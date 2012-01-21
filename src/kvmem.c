@@ -218,7 +218,7 @@ static KVMemData *kvmemDataRef(KVMemData *p){
 ** Dereference a KVMemData object
 */
 static void kvmemDataUnref(KVMemData *p){
-  if( p && (p->nRef--)<=0 ) sqlite3_free(p);
+  if( p && (--p->nRef)<=0 ) sqlite3_free(p);
 }
 
 /*
@@ -233,7 +233,7 @@ static KVMemNode *kvmemNodeRef(KVMemNode *p){
 ** Dereference a KVMemNode object
 */
 static void kvmemNodeUnref(KVMemNode *p){
-  if( p && (p->nRef--)<=0 ){
+  if( p && (--p->nRef)<=0 ){
     kvmemDataUnref(p->pData);
     sqlite3_free(p);
   }
@@ -246,7 +246,6 @@ static void kvmemClearTree(KVMemNode *pNode){
   if( pNode==0 ) return;
   kvmemClearTree(pNode->pBefore);
   kvmemClearTree(pNode->pAfter);
-  kvmemDataUnref(pNode->pData);
   kvmemNodeUnref(pNode);
 }
 
@@ -327,12 +326,12 @@ static KVMemNode *kvmemNewNode(
   KVMemNode *pNode;
   KVMemChng *pChng;
   assert( p->nTrans>=2 );
-  pNode = sqlite3_malloc( sizeof(*p)+nKey-2 );
+  pNode = sqlite3_malloc( sizeof(*pNode)+nKey-2 );
   if( pNode ){
     memset(pNode, 0, sizeof(*p));
     memcpy(pNode->aKey, aKey, nKey);
     pNode->nKey = nKey;
-    pNode->nRef = 0;
+    pNode->nRef = 1;
     pChng = kvmemNewChng(p, pNode);
     if( pChng==0 ){
       sqlite3_free(pNode);
@@ -350,6 +349,8 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
   KVMemNode **ppParent;
   KVMemNode *pBalance;
 
+  kvmemDataUnref(pOld->pData);
+  pOld->pData = 0;
   ppParent = kvmemFromPtr(pOld, &p->pRoot);
   if( pOld->pBefore==0 && pOld->pAfter==0 ){
     *ppParent = 0;
@@ -360,7 +361,12 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
     *kvmemFromPtr(pX, 0) = 0;
     pBalance = pX->pUp;
     pX->pAfter = pOld->pAfter;
-    pX->pAfter->pUp = pX;
+    if( pX->pAfter ){
+      pX->pAfter->pUp = pX;
+    }else{
+      assert( pBalance==pOld );
+      pBalance = pX;
+    }
     pX->pBefore = pY = pOld->pBefore;
     if( pY ) pY->pUp = pX;
     pX->pUp = pOld->pUp;
@@ -515,6 +521,7 @@ static int kvmemReplace(
     if( pNew==0 ) goto KVMemReplace_nomem;
     pNew->pUp = 0;
   }else{
+    pNode = p->pRoot;
     while( pNode ){
       int c = kvmemKeyCompare(aKey, nKey, pNode->aKey, pNode->nKey);
       if( c<0 ){
@@ -629,8 +636,8 @@ static int kvmemSeek(
   while( pNode ){
     c = kvmemKeyCompare(aKey, nKey, pNode->aKey, pNode->nKey);
     if( c==0
-     || (c<0 && pNode->pBefore==0 && direction<0)
-     || (c>0 && pNode->pAfter==0 && direction>0)
+     || (c<0 && pNode->pBefore==0 && direction>0)
+     || (c>0 && pNode->pAfter==0 && direction<0)
     ){
       pCur->pNode = kvmemNodeRef(pNode);
       pCur->pData = kvmemDataRef(pNode->pData);

@@ -136,13 +136,14 @@ int sqlite3KVStoreOpen(const char *zUri, KVStore**);
         ((X)->pStoreVfunc->xReplace((X),(A),(B),(C),(D)))
 #define sqlite3KVStoreOpenCursor(X,A) \
         ((X)->pStoreVfunc->xOpenCursor((X),(A)))
-#define sqlite3KVCursorSeek(X,Y,Z)  ((X)->pStoreVfunc->xSeek(X,(Y),(Z)))
+#define sqlite3KVCursorSeek(X,A,B,C) \
+        ((X)->pStoreVfunc->xSeek(X,(A),(B),(C)))
 #define sqlite3KVCursorNext(X)      ((X)->pStoreVfunc->xNext(X))
 #define sqlite3KVCursorPrev(X)      ((X)->pStoreVfunc->xPrev(X))
 #define sqlite3KVCursorDelete(X)    ((X)->pStoreVfunc->xDelete(X))
 #define sqlite3KVCursorKey(X,Y,Z)   ((X)->pStoreVfunc->xKey(X,(Y),(Z)))
 #define sqlite3KVCursorData(X,A,B,C,D) \
-        ((X)->pStoreVfunc->xData(X,(A),(B),(C),(D))
+        ((X)->pStoreVfunc->xData(X,(A),(B),(C),(D)))
 #define sqlite3KVCursorReset(X)     ((X)->pStoreVfunc->xReset(X))
 #define sqlite3KVCursorClose(X)     ((X)?(X)->pStoreVfunc->xCloseCursor(X):0)
 #define sqlite3KVStoreBegin(X,A)    ((X)->pStoreVfunc->xBegin((X),(A)))

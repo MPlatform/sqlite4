@@ -128,7 +128,7 @@ static int test_storage_close_cursor(
   KVCursor *pOld = 0;
   int rc;
   if( objc!=2 ){
-    Tcl_WrongNumArgs(interp, 2, objv, "STORAGE");
+    Tcl_WrongNumArgs(interp, 2, objv, "CURSOR");
     return TCL_ERROR;
   }
   pOld = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
@@ -207,6 +207,245 @@ static int test_storage_begin(
   return TCL_OK;
 }
 
+/*
+** TCLCMD:    storage_commit STORAGE LEVEL
+**
+** Increase the transaction level
+*/
+static int test_storage_commit(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVStore *p = 0;
+  int rc;
+  int iLevel;
+  if( objc!=3 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "STORAGE LEVEL");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  if( Tcl_GetIntFromObj(interp, objv[2], &iLevel) ) return TCL_ERROR;
+  rc = sqlite3KVStoreCommit(p, iLevel);
+  if( rc ){
+    storageSetTclErrorName(interp, rc);
+    return TCL_ERROR;
+  }
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    storage_rollback STORAGE LEVEL
+**
+** Increase the transaction level
+*/
+static int test_storage_rollback(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVStore *p = 0;
+  int rc;
+  int iLevel;
+  if( objc!=3 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "STORAGE LEVEL");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  if( Tcl_GetIntFromObj(interp, objv[2], &iLevel) ) return TCL_ERROR;
+  rc = sqlite3KVStoreRollback(p, iLevel);
+  if( rc ){
+    storageSetTclErrorName(interp, rc);
+    return TCL_ERROR;
+  }
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    storage_seek CURSOR KEY DIRECTION
+**
+** Move a cursor object
+*/
+static int test_storage_seek(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVCursor *p = 0;
+  int rc;
+  int nKey, dir;
+  unsigned char aKey[100];
+  if( objc!=4 ){
+    Tcl_WrongNumArgs(interp, 4, objv, "CURSOR KEY DIRECTION");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  sqlite3DecodeHex(objv[2], aKey, &nKey);
+  if( Tcl_GetIntFromObj(interp, objv[3], &dir) ) return TCL_ERROR;
+  rc = sqlite3KVCursorSeek(p, aKey, nKey, dir);
+  storageSetTclErrorName(interp, rc);
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    storage_next CURSOR
+**
+** Move the cursor to the next entry
+*/
+static int test_storage_next(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVCursor *p = 0;
+  int rc;
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "CURSOR");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  rc = sqlite3KVCursorNext(p);
+  storageSetTclErrorName(interp, rc);
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    storage_prev CURSOR
+**
+** Move the cursor to the previous entry
+*/
+static int test_storage_prev(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVCursor *p = 0;
+  int rc;
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "CURSOR");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  rc = sqlite3KVCursorPrev(p);
+  storageSetTclErrorName(interp, rc);
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    storage_delete CURSOR
+**
+** delete the entry under the cursor
+*/
+static int test_storage_delete(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVCursor *p = 0;
+  int rc;
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "CURSOR");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  rc = sqlite3KVCursorDelete(p);
+  storageSetTclErrorName(interp, rc);
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    storage_reset CURSOR
+**
+** Reset the cursor
+*/
+static int test_storage_reset(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVCursor *p = 0;
+  int rc;
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "CURSOR");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  rc = sqlite3KVCursorReset(p);
+  storageSetTclErrorName(interp, rc);
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    storage_key CURSOR
+**
+** Return the complete key of the cursor
+*/
+static int test_storage_key(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVCursor *p = 0;
+  int rc;
+  const unsigned char *aKey;
+  int nKey;
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "CURSOR");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  rc = sqlite3KVCursorKey(p, &aKey, &nKey);
+  if( rc ){
+    storageSetTclErrorName(interp, rc);
+  }else{
+    unsigned char zBuf[500];
+    memcpy(zBuf, aKey, nKey);
+    sqlite3TestBinToHex(zBuf, nKey);
+    Tcl_SetObjResult(interp, Tcl_NewStringObj((char*)zBuf, -1));
+  }
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    storage_data CURSOR
+**
+** Return the complete data of the cursor
+*/
+static int test_storage_data(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  KVCursor *p = 0;
+  int rc;
+  const unsigned char *aData;
+  int nData;
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "CURSOR");
+    return TCL_ERROR;
+  }
+  p = sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  rc = sqlite3KVCursorData(p, 0, 0, &aData, &nData);
+  if( rc ){
+    storageSetTclErrorName(interp, rc);
+  }else{
+    unsigned char zBuf[500];
+    memcpy(zBuf, aData, nData);
+    sqlite3TestBinToHex(zBuf, nData);
+    Tcl_SetObjResult(interp, Tcl_NewStringObj((char*)zBuf, -1));
+  }
+  return TCL_OK;
+}
+
 
 
 /*
@@ -226,6 +465,15 @@ int Sqliteteststorage_Init(Tcl_Interp *interp){
     { "storage_close_cursor", test_storage_close_cursor    },
     { "storage_replace",      test_storage_replace         },
     { "storage_begin",        test_storage_begin           },
+    { "storage_commit",       test_storage_commit          },
+    { "storage_rollback",     test_storage_rollback        },
+    { "storage_seek",         test_storage_seek            },
+    { "storage_next",         test_storage_next            },
+    { "storage_prev",         test_storage_prev            },
+    { "storage_delete",       test_storage_delete          },
+    { "storage_reset",        test_storage_reset           },
+    { "storage_key",          test_storage_key             },
+    { "storage_data",         test_storage_data            },
   };
   int i;
 

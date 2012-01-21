@@ -147,6 +147,7 @@ const char *sqlite3TestErrorName(int rc){
     case SQLITE_NOTADB:              zName = "SQLITE_NOTADB";            break;
     case SQLITE_ROW:                 zName = "SQLITE_ROW";               break;
     case SQLITE_DONE:                zName = "SQLITE_DONE";              break;
+    case SQLITE_INEXACT:             zName = "SQLITE_INEXACT";           break;
     case SQLITE_IOERR_READ:          zName = "SQLITE_IOERR_READ";        break;
     case SQLITE_IOERR_SHORT_READ:    zName = "SQLITE_IOERR_SHORT_READ";  break;
     case SQLITE_IOERR_WRITE:         zName = "SQLITE_IOERR_WRITE";       break;
