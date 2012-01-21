@@ -56,13 +56,13 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          fts3.o fts3_aux.o fts3_expr.o fts3_hash.o fts3_icu.o fts3_porter.o \
          fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
          fts3_write.o func.o global.o hash.o \
-         icu.o insert.o journal.o legacy.o loadext.o \
+         icu.o insert.o journal.o kvmem.o legacy.o loadext.o \
          main.o malloc.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          memjournal.o \
          mutex.o mutex_noop.o mutex_os2.o mutex_unix.o mutex_w32.o \
          notify.o opcodes.o os.o os_os2.o os_unix.o os_win.o \
          pager.o parse.o pcache.o pcache1.o pragma.o prepare.o printf.o \
-         random.o resolve.o rowset.o rtree.o select.o status.o \
+         random.o resolve.o rowset.o rtree.o select.o status.o storage.o \
          table.o tokenize.o trigger.o \
          update.o util.o vacuum.o \
          vdbe.o vdbeapi.o vdbeaux.o vdbeblob.o vdbemem.o vdbesort.o \
@@ -99,6 +99,7 @@ SRC = \
   $(TOP)/src/hwtime.h \
   $(TOP)/src/insert.c \
   $(TOP)/src/journal.c \
+  $(TOP)/src/kvmem.c \
   $(TOP)/src/legacy.c \
   $(TOP)/src/loadext.c \
   $(TOP)/src/main.c \
@@ -135,12 +136,14 @@ SRC = \
   $(TOP)/src/resolve.c \
   $(TOP)/src/rowset.c \
   $(TOP)/src/select.c \
-  $(TOP)/src/status.c \
   $(TOP)/src/shell.c \
   $(TOP)/src/sqlite.h.in \
   $(TOP)/src/sqlite3ext.h \
   $(TOP)/src/sqliteInt.h \
   $(TOP)/src/sqliteLimit.h \
+  $(TOP)/src/status.c \
+  $(TOP)/src/storage.c \
+  $(TOP)/src/storage.h \
   $(TOP)/src/table.c \
   $(TOP)/src/tclsqlite.c \
   $(TOP)/src/tokenize.c \
@@ -256,6 +259,7 @@ TESTSRC = \
   $(TOP)/src/test_schema.c \
   $(TOP)/src/test_server.c \
   $(TOP)/src/test_stat.c \
+  $(TOP)/src/test_storage.c \
   $(TOP)/src/test_superlock.c \
   $(TOP)/src/test_syscall.c \
   $(TOP)/src/test_tclvar.c \
@@ -325,6 +329,7 @@ HDR = \
    $(TOP)/src/sqlite3ext.h \
    $(TOP)/src/sqliteInt.h  \
    $(TOP)/src/sqliteLimit.h \
+   $(TOP)/src/storage.h \
    $(TOP)/src/vdbe.h \
    $(TOP)/src/vdbeInt.h
 

@@ -36,7 +36,7 @@ struct KVMemData {
 ** object:
 */
 struct KVMemNode {
-  KVMemBlob *pData;     /* Content of the row.  NULL means it is deleted. */
+  KVMemData *pData;     /* Content of the row.  NULL means it is deleted. */
   KVMemNode *pBefore;   /* Other elements less than zKey */
   KVMemNode *pAfter;    /* Other elements greater than zKey */
   KVMemNode *pUp;       /* Parent element */
@@ -54,7 +54,7 @@ struct KVMemNode {
 */
 struct KVMemChng {
   KVMemChng *pNext;     /* Next entry in the change log */
-  KVMenNode *pNode;     /* The node that is changing */
+  KVMemNode *pNode;     /* The node that is changing */
   KVMemData *pData;     /* Old data for the row.  NULL for new content. */
   short int oldTrans;   /* Value of pNode->mxTrans prior to this entry */
 };
@@ -69,7 +69,7 @@ struct KVMem {
   int nTrans;           /* Number of nested option transactions */
   KVMemChng **apLog;    /* Array of transaction logs */
   int nCursor;          /* Number of outstanding cursors */
-  int iMagicKVmemBase;  /* Magic number of sanity */
+  int iMagicKVMemBase;  /* Magic number of sanity */
 };
 #define SQLITE_KVMEMBASE_MAGIC  0xbfcd47d0
 
@@ -80,7 +80,7 @@ struct KVMemCursor {
   KVMem *pOwner;        /* The tree that owns this cursor */
   KVMemNode *pNode;     /* The entry this cursor points to */
   KVMemData *pData;     /* Data returned by xData */
-  int iMagicKVmemCur;   /* Magic number for sanity */
+  int iMagicKVMemCur;   /* Magic number for sanity */
 };
 #define SQLITE_KVMEMCUR_MAGIC   0xb19bdc1b
 
@@ -195,12 +195,12 @@ static int kvmemKeyCompare(
 /*
 ** Create a new KVMemData object
 */
-static KVMemData *kvmemDataNew(KVByteArray *aData, KVSize nData){
+static KVMemData *kvmemDataNew(const KVByteArray *aData, KVSize nData){
   KVMemData *p = sqlite3_malloc( sizeof(*p) + nData - 8 );
   if( p ) {
     p->nRef = 1;
-    p->nData = nData;
-    memcmp(p->a, aData, nData);
+    p->n = nData;
+    memcpy(p->a, aData, nData);
   }
   return p;
 }
@@ -208,7 +208,7 @@ static KVMemData *kvmemDataNew(KVByteArray *aData, KVSize nData){
 /*
 ** Make a copy of a KVMemData object
 */
-static KVMemData *kvmemDataCopy(KVMemData *p){
+static KVMemData *kvmemDataRef(KVMemData *p){
   if( p ) p->nRef++;
   return p;
 }
@@ -260,7 +260,7 @@ static KVMemNode *kvmemNext(KVMemNode *p){
     p = p->pUp;
   }
   if( p && pPrev==0 ){
-    p = First(p->pAfter);
+    p = kvmemFirst(p->pAfter);
   }
   return p;
 }
@@ -281,7 +281,7 @@ static KVMemNode *kvmemPrev(KVMemNode *p){
     p = p->pUp;
   }
   if( p && pPrior==0 ){
-    p = Last(p->pBefore);
+    p = kvmemLast(p->pBefore);
   }
   return p;
 }
@@ -327,7 +327,6 @@ static KVMemNode *kvmemNewNode(
       pNode = 0;
     }else{
       pChng->pData = 0;
-      pChng->nData = 0;
     }
   }
   return pNode;
@@ -335,7 +334,7 @@ static KVMemNode *kvmemNewNode(
 
 /* Remove node pOld from the tree.  pOld must be an element of the tree.
 */
-static void kvmemRemove(KVMem *p, KVMemNode *pOld){
+static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
   KVMemNode **ppParent;
   KVMemNode *pBalance;
 
@@ -362,6 +361,7 @@ static void kvmemRemove(KVMem *p, KVMemNode *pOld){
     pBalance->pUp = pOld->pUp;
   }
   p->pRoot = kvmemBalance(pBalance);
+  kvmemNodeUnref(pOld);
 }
 
 /*
@@ -390,7 +390,7 @@ static int kvmemBegin(KVStore *pKVStore, int iLevel){
   assert( iLevel==2 || iLevel==p->nTrans+1 );
   if( iLevel>=2 ){
     KVMemChng **apNewLog;
-    apNewLog = sqlite3_realloc(p->apLog, sizeof(pNewLog[0])*(iLevel-1) );
+    apNewLog = sqlite3_realloc(p->apLog, sizeof(apNewLog[0])*(iLevel-1) );
     if( apNewLog==0 ) return SQLITE_NOMEM;
     p->apLog = apNewLog;
     p->apLog[iLevel-2] = 0;
@@ -410,7 +410,7 @@ static int kvmemBegin(KVStore *pKVStore, int iLevel){
 ** After this routine returns successfully, the transaction level will be 
 ** equal to iLevel.
 */
-static kvmemCommit(KVStore *pKVStore, int iLevel){
+static int kvmemCommit(KVStore *pKVStore, int iLevel){
   KVMem *p = (KVMem*)pKVStore;
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( iLevel>=0 );
@@ -419,7 +419,7 @@ static kvmemCommit(KVStore *pKVStore, int iLevel){
     KVMemChng *pChng, *pNext;
     for(pChng=p->apLog[p->nTrans-2]; pChng; pChng=pNext){
       KVMemNode *pNode = pChng->pNode;
-      if( pNode->aData ){
+      if( pNode->pData ){
         pNode->mxTrans = pChng->oldTrans;
       }else{
         kvmemRemoveNode(p, pNode);
@@ -445,7 +445,7 @@ static kvmemCommit(KVStore *pKVStore, int iLevel){
 ** After this routine returns successfully, the transaction level will be
 ** equal to iLevel.
 */
-static kvmemRollback(KVStore *pKVStore, int iLevel){
+static int kvmemRollback(KVStore *pKVStore, int iLevel){
   KVMem *p = (KVMem*)pKVStore;
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( iLevel>=0 );
@@ -454,7 +454,7 @@ static kvmemRollback(KVStore *pKVStore, int iLevel){
     KVMemChng *pChng, *pNext;
     for(pChng=p->apLog[p->nTrans-2]; pChng; pChng=pNext){
       KVMemNode *pNode = pChng->pNode;
-      if( pChng->aData ){
+      if( pChng->pData ){
         kvmemDataUnref(pNode->pData);
         pNode->pData = pChng->pData;
         pNode->mxTrans = pChng->oldTrans;
@@ -537,11 +537,11 @@ static int kvmemReplace(
   }
   pNew->pData = pData;
   pNew->height = 1;
-  p->pRoot = kvmemBalance(p);
+  p->pRoot = kvmemBalance(pNew);
   return SQLITE_OK;
 
 KVMemReplace_nomem:
-  sqlite3_free(aNewData);
+  kvmemDataUnref(pData);
   return SQLITE_NOMEM;
 }
 
@@ -560,9 +560,9 @@ static int kvmemOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
   memset(pCur, 0, sizeof(*pCur));
   pCur->pOwner = p;
   p->nCursor++;
-  pCur->iMagicKVmemCur = SQLITE_KVMEMCUR_MAGIC;
+  pCur->iMagicKVMemCur = SQLITE_KVMEMCUR_MAGIC;
   *ppKVCursor = (KVCursor*)pCur;
-  return pCur;
+  return SQLITE_OK;
 }
 
 /*
@@ -570,7 +570,7 @@ static int kvmemOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
 */
 static int kvmemReset(KVCursor *pKVCursor){
   KVMemCursor *pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVmemCur==SQLITE_KVMEMCUR_MAGIC );
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
   kvmemDataUnref(pCur->pData);
   pCur->pData = 0;
   kvmemNodeUnref(pCur->pNode);
@@ -584,8 +584,8 @@ static int kvmemReset(KVCursor *pKVCursor){
 static int kvmemCloseCursor(KVCursor *pKVCursor){
   KVMemCursor *pCur = (KVMemCursor*)pKVCursor;
   if( pCur ){
-    assert( pCur->iMagicKVmemCur==SQLITE_KVMEMCUR_MAGIC );
-    assert( pCur->pOwner->iMagicKVmemBase==SQLITE_KVMEMBASE_MAGIC );
+    assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
+    assert( pCur->pOwner->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
     pCur->pOwner->nCursor--;
     kvmemReset(pKVCursor);
     memset(pCur, 0, sizeof(*pCur));
@@ -603,13 +603,13 @@ static int kvmemSeek(
   KVSize nKey,
   int direction
 ){
-  KVMemCursor *Cur;
+  KVMemCursor *pCur;
   KVMemNode *pNode;
   int c;
 
   kvmemReset(pKVCursor);
   pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVmemCur==SQLITE_KVMEMCUR_MAGIC );
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
 
   pNode = pCur->pOwner->pRoot;
   while( pNode ){
@@ -628,14 +628,46 @@ static int kvmemSeek(
 }
 
 /*
+** Delete the entry that the cursor is pointing to.
+**
+** Though the entry is "deleted", it still continues to exist as a
+** phantom.  Subsequent xNext or xPrev calls will work, as will
+** calls to xKey and xData, thought the result from xKey and xData
+** are undefined.
+*/
+static int kvmemDelete(KVCursor *pKVCursor){
+  KVMemCursor *pCur;
+  KVMemNode *pNode;
+  KVMemChng *pChng;
+  KVMem *p;
+
+  pCur = (KVMemCursor*)pKVCursor;
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
+  p = pCur->pOwner;
+  assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
+  assert( p->nTrans>=2 );
+  pNode = pCur->pNode;
+  if( pNode==0 ) return SQLITE_OK;
+  if( pNode->pData==0 ) return SQLITE_OK;
+  if( pNode->mxTrans<p->nTrans ){
+    pChng = kvmemNewChng(p, pNode);
+    if( pChng==0 ) return SQLITE_NOMEM;
+  }else{
+    kvmemDataUnref(pNode->pData);
+    pNode->pData = 0;
+  }
+  return SQLITE_OK;
+}
+
+/*
 ** Move a cursor to the next non-deleted node.
 */
 static int kvmemNextEntry(KVCursor *pKVCursor){
-  KVMemCursor *Cur;
+  KVMemCursor *pCur;
   KVMemNode *pNode;
 
   pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVmemCur==SQLITE_KVMEMCUR_MAGIC );
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
   pNode = pCur->pNode;
   kvmemReset(pKVCursor);
   do{
@@ -652,11 +684,11 @@ static int kvmemNextEntry(KVCursor *pKVCursor){
 ** Move a cursor to the previous non-deleted node.
 */
 static int kvmemPrevEntry(KVCursor *pKVCursor){
-  KVMemCursor *Cur;
+  KVMemCursor *pCur;
   KVMemNode *pNode;
 
   pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVmemCur==SQLITE_KVMEMCUR_MAGIC );
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
   pNode = pCur->pNode;
   kvmemReset(pKVCursor);
   do{
@@ -677,11 +709,11 @@ static int kvmemKey(
   const KVByteArray **paKey,   /* Make this point to the key */
   KVSize *pN                   /* Make this point to the size of the key */
 ){
-  KVMemCursor *Cur;
+  KVMemCursor *pCur;
   KVMemNode *pNode;
 
   pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVmemCur==SQLITE_KVMEMCUR_MAGIC );
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
   pNode = pCur->pNode;
   if( pNode==0 ){
     *paKey = 0;
@@ -703,19 +735,19 @@ static int kvmemData(
   const KVByteArray **paData,  /* Pointer to the data written here */
   KVSize *pNData               /* Number of bytes delivered */
 ){
-  KVMemCursor *Cur;
+  KVMemCursor *pCur;
   KVMemData *pData;
 
   pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVmemCur==SQLITE_KVMEMCUR_MAGIC );
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
   pData = pCur->pData;
   if( pData==0 ){
     *paData = 0;
     *pNData = 0;
     return SQLITE_DONE;
   }
-  *paData = pData + ofst;
-  *pN = pData->nData-ofst;
+  *paData = pData->a + ofst;
+  *pNData = pData->n - ofst;
   return SQLITE_OK;
 }
 
@@ -734,12 +766,13 @@ static int kvmemClose(KVStore *pKVStore){
 }
 
 /* Virtual methods for the in-memory storage engine */
-static const KVStoreMethods {
+static const KVStoreMethods kvmemMethods = {
   kvmemReplace,
-  kvmemDelete,
   kvmemOpenCursor,
+  kvmemSeek,
   kvmemNextEntry,
   kvmemPrevEntry,
+  kvmemDelete,
   kvmemKey,
   kvmemData,
   kvmemReset,
@@ -747,18 +780,18 @@ static const KVStoreMethods {
   kvmemBegin,
   kvmemCommit,
   kvmemRollback,
-  vkmemClose
+  kvmemClose
 };
 
 /*
 ** Create a new in-memory storage engine and return a pointer to it.
 */
-int sqlite4KVStoreOpenMem(KVStore **ppKVStore){
+int sqlite3KVStoreOpenMem(KVStore **ppKVStore){
   KVMem *pNew = sqlite3_malloc( sizeof(*pNew) );
   if( pNew==0 ) return SQLITE_NOMEM;
   memset(pNew, 0, sizeof(*pNew));
-  pNew->base = &KVStoreMethods;
-  pNew->iMagicKVmemBase = SQLITE_KVMEMBASE_MAGIC;
+  pNew->base.pMethods = &kvmemMethods;
+  pNew->iMagicKVMemBase = SQLITE_KVMEMBASE_MAGIC;
   *ppKVStore = (KVStore*)pNew;
   return SQLITE_OK;
 }

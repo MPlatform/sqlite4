@@ -670,6 +670,7 @@ typedef struct WhereLevel WhereLevel;
 #include "vdbe.h"
 #include "pager.h"
 #include "pcache.h"
+#include "storage.h"
 
 #include "os.h"
 #include "mutex.h"
