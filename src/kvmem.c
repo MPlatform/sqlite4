@@ -77,6 +77,7 @@ struct KVMem {
 ** A cursor used for scanning through the tree
 */
 struct KVMemCursor {
+  KVCursor base;        /* Base class. Must be first */
   KVMem *pOwner;        /* The tree that owns this cursor */
   KVMemNode *pNode;     /* The entry this cursor points to */
   KVMemData *pData;     /* Data returned by xData */
@@ -236,6 +237,17 @@ static void kvmemNodeUnref(KVMemNode *p){
     kvmemDataUnref(p->pData);
     sqlite3_free(p);
   }
+}
+
+/*
+** Recursively delete all nodes in a tree
+*/
+static void kvmemClearTree(KVMemNode *pNode){
+  if( pNode==0 ) return;
+  kvmemClearTree(pNode->pBefore);
+  kvmemClearTree(pNode->pAfter);
+  kvmemDataUnref(pNode->pData);
+  kvmemNodeUnref(pNode);
 }
 
 /*
@@ -498,7 +510,7 @@ static int kvmemReplace(
   assert( p->nTrans>=2 );
   pData = kvmemDataNew(aData, nData);
   if( pData==0 ) return SQLITE_NOMEM;
-  if( p==0 ){
+  if( p->pRoot==0 ){
     pNode = pNew = kvmemNewNode(p, aKey, nKey);
     if( pNew==0 ) goto KVMemReplace_nomem;
     pNew->pUp = 0;
@@ -561,6 +573,8 @@ static int kvmemOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
   pCur->pOwner = p;
   p->nCursor++;
   pCur->iMagicKVMemCur = SQLITE_KVMEMCUR_MAGIC;
+  pCur->base.pStore = pKVStore;
+  pCur->base.pStoreVfunc = pKVStore->pStoreVfunc;
   *ppKVCursor = (KVCursor*)pCur;
   return SQLITE_OK;
 }
@@ -761,7 +775,9 @@ static int kvmemClose(KVStore *pKVStore){
   assert( p->nCursor==0 );
   if( p->nTrans ) kvmemCommit(pKVStore, 0);
   sqlite3_free(p->apLog);
+  kvmemClearTree(p->pRoot);
   memset(p, 0, sizeof(*p));
+  sqlite3_free(p);
   return SQLITE_OK;
 }
 
@@ -790,7 +806,7 @@ int sqlite3KVStoreOpenMem(KVStore **ppKVStore){
   KVMem *pNew = sqlite3_malloc( sizeof(*pNew) );
   if( pNew==0 ) return SQLITE_NOMEM;
   memset(pNew, 0, sizeof(*pNew));
-  pNew->base.pMethods = &kvmemMethods;
+  pNew->base.pStoreVfunc = &kvmemMethods;
   pNew->iMagicKVMemBase = SQLITE_KVMEMBASE_MAGIC;
   *ppKVStore = (KVStore*)pNew;
   return SQLITE_OK;

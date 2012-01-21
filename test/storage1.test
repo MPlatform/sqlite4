@@ -1,0 +1,39 @@
+# 2012 January 21
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# This file implements regression tests for SQLite library.  The
+# focus of this file is testing the internal storage.h interface.
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+
+do_test storage1-1.1 {
+  set x [storage_open :memory:]
+  storage_close $x
+} {}
+do_test storage1-1.2 {
+  set x [storage_open :memory:]
+  set c1 [storage_open_cursor $x]
+  set c2 [storage_open_cursor $x]
+  set c3 [storage_open_cursor $x]
+  storage_close_cursor $c2
+  storage_close_cursor $c3
+  storage_close_cursor $c1
+  storage_close $x
+} {}
+do_test storage1-1.3 {
+  set x [storage_open :memory:]
+  storage_begin $x 2
+  storage_replace $x 0123456789abcdef fedcba9876543210
+  storage_close $x
+} {}
+
+finish_test
