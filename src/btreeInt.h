@@ -55,7 +55,7 @@
 ** The format of the file header is as follows:
 **
 **   OFFSET   SIZE    DESCRIPTION
-**      0      16     Header string: "SQLite format 3\000"
+**      0      16     Header string: "SQLite format 4\000"
 **     16       2     Page size in bytes.  
 **     18       1     File format write version
 **     19       1     File format read version
@@ -244,7 +244,7 @@ typedef struct BtLock BtLock;
 ** will not be able to read databases created by your custom library.
 */
 #ifndef SQLITE_FILE_HEADER /* 123456789 123456 */
-#  define SQLITE_FILE_HEADER "SQLite format 3"
+#  define SQLITE_FILE_HEADER "SQLite format 4"
 #endif
 
 /*

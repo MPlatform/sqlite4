@@ -32,7 +32,7 @@ do_test filefmt-1.1 {
   db eval {CREATE TABLE t1(x)}
   db close
   hexio_read test.db 0 16
-} {53514C69746520666F726D6174203300}
+} {53514C69746520666F726D6174203400}
 
 # If the 16-byte header is changed, the file will not open
 #
