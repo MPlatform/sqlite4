@@ -15,7 +15,7 @@
 ** to obtain the memory it needs.
 **
 ** This file contains implementations of the low-level memory allocation
-** routines specified in the sqlite3_mem_methods object.  The content of
+** routines specified in the sqlite4_mem_methods object.  The content of
 ** this file is only used if SQLITE_SYSTEM_MALLOC is defined.  The
 ** SQLITE_SYSTEM_MALLOC macro is defined automatically if neither the
 ** SQLITE_MEMDEBUG nor the SQLITE_WIN32_MALLOC macros are defined.  The
@@ -104,22 +104,22 @@ static malloc_zone_t* _sqliteZone_;
 
 /*
 ** Like malloc(), but remember the size of the allocation
-** so that we can find it later using sqlite3MemSize().
+** so that we can find it later using sqlite4MemSize().
 **
 ** For this low-level routine, we are guaranteed that nByte>0 because
 ** cases of nByte<=0 will be intercepted and dealt with by higher level
 ** routines.
 */
-static void *sqlite3MemMalloc(int nByte){
+static void *sqlite4MemMalloc(int nByte){
 #ifdef SQLITE_MALLOCSIZE
   void *p = SQLITE_MALLOC( nByte );
   if( p==0 ){
-    testcase( sqlite3GlobalConfig.xLog!=0 );
-    sqlite3_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
+    testcase( sqlite4GlobalConfig.xLog!=0 );
+    sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
   }
   return p;
 #else
-  sqlite3_int64 *p;
+  sqlite4_int64 *p;
   assert( nByte>0 );
   nByte = ROUND8(nByte);
   p = SQLITE_MALLOC( nByte+8 );
@@ -127,26 +127,26 @@ static void *sqlite3MemMalloc(int nByte){
     p[0] = nByte;
     p++;
   }else{
-    testcase( sqlite3GlobalConfig.xLog!=0 );
-    sqlite3_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
+    testcase( sqlite4GlobalConfig.xLog!=0 );
+    sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
   }
   return (void *)p;
 #endif
 }
 
 /*
-** Like free() but works for allocations obtained from sqlite3MemMalloc()
-** or sqlite3MemRealloc().
+** Like free() but works for allocations obtained from sqlite4MemMalloc()
+** or sqlite4MemRealloc().
 **
 ** For this low-level routine, we already know that pPrior!=0 since
 ** cases where pPrior==0 will have been intecepted and dealt with
 ** by higher-level routines.
 */
-static void sqlite3MemFree(void *pPrior){
+static void sqlite4MemFree(void *pPrior){
 #ifdef SQLITE_MALLOCSIZE
   SQLITE_FREE(pPrior);
 #else
-  sqlite3_int64 *p = (sqlite3_int64*)pPrior;
+  sqlite4_int64 *p = (sqlite4_int64*)pPrior;
   assert( pPrior!=0 );
   p--;
   SQLITE_FREE(p);
@@ -157,13 +157,13 @@ static void sqlite3MemFree(void *pPrior){
 ** Report the allocated size of a prior return from xMalloc()
 ** or xRealloc().
 */
-static int sqlite3MemSize(void *pPrior){
+static int sqlite4MemSize(void *pPrior){
 #ifdef SQLITE_MALLOCSIZE
   return pPrior ? (int)SQLITE_MALLOCSIZE(pPrior) : 0;
 #else
-  sqlite3_int64 *p;
+  sqlite4_int64 *p;
   if( pPrior==0 ) return 0;
-  p = (sqlite3_int64*)pPrior;
+  p = (sqlite4_int64*)pPrior;
   p--;
   return (int)p[0];
 #endif
@@ -171,7 +171,7 @@ static int sqlite3MemSize(void *pPrior){
 
 /*
 ** Like realloc().  Resize an allocation previously obtained from
-** sqlite3MemMalloc().
+** sqlite4MemMalloc().
 **
 ** For this low-level interface, we know that pPrior!=0.  Cases where
 ** pPrior==0 while have been intercepted by higher-level routine and
@@ -179,18 +179,18 @@ static int sqlite3MemSize(void *pPrior){
 ** cases where nByte<=0 will have been intercepted by higher-level
 ** routines and redirected to xFree.
 */
-static void *sqlite3MemRealloc(void *pPrior, int nByte){
+static void *sqlite4MemRealloc(void *pPrior, int nByte){
 #ifdef SQLITE_MALLOCSIZE
   void *p = SQLITE_REALLOC(pPrior, nByte);
   if( p==0 ){
-    testcase( sqlite3GlobalConfig.xLog!=0 );
-    sqlite3_log(SQLITE_NOMEM,
+    testcase( sqlite4GlobalConfig.xLog!=0 );
+    sqlite4_log(SQLITE_NOMEM,
       "failed memory resize %u to %u bytes",
       SQLITE_MALLOCSIZE(pPrior), nByte);
   }
   return p;
 #else
-  sqlite3_int64 *p = (sqlite3_int64*)pPrior;
+  sqlite4_int64 *p = (sqlite4_int64*)pPrior;
   assert( pPrior!=0 && nByte>0 );
   assert( nByte==ROUND8(nByte) ); /* EV: R-46199-30249 */
   p--;
@@ -199,10 +199,10 @@ static void *sqlite3MemRealloc(void *pPrior, int nByte){
     p[0] = nByte;
     p++;
   }else{
-    testcase( sqlite3GlobalConfig.xLog!=0 );
-    sqlite3_log(SQLITE_NOMEM,
+    testcase( sqlite4GlobalConfig.xLog!=0 );
+    sqlite4_log(SQLITE_NOMEM,
       "failed memory resize %u to %u bytes",
-      sqlite3MemSize(pPrior), nByte);
+      sqlite4MemSize(pPrior), nByte);
   }
   return (void*)p;
 #endif
@@ -211,14 +211,14 @@ static void *sqlite3MemRealloc(void *pPrior, int nByte){
 /*
 ** Round up a request size to the next valid allocation size.
 */
-static int sqlite3MemRoundup(int n){
+static int sqlite4MemRoundup(int n){
   return ROUND8(n);
 }
 
 /*
 ** Initialize this module.
 */
-static int sqlite3MemInit(void *NotUsed){
+static int sqlite4MemInit(void *NotUsed){
 #if defined(__APPLE__) && !defined(SQLITE_WITHOUT_ZONEMALLOC)
   int cpuCount;
   size_t len;
@@ -254,7 +254,7 @@ static int sqlite3MemInit(void *NotUsed){
 /*
 ** Deinitialize this module.
 */
-static void sqlite3MemShutdown(void *NotUsed){
+static void sqlite4MemShutdown(void *NotUsed){
   UNUSED_PARAMETER(NotUsed);
   return;
 }
@@ -263,20 +263,20 @@ static void sqlite3MemShutdown(void *NotUsed){
 ** This routine is the only routine in this file with external linkage.
 **
 ** Populate the low-level memory allocation function pointers in
-** sqlite3GlobalConfig.m with pointers to the routines in this file.
+** sqlite4GlobalConfig.m with pointers to the routines in this file.
 */
-void sqlite3MemSetDefault(void){
-  static const sqlite3_mem_methods defaultMethods = {
-     sqlite3MemMalloc,
-     sqlite3MemFree,
-     sqlite3MemRealloc,
-     sqlite3MemSize,
-     sqlite3MemRoundup,
-     sqlite3MemInit,
-     sqlite3MemShutdown,
+void sqlite4MemSetDefault(void){
+  static const sqlite4_mem_methods defaultMethods = {
+     sqlite4MemMalloc,
+     sqlite4MemFree,
+     sqlite4MemRealloc,
+     sqlite4MemSize,
+     sqlite4MemRoundup,
+     sqlite4MemInit,
+     sqlite4MemShutdown,
      0
   };
-  sqlite3_config(SQLITE_CONFIG_MALLOC, &defaultMethods);
+  sqlite4_config(SQLITE_CONFIG_MALLOC, &defaultMethods);
 }
 
 #endif /* SQLITE_SYSTEM_MALLOC */

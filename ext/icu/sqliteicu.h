@@ -11,15 +11,15 @@
 ******************************************************************************
 **
 ** This header file is used by programs that want to link against the
-** ICU extension.  All it does is declare the sqlite3IcuInit() interface.
+** ICU extension.  All it does is declare the sqlite4IcuInit() interface.
 */
-#include "sqlite3.h"
+#include "sqlite4.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  /* __cplusplus */
 
-int sqlite3IcuInit(sqlite3 *db);
+int sqlite4IcuInit(sqlite4 *db);
 
 #ifdef __cplusplus
 }  /* extern "C" */

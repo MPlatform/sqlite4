@@ -21,9 +21,9 @@
 ** is stored in a compressed binary format to reduce the amount of IO 
 ** overhead introduced into the application by logging.
 **
-** All calls on sqlite3_file objects except xFileControl() are logged.
+** All calls on sqlite4_file objects except xFileControl() are logged.
 ** Additionally, calls to the xAccess(), xOpen(), and xDelete()
-** methods are logged. The other sqlite3_vfs object methods (xDlXXX,
+** methods are logged. The other sqlite4_vfs object methods (xDlXXX,
 ** xRandomness, xSleep, xCurrentTime, xGetLastError and xCurrentTimeInt64) 
 ** are not logged.
 **
@@ -32,26 +32,26 @@
 **
 ** CREATING LOG FILES:
 **
-**       int sqlite3_vfslog_new(
+**       int sqlite4_vfslog_new(
 **         const char *zVfs,          // Name of new VFS
 **         const char *zParentVfs,    // Name of parent VFS (or NULL)
 **         const char *zLog           // Name of log file to write to
 **       );
 **
-**       int sqlite3_vfslog_finalize(const char *zVfs);
+**       int sqlite4_vfslog_finalize(const char *zVfs);
 **
 ** ANNOTATING LOG FILES:
 **
 **   To write an arbitrary message into a log file:
 **
-**       int sqlite3_vfslog_annotate(const char *zVfs, const char *zMsg);
+**       int sqlite4_vfslog_annotate(const char *zVfs, const char *zMsg);
 **
 ** READING LOG FILES:
 **
 **   Log files are read using the "vfslog" virtual table implementation
 **   in this file. To register the virtual table with SQLite, use:
 **
-**       int sqlite3_vfslog_register(sqlite3 *db);
+**       int sqlite4_vfslog_register(sqlite4 *db);
 **
 **   Then, if the log file is named "vfs.log", the following SQL command:
 **
@@ -69,7 +69,7 @@
 **       );
 */
 
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include <string.h>
 #include <assert.h>
 
@@ -112,19 +112,19 @@ typedef struct VfslogVfs VfslogVfs;
 typedef struct VfslogFile VfslogFile;
 
 struct VfslogVfs {
-  sqlite3_vfs base;               /* VFS methods */
-  sqlite3_vfs *pVfs;              /* Parent VFS */
+  sqlite4_vfs base;               /* VFS methods */
+  sqlite4_vfs *pVfs;              /* Parent VFS */
   int iNextFileId;                /* Next file id */
-  sqlite3_file *pLog;             /* Log file handle */
-  sqlite3_int64 iOffset;          /* Log file offset of start of write buffer */
+  sqlite4_file *pLog;             /* Log file handle */
+  sqlite4_int64 iOffset;          /* Log file offset of start of write buffer */
   int nBuf;                       /* Number of valid bytes in aBuf[] */
   char aBuf[VFSLOG_BUFFERSIZE];   /* Write buffer */
 };
 
 struct VfslogFile {
-  sqlite3_file base;              /* IO methods */
-  sqlite3_file *pReal;            /* Underlying file handle */
-  sqlite3_vfs *pVfslog;           /* Associated VsflogVfs object */
+  sqlite4_file base;              /* IO methods */
+  sqlite4_file *pReal;            /* Underlying file handle */
+  sqlite4_vfs *pVfslog;           /* Associated VsflogVfs object */
   int iFileId;                    /* File id number */
 };
 
@@ -135,43 +135,43 @@ struct VfslogFile {
 /*
 ** Method declarations for vfslog_file.
 */
-static int vfslogClose(sqlite3_file*);
-static int vfslogRead(sqlite3_file*, void*, int iAmt, sqlite3_int64 iOfst);
-static int vfslogWrite(sqlite3_file*,const void*,int iAmt, sqlite3_int64 iOfst);
-static int vfslogTruncate(sqlite3_file*, sqlite3_int64 size);
-static int vfslogSync(sqlite3_file*, int flags);
-static int vfslogFileSize(sqlite3_file*, sqlite3_int64 *pSize);
-static int vfslogLock(sqlite3_file*, int);
-static int vfslogUnlock(sqlite3_file*, int);
-static int vfslogCheckReservedLock(sqlite3_file*, int *pResOut);
-static int vfslogFileControl(sqlite3_file*, int op, void *pArg);
-static int vfslogSectorSize(sqlite3_file*);
-static int vfslogDeviceCharacteristics(sqlite3_file*);
+static int vfslogClose(sqlite4_file*);
+static int vfslogRead(sqlite4_file*, void*, int iAmt, sqlite4_int64 iOfst);
+static int vfslogWrite(sqlite4_file*,const void*,int iAmt, sqlite4_int64 iOfst);
+static int vfslogTruncate(sqlite4_file*, sqlite4_int64 size);
+static int vfslogSync(sqlite4_file*, int flags);
+static int vfslogFileSize(sqlite4_file*, sqlite4_int64 *pSize);
+static int vfslogLock(sqlite4_file*, int);
+static int vfslogUnlock(sqlite4_file*, int);
+static int vfslogCheckReservedLock(sqlite4_file*, int *pResOut);
+static int vfslogFileControl(sqlite4_file*, int op, void *pArg);
+static int vfslogSectorSize(sqlite4_file*);
+static int vfslogDeviceCharacteristics(sqlite4_file*);
 
-static int vfslogShmLock(sqlite3_file *pFile, int ofst, int n, int flags);
-static int vfslogShmMap(sqlite3_file *pFile,int,int,int,volatile void **);
-static void vfslogShmBarrier(sqlite3_file*);
-static int vfslogShmUnmap(sqlite3_file *pFile, int deleteFlag);
+static int vfslogShmLock(sqlite4_file *pFile, int ofst, int n, int flags);
+static int vfslogShmMap(sqlite4_file *pFile,int,int,int,volatile void **);
+static void vfslogShmBarrier(sqlite4_file*);
+static int vfslogShmUnmap(sqlite4_file *pFile, int deleteFlag);
 
 /*
 ** Method declarations for vfslog_vfs.
 */
-static int vfslogOpen(sqlite3_vfs*, const char *, sqlite3_file*, int , int *);
-static int vfslogDelete(sqlite3_vfs*, const char *zName, int syncDir);
-static int vfslogAccess(sqlite3_vfs*, const char *zName, int flags, int *);
-static int vfslogFullPathname(sqlite3_vfs*, const char *zName, int, char *zOut);
-static void *vfslogDlOpen(sqlite3_vfs*, const char *zFilename);
-static void vfslogDlError(sqlite3_vfs*, int nByte, char *zErrMsg);
-static void (*vfslogDlSym(sqlite3_vfs *pVfs, void *p, const char*zSym))(void);
-static void vfslogDlClose(sqlite3_vfs*, void*);
-static int vfslogRandomness(sqlite3_vfs*, int nByte, char *zOut);
-static int vfslogSleep(sqlite3_vfs*, int microseconds);
-static int vfslogCurrentTime(sqlite3_vfs*, double*);
+static int vfslogOpen(sqlite4_vfs*, const char *, sqlite4_file*, int , int *);
+static int vfslogDelete(sqlite4_vfs*, const char *zName, int syncDir);
+static int vfslogAccess(sqlite4_vfs*, const char *zName, int flags, int *);
+static int vfslogFullPathname(sqlite4_vfs*, const char *zName, int, char *zOut);
+static void *vfslogDlOpen(sqlite4_vfs*, const char *zFilename);
+static void vfslogDlError(sqlite4_vfs*, int nByte, char *zErrMsg);
+static void (*vfslogDlSym(sqlite4_vfs *pVfs, void *p, const char*zSym))(void);
+static void vfslogDlClose(sqlite4_vfs*, void*);
+static int vfslogRandomness(sqlite4_vfs*, int nByte, char *zOut);
+static int vfslogSleep(sqlite4_vfs*, int microseconds);
+static int vfslogCurrentTime(sqlite4_vfs*, double*);
 
-static int vfslogGetLastError(sqlite3_vfs*, int, char *);
-static int vfslogCurrentTimeInt64(sqlite3_vfs*, sqlite3_int64*);
+static int vfslogGetLastError(sqlite4_vfs*, int, char *);
+static int vfslogCurrentTimeInt64(sqlite4_vfs*, sqlite4_int64*);
 
-static sqlite3_vfs vfslog_vfs = {
+static sqlite4_vfs vfslog_vfs = {
   1,                              /* iVersion */
   sizeof(VfslogFile),             /* szOsFile */
   INST_MAX_PATHNAME,              /* mxPathname */
@@ -193,7 +193,7 @@ static sqlite3_vfs vfslog_vfs = {
   vfslogCurrentTimeInt64          /* xCurrentTime */
 };
 
-static sqlite3_io_methods vfslog_io_methods = {
+static sqlite4_io_methods vfslog_io_methods = {
   2,                              /* iVersion */
   vfslogClose,                    /* xClose */
   vfslogRead,                     /* xRead */
@@ -215,17 +215,17 @@ static sqlite3_io_methods vfslog_io_methods = {
 
 #if SQLITE_OS_UNIX && !defined(NO_GETTOD)
 #include <sys/time.h>
-static sqlite3_uint64 vfslog_time(){
+static sqlite4_uint64 vfslog_time(){
   struct timeval sTime;
   gettimeofday(&sTime, 0);
-  return sTime.tv_usec + (sqlite3_uint64)sTime.tv_sec * 1000000;
+  return sTime.tv_usec + (sqlite4_uint64)sTime.tv_sec * 1000000;
 }
 #elif SQLITE_OS_WIN
 #include <windows.h>
 #include <time.h>
-static sqlite3_uint64 vfslog_time(){
+static sqlite4_uint64 vfslog_time(){
   FILETIME ft;
-  sqlite3_uint64 u64time = 0;
+  sqlite4_uint64 u64time = 0;
  
   GetSystemTimeAsFileTime(&ft);
 
@@ -234,22 +234,22 @@ static sqlite3_uint64 vfslog_time(){
   u64time |= ft.dwLowDateTime;
 
   /* ft is 100-nanosecond intervals, we want microseconds */
-  return u64time /(sqlite3_uint64)10;
+  return u64time /(sqlite4_uint64)10;
 }
 #else
-static sqlite3_uint64 vfslog_time(){
+static sqlite4_uint64 vfslog_time(){
   return 0;
 }
 #endif
 
-static void vfslog_call(sqlite3_vfs *, int, int, int, int, int, int);
-static void vfslog_string(sqlite3_vfs *, const char *);
+static void vfslog_call(sqlite4_vfs *, int, int, int, int, int, int);
+static void vfslog_string(sqlite4_vfs *, const char *);
 
 /*
 ** Close an vfslog-file.
 */
-static int vfslogClose(sqlite3_file *pFile){
-  sqlite3_uint64 t;
+static int vfslogClose(sqlite4_file *pFile){
+  sqlite4_uint64 t;
   int rc = SQLITE_OK;
   VfslogFile *p = (VfslogFile *)pFile;
 
@@ -266,13 +266,13 @@ static int vfslogClose(sqlite3_file *pFile){
 ** Read data from an vfslog-file.
 */
 static int vfslogRead(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
 ){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xRead(p->pReal, zBuf, iAmt, iOfst);
@@ -285,13 +285,13 @@ static int vfslogRead(
 ** Write data to an vfslog-file.
 */
 static int vfslogWrite(
-  sqlite3_file *pFile,
+  sqlite4_file *pFile,
   const void *z,
   int iAmt,
   sqlite_int64 iOfst
 ){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xWrite(p->pReal, z, iAmt, iOfst);
@@ -303,9 +303,9 @@ static int vfslogWrite(
 /*
 ** Truncate an vfslog-file.
 */
-static int vfslogTruncate(sqlite3_file *pFile, sqlite_int64 size){
+static int vfslogTruncate(sqlite4_file *pFile, sqlite_int64 size){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xTruncate(p->pReal, size);
@@ -317,9 +317,9 @@ static int vfslogTruncate(sqlite3_file *pFile, sqlite_int64 size){
 /*
 ** Sync an vfslog-file.
 */
-static int vfslogSync(sqlite3_file *pFile, int flags){
+static int vfslogSync(sqlite4_file *pFile, int flags){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xSync(p->pReal, flags);
@@ -331,9 +331,9 @@ static int vfslogSync(sqlite3_file *pFile, int flags){
 /*
 ** Return the current file-size of an vfslog-file.
 */
-static int vfslogFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
+static int vfslogFileSize(sqlite4_file *pFile, sqlite_int64 *pSize){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xFileSize(p->pReal, pSize);
@@ -345,9 +345,9 @@ static int vfslogFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
 /*
 ** Lock an vfslog-file.
 */
-static int vfslogLock(sqlite3_file *pFile, int eLock){
+static int vfslogLock(sqlite4_file *pFile, int eLock){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xLock(p->pReal, eLock);
@@ -359,9 +359,9 @@ static int vfslogLock(sqlite3_file *pFile, int eLock){
 /*
 ** Unlock an vfslog-file.
 */
-static int vfslogUnlock(sqlite3_file *pFile, int eLock){
+static int vfslogUnlock(sqlite4_file *pFile, int eLock){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xUnlock(p->pReal, eLock);
@@ -373,9 +373,9 @@ static int vfslogUnlock(sqlite3_file *pFile, int eLock){
 /*
 ** Check if another file-handle holds a RESERVED lock on an vfslog-file.
 */
-static int vfslogCheckReservedLock(sqlite3_file *pFile, int *pResOut){
+static int vfslogCheckReservedLock(sqlite4_file *pFile, int *pResOut){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xCheckReservedLock(p->pReal, pResOut);
@@ -387,11 +387,11 @@ static int vfslogCheckReservedLock(sqlite3_file *pFile, int *pResOut){
 /*
 ** File control method. For custom operations on an vfslog-file.
 */
-static int vfslogFileControl(sqlite3_file *pFile, int op, void *pArg){
+static int vfslogFileControl(sqlite4_file *pFile, int op, void *pArg){
   VfslogFile *p = (VfslogFile *)pFile;
   int rc = p->pReal->pMethods->xFileControl(p->pReal, op, pArg);
   if( op==SQLITE_FCNTL_VFSNAME && rc==SQLITE_OK ){
-    *(char**)pArg = sqlite3_mprintf("vfslog/%z", *(char**)pArg);
+    *(char**)pArg = sqlite4_mprintf("vfslog/%z", *(char**)pArg);
   }
   return rc;
 }
@@ -399,9 +399,9 @@ static int vfslogFileControl(sqlite3_file *pFile, int op, void *pArg){
 /*
 ** Return the sector-size in bytes for an vfslog-file.
 */
-static int vfslogSectorSize(sqlite3_file *pFile){
+static int vfslogSectorSize(sqlite4_file *pFile){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xSectorSize(p->pReal);
@@ -413,9 +413,9 @@ static int vfslogSectorSize(sqlite3_file *pFile){
 /*
 ** Return the device characteristic flags supported by an vfslog-file.
 */
-static int vfslogDeviceCharacteristics(sqlite3_file *pFile){
+static int vfslogDeviceCharacteristics(sqlite4_file *pFile){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xDeviceCharacteristics(p->pReal);
@@ -424,9 +424,9 @@ static int vfslogDeviceCharacteristics(sqlite3_file *pFile){
   return rc;
 }
 
-static int vfslogShmLock(sqlite3_file *pFile, int ofst, int n, int flags){
+static int vfslogShmLock(sqlite4_file *pFile, int ofst, int n, int flags){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xShmLock(p->pReal, ofst, n, flags);
@@ -435,14 +435,14 @@ static int vfslogShmLock(sqlite3_file *pFile, int ofst, int n, int flags){
   return rc;
 }
 static int vfslogShmMap(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   int iRegion, 
   int szRegion, 
   int isWrite, 
   volatile void **pp
 ){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xShmMap(p->pReal, iRegion, szRegion, isWrite, pp);
@@ -450,17 +450,17 @@ static int vfslogShmMap(
   vfslog_call(p->pVfslog, OS_SHMMAP, p->iFileId, t, rc, 0, 0);
   return rc;
 }
-static void vfslogShmBarrier(sqlite3_file *pFile){
-  sqlite3_uint64 t;
+static void vfslogShmBarrier(sqlite4_file *pFile){
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   p->pReal->pMethods->xShmBarrier(p->pReal);
   t = vfslog_time() - t;
   vfslog_call(p->pVfslog, OS_SHMBARRIER, p->iFileId, t, SQLITE_OK, 0, 0);
 }
-static int vfslogShmUnmap(sqlite3_file *pFile, int deleteFlag){
+static int vfslogShmUnmap(sqlite4_file *pFile, int deleteFlag){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   t = vfslog_time();
   rc = p->pReal->pMethods->xShmUnmap(p->pReal, deleteFlag);
@@ -474,19 +474,19 @@ static int vfslogShmUnmap(sqlite3_file *pFile, int deleteFlag){
 ** Open an vfslog file handle.
 */
 static int vfslogOpen(
-  sqlite3_vfs *pVfs,
+  sqlite4_vfs *pVfs,
   const char *zName,
-  sqlite3_file *pFile,
+  sqlite4_file *pFile,
   int flags,
   int *pOutFlags
 ){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   VfslogFile *p = (VfslogFile *)pFile;
   VfslogVfs *pLog = (VfslogVfs *)pVfs;
 
   pFile->pMethods = &vfslog_io_methods;
-  p->pReal = (sqlite3_file *)&p[1];
+  p->pReal = (sqlite4_file *)&p[1];
   p->pVfslog = pVfs;
   p->iFileId = ++pLog->iNextFileId;
 
@@ -504,9 +504,9 @@ static int vfslogOpen(
 ** ensure the file-system modifications are synced to disk before
 ** returning.
 */
-static int vfslogDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
+static int vfslogDelete(sqlite4_vfs *pVfs, const char *zPath, int dirSync){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   t = vfslog_time();
   rc = REALVFS(pVfs)->xDelete(REALVFS(pVfs), zPath, dirSync);
   t = vfslog_time() - t;
@@ -520,13 +520,13 @@ static int vfslogDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
 ** is available, or false otherwise.
 */
 static int vfslogAccess(
-  sqlite3_vfs *pVfs, 
+  sqlite4_vfs *pVfs, 
   const char *zPath, 
   int flags, 
   int *pResOut
 ){
   int rc;
-  sqlite3_uint64 t;
+  sqlite4_uint64 t;
   t = vfslog_time();
   rc = REALVFS(pVfs)->xAccess(REALVFS(pVfs), zPath, flags, pResOut);
   t = vfslog_time() - t;
@@ -541,7 +541,7 @@ static int vfslogAccess(
 ** of at least (INST_MAX_PATHNAME+1) bytes.
 */
 static int vfslogFullPathname(
-  sqlite3_vfs *pVfs, 
+  sqlite4_vfs *pVfs, 
   const char *zPath, 
   int nOut, 
   char *zOut
@@ -552,7 +552,7 @@ static int vfslogFullPathname(
 /*
 ** Open the dynamic library located at zPath and return a handle.
 */
-static void *vfslogDlOpen(sqlite3_vfs *pVfs, const char *zPath){
+static void *vfslogDlOpen(sqlite4_vfs *pVfs, const char *zPath){
   return REALVFS(pVfs)->xDlOpen(REALVFS(pVfs), zPath);
 }
 
@@ -561,21 +561,21 @@ static void *vfslogDlOpen(sqlite3_vfs *pVfs, const char *zPath){
 ** utf-8 string describing the most recent error encountered associated 
 ** with dynamic libraries.
 */
-static void vfslogDlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg){
+static void vfslogDlError(sqlite4_vfs *pVfs, int nByte, char *zErrMsg){
   REALVFS(pVfs)->xDlError(REALVFS(pVfs), nByte, zErrMsg);
 }
 
 /*
 ** Return a pointer to the symbol zSymbol in the dynamic library pHandle.
 */
-static void (*vfslogDlSym(sqlite3_vfs *pVfs, void *p, const char *zSym))(void){
+static void (*vfslogDlSym(sqlite4_vfs *pVfs, void *p, const char *zSym))(void){
   return REALVFS(pVfs)->xDlSym(REALVFS(pVfs), p, zSym);
 }
 
 /*
 ** Close the dynamic library handle pHandle.
 */
-static void vfslogDlClose(sqlite3_vfs *pVfs, void *pHandle){
+static void vfslogDlClose(sqlite4_vfs *pVfs, void *pHandle){
   REALVFS(pVfs)->xDlClose(REALVFS(pVfs), pHandle);
 }
 
@@ -583,7 +583,7 @@ static void vfslogDlClose(sqlite3_vfs *pVfs, void *pHandle){
 ** Populate the buffer pointed to by zBufOut with nByte bytes of 
 ** random data.
 */
-static int vfslogRandomness(sqlite3_vfs *pVfs, int nByte, char *zBufOut){
+static int vfslogRandomness(sqlite4_vfs *pVfs, int nByte, char *zBufOut){
   return REALVFS(pVfs)->xRandomness(REALVFS(pVfs), nByte, zBufOut);
 }
 
@@ -591,37 +591,37 @@ static int vfslogRandomness(sqlite3_vfs *pVfs, int nByte, char *zBufOut){
 ** Sleep for nMicro microseconds. Return the number of microseconds 
 ** actually slept.
 */
-static int vfslogSleep(sqlite3_vfs *pVfs, int nMicro){
+static int vfslogSleep(sqlite4_vfs *pVfs, int nMicro){
   return REALVFS(pVfs)->xSleep(REALVFS(pVfs), nMicro);
 }
 
 /*
 ** Return the current time as a Julian Day number in *pTimeOut.
 */
-static int vfslogCurrentTime(sqlite3_vfs *pVfs, double *pTimeOut){
+static int vfslogCurrentTime(sqlite4_vfs *pVfs, double *pTimeOut){
   return REALVFS(pVfs)->xCurrentTime(REALVFS(pVfs), pTimeOut);
 }
 
-static int vfslogGetLastError(sqlite3_vfs *pVfs, int a, char *b){
+static int vfslogGetLastError(sqlite4_vfs *pVfs, int a, char *b){
   return REALVFS(pVfs)->xGetLastError(REALVFS(pVfs), a, b);
 }
-static int vfslogCurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *p){
+static int vfslogCurrentTimeInt64(sqlite4_vfs *pVfs, sqlite4_int64 *p){
   return REALVFS(pVfs)->xCurrentTimeInt64(REALVFS(pVfs), p);
 }
 
 static void vfslog_flush(VfslogVfs *p){
 #ifdef SQLITE_TEST
-  extern int sqlite3_io_error_pending;
-  extern int sqlite3_io_error_persist;
-  extern int sqlite3_diskfull_pending;
+  extern int sqlite4_io_error_pending;
+  extern int sqlite4_io_error_persist;
+  extern int sqlite4_diskfull_pending;
 
-  int pending = sqlite3_io_error_pending;
-  int persist = sqlite3_io_error_persist;
-  int diskfull = sqlite3_diskfull_pending;
+  int pending = sqlite4_io_error_pending;
+  int persist = sqlite4_io_error_persist;
+  int diskfull = sqlite4_diskfull_pending;
 
-  sqlite3_io_error_pending = 0;
-  sqlite3_io_error_persist = 0;
-  sqlite3_diskfull_pending = 0;
+  sqlite4_io_error_pending = 0;
+  sqlite4_io_error_persist = 0;
+  sqlite4_diskfull_pending = 0;
 #endif
 
   if( p->nBuf ){
@@ -631,9 +631,9 @@ static void vfslog_flush(VfslogVfs *p){
   }
 
 #ifdef SQLITE_TEST
-  sqlite3_io_error_pending = pending;
-  sqlite3_io_error_persist = persist;
-  sqlite3_diskfull_pending = diskfull;
+  sqlite4_io_error_pending = pending;
+  sqlite4_io_error_persist = persist;
+  sqlite4_diskfull_pending = diskfull;
 #endif
 }
 
@@ -645,7 +645,7 @@ static void put32bits(unsigned char *p, unsigned int v){
 }
 
 static void vfslog_call(
-  sqlite3_vfs *pVfs,
+  sqlite4_vfs *pVfs,
   int eEvent,
   int iFileid,
   int nClick,
@@ -668,7 +668,7 @@ static void vfslog_call(
   p->nBuf += 24;
 }
 
-static void vfslog_string(sqlite3_vfs *pVfs, const char *zStr){
+static void vfslog_string(sqlite4_vfs *pVfs, const char *zStr){
   VfslogVfs *p = (VfslogVfs *)pVfs;
   unsigned char *zRec;
   int nStr = zStr ? strlen(zStr) : 0;
@@ -688,46 +688,46 @@ static void vfslog_finalize(VfslogVfs *p){
     vfslog_flush(p);
     p->pLog->pMethods->xClose(p->pLog);
   }
-  sqlite3_free(p);
+  sqlite4_free(p);
 }
 
-int sqlite3_vfslog_finalize(const char *zVfs){
-  sqlite3_vfs *pVfs;
-  pVfs = sqlite3_vfs_find(zVfs);
+int sqlite4_vfslog_finalize(const char *zVfs){
+  sqlite4_vfs *pVfs;
+  pVfs = sqlite4_vfs_find(zVfs);
   if( !pVfs || pVfs->xOpen!=vfslogOpen ){
     return SQLITE_ERROR;
   } 
-  sqlite3_vfs_unregister(pVfs);
+  sqlite4_vfs_unregister(pVfs);
   vfslog_finalize((VfslogVfs *)pVfs);
   return SQLITE_OK;
 }
 
-int sqlite3_vfslog_new(
+int sqlite4_vfslog_new(
   const char *zVfs,               /* New VFS name */
   const char *zParentVfs,         /* Parent VFS name (or NULL) */
   const char *zLog                /* Log file name */
 ){
   VfslogVfs *p;
-  sqlite3_vfs *pParent;
+  sqlite4_vfs *pParent;
   int nByte;
   int flags;
   int rc;
   char *zFile;
   int nVfs;
 
-  pParent = sqlite3_vfs_find(zParentVfs);
+  pParent = sqlite4_vfs_find(zParentVfs);
   if( !pParent ){
     return SQLITE_ERROR;
   }
 
   nVfs = strlen(zVfs);
   nByte = sizeof(VfslogVfs) + pParent->szOsFile + nVfs+1+pParent->mxPathname+1;
-  p = (VfslogVfs *)sqlite3_malloc(nByte);
+  p = (VfslogVfs *)sqlite4_malloc(nByte);
   memset(p, 0, nByte);
 
   p->pVfs = pParent;
-  p->pLog = (sqlite3_file *)&p[1];
-  memcpy(&p->base, &vfslog_vfs, sizeof(sqlite3_vfs));
+  p->pLog = (sqlite4_file *)&p[1];
+  memcpy(&p->base, &vfslog_vfs, sizeof(sqlite4_vfs));
   p->base.zName = &((char *)p->pLog)[pParent->szOsFile];
   p->base.szOsFile += pParent->szOsFile;
   memcpy((char *)p->base.zName, zVfs, nVfs);
@@ -742,7 +742,7 @@ int sqlite3_vfslog_new(
     memcpy(p->aBuf, "sqlite_ostrace1.....", 20);
     p->iOffset = 0;
     p->nBuf = 20;
-    rc = sqlite3_vfs_register((sqlite3_vfs *)p, 1);
+    rc = sqlite4_vfs_register((sqlite4_vfs *)p, 1);
   }
   if( rc ){
     vfslog_finalize(p);
@@ -750,9 +750,9 @@ int sqlite3_vfslog_new(
   return rc;
 }
 
-int sqlite3_vfslog_annotate(const char *zVfs, const char *zMsg){
-  sqlite3_vfs *pVfs;
-  pVfs = sqlite3_vfs_find(zVfs);
+int sqlite4_vfslog_annotate(const char *zVfs, const char *zMsg){
+  sqlite4_vfs *pVfs;
+  pVfs = sqlite4_vfs_find(zVfs);
   if( !pVfs || pVfs->xOpen!=vfslogOpen ){
     return SQLITE_ERROR;
   } 
@@ -803,9 +803,9 @@ typedef struct VfslogCsr VfslogCsr;
 ** Virtual table type for the vfslog reader module.
 */
 struct VfslogVtab {
-  sqlite3_vtab base;              /* Base class */
-  sqlite3_file *pFd;              /* File descriptor open on vfslog file */
-  sqlite3_int64 nByte;            /* Size of file in bytes */
+  sqlite4_vtab base;              /* Base class */
+  sqlite4_file *pFd;              /* File descriptor open on vfslog file */
+  sqlite4_int64 nByte;            /* Size of file in bytes */
   char *zFile;                    /* File name for pFd */
 };
 
@@ -813,9 +813,9 @@ struct VfslogVtab {
 ** Virtual table cursor type for the vfslog reader module.
 */
 struct VfslogCsr {
-  sqlite3_vtab_cursor base;       /* Base class */
-  sqlite3_int64 iRowid;           /* Current rowid. */
-  sqlite3_int64 iOffset;          /* Offset of next record in file */
+  sqlite4_vtab_cursor base;       /* Base class */
+  sqlite4_int64 iRowid;           /* Current rowid. */
+  sqlite4_int64 iOffset;          /* Offset of next record in file */
   char *zTransient;               /* Transient 'file' string */
   int nFile;                      /* Size of array azFile[] */
   char **azFile;                  /* File strings */
@@ -856,13 +856,13 @@ static void dequote(char *z){
 ** Connect to or create a vfslog virtual table.
 */
 static int vlogConnect(
-  sqlite3 *db,
+  sqlite4 *db,
   void *pAux,
   int argc, const char *const*argv,
-  sqlite3_vtab **ppVtab,
+  sqlite4_vtab **ppVtab,
   char **pzErr
 ){
-  sqlite3_vfs *pVfs;              /* VFS used to read log file */
+  sqlite4_vfs *pVfs;              /* VFS used to read log file */
   int flags;                      /* flags passed to pVfs->xOpen() */
   VfslogVtab *p;
   int rc;
@@ -870,35 +870,35 @@ static int vlogConnect(
   char *zFile;
 
   *ppVtab = 0;
-  pVfs = sqlite3_vfs_find(0);
+  pVfs = sqlite4_vfs_find(0);
   nByte = sizeof(VfslogVtab) + pVfs->szOsFile + pVfs->mxPathname;
-  p = sqlite3_malloc(nByte);
+  p = sqlite4_malloc(nByte);
   if( p==0 ) return SQLITE_NOMEM;
   memset(p, 0, nByte);
 
-  p->pFd = (sqlite3_file *)&p[1];
+  p->pFd = (sqlite4_file *)&p[1];
   p->zFile = &((char *)p->pFd)[pVfs->szOsFile];
 
-  zFile = sqlite3_mprintf("%s", argv[3]);
+  zFile = sqlite4_mprintf("%s", argv[3]);
   if( !zFile ){
-    sqlite3_free(p);
+    sqlite4_free(p);
     return SQLITE_NOMEM;
   }
   dequote(zFile);
   pVfs->xFullPathname(pVfs, zFile, pVfs->mxPathname, p->zFile);
-  sqlite3_free(zFile);
+  sqlite4_free(zFile);
 
   flags = SQLITE_OPEN_READWRITE|SQLITE_OPEN_MASTER_JOURNAL;
   rc = pVfs->xOpen(pVfs, p->zFile, p->pFd, flags, &flags);
 
   if( rc==SQLITE_OK ){
     p->pFd->pMethods->xFileSize(p->pFd, &p->nByte);
-    sqlite3_declare_vtab(db, 
+    sqlite4_declare_vtab(db, 
         "CREATE TABLE xxx(event, file, click, rc, size, offset)"
     );
     *ppVtab = &p->base;
   }else{
-    sqlite3_free(p);
+    sqlite4_free(p);
   }
 
   return rc;
@@ -908,7 +908,7 @@ static int vlogConnect(
 ** There is no "best-index". This virtual table always does a linear
 ** scan of the binary VFS log file.
 */
-static int vlogBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
+static int vlogBestIndex(sqlite4_vtab *tab, sqlite4_index_info *pIdxInfo){
   pIdxInfo->estimatedCost = 10.0;
   return SQLITE_OK;
 }
@@ -916,23 +916,23 @@ static int vlogBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
 /*
 ** Disconnect from or destroy a vfslog virtual table.
 */
-static int vlogDisconnect(sqlite3_vtab *pVtab){
+static int vlogDisconnect(sqlite4_vtab *pVtab){
   VfslogVtab *p = (VfslogVtab *)pVtab;
   if( p->pFd->pMethods ){
     p->pFd->pMethods->xClose(p->pFd);
     p->pFd->pMethods = 0;
   }
-  sqlite3_free(p);
+  sqlite4_free(p);
   return SQLITE_OK;
 }
 
 /*
 ** Open a new vfslog cursor.
 */
-static int vlogOpen(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCursor){
+static int vlogOpen(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCursor){
   VfslogCsr *pCsr;                /* Newly allocated cursor object */
 
-  pCsr = sqlite3_malloc(sizeof(VfslogCsr));
+  pCsr = sqlite4_malloc(sizeof(VfslogCsr));
   if( !pCsr ) return SQLITE_NOMEM;
   memset(pCsr, 0, sizeof(VfslogCsr));
   *ppCursor = &pCsr->base;
@@ -942,28 +942,28 @@ static int vlogOpen(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCursor){
 /*
 ** Close a vfslog cursor.
 */
-static int vlogClose(sqlite3_vtab_cursor *pCursor){
+static int vlogClose(sqlite4_vtab_cursor *pCursor){
   VfslogCsr *p = (VfslogCsr *)pCursor;
   int i;
   for(i=0; i<p->nFile; i++){
-    sqlite3_free(p->azFile[i]);
+    sqlite4_free(p->azFile[i]);
   }
-  sqlite3_free(p->azFile);
-  sqlite3_free(p->zTransient);
-  sqlite3_free(p);
+  sqlite4_free(p->azFile);
+  sqlite4_free(p->zTransient);
+  sqlite4_free(p);
   return SQLITE_OK;
 }
 
 /*
 ** Move a vfslog cursor to the next entry in the file.
 */
-static int vlogNext(sqlite3_vtab_cursor *pCursor){
+static int vlogNext(sqlite4_vtab_cursor *pCursor){
   VfslogCsr *pCsr = (VfslogCsr *)pCursor;
   VfslogVtab *p = (VfslogVtab *)pCursor->pVtab;
   int rc = SQLITE_OK;
   int nRead;
 
-  sqlite3_free(pCsr->zTransient);
+  sqlite4_free(pCsr->zTransient);
   pCsr->zTransient = 0;
 
   nRead = 24;
@@ -980,7 +980,7 @@ static int vlogNext(sqlite3_vtab_cursor *pCursor){
       nRead += 4;
       if( rc==SQLITE_OK ){
         int nStr = get32bits((unsigned char *)buf);
-        char *zStr = sqlite3_malloc(nStr+1);
+        char *zStr = sqlite4_malloc(nStr+1);
         rc = p->pFd->pMethods->xRead(p->pFd, zStr, nStr, pCsr->iOffset+nRead);
         zStr[nStr] = '\0';
         nRead += nStr;
@@ -989,12 +989,12 @@ static int vlogNext(sqlite3_vtab_cursor *pCursor){
           int iFileid = get32bits(&pCsr->aBuf[4]);
           if( iFileid>=pCsr->nFile ){
             int nNew = sizeof(pCsr->azFile[0])*(iFileid+1);
-            pCsr->azFile = (char **)sqlite3_realloc(pCsr->azFile, nNew);
+            pCsr->azFile = (char **)sqlite4_realloc(pCsr->azFile, nNew);
             nNew -= sizeof(pCsr->azFile[0])*pCsr->nFile;
             memset(&pCsr->azFile[pCsr->nFile], 0, nNew);
             pCsr->nFile = iFileid+1;
           }
-          sqlite3_free(pCsr->azFile[iFileid]);
+          sqlite4_free(pCsr->azFile[iFileid]);
           pCsr->azFile[iFileid] = zStr;
         }else{
           pCsr->zTransient = zStr;
@@ -1008,16 +1008,16 @@ static int vlogNext(sqlite3_vtab_cursor *pCursor){
   return rc;
 }
 
-static int vlogEof(sqlite3_vtab_cursor *pCursor){
+static int vlogEof(sqlite4_vtab_cursor *pCursor){
   VfslogCsr *pCsr = (VfslogCsr *)pCursor;
   VfslogVtab *p = (VfslogVtab *)pCursor->pVtab;
   return (pCsr->iOffset>=p->nByte);
 }
 
 static int vlogFilter(
-  sqlite3_vtab_cursor *pCursor, 
+  sqlite4_vtab_cursor *pCursor, 
   int idxNum, const char *idxStr,
-  int argc, sqlite3_value **argv
+  int argc, sqlite4_value **argv
 ){
   VfslogCsr *pCsr = (VfslogCsr *)pCursor;
   pCsr->iRowid = 0;
@@ -1026,8 +1026,8 @@ static int vlogFilter(
 }
 
 static int vlogColumn(
-  sqlite3_vtab_cursor *pCursor, 
-  sqlite3_context *ctx, 
+  sqlite4_vtab_cursor *pCursor, 
+  sqlite4_context *ctx, 
   int i
 ){
   unsigned int val;
@@ -1038,7 +1038,7 @@ static int vlogColumn(
 
   switch( i ){
     case 0: {
-      sqlite3_result_text(ctx, vfslog_eventname(val), -1, SQLITE_STATIC);
+      sqlite4_result_text(ctx, vfslog_eventname(val), -1, SQLITE_STATIC);
       break;
     }
     case 1: {
@@ -1046,25 +1046,25 @@ static int vlogColumn(
       if( val!=0 && val<pCsr->nFile ){
         zStr = pCsr->azFile[val];
       }
-      sqlite3_result_text(ctx, zStr, -1, SQLITE_TRANSIENT);
+      sqlite4_result_text(ctx, zStr, -1, SQLITE_TRANSIENT);
       break;
     }
     default:
-      sqlite3_result_int(ctx, val);
+      sqlite4_result_int(ctx, val);
       break;
   }
 
   return SQLITE_OK;
 }
 
-static int vlogRowid(sqlite3_vtab_cursor *pCursor, sqlite_int64 *pRowid){
+static int vlogRowid(sqlite4_vtab_cursor *pCursor, sqlite_int64 *pRowid){
   VfslogCsr *pCsr = (VfslogCsr *)pCursor;
   *pRowid = pCsr->iRowid;
   return SQLITE_OK;
 }
 
-int sqlite3_vfslog_register(sqlite3 *db){
-  static sqlite3_module vfslog_module = {
+int sqlite4_vfslog_register(sqlite4 *db){
+  static sqlite4_module vfslog_module = {
     0,                            /* iVersion */
     vlogConnect,                /* xCreate */
     vlogConnect,                /* xConnect */
@@ -1087,7 +1087,7 @@ int sqlite3_vfslog_register(sqlite3 *db){
     0,                            /* xRename */
   };
 
-  sqlite3_create_module(db, "vfslog", &vfslog_module, 0);
+  sqlite4_create_module(db, "vfslog", &vfslog_module, 0);
   return SQLITE_OK;
 }
 #endif /* SQLITE_OMIT_VIRTUALTABLE */
@@ -1107,8 +1107,8 @@ static int test_vfslog(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  struct SqliteDb { sqlite3 *db; };
-  sqlite3 *db;
+  struct SqliteDb { sqlite4 *db; };
+  sqlite4 *db;
   Tcl_CmdInfo cmdInfo;
   int rc = SQLITE_ERROR;
 
@@ -1135,7 +1135,7 @@ static int test_vfslog(
       }
       zVfs = Tcl_GetString(objv[2]);
       zMsg = Tcl_GetString(objv[3]);
-      rc = sqlite3_vfslog_annotate(zVfs, zMsg);
+      rc = sqlite4_vfslog_annotate(zVfs, zMsg);
       if( rc!=SQLITE_OK ){
         Tcl_AppendResult(interp, "failed", 0);
         return TCL_ERROR;
@@ -1150,7 +1150,7 @@ static int test_vfslog(
         return TCL_ERROR;
       }
       zVfs = Tcl_GetString(objv[2]);
-      rc = sqlite3_vfslog_finalize(zVfs);
+      rc = sqlite4_vfslog_finalize(zVfs);
       if( rc!=SQLITE_OK ){
         Tcl_AppendResult(interp, "failed", 0);
         return TCL_ERROR;
@@ -1171,7 +1171,7 @@ static int test_vfslog(
       zParent = Tcl_GetString(objv[3]);
       zLog = Tcl_GetString(objv[4]);
       if( *zParent=='\0' ) zParent = 0;
-      rc = sqlite3_vfslog_new(zVfs, zParent, zLog);
+      rc = sqlite4_vfslog_new(zVfs, zParent, zLog);
       if( rc!=SQLITE_OK ){
         Tcl_AppendResult(interp, "failed", 0);
         return TCL_ERROR;
@@ -1193,10 +1193,10 @@ static int test_vfslog(
       zDb = Tcl_GetString(objv[2]);
       if( Tcl_GetCommandInfo(interp, zDb, &cmdInfo) ){
         db = ((struct SqliteDb*)cmdInfo.objClientData)->db;
-        rc = sqlite3_vfslog_register(db);
+        rc = sqlite4_vfslog_register(db);
       }
       if( rc!=SQLITE_OK ){
-        Tcl_AppendResult(interp, "bad sqlite3 handle: ", zDb, (void*)0);
+        Tcl_AppendResult(interp, "bad sqlite4 handle: ", zDb, (void*)0);
         return TCL_ERROR;
       }
       break;

@@ -231,7 +231,7 @@ do_test fts3cov-6.1 {
 
 # First time.
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 do_write_test fts3cov-6.2 t5_content {
   INSERT INTO t5 VALUES('segment number 16!');
 }

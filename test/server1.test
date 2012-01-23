@@ -21,7 +21,7 @@ source $testdir/tester.tcl
 
 # Skip this whole file if the server testing code is not enabled
 #
-if {[llength [info command client_step]]==0 || [sqlite3 -has-codec]} {
+if {[llength [info command client_step]]==0 || [sqlite4 -has-codec]} {
   finish_test
   return
 }
@@ -167,5 +167,5 @@ do_test server1-2.6 {
 } SQLITE_OK
 
 client_halt *   
-sqlite3_enable_shared_cache 0
+sqlite4_enable_shared_cache 0
 finish_test

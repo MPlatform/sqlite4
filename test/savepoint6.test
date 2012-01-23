@@ -224,21 +224,21 @@ do_test savepoint6-1.2 {
 
 foreach zSetup [list {
   set testname normal
-  sqlite3 db test.db
+  sqlite4 db test.db
 } {
   if {[wal_is_wal_mode]} continue
   set testname tempdb
-  sqlite3 db ""
+  sqlite4 db ""
 } {
   if {[permutation] eq "journaltest"} {
     continue
   }
   set testname nosync
-  sqlite3 db test.db
+  sqlite4 db test.db
   sql { PRAGMA synchronous = off }
 } {
   set testname smallcache
-  sqlite3 db test.db
+  sqlite4 db test.db
   sql { PRAGMA cache_size = 10 }
 }] {
 

@@ -22,7 +22,7 @@ ifcapable !vtab {
   return
 }
 
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 # See ticket #2244
 #

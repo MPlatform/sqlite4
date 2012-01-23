@@ -11,15 +11,15 @@
 # This file implements regression tests for SQLite library.
 #
 # The focus of the tests in this file are to verify that the
-# underlying TEXT or BLOB representation of an sqlite3_value
+# underlying TEXT or BLOB representation of an sqlite4_value
 # changes appropriately when APIs from the following set are
 # called:
 #
-#     sqlite3_value_text()
-#     sqlite3_value_text16()
-#     sqlite3_value_blob()
-#     sqlite3_value_bytes()
-#     sqlite3_value_bytes16()
+#     sqlite4_value_text()
+#     sqlite4_value_text16()
+#     sqlite4_value_blob()
+#     sqlite4_value_bytes()
+#     sqlite4_value_bytes16()
 #
 # $Id: ptrchng.test,v 1.5 2008/07/12 14:52:20 drh Exp $
 
@@ -33,7 +33,7 @@ ifcapable !bloblit {
 
 # Register the "pointer_change" SQL function.
 #
-sqlite3_create_function db
+sqlite4_create_function db
 
 do_test ptrchng-1.1 {
   execsql {

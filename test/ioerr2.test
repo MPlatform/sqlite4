@@ -54,7 +54,7 @@ proc check_db {testname} {
   set rc [catch {execsql {PRAGMA integrity_check}} msg]
   if {$rc && ($msg eq "disk I/O error" || $msg eq "database is locked")} {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     set refcnt 0
   } else {
     if {$rc || $msg ne "ok"} {
@@ -69,7 +69,7 @@ proc check_db {testname} {
   do_test ${testname}.cksum [list set ck $ck] $::cksum
   integrity_check ${testname}.integrity
   do_test ${testname}.refcnt {
-    lindex [sqlite3_pager_refcounts db] 0
+    lindex [sqlite4_pager_refcounts db] 0
   } 0
 }
 
@@ -91,7 +91,7 @@ foreach bPersist [list 0 1] {
   set ::go 1
   for {set ::N 1} {$::go} {incr ::N} {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     set ::sqlite_io_error_hit 0
     set ::sqlite_io_error_persist $bPersist
     set ::sqlite_io_error_pending $::N

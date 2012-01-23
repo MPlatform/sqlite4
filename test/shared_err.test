@@ -28,10 +28,10 @@ ifcapable !shared_cache||!subquery {
   return
 }
 
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 do_ioerr_test shared_ioerr-1 -tclprep {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA read_uncommitted = 1;
     CREATE TABLE t1(a,b,c);
@@ -84,7 +84,7 @@ do_ioerr_test shared_ioerr-1 -tclprep {
 }
 
 do_ioerr_test shared_ioerr-2 -tclprep {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA read_uncommitted = 1;
     BEGIN;
@@ -146,7 +146,7 @@ do_ioerr_test shared_ioerr-2 -tclprep {
 # "saved" (because another cursor is going to modify the underlying table). 
 # 
 do_ioerr_test shared_ioerr-3 -tclprep {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA read_uncommitted = 1;
     PRAGMA cache_size = 10;
@@ -160,10 +160,10 @@ do_ioerr_test shared_ioerr-3 -tclprep {
     execsql {INSERT INTO t1 VALUES($a, $b)} db2
   }
   execsql {COMMIT} db2
-  set ::DB2 [sqlite3_connection_pointer db2]
-  set ::STMT [sqlite3_prepare $::DB2 "SELECT a FROM t1 ORDER BY a" -1 DUMMY]
-  sqlite3_step $::STMT       ;# Cursor points at 000.000.000.000
-  sqlite3_step $::STMT       ;# Cursor points at 001.001.001.001
+  set ::DB2 [sqlite4_connection_pointer db2]
+  set ::STMT [sqlite4_prepare $::DB2 "SELECT a FROM t1 ORDER BY a" -1 DUMMY]
+  sqlite4_step $::STMT       ;# Cursor points at 000.000.000.000
+  sqlite4_step $::STMT       ;# Cursor points at 001.001.001.001
 
 } -tclbody {
   execsql {
@@ -173,25 +173,25 @@ do_ioerr_test shared_ioerr-3 -tclprep {
     COMMIT;
   }
 } -cleanup {
-  set ::steprc  [sqlite3_step $::STMT]
-  set ::column  [sqlite3_column_text $::STMT 0]
-  set ::finalrc [sqlite3_finalize $::STMT]
+  set ::steprc  [sqlite4_step $::STMT]
+  set ::column  [sqlite4_column_text $::STMT 0]
+  set ::finalrc [sqlite4_finalize $::STMT]
 
   # There are three possible outcomes here (assuming persistent IO errors):
   #
-  # 1. If the [sqlite3_step] did not require any IO (required pages in
+  # 1. If the [sqlite4_step] did not require any IO (required pages in
   #    the cache), then the next row ("002...") may be retrieved 
   #    successfully.
   #
-  # 2. If the [sqlite3_step] does require IO, then [sqlite3_step] returns
-  #    SQLITE_ERROR and [sqlite3_finalize] returns IOERR.
+  # 2. If the [sqlite4_step] does require IO, then [sqlite4_step] returns
+  #    SQLITE_ERROR and [sqlite4_finalize] returns IOERR.
   #
   # 3. If, after the initial IO error, SQLite tried to rollback the
   #    active transaction and a second IO error was encountered, then
-  #    statement $::STMT will have been aborted. This means [sqlite3_stmt]
+  #    statement $::STMT will have been aborted. This means [sqlite4_stmt]
   #    returns SQLITE_ABORT, and the statement cursor does not move. i.e.
-  #    [sqlite3_column] still returns the current row ("001...") and
-  #    [sqlite3_finalize] returns SQLITE_OK.
+  #    [sqlite4_column] still returns the current row ("001...") and
+  #    [sqlite4_finalize] returns SQLITE_OK.
   #
 
   do_test shared_ioerr-3.$n.cleanup.1 {
@@ -225,7 +225,7 @@ do_ioerr_test shared_ioerr-3 -tclprep {
 # "saved".
 # 
 do_ioerr_test shared_ioerr-3rev -tclprep {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA read_uncommitted = 1;
     PRAGMA cache_size = 10;
@@ -239,11 +239,11 @@ do_ioerr_test shared_ioerr-3rev -tclprep {
     execsql {INSERT INTO t1 VALUES($a, $b)} db2
   }
   execsql {COMMIT} db2
-  set ::DB2 [sqlite3_connection_pointer db2]
-  set ::STMT [sqlite3_prepare $::DB2 \
+  set ::DB2 [sqlite4_connection_pointer db2]
+  set ::STMT [sqlite4_prepare $::DB2 \
            "SELECT a FROM t1 ORDER BY a DESC" -1 DUMMY]
-  sqlite3_step $::STMT       ;# Cursor points at 199.199.199.199.199
-  sqlite3_step $::STMT       ;# Cursor points at 198.198.198.198.198
+  sqlite4_step $::STMT       ;# Cursor points at 199.199.199.199.199
+  sqlite4_step $::STMT       ;# Cursor points at 198.198.198.198.198
 
 } -tclbody {
   execsql {
@@ -253,25 +253,25 @@ do_ioerr_test shared_ioerr-3rev -tclprep {
     COMMIT;
   }
 } -cleanup {
-  set ::steprc  [sqlite3_step $::STMT]
-  set ::column  [sqlite3_column_text $::STMT 0]
-  set ::finalrc [sqlite3_finalize $::STMT]
+  set ::steprc  [sqlite4_step $::STMT]
+  set ::column  [sqlite4_column_text $::STMT 0]
+  set ::finalrc [sqlite4_finalize $::STMT]
 
   # There are three possible outcomes here (assuming persistent IO errors):
   #
-  # 1. If the [sqlite3_step] did not require any IO (required pages in
+  # 1. If the [sqlite4_step] did not require any IO (required pages in
   #    the cache), then the next row ("002...") may be retrieved 
   #    successfully.
   #
-  # 2. If the [sqlite3_step] does require IO, then [sqlite3_step] returns
-  #    SQLITE_ERROR and [sqlite3_finalize] returns IOERR.
+  # 2. If the [sqlite4_step] does require IO, then [sqlite4_step] returns
+  #    SQLITE_ERROR and [sqlite4_finalize] returns IOERR.
   #
   # 3. If, after the initial IO error, SQLite tried to rollback the
   #    active transaction and a second IO error was encountered, then
-  #    statement $::STMT will have been aborted. This means [sqlite3_stmt]
+  #    statement $::STMT will have been aborted. This means [sqlite4_stmt]
   #    returns SQLITE_ABORT, and the statement cursor does not move. i.e.
-  #    [sqlite3_column] still returns the current row ("001...") and
-  #    [sqlite3_finalize] returns SQLITE_OK.
+  #    [sqlite4_column] still returns the current row ("001...") and
+  #    [sqlite4_finalize] returns SQLITE_OK.
   #
 
   do_test shared_ioerr-3rev.$n.cleanup.1 {
@@ -310,7 +310,7 @@ do_ioerr_test shared_ioerr-3rev -tclprep {
 # continue unaffected.
 # 
 do_malloc_test shared_err-4 -tclprep {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA read_uncommitted = 1;
     BEGIN;
@@ -322,26 +322,26 @@ do_malloc_test shared_err-4 -tclprep {
     execsql {INSERT INTO t1 VALUES($a, $b)} db2
   }
   execsql {COMMIT} db2
-  set ::DB2 [sqlite3_connection_pointer db2]
-  set ::STMT [sqlite3_prepare $::DB2 "SELECT a FROM t1 ORDER BY a" -1 DUMMY]
-  sqlite3_step $::STMT       ;# Cursor points at 0000000000
-  sqlite3_step $::STMT       ;# Cursor points at 1111111111
+  set ::DB2 [sqlite4_connection_pointer db2]
+  set ::STMT [sqlite4_prepare $::DB2 "SELECT a FROM t1 ORDER BY a" -1 DUMMY]
+  sqlite4_step $::STMT       ;# Cursor points at 0000000000
+  sqlite4_step $::STMT       ;# Cursor points at 1111111111
 } -tclbody {
   execsql {
     INSERT INTO t1 VALUES(6, NULL);
   }
 } -cleanup {
   do_test shared_malloc-4.$::n.cleanup.1 {
-    set ::rc [sqlite3_step $::STMT]
+    set ::rc [sqlite4_step $::STMT]
     expr {$::rc=="SQLITE_ROW" || $::rc=="SQLITE_ERROR"}
   } {1}
   if {$::rc=="SQLITE_ROW"} {
     do_test shared_malloc-4.$::n.cleanup.2 {
-      sqlite3_column_text $::STMT 0
+      sqlite4_column_text $::STMT 0
     } {2222222222}
   }
   do_test shared_malloc-4.$::n.cleanup.3 {
-   set rc [sqlite3_finalize $::STMT]
+   set rc [sqlite4_finalize $::STMT]
    expr {$rc=="SQLITE_OK" || $rc=="SQLITE_ABORT" ||
          $rc=="SQLITE_NOMEM" || $rc=="SQLITE_IOERR"}
   } {1}
@@ -351,8 +351,8 @@ do_malloc_test shared_err-4 -tclprep {
 
 do_malloc_test shared_err-5 -tclbody {
   db close
-  sqlite3 dbX test.db
-  sqlite3 dbY test.db
+  sqlite4 dbX test.db
+  sqlite4 dbY test.db
   dbX close
   dbY close
 } -cleanup {
@@ -363,19 +363,19 @@ do_malloc_test shared_err-5 -tclbody {
 do_malloc_test shared_err-6 -tclbody {
   catch {db close}
   ifcapable deprecated {
-    sqlite3_thread_cleanup
+    sqlite4_thread_cleanup
   }
-  sqlite3_enable_shared_cache 0
+  sqlite4_enable_shared_cache 0
 } -cleanup {
-  sqlite3_enable_shared_cache 1
+  sqlite4_enable_shared_cache 1
 }
 
-# As of 3.5.0, sqlite3_enable_shared_cache can be called at
+# As of 3.5.0, sqlite4_enable_shared_cache can be called at
 # any time and from any thread
 #do_test shared_err-misuse-7.1 {
-#  sqlite3 db test.db
+#  sqlite4 db test.db
 #  catch {
-#    sqlite3_enable_shared_cache 0
+#    sqlite4_enable_shared_cache 0
 #  } msg
 #  set msg
 #} {library routine called out of sequence}
@@ -389,7 +389,7 @@ do_malloc_test shared_err-6 -tclbody {
 # 
 set ::aborted 0
 do_malloc_test shared_err-8 -tclprep {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA read_uncommitted = 1;
     BEGIN;
@@ -401,10 +401,10 @@ do_malloc_test shared_err-8 -tclprep {
     execsql {INSERT INTO t1 VALUES($a, $b)} db2
   }
   execsql {COMMIT} db2
-  set ::DB2 [sqlite3_connection_pointer db2]
-  set ::STMT [sqlite3_prepare $::DB2 "SELECT a FROM t1 ORDER BY a" -1 DUMMY]
-  sqlite3_step $::STMT       ;# Cursor points at 0000000000
-  sqlite3_step $::STMT       ;# Cursor points at 1111111111
+  set ::DB2 [sqlite4_connection_pointer db2]
+  set ::STMT [sqlite4_prepare $::DB2 "SELECT a FROM t1 ORDER BY a" -1 DUMMY]
+  sqlite4_step $::STMT       ;# Cursor points at 0000000000
+  sqlite4_step $::STMT       ;# Cursor points at 1111111111
 } -tclbody {
   execsql {
     BEGIN;
@@ -430,8 +430,8 @@ do_malloc_test shared_err-8 -tclprep {
     }
   } {1}
   do_test shared_malloc-8.$::n.cleanup.2 {
-    set rc1 [sqlite3_step $::STMT]
-    set rc2 [sqlite3_finalize $::STMT]
+    set rc1 [sqlite4_step $::STMT]
+    set rc2 [sqlite4_finalize $::STMT]
     if {$rc2=="SQLITE_ABORT"} {
       incr ::aborted
     }
@@ -458,7 +458,7 @@ do_test shared_malloc-8.X {
 # This test will crash 3.4.2.
 #
 do_malloc_test shared_err-9 -tclprep {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
 } -sqlbody {
   PRAGMA page_size = 4096;
   PRAGMA page_size = 1024;
@@ -475,8 +475,8 @@ do_malloc_test shared_err-9 -tclprep {
 catch {db close}
 catch {db2 close}
 do_malloc_test shared_err-10 -tclprep {
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   
   db eval { SELECT * FROM sqlite_master }
   db2 eval { 
@@ -491,8 +491,8 @@ do_malloc_test shared_err-10 -tclprep {
 }
 
 do_malloc_test shared_err-11 -tclprep {
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   
   db eval { SELECT * FROM sqlite_master }
   db2 eval { 
@@ -501,7 +501,7 @@ do_malloc_test shared_err-11 -tclprep {
   }
 } -tclbody {
   catch {db eval {SELECT * FROM sqlite_master}}
-  catch {sqlite3_errmsg16 db}
+  catch {sqlite4_errmsg16 db}
   error 1
 } -cleanup {
   execsql { SELECT * FROM sqlite_master }
@@ -517,5 +517,5 @@ do_malloc_test shared_err-12 -sqlbody {
 
 catch {db close}
 catch {db2 close}
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

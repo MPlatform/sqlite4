@@ -273,7 +273,7 @@ ifcapable tempdb {
   } {1 {no such table: main.t2}}
   do_test trigger-3.3 {
     db close
-    set rc [catch {sqlite3 db test.db} err]
+    set rc [catch {sqlite4 db test.db} err]
     if {$rc} {lappend rc $err}
     set rc
   } {0}
@@ -319,7 +319,7 @@ ifcapable tempdb {
   } {1 2 3 4 3 4}
   do_test trigger1-3.9 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       INSERT INTO t1 VALUES(5,6);
       SELECT * FROM t1 UNION ALL SELECT * FROM t2;
@@ -336,7 +336,7 @@ ifcapable tempdb {
   } {1 2 3 4 3 4}
   do_test trigger1-3.9 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       INSERT INTO t1 VALUES(5,6);
       SELECT * FROM t1;
@@ -355,7 +355,7 @@ ifcapable tempdb {
     }
   } {3 4 7 8}
   do_test trigger1-4.2 {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql {
       INSERT INTO t1 VALUES(9,10);
     } db2;
@@ -372,7 +372,7 @@ ifcapable tempdb {
   } {3 4 7 8}
   do_test trigger1-4.4 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       SELECT * FROM t2;
     };
@@ -416,7 +416,7 @@ do_test trigger1-6.4 {
 } {3 4 7 8}
 do_test trigger1-6.5 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {SELECT type, name FROM sqlite_master}
 } [concat $view_v1 {table t2 trigger t2}]
 do_test trigger1-6.6 {
@@ -430,7 +430,7 @@ do_test trigger1-6.7 {
 } {3 4 7 8}
 do_test trigger1-6.8 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {SELECT * FROM t2}
 } {3 4 7 8}
 

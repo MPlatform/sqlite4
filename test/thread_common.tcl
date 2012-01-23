@@ -31,16 +31,16 @@ set thread_procs {
 
       enter_db_mutex $::DB
       set err [catch {
-        set ::STMT [sqlite3_prepare_v2 $::DB $sql -1 dummy_tail]
+        set ::STMT [sqlite4_prepare_v2 $::DB $sql -1 dummy_tail]
       } msg]
 
       if {$err == 0} {
-        while {[set rc [sqlite3_step $::STMT]] eq "SQLITE_ROW"} {
-          for {set i 0} {$i < [sqlite3_column_count $::STMT]} {incr i} {
-            lappend res [sqlite3_column_text $::STMT 0]
+        while {[set rc [sqlite4_step $::STMT]] eq "SQLITE_ROW"} {
+          for {set i 0} {$i < [sqlite4_column_count $::STMT]} {incr i} {
+            lappend res [sqlite4_column_text $::STMT 0]
           }
         }
-        set rc [sqlite3_finalize $::STMT]
+        set rc [sqlite4_finalize $::STMT]
       } else {
         if {[lindex $msg 0]=="(6)"} {
           set rc SQLITE_LOCKED
@@ -49,11 +49,11 @@ set thread_procs {
         }
       }
 
-      if {[string first locked [sqlite3_errmsg $::DB]]>=0} {
+      if {[string first locked [sqlite4_errmsg $::DB]]>=0} {
         set rc SQLITE_LOCKED
       }
       if {$rc ne "SQLITE_OK"} {
-        set errtxt "$rc - [sqlite3_errmsg $::DB] (debug1)"
+        set errtxt "$rc - [sqlite4_errmsg $::DB] (debug1)"
       }
       leave_db_mutex $::DB
 

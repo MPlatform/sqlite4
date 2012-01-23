@@ -47,7 +47,7 @@ ifcapable !subquery||!memorydb {
 # Construct the sample database.
 #
 do_test tkt1443-1.0 {
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   execsql {
     CREATE TABLE Items(
     	itemId integer primary key,

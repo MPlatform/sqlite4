@@ -19,7 +19,7 @@ source $testdir/tester.tcl
 ifcapable !vtab||!schema_pragmas { finish_test ; return }
 
 # Register the echo module
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 do_test vtabE-1.1 {
   execsql {

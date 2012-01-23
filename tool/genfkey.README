@@ -5,7 +5,7 @@ OVERVIEW
   supplied as part of CREATE TABLE statements, but it does not actually 
   implement them. However, most of the features of foreign keys may be
   implemented using SQL triggers, which SQLite does support. This text
-  file describes a feature of the SQLite shell tool (sqlite3) that
+  file describes a feature of the SQLite shell tool (sqlite4) that
   extracts foreign key definitions from an existing SQLite database and
   creates the set of CREATE TRIGGER statements required to implement
   the foreign key constraints.
@@ -94,7 +94,7 @@ LIMITATIONS
 
 USAGE
 
-  The functionality is accessed through an sqlite3 shell tool "dot-command":
+  The functionality is accessed through an sqlite4 shell tool "dot-command":
 
     .genfkey ?--no-drop? ?--ignore-errors? ?--exec?
 

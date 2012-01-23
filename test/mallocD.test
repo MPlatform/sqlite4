@@ -24,8 +24,8 @@ if {!$MEMDEBUG} {
 }
 
 db close
-sqlite3_simulate_device -char atomic
-sqlite3 db test.db -vfs devsym
+sqlite4_simulate_device -char atomic
+sqlite4 db test.db -vfs devsym
 
 set PREP { 
   PRAGMA page_size = 1024;
@@ -60,6 +60,6 @@ ifcapable attach {
   }
 }
 
-sqlite3_simulate_device -char {}
+sqlite4_simulate_device -char {}
 
 finish_test

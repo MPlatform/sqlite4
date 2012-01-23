@@ -58,7 +58,7 @@ CONTENTLESS FTS4 TABLES
     SELECT snippet(t1) FROM t1 WHERE t1 MATCH 'xxx';
 
   Errors related to attempting to retrieve column values other than docid
-  are runtime errors that occur within sqlite3_step(). In some cases, for
+  are runtime errors that occur within sqlite4_step(). In some cases, for
   example if the MATCH expression in a SELECT query matches zero rows, there
   may be no error at all even if a statement does refer to column values 
   other than docid.

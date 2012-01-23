@@ -73,12 +73,12 @@ ifcapable view {
     execsql {
       CREATE TEMP TABLE temp_t1(a, b);
     }
-    set ::DB [sqlite3_connection_pointer db]
-    set ::STMT [sqlite3_prepare $::DB "SELECT * FROM temp_t1" -1 DUMMY]
+    set ::DB [sqlite4_connection_pointer db]
+    set ::STMT [sqlite4_prepare $::DB "SELECT * FROM temp_t1" -1 DUMMY]
     execsql {
       DROP TABLE temp_t1;
     }
-    list [sqlite3_step $::STMT] [sqlite3_finalize $::STMT]
+    list [sqlite4_step $::STMT] [sqlite4_finalize $::STMT]
   } {SQLITE_ERROR SQLITE_SCHEMA}
   
   do_test tkt1644-2.2 {
@@ -86,24 +86,24 @@ ifcapable view {
       CREATE TABLE real_t1(a, b);
       CREATE TEMP VIEW temp_v1 AS SELECT * FROM real_t1;
     }
-    set ::DB [sqlite3_connection_pointer db]
-    set ::STMT [sqlite3_prepare $::DB "SELECT * FROM temp_v1" -1 DUMMY]
+    set ::DB [sqlite4_connection_pointer db]
+    set ::STMT [sqlite4_prepare $::DB "SELECT * FROM temp_v1" -1 DUMMY]
     execsql {
       DROP VIEW temp_v1;
     }
-    list [sqlite3_step $::STMT] [sqlite3_finalize $::STMT]
+    list [sqlite4_step $::STMT] [sqlite4_finalize $::STMT]
   } {SQLITE_ERROR SQLITE_SCHEMA}
 
   do_test tkt1644-2.3 {
     execsql {
       CREATE TEMP VIEW temp_v1 AS SELECT * FROM real_t1 LIMIT 10 OFFSET 10;
     }
-    set ::DB [sqlite3_connection_pointer db]
-    set ::STMT [sqlite3_prepare $::DB "SELECT * FROM temp_v1" -1 DUMMY]
+    set ::DB [sqlite4_connection_pointer db]
+    set ::STMT [sqlite4_prepare $::DB "SELECT * FROM temp_v1" -1 DUMMY]
     execsql {
       DROP VIEW temp_v1;
     }
-    list [sqlite3_step $::STMT] [sqlite3_finalize $::STMT]
+    list [sqlite4_step $::STMT] [sqlite4_finalize $::STMT]
   } {SQLITE_ERROR SQLITE_SCHEMA}
 }
 

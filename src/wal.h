@@ -20,29 +20,29 @@
 #include "sqliteInt.h"
 
 /* Additional values that can be added to the sync_flags argument of
-** sqlite3WalFrames():
+** sqlite4WalFrames():
 */
 #define WAL_SYNC_TRANSACTIONS  0x20   /* Sync at the end of each transaction */
 #define SQLITE_SYNC_MASK       0x13   /* Mask off the SQLITE_SYNC_* values */
 
 #ifdef SQLITE_OMIT_WAL
-# define sqlite3WalOpen(x,y,z)                   0
-# define sqlite3WalLimit(x,y)
-# define sqlite3WalClose(w,x,y,z)                0
-# define sqlite3WalBeginReadTransaction(y,z)     0
-# define sqlite3WalEndReadTransaction(z)
-# define sqlite3WalRead(v,w,x,y,z)               0
-# define sqlite3WalDbsize(y)                     0
-# define sqlite3WalBeginWriteTransaction(y)      0
-# define sqlite3WalEndWriteTransaction(x)        0
-# define sqlite3WalUndo(x,y,z)                   0
-# define sqlite3WalSavepoint(y,z)
-# define sqlite3WalSavepointUndo(y,z)            0
-# define sqlite3WalFrames(u,v,w,x,y,z)           0
-# define sqlite3WalCheckpoint(r,s,t,u,v,w,x,y,z) 0
-# define sqlite3WalCallback(z)                   0
-# define sqlite3WalExclusiveMode(y,z)            0
-# define sqlite3WalHeapMemory(z)                 0
+# define sqlite4WalOpen(x,y,z)                   0
+# define sqlite4WalLimit(x,y)
+# define sqlite4WalClose(w,x,y,z)                0
+# define sqlite4WalBeginReadTransaction(y,z)     0
+# define sqlite4WalEndReadTransaction(z)
+# define sqlite4WalRead(v,w,x,y,z)               0
+# define sqlite4WalDbsize(y)                     0
+# define sqlite4WalBeginWriteTransaction(y)      0
+# define sqlite4WalEndWriteTransaction(x)        0
+# define sqlite4WalUndo(x,y,z)                   0
+# define sqlite4WalSavepoint(y,z)
+# define sqlite4WalSavepointUndo(y,z)            0
+# define sqlite4WalFrames(u,v,w,x,y,z)           0
+# define sqlite4WalCheckpoint(r,s,t,u,v,w,x,y,z) 0
+# define sqlite4WalCallback(z)                   0
+# define sqlite4WalExclusiveMode(y,z)            0
+# define sqlite4WalHeapMemory(z)                 0
 #else
 
 #define WAL_SAVEPOINT_NDATA 4
@@ -53,48 +53,48 @@
 typedef struct Wal Wal;
 
 /* Open and close a connection to a write-ahead log. */
-int sqlite3WalOpen(sqlite3_vfs*, sqlite3_file*, const char *, int, i64, Wal**);
-int sqlite3WalClose(Wal *pWal, int sync_flags, int, u8 *);
+int sqlite4WalOpen(sqlite4_vfs*, sqlite4_file*, const char *, int, i64, Wal**);
+int sqlite4WalClose(Wal *pWal, int sync_flags, int, u8 *);
 
 /* Set the limiting size of a WAL file. */
-void sqlite3WalLimit(Wal*, i64);
+void sqlite4WalLimit(Wal*, i64);
 
 /* Used by readers to open (lock) and close (unlock) a snapshot.  A 
 ** snapshot is like a read-transaction.  It is the state of the database
-** at an instant in time.  sqlite3WalOpenSnapshot gets a read lock and
+** at an instant in time.  sqlite4WalOpenSnapshot gets a read lock and
 ** preserves the current state even if the other threads or processes
-** write to or checkpoint the WAL.  sqlite3WalCloseSnapshot() closes the
+** write to or checkpoint the WAL.  sqlite4WalCloseSnapshot() closes the
 ** transaction and releases the lock.
 */
-int sqlite3WalBeginReadTransaction(Wal *pWal, int *);
-void sqlite3WalEndReadTransaction(Wal *pWal);
+int sqlite4WalBeginReadTransaction(Wal *pWal, int *);
+void sqlite4WalEndReadTransaction(Wal *pWal);
 
 /* Read a page from the write-ahead log, if it is present. */
-int sqlite3WalRead(Wal *pWal, Pgno pgno, int *pInWal, int nOut, u8 *pOut);
+int sqlite4WalRead(Wal *pWal, Pgno pgno, int *pInWal, int nOut, u8 *pOut);
 
 /* If the WAL is not empty, return the size of the database. */
-Pgno sqlite3WalDbsize(Wal *pWal);
+Pgno sqlite4WalDbsize(Wal *pWal);
 
 /* Obtain or release the WRITER lock. */
-int sqlite3WalBeginWriteTransaction(Wal *pWal);
-int sqlite3WalEndWriteTransaction(Wal *pWal);
+int sqlite4WalBeginWriteTransaction(Wal *pWal);
+int sqlite4WalEndWriteTransaction(Wal *pWal);
 
 /* Undo any frames written (but not committed) to the log */
-int sqlite3WalUndo(Wal *pWal, int (*xUndo)(void *, Pgno), void *pUndoCtx);
+int sqlite4WalUndo(Wal *pWal, int (*xUndo)(void *, Pgno), void *pUndoCtx);
 
 /* Return an integer that records the current (uncommitted) write
 ** position in the WAL */
-void sqlite3WalSavepoint(Wal *pWal, u32 *aWalData);
+void sqlite4WalSavepoint(Wal *pWal, u32 *aWalData);
 
 /* Move the write position of the WAL back to iFrame.  Called in
 ** response to a ROLLBACK TO command. */
-int sqlite3WalSavepointUndo(Wal *pWal, u32 *aWalData);
+int sqlite4WalSavepointUndo(Wal *pWal, u32 *aWalData);
 
 /* Write a frame or frames to the log. */
-int sqlite3WalFrames(Wal *pWal, int, PgHdr *, Pgno, int, int);
+int sqlite4WalFrames(Wal *pWal, int, PgHdr *, Pgno, int, int);
 
 /* Copy pages from the log to the database file */ 
-int sqlite3WalCheckpoint(
+int sqlite4WalCheckpoint(
   Wal *pWal,                      /* Write-ahead log connection */
   int eMode,                      /* One of PASSIVE, FULL and RESTART */
   int (*xBusy)(void*),            /* Function to call when busy */
@@ -106,23 +106,23 @@ int sqlite3WalCheckpoint(
   int *pnCkpt                     /* OUT: Number of backfilled frames in WAL */
 );
 
-/* Return the value to pass to a sqlite3_wal_hook callback, the
+/* Return the value to pass to a sqlite4_wal_hook callback, the
 ** number of frames in the WAL at the point of the last commit since
-** sqlite3WalCallback() was called.  If no commits have occurred since
+** sqlite4WalCallback() was called.  If no commits have occurred since
 ** the last call, then return 0.
 */
-int sqlite3WalCallback(Wal *pWal);
+int sqlite4WalCallback(Wal *pWal);
 
 /* Tell the wal layer that an EXCLUSIVE lock has been obtained (or released)
 ** by the pager layer on the database file.
 */
-int sqlite3WalExclusiveMode(Wal *pWal, int op);
+int sqlite4WalExclusiveMode(Wal *pWal, int op);
 
 /* Return true if the argument is non-NULL and the WAL module is using
 ** heap-memory for the wal-index. Otherwise, if the argument is NULL or the
 ** WAL module is using shared-memory, return false. 
 */
-int sqlite3WalHeapMemory(Wal *pWal);
+int sqlite4WalHeapMemory(Wal *pWal);
 
 #endif /* ifndef SQLITE_OMIT_WAL */
 #endif /* _WAL_H_ */

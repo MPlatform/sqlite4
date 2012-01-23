@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.
 #
-# This file implements tests for the "sqlite3_trace()" API. Specifically,
+# This file implements tests for the "sqlite4_trace()" API. Specifically,
 # it tests the special handling of nested SQL statements (those executed
 # by virtual table or user function callbacks). These statements are treated
 # differently in two respects:

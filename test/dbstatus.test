@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 #
-# Tests for the sqlite3_db_status() function
+# Tests for the sqlite4_db_status() function
 #
 
 set testdir [file dirname $argv0]
@@ -17,27 +17,27 @@ source $testdir/tester.tcl
 
 # Memory statistics must be enabled for this test.
 db close
-sqlite3_shutdown
-sqlite3_config_memstatus 1
-sqlite3_initialize
-sqlite3 db test.db
+sqlite4_shutdown
+sqlite4_config_memstatus 1
+sqlite4_initialize
+sqlite4 db test.db
 
 
-# Make sure sqlite3_db_config() and sqlite3_db_status are working.
+# Make sure sqlite4_db_config() and sqlite4_db_status are working.
 #
 unset -nocomplain PAGESZ
 unset -nocomplain BASESZ
 do_test dbstatus-1.1 {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db eval {
     CREATE TABLE t1(x);
   }
-  set sz1 [lindex [sqlite3_db_status db SQLITE_DBSTATUS_CACHE_USED 0] 1]
+  set sz1 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_CACHE_USED 0] 1]
   db eval {
     CREATE TABLE t2(y);
   }
-  set sz2 [lindex [sqlite3_db_status db SQLITE_DBSTATUS_CACHE_USED 0] 1]
+  set sz2 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_CACHE_USED 0] 1]
   set ::PAGESZ [expr {$sz2-$sz1}]
   set ::BASESZ [expr {$sz1-$::PAGESZ}]
   expr {$::PAGESZ>1024 && $::PAGESZ<1300}
@@ -46,13 +46,13 @@ do_test dbstatus-1.2 {
   db eval {
     INSERT INTO t1 VALUES(zeroblob(9000));
   }
-  lindex [sqlite3_db_status db SQLITE_DBSTATUS_CACHE_USED 0] 1
+  lindex [sqlite4_db_status db SQLITE_DBSTATUS_CACHE_USED 0] 1
 } [expr {$BASESZ + 10*$PAGESZ}]
 
 
 proc lookaside {db} {
   expr { $::lookaside_buffer_size *
-    [lindex [sqlite3_db_status $db SQLITE_DBSTATUS_LOOKASIDE_USED 0] 1]
+    [lindex [sqlite4_db_status $db SQLITE_DBSTATUS_LOOKASIDE_USED 0] 1]
   }
 }
 
@@ -74,8 +74,8 @@ ifcapable malloc_usable_size {
 foreach ::lookaside_buffer_size {0 64 120} {
 
   # Do not run any of these tests if there is SQL configured to run
-  # as part of the [sqlite3] command. This prevents the script from
-  # configuring the size of the lookaside buffer after [sqlite3] has
+  # as part of the [sqlite4] command. This prevents the script from
+  # configuring the size of the lookaside buffer after [sqlite4] has
   # returned.
   if {[presql] != ""} break
 
@@ -89,7 +89,7 @@ foreach ::lookaside_buffer_size {0 64 120} {
   #
   #   2. Execute the SQL to create the database schema. Measure the total 
   #      heap and lookaside memory allocated by SQLite, and the memory 
-  #      allocated for the database schema according to sqlite3_db_status().
+  #      allocated for the database schema according to sqlite4_db_status().
   #
   #   3. Drop all tables in the database schema. Measure the total memory 
   #      and the schema memory again.
@@ -167,8 +167,8 @@ foreach ::lookaside_buffer_size {0 64 120} {
     # Step 1.
     db close
     forcedelete test.db
-    sqlite3 db test.db
-    sqlite3_db_config_lookaside db 0 $::lookaside_buffer_size 500
+    sqlite4 db test.db
+    sqlite4_db_config_lookaside db 0 $::lookaside_buffer_size 500
     db cache size 0
 
     catch { register_echo_module db }
@@ -176,27 +176,27 @@ foreach ::lookaside_buffer_size {0 64 120} {
   
     # Step 2.
     execsql $schema
-    set nAlloc1  [lindex [sqlite3_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc1  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
     incr nAlloc1 [lookaside db]
-    set nSchema1 [lindex [sqlite3_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
+    set nSchema1 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
   
     # Step 3.
     drop_all_tables
-    set nAlloc2  [lindex [sqlite3_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc2  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
     incr nAlloc2 [lookaside db]
-    set nSchema2 [lindex [sqlite3_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
+    set nSchema2 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
   
     # Step 4.
     execsql $schema
-    set nAlloc3  [lindex [sqlite3_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc3  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
     incr nAlloc3 [lookaside db]
-    set nSchema3 [lindex [sqlite3_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
+    set nSchema3 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
     
     # Step 5.
     drop_all_tables
-    set nAlloc4  [lindex [sqlite3_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc4  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
     incr nAlloc4 [lookaside db]
-    set nSchema4 [lindex [sqlite3_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
+    set nSchema4 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
     set nFree [expr {$nAlloc1-$nAlloc2}]
     
     # Tests for which the test name ends in an "x" report slightly less
@@ -239,7 +239,7 @@ foreach ::lookaside_buffer_size {0 64 120} {
   #
   #   2. Prepare a bunch of SQL statements. Measure the total heap and 
   #      lookaside memory allocated by SQLite, and the memory allocated 
-  #      for the prepared statements according to sqlite3_db_status().
+  #      for the prepared statements according to sqlite4_db_status().
   #
   #   3. Finalize all prepared statements Measure the total memory 
   #      and the prepared statement memory again.
@@ -308,8 +308,8 @@ foreach ::lookaside_buffer_size {0 64 120} {
     # Step 1.
     db close
     forcedelete test.db
-    sqlite3 db test.db
-    sqlite3_db_config_lookaside db 0 $::lookaside_buffer_size 500
+    sqlite4 db test.db
+    sqlite4_db_config_lookaside db 0 $::lookaside_buffer_size 500
     db cache size 1000
 
     catch { register_echo_module db }
@@ -320,29 +320,29 @@ foreach ::lookaside_buffer_size {0 64 120} {
   
     # Step 2.
     execsql $statements
-    set nAlloc1  [lindex [sqlite3_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc1  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
     incr nAlloc1 [lookaside db]
-    set nStmt1   [lindex [sqlite3_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
+    set nStmt1   [lindex [sqlite4_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
     execsql $statements
   
     # Step 3.
     db cache flush
-    set nAlloc2  [lindex [sqlite3_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc2  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
     incr nAlloc2 [lookaside db]
-    set nStmt2   [lindex [sqlite3_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
+    set nStmt2   [lindex [sqlite4_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
     
     # Step 3.
     execsql $statements
-    set nAlloc3  [lindex [sqlite3_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc3  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
     incr nAlloc3 [lookaside db]
-    set nStmt3   [lindex [sqlite3_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
+    set nStmt3   [lindex [sqlite4_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
     execsql $statements
   
     # Step 4.
     db cache flush
-    set nAlloc4  [lindex [sqlite3_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc4  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
     incr nAlloc4 [lookaside db]
-    set nStmt4 [lindex [sqlite3_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
+    set nStmt4 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
   
     set nFree [expr {$nAlloc1-$nAlloc2}]
 
@@ -351,7 +351,7 @@ foreach ::lookaside_buffer_size {0 64 120} {
     # Tests for which the test name ends in an "x" report slightly less
     # memory than is actually freed when all statements are finalized.
     # This is because a small amount of memory allocated by a virtual table
-    # implementation using sqlite3_mprintf() is technically considered
+    # implementation using sqlite4_mprintf() is technically considered
     # external and so is not counted as "statement memory".
     #
 #puts "$nStmt1 $nFree"

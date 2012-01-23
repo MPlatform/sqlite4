@@ -9,12 +9,12 @@
 ** To compile this program, first compile the SQLite library separately
 ** will full optimizations.  For example:
 **
-**     gcc -c -O6 -DSQLITE_THREADSAFE=0 sqlite3.c
+**     gcc -c -O6 -DSQLITE_THREADSAFE=0 sqlite4.c
 **
 ** Then link against this program.  But to do optimize this program
 ** because that defeats the hi-res timer.
 **
-**     gcc speedtest8.c sqlite3.o -ldl -I../src
+**     gcc speedtest8.c sqlite4.o -ldl -I../src
 **
 ** Then run this program with a single argument which is the name of
 ** a file containing SQL script that you want to test:
@@ -27,46 +27,46 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <stdarg.h>
-#include "sqlite3.h"
+#include "sqlite4.h"
 
 #include "test_osinst.c"
 
 /*
 ** Prepare and run a single statement of SQL.
 */
-static void prepareAndRun(sqlite3_vfs *pInstVfs, sqlite3 *db, const char *zSql){
-  sqlite3_stmt *pStmt;
+static void prepareAndRun(sqlite4_vfs *pInstVfs, sqlite4 *db, const char *zSql){
+  sqlite4_stmt *pStmt;
   const char *stmtTail;
   int rc;
   char zMessage[1024];
   zMessage[1023] = '\0';
 
-  sqlite3_uint64 iTime;
+  sqlite4_uint64 iTime;
 
-  sqlite3_snprintf(1023, zMessage, "sqlite3_prepare_v2: %s", zSql);
-  sqlite3_instvfs_binarylog_marker(pInstVfs, zMessage);
+  sqlite4_snprintf(1023, zMessage, "sqlite4_prepare_v2: %s", zSql);
+  sqlite4_instvfs_binarylog_marker(pInstVfs, zMessage);
 
-  iTime = sqlite3Hwtime();
-  rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, &stmtTail);
-  iTime = sqlite3Hwtime() - iTime;
-  sqlite3_instvfs_binarylog_call(pInstVfs,BINARYLOG_PREPARE_V2,iTime,rc,zSql);
+  iTime = sqlite4Hwtime();
+  rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, &stmtTail);
+  iTime = sqlite4Hwtime() - iTime;
+  sqlite4_instvfs_binarylog_call(pInstVfs,BINARYLOG_PREPARE_V2,iTime,rc,zSql);
 
   if( rc==SQLITE_OK ){
     int nRow = 0;
 
-    sqlite3_snprintf(1023, zMessage, "sqlite3_step loop: %s", zSql);
-    sqlite3_instvfs_binarylog_marker(pInstVfs, zMessage);
-    iTime = sqlite3Hwtime();
-    while( (rc=sqlite3_step(pStmt))==SQLITE_ROW ){ nRow++; }
-    iTime = sqlite3Hwtime() - iTime;
-    sqlite3_instvfs_binarylog_call(pInstVfs, BINARYLOG_STEP, iTime, rc, zSql);
+    sqlite4_snprintf(1023, zMessage, "sqlite4_step loop: %s", zSql);
+    sqlite4_instvfs_binarylog_marker(pInstVfs, zMessage);
+    iTime = sqlite4Hwtime();
+    while( (rc=sqlite4_step(pStmt))==SQLITE_ROW ){ nRow++; }
+    iTime = sqlite4Hwtime() - iTime;
+    sqlite4_instvfs_binarylog_call(pInstVfs, BINARYLOG_STEP, iTime, rc, zSql);
 
-    sqlite3_snprintf(1023, zMessage, "sqlite3_finalize: %s", zSql);
-    sqlite3_instvfs_binarylog_marker(pInstVfs, zMessage);
-    iTime = sqlite3Hwtime();
-    rc = sqlite3_finalize(pStmt);
-    iTime = sqlite3Hwtime() - iTime;
-    sqlite3_instvfs_binarylog_call(pInstVfs, BINARYLOG_FINALIZE, iTime, rc, zSql);
+    sqlite4_snprintf(1023, zMessage, "sqlite4_finalize: %s", zSql);
+    sqlite4_instvfs_binarylog_marker(pInstVfs, zMessage);
+    iTime = sqlite4Hwtime();
+    rc = sqlite4_finalize(pStmt);
+    iTime = sqlite4Hwtime() - iTime;
+    sqlite4_instvfs_binarylog_call(pInstVfs, BINARYLOG_FINALIZE, iTime, rc, zSql);
   }
 }
 
@@ -79,14 +79,14 @@ static int stringcompare(const char *zLeft, const char *zRight){
 }
 
 static char *readScriptFile(const char *zFile, int *pnScript){
-  sqlite3_vfs *pVfs = sqlite3_vfs_find(0);
-  sqlite3_file *p;
+  sqlite4_vfs *pVfs = sqlite4_vfs_find(0);
+  sqlite4_file *p;
   int rc;
-  sqlite3_int64 nByte;
+  sqlite4_int64 nByte;
   char *zData = 0;
   int flags = SQLITE_OPEN_READONLY|SQLITE_OPEN_MAIN_DB;
 
-  p = (sqlite3_file *)malloc(pVfs->szOsFile);
+  p = (sqlite4_file *)malloc(pVfs->szOsFile);
   rc = pVfs->xOpen(pVfs, zFile, p, flags, &flags);
   if( rc!=SQLITE_OK ){
     goto error_out;
@@ -142,12 +142,12 @@ int main(int argc, char **argv){
   int i, j;
   int rc;
 
-  sqlite3_vfs *pInstVfs;                 /* Instrumentation VFS */
+  sqlite4_vfs *pInstVfs;                 /* Instrumentation VFS */
 
   char *zSql = 0;
   int nSql;
 
-  sqlite3 *db;
+  sqlite4 *db;
 
   for(ii=1; ii<argc; ii++){
     if( stringcompare("-db", argv[ii]) && (ii+1)<argc ){
@@ -178,13 +178,13 @@ int main(int argc, char **argv){
     return -1;
   }
 
-  pInstVfs = sqlite3_instvfs_binarylog("logging", 0, zLog, logdata);
+  pInstVfs = sqlite4_instvfs_binarylog("logging", 0, zLog, logdata);
 
-  rc = sqlite3_open_v2(
+  rc = sqlite4_open_v2(
      zDb, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, "logging"
   );
   if( rc!=SQLITE_OK ){
-    fprintf(stderr, "Failed to open db: %s\n", sqlite3_errmsg(db));
+    fprintf(stderr, "Failed to open db: %s\n", sqlite4_errmsg(db));
     return -2;
   }
 
@@ -193,7 +193,7 @@ int main(int argc, char **argv){
       int isComplete;
       char c = zSql[j+1];
       zSql[j+1] = 0;
-      isComplete = sqlite3_complete(&zSql[i]);
+      isComplete = sqlite4_complete(&zSql[i]);
       zSql[j+1] = c;
       if( isComplete ){
         zSql[j] = 0;
@@ -207,7 +207,7 @@ int main(int argc, char **argv){
     }
   }
   
-  sqlite3_instvfs_destroy(pInstVfs);
+  sqlite4_instvfs_destroy(pInstVfs);
   return 0;
   
 usage:

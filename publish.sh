@@ -23,16 +23,16 @@ echo "VERSIONS: $VERS $VERSW"
 # Start by building an sqlite shell for linux.
 #
 make clean
-make sqlite3.c
+make sqlite4.c
 CFLAGS="-Os -DSQLITE_ENABLE_FTS3=0 -DSQLITE_ENABLE_RTREE=0"
 CFLAGS="$CFLAGS -DSQLITE_THREADSAFE=0"
-echo '***** '"COMPILING sqlite3-$VERS.bin..."
-gcc $CFLAGS -Itsrc sqlite3.c tsrc/shell.c -o sqlite3 -ldl
-strip sqlite3
-mv sqlite3 sqlite3-$VERS.bin
-gzip sqlite3-$VERS.bin
-chmod 644 sqlite3-$VERS.bin.gz
-mv sqlite3-$VERS.bin.gz doc
+echo '***** '"COMPILING sqlite4-$VERS.bin..."
+gcc $CFLAGS -Itsrc sqlite4.c tsrc/shell.c -o sqlite4 -ldl
+strip sqlite4
+mv sqlite4 sqlite4-$VERS.bin
+gzip sqlite4-$VERS.bin
+chmod 644 sqlite4-$VERS.bin.gz
+mv sqlite4-$VERS.bin.gz doc
 
 # Build the sqlite.so and tclsqlite.so shared libraries
 # under Linux
@@ -43,36 +43,36 @@ CFLAGS="-Os -DSQLITE_ENABLE_FTS3=3 -DSQLITE_ENABLE_RTREE=1"
 CFLAGS="$CFLAGS -DHAVE_LOCALTIME_R=1 -DHAVE_GMTIME_R=1"
 CFLAGS="$CFLAGS -DSQLITE_ENABLE_COLUMN_METADATA=1"
 echo '***** BUILDING shared libraries for linux'
-gcc $CFLAGS -shared tclsqlite3.c $TCLSTUBLIB -o tclsqlite3.so -lpthread
-strip tclsqlite3.so
-chmod 644 tclsqlite3.so
-mv tclsqlite3.so tclsqlite-$VERS.so
+gcc $CFLAGS -shared tclsqlite4.c $TCLSTUBLIB -o tclsqlite4.so -lpthread
+strip tclsqlite4.so
+chmod 644 tclsqlite4.so
+mv tclsqlite4.so tclsqlite-$VERS.so
 gzip tclsqlite-$VERS.so
 mv tclsqlite-$VERS.so.gz doc
-gcc $CFLAGS -shared sqlite3.c -o sqlite3.so -lpthread
-strip sqlite3.so
-chmod 644 sqlite3.so
-mv sqlite3.so sqlite-$VERS.so
+gcc $CFLAGS -shared sqlite4.c -o sqlite4.so -lpthread
+strip sqlite4.so
+chmod 644 sqlite4.so
+mv sqlite4.so sqlite-$VERS.so
 gzip sqlite-$VERS.so
 mv sqlite-$VERS.so.gz doc
 
 
-# Build the tclsqlite3.dll and sqlite3.dll shared libraries.
+# Build the tclsqlite4.dll and sqlite4.dll shared libraries.
 #
 . $srcdir/mkdll.sh
 echo '***** PACKAGING shared libraries for windows'
-echo zip doc/tclsqlite-$VERSW.zip tclsqlite3.dll
-zip doc/tclsqlite-$VERSW.zip tclsqlite3.dll
-echo zip doc/sqlitedll-$VERSW.zip sqlite3.dll sqlite3.def
-zip doc/sqlitedll-$VERSW.zip sqlite3.dll sqlite3.def
+echo zip doc/tclsqlite-$VERSW.zip tclsqlite4.dll
+zip doc/tclsqlite-$VERSW.zip tclsqlite4.dll
+echo zip doc/sqlitedll-$VERSW.zip sqlite4.dll sqlite4.def
+zip doc/sqlitedll-$VERSW.zip sqlite4.dll sqlite4.def
 
 # Build the sqlite.exe executable for windows.
 #
 OPTS='-DSTATIC_BUILD=1 -DNDEBUG=1 -DSQLITE_THREADSAFE=0'
 OPTS="$OPTS -DSQLITE_ENABLE_FTS3=1 -DSQLITE_ENABLE_RTREE=1"
-i386-mingw32msvc-gcc -Os $OPTS -Itsrc -I$TCLDIR sqlite3.c tsrc/shell.c \
-      -o sqlite3.exe
-zip doc/sqlite-$VERSW.zip sqlite3.exe
+i386-mingw32msvc-gcc -Os $OPTS -Itsrc -I$TCLDIR sqlite4.c tsrc/shell.c \
+      -o sqlite4.exe
+zip doc/sqlite-$VERSW.zip sqlite4.exe
 
 # Build a source archive useful for windows.
 #
@@ -83,10 +83,10 @@ rm fts[12]* icu*
 rm -f ../doc/sqlite-source-$VERSW.zip
 zip ../doc/sqlite-source-$VERSW.zip *
 cd ..
-cp tsrc/sqlite3.h tsrc/sqlite3ext.h .
+cp tsrc/sqlite4.h tsrc/sqlite4ext.h .
 cp tsrc/shell.c .
 pwd
-zip doc/sqlite-amalgamation-$VERSW.zip sqlite3.c sqlite3.h sqlite3ext.h shell.c sqlite3.def
+zip doc/sqlite-amalgamation-$VERSW.zip sqlite4.c sqlite4.h sqlite4ext.h shell.c sqlite4.def
 
 # Construct a tarball of the source tree
 #

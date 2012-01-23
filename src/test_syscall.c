@@ -69,7 +69,7 @@
 **     the xNextSystemCall() VFS method.
 */
 
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include "tcl.h"
 #include <stdlib.h>
 #include <string.h>
@@ -79,7 +79,7 @@
 #if SQLITE_OS_UNIX
 
 /* From test1.c */
-extern const char *sqlite3TestErrorName(int);
+extern const char *sqlite4TestErrorName(int);
 
 #include <sys/types.h>
 #include <errno.h>
@@ -110,27 +110,27 @@ static int ts_fallocate(int fd, off_t off, off_t len);
 
 struct TestSyscallArray {
   const char *zName;
-  sqlite3_syscall_ptr xTest;
-  sqlite3_syscall_ptr xOrig;
+  sqlite4_syscall_ptr xTest;
+  sqlite4_syscall_ptr xOrig;
   int default_errno;              /* Default value for errno following errors */
   int custom_errno;               /* Current value for errno if error */
 } aSyscall[] = {
-  /*  0 */ { "open",      (sqlite3_syscall_ptr)ts_open,      0, EACCES, 0 },
-  /*  1 */ { "close",     (sqlite3_syscall_ptr)ts_close,     0, 0, 0 },
-  /*  2 */ { "access",    (sqlite3_syscall_ptr)ts_access,    0, 0, 0 },
-  /*  3 */ { "getcwd",    (sqlite3_syscall_ptr)ts_getcwd,    0, 0, 0 },
-  /*  4 */ { "stat",      (sqlite3_syscall_ptr)ts_stat,      0, 0, 0 },
-  /*  5 */ { "fstat",     (sqlite3_syscall_ptr)ts_fstat,     0, 0, 0 },
-  /*  6 */ { "ftruncate", (sqlite3_syscall_ptr)ts_ftruncate, 0, EIO, 0 },
-  /*  7 */ { "fcntl",     (sqlite3_syscall_ptr)ts_fcntl,     0, EACCES, 0 },
-  /*  8 */ { "read",      (sqlite3_syscall_ptr)ts_read,      0, 0, 0 },
-  /*  9 */ { "pread",     (sqlite3_syscall_ptr)ts_pread,     0, 0, 0 },
-  /* 10 */ { "pread64",   (sqlite3_syscall_ptr)ts_pread64,   0, 0, 0 },
-  /* 11 */ { "write",     (sqlite3_syscall_ptr)ts_write,     0, 0, 0 },
-  /* 12 */ { "pwrite",    (sqlite3_syscall_ptr)ts_pwrite,    0, 0, 0 },
-  /* 13 */ { "pwrite64",  (sqlite3_syscall_ptr)ts_pwrite64,  0, 0, 0 },
-  /* 14 */ { "fchmod",    (sqlite3_syscall_ptr)ts_fchmod,    0, 0, 0 },
-  /* 15 */ { "fallocate", (sqlite3_syscall_ptr)ts_fallocate, 0, 0, 0 },
+  /*  0 */ { "open",      (sqlite4_syscall_ptr)ts_open,      0, EACCES, 0 },
+  /*  1 */ { "close",     (sqlite4_syscall_ptr)ts_close,     0, 0, 0 },
+  /*  2 */ { "access",    (sqlite4_syscall_ptr)ts_access,    0, 0, 0 },
+  /*  3 */ { "getcwd",    (sqlite4_syscall_ptr)ts_getcwd,    0, 0, 0 },
+  /*  4 */ { "stat",      (sqlite4_syscall_ptr)ts_stat,      0, 0, 0 },
+  /*  5 */ { "fstat",     (sqlite4_syscall_ptr)ts_fstat,     0, 0, 0 },
+  /*  6 */ { "ftruncate", (sqlite4_syscall_ptr)ts_ftruncate, 0, EIO, 0 },
+  /*  7 */ { "fcntl",     (sqlite4_syscall_ptr)ts_fcntl,     0, EACCES, 0 },
+  /*  8 */ { "read",      (sqlite4_syscall_ptr)ts_read,      0, 0, 0 },
+  /*  9 */ { "pread",     (sqlite4_syscall_ptr)ts_pread,     0, 0, 0 },
+  /* 10 */ { "pread64",   (sqlite4_syscall_ptr)ts_pread64,   0, 0, 0 },
+  /* 11 */ { "write",     (sqlite4_syscall_ptr)ts_write,     0, 0, 0 },
+  /* 12 */ { "pwrite",    (sqlite4_syscall_ptr)ts_pwrite,    0, 0, 0 },
+  /* 13 */ { "pwrite64",  (sqlite4_syscall_ptr)ts_pwrite64,  0, 0, 0 },
+  /* 14 */ { "fchmod",    (sqlite4_syscall_ptr)ts_fchmod,    0, 0, 0 },
+  /* 15 */ { "fallocate", (sqlite4_syscall_ptr)ts_fallocate, 0, 0, 0 },
            { 0, 0, 0, 0, 0 }
 };
 
@@ -383,7 +383,7 @@ static int test_syscall_install(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  sqlite3_vfs *pVfs; 
+  sqlite4_vfs *pVfs; 
   int nElem;
   int i;
   Tcl_Obj **apElem;
@@ -395,7 +395,7 @@ static int test_syscall_install(
   if( Tcl_ListObjGetElements(interp, objv[2], &nElem, &apElem) ){
     return TCL_ERROR;
   }
-  pVfs = sqlite3_vfs_find(0);
+  pVfs = sqlite4_vfs_find(0);
 
   for(i=0; i<nElem; i++){
     int iCall;
@@ -419,7 +419,7 @@ static int test_syscall_uninstall(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  sqlite3_vfs *pVfs; 
+  sqlite4_vfs *pVfs; 
   int i;
 
   if( objc!=2 ){
@@ -427,7 +427,7 @@ static int test_syscall_uninstall(
     return TCL_ERROR;
   }
 
-  pVfs = sqlite3_vfs_find(0);
+  pVfs = sqlite4_vfs_find(0);
   for(i=0; aSyscall[i].zName; i++){
     if( aSyscall[i].xOrig ){
       pVfs->xSetSystemCall(pVfs, aSyscall[i].zName, 0);
@@ -443,7 +443,7 @@ static int test_syscall_reset(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  sqlite3_vfs *pVfs; 
+  sqlite4_vfs *pVfs; 
   int i;
   int rc;
 
@@ -452,7 +452,7 @@ static int test_syscall_reset(
     return TCL_ERROR;
   }
 
-  pVfs = sqlite3_vfs_find(0);
+  pVfs = sqlite4_vfs_find(0);
   if( objc==2 ){
     rc = pVfs->xSetSystemCall(pVfs, 0, 0);
     for(i=0; aSyscall[i].zName; i++) aSyscall[i].xOrig = 0;
@@ -467,7 +467,7 @@ static int test_syscall_reset(
     }
   }
   if( rc!=SQLITE_OK ){
-    Tcl_SetObjResult(interp, Tcl_NewStringObj(sqlite3TestErrorName(rc), -1));
+    Tcl_SetObjResult(interp, Tcl_NewStringObj(sqlite4TestErrorName(rc), -1));
     return TCL_ERROR;
   }
 
@@ -481,15 +481,15 @@ static int test_syscall_exists(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  sqlite3_vfs *pVfs; 
-  sqlite3_syscall_ptr x;
+  sqlite4_vfs *pVfs; 
+  sqlite4_syscall_ptr x;
 
   if( objc!=3 ){
     Tcl_WrongNumArgs(interp, 2, objv, "");
     return TCL_ERROR;
   }
 
-  pVfs = sqlite3_vfs_find(0);
+  pVfs = sqlite4_vfs_find(0);
   x = pVfs->xGetSystemCall(pVfs, Tcl_GetString(objv[2]));
 
   Tcl_SetObjResult(interp, Tcl_NewBooleanObj(x!=0));
@@ -578,7 +578,7 @@ static int test_syscall_list(
   Tcl_Obj *CONST objv[]
 ){
   const char *zSys;
-  sqlite3_vfs *pVfs; 
+  sqlite4_vfs *pVfs; 
   Tcl_Obj *pList;
 
   if( objc!=2 ){
@@ -586,7 +586,7 @@ static int test_syscall_list(
     return TCL_ERROR;
   }
 
-  pVfs = sqlite3_vfs_find(0);
+  pVfs = sqlite4_vfs_find(0);
   pList = Tcl_NewObj();
   Tcl_IncrRefCount(pList);
   for(zSys = pVfs->xNextSystemCall(pVfs, 0); 
@@ -607,14 +607,14 @@ static int test_syscall_defaultvfs(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  sqlite3_vfs *pVfs; 
+  sqlite4_vfs *pVfs; 
 
   if( objc!=2 ){
     Tcl_WrongNumArgs(interp, 2, objv, "");
     return TCL_ERROR;
   }
 
-  pVfs = sqlite3_vfs_find(0);
+  pVfs = sqlite4_vfs_find(0);
   Tcl_SetObjResult(interp, Tcl_NewStringObj(pVfs->zName, -1));
   return TCL_OK;
 }

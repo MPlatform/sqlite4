@@ -35,7 +35,7 @@ do_test attach2-1.1 {
   }
   forcedelete test2.db
   forcedelete test2.db-journal
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   db2 eval {
     CREATE TABLE t1(a,b);
     CREATE INDEX x1 ON t1(a);
@@ -134,18 +134,18 @@ do_test attach2-2.12 {
 # Ticket #574:  Make sure it works using the non-callback API
 #
 do_test attach2-3.1 {
-  set DB [sqlite3_connection_pointer db]
-  set rc [catch {sqlite3_prepare $DB "ATTACH 'test2.db' AS t2" -1 TAIL} VM]
+  set DB [sqlite4_connection_pointer db]
+  set rc [catch {sqlite4_prepare $DB "ATTACH 'test2.db' AS t2" -1 TAIL} VM]
   if {$rc} {lappend rc $VM}
-  sqlite3_step $VM
-  sqlite3_finalize $VM
+  sqlite4_step $VM
+  sqlite4_finalize $VM
   set rc
 } {0}
 do_test attach2-3.2 {
-  set rc [catch {sqlite3_prepare $DB "DETACH t2" -1 TAIL} VM]
+  set rc [catch {sqlite4_prepare $DB "DETACH t2" -1 TAIL} VM]
   if {$rc} {lappend rc $VM}
-  sqlite3_step $VM
-  sqlite3_finalize $VM
+  sqlite4_step $VM
+  sqlite4_finalize $VM
   set rc
 } {0}
 
@@ -177,8 +177,8 @@ set sqlite_os_trace 0
 # Tests attach2-4.* test that read-locks work correctly with attached
 # databases.
 do_test attach2-4.1 {
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql {ATTACH 'test2.db' as file2}
   execsql {ATTACH 'test2.db' as file2} db2
 } {}
@@ -223,7 +223,7 @@ lock_status 4.4.2 db2 {main unlocked temp closed file2 unlocked}
 # a reserved lock to promote to exclusive.  That will mess up our
 # test results. 
 
-set soft_limit [sqlite3_soft_heap_limit 0]
+set soft_limit [sqlite4_soft_heap_limit 0]
 
 
 do_test attach2-4.5 {
@@ -328,7 +328,7 @@ do_test attach2-4.15 {
 db close
 db2 close
 forcedelete test2.db
-sqlite3_soft_heap_limit $soft_limit
+sqlite4_soft_heap_limit $soft_limit
 
 # These tests - attach2-5.* - check that the master journal file is deleted
 # correctly when a multi-file transaction is committed or rolled back.
@@ -337,7 +337,7 @@ sqlite3_soft_heap_limit $soft_limit
 # doesn't really prove too much.
 foreach f [glob test.db*] {forcedelete $f}
 do_test attach2-5.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     ATTACH 'test.db2' AS aux;
   }

@@ -171,7 +171,7 @@ foreach tab [db eval {SELECT name FROM sqlite_master WHERE type = 'table'}] {
   db eval "DROP TABLE $tab"
 }
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 
 #-------------------------------------------------------------------------
 # While developing tests for a different feature (savepoint) the following

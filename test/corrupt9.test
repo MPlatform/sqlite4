@@ -89,7 +89,7 @@ db close
 forcecopy test.db test.db-template
 
 corrupt_freelist test.db 1
-sqlite3 db test.db
+sqlite4 db test.db
 do_test corrupt9-2.1 {
   set x [db eval {PRAGMA integrity_check}]
   expr {$x!="ok"}
@@ -105,7 +105,7 @@ do_test corrupt9-2.2 {
 db close
 forcecopy test.db-template test.db
 corrupt_freelist test.db 2
-sqlite3 db test.db
+sqlite4 db test.db
 do_test corrupt9-3.1 {
   set x [db eval {PRAGMA integrity_check}]
   expr {$x!="ok"}
@@ -120,7 +120,7 @@ do_test corrupt9-3.2 {
 db close
 forcecopy test.db-template test.db
 corrupt_freelist test.db 3
-sqlite3 db test.db
+sqlite4 db test.db
 do_test corrupt9-4.1 {
   set x [db eval {PRAGMA integrity_check}]
   expr {$x!="ok"}

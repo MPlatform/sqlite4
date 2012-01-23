@@ -16,7 +16,7 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-# Only do the next group of tests if the sqlite3_complete API is available
+# Only do the next group of tests if the sqlite4_complete API is available
 #
 ifcapable {complete} {
 
@@ -305,7 +305,7 @@ if {[permutation] == ""} {
     set fd [open test.db w]
     puts $fd hi!
     close $fd
-    set v [catch {sqlite3 db test.db} msg]
+    set v [catch {sqlite4 db test.db} msg]
     if {$v} {lappend v $msg} {lappend v {}}
   } {0 {}}
 }
@@ -316,7 +316,7 @@ do_test main-3.1 {
   catch {db close}
   foreach f [glob -nocomplain testdb/*] {forcedelete $f}
   forcedelete testdb
-  sqlite3 db testdb
+  sqlite4 db testdb
   set v [catch {execsql {SELECT * from T1 where x!!5}} msg]
   lappend v $msg
 } {1 {unrecognized token: "!!"}}
@@ -324,7 +324,7 @@ do_test main-3.2 {
   catch {db close}
   foreach f [glob -nocomplain testdb/*] {forcedelete $f}
   forcedelete testdb
-  sqlite3 db testdb
+  sqlite4 db testdb
   set v [catch {execsql {SELECT * from T1 where ^x}} msg]
   lappend v $msg
 } {1 {unrecognized token: "^"}}
@@ -444,7 +444,7 @@ do_test main-3.3 {
   catch {db close}
   foreach f [glob -nocomplain testdb/*] {forcedelete $f}
   forcedelete testdb
-  sqlite3 db testdb
+  sqlite4 db testdb
   execsql {
     create table T1(X REAL);  /* C-style comments allowed */
     insert into T1 values(0.5);
@@ -472,47 +472,5 @@ do_test main-3.6 {
   catchsql {SELECT 'abc' + #9}
 } {1 {near "#9": syntax error}}
 
-# The following test-case tests the linked list code used to manage
-# sqlite3_vfs structures.
-if {$::tcl_platform(platform)=="unix" 
-     && [info command sqlite3async_initialize]!=""} {
-  ifcapable threadsafe {
-    do_test main-4.1 {
-      sqlite3_crash_enable 1
-      sqlite3_crash_enable 0
-    
-      sqlite3async_initialize "" 1
-      sqlite3async_shutdown
-    
-      sqlite3_crash_enable 1
-      sqlite3async_initialize "" 1
-      sqlite3_crash_enable 0
-      sqlite3async_shutdown
-    
-      sqlite3_crash_enable 1
-      sqlite3async_initialize "" 1
-      sqlite3async_shutdown
-      sqlite3_crash_enable 0
-    
-      sqlite3async_initialize "" 1
-      sqlite3_crash_enable 1
-      sqlite3_crash_enable 0
-      sqlite3async_shutdown
-    
-      sqlite3async_initialize "" 1
-      sqlite3_crash_enable 1
-      sqlite3async_shutdown
-      sqlite3_crash_enable 0
-    } {}
-    do_test main-4.2 {
-      set rc [catch {sqlite3 db test.db -vfs crash} msg]
-      list $rc $msg
-    } {1 {no such vfs: crash}}
-    do_test main-4.3 {
-      set rc [catch {sqlite3 db test.db -vfs async} msg]
-      list $rc $msg
-    } {1 {no such vfs: async}}
-  }
-}
     
 finish_test

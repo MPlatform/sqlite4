@@ -11,15 +11,15 @@
 ******************************************************************************
 **
 ** This header file is used by programs that want to link against the
-** RTREE library.  All it does is declare the sqlite3RtreeInit() interface.
+** RTREE library.  All it does is declare the sqlite4RtreeInit() interface.
 */
-#include "sqlite3.h"
+#include "sqlite4.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  /* __cplusplus */
 
-int sqlite3RtreeInit(sqlite3 *db);
+int sqlite4RtreeInit(sqlite4 *db);
 
 #ifdef __cplusplus
 }  /* extern "C" */

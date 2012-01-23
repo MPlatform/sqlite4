@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 #
-# Tests for the sqlite3_stmt_status() function
+# Tests for the sqlite4_stmt_status() function
 #
 
 set testdir [file dirname $argv0]
@@ -28,14 +28,14 @@ do_execsql_test 1.0 {
 }
 
 proc db_hit_miss {db {reset 0}} {
-  set nHit  [sqlite3_db_status $db CACHE_HIT $reset]
-  set nMiss [sqlite3_db_status $db CACHE_MISS $reset]
+  set nHit  [sqlite4_db_status $db CACHE_HIT $reset]
+  set nMiss [sqlite4_db_status $db CACHE_MISS $reset]
   list $nHit $nMiss
 }
 
 do_test 1.1 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   expr {[file size test.db] / 1024}
 } 6
 
@@ -69,8 +69,8 @@ do_test 1.7 {
   close $fd
   set len
 } 600
-do_test 1.8 { sqlite3_db_status db CACHE_HIT  0 } {0 2 0}
-do_test 1.9 { sqlite3_db_status db CACHE_MISS 0 } {0 1 0}
+do_test 1.8 { sqlite4_db_status db CACHE_HIT  0 } {0 2 0}
+do_test 1.9 { sqlite4_db_status db CACHE_MISS 0 } {0 1 0}
 
  
 finish_test

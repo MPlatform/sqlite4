@@ -19,7 +19,7 @@ source $testdir/tester.tcl
 # This file is only run if using the unix backend compiled with the
 # SQLITE_ENABLE_LOCKING_STYLE macro.
 db close
-if {[catch {sqlite3 db test.db -vfs unix-none} msg]} {
+if {[catch {sqlite4 db test.db -vfs unix-none} msg]} {
   finish_test
   return
 }
@@ -37,7 +37,7 @@ ifcapable lock_proxy_pragmas {
 
 
 do_test lock5-dotfile.1 {
-  sqlite3 db test.db -vfs unix-dotfile
+  sqlite4 db test.db -vfs unix-dotfile
   execsql {
     BEGIN;
     CREATE TABLE t1(a, b);
@@ -54,7 +54,7 @@ do_test lock5-dotfile.3 {
 } {0}
 
 do_test lock5-dotfile.4 {
-  sqlite3 db2 test.db -vfs unix-dotfile
+  sqlite4 db2 test.db -vfs unix-dotfile
   execsql {
     INSERT INTO t1 VALUES('a', 'b');
     SELECT * FROM t1;
@@ -101,13 +101,13 @@ do_test lock5-dotfile.X {
 #####################################################################
 
 forcedelete test.db
-if {[catch {sqlite3 db test.db -vfs unix-flock} msg]} {
+if {[catch {sqlite4 db test.db -vfs unix-flock} msg]} {
   finish_test
   return
 }
 
 do_test lock5-flock.1 {
-  sqlite3 db test.db -vfs unix-flock
+  sqlite4 db test.db -vfs unix-flock
   execsql {
     CREATE TABLE t1(a, b);
     BEGIN;
@@ -121,7 +121,7 @@ do_test lock5-flock.2 {
 } {0}
 
 do_test lock5-flock.3 {
-  catch { sqlite3 db2 test.db -vfs unix-flock }
+  catch { sqlite4 db2 test.db -vfs unix-flock }
   catchsql { SELECT * FROM t1 } db2
 } {1 {database is locked}}
 
@@ -152,8 +152,8 @@ do_test lock5-flock.8 {
 #####################################################################
 
 do_test lock5-none.1 {
-  sqlite3 db test.db -vfs unix-none
-  sqlite3 db2 test.db -vfs unix-none
+  sqlite4 db test.db -vfs unix-none
+  sqlite4 db2 test.db -vfs unix-none
   execsql {
     BEGIN;
     INSERT INTO t1 VALUES(3, 4);
@@ -178,7 +178,7 @@ do_test lock5-none.5 {
 
 ifcapable memorymanage {
   do_test lock5-none.6 {
-    sqlite3_release_memory 1000000
+    sqlite4_release_memory 1000000
     execsql {SELECT * FROM t1} db2
   } {1 2 3 4}
 }

@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
-# focus of this file is testing the sqlite3_unlock_notify() API.
+# focus of this file is testing the sqlite4_unlock_notify() API.
 #
 # $Id: notify1.test,v 1.4 2009/06/05 17:09:12 drh Exp $
 
@@ -21,15 +21,15 @@ ifcapable !unlock_notify||!shared_cache {
   return
 }
 db close
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 #-------------------------------------------------------------------------
 # Warm body test. Test that an unlock-notify callback can be registered 
 # and that it is invoked.
 #
 do_test notify1-1.1 {
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql { CREATE TABLE t1(a, b) }
 } {}
 do_test notify1-1.2 {
@@ -57,7 +57,7 @@ do_test notify1-1.5 {
 
 #-------------------------------------------------------------------------
 # Verify that invoking the "unlock_notify" method with no arguments
-# (which is the equivalent of invoking sqlite3_unlock_notify() with
+# (which is the equivalent of invoking sqlite4_unlock_notify() with
 # a NULL xNotify argument) cancels a pending notify callback.
 #
 do_test notify1-1.11 {
@@ -142,7 +142,7 @@ do_test notify1-2.3.1 {
   db2 close
   forcedelete test.db test2.db test3.db
   foreach con {db db2 db3} {
-    sqlite3 $con test.db
+    sqlite4 $con test.db
     $con eval { ATTACH 'test2.db' AS aux2 }
     $con eval { ATTACH 'test3.db' AS aux3 }
   }
@@ -202,7 +202,7 @@ catch { db close }
 # 
 foreach {tn nConn} {3 20 4 76} {
   do_test notify1-$tn.1 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       BEGIN;
       INSERT INTO t1 VALUES('a', 'b');
@@ -213,7 +213,7 @@ foreach {tn nConn} {3 20 4 76} {
   for {set ii 1} {$ii <= $nConn} {incr ii} {
     do_test notify1-$tn.2.$ii.1 {
       set cmd "db$ii"
-      sqlite3 $cmd test.db
+      sqlite4 $cmd test.db
       catchsql { SELECT * FROM t1 } $cmd
     } {1 {database table is locked: t1}}
     do_test notify1-$tn.2.$ii.2 {
@@ -251,7 +251,7 @@ do_malloc_test notify1-5 -tclprep {
   }
   for {set ii 1} {$ii <= 60} {incr ii} {
     set cmd "db$ii"
-    sqlite3 $cmd test.db
+    sqlite4 $cmd test.db
     catchsql { SELECT * FROM t1 } $cmd
     $cmd unlock_notify "lappend ::lUnlock $ii"
   }
@@ -266,8 +266,8 @@ do_malloc_test notify1-5 -tclprep {
   #      callbacks were invoked.
   #
   do_test notify1-5.systemstate {
-    expr { ([llength $::lUnlock]==0 && [sqlite3_get_autocommit db]==0)
-        || ([llength $::lUnlock]==60 && [sqlite3_get_autocommit db]==1)
+    expr { ([llength $::lUnlock]==0 && [sqlite4_get_autocommit db]==0)
+        || ([llength $::lUnlock]==60 && [sqlite4_get_autocommit db]==1)
     }
   } {1}
   for {set ii 1} {$ii <= 60} {incr ii} { "db$ii" close }
@@ -296,7 +296,7 @@ db close
 do_test notify1-6.1.1 {
   forcedelete test.db test2.db
   foreach conn {db db2 db3} {
-    sqlite3 $conn test.db
+    sqlite4 $conn test.db
     execsql { ATTACH 'test2.db' AS two } $conn
   }
   execsql {
@@ -381,7 +381,7 @@ proc unlock_notify {} {
 }
 do_test notify1-7.1 {
   foreach conn {db db2 db3} {
-    sqlite3 $conn test.db
+    sqlite4 $conn test.db
   }
   execsql {
     BEGIN;
@@ -397,7 +397,7 @@ do_test notify1-7.3 {
 do_test notify1-7.4 {
   set unlock_notify 0
   db2 unlock_notify unlock_notify
-  sqlite3_unlock_notify db3
+  sqlite4_unlock_notify db3
 } {SQLITE_OK}
 do_test notify1-7.5 {
   set unlock_notify
@@ -419,7 +419,7 @@ do_test notify1-8.1 {
   catchsql { SELECT * FROM t1 } db2
 } {1 {database table is locked: t1}}
 do_test notify1-8.2 {
-  sqlite3_extended_errcode db2
+  sqlite4_extended_errcode db2
 } {SQLITE_LOCKED_SHAREDCACHE}
 
 do_test notify1-8.3 {
@@ -430,7 +430,7 @@ do_test notify1-8.3 {
   catchsql { SELECT * FROM t1 } db2
 } {1 {database schema is locked: main}}
 do_test notify1-8.4 {
-  sqlite3_extended_errcode db2
+  sqlite4_extended_errcode db2
 } {SQLITE_LOCKED_SHAREDCACHE}
 
 do_test notify1-8.X {
@@ -496,5 +496,5 @@ do_test notify1-9.12 {
 db close
 db2 close
 db3 close
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

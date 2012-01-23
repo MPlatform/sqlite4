@@ -197,7 +197,7 @@ foreach {request actual} [list \
 do_test vacuum3-4.1 {
   db close
   delete_file test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA page_size=1024;
     CREATE TABLE abc(a, b, c);
@@ -207,7 +207,7 @@ do_test vacuum3-4.1 {
   execsql { SELECT * FROM abc }
 } {1 2 3 4 5 6}
 do_test vacuum3-4.2 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { SELECT * FROM abc } db2
 } {1 2 3 4 5 6}
 do_test vacuum3-4.3 {
@@ -237,7 +237,7 @@ do_test vacuum3-4.6 {
 
 # Unable to change the page-size of an in-memory using vacuum.
 db2 close
-sqlite3 db2 :memory:
+sqlite4 db2 :memory:
 do_test vacuum3-5.1 {
   db2 eval {
     CREATE TABLE t1(x);

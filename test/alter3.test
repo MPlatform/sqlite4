@@ -28,7 +28,7 @@ ifcapable !altertable {
 
 # Determine if there is a codec available on this test.
 #
-if {[catch {sqlite3 -has-codec} r] || $r} {
+if {[catch {sqlite4 -has-codec} r] || $r} {
   set has_codec 1
 } else {
   set has_codec 0
@@ -197,7 +197,7 @@ ifcapable schema_version {
 do_test alter3-4.1 {
   db close
   forcedelete test.db
-  set ::DB [sqlite3 db test.db]
+  set ::DB [sqlite4 db test.db]
   execsql {
     PRAGMA legacy_file_format=ON;
     CREATE TABLE t1(a, b);

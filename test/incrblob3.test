@@ -14,8 +14,8 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-sqlite3 db test.db
-sqlite3_db_config_lookaside db 0 0 0
+sqlite4 db test.db
+sqlite4_db_config_lookaside db 0 0 0
 
 do_execsql_test incrblob3-1.1 {
   CREATE TABLE blobs(k INTEGER PRIMARY KEY, v BLOB);
@@ -23,7 +23,7 @@ do_execsql_test incrblob3-1.1 {
   INSERT INTO blobs VALUES(2, zeroblob(100));
 } {}
 
-# Test the sqlite3_blob_reopen()/read()/write() functions.
+# Test the sqlite4_blob_reopen()/read()/write() functions.
 #
 do_test incrblob3-1.2 {
   set ::blob [db incrblob blobs v 1]
@@ -31,17 +31,17 @@ do_test incrblob3-1.2 {
 } {}
 
 do_test incrblob3-1.3 {
-  sqlite3_blob_reopen $::blob 2
+  sqlite4_blob_reopen $::blob 2
   puts $::blob "world hello"
 } {}
 
 do_test incrblob3-1.4 {
-  sqlite3_blob_reopen $::blob 1
+  sqlite4_blob_reopen $::blob 1
   gets $::blob
 } {hello world}
 
 do_test incrblob3-1.5 {
-  sqlite3_blob_reopen $::blob 2
+  sqlite4_blob_reopen $::blob 2
   gets $::blob
 } {world hello}
 
@@ -55,13 +55,13 @@ do_test incrblob3-1.6 { close $::blob } {}
 #
 do_test incrblob3-2.1.1 {
   set ::blob [db incrblob blobs v 1]
-  list [catch {sqlite3_blob_reopen $::blob 3} msg] $msg
+  list [catch {sqlite4_blob_reopen $::blob 3} msg] $msg
 } {1 SQLITE_ERROR}
 do_test incrblob3-2.1.2 {
-  list [sqlite3_errcode db] [sqlite3_errmsg db]
+  list [sqlite4_errcode db] [sqlite4_errmsg db]
 } {SQLITE_ERROR {no such rowid: 3}}
 do_test incrblob3-2.1.3 {
-  list [catch {sqlite3_blob_reopen $::blob 1} msg] $msg
+  list [catch {sqlite4_blob_reopen $::blob 1} msg] $msg
 } {1 SQLITE_ABORT}
 do_test incrblob3-2.1.4 { close $::blob } {}
 
@@ -77,74 +77,74 @@ foreach {tn rowid type} {
 } {
   do_test incrblob3-2.2.$tn.1 {
     set ::blob [db incrblob blobs v 1]
-    list [catch {sqlite3_blob_reopen $::blob $rowid} msg] $msg
+    list [catch {sqlite4_blob_reopen $::blob $rowid} msg] $msg
   } {1 SQLITE_ERROR}
   do_test incrblob3-2.2.$tn.2 {
-    list [sqlite3_errcode db] [sqlite3_errmsg db]
+    list [sqlite4_errcode db] [sqlite4_errmsg db]
   } "SQLITE_ERROR {cannot open value of type $type}"
 
   do_test incrblob3-2.2.$tn.3 {
-    list [catch {sqlite3_blob_reopen $::blob 1} msg] $msg
+    list [catch {sqlite4_blob_reopen $::blob 1} msg] $msg
   } {1 SQLITE_ABORT}
   do_test incrblob3-2.2.$tn.4 {
-    list [catch {sqlite3_blob_read $::blob 0 10} msg] $msg
+    list [catch {sqlite4_blob_read $::blob 0 10} msg] $msg
   } {1 SQLITE_ABORT}
   do_test incrblob3-2.2.$tn.5 {
-    list [catch {sqlite3_blob_write $::blob 0 "abcd"} msg] $msg
+    list [catch {sqlite4_blob_write $::blob 0 "abcd"} msg] $msg
   } {1 SQLITE_ABORT}
   do_test incrblob3-2.2.$tn.6 {
-    sqlite3_blob_bytes $::blob
+    sqlite4_blob_bytes $::blob
   } {0}
 
   do_test incrblob3-2.2.$tn.7 { close $::blob } {}
 }
 
-# Test that passing NULL to sqlite3_blob_XXX() APIs returns SQLITE_MISUSE.
+# Test that passing NULL to sqlite4_blob_XXX() APIs returns SQLITE_MISUSE.
 #
-#   incrblob3-3.1: sqlite3_blob_reopen()
-#   incrblob3-3.2: sqlite3_blob_read()
-#   incrblob3-3.3: sqlite3_blob_write()
-#   incrblob3-3.4: sqlite3_blob_bytes()
+#   incrblob3-3.1: sqlite4_blob_reopen()
+#   incrblob3-3.2: sqlite4_blob_read()
+#   incrblob3-3.3: sqlite4_blob_write()
+#   incrblob3-3.4: sqlite4_blob_bytes()
 #
 do_test incrblob3-3.1 {
-  list [catch {sqlite3_blob_reopen {} 3} msg] $msg
+  list [catch {sqlite4_blob_reopen {} 3} msg] $msg
 } {1 SQLITE_MISUSE}
 
 do_test incrblob3-3.2 {
-  list [catch {sqlite3_blob_read {} 0 10} msg] $msg
+  list [catch {sqlite4_blob_read {} 0 10} msg] $msg
 } {1 SQLITE_MISUSE}
 
 do_test incrblob3-3.3 {
-  list [catch {sqlite3_blob_write {} 0 "abcd"} msg] $msg
+  list [catch {sqlite4_blob_write {} 0 "abcd"} msg] $msg
 } {1 SQLITE_MISUSE}
 
-do_test incrblob3-3.4 { sqlite3_blob_bytes {} } {0}
+do_test incrblob3-3.4 { sqlite4_blob_bytes {} } {0}
 
-do_test incrblob3-3.5 { sqlite3_blob_close {} } {}
+do_test incrblob3-3.5 { sqlite4_blob_close {} } {}
 
 # Test out-of-range reading and writing
 #
 do_test incrblob3-4.1 {
   set ::blob [db incrblob blobs v 1]
-  sqlite3_blob_bytes $::blob
+  sqlite4_blob_bytes $::blob
 } {100}
 do_test incrblob3-4.2 {
-  list [catch { sqlite3_blob_read $::blob -1 10 } msg] $msg
+  list [catch { sqlite4_blob_read $::blob -1 10 } msg] $msg
 } {1 SQLITE_ERROR}
 do_test incrblob3-4.3 {
-  list [catch { sqlite3_blob_read $::blob 0 -10 } msg] $msg
+  list [catch { sqlite4_blob_read $::blob 0 -10 } msg] $msg
 } {1 SQLITE_ERROR}
 do_test incrblob3-4.4 {
-  list [catch { sqlite3_blob_read $::blob 95 10 } msg] $msg
+  list [catch { sqlite4_blob_read $::blob 95 10 } msg] $msg
 } {1 SQLITE_ERROR}
 do_test incrblob3-4.5 {
-  list [catch { sqlite3_blob_write $::blob -1 "abcdefghij" 10 } msg] $msg
+  list [catch { sqlite4_blob_write $::blob -1 "abcdefghij" 10 } msg] $msg
 } {1 SQLITE_ERROR}
 do_test incrblob3-4.6 {
-  list [catch { sqlite3_blob_write $::blob 0 "abcdefghij" -10 } msg] $msg
+  list [catch { sqlite4_blob_write $::blob 0 "abcdefghij" -10 } msg] $msg
 } {1 SQLITE_ERROR}
 do_test incrblob3-4.7 {
-  list [catch { sqlite3_blob_write $::blob 95 "abcdefghij" } msg] $msg
+  list [catch { sqlite4_blob_write $::blob 95 "abcdefghij" } msg] $msg
 } {1 SQLITE_ERROR}
 
 do_test incrblob3-4.8 { close $::blob } {}
@@ -153,14 +153,14 @@ do_test incrblob3-4.8 { close $::blob } {}
 #
 do_test incrblob3-5.1 {
   set ::blob [db incrblob blobs v 1]
-  sqlite3_blob_bytes $::blob
+  sqlite4_blob_bytes $::blob
 } {100}
 do_test incrblob3-5.2 {
   execsql { UPDATE blobs SET v = '123456789012345678901234567890' WHERE k = 1 }
-  list [catch { sqlite3_blob_read $::blob 0 10 } msg] $msg
+  list [catch { sqlite4_blob_read $::blob 0 10 } msg] $msg
 } {1 SQLITE_ABORT}
 
-# Test various errors that can occur in sqlite3_blob_open():
+# Test various errors that can occur in sqlite4_blob_open():
 #
 #   1. Trying to open a virtual table column.
 #   2. Trying to open a view column.
@@ -232,12 +232,12 @@ do_test incrblob3-6.5.4 {
 } {}
 
 
-# Test that sqlite3_blob_open() handles transient and persistent schema 
+# Test that sqlite4_blob_open() handles transient and persistent schema 
 # errors correctly.
 #
 do_test incrblob3-7.1 {
-  sqlite3 db2 test.db
-  sqlite3_db_config_lookaside db2 0 0 0
+  sqlite4 db2 test.db
+  sqlite4_db_config_lookaside db2 0 0 0
   execsql { CREATE TABLE t2(x) } db2
   set ::blob [db incrblob blobs v 1]
   close $::blob
@@ -261,8 +261,8 @@ proc access_method {args} {
 }
 
 do_test incrblob3-7.2 {
-  sqlite3 db test.db 
-  sqlite3_db_config_lookaside db 0 0 0
+  sqlite4 db test.db 
+  sqlite4_db_config_lookaside db 0 0 0
   list [catch {db incrblob blobs v 1} msg] $msg
 } {1 {database schema has changed}}
 db close

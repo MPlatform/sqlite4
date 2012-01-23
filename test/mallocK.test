@@ -59,7 +59,7 @@ ifcapable vtab {
   for {set x 1} {$x<5} {incr x} {
     append sql " AND b!=$x"
     do_malloc_test mallocK-5.$x -sqlbody $sql -tclprep {
-      register_echo_module [sqlite3_connection_pointer db]
+      register_echo_module [sqlite4_connection_pointer db]
       db eval {
         CREATE TABLE t1(a,b);
         CREATE VIRTUAL TABLE t2 USING echo(t1);

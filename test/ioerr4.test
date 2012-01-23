@@ -28,12 +28,12 @@ ifcapable {!shared_cache || !autovacuum} {
 #
 do_test ioerr4-1.1 {
   db close
-  set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+  set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 } {0}
 do_test ioerr4-1.2 {
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   db eval {
     PRAGMA auto_vacuum=INCREMENTAL;
     CREATE TABLE a(i INTEGER, b BLOB);
@@ -85,16 +85,16 @@ do_ioerr_test ioerr4-2 -tclprep {
   db close
   forcedelete test.db test.db-journal
   forcecopy test.db-bu test.db
-  sqlite3_enable_shared_cache 1
-  set ::DB [sqlite3 db test.db; sqlite3_connection_pointer db]
+  sqlite4_enable_shared_cache 1
+  set ::DB [sqlite4 db test.db; sqlite4_connection_pointer db]
   db eval {PRAGMA auto_vacuum=INCREMENTAL}
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
 } -tclbody {
   db eval {PRAGMA incremental_vacuum(5)}
 }
 
 db2 close
 forcedelete test.db-bu
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 
 finish_test

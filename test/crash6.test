@@ -34,14 +34,14 @@ for {set ii 0} {$ii < 10} {incr ii} {
     CREATE TABLE def AS SELECT 1 AS d, 2 AS e, 3 AS f;
     COMMIT;
   }
-  sqlite3 db test.db
+  sqlite4 db test.db
   integrity_check crash6-1.$ii
 }
 
 for {set ii 0} {$ii < 10} {incr ii} {
   catch {db close}
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA auto_vacuum=OFF;
     PRAGMA page_size=2048;
@@ -53,7 +53,7 @@ for {set ii 0} {$ii < 10} {incr ii} {
   crashsql -delay 1 -file test.db {
     INSERT INTO abc VALUES(5, 6, 7);
   }
-  sqlite3 db test.db
+  sqlite4 db test.db
   integrity_check crash6-2.$ii
 }
 
@@ -67,7 +67,7 @@ proc signature {} {
 for {set ii 0} {$ii < 30} {incr ii} {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   set pagesize [expr 1024 << ($ii % 4)]
   if {$pagesize>$::SQLITE_MAX_PAGE_SIZE} {
@@ -110,7 +110,7 @@ for {set ii 0} {$ii < 30} {incr ii} {
   } {1 {child process exited abnormally}}
 
   do_test crash6-3.$ii.3 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     signature
   } $sig
 } 

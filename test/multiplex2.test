@@ -17,17 +17,17 @@ source $testdir/lock_common.tcl
 
 
 do_multiclient_test tn {
-  code1 { catch { sqlite3_multiplex_initialize "" 0 } }
-  code2 { catch { sqlite3_multiplex_initialize "" 0 } }
+  code1 { catch { sqlite4_multiplex_initialize "" 0 } }
+  code2 { catch { sqlite4_multiplex_initialize "" 0 } }
 
   code1 { db close }
   code2 { db2 close }
 
-  code1 { sqlite3 db test.db -vfs multiplex }
-  code2 { sqlite3 db2 test.db -vfs multiplex }
+  code1 { sqlite4 db test.db -vfs multiplex }
+  code2 { sqlite4 db2 test.db -vfs multiplex }
 
-  code1 { sqlite3_multiplex_control db main chunk_size [expr 1024*1024] }
-  code2 { sqlite3_multiplex_control db2 main chunk_size [expr 1024*1024] }
+  code1 { sqlite4_multiplex_control db main chunk_size [expr 1024*1024] }
+  code2 { sqlite4_multiplex_control db2 main chunk_size [expr 1024*1024] }
 
   sql1 {
     CREATE TABLE t1(a, b);
@@ -66,5 +66,5 @@ do_multiclient_test tn {
   do_test multiplex-1.$tn.4 { sql2 { SELECT count(*) FROM t1 } } 512
 }
 
-catch { sqlite3_multiplex_shutdown }
+catch { sqlite4_multiplex_shutdown }
 finish_test

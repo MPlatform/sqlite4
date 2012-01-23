@@ -52,7 +52,7 @@ do_faultsim_test walfault-1 -prep {
   #
   if {[permutation] != "inmemory_journal"} {
     set jm  [db one  {SELECT * FROM sqlite_master ; PRAGMA main.journal_mode}]
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     set jm2 [db2 one {SELECT * FROM sqlite_master ; PRAGMA main.journal_mode}]
     db2 close
   
@@ -66,7 +66,7 @@ do_faultsim_test walfault-1 -prep {
 # short WAL file (a dozen frames or thereabouts).
 #
 do_test walfault-2-pre-1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA journal_mode = WAL;
     BEGIN;
@@ -101,7 +101,7 @@ do_faultsim_test walfault-2 -prep {
 # Test fault injection while writing and checkpointing a small WAL file.
 #
 do_test walfault-3-pre-1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA auto_vacuum = 1;
     PRAGMA journal_mode = WAL;
@@ -355,12 +355,12 @@ do_faultsim_test walfault-10 -prep {
       UPDATE z SET zzz = randomblob(799);
   }
 
-  set ::stmt [sqlite3_prepare db "SELECT zzz FROM z WHERE zz IN (1, 2, 3)" -1]
-  sqlite3_step $::stmt
+  set ::stmt [sqlite4_prepare db "SELECT zzz FROM z WHERE zz IN (1, 2, 3)" -1]
+  sqlite4_step $::stmt
 } -body {
   execsql { INSERT INTO z VALUES(NULL, NULL) }
 } -test {
-  sqlite3_finalize $::stmt
+  sqlite4_finalize $::stmt
   faultsim_integrity_check
 
   faultsim_test_result {0 {}}
@@ -381,7 +381,7 @@ do_faultsim_test walfault-10 -prep {
 # To speed this up, IO errors are only simulated within xShmMap() calls.
 #
 do_test walfault-11-pre-1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA journal_mode = WAL;
     PRAGMA wal_autocheckpoint = 0;
@@ -410,7 +410,7 @@ do_faultsim_test walfault-11 -faults shmerr* -prep {
   shmfault filter xShmMap
 } -body {
   db eval { SELECT count(*) FROM abc }
-  sqlite3 db2 test.db -vfs shmfault
+  sqlite4 db2 test.db -vfs shmfault
   db2 eval { PRAGMA wal_checkpoint }
   set {} {}
 } -test {
@@ -420,7 +420,7 @@ do_faultsim_test walfault-11 -faults shmerr* -prep {
 #-------------------------------------------------------------------------
 # Test the handling of the various IO/OOM/SHM errors that may occur during 
 # a log recovery operation undertaken as part of a call to 
-# sqlite3_wal_checkpoint().
+# sqlite4_wal_checkpoint().
 # 
 do_test walfault-12-pre-1 {
   faultsim_delete_and_reopen
@@ -443,8 +443,8 @@ do_faultsim_test walfault-12 -prep {
   db eval { SELECT * FROM sqlite_master }
   shmfault shm test.db [string repeat "\000" 40]
 } -body {
-  set rc [sqlite3_wal_checkpoint db]
-  if {$rc != "SQLITE_OK"} { error [sqlite3_errmsg db] }
+  set rc [sqlite4_wal_checkpoint db]
+  if {$rc != "SQLITE_OK"} { error [sqlite4_errmsg db] }
 } -test {
   db close
   faultsim_test_result {0 {}}

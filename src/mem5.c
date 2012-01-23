@@ -14,9 +14,9 @@
 **
 ** This version of the memory allocation subsystem omits all
 ** use of malloc(). The application gives SQLite a block of memory
-** before calling sqlite3_initialize() from which allocations
+** before calling sqlite4_initialize() from which allocations
 ** are made and returned by the xMalloc() and xRealloc() 
-** implementations. Once sqlite3_initialize() has been called,
+** implementations. Once sqlite4_initialize() has been called,
 ** the amount of memory available to SQLite is fixed and cannot
 ** be changed.
 **
@@ -45,7 +45,7 @@
 **
 **      N >=  M*(1 + log2(n)/2) - n + 1
 **
-** The sqlite3_status() logic tracks the maximum values of n and M so
+** The sqlite4_status() logic tracks the maximum values of n and M so
 ** that an application can, at any time, verify this constraint.
 */
 #include "sqliteInt.h"
@@ -100,7 +100,7 @@ static SQLITE_WSD struct Mem5Global {
   /*
   ** Mutex to control access to the memory allocation subsystem.
   */
-  sqlite3_mutex *mutex;
+  sqlite4_mutex *mutex;
 
   /*
   ** Performance statistics
@@ -168,7 +168,7 @@ static void memsys5Unlink(int i, int iLogsize){
 */
 static void memsys5Link(int i, int iLogsize){
   int x;
-  assert( sqlite3_mutex_held(mem5.mutex) );
+  assert( sqlite4_mutex_held(mem5.mutex) );
   assert( i>=0 && i<mem5.nBlock );
   assert( iLogsize>=0 && iLogsize<=LOGMAX );
   assert( (mem5.aCtrl[i] & CTRL_LOGSIZE)==iLogsize );
@@ -185,13 +185,13 @@ static void memsys5Link(int i, int iLogsize){
 /*
 ** If the STATIC_MEM mutex is not already held, obtain it now. The mutex
 ** will already be held (obtained by code in malloc.c) if
-** sqlite3GlobalConfig.bMemStat is true.
+** sqlite4GlobalConfig.bMemStat is true.
 */
 static void memsys5Enter(void){
-  sqlite3_mutex_enter(mem5.mutex);
+  sqlite4_mutex_enter(mem5.mutex);
 }
 static void memsys5Leave(void){
-  sqlite3_mutex_leave(mem5.mutex);
+  sqlite4_mutex_leave(mem5.mutex);
 }
 
 /*
@@ -269,8 +269,8 @@ static void *memsys5MallocUnsafe(int nByte){
   */
   for(iBin=iLogsize; mem5.aiFreelist[iBin]<0 && iBin<=LOGMAX; iBin++){}
   if( iBin>LOGMAX ){
-    testcase( sqlite3GlobalConfig.xLog!=0 );
-    sqlite3_log(SQLITE_NOMEM, "failed to allocate %u bytes", nByte);
+    testcase( sqlite4GlobalConfig.xLog!=0 );
+    sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes", nByte);
     return 0;
   }
   i = memsys5UnlinkFirst(iBin);
@@ -357,7 +357,7 @@ static void memsys5FreeUnsafe(void *pOld){
 ** Allocate nBytes of memory
 */
 static void *memsys5Malloc(int nBytes){
-  sqlite3_int64 *p = 0;
+  sqlite4_int64 *p = 0;
   if( nBytes>0 ){
     memsys5Enter();
     p = memsys5MallocUnsafe(nBytes);
@@ -469,12 +469,12 @@ static int memsys5Init(void *NotUsed){
   */
   assert( (sizeof(Mem5Link)&(sizeof(Mem5Link)-1))==0 );
 
-  nByte = sqlite3GlobalConfig.nHeap;
-  zByte = (u8*)sqlite3GlobalConfig.pHeap;
-  assert( zByte!=0 );  /* sqlite3_config() does not allow otherwise */
+  nByte = sqlite4GlobalConfig.nHeap;
+  zByte = (u8*)sqlite4GlobalConfig.pHeap;
+  assert( zByte!=0 );  /* sqlite4_config() does not allow otherwise */
 
-  /* boundaries on sqlite3GlobalConfig.mnReq are enforced in sqlite3_config() */
-  nMinLog = memsys5Log(sqlite3GlobalConfig.mnReq);
+  /* boundaries on sqlite4GlobalConfig.mnReq are enforced in sqlite4_config() */
+  nMinLog = memsys5Log(sqlite4GlobalConfig.mnReq);
   mem5.szAtom = (1<<nMinLog);
   while( (int)sizeof(Mem5Link)>mem5.szAtom ){
     mem5.szAtom = mem5.szAtom << 1;
@@ -500,8 +500,8 @@ static int memsys5Init(void *NotUsed){
   }
 
   /* If a mutex is required for normal operation, allocate one */
-  if( sqlite3GlobalConfig.bMemstat==0 ){
-    mem5.mutex = sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
+  if( sqlite4GlobalConfig.bMemstat==0 ){
+    mem5.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
   }
 
   return SQLITE_OK;
@@ -521,7 +521,7 @@ static void memsys5Shutdown(void *NotUsed){
 ** Open the file indicated and write a log of all unfreed memory 
 ** allocations into that log.
 */
-void sqlite3Memsys5Dump(const char *zFilename){
+void sqlite4Memsys5Dump(const char *zFilename){
   FILE *out;
   int i, j, n;
   int nMinLog;
@@ -561,11 +561,11 @@ void sqlite3Memsys5Dump(const char *zFilename){
 
 /*
 ** This routine is the only routine in this file with external 
-** linkage. It returns a pointer to a static sqlite3_mem_methods
+** linkage. It returns a pointer to a static sqlite4_mem_methods
 ** struct populated with the memsys5 methods.
 */
-const sqlite3_mem_methods *sqlite3MemGetMemsys5(void){
-  static const sqlite3_mem_methods memsys5Methods = {
+const sqlite4_mem_methods *sqlite4MemGetMemsys5(void){
+  static const sqlite4_mem_methods memsys5Methods = {
      memsys5Malloc,
      memsys5Free,
      memsys5Realloc,

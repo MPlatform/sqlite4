@@ -30,12 +30,12 @@ typedef struct IcuTokenizer IcuTokenizer;
 typedef struct IcuCursor IcuCursor;
 
 struct IcuTokenizer {
-  sqlite3_tokenizer base;
+  sqlite4_tokenizer base;
   char *zLocale;
 };
 
 struct IcuCursor {
-  sqlite3_tokenizer_cursor base;
+  sqlite4_tokenizer_cursor base;
 
   UBreakIterator *pIter;      /* ICU break-iterator object */
   int nChar;                  /* Number of UChar elements in pInput */
@@ -54,7 +54,7 @@ struct IcuCursor {
 static int icuCreate(
   int argc,                            /* Number of entries in argv[] */
   const char * const *argv,            /* Tokenizer creation arguments */
-  sqlite3_tokenizer **ppTokenizer      /* OUT: Created tokenizer */
+  sqlite4_tokenizer **ppTokenizer      /* OUT: Created tokenizer */
 ){
   IcuTokenizer *p;
   int n = 0;
@@ -62,7 +62,7 @@ static int icuCreate(
   if( argc>0 ){
     n = strlen(argv[0])+1;
   }
-  p = (IcuTokenizer *)sqlite3_malloc(sizeof(IcuTokenizer)+n);
+  p = (IcuTokenizer *)sqlite4_malloc(sizeof(IcuTokenizer)+n);
   if( !p ){
     return SQLITE_NOMEM;
   }
@@ -73,7 +73,7 @@ static int icuCreate(
     memcpy(p->zLocale, argv[0], n);
   }
 
-  *ppTokenizer = (sqlite3_tokenizer *)p;
+  *ppTokenizer = (sqlite4_tokenizer *)p;
 
   return SQLITE_OK;
 }
@@ -81,9 +81,9 @@ static int icuCreate(
 /*
 ** Destroy a tokenizer
 */
-static int icuDestroy(sqlite3_tokenizer *pTokenizer){
+static int icuDestroy(sqlite4_tokenizer *pTokenizer){
   IcuTokenizer *p = (IcuTokenizer *)pTokenizer;
-  sqlite3_free(p);
+  sqlite4_free(p);
   return SQLITE_OK;
 }
 
@@ -94,10 +94,10 @@ static int icuDestroy(sqlite3_tokenizer *pTokenizer){
 ** *ppCursor.
 */
 static int icuOpen(
-  sqlite3_tokenizer *pTokenizer,         /* The tokenizer */
+  sqlite4_tokenizer *pTokenizer,         /* The tokenizer */
   const char *zInput,                    /* Input string */
   int nInput,                            /* Length of zInput in bytes */
-  sqlite3_tokenizer_cursor **ppCursor    /* OUT: Tokenization cursor */
+  sqlite4_tokenizer_cursor **ppCursor    /* OUT: Tokenization cursor */
 ){
   IcuTokenizer *p = (IcuTokenizer *)pTokenizer;
   IcuCursor *pCsr;
@@ -116,7 +116,7 @@ static int icuOpen(
     nInput = strlen(zInput);
   }
   nChar = nInput+1;
-  pCsr = (IcuCursor *)sqlite3_malloc(
+  pCsr = (IcuCursor *)sqlite4_malloc(
       sizeof(IcuCursor) +                /* IcuCursor */
       nChar * sizeof(UChar) +            /* IcuCursor.aChar[] */
       (nChar+1) * sizeof(int)            /* IcuCursor.aOffset[] */
@@ -135,7 +135,7 @@ static int icuOpen(
     c = u_foldCase(c, opt);
     U16_APPEND(pCsr->aChar, iOut, nChar, c, isError);
     if( isError ){
-      sqlite3_free(pCsr);
+      sqlite4_free(pCsr);
       return SQLITE_ERROR;
     }
     pCsr->aOffset[iOut] = iInput;
@@ -149,24 +149,24 @@ static int icuOpen(
 
   pCsr->pIter = ubrk_open(UBRK_WORD, p->zLocale, pCsr->aChar, iOut, &status);
   if( !U_SUCCESS(status) ){
-    sqlite3_free(pCsr);
+    sqlite4_free(pCsr);
     return SQLITE_ERROR;
   }
   pCsr->nChar = iOut;
 
   ubrk_first(pCsr->pIter);
-  *ppCursor = (sqlite3_tokenizer_cursor *)pCsr;
+  *ppCursor = (sqlite4_tokenizer_cursor *)pCsr;
   return SQLITE_OK;
 }
 
 /*
 ** Close a tokenization cursor previously opened by a call to icuOpen().
 */
-static int icuClose(sqlite3_tokenizer_cursor *pCursor){
+static int icuClose(sqlite4_tokenizer_cursor *pCursor){
   IcuCursor *pCsr = (IcuCursor *)pCursor;
   ubrk_close(pCsr->pIter);
-  sqlite3_free(pCsr->zBuffer);
-  sqlite3_free(pCsr);
+  sqlite4_free(pCsr->zBuffer);
+  sqlite4_free(pCsr);
   return SQLITE_OK;
 }
 
@@ -174,7 +174,7 @@ static int icuClose(sqlite3_tokenizer_cursor *pCursor){
 ** Extract the next token from a tokenization cursor.
 */
 static int icuNext(
-  sqlite3_tokenizer_cursor *pCursor,  /* Cursor returned by simpleOpen */
+  sqlite4_tokenizer_cursor *pCursor,  /* Cursor returned by simpleOpen */
   const char **ppToken,               /* OUT: *ppToken is the token text */
   int *pnBytes,                       /* OUT: Number of bytes in token */
   int *piStartOffset,                 /* OUT: Starting offset of token */
@@ -211,7 +211,7 @@ static int icuNext(
   do {
     UErrorCode status = U_ZERO_ERROR;
     if( nByte ){
-      char *zNew = sqlite3_realloc(pCsr->zBuffer, nByte);
+      char *zNew = sqlite4_realloc(pCsr->zBuffer, nByte);
       if( !zNew ){
         return SQLITE_NOMEM;
       }
@@ -238,7 +238,7 @@ static int icuNext(
 /*
 ** The set of routines that implement the simple tokenizer
 */
-static const sqlite3_tokenizer_module icuTokenizerModule = {
+static const sqlite4_tokenizer_module icuTokenizerModule = {
   0,                           /* iVersion */
   icuCreate,                   /* xCreate  */
   icuDestroy,                  /* xCreate  */
@@ -250,8 +250,8 @@ static const sqlite3_tokenizer_module icuTokenizerModule = {
 /*
 ** Set *ppModule to point at the implementation of the ICU tokenizer.
 */
-void sqlite3Fts2IcuTokenizerModule(
-  sqlite3_tokenizer_module const**ppModule
+void sqlite4Fts2IcuTokenizerModule(
+  sqlite4_tokenizer_module const**ppModule
 ){
   *ppModule = &icuTokenizerModule;
 }

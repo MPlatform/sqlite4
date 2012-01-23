@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
-# focus of this file is testing the sqlite3_unlock_notify() API.
+# focus of this file is testing the sqlite4_unlock_notify() API.
 #
 
 set testdir [file dirname $argv0]
@@ -22,11 +22,11 @@ ifcapable !unlock_notify||!shared_cache {
   return 
 }
 
-set esc [sqlite3_enable_shared_cache 1]
+set esc [sqlite4_enable_shared_cache 1]
 
-sqlite3 db  test.db
+sqlite4 db  test.db
 forcedelete test.db2 test.db2-journal test.db2-wal
-sqlite3 db2 test.db2
+sqlite4 db2 test.db2
 
 do_test notify3-1.1 {
   execsql { 
@@ -56,12 +56,12 @@ do_test notify3-1.5 {
 } {1 {database schema is locked: aux}}
 
 do_test notify3-1.6 {
-  list [sqlite3_errcode db] [sqlite3_extended_errcode db]
+  list [sqlite4_errcode db] [sqlite4_extended_errcode db]
 } {SQLITE_LOCKED SQLITE_LOCKED_SHAREDCACHE}
 
 do_test notify3-1.7 {
-  sqlite3_extended_result_codes db 1
-  catch { set ::stmt [sqlite3_prepare_v2 db "SELECT * FROM t2" -1 tail] } msg
+  sqlite4_extended_result_codes db 1
+  catch { set ::stmt [sqlite4_prepare_v2 db "SELECT * FROM t2" -1 tail] } msg
   set msg
 } {(262) database schema is locked: aux}
 
@@ -93,7 +93,7 @@ set noerr {{0 {}}}
 # the ATTACH might succeed.
 #
 # This test does not work for test-permutations that specify SQL to
-# be executed as part of the [sqlite3] command that opens the database.
+# be executed as part of the [sqlite4] command that opens the database.
 # Executing such SQL causes SQLite to load the database schema into memory 
 # earlier than expected, causing test cases to fail.
 #
@@ -119,11 +119,11 @@ if {[presql] == ""} {
     do_test notify3-2.$tn.1 {
       catch { db1 close }
       catch { db2 close }
-      sqlite3 db1 test.db
-      sqlite3 db2 test.db2
+      sqlite4 db1 test.db
+      sqlite4 db2 test.db2
   
-      sqlite3_extended_result_codes db1 $enable_extended_errors
-      sqlite3_extended_result_codes db2 $enable_extended_errors
+      sqlite4_extended_result_codes db1 $enable_extended_errors
+      sqlite4_extended_result_codes db2 $enable_extended_errors
   
       if { $db1_loaded } { db1 eval "SELECT * FROM sqlite_master" }
       if { $db2_loaded } { db2 eval "SELECT * FROM sqlite_master" }
@@ -133,7 +133,7 @@ if {[presql] == ""} {
     } $result
   
     do_test notify3-2.$tn.2 {
-      list [sqlite3_errcode db1] [sqlite3_extended_errcode db1]
+      list [sqlite4_errcode db1] [sqlite4_extended_errcode db1]
     } [list $error1 $error2]
   
     do_test notify3-2.$tn.3 {
@@ -148,6 +148,6 @@ catch { db1 close }
 catch { db2 close }
 
 
-sqlite3_enable_shared_cache $esc
+sqlite4_enable_shared_cache $esc
 finish_test
 

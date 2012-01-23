@@ -73,7 +73,7 @@ for {set nEntry 8} {$nEntry < 8192} {incr nEntry 8} {
   do_test walcrash2-1.2.[expr $nEntry/8] {
     set C [launch_testfixture]
     testfixture $C {
-      sqlite3 db test.db
+      sqlite4 db test.db
       db eval {
         PRAGMA cache_size = 15;
         BEGIN;
@@ -90,7 +90,7 @@ for {set nEntry 8} {$nEntry < 8192} {incr nEntry 8} {
   } [wal_file_size 16 1024]
 }
 do_test walcrash2-1.3 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { SELECT count(*) FROM t1 } db2
 } {0}
 catch { db2 close }

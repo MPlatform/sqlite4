@@ -25,7 +25,7 @@ ifcapable !shared_cache||!compound {
   finish_test
   return
 }
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 # Prepare multiple databases in shared cache mode.
 #
@@ -34,10 +34,10 @@ do_test shared4-1.1 {
   forcedelete test2.db test2.db-journal
   forcedelete test3.db test3.db-journal
   forcedelete test4.db test4.db-journal
-  sqlite3 db1 test1.db
-  sqlite3 db2 test2.db
-  sqlite3 db3 test3.db
-  sqlite3 db4 test4.db
+  sqlite4 db1 test1.db
+  sqlite4 db2 test2.db
+  sqlite4 db3 test3.db
+  sqlite4 db4 test4.db
   db1 eval {
     CREATE TABLE t1(a);
     INSERT INTO t1 VALUES(111);
@@ -233,5 +233,5 @@ db2 close
 db3 close
 db4 close
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

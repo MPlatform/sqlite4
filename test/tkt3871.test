@@ -7,7 +7,7 @@ ifcapable !vtab {
   return
 }
 
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 do_test tkt3871-1.1 {
   execsql {

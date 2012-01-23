@@ -13,7 +13,7 @@
 # "PRAGMA journal_mode=WAL" mode.
 # 
 # More specifically, this file contains regression tests for the 
-# sqlite3_wal_hook() mechanism, including the sqlite3_wal_autocheckpoint()
+# sqlite4_wal_hook() mechanism, including the sqlite4_wal_autocheckpoint()
 # and "PRAGMA wal_autocheckpoint" convenience interfaces.
 #
 
@@ -61,7 +61,7 @@ do_test walhook-1.4 {
 } [expr 4*1024]
 
 do_test walhook-1.5 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   proc wal_hook {zDb nEntry} {
     execsql { PRAGMA wal_checkpoint } db2
     return 0
@@ -72,7 +72,7 @@ do_test walhook-1.5 {
 
 db2 close
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 do_test walhook-2.1 {
   execsql { PRAGMA synchronous = NORMAL }
   execsql { PRAGMA wal_autocheckpoint }

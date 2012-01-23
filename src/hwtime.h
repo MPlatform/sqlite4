@@ -27,7 +27,7 @@
 
   #if defined(__GNUC__)
 
-  __inline__ sqlite_uint64 sqlite3Hwtime(void){
+  __inline__ sqlite_uint64 sqlite4Hwtime(void){
      unsigned int lo, hi;
      __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
      return (sqlite_uint64)hi << 32 | lo;
@@ -35,7 +35,7 @@
 
   #elif defined(_MSC_VER)
 
-  __declspec(naked) __inline sqlite_uint64 __cdecl sqlite3Hwtime(void){
+  __declspec(naked) __inline sqlite_uint64 __cdecl sqlite4Hwtime(void){
      __asm {
         rdtsc
         ret       ; return value at EDX:EAX
@@ -46,7 +46,7 @@
 
 #elif (defined(__GNUC__) && defined(__x86_64__))
 
-  __inline__ sqlite_uint64 sqlite3Hwtime(void){
+  __inline__ sqlite_uint64 sqlite4Hwtime(void){
       unsigned long val;
       __asm__ __volatile__ ("rdtsc" : "=A" (val));
       return val;
@@ -54,7 +54,7 @@
  
 #elif (defined(__GNUC__) && defined(__ppc__))
 
-  __inline__ sqlite_uint64 sqlite3Hwtime(void){
+  __inline__ sqlite_uint64 sqlite4Hwtime(void){
       unsigned long long retval;
       unsigned long junk;
       __asm__ __volatile__ ("\n\
@@ -69,16 +69,16 @@
 
 #else
 
-  #error Need implementation of sqlite3Hwtime() for your platform.
+  #error Need implementation of sqlite4Hwtime() for your platform.
 
   /*
-  ** To compile without implementing sqlite3Hwtime() for your platform,
+  ** To compile without implementing sqlite4Hwtime() for your platform,
   ** you can remove the above #error and use the following
   ** stub function.  You will lose timing support for many
   ** of the debugging and testing utilities, but it should at
   ** least compile and run.
   */
-  sqlite_uint64 sqlite3Hwtime(void){ return ((sqlite_uint64)0); }
+  sqlite_uint64 sqlite4Hwtime(void){ return ((sqlite_uint64)0); }
 
 #endif
 

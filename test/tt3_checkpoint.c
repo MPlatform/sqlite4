@@ -26,7 +26,7 @@
 ** another. Each read transaction lasts for 100 ms.
 **
 ** The writer writes transactions as fast as possible. It uses a callback
-** registered with sqlite3_wal_hook() to try to keep the WAL-size limited to 
+** registered with sqlite4_wal_hook() to try to keep the WAL-size limited to 
 ** around 50 pages.
 **
 ** In test case checkpoint_starvation_1, the auto-checkpoint uses 
@@ -52,7 +52,7 @@ typedef struct CheckpointStarvationCtx CheckpointStarvationCtx;
 
 static int checkpoint_starvation_walhook(
   void *pCtx, 
-  sqlite3 *db, 
+  sqlite4 *db, 
   const char *zDb, 
   int nFrame
 ){
@@ -61,7 +61,7 @@ static int checkpoint_starvation_walhook(
     p->nMaxFrame = nFrame;
   }
   if( nFrame>=CHECKPOINT_STARVATION_FRAMELIMIT ){
-    sqlite3_wal_checkpoint_v2(db, zDb, p->eMode, 0, 0);
+    sqlite4_wal_checkpoint_v2(db, zDb, p->eMode, 0, 0);
   }
   return SQLITE_OK;
 }
@@ -110,7 +110,7 @@ static void checkpoint_starvation_main(int nMs, CheckpointStarvationCtx *p){
     usleep(CHECKPOINT_STARVATION_READMS*1000/4);
   }
 
-  sqlite3_wal_hook(db.db, checkpoint_starvation_walhook, (void *)p);
+  sqlite4_wal_hook(db.db, checkpoint_starvation_walhook, (void *)p);
   while( !timetostop(&err) ){
     sql_script(&err, &db, "INSERT INTO t1 VALUES(randomblob(1200))");
     nInsert++;

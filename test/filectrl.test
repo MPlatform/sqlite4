@@ -24,16 +24,16 @@ do_test filectrl-1.2 {
 } {}
 do_test filectrl-1.3 {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   file_control_test db
 } {}
 do_test filectrl-1.4 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   file_control_lasterrno_test db
 } {}
 do_test filectrl-1.5 {
   db close
-  sqlite3 db test_control_lockproxy.db
+  sqlite4 db test_control_lockproxy.db
   file_control_lockproxy_test db [pwd]
 } {}
 db close

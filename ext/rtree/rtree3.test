@@ -203,11 +203,11 @@ do_faultsim_test rtree3-7 -faults oom-* -prep {
 do_faultsim_test rtree3-8 -faults oom-* -prep {
   catch { db close }
 } -body {
-  sqlite3 db test.db
+  sqlite4 db test.db
 } 
 
 do_faultsim_test rtree3-9 -faults oom-* -prep {
-  sqlite3 db :memory:
+  sqlite4 db :memory:
 } -body {
   set rc [register_cube_geom db]
   if {$rc != "SQLITE_OK"} { error $rc }

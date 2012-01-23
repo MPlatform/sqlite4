@@ -94,7 +94,7 @@
 ** This last query will show up to 50 words out of the vocabulary that
 ** match or nearly match the $prefix.
 */
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -113,7 +113,7 @@ typedef struct fuzzer_stem fuzzer_stem;
 
 /*
 ** Type of the "cost" of an edit operation.  Might be changed to
-** "float" or "double" or "sqlite3_int64" in the future.
+** "float" or "double" or "sqlite4_int64" in the future.
 */
 typedef int fuzzer_cost;
 
@@ -156,7 +156,7 @@ struct fuzzer_stem {
 ** A fuzzer virtual-table object 
 */
 struct fuzzer_vtab {
-  sqlite3_vtab base;         /* Base class - must be first */
+  sqlite4_vtab base;         /* Base class - must be first */
   char *zClassName;          /* Name of this class.  Default: "fuzzer" */
   fuzzer_rule *pRule;        /* All active rules in this fuzzer */
   fuzzer_rule *pNewRule;     /* New rules to add when last cursor expires */
@@ -168,8 +168,8 @@ struct fuzzer_vtab {
 
 /* A fuzzer cursor object */
 struct fuzzer_cursor {
-  sqlite3_vtab_cursor base;  /* Base class - must be first */
-  sqlite3_int64 iRowid;      /* The rowid of the current word */
+  sqlite4_vtab_cursor base;  /* Base class - must be first */
+  sqlite4_int64 iRowid;      /* The rowid of the current word */
   fuzzer_vtab *pVtab;        /* The virtual table this cursor belongs to */
   fuzzer_cost rLimit;        /* Maximum cost of any term */
   fuzzer_stem *pStem;        /* Stem with smallest rCostX */
@@ -185,24 +185,24 @@ struct fuzzer_cursor {
 
 /* Methods for the fuzzer module */
 static int fuzzerConnect(
-  sqlite3 *db,
+  sqlite4 *db,
   void *pAux,
   int argc, const char *const*argv,
-  sqlite3_vtab **ppVtab,
+  sqlite4_vtab **ppVtab,
   char **pzErr
 ){
   fuzzer_vtab *pNew;
   int n;
   if( strcmp(argv[1],"temp")!=0 ){
-    *pzErr = sqlite3_mprintf("%s virtual tables must be TEMP", argv[0]);
+    *pzErr = sqlite4_mprintf("%s virtual tables must be TEMP", argv[0]);
     return SQLITE_ERROR;
   }
   n = strlen(argv[0]) + 1;
-  pNew = sqlite3_malloc( sizeof(*pNew) + n );
+  pNew = sqlite4_malloc( sizeof(*pNew) + n );
   if( pNew==0 ) return SQLITE_NOMEM;
   pNew->zClassName = (char*)&pNew[1];
   memcpy(pNew->zClassName, argv[0], n);
-  sqlite3_declare_vtab(db, "CREATE TABLE x(word,distance,cFrom,cTo,cost)");
+  sqlite4_declare_vtab(db, "CREATE TABLE x(word,distance,cFrom,cTo,cost)");
   memset(pNew, 0, sizeof(*pNew));
   *ppVtab = &pNew->base;
   return SQLITE_OK;
@@ -210,19 +210,19 @@ static int fuzzerConnect(
 /* Note that for this virtual table, the xCreate and xConnect
 ** methods are identical. */
 
-static int fuzzerDisconnect(sqlite3_vtab *pVtab){
+static int fuzzerDisconnect(sqlite4_vtab *pVtab){
   fuzzer_vtab *p = (fuzzer_vtab*)pVtab;
   assert( p->nCursor==0 );
   do{
     while( p->pRule ){
       fuzzer_rule *pRule = p->pRule;
       p->pRule = pRule->pNext;
-      sqlite3_free(pRule);
+      sqlite4_free(pRule);
     }
     p->pRule = p->pNewRule;
     p->pNewRule = 0;
   }while( p->pRule );
-  sqlite3_free(p);
+  sqlite4_free(p);
   return SQLITE_OK;
 }
 /* The xDisconnect and xDestroy methods are also the same */
@@ -260,10 +260,10 @@ static fuzzer_rule *fuzzerMergeRules(fuzzer_rule *pA, fuzzer_rule *pB){
 /*
 ** Open a new fuzzer cursor.
 */
-static int fuzzerOpen(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCursor){
+static int fuzzerOpen(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCursor){
   fuzzer_vtab *p = (fuzzer_vtab*)pVTab;
   fuzzer_cursor *pCur;
-  pCur = sqlite3_malloc( sizeof(*pCur) );
+  pCur = sqlite4_malloc( sizeof(*pCur) );
   if( pCur==0 ) return SQLITE_NOMEM;
   memset(pCur, 0, sizeof(*pCur));
   pCur->pVtab = p;
@@ -297,7 +297,7 @@ static int fuzzerOpen(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCursor){
 static void fuzzerClearStemList(fuzzer_stem *pStem){
   while( pStem ){
     fuzzer_stem *pNext = pStem->pNext;
-    sqlite3_free(pStem);
+    sqlite4_free(pStem);
     pStem = pNext;
   }
 }
@@ -325,12 +325,12 @@ static void fuzzerClearCursor(fuzzer_cursor *pCur, int clearHash){
 /*
 ** Close a fuzzer cursor.
 */
-static int fuzzerClose(sqlite3_vtab_cursor *cur){
+static int fuzzerClose(sqlite4_vtab_cursor *cur){
   fuzzer_cursor *pCur = (fuzzer_cursor *)cur;
   fuzzerClearCursor(pCur, 0);
-  sqlite3_free(pCur->zBuf);
+  sqlite4_free(pCur->zBuf);
   pCur->pVtab->nCursor--;
-  sqlite3_free(pCur);
+  sqlite4_free(pCur);
   return SQLITE_OK;
 }
 
@@ -348,7 +348,7 @@ static int fuzzerRender(
 
   n = pStem->nBasis + pRule->nTo - pRule->nFrom;
   if( (*pnBuf)<n+1 ){
-    (*pzBuf) = sqlite3_realloc((*pzBuf), n+100);
+    (*pzBuf) = sqlite4_realloc((*pzBuf), n+100);
     if( (*pzBuf)==0 ) return SQLITE_NOMEM;
     (*pnBuf) = n+100;
   }
@@ -405,7 +405,7 @@ static void fuzzerStemPrint(
       pStem->zBasis, pStem->rBaseCost, zBuf, pStem->,
       zSuffix
     );
-    sqlite3_free(zBuf);
+    sqlite4_free(zBuf);
   }
 }
 #endif
@@ -574,7 +574,7 @@ static fuzzer_stem *fuzzerNewStem(
   fuzzer_stem *pNew;
   unsigned int h;
 
-  pNew = sqlite3_malloc( sizeof(*pNew) + strlen(zWord) + 1 );
+  pNew = sqlite4_malloc( sizeof(*pNew) + strlen(zWord) + 1 );
   if( pNew==0 ) return 0;
   memset(pNew, 0, sizeof(*pNew));
   pNew->zBasis = (char*)&pNew[1];
@@ -594,7 +594,7 @@ static fuzzer_stem *fuzzerNewStem(
 /*
 ** Advance a cursor to its next row of output
 */
-static int fuzzerNext(sqlite3_vtab_cursor *cur){
+static int fuzzerNext(sqlite4_vtab_cursor *cur){
   fuzzer_cursor *pCur = (fuzzer_cursor*)cur;
   int rc;
   fuzzer_stem *pStem, *pNew;
@@ -660,9 +660,9 @@ static int fuzzerNext(sqlite3_vtab_cursor *cur){
 ** prior to any fuzzerColumn, fuzzerRowid, or fuzzerEof call.
 */
 static int fuzzerFilter(
-  sqlite3_vtab_cursor *pVtabCursor, 
+  sqlite4_vtab_cursor *pVtabCursor, 
   int idxNum, const char *idxStr,
-  int argc, sqlite3_value **argv
+  int argc, sqlite4_value **argv
 ){
   fuzzer_cursor *pCur = (fuzzer_cursor *)pVtabCursor;
   const char *zWord = 0;
@@ -671,12 +671,12 @@ static int fuzzerFilter(
   fuzzerClearCursor(pCur, 1);
   pCur->rLimit = 2147483647;
   if( idxNum==1 ){
-    zWord = (const char*)sqlite3_value_text(argv[0]);
+    zWord = (const char*)sqlite4_value_text(argv[0]);
   }else if( idxNum==2 ){
-    pCur->rLimit = (fuzzer_cost)sqlite3_value_int(argv[0]);
+    pCur->rLimit = (fuzzer_cost)sqlite4_value_int(argv[0]);
   }else if( idxNum==3 ){
-    zWord = (const char*)sqlite3_value_text(argv[0]);
-    pCur->rLimit = (fuzzer_cost)sqlite3_value_int(argv[1]);
+    zWord = (const char*)sqlite4_value_text(argv[0]);
+    pCur->rLimit = (fuzzer_cost)sqlite4_value_int(argv[1]);
   }
   if( zWord==0 ) zWord = "";
   pCur->pStem = pStem = fuzzerNewStem(pCur, zWord, (fuzzer_cost)0);
@@ -696,20 +696,20 @@ static int fuzzerFilter(
 ** Only the word and distance columns have values.  All other columns
 ** return NULL
 */
-static int fuzzerColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int i){
+static int fuzzerColumn(sqlite4_vtab_cursor *cur, sqlite4_context *ctx, int i){
   fuzzer_cursor *pCur = (fuzzer_cursor*)cur;
   if( i==0 ){
     /* the "word" column */
     if( fuzzerRender(pCur->pStem, &pCur->zBuf, &pCur->nBuf)==SQLITE_NOMEM ){
       return SQLITE_NOMEM;
     }
-    sqlite3_result_text(ctx, pCur->zBuf, -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(ctx, pCur->zBuf, -1, SQLITE_TRANSIENT);
   }else if( i==1 ){
     /* the "distance" column */
-    sqlite3_result_int(ctx, pCur->pStem->rCostX);
+    sqlite4_result_int(ctx, pCur->pStem->rCostX);
   }else{
     /* All other columns are NULL */
-    sqlite3_result_null(ctx);
+    sqlite4_result_null(ctx);
   }
   return SQLITE_OK;
 }
@@ -717,7 +717,7 @@ static int fuzzerColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int i){
 /*
 ** The rowid.
 */
-static int fuzzerRowid(sqlite3_vtab_cursor *cur, sqlite_int64 *pRowid){
+static int fuzzerRowid(sqlite4_vtab_cursor *cur, sqlite_int64 *pRowid){
   fuzzer_cursor *pCur = (fuzzer_cursor*)cur;
   *pRowid = pCur->iRowid;
   return SQLITE_OK;
@@ -727,7 +727,7 @@ static int fuzzerRowid(sqlite3_vtab_cursor *cur, sqlite_int64 *pRowid){
 ** When the fuzzer_cursor.rLimit value is 0 or less, that is a signal
 ** that the cursor has nothing more to output.
 */
-static int fuzzerEof(sqlite3_vtab_cursor *cur){
+static int fuzzerEof(sqlite4_vtab_cursor *cur){
   fuzzer_cursor *pCur = (fuzzer_cursor*)cur;
   return pCur->rLimit<=(fuzzer_cost)0;
 }
@@ -748,11 +748,11 @@ static int fuzzerEof(sqlite3_vtab_cursor *cur){
 **   3:    Both "word MATCH" and "distance<" with $str in argv[0] and
 **         $value in argv[1].
 */
-static int fuzzerBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
+static int fuzzerBestIndex(sqlite4_vtab *tab, sqlite4_index_info *pIdxInfo){
   int iPlan = 0;
   int iDistTerm = -1;
   int i;
-  const struct sqlite3_index_constraint *pConstraint;
+  const struct sqlite4_index_constraint *pConstraint;
   pConstraint = pIdxInfo->aConstraint;
   for(i=0; i<pIdxInfo->nConstraint; i++, pConstraint++){
     if( pConstraint->usable==0 ) continue;
@@ -799,9 +799,9 @@ static int fuzzerBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
 ** interpreted as an empty string.  The cost must be positive.
 */
 static int fuzzerUpdate(
-  sqlite3_vtab *pVTab,
+  sqlite4_vtab *pVTab,
   int argc,
-  sqlite3_value **argv,
+  sqlite4_value **argv,
   sqlite_int64 *pRowid
 ){
   fuzzer_vtab *p = (fuzzer_vtab*)pVTab;
@@ -812,34 +812,34 @@ static int fuzzerUpdate(
   int nTo;
   fuzzer_cost rCost;
   if( argc!=7 ){
-    sqlite3_free(pVTab->zErrMsg);
-    pVTab->zErrMsg = sqlite3_mprintf("cannot delete from a %s virtual table",
+    sqlite4_free(pVTab->zErrMsg);
+    pVTab->zErrMsg = sqlite4_mprintf("cannot delete from a %s virtual table",
                                      p->zClassName);
     return SQLITE_CONSTRAINT;
   }
-  if( sqlite3_value_type(argv[0])!=SQLITE_NULL ){
-    sqlite3_free(pVTab->zErrMsg);
-    pVTab->zErrMsg = sqlite3_mprintf("cannot update a %s virtual table",
+  if( sqlite4_value_type(argv[0])!=SQLITE_NULL ){
+    sqlite4_free(pVTab->zErrMsg);
+    pVTab->zErrMsg = sqlite4_mprintf("cannot update a %s virtual table",
                                      p->zClassName);
     return SQLITE_CONSTRAINT;
   }
-  zFrom = (char*)sqlite3_value_text(argv[4]);
+  zFrom = (char*)sqlite4_value_text(argv[4]);
   if( zFrom==0 ) zFrom = "";
-  zTo = (char*)sqlite3_value_text(argv[5]);
+  zTo = (char*)sqlite4_value_text(argv[5]);
   if( zTo==0 ) zTo = "";
   if( strcmp(zFrom,zTo)==0 ){
     /* Silently ignore null transformations */
     return SQLITE_OK;
   }
-  rCost = sqlite3_value_int(argv[6]);
+  rCost = sqlite4_value_int(argv[6]);
   if( rCost<=0 ){
-    sqlite3_free(pVTab->zErrMsg);
-    pVTab->zErrMsg = sqlite3_mprintf("cost must be positive");
+    sqlite4_free(pVTab->zErrMsg);
+    pVTab->zErrMsg = sqlite4_mprintf("cost must be positive");
     return SQLITE_CONSTRAINT;    
   }
   nFrom = strlen(zFrom);
   nTo = strlen(zTo);
-  pRule = sqlite3_malloc( sizeof(*pRule) + nFrom + nTo );
+  pRule = sqlite4_malloc( sizeof(*pRule) + nFrom + nTo );
   if( pRule==0 ){
     return SQLITE_NOMEM;
   }
@@ -858,7 +858,7 @@ static int fuzzerUpdate(
 ** A virtual table module that provides read-only access to a
 ** Tcl global variable namespace.
 */
-static sqlite3_module fuzzerModule = {
+static sqlite4_module fuzzerModule = {
   0,                           /* iVersion */
   fuzzerConnect,
   fuzzerConnect,
@@ -887,10 +887,10 @@ static sqlite3_module fuzzerModule = {
 /*
 ** Register the fuzzer virtual table
 */
-int fuzzer_register(sqlite3 *db){
+int fuzzer_register(sqlite4 *db){
   int rc = SQLITE_OK;
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-  rc = sqlite3_create_module(db, "fuzzer", &fuzzerModule, 0);
+  rc = sqlite4_create_module(db, "fuzzer", &fuzzerModule, 0);
 #endif
   return rc;
 }
@@ -898,20 +898,20 @@ int fuzzer_register(sqlite3 *db){
 #ifdef SQLITE_TEST
 #include <tcl.h>
 /*
-** Decode a pointer to an sqlite3 object.
+** Decode a pointer to an sqlite4 object.
 */
-extern int getDbPointer(Tcl_Interp *interp, const char *zA, sqlite3 **ppDb);
+extern int getDbPointer(Tcl_Interp *interp, const char *zA, sqlite4 **ppDb);
 
 /*
 ** Register the echo virtual table module.
 */
 static int register_fuzzer_module(
-  ClientData clientData, /* Pointer to sqlite3_enable_XXX function */
+  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
   int objc,              /* Number of arguments */
   Tcl_Obj *CONST objv[]  /* Command arguments */
 ){
-  sqlite3 *db;
+  sqlite4 *db;
   if( objc!=2 ){
     Tcl_WrongNumArgs(interp, 1, objv, "DB");
     return TCL_ERROR;

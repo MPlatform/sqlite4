@@ -20,9 +20,9 @@
 #   shell3-2.*: Basic tests for running SQL file from command line.
 #
 
-package require sqlite3
+package require sqlite4
 
-set CLI "./sqlite3"
+set CLI "./sqlite4"
 
 proc do_test {name cmd expected} {
   puts -nonewline "$name ..."
@@ -57,7 +57,7 @@ proc catchcmd {db {cmd ""}} {
 }
 
 file delete -force test.db test.db.journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 
 #----------------------------------------------------------------------------

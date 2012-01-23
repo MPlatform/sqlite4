@@ -22,9 +22,9 @@
 # After extracting the value, we have to call OP_RealAffinity to
 # convert it back to a REAL.
 #
-# The sqlite3ExprCodeGetColumn() routine was added to take care of
+# The sqlite4ExprCodeGetColumn() routine was added to take care of
 # all of the complications above.  The tests in this file attempt
-# to verify that sqlite3ExprCodeGetColumn() is used instead of a
+# to verify that sqlite4ExprCodeGetColumn() is used instead of a
 # raw OP_Column in all places where a table column is extracted from
 # the database.
 #

@@ -107,7 +107,7 @@ proc io_log {db} {
 
 proc reset_db {} {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval { 
     PRAGMA main.cache_size = 200000;
     PRAGMA main.auto_vacuum = 'incremental';

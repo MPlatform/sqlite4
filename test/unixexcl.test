@@ -42,7 +42,7 @@ do_multiclient_test tn {
   do_test unixexcl-1.$tn.3 {
     code1 {
       db close
-      sqlite3 db test.db -vfs unix-excl
+      sqlite4 db test.db -vfs unix-excl
       db eval { SELECT * FROM t1 }
     }
   } {hello world}
@@ -71,7 +71,7 @@ do_multiclient_test tn {
   do_test unixexcl-2.$tn.3 {
     code1 {
       db close
-      sqlite3 db test.db -readonly yes -vfs unix-excl
+      sqlite4 db test.db -readonly yes -vfs unix-excl
       db eval { SELECT * FROM t1 }
     }
   } {hello world}
@@ -82,8 +82,8 @@ do_multiclient_test tn {
 
 do_multiclient_test tn {
   do_test unixexcl-3.$tn.1 {
-    code1 { db close; sqlite3 db file:test.db?psow=0 -vfs unix-excl -uri 1 }
-    code2 { db2 close; sqlite3 db2 file:test.db?psow=0 -vfs unix-excl -uri 1 }
+    code1 { db close; sqlite4 db file:test.db?psow=0 -vfs unix-excl -uri 1 }
+    code2 { db2 close; sqlite4 db2 file:test.db?psow=0 -vfs unix-excl -uri 1 }
     sql1 {
       PRAGMA auto_vacuum = 0;
       PRAGMA journal_mode = WAL;

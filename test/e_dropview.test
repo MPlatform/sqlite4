@@ -20,7 +20,7 @@ set ::testprefix e_dropview
 proc dropview_reopen_db {} {
   db close
   forcedelete test.db test.db2
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   db eval {
     ATTACH 'test.db2' AS aux;

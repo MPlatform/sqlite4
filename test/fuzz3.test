@@ -92,9 +92,9 @@ proc modify_database {iMod} {
 proc purge_pcache {} {
   ifcapable !memorymanage {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
   } else {
-    sqlite3_release_memory 10000000
+    sqlite4_release_memory 10000000
   }
   if {[lindex [pcache_stats] 1] != 0} {
     error "purge_pcache failed: [pcache_stats]"

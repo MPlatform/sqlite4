@@ -99,7 +99,7 @@ struct VdbeSorter {
   int *aTree;                     /* Current state of incremental merge */
   i64 iWriteOff;                  /* Current write offset within file pTemp1 */
   i64 iReadOff;                   /* Current read offset within file pTemp1 */
-  sqlite3_file *pTemp1;           /* PMA file 1 */
+  sqlite4_file *pTemp1;           /* PMA file 1 */
   int nPMA;                       /* Number of PMAs stored in pTemp1 */
   SorterRecord *pRecord;          /* Head of in-memory record list */
   int mnPmaSize;                  /* Minimum PMA size, in bytes */
@@ -114,7 +114,7 @@ struct VdbeSorter {
 struct VdbeSorterIter {
   i64 iReadOff;                   /* Current read offset */
   i64 iEof;                       /* 1 byte past EOF for this iterator */
-  sqlite3_file *pFile;            /* File iterator is reading from */
+  sqlite4_file *pFile;            /* File iterator is reading from */
   int nAlloc;                     /* Bytes of space at aAlloc */
   u8 *aAlloc;                     /* Allocated space */
   int nKey;                       /* Number of bytes in key */
@@ -142,8 +142,8 @@ struct SorterRecord {
 ** Free all memory belonging to the VdbeSorterIter object passed as the second
 ** argument. All structure fields are set to zero before returning.
 */
-static void vdbeSorterIterZero(sqlite3 *db, VdbeSorterIter *pIter){
-  sqlite3DbFree(db, pIter->aAlloc);
+static void vdbeSorterIterZero(sqlite4 *db, VdbeSorterIter *pIter){
+  sqlite4DbFree(db, pIter->aAlloc);
   memset(pIter, 0, sizeof(VdbeSorterIter));
 }
 
@@ -152,7 +152,7 @@ static void vdbeSorterIterZero(sqlite3 *db, VdbeSorterIter *pIter){
 ** no error occurs, or an SQLite error code if one does.
 */
 static int vdbeSorterIterNext(
-  sqlite3 *db,                    /* Database handle (for sqlite3DbMalloc() ) */
+  sqlite4 *db,                    /* Database handle (for sqlite4DbMalloc() ) */
   VdbeSorterIter *pIter           /* Iterator to advance */
 ){
   int rc;                         /* Return Code */
@@ -172,7 +172,7 @@ static int vdbeSorterIterNext(
     return SQLITE_OK;
   }
 
-  rc = sqlite3OsRead(pIter->pFile, pIter->aAlloc, nRead, pIter->iReadOff);
+  rc = sqlite4OsRead(pIter->pFile, pIter->aAlloc, nRead, pIter->iReadOff);
   if( rc==SQLITE_OK ){
     iOff = getVarint32(pIter->aAlloc, nRec);
     if( (iOff+nRec)>nRead ){
@@ -180,13 +180,13 @@ static int vdbeSorterIterNext(
       if( (iOff+nRec)>pIter->nAlloc ){
         int nNew = pIter->nAlloc*2;
         while( (iOff+nRec)>nNew ) nNew = nNew*2;
-        pIter->aAlloc = sqlite3DbReallocOrFree(db, pIter->aAlloc, nNew);
+        pIter->aAlloc = sqlite4DbReallocOrFree(db, pIter->aAlloc, nNew);
         if( !pIter->aAlloc ) return SQLITE_NOMEM;
         pIter->nAlloc = nNew;
       }
   
       nRead2 = iOff + nRec - nRead;
-      rc = sqlite3OsRead(
+      rc = sqlite4OsRead(
           pIter->pFile, &pIter->aAlloc[nRead], nRead2, pIter->iReadOff+nRead
       );
     }
@@ -208,7 +208,7 @@ static int vdbeSorterIterNext(
 ** incremented by the number of bytes written.
 */
 static int vdbeSorterWriteVarint(
-  sqlite3_file *pFile,            /* File to write to */
+  sqlite4_file *pFile,            /* File to write to */
   i64 iVal,                       /* Value to write as a varint */
   i64 *piOffset                   /* IN/OUT: Write offset in file pFile */
 ){
@@ -216,8 +216,8 @@ static int vdbeSorterWriteVarint(
   int nVarint;                    /* Number of used bytes in varint */
   int rc;                         /* Result of write() call */
 
-  nVarint = sqlite3PutVarint(aVarint, iVal);
-  rc = sqlite3OsWrite(pFile, aVarint, nVarint, *piOffset);
+  nVarint = sqlite4PutVarint(aVarint, iVal);
+  rc = sqlite4OsWrite(pFile, aVarint, nVarint, *piOffset);
   *piOffset += nVarint;
 
   return rc;
@@ -235,7 +235,7 @@ static int vdbeSorterWriteVarint(
 ** both *piOffset and *piVal are undefined.
 */
 static int vdbeSorterReadVarint(
-  sqlite3_file *pFile,            /* File to read from */
+  sqlite4_file *pFile,            /* File to read from */
   i64 *piOffset,                  /* IN/OUT: Read offset in pFile */
   i64 *piVal                      /* OUT: Value read from file */
 ){
@@ -243,7 +243,7 @@ static int vdbeSorterReadVarint(
   i64 iOff = *piOffset;           /* Offset in file to read from */
   int rc;                         /* Return code */
 
-  rc = sqlite3OsRead(pFile, aVarint, 9, iOff);
+  rc = sqlite4OsRead(pFile, aVarint, 9, iOff);
   if( rc==SQLITE_OK ){
     *piOffset += getVarint(aVarint, (u64 *)piVal);
   }
@@ -258,7 +258,7 @@ static int vdbeSorterReadVarint(
 ** PMA is empty).
 */
 static int vdbeSorterIterInit(
-  sqlite3 *db,                    /* Database handle */
+  sqlite4 *db,                    /* Database handle */
   VdbeSorter *pSorter,            /* Sorter object */
   i64 iStart,                     /* Start offset in pFile */
   VdbeSorterIter *pIter,          /* Iterator to populate */
@@ -271,7 +271,7 @@ static int vdbeSorterIterInit(
   pIter->pFile = pSorter->pTemp1;
   pIter->iReadOff = iStart;
   pIter->nAlloc = 128;
-  pIter->aAlloc = (u8 *)sqlite3DbMallocRaw(db, pIter->nAlloc);
+  pIter->aAlloc = (u8 *)sqlite4DbMallocRaw(db, pIter->nAlloc);
   if( !pIter->aAlloc ){
     rc = SQLITE_NOMEM;
   }else{
@@ -315,7 +315,7 @@ static void vdbeSorterCompare(
   int i;
 
   if( pKey2 ){
-    sqlite3VdbeRecordUnpack(pKeyInfo, nKey2, pKey2, r2);
+    sqlite4VdbeRecordUnpack(pKeyInfo, nKey2, pKey2, r2);
   }
 
   if( bOmitRowid ){
@@ -330,7 +330,7 @@ static void vdbeSorterCompare(
     r2->flags |= UNPACKED_PREFIX_MATCH;
   }
 
-  *pRes = sqlite3VdbeRecordCompare(nKey1, pKey1, r2);
+  *pRes = sqlite4VdbeRecordCompare(nKey1, pKey1, r2);
 }
 
 /*
@@ -383,24 +383,24 @@ static int vdbeSorterDoCompare(VdbeCursor *pCsr, int iOut){
 /*
 ** Initialize the temporary index cursor just opened as a sorter cursor.
 */
-int sqlite3VdbeSorterInit(sqlite3 *db, VdbeCursor *pCsr){
+int sqlite4VdbeSorterInit(sqlite4 *db, VdbeCursor *pCsr){
   int pgsz;                       /* Page size of main database */
   int mxCache;                    /* Cache size */
   VdbeSorter *pSorter;            /* The new sorter */
   char *d;                        /* Dummy */
 
   assert( pCsr->pKeyInfo && pCsr->pBt==0 );
-  pCsr->pSorter = pSorter = sqlite3DbMallocZero(db, sizeof(VdbeSorter));
+  pCsr->pSorter = pSorter = sqlite4DbMallocZero(db, sizeof(VdbeSorter));
   if( pSorter==0 ){
     return SQLITE_NOMEM;
   }
   
-  pSorter->pUnpacked = sqlite3VdbeAllocUnpackedRecord(pCsr->pKeyInfo, 0, 0, &d);
+  pSorter->pUnpacked = sqlite4VdbeAllocUnpackedRecord(pCsr->pKeyInfo, 0, 0, &d);
   if( pSorter->pUnpacked==0 ) return SQLITE_NOMEM;
   assert( pSorter->pUnpacked==(UnpackedRecord *)d );
 
-  if( !sqlite3TempInMemory(db) ){
-    pgsz = sqlite3BtreeGetPageSize(db->aDb[0].pBt);
+  if( !sqlite4TempInMemory(db) ){
+    pgsz = sqlite4BtreeGetPageSize(db->aDb[0].pBt);
     pSorter->mnPmaSize = SORTER_MIN_WORKING * pgsz;
     mxCache = db->aDb[0].pSchema->cache_size;
     if( mxCache<SORTER_MIN_WORKING ) mxCache = SORTER_MIN_WORKING;
@@ -413,19 +413,19 @@ int sqlite3VdbeSorterInit(sqlite3 *db, VdbeCursor *pCsr){
 /*
 ** Free the list of sorted records starting at pRecord.
 */
-static void vdbeSorterRecordFree(sqlite3 *db, SorterRecord *pRecord){
+static void vdbeSorterRecordFree(sqlite4 *db, SorterRecord *pRecord){
   SorterRecord *p;
   SorterRecord *pNext;
   for(p=pRecord; p; p=pNext){
     pNext = p->pNext;
-    sqlite3DbFree(db, p);
+    sqlite4DbFree(db, p);
   }
 }
 
 /*
-** Free any cursor components allocated by sqlite3VdbeSorterXXX routines.
+** Free any cursor components allocated by sqlite4VdbeSorterXXX routines.
 */
-void sqlite3VdbeSorterClose(sqlite3 *db, VdbeCursor *pCsr){
+void sqlite4VdbeSorterClose(sqlite4 *db, VdbeCursor *pCsr){
   VdbeSorter *pSorter = pCsr->pSorter;
   if( pSorter ){
     if( pSorter->aIter ){
@@ -433,14 +433,14 @@ void sqlite3VdbeSorterClose(sqlite3 *db, VdbeCursor *pCsr){
       for(i=0; i<pSorter->nTree; i++){
         vdbeSorterIterZero(db, &pSorter->aIter[i]);
       }
-      sqlite3DbFree(db, pSorter->aIter);
+      sqlite4DbFree(db, pSorter->aIter);
     }
     if( pSorter->pTemp1 ){
-      sqlite3OsCloseFree(pSorter->pTemp1);
+      sqlite4OsCloseFree(pSorter->pTemp1);
     }
     vdbeSorterRecordFree(db, pSorter->pRecord);
-    sqlite3DbFree(db, pSorter->pUnpacked);
-    sqlite3DbFree(db, pSorter);
+    sqlite4DbFree(db, pSorter->pUnpacked);
+    sqlite4DbFree(db, pSorter);
     pCsr->pSorter = 0;
   }
 }
@@ -450,9 +450,9 @@ void sqlite3VdbeSorterClose(sqlite3 *db, VdbeCursor *pCsr){
 ** set *ppFile to point to the malloc'd file-handle and return SQLITE_OK.
 ** Otherwise, set *ppFile to 0 and return an SQLite error code.
 */
-static int vdbeSorterOpenTempFile(sqlite3 *db, sqlite3_file **ppFile){
+static int vdbeSorterOpenTempFile(sqlite4 *db, sqlite4_file **ppFile){
   int dummy;
-  return sqlite3OsOpenMalloc(db->pVfs, 0, ppFile,
+  return sqlite4OsOpenMalloc(db->pVfs, 0, ppFile,
       SQLITE_OPEN_TEMP_JOURNAL |
       SQLITE_OPEN_READWRITE    | SQLITE_OPEN_CREATE |
       SQLITE_OPEN_EXCLUSIVE    | SQLITE_OPEN_DELETEONCLOSE, &dummy
@@ -504,7 +504,7 @@ static int vdbeSorterSort(VdbeCursor *pCsr){
   SorterRecord *p;
   VdbeSorter *pSorter = pCsr->pSorter;
 
-  aSlot = (SorterRecord **)sqlite3MallocZero(64 * sizeof(SorterRecord *));
+  aSlot = (SorterRecord **)sqlite4MallocZero(64 * sizeof(SorterRecord *));
   if( !aSlot ){
     return SQLITE_NOMEM;
   }
@@ -527,7 +527,7 @@ static int vdbeSorterSort(VdbeCursor *pCsr){
   }
   pSorter->pRecord = p;
 
-  sqlite3_free(aSlot);
+  sqlite4_free(aSlot);
   return SQLITE_OK;
 }
 
@@ -545,7 +545,7 @@ static int vdbeSorterSort(VdbeCursor *pCsr){
 **       Each record consists of a varint followed by a blob of data (the 
 **       key). The varint is the number of bytes in the blob of data.
 */
-static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
+static int vdbeSorterListToPMA(sqlite4 *db, VdbeCursor *pCsr){
   int rc = SQLITE_OK;             /* Return code */
   VdbeSorter *pSorter = pCsr->pSorter;
 
@@ -577,25 +577,25 @@ static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
       rc = vdbeSorterWriteVarint(pSorter->pTemp1, p->nVal, &iOff);
 
       if( rc==SQLITE_OK ){
-        rc = sqlite3OsWrite(pSorter->pTemp1, p->pVal, p->nVal, iOff);
+        rc = sqlite4OsWrite(pSorter->pTemp1, p->pVal, p->nVal, iOff);
         iOff += p->nVal;
       }
 
-      sqlite3DbFree(db, p);
+      sqlite4DbFree(db, p);
     }
 
     /* This assert verifies that unless an error has occurred, the size of 
     ** the PMA on disk is the same as the expected size stored in
     ** pSorter->nInMemory. */ 
     assert( rc!=SQLITE_OK || pSorter->nInMemory==(
-          iOff-pSorter->iWriteOff-sqlite3VarintLen(pSorter->nInMemory)
+          iOff-pSorter->iWriteOff-sqlite4VarintLen(pSorter->nInMemory)
     ));
 
     pSorter->iWriteOff = iOff;
     if( rc==SQLITE_OK ){
       /* Terminate each file with 8 extra bytes so that from any offset
       ** in the file we can always read 9 bytes without a SHORT_READ error */
-      rc = sqlite3OsWrite(pSorter->pTemp1, eightZeros, 8, iOff);
+      rc = sqlite4OsWrite(pSorter->pTemp1, eightZeros, 8, iOff);
     }
     pSorter->pRecord = p;
   }
@@ -606,8 +606,8 @@ static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
 /*
 ** Add a record to the sorter.
 */
-int sqlite3VdbeSorterWrite(
-  sqlite3 *db,                    /* Database handle */
+int sqlite4VdbeSorterWrite(
+  sqlite4 *db,                    /* Database handle */
   VdbeCursor *pCsr,               /* Sorter cursor */
   Mem *pVal                       /* Memory cell containing record */
 ){
@@ -616,9 +616,9 @@ int sqlite3VdbeSorterWrite(
   SorterRecord *pNew;             /* New list element */
 
   assert( pSorter );
-  pSorter->nInMemory += sqlite3VarintLen(pVal->n) + pVal->n;
+  pSorter->nInMemory += sqlite4VarintLen(pVal->n) + pVal->n;
 
-  pNew = (SorterRecord *)sqlite3DbMallocRaw(db, pVal->n + sizeof(SorterRecord));
+  pNew = (SorterRecord *)sqlite4DbMallocRaw(db, pVal->n + sizeof(SorterRecord));
   if( pNew==0 ){
     rc = SQLITE_NOMEM;
   }else{
@@ -636,11 +636,11 @@ int sqlite3VdbeSorterWrite(
   **     than (page-size * cache-size), or
   **
   **   * The total memory allocated for the in-memory list is greater 
-  **     than (page-size * 10) and sqlite3HeapNearlyFull() returns true.
+  **     than (page-size * 10) and sqlite4HeapNearlyFull() returns true.
   */
   if( rc==SQLITE_OK && pSorter->mxPmaSize>0 && (
         (pSorter->nInMemory>pSorter->mxPmaSize)
-     || (pSorter->nInMemory>pSorter->mnPmaSize && sqlite3HeapNearlyFull())
+     || (pSorter->nInMemory>pSorter->mnPmaSize && sqlite4HeapNearlyFull())
   )){
     rc = vdbeSorterListToPMA(db, pCsr);
     pSorter->nInMemory = 0;
@@ -650,10 +650,10 @@ int sqlite3VdbeSorterWrite(
 }
 
 /*
-** Helper function for sqlite3VdbeSorterRewind(). 
+** Helper function for sqlite4VdbeSorterRewind(). 
 */
 static int vdbeSorterInitMerge(
-  sqlite3 *db,                    /* Database handle */
+  sqlite4 *db,                    /* Database handle */
   VdbeCursor *pCsr,               /* Cursor handle for this sorter */
   i64 *pnByte                     /* Sum of bytes in all opened PMAs */
 ){
@@ -684,10 +684,10 @@ static int vdbeSorterInitMerge(
 ** Once the sorter has been populated, this function is called to prepare
 ** for iterating through its contents in sorted order.
 */
-int sqlite3VdbeSorterRewind(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
+int sqlite4VdbeSorterRewind(sqlite4 *db, VdbeCursor *pCsr, int *pbEof){
   VdbeSorter *pSorter = pCsr->pSorter;
   int rc;                         /* Return code */
-  sqlite3_file *pTemp2 = 0;       /* Second temp file to use */
+  sqlite4_file *pTemp2 = 0;       /* Second temp file to use */
   i64 iWrite2 = 0;                /* Write offset for pTemp2 */
   int nIter;                      /* Number of iterators used */
   int nByte;                      /* Bytes of space required for aIter/aTree */
@@ -714,7 +714,7 @@ int sqlite3VdbeSorterRewind(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
   assert( nIter>0 );
   while( N<nIter ) N += N;
   nByte = N * (sizeof(int) + sizeof(VdbeSorterIter));
-  pSorter->aIter = (VdbeSorterIter *)sqlite3DbMallocZero(db, nByte);
+  pSorter->aIter = (VdbeSorterIter *)sqlite4DbMallocZero(db, nByte);
   if( !pSorter->aIter ) return SQLITE_NOMEM;
   pSorter->aTree = (int *)&pSorter->aIter[N];
   pSorter->nTree = N;
@@ -731,7 +731,7 @@ int sqlite3VdbeSorterRewind(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
       /* If there are SORTER_MAX_MERGE_COUNT or less PMAs in file pTemp1,
       ** initialize an iterator for each of them and break out of the loop.
       ** These iterators will be incrementally merged as the VDBE layer calls
-      ** sqlite3VdbeSorterNext().
+      ** sqlite4VdbeSorterNext().
       **
       ** Otherwise, if pTemp1 contains more than SORTER_MAX_MERGE_COUNT PMAs,
       ** initialize interators for SORTER_MAX_MERGE_COUNT of them. These PMAs
@@ -759,11 +759,11 @@ int sqlite3VdbeSorterRewind(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
           int nToWrite;
           VdbeSorterIter *pIter = &pSorter->aIter[ pSorter->aTree[1] ];
           assert( pIter->pFile );
-          nToWrite = pIter->nKey + sqlite3VarintLen(pIter->nKey);
-          rc = sqlite3OsWrite(pTemp2, pIter->aAlloc, nToWrite, iWrite2);
+          nToWrite = pIter->nKey + sqlite4VarintLen(pIter->nKey);
+          rc = sqlite4OsWrite(pTemp2, pIter->aAlloc, nToWrite, iWrite2);
           iWrite2 += nToWrite;
           if( rc==SQLITE_OK ){
-            rc = sqlite3VdbeSorterNext(db, pCsr, &bEof);
+            rc = sqlite4VdbeSorterNext(db, pCsr, &bEof);
           }
         }
       }
@@ -772,7 +772,7 @@ int sqlite3VdbeSorterRewind(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
     if( pSorter->nPMA<=SORTER_MAX_MERGE_COUNT ){
       break;
     }else{
-      sqlite3_file *pTmp = pSorter->pTemp1;
+      sqlite4_file *pTmp = pSorter->pTemp1;
       pSorter->nPMA = iNew;
       pSorter->pTemp1 = pTemp2;
       pTemp2 = pTmp;
@@ -783,7 +783,7 @@ int sqlite3VdbeSorterRewind(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
   }while( rc==SQLITE_OK );
 
   if( pTemp2 ){
-    sqlite3OsCloseFree(pTemp2);
+    sqlite4OsCloseFree(pTemp2);
   }
   *pbEof = (pSorter->aIter[pSorter->aTree[1]].pFile==0);
   return rc;
@@ -792,7 +792,7 @@ int sqlite3VdbeSorterRewind(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
 /*
 ** Advance to the next element in the sorter.
 */
-int sqlite3VdbeSorterNext(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
+int sqlite4VdbeSorterNext(sqlite4 *db, VdbeCursor *pCsr, int *pbEof){
   VdbeSorter *pSorter = pCsr->pSorter;
   int rc;                         /* Return code */
 
@@ -841,12 +841,12 @@ static void *vdbeSorterRowkey(
 /*
 ** Copy the current sorter key into the memory cell pOut.
 */
-int sqlite3VdbeSorterRowkey(VdbeCursor *pCsr, Mem *pOut){
+int sqlite4VdbeSorterRowkey(VdbeCursor *pCsr, Mem *pOut){
   VdbeSorter *pSorter = pCsr->pSorter;
   void *pKey; int nKey;           /* Sorter key to copy into pOut */
 
   pKey = vdbeSorterRowkey(pSorter, &nKey);
-  if( sqlite3VdbeMemGrow(pOut, nKey, 0) ){
+  if( sqlite4VdbeMemGrow(pOut, nKey, 0) ){
     return SQLITE_NOMEM;
   }
   pOut->n = nKey;
@@ -866,7 +866,7 @@ int sqlite3VdbeSorterRowkey(VdbeCursor *pCsr, Mem *pOut){
 ** key in pVal is smaller than, equal to or larger than the current sorter
 ** key.
 */
-int sqlite3VdbeSorterCompare(
+int sqlite4VdbeSorterCompare(
   VdbeCursor *pCsr,               /* Sorter cursor */
   Mem *pVal,                      /* Value to compare to current sorter key */
   int *pRes                       /* OUT: Result of comparison */

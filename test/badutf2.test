@@ -44,13 +44,13 @@ proc utf8_to_ustr {in} {
 do_test badutf2-1.0 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval "PRAGMA encoding = 'UTF-8'"
 } {}
 
 do_test badutf2-4.0 {
-  set S [sqlite3_prepare_v2 db "SELECT ?" -1 dummy]
-  sqlite3_expired $S
+  set S [sqlite4_prepare_v2 db "SELECT ?" -1 dummy]
+  sqlite4_expired $S
 } {0}
         
 foreach { i len uval xstr ustr u2u } {
@@ -69,23 +69,23 @@ foreach { i len uval xstr ustr u2u } {
     if {$hstr != "%00"} {
       do_test badutf2-2.1.$i {
         set sql "SELECT '$hstr'=CAST(x'$uval' AS text) AS x;"
-        set res [ sqlite3_exec db $sql ]
+        set res [ sqlite4_exec db $sql ]
         lindex [ lindex $res 1] 1
       } {1}
       do_test badutf2-2.2.$i {
         set sql "SELECT CAST('$hstr' AS blob)=x'$uval' AS x;"
-        set res [ sqlite3_exec db $sql ]
+        set res [ sqlite4_exec db $sql ]
         lindex [ lindex $res 1] 1
       } {1}
     }
     do_test badutf2-2.3.$i {
       set sql "SELECT hex(CAST(x'$uval' AS text)) AS x;"
-      set res [ sqlite3_exec db $sql ]
+      set res [ sqlite4_exec db $sql ]
       lindex [ lindex $res 1] 1
     } $uval
     do_test badutf2-2.4.$i {
       set sql "SELECT hex(CAST(x'$uval' AS text)) AS x;"
-      set res [ sqlite3_exec db $sql ]
+      set res [ sqlite4_exec db $sql ]
       lindex [ lindex $res 1] 1
     } $uval
   }
@@ -93,16 +93,16 @@ foreach { i len uval xstr ustr u2u } {
   if {$hstr != "%00"} {
     do_test badutf2-3.1.$i {
       set sql "SELECT hex('$hstr') AS x;"
-      set res [ sqlite3_exec db $sql ]
+      set res [ sqlite4_exec db $sql ]
       lindex [ lindex $res 1] 1
     } $uval
   }
 
   do_test badutf2-4.1.$i {
-    sqlite3_reset $S
-    sqlite3_bind_text $S 1 $xstr $len
-    sqlite3_step $S
-    utf8_to_ustr2 [ sqlite3_column_text $S 0 ]
+    sqlite4_reset $S
+    sqlite4_bind_text $S 1 $xstr $len
+    sqlite4_step $S
+    utf8_to_ustr2 [ sqlite4_column_text $S 0 ]
   } $ustr
 
   ifcapable debug {
@@ -114,7 +114,7 @@ foreach { i len uval xstr ustr u2u } {
 }
 
 do_test badutf2-4.2 {
-  sqlite3_finalize $S
+  sqlite4_finalize $S
 } {SQLITE_OK}
 
 

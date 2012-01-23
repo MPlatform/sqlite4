@@ -38,8 +38,8 @@ proc do_multiclient_test {varname script} {
     # respectively.
     #
     eval $code
-    code2 { sqlite3 db2 test.db }
-    code3 { sqlite3 db3 test.db }
+    code2 { sqlite4 db2 test.db }
+    code3 { sqlite4 db3 test.db }
     
     # Shorthand commands. Execute SQL using database connection [db2] or 
     # [db3]. Return the results.
@@ -75,7 +75,7 @@ proc launch_testfixture {{prg ""}} {
   set chan [open "|$prg tf_main.tcl" r+]
   fconfigure $chan -buffering line
   set rc [catch { 
-    testfixture $chan "sqlite3_test_control_pending_byte $::sqlite_pending_byte"
+    testfixture $chan "sqlite4_test_control_pending_byte $::sqlite_pending_byte"
   }]
   if {$rc} {
     testfixture $chan "set ::sqlite_pending_byte $::sqlite_pending_byte"
@@ -142,10 +142,10 @@ set main_loop_written 0
 proc write_main_loop {} {
   if {$::main_loop_written} return
   set wrapper ""
-  if {[sqlite3 -has-codec] && [info exists ::do_not_use_codec]==0} {
+  if {[sqlite4 -has-codec] && [info exists ::do_not_use_codec]==0} {
     set wrapper "
-      rename sqlite3 sqlite_orig
-      proc sqlite3 {args} {[info body sqlite3]}
+      rename sqlite4 sqlite_orig
+      proc sqlite4 {args} {[info body sqlite4]}
     "
   }
 

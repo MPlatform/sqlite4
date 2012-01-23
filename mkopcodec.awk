@@ -15,7 +15,7 @@ BEGIN {
   printf    " || !defined(NDEBUG)"
   printf    " || defined(VDBE_PROFILE)"
   print     " || defined(SQLITE_DEBUG)"
-  print "const char *sqlite3OpcodeName(int i){"
+  print "const char *sqlite4OpcodeName(int i){"
   print " static const char *const azName[] = { \"?\","
   mx = 0
 }

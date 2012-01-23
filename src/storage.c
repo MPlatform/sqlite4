@@ -18,14 +18,14 @@
 /*
 ** Open a storage engine via URI
 */
-int sqlite3KVStoreOpen(const char *zUri, KVStore **ppKVStore){
+int sqlite4KVStoreOpen(const char *zUri, KVStore **ppKVStore){
   KVStore *pNew = 0;
   int rc;
 
-  rc = sqlite3KVStoreOpenMem(&pNew);
+  rc = sqlite4KVStoreOpenMem(&pNew);
   *ppKVStore = pNew;
   if( pNew ){
-    sqlite3_randomness(sizeof(pNew->kvId), &pNew->kvId);
+    sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);
     pNew->fTrace = 1;
     if( pNew->fTrace ){
       printf("KVopen(%s,%d)\n", zUri, pNew->kvId);
@@ -49,7 +49,7 @@ static void binToHex(char *zOut, int mxOut, const KVByteArray *a, KVSize n){
 ** The following wrapper functions invoke the underlying methods of
 ** the storage object and add optional tracing.
 */
-int sqlite3KVStoreReplace(
+int sqlite4KVStoreReplace(
   KVStore *p,
   const KVByteArray *pKey, KVSize nKey,
   const KVByteArray *pData, KVSize nData
@@ -63,14 +63,14 @@ int sqlite3KVStoreReplace(
   }
   return p->pStoreVfunc->xReplace(p,pKey,nKey,pData,nData);
 }
-int sqlite3KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor){
+int sqlite4KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor){
   KVCursor *pCur;
   int rc;
 
   rc = p->pStoreVfunc->xOpenCursor(p, &pCur);
   *ppKVCursor = pCur;
   if( pCur ){
-    sqlite3_randomness(sizeof(pCur->curId), &pCur->curId);
+    sqlite4_randomness(sizeof(pCur->curId), &pCur->curId);
     pCur->fTrace = p->fTrace;
   }
   if( p->fTrace ){
@@ -78,7 +78,7 @@ int sqlite3KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor){
   }
   return rc;
 }
-int sqlite3KVCursorSeek(
+int sqlite4KVCursorSeek(
   KVCursor *p,
   const KVByteArray *pKey, KVSize nKey,
   int dir
@@ -92,7 +92,7 @@ int sqlite3KVCursorSeek(
   }
   return rc;
 }
-int sqlite3KVCursorNext(KVCursor *p){
+int sqlite4KVCursorNext(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xNext(p);
   if( p->fTrace ){
@@ -100,7 +100,7 @@ int sqlite3KVCursorNext(KVCursor *p){
   }
   return rc;
 }
-int sqlite3KVCursorPrev(KVCursor *p){
+int sqlite4KVCursorPrev(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xPrev(p);
   if( p->fTrace ){
@@ -108,7 +108,7 @@ int sqlite3KVCursorPrev(KVCursor *p){
   }
   return rc;
 }
-int sqlite3KVCursorDelete(KVCursor *p){
+int sqlite4KVCursorDelete(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xDelete(p);
   if( p->fTrace ){
@@ -116,7 +116,7 @@ int sqlite3KVCursorDelete(KVCursor *p){
   }
   return rc;
 }
-int sqlite3KVCursorReset(KVCursor *p){
+int sqlite4KVCursorReset(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xReset(p);
   if( p->fTrace ){
@@ -124,7 +124,7 @@ int sqlite3KVCursorReset(KVCursor *p){
   }
   return rc;
 }
-int sqlite3KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey){
+int sqlite4KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey){
   int rc;
   rc = p->pStoreVfunc->xKey(p, ppKey, pnKey);
   if( p->fTrace ){
@@ -138,7 +138,7 @@ int sqlite3KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey){
   }
   return rc;
 }
-int sqlite3KVCursorData(
+int sqlite4KVCursorData(
   KVCursor *p,
   KVSize ofst,
   KVSize n,
@@ -160,7 +160,7 @@ int sqlite3KVCursorData(
   }
   return rc;
 }
-int sqlite3KVCursorClose(KVCursor *p){
+int sqlite4KVCursorClose(KVCursor *p){
   int rc = SQLITE_OK;
   if( p ){
     rc = p->pStoreVfunc->xCloseCursor(p);
@@ -170,28 +170,28 @@ int sqlite3KVCursorClose(KVCursor *p){
   }
   return rc;
 }
-int sqlite3KVStoreBegin(KVStore *p, int iLevel){
+int sqlite4KVStoreBegin(KVStore *p, int iLevel){
   int rc = p->pStoreVfunc->xBegin(p, iLevel);
   if( p->fTrace ){
     printf("KV.xBegin(%d,%d) -> %d\n", p->kvId, iLevel, rc);
   }
   return rc;
 }
-int sqlite3KVStoreCommit(KVStore *p, int iLevel){
+int sqlite4KVStoreCommit(KVStore *p, int iLevel){
   int rc = p->pStoreVfunc->xCommit(p, iLevel);
   if( p->fTrace ){
     printf("KV.xCommit(%d,%d) -> %d\n", p->kvId, iLevel, rc);
   }
   return rc;
 }
-int sqlite3KVStoreRollback(KVStore *p, int iLevel){
+int sqlite4KVStoreRollback(KVStore *p, int iLevel){
   int rc = p->pStoreVfunc->xRollback(p, iLevel);
   if( p->fTrace ){
     printf("KV.xRollback(%d,%d) -> %d\n", p->kvId, iLevel, rc);
   }
   return rc;
 }
-int sqlite3KVStoreClose(KVStore *p){
+int sqlite4KVStoreClose(KVStore *p){
   int rc;
   if( p ){
     if( p->fTrace ){

@@ -22,7 +22,7 @@ if {[run_thread_tests]==0} { finish_test ; return }
 
 
 db close
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 set ::NTHREAD 10
 
@@ -30,7 +30,7 @@ do_test thread002.1 {
   # Create 3 databases with identical schemas:
   for {set ii 0} {$ii < 3} {incr ii} {
     forcedelete test${ii}.db
-    sqlite3 db test${ii}.db
+    sqlite4 db test${ii}.db
     execsql {
       CREATE TABLE t1(k, v);
       CREATE INDEX t1_i ON t1(v);
@@ -41,7 +41,7 @@ do_test thread002.1 {
 } {}
 
 set thread_program {
-  set ::DB [sqlite3_open test.db]
+  set ::DB [sqlite4_open test.db]
   for {set ii 1} {$ii <= 3} {incr ii} {
     set T [lindex $order [expr $ii-1]]
     execsql "ATTACH 'test${T}.db' AS aux${ii}"
@@ -64,7 +64,7 @@ set thread_program {
     puts -nonewline . ; flush stdout
   }
 
-  sqlite3_close $::DB
+  sqlite4_close $::DB
   list OK
 }
 
@@ -90,7 +90,7 @@ for {set i 0} {$i < $::NTHREAD} {incr i} {
 # Check all three databases are Ok.
 for {set ii 0} {$ii < 3} {incr ii} {
   do_test thread002.3.$ii {
-    sqlite3 db test${ii}.db
+    sqlite4 db test${ii}.db
     set res [list                         \
       [execsql {SELECT count(*) FROM t1}] \
       [execsql {PRAGMA integrity_check}]  \
@@ -100,6 +100,6 @@ for {set ii 0} {$ii < 3} {incr ii} {
   } [list [expr 1 + $::NTHREAD*100] ok]
 }
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 set sqlite_open_file_count 0
 finish_test

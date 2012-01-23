@@ -35,7 +35,7 @@ ifcapable !pragma||!schema_pragmas {
 db close
 delete_file test.db test.db-journal
 delete_file test3.db test3.db-journal
-sqlite3 db test.db; set DB [sqlite3_connection_pointer db]
+sqlite4 db test.db; set DB [sqlite4_connection_pointer db]
 db eval {PRAGMA auto_vacuum=0}
 
 do_test pragma2-1.1 {

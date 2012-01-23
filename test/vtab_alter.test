@@ -38,7 +38,7 @@ ifcapable !vtab||!altertable {
 #   t2_base
 #   t2
 #
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 
 # Try to rename an echo table. Make sure nothing terrible happens.

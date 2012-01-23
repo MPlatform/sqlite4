@@ -22,11 +22,11 @@
 ** Finalize a prepared statement.  If there was an error, store the
 ** text of the error message in *pzErrMsg.  Return the result code.
 */
-static int vacuumFinalize(sqlite3 *db, sqlite3_stmt *pStmt, char **pzErrMsg){
+static int vacuumFinalize(sqlite4 *db, sqlite4_stmt *pStmt, char **pzErrMsg){
   int rc;
-  rc = sqlite3VdbeFinalize((Vdbe*)pStmt);
+  rc = sqlite4VdbeFinalize((Vdbe*)pStmt);
   if( rc ){
-    sqlite3SetString(pzErrMsg, db, sqlite3_errmsg(db));
+    sqlite4SetString(pzErrMsg, db, sqlite4_errmsg(db));
   }
   return rc;
 }
@@ -34,17 +34,17 @@ static int vacuumFinalize(sqlite3 *db, sqlite3_stmt *pStmt, char **pzErrMsg){
 /*
 ** Execute zSql on database db. Return an error code.
 */
-static int execSql(sqlite3 *db, char **pzErrMsg, const char *zSql){
-  sqlite3_stmt *pStmt;
+static int execSql(sqlite4 *db, char **pzErrMsg, const char *zSql){
+  sqlite4_stmt *pStmt;
   VVA_ONLY( int rc; )
   if( !zSql ){
     return SQLITE_NOMEM;
   }
-  if( SQLITE_OK!=sqlite3_prepare(db, zSql, -1, &pStmt, 0) ){
-    sqlite3SetString(pzErrMsg, db, sqlite3_errmsg(db));
-    return sqlite3_errcode(db);
+  if( SQLITE_OK!=sqlite4_prepare(db, zSql, -1, &pStmt, 0) ){
+    sqlite4SetString(pzErrMsg, db, sqlite4_errmsg(db));
+    return sqlite4_errcode(db);
   }
-  VVA_ONLY( rc = ) sqlite3_step(pStmt);
+  VVA_ONLY( rc = ) sqlite4_step(pStmt);
   assert( rc!=SQLITE_ROW || (db->flags&SQLITE_CountRows) );
   return vacuumFinalize(db, pStmt, pzErrMsg);
 }
@@ -53,15 +53,15 @@ static int execSql(sqlite3 *db, char **pzErrMsg, const char *zSql){
 ** Execute zSql on database db. The statement returns exactly
 ** one column. Execute this as SQL on the same database.
 */
-static int execExecSql(sqlite3 *db, char **pzErrMsg, const char *zSql){
-  sqlite3_stmt *pStmt;
+static int execExecSql(sqlite4 *db, char **pzErrMsg, const char *zSql){
+  sqlite4_stmt *pStmt;
   int rc;
 
-  rc = sqlite3_prepare(db, zSql, -1, &pStmt, 0);
+  rc = sqlite4_prepare(db, zSql, -1, &pStmt, 0);
   if( rc!=SQLITE_OK ) return rc;
 
-  while( SQLITE_ROW==sqlite3_step(pStmt) ){
-    rc = execSql(db, pzErrMsg, (char*)sqlite3_column_text(pStmt, 0));
+  while( SQLITE_ROW==sqlite4_step(pStmt) ){
+    rc = execSql(db, pzErrMsg, (char*)sqlite4_column_text(pStmt, 0));
     if( rc!=SQLITE_OK ){
       vacuumFinalize(db, pStmt, pzErrMsg);
       return rc;
@@ -81,10 +81,10 @@ static int execExecSql(sqlite3 *db, char **pzErrMsg, const char *zSql){
 ** with 2.0.0, SQLite no longer uses GDBM so this command has
 ** become a no-op.
 */
-void sqlite3Vacuum(Parse *pParse){
-  Vdbe *v = sqlite3GetVdbe(pParse);
+void sqlite4Vacuum(Parse *pParse){
+  Vdbe *v = sqlite4GetVdbe(pParse);
   if( v ){
-    sqlite3VdbeAddOp2(v, OP_Vacuum, 0, 0);
+    sqlite4VdbeAddOp2(v, OP_Vacuum, 0, 0);
   }
   return;
 }
@@ -92,7 +92,7 @@ void sqlite3Vacuum(Parse *pParse){
 /*
 ** This routine implements the OP_Vacuum opcode of the VDBE.
 */
-int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
+int sqlite4RunVacuum(char **pzErrMsg, sqlite4 *db){
   int rc = SQLITE_OK;     /* Return code from service routines */
   Btree *pMain;           /* The database being vacuumed */
   Btree *pTemp;           /* The temporary database we vacuum into */
@@ -107,11 +107,11 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
   int nDb;                /* Number of attached databases */
 
   if( !db->autoCommit ){
-    sqlite3SetString(pzErrMsg, db, "cannot VACUUM from within a transaction");
+    sqlite4SetString(pzErrMsg, db, "cannot VACUUM from within a transaction");
     return SQLITE_ERROR;
   }
   if( db->activeVdbeCnt>1 ){
-    sqlite3SetString(pzErrMsg, db,"cannot VACUUM - SQL statements in progress");
+    sqlite4SetString(pzErrMsg, db,"cannot VACUUM - SQL statements in progress");
     return SQLITE_ERROR;
   }
 
@@ -127,13 +127,13 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
   db->xTrace = 0;
 
   pMain = db->aDb[0].pBt;
-  isMemDb = sqlite3PagerIsMemdb(sqlite3BtreePager(pMain));
+  isMemDb = sqlite4PagerIsMemdb(sqlite4BtreePager(pMain));
 
   /* Attach the temporary database as 'vacuum_db'. The synchronous pragma
   ** can be set to 'off' for this file, as it is not recovered if a crash
   ** occurs anyway. The integrity of the database is maintained by a
   ** (possibly synchronous) transaction opened on the main database before
-  ** sqlite3BtreeCopyFile() is called.
+  ** sqlite4BtreeCopyFile() is called.
   **
   ** An optimisation would be to use a non-journaled pager.
   ** (Later:) I tried setting "PRAGMA vacuum_db.journal_mode=OFF" but
@@ -144,7 +144,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
   ** to write the journal header file.
   */
   nDb = db->nDb;
-  if( sqlite3TempInMemory(db) ){
+  if( sqlite4TempInMemory(db) ){
     zSql = "ATTACH ':memory:' AS vacuum_db;";
   }else{
     zSql = "ATTACH '' AS vacuum_db;";
@@ -161,29 +161,29 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
   ** locked (as there was more than one active statement when the transaction
   ** to read the schema was concluded. Unlock it here so that this doesn't
   ** cause problems for the call to BtreeSetPageSize() below.  */
-  sqlite3BtreeCommit(pTemp);
+  sqlite4BtreeCommit(pTemp);
 
-  nRes = sqlite3BtreeGetReserve(pMain);
+  nRes = sqlite4BtreeGetReserve(pMain);
 
   /* A VACUUM cannot change the pagesize of an encrypted database. */
 #ifdef SQLITE_HAS_CODEC
   if( db->nextPagesize ){
-    extern void sqlite3CodecGetKey(sqlite3*, int, void**, int*);
+    extern void sqlite4CodecGetKey(sqlite4*, int, void**, int*);
     int nKey;
     char *zKey;
-    sqlite3CodecGetKey(db, 0, (void**)&zKey, &nKey);
+    sqlite4CodecGetKey(db, 0, (void**)&zKey, &nKey);
     if( nKey ) db->nextPagesize = 0;
   }
 #endif
 
   /* Do not attempt to change the page size for a WAL database */
-  if( sqlite3PagerGetJournalMode(sqlite3BtreePager(pMain))
+  if( sqlite4PagerGetJournalMode(sqlite4BtreePager(pMain))
                                                ==PAGER_JOURNALMODE_WAL ){
     db->nextPagesize = 0;
   }
 
-  if( sqlite3BtreeSetPageSize(pTemp, sqlite3BtreeGetPageSize(pMain), nRes, 0)
-   || (!isMemDb && sqlite3BtreeSetPageSize(pTemp, db->nextPagesize, nRes, 0))
+  if( sqlite4BtreeSetPageSize(pTemp, sqlite4BtreeGetPageSize(pMain), nRes, 0)
+   || (!isMemDb && sqlite4BtreeSetPageSize(pTemp, db->nextPagesize, nRes, 0))
    || NEVER(db->mallocFailed)
   ){
     rc = SQLITE_NOMEM;
@@ -195,8 +195,8 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
   }
 
 #ifndef SQLITE_OMIT_AUTOVACUUM
-  sqlite3BtreeSetAutoVacuum(pTemp, db->nextAutovac>=0 ? db->nextAutovac :
-                                           sqlite3BtreeGetAutoVacuum(pMain));
+  sqlite4BtreeSetAutoVacuum(pTemp, db->nextAutovac>=0 ? db->nextAutovac :
+                                           sqlite4BtreeGetAutoVacuum(pMain));
 #endif
 
   /* Begin a transaction */
@@ -266,8 +266,8 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
   /* At this point, there is a write transaction open on both the 
   ** vacuum database and the main database. Assuming no error occurs,
   ** both transactions are closed by this block - the main database
-  ** transaction by sqlite3BtreeCopyFile() and the other by an explicit
-  ** call to sqlite3BtreeCommit().
+  ** transaction by sqlite4BtreeCopyFile() and the other by an explicit
+  ** call to sqlite4BtreeCommit().
   */
   {
     u32 meta;
@@ -286,29 +286,29 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
        BTREE_USER_VERSION,       0,  /* Preserve the user version */
     };
 
-    assert( 1==sqlite3BtreeIsInTrans(pTemp) );
-    assert( 1==sqlite3BtreeIsInTrans(pMain) );
+    assert( 1==sqlite4BtreeIsInTrans(pTemp) );
+    assert( 1==sqlite4BtreeIsInTrans(pMain) );
 
     /* Copy Btree meta values */
     for(i=0; i<ArraySize(aCopy); i+=2){
       /* GetMeta() and UpdateMeta() cannot fail in this context because
       ** we already have page 1 loaded into cache and marked dirty. */
-      sqlite3BtreeGetMeta(pMain, aCopy[i], &meta);
-      rc = sqlite3BtreeUpdateMeta(pTemp, aCopy[i], meta+aCopy[i+1]);
+      sqlite4BtreeGetMeta(pMain, aCopy[i], &meta);
+      rc = sqlite4BtreeUpdateMeta(pTemp, aCopy[i], meta+aCopy[i+1]);
       if( NEVER(rc!=SQLITE_OK) ) goto end_of_vacuum;
     }
 
-    rc = sqlite3BtreeCopyFile(pMain, pTemp);
+    rc = sqlite4BtreeCopyFile(pMain, pTemp);
     if( rc!=SQLITE_OK ) goto end_of_vacuum;
-    rc = sqlite3BtreeCommit(pTemp);
+    rc = sqlite4BtreeCommit(pTemp);
     if( rc!=SQLITE_OK ) goto end_of_vacuum;
 #ifndef SQLITE_OMIT_AUTOVACUUM
-    sqlite3BtreeSetAutoVacuum(pMain, sqlite3BtreeGetAutoVacuum(pTemp));
+    sqlite4BtreeSetAutoVacuum(pMain, sqlite4BtreeGetAutoVacuum(pTemp));
 #endif
   }
 
   assert( rc==SQLITE_OK );
-  rc = sqlite3BtreeSetPageSize(pMain, sqlite3BtreeGetPageSize(pTemp), nRes,1);
+  rc = sqlite4BtreeSetPageSize(pMain, sqlite4BtreeGetPageSize(pTemp), nRes,1);
 
 end_of_vacuum:
   /* Restore the original value of db->flags */
@@ -316,7 +316,7 @@ end_of_vacuum:
   db->nChange = saved_nChange;
   db->nTotalChange = saved_nTotalChange;
   db->xTrace = saved_xTrace;
-  sqlite3BtreeSetPageSize(pMain, -1, -1, 1);
+  sqlite4BtreeSetPageSize(pMain, -1, -1, 1);
 
   /* Currently there is an SQL level transaction open on the vacuum
   ** database. No locks are held on any other files (since the main file
@@ -328,16 +328,16 @@ end_of_vacuum:
   db->autoCommit = 1;
 
   if( pDb ){
-    sqlite3BtreeClose(pDb->pBt);
+    sqlite4BtreeClose(pDb->pBt);
     pDb->pBt = 0;
-    sqlite3KVStoreClose(pDb->pKV);
+    sqlite4KVStoreClose(pDb->pKV);
     pDb->pKV = 0;
     pDb->pSchema = 0;
   }
 
   /* This both clears the schemas and reduces the size of the db->aDb[]
   ** array. */ 
-  sqlite3ResetInternalSchema(db, -1);
+  sqlite4ResetInternalSchema(db, -1);
 
   return rc;
 }

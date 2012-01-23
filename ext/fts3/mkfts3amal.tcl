@@ -43,8 +43,8 @@ foreach hdr {
    fts3.h
    fts3_hash.h
    fts3_tokenizer.h
-   sqlite3.h
-   sqlite3ext.h
+   sqlite4.h
+   sqlite4ext.h
 } {
   set available_hdr($hdr) 1
 }
@@ -64,7 +64,7 @@ proc section_comment {text} {
 }
 
 # Read the source file named $filename and write it into the
-# sqlite3.c output file.  If any #include statements are seen,
+# sqlite4.c output file.  If any #include statements are seen,
 # process them approprately.
 #
 proc copy_file {filename} {

@@ -17,7 +17,7 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
 do_test busy-1.1 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     CREATE TABLE t1(x);
     INSERT INTO t1 VALUES(1);

@@ -93,7 +93,7 @@
 **   start of a sector.
 **
 **   To work around this, the code in this file allocates a fixed size
-**   buffer of SQLITE_DEMOVFS_BUFFERSZ using sqlite3_malloc() whenever a 
+**   buffer of SQLITE_DEMOVFS_BUFFERSZ using sqlite4_malloc() whenever a 
 **   journal file is opened. It uses the buffer to coalesce sequential
 **   writes into aligned SQLITE_DEMOVFS_BUFFERSZ blocks. When SQLite
 **   invokes the xSync() method to sync the contents of the file to disk,
@@ -115,7 +115,7 @@
 
 #if !defined(SQLITE_TEST) || SQLITE_OS_UNIX
 
-#include <sqlite3.h>
+#include <sqlite4.h>
 
 #include <assert.h>
 #include <string.h>
@@ -141,17 +141,17 @@
 #define MAXPATHNAME 512
 
 /*
-** When using this VFS, the sqlite3_file* handles that SQLite uses are
+** When using this VFS, the sqlite4_file* handles that SQLite uses are
 ** actually pointers to instances of type DemoFile.
 */
 typedef struct DemoFile DemoFile;
 struct DemoFile {
-  sqlite3_file base;              /* Base class. Must be first. */
+  sqlite4_file base;              /* Base class. Must be first. */
   int fd;                         /* File descriptor */
 
   char *aBuffer;                  /* Pointer to malloc'd buffer */
   int nBuffer;                    /* Valid bytes of data in zBuffer */
-  sqlite3_int64 iBufferOfst;      /* Offset in file of zBuffer[0] */
+  sqlite4_int64 iBufferOfst;      /* Offset in file of zBuffer[0] */
 };
 
 /*
@@ -197,11 +197,11 @@ static int demoFlushBuffer(DemoFile *p){
 /*
 ** Close a file.
 */
-static int demoClose(sqlite3_file *pFile){
+static int demoClose(sqlite4_file *pFile){
   int rc;
   DemoFile *p = (DemoFile*)pFile;
   rc = demoFlushBuffer(p);
-  sqlite3_free(p->aBuffer);
+  sqlite4_free(p->aBuffer);
   close(p->fd);
   return rc;
 }
@@ -210,7 +210,7 @@ static int demoClose(sqlite3_file *pFile){
 ** Read data from a file.
 */
 static int demoRead(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -250,7 +250,7 @@ static int demoRead(
 ** Write data to a crash-file.
 */
 static int demoWrite(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   const void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -260,7 +260,7 @@ static int demoWrite(
   if( p->aBuffer ){
     char *z = (char *)zBuf;       /* Pointer to remaining data to write */
     int n = iAmt;                 /* Number of bytes at z */
-    sqlite3_int64 i = iOfst;      /* File offset to write to */
+    sqlite4_int64 i = iOfst;      /* File offset to write to */
 
     while( n>0 ){
       int nCopy;                  /* Number of bytes to copy into buffer */
@@ -301,7 +301,7 @@ static int demoWrite(
 ** Truncate a file. This is a no-op for this VFS (see header comments at
 ** the top of the file).
 */
-static int demoTruncate(sqlite3_file *pFile, sqlite_int64 size){
+static int demoTruncate(sqlite4_file *pFile, sqlite_int64 size){
 #if 0
   if( ftruncate(((DemoFile *)pFile)->fd, size) ) return SQLITE_IOERR_TRUNCATE;
 #endif
@@ -311,7 +311,7 @@ static int demoTruncate(sqlite3_file *pFile, sqlite_int64 size){
 /*
 ** Sync the contents of the file to the persistent media.
 */
-static int demoSync(sqlite3_file *pFile, int flags){
+static int demoSync(sqlite4_file *pFile, int flags){
   DemoFile *p = (DemoFile*)pFile;
   int rc;
 
@@ -327,7 +327,7 @@ static int demoSync(sqlite3_file *pFile, int flags){
 /*
 ** Write the size of the file in bytes to *pSize.
 */
-static int demoFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
+static int demoFileSize(sqlite4_file *pFile, sqlite_int64 *pSize){
   DemoFile *p = (DemoFile*)pFile;
   int rc;                         /* Return code from fstat() call */
   struct stat sStat;              /* Output of fstat() call */
@@ -354,13 +354,13 @@ static int demoFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
 ** a reserved lock on the database file. This ensures that if a hot-journal
 ** file is found in the file-system it is rolled back.
 */
-static int demoLock(sqlite3_file *pFile, int eLock){
+static int demoLock(sqlite4_file *pFile, int eLock){
   return SQLITE_OK;
 }
-static int demoUnlock(sqlite3_file *pFile, int eLock){
+static int demoUnlock(sqlite4_file *pFile, int eLock){
   return SQLITE_OK;
 }
-static int demoCheckReservedLock(sqlite3_file *pFile, int *pResOut){
+static int demoCheckReservedLock(sqlite4_file *pFile, int *pResOut){
   *pResOut = 0;
   return SQLITE_OK;
 }
@@ -368,7 +368,7 @@ static int demoCheckReservedLock(sqlite3_file *pFile, int *pResOut){
 /*
 ** No xFileControl() verbs are implemented by this VFS.
 */
-static int demoFileControl(sqlite3_file *pFile, int op, void *pArg){
+static int demoFileControl(sqlite4_file *pFile, int op, void *pArg){
   return SQLITE_OK;
 }
 
@@ -377,10 +377,10 @@ static int demoFileControl(sqlite3_file *pFile, int op, void *pArg){
 ** may return special values allowing SQLite to optimize file-system 
 ** access to some extent. But it is also safe to simply return 0.
 */
-static int demoSectorSize(sqlite3_file *pFile){
+static int demoSectorSize(sqlite4_file *pFile){
   return 0;
 }
-static int demoDeviceCharacteristics(sqlite3_file *pFile){
+static int demoDeviceCharacteristics(sqlite4_file *pFile){
   return 0;
 }
 
@@ -388,13 +388,13 @@ static int demoDeviceCharacteristics(sqlite3_file *pFile){
 ** Open a file handle.
 */
 static int demoOpen(
-  sqlite3_vfs *pVfs,              /* VFS */
+  sqlite4_vfs *pVfs,              /* VFS */
   const char *zName,              /* File to open, or 0 for a temp file */
-  sqlite3_file *pFile,            /* Pointer to DemoFile struct to populate */
+  sqlite4_file *pFile,            /* Pointer to DemoFile struct to populate */
   int flags,                      /* Input SQLITE_OPEN_XXX flags */
   int *pOutFlags                  /* Output SQLITE_OPEN_XXX flags (or NULL) */
 ){
-  static const sqlite3_io_methods demoio = {
+  static const sqlite4_io_methods demoio = {
     1,                            /* iVersion */
     demoClose,                    /* xClose */
     demoRead,                     /* xRead */
@@ -419,7 +419,7 @@ static int demoOpen(
   }
 
   if( flags&SQLITE_OPEN_MAIN_JOURNAL ){
-    aBuf = (char *)sqlite3_malloc(SQLITE_DEMOVFS_BUFFERSZ);
+    aBuf = (char *)sqlite4_malloc(SQLITE_DEMOVFS_BUFFERSZ);
     if( !aBuf ){
       return SQLITE_NOMEM;
     }
@@ -433,7 +433,7 @@ static int demoOpen(
   memset(p, 0, sizeof(DemoFile));
   p->fd = open(zName, oflags, 0600);
   if( p->fd<0 ){
-    sqlite3_free(aBuf);
+    sqlite4_free(aBuf);
     return SQLITE_CANTOPEN;
   }
   p->aBuffer = aBuf;
@@ -450,7 +450,7 @@ static int demoOpen(
 ** is non-zero, then ensure the file-system modification to delete the
 ** file has been synced to disk before returning.
 */
-static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
+static int demoDelete(sqlite4_vfs *pVfs, const char *zPath, int dirSync){
   int rc;                         /* Return code */
 
   rc = unlink(zPath);
@@ -462,7 +462,7 @@ static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
     char zDir[MAXPATHNAME+1];     /* Name of directory containing file zPath */
 
     /* Figure out the directory name from the path of the file deleted. */
-    sqlite3_snprintf(MAXPATHNAME, zDir, "%s", zPath);
+    sqlite4_snprintf(MAXPATHNAME, zDir, "%s", zPath);
     zDir[MAXPATHNAME] = '\0';
     for(i=strlen(zDir); i>1 && zDir[i]!='/'; i++);
     zDir[i] = '\0';
@@ -494,7 +494,7 @@ static int demoDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
 ** is both readable and writable.
 */
 static int demoAccess(
-  sqlite3_vfs *pVfs, 
+  sqlite4_vfs *pVfs, 
   const char *zPath, 
   int flags, 
   int *pResOut
@@ -527,7 +527,7 @@ static int demoAccess(
 **   2. Full paths begin with a '/' character.
 */
 static int demoFullPathname(
-  sqlite3_vfs *pVfs,              /* VFS */
+  sqlite4_vfs *pVfs,              /* VFS */
   const char *zPath,              /* Input path (possibly a relative path) */
   int nPathOut,                   /* Size of output buffer in bytes */
   char *zPathOut                  /* Pointer to output buffer */
@@ -540,7 +540,7 @@ static int demoFullPathname(
   }
   zDir[MAXPATHNAME] = '\0';
 
-  sqlite3_snprintf(nPathOut, zPathOut, "%s/%s", zDir, zPath);
+  sqlite4_snprintf(nPathOut, zPathOut, "%s/%s", zDir, zPath);
   zPathOut[nPathOut-1] = '\0';
 
   return SQLITE_OK;
@@ -558,17 +558,17 @@ static int demoFullPathname(
 ** extensions compiled as shared objects. This simple VFS does not support
 ** this functionality, so the following functions are no-ops.
 */
-static void *demoDlOpen(sqlite3_vfs *pVfs, const char *zPath){
+static void *demoDlOpen(sqlite4_vfs *pVfs, const char *zPath){
   return 0;
 }
-static void demoDlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg){
-  sqlite3_snprintf(nByte, zErrMsg, "Loadable extensions are not supported");
+static void demoDlError(sqlite4_vfs *pVfs, int nByte, char *zErrMsg){
+  sqlite4_snprintf(nByte, zErrMsg, "Loadable extensions are not supported");
   zErrMsg[nByte-1] = '\0';
 }
-static void (*demoDlSym(sqlite3_vfs *pVfs, void *pH, const char *z))(void){
+static void (*demoDlSym(sqlite4_vfs *pVfs, void *pH, const char *z))(void){
   return 0;
 }
-static void demoDlClose(sqlite3_vfs *pVfs, void *pHandle){
+static void demoDlClose(sqlite4_vfs *pVfs, void *pHandle){
   return;
 }
 
@@ -576,7 +576,7 @@ static void demoDlClose(sqlite3_vfs *pVfs, void *pHandle){
 ** Parameter zByte points to a buffer nByte bytes in size. Populate this
 ** buffer with pseudo-random data.
 */
-static int demoRandomness(sqlite3_vfs *pVfs, int nByte, char *zByte){
+static int demoRandomness(sqlite4_vfs *pVfs, int nByte, char *zByte){
   return SQLITE_OK;
 }
 
@@ -584,7 +584,7 @@ static int demoRandomness(sqlite3_vfs *pVfs, int nByte, char *zByte){
 ** Sleep for at least nMicro microseconds. Return the (approximate) number 
 ** of microseconds slept for.
 */
-static int demoSleep(sqlite3_vfs *pVfs, int nMicro){
+static int demoSleep(sqlite4_vfs *pVfs, int nMicro){
   sleep(nMicro / 1000000);
   usleep(nMicro % 1000000);
   return nMicro;
@@ -601,7 +601,7 @@ static int demoSleep(sqlite3_vfs *pVfs, int nMicro){
 ** value, it will stop working some time in the year 2038 AD (the so-called
 ** "year 2038" problem that afflicts systems that store time this way). 
 */
-static int demoCurrentTime(sqlite3_vfs *pVfs, double *pTime){
+static int demoCurrentTime(sqlite4_vfs *pVfs, double *pTime){
   time_t t = time(0);
   *pTime = t/86400.0 + 2440587.5; 
   return SQLITE_OK;
@@ -611,10 +611,10 @@ static int demoCurrentTime(sqlite3_vfs *pVfs, double *pTime){
 ** This function returns a pointer to the VFS implemented in this file.
 ** To make the VFS available to SQLite:
 **
-**   sqlite3_vfs_register(sqlite3_demovfs(), 0);
+**   sqlite4_vfs_register(sqlite4_demovfs(), 0);
 */
-sqlite3_vfs *sqlite3_demovfs(void){
-  static sqlite3_vfs demovfs = {
+sqlite4_vfs *sqlite4_demovfs(void){
+  static sqlite4_vfs demovfs = {
     1,                            /* iVersion */
     sizeof(DemoFile),             /* szOsFile */
     MAXPATHNAME,                  /* mxPathname */
@@ -645,21 +645,21 @@ sqlite3_vfs *sqlite3_demovfs(void){
 
 #if SQLITE_OS_UNIX
 static int register_demovfs(
-  ClientData clientData, /* Pointer to sqlite3_enable_XXX function */
+  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
   int objc,              /* Number of arguments */
   Tcl_Obj *CONST objv[]  /* Command arguments */
 ){
-  sqlite3_vfs_register(sqlite3_demovfs(), 1);
+  sqlite4_vfs_register(sqlite4_demovfs(), 1);
   return TCL_OK;
 }
 static int unregister_demovfs(
-  ClientData clientData, /* Pointer to sqlite3_enable_XXX function */
+  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
   int objc,              /* Number of arguments */
   Tcl_Obj *CONST objv[]  /* Command arguments */
 ){
-  sqlite3_vfs_unregister(sqlite3_demovfs());
+  sqlite4_vfs_unregister(sqlite4_demovfs());
   return TCL_OK;
 }
 

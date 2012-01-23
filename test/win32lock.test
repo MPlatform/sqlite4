@@ -21,12 +21,12 @@ source $testdir/tester.tcl
 set testprefix win32lock
 
 db close
-sqlite3_shutdown
-test_sqlite3_log xLog
+sqlite4_shutdown
+test_sqlite4_log xLog
 proc xLog {error_code msg} {
   lappend ::log $msg 
 }
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_test win32lock-1.1 {
   db eval {
@@ -41,7 +41,7 @@ do_test win32lock-1.1 {
 } {1 100000 2 50000 3 25000 4 12500}
 
 unset -nocomplain delay1 rc msg
-set old_pending_byte [sqlite3_test_control_pending_byte 0x40000000]
+set old_pending_byte [sqlite4_test_control_pending_byte 0x40000000]
 
 set win32_lock_ok [list]
 set win32_lock_error [list]
@@ -73,7 +73,7 @@ while {1} {
     puts "Timed out waiting for \"ok\" and \"error\" results."
     break
   }
-  sqlite3_sleep 10
+  sqlite4_sleep 10
 }
 
 do_test win32lock-2.0 {
@@ -121,13 +121,13 @@ while {1} {
     puts "Timed out waiting for \"ok\" and \"error\" results."
     break
   }
-  sqlite3_sleep 10
+  sqlite4_sleep 10
 }
 
 file_control_win32_av_retry db 10 25
-sqlite3_test_control_pending_byte $old_pending_byte
+sqlite4_test_control_pending_byte $old_pending_byte
 db close
-sqlite3_shutdown
-test_sqlite3_log 
-sqlite3_initialize
+sqlite4_shutdown
+test_sqlite4_log 
+sqlite4_initialize
 finish_test

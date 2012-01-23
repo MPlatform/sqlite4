@@ -60,19 +60,19 @@ struct VdbeCursor {
   Bool atFirst;         /* True if pointing to first entry */
   Bool useRandomRowid;  /* Generate new record numbers semi-randomly */
   Bool nullRow;         /* True if pointing to a row with no data */
-  Bool deferredMoveto;  /* A call to sqlite3BtreeMoveto() is needed */
+  Bool deferredMoveto;  /* A call to sqlite4BtreeMoveto() is needed */
   Bool isTable;         /* True if a table requiring integer keys */
   Bool isIndex;         /* True if an index containing keys only - no data */
   Bool isOrdered;       /* True if the underlying table is BTREE_UNORDERED */
   Bool isSorter;        /* True if a new-style sorter */
-  sqlite3_vtab_cursor *pVtabCursor;  /* The cursor for a virtual table */
-  const sqlite3_module *pModule;     /* Module for cursor pVtabCursor */
+  sqlite4_vtab_cursor *pVtabCursor;  /* The cursor for a virtual table */
+  const sqlite4_module *pModule;     /* Module for cursor pVtabCursor */
   i64 seqCount;         /* Sequence counter */
-  i64 movetoTarget;     /* Argument to the deferred sqlite3BtreeMoveto() */
+  i64 movetoTarget;     /* Argument to the deferred sqlite4BtreeMoveto() */
   i64 lastRowid;        /* Last rowid from a Next or NextIdx operation */
   VdbeSorter *pSorter;  /* Sorter object for OP_SorterOpen cursors */
 
-  /* Result of last sqlite3BtreeMoveto() done by an OP_NotExists or 
+  /* Result of last sqlite4BtreeMoveto() done by an OP_NotExists or 
   ** OP_IsUnique opcode on this cursor. */
   int seekResult;
 
@@ -108,7 +108,7 @@ typedef struct VdbeCursor VdbeCursor;
 ** is linked into the Vdbe.pDelFrame list. The contents of the Vdbe.pDelFrame
 ** list is deleted when the VM is reset in VdbeHalt(). The reason for doing
 ** this instead of deleting the VdbeFrame immediately is to avoid recursive
-** calls to sqlite3VdbeMemRelease() when the memory cells belonging to the
+** calls to sqlite4VdbeMemRelease() when the memory cells belonging to the
 ** child frame are released.
 **
 ** The currently executing frame is stored in Vdbe.pFrame. Vdbe.pFrame is
@@ -129,7 +129,7 @@ struct VdbeFrame {
   void *token;            /* Copy of SubProgram.token */
   int nChildMem;          /* Number of memory cells for child frame */
   int nChildCsr;          /* Number of cursors for child frame */
-  i64 lastRowid;          /* Last insert rowid (sqlite3.lastRowid) */
+  i64 lastRowid;          /* Last insert rowid (sqlite4.lastRowid) */
   int nChange;            /* Statement changes (Vdbe.nChanges)     */
   VdbeFrame *pParent;     /* Parent of this frame, or NULL if parent is main */
 };
@@ -147,7 +147,7 @@ struct VdbeFrame {
 ** integer etc.) of the same value.
 */
 struct Mem {
-  sqlite3 *db;        /* The associated database connection */
+  sqlite4 *db;        /* The associated database connection */
   char *z;            /* String or BLOB value */
   double r;           /* Real value */
   union {
@@ -166,7 +166,7 @@ struct Mem {
   void *pFiller;      /* So that sizeof(Mem) is a multiple of 8 */
 #endif
   void (*xDel)(void *);  /* If not null, call this function to delete Mem.z */
-  char *zMalloc;      /* Dynamic buffer allocated by sqlite3_malloc() */
+  char *zMalloc;      /* Dynamic buffer allocated by sqlite4_malloc() */
 };
 
 /* One or more of the following flags are set to indicate the validOK
@@ -224,8 +224,8 @@ struct Mem {
 
 /* A VdbeFunc is just a FuncDef (defined in sqliteInt.h) that contains
 ** additional information about auxiliary information bound to arguments
-** of the function.  This is used to implement the sqlite3_get_auxdata()
-** and sqlite3_set_auxdata() APIs.  The "auxdata" is some auxiliary data
+** of the function.  This is used to implement the sqlite4_get_auxdata()
+** and sqlite4_set_auxdata() APIs.  The "auxdata" is some auxiliary data
 ** that can be associated with a constant argument to a function.  This
 ** allows functions such as "regexp" to compile their constant regular
 ** expression argument once and reused the compiled code for multiple
@@ -253,7 +253,7 @@ struct VdbeFunc {
 ** This structure is defined inside of vdbeInt.h because it uses substructures
 ** (Mem) which are only defined there.
 */
-struct sqlite3_context {
+struct sqlite4_context {
   FuncDef *pFunc;       /* Pointer to function information.  MUST BE FIRST */
   VdbeFunc *pVdbeFunc;  /* Auxilary data, if created. */
   Mem s;                /* The return value is stored here */
@@ -278,7 +278,7 @@ struct Explain {
 ** An instance of the virtual machine.  This structure contains the complete
 ** state of the virtual machine.
 **
-** The "sqlite3_stmt" structure pointer that is returned by sqlite3_prepare()
+** The "sqlite4_stmt" structure pointer that is returned by sqlite4_prepare()
 ** is really a pointer to an instance of this structure.
 **
 ** The Vdbe.inVtabMethod variable is set to non-zero for the duration of
@@ -290,7 +290,7 @@ struct Explain {
 ** method function.
 */
 struct Vdbe {
-  sqlite3 *db;            /* The database connection that owns this statement */
+  sqlite4 *db;            /* The database connection that owns this statement */
   Op *aOp;                /* Space to hold the virtual machine's program */
   Mem *aMem;              /* The memory locations */
   Mem **apArg;            /* Arguments to currently executing user function */
@@ -329,7 +329,7 @@ struct Vdbe {
   yDbMask btreeMask;      /* Bitmask of db->aDb[] entries referenced */
   yDbMask lockMask;       /* Subset of btreeMask that requires a lock */
   int iStatement;         /* Statement number (or 0 if has not opened stmt) */
-  int aCounter[3];        /* Counters used by sqlite3_stmt_status() */
+  int aCounter[3];        /* Counters used by sqlite4_stmt_status() */
 #ifndef SQLITE_OMIT_TRACE
   i64 startTime;          /* Time when query started - used for profiling */
 #endif
@@ -364,112 +364,112 @@ struct Vdbe {
 /*
 ** Function prototypes
 */
-void sqlite3VdbeFreeCursor(Vdbe *, VdbeCursor*);
+void sqlite4VdbeFreeCursor(Vdbe *, VdbeCursor*);
 void sqliteVdbePopStack(Vdbe*,int);
-int sqlite3VdbeCursorMoveto(VdbeCursor*);
+int sqlite4VdbeCursorMoveto(VdbeCursor*);
 #if defined(SQLITE_DEBUG) || defined(VDBE_PROFILE)
-void sqlite3VdbePrintOp(FILE*, int, Op*);
+void sqlite4VdbePrintOp(FILE*, int, Op*);
 #endif
-u32 sqlite3VdbeSerialTypeLen(u32);
-u32 sqlite3VdbeSerialType(Mem*, int);
-u32 sqlite3VdbeSerialPut(unsigned char*, int, Mem*, int);
-u32 sqlite3VdbeSerialGet(const unsigned char*, u32, Mem*);
-void sqlite3VdbeDeleteAuxData(VdbeFunc*, int);
+u32 sqlite4VdbeSerialTypeLen(u32);
+u32 sqlite4VdbeSerialType(Mem*, int);
+u32 sqlite4VdbeSerialPut(unsigned char*, int, Mem*, int);
+u32 sqlite4VdbeSerialGet(const unsigned char*, u32, Mem*);
+void sqlite4VdbeDeleteAuxData(VdbeFunc*, int);
 
 int sqlite2BtreeKeyCompare(BtCursor *, const void *, int, int, int *);
-int sqlite3VdbeIdxKeyCompare(VdbeCursor*,UnpackedRecord*,int*);
-int sqlite3VdbeIdxRowid(sqlite3*, BtCursor *, i64 *);
-int sqlite3MemCompare(const Mem*, const Mem*, const CollSeq*);
-int sqlite3VdbeExec(Vdbe*);
-int sqlite3VdbeList(Vdbe*);
-int sqlite3VdbeHalt(Vdbe*);
-int sqlite3VdbeChangeEncoding(Mem *, int);
-int sqlite3VdbeMemTooBig(Mem*);
-int sqlite3VdbeMemCopy(Mem*, const Mem*);
-void sqlite3VdbeMemShallowCopy(Mem*, const Mem*, int);
-void sqlite3VdbeMemMove(Mem*, Mem*);
-int sqlite3VdbeMemNulTerminate(Mem*);
-int sqlite3VdbeMemSetStr(Mem*, const char*, int, u8, void(*)(void*));
-void sqlite3VdbeMemSetInt64(Mem*, i64);
+int sqlite4VdbeIdxKeyCompare(VdbeCursor*,UnpackedRecord*,int*);
+int sqlite4VdbeIdxRowid(sqlite4*, BtCursor *, i64 *);
+int sqlite4MemCompare(const Mem*, const Mem*, const CollSeq*);
+int sqlite4VdbeExec(Vdbe*);
+int sqlite4VdbeList(Vdbe*);
+int sqlite4VdbeHalt(Vdbe*);
+int sqlite4VdbeChangeEncoding(Mem *, int);
+int sqlite4VdbeMemTooBig(Mem*);
+int sqlite4VdbeMemCopy(Mem*, const Mem*);
+void sqlite4VdbeMemShallowCopy(Mem*, const Mem*, int);
+void sqlite4VdbeMemMove(Mem*, Mem*);
+int sqlite4VdbeMemNulTerminate(Mem*);
+int sqlite4VdbeMemSetStr(Mem*, const char*, int, u8, void(*)(void*));
+void sqlite4VdbeMemSetInt64(Mem*, i64);
 #ifdef SQLITE_OMIT_FLOATING_POINT
-# define sqlite3VdbeMemSetDouble sqlite3VdbeMemSetInt64
+# define sqlite4VdbeMemSetDouble sqlite4VdbeMemSetInt64
 #else
-  void sqlite3VdbeMemSetDouble(Mem*, double);
+  void sqlite4VdbeMemSetDouble(Mem*, double);
 #endif
-void sqlite3VdbeMemSetNull(Mem*);
-void sqlite3VdbeMemSetZeroBlob(Mem*,int);
-void sqlite3VdbeMemSetRowSet(Mem*);
-int sqlite3VdbeMemMakeWriteable(Mem*);
-int sqlite3VdbeMemStringify(Mem*, int);
-i64 sqlite3VdbeIntValue(Mem*);
-int sqlite3VdbeMemIntegerify(Mem*);
-double sqlite3VdbeRealValue(Mem*);
-void sqlite3VdbeIntegerAffinity(Mem*);
-int sqlite3VdbeMemRealify(Mem*);
-int sqlite3VdbeMemNumerify(Mem*);
-int sqlite3VdbeMemFromBtree(BtCursor*,int,int,int,Mem*);
-void sqlite3VdbeMemRelease(Mem *p);
-void sqlite3VdbeMemReleaseExternal(Mem *p);
+void sqlite4VdbeMemSetNull(Mem*);
+void sqlite4VdbeMemSetZeroBlob(Mem*,int);
+void sqlite4VdbeMemSetRowSet(Mem*);
+int sqlite4VdbeMemMakeWriteable(Mem*);
+int sqlite4VdbeMemStringify(Mem*, int);
+i64 sqlite4VdbeIntValue(Mem*);
+int sqlite4VdbeMemIntegerify(Mem*);
+double sqlite4VdbeRealValue(Mem*);
+void sqlite4VdbeIntegerAffinity(Mem*);
+int sqlite4VdbeMemRealify(Mem*);
+int sqlite4VdbeMemNumerify(Mem*);
+int sqlite4VdbeMemFromBtree(BtCursor*,int,int,int,Mem*);
+void sqlite4VdbeMemRelease(Mem *p);
+void sqlite4VdbeMemReleaseExternal(Mem *p);
 #define VdbeMemRelease(X)  \
   if((X)->flags&(MEM_Agg|MEM_Dyn|MEM_RowSet|MEM_Frame)) \
-    sqlite3VdbeMemReleaseExternal(X);
-int sqlite3VdbeMemFinalize(Mem*, FuncDef*);
-const char *sqlite3OpcodeName(int);
-int sqlite3VdbeMemGrow(Mem *pMem, int n, int preserve);
-int sqlite3VdbeCloseStatement(Vdbe *, int);
-void sqlite3VdbeFrameDelete(VdbeFrame*);
-int sqlite3VdbeFrameRestore(VdbeFrame *);
-void sqlite3VdbeMemStoreType(Mem *pMem);
-int sqlite3VdbeTransferError(Vdbe *p);
+    sqlite4VdbeMemReleaseExternal(X);
+int sqlite4VdbeMemFinalize(Mem*, FuncDef*);
+const char *sqlite4OpcodeName(int);
+int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve);
+int sqlite4VdbeCloseStatement(Vdbe *, int);
+void sqlite4VdbeFrameDelete(VdbeFrame*);
+int sqlite4VdbeFrameRestore(VdbeFrame *);
+void sqlite4VdbeMemStoreType(Mem *pMem);
+int sqlite4VdbeTransferError(Vdbe *p);
 
 #ifdef SQLITE_OMIT_MERGE_SORT
-# define sqlite3VdbeSorterInit(Y,Z)      SQLITE_OK
-# define sqlite3VdbeSorterWrite(X,Y,Z)   SQLITE_OK
-# define sqlite3VdbeSorterClose(Y,Z)
-# define sqlite3VdbeSorterRowkey(Y,Z)    SQLITE_OK
-# define sqlite3VdbeSorterRewind(X,Y,Z)  SQLITE_OK
-# define sqlite3VdbeSorterNext(X,Y,Z)    SQLITE_OK
-# define sqlite3VdbeSorterCompare(X,Y,Z) SQLITE_OK
+# define sqlite4VdbeSorterInit(Y,Z)      SQLITE_OK
+# define sqlite4VdbeSorterWrite(X,Y,Z)   SQLITE_OK
+# define sqlite4VdbeSorterClose(Y,Z)
+# define sqlite4VdbeSorterRowkey(Y,Z)    SQLITE_OK
+# define sqlite4VdbeSorterRewind(X,Y,Z)  SQLITE_OK
+# define sqlite4VdbeSorterNext(X,Y,Z)    SQLITE_OK
+# define sqlite4VdbeSorterCompare(X,Y,Z) SQLITE_OK
 #else
-int sqlite3VdbeSorterInit(sqlite3 *, VdbeCursor *);
-void sqlite3VdbeSorterClose(sqlite3 *, VdbeCursor *);
-int sqlite3VdbeSorterRowkey(VdbeCursor *, Mem *);
-int sqlite3VdbeSorterNext(sqlite3 *, VdbeCursor *, int *);
-int sqlite3VdbeSorterRewind(sqlite3 *, VdbeCursor *, int *);
-int sqlite3VdbeSorterWrite(sqlite3 *, VdbeCursor *, Mem *);
-int sqlite3VdbeSorterCompare(VdbeCursor *, Mem *, int *);
+int sqlite4VdbeSorterInit(sqlite4 *, VdbeCursor *);
+void sqlite4VdbeSorterClose(sqlite4 *, VdbeCursor *);
+int sqlite4VdbeSorterRowkey(VdbeCursor *, Mem *);
+int sqlite4VdbeSorterNext(sqlite4 *, VdbeCursor *, int *);
+int sqlite4VdbeSorterRewind(sqlite4 *, VdbeCursor *, int *);
+int sqlite4VdbeSorterWrite(sqlite4 *, VdbeCursor *, Mem *);
+int sqlite4VdbeSorterCompare(VdbeCursor *, Mem *, int *);
 #endif
 
 #if !defined(SQLITE_OMIT_SHARED_CACHE) && SQLITE_THREADSAFE>0
-  void sqlite3VdbeEnter(Vdbe*);
-  void sqlite3VdbeLeave(Vdbe*);
+  void sqlite4VdbeEnter(Vdbe*);
+  void sqlite4VdbeLeave(Vdbe*);
 #else
-# define sqlite3VdbeEnter(X)
-# define sqlite3VdbeLeave(X)
+# define sqlite4VdbeEnter(X)
+# define sqlite4VdbeLeave(X)
 #endif
 
 #ifdef SQLITE_DEBUG
-void sqlite3VdbeMemAboutToChange(Vdbe*,Mem*);
+void sqlite4VdbeMemAboutToChange(Vdbe*,Mem*);
 #endif
 
 #ifndef SQLITE_OMIT_FOREIGN_KEY
-int sqlite3VdbeCheckFk(Vdbe *, int);
+int sqlite4VdbeCheckFk(Vdbe *, int);
 #else
-# define sqlite3VdbeCheckFk(p,i) 0
+# define sqlite4VdbeCheckFk(p,i) 0
 #endif
 
-int sqlite3VdbeMemTranslate(Mem*, u8);
+int sqlite4VdbeMemTranslate(Mem*, u8);
 #ifdef SQLITE_DEBUG
-  void sqlite3VdbePrintSql(Vdbe*);
-  void sqlite3VdbeMemPrettyPrint(Mem *pMem, char *zBuf);
+  void sqlite4VdbePrintSql(Vdbe*);
+  void sqlite4VdbeMemPrettyPrint(Mem *pMem, char *zBuf);
 #endif
-int sqlite3VdbeMemHandleBom(Mem *pMem);
+int sqlite4VdbeMemHandleBom(Mem *pMem);
 
 #ifndef SQLITE_OMIT_INCRBLOB
-  int sqlite3VdbeMemExpandBlob(Mem *);
-  #define ExpandBlob(P) (((P)->flags&MEM_Zero)?sqlite3VdbeMemExpandBlob(P):0)
+  int sqlite4VdbeMemExpandBlob(Mem *);
+  #define ExpandBlob(P) (((P)->flags&MEM_Zero)?sqlite4VdbeMemExpandBlob(P):0)
 #else
-  #define sqlite3VdbeMemExpandBlob(x) SQLITE_OK
+  #define sqlite4VdbeMemExpandBlob(x) SQLITE_OK
   #define ExpandBlob(P) SQLITE_OK
 #endif
 

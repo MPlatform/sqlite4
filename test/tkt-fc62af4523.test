@@ -43,7 +43,7 @@ set ::chan [launch_testfixture]
 proc buddy {code} { testfixture $::chan $code }
 do_test tkt-fc62af4523.2 {
   testfixture $::chan {
-    sqlite3 db test.db
+    sqlite4 db test.db
     db eval {
       PRAGMA cache_size = 10;
       BEGIN;

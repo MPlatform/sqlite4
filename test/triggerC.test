@@ -42,7 +42,7 @@ ifcapable {!trigger} {
 #
 execsql { PRAGMA recursive_triggers = on }
 
-#sqlite3_db_config_lookaside db 0 0 0
+#sqlite4_db_config_lookaside db 0 0 0
 
 #-------------------------------------------------------------------------
 # This block of tests, triggerC-1.*, are not aimed at any specific
@@ -322,7 +322,7 @@ do_test triggerC-3.4.2 {
 } {0 {} {}}
 
 do_test triggerC-3.5.1 {
-  sqlite3_limit db SQLITE_LIMIT_TRIGGER_DEPTH  [expr $SQLITE_MAX_TRIGGER_DEPTH / 10]
+  sqlite4_limit db SQLITE_LIMIT_TRIGGER_DEPTH  [expr $SQLITE_MAX_TRIGGER_DEPTH / 10]
   catchsql "
     INSERT INTO t3b VALUES([expr ($SQLITE_MAX_TRIGGER_DEPTH * 2) - ($SQLITE_MAX_TRIGGER_DEPTH / 10) + 1]);
   "
@@ -342,7 +342,7 @@ do_test triggerC-3.5.4 {
 } {0 {} {}}
 
 do_test triggerC-3.6.1 {
-  sqlite3_limit db SQLITE_LIMIT_TRIGGER_DEPTH 1
+  sqlite4_limit db SQLITE_LIMIT_TRIGGER_DEPTH 1
   catchsql "
     INSERT INTO t3b VALUES([expr $SQLITE_MAX_TRIGGER_DEPTH * 2]);
   "
@@ -360,7 +360,7 @@ do_test triggerC-3.6.3 {
 do_test triggerC-3.6.4 {
   db eval {SELECT count(*), max(x), min(x) FROM t3b}
 } {0 {} {}}
-sqlite3_limit db SQLITE_LIMIT_TRIGGER_DEPTH $SQLITE_MAX_TRIGGER_DEPTH
+sqlite4_limit db SQLITE_LIMIT_TRIGGER_DEPTH $SQLITE_MAX_TRIGGER_DEPTH
 
 
 #-----------------------------------------------------------------------
@@ -919,7 +919,7 @@ do_test triggerC-11.4 {
 do_test triggerC-12.1 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   execsql {
     CREATE TABLE t1(a, b);

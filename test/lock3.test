@@ -24,7 +24,7 @@ source $testdir/tester.tcl
 #
 do_test lock3-1.1 {
   file mkdir tempdir/t1/t2/t3
-  sqlite3 db2 ./tempdir/t1//t2/./t3//./../..//./../../tempdir/..//test.db//
+  sqlite4 db2 ./tempdir/t1//t2/./t3//./../..//./../../tempdir/..//test.db//
   execsql {
     CREATE TABLE t1(a);
     INSERT INTO t1 VALUES(1);

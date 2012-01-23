@@ -42,7 +42,7 @@
 **         connections to the same database occur within the same thread,
 **         they can optionally share their database cache.  This reduces
 **         I/O and memory requirements.  Cache shared is controlled using
-**         the sqlite3_enable_shared_cache() API.
+**         the sqlite4_enable_shared_cache() API.
 **
 **    (3)  Database connections on a shared cache use table-level locking
 **         instead of file-level locking for improved concurrency.
@@ -68,7 +68,7 @@
 ** Here is how the client/server approach works:  The database server
 ** thread is started on this procedure:
 **
-**       void *sqlite3_server(void *NotUsed);
+**       void *sqlite4_server(void *NotUsed);
 **
 ** The sqlite_server procedure runs as long as the g.serverHalt variable
 ** is false.  A mutex is used to make sure no more than one server runs
@@ -78,8 +78,8 @@
 ** Two convenience routines are provided for starting and stopping the
 ** server thread:
 **
-**       void sqlite3_server_start(void);
-**       void sqlite3_server_stop(void);
+**       void sqlite4_server_start(void);
+**       void sqlite4_server_stop(void);
 **
 ** Both of the convenience routines return immediately.  Neither will
 ** ever give an error.  If a server is already started or already halted,
@@ -87,12 +87,12 @@
 **
 ** Clients use the following interfaces:
 **
-**       sqlite3_client_open
-**       sqlite3_client_prepare
-**       sqlite3_client_step
-**       sqlite3_client_reset
-**       sqlite3_client_finalize
-**       sqlite3_client_close
+**       sqlite4_client_open
+**       sqlite4_client_prepare
+**       sqlite4_client_step
+**       sqlite4_client_reset
+**       sqlite4_client_finalize
+**       sqlite4_client_close
 **
 ** These interfaces work exactly like the standard core SQLite interfaces
 ** having the same names without the "_client_" infix.  Many other SQLite
@@ -100,23 +100,23 @@
 ** server as long as SQLITE_ENABLE_MEMORY_MANAGEMENT is not defined.
 ** The following interfaces fall into this second category:
 **
-**       sqlite3_bind_*
-**       sqlite3_changes
-**       sqlite3_clear_bindings
-**       sqlite3_column_*
-**       sqlite3_complete
-**       sqlite3_create_collation
-**       sqlite3_create_function
-**       sqlite3_data_count
-**       sqlite3_db_handle
-**       sqlite3_errcode
-**       sqlite3_errmsg
-**       sqlite3_last_insert_rowid
-**       sqlite3_total_changes
-**       sqlite3_transfer_bindings
+**       sqlite4_bind_*
+**       sqlite4_changes
+**       sqlite4_clear_bindings
+**       sqlite4_column_*
+**       sqlite4_complete
+**       sqlite4_create_collation
+**       sqlite4_create_function
+**       sqlite4_data_count
+**       sqlite4_db_handle
+**       sqlite4_errcode
+**       sqlite4_errmsg
+**       sqlite4_last_insert_rowid
+**       sqlite4_total_changes
+**       sqlite4_transfer_bindings
 **
-** A single SQLite connection (an sqlite3* object) or an SQLite statement
-** (an sqlite3_stmt* object) should only be passed to a single interface
+** A single SQLite connection (an sqlite4* object) or an SQLite statement
+** (an sqlite4_stmt* object) should only be passed to a single interface
 ** function at a time.  The connections and statements can be passed from
 ** any thread to any of the functions listed in the second group above as
 ** long as the same connection is not in use by two threads at once and
@@ -126,7 +126,7 @@
 **
 ** The busy handler for all database connections should remain turned
 ** off.  That means that any lock contention will cause the associated
-** sqlite3_client_step() call to return immediately with an SQLITE_BUSY
+** sqlite4_client_step() call to return immediately with an SQLITE_BUSY
 ** error code.  If a busy handler is enabled and lock contention occurs,
 ** then the entire server thread will block.  This will cause not only
 ** the requesting client to block but every other database client as
@@ -157,41 +157,41 @@
 ** the following functions can be used safely from different threads
 ** without messing up the allocation counts:
 **
-**       sqlite3_bind_parameter_name
-**       sqlite3_bind_parameter_index
-**       sqlite3_changes
-**       sqlite3_column_blob
-**       sqlite3_column_count
-**       sqlite3_complete
-**       sqlite3_data_count
-**       sqlite3_db_handle
-**       sqlite3_errcode
-**       sqlite3_errmsg
-**       sqlite3_last_insert_rowid
-**       sqlite3_total_changes
+**       sqlite4_bind_parameter_name
+**       sqlite4_bind_parameter_index
+**       sqlite4_changes
+**       sqlite4_column_blob
+**       sqlite4_column_count
+**       sqlite4_complete
+**       sqlite4_data_count
+**       sqlite4_db_handle
+**       sqlite4_errcode
+**       sqlite4_errmsg
+**       sqlite4_last_insert_rowid
+**       sqlite4_total_changes
 **
 ** The remaining functions are not thread-safe when memory management
 ** is enabled.  So one would have to define some new interface routines
 ** along the following lines:
 **
-**       sqlite3_client_bind_*
-**       sqlite3_client_clear_bindings
-**       sqlite3_client_column_*
-**       sqlite3_client_create_collation
-**       sqlite3_client_create_function
-**       sqlite3_client_transfer_bindings
+**       sqlite4_client_bind_*
+**       sqlite4_client_clear_bindings
+**       sqlite4_client_column_*
+**       sqlite4_client_create_collation
+**       sqlite4_client_create_function
+**       sqlite4_client_transfer_bindings
 **
 ** The example code in this file is intended for use with memory
 ** management turned off.  So the implementation of these additional
 ** client interfaces is left as an exercise to the reader.
 **
 ** It may seem surprising to the reader that the list of safe functions
-** above does not include things like sqlite3_bind_int() or
-** sqlite3_column_int().  But those routines might, in fact, allocate
-** or deallocate memory.  In the case of sqlite3_bind_int(), if the
+** above does not include things like sqlite4_bind_int() or
+** sqlite4_column_int().  But those routines might, in fact, allocate
+** or deallocate memory.  In the case of sqlite4_bind_int(), if the
 ** parameter was previously bound to a string that string might need
 ** to be deallocated before the new integer value is inserted.  In
-** the case of sqlite3_column_int(), the value of the column might be
+** the case of sqlite4_column_int(), the value of the column might be
 ** a UTF-16 string which will need to be converted to UTF-8 then into
 ** an integer.
 */
@@ -212,7 +212,7 @@
 ** We require only pthreads and the public interface of SQLite.
 */
 #include <pthread.h>
-#include "sqlite3.h"
+#include "sqlite4.h"
 
 /*
 ** Messages are passed from client to server and back again as 
@@ -221,8 +221,8 @@
 typedef struct SqlMessage SqlMessage;
 struct SqlMessage {
   int op;                      /* Opcode for the message */
-  sqlite3 *pDb;                /* The SQLite connection */
-  sqlite3_stmt *pStmt;         /* A specific statement */
+  sqlite4 *pDb;                /* The SQLite connection */
+  sqlite4_stmt *pStmt;         /* A specific statement */
   int errCode;                 /* Error code returned */
   const char *zIn;             /* Input filename or SQL statement */
   int nByte;                   /* Size of the zIn parameter for prepare() */
@@ -236,12 +236,12 @@ struct SqlMessage {
 /*
 ** Legal values for SqlMessage.op
 */
-#define MSG_Open       1  /* sqlite3_open(zIn, &pDb) */
-#define MSG_Prepare    2  /* sqlite3_prepare(pDb, zIn, nByte, &pStmt, &zOut) */
-#define MSG_Step       3  /* sqlite3_step(pStmt) */
-#define MSG_Reset      4  /* sqlite3_reset(pStmt) */
-#define MSG_Finalize   5  /* sqlite3_finalize(pStmt) */
-#define MSG_Close      6  /* sqlite3_close(pDb) */
+#define MSG_Open       1  /* sqlite4_open(zIn, &pDb) */
+#define MSG_Prepare    2  /* sqlite4_prepare(pDb, zIn, nByte, &pStmt, &zOut) */
+#define MSG_Step       3  /* sqlite4_step(pStmt) */
+#define MSG_Reset      4  /* sqlite4_reset(pStmt) */
+#define MSG_Finalize   5  /* sqlite4_finalize(pStmt) */
+#define MSG_Close      6  /* sqlite4_close(pDb) */
 #define MSG_Done       7  /* Server has finished with this message */
 
 
@@ -308,28 +308,28 @@ static void sendToServer(SqlMessage *pMsg){
 ** The following 6 routines are client-side implementations of the
 ** core SQLite interfaces:
 **
-**        sqlite3_open
-**        sqlite3_prepare
-**        sqlite3_step
-**        sqlite3_reset
-**        sqlite3_finalize
-**        sqlite3_close
+**        sqlite4_open
+**        sqlite4_prepare
+**        sqlite4_step
+**        sqlite4_reset
+**        sqlite4_finalize
+**        sqlite4_close
 **
 ** Clients should use the following client-side routines instead of 
 ** the core routines above.
 **
-**        sqlite3_client_open
-**        sqlite3_client_prepare
-**        sqlite3_client_step
-**        sqlite3_client_reset
-**        sqlite3_client_finalize
-**        sqlite3_client_close
+**        sqlite4_client_open
+**        sqlite4_client_prepare
+**        sqlite4_client_step
+**        sqlite4_client_reset
+**        sqlite4_client_finalize
+**        sqlite4_client_close
 **
 ** Each of these routines creates a message for the desired operation,
 ** sends that message to the server, waits for the server to process
 ** then message and return a response.
 */
-int sqlite3_client_open(const char *zDatabaseName, sqlite3 **ppDb){
+int sqlite4_client_open(const char *zDatabaseName, sqlite4 **ppDb){
   SqlMessage msg;
   msg.op = MSG_Open;
   msg.zIn = zDatabaseName;
@@ -337,11 +337,11 @@ int sqlite3_client_open(const char *zDatabaseName, sqlite3 **ppDb){
   *ppDb = msg.pDb;
   return msg.errCode;
 }
-int sqlite3_client_prepare(
-  sqlite3 *pDb,
+int sqlite4_client_prepare(
+  sqlite4 *pDb,
   const char *zSql,
   int nByte,
-  sqlite3_stmt **ppStmt,
+  sqlite4_stmt **ppStmt,
   const char **pzTail
 ){
   SqlMessage msg;
@@ -354,28 +354,28 @@ int sqlite3_client_prepare(
   if( pzTail ) *pzTail = msg.zOut;
   return msg.errCode;
 }
-int sqlite3_client_step(sqlite3_stmt *pStmt){
+int sqlite4_client_step(sqlite4_stmt *pStmt){
   SqlMessage msg;
   msg.op = MSG_Step;
   msg.pStmt = pStmt;
   sendToServer(&msg);
   return msg.errCode;
 }
-int sqlite3_client_reset(sqlite3_stmt *pStmt){
+int sqlite4_client_reset(sqlite4_stmt *pStmt){
   SqlMessage msg;
   msg.op = MSG_Reset;
   msg.pStmt = pStmt;
   sendToServer(&msg);
   return msg.errCode;
 }
-int sqlite3_client_finalize(sqlite3_stmt *pStmt){
+int sqlite4_client_finalize(sqlite4_stmt *pStmt){
   SqlMessage msg;
   msg.op = MSG_Finalize;
   msg.pStmt = pStmt;
   sendToServer(&msg);
   return msg.errCode;
 }
-int sqlite3_client_close(sqlite3 *pDb){
+int sqlite4_client_close(sqlite4 *pDb){
   SqlMessage msg;
   msg.op = MSG_Close;
   msg.pDb = pDb;
@@ -386,15 +386,15 @@ int sqlite3_client_close(sqlite3 *pDb){
 /*
 ** This routine implements the server.  To start the server, first
 ** make sure g.serverHalt is false, then create a new detached thread
-** on this procedure.  See the sqlite3_server_start() routine below
+** on this procedure.  See the sqlite4_server_start() routine below
 ** for an example.  This procedure loops until g.serverHalt becomes
 ** true.
 */
-void *sqlite3_server(void *NotUsed){
+void *sqlite4_server(void *NotUsed){
   if( pthread_mutex_trylock(&g.serverMutex) ){
     return 0;  /* Another server is already running */
   }
-  sqlite3_enable_shared_cache(1);
+  sqlite4_enable_shared_cache(1);
   while( !g.serverHalt ){
     SqlMessage *pMsg;
 
@@ -421,28 +421,28 @@ void *sqlite3_server(void *NotUsed){
     pthread_mutex_lock(&pMsg->clientMutex);
     switch( pMsg->op ){
       case MSG_Open: {
-        pMsg->errCode = sqlite3_open(pMsg->zIn, &pMsg->pDb);
+        pMsg->errCode = sqlite4_open(pMsg->zIn, &pMsg->pDb);
         break;
       }
       case MSG_Prepare: {
-        pMsg->errCode = sqlite3_prepare(pMsg->pDb, pMsg->zIn, pMsg->nByte,
+        pMsg->errCode = sqlite4_prepare(pMsg->pDb, pMsg->zIn, pMsg->nByte,
                                         &pMsg->pStmt, &pMsg->zOut);
         break;
       }
       case MSG_Step: {
-        pMsg->errCode = sqlite3_step(pMsg->pStmt);
+        pMsg->errCode = sqlite4_step(pMsg->pStmt);
         break;
       }
       case MSG_Reset: {
-        pMsg->errCode = sqlite3_reset(pMsg->pStmt);
+        pMsg->errCode = sqlite4_reset(pMsg->pStmt);
         break;
       }
       case MSG_Finalize: {
-        pMsg->errCode = sqlite3_finalize(pMsg->pStmt);
+        pMsg->errCode = sqlite4_finalize(pMsg->pStmt);
         break;
       }
       case MSG_Close: {
-        pMsg->errCode = sqlite3_close(pMsg->pDb);
+        pMsg->errCode = sqlite4_close(pMsg->pDb);
         break;
       }
     }
@@ -462,11 +462,11 @@ void *sqlite3_server(void *NotUsed){
 ** is aleady a server thread running, the new thread will quickly
 ** die and this routine is effectively a no-op.
 */
-void sqlite3_server_start(void){
+void sqlite4_server_start(void){
   pthread_t x;
   int rc;
   g.serverHalt = 0;
-  rc = pthread_create(&x, 0, sqlite3_server, 0);
+  rc = pthread_create(&x, 0, sqlite4_server, 0);
   if( rc==0 ){
     pthread_detach(x);
   }
@@ -479,7 +479,7 @@ void sqlite3_server_start(void){
 ** This routine waits until the server has actually stopped before
 ** returning.
 */
-void sqlite3_server_stop(void){
+void sqlite4_server_stop(void){
   g.serverHalt = 1;
   pthread_cond_broadcast(&g.serverWakeup);
   pthread_mutex_lock(&g.serverMutex);

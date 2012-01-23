@@ -161,7 +161,7 @@ ifcapable wal {
   #
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   do_execsql_test 4.1 {
     PRAGMA page_size = 512;
@@ -195,7 +195,7 @@ ifcapable wal {
 
   do_test 4.3 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     set maxsz 0
     while {[file size test.db] > [expr 512*3]} {
       execsql { PRAGMA journal_mode = WAL }

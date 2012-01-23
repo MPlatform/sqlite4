@@ -1,13 +1,13 @@
 #!/usr/bin/tcl
 #
 # This script makes modifications to the vdbe.c source file which reduce
-# the amount of stack space required by the sqlite3VdbeExec() routine.
+# the amount of stack space required by the sqlite4VdbeExec() routine.
 #
 # The modifications performed by this script are optional.  The vdbe.c
 # source file will compile correctly with and without the modifications
 # performed by this script.  And all routines within vdbe.c will compute
 # the same result.  The modifications made by this script merely help
-# the C compiler to generate code for sqlite3VdbeExec() that uses less
+# the C compiler to generate code for sqlite4VdbeExec() that uses less
 # stack space.
 #
 # Script usage:
@@ -17,13 +17,13 @@
 #
 # Modifications made:
 #
-# All modifications are within the sqlite3VdbeExec() function.  The
+# All modifications are within the sqlite4VdbeExec() function.  The
 # modifications seek to reduce the amount of stack space allocated by
 # this routine by moving local variable declarations out of individual
 # opcode implementations and into a single large union.  The union contains
 # a separate structure for each opcode and that structure contains the
 # local variables used by that opcode.  In this way, the total amount
-# of stack space required by sqlite3VdbeExec() is reduced from the
+# of stack space required by sqlite4VdbeExec() is reduced from the
 # sum of all local variables to the maximum of the local variable space
 # required for any single opcode.
 #
@@ -33,7 +33,7 @@
 # may be commented.
 #
 # The union definition is inserted in place of a special marker comment
-# in the preamble to the sqlite3VdbeExec() implementation.
+# in the preamble to the sqlite4VdbeExec() implementation.
 #
 #############################################################################
 #

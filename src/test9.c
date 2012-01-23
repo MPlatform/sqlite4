@@ -23,13 +23,13 @@
 ** c_collation_test
 */
 static int c_collation_test(
-  ClientData clientData, /* Pointer to sqlite3_enable_XXX function */
+  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
   int objc,              /* Number of arguments */
   Tcl_Obj *CONST objv[]  /* Command arguments */
 ){
   const char *zErrFunction = "N/A";
-  sqlite3 *db;
+  sqlite4 *db;
 
   int rc;
   if( objc!=1 ){
@@ -38,20 +38,20 @@ static int c_collation_test(
   }
 
   /* Open a database. */
-  rc = sqlite3_open(":memory:", &db);
+  rc = sqlite4_open(":memory:", &db);
   if( rc!=SQLITE_OK ){
-    zErrFunction = "sqlite3_open";
+    zErrFunction = "sqlite4_open";
     goto error_out;
   }
 
-  rc = sqlite3_create_collation(db, "collate", 456, 0, 0);
+  rc = sqlite4_create_collation(db, "collate", 456, 0, 0);
   if( rc!=SQLITE_MISUSE ){
-    sqlite3_close(db);
-    zErrFunction = "sqlite3_create_collation";
+    sqlite4_close(db);
+    zErrFunction = "sqlite4_create_collation";
     goto error_out;
   }
 
-  sqlite3_close(db);
+  sqlite4_close(db);
   return TCL_OK;
 
 error_out:
@@ -64,7 +64,7 @@ error_out:
 ** c_realloc_test
 */
 static int c_realloc_test(
-  ClientData clientData, /* Pointer to sqlite3_enable_XXX function */
+  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
   int objc,              /* Number of arguments */
   Tcl_Obj *CONST objv[]  /* Command arguments */
@@ -77,18 +77,18 @@ static int c_realloc_test(
     return TCL_ERROR;
   }
 
-  p = sqlite3_malloc(5);
+  p = sqlite4_malloc(5);
   if( !p ){
-    zErrFunction = "sqlite3_malloc";
+    zErrFunction = "sqlite4_malloc";
     goto error_out;
   }
 
   /* Test that realloc()ing a block of memory to a negative size is
   ** the same as free()ing that memory.
   */
-  p = sqlite3_realloc(p, -1);
+  p = sqlite4_realloc(p, -1);
   if( p ){
-    zErrFunction = "sqlite3_realloc";
+    zErrFunction = "sqlite4_realloc";
     goto error_out;
   }
 
@@ -105,14 +105,14 @@ error_out:
 ** c_misuse_test
 */
 static int c_misuse_test(
-  ClientData clientData, /* Pointer to sqlite3_enable_XXX function */
+  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
   int objc,              /* Number of arguments */
   Tcl_Obj *CONST objv[]  /* Command arguments */
 ){
   const char *zErrFunction = "N/A";
-  sqlite3 *db = 0;
-  sqlite3_stmt *pStmt;
+  sqlite4 *db = 0;
+  sqlite4_stmt *pStmt;
   int rc;
 
   if( objc!=1 ){
@@ -123,48 +123,48 @@ static int c_misuse_test(
   /* Open a database. Then close it again. We need to do this so that
   ** we have a "closed database handle" to pass to various API functions.
   */
-  rc = sqlite3_open(":memory:", &db);
+  rc = sqlite4_open(":memory:", &db);
   if( rc!=SQLITE_OK ){
-    zErrFunction = "sqlite3_open";
+    zErrFunction = "sqlite4_open";
     goto error_out;
   }
-  sqlite3_close(db);
+  sqlite4_close(db);
 
 
-  rc = sqlite3_errcode(db);
+  rc = sqlite4_errcode(db);
   if( rc!=SQLITE_MISUSE ){
-    zErrFunction = "sqlite3_errcode";
+    zErrFunction = "sqlite4_errcode";
     goto error_out;
   }
 
-  pStmt = (sqlite3_stmt*)1234;
-  rc = sqlite3_prepare(db, 0, 0, &pStmt, 0);
+  pStmt = (sqlite4_stmt*)1234;
+  rc = sqlite4_prepare(db, 0, 0, &pStmt, 0);
   if( rc!=SQLITE_MISUSE ){
-    zErrFunction = "sqlite3_prepare";
+    zErrFunction = "sqlite4_prepare";
     goto error_out;
   }
   assert( pStmt==0 ); /* Verify that pStmt is zeroed even on a MISUSE error */
 
-  pStmt = (sqlite3_stmt*)1234;
-  rc = sqlite3_prepare_v2(db, 0, 0, &pStmt, 0);
+  pStmt = (sqlite4_stmt*)1234;
+  rc = sqlite4_prepare_v2(db, 0, 0, &pStmt, 0);
   if( rc!=SQLITE_MISUSE ){
-    zErrFunction = "sqlite3_prepare_v2";
+    zErrFunction = "sqlite4_prepare_v2";
     goto error_out;
   }
   assert( pStmt==0 );
 
 #ifndef SQLITE_OMIT_UTF16
-  pStmt = (sqlite3_stmt*)1234;
-  rc = sqlite3_prepare16(db, 0, 0, &pStmt, 0);
+  pStmt = (sqlite4_stmt*)1234;
+  rc = sqlite4_prepare16(db, 0, 0, &pStmt, 0);
   if( rc!=SQLITE_MISUSE ){
-    zErrFunction = "sqlite3_prepare16";
+    zErrFunction = "sqlite4_prepare16";
     goto error_out;
   }
   assert( pStmt==0 );
-  pStmt = (sqlite3_stmt*)1234;
-  rc = sqlite3_prepare16_v2(db, 0, 0, &pStmt, 0);
+  pStmt = (sqlite4_stmt*)1234;
+  rc = sqlite4_prepare16_v2(db, 0, 0, &pStmt, 0);
   if( rc!=SQLITE_MISUSE ){
-    zErrFunction = "sqlite3_prepare16_v2";
+    zErrFunction = "sqlite4_prepare16_v2";
     goto error_out;
   }
   assert( pStmt==0 );

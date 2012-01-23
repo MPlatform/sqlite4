@@ -30,7 +30,7 @@ typedef struct WriteBuffer WriteBuffer;
 ** Method:
 **
 **   This layer is implemented as a wrapper around the "real" 
-**   sqlite3_file object for the host system. Each time data is 
+**   sqlite4_file object for the host system. Each time data is 
 **   written to the file object, instead of being written to the
 **   underlying file, the write operation is stored in an in-memory 
 **   structure (type WriteBuffer). This structure is placed at the
@@ -124,8 +124,8 @@ struct WriteBuffer {
 };
 
 struct CrashFile {
-  const sqlite3_io_methods *pMethod;   /* Must be first */
-  sqlite3_file *pRealFile;             /* Underlying "real" file handle */
+  const sqlite4_io_methods *pMethod;   /* Must be first */
+  sqlite4_file *pRealFile;             /* Underlying "real" file handle */
   char *zName;
   int flags;                           /* Flags the file was opened with */
 
@@ -154,7 +154,7 @@ static CrashGlobal g = {0, 0, SQLITE_DEFAULT_SECTOR_SIZE, 0, 0};
 /*
 ** Set this global variable to 1 to enable crash testing.
 */
-static int sqlite3CrashTestEnable = 0;
+static int sqlite4CrashTestEnable = 0;
 
 static void *crash_malloc(int nByte){
   return (void *)Tcl_Alloc((size_t)nByte);
@@ -167,7 +167,7 @@ static void *crash_realloc(void *p, int n){
 }
 
 /*
-** Wrapper around the sqlite3OsWrite() function that avoids writing to the
+** Wrapper around the sqlite4OsWrite() function that avoids writing to the
 ** 512 byte block begining at offset PENDING_BYTE.
 */
 static int writeDbFile(CrashFile *p, u8 *z, i64 iAmt, i64 iOff){
@@ -177,7 +177,7 @@ static int writeDbFile(CrashFile *p, u8 *z, i64 iAmt, i64 iOff){
     iSkip = 512;
   }
   if( (iAmt-iSkip)>0 ){
-    rc = sqlite3OsWrite(p->pRealFile, &z[iSkip], iAmt-iSkip, iOff+iSkip);
+    rc = sqlite4OsWrite(p->pRealFile, &z[iSkip], iAmt-iSkip, iOff+iSkip);
   }
   return rc;
 }
@@ -211,7 +211,7 @@ static int writeListSync(CrashFile *pFile, int isCrash){
     int nWrite = 0;
     int iFinal;
     for(pWrite=g.pWriteList; pWrite; pWrite=pWrite->pNext) nWrite++;
-    sqlite3_randomness(sizeof(int), &iFinal);
+    sqlite4_randomness(sizeof(int), &iFinal);
     iFinal = ((iFinal<0)?-1*iFinal:iFinal)%nWrite;
     for(pWrite=g.pWriteList; iFinal>0; pWrite=pWrite->pNext) iFinal--;
     pFinal = pWrite;
@@ -223,7 +223,7 @@ static int writeListSync(CrashFile *pFile, int isCrash){
 
   ppPtr = &g.pWriteList;
   for(pWrite=*ppPtr; rc==SQLITE_OK && pWrite; pWrite=*ppPtr){
-    sqlite3_file *pRealFile = pWrite->pFile->pRealFile;
+    sqlite4_file *pRealFile = pWrite->pFile->pRealFile;
 
     /* (eAction==1)      -> write block out normally,
     ** (eAction==2)      -> do nothing,
@@ -237,7 +237,7 @@ static int writeListSync(CrashFile *pFile, int isCrash){
       }
     }else{
       char random;
-      sqlite3_randomness(1, &random);
+      sqlite4_randomness(1, &random);
 
       /* Do not select option 3 (sector trashing) if the IOCAP_ATOMIC flag 
       ** is set or this is an OsTruncate(), not an Oswrite().
@@ -260,7 +260,7 @@ static int writeListSync(CrashFile *pFile, int isCrash){
       */
       if( iDc&SQLITE_IOCAP_SAFE_APPEND && pWrite->zBuf ){
         i64 iSize;
-        sqlite3OsFileSize(pRealFile, &iSize);
+        sqlite4OsFileSize(pRealFile, &iSize);
         if( iSize==pWrite->iOffset ){
           random = 0;
         }
@@ -280,7 +280,7 @@ static int writeListSync(CrashFile *pFile, int isCrash){
               pWrite->pFile, pWrite->zBuf, pWrite->nBuf, pWrite->iOffset
           );
         }else{
-          rc = sqlite3OsTruncate(pRealFile, pWrite->iOffset);
+          rc = sqlite4OsTruncate(pRealFile, pWrite->iOffset);
         }
         *ppPtr = pWrite->pNext;
 #ifdef TRACE_CRASHTEST
@@ -319,9 +319,9 @@ static int writeListSync(CrashFile *pFile, int isCrash){
 
         zGarbage = crash_malloc(g.iSectorSize);
         if( zGarbage ){
-          sqlite3_int64 i;
+          sqlite4_int64 i;
           for(i=iFirst; rc==SQLITE_OK && i<=iLast; i++){
-            sqlite3_randomness(g.iSectorSize, zGarbage); 
+            sqlite4_randomness(g.iSectorSize, zGarbage); 
             rc = writeDbFile(
               pWrite->pFile, zGarbage, g.iSectorSize, i*g.iSectorSize
             );
@@ -356,8 +356,8 @@ static int writeListSync(CrashFile *pFile, int isCrash){
 ** Add an entry to the end of the write-list.
 */
 static int writeListAppend(
-  sqlite3_file *pFile,
-  sqlite3_int64 iOffset,
+  sqlite4_file *pFile,
+  sqlite4_int64 iOffset,
   const u8 *zBuf,
   int nBuf
 ){
@@ -392,10 +392,10 @@ static int writeListAppend(
 /*
 ** Close a crash-file.
 */
-static int cfClose(sqlite3_file *pFile){
+static int cfClose(sqlite4_file *pFile){
   CrashFile *pCrash = (CrashFile *)pFile;
   writeListSync(pCrash, 0);
-  sqlite3OsClose(pCrash->pRealFile);
+  sqlite4OsClose(pCrash->pRealFile);
   return SQLITE_OK;
 }
 
@@ -403,7 +403,7 @@ static int cfClose(sqlite3_file *pFile){
 ** Read data from a crash-file.
 */
 static int cfRead(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -423,7 +423,7 @@ static int cfRead(
 ** Write data to a crash-file.
 */
 static int cfWrite(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   const void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -450,7 +450,7 @@ static int cfWrite(
 /*
 ** Truncate a crash-file.
 */
-static int cfTruncate(sqlite3_file *pFile, sqlite_int64 size){
+static int cfTruncate(sqlite4_file *pFile, sqlite_int64 size){
   CrashFile *pCrash = (CrashFile *)pFile;
   assert(size>=0);
   if( pCrash->iSize>size ){
@@ -462,7 +462,7 @@ static int cfTruncate(sqlite3_file *pFile, sqlite_int64 size){
 /*
 ** Sync a crash-file.
 */
-static int cfSync(sqlite3_file *pFile, int flags){
+static int cfSync(sqlite4_file *pFile, int flags){
   CrashFile *pCrash = (CrashFile *)pFile;
   int isCrash = 0;
 
@@ -486,7 +486,7 @@ static int cfSync(sqlite3_file *pFile, int flags){
 /*
 ** Return the current file-size of the crash-file.
 */
-static int cfFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
+static int cfFileSize(sqlite4_file *pFile, sqlite_int64 *pSize){
   CrashFile *pCrash = (CrashFile *)pFile;
   *pSize = (i64)pCrash->iSize;
   return SQLITE_OK;
@@ -495,16 +495,16 @@ static int cfFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
 /*
 ** Calls related to file-locks are passed on to the real file handle.
 */
-static int cfLock(sqlite3_file *pFile, int eLock){
-  return sqlite3OsLock(((CrashFile *)pFile)->pRealFile, eLock);
+static int cfLock(sqlite4_file *pFile, int eLock){
+  return sqlite4OsLock(((CrashFile *)pFile)->pRealFile, eLock);
 }
-static int cfUnlock(sqlite3_file *pFile, int eLock){
-  return sqlite3OsUnlock(((CrashFile *)pFile)->pRealFile, eLock);
+static int cfUnlock(sqlite4_file *pFile, int eLock){
+  return sqlite4OsUnlock(((CrashFile *)pFile)->pRealFile, eLock);
 }
-static int cfCheckReservedLock(sqlite3_file *pFile, int *pResOut){
-  return sqlite3OsCheckReservedLock(((CrashFile *)pFile)->pRealFile, pResOut);
+static int cfCheckReservedLock(sqlite4_file *pFile, int *pResOut){
+  return sqlite4OsCheckReservedLock(((CrashFile *)pFile)->pRealFile, pResOut);
 }
-static int cfFileControl(sqlite3_file *pFile, int op, void *pArg){
+static int cfFileControl(sqlite4_file *pFile, int op, void *pArg){
   if( op==SQLITE_FCNTL_SIZE_HINT ){
     CrashFile *pCrash = (CrashFile *)pFile;
     i64 nByte = *(i64 *)pArg;
@@ -515,7 +515,7 @@ static int cfFileControl(sqlite3_file *pFile, int op, void *pArg){
     }
     return SQLITE_OK;
   }
-  return sqlite3OsFileControl(((CrashFile *)pFile)->pRealFile, op, pArg);
+  return sqlite4OsFileControl(((CrashFile *)pFile)->pRealFile, op, pArg);
 }
 
 /*
@@ -523,36 +523,36 @@ static int cfFileControl(sqlite3_file *pFile, int op, void *pArg){
 ** the global values configured by the [sqlite_crashparams] tcl
 *  interface.
 */
-static int cfSectorSize(sqlite3_file *pFile){
+static int cfSectorSize(sqlite4_file *pFile){
   return g.iSectorSize;
 }
-static int cfDeviceCharacteristics(sqlite3_file *pFile){
+static int cfDeviceCharacteristics(sqlite4_file *pFile){
   return g.iDeviceCharacteristics;
 }
 
 /*
 ** Pass-throughs for WAL support.
 */
-static int cfShmLock(sqlite3_file *pFile, int ofst, int n, int flags){
-  return sqlite3OsShmLock(((CrashFile*)pFile)->pRealFile, ofst, n, flags);
+static int cfShmLock(sqlite4_file *pFile, int ofst, int n, int flags){
+  return sqlite4OsShmLock(((CrashFile*)pFile)->pRealFile, ofst, n, flags);
 }
-static void cfShmBarrier(sqlite3_file *pFile){
-  sqlite3OsShmBarrier(((CrashFile*)pFile)->pRealFile);
+static void cfShmBarrier(sqlite4_file *pFile){
+  sqlite4OsShmBarrier(((CrashFile*)pFile)->pRealFile);
 }
-static int cfShmUnmap(sqlite3_file *pFile, int delFlag){
-  return sqlite3OsShmUnmap(((CrashFile*)pFile)->pRealFile, delFlag);
+static int cfShmUnmap(sqlite4_file *pFile, int delFlag){
+  return sqlite4OsShmUnmap(((CrashFile*)pFile)->pRealFile, delFlag);
 }
 static int cfShmMap(
-  sqlite3_file *pFile,            /* Handle open on database file */
+  sqlite4_file *pFile,            /* Handle open on database file */
   int iRegion,                    /* Region to retrieve */
   int sz,                         /* Size of regions */
   int w,                          /* True to extend file if necessary */
   void volatile **pp              /* OUT: Mapped memory */
 ){
-  return sqlite3OsShmMap(((CrashFile*)pFile)->pRealFile, iRegion, sz, w, pp);
+  return sqlite4OsShmMap(((CrashFile*)pFile)->pRealFile, iRegion, sz, w, pp);
 }
 
-static const sqlite3_io_methods CrashFileVtab = {
+static const sqlite4_io_methods CrashFileVtab = {
   2,                            /* iVersion */
   cfClose,                      /* xClose */
   cfRead,                       /* xRead */
@@ -576,7 +576,7 @@ static const sqlite3_io_methods CrashFileVtab = {
 ** Application data for the crash VFS
 */
 struct crashAppData {
-  sqlite3_vfs *pOrig;                   /* Wrapped vfs structure */
+  sqlite4_vfs *pOrig;                   /* Wrapped vfs structure */
 };
 
 /*
@@ -585,30 +585,30 @@ struct crashAppData {
 ** The caller will have allocated pVfs->szOsFile bytes of space
 ** at pFile. This file uses this space for the CrashFile structure
 ** and allocates space for the "real" file structure using 
-** sqlite3_malloc(). The assumption here is (pVfs->szOsFile) is
+** sqlite4_malloc(). The assumption here is (pVfs->szOsFile) is
 ** equal or greater than sizeof(CrashFile).
 */
 static int cfOpen(
-  sqlite3_vfs *pCfVfs,
+  sqlite4_vfs *pCfVfs,
   const char *zName,
-  sqlite3_file *pFile,
+  sqlite4_file *pFile,
   int flags,
   int *pOutFlags
 ){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   int rc;
   CrashFile *pWrapper = (CrashFile *)pFile;
-  sqlite3_file *pReal = (sqlite3_file*)&pWrapper[1];
+  sqlite4_file *pReal = (sqlite4_file*)&pWrapper[1];
 
   memset(pWrapper, 0, sizeof(CrashFile));
-  rc = sqlite3OsOpen(pVfs, zName, pReal, flags, pOutFlags);
+  rc = sqlite4OsOpen(pVfs, zName, pReal, flags, pOutFlags);
 
   if( rc==SQLITE_OK ){
     i64 iSize;
     pWrapper->pMethod = &CrashFileVtab;
     pWrapper->zName = (char *)zName;
     pWrapper->pRealFile = pReal;
-    rc = sqlite3OsFileSize(pReal, &iSize);
+    rc = sqlite4OsFileSize(pReal, &iSize);
     pWrapper->iSize = (int)iSize;
     pWrapper->flags = flags;
   }
@@ -627,70 +627,70 @@ static int cfOpen(
         iChunk = PENDING_BYTE;
       }
       memset(pWrapper->zData, 0, pWrapper->nData);
-      rc = sqlite3OsRead(pReal, pWrapper->zData, iChunk, 0); 
+      rc = sqlite4OsRead(pReal, pWrapper->zData, iChunk, 0); 
       if( SQLITE_OK==rc && pWrapper->iSize>(PENDING_BYTE+512) && isDb ){
         i64 iOff = PENDING_BYTE+512;
         iChunk = pWrapper->iSize - iOff;
-        rc = sqlite3OsRead(pReal, &pWrapper->zData[iOff], iChunk, iOff);
+        rc = sqlite4OsRead(pReal, &pWrapper->zData[iOff], iChunk, iOff);
       }
     }else{
       rc = SQLITE_NOMEM;
     }
   }
   if( rc!=SQLITE_OK && pWrapper->pMethod ){
-    sqlite3OsClose(pFile);
+    sqlite4OsClose(pFile);
   }
   return rc;
 }
 
-static int cfDelete(sqlite3_vfs *pCfVfs, const char *zPath, int dirSync){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+static int cfDelete(sqlite4_vfs *pCfVfs, const char *zPath, int dirSync){
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   return pVfs->xDelete(pVfs, zPath, dirSync);
 }
 static int cfAccess(
-  sqlite3_vfs *pCfVfs, 
+  sqlite4_vfs *pCfVfs, 
   const char *zPath, 
   int flags, 
   int *pResOut
 ){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   return pVfs->xAccess(pVfs, zPath, flags, pResOut);
 }
 static int cfFullPathname(
-  sqlite3_vfs *pCfVfs, 
+  sqlite4_vfs *pCfVfs, 
   const char *zPath, 
   int nPathOut,
   char *zPathOut
 ){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   return pVfs->xFullPathname(pVfs, zPath, nPathOut, zPathOut);
 }
-static void *cfDlOpen(sqlite3_vfs *pCfVfs, const char *zPath){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+static void *cfDlOpen(sqlite4_vfs *pCfVfs, const char *zPath){
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   return pVfs->xDlOpen(pVfs, zPath);
 }
-static void cfDlError(sqlite3_vfs *pCfVfs, int nByte, char *zErrMsg){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+static void cfDlError(sqlite4_vfs *pCfVfs, int nByte, char *zErrMsg){
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   pVfs->xDlError(pVfs, nByte, zErrMsg);
 }
-static void (*cfDlSym(sqlite3_vfs *pCfVfs, void *pH, const char *zSym))(void){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+static void (*cfDlSym(sqlite4_vfs *pCfVfs, void *pH, const char *zSym))(void){
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   return pVfs->xDlSym(pVfs, pH, zSym);
 }
-static void cfDlClose(sqlite3_vfs *pCfVfs, void *pHandle){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+static void cfDlClose(sqlite4_vfs *pCfVfs, void *pHandle){
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   pVfs->xDlClose(pVfs, pHandle);
 }
-static int cfRandomness(sqlite3_vfs *pCfVfs, int nByte, char *zBufOut){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+static int cfRandomness(sqlite4_vfs *pCfVfs, int nByte, char *zBufOut){
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   return pVfs->xRandomness(pVfs, nByte, zBufOut);
 }
-static int cfSleep(sqlite3_vfs *pCfVfs, int nMicro){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+static int cfSleep(sqlite4_vfs *pCfVfs, int nMicro){
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   return pVfs->xSleep(pVfs, nMicro);
 }
-static int cfCurrentTime(sqlite3_vfs *pCfVfs, double *pTimeOut){
-  sqlite3_vfs *pVfs = (sqlite3_vfs *)pCfVfs->pAppData;
+static int cfCurrentTime(sqlite4_vfs *pCfVfs, double *pTimeOut){
+  sqlite4_vfs *pVfs = (sqlite4_vfs *)pCfVfs->pAppData;
   return pVfs->xCurrentTime(pVfs, pTimeOut);
 }
 
@@ -800,7 +800,7 @@ static int crashEnableCmd(
   Tcl_Obj *CONST objv[]
 ){
   int isEnable;
-  static sqlite3_vfs crashVfs = {
+  static sqlite4_vfs crashVfs = {
     2,                  /* iVersion */
     0,                  /* szOsFile */
     0,                  /* mxPathname */
@@ -837,14 +837,14 @@ static int crashEnableCmd(
   }
 
   if( crashVfs.pAppData==0 ){
-    sqlite3_vfs *pOriginalVfs = sqlite3_vfs_find(0);
+    sqlite4_vfs *pOriginalVfs = sqlite4_vfs_find(0);
     crashVfs.mxPathname = pOriginalVfs->mxPathname;
     crashVfs.pAppData = (void *)pOriginalVfs;
     crashVfs.szOsFile = sizeof(CrashFile) + pOriginalVfs->szOsFile;
-    sqlite3_vfs_register(&crashVfs, 0);
+    sqlite4_vfs_register(&crashVfs, 0);
   }else{
     crashVfs.pAppData = 0;
-    sqlite3_vfs_unregister(&crashVfs);
+    sqlite4_vfs_unregister(&crashVfs);
   }
 
   return TCL_OK;
@@ -908,7 +908,7 @@ static int crashParamsObjCmd(
 
   g.iCrash = iDelay;
   memcpy(g.zCrashFile, zCrashFile, nCrashFile+1);
-  sqlite3CrashTestEnable = 1;
+  sqlite4CrashTestEnable = 1;
   return TCL_OK;
 
 error:
@@ -999,9 +999,9 @@ static int jtUnregisterObjCmd(
 */
 int Sqlitetest6_Init(Tcl_Interp *interp){
 #ifndef SQLITE_OMIT_DISKIO
-  Tcl_CreateObjCommand(interp, "sqlite3_crash_enable", crashEnableCmd, 0, 0);
-  Tcl_CreateObjCommand(interp, "sqlite3_crashparams", crashParamsObjCmd, 0, 0);
-  Tcl_CreateObjCommand(interp, "sqlite3_simulate_device", devSymObjCmd, 0, 0);
+  Tcl_CreateObjCommand(interp, "sqlite4_crash_enable", crashEnableCmd, 0, 0);
+  Tcl_CreateObjCommand(interp, "sqlite4_crashparams", crashParamsObjCmd, 0, 0);
+  Tcl_CreateObjCommand(interp, "sqlite4_simulate_device", devSymObjCmd, 0, 0);
   Tcl_CreateObjCommand(interp, "register_jt_vfs", jtObjCmd, 0, 0);
   Tcl_CreateObjCommand(interp, "unregister_jt_vfs", jtUnregisterObjCmd, 0, 0);
 #endif

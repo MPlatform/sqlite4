@@ -29,7 +29,7 @@
 ** binary data.  zBuf[] is 2*n+1 bytes long.  Overwrite zBuf[]
 ** with a hexadecimal representation of its original binary input.
 */
-void sqlite3TestBinToHex(unsigned char *zBuf, int N){
+void sqlite4TestBinToHex(unsigned char *zBuf, int N){
   const unsigned char zHex[] = "0123456789ABCDEF";
   int i, j;
   unsigned char c;
@@ -49,7 +49,7 @@ void sqlite3TestBinToHex(unsigned char *zBuf, int N){
 ** the binary data.  Spaces in the original input are ignored.
 ** Return the number of bytes of binary rendered.
 */
-int sqlite3TestHexToBin(const unsigned char *zIn, int N, unsigned char *aOut){
+int sqlite4TestHexToBin(const unsigned char *zIn, int N, unsigned char *aOut){
   const unsigned char aMap[] = {
      0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
      0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
@@ -113,7 +113,7 @@ static int hexio_read(
   if( Tcl_GetIntFromObj(interp, objv[2], &offset) ) return TCL_ERROR;
   if( Tcl_GetIntFromObj(interp, objv[3], &amt) ) return TCL_ERROR;
   zFile = Tcl_GetString(objv[1]);
-  zBuf = sqlite3_malloc( amt*2+1 );
+  zBuf = sqlite4_malloc( amt*2+1 );
   if( zBuf==0 ){
     return TCL_ERROR;
   }
@@ -131,9 +131,9 @@ static int hexio_read(
   if( got<0 ){
     got = 0;
   }
-  sqlite3TestBinToHex(zBuf, got);
+  sqlite4TestBinToHex(zBuf, got);
   Tcl_AppendResult(interp, zBuf, 0);
-  sqlite3_free(zBuf);
+  sqlite4_free(zBuf);
   return TCL_OK;
 }
 
@@ -164,11 +164,11 @@ static int hexio_write(
   if( Tcl_GetIntFromObj(interp, objv[2], &offset) ) return TCL_ERROR;
   zFile = Tcl_GetString(objv[1]);
   zIn = (const unsigned char *)Tcl_GetStringFromObj(objv[3], &nIn);
-  aOut = sqlite3_malloc( nIn/2 );
+  aOut = sqlite4_malloc( nIn/2 );
   if( aOut==0 ){
     return TCL_ERROR;
   }
-  nOut = sqlite3TestHexToBin(zIn, nIn, aOut);
+  nOut = sqlite4TestHexToBin(zIn, nIn, aOut);
   out = fopen(zFile, "r+b");
   if( out==0 ){
     out = fopen(zFile, "r+");
@@ -179,7 +179,7 @@ static int hexio_write(
   }
   fseek(out, offset, SEEK_SET);
   written = fwrite(aOut, 1, nOut, out);
-  sqlite3_free(aOut);
+  sqlite4_free(aOut);
   fclose(out);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(written));
   return TCL_OK;
@@ -209,18 +209,18 @@ static int hexio_get_int(
     return TCL_ERROR;
   }
   zIn = (const unsigned char *)Tcl_GetStringFromObj(objv[1], &nIn);
-  aOut = sqlite3_malloc( nIn/2 );
+  aOut = sqlite4_malloc( nIn/2 );
   if( aOut==0 ){
     return TCL_ERROR;
   }
-  nOut = sqlite3TestHexToBin(zIn, nIn, aOut);
+  nOut = sqlite4TestHexToBin(zIn, nIn, aOut);
   if( nOut>=4 ){
     memcpy(aNum, aOut, 4);
   }else{
     memset(aNum, 0, sizeof(aNum));
     memcpy(&aNum[4-nOut], aOut, nOut);
   }
-  sqlite3_free(aOut);
+  sqlite4_free(aOut);
   val = (aNum[0]<<24) | (aNum[1]<<16) | (aNum[2]<<8) | aNum[3];
   Tcl_SetObjResult(interp, Tcl_NewIntObj(val));
   return TCL_OK;
@@ -248,7 +248,7 @@ static int hexio_render_int16(
   if( Tcl_GetIntFromObj(interp, objv[1], &val) ) return TCL_ERROR;
   aNum[0] = val>>8;
   aNum[1] = val;
-  sqlite3TestBinToHex(aNum, 2);
+  sqlite4TestBinToHex(aNum, 2);
   Tcl_SetObjResult(interp, Tcl_NewStringObj((char*)aNum, 4));
   return TCL_OK;
 }
@@ -277,7 +277,7 @@ static int hexio_render_int32(
   aNum[1] = val>>16;
   aNum[2] = val>>8;
   aNum[3] = val;
-  sqlite3TestBinToHex(aNum, 4);
+  sqlite4TestBinToHex(aNum, 4);
   Tcl_SetObjResult(interp, Tcl_NewStringObj((char*)aNum, 8));
   return TCL_OK;
 }
@@ -287,7 +287,7 @@ static int hexio_render_int32(
 **
 ** The argument is a UTF8 string represented in hexadecimal.
 ** The UTF8 might not be well-formed.  Run this string through
-** sqlite3Utf8to8() convert it back to hex and return the result.
+** sqlite4Utf8to8() convert it back to hex and return the result.
 */
 static int utf8_to_utf8(
   void * clientData,
@@ -305,13 +305,13 @@ static int utf8_to_utf8(
     return TCL_ERROR;
   }
   zOrig = (unsigned char *)Tcl_GetStringFromObj(objv[1], &n);
-  z = sqlite3_malloc( n+3 );
-  n = sqlite3TestHexToBin(zOrig, n, z);
+  z = sqlite4_malloc( n+3 );
+  n = sqlite4TestHexToBin(zOrig, n, z);
   z[n] = 0;
-  nOut = sqlite3Utf8To8(z);
-  sqlite3TestBinToHex(z,nOut);
+  nOut = sqlite4Utf8To8(z);
+  sqlite4TestBinToHex(z,nOut);
   Tcl_AppendResult(interp, (char*)z, 0);
-  sqlite3_free(z);
+  sqlite4_free(z);
   return TCL_OK;
 #else
   Tcl_AppendResult(interp, 
@@ -348,7 +348,7 @@ static int read_fts3varint(
 ){
   int nBlob;
   unsigned char *zBlob;
-  sqlite3_int64 iVal;
+  sqlite4_int64 iVal;
   int nVal;
 
   if( objc!=3 ){
@@ -357,7 +357,7 @@ static int read_fts3varint(
   }
   zBlob = Tcl_GetByteArrayFromObj(objv[1], &nBlob);
 
-  nVal = getFts3Varint((char*)zBlob, (sqlite3_int64 *)(&iVal));
+  nVal = getFts3Varint((char*)zBlob, (sqlite4_int64 *)(&iVal));
   Tcl_ObjSetVar2(interp, objv[2], 0, Tcl_NewWideIntObj(iVal), 0);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(nVal));
   return TCL_OK;

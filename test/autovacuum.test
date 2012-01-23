@@ -453,7 +453,7 @@ do_test autovacuum-3.1 {
 } {1}
 do_test autovacuum-3.2 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA auto_vacuum;
   }
@@ -468,7 +468,7 @@ do_test autovacuum-3.3 {
 do_test autovacuum-3.4 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA auto_vacuum;
   }
@@ -503,7 +503,7 @@ do_test autovacuum-4.0 {
   #
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA auto_vacuum = 1;
     PRAGMA auto_vacuum;
@@ -543,7 +543,7 @@ ifcapable integrityck {
 # Ticket #1727
 do_test autovacuum-5.1 {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db eval {
     PRAGMA auto_vacuum=1;
     CREATE TABLE t1(a);
@@ -571,7 +571,7 @@ ifcapable integrityck&&memorydb {
 
 do_test autovacuum-6.1 {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db eval {
     PRAGMA auto_vacuum=1;
     CREATE TABLE t1(a, b);
@@ -601,7 +601,7 @@ do_test autovacuum-7.1 {
   db close
   forcedelete test.db
   forcedelete test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   execsql {
     PRAGMA auto_vacuum=1;
@@ -633,7 +633,7 @@ do_test autovacuum-7.2 {
 
 do_test autovacuum-7.3 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     BEGIN;
     DELETE FROM t4;
@@ -650,8 +650,8 @@ do_test autovacuum-7.3 {
 #
 do_test autovacuum-8.1 {
   db close
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   db eval {PRAGMA auto_vacuum}
 } {1}
 if {[permutation] == ""} {

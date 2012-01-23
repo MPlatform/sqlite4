@@ -21,7 +21,7 @@ ifcapable !fts3 {
 # Clean up anything left over from a previous pass.
 forcedelete test2.db
 forcedelete test2.db-journal
-sqlite3 db2 test2.db
+sqlite4 db2 test2.db
 
 db eval {
   CREATE VIRTUAL TABLE t3 USING fts3(content);

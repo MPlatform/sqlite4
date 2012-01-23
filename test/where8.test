@@ -148,7 +148,7 @@ if 0 {
 ifcapable vtab {
   # Register the 'echo' module used for testing virtual tables.
   #
-  register_echo_module [sqlite3_connection_pointer db]
+  register_echo_module [sqlite4_connection_pointer db]
 
   do_test where8-2.1 {
     execsql {
@@ -677,8 +677,8 @@ catch {unset B}
 # 
 do_test where8-5.1 {
   db close
-  sqlite3 db test.db
-  sqlite3_db_config_lookaside db 0 0 0
+  sqlite4 db test.db
+  sqlite4_db_config_lookaside db 0 0 0
   execsql {
     CREATE TABLE tA(
       a, b, c, d, e, f, g, h, 

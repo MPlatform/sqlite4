@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
 # focus of this file is testing the handling of OOM errors by the
-# sqlite3_backup_XXX APIs.
+# sqlite4_backup_XXX APIs.
 #
 # $Id: backup_malloc.test,v 1.2 2009/02/04 22:46:47 drh Exp $
 
@@ -35,14 +35,14 @@ do_malloc_test backup_malloc-1 -tclprep {
     CREATE INDEX i1 ON t1(b);
     COMMIT;
   }
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   execsql { PRAGMA cache_size = 10 } db2
 } -tclbody {
 
   # Create a backup object.
   #
-  set rc [catch {sqlite3_backup B db2 main db main}]
-  if {$rc && [sqlite3_errcode db2] == "SQLITE_NOMEM"} {
+  set rc [catch {sqlite4_backup B db2 main db main}]
+  if {$rc && [sqlite4_errcode db2] == "SQLITE_NOMEM"} {
     error "out of memory"
   }
 
@@ -72,10 +72,10 @@ do_malloc_test backup_malloc-1 -tclprep {
 }
 
 do_malloc_test backup_malloc-2 -tclprep {
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
 } -tclbody {
-  set rc [catch {sqlite3_backup B db2 temp db main}]
-  set errcode [sqlite3_errcode db2]
+  set rc [catch {sqlite4_backup B db2 temp db main}]
+  set errcode [sqlite4_errcode db2]
   if {$rc && ($errcode == "SQLITE_NOMEM" || $errcode == "SQLITE_IOERR_NOMEM")} {
     error "out of memory"
   }

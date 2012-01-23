@@ -112,9 +112,9 @@ do_ioerr_test incrblob_err-7 -cksum 1 -sqlprep {
   # "blobs". This forces the IO error to occur while reading a pointer
   # map page for the purposes of seeking to the end of the blob.
   #
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   set ::blob [db2 incrblob blobs v 1]
-  sqlite3_blob_read $::blob [expr 500*1020-20] 20
+  sqlite4_blob_read $::blob [expr 500*1020-20] 20
   close $::blob
 }
 catch {db2 close}
@@ -128,9 +128,9 @@ do_ioerr_test incrblob_err-8 -cksum 1 -sqlprep {
   # "blobs". This forces the IO error to occur while reading a pointer
   # map page for the purposes of seeking to the end of the blob.
   #
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   set ::blob [db2 incrblob blobs v 1]
-  sqlite3_blob_write $::blob [expr 500*1020-20] 12345678900987654321
+  sqlite4_blob_write $::blob [expr 500*1020-20] 12345678900987654321
   close $::blob
 }
 

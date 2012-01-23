@@ -17,7 +17,7 @@
 ** leaks and memory usage errors.
 **
 ** This file contains implementations of the low-level memory allocation
-** routines specified in the sqlite3_mem_methods object.
+** routines specified in the sqlite4_mem_methods object.
 */
 #include "sqliteInt.h"
 
@@ -84,7 +84,7 @@ static struct {
   /*
   ** Mutex to control access to the memory allocation subsystem.
   */
-  sqlite3_mutex *mutex;
+  sqlite4_mutex *mutex;
 
   /*
   ** Head and tail of a linked list of all outstanding allocations
@@ -105,8 +105,8 @@ static struct {
   char zTitle[100];  /* The title text */
 
   /* 
-  ** sqlite3MallocDisallow() increments the following counter.
-  ** sqlite3MallocAllow() decrements it.
+  ** sqlite4MallocDisallow() increments the following counter.
+  ** sqlite4MallocAllow() decrements it.
   */
   int disallow; /* Do not allow memory allocation */
 
@@ -149,7 +149,7 @@ static void adjustStats(int iSize, int increment){
 ** This routine checks the guards at either end of the allocation and
 ** if they are incorrect it asserts.
 */
-static struct MemBlockHdr *sqlite3MemsysGetHeader(void *pAllocation){
+static struct MemBlockHdr *sqlite4MemsysGetHeader(void *pAllocation){
   struct MemBlockHdr *p;
   int *pInt;
   u8 *pU8;
@@ -173,25 +173,25 @@ static struct MemBlockHdr *sqlite3MemsysGetHeader(void *pAllocation){
 /*
 ** Return the number of bytes currently allocated at address p.
 */
-static int sqlite3MemSize(void *p){
+static int sqlite4MemSize(void *p){
   struct MemBlockHdr *pHdr;
   if( !p ){
     return 0;
   }
-  pHdr = sqlite3MemsysGetHeader(p);
+  pHdr = sqlite4MemsysGetHeader(p);
   return pHdr->iSize;
 }
 
 /*
 ** Initialize the memory allocation subsystem.
 */
-static int sqlite3MemInit(void *NotUsed){
+static int sqlite4MemInit(void *NotUsed){
   UNUSED_PARAMETER(NotUsed);
   assert( (sizeof(struct MemBlockHdr)&7) == 0 );
-  if( !sqlite3GlobalConfig.bMemstat ){
+  if( !sqlite4GlobalConfig.bMemstat ){
     /* If memory status is enabled, then the malloc.c wrapper will already
     ** hold the STATIC_MEM mutex when the routines here are invoked. */
-    mem.mutex = sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
+    mem.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
   }
   return SQLITE_OK;
 }
@@ -199,7 +199,7 @@ static int sqlite3MemInit(void *NotUsed){
 /*
 ** Deinitialize the memory allocation subsystem.
 */
-static void sqlite3MemShutdown(void *NotUsed){
+static void sqlite4MemShutdown(void *NotUsed){
   UNUSED_PARAMETER(NotUsed);
   mem.mutex = 0;
 }
@@ -207,7 +207,7 @@ static void sqlite3MemShutdown(void *NotUsed){
 /*
 ** Round up a request size to the next valid allocation size.
 */
-static int sqlite3MemRoundup(int n){
+static int sqlite4MemRoundup(int n){
   return ROUND8(n);
 }
 
@@ -239,7 +239,7 @@ static void randomFill(char *pBuf, int nByte){
 /*
 ** Allocate nByte bytes of memory.
 */
-static void *sqlite3MemMalloc(int nByte){
+static void *sqlite4MemMalloc(int nByte){
   struct MemBlockHdr *pHdr;
   void **pBt;
   char *z;
@@ -247,7 +247,7 @@ static void *sqlite3MemMalloc(int nByte){
   void *p = 0;
   int totalSize;
   int nReserve;
-  sqlite3_mutex_enter(mem.mutex);
+  sqlite4_mutex_enter(mem.mutex);
   assert( mem.disallow==0 );
   nReserve = ROUND8(nByte);
   totalSize = nReserve + sizeof(*pHdr) + sizeof(int) +
@@ -291,23 +291,23 @@ static void *sqlite3MemMalloc(int nByte){
     memset(((char*)pInt)+nByte, 0x65, nReserve-nByte);
     p = (void*)pInt;
   }
-  sqlite3_mutex_leave(mem.mutex);
+  sqlite4_mutex_leave(mem.mutex);
   return p; 
 }
 
 /*
 ** Free memory.
 */
-static void sqlite3MemFree(void *pPrior){
+static void sqlite4MemFree(void *pPrior){
   struct MemBlockHdr *pHdr;
   void **pBt;
   char *z;
-  assert( sqlite3GlobalConfig.bMemstat || sqlite3GlobalConfig.bCoreMutex==0 
+  assert( sqlite4GlobalConfig.bMemstat || sqlite4GlobalConfig.bCoreMutex==0 
        || mem.mutex!=0 );
-  pHdr = sqlite3MemsysGetHeader(pPrior);
+  pHdr = sqlite4MemsysGetHeader(pPrior);
   pBt = (void**)pHdr;
   pBt -= pHdr->nBacktraceSlots;
-  sqlite3_mutex_enter(mem.mutex);
+  sqlite4_mutex_enter(mem.mutex);
   if( pHdr->pPrev ){
     assert( pHdr->pPrev->pNext==pHdr );
     pHdr->pPrev->pNext = pHdr->pNext;
@@ -328,7 +328,7 @@ static void sqlite3MemFree(void *pPrior){
   randomFill(z, sizeof(void*)*pHdr->nBacktraceSlots + sizeof(*pHdr) +
                 pHdr->iSize + sizeof(int) + pHdr->nTitle);
   free(z);
-  sqlite3_mutex_leave(mem.mutex);  
+  sqlite4_mutex_leave(mem.mutex);  
 }
 
 /*
@@ -340,48 +340,48 @@ static void sqlite3MemFree(void *pPrior){
 ** much more likely to break and we are much more liking to find
 ** the error.
 */
-static void *sqlite3MemRealloc(void *pPrior, int nByte){
+static void *sqlite4MemRealloc(void *pPrior, int nByte){
   struct MemBlockHdr *pOldHdr;
   void *pNew;
   assert( mem.disallow==0 );
   assert( (nByte & 7)==0 );     /* EV: R-46199-30249 */
-  pOldHdr = sqlite3MemsysGetHeader(pPrior);
-  pNew = sqlite3MemMalloc(nByte);
+  pOldHdr = sqlite4MemsysGetHeader(pPrior);
+  pNew = sqlite4MemMalloc(nByte);
   if( pNew ){
     memcpy(pNew, pPrior, nByte<pOldHdr->iSize ? nByte : pOldHdr->iSize);
     if( nByte>pOldHdr->iSize ){
       randomFill(&((char*)pNew)[pOldHdr->iSize], nByte - pOldHdr->iSize);
     }
-    sqlite3MemFree(pPrior);
+    sqlite4MemFree(pPrior);
   }
   return pNew;
 }
 
 /*
 ** Populate the low-level memory allocation function pointers in
-** sqlite3GlobalConfig.m with pointers to the routines in this file.
+** sqlite4GlobalConfig.m with pointers to the routines in this file.
 */
-void sqlite3MemSetDefault(void){
-  static const sqlite3_mem_methods defaultMethods = {
-     sqlite3MemMalloc,
-     sqlite3MemFree,
-     sqlite3MemRealloc,
-     sqlite3MemSize,
-     sqlite3MemRoundup,
-     sqlite3MemInit,
-     sqlite3MemShutdown,
+void sqlite4MemSetDefault(void){
+  static const sqlite4_mem_methods defaultMethods = {
+     sqlite4MemMalloc,
+     sqlite4MemFree,
+     sqlite4MemRealloc,
+     sqlite4MemSize,
+     sqlite4MemRoundup,
+     sqlite4MemInit,
+     sqlite4MemShutdown,
      0
   };
-  sqlite3_config(SQLITE_CONFIG_MALLOC, &defaultMethods);
+  sqlite4_config(SQLITE_CONFIG_MALLOC, &defaultMethods);
 }
 
 /*
 ** Set the "type" of an allocation.
 */
-void sqlite3MemdebugSetType(void *p, u8 eType){
-  if( p && sqlite3GlobalConfig.m.xMalloc==sqlite3MemMalloc ){
+void sqlite4MemdebugSetType(void *p, u8 eType){
+  if( p && sqlite4GlobalConfig.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
-    pHdr = sqlite3MemsysGetHeader(p);
+    pHdr = sqlite4MemsysGetHeader(p);
     assert( pHdr->iForeGuard==FOREGUARD );
     pHdr->eType = eType;
   }
@@ -394,13 +394,13 @@ void sqlite3MemdebugSetType(void *p, u8 eType){
 ** This routine is designed for use within an assert() statement, to
 ** verify the type of an allocation.  For example:
 **
-**     assert( sqlite3MemdebugHasType(p, MEMTYPE_DB) );
+**     assert( sqlite4MemdebugHasType(p, MEMTYPE_DB) );
 */
-int sqlite3MemdebugHasType(void *p, u8 eType){
+int sqlite4MemdebugHasType(void *p, u8 eType){
   int rc = 1;
-  if( p && sqlite3GlobalConfig.m.xMalloc==sqlite3MemMalloc ){
+  if( p && sqlite4GlobalConfig.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
-    pHdr = sqlite3MemsysGetHeader(p);
+    pHdr = sqlite4MemsysGetHeader(p);
     assert( pHdr->iForeGuard==FOREGUARD );         /* Allocation is valid */
     if( (pHdr->eType&eType)==0 ){
       rc = 0;
@@ -416,13 +416,13 @@ int sqlite3MemdebugHasType(void *p, u8 eType){
 ** This routine is designed for use within an assert() statement, to
 ** verify the type of an allocation.  For example:
 **
-**     assert( sqlite3MemdebugNoType(p, MEMTYPE_DB) );
+**     assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
 */
-int sqlite3MemdebugNoType(void *p, u8 eType){
+int sqlite4MemdebugNoType(void *p, u8 eType){
   int rc = 1;
-  if( p && sqlite3GlobalConfig.m.xMalloc==sqlite3MemMalloc ){
+  if( p && sqlite4GlobalConfig.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
-    pHdr = sqlite3MemsysGetHeader(p);
+    pHdr = sqlite4MemsysGetHeader(p);
     assert( pHdr->iForeGuard==FOREGUARD );         /* Allocation is valid */
     if( (pHdr->eType&eType)!=0 ){
       rc = 0;
@@ -436,31 +436,31 @@ int sqlite3MemdebugNoType(void *p, u8 eType){
 ** A value of zero turns off backtracing.  The number is always rounded
 ** up to a multiple of 2.
 */
-void sqlite3MemdebugBacktrace(int depth){
+void sqlite4MemdebugBacktrace(int depth){
   if( depth<0 ){ depth = 0; }
   if( depth>20 ){ depth = 20; }
   depth = (depth+1)&0xfe;
   mem.nBacktrace = depth;
 }
 
-void sqlite3MemdebugBacktraceCallback(void (*xBacktrace)(int, int, void **)){
+void sqlite4MemdebugBacktraceCallback(void (*xBacktrace)(int, int, void **)){
   mem.xBacktrace = xBacktrace;
 }
 
 /*
 ** Set the title string for subsequent allocations.
 */
-void sqlite3MemdebugSettitle(const char *zTitle){
-  unsigned int n = sqlite3Strlen30(zTitle) + 1;
-  sqlite3_mutex_enter(mem.mutex);
+void sqlite4MemdebugSettitle(const char *zTitle){
+  unsigned int n = sqlite4Strlen30(zTitle) + 1;
+  sqlite4_mutex_enter(mem.mutex);
   if( n>=sizeof(mem.zTitle) ) n = sizeof(mem.zTitle)-1;
   memcpy(mem.zTitle, zTitle, n);
   mem.zTitle[n] = 0;
   mem.nTitle = ROUND8(n);
-  sqlite3_mutex_leave(mem.mutex);
+  sqlite4_mutex_leave(mem.mutex);
 }
 
-void sqlite3MemdebugSync(){
+void sqlite4MemdebugSync(){
   struct MemBlockHdr *pHdr;
   for(pHdr=mem.pFirst; pHdr; pHdr=pHdr->pNext){
     void **pBt = (void**)pHdr;
@@ -473,7 +473,7 @@ void sqlite3MemdebugSync(){
 ** Open the file indicated and write a log of all unfreed memory 
 ** allocations into that log.
 */
-void sqlite3MemdebugDump(const char *zFilename){
+void sqlite4MemdebugDump(const char *zFilename){
   FILE *out;
   struct MemBlockHdr *pHdr;
   void **pBt;
@@ -513,9 +513,9 @@ void sqlite3MemdebugDump(const char *zFilename){
 }
 
 /*
-** Return the number of times sqlite3MemMalloc() has been called.
+** Return the number of times sqlite4MemMalloc() has been called.
 */
-int sqlite3MemdebugMallocCount(){
+int sqlite4MemdebugMallocCount(){
   int i;
   int nTotal = 0;
   for(i=0; i<NCSIZE; i++){

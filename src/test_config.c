@@ -477,7 +477,7 @@ Tcl_SetVar2(interp, "sqlite_options", "long_double",
 
   Tcl_SetVar2(interp, "sqlite_options", "threadsafe", 
       STRINGVALUE(SQLITE_THREADSAFE), TCL_GLOBAL_ONLY);
-  assert( sqlite3_threadsafe()==SQLITE_THREADSAFE );
+  assert( sqlite4_threadsafe()==SQLITE_THREADSAFE );
 
 #ifdef SQLITE_OMIT_TEMPDB
   Tcl_SetVar2(interp, "sqlite_options", "tempdb", "0", TCL_GLOBAL_ONLY);

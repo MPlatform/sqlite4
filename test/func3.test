@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library. The
 # focus of this file is testing that destructor functions associated
-# with functions created using sqlite3_create_function_v2() is 
+# with functions created using sqlite4_create_function_v2() is 
 # correctly invoked.
 #
 set testdir [file dirname $argv0]
@@ -21,19 +21,19 @@ ifcapable utf16 {
   do_test func3-1.1 {
     set destroyed 0
     proc destroy {} { set ::destroyed 1 }
-    sqlite3_create_function_v2 db f2 -1 any -func f2 -destroy destroy
+    sqlite4_create_function_v2 db f2 -1 any -func f2 -destroy destroy
     set destroyed
   } 0
   do_test func3-1.2 {
-    sqlite3_create_function_v2 db f2 -1 utf8 -func f2
+    sqlite4_create_function_v2 db f2 -1 utf8 -func f2
     set destroyed
   } 0
   do_test func3-1.3 {
-    sqlite3_create_function_v2 db f2 -1 utf16le -func f2
+    sqlite4_create_function_v2 db f2 -1 utf16le -func f2
     set destroyed
   } 0
   do_test func3-1.4 {
-    sqlite3_create_function_v2 db f2 -1 utf16be -func f2
+    sqlite4_create_function_v2 db f2 -1 utf16be -func f2
     set destroyed
   } 1
 }
@@ -41,18 +41,18 @@ ifcapable utf16 {
 do_test func3-2.1 {
   set destroyed 0
   proc destroy {} { set ::destroyed 1 }
-  sqlite3_create_function_v2 db f3 -1 utf8 -func f3 -destroy destroy
+  sqlite4_create_function_v2 db f3 -1 utf8 -func f3 -destroy destroy
   set destroyed
 } 0
 do_test func3-2.2 {
-  sqlite3_create_function_v2 db f3 -1 utf8 -func f3
+  sqlite4_create_function_v2 db f3 -1 utf8 -func f3
   set destroyed
 } 1
 
 do_test func3-3.1 {
   set destroyed 0
   proc destroy {} { set ::destroyed 1 }
-  sqlite3_create_function_v2 db f3 -1 any -func f3 -destroy destroy
+  sqlite4_create_function_v2 db f3 -1 any -func f3 -destroy destroy
   set destroyed
 } 0
 do_test func3-3.2 {
@@ -60,11 +60,11 @@ do_test func3-3.2 {
   set destroyed
 } 1
 
-sqlite3 db test.db
+sqlite4 db test.db
 do_test func3-4.1 {
   set destroyed 0
   set rc [catch { 
-    sqlite3_create_function_v2 db f3 -1 any -func f3 -step f3 -destroy destroy
+    sqlite4_create_function_v2 db f3 -1 any -func f3 -step f3 -destroy destroy
   } msg]
   list $rc $msg
 } {1 SQLITE_MISUSE}

@@ -29,13 +29,13 @@ do_test index-1.1b {
 } {index1 {CREATE INDEX index1 ON test1(f1)} test1 index}
 do_test index-1.1c {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {SELECT name, sql, tbl_name, type FROM sqlite_master 
            WHERE name='index1'}
 } {index1 {CREATE INDEX index1 ON test1(f1)} test1 index}
 do_test index-1.1d {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {SELECT name FROM sqlite_master WHERE type!='meta' ORDER BY name}
 } {index1 test1}
 
@@ -363,7 +363,7 @@ integrity_check index-11.2
 # same number they should compare equal to one another.  Verify that this
 # is true in indices.
 #
-# Updated for sqlite3 v3: SQLite will now store these values as numbers
+# Updated for sqlite4 v3: SQLite will now store these values as numbers
 # (because the affinity of column a is NUMERIC) so the quirky
 # representations are not retained. i.e. '+1.0' becomes '1'.
 do_test index-12.1 {

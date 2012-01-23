@@ -55,14 +55,14 @@ ifcapable !pager_pragmas {
   return
 }
 
-sqlite3_extended_result_codes $::DB 1
+sqlite4_extended_result_codes $::DB 1
 
 # Aquire a read-lock on the database using handle [db2].
 #
 proc read_lock_db {} {
   if {$::STMT eq ""} {
-    set ::STMT [sqlite3_prepare db2 {SELECT rowid FROM sqlite_master} -1 TAIL]
-    set rc [sqlite3_step $::STMT]
+    set ::STMT [sqlite4_prepare db2 {SELECT rowid FROM sqlite_master} -1 TAIL]
+    set rc [sqlite4_step $::STMT]
     if {$rc eq "SQLITE_ERROR"} {
       unread_lock_db
       read_lock_db
@@ -74,14 +74,14 @@ proc read_lock_db {} {
 #
 proc unread_lock_db {} {
   if {$::STMT ne ""} {
-    sqlite3_finalize $::STMT
+    sqlite4_finalize $::STMT
     set ::STMT ""
   }
 }
 
 # Open the db handle used by [read_lock_db].
 #
-sqlite3 db2 test.db
+sqlite4 db2 test.db
 set ::STMT ""
 
 do_test tkt2409-1.1 {
@@ -99,7 +99,7 @@ do_test tkt2409-1.1 {
 } {0 {}}
 
 do_test tkt2409-1.2 {
-  sqlite3_errcode $::DB
+  sqlite4_errcode $::DB
 } {SQLITE_OK}
 
 # Check the integrity of the cache.
@@ -151,8 +151,8 @@ do_test tkt2409-2.3 {
 
 do_test tkt2409-3.1 {
   db close
-  set ::DB [sqlite3 db test.db; sqlite3_connection_pointer db]
-  sqlite3_extended_result_codes $::DB 1
+  set ::DB [sqlite4 db test.db; sqlite4_connection_pointer db]
+  sqlite4_extended_result_codes $::DB 1
   execsql {
     PRAGMA cache_size=10;
     DELETE FROM t1;
@@ -167,7 +167,7 @@ do_test tkt2409-3.1 {
 } {0 {}}
 
 do_test tkt2409-3.2 {
-  sqlite3_errcode $::DB
+  sqlite4_errcode $::DB
 } {SQLITE_OK}
 
 # Check the integrity of the cache.
@@ -211,7 +211,7 @@ do_test tkt2409-4.1 {
 } {0 {}}
 
 do_test tkt2409-4.2 {
-  sqlite3_errcode $::DB
+  sqlite4_errcode $::DB
 } {SQLITE_OK}
 
 # Check the integrity of the cache.

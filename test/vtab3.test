@@ -50,7 +50,7 @@ do_test vtab3-1.1 {
 
 
 do_test vtab3-1.2 {
-  register_echo_module [sqlite3_connection_pointer db]
+  register_echo_module [sqlite4_connection_pointer db]
   db authorizer ::auth
   execsql {
     CREATE VIRTUAL TABLE pachyderm USING echo(elephant);

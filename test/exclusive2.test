@@ -28,7 +28,7 @@ ifcapable {!pager_pragmas} {
 # This module does not work right if the cache spills at unexpected
 # moments.  So disable the soft-heap-limit.
 #
-sqlite3_soft_heap_limit 0
+sqlite4_soft_heap_limit 0
 
 proc pagerChangeCounter {filename new {fd ""}} {
   if {$fd==""} {
@@ -141,7 +141,7 @@ do_test exclusive2-1.3 {
   t1sig
 } $::sig
 do_test exclusive2-1.4 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   t1sig db2
 } $::sig
 do_test exclusive2-1.5 {
@@ -263,7 +263,7 @@ forcedelete test.db
 forcedelete test.db-journal
 
 do_test exclusive2-3.0 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     BEGIN;
     CREATE TABLE t1(a UNIQUE);
@@ -312,6 +312,6 @@ do_test exclusive2-3.6 {
   }
   readPagerChangeCounter test.db
 } {5}
-sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 
 finish_test

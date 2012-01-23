@@ -77,7 +77,7 @@ do_ioerr_test savepoint3.3 -sqlprep {
 }
 
 # The following test does a really big savepoint rollback. One involving
-# more than 4000 pages. The idea is to get a specific sqlite3BitvecSet()
+# more than 4000 pages. The idea is to get a specific sqlite4BitvecSet()
 # operation in pagerPlaybackSavepoint() to fail.
 #do_malloc_test savepoint3-4 -sqlprep {
 #  BEGIN;

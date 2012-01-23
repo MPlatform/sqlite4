@@ -5,7 +5,7 @@
 ** written to standard output.  There are three arguments, which are the
 ** name of the database file, the table, and the column.
 */
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -38,9 +38,9 @@ struct GState {
 */
 static void ofstError(GState *p, const char *zFormat, ...){
   va_list ap;
-  sqlite3_free(p->zErr);
+  sqlite4_free(p->zErr);
   va_start(ap, zFormat);
-  p->zErr = sqlite3_vmprintf(zFormat, ap);
+  p->zErr = sqlite4_vmprintf(zFormat, ap);
   va_end(ap);
 }
 
@@ -65,65 +65,65 @@ static void ofstRootAndColumn(
   const char *zTable,     /* Name of the table */
   const char *zColumn     /* Name of the column */
 ){
-  sqlite3 *db = 0;
-  sqlite3_stmt *pStmt = 0;
+  sqlite4 *db = 0;
+  sqlite4_stmt *pStmt = 0;
   char *zSql = 0;
   int rc;
   if( p->zErr ) return;
-  rc = sqlite3_open(zFile, &db);
+  rc = sqlite4_open(zFile, &db);
   if( rc ){
     ofstError(p, "cannot open database file \"%s\"", zFile);
     goto rootAndColumn_exit;
   }
-  zSql = sqlite3_mprintf("SELECT rootpage FROM sqlite_master WHERE name=%Q",
+  zSql = sqlite4_mprintf("SELECT rootpage FROM sqlite_master WHERE name=%Q",
                          zTable);
-  rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, 0);
-  if( rc ) ofstError(p, "%s: [%s]", sqlite3_errmsg(db), zSql);
-  sqlite3_free(zSql);
+  rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
+  if( rc ) ofstError(p, "%s: [%s]", sqlite4_errmsg(db), zSql);
+  sqlite4_free(zSql);
   if( p->zErr ) goto rootAndColumn_exit;
-  if( sqlite3_step(pStmt)!=SQLITE_ROW ){
+  if( sqlite4_step(pStmt)!=SQLITE_ROW ){
     ofstError(p, "cannot find table [%s]\n", zTable);
-    sqlite3_finalize(pStmt);
+    sqlite4_finalize(pStmt);
     goto rootAndColumn_exit;
   }
-  p->iRoot = sqlite3_column_int(pStmt , 0);
-  sqlite3_finalize(pStmt);
+  p->iRoot = sqlite4_column_int(pStmt , 0);
+  sqlite4_finalize(pStmt);
 
   p->iCol = -1;
-  zSql = sqlite3_mprintf("PRAGMA table_info(%Q)", zTable);
-  rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, 0);
-  if( rc ) ofstError(p, "%s: [%s}", sqlite3_errmsg(db), zSql);
-  sqlite3_free(zSql);
+  zSql = sqlite4_mprintf("PRAGMA table_info(%Q)", zTable);
+  rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
+  if( rc ) ofstError(p, "%s: [%s}", sqlite4_errmsg(db), zSql);
+  sqlite4_free(zSql);
   if( p->zErr ) goto rootAndColumn_exit;
-  while( sqlite3_step(pStmt)==SQLITE_ROW ){
-    const char *zCol = sqlite3_column_text(pStmt, 1);
+  while( sqlite4_step(pStmt)==SQLITE_ROW ){
+    const char *zCol = sqlite4_column_text(pStmt, 1);
     if( strlen(zCol)==strlen(zColumn)
-     && sqlite3_strnicmp(zCol, zColumn, strlen(zCol))==0
+     && sqlite4_strnicmp(zCol, zColumn, strlen(zCol))==0
     ){
-      p->iCol = sqlite3_column_int(pStmt, 0);
+      p->iCol = sqlite4_column_int(pStmt, 0);
       break;
     }
   }
-  sqlite3_finalize(pStmt);
+  sqlite4_finalize(pStmt);
   if( p->iCol<0 ){
     ofstError(p, "no such column: %s.%s", zTable, zColumn);
     goto rootAndColumn_exit;
   }
 
-  zSql = sqlite3_mprintf("PRAGMA page_size");
-  rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, 0);
-  if( rc )  ofstError(p, "%s: [%s]", sqlite3_errmsg(db), zSql);
-  sqlite3_free(zSql);
+  zSql = sqlite4_mprintf("PRAGMA page_size");
+  rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
+  if( rc )  ofstError(p, "%s: [%s]", sqlite4_errmsg(db), zSql);
+  sqlite4_free(zSql);
   if( p->zErr ) goto rootAndColumn_exit;
-  if( sqlite3_step(pStmt)!=SQLITE_ROW ){
+  if( sqlite4_step(pStmt)!=SQLITE_ROW ){
     ofstError(p, "cannot find page size");
   }else{
-    p->szPg = sqlite3_column_int(pStmt, 0);
+    p->szPg = sqlite4_column_int(pStmt, 0);
   }
-  sqlite3_finalize(pStmt);
+  sqlite4_finalize(pStmt);
 
 rootAndColumn_exit:
-  sqlite3_close(db);
+  sqlite4_close(db);
   return;
 }
 
@@ -133,7 +133,7 @@ rootAndColumn_exit:
 static void ofstPopPage(GState *p){
   if( p->nStack<=0 ) return;
   p->nStack--;
-  sqlite3_free(p->aStack[p->nStack]);
+  sqlite4_free(p->aStack[p->nStack]);
   p->pgno = p->aPgno[p->nStack-1];
   p->aPage = p->aStack[p->nStack-1];
 }
@@ -151,7 +151,7 @@ static void ofstPushPage(GState *p, int pgno){
     return;
   }
   p->aPgno[p->nStack] = pgno;
-  p->aStack[p->nStack] = pPage = sqlite3_malloc( p->szPg );
+  p->aStack[p->nStack] = pPage = sqlite4_malloc( p->szPg );
   if( pPage==0 ){
     fprintf(stderr, "out of memory\n");
     exit(1);
@@ -183,8 +183,8 @@ static int ofst4byte(GState *p, int ofst){
 }
 
 /* Read a variable-length integer.  Update the offset */
-static sqlite3_int64 ofstVarint(GState *p, int *pOfst){
-  sqlite3_int64 x = 0;
+static sqlite4_int64 ofstVarint(GState *p, int *pOfst){
+  sqlite4_int64 x = 0;
   u8 *a = &p->aPage[*pOfst];
   int n = 0;
   while( n<8 && (a[0] & 0x80)!=0 ){
@@ -243,7 +243,7 @@ static void ofstWalkLeafPage(GState *p){
   int i;
   int ofst;
   int nPayload;
-  sqlite3_int64 rowid;
+  sqlite4_int64 rowid;
   int nHdr;
   int j;
   int scode;
@@ -257,7 +257,7 @@ static void ofstWalkLeafPage(GState *p){
     nPayload = ofstVarint(p, &ofst);
     rowid = ofstVarint(p, &ofst);
     if( nPayload > p->szPg-35 ){
-      sqlite3_snprintf(sizeof(zMsg), zMsg,
+      sqlite4_snprintf(sizeof(zMsg), zMsg,
          "# overflow rowid %lld", rowid);
       printf("%s\n", zMsg);
       continue;
@@ -271,7 +271,7 @@ static void ofstWalkLeafPage(GState *p){
     }
     scode = ofstVarint(p, &ofst);
     sz = ofstSerialSize(scode);
-    sqlite3_snprintf(sizeof(zMsg), zMsg,
+    sqlite4_snprintf(sizeof(zMsg), zMsg,
          "rowid %12lld size %5d offset %8d",
           rowid, sz, ofstInFile(p, dataOfst));
     printf("%s\n", zMsg);

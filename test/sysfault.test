@@ -45,7 +45,7 @@ faultsim_save_and_close
 
 
 set open_and_write_body {
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     CREATE TABLE t1(a, b);
     INSERT INTO t1 VALUES(1, 2);
@@ -109,7 +109,7 @@ foreach vfs {unix unix-excl} {
     foreach e $errlist { lappend errs [list 1 $e] }
   
     set body [string map [list %VFS% $vfs] {
-      sqlite3 db test.db
+      sqlite4 db test.db
       db eval {
         CREATE TABLE t1(a, b);
         INSERT INTO t1 VALUES(1, 2);
@@ -117,7 +117,7 @@ foreach vfs {unix unix-excl} {
       set fd [open test.db-journal w]
       puts $fd "hello world"
       close $fd
-      sqlite3 db test.db -vfs %VFS%
+      sqlite4 db test.db -vfs %VFS%
       db eval {
         SELECT * FROM t1;
       }
@@ -143,7 +143,7 @@ proc vfsfault_install {} {
 }
 
 forcedelete test.db test.db2
-sqlite3 db test.db
+sqlite4 db test.db
 do_test 2.setup {
   execsql {
     CREATE TABLE t1(a, b, c, PRIMARY KEY(a));
@@ -168,7 +168,7 @@ do_faultsim_test 2.1 -faults vfsfault-transient -prep {
   test_syscall errno write     EINTR
   test_syscall errno fallocate EINTR
 
-  sqlite3 db test.db
+  sqlite4 db test.db
   file_control_chunksize_test db main 8192
 
   set res [db eval {
@@ -194,7 +194,7 @@ do_faultsim_test 2.2 -faults vfsfault-* -prep {
   catch { db close }
   faultsim_restore
 } -body {
-  sqlite3 db test.db
+  sqlite4 db test.db
   set res [db eval {
     ATTACH 'test.db2' AS 'aux';
     SELECT * FROM t1;

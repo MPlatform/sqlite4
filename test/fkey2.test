@@ -1398,8 +1398,8 @@ foreach {tn zSchema} {
 # of rows before failing.
 #
 # Also test that rows modified by FK actions are not counted in either the
-# returned row count or the values returned by sqlite3_changes(). Like
-# trigger related changes, they are included in sqlite3_total_changes() though.
+# returned row count or the values returned by sqlite4_changes(). Like
+# trigger related changes, they are included in sqlite4_total_changes() though.
 #
 drop_all_tables
 do_test fkey2-17.1.1 {
@@ -1411,20 +1411,20 @@ do_test fkey2-17.1.1 {
   }
 } {1}
 do_test fkey2-17.1.2 {
-  set STMT [sqlite3_prepare_v2 db "INSERT INTO two VALUES(4, 5, 6)" -1 dummy]
-  sqlite3_step $STMT
+  set STMT [sqlite4_prepare_v2 db "INSERT INTO two VALUES(4, 5, 6)" -1 dummy]
+  sqlite4_step $STMT
 } {SQLITE_CONSTRAINT}
 ifcapable autoreset {
   do_test fkey2-17.1.3 {
-    sqlite3_step $STMT
+    sqlite4_step $STMT
   } {SQLITE_CONSTRAINT}
 } else {
   do_test fkey2-17.1.3 {
-    sqlite3_step $STMT
+    sqlite4_step $STMT
   } {SQLITE_MISUSE}
 }
 do_test fkey2-17.1.4 {
-  sqlite3_finalize $STMT
+  sqlite4_finalize $STMT
 } {SQLITE_CONSTRAINT}
 do_test fkey2-17.1.5 {
   execsql {
@@ -1460,17 +1460,17 @@ do_test fkey2-17.1.10 {
   }
 } {}
 do_test fkey2-17.1.11 {
-  set STMT [sqlite3_prepare_v2 db "INSERT INTO three VALUES(7, 8, 9)" -1 dummy]
-  sqlite3_step $STMT
+  set STMT [sqlite4_prepare_v2 db "INSERT INTO three VALUES(7, 8, 9)" -1 dummy]
+  sqlite4_step $STMT
 } {SQLITE_ROW}
 do_test fkey2-17.1.12 {
-  sqlite3_column_text $STMT 0
+  sqlite4_column_text $STMT 0
 } {1}
 do_test fkey2-17.1.13 {
-  sqlite3_step $STMT
+  sqlite4_step $STMT
 } {SQLITE_CONSTRAINT}
 do_test fkey2-17.1.14 {
-  sqlite3_finalize $STMT
+  sqlite4_finalize $STMT
 } {SQLITE_CONSTRAINT}
 
 drop_all_tables
@@ -1621,19 +1621,19 @@ do_test fkey2-19.1 {
   }
 } {}
 do_test fkey2-19.2 {
-  set S [sqlite3_prepare_v2 db "DELETE FROM main WHERE id = ?" -1 dummy]
-  sqlite3_bind_int $S 1 2
-  sqlite3_step $S
+  set S [sqlite4_prepare_v2 db "DELETE FROM main WHERE id = ?" -1 dummy]
+  sqlite4_bind_int $S 1 2
+  sqlite4_step $S
 } {SQLITE_CONSTRAINT}
 do_test fkey2-19.3 {
-  sqlite3_reset $S
+  sqlite4_reset $S
 } {SQLITE_CONSTRAINT}
 do_test fkey2-19.4 {
-  sqlite3_bind_int $S 1 1
-  sqlite3_step $S
+  sqlite4_bind_int $S 1 1
+  sqlite4_step $S
 } {SQLITE_DONE}
 do_test fkey2-19.4 {
-  sqlite3_finalize $S
+  sqlite4_finalize $S
 } {SQLITE_OK}
 
 drop_all_tables

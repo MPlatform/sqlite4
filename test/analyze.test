@@ -235,7 +235,7 @@ do_test analyze-3.11 {
 # database is still able to function.
 #
 do_test analyze-4.0 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   db2 eval {
     CREATE TABLE t4(x,y,z);
     CREATE INDEX t4i1 ON t4(x);
@@ -244,7 +244,7 @@ do_test analyze-4.0 {
   }
   db2 close
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     ANALYZE;
     SELECT idx, stat FROM sqlite_stat1 ORDER BY idx;
@@ -257,7 +257,7 @@ do_test analyze-4.1 {
     PRAGMA writable_schema=off;
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     SELECT * FROM t4 WHERE x=1234;
   }
@@ -271,7 +271,7 @@ do_test analyze-4.2 {
     PRAGMA writable_schema=off;
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     SELECT * FROM t4 WHERE x=1234;
   }
@@ -281,7 +281,7 @@ do_test analyze-4.3 {
     INSERT INTO sqlite_stat1 VALUES('t4','xyzzy','0 1 2 3');
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     SELECT * FROM t4 WHERE x=1234;
   }
@@ -354,7 +354,7 @@ do_test analyze-99.1 {
     UPDATE sqlite_master SET sql='nonsense' WHERE name='sqlite_stat1';
   }
   db close
-  catch { sqlite3 db test.db }
+  catch { sqlite4 db test.db }
   catchsql {
     ANALYZE
   }

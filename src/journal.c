@@ -10,11 +10,11 @@
 **
 *************************************************************************
 **
-** This file implements a special kind of sqlite3_file object used
+** This file implements a special kind of sqlite4_file object used
 ** by SQLite to create journal files if the atomic-write optimization
 ** is enabled.
 **
-** The distinctive characteristic of this sqlite3_file is that the
+** The distinctive characteristic of this sqlite4_file is that the
 ** actual on disk file is created lazily. When the file is created,
 ** the caller specifies a buffer size for an in-memory buffer to
 ** be used to service read() and write() requests. The actual file
@@ -22,24 +22,24 @@
 **
 **   1) The in-memory representation grows too large for the allocated 
 **      buffer, or
-**   2) The sqlite3JournalCreate() function is called.
+**   2) The sqlite4JournalCreate() function is called.
 */
 #ifdef SQLITE_ENABLE_ATOMIC_WRITE
 #include "sqliteInt.h"
 
 
 /*
-** A JournalFile object is a subclass of sqlite3_file used by
+** A JournalFile object is a subclass of sqlite4_file used by
 ** as an open file handle for journal files.
 */
 struct JournalFile {
-  sqlite3_io_methods *pMethod;    /* I/O methods on journal files */
+  sqlite4_io_methods *pMethod;    /* I/O methods on journal files */
   int nBuf;                       /* Size of zBuf[] in bytes */
   char *zBuf;                     /* Space to buffer journal writes */
   int iSize;                      /* Amount of zBuf[] currently used */
   int flags;                      /* xOpen flags */
-  sqlite3_vfs *pVfs;              /* The "real" underlying VFS */
-  sqlite3_file *pReal;            /* The "real" underlying file descriptor */
+  sqlite4_vfs *pVfs;              /* The "real" underlying VFS */
+  sqlite4_file *pReal;            /* The "real" underlying file descriptor */
   const char *zJournal;           /* Name of the journal file */
 };
 typedef struct JournalFile JournalFile;
@@ -51,13 +51,13 @@ typedef struct JournalFile JournalFile;
 static int createFile(JournalFile *p){
   int rc = SQLITE_OK;
   if( !p->pReal ){
-    sqlite3_file *pReal = (sqlite3_file *)&p[1];
-    rc = sqlite3OsOpen(p->pVfs, p->zJournal, pReal, p->flags, 0);
+    sqlite4_file *pReal = (sqlite4_file *)&p[1];
+    rc = sqlite4OsOpen(p->pVfs, p->zJournal, pReal, p->flags, 0);
     if( rc==SQLITE_OK ){
       p->pReal = pReal;
       if( p->iSize>0 ){
         assert(p->iSize<=p->nBuf);
-        rc = sqlite3OsWrite(p->pReal, p->zBuf, p->iSize, 0);
+        rc = sqlite4OsWrite(p->pReal, p->zBuf, p->iSize, 0);
       }
     }
   }
@@ -67,12 +67,12 @@ static int createFile(JournalFile *p){
 /*
 ** Close the file.
 */
-static int jrnlClose(sqlite3_file *pJfd){
+static int jrnlClose(sqlite4_file *pJfd){
   JournalFile *p = (JournalFile *)pJfd;
   if( p->pReal ){
-    sqlite3OsClose(p->pReal);
+    sqlite4OsClose(p->pReal);
   }
-  sqlite3_free(p->zBuf);
+  sqlite4_free(p->zBuf);
   return SQLITE_OK;
 }
 
@@ -80,7 +80,7 @@ static int jrnlClose(sqlite3_file *pJfd){
 ** Read data from the file.
 */
 static int jrnlRead(
-  sqlite3_file *pJfd,    /* The journal file from which to read */
+  sqlite4_file *pJfd,    /* The journal file from which to read */
   void *zBuf,            /* Put the results here */
   int iAmt,              /* Number of bytes to read */
   sqlite_int64 iOfst     /* Begin reading at this offset */
@@ -88,7 +88,7 @@ static int jrnlRead(
   int rc = SQLITE_OK;
   JournalFile *p = (JournalFile *)pJfd;
   if( p->pReal ){
-    rc = sqlite3OsRead(p->pReal, zBuf, iAmt, iOfst);
+    rc = sqlite4OsRead(p->pReal, zBuf, iAmt, iOfst);
   }else if( (iAmt+iOfst)>p->iSize ){
     rc = SQLITE_IOERR_SHORT_READ;
   }else{
@@ -101,7 +101,7 @@ static int jrnlRead(
 ** Write data to the file.
 */
 static int jrnlWrite(
-  sqlite3_file *pJfd,    /* The journal file into which to write */
+  sqlite4_file *pJfd,    /* The journal file into which to write */
   const void *zBuf,      /* Take data to be written from here */
   int iAmt,              /* Number of bytes to write */
   sqlite_int64 iOfst     /* Begin writing at this offset into the file */
@@ -113,7 +113,7 @@ static int jrnlWrite(
   }
   if( rc==SQLITE_OK ){
     if( p->pReal ){
-      rc = sqlite3OsWrite(p->pReal, zBuf, iAmt, iOfst);
+      rc = sqlite4OsWrite(p->pReal, zBuf, iAmt, iOfst);
     }else{
       memcpy(&p->zBuf[iOfst], zBuf, iAmt);
       if( p->iSize<(iOfst+iAmt) ){
@@ -127,11 +127,11 @@ static int jrnlWrite(
 /*
 ** Truncate the file.
 */
-static int jrnlTruncate(sqlite3_file *pJfd, sqlite_int64 size){
+static int jrnlTruncate(sqlite4_file *pJfd, sqlite_int64 size){
   int rc = SQLITE_OK;
   JournalFile *p = (JournalFile *)pJfd;
   if( p->pReal ){
-    rc = sqlite3OsTruncate(p->pReal, size);
+    rc = sqlite4OsTruncate(p->pReal, size);
   }else if( size<p->iSize ){
     p->iSize = size;
   }
@@ -141,11 +141,11 @@ static int jrnlTruncate(sqlite3_file *pJfd, sqlite_int64 size){
 /*
 ** Sync the file.
 */
-static int jrnlSync(sqlite3_file *pJfd, int flags){
+static int jrnlSync(sqlite4_file *pJfd, int flags){
   int rc;
   JournalFile *p = (JournalFile *)pJfd;
   if( p->pReal ){
-    rc = sqlite3OsSync(p->pReal, flags);
+    rc = sqlite4OsSync(p->pReal, flags);
   }else{
     rc = SQLITE_OK;
   }
@@ -155,11 +155,11 @@ static int jrnlSync(sqlite3_file *pJfd, int flags){
 /*
 ** Query the size of the file in bytes.
 */
-static int jrnlFileSize(sqlite3_file *pJfd, sqlite_int64 *pSize){
+static int jrnlFileSize(sqlite4_file *pJfd, sqlite_int64 *pSize){
   int rc = SQLITE_OK;
   JournalFile *p = (JournalFile *)pJfd;
   if( p->pReal ){
-    rc = sqlite3OsFileSize(p->pReal, pSize);
+    rc = sqlite4OsFileSize(p->pReal, pSize);
   }else{
     *pSize = (sqlite_int64) p->iSize;
   }
@@ -167,9 +167,9 @@ static int jrnlFileSize(sqlite3_file *pJfd, sqlite_int64 *pSize){
 }
 
 /*
-** Table of methods for JournalFile sqlite3_file object.
+** Table of methods for JournalFile sqlite4_file object.
 */
-static struct sqlite3_io_methods JournalFileMethods = {
+static struct sqlite4_io_methods JournalFileMethods = {
   1,             /* iVersion */
   jrnlClose,     /* xClose */
   jrnlRead,      /* xRead */
@@ -192,22 +192,22 @@ static struct sqlite3_io_methods JournalFileMethods = {
 /* 
 ** Open a journal file.
 */
-int sqlite3JournalOpen(
-  sqlite3_vfs *pVfs,         /* The VFS to use for actual file I/O */
+int sqlite4JournalOpen(
+  sqlite4_vfs *pVfs,         /* The VFS to use for actual file I/O */
   const char *zName,         /* Name of the journal file */
-  sqlite3_file *pJfd,        /* Preallocated, blank file handle */
+  sqlite4_file *pJfd,        /* Preallocated, blank file handle */
   int flags,                 /* Opening flags */
   int nBuf                   /* Bytes buffered before opening the file */
 ){
   JournalFile *p = (JournalFile *)pJfd;
-  memset(p, 0, sqlite3JournalSize(pVfs));
+  memset(p, 0, sqlite4JournalSize(pVfs));
   if( nBuf>0 ){
-    p->zBuf = sqlite3MallocZero(nBuf);
+    p->zBuf = sqlite4MallocZero(nBuf);
     if( !p->zBuf ){
       return SQLITE_NOMEM;
     }
   }else{
-    return sqlite3OsOpen(pVfs, zName, pJfd, flags, 0);
+    return sqlite4OsOpen(pVfs, zName, pJfd, flags, 0);
   }
   p->pMethod = &JournalFileMethods;
   p->nBuf = nBuf;
@@ -221,7 +221,7 @@ int sqlite3JournalOpen(
 ** If the argument p points to a JournalFile structure, and the underlying
 ** file has not yet been created, create it now.
 */
-int sqlite3JournalCreate(sqlite3_file *p){
+int sqlite4JournalCreate(sqlite4_file *p){
   if( p->pMethods!=&JournalFileMethods ){
     return SQLITE_OK;
   }
@@ -232,7 +232,7 @@ int sqlite3JournalCreate(sqlite3_file *p){
 ** Return the number of bytes required to store a JournalFile that uses vfs
 ** pVfs to create the underlying on-disk files.
 */
-int sqlite3JournalSize(sqlite3_vfs *pVfs){
+int sqlite4JournalSize(sqlite4_vfs *pVfs){
   return (pVfs->szOsFile+sizeof(JournalFile));
 }
 #endif

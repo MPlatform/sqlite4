@@ -101,8 +101,8 @@ do_test wal2-1.0 {
   tvfs script tvfs_cb
   tvfs filter xShmOpen
 
-  sqlite3 db  test.db -vfs tvfs
-  sqlite3 db2 test.db -vfs tvfs
+  sqlite4 db  test.db -vfs tvfs
+  sqlite4 db2 test.db -vfs tvfs
 
   execsql {
     PRAGMA journal_mode = WAL;
@@ -196,8 +196,8 @@ do_test wal2-2.0 {
     return SQLITE_OK
   }
 
-  sqlite3 db  test.db -vfs tvfs
-  sqlite3 db2 test.db -vfs tvfs
+  sqlite4 db  test.db -vfs tvfs
+  sqlite4 db2 test.db -vfs tvfs
 
   execsql {
     PRAGMA journal_mode = WAL;
@@ -297,7 +297,7 @@ do_test wal2-3.0 {
 
   testvfs tvfs
   tvfs script tvfs_cb
-  sqlite3 db test.db -vfs tvfs
+  sqlite4 db test.db -vfs tvfs
   db busy busyhandler
 
   execsql {
@@ -353,7 +353,7 @@ forcedelete test.db test.db-wal test.db-journal
 # xShmXXX interfaces cannot open a WAL database.
 #
 do_test wal2-4.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA auto_vacuum = 0;
     PRAGMA journal_mode = WAL;
@@ -367,13 +367,13 @@ do_test wal2-4.1 {
 do_test wal2-4.2 {
   db close
   testvfs tvfs -noshm 1
-  sqlite3 db test.db -vfs tvfs
+  sqlite4 db test.db -vfs tvfs
   catchsql { SELECT * FROM data }
 } {1 {unable to open database file}}
 do_test wal2-4.3 {
   db close
   testvfs tvfs
-  sqlite3 db test.db -vfs tvfs
+  sqlite4 db test.db -vfs tvfs
   catchsql { SELECT * FROM data }
 } {0 {{need xShmOpen to see this}}}
 db close
@@ -407,7 +407,7 @@ do_test wal2-5.1 {
   testvfs tvfs
   tvfs script tvfs_cb
 
-  sqlite3 db test.db -vfs tvfs
+  sqlite4 db test.db -vfs tvfs
   execsql {
     PRAGMA journal_mode = WAL;
     CREATE TABLE x(y);
@@ -444,7 +444,7 @@ tvfs delete
 #
 do_test wal2-6.1.1 {
   forcedelete test.db test.db-wal test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     Pragma Journal_Mode = Wal;
   }
@@ -487,7 +487,7 @@ db close
 
 do_test wal2-6.2.1 {
   forcedelete test.db test.db-wal test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     Pragma Locking_Mode = Exclusive;
     Pragma Journal_Mode = Wal;
@@ -505,7 +505,7 @@ do_test wal2-6.2.2 {
 } {main exclusive temp closed}
 do_test wal2-6.2.3 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { SELECT * FROM sqlite_master }
   execsql { PRAGMA LOCKING_MODE = EXCLUSIVE }
 } {exclusive}
@@ -555,7 +555,7 @@ db close
 
 do_test wal2-6.3.1 {
   forcedelete test.db test.db-wal test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA journal_mode = WAL;
     PRAGMA locking_mode = exclusive;
@@ -607,7 +607,7 @@ do_test wal2-6.4.1 {
   }
   testvfs tvfs
   tvfs script tvfs_cb
-  sqlite3 db test.db -vfs tvfs
+  sqlite4 db test.db -vfs tvfs
   set {} {}
 } {}
 
@@ -722,7 +722,7 @@ db close
 tvfs delete
 
 do_test wal2-6.5.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA auto_vacuum = 0;
     PRAGMA journal_mode = wal;
@@ -755,7 +755,7 @@ do_test wal2-6.6.1 {
   testvfs T
   T script lock_control
   T filter {}
-  sqlite3 db test.db -vfs T
+  sqlite4 db test.db -vfs T
   execsql { SELECT * FROM sqlite_master }
   execsql { PRAGMA locking_mode = exclusive }
   execsql { INSERT INTO t2 VALUES('V', 'VI') }
@@ -772,7 +772,7 @@ do_test wal2-6.6.3 {
   # on the WAL file using xShmLock(). Since that call failed, it remains
   # in exclusive mode.
   #
-  sqlite3 db2 test.db -vfs T
+  sqlite4 db2 test.db -vfs T
   catchsql { SELECT * FROM t2 } db2
 } {1 {database is locked}}
 do_test wal2-6.6.2 {
@@ -783,7 +783,7 @@ do_test wal2-6.6.2 {
 do_test wal2-6.6.4 {
   # This time, we have successfully exited exclusive mode. So the second
   # connection can read the database.
-  sqlite3 db2 test.db -vfs T
+  sqlite4 db2 test.db -vfs T
   catchsql { SELECT * FROM t2 } db2
 } {0 {I II III IV V VI VII VIII IX X}}
 
@@ -797,7 +797,7 @@ T delete
 #
 forcedelete test.db test.db-wal test.db-journal
 do_test wal2-7.1.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA page_size = 4096;
     PRAGMA journal_mode = WAL;
@@ -811,7 +811,7 @@ do_test wal2-7.1.2 {
   hexio_write test2.db-wal 48 FF
 } {1}
 do_test wal2-7.1.3 {
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   execsql { PRAGMA wal_checkpoint } db2
   execsql { SELECT * FROM sqlite_master } db2
 } {}
@@ -819,7 +819,7 @@ db close
 db2 close
 forcedelete test.db test.db-wal test.db-journal
 do_test wal2-8.1.2 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA auto_vacuum=OFF;
     PRAGMA page_size = 1024;
@@ -856,7 +856,7 @@ do_test wal2-8.1.3 {
   }
 } {}
 do_test wal2-8.1.4 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { SELECT * FROM t2 }
 } {goodbye}
 db2 close
@@ -875,7 +875,7 @@ tvfs filter xShmOpen
 
 forcedelete test.db test.db-wal test.db-journal
 do_test wal2-9.1 {
-  sqlite3 db test.db -vfs tvfs
+  sqlite4 db test.db -vfs tvfs
   execsql {
     PRAGMA journal_mode = WAL;
     CREATE TABLE x(y);
@@ -898,7 +898,7 @@ do_test wal2-9.1 {
   execsql { INSERT INTO x VALUES('Watson') }
   set wih(2) [set_tvfs_hdr $::filename]
 
-  sqlite3 db2 test.db -vfs tvfs
+  sqlite4 db2 test.db -vfs tvfs
   execsql { SELECT * FROM x } db2
 } {Barton Deakin Watson}
 
@@ -1001,7 +1001,7 @@ do_test wal2-11.0 {
 } {wal 1 2 3 4 5 6 7 8 9}
 
 do_test wal2-11.1.1 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { SELECT name FROM sqlite_master } db2
 } {t1}
 
@@ -1045,7 +1045,7 @@ if {$::tcl_platform(platform) == "unix"} {
   set umask [exec /bin/sh -c umask]
 
   do_test wal2-12.1 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { 
       CREATE TABLE tx(y, z);
       PRAGMA journal_mode = WAL;
@@ -1069,7 +1069,7 @@ if {$::tcl_platform(platform) == "unix"} {
       list [file exists test.db-wal] [file exists test.db-shm]
     } {0 0}
     do_test wal2-12.2.$tn.3 {
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql { INSERT INTO tx DEFAULT VALUES }
       list [file exists test.db-wal] [file exists test.db-shm]
     } {1 1}
@@ -1141,7 +1141,7 @@ if {$::tcl_platform(platform) == "unix"} {
     set r(1) {0 ok}
     set r(0) {1 {unable to open database file}}
     do_test wal2-13.$tn.2 {
-      list [catch {sqlite3 db test.db ; set {} ok} msg] $msg
+      list [catch {sqlite4 db test.db ; set {} ok} msg] $msg
     } $r($can_open)
 
     if {$can_open} {
@@ -1262,7 +1262,7 @@ foreach {tn settings restart_sync commit_sync ckpt_sync} {
     incr ::sync($flags)
   }
 
-  sqlite3 db test.db
+  sqlite4 db test.db
   do_execsql_test 15.$tn.1 "
     PRAGMA page_size = 4096;
     CREATE TABLE t1(x);

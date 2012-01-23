@@ -21,7 +21,7 @@ ifcapable !wal {finish_test ; return }
 db close
 testvfs tvfsshm
 testvfs tvfs -default 1 -iversion 1 
-sqlite3 db test.db
+sqlite4 db test.db
 
 #--------------------------------------------------------------------------
 # Test that when using a version 1 VFS, a database can only be converted
@@ -89,7 +89,7 @@ do_execsql_test 2.1.2 {
 do_test 2.1.3 {
   forcecopy test.db     test2.db
   forcecopy test.db-wal test2.db-wal
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   catchsql { SELECT * FROM t2 } db2
 } {1 {unable to open database file}}
 do_test 2.1.4 {
@@ -106,8 +106,8 @@ do_test 2.1.5 {
 do_test 2.2.1 {
   forcecopy test.db     test2.db
   forcecopy test.db-wal test2.db-wal
-  sqlite3 db3 test2.db -vfs tvfsshm
-  sqlite3 db2 test2.db
+  sqlite4 db3 test2.db -vfs tvfsshm
+  sqlite4 db2 test2.db
   execsql { SELECT * FROM t2 } db3
 } {a b c d e f g h}
 
@@ -119,7 +119,7 @@ do_test 2.2.2 {
 do_test 2.2.3 {
   # This is to test that [db2] is not holding a PENDING lock (which can 
   # happen when an attempt to obtain an EXCLUSIVE lock fails).
-  sqlite3 db4 test2.db -vfs tvfsshm
+  sqlite4 db4 test2.db -vfs tvfsshm
   execsql { SELECT * FROM t2 } db4
 } {a b c d e f g h}
 
@@ -129,7 +129,7 @@ do_test 2.2.4 {
 
 do_test 2.2.5 {
   db4 close
-  sqlite3 db4 test2.db -vfs tvfsshm
+  sqlite4 db4 test2.db -vfs tvfsshm
   execsql { SELECT * FROM t2 } db4
 } {a b c d e f g h}
 
@@ -151,7 +151,7 @@ db close
 #      opened, it is not.
 #
 do_test 3.1 {
-  sqlite3 db test.db -vfs tvfsshm
+  sqlite4 db test.db -vfs tvfsshm
   execsql { 
     SELECT * FROM t1;
     PRAGMA locking_mode = EXCLUSIVE;
@@ -159,20 +159,20 @@ do_test 3.1 {
     PRAGMA locking_mode = NORMAL;
     INSERT INTO t1 VALUES(7, 8);
   }
-  sqlite3 db2 test.db -vfs tvfsshm
+  sqlite4 db2 test.db -vfs tvfsshm
   execsql { SELECT * FROM t1 } db2
 } {1 2 3 4 5 6 7 8}
 db close
 db2 close
 do_test 3.2 {
-  sqlite3 db  test.db -vfs tvfsshm
+  sqlite4 db  test.db -vfs tvfsshm
   execsql { 
     PRAGMA locking_mode = EXCLUSIVE;
     INSERT INTO t1 VALUES(9, 10);
     PRAGMA locking_mode = NORMAL;
     INSERT INTO t1 VALUES(11, 12);
   }
-  sqlite3 db2 test.db -vfs tvfsshm
+  sqlite4 db2 test.db -vfs tvfsshm
   catchsql { SELECT * FROM t1 } db2
 } {1 {database is locked}}
 db close

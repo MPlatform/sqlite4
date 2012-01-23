@@ -70,7 +70,7 @@ integrity_check corrupt3-1.6
 do_test corrupt3-1.7 {
   db close
   hexio_write test.db 2048 [hexio_render_int32 3]
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT x FROM t1
   }
@@ -83,7 +83,7 @@ integrity_check corrupt3-1.8
 do_test corrupt3-1.9 {
   db close
   hexio_write test.db 2044 [hexio_render_int32 4]
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT substr(x,1,10) FROM t1
   }
@@ -98,7 +98,7 @@ Page 3 is never used}}}
 do_test corrupt3-1.11 {
   db close
   hexio_write test.db 2044 [hexio_render_int32 0]
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT substr(x,1,10) FROM t1
   }

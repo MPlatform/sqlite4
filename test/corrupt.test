@@ -74,7 +74,7 @@ for {set i [expr {1*256}]} {$i<$fsize-256} {incr i 256} {
   puts -nonewline $fd $junk
   close $fd
   do_test corrupt-2.$tn.1 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     catchsql {SELECT count(*) FROM sqlite_master}
     set x {}
   } {}
@@ -121,7 +121,7 @@ for {set i [expr {1*256}]} {$i<$fsize-256} {incr i 256} {
 do_test corrupt-3.1 {
   db close
   forcecopy test.bu test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   list
 } {}
 do_test corrupt-3.2 {
@@ -140,28 +140,28 @@ do_test corrupt-3.2 {
 # This one tests the case caught by code in checkin [2313].
 do_test corrupt-3.3 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     INSERT INTO t1 VALUES('abc');
   }
 } {1 {database disk image is malformed}}
 do_test corrupt-3.4 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT * FROM t1;
   }
 } {1 {database disk image is malformed}}
 do_test corrupt-3.5 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT * FROM t1 WHERE oid = 10;
   }
 } {1 {database disk image is malformed}}
 do_test corrupt-3.6 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT * FROM t1 WHERE x = 'abcde';
   }
@@ -170,7 +170,7 @@ do_test corrupt-3.6 {
 do_test corrupt-4.1 {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA page_size = 1024;
     CREATE TABLE t1(a INTEGER PRIMARY KEY, b TEXT);
@@ -187,7 +187,7 @@ do_test corrupt-4.2 {
   set data [hexio_render_int32 [expr $iRoot - 1]]
   hexio_write test.db [expr ($iRoot-1)*1024 + $iOffset] $data
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   # The following DELETE statement attempts to delete a cell stored on the
   # root page of index i1. After this cell is deleted it must be replaced
@@ -202,7 +202,7 @@ do_test corrupt-4.2 {
 do_test corrupt-5.1 {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   execsql { PRAGMA page_size = 1024 }
   set ct "CREATE TABLE t1(c0 "
@@ -215,7 +215,7 @@ do_test corrupt-5.1 {
 do_test corrupt-5.2 {
   db close
   hexio_write test.db 108 00000000 
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql { SELECT * FROM sqlite_master }
 } {1 {database disk image is malformed}}
 
@@ -225,7 +225,7 @@ do_test corrupt-5.2 {
 do_test corrupt-6.1 {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { 
     PRAGMA page_size = 1024; CREATE TABLE t1(x);
   }
@@ -245,7 +245,7 @@ do_test corrupt-6.1 {
 
   set offset [expr ($rootpage * 1024)-14+2]
   hexio_write test.db $offset 00FF
-  sqlite3 db test.db 
+  sqlite4 db test.db 
 
   catchsql { INSERT INTO t1 VALUES( randomblob(10) ) }
 } {1 {database disk image is malformed}}
@@ -253,7 +253,7 @@ do_test corrupt-6.1 {
 ifcapable oversize_cell_check {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { 
     PRAGMA page_size = 1024; CREATE TABLE t1(x);
   }
@@ -290,7 +290,7 @@ ifcapable oversize_cell_check {
   puts -nonewline $fd "\x03\x14"
   close $fd
   
-  sqlite3 db test.db
+  sqlite4 db test.db
   do_test corrupt-7.2 {
     execsql { 
       UPDATE t1 SET x = X'870400020003000400050006000700080009000A' 
@@ -307,7 +307,7 @@ ifcapable oversize_cell_check {
 db close
 forcedelete test.db test.db-journal
 do_test corrupt-8.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA page_size = 1024;
     PRAGMA secure_delete = on;
@@ -325,7 +325,7 @@ do_test corrupt-8.1 {
 db close
 forcedelete test.db test.db-journal
 do_test corrupt-8.2 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA page_size = 1024;
     PRAGMA secure_delete = on;

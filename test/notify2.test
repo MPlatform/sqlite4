@@ -16,13 +16,13 @@ source $testdir/tester.tcl
 if {[run_thread_tests]==0} { finish_test ; return }
 ifcapable !unlock_notify||!shared_cache { finish_test ; return }
 
-# The tests in this file test the sqlite3_blocking_step() function in
-# test_thread.c. sqlite3_blocking_step() is not an SQLite API function,
-# it is just a demonstration of how the sqlite3_unlock_notify() function
+# The tests in this file test the sqlite4_blocking_step() function in
+# test_thread.c. sqlite4_blocking_step() is not an SQLite API function,
+# it is just a demonstration of how the sqlite4_unlock_notify() function
 # can be used to synchronize multi-threaded access to SQLite databases
 # in shared-cache mode.
 #
-# Since the implementation of sqlite3_blocking_step() is included on the
+# Since the implementation of sqlite4_blocking_step() is included on the
 # website as example code, it is important to test that it works.
 #
 # notify2-1.*:
@@ -36,13 +36,13 @@ ifcapable !unlock_notify||!shared_cache { finish_test ; return }
 #   to make sure that things are working as expected. If an SQLITE_LOCKED
 #   error is returned the current transaction is rolled back immediately.
 #
-#   This exercise is repeated twice, once using sqlite3_step(), and the
-#   other using sqlite3_blocking_step(). The results are compared to ensure
-#   that sqlite3_blocking_step() resulted in higher transaction throughput.
+#   This exercise is repeated twice, once using sqlite4_step(), and the
+#   other using sqlite4_blocking_step(). The results are compared to ensure
+#   that sqlite4_blocking_step() resulted in higher transaction throughput.
 #
 
 db close
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 # Number of threads to run simultaneously.
 #
@@ -64,14 +64,14 @@ set sql $zSql
     while {$rc=="SQLITE_OK" && $zSql ne ""} {
       set STMT [$::xPrepare $db $zSql -1 zSql]
       while {[set rc [$::xStep $STMT]] eq "SQLITE_ROW"} {
-        for {set i 0} {$i < [sqlite3_column_count $STMT]} {incr i} {
-          lappend lRes [sqlite3_column_text $STMT 0]
+        for {set i 0} {$i < [sqlite4_column_count $STMT]} {incr i} {
+          lappend lRes [sqlite4_column_text $STMT 0]
         }
       }
-      set rc [sqlite3_finalize $STMT]
+      set rc [sqlite4_finalize $STMT]
     }
 
-    if {$rc != "SQLITE_OK"} { error "$rc $sql [sqlite3_errmsg $db]" }
+    if {$rc != "SQLITE_OK"} { error "$rc $sql [sqlite4_errmsg $db]" }
     return $lRes
   }
 
@@ -89,7 +89,7 @@ set sql $zSql
 
   proc opendb {} {
     # Open a database connection. Attach the two auxillary databases.
-    set ::DB [sqlite3_open test.db]
+    set ::DB [sqlite4_open test.db]
     execsql_retry $::DB { ATTACH 'test2.db' AS aux2; }
     execsql_retry $::DB { ATTACH 'test3.db' AS aux3; }
   }
@@ -143,7 +143,7 @@ set sql $zSql
       # Hit an SQLITE_LOCKED error. Rollback the current transaction.
       set rc [catch { execsql_blocking $::DB ROLLBACK } msg]
       if {$rc && [string match "SQLITE_LOCKED*" $msg]} {
-        sqlite3_close $::DB
+        sqlite4_close $::DB
         opendb
       } 
     } elseif {$rc} {
@@ -159,13 +159,13 @@ set sql $zSql
 
   # Close the database connection and return 0.
   #
-  sqlite3_close $::DB
+  sqlite4_close $::DB
   expr 0
 }
 
 foreach {iTest xStep xPrepare} {
-  1 sqlite3_blocking_step sqlite3_blocking_prepare_v2
-  2 sqlite3_step          sqlite3_nonblocking_prepare_v2
+  1 sqlite4_blocking_step sqlite4_blocking_prepare_v2
+  2 sqlite4_step          sqlite4_nonblocking_prepare_v2
 } {
   forcedelete test.db test2.db test3.db
 
@@ -177,7 +177,7 @@ foreach {iTest xStep xPrepare} {
   # files test.db, test2.db and test3.db, respectively). 
   #
   do_test notify2-$iTest.1.1 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       ATTACH 'test2.db' AS aux2;
       ATTACH 'test3.db' AS aux3;
@@ -210,7 +210,7 @@ foreach {iTest xStep xPrepare} {
 
   # Count the total number of succesful writes.
   do_test notify2-$iTest.3.1 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       ATTACH 'test2.db' AS aux2;
       ATTACH 'test3.db' AS aux3;
@@ -224,19 +224,19 @@ foreach {iTest xStep xPrepare} {
   } {}
 }
 
-# The following tests checks to make sure sqlite3_blocking_step() is
-# faster than sqlite3_step().  blocking_step() is always faster on
+# The following tests checks to make sure sqlite4_blocking_step() is
+# faster than sqlite4_step().  blocking_step() is always faster on
 # multi-core and is usually faster on single-core.  But sometimes, by
 # chance, step() will be faster on a single core, in which case the
 # following test will fail.
 #
-puts "The following test seeks to demonstrate that the sqlite3_unlock_notify()"
+puts "The following test seeks to demonstrate that the sqlite4_unlock_notify()"
 puts "interface helps multi-core systems to run faster.  This test sometimes"
 puts "fails on single-core machines."
 puts [array get anWrite]
 do_test notify2-3 {
-  expr {$anWrite(sqlite3_blocking_step) > $anWrite(sqlite3_step)}
+  expr {$anWrite(sqlite4_blocking_step) > $anWrite(sqlite4_step)}
 } {1}
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

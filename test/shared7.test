@@ -19,13 +19,13 @@ source $testdir/tester.tcl
 ifcapable !shared_cache { finish_test ; return }
 
 do_test shared7-1.1 {
-  set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
-  sqlite3_enable_shared_cache
+  set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
+  sqlite4_enable_shared_cache
 } {1}
 
 do_test shared7-1.2 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     CREATE TABLE t1(x);
   }
@@ -51,5 +51,5 @@ do_test shared7-1.4 {
 } {1 {database is already attached}}
 
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

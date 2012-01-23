@@ -31,15 +31,15 @@
 /*
 ** Interfaces defined in server.c
 */
-int sqlite3_client_open(const char*, sqlite3**);
-int sqlite3_client_prepare(sqlite3*,const char*,int,
-                           sqlite3_stmt**,const char**);
-int sqlite3_client_step(sqlite3_stmt*);
-int sqlite3_client_reset(sqlite3_stmt*);
-int sqlite3_client_finalize(sqlite3_stmt*);
-int sqlite3_client_close(sqlite3*);
-int sqlite3_server_start(void);
-int sqlite3_server_stop(void);
+int sqlite4_client_open(const char*, sqlite4**);
+int sqlite4_client_prepare(sqlite4*,const char*,int,
+                           sqlite4_stmt**,const char**);
+int sqlite4_client_step(sqlite4_stmt*);
+int sqlite4_client_reset(sqlite4_stmt*);
+int sqlite4_client_finalize(sqlite4_stmt*);
+int sqlite4_client_close(sqlite4*);
+int sqlite4_server_start(void);
+int sqlite4_server_stop(void);
 
 /*
 ** Each thread is controlled by an instance of the following
@@ -60,8 +60,8 @@ struct Thread {
   ** but read-only to the superviser thread.
   */
   volatile int completed;  /* Number of operations completed */
-  sqlite3 *db;             /* Open database */
-  sqlite3_stmt *pStmt;     /* Pending operation */
+  sqlite4 *db;             /* Open database */
+  sqlite4_stmt *pStmt;     /* Pending operation */
   char *zErr;              /* operation error */
   char *zStaticErr;        /* Static error message */
   int rc;                  /* operation return code */
@@ -83,12 +83,12 @@ static Thread threadset[N_THREAD];
 static void *client_main(void *pArg){
   Thread *p = (Thread*)pArg;
   if( p->db ){
-    sqlite3_client_close(p->db);
+    sqlite4_client_close(p->db);
   }
-  sqlite3_client_open(p->zFilename, &p->db);
-  if( SQLITE_OK!=sqlite3_errcode(p->db) ){
-    p->zErr = strdup(sqlite3_errmsg(p->db));
-    sqlite3_client_close(p->db);
+  sqlite4_client_open(p->zFilename, &p->db);
+  if( SQLITE_OK!=sqlite4_errcode(p->db) ){
+    p->zErr = strdup(sqlite4_errmsg(p->db));
+    sqlite4_client_close(p->db);
     p->db = 0;
   }
   p->pStmt = 0;
@@ -96,7 +96,7 @@ static void *client_main(void *pArg){
   while( p->opnum<=p->completed ) sched_yield();
   while( p->xOp ){
     if( p->zErr && p->zErr!=p->zStaticErr ){
-      sqlite3_free(p->zErr);
+      sqlite4_free(p->zErr);
       p->zErr = 0;
     }
     (*p->xOp)(p);
@@ -104,20 +104,20 @@ static void *client_main(void *pArg){
     while( p->opnum<=p->completed ) sched_yield();
   }
   if( p->pStmt ){
-    sqlite3_client_finalize(p->pStmt);
+    sqlite4_client_finalize(p->pStmt);
     p->pStmt = 0;
   }
   if( p->db ){
-    sqlite3_client_close(p->db);
+    sqlite4_client_close(p->db);
     p->db = 0;
   }
   if( p->zErr && p->zErr!=p->zStaticErr ){
-    sqlite3_free(p->zErr);
+    sqlite4_free(p->zErr);
     p->zErr = 0;
   }
   p->completed++;
 #ifndef SQLITE_OMIT_DEPRECATED
-  sqlite3_thread_cleanup();
+  sqlite4_thread_cleanup();
 #endif
   return 0;
 }
@@ -163,19 +163,19 @@ static int tcl_client_create(
     return TCL_ERROR;
   }
   threadset[i].busy = 1;
-  sqlite3_free(threadset[i].zFilename);
-  threadset[i].zFilename = sqlite3_mprintf("%s", argv[2]);
+  sqlite4_free(threadset[i].zFilename);
+  threadset[i].zFilename = sqlite4_mprintf("%s", argv[2]);
   threadset[i].opnum = 1;
   threadset[i].completed = 0;
   rc = pthread_create(&x, 0, client_main, &threadset[i]);
   if( rc ){
     Tcl_AppendResult(interp, "failed to create the thread", 0);
-    sqlite3_free(threadset[i].zFilename);
+    sqlite4_free(threadset[i].zFilename);
     threadset[i].busy = 0;
     return TCL_ERROR;
   }
   pthread_detach(x);
-  sqlite3_server_start();
+  sqlite4_server_start();
   return TCL_OK;
 }
 
@@ -222,9 +222,9 @@ static void stop_thread(Thread *p){
   p->xOp = 0;
   p->opnum++;
   client_wait(p);
-  sqlite3_free(p->zArg);
+  sqlite4_free(p->zArg);
   p->zArg = 0;
-  sqlite3_free(p->zFilename);
+  sqlite4_free(p->zFilename);
   p->zFilename = 0;
   p->busy = 0;
 }
@@ -267,7 +267,7 @@ static int tcl_client_halt(
   /* If no client threads are still running, also stop the server */
   for(i=0; i<N_THREAD && threadset[i].busy==0; i++){}
   if( i>=N_THREAD ){
-    sqlite3_server_stop();
+    sqlite4_server_stop();
   }
   return TCL_OK;
 }
@@ -475,10 +475,10 @@ static void do_compile(Thread *p){
     return;
   }
   if( p->pStmt ){
-    sqlite3_client_finalize(p->pStmt);
+    sqlite4_client_finalize(p->pStmt);
     p->pStmt = 0;
   }
-  p->rc = sqlite3_client_prepare(p->db, p->zArg, -1, &p->pStmt, 0);
+  p->rc = sqlite4_client_prepare(p->db, p->zArg, -1, &p->pStmt, 0);
 }
 
 /*
@@ -506,8 +506,8 @@ static int tcl_client_compile(
   }
   client_wait(&threadset[i]);
   threadset[i].xOp = do_compile;
-  sqlite3_free(threadset[i].zArg);
-  threadset[i].zArg = sqlite3_mprintf("%s", argv[2]);
+  sqlite4_free(threadset[i].zArg);
+  threadset[i].zArg = sqlite4_mprintf("%s", argv[2]);
   threadset[i].opnum++;
   return TCL_OK;
 }
@@ -522,14 +522,14 @@ static void do_step(Thread *p){
     p->rc = SQLITE_ERROR;
     return;
   }
-  p->rc = sqlite3_client_step(p->pStmt);
+  p->rc = sqlite4_client_step(p->pStmt);
   if( p->rc==SQLITE_ROW ){
-    p->argc = sqlite3_column_count(p->pStmt);
-    for(i=0; i<sqlite3_data_count(p->pStmt); i++){
-      p->argv[i] = (char*)sqlite3_column_text(p->pStmt, i);
+    p->argc = sqlite4_column_count(p->pStmt);
+    for(i=0; i<sqlite4_data_count(p->pStmt); i++){
+      p->argv[i] = (char*)sqlite4_column_text(p->pStmt, i);
     }
     for(i=0; i<p->argc; i++){
-      p->colv[i] = sqlite3_column_name(p->pStmt, i);
+      p->colv[i] = sqlite4_column_name(p->pStmt, i);
     }
   }
 }
@@ -572,7 +572,7 @@ static void do_finalize(Thread *p){
     p->rc = SQLITE_ERROR;
     return;
   }
-  p->rc = sqlite3_client_finalize(p->pStmt);
+  p->rc = sqlite4_client_finalize(p->pStmt);
   p->pStmt = 0;
 }
 
@@ -601,7 +601,7 @@ static int tcl_client_finalize(
   }
   client_wait(&threadset[i]);
   threadset[i].xOp = do_finalize;
-  sqlite3_free(threadset[i].zArg);
+  sqlite4_free(threadset[i].zArg);
   threadset[i].zArg = 0;
   threadset[i].opnum++;
   return TCL_OK;
@@ -616,7 +616,7 @@ static void do_reset(Thread *p){
     p->rc = SQLITE_ERROR;
     return;
   }
-  p->rc = sqlite3_client_reset(p->pStmt);
+  p->rc = sqlite4_client_reset(p->pStmt);
   p->pStmt = 0;
 }
 
@@ -645,7 +645,7 @@ static int tcl_client_reset(
   }
   client_wait(&threadset[i]);
   threadset[i].xOp = do_reset;
-  sqlite3_free(threadset[i].zArg);
+  sqlite4_free(threadset[i].zArg);
   threadset[i].zArg = 0;
   threadset[i].opnum++;
   return TCL_OK;
@@ -663,7 +663,7 @@ static int tcl_client_swap(
   const char **argv      /* Text of each argument */
 ){
   int i, j;
-  sqlite3 *temp;
+  sqlite4 *temp;
   if( argc!=3 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
        " ID1 ID2", 0);

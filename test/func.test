@@ -512,7 +512,7 @@ if {$encoding=="UTF-16le"} {
 # the user-defined SQL function APIs that are not used by the built-in
 # functions.
 #
-set ::DB [sqlite3_connection_pointer db]
+set ::DB [sqlite4_connection_pointer db]
 sqlite_register_test_function $::DB testfunc
 do_test func-10.1 {
   catchsql {
@@ -571,9 +571,9 @@ do_test func-11.1 {
   execsql {
     SELECT sqlite_version(*);
   }
-} [sqlite3 -version]
+} [sqlite4 -version]
 
-# Test that destructors passed to sqlite3 by calls to sqlite3_result_text()
+# Test that destructors passed to sqlite4 by calls to sqlite4_result_text()
 # etc. are called. These tests use two special user-defined functions
 # (implemented in func.c) only available in test builds. 
 #
@@ -671,15 +671,15 @@ do_test func-13.6 {
 
 # Test that auxilary data is preserved between calls for SQL variables.
 do_test func-13.7 {
-  set DB [sqlite3_connection_pointer db]
+  set DB [sqlite4_connection_pointer db]
   set sql "SELECT test_auxdata( ? , a ) FROM t4;"
-  set STMT [sqlite3_prepare $DB $sql -1 TAIL]
-  sqlite3_bind_text $STMT 1 hello\000 -1
+  set STMT [sqlite4_prepare $DB $sql -1 TAIL]
+  sqlite4_bind_text $STMT 1 hello\000 -1
   set res [list]
-  while { "SQLITE_ROW"==[sqlite3_step $STMT] } {
-    lappend res [sqlite3_column_text $STMT 0]
+  while { "SQLITE_ROW"==[sqlite4_step $STMT] } {
+    lappend res [sqlite4_column_text $STMT 0]
   }
-  lappend res [sqlite3_finalize $STMT]
+  lappend res [sqlite4_finalize $STMT]
 } {{0 0} {1 0} SQLITE_OK}
 
 # Make sure that a function with a very long name is rejected
@@ -712,10 +712,10 @@ do_test func-16.1 {
   execsql {
     CREATE TABLE tbl2(a, b);
   }
-  set STMT [sqlite3_prepare $::DB "INSERT INTO tbl2 VALUES(?, ?)" -1 TAIL]
-  sqlite3_bind_blob $::STMT 1 abc 3
-  sqlite3_step $::STMT
-  sqlite3_finalize $::STMT
+  set STMT [sqlite4_prepare $::DB "INSERT INTO tbl2 VALUES(?, ?)" -1 TAIL]
+  sqlite4_bind_blob $::STMT 1 abc 3
+  sqlite4_step $::STMT
+  sqlite4_finalize $::STMT
   execsql {
     SELECT quote(a), quote(b) FROM tbl2;
   }
@@ -1070,11 +1070,11 @@ do_test func-22.22 {
   execsql {SELECT typeof(trim('hello',NULL));}
 } {null}
 
-# This is to test the deprecated sqlite3_aggregate_count() API.
+# This is to test the deprecated sqlite4_aggregate_count() API.
 #
 ifcapable deprecated {
   do_test func-23.1 {
-    sqlite3_create_aggregate db
+    sqlite4_create_aggregate db
     execsql {
       SELECT legacy_count() FROM t6;
     }
@@ -1123,7 +1123,7 @@ set midargs {}
 unset -nocomplain midres
 set midres {}
 unset -nocomplain result
-for {set i 1} {$i<[sqlite3_limit db SQLITE_LIMIT_FUNCTION_ARG -1]} {incr i} {
+for {set i 1} {$i<[sqlite4_limit db SQLITE_LIMIT_FUNCTION_ARG -1]} {incr i} {
   append midargs ,'/$i'
   append midres /$i
   set result [md5 \
@@ -1176,7 +1176,7 @@ do_test func-25.1 {
   execsql {SELECT test_isolation(t1,t1) FROM tbl1}
 } {this program is free software}
 
-# Try to misuse the sqlite3_create_function() interface.  Verify that
+# Try to misuse the sqlite4_create_function() interface.  Verify that
 # errors are returned.
 #
 do_test func-26.1 {

@@ -23,7 +23,7 @@ ifcapable !vtab {
 
 unset -nocomplain echo_module_begin_fail
 do_ioerr_test vtab_err-1 -tclprep {
-  register_echo_module [sqlite3_connection_pointer db]
+  register_echo_module [sqlite4_connection_pointer db]
 } -sqlbody {
   BEGIN;
   CREATE TABLE r(a PRIMARY KEY, b, c);
@@ -49,7 +49,7 @@ source $testdir/malloc_common.tcl
 
 
 do_malloc_test vtab_err-2 -tclprep { 
-  register_echo_module [sqlite3_connection_pointer db]
+  register_echo_module [sqlite4_connection_pointer db]
 } -sqlbody {
   BEGIN;
   CREATE TABLE r(a PRIMARY KEY, b, c);
@@ -66,6 +66,6 @@ do_malloc_test vtab_err-2 -tclprep {
   COMMIT;
 } 
 
-sqlite3_memdebug_fail -1
+sqlite4_memdebug_fail -1
 
 finish_test

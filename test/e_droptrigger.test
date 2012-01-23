@@ -42,7 +42,7 @@ proc list_all_triggers {{db db}} {
 proc droptrigger_reopen_db {{event INSERT}} {
   db close
   forcedelete test.db test.db2
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   set ::triggers_fired [list]
   proc r {x} { lappend ::triggers_fired $x }

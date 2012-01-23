@@ -26,8 +26,8 @@ db close
 
 # Use shared-cache mode for these tests.
 # 
-set ::enable_shared_cache [sqlite3_enable_shared_cache]
-sqlite3_enable_shared_cache 1
+set ::enable_shared_cache [sqlite4_enable_shared_cache]
+sqlite4_enable_shared_cache 1
 
 #-------------------------------------------------------------------------
 # This test attempts to hit the race condition fixed by commit [6363].
@@ -35,21 +35,21 @@ sqlite3_enable_shared_cache 1
 proc runsql {zSql {db {}}} {
   set rc SQLITE_OK
   while {$rc=="SQLITE_OK" && $zSql ne ""} {
-    set STMT [sqlite3_prepare_v2 $db $zSql -1 zSql]
-    while {[set rc [sqlite3_step $STMT]] eq "SQLITE_ROW"} { }
-    set rc [sqlite3_finalize $STMT]
+    set STMT [sqlite4_prepare_v2 $db $zSql -1 zSql]
+    while {[set rc [sqlite4_step $STMT]] eq "SQLITE_ROW"} { }
+    set rc [sqlite4_finalize $STMT]
   }
   return $rc
 }
 do_test thread005-1.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval { CREATE TABLE t1(a, b) }
   db close
 } {}
 for {set ii 2} {$ii < 500} {incr ii} {
   unset -nocomplain finished
-  thread_spawn finished(0) {sqlite3_open test.db}
-  thread_spawn finished(1) {sqlite3_open test.db}
+  thread_spawn finished(0) {sqlite4_open test.db}
+  thread_spawn finished(1) {sqlite4_open test.db}
   if {![info exists finished(0)]} { vwait finished(0) }
   if {![info exists finished(1)]} { vwait finished(1) }
 
@@ -67,8 +67,8 @@ for {set ii 2} {$ii < 500} {incr ii} {
     runsql { SELECT * FROM t1 }            $finished(1)
   } {SQLITE_LOCKED}
 
-  sqlite3_close $finished(0)
-  sqlite3_close $finished(1)
+  sqlite4_close $finished(0)
+  sqlite4_close $finished(1)
 }
 
 
@@ -125,7 +125,7 @@ forcedelete test.db test2.db
 unset -nocomplain finished
 
 do_test thread005-2.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { ATTACH 'test2.db' AS aux }
   execsql {
     CREATE TABLE aux.t1(a INTEGER PRIMARY KEY, b UNIQUE);
@@ -144,16 +144,16 @@ set ThreadProgram {
     set rc SQLITE_OK
 
     while {$rc=="SQLITE_OK" && $zSql ne ""} {
-      set STMT [sqlite3_prepare_v2 $db $zSql -1 zSql]
-      while {[set rc [sqlite3_step $STMT]] eq "SQLITE_ROW"} {
-        for {set i 0} {$i < [sqlite3_column_count $STMT]} {incr i} {
-          lappend lRes [sqlite3_column_text $STMT 0]
+      set STMT [sqlite4_prepare_v2 $db $zSql -1 zSql]
+      while {[set rc [sqlite4_step $STMT]] eq "SQLITE_ROW"} {
+        for {set i 0} {$i < [sqlite4_column_count $STMT]} {incr i} {
+          lappend lRes [sqlite4_column_text $STMT 0]
         }
       }
-      set rc [sqlite3_finalize $STMT]
+      set rc [sqlite4_finalize $STMT]
     }
 
-    if {$rc != "SQLITE_OK"} { error "$rc [sqlite3_errmsg $db]" }
+    if {$rc != "SQLITE_OK"} { error "$rc [sqlite4_errmsg $db]" }
     return $lRes
   }
 
@@ -174,7 +174,7 @@ set ThreadProgram {
     }
   }
 
-  set ::DB [sqlite3_open test.db]
+  set ::DB [sqlite4_open test.db]
 
   execsql { ATTACH 'test2.db' AS aux }
 
@@ -186,7 +186,7 @@ set ThreadProgram {
       if {[string match "SQLITE_LOCKED*" $msg]} {
         catch { execsql ROLLBACK }
       } else {
-        sqlite3_close $::DB
+        sqlite4_close $::DB
         error $msg
       }
     } elseif {$msg ne "0"} {
@@ -194,7 +194,7 @@ set ThreadProgram {
     }
   }
 
-  sqlite3_close $::DB
+  sqlite4_close $::DB
   set result
 }
 
@@ -212,8 +212,8 @@ set ThreadProgram {
 # already shared-caches in memory for all databases opened by the
 # test threads.
 #
-sqlite3 db test.db
-sqlite3 db test2.db
+sqlite4 db test.db
+sqlite4 db test2.db
 
 puts "Running thread-tests for ~20 seconds"
 thread_spawn finished(0) {set isWriter 0} $ThreadProgram
@@ -229,10 +229,10 @@ do_test thread005-2.2 {
 } {ok ok}
 
 do_test thread005-2.3 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { ATTACH 'test2.db' AS aux }
   execsql { SELECT count(*) FROM t1 WHERE b IS NULL }
 } {0}
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

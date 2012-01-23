@@ -36,7 +36,7 @@ do_test corrupt5-1.1 {
     UPDATE sqlite_master SET name=NULL, sql=NULL WHERE name='i1';
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT * FROM t1
   }

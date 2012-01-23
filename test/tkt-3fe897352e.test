@@ -26,7 +26,7 @@ ifcapable {!utf16} {
 
 do_test tkt-3fe89-1.1 {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db eval {
     PRAGMA encoding=UTF8;
     CREATE TABLE t1(x);

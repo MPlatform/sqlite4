@@ -20,14 +20,14 @@ ifcapable !shared_cache {
   return
 }
 
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 # Open 3 database connections. Connection "db" and "db2" share a cache.
 # Connection "db3" has its own cache.
 #
 do_test tkt2854-1.1 {
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
 
   # This is taken from shared.test.  The Windows VFS expands 
   # ./test.db (and test.db) to be the same thing so the path
@@ -35,9 +35,9 @@ do_test tkt2854-1.1 {
   # for Windows platform, we get around this and get a separate
   # connection.
   if {$::tcl_platform(platform)=="unix"} {
-    sqlite3 db3 ./test.db
+    sqlite4 db3 ./test.db
   } else {
-    sqlite3 db3 TEST.DB
+    sqlite4 db3 TEST.DB
   }
 
   db eval {
@@ -71,12 +71,12 @@ do_test tkt2854-1.6 {
 # starting a transaction.
 #
 do_test tkt2854-1.7 {
-  set ::DB2 [sqlite3_connection_pointer db2]
-  set ::STMT1 [sqlite3_prepare $DB2 "SELECT * FROM abc" -1 TAIL]
-  set ::STMT2 [sqlite3_prepare $DB2 "BEGIN EXCLUSIVE" -1 TAIL]
-  set ::STMT3 [sqlite3_prepare $DB2 "BEGIN IMMEDIATE" -1 TAIL]
-  set ::STMT4 [sqlite3_prepare $DB2 "BEGIN" -1 TAIL]
-  set ::STMT5 [sqlite3_prepare $DB2 "COMMIT" -1 TAIL]
+  set ::DB2 [sqlite4_connection_pointer db2]
+  set ::STMT1 [sqlite4_prepare $DB2 "SELECT * FROM abc" -1 TAIL]
+  set ::STMT2 [sqlite4_prepare $DB2 "BEGIN EXCLUSIVE" -1 TAIL]
+  set ::STMT3 [sqlite4_prepare $DB2 "BEGIN IMMEDIATE" -1 TAIL]
+  set ::STMT4 [sqlite4_prepare $DB2 "BEGIN" -1 TAIL]
+  set ::STMT5 [sqlite4_prepare $DB2 "COMMIT" -1 TAIL]
   execsql { BEGIN EXCLUSIVE } db
 } {}
 do_test tkt2854-1.8 {
@@ -95,21 +95,21 @@ do_test tkt2854-1.10 {
 # at the b-tree level, not the schema level.
 #
 do_test tkt2854-1.11 {
-  list [sqlite3_step $::STMT1] [sqlite3_finalize $::STMT1]
+  list [sqlite4_step $::STMT1] [sqlite4_finalize $::STMT1]
 } {SQLITE_ERROR SQLITE_LOCKED}
 do_test tkt2854-1.12 {
-  list [sqlite3_step $::STMT2] [sqlite3_finalize $::STMT2]
+  list [sqlite4_step $::STMT2] [sqlite4_finalize $::STMT2]
 } {SQLITE_ERROR SQLITE_LOCKED}
 do_test tkt2854-1.13 {
-  list [sqlite3_step $::STMT3] [sqlite3_finalize $::STMT3]
+  list [sqlite4_step $::STMT3] [sqlite4_finalize $::STMT3]
 } {SQLITE_ERROR SQLITE_LOCKED}
 do_test tkt2854-1.14 {
   # A regular "BEGIN" doesn't touch any databases. So it succeeds.
-  list [sqlite3_step $::STMT4] [sqlite3_finalize $::STMT4]
+  list [sqlite4_step $::STMT4] [sqlite4_finalize $::STMT4]
 } {SQLITE_DONE SQLITE_OK}
 do_test tkt2854-1.15 {
   # As does a COMMIT.
-  list [sqlite3_step $::STMT5] [sqlite3_finalize $::STMT5]
+  list [sqlite4_step $::STMT5] [sqlite4_finalize $::STMT5]
 } {SQLITE_DONE SQLITE_OK}
 
 # Try to read the database using connection "db3" (which does not share
@@ -129,7 +129,7 @@ do_test tkt2854-1.18 {
 # shared-cache users is correctly cleared.
 do_test tkt2854-1.19 {
   forcedelete test2.db test2.db-journal
-  sqlite3 db4 test2.db
+  sqlite4 db4 test2.db
   execsql { CREATE TABLE def(d, e, f) } db4
   execsql { ATTACH 'test2.db' AS aux } db
 } {}
@@ -145,5 +145,5 @@ db close
 db2 close
 db3 close
 db4 close
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

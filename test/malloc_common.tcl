@@ -158,13 +158,13 @@ proc faultsim_save_and_close {args} { uplevel db_save_and_close $args }
 proc faultsim_restore {args} { uplevel db_restore $args }
 proc faultsim_restore_and_reopen {args} { 
   uplevel db_restore_and_reopen $args 
-  sqlite3_extended_result_codes db 1
-  sqlite3_db_config_lookaside db 0 0 0
+  sqlite4_extended_result_codes db 1
+  sqlite4_db_config_lookaside db 0 0 0
 }
 proc faultsim_delete_and_reopen {args} {
   uplevel db_delete_and_reopen $args 
-  sqlite3_extended_result_codes db 1
-  sqlite3_db_config_lookaside db 0 0 0
+  sqlite4_extended_result_codes db 1
+  sqlite4_db_config_lookaside db 0 0 0
 }
 
 proc faultsim_integrity_check {{db db}} {
@@ -177,10 +177,10 @@ proc faultsim_integrity_check {{db db}} {
 # injecting OOM faults into test cases.
 #
 proc oom_injectstart {nRepeat iFail} {
-  sqlite3_memdebug_fail [expr $iFail-1] -repeat $nRepeat
+  sqlite4_memdebug_fail [expr $iFail-1] -repeat $nRepeat
 }
 proc oom_injectstop {} {
-  sqlite3_memdebug_fail -1
+  sqlite4_memdebug_fail -1
 }
 
 # The following procs are used as [do_one_faultsim_test] callbacks when 
@@ -427,11 +427,11 @@ proc do_malloc_test {tn args} {
         if {[info exists ::mallocopts(-testdb)]} {
           copy_file $::mallocopts(-testdb) test.db
         }
-        catch { sqlite3 db test.db }
+        catch { sqlite4 db test.db }
         if {[info commands db] ne ""} {
-          sqlite3_extended_result_codes db 1
+          sqlite4_extended_result_codes db 1
         }
-        sqlite3_db_config_lookaside db 0 0 0
+        sqlite4_db_config_lookaside db 0 0 0
   
         # Execute any -tclprep and -sqlprep scripts.
         #
@@ -445,7 +445,7 @@ proc do_malloc_test {tn args} {
         # Now set the ${::n}th malloc() to fail and execute the -tclbody 
         # and -sqlbody scripts.
         #
-        sqlite3_memdebug_fail $::n -repeat $::iRepeat
+        sqlite4_memdebug_fail $::n -repeat $::iRepeat
         set ::mallocbody {}
         if {[info exists ::mallocopts(-tclbody)]} {
           append ::mallocbody "$::mallocopts(-tclbody)\n"
@@ -461,7 +461,7 @@ proc do_malloc_test {tn args} {
         #     nBenign - The number of benign simulated malloc() failures.
         #
         set isFail [catch $::mallocbody msg]
-        set nFail [sqlite3_memdebug_fail -1 -benigncnt nBenign]
+        set nFail [sqlite4_memdebug_fail -1 -benigncnt nBenign]
         # puts -nonewline " (isFail=$isFail nFail=$nFail nBenign=$nBenign) "
 
         # If one or more mallocs failed, run this loop body again.
@@ -496,7 +496,7 @@ proc do_malloc_test {tn args} {
     }
   }
   unset ::mallocopts
-  sqlite3_memdebug_fail -1
+  sqlite4_memdebug_fail -1
 }
 
 
@@ -577,15 +577,15 @@ proc doPassiveTest {isRestart name sql catchres} {
     for {set iFail 1} {$nFail && $iFail<=$iLimit} {incr iFail} {
       for {set iTest 0} {$iTest<$nBackup && ($iFail-$iTest)>0} {incr iTest} {
 
-        if {$isRestart} { sqlite3 db test.db }
+        if {$isRestart} { sqlite4 db test.db }
 
-        sqlite3_memdebug_fail [expr $iFail-$iTest] -repeat $nRepeat
+        sqlite4_memdebug_fail [expr $iFail-$iTest] -repeat $nRepeat
         set res [uplevel [list catchsql $sql]]
         if {[lsearch -exact $answers $res]>=0} { set res $str }
         set testname "$name.$zName.$iFail"
         do_test "$name.$zName.$iLimit.$iFail" [list set {} $res] $str
 
-        set nFail [sqlite3_memdebug_fail -1 -benigncnt nBenign]
+        set nFail [sqlite4_memdebug_fail -1 -benigncnt nBenign]
       }
     }
   }
@@ -640,10 +640,10 @@ proc do_write_test {name tbl sql} {
 
   foreach {nRepeat zName} $modes {
     for {set iFail 1} 1 {incr iFail} {
-      if {$::DO_MALLOC_TEST} {sqlite3_memdebug_fail $iFail -repeat $nRepeat}
+      if {$::DO_MALLOC_TEST} {sqlite4_memdebug_fail $iFail -repeat $nRepeat}
 
       set res [uplevel [list catchsql $sql]]
-      set nFail [sqlite3_memdebug_fail -1 -benigncnt nBenign]
+      set nFail [sqlite4_memdebug_fail -1 -benigncnt nBenign]
       if {$nFail==0} {
         do_test $name.$zName.$iFail [list set {} $res] {0 {}}
         return

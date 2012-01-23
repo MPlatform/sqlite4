@@ -71,20 +71,20 @@ struct Fts3HashElem {
 /*
 ** Access routines.  To delete, insert a NULL pointer.
 */
-void sqlite3Fts3HashInit(Fts3Hash *pNew, char keyClass, char copyKey);
-void *sqlite3Fts3HashInsert(Fts3Hash*, const void *pKey, int nKey, void *pData);
-void *sqlite3Fts3HashFind(const Fts3Hash*, const void *pKey, int nKey);
-void sqlite3Fts3HashClear(Fts3Hash*);
-Fts3HashElem *sqlite3Fts3HashFindElem(const Fts3Hash *, const void *, int);
+void sqlite4Fts3HashInit(Fts3Hash *pNew, char keyClass, char copyKey);
+void *sqlite4Fts3HashInsert(Fts3Hash*, const void *pKey, int nKey, void *pData);
+void *sqlite4Fts3HashFind(const Fts3Hash*, const void *pKey, int nKey);
+void sqlite4Fts3HashClear(Fts3Hash*);
+Fts3HashElem *sqlite4Fts3HashFindElem(const Fts3Hash *, const void *, int);
 
 /*
 ** Shorthand for the functions above
 */
-#define fts3HashInit     sqlite3Fts3HashInit
-#define fts3HashInsert   sqlite3Fts3HashInsert
-#define fts3HashFind     sqlite3Fts3HashFind
-#define fts3HashClear    sqlite3Fts3HashClear
-#define fts3HashFindElem sqlite3Fts3HashFindElem
+#define fts3HashInit     sqlite4Fts3HashInit
+#define fts3HashInsert   sqlite4Fts3HashInsert
+#define fts3HashFind     sqlite4Fts3HashFind
+#define fts3HashClear    sqlite4Fts3HashClear
+#define fts3HashFindElem sqlite4Fts3HashFindElem
 
 /*
 ** Macros for looping over all elements of a hash table.  The idiom is

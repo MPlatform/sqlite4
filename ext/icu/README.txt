@@ -118,8 +118,8 @@ SQLite. Documentation follows.
 
     gcc -shared icu.c `icu-config --ldflags` -o libSqliteIcu.so
 
-  You may need to add "-I" flags so that gcc can find sqlite3ext.h
-  and sqlite3.h. The resulting shared lib, libSqliteIcu.so, may be
+  You may need to add "-I" flags so that gcc can find sqlite4ext.h
+  and sqlite4.h. The resulting shared lib, libSqliteIcu.so, may be
   loaded into sqlite in the same way as any other dynamically loadable
   extension.
 

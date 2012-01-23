@@ -48,7 +48,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
     }
   } {1 {child process exited abnormally}}
   do_test walcrash-1.$i.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { SELECT sum(a)==max(b) FROM t1 }
   } {1}
   integrity_check walcrash-1.$i.3
@@ -61,7 +61,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
     }
   } {1 {child process exited abnormally}}
   do_test walcrash-1.$i.5 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { SELECT sum(a)==max(b) FROM t1 }
   } {1}
   integrity_check walcrash-1.$i.6
@@ -85,7 +85,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
     }
   } {1 {child process exited abnormally}}
   do_test walcrash-2.$i.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { SELECT sum(a)==max(b) FROM t1 }
   } {1}
   integrity_check walcrash-2.$i.3
@@ -98,7 +98,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
     }
   } {1 {child process exited abnormally}}
   do_test walcrash-2.$i.5 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { SELECT sum(a)==max(b) FROM t1 }
   } {1}
   integrity_check walcrash-2.$i.6
@@ -128,7 +128,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
 #   } {1 {child process exited abnormally}}
 # 
 #   do_test walcrash-3.$i.2 {
-#     sqlite3_wal db test.db
+#     sqlite4_wal db test.db
 #     execsql { 
 #       ATTACH 'test2.db' AS aux;
 #       SELECT * FROM t1 EXCEPT SELECT * FROM t2;
@@ -157,7 +157,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
   } {1 {child process exited abnormally}}
 
   do_test walcrash-4.$i.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { 
       SELECT * FROM t1 WHERE a = 1;
     }
@@ -200,7 +200,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
   } {1 {child process exited abnormally}}
 
   do_test walcrash-5.$i.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { SELECT count(*)==33 OR count(*)==34 FROM t1 WHERE x != 1 }
   } {1}
   do_test walcrash-5.$i.3 { execsql { PRAGMA main.integrity_check } } {ok}
@@ -241,7 +241,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
   } {1 {child process exited abnormally}}
 
   do_test walcrash-6.$i.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { SELECT count(*)==34 OR count(*)==35 FROM t1 WHERE x != 1 }
   } {1}
   do_test walcrash-6.$i.3 { execsql { PRAGMA main.integrity_check } } {ok}
@@ -283,7 +283,7 @@ for {set i 1} {$i < $REPEATS} {incr i} {
   } {1 {child process exited abnormally}}
 
   do_test walcrash-7.$i.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { SELECT b FROM t1 WHERE a = 1 }
   } {2}
   do_test walcrash-7.$i.3 { execsql { PRAGMA main.integrity_check } } {ok}

@@ -57,9 +57,9 @@ if {!$MEMDEBUG} {
 # _get_autocommit().
 #
 #
-# Handling of sqlite3_reset():
+# Handling of sqlite4_reset():
 #
-# If a malloc() fails while executing an sqlite3_reset() call, this is handled
+# If a malloc() fails while executing an sqlite4_reset() call, this is handled
 # in the same way as a failure within _finalize(). The statement handle
 # is not deleted and must be passed to _finalize() for resource deallocation.
 # Attempting to _step() or _reset() the statement after a failed _reset() will
@@ -81,10 +81,10 @@ if {!$MEMDEBUG} {
 #         readMasterJournal()  - Space to read the master journal name
 #         pager_delmaster()    - Space for the entire master journal file
 #
-#         sqlite3pager_open()  - The pager structure itself
-#         sqlite3_pagerget()   - Space for a new page
+#         sqlite4pager_open()  - The pager structure itself
+#         sqlite4_pagerget()   - Space for a new page
 #         pager_open_journal() - Pager.aInJournal[] bitmap
-#         sqlite3pager_write() - For in-memory databases only: history page and
+#         sqlite4pager_write() - For in-memory databases only: history page and
 #                                statement history page.
 #         pager_stmt_begin()   - Pager.aInStmt[] bitmap
 #
@@ -93,8 +93,8 @@ if {!$MEMDEBUG} {
 # operation. This means the tree being balanced will be internally inconsistent
 # after the malloc() fails. To avoid the corrupt tree being read by a
 # READ_UNCOMMITTED query, we have to make sure the transaction or statement
-# rollback occurs before sqlite3_step() returns, not during a subsequent
-# sqlite3_finalize().
+# rollback occurs before sqlite4_step() returns, not during a subsequent
+# sqlite4_finalize().
 #--------------------------------------------------------------------------
 
 #--------------------------------------------------------------------------
@@ -179,7 +179,7 @@ proc SQL  {a1 {a2 ""}} {
 #     argument is either 1 or 0, the expected value of the auto-commit flag.
 #
 proc TEST_AUTOCOMMIT {id a} {
-    TEST $id "do_test \$testid { sqlite3_get_autocommit \$::DB } {$a}"
+    TEST $id "do_test \$testid { sqlite4_get_autocommit \$::DB } {$a}"
 }
 
 #--------------------------------------------------------------------------
@@ -339,7 +339,7 @@ SQL {COMMIT;}
 
 TEST 14 {
   do_test $testid.1 {
-    sqlite3_get_autocommit $::DB
+    sqlite4_get_autocommit $::DB
   } {1}
   do_test $testid.2 {
     execsql {SELECT a, b, c FROM abc}
@@ -488,13 +488,13 @@ ifcapable attach {
 }
 
 # Test what happens when a malloc() fails while there are other active
-# statements. This changes the way sqlite3VdbeHalt() works.
+# statements. This changes the way sqlite4VdbeHalt() works.
 TEST 32 {
   if {![info exists ::STMT32]} {
     set sql "SELECT name FROM sqlite_master"
-    set ::STMT32 [sqlite3_prepare $::DB $sql -1 DUMMY]
+    set ::STMT32 [sqlite4_prepare $::DB $sql -1 DUMMY]
     do_test $testid {
-      sqlite3_step $::STMT32
+      sqlite4_step $::STMT32
     } {SQLITE_ROW}
   }
 }
@@ -512,7 +512,7 @@ SQL -norollback {
 TEST 34 {
   if {[info exists ::STMT32]} {
     do_test $testid {
-      sqlite3_finalize $::STMT32
+      sqlite4_finalize $::STMT32
     } {SQLITE_OK}
     unset ::STMT32
   }
@@ -531,12 +531,12 @@ proc run_test {arglist iRepeat {pcstart 0} {iFailStart 1}} {
   for {set i 0} {$i < $pcstart} {incr i} {
     set k2 [lindex $arglist [expr 2 * $i]]
     set v2 [lindex $arglist [expr 2 * $i + 1]]
-    set ac [sqlite3_get_autocommit $::DB]        ;# Auto-Commit
+    set ac [sqlite4_get_autocommit $::DB]        ;# Auto-Commit
     switch -- $k2 {
       -sql  {db eval [lindex $v2 1]}
       -prep {db eval $v2}
     }
-    set nac [sqlite3_get_autocommit $::DB]       ;# New Auto-Commit 
+    set nac [sqlite4_get_autocommit $::DB]       ;# New Auto-Commit 
     if {$ac && !$nac} {set begin_pc $i}
   }
 
@@ -561,10 +561,10 @@ proc run_test {arglist iRepeat {pcstart 0} {iFailStart 1}} {
       -sql {
         set ::rollback_hook_count 0
 
-        set ac [sqlite3_get_autocommit $::DB]        ;# Auto-Commit
-        sqlite3_memdebug_fail $iFail -repeat 0
+        set ac [sqlite4_get_autocommit $::DB]        ;# Auto-Commit
+        sqlite4_memdebug_fail $iFail -repeat 0
         set rc [catch {db eval [lindex $v 1]} msg]   ;# True error occurs
-        set nac [sqlite3_get_autocommit $::DB]       ;# New Auto-Commit 
+        set nac [sqlite4_get_autocommit $::DB]       ;# New Auto-Commit 
 
         if {$rc != 0 && $nac && !$ac} {
           # Before [db eval] the auto-commit flag was clear. Now it
@@ -576,7 +576,7 @@ proc run_test {arglist iRepeat {pcstart 0} {iFailStart 1}} {
           } {1}
         }
 
-        set nFail [sqlite3_memdebug_fail -1 -benigncnt nBenign]
+        set nFail [sqlite4_memdebug_fail -1 -benigncnt nBenign]
         if {$rc == 0} {
             # Successful execution of sql. The number of failed malloc()
             # calls should be equal to the number of benign failures.
@@ -644,21 +644,21 @@ proc run_test {arglist iRepeat {pcstart 0} {iFailStart 1}} {
 
 # Turn of the Tcl interface's prepared statement caching facility. Then
 # run the tests with "persistent" malloc failures.
-sqlite3_extended_result_codes db 1
+sqlite4_extended_result_codes db 1
 db cache size 0
 run_test $::run_test_script 1
 
 # Close and reopen the db.
 db close
 forcedelete test.db test.db-journal test2.db test2.db-journal
-sqlite3 db test.db
-sqlite3_extended_result_codes db 1
-set ::DB [sqlite3_connection_pointer db]
+sqlite4 db test.db
+sqlite4_extended_result_codes db 1
+set ::DB [sqlite4_connection_pointer db]
 
 # Turn off the Tcl interface's prepared statement caching facility in
 # the new connnection. Then run the tests with "transient" malloc failures.
 db cache size 0
 run_test $::run_test_script 0
 
-sqlite3_memdebug_fail -1
+sqlite4_memdebug_fail -1
 finish_test

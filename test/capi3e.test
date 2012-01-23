@@ -19,7 +19,7 @@ source $testdir/tester.tcl
 
 # Make sure the system encoding is utf-8. Otherwise, if the system encoding
 # is other than utf-8, [file isfile $x] may not refer to the same file
-# as [sqlite3 db $x].
+# as [sqlite4 db $x].
 encoding system utf-8
 
 # Do not use a codec for tests in this file, as the database file is
@@ -53,8 +53,8 @@ proc utf8 {str} {
 # These tests complement those in capi2.test. They are organized
 # as follows:
 #
-# capi3e-1.*: Test sqlite3_open with various UTF8 filenames
-# capi3e-2.*: Test sqlite3_open16 with various UTF8 filenames
+# capi3e-1.*: Test sqlite4_open with various UTF8 filenames
+# capi3e-2.*: Test sqlite4_open16 with various UTF8 filenames
 # capi3e-3.*: Test ATTACH with various UTF8 filenames
 
 db close
@@ -66,11 +66,11 @@ set i 0
 foreach name $names {
   incr i
   do_test capi3e-1.1.$i {
-    set db2 [sqlite3_open $name {}]
-    sqlite3_errcode $db2
+    set db2 [sqlite4_open $name {}]
+    sqlite4_errcode $db2
   } {SQLITE_OK}
   do_test capi3e-1.2.$i {
-    sqlite3_close $db2
+    sqlite4_close $db2
   } {SQLITE_OK}
   do_test capi3e-1.3.$i {
     file isfile $name
@@ -82,11 +82,11 @@ ifcapable {utf16} {
   foreach name $names {
     incr i
     do_test capi3e-2.1.$i {
-      set db2 [sqlite3_open16 [utf16 $name] {}]
-      sqlite3_errcode $db2
+      set db2 [sqlite4_open16 [utf16 $name] {}]
+      sqlite4_errcode $db2
     } {SQLITE_OK}
     do_test capi3e-2.2.$i {
-      sqlite3_close $db2
+      sqlite4_close $db2
     } {SQLITE_OK}
     do_test capi3e-2.3.$i {
       file isfile $name
@@ -96,7 +96,7 @@ ifcapable {utf16} {
 
 ifcapable attach {
   do_test capi3e-3.1 {
-    sqlite3 db2 base.db
+    sqlite4 db2 base.db
   } {}
   set i 0
   foreach name $names {

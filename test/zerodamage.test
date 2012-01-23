@@ -50,7 +50,7 @@ do_test zerodamage-2.0 {
   db close
   testvfs tv -default 1
   tv sectorsize 8192
-  sqlite3 db file:test.db?psow=TRUE -uri 1
+  sqlite4 db file:test.db?psow=TRUE -uri 1
   unset -nocomplain ::max_journal_size
   set ::max_journal_size 0
   proc xDeleteCallback {method file args} {
@@ -82,7 +82,7 @@ do_test zerodamage-2.0 {
 do_test zerodamage-2.1 {
   set ::max_journal_size 0
   db close
-  sqlite3 db file:test.db?psow=FALSE -uri 1
+  sqlite4 db file:test.db?psow=FALSE -uri 1
   db eval {
     UPDATE t1 SET y=randomblob(50) WHERE x=124;
   }
@@ -97,7 +97,7 @@ do_test zerodamage-3.0 {
      PRAGMA journal_mode=WAL;
   }
   db close
-  sqlite3 db file:test.db?psow=TRUE -uri 1
+  sqlite4 db file:test.db?psow=TRUE -uri 1
   db eval {
      UPDATE t1 SET y=randomblob(50) WHERE x=124;
   }
@@ -109,7 +109,7 @@ do_test zerodamage-3.0 {
 #
 do_test zerodamage-3.1 {
   db close
-  sqlite3 db file:test.db?psow=FALSE -uri 1
+  sqlite4 db file:test.db?psow=FALSE -uri 1
   db eval {
      UPDATE t1 SET y=randomblob(50) WHERE x=124;
   }

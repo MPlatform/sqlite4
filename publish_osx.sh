@@ -23,11 +23,11 @@ echo "VERSIONS: $VERS $VERSW"
 # Start by building an sqlite shell for linux.
 #
 make clean
-make sqlite3.c
+make sqlite4.c
 CFLAGS="-Os -DSQLITE_ENABLE_FTS3=1 -DSQLITE_THREADSAFE=0"
-NAME=sqlite3-$VERS-osx-x86.bin
+NAME=sqlite4-$VERS-osx-x86.bin
 echo '***** '"COMPILING $NAME..."
-gcc $CFLAGS -Itsrc sqlite3.c tsrc/shell.c -o $NAME -ldl
+gcc $CFLAGS -Itsrc sqlite4.c tsrc/shell.c -o $NAME -ldl
 strip $NAME
 chmod 644 $NAME
 gzip $NAME

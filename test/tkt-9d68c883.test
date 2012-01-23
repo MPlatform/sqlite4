@@ -31,8 +31,8 @@ do_test tkt-9d68c88-1.1 {
 
 for {set i 0} {$i < 100} {incr i} {
   db close
-  sqlite3_simulate_device -sectorsize 8192
-  sqlite3 db test.db -vfs devsym
+  sqlite4_simulate_device -sectorsize 8192
+  sqlite4 db test.db -vfs devsym
 
   do_test tkt-9d68c88-2.$i {
     execsql {
@@ -41,9 +41,9 @@ for {set i 0} {$i < 100} {incr i} {
         INSERT INTO t8 VALUES('hello world');
     }
   
-    sqlite3_memdebug_fail $i -repeat 0
+    sqlite4_memdebug_fail $i -repeat 0
     catchsql { DROP TABLE t7; }
-    sqlite3_memdebug_fail -1
+    sqlite4_memdebug_fail -1
 
     catchsql { ROLLBACK }
     execsql { PRAGMA integrity_check }

@@ -343,7 +343,7 @@ do_test lastinsert-7.6 {
 
 do_test lastinsert-8.1 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     CREATE TABLE t2(x INTEGER PRIMARY KEY, y);
     CREATE TABLE t3(a, b);

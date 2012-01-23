@@ -49,7 +49,7 @@ static void *malloc_and_zero(int n){
 ** true if the hash table should make its own private copy of keys and
 ** false if it should just use the supplied pointer.
 */
-void sqlite3Fts1HashInit(fts1Hash *pNew, int keyClass, int copyKey){
+void sqlite4Fts1HashInit(fts1Hash *pNew, int keyClass, int copyKey){
   assert( pNew!=0 );
   assert( keyClass>=FTS1_HASH_STRING && keyClass<=FTS1_HASH_BINARY );
   pNew->keyClass = keyClass;
@@ -66,7 +66,7 @@ void sqlite3Fts1HashInit(fts1Hash *pNew, int keyClass, int copyKey){
 ** Call this routine to delete a hash table or to reset a hash table
 ** to the empty state.
 */
-void sqlite3Fts1HashClear(fts1Hash *pH){
+void sqlite4Fts1HashClear(fts1Hash *pH){
   fts1HashElem *elem;         /* For looping over all elements of the table */
 
   assert( pH!=0 );
@@ -275,7 +275,7 @@ static void removeElementGivenHash(
 ** that matches pKey,nKey.  Return the data for this element if it is
 ** found, or NULL if there is no match.
 */
-void *sqlite3Fts1HashFind(const fts1Hash *pH, const void *pKey, int nKey){
+void *sqlite4Fts1HashFind(const fts1Hash *pH, const void *pKey, int nKey){
   int h;                 /* A hash on key */
   fts1HashElem *elem;    /* The element that matches key */
   int (*xHash)(const void*,int);  /* The hash function */
@@ -304,7 +304,7 @@ void *sqlite3Fts1HashFind(const fts1Hash *pH, const void *pKey, int nKey){
 ** If the "data" parameter to this function is NULL, then the
 ** element corresponding to "key" is removed from the hash table.
 */
-void *sqlite3Fts1HashInsert(
+void *sqlite4Fts1HashInsert(
   fts1Hash *pH,        /* The hash table to insert into */
   const void *pKey,    /* The key */
   int nKey,            /* Number of bytes in the key */

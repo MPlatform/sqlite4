@@ -13,7 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "sqlite3.h"
+#include "sqlite4.h"
 
 static void usage(char *argv0){
   fprintf(stderr,
@@ -25,14 +25,14 @@ static void usage(char *argv0){
   exit(1);
 }
 
-static sqlite3 *openDb(const char *zFilename){
+static sqlite4 *openDb(const char *zFilename){
   int rc;
-  sqlite3 *db;
-  rc = sqlite3_open(zFilename, &db);
+  sqlite4 *db;
+  rc = sqlite4_open(zFilename, &db);
   if( rc ){
     fprintf(stderr, "Cannot open \"%s\": %s\n",
-            zFilename, sqlite3_errmsg(db));
-    sqlite3_close(db);
+            zFilename, sqlite4_errmsg(db));
+    sqlite4_close(db);
     exit(1);
   }
   return db;
@@ -57,23 +57,23 @@ static int execCallback(void *NotUsed, int nArg, char **azArg, char **azCol){
   return 0;
 }
 
-static void runSql(sqlite3 *db, const char *zSql){
+static void runSql(sqlite4 *db, const char *zSql){
   char *zErr = 0;
   int rc;
   nReply = 0;
-  rc = sqlite3_exec(db, zSql, execCallback, 0, &zErr);
+  rc = sqlite4_exec(db, zSql, execCallback, 0, &zErr);
   if( zErr ){
     fprintf(stderr, "SQL error: %s\n", zErr);
     exit(1);
   }
   if( rc ){
-    fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));
+    fprintf(stderr, "SQL error: %s\n", sqlite4_errmsg(db));
     exit(1);
   }
 }
 
 int main(int argc, char **argv){
-  sqlite3 *db;
+  sqlite4 *db;
   int i;
 
   if( argc<3 ) usage(argv[0]);
@@ -114,7 +114,7 @@ int main(int argc, char **argv){
        "CREATE INDEX t1y ON t1(y);"
        "COMMIT;"
     );
-    sqlite3_close(db);
+    sqlite4_close(db);
   }else if( strcmp(argv[1], "check")==0 ){
     db = openDb(argv[argc-1]);
     runSql(db, "PRAGMA integrity_check");

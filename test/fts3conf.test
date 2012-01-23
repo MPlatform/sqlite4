@@ -25,7 +25,7 @@ ifcapable !fts3 {
 
 proc fts3_integrity {tn db tbl} {
 
-  if {[sqlite3_get_autocommit $db]==0} {
+  if {[sqlite4_get_autocommit $db]==0} {
     error "fts3_integrity does not work with an open transaction"
   }
 

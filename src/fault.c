@@ -12,7 +12,7 @@
 **
 ** This file contains code to support the concept of "benign" 
 ** malloc failures (when the xMalloc() or xRealloc() method of the
-** sqlite3_mem_methods structure fails to allocate a block of memory
+** sqlite4_mem_methods structure fails to allocate a block of memory
 ** and returns 0). 
 **
 ** Most malloc failures are non-benign. After they occur, SQLite
@@ -35,29 +35,29 @@ typedef struct BenignMallocHooks BenignMallocHooks;
 static SQLITE_WSD struct BenignMallocHooks {
   void (*xBenignBegin)(void);
   void (*xBenignEnd)(void);
-} sqlite3Hooks = { 0, 0 };
+} sqlite4Hooks = { 0, 0 };
 
 /* The "wsdHooks" macro will resolve to the appropriate BenignMallocHooks
 ** structure.  If writable static data is unsupported on the target,
 ** we have to locate the state vector at run-time.  In the more common
 ** case where writable static data is supported, wsdHooks can refer directly
-** to the "sqlite3Hooks" state vector declared above.
+** to the "sqlite4Hooks" state vector declared above.
 */
 #ifdef SQLITE_OMIT_WSD
 # define wsdHooksInit \
-  BenignMallocHooks *x = &GLOBAL(BenignMallocHooks,sqlite3Hooks)
+  BenignMallocHooks *x = &GLOBAL(BenignMallocHooks,sqlite4Hooks)
 # define wsdHooks x[0]
 #else
 # define wsdHooksInit
-# define wsdHooks sqlite3Hooks
+# define wsdHooks sqlite4Hooks
 #endif
 
 
 /*
-** Register hooks to call when sqlite3BeginBenignMalloc() and
-** sqlite3EndBenignMalloc() are called, respectively.
+** Register hooks to call when sqlite4BeginBenignMalloc() and
+** sqlite4EndBenignMalloc() are called, respectively.
 */
-void sqlite3BenignMallocHooks(
+void sqlite4BenignMallocHooks(
   void (*xBenignBegin)(void),
   void (*xBenignEnd)(void)
 ){
@@ -67,17 +67,17 @@ void sqlite3BenignMallocHooks(
 }
 
 /*
-** This (sqlite3EndBenignMalloc()) is called by SQLite code to indicate that
-** subsequent malloc failures are benign. A call to sqlite3EndBenignMalloc()
+** This (sqlite4EndBenignMalloc()) is called by SQLite code to indicate that
+** subsequent malloc failures are benign. A call to sqlite4EndBenignMalloc()
 ** indicates that subsequent malloc failures are non-benign.
 */
-void sqlite3BeginBenignMalloc(void){
+void sqlite4BeginBenignMalloc(void){
   wsdHooksInit;
   if( wsdHooks.xBenignBegin ){
     wsdHooks.xBenignBegin();
   }
 }
-void sqlite3EndBenignMalloc(void){
+void sqlite4EndBenignMalloc(void){
   wsdHooksInit;
   if( wsdHooks.xBenignEnd ){
     wsdHooks.xBenignEnd();

@@ -845,9 +845,9 @@ foreach {tn select nCol} {
   6   "SELECT 1, 2, z1.* FROM z1"                   5
   7   "SELECT a, *, b, c FROM z1"                   6
 } {
-  set ::stmt [sqlite3_prepare_v2 db $select -1 DUMMY]
-  do_test e_select-4.3.$tn { sqlite3_column_count $::stmt } $nCol
-  sqlite3_finalize $::stmt
+  set ::stmt [sqlite4_prepare_v2 db $select -1 DUMMY]
+  do_test e_select-4.3.$tn { sqlite4_column_count $::stmt } $nCol
+  sqlite4_finalize $::stmt
 }
 
 
@@ -969,10 +969,10 @@ foreach {tn select} {
   8.5  "SELECT max(a1.one)+min(two), a1.one, two, * FROM a1, a2 WHERE 0"
 } {
   # Set $nRow to the number of rows returned by $select:
-  set ::stmt [sqlite3_prepare_v2 db $select -1 DUMMY]
+  set ::stmt [sqlite4_prepare_v2 db $select -1 DUMMY]
   set nRow 0
-  while {"SQLITE_ROW" == [sqlite3_step $::stmt]} { incr nRow }
-  set rc [sqlite3_finalize $::stmt]
+  while {"SQLITE_ROW" == [sqlite4_step $::stmt]} { incr nRow }
+  set rc [sqlite4_finalize $::stmt]
 
   # Test that $nRow==1 and that statement execution was successful 
   # (rc==SQLITE_OK).

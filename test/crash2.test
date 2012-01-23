@@ -60,7 +60,7 @@ for {set ii 0} {$ii < 5} {incr ii} {
       [string repeat {SELECT random();} $ii]
       CREATE TABLE hij(h, i, j);
     }]
-    sqlite3 db test.db
+    sqlite4 db test.db
     db eval {PRAGMA integrity_check}
   } {ok}
 }
@@ -102,7 +102,7 @@ for {set i 1} {$i < 30} {incr i} {
      "
   } {1 {child process exited abnormally}}
   do_test crash2-2.$i.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     signature
   } $sig
 } 
@@ -125,7 +125,7 @@ for {set i 1} {$i < 10} {incr i} {
      "
   } {1 {child process exited abnormally}}
   do_test crash2-3.$i.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     signature
   } $sig
 } 

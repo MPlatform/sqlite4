@@ -55,7 +55,7 @@ do_test tkt-d82e3-1.4 {
   }
 } {main t1 3 temp t2 3}
 
-sqlite3 db2 test.db
+sqlite4 db2 test.db
 do_test tkt-d82e3-2.1 {
   db eval {
     CREATE TEMP TABLE t3(x);

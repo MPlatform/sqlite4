@@ -225,17 +225,17 @@ test_suite "memsubsys1" -description {
   test_set $::allquicktests -exclude ioerr5.test malloc5.test
 ] -initialize {
   catch {db close}
-  sqlite3_shutdown
-  sqlite3_config_pagecache 4096 24
-  sqlite3_config_scratch 25000 1
-  sqlite3_initialize
+  sqlite4_shutdown
+  sqlite4_config_pagecache 4096 24
+  sqlite4_config_scratch 25000 1
+  sqlite4_initialize
   autoinstall_test_functions
 } -shutdown {
   catch {db close}
-  sqlite3_shutdown
-  sqlite3_config_pagecache 0 0
-  sqlite3_config_scratch 0 0
-  sqlite3_initialize
+  sqlite4_shutdown
+  sqlite4_config_pagecache 0 0
+  sqlite4_config_scratch 0 0
+  sqlite4_initialize
   autoinstall_test_functions
 }
 
@@ -243,7 +243,7 @@ test_suite "memsubsys1" -description {
 # the allocations are too small to use in most cases.
 #
 # Both ioerr5.test and malloc5.test are excluded because they test the
-# sqlite3_soft_heap_limit() and sqlite3_release_memory() functionality.
+# sqlite4_soft_heap_limit() and sqlite4_release_memory() functionality.
 # This functionality is disabled if a pre-allocated page block is provided.
 #
 test_suite "memsubsys2" -description {
@@ -252,17 +252,17 @@ test_suite "memsubsys2" -description {
   test_set $::allquicktests -exclude ioerr5.test malloc5.test
 ] -initialize {
   catch {db close}
-  sqlite3_shutdown
-  sqlite3_config_pagecache 512 5
-  sqlite3_config_scratch 1000 1
-  sqlite3_initialize
+  sqlite4_shutdown
+  sqlite4_config_pagecache 512 5
+  sqlite4_config_scratch 1000 1
+  sqlite4_initialize
   autoinstall_test_functions
 } -shutdown {
   catch {db close}
-  sqlite3_shutdown
-  sqlite3_config_pagecache 0 0
-  sqlite3_config_scratch 0 0
-  sqlite3_initialize
+  sqlite4_shutdown
+  sqlite4_config_pagecache 0 0
+  sqlite4_config_scratch 0 0
+  sqlite4_initialize
   autoinstall_test_functions
 }
 
@@ -272,15 +272,15 @@ test_suite "nolookaside" -description {
   OOM tests with lookaside disabled
 } -initialize {
   catch {db close}
-  sqlite3_shutdown
-  sqlite3_config_lookaside 0 0
-  sqlite3_initialize
+  sqlite4_shutdown
+  sqlite4_config_lookaside 0 0
+  sqlite4_initialize
   autoinstall_test_functions
 } -shutdown {
   catch {db close}
-  sqlite3_shutdown
-  sqlite3_config_lookaside 100 500
-  sqlite3_initialize
+  sqlite4_shutdown
+  sqlite4_config_lookaside 100 500
+  sqlite4_initialize
   autoinstall_test_functions
 } -files $::allquicktests
 
@@ -290,9 +290,9 @@ test_suite "singlethread" -description {
   Tests run in SQLITE_CONFIG_SINGLETHREAD mode
 } -initialize {
   catch {db close}
-  sqlite3_shutdown
-  catch {sqlite3_config singlethread}
-  sqlite3_initialize
+  sqlite4_shutdown
+  catch {sqlite4_config singlethread}
+  sqlite4_initialize
   autoinstall_test_functions
 } -files {
   delete.test   delete2.test  insert.test  rollback.test  select1.test
@@ -300,29 +300,29 @@ test_suite "singlethread" -description {
   types2.test   types3.test
 } -shutdown {
   catch {db close}
-  sqlite3_shutdown
-  catch {sqlite3_config serialized}
-  sqlite3_initialize
+  sqlite4_shutdown
+  catch {sqlite4_config serialized}
+  sqlite4_initialize
   autoinstall_test_functions
 }
 
 test_suite "nomutex" -description {
-  Tests run with the SQLITE_OPEN_MULTITHREADED flag passed to sqlite3_open().
+  Tests run with the SQLITE_OPEN_MULTITHREADED flag passed to sqlite4_open().
 } -initialize {
-  rename sqlite3 sqlite3_nomutex
-  proc sqlite3 {args} {
+  rename sqlite4 sqlite4_nomutex
+  proc sqlite4 {args} {
     if {[string range [lindex $args 0] 0 0] ne "-"} {
       lappend args -fullmutex 0 -nomutex 1
     }
-    uplevel [concat sqlite3_nomutex $args]
+    uplevel [concat sqlite4_nomutex $args]
   }
 } -files {
   delete.test   delete2.test  insert.test  rollback.test  select1.test
   select2.test  trans.test    update.test  vacuum.test    types.test
   types2.test   types3.test
 } -shutdown {
-  rename sqlite3 {}
-  rename sqlite3_nomutex sqlite3
+  rename sqlite4 {}
+  rename sqlite4_nomutex sqlite4
 }
 
 # Run some tests in SQLITE_CONFIG_MULTITHREAD mode.
@@ -331,9 +331,9 @@ test_suite "multithread" -description {
   Tests run in SQLITE_CONFIG_MULTITHREAD mode
 } -initialize {
   catch {db close}
-  sqlite3_shutdown
-  catch {sqlite3_config multithread}
-  sqlite3_initialize
+  sqlite4_shutdown
+  catch {sqlite4_config multithread}
+  sqlite4_initialize
   autoinstall_test_functions
 } -files {
   delete.test   delete2.test  insert.test  rollback.test  select1.test
@@ -341,9 +341,9 @@ test_suite "multithread" -description {
   types2.test   types3.test
 } -shutdown {
   catch {db close}
-  sqlite3_shutdown
-  catch {sqlite3_config serialized}
-  sqlite3_initialize
+  sqlite4_shutdown
+  catch {sqlite4_config serialized}
+  sqlite4_initialize
   autoinstall_test_functions
 }
 
@@ -352,20 +352,20 @@ test_suite "multithread" -description {
 test_suite "fullmutex" -description {
   Tests run in SQLITE_OPEN_FULLMUTEX mode
 } -initialize {
-  rename sqlite3 sqlite3_fullmutex
-  proc sqlite3 {args} {
+  rename sqlite4 sqlite4_fullmutex
+  proc sqlite4 {args} {
     if {[string range [lindex $args 0] 0 0] ne "-"} {
       lappend args -nomutex 0 -fullmutex 1
     }
-    uplevel [concat sqlite3_fullmutex $args]
+    uplevel [concat sqlite4_fullmutex $args]
   }
 } -files {
   delete.test   delete2.test  insert.test  rollback.test  select1.test
   select2.test  trans.test    update.test  vacuum.test    types.test
   types2.test   types3.test
 } -shutdown {
-  rename sqlite3 {}
-  rename sqlite3_fullmutex sqlite3
+  rename sqlite4 {}
+  rename sqlite4_fullmutex sqlite4
 }
 
 # Run some tests using the "onefile" demo.
@@ -373,19 +373,19 @@ test_suite "fullmutex" -description {
 test_suite "onefile" -description {
   Run some tests using the "test_onefile.c" demo
 } -initialize {
-  rename sqlite3 sqlite3_onefile
-  proc sqlite3 {args} {
+  rename sqlite4 sqlite4_onefile
+  proc sqlite4 {args} {
     if {[string range [lindex $args 0] 0 0] ne "-"} {
       lappend args -vfs fs
     }
-    uplevel [concat sqlite3_onefile $args]
+    uplevel [concat sqlite4_onefile $args]
   }
 } -files {
   conflict.test  insert.test   insert2.test  insert3.test
   rollback.test  select1.test  select2.test  select3.test
 } -shutdown {
-  rename sqlite3 {}
-  rename sqlite3_onefile sqlite3
+  rename sqlite4 {}
+  rename sqlite4_onefile sqlite4
 }
 
 # Run some tests using UTF-16 databases.
@@ -549,27 +549,27 @@ ifcapable mem3 {
     backup_malloc.test
   }] -initialize {
     catch {db close}
-    sqlite3_reset_auto_extension
-    sqlite3_shutdown
-    sqlite3_config_heap 25000000 0
-    sqlite3_config_lookaside 0 0
+    sqlite4_reset_auto_extension
+    sqlite4_shutdown
+    sqlite4_config_heap 25000000 0
+    sqlite4_config_lookaside 0 0
     ifcapable mem5 {
       # If both memsys3 and memsys5 are enabled in the build, the call to
-      # [sqlite3_config_heap] will initialize the system to use memsys5.
+      # [sqlite4_config_heap] will initialize the system to use memsys5.
       # The following overrides this preference and installs the memsys3
       # allocator.
-      sqlite3_install_memsys3
+      sqlite4_install_memsys3
     }
     install_malloc_faultsim 1 
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   } -shutdown {
     catch {db close}
-    sqlite3_shutdown
-    sqlite3_config_heap 0 0
-    sqlite3_config_lookaside 100 500
+    sqlite4_shutdown
+    sqlite4_config_heap 0 0
+    sqlite4_config_lookaside 100 500
     install_malloc_faultsim 1 
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   }
 }
@@ -586,19 +586,19 @@ ifcapable mem5 {
     collate5.test             limit.test                zeroblob.test
   }] -initialize {
     catch {db close}
-    sqlite3_shutdown
-    sqlite3_config_heap 25000000 64
-    sqlite3_config_lookaside 0 0
+    sqlite4_shutdown
+    sqlite4_config_heap 25000000 64
+    sqlite4_config_lookaside 0 0
     install_malloc_faultsim 1 
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   } -shutdown {
     catch {db close}
-    sqlite3_shutdown
-    sqlite3_config_heap 0 0
-    sqlite3_config_lookaside 100 500
+    sqlite4_shutdown
+    sqlite4_config_heap 0 0
+    sqlite4_config_lookaside 100 500
     install_malloc_faultsim 1 
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   }
 
@@ -608,41 +608,41 @@ ifcapable mem5 {
     select1.test 
   } -initialize {
     catch {db close}
-    sqlite3_shutdown
-    sqlite3_config_memstatus 0
-    sqlite3_config_heap 40000000 16
-    sqlite3_config_lookaside 0 0
+    sqlite4_shutdown
+    sqlite4_config_memstatus 0
+    sqlite4_config_heap 40000000 16
+    sqlite4_config_lookaside 0 0
     install_malloc_faultsim 1 
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   } -shutdown {
     catch {db close}
-    sqlite3_shutdown
-    sqlite3_config_heap 0 0
-    sqlite3_config_lookaside 100 500
+    sqlite4_shutdown
+    sqlite4_config_heap 0 0
+    sqlite4_config_lookaside 100 500
     install_malloc_faultsim 1 
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   }
 }
 
 ifcapable threadsafe {
   test_suite "no_mutex_try" -description {
-     The sqlite3_mutex_try() interface always fails
+     The sqlite4_mutex_try() interface always fails
   } -files [
     test_set $::allquicktests -exclude mutex1.test mutex2.test
   ] -initialize {
     catch {db close}
-    sqlite3_shutdown
+    sqlite4_shutdown
     install_mutex_counters 1
     set ::disable_mutex_try 1
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   } -shutdown {
     catch {db close}
-    sqlite3_shutdown
+    sqlite4_shutdown
     install_mutex_counters 0
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   }
 }
@@ -672,17 +672,17 @@ ifcapable threadsafe {
 test_suite "safe_append" -description {
   Run some tests on a SAFE_APPEND file-system.
 } -initialize {
-  rename sqlite3 sqlite3_safeappend
-  proc sqlite3 {args} {
+  rename sqlite4 sqlite4_safeappend
+  proc sqlite4 {args} {
     if {[string range [lindex $args 0] 0 0] ne "-"} {
       lappend args -vfs devsym
     }
-    uplevel [concat sqlite3_safeappend $args]
+    uplevel [concat sqlite4_safeappend $args]
   }
-  sqlite3_simulate_device -char safe_append
+  sqlite4_simulate_device -char safe_append
 } -shutdown {
-  rename sqlite3 {}
-  rename sqlite3_shutdown sqlite3
+  rename sqlite4 {}
+  rename sqlite4_shutdown sqlite4
 } -files [
   test_set $::allquicktests shared_err.test -exclude async3.test
 ]
@@ -706,17 +706,17 @@ foreach discard_rate {0 10 50 90 100} {
     Alternative pcache implementation with ${discard_rate}% random discard
   " -initialize "
     catch {db close}
-    sqlite3_shutdown
-    sqlite3_config_alt_pcache 1 $discard_rate 1
-    sqlite3_initialize
+    sqlite4_shutdown
+    sqlite4_config_alt_pcache 1 $discard_rate 1
+    sqlite4_initialize
     autoinstall_test_functions
   " -shutdown {
     catch {db close}
-    sqlite3_shutdown
-    sqlite3_config_alt_pcache 0 0 0
-    sqlite3_config_lookaside 100 500
+    sqlite4_shutdown
+    sqlite4_config_alt_pcache 0 0 0
+    sqlite4_config_lookaside 100 500
     install_malloc_faultsim 1 
-    sqlite3_initialize
+    sqlite4_initialize
     autoinstall_test_functions
   } -files ${perm-alt-pcache-testset}
 }
@@ -769,7 +769,7 @@ test_suite "rtree" -description {
 
 test_suite "no_optimization" -description {
   Run test scripts with optimizations disabled using the
-  sqlite3_test_control(SQLITE_TESTCTRL_OPTIMIZATIONS) interface.
+  sqlite4_test_control(SQLITE_TESTCTRL_OPTIMIZATIONS) interface.
 } -files {
   where.test where2.test where3.test where4.test where5.test
   where6.test where7.test where8.test where9.test
@@ -781,7 +781,7 @@ test_suite "no_optimization" -description {
 }
 
 test_suite "prepare" -description {
-  Run tests with the db connection using sqlite3_prepare() instead of _v2().
+  Run tests with the db connection using sqlite4_prepare() instead of _v2().
 } -dbconfig {
   db_use_legacy_prepare $::dbhandle 1
   #$::dbhandle cache size 0

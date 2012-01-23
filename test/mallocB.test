@@ -37,7 +37,7 @@ ifcapable subquery {
 }
 
 # The following test checks that there are no resource leaks following a
-# malloc() failure in sqlite3_set_auxdata().
+# malloc() failure in sqlite4_set_auxdata().
 #
 # Note: This problem was not discovered by fuzzy generation of SQL. Not
 # that it really matters.

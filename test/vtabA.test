@@ -22,9 +22,9 @@ ifcapable !vtab {
 }
 
 proc get_decltype {table col} {
-  set STMT [sqlite3_prepare $::DB "SELECT $col FROM $table" -1 TAIL]
-  set decltype [sqlite3_column_decltype $STMT 0]
-  sqlite3_finalize $STMT
+  set STMT [sqlite4_prepare $::DB "SELECT $col FROM $table" -1 TAIL]
+  set decltype [sqlite4_column_decltype $STMT 0]
+  sqlite4_finalize $STMT
   set decltype
 }
 
@@ -35,7 +35,7 @@ proc get_collist {table} {
 }
 
 # Register the echo module
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 # Create a virtual table with a 'hidden' column (column b).
 #

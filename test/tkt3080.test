@@ -51,7 +51,7 @@ do_test tkt3080.4 {
 } {t1 t2 t3}
 
 ifcapable vtab {
-  register_echo_module [sqlite3_connection_pointer db]
+  register_echo_module [sqlite4_connection_pointer db]
   do_test tkt3080.10 {
      set sql {
        CREATE VIRTUAL TABLE t4 USING echo(t2);

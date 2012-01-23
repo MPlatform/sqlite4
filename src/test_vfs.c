@@ -20,13 +20,13 @@
 **
 **   -noshm      BOOLEAN        (True to omit shm methods. Default false)
 **   -default    BOOLEAN        (True to make the vfs default. Default false)
-**   -szosfile   INTEGER        (Value for sqlite3_vfs.szOsFile)
-**   -mxpathname INTEGER        (Value for sqlite3_vfs.mxPathname)
-**   -iversion   INTEGER        (Value for sqlite3_vfs.iVersion)
+**   -szosfile   INTEGER        (Value for sqlite4_vfs.szOsFile)
+**   -mxpathname INTEGER        (Value for sqlite4_vfs.mxPathname)
+**   -iversion   INTEGER        (Value for sqlite4_vfs.iVersion)
 */
 #if SQLITE_TEST          /* This file is used for testing only */
 
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include "sqliteInt.h"
 
 typedef struct Testvfs Testvfs;
@@ -39,15 +39,15 @@ typedef struct TestvfsFd TestvfsFd;
 ** An open file handle.
 */
 struct TestvfsFile {
-  sqlite3_file base;              /* Base class.  Must be first */
+  sqlite4_file base;              /* Base class.  Must be first */
   TestvfsFd *pFd;                 /* File data */
 };
 #define tvfsGetFd(pFile) (((TestvfsFile *)pFile)->pFd)
 
 struct TestvfsFd {
-  sqlite3_vfs *pVfs;              /* The VFS */
+  sqlite4_vfs *pVfs;              /* The VFS */
   const char *zFilename;          /* Filename as passed to xOpen() */
-  sqlite3_file *pReal;            /* The real, underlying file descriptor */
+  sqlite4_file *pReal;            /* The real, underlying file descriptor */
   Tcl_Obj *pShmId;                /* Shared memory id for Tcl callbacks */
 
   TestvfsBuffer *pShm;            /* Shared memory buffer */
@@ -70,13 +70,13 @@ struct TestFaultInject {
 
 /*
 ** An instance of this structure is allocated for each VFS created. The
-** sqlite3_vfs.pAppData field of the VFS structure registered with SQLite
+** sqlite4_vfs.pAppData field of the VFS structure registered with SQLite
 ** is set to point to it.
 */
 struct Testvfs {
   char *zName;                    /* Name of this VFS */
-  sqlite3_vfs *pParent;           /* The VFS to use for file IO */
-  sqlite3_vfs *pVfs;              /* The testvfs registered with SQLite */
+  sqlite4_vfs *pParent;           /* The VFS to use for file IO */
+  sqlite4_vfs *pVfs;              /* The testvfs registered with SQLite */
   Tcl_Interp *interp;             /* Interpreter to run script in */
   Tcl_Obj *pScript;               /* Script to execute */
   TestvfsBuffer *pBuffer;         /* List of shared buffers */
@@ -152,43 +152,43 @@ struct TestvfsBuffer {
 /*
 ** Method declarations for TestvfsFile.
 */
-static int tvfsClose(sqlite3_file*);
-static int tvfsRead(sqlite3_file*, void*, int iAmt, sqlite3_int64 iOfst);
-static int tvfsWrite(sqlite3_file*,const void*,int iAmt, sqlite3_int64 iOfst);
-static int tvfsTruncate(sqlite3_file*, sqlite3_int64 size);
-static int tvfsSync(sqlite3_file*, int flags);
-static int tvfsFileSize(sqlite3_file*, sqlite3_int64 *pSize);
-static int tvfsLock(sqlite3_file*, int);
-static int tvfsUnlock(sqlite3_file*, int);
-static int tvfsCheckReservedLock(sqlite3_file*, int *);
-static int tvfsFileControl(sqlite3_file*, int op, void *pArg);
-static int tvfsSectorSize(sqlite3_file*);
-static int tvfsDeviceCharacteristics(sqlite3_file*);
+static int tvfsClose(sqlite4_file*);
+static int tvfsRead(sqlite4_file*, void*, int iAmt, sqlite4_int64 iOfst);
+static int tvfsWrite(sqlite4_file*,const void*,int iAmt, sqlite4_int64 iOfst);
+static int tvfsTruncate(sqlite4_file*, sqlite4_int64 size);
+static int tvfsSync(sqlite4_file*, int flags);
+static int tvfsFileSize(sqlite4_file*, sqlite4_int64 *pSize);
+static int tvfsLock(sqlite4_file*, int);
+static int tvfsUnlock(sqlite4_file*, int);
+static int tvfsCheckReservedLock(sqlite4_file*, int *);
+static int tvfsFileControl(sqlite4_file*, int op, void *pArg);
+static int tvfsSectorSize(sqlite4_file*);
+static int tvfsDeviceCharacteristics(sqlite4_file*);
 
 /*
 ** Method declarations for tvfs_vfs.
 */
-static int tvfsOpen(sqlite3_vfs*, const char *, sqlite3_file*, int , int *);
-static int tvfsDelete(sqlite3_vfs*, const char *zName, int syncDir);
-static int tvfsAccess(sqlite3_vfs*, const char *zName, int flags, int *);
-static int tvfsFullPathname(sqlite3_vfs*, const char *zName, int, char *zOut);
+static int tvfsOpen(sqlite4_vfs*, const char *, sqlite4_file*, int , int *);
+static int tvfsDelete(sqlite4_vfs*, const char *zName, int syncDir);
+static int tvfsAccess(sqlite4_vfs*, const char *zName, int flags, int *);
+static int tvfsFullPathname(sqlite4_vfs*, const char *zName, int, char *zOut);
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
-static void *tvfsDlOpen(sqlite3_vfs*, const char *zFilename);
-static void tvfsDlError(sqlite3_vfs*, int nByte, char *zErrMsg);
-static void (*tvfsDlSym(sqlite3_vfs*,void*, const char *zSymbol))(void);
-static void tvfsDlClose(sqlite3_vfs*, void*);
+static void *tvfsDlOpen(sqlite4_vfs*, const char *zFilename);
+static void tvfsDlError(sqlite4_vfs*, int nByte, char *zErrMsg);
+static void (*tvfsDlSym(sqlite4_vfs*,void*, const char *zSymbol))(void);
+static void tvfsDlClose(sqlite4_vfs*, void*);
 #endif /* SQLITE_OMIT_LOAD_EXTENSION */
-static int tvfsRandomness(sqlite3_vfs*, int nByte, char *zOut);
-static int tvfsSleep(sqlite3_vfs*, int microseconds);
-static int tvfsCurrentTime(sqlite3_vfs*, double*);
+static int tvfsRandomness(sqlite4_vfs*, int nByte, char *zOut);
+static int tvfsSleep(sqlite4_vfs*, int microseconds);
+static int tvfsCurrentTime(sqlite4_vfs*, double*);
 
-static int tvfsShmOpen(sqlite3_file*);
-static int tvfsShmLock(sqlite3_file*, int , int, int);
-static int tvfsShmMap(sqlite3_file*,int,int,int, void volatile **);
-static void tvfsShmBarrier(sqlite3_file*);
-static int tvfsShmUnmap(sqlite3_file*, int);
+static int tvfsShmOpen(sqlite4_file*);
+static int tvfsShmLock(sqlite4_file*, int , int, int);
+static int tvfsShmMap(sqlite4_file*,int,int,int, void volatile **);
+static void tvfsShmBarrier(sqlite4_file*);
+static int tvfsShmUnmap(sqlite4_file*, int);
 
-static sqlite3_io_methods tvfs_io_methods = {
+static sqlite4_io_methods tvfs_io_methods = {
   2,                              /* iVersion */
   tvfsClose,                      /* xClose */
   tvfsRead,                       /* xRead */
@@ -293,7 +293,7 @@ static void tvfsExecTcl(
 /*
 ** Close an tvfs-file.
 */
-static int tvfsClose(sqlite3_file *pFile){
+static int tvfsClose(sqlite4_file *pFile){
   int rc;
   TestvfsFile *pTestfile = (TestvfsFile *)pFile;
   TestvfsFd *pFd = pTestfile->pFd;
@@ -312,7 +312,7 @@ static int tvfsClose(sqlite3_file *pFile){
   if( pFile->pMethods ){
     ckfree((char *)pFile->pMethods);
   }
-  rc = sqlite3OsClose(pFd->pReal);
+  rc = sqlite4OsClose(pFd->pReal);
   ckfree((char *)pFd);
   pTestfile->pFd = 0;
   return rc;
@@ -322,7 +322,7 @@ static int tvfsClose(sqlite3_file *pFile){
 ** Read data from an tvfs-file.
 */
 static int tvfsRead(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -340,7 +340,7 @@ static int tvfsRead(
     rc = SQLITE_IOERR;
   }
   if( rc==SQLITE_OK ){
-    rc = sqlite3OsRead(pFd->pReal, zBuf, iAmt, iOfst);
+    rc = sqlite4OsRead(pFd->pReal, zBuf, iAmt, iOfst);
   }
   return rc;
 }
@@ -349,7 +349,7 @@ static int tvfsRead(
 ** Write data to an tvfs-file.
 */
 static int tvfsWrite(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   const void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -373,7 +373,7 @@ static int tvfsWrite(
   }
   
   if( rc==SQLITE_OK ){
-    rc = sqlite3OsWrite(pFd->pReal, zBuf, iAmt, iOfst);
+    rc = sqlite4OsWrite(pFd->pReal, zBuf, iAmt, iOfst);
   }
   return rc;
 }
@@ -381,7 +381,7 @@ static int tvfsWrite(
 /*
 ** Truncate an tvfs-file.
 */
-static int tvfsTruncate(sqlite3_file *pFile, sqlite_int64 size){
+static int tvfsTruncate(sqlite4_file *pFile, sqlite_int64 size){
   int rc = SQLITE_OK;
   TestvfsFd *pFd = tvfsGetFd(pFile);
   Testvfs *p = (Testvfs *)pFd->pVfs->pAppData;
@@ -394,7 +394,7 @@ static int tvfsTruncate(sqlite3_file *pFile, sqlite_int64 size){
   }
   
   if( rc==SQLITE_OK ){
-    rc = sqlite3OsTruncate(pFd->pReal, size);
+    rc = sqlite4OsTruncate(pFd->pReal, size);
   }
   return rc;
 }
@@ -402,7 +402,7 @@ static int tvfsTruncate(sqlite3_file *pFile, sqlite_int64 size){
 /*
 ** Sync an tvfs-file.
 */
-static int tvfsSync(sqlite3_file *pFile, int flags){
+static int tvfsSync(sqlite4_file *pFile, int flags){
   int rc = SQLITE_OK;
   TestvfsFd *pFd = tvfsGetFd(pFile);
   Testvfs *p = (Testvfs *)pFd->pVfs->pAppData;
@@ -437,7 +437,7 @@ static int tvfsSync(sqlite3_file *pFile, int flags){
   if( rc==SQLITE_OK && tvfsInjectFullerr(p) ) rc = SQLITE_FULL;
 
   if( rc==SQLITE_OK ){
-    rc = sqlite3OsSync(pFd->pReal, flags);
+    rc = sqlite4OsSync(pFd->pReal, flags);
   }
 
   return rc;
@@ -446,74 +446,74 @@ static int tvfsSync(sqlite3_file *pFile, int flags){
 /*
 ** Return the current file-size of an tvfs-file.
 */
-static int tvfsFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
+static int tvfsFileSize(sqlite4_file *pFile, sqlite_int64 *pSize){
   TestvfsFd *p = tvfsGetFd(pFile);
-  return sqlite3OsFileSize(p->pReal, pSize);
+  return sqlite4OsFileSize(p->pReal, pSize);
 }
 
 /*
 ** Lock an tvfs-file.
 */
-static int tvfsLock(sqlite3_file *pFile, int eLock){
+static int tvfsLock(sqlite4_file *pFile, int eLock){
   TestvfsFd *p = tvfsGetFd(pFile);
-  return sqlite3OsLock(p->pReal, eLock);
+  return sqlite4OsLock(p->pReal, eLock);
 }
 
 /*
 ** Unlock an tvfs-file.
 */
-static int tvfsUnlock(sqlite3_file *pFile, int eLock){
+static int tvfsUnlock(sqlite4_file *pFile, int eLock){
   TestvfsFd *p = tvfsGetFd(pFile);
-  return sqlite3OsUnlock(p->pReal, eLock);
+  return sqlite4OsUnlock(p->pReal, eLock);
 }
 
 /*
 ** Check if another file-handle holds a RESERVED lock on an tvfs-file.
 */
-static int tvfsCheckReservedLock(sqlite3_file *pFile, int *pResOut){
+static int tvfsCheckReservedLock(sqlite4_file *pFile, int *pResOut){
   TestvfsFd *p = tvfsGetFd(pFile);
-  return sqlite3OsCheckReservedLock(p->pReal, pResOut);
+  return sqlite4OsCheckReservedLock(p->pReal, pResOut);
 }
 
 /*
 ** File control method. For custom operations on an tvfs-file.
 */
-static int tvfsFileControl(sqlite3_file *pFile, int op, void *pArg){
+static int tvfsFileControl(sqlite4_file *pFile, int op, void *pArg){
   TestvfsFd *p = tvfsGetFd(pFile);
-  return sqlite3OsFileControl(p->pReal, op, pArg);
+  return sqlite4OsFileControl(p->pReal, op, pArg);
 }
 
 /*
 ** Return the sector-size in bytes for an tvfs-file.
 */
-static int tvfsSectorSize(sqlite3_file *pFile){
+static int tvfsSectorSize(sqlite4_file *pFile){
   TestvfsFd *pFd = tvfsGetFd(pFile);
   Testvfs *p = (Testvfs *)pFd->pVfs->pAppData;
   if( p->iSectorsize>=0 ){
     return p->iSectorsize;
   }
-  return sqlite3OsSectorSize(pFd->pReal);
+  return sqlite4OsSectorSize(pFd->pReal);
 }
 
 /*
 ** Return the device characteristic flags supported by an tvfs-file.
 */
-static int tvfsDeviceCharacteristics(sqlite3_file *pFile){
+static int tvfsDeviceCharacteristics(sqlite4_file *pFile){
   TestvfsFd *pFd = tvfsGetFd(pFile);
   Testvfs *p = (Testvfs *)pFd->pVfs->pAppData;
   if( p->iDevchar>=0 ){
     return p->iDevchar;
   }
-  return sqlite3OsDeviceCharacteristics(pFd->pReal);
+  return sqlite4OsDeviceCharacteristics(pFd->pReal);
 }
 
 /*
 ** Open an tvfs file handle.
 */
 static int tvfsOpen(
-  sqlite3_vfs *pVfs,
+  sqlite4_vfs *pVfs,
   const char *zName,
-  sqlite3_file *pFile,
+  sqlite4_file *pFile,
   int flags,
   int *pOutFlags
 ){
@@ -529,7 +529,7 @@ static int tvfsOpen(
   pFd->pShmId = 0;
   pFd->zFilename = zName;
   pFd->pVfs = pVfs;
-  pFd->pReal = (sqlite3_file *)&pFd[1];
+  pFd->pReal = (sqlite4_file *)&pFd[1];
   memset(pTestfile, 0, sizeof(TestvfsFile));
   pTestfile->pFd = pFd;
 
@@ -575,18 +575,18 @@ static int tvfsOpen(
   pFd->pShmId = pId;
   Tcl_ResetResult(p->interp);
 
-  rc = sqlite3OsOpen(PARENTVFS(pVfs), zName, pFd->pReal, flags, pOutFlags);
+  rc = sqlite4OsOpen(PARENTVFS(pVfs), zName, pFd->pReal, flags, pOutFlags);
   if( pFd->pReal->pMethods ){
-    sqlite3_io_methods *pMethods;
+    sqlite4_io_methods *pMethods;
     int nByte;
 
     if( pVfs->iVersion>1 ){
-      nByte = sizeof(sqlite3_io_methods);
+      nByte = sizeof(sqlite4_io_methods);
     }else{
-      nByte = offsetof(sqlite3_io_methods, xShmMap);
+      nByte = offsetof(sqlite4_io_methods, xShmMap);
     }
 
-    pMethods = (sqlite3_io_methods *)ckalloc(nByte);
+    pMethods = (sqlite4_io_methods *)ckalloc(nByte);
     memcpy(pMethods, &tvfs_io_methods, nByte);
     pMethods->iVersion = pVfs->iVersion;
     if( pVfs->iVersion>1 && ((Testvfs *)pVfs->pAppData)->isNoshm ){
@@ -606,7 +606,7 @@ static int tvfsOpen(
 ** ensure the file-system modifications are synced to disk before
 ** returning.
 */
-static int tvfsDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
+static int tvfsDelete(sqlite4_vfs *pVfs, const char *zPath, int dirSync){
   int rc = SQLITE_OK;
   Testvfs *p = (Testvfs *)pVfs->pAppData;
 
@@ -617,7 +617,7 @@ static int tvfsDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
     tvfsResultCode(p, &rc);
   }
   if( rc==SQLITE_OK ){
-    rc = sqlite3OsDelete(PARENTVFS(pVfs), zPath, dirSync);
+    rc = sqlite4OsDelete(PARENTVFS(pVfs), zPath, dirSync);
   }
   return rc;
 }
@@ -627,7 +627,7 @@ static int tvfsDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
 ** is available, or false otherwise.
 */
 static int tvfsAccess(
-  sqlite3_vfs *pVfs, 
+  sqlite4_vfs *pVfs, 
   const char *zPath, 
   int flags, 
   int *pResOut
@@ -651,7 +651,7 @@ static int tvfsAccess(
       }
     }
   }
-  return sqlite3OsAccess(PARENTVFS(pVfs), zPath, flags, pResOut);
+  return sqlite4OsAccess(PARENTVFS(pVfs), zPath, flags, pResOut);
 }
 
 /*
@@ -660,7 +660,7 @@ static int tvfsAccess(
 ** of at least (DEVSYM_MAX_PATHNAME+1) bytes.
 */
 static int tvfsFullPathname(
-  sqlite3_vfs *pVfs, 
+  sqlite4_vfs *pVfs, 
   const char *zPath, 
   int nOut, 
   char *zOut
@@ -673,15 +673,15 @@ static int tvfsFullPathname(
       if( rc!=SQLITE_OK ) return rc;
     }
   }
-  return sqlite3OsFullPathname(PARENTVFS(pVfs), zPath, nOut, zOut);
+  return sqlite4OsFullPathname(PARENTVFS(pVfs), zPath, nOut, zOut);
 }
 
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
 /*
 ** Open the dynamic library located at zPath and return a handle.
 */
-static void *tvfsDlOpen(sqlite3_vfs *pVfs, const char *zPath){
-  return sqlite3OsDlOpen(PARENTVFS(pVfs), zPath);
+static void *tvfsDlOpen(sqlite4_vfs *pVfs, const char *zPath){
+  return sqlite4OsDlOpen(PARENTVFS(pVfs), zPath);
 }
 
 /*
@@ -689,22 +689,22 @@ static void *tvfsDlOpen(sqlite3_vfs *pVfs, const char *zPath){
 ** utf-8 string describing the most recent error encountered associated 
 ** with dynamic libraries.
 */
-static void tvfsDlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg){
-  sqlite3OsDlError(PARENTVFS(pVfs), nByte, zErrMsg);
+static void tvfsDlError(sqlite4_vfs *pVfs, int nByte, char *zErrMsg){
+  sqlite4OsDlError(PARENTVFS(pVfs), nByte, zErrMsg);
 }
 
 /*
 ** Return a pointer to the symbol zSymbol in the dynamic library pHandle.
 */
-static void (*tvfsDlSym(sqlite3_vfs *pVfs, void *p, const char *zSym))(void){
-  return sqlite3OsDlSym(PARENTVFS(pVfs), p, zSym);
+static void (*tvfsDlSym(sqlite4_vfs *pVfs, void *p, const char *zSym))(void){
+  return sqlite4OsDlSym(PARENTVFS(pVfs), p, zSym);
 }
 
 /*
 ** Close the dynamic library handle pHandle.
 */
-static void tvfsDlClose(sqlite3_vfs *pVfs, void *pHandle){
-  sqlite3OsDlClose(PARENTVFS(pVfs), pHandle);
+static void tvfsDlClose(sqlite4_vfs *pVfs, void *pHandle){
+  sqlite4OsDlClose(PARENTVFS(pVfs), pHandle);
 }
 #endif /* SQLITE_OMIT_LOAD_EXTENSION */
 
@@ -712,26 +712,26 @@ static void tvfsDlClose(sqlite3_vfs *pVfs, void *pHandle){
 ** Populate the buffer pointed to by zBufOut with nByte bytes of 
 ** random data.
 */
-static int tvfsRandomness(sqlite3_vfs *pVfs, int nByte, char *zBufOut){
-  return sqlite3OsRandomness(PARENTVFS(pVfs), nByte, zBufOut);
+static int tvfsRandomness(sqlite4_vfs *pVfs, int nByte, char *zBufOut){
+  return sqlite4OsRandomness(PARENTVFS(pVfs), nByte, zBufOut);
 }
 
 /*
 ** Sleep for nMicro microseconds. Return the number of microseconds 
 ** actually slept.
 */
-static int tvfsSleep(sqlite3_vfs *pVfs, int nMicro){
-  return sqlite3OsSleep(PARENTVFS(pVfs), nMicro);
+static int tvfsSleep(sqlite4_vfs *pVfs, int nMicro){
+  return sqlite4OsSleep(PARENTVFS(pVfs), nMicro);
 }
 
 /*
 ** Return the current time as a Julian Day number in *pTimeOut.
 */
-static int tvfsCurrentTime(sqlite3_vfs *pVfs, double *pTimeOut){
+static int tvfsCurrentTime(sqlite4_vfs *pVfs, double *pTimeOut){
   return PARENTVFS(pVfs)->xCurrentTime(PARENTVFS(pVfs), pTimeOut);
 }
 
-static int tvfsShmOpen(sqlite3_file *pFile){
+static int tvfsShmOpen(sqlite4_file *pFile){
   Testvfs *p;
   int rc = SQLITE_OK;             /* Return code */
   TestvfsBuffer *pBuffer;         /* Buffer to open connection to */
@@ -789,7 +789,7 @@ static void tvfsAllocPage(TestvfsBuffer *p, int iPage, int pgsz){
 }
 
 static int tvfsShmMap(
-  sqlite3_file *pFile,            /* Handle open on database file */
+  sqlite4_file *pFile,            /* Handle open on database file */
   int iPage,                      /* Page to retrieve */
   int pgsz,                       /* Size of pages */
   int isWrite,                    /* True to extend file if necessary */
@@ -832,7 +832,7 @@ static int tvfsShmMap(
 
 
 static int tvfsShmLock(
-  sqlite3_file *pFile,
+  sqlite4_file *pFile,
   int ofst,
   int n,
   int flags
@@ -844,7 +844,7 @@ static int tvfsShmLock(
   char zLock[80];
 
   if( p->pScript && p->mask&TESTVFS_SHMLOCK_MASK ){
-    sqlite3_snprintf(sizeof(zLock), zLock, "%d %d", ofst, n);
+    sqlite4_snprintf(sizeof(zLock), zLock, "%d %d", ofst, n);
     nLock = strlen(zLock);
     if( flags & SQLITE_SHM_LOCK ){
       strcpy(&zLock[nLock], " lock");
@@ -894,7 +894,7 @@ static int tvfsShmLock(
   return rc;
 }
 
-static void tvfsShmBarrier(sqlite3_file *pFile){
+static void tvfsShmBarrier(sqlite4_file *pFile){
   TestvfsFd *pFd = tvfsGetFd(pFile);
   Testvfs *p = (Testvfs *)(pFd->pVfs->pAppData);
 
@@ -906,7 +906,7 @@ static void tvfsShmBarrier(sqlite3_file *pFile){
 }
 
 static int tvfsShmUnmap(
-  sqlite3_file *pFile,
+  sqlite4_file *pFile,
   int deleteFlag
 ){
   int rc = SQLITE_OK;
@@ -1247,7 +1247,7 @@ static int testvfs_obj_cmd(
 static void testvfs_obj_del(ClientData cd){
   Testvfs *p = (Testvfs *)cd;
   if( p->pScript ) Tcl_DecrRefCount(p->pScript);
-  sqlite3_vfs_unregister(p->pVfs);
+  sqlite4_vfs_unregister(p->pVfs);
   ckfree((char *)p->pVfs);
   ckfree((char *)p);
 }
@@ -1293,7 +1293,7 @@ static int testvfs_cmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  static sqlite3_vfs tvfs_vfs = {
+  static sqlite4_vfs tvfs_vfs = {
     2,                            /* iVersion */
     0,                            /* szOsFile */
     0,                            /* mxPathname */
@@ -1323,7 +1323,7 @@ static int testvfs_cmd(
   };
 
   Testvfs *p;                     /* New object */
-  sqlite3_vfs *pVfs;              /* New VFS */
+  sqlite4_vfs *pVfs;              /* New VFS */
   char *zVfs;
   int nByte;                      /* Bytes of space to allocate at p */
 
@@ -1388,14 +1388,14 @@ static int testvfs_cmd(
   ** methods of a deleted object.
   */
   Tcl_CreateObjCommand(interp, zVfs, testvfs_obj_cmd, p, testvfs_obj_del);
-  p->pParent = sqlite3_vfs_find(0);
+  p->pParent = sqlite4_vfs_find(0);
   p->interp = interp;
 
   p->zName = (char *)&p[1];
   memcpy(p->zName, zVfs, strlen(zVfs)+1);
 
-  pVfs = (sqlite3_vfs *)ckalloc(sizeof(sqlite3_vfs));
-  memcpy(pVfs, &tvfs_vfs, sizeof(sqlite3_vfs));
+  pVfs = (sqlite4_vfs *)ckalloc(sizeof(sqlite4_vfs));
+  memcpy(pVfs, &tvfs_vfs, sizeof(sqlite4_vfs));
   pVfs->pAppData = (void *)p;
   pVfs->iVersion = iVersion;
   pVfs->zName = p->zName;
@@ -1408,7 +1408,7 @@ static int testvfs_cmd(
   p->isNoshm = isNoshm;
   p->mask = TESTVFS_ALL_MASK;
 
-  sqlite3_vfs_register(pVfs, isDefault);
+  sqlite4_vfs_register(pVfs, isDefault);
 
   return TCL_OK;
 

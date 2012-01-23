@@ -38,14 +38,14 @@ do_test savepoint-1.3 {
   execsql { SAVEPOINT sp1 }
   db close
 } {}
-sqlite3 db test.db
+sqlite4 db test.db
 do_test savepoint-1.4.1 {
   execsql {
     SAVEPOINT sp1;
     SAVEPOINT sp2;
     RELEASE sp1;
   }
-  sqlite3_get_autocommit db
+  sqlite4_get_autocommit db
 } {1}
 do_test savepoint-1.4.2 {
   execsql {
@@ -53,11 +53,11 @@ do_test savepoint-1.4.2 {
     SAVEPOINT sp2;
     RELEASE sp2;
   }
-  sqlite3_get_autocommit db
+  sqlite4_get_autocommit db
 } {0}
 do_test savepoint-1.4.3 {
   execsql { RELEASE sp1 }
-  sqlite3_get_autocommit db
+  sqlite4_get_autocommit db
 } {1}
 do_test savepoint-1.4.4 {
   execsql {
@@ -65,11 +65,11 @@ do_test savepoint-1.4.4 {
     SAVEPOINT sp2;
     ROLLBACK TO sp1;
   }
-  sqlite3_get_autocommit db
+  sqlite4_get_autocommit db
 } {0}
 do_test savepoint-1.4.5 {
   execsql { RELEASE SAVEPOINT sp1 }
-  sqlite3_get_autocommit db
+  sqlite4_get_autocommit db
 } {1}
 do_test savepoint-1.4.6 {
   execsql {
@@ -80,11 +80,11 @@ do_test savepoint-1.4.6 {
     ROLLBACK TRANSACTION TO sp2;
     ROLLBACK TRANSACTION TO SAVEPOINT sp1;
   }
-  sqlite3_get_autocommit db
+  sqlite4_get_autocommit db
 } {0}
 do_test savepoint-1.4.7 {
   execsql { RELEASE SAVEPOINT SP1 }
-  sqlite3_get_autocommit db
+  sqlite4_get_autocommit db
 } {1}
 do_test savepoint-1.5 {
   execsql {
@@ -341,7 +341,7 @@ ifcapable incrblob {
     }
   } {}
   do_test savepoint-5.4.2 {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql { BEGIN ; SELECT count(*) FROM blobs } db2
   } {1}
   if {[wal_is_wal_mode]} {
@@ -372,7 +372,7 @@ wal_check_journal_mode savepoint-5.5
 ifcapable {autovacuum && pragma} {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   do_test savepoint-6.1 {
     execsql { PRAGMA auto_vacuum = incremental }
@@ -420,7 +420,7 @@ ifcapable {autovacuum && pragma} {
 #
 db close
 forcedelete test.db
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_test savepoint-7.1 {
   execsql { PRAGMA auto_vacuum = incremental }
@@ -491,7 +491,7 @@ wal_check_journal_mode savepoint-7.3.3
 do_test savepoint-7.4.1 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { PRAGMA auto_vacuum = incremental }
   wal_set_journal_mode
   execsql {
@@ -763,7 +763,7 @@ if {[wal_is_wal_mode]==0} {
 do_test savepoint-11.1 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { PRAGMA auto_vacuum = full; }
   wal_set_journal_mode
   execsql {
@@ -854,7 +854,7 @@ do_test savepoint-12.2 {
   }
 } {1 {column a is not unique}}
 do_test savepoint-12.3 {
-  sqlite3_get_autocommit db
+  sqlite4_get_autocommit db
 } {1}
 do_test savepoint-12.4 {
   execsql { SAVEPOINT one }
@@ -869,7 +869,7 @@ if {[wal_is_wal_mode]==0} {
   do_test savepoint-13.1 {
     db close
     catch {forcedelete test.db}
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       BEGIN;
         CREATE TABLE t1(a PRIMARY KEY, b);
@@ -1026,7 +1026,7 @@ do_multiclient_test tn {
 # (even though it had been removed from the database by the ROLLBACK 
 # command).
 #
-sqlite3 db test.db
+sqlite4 db test.db
 do_execsql_test savepoint-17.1 {
   BEGIN;
     CREATE TABLE t6(a, b);

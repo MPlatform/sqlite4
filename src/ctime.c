@@ -371,15 +371,15 @@ static const char * const azCompileOpt[] = {
 ** The name can optionally begin with "SQLITE_" but the "SQLITE_" prefix
 ** is not required for a match.
 */
-int sqlite3_compileoption_used(const char *zOptName){
+int sqlite4_compileoption_used(const char *zOptName){
   int i, n;
-  if( sqlite3StrNICmp(zOptName, "SQLITE_", 7)==0 ) zOptName += 7;
-  n = sqlite3Strlen30(zOptName);
+  if( sqlite4StrNICmp(zOptName, "SQLITE_", 7)==0 ) zOptName += 7;
+  n = sqlite4Strlen30(zOptName);
 
   /* Since ArraySize(azCompileOpt) is normally in single digits, a
   ** linear search is adequate.  No need for a binary search. */
   for(i=0; i<ArraySize(azCompileOpt); i++){
-    if(   (sqlite3StrNICmp(zOptName, azCompileOpt[i], n)==0)
+    if(   (sqlite4StrNICmp(zOptName, azCompileOpt[i], n)==0)
        && ( (azCompileOpt[i][n]==0) || (azCompileOpt[i][n]=='=') ) ) return 1;
   }
   return 0;
@@ -389,7 +389,7 @@ int sqlite3_compileoption_used(const char *zOptName){
 ** Return the N-th compile-time option string.  If N is out of range,
 ** return a NULL pointer.
 */
-const char *sqlite3_compileoption_get(int N){
+const char *sqlite4_compileoption_get(int N){
   if( N>=0 && N<ArraySize(azCompileOpt) ){
     return azCompileOpt[N];
   }

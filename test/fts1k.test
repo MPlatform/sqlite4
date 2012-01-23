@@ -33,7 +33,7 @@ do_test fts1k-1.2 {
   catch {
     execsql "CREATE VIRTUAL TABLE t2 USING fts1(content, tokenize \x80)"
   }
-  sqlite3_errmsg $DB
+  sqlite4_errmsg $DB
 } "unknown tokenizer: \x80"
 
 # Additionally test final isalnum() in startsWith().

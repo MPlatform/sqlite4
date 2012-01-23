@@ -26,19 +26,19 @@ ifcapable !vtab||!schema_pragmas {
 #
 # vtab1-1.*: Error conditions and other issues surrounding creation/connection
 #            of a virtual module.
-# vtab1-2.*: Test sqlite3_declare_vtab() and the xConnect/xDisconnect methods.
+# vtab1-2.*: Test sqlite4_declare_vtab() and the xConnect/xDisconnect methods.
 # vtab1-3.*: Table scans and WHERE clauses.
 # vtab1-4.*: Table scans and ORDER BY clauses.
 # vtab1-5.*: Test queries that include joins. This brings the
-#            sqlite3_index_info.estimatedCost variable into play.
+#            sqlite4_index_info.estimatedCost variable into play.
 # vtab1-6.*: Test UPDATE/INSERT/DELETE on vtables.
-# vtab1-7.*: Test sqlite3_last_insert_rowid().
+# vtab1-7.*: Test sqlite4_last_insert_rowid().
 #
 # This file uses the "echo" module (see src/test8.c). Refer to comments
 # in that file for the special behaviour of the Tcl $echo_module variable.
 #
 # TODO: 
-#   * How to test the sqlite3_index_constraint_usage.omit field?
+#   * How to test the sqlite4_index_constraint_usage.omit field?
 #   * vtab1-5.*
 #
 # vtab1-14.*: Test 'IN' constraints - i.e. "SELECT * FROM t1 WHERE id IN(...)"
@@ -66,13 +66,13 @@ do_test vtab1-1.2 {
 } {}
 
 # Register the module
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 # Once a module has been registered, virtual tables using that module
 # may be created. However if a module xCreate() fails to call
-# sqlite3_declare_vtab() an error will be raised and the table not created.
+# sqlite4_declare_vtab() an error will be raised and the table not created.
 #
-# The "echo" module does not invoke sqlite3_declare_vtab() if it is
+# The "echo" module does not invoke sqlite4_declare_vtab() if it is
 # passed zero arguments.
 #
 do_test vtab1-1.3 {
@@ -101,26 +101,26 @@ do_test vtab1-1.6 {
   }
 } {}
 
-# Ticket #2156.  Using the sqlite3_prepare_v2() API, make sure that
+# Ticket #2156.  Using the sqlite4_prepare_v2() API, make sure that
 # a CREATE VIRTUAL TABLE statement can be used multiple times.
 #
 do_test vtab1-1.2152.1 {
-  set DB [sqlite3_connection_pointer db]
+  set DB [sqlite4_connection_pointer db]
   set sql {CREATE VIRTUAL TABLE t2152a USING echo(t2152b)}
-  set STMT [sqlite3_prepare_v2 $DB $sql -1 TAIL]
-  sqlite3_step $STMT
+  set STMT [sqlite4_prepare_v2 $DB $sql -1 TAIL]
+  sqlite4_step $STMT
 } SQLITE_ERROR
 do_test vtab-1.2152.2 {
-  sqlite3_reset $STMT
-  sqlite3_step $STMT
+  sqlite4_reset $STMT
+  sqlite4_step $STMT
 } SQLITE_ERROR
 do_test vtab-1.2152.3 {
-  sqlite3_reset $STMT
+  sqlite4_reset $STMT
   db eval {CREATE TABLE t2152b(x,y)}
-  sqlite3_step $STMT
+  sqlite4_step $STMT
 } SQLITE_DONE
 do_test vtab-1.2152.4 {
-  sqlite3_finalize $STMT
+  sqlite4_finalize $STMT
   db eval {DROP TABLE t2152a; DROP TABLE t2152b}
 } {}
 
@@ -152,7 +152,7 @@ do_test vtab1-1.10 {
     CREATE VIRTUAL TABLE techo USING echo(treal);
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT * FROM techo;
   }
@@ -183,8 +183,8 @@ do_test vtab1-1.15 {
   }
 } {1 {no such module: echo}}
 
-register_echo_module [sqlite3_connection_pointer db]
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 # Test an error message returned from a v-table constructor.
 #
@@ -253,7 +253,7 @@ do_test vtab1-2.3 {
 #
 do_test vtab1-2.4 {
   set echo_module [list]
-  sqlite3 db test.db
+  sqlite4 db test.db
   db cache size 0
   set echo_module
 } {}
@@ -266,7 +266,7 @@ do_test vtab1.2.6 {
 } {1 {no such module: echo}}
 
 # Register the module
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 # Try to query the virtual table schema again. This time it should
 # invoke the xConnect method and succeed.
@@ -575,8 +575,8 @@ do_test vtab1-5-6 {
   }
 
   db close
-  sqlite3 db test.db
-  register_echo_module [sqlite3_connection_pointer db]
+  sqlite4 db test.db
+  register_echo_module [sqlite4_connection_pointer db]
 
   set ::echo_module ""
   execsql {
@@ -726,7 +726,7 @@ execsql {PRAGMA count_changes=OFF}
 
 forcedelete test2.db
 forcedelete test2.db-journal
-sqlite3 db2 test2.db
+sqlite4 db2 test2.db
 execsql {
   CREATE TABLE techo(a PRIMARY KEY, b, c);
 } db2
@@ -759,7 +759,7 @@ db2 close
 
 #----------------------------------------------------------------------
 # Test cases vtab1-7 tests that the value returned by 
-# sqlite3_last_insert_rowid() is set correctly when rows are inserted
+# sqlite4_last_insert_rowid() is set correctly when rows are inserted
 # into virtual tables.
 do_test vtab1.7-1 {
   execsql {
@@ -904,8 +904,8 @@ do_test vtab1.10-1 {
     CREATE VIRTUAL TABLE e2 USING echo(del);
   }
   db close
-  sqlite3 db test.db
-  register_echo_module [sqlite3_connection_pointer db]
+  sqlite4 db test.db
+  register_echo_module [sqlite4_connection_pointer db]
   execsql {
     DROP TABLE del;
   }
@@ -915,8 +915,8 @@ do_test vtab1.10-1 {
 } {1 {vtable constructor failed: e2}}
 do_test vtab1.10-2 {
   set rc [catch {
-    set ptr [sqlite3_connection_pointer db]
-    sqlite3_declare_vtab $ptr {CREATE TABLE abc(a, b, c)}
+    set ptr [sqlite4_connection_pointer db]
+    sqlite4_declare_vtab $ptr {CREATE TABLE abc(a, b, c)}
   } msg]
   list $rc $msg
 } {1 {library routine called out of sequence}}
@@ -1012,7 +1012,7 @@ do_test vtab1.12-2 {
   catchsql { INSERT INTO echo_c SELECT * FROM b; }
 } {1 {echo-vtab-error: column a is not unique}}
 do_test vtab1.12-2.1 {
-  sqlite3_errmsg db
+  sqlite4_errmsg db
 } {echo-vtab-error: column a is not unique}
 do_test vtab1.12-3 {
   execsql { SELECT * FROM c }
@@ -1112,7 +1112,7 @@ do_test vtab1-15.4 {
 } {1 {datatype mismatch}}
 
 # The following tests - vtab1-16.* - are designed to test that setting 
-# sqlite3_vtab.zErrMsg variable can be used by the vtab interface to 
+# sqlite4_vtab.zErrMsg variable can be used by the vtab interface to 
 # return an error message to the user.
 # 
 do_test vtab1-16.1 {
@@ -1163,8 +1163,8 @@ ifcapable altertable {
   incr tn
 }
 
-# The following test case exposes an instance in sqlite3_declare_vtab()
-# an error message was set using a call similar to sqlite3_mprintf(zErr),
+# The following test case exposes an instance in sqlite4_declare_vtab()
+# an error message was set using a call similar to sqlite4_mprintf(zErr),
 # where zErr is an arbitrary string. This is no good if the string contains
 # characters that can be mistaken for printf() formatting directives.
 #

@@ -101,7 +101,7 @@ struct RowSetChunk {
 */
 struct RowSet {
   struct RowSetChunk *pChunk;    /* List of all chunk allocations */
-  sqlite3 *db;                   /* The database connection */
+  sqlite4 *db;                   /* The database connection */
   struct RowSetEntry *pEntry;    /* List of entries using pRight */
   struct RowSetEntry *pLast;     /* Last entry on the pEntry list */
   struct RowSetEntry *pFresh;    /* Source of new entry objects */
@@ -123,7 +123,7 @@ struct RowSet {
 ** If N is larger than the minimum, use the surplus as an initial
 ** allocation of entries available to be filled.
 */
-RowSet *sqlite3RowSetInit(sqlite3 *db, void *pSpace, unsigned int N){
+RowSet *sqlite4RowSetInit(sqlite4 *db, void *pSpace, unsigned int N){
   RowSet *p;
   assert( N >= ROUND8(sizeof(*p)) );
   p = pSpace;
@@ -144,11 +144,11 @@ RowSet *sqlite3RowSetInit(sqlite3 *db, void *pSpace, unsigned int N){
 ** the RowSet has allocated over its lifetime.  This routine is
 ** the destructor for the RowSet.
 */
-void sqlite3RowSetClear(RowSet *p){
+void sqlite4RowSetClear(RowSet *p){
   struct RowSetChunk *pChunk, *pNextChunk;
   for(pChunk=p->pChunk; pChunk; pChunk = pNextChunk){
     pNextChunk = pChunk->pNextChunk;
-    sqlite3DbFree(p->db, pChunk);
+    sqlite4DbFree(p->db, pChunk);
   }
   p->pChunk = 0;
   p->nFresh = 0;
@@ -164,13 +164,13 @@ void sqlite3RowSetClear(RowSet *p){
 ** The mallocFailed flag of the database connection is set if a
 ** memory allocation fails.
 */
-void sqlite3RowSetInsert(RowSet *p, i64 rowid){
+void sqlite4RowSetInsert(RowSet *p, i64 rowid){
   struct RowSetEntry *pEntry;  /* The new entry */
   struct RowSetEntry *pLast;   /* The last prior entry */
   assert( p!=0 );
   if( p->nFresh==0 ){
     struct RowSetChunk *pNew;
-    pNew = sqlite3DbMallocRaw(p->db, sizeof(*pNew));
+    pNew = sqlite4DbMallocRaw(p->db, sizeof(*pNew));
     if( pNew==0 ){
       return;
     }
@@ -376,16 +376,16 @@ static void rowSetToList(RowSet *p){
 ** Write the element into *pRowid.  Return 1 on success.  Return
 ** 0 if the RowSet is already empty.
 **
-** After this routine has been called, the sqlite3RowSetInsert()
+** After this routine has been called, the sqlite4RowSetInsert()
 ** routine may not be called again.  
 */
-int sqlite3RowSetNext(RowSet *p, i64 *pRowid){
+int sqlite4RowSetNext(RowSet *p, i64 *pRowid){
   rowSetToList(p);
   if( p->pEntry ){
     *pRowid = p->pEntry->v;
     p->pEntry = p->pEntry->pRight;
     if( p->pEntry==0 ){
-      sqlite3RowSetClear(p);
+      sqlite4RowSetClear(p);
     }
     return 1;
   }else{
@@ -397,7 +397,7 @@ int sqlite3RowSetNext(RowSet *p, i64 *pRowid){
 ** Check to see if element iRowid was inserted into the the rowset as
 ** part of any insert batch prior to iBatch.  Return 1 or 0.
 */
-int sqlite3RowSetTest(RowSet *pRowSet, u8 iBatch, sqlite3_int64 iRowid){
+int sqlite4RowSetTest(RowSet *pRowSet, u8 iBatch, sqlite4_int64 iRowid){
   struct RowSetEntry *p;
   if( iBatch!=pRowSet->iBatch ){
     if( pRowSet->pEntry ){

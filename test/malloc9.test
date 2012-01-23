@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 # This file contains additional out-of-memory checks (see malloc.tcl)
-# added to expose a bug in out-of-memory handling for sqlite3_prepare().
+# added to expose a bug in out-of-memory handling for sqlite4_prepare().
 #
 # $Id: malloc9.test,v 1.5 2008/04/04 12:21:26 drh Exp $
 
@@ -31,14 +31,14 @@ do_malloc_test malloc-9.1 -tclprep {
   set sqlbytes [string length $sql]
   append sql {; INSERT INTO t1 VALUES(1)}
 } -tclbody {
-  if {[catch {sqlite3_prepare db $sql $sqlbytes TAIL} STMT]} {
+  if {[catch {sqlite4_prepare db $sql $sqlbytes TAIL} STMT]} {
     set msg $STMT
     set STMT {}
     error $msg
   }
 } -cleanup {
   if {$STMT!=""} {
-    sqlite3_finalize $STMT
+    sqlite4_finalize $STMT
   }
 }
 

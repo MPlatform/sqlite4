@@ -23,7 +23,7 @@
 **   database file and the journal file. 
 **
 **   Any statement journal created is stored in volatile memory obtained 
-**   from sqlite3_malloc(). Any attempt to create a temporary database file 
+**   from sqlite4_malloc(). Any attempt to create a temporary database file 
 **   will fail (SQLITE_IOERR). To prevent SQLite from attempting this,
 **   it should be configured to store all temporary database files in 
 **   main memory (see pragma "temp_store" or the SQLITE_TEMP_STORE compile 
@@ -79,7 +79,7 @@
 **   time using this demo vfs.
 */
 
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include <assert.h>
 #include <string.h>
 
@@ -96,7 +96,7 @@
 
 typedef struct fs_real_file fs_real_file;
 struct fs_real_file {
-  sqlite3_file *pFile;
+  sqlite4_file *pFile;
   const char *zName;
   int nDatabase;              /* Current size of database region */
   int nJournal;               /* Current size of journal region */
@@ -108,14 +108,14 @@ struct fs_real_file {
 
 typedef struct fs_file fs_file;
 struct fs_file {
-  sqlite3_file base;
+  sqlite4_file base;
   int eType;
   fs_real_file *pReal;
 };
 
 typedef struct tmp_file tmp_file;
 struct tmp_file {
-  sqlite3_file base;
+  sqlite4_file base;
   int nSize;
   int nAlloc;
   char *zAlloc;
@@ -128,56 +128,56 @@ struct tmp_file {
 /*
 ** Method declarations for fs_file.
 */
-static int fsClose(sqlite3_file*);
-static int fsRead(sqlite3_file*, void*, int iAmt, sqlite3_int64 iOfst);
-static int fsWrite(sqlite3_file*, const void*, int iAmt, sqlite3_int64 iOfst);
-static int fsTruncate(sqlite3_file*, sqlite3_int64 size);
-static int fsSync(sqlite3_file*, int flags);
-static int fsFileSize(sqlite3_file*, sqlite3_int64 *pSize);
-static int fsLock(sqlite3_file*, int);
-static int fsUnlock(sqlite3_file*, int);
-static int fsCheckReservedLock(sqlite3_file*, int *pResOut);
-static int fsFileControl(sqlite3_file*, int op, void *pArg);
-static int fsSectorSize(sqlite3_file*);
-static int fsDeviceCharacteristics(sqlite3_file*);
+static int fsClose(sqlite4_file*);
+static int fsRead(sqlite4_file*, void*, int iAmt, sqlite4_int64 iOfst);
+static int fsWrite(sqlite4_file*, const void*, int iAmt, sqlite4_int64 iOfst);
+static int fsTruncate(sqlite4_file*, sqlite4_int64 size);
+static int fsSync(sqlite4_file*, int flags);
+static int fsFileSize(sqlite4_file*, sqlite4_int64 *pSize);
+static int fsLock(sqlite4_file*, int);
+static int fsUnlock(sqlite4_file*, int);
+static int fsCheckReservedLock(sqlite4_file*, int *pResOut);
+static int fsFileControl(sqlite4_file*, int op, void *pArg);
+static int fsSectorSize(sqlite4_file*);
+static int fsDeviceCharacteristics(sqlite4_file*);
 
 /*
 ** Method declarations for tmp_file.
 */
-static int tmpClose(sqlite3_file*);
-static int tmpRead(sqlite3_file*, void*, int iAmt, sqlite3_int64 iOfst);
-static int tmpWrite(sqlite3_file*, const void*, int iAmt, sqlite3_int64 iOfst);
-static int tmpTruncate(sqlite3_file*, sqlite3_int64 size);
-static int tmpSync(sqlite3_file*, int flags);
-static int tmpFileSize(sqlite3_file*, sqlite3_int64 *pSize);
-static int tmpLock(sqlite3_file*, int);
-static int tmpUnlock(sqlite3_file*, int);
-static int tmpCheckReservedLock(sqlite3_file*, int *pResOut);
-static int tmpFileControl(sqlite3_file*, int op, void *pArg);
-static int tmpSectorSize(sqlite3_file*);
-static int tmpDeviceCharacteristics(sqlite3_file*);
+static int tmpClose(sqlite4_file*);
+static int tmpRead(sqlite4_file*, void*, int iAmt, sqlite4_int64 iOfst);
+static int tmpWrite(sqlite4_file*, const void*, int iAmt, sqlite4_int64 iOfst);
+static int tmpTruncate(sqlite4_file*, sqlite4_int64 size);
+static int tmpSync(sqlite4_file*, int flags);
+static int tmpFileSize(sqlite4_file*, sqlite4_int64 *pSize);
+static int tmpLock(sqlite4_file*, int);
+static int tmpUnlock(sqlite4_file*, int);
+static int tmpCheckReservedLock(sqlite4_file*, int *pResOut);
+static int tmpFileControl(sqlite4_file*, int op, void *pArg);
+static int tmpSectorSize(sqlite4_file*);
+static int tmpDeviceCharacteristics(sqlite4_file*);
 
 /*
 ** Method declarations for fs_vfs.
 */
-static int fsOpen(sqlite3_vfs*, const char *, sqlite3_file*, int , int *);
-static int fsDelete(sqlite3_vfs*, const char *zName, int syncDir);
-static int fsAccess(sqlite3_vfs*, const char *zName, int flags, int *);
-static int fsFullPathname(sqlite3_vfs*, const char *zName, int nOut,char *zOut);
-static void *fsDlOpen(sqlite3_vfs*, const char *zFilename);
-static void fsDlError(sqlite3_vfs*, int nByte, char *zErrMsg);
-static void (*fsDlSym(sqlite3_vfs*,void*, const char *zSymbol))(void);
-static void fsDlClose(sqlite3_vfs*, void*);
-static int fsRandomness(sqlite3_vfs*, int nByte, char *zOut);
-static int fsSleep(sqlite3_vfs*, int microseconds);
-static int fsCurrentTime(sqlite3_vfs*, double*);
+static int fsOpen(sqlite4_vfs*, const char *, sqlite4_file*, int , int *);
+static int fsDelete(sqlite4_vfs*, const char *zName, int syncDir);
+static int fsAccess(sqlite4_vfs*, const char *zName, int flags, int *);
+static int fsFullPathname(sqlite4_vfs*, const char *zName, int nOut,char *zOut);
+static void *fsDlOpen(sqlite4_vfs*, const char *zFilename);
+static void fsDlError(sqlite4_vfs*, int nByte, char *zErrMsg);
+static void (*fsDlSym(sqlite4_vfs*,void*, const char *zSymbol))(void);
+static void fsDlClose(sqlite4_vfs*, void*);
+static int fsRandomness(sqlite4_vfs*, int nByte, char *zOut);
+static int fsSleep(sqlite4_vfs*, int microseconds);
+static int fsCurrentTime(sqlite4_vfs*, double*);
 
 
 typedef struct fs_vfs_t fs_vfs_t;
 struct fs_vfs_t {
-  sqlite3_vfs base;
+  sqlite4_vfs base;
   fs_real_file *pFileList;
-  sqlite3_vfs *pParent;
+  sqlite4_vfs *pParent;
 };
 
 static fs_vfs_t fs_vfs = {
@@ -205,7 +205,7 @@ static fs_vfs_t fs_vfs = {
   0                                             /* pParent */
 };
 
-static sqlite3_io_methods fs_io_methods = {
+static sqlite4_io_methods fs_io_methods = {
   1,                            /* iVersion */
   fsClose,                      /* xClose */
   fsRead,                       /* xRead */
@@ -226,7 +226,7 @@ static sqlite3_io_methods fs_io_methods = {
 };
 
 
-static sqlite3_io_methods tmp_io_methods = {
+static sqlite4_io_methods tmp_io_methods = {
   1,                            /* iVersion */
   tmpClose,                     /* xClose */
   tmpRead,                      /* xRead */
@@ -254,9 +254,9 @@ static sqlite3_io_methods tmp_io_methods = {
 /*
 ** Close a tmp-file.
 */
-static int tmpClose(sqlite3_file *pFile){
+static int tmpClose(sqlite4_file *pFile){
   tmp_file *pTmp = (tmp_file *)pFile;
-  sqlite3_free(pTmp->zAlloc);
+  sqlite4_free(pTmp->zAlloc);
   return SQLITE_OK;
 }
 
@@ -264,7 +264,7 @@ static int tmpClose(sqlite3_file *pFile){
 ** Read data from a tmp-file.
 */
 static int tmpRead(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -281,7 +281,7 @@ static int tmpRead(
 ** Write data to a tmp-file.
 */
 static int tmpWrite(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   const void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -289,7 +289,7 @@ static int tmpWrite(
   tmp_file *pTmp = (tmp_file *)pFile;
   if( (iAmt+iOfst)>pTmp->nAlloc ){
     int nNew = 2*(iAmt+iOfst+pTmp->nAlloc);
-    char *zNew = sqlite3_realloc(pTmp->zAlloc, nNew);
+    char *zNew = sqlite4_realloc(pTmp->zAlloc, nNew);
     if( !zNew ){
       return SQLITE_NOMEM;
     }
@@ -304,7 +304,7 @@ static int tmpWrite(
 /*
 ** Truncate a tmp-file.
 */
-static int tmpTruncate(sqlite3_file *pFile, sqlite_int64 size){
+static int tmpTruncate(sqlite4_file *pFile, sqlite_int64 size){
   tmp_file *pTmp = (tmp_file *)pFile;
   pTmp->nSize = MIN(pTmp->nSize, size);
   return SQLITE_OK;
@@ -313,14 +313,14 @@ static int tmpTruncate(sqlite3_file *pFile, sqlite_int64 size){
 /*
 ** Sync a tmp-file.
 */
-static int tmpSync(sqlite3_file *pFile, int flags){
+static int tmpSync(sqlite4_file *pFile, int flags){
   return SQLITE_OK;
 }
 
 /*
 ** Return the current file-size of a tmp-file.
 */
-static int tmpFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
+static int tmpFileSize(sqlite4_file *pFile, sqlite_int64 *pSize){
   tmp_file *pTmp = (tmp_file *)pFile;
   *pSize = pTmp->nSize;
   return SQLITE_OK;
@@ -329,21 +329,21 @@ static int tmpFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
 /*
 ** Lock a tmp-file.
 */
-static int tmpLock(sqlite3_file *pFile, int eLock){
+static int tmpLock(sqlite4_file *pFile, int eLock){
   return SQLITE_OK;
 }
 
 /*
 ** Unlock a tmp-file.
 */
-static int tmpUnlock(sqlite3_file *pFile, int eLock){
+static int tmpUnlock(sqlite4_file *pFile, int eLock){
   return SQLITE_OK;
 }
 
 /*
 ** Check if another file-handle holds a RESERVED lock on a tmp-file.
 */
-static int tmpCheckReservedLock(sqlite3_file *pFile, int *pResOut){
+static int tmpCheckReservedLock(sqlite4_file *pFile, int *pResOut){
   *pResOut = 0;
   return SQLITE_OK;
 }
@@ -351,28 +351,28 @@ static int tmpCheckReservedLock(sqlite3_file *pFile, int *pResOut){
 /*
 ** File control method. For custom operations on a tmp-file.
 */
-static int tmpFileControl(sqlite3_file *pFile, int op, void *pArg){
+static int tmpFileControl(sqlite4_file *pFile, int op, void *pArg){
   return SQLITE_OK;
 }
 
 /*
 ** Return the sector-size in bytes for a tmp-file.
 */
-static int tmpSectorSize(sqlite3_file *pFile){
+static int tmpSectorSize(sqlite4_file *pFile){
   return 0;
 }
 
 /*
 ** Return the device characteristic flags supported by a tmp-file.
 */
-static int tmpDeviceCharacteristics(sqlite3_file *pFile){
+static int tmpDeviceCharacteristics(sqlite4_file *pFile){
   return 0;
 }
 
 /*
 ** Close an fs-file.
 */
-static int fsClose(sqlite3_file *pFile){
+static int fsClose(sqlite4_file *pFile){
   int rc = SQLITE_OK;
   fs_file *p = (fs_file *)pFile;
   fs_real_file *pReal = p->pReal;
@@ -388,7 +388,7 @@ static int fsClose(sqlite3_file *pFile){
       pReal->pNext->ppThis = pReal->ppThis;
     }
     rc = pReal->pFile->pMethods->xClose(pReal->pFile);
-    sqlite3_free(pReal);
+    sqlite4_free(pReal);
   }
 
   return rc;
@@ -398,7 +398,7 @@ static int fsClose(sqlite3_file *pFile){
 ** Read data from an fs-file.
 */
 static int fsRead(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -406,7 +406,7 @@ static int fsRead(
   int rc = SQLITE_OK;
   fs_file *p = (fs_file *)pFile;
   fs_real_file *pReal = p->pReal;
-  sqlite3_file *pF = pReal->pFile;
+  sqlite4_file *pF = pReal->pFile;
 
   if( (p->eType==DATABASE_FILE && (iAmt+iOfst)>pReal->nDatabase)
    || (p->eType==JOURNAL_FILE && (iAmt+iOfst)>pReal->nJournal)
@@ -437,7 +437,7 @@ static int fsRead(
 ** Write data to an fs-file.
 */
 static int fsWrite(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   const void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
@@ -445,7 +445,7 @@ static int fsWrite(
   int rc = SQLITE_OK;
   fs_file *p = (fs_file *)pFile;
   fs_real_file *pReal = p->pReal;
-  sqlite3_file *pF = pReal->pFile;
+  sqlite4_file *pF = pReal->pFile;
 
   if( p->eType==DATABASE_FILE ){
     if( (iAmt+iOfst+BLOCKSIZE)>(pReal->nBlob-pReal->nJournal) ){
@@ -485,7 +485,7 @@ static int fsWrite(
 /*
 ** Truncate an fs-file.
 */
-static int fsTruncate(sqlite3_file *pFile, sqlite_int64 size){
+static int fsTruncate(sqlite4_file *pFile, sqlite_int64 size){
   fs_file *p = (fs_file *)pFile;
   fs_real_file *pReal = p->pReal;
   if( p->eType==DATABASE_FILE ){
@@ -499,10 +499,10 @@ static int fsTruncate(sqlite3_file *pFile, sqlite_int64 size){
 /*
 ** Sync an fs-file.
 */
-static int fsSync(sqlite3_file *pFile, int flags){
+static int fsSync(sqlite4_file *pFile, int flags){
   fs_file *p = (fs_file *)pFile;
   fs_real_file *pReal = p->pReal;
-  sqlite3_file *pRealFile = pReal->pFile;
+  sqlite4_file *pRealFile = pReal->pFile;
   int rc = SQLITE_OK;
 
   if( p->eType==DATABASE_FILE ){
@@ -523,7 +523,7 @@ static int fsSync(sqlite3_file *pFile, int flags){
 /*
 ** Return the current file-size of an fs-file.
 */
-static int fsFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
+static int fsFileSize(sqlite4_file *pFile, sqlite_int64 *pSize){
   fs_file *p = (fs_file *)pFile;
   fs_real_file *pReal = p->pReal;
   if( p->eType==DATABASE_FILE ){
@@ -537,21 +537,21 @@ static int fsFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
 /*
 ** Lock an fs-file.
 */
-static int fsLock(sqlite3_file *pFile, int eLock){
+static int fsLock(sqlite4_file *pFile, int eLock){
   return SQLITE_OK;
 }
 
 /*
 ** Unlock an fs-file.
 */
-static int fsUnlock(sqlite3_file *pFile, int eLock){
+static int fsUnlock(sqlite4_file *pFile, int eLock){
   return SQLITE_OK;
 }
 
 /*
 ** Check if another file-handle holds a RESERVED lock on an fs-file.
 */
-static int fsCheckReservedLock(sqlite3_file *pFile, int *pResOut){
+static int fsCheckReservedLock(sqlite4_file *pFile, int *pResOut){
   *pResOut = 0;
   return SQLITE_OK;
 }
@@ -559,21 +559,21 @@ static int fsCheckReservedLock(sqlite3_file *pFile, int *pResOut){
 /*
 ** File control method. For custom operations on an fs-file.
 */
-static int fsFileControl(sqlite3_file *pFile, int op, void *pArg){
+static int fsFileControl(sqlite4_file *pFile, int op, void *pArg){
   return SQLITE_OK;
 }
 
 /*
 ** Return the sector-size in bytes for an fs-file.
 */
-static int fsSectorSize(sqlite3_file *pFile){
+static int fsSectorSize(sqlite4_file *pFile){
   return BLOCKSIZE;
 }
 
 /*
 ** Return the device characteristic flags supported by an fs-file.
 */
-static int fsDeviceCharacteristics(sqlite3_file *pFile){
+static int fsDeviceCharacteristics(sqlite4_file *pFile){
   return 0;
 }
 
@@ -581,9 +581,9 @@ static int fsDeviceCharacteristics(sqlite3_file *pFile){
 ** Open an fs file handle.
 */
 static int fsOpen(
-  sqlite3_vfs *pVfs,
+  sqlite4_vfs *pVfs,
   const char *zName,
-  sqlite3_file *pFile,
+  sqlite4_file *pFile,
   int flags,
   int *pOutFlags
 ){
@@ -612,19 +612,19 @@ static int fsOpen(
 
   if( !pReal ){
     int real_flags = (flags&~(SQLITE_OPEN_MAIN_DB))|SQLITE_OPEN_TEMP_DB;
-    sqlite3_int64 size;
-    sqlite3_file *pRealFile;
-    sqlite3_vfs *pParent = pFsVfs->pParent;
+    sqlite4_int64 size;
+    sqlite4_file *pRealFile;
+    sqlite4_vfs *pParent = pFsVfs->pParent;
     assert(eType==DATABASE_FILE);
 
-    pReal = (fs_real_file *)sqlite3_malloc(sizeof(*pReal)+pParent->szOsFile);
+    pReal = (fs_real_file *)sqlite4_malloc(sizeof(*pReal)+pParent->szOsFile);
     if( !pReal ){
       rc = SQLITE_NOMEM;
       goto open_out;
     }
     memset(pReal, 0, sizeof(*pReal)+pParent->szOsFile);
     pReal->zName = zName;
-    pReal->pFile = (sqlite3_file *)(&pReal[1]);
+    pReal->pFile = (sqlite4_file *)(&pReal[1]);
 
     rc = pParent->xOpen(pParent, zName, pReal->pFile, real_flags, pOutFlags);
     if( rc!=SQLITE_OK ){
@@ -671,7 +671,7 @@ open_out:
       if( pReal->pFile->pMethods ){
         pReal->pFile->pMethods->xClose(pReal->pFile);
       }
-      sqlite3_free(pReal);
+      sqlite4_free(pReal);
     }
   }
   return rc;
@@ -682,11 +682,11 @@ open_out:
 ** ensure the file-system modifications are synced to disk before
 ** returning.
 */
-static int fsDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
+static int fsDelete(sqlite4_vfs *pVfs, const char *zPath, int dirSync){
   int rc = SQLITE_OK;
   fs_vfs_t *pFsVfs = (fs_vfs_t *)pVfs;
   fs_real_file *pReal;
-  sqlite3_file *pF;
+  sqlite4_file *pF;
   int nName = strlen(zPath) - 8;
 
   assert(strlen("-journal")==8);
@@ -709,7 +709,7 @@ static int fsDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
 ** is available, or false otherwise.
 */
 static int fsAccess(
-  sqlite3_vfs *pVfs, 
+  sqlite4_vfs *pVfs, 
   const char *zPath, 
   int flags, 
   int *pResOut
@@ -720,7 +720,7 @@ static int fsAccess(
   int nName = strlen(zPath);
 
   if( flags!=SQLITE_ACCESS_EXISTS ){
-    sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+    sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
     return pParent->xAccess(pParent, zPath, flags, pResOut);
   }
 
@@ -743,20 +743,20 @@ static int fsAccess(
 ** of at least (FS_MAX_PATHNAME+1) bytes.
 */
 static int fsFullPathname(
-  sqlite3_vfs *pVfs,            /* Pointer to vfs object */
+  sqlite4_vfs *pVfs,            /* Pointer to vfs object */
   const char *zPath,            /* Possibly relative input path */
   int nOut,                     /* Size of output buffer in bytes */
   char *zOut                    /* Output buffer */
 ){
-  sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+  sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
   return pParent->xFullPathname(pParent, zPath, nOut, zOut);
 }
 
 /*
 ** Open the dynamic library located at zPath and return a handle.
 */
-static void *fsDlOpen(sqlite3_vfs *pVfs, const char *zPath){
-  sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+static void *fsDlOpen(sqlite4_vfs *pVfs, const char *zPath){
+  sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
   return pParent->xDlOpen(pParent, zPath);
 }
 
@@ -765,24 +765,24 @@ static void *fsDlOpen(sqlite3_vfs *pVfs, const char *zPath){
 ** utf-8 string describing the most recent error encountered associated 
 ** with dynamic libraries.
 */
-static void fsDlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg){
-  sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+static void fsDlError(sqlite4_vfs *pVfs, int nByte, char *zErrMsg){
+  sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
   pParent->xDlError(pParent, nByte, zErrMsg);
 }
 
 /*
 ** Return a pointer to the symbol zSymbol in the dynamic library pHandle.
 */
-static void (*fsDlSym(sqlite3_vfs *pVfs, void *pH, const char *zSym))(void){
-  sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+static void (*fsDlSym(sqlite4_vfs *pVfs, void *pH, const char *zSym))(void){
+  sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
   return pParent->xDlSym(pParent, pH, zSym);
 }
 
 /*
 ** Close the dynamic library handle pHandle.
 */
-static void fsDlClose(sqlite3_vfs *pVfs, void *pHandle){
-  sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+static void fsDlClose(sqlite4_vfs *pVfs, void *pHandle){
+  sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
   pParent->xDlClose(pParent, pHandle);
 }
 
@@ -790,8 +790,8 @@ static void fsDlClose(sqlite3_vfs *pVfs, void *pHandle){
 ** Populate the buffer pointed to by zBufOut with nByte bytes of 
 ** random data.
 */
-static int fsRandomness(sqlite3_vfs *pVfs, int nByte, char *zBufOut){
-  sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+static int fsRandomness(sqlite4_vfs *pVfs, int nByte, char *zBufOut){
+  sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
   return pParent->xRandomness(pParent, nByte, zBufOut);
 }
 
@@ -799,16 +799,16 @@ static int fsRandomness(sqlite3_vfs *pVfs, int nByte, char *zBufOut){
 ** Sleep for nMicro microseconds. Return the number of microseconds 
 ** actually slept.
 */
-static int fsSleep(sqlite3_vfs *pVfs, int nMicro){
-  sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+static int fsSleep(sqlite4_vfs *pVfs, int nMicro){
+  sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
   return pParent->xSleep(pParent, nMicro);
 }
 
 /*
 ** Return the current time as a Julian Day number in *pTimeOut.
 */
-static int fsCurrentTime(sqlite3_vfs *pVfs, double *pTimeOut){
-  sqlite3_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
+static int fsCurrentTime(sqlite4_vfs *pVfs, double *pTimeOut){
+  sqlite4_vfs *pParent = ((fs_vfs_t *)pVfs)->pParent;
   return pParent->xCurrentTime(pParent, pTimeOut);
 }
 
@@ -819,10 +819,10 @@ static int fsCurrentTime(sqlite3_vfs *pVfs, double *pTimeOut){
 */
 int fs_register(void){
   if( fs_vfs.pParent ) return SQLITE_OK;
-  fs_vfs.pParent = sqlite3_vfs_find(0);
+  fs_vfs.pParent = sqlite4_vfs_find(0);
   fs_vfs.base.mxPathname = fs_vfs.pParent->mxPathname;
   fs_vfs.base.szOsFile = MAX(sizeof(tmp_file), sizeof(fs_file));
-  return sqlite3_vfs_register(&fs_vfs.base, 0);
+  return sqlite4_vfs_register(&fs_vfs.base, 0);
 }
 
 #ifdef SQLITE_TEST

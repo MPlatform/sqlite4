@@ -39,10 +39,10 @@
 #include <assert.h>
 
 #ifndef SQLITE_CORE
-  #include "sqlite3ext.h"
+  #include "sqlite4ext.h"
   SQLITE_EXTENSION_INIT1
 #else
-  #include "sqlite3.h"
+  #include "sqlite4.h"
 #endif
 
 /*
@@ -54,10 +54,10 @@
 #endif
 
 /*
-** Version of sqlite3_free() that is always a function, never a macro.
+** Version of sqlite4_free() that is always a function, never a macro.
 */
 static void xFree(void *p){
-  sqlite3_free(p);
+  sqlite4_free(p);
 }
 
 /*
@@ -157,19 +157,19 @@ static int icuLikeCompare(
 ** is mapped to like(B, A, E).
 */
 static void icuLikeFunc(
-  sqlite3_context *context, 
+  sqlite4_context *context, 
   int argc, 
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
-  const unsigned char *zA = sqlite3_value_text(argv[0]);
-  const unsigned char *zB = sqlite3_value_text(argv[1]);
+  const unsigned char *zA = sqlite4_value_text(argv[0]);
+  const unsigned char *zB = sqlite4_value_text(argv[1]);
   UChar32 uEsc = 0;
 
   /* Limit the length of the LIKE or GLOB pattern to avoid problems
   ** of deep recursion and N*N behavior in patternCompare().
   */
-  if( sqlite3_value_bytes(argv[0])>SQLITE_MAX_LIKE_PATTERN_LENGTH ){
-    sqlite3_result_error(context, "LIKE or GLOB pattern too complex", -1);
+  if( sqlite4_value_bytes(argv[0])>SQLITE_MAX_LIKE_PATTERN_LENGTH ){
+    sqlite4_result_error(context, "LIKE or GLOB pattern too complex", -1);
     return;
   }
 
@@ -178,20 +178,20 @@ static void icuLikeFunc(
     /* The escape character string must consist of a single UTF-8 character.
     ** Otherwise, return an error.
     */
-    int nE= sqlite3_value_bytes(argv[2]);
-    const unsigned char *zE = sqlite3_value_text(argv[2]);
+    int nE= sqlite4_value_bytes(argv[2]);
+    const unsigned char *zE = sqlite4_value_text(argv[2]);
     int i = 0;
     if( zE==0 ) return;
     U8_NEXT(zE, i, nE, uEsc);
     if( i!=nE){
-      sqlite3_result_error(context, 
+      sqlite4_result_error(context, 
           "ESCAPE expression must be a single character", -1);
       return;
     }
   }
 
   if( zA && zB ){
-    sqlite3_result_int(context, icuLikeCompare(zA, zB, uEsc));
+    sqlite4_result_int(context, icuLikeCompare(zA, zB, uEsc));
   }
 }
 
@@ -203,19 +203,19 @@ static void icuLikeFunc(
 ** loaded with an error message based on the following two args.
 */
 static void icuFunctionError(
-  sqlite3_context *pCtx,       /* SQLite scalar function context */
+  sqlite4_context *pCtx,       /* SQLite scalar function context */
   const char *zName,           /* Name of ICU function that failed */
   UErrorCode e                 /* Error code returned by ICU function */
 ){
   char zBuf[128];
-  sqlite3_snprintf(128, zBuf, "ICU error: %s(): %s", zName, u_errorName(e));
+  sqlite4_snprintf(128, zBuf, "ICU error: %s(): %s", zName, u_errorName(e));
   zBuf[127] = '\0';
-  sqlite3_result_error(pCtx, zBuf, -1);
+  sqlite4_result_error(pCtx, zBuf, -1);
 }
 
 /*
 ** Function to delete compiled regexp objects. Registered as
-** a destructor function with sqlite3_set_auxdata().
+** a destructor function with sqlite4_set_auxdata().
 */
 static void icuRegexpDelete(void *p){
   URegularExpression *pExpr = (URegularExpression *)p;
@@ -241,11 +241,11 @@ static void icuRegexpDelete(void *p){
 **     uregex_matches()
 **     uregex_close()
 */
-static void icuRegexpFunc(sqlite3_context *p, int nArg, sqlite3_value **apArg){
+static void icuRegexpFunc(sqlite4_context *p, int nArg, sqlite4_value **apArg){
   UErrorCode status = U_ZERO_ERROR;
   URegularExpression *pExpr;
   UBool res;
-  const UChar *zString = sqlite3_value_text16(apArg[1]);
+  const UChar *zString = sqlite4_value_text16(apArg[1]);
 
   (void)nArg;  /* Unused parameter */
 
@@ -256,16 +256,16 @@ static void icuRegexpFunc(sqlite3_context *p, int nArg, sqlite3_value **apArg){
     return;
   }
 
-  pExpr = sqlite3_get_auxdata(p, 0);
+  pExpr = sqlite4_get_auxdata(p, 0);
   if( !pExpr ){
-    const UChar *zPattern = sqlite3_value_text16(apArg[0]);
+    const UChar *zPattern = sqlite4_value_text16(apArg[0]);
     if( !zPattern ){
       return;
     }
     pExpr = uregex_open(zPattern, -1, 0, 0, &status);
 
     if( U_SUCCESS(status) ){
-      sqlite3_set_auxdata(p, 0, pExpr, icuRegexpDelete);
+      sqlite4_set_auxdata(p, 0, pExpr, icuRegexpDelete);
     }else{
       assert(!pExpr);
       icuFunctionError(p, "uregex_open", status);
@@ -295,7 +295,7 @@ static void icuRegexpFunc(sqlite3_context *p, int nArg, sqlite3_value **apArg){
   uregex_setText(pExpr, 0, 0, &status);
 
   /* Return 1 or 0. */
-  sqlite3_result_int(p, res ? 1 : 0);
+  sqlite4_result_int(p, res ? 1 : 0);
 }
 
 /*
@@ -324,7 +324,7 @@ static void icuRegexpFunc(sqlite3_context *p, int nArg, sqlite3_value **apArg){
 **
 ** http://www.icu-project.org/userguide/posix.html#case_mappings
 */
-static void icuCaseFunc16(sqlite3_context *p, int nArg, sqlite3_value **apArg){
+static void icuCaseFunc16(sqlite4_context *p, int nArg, sqlite4_value **apArg){
   const UChar *zInput;
   UChar *zOutput;
   int nInput;
@@ -335,22 +335,22 @@ static void icuCaseFunc16(sqlite3_context *p, int nArg, sqlite3_value **apArg){
 
   assert(nArg==1 || nArg==2);
   if( nArg==2 ){
-    zLocale = (const char *)sqlite3_value_text(apArg[1]);
+    zLocale = (const char *)sqlite4_value_text(apArg[1]);
   }
 
-  zInput = sqlite3_value_text16(apArg[0]);
+  zInput = sqlite4_value_text16(apArg[0]);
   if( !zInput ){
     return;
   }
-  nInput = sqlite3_value_bytes16(apArg[0]);
+  nInput = sqlite4_value_bytes16(apArg[0]);
 
   nOutput = nInput * 2 + 2;
-  zOutput = sqlite3_malloc(nOutput);
+  zOutput = sqlite4_malloc(nOutput);
   if( !zOutput ){
     return;
   }
 
-  if( sqlite3_user_data(p) ){
+  if( sqlite4_user_data(p) ){
     u_strToUpper(zOutput, nOutput/2, zInput, nInput/2, zLocale, &status);
   }else{
     u_strToLower(zOutput, nOutput/2, zInput, nInput/2, zLocale, &status);
@@ -361,7 +361,7 @@ static void icuCaseFunc16(sqlite3_context *p, int nArg, sqlite3_value **apArg){
     return;
   }
 
-  sqlite3_result_text16(p, zOutput, -1, xFree);
+  sqlite4_result_text16(p, zOutput, -1, xFree);
 }
 
 /*
@@ -410,20 +410,20 @@ static int icuCollationColl(
 ** collation sequence to create.
 */
 static void icuLoadCollation(
-  sqlite3_context *p, 
+  sqlite4_context *p, 
   int nArg, 
-  sqlite3_value **apArg
+  sqlite4_value **apArg
 ){
-  sqlite3 *db = (sqlite3 *)sqlite3_user_data(p);
+  sqlite4 *db = (sqlite4 *)sqlite4_user_data(p);
   UErrorCode status = U_ZERO_ERROR;
   const char *zLocale;      /* Locale identifier - (eg. "jp_JP") */
   const char *zName;        /* SQL Collation sequence name (eg. "japanese") */
   UCollator *pUCollator;    /* ICU library collation object */
-  int rc;                   /* Return code from sqlite3_create_collation_x() */
+  int rc;                   /* Return code from sqlite4_create_collation_x() */
 
   assert(nArg==2);
-  zLocale = (const char *)sqlite3_value_text(apArg[0]);
-  zName = (const char *)sqlite3_value_text(apArg[1]);
+  zLocale = (const char *)sqlite4_value_text(apArg[0]);
+  zName = (const char *)sqlite4_value_text(apArg[1]);
 
   if( !zLocale || !zName ){
     return;
@@ -436,25 +436,25 @@ static void icuLoadCollation(
   }
   assert(p);
 
-  rc = sqlite3_create_collation_v2(db, zName, SQLITE_UTF16, (void *)pUCollator, 
+  rc = sqlite4_create_collation_v2(db, zName, SQLITE_UTF16, (void *)pUCollator, 
       icuCollationColl, icuCollationDel
   );
   if( rc!=SQLITE_OK ){
     ucol_close(pUCollator);
-    sqlite3_result_error(p, "Error registering collation function", -1);
+    sqlite4_result_error(p, "Error registering collation function", -1);
   }
 }
 
 /*
 ** Register the ICU extension functions with database db.
 */
-int sqlite3IcuInit(sqlite3 *db){
+int sqlite4IcuInit(sqlite4 *db){
   struct IcuScalar {
     const char *zName;                        /* Function name */
     int nArg;                                 /* Number of arguments */
     int enc;                                  /* Optimal text encoding */
-    void *pContext;                           /* sqlite3_user_data() context */
-    void (*xFunc)(sqlite3_context*,int,sqlite3_value**);
+    void *pContext;                           /* sqlite4_user_data() context */
+    void (*xFunc)(sqlite4_context*,int,sqlite4_value**);
   } scalars[] = {
     {"regexp", 2, SQLITE_ANY,          0, icuRegexpFunc},
 
@@ -479,7 +479,7 @@ int sqlite3IcuInit(sqlite3 *db){
 
   for(i=0; rc==SQLITE_OK && i<(int)(sizeof(scalars)/sizeof(scalars[0])); i++){
     struct IcuScalar *p = &scalars[i];
-    rc = sqlite3_create_function(
+    rc = sqlite4_create_function(
         db, p->zName, p->nArg, p->enc, p->pContext, p->xFunc, 0, 0
     );
   }
@@ -488,13 +488,13 @@ int sqlite3IcuInit(sqlite3 *db){
 }
 
 #if !SQLITE_CORE
-int sqlite3_extension_init(
-  sqlite3 *db, 
+int sqlite4_extension_init(
+  sqlite4 *db, 
   char **pzErrMsg,
-  const sqlite3_api_routines *pApi
+  const sqlite4_api_routines *pApi
 ){
   SQLITE_EXTENSION_INIT2(pApi)
-  return sqlite3IcuInit(db);
+  return sqlite4IcuInit(db);
 }
 #endif
 

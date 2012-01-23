@@ -1026,7 +1026,7 @@ foreach tab [db eval {SELECT name FROM sqlite_master WHERE type = 'table'}] {
   db eval "DROP TABLE $tab"
 }
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_test select1-14.1 {
   execsql { 
@@ -1058,7 +1058,7 @@ if {[db one {PRAGMA locking_mode}]=="normal"} {
     }
   } {}
   do_test select1-15.2 {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql { DROP INDEX i1 } db2
     db2 close
   } {}

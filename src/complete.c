@@ -11,7 +11,7 @@
 *************************************************************************
 ** An tokenizer for SQL
 **
-** This file contains C code that implements the sqlite3_complete() API.
+** This file contains C code that implements the sqlite4_complete() API.
 ** This code used to be part of the tokenizer.c source file.  But by
 ** separating it out, the code will be automatically omitted from
 ** static links that do not use it.
@@ -24,17 +24,17 @@
 */
 #ifndef SQLITE_AMALGAMATION
 #ifdef SQLITE_ASCII
-#define IdChar(C)  ((sqlite3CtypeMap[(unsigned char)C]&0x46)!=0)
+#define IdChar(C)  ((sqlite4CtypeMap[(unsigned char)C]&0x46)!=0)
 #endif
 #ifdef SQLITE_EBCDIC
-extern const char sqlite3IsEbcdicIdChar[];
-#define IdChar(C)  (((c=C)>=0x42 && sqlite3IsEbcdicIdChar[c-0x40]))
+extern const char sqlite4IsEbcdicIdChar[];
+#define IdChar(C)  (((c=C)>=0x42 && sqlite4IsEbcdicIdChar[c-0x40]))
 #endif
 #endif /* SQLITE_AMALGAMATION */
 
 
 /*
-** Token types used by the sqlite3_complete() routine.  See the header
+** Token types used by the sqlite4_complete() routine.  See the header
 ** comments on that procedure for additional information.
 */
 #define tkSEMI    0
@@ -101,7 +101,7 @@ extern const char sqlite3IsEbcdicIdChar[];
 ** to recognize the end of a trigger can be omitted.  All we have to do
 ** is look for a semicolon that is not part of an string or comment.
 */
-int sqlite3_complete(const char *zSql){
+int sqlite4_complete(const char *zSql){
   u8 state = 0;   /* Current state, using numbers defined in header comment */
   u8 token;       /* Value of the next token */
 
@@ -200,7 +200,7 @@ int sqlite3_complete(const char *zSql){
 #else
           switch( *zSql ){
             case 'c': case 'C': {
-              if( nId==6 && sqlite3StrNICmp(zSql, "create", 6)==0 ){
+              if( nId==6 && sqlite4StrNICmp(zSql, "create", 6)==0 ){
                 token = tkCREATE;
               }else{
                 token = tkOTHER;
@@ -208,11 +208,11 @@ int sqlite3_complete(const char *zSql){
               break;
             }
             case 't': case 'T': {
-              if( nId==7 && sqlite3StrNICmp(zSql, "trigger", 7)==0 ){
+              if( nId==7 && sqlite4StrNICmp(zSql, "trigger", 7)==0 ){
                 token = tkTRIGGER;
-              }else if( nId==4 && sqlite3StrNICmp(zSql, "temp", 4)==0 ){
+              }else if( nId==4 && sqlite4StrNICmp(zSql, "temp", 4)==0 ){
                 token = tkTEMP;
-              }else if( nId==9 && sqlite3StrNICmp(zSql, "temporary", 9)==0 ){
+              }else if( nId==9 && sqlite4StrNICmp(zSql, "temporary", 9)==0 ){
                 token = tkTEMP;
               }else{
                 token = tkOTHER;
@@ -220,11 +220,11 @@ int sqlite3_complete(const char *zSql){
               break;
             }
             case 'e':  case 'E': {
-              if( nId==3 && sqlite3StrNICmp(zSql, "end", 3)==0 ){
+              if( nId==3 && sqlite4StrNICmp(zSql, "end", 3)==0 ){
                 token = tkEND;
               }else
 #ifndef SQLITE_OMIT_EXPLAIN
-              if( nId==7 && sqlite3StrNICmp(zSql, "explain", 7)==0 ){
+              if( nId==7 && sqlite4StrNICmp(zSql, "explain", 7)==0 ){
                 token = tkEXPLAIN;
               }else
 #endif
@@ -255,29 +255,29 @@ int sqlite3_complete(const char *zSql){
 
 #ifndef SQLITE_OMIT_UTF16
 /*
-** This routine is the same as the sqlite3_complete() routine described
+** This routine is the same as the sqlite4_complete() routine described
 ** above, except that the parameter is required to be UTF-16 encoded, not
 ** UTF-8.
 */
-int sqlite3_complete16(const void *zSql){
-  sqlite3_value *pVal;
+int sqlite4_complete16(const void *zSql){
+  sqlite4_value *pVal;
   char const *zSql8;
   int rc = SQLITE_NOMEM;
 
 #ifndef SQLITE_OMIT_AUTOINIT
-  rc = sqlite3_initialize();
+  rc = sqlite4_initialize();
   if( rc ) return rc;
 #endif
-  pVal = sqlite3ValueNew(0);
-  sqlite3ValueSetStr(pVal, -1, zSql, SQLITE_UTF16NATIVE, SQLITE_STATIC);
-  zSql8 = sqlite3ValueText(pVal, SQLITE_UTF8);
+  pVal = sqlite4ValueNew(0);
+  sqlite4ValueSetStr(pVal, -1, zSql, SQLITE_UTF16NATIVE, SQLITE_STATIC);
+  zSql8 = sqlite4ValueText(pVal, SQLITE_UTF8);
   if( zSql8 ){
-    rc = sqlite3_complete(zSql8);
+    rc = sqlite4_complete(zSql8);
   }else{
     rc = SQLITE_NOMEM;
   }
-  sqlite3ValueFree(pVal);
-  return sqlite3ApiExit(0, rc);
+  sqlite4ValueFree(pVal);
+  return sqlite4ApiExit(0, rc);
 }
 #endif /* SQLITE_OMIT_UTF16 */
 #endif /* SQLITE_OMIT_COMPLETE */

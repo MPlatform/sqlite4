@@ -21,13 +21,13 @@ ifcapable !shared_cache {
   finish_test
   return
 }
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 # Test that if we delete all rows from a table any read-uncommitted 
 # cursors are correctly invalidated. Test on both table and index btrees.
 do_test shared2-1.1 {
-  sqlite3 db1 test.db
-  sqlite3 db2 test.db
+  sqlite4 db1 test.db
+  sqlite4 db2 test.db
 
   # Set up some data. Table "numbers" has 64 rows after this block 
   # is executed.
@@ -126,12 +126,12 @@ db1 close
 db2 close
 
 do_test shared2-3.2 {
-  sqlite3_enable_shared_cache 1
+  sqlite4_enable_shared_cache 1
 } {1}
 
 forcedelete test.db
 
-sqlite3 db test.db
+sqlite4 db test.db
 do_test shared2-4.1 {
   execsql {
     CREATE TABLE t0(a, b);
@@ -140,8 +140,8 @@ do_test shared2-4.1 {
 } {}
 db close
 
-sqlite3 db test.db
-sqlite3 db2 test.db
+sqlite4 db test.db
+sqlite4 db2 test.db
 
 do_test shared2-4.2 {
   execsql { SELECT a, b FROM t0 } db
@@ -156,11 +156,11 @@ do_test shared2-4.3 {
 # At one point, this was causing a crash.
 #
 do_test shared2-5.1 {
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql { CREATE TABLE t2(a, b, c) }
   
-  # The following statement would crash when attempting to sqlite3_free()
+  # The following statement would crash when attempting to sqlite4_free()
   # a pointer allocated from a lookaside buffer.
   execsql { CREATE INDEX i1 ON t2(a) } db2
 } {}
@@ -177,5 +177,5 @@ do_multiclient_test {tn} {
   do_test shared2-6.$tn.2 { sql2 { SELECT * FROM t1 } } {}
 }
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

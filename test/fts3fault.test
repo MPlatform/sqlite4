@@ -18,12 +18,12 @@ set ::testprefix fts3fault
 # If SQLITE_ENABLE_FTS3 is not defined, omit this file.
 ifcapable !fts3 { finish_test ; return }
 
-# Test error handling in the sqlite3Fts3Init() function. This is the 
+# Test error handling in the sqlite4Fts3Init() function. This is the 
 # function that registers the FTS3 module and various support functions
 # with SQLite.
 #
 do_faultsim_test 1 -body { 
-  sqlite3 db test.db 
+  sqlite4 db test.db 
   expr 0
 } -test {
   catch { db close }
@@ -40,7 +40,7 @@ do_execsql_test 2.0 {
   INSERT INTO t1 VALUES(' after it has been written');
 }
 do_faultsim_test 2 -prep { 
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     BEGIN;
       INSERT INTO t1 VALUES('registers the FTS3 module');
@@ -56,7 +56,7 @@ do_faultsim_test 2 -prep {
 # matches terms that reside on a large range of leaf nodes.
 #
 do_test fts3fault-3.0 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { CREATE VIRTUAL TABLE t3 USING fts4; }
   execsql { INSERT INTO t3(t3) VALUES('nodesize=50') }
   execsql { BEGIN }
@@ -67,7 +67,7 @@ do_test fts3fault-3.0 {
 } {}
 
 do_faultsim_test 3 -faults oom-transient -prep { 
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { SELECT * FROM t3 WHERE t3 MATCH 'x' }
 } -body {
   execsql { SELECT count(rowid) FROM t3 WHERE t3 MATCH 'aa*' }

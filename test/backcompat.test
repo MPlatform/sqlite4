@@ -49,7 +49,7 @@ if {[llength $binaries]==0} {
 }
 proc get_version {binary} {
   set chan [launch_testfixture $binary]
-  set v [testfixture $chan { sqlite3 -version }]
+  set v [testfixture $chan { sqlite4 -version }]
   close $chan
   set v
 }
@@ -79,8 +79,8 @@ proc do_backcompat_test {rv bin1 bin2 script} {
   proc sql1 sql { code1 [list db eval $sql] }
   proc sql2 sql { code2 [list db eval $sql] }
 
-  code1 { sqlite3 db test.db }
-  code2 { sqlite3 db test.db }
+  code1 { sqlite4 db test.db }
+  code2 { sqlite4 db test.db }
 
   uplevel $script
 
@@ -216,8 +216,8 @@ do_allbackcompat_test {
   code1 { db close }
   code2 { db close }
   write_file_system $data
-  code1 { sqlite3 db test.db }
-  code2 { sqlite3 db test.db }
+  code1 { sqlite4 db test.db }
+  code2 { sqlite4 db test.db }
 
   set same [expr {[sql2 {SELECT md5sum(a), md5sum(b) FROM t1}] == $cksum2}]
   do_test backcompat-1.2.6 [list set {} $same] 1
@@ -236,8 +236,8 @@ unset ::incompatible
 # SQLite versions.
 #
 do_allbackcompat_test {
-  if {[code1 {sqlite3 -version}] >= "3.7.0"
-   && [code2 {sqlite3 -version}] >= "3.7.0"
+  if {[code1 {sqlite4 -version}] >= "3.7.0"
+   && [code2 {sqlite4 -version}] >= "3.7.0"
   } {
 
     do_test backcompat-2.1.1 { sql1 {
@@ -256,8 +256,8 @@ do_allbackcompat_test {
     code1 {db close}
     code2 {db close}
     write_file_system $data
-    code1 {sqlite3 db test.db}
-    code2 {sqlite3 db test.db}
+    code1 {sqlite4 db test.db}
+    code2 {sqlite4 db test.db}
 
     # The WAL file now in the file-system was created by the [code1]
     # process. Check that the [code2] process can recover the log.

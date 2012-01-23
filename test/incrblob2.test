@@ -151,7 +151,7 @@ proc aborted_handles {} {
     set nByte [string length $str]
     set iOffset [expr $nByte * $ii * 2]
 
-    set rc [catch {sqlite3_blob_read $handles($ii) $iOffset $nByte} msg]
+    set rc [catch {sqlite4_blob_read $handles($ii) $iOffset $nByte} msg]
     if {$rc && $msg eq "SQLITE_ABORT"} {
       lappend aborted $ii
     } else {
@@ -180,7 +180,7 @@ do_test incrblob2-4.3 {
 # Test that a write to handle 3 also returns SQLITE_ABORT.
 #
 do_test incrblob2-4.3.1 {
-  set rc [catch {sqlite3_blob_write $::handles(3) 10 HELLO} msg]
+  set rc [catch {sqlite4_blob_write $::handles(3) 10 HELLO} msg]
   list $rc $msg
 } {1 SQLITE_ABORT}
 
@@ -227,7 +227,7 @@ do_test incrblob2-4.9 {
   aborted_handles
 } {1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 35 65 92}
 
-# Delete the whole table (this will use sqlite3BtreeClearTable()). All handles
+# Delete the whole table (this will use sqlite4BtreeClearTable()). All handles
 # should now be aborted.
 #
 do_test incrblob2-4.10 {
@@ -247,11 +247,11 @@ do_test incrblob2-4.1.X {
 #
 ifcapable shared_cache {
   db close
-  set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+  set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
   do_test incrblob2-5.1 {
-    sqlite3 db test.db
-    sqlite3 db2 test.db
+    sqlite4 db test.db
+    sqlite4 db2 test.db
 
     execsql {
       INSERT INTO t1 VALUES(1, 'abcde');
@@ -294,14 +294,14 @@ ifcapable shared_cache {
 
   db2 close
   db close
-  sqlite3_enable_shared_cache $::enable_shared_cache
+  sqlite4_enable_shared_cache $::enable_shared_cache
 }
 
 #--------------------------------------------------------------------------
 # The following tests - incrblob2-6.* - test a specific scenario that might
 # be causing an error.
 #
-sqlite3 db test.db
+sqlite4 db test.db
 do_test incrblob2-6.1 {
   execsql {
     DELETE FROM t1;
@@ -311,9 +311,9 @@ do_test incrblob2-6.1 {
   set rdHandle [db incrblob -readonly t1 data 1]
   set wrHandle [db incrblob t1 data 1]
 
-  sqlite3_blob_read $rdHandle 0 100
+  sqlite4_blob_read $rdHandle 0 100
 
-  sqlite3_blob_write $wrHandle 0 ABCDEF
+  sqlite4_blob_write $wrHandle 0 ABCDEF
 
   close $wrHandle
   close $rdHandle
@@ -321,13 +321,13 @@ do_test incrblob2-6.1 {
 
 do_test incrblob2-6.2 {
   set rdHandle [db incrblob -readonly t1 data 1]
-  sqlite3_blob_read $rdHandle 0 2
+  sqlite4_blob_read $rdHandle 0 2
 } {AB}
 
 do_test incrblob2-6.3 {
   set wrHandle [db incrblob t1 data 1]
-  sqlite3_blob_write $wrHandle 0 ZZZZZZZZZZ
-  sqlite3_blob_read $rdHandle 2 4
+  sqlite4_blob_write $wrHandle 0 ZZZZZZZZZZ
+  sqlite4_blob_read $rdHandle 2 4
 } {ZZZZ}
 
 do_test incrblob2-6.4 {
@@ -335,18 +335,18 @@ do_test incrblob2-6.4 {
   close $rdHandle
 } {}
 
-sqlite3_memory_highwater 1
+sqlite4_memory_highwater 1
 do_test incrblob2-7.1 {
   db eval {
     CREATE TABLE t2(B BLOB);
     INSERT INTO t2 VALUES(zeroblob(10 * 1024 * 1024)); 
   }
-  expr {[sqlite3_memory_highwater]<(5 * 1024 * 1024)}
+  expr {[sqlite4_memory_highwater]<(5 * 1024 * 1024)}
 } {1}
 
 do_test incrblob2-7.2 {
   set h [db incrblob t2 B 1]
-  expr {[sqlite3_memory_highwater]<(5 * 1024 * 1024)}
+  expr {[sqlite4_memory_highwater]<(5 * 1024 * 1024)}
 } {1}
 
 do_test incrblob2-7.3 {
@@ -355,7 +355,7 @@ do_test incrblob2-7.3 {
 } [expr 10 * 1024 * 1024]
 
 do_test incrblob2-7.4 {
-  expr {[sqlite3_memory_highwater]<(5 * 1024 * 1024)}
+  expr {[sqlite4_memory_highwater]<(5 * 1024 * 1024)}
 } {1}
 
 do_test incrblob2-7.5 {
@@ -393,7 +393,7 @@ do_test incrblob2-8.3 {
 do_test incrblob2-8.4 {
   execsql BEGIN
   set h [db incrblob t3 b 3]
-  sqlite3_blob_read $h 0 20
+  sqlite4_blob_read $h 0 20
 } {cccccccccccccccccccc}
 do_test incrblob2-8.5 {
   catchsql {UPDATE t3 SET a = 6 WHERE a > 3}
@@ -402,13 +402,13 @@ do_test incrblob2-8.6 {
   catchsql {UPDATE t3 SET a = 6 WHERE a > 3}
 } {1 {column a is not unique}}
 do_test incrblob2-8.7 {
-  sqlite3_blob_read $h 0 20
+  sqlite4_blob_read $h 0 20
 } {cccccccccccccccccccc}
 do_test incrblob2-8.8 {
   catchsql {UPDATE t3 SET a = 6 WHERE a = 3 OR a = 5}
 } {1 {column a is not unique}}
 do_test incrblob2-8.9 {
-  set rc [catch {sqlite3_blob_read $h 0 20} msg]
+  set rc [catch {sqlite4_blob_read $h 0 20} msg]
   list $rc $msg
 } {1 SQLITE_ABORT}
 do_test incrblob2-8.X {

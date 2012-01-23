@@ -27,15 +27,15 @@ ifcapable !8_3_names {
 }
 
 db close
-sqlite3_shutdown
-sqlite3_config_uri 1
+sqlite4_shutdown
+sqlite4_config_uri 1
 autoinstall_test_functions
 
-sqlite3_multiplex_initialize "" 1
+sqlite4_multiplex_initialize "" 1
 
 proc destroy_vfs_stack {} {
   generic_unregister stack
-  sqlite3_multiplex_shutdown
+  sqlite4_multiplex_shutdown
 }
 
 proc multiplex_delete_db {} {
@@ -57,8 +57,8 @@ proc multiplex_restore_db {} {
 
 proc setup_and_save_db {} {
   multiplex_delete_db
-  sqlite3 db file:test.db?8_3_names=1
-  sqlite3_multiplex_control db main chunk_size [expr 256*1024]
+  sqlite4 db file:test.db?8_3_names=1
+  sqlite4_multiplex_control db main chunk_size [expr 256*1024]
   execsql {
     CREATE TABLE t1(a PRIMARY KEY, b);
     INSERT INTO t1 VALUES(randomblob(15), randomblob(2000));
@@ -80,8 +80,8 @@ proc setup_and_save_db {} {
 do_test 1.0 { setup_and_save_db } {}
 do_faultsim_test 1 -prep {
   multiplex_restore_db
-  sqlite3 db file:test.db?8_3_names=1
-  sqlite3_multiplex_control db main chunk_size [expr 256*1024]
+  sqlite4 db file:test.db?8_3_names=1
+  sqlite4_multiplex_control db main chunk_size [expr 256*1024]
 } -body {
   execsql {
     UPDATE t1 SET a=randomblob(12), b=randomblob(1500) WHERE (rowid%32)=0
@@ -110,7 +110,7 @@ do_faultsim_test 1 -prep {
 do_test 2.0 { 
   setup_and_save_db
   multiplex_restore_db
-  sqlite3 db file:test.db?8_3_names=1
+  sqlite4 db file:test.db?8_3_names=1
   execsql { PRAGMA cache_size = 10 }
   execsql { BEGIN }
 } {}
@@ -121,7 +121,7 @@ for {set iTest 1} {$iTest<=100} {incr iTest} {
       UPDATE t1 SET a=randomblob(12), b=randomblob(1400) WHERE rowid=5*$iTest
     }
     foreach f [glob -nocomplain test.*] {forcecopy $f "xx_$f"}
-    sqlite3 db2 file:xx_test.db?8_3_names=1
+    sqlite4 db2 file:xx_test.db?8_3_names=1
     execsql {SELECT md5sum(a, b) FROM t1 ORDER BY a} db2
   } $::cksum1
 
@@ -129,5 +129,5 @@ for {set iTest 1} {$iTest<=100} {incr iTest} {
 }
 
 catch { db close }
-sqlite3_multiplex_shutdown
+sqlite4_multiplex_shutdown
 finish_test

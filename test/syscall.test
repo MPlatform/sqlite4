@@ -90,7 +90,7 @@ foreach jrnl [list wal delete] {
     test_syscall errno open EINTR
   
     do_test 4.2.$jrnl.$i {
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql { ATTACH 'test.db2' AS aux }
       execsql "PRAGMA main.journal_mode = $jrnl"
       execsql "PRAGMA aux.journal_mode = $jrnl"
@@ -102,7 +102,7 @@ foreach jrnl [list wal delete] {
       }
 
       db close
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql { ATTACH 'test.db2' AS aux }
       execsql {
         SELECT * FROM t1;
@@ -130,8 +130,8 @@ forcedelete test.db test.db2
 
 do_multiclient_test tn {
   code1 {
-    sqlite3 dbX1 test.db
-    sqlite3 dbX2 test.db
+    sqlite4 dbX1 test.db
+    sqlite4 dbX2 test.db
   }
 
   do_test syscall-5.$tn.1 {
@@ -168,10 +168,10 @@ do_multiclient_test tn {
 
 catch {db close}
 do_test 6.1 {
-  sqlite3 db1 test.db1
-  sqlite3 db2 test.db2
-  sqlite3 db3 test.db3
-  sqlite3 dbM ""
+  sqlite4 db1 test.db1
+  sqlite4 db2 test.db2
+  sqlite4 db3 test.db3
+  sqlite4 dbM ""
 
   db2 close
   db3 close
@@ -180,7 +180,7 @@ do_test 6.1 {
 } {}
 
 do_test 6.2 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA temp_store = file;
 
@@ -223,7 +223,7 @@ foreach {nByte res} {
   do_test 7.$nByte {
     create_db_file $nByte
     list [catch {
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql { CREATE TABLE t1(a, b) }
     } msg] $msg
   } $res
@@ -236,7 +236,7 @@ catch { db close }
 forcedelete test.db test.db2
 
 do_test 8.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   file_control_chunksize_test db main 4096
   file size test.db
 } {0}
@@ -256,7 +256,7 @@ foreach {tn hint size} {
 do_test 8.3 {
   db close
   forcedelete test.db test.db2
-  sqlite3 db test.db
+  sqlite4 db test.db
   file_control_chunksize_test db main 16
   file size test.db
 } {0}

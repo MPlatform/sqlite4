@@ -9,10 +9,10 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** Test extension for testing the sqlite3_auto_extension() function.
+** Test extension for testing the sqlite4_auto_extension() function.
 */
 #include "tcl.h"
-#include "sqlite3ext.h"
+#include "sqlite4ext.h"
 
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
 static SQLITE_EXTENSION_INIT1
@@ -21,24 +21,24 @@ static SQLITE_EXTENSION_INIT1
 ** The sqr() SQL function returns the square of its input value.
 */
 static void sqrFunc(
-  sqlite3_context *context,
+  sqlite4_context *context,
   int argc,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
-  double r = sqlite3_value_double(argv[0]);
-  sqlite3_result_double(context, r*r);
+  double r = sqlite4_value_double(argv[0]);
+  sqlite4_result_double(context, r*r);
 }
 
 /*
 ** This is the entry point to register the extension for the sqr() function.
 */
 static int sqr_init(
-  sqlite3 *db, 
+  sqlite4 *db, 
   char **pzErrMsg, 
-  const sqlite3_api_routines *pApi
+  const sqlite4_api_routines *pApi
 ){
   SQLITE_EXTENSION_INIT2(pApi);
-  sqlite3_create_function(db, "sqr", 1, SQLITE_ANY, 0, sqrFunc, 0, 0);
+  sqlite4_create_function(db, "sqr", 1, SQLITE_ANY, 0, sqrFunc, 0, 0);
   return 0;
 }
 
@@ -46,24 +46,24 @@ static int sqr_init(
 ** The cube() SQL function returns the cube of its input value.
 */
 static void cubeFunc(
-  sqlite3_context *context,
+  sqlite4_context *context,
   int argc,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
-  double r = sqlite3_value_double(argv[0]);
-  sqlite3_result_double(context, r*r*r);
+  double r = sqlite4_value_double(argv[0]);
+  sqlite4_result_double(context, r*r*r);
 }
 
 /*
 ** This is the entry point to register the extension for the cube() function.
 */
 static int cube_init(
-  sqlite3 *db, 
+  sqlite4 *db, 
   char **pzErrMsg, 
-  const sqlite3_api_routines *pApi
+  const sqlite4_api_routines *pApi
 ){
   SQLITE_EXTENSION_INIT2(pApi);
-  sqlite3_create_function(db, "cube", 1, SQLITE_ANY, 0, cubeFunc, 0, 0);
+  sqlite4_create_function(db, "cube", 1, SQLITE_ANY, 0, cubeFunc, 0, 0);
   return 0;
 }
 
@@ -71,19 +71,19 @@ static int cube_init(
 ** This is a broken extension entry point
 */
 static int broken_init(
-  sqlite3 *db, 
+  sqlite4 *db, 
   char **pzErrMsg, 
-  const sqlite3_api_routines *pApi
+  const sqlite4_api_routines *pApi
 ){
   char *zErr;
   SQLITE_EXTENSION_INIT2(pApi);
-  zErr = sqlite3_mprintf("broken autoext!");
+  zErr = sqlite4_mprintf("broken autoext!");
   *pzErrMsg = zErr;
   return 1;
 }
 
 /*
-** tclcmd:   sqlite3_auto_extension_sqr
+** tclcmd:   sqlite4_auto_extension_sqr
 **
 ** Register the "sqr" extension to be loaded automatically.
 */
@@ -93,13 +93,13 @@ static int autoExtSqrObjCmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc = sqlite3_auto_extension((void*)sqr_init);
+  int rc = sqlite4_auto_extension((void*)sqr_init);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return SQLITE_OK;
 }
 
 /*
-** tclcmd:   sqlite3_auto_extension_cube
+** tclcmd:   sqlite4_auto_extension_cube
 **
 ** Register the "cube" extension to be loaded automatically.
 */
@@ -109,13 +109,13 @@ static int autoExtCubeObjCmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc = sqlite3_auto_extension((void*)cube_init);
+  int rc = sqlite4_auto_extension((void*)cube_init);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return SQLITE_OK;
 }
 
 /*
-** tclcmd:   sqlite3_auto_extension_broken
+** tclcmd:   sqlite4_auto_extension_broken
 **
 ** Register the broken extension to be loaded automatically.
 */
@@ -125,7 +125,7 @@ static int autoExtBrokenObjCmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc = sqlite3_auto_extension((void*)broken_init);
+  int rc = sqlite4_auto_extension((void*)broken_init);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return SQLITE_OK;
 }
@@ -134,7 +134,7 @@ static int autoExtBrokenObjCmd(
 
 
 /*
-** tclcmd:   sqlite3_reset_auto_extension
+** tclcmd:   sqlite4_reset_auto_extension
 **
 ** Reset all auto-extensions
 */
@@ -144,7 +144,7 @@ static int resetAutoExtObjCmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  sqlite3_reset_auto_extension();
+  sqlite4_reset_auto_extension();
   return SQLITE_OK;
 }
 
@@ -154,14 +154,14 @@ static int resetAutoExtObjCmd(
 */
 int Sqlitetest_autoext_Init(Tcl_Interp *interp){
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
-  Tcl_CreateObjCommand(interp, "sqlite3_auto_extension_sqr",
+  Tcl_CreateObjCommand(interp, "sqlite4_auto_extension_sqr",
           autoExtSqrObjCmd, 0, 0);
-  Tcl_CreateObjCommand(interp, "sqlite3_auto_extension_cube",
+  Tcl_CreateObjCommand(interp, "sqlite4_auto_extension_cube",
           autoExtCubeObjCmd, 0, 0);
-  Tcl_CreateObjCommand(interp, "sqlite3_auto_extension_broken",
+  Tcl_CreateObjCommand(interp, "sqlite4_auto_extension_broken",
           autoExtBrokenObjCmd, 0, 0);
 #endif
-  Tcl_CreateObjCommand(interp, "sqlite3_reset_auto_extension",
+  Tcl_CreateObjCommand(interp, "sqlite4_reset_auto_extension",
           resetAutoExtObjCmd, 0, 0);
   return TCL_OK;
 }

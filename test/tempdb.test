@@ -20,7 +20,7 @@ source $testdir/tester.tcl
 # Use a temporary database.
 #
 db close
-sqlite3 db {}
+sqlite4 db {}
 
 # Force a statement journal rollback on a database file that
 # has never been opened.
@@ -62,7 +62,7 @@ do_test tempdb-2.1 {
   set subj_in_memory [expr {$jrnl_in_memory || $TEMP_STORE>=2}]
 
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
 } {}
 do_test tempdb-2.2 {
   execsql {

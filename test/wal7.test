@@ -22,7 +22,7 @@ ifcapable !wal {finish_test ; return }
 do_test wal7-1.0 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA page_size=1024;
     PRAGMA journal_mode=WAL;
@@ -50,7 +50,7 @@ do_test wal7-1.2 {
 do_test wal7-2.0 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA page_size=1024;
     PRAGMA journal_mode=WAL;
@@ -72,7 +72,7 @@ do_test wal7-2.0 {
 do_test wal7-3.0 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA page_size=1024;
     PRAGMA journal_mode=WAL;
@@ -95,7 +95,7 @@ do_test wal7-3.0 {
 do_test wal7-4.0 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA page_size=1024;
     PRAGMA journal_size_limit=25000;

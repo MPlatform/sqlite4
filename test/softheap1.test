@@ -24,9 +24,9 @@ ifcapable !integrityck {
   return
 }
 
-sqlite3_soft_heap_limit -1
-sqlite3_soft_heap_limit 0
-sqlite3_soft_heap_limit 5000
+sqlite4_soft_heap_limit -1
+sqlite4_soft_heap_limit 0
+sqlite4_soft_heap_limit 5000
 do_test softheap1-1.1 {
   execsql {
     PRAGMA auto_vacuum=1;
@@ -45,5 +45,5 @@ do_test softheap1-1.1 {
   }
 } {ok}
 
-sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 finish_test

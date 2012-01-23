@@ -64,7 +64,7 @@ for {set i 1024} {$i<2048} {incr i 5} {
   hexio_write test.db $i 00
   do_test corrupt8-2.$i.0 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     set x [db eval {PRAGMA integrity_check}]
     expr {$x!="ok"}
   } {1}
@@ -73,7 +73,7 @@ for {set i 1024} {$i<2048} {incr i 5} {
     hexio_write test.db $i 0$k
     do_test corrupt8-2.$i.$k {
       db close
-      sqlite3 db test.db
+      sqlite4 db test.db
       set x [db eval {PRAGMA integrity_check}]
       expr {$x!="ok"}
     } {1}
@@ -81,7 +81,7 @@ for {set i 1024} {$i<2048} {incr i 5} {
   hexio_write test.db $i 06
   do_test corrupt8-2.$i.6 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     set x [db eval {PRAGMA integrity_check}]
     expr {$x!="ok"}
   } {1}
@@ -92,7 +92,7 @@ for {set i 1024} {$i<2048} {incr i 5} {
     hexio_write test.db $i2 [format %02x [expr {($oldval+1)&0xff}]]
     do_test corrupt8-2.$i.7 {
       db close
-      sqlite3 db test.db
+      sqlite4 db test.db
       set x [db eval {PRAGMA integrity_check}]
       expr {$x!="ok"}
     } {1}

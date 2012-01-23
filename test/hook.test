@@ -96,7 +96,7 @@ do_test hook-3.9 {
 #
 do_test hook-3.10 {
   forcedelete test2.db test2.db-journal
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   proc commit_hook {} {
     set y [db2 one {SELECT y FROM t3 WHERE y>10}]
     return [expr {$y>10}]

@@ -11,15 +11,15 @@
 ******************************************************************************
 **
 ** This header file is used by programs that want to link against the
-** FTS3 library.  All it does is declare the sqlite3Fts3Init() interface.
+** FTS3 library.  All it does is declare the sqlite4Fts3Init() interface.
 */
-#include "sqlite3.h"
+#include "sqlite4.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  /* __cplusplus */
 
-int sqlite3Fts3Init(sqlite3 *db);
+int sqlite4Fts3Init(sqlite4 *db);
 
 #ifdef __cplusplus
 }  /* extern "C" */

@@ -58,7 +58,7 @@ do_test journal1-1.2 {
   db close
   delete_file test.db
   copy_file test.db-journal-bu test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT * FROM sqlite_master
   }

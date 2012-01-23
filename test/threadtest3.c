@@ -4,7 +4,7 @@
 ** SQLite library. It can be compiled to an executable on unix using the
 ** following command:
 **
-**   gcc -O2 threadtest3.c sqlite3.c -ldl -lpthread -lm
+**   gcc -O2 threadtest3.c sqlite4.c -ldl -lpthread -lm
 **
 ** Then run the compiled program. The exit status is non-zero if any tests
 ** failed (hopefully there is also some output to stdout to clarify what went
@@ -57,7 +57,7 @@
 #define timetostop(z)           (SEL(z), timetostop_x(z))
 
 /* Report/clear errors. */
-#define test_error(z, ...)      test_error_x(z, sqlite3_mprintf(__VA_ARGS__))
+#define test_error(z, ...)      test_error_x(z, sqlite4_mprintf(__VA_ARGS__))
 #define clear_error(y,z)        clear_error_x(y, z)
 
 /* File-system operations */
@@ -71,7 +71,7 @@
 
 
 
-#include <sqlite3.h>
+#include <sqlite4.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <pthread.h>
@@ -356,37 +356,37 @@ static void MD5DigestToBase16(unsigned char *digest, char *zBuf){
 ** During testing, the special md5sum() aggregate function is available.
 ** inside SQLite.  The following routines implement that function.
 */
-static void md5step(sqlite3_context *context, int argc, sqlite3_value **argv){
+static void md5step(sqlite4_context *context, int argc, sqlite4_value **argv){
   MD5Context *p;
   int i;
   if( argc<1 ) return;
-  p = sqlite3_aggregate_context(context, sizeof(*p));
+  p = sqlite4_aggregate_context(context, sizeof(*p));
   if( p==0 ) return;
   if( !p->isInit ){
     MD5Init(p);
   }
   for(i=0; i<argc; i++){
-    const char *zData = (char*)sqlite3_value_text(argv[i]);
+    const char *zData = (char*)sqlite4_value_text(argv[i]);
     if( zData ){
       MD5Update(p, (unsigned char*)zData, strlen(zData));
     }
   }
 }
-static void md5finalize(sqlite3_context *context){
+static void md5finalize(sqlite4_context *context){
   MD5Context *p;
   unsigned char digest[16];
   char zBuf[33];
-  p = sqlite3_aggregate_context(context, sizeof(*p));
+  p = sqlite4_aggregate_context(context, sizeof(*p));
   MD5Final(digest,p);
   MD5DigestToBase16(digest, zBuf);
-  sqlite3_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
+  sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
 }
 
 /*************************************************************************
 ** End of copied md5sum() code.
 */
 
-typedef sqlite3_int64 i64;
+typedef sqlite4_int64 i64;
 
 typedef struct Error Error;
 typedef struct Sqlite Sqlite;
@@ -408,14 +408,14 @@ struct Error {
 };
 
 struct Sqlite {
-  sqlite3 *db;                    /* Database handle */
+  sqlite4 *db;                    /* Database handle */
   Statement *pCache;              /* Linked list of cached statements */
   int nText;                      /* Size of array at aText[] */
   char **aText;                   /* Stored text results */
 };
 
 struct Statement {
-  sqlite3_stmt *pStmt;            /* Pre-compiled statement handle */
+  sqlite4_stmt *pStmt;            /* Pre-compiled statement handle */
   Statement *pNext;               /* Next statement in linked-list */
 };
 
@@ -434,7 +434,7 @@ struct Threadset {
 };
 
 static void free_err(Error *p){
-  sqlite3_free(p->zErr);
+  sqlite4_free(p->zErr);
   p->zErr = 0;
   p->rc = 0;
 }
@@ -453,7 +453,7 @@ static void print_and_free_err(Error *p){
 
 static void system_error(Error *pErr, int iSys){
   pErr->rc = iSys;
-  pErr->zErr = (char *)sqlite3_malloc(512);
+  pErr->zErr = (char *)sqlite4_malloc(512);
   strerror_r(iSys, pErr->zErr, 512);
   pErr->zErr[511] = '\0';
 }
@@ -463,10 +463,10 @@ static void sqlite_error(
   Sqlite *pDb, 
   const char *zFunc
 ){
-  pErr->rc = sqlite3_errcode(pDb->db);
-  pErr->zErr = sqlite3_mprintf(
-      "sqlite3_%s() - %s (%d)", zFunc, sqlite3_errmsg(pDb->db),
-      sqlite3_extended_errcode(pDb->db)
+  pErr->rc = sqlite4_errcode(pDb->db);
+  pErr->zErr = sqlite4_mprintf(
+      "sqlite4_%s() - %s (%d)", zFunc, sqlite4_errmsg(pDb->db),
+      sqlite4_extended_errcode(pDb->db)
   );
 }
 
@@ -478,7 +478,7 @@ static void test_error_x(
     pErr->rc = 1;
     pErr->zErr = zErr;
   }else{
-    sqlite3_free(zErr);
+    sqlite4_free(zErr);
   }
 }
 
@@ -488,7 +488,7 @@ static void clear_error_x(
 ){
   if( pErr->rc==rc ){
     pErr->rc = SQLITE_OK;
-    sqlite3_free(pErr->zErr);
+    sqlite4_free(pErr->zErr);
     pErr->zErr = 0;
   }
 }
@@ -507,17 +507,17 @@ static void opendb_x(
   if( pErr->rc==SQLITE_OK ){
     int rc;
     if( bDelete ) unlink(zFile);
-    rc = sqlite3_open(zFile, &pDb->db);
+    rc = sqlite4_open(zFile, &pDb->db);
     if( rc ){
       sqlite_error(pErr, pDb, "open");
-      sqlite3_close(pDb->db);
+      sqlite4_close(pDb->db);
       pDb->db = 0;
     }else{
-      sqlite3_create_function(
+      sqlite4_create_function(
           pDb->db, "md5sum", -1, SQLITE_UTF8, 0, 0, md5step, md5finalize
       );
-      sqlite3_busy_handler(pDb->db, busyhandler, 0);
-      sqlite3_exec(pDb->db, "PRAGMA synchronous=OFF", 0, 0, 0);
+      sqlite4_busy_handler(pDb->db, busyhandler, 0);
+      sqlite4_exec(pDb->db, "PRAGMA synchronous=OFF", 0, 0, 0);
     }
   }
 }
@@ -532,16 +532,16 @@ static void closedb_x(
   Statement *pNext;
   for(pIter=pDb->pCache; pIter; pIter=pNext){
     pNext = pIter->pNext;
-    sqlite3_finalize(pIter->pStmt);
-    sqlite3_free(pIter);
+    sqlite4_finalize(pIter->pStmt);
+    sqlite4_free(pIter);
   }
   for(i=0; i<pDb->nText; i++){
-    sqlite3_free(pDb->aText[i]);
+    sqlite4_free(pDb->aText[i]);
   }
-  sqlite3_free(pDb->aText);
-  rc = sqlite3_close(pDb->db);
+  sqlite4_free(pDb->aText);
+  rc = sqlite4_close(pDb->db);
   if( rc && pErr->rc==SQLITE_OK ){
-    pErr->zErr = sqlite3_mprintf("%s", sqlite3_errmsg(pDb->db));
+    pErr->zErr = sqlite4_mprintf("%s", sqlite4_errmsg(pDb->db));
   }
   memset(pDb, 0, sizeof(Sqlite));
 }
@@ -552,7 +552,7 @@ static void sql_script_x(
   const char *zSql                /* SQL script to execute */
 ){
   if( pErr->rc==SQLITE_OK ){
-    pErr->rc = sqlite3_exec(pDb->db, zSql, 0, 0, &pErr->zErr);
+    pErr->rc = sqlite4_exec(pDb->db, zSql, 0, 0, &pErr->zErr);
   }
 }
 
@@ -565,48 +565,48 @@ static Statement *getSqlStatement(
   int rc;
 
   for(pRet=pDb->pCache; pRet; pRet=pRet->pNext){
-    if( 0==strcmp(sqlite3_sql(pRet->pStmt), zSql) ){
+    if( 0==strcmp(sqlite4_sql(pRet->pStmt), zSql) ){
       return pRet;
     }
   }
 
-  pRet = sqlite3_malloc(sizeof(Statement));
-  rc = sqlite3_prepare_v2(pDb->db, zSql, -1, &pRet->pStmt, 0);
+  pRet = sqlite4_malloc(sizeof(Statement));
+  rc = sqlite4_prepare_v2(pDb->db, zSql, -1, &pRet->pStmt, 0);
   if( rc!=SQLITE_OK ){
     sqlite_error(pErr, pDb, "prepare_v2");
     return 0;
   }
-  assert( 0==strcmp(sqlite3_sql(pRet->pStmt), zSql) );
+  assert( 0==strcmp(sqlite4_sql(pRet->pStmt), zSql) );
 
   pRet->pNext = pDb->pCache;
   pDb->pCache = pRet;
   return pRet;
 }
 
-static sqlite3_stmt *getAndBindSqlStatement(
+static sqlite4_stmt *getAndBindSqlStatement(
   Error *pErr,                    /* IN/OUT: Error code */
   Sqlite *pDb,                    /* Database handle */
   va_list ap                      /* SQL followed by parameters */
 ){
   Statement *pStatement;          /* The SQLite statement wrapper */
-  sqlite3_stmt *pStmt;            /* The SQLite statement to return */
+  sqlite4_stmt *pStmt;            /* The SQLite statement to return */
   int i;                          /* Used to iterate through parameters */
 
   pStatement = getSqlStatement(pErr, pDb, va_arg(ap, const char *));
   if( !pStatement ) return 0;
   pStmt = pStatement->pStmt;
-  for(i=1; i<=sqlite3_bind_parameter_count(pStmt); i++){
-    const char *zName = sqlite3_bind_parameter_name(pStmt, i);
+  for(i=1; i<=sqlite4_bind_parameter_count(pStmt); i++){
+    const char *zName = sqlite4_bind_parameter_name(pStmt, i);
     void * pArg = va_arg(ap, void*);
 
     switch( zName[1] ){
       case 'i':
-        sqlite3_bind_int64(pStmt, i, *(i64 *)pArg);
+        sqlite4_bind_int64(pStmt, i, *(i64 *)pArg);
         break;
 
       default:
         pErr->rc = 1;
-        pErr->zErr = sqlite3_mprintf("Cannot discern type: \"%s\"", zName);
+        pErr->zErr = sqlite4_mprintf("Cannot discern type: \"%s\"", zName);
         pStmt = 0;
         break;
     }
@@ -622,7 +622,7 @@ static i64 execsql_i64_x(
 ){
   i64 iRet = 0;
   if( pErr->rc==SQLITE_OK ){
-    sqlite3_stmt *pStmt;          /* SQL statement to execute */
+    sqlite4_stmt *pStmt;          /* SQL statement to execute */
     va_list ap;                   /* ... arguments */
     int i;                        /* Used to iterate through parameters */
     va_start(ap, pDb);
@@ -630,13 +630,13 @@ static i64 execsql_i64_x(
     if( pStmt ){
       int rc;
       int first = 1;
-      while( SQLITE_ROW==sqlite3_step(pStmt) ){
-        if( first && sqlite3_column_count(pStmt)>0 ){
-          iRet = sqlite3_column_int64(pStmt, 0);
+      while( SQLITE_ROW==sqlite4_step(pStmt) ){
+        if( first && sqlite4_column_count(pStmt)>0 ){
+          iRet = sqlite4_column_int64(pStmt, 0);
         }
         first = 0;
       }
-      if( SQLITE_OK!=sqlite3_reset(pStmt) ){
+      if( SQLITE_OK!=sqlite4_reset(pStmt) ){
         sqlite_error(pErr, pDb, "reset");
       }
     }
@@ -655,13 +655,13 @@ static char * execsql_text_x(
 
   if( iSlot>=pDb->nText ){
     int nByte = sizeof(char *)*(iSlot+1);
-    pDb->aText = (char **)sqlite3_realloc(pDb->aText, nByte);
+    pDb->aText = (char **)sqlite4_realloc(pDb->aText, nByte);
     memset(&pDb->aText[pDb->nText], 0, sizeof(char*)*(iSlot+1-pDb->nText));
     pDb->nText = iSlot+1;
   }
 
   if( pErr->rc==SQLITE_OK ){
-    sqlite3_stmt *pStmt;          /* SQL statement to execute */
+    sqlite4_stmt *pStmt;          /* SQL statement to execute */
     va_list ap;                   /* ... arguments */
     int i;                        /* Used to iterate through parameters */
     va_start(ap, iSlot);
@@ -669,15 +669,15 @@ static char * execsql_text_x(
     if( pStmt ){
       int rc;
       int first = 1;
-      while( SQLITE_ROW==sqlite3_step(pStmt) ){
-        if( first && sqlite3_column_count(pStmt)>0 ){
-          zRet = sqlite3_mprintf("%s", sqlite3_column_text(pStmt, 0));
-          sqlite3_free(pDb->aText[iSlot]);
+      while( SQLITE_ROW==sqlite4_step(pStmt) ){
+        if( first && sqlite4_column_count(pStmt)>0 ){
+          zRet = sqlite4_mprintf("%s", sqlite4_column_text(pStmt, 0));
+          sqlite4_free(pDb->aText[iSlot]);
           pDb->aText[iSlot] = zRet;
         }
         first = 0;
       }
-      if( SQLITE_OK!=sqlite3_reset(pStmt) ){
+      if( SQLITE_OK!=sqlite4_reset(pStmt) ){
         sqlite_error(pErr, pDb, "reset");
       }
     }
@@ -698,18 +698,18 @@ static void integrity_check_x(
 
     pStatement = getSqlStatement(pErr, pDb, "PRAGMA integrity_check");
     if( pStatement ){
-      sqlite3_stmt *pStmt = pStatement->pStmt;
-      while( SQLITE_ROW==sqlite3_step(pStmt) ){
-        const char *z = sqlite3_column_text(pStmt, 0);
+      sqlite4_stmt *pStmt = pStatement->pStmt;
+      while( SQLITE_ROW==sqlite4_step(pStmt) ){
+        const char *z = sqlite4_column_text(pStmt, 0);
         if( strcmp(z, "ok") ){
           if( zErr==0 ){
-            zErr = sqlite3_mprintf("%s", z);
+            zErr = sqlite4_mprintf("%s", z);
           }else{
-            zErr = sqlite3_mprintf("%z\n%s", zErr, z);
+            zErr = sqlite4_mprintf("%z\n%s", zErr, z);
           }
         }
       }
-      sqlite3_reset(pStmt);
+      sqlite4_reset(pStmt);
 
       if( zErr ){
         pErr->zErr = zErr;
@@ -735,7 +735,7 @@ static void launch_thread_x(
     Thread *p;
     int rc;
 
-    p = (Thread *)sqlite3_malloc(sizeof(Thread));
+    p = (Thread *)sqlite4_malloc(sizeof(Thread));
     memset(p, 0, sizeof(Thread));
     p->iTid = iTid;
     p->iArg = iArg;
@@ -744,7 +744,7 @@ static void launch_thread_x(
     rc = pthread_create(&p->tid, NULL, launch_thread_main, (void *)p);
     if( rc!=0 ){
       system_error(pErr, rc);
-      sqlite3_free(p);
+      sqlite4_free(p);
     }else{
       p->pNext = pThreads->pThread;
       pThreads->pThread = p;
@@ -768,7 +768,7 @@ static void join_all_threads_x(
     }else{
       printf("Thread %d says: %s\n", p->iTid, (ret==0 ? "..." : (char *)ret));
     }
-    sqlite3_free(p);
+    sqlite4_free(p);
   }
   pThreads->pThread = 0;
 }
@@ -797,7 +797,7 @@ static void filecopy_x(
   if( pErr->rc==SQLITE_OK ){
     i64 nByte = filesize_x(pErr, zFrom);
     if( nByte<0 ){
-      test_error_x(pErr, sqlite3_mprintf("no such file: %s", zFrom));
+      test_error_x(pErr, sqlite4_mprintf("no such file: %s", zFrom));
     }else{
       i64 iOff;
       char aBuf[1024];
@@ -844,7 +844,7 @@ static void filecopy_x(
 ** Used by setstoptime() and timetostop().
 */
 static double timelimit = 0.0;
-static sqlite3_vfs *pTimelimitVfs = 0;
+static sqlite4_vfs *pTimelimitVfs = 0;
 
 static void setstoptime_x(
   Error *pErr,                    /* IN/OUT: Error code */
@@ -853,7 +853,7 @@ static void setstoptime_x(
   if( pErr->rc==SQLITE_OK ){
     double t;
     int rc;
-    pTimelimitVfs = sqlite3_vfs_find(0);
+    pTimelimitVfs = sqlite4_vfs_find(0);
     rc = pTimelimitVfs->xCurrentTime(pTimelimitVfs, &t);
     if( rc!=SQLITE_OK ){
       pErr->rc = rc;
@@ -931,7 +931,7 @@ static char *walthread1_thread(int iTid, int iArg){
   closedb(&err, &db);
 
   print_and_free_err(&err);
-  return sqlite3_mprintf("%d iterations", nIter);
+  return sqlite4_mprintf("%d iterations", nIter);
 }
 
 static char *walthread1_ckpt_thread(int iTid, int iArg){
@@ -949,7 +949,7 @@ static char *walthread1_ckpt_thread(int iTid, int iArg){
   closedb(&err, &db);
 
   print_and_free_err(&err);
-  return sqlite3_mprintf("%d checkpoints", nCkpt);
+  return sqlite4_mprintf("%d checkpoints", nCkpt);
 }
 
 static void walthread1(int nMs){
@@ -1011,7 +1011,7 @@ static char *walthread2_thread(int iTid, int iArg){
   }
 
   print_and_free_err(&err);
-  return sqlite3_mprintf("W %d R %d", anTrans[0], anTrans[1]);
+  return sqlite4_mprintf("W %d R %d", anTrans[0], anTrans[1]);
 }
 
 static void walthread2(int nMs){
@@ -1291,44 +1291,44 @@ static char *dynamic_triggers_1(int iTid, int iArg){
     int i;
 
     for(i=1; i<9; i++){
-      char *zSql = sqlite3_mprintf(
+      char *zSql = sqlite4_mprintf(
         "CREATE TRIGGER itr%d BEFORE INSERT ON t%d BEGIN "
           "INSERT INTO t%d VALUES(new.x, new.y);"
         "END;", i, i, i+1
       );
       execsql(&err, &db, zSql);
-      sqlite3_free(zSql);
+      sqlite4_free(zSql);
       nCreate++;
     }
 
     for(i=1; i<9; i++){
-      char *zSql = sqlite3_mprintf(
+      char *zSql = sqlite4_mprintf(
         "CREATE TRIGGER dtr%d BEFORE DELETE ON t%d BEGIN "
           "DELETE FROM t%d WHERE x = old.x; "
         "END;", i, i, i+1
       );
       execsql(&err, &db, zSql);
-      sqlite3_free(zSql);
+      sqlite4_free(zSql);
       nCreate++;
     }
 
     for(i=1; i<9; i++){
-      char *zSql = sqlite3_mprintf("DROP TRIGGER itr%d", i);
+      char *zSql = sqlite4_mprintf("DROP TRIGGER itr%d", i);
       execsql(&err, &db, zSql);
-      sqlite3_free(zSql);
+      sqlite4_free(zSql);
       nDrop++;
     }
 
     for(i=1; i<9; i++){
-      char *zSql = sqlite3_mprintf("DROP TRIGGER dtr%d", i);
+      char *zSql = sqlite4_mprintf("DROP TRIGGER dtr%d", i);
       execsql(&err, &db, zSql);
-      sqlite3_free(zSql);
+      sqlite4_free(zSql);
       nDrop++;
     }
   }
 
   print_and_free_err(&err);
-  return sqlite3_mprintf("%d created, %d dropped", nCreate, nDrop);
+  return sqlite4_mprintf("%d created, %d dropped", nCreate, nDrop);
 }
 
 static char *dynamic_triggers_2(int iTid, int iArg){
@@ -1354,7 +1354,7 @@ static char *dynamic_triggers_2(int iTid, int iArg){
   }
 
   print_and_free_err(&err);
-  return sqlite3_mprintf("%d inserts, %d deletes", nInsert, nDelete);
+  return sqlite4_mprintf("%d inserts, %d deletes", nInsert, nDelete);
 }
 
 static void dynamic_triggers(int nMs){
@@ -1379,10 +1379,10 @@ static void dynamic_triggers(int nMs){
 
   setstoptime(&err, nMs);
 
-  sqlite3_enable_shared_cache(1);
+  sqlite4_enable_shared_cache(1);
   launch_thread(&err, &threads, dynamic_triggers_2, 0);
   launch_thread(&err, &threads, dynamic_triggers_2, 0);
-  sqlite3_enable_shared_cache(0);
+  sqlite4_enable_shared_cache(0);
 
   sleep(2);
 
@@ -1432,7 +1432,7 @@ int main(int argc, char **argv){
     }
   }
 
-  sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
+  sqlite4_config(SQLITE_CONFIG_MULTITHREAD);
 
   for(i=0; i<sizeof(aTest)/sizeof(aTest[0]); i++){
     char const *z = aTest[i].zTest;

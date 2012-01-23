@@ -147,7 +147,7 @@ do_test misc2-5.1 {
 #
 do_test misc2-6.1 {
   db close
-  sqlite3 db {}
+  sqlite4 db {}
   execsql {
     CREATE TABLE t1(a,b);
     INSERT INTO t1 VALUES(1,2);
@@ -166,7 +166,7 @@ ifcapable tclvar {
   do_test misc2-7.1 {
     db close
     forcedelete test.db
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       CREATE TABLE t1(x);
       INSERT INTO t1 VALUES(1);
@@ -260,13 +260,13 @@ ifcapable tclvar {
   } {1 2 3 4 5 6 7 8 9 10}
   
   # Repeat the tests 7.1 through 7.8 about but this time do the SELECTs
-  # in reverse order so that we exercise the sqlite3BtreePrev() routine
-  # instead of sqlite3BtreeNext()
+  # in reverse order so that we exercise the sqlite4BtreePrev() routine
+  # instead of sqlite4BtreeNext()
   #
   do_test misc2-7.11 {
     db close
     forcedelete test.db
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       CREATE TABLE t1(x);
       INSERT INTO t1 VALUES(1);
@@ -362,7 +362,7 @@ ifcapable tclvar {
 
 db close
 forcedelete test.db
-sqlite3 db test.db
+sqlite4 db test.db
 catchsql { pragma recursive_triggers = off } 
 
 # Ticket #453.  If the SQL ended with "-", the tokenizer was calling that

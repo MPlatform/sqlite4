@@ -156,7 +156,7 @@ if test "x${TCLLIBDIR+set}" != "xset" ; then
     TCLLIBDIR=$i
     break
   done
-  TCLLIBDIR="${TCLLIBDIR}/sqlite3"
+  TCLLIBDIR="${TCLLIBDIR}/sqlite4"
 fi
 
 
@@ -698,5 +698,5 @@ AC_CONFIG_HEADERS(config.h)
 AC_SUBST(BUILD_CFLAGS)
 AC_OUTPUT([
 Makefile
-sqlite3.pc
+sqlite4.pc
 ])

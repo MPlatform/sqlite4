@@ -21,11 +21,11 @@
 /* All threads share a single random number generator.
 ** This structure is the current state of the generator.
 */
-static SQLITE_WSD struct sqlite3PrngType {
+static SQLITE_WSD struct sqlite4PrngType {
   unsigned char isInit;          /* True if initialized */
   unsigned char i, j;            /* State variables */
   unsigned char s[256];          /* State variables */
-} sqlite3Prng;
+} sqlite4Prng;
 
 /*
 ** Get a single 8-bit random value from the RC4 PRNG.  The Mutex
@@ -51,13 +51,13 @@ static u8 randomByte(void){
   ** state vector.  If writable static data is unsupported on the target,
   ** we have to locate the state vector at run-time.  In the more common
   ** case where writable static data is supported, wsdPrng can refer directly
-  ** to the "sqlite3Prng" state vector declared above.
+  ** to the "sqlite4Prng" state vector declared above.
   */
 #ifdef SQLITE_OMIT_WSD
-  struct sqlite3PrngType *p = &GLOBAL(struct sqlite3PrngType, sqlite3Prng);
+  struct sqlite4PrngType *p = &GLOBAL(struct sqlite4PrngType, sqlite4Prng);
 # define wsdPrng p[0]
 #else
-# define wsdPrng sqlite3Prng
+# define wsdPrng sqlite4Prng
 #endif
 
 
@@ -75,7 +75,7 @@ static u8 randomByte(void){
     char k[256];
     wsdPrng.j = 0;
     wsdPrng.i = 0;
-    sqlite3OsRandomness(sqlite3_vfs_find(0), 256, k);
+    sqlite4OsRandomness(sqlite4_vfs_find(0), 256, k);
     for(i=0; i<256; i++){
       wsdPrng.s[i] = (u8)i;
     }
@@ -102,16 +102,16 @@ static u8 randomByte(void){
 /*
 ** Return N random bytes.
 */
-void sqlite3_randomness(int N, void *pBuf){
+void sqlite4_randomness(int N, void *pBuf){
   unsigned char *zBuf = pBuf;
 #if SQLITE_THREADSAFE
-  sqlite3_mutex *mutex = sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_PRNG);
+  sqlite4_mutex *mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_PRNG);
 #endif
-  sqlite3_mutex_enter(mutex);
+  sqlite4_mutex_enter(mutex);
   while( N-- ){
     *(zBuf++) = randomByte();
   }
-  sqlite3_mutex_leave(mutex);
+  sqlite4_mutex_leave(mutex);
 }
 
 #ifndef SQLITE_OMIT_BUILTIN_TEST
@@ -121,25 +121,25 @@ void sqlite3_randomness(int N, void *pBuf){
 ** to reset the PRNG to its initial state.  These routines accomplish
 ** those tasks.
 **
-** The sqlite3_test_control() interface calls these routines to
+** The sqlite4_test_control() interface calls these routines to
 ** control the PRNG.
 */
-static SQLITE_WSD struct sqlite3PrngType sqlite3SavedPrng;
-void sqlite3PrngSaveState(void){
+static SQLITE_WSD struct sqlite4PrngType sqlite4SavedPrng;
+void sqlite4PrngSaveState(void){
   memcpy(
-    &GLOBAL(struct sqlite3PrngType, sqlite3SavedPrng),
-    &GLOBAL(struct sqlite3PrngType, sqlite3Prng),
-    sizeof(sqlite3Prng)
+    &GLOBAL(struct sqlite4PrngType, sqlite4SavedPrng),
+    &GLOBAL(struct sqlite4PrngType, sqlite4Prng),
+    sizeof(sqlite4Prng)
   );
 }
-void sqlite3PrngRestoreState(void){
+void sqlite4PrngRestoreState(void){
   memcpy(
-    &GLOBAL(struct sqlite3PrngType, sqlite3Prng),
-    &GLOBAL(struct sqlite3PrngType, sqlite3SavedPrng),
-    sizeof(sqlite3Prng)
+    &GLOBAL(struct sqlite4PrngType, sqlite4Prng),
+    &GLOBAL(struct sqlite4PrngType, sqlite4SavedPrng),
+    sizeof(sqlite4Prng)
   );
 }
-void sqlite3PrngResetState(void){
-  GLOBAL(struct sqlite3PrngType, sqlite3Prng).isInit = 0;
+void sqlite4PrngResetState(void){
+  GLOBAL(struct sqlite4PrngType, sqlite4Prng).isInit = 0;
 }
 #endif /* SQLITE_OMIT_BUILTIN_TEST */

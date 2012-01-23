@@ -68,7 +68,7 @@ do_test vacuum2-2.1 {
 # Make sure this happens correctly even if there are multiple open
 # connections to the same database file.
 #
-sqlite3 db2 test.db
+sqlite4 db2 test.db
 set pageSize [db eval {pragma page_size}]
 
 # We are currently not autovacuuming so the database should be 3 pages
@@ -136,7 +136,7 @@ ifcapable autovacuum {
   do_test vacuum2-4.1 {
     db close
     forcedelete test.db
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       pragma auto_vacuum=1;
       create table t(a, b);
@@ -161,7 +161,7 @@ ifcapable autovacuum {
   } {ok}
   do_test vacuum2-4.4 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       pragma auto_vacuum;
     }
@@ -180,7 +180,7 @@ ifcapable autovacuum {
   } {ok}
   do_test vacuum2-4.7 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       pragma auto_vacuum;
     }
@@ -195,7 +195,7 @@ ifcapable autovacuum {
 #
 db close
 forcedelete test.db
-sqlite3 db test.db
+sqlite4 db test.db
 do_execsql_test vacuum2-5.1 {
   CREATE TABLE t1(a PRIMARY KEY, b UNIQUE);
   INSERT INTO t1 VALUES(1, randomblob(500));

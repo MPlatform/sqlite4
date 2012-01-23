@@ -20,51 +20,51 @@ source $testdir/tester.tcl
 # Verify that the default per-connection limits are the same as
 # the compile-time hard limits.
 #
-sqlite3 db2 :memory:
+sqlite4 db2 :memory:
 do_test sqllimits1-1.1 {
-  sqlite3_limit db SQLITE_LIMIT_LENGTH -1
+  sqlite4_limit db SQLITE_LIMIT_LENGTH -1
 } $SQLITE_MAX_LENGTH
 do_test sqllimits1-1.2 {
-  sqlite3_limit db SQLITE_LIMIT_SQL_LENGTH -1
+  sqlite4_limit db SQLITE_LIMIT_SQL_LENGTH -1
 } $SQLITE_MAX_SQL_LENGTH
 do_test sqllimits1-1.3 {
-  sqlite3_limit db SQLITE_LIMIT_COLUMN -1
+  sqlite4_limit db SQLITE_LIMIT_COLUMN -1
 } $SQLITE_MAX_COLUMN
 do_test sqllimits1-1.4 {
-  sqlite3_limit db SQLITE_LIMIT_EXPR_DEPTH -1
+  sqlite4_limit db SQLITE_LIMIT_EXPR_DEPTH -1
 } $SQLITE_MAX_EXPR_DEPTH
 do_test sqllimits1-1.5 {
-  sqlite3_limit db SQLITE_LIMIT_COMPOUND_SELECT -1
+  sqlite4_limit db SQLITE_LIMIT_COMPOUND_SELECT -1
 } $SQLITE_MAX_COMPOUND_SELECT
 do_test sqllimits1-1.6 {
-  sqlite3_limit db SQLITE_LIMIT_VDBE_OP -1
+  sqlite4_limit db SQLITE_LIMIT_VDBE_OP -1
 } $SQLITE_MAX_VDBE_OP
 do_test sqllimits1-1.7 {
-  sqlite3_limit db SQLITE_LIMIT_FUNCTION_ARG -1
+  sqlite4_limit db SQLITE_LIMIT_FUNCTION_ARG -1
 } $SQLITE_MAX_FUNCTION_ARG
 do_test sqllimits1-1.8 {
-  sqlite3_limit db SQLITE_LIMIT_ATTACHED -1
+  sqlite4_limit db SQLITE_LIMIT_ATTACHED -1
 } $SQLITE_MAX_ATTACHED
 do_test sqllimits1-1.9 {
-  sqlite3_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH -1
+  sqlite4_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH -1
 } $SQLITE_MAX_LIKE_PATTERN_LENGTH
 do_test sqllimits1-1.10 {
-  sqlite3_limit db SQLITE_LIMIT_VARIABLE_NUMBER -1
+  sqlite4_limit db SQLITE_LIMIT_VARIABLE_NUMBER -1
 } $SQLITE_MAX_VARIABLE_NUMBER
 
 # Limit parameters out of range.
 #
 do_test sqllimits1-1.20 {
-  sqlite3_limit db SQLITE_LIMIT_TOOSMALL 123
+  sqlite4_limit db SQLITE_LIMIT_TOOSMALL 123
 } {-1}
 do_test sqllimits1-1.21 {
-  sqlite3_limit db SQLITE_LIMIT_TOOSMALL 123
+  sqlite4_limit db SQLITE_LIMIT_TOOSMALL 123
 } {-1}
 do_test sqllimits1-1.22 {
-  sqlite3_limit db SQLITE_LIMIT_TOOBIG 123
+  sqlite4_limit db SQLITE_LIMIT_TOOBIG 123
 } {-1}
 do_test sqllimits1-1.23 {
-  sqlite3_limit db SQLITE_LIMIT_TOOBIG 123
+  sqlite4_limit db SQLITE_LIMIT_TOOBIG 123
 } {-1}
 
 
@@ -72,126 +72,126 @@ do_test sqllimits1-1.23 {
 #
 if {$SQLITE_MAX_LENGTH>=2} {
   do_test sqllimits1-2.1.1 {
-    sqlite3_limit db SQLITE_LIMIT_LENGTH \
+    sqlite4_limit db SQLITE_LIMIT_LENGTH \
                     [expr {$::SQLITE_MAX_LENGTH/2}]
   } $SQLITE_MAX_LENGTH
   do_test sqllimits1-2.1.2 {
-    sqlite3_limit db SQLITE_LIMIT_LENGTH -1
+    sqlite4_limit db SQLITE_LIMIT_LENGTH -1
   } [expr {$SQLITE_MAX_LENGTH/2}]
 }
 if {$SQLITE_MAX_SQL_LENGTH>=2} {
   do_test sqllimits1-2.2.1 {
-    sqlite3_limit db SQLITE_LIMIT_SQL_LENGTH \
+    sqlite4_limit db SQLITE_LIMIT_SQL_LENGTH \
                     [expr {$::SQLITE_MAX_SQL_LENGTH/2}]
   } $SQLITE_MAX_SQL_LENGTH
   do_test sqllimits1-2.2.2 {
-    sqlite3_limit db SQLITE_LIMIT_SQL_LENGTH -1
+    sqlite4_limit db SQLITE_LIMIT_SQL_LENGTH -1
   } [expr {$SQLITE_MAX_SQL_LENGTH/2}]
 }
 if {$SQLITE_MAX_COLUMN>=2} {
   do_test sqllimits1-2.3.1 {
-    sqlite3_limit db SQLITE_LIMIT_COLUMN \
+    sqlite4_limit db SQLITE_LIMIT_COLUMN \
                     [expr {$::SQLITE_MAX_COLUMN/2}]
   } $SQLITE_MAX_COLUMN
   do_test sqllimits1-2.3.2 {
-    sqlite3_limit db SQLITE_LIMIT_COLUMN -1
+    sqlite4_limit db SQLITE_LIMIT_COLUMN -1
   } [expr {$SQLITE_MAX_COLUMN/2}]
 }
 if {$SQLITE_MAX_EXPR_DEPTH>=2} {
   do_test sqllimits1-2.4.1 {
-    sqlite3_limit db SQLITE_LIMIT_EXPR_DEPTH \
+    sqlite4_limit db SQLITE_LIMIT_EXPR_DEPTH \
                     [expr {$::SQLITE_MAX_EXPR_DEPTH/2}]
   } $SQLITE_MAX_EXPR_DEPTH
   do_test sqllimits1-2.4.2 {
-    sqlite3_limit db SQLITE_LIMIT_EXPR_DEPTH -1
+    sqlite4_limit db SQLITE_LIMIT_EXPR_DEPTH -1
   } [expr {$SQLITE_MAX_EXPR_DEPTH/2}]
 }
 if {$SQLITE_MAX_COMPOUND_SELECT>=2} {
   do_test sqllimits1-2.5.1 {
-    sqlite3_limit db SQLITE_LIMIT_COMPOUND_SELECT \
+    sqlite4_limit db SQLITE_LIMIT_COMPOUND_SELECT \
                     [expr {$::SQLITE_MAX_COMPOUND_SELECT/2}]
   } $SQLITE_MAX_COMPOUND_SELECT
   do_test sqllimits1-2.5.2 {
-    sqlite3_limit db SQLITE_LIMIT_COMPOUND_SELECT -1
+    sqlite4_limit db SQLITE_LIMIT_COMPOUND_SELECT -1
   } [expr {$SQLITE_MAX_COMPOUND_SELECT/2}]
 }
 if {$SQLITE_MAX_VDBE_OP>=2} {
   do_test sqllimits1-2.6.1 {
-    sqlite3_limit db SQLITE_LIMIT_VDBE_OP \
+    sqlite4_limit db SQLITE_LIMIT_VDBE_OP \
                     [expr {$::SQLITE_MAX_VDBE_OP/2}]
   } $SQLITE_MAX_VDBE_OP
   do_test sqllimits1-2.6.2 {
-    sqlite3_limit db SQLITE_LIMIT_VDBE_OP -1
+    sqlite4_limit db SQLITE_LIMIT_VDBE_OP -1
   } [expr {$SQLITE_MAX_VDBE_OP/2}]
 }
 if {$SQLITE_MAX_FUNCTION_ARG>=2} {
   do_test sqllimits1-2.7.1 {
-    sqlite3_limit db SQLITE_LIMIT_FUNCTION_ARG \
+    sqlite4_limit db SQLITE_LIMIT_FUNCTION_ARG \
                     [expr {$::SQLITE_MAX_FUNCTION_ARG/2}]
   } $SQLITE_MAX_FUNCTION_ARG
   do_test sqllimits1-2.7.2 {
-    sqlite3_limit db SQLITE_LIMIT_FUNCTION_ARG -1
+    sqlite4_limit db SQLITE_LIMIT_FUNCTION_ARG -1
   } [expr {$SQLITE_MAX_FUNCTION_ARG/2}]
 }
 if {$SQLITE_MAX_ATTACHED>=2} {
   do_test sqllimits1-2.8.1 {
-    sqlite3_limit db SQLITE_LIMIT_ATTACHED \
+    sqlite4_limit db SQLITE_LIMIT_ATTACHED \
                     [expr {$::SQLITE_MAX_ATTACHED/2}]
   } $SQLITE_MAX_ATTACHED
   do_test sqllimits1-2.8.2 {
-    sqlite3_limit db SQLITE_LIMIT_ATTACHED -1
+    sqlite4_limit db SQLITE_LIMIT_ATTACHED -1
   } [expr {$SQLITE_MAX_ATTACHED/2}]
 }
 if {$SQLITE_MAX_LIKE_PATTERN_LENGTH>=2} {
   do_test sqllimits1-2.9.1 {
-    sqlite3_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH \
+    sqlite4_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH \
                     [expr {$::SQLITE_MAX_LIKE_PATTERN_LENGTH/2}]
   } $SQLITE_MAX_LIKE_PATTERN_LENGTH
   do_test sqllimits1-2.9.2 {
-    sqlite3_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH -1
+    sqlite4_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH -1
   } [expr {$SQLITE_MAX_LIKE_PATTERN_LENGTH/2}]
 }
 if {$SQLITE_MAX_VARIABLE_NUMBER>=2} {
   do_test sqllimits1-2.10.1 {
-    sqlite3_limit db SQLITE_LIMIT_VARIABLE_NUMBER \
+    sqlite4_limit db SQLITE_LIMIT_VARIABLE_NUMBER \
                     [expr {$::SQLITE_MAX_VARIABLE_NUMBER/2}]
   } $SQLITE_MAX_VARIABLE_NUMBER
   do_test sqllimits1-2.10.2 {
-    sqlite3_limit db SQLITE_LIMIT_VARIABLE_NUMBER -1
+    sqlite4_limit db SQLITE_LIMIT_VARIABLE_NUMBER -1
   } [expr {$SQLITE_MAX_VARIABLE_NUMBER/2}]
 }
 
 # In a separate database connection, verify that the limits are unchanged.
 #
 do_test sqllimits1-3.1 {
-  sqlite3_limit db2 SQLITE_LIMIT_LENGTH -1
+  sqlite4_limit db2 SQLITE_LIMIT_LENGTH -1
 } $SQLITE_MAX_LENGTH
 do_test sqllimits1-3.2 {
-  sqlite3_limit db2 SQLITE_LIMIT_SQL_LENGTH -1
+  sqlite4_limit db2 SQLITE_LIMIT_SQL_LENGTH -1
 } $SQLITE_MAX_SQL_LENGTH
 do_test sqllimits1-3.3 {
-  sqlite3_limit db2 SQLITE_LIMIT_COLUMN -1
+  sqlite4_limit db2 SQLITE_LIMIT_COLUMN -1
 } $SQLITE_MAX_COLUMN
 do_test sqllimits1-3.4 {
-  sqlite3_limit db2 SQLITE_LIMIT_EXPR_DEPTH -1
+  sqlite4_limit db2 SQLITE_LIMIT_EXPR_DEPTH -1
 } $SQLITE_MAX_EXPR_DEPTH
 do_test sqllimits1-3.5 {
-  sqlite3_limit db2 SQLITE_LIMIT_COMPOUND_SELECT -1
+  sqlite4_limit db2 SQLITE_LIMIT_COMPOUND_SELECT -1
 } $SQLITE_MAX_COMPOUND_SELECT
 do_test sqllimits1-3.6 {
-  sqlite3_limit db2 SQLITE_LIMIT_VDBE_OP -1
+  sqlite4_limit db2 SQLITE_LIMIT_VDBE_OP -1
 } $SQLITE_MAX_VDBE_OP
 do_test sqllimits1-3.7 {
-  sqlite3_limit db2 SQLITE_LIMIT_FUNCTION_ARG -1
+  sqlite4_limit db2 SQLITE_LIMIT_FUNCTION_ARG -1
 } $SQLITE_MAX_FUNCTION_ARG
 do_test sqllimits1-3.8 {
-  sqlite3_limit db2 SQLITE_LIMIT_ATTACHED -1
+  sqlite4_limit db2 SQLITE_LIMIT_ATTACHED -1
 } $SQLITE_MAX_ATTACHED
 do_test sqllimits1-3.9 {
-  sqlite3_limit db2 SQLITE_LIMIT_LIKE_PATTERN_LENGTH -1
+  sqlite4_limit db2 SQLITE_LIMIT_LIKE_PATTERN_LENGTH -1
 } $SQLITE_MAX_LIKE_PATTERN_LENGTH
 do_test sqllimits1-3.10 {
-  sqlite3_limit db2 SQLITE_LIMIT_VARIABLE_NUMBER -1
+  sqlite4_limit db2 SQLITE_LIMIT_VARIABLE_NUMBER -1
 } $SQLITE_MAX_VARIABLE_NUMBER
 db2 close
 
@@ -199,44 +199,44 @@ db2 close
 # that the limit does not exceed the compile-time upper bound.
 #
 do_test sqllimits1-4.1.1 {
-  sqlite3_limit db SQLITE_LIMIT_LENGTH 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_LENGTH -1
+  sqlite4_limit db SQLITE_LIMIT_LENGTH 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_LENGTH -1
 } $SQLITE_MAX_LENGTH
 do_test sqllimits1-4.2.1 {
-  sqlite3_limit db SQLITE_LIMIT_SQL_LENGTH 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_SQL_LENGTH -1
+  sqlite4_limit db SQLITE_LIMIT_SQL_LENGTH 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_SQL_LENGTH -1
 } $SQLITE_MAX_SQL_LENGTH
 do_test sqllimits1-4.3.1 {
-  sqlite3_limit db SQLITE_LIMIT_COLUMN 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_COLUMN -1
+  sqlite4_limit db SQLITE_LIMIT_COLUMN 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_COLUMN -1
 } $SQLITE_MAX_COLUMN
 do_test sqllimits1-4.4.1 {
-  sqlite3_limit db SQLITE_LIMIT_EXPR_DEPTH 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_EXPR_DEPTH -1
+  sqlite4_limit db SQLITE_LIMIT_EXPR_DEPTH 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_EXPR_DEPTH -1
 } $SQLITE_MAX_EXPR_DEPTH
 do_test sqllimits1-4.5.1 {
-  sqlite3_limit db SQLITE_LIMIT_COMPOUND_SELECT 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_COMPOUND_SELECT -1
+  sqlite4_limit db SQLITE_LIMIT_COMPOUND_SELECT 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_COMPOUND_SELECT -1
 } $SQLITE_MAX_COMPOUND_SELECT
 do_test sqllimits1-4.6.1 {
-  sqlite3_limit db SQLITE_LIMIT_VDBE_OP 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_VDBE_OP -1
+  sqlite4_limit db SQLITE_LIMIT_VDBE_OP 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_VDBE_OP -1
 } $SQLITE_MAX_VDBE_OP
 do_test sqllimits1-4.7.1 {
-  sqlite3_limit db SQLITE_LIMIT_FUNCTION_ARG 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_FUNCTION_ARG -1
+  sqlite4_limit db SQLITE_LIMIT_FUNCTION_ARG 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_FUNCTION_ARG -1
 } $SQLITE_MAX_FUNCTION_ARG
 do_test sqllimits1-4.8.1 {
-  sqlite3_limit db SQLITE_LIMIT_ATTACHED 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_ATTACHED -1
+  sqlite4_limit db SQLITE_LIMIT_ATTACHED 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_ATTACHED -1
 } $SQLITE_MAX_ATTACHED
 do_test sqllimits1-4.9.1 {
-  sqlite3_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH -1
+  sqlite4_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH -1
 } $SQLITE_MAX_LIKE_PATTERN_LENGTH
 do_test sqllimits1-4.10.1 {
-  sqlite3_limit db SQLITE_LIMIT_VARIABLE_NUMBER 0x7fffffff
-  sqlite3_limit db SQLITE_LIMIT_VARIABLE_NUMBER -1
+  sqlite4_limit db SQLITE_LIMIT_VARIABLE_NUMBER 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_VARIABLE_NUMBER -1
 } $SQLITE_MAX_VARIABLE_NUMBER
 
 #--------------------------------------------------------------------
@@ -244,10 +244,10 @@ do_test sqllimits1-4.10.1 {
 # is enforced.
 #
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 set LARGESIZE 99999
 set SQLITE_LIMIT_LENGTH 100000
-sqlite3_limit db SQLITE_LIMIT_LENGTH $SQLITE_LIMIT_LENGTH
+sqlite4_limit db SQLITE_LIMIT_LENGTH $SQLITE_LIMIT_LENGTH
 
 do_test sqllimits1-5.1.1 {
   catchsql { SELECT randomblob(2147483647) }
@@ -304,47 +304,47 @@ do_test sqllimits1-5.13 {
 } {1 {string or blob too big}}
 
 do_test sqllimits1-5.14.1 {
-  set ::STMT [sqlite3_prepare db "SELECT ?" -1 TAIL]
-  sqlite3_bind_zeroblob $::STMT 1 [expr {$SQLITE_LIMIT_LENGTH + 1}]
+  set ::STMT [sqlite4_prepare db "SELECT ?" -1 TAIL]
+  sqlite4_bind_zeroblob $::STMT 1 [expr {$SQLITE_LIMIT_LENGTH + 1}]
 } {}
 do_test sqllimits1-5.14.2 {
-  sqlite3_step $::STMT 
+  sqlite4_step $::STMT 
 } {SQLITE_ERROR}
 do_test sqllimits1-5.14.3 {
-  sqlite3_reset $::STMT 
+  sqlite4_reset $::STMT 
 } {SQLITE_TOOBIG}
 do_test sqllimits1-5.14.4 {
   set np1 [expr {$SQLITE_LIMIT_LENGTH + 1}]
   set ::str1 [string repeat A $np1]
-  catch {sqlite3_bind_text $::STMT 1 $::str1 -1} res
+  catch {sqlite4_bind_text $::STMT 1 $::str1 -1} res
   set res
 } {SQLITE_TOOBIG}
 ifcapable utf16 {
   do_test sqllimits1-5.14.5 {
-    catch {sqlite3_bind_text16 $::STMT 1 $::str1 -1} res
+    catch {sqlite4_bind_text16 $::STMT 1 $::str1 -1} res
     set res
   } {SQLITE_TOOBIG}
 }
 do_test sqllimits1-5.14.6 {
-  catch {sqlite3_bind_text $::STMT 1 $::str1 $np1} res
+  catch {sqlite4_bind_text $::STMT 1 $::str1 $np1} res
   set res
 } {SQLITE_TOOBIG}
 ifcapable utf16 {
   do_test sqllimits1-5.14.7 {
-    catch {sqlite3_bind_text16 $::STMT 1 $::str1 $np1} res
+    catch {sqlite4_bind_text16 $::STMT 1 $::str1 $np1} res
     set res
   } {SQLITE_TOOBIG}
 }
 do_test sqllimits1-5.14.8 {
   set n [expr {$np1-1}]
-  catch {sqlite3_bind_text $::STMT 1 $::str1 $n} res
+  catch {sqlite4_bind_text $::STMT 1 $::str1 $n} res
   set res
 } {}
 do_test sqllimits1-5.14.9 {
-  catch {sqlite3_bind_text16 $::STMT 1 $::str1 $n} res
+  catch {sqlite4_bind_text16 $::STMT 1 $::str1 $n} res
   set res
 } {}
-sqlite3_finalize $::STMT 
+sqlite4_finalize $::STMT 
 
 do_test sqllimits1-5.15 {
   execsql {
@@ -359,7 +359,7 @@ do_test sqllimits1-5.15 {
 } {1 {string or blob too big}}
 db eval {DROP TABLE t4}
 
-sqlite3_limit db SQLITE_LIMIT_SQL_LENGTH 0x7fffffff
+sqlite4_limit db SQLITE_LIMIT_SQL_LENGTH 0x7fffffff
 set strvalue [string repeat A $::SQLITE_LIMIT_LENGTH]
 do_test sqllimits1-5.16 {
   catchsql "SELECT '$strvalue'"
@@ -368,11 +368,11 @@ do_test sqllimits1-5.17.1 {
   catchsql "SELECT 'A$strvalue'"
 } [list 1 {string or blob too big}]
 do_test sqllimits1-5.17.2 {
-  sqlite3_limit db SQLITE_LIMIT_LENGTH 0x7fffffff
+  sqlite4_limit db SQLITE_LIMIT_LENGTH 0x7fffffff
   catchsql {SELECT 'A' || $::strvalue}
 } [list 0 A$strvalue]
 do_test sqllimits1-5.17.3 {
-  sqlite3_limit db SQLITE_LIMIT_LENGTH $SQLITE_LIMIT_LENGTH
+  sqlite4_limit db SQLITE_LIMIT_LENGTH $SQLITE_LIMIT_LENGTH
   catchsql {SELECT 'A' || $::strvalue}
 } [list 1 {string or blob too big}]
 set blobvalue [string repeat 41 $::SQLITE_LIMIT_LENGTH]
@@ -400,7 +400,7 @@ unset strvalue
 # is enforced.
 #
 do_test sqllimits1-6.1 {
-  sqlite3_limit db SQLITE_LIMIT_SQL_LENGTH 50000
+  sqlite4_limit db SQLITE_LIMIT_SQL_LENGTH 50000
   set sql "SELECT 1 WHERE 1==1"
   set tail " /* A comment to take up space in order to make the string\
                 longer without increasing the expression depth */\
@@ -410,7 +410,7 @@ do_test sqllimits1-6.1 {
   catchsql $sql
 } {1 {string or blob too big}}
 do_test sqllimits1-6.3 {
-  sqlite3_limit db SQLITE_LIMIT_SQL_LENGTH 50000
+  sqlite4_limit db SQLITE_LIMIT_SQL_LENGTH 50000
   set sql "SELECT 1 WHERE 1==1"
   set tail " /* A comment to take up space in order to make the string\
                 longer without increasing the expression depth */\
@@ -419,11 +419,11 @@ do_test sqllimits1-6.3 {
   append sql [string repeat $tail $N]
   set nbytes [string length $sql]
   append sql { AND 0}
-  set rc [catch {sqlite3_prepare db $sql $nbytes TAIL} STMT]
+  set rc [catch {sqlite4_prepare db $sql $nbytes TAIL} STMT]
   lappend rc $STMT
 } {1 {(18) statement too long}}
 do_test sqllimits1-6.4 {
-  sqlite3_errmsg db
+  sqlite4_errmsg db
 } {statement too long}
 
 #--------------------------------------------------------------------
@@ -538,7 +538,7 @@ do_test sqllimits1-7.7.1 {
 } $fsize
 do_test sqllimits1-7.7.2 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA max_page_count = 1000;
   }
@@ -561,7 +561,7 @@ do_test sqllimits1-7.7.4 {
 # Test cases sqllimits1-8.* test the SQLITE_MAX_COLUMN limit.
 #
 set SQLITE_LIMIT_COLUMN 200
-sqlite3_limit db SQLITE_LIMIT_COLUMN $SQLITE_LIMIT_COLUMN
+sqlite4_limit db SQLITE_LIMIT_COLUMN $SQLITE_LIMIT_COLUMN
 do_test sqllimits1-8.1 {
   # Columns in a table.
   set cols [list]
@@ -725,7 +725,7 @@ if 0 {
 for {set max 5} {$max<=$SQLITE_MAX_FUNCTION_ARG} {incr max} {
   do_test sqllimits1-11.$max.1 {
     set vals [list]
-    sqlite3_limit db SQLITE_LIMIT_FUNCTION_ARG $::max
+    sqlite4_limit db SQLITE_LIMIT_FUNCTION_ARG $::max
     for {set i 0} {$i < $::max} {incr i} {
       lappend vals $i
     }
@@ -804,7 +804,7 @@ do_test sqllimits1-13.2 {
 # against the pattern).
 #
 set SQLITE_LIMIT_LIKE_PATTERN 1000
-sqlite3_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH $SQLITE_LIMIT_LIKE_PATTERN
+sqlite4_limit db SQLITE_LIMIT_LIKE_PATTERN_LENGTH $SQLITE_LIMIT_LIKE_PATTERN
 do_test sqllimits1-15.1 {
   set max $::SQLITE_LIMIT_LIKE_PATTERN
   set ::pattern [string repeat "A%" [expr $max/2]]

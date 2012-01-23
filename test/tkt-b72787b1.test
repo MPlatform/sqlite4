@@ -13,7 +13,7 @@
 # This file implements tests to verify that ticket [b72787b1a7] has been
 # fixed.  From the ticket:
 #
-#     The sqlite3ExpirePreparedStatements routine marks all statements
+#     The sqlite4ExpirePreparedStatements routine marks all statements
 #     as expired. This includes statements that are not expired.
 #
 #     Steps to reproduce:
@@ -24,10 +24,10 @@
 #        * Run B and have A run as part of B
 #        * A will find a bad cookie and cause *all* statements
 #          to be expired including the currently running B by calling
-#          sqlite3ExpirePreparedStatements
+#          sqlite4ExpirePreparedStatements
 #        * When control returns to B it will then abort 
 #
-#     The bug is that sqlite3ExpirePreparedStatements expires all statements.
+#     The bug is that sqlite4ExpirePreparedStatements expires all statements.
 #     Note that B was prepared after the schema change and hence is perfectly
 #     valid and then is marked as expired while running.
 #
@@ -38,9 +38,9 @@ source $testdir/tester.tcl
 unset -nocomplain ::STMT
 proc runsql {} {
   db eval {CREATE TABLE IF NOT EXISTS t4(q)}
-  sqlite3_step $::STMT
-  set rc [sqlite3_column_int $::STMT 0]
-  sqlite3_reset $::STMT
+  sqlite4_step $::STMT
+  set rc [sqlite4_column_int $::STMT 0]
+  sqlite4_reset $::STMT
   return $rc
 }
 
@@ -54,9 +54,9 @@ do_test tkt-b72787b1.1 {
     INSERT INTO t2 SELECT x+4 FROM t1;
   }
   db func runsql ::runsql
-  set DB [sqlite3_connection_pointer db]
+  set DB [sqlite4_connection_pointer db]
   set sql {SELECT max(x) FROM t1}
-  set ::STMT [sqlite3_prepare_v2 $DB $sql -1 TAIL]
+  set ::STMT [sqlite4_prepare_v2 $DB $sql -1 TAIL]
 
   # The runsql() call on the second row of the first query will
   # cause all $::STMT to hit an expired cookie.  Prior to the fix
@@ -72,6 +72,6 @@ do_test tkt-b72787b1.1 {
   }
 } {103 202 305 306 1 2}
 
-sqlite3_finalize $::STMT
+sqlite4_finalize $::STMT
 
 finish_test

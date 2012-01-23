@@ -24,7 +24,7 @@ ifcapable !vtab {
   return
 }
 
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 execsql {
   CREATE TABLE real_t1(a,b,c);
@@ -524,8 +524,8 @@ do_test vtab6-11.2.4 {
 
 unset ::echo_module_cost
 db close
-sqlite3 db test.db
-register_echo_module [sqlite3_connection_pointer db]
+sqlite4 db test.db
+register_echo_module [sqlite4_connection_pointer db]
 
 do_test vtab6-11.3.1 {
   execsql {

@@ -31,13 +31,13 @@ for {set ii 0} {$ii < $SQLITE_MAX_ATTACHED} {incr ii} {
 }
 
 do_test 1.1 {
-  sqlite3_limit db SQLITE_LIMIT_ATTACHED -1
+  sqlite4_limit db SQLITE_LIMIT_ATTACHED -1
 } $SQLITE_MAX_ATTACHED
 
 do_test 1.2.1 {
   db close
   foreach {name f} $files { forcedelete $f }
-  sqlite3 db test.db
+  sqlite4 db test.db
   
   foreach {name f} $files {
     if {$name == "main"} continue

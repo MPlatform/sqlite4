@@ -111,10 +111,10 @@ struct Bitvec {
 ** inclusive.  Return a pointer to the new object.  Return NULL if 
 ** malloc fails.
 */
-Bitvec *sqlite3BitvecCreate(u32 iSize){
+Bitvec *sqlite4BitvecCreate(u32 iSize){
   Bitvec *p;
   assert( sizeof(*p)==BITVEC_SZ );
-  p = sqlite3MallocZero( sizeof(*p) );
+  p = sqlite4MallocZero( sizeof(*p) );
   if( p ){
     p->iSize = iSize;
   }
@@ -126,7 +126,7 @@ Bitvec *sqlite3BitvecCreate(u32 iSize){
 ** If p is NULL (if the bitmap has not been created) or if
 ** i is out of range, then return false.
 */
-int sqlite3BitvecTest(Bitvec *p, u32 i){
+int sqlite4BitvecTest(Bitvec *p, u32 i){
   if( p==0 ) return 0;
   if( i>p->iSize || i==0 ) return 0;
   i--;
@@ -162,7 +162,7 @@ int sqlite3BitvecTest(Bitvec *p, u32 i){
 ** and that the value for "i" is within range of the Bitvec object.
 ** Otherwise the behavior is undefined.
 */
-int sqlite3BitvecSet(Bitvec *p, u32 i){
+int sqlite4BitvecSet(Bitvec *p, u32 i){
   u32 h;
   if( p==0 ) return SQLITE_OK;
   assert( i>0 );
@@ -172,7 +172,7 @@ int sqlite3BitvecSet(Bitvec *p, u32 i){
     u32 bin = i/p->iDivisor;
     i = i%p->iDivisor;
     if( p->u.apSub[bin]==0 ){
-      p->u.apSub[bin] = sqlite3BitvecCreate( p->iDivisor );
+      p->u.apSub[bin] = sqlite4BitvecCreate( p->iDivisor );
       if( p->u.apSub[bin]==0 ) return SQLITE_NOMEM;
     }
     p = p->u.apSub[bin];
@@ -206,18 +206,18 @@ bitvec_set_rehash:
   if( p->nSet>=BITVEC_MXHASH ){
     unsigned int j;
     int rc;
-    u32 *aiValues = sqlite3StackAllocRaw(0, sizeof(p->u.aHash));
+    u32 *aiValues = sqlite4StackAllocRaw(0, sizeof(p->u.aHash));
     if( aiValues==0 ){
       return SQLITE_NOMEM;
     }else{
       memcpy(aiValues, p->u.aHash, sizeof(p->u.aHash));
       memset(p->u.apSub, 0, sizeof(p->u.apSub));
       p->iDivisor = (p->iSize + BITVEC_NPTR - 1)/BITVEC_NPTR;
-      rc = sqlite3BitvecSet(p, i);
+      rc = sqlite4BitvecSet(p, i);
       for(j=0; j<BITVEC_NINT; j++){
-        if( aiValues[j] ) rc |= sqlite3BitvecSet(p, aiValues[j]);
+        if( aiValues[j] ) rc |= sqlite4BitvecSet(p, aiValues[j]);
       }
-      sqlite3StackFree(0, aiValues);
+      sqlite4StackFree(0, aiValues);
       return rc;
     }
   }
@@ -233,7 +233,7 @@ bitvec_set_end:
 ** pBuf must be a pointer to at least BITVEC_SZ bytes of temporary storage
 ** that BitvecClear can use to rebuilt its hash table.
 */
-void sqlite3BitvecClear(Bitvec *p, u32 i, void *pBuf){
+void sqlite4BitvecClear(Bitvec *p, u32 i, void *pBuf){
   if( p==0 ) return;
   assert( i>0 );
   i--;
@@ -270,22 +270,22 @@ void sqlite3BitvecClear(Bitvec *p, u32 i, void *pBuf){
 /*
 ** Destroy a bitmap object.  Reclaim all memory used.
 */
-void sqlite3BitvecDestroy(Bitvec *p){
+void sqlite4BitvecDestroy(Bitvec *p){
   if( p==0 ) return;
   if( p->iDivisor ){
     unsigned int i;
     for(i=0; i<BITVEC_NPTR; i++){
-      sqlite3BitvecDestroy(p->u.apSub[i]);
+      sqlite4BitvecDestroy(p->u.apSub[i]);
     }
   }
-  sqlite3_free(p);
+  sqlite4_free(p);
 }
 
 /*
 ** Return the value of the iSize parameter specified when Bitvec *p
 ** was created.
 */
-u32 sqlite3BitvecSize(Bitvec *p){
+u32 sqlite4BitvecSize(Bitvec *p){
   return p->iSize;
 }
 
@@ -330,7 +330,7 @@ u32 sqlite3BitvecSize(Bitvec *p){
 **
 ** If a memory allocation error occurs, return -1.
 */
-int sqlite3BitvecBuiltinTest(int sz, int *aOp){
+int sqlite4BitvecBuiltinTest(int sz, int *aOp){
   Bitvec *pBitvec = 0;
   unsigned char *pV = 0;
   int rc = -1;
@@ -339,15 +339,15 @@ int sqlite3BitvecBuiltinTest(int sz, int *aOp){
 
   /* Allocate the Bitvec to be tested and a linear array of
   ** bits to act as the reference */
-  pBitvec = sqlite3BitvecCreate( sz );
-  pV = sqlite3_malloc( (sz+7)/8 + 1 );
-  pTmpSpace = sqlite3_malloc(BITVEC_SZ);
+  pBitvec = sqlite4BitvecCreate( sz );
+  pV = sqlite4_malloc( (sz+7)/8 + 1 );
+  pTmpSpace = sqlite4_malloc(BITVEC_SZ);
   if( pBitvec==0 || pV==0 || pTmpSpace==0  ) goto bitvec_end;
   memset(pV, 0, (sz+7)/8 + 1);
 
   /* NULL pBitvec tests */
-  sqlite3BitvecSet(0, 1);
-  sqlite3BitvecClear(0, 1, pTmpSpace);
+  sqlite4BitvecSet(0, 1);
+  sqlite4BitvecClear(0, 1, pTmpSpace);
 
   /* Run the program */
   pc = 0;
@@ -365,7 +365,7 @@ int sqlite3BitvecBuiltinTest(int sz, int *aOp){
       case 4: 
       default: {
         nx = 2;
-        sqlite3_randomness(sizeof(i), &i);
+        sqlite4_randomness(sizeof(i), &i);
         break;
       }
     }
@@ -375,11 +375,11 @@ int sqlite3BitvecBuiltinTest(int sz, int *aOp){
     if( (op & 1)!=0 ){
       SETBIT(pV, (i+1));
       if( op!=5 ){
-        if( sqlite3BitvecSet(pBitvec, i+1) ) goto bitvec_end;
+        if( sqlite4BitvecSet(pBitvec, i+1) ) goto bitvec_end;
       }
     }else{
       CLEARBIT(pV, (i+1));
-      sqlite3BitvecClear(pBitvec, i+1, pTmpSpace);
+      sqlite4BitvecClear(pBitvec, i+1, pTmpSpace);
     }
   }
 
@@ -388,11 +388,11 @@ int sqlite3BitvecBuiltinTest(int sz, int *aOp){
   ** match (rc==0).  Change rc to non-zero if a discrepancy
   ** is found.
   */
-  rc = sqlite3BitvecTest(0,0) + sqlite3BitvecTest(pBitvec, sz+1)
-          + sqlite3BitvecTest(pBitvec, 0)
-          + (sqlite3BitvecSize(pBitvec) - sz);
+  rc = sqlite4BitvecTest(0,0) + sqlite4BitvecTest(pBitvec, sz+1)
+          + sqlite4BitvecTest(pBitvec, 0)
+          + (sqlite4BitvecSize(pBitvec) - sz);
   for(i=1; i<=sz; i++){
-    if(  (TESTBIT(pV,i))!=sqlite3BitvecTest(pBitvec,i) ){
+    if(  (TESTBIT(pV,i))!=sqlite4BitvecTest(pBitvec,i) ){
       rc = i;
       break;
     }
@@ -400,9 +400,9 @@ int sqlite3BitvecBuiltinTest(int sz, int *aOp){
 
   /* Free allocated structure */
 bitvec_end:
-  sqlite3_free(pTmpSpace);
-  sqlite3_free(pV);
-  sqlite3BitvecDestroy(pBitvec);
+  sqlite4_free(pTmpSpace);
+  sqlite4_free(pV);
+  sqlite4BitvecDestroy(pBitvec);
   return rc;
 }
 #endif /* SQLITE_OMIT_BUILTIN_TEST */

@@ -131,7 +131,7 @@ proc do_thread_test {args} {
   catch { db close }
   forcedelete test.db test.db-journal test.db-wal
 
-  sqlite3 db test.db
+  sqlite4 db test.db
   eval $P(init)
   catch { db close }
 
@@ -163,7 +163,7 @@ proc do_thread_test {args} {
 
         proc busyhandler {n} { usleep 10 ; return 0 }
 
-        sqlite3 db test.db
+        sqlite4 db test.db
         db busy busyhandler
         db eval { SELECT randomblob($E(pid)*5) }
 
@@ -202,7 +202,7 @@ proc do_thread_test {args} {
   }
   puts $report
 
-  sqlite3 db test.db
+  sqlite4 db test.db
   set res ""
   if {[catch $P(check) msg]} { set res $msg }
   do_test $P(testname).check [list set {} $res] ""
@@ -335,7 +335,7 @@ do_thread_test2 walthread-2 -seconds $seconds(walthread-2) -init {
   set nRun 0
   set nDel 0
   while {[tt_continue]} {
-    sqlite3 db test.db
+    sqlite4 db test.db
     db busy busyhandler
     db eval { SELECT * FROM sqlite_master }
     catch { db eval { PRAGMA journal_mode = DELETE } }
@@ -361,7 +361,7 @@ do_thread_test2 walthread-2 -seconds $seconds(walthread-2) -init {
   set nRun 0
   set nDel 0
   while {[tt_continue]} {
-    sqlite3 db test.db
+    sqlite4 db test.db
     db busy busyhandler
     db eval { SELECT * FROM sqlite_master }
     catch { db eval { PRAGMA journal_mode = WAL } }

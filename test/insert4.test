@@ -21,14 +21,14 @@ ifcapable !view||!subquery {
   return
 }
 
-# The sqlite3_xferopt_count variable is incremented whenever the 
+# The sqlite4_xferopt_count variable is incremented whenever the 
 # insert transfer optimization applies.
 #
-# This procedure runs a test to see if the sqlite3_xferopt_count is
+# This procedure runs a test to see if the sqlite4_xferopt_count is
 # set to N.
 #
 proc xferopt_test {testname N} {
-  do_test $testname {set ::sqlite3_xferopt_count} $N
+  do_test $testname {set ::sqlite4_xferopt_count} $N
 }
 
 # Create tables used for testing.
@@ -45,7 +45,7 @@ execsql {
 # does not violate constraints.
 #
 do_test insert4-1.1 {
-  set sqlite3_xferopt_count 0
+  set sqlite4_xferopt_count 0
   execsql {
     DELETE FROM t1;
     DELETE FROM t2;
@@ -139,7 +139,7 @@ proc xfer_check {testid xferused initdata destschema srcschema} {
   execsql "CREATE TABLE dest($destschema)"
   execsql "CREATE TABLE src($srcschema)"
   execsql "INSERT INTO src VALUES([join $initdata ,])"
-  set ::sqlite3_xferopt_count 0
+  set ::sqlite4_xferopt_count 0
   do_test $testid.1 {
     execsql {
       INSERT INTO dest SELECT * FROM src;
@@ -147,7 +147,7 @@ proc xfer_check {testid xferused initdata destschema srcschema} {
     }
   } $initdata
   do_test $testid.2 {
-    set ::sqlite3_xferopt_count
+    set ::sqlite4_xferopt_count
   } $xferused
   execsql {
     DROP TABLE dest;
@@ -264,40 +264,40 @@ do_test insert4-5.2 {
 } {1 {table t4 has 2 columns but 3 values were supplied}}
 
 do_test insert4-6.1 {
-  set ::sqlite3_xferopt_count 0
+  set ::sqlite4_xferopt_count 0
   execsql {
     CREATE INDEX t2_i2 ON t2(x, y COLLATE nocase); 
     CREATE INDEX t2_i1 ON t2(x ASC, y DESC);
     CREATE INDEX t3_i1 ON t3(a, b);
     INSERT INTO t2 SELECT * FROM t3;
   }
-  set ::sqlite3_xferopt_count
+  set ::sqlite4_xferopt_count
 } {0}
 do_test insert4-6.2 {
-  set ::sqlite3_xferopt_count 0
+  set ::sqlite4_xferopt_count 0
   execsql {
     DROP INDEX t2_i2;
     INSERT INTO t2 SELECT * FROM t3;
   }
-  set ::sqlite3_xferopt_count
+  set ::sqlite4_xferopt_count
 } {0}
 do_test insert4-6.3 {
-  set ::sqlite3_xferopt_count 0
+  set ::sqlite4_xferopt_count 0
   execsql {
     DROP INDEX t2_i1;
     CREATE INDEX t2_i1 ON t2(x ASC, y ASC);
     INSERT INTO t2 SELECT * FROM t3;
   }
-  set ::sqlite3_xferopt_count
+  set ::sqlite4_xferopt_count
 } {1}
 do_test insert4-6.4 {
-  set ::sqlite3_xferopt_count 0
+  set ::sqlite4_xferopt_count 0
   execsql {
     DROP INDEX t2_i1;
     CREATE INDEX t2_i1 ON t2(x ASC, y COLLATE RTRIM);
     INSERT INTO t2 SELECT * FROM t3;
   }
-  set ::sqlite3_xferopt_count
+  set ::sqlite4_xferopt_count
 } {0}
 
 
@@ -332,7 +332,7 @@ do_test insert4-6.7 {
 #
 ifcapable foreignkey {
   do_test insert4-7.1 {
-    set ::sqlite3_xferopt_count 0
+    set ::sqlite4_xferopt_count 0
     execsql {
       CREATE TABLE t7a(x INTEGER PRIMARY KEY); INSERT INTO t7a VALUES(123);
       CREATE TABLE t7b(y INTEGER REFERENCES t7a);
@@ -342,10 +342,10 @@ ifcapable foreignkey {
     }
   } {234}
   do_test insert4-7.2 {
-    set ::sqlite3_xferopt_count
+    set ::sqlite4_xferopt_count
   } {1}
   do_test insert4-7.3 {
-    set ::sqlite3_xferopt_count 0
+    set ::sqlite4_xferopt_count 0
     execsql {
       DELETE FROM t7b;
       PRAGMA foreign_keys=ON;
@@ -358,10 +358,10 @@ ifcapable foreignkey {
     execsql {SELECT * FROM t7b}
   } {}
   do_test insert4-7.5 {
-    set ::sqlite3_xferopt_count
+    set ::sqlite4_xferopt_count
   } {0}
   do_test insert4-7.6 {
-    set ::sqlite3_xferopt_count 0
+    set ::sqlite4_xferopt_count 0
     execsql {
       DELETE FROM t7b; DELETE FROM t7c;
       INSERT INTO t7c VALUES(123);
@@ -370,10 +370,10 @@ ifcapable foreignkey {
     }
   } {123}
   do_test insert4-7.7 {
-    set ::sqlite3_xferopt_count
+    set ::sqlite4_xferopt_count
   } {0}
   do_test insert4-7.7 {
-    set ::sqlite3_xferopt_count 0
+    set ::sqlite4_xferopt_count 0
     execsql {
       PRAGMA foreign_keys=OFF;
       DELETE FROM t7b;
@@ -382,7 +382,7 @@ ifcapable foreignkey {
     }
   } {123}
   do_test insert4-7.8 {
-    set ::sqlite3_xferopt_count
+    set ::sqlite4_xferopt_count
   } {1}
 }
 

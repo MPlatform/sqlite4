@@ -70,8 +70,8 @@ do_test like-1.4 {
   }
 } {ABC abc}
 do_test like-1.5.1 {
-  # Use sqlite3_exec() to verify fix for ticket [25ee81271091] 2011-06-26
-  sqlite3_exec db {PRAGMA case_sensitive_like=on}
+  # Use sqlite4_exec() to verify fix for ticket [25ee81271091] 2011-06-26
+  sqlite4_exec db {PRAGMA case_sensitive_like=on}
 } {0 {}}
 do_test like-1.5.2 {
   execsql {
@@ -590,7 +590,7 @@ do_test like-8.1 {
 } {1 ghijkl 2 ghijkl}
 do_test like-8.2 {
   proc newlike {args} {return 1} ;# Alternative LIKE is always return TRUE
-  db function like newlike       ;# Uses -1 for nArg in sqlite3_create_function
+  db function like newlike       ;# Uses -1 for nArg in sqlite4_create_function
   db cache flush
   db eval {
     SELECT 1, x FROM t8 WHERE x LIKE '%h%';
@@ -618,7 +618,7 @@ ifcapable like_opt&&!icu {
   # and the number of full-scan steps.
   #
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   proc count_steps {sql} {
     set r [db eval $sql]
     lappend r scan [db status step] sort [db status sort]
@@ -634,45 +634,45 @@ ifcapable like_opt&&!icu {
     }
   } {xyz scan 19 sort 0}
   do_test like-9.3.1 {
-    set res [sqlite3_exec_hex db {
+    set res [sqlite4_exec_hex db {
        SELECT x FROM t2 WHERE x LIKE '%78%25'
     }]
   } {0 {x xyz}}
   ifcapable explain {
     do_test like-9.3.2 {
-      set res [sqlite3_exec_hex db {
+      set res [sqlite4_exec_hex db {
          EXPLAIN QUERY PLAN SELECT x FROM t2 WHERE x LIKE '%78%25'
       }]
       regexp {INDEX i2} $res
     } {1}
   }
   do_test like-9.4.1 {
-    sqlite3_exec_hex db {INSERT INTO t2 VALUES('%ffhello')}
-    set res [sqlite3_exec_hex db {
+    sqlite4_exec_hex db {INSERT INTO t2 VALUES('%ffhello')}
+    set res [sqlite4_exec_hex db {
        SELECT substr(x,2) AS x FROM t2 WHERE +x LIKE '%ff%25'
     }]
   } {0 {x hello}}
   do_test like-9.4.2 {
-    set res [sqlite3_exec_hex db {
+    set res [sqlite4_exec_hex db {
        SELECT substr(x,2) AS x FROM t2 WHERE x LIKE '%ff%25'
     }]
   } {0 {x hello}}
   ifcapable explain {
     do_test like-9.4.3 {
-      set res [sqlite3_exec_hex db {
+      set res [sqlite4_exec_hex db {
          EXPLAIN QUERY PLAN SELECT x FROM t2 WHERE x LIKE '%ff%25'
       }]
       regexp {INDEX i2} $res
     } {0}
   }
   do_test like-9.5.1 {
-    set res [sqlite3_exec_hex db {
+    set res [sqlite4_exec_hex db {
        SELECT x FROM t2 WHERE x LIKE '%fe%25'
     }]
   } {0 {}}
   ifcapable explain {
     do_test like-9.5.2 {
-      set res [sqlite3_exec_hex db {
+      set res [sqlite4_exec_hex db {
          EXPLAIN QUERY PLAN SELECT x FROM t2 WHERE x LIKE '%fe%25'
       }]
       regexp {INDEX i2} $res
@@ -694,7 +694,7 @@ ifcapable like_opt&&!icu {
   #
   do_test like-10.1 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       CREATE TABLE t10(
         a INTEGER PRIMARY KEY,

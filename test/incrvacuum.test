@@ -104,7 +104,7 @@ do_test incrvacuum-2.2 {
 } {1}
 do_test incrvacuum-2.2.1 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     pragma auto_vacuum;
   }
@@ -332,8 +332,8 @@ set ::str1 [string repeat abcdefghij 130]
 set ::str2 [string repeat 1234567890 105]
 
 forcedelete test1.db test1.db-journal test2.db test2.db-journal
-sqlite3 db1 test1.db
-sqlite3 db2 test2.db
+sqlite4 db1 test1.db
+sqlite4 db2 test2.db
 execsql { PRAGMA auto_vacuum = 'none' } db1
 execsql { PRAGMA auto_vacuum = 'incremental' } db2
 
@@ -464,7 +464,7 @@ while 1 {
 #
 do_test incrvacuum-8.1 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA incremental_vacuum(50);
   }
@@ -476,7 +476,7 @@ do_test incrvacuum-8.1 {
 do_test incrvacuum-9.1 {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   execsql {
     PRAGMA auto_vacuum = 'incremental';
@@ -594,7 +594,7 @@ do_test incrvacuum-10.8 {
 #
 db close
 forcedelete test.db test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 ifcapable default_autovacuum {
   do_test incrvacuum-11.1-av-dflt-on {
@@ -626,7 +626,7 @@ do_test incrvacuum-11.4 {
 do_test incrvacuum-11.5 {
   # Close and reopen the connection.
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   # Test we are still in incremental vacuum mode.
   execsql { PRAGMA auto_vacuum; }
@@ -640,7 +640,7 @@ do_test incrvacuum-11.6 {
 do_test incrvacuum-11.7 {
   # Close and reopen the connection.
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   # Test we are still in "full" auto-vacuum mode.
   execsql { PRAGMA auto_vacuum; }
@@ -652,7 +652,7 @@ do_test incrvacuum-11.7 {
 #
 db close
 forcedelete test.db test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_test incrvacuum-12.1 {
   execsql {
@@ -665,7 +665,7 @@ do_test incrvacuum-12.1 {
 # database is locked. Nothing should change.
 #
 do_test incrvacuum-12.2 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { BEGIN EXCLUSIVE; } db2
   catchsql { PRAGMA auto_vacuum = 2; }
 } {1 {database is locked}}
@@ -676,7 +676,7 @@ do_test incrvacuum-12.3 {
 } {2}   ;# Still 2 because PRAGMA auto_vacuum setting held in case of vacuum
 do_test incrvacuum-12.4 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { PRAGMA auto_vacuum }
 } {1}   ;# Revert to 1 because the database file did not change
 
@@ -693,8 +693,8 @@ do_test incrvacuum-12.5 {
 db2 close
 db close
 forcedelete test.db test.db-journal
-sqlite3 db test.db  ;  set ::DB [sqlite3_connection_pointer db]
-sqlite3 db2 test.db
+sqlite4 db test.db  ;  set ::DB [sqlite4_connection_pointer db]
+sqlite4 db2 test.db
 
 do_test incrvacuum-13.1 {
   # File size is sometimes 1 instead of 0 due to the hack we put in
@@ -703,7 +703,7 @@ do_test incrvacuum-13.1 {
   expr {[file size test.db]>1}
 } {0}
 do_test incrvacuum-13.2 {
-  set ::STMT [sqlite3_prepare $::DB {PRAGMA auto_vacuum = 2} -1 DUMMY]
+  set ::STMT [sqlite4_prepare $::DB {PRAGMA auto_vacuum = 2} -1 DUMMY]
   execsql {
     PRAGMA auto_vacuum = none;
     PRAGMA default_cache_size = 1024;
@@ -714,8 +714,8 @@ do_test incrvacuum-13.3 {
   expr {[file size test.db]>0}
 } {1}
 do_test incrvacuum-13.4 {
-  set rc [sqlite3_step $::STMT]
-  list $rc [sqlite3_finalize $::STMT]
+  set rc [sqlite4_step $::STMT]
+  list $rc [sqlite4_finalize $::STMT]
 } {SQLITE_DONE SQLITE_OK}
 do_test incrvacuum-13.5 {
   execsql {
@@ -732,7 +732,7 @@ if {[permutation] == ""} {
     set out [open invalid.db w]
     puts $out "This is not an SQLite database file"
     close $out
-    sqlite3 db3 invalid.db
+    sqlite4 db3 invalid.db
     catchsql {
       PRAGMA incremental_vacuum(10);
     } db3
@@ -744,7 +744,7 @@ do_test incrvacuum-15.1 {
   db close
   db2 close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   set str [string repeat "abcdefghij" 500]
 

@@ -84,7 +84,7 @@ proc journal_op_catcher {method filename args} {
 
 do_test journal2-1.1 {
   set ::oplog [list]
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { CREATE TABLE t1(a, b) }
   set ::oplog
 } {xOpen test.db-journal xClose test.db-journal xDelete test.db-journal}
@@ -109,7 +109,7 @@ do_test journal2-1.4 { execsql { SELECT * FROM t1 } } {1 2 3 4}
 #
 do_test journal2-1.5 {
   set ::oplog [list]
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql  { PRAGMA journal_mode = delete } db2
   catchsql { INSERT INTO t1 VALUES(5, 6)  } db2
 } {1 {disk I/O error}}
@@ -153,7 +153,7 @@ do_test journal2-1.11 {
 # appears as if the process hosting [db2] unexpectedly exited.
 # 
 do_test journal2-1.12 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA cache_size = 10;
     BEGIN;
@@ -190,7 +190,7 @@ do_test journal2-1.17 {
   expr {[catchsql { PRAGMA integrity_check } db] == "0 ok"}
 } {1}
 do_test journal2-1.20 {
-  sqlite3 db2 testX.db
+  sqlite4 db2 testX.db
   expr {[catchsql { PRAGMA integrity_check } db2] == "0 ok"}
 } {0}
 do_test journal2-1.21 {

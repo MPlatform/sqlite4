@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
 # focus of this file is testing of the zero-filled blob functionality
-# including the sqlite3_bind_zeroblob(), sqlite3_result_zeroblob(),
+# including the sqlite4_bind_zeroblob(), sqlite4_result_zeroblob(),
 # and the built-in zeroblob() SQL function.
 #
 # $Id: zeroblob.test,v 1.14 2009/07/14 02:33:02 drh Exp $
@@ -28,21 +28,21 @@ ifcapable !incrblob {
 # But it does get inserted into the database correctly.
 #
 db eval {PRAGMA cache_size=10}
-sqlite3_memory_highwater 1
+sqlite4_memory_highwater 1
 unset -nocomplain memused
-set memused [sqlite3_memory_used]
+set memused [sqlite4_memory_used]
 do_test zeroblob-1.1 {
   execsql {
     CREATE TABLE t1(a,b,c,d);
   }
-  set ::sqlite3_max_blobsize 0
+  set ::sqlite4_max_blobsize 0
   execsql {
     INSERT INTO t1 VALUES(2,3,4,zeroblob(1000000));
   }
-  set ::sqlite3_max_blobsize
+  set ::sqlite4_max_blobsize
 } {10}
 do_test zeroblob-1.1.1 {
-  expr {[sqlite3_memory_highwater]<$::memused+25000}
+  expr {[sqlite4_memory_highwater]<$::memused+25000}
 } {1}
 do_test zeroblob-1.2 {
   execsql {
@@ -54,11 +54,11 @@ do_test zeroblob-1.2 {
 # the zeroblob must be instantiated.
 #
 do_test zeroblob-1.3 {
-  set ::sqlite3_max_blobsize 0
+  set ::sqlite4_max_blobsize 0
   execsql {
     INSERT INTO t1 VALUES(3,4,zeroblob(10000),5);
   }
-  set ::sqlite3_max_blobsize
+  set ::sqlite4_max_blobsize
 } {10010}
 do_test zeroblob-1.4 {
   execsql {
@@ -70,11 +70,11 @@ do_test zeroblob-1.4 {
 # of the blob content occurs on the stack.
 #
 do_test zeroblob-1.5 {
-  set ::sqlite3_max_blobsize 0
+  set ::sqlite4_max_blobsize 0
   execsql {
     INSERT INTO t1 VALUES(4,5,zeroblob(10000),zeroblob(10000));
   }
-  set ::sqlite3_max_blobsize
+  set ::sqlite4_max_blobsize
 } {11}
 do_test zeroblob-1.6 {
   execsql {
@@ -86,11 +86,11 @@ do_test zeroblob-1.6 {
 # no instantiation of the zeroblobs occurs on the stack.
 #
 do_test zeroblob-1.7 {
-  set ::sqlite3_max_blobsize 0
+  set ::sqlite4_max_blobsize 0
   execsql {
     INSERT INTO t1 VALUES(5,zeroblob(10000),NULL,zeroblob(10000));
   }
-  set ::sqlite3_max_blobsize
+  set ::sqlite4_max_blobsize
 } {10}
 do_test zeroblob-1.8 {
   execsql {
@@ -195,26 +195,26 @@ do_test zeroblob-6.7 {
 
 # Test bind_zeroblob()
 #
-sqlite3_memory_highwater 1
+sqlite4_memory_highwater 1
 unset -nocomplain memused
-set memused [sqlite3_memory_used]
+set memused [sqlite4_memory_used]
 do_test zeroblob-7.1 {
-  set ::STMT [sqlite3_prepare $::DB "SELECT length(?)" -1 DUMMY]
-  set ::sqlite3_max_blobsize 0
-  sqlite3_bind_zeroblob $::STMT 1 450000
-  sqlite3_step $::STMT
+  set ::STMT [sqlite4_prepare $::DB "SELECT length(?)" -1 DUMMY]
+  set ::sqlite4_max_blobsize 0
+  sqlite4_bind_zeroblob $::STMT 1 450000
+  sqlite4_step $::STMT
 } {SQLITE_ROW}
 do_test zeroblob-7.2 {
-  sqlite3_column_int $::STMT 0
+  sqlite4_column_int $::STMT 0
 } {450000}
 do_test zeroblob-7.3 {
-  sqlite3_finalize $::STMT
+  sqlite4_finalize $::STMT
 } {SQLITE_OK}
 do_test zeroblob-7.4 {
-  set ::sqlite3_max_blobsize
+  set ::sqlite4_max_blobsize
 } {0}
 do_test zeroblob-7.5 {
-  expr {[sqlite3_memory_highwater]<$::memused+10000}
+  expr {[sqlite4_memory_highwater]<$::memused+10000}
 } {1}
 
 # Test that MakeRecord can handle a value with some real content

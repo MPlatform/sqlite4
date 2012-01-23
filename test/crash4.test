@@ -81,7 +81,7 @@ for {set cnt 1; set fin 0} {!$fin} {incr cnt} {
       db eval {INSERT INTO a(id,name) VALUES(9,'nine')}
       db eval {INSERT INTO a(id,name) VALUES(10,'ten')}
       db close
-      sqlite3 db test.db
+      sqlite4 db test.db
       db eval {UPDATE A SET name='new text for row 3' WHERE id=3}
       db close
     } {}]
@@ -91,7 +91,7 @@ for {set cnt 1; set fin 0} {!$fin} {incr cnt} {
     }
     set c
   } {1 {child process exited abnormally}}
-  sqlite3 db test.db
+  sqlite4 db test.db
   integrity_check crash4-1.$cnt.2
   do_test crash4-1.$cnt.3 {
     set x [lsearch $::crash4_cksum_set [allcksum db]]

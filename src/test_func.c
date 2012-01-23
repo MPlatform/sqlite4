@@ -12,7 +12,7 @@
 ** Code for testing all sorts of SQLite interfaces.  This code
 ** implements new SQL functions used by the test scripts.
 */
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include "tcl.h"
 #include <stdlib.h>
 #include <string.h>
@@ -20,14 +20,14 @@
 
 
 /*
-** Allocate nByte bytes of space using sqlite3_malloc(). If the
-** allocation fails, call sqlite3_result_error_nomem() to notify
+** Allocate nByte bytes of space using sqlite4_malloc(). If the
+** allocation fails, call sqlite4_result_error_nomem() to notify
 ** the database handle that malloc() has failed.
 */
-static void *testContextMalloc(sqlite3_context *context, int nByte){
-  char *z = sqlite3_malloc(nByte);
+static void *testContextMalloc(sqlite4_context *context, int nByte){
+  char *z = sqlite4_malloc(nByte);
   if( !z && nByte>0 ){
-    sqlite3_result_error_nomem(context);
+    sqlite4_result_error_nomem(context);
   }
   return z;
 }
@@ -36,7 +36,7 @@ static void *testContextMalloc(sqlite3_context *context, int nByte){
 ** This function generates a string of random characters.  Used for
 ** generating test data.
 */
-static void randStr(sqlite3_context *context, int argc, sqlite3_value **argv){
+static void randStr(sqlite4_context *context, int argc, sqlite4_value **argv){
   static const unsigned char zSrc[] = 
      "abcdefghijklmnopqrstuvwxyz"
      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -50,32 +50,32 @@ static void randStr(sqlite3_context *context, int argc, sqlite3_value **argv){
   */
   assert(argc==2);
 
-  iMin = sqlite3_value_int(argv[0]);
+  iMin = sqlite4_value_int(argv[0]);
   if( iMin<0 ) iMin = 0;
   if( iMin>=sizeof(zBuf) ) iMin = sizeof(zBuf)-1;
-  iMax = sqlite3_value_int(argv[1]);
+  iMax = sqlite4_value_int(argv[1]);
   if( iMax<iMin ) iMax = iMin;
   if( iMax>=sizeof(zBuf) ) iMax = sizeof(zBuf)-1;
   n = iMin;
   if( iMax>iMin ){
-    sqlite3_randomness(sizeof(r), &r);
+    sqlite4_randomness(sizeof(r), &r);
     r &= 0x7fffffff;
     n += r%(iMax + 1 - iMin);
   }
   assert( n<sizeof(zBuf) );
-  sqlite3_randomness(n, zBuf);
+  sqlite4_randomness(n, zBuf);
   for(i=0; i<n; i++){
     zBuf[i] = zSrc[zBuf[i]%(sizeof(zSrc)-1)];
   }
   zBuf[n] = 0;
-  sqlite3_result_text(context, (char*)zBuf, n, SQLITE_TRANSIENT);
+  sqlite4_result_text(context, (char*)zBuf, n, SQLITE_TRANSIENT);
 }
 
 /*
 ** The following two SQL functions are used to test returning a text
 ** result with a destructor. Function 'test_destructor' takes one argument
 ** and returns the same argument interpreted as TEXT. A destructor is
-** passed with the sqlite3_result_text() call.
+** passed with the sqlite4_result_text() call.
 **
 ** SQL function 'test_destructor_count' returns the number of outstanding 
 ** allocations made by 'test_destructor';
@@ -87,21 +87,21 @@ static void destructor(void *p){
   char *zVal = (char *)p;
   assert(zVal);
   zVal--;
-  sqlite3_free(zVal);
+  sqlite4_free(zVal);
   test_destructor_count_var--;
 }
 static void test_destructor(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
   char *zVal;
   int len;
   
   test_destructor_count_var++;
   assert( nArg==1 );
-  if( sqlite3_value_type(argv[0])==SQLITE_NULL ) return;
-  len = sqlite3_value_bytes(argv[0]); 
+  if( sqlite4_value_type(argv[0])==SQLITE_NULL ) return;
+  len = sqlite4_value_bytes(argv[0]); 
   zVal = testContextMalloc(pCtx, len+3);
   if( !zVal ){
     return;
@@ -109,22 +109,22 @@ static void test_destructor(
   zVal[len+1] = 0;
   zVal[len+2] = 0;
   zVal++;
-  memcpy(zVal, sqlite3_value_text(argv[0]), len);
-  sqlite3_result_text(pCtx, zVal, -1, destructor);
+  memcpy(zVal, sqlite4_value_text(argv[0]), len);
+  sqlite4_result_text(pCtx, zVal, -1, destructor);
 }
 #ifndef SQLITE_OMIT_UTF16
 static void test_destructor16(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
   char *zVal;
   int len;
   
   test_destructor_count_var++;
   assert( nArg==1 );
-  if( sqlite3_value_type(argv[0])==SQLITE_NULL ) return;
-  len = sqlite3_value_bytes16(argv[0]); 
+  if( sqlite4_value_type(argv[0])==SQLITE_NULL ) return;
+  len = sqlite4_value_bytes16(argv[0]); 
   zVal = testContextMalloc(pCtx, len+3);
   if( !zVal ){
     return;
@@ -132,46 +132,46 @@ static void test_destructor16(
   zVal[len+1] = 0;
   zVal[len+2] = 0;
   zVal++;
-  memcpy(zVal, sqlite3_value_text16(argv[0]), len);
-  sqlite3_result_text16(pCtx, zVal, -1, destructor);
+  memcpy(zVal, sqlite4_value_text16(argv[0]), len);
+  sqlite4_result_text16(pCtx, zVal, -1, destructor);
 }
 #endif
 static void test_destructor_count(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
-  sqlite3_result_int(pCtx, test_destructor_count_var);
+  sqlite4_result_int(pCtx, test_destructor_count_var);
 }
 
 /*
 ** The following aggregate function, test_agg_errmsg16(), takes zero 
-** arguments. It returns the text value returned by the sqlite3_errmsg16()
+** arguments. It returns the text value returned by the sqlite4_errmsg16()
 ** API function.
 */
 #ifndef SQLITE_OMIT_BUILTIN_TEST
-void sqlite3BeginBenignMalloc(void);
-void sqlite3EndBenignMalloc(void);
+void sqlite4BeginBenignMalloc(void);
+void sqlite4EndBenignMalloc(void);
 #else
-  #define sqlite3BeginBenignMalloc()
-  #define sqlite3EndBenignMalloc()
+  #define sqlite4BeginBenignMalloc()
+  #define sqlite4EndBenignMalloc()
 #endif
-static void test_agg_errmsg16_step(sqlite3_context *a, int b,sqlite3_value **c){
+static void test_agg_errmsg16_step(sqlite4_context *a, int b,sqlite4_value **c){
 }
-static void test_agg_errmsg16_final(sqlite3_context *ctx){
+static void test_agg_errmsg16_final(sqlite4_context *ctx){
 #ifndef SQLITE_OMIT_UTF16
   const void *z;
-  sqlite3 * db = sqlite3_context_db_handle(ctx);
-  sqlite3_aggregate_context(ctx, 2048);
-  sqlite3BeginBenignMalloc();
-  z = sqlite3_errmsg16(db);
-  sqlite3EndBenignMalloc();
-  sqlite3_result_text16(ctx, z, -1, SQLITE_TRANSIENT);
+  sqlite4 * db = sqlite4_context_db_handle(ctx);
+  sqlite4_aggregate_context(ctx, 2048);
+  sqlite4BeginBenignMalloc();
+  z = sqlite4_errmsg16(db);
+  sqlite4EndBenignMalloc();
+  sqlite4_result_text16(ctx, z, -1, SQLITE_TRANSIENT);
 #endif
 }
 
 /*
-** Routines for testing the sqlite3_get_auxdata() and sqlite3_set_auxdata()
+** Routines for testing the sqlite4_get_auxdata() and sqlite4_set_auxdata()
 ** interface.
 **
 ** The test_auxdata() SQL function attempts to register each of its arguments
@@ -181,21 +181,21 @@ static void test_agg_errmsg16_final(sqlite3_context *ctx){
 ** registration, the result for that argument is 1.  The overall result
 ** is the individual argument results separated by spaces.
 */
-static void free_test_auxdata(void *p) {sqlite3_free(p);}
+static void free_test_auxdata(void *p) {sqlite4_free(p);}
 static void test_auxdata(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
   int i;
   char *zRet = testContextMalloc(pCtx, nArg*2);
   if( !zRet ) return;
   memset(zRet, 0, nArg*2);
   for(i=0; i<nArg; i++){
-    char const *z = (char*)sqlite3_value_text(argv[i]);
+    char const *z = (char*)sqlite4_value_text(argv[i]);
     if( z ){
       int n;
-      char *zAux = sqlite3_get_auxdata(pCtx, i);
+      char *zAux = sqlite4_get_auxdata(pCtx, i);
       if( zAux ){
         zRet[i*2] = '1';
         assert( strcmp(zAux,z)==0 );
@@ -206,12 +206,12 @@ static void test_auxdata(
       zAux = testContextMalloc(pCtx, n);
       if( zAux ){
         memcpy(zAux, z, n);
-        sqlite3_set_auxdata(pCtx, i, zAux, free_test_auxdata);
+        sqlite4_set_auxdata(pCtx, i, zAux, free_test_auxdata);
       }
       zRet[i*2+1] = ' ';
     }
   }
-  sqlite3_result_text(pCtx, zRet, 2*nArg-1, free_test_auxdata);
+  sqlite4_result_text(pCtx, zRet, 2*nArg-1, free_test_auxdata);
 }
 
 /*
@@ -220,13 +220,13 @@ static void test_auxdata(
 ** second argument exists, it becomes the error code.
 */
 static void test_error(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
-  sqlite3_result_error(pCtx, (char*)sqlite3_value_text(argv[0]), -1);
+  sqlite4_result_error(pCtx, (char*)sqlite4_value_text(argv[0]), -1);
   if( nArg==2 ){
-    sqlite3_result_error_code(pCtx, sqlite3_value_int(argv[1]));
+    sqlite4_result_error_code(pCtx, sqlite4_value_int(argv[1]));
   }
 }
 
@@ -237,23 +237,23 @@ static void test_error(
 ** in a result set.
 */
 static void counterFunc(
-  sqlite3_context *pCtx,   /* Function context */
+  sqlite4_context *pCtx,   /* Function context */
   int nArg,                /* Number of function arguments */
-  sqlite3_value **argv     /* Values for all function arguments */
+  sqlite4_value **argv     /* Values for all function arguments */
 ){
-  int *pCounter = (int*)sqlite3_get_auxdata(pCtx, 0);
+  int *pCounter = (int*)sqlite4_get_auxdata(pCtx, 0);
   if( pCounter==0 ){
-    pCounter = sqlite3_malloc( sizeof(*pCounter) );
+    pCounter = sqlite4_malloc( sizeof(*pCounter) );
     if( pCounter==0 ){
-      sqlite3_result_error_nomem(pCtx);
+      sqlite4_result_error_nomem(pCtx);
       return;
     }
-    *pCounter = sqlite3_value_int(argv[0]);
-    sqlite3_set_auxdata(pCtx, 0, pCounter, sqlite3_free);
+    *pCounter = sqlite4_value_int(argv[0]);
+    sqlite4_set_auxdata(pCtx, 0, pCounter, sqlite4_free);
   }else{
     ++*pCounter;
   }
-  sqlite3_result_int(pCtx, *pCounter);
+  sqlite4_result_int(pCtx, *pCounter);
 }
 
 
@@ -270,17 +270,17 @@ static void counterFunc(
 ** first argument do not invalidate the second argument.
 */
 static void test_isolation(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
 #ifndef SQLITE_OMIT_UTF16
-  sqlite3_value_text16(argv[0]);
-  sqlite3_value_text(argv[0]);
-  sqlite3_value_text16(argv[0]);
-  sqlite3_value_text(argv[0]);
+  sqlite4_value_text16(argv[0]);
+  sqlite4_value_text(argv[0]);
+  sqlite4_value_text16(argv[0]);
+  sqlite4_value_text(argv[0]);
 #endif
-  sqlite3_result_value(pCtx, argv[1]);
+  sqlite4_result_value(pCtx, argv[1]);
 }
 
 /*
@@ -288,30 +288,30 @@ static void test_isolation(
 ** first column of the first row of the result set.
 */
 static void test_eval(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
-  sqlite3_stmt *pStmt;
+  sqlite4_stmt *pStmt;
   int rc;
-  sqlite3 *db = sqlite3_context_db_handle(pCtx);
+  sqlite4 *db = sqlite4_context_db_handle(pCtx);
   const char *zSql;
 
-  zSql = (char*)sqlite3_value_text(argv[0]);
-  rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, 0);
+  zSql = (char*)sqlite4_value_text(argv[0]);
+  rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
   if( rc==SQLITE_OK ){
-    rc = sqlite3_step(pStmt);
+    rc = sqlite4_step(pStmt);
     if( rc==SQLITE_ROW ){
-      sqlite3_result_value(pCtx, sqlite3_column_value(pStmt, 0));
+      sqlite4_result_value(pCtx, sqlite4_column_value(pStmt, 0));
     }
-    rc = sqlite3_finalize(pStmt);
+    rc = sqlite4_finalize(pStmt);
   }
   if( rc ){
     char *zErr;
     assert( pStmt==0 );
-    zErr = sqlite3_mprintf("sqlite3_prepare_v2() error: %s",sqlite3_errmsg(db));
-    sqlite3_result_text(pCtx, zErr, -1, sqlite3_free);
-    sqlite3_result_error_code(pCtx, rc);
+    zErr = sqlite4_mprintf("sqlite4_prepare_v2() error: %s",sqlite4_errmsg(db));
+    sqlite4_result_text(pCtx, zErr, -1, sqlite4_free);
+    sqlite4_result_error_code(pCtx, rc);
   }
 }
 
@@ -344,26 +344,26 @@ static void testHexToBin(const char *zIn, char *zOut){
 **      hex_to_utf16be(HEX)
 **
 ** Convert the input string from HEX into binary.  Then return the
-** result using sqlite3_result_text16le().
+** result using sqlite4_result_text16le().
 */
 #ifndef SQLITE_OMIT_UTF16
 static void testHexToUtf16be(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
   int n;
   const char *zIn;
   char *zOut;
   assert( nArg==1 );
-  n = sqlite3_value_bytes(argv[0]);
-  zIn = (const char*)sqlite3_value_text(argv[0]);
-  zOut = sqlite3_malloc( n/2 );
+  n = sqlite4_value_bytes(argv[0]);
+  zIn = (const char*)sqlite4_value_text(argv[0]);
+  zOut = sqlite4_malloc( n/2 );
   if( zOut==0 ){
-    sqlite3_result_error_nomem(pCtx);
+    sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite3_result_text16be(pCtx, zOut, n/2, sqlite3_free);
+    sqlite4_result_text16be(pCtx, zOut, n/2, sqlite4_free);
   }
 }
 #endif
@@ -372,25 +372,25 @@ static void testHexToUtf16be(
 **      hex_to_utf8(HEX)
 **
 ** Convert the input string from HEX into binary.  Then return the
-** result using sqlite3_result_text16le().
+** result using sqlite4_result_text16le().
 */
 static void testHexToUtf8(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
   int n;
   const char *zIn;
   char *zOut;
   assert( nArg==1 );
-  n = sqlite3_value_bytes(argv[0]);
-  zIn = (const char*)sqlite3_value_text(argv[0]);
-  zOut = sqlite3_malloc( n/2 );
+  n = sqlite4_value_bytes(argv[0]);
+  zIn = (const char*)sqlite4_value_text(argv[0]);
+  zOut = sqlite4_malloc( n/2 );
   if( zOut==0 ){
-    sqlite3_result_error_nomem(pCtx);
+    sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite3_result_text(pCtx, zOut, n/2, sqlite3_free);
+    sqlite4_result_text(pCtx, zOut, n/2, sqlite4_free);
   }
 }
 
@@ -398,36 +398,36 @@ static void testHexToUtf8(
 **      hex_to_utf16le(HEX)
 **
 ** Convert the input string from HEX into binary.  Then return the
-** result using sqlite3_result_text16le().
+** result using sqlite4_result_text16le().
 */
 #ifndef SQLITE_OMIT_UTF16
 static void testHexToUtf16le(
-  sqlite3_context *pCtx, 
+  sqlite4_context *pCtx, 
   int nArg,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
   int n;
   const char *zIn;
   char *zOut;
   assert( nArg==1 );
-  n = sqlite3_value_bytes(argv[0]);
-  zIn = (const char*)sqlite3_value_text(argv[0]);
-  zOut = sqlite3_malloc( n/2 );
+  n = sqlite4_value_bytes(argv[0]);
+  zIn = (const char*)sqlite4_value_text(argv[0]);
+  zOut = sqlite4_malloc( n/2 );
   if( zOut==0 ){
-    sqlite3_result_error_nomem(pCtx);
+    sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite3_result_text16le(pCtx, zOut, n/2, sqlite3_free);
+    sqlite4_result_text16le(pCtx, zOut, n/2, sqlite4_free);
   }
 }
 #endif
 
-static int registerTestFunctions(sqlite3 *db){
+static int registerTestFunctions(sqlite4 *db){
   static const struct {
      char *zName;
      signed char nArg;
      unsigned char eTextRep; /* 1: UTF-16.  0: UTF-8 */
-     void (*xFunc)(sqlite3_context*,int,sqlite3_value **);
+     void (*xFunc)(sqlite4_context*,int,sqlite4_value **);
   } aFuncs[] = {
     { "randstr",               2, SQLITE_UTF8, randStr    },
     { "test_destructor",       1, SQLITE_UTF8, test_destructor},
@@ -448,11 +448,11 @@ static int registerTestFunctions(sqlite3 *db){
   int i;
 
   for(i=0; i<sizeof(aFuncs)/sizeof(aFuncs[0]); i++){
-    sqlite3_create_function(db, aFuncs[i].zName, aFuncs[i].nArg,
+    sqlite4_create_function(db, aFuncs[i].zName, aFuncs[i].nArg,
         aFuncs[i].eTextRep, 0, aFuncs[i].xFunc, 0, 0);
   }
 
-  sqlite3_create_function(db, "test_agg_errmsg16", 0, SQLITE_ANY, 0, 0, 
+  sqlite4_create_function(db, "test_agg_errmsg16", 0, SQLITE_ANY, 0, 0, 
       test_agg_errmsg16_step, test_agg_errmsg16_final);
       
   return SQLITE_OK;
@@ -461,7 +461,7 @@ static int registerTestFunctions(sqlite3 *db){
 /*
 ** TCLCMD:  autoinstall_test_functions
 **
-** Invoke this TCL command to use sqlite3_auto_extension() to cause
+** Invoke this TCL command to use sqlite4_auto_extension() to cause
 ** the standard set of test functions to be loaded into each new
 ** database connection.
 */
@@ -471,10 +471,10 @@ static int autoinstall_test_funcs(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  extern int Md5_Register(sqlite3*);
-  int rc = sqlite3_auto_extension((void*)registerTestFunctions);
+  extern int Md5_Register(sqlite4*);
+  int rc = sqlite4_auto_extension((void*)registerTestFunctions);
   if( rc==SQLITE_OK ){
-    rc = sqlite3_auto_extension((void*)Md5_Register);
+    rc = sqlite4_auto_extension((void*)Md5_Register);
   }
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return TCL_OK;
@@ -483,14 +483,14 @@ static int autoinstall_test_funcs(
 /*
 ** A bogus step function and finalizer function.
 */
-static void tStep(sqlite3_context *a, int b, sqlite3_value **c){}
-static void tFinal(sqlite3_context *a){}
+static void tStep(sqlite4_context *a, int b, sqlite4_value **c){}
+static void tFinal(sqlite4_context *a){}
 
 
 /*
 ** tclcmd:  abuse_create_function
 **
-** Make various calls to sqlite3_create_function that do not have valid
+** Make various calls to sqlite4_create_function that do not have valid
 ** parameters.  Verify that the error condition is detected and reported.
 */
 static int abuse_create_function(
@@ -499,35 +499,35 @@ static int abuse_create_function(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  extern int getDbPointer(Tcl_Interp*, const char*, sqlite3**);
-  sqlite3 *db;
+  extern int getDbPointer(Tcl_Interp*, const char*, sqlite4**);
+  sqlite4 *db;
   int rc;
   int mxArg;
 
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
 
-  rc = sqlite3_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep,tStep,tFinal);
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep,tStep,tFinal);
   if( rc!=SQLITE_MISUSE ) goto abuse_err;
 
-  rc = sqlite3_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep, tStep, 0);
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep, tStep, 0);
   if( rc!=SQLITE_MISUSE ) goto abuse_err;
 
-  rc = sqlite3_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep, 0, tFinal);
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep, 0, tFinal);
   if( rc!=SQLITE_MISUSE) goto abuse_err;
 
-  rc = sqlite3_create_function(db, "tx", 1, SQLITE_UTF8, 0, 0, 0, tFinal);
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, 0, 0, tFinal);
   if( rc!=SQLITE_MISUSE ) goto abuse_err;
 
-  rc = sqlite3_create_function(db, "tx", 1, SQLITE_UTF8, 0, 0, tStep, 0);
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, 0, tStep, 0);
   if( rc!=SQLITE_MISUSE ) goto abuse_err;
 
-  rc = sqlite3_create_function(db, "tx", -2, SQLITE_UTF8, 0, tStep, 0, 0);
+  rc = sqlite4_create_function(db, "tx", -2, SQLITE_UTF8, 0, tStep, 0, 0);
   if( rc!=SQLITE_MISUSE ) goto abuse_err;
 
-  rc = sqlite3_create_function(db, "tx", 128, SQLITE_UTF8, 0, tStep, 0, 0);
+  rc = sqlite4_create_function(db, "tx", 128, SQLITE_UTF8, 0, tStep, 0, 0);
   if( rc!=SQLITE_MISUSE ) goto abuse_err;
 
-  rc = sqlite3_create_function(db, "funcxx"
+  rc = sqlite4_create_function(db, "funcxx"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789"
@@ -540,9 +540,9 @@ static int abuse_create_function(
   ** a no-op function (that always returns NULL) and which has the
   ** maximum-length function name and the maximum number of parameters.
   */
-  sqlite3_limit(db, SQLITE_LIMIT_FUNCTION_ARG, 10000);
-  mxArg = sqlite3_limit(db, SQLITE_LIMIT_FUNCTION_ARG, -1);
-  rc = sqlite3_create_function(db, "nullx"
+  sqlite4_limit(db, SQLITE_LIMIT_FUNCTION_ARG, 10000);
+  mxArg = sqlite4_limit(db, SQLITE_LIMIT_FUNCTION_ARG, -1);
+  rc = sqlite4_create_function(db, "nullx"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789"
@@ -554,7 +554,7 @@ static int abuse_create_function(
   return TCL_OK;
 
 abuse_err:
-  Tcl_AppendResult(interp, "sqlite3_create_function abused test failed", 
+  Tcl_AppendResult(interp, "sqlite4_create_function abused test failed", 
                    (char*)0);
   return TCL_ERROR;
 }
@@ -571,13 +571,13 @@ int Sqlitetest_func_Init(Tcl_Interp *interp){
      { "abuse_create_function",         abuse_create_function  },
   };
   int i;
-  extern int Md5_Register(sqlite3*);
+  extern int Md5_Register(sqlite4*);
 
   for(i=0; i<sizeof(aObjCmd)/sizeof(aObjCmd[0]); i++){
     Tcl_CreateObjCommand(interp, aObjCmd[i].zName, aObjCmd[i].xProc, 0, 0);
   }
-  sqlite3_initialize();
-  sqlite3_auto_extension((void*)registerTestFunctions);
-  sqlite3_auto_extension((void*)Md5_Register);
+  sqlite4_initialize();
+  sqlite4_auto_extension((void*)registerTestFunctions);
+  sqlite4_auto_extension((void*)Md5_Register);
   return TCL_OK;
 }

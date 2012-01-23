@@ -31,7 +31,7 @@ ifcapable !vtab {
 
 # Register the echo module
 db cache size 0
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 
 do_test vtab4-1.1 {
   execsql {

@@ -53,7 +53,7 @@ do_test walbak-1.1 {
   file size bak.db
 } [expr 3*1024]
 do_test walbak-1.2 {
-  sqlite3 db2 bak.db
+  sqlite4 db2 bak.db
   execsql { 
     SELECT * FROM t1;
     PRAGMA main.journal_mode;
@@ -110,7 +110,7 @@ proc sig {{db db}} {
 }
 db close
 delete_file test.db
-sqlite3 db test.db
+sqlite4 db test.db
 do_test walbak-2.1 {
   execsql { PRAGMA journal_mode = WAL }
   execsql {
@@ -128,12 +128,12 @@ do_test walbak-2.1 {
 } {}
 do_test walbak-2.2 {
   db backup abc.db
-  sqlite3 db2 abc.db
+  sqlite4 db2 abc.db
   string compare [sig db] [sig db2]
 } {0}
 
 do_test walbak-2.3 {
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   B step 50
   execsql { UPDATE t1 SET b = randomblob(500) }
   list [B step 1000] [B finish]
@@ -144,9 +144,9 @@ do_test walbak-2.4 {
 
 do_test walbak-2.5 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { PRAGMA cache_size = 10 }
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   B step 50
   execsql {
     BEGIN;
@@ -167,9 +167,9 @@ do_test walbak-2.8 {
 
 do_test walbak-2.9 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { PRAGMA cache_size = 10 }
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   B step 50
   execsql {
     BEGIN;
@@ -207,29 +207,29 @@ db close
 #
 foreach {tn setup} {
   1 {
-    sqlite3 db  test.db
-    sqlite3 db2 :memory:
+    sqlite4 db  test.db
+    sqlite4 db2 :memory:
     db  eval { PRAGMA page_size = 1024 ; PRAGMA journal_mode = WAL }
     db2 eval { PRAGMA page_size = 1024 }
   }
 
   2 {
-    sqlite3 db  test.db
-    sqlite3 db2 ""
+    sqlite4 db  test.db
+    sqlite4 db2 ""
     db  eval { PRAGMA page_size = 1024 ; PRAGMA journal_mode = WAL }
     db2 eval { PRAGMA page_size = 1024 }
   }
 
   3 {
-    sqlite3 db  test.db
-    sqlite3 db2 test.db2
+    sqlite4 db  test.db
+    sqlite4 db2 test.db2
     db  eval { PRAGMA page_size = 1024 ; PRAGMA journal_mode = WAL }
     db2 eval { PRAGMA page_size = 1024 ; PRAGMA journal_mode = PERSIST }
   }
 
   4 {
-    sqlite3 db  test.db
-    sqlite3 db2 test.db2
+    sqlite4 db  test.db
+    sqlite4 db2 test.db2
     db  eval { PRAGMA page_size = 1024 ; PRAGMA journal_mode = WAL }
     db2 eval { 
       PRAGMA page_size = 2048;
@@ -253,7 +253,7 @@ foreach {tn setup} {
   } {1 2 3 4}
 
   do_test walbak-3.$tn.2 {
-    sqlite3_backup B db2 main db main
+    sqlite4_backup B db2 main db main
     B step 10000
     B finish
     execsql { SELECT * FROM t1 } db2
@@ -268,7 +268,7 @@ foreach {tn setup} {
   } {1 2 3 4 5 6 7 8}
 
   do_test walbak-3.$tn.4 {
-    sqlite3_backup B db main db2 main
+    sqlite4_backup B db main db2 main
     B step 10000
     B finish
     execsql { SELECT * FROM t1 }
@@ -320,7 +320,7 @@ foreach {tn src dest dest_final} {
   forcedelete test.db test.db2
 
   do_test walbak-4.$tn.1 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     db eval "PRAGMA journal_mode = $src"
     db eval {
       CREATE TABLE t1(a, b);
@@ -328,7 +328,7 @@ foreach {tn src dest dest_final} {
       INSERT INTO t1 VALUES('III', 'IV');
     }
 
-    sqlite3 db2 test.db2
+    sqlite4 db2 test.db2
     db2 eval "PRAGMA journal_mode = $dest"
     db2 eval {
       CREATE TABLE t2(x, y);
@@ -349,7 +349,7 @@ foreach {tn src dest dest_final} {
 
   db2 close
   do_test walbak-4.$tn.6 { file exists test.db2-wal } 0
-  sqlite3 db2 test.db2
+  sqlite4 db2 test.db2
   do_test walbak-4.$tn.7 { execsql { PRAGMA journal_mode } db2 } $dest_final
 }
 

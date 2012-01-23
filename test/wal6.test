@@ -30,7 +30,7 @@ set all_journal_modes {delete persist truncate memory off}
 foreach jmode $all_journal_modes {
 
 	do_test wal6-1.0.$jmode {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql "PRAGMA journal_mode = $jmode;"
 	} $jmode
 
@@ -52,7 +52,7 @@ if {$tcl_platform(platform)=="windows"} {
 }
 
 	do_test wal6-1.2.$jmode {
-	  sqlite3 db2 test.db
+	  sqlite4 db2 test.db
 	  execsql {
 		PRAGMA journal_mode=WAL;
 		INSERT INTO t1 VALUES(3,4);
@@ -62,7 +62,7 @@ if {$tcl_platform(platform)=="windows"} {
 
 if {$tcl_platform(platform)=="windows"} {
   if {$jmode=="persist" || $jmode=="truncate"} {
-	  sqlite3 db test.db
+	  sqlite4 db test.db
   }
 }
 

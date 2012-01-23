@@ -130,7 +130,7 @@ do_test check-2.2 {
   }
 } {1 2.2 three}
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 do_test check-2.3 {
   execsql {
     INSERT INTO t2 VALUES(NULL, NULL, NULL);

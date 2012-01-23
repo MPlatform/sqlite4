@@ -25,7 +25,7 @@ ifcapable !fts3 {
 proc build_database {nRow param} {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   set vocab [list    aa ab ac   ba bb bc    ca cb cc   da]
   expr srand(0)

@@ -23,7 +23,7 @@ ifcapable !shared_cache||!attach {
   finish_test
   return
 }
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 do_test tkt3793-1.1 {
   # This is taken from shared.test.  The Windows VFS expands 
@@ -32,11 +32,11 @@ do_test tkt3793-1.1 {
   # for Windows platform, we get around this and get a separate
   # connection.
   if {$::tcl_platform(platform)=="unix"} {
-    sqlite3 db1 test.db
-    sqlite3 db2 test.db
+    sqlite4 db1 test.db
+    sqlite4 db2 test.db
   } else {
-    sqlite3 db1 TEST.DB
-    sqlite3 db2 TEST.DB
+    sqlite4 db1 TEST.DB
+    sqlite4 db2 TEST.DB
   }
   execsql {
     BEGIN;
@@ -93,8 +93,8 @@ set x 0
 # SQLite will attempt to upgrade to an EXCLUSIVE lock, and hence invoke
 # the busy-handler. The tests here verify that the correct busy-handler
 # function is invoked (the busy-handler associated with the database
-# connection that called sqlite3_step()). When bug #3793 existed, sometimes
-# the [db2] busy-handler was invoked from within the call to sqlite3_step()
+# connection that called sqlite4_step()). When bug #3793 existed, sometimes
+# the [db2] busy-handler was invoked from within the call to sqlite4_step()
 # associated with [db1]. 
 #
 # Note: Before the bug was fixed, if [db2] was opened with the "-fullmutex 1"
@@ -117,5 +117,5 @@ do_test tkt3793-3 {
   db2 close
 } {}
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

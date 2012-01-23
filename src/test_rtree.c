@@ -13,7 +13,7 @@
 ** is not included in the SQLite library. 
 */
 
-#include <sqlite3.h>
+#include <sqlite4.h>
 
 /* Solely for the UNUSED_PARAMETER() macro. */
 #include "sqliteInt.h"
@@ -40,14 +40,14 @@ struct Circle {
 ** Destructor function for Circle objects allocated by circle_geom().
 */
 static void circle_del(void *p){
-  sqlite3_free(p);
+  sqlite4_free(p);
 }
 
 /*
 ** Implementation of "circle" r-tree geometry callback.
 */
 static int circle_geom(
-  sqlite3_rtree_geometry *p,
+  sqlite4_rtree_geometry *p,
   int nCoord, 
   double *aCoord, 
   int *pRes
@@ -72,7 +72,7 @@ static int circle_geom(
 
     /* Allocate a structure to cache parameter data in. Return SQLITE_NOMEM
     ** if the allocation fails. */
-    pCircle = (Circle *)(p->pUser = sqlite3_malloc(sizeof(Circle)));
+    pCircle = (Circle *)(p->pUser = sqlite4_malloc(sizeof(Circle)));
     if( !pCircle ) return SQLITE_NOMEM;
     p->xDelUser = circle_del;
 
@@ -167,7 +167,7 @@ struct Cube {
 };
 
 static void cube_context_free(void *p){
-  sqlite3_free(p);
+  sqlite4_free(p);
 }
 
 /*
@@ -187,7 +187,7 @@ static int gHere = 42;
 ** The width, height and depth parameters must all be greater than zero.
 */
 static int cube_geom(
-  sqlite3_rtree_geometry *p,
+  sqlite4_rtree_geometry *p,
   int nCoord, 
   double *aCoord, 
   int *piRes
@@ -202,7 +202,7 @@ static int cube_geom(
     ){
       return SQLITE_ERROR;
     }
-    pCube = (Cube *)sqlite3_malloc(sizeof(Cube));
+    pCube = (Cube *)sqlite4_malloc(sizeof(Cube));
     if( !pCube ){
       return SQLITE_NOMEM;
     }
@@ -245,9 +245,9 @@ static int register_cube_geom(
   UNUSED_PARAMETER(objc);
   UNUSED_PARAMETER(objv);
 #else
-  extern int getDbPointer(Tcl_Interp*, const char*, sqlite3**);
-  extern const char *sqlite3TestErrorName(int);
-  sqlite3 *db;
+  extern int getDbPointer(Tcl_Interp*, const char*, sqlite4**);
+  extern const char *sqlite4TestErrorName(int);
+  sqlite4 *db;
   int rc;
 
   if( objc!=2 ){
@@ -255,8 +255,8 @@ static int register_cube_geom(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  rc = sqlite3_rtree_geometry_callback(db, "cube", cube_geom, (void *)&gHere);
-  Tcl_SetResult(interp, (char *)sqlite3TestErrorName(rc), TCL_STATIC);
+  rc = sqlite4_rtree_geometry_callback(db, "cube", cube_geom, (void *)&gHere);
+  Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
 #endif
   return TCL_OK;
 }
@@ -273,9 +273,9 @@ static int register_circle_geom(
   UNUSED_PARAMETER(objc);
   UNUSED_PARAMETER(objv);
 #else
-  extern int getDbPointer(Tcl_Interp*, const char*, sqlite3**);
-  extern const char *sqlite3TestErrorName(int);
-  sqlite3 *db;
+  extern int getDbPointer(Tcl_Interp*, const char*, sqlite4**);
+  extern const char *sqlite4TestErrorName(int);
+  sqlite4 *db;
   int rc;
 
   if( objc!=2 ){
@@ -283,8 +283,8 @@ static int register_circle_geom(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  rc = sqlite3_rtree_geometry_callback(db, "circle", circle_geom, 0);
-  Tcl_SetResult(interp, (char *)sqlite3TestErrorName(rc), TCL_STATIC);
+  rc = sqlite4_rtree_geometry_callback(db, "circle", circle_geom, 0);
+  Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
 #endif
   return TCL_OK;
 }

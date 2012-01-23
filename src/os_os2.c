@@ -21,7 +21,7 @@
 ** A Note About Memory Allocation:
 **
 ** This driver uses malloc()/free() directly rather than going through
-** the SQLite-wrappers sqlite3_malloc()/sqlite3_free().  Those wrappers
+** the SQLite-wrappers sqlite4_malloc()/sqlite4_free().  Those wrappers
 ** are designed for use on embedded systems where memory is scarce and
 ** malloc failures happen frequently.  OS/2 does not typically run on
 ** embedded systems, and when it does the developers normally have bigger
@@ -61,11 +61,11 @@ typedef struct os2ShmNode os2ShmNode;   /* A shared descritive memory node */
 typedef struct os2ShmLink os2ShmLink;   /* A connection to shared-memory */
 
 /*
-** The os2File structure is subclass of sqlite3_file specific for the OS/2
+** The os2File structure is subclass of sqlite4_file specific for the OS/2
 ** protability layer.
 */
 struct os2File {
-  const sqlite3_io_methods *pMethod;  /* Always the first entry */
+  const sqlite4_io_methods *pMethod;  /* Always the first entry */
   HFILE h;                  /* Handle for accessing the file */
   int flags;                /* Flags provided to os2Open() */
   int locktype;             /* Type of lock currently held on this file */
@@ -86,13 +86,13 @@ struct os2File {
 
 /*****************************************************************************
 ** The next group of routines implement the I/O methods specified
-** by the sqlite3_io_methods object.
+** by the sqlite4_io_methods object.
 ******************************************************************************/
 
 /*
 ** Close a file.
 */
-static int os2Close( sqlite3_file *id ){
+static int os2Close( sqlite4_file *id ){
   APIRET rc;
   os2File *pFile = (os2File*)id;
 
@@ -120,10 +120,10 @@ static int os2Close( sqlite3_file *id ){
 ** wrong.
 */
 static int os2Read(
-  sqlite3_file *id,               /* File to read from */
+  sqlite4_file *id,               /* File to read from */
   void *pBuf,                     /* Write content into this buffer */
   int amt,                        /* Number of bytes to read */
-  sqlite3_int64 offset            /* Begin reading at this offset */
+  sqlite4_int64 offset            /* Begin reading at this offset */
 ){
   ULONG fileLocation = 0L;
   ULONG got;
@@ -151,10 +151,10 @@ static int os2Read(
 ** or some other error code on failure.
 */
 static int os2Write(
-  sqlite3_file *id,               /* File to write into */
+  sqlite4_file *id,               /* File to write into */
   const void *pBuf,               /* The bytes to be written */
   int amt,                        /* Number of bytes to write */
-  sqlite3_int64 offset            /* Offset into the file to begin writing at */
+  sqlite4_int64 offset            /* Offset into the file to begin writing at */
 ){
   ULONG fileLocation = 0L;
   APIRET rc = NO_ERROR;
@@ -182,7 +182,7 @@ static int os2Write(
 /*
 ** Truncate an open file to a specified size
 */
-static int os2Truncate( sqlite3_file *id, i64 nByte ){
+static int os2Truncate( sqlite4_file *id, i64 nByte ){
   APIRET rc;
   os2File *pFile = (os2File*)id;
   assert( id!=0 );
@@ -207,21 +207,21 @@ static int os2Truncate( sqlite3_file *id, i64 nByte ){
 ** Count the number of fullsyncs and normal syncs.  This is used to test
 ** that syncs and fullsyncs are occuring at the right times.
 */
-int sqlite3_sync_count = 0;
-int sqlite3_fullsync_count = 0;
+int sqlite4_sync_count = 0;
+int sqlite4_fullsync_count = 0;
 #endif
 
 /*
 ** Make sure all writes to a particular file are committed to disk.
 */
-static int os2Sync( sqlite3_file *id, int flags ){
+static int os2Sync( sqlite4_file *id, int flags ){
   os2File *pFile = (os2File*)id;
   OSTRACE(( "SYNC %d lock=%d\n", pFile->h, pFile->locktype ));
 #ifdef SQLITE_TEST
   if( flags & SQLITE_SYNC_FULL){
-    sqlite3_fullsync_count++;
+    sqlite4_fullsync_count++;
   }
-  sqlite3_sync_count++;
+  sqlite4_sync_count++;
 #endif
   /* If we compiled with the SQLITE_NO_SYNC flag, then syncing is a
   ** no-op
@@ -237,7 +237,7 @@ static int os2Sync( sqlite3_file *id, int flags ){
 /*
 ** Determine the current size of a file in bytes
 */
-static int os2FileSize( sqlite3_file *id, sqlite3_int64 *pSize ){
+static int os2FileSize( sqlite4_file *id, sqlite4_int64 *pSize ){
   APIRET rc = NO_ERROR;
   FILESTATUS3 fsts3FileInfo;
   memset(&fsts3FileInfo, 0, sizeof(fsts3FileInfo));
@@ -314,7 +314,7 @@ static int unlockReadLock( os2File *id ){
 ** It is not possible to lower the locking level one step at a time.  You
 ** must go straight to locking level 0.
 */
-static int os2Lock( sqlite3_file *id, int locktype ){
+static int os2Lock( sqlite4_file *id, int locktype ){
   int rc = SQLITE_OK;       /* Return code from subroutines */
   APIRET res = NO_ERROR;    /* Result of an OS/2 lock call */
   int newLocktype;       /* Set pFile->locktype to this value before exiting */
@@ -329,7 +329,7 @@ static int os2Lock( sqlite3_file *id, int locktype ){
 
   /* If there is already a lock of this type or more restrictive on the
   ** os2File, do nothing. Don't use the end_lock: exit path, as
-  ** sqlite3_mutex_enter() hasn't been called yet.
+  ** sqlite4_mutex_enter() hasn't been called yet.
   */
   if( pFile->locktype>=locktype ){
     OSTRACE(( "LOCK %d %d ok (already held)\n", pFile->h, locktype ));
@@ -451,7 +451,7 @@ static int os2Lock( sqlite3_file *id, int locktype ){
 ** file by this or any other process. If such a lock is held, return
 ** non-zero, otherwise zero.
 */
-static int os2CheckReservedLock( sqlite3_file *id, int *pOut ){
+static int os2CheckReservedLock( sqlite4_file *id, int *pOut ){
   int r = 0;
   os2File *pFile = (os2File*)id;
   assert( pFile!=0 );
@@ -497,7 +497,7 @@ static int os2CheckReservedLock( sqlite3_file *id, int *pOut ){
 ** is NO_LOCK.  If the second argument is SHARED_LOCK then this routine
 ** might return SQLITE_IOERR;
 */
-static int os2Unlock( sqlite3_file *id, int locktype ){
+static int os2Unlock( sqlite4_file *id, int locktype ){
   int type;
   os2File *pFile = (os2File*)id;
   APIRET rc = SQLITE_OK;
@@ -553,7 +553,7 @@ static int os2Unlock( sqlite3_file *id, int locktype ){
 /*
 ** Control and query of the open file handle.
 */
-static int os2FileControl(sqlite3_file *id, int op, void *pArg){
+static int os2FileControl(sqlite4_file *id, int op, void *pArg){
   switch( op ){
     case SQLITE_FCNTL_LOCKSTATE: {
       *(int*)pArg = ((os2File*)id)->locktype;
@@ -566,7 +566,7 @@ static int os2FileControl(sqlite3_file *id, int op, void *pArg){
       return SQLITE_OK;
     }
     case SQLITE_FCNTL_SIZE_HINT: {
-      sqlite3_int64 sz = *(sqlite3_int64*)pArg;
+      sqlite4_int64 sz = *(sqlite4_int64*)pArg;
       SimulateIOErrorBenign(1);
       os2Truncate(id, sz);
       SimulateIOErrorBenign(0);
@@ -589,7 +589,7 @@ static int os2FileControl(sqlite3_file *id, int op, void *pArg){
 ** a database and its journal file) that the sector size will be the
 ** same for both.
 */
-static int os2SectorSize(sqlite3_file *id){
+static int os2SectorSize(sqlite4_file *id){
   UNUSED_PARAMETER(id);
   return SQLITE_DEFAULT_SECTOR_SIZE;
 }
@@ -597,7 +597,7 @@ static int os2SectorSize(sqlite3_file *id){
 /*
 ** Return a vector of device characteristics.
 */
-static int os2DeviceCharacteristics(sqlite3_file *id){
+static int os2DeviceCharacteristics(sqlite4_file *id){
   UNUSED_PARAMETER(id);
   return SQLITE_IOCAP_UNDELETABLE_WHEN_OPEN;
 }
@@ -722,14 +722,14 @@ static void _ERR_TRACE( const char *fmt, ... ) {
 **   os2ShmLeaveMutex()
 */
 static void os2ShmEnterMutex(void){
-  sqlite3_mutex_enter(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_MASTER));
+  sqlite4_mutex_enter(sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MASTER));
 }
 static void os2ShmLeaveMutex(void){
-  sqlite3_mutex_leave(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_MASTER));
+  sqlite4_mutex_leave(sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MASTER));
 }
 #ifdef SQLITE_DEBUG
 static int os2ShmMutexHeld(void) {
-  return sqlite3_mutex_held(sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_MASTER));
+  return sqlite4_mutex_held(sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MASTER));
 }
 int GetCurrentProcessId(void) {
   PPIB pib;
@@ -762,7 +762,7 @@ int GetCurrentProcessId(void) {
 **
 */
 struct os2ShmNode {
-  sqlite3_mutex *mutex;      /* Mutex to access this object */
+  sqlite4_mutex *mutex;      /* Mutex to access this object */
   os2ShmNode *pNext;         /* Next in list of all os2ShmNode objects */
 
   int szRegion;              /* Size of shared-memory regions */
@@ -838,7 +838,7 @@ static int os2ShmSystemLock(
   ULONG mode, timeout;
 
   /* Access to the os2ShmNode object is serialized by the caller */
-  assert( sqlite3_mutex_held(pNode->mutex) || pNode->nRef==0 );
+  assert( sqlite4_mutex_held(pNode->mutex) || pNode->nRef==0 );
 
   mode = 1;     /* shared lock */
   timeout = 0;  /* no wait */
@@ -896,7 +896,7 @@ static int os2OpenSharedMemory( os2File *fd, int szRegion ) {
   shmName[10+1] = '!';
 
   /* Allocate link object (we free it later in case of failure) */
-  pLink = sqlite3_malloc( sizeof(*pLink) );
+  pLink = sqlite4_malloc( sizeof(*pLink) );
   if( !pLink )
     return SQLITE_NOMEM;
 
@@ -910,7 +910,7 @@ static int os2OpenSharedMemory( os2File *fd, int szRegion ) {
 
   /* Not found: allocate a new node */
   if( !pNode ) {
-    pNode = sqlite3_malloc( sizeof(*pNode) + cbShmName );
+    pNode = sqlite4_malloc( sizeof(*pNode) + cbShmName );
     if( pNode ) {
       memset(pNode, 0, sizeof(*pNode) );
       pNode->szRegion = szRegion;
@@ -927,12 +927,12 @@ static int os2OpenSharedMemory( os2File *fd, int szRegion ) {
                   OPEN_FLAGS_NOINHERIT | OPEN_FLAGS_FAIL_ON_ERROR,
                   NULL) != 0 ) {
 #endif
-        sqlite3_free(pNode);  
+        sqlite4_free(pNode);  
         rc = SQLITE_IOERR;
       } else {
-        pNode->mutex = sqlite3_mutex_alloc(SQLITE_MUTEX_FAST);
+        pNode->mutex = sqlite4_mutex_alloc(SQLITE_MUTEX_FAST);
         if( !pNode->mutex ) {
-          sqlite3_free(pNode);  
+          sqlite4_free(pNode);  
           rc = SQLITE_NOMEM;
         }
       }   
@@ -952,7 +952,7 @@ static int os2OpenSharedMemory( os2File *fd, int szRegion ) {
   }
 
   if( pNode ) {
-    sqlite3_mutex_enter(pNode->mutex);
+    sqlite4_mutex_enter(pNode->mutex);
 
     memset(pLink, 0, sizeof(*pLink));
 
@@ -963,11 +963,11 @@ static int os2OpenSharedMemory( os2File *fd, int szRegion ) {
 
     fd->pShmLink = pLink;
 
-    sqlite3_mutex_leave(pNode->mutex);
+    sqlite4_mutex_leave(pNode->mutex);
     
   } else {
     /* Error occured. Free our link object. */
-    sqlite3_free(pLink);  
+    sqlite4_free(pLink);  
   }
 
   os2ShmLeaveMutex();
@@ -1015,7 +1015,7 @@ static void os2PurgeShmNodes( int deleteFlag ) {
         /* Allow other processes to resize the shared memory */
         os2ShmSystemLock(pNode, _SHM_UNLCK, OS2_SHM_DMS, 1);
 
-        sqlite3_free(pNode->apRegion);
+        sqlite4_free(pNode->apRegion);
       }  
 
       DosClose(pNode->hLockFile);
@@ -1032,9 +1032,9 @@ static void os2PurgeShmNodes( int deleteFlag ) {
       }
 #endif
 
-      sqlite3_mutex_free(pNode->mutex);
+      sqlite4_mutex_free(pNode->mutex);
 
-      sqlite3_free(pNode);
+      sqlite4_free(pNode);
       
     } else {
       ppNode = &pNode->pNext;
@@ -1064,7 +1064,7 @@ static void os2PurgeShmNodes( int deleteFlag ) {
 ** memory and SQLITE_OK returned.
 */
 static int os2ShmMap(
-  sqlite3_file *id,               /* Handle open on database file */
+  sqlite4_file *id,               /* Handle open on database file */
   int iRegion,                    /* Region to retrieve */
   int szRegion,                   /* Size of regions */
   int bExtend,                    /* True to extend block if necessary */
@@ -1085,7 +1085,7 @@ static int os2ShmMap(
   if( rc == SQLITE_OK ) {
     pNode = pFile->pShmLink->pShmNode ;
     
-    sqlite3_mutex_enter(pNode->mutex);
+    sqlite4_mutex_enter(pNode->mutex);
     
     assert( szRegion==pNode->szRegion );
 
@@ -1094,7 +1094,7 @@ static int os2ShmMap(
       /* Prevent other processes from resizing the shared memory */
       os2ShmSystemLock(pNode, _SHM_WRLCK_WAIT, OS2_SHM_DMS, 1);
 
-      apRegion = sqlite3_realloc(
+      apRegion = sqlite4_realloc(
         pNode->apRegion, (iRegion + 1) * sizeof(apRegion[0]));
 
       if( apRegion ) {
@@ -1139,7 +1139,7 @@ static int os2ShmMap(
       *pp = pNode->apRegion[iRegion];
     }
 
-    sqlite3_mutex_leave(pNode->mutex);
+    sqlite4_mutex_leave(pNode->mutex);
   } 
 
   ERR_TRACE(rc, ("os2ShmMap: %s iRgn = %d, szRgn = %d, bExt = %d : %d\n", 
@@ -1156,7 +1156,7 @@ static int os2ShmMap(
 ** routine is a harmless no-op.
 */
 static int os2ShmUnmap(
-  sqlite3_file *id,               /* The underlying database file */
+  sqlite4_file *id,               /* The underlying database file */
   int deleteFlag                  /* Delete shared-memory if true */
 ){
   os2File *pFile = (os2File*)id;
@@ -1167,7 +1167,7 @@ static int os2ShmUnmap(
     os2ShmLink **ppLink;
     os2ShmNode *pNode = pLink->pShmNode;
 
-    sqlite3_mutex_enter(pNode->mutex);
+    sqlite4_mutex_enter(pNode->mutex);
     
     for( ppLink = &pNode->pFirst;
          *ppLink && *ppLink != pLink;
@@ -1184,9 +1184,9 @@ static int os2ShmUnmap(
     }
     
     pFile->pShmLink = NULL;
-    sqlite3_free(pLink);
+    sqlite4_free(pLink);
 
-    sqlite3_mutex_leave(pNode->mutex);
+    sqlite4_mutex_leave(pNode->mutex);
     
     if( nRef == 0 )
       os2PurgeShmNodes( deleteFlag );
@@ -1204,7 +1204,7 @@ static int os2ShmUnmap(
 ** not go from shared to exclusive or from exclusive to shared.
 */
 static int os2ShmLock(
-  sqlite3_file *id,          /* Database file holding the shared memory */
+  sqlite4_file *id,          /* Database file holding the shared memory */
   int ofst,                  /* First lock to acquire or release */
   int n,                     /* Number of locks to acquire or release */
   int flags                  /* What to do with the lock */
@@ -1228,7 +1228,7 @@ static int os2ShmLock(
   assert( n>1 || mask==(1<<ofst) );
 
 
-  sqlite3_mutex_enter(pShmNode->mutex);
+  sqlite4_mutex_enter(pShmNode->mutex);
 
   if( flags & SQLITE_SHM_UNLOCK ){
     u32 allMask = 0; /* Mask of locks held by siblings */
@@ -1303,7 +1303,7 @@ static int os2ShmLock(
     }
   }
 
-  sqlite3_mutex_leave(pShmNode->mutex);
+  sqlite4_mutex_leave(pShmNode->mutex);
   
   OSTRACE(("SHM-LOCK shmid-%d, pid-%d got %03x,%03x %s\n",
            p->id, (int)GetCurrentProcessId(), p->sharedMask, p->exclMask,
@@ -1322,7 +1322,7 @@ static int os2ShmLock(
 ** any load or store begun after the barrier.
 */
 static void os2ShmBarrier(
-  sqlite3_file *id                /* Database file holding the shared memory */
+  sqlite4_file *id                /* Database file holding the shared memory */
 ){
   UNUSED_PARAMETER(id);
   os2ShmEnterMutex();
@@ -1339,9 +1339,9 @@ static void os2ShmBarrier(
 
 /*
 ** This vector defines all the methods that can operate on an
-** sqlite3_file for os2.
+** sqlite4_file for os2.
 */
-static const sqlite3_io_methods os2IoMethod = {
+static const sqlite4_io_methods os2IoMethod = {
   2,                              /* iVersion */
   os2Close,                       /* xClose */
   os2Read,                        /* xRead */
@@ -1363,7 +1363,7 @@ static const sqlite3_io_methods os2IoMethod = {
 
 
 /***************************************************************************
-** Here ends the I/O methods that form the sqlite3_io_methods object.
+** Here ends the I/O methods that form the sqlite4_io_methods object.
 **
 ** The next block of code implements the VFS methods.
 ****************************************************************************/
@@ -1388,13 +1388,13 @@ static int getTempname(int nBuf, char *zBuf ){
   */
   SimulateIOError( return SQLITE_IOERR );
 
-  if( sqlite3_temp_directory ) {
-    sqlite3_snprintf(CCHMAXPATH-30, zTempPath, "%s", sqlite3_temp_directory);
+  if( sqlite4_temp_directory ) {
+    sqlite4_snprintf(CCHMAXPATH-30, zTempPath, "%s", sqlite4_temp_directory);
   } else if( DosScanEnv( (PSZ)"TEMP",   &zTempPathCp ) == NO_ERROR ||
              DosScanEnv( (PSZ)"TMP",    &zTempPathCp ) == NO_ERROR ||
              DosScanEnv( (PSZ)"TMPDIR", &zTempPathCp ) == NO_ERROR ) {
     char *zTempPathUTF = convertCpPathToUtf8( (char *)zTempPathCp );
-    sqlite3_snprintf(CCHMAXPATH-30, zTempPath, "%s", zTempPathUTF);
+    sqlite4_snprintf(CCHMAXPATH-30, zTempPath, "%s", zTempPathUTF);
     free( zTempPathUTF );
   } else if( DosQueryCurrentDisk( &ulDriveNum, &ulDriveMap ) == NO_ERROR ) {
     zTempPath[0] = (char)('A' + ulDriveNum - 1);
@@ -1407,7 +1407,7 @@ static int getTempname(int nBuf, char *zBuf ){
   /* Strip off a trailing slashes or backslashes, otherwise we would get *
    * multiple (back)slashes which causes DosOpen() to fail.              *
    * Trailing spaces are not allowed, either.                            */
-  j = sqlite3Strlen30(zTempPath);
+  j = sqlite4Strlen30(zTempPath);
   while( j > 0 && ( zTempPath[j-1] == '\\' || zTempPath[j-1] == '/' || 
                     zTempPath[j-1] == ' ' ) ){
     j--;
@@ -1415,10 +1415,10 @@ static int getTempname(int nBuf, char *zBuf ){
   zTempPath[j] = '\0';
   
   /* We use 20 bytes to randomize the name */
-  sqlite3_snprintf(nBuf-22, zBuf,
+  sqlite4_snprintf(nBuf-22, zBuf,
                    "%s\\"SQLITE_TEMP_FILE_PREFIX, zTempPath);
-  j = sqlite3Strlen30(zBuf);
-  sqlite3_randomness( 20, &zBuf[j] );
+  j = sqlite4Strlen30(zBuf);
+  sqlite4_randomness( 20, &zBuf[j] );
   for( i = 0; i < 20; i++, j++ ){
     zBuf[j] = zChars[ ((unsigned char)zBuf[j])%(sizeof(zChars)-1) ];
   }
@@ -1435,7 +1435,7 @@ static int getTempname(int nBuf, char *zBuf ){
 ** bytes in size.
 */
 static int os2FullPathname(
-  sqlite3_vfs *pVfs,          /* Pointer to vfs object */
+  sqlite4_vfs *pVfs,          /* Pointer to vfs object */
   const char *zRelative,      /* Possibly relative input path */
   int nFull,                  /* Size of output buffer in bytes */
   char *zFull                 /* Output buffer */
@@ -1447,7 +1447,7 @@ static int os2FullPathname(
                                 zFullCp, CCHMAXPATH );
   free( zRelativeCp );
   zFullUTF = convertCpPathToUtf8( zFullCp );
-  sqlite3_snprintf( nFull, zFull, zFullUTF );
+  sqlite4_snprintf( nFull, zFull, zFullUTF );
   free( zFullUTF );
   return rc == NO_ERROR ? SQLITE_OK : SQLITE_IOERR;
 }
@@ -1457,9 +1457,9 @@ static int os2FullPathname(
 ** Open a file.
 */
 static int os2Open(
-  sqlite3_vfs *pVfs,            /* Not used */
+  sqlite4_vfs *pVfs,            /* Not used */
   const char *zName,            /* Name of the file (UTF-8) */
-  sqlite3_file *id,             /* Write the SQLite file handle here */
+  sqlite4_file *id,             /* Write the SQLite file handle here */
   int flags,                    /* Open mode flags */
   int *pOutFlags                /* Status return flags */
 ){
@@ -1604,7 +1604,7 @@ static int os2Open(
 ** Delete the named file.
 */
 static int os2Delete(
-  sqlite3_vfs *pVfs,                     /* Not used on os2 */
+  sqlite4_vfs *pVfs,                     /* Not used on os2 */
   const char *zFilename,                 /* Name of file to delete */
   int syncDir                            /* Not used on os2 */
 ){
@@ -1624,7 +1624,7 @@ static int os2Delete(
 ** Check the existance and status of a file.
 */
 static int os2Access(
-  sqlite3_vfs *pVfs,        /* Not used on os2 */
+  sqlite4_vfs *pVfs,        /* Not used on os2 */
   const char *zFilename,    /* Name of file to check */
   int flags,                /* Type of test to make on this file */
   int *pOut                 /* Write results here */
@@ -1678,7 +1678,7 @@ static int os2Access(
 ** Interfaces for opening a shared library, finding entry points
 ** within the shared library, and closing the shared library.
 */
-static void *os2DlOpen(sqlite3_vfs *pVfs, const char *zFilename){
+static void *os2DlOpen(sqlite4_vfs *pVfs, const char *zFilename){
   HMODULE hmod;
   APIRET rc;
   char *zFilenameCp = convertUtf8PathToCp(zFilename);
@@ -1690,10 +1690,10 @@ static void *os2DlOpen(sqlite3_vfs *pVfs, const char *zFilename){
 ** A no-op since the error code is returned on the DosLoadModule call.
 ** os2Dlopen returns zero if DosLoadModule is not successful.
 */
-static void os2DlError(sqlite3_vfs *pVfs, int nBuf, char *zBufOut){
+static void os2DlError(sqlite4_vfs *pVfs, int nBuf, char *zBufOut){
 /* no-op */
 }
-static void (*os2DlSym(sqlite3_vfs *pVfs, void *pHandle, const char *zSymbol))(void){
+static void (*os2DlSym(sqlite4_vfs *pVfs, void *pHandle, const char *zSymbol))(void){
   PFN pfn;
   APIRET rc;
   rc = DosQueryProcAddr((HMODULE)pHandle, 0L, (PSZ)zSymbol, &pfn);
@@ -1707,7 +1707,7 @@ static void (*os2DlSym(sqlite3_vfs *pVfs, void *pHandle, const char *zSymbol))(v
   }
   return rc != NO_ERROR ? 0 : (void(*)(void))pfn;
 }
-static void os2DlClose(sqlite3_vfs *pVfs, void *pHandle){
+static void os2DlClose(sqlite4_vfs *pVfs, void *pHandle){
   DosFreeModule((HMODULE)pHandle);
 }
 #else /* if SQLITE_OMIT_LOAD_EXTENSION is defined: */
@@ -1721,7 +1721,7 @@ static void os2DlClose(sqlite3_vfs *pVfs, void *pHandle){
 /*
 ** Write up to nBuf bytes of randomness into zBuf.
 */
-static int os2Randomness(sqlite3_vfs *pVfs, int nBuf, char *zBuf ){
+static int os2Randomness(sqlite4_vfs *pVfs, int nBuf, char *zBuf ){
   int n = 0;
 #if defined(SQLITE_TEST)
   n = nBuf;
@@ -1773,17 +1773,17 @@ static int os2Randomness(sqlite3_vfs *pVfs, int nBuf, char *zBuf ){
 ** might be greater than or equal to the argument, but not less
 ** than the argument.
 */
-static int os2Sleep( sqlite3_vfs *pVfs, int microsec ){
+static int os2Sleep( sqlite4_vfs *pVfs, int microsec ){
   DosSleep( (microsec/1000) );
   return microsec;
 }
 
 /*
 ** The following variable, if set to a non-zero value, becomes the result
-** returned from sqlite3OsCurrentTime().  This is used for testing.
+** returned from sqlite4OsCurrentTime().  This is used for testing.
 */
 #ifdef SQLITE_TEST
-int sqlite3_current_time = 0;
+int sqlite4_current_time = 0;
 #endif
 
 /*
@@ -1795,9 +1795,9 @@ int sqlite3_current_time = 0;
 **
 ** On success, return 0.  Return 1 if the time and date cannot be found.
 */
-static int os2CurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *piNow){
+static int os2CurrentTimeInt64(sqlite4_vfs *pVfs, sqlite4_int64 *piNow){
 #ifdef SQLITE_TEST
-  static const sqlite3_int64 unixEpoch = 24405875*(sqlite3_int64)8640000;
+  static const sqlite4_int64 unixEpoch = 24405875*(sqlite4_int64)8640000;
 #endif
   int year, month, datepart, timepart;
  
@@ -1820,11 +1820,11 @@ static int os2CurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *piNow){
   timepart = 12*3600*1000 + dt.hundredths*10 + dt.seconds*1000 +
     ((int)dt.minutes + dt.timezone)*60*1000 + dt.hours*3600*1000;
 
-  *piNow = (sqlite3_int64)datepart*86400*1000 + timepart;
+  *piNow = (sqlite4_int64)datepart*86400*1000 + timepart;
    
 #ifdef SQLITE_TEST
-  if( sqlite3_current_time ){
-    *piNow = 1000*(sqlite3_int64)sqlite3_current_time + unixEpoch;
+  if( sqlite4_current_time ){
+    *piNow = 1000*(sqlite4_int64)sqlite4_current_time + unixEpoch;
   }
 #endif
 
@@ -1837,9 +1837,9 @@ static int os2CurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *piNow){
 ** current time and date as a Julian Day number into *prNow and
 ** return 0.  Return 1 if the time and date cannot be found.
 */
-static int os2CurrentTime( sqlite3_vfs *pVfs, double *prNow ){
+static int os2CurrentTime( sqlite4_vfs *pVfs, double *prNow ){
   int rc;
-  sqlite3_int64 i;
+  sqlite4_int64 i;
   rc = os2CurrentTimeInt64(pVfs, &i);
   if( !rc ){
     *prNow = i/86400000.0;
@@ -1868,16 +1868,16 @@ static int os2CurrentTime( sqlite3_vfs *pVfs, double *prNow ){
 ** on SQLite. It is fine to have an implementation that never
 ** returns an error message:
 **
-**   int xGetLastError(sqlite3_vfs *pVfs, int nBuf, char *zBuf){
+**   int xGetLastError(sqlite4_vfs *pVfs, int nBuf, char *zBuf){
 **     assert(zBuf[0]=='\0');
 **     return 0;
 **   }
 **
 ** However if an error message is supplied, it will be incorporated
 ** by sqlite into the error message available to the user using
-** sqlite3_errmsg(), possibly making IO errors easier to debug.
+** sqlite4_errmsg(), possibly making IO errors easier to debug.
 */
-static int os2GetLastError(sqlite3_vfs *pVfs, int nBuf, char *zBuf){
+static int os2GetLastError(sqlite4_vfs *pVfs, int nBuf, char *zBuf){
   assert(zBuf[0]=='\0');
   return 0;
 }
@@ -1885,8 +1885,8 @@ static int os2GetLastError(sqlite3_vfs *pVfs, int nBuf, char *zBuf){
 /*
 ** Initialize and deinitialize the operating system interface.
 */
-int sqlite3_os_init(void){
-  static sqlite3_vfs os2Vfs = {
+int sqlite4_os_init(void){
+  static sqlite4_vfs os2Vfs = {
     3,                 /* iVersion */
     sizeof(os2File),   /* szOsFile */
     CCHMAXPATH,        /* mxPathname */
@@ -1911,12 +1911,12 @@ int sqlite3_os_init(void){
     0,                 /* xGetSystemCall */
     0                  /* xNextSystemCall */
   };
-  sqlite3_vfs_register(&os2Vfs, 1);
+  sqlite4_vfs_register(&os2Vfs, 1);
   initUconvObjects();
-/*  sqlite3OSTrace = 1; */
+/*  sqlite4OSTrace = 1; */
   return SQLITE_OK;
 }
-int sqlite3_os_end(void){
+int sqlite4_os_end(void){
   freeUconvObjects();
   return SQLITE_OK;
 }

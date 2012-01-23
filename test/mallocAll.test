@@ -17,7 +17,7 @@ proc lshift {lvar} {
 while {[set arg [lshift argv]] != ""} {
   switch -- $arg {
     -sharedpagercache {
-      sqlite3_enable_shared_cache 1
+      sqlite4_enable_shared_cache 1
     }
     default {
       set argv [linsert $argv 0 $arg]
@@ -36,7 +36,7 @@ set EXCLUDE {
   mallocAll.test
 }
 
-if {[sqlite3 -has-codec]} {
+if {[sqlite4 -has-codec]} {
   # lappend EXCLUDE \
   #  conflict.test
 }

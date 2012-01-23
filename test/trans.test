@@ -40,7 +40,7 @@ do_test trans-1.1 {
   }
 } {I V X}
 do_test trans-1.9 {
-  sqlite3 altdb test.db
+  sqlite4 altdb test.db
   execsql {SELECT b FROM one ORDER BY a} altdb
 } {one two three}
 do_test trans-1.10 {
@@ -790,8 +790,8 @@ wal_check_journal_mode trans-7.16
 #
 set fd [open test.tcl w]
 puts $fd {
-  sqlite3_test_control_pending_byte 0x0010000
-  sqlite3 db test.db
+  sqlite4_test_control_pending_byte 0x0010000
+  sqlite4 db test.db
   db eval {
     PRAGMA default_cache_size=20;
     BEGIN;
@@ -811,8 +811,8 @@ do_test trans-8.2 {
 integrity_check trans-8.3
 set fd [open test.tcl w]
 puts $fd {
-  sqlite3_test_control_pending_byte 0x0010000
-  sqlite3 db test.db
+  sqlite4_test_control_pending_byte 0x0010000
+  sqlite4 db test.db
   db eval {
     PRAGMA journal_mode=persist;
     PRAGMA default_cache_size=20;
@@ -842,7 +842,7 @@ do_test trans-9.1 {
     PRAGMA default_cache_size=10;
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     BEGIN;
     CREATE TABLE t3(x TEXT);

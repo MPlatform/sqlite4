@@ -19,7 +19,7 @@ source $testdir/tester.tcl
 
 do_test tkt3761-1.1 {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db eval {
     PRAGMA auto_vacuum=INCREMENTAL;
     CREATE TABLE t1(x);

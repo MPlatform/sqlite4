@@ -27,7 +27,7 @@
 ** continues as if nothing had happened.
 */
 #ifndef _QUOTA_H_
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include <stdio.h>
 
 /* Make this callable from C++ */
@@ -46,7 +46,7 @@ extern "C" {
 ** THIS ROUTINE IS NOT THREADSAFE.  Call this routine exactly once
 ** during start-up.
 */
-int sqlite3_quota_initialize(const char *zOrigVfsName, int makeDefault);
+int sqlite4_quota_initialize(const char *zOrigVfsName, int makeDefault);
 
 /*
 ** Shutdown the quota system.
@@ -57,7 +57,7 @@ int sqlite3_quota_initialize(const char *zOrigVfsName, int makeDefault);
 ** THIS ROUTINE IS NOT THREADSAFE.  Call this routine exactly once while
 ** shutting down in order to free all remaining quota groups.
 */
-int sqlite3_quota_shutdown(void);
+int sqlite4_quota_shutdown(void);
 
 /*
 ** Create or destroy a quota group.
@@ -111,13 +111,13 @@ int sqlite3_quota_shutdown(void);
 ** If the same filename matches more than one quota group pattern, then
 ** the behavior of this package is undefined.
 */
-int sqlite3_quota_set(
+int sqlite4_quota_set(
   const char *zPattern,           /* The filename pattern */
-  sqlite3_int64 iLimit,           /* New quota to set for this quota group */
+  sqlite4_int64 iLimit,           /* New quota to set for this quota group */
   void (*xCallback)(              /* Callback invoked when going over quota */
      const char *zFilename,         /* Name of file whose size increases */
-     sqlite3_int64 *piLimit,        /* IN/OUT: The current limit */
-     sqlite3_int64 iSize,           /* Total size of all files in the group */
+     sqlite4_int64 *piLimit,        /* IN/OUT: The current limit */
+     sqlite4_int64 iSize,           /* Total size of all files in the group */
      void *pArg                     /* Client data */
   ),
   void *pArg,                     /* client data passed thru to callback */
@@ -130,7 +130,7 @@ int sqlite3_quota_set(
 ** management, update its size.  If zFilename does not match the glob
 ** pattern of any quota group, this routine is a no-op.
 */
-int sqlite3_quota_file(const char *zFilename);
+int sqlite4_quota_file(const char *zFilename);
 
 /*
 ** The following object serves the same role as FILE in the standard C
@@ -146,15 +146,15 @@ typedef struct quota_FILE quota_FILE;
 ** Create a new quota_FILE object used to read and/or write to the
 ** file zFilename.  The zMode parameter is as with standard library zMode.
 */
-quota_FILE *sqlite3_quota_fopen(const char *zFilename, const char *zMode);
+quota_FILE *sqlite4_quota_fopen(const char *zFilename, const char *zMode);
 
 /*
 ** Perform I/O against a quota_FILE object.  When doing writes, the
 ** quota mechanism may result in a short write, in order to prevent
 ** the sum of sizes of all files from going over quota.
 */
-size_t sqlite3_quota_fread(void*, size_t, size_t, quota_FILE*);
-size_t sqlite3_quota_fwrite(void*, size_t, size_t, quota_FILE*);
+size_t sqlite4_quota_fread(void*, size_t, size_t, quota_FILE*);
+size_t sqlite4_quota_fwrite(void*, size_t, size_t, quota_FILE*);
 
 /*
 ** Flush all written content held in memory buffers out to disk.
@@ -166,21 +166,21 @@ size_t sqlite3_quota_fwrite(void*, size_t, size_t, quota_FILE*);
 ** This routine return zero on success and non-zero if something goes
 ** wrong.
 */
-int sqlite3_quota_fflush(quota_FILE*, int hardSync);
+int sqlite4_quota_fflush(quota_FILE*, int hardSync);
 
 /*
 ** Close a quota_FILE object and free all associated resources.  The
 ** file remains under quota management.
 */
-int sqlite3_quota_fclose(quota_FILE*);
+int sqlite4_quota_fclose(quota_FILE*);
 
 /*
 ** Move the read/write pointer for a quota_FILE object.  Or tell the
 ** current location of the read/write pointer.
 */
-int sqlite3_quota_fseek(quota_FILE*, long, int);
-void sqlite3_quota_rewind(quota_FILE*);
-long sqlite3_quota_ftell(quota_FILE*);
+int sqlite4_quota_fseek(quota_FILE*, long, int);
+void sqlite4_quota_rewind(quota_FILE*);
+long sqlite4_quota_ftell(quota_FILE*);
 
 /*
 ** Delete a file from the disk, if that file is under quota management.
@@ -201,7 +201,7 @@ long sqlite3_quota_ftell(quota_FILE*);
 **
 ** This routine is a no-op for files that are not under quota management.
 */
-int sqlite3_quota_remove(const char *zFilename);
+int sqlite4_quota_remove(const char *zFilename);
 
 #ifdef __cplusplus
 }  /* end of the 'extern "C"' block */

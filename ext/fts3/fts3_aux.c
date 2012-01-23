@@ -21,24 +21,24 @@ typedef struct Fts3auxTable Fts3auxTable;
 typedef struct Fts3auxCursor Fts3auxCursor;
 
 struct Fts3auxTable {
-  sqlite3_vtab base;              /* Base class used by SQLite core */
+  sqlite4_vtab base;              /* Base class used by SQLite core */
   Fts3Table *pFts3Tab;
 };
 
 struct Fts3auxCursor {
-  sqlite3_vtab_cursor base;       /* Base class used by SQLite core */
+  sqlite4_vtab_cursor base;       /* Base class used by SQLite core */
   Fts3MultiSegReader csr;        /* Must be right after "base" */
   Fts3SegFilter filter;
   char *zStop;
   int nStop;                      /* Byte-length of string zStop */
   int isEof;                      /* True if cursor is at EOF */
-  sqlite3_int64 iRowid;           /* Current rowid */
+  sqlite4_int64 iRowid;           /* Current rowid */
 
   int iCol;                       /* Current value of 'col' column */
   int nStat;                      /* Size of aStat[] array */
   struct Fts3auxColstats {
-    sqlite3_int64 nDoc;           /* 'documents' values for current csr row */
-    sqlite3_int64 nOcc;           /* 'occurrences' values for current csr row */
+    sqlite4_int64 nDoc;           /* 'documents' values for current csr row */
+    sqlite4_int64 nOcc;           /* 'occurrences' values for current csr row */
   } *aStat;
 };
 
@@ -53,12 +53,12 @@ struct Fts3auxCursor {
 ** and xCreate are identical operations.
 */
 static int fts3auxConnectMethod(
-  sqlite3 *db,                    /* Database connection */
+  sqlite4 *db,                    /* Database connection */
   void *pUnused,                  /* Unused */
   int argc,                       /* Number of elements in argv array */
   const char * const *argv,       /* xCreate/xConnect argument array */
-  sqlite3_vtab **ppVtab,          /* OUT: New sqlite3_vtab object */
-  char **pzErr                    /* OUT: sqlite3_malloc'd error message */
+  sqlite4_vtab **ppVtab,          /* OUT: New sqlite4_vtab object */
+  char **pzErr                    /* OUT: sqlite4_malloc'd error message */
 ){
   char const *zDb;                /* Name of database (e.g. "main") */
   char const *zFts3;              /* Name of fts3 table */
@@ -72,7 +72,7 @@ static int fts3auxConnectMethod(
 
   /* The user should specify a single argument - the name of an fts3 table. */
   if( argc!=4 ){
-    *pzErr = sqlite3_mprintf(
+    *pzErr = sqlite4_mprintf(
         "wrong number of arguments to fts4aux constructor"
     );
     return SQLITE_ERROR;
@@ -83,11 +83,11 @@ static int fts3auxConnectMethod(
   zFts3 = argv[3];
   nFts3 = strlen(zFts3);
 
-  rc = sqlite3_declare_vtab(db, FTS3_TERMS_SCHEMA);
+  rc = sqlite4_declare_vtab(db, FTS3_TERMS_SCHEMA);
   if( rc!=SQLITE_OK ) return rc;
 
   nByte = sizeof(Fts3auxTable) + sizeof(Fts3Table) + nDb + nFts3 + 2;
-  p = (Fts3auxTable *)sqlite3_malloc(nByte);
+  p = (Fts3auxTable *)sqlite4_malloc(nByte);
   if( !p ) return SQLITE_NOMEM;
   memset(p, 0, nByte);
 
@@ -99,9 +99,9 @@ static int fts3auxConnectMethod(
 
   memcpy((char *)p->pFts3Tab->zDb, zDb, nDb);
   memcpy((char *)p->pFts3Tab->zName, zFts3, nFts3);
-  sqlite3Fts3Dequote((char *)p->pFts3Tab->zName);
+  sqlite4Fts3Dequote((char *)p->pFts3Tab->zName);
 
-  *ppVtab = (sqlite3_vtab *)p;
+  *ppVtab = (sqlite4_vtab *)p;
   return SQLITE_OK;
 }
 
@@ -110,17 +110,17 @@ static int fts3auxConnectMethod(
 ** These tables have no persistent representation of their own, so xDisconnect
 ** and xDestroy are identical operations.
 */
-static int fts3auxDisconnectMethod(sqlite3_vtab *pVtab){
+static int fts3auxDisconnectMethod(sqlite4_vtab *pVtab){
   Fts3auxTable *p = (Fts3auxTable *)pVtab;
   Fts3Table *pFts3 = p->pFts3Tab;
   int i;
 
   /* Free any prepared statements held */
   for(i=0; i<SizeofArray(pFts3->aStmt); i++){
-    sqlite3_finalize(pFts3->aStmt[i]);
+    sqlite4_finalize(pFts3->aStmt[i]);
   }
-  sqlite3_free(pFts3->zSegmentsTbl);
-  sqlite3_free(p);
+  sqlite4_free(pFts3->zSegmentsTbl);
+  sqlite4_free(p);
   return SQLITE_OK;
 }
 
@@ -132,8 +132,8 @@ static int fts3auxDisconnectMethod(sqlite3_vtab *pVtab){
 ** xBestIndex - Analyze a WHERE and ORDER BY clause.
 */
 static int fts3auxBestIndexMethod(
-  sqlite3_vtab *pVTab, 
-  sqlite3_index_info *pInfo
+  sqlite4_vtab *pVTab, 
+  sqlite4_index_info *pInfo
 ){
   int i;
   int iEq = -1;
@@ -187,39 +187,39 @@ static int fts3auxBestIndexMethod(
 /*
 ** xOpen - Open a cursor.
 */
-static int fts3auxOpenMethod(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCsr){
+static int fts3auxOpenMethod(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCsr){
   Fts3auxCursor *pCsr;            /* Pointer to cursor object to return */
 
   UNUSED_PARAMETER(pVTab);
 
-  pCsr = (Fts3auxCursor *)sqlite3_malloc(sizeof(Fts3auxCursor));
+  pCsr = (Fts3auxCursor *)sqlite4_malloc(sizeof(Fts3auxCursor));
   if( !pCsr ) return SQLITE_NOMEM;
   memset(pCsr, 0, sizeof(Fts3auxCursor));
 
-  *ppCsr = (sqlite3_vtab_cursor *)pCsr;
+  *ppCsr = (sqlite4_vtab_cursor *)pCsr;
   return SQLITE_OK;
 }
 
 /*
 ** xClose - Close a cursor.
 */
-static int fts3auxCloseMethod(sqlite3_vtab_cursor *pCursor){
+static int fts3auxCloseMethod(sqlite4_vtab_cursor *pCursor){
   Fts3Table *pFts3 = ((Fts3auxTable *)pCursor->pVtab)->pFts3Tab;
   Fts3auxCursor *pCsr = (Fts3auxCursor *)pCursor;
 
-  sqlite3Fts3SegmentsClose(pFts3);
-  sqlite3Fts3SegReaderFinish(&pCsr->csr);
-  sqlite3_free((void *)pCsr->filter.zTerm);
-  sqlite3_free(pCsr->zStop);
-  sqlite3_free(pCsr->aStat);
-  sqlite3_free(pCsr);
+  sqlite4Fts3SegmentsClose(pFts3);
+  sqlite4Fts3SegReaderFinish(&pCsr->csr);
+  sqlite4_free((void *)pCsr->filter.zTerm);
+  sqlite4_free(pCsr->zStop);
+  sqlite4_free(pCsr->aStat);
+  sqlite4_free(pCsr);
   return SQLITE_OK;
 }
 
 static int fts3auxGrowStatArray(Fts3auxCursor *pCsr, int nSize){
   if( nSize>pCsr->nStat ){
     struct Fts3auxColstats *aNew;
-    aNew = (struct Fts3auxColstats *)sqlite3_realloc(pCsr->aStat, 
+    aNew = (struct Fts3auxColstats *)sqlite4_realloc(pCsr->aStat, 
         sizeof(struct Fts3auxColstats) * nSize
     );
     if( aNew==0 ) return SQLITE_NOMEM;
@@ -235,7 +235,7 @@ static int fts3auxGrowStatArray(Fts3auxCursor *pCsr, int nSize){
 /*
 ** xNext - Advance the cursor to the next row, if any.
 */
-static int fts3auxNextMethod(sqlite3_vtab_cursor *pCursor){
+static int fts3auxNextMethod(sqlite4_vtab_cursor *pCursor){
   Fts3auxCursor *pCsr = (Fts3auxCursor *)pCursor;
   Fts3Table *pFts3 = ((Fts3auxTable *)pCursor->pVtab)->pFts3Tab;
   int rc;
@@ -247,7 +247,7 @@ static int fts3auxNextMethod(sqlite3_vtab_cursor *pCursor){
     if( pCsr->aStat[pCsr->iCol].nDoc>0 ) return SQLITE_OK;
   }
 
-  rc = sqlite3Fts3SegReaderStep(pFts3, &pCsr->csr);
+  rc = sqlite4Fts3SegReaderStep(pFts3, &pCsr->csr);
   if( rc==SQLITE_ROW ){
     int i = 0;
     int nDoclist = pCsr->csr.nDoclist;
@@ -270,9 +270,9 @@ static int fts3auxNextMethod(sqlite3_vtab_cursor *pCursor){
     iCol = 0;
 
     while( i<nDoclist ){
-      sqlite3_int64 v = 0;
+      sqlite4_int64 v = 0;
 
-      i += sqlite3Fts3GetVarint(&aDoclist[i], &v);
+      i += sqlite4Fts3GetVarint(&aDoclist[i], &v);
       switch( eState ){
         /* State 0. In this state the integer just read was a docid. */
         case 0:
@@ -330,11 +330,11 @@ static int fts3auxNextMethod(sqlite3_vtab_cursor *pCursor){
 ** xFilter - Initialize a cursor to point at the start of its data.
 */
 static int fts3auxFilterMethod(
-  sqlite3_vtab_cursor *pCursor,   /* The cursor used for this query */
+  sqlite4_vtab_cursor *pCursor,   /* The cursor used for this query */
   int idxNum,                     /* Strategy index */
   const char *idxStr,             /* Unused */
   int nVal,                       /* Number of elements in apVal */
-  sqlite3_value **apVal           /* Arguments for the indexing scheme */
+  sqlite4_value **apVal           /* Arguments for the indexing scheme */
 ){
   Fts3auxCursor *pCsr = (Fts3auxCursor *)pCursor;
   Fts3Table *pFts3 = ((Fts3auxTable *)pCursor->pVtab)->pFts3Tab;
@@ -353,34 +353,34 @@ static int fts3auxFilterMethod(
 
   /* In case this cursor is being reused, close and zero it. */
   testcase(pCsr->filter.zTerm);
-  sqlite3Fts3SegReaderFinish(&pCsr->csr);
-  sqlite3_free((void *)pCsr->filter.zTerm);
-  sqlite3_free(pCsr->aStat);
+  sqlite4Fts3SegReaderFinish(&pCsr->csr);
+  sqlite4_free((void *)pCsr->filter.zTerm);
+  sqlite4_free(pCsr->aStat);
   memset(&pCsr->csr, 0, ((u8*)&pCsr[1]) - (u8*)&pCsr->csr);
 
   pCsr->filter.flags = FTS3_SEGMENT_REQUIRE_POS|FTS3_SEGMENT_IGNORE_EMPTY;
   if( isScan ) pCsr->filter.flags |= FTS3_SEGMENT_SCAN;
 
   if( idxNum&(FTS4AUX_EQ_CONSTRAINT|FTS4AUX_GE_CONSTRAINT) ){
-    const unsigned char *zStr = sqlite3_value_text(apVal[0]);
+    const unsigned char *zStr = sqlite4_value_text(apVal[0]);
     if( zStr ){
-      pCsr->filter.zTerm = sqlite3_mprintf("%s", zStr);
-      pCsr->filter.nTerm = sqlite3_value_bytes(apVal[0]);
+      pCsr->filter.zTerm = sqlite4_mprintf("%s", zStr);
+      pCsr->filter.nTerm = sqlite4_value_bytes(apVal[0]);
       if( pCsr->filter.zTerm==0 ) return SQLITE_NOMEM;
     }
   }
   if( idxNum&FTS4AUX_LE_CONSTRAINT ){
     int iIdx = (idxNum&FTS4AUX_GE_CONSTRAINT) ? 1 : 0;
-    pCsr->zStop = sqlite3_mprintf("%s", sqlite3_value_text(apVal[iIdx]));
-    pCsr->nStop = sqlite3_value_bytes(apVal[iIdx]);
+    pCsr->zStop = sqlite4_mprintf("%s", sqlite4_value_text(apVal[iIdx]));
+    pCsr->nStop = sqlite4_value_bytes(apVal[iIdx]);
     if( pCsr->zStop==0 ) return SQLITE_NOMEM;
   }
 
-  rc = sqlite3Fts3SegReaderCursor(pFts3, 0, FTS3_SEGCURSOR_ALL,
+  rc = sqlite4Fts3SegReaderCursor(pFts3, 0, FTS3_SEGCURSOR_ALL,
       pCsr->filter.zTerm, pCsr->filter.nTerm, 0, isScan, &pCsr->csr
   );
   if( rc==SQLITE_OK ){
-    rc = sqlite3Fts3SegReaderStart(pFts3, &pCsr->csr, &pCsr->filter);
+    rc = sqlite4Fts3SegReaderStart(pFts3, &pCsr->csr, &pCsr->filter);
   }
 
   if( rc==SQLITE_OK ) rc = fts3auxNextMethod(pCursor);
@@ -390,7 +390,7 @@ static int fts3auxFilterMethod(
 /*
 ** xEof - Return true if the cursor is at EOF, or false otherwise.
 */
-static int fts3auxEofMethod(sqlite3_vtab_cursor *pCursor){
+static int fts3auxEofMethod(sqlite4_vtab_cursor *pCursor){
   Fts3auxCursor *pCsr = (Fts3auxCursor *)pCursor;
   return pCsr->isEof;
 }
@@ -399,25 +399,25 @@ static int fts3auxEofMethod(sqlite3_vtab_cursor *pCursor){
 ** xColumn - Return a column value.
 */
 static int fts3auxColumnMethod(
-  sqlite3_vtab_cursor *pCursor,   /* Cursor to retrieve value from */
-  sqlite3_context *pContext,      /* Context for sqlite3_result_xxx() calls */
+  sqlite4_vtab_cursor *pCursor,   /* Cursor to retrieve value from */
+  sqlite4_context *pContext,      /* Context for sqlite4_result_xxx() calls */
   int iCol                        /* Index of column to read value from */
 ){
   Fts3auxCursor *p = (Fts3auxCursor *)pCursor;
 
   assert( p->isEof==0 );
   if( iCol==0 ){        /* Column "term" */
-    sqlite3_result_text(pContext, p->csr.zTerm, p->csr.nTerm, SQLITE_TRANSIENT);
+    sqlite4_result_text(pContext, p->csr.zTerm, p->csr.nTerm, SQLITE_TRANSIENT);
   }else if( iCol==1 ){  /* Column "col" */
     if( p->iCol ){
-      sqlite3_result_int(pContext, p->iCol-1);
+      sqlite4_result_int(pContext, p->iCol-1);
     }else{
-      sqlite3_result_text(pContext, "*", -1, SQLITE_STATIC);
+      sqlite4_result_text(pContext, "*", -1, SQLITE_STATIC);
     }
   }else if( iCol==2 ){  /* Column "documents" */
-    sqlite3_result_int64(pContext, p->aStat[p->iCol].nDoc);
+    sqlite4_result_int64(pContext, p->aStat[p->iCol].nDoc);
   }else{                /* Column "occurrences" */
-    sqlite3_result_int64(pContext, p->aStat[p->iCol].nOcc);
+    sqlite4_result_int64(pContext, p->aStat[p->iCol].nOcc);
   }
 
   return SQLITE_OK;
@@ -427,7 +427,7 @@ static int fts3auxColumnMethod(
 ** xRowid - Return the current rowid for the cursor.
 */
 static int fts3auxRowidMethod(
-  sqlite3_vtab_cursor *pCursor,   /* Cursor to retrieve value from */
+  sqlite4_vtab_cursor *pCursor,   /* Cursor to retrieve value from */
   sqlite_int64 *pRowid            /* OUT: Rowid value */
 ){
   Fts3auxCursor *pCsr = (Fts3auxCursor *)pCursor;
@@ -437,10 +437,10 @@ static int fts3auxRowidMethod(
 
 /*
 ** Register the fts3aux module with database connection db. Return SQLITE_OK
-** if successful or an error code if sqlite3_create_module() fails.
+** if successful or an error code if sqlite4_create_module() fails.
 */
-int sqlite3Fts3InitAux(sqlite3 *db){
-  static const sqlite3_module fts3aux_module = {
+int sqlite4Fts3InitAux(sqlite4 *db){
+  static const sqlite4_module fts3aux_module = {
      0,                           /* iVersion      */
      fts3auxConnectMethod,        /* xCreate       */
      fts3auxConnectMethod,        /* xConnect      */
@@ -467,7 +467,7 @@ int sqlite3Fts3InitAux(sqlite3 *db){
   };
   int rc;                         /* Return code */
 
-  rc = sqlite3_create_module(db, "fts4aux", &fts3aux_module, 0);
+  rc = sqlite4_create_module(db, "fts4aux", &fts3aux_module, 0);
   return rc;
 }
 

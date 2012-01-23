@@ -2,8 +2,8 @@
 #
 # This script is used to compile SQLite into a shared library on Linux.
 #
-# Two separate shared libraries are generated.  "sqlite3.so" is the core
-# library.  "tclsqlite3.so" contains the TCL bindings and is the
+# Two separate shared libraries are generated.  "sqlite4.so" is the core
+# library.  "tclsqlite4.so" contains the TCL bindings and is the
 # library that is loaded into TCL in order to run SQLite.
 #
 CFLAGS=-O2 -Wall

@@ -310,7 +310,7 @@ do_test fts3d-5.1 {
 do_test fts3d-6.0 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA encoding=UTF8;
     CREATE VIRTUAL TABLE fts USING fts3(a,b,c);
@@ -326,7 +326,7 @@ do_test fts3d-6.1 {
 do_test fts3d-6.2 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA encoding=UTF16le;
     CREATE VIRTUAL TABLE fts USING fts3(a,b,c);
@@ -342,7 +342,7 @@ do_test fts3d-6.3 {
 do_test fts3d-6.4 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA encoding=UTF16be;
     CREATE VIRTUAL TABLE fts USING fts3(a,b,c);

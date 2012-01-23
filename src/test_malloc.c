@@ -31,14 +31,14 @@ static struct MemFault {
   u8 enable;              /* True if enabled */
   int isInstalled;        /* True if the fault simulation layer is installed */
   int isBenignMode;       /* True if malloc failures are considered benign */
-  sqlite3_mem_methods m;  /* 'Real' malloc implementation */
+  sqlite4_mem_methods m;  /* 'Real' malloc implementation */
 } memfault;
 
 /*
 ** This routine exists as a place to set a breakpoint that will
 ** fire on any simulated malloc() failure.
 */
-static void sqlite3Fault(void){
+static void sqlite4Fault(void){
   static int cnt = 0;
   cnt++;
 }
@@ -55,7 +55,7 @@ static int faultsimStep(void){
     memfault.iCountdown--;
     return 0;
   }
-  sqlite3Fault();
+  sqlite4Fault();
   memfault.nFail++;
   if( memfault.isBenignMode>0 ){
     memfault.nBenign++;
@@ -68,7 +68,7 @@ static int faultsimStep(void){
 }
 
 /*
-** A version of sqlite3_mem_methods.xMalloc() that includes fault simulation
+** A version of sqlite4_mem_methods.xMalloc() that includes fault simulation
 ** logic.
 */
 static void *faultsimMalloc(int n){
@@ -81,7 +81,7 @@ static void *faultsimMalloc(int n){
 
 
 /*
-** A version of sqlite3_mem_methods.xRealloc() that includes fault simulation
+** A version of sqlite4_mem_methods.xRealloc() that includes fault simulation
 ** logic.
 */
 static void *faultsimRealloc(void *pOld, int n){
@@ -178,11 +178,11 @@ static void faultsimEndBenign(void){
 }
 
 /*
-** Add or remove the fault-simulation layer using sqlite3_config(). If
+** Add or remove the fault-simulation layer using sqlite4_config(). If
 ** the argument is non-zero, the 
 */
 static int faultsimInstall(int install){
-  static struct sqlite3_mem_methods m = {
+  static struct sqlite4_mem_methods m = {
     faultsimMalloc,                   /* xMalloc */
     faultsimFree,                     /* xFree */
     faultsimRealloc,                  /* xRealloc */
@@ -202,27 +202,27 @@ static int faultsimInstall(int install){
   }
 
   if( install ){
-    rc = sqlite3_config(SQLITE_CONFIG_GETMALLOC, &memfault.m);
+    rc = sqlite4_config(SQLITE_CONFIG_GETMALLOC, &memfault.m);
     assert(memfault.m.xMalloc);
     if( rc==SQLITE_OK ){
-      rc = sqlite3_config(SQLITE_CONFIG_MALLOC, &m);
+      rc = sqlite4_config(SQLITE_CONFIG_MALLOC, &m);
     }
-    sqlite3_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 
+    sqlite4_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 
         faultsimBeginBenign, faultsimEndBenign
     );
   }else{
-    sqlite3_mem_methods m;
+    sqlite4_mem_methods m;
     assert(memfault.m.xMalloc);
 
     /* One should be able to reset the default memory allocator by storing
     ** a zeroed allocator then calling GETMALLOC. */
     memset(&m, 0, sizeof(m));
-    sqlite3_config(SQLITE_CONFIG_MALLOC, &m);
-    sqlite3_config(SQLITE_CONFIG_GETMALLOC, &m);
+    sqlite4_config(SQLITE_CONFIG_MALLOC, &m);
+    sqlite4_config(SQLITE_CONFIG_GETMALLOC, &m);
     assert( memcmp(&m, &memfault.m, sizeof(m))==0 );
 
-    rc = sqlite3_config(SQLITE_CONFIG_MALLOC, &memfault.m);
-    sqlite3_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 0, 0);
+    rc = sqlite4_config(SQLITE_CONFIG_MALLOC, &memfault.m);
+    sqlite4_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 0, 0);
   }
 
   if( rc==SQLITE_OK ){
@@ -239,9 +239,9 @@ static int faultsimInstall(int install){
 ** the least-significant 8-bits of the integer passed as an argument.
 ** For example:
 **
-**   sqlite3TestErrorName(1) -> "SQLITE_ERROR"
+**   sqlite4TestErrorName(1) -> "SQLITE_ERROR"
 */
-const char *sqlite3TestErrorName(int);
+const char *sqlite4TestErrorName(int);
 
 /*
 ** Transform pointers to text and back again
@@ -250,7 +250,7 @@ static void pointerToText(void *p, char *z){
   static const char zHex[] = "0123456789abcdef";
   int i, k;
   unsigned int u;
-  sqlite3_uint64 n;
+  sqlite4_uint64 n;
   if( p==0 ){
     strcpy(z, "0");
     return;
@@ -279,7 +279,7 @@ static int hexToInt(int h){
   }
 }
 static int textToPointer(const char *z, void **pp){
-  sqlite3_uint64 n = 0;
+  sqlite4_uint64 n = 0;
   int i;
   unsigned int u;
   for(i=0; i<sizeof(void*)*2 && z[0]; i++){
@@ -301,9 +301,9 @@ static int textToPointer(const char *z, void **pp){
 }
 
 /*
-** Usage:    sqlite3_malloc  NBYTES
+** Usage:    sqlite4_malloc  NBYTES
 **
-** Raw test interface for sqlite3_malloc().
+** Raw test interface for sqlite4_malloc().
 */
 static int test_malloc(
   void * clientData,
@@ -319,16 +319,16 @@ static int test_malloc(
     return TCL_ERROR;
   }
   if( Tcl_GetIntFromObj(interp, objv[1], &nByte) ) return TCL_ERROR;
-  p = sqlite3_malloc((unsigned)nByte);
+  p = sqlite4_malloc((unsigned)nByte);
   pointerToText(p, zOut);
   Tcl_AppendResult(interp, zOut, NULL);
   return TCL_OK;
 }
 
 /*
-** Usage:    sqlite3_realloc  PRIOR  NBYTES
+** Usage:    sqlite4_realloc  PRIOR  NBYTES
 **
-** Raw test interface for sqlite3_realloc().
+** Raw test interface for sqlite4_realloc().
 */
 static int test_realloc(
   void * clientData,
@@ -348,16 +348,16 @@ static int test_realloc(
     Tcl_AppendResult(interp, "bad pointer: ", Tcl_GetString(objv[1]), (char*)0);
     return TCL_ERROR;
   }
-  p = sqlite3_realloc(pPrior, (unsigned)nByte);
+  p = sqlite4_realloc(pPrior, (unsigned)nByte);
   pointerToText(p, zOut);
   Tcl_AppendResult(interp, zOut, NULL);
   return TCL_OK;
 }
 
 /*
-** Usage:    sqlite3_free  PRIOR
+** Usage:    sqlite4_free  PRIOR
 **
-** Raw test interface for sqlite3_free().
+** Raw test interface for sqlite4_free().
 */
 static int test_free(
   void * clientData,
@@ -374,15 +374,15 @@ static int test_free(
     Tcl_AppendResult(interp, "bad pointer: ", Tcl_GetString(objv[1]), (char*)0);
     return TCL_ERROR;
   }
-  sqlite3_free(pPrior);
+  sqlite4_free(pPrior);
   return TCL_OK;
 }
 
 /*
 ** These routines are in test_hexio.c
 */
-int sqlite3TestHexToBin(const char *, int, char *);
-int sqlite3TestBinToHex(char*,int);
+int sqlite4TestHexToBin(const char *, int, char *);
+int sqlite4TestBinToHex(char*,int);
 
 /*
 ** Usage:    memset  ADDRESS  SIZE  HEX
@@ -419,7 +419,7 @@ static int test_memset(
   }
   zHex = Tcl_GetStringFromObj(objv[3], &n);
   if( n>sizeof(zBin)*2 ) n = sizeof(zBin)*2;
-  n = sqlite3TestHexToBin(zHex, n, zBin);
+  n = sqlite4TestHexToBin(zHex, n, zBin);
   if( n==0 ){
     Tcl_AppendResult(interp, "no data", (char*)0);
     return TCL_ERROR;
@@ -472,16 +472,16 @@ static int test_memget(
     memcpy(zHex, zBin, n);
     zBin += n;
     size -= n;
-    sqlite3TestBinToHex(zHex, n);
+    sqlite4TestBinToHex(zHex, n);
     Tcl_AppendResult(interp, zHex, (char*)0);
   }
   return TCL_OK;
 }
 
 /*
-** Usage:    sqlite3_memory_used
+** Usage:    sqlite4_memory_used
 **
-** Raw test interface for sqlite3_memory_used().
+** Raw test interface for sqlite4_memory_used().
 */
 static int test_memory_used(
   void * clientData,
@@ -489,14 +489,14 @@ static int test_memory_used(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  Tcl_SetObjResult(interp, Tcl_NewWideIntObj(sqlite3_memory_used()));
+  Tcl_SetObjResult(interp, Tcl_NewWideIntObj(sqlite4_memory_used()));
   return TCL_OK;
 }
 
 /*
-** Usage:    sqlite3_memory_highwater ?RESETFLAG?
+** Usage:    sqlite4_memory_highwater ?RESETFLAG?
 **
-** Raw test interface for sqlite3_memory_highwater().
+** Raw test interface for sqlite4_memory_highwater().
 */
 static int test_memory_highwater(
   void * clientData,
@@ -513,12 +513,12 @@ static int test_memory_highwater(
     if( Tcl_GetBooleanFromObj(interp, objv[1], &resetFlag) ) return TCL_ERROR;
   } 
   Tcl_SetObjResult(interp, 
-     Tcl_NewWideIntObj(sqlite3_memory_highwater(resetFlag)));
+     Tcl_NewWideIntObj(sqlite4_memory_highwater(resetFlag)));
   return TCL_OK;
 }
 
 /*
-** Usage:    sqlite3_memdebug_backtrace DEPTH
+** Usage:    sqlite4_memdebug_backtrace DEPTH
 **
 ** Set the depth of backtracing.  If SQLITE_MEMDEBUG is not defined
 ** then this routine is a no-op.
@@ -537,15 +537,15 @@ static int test_memdebug_backtrace(
   if( Tcl_GetIntFromObj(interp, objv[1], &depth) ) return TCL_ERROR;
 #ifdef SQLITE_MEMDEBUG
   {
-    extern void sqlite3MemdebugBacktrace(int);
-    sqlite3MemdebugBacktrace(depth);
+    extern void sqlite4MemdebugBacktrace(int);
+    sqlite4MemdebugBacktrace(depth);
   }
 #endif
   return TCL_OK;
 }
 
 /*
-** Usage:    sqlite3_memdebug_dump  FILENAME
+** Usage:    sqlite4_memdebug_dump  FILENAME
 **
 ** Write a summary of unfreed memory to FILENAME.
 */
@@ -562,15 +562,15 @@ static int test_memdebug_dump(
 #if defined(SQLITE_MEMDEBUG) || defined(SQLITE_MEMORY_SIZE) \
      || defined(SQLITE_POW2_MEMORY_SIZE)
   {
-    extern void sqlite3MemdebugDump(const char*);
-    sqlite3MemdebugDump(Tcl_GetString(objv[1]));
+    extern void sqlite4MemdebugDump(const char*);
+    sqlite4MemdebugDump(Tcl_GetString(objv[1]));
   }
 #endif
   return TCL_OK;
 }
 
 /*
-** Usage:    sqlite3_memdebug_malloc_count
+** Usage:    sqlite4_memdebug_malloc_count
 **
 ** Return the total number of times malloc() has been called.
 */
@@ -587,8 +587,8 @@ static int test_memdebug_malloc_count(
   }
 #if defined(SQLITE_MEMDEBUG)
   {
-    extern int sqlite3MemdebugMallocCount();
-    nMalloc = sqlite3MemdebugMallocCount();
+    extern int sqlite4MemdebugMallocCount();
+    nMalloc = sqlite4MemdebugMallocCount();
   }
 #endif
   Tcl_SetObjResult(interp, Tcl_NewIntObj(nMalloc));
@@ -597,7 +597,7 @@ static int test_memdebug_malloc_count(
 
 
 /*
-** Usage:    sqlite3_memdebug_fail  COUNTER  ?OPTIONS?
+** Usage:    sqlite4_memdebug_fail  COUNTER  ?OPTIONS?
 **
 ** where options are:
 **
@@ -674,7 +674,7 @@ static int test_memdebug_fail(
 }
 
 /*
-** Usage:    sqlite3_memdebug_pending
+** Usage:    sqlite4_memdebug_pending
 **
 ** Return the number of malloc() calls that will succeed before a 
 ** simulated failure occurs. A negative return value indicates that
@@ -698,7 +698,7 @@ static int test_memdebug_pending(
 
 
 /*
-** Usage:    sqlite3_memdebug_settitle TITLE
+** Usage:    sqlite4_memdebug_settitle TITLE
 **
 ** Set a title string stored with each allocation.  The TITLE is
 ** typically the name of the test that was running when the
@@ -721,8 +721,8 @@ static int test_memdebug_settitle(
   zTitle = Tcl_GetString(objv[1]);
 #ifdef SQLITE_MEMDEBUG
   {
-    extern int sqlite3MemdebugSettitle(const char*);
-    sqlite3MemdebugSettitle(zTitle);
+    extern int sqlite4MemdebugSettitle(const char*);
+    sqlite4MemdebugSettitle(zTitle);
   }
 #endif
   return TCL_OK;
@@ -803,9 +803,9 @@ static int test_memdebug_log(
 
   if( !isInit ){
 #ifdef SQLITE_MEMDEBUG
-    extern void sqlite3MemdebugBacktraceCallback(
+    extern void sqlite4MemdebugBacktraceCallback(
         void (*xBacktrace)(int, int, void **));
-    sqlite3MemdebugBacktraceCallback(test_memdebug_callback);
+    sqlite4MemdebugBacktraceCallback(test_memdebug_callback);
 #endif
     Tcl_InitHashTable(&aMallocLog, MALLOC_LOG_KEYINTS);
     isInit = 1;
@@ -863,10 +863,10 @@ static int test_memdebug_log(
 
     case MB_LOG_SYNC: {
 #ifdef SQLITE_MEMDEBUG
-      extern void sqlite3MemdebugSync();
+      extern void sqlite4MemdebugSync();
       test_memdebug_log_clear();
       mallocLogEnabled = 1;
-      sqlite3MemdebugSync();
+      sqlite4MemdebugSync();
 #endif
       break;
     }
@@ -876,7 +876,7 @@ static int test_memdebug_log(
 }
 
 /*
-** Usage:    sqlite3_config_scratch SIZE N
+** Usage:    sqlite4_config_scratch SIZE N
 **
 ** Set the scratch memory buffer using SQLITE_CONFIG_SCRATCH.
 ** The buffer is static and is of limited size.  N might be
@@ -903,10 +903,10 @@ static int test_config_scratch(
   free(buf);
   if( sz<0 ){
     buf = 0;
-    rc = sqlite3_config(SQLITE_CONFIG_SCRATCH, 0, 0, 0);
+    rc = sqlite4_config(SQLITE_CONFIG_SCRATCH, 0, 0, 0);
   }else{
     buf = malloc( sz*N + 1 );
-    rc = sqlite3_config(SQLITE_CONFIG_SCRATCH, buf, sz, N);
+    rc = sqlite4_config(SQLITE_CONFIG_SCRATCH, buf, sz, N);
   }
   pResult = Tcl_NewObj();
   Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(rc));
@@ -916,7 +916,7 @@ static int test_config_scratch(
 }
 
 /*
-** Usage:    sqlite3_config_pagecache SIZE N
+** Usage:    sqlite4_config_pagecache SIZE N
 **
 ** Set the page-cache memory buffer using SQLITE_CONFIG_PAGECACHE.
 ** The buffer is static and is of limited size.  N might be
@@ -943,10 +943,10 @@ static int test_config_pagecache(
   free(buf);
   if( sz<0 ){
     buf = 0;
-    rc = sqlite3_config(SQLITE_CONFIG_PAGECACHE, 0, 0, 0);
+    rc = sqlite4_config(SQLITE_CONFIG_PAGECACHE, 0, 0, 0);
   }else{
     buf = malloc( sz*N );
-    rc = sqlite3_config(SQLITE_CONFIG_PAGECACHE, buf, sz, N);
+    rc = sqlite4_config(SQLITE_CONFIG_PAGECACHE, buf, sz, N);
   }
   pResult = Tcl_NewObj();
   Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(rc));
@@ -956,7 +956,7 @@ static int test_config_pagecache(
 }
 
 /*
-** Usage:    sqlite3_config_alt_pcache INSTALL_FLAG DISCARD_CHANCE PRNG_SEED
+** Usage:    sqlite4_config_alt_pcache INSTALL_FLAG DISCARD_CHANCE PRNG_SEED
 **
 ** Set up the alternative test page cache.  Install if INSTALL_FLAG is
 ** true and uninstall (reverting to the default page cache) if INSTALL_FLAG
@@ -1002,7 +1002,7 @@ static int test_alt_pcache(
 }
 
 /*
-** Usage:    sqlite3_config_memstatus BOOLEAN
+** Usage:    sqlite4_config_memstatus BOOLEAN
 **
 ** Enable or disable memory status reporting using SQLITE_CONFIG_MEMSTATUS.
 */
@@ -1018,13 +1018,13 @@ static int test_config_memstatus(
     return TCL_ERROR;
   }
   if( Tcl_GetBooleanFromObj(interp, objv[1], &enable) ) return TCL_ERROR;
-  rc = sqlite3_config(SQLITE_CONFIG_MEMSTATUS, enable);
+  rc = sqlite4_config(SQLITE_CONFIG_MEMSTATUS, enable);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return TCL_OK;
 }
 
 /*
-** Usage:    sqlite3_config_lookaside  SIZE  COUNT
+** Usage:    sqlite4_config_lookaside  SIZE  COUNT
 **
 */
 static int test_config_lookaside(
@@ -1044,23 +1044,23 @@ static int test_config_lookaside(
   if( Tcl_GetIntFromObj(interp, objv[2], &cnt) ) return TCL_ERROR;
   pRet = Tcl_NewObj();
   Tcl_ListObjAppendElement(
-      interp, pRet, Tcl_NewIntObj(sqlite3GlobalConfig.szLookaside)
+      interp, pRet, Tcl_NewIntObj(sqlite4GlobalConfig.szLookaside)
   );
   Tcl_ListObjAppendElement(
-      interp, pRet, Tcl_NewIntObj(sqlite3GlobalConfig.nLookaside)
+      interp, pRet, Tcl_NewIntObj(sqlite4GlobalConfig.nLookaside)
   );
-  rc = sqlite3_config(SQLITE_CONFIG_LOOKASIDE, sz, cnt);
+  rc = sqlite4_config(SQLITE_CONFIG_LOOKASIDE, sz, cnt);
   Tcl_SetObjResult(interp, pRet);
   return TCL_OK;
 }
 
 
 /*
-** Usage:    sqlite3_db_config_lookaside  CONNECTION  BUFID  SIZE  COUNT
+** Usage:    sqlite4_db_config_lookaside  CONNECTION  BUFID  SIZE  COUNT
 **
 ** There are two static buffers with BUFID 1 and 2.   Each static buffer
 ** is 10KB in size.  A BUFID of 0 indicates that the buffer should be NULL
-** which will cause sqlite3_db_config() to allocate space on its own.
+** which will cause sqlite4_db_config() to allocate space on its own.
 */
 static int test_db_config_lookaside(
   void * clientData,
@@ -1070,10 +1070,10 @@ static int test_db_config_lookaside(
 ){
   int rc;
   int sz, cnt;
-  sqlite3 *db;
+  sqlite4 *db;
   int bufid;
   static char azBuf[2][10000];
-  int getDbPointer(Tcl_Interp*, const char*, sqlite3**);
+  int getDbPointer(Tcl_Interp*, const char*, sqlite4**);
   if( objc!=5 ){
     Tcl_WrongNumArgs(interp, 1, objv, "BUFID SIZE COUNT");
     return TCL_ERROR;
@@ -1083,9 +1083,9 @@ static int test_db_config_lookaside(
   if( Tcl_GetIntFromObj(interp, objv[3], &sz) ) return TCL_ERROR;
   if( Tcl_GetIntFromObj(interp, objv[4], &cnt) ) return TCL_ERROR;
   if( bufid==0 ){
-    rc = sqlite3_db_config(db, SQLITE_DBCONFIG_LOOKASIDE, 0, sz, cnt);
+    rc = sqlite4_db_config(db, SQLITE_DBCONFIG_LOOKASIDE, 0, sz, cnt);
   }else if( bufid>=1 && bufid<=2 && sz*cnt<=sizeof(azBuf[0]) ){
-    rc = sqlite3_db_config(db, SQLITE_DBCONFIG_LOOKASIDE, azBuf[bufid], sz,cnt);
+    rc = sqlite4_db_config(db, SQLITE_DBCONFIG_LOOKASIDE, azBuf[bufid], sz,cnt);
   }else{
     Tcl_AppendResult(interp, "illegal arguments - see documentation", (char*)0);
     return TCL_ERROR;
@@ -1097,7 +1097,7 @@ static int test_db_config_lookaside(
 /*
 ** Usage:
 **
-**   sqlite3_config_heap NBYTE NMINALLOC
+**   sqlite4_config_heap NBYTE NMINALLOC
 */
 static int test_config_heap(
   void * clientData, 
@@ -1107,9 +1107,9 @@ static int test_config_heap(
 ){
   static char *zBuf; /* Use this memory */
   static int szBuf;  /* Bytes allocated for zBuf */
-  int nByte;         /* Size of buffer to pass to sqlite3_config() */
+  int nByte;         /* Size of buffer to pass to sqlite4_config() */
   int nMinAlloc;     /* Size of minimum allocation */
-  int rc;            /* Return code of sqlite3_config() */
+  int rc;            /* Return code of sqlite4_config() */
 
   Tcl_Obj * CONST *aArg = &objv[1];
   int nArg = objc-1;
@@ -1125,21 +1125,21 @@ static int test_config_heap(
     free( zBuf );
     zBuf = 0;
     szBuf = 0;
-    rc = sqlite3_config(SQLITE_CONFIG_HEAP, (void*)0, 0, 0);
+    rc = sqlite4_config(SQLITE_CONFIG_HEAP, (void*)0, 0, 0);
   }else{
     zBuf = realloc(zBuf, nByte);
     szBuf = nByte;
-    rc = sqlite3_config(SQLITE_CONFIG_HEAP, zBuf, nByte, nMinAlloc);
+    rc = sqlite4_config(SQLITE_CONFIG_HEAP, zBuf, nByte, nMinAlloc);
   }
 
-  Tcl_SetResult(interp, (char *)sqlite3TestErrorName(rc), TCL_VOLATILE);
+  Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
 }
 
 /*
-** tclcmd:     sqlite3_config_error  [DB]
+** tclcmd:     sqlite4_config_error  [DB]
 **
-** Invoke sqlite3_config() or sqlite3_db_config() with invalid
+** Invoke sqlite4_config() or sqlite4_db_config() with invalid
 ** opcodes and verify that they return errors.
 */
 static int test_config_error(
@@ -1148,8 +1148,8 @@ static int test_config_error(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  sqlite3 *db;
-  int getDbPointer(Tcl_Interp*, const char*, sqlite3**);
+  sqlite4 *db;
+  int getDbPointer(Tcl_Interp*, const char*, sqlite4**);
 
   if( objc!=2 && objc!=1 ){
     Tcl_WrongNumArgs(interp, 1, objv, "[DB]");
@@ -1157,16 +1157,16 @@ static int test_config_error(
   }
   if( objc==2 ){
     if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-    if( sqlite3_db_config(db, 99999)!=SQLITE_ERROR ){
+    if( sqlite4_db_config(db, 99999)!=SQLITE_ERROR ){
       Tcl_AppendResult(interp, 
-            "sqlite3_db_config(db, 99999) does not return SQLITE_ERROR",
+            "sqlite4_db_config(db, 99999) does not return SQLITE_ERROR",
             (char*)0);
       return TCL_ERROR;
     }
   }else{
-    if( sqlite3_config(99999)!=SQLITE_ERROR ){
+    if( sqlite4_config(99999)!=SQLITE_ERROR ){
       Tcl_AppendResult(interp, 
-          "sqlite3_config(99999) does not return SQLITE_ERROR",
+          "sqlite4_config(99999) does not return SQLITE_ERROR",
           (char*)0);
       return TCL_ERROR;
     }
@@ -1175,9 +1175,9 @@ static int test_config_error(
 }
 
 /*
-** tclcmd:     sqlite3_config_uri  BOOLEAN
+** tclcmd:     sqlite4_config_uri  BOOLEAN
 **
-** Invoke sqlite3_config() or sqlite3_db_config() with invalid
+** Invoke sqlite4_config() or sqlite4_db_config() with invalid
 ** opcodes and verify that they return errors.
 */
 static int test_config_uri(
@@ -1197,8 +1197,8 @@ static int test_config_uri(
     return TCL_ERROR;
   }
 
-  rc = sqlite3_config(SQLITE_CONFIG_URI, bOpenUri);
-  Tcl_SetResult(interp, (char *)sqlite3TestErrorName(rc), TCL_VOLATILE);
+  rc = sqlite4_config(SQLITE_CONFIG_URI, bOpenUri);
+  Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
 
   return TCL_OK;
 }
@@ -1206,8 +1206,8 @@ static int test_config_uri(
 /*
 ** Usage:    
 **
-**   sqlite3_dump_memsys3  FILENAME
-**   sqlite3_dump_memsys5  FILENAME
+**   sqlite4_dump_memsys3  FILENAME
+**   sqlite4_dump_memsys5  FILENAME
 **
 ** Write a summary of unfreed memsys3 allocations to FILENAME.
 */
@@ -1225,15 +1225,15 @@ static int test_dump_memsys3(
   switch( SQLITE_PTR_TO_INT(clientData) ){
     case 3: {
 #ifdef SQLITE_ENABLE_MEMSYS3
-      extern void sqlite3Memsys3Dump(const char*);
-      sqlite3Memsys3Dump(Tcl_GetString(objv[1]));
+      extern void sqlite4Memsys3Dump(const char*);
+      sqlite4Memsys3Dump(Tcl_GetString(objv[1]));
       break;
 #endif
     }
     case 5: {
 #ifdef SQLITE_ENABLE_MEMSYS5
-      extern void sqlite3Memsys5Dump(const char*);
-      sqlite3Memsys5Dump(Tcl_GetString(objv[1]));
+      extern void sqlite4Memsys5Dump(const char*);
+      sqlite4Memsys5Dump(Tcl_GetString(objv[1]));
       break;
 #endif
     }
@@ -1242,9 +1242,9 @@ static int test_dump_memsys3(
 }
 
 /*
-** Usage:    sqlite3_status  OPCODE  RESETFLAG
+** Usage:    sqlite4_status  OPCODE  RESETFLAG
 **
-** Return a list of three elements which are the sqlite3_status() return
+** Return a list of three elements which are the sqlite4_status() return
 ** code, the current value, and the high-water mark value.
 */
 static int test_status(
@@ -1289,7 +1289,7 @@ static int test_status(
   if( Tcl_GetBooleanFromObj(interp, objv[2], &resetFlag) ) return TCL_ERROR;
   iValue = 0;
   mxValue = 0;
-  rc = sqlite3_status(op, &iValue, &mxValue, resetFlag);
+  rc = sqlite4_status(op, &iValue, &mxValue, resetFlag);
   pResult = Tcl_NewObj();
   Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(rc));
   Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(iValue));
@@ -1299,9 +1299,9 @@ static int test_status(
 }
 
 /*
-** Usage:    sqlite3_db_status  DATABASE  OPCODE  RESETFLAG
+** Usage:    sqlite4_db_status  DATABASE  OPCODE  RESETFLAG
 **
-** Return a list of three elements which are the sqlite3_db_status() return
+** Return a list of three elements which are the sqlite4_db_status() return
 ** code, the current value, and the high-water mark value.
 */
 static int test_db_status(
@@ -1313,8 +1313,8 @@ static int test_db_status(
   int rc, iValue, mxValue;
   int i, op, resetFlag;
   const char *zOpName;
-  sqlite3 *db;
-  int getDbPointer(Tcl_Interp*, const char*, sqlite3**);
+  sqlite4 *db;
+  int getDbPointer(Tcl_Interp*, const char*, sqlite4**);
   static const struct {
     const char *zName;
     int op;
@@ -1350,7 +1350,7 @@ static int test_db_status(
   if( Tcl_GetBooleanFromObj(interp, objv[3], &resetFlag) ) return TCL_ERROR;
   iValue = 0;
   mxValue = 0;
-  rc = sqlite3_db_status(db, op, &iValue, &mxValue, resetFlag);
+  rc = sqlite4_db_status(db, op, &iValue, &mxValue, resetFlag);
   pResult = Tcl_NewObj();
   Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(rc));
   Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(iValue));
@@ -1379,12 +1379,12 @@ static int test_install_malloc_faultsim(
     return TCL_ERROR;
   }
   rc = faultsimInstall(isInstall);
-  Tcl_SetResult(interp, (char *)sqlite3TestErrorName(rc), TCL_VOLATILE);
+  Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
 }
 
 /*
-** sqlite3_install_memsys3
+** sqlite4_install_memsys3
 */
 static int test_install_memsys3(
   void * clientData,
@@ -1394,10 +1394,10 @@ static int test_install_memsys3(
 ){
   int rc = SQLITE_MISUSE;
 #ifdef SQLITE_ENABLE_MEMSYS3
-  const sqlite3_mem_methods *sqlite3MemGetMemsys3(void);
-  rc = sqlite3_config(SQLITE_CONFIG_MALLOC, sqlite3MemGetMemsys3());
+  const sqlite4_mem_methods *sqlite4MemGetMemsys3(void);
+  rc = sqlite4_config(SQLITE_CONFIG_MALLOC, sqlite4MemGetMemsys3());
 #endif
-  Tcl_SetResult(interp, (char *)sqlite3TestErrorName(rc), TCL_VOLATILE);
+  Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
 }
 
@@ -1407,16 +1407,16 @@ static int test_vfs_oom_test(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  extern int sqlite3_memdebug_vfs_oom_test;
+  extern int sqlite4_memdebug_vfs_oom_test;
   if( objc>2 ){
     Tcl_WrongNumArgs(interp, 1, objv, "?INTEGER?");
     return TCL_ERROR;
   }else if( objc==2 ){
     int iNew;
     if( Tcl_GetIntFromObj(interp, objv[1], &iNew) ) return TCL_ERROR;
-    sqlite3_memdebug_vfs_oom_test = iNew;
+    sqlite4_memdebug_vfs_oom_test = iNew;
   }
-  Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite3_memdebug_vfs_oom_test));
+  Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite4_memdebug_vfs_oom_test));
   return TCL_OK;
 }
 
@@ -1429,36 +1429,36 @@ int Sqlitetest_malloc_Init(Tcl_Interp *interp){
      Tcl_ObjCmdProc *xProc;
      int clientData;
   } aObjCmd[] = {
-     { "sqlite3_malloc",             test_malloc                   ,0 },
-     { "sqlite3_realloc",            test_realloc                  ,0 },
-     { "sqlite3_free",               test_free                     ,0 },
+     { "sqlite4_malloc",             test_malloc                   ,0 },
+     { "sqlite4_realloc",            test_realloc                  ,0 },
+     { "sqlite4_free",               test_free                     ,0 },
      { "memset",                     test_memset                   ,0 },
      { "memget",                     test_memget                   ,0 },
-     { "sqlite3_memory_used",        test_memory_used              ,0 },
-     { "sqlite3_memory_highwater",   test_memory_highwater         ,0 },
-     { "sqlite3_memdebug_backtrace", test_memdebug_backtrace       ,0 },
-     { "sqlite3_memdebug_dump",      test_memdebug_dump            ,0 },
-     { "sqlite3_memdebug_fail",      test_memdebug_fail            ,0 },
-     { "sqlite3_memdebug_pending",   test_memdebug_pending         ,0 },
-     { "sqlite3_memdebug_settitle",  test_memdebug_settitle        ,0 },
-     { "sqlite3_memdebug_malloc_count", test_memdebug_malloc_count ,0 },
-     { "sqlite3_memdebug_log",       test_memdebug_log             ,0 },
-     { "sqlite3_config_scratch",     test_config_scratch           ,0 },
-     { "sqlite3_config_pagecache",   test_config_pagecache         ,0 },
-     { "sqlite3_config_alt_pcache",  test_alt_pcache               ,0 },
-     { "sqlite3_status",             test_status                   ,0 },
-     { "sqlite3_db_status",          test_db_status                ,0 },
+     { "sqlite4_memory_used",        test_memory_used              ,0 },
+     { "sqlite4_memory_highwater",   test_memory_highwater         ,0 },
+     { "sqlite4_memdebug_backtrace", test_memdebug_backtrace       ,0 },
+     { "sqlite4_memdebug_dump",      test_memdebug_dump            ,0 },
+     { "sqlite4_memdebug_fail",      test_memdebug_fail            ,0 },
+     { "sqlite4_memdebug_pending",   test_memdebug_pending         ,0 },
+     { "sqlite4_memdebug_settitle",  test_memdebug_settitle        ,0 },
+     { "sqlite4_memdebug_malloc_count", test_memdebug_malloc_count ,0 },
+     { "sqlite4_memdebug_log",       test_memdebug_log             ,0 },
+     { "sqlite4_config_scratch",     test_config_scratch           ,0 },
+     { "sqlite4_config_pagecache",   test_config_pagecache         ,0 },
+     { "sqlite4_config_alt_pcache",  test_alt_pcache               ,0 },
+     { "sqlite4_status",             test_status                   ,0 },
+     { "sqlite4_db_status",          test_db_status                ,0 },
      { "install_malloc_faultsim",    test_install_malloc_faultsim  ,0 },
-     { "sqlite3_config_heap",        test_config_heap              ,0 },
-     { "sqlite3_config_memstatus",   test_config_memstatus         ,0 },
-     { "sqlite3_config_lookaside",   test_config_lookaside         ,0 },
-     { "sqlite3_config_error",       test_config_error             ,0 },
-     { "sqlite3_config_uri",         test_config_uri               ,0 },
-     { "sqlite3_db_config_lookaside",test_db_config_lookaside      ,0 },
-     { "sqlite3_dump_memsys3",       test_dump_memsys3             ,3 },
-     { "sqlite3_dump_memsys5",       test_dump_memsys3             ,5 },
-     { "sqlite3_install_memsys3",    test_install_memsys3          ,0 },
-     { "sqlite3_memdebug_vfs_oom_test", test_vfs_oom_test          ,0 },
+     { "sqlite4_config_heap",        test_config_heap              ,0 },
+     { "sqlite4_config_memstatus",   test_config_memstatus         ,0 },
+     { "sqlite4_config_lookaside",   test_config_lookaside         ,0 },
+     { "sqlite4_config_error",       test_config_error             ,0 },
+     { "sqlite4_config_uri",         test_config_uri               ,0 },
+     { "sqlite4_db_config_lookaside",test_db_config_lookaside      ,0 },
+     { "sqlite4_dump_memsys3",       test_dump_memsys3             ,3 },
+     { "sqlite4_dump_memsys5",       test_dump_memsys3             ,5 },
+     { "sqlite4_install_memsys3",    test_install_memsys3          ,0 },
+     { "sqlite4_memdebug_vfs_oom_test", test_vfs_oom_test          ,0 },
   };
   int i;
   for(i=0; i<sizeof(aObjCmd)/sizeof(aObjCmd[0]); i++){

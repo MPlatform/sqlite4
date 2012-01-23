@@ -41,7 +41,7 @@ do_execsql_test tkt-5e10420e8d.4 {
 } {}
 
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_execsql_test tkt-5e10420e8d.5 {
   PRAGMA integrity_check;

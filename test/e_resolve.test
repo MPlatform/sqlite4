@@ -46,7 +46,7 @@ set schema {
 proc resolve_reopen_db {} {
   db close
   forcedelete test.db test.db2 test.db3
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval $::schema
 }
 
@@ -112,7 +112,7 @@ do_execsql_test 5.2 { SELECT * FROM n4 } {at2  n4}
 #
 db close
 forcedelete test.db file.db
-sqlite3 db test.db
+sqlite4 db test.db
 do_execsql_test 6.1 {
   ATTACH 'file.db' AS aux;
   CREATE TABLE t1(x, y);

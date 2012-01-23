@@ -34,17 +34,17 @@
 #include "fts1_tokenizer.h"
 
 /*
-** Class derived from sqlite3_tokenizer
+** Class derived from sqlite4_tokenizer
 */
 typedef struct porter_tokenizer {
-  sqlite3_tokenizer base;      /* Base class */
+  sqlite4_tokenizer base;      /* Base class */
 } porter_tokenizer;
 
 /*
 ** Class derived from sqlit3_tokenizer_cursor
 */
 typedef struct porter_tokenizer_cursor {
-  sqlite3_tokenizer_cursor base;
+  sqlite4_tokenizer_cursor base;
   const char *zInput;          /* input we are tokenizing */
   int nInput;                  /* size of the input */
   int iOffset;                 /* current position in zInput */
@@ -55,7 +55,7 @@ typedef struct porter_tokenizer_cursor {
 
 
 /* Forward declaration */
-static const sqlite3_tokenizer_module porterTokenizerModule;
+static const sqlite4_tokenizer_module porterTokenizerModule;
 
 
 /*
@@ -63,7 +63,7 @@ static const sqlite3_tokenizer_module porterTokenizerModule;
 */
 static int porterCreate(
   int argc, const char * const *argv,
-  sqlite3_tokenizer **ppTokenizer
+  sqlite4_tokenizer **ppTokenizer
 ){
   porter_tokenizer *t;
   t = (porter_tokenizer *) calloc(sizeof(*t), 1);
@@ -76,7 +76,7 @@ static int porterCreate(
 /*
 ** Destroy a tokenizer
 */
-static int porterDestroy(sqlite3_tokenizer *pTokenizer){
+static int porterDestroy(sqlite4_tokenizer *pTokenizer){
   free(pTokenizer);
   return SQLITE_OK;
 }
@@ -88,9 +88,9 @@ static int porterDestroy(sqlite3_tokenizer *pTokenizer){
 ** *ppCursor.
 */
 static int porterOpen(
-  sqlite3_tokenizer *pTokenizer,         /* The tokenizer */
+  sqlite4_tokenizer *pTokenizer,         /* The tokenizer */
   const char *zInput, int nInput,        /* String to be tokenized */
-  sqlite3_tokenizer_cursor **ppCursor    /* OUT: Tokenization cursor */
+  sqlite4_tokenizer_cursor **ppCursor    /* OUT: Tokenization cursor */
 ){
   porter_tokenizer_cursor *c;
 
@@ -118,7 +118,7 @@ static int porterOpen(
 ** Close a tokenization cursor previously opened by a call to
 ** porterOpen() above.
 */
-static int porterClose(sqlite3_tokenizer_cursor *pCursor){
+static int porterClose(sqlite4_tokenizer_cursor *pCursor){
   porter_tokenizer_cursor *c = (porter_tokenizer_cursor *) pCursor;
   free(c->zToken);
   free(c);
@@ -576,7 +576,7 @@ static const char isIdChar[] = {
 ** have been opened by a prior call to porterOpen().
 */
 static int porterNext(
-  sqlite3_tokenizer_cursor *pCursor,  /* Cursor returned by porterOpen */
+  sqlite4_tokenizer_cursor *pCursor,  /* Cursor returned by porterOpen */
   const char **pzToken,               /* OUT: *pzToken is the token text */
   int *pnBytes,                       /* OUT: Number of bytes in token */
   int *piStartOffset,                 /* OUT: Starting offset of token */
@@ -621,7 +621,7 @@ static int porterNext(
 /*
 ** The set of routines that implement the porter-stemmer tokenizer
 */
-static const sqlite3_tokenizer_module porterTokenizerModule = {
+static const sqlite4_tokenizer_module porterTokenizerModule = {
   0,
   porterCreate,
   porterDestroy,
@@ -634,8 +634,8 @@ static const sqlite3_tokenizer_module porterTokenizerModule = {
 ** Allocate a new porter tokenizer.  Return a pointer to the new
 ** tokenizer in *ppModule
 */
-void sqlite3Fts1PorterTokenizerModule(
-  sqlite3_tokenizer_module const**ppModule
+void sqlite4Fts1PorterTokenizerModule(
+  sqlite4_tokenizer_module const**ppModule
 ){
   *ppModule = &porterTokenizerModule;
 }

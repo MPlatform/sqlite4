@@ -261,7 +261,7 @@ do_test tkt2822-6.6 {
 } {7 2 9 2 1 7 1 8}
 
 # More error message tests.  This is really more of a test of the
-# %r ordinal value formatting capablity added to sqlite3_snprintf()
+# %r ordinal value formatting capablity added to sqlite4_snprintf()
 # by ticket #2822.
 #
 do_test tkt2822-7.1 {

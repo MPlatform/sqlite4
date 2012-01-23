@@ -2,8 +2,8 @@
 #
 # This script is used to compile SQLite into a shared library on Linux.
 #
-# Two separate shared libraries are generated.  "sqlite3.so" is the core
-# library.  "tclsqlite3.so" contains the TCL bindings and is the
+# Two separate shared libraries are generated.  "sqlite4.so" is the core
+# library.  "tclsqlite4.so" contains the TCL bindings and is the
 # library that is loaded into TCL in order to run SQLite.
 #
 make target_source
@@ -22,11 +22,11 @@ for i in *.c; do
     $CMD
   fi
 done
-echo gcc -shared *.o $TCLSTUBLIB -o tclsqlite3.so
-gcc -shared *.o $TCLSTUBLIB -o tclsqlite3.so
-strip tclsqlite3.so
+echo gcc -shared *.o $TCLSTUBLIB -o tclsqlite4.so
+gcc -shared *.o $TCLSTUBLIB -o tclsqlite4.so
+strip tclsqlite4.so
 rm tclsqlite.c tclsqlite.o
-echo gcc -shared *.o -o sqlite3.so
-gcc -shared *.o -o sqlite3.so
-strip sqlite3.so
+echo gcc -shared *.o -o sqlite4.so
+gcc -shared *.o -o sqlite4.so
+strip sqlite4.so
 cd ..

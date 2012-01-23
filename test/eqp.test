@@ -499,11 +499,11 @@ det 5.13 "SELECT a FROM t1 EXCEPT SELECT d FROM t2 ORDER BY 1" {
 #
 set boilerplate {
   proc explain_query_plan {db sql} {
-    set stmt [sqlite3_prepare_v2 db $sql -1 DUMMY]
+    set stmt [sqlite4_prepare_v2 db $sql -1 DUMMY]
     print_explain_query_plan $stmt
-    sqlite3_finalize $stmt
+    sqlite4_finalize $stmt
   }
-  sqlite3 db test.db
+  sqlite4 db test.db
   explain_query_plan db {%SQL%}
   db close
   exit
@@ -564,7 +564,7 @@ do_execsql_test 7.3 {
 }
 
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 
 det 7.4 "SELECT count(*) FROM t1" {
   0 0 0 {SCAN TABLE t1 (~2 rows)}

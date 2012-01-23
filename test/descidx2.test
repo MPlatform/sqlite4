@@ -67,7 +67,7 @@ do_test descidx2-1.2 {
 do_test descidx2-2.0 {
   set_file_format 3
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   get_file_format
 } {3}
 

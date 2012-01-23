@@ -11,7 +11,7 @@
 #
 # This file attempts to check the behavior of the SQLite library in 
 # an out-of-memory situation. When compiled with -DSQLITE_DEBUG=1, 
-# the SQLite library accepts a special command (sqlite3_memdebug_fail N C)
+# the SQLite library accepts a special command (sqlite4_memdebug_fail N C)
 # which causes the N-th malloc to fail.  This special feature is used
 # to see what happens in the library if a malloc were to really fail
 # due to an out-of-memory situation.
@@ -35,18 +35,18 @@ if {!$MEMDEBUG} {
 # that that we can say that we have.
 #
 puts stderr "This is a test.  Ignore the error that follows:"
-sqlite3_memdebug_dump $testdir
+sqlite4_memdebug_dump $testdir
 puts "Memory dump to file memdump.txt..."
-sqlite3_memdebug_dump memdump.txt
+sqlite4_memdebug_dump memdump.txt
 
 ifcapable bloblit&&subquery {
   do_malloc_test 1 -tclprep {
     db close
   } -tclbody {
-    if {[catch {sqlite3 db test.db}]} {
+    if {[catch {sqlite4 db test.db}]} {
       error "out of memory"
     }
-    sqlite3_extended_result_codes db 1
+    sqlite4_extended_result_codes db 1
   } -sqlbody {
     DROP TABLE IF EXISTS t1;
     CREATE TABLE t1(
@@ -213,7 +213,7 @@ do_malloc_test 7 -sqlprep {
 # correctly. 
 #
 # This is done by retrieving a string from the database engine and
-# manipulating it using the sqlite3_column_*** APIs. This doesn't 
+# manipulating it using the sqlite4_column_*** APIs. This doesn't 
 # actually return an error to the user when a malloc() fails.. That 
 # could be viewed as a bug.
 #
@@ -223,8 +223,8 @@ ifcapable utf16 {
   set ::STMT {}
   do_malloc_test 8 -tclprep {
     set sql "SELECT '[string repeat abc 20]', '[string repeat def 20]', ?"
-    set ::STMT [sqlite3_prepare db $sql -1 X]
-    sqlite3_step $::STMT
+    set ::STMT [sqlite4_prepare db $sql -1 X]
+    sqlite4_step $::STMT
     if { $::tcl_platform(byteOrder)=="littleEndian" } {
       set ::bomstr "\xFF\xFE"
     } else {
@@ -232,20 +232,20 @@ ifcapable utf16 {
     }
     append ::bomstr [encoding convertto unicode "123456789_123456789_123456789"]
   } -tclbody {
-    sqlite3_column_text16 $::STMT 0
-    sqlite3_column_int $::STMT 0
-    sqlite3_column_text16 $::STMT 1
-    sqlite3_column_double $::STMT 1
-    set rc [sqlite3_reset $::STMT]
+    sqlite4_column_text16 $::STMT 0
+    sqlite4_column_int $::STMT 0
+    sqlite4_column_text16 $::STMT 1
+    sqlite4_column_double $::STMT 1
+    set rc [sqlite4_reset $::STMT]
     if {$rc eq "SQLITE_NOMEM"} {error "out of memory"}
-    sqlite3_bind_text16 $::STMT 1 $::bomstr 60
-    #catch {sqlite3_finalize $::STMT}
+    sqlite4_bind_text16 $::STMT 1 $::bomstr 60
+    #catch {sqlite4_finalize $::STMT}
     #if {[lindex [sqlite_malloc_stat] 2]<=0} {
     #  error "out of memory"
     #}
   } -cleanup {
     if {$::STMT!=""} {
-      sqlite3_finalize $::STMT
+      sqlite4_finalize $::STMT
       set ::STMT {}
     }
   }
@@ -271,23 +271,23 @@ do_malloc_test 10 -tclprep {
   catch {db2 close}
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
-  sqlite3_extended_result_codes db 1
+  sqlite4 db test.db
+  sqlite4_extended_result_codes db 1
   db eval {CREATE TABLE abc(a, b, c)}
 } -tclbody {
   db close
-  sqlite3 db2 test.db
-  sqlite3_extended_result_codes db2 1
+  sqlite4 db2 test.db
+  sqlite4_extended_result_codes db2 1
   db2 eval {SELECT * FROM sqlite_master}
   db2 close
 }
 
 # This block tests malloc() failures that occur within calls to
-# sqlite3_create_function().
+# sqlite4_create_function().
 do_malloc_test 11 -tclbody {
-  set rc [sqlite3_create_function db]
+  set rc [sqlite4_create_function db]
   if {[string match $rc SQLITE_OK]} {
-    set rc [sqlite3_create_aggregate db]
+    set rc [sqlite4_create_aggregate db]
   }
   if {[string match $rc SQLITE_NOMEM]} {
     error "out of memory"
@@ -297,8 +297,8 @@ do_malloc_test 11 -tclbody {
 do_malloc_test 12 -tclbody {
   set sql16 [encoding convertto unicode "SELECT * FROM sqlite_master"]
   append sql16 "\00\00"
-  set ::STMT [sqlite3_prepare16 db $sql16 -1 DUMMY]
-  sqlite3_finalize $::STMT
+  set ::STMT [sqlite4_prepare16 db $sql16 -1 DUMMY]
+  sqlite4_finalize $::STMT
 }
 
 # Test malloc errors when replaying two hot journals from a 2-file 
@@ -331,8 +331,8 @@ ifcapable crashtest&&attach {
 if {$tcl_platform(platform)!="windows"} {
   do_malloc_test 14 -tclprep {
     catch {db close}
-    sqlite3 db2 test2.db
-    sqlite3_extended_result_codes db2 1
+    sqlite4 db2 test2.db
+    sqlite4_extended_result_codes db2 1
     db2 eval {
       PRAGMA journal_mode = DELETE;    /* For inmemory_journal permutation */
       PRAGMA synchronous = 0;
@@ -345,8 +345,8 @@ if {$tcl_platform(platform)!="windows"} {
     forcecopy test2.db-journal test.db-journal
     db2 close
   } -tclbody {
-    sqlite3 db test.db
-    sqlite3_extended_result_codes db 1
+    sqlite4 db test.db
+    sqlite4_extended_result_codes db 1
 
     # If an out-of-memory occurs within a call to a VFS layer function during
     # hot-journal rollback, sqlite will report SQLITE_CORRUPT. See commit
@@ -362,8 +362,8 @@ proc string_compare {a b} {
   return [string compare $a $b]
 }
 
-# Test for malloc() failures in sqlite3_create_collation() and 
-# sqlite3_create_collation16().
+# Test for malloc() failures in sqlite4_create_collation() and 
+# sqlite4_create_collation16().
 #
 ifcapable utf16 {
   do_malloc_test 15 -start 4 -tclbody {
@@ -384,7 +384,7 @@ ifcapable utf16 {
   }
 }
 
-# Also test sqlite3_complete(). There are (currently) no malloc()
+# Also test sqlite4_complete(). There are (currently) no malloc()
 # calls in this function, but test anyway against future changes.
 #
 do_malloc_test 16 -tclbody {
@@ -395,28 +395,28 @@ do_malloc_test 16 -tclbody {
   }
 }
 
-# Test handling of malloc() failures in sqlite3_open16().
+# Test handling of malloc() failures in sqlite4_open16().
 #
 ifcapable utf16 {
   do_malloc_test 17 -tclbody {
     set DB2 0
     set STMT 0
   
-    # open database using sqlite3_open16()
+    # open database using sqlite4_open16()
     set filename [encoding convertto unicode test.db]
     append filename "\x00\x00"
-    set DB2 [sqlite3_open16 $filename -unused]
+    set DB2 [sqlite4_open16 $filename -unused]
     if {0==$DB2} {
       error "out of memory"
     }
-    sqlite3_extended_result_codes $DB2 1
+    sqlite4_extended_result_codes $DB2 1
   
     # Prepare statement
-    set rc [catch {sqlite3_prepare $DB2 {SELECT * FROM sqlite_master} -1 X} msg]
-    if {[sqlite3_errcode $DB2] eq "SQLITE_IOERR+12"} {
+    set rc [catch {sqlite4_prepare $DB2 {SELECT * FROM sqlite_master} -1 X} msg]
+    if {[sqlite4_errcode $DB2] eq "SQLITE_IOERR+12"} {
       error "out of memory"
     }
-    if {[regexp ".*automatic extension loading.*" [sqlite3_errmsg $DB2]]} {
+    if {[regexp ".*automatic extension loading.*" [sqlite4_errmsg $DB2]]} {
       error "out of memory"
     }
     if {$rc} {
@@ -425,29 +425,29 @@ ifcapable utf16 {
     set STMT $msg
   
     # Finalize statement
-    set rc [sqlite3_finalize $STMT]
+    set rc [sqlite4_finalize $STMT]
     if {$rc!="SQLITE_OK"} {
-      error [sqlite3_errmsg $DB2]
+      error [sqlite4_errmsg $DB2]
     }
     set STMT 0
   
     # Close database
-    set rc [sqlite3_close $DB2]
+    set rc [sqlite4_close $DB2]
     if {$rc!="SQLITE_OK"} {
-      error [sqlite3_errmsg $DB2]
+      error [sqlite4_errmsg $DB2]
     }
     set DB2 0
   } -cleanup {
     if {$STMT!="0"} {
-      sqlite3_finalize $STMT
+      sqlite4_finalize $STMT
     }
     if {$DB2!="0"} {
-      set rc [sqlite3_close $DB2]
+      set rc [sqlite4_close $DB2]
     }
   }
 }
 
-# Test handling of malloc() failures in sqlite3_errmsg16().
+# Test handling of malloc() failures in sqlite4_errmsg16().
 #
 ifcapable utf16 {
   do_malloc_test 18 -tclprep {
@@ -455,7 +455,7 @@ ifcapable utf16 {
       db eval "SELECT [string repeat longcolumnname 10] FROM sqlite_master"
     }
   } -tclbody {
-    set utf16 [sqlite3_errmsg16 [sqlite3_connection_pointer db]]
+    set utf16 [sqlite4_errmsg16 [sqlite4_connection_pointer db]]
     binary scan $utf16 c* bytes
     if {[llength $bytes]==0} {
       error "out of memory"
@@ -481,14 +481,14 @@ do_malloc_test 19 -tclprep {
 } -tclbody {
   unset -nocomplain ::STMT
   set r [catch {
-    set ::STMT [sqlite3_prepare db {SELECT ?} -1 DUMMY]
-    sqlite3_bind_text16 -static $::STMT 1 $static_string 112
+    set ::STMT [sqlite4_prepare db {SELECT ?} -1 DUMMY]
+    sqlite4_bind_text16 -static $::STMT 1 $static_string 112
   } msg]
   if {$r} {error [string range $msg 4 end]}
   set msg
 } -cleanup {
   if {[info exists ::STMT]} {
-    sqlite3_finalize $::STMT
+    sqlite4_finalize $::STMT
   }
 }
 unset static_string
@@ -500,15 +500,15 @@ ifcapable attach {
   do_malloc_test 20 -tclprep {
     db close
     forcedelete test2.db test2.db-journal
-    sqlite3 db test2.db
-    sqlite3_extended_result_codes db 1
+    sqlite4 db test2.db
+    sqlite4_extended_result_codes db 1
     db eval {CREATE TABLE t1(x);}
     db close
   } -tclbody {
-    if {[catch {sqlite3 db test.db}]} {
+    if {[catch {sqlite4 db test.db}]} {
       error "out of memory"
     }
-    sqlite3_extended_result_codes db 1
+    sqlite4_extended_result_codes db 1
   } -sqlbody {
     ATTACH DATABASE 'test2.db' AS t2;
     SELECT * FROM t1;
@@ -524,19 +524,19 @@ ifcapable foreignkey {
   } 
 }
 
-# Test malloc failure in an sqlite3_prepare_v2() call.
+# Test malloc failure in an sqlite4_prepare_v2() call.
 #
 do_malloc_test 22 -tclbody {
   set ::STMT ""
   set r [catch {
     set ::STMT [
-      sqlite3_prepare_v2 db "SELECT * FROM sqlite_master" -1 DUMMY
+      sqlite4_prepare_v2 db "SELECT * FROM sqlite_master" -1 DUMMY
     ]
   } msg]
   if {$r} {error [string range $msg 4 end]}
 } -cleanup {
   if {$::STMT ne ""} {
-    sqlite3_finalize $::STMT
+    sqlite4_finalize $::STMT
     set ::STMT ""
   }
 }
@@ -645,18 +645,18 @@ do_malloc_test 26 -sqlprep {
   COMMIT;
 } -tclbody {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval { INSERT INTO t1 VALUES(1, randomblob(210)) }
 }
 
 # Test that no memory is leaked following a malloc() failure in
-# sqlite3_initialize().
+# sqlite4_initialize().
 #
 do_malloc_test 27 -tclprep {
   db close
-  sqlite3_shutdown
+  sqlite4_shutdown
 } -tclbody {
-  set rc [sqlite3_initialize]
+  set rc [sqlite4_initialize]
   if {$rc == "SQLITE_NOMEM"} {
     error "out of memory"
   }
@@ -689,7 +689,7 @@ do_malloc_test 30 -tclprep {
     INSERT INTO t1 VALUES(randstr(500,500));
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   # The DELETE command in the following block moves the overflow pages that
   # are part of the primary key index to the free-list. But it does not
@@ -752,7 +752,7 @@ do_malloc_test 32 -tclprep {
   # Open a second database connection. Load the table (but not index)
   # into the second connections pager cache.
   #
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   db2 eval { 
     PRAGMA locking_mode = normal;
     SELECT b FROM t1;
@@ -823,15 +823,15 @@ do_malloc_test 34 -tclprep {
 proc f {args} { error "Quite a long error!" }
 do_malloc_test 35 -tclprep {
   db func f f
-  set ::STMT [sqlite3_prepare db "SELECT f()" -1 DUMMY]
-  sqlite3_step $::STMT
+  set ::STMT [sqlite4_prepare db "SELECT f()" -1 DUMMY]
+  sqlite4_step $::STMT
 } -tclbody {
-  sqlite3_finalize $::STMT
+  sqlite4_finalize $::STMT
 } -cleanup {
   # At one point an assert( !db->mallocFailed ) could fail in the following
-  # call to sqlite3_errmsg(). Because sqlite3_finalize() had failed to clear
+  # call to sqlite4_errmsg(). Because sqlite4_finalize() had failed to clear
   # the flag before returning.
-  sqlite3_errmsg16 db
+  sqlite4_errmsg16 db
 }
 
 do_malloc_test 36 -sqlprep {
@@ -847,7 +847,7 @@ do_malloc_test 36 -sqlprep {
 # that bug has been fixed.i
 if {[db eval {PRAGMA locking_mode}]!="exclusive"} {
   do_malloc_test 37 -tclprep {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql {
       CREATE TABLE t1(a, b);
       INSERT INTO t1 VALUES(1, 2);
@@ -873,7 +873,7 @@ if {[db eval {PRAGMA locking_mode}]!="exclusive"} {
 # at one point, depending on the configuration.
 #
 do_malloc_test 39 -tclprep {
-  sqlite3 db test.db
+  sqlite4 db test.db
 } -sqlbody {
   SELECT test_auxdata('abc', 'def');
 } -cleanup {

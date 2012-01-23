@@ -78,10 +78,10 @@ foreach {testnum pattern text ans} {
   54  {*[xyz]efg}     {abcwefg} 0
 } {
   do_test quota-glob-$testnum.1 {
-    sqlite3_quota_glob $::pattern $::text
+    sqlite4_quota_glob $::pattern $::text
   } $::ans
   do_test quota-glob-$testnum.2 {
-    sqlite3_quota_glob $::pattern [string map {/ \\} $::text]
+    sqlite4_quota_glob $::pattern [string map {/ \\} $::text]
   } $::ans
 }
 finish_test

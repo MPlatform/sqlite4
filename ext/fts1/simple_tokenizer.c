@@ -29,12 +29,12 @@ static char *string_dup(const char *s){
 }
 
 typedef struct simple_tokenizer {
-  sqlite3_tokenizer base;
+  sqlite4_tokenizer base;
   const char *zDelim;          /* token delimiters */
 } simple_tokenizer;
 
 typedef struct simple_tokenizer_cursor {
-  sqlite3_tokenizer_cursor base;
+  sqlite4_tokenizer_cursor base;
   const char *pInput;          /* input we are tokenizing */
   int nBytes;                  /* size of the input */
   const char *pCurrent;        /* current position in pInput */
@@ -44,11 +44,11 @@ typedef struct simple_tokenizer_cursor {
   int nTokenAllocated;         /* space allocated to zToken buffer */
 } simple_tokenizer_cursor;
 
-static sqlite3_tokenizer_module simpleTokenizerModule;/* forward declaration */
+static sqlite4_tokenizer_module simpleTokenizerModule;/* forward declaration */
 
 static int simpleCreate(
   int argc, const char **argv,
-  sqlite3_tokenizer **ppTokenizer
+  sqlite4_tokenizer **ppTokenizer
 ){
   simple_tokenizer *t;
 
@@ -78,7 +78,7 @@ static int simpleCreate(
   return SQLITE_OK;
 }
 
-static int simpleDestroy(sqlite3_tokenizer *pTokenizer){
+static int simpleDestroy(sqlite4_tokenizer *pTokenizer){
   simple_tokenizer *t = (simple_tokenizer *) pTokenizer;
 
   free((void *) t->zDelim);
@@ -88,9 +88,9 @@ static int simpleDestroy(sqlite3_tokenizer *pTokenizer){
 }
 
 static int simpleOpen(
-  sqlite3_tokenizer *pTokenizer,
+  sqlite4_tokenizer *pTokenizer,
   const char *pInput, int nBytes,
-  sqlite3_tokenizer_cursor **ppCursor
+  sqlite4_tokenizer_cursor **ppCursor
 ){
   simple_tokenizer_cursor *c;
 
@@ -107,7 +107,7 @@ static int simpleOpen(
   return SQLITE_OK;
 }
 
-static int simpleClose(sqlite3_tokenizer_cursor *pCursor){
+static int simpleClose(sqlite4_tokenizer_cursor *pCursor){
   simple_tokenizer_cursor *c = (simple_tokenizer_cursor *) pCursor;
 
   if( NULL!=c->zToken ){
@@ -119,7 +119,7 @@ static int simpleClose(sqlite3_tokenizer_cursor *pCursor){
 }
 
 static int simpleNext(
-  sqlite3_tokenizer_cursor *pCursor,
+  sqlite4_tokenizer_cursor *pCursor,
   const char **ppToken, int *pnBytes,
   int *piStartOffset, int *piEndOffset, int *piPosition
 ){
@@ -158,7 +158,7 @@ static int simpleNext(
   return SQLITE_DONE;
 }
 
-static sqlite3_tokenizer_module simpleTokenizerModule = {
+static sqlite4_tokenizer_module simpleTokenizerModule = {
   0,
   simpleCreate,
   simpleDestroy,
@@ -168,7 +168,7 @@ static sqlite3_tokenizer_module simpleTokenizerModule = {
 };
 
 void get_simple_tokenizer_module(
-  sqlite3_tokenizer_module **ppModule
+  sqlite4_tokenizer_module **ppModule
 ){
   *ppModule = &simpleTokenizerModule;
 }

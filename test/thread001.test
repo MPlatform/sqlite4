@@ -16,7 +16,7 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 if {[run_thread_tests]==0} { finish_test ; return }
 
-set ::enable_shared_cache [sqlite3_enable_shared_cache]
+set ::enable_shared_cache [sqlite4_enable_shared_cache]
 
 set ::NTHREAD 10
 
@@ -39,14 +39,14 @@ foreach {tn same_db shared_cache} [list \
 
   do_test thread001.$tn.0 {
     db close
-    sqlite3_enable_shared_cache $shared_cache
-    sqlite3_enable_shared_cache $shared_cache
+    sqlite4_enable_shared_cache $shared_cache
+    sqlite4_enable_shared_cache $shared_cache
   } $shared_cache
-  sqlite3 db test.db -fullmutex 1 -key xyzzy
+  sqlite4 db test.db -fullmutex 1 -key xyzzy
 
   set dbconfig ""
   if {$same_db} {
-    set dbconfig [list set ::DB [sqlite3_connection_pointer db]]
+    set dbconfig [list set ::DB [sqlite4_connection_pointer db]]
   }
 
   # Set up a database and a schema. The database contains a single
@@ -98,7 +98,7 @@ foreach {tn same_db shared_cache} [list \
   
     if {$needToClose} {
       #sqlthread parent "puts \"CLOSE $::DB\""
-      sqlite3_close $::DB
+      sqlite4_close $::DB
     }
     #sqlthread parent "puts \"DONE\""
   
@@ -140,6 +140,6 @@ foreach {tn same_db shared_cache} [list \
   } {ok}
 }
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 set sqlite_open_file_count 0
 finish_test

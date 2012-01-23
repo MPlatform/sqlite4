@@ -18,7 +18,7 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-set DB [sqlite3_connection_pointer db]
+set DB [sqlite4_connection_pointer db]
 
 do_test rollback-1.1 {
   execsql {
@@ -42,8 +42,8 @@ ifcapable conflict {
   } {}
 }
 do_test rollback-1.3 {
-  set STMT [sqlite3_prepare $DB "SELECT a FROM t1" -1 TAIL]
-  sqlite3_step $STMT
+  set STMT [sqlite4_prepare $DB "SELECT a FROM t1" -1 TAIL]
+  sqlite4_step $STMT
 } {SQLITE_ROW}
 
 ifcapable conflict {
@@ -59,24 +59,24 @@ ifcapable conflict {
   # Try to continue with the SELECT statement
   #
   do_test rollback-1.5 {
-    sqlite3_step $STMT
+    sqlite4_step $STMT
   } {SQLITE_ERROR}
 
   # Restart the SELECT statement
   #
-  do_test rollback-1.6 { sqlite3_reset $STMT } {SQLITE_ABORT}
+  do_test rollback-1.6 { sqlite4_reset $STMT } {SQLITE_ABORT}
 } else {
-  do_test rollback-1.6 { sqlite3_reset $STMT } {SQLITE_OK}
+  do_test rollback-1.6 { sqlite4_reset $STMT } {SQLITE_OK}
 }
 
 do_test rollback-1.7 {
-  sqlite3_step $STMT
+  sqlite4_step $STMT
 } {SQLITE_ROW}
 do_test rollback-1.8 {
-  sqlite3_step $STMT
+  sqlite4_step $STMT
 } {SQLITE_ROW}
 do_test rollback-1.9 {
-  sqlite3_finalize $STMT
+  sqlite4_finalize $STMT
 } {SQLITE_OK}
 
 if {$tcl_platform(platform) == "unix" 
@@ -128,7 +128,7 @@ if {$tcl_platform(platform) == "unix"
   # file and proceed with the query.
   # 
   do_test rollback-2.2 {
-    sqlite3 db2 testA.db
+    sqlite4 db2 testA.db
     execsql {
       SELECT distinct tbl_name FROM sqlite_master;
     } db2

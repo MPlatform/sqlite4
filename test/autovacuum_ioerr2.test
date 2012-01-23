@@ -79,7 +79,7 @@ forcedelete backup.db
 ifcapable subquery {
   do_ioerr_test autovacuum-ioerr2-4 -tclprep {
     if {![file exists backup.db]} {
-      sqlite3 dbb backup.db 
+      sqlite4 dbb backup.db 
       execsql {
         PRAGMA auto_vacuum = 1;
         BEGIN;
@@ -102,7 +102,7 @@ ifcapable subquery {
     forcedelete test.db
     forcedelete test.db-journal
     forcecopy backup.db test.db
-    set ::DB [sqlite3 db test.db]
+    set ::DB [sqlite4 db test.db]
     execsql {
       PRAGMA cache_size = 10;
     }

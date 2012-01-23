@@ -36,14 +36,14 @@
 ** Malloc and Free functions
 */
 static void *fts3HashMalloc(int n){
-  void *p = sqlite3_malloc(n);
+  void *p = sqlite4_malloc(n);
   if( p ){
     memset(p, 0, n);
   }
   return p;
 }
 static void fts3HashFree(void *p){
-  sqlite3_free(p);
+  sqlite4_free(p);
 }
 
 /* Turn bulk memory into a hash table object by initializing the
@@ -56,7 +56,7 @@ static void fts3HashFree(void *p){
 ** true if the hash table should make its own private copy of keys and
 ** false if it should just use the supplied pointer.
 */
-void sqlite3Fts3HashInit(Fts3Hash *pNew, char keyClass, char copyKey){
+void sqlite4Fts3HashInit(Fts3Hash *pNew, char keyClass, char copyKey){
   assert( pNew!=0 );
   assert( keyClass>=FTS3_HASH_STRING && keyClass<=FTS3_HASH_BINARY );
   pNew->keyClass = keyClass;
@@ -71,7 +71,7 @@ void sqlite3Fts3HashInit(Fts3Hash *pNew, char keyClass, char copyKey){
 ** Call this routine to delete a hash table or to reset a hash table
 ** to the empty state.
 */
-void sqlite3Fts3HashClear(Fts3Hash *pH){
+void sqlite4Fts3HashClear(Fts3Hash *pH){
   Fts3HashElem *elem;         /* For looping over all elements of the table */
 
   assert( pH!=0 );
@@ -279,7 +279,7 @@ static void fts3RemoveElementByHash(
   }
 }
 
-Fts3HashElem *sqlite3Fts3HashFindElem(
+Fts3HashElem *sqlite4Fts3HashFindElem(
   const Fts3Hash *pH, 
   const void *pKey, 
   int nKey
@@ -300,10 +300,10 @@ Fts3HashElem *sqlite3Fts3HashFindElem(
 ** that matches pKey,nKey.  Return the data for this element if it is
 ** found, or NULL if there is no match.
 */
-void *sqlite3Fts3HashFind(const Fts3Hash *pH, const void *pKey, int nKey){
+void *sqlite4Fts3HashFind(const Fts3Hash *pH, const void *pKey, int nKey){
   Fts3HashElem *pElem;            /* The element that matches key (if any) */
 
-  pElem = sqlite3Fts3HashFindElem(pH, pKey, nKey);
+  pElem = sqlite4Fts3HashFindElem(pH, pKey, nKey);
   return pElem ? pElem->data : 0;
 }
 
@@ -322,7 +322,7 @@ void *sqlite3Fts3HashFind(const Fts3Hash *pH, const void *pKey, int nKey){
 ** If the "data" parameter to this function is NULL, then the
 ** element corresponding to "key" is removed from the hash table.
 */
-void *sqlite3Fts3HashInsert(
+void *sqlite4Fts3HashInsert(
   Fts3Hash *pH,        /* The hash table to insert into */
   const void *pKey,    /* The key */
   int nKey,            /* Number of bytes in the key */

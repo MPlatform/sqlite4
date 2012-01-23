@@ -26,7 +26,7 @@ ifcapable !wal {finish_test ; return }
 proc reopen_db {} {
   catch { db close }
   forcedelete test.db test.db-wal test.db-wal-summary
-  sqlite3_wal db test.db
+  sqlite4_wal db test.db
 }
 
 set ::blobcnt 0
@@ -35,8 +35,8 @@ proc blob {nByte} {
   return [string range [string repeat "${::blobcnt}x" $nByte] 1 $nByte]
 }
 
-proc sqlite3_wal {args} {
-  eval sqlite3 $args
+proc sqlite4_wal {args} {
+  eval sqlite4 $args
   [lindex $args 0] eval { PRAGMA auto_vacuum = 0 }
   [lindex $args 0] eval { PRAGMA page_size = 1024 }
   [lindex $args 0] eval { PRAGMA journal_mode = wal }
@@ -105,7 +105,7 @@ do_test wal-1.5 {
 } {1 2 3 4 5 6 7 8 9 10}
 
 do_test wal-2.1 {
-  sqlite3_wal db2 ./test.db
+  sqlite4_wal db2 ./test.db
   execsql { BEGIN; SELECT * FROM t1 } db2
 } {1 2 3 4 5 6 7 8 9 10}
 
@@ -173,7 +173,7 @@ do_test wal-4.3 {
 
 do_test wal-4.4.1 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   db func blob blob
   list [execsql { SELECT * FROM t1 }] [file size test.db-wal]
 } {{a b} 0}
@@ -213,7 +213,7 @@ do_test wal-4.4.5 {
 do_test wal-4.4.6 {
   forcecopy test.db test2.db
   forcecopy test.db-wal test2.db-wal
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   execsql { SELECT count(*) FROM t2 ; SELECT count(*) FROM t1 } db2
 } {1 2}
 do_test wal-4.4.7 {
@@ -229,7 +229,7 @@ do_test wal-4.5.1 {
     CREATE TABLE t1(a, b);
     INSERT INTO t1 VALUES('a', 'b');
   }
-  sqlite3 db test.db
+  sqlite4 db test.db
   db func blob blob
   list [execsql { SELECT * FROM t1 }] [file size test.db-wal]
 } {{a b} 0}
@@ -271,7 +271,7 @@ do_test wal-4.5.5 {
 do_test wal-4.5.6 {
   forcecopy test.db test2.db
   forcecopy test.db-wal test2.db-wal
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   execsql { SELECT count(*) FROM t2 ; SELECT count(*) FROM t1 } db2
 } {1 2}
 do_test wal-4.5.7 {
@@ -332,11 +332,11 @@ do_test wal-5.5 {
 db close
 
 foreach sector {512 4096} {
-  sqlite3_simulate_device -sectorsize $sector
+  sqlite4_simulate_device -sectorsize $sector
   foreach pgsz {512 1024 2048 4096} {
     forcedelete test.db test.db-wal
     do_test wal-6.$sector.$pgsz.1 {
-      sqlite3 db test.db -vfs devsym
+      sqlite4 db test.db -vfs devsym
       execsql "
         PRAGMA page_size = $pgsz;
         PRAGMA auto_vacuum = 0;
@@ -358,7 +358,7 @@ foreach sector {512 4096} {
 
 do_test wal-7.1 {
   forcedelete test.db test.db-wal
-  sqlite3_wal db test.db
+  sqlite4_wal db test.db
   execsql {
     PRAGMA page_size = 1024;
     CREATE TABLE t1(a, b);
@@ -379,7 +379,7 @@ do_test wal-8.1 {
   catch { db close }
   forcedelete test.db test.db-wal
 
-  sqlite3 db test.db
+  sqlite4 db test.db
   db function blob blob
   execsql {
     PRAGMA auto_vacuum = 1;
@@ -431,7 +431,7 @@ do_test wal-9.1 {
   file size test.db
 } 1024
 do_test wal-9.2 {
-  sqlite3_wal db2 test.db
+  sqlite4_wal db2 test.db
   execsql {PRAGMA integrity_check } db2
 } {ok}
 
@@ -439,7 +439,7 @@ do_test wal-9.3 {
   forcedelete test2.db test2.db-wal
   copy_file test.db test2.db
   copy_file test.db-wal test2.db-wal
-  sqlite3_wal db3 test2.db 
+  sqlite4_wal db3 test2.db 
   execsql {PRAGMA integrity_check } db3
 } {ok}
 db3 close
@@ -447,7 +447,7 @@ db3 close
 do_test wal-9.4 {
   execsql { PRAGMA wal_checkpoint }
   db2 close
-  sqlite3_wal db2 test.db
+  sqlite4_wal db2 test.db
   execsql {PRAGMA integrity_check } db2
 } {ok}
 
@@ -607,8 +607,8 @@ do_multiclient_test tn {
   } {}
   do_test wal-10.$tn.28 {
     code3 {
-      set ::STMT [sqlite3_prepare db3 "SELECT * FROM t1" -1 TAIL]
-      sqlite3_step $::STMT
+      set ::STMT [sqlite4_prepare db3 "SELECT * FROM t1" -1 TAIL]
+      sqlite4_step $::STMT
     }
     execsql { SELECT * FROM t1 }
   } {1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18}
@@ -617,7 +617,7 @@ do_multiclient_test tn {
     catchsql { PRAGMA wal_checkpoint }
   } {0 {0 3 0}}
   do_test wal-10.$tn.30 {
-    code3 { sqlite3_finalize $::STMT }
+    code3 { sqlite4_finalize $::STMT }
     execsql { PRAGMA wal_checkpoint }
   } {0 3 0}
 
@@ -726,7 +726,7 @@ do_test wal-11.9 {
   db close
   list [expr [file size test.db]/1024] [log_deleted test.db-wal]
 } {37 1}
-sqlite3_wal db test.db
+sqlite4_wal db test.db
 do_test wal-11.10 {
   execsql {
     PRAGMA cache_size = 10;
@@ -775,7 +775,7 @@ do_test wal-12.1 {
 } [list 1 [wal_file_size 5 1024]]
 do_test wal-12.2 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA synchronous = normal;
     UPDATE t1 SET y = 0 WHERE x = 'A';
@@ -789,7 +789,7 @@ do_test wal-12.3 {
 do_test wal-12.4 {
   forcecopy test.db test2.db
   forcecopy test.db-wal test2.db-wal
-  sqlite3_wal db2 test2.db
+  sqlite4_wal db2 test2.db
   execsql { SELECT * FROM t2 } db2
 } {B 1}
 db2 close
@@ -807,7 +807,7 @@ do_test wal-12.5 {
 do_test wal-12.6 {
   forcecopy test.db test2.db
   forcecopy test.db-wal test2.db-wal
-  sqlite3_wal db2 test2.db
+  sqlite4_wal db2 test2.db
   execsql { SELECT * FROM t2 } db2
 } {B 2}
 db2 close
@@ -846,7 +846,7 @@ do_test wal-13.1.2 {
   seek $fd [expr 200*1024*1024]
   puts $fd ""
   close $fd
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { SELECT * FROM t2 }
 } {B 2}
 breakpoint
@@ -856,7 +856,7 @@ do_test wal-13.1.3 {
 } {0}
 
 do_test wal-13.2.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { SELECT count(*) FROM t2 }
 } {1}
 do_test wal-13.2.2 {
@@ -911,8 +911,8 @@ catch { db close }
 catch { db2 close }
 catch { db3 close }
 forcedelete test.db test.db-wal
-sqlite3 db test.db
-sqlite3 db2 test.db
+sqlite4 db test.db
+sqlite4 db2 test.db
 do_test wal-14 {
   execsql {
     PRAGMA journal_mode = WAL;
@@ -946,10 +946,10 @@ catch { db2 close }
 
 #-------------------------------------------------------------------------
 # The following block of tests - wal-15.* - focus on testing the 
-# implementation of the sqlite3_wal_checkpoint() interface.
+# implementation of the sqlite4_wal_checkpoint() interface.
 #
 forcedelete test.db test.db-wal
-sqlite3 db test.db
+sqlite4 db test.db
 do_test wal-15.1 {
   execsql {
     PRAGMA auto_vacuum = 0;
@@ -965,13 +965,13 @@ do_test wal-15.1 {
 # Test that an error is returned if the database name is not recognized
 #
 do_test wal-15.2.1 {
-  sqlite3_wal_checkpoint db aux
+  sqlite4_wal_checkpoint db aux
 } {SQLITE_ERROR}
 do_test wal-15.2.2 {
-  sqlite3_errcode db
+  sqlite4_errcode db
 } {SQLITE_ERROR}
 do_test wal-15.2.3 {
-  sqlite3_errmsg db
+  sqlite4_errmsg db
 } {unknown database: aux}
 
 # Test that an error is returned if an attempt is made to checkpoint
@@ -982,20 +982,20 @@ do_test wal-15.3.1 {
     BEGIN;
     INSERT INTO t1 VALUES(3, 4);
   }
-  sqlite3_wal_checkpoint db main
+  sqlite4_wal_checkpoint db main
 } {SQLITE_LOCKED}
 do_test wal-15.3.2 {
-  sqlite3_errcode db
+  sqlite4_errcode db
 } {SQLITE_LOCKED}
 do_test wal-15.3.3 {
-  sqlite3_errmsg db
+  sqlite4_errmsg db
 } {database table is locked}
 
 # Earlier versions returned an error is returned if the db cannot be 
 # checkpointed because of locks held by another connection. Check that
 # this is no longer the case.
 #
-sqlite3 db2 test.db
+sqlite4 db2 test.db
 do_test wal-15.4.1 {
   execsql {
     BEGIN;
@@ -1004,20 +1004,20 @@ do_test wal-15.4.1 {
 } {1 2}
 do_test wal-15.4.2 {
   execsql { COMMIT }
-  sqlite3_wal_checkpoint db
+  sqlite4_wal_checkpoint db
 } {SQLITE_OK}
 do_test wal-15.4.3 {
-  sqlite3_errmsg db
+  sqlite4_errmsg db
 } {not an error}
 
 # After [db2] drops its lock, [db] may checkpoint the db.
 #
 do_test wal-15.4.4 {
   execsql { COMMIT } db2
-  sqlite3_wal_checkpoint db
+  sqlite4_wal_checkpoint db
 } {SQLITE_OK}
 do_test wal-15.4.5 {
-  sqlite3_errmsg db
+  sqlite4_errmsg db
 } {not an error}
 do_test wal-15.4.6 {
   file size test.db
@@ -1032,13 +1032,13 @@ catch { db close }
 # API, an attempt is made to checkpoint all attached databases.
 #
 foreach {tn ckpt_cmd ckpt_res ckpt_main ckpt_aux} {
-  1 {sqlite3_wal_checkpoint db}              SQLITE_OK     1 1
-  2 {sqlite3_wal_checkpoint db ""}           SQLITE_OK     1 1
+  1 {sqlite4_wal_checkpoint db}              SQLITE_OK     1 1
+  2 {sqlite4_wal_checkpoint db ""}           SQLITE_OK     1 1
   3 {db eval "PRAGMA wal_checkpoint"}        {0 10 10}     1 1
 
-  4 {sqlite3_wal_checkpoint db main}         SQLITE_OK     1 0
-  5 {sqlite3_wal_checkpoint db aux}          SQLITE_OK     0 1
-  6 {sqlite3_wal_checkpoint db temp}         SQLITE_OK     0 0
+  4 {sqlite4_wal_checkpoint db main}         SQLITE_OK     1 0
+  5 {sqlite4_wal_checkpoint db aux}          SQLITE_OK     0 1
+  6 {sqlite4_wal_checkpoint db temp}         SQLITE_OK     0 0
   7 {db eval "PRAGMA main.wal_checkpoint"}   {0 10 10}     1 0
   8 {db eval "PRAGMA aux.wal_checkpoint"}    {0 13 13}     0 1
   9 {db eval "PRAGMA temp.wal_checkpoint"}   {0 -1 -1}     0 0
@@ -1047,7 +1047,7 @@ foreach {tn ckpt_cmd ckpt_res ckpt_main ckpt_aux} {
     forcedelete test2.db test2.db-wal test2.db-journal
     forcedelete test.db test.db-wal test.db-journal
 
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       ATTACH 'test2.db' AS aux;
       PRAGMA main.auto_vacuum = 0;
@@ -1107,7 +1107,7 @@ foreach {tn ckpt_cmd ckpt_res ckpt_main ckpt_aux} {
 # log file so that no part of the next transaction will be written into
 # a disk-sector used by transaction just committed.
 #
-set old_pending_byte [sqlite3_test_control_pending_byte 0x10000000]
+set old_pending_byte [sqlite4_test_control_pending_byte 0x10000000]
 catch { db close }
 foreach {tn sectorsize logsize} "
   1   128  [wal_file_size 172 512]
@@ -1119,8 +1119,8 @@ foreach {tn sectorsize logsize} "
   7  8192  [wal_file_size 184 512]
 " {
   forcedelete test.db test.db-wal test.db-journal
-  sqlite3_simulate_device -sectorsize $sectorsize
-  sqlite3 db test.db -vfs devsym
+  sqlite4_simulate_device -sectorsize $sectorsize
+  sqlite4 db test.db -vfs devsym
 
   do_test wal-17.$tn.1 {
     execsql {
@@ -1151,7 +1151,7 @@ foreach {tn sectorsize logsize} "
     file size test.db
   } [expr 512*171]
 }
-sqlite3_test_control_pending_byte $old_pending_byte
+sqlite4_test_control_pending_byte $old_pending_byte
 
 #-------------------------------------------------------------------------
 # This test - wal-18.* - verifies a couple of specific conditions that
@@ -1165,7 +1165,7 @@ sqlite3_test_control_pending_byte $old_pending_byte
 #
 forcedelete test.db test.db-wal test.db-journal
 do_test wal-18.0 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA page_size = 1024;
     PRAGMA auto_vacuum = 0;
@@ -1203,7 +1203,7 @@ foreach {nFrame result} {
 
     hexio_write test.db-wal [expr 24 + $nFrame*(24+1024) + 20] 00000000
 
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { 
       SELECT * FROM t1;
       PRAGMA integrity_check; 
@@ -1213,7 +1213,7 @@ foreach {nFrame result} {
 } 
 
 proc randomblob {pgsz} {
-  sqlite3 rbdb :memory:
+  sqlite4 rbdb :memory:
   set blob [rbdb one {SELECT randomblob($pgsz)}]
   rbdb close
   set blob
@@ -1302,7 +1302,7 @@ foreach {tn pgsz works} {
     } [wal_file_size 1 $pgsz]
   
     do_test wal-18.2.$tn.$pg.5 {
-      sqlite3 db test.db
+      sqlite4 db test.db
       set rc [catch { db one {PRAGMA integrity_check} } msg]
       expr { $rc!=0 || $msg!="ok" }
     } $works
@@ -1325,8 +1325,8 @@ foreach {tn pgsz works} {
 #
 do_test wal-19.1 {
   forcedelete test.db test.db-wal test.db-journal
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA journal_mode = WAL;
     CREATE TABLE t1(a, b);
@@ -1351,7 +1351,7 @@ do_test wal-19.4 {
   # as [db2] had an out-of-date copy of the wal-index header when it was
   # closed.
   #
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { SELECT * FROM t1 }
 } {1 2 3 4 5 6}
 
@@ -1374,7 +1374,7 @@ do_test wal-19.4 {
 do_test wal-20.1 {
   catch {db close}
   forcedelete test.db test.db-wal test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA journal_mode = WAL;
     CREATE TABLE t1(x);
@@ -1385,7 +1385,7 @@ do_test wal-20.1 {
 do_test wal-20.2 {
   set ::buddy [launch_testfixture]
   testfixture $::buddy {
-    sqlite3 db test.db
+    sqlite4 db test.db
     db transaction { db eval {
       PRAGMA wal_autocheckpoint = 0;
       INSERT INTO t1 SELECT randomblob(900) FROM t1;       /* 2 */
@@ -1412,7 +1412,7 @@ do_test wal-20.3 {
 } {16384}
 do_test wal-20.4 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { SELECT count(*) FROM t1 }
 } {16384}
 integrity_check wal-20.5
@@ -1475,7 +1475,7 @@ foreach pgsz {512 1024 2048 4096 8192 16384 32768 65536} {
 
 #-------------------------------------------------------------------------
 # Test that when 1 or more pages are recovered from a WAL file, 
-# sqlite3_log() is invoked to report this to the user.
+# sqlite4_log() is invoked to report this to the user.
 #
 set walfile [file nativename [file join [pwd] test.db-wal]]
 catch {db close}
@@ -1490,10 +1490,10 @@ do_test wal-23.1 {
   }
   faultsim_save_and_close
 
-  sqlite3_shutdown
-  test_sqlite3_log [list lappend ::log]
+  sqlite4_shutdown
+  test_sqlite4_log [list lappend ::log]
   set ::log [list]
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { SELECT * FROM t1 }
 } {1 2 3 4}
 do_test wal-23.2 { set ::log } {}
@@ -1521,7 +1521,7 @@ ifcapable autovacuum {
   #
   catch {db close}
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   do_execsql_test 24.1 {
     PRAGMA auto_vacuum = 2;
     PRAGMA journal_mode = WAL;
@@ -1539,7 +1539,7 @@ ifcapable autovacuum {
       PRAGMA wal_checkpoint;
     }
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     file exists test.db-wal
   } 0
   do_test 24.3 {
@@ -1563,8 +1563,8 @@ ifcapable autovacuum {
 }
 
 db close
-sqlite3_shutdown
-test_sqlite3_log
-sqlite3_initialize
+sqlite4_shutdown
+test_sqlite4_log
+sqlite4_initialize
 
 finish_test

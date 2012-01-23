@@ -26,10 +26,10 @@
 */
 static void lockBtreeMutex(Btree *p){
   assert( p->locked==0 );
-  assert( sqlite3_mutex_notheld(p->pBt->mutex) );
-  assert( sqlite3_mutex_held(p->db->mutex) );
+  assert( sqlite4_mutex_notheld(p->pBt->mutex) );
+  assert( sqlite4_mutex_held(p->db->mutex) );
 
-  sqlite3_mutex_enter(p->pBt->mutex);
+  sqlite4_mutex_enter(p->pBt->mutex);
   p->pBt->db = p->db;
   p->locked = 1;
 }
@@ -41,11 +41,11 @@ static void lockBtreeMutex(Btree *p){
 static void unlockBtreeMutex(Btree *p){
   BtShared *pBt = p->pBt;
   assert( p->locked==1 );
-  assert( sqlite3_mutex_held(pBt->mutex) );
-  assert( sqlite3_mutex_held(p->db->mutex) );
+  assert( sqlite4_mutex_held(pBt->mutex) );
+  assert( sqlite4_mutex_held(p->db->mutex) );
   assert( p->db==pBt->db );
 
-  sqlite3_mutex_leave(pBt->mutex);
+  sqlite4_mutex_leave(pBt->mutex);
   p->locked = 0;
 }
 
@@ -65,7 +65,7 @@ static void unlockBtreeMutex(Btree *p){
 ** for the lock to become available on p, then relock all of the
 ** subsequent Btrees that desire a lock.
 */
-void sqlite3BtreeEnter(Btree *p){
+void sqlite4BtreeEnter(Btree *p){
   Btree *pLater;
 
   /* Some basic sanity checking on the Btree.  The list of Btrees
@@ -83,7 +83,7 @@ void sqlite3BtreeEnter(Btree *p){
   assert( p->sharable || p->wantToLock==0 );
 
   /* We should already hold a lock on the database connection */
-  assert( sqlite3_mutex_held(p->db->mutex) );
+  assert( sqlite4_mutex_held(p->db->mutex) );
 
   /* Unless the database is sharable and unlocked, then BtShared.db
   ** should already be set correctly. */
@@ -97,7 +97,7 @@ void sqlite3BtreeEnter(Btree *p){
   ** want without having to go throught the ascending lock
   ** procedure that follows.  Just be sure not to block.
   */
-  if( sqlite3_mutex_try(p->pBt->mutex)==SQLITE_OK ){
+  if( sqlite4_mutex_try(p->pBt->mutex)==SQLITE_OK ){
     p->pBt->db = p->db;
     p->locked = 1;
     return;
@@ -127,7 +127,7 @@ void sqlite3BtreeEnter(Btree *p){
 /*
 ** Exit the recursive mutex on a Btree.
 */
-void sqlite3BtreeLeave(Btree *p){
+void sqlite4BtreeLeave(Btree *p){
   if( p->sharable ){
     assert( p->wantToLock>0 );
     p->wantToLock--;
@@ -144,11 +144,11 @@ void sqlite3BtreeLeave(Btree *p){
 **
 ** This routine is used only from within assert() statements.
 */
-int sqlite3BtreeHoldsMutex(Btree *p){
+int sqlite4BtreeHoldsMutex(Btree *p){
   assert( p->sharable==0 || p->locked==0 || p->wantToLock>0 );
   assert( p->sharable==0 || p->locked==0 || p->db==p->pBt->db );
-  assert( p->sharable==0 || p->locked==0 || sqlite3_mutex_held(p->pBt->mutex) );
-  assert( p->sharable==0 || p->locked==0 || sqlite3_mutex_held(p->db->mutex) );
+  assert( p->sharable==0 || p->locked==0 || sqlite4_mutex_held(p->pBt->mutex) );
+  assert( p->sharable==0 || p->locked==0 || sqlite4_mutex_held(p->db->mutex) );
 
   return (p->sharable==0 || p->locked);
 }
@@ -161,11 +161,11 @@ int sqlite3BtreeHoldsMutex(Btree *p){
 ** Btree.  These entry points are used by incremental I/O and can be
 ** omitted if that module is not used.
 */
-void sqlite3BtreeEnterCursor(BtCursor *pCur){
-  sqlite3BtreeEnter(pCur->pBtree);
+void sqlite4BtreeEnterCursor(BtCursor *pCur){
+  sqlite4BtreeEnter(pCur->pBtree);
 }
-void sqlite3BtreeLeaveCursor(BtCursor *pCur){
-  sqlite3BtreeLeave(pCur->pBtree);
+void sqlite4BtreeLeaveCursor(BtCursor *pCur){
+  sqlite4BtreeLeave(pCur->pBtree);
 }
 #endif /* SQLITE_OMIT_INCRBLOB */
 
@@ -184,22 +184,22 @@ void sqlite3BtreeLeaveCursor(BtCursor *pCur){
 ** two or more btrees in common both try to lock all their btrees
 ** at the same instant.
 */
-void sqlite3BtreeEnterAll(sqlite3 *db){
+void sqlite4BtreeEnterAll(sqlite4 *db){
   int i;
   Btree *p;
-  assert( sqlite3_mutex_held(db->mutex) );
+  assert( sqlite4_mutex_held(db->mutex) );
   for(i=0; i<db->nDb; i++){
     p = db->aDb[i].pBt;
-    if( p ) sqlite3BtreeEnter(p);
+    if( p ) sqlite4BtreeEnter(p);
   }
 }
-void sqlite3BtreeLeaveAll(sqlite3 *db){
+void sqlite4BtreeLeaveAll(sqlite4 *db){
   int i;
   Btree *p;
-  assert( sqlite3_mutex_held(db->mutex) );
+  assert( sqlite4_mutex_held(db->mutex) );
   for(i=0; i<db->nDb; i++){
     p = db->aDb[i].pBt;
-    if( p ) sqlite3BtreeLeave(p);
+    if( p ) sqlite4BtreeLeave(p);
   }
 }
 
@@ -207,7 +207,7 @@ void sqlite3BtreeLeaveAll(sqlite3 *db){
 ** Return true if a particular Btree requires a lock.  Return FALSE if
 ** no lock is ever required since it is not sharable.
 */
-int sqlite3BtreeSharable(Btree *p){
+int sqlite4BtreeSharable(Btree *p){
   return p->sharable;
 }
 
@@ -218,16 +218,16 @@ int sqlite3BtreeSharable(Btree *p){
 **
 ** This routine is used inside assert() statements only.
 */
-int sqlite3BtreeHoldsAllMutexes(sqlite3 *db){
+int sqlite4BtreeHoldsAllMutexes(sqlite4 *db){
   int i;
-  if( !sqlite3_mutex_held(db->mutex) ){
+  if( !sqlite4_mutex_held(db->mutex) ){
     return 0;
   }
   for(i=0; i<db->nDb; i++){
     Btree *p;
     p = db->aDb[i].pBt;
     if( p && p->sharable &&
-         (p->wantToLock==0 || !sqlite3_mutex_held(p->pBt->mutex)) ){
+         (p->wantToLock==0 || !sqlite4_mutex_held(p->pBt->mutex)) ){
       return 0;
     }
   }
@@ -245,14 +245,14 @@ int sqlite3BtreeHoldsAllMutexes(sqlite3 *db){
 **   (2) if iDb!=1, then the mutex on db->aDb[iDb].pBt.
 **
 ** If pSchema is not NULL, then iDb is computed from pSchema and
-** db using sqlite3SchemaToIndex().
+** db using sqlite4SchemaToIndex().
 */
-int sqlite3SchemaMutexHeld(sqlite3 *db, int iDb, Schema *pSchema){
+int sqlite4SchemaMutexHeld(sqlite4 *db, int iDb, Schema *pSchema){
   Btree *p;
   assert( db!=0 );
-  if( pSchema ) iDb = sqlite3SchemaToIndex(db, pSchema);
+  if( pSchema ) iDb = sqlite4SchemaToIndex(db, pSchema);
   assert( iDb>=0 && iDb<db->nDb );
-  if( !sqlite3_mutex_held(db->mutex) ) return 0;
+  if( !sqlite4_mutex_held(db->mutex) ) return 0;
   if( iDb==1 ) return 1;
   p = db->aDb[iDb].pBt;
   assert( p!=0 );
@@ -271,10 +271,10 @@ int sqlite3SchemaMutexHeld(sqlite3 *db, int iDb, Schema *pSchema){
 ** the ones below, are no-ops and are null #defines in btree.h.
 */
 
-void sqlite3BtreeEnter(Btree *p){
+void sqlite4BtreeEnter(Btree *p){
   p->pBt->db = p->db;
 }
-void sqlite3BtreeEnterAll(sqlite3 *db){
+void sqlite4BtreeEnterAll(sqlite4 *db){
   int i;
   for(i=0; i<db->nDb; i++){
     Btree *p = db->aDb[i].pBt;

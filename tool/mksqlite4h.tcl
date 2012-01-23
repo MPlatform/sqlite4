@@ -1,9 +1,9 @@
 #!/usr/bin/tclsh
 #
-# This script constructs the "sqlite3.h" header file from the following
+# This script constructs the "sqlite4.h" header file from the following
 # sources:
 #
-#   1) The src/sqlite.h.in source file.  This is the template for sqlite3.h.
+#   1) The src/sqlite.h.in source file.  This is the template for sqlite4.h.
 #   2) The VERSION file containing the current SQLite version number.
 #   3) The manifest file from the fossil SCM.  This gives use the date.
 #   4) The manifest.uuid file from the fossil SCM.  This gives the SHA1 hash.
@@ -26,7 +26,7 @@
 #
 # Example usage:
 #
-#   tclsh mksqlite3h.tcl ../sqlite >sqlite3.h
+#   tclsh mksqlite4h.tcl ../sqlite >sqlite4.h
 #
 
 
@@ -62,24 +62,24 @@ close $in
 
 # Set up patterns for recognizing API declarations.
 #
-set varpattern {^[a-zA-Z][a-zA-Z_0-9 *]+sqlite3_[_a-zA-Z0-9]+(\[|;| =)}
-set declpattern {^ *[a-zA-Z][a-zA-Z_0-9 ]+ \**sqlite3_[_a-zA-Z0-9]+\(}
+set varpattern {^[a-zA-Z][a-zA-Z_0-9 *]+sqlite4_[_a-zA-Z0-9]+(\[|;| =)}
+set declpattern {^ *[a-zA-Z][a-zA-Z_0-9 ]+ \**sqlite4_[_a-zA-Z0-9]+\(}
 
 # Force the output to use unix line endings, even on Windows.
 fconfigure stdout -translation lf
 
-# Process the src/sqlite.h.in ext/rtree/sqlite3rtree.h files.
+# Process the src/sqlite.h.in ext/rtree/sqlite4rtree.h files.
 #
-foreach file [list $TOP/src/sqlite.h.in $TOP/ext/rtree/sqlite3rtree.h] {
+foreach file [list $TOP/src/sqlite.h.in $TOP/ext/rtree/sqlite4rtree.h] {
   set in [open $file]
   while {![eof $in]} {
   
     set line [gets $in]
 
-    # File sqlite3rtree.h contains a line "#include <sqlite3.h>". Omit this
-    # line when copying sqlite3rtree.h into sqlite3.h.
+    # File sqlite4rtree.h contains a line "#include <sqlite4.h>". Omit this
+    # line when copying sqlite4rtree.h into sqlite4.h.
     #
-    if {[string match {*#include*<sqlite3.h>*} $line]} continue
+    if {[string match {*#include*<sqlite4.h>*} $line]} continue
   
     regsub -- --VERS--           $line $zVersion line
     regsub -- --VERSION-NUMBER-- $line $nVersion line

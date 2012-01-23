@@ -14,14 +14,14 @@
 ** the source code used in production systems.
 **
 ** Specifically, this file tests the effect of errors while initializing
-** the various pluggable sub-systems from within sqlite3_initialize().
-** If an error occurs in sqlite3_initialize() the following should be
+** the various pluggable sub-systems from within sqlite4_initialize().
+** If an error occurs in sqlite4_initialize() the following should be
 ** true:
 **
 **   1) An error code is returned to the user, and
-**   2) A subsequent call to sqlite3_shutdown() calls the shutdown method
+**   2) A subsequent call to sqlite4_shutdown() calls the shutdown method
 **      of those subsystems that were initialized, and
-**   3) A subsequent call to sqlite3_initialize() attempts to initialize
+**   3) A subsequent call to sqlite4_initialize() attempts to initialize
 **      the remaining, uninitialized, subsystems.
 */
 
@@ -30,9 +30,9 @@
 #include <tcl.h>
 
 static struct Wrapped {
-  sqlite3_pcache_methods2 pcache;
-  sqlite3_mem_methods     mem;
-  sqlite3_mutex_methods   mutex;
+  sqlite4_pcache_methods2 pcache;
+  sqlite4_mem_methods     mem;
+  sqlite4_mutex_methods   mutex;
 
   int mem_init;                /* True if mem subsystem is initalized */
   int mem_fail;                /* True to fail mem subsystem inialization */
@@ -82,25 +82,25 @@ static int wrMutexEnd(void){
   wrapped.mutex_init = 0;
   return SQLITE_OK;
 }
-static sqlite3_mutex *wrMutexAlloc(int e){
+static sqlite4_mutex *wrMutexAlloc(int e){
   return wrapped.mutex.xMutexAlloc(e);
 }
-static void wrMutexFree(sqlite3_mutex *p){
+static void wrMutexFree(sqlite4_mutex *p){
   wrapped.mutex.xMutexFree(p);
 }
-static void wrMutexEnter(sqlite3_mutex *p){
+static void wrMutexEnter(sqlite4_mutex *p){
   wrapped.mutex.xMutexEnter(p);
 }
-static int wrMutexTry(sqlite3_mutex *p){
+static int wrMutexTry(sqlite4_mutex *p){
   return wrapped.mutex.xMutexTry(p);
 }
-static void wrMutexLeave(sqlite3_mutex *p){
+static void wrMutexLeave(sqlite4_mutex *p){
   wrapped.mutex.xMutexLeave(p);
 }
-static int wrMutexHeld(sqlite3_mutex *p){
+static int wrMutexHeld(sqlite4_mutex *p){
   return wrapped.mutex.xMutexHeld(p);
 }
-static int wrMutexNotheld(sqlite3_mutex *p){
+static int wrMutexNotheld(sqlite4_mutex *p){
   return wrapped.mutex.xMutexNotheld(p);
 }
 
@@ -123,50 +123,50 @@ static void wrPCacheShutdown(void *pArg){
   wrapped.pcache_init = 0;
 }
 
-static sqlite3_pcache *wrPCacheCreate(int a, int b, int c){
+static sqlite4_pcache *wrPCacheCreate(int a, int b, int c){
   return wrapped.pcache.xCreate(a, b, c);
 }  
-static void wrPCacheCachesize(sqlite3_pcache *p, int n){
+static void wrPCacheCachesize(sqlite4_pcache *p, int n){
   wrapped.pcache.xCachesize(p, n);
 }  
-static int wrPCachePagecount(sqlite3_pcache *p){
+static int wrPCachePagecount(sqlite4_pcache *p){
   return wrapped.pcache.xPagecount(p);
 }  
-static sqlite3_pcache_page *wrPCacheFetch(sqlite3_pcache *p, unsigned a, int b){
+static sqlite4_pcache_page *wrPCacheFetch(sqlite4_pcache *p, unsigned a, int b){
   return wrapped.pcache.xFetch(p, a, b);
 }  
-static void wrPCacheUnpin(sqlite3_pcache *p, sqlite3_pcache_page *a, int b){
+static void wrPCacheUnpin(sqlite4_pcache *p, sqlite4_pcache_page *a, int b){
   wrapped.pcache.xUnpin(p, a, b);
 }  
 static void wrPCacheRekey(
-  sqlite3_pcache *p, 
-  sqlite3_pcache_page *a, 
+  sqlite4_pcache *p, 
+  sqlite4_pcache_page *a, 
   unsigned b, 
   unsigned c
 ){
   wrapped.pcache.xRekey(p, a, b, c);
 }  
-static void wrPCacheTruncate(sqlite3_pcache *p, unsigned a){
+static void wrPCacheTruncate(sqlite4_pcache *p, unsigned a){
   wrapped.pcache.xTruncate(p, a);
 }  
-static void wrPCacheDestroy(sqlite3_pcache *p){
+static void wrPCacheDestroy(sqlite4_pcache *p){
   wrapped.pcache.xDestroy(p);
 }  
 
 static void installInitWrappers(void){
-  sqlite3_mutex_methods mutexmethods = {
+  sqlite4_mutex_methods mutexmethods = {
     wrMutexInit,  wrMutexEnd,   wrMutexAlloc,
     wrMutexFree,  wrMutexEnter, wrMutexTry,
     wrMutexLeave, wrMutexHeld,  wrMutexNotheld
   };
-  sqlite3_pcache_methods2 pcachemethods = {
+  sqlite4_pcache_methods2 pcachemethods = {
     1, 0,
     wrPCacheInit,      wrPCacheShutdown,  wrPCacheCreate, 
     wrPCacheCachesize, wrPCachePagecount, wrPCacheFetch,
     wrPCacheUnpin,     wrPCacheRekey,     wrPCacheTruncate,  
     wrPCacheDestroy
   };
-  sqlite3_mem_methods memmethods = {
+  sqlite4_mem_methods memmethods = {
     wrMemMalloc,   wrMemFree,    wrMemRealloc,
     wrMemSize,     wrMemRoundup, wrMemInit,
     wrMemShutdown,
@@ -175,13 +175,13 @@ static void installInitWrappers(void){
 
   memset(&wrapped, 0, sizeof(wrapped));
 
-  sqlite3_shutdown();
-  sqlite3_config(SQLITE_CONFIG_GETMUTEX, &wrapped.mutex);
-  sqlite3_config(SQLITE_CONFIG_GETMALLOC, &wrapped.mem);
-  sqlite3_config(SQLITE_CONFIG_GETPCACHE2, &wrapped.pcache);
-  sqlite3_config(SQLITE_CONFIG_MUTEX, &mutexmethods);
-  sqlite3_config(SQLITE_CONFIG_MALLOC, &memmethods);
-  sqlite3_config(SQLITE_CONFIG_PCACHE2, &pcachemethods);
+  sqlite4_shutdown();
+  sqlite4_config(SQLITE_CONFIG_GETMUTEX, &wrapped.mutex);
+  sqlite4_config(SQLITE_CONFIG_GETMALLOC, &wrapped.mem);
+  sqlite4_config(SQLITE_CONFIG_GETPCACHE2, &wrapped.pcache);
+  sqlite4_config(SQLITE_CONFIG_MUTEX, &mutexmethods);
+  sqlite4_config(SQLITE_CONFIG_MALLOC, &memmethods);
+  sqlite4_config(SQLITE_CONFIG_PCACHE2, &pcachemethods);
 }
 
 static int init_wrapper_install(
@@ -220,10 +220,10 @@ static int init_wrapper_uninstall(
   }
 
   memset(&wrapped, 0, sizeof(&wrapped));
-  sqlite3_shutdown();
-  sqlite3_config(SQLITE_CONFIG_MUTEX, &wrapped.mutex);
-  sqlite3_config(SQLITE_CONFIG_MALLOC, &wrapped.mem);
-  sqlite3_config(SQLITE_CONFIG_PCACHE2, &wrapped.pcache);
+  sqlite4_shutdown();
+  sqlite4_config(SQLITE_CONFIG_MUTEX, &wrapped.mutex);
+  sqlite4_config(SQLITE_CONFIG_MALLOC, &wrapped.mem);
+  sqlite4_config(SQLITE_CONFIG_PCACHE2, &wrapped.pcache);
   return TCL_OK;
 }
 

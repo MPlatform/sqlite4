@@ -27,7 +27,7 @@ if {[permutation] == "inmemory_journal"} {
   return
 }
 
-sqlite3_memdebug_vfs_oom_test 0
+sqlite4_memdebug_vfs_oom_test 0
 
 set a_string_counter 1
 proc a_string {n} {
@@ -56,7 +56,7 @@ do_test pagerfault2-1-pre1 {
 
 do_faultsim_test pagerfault2-1 -faults oom-transient -prep {
   faultsim_restore_and_reopen
-  sqlite3_db_config_lookaside db 0 256 4096
+  sqlite4_db_config_lookaside db 0 256 4096
   execsql { 
     BEGIN;
       SELECT * FROM t1;
@@ -79,7 +79,7 @@ do_test pagerfault2-2-pre1 {
 
 do_faultsim_test pagerfault2-2 -faults oom-transient -prep {
   faultsim_restore_and_reopen
-  sqlite3_db_config_lookaside db 0 256 4096
+  sqlite4_db_config_lookaside db 0 256 4096
   db func a_string a_string
 
   execsql { 
@@ -94,6 +94,6 @@ do_faultsim_test pagerfault2-2 -faults oom-transient -prep {
   faultsim_test_result {0 {}}
 }
 
-sqlite3_memdebug_vfs_oom_test 1
+sqlite4_memdebug_vfs_oom_test 1
 finish_test
 

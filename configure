@@ -12316,7 +12316,7 @@ if test "x${TCLLIBDIR+set}" != "xset" ; then
     TCLLIBDIR=$i
     break
   done
-  TCLLIBDIR="${TCLLIBDIR}/sqlite3"
+  TCLLIBDIR="${TCLLIBDIR}/sqlite4"
 fi
 
 
@@ -13610,7 +13610,7 @@ ac_config_headers="$ac_config_headers config.h"
 # Generate the output files.
 #
 
-ac_config_files="$ac_config_files Makefile sqlite3.pc"
+ac_config_files="$ac_config_files Makefile sqlite4.pc"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -14463,7 +14463,7 @@ do
     "libtool") CONFIG_COMMANDS="$CONFIG_COMMANDS libtool" ;;
     "config.h") CONFIG_HEADERS="$CONFIG_HEADERS config.h" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
-    "sqlite3.pc") CONFIG_FILES="$CONFIG_FILES sqlite3.pc" ;;
+    "sqlite4.pc") CONFIG_FILES="$CONFIG_FILES sqlite4.pc" ;;
 
   *) { { $as_echo "$as_me:$LINENO: error: invalid argument: $ac_config_target" >&5
 $as_echo "$as_me: error: invalid argument: $ac_config_target" >&2;}

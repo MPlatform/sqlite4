@@ -21,7 +21,7 @@
 ** handle case conversions for the UTF character set since the tables
 ** involved are nearly as big or bigger than SQLite itself.
 */
-const unsigned char sqlite3UpperToLower[] = {
+const unsigned char sqlite4UpperToLower[] = {
 #ifdef SQLITE_ASCII
       0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
      18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
@@ -78,7 +78,7 @@ const unsigned char sqlite3UpperToLower[] = {
 **
 **   (x & ~(map[x]&0x20))
 **
-** Standard function tolower() is implemented using the sqlite3UpperToLower[]
+** Standard function tolower() is implemented using the sqlite4UpperToLower[]
 ** array. tolower() is used more often than toupper() by SQLite.
 **
 ** Bit 0x40 is set if the character non-alphanumeric and can be used in an 
@@ -90,7 +90,7 @@ const unsigned char sqlite3UpperToLower[] = {
 ** locale of "C". They are implemented as macros in sqliteInt.h.
 */
 #ifdef SQLITE_ASCII
-const unsigned char sqlite3CtypeMap[256] = {
+const unsigned char sqlite4CtypeMap[256] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  /* 00..07    ........ */
   0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00,  /* 08..0f    ........ */
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  /* 10..17    ........ */
@@ -137,7 +137,7 @@ const unsigned char sqlite3CtypeMap[256] = {
 ** The following singleton contains the global configuration for
 ** the SQLite library.
 */
-SQLITE_WSD struct Sqlite3Config sqlite3Config = {
+SQLITE_WSD struct Sqlite3Config sqlite4Config = {
    SQLITE_DEFAULT_MEMSTATUS,  /* bMemstat */
    1,                         /* bCoreMutex */
    SQLITE_THREADSAFE==1,      /* bFullMutex */
@@ -178,12 +178,12 @@ SQLITE_WSD struct Sqlite3Config sqlite3Config = {
 ** database connections.  After initialization, this table is
 ** read-only.
 */
-SQLITE_WSD FuncDefHash sqlite3GlobalFunctions;
+SQLITE_WSD FuncDefHash sqlite4GlobalFunctions;
 
 /*
 ** Constant tokens for values 0 and 1.
 */
-const Token sqlite3IntTokens[] = {
+const Token sqlite4IntTokens[] = {
    { "0", 1 },
    { "1", 1 }
 };
@@ -199,7 +199,7 @@ const Token sqlite3IntTokens[] = {
 ** During testing, it is often desirable to move the pending byte to
 ** a different position in the file.  This allows code that has to
 ** deal with the pending byte to run on files that are much smaller
-** than 1 GiB.  The sqlite3_test_control() interface can be used to
+** than 1 GiB.  The sqlite4_test_control() interface can be used to
 ** move the pending byte.
 **
 ** IMPORTANT:  Changing the pending byte to any value other than
@@ -208,7 +208,7 @@ const Token sqlite3IntTokens[] = {
 ** and dileterious behavior.
 */
 #ifndef SQLITE_OMIT_WSD
-int sqlite3PendingByte = 0x40000000;
+int sqlite4PendingByte = 0x40000000;
 #endif
 
 #include "opcodes.h"
@@ -218,4 +218,4 @@ int sqlite3PendingByte = 0x40000000;
 ** from the comments following the "case OP_xxxx:" statements in
 ** the vdbe.c file.  
 */
-const unsigned char sqlite3OpcodeProperty[] = OPFLG_INITIALIZER;
+const unsigned char sqlite4OpcodeProperty[] = OPFLG_INITIALIZER;

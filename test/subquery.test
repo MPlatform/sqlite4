@@ -334,7 +334,7 @@ do_test subquery-3.3.5 {
 #------------------------------------------------------------------
 # These tests - subquery-4.* - use the TCL statement cache to try 
 # and expose bugs to do with re-using statements that have been 
-# passed to sqlite3_reset().
+# passed to sqlite4_reset().
 #
 # One problem was that VDBE memory cells were not being initialised
 # to NULL on the second and subsequent executions.

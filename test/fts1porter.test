@@ -23571,7 +23571,7 @@ set porter_test_data {
 # Create a full-text index to use for testing the stemmer.
 #
 db close
-sqlite3 db :memory:
+sqlite4 db :memory:
 db eval {
   CREATE VIRTUAL TABLE t1 USING fts1(word, tokenize Porter);
 }

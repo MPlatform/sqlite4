@@ -14,11 +14,11 @@
 ** mode database files. The interface to the example code in this file 
 ** consists of the following two functions:
 **
-**   sqlite3demo_superlock()
-**   sqlite3demo_superunlock()
+**   sqlite4demo_superlock()
+**   sqlite4demo_superunlock()
 */
 
-#include <sqlite3.h>
+#include <sqlite4.h>
 #include <string.h>               /* memset(), strlen() */
 #include <assert.h>               /* assert() */
 
@@ -35,11 +35,11 @@ typedef struct SuperlockBusy SuperlockBusy;
 
 /*
 ** An instance of the following structure is allocated for each active
-** superlock. The opaque handle returned by sqlite3demo_superlock() is
+** superlock. The opaque handle returned by sqlite4demo_superlock() is
 ** actually a pointer to an instance of this structure.
 */
 struct Superlock {
-  sqlite3 *db;                    /* Database handle used to lock db */
+  sqlite4 *db;                    /* Database handle used to lock db */
   int bWal;                       /* True if db is a WAL database */
 };
 typedef struct Superlock Superlock;
@@ -66,20 +66,20 @@ static int superlockBusyHandler(void *pCtx, int UNUSED){
 */
 static int superlockIsWal(Superlock *pLock){
   int rc;                         /* Return Code */
-  sqlite3_stmt *pStmt;            /* Compiled PRAGMA journal_mode statement */
+  sqlite4_stmt *pStmt;            /* Compiled PRAGMA journal_mode statement */
 
-  rc = sqlite3_prepare(pLock->db, "PRAGMA main.journal_mode", -1, &pStmt, 0);
+  rc = sqlite4_prepare(pLock->db, "PRAGMA main.journal_mode", -1, &pStmt, 0);
   if( rc!=SQLITE_OK ) return rc;
 
   pLock->bWal = 0;
-  if( SQLITE_ROW==sqlite3_step(pStmt) ){
-    const char *zMode = (const char *)sqlite3_column_text(pStmt, 0);
-    if( zMode && strlen(zMode)==3 && sqlite3_strnicmp("wal", zMode, 3)==0 ){
+  if( SQLITE_ROW==sqlite4_step(pStmt) ){
+    const char *zMode = (const char *)sqlite4_column_text(pStmt, 0);
+    if( zMode && strlen(zMode)==3 && sqlite4_strnicmp("wal", zMode, 3)==0 ){
       pLock->bWal = 1;
     }
   }
 
-  return sqlite3_finalize(pStmt);
+  return sqlite4_finalize(pStmt);
 }
 
 /*
@@ -89,13 +89,13 @@ static int superlockIsWal(Superlock *pLock){
 ** callback returns 0.
 */
 static int superlockShmLock(
-  sqlite3_file *fd,               /* Database file handle */
+  sqlite4_file *fd,               /* Database file handle */
   int idx,                        /* Offset of shm-lock to obtain */
   int nByte,                      /* Number of consective bytes to lock */
   SuperlockBusy *pBusy            /* Busy-handler wrapper object */
 ){
   int rc;
-  int (*xShmLock)(sqlite3_file*, int, int, int) = fd->pMethods->xShmLock;
+  int (*xShmLock)(sqlite4_file*, int, int, int) = fd->pMethods->xShmLock;
   do {
     rc = xShmLock(fd, idx, nByte, SQLITE_SHM_LOCK|SQLITE_SHM_EXCLUSIVE);
   }while( rc==SQLITE_BUSY && superlockBusyHandler((void *)pBusy, 0) );
@@ -107,15 +107,15 @@ static int superlockShmLock(
 ** Invoke the supplied busy-handler as required.
 */
 static int superlockWalLock(
-  sqlite3 *db,                    /* Database handle open on WAL database */
+  sqlite4 *db,                    /* Database handle open on WAL database */
   SuperlockBusy *pBusy            /* Busy handler wrapper object */
 ){
   int rc;                         /* Return code */
-  sqlite3_file *fd = 0;           /* Main database file handle */
+  sqlite4_file *fd = 0;           /* Main database file handle */
   void volatile *p = 0;           /* Pointer to first page of shared memory */
 
-  /* Obtain a pointer to the sqlite3_file object open on the main db file. */
-  rc = sqlite3_file_control(db, "main", SQLITE_FCNTL_FILE_POINTER, (void *)&fd);
+  /* Obtain a pointer to the sqlite4_file object open on the main db file. */
+  rc = sqlite4_file_control(db, "main", SQLITE_FCNTL_FILE_POINTER, (void *)&fd);
   if( rc!=SQLITE_OK ) return rc;
 
   /* Obtain the "recovery" lock. Normally, this lock is only obtained by
@@ -146,40 +146,40 @@ static int superlockWalLock(
 /*
 ** Release a superlock held on a database file. The argument passed to 
 ** this function must have been obtained from a successful call to
-** sqlite3demo_superlock().
+** sqlite4demo_superlock().
 */
-void sqlite3demo_superunlock(void *pLock){
+void sqlite4demo_superunlock(void *pLock){
   Superlock *p = (Superlock *)pLock;
   if( p->bWal ){
     int rc;                         /* Return code */
     int flags = SQLITE_SHM_UNLOCK | SQLITE_SHM_EXCLUSIVE;
-    sqlite3_file *fd = 0;
-    rc = sqlite3_file_control(p->db, "main", SQLITE_FCNTL_FILE_POINTER, (void *)&fd);
+    sqlite4_file *fd = 0;
+    rc = sqlite4_file_control(p->db, "main", SQLITE_FCNTL_FILE_POINTER, (void *)&fd);
     if( rc==SQLITE_OK ){
       fd->pMethods->xShmLock(fd, 2, 1, flags);
       fd->pMethods->xShmLock(fd, 3, SQLITE_SHM_NLOCK-3, flags);
     }
   }
-  sqlite3_close(p->db);
-  sqlite3_free(p);
+  sqlite4_close(p->db);
+  sqlite4_free(p);
 }
 
 /*
 ** Obtain a superlock on the database file identified by zPath, using the
 ** locking primitives provided by VFS zVfs. If successful, SQLITE_OK is
 ** returned and output variable *ppLock is populated with an opaque handle
-** that may be used with sqlite3demo_superunlock() to release the lock.
+** that may be used with sqlite4demo_superunlock() to release the lock.
 **
 ** If an error occurs, *ppLock is set to 0 and an SQLite error code 
 ** (e.g. SQLITE_BUSY) is returned.
 **
 ** If a required lock cannot be obtained immediately and the xBusy parameter
 ** to this function is not NULL, then xBusy is invoked in the same way
-** as a busy-handler registered with SQLite (using sqlite3_busy_handler())
+** as a busy-handler registered with SQLite (using sqlite4_busy_handler())
 ** until either the lock can be obtained or the busy-handler function returns
 ** 0 (indicating "give up").
 */
-int sqlite3demo_superlock(
+int sqlite4demo_superlock(
   const char *zPath,              /* Path to database file to lock */
   const char *zVfs,               /* VFS to use to access database file */
   int (*xBusy)(void*,int),        /* Busy handler callback */
@@ -190,12 +190,12 @@ int sqlite3demo_superlock(
   int rc;                         /* Return code */
   Superlock *pLock;
 
-  pLock = sqlite3_malloc(sizeof(Superlock));
+  pLock = sqlite4_malloc(sizeof(Superlock));
   if( !pLock ) return SQLITE_NOMEM;
   memset(pLock, 0, sizeof(Superlock));
 
   /* Open a database handle on the file to superlock. */
-  rc = sqlite3_open_v2(
+  rc = sqlite4_open_v2(
       zPath, &pLock->db, SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE, zVfs
   );
 
@@ -209,14 +209,14 @@ int sqlite3demo_superlock(
   ** required in WAL mode. By using the wrapper, we are able to guarantee
   ** that the "nBusy" integer parameter passed to the users busy-handler
   ** represents the total number of busy-handler invocations made within
-  ** this call to sqlite3demo_superlock(), including any made during the
+  ** this call to sqlite4demo_superlock(), including any made during the
   ** "BEGIN EXCLUSIVE".
   */
   if( rc==SQLITE_OK ){
     busy.xBusy = xBusy;
     busy.pBusyArg = pBusyArg;
-    sqlite3_busy_handler(pLock->db, superlockBusyHandler, (void *)&busy);
-    rc = sqlite3_exec(pLock->db, "BEGIN EXCLUSIVE", 0, 0, 0);
+    sqlite4_busy_handler(pLock->db, superlockBusyHandler, (void *)&busy);
+    rc = sqlite4_exec(pLock->db, "BEGIN EXCLUSIVE", 0, 0, 0);
   }
 
   /* If the BEGIN EXCLUSIVE was executed successfully and this is a WAL
@@ -230,7 +230,7 @@ int sqlite3demo_superlock(
   */
   if( rc==SQLITE_OK ){
     if( SQLITE_OK==(rc = superlockIsWal(pLock)) && pLock->bWal ){
-      rc = sqlite3_exec(pLock->db, "COMMIT", 0, 0, 0);
+      rc = sqlite4_exec(pLock->db, "COMMIT", 0, 0, 0);
       if( rc==SQLITE_OK ){
         rc = superlockWalLock(pLock->db, &busy);
       }
@@ -238,7 +238,7 @@ int sqlite3demo_superlock(
   }
 
   if( rc!=SQLITE_OK ){
-    sqlite3demo_superunlock(pLock);
+    sqlite4demo_superunlock(pLock);
     *ppLock = 0;
   }else{
     *ppLock = pLock;
@@ -265,7 +265,7 @@ struct InterpAndScript {
 typedef struct InterpAndScript InterpAndScript;
 
 static void superunlock_del(ClientData cd){
-  sqlite3demo_superunlock((void *)cd);
+  sqlite4demo_superunlock((void *)cd);
 }
 
 static int superunlock_cmd(
@@ -298,7 +298,7 @@ static int superlock_busy(void *pCtx, int nBusy){
 }
 
 /*
-** Tclcmd: sqlite3demo_superlock CMDNAME PATH VFS BUSY-HANDLER-SCRIPT
+** Tclcmd: sqlite4demo_superlock CMDNAME PATH VFS BUSY-HANDLER-SCRIPT
 */
 static int superlock_cmd(
   ClientData cd,
@@ -311,7 +311,7 @@ static int superlock_cmd(
   char *zVfs = 0;
   InterpAndScript busy = {0, 0};
   int (*xBusy)(void*,int) = 0;    /* Busy handler callback */
-  int rc;                         /* Return code from sqlite3demo_superlock() */
+  int rc;                         /* Return code from sqlite4demo_superlock() */
 
   if( objc<3 || objc>5 ){
     Tcl_WrongNumArgs(
@@ -331,14 +331,14 @@ static int superlock_cmd(
     xBusy = superlock_busy;
   }
 
-  rc = sqlite3demo_superlock(zPath, zVfs, xBusy, &busy, &pLock);
+  rc = sqlite4demo_superlock(zPath, zVfs, xBusy, &busy, &pLock);
   assert( rc==SQLITE_OK || pLock==0 );
   assert( rc!=SQLITE_OK || pLock!=0 );
 
   if( rc!=SQLITE_OK ){
-    extern const char *sqlite3ErrStr(int);
+    extern const char *sqlite4ErrStr(int);
     Tcl_ResetResult(interp);
-    Tcl_AppendResult(interp, sqlite3ErrStr(rc), 0);
+    Tcl_AppendResult(interp, sqlite4ErrStr(rc), 0);
     return TCL_ERROR;
   }
 
@@ -350,7 +350,7 @@ static int superlock_cmd(
 }
 
 int SqliteSuperlock_Init(Tcl_Interp *interp){
-  Tcl_CreateObjCommand(interp, "sqlite3demo_superlock", superlock_cmd, 0, 0);
+  Tcl_CreateObjCommand(interp, "sqlite4demo_superlock", superlock_cmd, 0, 0);
   return TCL_OK;
 }
 #endif

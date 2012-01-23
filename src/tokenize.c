@@ -26,7 +26,7 @@
 ** need to be translated.
 */
 #ifdef SQLITE_ASCII
-# define charMap(X) sqlite3UpperToLower[(unsigned char)X]
+# define charMap(X) sqlite4UpperToLower[(unsigned char)X]
 #endif
 #ifdef SQLITE_EBCDIC
 # define charMap(X) ebcdicToAscii[(unsigned char)X]
@@ -52,7 +52,7 @@ const unsigned char ebcdicToAscii[] = {
 #endif
 
 /*
-** The sqlite3KeywordCode function looks up an identifier to determine if
+** The sqlite4KeywordCode function looks up an identifier to determine if
 ** it is a keyword.  If it is a keyword, the token code of that keyword is 
 ** returned.  If the input is not a keyword, TK_ID is returned.
 **
@@ -71,7 +71,7 @@ const unsigned char ebcdicToAscii[] = {
 **
 ** For ASCII, any character with the high-order bit set is
 ** allowed in an identifier.  For 7-bit characters, 
-** sqlite3IsIdChar[X] must be 1.
+** sqlite4IsIdChar[X] must be 1.
 **
 ** For EBCDIC, the rules are more complex but have the same
 ** end result.
@@ -82,10 +82,10 @@ const unsigned char ebcdicToAscii[] = {
 ** But the feature is undocumented.
 */
 #ifdef SQLITE_ASCII
-#define IdChar(C)  ((sqlite3CtypeMap[(unsigned char)C]&0x46)!=0)
+#define IdChar(C)  ((sqlite4CtypeMap[(unsigned char)C]&0x46)!=0)
 #endif
 #ifdef SQLITE_EBCDIC
-const char sqlite3IsEbcdicIdChar[] = {
+const char sqlite4IsEbcdicIdChar[] = {
 /* x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 xA xB xC xD xE xF */
     0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,  /* 4x */
     0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0,  /* 5x */
@@ -100,7 +100,7 @@ const char sqlite3IsEbcdicIdChar[] = {
     0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1,  /* Ex */
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0,  /* Fx */
 };
-#define IdChar(C)  (((c=C)>=0x42 && sqlite3IsEbcdicIdChar[c-0x40]))
+#define IdChar(C)  (((c=C)>=0x42 && sqlite4IsEbcdicIdChar[c-0x40]))
 #endif
 
 
@@ -108,7 +108,7 @@ const char sqlite3IsEbcdicIdChar[] = {
 ** Return the length of the token that begins at z[0]. 
 ** Store the token type in *tokenType before returning.
 */
-int sqlite3GetToken(const unsigned char *z, int *tokenType){
+int sqlite4GetToken(const unsigned char *z, int *tokenType){
   int i, c;
   switch( *z ){
     case ' ': case '\t': case '\n': case '\f': case '\r': {
@@ -117,7 +117,7 @@ int sqlite3GetToken(const unsigned char *z, int *tokenType){
       testcase( z[0]=='\n' );
       testcase( z[0]=='\f' );
       testcase( z[0]=='\r' );
-      for(i=1; sqlite3Isspace(z[i]); i++){}
+      for(i=1; sqlite4Isspace(z[i]); i++){}
       *tokenType = TK_SPACE;
       return i;
     }
@@ -256,7 +256,7 @@ int sqlite3GetToken(const unsigned char *z, int *tokenType){
     }
     case '.': {
 #ifndef SQLITE_OMIT_FLOATING_POINT
-      if( !sqlite3Isdigit(z[1]) )
+      if( !sqlite4Isdigit(z[1]) )
 #endif
       {
         *tokenType = TK_DOT;
@@ -272,20 +272,20 @@ int sqlite3GetToken(const unsigned char *z, int *tokenType){
       testcase( z[0]=='6' );  testcase( z[0]=='7' );  testcase( z[0]=='8' );
       testcase( z[0]=='9' );
       *tokenType = TK_INTEGER;
-      for(i=0; sqlite3Isdigit(z[i]); i++){}
+      for(i=0; sqlite4Isdigit(z[i]); i++){}
 #ifndef SQLITE_OMIT_FLOATING_POINT
       if( z[i]=='.' ){
         i++;
-        while( sqlite3Isdigit(z[i]) ){ i++; }
+        while( sqlite4Isdigit(z[i]) ){ i++; }
         *tokenType = TK_FLOAT;
       }
       if( (z[i]=='e' || z[i]=='E') &&
-           ( sqlite3Isdigit(z[i+1]) 
-            || ((z[i+1]=='+' || z[i+1]=='-') && sqlite3Isdigit(z[i+2]))
+           ( sqlite4Isdigit(z[i+1]) 
+            || ((z[i+1]=='+' || z[i+1]=='-') && sqlite4Isdigit(z[i+2]))
            )
       ){
         i += 2;
-        while( sqlite3Isdigit(z[i]) ){ i++; }
+        while( sqlite4Isdigit(z[i]) ){ i++; }
         *tokenType = TK_FLOAT;
       }
 #endif
@@ -302,14 +302,14 @@ int sqlite3GetToken(const unsigned char *z, int *tokenType){
     }
     case '?': {
       *tokenType = TK_VARIABLE;
-      for(i=1; sqlite3Isdigit(z[i]); i++){}
+      for(i=1; sqlite4Isdigit(z[i]); i++){}
       return i;
     }
     case '#': {
-      for(i=1; sqlite3Isdigit(z[i]); i++){}
+      for(i=1; sqlite4Isdigit(z[i]); i++){}
       if( i>1 ){
         /* Parameters of the form #NNN (where NNN is a number) are used
-        ** internally by sqlite3NestedParse.  */
+        ** internally by sqlite4NestedParse.  */
         *tokenType = TK_REGISTER;
         return i;
       }
@@ -331,7 +331,7 @@ int sqlite3GetToken(const unsigned char *z, int *tokenType){
         }else if( c=='(' && n>0 ){
           do{
             i++;
-          }while( (c=z[i])!=0 && !sqlite3Isspace(c) && c!=')' );
+          }while( (c=z[i])!=0 && !sqlite4Isspace(c) && c!=')' );
           if( c==')' ){
             i++;
           }else{
@@ -353,7 +353,7 @@ int sqlite3GetToken(const unsigned char *z, int *tokenType){
       testcase( z[0]=='x' ); testcase( z[0]=='X' );
       if( z[1]=='\'' ){
         *tokenType = TK_BLOB;
-        for(i=2; sqlite3Isxdigit(z[i]); i++){}
+        for(i=2; sqlite4Isxdigit(z[i]); i++){}
         if( z[i]!='\'' || i%2 ){
           *tokenType = TK_ILLEGAL;
           while( z[i] && z[i]!='\'' ){ i++; }
@@ -381,17 +381,17 @@ int sqlite3GetToken(const unsigned char *z, int *tokenType){
 ** Run the parser on the given SQL string.  The parser structure is
 ** passed in.  An SQLITE_ status code is returned.  If an error occurs
 ** then an and attempt is made to write an error message into 
-** memory obtained from sqlite3_malloc() and to make *pzErrMsg point to that
+** memory obtained from sqlite4_malloc() and to make *pzErrMsg point to that
 ** error message.
 */
-int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
+int sqlite4RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
   int nErr = 0;                   /* Number of errors encountered */
   int i;                          /* Loop counter */
   void *pEngine;                  /* The LEMON-generated LALR(1) parser */
   int tokenType;                  /* type of the next token */
   int lastTokenParsed = -1;       /* type of the previous token */
   u8 enableLookaside;             /* Saved value of db->lookaside.bEnabled */
-  sqlite3 *db = pParse->db;       /* The database connection */
+  sqlite4 *db = pParse->db;       /* The database connection */
   int mxSqlLen;                   /* Max length of an SQL string */
 
 
@@ -403,7 +403,7 @@ int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
   pParse->zTail = zSql;
   i = 0;
   assert( pzErrMsg!=0 );
-  pEngine = sqlite3ParserAlloc((void*(*)(size_t))sqlite3Malloc);
+  pEngine = sqlite4ParserAlloc((void*(*)(size_t))sqlite4Malloc);
   if( pEngine==0 ){
     db->mallocFailed = 1;
     return SQLITE_NOMEM;
@@ -418,7 +418,7 @@ int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
   while( !db->mallocFailed && zSql[i]!=0 ){
     assert( i>=0 );
     pParse->sLastToken.z = &zSql[i];
-    pParse->sLastToken.n = sqlite3GetToken((unsigned char*)&zSql[i],&tokenType);
+    pParse->sLastToken.n = sqlite4GetToken((unsigned char*)&zSql[i],&tokenType);
     i += pParse->sLastToken.n;
     if( i>mxSqlLen ){
       pParse->rc = SQLITE_TOOBIG;
@@ -427,15 +427,15 @@ int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
     switch( tokenType ){
       case TK_SPACE: {
         if( db->u1.isInterrupted ){
-          sqlite3ErrorMsg(pParse, "interrupt");
+          sqlite4ErrorMsg(pParse, "interrupt");
           pParse->rc = SQLITE_INTERRUPT;
           goto abort_parse;
         }
         break;
       }
       case TK_ILLEGAL: {
-        sqlite3DbFree(db, *pzErrMsg);
-        *pzErrMsg = sqlite3MPrintf(db, "unrecognized token: \"%T\"",
+        sqlite4DbFree(db, *pzErrMsg);
+        *pzErrMsg = sqlite4MPrintf(db, "unrecognized token: \"%T\"",
                         &pParse->sLastToken);
         nErr++;
         goto abort_parse;
@@ -445,7 +445,7 @@ int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
         /* Fall thru into the default case */
       }
       default: {
-        sqlite3Parser(pEngine, tokenType, pParse->sLastToken, pParse);
+        sqlite4Parser(pEngine, tokenType, pParse->sLastToken, pParse);
         lastTokenParsed = tokenType;
         if( pParse->rc!=SQLITE_OK ){
           goto abort_parse;
@@ -457,44 +457,44 @@ int sqlite3RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
 abort_parse:
   if( zSql[i]==0 && nErr==0 && pParse->rc==SQLITE_OK ){
     if( lastTokenParsed!=TK_SEMI ){
-      sqlite3Parser(pEngine, TK_SEMI, pParse->sLastToken, pParse);
+      sqlite4Parser(pEngine, TK_SEMI, pParse->sLastToken, pParse);
       pParse->zTail = &zSql[i];
     }
-    sqlite3Parser(pEngine, 0, pParse->sLastToken, pParse);
+    sqlite4Parser(pEngine, 0, pParse->sLastToken, pParse);
   }
 #ifdef YYTRACKMAXSTACKDEPTH
-  sqlite3StatusSet(SQLITE_STATUS_PARSER_STACK,
-      sqlite3ParserStackPeak(pEngine)
+  sqlite4StatusSet(SQLITE_STATUS_PARSER_STACK,
+      sqlite4ParserStackPeak(pEngine)
   );
 #endif /* YYDEBUG */
-  sqlite3ParserFree(pEngine, sqlite3_free);
+  sqlite4ParserFree(pEngine, sqlite4_free);
   db->lookaside.bEnabled = enableLookaside;
   if( db->mallocFailed ){
     pParse->rc = SQLITE_NOMEM;
   }
   if( pParse->rc!=SQLITE_OK && pParse->rc!=SQLITE_DONE && pParse->zErrMsg==0 ){
-    sqlite3SetString(&pParse->zErrMsg, db, "%s", sqlite3ErrStr(pParse->rc));
+    sqlite4SetString(&pParse->zErrMsg, db, "%s", sqlite4ErrStr(pParse->rc));
   }
   assert( pzErrMsg!=0 );
   if( pParse->zErrMsg ){
     *pzErrMsg = pParse->zErrMsg;
-    sqlite3_log(pParse->rc, "%s", *pzErrMsg);
+    sqlite4_log(pParse->rc, "%s", *pzErrMsg);
     pParse->zErrMsg = 0;
     nErr++;
   }
   if( pParse->pVdbe && pParse->nErr>0 && pParse->nested==0 ){
-    sqlite3VdbeDelete(pParse->pVdbe);
+    sqlite4VdbeDelete(pParse->pVdbe);
     pParse->pVdbe = 0;
   }
 #ifndef SQLITE_OMIT_SHARED_CACHE
   if( pParse->nested==0 ){
-    sqlite3DbFree(db, pParse->aTableLock);
+    sqlite4DbFree(db, pParse->aTableLock);
     pParse->aTableLock = 0;
     pParse->nTableLock = 0;
   }
 #endif
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-  sqlite3_free(pParse->apVtabLock);
+  sqlite4_free(pParse->apVtabLock);
 #endif
 
   if( !IN_DECLARE_VTAB ){
@@ -502,22 +502,22 @@ abort_parse:
     ** structure built up in pParse->pNewTable. The calling code (see vtab.c)
     ** will take responsibility for freeing the Table structure.
     */
-    sqlite3DeleteTable(db, pParse->pNewTable);
+    sqlite4DeleteTable(db, pParse->pNewTable);
   }
 
-  sqlite3DeleteTrigger(db, pParse->pNewTrigger);
-  for(i=pParse->nzVar-1; i>=0; i--) sqlite3DbFree(db, pParse->azVar[i]);
-  sqlite3DbFree(db, pParse->azVar);
-  sqlite3DbFree(db, pParse->aAlias);
+  sqlite4DeleteTrigger(db, pParse->pNewTrigger);
+  for(i=pParse->nzVar-1; i>=0; i--) sqlite4DbFree(db, pParse->azVar[i]);
+  sqlite4DbFree(db, pParse->azVar);
+  sqlite4DbFree(db, pParse->aAlias);
   while( pParse->pAinc ){
     AutoincInfo *p = pParse->pAinc;
     pParse->pAinc = p->pNext;
-    sqlite3DbFree(db, p);
+    sqlite4DbFree(db, p);
   }
   while( pParse->pZombieTab ){
     Table *p = pParse->pZombieTab;
     pParse->pZombieTab = p->pNextZombie;
-    sqlite3DeleteTable(db, p);
+    sqlite4DeleteTable(db, p);
   }
   if( nErr>0 && pParse->rc==SQLITE_OK ){
     pParse->rc = SQLITE_ERROR;

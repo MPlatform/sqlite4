@@ -21,7 +21,7 @@ source $testdir/malloc_common.tcl
 #
 do_malloc_test mallocH-1 -tclprep {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db eval {
     CREATE TABLE t1(x UNIQUE, y);
     INSERT INTO t1 VALUES(1,2);

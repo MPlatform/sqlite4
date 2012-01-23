@@ -2,11 +2,11 @@
 #
 # This script is used to compile SQLite into a DLL.
 #
-# Two separate DLLs are generated.  "sqlite3.dll" is the core
-# library.  "tclsqlite3.dll" contains the TCL bindings and is the
+# Two separate DLLs are generated.  "sqlite4.dll" is the core
+# library.  "tclsqlite4.dll" contains the TCL bindings and is the
 # library that is loaded into TCL in order to run SQLite.
 #
-make sqlite3.c
+make sqlite4.c
 PATH=$PATH:/opt/mingw/bin
 TCLDIR=/home/drh/tcltk/846/win/846win
 TCLSTUBLIB=$TCLDIR/libtcl84stub.a
@@ -17,33 +17,33 @@ OPTS="$OPTS -DSQLITE_ENABLE_RTREE=1"
 OPTS="$OPTS -DSQLITE_ENABLE_COLUMN_METADATA=1"
 CC="i386-mingw32msvc-gcc -Os $OPTS -Itsrc -I$TCLDIR"
 NM="i386-mingw32msvc-nm"
-CMD="$CC -c sqlite3.c"
+CMD="$CC -c sqlite4.c"
 echo $CMD
 $CMD
-CMD="$CC -c tclsqlite3.c"
+CMD="$CC -c tclsqlite4.c"
 echo $CMD
 $CMD
-echo 'EXPORTS' >tclsqlite3.def
-$NM tclsqlite3.o | grep ' T ' >temp1
+echo 'EXPORTS' >tclsqlite4.def
+$NM tclsqlite4.o | grep ' T ' >temp1
 grep '_Init$' temp1 >temp2
 grep '_SafeInit$' temp1 >>temp2
-grep ' T _sqlite3_' temp1 >>temp2
-echo 'EXPORTS' >tclsqlite3.def
-sed 's/^.* T _//' temp2 | sort | uniq >>tclsqlite3.def
+grep ' T _sqlite4_' temp1 >>temp2
+echo 'EXPORTS' >tclsqlite4.def
+sed 's/^.* T _//' temp2 | sort | uniq >>tclsqlite4.def
 i386-mingw32msvc-dllwrap \
-     --def tclsqlite3.def -v --export-all \
+     --def tclsqlite4.def -v --export-all \
      --driver-name i386-mingw32msvc-gcc \
      --dlltool-name i386-mingw32msvc-dlltool \
      --as i386-mingw32msvc-as \
      --target i386-mingw32 \
-     -dllname tclsqlite3.dll -lmsvcrt tclsqlite3.o $TCLSTUBLIB
-$NM sqlite3.o | grep ' T ' >temp1
-echo 'EXPORTS' >sqlite3.def
-grep ' _sqlite3_' temp1 | sed 's/^.* _//' >>sqlite3.def
+     -dllname tclsqlite4.dll -lmsvcrt tclsqlite4.o $TCLSTUBLIB
+$NM sqlite4.o | grep ' T ' >temp1
+echo 'EXPORTS' >sqlite4.def
+grep ' _sqlite4_' temp1 | sed 's/^.* _//' >>sqlite4.def
 i386-mingw32msvc-dllwrap \
-     --def sqlite3.def -v --export-all \
+     --def sqlite4.def -v --export-all \
      --driver-name i386-mingw32msvc-gcc \
      --dlltool-name i386-mingw32msvc-dlltool \
      --as i386-mingw32msvc-as \
      --target i386-mingw32 \
-     -dllname sqlite3.dll -lmsvcrt sqlite3.o
+     -dllname sqlite4.dll -lmsvcrt sqlite4.o

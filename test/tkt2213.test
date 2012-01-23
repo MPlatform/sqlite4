@@ -20,7 +20,7 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
 do_test tkt2213-1 {
-  sqlite3_create_function db
+  sqlite4_create_function db
   catchsql {
     SELECT tkt2213func(tkt2213func('abcd'));
   }

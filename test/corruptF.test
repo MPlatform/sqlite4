@@ -28,7 +28,7 @@ proc str {i} { format %08d $i }
 proc create_test_db {} {
   catch { db close }
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db func str str
   execsql {
     PRAGMA auto_vacuum = 0;
@@ -63,7 +63,7 @@ do_test 1.4 { hexio_read test.db [expr 2*1024] 12 } 000000000000000100000004
 # Change the free-list entry to page 6 and reopen the db file.
 do_test 1.5 { 
   hexio_write test.db [expr 2*1024 + 8] 00000006 
-  sqlite3 db test.db
+  sqlite4 db test.db
 } {}
 
 # Now create a new table in the database file. The root of the new table
@@ -116,7 +116,7 @@ do_test 2.4 { hexio_read test.db [expr 2*1024] 12 } 000000000000000100000004
 # Change the free-list entry to page 5 and reopen the db file.
 do_test 2.5 { 
   hexio_write test.db [expr 2*1024 + 8] 00000005 
-  sqlite3 db test.db
+  sqlite4 db test.db
 } {}
 
 # Now create a new table in the database file. The root of the new table

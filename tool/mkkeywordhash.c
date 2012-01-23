@@ -272,7 +272,7 @@ static int nKeyword = (sizeof(aKeywordTable)/sizeof(aKeywordTable[0]));
 /* An array to map all upper-case characters into their corresponding
 ** lower-case character. 
 */
-const unsigned char sqlite3UpperToLower[] = {
+const unsigned char sqlite4UpperToLower[] = {
       0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
      18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
      36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
@@ -289,7 +289,7 @@ const unsigned char sqlite3UpperToLower[] = {
     234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,
     252,253,254,255
 };
-#define UpperToLower sqlite3UpperToLower
+#define UpperToLower sqlite4UpperToLower
 
 /*
 ** Comparision function for two Keyword records
@@ -583,7 +583,7 @@ int main(int argc, char **argv){
          "      n) %% %d;\n", bestSize);
   printf("  for(i=((int)aHash[h])-1; i>=0; i=((int)aNext[i])-1){\n");
   printf("    if( aLen[i]==n &&"
-                   " sqlite3StrNICmp(&zText[aOffset[i]],z,n)==0 ){\n");
+                   " sqlite4StrNICmp(&zText[aOffset[i]],z,n)==0 ){\n");
   for(i=0; i<nKeyword; i++){
     printf("      testcase( i==%d ); /* %s */\n",
            i, aKeywordTable[i].zOrigName);
@@ -593,7 +593,7 @@ int main(int argc, char **argv){
   printf("  }\n");
   printf("  return TK_ID;\n");
   printf("}\n");
-  printf("int sqlite3KeywordCode(const unsigned char *z, int n){\n");
+  printf("int sqlite4KeywordCode(const unsigned char *z, int n){\n");
   printf("  return keywordCode((char*)z, n);\n");
   printf("}\n");
   printf("#define SQLITE_N_KEYWORD %d\n", nKeyword);

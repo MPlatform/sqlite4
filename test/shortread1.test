@@ -36,7 +36,7 @@ do_test shortread1-1.2 {
   }
 } {11}
 do_test shortread1-1.3 {
-  sqlite3_release_memory [expr {1024*9}]
+  sqlite4_release_memory [expr {1024*9}]
   execsql {
     INSERT INTO t1 VALUES(hex(randomblob(5000)));
     PRAGMA freelist_count;

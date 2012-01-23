@@ -387,7 +387,7 @@ do_catchsql_test 3.3.3 {
 #
 db close
 forcedelete test.db
-sqlite3 db test.db
+sqlite4 db test.db
 do_execsql_test 4.1 {
   CREATE VIRTUAL TABLE x1 USING fts4(x);
   CREATE VIRTUAL TABLE terms USING fts4aux(x1);

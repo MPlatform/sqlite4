@@ -10,7 +10,7 @@
 #***********************************************************************
 # 
 # This file contains code to verify that the SQLITE_UTF16_ALIGNED
-# flag passed into the sqlite3_create_collation() function insures
+# flag passed into the sqlite4_create_collation() function insures
 # that all strings passed to that function are aligned on an even
 # byte boundary.
 #
@@ -31,7 +31,7 @@ ifcapable !utf16 {
 #
 do_test utf16align-1.0 {
   set unaligned_string_counter 0
-  add_alignment_test_collations [sqlite3_connection_pointer db]
+  add_alignment_test_collations [sqlite4_connection_pointer db]
   execsql {
     PRAGMA encoding=UTF16;
     CREATE TABLE t1(
@@ -84,7 +84,7 @@ integrity_check utf16align-1.4
 # ticket #3482
 #
 db close
-sqlite3 db :memory:
+sqlite4 db :memory:
 do_test utf16align-2.1 {
   db eval {
     PRAGMA encoding=UTF16be;

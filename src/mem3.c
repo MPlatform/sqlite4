@@ -14,9 +14,9 @@
 **
 ** This version of the memory allocation subsystem omits all
 ** use of malloc(). The SQLite user supplies a block of memory
-** before calling sqlite3_initialize() from which allocations
+** before calling sqlite4_initialize() from which allocations
 ** are made and returned by the xMalloc() and xRealloc() 
-** implementations. Once sqlite3_initialize() has been called,
+** implementations. Once sqlite4_initialize() has been called,
 ** the amount of memory available to SQLite is fixed and cannot
 ** be changed.
 **
@@ -30,7 +30,7 @@
 ** SQLITE_ENABLE_MEMSYS3 is defined. Defining this symbol does not
 ** mean that the library will use a memory-pool by default, just that
 ** it is available. The mempool allocator is activated by calling
-** sqlite3_config().
+** sqlite4_config().
 */
 #ifdef SQLITE_ENABLE_MEMSYS3
 
@@ -113,7 +113,7 @@ static SQLITE_WSD struct Mem3Global {
   /*
   ** Mutex to control access to the memory allocation subsystem.
   */
-  sqlite3_mutex *mutex;
+  sqlite4_mutex *mutex;
   
   /*
   ** The minimum amount of free space that we have seen.
@@ -147,7 +147,7 @@ static SQLITE_WSD struct Mem3Global {
 static void memsys3UnlinkFromList(u32 i, u32 *pRoot){
   u32 next = mem3.aPool[i].u.list.next;
   u32 prev = mem3.aPool[i].u.list.prev;
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   if( prev==0 ){
     *pRoot = next;
   }else{
@@ -166,7 +166,7 @@ static void memsys3UnlinkFromList(u32 i, u32 *pRoot){
 */
 static void memsys3Unlink(u32 i){
   u32 size, hash;
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   assert( (mem3.aPool[i-1].u.hdr.size4x & 1)==0 );
   assert( i>=1 );
   size = mem3.aPool[i-1].u.hdr.size4x/4;
@@ -185,7 +185,7 @@ static void memsys3Unlink(u32 i){
 ** at *pRoot.
 */
 static void memsys3LinkIntoList(u32 i, u32 *pRoot){
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   mem3.aPool[i].u.list.next = *pRoot;
   mem3.aPool[i].u.list.prev = 0;
   if( *pRoot ){
@@ -200,7 +200,7 @@ static void memsys3LinkIntoList(u32 i, u32 *pRoot){
 */
 static void memsys3Link(u32 i){
   u32 size, hash;
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   assert( i>=1 );
   assert( (mem3.aPool[i-1].u.hdr.size4x & 1)==0 );
   size = mem3.aPool[i-1].u.hdr.size4x/4;
@@ -217,16 +217,16 @@ static void memsys3Link(u32 i){
 /*
 ** If the STATIC_MEM mutex is not already held, obtain it now. The mutex
 ** will already be held (obtained by code in malloc.c) if
-** sqlite3GlobalConfig.bMemStat is true.
+** sqlite4GlobalConfig.bMemStat is true.
 */
 static void memsys3Enter(void){
-  if( sqlite3GlobalConfig.bMemstat==0 && mem3.mutex==0 ){
-    mem3.mutex = sqlite3MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
+  if( sqlite4GlobalConfig.bMemstat==0 && mem3.mutex==0 ){
+    mem3.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
   }
-  sqlite3_mutex_enter(mem3.mutex);
+  sqlite4_mutex_enter(mem3.mutex);
 }
 static void memsys3Leave(void){
-  sqlite3_mutex_leave(mem3.mutex);
+  sqlite4_mutex_leave(mem3.mutex);
 }
 
 /*
@@ -235,10 +235,10 @@ static void memsys3Leave(void){
 static void memsys3OutOfMemory(int nByte){
   if( !mem3.alarmBusy ){
     mem3.alarmBusy = 1;
-    assert( sqlite3_mutex_held(mem3.mutex) );
-    sqlite3_mutex_leave(mem3.mutex);
-    sqlite3_release_memory(nByte);
-    sqlite3_mutex_enter(mem3.mutex);
+    assert( sqlite4_mutex_held(mem3.mutex) );
+    sqlite4_mutex_leave(mem3.mutex);
+    sqlite4_release_memory(nByte);
+    sqlite4_mutex_enter(mem3.mutex);
     mem3.alarmBusy = 0;
   }
 }
@@ -251,7 +251,7 @@ static void memsys3OutOfMemory(int nByte){
 */
 static void *memsys3Checkout(u32 i, u32 nBlock){
   u32 x;
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   assert( i>=1 );
   assert( mem3.aPool[i-1].u.hdr.size4x/4==nBlock );
   assert( mem3.aPool[i+nBlock-1].u.hdr.prevSize==nBlock );
@@ -268,7 +268,7 @@ static void *memsys3Checkout(u32 i, u32 nBlock){
 ** is not large enough, return 0.
 */
 static void *memsys3FromMaster(u32 nBlock){
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   assert( mem3.szMaster>=nBlock );
   if( nBlock>=mem3.szMaster-1 ){
     /* Use the entire master */
@@ -315,7 +315,7 @@ static void *memsys3FromMaster(u32 nBlock){
 static void memsys3Merge(u32 *pRoot){
   u32 iNext, prev, size, i, x;
 
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   for(i=*pRoot; i>0; i=iNext){
     iNext = mem3.aPool[i].u.list.next;
     size = mem3.aPool[i-1].u.hdr.size4x;
@@ -356,7 +356,7 @@ static void *memsys3MallocUnsafe(int nByte){
   u32 nBlock;
   u32 toFree;
 
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   assert( sizeof(Mem3Block)==8 );
   if( nByte<=12 ){
     nBlock = 2;
@@ -437,7 +437,7 @@ static void memsys3FreeUnsafe(void *pOld){
   Mem3Block *p = (Mem3Block*)pOld;
   int i;
   u32 size, x;
-  assert( sqlite3_mutex_held(mem3.mutex) );
+  assert( sqlite4_mutex_held(mem3.mutex) );
   assert( p>mem3.aPool && p<&mem3.aPool[mem3.nPool] );
   i = p - mem3.aPool;
   assert( (mem3.aPool[i-1].u.hdr.size4x&1)==1 );
@@ -497,7 +497,7 @@ static int memsys3Roundup(int n){
 ** Allocate nBytes of memory.
 */
 static void *memsys3Malloc(int nBytes){
-  sqlite3_int64 *p;
+  sqlite4_int64 *p;
   assert( nBytes>0 );          /* malloc.c filters out 0 byte requests */
   memsys3Enter();
   p = memsys3MallocUnsafe(nBytes);
@@ -522,10 +522,10 @@ static void *memsys3Realloc(void *pPrior, int nBytes){
   int nOld;
   void *p;
   if( pPrior==0 ){
-    return sqlite3_malloc(nBytes);
+    return sqlite4_malloc(nBytes);
   }
   if( nBytes<=0 ){
-    sqlite3_free(pPrior);
+    sqlite4_free(pPrior);
     return 0;
   }
   nOld = memsys3Size(pPrior);
@@ -551,14 +551,14 @@ static void *memsys3Realloc(void *pPrior, int nBytes){
 */
 static int memsys3Init(void *NotUsed){
   UNUSED_PARAMETER(NotUsed);
-  if( !sqlite3GlobalConfig.pHeap ){
+  if( !sqlite4GlobalConfig.pHeap ){
     return SQLITE_ERROR;
   }
 
   /* Store a pointer to the memory block in global structure mem3. */
   assert( sizeof(Mem3Block)==8 );
-  mem3.aPool = (Mem3Block *)sqlite3GlobalConfig.pHeap;
-  mem3.nPool = (sqlite3GlobalConfig.nHeap / sizeof(Mem3Block)) - 2;
+  mem3.aPool = (Mem3Block *)sqlite4GlobalConfig.pHeap;
+  mem3.nPool = (sqlite4GlobalConfig.nHeap / sizeof(Mem3Block)) - 2;
 
   /* Initialize the master block. */
   mem3.szMaster = mem3.nPool;
@@ -586,7 +586,7 @@ static void memsys3Shutdown(void *NotUsed){
 ** Open the file indicated and write a log of all unfreed memory 
 ** allocations into that log.
 */
-void sqlite3Memsys3Dump(const char *zFilename){
+void sqlite4Memsys3Dump(const char *zFilename){
 #ifdef SQLITE_DEBUG
   FILE *out;
   u32 i, j;
@@ -648,7 +648,7 @@ void sqlite3Memsys3Dump(const char *zFilename){
   fprintf(out, "master=%d\n", mem3.iMaster);
   fprintf(out, "nowUsed=%d\n", mem3.nPool*8 - mem3.szMaster*8);
   fprintf(out, "mxUsed=%d\n", mem3.nPool*8 - mem3.mnMaster*8);
-  sqlite3_mutex_leave(mem3.mutex);
+  sqlite4_mutex_leave(mem3.mutex);
   if( out==stdout ){
     fflush(stdout);
   }else{
@@ -664,14 +664,14 @@ void sqlite3Memsys3Dump(const char *zFilename){
 ** linkage.
 **
 ** Populate the low-level memory allocation function pointers in
-** sqlite3GlobalConfig.m with pointers to the routines in this file. The
+** sqlite4GlobalConfig.m with pointers to the routines in this file. The
 ** arguments specify the block of memory to manage.
 **
-** This routine is only called by sqlite3_config(), and therefore
+** This routine is only called by sqlite4_config(), and therefore
 ** is not required to be threadsafe (it is not).
 */
-const sqlite3_mem_methods *sqlite3MemGetMemsys3(void){
-  static const sqlite3_mem_methods mempoolMethods = {
+const sqlite4_mem_methods *sqlite4MemGetMemsys3(void){
+  static const sqlite4_mem_methods mempoolMethods = {
      memsys3Malloc,
      memsys3Free,
      memsys3Realloc,

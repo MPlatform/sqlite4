@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
 # focus of this file is testing the handling of IO errors by the
-# sqlite3_backup_XXX APIs.
+# sqlite4_backup_XXX APIs.
 #
 # $Id: backup_ioerr.test,v 1.3 2009/04/10 18:41:01 danielk1977 Exp $
 
@@ -159,8 +159,8 @@ for {set iError 1} {$bStop == 0} {incr iError} {
   catch { forcedelete bak.db }
 
   # Open the source and destination databases.
-  sqlite3 sdb test.db
-  sqlite3 ddb bak.db
+  sqlite4 sdb test.db
+  sqlite4 ddb bak.db
 
   # Step 1: Populate the source and destination databases.
   populate_database sdb
@@ -169,7 +169,7 @@ for {set iError 1} {$bStop == 0} {incr iError} {
   eval $zSetupBak
 
   # Step 2: Open the backup process.
-  sqlite3_backup B ddb main sdb main
+  sqlite4_backup B ddb main sdb main
 
   # Enable IO error simulation.
   set ::sqlite_io_error_pending $iError
@@ -185,7 +185,7 @@ for {set iError 1} {$bStop == 0} {incr iError} {
       string match SQLITE_IOERR* $rc
     } {1}
     do_test backup_ioerr-$iTest.$iError.2 {
-      list [sqlite3_errcode ddb] [sqlite3_errmsg ddb]
+      list [sqlite4_errcode ddb] [sqlite4_errmsg ddb]
     } {SQLITE_OK {not an error}}
 
     set rc [B finish]
@@ -194,11 +194,11 @@ for {set iError 1} {$bStop == 0} {incr iError} {
     } {1}
 
     do_test backup_ioerr-$iTest.$iError.4 {
-      sqlite3_errmsg ddb
+      sqlite4_errmsg ddb
     } {disk I/O error}
 
     clear_ioerr_simulation
-    sqlite3 ddb bak.db
+    sqlite4 ddb bak.db
     integrity_check backup_ioerr-$iTest.$iError.5 ddb
 
     continue
@@ -232,7 +232,7 @@ for {set iError 1} {$bStop == 0} {incr iError} {
     }
 
     clear_ioerr_simulation
-    sqlite3 ddb bak.db
+    sqlite4 ddb bak.db
     integrity_check backup_ioerr-$iTest.$iError.11 ddb
 
     continue
@@ -247,7 +247,7 @@ for {set iError 1} {$bStop == 0} {incr iError} {
       string match SQLITE_IOERR* $rc
     } {1}
     do_test backup_ioerr-$iTest.$iError.13 {
-      list [sqlite3_errcode ddb] [sqlite3_errmsg ddb]
+      list [sqlite4_errcode ddb] [sqlite4_errmsg ddb]
     } {SQLITE_OK {not an error}}
 
     set rc [B finish]
@@ -255,11 +255,11 @@ for {set iError 1} {$bStop == 0} {incr iError} {
       string match SQLITE_IOERR* $rc
     } {1}
     do_test backup_ioerr-$iTest.$iError.15 {
-      sqlite3_errmsg ddb
+      sqlite4_errmsg ddb
     } {disk I/O error}
 
     clear_ioerr_simulation
-    sqlite3 ddb bak.db
+    sqlite4 ddb bak.db
     integrity_check backup_ioerr-$iTest.$iError.16 ddb
 
     continue
@@ -272,8 +272,8 @@ for {set iError 1} {$bStop == 0} {incr iError} {
   } {SQLITE_DONE SQLITE_OK}
 
   clear_ioerr_simulation
-  sqlite3 sdb test.db
-  sqlite3 ddb bak.db
+  sqlite4 sdb test.db
+  sqlite4 ddb bak.db
 
   test_contents backup_ioerr-$iTest.$iError.18 ddb main sdb main
   integrity_check backup_ioerr-$iTest.$iError.19 ddb

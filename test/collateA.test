@@ -179,7 +179,7 @@ do_test collateA-2.26 {
 
 do_test collateA-3.1 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     REINDEX;
     PRAGMA integrity_check;

@@ -22,7 +22,7 @@ ifcapable !vtab {
   return
 }
 
-register_tclvar_module [sqlite3_connection_pointer db]
+register_tclvar_module [sqlite4_connection_pointer db]
 
 unset -nocomplain vtabE
 set vtabE(vtabE1) 11

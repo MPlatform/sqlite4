@@ -49,7 +49,7 @@ BCC = cl.exe
 #
 TCC = cl.exe -W3 -DSQLITE_OS_WIN=1 -I. -I$(TOP)\src -fp:precise
 
-# The mksqlite3c.tcl and mksqlite3h.tcl scripts will pull in 
+# The mksqlite4c.tcl and mksqlite4h.tcl scripts will pull in 
 # any extension header files by default.  For non-amalgamation
 # builds, we need to make sure the compiler can find these.
 #
@@ -267,7 +267,7 @@ LIBOBJS0 = alter.lo analyze.lo attach.lo auth.lo \
 
 # Object files for the amalgamation.
 #
-LIBOBJS1 = sqlite3.lo
+LIBOBJS1 = sqlite4.lo
 
 # Determine the real value of LIBOBJ based on the 'configure' script
 #
@@ -345,7 +345,7 @@ SRC = \
   $(TOP)\src\status.c \
   $(TOP)\src\shell.c \
   $(TOP)\src\sqlite.h.in \
-  $(TOP)\src\sqlite3ext.h \
+  $(TOP)\src\sqlite4ext.h \
   $(TOP)\src\sqliteInt.h \
   $(TOP)\src\sqliteLimit.h \
   $(TOP)\src\table.c \
@@ -422,7 +422,7 @@ SRC = $(SRC) \
   opcodes.h \
   parse.c \
   parse.h \
-  sqlite3.h
+  sqlite4.h
 
 # Source code to the test files.
 #
@@ -437,7 +437,6 @@ TESTSRC = \
   $(TOP)\src\test8.c \
   $(TOP)\src\test9.c \
   $(TOP)\src\test_autoext.c \
-  $(TOP)\src\test_async.c \
   $(TOP)\src\test_backup.c \
   $(TOP)\src\test_btree.c \
   $(TOP)\src\test_config.c \
@@ -512,8 +511,7 @@ TESTSRC2 = \
   $(TOP)\ext\fts3\fts3_aux.c \
   $(TOP)\ext\fts3\fts3_expr.c \
   $(TOP)\ext\fts3\fts3_tokenizer.c \
-  $(TOP)\ext\fts3\fts3_write.c \
-  $(TOP)\ext\async\sqlite3async.c
+  $(TOP)\ext\fts3\fts3_write.c
 
 # Header files used by all library source files.
 #
@@ -530,8 +528,8 @@ HDR = \
    $(TOP)\src\pager.h \
    $(TOP)\src\pcache.h \
    parse.h \
-   sqlite3.h \
-   $(TOP)\src\sqlite3ext.h \
+   sqlite4.h \
+   $(TOP)\src\sqlite4ext.h \
    $(TOP)\src\sqliteInt.h \
    $(TOP)\src\sqliteLimit.h \
    $(TOP)\src\vdbe.h \
@@ -557,23 +555,23 @@ EXTHDR = $(EXTHDR) \
 EXTHDR = $(EXTHDR) \
   $(TOP)\ext\icu\sqliteicu.h
 EXTHDR = $(EXTHDR) \
-  $(TOP)\ext\rtree\sqlite3rtree.h
+  $(TOP)\ext\rtree\sqlite4rtree.h
 
 # This is the default Makefile target.  The objects listed here
 # are what get build when you type just "make" with no arguments.
 #
-all:	dll libsqlite3.lib sqlite3.exe libtclsqlite3.lib
+all:	dll libsqlite4.lib sqlite4.exe libtclsqlite4.lib
 
-libsqlite3.lib:	$(LIBOBJ)
+libsqlite4.lib:	$(LIBOBJ)
 	$(LTLIB) $(LTLIBOPTS) /OUT:$@ $(LIBOBJ) $(TLIBS)
 
-libtclsqlite3.lib:	tclsqlite.lo libsqlite3.lib
-	$(LTLIB) $(LTLIBOPTS) $(LTLIBPATHS) /OUT:$@ tclsqlite.lo libsqlite3.lib $(LIBTCL:tcl=tclstub) $(TLIBS)
+libtclsqlite4.lib:	tclsqlite.lo libsqlite4.lib
+	$(LTLIB) $(LTLIBOPTS) $(LTLIBPATHS) /OUT:$@ tclsqlite.lo libsqlite4.lib $(LIBTCL:tcl=tclstub) $(TLIBS)
 
-sqlite3.exe:	$(TOP)\src\shell.c libsqlite3.lib sqlite3.h
+sqlite4.exe:	$(TOP)\src\shell.c libsqlite4.lib sqlite4.h
 	$(LTLINK) $(READLINE_FLAGS) \
 		$(TOP)\src\shell.c \
-		/link $(LTLINKOPTS) $(LTLIBPATHS) libsqlite3.lib $(LIBREADLINE) $(LTLIBS) $(TLIBS)
+		/link $(LTLINKOPTS) $(LTLIBPATHS) libsqlite4.lib $(LIBREADLINE) $(LTLIBS) $(TLIBS)
 
 # This target creates a directory named "tsrc" and fills it with
 # copies of all of the C source code and header files needed to
@@ -590,16 +588,16 @@ sqlite3.exe:	$(TOP)\src\shell.c libsqlite3.lib sqlite3.h
 	move vdbe.new tsrc\vdbe.c
 	echo > .target_source
 
-sqlite3.c:	.target_source $(TOP)\tool\mksqlite3c.tcl
-	$(TCLSH_CMD) $(TOP)\tool\mksqlite3c.tcl
+sqlite4.c:	.target_source $(TOP)\tool\mksqlite4c.tcl
+	$(TCLSH_CMD) $(TOP)\tool\mksqlite4c.tcl
 
-sqlite3-all.c:	sqlite3.c $(TOP)/tool/split-sqlite3c.tcl
-	$(TCLSH_CMD) $(TOP)/tool/split-sqlite3c.tcl
+sqlite4-all.c:	sqlite4.c $(TOP)/tool/split-sqlite4c.tcl
+	$(TCLSH_CMD) $(TOP)/tool/split-sqlite4c.tcl
 
 # Rule to build the amalgamation
 #
-sqlite3.lo:	sqlite3.c
-	$(LTCOMPILE) -c sqlite3.c
+sqlite4.lo:	sqlite4.c
+	$(LTCOMPILE) -c sqlite4.c
 
 # Rules to build the LEMON compiler generator
 #
@@ -842,9 +840,9 @@ tclsqlite.lo:	$(TOP)\src\tclsqlite.c $(HDR)
 tclsqlite-shell.lo:	$(TOP)\src\tclsqlite.c $(HDR)
 	$(LTCOMPILE) -DTCLSH=1 -DBUILD_sqlite -I$(TCLINCDIR) -c $(TOP)\src\tclsqlite.c
 
-tclsqlite3.exe:	tclsqlite-shell.lo libsqlite3.lib
+tclsqlite4.exe:	tclsqlite-shell.lo libsqlite4.lib
 	$(LTLINK) tclsqlite-shell.lo \
-		/link $(LTLINKOPTS) $(LTLIBPATHS) libsqlite3.lib $(LTLIBS) $(TLIBS)
+		/link $(LTLINKOPTS) $(LTLIBPATHS) libsqlite4.lib $(LTLIBS) $(TLIBS)
 
 # Rules to build opcodes.c and opcodes.h
 #
@@ -865,8 +863,8 @@ parse.c:	$(TOP)\src\parse.y lemon.exe $(TOP)\addopcodes.awk
 	move parse.h parse.h.temp
 	$(NAWK) -f $(TOP)\addopcodes.awk parse.h.temp > parse.h
 
-sqlite3.h:	$(TOP)\src\sqlite.h.in $(TOP)\manifest.uuid $(TOP)\VERSION
-	$(TCLSH_CMD) $(TOP)\tool\mksqlite3h.tcl $(TOP) > sqlite3.h
+sqlite4.h:	$(TOP)\src\sqlite.h.in $(TOP)\manifest.uuid $(TOP)\VERSION
+	$(TCLSH_CMD) $(TOP)\tool\mksqlite4h.tcl $(TOP) > sqlite4.h
 
 mkkeywordhash.exe:	$(TOP)\tool\mkkeywordhash.c
 	$(BCC) -Femkkeywordhash.exe $(OPT_FEATURE_FLAGS) $(OPTS) $(TOP)\tool\mkkeywordhash.c
@@ -935,16 +933,16 @@ rtree.lo:	$(TOP)\ext\rtree\rtree.c $(HDR) $(EXTHDR)
 
 # Rules to build the 'testfixture' application.
 #
-# If using the amalgamation, use sqlite3.c directly to build the test
-# fixture.  Otherwise link against libsqlite3.lib.  (This distinction is
+# If using the amalgamation, use sqlite4.c directly to build the test
+# fixture.  Otherwise link against libsqlite4.lib.  (This distinction is
 # necessary because the test fixture requires non-API symbols which are
 # hidden when the library is built via the amalgamation).
 #
 TESTFIXTURE_FLAGS = -DTCLSH=1 -DSQLITE_TEST=1 -DSQLITE_CRASH_TEST=1
 TESTFIXTURE_FLAGS = $(TESTFIXTURE_FLAGS) -DSQLITE_SERVER=1 -DSQLITE_PRIVATE="" -DSQLITE_CORE
 
-TESTFIXTURE_SRC0 = $(TESTSRC2) libsqlite3.lib
-TESTFIXTURE_SRC1 = sqlite3.c
+TESTFIXTURE_SRC0 = $(TESTSRC2) libsqlite4.lib
+TESTFIXTURE_SRC1 = sqlite4.c
 !IF $(USE_AMALGAMATION)==0
 TESTFIXTURE_SRC = $(TESTSRC) $(TOP)\src\tclsqlite.c $(TESTFIXTURE_SRC0)
 !ELSE
@@ -957,49 +955,49 @@ testfixture.exe:	$(TESTFIXTURE_SRC) $(HDR)
 		$(TESTFIXTURE_SRC) \
 		/link $(LTLINKOPTS) $(LTLIBPATHS) $(LTLIBS) $(TLIBS)
 
-fulltest:	testfixture.exe sqlite3.exe
+fulltest:	testfixture.exe sqlite4.exe
 	.\testfixture.exe $(TOP)\test\all.test
 
-soaktest:	testfixture.exe sqlite3.exe
+soaktest:	testfixture.exe sqlite4.exe
 	.\testfixture.exe $(TOP)\test\all.test -soak=1
 
-test:	testfixture.exe sqlite3.exe
+test:	testfixture.exe sqlite4.exe
 	.\testfixture.exe $(TOP)\test\veryquick.test
 
-sqlite3_analyzer.c: sqlite3.c $(TOP)\src\test_stat.c $(TOP)\src\tclsqlite.c $(TOP)\tool\spaceanal.tcl
-	copy sqlite3.c + $(TOP)\src\test_stat.c + $(TOP)\src\tclsqlite.c $@
+sqlite4_analyzer.c: sqlite4.c $(TOP)\src\test_stat.c $(TOP)\src\tclsqlite.c $(TOP)\tool\spaceanal.tcl
+	copy sqlite4.c + $(TOP)\src\test_stat.c + $(TOP)\src\tclsqlite.c $@
 	echo static const char *tclsh_main_loop(void){ >> $@
 	echo static const char *zMainloop = >> $@
 	$(NAWK) -f $(TOP)\tool\tostr.awk $(TOP)\tool\spaceanal.tcl >> $@
 	echo ; return zMainloop; } >> $@
 
-sqlite3_analyzer.exe:	sqlite3_analyzer.c
-	$(LTLINK) -DBUILD_sqlite -DTCLSH=2 -I$(TCLINCDIR) sqlite3_analyzer.c \
+sqlite4_analyzer.exe:	sqlite4_analyzer.c
+	$(LTLINK) -DBUILD_sqlite -DTCLSH=2 -I$(TCLINCDIR) sqlite4_analyzer.c \
 		/link $(LTLINKOPTS) $(LTLIBPATHS) $(LTLIBS) $(TLIBS)
 
 clean:
-	del /Q *.lo *.ilk *.lib *.obj *.pdb sqlite3.exe libsqlite3.lib
-	del /Q sqlite3.h opcodes.c opcodes.h
+	del /Q *.lo *.ilk *.lib *.obj *.pdb sqlite4.exe libsqlite4.lib
+	del /Q sqlite4.h opcodes.c opcodes.h
 	del /Q lemon.exe lempar.c parse.*
 	del /Q mkkeywordhash.exe keywordhash.h
 	-rmdir /Q/S tsrc
 	del /Q .target_source
-	del /Q tclsqlite3.exe
+	del /Q tclsqlite4.exe
 	del /Q testfixture.exe testfixture.exp test.db
-	del /Q sqlite3.dll sqlite3.lib sqlite3.exp sqlite3.def
-	del /Q sqlite3.c
-	del /Q sqlite3_analyzer.exe sqlite3_analyzer.exp sqlite3_analyzer.c
+	del /Q sqlite4.dll sqlite4.lib sqlite4.exp sqlite4.def
+	del /Q sqlite4.c
+	del /Q sqlite4_analyzer.exe sqlite4_analyzer.exp sqlite4_analyzer.c
 
 #
 # Windows section
 #
-dll: sqlite3.dll
+dll: sqlite4.dll
 
-sqlite3.def: libsqlite3.lib
-	echo EXPORTS > sqlite3.def
-	dumpbin /all libsqlite3.lib \
-		| $(NAWK) "/ 1 _?sqlite3_/ { sub(/^.* _?/,\"\");print }" \
-		| sort >> sqlite3.def
+sqlite4.def: libsqlite4.lib
+	echo EXPORTS > sqlite4.def
+	dumpbin /all libsqlite4.lib \
+		| $(NAWK) "/ 1 _?sqlite4_/ { sub(/^.* _?/,\"\");print }" \
+		| sort >> sqlite4.def
 
-sqlite3.dll: $(LIBOBJ) sqlite3.def
-	link $(LTLINKOPTS) $(LTLIBPATHS) /DLL /DEF:sqlite3.def /OUT:$@ $(LIBOBJ) $(LTLIBS) $(TLIBS)
+sqlite4.dll: $(LIBOBJ) sqlite4.def
+	link $(LTLINKOPTS) $(LTLIBPATHS) /DLL /DEF:sqlite4.def /OUT:$@ $(LIBOBJ) $(LTLIBS) $(TLIBS)

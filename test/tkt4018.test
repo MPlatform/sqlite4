@@ -20,8 +20,8 @@ source $testdir/tester.tcl
 proc testsql {sql} {
   set fd [open tf_main.tcl w]
   puts $fd [subst -nocommands {
-    sqlite3_test_control_pending_byte 0x0010000
-    sqlite3 db test.db
+    sqlite4_test_control_pending_byte 0x0010000
+    sqlite4 db test.db
     set rc [catch { db eval {$sql} } msg]
     puts -nonewline "[set rc] {[set msg]}"
     flush stdout
@@ -48,7 +48,7 @@ do_test tkt4018-1.1 {
 # file descriptors (1024 by default on linux).
 do_test tkt4018-1.2 {
   for {set i 0} {$i < 10000} {incr i} {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     db2 close
   }
 } {}
@@ -69,7 +69,7 @@ do_test tkt4018-1.4 {
 # Check that reusing a file descriptor cannot change a read-only 
 # connection into a read-write connection.
 do_test tkt4018-2.1 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {INSERT INTO t1 VALUES(1, 2)} db2
 } {}
 do_test tkt4018-2.2 {
@@ -80,7 +80,7 @@ do_test tkt4018-2.2 {
 } {1 2 3 4}
 do_test tkt4018-2.3 {
   db2 close
-  sqlite3 db2 test.db -readonly 1
+  sqlite4 db2 test.db -readonly 1
   execsql COMMIT
   catchsql {INSERT INTO t1 VALUES(5, 6)} db2
 } {1 {attempt to write a readonly database}}

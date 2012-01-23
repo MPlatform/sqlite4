@@ -10,7 +10,7 @@
 #
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
-# focus of this script is the sqlite3_table_column_metadata() API.
+# focus of this script is the sqlite4_table_column_metadata() API.
 #
 # $Id: colmeta.test,v 1.4 2008/01/23 12:52:41 drh Exp $
 
@@ -74,18 +74,18 @@ ifcapable view {
 }
 
 foreach {tn params results} $tests {
-  set ::DB [sqlite3_connection_pointer db]
+  set ::DB [sqlite4_connection_pointer db]
 
-  set tstbody [concat sqlite3_table_column_metadata $::DB $params] 
+  set tstbody [concat sqlite4_table_column_metadata $::DB $params] 
   do_test colmeta-$tn.1 {
     list [catch $tstbody msg] [set msg]
   } $results
 
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
 
-  set ::DB [sqlite3_connection_pointer db]
-  set tstbody [concat sqlite3_table_column_metadata $::DB $params] 
+  set ::DB [sqlite4_connection_pointer db]
+  set tstbody [concat sqlite4_table_column_metadata $::DB $params] 
   do_test colmeta-$tn.2 {
     list [catch $tstbody msg] [set msg]
   } $results

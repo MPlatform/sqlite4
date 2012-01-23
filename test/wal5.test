@@ -57,7 +57,7 @@ foreach {testprefix do_wal_checkpoint} {
 
       if {$a(-mode)!="restart" && $a(-mode)!="full"} { set a(-mode) passive }
 
-      set cmd [list sqlite3_wal_checkpoint_v2 $dbhandle $a(-mode)]
+      set cmd [list sqlite4_wal_checkpoint_v2 $dbhandle $a(-mode)]
       if {[info exists a(-db)]} { lappend sql $a(-db) }
 
       uplevel $cmd
@@ -82,9 +82,9 @@ foreach {testprefix do_wal_checkpoint} {
       code2 {db2 close}
       code3 {db3 close}
 
-      code1 {sqlite3 db test.db}
-      code2 {sqlite3 db2 test.db}
-      code3 {sqlite3 db3 test.db}
+      code1 {sqlite4 db test.db}
+      code2 {sqlite4 db2 test.db}
+      code3 {sqlite4 db3 test.db}
 
       sql1  { PRAGMA synchronous = NORMAL }
       code1 { db busy busyhandler }
@@ -331,9 +331,9 @@ foreach {testprefix do_wal_checkpoint} {
     code2 {db2 close}
     code3 {db3 close}
 
-    code1 {sqlite3 db  test.db}
-    code2 {sqlite3 db2 test.db}
-    code3 {sqlite3 db3 test.db}
+    code1 {sqlite4 db  test.db}
+    code2 {sqlite4 db2 test.db}
+    code3 {sqlite4 db3 test.db}
 
     do_test 3.$tn.5 { sql3 { PRAGMA journal_mode } } {wal}
 

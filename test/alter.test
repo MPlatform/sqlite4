@@ -147,8 +147,8 @@ do_test alter-1.5 {
 ifcapable tempdb {
   do_test alter-1.6 {
     db close
-    sqlite3 db test.db
-    set DB [sqlite3_connection_pointer db]
+    sqlite4 db test.db
+    set DB [sqlite4_connection_pointer db]
     execsql {
       CREATE TEMP TABLE objlist(type, name, tbl_name);
       INSERT INTO objlist SELECT type, name, tbl_name FROM sqlite_master;
@@ -570,7 +570,7 @@ do_test alter-5.1 {
   }
 } {}
 do_test alter-5.2 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     ALTER TABLE tbl1 RENAME TO tbl2;
     SELECT * FROM tbl2;
@@ -632,7 +632,7 @@ do_test alter-6.5 {
 set ::col_name2 B\3421\A
 do_test alter-6.6 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql "
     ALTER TABLE $::tbl_name ADD COLUMN $::col_name2
   "
@@ -717,7 +717,7 @@ do_test alter-10.4 {
 } [list sqlite_autoindex_xyzabc_1]
 
 do_test alter-11.1 {
-  sqlite3_exec db {CREATE TABLE t11(%c6%c6)}
+  sqlite4_exec db {CREATE TABLE t11(%c6%c6)}
   execsql {
     ALTER TABLE t11 ADD COLUMN abc;
   }
@@ -729,11 +729,11 @@ set isutf16 [regexp 16 [db one {PRAGMA encoding}]]
 if {!$isutf16} {
   do_test alter-11.2 {
     execsql {INSERT INTO t11 VALUES(1,2)}
-    sqlite3_exec db {SELECT %c6%c6 AS xyz, abc FROM t11}
+    sqlite4_exec db {SELECT %c6%c6 AS xyz, abc FROM t11}
   } {0 {xyz abc 1 2}}
 }
 do_test alter-11.3 {
-  sqlite3_exec db {CREATE TABLE t11b("%81%82%83" text)}
+  sqlite4_exec db {CREATE TABLE t11b("%81%82%83" text)}
   execsql {
     ALTER TABLE t11b ADD COLUMN abc;
   }
@@ -744,17 +744,17 @@ do_test alter-11.3 {
 if {!$isutf16} {
   do_test alter-11.4 {
     execsql {INSERT INTO t11b VALUES(3,4)}
-    sqlite3_exec db {SELECT %81%82%83 AS xyz, abc FROM t11b}
+    sqlite4_exec db {SELECT %81%82%83 AS xyz, abc FROM t11b}
   } {0 {xyz abc 3 4}}
   do_test alter-11.5 {
-    sqlite3_exec db {SELECT [%81%82%83] AS xyz, abc FROM t11b}
+    sqlite4_exec db {SELECT [%81%82%83] AS xyz, abc FROM t11b}
   } {0 {xyz abc 3 4}}
   do_test alter-11.6 {
-    sqlite3_exec db {SELECT "%81%82%83" AS xyz, abc FROM t11b}
+    sqlite4_exec db {SELECT "%81%82%83" AS xyz, abc FROM t11b}
   } {0 {xyz abc 3 4}}
 }
 do_test alter-11.7 {
-  sqlite3_exec db {CREATE TABLE t11c(%81%82%83 text)}
+  sqlite4_exec db {CREATE TABLE t11c(%81%82%83 text)}
   execsql {
     ALTER TABLE t11c ADD COLUMN abc;
   }
@@ -765,13 +765,13 @@ do_test alter-11.7 {
 if {!$isutf16} {
   do_test alter-11.8 {
     execsql {INSERT INTO t11c VALUES(5,6)}
-    sqlite3_exec db {SELECT %81%82%83 AS xyz, abc FROM t11c}
+    sqlite4_exec db {SELECT %81%82%83 AS xyz, abc FROM t11c}
   } {0 {xyz abc 5 6}}
   do_test alter-11.9 {
-    sqlite3_exec db {SELECT [%81%82%83] AS xyz, abc FROM t11c}
+    sqlite4_exec db {SELECT [%81%82%83] AS xyz, abc FROM t11c}
   } {0 {xyz abc 5 6}}
   do_test alter-11.10 {
-    sqlite3_exec db {SELECT "%81%82%83" AS xyz, abc FROM t11c}
+    sqlite4_exec db {SELECT "%81%82%83" AS xyz, abc FROM t11c}
   } {0 {xyz abc 5 6}}
 }
 
@@ -791,7 +791,7 @@ do_test alter-12.3 {
 } {}
 do_test alter-12.4 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { SELECT * FROM v1; }
 } {}
 do_test alter-12.5 {

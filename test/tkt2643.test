@@ -29,7 +29,7 @@ do_test tkt2643-1.1 {
     ANALYZE;
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     CREATE INDEX i1 ON t1(c);
     SELECT count(*) FROM t1 WHERE c IS NOT NULL

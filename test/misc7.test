@@ -33,7 +33,7 @@ do_test misc7-4 {
   delete_file mydir
   file mkdir mydir
   set rc [catch {
-    sqlite3 db2 ./mydir
+    sqlite4 db2 ./mydir
   } msg]
   list $rc $msg
 } {1 {unable to open database file}}
@@ -43,7 +43,7 @@ do_test misc7-4 {
 do_test misc7-5 {
   delete_file mydir
   file mkdir mydir-journal
-  sqlite3 db2 ./mydir
+  sqlite4 db2 ./mydir
   catchsql {
     CREATE TABLE abc(a, b, c);
   } db2
@@ -113,7 +113,7 @@ if {$tcl_platform(platform)!="windows"} {
 # End of tests for out-of-file-descriptors condition.
 #--------------------------------------------------------------------
 
-sqlite3 db test.db
+sqlite4 db test.db
 execsql {
   DELETE FROM abc;
   INSERT INTO abc VALUES(1, 2, 3);
@@ -123,12 +123,12 @@ execsql {
   
 
 #--------------------------------------------------------------------
-# Test that the sqlite3_busy_timeout call seems to delay approximately
+# Test that the sqlite4_busy_timeout call seems to delay approximately
 # the right amount of time.
 #
 do_test misc7-7.0 {
-  sqlite3 db2 test.db
-  sqlite3_busy_timeout [sqlite3_connection_pointer db] 2000
+  sqlite4 db2 test.db
+  sqlite4_busy_timeout [sqlite4_connection_pointer db] 2000
   execsql {
     BEGIN EXCLUSIVE;
   } db2
@@ -174,7 +174,7 @@ do_test misc7-7.2 {
 } {}
 do_test misc7-7.3 {
   db close
-  sqlite3 db test.db -readonly 1
+  sqlite4 db test.db -readonly 1
   execsql {
     PRAGMA omit_readlock = 1;
     ATTACH 'test2.db' AS aux;
@@ -184,17 +184,17 @@ do_test misc7-7.3 {
 } {hello hello}
 do_test misc7-7.3 {
   db close
-  sqlite3 db test.db
-  set ::DB [sqlite3_connection_pointer db]
+  sqlite4 db test.db
+  set ::DB [sqlite4_connection_pointer db]
   list
 } {}
 
 # Test the UTF-16 version of the "out of memory" message (used when
-# malloc fails during sqlite3_open() ).
+# malloc fails during sqlite4_open() ).
 #
 ifcapable utf16 {
   do_test misc7-8 {
-    encoding convertfrom unicode [sqlite3_errmsg16 0x00000000]
+    encoding convertfrom unicode [sqlite4_errmsg16 0x00000000]
   } {out of memory}
 }
 
@@ -215,7 +215,7 @@ ifcapable vtab {
 
   # set sqlite_where_trace 1
   do_test misc7-10 {
-    register_echo_module [sqlite3_connection_pointer db]
+    register_echo_module [sqlite4_connection_pointer db]
     execsql {
       CREATE VIRTUAL TABLE t1 USING echo(abc);
       SELECT a FROM t1 WHERE a = 1 ORDER BY b;
@@ -234,8 +234,8 @@ ifcapable vtab {
   # SQLITE_NOMEM from the vtab xBestIndex callback.
   #
   do_ioerr_test misc7-12 -tclprep {
-    sqlite3 db2 test.db
-    register_echo_module [sqlite3_connection_pointer db2]
+    sqlite4 db2 test.db
+    register_echo_module [sqlite4_connection_pointer db2]
     db2 eval {
       CREATE TABLE abc(a PRIMARY KEY, b, c);
       INSERT INTO abc VALUES(1, 2, 3);
@@ -243,7 +243,7 @@ ifcapable vtab {
     }
     db2 close
   } -tclbody {
-    register_echo_module [sqlite3_connection_pointer db]
+    register_echo_module [sqlite4_connection_pointer db]
     execsql {SELECT * FROM t1 WHERE a = 1;}
   } 
 
@@ -251,8 +251,8 @@ ifcapable vtab {
   # as the cost of a scan (greater than SQLITE_BIG_DOUBLE in the code).
   #
   do_test misc7-13 {
-    sqlite3 db test.db
-    register_echo_module [sqlite3_connection_pointer db]
+    sqlite4 db test.db
+    register_echo_module [sqlite4_connection_pointer db]
     set ::echo_module_cost 2.0e+99
     execsql {SELECT * FROM t1 WHERE a = 1;}
   } {1 2 3}
@@ -262,7 +262,7 @@ ifcapable vtab {
 db close
 forcedelete test.db
 forcedelete test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 ifcapable explain {
   do_execsql_test misc7-14.1 {
@@ -286,7 +286,7 @@ ifcapable explain {
 db close
 forcedelete test.db
 forcedelete test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 #--------------------------------------------------------------------
 # This is all to force the pager_remove_from_stmt_list() function
@@ -331,7 +331,7 @@ do_test misc7-15.2 {
 db close
 forcedelete test.db
 forcedelete test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_ioerr_test misc7-16 -sqlprep {
    PRAGMA cache_size = 10;
@@ -362,7 +362,7 @@ do_ioerr_test misc7-16 -sqlprep {
   }
 }
 
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_test misc7-16.X {
   execsql {
@@ -400,7 +400,7 @@ if {$tcl_platform(platform)!="windows" && $tcl_platform(platform)!="os2"} {
       db close
       forcecopy bak.db test.db
       forcecopy bak.db-journal test.db-journal
-      sqlite3 db test.db
+      sqlite4 db test.db
     
       catch {file attributes test.db-journal -permissions r--------}
       catch {file attributes test.db-journal -readonly 1}
@@ -420,9 +420,9 @@ if {$tcl_platform(platform)!="windows" && $tcl_platform(platform)!="os2"} {
       }
     } {0 32}
     
-    # sqlite3_test_control_pending_page [expr ($::sqlite_pending_byte / 1024) + 1]
+    # sqlite4_test_control_pending_page [expr ($::sqlite_pending_byte / 1024) + 1]
     set ::pending_byte_page [expr ($::sqlite_pending_byte / 1024) + 1]
-    sqlite3_test_control_pending_byte $::sqlite_pending_byte 
+    sqlite4_test_control_pending_byte $::sqlite_pending_byte 
     do_test misc7-17.3 {
       db eval {
         pragma writable_schema = true;
@@ -437,7 +437,7 @@ if {$tcl_platform(platform)!="windows" && $tcl_platform(platform)!="os2"} {
     
     do_test misc7-17.4 {
       db close
-      sqlite3 db test.db
+      sqlite4 db test.db
       catchsql {
         SELECT count(*) FROM t3;
       } 
@@ -463,28 +463,28 @@ do_test misc7-18.1 {
   }
 } {}
 
-# Testing boundary conditions on sqlite3_status()
+# Testing boundary conditions on sqlite4_status()
 #
 do_test misc7-19.1 {
-  sqlite3_status -1 0
+  sqlite4_status -1 0
 } {21 0 0}
 do_test misc7-19.2 {
-  sqlite3_status 1000 0
+  sqlite4_status 1000 0
 } {21 0 0}
 
 
-# sqlite3_global_recover() is a no-op.  But we might as well test it
+# sqlite4_global_recover() is a no-op.  But we might as well test it
 # if only to get the test coverage.
 #
 do_test misc7-20.1 {
-  sqlite3_global_recover
+  sqlite4_global_recover
 } {SQLITE_OK}
 
 # Try to open a really long file name.
 #
 do_test misc7-21.1 {
   set zFile [file join [pwd] "[string repeat abcde 104].db"]
-  set rc [catch {sqlite3 db2 $zFile} msg]
+  set rc [catch {sqlite4 db2 $zFile} msg]
   list $rc $msg
 } {1 {unable to open database file}}
 

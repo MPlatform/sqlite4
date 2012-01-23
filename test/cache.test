@@ -18,7 +18,7 @@ ifcapable {!pager_pragmas} {
   finish_test
   return
 }
-sqlite3_soft_heap_limit 0
+sqlite4_soft_heap_limit 0
 
 proc pager_cache_size {db} {
   set bt [btree_from_db $db]
@@ -136,5 +136,5 @@ do_execsql_test cache-2.4.7 {
 } {1 2 i j x y}
 do_test cache-2.4.8 { pager_cache_size db } 0
 
-sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 finish_test

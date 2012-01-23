@@ -35,14 +35,14 @@ source $testdir/lock_common.tcl
 do_test lock2-1.1 {
   set ::tf1 [launch_testfixture]
   testfixture $::tf1 {
-    sqlite3 db test.db -key xyzzy
+    sqlite4 db test.db -key xyzzy
     db eval {select * from sqlite_master}
   }
 } {}
 do_test lock2-1.1.1 {
   execsql {pragma lock_status}
 } {main unlocked temp closed}
-sqlite3_soft_heap_limit 0
+sqlite4_soft_heap_limit 0
 do_test lock2-1.2 {
   execsql {
     BEGIN;
@@ -106,6 +106,6 @@ do_test lock2-1.10 {
 
 catch {testfixture $::tf1 {db close}}
 catch {close $::tf1}
-sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 
 finish_test

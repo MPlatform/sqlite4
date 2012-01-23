@@ -49,7 +49,7 @@ do_test jrnlmode3-1.2 {
 
 db close
 forcedelete test.db test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_test jrnlmode3-2.1 {
   db eval {
@@ -86,7 +86,7 @@ foreach fromjmode $all_journal_modes {
     #
     db close
     forcedelete test.db test.db-journal
-    sqlite3 db test.db
+    sqlite4 db test.db
 
     # Initialize the journal mode.
     #

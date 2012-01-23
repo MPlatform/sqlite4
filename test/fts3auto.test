@@ -111,9 +111,9 @@ proc do_fts3query_test {tn args} {
 #
 proc fts3_make_deferrable {tbl token {nRow 0}} {
 
-  set stmt [sqlite3_prepare db "SELECT * FROM $tbl" -1 dummy]
-  set name [sqlite3_column_name $stmt 0]
-  sqlite3_finalize $stmt
+  set stmt [sqlite4_prepare db "SELECT * FROM $tbl" -1 dummy]
+  set name [sqlite4_column_name $stmt 0]
+  sqlite4_finalize $stmt
 
   if {$nRow==0} {
     set nRow [db one "SELECT count(*) FROM $tbl"]

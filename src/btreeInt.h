@@ -336,19 +336,19 @@ struct BtLock {
 ** schema associated with the database file are all contained within
 ** the BtShared object.
 **
-** All fields in this structure are accessed under sqlite3.mutex.
+** All fields in this structure are accessed under sqlite4.mutex.
 ** The pBt pointer itself may not be changed while there exists cursors 
 ** in the referenced BtShared that point back to this Btree since those
 ** cursors have to go through this Btree to find their BtShared and
-** they often do so without holding sqlite3.mutex.
+** they often do so without holding sqlite4.mutex.
 */
 struct Btree {
-  sqlite3 *db;       /* The database connection holding this btree */
+  sqlite4 *db;       /* The database connection holding this btree */
   BtShared *pBt;     /* Sharable content of this btree */
   u8 inTrans;        /* TRANS_NONE, TRANS_READ or TRANS_WRITE */
   u8 sharable;       /* True if we can share pBt with another db */
   u8 locked;         /* True if db currently has pBt locked */
-  int wantToLock;    /* Number of nested calls to sqlite3BtreeEnter() */
+  int wantToLock;    /* Number of nested calls to sqlite4BtreeEnter() */
   int nBackup;       /* Number of backup operations reading this btree */
   Btree *pNext;      /* List of other sharable Btrees from the same db */
   Btree *pPrev;      /* Back pointer of the same list */
@@ -405,10 +405,10 @@ struct Btree {
 */
 struct BtShared {
   Pager *pPager;        /* The page cache */
-  sqlite3 *db;          /* Database connection currently using this Btree */
+  sqlite4 *db;          /* Database connection currently using this Btree */
   BtCursor *pCursor;    /* A list of all open cursors */
   MemPage *pPage1;      /* First page of the database */
-  u8 openFlags;         /* Flags to sqlite3BtreeOpen() */
+  u8 openFlags;         /* Flags to sqlite4BtreeOpen() */
 #ifndef SQLITE_OMIT_AUTOVACUUM
   u8 autoVacuum;        /* True if auto-vacuum is enabled */
   u8 incrVacuum;        /* True if incr-vacuum is enabled */
@@ -424,9 +424,9 @@ struct BtShared {
   u32 usableSize;       /* Number of usable bytes on each page */
   int nTransaction;     /* Number of open transactions (read + write) */
   u32 nPage;            /* Number of pages in the database */
-  void *pSchema;        /* Pointer to space allocated by sqlite3BtreeSchema() */
+  void *pSchema;        /* Pointer to space allocated by sqlite4BtreeSchema() */
   void (*xFreeSchema)(void*);  /* Destructor for BtShared.pSchema */
-  sqlite3_mutex *mutex; /* Non-recursive mutex required to access this object */
+  sqlite4_mutex *mutex; /* Non-recursive mutex required to access this object */
   Bitvec *pHasContent;  /* Set of pages moved to free-list this transaction */
 #ifndef SQLITE_OMIT_SHARED_CACHE
   int nRef;             /* Number of references to this structure */
@@ -496,7 +496,7 @@ struct BtCursor {
   BtCursor *pNext, *pPrev;  /* Forms a linked list of all cursors */
   struct KeyInfo *pKeyInfo; /* Argument passed to comparison function */
   Pgno pgnoRoot;            /* The root page of this tree */
-  sqlite3_int64 cachedRowid; /* Next rowid cache.  0 means not valid */
+  sqlite4_int64 cachedRowid; /* Next rowid cache.  0 means not valid */
   CellInfo info;            /* A parse of the cell we are pointing at */
   i64 nKey;        /* Size of pKey, or last integer key */
   void *pKey;      /* Saved key that was cursor's last known position */
@@ -648,5 +648,5 @@ struct IntegrityCk {
 */
 #define get2byte(x)   ((x)[0]<<8 | (x)[1])
 #define put2byte(p,v) ((p)[0] = (u8)((v)>>8), (p)[1] = (u8)(v))
-#define get4byte sqlite3Get4byte
-#define put4byte sqlite3Put4byte
+#define get4byte sqlite4Get4byte
+#define put4byte sqlite4Put4byte

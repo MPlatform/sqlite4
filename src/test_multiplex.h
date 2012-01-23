@@ -47,7 +47,7 @@
 #define MULTIPLEX_CTRL_SET_MAX_CHUNKS  214016
 
 /*
-** CAPI: Initialize the multiplex VFS shim - sqlite3_multiplex_initialize()
+** CAPI: Initialize the multiplex VFS shim - sqlite4_multiplex_initialize()
 **
 ** Use the VFS named zOrigVfsName as the VFS that does the actual work.  
 ** Use the default if zOrigVfsName==NULL.  
@@ -75,10 +75,10 @@
 ** THIS ROUTINE IS NOT THREADSAFE.  Call this routine exactly once
 ** during start-up.
 */
-extern int sqlite3_multiplex_initialize(const char *zOrigVfsName, int makeDefault);
+extern int sqlite4_multiplex_initialize(const char *zOrigVfsName, int makeDefault);
 
 /*
-** CAPI: Shutdown the multiplex system - sqlite3_multiplex_shutdown()
+** CAPI: Shutdown the multiplex system - sqlite4_multiplex_shutdown()
 **
 ** All SQLite database connections must be closed before calling this
 ** routine.
@@ -86,6 +86,6 @@ extern int sqlite3_multiplex_initialize(const char *zOrigVfsName, int makeDefaul
 ** THIS ROUTINE IS NOT THREADSAFE.  Call this routine exactly once while
 ** shutting down in order to free all remaining multiplex groups.
 */
-extern int sqlite3_multiplex_shutdown(void);
+extern int sqlite4_multiplex_shutdown(void);
 
 #endif

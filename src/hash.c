@@ -20,7 +20,7 @@
 **
 ** "pNew" is a pointer to the hash table that is to be initialized.
 */
-void sqlite3HashInit(Hash *pNew){
+void sqlite4HashInit(Hash *pNew){
   assert( pNew!=0 );
   pNew->first = 0;
   pNew->count = 0;
@@ -32,18 +32,18 @@ void sqlite3HashInit(Hash *pNew){
 ** Call this routine to delete a hash table or to reset a hash table
 ** to the empty state.
 */
-void sqlite3HashClear(Hash *pH){
+void sqlite4HashClear(Hash *pH){
   HashElem *elem;         /* For looping over all elements of the table */
 
   assert( pH!=0 );
   elem = pH->first;
   pH->first = 0;
-  sqlite3_free(pH->ht);
+  sqlite4_free(pH->ht);
   pH->ht = 0;
   pH->htsize = 0;
   while( elem ){
     HashElem *next_elem = elem->next;
-    sqlite3_free(elem);
+    sqlite4_free(elem);
     elem = next_elem;
   }
   pH->count = 0;
@@ -56,7 +56,7 @@ static unsigned int strHash(const char *z, int nKey){
   int h = 0;
   assert( nKey>=0 );
   while( nKey > 0  ){
-    h = (h<<3) ^ h ^ sqlite3UpperToLower[(unsigned char)*z++];
+    h = (h<<3) ^ h ^ sqlite4UpperToLower[(unsigned char)*z++];
     nKey--;
   }
   return h;
@@ -96,7 +96,7 @@ static void insertElement(
 
 /* Resize the hash table so that it cantains "new_size" buckets.
 **
-** The hash table might fail to resize if sqlite3_malloc() fails or
+** The hash table might fail to resize if sqlite4_malloc() fails or
 ** if the new size is the same as the prior size.
 ** Return TRUE if the resize occurs and false if not.
 */
@@ -115,14 +115,14 @@ static int rehash(Hash *pH, unsigned int new_size){
   ** a performance hit but it is not a fatal error.  So mark the
   ** allocation as a benign.
   */
-  sqlite3BeginBenignMalloc();
-  new_ht = (struct _ht *)sqlite3Malloc( new_size*sizeof(struct _ht) );
-  sqlite3EndBenignMalloc();
+  sqlite4BeginBenignMalloc();
+  new_ht = (struct _ht *)sqlite4Malloc( new_size*sizeof(struct _ht) );
+  sqlite4EndBenignMalloc();
 
   if( new_ht==0 ) return 0;
-  sqlite3_free(pH->ht);
+  sqlite4_free(pH->ht);
   pH->ht = new_ht;
-  pH->htsize = new_size = sqlite3MallocSize(new_ht)/sizeof(struct _ht);
+  pH->htsize = new_size = sqlite4MallocSize(new_ht)/sizeof(struct _ht);
   memset(new_ht, 0, new_size*sizeof(struct _ht));
   for(elem=pH->first, pH->first=0; elem; elem = next_elem){
     unsigned int h = strHash(elem->pKey, elem->nKey) % new_size;
@@ -154,7 +154,7 @@ static HashElem *findElementGivenHash(
     count = pH->count;
   }
   while( count-- && ALWAYS(elem) ){
-    if( elem->nKey==nKey && sqlite3StrNICmp(elem->pKey,pKey,nKey)==0 ){ 
+    if( elem->nKey==nKey && sqlite4StrNICmp(elem->pKey,pKey,nKey)==0 ){ 
       return elem;
     }
     elem = elem->next;
@@ -187,12 +187,12 @@ static void removeElementGivenHash(
     pEntry->count--;
     assert( pEntry->count>=0 );
   }
-  sqlite3_free( elem );
+  sqlite4_free( elem );
   pH->count--;
   if( pH->count<=0 ){
     assert( pH->first==0 );
     assert( pH->count==0 );
-    sqlite3HashClear(pH);
+    sqlite4HashClear(pH);
   }
 }
 
@@ -200,7 +200,7 @@ static void removeElementGivenHash(
 ** that matches pKey,nKey.  Return the data for this element if it is
 ** found, or NULL if there is no match.
 */
-void *sqlite3HashFind(const Hash *pH, const char *pKey, int nKey){
+void *sqlite4HashFind(const Hash *pH, const char *pKey, int nKey){
   HashElem *elem;    /* The element that matches key */
   unsigned int h;    /* A hash on key */
 
@@ -230,7 +230,7 @@ void *sqlite3HashFind(const Hash *pH, const char *pKey, int nKey){
 ** If the "data" parameter to this function is NULL, then the
 ** element corresponding to "key" is removed from the hash table.
 */
-void *sqlite3HashInsert(Hash *pH, const char *pKey, int nKey, void *data){
+void *sqlite4HashInsert(Hash *pH, const char *pKey, int nKey, void *data){
   unsigned int h;       /* the hash of the key modulo hash table size */
   HashElem *elem;       /* Used to loop thru the element list */
   HashElem *new_elem;   /* New element added to the pH */
@@ -256,7 +256,7 @@ void *sqlite3HashInsert(Hash *pH, const char *pKey, int nKey, void *data){
     return old_data;
   }
   if( data==0 ) return 0;
-  new_elem = (HashElem*)sqlite3Malloc( sizeof(HashElem) );
+  new_elem = (HashElem*)sqlite4Malloc( sizeof(HashElem) );
   if( new_elem==0 ) return data;
   new_elem->pKey = pKey;
   new_elem->nKey = nKey;

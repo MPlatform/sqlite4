@@ -135,33 +135,33 @@ struct KVCursor {
 };
 
 
-int sqlite3KVStoreOpenMem(KVStore**);
-int sqlite3KVStoreOpen(const char *zUri, KVStore**);
-int sqlite3KVStoreReplace(
+int sqlite4KVStoreOpenMem(KVStore**);
+int sqlite4KVStoreOpen(const char *zUri, KVStore**);
+int sqlite4KVStoreReplace(
  KVStore*,
  const KVByteArray *pKey, KVSize nKey,
  const KVByteArray *pData, KVSize nData
 );
-int sqlite3KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor);
-int sqlite3KVCursorSeek(
+int sqlite4KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor);
+int sqlite4KVCursorSeek(
   KVCursor *p,
   const KVByteArray *pKey, KVSize nKey,
   int dir
 );
-int sqlite3KVCursorNext(KVCursor *p);
-int sqlite3KVCursorPrev(KVCursor *p);
-int sqlite3KVCursorDelete(KVCursor *p);
-int sqlite3KVCursorReset(KVCursor *p);
-int sqlite3KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey);
-int sqlite3KVCursorData(
+int sqlite4KVCursorNext(KVCursor *p);
+int sqlite4KVCursorPrev(KVCursor *p);
+int sqlite4KVCursorDelete(KVCursor *p);
+int sqlite4KVCursorReset(KVCursor *p);
+int sqlite4KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey);
+int sqlite4KVCursorData(
   KVCursor *p,
   KVSize ofst,
   KVSize n,
   const KVByteArray **ppData,
   KVSize *pnData
 );
-int sqlite3KVCursorClose(KVCursor *p);
-int sqlite3KVStoreBegin(KVStore *p, int iLevel);
-int sqlite3KVStoreCommit(KVStore *p, int iLevel);
-int sqlite3KVStoreRollback(KVStore *p, int iLevel);
-int sqlite3KVStoreClose(KVStore *p);
+int sqlite4KVCursorClose(KVCursor *p);
+int sqlite4KVStoreBegin(KVStore *p, int iLevel);
+int sqlite4KVStoreCommit(KVStore *p, int iLevel);
+int sqlite4KVStoreRollback(KVStore *p, int iLevel);
+int sqlite4KVStoreClose(KVStore *p);

@@ -80,7 +80,7 @@ ifcapable !wal { set skipwaltests 1 }
 if {!$skipwaltests} {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   file_control_chunksize_test db main [expr 32*1024]
   
   do_test fallocate-2.1 {
@@ -121,7 +121,7 @@ if {!$skipwaltests} {
   } [expr 64*1024]
   
   do_test fallocate-2.6 {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql { BEGIN ; SELECT count(a) FROM t1 } db2
     execsql {  
       INSERT INTO t1 VALUES(4, randomblob(128));

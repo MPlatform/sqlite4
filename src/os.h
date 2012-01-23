@@ -149,7 +149,7 @@
 
 /*
 ** The following values may be passed as the second argument to
-** sqlite3OsLock(). The various locks exhibit the following semantics:
+** sqlite4OsLock(). The various locks exhibit the following semantics:
 **
 ** SHARED:    Any number of processes may hold a SHARED lock simultaneously.
 ** RESERVED:  A single process may hold a RESERVED lock on a file at
@@ -159,10 +159,10 @@
 **            SHARED locks may be obtained by other processes.
 ** EXCLUSIVE: An EXCLUSIVE lock precludes all other locks.
 **
-** PENDING_LOCK may not be passed directly to sqlite3OsLock(). Instead, a
+** PENDING_LOCK may not be passed directly to sqlite4OsLock(). Instead, a
 ** process that requests an EXCLUSIVE lock may actually obtain a PENDING
 ** lock. This can be upgraded to an EXCLUSIVE lock by a subsequent call to
-** sqlite3OsLock().
+** sqlite4OsLock().
 */
 #define NO_LOCK         0
 #define SHARED_LOCK     1
@@ -228,62 +228,62 @@
 #ifdef SQLITE_OMIT_WSD
 # define PENDING_BYTE     (0x40000000)
 #else
-# define PENDING_BYTE      sqlite3PendingByte
+# define PENDING_BYTE      sqlite4PendingByte
 #endif
 #define RESERVED_BYTE     (PENDING_BYTE+1)
 #define SHARED_FIRST      (PENDING_BYTE+2)
 #define SHARED_SIZE       510
 
 /*
-** Wrapper around OS specific sqlite3_os_init() function.
+** Wrapper around OS specific sqlite4_os_init() function.
 */
-int sqlite3OsInit(void);
+int sqlite4OsInit(void);
 
 /* 
-** Functions for accessing sqlite3_file methods 
+** Functions for accessing sqlite4_file methods 
 */
-int sqlite3OsClose(sqlite3_file*);
-int sqlite3OsRead(sqlite3_file*, void*, int amt, i64 offset);
-int sqlite3OsWrite(sqlite3_file*, const void*, int amt, i64 offset);
-int sqlite3OsTruncate(sqlite3_file*, i64 size);
-int sqlite3OsSync(sqlite3_file*, int);
-int sqlite3OsFileSize(sqlite3_file*, i64 *pSize);
-int sqlite3OsLock(sqlite3_file*, int);
-int sqlite3OsUnlock(sqlite3_file*, int);
-int sqlite3OsCheckReservedLock(sqlite3_file *id, int *pResOut);
-int sqlite3OsFileControl(sqlite3_file*,int,void*);
-void sqlite3OsFileControlHint(sqlite3_file*,int,void*);
+int sqlite4OsClose(sqlite4_file*);
+int sqlite4OsRead(sqlite4_file*, void*, int amt, i64 offset);
+int sqlite4OsWrite(sqlite4_file*, const void*, int amt, i64 offset);
+int sqlite4OsTruncate(sqlite4_file*, i64 size);
+int sqlite4OsSync(sqlite4_file*, int);
+int sqlite4OsFileSize(sqlite4_file*, i64 *pSize);
+int sqlite4OsLock(sqlite4_file*, int);
+int sqlite4OsUnlock(sqlite4_file*, int);
+int sqlite4OsCheckReservedLock(sqlite4_file *id, int *pResOut);
+int sqlite4OsFileControl(sqlite4_file*,int,void*);
+void sqlite4OsFileControlHint(sqlite4_file*,int,void*);
 #define SQLITE_FCNTL_DB_UNCHANGED 0xca093fa0
-int sqlite3OsSectorSize(sqlite3_file *id);
-int sqlite3OsDeviceCharacteristics(sqlite3_file *id);
-int sqlite3OsShmMap(sqlite3_file *,int,int,int,void volatile **);
-int sqlite3OsShmLock(sqlite3_file *id, int, int, int);
-void sqlite3OsShmBarrier(sqlite3_file *id);
-int sqlite3OsShmUnmap(sqlite3_file *id, int);
+int sqlite4OsSectorSize(sqlite4_file *id);
+int sqlite4OsDeviceCharacteristics(sqlite4_file *id);
+int sqlite4OsShmMap(sqlite4_file *,int,int,int,void volatile **);
+int sqlite4OsShmLock(sqlite4_file *id, int, int, int);
+void sqlite4OsShmBarrier(sqlite4_file *id);
+int sqlite4OsShmUnmap(sqlite4_file *id, int);
 
 
 /* 
-** Functions for accessing sqlite3_vfs methods 
+** Functions for accessing sqlite4_vfs methods 
 */
-int sqlite3OsOpen(sqlite3_vfs *, const char *, sqlite3_file*, int, int *);
-int sqlite3OsDelete(sqlite3_vfs *, const char *, int);
-int sqlite3OsAccess(sqlite3_vfs *, const char *, int, int *pResOut);
-int sqlite3OsFullPathname(sqlite3_vfs *, const char *, int, char *);
+int sqlite4OsOpen(sqlite4_vfs *, const char *, sqlite4_file*, int, int *);
+int sqlite4OsDelete(sqlite4_vfs *, const char *, int);
+int sqlite4OsAccess(sqlite4_vfs *, const char *, int, int *pResOut);
+int sqlite4OsFullPathname(sqlite4_vfs *, const char *, int, char *);
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
-void *sqlite3OsDlOpen(sqlite3_vfs *, const char *);
-void sqlite3OsDlError(sqlite3_vfs *, int, char *);
-void (*sqlite3OsDlSym(sqlite3_vfs *, void *, const char *))(void);
-void sqlite3OsDlClose(sqlite3_vfs *, void *);
+void *sqlite4OsDlOpen(sqlite4_vfs *, const char *);
+void sqlite4OsDlError(sqlite4_vfs *, int, char *);
+void (*sqlite4OsDlSym(sqlite4_vfs *, void *, const char *))(void);
+void sqlite4OsDlClose(sqlite4_vfs *, void *);
 #endif /* SQLITE_OMIT_LOAD_EXTENSION */
-int sqlite3OsRandomness(sqlite3_vfs *, int, char *);
-int sqlite3OsSleep(sqlite3_vfs *, int);
-int sqlite3OsCurrentTimeInt64(sqlite3_vfs *, sqlite3_int64*);
+int sqlite4OsRandomness(sqlite4_vfs *, int, char *);
+int sqlite4OsSleep(sqlite4_vfs *, int);
+int sqlite4OsCurrentTimeInt64(sqlite4_vfs *, sqlite4_int64*);
 
 /*
 ** Convenience functions for opening and closing files using 
-** sqlite3_malloc() to obtain space for the file-handle structure.
+** sqlite4_malloc() to obtain space for the file-handle structure.
 */
-int sqlite3OsOpenMalloc(sqlite3_vfs *, const char *, sqlite3_file **, int,int*);
-int sqlite3OsCloseFree(sqlite3_file *);
+int sqlite4OsOpenMalloc(sqlite4_vfs *, const char *, sqlite4_file **, int,int*);
+int sqlite4OsCloseFree(sqlite4_file *);
 
 #endif /* _SQLITE_OS_H_ */

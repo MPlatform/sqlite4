@@ -52,13 +52,13 @@ do_test laststmtchanges-1.2 {
     }
 } {0 {5 13}}
 
-# There was some goofy change-counting logic in sqlite3_exec() that
+# There was some goofy change-counting logic in sqlite4_exec() that
 # appears to have been left over from SQLite version 2.  This test
 # makes sure it has been removed.
 #
 do_test laststmtchanges-1.2.1 {
     db cache flush
-    sqlite3_exec_printf db {update t0 set x=4 where x=3; select 1;} {}
+    sqlite4_exec_printf db {update t0 set x=4 where x=3; select 1;} {}
     execsql {select changes()}
 } {5}
 

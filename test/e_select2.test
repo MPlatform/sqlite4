@@ -110,22 +110,22 @@ proc te_read_tbl {db tbl} {
  te_read_sql $db "SELECT * FROM '$tbl'"
 }
 proc te_read_sql {db sql} {
-  set S [sqlite3_prepare_v2 $db $sql -1 DUMMY]
+  set S [sqlite4_prepare_v2 $db $sql -1 DUMMY]
 
   set cols [list]
-  for {set i 0} {$i < [sqlite3_column_count $S]} {incr i} {
-    lappend cols [sqlite3_column_name $S $i]
+  for {set i 0} {$i < [sqlite4_column_count $S]} {incr i} {
+    lappend cols [sqlite4_column_name $S $i]
   }
 
   set rows [list]
-  while {[sqlite3_step $S] == "SQLITE_ROW"} {
+  while {[sqlite4_step $S] == "SQLITE_ROW"} {
     set r [list]
-    for {set i 0} {$i < [sqlite3_column_count $S]} {incr i} {
-      lappend r [list [sqlite3_column_type $S $i] [sqlite3_column_text $S $i]]
+    for {set i 0} {$i < [sqlite4_column_count $S]} {incr i} {
+      lappend r [list [sqlite4_column_type $S $i] [sqlite4_column_text $S $i]]
     }
     lappend rows $r
   }
-  sqlite3_finalize $S
+  sqlite4_finalize $S
 
   return [list $cols $rows]
 }

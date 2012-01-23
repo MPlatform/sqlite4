@@ -49,8 +49,8 @@
 #include "fts1.h"
 #include "fts1_hash.h"
 #include "fts1_tokenizer.h"
-#include "sqlite3.h"
-#include "sqlite3ext.h"
+#include "sqlite4.h"
+#include "sqlite4ext.h"
 SQLITE_EXTENSION_INIT1
 
 
@@ -920,22 +920,22 @@ static char *string_format(const char *zFormat,
   return result;
 }
 
-static int sql_exec(sqlite3 *db, const char *zDb, const char *zName,
+static int sql_exec(sqlite4 *db, const char *zDb, const char *zName,
                     const char *zFormat){
   char *zCommand = string_format(zFormat, zDb, zName);
   int rc;
   TRACE(("FTS1 sql: %s\n", zCommand));
-  rc = sqlite3_exec(db, zCommand, NULL, 0, NULL);
+  rc = sqlite4_exec(db, zCommand, NULL, 0, NULL);
   free(zCommand);
   return rc;
 }
 
-static int sql_prepare(sqlite3 *db, const char *zDb, const char *zName,
-                       sqlite3_stmt **ppStmt, const char *zFormat){
+static int sql_prepare(sqlite4 *db, const char *zDb, const char *zName,
+                       sqlite4_stmt **ppStmt, const char *zFormat){
   char *zCommand = string_format(zFormat, zDb, zName);
   int rc;
   TRACE(("FTS1 prepare: %s\n", zCommand));
-  rc = sqlite3_prepare(db, zCommand, -1, ppStmt, NULL);
+  rc = sqlite4_prepare(db, zCommand, -1, ppStmt, NULL);
   free(zCommand);
   return rc;
 }
@@ -1082,19 +1082,19 @@ static const char *const fulltext_zStatement[MAX_STMT] = {
 ** arguments.
 */
 struct fulltext_vtab {
-  sqlite3_vtab base;               /* Base class used by SQLite core */
-  sqlite3 *db;                     /* The database connection */
+  sqlite4_vtab base;               /* Base class used by SQLite core */
+  sqlite4 *db;                     /* The database connection */
   const char *zDb;                 /* logical database name */
   const char *zName;               /* virtual table name */
   int nColumn;                     /* number of columns in virtual table */
   char **azColumn;                 /* column names.  malloced */
   char **azContentColumn;          /* column names in content table; malloced */
-  sqlite3_tokenizer *pTokenizer;   /* tokenizer for inserts and queries */
+  sqlite4_tokenizer *pTokenizer;   /* tokenizer for inserts and queries */
 
   /* Precompiled statements which we keep as long as the table is
   ** open.
   */
-  sqlite3_stmt *pFulltextStatements[MAX_STMT];
+  sqlite4_stmt *pFulltextStatements[MAX_STMT];
 };
 
 /*
@@ -1103,9 +1103,9 @@ struct fulltext_vtab {
 ** is destroyed by xClose.
 */
 typedef struct fulltext_cursor {
-  sqlite3_vtab_cursor base;        /* Base class used by SQLite core */
-  QueryType iCursorType;           /* Copy of sqlite3_index_info.idxNum */
-  sqlite3_stmt *pStmt;             /* Prepared statement in use by the cursor */
+  sqlite4_vtab_cursor base;        /* Base class used by SQLite core */
+  QueryType iCursorType;           /* Copy of sqlite4_index_info.idxNum */
+  sqlite4_stmt *pStmt;             /* Prepared statement in use by the cursor */
   int eof;                         /* True if at End Of Results */
   Query q;                         /* Parsed query string */
   Snippet snippet;                 /* Cached snippet for the current row */
@@ -1117,7 +1117,7 @@ static struct fulltext_vtab *cursor_vtab(fulltext_cursor *c){
   return (fulltext_vtab *) c->base.pVtab;
 }
 
-static const sqlite3_module fulltextModule;   /* forward declaration */
+static const sqlite4_module fulltextModule;   /* forward declaration */
 
 /* Append a list of strings separated by commas to a StringBuffer. */
 static void appendList(StringBuffer *sb, int nString, char **azString){
@@ -1171,7 +1171,7 @@ static const char *contentUpdateStatement(fulltext_vtab *v){
 ** and cached, otherwise the cached version is reset.
 */
 static int sql_get_statement(fulltext_vtab *v, fulltext_statement iStmt,
-                             sqlite3_stmt **ppStmt){
+                             sqlite4_stmt **ppStmt){
   assert( iStmt<MAX_STMT );
   if( v->pFulltextStatements[iStmt]==NULL ){
     const char *zStmt;
@@ -1189,7 +1189,7 @@ static int sql_get_statement(fulltext_vtab *v, fulltext_statement iStmt,
     if( zStmt != fulltext_zStatement[iStmt]) free((void *) zStmt);
     if( rc!=SQLITE_OK ) return rc;
   } else {
-    int rc = sqlite3_reset(v->pFulltextStatements[iStmt]);
+    int rc = sqlite4_reset(v->pFulltextStatements[iStmt]);
     if( rc!=SQLITE_OK ) return rc;
   }
 
@@ -1204,13 +1204,13 @@ static int sql_get_statement(fulltext_vtab *v, fulltext_statement iStmt,
 ** statements declared locally, not only globally cached statements.
 */
 static int sql_step_statement(fulltext_vtab *v, fulltext_statement iStmt,
-                              sqlite3_stmt **ppStmt){
+                              sqlite4_stmt **ppStmt){
   int rc;
-  sqlite3_stmt *s = *ppStmt;
+  sqlite4_stmt *s = *ppStmt;
   assert( iStmt<MAX_STMT );
   assert( s==v->pFulltextStatements[iStmt] );
 
-  while( (rc=sqlite3_step(s))!=SQLITE_DONE && rc!=SQLITE_ROW ){
+  while( (rc=sqlite4_step(s))!=SQLITE_DONE && rc!=SQLITE_ROW ){
     if( rc==SQLITE_BUSY ) continue;
     if( rc!=SQLITE_ERROR ) return rc;
 
@@ -1218,16 +1218,16 @@ static int sql_step_statement(fulltext_vtab *v, fulltext_statement iStmt,
      * statement is going to delete the fulltext_vtab structure. If
      * the statement just executed is in the pFulltextStatements[]
      * array, it will be finalized twice. So remove it before
-     * calling sqlite3_finalize().
+     * calling sqlite4_finalize().
      */
     v->pFulltextStatements[iStmt] = NULL;
-    rc = sqlite3_finalize(s);
+    rc = sqlite4_finalize(s);
     break;
   }
   return rc;
 
  err:
-  sqlite3_finalize(s);
+  sqlite4_finalize(s);
   return rc;
 }
 
@@ -1236,24 +1236,24 @@ static int sql_step_statement(fulltext_vtab *v, fulltext_statement iStmt,
 */
 static int sql_single_step_statement(fulltext_vtab *v,
                                      fulltext_statement iStmt,
-                                     sqlite3_stmt **ppStmt){
+                                     sqlite4_stmt **ppStmt){
   int rc = sql_step_statement(v, iStmt, ppStmt);
   return (rc==SQLITE_DONE) ? SQLITE_OK : rc;
 }
 
 /* insert into %_content (rowid, ...) values ([rowid], [pValues]) */
-static int content_insert(fulltext_vtab *v, sqlite3_value *rowid,
-                          sqlite3_value **pValues){
-  sqlite3_stmt *s;
+static int content_insert(fulltext_vtab *v, sqlite4_value *rowid,
+                          sqlite4_value **pValues){
+  sqlite4_stmt *s;
   int i;
   int rc = sql_get_statement(v, CONTENT_INSERT_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_value(s, 1, rowid);
+  rc = sqlite4_bind_value(s, 1, rowid);
   if( rc!=SQLITE_OK ) return rc;
 
   for(i=0; i<v->nColumn; ++i){
-    rc = sqlite3_bind_value(s, 2+i, pValues[i]);
+    rc = sqlite4_bind_value(s, 2+i, pValues[i]);
     if( rc!=SQLITE_OK ) return rc;
   }
 
@@ -1262,19 +1262,19 @@ static int content_insert(fulltext_vtab *v, sqlite3_value *rowid,
 
 /* update %_content set col0 = pValues[0], col1 = pValues[1], ...
  *                  where rowid = [iRowid] */
-static int content_update(fulltext_vtab *v, sqlite3_value **pValues,
+static int content_update(fulltext_vtab *v, sqlite4_value **pValues,
                           sqlite_int64 iRowid){
-  sqlite3_stmt *s;
+  sqlite4_stmt *s;
   int i;
   int rc = sql_get_statement(v, CONTENT_UPDATE_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
   for(i=0; i<v->nColumn; ++i){
-    rc = sqlite3_bind_value(s, 1+i, pValues[i]);
+    rc = sqlite4_bind_value(s, 1+i, pValues[i]);
     if( rc!=SQLITE_OK ) return rc;
   }
 
-  rc = sqlite3_bind_int64(s, 1+v->nColumn, iRowid);
+  rc = sqlite4_bind_int64(s, 1+v->nColumn, iRowid);
   if( rc!=SQLITE_OK ) return rc;
 
   return sql_single_step_statement(v, CONTENT_UPDATE_STMT, &s);
@@ -1297,7 +1297,7 @@ static void freeStringArray(int nString, const char **pString){
  * with other code which uses pointer/length. */
 static int content_select(fulltext_vtab *v, sqlite_int64 iRow,
                           const char ***pValues){
-  sqlite3_stmt *s;
+  sqlite4_stmt *s;
   const char **values;
   int i;
   int rc;
@@ -1307,7 +1307,7 @@ static int content_select(fulltext_vtab *v, sqlite_int64 iRow,
   rc = sql_get_statement(v, CONTENT_SELECT_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_int64(s, 1, iRow);
+  rc = sqlite4_bind_int64(s, 1, iRow);
   if( rc!=SQLITE_OK ) return rc;
 
   rc = sql_step_statement(v, CONTENT_SELECT_STMT, &s);
@@ -1315,16 +1315,16 @@ static int content_select(fulltext_vtab *v, sqlite_int64 iRow,
 
   values = (const char **) malloc(v->nColumn * sizeof(const char *));
   for(i=0; i<v->nColumn; ++i){
-    if( sqlite3_column_type(s, i)==SQLITE_NULL ){
+    if( sqlite4_column_type(s, i)==SQLITE_NULL ){
       values[i] = NULL;
     }else{
-      values[i] = string_dup((char*)sqlite3_column_text(s, i));
+      values[i] = string_dup((char*)sqlite4_column_text(s, i));
     }
   }
 
-  /* We expect only one row.  We must execute another sqlite3_step()
+  /* We expect only one row.  We must execute another sqlite4_step()
    * to complete the iteration; otherwise the table will remain locked. */
-  rc = sqlite3_step(s);
+  rc = sqlite4_step(s);
   if( rc==SQLITE_DONE ){
     *pValues = values;
     return SQLITE_OK;
@@ -1336,11 +1336,11 @@ static int content_select(fulltext_vtab *v, sqlite_int64 iRow,
 
 /* delete from %_content where rowid = [iRow ] */
 static int content_delete(fulltext_vtab *v, sqlite_int64 iRow){
-  sqlite3_stmt *s;
+  sqlite4_stmt *s;
   int rc = sql_get_statement(v, CONTENT_DELETE_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_int64(s, 1, iRow);
+  rc = sqlite4_bind_int64(s, 1, iRow);
   if( rc!=SQLITE_OK ) return rc;
 
   return sql_single_step_statement(v, CONTENT_DELETE_STMT, &s);
@@ -1353,26 +1353,26 @@ static int content_delete(fulltext_vtab *v, sqlite_int64 iRow){
 static int term_select(fulltext_vtab *v, const char *pTerm, int nTerm,
                        int iSegment,
                        sqlite_int64 *rowid, DocList *out){
-  sqlite3_stmt *s;
+  sqlite4_stmt *s;
   int rc = sql_get_statement(v, TERM_SELECT_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_text(s, 1, pTerm, nTerm, SQLITE_STATIC);
+  rc = sqlite4_bind_text(s, 1, pTerm, nTerm, SQLITE_STATIC);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_int(s, 2, iSegment);
+  rc = sqlite4_bind_int(s, 2, iSegment);
   if( rc!=SQLITE_OK ) return rc;
 
   rc = sql_step_statement(v, TERM_SELECT_STMT, &s);
   if( rc!=SQLITE_ROW ) return rc;
 
-  *rowid = sqlite3_column_int64(s, 0);
+  *rowid = sqlite4_column_int64(s, 0);
   docListInit(out, DL_DEFAULT,
-              sqlite3_column_blob(s, 1), sqlite3_column_bytes(s, 1));
+              sqlite4_column_blob(s, 1), sqlite4_column_bytes(s, 1));
 
-  /* We expect only one row.  We must execute another sqlite3_step()
+  /* We expect only one row.  We must execute another sqlite4_step()
    * to complete the iteration; otherwise the table will remain locked. */
-  rc = sqlite3_step(s);
+  rc = sqlite4_step(s);
   return rc==SQLITE_DONE ? SQLITE_ROW : rc;
 }
 
@@ -1395,11 +1395,11 @@ static int term_select_all(
   DocList *out          /* Write the resulting doclist here */
 ){
   DocList doclist;
-  sqlite3_stmt *s;
+  sqlite4_stmt *s;
   int rc = sql_get_statement(v, TERM_SELECT_ALL_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_text(s, 1, pTerm, nTerm, SQLITE_STATIC);
+  rc = sqlite4_bind_text(s, 1, pTerm, nTerm, SQLITE_STATIC);
   if( rc!=SQLITE_OK ) return rc;
 
   docListInit(&doclist, DL_DEFAULT, 0, 0);
@@ -1415,7 +1415,7 @@ static int term_select_all(
     ** that would require a distinct version of docListAccumulate().
     */
     docListInit(&old, DL_DEFAULT,
-                sqlite3_column_blob(s, 0), sqlite3_column_bytes(s, 0));
+                sqlite4_column_blob(s, 0), sqlite4_column_bytes(s, 0));
 
     if( iColumn<v->nColumn ){   /* querying a single column */
       docListRestrictColumn(&old, iColumn);
@@ -1448,24 +1448,24 @@ static int term_select_all(
 static int term_insert(fulltext_vtab *v, sqlite_int64 *piRowid,
                        const char *pTerm, int nTerm,
                        int iSegment, DocList *doclist){
-  sqlite3_stmt *s;
+  sqlite4_stmt *s;
   int rc = sql_get_statement(v, TERM_INSERT_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
   if( piRowid==NULL ){
-    rc = sqlite3_bind_null(s, 1);
+    rc = sqlite4_bind_null(s, 1);
   }else{
-    rc = sqlite3_bind_int64(s, 1, *piRowid);
+    rc = sqlite4_bind_int64(s, 1, *piRowid);
   }
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_text(s, 2, pTerm, nTerm, SQLITE_STATIC);
+  rc = sqlite4_bind_text(s, 2, pTerm, nTerm, SQLITE_STATIC);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_int(s, 3, iSegment);
+  rc = sqlite4_bind_int(s, 3, iSegment);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_blob(s, 4, doclist->pData, doclist->nData, SQLITE_STATIC);
+  rc = sqlite4_bind_blob(s, 4, doclist->pData, doclist->nData, SQLITE_STATIC);
   if( rc!=SQLITE_OK ) return rc;
 
   return sql_single_step_statement(v, TERM_INSERT_STMT, &s);
@@ -1474,25 +1474,25 @@ static int term_insert(fulltext_vtab *v, sqlite_int64 *piRowid,
 /* update %_term set doclist = [doclist] where rowid = [rowid] */
 static int term_update(fulltext_vtab *v, sqlite_int64 rowid,
                        DocList *doclist){
-  sqlite3_stmt *s;
+  sqlite4_stmt *s;
   int rc = sql_get_statement(v, TERM_UPDATE_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_blob(s, 1, doclist->pData, doclist->nData, SQLITE_STATIC);
+  rc = sqlite4_bind_blob(s, 1, doclist->pData, doclist->nData, SQLITE_STATIC);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_int64(s, 2, rowid);
+  rc = sqlite4_bind_int64(s, 2, rowid);
   if( rc!=SQLITE_OK ) return rc;
 
   return sql_single_step_statement(v, TERM_UPDATE_STMT, &s);
 }
 
 static int term_delete(fulltext_vtab *v, sqlite_int64 rowid){
-  sqlite3_stmt *s;
+  sqlite4_stmt *s;
   int rc = sql_get_statement(v, TERM_DELETE_STMT, &s);
   if( rc!=SQLITE_OK ) return rc;
 
-  rc = sqlite3_bind_int64(s, 1, rowid);
+  rc = sqlite4_bind_int64(s, 1, rowid);
   if( rc!=SQLITE_OK ) return rc;
 
   return sql_single_step_statement(v, TERM_DELETE_STMT, &s);
@@ -1507,7 +1507,7 @@ static void fulltext_vtab_destroy(fulltext_vtab *v){
   TRACE(("FTS1 Destroy %p\n", v));
   for( iStmt=0; iStmt<MAX_STMT; iStmt++ ){
     if( v->pFulltextStatements[iStmt]!=NULL ){
-      sqlite3_finalize(v->pFulltextStatements[iStmt]);
+      sqlite4_finalize(v->pFulltextStatements[iStmt]);
       v->pFulltextStatements[iStmt] = NULL;
     }
   }
@@ -1519,7 +1519,7 @@ static void fulltext_vtab_destroy(fulltext_vtab *v){
   
   free(v->azColumn);
   for(i = 0; i < v->nColumn; ++i) {
-    sqlite3_free(v->azContentColumn[i]);
+    sqlite4_free(v->azContentColumn[i]);
   }
   free(v->azContentColumn);
   free(v);
@@ -1540,7 +1540,7 @@ static void fulltext_vtab_destroy(fulltext_vtab *v){
 **
 ** For ASCII, any character with the high-order bit set is
 ** allowed in an identifier.  For 7-bit characters, 
-** sqlite3IsIdChar[X] must be 1.
+** sqlite4IsIdChar[X] must be 1.
 **
 ** Ticket #1066.  the SQL standard does not allow '$' in the
 ** middle of identfiers.  But many SQL implementations do. 
@@ -1887,7 +1887,7 @@ static int parseSpec(TableSpec *pSpec, int argc, const char *const*argv,
   }
   for(i=0; i<pSpec->nColumn; i++){
     char *p;
-    pSpec->azContentColumn[i] = sqlite3_mprintf("c%d%s", i, azArg[i]);
+    pSpec->azContentColumn[i] = sqlite4_mprintf("c%d%s", i, azArg[i]);
     for (p = pSpec->azContentColumn[i]; *p ; ++p) {
       if( !safe_isalnum(*p) ) *p = '_';
     }
@@ -1906,8 +1906,8 @@ static int parseSpec(TableSpec *pSpec, int argc, const char *const*argv,
 ** Generate a CREATE TABLE statement that describes the schema of
 ** the virtual table.  Return a pointer to this schema string.
 **
-** Space is obtained from sqlite3_mprintf() and should be freed
-** using sqlite3_free().
+** Space is obtained from sqlite4_mprintf() and should be freed
+** using sqlite4_free().
 */
 static char *fulltextSchema(
   int nColumn,                  /* Number of columns */
@@ -1917,32 +1917,32 @@ static char *fulltextSchema(
   int i;
   char *zSchema, *zNext;
   const char *zSep = "(";
-  zSchema = sqlite3_mprintf("CREATE TABLE x");
+  zSchema = sqlite4_mprintf("CREATE TABLE x");
   for(i=0; i<nColumn; i++){
-    zNext = sqlite3_mprintf("%s%s%Q", zSchema, zSep, azColumn[i]);
-    sqlite3_free(zSchema);
+    zNext = sqlite4_mprintf("%s%s%Q", zSchema, zSep, azColumn[i]);
+    sqlite4_free(zSchema);
     zSchema = zNext;
     zSep = ",";
   }
-  zNext = sqlite3_mprintf("%s,%Q)", zSchema, zTableName);
-  sqlite3_free(zSchema);
+  zNext = sqlite4_mprintf("%s,%Q)", zSchema, zTableName);
+  sqlite4_free(zSchema);
   return zNext;
 }
 
 /*
-** Build a new sqlite3_vtab structure that will describe the
+** Build a new sqlite4_vtab structure that will describe the
 ** fulltext index defined by spec.
 */
 static int constructVtab(
-  sqlite3 *db,              /* The SQLite database connection */
+  sqlite4 *db,              /* The SQLite database connection */
   TableSpec *spec,          /* Parsed spec information from parseSpec() */
-  sqlite3_vtab **ppVTab,    /* Write the resulting vtab structure here */
+  sqlite4_vtab **ppVTab,    /* Write the resulting vtab structure here */
   char **pzErr              /* Write any error message here */
 ){
   int rc;
   int n;
   fulltext_vtab *v = 0;
-  const sqlite3_tokenizer_module *m = NULL;
+  const sqlite4_tokenizer_module *m = NULL;
   char *schema;
 
   v = (fulltext_vtab *) malloc(sizeof(fulltext_vtab));
@@ -1963,11 +1963,11 @@ static int constructVtab(
   }
   /* TODO(shess) For now, add new tokenizers as else if clauses. */
   if( spec->azTokenizer[0]==0 || startsWith(spec->azTokenizer[0], "simple") ){
-    sqlite3Fts1SimpleTokenizerModule(&m);
+    sqlite4Fts1SimpleTokenizerModule(&m);
   }else if( startsWith(spec->azTokenizer[0], "porter") ){
-    sqlite3Fts1PorterTokenizerModule(&m);
+    sqlite4Fts1PorterTokenizerModule(&m);
   }else{
-    *pzErr = sqlite3_mprintf("unknown tokenizer: %s", spec->azTokenizer[0]);
+    *pzErr = sqlite4_mprintf("unknown tokenizer: %s", spec->azTokenizer[0]);
     rc = SQLITE_ERROR;
     goto err;
   }
@@ -1985,8 +1985,8 @@ static int constructVtab(
 
   schema = fulltextSchema(v->nColumn, (const char*const*)v->azColumn,
                           spec->zName);
-  rc = sqlite3_declare_vtab(db, schema);
-  sqlite3_free(schema);
+  rc = sqlite4_declare_vtab(db, schema);
+  sqlite4_free(schema);
   if( rc!=SQLITE_OK ) goto err;
 
   memset(v->pFulltextStatements, 0, sizeof(v->pFulltextStatements));
@@ -2002,10 +2002,10 @@ err:
 }
 
 static int fulltextConnect(
-  sqlite3 *db,
+  sqlite4 *db,
   void *pAux,
   int argc, const char *const*argv,
-  sqlite3_vtab **ppVTab,
+  sqlite4_vtab **ppVTab,
   char **pzErr
 ){
   TableSpec spec;
@@ -2052,9 +2052,9 @@ static int fulltextConnect(
   ** elements.  I suspect this will probably not be necessary in
   ** practice, though.
   */
-static int fulltextCreate(sqlite3 *db, void *pAux,
+static int fulltextCreate(sqlite4 *db, void *pAux,
                           int argc, const char * const *argv,
-                          sqlite3_vtab **ppVTab, char **pzErr){
+                          sqlite4_vtab **ppVTab, char **pzErr){
   int rc;
   TableSpec spec;
   StringBuffer schema;
@@ -2084,12 +2084,12 @@ out:
 }
 
 /* Decide how to handle an SQL query. */
-static int fulltextBestIndex(sqlite3_vtab *pVTab, sqlite3_index_info *pInfo){
+static int fulltextBestIndex(sqlite4_vtab *pVTab, sqlite4_index_info *pInfo){
   int i;
   TRACE(("FTS1 BestIndex\n"));
 
   for(i=0; i<pInfo->nConstraint; ++i){
-    const struct sqlite3_index_constraint *pConstraint;
+    const struct sqlite4_index_constraint *pConstraint;
     pConstraint = &pInfo->aConstraint[i];
     if( pConstraint->usable ) {
       if( pConstraint->iColumn==-1 &&
@@ -2118,13 +2118,13 @@ static int fulltextBestIndex(sqlite3_vtab *pVTab, sqlite3_index_info *pInfo){
   return SQLITE_OK;
 }
 
-static int fulltextDisconnect(sqlite3_vtab *pVTab){
+static int fulltextDisconnect(sqlite4_vtab *pVTab){
   TRACE(("FTS1 Disconnect %p\n", pVTab));
   fulltext_vtab_destroy((fulltext_vtab *)pVTab);
   return SQLITE_OK;
 }
 
-static int fulltextDestroy(sqlite3_vtab *pVTab){
+static int fulltextDestroy(sqlite4_vtab *pVTab){
   fulltext_vtab *v = (fulltext_vtab *)pVTab;
   int rc;
 
@@ -2139,7 +2139,7 @@ static int fulltextDestroy(sqlite3_vtab *pVTab){
   return SQLITE_OK;
 }
 
-static int fulltextOpen(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCursor){
+static int fulltextOpen(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCursor){
   fulltext_cursor *c;
 
   c = (fulltext_cursor *) calloc(sizeof(fulltext_cursor), 1);
@@ -2215,9 +2215,9 @@ static void snippetOffsetsOfColumn(
   const char *zDoc,
   int nDoc
 ){
-  const sqlite3_tokenizer_module *pTModule;  /* The tokenizer module */
-  sqlite3_tokenizer *pTokenizer;             /* The specific tokenizer */
-  sqlite3_tokenizer_cursor *pTCursor;        /* Tokenizer cursor */
+  const sqlite4_tokenizer_module *pTModule;  /* The tokenizer module */
+  sqlite4_tokenizer *pTokenizer;             /* The specific tokenizer */
+  sqlite4_tokenizer_cursor *pTCursor;        /* Tokenizer cursor */
   fulltext_vtab *pVtab;                /* The full text index */
   int nColumn;                         /* Number of columns in the index */
   const QueryTerm *aTerm;              /* Query string terms */
@@ -2302,8 +2302,8 @@ static void snippetAllOffsets(fulltext_cursor *p){
   for(i=iFirst; i<=iLast; i++){
     const char *zDoc;
     int nDoc;
-    zDoc = (const char*)sqlite3_column_text(p->pStmt, i+1);
-    nDoc = sqlite3_column_bytes(p->pStmt, i+1);
+    zDoc = (const char*)sqlite4_column_text(p->pStmt, i+1);
+    nDoc = sqlite4_column_bytes(p->pStmt, i+1);
     snippetOffsetsOfColumn(&p->q, &p->snippet, i, zDoc, nDoc);
   }
 }
@@ -2322,7 +2322,7 @@ static void snippetOffsetText(Snippet *p){
   for(i=0; i<p->nMatch; i++){
     struct snippetMatch *pMatch = &p->aMatch[i];
     zBuf[0] = ' ';
-    sqlite3_snprintf(sizeof(zBuf)-1, &zBuf[cnt>0], "%d %d %d %d",
+    sqlite4_snprintf(sizeof(zBuf)-1, &zBuf[cnt>0], "%d %d %d %d",
         pMatch->iCol, pMatch->iTerm, pMatch->iStart, pMatch->nByte);
     append(&sb, zBuf);
     cnt++;
@@ -2454,8 +2454,8 @@ static void snippetText(
     if( aMatch[i].snStatus!=SNIPPET_DESIRED ) continue;
     nDesired--;
     iCol = aMatch[i].iCol;
-    zDoc = (const char*)sqlite3_column_text(pCursor->pStmt, iCol+1);
-    nDoc = sqlite3_column_bytes(pCursor->pStmt, iCol+1);
+    zDoc = (const char*)sqlite4_column_text(pCursor->pStmt, iCol+1);
+    nDoc = sqlite4_column_bytes(pCursor->pStmt, iCol+1);
     iStart = aMatch[i].iStart - 40;
     iStart = wordBoundary(iStart, zDoc, nDoc, aMatch, nMatch, iCol);
     if( iStart<=10 ){
@@ -2521,10 +2521,10 @@ static void snippetText(
 ** Close the cursor.  For additional information see the documentation
 ** on the xClose method of the virtual table interface.
 */
-static int fulltextClose(sqlite3_vtab_cursor *pCursor){
+static int fulltextClose(sqlite4_vtab_cursor *pCursor){
   fulltext_cursor *c = (fulltext_cursor *) pCursor;
   TRACE(("FTS1 Close %p\n", c));
-  sqlite3_finalize(c->pStmt);
+  sqlite4_finalize(c->pStmt);
   queryClear(&c->q);
   snippetClear(&c->snippet);
   if( c->result.pDoclist!=NULL ){
@@ -2534,7 +2534,7 @@ static int fulltextClose(sqlite3_vtab_cursor *pCursor){
   return SQLITE_OK;
 }
 
-static int fulltextNext(sqlite3_vtab_cursor *pCursor){
+static int fulltextNext(sqlite4_vtab_cursor *pCursor){
   fulltext_cursor *c = (fulltext_cursor *) pCursor;
   sqlite_int64 iDocid;
   int rc;
@@ -2543,7 +2543,7 @@ static int fulltextNext(sqlite3_vtab_cursor *pCursor){
   snippetClear(&c->snippet);
   if( c->iCursorType < QUERY_FULLTEXT ){
     /* TODO(shess) Handle SQLITE_SCHEMA AND SQLITE_BUSY. */
-    rc = sqlite3_step(c->pStmt);
+    rc = sqlite4_step(c->pStmt);
     switch( rc ){
       case SQLITE_ROW:
         c->eof = 0;
@@ -2556,7 +2556,7 @@ static int fulltextNext(sqlite3_vtab_cursor *pCursor){
         return rc;
     }
   } else {  /* full-text query */
-    rc = sqlite3_reset(c->pStmt);
+    rc = sqlite4_reset(c->pStmt);
     if( rc!=SQLITE_OK ) return rc;
 
     iDocid = nextDocid(&c->result);
@@ -2564,10 +2564,10 @@ static int fulltextNext(sqlite3_vtab_cursor *pCursor){
       c->eof = 1;
       return SQLITE_OK;
     }
-    rc = sqlite3_bind_int64(c->pStmt, 1, iDocid);
+    rc = sqlite4_bind_int64(c->pStmt, 1, iDocid);
     if( rc!=SQLITE_OK ) return rc;
     /* TODO(shess) Handle SQLITE_SCHEMA AND SQLITE_BUSY. */
-    rc = sqlite3_step(c->pStmt);
+    rc = sqlite4_step(c->pStmt);
     if( rc==SQLITE_ROW ){   /* the case we expect */
       c->eof = 0;
       return SQLITE_OK;
@@ -2669,13 +2669,13 @@ static int checkColumnSpecifier(
 ** term found is marked with nPhrase=0 and OR and "-" syntax is significant.
 */
 static int tokenizeSegment(
-  sqlite3_tokenizer *pTokenizer,          /* The tokenizer to use */
+  sqlite4_tokenizer *pTokenizer,          /* The tokenizer to use */
   const char *pSegment, int nSegment,     /* Query expression being parsed */
   int inPhrase,                           /* True if within "..." */
   Query *pQuery                           /* Append results here */
 ){
-  const sqlite3_tokenizer_module *pModule = pTokenizer->pModule;
-  sqlite3_tokenizer_cursor *pCursor;
+  const sqlite4_tokenizer_module *pModule = pTokenizer->pModule;
+  sqlite4_tokenizer_cursor *pCursor;
   int firstIndex = pQuery->nTerms;
   int iCol;
   int nTerm = 1;
@@ -2875,9 +2875,9 @@ static int fulltextQuery(
 ** fts2 as appropriate.
 */
 static int fulltextFilter(
-  sqlite3_vtab_cursor *pCursor,     /* The cursor used for this query */
+  sqlite4_vtab_cursor *pCursor,     /* The cursor used for this query */
   int idxNum, const char *idxStr,   /* Which indexing scheme to use */
-  int argc, sqlite3_value **argv    /* Arguments for the indexing scheme */
+  int argc, sqlite4_value **argv    /* Arguments for the indexing scheme */
 ){
   fulltext_cursor *c = (fulltext_cursor *) pCursor;
   fulltext_vtab *v = cursor_vtab(c);
@@ -2886,11 +2886,11 @@ static int fulltextFilter(
 
   TRACE(("FTS1 Filter %p\n",pCursor));
 
-  zSql = sqlite3_mprintf("select rowid, * from %%_content %s",
+  zSql = sqlite4_mprintf("select rowid, * from %%_content %s",
                           idxNum==QUERY_GENERIC ? "" : "where rowid=?");
-  sqlite3_finalize(c->pStmt);
+  sqlite4_finalize(c->pStmt);
   rc = sql_prepare(v->db, v->zDb, v->zName, &c->pStmt, zSql);
-  sqlite3_free(zSql);
+  sqlite4_free(zSql);
   if( rc!=SQLITE_OK ) return rc;
 
   c->iCursorType = idxNum;
@@ -2899,13 +2899,13 @@ static int fulltextFilter(
       break;
 
     case QUERY_ROWID:
-      rc = sqlite3_bind_int64(c->pStmt, 1, sqlite3_value_int64(argv[0]));
+      rc = sqlite4_bind_int64(c->pStmt, 1, sqlite4_value_int64(argv[0]));
       if( rc!=SQLITE_OK ) return rc;
       break;
 
     default:   /* full-text search */
     {
-      const char *zQuery = (const char *)sqlite3_value_text(argv[0]);
+      const char *zQuery = (const char *)sqlite4_value_text(argv[0]);
       DocList *pResult;
       assert( idxNum<=QUERY_FULLTEXT+v->nColumn);
       assert( argc==1 );
@@ -2925,7 +2925,7 @@ static int fulltextFilter(
 ** calls this routine to find out if it has reached the end of
 ** a query's results set.
 */
-static int fulltextEof(sqlite3_vtab_cursor *pCursor){
+static int fulltextEof(sqlite4_vtab_cursor *pCursor){
   fulltext_cursor *c = (fulltext_cursor *) pCursor;
   return c->eof;
 }
@@ -2933,22 +2933,22 @@ static int fulltextEof(sqlite3_vtab_cursor *pCursor){
 /* This is the xColumn method of the virtual table.  The SQLite
 ** core calls this method during a query when it needs the value
 ** of a column from the virtual table.  This method needs to use
-** one of the sqlite3_result_*() routines to store the requested
+** one of the sqlite4_result_*() routines to store the requested
 ** value back in the pContext.
 */
-static int fulltextColumn(sqlite3_vtab_cursor *pCursor,
-                          sqlite3_context *pContext, int idxCol){
+static int fulltextColumn(sqlite4_vtab_cursor *pCursor,
+                          sqlite4_context *pContext, int idxCol){
   fulltext_cursor *c = (fulltext_cursor *) pCursor;
   fulltext_vtab *v = cursor_vtab(c);
 
   if( idxCol<v->nColumn ){
-    sqlite3_value *pVal = sqlite3_column_value(c->pStmt, idxCol+1);
-    sqlite3_result_value(pContext, pVal);
+    sqlite4_value *pVal = sqlite4_column_value(c->pStmt, idxCol+1);
+    sqlite4_result_value(pContext, pVal);
   }else if( idxCol==v->nColumn ){
     /* The extra column whose name is the same as the table.
     ** Return a blob which is a pointer to the cursor
     */
-    sqlite3_result_blob(pContext, &c, sizeof(c), SQLITE_TRANSIENT);
+    sqlite4_result_blob(pContext, &c, sizeof(c), SQLITE_TRANSIENT);
   }
   return SQLITE_OK;
 }
@@ -2957,10 +2957,10 @@ static int fulltextColumn(sqlite3_vtab_cursor *pCursor,
 ** retrive the rowid for the current row of the result set.  The
 ** rowid should be written to *pRowid.
 */
-static int fulltextRowid(sqlite3_vtab_cursor *pCursor, sqlite_int64 *pRowid){
+static int fulltextRowid(sqlite4_vtab_cursor *pCursor, sqlite_int64 *pRowid){
   fulltext_cursor *c = (fulltext_cursor *) pCursor;
 
-  *pRowid = sqlite3_column_int64(c->pStmt, 0);
+  *pRowid = sqlite4_column_int64(c->pStmt, 0);
   return SQLITE_OK;
 }
 
@@ -2969,8 +2969,8 @@ static int fulltextRowid(sqlite3_vtab_cursor *pCursor, sqlite_int64 *pRowid){
  * column number. */
 static int buildTerms(fulltext_vtab *v, fts1Hash *terms, sqlite_int64 iDocid,
                       const char *zText, int iColumn){
-  sqlite3_tokenizer *pTokenizer = v->pTokenizer;
-  sqlite3_tokenizer_cursor *pCursor;
+  sqlite4_tokenizer *pTokenizer = v->pTokenizer;
+  sqlite4_tokenizer_cursor *pCursor;
   const char *pToken;
   int nTokenBytes;
   int iStartOffset, iEndOffset, iPosition;
@@ -3004,7 +3004,7 @@ static int buildTerms(fulltext_vtab *v, fts1Hash *terms, sqlite_int64 iDocid,
   }
 
   /* TODO(shess) Check return?  Should this be able to cause errors at
-  ** this point?  Actually, same question about sqlite3_finalize(),
+  ** this point?  Actually, same question about sqlite4_finalize(),
   ** though one could argue that failure there means that the data is
   ** not durable.  *ponder*
   */
@@ -3081,10 +3081,10 @@ static int index_insert_term(fulltext_vtab *v, const char *pTerm, int nTerm,
 
 /* Add doclists for all terms in [pValues] to the hash table [terms]. */
 static int insertTerms(fulltext_vtab *v, fts1Hash *terms, sqlite_int64 iRowid,
-                sqlite3_value **pValues){
+                sqlite4_value **pValues){
   int i;
   for(i = 0; i < v->nColumn ; ++i){
-    char *zText = (char*)sqlite3_value_text(pValues[i]);
+    char *zText = (char*)sqlite4_value_text(pValues[i]);
     int rc = buildTerms(v, terms, iRowid, zText, i);
     if( rc!=SQLITE_OK ) return rc;
   }
@@ -3111,14 +3111,14 @@ static int deleteTerms(fulltext_vtab *v, fts1Hash *pTerms, sqlite_int64 iRowid){
 
 /* Insert a row into the %_content table; set *piRowid to be the ID of the
  * new row.  Fill [pTerms] with new doclists for the %_term table. */
-static int index_insert(fulltext_vtab *v, sqlite3_value *pRequestRowid,
-                        sqlite3_value **pValues,
+static int index_insert(fulltext_vtab *v, sqlite4_value *pRequestRowid,
+                        sqlite4_value **pValues,
                         sqlite_int64 *piRowid, fts1Hash *pTerms){
   int rc;
 
   rc = content_insert(v, pRequestRowid, pValues);  /* execute an SQL INSERT */
   if( rc!=SQLITE_OK ) return rc;
-  *piRowid = sqlite3_last_insert_rowid(v->db);
+  *piRowid = sqlite4_last_insert_rowid(v->db);
   return insertTerms(v, pTerms, *piRowid, pValues);
 }
 
@@ -3133,7 +3133,7 @@ static int index_delete(fulltext_vtab *v, sqlite_int64 iRow, fts1Hash *pTerms){
 /* Update a row in the %_content table; fill [pTerms] with new doclists for the
  * %_term table. */
 static int index_update(fulltext_vtab *v, sqlite_int64 iRow,
-                        sqlite3_value **pValues, fts1Hash *pTerms){
+                        sqlite4_value **pValues, fts1Hash *pTerms){
   /* Generate an empty doclist for each term that previously appeared in this
    * row. */
   int rc = deleteTerms(v, pTerms, iRow);
@@ -3148,7 +3148,7 @@ static int index_update(fulltext_vtab *v, sqlite_int64 iRow,
 
 /* This function implements the xUpdate callback; it is the top-level entry
  * point for inserting, deleting or updating a row in a full-text table. */
-static int fulltextUpdate(sqlite3_vtab *pVtab, int nArg, sqlite3_value **ppArg,
+static int fulltextUpdate(sqlite4_vtab *pVtab, int nArg, sqlite4_value **ppArg,
                    sqlite_int64 *pRowid){
   fulltext_vtab *v = (fulltext_vtab *) pVtab;
   fts1Hash terms;   /* maps term string -> PosList */
@@ -3160,17 +3160,17 @@ static int fulltextUpdate(sqlite3_vtab *pVtab, int nArg, sqlite3_value **ppArg,
   fts1HashInit(&terms, FTS1_HASH_STRING, 1);
 
   if( nArg<2 ){
-    rc = index_delete(v, sqlite3_value_int64(ppArg[0]), &terms);
-  } else if( sqlite3_value_type(ppArg[0]) != SQLITE_NULL ){
+    rc = index_delete(v, sqlite4_value_int64(ppArg[0]), &terms);
+  } else if( sqlite4_value_type(ppArg[0]) != SQLITE_NULL ){
     /* An update:
      * ppArg[0] = old rowid
      * ppArg[1] = new rowid
      * ppArg[2..2+v->nColumn-1] = values
      * ppArg[2+v->nColumn] = value for magic column (we ignore this)
      */
-    sqlite_int64 rowid = sqlite3_value_int64(ppArg[0]);
-    if( sqlite3_value_type(ppArg[1]) != SQLITE_INTEGER ||
-      sqlite3_value_int64(ppArg[1]) != rowid ){
+    sqlite_int64 rowid = sqlite4_value_int64(ppArg[0]);
+    if( sqlite4_value_type(ppArg[1]) != SQLITE_INTEGER ||
+      sqlite4_value_int64(ppArg[1]) != rowid ){
       rc = SQLITE_ERROR;  /* we don't allow changing the rowid */
     } else {
       assert( nArg==2+v->nColumn+1);
@@ -3209,32 +3209,32 @@ static int fulltextUpdate(sqlite3_vtab *pVtab, int nArg, sqlite3_value **ppArg,
 ** Implementation of the snippet() function for FTS1
 */
 static void snippetFunc(
-  sqlite3_context *pContext,
+  sqlite4_context *pContext,
   int argc,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
   fulltext_cursor *pCursor;
   if( argc<1 ) return;
-  if( sqlite3_value_type(argv[0])!=SQLITE_BLOB ||
-      sqlite3_value_bytes(argv[0])!=sizeof(pCursor) ){
-    sqlite3_result_error(pContext, "illegal first argument to html_snippet",-1);
+  if( sqlite4_value_type(argv[0])!=SQLITE_BLOB ||
+      sqlite4_value_bytes(argv[0])!=sizeof(pCursor) ){
+    sqlite4_result_error(pContext, "illegal first argument to html_snippet",-1);
   }else{
     const char *zStart = "<b>";
     const char *zEnd = "</b>";
     const char *zEllipsis = "<b>...</b>";
-    memcpy(&pCursor, sqlite3_value_blob(argv[0]), sizeof(pCursor));
+    memcpy(&pCursor, sqlite4_value_blob(argv[0]), sizeof(pCursor));
     if( argc>=2 ){
-      zStart = (const char*)sqlite3_value_text(argv[1]);
+      zStart = (const char*)sqlite4_value_text(argv[1]);
       if( argc>=3 ){
-        zEnd = (const char*)sqlite3_value_text(argv[2]);
+        zEnd = (const char*)sqlite4_value_text(argv[2]);
         if( argc>=4 ){
-          zEllipsis = (const char*)sqlite3_value_text(argv[3]);
+          zEllipsis = (const char*)sqlite4_value_text(argv[3]);
         }
       }
     }
     snippetAllOffsets(pCursor);
     snippetText(pCursor, zStart, zEnd, zEllipsis);
-    sqlite3_result_text(pContext, pCursor->snippet.zSnippet,
+    sqlite4_result_text(pContext, pCursor->snippet.zSnippet,
                         pCursor->snippet.nSnippet, SQLITE_STATIC);
   }
 }
@@ -3243,20 +3243,20 @@ static void snippetFunc(
 ** Implementation of the offsets() function for FTS1
 */
 static void snippetOffsetsFunc(
-  sqlite3_context *pContext,
+  sqlite4_context *pContext,
   int argc,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
   fulltext_cursor *pCursor;
   if( argc<1 ) return;
-  if( sqlite3_value_type(argv[0])!=SQLITE_BLOB ||
-      sqlite3_value_bytes(argv[0])!=sizeof(pCursor) ){
-    sqlite3_result_error(pContext, "illegal first argument to offsets",-1);
+  if( sqlite4_value_type(argv[0])!=SQLITE_BLOB ||
+      sqlite4_value_bytes(argv[0])!=sizeof(pCursor) ){
+    sqlite4_result_error(pContext, "illegal first argument to offsets",-1);
   }else{
-    memcpy(&pCursor, sqlite3_value_blob(argv[0]), sizeof(pCursor));
+    memcpy(&pCursor, sqlite4_value_blob(argv[0]), sizeof(pCursor));
     snippetAllOffsets(pCursor);
     snippetOffsetText(&pCursor->snippet);
-    sqlite3_result_text(pContext,
+    sqlite4_result_text(pContext,
                         pCursor->snippet.zOffset, pCursor->snippet.nOffset,
                         SQLITE_STATIC);
   }
@@ -3267,10 +3267,10 @@ static void snippetOffsetsFunc(
 ** virtual table.
 */
 static int fulltextFindFunction(
-  sqlite3_vtab *pVtab,
+  sqlite4_vtab *pVtab,
   int nArg,
   const char *zName,
-  void (**pxFunc)(sqlite3_context*,int,sqlite3_value**),
+  void (**pxFunc)(sqlite4_context*,int,sqlite4_value**),
   void **ppArg
 ){
   if( strcmp(zName,"snippet")==0 ){
@@ -3287,25 +3287,25 @@ static int fulltextFindFunction(
 ** Rename an fts1 table.
 */
 static int fulltextRename(
-  sqlite3_vtab *pVtab,
+  sqlite4_vtab *pVtab,
   const char *zName
 ){
   fulltext_vtab *p = (fulltext_vtab *)pVtab;
   int rc = SQLITE_NOMEM;
-  char *zSql = sqlite3_mprintf(
+  char *zSql = sqlite4_mprintf(
     "ALTER TABLE %Q.'%q_content'  RENAME TO '%q_content';"
     "ALTER TABLE %Q.'%q_term' RENAME TO '%q_term';"
     , p->zDb, p->zName, zName
     , p->zDb, p->zName, zName
   );
   if( zSql ){
-    rc = sqlite3_exec(p->db, zSql, 0, 0, 0);
-    sqlite3_free(zSql);
+    rc = sqlite4_exec(p->db, zSql, 0, 0, 0);
+    sqlite4_free(zSql);
   }
   return rc;
 }
 
-static const sqlite3_module fulltextModule = {
+static const sqlite4_module fulltextModule = {
   /* iVersion      */ 0,
   /* xCreate       */ fulltextCreate,
   /* xConnect      */ fulltextConnect,
@@ -3328,17 +3328,17 @@ static const sqlite3_module fulltextModule = {
   /* xRename       */ fulltextRename,
 };
 
-int sqlite3Fts1Init(sqlite3 *db){
-  sqlite3_overload_function(db, "snippet", -1);
-  sqlite3_overload_function(db, "offsets", -1);
-  return sqlite3_create_module(db, "fts1", &fulltextModule, 0);
+int sqlite4Fts1Init(sqlite4 *db){
+  sqlite4_overload_function(db, "snippet", -1);
+  sqlite4_overload_function(db, "offsets", -1);
+  return sqlite4_create_module(db, "fts1", &fulltextModule, 0);
 }
 
 #if !SQLITE_CORE
-int sqlite3_extension_init(sqlite3 *db, char **pzErrMsg,
-                           const sqlite3_api_routines *pApi){
+int sqlite4_extension_init(sqlite4 *db, char **pzErrMsg,
+                           const sqlite4_api_routines *pApi){
   SQLITE_EXTENSION_INIT2(pApi)
-  return sqlite3Fts1Init(db);
+  return sqlite4Fts1Init(db);
 }
 #endif
 

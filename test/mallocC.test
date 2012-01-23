@@ -34,7 +34,7 @@ proc do_mallocC_test {tn args} {
 
     # Run the SQL. Malloc number $::n is set to fail. A malloc() failure
     # may or may not be reported.
-    sqlite3_memdebug_fail $::n -repeat 1
+    sqlite4_memdebug_fail $::n -repeat 1
     do_test mallocC-$tn.$::n.1 {
       set res [catchsql [string trim $::mallocopts(-sql)]]
       set rc [expr { 
@@ -50,7 +50,7 @@ proc do_mallocC_test {tn args} {
 
     # If $::n is greater than the number of malloc() calls required to
     # execute the SQL, then this test is finished. Break out of the loop.
-    set nFail [sqlite3_memdebug_fail -1]
+    set nFail [sqlite4_memdebug_fail -1]
     if {$nFail==0} {
       break
     }
@@ -80,7 +80,7 @@ proc do_mallocC_test {tn args} {
   unset ::mallocopts
 }
 
-sqlite3_extended_result_codes db 1
+sqlite4_extended_result_codes db 1
 
 execsql {
   PRAGMA auto_vacuum=1;
@@ -95,11 +95,11 @@ execsql {
 #
 if {0} {
   db close
-  sqlite3_shutdown
-  sqlite3_config_lookaside 50 500
-  sqlite3_initialize
+  sqlite4_shutdown
+  sqlite4_config_lookaside 50 500
+  sqlite4_initialize
   autoinstall_test_functions
-  sqlite3 db test.db
+  sqlite4 db test.db
 }
 
 do_mallocC_test 1 -sql {

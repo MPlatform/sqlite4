@@ -41,7 +41,7 @@ if {$::tcl_platform(platform) == "unix"} {
     } $permissions
     do_test journal3-1.2.$tn.2 { file exists test.db-journal } {0}
     do_test journal3-1.2.$tn.3 {
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql { 
         BEGIN;
           INSERT INTO tx DEFAULT VALUES;

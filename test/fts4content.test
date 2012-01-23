@@ -422,7 +422,7 @@ do_catchsql_test 6.2.2 {
 } {1 {SQL logic error or missing database}}
 
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 do_execsql_test 6.2.3 {
   SELECT name FROM sqlite_master WHERE name LIKE '%t7%'
 } {
@@ -458,7 +458,7 @@ do_catchsql_test 6.2.9 {
 } {1 {SQL logic error or missing database}}
 
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 do_catchsql_test 6.2.10 {
   SELECT rowid FROM ft7 WHERE ft7 MATCH '"A A"';
 } {0 2}

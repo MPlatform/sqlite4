@@ -53,7 +53,7 @@ ifcapable default_autovacuum {
   lappend EXCLUDE btree4.test
 }
 
-if {[sqlite3 -has-codec]} {
+if {[sqlite4 -has-codec]} {
   # lappend EXCLUDE 
 }
 if {[llength $argv]>0} {

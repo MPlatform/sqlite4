@@ -11,7 +11,7 @@
 #
 # This file implements regression tests for SQLite library.  The
 # focus of this file is testing the effects of a failure in 
-# sqlite3_initialize().
+# sqlite4_initialize().
 #
 #
 
@@ -32,24 +32,24 @@ foreach {t failed rc started} {
 } {
   do_test init-$t.1 {
     eval init_wrapper_install $failed
-    sqlite3_initialize
+    sqlite4_initialize
   } $rc
   do_test init-$t.2 {
     init_wrapper_query
   } $started
   do_test init-$t.3 {
-    sqlite3_shutdown
+    sqlite4_shutdown
     init_wrapper_query
   } {}
   do_test init-$t.4 {
-    sqlite3_initialize
+    sqlite4_initialize
   } $rc
   do_test init-$t.5 {
     init_wrapper_query
   } $started
   do_test init-$t.6 {
     init_wrapper_clear
-    sqlite3_initialize
+    sqlite4_initialize
   } SQLITE_OK
   do_test init-$t.7 {
     init_wrapper_query
@@ -65,14 +65,14 @@ if {$MEMDEBUG} {
     db close
     init_wrapper_install
   } -tclbody {
-    set rc [sqlite3_initialize]
+    set rc [sqlite4_initialize]
     if {[string match "SQLITE*NOMEM" $rc]} {error "out of memory"}
   } -cleanup {
     set zRepeat "transient"
     if {$::iRepeat} {set zRepeat "persistent"}
     do_test init-2.$zRepeat.$::n.x {
       init_wrapper_clear
-      sqlite3_initialize
+      sqlite4_initialize
     } SQLITE_OK
     init_wrapper_uninstall
   }

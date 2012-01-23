@@ -50,16 +50,16 @@ struct FileChunk {
 ** The cursor can be either for reading or writing.
 */
 struct FilePoint {
-  sqlite3_int64 iOffset;          /* Offset from the beginning of the file */
+  sqlite4_int64 iOffset;          /* Offset from the beginning of the file */
   FileChunk *pChunk;              /* Specific chunk into which cursor points */
 };
 
 /*
-** This subclass is a subclass of sqlite3_file.  Each open memory-journal
+** This subclass is a subclass of sqlite4_file.  Each open memory-journal
 ** is an instance of this class.
 */
 struct MemJournal {
-  sqlite3_io_methods *pMethod;    /* Parent class. MUST BE FIRST */
+  sqlite4_io_methods *pMethod;    /* Parent class. MUST BE FIRST */
   FileChunk *pFirst;              /* Head of in-memory chunk-list */
   FilePoint endpoint;             /* Pointer to the end of the file */
   FilePoint readpoint;            /* Pointer to the end of the last xRead() */
@@ -67,10 +67,10 @@ struct MemJournal {
 
 /*
 ** Read data from the in-memory journal file.  This is the implementation
-** of the sqlite3_vfs.xRead method.
+** of the sqlite4_vfs.xRead method.
 */
 static int memjrnlRead(
-  sqlite3_file *pJfd,    /* The journal file from which to read */
+  sqlite4_file *pJfd,    /* The journal file from which to read */
   void *zBuf,            /* Put the results here */
   int iAmt,              /* Number of bytes to read */
   sqlite_int64 iOfst     /* Begin reading at this offset */
@@ -85,7 +85,7 @@ static int memjrnlRead(
   assert( iOfst+iAmt<=p->endpoint.iOffset );
 
   if( p->readpoint.iOffset!=iOfst || iOfst==0 ){
-    sqlite3_int64 iOff = 0;
+    sqlite4_int64 iOff = 0;
     for(pChunk=p->pFirst; 
         ALWAYS(pChunk) && (iOff+JOURNAL_CHUNKSIZE)<=iOfst;
         pChunk=pChunk->pNext
@@ -115,7 +115,7 @@ static int memjrnlRead(
 ** Write data to the file.
 */
 static int memjrnlWrite(
-  sqlite3_file *pJfd,    /* The journal file into which to write */
+  sqlite4_file *pJfd,    /* The journal file into which to write */
   const void *zBuf,      /* Take data to be written from here */
   int iAmt,              /* Number of bytes to write */
   sqlite_int64 iOfst     /* Begin writing at this offset into the file */
@@ -137,7 +137,7 @@ static int memjrnlWrite(
 
     if( iChunkOffset==0 ){
       /* New chunk is required to extend the file. */
-      FileChunk *pNew = sqlite3_malloc(sizeof(FileChunk));
+      FileChunk *pNew = sqlite4_malloc(sizeof(FileChunk));
       if( !pNew ){
         return SQLITE_IOERR_NOMEM;
       }
@@ -164,7 +164,7 @@ static int memjrnlWrite(
 /*
 ** Truncate the file.
 */
-static int memjrnlTruncate(sqlite3_file *pJfd, sqlite_int64 size){
+static int memjrnlTruncate(sqlite4_file *pJfd, sqlite_int64 size){
   MemJournal *p = (MemJournal *)pJfd;
   FileChunk *pChunk;
   assert(size==0);
@@ -173,16 +173,16 @@ static int memjrnlTruncate(sqlite3_file *pJfd, sqlite_int64 size){
   while( pChunk ){
     FileChunk *pTmp = pChunk;
     pChunk = pChunk->pNext;
-    sqlite3_free(pTmp);
+    sqlite4_free(pTmp);
   }
-  sqlite3MemJournalOpen(pJfd);
+  sqlite4MemJournalOpen(pJfd);
   return SQLITE_OK;
 }
 
 /*
 ** Close the file.
 */
-static int memjrnlClose(sqlite3_file *pJfd){
+static int memjrnlClose(sqlite4_file *pJfd){
   memjrnlTruncate(pJfd, 0);
   return SQLITE_OK;
 }
@@ -196,7 +196,7 @@ static int memjrnlClose(sqlite3_file *pJfd){
 ** exists purely as a contingency, in case some malfunction in some other
 ** part of SQLite causes Sync to be called by mistake.
 */
-static int memjrnlSync(sqlite3_file *NotUsed, int NotUsed2){
+static int memjrnlSync(sqlite4_file *NotUsed, int NotUsed2){
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
   return SQLITE_OK;
 }
@@ -204,16 +204,16 @@ static int memjrnlSync(sqlite3_file *NotUsed, int NotUsed2){
 /*
 ** Query the size of the file in bytes.
 */
-static int memjrnlFileSize(sqlite3_file *pJfd, sqlite_int64 *pSize){
+static int memjrnlFileSize(sqlite4_file *pJfd, sqlite_int64 *pSize){
   MemJournal *p = (MemJournal *)pJfd;
   *pSize = (sqlite_int64) p->endpoint.iOffset;
   return SQLITE_OK;
 }
 
 /*
-** Table of methods for MemJournal sqlite3_file object.
+** Table of methods for MemJournal sqlite4_file object.
 */
-static const struct sqlite3_io_methods MemJournalMethods = {
+static const struct sqlite4_io_methods MemJournalMethods = {
   1,                /* iVersion */
   memjrnlClose,     /* xClose */
   memjrnlRead,      /* xRead */
@@ -236,24 +236,24 @@ static const struct sqlite3_io_methods MemJournalMethods = {
 /* 
 ** Open a journal file.
 */
-void sqlite3MemJournalOpen(sqlite3_file *pJfd){
+void sqlite4MemJournalOpen(sqlite4_file *pJfd){
   MemJournal *p = (MemJournal *)pJfd;
   assert( EIGHT_BYTE_ALIGNMENT(p) );
-  memset(p, 0, sqlite3MemJournalSize());
-  p->pMethod = (sqlite3_io_methods*)&MemJournalMethods;
+  memset(p, 0, sqlite4MemJournalSize());
+  p->pMethod = (sqlite4_io_methods*)&MemJournalMethods;
 }
 
 /*
 ** Return true if the file-handle passed as an argument is 
 ** an in-memory journal 
 */
-int sqlite3IsMemJournal(sqlite3_file *pJfd){
+int sqlite4IsMemJournal(sqlite4_file *pJfd){
   return pJfd->pMethods==&MemJournalMethods;
 }
 
 /* 
 ** Return the number of bytes required to store a MemJournal file descriptor.
 */
-int sqlite3MemJournalSize(void){
+int sqlite4MemJournalSize(void){
   return sizeof(MemJournal);
 }

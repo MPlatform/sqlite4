@@ -47,11 +47,11 @@ static int binarize(
 ** Usage: test_value_overhead <repeat-count> <do-calls>.
 **
 ** This routine is used to test the overhead of calls to
-** sqlite3_value_text(), on a value that contains a UTF-8 string. The idea
-** is to figure out whether or not it is a problem to use sqlite3_value
+** sqlite4_value_text(), on a value that contains a UTF-8 string. The idea
+** is to figure out whether or not it is a problem to use sqlite4_value
 ** structures with collation sequence functions.
 **
-** If <do-calls> is 0, then the calls to sqlite3_value_text() are not
+** If <do-calls> is 0, then the calls to sqlite4_value_text() are not
 ** actually made.
 */
 static int test_value_overhead(
@@ -82,7 +82,7 @@ static int test_value_overhead(
 
   for(i=0; i<repeat_count; i++){
     if( do_calls ){
-      zVal = (char*)sqlite3_value_text(&val);
+      zVal = (char*)sqlite4_value_text(&val);
     }
   }
 
@@ -103,7 +103,7 @@ static u8 name_to_enc(Tcl_Interp *interp, Tcl_Obj *pObj){
   struct EncName *pEnc;
   char *z = Tcl_GetString(pObj);
   for(pEnc=&encnames[0]; pEnc->zName; pEnc++){
-    if( 0==sqlite3StrICmp(z, pEnc->zName) ){
+    if( 0==sqlite4StrICmp(z, pEnc->zName) ){
       break;
     }
   }
@@ -128,7 +128,7 @@ static int test_translate(
 ){
   u8 enc_from;
   u8 enc_to;
-  sqlite3_value *pVal;
+  sqlite4_value *pVal;
 
   char *z;
   int len;
@@ -142,7 +142,7 @@ static int test_translate(
     return TCL_ERROR;
   }
   if( objc==5 ){
-    xDel = sqlite3_free;
+    xDel = sqlite4_free;
   }
 
   enc_from = name_to_enc(interp, objv[2]);
@@ -150,29 +150,29 @@ static int test_translate(
   enc_to = name_to_enc(interp, objv[3]);
   if( !enc_to ) return TCL_ERROR;
 
-  pVal = sqlite3ValueNew(0);
+  pVal = sqlite4ValueNew(0);
 
   if( enc_from==SQLITE_UTF8 ){
     z = Tcl_GetString(objv[1]);
     if( objc==5 ){
-      z = sqlite3_mprintf("%s", z);
+      z = sqlite4_mprintf("%s", z);
     }
-    sqlite3ValueSetStr(pVal, -1, z, enc_from, xDel);
+    sqlite4ValueSetStr(pVal, -1, z, enc_from, xDel);
   }else{
     z = (char*)Tcl_GetByteArrayFromObj(objv[1], &len);
     if( objc==5 ){
       char *zTmp = z;
-      z = sqlite3_malloc(len);
+      z = sqlite4_malloc(len);
       memcpy(z, zTmp, len);
     }
-    sqlite3ValueSetStr(pVal, -1, z, enc_from, xDel);
+    sqlite4ValueSetStr(pVal, -1, z, enc_from, xDel);
   }
 
-  z = (char *)sqlite3ValueText(pVal, enc_to);
-  len = sqlite3ValueBytes(pVal, enc_to) + (enc_to==SQLITE_UTF8?1:2);
+  z = (char *)sqlite4ValueText(pVal, enc_to);
+  len = sqlite4ValueBytes(pVal, enc_to) + (enc_to==SQLITE_UTF8?1:2);
   Tcl_SetObjResult(interp, Tcl_NewByteArrayObj((u8*)z, len));
 
-  sqlite3ValueFree(pVal);
+  sqlite4ValueFree(pVal);
 
   return TCL_OK;
 }
@@ -180,10 +180,10 @@ static int test_translate(
 /*
 ** Usage: translate_selftest
 **
-** Call sqlite3UtfSelfTest() to run the internal tests for unicode
+** Call sqlite4UtfSelfTest() to run the internal tests for unicode
 ** translation. If there is a problem an assert() will fail.
 **/
-void sqlite3UtfSelfTest(void);
+void sqlite4UtfSelfTest(void);
 static int test_translate_selftest(
   void * clientData,
   Tcl_Interp *interp,
@@ -191,7 +191,7 @@ static int test_translate_selftest(
   Tcl_Obj *CONST objv[]
 ){
 #ifndef SQLITE_OMIT_UTF16
-  sqlite3UtfSelfTest();
+  sqlite4UtfSelfTest();
 #endif
   return SQLITE_OK;
 }

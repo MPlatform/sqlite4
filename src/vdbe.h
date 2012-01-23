@@ -111,8 +111,8 @@ typedef struct VdbeOpList VdbeOpList;
 #define P4_VDBEFUNC (-7)  /* P4 is a pointer to a VdbeFunc structure */
 #define P4_MEM      (-8)  /* P4 is a pointer to a Mem*    structure */
 #define P4_TRANSIENT  0   /* P4 is a pointer to a transient string */
-#define P4_VTAB     (-10) /* P4 is a pointer to an sqlite3_vtab structure */
-#define P4_MPRINTF  (-11) /* P4 is a string obtained from sqlite3_mprintf() */
+#define P4_VTAB     (-10) /* P4 is a pointer to an sqlite4_vtab structure */
+#define P4_MPRINTF  (-11) /* P4 is a string obtained from sqlite4_mprintf() */
 #define P4_REAL     (-12) /* P4 is a 64-bit floating point value */
 #define P4_INT64    (-13) /* P4 is a 64-bit signed integer */
 #define P4_INT32    (-14) /* P4 is a 32-bit signed integer */
@@ -152,7 +152,7 @@ typedef struct VdbeOpList VdbeOpList;
 /*
 ** The following macro converts a relative address in the p2 field
 ** of a VdbeOp structure into a negative number so that 
-** sqlite3VdbeAddOpList() knows that the address is relative.  Calling
+** sqlite4VdbeAddOpList() knows that the address is relative.  Calling
 ** the macro again restores the address.
 */
 #define ADDR(X)  (-1-(X))
@@ -167,66 +167,66 @@ typedef struct VdbeOpList VdbeOpList;
 ** Prototypes for the VDBE interface.  See comments on the implementation
 ** for a description of what each of these routines does.
 */
-Vdbe *sqlite3VdbeCreate(sqlite3*);
-int sqlite3VdbeAddOp0(Vdbe*,int);
-int sqlite3VdbeAddOp1(Vdbe*,int,int);
-int sqlite3VdbeAddOp2(Vdbe*,int,int,int);
-int sqlite3VdbeAddOp3(Vdbe*,int,int,int,int);
-int sqlite3VdbeAddOp4(Vdbe*,int,int,int,int,const char *zP4,int);
-int sqlite3VdbeAddOp4Int(Vdbe*,int,int,int,int,int);
-int sqlite3VdbeAddOpList(Vdbe*, int nOp, VdbeOpList const *aOp);
-void sqlite3VdbeAddParseSchemaOp(Vdbe*,int,char*);
-void sqlite3VdbeChangeP1(Vdbe*, u32 addr, int P1);
-void sqlite3VdbeChangeP2(Vdbe*, u32 addr, int P2);
-void sqlite3VdbeChangeP3(Vdbe*, u32 addr, int P3);
-void sqlite3VdbeChangeP5(Vdbe*, u8 P5);
-void sqlite3VdbeJumpHere(Vdbe*, int addr);
-void sqlite3VdbeChangeToNoop(Vdbe*, int addr);
-void sqlite3VdbeChangeP4(Vdbe*, int addr, const char *zP4, int N);
-void sqlite3VdbeUsesBtree(Vdbe*, int);
-VdbeOp *sqlite3VdbeGetOp(Vdbe*, int);
-int sqlite3VdbeMakeLabel(Vdbe*);
-void sqlite3VdbeRunOnlyOnce(Vdbe*);
-void sqlite3VdbeDelete(Vdbe*);
-void sqlite3VdbeDeleteObject(sqlite3*,Vdbe*);
-void sqlite3VdbeMakeReady(Vdbe*,Parse*);
-int sqlite3VdbeFinalize(Vdbe*);
-void sqlite3VdbeResolveLabel(Vdbe*, int);
-int sqlite3VdbeCurrentAddr(Vdbe*);
+Vdbe *sqlite4VdbeCreate(sqlite4*);
+int sqlite4VdbeAddOp0(Vdbe*,int);
+int sqlite4VdbeAddOp1(Vdbe*,int,int);
+int sqlite4VdbeAddOp2(Vdbe*,int,int,int);
+int sqlite4VdbeAddOp3(Vdbe*,int,int,int,int);
+int sqlite4VdbeAddOp4(Vdbe*,int,int,int,int,const char *zP4,int);
+int sqlite4VdbeAddOp4Int(Vdbe*,int,int,int,int,int);
+int sqlite4VdbeAddOpList(Vdbe*, int nOp, VdbeOpList const *aOp);
+void sqlite4VdbeAddParseSchemaOp(Vdbe*,int,char*);
+void sqlite4VdbeChangeP1(Vdbe*, u32 addr, int P1);
+void sqlite4VdbeChangeP2(Vdbe*, u32 addr, int P2);
+void sqlite4VdbeChangeP3(Vdbe*, u32 addr, int P3);
+void sqlite4VdbeChangeP5(Vdbe*, u8 P5);
+void sqlite4VdbeJumpHere(Vdbe*, int addr);
+void sqlite4VdbeChangeToNoop(Vdbe*, int addr);
+void sqlite4VdbeChangeP4(Vdbe*, int addr, const char *zP4, int N);
+void sqlite4VdbeUsesBtree(Vdbe*, int);
+VdbeOp *sqlite4VdbeGetOp(Vdbe*, int);
+int sqlite4VdbeMakeLabel(Vdbe*);
+void sqlite4VdbeRunOnlyOnce(Vdbe*);
+void sqlite4VdbeDelete(Vdbe*);
+void sqlite4VdbeDeleteObject(sqlite4*,Vdbe*);
+void sqlite4VdbeMakeReady(Vdbe*,Parse*);
+int sqlite4VdbeFinalize(Vdbe*);
+void sqlite4VdbeResolveLabel(Vdbe*, int);
+int sqlite4VdbeCurrentAddr(Vdbe*);
 #ifdef SQLITE_DEBUG
-  int sqlite3VdbeAssertMayAbort(Vdbe *, int);
-  void sqlite3VdbeTrace(Vdbe*,FILE*);
+  int sqlite4VdbeAssertMayAbort(Vdbe *, int);
+  void sqlite4VdbeTrace(Vdbe*,FILE*);
 #endif
-void sqlite3VdbeResetStepResult(Vdbe*);
-void sqlite3VdbeRewind(Vdbe*);
-int sqlite3VdbeReset(Vdbe*);
-void sqlite3VdbeSetNumCols(Vdbe*,int);
-int sqlite3VdbeSetColName(Vdbe*, int, int, const char *, void(*)(void*));
-void sqlite3VdbeCountChanges(Vdbe*);
-sqlite3 *sqlite3VdbeDb(Vdbe*);
-void sqlite3VdbeSetSql(Vdbe*, const char *z, int n, int);
-void sqlite3VdbeSwap(Vdbe*,Vdbe*);
-VdbeOp *sqlite3VdbeTakeOpArray(Vdbe*, int*, int*);
-sqlite3_value *sqlite3VdbeGetValue(Vdbe*, int, u8);
-void sqlite3VdbeSetVarmask(Vdbe*, int);
+void sqlite4VdbeResetStepResult(Vdbe*);
+void sqlite4VdbeRewind(Vdbe*);
+int sqlite4VdbeReset(Vdbe*);
+void sqlite4VdbeSetNumCols(Vdbe*,int);
+int sqlite4VdbeSetColName(Vdbe*, int, int, const char *, void(*)(void*));
+void sqlite4VdbeCountChanges(Vdbe*);
+sqlite4 *sqlite4VdbeDb(Vdbe*);
+void sqlite4VdbeSetSql(Vdbe*, const char *z, int n, int);
+void sqlite4VdbeSwap(Vdbe*,Vdbe*);
+VdbeOp *sqlite4VdbeTakeOpArray(Vdbe*, int*, int*);
+sqlite4_value *sqlite4VdbeGetValue(Vdbe*, int, u8);
+void sqlite4VdbeSetVarmask(Vdbe*, int);
 #ifndef SQLITE_OMIT_TRACE
-  char *sqlite3VdbeExpandSql(Vdbe*, const char*);
+  char *sqlite4VdbeExpandSql(Vdbe*, const char*);
 #endif
 
-void sqlite3VdbeRecordUnpack(KeyInfo*,int,const void*,UnpackedRecord*);
-int sqlite3VdbeRecordCompare(int,const void*,UnpackedRecord*);
-UnpackedRecord *sqlite3VdbeAllocUnpackedRecord(KeyInfo *, char *, int, char **);
+void sqlite4VdbeRecordUnpack(KeyInfo*,int,const void*,UnpackedRecord*);
+int sqlite4VdbeRecordCompare(int,const void*,UnpackedRecord*);
+UnpackedRecord *sqlite4VdbeAllocUnpackedRecord(KeyInfo *, char *, int, char **);
 
 #ifndef SQLITE_OMIT_TRIGGER
-void sqlite3VdbeLinkSubProgram(Vdbe *, SubProgram *);
+void sqlite4VdbeLinkSubProgram(Vdbe *, SubProgram *);
 #endif
 
 
 #ifndef NDEBUG
-  void sqlite3VdbeComment(Vdbe*, const char*, ...);
-# define VdbeComment(X)  sqlite3VdbeComment X
-  void sqlite3VdbeNoopComment(Vdbe*, const char*, ...);
-# define VdbeNoopComment(X)  sqlite3VdbeNoopComment X
+  void sqlite4VdbeComment(Vdbe*, const char*, ...);
+# define VdbeComment(X)  sqlite4VdbeComment X
+  void sqlite4VdbeNoopComment(Vdbe*, const char*, ...);
+# define VdbeNoopComment(X)  sqlite4VdbeNoopComment X
 #else
 # define VdbeComment(X)
 # define VdbeNoopComment(X)

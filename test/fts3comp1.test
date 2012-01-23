@@ -42,7 +42,7 @@ foreach {tn zip unzip} {
   set next_x 0
   catch {db close}
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   db func $zip zip
   db func $unzip unzip
   

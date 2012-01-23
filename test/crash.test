@@ -313,13 +313,13 @@ ifcapable attach {
 
 #--------------------------------------------------------------------------
 # The following test cases - crash-5.* - exposes a bug that existed in the
-# sqlite3pager_movepage() API used by auto-vacuum databases.
+# sqlite4pager_movepage() API used by auto-vacuum databases.
 # database when a crash occurs during a multi-file transaction. See comments
 # in test crash-5.3 for details.
 #
 db close
 forcedelete test.db
-sqlite3 db test.db
+sqlite4 db test.db
 do_test crash-5.1 {
   execsql {
     CREATE TABLE abc(a, b, c);                          -- Root page 3
@@ -335,7 +335,7 @@ do_test crash-5.2 {
 set sig [signature]
 do_test crash-5.3 {
 # The SQL below is used to expose a bug that existed in
-# sqlite3pager_movepage() during development of the auto-vacuum feature. It
+# sqlite4pager_movepage() during development of the auto-vacuum feature. It
 # functions as follows:
 # 
 # 1: Begin a transaction.
@@ -343,7 +343,7 @@ do_test crash-5.3 {
 # 3: Write data to page 4 (it becomes the overflow page for the row inserted).
 #    The old page 4 data has been written to the journal file, but the
 #    journal file has not been sync()hronized.
-# 4: Create a table, which calls sqlite3pager_movepage() to move page 4
+# 4: Create a table, which calls sqlite4pager_movepage() to move page 4
 #    to the end of the database (page 12) to make room for the new root-page.
 # 5: Put pressure on the pager-cache. This results in page 4 being written
 #    to the database file to make space in the cache to load a new page. The

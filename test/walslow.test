@@ -22,7 +22,7 @@ ifcapable !wal {finish_test ; return }
 proc reopen_db {} {
   catch { db close }
   forcedelete test.db test.db-wal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { PRAGMA journal_mode = wal }
 }
 
@@ -57,7 +57,7 @@ for {set seed 1} {$seed<10} {incr seed} {
       copy_file test.db testX.db
       copy_file test.db-wal testX.db-wal
   
-      sqlite3 db2 testX.db
+      sqlite4 db2 testX.db
       execsql { PRAGMA journal_mode = WAL } db2
       execsql { PRAGMA integrity_check } db2
     } {ok}

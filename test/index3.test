@@ -49,7 +49,7 @@ do_test index3-99.1 {
     UPDATE sqlite_master SET sql='nonsense';
   }
   db close
-  catch { sqlite3 db test.db }
+  catch { sqlite4 db test.db }
   catchsql { DROP INDEX i1 }
 } {1 {malformed database schema (t1) - near "nonsense": syntax error}}
 

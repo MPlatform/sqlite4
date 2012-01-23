@@ -65,7 +65,7 @@ if {[string length $extension]>=2 && [string length $extension]<=4} {
 
 # Open the database
 #
-sqlite3 db $file_to_analyze
+sqlite4 db $file_to_analyze
 register_dbstat_vtab db
 
 db eval {SELECT count(*) FROM sqlite_master}
@@ -114,7 +114,7 @@ if {$flags(-stats)} {
 # to an in-memory database (for which the schema is shown below). It then
 # queries the in-memory db to produce the space-analysis report.
 #
-sqlite3 mem :memory:
+sqlite4 mem :memory:
 set tabledef {CREATE TABLE space_used(
    name clob,        -- Name of a table or index in the database file
    tblname clob,     -- Name of associated table

@@ -616,17 +616,17 @@ do_execsql_test e_createtable-1.11.2.4 {
 #
 proc sci {select cmd} {
   set res [list]
-  set STMT [sqlite3_prepare_v2 db $select -1 dummy]
-  for {set i 0} {$i < [sqlite3_column_count $STMT]} {incr i} {
+  set STMT [sqlite4_prepare_v2 db $select -1 dummy]
+  for {set i 0} {$i < [sqlite4_column_count $STMT]} {incr i} {
     lappend res [$cmd $STMT $i]
   }
-  sqlite3_finalize $STMT
+  sqlite4_finalize $STMT
   set res
 }
 proc tci {tbl cmd} { sci "SELECT * FROM $tbl" $cmd }
-proc select_column_names    {sql} { sci $sql sqlite3_column_name }
-proc table_column_names     {tbl} { tci $tbl sqlite3_column_name }
-proc table_column_decltypes {tbl} { tci $tbl sqlite3_column_decltype }
+proc select_column_names    {sql} { sci $sql sqlite4_column_name }
+proc table_column_names     {tbl} { tci $tbl sqlite4_column_name }
+proc table_column_decltypes {tbl} { tci $tbl sqlite4_column_decltype }
 
 # Create a database schema. This schema is used by tests 2.1.* through 2.3.*.
 #
@@ -1066,14 +1066,14 @@ do_catchsql_test e_createtable-3.10.2 [subst {
 }] {1 {too many columns on t10}}
 
 # EVIDENCE-OF: R-27775-64721 Both of these limits can be lowered at
-# runtime using the sqlite3_limit() C/C++ interface.
+# runtime using the sqlite4_limit() C/C++ interface.
 #
 #   A 30,000 byte blob consumes 30,003 bytes of record space. A record 
 #   that contains 3 such blobs consumes (30,000*3)+1 bytes of space. Tests
 #   3.11.4 and 3.11.5, which verify that SQLITE_MAX_LENGTH may be lowered
 #   at runtime, are based on this calculation.
 #
-sqlite3_limit db SQLITE_LIMIT_COLUMN 500
+sqlite4_limit db SQLITE_LIMIT_COLUMN 500
 do_execsql_test e_createtable-3.11.1 [subst {
   CREATE TABLE t10([columns 500]);
 }] {}
@@ -1084,12 +1084,12 @@ do_catchsql_test e_createtable-3.11.2 [subst {
 # Check that it is not possible to raise the column limit above its 
 # default compile time value.
 #
-sqlite3_limit db SQLITE_LIMIT_COLUMN [expr $::SQLITE_MAX_COLUMN+2]
+sqlite4_limit db SQLITE_LIMIT_COLUMN [expr $::SQLITE_MAX_COLUMN+2]
 do_catchsql_test e_createtable-3.11.3 [subst {
   CREATE TABLE t11([columns [expr $::SQLITE_MAX_COLUMN+1]]);
 }] {1 {too many columns on t11}}
 
-sqlite3_limit db SQLITE_LIMIT_LENGTH 90010
+sqlite4_limit db SQLITE_LIMIT_LENGTH 90010
 do_execsql_test e_createtable-3.11.4 {
   CREATE TABLE t12(a, b, c);
   INSERT INTO t12 VALUES(randomblob(30000),randomblob(30000),randomblob(30000));
@@ -1554,7 +1554,7 @@ foreach {tn tbl res ac data} {
     INSERT INTO $tbl SELECT ((a%2)*a+3), 'string' FROM $tbl;
   " $res
 
-  do_test e_createtable-4.15.$tn.3 { sqlite3_get_autocommit db } $ac
+  do_test e_createtable-4.15.$tn.3 { sqlite4_get_autocommit db } $ac
   do_execsql_test 4.15.$tn.4 "SELECT * FROM $tbl" $data
 }
 foreach {tn tbl res ac data} {
@@ -1572,7 +1572,7 @@ foreach {tn tbl res ac data} {
     INSERT INTO $tbl SELECT a+3, CASE a WHEN 2 THEN NULL ELSE 'xx' END FROM $tbl
   " $res
 
-  do_test e_createtable-4.16.$tn.3 { sqlite3_get_autocommit db } $ac
+  do_test e_createtable-4.16.$tn.3 { sqlite4_get_autocommit db } $ac
   do_execsql_test 4.16.$tn.4 "SELECT * FROM $tbl" $data
 }
 foreach {tn tbl res ac data} {
@@ -1590,7 +1590,7 @@ foreach {tn tbl res ac data} {
     INSERT INTO $tbl SELECT ((a%2)*a+3), 'three' FROM $tbl
   " $res
 
-  do_test e_createtable-4.17.$tn.3 { sqlite3_get_autocommit db } $ac
+  do_test e_createtable-4.17.$tn.3 { sqlite4_get_autocommit db } $ac
   do_execsql_test 4.17.$tn.4 "SELECT * FROM $tbl" $data
 }
 catchsql COMMIT
@@ -1613,7 +1613,7 @@ do_execsql_test  4.18.2 { BEGIN; INSERT INTO t4 VALUES(5, 6) }
 do_catchsql_test 4.18.3 { 
   INSERT INTO t4 SELECT a+4, b+4 FROM t4
 } {1 {constraint failed}}
-do_test e_createtable-4.18.4 { sqlite3_get_autocommit db } 0
+do_test e_createtable-4.18.4 { sqlite4_get_autocommit db } 0
 do_execsql_test 4.18.5 { SELECT * FROM t4 } {1 2 3 4 5 6}
 
 # EVIDENCE-OF: R-19114-56113 Different constraints within the same table

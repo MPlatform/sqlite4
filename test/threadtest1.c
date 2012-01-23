@@ -41,8 +41,8 @@ static void Exit(int rc){
   exit(rc);
 }
 
-extern char *sqlite3_mprintf(const char *zFormat, ...);
-extern char *sqlite3_vmprintf(const char *zFormat, va_list);
+extern char *sqlite4_mprintf(const char *zFormat, ...);
+extern char *sqlite4_vmprintf(const char *zFormat, va_list);
 
 /*
 ** When a lock occurs, yield.
@@ -90,7 +90,7 @@ static int db_query_callback(
   if( azArg==0 ) return 0;
   for(i=0; i<nArg; i++){
     pResult->azElem[pResult->nElem++] =
-        sqlite3_mprintf("%s",azArg[i] ? azArg[i] : ""); 
+        sqlite4_mprintf("%s",azArg[i] ? azArg[i] : ""); 
   }
   return 0;
 }
@@ -106,15 +106,15 @@ char **db_query(sqlite *db, const char *zFile, const char *zFormat, ...){
   va_list ap;
   struct QueryResult sResult;
   va_start(ap, zFormat);
-  zSql = sqlite3_vmprintf(zFormat, ap);
+  zSql = sqlite4_vmprintf(zFormat, ap);
   va_end(ap);
   memset(&sResult, 0, sizeof(sResult));
   sResult.zFile = zFile;
   if( verbose ) printf("QUERY %s: %s\n", zFile, zSql);
-  rc = sqlite3_exec(db, zSql, db_query_callback, &sResult, &zErrMsg);
+  rc = sqlite4_exec(db, zSql, db_query_callback, &sResult, &zErrMsg);
   if( rc==SQLITE_SCHEMA ){
     if( zErrMsg ) free(zErrMsg);
-    rc = sqlite3_exec(db, zSql, db_query_callback, &sResult, &zErrMsg);
+    rc = sqlite4_exec(db, zSql, db_query_callback, &sResult, &zErrMsg);
   }
   if( verbose ) printf("DONE %s %s\n", zFile, zSql);
   if( zErrMsg ){
@@ -123,7 +123,7 @@ char **db_query(sqlite *db, const char *zFile, const char *zFormat, ...){
     free(zSql);
     Exit(1);
   }
-  sqlite3_free(zSql);
+  sqlite4_free(zSql);
   if( sResult.azElem==0 ){
     db_query_callback(&sResult, 0, 0, 0);
   }
@@ -140,20 +140,20 @@ void db_execute(sqlite *db, const char *zFile, const char *zFormat, ...){
   char *zErrMsg = 0;
   va_list ap;
   va_start(ap, zFormat);
-  zSql = sqlite3_vmprintf(zFormat, ap);
+  zSql = sqlite4_vmprintf(zFormat, ap);
   va_end(ap);
   if( verbose ) printf("EXEC %s: %s\n", zFile, zSql);
   do{
-    rc = sqlite3_exec(db, zSql, 0, 0, &zErrMsg);
+    rc = sqlite4_exec(db, zSql, 0, 0, &zErrMsg);
   }while( rc==SQLITE_BUSY );
   if( verbose ) printf("DONE %s: %s\n", zFile, zSql);
   if( zErrMsg ){
     fprintf(stdout,"%s: command failed: %s - %s\n", zFile, zSql, zErrMsg);
     free(zErrMsg);
-    sqlite3_free(zSql);
+    sqlite4_free(zSql);
     Exit(1);
   }
-  sqlite3_free(zSql);
+  sqlite4_free(zSql);
 }
 
 /*
@@ -162,7 +162,7 @@ void db_execute(sqlite *db, const char *zFile, const char *zFormat, ...){
 void db_query_free(char **az){
   int i;
   for(i=0; az[i]; i++){
-    sqlite3_free(az[i]);
+    sqlite4_free(az[i]);
   }
   free(az);
 }
@@ -205,12 +205,12 @@ static void *worker_bee(void *pArg){
   printf("%s: START\n", zFilename);
   fflush(stdout);
   for(cnt=0; cnt<10; cnt++){
-    sqlite3_open(&zFilename[2], &db);
+    sqlite4_open(&zFilename[2], &db);
     if( db==0 ){
       fprintf(stdout,"%s: can't open\n", zFilename);
       Exit(1);
     }
-    sqlite3_busy_handler(db, db_is_locked, zFilename);
+    sqlite4_busy_handler(db, db_is_locked, zFilename);
     db_execute(db, zFilename, "CREATE TABLE t%d(a,b,c);", t);
     for(i=1; i<=100; i++){
       db_execute(db, zFilename, "INSERT INTO t%d VALUES(%d,%d,%d);",
@@ -231,7 +231,7 @@ static void *worker_bee(void *pArg){
       db_check(zFilename, "readback", az, z1, z2, 0);
     }
     db_execute(db, zFilename, "DROP TABLE t%d;", t);
-    sqlite3_close(db);
+    sqlite4_close(db);
   }
   printf("%s: END\n", zFilename);
   /* unlink(zFilename); */
@@ -261,12 +261,12 @@ int main(int argc, char **argv){
     unlink(zBuf);
   }
   for(i=0; i<n; i++){
-    zFile = sqlite3_mprintf("%d.testdb-%d", i%2+1, (i+2)/2);
+    zFile = sqlite4_mprintf("%d.testdb-%d", i%2+1, (i+2)/2);
     if( (i%2)==0 ){
       /* Remove both the database file and any old journal for the file
       ** being used by this thread and the next one. */
       char *zDb = &zFile[2];
-      char *zJournal = sqlite3_mprintf("%s-journal", zDb);
+      char *zJournal = sqlite4_mprintf("%s-journal", zDb);
       unlink(zDb);
       unlink(zJournal);
       free(zJournal);

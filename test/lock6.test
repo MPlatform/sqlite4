@@ -92,10 +92,10 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
 
   do_test lock6-1.1 {
     set ::tf1 [launch_testfixture]
-    testfixture $::tf1 "sqlite3_test_control_pending_byte $::sqlite_pending_byte"
+    testfixture $::tf1 "sqlite4_test_control_pending_byte $::sqlite_pending_byte"
     testfixture $::tf1 {
       set sqlite_hostid_num 2    
-      sqlite3 db test.db -key xyzzy
+      sqlite4 db test.db -key xyzzy
       set lockpath [db eval {
         PRAGMA lock_proxy_file=":auto:";
         select * from sqlite_master;
@@ -110,10 +110,10 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
     execsql {pragma lock_status}
   } {main unlocked temp closed}
 
-  sqlite3_soft_heap_limit 0
+  sqlite4_soft_heap_limit 0
   do_test lock6-1.3 {
     list [catch {
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql { select * from sqlite_master } 
     } msg] $msg
   } {1 {database is locked}}
@@ -161,7 +161,7 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
   set env(SQLITE_FORCE_PROXY_LOCKING) $using_proxy
   set sqlite_hostid_num 0
 
-  sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+  sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 }
       
 finish_test

@@ -66,7 +66,7 @@ for {set i 0} {$i<$N} {incr i} {
 #
 for {set i 0} {$i<$N} {incr i} {
   do_test manydb-1.$i {
-    sqlite3 db$i $dbname($i)
+    sqlite4 db$i $dbname($i)
     execsql {
        CREATE TABLE t1(a,b);
        BEGIN;

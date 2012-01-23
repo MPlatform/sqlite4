@@ -49,9 +49,9 @@ do_not_use_codec
 #
 # pager1-14.*: Cases specific to "PRAGMA journal_mode=OFF"
 #
-# pager1-15.*: Varying sqlite3_vfs.szOsFile
+# pager1-15.*: Varying sqlite4_vfs.szOsFile
 #
-# pager1-16.*: Varying sqlite3_vfs.mxPathname
+# pager1-16.*: Varying sqlite4_vfs.mxPathname
 #
 # pager1-17.*: Tests related to "PRAGMA omit_readlock"
 #              (The omit_readlock pragma has been removed and so have
@@ -739,7 +739,7 @@ do_execsql_test pager1.4.5.5 {
 
 faultsim_restore_and_reopen
 db close
-sqlite3 db test.db -readonly 1
+sqlite4 db test.db -readonly 1
 do_catchsql_test pager1.4.5.6 {
   SELECT * FROM t1;
   SELECT * FROM t2;
@@ -790,7 +790,7 @@ db close
 do_test pager1.4.6.8 {
   set ::mj_filename1 $::mj_filename
   tv filter xDelete
-  sqlite3 db test.db2
+  sqlite4 db test.db2
   execsql {
     PRAGMA journal_mode = DELETE;
     ATTACH 'test.db3' AS three;
@@ -929,7 +929,7 @@ do_test pager1-5.1.2 {
       INSERT INTO t1 VALUES(64, 'Brezhnev');
       INSERT INTO t2 SELECT * FROM t1;
   }
-  sqlite3 db2 test.db2
+  sqlite4 db2 test.db2
   execsql {
     BEGIN;
       SELECT * FROM t2;
@@ -969,7 +969,7 @@ do_test pager1-5.3.1 {
 do_test pager1-5.4.1 {
   db close
   testvfs tv
-  sqlite3 db test.db -vfs tv
+  sqlite4 db test.db -vfs tv
   execsql { ATTACH 'test.db2' AS aux }
 
   tv filter xDelete
@@ -1028,7 +1028,7 @@ db close
 tv delete
 
 do_test pager1-5.5.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { 
     ATTACH 'test.db2' AS aux;
     PRAGMA journal_mode = PERSIST;
@@ -1181,7 +1181,7 @@ foreach {tn filename} {
   do_test pager1-8.$tn.1 {
     faultsim_delete_and_reopen
     db close
-    sqlite3 db $filename
+    sqlite4 db $filename
     execsql {
       PRAGMA auto_vacuum = 1;
       CREATE TABLE x1(x);
@@ -1193,7 +1193,7 @@ foreach {tn filename} {
   } {Charles James Mary}
 
   do_test pager1-8.$tn.2 {
-    sqlite3 db2 $filename
+    sqlite4 db2 $filename
     catchsql { SELECT * FROM x1 } db2
   } {1 {no such table: x1}}
 
@@ -1235,9 +1235,9 @@ do_test pager1-9.0.1 {
   }
 } {}
 do_test pager1-9.0.2 {
-  sqlite3 db2 test.db2
+  sqlite4 db2 test.db2
   db2 eval { PRAGMA cache_size = 10 }
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   list [B step 10000] [B finish]
 } {SQLITE_DONE SQLITE_OK}
 do_test pager1-9.0.3 {
@@ -1246,7 +1246,7 @@ do_test pager1-9.0.3 {
 
 do_test pager1-9.1.1 {
   execsql { UPDATE ab SET a = a_string(201) }
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   B step 30
 } {SQLITE_OK}
 do_test pager1-9.1.2 {
@@ -1260,7 +1260,7 @@ do_test pager1-9.1.4 { execsql { SELECT count(*) FROM ab } } {128}
 
 do_test pager1-9.2.1 {
   execsql { UPDATE ab SET a = a_string(202) }
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   B step 30
 } {SQLITE_OK}
 do_test pager1-9.2.2 {
@@ -1287,7 +1287,7 @@ do_test pager1-9.3.1 {
   for {set ii 0} {$ii < 4} {incr ii} { execsql "CREATE TABLE t${ii}(a, b)" }
 } {}
 do_test pager1-9.3.2 {
-  sqlite3 db2 test.db2
+  sqlite4 db2 test.db2
 
   execsql {
     PRAGMA page_size = 4096;
@@ -1296,7 +1296,7 @@ do_test pager1-9.3.2 {
     CREATE TABLE t2(a, b);
   } db2
 
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   B step 30
   list [B step 10000] [B finish]
 } {SQLITE_DONE SQLITE_OK}
@@ -1309,13 +1309,13 @@ do_test pager1-9.3.3 {
 
 do_test pager1-9.4.1 {
   faultsim_delete_and_reopen
-  sqlite3 db2 test.db2
+  sqlite4 db2 test.db2
   execsql {
     PRAGMA page_size = 4096;
     CREATE TABLE t1(a, b);
     CREATE TABLE t2(a, b);
   } db2
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   list [B step 10000] [B finish]
 } {SQLITE_DONE SQLITE_OK}
 do_test pager1-9.4.2 {
@@ -1366,7 +1366,7 @@ foreach sectorsize {
 
   do_test pager1-10.$sectorsize.3 {
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { 
       PRAGMA cache_size = 10;
       BEGIN;
@@ -1461,7 +1461,7 @@ do_catchsql_test pager1-11.2 { COMMIT } {1 {disk I/O error}}
 
 tv script {}
 do_test pager1-11.3 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA journal_mode = TRUNCATE;
     PRAGMA integrity_check;
@@ -1494,7 +1494,7 @@ foreach pagesize {
   if {$eff > $::SQLITE_MAX_PAGE_SIZE} { set eff 1024 }
 
   do_test pager1-12.$pagesize.1 {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql "
       PRAGMA page_size = $pagesize;
       CREATE VIEW v AS SELECT * FROM sqlite_master;
@@ -1502,7 +1502,7 @@ foreach pagesize {
     file size test.db
   } $eff
   do_test pager1-12.$pagesize.2 {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql { 
       SELECT count(*) FROM v;
       PRAGMA main.page_size;
@@ -1587,7 +1587,7 @@ for {set nUp 1} {$nUp<64} {incr nUp} {
 
   # Try to access the snapshot of the file-system.
   #
-  sqlite3 db2 sv_test.db
+  sqlite4 db2 sv_test.db
   do_test pager1-13.1.2.$nUp.3 {
     execsql { SELECT sum(length(b)) FROM t1 } db2
   } [expr {128*400 - ($nUp-1)}]
@@ -1610,7 +1610,7 @@ for {set nUp 1} {$nUp<64} {incr nUp} {
     UPDATE t1 SET b = a_string(399) WHERE a <= $nUp
   } {}
   do_execsql_test pager1-13.2.2.$nUp.2 { PRAGMA integrity_check } {ok} 
-  sqlite3 db2 sv_test.db
+  sqlite4 db2 sv_test.db
   do_test pager1-13.2.2.$nUp.3 {
     execsql { SELECT sum(length(b)) FROM t1 } db2
   } [expr {128*400 - ($nUp-1)}]
@@ -1656,7 +1656,7 @@ do_execsql_test pager1-14.1.5 {
 
 #-------------------------------------------------------------------------
 # Test opening and closing the pager sub-system with different values
-# for the sqlite3_vfs.szOsFile variable.
+# for the sqlite4_vfs.szOsFile variable.
 #
 faultsim_delete_and_reopen
 do_execsql_test pager1-15.0 {
@@ -1667,7 +1667,7 @@ do_execsql_test pager1-15.0 {
 db close
 for {set i 0} {$i<513} {incr i 3} {
   testvfs tv -default 1 -szosfile $i
-  sqlite3 db test.db
+  sqlite4 db test.db
   do_execsql_test pager1-15.$i.1 {
     SELECT * FROM tx;
   } {Ayutthaya Beijing London Tokyo}
@@ -1677,7 +1677,7 @@ for {set i 0} {$i<513} {incr i 3} {
 
 #-------------------------------------------------------------------------
 # Check that it is not possible to open a database file if the full path
-# to the associated journal file will be longer than sqlite3_vfs.mxPathname.
+# to the associated journal file will be longer than sqlite4_vfs.mxPathname.
 #
 testvfs tv -default 1
 tv script xOpenCb
@@ -1685,7 +1685,7 @@ tv filter xOpen
 proc xOpenCb {method filename args} {
   set ::file_len [string length $filename]
 }
-sqlite3 db test.db
+sqlite4 db test.db
 db close
 tv delete
 
@@ -1693,7 +1693,7 @@ for {set ii [expr $::file_len-5]} {$ii < [expr $::file_len+20]} {incr ii} {
   testvfs tv -default 1 -mxpathname $ii
 
   # The length of the full path to file "test.db-journal" is ($::file_len+8).
-  # If the configured sqlite3_vfs.mxPathname value greater than or equal to
+  # If the configured sqlite4_vfs.mxPathname value greater than or equal to
   # this, then the file can be opened. Otherwise, it cannot.
   #
   if {$ii >= [expr $::file_len+8]} {
@@ -1703,7 +1703,7 @@ for {set ii [expr $::file_len-5]} {$ii < [expr $::file_len+20]} {incr ii} {
   }
 
   do_test pager1-16.1.$ii {
-    list [catch { sqlite3 db test.db } msg] $msg
+    list [catch { sqlite4 db test.db } msg] $msg
   } $res
 
   catch {db close}
@@ -1746,7 +1746,7 @@ do_test pager1-18.2 {
     PRAGMA writable_schema = 1;
     UPDATE sqlite_master SET rootpage = $lockingpage;
   }
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   catchsql { SELECT count(*) FROM t1 } db2
 } {1 {database disk image is malformed}}
 db2 close
@@ -1757,18 +1757,18 @@ do_test pager1-18.3 {
   }
   set pgno [expr ([file size test.db] / 1024)-2]
   hexio_write test.db [expr ($pgno-1)*1024] 00000000
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   catchsql { SELECT length(x) FROM t2 } db2
 } {1 {database disk image is malformed}}
 db2 close
 do_test pager1-18.4 {
   hexio_write test.db [expr ($pgno-1)*1024] 90000000
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   catchsql { SELECT length(x) FROM t2 } db2
 } {1 {database disk image is malformed}}
 db2 close
 do_test pager1-18.5 {
-  sqlite3 db ""
+  sqlite4 db ""
   execsql {
     CREATE TABLE t1(a, b);
     CREATE TABLE t2(a, b);
@@ -1795,13 +1795,13 @@ do_test pager1-18.6 {
   db close
 
   hexio_write test.db [expr ($root-1)*1024 + 8] 00000000
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql { SELECT length(x) FROM t1 }
 } {1 {database disk image is malformed}}
 }
 
 do_test pager1-19.1 {
-  sqlite3 db ""
+  sqlite4 db ""
   db func a_string a_string
   execsql {
     PRAGMA page_size = 512;
@@ -1855,7 +1855,7 @@ do_test pager1-19.1 {
 #
 do_test pager1-20.1.1 {
   catch {db close}
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   execsql {
     CREATE TABLE one(two, three);
     INSERT INTO one VALUES('a', 'b');
@@ -1930,14 +1930,14 @@ ifcapable wal {
   } {wal}
   do_test pager1-21.1 {
     testvfs tv -noshm 1
-    sqlite3 db2 test.db -vfs tv
+    sqlite4 db2 test.db -vfs tv
     catchsql { SELECT * FROM ko } db2
   } {1 {unable to open database file}}
   db2 close
   tv delete
   do_test pager1-21.2 {
     testvfs tv -iversion 1
-    sqlite3 db2 test.db -vfs tv
+    sqlite4 db2 test.db -vfs tv
     catchsql { SELECT * FROM ko } db2
   } {1 {unable to open database file}}
   db2 close
@@ -1965,7 +1965,7 @@ ifcapable wal {
     tv script xSyncCb
     proc xSyncCb {args} {incr ::synccount}
     set ::synccount 0
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       PRAGMA synchronous = off;
       PRAGMA journal_mode = WAL;
@@ -2060,7 +2060,7 @@ do_test pager1-23.4.3 {
 
 do_test pager1-23.5.1 {
   faultsim_delete_and_reopen
-  sqlite3 db :memory:
+  sqlite4 db :memory:
 } {}
 foreach {tn mode possible} {
   2  off      1
@@ -2210,12 +2210,12 @@ tv delete
 #
 do_test pager1.27.1 {
   faultsim_delete_and_reopen
-  sqlite3_pager_refcounts db
+  sqlite4_pager_refcounts db
   execsql {
     BEGIN;
       CREATE TABLE t1(a, b);
   }
-  sqlite3_pager_refcounts db
+  sqlite4_pager_refcounts db
   execsql COMMIT
 } {}
 
@@ -2240,7 +2240,7 @@ ifcapable wal {
     do_test pager1-28.$tn.4 { 
       csql1 { BEGIN; INSERT INTO t1 VALUES('c', 'd'); }
     } {1 {database is locked}}
-    code2 { db2 close ; sqlite3 db2 test.db }
+    code2 { db2 close ; sqlite4 db2 test.db }
     do_test pager1-28.$tn.4 { 
       sql1 { INSERT INTO t1 VALUES('c', 'd'); COMMIT }
     } {}
@@ -2335,7 +2335,7 @@ do_test pager1-30.1 {
   puts -nonewline $fd x
   close $fd
 
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA locking_mode=EXCLUSIVE;
     SELECT count(*) FROM sqlite_master;
@@ -2373,7 +2373,7 @@ do_test pager1-31.1 {
   copy_file test.db-journal test.db2-journal
   
   hexio_write test.db2-journal 24 00000000
-  sqlite3 db2 test.db2
+  sqlite4 db2 test.db2
   execsql { PRAGMA integrity_check } db2
 } {ok}
 }
@@ -2387,12 +2387,12 @@ catch {db close}
 forcedelete test.db
 
 do_test pager1-32.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     CREATE TABLE t1(x, y);
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     BEGIN;
     INSERT INTO t1 VALUES(1, randomblob(10000));

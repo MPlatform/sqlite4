@@ -17,16 +17,16 @@
 # After the "tsrc" directory has been created and populated, run
 # this script:
 #
-#      tclsh mksqlite3c.tcl
+#      tclsh mksqlite4c.tcl
 #
-# The amalgamated SQLite code will be written into sqlite3.c
+# The amalgamated SQLite code will be written into sqlite4.c
 #
 
-# Begin by reading the "sqlite3.h" header file.  Count the number of lines
+# Begin by reading the "sqlite4.h" header file.  Count the number of lines
 # in this file and extract the version number.  That information will be
 # needed in order to generate the header of the amalgamation.
 #
-set in [open tsrc/sqlite3.h]
+set in [open tsrc/sqlite4.h]
 set cnt 0
 set VERSION ?????
 while {![eof $in]} {
@@ -40,7 +40,7 @@ close $in
 # Open the output file and write a header comment at the beginning
 # of the file.
 #
-set out [open sqlite3internal.h w]
+set out [open sqlite4internal.h w]
 set today [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S UTC" -gmt 1]
 puts $out [subst \
 {/******************************************************************************
@@ -64,8 +64,8 @@ foreach hdr {
    os_os2.h
    pager.h
    parse.h
-   sqlite3ext.h
-   sqlite3.h
+   sqlite4ext.h
+   sqlite4.h
    sqliteInt.h
    sqliteLimit.h
    vdbe.h
@@ -89,7 +89,7 @@ proc section_comment {text} {
 }
 
 # Read the source file named $filename and write it into the
-# sqlite3.c output file.  If any #include statements are seen,
+# sqlite4.c output file.  If any #include statements are seen,
 # process them approprately.
 #
 proc copy_file {filename} {
@@ -129,13 +129,13 @@ proc copy_file {filename} {
 #
 foreach file {
    sqliteInt.h
-   sqlite3.h
+   sqlite4.h
    btree.h
    hash.h
    os.h
    pager.h
    parse.h
-   sqlite3ext.h
+   sqlite4ext.h
    vdbe.h
 } {
   if {$available_hdr($file)} {

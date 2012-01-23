@@ -16,29 +16,29 @@
 .\" .sp <n>    insert n+1 empty lines
 .\" for manpage-specific macros, see man(7)
 .SH NAME
-.B sqlite3 
+.B sqlite4 
 \- A command line interface for SQLite version 3
 
 .SH SYNOPSIS
-.B sqlite3
+.B sqlite4
 .RI [ options ]
 .RI [ databasefile ]
 .RI [ SQL ]
 
 .SH SUMMARY
 .PP
-.B sqlite3
+.B sqlite4
 is a terminal-based front-end to the SQLite library that can evaluate
 queries interactively and display the results in multiple formats.
-.B sqlite3
+.B sqlite4
 can also be used within shell scripts and other applications to provide
 batch processing features.
 
 .SH DESCRIPTION
 To start a
-.B sqlite3
+.B sqlite4
 interactive session, invoke the
-.B sqlite3
+.B sqlite4
 command and optionally provide the name of a database file.  If the
 database file does not exist, it will be created.  If the database file
 does exist, it will be opened.
@@ -47,7 +47,7 @@ For example, to create a new database file named "mydata.db", create
 a table named "memos" and insert a couple of records into that table:
 .sp
 $ 
-.B sqlite3 mydata.db
+.B sqlite4 mydata.db
 .br
 SQLite version 3.1.3
 .br
@@ -85,7 +85,7 @@ semi-colons.
 For example:
 .sp
 $ 
-.B sqlite3 -line mydata.db 'select * from memos where priority > 20;'
+.B sqlite4 -line mydata.db 'select * from memos where priority > 20;'
 .br
     text = lunch with Christine
 .br
@@ -144,7 +144,7 @@ sqlite>
 .fi
 
 .SH OPTIONS
-.B sqlite3
+.B sqlite4
 has the following options:
 .TP
 .BI \-init\ file
@@ -190,7 +190,7 @@ Show help on options and exit.
 
 
 .SH INIT FILE
-.B sqlite3
+.B sqlite4
 reads an initialization file to set the configuration of the
 interactive environment.  Throughout initialization, any previously
 specified setting can be overridden.  The sequence of initialization is

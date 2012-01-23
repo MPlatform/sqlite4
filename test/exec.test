@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.
 #
-# This file implements tests for the sqlite3_exec interface
+# This file implements tests for the sqlite4_exec interface
 #
 # $Id: exec.test,v 1.1 2008/01/21 16:22:46 drh Exp $
 
@@ -25,13 +25,13 @@ do_test exec-1.1 {
   }
 } {1 2}
 do_test exec-1.2 {
-  sqlite3_exec db {/* comment */;;; SELECT * FROM t1; /* comment */}
+  sqlite4_exec db {/* comment */;;; SELECT * FROM t1; /* comment */}
 } {0 {a b 1 2}}
 do_test exec-1.3 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   db2 eval {CREATE TABLE t2(x, y);}
   db2 close
-  sqlite3_exec db {SELECT * FROM t1}
+  sqlite4_exec db {SELECT * FROM t1}
 } {0 {a b 1 2}}
 
 finish_test

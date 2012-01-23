@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.
 #
-# This file implements tests for the "sqlite3_trace()" API.
+# This file implements tests for the "sqlite4_trace()" API.
 #
 # $Id: trace.test,v 1.8 2009/04/07 14:14:23 danielk1977 Exp $
 
@@ -53,25 +53,25 @@ do_test trace-1.5 {
 # happens on each execution.
 #
 db close
-sqlite3 db test.db; set DB [sqlite3_connection_pointer db]
+sqlite4 db test.db; set DB [sqlite4_connection_pointer db]
 do_test trace-2.1 {
-  set STMT [sqlite3_prepare $DB {INSERT INTO t1 VALUES(2,3)} -1 TAIL]
+  set STMT [sqlite4_prepare $DB {INSERT INTO t1 VALUES(2,3)} -1 TAIL]
   db trace trace_proc
   proc trace_proc sql {
     global TRACE_OUT
     lappend TRACE_OUT [string trim $sql]
   }
   set TRACE_OUT {}
-  sqlite3_step $STMT
+  sqlite4_step $STMT
   set TRACE_OUT
 } {{INSERT INTO t1 VALUES(2,3)}}
 do_test trace-2.2 {
   set TRACE_OUT {}
-  sqlite3_reset $STMT
+  sqlite4_reset $STMT
   set TRACE_OUT 
 } {}
 do_test trace-2.3 {
-  sqlite3_step $STMT
+  sqlite4_step $STMT
   set TRACE_OUT
 } {{INSERT INTO t1 VALUES(2,3)}}
 do_test trace-2.4 {
@@ -81,7 +81,7 @@ do_test trace-2.4 {
 do_test trace-2.5 {
   set TRACE_OUT
 } {{SELECT * FROM t1}}
-catch {sqlite3_finalize $STMT}
+catch {sqlite4_finalize $STMT}
 
 do_test trace-2.6 {
   set TRACE_OUT {}
@@ -123,25 +123,25 @@ do_test trace-3.5 {
 # happens on each execution.
 #
 db close
-sqlite3 db test.db; set DB [sqlite3_connection_pointer db]
+sqlite4 db test.db; set DB [sqlite4_connection_pointer db]
 do_test trace-4.1 {
-  set STMT [sqlite3_prepare $DB {INSERT INTO t2 VALUES(2,3)} -1 TAIL]
+  set STMT [sqlite4_prepare $DB {INSERT INTO t2 VALUES(2,3)} -1 TAIL]
   db trace trace_proc
   proc profile_proc {sql tm} {
     global TRACE_OUT
     lappend TRACE_OUT [string trim $sql]
   }
   set TRACE_OUT {}
-  sqlite3_step $STMT
+  sqlite4_step $STMT
   set TRACE_OUT
 } {{INSERT INTO t2 VALUES(2,3)}}
 do_test trace-4.2 {
   set TRACE_OUT {}
-  sqlite3_reset $STMT
+  sqlite4_reset $STMT
   set TRACE_OUT 
 } {}
 do_test trace-4.3 {
-  sqlite3_step $STMT
+  sqlite4_step $STMT
   set TRACE_OUT
 } {{INSERT INTO t2 VALUES(2,3)}}
 do_test trace-4.4 {
@@ -151,7 +151,7 @@ do_test trace-4.4 {
 do_test trace-4.5 {
   set TRACE_OUT
 } {{SELECT * FROM t1}}
-catch {sqlite3_finalize $STMT}
+catch {sqlite4_finalize $STMT}
 
 # Trigger tracing.
 #
@@ -211,7 +211,7 @@ do_test trace-6.6 {
 #
 do_test trace-6.100 {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db eval {
      PRAGMA encoding=UTF16be;
      CREATE TABLE t6([$::t6str],"?1");
@@ -227,7 +227,7 @@ do_test trace-6.101 {
 
 do_test trace-6.200 {
   db close
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db eval {
      PRAGMA encoding=UTF16le;
      CREATE TABLE t6([$::t6str],"?1");

@@ -24,14 +24,14 @@ source $testdir/tester.tcl
 # very frequently.
 #
 db close
-sqlite3_shutdown
-sqlite3_config_alt_pcache 1 100 0 1
+sqlite4_shutdown
+sqlite4_config_alt_pcache 1 100 0 1
 
 # Open two database connections to database "test.db".
 #
 proc reopen_database {} {
   catch {db close}
-  sqlite3 db test.db
+  sqlite4 db test.db
   db cache size 0
   execsql {
     pragma page_size=512;
@@ -84,9 +84,9 @@ do_test tkt2565-1.X {
 
 # Restore the pcache configuration for subsequent tests.
 #
-sqlite3_shutdown
-sqlite3_config_alt_pcache 0
-sqlite3_initialize
+sqlite4_shutdown
+sqlite4_config_alt_pcache 0
+sqlite4_initialize
 autoinstall_test_functions
 
 finish_test

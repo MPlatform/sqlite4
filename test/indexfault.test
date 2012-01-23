@@ -89,21 +89,21 @@ do_faultsim_test 1.1 -prep {
   faultsim_integrity_check
 }
 ifcapable memorymanage {
-  set soft_limit [sqlite3_soft_heap_limit 50000]
+  set soft_limit [sqlite4_soft_heap_limit 50000]
   do_faultsim_test 2.1 -prep {
     faultsim_restore_and_reopen
   } -body {
     execsql { CREATE INDEX i1 ON t1(x) }
     faultsim_test_result {0 {}} 
   }
-  sqlite3_soft_heap_limit $soft_limit
+  sqlite4_soft_heap_limit $soft_limit
 }
 
 #-------------------------------------------------------------------------
 # These are similar to the indexfault-1.* tests, except they create an
 # index with more than one column.
 #
-sqlite3 db test.db
+sqlite4 db test.db
 do_execsql_test 2.0 {
   BEGIN;
     DROP TABLE IF EXISTS t1;
@@ -145,14 +145,14 @@ do_faultsim_test 2.1 -prep {
   faultsim_integrity_check
 }
 ifcapable memorymanage {
-  set soft_limit [sqlite3_soft_heap_limit 50000]
+  set soft_limit [sqlite4_soft_heap_limit 50000]
   do_faultsim_test 2.2 -prep {
     faultsim_restore_and_reopen
   } -body {
     execsql { CREATE INDEX i1 ON t1(t,u,v,w,x,y,z) }
     faultsim_test_result {0 {}} 
   }
-  sqlite3_soft_heap_limit $soft_limit
+  sqlite4_soft_heap_limit $soft_limit
 }
 
 #-------------------------------------------------------------------------
@@ -168,7 +168,7 @@ ifcapable memorymanage {
 #   3.4: As 7.3, but with a low (50KB) soft-heap-limit.
 #
 #   3.5: After a certain amount of data has been read from the main database
-#        file (and written into the temporary b-tree), sqlite3_release_memory()
+#        file (and written into the temporary b-tree), sqlite4_release_memory()
 #        is called to free as much memory as possible. This causes the temp
 #        b-tree to be flushed to disk. So that before its contents can be 
 #        transfered to a PMA they must be read back from disk - creating extra
@@ -179,7 +179,7 @@ install_custom_faultsim
 # Set up a table to build indexes on. Save the setup using the 
 # [faultsim_save_and_close] mechanism.
 # 
-sqlite3 db test.db
+sqlite4 db test.db
 do_execsql_test 3.0 {
   BEGIN;
     DROP TABLE IF EXISTS t1;
@@ -214,14 +214,14 @@ do_faultsim_test 3.1 -faults custom -prep {
   faultsim_test_result {0 {}} 
 }
 ifcapable memorymanage {
-  set soft_limit [sqlite3_soft_heap_limit 50000]
+  set soft_limit [sqlite4_soft_heap_limit 50000]
   do_faultsim_test 3.2 -faults custom -prep {
     faultsim_restore_and_reopen
   } -body {
     execsql { CREATE INDEX i1 ON t1(x) }
     faultsim_test_result {0 {}} 
   }
-  sqlite3_soft_heap_limit $soft_limit
+  sqlite4_soft_heap_limit $soft_limit
 }
 
 set ::custom_filter {xOpen xWrite}
@@ -252,7 +252,7 @@ do_faultsim_test 3.3 -faults custom -prep {
 }
 
 ifcapable memorymanage {
-  set soft_limit [sqlite3_soft_heap_limit 50000]
+  set soft_limit [sqlite4_soft_heap_limit 50000]
   do_faultsim_test 3.4 -faults custom -prep {
     faultsim_restore_and_reopen
     set ::nTmpOpen 0
@@ -260,14 +260,14 @@ ifcapable memorymanage {
     execsql { CREATE INDEX i1 ON t1(x) }
     faultsim_test_result {0 {}} 
   }
-  sqlite3_soft_heap_limit $soft_limit
+  sqlite4_soft_heap_limit $soft_limit
 }
 
 uninstall_custom_faultsim
 
 #-------------------------------------------------------------------------
 # Test 4: After a certain amount of data has been read from the main database
-# file (and written into the temporary b-tree), sqlite3_release_memory() is
+# file (and written into the temporary b-tree), sqlite4_release_memory() is
 # called to free as much memory as possible. This causes the temp b-tree to be
 # flushed to disk. So that before its contents can be transfered to a PMA they
 # must be read back from disk - creating extra opportunities for IO errors.
@@ -276,7 +276,7 @@ install_custom_faultsim
 
 catch { db close }
 forcedelete test.db
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_execsql_test 4.0 {
   BEGIN;
@@ -302,7 +302,7 @@ proc xRead {method file args} {
 }
 
 do_test 4.1 {
-  sqlite3 db test.db -vfs tvfs
+  sqlite4 db test.db -vfs tvfs
   execsql { CREATE INDEX i1 ON t1(x) }
 } {}
 
@@ -314,8 +314,8 @@ proc xCustom {method file args} {
   incr ::nReadCall
   if {$::nReadCall >= ($::nRead/5)} {
     if {$::nReadCall == ($::nRead/5)} {
-      set nByte [sqlite3_release_memory [expr 64*1024*1024]]
-      sqlite3_soft_heap_limit 20000
+      set nByte [sqlite4_release_memory [expr 64*1024*1024]]
+      sqlite4_soft_heap_limit 20000
     }
     if {$file == ""} {
       incr ::custom_ifail -1
@@ -331,7 +331,7 @@ proc xCustom {method file args} {
 do_faultsim_test 4.2 -faults custom -prep {
   faultsim_restore_and_reopen
   set ::nReadCall 0
-  sqlite3_soft_heap_limit 0
+  sqlite4_soft_heap_limit 0
 } -body {
   execsql { CREATE INDEX i1 ON t1(x) }
   faultsim_test_result {0 {}} 

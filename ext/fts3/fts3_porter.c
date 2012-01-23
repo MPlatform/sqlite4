@@ -33,17 +33,17 @@
 #include "fts3_tokenizer.h"
 
 /*
-** Class derived from sqlite3_tokenizer
+** Class derived from sqlite4_tokenizer
 */
 typedef struct porter_tokenizer {
-  sqlite3_tokenizer base;      /* Base class */
+  sqlite4_tokenizer base;      /* Base class */
 } porter_tokenizer;
 
 /*
-** Class derived from sqlite3_tokenizer_cursor
+** Class derived from sqlite4_tokenizer_cursor
 */
 typedef struct porter_tokenizer_cursor {
-  sqlite3_tokenizer_cursor base;
+  sqlite4_tokenizer_cursor base;
   const char *zInput;          /* input we are tokenizing */
   int nInput;                  /* size of the input */
   int iOffset;                 /* current position in zInput */
@@ -58,14 +58,14 @@ typedef struct porter_tokenizer_cursor {
 */
 static int porterCreate(
   int argc, const char * const *argv,
-  sqlite3_tokenizer **ppTokenizer
+  sqlite4_tokenizer **ppTokenizer
 ){
   porter_tokenizer *t;
 
   UNUSED_PARAMETER(argc);
   UNUSED_PARAMETER(argv);
 
-  t = (porter_tokenizer *) sqlite3_malloc(sizeof(*t));
+  t = (porter_tokenizer *) sqlite4_malloc(sizeof(*t));
   if( t==NULL ) return SQLITE_NOMEM;
   memset(t, 0, sizeof(*t));
   *ppTokenizer = &t->base;
@@ -75,8 +75,8 @@ static int porterCreate(
 /*
 ** Destroy a tokenizer
 */
-static int porterDestroy(sqlite3_tokenizer *pTokenizer){
-  sqlite3_free(pTokenizer);
+static int porterDestroy(sqlite4_tokenizer *pTokenizer){
+  sqlite4_free(pTokenizer);
   return SQLITE_OK;
 }
 
@@ -87,15 +87,15 @@ static int porterDestroy(sqlite3_tokenizer *pTokenizer){
 ** *ppCursor.
 */
 static int porterOpen(
-  sqlite3_tokenizer *pTokenizer,         /* The tokenizer */
+  sqlite4_tokenizer *pTokenizer,         /* The tokenizer */
   const char *zInput, int nInput,        /* String to be tokenized */
-  sqlite3_tokenizer_cursor **ppCursor    /* OUT: Tokenization cursor */
+  sqlite4_tokenizer_cursor **ppCursor    /* OUT: Tokenization cursor */
 ){
   porter_tokenizer_cursor *c;
 
   UNUSED_PARAMETER(pTokenizer);
 
-  c = (porter_tokenizer_cursor *) sqlite3_malloc(sizeof(*c));
+  c = (porter_tokenizer_cursor *) sqlite4_malloc(sizeof(*c));
   if( c==NULL ) return SQLITE_NOMEM;
 
   c->zInput = zInput;
@@ -119,10 +119,10 @@ static int porterOpen(
 ** Close a tokenization cursor previously opened by a call to
 ** porterOpen() above.
 */
-static int porterClose(sqlite3_tokenizer_cursor *pCursor){
+static int porterClose(sqlite4_tokenizer_cursor *pCursor){
   porter_tokenizer_cursor *c = (porter_tokenizer_cursor *) pCursor;
-  sqlite3_free(c->zToken);
-  sqlite3_free(c);
+  sqlite4_free(c->zToken);
+  sqlite4_free(c);
   return SQLITE_OK;
 }
 /*
@@ -576,7 +576,7 @@ static const char porterIdChar[] = {
 ** have been opened by a prior call to porterOpen().
 */
 static int porterNext(
-  sqlite3_tokenizer_cursor *pCursor,  /* Cursor returned by porterOpen */
+  sqlite4_tokenizer_cursor *pCursor,  /* Cursor returned by porterOpen */
   const char **pzToken,               /* OUT: *pzToken is the token text */
   int *pnBytes,                       /* OUT: Number of bytes in token */
   int *piStartOffset,                 /* OUT: Starting offset of token */
@@ -605,7 +605,7 @@ static int porterNext(
       if( n>c->nAllocated ){
         char *pNew;
         c->nAllocated = n+20;
-        pNew = sqlite3_realloc(c->zToken, c->nAllocated);
+        pNew = sqlite4_realloc(c->zToken, c->nAllocated);
         if( !pNew ) return SQLITE_NOMEM;
         c->zToken = pNew;
       }
@@ -623,7 +623,7 @@ static int porterNext(
 /*
 ** The set of routines that implement the porter-stemmer tokenizer
 */
-static const sqlite3_tokenizer_module porterTokenizerModule = {
+static const sqlite4_tokenizer_module porterTokenizerModule = {
   0,
   porterCreate,
   porterDestroy,
@@ -636,8 +636,8 @@ static const sqlite3_tokenizer_module porterTokenizerModule = {
 ** Allocate a new porter tokenizer.  Return a pointer to the new
 ** tokenizer in *ppModule
 */
-void sqlite3Fts3PorterTokenizerModule(
-  sqlite3_tokenizer_module const**ppModule
+void sqlite4Fts3PorterTokenizerModule(
+  sqlite4_tokenizer_module const**ppModule
 ){
   *ppModule = &porterTokenizerModule;
 }

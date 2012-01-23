@@ -82,26 +82,26 @@
 # very large database files.
 #
 set tcl_precision 15
-sqlite3_test_control_pending_byte 0x0010000
+sqlite4_test_control_pending_byte 0x0010000
 
 
-# If the pager codec is available, create a wrapper for the [sqlite3] 
+# If the pager codec is available, create a wrapper for the [sqlite4] 
 # command that appends "-key {xyzzy}" to the command line. i.e. this:
 #
-#     sqlite3 db test.db
+#     sqlite4 db test.db
 #
 # becomes
 #
-#     sqlite3 db test.db -key {xyzzy}
+#     sqlite4 db test.db -key {xyzzy}
 #
 if {[info command sqlite_orig]==""} {
-  rename sqlite3 sqlite_orig
-  proc sqlite3 {args} {
+  rename sqlite4 sqlite_orig
+  proc sqlite4 {args} {
     if {[llength $args]>=2 && [string index [lindex $args 0] 0]!="-"} {
       # This command is opening a new database connection.
       #
-      if {[info exists ::G(perm:sqlite3_args)]} {
-        set args [concat $args $::G(perm:sqlite3_args)]
+      if {[info exists ::G(perm:sqlite4_args)]} {
+        set args [concat $args $::G(perm:sqlite4_args)]
       }
       if {[sqlite_orig -has-codec] && ![info exists ::do_not_use_codec]} {
         lappend args -key {xyzzy}
@@ -306,12 +306,12 @@ if {[info exists cmdlinearg]==0} {
       {^-+malloctrace=.+$} {
         foreach {dummy cmdlinearg(malloctrace)} [split $a =] break
         if {$cmdlinearg(malloctrace)} {
-          sqlite3_memdebug_log start
+          sqlite4_memdebug_log start
         }
       }
       {^-+backtrace=.+$} {
         foreach {dummy cmdlinearg(backtrace)} [split $a =] break
-        sqlite3_memdebug_backtrace $value
+        sqlite4_memdebug_backtrace $value
       }
       {^-+binarylog=.+$} {
         foreach {dummy cmdlinearg(binarylog)} [split $a =] break
@@ -354,9 +354,9 @@ if {[info exists cmdlinearg]==0} {
   # Install the malloc layer used to inject OOM errors. And the 'automatic'
   # extensions. This only needs to be done once for the process.
   #
-  sqlite3_shutdown 
+  sqlite4_shutdown 
   install_malloc_faultsim 1 
-  sqlite3_initialize
+  sqlite4_initialize
   autoinstall_test_functions
 
   # If the --binarylog option was specified, create the logging VFS. This
@@ -369,7 +369,7 @@ if {[info exists cmdlinearg]==0} {
   # Set the backtrace depth, if malloc tracing is enabled.
   #
   if {$cmdlinearg(malloctrace)} {
-    sqlite3_memdebug_backtrace $cmdlinearg(backtrace)
+    sqlite4_memdebug_backtrace $cmdlinearg(backtrace)
   }
 }
 
@@ -377,7 +377,7 @@ if {[info exists cmdlinearg]==0} {
 # way if an individual test file changes the soft-heap-limit, it
 # will be reset at the start of the next test file.
 #
-sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 
 # Create a test database
 #
@@ -386,8 +386,8 @@ proc reset_db {} {
   forcedelete test.db
   forcedelete test.db-journal
   forcedelete test.db-wal
-  sqlite3 db ./test.db
-  set ::DB [sqlite3_connection_pointer db]
+  sqlite4 db ./test.db
+  set ::DB [sqlite4_connection_pointer db]
   if {[info exists ::SETUP_SQL]} {
     db eval $::SETUP_SQL
   }
@@ -400,7 +400,7 @@ if {[info exists TC(count)]} return
 
 # Make sure memory statistics are enabled.
 #
-sqlite3_config_memstatus 1
+sqlite4_config_memstatus 1
 
 # Initialize the test counters and set up commands to access them.
 # Or, if this is a slave interpreter, set up aliases to write the
@@ -460,7 +460,7 @@ proc do_test {name cmd expected} {
 
   fix_testname name
 
-  sqlite3_memdebug_settitle $name
+  sqlite4_memdebug_settitle $name
 
 #  if {[llength $argv]==0} { 
 #    set go 1
@@ -624,7 +624,7 @@ proc delete_all_data {} {
 proc speed_trial {name numstmt units sql} {
   puts -nonewline [format {%-21.21s } $name...]
   flush stdout
-  set speed [time {sqlite3_exec_nr db $sql}]
+  set speed [time {sqlite4_exec_nr db $sql}]
   set tm [lindex $speed 0]
   if {$tm == 0} {
     set rate [format %20s "many"]
@@ -657,7 +657,7 @@ proc speed_trial_init {name} {
   global total_time
   set total_time 0
   set ::speed_trial_times [list]
-  sqlite3 versdb :memory:
+  sqlite4 versdb :memory:
   set vers [versdb one {SELECT sqlite_source_id()}]
   versdb close
   puts "SQLite $vers"
@@ -667,7 +667,7 @@ proc speed_trial_summary {name} {
   puts [format {%-21.21s %12d uS TOTAL} $name $total_time]
 
   if { 0 } {
-    sqlite3 versdb :memory:
+    sqlite4 versdb :memory:
     set vers [lindex [versdb one {SELECT sqlite_source_id()}] 0]
     versdb close
     puts "CREATE TABLE IF NOT EXISTS time(version, script, test, us);"
@@ -695,12 +695,12 @@ proc finalize_testing {} {
   catch {db3 close}
 
   vfs_unlink_test
-  sqlite3 db {}
-  # sqlite3_clear_tsd_memdebug
+  sqlite4 db {}
+  # sqlite4_clear_tsd_memdebug
   db close
-  sqlite3_reset_auto_extension
+  sqlite4_reset_auto_extension
 
-  sqlite3_soft_heap_limit 0
+  sqlite4_soft_heap_limit 0
   set nTest [incr_ntest]
   set nErr [set_test_counter errors]
 
@@ -733,36 +733,36 @@ proc finalize_testing {} {
     puts "$sqlite_open_file_count files were left open"
     incr nErr
   }
-  if {[lindex [sqlite3_status SQLITE_STATUS_MALLOC_COUNT 0] 1]>0 ||
-              [sqlite3_memory_used]>0} {
-    puts "Unfreed memory: [sqlite3_memory_used] bytes in\
-         [lindex [sqlite3_status SQLITE_STATUS_MALLOC_COUNT 0] 1] allocations"
+  if {[lindex [sqlite4_status SQLITE_STATUS_MALLOC_COUNT 0] 1]>0 ||
+              [sqlite4_memory_used]>0} {
+    puts "Unfreed memory: [sqlite4_memory_used] bytes in\
+         [lindex [sqlite4_status SQLITE_STATUS_MALLOC_COUNT 0] 1] allocations"
     incr nErr
     ifcapable memdebug||mem5||(mem3&&debug) {
       puts "Writing unfreed memory log to \"./memleak.txt\""
-      sqlite3_memdebug_dump ./memleak.txt
+      sqlite4_memdebug_dump ./memleak.txt
     }
   } else {
     puts "All memory allocations freed - no leaks"
     ifcapable memdebug||mem5 {
-      sqlite3_memdebug_dump ./memusage.txt
+      sqlite4_memdebug_dump ./memusage.txt
     }
   }
   show_memstats
-  puts "Maximum memory usage: [sqlite3_memory_highwater 1] bytes"
-  puts "Current memory usage: [sqlite3_memory_highwater] bytes"
-  if {[info commands sqlite3_memdebug_malloc_count] ne ""} {
-    puts "Number of malloc()  : [sqlite3_memdebug_malloc_count] calls"
+  puts "Maximum memory usage: [sqlite4_memory_highwater 1] bytes"
+  puts "Current memory usage: [sqlite4_memory_highwater] bytes"
+  if {[info commands sqlite4_memdebug_malloc_count] ne ""} {
+    puts "Number of malloc()  : [sqlite4_memdebug_malloc_count] calls"
   }
   if {$::cmdlinearg(malloctrace)} {
     puts "Writing mallocs.sql..."
     memdebug_log_sql
-    sqlite3_memdebug_log stop
-    sqlite3_memdebug_log clear
+    sqlite4_memdebug_log stop
+    sqlite4_memdebug_log clear
 
-    if {[sqlite3_memory_used]>0} {
+    if {[sqlite4_memory_used]>0} {
       puts "Writing leaks.sql..."
-      sqlite3_memdebug_log sync
+      sqlite4_memdebug_log sync
       memdebug_log_sql leaks.sql
     }
   }
@@ -778,32 +778,32 @@ proc finalize_testing {} {
 # Display memory statistics for analysis and debugging purposes.
 #
 proc show_memstats {} {
-  set x [sqlite3_status SQLITE_STATUS_MEMORY_USED 0]
-  set y [sqlite3_status SQLITE_STATUS_MALLOC_SIZE 0]
+  set x [sqlite4_status SQLITE_STATUS_MEMORY_USED 0]
+  set y [sqlite4_status SQLITE_STATUS_MALLOC_SIZE 0]
   set val [format {now %10d  max %10d  max-size %10d} \
               [lindex $x 1] [lindex $x 2] [lindex $y 2]]
   puts "Memory used:          $val"
-  set x [sqlite3_status SQLITE_STATUS_MALLOC_COUNT 0]
+  set x [sqlite4_status SQLITE_STATUS_MALLOC_COUNT 0]
   set val [format {now %10d  max %10d} [lindex $x 1] [lindex $x 2]]
   puts "Allocation count:     $val"
-  set x [sqlite3_status SQLITE_STATUS_PAGECACHE_USED 0]
-  set y [sqlite3_status SQLITE_STATUS_PAGECACHE_SIZE 0]
+  set x [sqlite4_status SQLITE_STATUS_PAGECACHE_USED 0]
+  set y [sqlite4_status SQLITE_STATUS_PAGECACHE_SIZE 0]
   set val [format {now %10d  max %10d  max-size %10d} \
               [lindex $x 1] [lindex $x 2] [lindex $y 2]]
   puts "Page-cache used:      $val"
-  set x [sqlite3_status SQLITE_STATUS_PAGECACHE_OVERFLOW 0]
+  set x [sqlite4_status SQLITE_STATUS_PAGECACHE_OVERFLOW 0]
   set val [format {now %10d  max %10d} [lindex $x 1] [lindex $x 2]]
   puts "Page-cache overflow:  $val"
-  set x [sqlite3_status SQLITE_STATUS_SCRATCH_USED 0]
+  set x [sqlite4_status SQLITE_STATUS_SCRATCH_USED 0]
   set val [format {now %10d  max %10d} [lindex $x 1] [lindex $x 2]]
   puts "Scratch memory used:  $val"
-  set x [sqlite3_status SQLITE_STATUS_SCRATCH_OVERFLOW 0]
-  set y [sqlite3_status SQLITE_STATUS_SCRATCH_SIZE 0]
+  set x [sqlite4_status SQLITE_STATUS_SCRATCH_OVERFLOW 0]
+  set y [sqlite4_status SQLITE_STATUS_SCRATCH_SIZE 0]
   set val [format {now %10d  max %10d  max-size %10d} \
                [lindex $x 1] [lindex $x 2] [lindex $y 2]]
   puts "Scratch overflow:     $val"
   ifcapable yytrackmaxstackdepth {
-    set x [sqlite3_status SQLITE_STATUS_PARSER_STACK 0]
+    set x [sqlite4_status SQLITE_STATUS_PARSER_STACK 0]
     set val [format {               max %10d} [lindex $x 2]]
     puts "Parser stack depth:    $val"
   }
@@ -866,19 +866,19 @@ proc stepsql {dbptr sql} {
   set sql [string trim $sql]
   set r 0
   while {[string length $sql]>0} {
-    if {[catch {sqlite3_prepare $dbptr $sql -1 sqltail} vm]} {
+    if {[catch {sqlite4_prepare $dbptr $sql -1 sqltail} vm]} {
       return [list 1 $vm]
     }
     set sql [string trim $sqltail]
 #    while {[sqlite_step $vm N VAL COL]=="SQLITE_ROW"} {
 #      foreach v $VAL {lappend r $v}
 #    }
-    while {[sqlite3_step $vm]=="SQLITE_ROW"} {
-      for {set i 0} {$i<[sqlite3_data_count $vm]} {incr i} {
-        lappend r [sqlite3_column_text $vm $i]
+    while {[sqlite4_step $vm]=="SQLITE_ROW"} {
+      for {set i 0} {$i<[sqlite4_data_count $vm]} {incr i} {
+        lappend r [sqlite4_column_text $vm $i]
       }
     }
-    if {[catch {sqlite3_finalize $vm} errmsg]} {
+    if {[catch {sqlite4_finalize $vm} errmsg]} {
       return [list 1 $errmsg]
     }
   }
@@ -898,9 +898,9 @@ proc integrity_check {name {db db}} {
 # statement transaction.
 #
 proc sql_uses_stmt {db sql} {
-  set stmt [sqlite3_prepare $db $sql -1 dummy]
+  set stmt [sqlite4_prepare $db $sql -1 dummy]
   set uses [uses_stmt_journal $stmt]
-  sqlite3_finalize $stmt
+  sqlite4_finalize $stmt
   return $uses
 }
 
@@ -987,10 +987,10 @@ proc crashsql {args} {
   set cfile [string map {\\ \\\\} [file nativename [file join [pwd] $crashfile]]]
 
   set f [open crash.tcl w]
-  puts $f "sqlite3_crash_enable 1"
-  puts $f "sqlite3_crashparams $blocksize $dc $crashdelay $cfile"
-  puts $f "sqlite3_test_control_pending_byte $::sqlite_pending_byte"
-  puts $f "sqlite3 db test.db -vfs crash"
+  puts $f "sqlite4_crash_enable 1"
+  puts $f "sqlite4_crashparams $blocksize $dc $crashdelay $cfile"
+  puts $f "sqlite4_test_control_pending_byte $::sqlite_pending_byte"
+  puts $f "sqlite4 db test.db -vfs crash"
 
   # This block sets the cache size of the main database to 10
   # pages. This is done in case the build is configured to omit
@@ -1089,8 +1089,8 @@ proc do_ioerr_test {testname args} {
       catch {forcedelete test.db-journal}
       catch {forcedelete test2.db}
       catch {forcedelete test2.db-journal}
-      set ::DB [sqlite3 db test.db; sqlite3_connection_pointer db]
-      sqlite3_extended_result_codes $::DB $::ioerropts(-erc)
+      set ::DB [sqlite4 db test.db; sqlite4_connection_pointer db]
+      sqlite4_extended_result_codes $::DB $::ioerropts(-erc)
       if {[info exists ::ioerropts(-tclprep)]} {
         eval $::ioerropts(-tclprep)
       }
@@ -1129,11 +1129,11 @@ proc do_ioerr_test {testname args} {
       set ::sqlite_io_error_hardhit 0
       set r [catch $::ioerrorbody msg]
       set ::errseen $r
-      set rc [sqlite3_errcode $::DB]
+      set rc [sqlite4_errcode $::DB]
       if {$::ioerropts(-erc)} {
         # If we are in extended result code mode, make sure all of the
         # IOERRs we get back really do have their extended code values.
-        # If an extended result code is returned, the sqlite3_errcode
+        # If an extended result code is returned, the sqlite4_errcode
         # TCLcommand will return a string of the form:  SQLITE_IOERR+nnnn
         # where nnnn is a number
         if {[regexp {^SQLITE_IOERR} $rc] && ![regexp {IOERR\+\d} $rc]} {
@@ -1184,7 +1184,7 @@ proc do_ioerr_test {testname args} {
     # locks are established on database files (i.e. if the error 
     # occurs while attempting to detect a hot-journal file), then
     # there may 0 page references and an active transaction according
-    # to [sqlite3_get_autocommit].
+    # to [sqlite4_get_autocommit].
     #
     if {$::go && $::sqlite_io_error_hardhit && $::ioerropts(-ckrefcount)} {
       do_test $testname.$n.4 {
@@ -1193,7 +1193,7 @@ proc do_ioerr_test {testname args} {
         array set stats [btree_pager_stats $bt]
         db_leave db
         set nRef $stats(ref)
-        expr {$nRef == 0 || ([sqlite3_get_autocommit db]==0 && $nRef == 1)}
+        expr {$nRef == 0 || ([sqlite4_get_autocommit db]==0 && $nRef == 1)}
       } {1}
     }
 
@@ -1207,7 +1207,7 @@ proc do_ioerr_test {testname args} {
       if { [info commands db] ne ""
         && $::ioerropts(-ckrefcount)
         && [db one {pragma locking_mode}] eq "normal"
-        && [sqlite3_get_autocommit db]
+        && [sqlite4_get_autocommit db]
       } {
         do_test $testname.$n.5 {
           set bt [btree_from_db db]
@@ -1226,7 +1226,7 @@ proc do_ioerr_test {testname args} {
       do_test $testname.$n.6 {
         catch {db close}
         catch {db2 close}
-        set ::DB [sqlite3 db test.db; sqlite3_connection_pointer db]
+        set ::DB [sqlite4 db test.db; sqlite4_connection_pointer db]
         cksum
       } $checksum
     }
@@ -1313,7 +1313,7 @@ proc dbcksum {db dbname} {
 
 proc memdebug_log_sql {{filename mallocs.sql}} {
 
-  set data [sqlite3_memdebug_log dump]
+  set data [sqlite4_memdebug_log dump]
   set nFrame [expr [llength [lindex $data 0]]-2]
   if {$nFrame < 0} { return "" }
 
@@ -1488,7 +1488,7 @@ proc slave_test_file {zFile} {
   # Remember the value of the shared-cache setting. So that it is possible
   # to check afterwards that it was not modified by the test script.
   #
-  ifcapable shared_cache { set scs [sqlite3_enable_shared_cache] }
+  ifcapable shared_cache { set scs [sqlite4_enable_shared_cache] }
 
   # Run the test script in a slave interpreter.
   #
@@ -1511,7 +1511,7 @@ proc slave_test_file {zFile} {
   # the test script.
   #
   ifcapable shared_cache { 
-    set res [expr {[sqlite3_enable_shared_cache] == $scs}]
+    set res [expr {[sqlite4_enable_shared_cache] == $scs}]
     do_test ${tail}-sharedcachesetting [list set {} $res] 1
   }
 
@@ -1530,7 +1530,7 @@ proc slave_test_file {zFile} {
 proc sql36231 {sql} {
   set B [hexio_read test.db 92 8]
   set A [hexio_read test.db 28 4]
-  sqlite3 db36231 test.db
+  sqlite4 db36231 test.db
   catch { db36231 func a_string a_string }
   execsql $sql db36231
   db36231 close
@@ -1561,12 +1561,12 @@ proc db_restore {} {
 proc db_restore_and_reopen {{dbfile test.db}} {
   catch { db close }
   db_restore
-  sqlite3 db $dbfile
+  sqlite4 db $dbfile
 }
 proc db_delete_and_reopen {{file test.db}} {
   catch { db close }
   foreach f [glob -nocomplain test.db*] { forcedelete $f }
-  sqlite3 db $file
+  sqlite4 db $file
 }
 
 # If the library is compiled with the SQLITE_DEFAULT_AUTOVACUUM macro set

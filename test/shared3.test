@@ -19,24 +19,24 @@ ifcapable !shared_cache {
   finish_test
   return
 }
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 # Ticket #1824
 #
 do_test shared3-1.1 {
   forcedelete test.db test.db-journal
-  sqlite3 db1 test.db
+  sqlite4 db1 test.db
   db1 eval {
     PRAGMA encoding=UTF16;
     CREATE TABLE t1(x,y);
     INSERT INTO t1 VALUES('abc','This is a test string');
   }
   db1 close
-  sqlite3 db1 test.db
+  sqlite4 db1 test.db
   db1 eval {SELECT * FROM t1}
 } {abc {This is a test string}}
 do_test shared3-1.2 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   db2 eval {SELECT y FROM t1 WHERE x='abc'}
 } {{This is a test string}}
 
@@ -44,7 +44,7 @@ db1 close
 db2 close
 
 do_test shared3-2.1 {
-  sqlite3 db1 test.db
+  sqlite4 db1 test.db
   execsql {
     PRAGMA main.cache_size = 10;
   } db1
@@ -53,7 +53,7 @@ do_test shared3-2.2 {
   execsql { PRAGMA main.cache_size } db1
 } {10}
 do_test shared3-2.3 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { PRAGMA main.cache_size } db1
 } {10}
 do_test shared3-2.4 {
@@ -75,7 +75,7 @@ if {$::tcl_platform(platform)=="unix"} {
   set alternative_name TEST.DB
 }
 do_test shared3-2.6 {
-  sqlite3 db3 $alternative_name
+  sqlite4 db3 $alternative_name
   catchsql {select count(*) from sqlite_master} db3
 } {0 1}
 do_test shared3-2.7 {
@@ -95,7 +95,7 @@ do_test shared3-2.8 {
   # statement above should have caused the pager to grab an exclusive lock
   # on the database file so that the cache could be spilled.
   #
-  catch { sqlite3 db3 $alternative_name }
+  catch { sqlite4 db3 $alternative_name }
   catchsql {select count(*) from sqlite_master} db3
 } {1 {database is locked}}
 
@@ -103,5 +103,5 @@ db1 close
 db2 close
 db3 close
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

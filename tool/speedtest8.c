@@ -9,12 +9,12 @@
 ** To compile this program, first compile the SQLite library separately
 ** will full optimizations.  For example:
 **
-**     gcc -c -O6 -DSQLITE_THREADSAFE=0 sqlite3.c
+**     gcc -c -O6 -DSQLITE_THREADSAFE=0 sqlite4.c
 **
 ** Then link against this program.  But to do optimize this program
 ** because that defeats the hi-res timer.
 **
-**     gcc speedtest8.c sqlite3.o -ldl -I../src
+**     gcc speedtest8.c sqlite4.o -ldl -I../src
 **
 ** Then run this program with a single argument which is the name of
 ** a file containing SQL script that you want to test:
@@ -35,7 +35,7 @@
 #include <sched.h>
 #endif
 
-#include "sqlite3.h"
+#include "sqlite4.h"
 
 /* 
 ** hwtime.h contains inline assembler code for implementing 
@@ -53,8 +53,8 @@ static sqlite_uint64 finalizeTime = 0;
 /*
 ** Prepare and run a single statement of SQL.
 */
-static void prepareAndRun(sqlite3 *db, const char *zSql, int bQuiet){
-  sqlite3_stmt *pStmt;
+static void prepareAndRun(sqlite4 *db, const char *zSql, int bQuiet){
+  sqlite4_stmt *pStmt;
   const char *stmtTail;
   sqlite_uint64 iStart, iElapse;
   int rc;
@@ -63,35 +63,35 @@ static void prepareAndRun(sqlite3 *db, const char *zSql, int bQuiet){
     printf("***************************************************************\n");
   }
   if (!bQuiet) printf("SQL statement: [%s]\n", zSql);
-  iStart = sqlite3Hwtime();
-  rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, &stmtTail);
-  iElapse = sqlite3Hwtime() - iStart;
+  iStart = sqlite4Hwtime();
+  rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, &stmtTail);
+  iElapse = sqlite4Hwtime() - iStart;
   prepTime += iElapse;
   if (!bQuiet){
-    printf("sqlite3_prepare_v2() returns %d in %llu cycles\n", rc, iElapse);
+    printf("sqlite4_prepare_v2() returns %d in %llu cycles\n", rc, iElapse);
   }
   if( rc==SQLITE_OK ){
     int nRow = 0;
-    iStart = sqlite3Hwtime();
-    while( (rc=sqlite3_step(pStmt))==SQLITE_ROW ){ nRow++; }
-    iElapse = sqlite3Hwtime() - iStart;
+    iStart = sqlite4Hwtime();
+    while( (rc=sqlite4_step(pStmt))==SQLITE_ROW ){ nRow++; }
+    iElapse = sqlite4Hwtime() - iStart;
     runTime += iElapse;
     if (!bQuiet){
-      printf("sqlite3_step() returns %d after %d rows in %llu cycles\n",
+      printf("sqlite4_step() returns %d after %d rows in %llu cycles\n",
              rc, nRow, iElapse);
     }
-    iStart = sqlite3Hwtime();
-    rc = sqlite3_finalize(pStmt);
-    iElapse = sqlite3Hwtime() - iStart;
+    iStart = sqlite4Hwtime();
+    rc = sqlite4_finalize(pStmt);
+    iElapse = sqlite4Hwtime() - iStart;
     finalizeTime += iElapse;
     if (!bQuiet){
-      printf("sqlite3_finalize() returns %d in %llu cycles\n", rc, iElapse);
+      printf("sqlite4_finalize() returns %d in %llu cycles\n", rc, iElapse);
     }
   }
 }
 
 int main(int argc, char **argv){
-  sqlite3 *db;
+  sqlite4 *db;
   int rc;
   int nSql;
   char *zSql;
@@ -109,17 +109,17 @@ int main(int argc, char **argv){
 #endif
 
 #ifdef HAVE_OSINST
-  extern sqlite3_vfs *sqlite3_instvfs_binarylog(char *, char *, char *);
-  extern void sqlite3_instvfs_destroy(sqlite3_vfs *);
-  sqlite3_vfs *pVfs = 0;
+  extern sqlite4_vfs *sqlite4_instvfs_binarylog(char *, char *, char *);
+  extern void sqlite4_instvfs_destroy(sqlite4_vfs *);
+  sqlite4_vfs *pVfs = 0;
 #endif
 
   while (argc>3)
   {
 #ifdef HAVE_OSINST
     if( argc>4 && (strcmp(argv[1], "-log")==0) ){
-     pVfs = sqlite3_instvfs_binarylog("oslog", 0, argv[2]);
-     sqlite3_vfs_register(pVfs, 1);
+     pVfs = sqlite4_instvfs_binarylog("oslog", 0, argv[2]);
+     sqlite4_vfs_register(pVfs, 1);
      argv += 2;
      argc -= 2;
      continue;
@@ -191,22 +191,22 @@ int main(int argc, char **argv){
   nSql = fread(zSql, 1, nSql, in);
   zSql[nSql] = 0;
 
-  printf("SQLite version: %d\n", sqlite3_libversion_number());
+  printf("SQLite version: %d\n", sqlite4_libversion_number());
   unlink(argv[1]);
 #if !defined(_MSC_VER)
   clkStart = times(&tmsStart);
 #endif
-  iStart = sqlite3Hwtime();
-  rc = sqlite3_open(argv[1], &db);
-  iElapse = sqlite3Hwtime() - iStart;
+  iStart = sqlite4Hwtime();
+  rc = sqlite4_open(argv[1], &db);
+  iElapse = sqlite4Hwtime() - iStart;
   iSetup = iElapse;
-  if (!bQuiet) printf("sqlite3_open() returns %d in %llu cycles\n", rc, iElapse);
+  if (!bQuiet) printf("sqlite4_open() returns %d in %llu cycles\n", rc, iElapse);
   for(i=j=0; j<nSql; j++){
     if( zSql[j]==';' ){
       int isComplete;
       char c = zSql[j+1];
       zSql[j+1] = 0;
-      isComplete = sqlite3_complete(&zSql[i]);
+      isComplete = sqlite4_complete(&zSql[i]);
       zSql[j+1] = c;
       if( isComplete ){
         zSql[j] = 0;
@@ -223,14 +223,14 @@ int main(int argc, char **argv){
       }
     }
   }
-  iStart = sqlite3Hwtime();
-  sqlite3_close(db);
-  iElapse = sqlite3Hwtime() - iStart;
+  iStart = sqlite4Hwtime();
+  sqlite4_close(db);
+  iElapse = sqlite4Hwtime() - iStart;
 #if !defined(_MSC_VER)
   clkEnd = times(&tmsEnd);
 #endif
   iSetup += iElapse;
-  if (!bQuiet) printf("sqlite3_close() returns in %llu cycles\n", iElapse);
+  if (!bQuiet) printf("sqlite4_close() returns in %llu cycles\n", iElapse);
 
   printf("\n");
   printf("Statements run:        %15d stmts\n", nStmt);
@@ -251,7 +251,7 @@ int main(int argc, char **argv){
 
 #ifdef HAVE_OSINST
   if( pVfs ){
-    sqlite3_instvfs_destroy(pVfs);
+    sqlite4_instvfs_destroy(pVfs);
     printf("vfs log written to %s\n", argv[0]);
   }
 #endif

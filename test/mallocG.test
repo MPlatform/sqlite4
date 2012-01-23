@@ -29,7 +29,7 @@ if {!$MEMDEBUG} {
 #
 do_malloc_test mallocG-1 -tclbody {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
 }
 
 do_malloc_test mallocG-2 -sqlprep {
@@ -60,7 +60,7 @@ proc utf16 {utf8} {
 }
 
 do_malloc_test mallocG-4 -tclbody {
-  set rc [sqlite3_complete16 [utf16 "SELECT * FROM t1;"]]
+  set rc [sqlite4_complete16 [utf16 "SELECT * FROM t1;"]]
   if {$rc==1} {set rc 0} {error "out of memory"}
   set rc
 }

@@ -9,9 +9,9 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** This file contains the sqlite3_get_table() and sqlite3_free_table()
+** This file contains the sqlite4_get_table() and sqlite4_free_table()
 ** interface routines.  These are just wrappers around the main
-** interface routine of sqlite3_exec().
+** interface routine of sqlite4_exec().
 **
 ** These routines are in a separate files so that they will not be linked
 ** if they are not used.
@@ -23,7 +23,7 @@
 #ifndef SQLITE_OMIT_GET_TABLE
 
 /*
-** This structure is used to pass data from sqlite3_get_table() through
+** This structure is used to pass data from sqlite4_get_table() through
 ** to the callback function is uses to build the result.
 */
 typedef struct TabResult {
@@ -33,7 +33,7 @@ typedef struct TabResult {
   int nRow;          /* Number of rows in the result */
   int nColumn;       /* Number of columns in the result */
   int nData;         /* Slots used in azResult[].  (nRow+1)*nColumn */
-  int rc;            /* Return code from sqlite3_exec() */
+  int rc;            /* Return code from sqlite4_exec() */
 } TabResult;
 
 /*
@@ -41,7 +41,7 @@ typedef struct TabResult {
 ** is to fill in the TabResult structure appropriately, allocating new
 ** memory as necessary.
 */
-static int sqlite3_get_table_cb(void *pArg, int nCol, char **argv, char **colv){
+static int sqlite4_get_table_cb(void *pArg, int nCol, char **argv, char **colv){
   TabResult *p = (TabResult*)pArg;  /* Result accumulator */
   int need;                         /* Slots needed in p->azResult[] */
   int i;                            /* Loop counter */
@@ -58,7 +58,7 @@ static int sqlite3_get_table_cb(void *pArg, int nCol, char **argv, char **colv){
   if( p->nData + need > p->nAlloc ){
     char **azNew;
     p->nAlloc = p->nAlloc*2 + need;
-    azNew = sqlite3_realloc( p->azResult, sizeof(char*)*p->nAlloc );
+    azNew = sqlite4_realloc( p->azResult, sizeof(char*)*p->nAlloc );
     if( azNew==0 ) goto malloc_failed;
     p->azResult = azNew;
   }
@@ -69,14 +69,14 @@ static int sqlite3_get_table_cb(void *pArg, int nCol, char **argv, char **colv){
   if( p->nRow==0 ){
     p->nColumn = nCol;
     for(i=0; i<nCol; i++){
-      z = sqlite3_mprintf("%s", colv[i]);
+      z = sqlite4_mprintf("%s", colv[i]);
       if( z==0 ) goto malloc_failed;
       p->azResult[p->nData++] = z;
     }
   }else if( p->nColumn!=nCol ){
-    sqlite3_free(p->zErrMsg);
-    p->zErrMsg = sqlite3_mprintf(
-       "sqlite3_get_table() called with two or more incompatible queries"
+    sqlite4_free(p->zErrMsg);
+    p->zErrMsg = sqlite4_mprintf(
+       "sqlite4_get_table() called with two or more incompatible queries"
     );
     p->rc = SQLITE_ERROR;
     return 1;
@@ -89,8 +89,8 @@ static int sqlite3_get_table_cb(void *pArg, int nCol, char **argv, char **colv){
       if( argv[i]==0 ){
         z = 0;
       }else{
-        int n = sqlite3Strlen30(argv[i])+1;
-        z = sqlite3_malloc( n );
+        int n = sqlite4Strlen30(argv[i])+1;
+        z = sqlite4_malloc( n );
         if( z==0 ) goto malloc_failed;
         memcpy(z, argv[i], n);
       }
@@ -112,11 +112,11 @@ malloc_failed:
 **
 ** The result that is written to ***pazResult is held in memory obtained
 ** from malloc().  But the caller cannot free this memory directly.  
-** Instead, the entire table should be passed to sqlite3_free_table() when
+** Instead, the entire table should be passed to sqlite4_free_table() when
 ** the calling procedure is finished using it.
 */
-int sqlite3_get_table(
-  sqlite3 *db,                /* The database on which the SQL executes */
+int sqlite4_get_table(
+  sqlite4 *db,                /* The database on which the SQL executes */
   const char *zSql,           /* The SQL to be executed */
   char ***pazResult,          /* Write the result table here */
   int *pnRow,                 /* Write the number of rows in the result here */
@@ -136,37 +136,37 @@ int sqlite3_get_table(
   res.nData = 1;
   res.nAlloc = 20;
   res.rc = SQLITE_OK;
-  res.azResult = sqlite3_malloc(sizeof(char*)*res.nAlloc );
+  res.azResult = sqlite4_malloc(sizeof(char*)*res.nAlloc );
   if( res.azResult==0 ){
      db->errCode = SQLITE_NOMEM;
      return SQLITE_NOMEM;
   }
   res.azResult[0] = 0;
-  rc = sqlite3_exec(db, zSql, sqlite3_get_table_cb, &res, pzErrMsg);
+  rc = sqlite4_exec(db, zSql, sqlite4_get_table_cb, &res, pzErrMsg);
   assert( sizeof(res.azResult[0])>= sizeof(res.nData) );
   res.azResult[0] = SQLITE_INT_TO_PTR(res.nData);
   if( (rc&0xff)==SQLITE_ABORT ){
-    sqlite3_free_table(&res.azResult[1]);
+    sqlite4_free_table(&res.azResult[1]);
     if( res.zErrMsg ){
       if( pzErrMsg ){
-        sqlite3_free(*pzErrMsg);
-        *pzErrMsg = sqlite3_mprintf("%s",res.zErrMsg);
+        sqlite4_free(*pzErrMsg);
+        *pzErrMsg = sqlite4_mprintf("%s",res.zErrMsg);
       }
-      sqlite3_free(res.zErrMsg);
+      sqlite4_free(res.zErrMsg);
     }
     db->errCode = res.rc;  /* Assume 32-bit assignment is atomic */
     return res.rc;
   }
-  sqlite3_free(res.zErrMsg);
+  sqlite4_free(res.zErrMsg);
   if( rc!=SQLITE_OK ){
-    sqlite3_free_table(&res.azResult[1]);
+    sqlite4_free_table(&res.azResult[1]);
     return rc;
   }
   if( res.nAlloc>res.nData ){
     char **azNew;
-    azNew = sqlite3_realloc( res.azResult, sizeof(char*)*res.nData );
+    azNew = sqlite4_realloc( res.azResult, sizeof(char*)*res.nData );
     if( azNew==0 ){
-      sqlite3_free_table(&res.azResult[1]);
+      sqlite4_free_table(&res.azResult[1]);
       db->errCode = SQLITE_NOMEM;
       return SQLITE_NOMEM;
     }
@@ -179,18 +179,18 @@ int sqlite3_get_table(
 }
 
 /*
-** This routine frees the space the sqlite3_get_table() malloced.
+** This routine frees the space the sqlite4_get_table() malloced.
 */
-void sqlite3_free_table(
-  char **azResult            /* Result returned from from sqlite3_get_table() */
+void sqlite4_free_table(
+  char **azResult            /* Result returned from from sqlite4_get_table() */
 ){
   if( azResult ){
     int i, n;
     azResult--;
     assert( azResult!=0 );
     n = SQLITE_PTR_TO_INT(azResult[0]);
-    for(i=1; i<n; i++){ if( azResult[i] ) sqlite3_free(azResult[i]); }
-    sqlite3_free(azResult);
+    for(i=1; i<n; i++){ if( azResult[i] ) sqlite4_free(azResult[i]); }
+    sqlite4_free(azResult);
   }
 }
 

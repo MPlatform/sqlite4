@@ -51,7 +51,7 @@ do_test tkt35xx-1.1 {
 #
 db close
 delete_file test.db
-sqlite3 db test.db
+sqlite4 db test.db
 set big [string repeat abcdefghij 22]    ;# 220 byte string
 do_test tkt35xx-1.2.1 {
   execsql {

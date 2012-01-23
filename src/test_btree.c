@@ -17,23 +17,23 @@
 #include <tcl.h>
 
 /*
-** Usage: sqlite3_shared_cache_report
+** Usage: sqlite4_shared_cache_report
 **
 ** Return a list of file that are shared and the number of
 ** references to each file.
 */
-int sqlite3BtreeSharedCacheReport(
+int sqlite4BtreeSharedCacheReport(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
   Tcl_Obj *CONST objv[]
 ){
 #ifndef SQLITE_OMIT_SHARED_CACHE
-  extern BtShared *sqlite3SharedCacheList;
+  extern BtShared *sqlite4SharedCacheList;
   BtShared *pBt;
   Tcl_Obj *pRet = Tcl_NewObj();
-  for(pBt=GLOBAL(BtShared*,sqlite3SharedCacheList); pBt; pBt=pBt->pNext){
-    const char *zFile = sqlite3PagerFilename(pBt->pPager);
+  for(pBt=GLOBAL(BtShared*,sqlite4SharedCacheList); pBt; pBt=pBt->pNext){
+    const char *zFile = sqlite4PagerFilename(pBt->pPager);
     Tcl_ListObjAppendElement(interp, pRet, Tcl_NewStringObj(zFile, -1));
     Tcl_ListObjAppendElement(interp, pRet, Tcl_NewIntObj(pBt->nRef));
   }
@@ -45,14 +45,14 @@ int sqlite3BtreeSharedCacheReport(
 /*
 ** Print debugging information about all cursors to standard output.
 */
-void sqlite3BtreeCursorList(Btree *p){
+void sqlite4BtreeCursorList(Btree *p){
 #ifdef SQLITE_DEBUG
   BtCursor *pCur;
   BtShared *pBt = p->pBt;
   for(pCur=pBt->pCursor; pCur; pCur=pCur->pNext){
     MemPage *pPage = pCur->apPage[pCur->iPage];
     char *zMode = pCur->wrFlag ? "rw" : "ro";
-    sqlite3DebugPrintf("CURSOR %p rooted at %4d(%s) currently at %d.%d%s\n",
+    sqlite4DebugPrintf("CURSOR %p rooted at %4d(%s) currently at %d.%d%s\n",
        pCur, pCur->pgnoRoot, zMode,
        pPage ? pPage->pgno : 0, pCur->aiIdx[pCur->iPage],
        (pCur->eState==CURSOR_VALID) ? "" : " eof"

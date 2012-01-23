@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
 # focus of this file is testing that error messages are logged via the
-# sqlite3_log() mechanism when certain errors are encountered in the
+# sqlite4_log() mechanism when certain errors are encountered in the
 # default unix or windows VFS modules.
 #
 
@@ -20,8 +20,8 @@ if {$::tcl_platform(platform)!="unix"} { finish_test ; return }
 set ::testprefix oserror
 
 db close
-sqlite3_shutdown
-test_sqlite3_log xLog
+sqlite4_shutdown
+test_sqlite4_log xLog
 proc xLog {error_code msg} {
   if {[string match os_* $msg]} {
     lappend ::log $msg 
@@ -55,7 +55,7 @@ puts "Possible valgrind error about invalid file descriptor follows:"
 do_test 1.1.1 {
   set ::log [list]
   list [catch {
-    for {set i 0} {$i < 2000} {incr i} { sqlite3 dbh_$i test.db -readonly 1 }
+    for {set i 0} {$i < 2000} {incr i} { sqlite4 dbh_$i test.db -readonly 1 }
   } msg] $msg
 } {1 {unable to open database file}}
 do_test 1.1.2 {
@@ -71,7 +71,7 @@ do_re_test 1.1.3 {
 do_test 1.2.1 {
   file mkdir dir.db
   set ::log [list]
-  list [catch { sqlite3 dbh dir.db } msg] $msg
+  list [catch { sqlite4 dbh dir.db } msg] $msg
 } {1 {unable to open database file}}
 
 do_re_test 1.2.2 { lindex $::log 0 } {^os_unix.c:\d+: \(\d+\) open\(.*dir.db\) - }
@@ -80,7 +80,7 @@ do_re_test 1.2.2 { lindex $::log 0 } {^os_unix.c:\d+: \(\d+\) open\(.*dir.db\) -
 #
 do_test 1.3.1 {
   set ::log [list]
-  list [catch { sqlite3 dbh /x/y/z/test.db } msg] $msg
+  list [catch { sqlite4 dbh /x/y/z/test.db } msg] $msg
 } {1 {unable to open database file}}
 
 do_re_test 1.3.2 { lindex $::log 0 } {^os_unix.c:\d+: \(\d+\) open\(.*test.db\) - }
@@ -89,7 +89,7 @@ do_re_test 1.3.2 { lindex $::log 0 } {^os_unix.c:\d+: \(\d+\) open\(.*test.db\) 
 #
 do_test 1.4.1 {
   set ::log [list]
-  list [catch { sqlite3 dbh /root/test.db } msg] $msg
+  list [catch { sqlite4 dbh /root/test.db } msg] $msg
 } {1 {unable to open database file}}
 
 do_re_test 1.4.2 { lindex $::log 0 } {^os_unix.c:\d*: \(\d+\) open\(.*test.db\) - }
@@ -103,7 +103,7 @@ ifcapable wal {
     file mkdir test.db-wal
     forcedelete test.db
     list [catch {
-      sqlite3 dbh test.db
+      sqlite4 dbh test.db
       execsql { SELECT * FROM sqlite_master } dbh
     } msg] $msg
   } {1 {disk I/O error}}
@@ -119,7 +119,7 @@ ifcapable wal {
   
 
 test_syscall reset
-sqlite3_shutdown
-test_sqlite3_log 
-sqlite3_initialize
+sqlite4_shutdown
+test_sqlite4_log 
+sqlite4_initialize
 finish_test

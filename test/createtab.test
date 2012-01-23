@@ -28,7 +28,7 @@ ifcapable autovacuum {
 for {set av 0} {$av<=$upperBound} {incr av} {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   # Create a table that spans multiple pages.  It is important
   # that part of the database be in pages beyond the root page.
@@ -58,11 +58,11 @@ for {set av 0} {$av<=$upperBound} {incr av} {
   # Start reading the table
   #
   do_test createtab-$av.3 {
-    set STMT [sqlite3_prepare db {SELECT x FROM t1} -1 TAIL]
-    sqlite3_step $STMT
+    set STMT [sqlite4_prepare db {SELECT x FROM t1} -1 TAIL]
+    sqlite4_step $STMT
   } {SQLITE_ROW}
   do_test createtab-$av.4 {
-    sqlite3_column_int $STMT 0
+    sqlite4_column_int $STMT 0
   } {1}
   
   # While still reading the table, create a new table.
@@ -78,13 +78,13 @@ for {set av 0} {$av<=$upperBound} {incr av} {
   # Continue reading the original table.
   #
   do_test createtab-$av.6 {
-    sqlite3_column_int $STMT 0
+    sqlite4_column_int $STMT 0
   } {1}
   do_test createtab-$av.7 {
-    sqlite3_step $STMT
+    sqlite4_step $STMT
   } {SQLITE_ROW}
   do_test createtab-$av.8 {
-    sqlite3_column_int $STMT 0
+    sqlite4_column_int $STMT 0
   } {2}
   
   # Do another cycle of creating a new database table while contining
@@ -98,13 +98,13 @@ for {set av 0} {$av<=$upperBound} {incr av} {
     }
   } {4 5}
   do_test createtab-$av.12 {
-    sqlite3_column_int $STMT 0
+    sqlite4_column_int $STMT 0
   } {2}
   do_test createtab-$av.13 {
-    sqlite3_step $STMT
+    sqlite4_step $STMT
   } {SQLITE_ROW}
   do_test createtab-$av.14 {
-    sqlite3_column_int $STMT 0
+    sqlite4_column_int $STMT 0
   } {3}
   
   # One more cycle.
@@ -117,22 +117,22 @@ for {set av 0} {$av<=$upperBound} {incr av} {
     }
   } {abc xyz}
   do_test createtab-$av.22 {
-    sqlite3_column_int $STMT 0
+    sqlite4_column_int $STMT 0
   } {3}
   do_test createtab-$av.23 {
-    sqlite3_step $STMT
+    sqlite4_step $STMT
   } {SQLITE_ROW}
   do_test createtab-$av.24 {
-    sqlite3_column_int $STMT 0
+    sqlite4_column_int $STMT 0
   } {4}
   
   # Finish reading.  Do an integrity check on the database.
   #
   do_test createtab-$av.30 {
-    sqlite3_step $STMT
+    sqlite4_step $STMT
   } {SQLITE_DONE}
   do_test createtab-$av.31 {
-    sqlite3_finalize $STMT
+    sqlite4_finalize $STMT
   } {SQLITE_OK}
   do_test createtab-$av.32 {
     execsql {

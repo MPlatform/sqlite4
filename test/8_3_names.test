@@ -23,12 +23,12 @@ ifcapable !8_3_names {
 }
 
 db close
-sqlite3_shutdown
-sqlite3_config_uri 1
+sqlite4_shutdown
+sqlite4_config_uri 1
 
 do_test 8_3_names-1.0 {
   forcedelete test.db test.nal test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA cache_size=10;
     CREATE TABLE t1(x);
@@ -52,7 +52,7 @@ do_test 8_3_names-1.2 {
 db close
 do_test 8_3_names-2.0 {
   forcedelete test.db test.nal test.db-journal
-  sqlite3 db file:./test.db?8_3_names=1
+  sqlite4 db file:./test.db?8_3_names=1
   db eval {
     PRAGMA cache_size=10;
     CREATE TABLE t1(x);
@@ -76,7 +76,7 @@ do_test 8_3_names-2.2 {
   }
 } 15000
 do_test 8_3_names-2.3 {
-  sqlite3 db2 file:./test2.db?8_3_names=1
+  sqlite4 db2 file:./test2.db?8_3_names=1
   db2 eval {
     PRAGMA integrity_check;
     SELECT length(x) FROM t1;
@@ -86,7 +86,7 @@ do_test 8_3_names-2.3 {
 db close
 do_test 8_3_names-3.0 {
   forcedelete test.db test.nal test.db-journal
-  sqlite3 db file:./test.db?8_3_names=0
+  sqlite4 db file:./test.db?8_3_names=0
   db eval {
     PRAGMA cache_size=10;
     CREATE TABLE t1(x);
@@ -110,7 +110,7 @@ do_test 8_3_names-3.2 {
   }
 } 15000
 do_test 8_3_names-3.3 {
-  sqlite3 db2 file:./test2.db?8_3_names=0
+  sqlite4 db2 file:./test2.db?8_3_names=0
   db2 eval {
     PRAGMA integrity_check;
     SELECT length(x) FROM t1;
@@ -123,7 +123,7 @@ do_test 8_3_names-3.3 {
 db close
 forcedelete test.db test2.db
 do_test 8_3_names-4.0 {
-  sqlite3 db file:./test.db?8_3_names=1
+  sqlite4 db file:./test.db?8_3_names=1
   db eval {
     CREATE TABLE t1(x);
     INSERT INTO t1 VALUES(1);
@@ -149,7 +149,7 @@ ifcapable !wal {
 db close
 forcedelete test.db
 do_test 8_3_names-5.0 {
-  sqlite3 db file:./test.db?8_3_names=1
+  sqlite4 db file:./test.db?8_3_names=1
   register_wholenumber_module db
   db eval {
     PRAGMA journal_mode=WAL;
@@ -159,7 +159,7 @@ do_test 8_3_names-5.0 {
     BEGIN;
     UPDATE t1 SET x=x*2;
   }
-  sqlite3 db2 file:./test.db?8_3_names=1
+  sqlite4 db2 file:./test.db?8_3_names=1
   register_wholenumber_module db2
   db2 eval {
     BEGIN;

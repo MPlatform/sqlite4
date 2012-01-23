@@ -22,12 +22,12 @@ ifcapable !vtab||!shared_cache {
 }
 
 db close
-sqlite3_enable_shared_cache 1
-sqlite3 db  test.db
-sqlite3 db2 test.db
+sqlite4_enable_shared_cache 1
+sqlite4 db  test.db
+sqlite4 db2 test.db
 
 do_test vtab_shared-1.1 {
-  register_echo_module [sqlite3_connection_pointer db]
+  register_echo_module [sqlite4_connection_pointer db]
   execsql {
     CREATE TABLE t0(a, b, c);
     INSERT INTO t0 VALUES(1, 2, 3);
@@ -49,7 +49,7 @@ do_test vtab_shared-1.4 {
 } {1 2 3}
 
 do_test vtab_shared-1.5 {
-  register_echo_module [sqlite3_connection_pointer db2]
+  register_echo_module [sqlite4_connection_pointer db2]
   execsql { SELECT * FROM t1 } db
 } {1 2 3}
 
@@ -60,7 +60,7 @@ do_test vtab_shared-1.6 {
 
 # Set a write-lock on table t0 using connection [db]. Then try to read from
 # virtual table t1 using [db2]. That this returns an SQLITE_LOCKED error
-# shows that the correct sqlite3_vtab is being used.
+# shows that the correct sqlite4_vtab is being used.
 #
 do_test vtab_shared-1.8.1 {
   execsql { 
@@ -98,8 +98,8 @@ foreach {iTest dbSelect dbClose} {
       if {$a == 1} {$dbClose close}
       lappend res $a $b $c
     }
-    sqlite3 $dbClose test.db
-    register_echo_module [sqlite3_connection_pointer $dbClose]
+    sqlite4 $dbClose test.db
+    register_echo_module [sqlite4_connection_pointer $dbClose]
     set res
   } {1 2 3 4 5 6}
 }
@@ -133,8 +133,8 @@ do_test vtab_shared-1.12.1 {
   } db2
 } {1 2 3 4 5 6 1 2 3 4 5 6 1 2 3 4 5 6}
 do_test vtab_shared-1.12.2 {
-  sqlite3 db test.db
-  register_echo_module [sqlite3_connection_pointer db]
+  sqlite4 db test.db
+  register_echo_module [sqlite4_connection_pointer db]
   execsql { 
     SELECT * FROM t1 UNION ALL
     SELECT * FROM t2 UNION ALL
@@ -162,8 +162,8 @@ ifcapable altertable {
 # schema is loaded.
 do_test vtab_shared_1.14.1 {
   db2 close
-  sqlite3 db2 test.db
-  register_echo_module [sqlite3_connection_pointer db2]
+  sqlite4 db2 test.db
+  register_echo_module [sqlite4_connection_pointer db2]
   execsql { SELECT * FROM t3 }
 } {1 2 3 4 5 6}
 do_test vtab_shared_1.14.2 {
@@ -174,8 +174,8 @@ do_test vtab_shared_1.14.2 {
 } {1 2 3 4 5 six}
 do_test vtab_shared_1.14.3 {
   db2 close
-  sqlite3 db2 test.db
-  register_echo_module [sqlite3_connection_pointer db2]
+  sqlite4 db2 test.db
+  register_echo_module [sqlite4_connection_pointer db2]
   execsql { SELECT * FROM t3 }
 } {1 2 3 4 5 six}
 do_test vtab_shared_1.14.4 {
@@ -186,8 +186,8 @@ do_test vtab_shared_1.14.4 {
 } {1 2 3}
 do_test vtab_shared_1.14.5 {
   db2 close
-  sqlite3 db2 test.db
-  register_echo_module [sqlite3_connection_pointer db2]
+  sqlite4 db2 test.db
+  register_echo_module [sqlite4_connection_pointer db2]
   execsql { SELECT * FROM t3 }
 } {1 2 3}
 do_test vtab_shared_1.14.6 {
@@ -199,8 +199,8 @@ do_test vtab_shared_1.14.6 {
 
 do_test vtab_shared_1.15.1 {
   db2 close
-  sqlite3 db2 test.db
-  register_echo_module [sqlite3_connection_pointer db2]
+  sqlite4 db2 test.db
+  register_echo_module [sqlite4_connection_pointer db2]
   execsql { 
     UPDATE t3 SET c = 'six' WHERE c = 6;
     SELECT * FROM t3;
@@ -208,8 +208,8 @@ do_test vtab_shared_1.15.1 {
 } {1 2 3 4 5 six}
 do_test vtab_shared_1.15.2 {
   db2 close
-  sqlite3 db2 test.db
-  register_echo_module [sqlite3_connection_pointer db2]
+  sqlite4 db2 test.db
+  register_echo_module [sqlite4_connection_pointer db2]
   execsql { 
     DELETE FROM t3 WHERE c = 'six';
     SELECT * FROM t3;
@@ -217,8 +217,8 @@ do_test vtab_shared_1.15.2 {
 } {1 2 3}
 do_test vtab_shared_1.15.3 {
   db2 close
-  sqlite3 db2 test.db
-  register_echo_module [sqlite3_connection_pointer db2]
+  sqlite4 db2 test.db
+  register_echo_module [sqlite4_connection_pointer db2]
   execsql { 
     INSERT INTO t3 VALUES(4, 5, 6);
     SELECT * FROM t3;
@@ -227,5 +227,5 @@ do_test vtab_shared_1.15.3 {
 
 db close
 db2 close
-sqlite3_enable_shared_cache 0
+sqlite4_enable_shared_cache 0
 finish_test

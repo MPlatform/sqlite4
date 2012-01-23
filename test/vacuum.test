@@ -122,14 +122,14 @@ ifcapable vacuum {
     }
   } {1 {cannot VACUUM from within a transaction}}
   do_test vacuum-2.1.2 {
-    sqlite3_get_autocommit db
+    sqlite4_get_autocommit db
   } {0}
   do_test vacuum-2.1.3 {
     db eval {COMMIT}
   } {}
 }
 do_test vacuum-2.2 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     BEGIN;
     CREATE TABLE t4 AS SELECT * FROM t1;
@@ -160,7 +160,7 @@ do_test vacuum-2.5 {
     CREATE TABLE t7 AS SELECT * FROM t1;
     COMMIT;
   }
-  sqlite3 db3 test.db
+  sqlite4 db3 test.db
   execsql {
     -- The "SELECT * FROM sqlite_master" statement ensures that this test
     -- works when shared-cache is enabled. If shared-cache is enabled, then
@@ -209,23 +209,23 @@ do_test vacuum-3.1 {
   db close
   db2 close
   delete_file test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA empty_result_callbacks=on;
     VACUUM;
   }
 } {}
 
-# Ticket #464.  Make sure VACUUM works with the sqlite3_prepare() API.
+# Ticket #464.  Make sure VACUUM works with the sqlite4_prepare() API.
 #
 do_test vacuum-4.1 {
   db close
-  sqlite3 db test.db; set DB [sqlite3_connection_pointer db]
-  set VM [sqlite3_prepare $DB {VACUUM} -1 TAIL]
-  sqlite3_step $VM
+  sqlite4 db test.db; set DB [sqlite4_connection_pointer db]
+  set VM [sqlite4_prepare $DB {VACUUM} -1 TAIL]
+  sqlite4_step $VM
 } {SQLITE_DONE}
 do_test vacuum-4.2 {
-  sqlite3_finalize $VM
+  sqlite4_finalize $VM
 } SQLITE_OK
 
 # Ticket #515.  VACUUM after deleting and recreating the table that
@@ -235,7 +235,7 @@ ifcapable view {
 do_test vacuum-5.1 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     CREATE TABLE Test (TestID int primary key);
     INSERT INTO Test VALUES (NULL);
@@ -295,7 +295,7 @@ ifcapable {bloblit} {
 #
 forcedelete :memory:
 do_test vacuum-7.0 {
-  sqlite3 db2 :memory:
+  sqlite4 db2 :memory:
   execsql {
     CREATE TABLE t1(t);
     VACUUM;
@@ -339,7 +339,7 @@ db2 close
 do_test vacuum-8.1 {
   forcedelete a'z.db
   forcedelete a'z.db-journal
-  sqlite3 db2 a'z.db
+  sqlite4 db2 a'z.db
   execsql {
     CREATE TABLE t1(t);
     VACUUM;
@@ -391,7 +391,7 @@ forcedelete {a'z.db}
 do_test vacuum-10.1 {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     CREATE TABLE t8(a, b);
     INSERT INTO t8 VALUES('a', 'b');

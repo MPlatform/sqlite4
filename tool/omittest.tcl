@@ -89,15 +89,15 @@ proc run_quick_test {dir omit_symbol_list} {
     puts "Ok"
   }
   
-  # Create an empty file "$dir/sqlite3". This is to trick the makefile out 
+  # Create an empty file "$dir/sqlite4". This is to trick the makefile out 
   # of trying to build the sqlite shell. The sqlite shell won't build 
   # with some of the OMIT options (i.e OMIT_COMPLETE).
-  set sqlite3_dummy $dir/sqlite3
+  set sqlite4_dummy $dir/sqlite4
   if {$::tcl_platform(platform)=="windows" || $::tcl_platform(platform)=="os2"} {
-    append sqlite3_dummy ".exe"
+    append sqlite4_dummy ".exe"
   }
-  if {![file exists $sqlite3_dummy]} {
-    set wr [open $sqlite3_dummy w]
+  if {![file exists $sqlite4_dummy]} {
+    set wr [open $sqlite4_dummy w]
     puts $wr "dummy"
     close $wr
   }

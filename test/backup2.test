@@ -11,7 +11,7 @@
 # This file implements regression tests for SQLite library.  The
 # focus of this file is testing the "backup" and "restore" methods
 # of the TCL interface - methods which are based on the
-# sqlite3_backup_XXX API.
+# sqlite4_backup_XXX API.
 #
 # $Id: backup2.test,v 1.4 2009/04/07 14:14:23 danielk1977 Exp $
 
@@ -63,7 +63,7 @@ set cksum [dbcksum db main]
 do_test backup2-2 {
   forcedelete bu1.db
   db backup bu1.db
-  sqlite3 db2 bu1.db
+  sqlite4 db2 bu1.db
   dbcksum db2 main
 } $cksum
 
@@ -73,7 +73,7 @@ do_test backup2-2 {
 do_test backup2-3.1 {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   db2 eval {BEGIN EXCLUSIVE}
   set rc [catch {db restore bu1.db} res]
   lappend rc $res
@@ -83,7 +83,7 @@ do_test backup2-3.1 {
 do_test backup2-3.2 {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   db restore bu1.db
   dbcksum db main
 } $cksum
@@ -98,7 +98,7 @@ do_test backup2-5 {
   db2 close
   forcedelete bu1.db bu2.db
   db backup temp bu2.db
-  sqlite3 db2 bu2.db
+  sqlite4 db2 bu2.db
   dbcksum db2 main
 } $cksum
 

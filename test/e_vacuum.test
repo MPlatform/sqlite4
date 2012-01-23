@@ -16,12 +16,12 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-sqlite3_test_control_pending_byte 0x1000000
+sqlite4_test_control_pending_byte 0x1000000
 
 proc create_db {{sql ""}} {
   catch { db close }
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   db transaction {
     execsql { PRAGMA page_size = 1024; }

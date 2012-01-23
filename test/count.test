@@ -147,7 +147,7 @@ do_test count-2.13 {
 } {0}
 
 ifcapable vtab {
-  register_echo_module [sqlite3_connection_pointer db]
+  register_echo_module [sqlite4_connection_pointer db]
   do_test count-2.14 {
     execsql { CREATE VIRTUAL TABLE techo USING echo(t1); }
     uses_op_count {SELECT count(*) FROM techo}

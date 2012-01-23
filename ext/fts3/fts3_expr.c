@@ -36,7 +36,7 @@
 **     AND operators have a higher precedence than OR.
 **
 ** If compiled with SQLITE_TEST defined, then this module exports the
-** symbol "int sqlite3_fts3_enable_parentheses". Setting this variable
+** symbol "int sqlite4_fts3_enable_parentheses". Setting this variable
 ** to zero causes the module to use the old syntax. If it is set to 
 ** non-zero the new syntax is activated. This is so both syntaxes can
 ** be tested using a single build of testfixture.
@@ -64,12 +64,12 @@
 */
 
 #ifdef SQLITE_TEST
-int sqlite3_fts3_enable_parentheses = 0;
+int sqlite4_fts3_enable_parentheses = 0;
 #else
 # ifdef SQLITE_ENABLE_FTS3_PARENTHESIS 
-#  define sqlite3_fts3_enable_parentheses 1
+#  define sqlite4_fts3_enable_parentheses 1
 # else
-#  define sqlite3_fts3_enable_parentheses 0
+#  define sqlite4_fts3_enable_parentheses 0
 # endif
 #endif
 
@@ -91,13 +91,13 @@ int sqlite3_fts3_enable_parentheses = 0;
 */
 typedef struct ParseContext ParseContext;
 struct ParseContext {
-  sqlite3_tokenizer *pTokenizer;      /* Tokenizer module */
+  sqlite4_tokenizer *pTokenizer;      /* Tokenizer module */
   const char **azCol;                 /* Array of column names for fts3 table */
   int bFts4;                          /* True to allow FTS4-only syntax */
   int nCol;                           /* Number of entries in azCol[] */
   int iDefaultCol;                    /* Default column to query */
   int isNot;                          /* True if getNextNode() sees a unary - */
-  sqlite3_context *pCtx;              /* Write error message here */
+  sqlite4_context *pCtx;              /* Write error message here */
   int nNest;                          /* Number of nested brackets */
 };
 
@@ -117,12 +117,12 @@ static int fts3isspace(char c){
 }
 
 /*
-** Allocate nByte bytes of memory using sqlite3_malloc(). If successful,
+** Allocate nByte bytes of memory using sqlite4_malloc(). If successful,
 ** zero the memory before returning a pointer to it. If unsuccessful, 
 ** return NULL.
 */
 static void *fts3MallocZero(int nByte){
-  void *pRet = sqlite3_malloc(nByte);
+  void *pRet = sqlite4_malloc(nByte);
   if( pRet ) memset(pRet, 0, nByte);
   return pRet;
 }
@@ -135,7 +135,7 @@ static void *fts3MallocZero(int nByte){
 ** single token and set *ppExpr to point to it. If the end of the buffer is
 ** reached before a token is found, set *ppExpr to zero. It is the
 ** responsibility of the caller to eventually deallocate the allocated 
-** Fts3Expr structure (if any) by passing it to sqlite3_free().
+** Fts3Expr structure (if any) by passing it to sqlite4_free().
 **
 ** Return SQLITE_OK if successful, or SQLITE_NOMEM if a memory allocation
 ** fails.
@@ -147,10 +147,10 @@ static int getNextToken(
   Fts3Expr **ppExpr,                      /* OUT: expression */
   int *pnConsumed                         /* OUT: Number of bytes consumed */
 ){
-  sqlite3_tokenizer *pTokenizer = pParse->pTokenizer;
-  sqlite3_tokenizer_module const *pModule = pTokenizer->pModule;
+  sqlite4_tokenizer *pTokenizer = pParse->pTokenizer;
+  sqlite4_tokenizer_module const *pModule = pTokenizer->pModule;
   int rc;
-  sqlite3_tokenizer_cursor *pCursor;
+  sqlite4_tokenizer_cursor *pCursor;
   Fts3Expr *pRet = 0;
   int nConsumed = 0;
 
@@ -183,7 +183,7 @@ static int getNextToken(
         }
 
         while( 1 ){
-          if( !sqlite3_fts3_enable_parentheses 
+          if( !sqlite4_fts3_enable_parentheses 
            && iStart>0 && z[iStart-1]=='-' 
           ){
             pParse->isNot = 1;
@@ -214,9 +214,9 @@ static int getNextToken(
 ** then free the old allocation.
 */
 static void *fts3ReallocOrFree(void *pOrig, int nNew){
-  void *pRet = sqlite3_realloc(pOrig, nNew);
+  void *pRet = sqlite4_realloc(pOrig, nNew);
   if( !pRet ){
-    sqlite3_free(pOrig);
+    sqlite4_free(pOrig);
   }
   return pRet;
 }
@@ -238,11 +238,11 @@ static int getNextString(
   const char *zInput, int nInput,         /* Input string */
   Fts3Expr **ppExpr                       /* OUT: expression */
 ){
-  sqlite3_tokenizer *pTokenizer = pParse->pTokenizer;
-  sqlite3_tokenizer_module const *pModule = pTokenizer->pModule;
+  sqlite4_tokenizer *pTokenizer = pParse->pTokenizer;
+  sqlite4_tokenizer_module const *pModule = pTokenizer->pModule;
   int rc;
   Fts3Expr *p = 0;
-  sqlite3_tokenizer_cursor *pCursor = 0;
+  sqlite4_tokenizer_cursor *pCursor = 0;
   char *zTemp = 0;
   int nTemp = 0;
 
@@ -252,7 +252,7 @@ static int getNextString(
   /* The final Fts3Expr data structure, including the Fts3Phrase,
   ** Fts3PhraseToken structures token buffers are all stored as a single 
   ** allocation so that the expression can be freed with a single call to
-  ** sqlite3_free(). Setting this up requires a two pass approach.
+  ** sqlite4_free(). Setting this up requires a two pass approach.
   **
   ** The first pass, in the block below, uses a tokenizer cursor to iterate
   ** through the tokens in the expression. This pass uses fts3ReallocOrFree()
@@ -318,7 +318,7 @@ static int getNextString(
     zBuf = (char *)&p->pPhrase->aToken[nToken];
     if( zTemp ){
       memcpy(zBuf, zTemp, nTemp);
-      sqlite3_free(zTemp);
+      sqlite4_free(zTemp);
     }else{
       assert( nTemp==0 );
     }
@@ -337,8 +337,8 @@ no_mem:
   if( pCursor ){
     pModule->xClose(pCursor);
   }
-  sqlite3_free(zTemp);
-  sqlite3_free(p);
+  sqlite4_free(zTemp);
+  sqlite4_free(p);
   *ppExpr = 0;
   return SQLITE_NOMEM;
 }
@@ -400,7 +400,7 @@ static int getNextNode(
   for(ii=0; ii<(int)(sizeof(aKeyword)/sizeof(struct Fts3Keyword)); ii++){
     const struct Fts3Keyword *pKey = &aKeyword[ii];
 
-    if( (pKey->parenOnly & ~sqlite3_fts3_enable_parentheses)!=0 ){
+    if( (pKey->parenOnly & ~sqlite4_fts3_enable_parentheses)!=0 ){
       continue;
     }
 
@@ -446,7 +446,7 @@ static int getNextNode(
   }
 
   /* Check for an open bracket. */
-  if( sqlite3_fts3_enable_parentheses ){
+  if( sqlite4_fts3_enable_parentheses ){
     if( *zInput=='(' ){
       int nConsumed;
       pParse->nNest++;
@@ -482,7 +482,7 @@ static int getNextNode(
 
 
   /* If control flows to this point, this must be a regular token, or 
-  ** the end of the input. Read a regular token using the sqlite3_tokenizer
+  ** the end of the input. Read a regular token using the sqlite4_tokenizer
   ** interface. Before doing so, figure out if there is an explicit
   ** column specifier for the token. 
   **
@@ -498,7 +498,7 @@ static int getNextNode(
     const char *zStr = pParse->azCol[ii];
     int nStr = (int)strlen(zStr);
     if( nInput>nStr && zInput[nStr]==':' 
-     && sqlite3_strnicmp(zStr, zInput, nStr)==0 
+     && sqlite4_strnicmp(zStr, zInput, nStr)==0 
     ){
       iCol = ii;
       iColLen = (int)((zInput - z) + nStr + 1);
@@ -531,7 +531,7 @@ static int getNextNode(
 */
 static int opPrecedence(Fts3Expr *p){
   assert( p->eType!=FTSQUERY_PHRASE );
-  if( sqlite3_fts3_enable_parentheses ){
+  if( sqlite4_fts3_enable_parentheses ){
     return p->eType;
   }else if( p->eType==FTSQUERY_NEAR ){
     return 1;
@@ -602,13 +602,13 @@ static int fts3ExprParse(
     if( rc==SQLITE_OK ){
       int isPhrase;
 
-      if( !sqlite3_fts3_enable_parentheses 
+      if( !sqlite4_fts3_enable_parentheses 
        && p->eType==FTSQUERY_PHRASE && pParse->isNot 
       ){
         /* Create an implicit NOT operator. */
         Fts3Expr *pNot = fts3MallocZero(sizeof(Fts3Expr));
         if( !pNot ){
-          sqlite3Fts3ExprFree(p);
+          sqlite4Fts3ExprFree(p);
           rc = SQLITE_NOMEM;
           goto exprparse_out;
         }
@@ -629,7 +629,7 @@ static int fts3ExprParse(
         ** isRequirePhrase is set, this is a syntax error.
         */
         if( !isPhrase && isRequirePhrase ){
-          sqlite3Fts3ExprFree(p);
+          sqlite4Fts3ExprFree(p);
           rc = SQLITE_ERROR;
           goto exprparse_out;
         }
@@ -640,7 +640,7 @@ static int fts3ExprParse(
           assert( pRet && pPrev );
           pAnd = fts3MallocZero(sizeof(Fts3Expr));
           if( !pAnd ){
-            sqlite3Fts3ExprFree(p);
+            sqlite4Fts3ExprFree(p);
             rc = SQLITE_NOMEM;
             goto exprparse_out;
           }
@@ -662,7 +662,7 @@ static int fts3ExprParse(
             (eType==FTSQUERY_NEAR && !isPhrase && pPrev->eType!=FTSQUERY_PHRASE)
          || (eType!=FTSQUERY_PHRASE && isPhrase && pPrev->eType==FTSQUERY_NEAR)
         )){
-          sqlite3Fts3ExprFree(p);
+          sqlite4Fts3ExprFree(p);
           rc = SQLITE_ERROR;
           goto exprparse_out;
         }
@@ -694,7 +694,7 @@ static int fts3ExprParse(
 
   if( rc==SQLITE_DONE ){
     rc = SQLITE_OK;
-    if( !sqlite3_fts3_enable_parentheses && pNotBranch ){
+    if( !sqlite4_fts3_enable_parentheses && pNotBranch ){
       if( !pRet ){
         rc = SQLITE_ERROR;
       }else{
@@ -711,8 +711,8 @@ static int fts3ExprParse(
 
 exprparse_out:
   if( rc!=SQLITE_OK ){
-    sqlite3Fts3ExprFree(pRet);
-    sqlite3Fts3ExprFree(pNotBranch);
+    sqlite4Fts3ExprFree(pRet);
+    sqlite4Fts3ExprFree(pNotBranch);
     pRet = 0;
   }
   *ppExpr = pRet;
@@ -743,8 +743,8 @@ exprparse_out:
 ** specified as part of the query string), or -1 if tokens may by default
 ** match any table column.
 */
-int sqlite3Fts3ExprParse(
-  sqlite3_tokenizer *pTokenizer,      /* Tokenizer module */
+int sqlite4Fts3ExprParse(
+  sqlite4_tokenizer *pTokenizer,      /* Tokenizer module */
   char **azCol,                       /* Array of column names for fts3 table */
   int bFts4,                          /* True to allow FTS4-only syntax */
   int nCol,                           /* Number of entries in azCol[] */
@@ -773,7 +773,7 @@ int sqlite3Fts3ExprParse(
   /* Check for mismatched parenthesis */
   if( rc==SQLITE_OK && sParse.nNest ){
     rc = SQLITE_ERROR;
-    sqlite3Fts3ExprFree(*ppExpr);
+    sqlite4Fts3ExprFree(*ppExpr);
     *ppExpr = 0;
   }
 
@@ -781,16 +781,16 @@ int sqlite3Fts3ExprParse(
 }
 
 /*
-** Free a parsed fts3 query expression allocated by sqlite3Fts3ExprParse().
+** Free a parsed fts3 query expression allocated by sqlite4Fts3ExprParse().
 */
-void sqlite3Fts3ExprFree(Fts3Expr *p){
+void sqlite4Fts3ExprFree(Fts3Expr *p){
   if( p ){
     assert( p->eType==FTSQUERY_PHRASE || p->pPhrase==0 );
-    sqlite3Fts3ExprFree(p->pLeft);
-    sqlite3Fts3ExprFree(p->pRight);
-    sqlite3Fts3EvalPhraseCleanup(p->pPhrase);
-    sqlite3_free(p->aMI);
-    sqlite3_free(p);
+    sqlite4Fts3ExprFree(p->pLeft);
+    sqlite4Fts3ExprFree(p->pRight);
+    sqlite4Fts3EvalPhraseCleanup(p->pPhrase);
+    sqlite4_free(p->aMI);
+    sqlite4_free(p);
   }
 }
 
@@ -807,49 +807,49 @@ void sqlite3Fts3ExprFree(Fts3Expr *p){
 ** Function to query the hash-table of tokenizers (see README.tokenizers).
 */
 static int queryTestTokenizer(
-  sqlite3 *db, 
+  sqlite4 *db, 
   const char *zName,  
-  const sqlite3_tokenizer_module **pp
+  const sqlite4_tokenizer_module **pp
 ){
   int rc;
-  sqlite3_stmt *pStmt;
+  sqlite4_stmt *pStmt;
   const char zSql[] = "SELECT fts3_tokenizer(?)";
 
   *pp = 0;
-  rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, 0);
+  rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
   if( rc!=SQLITE_OK ){
     return rc;
   }
 
-  sqlite3_bind_text(pStmt, 1, zName, -1, SQLITE_STATIC);
-  if( SQLITE_ROW==sqlite3_step(pStmt) ){
-    if( sqlite3_column_type(pStmt, 0)==SQLITE_BLOB ){
-      memcpy((void *)pp, sqlite3_column_blob(pStmt, 0), sizeof(*pp));
+  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE_STATIC);
+  if( SQLITE_ROW==sqlite4_step(pStmt) ){
+    if( sqlite4_column_type(pStmt, 0)==SQLITE_BLOB ){
+      memcpy((void *)pp, sqlite4_column_blob(pStmt, 0), sizeof(*pp));
     }
   }
 
-  return sqlite3_finalize(pStmt);
+  return sqlite4_finalize(pStmt);
 }
 
 /*
 ** Return a pointer to a buffer containing a text representation of the
 ** expression passed as the first argument. The buffer is obtained from
-** sqlite3_malloc(). It is the responsibility of the caller to use 
-** sqlite3_free() to release the memory. If an OOM condition is encountered,
+** sqlite4_malloc(). It is the responsibility of the caller to use 
+** sqlite4_free() to release the memory. If an OOM condition is encountered,
 ** NULL is returned.
 **
 ** If the second argument is not NULL, then its contents are prepended to 
-** the returned expression text and then freed using sqlite3_free().
+** the returned expression text and then freed using sqlite4_free().
 */
 static char *exprToString(Fts3Expr *pExpr, char *zBuf){
   switch( pExpr->eType ){
     case FTSQUERY_PHRASE: {
       Fts3Phrase *pPhrase = pExpr->pPhrase;
       int i;
-      zBuf = sqlite3_mprintf(
+      zBuf = sqlite4_mprintf(
           "%zPHRASE %d 0", zBuf, pPhrase->iColumn);
       for(i=0; zBuf && i<pPhrase->nToken; i++){
-        zBuf = sqlite3_mprintf("%z %.*s%s", zBuf, 
+        zBuf = sqlite4_mprintf("%z %.*s%s", zBuf, 
             pPhrase->aToken[i].n, pPhrase->aToken[i].z,
             (pPhrase->aToken[i].isPrefix?"+":"")
         );
@@ -858,25 +858,25 @@ static char *exprToString(Fts3Expr *pExpr, char *zBuf){
     }
 
     case FTSQUERY_NEAR:
-      zBuf = sqlite3_mprintf("%zNEAR/%d ", zBuf, pExpr->nNear);
+      zBuf = sqlite4_mprintf("%zNEAR/%d ", zBuf, pExpr->nNear);
       break;
     case FTSQUERY_NOT:
-      zBuf = sqlite3_mprintf("%zNOT ", zBuf);
+      zBuf = sqlite4_mprintf("%zNOT ", zBuf);
       break;
     case FTSQUERY_AND:
-      zBuf = sqlite3_mprintf("%zAND ", zBuf);
+      zBuf = sqlite4_mprintf("%zAND ", zBuf);
       break;
     case FTSQUERY_OR:
-      zBuf = sqlite3_mprintf("%zOR ", zBuf);
+      zBuf = sqlite4_mprintf("%zOR ", zBuf);
       break;
   }
 
-  if( zBuf ) zBuf = sqlite3_mprintf("%z{", zBuf);
+  if( zBuf ) zBuf = sqlite4_mprintf("%z{", zBuf);
   if( zBuf ) zBuf = exprToString(pExpr->pLeft, zBuf);
-  if( zBuf ) zBuf = sqlite3_mprintf("%z} {", zBuf);
+  if( zBuf ) zBuf = sqlite4_mprintf("%z} {", zBuf);
 
   if( zBuf ) zBuf = exprToString(pExpr->pRight, zBuf);
-  if( zBuf ) zBuf = sqlite3_mprintf("%z}", zBuf);
+  if( zBuf ) zBuf = sqlite4_mprintf("%z}", zBuf);
 
   return zBuf;
 }
@@ -896,12 +896,12 @@ static char *exprToString(Fts3Expr *pExpr, char *zBuf){
 **   SELECT fts3_exprtest('simple', 'Bill col2:Bloggs', 'col1', 'col2');
 */
 static void fts3ExprTest(
-  sqlite3_context *context,
+  sqlite4_context *context,
   int argc,
-  sqlite3_value **argv
+  sqlite4_value **argv
 ){
-  sqlite3_tokenizer_module const *pModule = 0;
-  sqlite3_tokenizer *pTokenizer = 0;
+  sqlite4_tokenizer_module const *pModule = 0;
+  sqlite4_tokenizer *pTokenizer = 0;
   int rc;
   char **azCol = 0;
   const char *zExpr;
@@ -910,72 +910,72 @@ static void fts3ExprTest(
   int ii;
   Fts3Expr *pExpr;
   char *zBuf = 0;
-  sqlite3 *db = sqlite3_context_db_handle(context);
+  sqlite4 *db = sqlite4_context_db_handle(context);
 
   if( argc<3 ){
-    sqlite3_result_error(context, 
+    sqlite4_result_error(context, 
         "Usage: fts3_exprtest(tokenizer, expr, col1, ...", -1
     );
     return;
   }
 
   rc = queryTestTokenizer(db,
-                          (const char *)sqlite3_value_text(argv[0]), &pModule);
+                          (const char *)sqlite4_value_text(argv[0]), &pModule);
   if( rc==SQLITE_NOMEM ){
-    sqlite3_result_error_nomem(context);
+    sqlite4_result_error_nomem(context);
     goto exprtest_out;
   }else if( !pModule ){
-    sqlite3_result_error(context, "No such tokenizer module", -1);
+    sqlite4_result_error(context, "No such tokenizer module", -1);
     goto exprtest_out;
   }
 
   rc = pModule->xCreate(0, 0, &pTokenizer);
   assert( rc==SQLITE_NOMEM || rc==SQLITE_OK );
   if( rc==SQLITE_NOMEM ){
-    sqlite3_result_error_nomem(context);
+    sqlite4_result_error_nomem(context);
     goto exprtest_out;
   }
   pTokenizer->pModule = pModule;
 
-  zExpr = (const char *)sqlite3_value_text(argv[1]);
-  nExpr = sqlite3_value_bytes(argv[1]);
+  zExpr = (const char *)sqlite4_value_text(argv[1]);
+  nExpr = sqlite4_value_bytes(argv[1]);
   nCol = argc-2;
-  azCol = (char **)sqlite3_malloc(nCol*sizeof(char *));
+  azCol = (char **)sqlite4_malloc(nCol*sizeof(char *));
   if( !azCol ){
-    sqlite3_result_error_nomem(context);
+    sqlite4_result_error_nomem(context);
     goto exprtest_out;
   }
   for(ii=0; ii<nCol; ii++){
-    azCol[ii] = (char *)sqlite3_value_text(argv[ii+2]);
+    azCol[ii] = (char *)sqlite4_value_text(argv[ii+2]);
   }
 
-  rc = sqlite3Fts3ExprParse(
+  rc = sqlite4Fts3ExprParse(
       pTokenizer, azCol, 0, nCol, nCol, zExpr, nExpr, &pExpr
   );
   if( rc!=SQLITE_OK && rc!=SQLITE_NOMEM ){
-    sqlite3_result_error(context, "Error parsing expression", -1);
+    sqlite4_result_error(context, "Error parsing expression", -1);
   }else if( rc==SQLITE_NOMEM || !(zBuf = exprToString(pExpr, 0)) ){
-    sqlite3_result_error_nomem(context);
+    sqlite4_result_error_nomem(context);
   }else{
-    sqlite3_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
-    sqlite3_free(zBuf);
+    sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
+    sqlite4_free(zBuf);
   }
 
-  sqlite3Fts3ExprFree(pExpr);
+  sqlite4Fts3ExprFree(pExpr);
 
 exprtest_out:
   if( pModule && pTokenizer ){
     rc = pModule->xDestroy(pTokenizer);
   }
-  sqlite3_free(azCol);
+  sqlite4_free(azCol);
 }
 
 /*
 ** Register the query expression parser test function fts3_exprtest() 
 ** with database connection db. 
 */
-int sqlite3Fts3ExprInitTestInterface(sqlite3* db){
-  return sqlite3_create_function(
+int sqlite4Fts3ExprInitTestInterface(sqlite4* db){
+  return sqlite4_create_function(
       db, "fts3_exprtest", -1, SQLITE_UTF8, 0, fts3ExprTest, 0, 0
   );
 }

@@ -14,13 +14,13 @@
 #ifndef _SQLITE3RTREE_H_
 #define _SQLITE3RTREE_H_
 
-#include <sqlite3.h>
+#include <sqlite4.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct sqlite3_rtree_geometry sqlite3_rtree_geometry;
+typedef struct sqlite4_rtree_geometry sqlite4_rtree_geometry;
 
 /*
 ** Register a geometry callback named zGeom that can be used as part of an
@@ -28,10 +28,10 @@ typedef struct sqlite3_rtree_geometry sqlite3_rtree_geometry;
 **
 **   SELECT ... FROM <rtree> WHERE <rtree col> MATCH $zGeom(... params ...)
 */
-int sqlite3_rtree_geometry_callback(
-  sqlite3 *db,
+int sqlite4_rtree_geometry_callback(
+  sqlite4 *db,
   const char *zGeom,
-  int (*xGeom)(sqlite3_rtree_geometry *, int nCoord, double *aCoord, int *pRes),
+  int (*xGeom)(sqlite4_rtree_geometry *, int nCoord, double *aCoord, int *pRes),
   void *pContext
 );
 
@@ -40,7 +40,7 @@ int sqlite3_rtree_geometry_callback(
 ** A pointer to a structure of the following type is passed as the first
 ** argument to callbacks registered using rtree_geometry_callback().
 */
-struct sqlite3_rtree_geometry {
+struct sqlite4_rtree_geometry {
   void *pContext;                 /* Copy of pContext passed to s_r_g_c() */
   int nParam;                     /* Size of array aParam[] */
   double *aParam;                 /* Parameters passed to SQL geom function */

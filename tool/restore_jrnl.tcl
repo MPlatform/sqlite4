@@ -15,7 +15,7 @@
 # transaction from a recovered journal.
 #
 
-package require sqlite3
+package require sqlite4
 
 set parm_error 0
 set fix_chksums 0
@@ -225,7 +225,7 @@ hexio_write $jrnl_name 20 [format %08x $sectsz]
 hexio_write $jrnl_name 24 [format %08x $db_pgsz]
 
 # check the integrity of the database with the patched journal
-sqlite3 db $db_name
+sqlite4 db $db_name
 do_test restore_jrnl-1.0 {
   catchsql {PRAGMA integrity_check}
 } {0 ok}

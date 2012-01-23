@@ -8,10 +8,10 @@
 #    May you share freely, never taking more than you give.
 #
 #***********************************************************************
-# Test that if sqlite3_prepare_v2() is used to prepare a query, the
-# error-message associated with an sqlite3_step() error is available
-# immediately. Whereas if sqlite3_prepare() is used, it is not available
-# until sqlite3_finalize() or sqlite3_reset() has been called.
+# Test that if sqlite4_prepare_v2() is used to prepare a query, the
+# error-message associated with an sqlite4_step() error is available
+# immediately. Whereas if sqlite4_prepare() is used, it is not available
+# until sqlite4_finalize() or sqlite4_reset() has been called.
 #
 
 set testdir [file dirname $argv0]
@@ -31,20 +31,20 @@ proc error_messages_worker {prepare sql schema} {
 
   set stmt [$prepare db $sql -1 dummy]
   execsql $schema
-  lappend ret [sqlite3_step $stmt]
-  lappend ret [sqlite3_errmsg db]
-  lappend ret [sqlite3_finalize $stmt]
-  lappend ret [sqlite3_errmsg db]
+  lappend ret [sqlite4_step $stmt]
+  lappend ret [sqlite4_errmsg db]
+  lappend ret [sqlite4_finalize $stmt]
+  lappend ret [sqlite4_errmsg db]
 
   set ret
 }
 
 proc error_messages_v2 {sql {schema {}}} {
-  error_messages_worker sqlite3_prepare_v2 $sql $schema
+  error_messages_worker sqlite4_prepare_v2 $sql $schema
 }
 
 proc error_messages {sql {schema {}}} {
-  error_messages_worker sqlite3_prepare $sql $schema
+  error_messages_worker sqlite4_prepare $sql $schema
 }
 
 proc sql_error {msg} { error $msg }

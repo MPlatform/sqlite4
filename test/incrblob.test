@@ -109,7 +109,7 @@ proc nWrite {db} {
   return $stats(write)
 }
 
-sqlite3_soft_heap_limit 0
+sqlite4_soft_heap_limit 0
 
 foreach AutoVacuumMode [list 0 1] {
 
@@ -122,7 +122,7 @@ foreach AutoVacuumMode [list 0 1] {
   db close
   forcedelete test.db test.db-journal
 
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql "PRAGMA auto_vacuum = $AutoVacuumMode"
 
   do_test incrblob-2.$AutoVacuumMode.1 {
@@ -148,7 +148,7 @@ foreach AutoVacuumMode [list 0 1] {
   do_test incrblob-2.$AutoVacuumMode.3 {
     # Open and close the db to make sure the page cache is empty.
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
   
     # Read the last 20 bytes of the blob via a blob handle.
     set ::blob [db incrblob blobs v 1]
@@ -170,7 +170,7 @@ foreach AutoVacuumMode [list 0 1] {
   do_test incrblob-2.$AutoVacuumMode.5 {
     # Open and close the db to make sure the page cache is empty.
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
   
     # Write the second-to-last 20 bytes of the blob via a blob handle.
     #
@@ -199,7 +199,7 @@ foreach AutoVacuumMode [list 0 1] {
   do_test incrblob-2.$AutoVacuumMode.8 {
     # Open and close the db to make sure the page cache is empty.
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
 
     execsql { SELECT i FROM blobs } 
   } {45}
@@ -208,7 +208,7 @@ foreach AutoVacuumMode [list 0 1] {
     nRead db
   } [expr $AutoVacuumMode ? 4 : 30]
 }
-sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 
 #------------------------------------------------------------------------
 # incrblob-3.*: 
@@ -236,7 +236,7 @@ do_test incrblob-3.3 {
 } "1234567890abcdefghij"
 do_test incrblob-3.4 {
   set rc [catch {
-    sqlite3_blob_write $::blob 20 "qwertyuioplkjhgfds" 
+    sqlite4_blob_write $::blob 20 "qwertyuioplkjhgfds" 
   } msg]
   list $rc $msg
 } {1 SQLITE_READONLY}
@@ -348,7 +348,7 @@ do_test incrblob-4.9.2 {
 
 do_test incrblob-4.10 {
   set ::blob [db incrblob -readonly blobs k 3]
-  set rc [catch { sqlite3_blob_read $::blob 10 100 } msg]
+  set rc [catch { sqlite4_blob_read $::blob 10 100 } msg]
   list $rc $msg
 } {1 SQLITE_ERROR}
 do_test incrblob-4.10.2 {
@@ -363,7 +363,7 @@ ifcapable view {
   } {1 {cannot open view: blobs_view}}
 }
 ifcapable vtab {
-  register_echo_module [sqlite3_connection_pointer db]
+  register_echo_module [sqlite4_connection_pointer db]
   do_test incrblob-4.12 {
     execsql { CREATE VIRTUAL TABLE blobs_echo USING echo(blobs) }
     set rc [catch { db incrblob blobs_echo v 3 } msg]
@@ -426,10 +426,10 @@ unset -nocomplain ::text
 #     to an exclusive lock when writing earlier than usual, which
 #     makes some of these tests fail.
 #
-sqlite3_soft_heap_limit 0
+sqlite4_soft_heap_limit 0
 if {[permutation] != "memsubsys1"} {
   do_test incrblob-6.1 {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql {
       BEGIN;
       INSERT INTO blobs(k, v, i) VALUES('a', 'different', 'connection');
@@ -508,7 +508,7 @@ if {[permutation] != "memsubsys1"} {
   } {a different invocation}
   db2 close
 }
-sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 
 #-----------------------------------------------------------------------
 # The following tests verify the behaviour of the incremental IO
@@ -549,7 +549,7 @@ foreach {tn arg} {1 "" 2 -readonly} {
 
   do_test incrblob-7.1.$tn.1 {
     set ::b [eval db incrblob $arg t1 d 1]
-    binary scan [sqlite3_blob_read $::b 5000 5] c* c
+    binary scan [sqlite4_blob_read $::b 5000 5] c* c
     set c
   } {0 0 0 0 0}
   do_test incrblob-7.1.$tn.2 {
@@ -558,7 +558,7 @@ foreach {tn arg} {1 "" 2 -readonly} {
     }
   } {}
   do_test incrblob-7.1.$tn.3 {
-    set rc [catch { sqlite3_blob_read $::b 5000 5 } msg]
+    set rc [catch { sqlite4_blob_read $::b 5000 5 } msg]
     list $rc $msg
   } {1 SQLITE_ABORT}
   do_test incrblob-7.1.$tn.4 {
@@ -585,7 +585,7 @@ close $fd
 
 db close
 forcedelete test.db test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_test incrblob-7.2.1 {
   execsql {
@@ -636,41 +636,41 @@ do_test incrblob-7.3.3 {
 # gets set.  Ticket #2464.
 #
 do_test incrblob-7.4 {
-  set rc [catch {sqlite3_blob_write $::b 10 HELLO} msg]
+  set rc [catch {sqlite4_blob_write $::b 10 HELLO} msg]
   lappend rc $msg
 } {1 SQLITE_READONLY}
 do_test incrblob-7.5 {
-  sqlite3_errcode db
+  sqlite4_errcode db
 } {SQLITE_READONLY}
 do_test incrblob-7.6 {
-  sqlite3_errmsg db
+  sqlite4_errmsg db
 } {attempt to write a readonly database}
 
 # Test that if either the "offset" or "amount" arguments to
-# sqlite3_blob_write() are less than zero, SQLITE_ERROR is returned.
+# sqlite4_blob_write() are less than zero, SQLITE_ERROR is returned.
 # 
 do_test incrblob-8.1 {
   execsql { INSERT INTO t1 VALUES(314159, 'sqlite') }
   set ::b [db incrblob t1 b 314159]
   fconfigure $::b -translation binary
-  set rc [catch {sqlite3_blob_write $::b 10 HELLO -1} msg]
+  set rc [catch {sqlite4_blob_write $::b 10 HELLO -1} msg]
   lappend rc $msg
 } {1 SQLITE_ERROR}
 do_test incrblob-8.2 {
-  sqlite3_errcode db
+  sqlite4_errcode db
 } {SQLITE_ERROR}
 do_test incrblob-8.3 {
-  set rc [catch {sqlite3_blob_write $::b -1 HELLO 5} msg]
+  set rc [catch {sqlite4_blob_write $::b -1 HELLO 5} msg]
   lappend rc $msg
 } {1 SQLITE_ERROR}
 do_test incrblob-8.4 {
-  sqlite3_errcode db
+  sqlite4_errcode db
 } {SQLITE_ERROR}
 do_test incrblob-8.5 {
   execsql {SELECT b FROM t1 WHERE a = 314159}
 } {sqlite}
 do_test incrblob-8.6 {
-  set rc [catch {sqlite3_blob_write $::b 0 etilqs 6} msg]
+  set rc [catch {sqlite4_blob_write $::b 0 etilqs 6} msg]
   lappend rc $msg
 } {0 {}}
 do_test incrblob-8.7 {
@@ -678,7 +678,7 @@ do_test incrblob-8.7 {
 } {etilqs}
 
 # The following test case exposes an instance in the blob code where
-# an error message was set using a call similar to sqlite3_mprintf(zErr),
+# an error message was set using a call similar to sqlite4_mprintf(zErr),
 # where zErr is an arbitrary string. This is no good if the string contains
 # characters that can be mistaken for printf() formatting directives.
 #

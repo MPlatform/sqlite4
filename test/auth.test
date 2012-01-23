@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
-# focus of this script is testing the sqlite3_set_authorizer() API
+# focus of this script is testing the sqlite4_set_authorizer() API
 # and related functionality.
 #
 # $Id: auth.test,v 1.46 2009/07/02 18:40:35 danielk1977 Exp $
@@ -35,7 +35,7 @@ proc_real proc {name arguments script} {
 
 do_test auth-1.1.1 {
   db close
-  set ::DB [sqlite3 db test.db]
+  set ::DB [sqlite4 db test.db]
   proc auth {code arg1 arg2 arg3 arg4} {
     if {$code=="SQLITE_INSERT" && $arg1=="sqlite_master"} {
       return SQLITE_DENY
@@ -2136,7 +2136,7 @@ do_test auth-2.8 {
 } {0 {{} 2 33 {} 8 9}}
 do_test auth-2.9.1 {
   # We have to flush the cache here in case the Tcl interface tries to
-  # reuse a statement compiled with sqlite3_prepare_v2(). In this case,
+  # reuse a statement compiled with sqlite4_prepare_v2(). In this case,
   # the first error encountered is an SQLITE_SCHEMA error. Then, when
   # trying to recompile the statement, the authorization error is encountered.
   # If we do not flush the cache, the correct error message is returned, but

@@ -74,7 +74,7 @@ proc do_diskfull_test {prefix sql} {
     } {1 {database or disk is full}}
     set ::sqlite_diskfull_pending 0
     db close
-    sqlite3 db test.db
+    sqlite4 db test.db
     integrity_check ${prefix}.$::i.2
   }
 }
@@ -84,7 +84,7 @@ do_diskfull_test diskfull-2 VACUUM
 # db close
 # forcedelete test.db
 # forcedelete test.db-journal
-# sqlite3 db test.db
+# sqlite4 db test.db
 # 
 # do_test diskfull-3.1 {
 #   execsql {

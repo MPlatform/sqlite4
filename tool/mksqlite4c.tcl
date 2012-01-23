@@ -17,12 +17,12 @@
 # After the "tsrc" directory has been created and populated, run
 # this script:
 #
-#      tclsh mksqlite3c.tcl
+#      tclsh mksqlite4c.tcl
 #
-# The amalgamated SQLite code will be written into sqlite3.c
+# The amalgamated SQLite code will be written into sqlite4.c
 #
 
-# Begin by reading the "sqlite3.h" header file.  Extract the version number
+# Begin by reading the "sqlite4.h" header file.  Extract the version number
 # from in this file.  The versioon number is needed to generate the header
 # comment of the amalgamation.
 #
@@ -36,7 +36,7 @@ if {[lsearch $argv --linemacros]>=0} {
 } else {
   set linemacros 0
 }
-set in [open tsrc/sqlite3.h]
+set in [open tsrc/sqlite4.h]
 set cnt 0
 set VERSION ?????
 while {![eof $in]} {
@@ -50,7 +50,7 @@ close $in
 # Open the output file and write a header comment at the beginning
 # of the file.
 #
-set out [open sqlite3.c w]
+set out [open sqlite4.c w]
 # Force the output to use unix line endings, even on Windows.
 fconfigure $out -translation lf
 set today [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S UTC" -gmt 1]
@@ -65,13 +65,13 @@ puts $out [subst \
 ** translation unit.
 **
 ** This file is all you need to compile SQLite.  To use SQLite in other
-** programs, you need this file and the "sqlite3.h" header file that defines
+** programs, you need this file and the "sqlite4.h" header file that defines
 ** the programming interface to the SQLite library.  (If you do not have 
-** the "sqlite3.h" header file at hand, you will find a copy embedded within
-** the text of this file.  Search for "Begin file sqlite3.h" to find the start
-** of the embedded sqlite3.h header file.) Additional code files may be needed
+** the "sqlite4.h" header file at hand, you will find a copy embedded within
+** the text of this file.  Search for "Begin file sqlite4.h" to find the start
+** of the embedded sqlite4.h header file.) Additional code files may be needed
 ** if you want a wrapper to interface SQLite with your choice of programming
-** language. The code for the "sqlite3" command-line shell is also in a
+** language. The code for the "sqlite4" command-line shell is also in a
 ** separate file. This file contains only code for the core SQLite library.
 */
 #define SQLITE_CORE 1
@@ -109,8 +109,8 @@ foreach hdr {
    parse.h
    pcache.h
    rtree.h
-   sqlite3ext.h
-   sqlite3.h
+   sqlite4ext.h
+   sqlite4.h
    sqliteicu.h
    sqliteInt.h
    sqliteLimit.h
@@ -137,7 +137,7 @@ proc section_comment {text} {
 }
 
 # Read the source file named $filename and write it into the
-# sqlite3.c output file.  If any #include statements are seen,
+# sqlite4.c output file.  If any #include statements are seen,
 # process them approprately.
 #
 proc copy_file {filename} {
@@ -147,8 +147,8 @@ proc copy_file {filename} {
   section_comment "Begin file $tail"
   if {$linemacros} {puts $out "#line 1 \"$filename\""}
   set in [open $filename r]
-  set varpattern {^[a-zA-Z][a-zA-Z_0-9 *]+(sqlite3[_a-zA-Z0-9]+)(\[|;| =)}
-  set declpattern {[a-zA-Z][a-zA-Z_0-9 ]+ \**(sqlite3[_a-zA-Z0-9]+)\(}
+  set varpattern {^[a-zA-Z][a-zA-Z_0-9 *]+(sqlite4[_a-zA-Z0-9]+)(\[|;| =)}
+  set declpattern {[a-zA-Z][a-zA-Z_0-9 ]+ \**(sqlite4[_a-zA-Z0-9]+)\(}
   if {[file extension $filename]==".h"} {
     set declpattern " *$declpattern"
   }
@@ -182,7 +182,7 @@ proc copy_file {filename} {
       if {[regexp $declpattern $line all funcname]} {
         # Add the SQLITE_PRIVATE or SQLITE_API keyword before functions.
         # so that linkage can be modified at compile-time.
-        if {[regexp {^sqlite3_} $funcname]} {
+        if {[regexp {^sqlite4_} $funcname]} {
           puts $out "SQLITE_API $line"
         } else {
           puts $out "SQLITE_PRIVATE $line"
@@ -190,20 +190,20 @@ proc copy_file {filename} {
       } elseif {[regexp $varpattern $line all varname]} {
         # Add the SQLITE_PRIVATE before variable declarations or
         # definitions for internal use
-        if {![regexp {^sqlite3_} $varname]} {
+        if {![regexp {^sqlite4_} $varname]} {
           regsub {^extern } $line {} line
           puts $out "SQLITE_PRIVATE $line"
         } else {
-          if {[regexp {const char sqlite3_version\[\];} $line]} {
-            set line {const char sqlite3_version[] = SQLITE_VERSION;}
+          if {[regexp {const char sqlite4_version\[\];} $line]} {
+            set line {const char sqlite4_version[] = SQLITE_VERSION;}
           }
           regsub {^SQLITE_EXTERN } $line {} line
           puts $out "SQLITE_API $line"
         }
-      } elseif {[regexp {^(SQLITE_EXTERN )?void \(\*sqlite3IoTrace\)} $line]} {
+      } elseif {[regexp {^(SQLITE_EXTERN )?void \(\*sqlite4IoTrace\)} $line]} {
         regsub {^SQLITE_EXTERN } $line {} line
         puts $out "SQLITE_PRIVATE $line"
-      } elseif {[regexp {^void \(\*sqlite3Os} $line]} {
+      } elseif {[regexp {^void \(\*sqlite4Os} $line]} {
         puts $out "SQLITE_PRIVATE $line"
       } else {
         puts $out $line

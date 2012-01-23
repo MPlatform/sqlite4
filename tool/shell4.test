@@ -20,7 +20,7 @@
 #   shell4-1.*: Basic tests specific to the "stats" command.
 #
 
-set CLI "./sqlite3"
+set CLI "./sqlite4"
 
 proc do_test {name cmd expected} {
   puts -nonewline "$name ..."

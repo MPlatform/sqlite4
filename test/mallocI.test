@@ -44,7 +44,7 @@ do_malloc_test mallocI-3 -sqlprep {
 # does not result in a SHARED lock being left on the database file.
 #
 do_malloc_test mallocI-4 -tclprep {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   db2 eval {
     CREATE TABLE t1(a, b, c);
     CREATE TABLE t2(a, b, c);

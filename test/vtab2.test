@@ -20,7 +20,7 @@ ifcapable !vtab||!schema_pragmas {
   return
 }
 
-register_schema_module [sqlite3_connection_pointer db]
+register_schema_module [sqlite4_connection_pointer db]
 do_test vtab2-1.1 {
   execsql {
     CREATE VIRTUAL TABLE schema USING schema;
@@ -55,7 +55,7 @@ do_test vtab2-1.4 {
   }
 } {6}
 
-register_tclvar_module [sqlite3_connection_pointer db]
+register_tclvar_module [sqlite4_connection_pointer db]
 do_test vtab2-2.1 {
   set ::abc 123
   execsql {

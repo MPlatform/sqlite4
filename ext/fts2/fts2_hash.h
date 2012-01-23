@@ -71,18 +71,18 @@ struct fts2HashElem {
 /*
 ** Access routines.  To delete, insert a NULL pointer.
 */
-void sqlite3Fts2HashInit(fts2Hash*, int keytype, int copyKey);
-void *sqlite3Fts2HashInsert(fts2Hash*, const void *pKey, int nKey, void *pData);
-void *sqlite3Fts2HashFind(const fts2Hash*, const void *pKey, int nKey);
-void sqlite3Fts2HashClear(fts2Hash*);
+void sqlite4Fts2HashInit(fts2Hash*, int keytype, int copyKey);
+void *sqlite4Fts2HashInsert(fts2Hash*, const void *pKey, int nKey, void *pData);
+void *sqlite4Fts2HashFind(const fts2Hash*, const void *pKey, int nKey);
+void sqlite4Fts2HashClear(fts2Hash*);
 
 /*
 ** Shorthand for the functions above
 */
-#define fts2HashInit   sqlite3Fts2HashInit
-#define fts2HashInsert sqlite3Fts2HashInsert
-#define fts2HashFind   sqlite3Fts2HashFind
-#define fts2HashClear  sqlite3Fts2HashClear
+#define fts2HashInit   sqlite4Fts2HashInit
+#define fts2HashInsert sqlite4Fts2HashInsert
+#define fts2HashFind   sqlite4Fts2HashFind
+#define fts2HashClear  sqlite4Fts2HashClear
 
 /*
 ** Macros for looping over all elements of a hash table.  The idiom is

@@ -1,6 +1,6 @@
 
-load ./libsqlite3.dylib
-#package require sqlite3
+load ./libsqlite4.dylib
+#package require sqlite4
 source [file join [file dirname $argv0] rtree_util.tcl]
 
 wm title . "SQLite r-tree viewer"
@@ -10,7 +10,7 @@ if {[llength $argv]!=1} {
   puts stderr ""
   exit
 }
-sqlite3 db [lindex $argv 0]
+sqlite4 db [lindex $argv 0]
 
 canvas .c -background white -width 400 -height 300 -highlightthickness 0
 

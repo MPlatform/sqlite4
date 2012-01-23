@@ -10,7 +10,7 @@
 **
 *************************************************************************
 **
-** This module implements the sqlite3_status() interface and related
+** This module implements the sqlite4_status() interface and related
 ** functionality.
 */
 #include "sqliteInt.h"
@@ -19,31 +19,31 @@
 /*
 ** Variables in which to record status information.
 */
-typedef struct sqlite3StatType sqlite3StatType;
-static SQLITE_WSD struct sqlite3StatType {
+typedef struct sqlite4StatType sqlite4StatType;
+static SQLITE_WSD struct sqlite4StatType {
   int nowValue[10];         /* Current value */
   int mxValue[10];          /* Maximum value */
-} sqlite3Stat = { {0,}, {0,} };
+} sqlite4Stat = { {0,}, {0,} };
 
 
 /* The "wsdStat" macro will resolve to the status information
 ** state vector.  If writable static data is unsupported on the target,
 ** we have to locate the state vector at run-time.  In the more common
 ** case where writable static data is supported, wsdStat can refer directly
-** to the "sqlite3Stat" state vector declared above.
+** to the "sqlite4Stat" state vector declared above.
 */
 #ifdef SQLITE_OMIT_WSD
-# define wsdStatInit  sqlite3StatType *x = &GLOBAL(sqlite3StatType,sqlite3Stat)
+# define wsdStatInit  sqlite4StatType *x = &GLOBAL(sqlite4StatType,sqlite4Stat)
 # define wsdStat x[0]
 #else
 # define wsdStatInit
-# define wsdStat sqlite3Stat
+# define wsdStat sqlite4Stat
 #endif
 
 /*
 ** Return the current value of a status parameter.
 */
-int sqlite3StatusValue(int op){
+int sqlite4StatusValue(int op){
   wsdStatInit;
   assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
   return wsdStat.nowValue[op];
@@ -53,7 +53,7 @@ int sqlite3StatusValue(int op){
 ** Add N to the value of a status record.  It is assumed that the
 ** caller holds appropriate locks.
 */
-void sqlite3StatusAdd(int op, int N){
+void sqlite4StatusAdd(int op, int N){
   wsdStatInit;
   assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
   wsdStat.nowValue[op] += N;
@@ -65,7 +65,7 @@ void sqlite3StatusAdd(int op, int N){
 /*
 ** Set the value of a status to X.
 */
-void sqlite3StatusSet(int op, int X){
+void sqlite4StatusSet(int op, int X){
   wsdStatInit;
   assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
   wsdStat.nowValue[op] = X;
@@ -81,7 +81,7 @@ void sqlite3StatusSet(int op, int X){
 ** 32-bit integer is an atomic operation.  If that assumption is not true,
 ** then this routine is not threadsafe.
 */
-int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag){
+int sqlite4_status(int op, int *pCurrent, int *pHighwater, int resetFlag){
   wsdStatInit;
   if( op<0 || op>=ArraySize(wsdStat.nowValue) ){
     return SQLITE_MISUSE_BKPT;
@@ -97,15 +97,15 @@ int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag){
 /*
 ** Query status information for a single database connection
 */
-int sqlite3_db_status(
-  sqlite3 *db,          /* The database connection whose status is desired */
+int sqlite4_db_status(
+  sqlite4 *db,          /* The database connection whose status is desired */
   int op,               /* Status verb */
   int *pCurrent,        /* Write current value here */
   int *pHighwater,      /* Write high-water mark here */
   int resetFlag         /* Reset high-water mark if true */
 ){
   int rc = SQLITE_OK;   /* Return code */
-  sqlite3_mutex_enter(db->mutex);
+  sqlite4_mutex_enter(db->mutex);
   switch( op ){
     case SQLITE_DBSTATUS_LOOKASIDE_USED: {
       *pCurrent = db->lookaside.nOut;
@@ -140,15 +140,15 @@ int sqlite3_db_status(
     case SQLITE_DBSTATUS_CACHE_USED: {
       int totalUsed = 0;
       int i;
-      sqlite3BtreeEnterAll(db);
+      sqlite4BtreeEnterAll(db);
       for(i=0; i<db->nDb; i++){
         Btree *pBt = db->aDb[i].pBt;
         if( pBt ){
-          Pager *pPager = sqlite3BtreePager(pBt);
-          totalUsed += sqlite3PagerMemUsed(pPager);
+          Pager *pPager = sqlite4BtreePager(pBt);
+          totalUsed += sqlite4PagerMemUsed(pPager);
         }
       }
-      sqlite3BtreeLeaveAll(db);
+      sqlite4BtreeLeaveAll(db);
       *pCurrent = totalUsed;
       *pHighwater = 0;
       break;
@@ -163,34 +163,34 @@ int sqlite3_db_status(
       int i;                      /* Used to iterate through schemas */
       int nByte = 0;              /* Used to accumulate return value */
 
-      sqlite3BtreeEnterAll(db);
+      sqlite4BtreeEnterAll(db);
       db->pnBytesFreed = &nByte;
       for(i=0; i<db->nDb; i++){
         Schema *pSchema = db->aDb[i].pSchema;
         if( ALWAYS(pSchema!=0) ){
           HashElem *p;
 
-          nByte += sqlite3GlobalConfig.m.xRoundup(sizeof(HashElem)) * (
+          nByte += sqlite4GlobalConfig.m.xRoundup(sizeof(HashElem)) * (
               pSchema->tblHash.count 
             + pSchema->trigHash.count
             + pSchema->idxHash.count
             + pSchema->fkeyHash.count
           );
-          nByte += sqlite3MallocSize(pSchema->tblHash.ht);
-          nByte += sqlite3MallocSize(pSchema->trigHash.ht);
-          nByte += sqlite3MallocSize(pSchema->idxHash.ht);
-          nByte += sqlite3MallocSize(pSchema->fkeyHash.ht);
+          nByte += sqlite4MallocSize(pSchema->tblHash.ht);
+          nByte += sqlite4MallocSize(pSchema->trigHash.ht);
+          nByte += sqlite4MallocSize(pSchema->idxHash.ht);
+          nByte += sqlite4MallocSize(pSchema->fkeyHash.ht);
 
           for(p=sqliteHashFirst(&pSchema->trigHash); p; p=sqliteHashNext(p)){
-            sqlite3DeleteTrigger(db, (Trigger*)sqliteHashData(p));
+            sqlite4DeleteTrigger(db, (Trigger*)sqliteHashData(p));
           }
           for(p=sqliteHashFirst(&pSchema->tblHash); p; p=sqliteHashNext(p)){
-            sqlite3DeleteTable(db, (Table *)sqliteHashData(p));
+            sqlite4DeleteTable(db, (Table *)sqliteHashData(p));
           }
         }
       }
       db->pnBytesFreed = 0;
-      sqlite3BtreeLeaveAll(db);
+      sqlite4BtreeLeaveAll(db);
 
       *pHighwater = 0;
       *pCurrent = nByte;
@@ -208,7 +208,7 @@ int sqlite3_db_status(
 
       db->pnBytesFreed = &nByte;
       for(pVdbe=db->pVdbe; pVdbe; pVdbe=pVdbe->pNext){
-        sqlite3VdbeDeleteObject(db, pVdbe);
+        sqlite4VdbeDeleteObject(db, pVdbe);
       }
       db->pnBytesFreed = 0;
 
@@ -231,8 +231,8 @@ int sqlite3_db_status(
 
       for(i=0; i<db->nDb; i++){
         if( db->aDb[i].pBt ){
-          Pager *pPager = sqlite3BtreePager(db->aDb[i].pBt);
-          sqlite3PagerCacheStat(pPager, op, resetFlag, &nRet);
+          Pager *pPager = sqlite4BtreePager(db->aDb[i].pBt);
+          sqlite4PagerCacheStat(pPager, op, resetFlag, &nRet);
         }
       }
       *pHighwater = 0;
@@ -244,6 +244,6 @@ int sqlite3_db_status(
       rc = SQLITE_ERROR;
     }
   }
-  sqlite3_mutex_leave(db->mutex);
+  sqlite4_mutex_leave(db->mutex);
   return rc;
 }

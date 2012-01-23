@@ -37,8 +37,8 @@ struct Thread {
   /* The next group of fields are writable by the thread but read-only to the
   ** master. */
   int completed;        /* Number of operations completed */
-  sqlite3 *db;           /* Open database */
-  sqlite3_stmt *pStmt;     /* Pending operation */
+  sqlite4 *db;           /* Open database */
+  sqlite4_stmt *pStmt;     /* Pending operation */
   char *zErr;           /* operation error */
   char *zStaticErr;     /* Static error message */
   int rc;               /* operation return code */
@@ -61,12 +61,12 @@ static Thread threadset[N_THREAD];
 static void *thread_main(void *pArg){
   Thread *p = (Thread*)pArg;
   if( p->db ){
-    sqlite3_close(p->db);
+    sqlite4_close(p->db);
   }
-  sqlite3_open(p->zFilename, &p->db);
-  if( SQLITE_OK!=sqlite3_errcode(p->db) ){
-    p->zErr = strdup(sqlite3_errmsg(p->db));
-    sqlite3_close(p->db);
+  sqlite4_open(p->zFilename, &p->db);
+  if( SQLITE_OK!=sqlite4_errcode(p->db) ){
+    p->zErr = strdup(sqlite4_errmsg(p->db));
+    sqlite4_close(p->db);
     p->db = 0;
   }
   p->pStmt = 0;
@@ -74,7 +74,7 @@ static void *thread_main(void *pArg){
   while( p->opnum<=p->completed ) sched_yield();
   while( p->xOp ){
     if( p->zErr && p->zErr!=p->zStaticErr ){
-      sqlite3_free(p->zErr);
+      sqlite4_free(p->zErr);
       p->zErr = 0;
     }
     (*p->xOp)(p);
@@ -82,20 +82,20 @@ static void *thread_main(void *pArg){
     while( p->opnum<=p->completed ) sched_yield();
   }
   if( p->pStmt ){
-    sqlite3_finalize(p->pStmt);
+    sqlite4_finalize(p->pStmt);
     p->pStmt = 0;
   }
   if( p->db ){
-    sqlite3_close(p->db);
+    sqlite4_close(p->db);
     p->db = 0;
   }
   if( p->zErr && p->zErr!=p->zStaticErr ){
-    sqlite3_free(p->zErr);
+    sqlite4_free(p->zErr);
     p->zErr = 0;
   }
   p->completed++;
 #ifndef SQLITE_OMIT_DEPRECATED
-  sqlite3_thread_cleanup();
+  sqlite4_thread_cleanup();
 #endif
   return 0;
 }
@@ -141,14 +141,14 @@ static int tcl_thread_create(
     return TCL_ERROR;
   }
   threadset[i].busy = 1;
-  sqlite3_free(threadset[i].zFilename);
-  threadset[i].zFilename = sqlite3_mprintf("%s", argv[2]);
+  sqlite4_free(threadset[i].zFilename);
+  threadset[i].zFilename = sqlite4_mprintf("%s", argv[2]);
   threadset[i].opnum = 1;
   threadset[i].completed = 0;
   rc = pthread_create(&x, 0, thread_main, &threadset[i]);
   if( rc ){
     Tcl_AppendResult(interp, "failed to create the thread", 0);
-    sqlite3_free(threadset[i].zFilename);
+    sqlite4_free(threadset[i].zFilename);
     threadset[i].busy = 0;
     return TCL_ERROR;
   }
@@ -199,9 +199,9 @@ static void stop_thread(Thread *p){
   p->xOp = 0;
   p->opnum++;
   thread_wait(p);
-  sqlite3_free(p->zArg);
+  sqlite4_free(p->zArg);
   p->zArg = 0;
-  sqlite3_free(p->zFilename);
+  sqlite4_free(p->zFilename);
   p->zFilename = 0;
   p->busy = 0;
 }
@@ -444,10 +444,10 @@ static void do_compile(Thread *p){
     return;
   }
   if( p->pStmt ){
-    sqlite3_finalize(p->pStmt);
+    sqlite4_finalize(p->pStmt);
     p->pStmt = 0;
   }
-  p->rc = sqlite3_prepare(p->db, p->zArg, -1, &p->pStmt, 0);
+  p->rc = sqlite4_prepare(p->db, p->zArg, -1, &p->pStmt, 0);
 }
 
 /*
@@ -475,8 +475,8 @@ static int tcl_thread_compile(
   }
   thread_wait(&threadset[i]);
   threadset[i].xOp = do_compile;
-  sqlite3_free(threadset[i].zArg);
-  threadset[i].zArg = sqlite3_mprintf("%s", argv[2]);
+  sqlite4_free(threadset[i].zArg);
+  threadset[i].zArg = sqlite4_mprintf("%s", argv[2]);
   threadset[i].opnum++;
   return TCL_OK;
 }
@@ -491,14 +491,14 @@ static void do_step(Thread *p){
     p->rc = SQLITE_ERROR;
     return;
   }
-  p->rc = sqlite3_step(p->pStmt);
+  p->rc = sqlite4_step(p->pStmt);
   if( p->rc==SQLITE_ROW ){
-    p->argc = sqlite3_column_count(p->pStmt);
-    for(i=0; i<sqlite3_data_count(p->pStmt); i++){
-      p->argv[i] = (char*)sqlite3_column_text(p->pStmt, i);
+    p->argc = sqlite4_column_count(p->pStmt);
+    for(i=0; i<sqlite4_data_count(p->pStmt); i++){
+      p->argv[i] = (char*)sqlite4_column_text(p->pStmt, i);
     }
     for(i=0; i<p->argc; i++){
-      p->colv[i] = sqlite3_column_name(p->pStmt, i);
+      p->colv[i] = sqlite4_column_name(p->pStmt, i);
     }
   }
 }
@@ -541,7 +541,7 @@ static void do_finalize(Thread *p){
     p->rc = SQLITE_ERROR;
     return;
   }
-  p->rc = sqlite3_finalize(p->pStmt);
+  p->rc = sqlite4_finalize(p->pStmt);
   p->pStmt = 0;
 }
 
@@ -570,7 +570,7 @@ static int tcl_thread_finalize(
   }
   thread_wait(&threadset[i]);
   threadset[i].xOp = do_finalize;
-  sqlite3_free(threadset[i].zArg);
+  sqlite4_free(threadset[i].zArg);
   threadset[i].zArg = 0;
   threadset[i].opnum++;
   return TCL_OK;
@@ -588,7 +588,7 @@ static int tcl_thread_swap(
   const char **argv      /* Text of each argument */
 ){
   int i, j;
-  sqlite3 *temp;
+  sqlite4 *temp;
   if( argc!=3 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
        " ID1 ID2", 0);
@@ -629,7 +629,7 @@ static int tcl_thread_db_get(
 ){
   int i;
   char zBuf[100];
-  extern int sqlite3TestMakePointerStr(Tcl_Interp*, char*, void*);
+  extern int sqlite4TestMakePointerStr(Tcl_Interp*, char*, void*);
   if( argc!=2 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
        " ID", 0);
@@ -642,7 +642,7 @@ static int tcl_thread_db_get(
     return TCL_ERROR;
   }
   thread_wait(&threadset[i]);
-  sqlite3TestMakePointerStr(interp, zBuf, threadset[i].db);
+  sqlite4TestMakePointerStr(interp, zBuf, threadset[i].db);
   threadset[i].db = 0;
   Tcl_AppendResult(interp, zBuf, (char*)0);
   return TCL_OK;
@@ -659,8 +659,8 @@ static int tcl_thread_db_put(
   const char **argv      /* Text of each argument */
 ){
   int i;
-  extern int sqlite3TestMakePointerStr(Tcl_Interp*, char*, void*);
-  extern void *sqlite3TestTextToPtr(const char *);
+  extern int sqlite4TestMakePointerStr(Tcl_Interp*, char*, void*);
+  extern void *sqlite4TestTextToPtr(const char *);
   if( argc!=3 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
        " ID DB", 0);
@@ -674,7 +674,7 @@ static int tcl_thread_db_put(
   }
   thread_wait(&threadset[i]);
   assert( !threadset[i].db );
-  threadset[i].db = (sqlite3*)sqlite3TestTextToPtr(argv[2]);
+  threadset[i].db = (sqlite4*)sqlite4TestTextToPtr(argv[2]);
   return TCL_OK;
 }
 
@@ -692,7 +692,7 @@ static int tcl_thread_stmt_get(
 ){
   int i;
   char zBuf[100];
-  extern int sqlite3TestMakePointerStr(Tcl_Interp*, char*, void*);
+  extern int sqlite4TestMakePointerStr(Tcl_Interp*, char*, void*);
   if( argc!=2 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
        " ID", 0);
@@ -705,7 +705,7 @@ static int tcl_thread_stmt_get(
     return TCL_ERROR;
   }
   thread_wait(&threadset[i]);
-  sqlite3TestMakePointerStr(interp, zBuf, threadset[i].pStmt);
+  sqlite4TestMakePointerStr(interp, zBuf, threadset[i].pStmt);
   threadset[i].pStmt = 0;
   Tcl_AppendResult(interp, zBuf, (char*)0);
   return TCL_OK;

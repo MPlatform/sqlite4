@@ -47,11 +47,11 @@ ifcapable {!trigger || !shared_cache} { finish_test ; return }
 #   temptrigger-1.5: Check that the temp trigger can be dropped without error.
 #
 db close
-set ::enable_shared_cache [sqlite3_enable_shared_cache]
-sqlite3_enable_shared_cache 1
+set ::enable_shared_cache [sqlite4_enable_shared_cache]
+sqlite4_enable_shared_cache 1
 
-sqlite3 db test.db
-sqlite3 db2 test.db
+sqlite4 db test.db
+sqlite4 db2 test.db
 
 do_test temptrigger-1.1 {
   execsql {
@@ -104,7 +104,7 @@ catch {db2 close}
 # It does not do anything special to cause the schema to be reloaded.
 # 
 do_test temptrigger-2.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     DELETE FROM t1;
     CREATE TEMP TABLE tt1(a, b);
@@ -120,7 +120,7 @@ do_test temptrigger-2.2 {
   }
 } {10 20}
 do_test temptrigger-2.3 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   db2 close
 } {}
 do_test temptrigger-2.4 {
@@ -135,7 +135,7 @@ do_test temptrigger-2.5 {
 
 catch {db close}
 catch {db2 close}
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 
 #-------------------------------------------------------------------------
 # Test case temptrigger-3.* demonstrates a problem with temp triggers
@@ -159,8 +159,8 @@ sqlite3_enable_shared_cache $::enable_shared_cache
 do_test temptrigger-3.1 {
   catch { forcedelete test2.db test2.db-journal }
   catch { forcedelete test.db test.db-journal }
-  sqlite3 db test.db 
-  sqlite3 db2 test2.db 
+  sqlite4 db test.db 
+  sqlite4 db2 test2.db 
   execsql { CREATE TABLE t2(a, b) } db2
   execsql {
     ATTACH 'test2.db' AS aux;

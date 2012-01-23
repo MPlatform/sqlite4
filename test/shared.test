@@ -22,13 +22,13 @@ ifcapable !shared_cache||!attach {
   return
 }
 
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
 foreach av [list 0 1] {
 
 # Open the database connection and execute the auto-vacuum pragma
 forcedelete test.db
-sqlite3 db test.db
+sqlite4 db test.db
 
 ifcapable autovacuum {
   do_test shared-[expr $av+1].1.0 {
@@ -78,7 +78,7 @@ incr av
 # shared-7.*: Autovacuum and shared-cache.
 # shared-8.*: Tests related to the text encoding of shared-cache databases.
 # shared-9.*: TEMP triggers and shared-cache databases.
-# shared-10.*: Tests of sqlite3_close().
+# shared-10.*: Tests of sqlite4_close().
 # shared-11.*: Test transaction locking.
 #
 
@@ -86,7 +86,7 @@ do_test shared-$av.1.1 {
   # Open a second database on the file test.db. It should use the same pager
   # cache and schema as the original connection. Verify that only 1 file is 
   # opened.
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   set ::sqlite_open_file_count
   expr $sqlite_open_file_count-$extrafds_postlock
 } {1}
@@ -164,9 +164,9 @@ do_test shared-$av.2.1 {
   # file so that db3 does *not* share the same pager cache as db and db2
   # (there should be two open file handles).
   if {$::tcl_platform(platform)=="unix"} {
-    sqlite3 db3 ./test.db
+    sqlite4 db3 ./test.db
   } else {
-    sqlite3 db3 TEST.DB
+    sqlite4 db3 TEST.DB
   }
   set ::sqlite_open_file_count
   expr $sqlite_open_file_count-($extrafds_prelock+$extrafds_postlock)
@@ -296,8 +296,8 @@ catch {db3 close}
 forcedelete test.db
 forcedelete test2.db
 forcedelete test2.db-journal
-sqlite3 db  test.db
-sqlite3 db2 test2.db
+sqlite4 db  test.db
+sqlite4 db2 test2.db
 do_test shared-$av.4.1.1 {
   set sqlite_open_file_count
   expr $sqlite_open_file_count-($extrafds_prelock*2)
@@ -393,27 +393,27 @@ ifcapable compound {
 }
 
 do_test shared-$av.4.4.2 {
-  set ::DB2 [sqlite3_connection_pointer db2]
+  set ::DB2 [sqlite4_connection_pointer db2]
   set sql {SELECT * FROM abc}
-  set ::STMT1 [sqlite3_prepare $::DB2 $sql -1 DUMMY]
+  set ::STMT1 [sqlite4_prepare $::DB2 $sql -1 DUMMY]
   execsql {
     BEGIN;
     CREATE TABLE jkl(j, k, l);
   }
-  sqlite3_step $::STMT1
+  sqlite4_step $::STMT1
 } {SQLITE_ERROR}
 do_test shared-$av.4.4.3 {
-  sqlite3_finalize $::STMT1
+  sqlite4_finalize $::STMT1
 } {SQLITE_LOCKED}
 do_test shared-$av.4.4.4 {
   set rc [catch {
-    set ::STMT1 [sqlite3_prepare $::DB2 $sql -1 DUMMY]
+    set ::STMT1 [sqlite4_prepare $::DB2 $sql -1 DUMMY]
   } msg]
   list $rc $msg
 } {1 {(6) database schema is locked: test}}
 do_test shared-$av.4.4.5 {
   set rc [catch {
-    set ::STMT1 [sqlite3_prepare $::DB2 "SELECT * FROM ghi" -1 DUMMY]
+    set ::STMT1 [sqlite4_prepare $::DB2 "SELECT * FROM ghi" -1 DUMMY]
   } msg]
   list $rc $msg
 } {1 {(6) database schema is locked: test}}
@@ -429,8 +429,8 @@ foreach db [list test.db test1.db test2.db test3.db] {
   forcedelete $db ${db}-journal
 }
 do_test shared-$av.5.1.1 {
-  sqlite3 db1 test.db
-  sqlite3 db2 test.db
+  sqlite4 db1 test.db
+  sqlite4 db2 test.db
   execsql {
     ATTACH 'test1.db' AS test1;
     ATTACH 'test2.db' AS test2;
@@ -570,8 +570,8 @@ do_test shared-$av.7.1 {
   # of two tables, t1 and t2. Both have a single index. Table t1 is 
   # populated first (so consists of pages toward the start of the db file), 
   # t2 second (pages toward the end of the file). 
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql {
     BEGIN;
     CREATE TABLE t1(a PRIMARY KEY, b);
@@ -646,7 +646,7 @@ unset -nocomplain contents
 forcedelete test.db test.db-journal
 ifcapable utf16 {
   do_test shared-$av.8.1.1 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       PRAGMA encoding = 'UTF-16';
       SELECT * FROM sqlite_master;
@@ -657,7 +657,7 @@ ifcapable utf16 {
   } {UTF-16}
 
   do_test shared-$av.8.1.3 {
-    sqlite3 db2 test.db
+    sqlite4 db2 test.db
     execsql {
       PRAGMA encoding = 'UTF-8';
       CREATE TABLE abc(a, b, c);
@@ -683,7 +683,7 @@ ifcapable utf16 {
     }
   } {}
   do_test shared-$av.8.2.2 {
-    sqlite3 db2 test2.db
+    sqlite4 db2 test2.db
     execsql {
       PRAGMA encoding = 'UTF-16';
       CREATE TABLE def(d, e, f);
@@ -696,29 +696,29 @@ ifcapable utf16 {
   forcedelete test.db test2.db
 
   do_test shared-$av.8.3.2 {
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql { CREATE TABLE def(d, e, f) }
     execsql { PRAGMA encoding }
   } {UTF-8}
   do_test shared-$av.8.3.3 {
     set zDb16 "[encoding convertto unicode test.db]\x00\x00"
-    set db16 [sqlite3_open16 $zDb16 {}]
+    set db16 [sqlite4_open16 $zDb16 {}]
 
-    set stmt [sqlite3_prepare $db16 "SELECT sql FROM sqlite_master" -1 DUMMY]
-    sqlite3_step $stmt
-    set sql [sqlite3_column_text $stmt 0]
-    sqlite3_finalize $stmt
+    set stmt [sqlite4_prepare $db16 "SELECT sql FROM sqlite_master" -1 DUMMY]
+    sqlite4_step $stmt
+    set sql [sqlite4_column_text $stmt 0]
+    sqlite4_finalize $stmt
     set sql
   } {CREATE TABLE def(d, e, f)}
   do_test shared-$av.8.3.4 {
-    set stmt [sqlite3_prepare $db16 "PRAGMA encoding" -1 DUMMY]
-    sqlite3_step $stmt
-    set enc [sqlite3_column_text $stmt 0]
-    sqlite3_finalize $stmt
+    set stmt [sqlite4_prepare $db16 "PRAGMA encoding" -1 DUMMY]
+    sqlite4_step $stmt
+    set enc [sqlite4_column_text $stmt 0]
+    sqlite4_finalize $stmt
     set enc
   } {UTF-8}
 
-  sqlite3_close $db16
+  sqlite4_close $db16
 
 # Bug #2547 is causing this to fail.
 if 0 {
@@ -741,8 +741,8 @@ forcedelete test.db test2.db
 ifcapable trigger&&tempdb {
 
 do_test shared-$av.9.1 {
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql {
     CREATE TABLE abc(a, b, c);
     CREATE TABLE abc_mirror(a, b, c);
@@ -773,8 +773,8 @@ do_test shared-$av.9.3 {
 do_test shared-$av.10.1 {
   # Create a small sample database with two connections to it (db and db2).
   forcedelete test.db
-  sqlite3 db  test.db
-  sqlite3 db2 test.db
+  sqlite4 db  test.db
+  sqlite4 db2 test.db
   execsql {
     CREATE TABLE ab(a PRIMARY KEY, b);
     CREATE TABLE de(d PRIMARY KEY, e);
@@ -800,9 +800,9 @@ do_test shared-$av.10.3 {
   # An external connection should be able to read the database, but not
   # prepare a write operation.
   if {$::tcl_platform(platform)=="unix"} {
-    sqlite3 db3 ./test.db
+    sqlite4 db3 ./test.db
   } else {
-    sqlite3 db3 TEST.DB
+    sqlite4 db3 TEST.DB
   }
   execsql {
     SELECT * FROM ab;
@@ -854,8 +854,8 @@ do_test shared-$av.10.11 {
 
 do_test shared-$av.11.1 {
   forcedelete test.db
-  sqlite3 db  test.db
-  sqlite3 db2 test.db
+  sqlite4 db  test.db
+  sqlite4 db2 test.db
   execsql {
     CREATE TABLE abc(a, b, c);
     CREATE TABLE abc2(a, b, c);
@@ -903,9 +903,9 @@ do_test shared-$av.11.8 {
   }
   set res
 } {1 4 {} 7}
-if {[llength [info command sqlite3_shared_cache_report]]==1} {
+if {[llength [info command sqlite4_shared_cache_report]]==1} {
   do_test shared-$av.11.9 {
-    string tolower [sqlite3_shared_cache_report]
+    string tolower [sqlite4_shared_cache_report]
   } [string tolower [list [file nativename [file normalize test.db]] 2]]
 }
 
@@ -917,7 +917,7 @@ do_test shared-$av.11.11 {
 # This tests that if it is impossible to free any pages, SQLite will
 # exceed the limit set by PRAGMA cache_size.
 forcedelete test.db test.db-journal
-sqlite3 db test.db 
+sqlite4 db test.db 
 ifcapable pager_pragmas {
   do_test shared-$av.12.1 {
     execsql {
@@ -930,7 +930,7 @@ do_test shared-$av.12.2 {
   set ::db_handles [list]
   for {set i 1} {$i < 15} {incr i} {
     lappend ::db_handles db$i
-    sqlite3 db$i test.db 
+    sqlite4 db$i test.db 
     execsql "CREATE TABLE db${i}(a, b, c)" db$i 
     execsql "INSERT INTO db${i} VALUES(1, 2, 3)"
   }
@@ -964,7 +964,7 @@ do_test shared-$av.12.X {
 #
 do_test shared-$av.13.1 {
   forcedelete test2.db test3.db test4.db test5.db
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   execsql {
     ATTACH 'test2.db' AS aux2;
     ATTACH 'test3.db' AS aux3;
@@ -1000,8 +1000,8 @@ do_test shared-$av.13.3 {
 # structure is closed while some other connection has an open cursor.
 #
 do_test shared-$av.14.1 {
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql {SELECT name FROM sqlite_master}
 } {db1 db2 db3 db4 db5 db6 db7 db8 db9 db10 db11 db12 db13 db14}
 do_test shared-$av.14.2 {
@@ -1027,8 +1027,8 @@ do_test shared-$av.14.3 {
 #
 do_test shared-$av-15.1 {
   forcedelete test.db
-  sqlite3 db test.db -fullmutex 1
-  sqlite3 db2 test.db -fullmutex 1
+  sqlite4 db test.db -fullmutex 1
+  sqlite4 db2 test.db -fullmutex 1
   execsql {
     CREATE TABLE t1(a, b, c);
     CREATE INDEX i1 ON t1(a, b);
@@ -1058,5 +1058,5 @@ db2 close
 
 }
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test

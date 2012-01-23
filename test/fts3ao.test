@@ -112,7 +112,7 @@ do_test fts3ao-2.12 {
 #
 db close
 forcedelete test.db test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 do_test fts3ao-3.1 {
   execsql {

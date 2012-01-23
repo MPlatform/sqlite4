@@ -85,7 +85,7 @@ foreach code [list {
       execsql { COMMIT ; BEGIN }
       set lowpoint $now
       do_test pager2.1.$otn.$tn { 
-        sqlite3 db2 test.db
+        sqlite4 db2 test.db
         execsql {
           SELECT COALESCE(max(i), 0) FROM t1;
           PRAGMA integrity_check;

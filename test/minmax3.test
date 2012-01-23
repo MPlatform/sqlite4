@@ -42,7 +42,7 @@ do_test minmax3-1.0 {
   }
   db close
   set_file_format 4
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     BEGIN;
     INSERT INTO t1 VALUES('1', 'I',   'one');

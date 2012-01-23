@@ -80,7 +80,7 @@ for {set i 1} {$i < 50} {incr i} {
   # Check that everything looks OK from the point of view of an 
   # external connection.
   #
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   do_test wal3-1.$i.2 {
     execsql { SELECT count(*) FROM t1 } db2
   } 4018
@@ -97,7 +97,7 @@ for {set i 1} {$i < 50} {incr i} {
   forcecopy test.db test2.db
   forcecopy test.db-wal test2.db-wal
   forcedelete test2.db-journal
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   do_test wal3-1.$i.5 {
     execsql { SELECT count(*) FROM t1 } db2
   } 4018
@@ -213,7 +213,7 @@ foreach {tn syncmode synccount} {
     testvfs T
     T filter {} 
     T script sync_counter
-    sqlite3 db test.db -vfs T
+    sqlite4 db test.db -vfs T
   
     execsql "PRAGMA synchronous = $syncmode"
     execsql { PRAGMA journal_mode = WAL }
@@ -252,7 +252,7 @@ do_test wal3-4.1 {
   T filter xShmLock 
   T script lock_callback
   set ::locks [list]
-  sqlite3 db test.db -vfs T
+  sqlite4 db test.db -vfs T
   execsql { SELECT * FROM x }
   lrange $::locks 0 3
 } [list {0 1 lock exclusive} {1 7 lock exclusive}      \
@@ -261,7 +261,7 @@ do_test wal3-4.1 {
 do_test wal3-4.2 {
   db close
   set ::locks [list]
-  sqlite3 db test.db -vfs T
+  sqlite4 db test.db -vfs T
   execsql { SELECT * FROM x }
   lrange $::locks 0 3
 } [list {0 1 lock exclusive} {1 7 lock exclusive}      \
@@ -277,7 +277,7 @@ puts "  without HAVE_USLEEP defined, it may be 100 seconds."
 do_test wal3-4.3 {
   db close
   set ::locks [list]
-  sqlite3 db test.db -vfs T
+  sqlite4 db test.db -vfs T
   catchsql { SELECT * FROM x }
 } {1 {locking protocol}}
 
@@ -289,7 +289,7 @@ proc lock_callback {method filename handle lock} {
 do_test wal3-4.4 {
   db close
   set ::locks [list]
-  sqlite3 db test.db -vfs T
+  sqlite4 db test.db -vfs T
   catchsql { SELECT * FROM x }
 } {1 {locking protocol}}
 db close
@@ -341,7 +341,7 @@ proc method_callback {method args} {
       # things up so that an IO error occurs within an xShmLock() callback
       # made by the second client (aka [db2]).
       #
-      sqlite3 db2 test.db
+      sqlite4 db2 test.db
       if { $::wal3_do_lockfailure } { T filter xShmLock }
       set ::testrc [ catch { db2 eval "SELECT * FROM t1" } ::testmsg ]
       T filter {}
@@ -413,7 +413,7 @@ catch {db close}
 testvfs T -default 1
 do_test wal3-6.1.1 {
   forcedelete test.db test.db-journal test.db wal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql { PRAGMA auto_vacuum = off }
   execsql { PRAGMA journal_mode = WAL }
   execsql {
@@ -423,8 +423,8 @@ do_test wal3-6.1.1 {
   }
 } {}
 do_test wal3-6.1.2 {
-  sqlite3 db2 test.db
-  sqlite3 db3 test.db
+  sqlite4 db2 test.db
+  sqlite4 db3 test.db
   execsql { BEGIN ; SELECT * FROM t1 } db3
 } {o t t f}
 do_test wal3-6.1.3 {
@@ -494,8 +494,8 @@ db close
 
 do_test wal3-6.2.1 {
   forcedelete test.db test.db-journal test.db wal
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql { PRAGMA auto_vacuum = off }
   execsql { PRAGMA journal_mode = WAL }
   execsql {
@@ -560,7 +560,7 @@ catch {db close}
 testvfs T -default 1
 do_test wal3-7.1.1 {
   forcedelete test.db test.db-journal test.db wal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA journal_mode = WAL;
     CREATE TABLE blue(red PRIMARY KEY, green);
@@ -573,7 +573,7 @@ proc method_callback {method args} {
   if {$method == "xOpen"} { return "reader" }
 }
 do_test wal3-7.1.2 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { SELECT * FROM blue } db2
 } {}
 
@@ -617,8 +617,8 @@ T delete
 # 
 do_test wal3-8.1 {
   forcedelete test.db test.db-journal test.db wal
-  sqlite3 db test.db
-  sqlite3 db2 test.db
+  sqlite4 db test.db
+  sqlite4 db2 test.db
   execsql {
     PRAGMA auto_vacuum = off;
     PRAGMA journal_mode = WAL;
@@ -660,8 +660,8 @@ proc lock_callback {method file handle spec} {
     set ::r [catchsql { SELECT * FROM b } db2]
   }
 }
-sqlite3 db test.db
-sqlite3 db2 test.db
+sqlite4 db test.db
+sqlite4 db2 test.db
 do_test wal3-8.5 {
   execsql { SELECT * FROM b }
 } {Tehran Qom Markazi Qazvin Gilan Ardabil}
@@ -673,7 +673,7 @@ db close
 db2 close
 
 faultsim_restore_and_reopen
-sqlite3 db2 test.db
+sqlite4 db2 test.db
 T filter xShmLock
 T script lock_callback
 proc lock_callback {method file handle spec} {
@@ -711,7 +711,7 @@ set nConn 50
 if { [string match *BSD $tcl_platform(os)] } { set nConn 25 }
 do_test wal3-9.0 {
   forcedelete test.db test.db-journal test.db wal
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     PRAGMA page_size = 1024;
     PRAGMA journal_mode = WAL;
@@ -722,7 +722,7 @@ do_test wal3-9.0 {
 for {set i 0} {$i < $nConn} {incr i} {
   set c db$i
   do_test wal3-9.1.$i {
-    sqlite3 $c test.db
+    sqlite4 $c test.db
     execsql { UPDATE whoami SET x = $c }
     execsql {
       BEGIN;

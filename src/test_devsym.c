@@ -16,7 +16,7 @@
 */
 #if SQLITE_TEST          /* This file is used for testing only */
 
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include "sqliteInt.h"
 
 /*
@@ -31,48 +31,48 @@
 
 typedef struct devsym_file devsym_file;
 struct devsym_file {
-  sqlite3_file base;
-  sqlite3_file *pReal;
+  sqlite4_file base;
+  sqlite4_file *pReal;
 };
 
 /*
 ** Method declarations for devsym_file.
 */
-static int devsymClose(sqlite3_file*);
-static int devsymRead(sqlite3_file*, void*, int iAmt, sqlite3_int64 iOfst);
-static int devsymWrite(sqlite3_file*,const void*,int iAmt, sqlite3_int64 iOfst);
-static int devsymTruncate(sqlite3_file*, sqlite3_int64 size);
-static int devsymSync(sqlite3_file*, int flags);
-static int devsymFileSize(sqlite3_file*, sqlite3_int64 *pSize);
-static int devsymLock(sqlite3_file*, int);
-static int devsymUnlock(sqlite3_file*, int);
-static int devsymCheckReservedLock(sqlite3_file*, int *);
-static int devsymFileControl(sqlite3_file*, int op, void *pArg);
-static int devsymSectorSize(sqlite3_file*);
-static int devsymDeviceCharacteristics(sqlite3_file*);
-static int devsymShmLock(sqlite3_file*,int,int,int);
-static int devsymShmMap(sqlite3_file*,int,int,int, void volatile **);
-static void devsymShmBarrier(sqlite3_file*);
-static int devsymShmUnmap(sqlite3_file*,int);
+static int devsymClose(sqlite4_file*);
+static int devsymRead(sqlite4_file*, void*, int iAmt, sqlite4_int64 iOfst);
+static int devsymWrite(sqlite4_file*,const void*,int iAmt, sqlite4_int64 iOfst);
+static int devsymTruncate(sqlite4_file*, sqlite4_int64 size);
+static int devsymSync(sqlite4_file*, int flags);
+static int devsymFileSize(sqlite4_file*, sqlite4_int64 *pSize);
+static int devsymLock(sqlite4_file*, int);
+static int devsymUnlock(sqlite4_file*, int);
+static int devsymCheckReservedLock(sqlite4_file*, int *);
+static int devsymFileControl(sqlite4_file*, int op, void *pArg);
+static int devsymSectorSize(sqlite4_file*);
+static int devsymDeviceCharacteristics(sqlite4_file*);
+static int devsymShmLock(sqlite4_file*,int,int,int);
+static int devsymShmMap(sqlite4_file*,int,int,int, void volatile **);
+static void devsymShmBarrier(sqlite4_file*);
+static int devsymShmUnmap(sqlite4_file*,int);
 
 /*
 ** Method declarations for devsym_vfs.
 */
-static int devsymOpen(sqlite3_vfs*, const char *, sqlite3_file*, int , int *);
-static int devsymDelete(sqlite3_vfs*, const char *zName, int syncDir);
-static int devsymAccess(sqlite3_vfs*, const char *zName, int flags, int *);
-static int devsymFullPathname(sqlite3_vfs*, const char *zName, int, char *zOut);
+static int devsymOpen(sqlite4_vfs*, const char *, sqlite4_file*, int , int *);
+static int devsymDelete(sqlite4_vfs*, const char *zName, int syncDir);
+static int devsymAccess(sqlite4_vfs*, const char *zName, int flags, int *);
+static int devsymFullPathname(sqlite4_vfs*, const char *zName, int, char *zOut);
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
-static void *devsymDlOpen(sqlite3_vfs*, const char *zFilename);
-static void devsymDlError(sqlite3_vfs*, int nByte, char *zErrMsg);
-static void (*devsymDlSym(sqlite3_vfs*,void*, const char *zSymbol))(void);
-static void devsymDlClose(sqlite3_vfs*, void*);
+static void *devsymDlOpen(sqlite4_vfs*, const char *zFilename);
+static void devsymDlError(sqlite4_vfs*, int nByte, char *zErrMsg);
+static void (*devsymDlSym(sqlite4_vfs*,void*, const char *zSymbol))(void);
+static void devsymDlClose(sqlite4_vfs*, void*);
 #endif /* SQLITE_OMIT_LOAD_EXTENSION */
-static int devsymRandomness(sqlite3_vfs*, int nByte, char *zOut);
-static int devsymSleep(sqlite3_vfs*, int microseconds);
-static int devsymCurrentTime(sqlite3_vfs*, double*);
+static int devsymRandomness(sqlite4_vfs*, int nByte, char *zOut);
+static int devsymSleep(sqlite4_vfs*, int microseconds);
+static int devsymCurrentTime(sqlite4_vfs*, double*);
 
-static sqlite3_vfs devsym_vfs = {
+static sqlite4_vfs devsym_vfs = {
   2,                     /* iVersion */
   sizeof(devsym_file),      /* szOsFile */
   DEVSYM_MAX_PATHNAME,      /* mxPathname */
@@ -101,7 +101,7 @@ static sqlite3_vfs devsym_vfs = {
   0                         /* xCurrentTimeInt64 */
 };
 
-static sqlite3_io_methods devsym_io_methods = {
+static sqlite4_io_methods devsym_io_methods = {
   2,                                /* iVersion */
   devsymClose,                      /* xClose */
   devsymRead,                       /* xRead */
@@ -122,7 +122,7 @@ static sqlite3_io_methods devsym_io_methods = {
 };
 
 struct DevsymGlobal {
-  sqlite3_vfs *pVfs;
+  sqlite4_vfs *pVfs;
   int iDeviceChar;
   int iSectorSize;
 };
@@ -131,131 +131,131 @@ struct DevsymGlobal g = {0, 0, 512};
 /*
 ** Close an devsym-file.
 */
-static int devsymClose(sqlite3_file *pFile){
+static int devsymClose(sqlite4_file *pFile){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsClose(p->pReal);
+  return sqlite4OsClose(p->pReal);
 }
 
 /*
 ** Read data from an devsym-file.
 */
 static int devsymRead(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
 ){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsRead(p->pReal, zBuf, iAmt, iOfst);
+  return sqlite4OsRead(p->pReal, zBuf, iAmt, iOfst);
 }
 
 /*
 ** Write data to an devsym-file.
 */
 static int devsymWrite(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   const void *zBuf, 
   int iAmt, 
   sqlite_int64 iOfst
 ){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsWrite(p->pReal, zBuf, iAmt, iOfst);
+  return sqlite4OsWrite(p->pReal, zBuf, iAmt, iOfst);
 }
 
 /*
 ** Truncate an devsym-file.
 */
-static int devsymTruncate(sqlite3_file *pFile, sqlite_int64 size){
+static int devsymTruncate(sqlite4_file *pFile, sqlite_int64 size){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsTruncate(p->pReal, size);
+  return sqlite4OsTruncate(p->pReal, size);
 }
 
 /*
 ** Sync an devsym-file.
 */
-static int devsymSync(sqlite3_file *pFile, int flags){
+static int devsymSync(sqlite4_file *pFile, int flags){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsSync(p->pReal, flags);
+  return sqlite4OsSync(p->pReal, flags);
 }
 
 /*
 ** Return the current file-size of an devsym-file.
 */
-static int devsymFileSize(sqlite3_file *pFile, sqlite_int64 *pSize){
+static int devsymFileSize(sqlite4_file *pFile, sqlite_int64 *pSize){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsFileSize(p->pReal, pSize);
+  return sqlite4OsFileSize(p->pReal, pSize);
 }
 
 /*
 ** Lock an devsym-file.
 */
-static int devsymLock(sqlite3_file *pFile, int eLock){
+static int devsymLock(sqlite4_file *pFile, int eLock){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsLock(p->pReal, eLock);
+  return sqlite4OsLock(p->pReal, eLock);
 }
 
 /*
 ** Unlock an devsym-file.
 */
-static int devsymUnlock(sqlite3_file *pFile, int eLock){
+static int devsymUnlock(sqlite4_file *pFile, int eLock){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsUnlock(p->pReal, eLock);
+  return sqlite4OsUnlock(p->pReal, eLock);
 }
 
 /*
 ** Check if another file-handle holds a RESERVED lock on an devsym-file.
 */
-static int devsymCheckReservedLock(sqlite3_file *pFile, int *pResOut){
+static int devsymCheckReservedLock(sqlite4_file *pFile, int *pResOut){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsCheckReservedLock(p->pReal, pResOut);
+  return sqlite4OsCheckReservedLock(p->pReal, pResOut);
 }
 
 /*
 ** File control method. For custom operations on an devsym-file.
 */
-static int devsymFileControl(sqlite3_file *pFile, int op, void *pArg){
+static int devsymFileControl(sqlite4_file *pFile, int op, void *pArg){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsFileControl(p->pReal, op, pArg);
+  return sqlite4OsFileControl(p->pReal, op, pArg);
 }
 
 /*
 ** Return the sector-size in bytes for an devsym-file.
 */
-static int devsymSectorSize(sqlite3_file *pFile){
+static int devsymSectorSize(sqlite4_file *pFile){
   return g.iSectorSize;
 }
 
 /*
 ** Return the device characteristic flags supported by an devsym-file.
 */
-static int devsymDeviceCharacteristics(sqlite3_file *pFile){
+static int devsymDeviceCharacteristics(sqlite4_file *pFile){
   return g.iDeviceChar;
 }
 
 /*
 ** Shared-memory methods are all pass-thrus.
 */
-static int devsymShmLock(sqlite3_file *pFile, int ofst, int n, int flags){
+static int devsymShmLock(sqlite4_file *pFile, int ofst, int n, int flags){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsShmLock(p->pReal, ofst, n, flags);
+  return sqlite4OsShmLock(p->pReal, ofst, n, flags);
 }
 static int devsymShmMap(
-  sqlite3_file *pFile, 
+  sqlite4_file *pFile, 
   int iRegion, 
   int szRegion, 
   int isWrite, 
   void volatile **pp
 ){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsShmMap(p->pReal, iRegion, szRegion, isWrite, pp);
+  return sqlite4OsShmMap(p->pReal, iRegion, szRegion, isWrite, pp);
 }
-static void devsymShmBarrier(sqlite3_file *pFile){
+static void devsymShmBarrier(sqlite4_file *pFile){
   devsym_file *p = (devsym_file *)pFile;
-  sqlite3OsShmBarrier(p->pReal);
+  sqlite4OsShmBarrier(p->pReal);
 }
-static int devsymShmUnmap(sqlite3_file *pFile, int delFlag){
+static int devsymShmUnmap(sqlite4_file *pFile, int delFlag){
   devsym_file *p = (devsym_file *)pFile;
-  return sqlite3OsShmUnmap(p->pReal, delFlag);
+  return sqlite4OsShmUnmap(p->pReal, delFlag);
 }
 
 
@@ -264,16 +264,16 @@ static int devsymShmUnmap(sqlite3_file *pFile, int delFlag){
 ** Open an devsym file handle.
 */
 static int devsymOpen(
-  sqlite3_vfs *pVfs,
+  sqlite4_vfs *pVfs,
   const char *zName,
-  sqlite3_file *pFile,
+  sqlite4_file *pFile,
   int flags,
   int *pOutFlags
 ){
   int rc;
   devsym_file *p = (devsym_file *)pFile;
-  p->pReal = (sqlite3_file *)&p[1];
-  rc = sqlite3OsOpen(g.pVfs, zName, p->pReal, flags, pOutFlags);
+  p->pReal = (sqlite4_file *)&p[1];
+  rc = sqlite4OsOpen(g.pVfs, zName, p->pReal, flags, pOutFlags);
   if( p->pReal->pMethods ){
     pFile->pMethods = &devsym_io_methods;
   }
@@ -285,8 +285,8 @@ static int devsymOpen(
 ** ensure the file-system modifications are synced to disk before
 ** returning.
 */
-static int devsymDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
-  return sqlite3OsDelete(g.pVfs, zPath, dirSync);
+static int devsymDelete(sqlite4_vfs *pVfs, const char *zPath, int dirSync){
+  return sqlite4OsDelete(g.pVfs, zPath, dirSync);
 }
 
 /*
@@ -294,12 +294,12 @@ static int devsymDelete(sqlite3_vfs *pVfs, const char *zPath, int dirSync){
 ** is available, or false otherwise.
 */
 static int devsymAccess(
-  sqlite3_vfs *pVfs, 
+  sqlite4_vfs *pVfs, 
   const char *zPath, 
   int flags, 
   int *pResOut
 ){
-  return sqlite3OsAccess(g.pVfs, zPath, flags, pResOut);
+  return sqlite4OsAccess(g.pVfs, zPath, flags, pResOut);
 }
 
 /*
@@ -308,20 +308,20 @@ static int devsymAccess(
 ** of at least (DEVSYM_MAX_PATHNAME+1) bytes.
 */
 static int devsymFullPathname(
-  sqlite3_vfs *pVfs, 
+  sqlite4_vfs *pVfs, 
   const char *zPath, 
   int nOut, 
   char *zOut
 ){
-  return sqlite3OsFullPathname(g.pVfs, zPath, nOut, zOut);
+  return sqlite4OsFullPathname(g.pVfs, zPath, nOut, zOut);
 }
 
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
 /*
 ** Open the dynamic library located at zPath and return a handle.
 */
-static void *devsymDlOpen(sqlite3_vfs *pVfs, const char *zPath){
-  return sqlite3OsDlOpen(g.pVfs, zPath);
+static void *devsymDlOpen(sqlite4_vfs *pVfs, const char *zPath){
+  return sqlite4OsDlOpen(g.pVfs, zPath);
 }
 
 /*
@@ -329,22 +329,22 @@ static void *devsymDlOpen(sqlite3_vfs *pVfs, const char *zPath){
 ** utf-8 string describing the most recent error encountered associated 
 ** with dynamic libraries.
 */
-static void devsymDlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg){
-  sqlite3OsDlError(g.pVfs, nByte, zErrMsg);
+static void devsymDlError(sqlite4_vfs *pVfs, int nByte, char *zErrMsg){
+  sqlite4OsDlError(g.pVfs, nByte, zErrMsg);
 }
 
 /*
 ** Return a pointer to the symbol zSymbol in the dynamic library pHandle.
 */
-static void (*devsymDlSym(sqlite3_vfs *pVfs, void *p, const char *zSym))(void){
-  return sqlite3OsDlSym(g.pVfs, p, zSym);
+static void (*devsymDlSym(sqlite4_vfs *pVfs, void *p, const char *zSym))(void){
+  return sqlite4OsDlSym(g.pVfs, p, zSym);
 }
 
 /*
 ** Close the dynamic library handle pHandle.
 */
-static void devsymDlClose(sqlite3_vfs *pVfs, void *pHandle){
-  sqlite3OsDlClose(g.pVfs, pHandle);
+static void devsymDlClose(sqlite4_vfs *pVfs, void *pHandle){
+  sqlite4OsDlClose(g.pVfs, pHandle);
 }
 #endif /* SQLITE_OMIT_LOAD_EXTENSION */
 
@@ -352,22 +352,22 @@ static void devsymDlClose(sqlite3_vfs *pVfs, void *pHandle){
 ** Populate the buffer pointed to by zBufOut with nByte bytes of 
 ** random data.
 */
-static int devsymRandomness(sqlite3_vfs *pVfs, int nByte, char *zBufOut){
-  return sqlite3OsRandomness(g.pVfs, nByte, zBufOut);
+static int devsymRandomness(sqlite4_vfs *pVfs, int nByte, char *zBufOut){
+  return sqlite4OsRandomness(g.pVfs, nByte, zBufOut);
 }
 
 /*
 ** Sleep for nMicro microseconds. Return the number of microseconds 
 ** actually slept.
 */
-static int devsymSleep(sqlite3_vfs *pVfs, int nMicro){
-  return sqlite3OsSleep(g.pVfs, nMicro);
+static int devsymSleep(sqlite4_vfs *pVfs, int nMicro){
+  return sqlite4OsSleep(g.pVfs, nMicro);
 }
 
 /*
 ** Return the current time as a Julian Day number in *pTimeOut.
 */
-static int devsymCurrentTime(sqlite3_vfs *pVfs, double *pTimeOut){
+static int devsymCurrentTime(sqlite4_vfs *pVfs, double *pTimeOut){
   return g.pVfs->xCurrentTime(g.pVfs, pTimeOut);
 }
 
@@ -379,9 +379,9 @@ static int devsymCurrentTime(sqlite3_vfs *pVfs, double *pTimeOut){
 */
 void devsym_register(int iDeviceChar, int iSectorSize){
   if( g.pVfs==0 ){
-    g.pVfs = sqlite3_vfs_find(0);
+    g.pVfs = sqlite4_vfs_find(0);
     devsym_vfs.szOsFile += g.pVfs->szOsFile;
-    sqlite3_vfs_register(&devsym_vfs, 0);
+    sqlite4_vfs_register(&devsym_vfs, 0);
   }
   if( iDeviceChar>=0 ){
     g.iDeviceChar = iDeviceChar;

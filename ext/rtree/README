@@ -104,8 +104,8 @@ and query r-tree structures using ordinary SQL statements.
 
     gcc -shared rtree.c -o libSqliteRtree.so
 
-  You may need to add "-I" flags so that gcc can find sqlite3ext.h
-  and sqlite3.h. The resulting shared lib, libSqliteRtree.so, may be
+  You may need to add "-I" flags so that gcc can find sqlite4ext.h
+  and sqlite4.h. The resulting shared lib, libSqliteRtree.so, may be
   loaded into sqlite in the same way as any other dynamicly loadable
   extension.
 

@@ -23,7 +23,7 @@ typedef struct PCache PCache;
 ** structure.
 */
 struct PgHdr {
-  sqlite3_pcache_page *pPage;    /* Pcache object page handle */
+  sqlite4_pcache_page *pPage;    /* Pcache object page handle */
   void *pData;                   /* Page data */
   void *pExtra;                  /* Extra content */
   PgHdr *pDirty;                 /* Transient list of dirty pages */
@@ -54,19 +54,19 @@ struct PgHdr {
 #define PGHDR_DONT_WRITE        0x020  /* Do not write content to disk */
 
 /* Initialize and shutdown the page cache subsystem */
-int sqlite3PcacheInitialize(void);
-void sqlite3PcacheShutdown(void);
+int sqlite4PcacheInitialize(void);
+void sqlite4PcacheShutdown(void);
 
 /* Page cache buffer management:
 ** These routines implement SQLITE_CONFIG_PAGECACHE.
 */
-void sqlite3PCacheBufferSetup(void *, int sz, int n);
+void sqlite4PCacheBufferSetup(void *, int sz, int n);
 
 /* Create a new pager cache.
 ** Under memory stress, invoke xStress to try to make pages clean.
 ** Only clean and unpinned pages can be reclaimed.
 */
-void sqlite3PcacheOpen(
+void sqlite4PcacheOpen(
   int szPage,                    /* Size of every page */
   int szExtra,                   /* Extra space associated with each page */
   int bPurgeable,                /* True if pages are on backing store */
@@ -76,59 +76,59 @@ void sqlite3PcacheOpen(
 );
 
 /* Modify the page-size after the cache has been created. */
-void sqlite3PcacheSetPageSize(PCache *, int);
+void sqlite4PcacheSetPageSize(PCache *, int);
 
 /* Return the size in bytes of a PCache object.  Used to preallocate
 ** storage space.
 */
-int sqlite3PcacheSize(void);
+int sqlite4PcacheSize(void);
 
 /* One release per successful fetch.  Page is pinned until released.
 ** Reference counted. 
 */
-int sqlite3PcacheFetch(PCache*, Pgno, int createFlag, PgHdr**);
-void sqlite3PcacheRelease(PgHdr*);
+int sqlite4PcacheFetch(PCache*, Pgno, int createFlag, PgHdr**);
+void sqlite4PcacheRelease(PgHdr*);
 
-void sqlite3PcacheDrop(PgHdr*);         /* Remove page from cache */
-void sqlite3PcacheMakeDirty(PgHdr*);    /* Make sure page is marked dirty */
-void sqlite3PcacheMakeClean(PgHdr*);    /* Mark a single page as clean */
-void sqlite3PcacheCleanAll(PCache*);    /* Mark all dirty list pages as clean */
+void sqlite4PcacheDrop(PgHdr*);         /* Remove page from cache */
+void sqlite4PcacheMakeDirty(PgHdr*);    /* Make sure page is marked dirty */
+void sqlite4PcacheMakeClean(PgHdr*);    /* Mark a single page as clean */
+void sqlite4PcacheCleanAll(PCache*);    /* Mark all dirty list pages as clean */
 
 /* Change a page number.  Used by incr-vacuum. */
-void sqlite3PcacheMove(PgHdr*, Pgno);
+void sqlite4PcacheMove(PgHdr*, Pgno);
 
 /* Remove all pages with pgno>x.  Reset the cache if x==0 */
-void sqlite3PcacheTruncate(PCache*, Pgno x);
+void sqlite4PcacheTruncate(PCache*, Pgno x);
 
 /* Get a list of all dirty pages in the cache, sorted by page number */
-PgHdr *sqlite3PcacheDirtyList(PCache*);
+PgHdr *sqlite4PcacheDirtyList(PCache*);
 
 /* Reset and close the cache object */
-void sqlite3PcacheClose(PCache*);
+void sqlite4PcacheClose(PCache*);
 
 /* Clear flags from pages of the page cache */
-void sqlite3PcacheClearSyncFlags(PCache *);
+void sqlite4PcacheClearSyncFlags(PCache *);
 
 /* Discard the contents of the cache */
-void sqlite3PcacheClear(PCache*);
+void sqlite4PcacheClear(PCache*);
 
 /* Return the total number of outstanding page references */
-int sqlite3PcacheRefCount(PCache*);
+int sqlite4PcacheRefCount(PCache*);
 
 /* Increment the reference count of an existing page */
-void sqlite3PcacheRef(PgHdr*);
+void sqlite4PcacheRef(PgHdr*);
 
-int sqlite3PcachePageRefcount(PgHdr*);
+int sqlite4PcachePageRefcount(PgHdr*);
 
 /* Return the total number of pages stored in the cache */
-int sqlite3PcachePagecount(PCache*);
+int sqlite4PcachePagecount(PCache*);
 
 #if defined(SQLITE_CHECK_PAGES) || defined(SQLITE_DEBUG)
 /* Iterate through all dirty pages currently stored in the cache. This
 ** interface is only available if SQLITE_CHECK_PAGES is defined when the 
 ** library is built.
 */
-void sqlite3PcacheIterateDirty(PCache *pCache, void (*xIter)(PgHdr *));
+void sqlite4PcacheIterateDirty(PCache *pCache, void (*xIter)(PgHdr *));
 #endif
 
 /* Set and get the suggested cache-size for the specified pager-cache.
@@ -137,23 +137,23 @@ void sqlite3PcacheIterateDirty(PCache *pCache, void (*xIter)(PgHdr *));
 ** the total number of pages cached by purgeable pager-caches to the sum
 ** of the suggested cache-sizes.
 */
-void sqlite3PcacheSetCachesize(PCache *, int);
+void sqlite4PcacheSetCachesize(PCache *, int);
 #ifdef SQLITE_TEST
-int sqlite3PcacheGetCachesize(PCache *);
+int sqlite4PcacheGetCachesize(PCache *);
 #endif
 
 /* Free up as much memory as possible from the page cache */
-void sqlite3PcacheShrink(PCache*);
+void sqlite4PcacheShrink(PCache*);
 
 #ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
 /* Try to return memory used by the pcache module to the main memory heap */
-int sqlite3PcacheReleaseMemory(int);
+int sqlite4PcacheReleaseMemory(int);
 #endif
 
 #ifdef SQLITE_TEST
-void sqlite3PcacheStats(int*,int*,int*,int*);
+void sqlite4PcacheStats(int*,int*,int*,int*);
 #endif
 
-void sqlite3PCacheSetDefault(void);
+void sqlite4PCacheSetDefault(void);
 
 #endif /* _PCACHE_H_ */

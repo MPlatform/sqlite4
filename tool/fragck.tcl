@@ -27,7 +27,7 @@ set objname [lindex $argv 1]
 
 # Open the database
 #
-sqlite3 db [lindex $argv 0]
+sqlite4 db [lindex $argv 0]
 set DB [btree_open [lindex $argv 0] 1000 0]
 
 # This proc is a wrapper around the btree_cursor_info command. The

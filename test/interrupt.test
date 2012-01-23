@@ -16,7 +16,7 @@
 
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
-set DB [sqlite3_connection_pointer db]
+set DB [sqlite4_connection_pointer db]
 
 # This routine attempts to execute the sql in $sql.  It triggers an
 # interrupt at progressively later and later points during the processing
@@ -97,7 +97,7 @@ ifcapable {explain} {
   do_test interrupt-2.5 {
     set sql {EXPLAIN SELECT max(a,b), a, b FROM t1}
     execsql $sql
-    set rc [catch {db eval $sql {sqlite3_interrupt $DB}} msg]
+    set rc [catch {db eval $sql {sqlite4_interrupt $DB}} msg]
     lappend rc $msg
   } {1 interrupted}
 }
@@ -171,7 +171,7 @@ for {set i 1} {$i<$max_count-5} {incr i 1} {
 do_test interrupt-5.1 {
   proc fake_interrupt {args} {
     db collate fake_collation no-op
-    sqlite3_interrupt db
+    sqlite4_interrupt db
     return SQLITE_OK
   }
   db collation_needed fake_interrupt

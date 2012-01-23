@@ -437,7 +437,7 @@ do_faultsim_test pagerfault-8 -prep {
 #-------------------------------------------------------------------------
 # This test case is specially designed so that during a savepoint 
 # rollback, a new cache entry must be allocated (see comments surrounding
-# the call to sqlite3PagerAcquire() from within pager_playback_one_page()
+# the call to sqlite4PagerAcquire() from within pager_playback_one_page()
 # for details). Test the effects of injecting an OOM at this point.
 #
 do_test pagerfault-9-pre1 {
@@ -486,7 +486,7 @@ do_faultsim_test pagerfault-9.1 -prep {
 #
 foreach v {a b} {
   do_faultsim_test pagerfault-10$v -prep {
-    sqlite3 db ""
+    sqlite4 db ""
     db func a_string a_string;
     execsql {
       PRAGMA cache_size = 10;
@@ -688,38 +688,38 @@ if {$TEMP_STORE<2} {
   do_faultsim_test pagerfault-14b -prep {
     catch { db2 close }
     faultsim_restore_and_reopen
-    sqlite3 db2 ""
+    sqlite4 db2 ""
     db2 eval { PRAGMA page_size = 4096; CREATE TABLE xx(a) }
   } -body {
-    sqlite3_backup B db2 main db main
+    sqlite4_backup B db2 main db main
     B step 200
     set rc [B finish]
     if {[string match SQLITE_IOERR_* $rc]} {set rc SQLITE_IOERR}
-    if {$rc != "SQLITE_OK"} { error [sqlite3_test_errstr $rc] }
+    if {$rc != "SQLITE_OK"} { error [sqlite4_test_errstr $rc] }
     set {} {}
   } -test {
-    faultsim_test_result {0 {}} {1 {sqlite3_backup_init() failed}}
+    faultsim_test_result {0 {}} {1 {sqlite4_backup_init() failed}}
   }
 }
 
 do_faultsim_test pagerfault-14c -prep {
   catch { db2 close }
   faultsim_restore_and_reopen
-  sqlite3 db2 test.db2
+  sqlite4 db2 test.db2
   db2 eval { 
     PRAGMA synchronous = off; 
     PRAGMA page_size = 4096; 
     CREATE TABLE xx(a);
   }
 } -body {
-  sqlite3_backup B db2 main db main
+  sqlite4_backup B db2 main db main
   B step 200
   set rc [B finish]
   if {[string match SQLITE_IOERR_* $rc]} {set rc SQLITE_IOERR}
-  if {$rc != "SQLITE_OK"} { error [sqlite3_test_errstr $rc] }
+  if {$rc != "SQLITE_OK"} { error [sqlite4_test_errstr $rc] }
   set {} {}
 } -test {
-  faultsim_test_result {0 {}} {1 {sqlite3_backup_init() failed}}
+  faultsim_test_result {0 {}} {1 {sqlite4_backup_init() failed}}
 }
 
 do_test pagerfault-15-pre1 {
@@ -828,7 +828,7 @@ do_faultsim_test pagerfault-17c -prep {
 do_faultsim_test pagerfault-17d -prep {
   catch { db2 close }
   faultsim_restore_and_reopen
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { PRAGMA journal_mode = delete }
   execsql { PRAGMA journal_mode = wal }
   execsql { INSERT INTO t1 VALUES(99, 'Bradman') } db2
@@ -841,12 +841,12 @@ do_faultsim_test pagerfault-17d -prep {
 do_faultsim_test pagerfault-17e -prep {
   catch { db2 close }
   faultsim_restore_and_reopen
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql { PRAGMA journal_mode = delete }
   execsql { PRAGMA journal_mode = wal }
   set ::chan [launch_testfixture]
   testfixture $::chan {
-    sqlite3 db test.db
+    sqlite4 db test.db
     db eval { INSERT INTO t1 VALUES(101, 'Latham') }
   }
   catch { testfixture $::chan sqlite_abort }
@@ -888,7 +888,7 @@ do_faultsim_test pagerfault-18 -prep {
 }
 
 do_faultsim_test pagerfault-19a -prep {
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   db func a_string a_string
   execsql {
     PRAGMA auto_vacuum = FULL;
@@ -1002,7 +1002,7 @@ do_test pagerfault-21-pre1 {
   db close
   hexio_write test.db 20    10
   hexio_write test.db 105 03F0
-  sqlite3 db test.db
+  sqlite4 db test.db
   db func a_string a_string
   execsql {
     CREATE TABLE t0(a PRIMARY KEY, b UNIQUE);
@@ -1033,7 +1033,7 @@ ifcapable crashtest {
   hexio_write test.db 20    10
   hexio_write test.db 105 03F0
 
-  sqlite3 db test.db
+  sqlite4 db test.db
   db func a_string a_string
   execsql {
     CREATE TABLE t0(a PRIMARY KEY, b UNIQUE);
@@ -1052,7 +1052,7 @@ ifcapable crashtest {
       }
     } {1 {child process exited abnormally}}
     do_test pagerfault-22.$iTest.2 {
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql { PRAGMA integrity_check }
     } {ok}
     db close
@@ -1105,7 +1105,7 @@ do_faultsim_test pagerfault-22 -prep {
 #   PagerRollback(<file-db>)
 #
 do_faultsim_test pagerfault-23 -prep {
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   foreach f [glob -nocomplain test.db*] { forcedelete $f }
   db eval { 
     ATTACH 'test.db2' AS aux;

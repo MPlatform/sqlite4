@@ -278,8 +278,8 @@ db close
 catch {forcedelete test.db-journal}
 catch {file attributes test.db -permissions 0444}
 catch {file attributes test.db -readonly 1}
-sqlite3 db test.db
-set ::DB [sqlite3_connection_pointer db]
+sqlite4 db test.db
+set ::DB [sqlite4_connection_pointer db]
 do_test delete-8.1 {
   catchsql {
     DELETE FROM t3;
@@ -327,7 +327,7 @@ forcedelete test.db test.db-journal
 # query results. 
 #
 do_test delete-9.1 {
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     CREATE TABLE t5(a, b);
     CREATE TABLE t6(c, d);

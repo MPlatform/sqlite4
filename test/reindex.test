@@ -144,7 +144,7 @@ integrity_check reindex-2.8.1
 # Try to REINDEX an index for which the collation sequence is not available.
 #
 do_test reindex-3.1 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   catchsql {
     REINDEX c1;
   } db2

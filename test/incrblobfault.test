@@ -33,11 +33,11 @@ do_execsql_test 1.0 {
 }
 
 do_faultsim_test 1 -prep {
-  sqlite3 db test.db
+  sqlite4 db test.db
   set ::blob [db incrblob blob v 1]
 } -body {
-  if {[catch {sqlite3_blob_reopen $::blob 1000}]} {
-    error [sqlite3_errmsg db]
+  if {[catch {sqlite4_blob_reopen $::blob 1000}]} {
+    error [sqlite4_errmsg db]
   }
 } -test {
   faultsim_test_result {0 {}}
@@ -45,11 +45,11 @@ do_faultsim_test 1 -prep {
 }
 
 do_faultsim_test 2 -prep {
-  sqlite3 db test.db
+  sqlite4 db test.db
   set ::blob [db incrblob blob v 1]
 } -body {
-  if {[catch {sqlite3_blob_reopen $::blob -1}]} {
-    error [sqlite3_errmsg db]
+  if {[catch {sqlite4_blob_reopen $::blob -1}]} {
+    error [sqlite4_errmsg db]
   }
 } -test {
   faultsim_test_result {1 {no such rowid: -1}}
@@ -57,7 +57,7 @@ do_faultsim_test 2 -prep {
 }
 
 do_faultsim_test 3 -prep {
-  sqlite3 db test.db
+  sqlite4 db test.db
 } -body {
   set ::blob [db incrblob blob v 1]
   gets $::blob

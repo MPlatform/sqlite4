@@ -25,7 +25,7 @@ for {set ii 1} {$ii<=10} {incr ii} {
   do_test tkt-2d1a5c67d.1.$ii {
     db close
     forcedelete test.db test.db-wal
-    sqlite3 db test.db
+    sqlite4 db test.db
     db eval "PRAGMA cache_size=$::ii"
     db eval {
       PRAGMA journal_mode=WAL;
@@ -45,7 +45,7 @@ for {set ii 1} {$ii<=10} {incr ii} {
 
 db close
 forcedelete test.db test.db-wal
-sqlite3 db test.db
+sqlite4 db test.db
 register_wholenumber_module db
 db eval {
   PRAGMA journal_mode=WAL;
@@ -72,7 +72,7 @@ for {set ii 1} {$ii<=10} {incr ii} {
 }
 
 db close
-sqlite3 db test.db
+sqlite4 db test.db
 
 
 do_execsql_test 3.1 {
@@ -120,7 +120,7 @@ forcedelete test.db2-wal test.db2
 do_test 3.6 {
   copy_file test.db-wal test.db2-wal
   copy_file test.db test.db2
-  sqlite3 db2 test.db2
+  sqlite4 db2 test.db2
   execsql { SELECT * FROM t4 WHERE a = 'xyz' } db2
 } {xyz}
 

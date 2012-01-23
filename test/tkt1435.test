@@ -27,7 +27,7 @@ ifcapable !memorydb {
 # Construct the sample database.
 #
 do_test tkt1435-1.0 {
-  sqlite3 db :memory:
+  sqlite4 db :memory:
   execsql {
     CREATE TABLE Instances(
     	instanceId INTEGER PRIMARY KEY,

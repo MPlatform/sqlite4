@@ -35,7 +35,7 @@ faultsim_save_and_close
 
 do_faultsim_test tkt-313723c356.2 -faults shmerr* -prep {
   faultsim_restore_and_reopen
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   db eval  { SELECT * FROM t1 }
   db2 eval { UPDATE t1 SET a = randomblob(399) }
   db2 close

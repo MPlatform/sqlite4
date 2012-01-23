@@ -21,7 +21,7 @@
 ** This pagecache implementation is designed for simplicity
 ** not speed.  
 */
-#include "sqlite3.h"
+#include "sqlite4.h"
 #include <string.h>
 #include <assert.h>
 
@@ -54,7 +54,7 @@ static int testpcacheInit(void *pArg){
   assert( pArg==(void*)&testpcacheGlobal );
   assert( testpcacheGlobal.pDummy==0 );
   assert( testpcacheGlobal.nInstance==0 );
-  testpcacheGlobal.pDummy = sqlite3_malloc(10);
+  testpcacheGlobal.pDummy = sqlite4_malloc(10);
   return testpcacheGlobal.pDummy==0 ? SQLITE_NOMEM : SQLITE_OK;
 }
 
@@ -68,7 +68,7 @@ static void testpcacheShutdown(void *pArg){
   assert( pArg==(void*)&testpcacheGlobal );
   assert( testpcacheGlobal.pDummy!=0 );
   assert( testpcacheGlobal.nInstance==0 );
-  sqlite3_free( testpcacheGlobal.pDummy );
+  sqlite4_free( testpcacheGlobal.pDummy );
   testpcacheGlobal.pDummy = 0;
 }
 
@@ -76,7 +76,7 @@ static void testpcacheShutdown(void *pArg){
 ** Number of pages in a cache.
 **
 ** The number of pages is a hard upper bound in this test module.
-** If more pages are requested, sqlite3PcacheFetch() returns NULL.
+** If more pages are requested, sqlite4PcacheFetch() returns NULL.
 **
 ** If testing with in-memory temp tables, provide a larger pcache.
 ** Some of the test cases need this.
@@ -107,7 +107,7 @@ struct testpcache {
   unsigned iRand;           /* State of the PRNG */
   unsigned iMagic;          /* Magic number for sanity checking */
   struct testpcachePage {
-    sqlite3_pcache_page page;  /* Base class */
+    sqlite4_pcache_page page;  /* Base class */
     unsigned key;              /* The key for this page. 0 means unallocated */
     int isPinned;              /* True if the page is pinned */
   } a[TESTPCACHE_NPAGE];    /* All pages in the cache */
@@ -130,7 +130,7 @@ static unsigned testpcacheRandom(testpcache *p){
 /*
 ** Allocate a new page cache instance.
 */
-static sqlite3_pcache *testpcacheCreate(
+static sqlite4_pcache *testpcacheCreate(
   int szPage, 
   int szExtra, 
   int bPurgeable
@@ -142,7 +142,7 @@ static sqlite3_pcache *testpcacheCreate(
   assert( testpcacheGlobal.pDummy!=0 );
   szPage = (szPage+7)&~7;
   nMem = sizeof(testpcache) + TESTPCACHE_NPAGE*(szPage+szExtra);
-  p = sqlite3_malloc( nMem );
+  p = sqlite4_malloc( nMem );
   if( p==0 ) return 0;
   x = (char*)&p[1];
   p->szPage = szPage;
@@ -159,13 +159,13 @@ static sqlite3_pcache *testpcacheCreate(
     p->a[i].page.pExtra = (void*)&x[szPage];
   }
   testpcacheGlobal.nInstance++;
-  return (sqlite3_pcache*)p;
+  return (sqlite4_pcache*)p;
 }
 
 /*
 ** Set the cache size
 */
-static void testpcacheCachesize(sqlite3_pcache *pCache, int newSize){
+static void testpcacheCachesize(sqlite4_pcache *pCache, int newSize){
   testpcache *p = (testpcache*)pCache;
   assert( p->iMagic==TESTPCACHE_VALID );
   assert( testpcacheGlobal.pDummy!=0 );
@@ -176,7 +176,7 @@ static void testpcacheCachesize(sqlite3_pcache *pCache, int newSize){
 ** Return the number of pages in the cache that are being used.
 ** This includes both pinned and unpinned pages.
 */
-static int testpcachePagecount(sqlite3_pcache *pCache){
+static int testpcachePagecount(sqlite4_pcache *pCache){
   testpcache *p = (testpcache*)pCache;
   assert( p->iMagic==TESTPCACHE_VALID );
   assert( testpcacheGlobal.pDummy!=0 );
@@ -187,8 +187,8 @@ static int testpcachePagecount(sqlite3_pcache *pCache){
 /*
 ** Fetch a page.
 */
-static sqlite3_pcache_page *testpcacheFetch(
-  sqlite3_pcache *pCache,
+static sqlite4_pcache_page *testpcacheFetch(
+  sqlite4_pcache *pCache,
   unsigned key,
   int createFlag
 ){
@@ -287,8 +287,8 @@ static sqlite3_pcache_page *testpcacheFetch(
 ** Unpin a page.
 */
 static void testpcacheUnpin(
-  sqlite3_pcache *pCache,
-  sqlite3_pcache_page *pOldPage,
+  sqlite4_pcache *pCache,
+  sqlite4_pcache_page *pOldPage,
   int discard
 ){
   testpcache *p = (testpcache*)pCache;
@@ -332,8 +332,8 @@ static void testpcacheUnpin(
 ** Rekey a single page.
 */
 static void testpcacheRekey(
-  sqlite3_pcache *pCache,
-  sqlite3_pcache_page *pOldPage,
+  sqlite4_pcache *pCache,
+  sqlite4_pcache_page *pOldPage,
   unsigned oldKey,
   unsigned newKey
 ){
@@ -379,7 +379,7 @@ static void testpcacheRekey(
 ** Truncate the page cache.  Every page with a key of iLimit or larger
 ** is discarded.
 */
-static void testpcacheTruncate(sqlite3_pcache *pCache, unsigned iLimit){
+static void testpcacheTruncate(sqlite4_pcache *pCache, unsigned iLimit){
   testpcache *p = (testpcache*)pCache;
   unsigned int i;
   assert( p->iMagic==TESTPCACHE_VALID );
@@ -401,13 +401,13 @@ static void testpcacheTruncate(sqlite3_pcache *pCache, unsigned iLimit){
 /*
 ** Destroy a page cache.
 */
-static void testpcacheDestroy(sqlite3_pcache *pCache){
+static void testpcacheDestroy(sqlite4_pcache *pCache){
   testpcache *p = (testpcache*)pCache;
   assert( p->iMagic==TESTPCACHE_VALID );
   assert( testpcacheGlobal.pDummy!=0 );
   assert( testpcacheGlobal.nInstance>0 );
   p->iMagic = TESTPCACHE_CLEAR;
-  sqlite3_free(p);
+  sqlite4_free(p);
   testpcacheGlobal.nInstance--;
 }
 
@@ -430,7 +430,7 @@ void installTestPCache(
   unsigned prngSeed,          /* Seed for the PRNG */
   unsigned highStress         /* Call xStress agressively */
 ){
-  static const sqlite3_pcache_methods2 testPcache = {
+  static const sqlite4_pcache_methods2 testPcache = {
     1,
     (void*)&testpcacheGlobal,
     testpcacheInit,
@@ -444,7 +444,7 @@ void installTestPCache(
     testpcacheTruncate,
     testpcacheDestroy,
   };
-  static sqlite3_pcache_methods2 defaultPcache;
+  static sqlite4_pcache_methods2 defaultPcache;
   static int isInstalled = 0;
 
   assert( testpcacheGlobal.nInstance==0 );
@@ -455,12 +455,12 @@ void installTestPCache(
   testpcacheGlobal.highStress = highStress;
   if( installFlag!=isInstalled ){
     if( installFlag ){
-      sqlite3_config(SQLITE_CONFIG_GETPCACHE2, &defaultPcache);
+      sqlite4_config(SQLITE_CONFIG_GETPCACHE2, &defaultPcache);
       assert( defaultPcache.xCreate!=testpcacheCreate );
-      sqlite3_config(SQLITE_CONFIG_PCACHE2, &testPcache);
+      sqlite4_config(SQLITE_CONFIG_PCACHE2, &testPcache);
     }else{
       assert( defaultPcache.xCreate!=0 );
-      sqlite3_config(SQLITE_CONFIG_PCACHE2, &defaultPcache);
+      sqlite4_config(SQLITE_CONFIG_PCACHE2, &defaultPcache);
     }
     isInstalled = installFlag;
   }

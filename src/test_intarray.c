@@ -20,16 +20,16 @@
 
 
 /*
-** Definition of the sqlite3_intarray object.
+** Definition of the sqlite4_intarray object.
 **
 ** The internal representation of an intarray object is subject
 ** to change, is not externally visible, and should be used by
 ** the implementation of intarray only.  This object is opaque
 ** to users.
 */
-struct sqlite3_intarray {
+struct sqlite4_intarray {
   int n;                    /* Number of elements in the array */
-  sqlite3_int64 *a;         /* Contents of the array */
+  sqlite4_int64 *a;         /* Contents of the array */
   void (*xFree)(void*);     /* Function used to free a[] */
 };
 
@@ -39,13 +39,13 @@ typedef struct intarray_cursor intarray_cursor;
 
 /* A intarray table object */
 struct intarray_vtab {
-  sqlite3_vtab base;            /* Base class */
-  sqlite3_intarray *pContent;   /* Content of the integer array */
+  sqlite4_vtab base;            /* Base class */
+  sqlite4_intarray *pContent;   /* Content of the integer array */
 };
 
 /* A intarray cursor object */
 struct intarray_cursor {
-  sqlite3_vtab_cursor base;    /* Base class */
+  sqlite4_vtab_cursor base;    /* Base class */
   int i;                       /* Current cursor position */
 };
 
@@ -55,21 +55,21 @@ struct intarray_cursor {
 #ifndef SQLITE_OMIT_VIRTUALTABLE
 
 /*
-** Free an sqlite3_intarray object.
+** Free an sqlite4_intarray object.
 */
-static void intarrayFree(sqlite3_intarray *p){
+static void intarrayFree(sqlite4_intarray *p){
   if( p->xFree ){
     p->xFree(p->a);
   }
-  sqlite3_free(p);
+  sqlite4_free(p);
 }
 
 /*
 ** Table destructor for the intarray module.
 */
-static int intarrayDestroy(sqlite3_vtab *p){
+static int intarrayDestroy(sqlite4_vtab *p){
   intarray_vtab *pVtab = (intarray_vtab*)p;
-  sqlite3_free(pVtab);
+  sqlite4_free(pVtab);
   return 0;
 }
 
@@ -77,35 +77,35 @@ static int intarrayDestroy(sqlite3_vtab *p){
 ** Table constructor for the intarray module.
 */
 static int intarrayCreate(
-  sqlite3 *db,              /* Database where module is created */
+  sqlite4 *db,              /* Database where module is created */
   void *pAux,               /* clientdata for the module */
   int argc,                 /* Number of arguments */
   const char *const*argv,   /* Value for all arguments */
-  sqlite3_vtab **ppVtab,    /* Write the new virtual table object here */
+  sqlite4_vtab **ppVtab,    /* Write the new virtual table object here */
   char **pzErr              /* Put error message text here */
 ){
   int rc = SQLITE_NOMEM;
-  intarray_vtab *pVtab = sqlite3_malloc(sizeof(intarray_vtab));
+  intarray_vtab *pVtab = sqlite4_malloc(sizeof(intarray_vtab));
 
   if( pVtab ){
     memset(pVtab, 0, sizeof(intarray_vtab));
-    pVtab->pContent = (sqlite3_intarray*)pAux;
-    rc = sqlite3_declare_vtab(db, "CREATE TABLE x(value INTEGER PRIMARY KEY)");
+    pVtab->pContent = (sqlite4_intarray*)pAux;
+    rc = sqlite4_declare_vtab(db, "CREATE TABLE x(value INTEGER PRIMARY KEY)");
   }
-  *ppVtab = (sqlite3_vtab *)pVtab;
+  *ppVtab = (sqlite4_vtab *)pVtab;
   return rc;
 }
 
 /*
 ** Open a new cursor on the intarray table.
 */
-static int intarrayOpen(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCursor){
+static int intarrayOpen(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCursor){
   int rc = SQLITE_NOMEM;
   intarray_cursor *pCur;
-  pCur = sqlite3_malloc(sizeof(intarray_cursor));
+  pCur = sqlite4_malloc(sizeof(intarray_cursor));
   if( pCur ){
     memset(pCur, 0, sizeof(intarray_cursor));
-    *ppCursor = (sqlite3_vtab_cursor *)pCur;
+    *ppCursor = (sqlite4_vtab_cursor *)pCur;
     rc = SQLITE_OK;
   }
   return rc;
@@ -114,20 +114,20 @@ static int intarrayOpen(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCursor){
 /*
 ** Close a intarray table cursor.
 */
-static int intarrayClose(sqlite3_vtab_cursor *cur){
+static int intarrayClose(sqlite4_vtab_cursor *cur){
   intarray_cursor *pCur = (intarray_cursor *)cur;
-  sqlite3_free(pCur);
+  sqlite4_free(pCur);
   return SQLITE_OK;
 }
 
 /*
 ** Retrieve a column of data.
 */
-static int intarrayColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int i){
+static int intarrayColumn(sqlite4_vtab_cursor *cur, sqlite4_context *ctx, int i){
   intarray_cursor *pCur = (intarray_cursor*)cur;
   intarray_vtab *pVtab = (intarray_vtab*)cur->pVtab;
   if( pCur->i>=0 && pCur->i<pVtab->pContent->n ){
-    sqlite3_result_int64(ctx, pVtab->pContent->a[pCur->i]);
+    sqlite4_result_int64(ctx, pVtab->pContent->a[pCur->i]);
   }
   return SQLITE_OK;
 }
@@ -135,13 +135,13 @@ static int intarrayColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int i)
 /*
 ** Retrieve the current rowid.
 */
-static int intarrayRowid(sqlite3_vtab_cursor *cur, sqlite_int64 *pRowid){
+static int intarrayRowid(sqlite4_vtab_cursor *cur, sqlite_int64 *pRowid){
   intarray_cursor *pCur = (intarray_cursor *)cur;
   *pRowid = pCur->i;
   return SQLITE_OK;
 }
 
-static int intarrayEof(sqlite3_vtab_cursor *cur){
+static int intarrayEof(sqlite4_vtab_cursor *cur){
   intarray_cursor *pCur = (intarray_cursor *)cur;
   intarray_vtab *pVtab = (intarray_vtab *)cur->pVtab;
   return pCur->i>=pVtab->pContent->n;
@@ -150,7 +150,7 @@ static int intarrayEof(sqlite3_vtab_cursor *cur){
 /*
 ** Advance the cursor to the next row.
 */
-static int intarrayNext(sqlite3_vtab_cursor *cur){
+static int intarrayNext(sqlite4_vtab_cursor *cur){
   intarray_cursor *pCur = (intarray_cursor *)cur;
   pCur->i++;
   return SQLITE_OK;
@@ -160,9 +160,9 @@ static int intarrayNext(sqlite3_vtab_cursor *cur){
 ** Reset a intarray table cursor.
 */
 static int intarrayFilter(
-  sqlite3_vtab_cursor *pVtabCursor, 
+  sqlite4_vtab_cursor *pVtabCursor, 
   int idxNum, const char *idxStr,
-  int argc, sqlite3_value **argv
+  int argc, sqlite4_value **argv
 ){
   intarray_cursor *pCur = (intarray_cursor *)pVtabCursor;
   pCur->i = 0;
@@ -172,7 +172,7 @@ static int intarrayFilter(
 /*
 ** Analyse the WHERE condition.
 */
-static int intarrayBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
+static int intarrayBestIndex(sqlite4_vtab *tab, sqlite4_index_info *pIdxInfo){
   return SQLITE_OK;
 }
 
@@ -180,7 +180,7 @@ static int intarrayBestIndex(sqlite3_vtab *tab, sqlite3_index_info *pIdxInfo){
 ** A virtual table module that merely echos method calls into TCL
 ** variables.
 */
-static sqlite3_module intarrayModule = {
+static sqlite4_module intarrayModule = {
   0,                           /* iVersion */
   intarrayCreate,              /* xCreate - create a new virtual table */
   intarrayCreate,              /* xConnect - connect to an existing vtab */
@@ -216,28 +216,28 @@ static sqlite3_module intarrayModule = {
 ** explicitly by the application, the virtual table will be dropped implicitly
 ** by the system when the database connection is closed.
 */
-int sqlite3_intarray_create(
-  sqlite3 *db,
+int sqlite4_intarray_create(
+  sqlite4 *db,
   const char *zName,
-  sqlite3_intarray **ppReturn
+  sqlite4_intarray **ppReturn
 ){
   int rc = SQLITE_OK;
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-  sqlite3_intarray *p;
+  sqlite4_intarray *p;
 
-  *ppReturn = p = sqlite3_malloc( sizeof(*p) );
+  *ppReturn = p = sqlite4_malloc( sizeof(*p) );
   if( p==0 ){
     return SQLITE_NOMEM;
   }
   memset(p, 0, sizeof(*p));
-  rc = sqlite3_create_module_v2(db, zName, &intarrayModule, p,
+  rc = sqlite4_create_module_v2(db, zName, &intarrayModule, p,
                                 (void(*)(void*))intarrayFree);
   if( rc==SQLITE_OK ){
     char *zSql;
-    zSql = sqlite3_mprintf("CREATE VIRTUAL TABLE temp.%Q USING %Q",
+    zSql = sqlite4_mprintf("CREATE VIRTUAL TABLE temp.%Q USING %Q",
                            zName, zName);
-    rc = sqlite3_exec(db, zSql, 0, 0, 0);
-    sqlite3_free(zSql);
+    rc = sqlite4_exec(db, zSql, 0, 0, 0);
+    sqlite4_free(zSql);
   }
 #endif
   return rc;
@@ -250,10 +250,10 @@ int sqlite3_intarray_create(
 ** any query against the corresponding virtual table.  If the integer
 ** array does change or is deallocated undefined behavior will result.
 */
-int sqlite3_intarray_bind(
-  sqlite3_intarray *pIntArray,   /* The intarray object to bind to */
+int sqlite4_intarray_bind(
+  sqlite4_intarray *pIntArray,   /* The intarray object to bind to */
   int nElements,                 /* Number of elements in the intarray */
-  sqlite3_int64 *aElements,      /* Content of the intarray */
+  sqlite4_int64 *aElements,      /* Content of the intarray */
   void (*xFree)(void*)           /* How to dispose of the intarray when done */
 ){
   if( pIntArray->xFree ){
@@ -275,16 +275,16 @@ int sqlite3_intarray_bind(
 /*
 ** Routines to encode and decode pointers
 */
-extern int getDbPointer(Tcl_Interp *interp, const char *zA, sqlite3 **ppDb);
-extern void *sqlite3TestTextToPtr(const char*);
-extern int sqlite3TestMakePointerStr(Tcl_Interp*, char *zPtr, void*);
-extern const char *sqlite3TestErrorName(int);
+extern int getDbPointer(Tcl_Interp *interp, const char *zA, sqlite4 **ppDb);
+extern void *sqlite4TestTextToPtr(const char*);
+extern int sqlite4TestMakePointerStr(Tcl_Interp*, char *zPtr, void*);
+extern const char *sqlite4TestErrorName(int);
 
 /*
-**    sqlite3_intarray_create  DB  NAME
+**    sqlite4_intarray_create  DB  NAME
 **
-** Invoke the sqlite3_intarray_create interface.  A string that becomes
-** the first parameter to sqlite3_intarray_bind.
+** Invoke the sqlite4_intarray_create interface.  A string that becomes
+** the first parameter to sqlite4_intarray_bind.
 */
 static int test_intarray_create(
   ClientData clientData, /* Not used */
@@ -292,9 +292,9 @@ static int test_intarray_create(
   int objc,              /* Number of arguments */
   Tcl_Obj *CONST objv[]  /* Command arguments */
 ){
-  sqlite3 *db;
+  sqlite4 *db;
   const char *zName;
-  sqlite3_intarray *pArray;
+  sqlite4_intarray *pArray;
   int rc = SQLITE_OK;
   char zPtr[100];
 
@@ -305,22 +305,22 @@ static int test_intarray_create(
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
   zName = Tcl_GetString(objv[2]);
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-  rc = sqlite3_intarray_create(db, zName, &pArray);
+  rc = sqlite4_intarray_create(db, zName, &pArray);
 #endif
   if( rc!=SQLITE_OK ){
     assert( pArray==0 );
-    Tcl_AppendResult(interp, sqlite3TestErrorName(rc), (char*)0);
+    Tcl_AppendResult(interp, sqlite4TestErrorName(rc), (char*)0);
     return TCL_ERROR;
   }
-  sqlite3TestMakePointerStr(interp, zPtr, pArray);
+  sqlite4TestMakePointerStr(interp, zPtr, pArray);
   Tcl_AppendResult(interp, zPtr, (char*)0);
   return TCL_OK;
 }
 
 /*
-**    sqlite3_intarray_bind  INTARRAY  ?VALUE ...?
+**    sqlite4_intarray_bind  INTARRAY  ?VALUE ...?
 **
-** Invoke the sqlite3_intarray_bind interface on the given array of integers.
+** Invoke the sqlite4_intarray_bind interface on the given array of integers.
 */
 static int test_intarray_bind(
   ClientData clientData, /* Not used */
@@ -328,19 +328,19 @@ static int test_intarray_bind(
   int objc,              /* Number of arguments */
   Tcl_Obj *CONST objv[]  /* Command arguments */
 ){
-  sqlite3_intarray *pArray;
+  sqlite4_intarray *pArray;
   int rc = SQLITE_OK;
   int i, n;
-  sqlite3_int64 *a;
+  sqlite4_int64 *a;
 
   if( objc<2 ){
     Tcl_WrongNumArgs(interp, 1, objv, "INTARRAY");
     return TCL_ERROR;
   }
-  pArray = (sqlite3_intarray*)sqlite3TestTextToPtr(Tcl_GetString(objv[1]));
+  pArray = (sqlite4_intarray*)sqlite4TestTextToPtr(Tcl_GetString(objv[1]));
   n = objc - 2;
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-  a = sqlite3_malloc( sizeof(a[0])*n );
+  a = sqlite4_malloc( sizeof(a[0])*n );
   if( a==0 ){
     Tcl_AppendResult(interp, "SQLITE_NOMEM", (char*)0);
     return TCL_ERROR;
@@ -349,9 +349,9 @@ static int test_intarray_bind(
     a[i] = 0;
     Tcl_GetWideIntFromObj(0, objv[i+2], &a[i]);
   }
-  rc = sqlite3_intarray_bind(pArray, n, a, sqlite3_free);
+  rc = sqlite4_intarray_bind(pArray, n, a, sqlite4_free);
   if( rc!=SQLITE_OK ){
-    Tcl_AppendResult(interp, sqlite3TestErrorName(rc), (char*)0);
+    Tcl_AppendResult(interp, sqlite4TestErrorName(rc), (char*)0);
     return TCL_ERROR;
   }
 #endif
@@ -367,8 +367,8 @@ int Sqlitetestintarray_Init(Tcl_Interp *interp){
      Tcl_ObjCmdProc *xProc;
      void *clientData;
   } aObjCmd[] = {
-     { "sqlite3_intarray_create", test_intarray_create, 0 },
-     { "sqlite3_intarray_bind", test_intarray_bind, 0 },
+     { "sqlite4_intarray_create", test_intarray_create, 0 },
+     { "sqlite4_intarray_bind", test_intarray_bind, 0 },
   };
   int i;
   for(i=0; i<sizeof(aObjCmd)/sizeof(aObjCmd[0]); i++){

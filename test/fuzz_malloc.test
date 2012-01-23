@@ -45,10 +45,10 @@ proc do_fuzzy_malloc_test {testname args} {
   set ::fuzzyopts(-sqlprep) {}
   array set ::fuzzyopts $args
 
-  sqlite3_memdebug_fail -1
+  sqlite4_memdebug_fail -1
   db close
   delete_file test.db test.db-journal
-  sqlite3 db test.db
+  sqlite4 db test.db
   set ::prep $::fuzzyopts(-sqlprep)
   execsql $::prep
   set jj 0

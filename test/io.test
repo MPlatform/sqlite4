@@ -18,8 +18,8 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
 db close
-sqlite3_simulate_device
-sqlite3 db test.db -vfs devsym
+sqlite4_simulate_device
+sqlite4 db test.db -vfs devsym
 
 # Test summary:
 #
@@ -146,7 +146,7 @@ do_test io-2.2 {
 # written because page 1 - the change-counter page - is written using
 # an out-of-band method that bypasses the write counter.
 #
-sqlite3_simulate_device -char atomic
+sqlite4_simulate_device -char atomic
 do_test io-2.3 {
   execsql { INSERT INTO abc VALUES(3, 4) }
   list [nWrite db] [nSync]
@@ -160,7 +160,7 @@ do_test io-2.4.1 {
     BEGIN;
     INSERT INTO abc VALUES(5, 6);
   }
-  sqlite3 db2 test.db -vfs devsym
+  sqlite4 db2 test.db -vfs devsym
   execsql { SELECT * FROM abc } db2
 } {1 2 3 4}
 do_test io-2.4.2 {
@@ -293,8 +293,8 @@ do_test io-2.8.3 {
 #
 do_test io-2.9.1 {
   db close
-  sqlite3 db test.db
-  sqlite3_simulate_device -char atomic -sectorsize 2048
+  sqlite4 db test.db
+  sqlite4_simulate_device -char atomic -sectorsize 2048
   execsql {
     BEGIN;
     INSERT INTO abc VALUES(9, 10);
@@ -305,7 +305,7 @@ do_test io-2.9.2 {
   execsql { ROLLBACK; }
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db -vfs devsym
+  sqlite4 db test.db -vfs devsym
   execsql {
     PRAGMA auto_vacuum = OFF;
     PRAGMA page_size = 2048;
@@ -325,7 +325,7 @@ do_test io-2.9.3 {
 # (i.e IOCAP_ATOMIC2K etc.).
 #
 do_test io-2.10.1 {
-  sqlite3_simulate_device -char atomic1k
+  sqlite4_simulate_device -char atomic1k
   execsql {
     BEGIN;
     INSERT INTO abc VALUES(11, 12);
@@ -334,7 +334,7 @@ do_test io-2.10.1 {
 } {1}
 do_test io-2.10.2 {
   execsql { ROLLBACK }
-  sqlite3_simulate_device -char atomic2k
+  sqlite4_simulate_device -char atomic2k
   execsql {
     BEGIN;
     INSERT INTO abc VALUES(11, 12);
@@ -371,12 +371,12 @@ do_test io-2.11.2 {
 #----------------------------------------------------------------------
 # Test cases io-3.* test the IOCAP_SEQUENTIAL optimization.
 #
-sqlite3_simulate_device -char sequential -sectorsize 0
+sqlite4_simulate_device -char sequential -sectorsize 0
 ifcapable pager_pragmas {
   do_test io-3.1 {
     db close
     forcedelete test.db test.db-journal
-    sqlite3 db test.db -vfs devsym
+    sqlite4 db test.db -vfs devsym
     db eval {
       PRAGMA auto_vacuum=OFF;
     }
@@ -421,7 +421,7 @@ ifcapable pager_pragmas {
 #----------------------------------------------------------------------
 # Test cases io-4.* test the IOCAP_SAFE_APPEND optimization.
 #
-sqlite3_simulate_device -char safe_append
+sqlite4_simulate_device -char safe_append
 
 # With the SAFE_APPEND flag set, simple transactions require 3, rather
 # than 4, calls to fsync(). The fsync() calls are on:
@@ -465,7 +465,7 @@ do_test io-4.2.3 {
   execsql { COMMIT }
   nSync
 } $expected_sync_count
-sqlite3_simulate_device -char safe_append
+sqlite4_simulate_device -char safe_append
 
 # With SAFE_APPEND set, there should only ever be one journal-header
 # written to the database, even though the sync-mode is "full".
@@ -545,8 +545,8 @@ foreach {char                 sectorsize pgsize} {
   if {$pgsize>$::SQLITE_MAX_PAGE_SIZE} continue
   db close
   forcedelete test.db test.db-journal
-  sqlite3_simulate_device -char $char -sectorsize $sectorsize
-  sqlite3 db test.db -vfs devsym
+  sqlite4_simulate_device -char $char -sectorsize $sectorsize
+  sqlite4 db test.db -vfs devsym
   db eval {
     PRAGMA auto_vacuum=OFF;
   }
@@ -561,5 +561,5 @@ foreach {char                 sectorsize pgsize} {
   } $pgsize
 }
 
-sqlite3_simulate_device -char {} -sectorsize 0
+sqlite4_simulate_device -char {} -sectorsize 0
 finish_test

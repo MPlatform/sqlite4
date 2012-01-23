@@ -65,7 +65,7 @@ do_not_use_codec
 #   
 #   Offset variables 1, 2, 3 and 4 are all checked to make sure they
 #   will not result in buffer overruns as part of page initialization in
-#   sqlite3BtreeInitPage(). Offsets 5 and 6 cannot be tested as part of
+#   sqlite4BtreeInitPage(). Offsets 5 and 6 cannot be tested as part of
 #   page initialization, as trying to do so causes a performance hit.
 #
 
@@ -97,7 +97,7 @@ proc incr_change_counter {} {
 proc restore_file {} {
   db close
   forcecopy test.bu test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 }
 
 #-------------------------------------------------------------------------

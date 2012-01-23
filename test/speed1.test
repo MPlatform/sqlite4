@@ -14,10 +14,10 @@
 # $Id: speed1.test,v 1.11 2009/04/09 01:23:49 drh Exp $
 #
 
-sqlite3_shutdown
-#sqlite3_config_scratch 29000 1
-set old_lookaside [sqlite3_config_lookaside 1000 300]
-#sqlite3_config_pagecache 1024 10000
+sqlite4_shutdown
+#sqlite4_config_scratch 29000 1
+set old_lookaside [sqlite4_config_lookaside 1000 300]
+#sqlite4_config_pagecache 1024 10000
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 speed_trial_init speed1
@@ -291,8 +291,8 @@ do_test speed1-1.2 {
 speed_trial_summary speed1
 
 db close
-sqlite3_shutdown
-eval sqlite3_config_lookaside $old_lookaside
-sqlite3_initialize
+sqlite4_shutdown
+eval sqlite4_config_lookaside $old_lookaside
+sqlite4_initialize
 autoinstall_test_functions
 finish_test

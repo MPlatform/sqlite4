@@ -40,7 +40,7 @@ ifcapable !vtab {
 # code in this file arranges for a Tcl script to be executed from within
 # the echo module xSync() callback.
 #
-register_echo_module [sqlite3_connection_pointer db]
+register_echo_module [sqlite4_connection_pointer db]
 trace add variable ::echo_module write echo_module_trace
 
 # This Tcl proc is invoked whenever the ::echo_module variable is written.

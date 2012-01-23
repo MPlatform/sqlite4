@@ -58,12 +58,12 @@ int integrity_check(sqlite *db, int id){
   int rc;
   if( all_stop ) return 0;
   /* fprintf(stderr,"%d: CHECK\n", id); */
-  rc = sqlite3_exec(db, "pragma integrity_check", check_callback, 0, 0);
+  rc = sqlite4_exec(db, "pragma integrity_check", check_callback, 0, 0);
   if( rc!=SQLITE_OK && rc!=SQLITE_BUSY ){
     fprintf(stderr,"%d, Integrity check returns %d\n", id, rc);
   }
   if( all_stop ){
-    sqlite3_exec(db, "pragma integrity_check", check_callback, 0, 0);
+    sqlite4_exec(db, "pragma integrity_check", check_callback, 0, 0);
   }
   return 0;
 }
@@ -79,14 +79,14 @@ void *worker(void *workerArg){
   fprintf(stderr, "Starting worker %d\n", id);
   while( !all_stop && cnt++<10000 ){
     if( cnt%100==0 ) printf("%d: %d\n", id, cnt);
-    while( (sqlite3_open(DB_FILE, &db))!=SQLITE_OK ) sched_yield();
-    sqlite3_exec(db, "PRAGMA synchronous=OFF", 0, 0, 0);
+    while( (sqlite4_open(DB_FILE, &db))!=SQLITE_OK ) sched_yield();
+    sqlite4_exec(db, "PRAGMA synchronous=OFF", 0, 0, 0);
     /* integrity_check(db, id); */
-    if( all_stop ){ sqlite3_close(db); break; }
+    if( all_stop ){ sqlite4_close(db); break; }
     /* fprintf(stderr, "%d: BEGIN\n", id); */
-    rc = sqlite3_exec(db, "INSERT INTO t1 VALUES('bogus data')", 0, 0, 0);
+    rc = sqlite4_exec(db, "INSERT INTO t1 VALUES('bogus data')", 0, 0, 0);
     /* fprintf(stderr, "%d: END rc=%d\n", id, rc); */
-    sqlite3_close(db);
+    sqlite4_close(db);
   }
   fprintf(stderr, "Worker %d finished\n", id);
   return 0;
@@ -101,22 +101,22 @@ int main(int argc, char **argv){
   pthread_t aThread[5];
 
   if( strcmp(DB_FILE,":memory:") ){
-    char *zJournal = sqlite3_mprintf("%s-journal", DB_FILE);
+    char *zJournal = sqlite4_mprintf("%s-journal", DB_FILE);
     unlink(DB_FILE);
     unlink(zJournal);
-    sqlite3_free(zJournal);
+    sqlite4_free(zJournal);
   }  
-  sqlite3_open(DB_FILE, &db);
+  sqlite4_open(DB_FILE, &db);
   if( db==0 ){
     fprintf(stderr,"unable to initialize database\n");
     exit(1);
   }
-  rc = sqlite3_exec(db, "CREATE TABLE t1(x);", 0,0,0);
+  rc = sqlite4_exec(db, "CREATE TABLE t1(x);", 0,0,0);
   if( rc ){
     fprintf(stderr,"cannot create table t1: %d\n", rc);
     exit(1);
   }
-  sqlite3_close(db);
+  sqlite4_close(db);
   for(i=0; i<sizeof(aThread)/sizeof(aThread[0]); i++){
     pthread_create(&aThread[i], 0, worker, (void*)i);
   }

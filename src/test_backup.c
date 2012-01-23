@@ -9,17 +9,17 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** This file contains test logic for the sqlite3_backup() interface.
+** This file contains test logic for the sqlite4_backup() interface.
 **
 */
 
 #include "tcl.h"
-#include <sqlite3.h>
+#include <sqlite4.h>
 #include <assert.h>
 
 /* These functions are implemented in test1.c. */
-int getDbPointer(Tcl_Interp *, const char *, sqlite3 **);
-const char *sqlite3TestErrorName(int);
+int getDbPointer(Tcl_Interp *, const char *, sqlite4 **);
+const char *sqlite4TestErrorName(int);
 
 static int backupTestCmd(
   ClientData clientData, 
@@ -43,7 +43,7 @@ static int backupTestCmd(
     {0, 0, 0, 0}
   };
 
-  sqlite3_backup *p = (sqlite3_backup *)clientData;
+  sqlite4_backup *p = (sqlite4_backup *)clientData;
   int iCmd;
   int rc;
 
@@ -69,8 +69,8 @@ static int backupTestCmd(
       Tcl_SetCommandInfo(interp, zCmdName, &cmdInfo);
       Tcl_DeleteCommand(interp, zCmdName);
 
-      rc = sqlite3_backup_finish(p);
-      Tcl_SetResult(interp, (char *)sqlite3TestErrorName(rc), TCL_STATIC);
+      rc = sqlite4_backup_finish(p);
+      Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
       break;
     }
 
@@ -79,17 +79,17 @@ static int backupTestCmd(
       if( TCL_OK!=Tcl_GetIntFromObj(interp, objv[2], &nPage) ){
         return TCL_ERROR;
       }
-      rc = sqlite3_backup_step(p, nPage);
-      Tcl_SetResult(interp, (char *)sqlite3TestErrorName(rc), TCL_STATIC);
+      rc = sqlite4_backup_step(p, nPage);
+      Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
       break;
     }
 
     case BACKUP_REMAINING:
-      Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite3_backup_remaining(p)));
+      Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite4_backup_remaining(p)));
       break;
 
     case BACKUP_PAGECOUNT:
-      Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite3_backup_pagecount(p)));
+      Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite4_backup_pagecount(p)));
       break;
   }
 
@@ -97,12 +97,12 @@ static int backupTestCmd(
 }
 
 static void backupTestFinish(ClientData clientData){
-  sqlite3_backup *pBackup = (sqlite3_backup *)clientData;
-  sqlite3_backup_finish(pBackup);
+  sqlite4_backup *pBackup = (sqlite4_backup *)clientData;
+  sqlite4_backup_finish(pBackup);
 }
 
 /*
-**     sqlite3_backup CMDNAME DESTHANDLE DESTNAME SRCHANDLE SRCNAME
+**     sqlite4_backup CMDNAME DESTHANDLE DESTNAME SRCHANDLE SRCNAME
 **
 */
 static int backupTestInit(
@@ -111,9 +111,9 @@ static int backupTestInit(
   int objc,
   Tcl_Obj *const*objv
 ){
-  sqlite3_backup *pBackup;
-  sqlite3 *pDestDb;
-  sqlite3 *pSrcDb;
+  sqlite4_backup *pBackup;
+  sqlite4 *pDestDb;
+  sqlite4 *pSrcDb;
   const char *zDestName;
   const char *zSrcName;
   const char *zCmd;
@@ -131,9 +131,9 @@ static int backupTestInit(
   getDbPointer(interp, Tcl_GetString(objv[4]), &pSrcDb);
   zSrcName = Tcl_GetString(objv[5]);
 
-  pBackup = sqlite3_backup_init(pDestDb, zDestName, pSrcDb, zSrcName);
+  pBackup = sqlite4_backup_init(pDestDb, zDestName, pSrcDb, zSrcName);
   if( !pBackup ){
-    Tcl_AppendResult(interp, "sqlite3_backup_init() failed", 0);
+    Tcl_AppendResult(interp, "sqlite4_backup_init() failed", 0);
     return TCL_ERROR;
   }
 
@@ -143,6 +143,6 @@ static int backupTestInit(
 }
 
 int Sqlitetestbackup_Init(Tcl_Interp *interp){
-  Tcl_CreateObjCommand(interp, "sqlite3_backup", backupTestInit, 0, 0);
+  Tcl_CreateObjCommand(interp, "sqlite4_backup", backupTestInit, 0, 0);
   return TCL_OK;
 }

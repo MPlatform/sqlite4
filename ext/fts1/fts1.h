@@ -1,10 +1,10 @@
-#include "sqlite3.h"
+#include "sqlite4.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  /* __cplusplus */
 
-int sqlite3Fts1Init(sqlite3 *db);
+int sqlite4Fts1Init(sqlite4 *db);
 
 #ifdef __cplusplus
 }  /* extern "C" */

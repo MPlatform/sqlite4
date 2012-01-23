@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 # This file implements regression tests for SQLite library.  The
-# focus of this script is testing the sqlite3_set_authorizer() API
+# focus of this script is testing the sqlite4_set_authorizer() API
 # and related functionality.
 #
 # $Id: auth2.test,v 1.3 2008/07/02 13:13:53 danielk1977 Exp $
@@ -76,8 +76,8 @@ do_test auth2-1.8 {
 # and when computing the result set of a view.
 #
 db close
-sqlite3 db test.db
-sqlite3 db2 test.db
+sqlite4 db test.db
+sqlite4 db2 test.db
 proc auth {args} {
   global authargs
   append authargs $args\n

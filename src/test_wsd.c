@@ -11,7 +11,7 @@
 *************************************************************************
 **
 ** The code in this file contains sample implementations of the 
-** sqlite3_wsd_init() and sqlite3_wsd_find() functions required if the
+** sqlite4_wsd_init() and sqlite4_wsd_find() functions required if the
 ** SQLITE_OMIT_WSD symbol is defined at build time.
 */
 
@@ -37,7 +37,7 @@ struct ProcessLocalVar {
 
 static ProcessLocalStorage *pGlobal = 0;
 
-int sqlite3_wsd_init(int N, int J){
+int sqlite4_wsd_init(int N, int J){
   if( !pGlobal ){
     int nMalloc = N + sizeof(ProcessLocalStorage) + J*sizeof(ProcessLocalVar);
     pGlobal = (ProcessLocalStorage *)malloc(nMalloc);
@@ -51,7 +51,7 @@ int sqlite3_wsd_init(int N, int J){
   return pGlobal ? SQLITE_OK : SQLITE_NOMEM;
 }
 
-void *sqlite3_wsd_find(void *K, int L){
+void *sqlite4_wsd_find(void *K, int L){
   int i;
   int iHash = 0;
   ProcessLocalVar *pVar;

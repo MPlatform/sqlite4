@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 # This file contains additional out-of-memory checks (see malloc.tcl)
-# added to expose a bug in out-of-memory handling for sqlite3_prepare16().
+# added to expose a bug in out-of-memory handling for sqlite4_prepare16().
 #
 # $Id: malloc7.test,v 1.5 2008/02/18 22:24:58 drh Exp $
 
@@ -33,8 +33,8 @@ do_malloc_test malloc7-1 -sqlprep {
   set sql16 [encoding convertto unicode "SELECT * FROM sqlite_master"]
   append sql16 "\00\00"
   set nbyte [string length $sql16]
-  set ::STMT [sqlite3_prepare16 db $sql16 $nbyte DUMMY]
-  sqlite3_finalize $::STMT
+  set ::STMT [sqlite4_prepare16 db $sql16 $nbyte DUMMY]
+  sqlite4_finalize $::STMT
 } 
 
 

@@ -140,7 +140,7 @@ for {set ii 2} {$ii < ($iterations+2)} {incr ii} {
   do_test savepoint2-$ii.6 {
     execsql $SQL(4)
     execsql COMMIT
-    sqlite3_get_autocommit db
+    sqlite4_get_autocommit db
   } {1}
   integrity_check savepoint2-$ii.6.1
 

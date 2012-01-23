@@ -36,7 +36,7 @@ do_test tkt3810-1.1 {
 # schema of the database has been parsed by the second connection.
 #
 do_test tkt3810-2 {
-  sqlite3 db2 test.db
+  sqlite4 db2 test.db
   execsql {
     SELECT * FROM t1;
   } db2

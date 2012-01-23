@@ -62,7 +62,7 @@ ifcapable {integrityck} {
 #
 db close
 forcecopy test.db test.bu
-sqlite3 db test.db
+sqlite4 db test.db
 set fsize [file size test.db]
 
 
@@ -73,7 +73,7 @@ do_test corruptE-2.1 {
   # insert corrupt byte(s)
   hexio_write test.db 2041 [format %02x 0x2e]
 
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   set res [ catchsql {PRAGMA integrity_check} ]
   set ans [lindex $res 1]
@@ -89,7 +89,7 @@ do_test corruptE-2.2 {
   # insert corrupt byte(s)
   hexio_write test.db 2047 [format %02x 0x84]
 
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   set res [ catchsql {PRAGMA integrity_check} ]
   set ans [lindex $res 1]
@@ -106,7 +106,7 @@ do_test corruptE-2.3 {
   hexio_write test.db 7420 [format %02x 0xa8]
   hexio_write test.db 10459 [format %02x 0x8d]
 
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   set res [ catchsql {PRAGMA integrity_check} ]
   set ans [lindex $res 1]
@@ -121,7 +121,7 @@ do_test corruptE-2.4 {
   # insert corrupt byte(s)
   hexio_write test.db 10233 [format %02x 0xd0]
 
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   set res [ catchsql {PRAGMA integrity_check} ]
   set ans [lindex $res 1]
@@ -162,7 +162,7 @@ foreach test $tests {
     # insert corrupt byte(s)
     hexio_write test.db [lindex $test 0] [format %02x [lindex $test 1]]
 
-    sqlite3 db test.db
+    sqlite4 db test.db
 
     set res [ catchsql {PRAGMA integrity_check} ]
     set ans [lindex $res 1]

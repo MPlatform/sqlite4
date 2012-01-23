@@ -1,6 +1,6 @@
 #!/usr/bin/tclsh
 #
-# This script splits the sqlite3.c amalgamated source code files into
+# This script splits the sqlite4.c amalgamated source code files into
 # several smaller files such that no single files is more than a fixed
 # number of lines in length (32k or 64k).  Each of the split out files
 # is #include-ed by the master file.
@@ -13,10 +13,10 @@ set MAX 32768    ;# Maximum number of lines per file.
 set BEGIN {^/\*+ Begin file ([a-zA-Z0-9_.]+) \*+/}
 set END   {^/\*+ End of %s \*+/}
 
-set in [open sqlite3.c]
-set out1 [open sqlite3-all.c w]
+set in [open sqlite4.c]
+set out1 [open sqlite4-all.c w]
 
-# Copy the header from sqlite3.c into sqlite3-all.c
+# Copy the header from sqlite4.c into sqlite4-all.c
 #
 while {[gets $in line]} {
   if {[regexp $BEGIN $line]} break
@@ -40,21 +40,21 @@ proc gather_one_file {firstline bufout nout} {
   }
 }
 
-# Write a big chunk of text in to an auxiliary file "sqlite3-NNN.c".
-# Also add an appropriate #include to sqlite3-all.c
+# Write a big chunk of text in to an auxiliary file "sqlite4-NNN.c".
+# Also add an appropriate #include to sqlite4-all.c
 #
 set filecnt 0
 proc write_one_file {content} {
   global filecnt
   incr filecnt
-  set out [open sqlite3-$filecnt.c w]
+  set out [open sqlite4-$filecnt.c w]
   puts -nonewline $out $content
   close $out
-  puts $::out1 "#include \"sqlite3-$filecnt.c\""
+  puts $::out1 "#include \"sqlite4-$filecnt.c\""
 }
 
 # Continue reading input.  Store chunks in separate files and add
-# the #includes to the main sqlite3-all.c file as necessary to reference
+# the #includes to the main sqlite4-all.c file as necessary to reference
 # the extra chunks.
 #
 set all {}

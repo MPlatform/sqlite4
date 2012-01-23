@@ -19,10 +19,10 @@ source $testdir/tester.tcl
 ifcapable !wal {finish_test ; return }
 
 db close
-set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
 
-sqlite3 db  test.db
-sqlite3 db2 test.db
+sqlite4 db  test.db
+sqlite4 db2 test.db
 
 do_test walshared-1.0 {
   execsql {
@@ -58,6 +58,6 @@ do_test walshared-1.4 {
 
 
 
-sqlite3_enable_shared_cache $::enable_shared_cache
+sqlite4_enable_shared_cache $::enable_shared_cache
 finish_test
 

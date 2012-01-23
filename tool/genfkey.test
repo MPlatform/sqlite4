@@ -1,5 +1,5 @@
 
-package require sqlite3
+package require sqlite4
 
 proc do_test {name cmd expected} {
   puts -nonewline "$name ..."
@@ -24,7 +24,7 @@ proc catchsql {sql} {
 }
 
 file delete -force test.db test.db.journal
-sqlite3 db test.db
+sqlite4 db test.db
 
 # The following tests - genfkey-1.* - test RESTRICT foreign keys.
 #
@@ -36,7 +36,7 @@ do_test genfkey-1.1 {
   }
 } {}
 do_test genfkey-1.2 {
-  execsql [exec ./sqlite3 test.db .genfkey]
+  execsql [exec ./sqlite4 test.db .genfkey]
 } {}
 do_test genfkey-1.3 {
   catchsql { INSERT INTO t2 VALUES(1, 2) }
@@ -129,7 +129,7 @@ do_test genfkey-2.1 {
   }
 } {}
 do_test genfkey-2.2 {
-  execsql [exec ./sqlite3 test.db .genfkey]
+  execsql [exec ./sqlite4 test.db .genfkey]
 } {}
 do_test genfkey-2.3 {
   execsql {
@@ -186,7 +186,7 @@ do_test genfkey-3.1 {
   }
 } {}
 do_test genfkey-3.2 {
-  execsql [exec ./sqlite3 test.db .genfkey]
+  execsql [exec ./sqlite4 test.db .genfkey]
 } {}
 do_test genfkey-3.3 {
   execsql {
@@ -249,7 +249,7 @@ do_test genfkey-4.1 {
 } {}
 
 do_test genfkey-4.X {
-  set rc [catch {exec ./sqlite3 test.db .genfkey} msg]
+  set rc [catch {exec ./sqlite4 test.db .genfkey} msg]
   list $rc $msg
 } "1 {[string trim {
 Error in table t5: foreign key columns do not exist
@@ -277,7 +277,7 @@ do_test genfkey-5.2 {
   }
 } {}
 do_test genfkey-5.3 {
-  set rc [catch {exec ./sqlite3 test.db .genfkey} msg]
+  set rc [catch {exec ./sqlite4 test.db .genfkey} msg]
 } {0}
 do_test genfkey-5.4 {
   db eval $msg
@@ -310,7 +310,7 @@ do_test genfkey-6.1 {
   }
 } {}
 do_test genfkey-6.2 {
-  set rc [catch {exec ./sqlite3 test.db .genfkey} msg]
+  set rc [catch {exec ./sqlite4 test.db .genfkey} msg]
 } {0}
 do_test genfkey-6.3 {
   execsql $msg
@@ -332,7 +332,7 @@ do_test genfkey-6.4 {
     CREATE TABLE parent("a.1", PRIMARY KEY("a.1"));
     CREATE TABLE child("b.2", FOREIGN KEY("b.2") REFERENCES parent("a.1"));
   }
-  set rc [catch {exec ./sqlite3 test.db .genfkey} msg]
+  set rc [catch {exec ./sqlite4 test.db .genfkey} msg]
 } {0}
 do_test genfkey-6.5 {
   execsql $msg

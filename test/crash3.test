@@ -74,7 +74,7 @@ foreach {sql res2} [list \
 
     db close
     forcedelete test.db test.db-journal
-    sqlite3 db test.db
+    sqlite4 db test.db
     do_test crash3-1.$tn.1 {
       execsql {
         PRAGMA page_size = 1024;
@@ -91,7 +91,7 @@ foreach {sql res2} [list \
     set rand "SELECT randstr($tn,$tn);"
     do_test crash3-1.$tn.2 [subst {
       crashsql -file $crashfile -char atomic {$rand $sql}
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql { PRAGMA integrity_check; }
     }] {ok}
   
@@ -107,7 +107,7 @@ foreach {sql res2} [list \
 #
 db close
 forcedelete test.db test.db-journal
-sqlite3 db test.db
+sqlite4 db test.db
 do_test crash3-2.0 {
   execsql {
     BEGIN;
@@ -162,7 +162,7 @@ foreach {::crashfile ::delay ::char} {
     do_test crash3-2.$tn.$ii {
       crashsql -file $::crashfile -delay $::delay -char $::char $::SQL
       db close
-      sqlite3 db test.db
+      sqlite4 db test.db
       execsql {PRAGMA integrity_check}
     } {ok}
   }
@@ -181,7 +181,7 @@ for {set ii 0} {$ii < 10} {incr ii} {
   crashsql -file test.db -char {sequential atomic} {
     CREATE TABLE abc(a, b, c);
   }
-  sqlite3 db test.db
+  sqlite4 db test.db
   do_test crash3-3.$ii {
     execsql {PRAGMA integrity_check}
   } {ok}

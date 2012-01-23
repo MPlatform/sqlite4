@@ -367,7 +367,7 @@ foreach {tn sql error ac data } {
 } {
   do_catchsql_test e_insert-4.1.$tn.1 $sql [list [expr {$error!=""}] $error]
   do_execsql_test  e_insert-4.1.$tn.2 {SELECT * FROM a4} [list {*}$data]
-  do_test          e_insert-4.1.$tn.3 {sqlite3_get_autocommit db} $ac
+  do_test          e_insert-4.1.$tn.3 {sqlite4_get_autocommit db} $ac
 }
 
 # EVIDENCE-OF: R-64196-02418 The optional "database-name." prefix on the

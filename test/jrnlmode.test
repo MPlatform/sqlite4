@@ -244,7 +244,7 @@ ifcapable attach {
   db close
   forcedelete test2.db
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   do_test jrnlmode-3.1 {
     execsql { 
@@ -271,7 +271,7 @@ ifcapable attach {
 ifcapable autovacuum&&pragma {
   db close
   forcedelete test.db
-  sqlite3 db test.db
+  sqlite4 db test.db
   do_test jrnlmode-4.1 {
     execsql {
       PRAGMA cache_size = 1;
@@ -304,7 +304,7 @@ ifcapable autovacuum&&pragma {
 ifcapable pragma {
   db close
   forcedelete test.db test2.db test3.db
-  sqlite3 db test.db
+  sqlite4 db test.db
 
   do_test jrnlmode-5.1 {
     execsql {pragma page_size=1024}
@@ -512,7 +512,7 @@ ifcapable pragma {
   catch { db close }
   do_test jrnlmode-7.1 {
     foreach f [glob -nocomplain test.db*] { forcedelete $f }
-    sqlite3 db test.db
+    sqlite4 db test.db
     execsql {
       PRAGMA journal_mode = memory;
       PRAGMA auto_vacuum = 0;

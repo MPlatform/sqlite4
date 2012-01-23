@@ -76,7 +76,7 @@ do_test collate3-2.0 {
     CREATE TABLE collate3t1(c1 COLLATE string_compare, c2);
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   expr 0
 } 0
 do_test collate3-2.1 {
@@ -198,7 +198,7 @@ do_test collate3-3.0 {
     INSERT INTO collate3t1 VALUES('xxx', 'yyy');
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   expr 0
 } 0
 db eval {select * from collate3t1}
@@ -287,7 +287,7 @@ do_test collate3-4.6 {
 } {}
 do_test collate3-4.7 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT * FROM collate3t1 ORDER BY a COLLATE user_defined;
   }
@@ -301,7 +301,7 @@ do_test collate3-4.8.1 {
 do_test collate3-4.8.2 {
   db close
   lindex [catch {
-    sqlite3 db test.db
+    sqlite4 db test.db
   }] 0
 } {0}
 do_test collate3-4.8.3 {
@@ -337,7 +337,7 @@ do_test collate3-4.9 {
 } {2 {} 12 {} 101 {}}
 do_test collate3-4.10 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT * FROM collate3v1;
   }
@@ -402,7 +402,7 @@ do_test collate3-5.7 {
     CREATE TABLE collate3t1(a COLLATE unk);
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   catchsql {
     SELECT a FROM collate3t1 ORDER BY 1;
   }

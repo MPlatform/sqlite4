@@ -37,7 +37,7 @@ do_test attach-1.1 {
   }
 } {1 2 3 4}
 do_test attach-1.2 {
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   execsql {
     CREATE TABLE t2(x,y);
     INSERT INTO t2 VALUES(1,'x');
@@ -52,22 +52,22 @@ do_test attach-1.3 {
   }
 } {1 x 2 y}
 
-# Tests for the sqlite3_db_filename interface
+# Tests for the sqlite4_db_filename interface
 #
 do_test attach-1.3.1 {
-  file tail [sqlite3_db_filename db main]
+  file tail [sqlite4_db_filename db main]
 } {test.db}
 do_test attach-1.3.2 {
-  file tail [sqlite3_db_filename db MAIN]
+  file tail [sqlite4_db_filename db MAIN]
 } {test.db}
 do_test attach-1.3.3 {
-  file tail [sqlite3_db_filename db temp]
+  file tail [sqlite4_db_filename db temp]
 } {}
 do_test attach-1.3.4 {
-  file tail [sqlite3_db_filename db two]
+  file tail [sqlite4_db_filename db two]
 } {test2.db}
 do_test attach-1.3.5 {
-  file tail [sqlite3_db_filename db three]
+  file tail [sqlite4_db_filename db three]
 } {}
 
 do_test attach-1.4 {
@@ -369,7 +369,7 @@ do_test attach-2.15 {
 } {table t2 t2 table tx tx trigger r1 t2 index i2 t2}
 do_test attach-2.16 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     ATTACH 'test2.db' AS db2;
     SELECT type, name, tbl_name FROM db2.sqlite_master;
@@ -380,8 +380,8 @@ do_test attach-2.16 {
 do_test attach-3.1 {
   db close
   db2 close
-  sqlite3 db test.db
-  sqlite3 db2 test2.db
+  sqlite4 db test.db
+  sqlite4 db2 test2.db
   execsql {
     SELECT * FROM t1
   }
@@ -501,7 +501,7 @@ do_test attach-3.15 {
 do_test attach-4.1 {
   execsql {DETACH db2}
   db2 close
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   execsql {
     CREATE TABLE t3(x,y);
     CREATE UNIQUE INDEX t3i1 ON t3(x);
@@ -645,10 +645,10 @@ do_test attach-4.13 {
 ifcapable {trigger} {
 do_test attach-5.1 {
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   db2 close
   forcedelete test2.db
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   catchsql {
     ATTACH DATABASE 'test.db' AS orig;
     CREATE TRIGGER r1 AFTER INSERT ON orig.t1 BEGIN
@@ -738,7 +738,7 @@ do_test attach-6.1 {
 } {0 {}}
 if {$tcl_platform(platform)=="unix"} {
   do_test attach-6.2 {
-    sqlite3 dbx cannot-read
+    sqlite4 dbx cannot-read
     dbx eval {CREATE TABLE t1(a,b,c)}
     dbx close
     file attributes cannot-read -permission 0000
@@ -774,7 +774,7 @@ forcedelete no-such-file
 ifcapable subquery {
   do_test attach-7.1 {
     forcedelete test.db test.db-journal
-    sqlite3 db test.db
+    sqlite4 db test.db
     catchsql {
       DETACH RAISE ( IGNORE ) IN ( SELECT "AAAAAA" . * ORDER BY 
       REGISTER LIMIT "AAAAAA" . "AAAAAA" OFFSET RAISE ( IGNORE ) NOT NULL )
@@ -798,7 +798,7 @@ do_test attach-8.2 {
 } {26}
 forcedelete test2.db
 do_test attach-8.3 {
-  sqlite3 db2 test2.db
+  sqlite4 db2 test2.db
   db2 eval {CREATE TABLE t1(x); BEGIN EXCLUSIVE}
   catchsql {
     ATTACH 'test2.db' AS t2;

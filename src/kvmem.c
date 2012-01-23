@@ -197,7 +197,7 @@ static int kvmemKeyCompare(
 ** Create a new KVMemData object
 */
 static KVMemData *kvmemDataNew(const KVByteArray *aData, KVSize nData){
-  KVMemData *p = sqlite3_malloc( sizeof(*p) + nData - 8 );
+  KVMemData *p = sqlite4_malloc( sizeof(*p) + nData - 8 );
   if( p ) {
     p->nRef = 1;
     p->n = nData;
@@ -218,7 +218,7 @@ static KVMemData *kvmemDataRef(KVMemData *p){
 ** Dereference a KVMemData object
 */
 static void kvmemDataUnref(KVMemData *p){
-  if( p && (--p->nRef)<=0 ) sqlite3_free(p);
+  if( p && (--p->nRef)<=0 ) sqlite4_free(p);
 }
 
 /*
@@ -235,7 +235,7 @@ static KVMemNode *kvmemNodeRef(KVMemNode *p){
 static void kvmemNodeUnref(KVMemNode *p){
   if( p && (--p->nRef)<=0 ){
     kvmemDataUnref(p->pData);
-    sqlite3_free(p);
+    sqlite4_free(p);
   }
 }
 
@@ -303,7 +303,7 @@ static KVMemNode *kvmemPrev(KVMemNode *p){
 static KVMemChng *kvmemNewChng(KVMem *p, KVMemNode *pNode){
   KVMemChng *pChng;
   assert( p->nTrans>=2 );
-  pChng = sqlite3_malloc( sizeof(*pChng) );
+  pChng = sqlite4_malloc( sizeof(*pChng) );
   if( pChng ){
     pChng->pNext = p->apLog[p->nTrans-2];
     p->apLog[p->nTrans-2] = pChng;
@@ -326,7 +326,7 @@ static KVMemNode *kvmemNewNode(
   KVMemNode *pNode;
   KVMemChng *pChng;
   assert( p->nTrans>=2 );
-  pNode = sqlite3_malloc( sizeof(*pNode)+nKey-2 );
+  pNode = sqlite4_malloc( sizeof(*pNode)+nKey-2 );
   if( pNode ){
     memset(pNode, 0, sizeof(*p));
     memcpy(pNode->aKey, aKey, nKey);
@@ -334,7 +334,7 @@ static KVMemNode *kvmemNewNode(
     pNode->nRef = 1;
     pChng = kvmemNewChng(p, pNode);
     if( pChng==0 ){
-      sqlite3_free(pNode);
+      sqlite4_free(pNode);
       pNode = 0;
     }else{
       pChng->pData = 0;
@@ -408,7 +408,7 @@ static int kvmemBegin(KVStore *pKVStore, int iLevel){
   assert( iLevel==2 || iLevel==p->nTrans+1 );
   if( iLevel>=2 ){
     KVMemChng **apNewLog;
-    apNewLog = sqlite3_realloc(p->apLog, sizeof(apNewLog[0])*(iLevel-1) );
+    apNewLog = sqlite4_realloc(p->apLog, sizeof(apNewLog[0])*(iLevel-1) );
     if( apNewLog==0 ) return SQLITE_NOMEM;
     p->apLog = apNewLog;
     p->apLog[iLevel-2] = 0;
@@ -444,7 +444,7 @@ static int kvmemCommit(KVStore *pKVStore, int iLevel){
       }
       kvmemDataUnref(pChng->pData);
       pNext = pChng->pNext;
-      sqlite3_free(pChng);
+      sqlite4_free(pChng);
     }
     p->apLog[p->nTrans-2] = 0;
     p->nTrans--;
@@ -480,7 +480,7 @@ static int kvmemRollback(KVStore *pKVStore, int iLevel){
         kvmemRemoveNode(p, pNode);
       }
       pNext = pChng->pNext;
-      sqlite3_free(pChng);
+      sqlite4_free(pChng);
     }
     p->apLog[p->nTrans-2] = 0;
     p->nTrans--;
@@ -571,7 +571,7 @@ static int kvmemOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
   KVMem *p = (KVMem*)pKVStore;
   KVMemCursor *pCur;
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
-  pCur = sqlite3_malloc( sizeof(*pCur) );
+  pCur = sqlite4_malloc( sizeof(*pCur) );
   if( pCur==0 ){
     *ppKVCursor = 0;
     return SQLITE_NOMEM;
@@ -610,7 +610,7 @@ static int kvmemCloseCursor(KVCursor *pKVCursor){
     pCur->pOwner->nCursor--;
     kvmemReset(pKVCursor);
     memset(pCur, 0, sizeof(*pCur));
-    sqlite3_free(pCur);
+    sqlite4_free(pCur);
   }
   return SQLITE_OK;
 }
@@ -781,10 +781,10 @@ static int kvmemClose(KVStore *pKVStore){
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( p->nCursor==0 );
   if( p->nTrans ) kvmemCommit(pKVStore, 0);
-  sqlite3_free(p->apLog);
+  sqlite4_free(p->apLog);
   kvmemClearTree(p->pRoot);
   memset(p, 0, sizeof(*p));
-  sqlite3_free(p);
+  sqlite4_free(p);
   return SQLITE_OK;
 }
 
@@ -809,8 +809,8 @@ static const KVStoreMethods kvmemMethods = {
 /*
 ** Create a new in-memory storage engine and return a pointer to it.
 */
-int sqlite3KVStoreOpenMem(KVStore **ppKVStore){
-  KVMem *pNew = sqlite3_malloc( sizeof(*pNew) );
+int sqlite4KVStoreOpenMem(KVStore **ppKVStore){
+  KVMem *pNew = sqlite4_malloc( sizeof(*pNew) );
   if( pNew==0 ) return SQLITE_NOMEM;
   memset(pNew, 0, sizeof(*pNew));
   pNew->base.pStoreVfunc = &kvmemMethods;

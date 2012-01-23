@@ -59,14 +59,14 @@ if {[catch {fake_big_file 5000 [pwd]/test.db}]} {
 }
 hexio_write test.db 28 00000000
 
-sqlite3 db test.db
+sqlite4 db test.db
 db func a_string a_string
 do_test walbig-1.1 {
   execsql { INSERT INTO t1 SELECT a_string(300), a_string(500) FROM t1 }
 } {}
 db close
 
-sqlite3 db test.db
+sqlite4 db test.db
 do_test walbig-1.2 {
   execsql { SELECT a FROM t1 ORDER BY a }
 } [lsort [execsql { SELECT a FROM t1 ORDER BY rowid }]]

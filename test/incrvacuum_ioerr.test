@@ -99,7 +99,7 @@ do_ioerr_test incrvacuum-ioerr-3 -start 1 -cksum 1 -tclprep {
 } -sqlbody {
   PRAGMA incremental_vacuum(5);
 } -cleanup {
-  sqlite3 db test.db
+  sqlite4 db test.db
   integrity_check incrvacuum-ioerr-2.$n.integritycheck
   db close
 }
@@ -109,12 +109,12 @@ ifcapable shared_cache {
 
   catch { db close }
   forcedelete test.db
-  set ::enable_shared_cache [sqlite3_enable_shared_cache 1]
+  set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
   
   # Create two connections to a single shared-cache:
   #
-  sqlite3 db1 test.db
-  sqlite3 db2 test.db
+  sqlite4 db1 test.db
+  sqlite4 db2 test.db
   
   # Create a database with around 20 free pages.
   #
@@ -175,7 +175,7 @@ ifcapable shared_cache {
   #
   db1 close
   db2 close
-  sqlite3_enable_shared_cache $::enable_shared_cache
+  sqlite4_enable_shared_cache $::enable_shared_cache
 }
 
 finish_test

@@ -61,8 +61,8 @@ foreach {DO_MALLOC_TEST enc} {
 #
 db close
 forcedelete test.db test.db-journal
-sqlite3 db test.db
-if {$DO_MALLOC_TEST} { sqlite3_db_config_lookaside db 0 0 0 }
+sqlite4 db test.db
+if {$DO_MALLOC_TEST} { sqlite4_db_config_lookaside db 0 0 0 }
 db eval "PRAGMA encoding = '$enc'"
 
 proc mit {blob} {
@@ -509,7 +509,7 @@ error_test 2.1.8 {
 # of the document examples above.
 #
 do_malloc_test e_fts3-3 -tclbody { 
-  if {[catch {sqlite3 db test.db}]} { error "out of memory" }
+  if {[catch {sqlite4 db test.db}]} { error "out of memory" }
 }
 #-------------------------------------------------------------------------
 
@@ -575,7 +575,7 @@ read_test  6.8 { SELECT * FROM t6 WHERE x MATCH NULL } {}
 #-------------------------------------------------------------------------
 # Test a few facets of the FTS3 xFilter() callback implementation:
 #
-#   1. That the sqlite3_index_constraint.usable flag is respected.
+#   1. That the sqlite4_index_constraint.usable flag is respected.
 #
 #   2. That it is an error to use the "docid" or "rowid" column of
 #      an FTS3 table as the LHS of a MATCH operator.
@@ -638,8 +638,8 @@ read_test 8.2.2 { PRAGMA table_info(t9c) } {0 c\"1 {} 0 {} 0 1 c'2 {} 0 {} 0}
 foreach DO_MALLOC_TEST {0 1 2} {
   db close
   forcedelete test.db test.db-journal
-  sqlite3 db test.db
-  if {$DO_MALLOC_TEST} { sqlite3_db_config_lookaside db 0 0 0 }
+  sqlite4 db test.db
+  if {$DO_MALLOC_TEST} { sqlite4_db_config_lookaside db 0 0 0 }
 
   ddl_test   9.1.1             { CREATE VIRTUAL TABLE t10 USING fts3(x) }
   write_test 9.1.2 t10_content { INSERT INTO t10 VALUES('fts3 tables') }

@@ -37,7 +37,7 @@ foreach idxmode {ordered unordered} {
     execsql { UPDATE sqlite_stat1 SET stat = stat || ' unordered' }
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   foreach {tn sql r(ordered) r(unordered)} {
     1   "SELECT * FROM t1 ORDER BY a"
         {0 0 0 {SCAN TABLE t1 USING INDEX i1 (~128 rows)}}

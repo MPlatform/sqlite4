@@ -33,8 +33,8 @@
 # ifndef SQLITE_DEBUG_OS_TRACE
 #   define SQLITE_DEBUG_OS_TRACE 0
 # endif
-  int sqlite3OSTrace = SQLITE_DEBUG_OS_TRACE;
-# define OSTRACE(X)          if( sqlite3OSTrace ) sqlite3DebugPrintf X
+  int sqlite4OSTrace = SQLITE_DEBUG_OS_TRACE;
+# define OSTRACE(X)          if( sqlite4OSTrace ) sqlite4DebugPrintf X
 #else
 # define OSTRACE(X)
 #endif
@@ -53,8 +53,8 @@
 
 static sqlite_uint64 g_start;
 static sqlite_uint64 g_elapsed;
-#define TIMER_START       g_start=sqlite3Hwtime()
-#define TIMER_END         g_elapsed=sqlite3Hwtime()-g_start
+#define TIMER_START       g_start=sqlite4Hwtime()
+#define TIMER_END         g_elapsed=sqlite4Hwtime()-g_start
 #define TIMER_ELAPSED     g_elapsed
 #else
 #define TIMER_START
@@ -68,32 +68,32 @@ static sqlite_uint64 g_elapsed;
 ** is used for testing the I/O recovery logic.
 */
 #ifdef SQLITE_TEST
-int sqlite3_io_error_hit = 0;            /* Total number of I/O Errors */
-int sqlite3_io_error_hardhit = 0;        /* Number of non-benign errors */
-int sqlite3_io_error_pending = 0;        /* Count down to first I/O error */
-int sqlite3_io_error_persist = 0;        /* True if I/O errors persist */
-int sqlite3_io_error_benign = 0;         /* True if errors are benign */
-int sqlite3_diskfull_pending = 0;
-int sqlite3_diskfull = 0;
-#define SimulateIOErrorBenign(X) sqlite3_io_error_benign=(X)
+int sqlite4_io_error_hit = 0;            /* Total number of I/O Errors */
+int sqlite4_io_error_hardhit = 0;        /* Number of non-benign errors */
+int sqlite4_io_error_pending = 0;        /* Count down to first I/O error */
+int sqlite4_io_error_persist = 0;        /* True if I/O errors persist */
+int sqlite4_io_error_benign = 0;         /* True if errors are benign */
+int sqlite4_diskfull_pending = 0;
+int sqlite4_diskfull = 0;
+#define SimulateIOErrorBenign(X) sqlite4_io_error_benign=(X)
 #define SimulateIOError(CODE)  \
-  if( (sqlite3_io_error_persist && sqlite3_io_error_hit) \
-       || sqlite3_io_error_pending-- == 1 )  \
+  if( (sqlite4_io_error_persist && sqlite4_io_error_hit) \
+       || sqlite4_io_error_pending-- == 1 )  \
               { local_ioerr(); CODE; }
 static void local_ioerr(){
   IOTRACE(("IOERR\n"));
-  sqlite3_io_error_hit++;
-  if( !sqlite3_io_error_benign ) sqlite3_io_error_hardhit++;
+  sqlite4_io_error_hit++;
+  if( !sqlite4_io_error_benign ) sqlite4_io_error_hardhit++;
 }
 #define SimulateDiskfullError(CODE) \
-   if( sqlite3_diskfull_pending ){ \
-     if( sqlite3_diskfull_pending == 1 ){ \
+   if( sqlite4_diskfull_pending ){ \
+     if( sqlite4_diskfull_pending == 1 ){ \
        local_ioerr(); \
-       sqlite3_diskfull = 1; \
-       sqlite3_io_error_hit = 1; \
+       sqlite4_diskfull = 1; \
+       sqlite4_io_error_hit = 1; \
        CODE; \
      }else{ \
-       sqlite3_diskfull_pending--; \
+       sqlite4_diskfull_pending--; \
      } \
    }
 #else
@@ -106,8 +106,8 @@ static void local_ioerr(){
 ** When testing, keep a count of the number of open files.
 */
 #ifdef SQLITE_TEST
-int sqlite3_open_file_count = 0;
-#define OpenCounter(X)  sqlite3_open_file_count+=(X)
+int sqlite4_open_file_count = 0;
+#define OpenCounter(X)  sqlite4_open_file_count+=(X)
 #else
 #define OpenCounter(X)
 #endif

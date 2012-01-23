@@ -42,7 +42,7 @@ do_test avtrans-1.1 {
   }
 } {I V X}
 do_test avtrans-1.9 {
-  sqlite3 altdb test.db
+  sqlite4 altdb test.db
   execsql {SELECT b FROM one ORDER BY a} altdb
 } {one two three}
 do_test avtrans-1.10 {
@@ -90,7 +90,7 @@ wal_check_journal_mode avtrans-2.12
 
 # Check the locking behavior
 #
-sqlite3_soft_heap_limit 0
+sqlite4_soft_heap_limit 0
 do_test avtrans-3.1 {
   execsql {
     BEGIN;
@@ -165,7 +165,7 @@ do_test avtrans-3.14 {
   } db} msg]
   lappend v $msg
 } {0 {1 2 3 4}}
-sqlite3_soft_heap_limit $cmdlinearg(soft-heap-limit)
+sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 integrity_check avtrans-3.15
 
 do_test avtrans-4.1 {
@@ -793,7 +793,7 @@ integrity_check avtrans-7.15
 #
 set fd [open test.tcl w]
 puts $fd {
-  sqlite3 db test.db
+  sqlite4 db test.db
   db eval {
     PRAGMA default_cache_size=20;
     BEGIN;
@@ -821,7 +821,7 @@ do_test avtrans-9.1 {
     PRAGMA default_cache_size=10;
   }
   db close
-  sqlite3 db test.db
+  sqlite4 db test.db
   execsql {
     BEGIN;
     CREATE TABLE t3(x TEXT);

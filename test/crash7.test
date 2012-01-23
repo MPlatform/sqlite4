@@ -27,7 +27,7 @@ foreach f [list test.db test.db-journal] {
   for {set ii 1} {$ii < 64} {incr ii} {
     db close
     delete_file test.db
-    sqlite3 db test.db
+    sqlite4 db test.db
   
     set from_size [expr 1024 << ($ii&3)]
     set to_size   [expr 1024 << (($ii>>2)&3)]
@@ -74,7 +74,7 @@ foreach f [list test.db test.db-journal] {
        "
     } {1 {child process exited abnormally}}
   
-    sqlite3 db test.db
+    sqlite4 db test.db
     integrity_check crash7-1.$ii.integrity
   } 
 }
