@@ -78,9 +78,9 @@ struct sqlite4_api_routines {
   int  (*complete)(const char*sql);
   int  (*complete16)(const void*sql);
   int  (*create_collation)(sqlite4*,const char*,int,void*,
-                           int(*)(void*,int,const void*,int,const void*));
-  int  (*create_collation16)(sqlite4*,const void*,int,void*,
-                             int(*)(void*,int,const void*,int,const void*));
+                           int(*)(void*,int,const void*,int,const void*),
+                           int(*)(void*,int,const void*,int,const void*),
+                           void(*)(void*));
   int  (*create_function)(sqlite4*,const char*,int,int,void*,
                           void (*xFunc)(sqlite4_context*,int,sqlite4_value**),
                           void (*xStep)(sqlite4_context*,int,sqlite4_value**),
@@ -177,9 +177,6 @@ struct sqlite4_api_routines {
                    int,sqlite4_blob**);
   int (*blob_read)(sqlite4_blob*,void*,int,int);
   int (*blob_write)(sqlite4_blob*,const void*,int,int);
-  int (*create_collation_v2)(sqlite4*,const char*,int,void*,
-                             int(*)(void*,int,const void*,int,const void*),
-                             void(*)(void*));
   int (*file_control)(sqlite4*,const char*,int,void*);
   sqlite4_int64 (*memory_highwater)(int);
   sqlite4_int64 (*memory_used)(void);
@@ -296,7 +293,6 @@ struct sqlite4_api_routines {
 #define sqlite4_complete               sqlite4_api->complete
 #define sqlite4_complete16             sqlite4_api->complete16
 #define sqlite4_create_collation       sqlite4_api->create_collation
-#define sqlite4_create_collation16     sqlite4_api->create_collation16
 #define sqlite4_create_function        sqlite4_api->create_function
 #define sqlite4_create_function16      sqlite4_api->create_function16
 #define sqlite4_create_module          sqlite4_api->create_module
@@ -386,7 +382,6 @@ struct sqlite4_api_routines {
 #define sqlite4_blob_open              sqlite4_api->blob_open
 #define sqlite4_blob_read              sqlite4_api->blob_read
 #define sqlite4_blob_write             sqlite4_api->blob_write
-#define sqlite4_create_collation_v2    sqlite4_api->create_collation_v2
 #define sqlite4_file_control           sqlite4_api->file_control
 #define sqlite4_memory_highwater       sqlite4_api->memory_highwater
 #define sqlite4_memory_used            sqlite4_api->memory_used

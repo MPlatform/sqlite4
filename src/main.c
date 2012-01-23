@@ -1665,6 +1665,7 @@ static int createCollation(
   u8 enc,
   void* pCtx,
   int(*xCompare)(void*,int,const void*,int,const void*),
+  int(*xMakeKey)(void*,int,const void*,int,const void*),
   void(*xDel)(void*)
 ){
   CollSeq *pColl;
@@ -1724,6 +1725,7 @@ static int createCollation(
   pColl = sqlite4FindCollSeq(db, (u8)enc2, zName, 1);
   if( pColl==0 ) return SQLITE_NOMEM;
   pColl->xCmp = xCompare;
+  pColl->xMkKey = xMakeKey;
   pColl->pUser = pCtx;
   pColl->xDel = xDel;
   pColl->enc = (u8)(enc2 | (enc & SQLITE_UTF16_ALIGNED));
@@ -2187,10 +2189,10 @@ static int openDatabase(
   ** and UTF-16, so add a version for each to avoid any unnecessary
   ** conversions. The only error that can occur here is a malloc() failure.
   */
-  createCollation(db, "BINARY", SQLITE_UTF8, 0, binCollFunc, 0);
-  createCollation(db, "BINARY", SQLITE_UTF16BE, 0, binCollFunc, 0);
-  createCollation(db, "BINARY", SQLITE_UTF16LE, 0, binCollFunc, 0);
-  createCollation(db, "RTRIM", SQLITE_UTF8, (void*)1, binCollFunc, 0);
+  createCollation(db, "BINARY", SQLITE_UTF8, 0, binCollFunc, 0, 0);
+  createCollation(db, "BINARY", SQLITE_UTF16BE, 0, binCollFunc, 0, 0);
+  createCollation(db, "BINARY", SQLITE_UTF16LE, 0, binCollFunc, 0, 0);
+  createCollation(db, "RTRIM", SQLITE_UTF8, (void*)1, binCollFunc, 0, 0);
   if( db->mallocFailed ){
     goto opendb_out;
   }
@@ -2198,7 +2200,7 @@ static int openDatabase(
   assert( db->pDfltColl!=0 );
 
   /* Also add a UTF-8 case-insensitive collation sequence. */
-  createCollation(db, "NOCASE", SQLITE_UTF8, 0, nocaseCollatingFunc, 0);
+  createCollation(db, "NOCASE", SQLITE_UTF8, 0, nocaseCollatingFunc, 0, 0);
 
   /* Parse the filename/URI argument. */
   db->openFlags = flags;
@@ -2389,62 +2391,18 @@ int sqlite4_create_collation(
   const char *zName, 
   int enc, 
   void* pCtx,
-  int(*xCompare)(void*,int,const void*,int,const void*)
-){
-  int rc;
-  sqlite4_mutex_enter(db->mutex);
-  assert( !db->mallocFailed );
-  rc = createCollation(db, zName, (u8)enc, pCtx, xCompare, 0);
-  rc = sqlite4ApiExit(db, rc);
-  sqlite4_mutex_leave(db->mutex);
-  return rc;
-}
-
-/*
-** Register a new collation sequence with the database handle db.
-*/
-int sqlite4_create_collation_v2(
-  sqlite4* db, 
-  const char *zName, 
-  int enc, 
-  void* pCtx,
   int(*xCompare)(void*,int,const void*,int,const void*),
+  int(*xMakeKey)(void*,int,const void*,int,const void*),
   void(*xDel)(void*)
 ){
   int rc;
   sqlite4_mutex_enter(db->mutex);
   assert( !db->mallocFailed );
-  rc = createCollation(db, zName, (u8)enc, pCtx, xCompare, xDel);
+  rc = createCollation(db, zName, (u8)enc, pCtx, xCompare, xMakeKey, xDel);
   rc = sqlite4ApiExit(db, rc);
   sqlite4_mutex_leave(db->mutex);
   return rc;
 }
-
-#ifndef SQLITE_OMIT_UTF16
-/*
-** Register a new collation sequence with the database handle db.
-*/
-int sqlite4_create_collation16(
-  sqlite4* db, 
-  const void *zName,
-  int enc, 
-  void* pCtx,
-  int(*xCompare)(void*,int,const void*,int,const void*)
-){
-  int rc = SQLITE_OK;
-  char *zName8;
-  sqlite4_mutex_enter(db->mutex);
-  assert( !db->mallocFailed );
-  zName8 = sqlite4Utf16to8(db, zName, -1, SQLITE_UTF16NATIVE);
-  if( zName8 ){
-    rc = createCollation(db, zName8, (u8)enc, pCtx, xCompare, 0);
-    sqlite4DbFree(db, zName8);
-  }
-  rc = sqlite4ApiExit(db, rc);
-  sqlite4_mutex_leave(db->mutex);
-  return rc;
-}
-#endif /* SQLITE_OMIT_UTF16 */
 
 /*
 ** Register a collation sequence factory callback with the database handle

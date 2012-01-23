@@ -48,7 +48,6 @@
 # define sqlite4_column_name16          0
 # define sqlite4_column_text16          0
 # define sqlite4_complete16             0
-# define sqlite4_create_collation16     0
 # define sqlite4_create_function16      0
 # define sqlite4_errmsg16               0
 # define sqlite4_open16                 0
@@ -176,7 +175,6 @@ static const sqlite4_api_routines sqlite4Apis = {
   sqlite4_complete,
   sqlite4_complete16,
   sqlite4_create_collation,
-  sqlite4_create_collation16,
   sqlite4_create_function,
   sqlite4_create_function16,
   sqlite4_create_module,
@@ -290,7 +288,6 @@ static const sqlite4_api_routines sqlite4Apis = {
   sqlite4_blob_open,
   sqlite4_blob_read,
   sqlite4_blob_write,
-  sqlite4_create_collation_v2,
   sqlite4_file_control,
   sqlite4_memory_highwater,
   sqlite4_memory_used,

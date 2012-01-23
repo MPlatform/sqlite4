@@ -4173,12 +4173,10 @@ void sqlite4_result_zeroblob(sqlite4_context*, int n);
 /*
 ** CAPI3REF: Define New Collating Sequences
 **
-** ^These functions add, remove, or modify a [collation] associated
+** ^This function adds, removes, or modifies a [collation] associated
 ** with the [database connection] specified as the first argument.
 **
-** ^The name of the collation is a UTF-8 string
-** for sqlite4_create_collation() and sqlite4_create_collation_v2()
-** and a UTF-16 string in native byte order for sqlite4_create_collation16().
+** ^The name of the collation is a UTF-8 string.
 ** ^Collation names that compare equal according to [sqlite4_strnicmp()] are
 ** considered to be the same name.
 **
@@ -4200,8 +4198,10 @@ void sqlite4_result_zeroblob(sqlite4_context*, int n);
 ** ^The fourth argument, pArg, is an application data pointer that is passed
 ** through as the first argument to the collating function callback.
 **
-** ^The fifth argument, xCallback, is a pointer to the collating function.
-** ^Multiple collating functions can be registered using the same name but
+** ^The fifth argument, xCallback, is a pointer to the comparision function.
+** ^The sixth argument, xMakeKey, is a pointer to a function that generates
+** a sort key.
+** ^Multiple functions can be registered using the same name but
 ** with different eTextRep parameters and SQLite will use whichever
 ** function requires the least amount of data transformation.
 ** ^If the xCallback argument is NULL then the collating function is
@@ -4231,16 +4231,13 @@ void sqlite4_result_zeroblob(sqlite4_context*, int n);
 ** collating function is  registered and used, then the behavior of SQLite
 ** is undefined.
 **
-** ^The sqlite4_create_collation_v2() works like sqlite4_create_collation()
-** with the addition that the xDestroy callback is invoked on pArg when
-** the collating function is deleted.
 ** ^Collating functions are deleted when they are overridden by later
 ** calls to the collation creation functions or when the
 ** [database connection] is closed using [sqlite4_close()].
 **
 ** ^The xDestroy callback is <u>not</u> called if the 
-** sqlite4_create_collation_v2() function fails.  Applications that invoke
-** sqlite4_create_collation_v2() with a non-NULL xDestroy argument should 
+** sqlite4_create_collation() function fails.  Applications that invoke
+** sqlite4_create_collation() with a non-NULL xDestroy argument should 
 ** check the return code and dispose of the application data pointer
 ** themselves rather than expecting SQLite to deal with it for them.
 ** This is different from every other SQLite interface.  The inconsistency 
@@ -4254,22 +4251,9 @@ int sqlite4_create_collation(
   const char *zName, 
   int eTextRep, 
   void *pArg,
-  int(*xCompare)(void*,int,const void*,int,const void*)
-);
-int sqlite4_create_collation_v2(
-  sqlite4*, 
-  const char *zName, 
-  int eTextRep, 
-  void *pArg,
   int(*xCompare)(void*,int,const void*,int,const void*),
+  int(*xMakeKey)(void*,int,const void*,int,const void*),
   void(*xDestroy)(void*)
-);
-int sqlite4_create_collation16(
-  sqlite4*, 
-  const void *zName,
-  int eTextRep, 
-  void *pArg,
-  int(*xCompare)(void*,int,const void*,int,const void*)
 );
 
 /*

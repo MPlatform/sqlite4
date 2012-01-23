@@ -1905,7 +1905,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     pDb->pCollate = pCollate;
     memcpy(pCollate->zScript, zScript, nScript+1);
     if( sqlite4_create_collation(pDb->db, zName, SQLITE_UTF8, 
-        pCollate, tclSqlCollate) ){
+        pCollate, tclSqlCollate, 0, 0) ){
       Tcl_SetResult(interp, (char *)sqlite4_errmsg(pDb->db), TCL_VOLATILE);
       return TCL_ERROR;
     }

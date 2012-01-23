@@ -1801,10 +1801,10 @@ static int test_blob_reopen(
 #endif
 
 /*
-** Usage: sqlite4_create_collation_v2 DB-HANDLE NAME CMP-PROC DEL-PROC
+** Usage: sqlite4_create_collation DB-HANDLE NAME CMP-PROC DEL-PROC
 **
 **   This Tcl proc is used for testing the experimental
-**   sqlite4_create_collation_v2() interface.
+**   sqlite4_create_collation() interface.
 */
 struct TestCollationX {
   Tcl_Interp *interp;
@@ -1848,7 +1848,7 @@ static int testCreateCollationCmp(
 
   return iRes;
 }
-static int test_create_collation_v2(
+static int test_create_collation(
   ClientData clientData, /* Not used */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
   int objc,              /* Number of arguments */
@@ -1871,16 +1871,16 @@ static int test_create_collation_v2(
   Tcl_IncrRefCount(p->pCmp);
   Tcl_IncrRefCount(p->pDel);
 
-  rc = sqlite4_create_collation_v2(db, Tcl_GetString(objv[2]), 16, 
-      (void *)p, testCreateCollationCmp, testCreateCollationDel
+  rc = sqlite4_create_collation(db, Tcl_GetString(objv[2]), 16, 
+      (void *)p, testCreateCollationCmp, 0, testCreateCollationDel
   );
   if( rc!=SQLITE_MISUSE ){
-    Tcl_AppendResult(interp, "sqlite4_create_collate_v2() failed to detect "
+    Tcl_AppendResult(interp, "sqlite4_create_collate() failed to detect "
       "an invalid encoding", (char*)0);
     return TCL_ERROR;
   }
-  rc = sqlite4_create_collation_v2(db, Tcl_GetString(objv[2]), SQLITE_UTF8, 
-      (void *)p, testCreateCollationCmp, testCreateCollationDel
+  rc = sqlite4_create_collation(db, Tcl_GetString(objv[2]), SQLITE_UTF8, 
+      (void *)p, testCreateCollationCmp, 0, testCreateCollationDel
   );
   return TCL_OK;
 }
@@ -2641,7 +2641,6 @@ static int test_collate(
 ){
   sqlite4 *db;
   int val;
-  sqlite4_value *pVal;
   int rc;
 
   if( objc!=5 ) goto bad_args;
@@ -2650,31 +2649,14 @@ static int test_collate(
 
   if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[2], &val) ) return TCL_ERROR;
   rc = sqlite4_create_collation(db, "test_collate", SQLITE_UTF8, 
-          (void *)SQLITE_UTF8, val?test_collate_func:0);
+          (void *)SQLITE_UTF8, val?test_collate_func:0, 0, 0);
   if( rc==SQLITE_OK ){
-    const void *zUtf16;
     if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[3], &val) ) return TCL_ERROR;
     rc = sqlite4_create_collation(db, "test_collate", SQLITE_UTF16LE, 
-            (void *)SQLITE_UTF16LE, val?test_collate_func:0);
+            (void *)SQLITE_UTF16LE, val?test_collate_func:0, 0, 0);
     if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[4], &val) ) return TCL_ERROR;
-
-#if 0
-    if( sqlite4_iMallocFail>0 ){
-      sqlite4_iMallocFail++;
-    }
-#endif
-    sqlite4_mutex_enter(db->mutex);
-    pVal = sqlite4ValueNew(db);
-    sqlite4ValueSetStr(pVal, -1, "test_collate", SQLITE_UTF8, SQLITE_STATIC);
-    zUtf16 = sqlite4ValueText(pVal, SQLITE_UTF16NATIVE);
-    if( db->mallocFailed ){
-      rc = SQLITE_NOMEM;
-    }else{
-      rc = sqlite4_create_collation16(db, zUtf16, SQLITE_UTF16BE, 
-          (void *)SQLITE_UTF16BE, val?test_collate_func:0);
-    }
-    sqlite4ValueFree(pVal);
-    sqlite4_mutex_leave(db->mutex);
+    rc = sqlite4_create_collation(db, "test_collate", SQLITE_UTF16BE,
+            (void *)SQLITE_UTF16BE, val?test_collate_func:0, 0, 0); 
   }
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
   
@@ -2718,7 +2700,8 @@ static void test_collate_needed_cb(
   }
   zNeededCollation[i] = 0;
   sqlite4_create_collation(
-      db, "test_collate", ENC(db), SQLITE_INT_TO_PTR(enc), test_collate_func);
+      db, "test_collate", ENC(db), SQLITE_INT_TO_PTR(enc), test_collate_func,
+      0, 0);
 }
 
 /*
@@ -2785,9 +2768,9 @@ static int add_alignment_test_collations(
   if( objc>=2 ){
     if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
     sqlite4_create_collation(db, "utf16_unaligned", SQLITE_UTF16, 
-        0, alignmentCollFunc);
+        0, alignmentCollFunc, 0, 0);
     sqlite4_create_collation(db, "utf16_aligned", SQLITE_UTF16_ALIGNED, 
-        0, alignmentCollFunc);
+        0, alignmentCollFunc, 0, 0);
   }
   return SQLITE_OK;
 }
@@ -4508,7 +4491,7 @@ static int delete_collation(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  rc = sqlite4_create_collation(db, argv[2], SQLITE_UTF8, 0, 0);
+  rc = sqlite4_create_collation(db, argv[2], SQLITE_UTF8, 0, 0, 0, 0);
   Tcl_SetResult(interp, (char *)t1ErrorName(rc), TCL_STATIC);
   return TCL_OK;
 }
@@ -6112,7 +6095,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 {"sqlite4_column_origin_name16", test_stmt_utf16, (void*)sqlite4_column_origin_name16},
 #endif
 #endif
-     { "sqlite4_create_collation_v2", test_create_collation_v2, 0 },
+     { "sqlite4_create_collation",   test_create_collation, 0 },
      { "sqlite4_global_recover",     test_global_recover, 0   },
      { "working_64bit_int",          working_64bit_int,   0   },
      { "vfs_unlink_test",            vfs_unlink_test,     0   },
