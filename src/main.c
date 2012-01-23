@@ -774,6 +774,8 @@ int sqlite3_close(sqlite3 *db){
     if( pDb->pBt ){
       sqlite3BtreeClose(pDb->pBt);
       pDb->pBt = 0;
+      sqlite3KVStoreClose(pDb->pKV);
+      pDb->pKV = 0;
       if( j!=1 ){
         pDb->pSchema = 0;
       }
@@ -2220,7 +2222,7 @@ static int openDatabase(
   }
   db->aDb[0].pSchema = sqlite3SchemaGet(db, db->aDb[0].pBt);
   db->aDb[1].pSchema = sqlite3SchemaGet(db, 0);
-
+  sqlite3KVStoreOpen(zOpen, &db->aDb[0].pKV);
 
   /* The default safety_level for the main database is 'full'; for the temp
   ** database it is 'NONE'. This matches the pager layer defaults.  

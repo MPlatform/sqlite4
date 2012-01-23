@@ -3204,6 +3204,8 @@ case OP_OpenEphemeral: {
   rc = sqlite3BtreeOpen(db->pVfs, 0, db, &pCx->pBt, 
                         BTREE_OMIT_JOURNAL | BTREE_SINGLE | pOp->p5, vfsFlags);
   if( rc==SQLITE_OK ){
+    sqlite3KVStoreOpen(":memory:", &pCx->pTmpKV);
+    if( pCx->pTmpKV ) sqlite3KVStoreBegin(pCx->pTmpKV, 2);
     rc = sqlite3BtreeBeginTrans(pCx->pBt, 1);
   }
   if( rc==SQLITE_OK ){

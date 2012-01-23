@@ -3515,6 +3515,7 @@ int sqlite3OpenTempDatabase(Parse *pParse){
       pParse->rc = rc;
       return 1;
     }
+    sqlite3KVStoreOpen(":memory", &db->aDb[1].pKV);
     db->aDb[1].pBt = pBt;
     assert( db->aDb[1].pSchema );
     if( SQLITE_NOMEM==sqlite3BtreeSetPageSize(pBt, db->nextPagesize, -1, 0) ){

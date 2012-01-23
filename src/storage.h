@@ -117,7 +117,9 @@ struct KVStoreMethods {
   int (*xClose)(KVStore*);
 };
 struct KVStore {
-  const KVStoreMethods *pStoreVfunc;
+  const KVStoreMethods *pStoreVfunc;    /* Virtual method table */
+  u16 kvId;                             /* Unique ID used for tracing */
+  u8 fTrace;                            /* True to enable tracing */
   /* Subclasses will typically append additional fields */
 };
 
@@ -127,26 +129,39 @@ struct KVStore {
 struct KVCursor {
   KVStore *pStore;                    /* The owner of this cursor */
   const KVStoreMethods *pStoreVfunc;  /* Methods */
+  u16 curId;                          /* Unique ID for tracing */
+  u8 fTrace;                          /* True to enable tracing */
   /* Subclasses will typically add additional fields */
 };
 
+
 int sqlite3KVStoreOpenMem(KVStore**);
 int sqlite3KVStoreOpen(const char *zUri, KVStore**);
-#define sqlite3KVStoreReplace(X,A,B,C,D) \
-        ((X)->pStoreVfunc->xReplace((X),(A),(B),(C),(D)))
-#define sqlite3KVStoreOpenCursor(X,A) \
-        ((X)->pStoreVfunc->xOpenCursor((X),(A)))
-#define sqlite3KVCursorSeek(X,A,B,C) \
-        ((X)->pStoreVfunc->xSeek(X,(A),(B),(C)))
-#define sqlite3KVCursorNext(X)      ((X)->pStoreVfunc->xNext(X))
-#define sqlite3KVCursorPrev(X)      ((X)->pStoreVfunc->xPrev(X))
-#define sqlite3KVCursorDelete(X)    ((X)->pStoreVfunc->xDelete(X))
-#define sqlite3KVCursorKey(X,Y,Z)   ((X)->pStoreVfunc->xKey(X,(Y),(Z)))
-#define sqlite3KVCursorData(X,A,B,C,D) \
-        ((X)->pStoreVfunc->xData(X,(A),(B),(C),(D)))
-#define sqlite3KVCursorReset(X)     ((X)->pStoreVfunc->xReset(X))
-#define sqlite3KVCursorClose(X)     ((X)?(X)->pStoreVfunc->xCloseCursor(X):0)
-#define sqlite3KVStoreBegin(X,A)    ((X)->pStoreVfunc->xBegin((X),(A)))
-#define sqlite3KVStoreCommit(X,A)   ((X)->pStoreVfunc->xCommit((X),(A)))
-#define sqlite3KVStoreRollback(X,A) ((X)->pStoreVfunc->xRollback((X),(A)))
-#define sqlite3KVStoreClose(X)      ((X)?(X)->pStoreVfunc->xClose(X):SQLITE_OK)
+int sqlite3KVStoreReplace(
+ KVStore*,
+ const KVByteArray *pKey, KVSize nKey,
+ const KVByteArray *pData, KVSize nData
+);
+int sqlite3KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor);
+int sqlite3KVCursorSeek(
+  KVCursor *p,
+  const KVByteArray *pKey, KVSize nKey,
+  int dir
+);
+int sqlite3KVCursorNext(KVCursor *p);
+int sqlite3KVCursorPrev(KVCursor *p);
+int sqlite3KVCursorDelete(KVCursor *p);
+int sqlite3KVCursorReset(KVCursor *p);
+int sqlite3KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey);
+int sqlite3KVCursorData(
+  KVCursor *p,
+  KVSize ofst,
+  KVSize n,
+  const KVByteArray **ppData,
+  KVSize *pnData
+);
+int sqlite3KVCursorClose(KVCursor *p);
+int sqlite3KVStoreBegin(KVStore *p, int iLevel);
+int sqlite3KVStoreCommit(KVStore *p, int iLevel);
+int sqlite3KVStoreRollback(KVStore *p, int iLevel);
+int sqlite3KVStoreClose(KVStore *p);

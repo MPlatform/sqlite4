@@ -48,7 +48,9 @@ typedef struct Explain Explain;
 */
 struct VdbeCursor {
   BtCursor *pCursor;    /* The cursor structure of the backend */
+  KVCursor *pKVCur;     /* The cursor structure of the backend */
   Btree *pBt;           /* Separate file holding temporary table */
+  KVStore *pTmpKV;      /* Separate file holding a temporary table */
   KeyInfo *pKeyInfo;    /* Info about index keys needed by index cursors */
   int iDb;              /* Index of cursor database in db->aDb[] (or -1) */
   int pseudoTableReg;   /* Register holding pseudotable content. */

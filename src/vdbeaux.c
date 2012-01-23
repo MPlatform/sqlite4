@@ -1581,10 +1581,12 @@ void sqlite3VdbeFreeCursor(Vdbe *p, VdbeCursor *pCx){
   sqlite3VdbeSorterClose(p->db, pCx);
   if( pCx->pBt ){
     sqlite3BtreeClose(pCx->pBt);
+    sqlite3KVStoreClose(pCx->pTmpKV);
     /* The pCx->pCursor will be close automatically, if it exists, by
     ** the call above. */
   }else if( pCx->pCursor ){
     sqlite3BtreeCloseCursor(pCx->pCursor);
+    sqlite3KVCursorClose(pCx->pKVCur);
   }
 #ifndef SQLITE_OMIT_VIRTUALTABLE
   if( pCx->pVtabCursor ){

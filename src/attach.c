@@ -139,6 +139,7 @@ static void attachFunc(
   assert( pVfs );
   flags |= SQLITE_OPEN_MAIN_DB;
   rc = sqlite3BtreeOpen(pVfs, zPath, db, &aNew->pBt, 0, flags);
+  if( rc==SQLITE_OK ) sqlite3KVStoreOpen(zPath, &aNew->pKV);
   sqlite3_free( zPath );
   db->nDb++;
   if( rc==SQLITE_CONSTRAINT ){
@@ -214,6 +215,8 @@ static void attachFunc(
     if( db->aDb[iDb].pBt ){
       sqlite3BtreeClose(db->aDb[iDb].pBt);
       db->aDb[iDb].pBt = 0;
+      sqlite3KVStoreClose(db->aDb[iDb].pKV);
+      db->aDb[iDb].pKV = 0;
       db->aDb[iDb].pSchema = 0;
     }
     sqlite3ResetInternalSchema(db, -1);
@@ -287,6 +290,8 @@ static void detachFunc(
 
   sqlite3BtreeClose(pDb->pBt);
   pDb->pBt = 0;
+  sqlite3KVStoreClose(pDb->pKV);
+  pDb->pKV = 0;
   pDb->pSchema = 0;
   sqlite3ResetInternalSchema(db, -1);
   return;

@@ -330,6 +330,8 @@ end_of_vacuum:
   if( pDb ){
     sqlite3BtreeClose(pDb->pBt);
     pDb->pBt = 0;
+    sqlite3KVStoreClose(pDb->pKV);
+    pDb->pKV = 0;
     pDb->pSchema = 0;
   }
 
