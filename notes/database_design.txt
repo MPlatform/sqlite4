@@ -1,7 +1,7 @@
 Notes on how a multi-table SQL database is mapped into the storage engine.
 
 We assume the storage engine supports key/value pairs where each key and
-value is arbitrary binary data.  Keys are in lexigraphical order.  In other
+value is arbitrary binary data.  Keys are in lexicographical order.  In other
 words, keys compare according to memcmp() and if one key is a prefix of the
 other, the shorter key comes first.  A sample key comparison function is
 the following:
@@ -13,11 +13,11 @@ the following:
    }
 
 The key space is logically divided into "tables".  Each key begins with
-a varint (in the new lexigraphical-ordered unsigned varint format described
-separately) that determines the table to which the key belongs.  Table 0
-is used for metadata, such as the schema version number.  Table 1 is the
-SQLITE_MASTER table.  Tables 2 and greater are used for other tables and
-indices in the schema.
+a varint (in the new lexicographically-ordered unsigned varint format
+described separately) that determines the table to which the key belongs.
+Table 0 is used for metadata, such as the schema version number.  Table 1
+is the SQLITE_MASTER table.  Tables 2 and greater are used for other
+tables and indices in the schema.
 
 After the table number, the rest of the key for each entry in a table or
 index follows the key encoding documented separately.  The key encoding is
