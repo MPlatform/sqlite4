@@ -20,7 +20,6 @@
 */
 #ifndef SQLITE_OMIT_DISKIO
 #include "sqliteInt.h"
-#include "wal.h"
 
 
 /******************* NOTES ON THE DESIGN OF THE PAGER ************************
@@ -448,9 +447,6 @@ struct PagerSavepoint {
   Bitvec *pInSavepoint;        /* Set of pages in this savepoint */
   Pgno nOrig;                  /* Original number of pages in file */
   Pgno iSubRec;                /* Index of first record in sub-journal */
-#ifndef SQLITE_OMIT_WAL
-  u32 aWalData[WAL_SAVEPOINT_NDATA];        /* WAL savepoint context */
-#endif
 };
 
 /*
@@ -615,7 +611,6 @@ struct Pager {
   u8 noSync;                  /* Do not sync the journal if true */
   u8 fullSync;                /* Do extra syncs of the journal for robustness */
   u8 ckptSyncFlags;           /* SYNC_NORMAL or SYNC_FULL for checkpoint */
-  u8 walSyncFlags;            /* SYNC_NORMAL or SYNC_FULL for wal writes */
   u8 syncFlags;               /* SYNC_NORMAL or SYNC_FULL otherwise */
   u8 tempFile;                /* zFilename is a temporary file */
   u8 readOnly;                /* True for a read-only database */
@@ -683,10 +678,6 @@ struct Pager {
 #endif
   char *pTmpSpace;            /* Pager.pageSize bytes of space for tmp use */
   PCache *pPCache;            /* Pointer to page cache object */
-#ifndef SQLITE_OMIT_WAL
-  Wal *pWal;                  /* Write-ahead log used by "journal_mode=wal" */
-  char *zWal;                 /* File name for write-ahead log */
-#endif
 };
 
 /*
@@ -779,17 +770,11 @@ static const unsigned char aJournalMagic[] = {
 ** Return true if this pager uses a write-ahead log instead of the usual
 ** rollback journal. Otherwise false.
 */
-#ifndef SQLITE_OMIT_WAL
-static int pagerUseWal(Pager *pPager){
-  return (pPager->pWal!=0);
-}
-#else
-# define pagerUseWal(x) 0
-# define pagerRollbackWal(x) 0
-# define pagerWalFrames(v,w,x,y) 0
-# define pagerOpenWalIfPresent(z) SQLITE_OK
-# define pagerBeginReadTransaction(z) SQLITE_OK
-#endif
+#define pagerUseWal(x) 0
+#define pagerRollbackWal(x) 0
+#define pagerWalFrames(v,w,x,y) 0
+#define pagerOpenWalIfPresent(z) SQLITE_OK
+#define pagerBeginReadTransaction(z) SQLITE_OK
 
 #ifndef NDEBUG 
 /*
@@ -1733,11 +1718,7 @@ static void pager_unlock(Pager *pPager){
   pPager->pInJournal = 0;
   releaseAllSavepoints(pPager);
 
-  if( pagerUseWal(pPager) ){
-    assert( !isOpen(pPager->jfd) );
-    sqlite4WalEndReadTransaction(pPager->pWal);
-    pPager->eState = PAGER_OPEN;
-  }else if( !pPager->exclusiveMode ){
+  if( !pPager->exclusiveMode ){
     int rc;                       /* Error code returned by pagerUnlockDb() */
     int iDc = isOpen(pPager->fd)?sqlite4OsDeviceCharacteristics(pPager->fd):0;
 
@@ -1960,17 +1941,7 @@ static int pager_end_transaction(Pager *pPager, int hasMaster){
   sqlite4PcacheCleanAll(pPager->pPCache);
   sqlite4PcacheTruncate(pPager->pPCache, pPager->dbSize);
 
-  if( pagerUseWal(pPager) ){
-    /* Drop the WAL write-lock, if any. Also, if the connection was in 
-    ** locking_mode=exclusive mode but is no longer, drop the EXCLUSIVE 
-    ** lock held on the database file.
-    */
-    rc2 = sqlite4WalEndWriteTransaction(pPager->pWal);
-    assert( rc2==SQLITE_OK );
-  }
-  if( !pPager->exclusiveMode 
-   && (!pagerUseWal(pPager) || sqlite4WalExclusiveMode(pPager->pWal, 0))
-  ){
+  if( !pPager->exclusiveMode ){
     rc2 = pagerUnlockDb(pPager, SHARED_LOCK);
     pPager->changeCountDone = 0;
   }
@@ -2820,10 +2791,6 @@ static int readDbPage(PgHdr *pPg){
     return SQLITE_OK;
   }
 
-  if( pagerUseWal(pPager) ){
-    /* Try to pull the page from the write-ahead log. */
-    rc = sqlite4WalRead(pPager->pWal, pgno, &isInWal, pgsz, pPg->pData);
-  }
   if( rc==SQLITE_OK && !isInWal ){
     i64 iOffset = (pgno-1)*(i64)pPager->pageSize;
     rc = sqlite4OsRead(pPager->fd, pPg->pData, pgsz, iOffset);
@@ -2885,170 +2852,6 @@ static void pager_write_changecounter(PgHdr *pPg){
   put32bits(((char*)pPg->pData)+96, SQLITE_VERSION_NUMBER);
 }
 
-#ifndef SQLITE_OMIT_WAL
-/*
-** This function is invoked once for each page that has already been 
-** written into the log file when a WAL transaction is rolled back.
-** Parameter iPg is the page number of said page. The pCtx argument 
-** is actually a pointer to the Pager structure.
-**
-** If page iPg is present in the cache, and has no outstanding references,
-** it is discarded. Otherwise, if there are one or more outstanding
-** references, the page content is reloaded from the database. If the
-** attempt to reload content from the database is required and fails, 
-** return an SQLite error code. Otherwise, SQLITE_OK.
-*/
-static int pagerUndoCallback(void *pCtx, Pgno iPg){
-  int rc = SQLITE_OK;
-  Pager *pPager = (Pager *)pCtx;
-  PgHdr *pPg;
-
-  pPg = sqlite4PagerLookup(pPager, iPg);
-  if( pPg ){
-    if( sqlite4PcachePageRefcount(pPg)==1 ){
-      sqlite4PcacheDrop(pPg);
-    }else{
-      rc = readDbPage(pPg);
-      if( rc==SQLITE_OK ){
-        pPager->xReiniter(pPg);
-      }
-      sqlite4PagerUnref(pPg);
-    }
-  }
-
-  /* Normally, if a transaction is rolled back, any backup processes are
-  ** updated as data is copied out of the rollback journal and into the
-  ** database. This is not generally possible with a WAL database, as
-  ** rollback involves simply truncating the log file. Therefore, if one
-  ** or more frames have already been written to the log (and therefore 
-  ** also copied into the backup databases) as part of this transaction,
-  ** the backups must be restarted.
-  */
-  sqlite4BackupRestart(pPager->pBackup);
-
-  return rc;
-}
-
-/*
-** This function is called to rollback a transaction on a WAL database.
-*/
-static int pagerRollbackWal(Pager *pPager){
-  int rc;                         /* Return Code */
-  PgHdr *pList;                   /* List of dirty pages to revert */
-
-  /* For all pages in the cache that are currently dirty or have already
-  ** been written (but not committed) to the log file, do one of the 
-  ** following:
-  **
-  **   + Discard the cached page (if refcount==0), or
-  **   + Reload page content from the database (if refcount>0).
-  */
-  pPager->dbSize = pPager->dbOrigSize;
-  rc = sqlite4WalUndo(pPager->pWal, pagerUndoCallback, (void *)pPager);
-  pList = sqlite4PcacheDirtyList(pPager->pPCache);
-  while( pList && rc==SQLITE_OK ){
-    PgHdr *pNext = pList->pDirty;
-    rc = pagerUndoCallback((void *)pPager, pList->pgno);
-    pList = pNext;
-  }
-
-  return rc;
-}
-
-/*
-** This function is a wrapper around sqlite4WalFrames(). As well as logging
-** the contents of the list of pages headed by pList (connected by pDirty),
-** this function notifies any active backup processes that the pages have
-** changed. 
-**
-** The list of pages passed into this routine is always sorted by page number.
-** Hence, if page 1 appears anywhere on the list, it will be the first page.
-*/ 
-static int pagerWalFrames(
-  Pager *pPager,                  /* Pager object */
-  PgHdr *pList,                   /* List of frames to log */
-  Pgno nTruncate,                 /* Database size after this commit */
-  int isCommit                    /* True if this is a commit */
-){
-  int rc;                         /* Return code */
-#if defined(SQLITE_DEBUG) || defined(SQLITE_CHECK_PAGES)
-  PgHdr *p;                       /* For looping over pages */
-#endif
-
-  assert( pPager->pWal );
-  assert( pList );
-#ifdef SQLITE_DEBUG
-  /* Verify that the page list is in accending order */
-  for(p=pList; p && p->pDirty; p=p->pDirty){
-    assert( p->pgno < p->pDirty->pgno );
-  }
-#endif
-
-  if( isCommit ){
-    /* If a WAL transaction is being committed, there is no point in writing
-    ** any pages with page numbers greater than nTruncate into the WAL file.
-    ** They will never be read by any client. So remove them from the pDirty
-    ** list here. */
-    PgHdr *p;
-    PgHdr **ppNext = &pList;
-    for(p=pList; (*ppNext = p); p=p->pDirty){
-      if( p->pgno<=nTruncate ) ppNext = &p->pDirty;
-    }
-    assert( pList );
-  }
-
-  if( pList->pgno==1 ) pager_write_changecounter(pList);
-  rc = sqlite4WalFrames(pPager->pWal, 
-      pPager->pageSize, pList, nTruncate, isCommit, pPager->walSyncFlags
-  );
-  if( rc==SQLITE_OK && pPager->pBackup ){
-    PgHdr *p;
-    for(p=pList; p; p=p->pDirty){
-      sqlite4BackupUpdate(pPager->pBackup, p->pgno, (u8 *)p->pData);
-    }
-  }
-
-#ifdef SQLITE_CHECK_PAGES
-  pList = sqlite4PcacheDirtyList(pPager->pPCache);
-  for(p=pList; p; p=p->pDirty){
-    pager_set_pagehash(p);
-  }
-#endif
-
-  return rc;
-}
-
-/*
-** Begin a read transaction on the WAL.
-**
-** This routine used to be called "pagerOpenSnapshot()" because it essentially
-** makes a snapshot of the database at the current point in time and preserves
-** that snapshot for use by the reader in spite of concurrently changes by
-** other writers or checkpointers.
-*/
-static int pagerBeginReadTransaction(Pager *pPager){
-  int rc;                         /* Return code */
-  int changed = 0;                /* True if cache must be reset */
-
-  assert( pagerUseWal(pPager) );
-  assert( pPager->eState==PAGER_OPEN || pPager->eState==PAGER_READER );
-
-  /* sqlite4WalEndReadTransaction() was not called for the previous
-  ** transaction in locking_mode=EXCLUSIVE.  So call it now.  If we
-  ** are in locking_mode=NORMAL and EndRead() was previously called,
-  ** the duplicate call is harmless.
-  */
-  sqlite4WalEndReadTransaction(pPager->pWal);
-
-  rc = sqlite4WalBeginReadTransaction(pPager->pWal, &changed);
-  if( rc!=SQLITE_OK || changed ){
-    pager_reset(pPager);
-  }
-
-  return rc;
-}
-#endif
-
 /*
 ** This function is called as part of the transition from PAGER_OPEN
 ** to PAGER_READER state to determine the size of the database file
@@ -3059,17 +2862,7 @@ static int pagerBeginReadTransaction(Pager *pPager){
 ** SQLITE_IOERR_FSTAT) is returned and *pnPage is left unmodified.
 */
 static int pagerPagecount(Pager *pPager, Pgno *pnPage){
-  Pgno nPage;                     /* Value to return via *pnPage */
-
-  /* Query the WAL sub-system for the database size. The WalDbsize()
-  ** function returns zero if the WAL is not open (i.e. Pager.pWal==0), or
-  ** if the database size is not available. The database size is not
-  ** available from the WAL sub-system if the log file is empty or
-  ** contains no valid committed transactions.
-  */
-  assert( pPager->eState==PAGER_OPEN );
-  assert( pPager->eLock>=SHARED_LOCK );
-  nPage = sqlite4WalDbsize(pPager->pWal);
+  Pgno nPage = 0;                   /* Value to return via *pnPage */
 
   /* If the database size was not available from the WAL sub-system,
   ** determine it based on the size of the database file. If the size
@@ -3101,56 +2894,6 @@ static int pagerPagecount(Pager *pPager, Pgno *pnPage){
   return SQLITE_OK;
 }
 
-#ifndef SQLITE_OMIT_WAL
-/*
-** Check if the *-wal file that corresponds to the database opened by pPager
-** exists if the database is not empy, or verify that the *-wal file does
-** not exist (by deleting it) if the database file is empty.
-**
-** If the database is not empty and the *-wal file exists, open the pager
-** in WAL mode.  If the database is empty or if no *-wal file exists and
-** if no error occurs, make sure Pager.journalMode is not set to
-** PAGER_JOURNALMODE_WAL.
-**
-** Return SQLITE_OK or an error code.
-**
-** The caller must hold a SHARED lock on the database file to call this
-** function. Because an EXCLUSIVE lock on the db file is required to delete 
-** a WAL on a none-empty database, this ensures there is no race condition 
-** between the xAccess() below and an xDelete() being executed by some 
-** other connection.
-*/
-static int pagerOpenWalIfPresent(Pager *pPager){
-  int rc = SQLITE_OK;
-  assert( pPager->eState==PAGER_OPEN );
-  assert( pPager->eLock>=SHARED_LOCK );
-
-  if( !pPager->tempFile ){
-    int isWal;                    /* True if WAL file exists */
-    Pgno nPage;                   /* Size of the database file */
-
-    rc = pagerPagecount(pPager, &nPage);
-    if( rc ) return rc;
-    if( nPage==0 ){
-      rc = sqlite4OsDelete(pPager->pVfs, pPager->zWal, 0);
-      isWal = 0;
-    }else{
-      rc = sqlite4OsAccess(
-          pPager->pVfs, pPager->zWal, SQLITE_ACCESS_EXISTS, &isWal
-      );
-    }
-    if( rc==SQLITE_OK ){
-      if( isWal ){
-        testcase( sqlite4PcachePagecount(pPager->pPCache)==0 );
-        rc = sqlite4PagerOpenWal(pPager, 0);
-      }else if( pPager->journalMode==PAGER_JOURNALMODE_WAL ){
-        pPager->journalMode = PAGER_JOURNALMODE_DELETE;
-      }
-    }
-  }
-  return rc;
-}
-#endif
 
 /*
 ** Playback savepoint pSavepoint. Or, if pSavepoint==NULL, then playback
@@ -3278,9 +3021,6 @@ static int pagerPlaybackSavepoint(Pager *pPager, PagerSavepoint *pSavepoint){
     u32 ii;            /* Loop counter */
     i64 offset = (i64)pSavepoint->iSubRec*(4+pPager->pageSize);
 
-    if( pagerUseWal(pPager) ){
-      rc = sqlite4WalSavepointUndo(pPager->pWal, pSavepoint->aWalData);
-    }
     for(ii=pSavepoint->iSubRec; rc==SQLITE_OK && ii<pPager->nSubRec; ii++){
       assert( offset==(i64)ii*(4+pPager->pageSize) );
       rc = pager_playback_one_page(pPager, &offset, pDone, 0, 1);
@@ -3375,10 +3115,6 @@ void sqlite4PagerSetSafetyLevel(
   }else{
     pPager->syncFlags = SQLITE_SYNC_NORMAL;
     pPager->ckptSyncFlags = SQLITE_SYNC_NORMAL;
-  }
-  pPager->walSyncFlags = pPager->syncFlags;
-  if( pPager->fullSync ){
-    pPager->walSyncFlags |= WAL_SYNC_TRANSACTIONS;
   }
 }
 #endif
@@ -3764,10 +3500,6 @@ int sqlite4PagerClose(Pager *pPager){
   sqlite4BeginBenignMalloc();
   /* pPager->errCode = 0; */
   pPager->exclusiveMode = 0;
-#ifndef SQLITE_OMIT_WAL
-  sqlite4WalClose(pPager->pWal, pPager->ckptSyncFlags, pPager->pageSize, pTmp);
-  pPager->pWal = 0;
-#endif
   pager_reset(pPager);
   if( MEMDB ){
     pager_unlock(pPager);
@@ -4401,9 +4133,6 @@ int sqlite4PagerOpen(
     journalFileSize * 2 +          /* The two journal files */ 
     nPathname + 1 + nUri +         /* zFilename */
     nPathname + 8 + 2              /* zJournal */
-#ifndef SQLITE_OMIT_WAL
-    + nPathname + 4 + 2            /* zWal */
-#endif
   );
   assert( EIGHT_BYTE_ALIGNMENT(SQLITE_INT_TO_PTR(journalFileSize)) );
   if( !pPtr ){
@@ -4427,12 +4156,6 @@ int sqlite4PagerOpen(
     memcpy(pPager->zJournal, zPathname, nPathname);
     memcpy(&pPager->zJournal[nPathname], "-journal\000", 8+1);
     sqlite4FileSuffix3(pPager->zFilename, pPager->zJournal);
-#ifndef SQLITE_OMIT_WAL
-    pPager->zWal = &pPager->zJournal[nPathname+8+1];
-    memcpy(pPager->zWal, zPathname, nPathname);
-    memcpy(&pPager->zWal[nPathname], "-wal\000", 4+1);
-    sqlite4FileSuffix3(pPager->zFilename, pPager->zWal);
-#endif
     sqlite4_free(zPathname);
   }
   pPager->pVfs = pVfs;
@@ -4548,12 +4271,10 @@ int sqlite4PagerOpen(
   if( pPager->noSync ){
     assert( pPager->fullSync==0 );
     assert( pPager->syncFlags==0 );
-    assert( pPager->walSyncFlags==0 );
     assert( pPager->ckptSyncFlags==0 );
   }else{
     pPager->fullSync = 1;
     pPager->syncFlags = SQLITE_SYNC_NORMAL;
-    pPager->walSyncFlags = SQLITE_SYNC_NORMAL | WAL_SYNC_TRANSACTIONS;
     pPager->ckptSyncFlags = SQLITE_SYNC_NORMAL;
   }
   /* pPager->pFirst = 0; */
@@ -4897,19 +4618,6 @@ int sqlite4PagerSharedLock(Pager *pPager){
         pager_reset(pPager);
       }
     }
-
-    /* If there is a WAL file in the file-system, open this database in WAL
-    ** mode. Otherwise, the following function call is a no-op.
-    */
-    rc = pagerOpenWalIfPresent(pPager);
-#ifndef SQLITE_OMIT_WAL
-    assert( pPager->pWal==0 || rc==SQLITE_OK );
-#endif
-  }
-
-  if( pagerUseWal(pPager) ){
-    assert( rc==SQLITE_OK );
-    rc = pagerBeginReadTransaction(pPager);
   }
 
   if( pPager->eState==PAGER_OPEN && rc==SQLITE_OK ){
@@ -5249,20 +4957,12 @@ int sqlite4PagerBegin(Pager *pPager, int exFlag, int subjInMemory){
       /* If the pager is configured to use locking_mode=exclusive, and an
       ** exclusive lock on the database is not already held, obtain it now.
       */
-      if( pPager->exclusiveMode && sqlite4WalExclusiveMode(pPager->pWal, -1) ){
+      if( pPager->exclusiveMode ){
         rc = pagerLockDb(pPager, EXCLUSIVE_LOCK);
         if( rc!=SQLITE_OK ){
           return rc;
         }
-        sqlite4WalExclusiveMode(pPager->pWal, 1);
       }
-
-      /* Grab the write lock on the log file. If successful, upgrade to
-      ** PAGER_RESERVED state. Otherwise, return an error code to the caller.
-      ** The busy-handler is not invoked if another connection already
-      ** holds the write-lock. If possible, the upper layer will call it.
-      */
-      rc = sqlite4WalBeginWriteTransaction(pPager->pWal);
     }else{
       /* Obtain a RESERVED lock on the database file. If the exFlag parameter
       ** is true, then immediately upgrade this to an EXCLUSIVE lock. The
@@ -6187,9 +5887,6 @@ int sqlite4PagerOpenSavepoint(Pager *pPager, int nSavepoint){
       if( !aNew[ii].pInSavepoint ){
         return SQLITE_NOMEM;
       }
-      if( pagerUseWal(pPager) ){
-        sqlite4WalSavepoint(pPager->pWal, aNew[ii].aWalData);
-      }
       pPager->nSavepoint = ii+1;
     }
     assert( pPager->nSavepoint==nSavepoint );
@@ -6523,8 +6220,7 @@ int sqlite4PagerLockingMode(Pager *pPager, int eMode){
             || eMode==PAGER_LOCKINGMODE_EXCLUSIVE );
   assert( PAGER_LOCKINGMODE_QUERY<0 );
   assert( PAGER_LOCKINGMODE_NORMAL>=0 && PAGER_LOCKINGMODE_EXCLUSIVE>=0 );
-  assert( pPager->exclusiveMode || 0==sqlite4WalHeapMemory(pPager->pWal) );
-  if( eMode>=0 && !pPager->tempFile && !sqlite4WalHeapMemory(pPager->pWal) ){
+  if( eMode>=0 && !pPager->tempFile ){
     pPager->exclusiveMode = (u8)eMode;
   }
   return (int)pPager->exclusiveMode;
@@ -6671,7 +6367,6 @@ int sqlite4PagerOkToChangeJournalMode(Pager *pPager){
 i64 sqlite4PagerJournalSizeLimit(Pager *pPager, i64 iLimit){
   if( iLimit>=-1 ){
     pPager->journalSizeLimit = iLimit;
-    sqlite4WalLimit(pPager->pWal, iLimit);
   }
   return pPager->journalSizeLimit;
 }
@@ -6686,206 +6381,5 @@ sqlite4_backup **sqlite4PagerBackupPtr(Pager *pPager){
   return &pPager->pBackup;
 }
 
-#ifndef SQLITE_OMIT_VACUUM
-/*
-** Unless this is an in-memory or temporary database, clear the pager cache.
-*/
-void sqlite4PagerClearCache(Pager *pPager){
-  if( !MEMDB && pPager->tempFile==0 ) pager_reset(pPager);
-}
-#endif
-
-#ifndef SQLITE_OMIT_WAL
-/*
-** This function is called when the user invokes "PRAGMA wal_checkpoint",
-** "PRAGMA wal_blocking_checkpoint" or calls the sqlite4_wal_checkpoint()
-** or wal_blocking_checkpoint() API functions.
-**
-** Parameter eMode is one of SQLITE_CHECKPOINT_PASSIVE, FULL or RESTART.
-*/
-int sqlite4PagerCheckpoint(Pager *pPager, int eMode, int *pnLog, int *pnCkpt){
-  int rc = SQLITE_OK;
-  if( pPager->pWal ){
-    rc = sqlite4WalCheckpoint(pPager->pWal, eMode,
-        pPager->xBusyHandler, pPager->pBusyHandlerArg,
-        pPager->ckptSyncFlags, pPager->pageSize, (u8 *)pPager->pTmpSpace,
-        pnLog, pnCkpt
-    );
-  }
-  return rc;
-}
-
-int sqlite4PagerWalCallback(Pager *pPager){
-  return sqlite4WalCallback(pPager->pWal);
-}
-
-/*
-** Return true if the underlying VFS for the given pager supports the
-** primitives necessary for write-ahead logging.
-*/
-int sqlite4PagerWalSupported(Pager *pPager){
-  const sqlite4_io_methods *pMethods = pPager->fd->pMethods;
-  return pPager->exclusiveMode || (pMethods->iVersion>=2 && pMethods->xShmMap);
-}
-
-/*
-** Attempt to take an exclusive lock on the database file. If a PENDING lock
-** is obtained instead, immediately release it.
-*/
-static int pagerExclusiveLock(Pager *pPager){
-  int rc;                         /* Return code */
-
-  assert( pPager->eLock==SHARED_LOCK || pPager->eLock==EXCLUSIVE_LOCK );
-  rc = pagerLockDb(pPager, EXCLUSIVE_LOCK);
-  if( rc!=SQLITE_OK ){
-    /* If the attempt to grab the exclusive lock failed, release the 
-    ** pending lock that may have been obtained instead.  */
-    pagerUnlockDb(pPager, SHARED_LOCK);
-  }
-
-  return rc;
-}
-
-/*
-** Call sqlite4WalOpen() to open the WAL handle. If the pager is in 
-** exclusive-locking mode when this function is called, take an EXCLUSIVE
-** lock on the database file and use heap-memory to store the wal-index
-** in. Otherwise, use the normal shared-memory.
-*/
-static int pagerOpenWal(Pager *pPager){
-  int rc = SQLITE_OK;
-
-  assert( pPager->pWal==0 && pPager->tempFile==0 );
-  assert( pPager->eLock==SHARED_LOCK || pPager->eLock==EXCLUSIVE_LOCK );
-
-  /* If the pager is already in exclusive-mode, the WAL module will use 
-  ** heap-memory for the wal-index instead of the VFS shared-memory 
-  ** implementation. Take the exclusive lock now, before opening the WAL
-  ** file, to make sure this is safe.
-  */
-  if( pPager->exclusiveMode ){
-    rc = pagerExclusiveLock(pPager);
-  }
-
-  /* Open the connection to the log file. If this operation fails, 
-  ** (e.g. due to malloc() failure), return an error code.
-  */
-  if( rc==SQLITE_OK ){
-    rc = sqlite4WalOpen(pPager->pVfs, 
-        pPager->fd, pPager->zWal, pPager->exclusiveMode,
-        pPager->journalSizeLimit, &pPager->pWal
-    );
-  }
-
-  return rc;
-}
-
-
-/*
-** The caller must be holding a SHARED lock on the database file to call
-** this function.
-**
-** If the pager passed as the first argument is open on a real database
-** file (not a temp file or an in-memory database), and the WAL file
-** is not already open, make an attempt to open it now. If successful,
-** return SQLITE_OK. If an error occurs or the VFS used by the pager does 
-** not support the xShmXXX() methods, return an error code. *pbOpen is
-** not modified in either case.
-**
-** If the pager is open on a temp-file (or in-memory database), or if
-** the WAL file is already open, set *pbOpen to 1 and return SQLITE_OK
-** without doing anything.
-*/
-int sqlite4PagerOpenWal(
-  Pager *pPager,                  /* Pager object */
-  int *pbOpen                     /* OUT: Set to true if call is a no-op */
-){
-  int rc = SQLITE_OK;             /* Return code */
-
-  assert( assert_pager_state(pPager) );
-  assert( pPager->eState==PAGER_OPEN   || pbOpen );
-  assert( pPager->eState==PAGER_READER || !pbOpen );
-  assert( pbOpen==0 || *pbOpen==0 );
-  assert( pbOpen!=0 || (!pPager->tempFile && !pPager->pWal) );
-
-  if( !pPager->tempFile && !pPager->pWal ){
-    if( !sqlite4PagerWalSupported(pPager) ) return SQLITE_CANTOPEN;
-
-    /* Close any rollback journal previously open */
-    sqlite4OsClose(pPager->jfd);
-
-    rc = pagerOpenWal(pPager);
-    if( rc==SQLITE_OK ){
-      pPager->journalMode = PAGER_JOURNALMODE_WAL;
-      pPager->eState = PAGER_OPEN;
-    }
-  }else{
-    *pbOpen = 1;
-  }
-
-  return rc;
-}
-
-/*
-** This function is called to close the connection to the log file prior
-** to switching from WAL to rollback mode.
-**
-** Before closing the log file, this function attempts to take an 
-** EXCLUSIVE lock on the database file. If this cannot be obtained, an
-** error (SQLITE_BUSY) is returned and the log connection is not closed.
-** If successful, the EXCLUSIVE lock is not released before returning.
-*/
-int sqlite4PagerCloseWal(Pager *pPager){
-  int rc = SQLITE_OK;
-
-  assert( pPager->journalMode==PAGER_JOURNALMODE_WAL );
-
-  /* If the log file is not already open, but does exist in the file-system,
-  ** it may need to be checkpointed before the connection can switch to
-  ** rollback mode. Open it now so this can happen.
-  */
-  if( !pPager->pWal ){
-    int logexists = 0;
-    rc = pagerLockDb(pPager, SHARED_LOCK);
-    if( rc==SQLITE_OK ){
-      rc = sqlite4OsAccess(
-          pPager->pVfs, pPager->zWal, SQLITE_ACCESS_EXISTS, &logexists
-      );
-    }
-    if( rc==SQLITE_OK && logexists ){
-      rc = pagerOpenWal(pPager);
-    }
-  }
-    
-  /* Checkpoint and close the log. Because an EXCLUSIVE lock is held on
-  ** the database file, the log and log-summary files will be deleted.
-  */
-  if( rc==SQLITE_OK && pPager->pWal ){
-    rc = pagerExclusiveLock(pPager);
-    if( rc==SQLITE_OK ){
-      rc = sqlite4WalClose(pPager->pWal, pPager->ckptSyncFlags,
-                           pPager->pageSize, (u8*)pPager->pTmpSpace);
-      pPager->pWal = 0;
-    }
-  }
-  return rc;
-}
-
-#ifdef SQLITE_HAS_CODEC
-/*
-** This function is called by the wal module when writing page content
-** into the log file.
-**
-** This function returns a pointer to a buffer containing the encrypted
-** page content. If a malloc fails, this function may return NULL.
-*/
-void *sqlite4PagerCodec(PgHdr *pPg){
-  void *aData = 0;
-  CODEC2(pPg->pPager, pPg->pData, pPg->pgno, 6, return 0, aData);
-  return aData;
-}
-#endif /* SQLITE_HAS_CODEC */
-
-#endif /* !SQLITE_OMIT_WAL */
 
 #endif /* SQLITE_OMIT_DISKIO */

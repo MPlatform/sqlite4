@@ -5415,41 +5415,6 @@ case OP_AggFinal: {
   break;
 }
 
-#ifndef SQLITE_OMIT_WAL
-/* Opcode: Checkpoint P1 P2 P3 * *
-**
-** Checkpoint database P1. This is a no-op if P1 is not currently in
-** WAL mode. Parameter P2 is one of SQLITE_CHECKPOINT_PASSIVE, FULL
-** or RESTART.  Write 1 or 0 into mem[P3] if the checkpoint returns
-** SQLITE_BUSY or not, respectively.  Write the number of pages in the
-** WAL after the checkpoint into mem[P3+1] and the number of pages
-** in the WAL that have been checkpointed after the checkpoint
-** completes into mem[P3+2].  However on an error, mem[P3+1] and
-** mem[P3+2] are initialized to -1.
-*/
-case OP_Checkpoint: {
-  int i;                          /* Loop counter */
-  int aRes[3];                    /* Results */
-  Mem *pMem;                      /* Write results here */
-
-  aRes[0] = 0;
-  aRes[1] = aRes[2] = -1;
-  assert( pOp->p2==SQLITE_CHECKPOINT_PASSIVE
-       || pOp->p2==SQLITE_CHECKPOINT_FULL
-       || pOp->p2==SQLITE_CHECKPOINT_RESTART
-  );
-  rc = sqlite4Checkpoint(db, pOp->p1, pOp->p2, &aRes[1], &aRes[2]);
-  if( rc==SQLITE_BUSY ){
-    rc = SQLITE_OK;
-    aRes[0] = 1;
-  }
-  for(i=0, pMem = &aMem[pOp->p3]; i<3; i++, pMem++){
-    sqlite4VdbeMemSetInt64(pMem, (i64)aRes[i]);
-  }    
-  break;
-};  
-#endif
-
 #ifndef SQLITE_OMIT_PRAGMA
 /* Opcode: JournalMode P1 P2 P3 * P5
 **
@@ -5486,57 +5451,6 @@ case OP_JournalMode: {    /* out2-prerelease */
   if( eNew==PAGER_JOURNALMODE_QUERY ) eNew = eOld;
   if( !sqlite4PagerOkToChangeJournalMode(pPager) ) eNew = eOld;
 
-#ifndef SQLITE_OMIT_WAL
-  zFilename = sqlite4PagerFilename(pPager);
-
-  /* Do not allow a transition to journal_mode=WAL for a database
-  ** in temporary storage or if the VFS does not support shared memory 
-  */
-  if( eNew==PAGER_JOURNALMODE_WAL
-   && (sqlite4Strlen30(zFilename)==0           /* Temp file */
-       || !sqlite4PagerWalSupported(pPager))   /* No shared-memory support */
-  ){
-    eNew = eOld;
-  }
-
-  if( (eNew!=eOld)
-   && (eOld==PAGER_JOURNALMODE_WAL || eNew==PAGER_JOURNALMODE_WAL)
-  ){
-    if( !db->autoCommit || db->activeVdbeCnt>1 ){
-      rc = SQLITE_ERROR;
-      sqlite4SetString(&p->zErrMsg, db, 
-          "cannot change %s wal mode from within a transaction",
-          (eNew==PAGER_JOURNALMODE_WAL ? "into" : "out of")
-      );
-      break;
-    }else{
- 
-      if( eOld==PAGER_JOURNALMODE_WAL ){
-        /* If leaving WAL mode, close the log file. If successful, the call
-        ** to PagerCloseWal() checkpoints and deletes the write-ahead-log 
-        ** file. An EXCLUSIVE lock may still be held on the database file 
-        ** after a successful return. 
-        */
-        rc = sqlite4PagerCloseWal(pPager);
-        if( rc==SQLITE_OK ){
-          sqlite4PagerSetJournalMode(pPager, eNew);
-        }
-      }else if( eOld==PAGER_JOURNALMODE_MEMORY ){
-        /* Cannot transition directly from MEMORY to WAL.  Use mode OFF
-        ** as an intermediate */
-        sqlite4PagerSetJournalMode(pPager, PAGER_JOURNALMODE_OFF);
-      }
-  
-      /* Open a transaction on the database file. Regardless of the journal
-      ** mode, this transaction always uses a rollback journal.
-      */
-      assert( sqlite4BtreeIsInTrans(pBt)==0 );
-      if( rc==SQLITE_OK ){
-        rc = sqlite4BtreeSetVersion(pBt, (eNew==PAGER_JOURNALMODE_WAL ? 2 : 1));
-      }
-    }
-  }
-#endif /* ifndef SQLITE_OMIT_WAL */
 
   if( rc ){
     eNew = eOld;
@@ -5553,40 +5467,6 @@ case OP_JournalMode: {    /* out2-prerelease */
 };
 #endif /* SQLITE_OMIT_PRAGMA */
 
-#if !defined(SQLITE_OMIT_VACUUM) && !defined(SQLITE_OMIT_ATTACH)
-/* Opcode: Vacuum * * * * *
-**
-** Vacuum the entire database.  This opcode will cause other virtual
-** machines to be created and run.  It may not be called from within
-** a transaction.
-*/
-case OP_Vacuum: {
-  rc = sqlite4RunVacuum(&p->zErrMsg, db);
-  break;
-}
-#endif
-
-#if !defined(SQLITE_OMIT_AUTOVACUUM)
-/* Opcode: IncrVacuum P1 P2 * * *
-**
-** Perform a single step of the incremental vacuum procedure on
-** the P1 database. If the vacuum has finished, jump to instruction
-** P2. Otherwise, fall through to the next instruction.
-*/
-case OP_IncrVacuum: {        /* jump */
-  Btree *pBt;
-
-  assert( pOp->p1>=0 && pOp->p1<db->nDb );
-  assert( (p->btreeMask & (((yDbMask)1)<<pOp->p1))!=0 );
-  pBt = db->aDb[pOp->p1].pBt;
-  rc = sqlite4BtreeIncrVacuum(pBt);
-  if( rc==SQLITE_DONE ){
-    pc = pOp->p2 - 1;
-    rc = SQLITE_OK;
-  }
-  break;
-}
-#endif
 
 /* Opcode: Expire P1 * * * *
 **

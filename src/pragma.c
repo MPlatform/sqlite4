@@ -66,23 +66,6 @@ static int getLockingMode(const char *z){
   return PAGER_LOCKINGMODE_QUERY;
 }
 
-#ifndef SQLITE_OMIT_AUTOVACUUM
-/*
-** Interpret the given string as an auto-vacuum mode value.
-**
-** The following strings, "none", "full" and "incremental" are 
-** acceptable, as are their numeric equivalents: 0, 1 and 2 respectively.
-*/
-static int getAutoVacuum(const char *z){
-  int i;
-  if( 0==sqlite4StrICmp(z, "none") ) return BTREE_AUTOVACUUM_NONE;
-  if( 0==sqlite4StrICmp(z, "full") ) return BTREE_AUTOVACUUM_FULL;
-  if( 0==sqlite4StrICmp(z, "incremental") ) return BTREE_AUTOVACUUM_INCR;
-  i = sqlite4Atoi(z);
-  return (u8)((i>=0&&i<=2)?i:0);
-}
-#endif /* ifndef SQLITE_OMIT_AUTOVACUUM */
-
 #ifndef SQLITE_OMIT_PAGER_PRAGMAS
 /*
 ** Interpret the given string as a temp db location. Return 1 for file
@@ -270,9 +253,6 @@ static const char *actionName(u8 action){
 const char *sqlite4JournalModename(int eMode){
   static char * const azModeName[] = {
     "delete", "persist", "off", "truncate", "memory"
-#ifndef SQLITE_OMIT_WAL
-     , "wal"
-#endif
   };
   assert( PAGER_JOURNALMODE_DELETE==0 );
   assert( PAGER_JOURNALMODE_PERSIST==1 );
@@ -601,90 +581,6 @@ void sqlite4Pragma(
 
 #endif /* SQLITE_OMIT_PAGER_PRAGMAS */
 
-  /*
-  **  PRAGMA [database.]auto_vacuum
-  **  PRAGMA [database.]auto_vacuum=N
-  **
-  ** Get or set the value of the database 'auto-vacuum' parameter.
-  ** The value is one of:  0 NONE 1 FULL 2 INCREMENTAL
-  */
-#ifndef SQLITE_OMIT_AUTOVACUUM
-  if( sqlite4StrICmp(zLeft,"auto_vacuum")==0 ){
-    Btree *pBt = pDb->pBt;
-    assert( pBt!=0 );
-    if( sqlite4ReadSchema(pParse) ){
-      goto pragma_out;
-    }
-    if( !zRight ){
-      int auto_vacuum;
-      if( ALWAYS(pBt) ){
-         auto_vacuum = sqlite4BtreeGetAutoVacuum(pBt);
-      }else{
-         auto_vacuum = SQLITE_DEFAULT_AUTOVACUUM;
-      }
-      returnSingleInt(pParse, "auto_vacuum", auto_vacuum);
-    }else{
-      int eAuto = getAutoVacuum(zRight);
-      assert( eAuto>=0 && eAuto<=2 );
-      db->nextAutovac = (u8)eAuto;
-      if( ALWAYS(eAuto>=0) ){
-        /* Call SetAutoVacuum() to set initialize the internal auto and
-        ** incr-vacuum flags. This is required in case this connection
-        ** creates the database file. It is important that it is created
-        ** as an auto-vacuum capable db.
-        */
-        int rc = sqlite4BtreeSetAutoVacuum(pBt, eAuto);
-        if( rc==SQLITE_OK && (eAuto==1 || eAuto==2) ){
-          /* When setting the auto_vacuum mode to either "full" or 
-          ** "incremental", write the value of meta[6] in the database
-          ** file. Before writing to meta[6], check that meta[3] indicates
-          ** that this really is an auto-vacuum capable database.
-          */
-          static const VdbeOpList setMeta6[] = {
-            { OP_Transaction,    0,         1,                 0},    /* 0 */
-            { OP_ReadCookie,     0,         1,         BTREE_LARGEST_ROOT_PAGE},
-            { OP_If,             1,         0,                 0},    /* 2 */
-            { OP_Halt,           SQLITE_OK, OE_Abort,          0},    /* 3 */
-            { OP_Integer,        0,         1,                 0},    /* 4 */
-            { OP_SetCookie,      0,         BTREE_INCR_VACUUM, 1},    /* 5 */
-          };
-          int iAddr;
-          iAddr = sqlite4VdbeAddOpList(v, ArraySize(setMeta6), setMeta6);
-          sqlite4VdbeChangeP1(v, iAddr, iDb);
-          sqlite4VdbeChangeP1(v, iAddr+1, iDb);
-          sqlite4VdbeChangeP2(v, iAddr+2, iAddr+4);
-          sqlite4VdbeChangeP1(v, iAddr+4, eAuto-1);
-          sqlite4VdbeChangeP1(v, iAddr+5, iDb);
-          sqlite4VdbeUsesBtree(v, iDb);
-        }
-      }
-    }
-  }else
-#endif
-
-  /*
-  **  PRAGMA [database.]incremental_vacuum(N)
-  **
-  ** Do N steps of incremental vacuuming on a database.
-  */
-#ifndef SQLITE_OMIT_AUTOVACUUM
-  if( sqlite4StrICmp(zLeft,"incremental_vacuum")==0 ){
-    int iLimit, addr;
-    if( sqlite4ReadSchema(pParse) ){
-      goto pragma_out;
-    }
-    if( zRight==0 || !sqlite4GetInt32(zRight, &iLimit) || iLimit<=0 ){
-      iLimit = 0x7fffffff;
-    }
-    sqlite4BeginWriteOperation(pParse, 0, iDb);
-    sqlite4VdbeAddOp2(v, OP_Integer, iLimit, 1);
-    addr = sqlite4VdbeAddOp1(v, OP_IncrVacuum, iDb);
-    sqlite4VdbeAddOp1(v, OP_ResultRow, 1);
-    sqlite4VdbeAddOp2(v, OP_AddImm, 1, -1);
-    sqlite4VdbeAddOp2(v, OP_IfPos, 1, addr);
-    sqlite4VdbeJumpHere(v, addr);
-  }else
-#endif
 
 #ifndef SQLITE_OMIT_PAGER_PRAGMAS
   /*
@@ -1394,50 +1290,6 @@ void sqlite4Pragma(
   }else
 #endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
 
-#ifndef SQLITE_OMIT_WAL
-  /*
-  **   PRAGMA [database.]wal_checkpoint = passive|full|restart
-  **
-  ** Checkpoint the database.
-  */
-  if( sqlite4StrICmp(zLeft, "wal_checkpoint")==0 ){
-    int iBt = (pId2->z?iDb:SQLITE_MAX_ATTACHED);
-    int eMode = SQLITE_CHECKPOINT_PASSIVE;
-    if( zRight ){
-      if( sqlite4StrICmp(zRight, "full")==0 ){
-        eMode = SQLITE_CHECKPOINT_FULL;
-      }else if( sqlite4StrICmp(zRight, "restart")==0 ){
-        eMode = SQLITE_CHECKPOINT_RESTART;
-      }
-    }
-    if( sqlite4ReadSchema(pParse) ) goto pragma_out;
-    sqlite4VdbeSetNumCols(v, 3);
-    pParse->nMem = 3;
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "busy", SQLITE_STATIC);
-    sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "log", SQLITE_STATIC);
-    sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "checkpointed", SQLITE_STATIC);
-
-    sqlite4VdbeAddOp3(v, OP_Checkpoint, iBt, eMode, 1);
-    sqlite4VdbeAddOp2(v, OP_ResultRow, 1, 3);
-  }else
-
-  /*
-  **   PRAGMA wal_autocheckpoint
-  **   PRAGMA wal_autocheckpoint = N
-  **
-  ** Configure a database connection to automatically checkpoint a database
-  ** after accumulating N frames in the log. Or query for the current value
-  ** of N.
-  */
-  if( sqlite4StrICmp(zLeft, "wal_autocheckpoint")==0 ){
-    if( zRight ){
-      sqlite4_wal_autocheckpoint(db, sqlite4Atoi(zRight));
-    }
-    returnSingleInt(pParse, "wal_autocheckpoint", 
-       db->xWalCallback==sqlite4WalDefaultHook ? 
-           SQLITE_PTR_TO_INT(db->pWalArg) : 0);
-  }else
-#endif
 
   /*
   **  PRAGMA shrink_memory

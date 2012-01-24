@@ -1851,47 +1851,6 @@ static void sqliteViewResetAll(sqlite4 *db, int idx){
 # define sqliteViewResetAll(A,B)
 #endif /* SQLITE_OMIT_VIEW */
 
-/*
-** This function is called by the VDBE to adjust the internal schema
-** used by SQLite when the btree layer moves a table root page. The
-** root-page of a table or index in database iDb has changed from iFrom
-** to iTo.
-**
-** Ticket #1728:  The symbol table might still contain information
-** on tables and/or indices that are the process of being deleted.
-** If you are unlucky, one of those deleted indices or tables might
-** have the same rootpage number as the real table or index that is
-** being moved.  So we cannot stop searching after the first match 
-** because the first match might be for one of the deleted indices
-** or tables and not the table/index that is actually being moved.
-** We must continue looping until all tables and indices with
-** rootpage==iFrom have been converted to have a rootpage of iTo
-** in order to be certain that we got the right one.
-*/
-#ifndef SQLITE_OMIT_AUTOVACUUM
-void sqlite4RootPageMoved(sqlite4 *db, int iDb, int iFrom, int iTo){
-  HashElem *pElem;
-  Hash *pHash;
-  Db *pDb;
-
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
-  pDb = &db->aDb[iDb];
-  pHash = &pDb->pSchema->tblHash;
-  for(pElem=sqliteHashFirst(pHash); pElem; pElem=sqliteHashNext(pElem)){
-    Table *pTab = sqliteHashData(pElem);
-    if( pTab->tnum==iFrom ){
-      pTab->tnum = iTo;
-    }
-  }
-  pHash = &pDb->pSchema->idxHash;
-  for(pElem=sqliteHashFirst(pHash); pElem; pElem=sqliteHashNext(pElem)){
-    Index *pIdx = sqliteHashData(pElem);
-    if( pIdx->tnum==iFrom ){
-      pIdx->tnum = iTo;
-    }
-  }
-}
-#endif
 
 /*
 ** Write code to erase the table with root-page iTable from database iDb.
@@ -1904,20 +1863,6 @@ static void destroyRootPage(Parse *pParse, int iTable, int iDb){
   int r1 = sqlite4GetTempReg(pParse);
   sqlite4VdbeAddOp3(v, OP_Destroy, iTable, r1, iDb);
   sqlite4MayAbort(pParse);
-#ifndef SQLITE_OMIT_AUTOVACUUM
-  /* OP_Destroy stores an in integer r1. If this integer
-  ** is non-zero, then it is the root page number of a table moved to
-  ** location iTable. The following code modifies the sqlite_master table to
-  ** reflect this.
-  **
-  ** The "#NNN" in the SQL is a special constant that means whatever value
-  ** is in register NNN.  See grammar rules associated with the TK_REGISTER
-  ** token for additional information.
-  */
-  sqlite4NestedParse(pParse, 
-     "UPDATE %Q.%s SET rootpage=%d WHERE #%d AND rootpage=#%d",
-     pParse->db->aDb[iDb].zName, SCHEMA_TABLE(iDb), iTable, r1, r1);
-#endif
   sqlite4ReleaseTempReg(pParse, r1);
 }
 
@@ -1928,56 +1873,12 @@ static void destroyRootPage(Parse *pParse, int iTable, int iDb){
 ** is also added (this can happen with an auto-vacuum database).
 */
 static void destroyTable(Parse *pParse, Table *pTab){
-#ifdef SQLITE_OMIT_AUTOVACUUM
   Index *pIdx;
   int iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
   destroyRootPage(pParse, pTab->tnum, iDb);
   for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
     destroyRootPage(pParse, pIdx->tnum, iDb);
   }
-#else
-  /* If the database may be auto-vacuum capable (if SQLITE_OMIT_AUTOVACUUM
-  ** is not defined), then it is important to call OP_Destroy on the
-  ** table and index root-pages in order, starting with the numerically 
-  ** largest root-page number. This guarantees that none of the root-pages
-  ** to be destroyed is relocated by an earlier OP_Destroy. i.e. if the
-  ** following were coded:
-  **
-  ** OP_Destroy 4 0
-  ** ...
-  ** OP_Destroy 5 0
-  **
-  ** and root page 5 happened to be the largest root-page number in the
-  ** database, then root page 5 would be moved to page 4 by the 
-  ** "OP_Destroy 4 0" opcode. The subsequent "OP_Destroy 5 0" would hit
-  ** a free-list page.
-  */
-  int iTab = pTab->tnum;
-  int iDestroyed = 0;
-
-  while( 1 ){
-    Index *pIdx;
-    int iLargest = 0;
-
-    if( iDestroyed==0 || iTab<iDestroyed ){
-      iLargest = iTab;
-    }
-    for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
-      int iIdx = pIdx->tnum;
-      assert( pIdx->pSchema==pTab->pSchema );
-      if( (iDestroyed==0 || (iIdx<iDestroyed)) && iIdx>iLargest ){
-        iLargest = iIdx;
-      }
-    }
-    if( iLargest==0 ){
-      return;
-    }else{
-      int iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
-      destroyRootPage(pParse, iLargest, iDb);
-      iDestroyed = iLargest;
-    }
-  }
-#endif
 }
 
 /*

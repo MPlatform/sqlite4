@@ -161,10 +161,6 @@ void sqlite4PagerClearCache(Pager *);
 /* Functions used to truncate the database file. */
 void sqlite4PagerTruncateImage(Pager*,Pgno);
 
-#if defined(SQLITE_HAS_CODEC) && !defined(SQLITE_OMIT_WAL)
-void *sqlite4PagerCodec(DbPage *);
-#endif
-
 /* Functions to support testing and debugging. */
 #if !defined(NDEBUG) || defined(SQLITE_TEST)
   Pgno sqlite4PagerPagenumber(DbPage*);

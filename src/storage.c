@@ -26,7 +26,7 @@ int sqlite4KVStoreOpen(const char *zUri, KVStore **ppKVStore){
   *ppKVStore = pNew;
   if( pNew ){
     sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);
-    pNew->fTrace = 1;
+    pNew->fTrace = 0;
     if( pNew->fTrace ){
       printf("KVopen(%s,%d)\n", zUri, pNew->kvId);
     }

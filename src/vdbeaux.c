@@ -422,7 +422,7 @@ static void resolveP2Values(Vdbe *p, int *pMaxFuncArgs){
     pOp->opflags = sqlite4OpcodeProperty[opcode];
     if( opcode==OP_Function || opcode==OP_AggStep ){
       if( pOp->p5>nMaxArgs ) nMaxArgs = pOp->p5;
-    }else if( (opcode==OP_Transaction && pOp->p2!=0) || opcode==OP_Vacuum ){
+    }else if( (opcode==OP_Transaction && pOp->p2!=0) ){
       p->readOnly = 0;
 #ifndef SQLITE_OMIT_VIRTUALTABLE
     }else if( opcode==OP_VUpdate ){
