@@ -1,0 +1,40 @@
+Notes on how a multi-table SQL database is mapped into the storage engine.
+
+We assume the storage engine supports key/value pairs where each key and
+value is arbitrary binary data.  Keys are in lexigraphical order.  In other
+words, keys compare according to memcmp() and if one key is a prefix of the
+other, the shorter key comes first.  A sample key comparison function is
+the following:
+
+   int key_compare(const void *key1, int n1, const void *key2, int n2){
+     int c = memcmp(key1, key2, n1<n2 ? n1 : n2);
+     if( c==0 ) c = n1 - n2;
+     return c;
+   }
+
+The key space is logically divided into "tables".  Each key begins with
+a varint (in the new lexigraphical-ordered unsigned varint format described
+separately) that determines the table to which the key belongs.  Table 0
+is used for metadata, such as the schema version number.  Table 1 is the
+SQLITE_MASTER table.  Tables 2 and greater are used for other tables and
+indices in the schema.
+
+After the table number, the rest of the key for each entry in a table or
+index follows the key encoding documented separately.  The key encoding is
+tricky since it must generate keys that sort in order using the key_compare()
+function above.  Text is encoded using ucol_getSortKey()-style keys.  The
+application-defined collating sequences have to supply a key-generator
+function to accommodate this requirement.
+
+The data portion of each entry uses the separately documented data encoding
+format.  The data encoding format is similar in concept to the encodings
+used for both key and data in SQLite3.  There is a header that contains
+data-types followed by the content.  The difference is that the serial
+codes are simplified.  And there is a general-purpose extension mechanism.
+
+In the SQLite3 format, both the key and data for an entry were readable.
+But in this format, only the data portion is readable because the
+ucol_getSortKey()-style encoding for text is not reversible.  Hence
+any key content that needs to be accessible must be duplicated using the
+data encoding in the data portion of the entry.  This means that index
+content is stored twice - once for the key and once for the value.
