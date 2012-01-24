@@ -1,0 +1,139 @@
+This note describes how record keys are encoded.  The encoding is designed
+such that memcmp() can be used to sort the keys into their proper order.
+
+A key consists of a list of one or more SQL values.  Each SQL value in the
+list has one of the following types:  NULL, numeric, text, binary.  Keys
+are compared value by value, from left to right, until a difference if found.
+The first difference determines the key order.
+
+Each SQL value has a sort-order which is either ASCENDING or DESCENDING.  The
+default and the usual case is ASCENDING.
+
+To generate the encoding, the SQL values of the key are visited from left
+to right.  Each SQL value generates one or more bytes that are appended
+to the encoding.  If the SQL value is DESCENDING, then its encoding bytes
+are inverted (ones complement) prior to being appended. The complete key 
+encoding is the concatenation of the individual SQL value encodings, in 
+the same order as the SQL values.
+
+Two key encodings are only compariable if they have the same number of SQL
+values and if corresponding SQL values have the same sort-order.
+
+NULL ENCODING
+
+Each SQL value that is a NULL encodes as a single byte of 0x01.  Since
+every other SQL value encoding begins with a byte greater than 0x01, this
+forces NULL values to sort first.
+
+TEXT ENCODING
+
+Each SQL value that is TEXT begins with a single byte of 0x0c and ends
+with a single byte of 0x00.  There are zero or more intervening bytes that
+encode the text value.  The intervening bytes are chosen so that the
+encoding will sort in the desired collating order.  The default sequence
+of bytes is simply UTF8.  The intervening bytes may not contain a 0x00
+character; the only 0x00 byte allowed in a text encoding is the final
+byte.
+
+The text encoding ends in 0x00 in order to ensure that when there are
+two strings where one is a prefix of the other that the shorter string
+will sort first.
+
+BINARY ENCODING
+
+Each SQL value that is BINARY begins with a single byte of 0x0d and
+ends with a single byte of 0x00.  There are zero or more intervening bytes
+that encode the binary value.  None of the intervening bytes may be zero.
+Each of the intervening bytes contains 7 bits of blob content with a 1 in
+the high-order bit (the 0x80 bit).  The final byte before the 0x00 contains
+any left-over bits of the blob content.
+
+The initial byte of a binary value, 0x0d, is larger than the initial
+byte of a text value, 0x2e, ensuring that every binary value will sort
+after every text value.
+
+NUMERIC ENCODING
+
+Numeric SQL values must be coded so as to sort in numeric order.  We assume
+that numeric SQL values can be both integer and floating point values.
+
+Simpliest cases first:  If the numeric value is a NaN, then the encoding
+is a single byte of 0x02.  This causes NaN values to sort prior to every other
+numeric value.  The only value that is less than a NaN is a NULL.
+
+If the numeric value is a negative infinity then the encoding is a single
+byte of 0x03.  Since every other numeric value except NaN has a larger 
+initial byte, this encoding ensures that negative infinity will sort prior
+to every other numeric value other than NaN.
+
+If the numeric value is a positive infinity then the encoding is a single
+byte of 0x0b.  Every other numeric value encoding begins with a smaller
+byte, ensuring that positive infinity always sorts last among numeric
+values.  0x0b is also smaller than 0x0c, the initial byte of a text value,
+ensuring that every numeric value sorts before every text value.
+
+If the numeric value is exactly zero then then is encoded is a single
+byte of 0x07.  Finite negative values will have initial bytes between 0x04
+and 0x06 and finite positive values will have initial bytes between 0x08
+and 0x0a.
+
+Finite non-zero values are classified as either large, medium, or small.
+Small values have an absolute value less than 1.  Large values have an
+absolute value of 18446744073709551616 or more.  (In other words, a value
+is large if its magnitude is greater than the largest 64-bit unsigned
+integer.)  Medium values are any values in between large and small values.
+
+For large values, let the value be encoded as a 64-bit unsigned integer
+for the significand and an integer exponent to base 10.  The encoding should
+be normalized so that the exponent is as small as possible, and hence the
+significand is as large a possible.  Call the exponent E and the significant
+L.  We represent E as a variable-length integer (varint) and
+we represent L as an 8-byte bigendian unsigned integer.
+
+Large positive numbers are represented as the single byte 0x0a followed
+by the varint for E followed by the 8-byte significand L.  Large negative
+nubmers are represented by the single byte 0x04 followed by the ones-
+complement of the varint E followed by the ones-complement of the 8-byte
+significand L.
+
+Let medium sized values be represented as an integer part I and a
+fractional part F.  The integer I is represented using a varint (which is
+always possible because we know the medium size value is less than the 
+maximum varint).  Let the fractional part F be a binary-coded decimal
+representation of the fraction with hex digits 1 through A representing
+digits 0 through 9 respectively, and with a 0 hex digit representing the
+end of the fraction.  The fraction is padded to an even number of hex
+digits by adding extra 0 digits.  There must be at least one hex digit,
+and hence at least one byte in the fractional part.
+
+A positive medium value begins with the byte 0x09 followed by the integer
+part I followed by the fractional part F.  A negative medium value is the
+byte 0x05 followed by the ones-complement of I followed by the ones-
+complement of F.
+
+Represent a small values as a fractional part F, represented in the
+same way as in a medium value though with leading zeros removed so.
+The number of leading zeros is Z, a varint.
+
+A positive small value begins with the byte 0x08 followed by the
+ones-complement of Z followed by F.  A negative small value begins with
+byte 0x06 followed by Z followed by the ones-complement of F.
+
+SUMMARY
+
+Each SQL value is encoded as one or more bytes.  The first byte of
+the encoding is as follows:
+
+  0x01 NULL
+  0x02 NaN
+  0x03 negative infinity
+  0x04 negative-large ~E ~L
+  0x05 negative-medium ~I ~F
+  0x06 negative-small Z ~F
+  0x07 zero
+  0x08 positive-small ~Z F
+  0x09 positive-medium I F
+  0x0a positive-large E L
+  0x0b positive infinity
+  0x0c text T
+  0x0d binary B

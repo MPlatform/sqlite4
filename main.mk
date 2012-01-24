@@ -248,7 +248,6 @@ TESTSRC = \
   $(TOP)/src/test_intarray.c \
   $(TOP)/src/test_journal.c \
   $(TOP)/src/test_malloc.c \
-  $(TOP)/src/test_multiplex.c \
   $(TOP)/src/test_mutex.c \
   $(TOP)/src/test_onefile.c \
   $(TOP)/src/test_osinst.c \
@@ -257,7 +256,6 @@ TESTSRC = \
   $(TOP)/src/test_rtree.c \
   $(TOP)/src/test_schema.c \
   $(TOP)/src/test_server.c \
-  $(TOP)/src/test_stat.c \
   $(TOP)/src/test_storage.c \
   $(TOP)/src/test_superlock.c \
   $(TOP)/src/test_syscall.c \
@@ -523,17 +521,6 @@ rtree.o:	$(TOP)/ext/rtree/rtree.c $(HDR) $(EXTHDR)
 tclsqlite4:	$(TOP)/src/tclsqlite.c libsqlite4.a
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 -o tclsqlite4 \
 		$(TOP)/src/tclsqlite.c libsqlite4.a $(LIBTCL) $(THREADLIB)
-
-sqlite4_analyzer.c: sqlite4.c $(TOP)/src/test_stat.c $(TOP)/src/tclsqlite.c $(TOP)/tool/spaceanal.tcl
-	echo "#define TCLSH 2" > $@
-	cat sqlite4.c $(TOP)/src/test_stat.c $(TOP)/src/tclsqlite.c >> $@
-	echo "static const char *tclsh_main_loop(void){" >> $@
-	echo "static const char *zMainloop = " >> $@
-	$(NAWK) -f $(TOP)/tool/tostr.awk $(TOP)/tool/spaceanal.tcl >> $@
-	echo "; return zMainloop; }" >> $@
-
-sqlite4_analyzer$(EXE): sqlite4_analyzer.c
-	$(TCCX) $(TCL_FLAGS) sqlite4_analyzer.c -o $@ $(LIBTCL) $(THREADLIB) 
 
 # Rules to build the 'testfixture' application.
 #

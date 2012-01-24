@@ -157,8 +157,8 @@ static void attachFunc(
     }
     pPager = sqlite4BtreePager(aNew->pBt);
     sqlite4PagerLockingMode(pPager, db->dfltLockMode);
-    sqlite4BtreeSecureDelete(aNew->pBt,
-                             sqlite4BtreeSecureDelete(db->aDb[0].pBt,-1) );
+    /*sqlite4BtreeSecureDelete(aNew->pBt,
+                             sqlite4BtreeSecureDelete(db->aDb[0].pBt,-1) );*/
   }
   aNew->safety_level = 3;
   aNew->zName = sqlite4DbStrDup(db, zName);

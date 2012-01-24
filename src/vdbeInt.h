@@ -53,6 +53,7 @@ struct VdbeCursor {
   KVStore *pTmpKV;      /* Separate file holding a temporary table */
   KeyInfo *pKeyInfo;    /* Info about index keys needed by index cursors */
   int iDb;              /* Index of cursor database in db->aDb[] (or -1) */
+  int iRoot;            /* Root page of the table */
   int pseudoTableReg;   /* Register holding pseudotable content. */
   int nField;           /* Number of fields in the header */
   Bool zeroed;          /* True if zeroed out and ready for reuse */

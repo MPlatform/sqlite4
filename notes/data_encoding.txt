@@ -1,0 +1,52 @@
+The key for each row of a table is the defined PRIMARY KEY in the key
+encoding. Or, if the table does not have a defined PRIMARY KEY, then
+it has an implicit INTEGER PRIMARY KEY as the first column.
+
+The content consists of all columns of the table, in order, in the data
+encoding defined here.  The PRIMARY KEY column or columns are repeated
+in the data, due to the difficulty in decoding the key format.
+
+The data consists of a header area followed by a content area.  The data
+begins with a single varint which is the size of the header area.  The
+initial varint itself is not considered part of the header.  The header
+is composed of one or two varints for each column in the table.  The varints
+determines the datatype and size of the value for that column:
+
+  0          NULL
+  1          zero
+  2          one
+  3..10      (N-2)-byte signed integer
+  11..21     (N-9)-byte number (two varints: min 2, max 12 bytes)
+  22+3*K     K-byte string
+  23+3*K     K-byte inline blob
+  24+3*K     K-byte typed blob, followed by a single varint type code
+
+Strings can be either UTF8, UTF16le, or UTF16be.  If the first byte of the
+payload is 0x00, 0x01, or 0x02 then that byte is ignored and the remaining
+bytes are UTF8, UTF16le, or UTF16be respectively.  If the first byte is 0x03
+or larger, then the entire string including the first byte is UTF8.
+
+A "typed blob" is a sequence of bytes in an application-defined type.
+The type is determined by a varint that immediately follows the initial
+varint.  Hence, a typed blob uses two varints in the header whereas all
+other types use a single varint.
+
+The content of a number is two varints.  The first varint has a value
+which is abs(e)*4 + (e<0)*2 + (m<0).  The second varint is abs(m).
+The maximum e is 999, which gives a max varint value of 3999 or 0xf906af, for
+a maximum first varint size of 3.  Values of e greater than 999 (used for
+Inf and NaN) are represented as a -0.  The second varint can be a full 9 bytes.
+Example values:
+
+    0.123   ->  e=-3, m=123     ->  0e,7b        (2 bytes)
+    3.14159 ->  e=-5, m=314159  ->  16,fa04cb2f  (5 bytes)
+   -1.2e+99 ->  e=98, m=-12     ->  f199,0c      (3 bytes)
+   +Inf     ->  e=-0, m=1       ->  02,01        (2 bytes)
+   -Inf     ->  e=-0, m=-1      ->  03,01        (2 bytes)
+    NaN     ->  e=-0, m=0       ->  02,00        (2 bytes)
+
+Initially, the followed typed blobs are defined:
+
+   0      external blob
+   1      big int
+   2      date/time

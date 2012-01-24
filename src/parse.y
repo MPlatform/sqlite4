@@ -196,7 +196,7 @@ id(A) ::= INDEXED(X).    {A = X;}
   CONFLICT DATABASE DEFERRED DESC DETACH EACH END EXCLUSIVE EXPLAIN FAIL FOR
   IGNORE IMMEDIATE INITIALLY INSTEAD LIKE_KW MATCH NO PLAN
   QUERY KEY OF OFFSET PRAGMA RAISE RELEASE REPLACE RESTRICT ROW ROLLBACK
-  SAVEPOINT TEMP TRIGGER VACUUM VIEW VIRTUAL
+  SAVEPOINT TEMP TRIGGER VIEW VIRTUAL
 %ifdef SQLITE_OMIT_COMPOUND_SELECT
   EXCEPT INTERSECT UNION
 %endif SQLITE_OMIT_COMPOUND_SELECT
@@ -1136,15 +1136,6 @@ collate(C) ::= COLLATE ids(X).   {C = X;}
 ///////////////////////////// The DROP INDEX command /////////////////////////
 //
 cmd ::= DROP INDEX ifexists(E) fullname(X).   {sqlite4DropIndex(pParse, X, E);}
-
-///////////////////////////// The VACUUM command /////////////////////////////
-//
-%ifndef SQLITE_OMIT_VACUUM
-%ifndef SQLITE_OMIT_ATTACH
-cmd ::= VACUUM.                {sqlite4Vacuum(pParse);}
-cmd ::= VACUUM nm.             {sqlite4Vacuum(pParse);}
-%endif  SQLITE_OMIT_ATTACH
-%endif  SQLITE_OMIT_VACUUM
 
 ///////////////////////////// The PRAGMA command /////////////////////////////
 //

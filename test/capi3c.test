@@ -1238,59 +1238,6 @@ do_test capi3c-20.4 {
   sqlite4_finalize $STMT
 } SQLITE_OK
 
-# Test that sqlite4_step() sets the database error code correctly.
-# See ticket #2497.
-#
-ifcapable progress {
-  do_test capi3c-21.1 {
-    set STMT [sqlite4_prepare_v2 $DB {SELECT * FROM t3} -1 TAIL]
-    db progress 5 "expr 1"
-    sqlite4_step $STMT
-  } {SQLITE_INTERRUPT}
-  do_test capi3c-21.2 {
-    sqlite4_extended_errcode $DB
-  } {SQLITE_INTERRUPT}
-  do_test capi3c-21.3 {
-    sqlite4_finalize $STMT
-  } {SQLITE_INTERRUPT}
-  do_test capi3c-21.4 {
-    set STMT [sqlite4_prepare $DB {SELECT * FROM t3} -1 TAIL]
-    db progress 5 "expr 1"
-    sqlite4_step $STMT
-  } {SQLITE_ERROR}
-  do_test capi3c-21.5 {
-    sqlite4_errcode $DB
-  } {SQLITE_ERROR}
-  do_test capi3c-21.6 {
-    sqlite4_finalize $STMT
-  } {SQLITE_INTERRUPT}
-  do_test capi3c-21.7 {
-    sqlite4_errcode $DB
-  } {SQLITE_INTERRUPT}
-  do_test capi3c-21.8 {
-    sqlite4_extended_errcode $DB
-  } {SQLITE_INTERRUPT}
-}
-
-# Make sure sqlite4_result_error_code() returns the correct error code.
-# See ticket #2940
-#
-do_test capi3c-22.1 {
-  db progress 0 {}
-  set STMT [sqlite4_prepare_v2 db {SELECT test_error('the message',3)} -1 TAIL]
-  sqlite4_step $STMT
-} {SQLITE_PERM}
-sqlite4_finalize $STMT
-do_test capi3c-22.2 {
-  set STMT [sqlite4_prepare_v2 db {SELECT test_error('the message',4)} -1 TAIL]
-  sqlite4_step $STMT
-} {SQLITE_ABORT}
-sqlite4_finalize $STMT
-do_test capi3c-22.3 {
-  set STMT [sqlite4_prepare_v2 db {SELECT test_error('the message',16)} -1 TAIL]
-  sqlite4_step $STMT
-} {SQLITE_EMPTY}
-sqlite4_finalize $STMT
 
 # For a multi-column result set where the same table column is repeated
 # in multiple columns of the output, verify that doing a UTF-8 to UTF-16

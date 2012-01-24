@@ -117,12 +117,6 @@ struct Keyword {
 #else
 #  define TRIGGER    0x00002000
 #endif
-#if defined(SQLITE_OMIT_AUTOVACUUM) && \
-    (defined(SQLITE_OMIT_VACUUM) || defined(SQLITE_OMIT_ATTACH))
-#  define VACUUM     0
-#else
-#  define VACUUM     0x00004000
-#endif
 #ifdef SQLITE_OMIT_VIEW
 #  define VIEW       0
 #else
@@ -258,7 +252,6 @@ static Keyword aKeywordTable[] = {
   { "UNIQUE",           "TK_UNIQUE",       ALWAYS                 },
   { "UPDATE",           "TK_UPDATE",       ALWAYS                 },
   { "USING",            "TK_USING",        ALWAYS                 },
-  { "VACUUM",           "TK_VACUUM",       VACUUM                 },
   { "VALUES",           "TK_VALUES",       ALWAYS                 },
   { "VIEW",             "TK_VIEW",         VIEW                   },
   { "VIRTUAL",          "TK_VIRTUAL",      VTAB                   },

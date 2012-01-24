@@ -708,7 +708,6 @@ proc finalize_testing {} {
   if {$nErr>0} {
     puts "Failures on these tests: [set_test_counter fail_list]"
   }
-  run_thread_tests 1
   if {[llength $omitList]>0} {
     puts "Omitted test cases:"
     set prec {}
@@ -1573,5 +1572,4 @@ proc db_delete_and_reopen {{file test.db}} {
 # to non-zero, then set the global variable $AUTOVACUUM to 1.
 set AUTOVACUUM $sqlite_options(default_autovacuum)
 
-source $testdir/thread_common.tcl
 source $testdir/malloc_common.tcl

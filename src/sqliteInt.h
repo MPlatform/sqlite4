@@ -15,6 +15,14 @@
 #ifndef _SQLITEINT_H_
 #define _SQLITEINT_H_
 
+/*#define SQLITE_OMIT_BTREECOUNT 1*/
+#define SQLITE_OMIT_WAL 1
+#define SQLITE_OMIT_VACUUM 1
+#define SQLITE_OMIT_AUTOVACUUM 1
+#define SQLITE_OMIT_SHARED_CACHE 1
+/*#define SQLITE_OMIT_PAGER_PRAGMAS 1*/
+#define SQLITE_OMIT_PROGRESS_CALLBACK 1
+
 /*
 ** These #defines should enable >2GB file support on POSIX if the
 ** underlying operating system supports it.  If the OS lacks

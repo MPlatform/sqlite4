@@ -165,35 +165,6 @@ foreach {tn mode create_ok write_ok readonly_ok} {
   } $A($readonly_ok)
 }
 
-set orig [sqlite4_enable_shared_cache]
-foreach {tn options sc_default is_shared} {
-  1    ""                1   1
-  2    "cache=private"   1   0
-  3    "cache=shared"    1   1
-  4    ""                0   0
-  5    "cache=private"   0   0
-  6    "cache=shared"    0   1
-} {
-  catch { db close }
-  forcedelete test.db
-
-  sqlite4_enable_shared_cache 1
-  sqlite4 db2 test.db
-  db2 eval {CREATE TABLE t1(a, b)}
-
-  sqlite4_enable_shared_cache $sc_default
-  sqlite4 db "file:test.db?$options"
-  db eval {SELECT * FROM t1}
-
-  set A(1) {1 {database table is locked: t1}}
-  set A(0) {0 {}}
-  do_test 4.2.$tn {
-    db2 eval {BEGIN; INSERT INTO t1 VALUES(1, 2);}
-    catchsql { SELECT * FROM t1 }
-  } $A($is_shared)
-
-  db2 close
-}
 
 do_test 4.3.1 {
   list [catch {sqlite4 db "file:test.db?mode=rc"} msg] $msg

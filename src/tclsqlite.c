@@ -1634,7 +1634,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     "errorcode",          "eval",              "exists",
     "function",           "incrblob",          "interrupt",
     "last_insert_rowid",  "nullvalue",         "onecolumn",
-    "profile",            "progress",          "rekey",
+    "profile",            "rekey",
     "restore",            "rollback_hook",     "status",
     "timeout",            "total_changes",     "trace",
     "transaction",        "unlock_notify",     "update_hook",
@@ -1648,7 +1648,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     DB_ERRORCODE,         DB_EVAL,             DB_EXISTS,
     DB_FUNCTION,          DB_INCRBLOB,         DB_INTERRUPT,
     DB_LAST_INSERT_ROWID, DB_NULLVALUE,        DB_ONECOLUMN,
-    DB_PROFILE,           DB_PROGRESS,         DB_REKEY,
+    DB_PROFILE,           DB_REKEY,
     DB_RESTORE,           DB_ROLLBACK_HOOK,    DB_STATUS,
     DB_TIMEOUT,           DB_TOTAL_CHANGES,    DB_TRACE,
     DB_TRANSACTION,       DB_UNLOCK_NOTIFY,    DB_UPDATE_HOOK,
@@ -2459,47 +2459,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   ** The DB_ONECOLUMN method is implemented together with DB_EXISTS.
   */
 
-  /*    $db progress ?N CALLBACK?
-  ** 
-  ** Invoke the given callback every N virtual machine opcodes while executing
-  ** queries.
-  */
-  case DB_PROGRESS: {
-    if( objc==2 ){
-      if( pDb->zProgress ){
-        Tcl_AppendResult(interp, pDb->zProgress, 0);
-      }
-    }else if( objc==4 ){
-      char *zProgress;
-      int len;
-      int N;
-      if( TCL_OK!=Tcl_GetIntFromObj(interp, objv[2], &N) ){
-        return TCL_ERROR;
-      };
-      if( pDb->zProgress ){
-        Tcl_Free(pDb->zProgress);
-      }
-      zProgress = Tcl_GetStringFromObj(objv[3], &len);
-      if( zProgress && len>0 ){
-        pDb->zProgress = Tcl_Alloc( len + 1 );
-        memcpy(pDb->zProgress, zProgress, len+1);
-      }else{
-        pDb->zProgress = 0;
-      }
-#ifndef SQLITE_OMIT_PROGRESS_CALLBACK
-      if( pDb->zProgress ){
-        pDb->interp = interp;
-        sqlite4_progress_handler(pDb->db, N, DbProgressHandler, pDb);
-      }else{
-        sqlite4_progress_handler(pDb->db, 0, 0, 0);
-      }
-#endif
-    }else{
-      Tcl_WrongNumArgs(interp, 2, objv, "N CALLBACK");
-      return TCL_ERROR;
-    }
-    break;
-  }
 
   /*    $db profile ?CALLBACK?
   **
@@ -3660,17 +3619,6 @@ static void init_all(Tcl_Interp *interp){
   Md5_Init(interp);
 #endif
 
-  /* Install the [register_dbstat_vtab] command to access the implementation
-  ** of virtual table dbstat (source file test_stat.c). This command is
-  ** required for testfixture and sqlite4_analyzer, but not by the production
-  ** Tcl extension.  */
-#if defined(SQLITE_TEST) || TCLSH==2
-  {
-    extern int SqlitetestStat_Init(Tcl_Interp*);
-    SqlitetestStat_Init(interp);
-  }
-#endif
-
 #ifdef SQLITE_TEST
   {
     extern int Sqliteconfig_Init(Tcl_Interp*);
@@ -3701,7 +3649,6 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitetestvfs_Init(Tcl_Interp *);
     extern int Sqlitetestrtree_Init(Tcl_Interp*);
     extern int Sqlitequota_Init(Tcl_Interp*);
-    extern int Sqlitemultiplex_Init(Tcl_Interp*);
     extern int SqliteSuperlock_Init(Tcl_Interp*);
     extern int SqlitetestSyscall_Init(Tcl_Interp*);
     extern int Sqlitetestfuzzer_Init(Tcl_Interp*);
@@ -3744,7 +3691,6 @@ static void init_all(Tcl_Interp *interp){
     Sqlitetestvfs_Init(interp);
     Sqlitetestrtree_Init(interp);
     Sqlitequota_Init(interp);
-    Sqlitemultiplex_Init(interp);
     SqliteSuperlock_Init(interp);
     SqlitetestSyscall_Init(interp);
     Sqlitetestfuzzer_Init(interp);

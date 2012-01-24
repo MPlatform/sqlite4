@@ -239,7 +239,7 @@
 ** that correspond to frames greater than the new K value are removed
 ** from the hash table at this point.
 */
-#ifndef SQLITE_OMIT_WAL
+#if 0
 
 #include "wal.h"
 

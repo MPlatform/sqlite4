@@ -38,7 +38,7 @@ do_test fts3b-1.1 {
   }
 } {1 3}
 
-db eval {VACUUM}
+#db eval {VACUUM}
 
 # The VACUUM renumbered the t1_content table in fts2, which breaks
 # this.
@@ -93,7 +93,7 @@ do_test fts3b-2.1 {
   }
 } $res
 
-db eval {VACUUM}
+#db eval {VACUUM}
 
 # The VACUUM renumbered the t2_segment table in fts2, which would
 # break the following.

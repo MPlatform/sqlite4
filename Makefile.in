@@ -362,7 +362,6 @@ TESTSRC = \
   $(TOP)/src/test_intarray.c \
   $(TOP)/src/test_journal.c \
   $(TOP)/src/test_malloc.c \
-  $(TOP)/src/test_multiplex.c \
   $(TOP)/src/test_mutex.c \
   $(TOP)/src/test_onefile.c \
   $(TOP)/src/test_osinst.c \
@@ -373,7 +372,6 @@ TESTSRC = \
   $(TOP)/src/test_server.c \
   $(TOP)/src/test_superlock.c \
   $(TOP)/src/test_syscall.c \
-  $(TOP)/src/test_stat.c \
   $(TOP)/src/test_tclvar.c \
   $(TOP)/src/test_thread.c \
   $(TOP)/src/test_vfs.c \
@@ -889,17 +887,6 @@ soaktest:	testfixture$(TEXE) sqlite4$(TEXE)
 
 test:	testfixture$(TEXE) sqlite4$(TEXE)
 	./testfixture$(TEXE) $(TOP)/test/veryquick.test
-
-sqlite4_analyzer.c: sqlite4.c $(TOP)/src/test_stat.c $(TOP)/src/tclsqlite.c $(TOP)/tool/spaceanal.tcl
-	echo "#define TCLSH 2" > $@
-	cat sqlite4.c $(TOP)/src/test_stat.c $(TOP)/src/tclsqlite.c >> $@
-	echo "static const char *tclsh_main_loop(void){" >> $@
-	echo "static const char *zMainloop = " >> $@
-	$(NAWK) -f $(TOP)/tool/tostr.awk $(TOP)/tool/spaceanal.tcl >> $@
-	echo "; return zMainloop; }" >> $@
-
-sqlite4_analyzer$(TEXE): sqlite4_analyzer.c
-	$(LTLINK) sqlite4_analyzer.c -o $@ $(LIBTCL) $(TLIBS)
 
 # Standard install and cleanup targets
 #
