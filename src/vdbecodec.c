@@ -222,6 +222,226 @@ vdbeEncodeData_error:
 }
 
 /*
+** An output buffer for EncodeKey
+*/
+typedef struct KeyEncoder KeyEncoder;
+struct KeyEncoder {
+  sqlite4 *db;   /* Database connection */
+  u8 *aOut;      /* Output buffer */
+  int nOut;      /* Slots of aOut[] used */
+  int nAlloc;    /* Slots of aOut[] allocated */
+};
+
+/*
+** Enlarge a memory allocation, if necessary
+*/
+static int enlargeEncoderAllocation(KeyEncoder *p, int needed){
+  if( p->nOut+needed>p->nAlloc ){
+    u8 *aNew;
+    p->nAlloc = p->nAlloc + needed + 10;
+    aNew = sqlite4DbRealloc(p->db, p->aOut, p->nAlloc);
+    if( aNew==0 ){
+      sqlite4DbFree(p->db, p->aOut);
+      memset(p, 0, sizeof(*p));
+      return SQLITE_NOMEM;
+    }
+    p->aOut = aNew;
+    p->nAlloc = sqlite4DbMallocSize(p->db, p->aOut);
+  }
+  return SQLITE_OK;
+}
+
+/*
+** Encode the positive integer m using the key encoding.
+**
+** The key encoding for a positive integer consists of a varint which
+** is the number of digits in the integer, followed by the digits of
+** the integer from most significant to least significant, packed to
+** digits to a byte.  Each digit is represented by a number between 1
+** and 10 with 1 representing 0 and 10 representing 9.  A zero value 
+** marks the end of the significand.  An extra zero is added to fill out
+** the final byte, if necessary.
+*/
+static void encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
+  int i;
+  unsigned char aDigits[30];
+  aDigits[0] = 0;
+  aDigits[1] = 0;
+  for(i=2; m; i++){ aDigits[i] = (m%10)+1; m /= 10; }
+  p->nOut += sqlite4PutVarint64(p->aOut+p->nOut, (i-2));
+  i--;
+  while( i>0 ){
+    p->aOut[p->nOut++] = aDigits[i]*16 + aDigits[i-1];
+    i -= 2;
+  }
+}
+
+/*
+** Encode the small positive floating point number r using the key
+** encoding.  The caller guarantees that r will be less than 1.0 and
+** greater than 0.0.
+**
+** The key encoding is the negative of the exponent E followed by the
+** mantessa M.  The exponent E is one less than the number of digits to
+** the left of the decimal point.  Since r is less than 1, E will always
+** be negative here.  E is output as a varint, and varints must be
+** positive, which is why we output -E.  The mantissa is stored two-digits
+** per byte as described for the integer encoding above.
+*/
+static void encodeSmallFloatKey(double r, KeyEncoder *p){
+  int e = 0;
+  int i, j, n;
+  unsigned char aDigits[30];
+  assert( r>0.0 && r<1.0 );
+  while( r<1e-8 ){ r *= 1e8; e=8; }
+  while( r<1.0 ){ r *= 10.0; e++; }
+  n = sqlite4PutVarint64(p->aOut+p->nOut, e);
+  for(i=0; i<n; i++) p->aOut[i+p->nOut] ^= 0xff;
+  p->nOut += n;
+  for(i=0; i<18 && r!=0.0; i++){
+    int d = r;
+    aDigits[i] = 1+d;
+    r -= d;
+    r *= 10.0;
+  }
+  aDigits[i] = 0;
+  aDigits[i+1] = 0;
+  for(j=0; j<=i; j += 2){
+    p->aOut[p->nOut++] = aDigits[j]*16 + aDigits[j+1];
+  }
+}
+
+/*
+** Encode the large positive floating point number r using the key
+** encoding.  The caller guarantees that r will be finite and greater than
+** or equal to 1.0.
+**
+** The key encoding is the exponent E followed by the mantessa M.  
+** The exponent E is one less than the number of digits to the left 
+** of the decimal point.  Since r is at least than 1.0, E will always
+** be non-negative here. The mantissa is stored two-digits per byte
+** as described for the integer encoding above.
+*/
+static void encodeLargeFloatKey(double r, KeyEncoder *p){
+  int e = 0;
+  int i, j, n;
+  unsigned char aDigits[30];
+  assert( r>=1.0 );
+  while( r>=1e32 && e<=350 ){ r *= 1e-32; e+=32; }
+  while( r>=1e8 && e<=350 ){ r *= 1e-8; e+=8; }
+  while( r>=10.0 && e<=350 ){ r *= 0.1; e++; }
+  while( r<1.0 ){ r *= 10.0; e--; }
+  n = sqlite4PutVarint64(p->aOut+p->nOut, e);
+  p->nOut += n;
+  for(i=0; i<18 && r!=0.0; i++){
+    int d = r;
+    aDigits[i] = 1+d;
+    r -= d;
+    r *= 10.0;
+  }
+  aDigits[i] = 0;
+  aDigits[i+1] = 0;
+  for(j=0; j<=i; j += 2){
+    p->aOut[p->nOut++] = aDigits[j]*16 + aDigits[j+1];
+  }
+}
+
+
+/*
+** Encode a single column of the key
+*/
+static int encodeOneKeyValue(
+  KeyEncoder *p,
+  Mem *pMem,
+  u8 sortOrder,
+  CollSeq *pColl
+){
+  int flags = pMem->flags;
+  int i;
+  int n;
+  int iStart = p->nOut;
+  if( flags & MEM_Null ){
+    if( enlargeEncoderAllocation(p, 1) ) return SQLITE_NOMEM;
+    p->aOut[p->nOut++] = 0x01;
+  }else
+  if( flags & MEM_Int ){
+    sqlite4_int64 v = pMem->u.i;
+    if( enlargeEncoderAllocation(p, 11) ) return SQLITE_NOMEM;
+    if( v==0 ){
+      p->aOut[p->nOut++] = 0x07;
+    }else if( v<0 ){
+      p->aOut[p->nOut++] = 0x04;
+      i = p->nOut;
+      encodeIntKey((sqlite4_uint64)-v, p);
+      while( i<p->nOut ) p->aOut[i++] ^= 0xff;
+    }else{
+      p->aOut[p->nOut++] = 0x0a;
+      encodeIntKey((sqlite4_uint64)v, p);
+    }
+  }else
+  if( flags & MEM_Real ){
+    double r = pMem->r;
+    int e;
+    sqlite4_uint64 m;
+    if( enlargeEncoderAllocation(p, 16) ) return SQLITE_NOMEM;
+    if( r==0.0 ){
+      p->aOut[p->nOut++] = 0x07;
+    }else if( sqlite4IsNaN(r) ){
+      p->aOut[p->nOut++] = 0x02;
+    }else if( (n = sqlite4IsInf(r))!=0 ){
+      p->aOut[p->nOut++] = r<0 ? 0x03 : 0x0b;
+    }else if( r<=-1.0 ){
+      p->aOut[p->nOut++] = 0x04;
+      i = p->nOut;
+      encodeLargeFloatKey(-r, p);
+      while( i<p->nOut ) p->aOut[i++] ^= 0xff;
+    }else if( r<0.0 ){
+      p->aOut[p->nOut++] = 0x06;
+      i = p->nOut;
+      encodeSmallFloatKey(-r, p);
+      while( i<p->nOut ) p->aOut[i++] ^= 0xff;
+    }else if( r<1.0 ){
+      p->aOut[p->nOut++] = 0x08;
+      encodeSmallFloatKey(r, p);
+    }else{
+      p->aOut[p->nOut++] = 0x0a;
+      encodeLargeFloatKey(r, p);
+    }
+  }else
+  if( flags & MEM_Str ){
+  }else
+  {
+    const unsigned char *a;
+    unsigned char s, t;
+    assert( flags & MEM_Blob );
+    n = pMem->n;
+    a = (u8*)pMem->z;
+    s = 1;
+    t = 0;
+    if( enlargeEncoderAllocation(p, (n*8+6)/7 + 2) ) return SQLITE_NOMEM;
+    p->aOut[p->nOut++] = 0x0d;
+     for(i=0; i<n; i++){
+      unsigned char x = a[i];
+      p->aOut[p->nOut++] = 0x80 | t | (x>>s);
+      if( s<7 ){
+        t = x<<(7-s);
+        s++;
+      }else{
+        p->aOut[p->nOut++] = 0x80 | x;
+        s = 1;
+        t = 0;
+      }
+    }
+    if( s>1 ) p->aOut[p->nOut++] = 0x80 | t;
+    p->aOut[p->nOut++] = 0x00;
+  }
+  if( sortOrder==SQLITE_SO_DESC ){
+    for(i=iStart; i<p->nOut; i++) p->aOut[i] ^= 0xff;
+  }
+  return SQLITE_OK;
+}
+
+/*
 ** Generate a record key from one or more data values
 **
 ** Space to hold the key is obtained from sqlite4DbMalloc() and should
@@ -233,10 +453,34 @@ int sqlite4VdbeEncodeKey(
   int nIn,                     /* Number of entries in aIn[] */
   int iTabno,                  /* The table this key applies to */
   KeyInfo *pKeyInfo,           /* Collating sequence information */
-  u8 **pzOut,                  /* Write the resulting key here */
+  u8 **paOut,                  /* Write the resulting key here */
   int *pnOut                   /* Number of bytes in the key */
 ){
-  *pzOut = 0;
+  int i;
+  int rc = SQLITE_OK;
+  KeyEncoder x;
+  
+  x.db = db;
+  x.aOut = 0;
+  x.nOut = 0;
+  x.nAlloc = 0;
+  *paOut = 0;
   *pnOut = 0;
-  return SQLITE_INTERNAL;
+  assert( pKeyInfo->aSortOrder!=0 );
+  if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE_NOMEM;
+  x.nOut = sqlite4PutVarint64(x.aOut, iTabno);
+  for(i=0; i<pKeyInfo->nField && rc==SQLITE_OK; i++){
+    rc = encodeOneKeyValue(&x, aIn+i, pKeyInfo->aSortOrder[i],
+                           pKeyInfo->aColl[i]);
+  }
+  for(; i<nIn && rc==SQLITE_OK; i++){
+    rc = encodeOneKeyValue(&x, aIn+i, SQLITE_SO_ASC, pKeyInfo->aColl[0]);
+  }
+  if( rc ){
+    sqlite4DbFree(db, x.aOut);
+  }else{
+    *paOut = x.aOut;
+    *pnOut = x.nOut;
+  }
+  return rc;
 }

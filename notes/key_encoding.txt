@@ -77,47 +77,53 @@ byte of 0x07.  Finite negative values will have initial bytes between 0x04
 and 0x06 and finite positive values will have initial bytes between 0x08
 and 0x0a.
 
-Finite non-zero values are classified as either large, medium, or small.
+Finite non-zero values are classified as either large, or small.
 Small values have an absolute value less than 1.  Large values have an
-absolute value of 18446744073709551616 or more.  (In other words, a value
-is large if its magnitude is greater than the largest 64-bit unsigned
-integer.)  Medium values are any values in between large and small values.
+absolute value of 1 or more.
 
-For large values, let the value be encoded as a 64-bit unsigned integer
-for the significand and an integer exponent to base 10.  The encoding should
-be normalized so that the exponent is as small as possible, and hence the
-significand is as large a possible.  Call the exponent E and the significant
-L.  We represent E as a variable-length integer (varint) and
-we represent L as an 8-byte bigendian unsigned integer.
+For both large and small values, we compute a mantissa M and an
+exponent E.  The mantissa is a base-10 representation of the
+value.  The exponent E determines where to put the decimal point.
 
-Large positive numbers are represented as the single byte 0x0a followed
-by the varint for E followed by the 8-byte significand L.  Large negative
-nubmers are represented by the single byte 0x04 followed by the ones-
-complement of the varint E followed by the ones-complement of the 8-byte
-significand L.
+Each decimal digit of the mantissa is stored in a half-byte.  There
+are two decimal digits per byte.  Digit 0 has a value of 1.  Digit 9
+has a value of A (1010).  The other digits have values in between.  A
+value of 0 is the end-of-content marker.  The mantissa is composed 
+of one or more bytes, ending with a single byte where the lower four
+bits at least are the end-of-content mark.  The upper four bits of the
+last byte may or may not be zero too, depending on how many other digits
+exist in the mantissa.
 
-Let medium sized values be represented as an integer part I and a
-fractional part F.  The integer I is represented using a varint (which is
-always possible because we know the medium size value is less than the 
-maximum varint).  Let the fractional part F be a binary-coded decimal
-representation of the fraction with hex digits 1 through A representing
-digits 0 through 9 respectively, and with a 0 hex digit representing the
-end of the fraction.  The fraction is padded to an even number of hex
-digits by adding extra 0 digits.  There must be at least one hex digit,
-and hence at least one byte in the fractional part.
+If we assume all digits of the mantissa occur to the right of the
+decimal point, then the exponent E is one less than the power of ten 
+by which one must multiply the mantissa to recover the original value. 
+Or, E is one less than the number of digits that occur to the left of 
+the decimal point.
 
-A positive medium value begins with the byte 0x09 followed by the integer
-part I followed by the fractional part F.  A negative medium value is the
-byte 0x05 followed by the ones-complement of I followed by the ones-
-complement of F.
+Examples:
 
-Represent a small values as a fractional part F, represented in the
-same way as in a medium value though with leading zeros removed so.
-The number of leading zeros is Z, a varint.
+   Value          Exponent E      Significand M (in hex)
+  --------        ----------      ----------------------
+    1.0              0              20
+    100.0            2              20
+    1234             3              23 45 00
+    12345            4              23 45 60
+    12.345           1              23 45 60
+    0.123            -1             23 40
 
-A positive small value begins with the byte 0x08 followed by the
-ones-complement of Z followed by F.  A negative small value begins with
-byte 0x06 followed by Z followed by the ones-complement of F.
+The E value is stored in the encoding as an unsigned varint.  And 
+since E can be negative, that means we need separate cases for positive
+and negative E value.  That is why large and small numbers are treated
+differently.  Large numbers of a positive or zero E and small numbers
+have a negative E.
+
+Large negative numbers have an initial byte of 0x04 followed by the
+ones-complement of the varint of E followed by the ones-complement of
+M.  Small negative numbers have an initial byte of 0x06 followed by
+the varint of -E followed by the ones-complement of M.  Small positive
+numbers have an initial byte of 0x08 followed by the ones-complement of
+the varint of -E followed by M.  Finally, large positive nubmers have
+an initial byte of 0x0a followed by the varint of E followed by M.
 
 SUMMARY
 
@@ -127,13 +133,11 @@ the encoding is as follows:
   0x01 NULL
   0x02 NaN
   0x03 negative infinity
-  0x04 negative-large ~E ~L
-  0x05 negative-medium ~I ~F
-  0x06 negative-small Z ~F
+  0x04 negative-large ~E ~M
+  0x06 negative-small -E ~M
   0x07 zero
-  0x08 positive-small ~Z F
-  0x09 positive-medium I F
-  0x0a positive-large E L
+  0x08 positive-small ~-E M
+  0x0a positive-large E M
   0x0b positive infinity
   0x0c text T
   0x0d binary B

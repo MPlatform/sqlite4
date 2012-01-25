@@ -6856,6 +6856,44 @@ int sqlite4_vtab_on_conflict(sqlite4 *);
 /* #define SQLITE_ABORT 4  // Also an error code */
 #define SQLITE_REPLACE  5
 
+/*
+** CAPI4REF: Representation Of Numbers
+**
+** Every number in SQLite is represented in memory by an instance of
+** the following object.
+*/
+typedef struct sqlite4_num sqlite4_num;
+struct sqlite4_num {
+  unsigned char sign;     /* Sign of the overall value */
+  unsigned char approx;   /* True if the value is approximate */
+  unsigned short e;       /* The exponent. */
+  sqlite4_uint64 m;       /* The significant */
+};
+
+/*
+** CAPI4REF: Operations On SQLite Number Objects
+*/
+sqlite4_num sqlite4_num_add(sqlite4_num, sqlite4_num);
+sqlite4_num sqlite4_num_sub(sqlite4_num, sqlite4_num);
+sqlite4_num sqlite4_num_mul(sqlite4_num, sqlite4_num);
+sqlite4_num sqlite4_num_div(sqlite4_num, sqlite4_num);
+int sqlite4_num_isinf(sqlite4_num);
+int sqlite4_num_isnan(sqlite4_num);
+sqlite4_num sqlite4_num_round(sqlite4_num, int iDigit);
+int sqlite4_num_compare(sqlite4_num, sqlite4_num);
+sqlite4_num sqlite4_num_from_text(const char*, int n, unsigned flags);
+sqlite4_num sqlite4_num_from_int64(sqlite4_int64);
+sqlite4_num sqlite4_num_from_double(double);
+int sqlite4_num_to_int32(sqlite4_num, int*);
+int sqlite4_num_to_int64(sqlite4_num, sqlite4_int64*);
+double sqlite4_num_to_double(sqlite4_num);
+int sqlite4_num_to_text(sqlite4_num, char*);
+
+/*
+** CAPI4REF: Flags For Text-To-Numeric Conversion
+*/
+#define SQLITE_PREFIX_ONLY         0x10
+#define SQLITE_IGNORE_WHITESPACE   0x20
 
 
 /*

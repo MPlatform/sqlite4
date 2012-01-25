@@ -461,6 +461,13 @@ typedef INT8_TYPE i8;              /* 1-byte signed integer */
 #define SQLITE_MAX_U32  ((((u64)1)<<32)-1)
 
 /*
+** In the sqlite4_num object, the maximum exponent value.  Values
+** larger than this are +Inf, or -Inf, or NaN.
+*/
+#define SQLITE_MX_EXP   999    /* Maximum exponent */
+#define SQLITE_NAN_EXP 2000    /* Exponent to use for NaN */
+
+/*
 ** The datatype used to store estimates of the number of rows in a
 ** table or index.  This is an unsigned integer type.  For 99.9% of
 ** the world, a 32-bit integer is sufficient.  But a 64-bit integer
@@ -499,6 +506,7 @@ extern const int sqlite4one;
 */
 #define LARGEST_INT64  (0xffffffff|(((i64)0x7fffffff)<<32))
 #define SMALLEST_INT64 (((i64)-1) - LARGEST_INT64)
+#define LARGEST_UINT64  (0xffffffff|(((i64)0xffffffff)<<32))
 
 /* 
 ** Round up a number to the next larger multiple of 8.  This is used
@@ -2656,8 +2664,10 @@ void sqlite4StatusSet(int, int);
 
 #ifndef SQLITE_OMIT_FLOATING_POINT
   int sqlite4IsNaN(double);
+  int sqlite4IsInf(double);
 #else
 # define sqlite4IsNaN(X)  0
+# define sqlite4IsInf(X)  0
 #endif
 
 void sqlite4VXPrintf(StrAccum*, int, const char*, va_list);

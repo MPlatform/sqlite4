@@ -76,6 +76,15 @@ int sqlite4IsNaN(double x){
   testcase( rc );
   return rc;
 }
+
+/*
+** If r is not infinity, return 0.  If it is negative infinity return negative.
+** Return positive if r is positive infinity.
+*/
+int sqlite4IsInf(double r){
+  return isinf(r);
+}
+  
 #endif /* SQLITE_OMIT_FLOATING_POINT */
 
 /*

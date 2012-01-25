@@ -2439,21 +2439,16 @@ case OP_Affinity: {
   break;
 }
 
-/* Opcode: MakeKey P1 P2 P3 P4 *
+/* Opcode: MakeKey P1 * * * *
 **
-** Convert P2 registers beginning with P1 into a key.
-**
-** P4 is a KeyInfo structure that is used to determine the collating
-** sequences and sort orders for each element in the key.
+** This must be followed immediately by a MakeRecord opcode.  This
+** opcode performs the subsequence MakeRecord but instead of generating
+** a data record, generates a key for the cursor P1.
 */
-case OP_MakeKey: {
-  /* fall through into OP_MakeRecord */
-}
-
 /* Opcode: MakeRecord P1 P2 P3 P4 *
 **
 ** Convert P2 registers beginning with P1 into the [record format]
-** use as a data record in a database table
+** use as a data record in a database table and store the result in P4.
 ** The OP_Column opcode can decode the record later.
 **
 ** P4 may be a string that is P2 characters long.  The nth character of the
@@ -2465,6 +2460,7 @@ case OP_MakeKey: {
 **
 ** If P4 is NULL then all index fields have the affinity NONE.
 */
+case OP_MakeKey:
 case OP_MakeRecord: {
   u8 *zNewRecord;        /* A buffer to hold the data for the new record */
   Mem *pRec;             /* The new record */
@@ -2481,29 +2477,25 @@ case OP_MakeRecord: {
   int file_format;       /* File format to use for encoding */
   int i;                 /* Space used in zNewRecord[] */
   int len;               /* Length of a field */
+  VdbeCursor *pC;        /* Cursor to generate key for */
   u8 *aRec2;
   int nRec2;
 
-  /* Assuming the record contains N fields, the record format looks
-  ** like this:
-  **
-  ** ------------------------------------------------------------------------
-  ** | hdr-size | type 0 | type 1 | ... | type N-1 | data0 | ... | data N-1 | 
-  ** ------------------------------------------------------------------------
-  **
-  ** Data(0) is taken from register P1.  Data(1) comes from register P1+1
-  ** and so froth.
-  **
-  ** Each type field is a varint representing the serial type of the 
-  ** corresponding data element (see sqlite4VdbeSerialType()). The
-  ** hdr-size field is also a varint which is the offset from the beginning
-  ** of the record to data0.
-  */
   nData = 0;         /* Number of bytes of data space */
   nHdr = 0;          /* Number of bytes of header space */
   nZero = 0;         /* Number of zero bytes at the end of the record */
+  if( pOp->opcode==OP_MakeKey ){
+    pC = p->apCsr[pOp->p1];
+    assert( pC!=0 );
+    assert( pC->pKeyInfo!=0 );
+    pc++;
+    pOp++;
+    assert( pOp->opcode==OP_MakeRecord );
+  }else{
+    pC = 0;
+  }
   nField = pOp->p1;
-  zAffinity = pOp->opcode==OP_MakeRecord ? pOp->p4.z : 0;
+  zAffinity = pOp->p4.z;
   assert( nField>0 && pOp->p2>0 && pOp->p2+nField<=p->nMem+1 );
   pData0 = &aMem[nField];
   nField = pOp->p2;
@@ -2540,11 +2532,17 @@ case OP_MakeRecord: {
   }
 
   aRec2 = 0;
-  sqlite4VdbeEncodeData(db, pData0, nField, &aRec2, &nRec2);
+  if( pC ){
+    sqlite4VdbeEncodeKey(db, pData0, nField, pC->iRoot, pC->pKeyInfo,
+                         &aRec2, &nRec2);
+  }else{
+    sqlite4VdbeEncodeData(db, pData0, nField, &aRec2, &nRec2);
+  }
   if( aRec2 ){
-    printf("DATA:");
+    printf(pC ? "KEY:":"DATA:");
     for(i=0; i<nRec2; i++) printf(" %02x", aRec2[i]&0xff);
     printf("\n");
+    fflush(stdout);
     sqlite4DbFree(db, aRec2);
   }
 

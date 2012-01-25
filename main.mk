@@ -57,7 +57,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
          fts3_write.o func.o global.o hash.o \
          icu.o insert.o journal.o kvmem.o legacy.o loadext.o \
-         main.o malloc.o mem0.o mem1.o mem2.o mem3.o mem5.o \
+         main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          memjournal.o \
          mutex.o mutex_noop.o mutex_os2.o mutex_unix.o mutex_w32.o \
          notify.o opcodes.o os.o os_os2.o os_unix.o os_win.o \
@@ -105,6 +105,7 @@ SRC = \
   $(TOP)/src/loadext.c \
   $(TOP)/src/main.c \
   $(TOP)/src/malloc.c \
+  $(TOP)/src/math.c \
   $(TOP)/src/mem0.c \
   $(TOP)/src/mem1.c \
   $(TOP)/src/mem2.c \

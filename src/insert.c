@@ -1329,6 +1329,7 @@ void sqlite4GenerateConstraintChecks(
       }
     }
     sqlite4VdbeAddOp2(v, OP_SCopy, regRowid, regIdx+i);
+    sqlite4VdbeAddOp1(v, OP_MakeKey, baseCur+iCur+1);
     sqlite4VdbeAddOp3(v, OP_MakeRecord, regIdx, pIdx->nColumn+1, aRegIdx[iCur]);
     sqlite4VdbeChangeP4(v, -1, sqlite4IndexAffinityStr(v, pIdx), P4_TRANSIENT);
     sqlite4ExprCacheAffinityChange(pParse, regIdx, pIdx->nColumn+1);
