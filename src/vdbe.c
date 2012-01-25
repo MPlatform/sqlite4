@@ -2481,6 +2481,8 @@ case OP_MakeRecord: {
   int file_format;       /* File format to use for encoding */
   int i;                 /* Space used in zNewRecord[] */
   int len;               /* Length of a field */
+  u8 *aRec2;
+  int nRec2;
 
   /* Assuming the record contains N fields, the record format looks
   ** like this:
@@ -2535,6 +2537,15 @@ case OP_MakeRecord: {
     }else if( len ){
       nZero = 0;
     }
+  }
+
+  aRec2 = 0;
+  sqlite4VdbeEncodeData(db, pData0, nField, &aRec2, &nRec2);
+  if( aRec2 ){
+    printf("DATA:");
+    for(i=0; i<nRec2; i++) printf(" %02x", aRec2[i]&0xff);
+    printf("\n");
+    sqlite4DbFree(db, aRec2);
   }
 
   /* Add the initial header varint and total the size */

@@ -2958,6 +2958,8 @@ int sqlite4PutVarint32(unsigned char*, u32);
 u8 sqlite4GetVarint(const unsigned char *, u64 *);
 u8 sqlite4GetVarint32(const unsigned char *, u32 *);
 int sqlite4VarintLen(u64 v);
+int sqlite4GetVarint64(const unsigned char*, sqlite4_uint64 *pResult);
+int sqlite4PutVarint64(unsigned char*, sqlite4_uint64);
 
 /*
 ** The header of a record consists of a sequence variable-length integers.

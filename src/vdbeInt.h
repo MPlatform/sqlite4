@@ -36,6 +36,9 @@ typedef struct VdbeSorter VdbeSorter;
 /* Opaque type used by the explainer */
 typedef struct Explain Explain;
 
+/* Opaque type used by vdbecodec.c */
+typedef struct ValueDecoder ValueDecoder;
+
 /*
 ** A cursor is a pointer into a single BTree within a database file.
 ** The cursor can seek to a BTree entry with a particular key, or
@@ -377,6 +380,36 @@ u32 sqlite4VdbeSerialPut(unsigned char*, int, Mem*, int);
 u32 sqlite4VdbeSerialGet(const unsigned char*, u32, Mem*);
 void sqlite4VdbeDeleteAuxData(VdbeFunc*, int);
 
+int sqlite4VdbeCreateDecoder(
+  sqlite4 *db,                /* The database connection */
+  const unsigned char *aIn,   /* The input data blob */
+  int nIn,                    /* Number of bytes in aIn[] */
+  int mxCol,                  /* Maximum number of columns in aIn[] */
+  ValueDecoder **ppOut        /* The newly generated decoder object */
+);
+int sqlite4VdbeDestroyDecoder(ValueDecoder *pDecoder);
+int sqlite4VdbeDecodeValue(
+  ValueDecoder *pDecoder,      /* The decoder for the whole string */
+  int iVal,                    /* Index of the value to decode.  First is 0 */
+  Mem *pDefault,               /* The default value.  Often NULL */
+  Mem *pOut                    /* Write the result here */
+);
+int sqlite4VdbeEncodeData(
+  sqlite4 *db,                /* The database connection */
+  Mem *aIn,                   /* Array of values to encode */
+  int nIn,                    /* Number of entries in aIn[] */
+  u8 **pzOut,                 /* The output data record */
+  int *pnOut                  /* Bytes of content in pzOut */
+);
+int sqlite4VdbeEncodeKey(
+  sqlite4 *db,                 /* The database connection */
+  Mem *aIn,                    /* Values to be encoded */
+  int nIn,                     /* Number of entries in aIn[] */
+  int iTabno,                  /* The table this key applies to */
+  KeyInfo *pKeyInfo,           /* Collating sequence information */
+  u8 **pzOut,                  /* Write the resulting key here */
+  int *pnOut                   /* Number of bytes in the key */
+);
 int sqlite2BtreeKeyCompare(BtCursor *, const void *, int, int, int *);
 int sqlite4VdbeIdxKeyCompare(VdbeCursor*,UnpackedRecord*,int*);
 int sqlite4VdbeIdxRowid(sqlite4*, BtCursor *, i64 *);

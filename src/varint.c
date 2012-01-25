@@ -99,7 +99,7 @@
 ** Decode the varint in z[].  Write the integer value into *pResult and
 ** return the number of bytes in the varint.
 */
-int sqlite4GetVarint64(const unsigned char *z, uint64_t *pResult){
+int sqlite4GetVarint64(const unsigned char *z, sqlite4_uint64 *pResult){
   unsigned int x;
   if( z[0]<=240 ){
     *pResult = z[0];
@@ -123,18 +123,18 @@ int sqlite4GetVarint64(const unsigned char *z, uint64_t *pResult){
     return 5;
   }
   if( z[0]==252 ){
-    *pResult = (((uint64_t)x)<<8) + z[5];
+    *pResult = (((sqlite4_uint64)x)<<8) + z[5];
     return 6;
   }
   if( z[0]==253 ){
-    *pResult = (((uint64_t)x)<<16) + (z[5]<<8) + z[6];
+    *pResult = (((sqlite4_uint64)x)<<16) + (z[5]<<8) + z[6];
     return 7;
   }
   if( z[0]==254 ){
-    *pResult = (((uint64_t)x)<<24) + (z[5]<<16) + (z[6]<<8) + z[7];
+    *pResult = (((sqlite4_uint64)x)<<24) + (z[5]<<16) + (z[6]<<8) + z[7];
     return 8;
   }
-  *pResult = (((uint64_t)x)<<32) +
+  *pResult = (((sqlite4_uint64)x)<<32) +
                (0xffffffff & ((z[5]<<24) + (z[6]<<16) + (z[7]<<8) + z[8]));
   return 9;
 }
@@ -154,7 +154,7 @@ static void varintWrite32(unsigned char *z, unsigned int y){
 ** long to accommodate the largest possible varint.  Return the number of
 ** bytes of z[] used.
 */
-int sqlite4PutVarint64(unsigned char *z, uint64_t x){
+int sqlite4PutVarint64(unsigned char *z, sqlite4_uint64 x){
   unsigned int w, y;
   if( x<=240 ){
     z[0] = (unsigned char)x;
@@ -230,7 +230,7 @@ static unsigned int randInt(void){
   return rx ^ ry;
 }
 int main(int argc,char **argv){
-  uint64_t x, y, px;
+  sqlite4_uint64 x, y, px;
   int i, n1, n2, pn;
   int nbit;
   unsigned char z[20], zp[20];
@@ -240,7 +240,7 @@ int main(int argc,char **argv){
     x = (x<<32) + randInt();
     nbit = randInt()%65;
     if( nbit<64 ){
-      x &= (((uint64_t)1)<<nbit)-1;
+      x &= (((sqlite4_uint64)1)<<nbit)-1;
     }
     n1 = sqlite4PutVarint64(z, x);
     assert( n1>=1 && n1<=9 );
@@ -276,7 +276,7 @@ int main(int argc,char **argv){
 #ifdef VARINT_TOOL
 int main(int argc, char **argv){
   int i, j, n;
-  uint64_t x;
+  sqlite4_uint64 x;
   char out[20];
   for(i=1; i<argc; i++){
     const char *z = argv[i];

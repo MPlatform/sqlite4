@@ -64,9 +64,10 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          pager.o parse.o pcache.o pcache1.o pragma.o prepare.o printf.o \
          random.o resolve.o rowset.o rtree.o select.o status.o storage.o \
          table.o tokenize.o trigger.o \
-         update.o util.o \
-         vdbe.o vdbeapi.o vdbeaux.o vdbeblob.o vdbemem.o vdbesort.o \
-	 vdbetrace.o walker.o where.o utf.o vtab.o
+         update.o util.o varint.o \
+         vdbe.o vdbeapi.o vdbeaux.o vdbeblob.o vdbecodec.o \
+         vdbemem.o vdbesort.o vdbetrace.o \
+         walker.o where.o utf.o vtab.o
 
 
 
@@ -151,6 +152,7 @@ SRC = \
   $(TOP)/src/utf.c \
   $(TOP)/src/update.c \
   $(TOP)/src/util.c \
+  $(TOP)/src/varint.c \
   $(TOP)/src/vdbe.c \
   $(TOP)/src/vdbe.h \
   $(TOP)/src/vdbeapi.c \
