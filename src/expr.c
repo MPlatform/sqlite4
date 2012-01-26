@@ -1689,7 +1689,7 @@ int sqlite4CodeSubselect(
         int i;
         ExprList *pList = pExpr->x.pList;
         struct ExprList_item *pItem;
-        int r1, r2, r3;
+        int r1, r2, r3, r4;
 
         if( !affinity ){
           affinity = SQLITE_AFF_NONE;
@@ -1724,9 +1724,12 @@ int sqlite4CodeSubselect(
                                 sqlite4VdbeCurrentAddr(v)+2);
               sqlite4VdbeAddOp3(v, OP_Insert, pExpr->iTable, r2, r3);
             }else{
+              int r4 = sqlite4GetTempReg(pParse);
+              sqlite4VdbeAddOp2(v, OP_MakeKey, pExpr->iTable, r4);
               sqlite4VdbeAddOp4(v, OP_MakeRecord, r3, 1, r2, &affinity, 1);
               sqlite4ExprCacheAffinityChange(pParse, r3, 1);
-              sqlite4VdbeAddOp2(v, OP_IdxInsert, pExpr->iTable, r2);
+              sqlite4VdbeAddOp3(v, OP_IdxInsert, pExpr->iTable, r2, r4);
+              sqlite4ReleaseTempReg(pParse, r4);
             }
           }
         }

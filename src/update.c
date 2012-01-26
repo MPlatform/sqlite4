@@ -245,7 +245,8 @@ void sqlite4Update(
   for(j=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, j++){
     int reg;
     if( hasFK || chngRowid ){
-      reg = ++pParse->nMem;
+      reg = ++pParse->nMem;  /* Register for index key */
+      pParse->nMem++;        /* Extra register for index data */
     }else{
       reg = 0;
       for(i=0; i<pIdx->nColumn; i++){

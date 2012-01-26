@@ -762,7 +762,8 @@ void sqlite4Insert(
       goto insert_cleanup;
     }
     for(i=0; i<nIdx; i++){
-      aRegIdx[i] = ++pParse->nMem;
+      aRegIdx[i] = ++pParse->nMem;  /* Register in which to store key */
+      pParse->nMem++;               /* Extra register for data */
     }
   }
 
@@ -1329,7 +1330,7 @@ void sqlite4GenerateConstraintChecks(
       }
     }
     sqlite4VdbeAddOp2(v, OP_SCopy, regRowid, regIdx+i);
-    sqlite4VdbeAddOp1(v, OP_MakeKey, baseCur+iCur+1);
+    sqlite4VdbeAddOp2(v, OP_MakeKey, baseCur+iCur+1, aRegIdx[iCur]+1);
     sqlite4VdbeAddOp3(v, OP_MakeRecord, regIdx, pIdx->nColumn+1, aRegIdx[iCur]);
     sqlite4VdbeChangeP4(v, -1, sqlite4IndexAffinityStr(v, pIdx), P4_TRANSIENT);
     sqlite4ExprCacheAffinityChange(pParse, regIdx, pIdx->nColumn+1);
@@ -1447,7 +1448,7 @@ void sqlite4CompleteInsertion(
   for(nIdx=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, nIdx++){}
   for(i=nIdx-1; i>=0; i--){
     if( aRegIdx[i]==0 ) continue;
-    sqlite4VdbeAddOp2(v, OP_IdxInsert, baseCur+i+1, aRegIdx[i]);
+    sqlite4VdbeAddOp3(v, OP_IdxInsert, baseCur+i+1, aRegIdx[i], aRegIdx[i]+1);
     if( useSeekResult ){
       sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT);
     }
@@ -1621,7 +1622,7 @@ static int xferOptimization(
   KeyInfo *pKey;                   /* Key information for an index */
   int regAutoinc;                  /* Memory register used by AUTOINC */
   int destHasUniqueIdx = 0;        /* True if pDest has a UNIQUE index */
-  int regData, regRowid;           /* Registers holding data and rowid */
+  int regData, regRowid, regKey;   /* Registers holding data and rowid */
 
   if( pSelect==0 ){
     return 0;   /* Must be of the form  INSERT INTO ... SELECT ... */
@@ -1785,6 +1786,7 @@ static int xferOptimization(
   }
   sqlite4OpenTable(pParse, iSrc, iDbSrc, pSrc, OP_OpenRead);
   emptySrcTest = sqlite4VdbeAddOp2(v, OP_Rewind, iSrc, 0);
+  regKey = sqlite4GetTempReg(pParse);
   regData = sqlite4GetTempReg(pParse);
   regRowid = sqlite4GetTempReg(pParse);
   if( pDest->iPKey>=0 ){
@@ -1821,14 +1823,17 @@ static int xferOptimization(
                       (char*)pKey, P4_KEYINFO_HANDOFF);
     VdbeComment((v, "%s", pDestIdx->zName));
     addr1 = sqlite4VdbeAddOp2(v, OP_Rewind, iSrc, 0);
-    sqlite4VdbeAddOp2(v, OP_RowKey, iSrc, regData);
-    sqlite4VdbeAddOp3(v, OP_IdxInsert, iDest, regData, 1);
+    sqlite4VdbeAddOp2(v, OP_RowKey, iSrc, regKey);
+    sqlite4VdbeAddOp2(v, OP_RowData, iSrc, regData);
+    sqlite4VdbeAddOp3(v, OP_IdxInsert, iDest, regKey, regData);
+    sqlite4VdbeChangeP5(v, OPFLAG_APPENDBIAS);
     sqlite4VdbeAddOp2(v, OP_Next, iSrc, addr1+1);
     sqlite4VdbeJumpHere(v, addr1);
   }
   sqlite4VdbeJumpHere(v, emptySrcTest);
   sqlite4ReleaseTempReg(pParse, regRowid);
   sqlite4ReleaseTempReg(pParse, regData);
+  sqlite4ReleaseTempReg(pParse, regKey);
   sqlite4VdbeAddOp2(v, OP_Close, iSrc, 0);
   sqlite4VdbeAddOp2(v, OP_Close, iDest, 0);
   if( emptyDestTest ){

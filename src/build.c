@@ -2290,7 +2290,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIndex, int memRootPage){
   ** records into the sorter. */
   sqlite4OpenTable(pParse, iTab, iDb, pTab, OP_OpenRead);
   addr1 = sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
-  regRecord = sqlite4GetTempReg(pParse);
+  regRecord = sqlite4GetTempRange(pParse,2);
 
 #ifndef SQLITE_OMIT_MERGE_SORT
   sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1, iIdx);
@@ -2310,8 +2310,8 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIndex, int memRootPage){
     addr2 = sqlite4VdbeCurrentAddr(v);
   }
   sqlite4VdbeAddOp2(v, OP_SorterData, iSorter, regRecord);
-  sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, regRecord, 1);
-  sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT);
+  sqlite4VdbeAddOp2(v, OP_IdxInsert, iIdx, regRecord);  ***** busted
+  sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT | OPFLAG_APPENDBIAS);
 #else
   regIdxKey = sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1, iIdx);
   addr2 = addr1 + 1;
@@ -2333,10 +2333,10 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIndex, int memRootPage){
     sqlite4HaltConstraint(
         pParse, OE_Abort, "indexed columns are not unique", P4_STATIC);
   }
-  sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, regRecord, 0);
+  sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, regRecord, regRecord+1);
   sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT);
 #endif
-  sqlite4ReleaseTempReg(pParse, regRecord);
+  sqlite4ReleaseTempRange(pParse, regRecord, 2);
   sqlite4VdbeAddOp2(v, OP_SorterNext, iSorter, addr2);
   sqlite4VdbeJumpHere(v, addr1);
 

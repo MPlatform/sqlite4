@@ -553,6 +553,7 @@ int sqlite4VdbeEncodeKey(
   int i;
   int rc = SQLITE_OK;
   KeyEncoder x;
+  u8 *so = pKeyInfo->aSortOrder;
 
   x.db = db;
   x.aOut = 0;
@@ -560,11 +561,10 @@ int sqlite4VdbeEncodeKey(
   x.nAlloc = 0;
   *paOut = 0;
   *pnOut = 0;
-  assert( pKeyInfo->aSortOrder!=0 );
   if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE_NOMEM;
   x.nOut = sqlite4PutVarint64(x.aOut, iTabno);
   for(i=0; i<pKeyInfo->nField && rc==SQLITE_OK; i++){
-    rc = encodeOneKeyValue(&x, aIn+i, pKeyInfo->aSortOrder[i],
+    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC,
                            pKeyInfo->aColl[i]);
   }
   for(; i<nIn && rc==SQLITE_OK; i++){

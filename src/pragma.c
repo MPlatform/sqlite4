@@ -431,41 +431,6 @@ void sqlite4Pragma(
   }else
 
   /*
-  **  PRAGMA [database.]max_page_count
-  **  PRAGMA [database.]max_page_count=N
-  **
-  ** The first form reports the current setting for the
-  ** maximum number of pages in the database file.  The 
-  ** second form attempts to change this setting.  Both
-  ** forms return the current setting.
-  **
-  ** The absolute value of N is used.  This is undocumented and might
-  ** change.  The only purpose is to provide an easy way to test
-  ** the sqlite4AbsInt32() function.
-  **
-  **  PRAGMA [database.]page_count
-  **
-  ** Return the number of pages in the specified database.
-  */
-  if( sqlite4StrICmp(zLeft,"page_count")==0
-   || sqlite4StrICmp(zLeft,"max_page_count")==0
-  ){
-    int iReg;
-    if( sqlite4ReadSchema(pParse) ) goto pragma_out;
-    sqlite4CodeVerifySchema(pParse, iDb);
-    iReg = ++pParse->nMem;
-    if( sqlite4Tolower(zLeft[0])=='p' ){
-      sqlite4VdbeAddOp2(v, OP_Pagecount, iDb, iReg);
-    }else{
-      sqlite4VdbeAddOp3(v, OP_MaxPgcnt, iDb, iReg, 
-                        sqlite4AbsInt32(sqlite4Atoi(zRight)));
-    }
-    sqlite4VdbeAddOp2(v, OP_ResultRow, iReg, 1);
-    sqlite4VdbeSetNumCols(v, 1);
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, zLeft, SQLITE_TRANSIENT);
-  }else
-
-  /*
   **  PRAGMA [database.]locking_mode
   **  PRAGMA [database.]locking_mode = (normal|exclusive)
   */

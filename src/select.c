@@ -423,19 +423,22 @@ static void pushOntoSorter(
   int nExpr = pOrderBy->nExpr;
   int regBase = sqlite4GetTempRange(pParse, nExpr+2);
   int regRecord = sqlite4GetTempReg(pParse);
+  int regKey = sqlite4GetTempReg(pParse);
   int op;
   sqlite4ExprCacheClear(pParse);
   sqlite4ExprCodeExprList(pParse, pOrderBy, regBase, 0);
   sqlite4VdbeAddOp2(v, OP_Sequence, pOrderBy->iECursor, regBase+nExpr);
   sqlite4ExprCodeMove(pParse, regData, regBase+nExpr+1, 1);
+  sqlite4VdbeAddOp2(v, OP_MakeKey, pOrderBy->iECursor, regKey);
   sqlite4VdbeAddOp3(v, OP_MakeRecord, regBase, nExpr + 2, regRecord);
   if( pSelect->selFlags & SF_UseSorter ){
     op = OP_SorterInsert;
   }else{
     op = OP_IdxInsert;
   }
-  sqlite4VdbeAddOp2(v, op, pOrderBy->iECursor, regRecord);
+  sqlite4VdbeAddOp3(v, op, pOrderBy->iECursor, regRecord, regKey);
   sqlite4ReleaseTempReg(pParse, regRecord);
+  sqlite4ReleaseTempReg(pParse, regKey);
   sqlite4ReleaseTempRange(pParse, regBase, nExpr+2);
   if( pSelect->iLimit ){
     int addr1, addr2;
@@ -490,14 +493,17 @@ static void codeDistinct(
   int iMem           /* First element */
 ){
   Vdbe *v;
-  int r1;
+  int r1, r2;
 
   v = pParse->pVdbe;
   r1 = sqlite4GetTempReg(pParse);
+  r2 = sqlite4GetTempReg(pParse);
   sqlite4VdbeAddOp4Int(v, OP_Found, iTab, addrRepeat, iMem, N);
+  sqlite4VdbeAddOp2(v, OP_MakeKey, iTab, r2);
   sqlite4VdbeAddOp3(v, OP_MakeRecord, iMem, N, r1);
-  sqlite4VdbeAddOp2(v, OP_IdxInsert, iTab, r1);
+  sqlite4VdbeAddOp3(v, OP_IdxInsert, iTab, r1, r2);
   sqlite4ReleaseTempReg(pParse, r1);
+  sqlite4ReleaseTempReg(pParse, r2);
 }
 
 #ifndef SQLITE_OMIT_SUBQUERY
@@ -608,11 +614,14 @@ static void selectInnerLoop(
     */
 #ifndef SQLITE_OMIT_COMPOUND_SELECT
     case SRT_Union: {
-      int r1;
+      int r1, r2;
       r1 = sqlite4GetTempReg(pParse);
+      r2 = sqlite4GetTempReg(pParse);
+      sqlite4VdbeAddOp2(v, OP_MakeKey, iParm, r2);
       sqlite4VdbeAddOp3(v, OP_MakeRecord, regResult, nColumn, r1);
-      sqlite4VdbeAddOp2(v, OP_IdxInsert, iParm, r1);
+      sqlite4VdbeAddOp3(v, OP_IdxInsert, iParm, r1, r2);
       sqlite4ReleaseTempReg(pParse, r1);
+      sqlite4ReleaseTempReg(pParse, r2);
       break;
     }
 
@@ -663,10 +672,13 @@ static void selectInnerLoop(
         pushOntoSorter(pParse, pOrderBy, p, regResult);
       }else{
         int r1 = sqlite4GetTempReg(pParse);
+        int r2 = sqlite4GetTempReg(pParse);
+        sqlite4VdbeAddOp2(v, OP_MakeKey, iParm, r2);
         sqlite4VdbeAddOp4(v, OP_MakeRecord, regResult, 1, r1, &p->affinity, 1);
         sqlite4ExprCacheAffinityChange(pParse, regResult, 1);
-        sqlite4VdbeAddOp2(v, OP_IdxInsert, iParm, r1);
+        sqlite4VdbeAddOp3(v, OP_IdxInsert, iParm, r1, r2);
         sqlite4ReleaseTempReg(pParse, r1);
+        sqlite4ReleaseTempReg(pParse, r2);
       }
       break;
     }
@@ -930,9 +942,12 @@ static void generateSortTail(
 #ifndef SQLITE_OMIT_SUBQUERY
     case SRT_Set: {
       assert( nColumn==1 );
+      int regKey = sqlite4GetTempReg(pParse);
+      sqlite4VdbeAddOp2(v, OP_MakeKey, iParm, regKey);
       sqlite4VdbeAddOp4(v, OP_MakeRecord, regRow, 1, regRowid, &p->affinity, 1);
       sqlite4ExprCacheAffinityChange(pParse, regRow, 1);
-      sqlite4VdbeAddOp2(v, OP_IdxInsert, iParm, regRowid);
+      sqlite4VdbeAddOp3(v, OP_IdxInsert, iParm, regRowid, regKey);
+      sqlite4ReleaseTempReg(pParse, regKey);
       break;
     }
     case SRT_Mem: {
@@ -1985,15 +2000,18 @@ static int generateOutputSubroutine(
     ** item into the set table with bogus data.
     */
     case SRT_Set: {
-      int r1;
+      int r1, r2;
       assert( pIn->nMem==1 );
       p->affinity = 
          sqlite4CompareAffinity(p->pEList->a[0].pExpr, pDest->affinity);
       r1 = sqlite4GetTempReg(pParse);
+      r2 = sqlite4GetTempReg(pParse);
+      sqlite4VdbeAddOp2(v, OP_MakeKey, pDest->iParm, r2);
       sqlite4VdbeAddOp4(v, OP_MakeRecord, pIn->iMem, 1, r1, &p->affinity, 1);
       sqlite4ExprCacheAffinityChange(pParse, pIn->iMem, 1);
-      sqlite4VdbeAddOp2(v, OP_IdxInsert, pDest->iParm, r1);
+      sqlite4VdbeAddOp3(v, OP_IdxInsert, pDest->iParm, r1, r2);
       sqlite4ReleaseTempReg(pParse, r1);
+      sqlite4ReleaseTempReg(pParse, r2);
       break;
     }
 

@@ -2330,6 +2330,7 @@ struct AuthContext {
 #define OPFLAG_APPEND        0x08    /* This is likely to be an append */
 #define OPFLAG_USESEEKRESULT 0x10    /* Try to avoid a seek in BtreeInsert() */
 #define OPFLAG_CLEARCACHE    0x20    /* Clear pseudo-table cache in OP_Column */
+#define OPFLAG_APPENDBIAS    0x40    /* Bias inserts for appending */
 
 /*
  * Each trigger present in the database schema is stored as an instance of

@@ -2439,11 +2439,13 @@ case OP_Affinity: {
   break;
 }
 
-/* Opcode: MakeKey P1 * * * *
+/* Opcode: MakeKey P1 P2 * * *
 **
 ** This must be followed immediately by a MakeRecord opcode.  This
 ** opcode performs the subsequence MakeRecord but instead of generating
-** a data record, generates a key for the cursor P1.
+** a data record, generates a key for the cursor P1.  The data is
+** written to P2 of this opcode.  A separate key structure is written to
+** P3 of the subsequent MakeRecord opcode.
 */
 /* Opcode: MakeRecord P1 P2 P3 P4 *
 **
@@ -4203,7 +4205,6 @@ case OP_RowData: {
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
   assert( pC->isSorter==0 );
-  assert( pC->isTable || pOp->opcode!=OP_RowData );
   assert( pC->isIndex || pOp->opcode==OP_RowData );
   assert( pC!=0 );
   assert( pC->nullRow==0 );
@@ -4486,7 +4487,7 @@ case OP_Next: {        /* jump */
   break;
 }
 
-/* Opcode: IdxInsert P1 P2 P3 * P5
+/* Opcode: IdxInsert P1 P2 * * P5
 **
 ** Register P2 holds an SQL index key made using the
 ** MakeRecord instructions.  This opcode writes that key
@@ -4524,7 +4525,8 @@ case OP_IdxInsert: {        /* in2 */
       }else{
         nKey = pIn2->n;
         zKey = pIn2->z;
-        rc = sqlite4BtreeInsert(pCrsr, zKey, nKey, "", 0, 0, pOp->p3, 
+        rc = sqlite4BtreeInsert(pCrsr, zKey, nKey, "", 0, 0,
+            ((pOp->p5 & OPFLAG_APPENDBIAS) ? 1 : 0),
             ((pOp->p5 & OPFLAG_USESEEKRESULT) ? pC->seekResult : 0)
             );
         assert( pC->deferredMoveto==0 );
@@ -4680,15 +4682,6 @@ case OP_IdxGE: {        /* jump */
 ** P3==1 then the table to be clear is in the auxiliary database file
 ** that is used to store tables create using CREATE TEMPORARY TABLE.
 **
-** If AUTOVACUUM is enabled then it is possible that another root page
-** might be moved into the newly deleted root page in order to keep all
-** root pages contiguous at the beginning of the database.  The former
-** value of the root page that moved - its value before the move occurred -
-** is stored in register P2.  If no page 
-** movement was required (because the table being dropped was already 
-** the last one in the database) then a zero is stored in register P2.
-** If AUTOVACUUM is disabled then a zero is stored in register P2.
-**
 ** See also: Clear
 */
 case OP_Destroy: {     /* out2-prerelease */
@@ -4717,14 +4710,6 @@ case OP_Destroy: {     /* out2-prerelease */
     rc = sqlite4BtreeDropTable(db->aDb[iDb].pBt, pOp->p1, &iMoved);
     pOut->flags = MEM_Int;
     pOut->u.i = iMoved;
-#ifndef SQLITE_OMIT_AUTOVACUUM
-    if( rc==SQLITE_OK && iMoved!=0 ){
-      sqlite4RootPageMoved(db, iDb, iMoved, pOp->p1);
-      /* All OP_Destroy operations occur on the same btree */
-      assert( resetSchemaOnFault==0 || resetSchemaOnFault==iDb+1 );
-      resetSchemaOnFault = iDb+1;
-    }
-#endif
   }
   break;
 }
@@ -5890,43 +5875,6 @@ case OP_VUpdate: {
   break;
 }
 #endif /* SQLITE_OMIT_VIRTUALTABLE */
-
-#ifndef  SQLITE_OMIT_PAGER_PRAGMAS
-/* Opcode: Pagecount P1 P2 * * *
-**
-** Write the current number of pages in database P1 to memory cell P2.
-*/
-case OP_Pagecount: {            /* out2-prerelease */
-  pOut->u.i = sqlite4BtreeLastPage(db->aDb[pOp->p1].pBt);
-  break;
-}
-#endif
-
-
-#ifndef  SQLITE_OMIT_PAGER_PRAGMAS
-/* Opcode: MaxPgcnt P1 P2 P3 * *
-**
-** Try to set the maximum page count for database P1 to the value in P3.
-** Do not let the maximum page count fall below the current page count and
-** do not change the maximum page count value if P3==0.
-**
-** Store the maximum page count after the change in register P2.
-*/
-case OP_MaxPgcnt: {            /* out2-prerelease */
-  unsigned int newMax;
-  Btree *pBt;
-
-  pBt = db->aDb[pOp->p1].pBt;
-  newMax = 0;
-  if( pOp->p3 ){
-    newMax = sqlite4BtreeLastPage(pBt);
-    if( newMax < (unsigned)pOp->p3 ) newMax = (unsigned)pOp->p3;
-  }
-  pOut->u.i = sqlite4BtreeMaxPageCount(pBt, newMax);
-  break;
-}
-#endif
-
 
 #ifndef SQLITE_OMIT_TRACE
 /* Opcode: Trace * * * P4 *
