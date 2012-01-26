@@ -58,6 +58,7 @@ int sqlite4VdbeDestroyDecoder(ValueDecoder *p){
   if( p ){
     sqlite4DbFree(p->db, p);
   }
+  return SQLITE_OK;
 }
 
 /*
@@ -130,15 +131,15 @@ int sqlite4VdbeDecodeValue(
       if( size==0 ){
         sqlite4VdbeMemSetStr(pOut, "", 0, SQLITE_UTF8, SQLITE_TRANSIENT);
       }else if( p->a[ofst]>0x02 ){
-        sqlite4VdbeMemSetStr(pOut, p->a+ofst, size, 
+        sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 
                              SQLITE_UTF8, SQLITE_TRANSIENT);
       }else{
         static const u8 enc[] = { SQLITE_UTF8, SQLITE_UTF16LE, SQLITE_UTF16BE };
-        sqlite4VdbeMemSetStr(pOut, p->a+ofst+1, size-1, 
+        sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst+1), size-1, 
                              enc[p->a[ofst]], SQLITE_TRANSIENT);
       }
     }else{
-      sqlite4VdbeMemSetStr(pOut, p->a+ofst, size, 0, SQLITE_TRANSIENT);
+      sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0, SQLITE_TRANSIENT);
     }
   }
   if( i<iVal ) sqlite4VdbeMemShallowCopy(pOut, pDefault, MEM_Static);
@@ -187,7 +188,7 @@ int sqlite4VdbeEncodeData(
   int encoding = ENC(db);     /* Text encoding */
   struct dencAux {            /* For each input value of aIn[] */
     int n;                       /* Size of encoding at this position */
-    char z[12];                  /* Encoding for number at this position */
+    u8 z[12];                    /* Encoding for number at this position */
   } *aAux;
 
   aAux = sqlite4StackAllocZero(db, sizeof(*aAux)*nIn);
@@ -434,55 +435,53 @@ static int encodeOneKeyValue(
   int iStart = p->nOut;
   if( flags & MEM_Null ){
     if( enlargeEncoderAllocation(p, 1) ) return SQLITE_NOMEM;
-    p->aOut[p->nOut++] = 0x01;
+    p->aOut[p->nOut++] = 0x05;   /* NULL */
   }else
   if( flags & MEM_Int ){
     sqlite4_int64 v = pMem->u.i;
     if( enlargeEncoderAllocation(p, 11) ) return SQLITE_NOMEM;
     if( v==0 ){
-      p->aOut[p->nOut++] = 0x07;
+      p->aOut[p->nOut++] = 0x0a;  /* Numeric zero */
     }else if( v<0 ){
-      p->aOut[p->nOut++] = 0x04;
+      p->aOut[p->nOut++] = 0x08;  /* Large negative number */
       i = p->nOut;
       encodeIntKey((sqlite4_uint64)-v, p);
       while( i<p->nOut ) p->aOut[i++] ^= 0xff;
     }else{
-      p->aOut[p->nOut++] = 0x0a;
+      p->aOut[p->nOut++] = 0x0c;  /* Large positive number */
       encodeIntKey((sqlite4_uint64)v, p);
     }
   }else
   if( flags & MEM_Real ){
     double r = pMem->r;
-    int e;
-    sqlite4_uint64 m;
     if( enlargeEncoderAllocation(p, 16) ) return SQLITE_NOMEM;
     if( r==0.0 ){
-      p->aOut[p->nOut++] = 0x07;
+      p->aOut[p->nOut++] = 0x0a;  /* Numeric zero */
     }else if( sqlite4IsNaN(r) ){
-      p->aOut[p->nOut++] = 0x02;
+      p->aOut[p->nOut++] = 0x06;  /* NaN */
     }else if( (n = sqlite4IsInf(r))!=0 ){
-      p->aOut[p->nOut++] = r<0 ? 0x03 : 0x0b;
+      p->aOut[p->nOut++] = n<0 ? 0x07 : 0x0d;  /* Neg and Pos infinity */
     }else if( r<=-1.0 ){
-      p->aOut[p->nOut++] = 0x04;
+      p->aOut[p->nOut++] = 0x08;  /* Large negative values */
       i = p->nOut;
       encodeLargeFloatKey(-r, p);
       while( i<p->nOut ) p->aOut[i++] ^= 0xff;
     }else if( r<0.0 ){
-      p->aOut[p->nOut++] = 0x06;
+      p->aOut[p->nOut++] = 0x09;  /* Small negative values */
       i = p->nOut;
       encodeSmallFloatKey(-r, p);
       while( i<p->nOut ) p->aOut[i++] ^= 0xff;
     }else if( r<1.0 ){
-      p->aOut[p->nOut++] = 0x08;
+      p->aOut[p->nOut++] = 0x0b;  /* Small positive values */
       encodeSmallFloatKey(r, p);
     }else{
-      p->aOut[p->nOut++] = 0x0a;
+      p->aOut[p->nOut++] = 0x0c;  /* Large positive values */
       encodeLargeFloatKey(r, p);
     }
   }else
   if( flags & MEM_Str ){
     if( enlargeEncoderAllocation(p, pMem->n*4 + 2) ) return SQLITE_NOMEM;
-    p->aOut[p->nOut++] = 0x0c;
+    p->aOut[p->nOut++] = 0x0e;   /* Text */
     if( pColl==0 || pColl->xMkKey==0 ){
       memcpy(p->aOut+p->nOut, pMem->z, pMem->n);
       p->nOut += pMem->n;
@@ -506,7 +505,7 @@ static int encodeOneKeyValue(
     s = 1;
     t = 0;
     if( enlargeEncoderAllocation(p, (n*8+6)/7 + 2) ) return SQLITE_NOMEM;
-    p->aOut[p->nOut++] = 0x0d;
+    p->aOut[p->nOut++] = 0x0f;   /* Blob */
      for(i=0; i<n; i++){
       unsigned char x = a[i];
       p->aOut[p->nOut++] = 0x80 | t | (x>>s);

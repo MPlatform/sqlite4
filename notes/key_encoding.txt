@@ -1,10 +1,14 @@
 This note describes how record keys are encoded.  The encoding is designed
 such that memcmp() can be used to sort the keys into their proper order.
 
-A key consists of a list of one or more SQL values.  Each SQL value in the
-list has one of the following types:  NULL, numeric, text, binary.  Keys
-are compared value by value, from left to right, until a difference if found.
-The first difference determines the key order.
+A key consists of a table number followed by a list of one or more SQL 
+values.  Each SQL value in the list has one of the following types:  NULL, 
+numeric, text, or binary.  Keys are compared value by value, from left to 
+right, until a difference if found. The first difference determines the
+key order.
+
+The table number is a varint that identifies the table to which the key
+belongs.  Table numbers always sort in ASCENDING order.
 
 Each SQL value has a sort-order which is either ASCENDING or DESCENDING.  The
 default and the usual case is ASCENDING.
@@ -19,15 +23,21 @@ the same order as the SQL values.
 Two key encodings are only compariable if they have the same number of SQL
 values and if corresponding SQL values have the same sort-order.
 
+The first byte of a key past the table number will be in the range of
+0x05..0x0f if ascending or 0xf0..0xfa if descending.  This leaves large
+chunks of key space available for other uses.  For example, the three-byte
+key 0x00 0x00 0x01 stores the schema cookie for the database as a 64-bit
+big-endian integer.
+
 NULL ENCODING
 
-Each SQL value that is a NULL encodes as a single byte of 0x01.  Since
-every other SQL value encoding begins with a byte greater than 0x01, this
+Each SQL value that is a NULL encodes as a single byte of 0x05.  Since
+every other SQL value encoding begins with a byte greater than 0x05, this
 forces NULL values to sort first.
 
 TEXT ENCODING
 
-Each SQL value that is TEXT begins with a single byte of 0x0c and ends
+Each SQL value that is TEXT begins with a single byte of 0x0e and ends
 with a single byte of 0x00.  There are zero or more intervening bytes that
 encode the text value.  The intervening bytes are chosen so that the
 encoding will sort in the desired collating order.  The default sequence
@@ -41,15 +51,15 @@ will sort first.
 
 BINARY ENCODING
 
-Each SQL value that is BINARY begins with a single byte of 0x0d and
+Each SQL value that is BINARY begins with a single byte of 0x0f and
 ends with a single byte of 0x00.  There are zero or more intervening bytes
 that encode the binary value.  None of the intervening bytes may be zero.
 Each of the intervening bytes contains 7 bits of blob content with a 1 in
 the high-order bit (the 0x80 bit).  The final byte before the 0x00 contains
 any left-over bits of the blob content.
 
-The initial byte of a binary value, 0x0d, is larger than the initial
-byte of a text value, 0x2e, ensuring that every binary value will sort
+The initial byte of a binary value, 0x0f, is larger than the initial
+byte of a text value, 0x0e, ensuring that every binary value will sort
 after every text value.
 
 NUMERIC ENCODING
@@ -58,28 +68,28 @@ Numeric SQL values must be coded so as to sort in numeric order.  We assume
 that numeric SQL values can be both integer and floating point values.
 
 Simpliest cases first:  If the numeric value is a NaN, then the encoding
-is a single byte of 0x02.  This causes NaN values to sort prior to every other
+is a single byte of 0x06.  This causes NaN values to sort prior to every other
 numeric value.  The only value that is less than a NaN is a NULL.
 
 If the numeric value is a negative infinity then the encoding is a single
-byte of 0x03.  Since every other numeric value except NaN has a larger 
+byte of 0x07.  Since every other numeric value except NaN has a larger 
 initial byte, this encoding ensures that negative infinity will sort prior
 to every other numeric value other than NaN.
 
 If the numeric value is a positive infinity then the encoding is a single
-byte of 0x0b.  Every other numeric value encoding begins with a smaller
+byte of 0x0d.  Every other numeric value encoding begins with a smaller
 byte, ensuring that positive infinity always sorts last among numeric
-values.  0x0b is also smaller than 0x0c, the initial byte of a text value,
+values.  0x0d is also smaller than 0x0e, the initial byte of a text value,
 ensuring that every numeric value sorts before every text value.
 
 If the numeric value is exactly zero then then is encoded is a single
-byte of 0x07.  Finite negative values will have initial bytes between 0x04
-and 0x06 and finite positive values will have initial bytes between 0x08
-and 0x0a.
+byte of 0x0a.  Finite negative values will have initial bytes of 0x08
+or 0x09 and finite positive values will have initial bytes of 0x0b
+and 0x0c.
 
 Finite non-zero values are classified as either large, or small.
 Small values have an absolute value less than 1.  Large values have an
-absolute value of 1 or more.
+absolute value of 1 or more.  The value 1.0 is considered large.
 
 For both large and small values, we compute a mantissa M and an
 exponent E.  The mantissa is a base-10 representation of the
@@ -87,12 +97,12 @@ value.  The exponent E determines where to put the decimal point.
 
 Each decimal digit of the mantissa is stored in a half-byte.  There
 are two decimal digits per byte.  Digit 0 has a value of 1.  Digit 9
-has a value of A (1010).  The other digits have values in between.  A
-value of 0 is the end-of-content marker.  The mantissa is composed 
-of one or more bytes, ending with a single byte where the lower four
-bits at least are the end-of-content mark.  The upper four bits of the
-last byte may or may not be zero too, depending on how many other digits
-exist in the mantissa.
+has a value of A (binary 1010).  The other digits have values in 
+between.  A value of 0 is the end-of-content marker.  The mantissa 
+is composed  of one or more bytes, ending with a single byte where
+the lower four bits at least are the end-of-content mark.  The upper
+four bits of the last byte may or may not be zero too, depending on
+how many other digits exist in the mantissa.
 
 If we assume all digits of the mantissa occur to the right of the
 decimal point, then the exponent E is one less than the power of ten 
@@ -114,30 +124,30 @@ Examples:
 The E value is stored in the encoding as an unsigned varint.  And 
 since E can be negative, that means we need separate cases for positive
 and negative E value.  That is why large and small numbers are treated
-differently.  Large numbers of a positive or zero E and small numbers
+differently.  Large numbers have a positive or zero E and small numbers
 have a negative E.
 
-Large negative numbers have an initial byte of 0x04 followed by the
+Large negative numbers have an initial byte of 0x08 followed by the
 ones-complement of the varint of E followed by the ones-complement of
-M.  Small negative numbers have an initial byte of 0x06 followed by
+M.  Small negative numbers have an initial byte of 0x09 followed by
 the varint of -E followed by the ones-complement of M.  Small positive
-numbers have an initial byte of 0x08 followed by the ones-complement of
+numbers have an initial byte of 0x0b followed by the ones-complement of
 the varint of -E followed by M.  Finally, large positive nubmers have
-an initial byte of 0x0a followed by the varint of E followed by M.
+an initial byte of 0x0c followed by the varint of E followed by M.
 
 SUMMARY
 
 Each SQL value is encoded as one or more bytes.  The first byte of
 the encoding is as follows:
 
-  0x01 NULL
-  0x02 NaN
-  0x03 negative infinity
-  0x04 negative-large ~E ~M
-  0x06 negative-small -E ~M
-  0x07 zero
-  0x08 positive-small ~-E M
-  0x0a positive-large E M
-  0x0b positive infinity
-  0x0c text T
-  0x0d binary B
+  0x05 NULL
+  0x06 NaN
+  0x07 negative infinity
+  0x08 negative-large ~E ~M
+  0x09 negative-small -E ~M
+  0x0a zero
+  0x0b positive-small ~-E M
+  0x0c positive-large E M
+  0x0d positive infinity
+  0x0e text T
+  0x0f binary B
