@@ -595,7 +595,7 @@ void sqlite4GenerateRowIndexDelete(
 
   for(i=1, pIdx=pTab->pIndex; pIdx; i++, pIdx=pIdx->pNext){
     if( aRegIdx!=0 && aRegIdx[i-1]==0 ) continue;
-    r1 = sqlite4GenerateIndexKey(pParse, pIdx, iCur, 0, 0);
+    r1 = sqlite4GenerateIndexKey(pParse, pIdx, iCur, 0, 0, 0);
     sqlite4VdbeAddOp3(pParse->pVdbe, OP_IdxDelete, iCur+i, r1,pIdx->nColumn+1);
   }
 }
@@ -616,7 +616,8 @@ int sqlite4GenerateIndexKey(
   Index *pIdx,       /* The index for which to generate a key */
   int iCur,          /* Cursor number for the pIdx->pTable table */
   int regOut,        /* Write the new index key to this register */
-  int doMakeRec      /* Run the OP_MakeRecord instruction if true */
+  int doMakeRec,     /* Run the OP_MakeRecord instruction if true */
+  int iIdxCur        /* Index cursor number.  Only needed with doMakeRec */
 ){
   Vdbe *v = pParse->pVdbe;
   int j;
@@ -643,7 +644,7 @@ int sqlite4GenerateIndexKey(
     }else{
       zAff = sqlite4IndexAffinityStr(v, pIdx);
     }
-    sqlite4VdbeAddOp1(v, OP_MakeKey, iCur);
+    sqlite4VdbeAddOp1(v, OP_MakeKey, iIdxCur);
     sqlite4VdbeAddOp3(v, OP_MakeRecord, regBase, nCol+1, regOut);
     sqlite4VdbeChangeP4(v, -1, zAff, P4_TRANSIENT);
   }

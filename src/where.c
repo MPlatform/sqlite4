@@ -2124,7 +2124,8 @@ static void constructAutomaticIndex(
   /* Fill the automatic index with content */
   addrTop = sqlite4VdbeAddOp1(v, OP_Rewind, pLevel->iTabCur);
   regRecord = sqlite4GetTempReg(pParse);
-  sqlite4GenerateIndexKey(pParse, pIdx, pLevel->iTabCur, regRecord, 1);
+  sqlite4GenerateIndexKey(pParse, pIdx, pLevel->iTabCur, regRecord,
+                          1, pLevel->iIdxCur);
   sqlite4VdbeAddOp2(v, OP_IdxInsert, pLevel->iIdxCur, regRecord);
   sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT);
   sqlite4VdbeAddOp2(v, OP_Next, pLevel->iTabCur, addrTop+1);

@@ -2293,7 +2293,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIndex, int memRootPage){
   regRecord = sqlite4GetTempReg(pParse);
 
 #ifndef SQLITE_OMIT_MERGE_SORT
-  sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1);
+  sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1, iIdx);
   sqlite4VdbeAddOp2(v, OP_SorterInsert, iSorter, regRecord);
   sqlite4VdbeAddOp2(v, OP_Next, iTab, addr1+1);
   sqlite4VdbeJumpHere(v, addr1);
@@ -2313,7 +2313,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIndex, int memRootPage){
   sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, regRecord, 1);
   sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT);
 #else
-  regIdxKey = sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1);
+  regIdxKey = sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1, iIdx);
   addr2 = addr1 + 1;
   if( pIndex->onError!=OE_None ){
     const int regRowid = regIdxKey + pIndex->nColumn;

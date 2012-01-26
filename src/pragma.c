@@ -1078,7 +1078,7 @@ void sqlite4Pragma(
             { OP_IfPos,       1,  0,  0},    /* 9 */
             { OP_Halt,        0,  0,  0},
           };
-          r1 = sqlite4GenerateIndexKey(pParse, pIdx, 1, 3, 0);
+          r1 = sqlite4GenerateIndexKey(pParse, pIdx, 1, 3, 0, 0);
           jmp2 = sqlite4VdbeAddOp4Int(v, OP_Found, j+2, 0, r1, pIdx->nColumn+1);
           addr = sqlite4VdbeAddOpList(v, ArraySize(idxErr), idxErr);
           sqlite4VdbeChangeP4(v, addr+1, "rowid ", P4_STATIC);

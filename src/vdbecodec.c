@@ -213,20 +213,28 @@ int sqlite4VdbeEncodeData(
       u8 sign = 0;
       double r = aIn[i].r;
       sqlite4_uint64 m;
-      if( r<0 ){ r = -r; sign = 1; }
-      while( r<1.0e+19 && r!=(sqlite4_uint64)r ){
-        e--;
-        r *= 10.0;
-      }
-      while( r>1.8e+19 ){
-        e++;
-        r /= 10.0;
-      }
-      m = r;
-      if( e<0 ){
-        e = (-e*4) + 2 + sign;
+      if( sqlite4IsNaN(r) ){
+        m = 0;
+        e = 2;
+      }else if( sqlite4IsInf(r)!=0 ){
+        m = 1;
+        e = 2 + (sqlite4IsInf(r)<0);
       }else{
-        e = e*4 + sign;
+        if( r<0 ){ r = -r; sign = 1; }
+        while( r<1.0e+19 && r!=(sqlite4_uint64)r ){
+          e--;
+          r *= 10.0;
+        }
+        while( r>1.8e+19 ){
+          e++;
+          r /= 10.0;
+        }
+        m = r;
+        if( e<0 ){
+          e = (-e*4) + 2 + sign;
+        }else{
+          e = e*4 + sign;
+        }
       }
       n = sqlite4PutVarint64(aAux[i].z, (sqlite4_uint64)e);
       n += sqlite4PutVarint64(aAux[i].z+n, m);
@@ -249,7 +257,7 @@ int sqlite4VdbeEncodeData(
   n = sqlite4PutVarint64(aOut, nHdr);
   for(i=n, j=9; j<nOut; j++) aOut[i++] = aOut[j];
   nOut = i;
-  aOut = sqlite4DbRealloc(db, aOut, nOut + nPayload);
+  aOut = sqlite4DbReallocOrFree(db, aOut, nOut + nPayload);
   if( aOut==0 ){ rc = SQLITE_NOMEM; goto vdbeEncodeData_error; }
   for(i=0; i<nIn; i++){
     int flags = aIn[i].flags;
@@ -545,7 +553,7 @@ int sqlite4VdbeEncodeKey(
   int i;
   int rc = SQLITE_OK;
   KeyEncoder x;
-  
+
   x.db = db;
   x.aOut = 0;
   x.nOut = 0;

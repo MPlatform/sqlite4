@@ -2539,10 +2539,12 @@ case OP_MakeRecord: {
     sqlite4VdbeEncodeData(db, pData0, nField, &aRec2, &nRec2);
   }
   if( aRec2 ){
+#if 0
     printf(pC ? "KEY:":"DATA:");
     for(i=0; i<nRec2; i++) printf(" %02x", aRec2[i]&0xff);
     printf("\n");
     fflush(stdout);
+#endif
     sqlite4DbFree(db, aRec2);
   }
 
