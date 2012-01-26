@@ -1175,7 +1175,7 @@ struct CollSeq {
   u8 enc;               /* Text encoding handled by xCmp() */
   void *pUser;          /* First argument to xCmp() */
   int (*xCmp)(void*,int, const void*, int, const void*);
-  int (*xMkKey)(void*,int, const void*, int, const void*);
+  int (*xMkKey)(void*,const void*,int,const void*,int);
   void (*xDel)(void*);  /* Destructor for pUser */
 };
 

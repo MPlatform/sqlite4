@@ -64,13 +64,85 @@ int sqlite4VdbeDestroyDecoder(ValueDecoder *p){
 ** Decode a single value from a data string.
 */
 int sqlite4VdbeDecodeValue(
-  ValueDecoder *pDecoder,      /* The decoder for the whole string */
+  ValueDecoder *p,             /* The decoder for the whole string */
   int iVal,                    /* Index of the value to decode.  First is 0 */
   Mem *pDefault,               /* The default value.  Often NULL */
   Mem *pOut                    /* Write the result here */
 ){
+  u32 size;                    /* Size of a field */
+  sqlite4_uint64 ofst;         /* Offset to the payload */
+  sqlite4_uint64 type;         /* Datatype */
+  sqlite4_uint64 subtype;      /* Subtype for a typed blob */
+  int cclass;                  /* class of content */
+  int n;                       /* Offset into the header */
+  int i;                       /* Loop counter */
+  int endHdr;                  /* First byte past header */
+
   sqlite4VdbeMemSetNull(pOut);
-  return SQLITE_OK;
+  assert( iVal<=p->mxCol );
+  n = sqlite4GetVarint64(p->a, &ofst);
+  endHdr = ofst;
+  if( endHdr>p->n ) return SQLITE_CORRUPT;
+  for(i=0; i<=iVal && n<endHdr; i++){
+    n += sqlite4GetVarint64(p->a+n, &type);
+    if( type>=22 ){
+      cclass = (type-22)%3;
+      if( cclass==2 ) n += sqlite4GetVarint64(p->a+n, &subtype);
+      size = (type-22)/3;
+    }else if( type<=2 ){
+      size = 0;
+    }else if( type<=10 ){
+      size = type - 2;
+    }else{
+      size = type - 9;
+    }
+    if( i<iVal ){
+      ofst += size;
+    }else if( type<=2 ){
+      sqlite4VdbeMemSetInt64(pOut, type-1);
+    }else if( type<=10 ){
+      sqlite4_int64 v = ((char*)p->a)[ofst];
+      for(i=4; i<type; i++){
+        v = v*256 + p->a[ofst+i-3];
+      }
+      sqlite4VdbeMemSetInt64(pOut, v);
+    }else if( type<=21 ){
+      sqlite4_uint64 x;
+      int e;
+      double r;
+      n = sqlite4GetVarint64(p->a+ofst, &x);
+      e = (int)x;
+      n += sqlite4GetVarint64(p->a+ofst+n, &x);
+      if( n!=size ) return SQLITE_CORRUPT;
+      r = (double)x;
+      if( e&1 ) r = -r;
+      if( e&2 ){
+        e = -(e>>2);
+        while( e<=-10 ){ r /= 1.0e10; e += 10; }
+        while( e<0 ){ r /= 10.0; e++; }
+      }else{
+        e = e>>2;
+        while( e>=10 ){ r *= 1.0e10; e -= 10; }
+        while( e>0 ){ r *= 10.0; e--; }
+      }
+      sqlite4VdbeMemSetDouble(pOut, r);
+    }else if( cclass==0 ){
+      if( size==0 ){
+        sqlite4VdbeMemSetStr(pOut, "", 0, SQLITE_UTF8, SQLITE_TRANSIENT);
+      }else if( p->a[ofst]>0x02 ){
+        sqlite4VdbeMemSetStr(pOut, p->a+ofst, size, 
+                             SQLITE_UTF8, SQLITE_TRANSIENT);
+      }else{
+        static const u8 enc[] = { SQLITE_UTF8, SQLITE_UTF16LE, SQLITE_UTF16BE };
+        sqlite4VdbeMemSetStr(pOut, p->a+ofst+1, size-1, 
+                             enc[p->a[ofst]], SQLITE_TRANSIENT);
+      }
+    }else{
+      sqlite4VdbeMemSetStr(pOut, p->a+ofst, size, 0, SQLITE_TRANSIENT);
+    }
+  }
+  if( i<iVal ) sqlite4VdbeMemShallowCopy(pOut, pDefault, MEM_Static);
+  return SQLITE_OK; 
 }
 
 /*
@@ -409,6 +481,21 @@ static int encodeOneKeyValue(
     }
   }else
   if( flags & MEM_Str ){
+    if( enlargeEncoderAllocation(p, pMem->n*4 + 2) ) return SQLITE_NOMEM;
+    p->aOut[p->nOut++] = 0x0c;
+    if( pColl==0 || pColl->xMkKey==0 ){
+      memcpy(p->aOut+p->nOut, pMem->z, pMem->n);
+      p->nOut += pMem->n;
+    }else{
+      n = pColl->xMkKey(pColl->pUser, pMem->z, pMem->n, p->aOut+p->nOut,
+                        p->nAlloc - p->nOut);
+      if( n > p->nAlloc - p->nOut ){
+        if( enlargeEncoderAllocation(p, n) ) return SQLITE_NOMEM;
+        pColl->xMkKey(pColl->pUser, pMem->z, pMem->n, p->aOut+p->nOut,
+                        p->nAlloc - p->nOut);
+      }
+    }
+    p->aOut[p->nOut++] = 0x00;
   }else
   {
     const unsigned char *a;
