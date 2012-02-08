@@ -66,6 +66,7 @@ struct KVMemChng {
 struct KVMem {
   KVStore base;         /* Base class, must be first */
   KVMemNode *pRoot;     /* Root of the tree of content */
+  unsigned openFlags;   /* Flags used at open */
   int nTrans;           /* Number of nested option transactions */
   KVMemChng **apLog;    /* Array of transaction logs */
   int nCursor;          /* Number of outstanding cursors */
@@ -809,12 +810,13 @@ static const KVStoreMethods kvmemMethods = {
 /*
 ** Create a new in-memory storage engine and return a pointer to it.
 */
-int sqlite4KVStoreOpenMem(KVStore **ppKVStore){
+int sqlite4KVStoreOpenMem(KVStore **ppKVStore, unsigned openFlags){
   KVMem *pNew = sqlite4_malloc( sizeof(*pNew) );
   if( pNew==0 ) return SQLITE_NOMEM;
   memset(pNew, 0, sizeof(*pNew));
   pNew->base.pStoreVfunc = &kvmemMethods;
   pNew->iMagicKVMemBase = SQLITE_KVMEMBASE_MAGIC;
+  pNew->openFlags = openFlags;
   *ppKVStore = (KVStore*)pNew;
   return SQLITE_OK;
 }

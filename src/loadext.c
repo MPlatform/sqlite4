@@ -87,10 +87,6 @@
 # define sqlite4_vtab_on_conflict 0
 #endif
 
-#ifdef SQLITE_OMIT_SHARED_CACHE
-# define sqlite4_enable_shared_cache 0
-#endif
-
 #ifdef SQLITE_OMIT_TRACE
 # define sqlite4_profile       0
 # define sqlite4_trace         0
@@ -181,7 +177,6 @@ static const sqlite4_api_routines sqlite4Apis = {
   sqlite4_data_count,
   sqlite4_db_handle,
   sqlite4_declare_vtab,
-  sqlite4_enable_shared_cache,
   sqlite4_errcode,
   sqlite4_errmsg,
   sqlite4_errmsg16,
@@ -336,11 +331,6 @@ static const sqlite4_api_routines sqlite4Apis = {
   /*
   ** Added for 3.7.4
   */
-  sqlite4_backup_finish,
-  sqlite4_backup_init,
-  sqlite4_backup_pagecount,
-  sqlite4_backup_remaining,
-  sqlite4_backup_step,
 #ifndef SQLITE_OMIT_COMPILEOPTION_DIAGS
   sqlite4_compileoption_get,
   sqlite4_compileoption_used,

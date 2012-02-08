@@ -702,28 +702,25 @@ typedef struct WhereLevel WhereLevel;
 */
 struct Db {
   char *zName;         /* Name of this database */
-  Btree *pBt;          /* The B*Tree structure for this database file */
   KVStore *pKV;        /* KV store for the database file */
   u8 inTrans;          /* 0: not writable.  1: Transaction.  2: Checkpoint */
-  u8 safety_level;     /* How aggressive at syncing data to disk */
+  u8 chngFlag;         /* True if modified */
   Schema *pSchema;     /* Pointer to database schema (possibly shared) */
 };
 
 /*
 ** An instance of the following structure stores a database schema.
 **
-** Most Schema objects are associated with a Btree.  The exception is
+** Most Schema objects are associated with a database file.  The exception is
 ** the Schema for the TEMP databaes (sqlite4.aDb[1]) which is free-standing.
-** In shared cache mode, a single Schema object can be shared by multiple
-** Btrees that refer to the same underlying BtShared object.
 ** 
-** Schema objects are automatically deallocated when the last Btree that
+** Schema objects are automatically deallocated when the last database that
 ** references them is destroyed.   The TEMP Schema is manually freed by
 ** sqlite4_close().
 *
-** A thread must be holding a mutex on the corresponding Btree in order
+** A thread must be holding a mutex on the corresponding database in order
 ** to access Schema content.  This implies that the thread must also be
-** holding a mutex on the sqlite4 connection pointer that owns the Btree.
+** holding a mutex on the sqlite4 connection pointer that owns the database
 ** For a TEMP Schema, only the connection mutex is required.
 */
 struct Schema {
@@ -1436,14 +1433,15 @@ struct FKey {
 
 
 /*
-** An instance of the following structure is passed as the first
-** argument to sqlite4VdbeKeyCompare and is used to control the 
-** comparison of the two index keys.
+** An instance of the following structure describes an index key.  It 
+** includes information such as sort order and collating sequence for
+** each key, and the number of primary key fields appended to the end.
 */
 struct KeyInfo {
   sqlite4 *db;        /* The database connection */
   u8 enc;             /* Text encoding - one of the SQLITE_UTF* values */
-  u16 nField;         /* Number of entries in aColl[] */
+  u16 nField;         /* Total number of entries in aColl[] */
+  u16 nPK;            /* Number of primary key entries at the end of aColl[] */
   u8 *aSortOrder;     /* Sort order for each column.  May be NULL */
   CollSeq *aColl[1];  /* Collating sequence for each term of the key */
 };
@@ -2328,7 +2326,7 @@ struct AuthContext {
 #define OPFLAG_LASTROWID     0x02    /* Set to update db->lastRowid */
 #define OPFLAG_ISUPDATE      0x04    /* This OP_Insert is an sql UPDATE */
 #define OPFLAG_APPEND        0x08    /* This is likely to be an append */
-#define OPFLAG_USESEEKRESULT 0x10    /* Try to avoid a seek in BtreeInsert() */
+#define OPFLAG_USESEEKRESULT 0x10    /* Try to avoid a seek on insert */
 #define OPFLAG_CLEARCACHE    0x20    /* Clear pseudo-table cache in OP_Column */
 #define OPFLAG_APPENDBIAS    0x40    /* Bias inserts for appending */
 
@@ -3076,9 +3074,8 @@ void sqlite4DeleteIndexSamples(sqlite4*,Index*);
 void sqlite4DefaultRowEst(Index*);
 void sqlite4RegisterLikeFunctions(sqlite4*, int);
 int sqlite4IsLikeFunction(sqlite4*,Expr*,int*,char*);
-void sqlite4MinimumFileFormat(Parse*, int, int);
-void sqlite4SchemaClear(void *);
-Schema *sqlite4SchemaGet(sqlite4 *, Btree *);
+void sqlite4SchemaClear(Schema*);
+Schema *sqlite4SchemaGet(sqlite4*);
 int sqlite4SchemaToIndex(sqlite4 *db, Schema *);
 KeyInfo *sqlite4IndexKeyinfo(Parse *, Index *);
 int sqlite4CreateFunc(sqlite4 *, const char *, int, int, void *, 
@@ -3096,9 +3093,6 @@ char *sqlite4StrAccumFinish(StrAccum*);
 void sqlite4StrAccumReset(StrAccum*);
 void sqlite4SelectDestInit(SelectDest*,int,int);
 Expr *sqlite4CreateColumnExpr(sqlite4 *, SrcList *, int, int);
-
-void sqlite4BackupRestart(sqlite4_backup *);
-void sqlite4BackupUpdate(sqlite4_backup *, Pgno, const u8 *);
 
 /*
 ** The interface to the LEMON-generated parser

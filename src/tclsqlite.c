@@ -102,8 +102,6 @@ struct SqlPreparedStmt {
   Tcl_Obj **apParm;        /* Array of referenced object pointers */
 };
 
-typedef struct IncrblobChannel IncrblobChannel;
-
 /*
 ** There is one instance of this structure for each SQLite database
 ** that has been opened by the SQLite TCL interface.
@@ -137,21 +135,11 @@ struct SqliteDb {
   SqlPreparedStmt *stmtLast; /* Last statement in the list */
   int maxStmt;               /* The next maximum number of stmtList */
   int nStmt;                 /* Number of statements in stmtList */
-  IncrblobChannel *pIncrblob;/* Linked list of open incrblob channels */
   int nStep, nSort, nIndex;  /* Statistics for most recent operation */
   int nTransaction;          /* Number of nested [transaction] methods */
 #ifdef SQLITE_TEST
   int bLegacyPrepare;        /* True to use sqlite4_prepare() */
 #endif
-};
-
-struct IncrblobChannel {
-  sqlite4_blob *pBlob;      /* sqlite4 blob handle */
-  SqliteDb *pDb;            /* Associated database connection */
-  int iSeek;                /* Current seek offset */
-  Tcl_Channel channel;      /* Channel identifier */
-  IncrblobChannel *pNext;   /* Linked list of all open incrblob channels */
-  IncrblobChannel *pPrev;   /* Linked list of all open incrblob channels */
 };
 
 /*
@@ -165,225 +153,6 @@ static int strlen30(const char *z){
 }
 
 
-#ifndef SQLITE_OMIT_INCRBLOB
-/*
-** Close all incrblob channels opened using database connection pDb.
-** This is called when shutting down the database connection.
-*/
-static void closeIncrblobChannels(SqliteDb *pDb){
-  IncrblobChannel *p;
-  IncrblobChannel *pNext;
-
-  for(p=pDb->pIncrblob; p; p=pNext){
-    pNext = p->pNext;
-
-    /* Note: Calling unregister here call Tcl_Close on the incrblob channel, 
-    ** which deletes the IncrblobChannel structure at *p. So do not
-    ** call Tcl_Free() here.
-    */
-    Tcl_UnregisterChannel(pDb->interp, p->channel);
-  }
-}
-
-/*
-** Close an incremental blob channel.
-*/
-static int incrblobClose(ClientData instanceData, Tcl_Interp *interp){
-  IncrblobChannel *p = (IncrblobChannel *)instanceData;
-  int rc = sqlite4_blob_close(p->pBlob);
-  sqlite4 *db = p->pDb->db;
-
-  /* Remove the channel from the SqliteDb.pIncrblob list. */
-  if( p->pNext ){
-    p->pNext->pPrev = p->pPrev;
-  }
-  if( p->pPrev ){
-    p->pPrev->pNext = p->pNext;
-  }
-  if( p->pDb->pIncrblob==p ){
-    p->pDb->pIncrblob = p->pNext;
-  }
-
-  /* Free the IncrblobChannel structure */
-  Tcl_Free((char *)p);
-
-  if( rc!=SQLITE_OK ){
-    Tcl_SetResult(interp, (char *)sqlite4_errmsg(db), TCL_VOLATILE);
-    return TCL_ERROR;
-  }
-  return TCL_OK;
-}
-
-/*
-** Read data from an incremental blob channel.
-*/
-static int incrblobInput(
-  ClientData instanceData, 
-  char *buf, 
-  int bufSize,
-  int *errorCodePtr
-){
-  IncrblobChannel *p = (IncrblobChannel *)instanceData;
-  int nRead = bufSize;         /* Number of bytes to read */
-  int nBlob;                   /* Total size of the blob */
-  int rc;                      /* sqlite error code */
-
-  nBlob = sqlite4_blob_bytes(p->pBlob);
-  if( (p->iSeek+nRead)>nBlob ){
-    nRead = nBlob-p->iSeek;
-  }
-  if( nRead<=0 ){
-    return 0;
-  }
-
-  rc = sqlite4_blob_read(p->pBlob, (void *)buf, nRead, p->iSeek);
-  if( rc!=SQLITE_OK ){
-    *errorCodePtr = rc;
-    return -1;
-  }
-
-  p->iSeek += nRead;
-  return nRead;
-}
-
-/*
-** Write data to an incremental blob channel.
-*/
-static int incrblobOutput(
-  ClientData instanceData, 
-  CONST char *buf, 
-  int toWrite,
-  int *errorCodePtr
-){
-  IncrblobChannel *p = (IncrblobChannel *)instanceData;
-  int nWrite = toWrite;        /* Number of bytes to write */
-  int nBlob;                   /* Total size of the blob */
-  int rc;                      /* sqlite error code */
-
-  nBlob = sqlite4_blob_bytes(p->pBlob);
-  if( (p->iSeek+nWrite)>nBlob ){
-    *errorCodePtr = EINVAL;
-    return -1;
-  }
-  if( nWrite<=0 ){
-    return 0;
-  }
-
-  rc = sqlite4_blob_write(p->pBlob, (void *)buf, nWrite, p->iSeek);
-  if( rc!=SQLITE_OK ){
-    *errorCodePtr = EIO;
-    return -1;
-  }
-
-  p->iSeek += nWrite;
-  return nWrite;
-}
-
-/*
-** Seek an incremental blob channel.
-*/
-static int incrblobSeek(
-  ClientData instanceData, 
-  long offset,
-  int seekMode,
-  int *errorCodePtr
-){
-  IncrblobChannel *p = (IncrblobChannel *)instanceData;
-
-  switch( seekMode ){
-    case SEEK_SET:
-      p->iSeek = offset;
-      break;
-    case SEEK_CUR:
-      p->iSeek += offset;
-      break;
-    case SEEK_END:
-      p->iSeek = sqlite4_blob_bytes(p->pBlob) + offset;
-      break;
-
-    default: assert(!"Bad seekMode");
-  }
-
-  return p->iSeek;
-}
-
-
-static void incrblobWatch(ClientData instanceData, int mode){ 
-  /* NO-OP */ 
-}
-static int incrblobHandle(ClientData instanceData, int dir, ClientData *hPtr){
-  return TCL_ERROR;
-}
-
-static Tcl_ChannelType IncrblobChannelType = {
-  "incrblob",                        /* typeName                             */
-  TCL_CHANNEL_VERSION_2,             /* version                              */
-  incrblobClose,                     /* closeProc                            */
-  incrblobInput,                     /* inputProc                            */
-  incrblobOutput,                    /* outputProc                           */
-  incrblobSeek,                      /* seekProc                             */
-  0,                                 /* setOptionProc                        */
-  0,                                 /* getOptionProc                        */
-  incrblobWatch,                     /* watchProc (this is a no-op)          */
-  incrblobHandle,                    /* getHandleProc (always returns error) */
-  0,                                 /* close2Proc                           */
-  0,                                 /* blockModeProc                        */
-  0,                                 /* flushProc                            */
-  0,                                 /* handlerProc                          */
-  0,                                 /* wideSeekProc                         */
-};
-
-/*
-** Create a new incrblob channel.
-*/
-static int createIncrblobChannel(
-  Tcl_Interp *interp, 
-  SqliteDb *pDb, 
-  const char *zDb,
-  const char *zTable, 
-  const char *zColumn, 
-  sqlite_int64 iRow,
-  int isReadonly
-){
-  IncrblobChannel *p;
-  sqlite4 *db = pDb->db;
-  sqlite4_blob *pBlob;
-  int rc;
-  int flags = TCL_READABLE|(isReadonly ? 0 : TCL_WRITABLE);
-
-  /* This variable is used to name the channels: "incrblob_[incr count]" */
-  static int count = 0;
-  char zChannel[64];
-
-  rc = sqlite4_blob_open(db, zDb, zTable, zColumn, iRow, !isReadonly, &pBlob);
-  if( rc!=SQLITE_OK ){
-    Tcl_SetResult(interp, (char *)sqlite4_errmsg(pDb->db), TCL_VOLATILE);
-    return TCL_ERROR;
-  }
-
-  p = (IncrblobChannel *)Tcl_Alloc(sizeof(IncrblobChannel));
-  p->iSeek = 0;
-  p->pBlob = pBlob;
-
-  sqlite4_snprintf(sizeof(zChannel), zChannel, "incrblob_%d", ++count);
-  p->channel = Tcl_CreateChannel(&IncrblobChannelType, zChannel, p, flags);
-  Tcl_RegisterChannel(interp, p->channel);
-
-  /* Link the new channel into the SqliteDb.pIncrblob list. */
-  p->pNext = pDb->pIncrblob;
-  p->pPrev = 0;
-  if( p->pNext ){
-    p->pNext->pPrev = p;
-  }
-  pDb->pIncrblob = p;
-  p->pDb = pDb;
-
-  Tcl_SetResult(interp, (char *)Tcl_GetChannelName(p->channel), TCL_VOLATILE);
-  return TCL_OK;
-}
-#else  /* else clause for "#ifndef SQLITE_OMIT_INCRBLOB" */
-  #define closeIncrblobChannels(pDb)
-#endif
 
 /*
 ** Look at the script prefix in pCmd.  We will be executing this script
@@ -473,7 +242,6 @@ static void flushStmtCache(SqliteDb *pDb){
 static void DbDeleteCmd(void *db){
   SqliteDb *pDb = (SqliteDb*)db;
   flushStmtCache(pDb);
-  closeIncrblobChannels(pDb);
   sqlite4_close(pDb->db);
   while( pDb->pFunc ){
     SqlFunc *pFunc = pDb->pFunc;
@@ -1627,32 +1395,30 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   int choice;
   int rc = TCL_OK;
   static const char *DB_strs[] = {
-    "authorizer",         "backup",            "busy",
-    "cache",              "changes",           "close",
-    "collate",            "collation_needed",  "commit_hook",
-    "complete",           "copy",              "enable_load_extension",
-    "errorcode",          "eval",              "exists",
-    "function",           "incrblob",          "interrupt",
-    "last_insert_rowid",  "nullvalue",         "onecolumn",
-    "profile",            "rekey",
-    "restore",            "rollback_hook",     "status",
-    "timeout",            "total_changes",     "trace",
-    "transaction",        "unlock_notify",     "update_hook",
-    "version",            "wal_hook",          0
+    "authorizer",         "busy",              "cache",
+    "changes",            "close",             "collate",
+    "collation_needed",   "commit_hook",       "complete",
+    "copy",               "enable_load_extension","errorcode",
+    "eval",               "exists",            "function",
+    "interrupt",          "last_insert_rowid", "nullvalue",
+    "onecolumn",          "profile",           "rekey",
+    "rollback_hook",      "status",            "timeout",
+    "total_changes",      "trace",             "transaction",
+    "unlock_notify",      "update_hook",       "version",
+    "wal_hook",           0                    
   };
   enum DB_enum {
-    DB_AUTHORIZER,        DB_BACKUP,           DB_BUSY,
-    DB_CACHE,             DB_CHANGES,          DB_CLOSE,
-    DB_COLLATE,           DB_COLLATION_NEEDED, DB_COMMIT_HOOK,
-    DB_COMPLETE,          DB_COPY,             DB_ENABLE_LOAD_EXTENSION,
-    DB_ERRORCODE,         DB_EVAL,             DB_EXISTS,
-    DB_FUNCTION,          DB_INCRBLOB,         DB_INTERRUPT,
-    DB_LAST_INSERT_ROWID, DB_NULLVALUE,        DB_ONECOLUMN,
-    DB_PROFILE,           DB_REKEY,
-    DB_RESTORE,           DB_ROLLBACK_HOOK,    DB_STATUS,
-    DB_TIMEOUT,           DB_TOTAL_CHANGES,    DB_TRACE,
-    DB_TRANSACTION,       DB_UNLOCK_NOTIFY,    DB_UPDATE_HOOK,
-    DB_VERSION,           DB_WAL_HOOK
+    DB_AUTHORIZER,        DB_BUSY,             DB_CACHE,
+    DB_CHANGES,           DB_CLOSE,            DB_COLLATE,
+    DB_COLLATION_NEEDED,  DB_COMMIT_HOOK,      DB_COMPLETE,
+    DB_COPY,              DB_ENABLE_LOAD_EXTENSION,DB_ERRORCODE,
+    DB_EVAL,              DB_EXISTS,           DB_FUNCTION,
+    DB_INTERRUPT,         DB_LAST_INSERT_ROWID,DB_NULLVALUE,
+    DB_ONECOLUMN,         DB_PROFILE,          DB_REKEY,
+    DB_ROLLBACK_HOOK,     DB_STATUS,           DB_TIMEOUT,
+    DB_TOTAL_CHANGES,     DB_TRACE,            DB_TRANSACTION,
+    DB_UNLOCK_NOTIFY,     DB_UPDATE_HOOK,      DB_VERSION,
+    DB_WAL_HOOK         
   };
   /* don't leave trailing commas on DB_enum, it confuses the AIX xlc compiler */
 
@@ -1717,55 +1483,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       }
     }
 #endif
-    break;
-  }
-
-  /*    $db backup ?DATABASE? FILENAME
-  **
-  ** Open or create a database file named FILENAME.  Transfer the
-  ** content of local database DATABASE (default: "main") into the
-  ** FILENAME database.
-  */
-  case DB_BACKUP: {
-    const char *zDestFile;
-    const char *zSrcDb;
-    sqlite4 *pDest;
-    sqlite4_backup *pBackup;
-
-    if( objc==3 ){
-      zSrcDb = "main";
-      zDestFile = Tcl_GetString(objv[2]);
-    }else if( objc==4 ){
-      zSrcDb = Tcl_GetString(objv[2]);
-      zDestFile = Tcl_GetString(objv[3]);
-    }else{
-      Tcl_WrongNumArgs(interp, 2, objv, "?DATABASE? FILENAME");
-      return TCL_ERROR;
-    }
-    rc = sqlite4_open(zDestFile, &pDest);
-    if( rc!=SQLITE_OK ){
-      Tcl_AppendResult(interp, "cannot open target database: ",
-           sqlite4_errmsg(pDest), (char*)0);
-      sqlite4_close(pDest);
-      return TCL_ERROR;
-    }
-    pBackup = sqlite4_backup_init(pDest, "main", pDb->db, zSrcDb);
-    if( pBackup==0 ){
-      Tcl_AppendResult(interp, "backup failed: ",
-           sqlite4_errmsg(pDest), (char*)0);
-      sqlite4_close(pDest);
-      return TCL_ERROR;
-    }
-    while(  (rc = sqlite4_backup_step(pBackup,100))==SQLITE_OK ){}
-    sqlite4_backup_finish(pBackup);
-    if( rc==SQLITE_DONE ){
-      rc = TCL_OK;
-    }else{
-      Tcl_AppendResult(interp, "backup failed: ",
-           sqlite4_errmsg(pDest), (char*)0);
-      rc = TCL_ERROR;
-    }
-    sqlite4_close(pDest);
     break;
   }
 
@@ -2356,46 +2073,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   }
 
   /*
-  **     $db incrblob ?-readonly? ?DB? TABLE COLUMN ROWID
-  */
-  case DB_INCRBLOB: {
-#ifdef SQLITE_OMIT_INCRBLOB
-    Tcl_AppendResult(interp, "incrblob not available in this build", 0);
-    return TCL_ERROR;
-#else
-    int isReadonly = 0;
-    const char *zDb = "main";
-    const char *zTable;
-    const char *zColumn;
-    sqlite_int64 iRow;
-
-    /* Check for the -readonly option */
-    if( objc>3 && strcmp(Tcl_GetString(objv[2]), "-readonly")==0 ){
-      isReadonly = 1;
-    }
-
-    if( objc!=(5+isReadonly) && objc!=(6+isReadonly) ){
-      Tcl_WrongNumArgs(interp, 2, objv, "?-readonly? ?DB? TABLE COLUMN ROWID");
-      return TCL_ERROR;
-    }
-
-    if( objc==(6+isReadonly) ){
-      zDb = Tcl_GetString(objv[2]);
-    }
-    zTable = Tcl_GetString(objv[objc-3]);
-    zColumn = Tcl_GetString(objv[objc-2]);
-    rc = Tcl_GetWideIntFromObj(interp, objv[objc-1], &iRow);
-
-    if( rc==TCL_OK ){
-      rc = createIncrblobChannel(
-          interp, pDb, zDb, zTable, zColumn, iRow, isReadonly
-      );
-    }
-#endif
-    break;
-  }
-
-  /*
   **     $db interrupt
   **
   ** Interrupt the execution of the inner-most SQL interpreter.  This
@@ -2521,65 +2198,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       rc = TCL_ERROR;
     }
 #endif
-    break;
-  }
-
-  /*    $db restore ?DATABASE? FILENAME
-  **
-  ** Open a database file named FILENAME.  Transfer the content 
-  ** of FILENAME into the local database DATABASE (default: "main").
-  */
-  case DB_RESTORE: {
-    const char *zSrcFile;
-    const char *zDestDb;
-    sqlite4 *pSrc;
-    sqlite4_backup *pBackup;
-    int nTimeout = 0;
-
-    if( objc==3 ){
-      zDestDb = "main";
-      zSrcFile = Tcl_GetString(objv[2]);
-    }else if( objc==4 ){
-      zDestDb = Tcl_GetString(objv[2]);
-      zSrcFile = Tcl_GetString(objv[3]);
-    }else{
-      Tcl_WrongNumArgs(interp, 2, objv, "?DATABASE? FILENAME");
-      return TCL_ERROR;
-    }
-    rc = sqlite4_open_v2(zSrcFile, &pSrc, SQLITE_OPEN_READONLY, 0);
-    if( rc!=SQLITE_OK ){
-      Tcl_AppendResult(interp, "cannot open source database: ",
-           sqlite4_errmsg(pSrc), (char*)0);
-      sqlite4_close(pSrc);
-      return TCL_ERROR;
-    }
-    pBackup = sqlite4_backup_init(pDb->db, zDestDb, pSrc, "main");
-    if( pBackup==0 ){
-      Tcl_AppendResult(interp, "restore failed: ",
-           sqlite4_errmsg(pDb->db), (char*)0);
-      sqlite4_close(pSrc);
-      return TCL_ERROR;
-    }
-    while( (rc = sqlite4_backup_step(pBackup,100))==SQLITE_OK
-              || rc==SQLITE_BUSY ){
-      if( rc==SQLITE_BUSY ){
-        if( nTimeout++ >= 3 ) break;
-        sqlite4_sleep(100);
-      }
-    }
-    sqlite4_backup_finish(pBackup);
-    if( rc==SQLITE_DONE ){
-      rc = TCL_OK;
-    }else if( rc==SQLITE_BUSY || rc==SQLITE_LOCKED ){
-      Tcl_AppendResult(interp, "restore failed: source database busy",
-                       (char*)0);
-      rc = TCL_ERROR;
-    }else{
-      Tcl_AppendResult(interp, "restore failed: ",
-           sqlite4_errmsg(pDb->db), (char*)0);
-      rc = TCL_ERROR;
-    }
-    sqlite4_close(pSrc);
     break;
   }
 
@@ -3623,7 +3241,6 @@ static void init_all(Tcl_Interp *interp){
   {
     extern int Sqliteconfig_Init(Tcl_Interp*);
     extern int Sqlitetest1_Init(Tcl_Interp*);
-    extern int Sqlitetest2_Init(Tcl_Interp*);
     extern int Sqlitetest3_Init(Tcl_Interp*);
     extern int Sqlitetest4_Init(Tcl_Interp*);
     extern int Sqlitetest5_Init(Tcl_Interp*);
@@ -3644,7 +3261,6 @@ static void init_all(Tcl_Interp *interp){
     extern int SqlitetestThread_Init(Tcl_Interp*);
     extern int SqlitetestOnefile_Init();
     extern int SqlitetestOsinst_Init(Tcl_Interp*);
-    extern int Sqlitetestbackup_Init(Tcl_Interp*);
     extern int Sqlitetestintarray_Init(Tcl_Interp*);
     extern int Sqlitetestvfs_Init(Tcl_Interp *);
     extern int Sqlitetestrtree_Init(Tcl_Interp*);
@@ -3686,7 +3302,6 @@ static void init_all(Tcl_Interp *interp){
     SqlitetestThread_Init(interp);
     SqlitetestOnefile_Init(interp);
     SqlitetestOsinst_Init(interp);
-    Sqlitetestbackup_Init(interp);
     Sqlitetestintarray_Init(interp);
     Sqlitetestvfs_Init(interp);
     Sqlitetestrtree_Init(interp);

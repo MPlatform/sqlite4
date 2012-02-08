@@ -51,21 +51,20 @@ TCCX += -I$(TOP)/ext/async
 # Object files for the SQLite library.
 #
 LIBOBJ+= alter.o analyze.o attach.o auth.o \
-         backup.o bitvec.o btmutex.o btree.o build.o \
+         bitvec.o build.o \
          callback.o complete.o ctime.o date.o delete.o expr.o fault.o fkey.o \
          fts3.o fts3_aux.o fts3_expr.o fts3_hash.o fts3_icu.o fts3_porter.o \
          fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
          fts3_write.o func.o global.o hash.o \
-         icu.o insert.o journal.o kvmem.o legacy.o loadext.o \
+         icu.o insert.o kvmem.o legacy.o loadext.o \
          main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
-         memjournal.o \
          mutex.o mutex_noop.o mutex_os2.o mutex_unix.o mutex_w32.o \
-         notify.o opcodes.o os.o os_os2.o os_unix.o os_win.o \
-         pager.o parse.o pcache.o pcache1.o pragma.o prepare.o printf.o \
+         opcodes.o os.o os_os2.o os_unix.o os_win.o \
+         parse.o pragma.o prepare.o printf.o \
          random.o resolve.o rowset.o rtree.o select.o status.o storage.o \
          table.o tokenize.o trigger.o \
          update.o util.o varint.o \
-         vdbe.o vdbeapi.o vdbeaux.o vdbeblob.o vdbecodec.o \
+         vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o \
          vdbemem.o vdbesort.o vdbetrace.o \
          walker.o where.o utf.o vtab.o
 
@@ -78,12 +77,7 @@ SRC = \
   $(TOP)/src/analyze.c \
   $(TOP)/src/attach.c \
   $(TOP)/src/auth.c \
-  $(TOP)/src/backup.c \
   $(TOP)/src/bitvec.c \
-  $(TOP)/src/btmutex.c \
-  $(TOP)/src/btree.c \
-  $(TOP)/src/btree.h \
-  $(TOP)/src/btreeInt.h \
   $(TOP)/src/build.c \
   $(TOP)/src/callback.c \
   $(TOP)/src/complete.c \
@@ -99,7 +93,6 @@ SRC = \
   $(TOP)/src/hash.h \
   $(TOP)/src/hwtime.h \
   $(TOP)/src/insert.c \
-  $(TOP)/src/journal.c \
   $(TOP)/src/kvmem.c \
   $(TOP)/src/legacy.c \
   $(TOP)/src/loadext.c \
@@ -111,26 +104,19 @@ SRC = \
   $(TOP)/src/mem2.c \
   $(TOP)/src/mem3.c \
   $(TOP)/src/mem5.c \
-  $(TOP)/src/memjournal.c \
   $(TOP)/src/mutex.c \
   $(TOP)/src/mutex.h \
   $(TOP)/src/mutex_noop.c \
   $(TOP)/src/mutex_os2.c \
   $(TOP)/src/mutex_unix.c \
   $(TOP)/src/mutex_w32.c \
-  $(TOP)/src/notify.c \
   $(TOP)/src/os.c \
   $(TOP)/src/os.h \
   $(TOP)/src/os_common.h \
   $(TOP)/src/os_os2.c \
   $(TOP)/src/os_unix.c \
   $(TOP)/src/os_win.c \
-  $(TOP)/src/pager.c \
-  $(TOP)/src/pager.h \
   $(TOP)/src/parse.y \
-  $(TOP)/src/pcache.c \
-  $(TOP)/src/pcache.h \
-  $(TOP)/src/pcache1.c \
   $(TOP)/src/pragma.c \
   $(TOP)/src/prepare.c \
   $(TOP)/src/printf.c \
@@ -158,7 +144,6 @@ SRC = \
   $(TOP)/src/vdbe.h \
   $(TOP)/src/vdbeapi.c \
   $(TOP)/src/vdbeaux.c \
-  $(TOP)/src/vdbeblob.c \
   $(TOP)/src/vdbemem.c \
   $(TOP)/src/vdbesort.c \
   $(TOP)/src/vdbetrace.c \
@@ -169,24 +154,6 @@ SRC = \
 
 # Source code for extensions
 #
-SRC += \
-  $(TOP)/ext/fts1/fts1.c \
-  $(TOP)/ext/fts1/fts1.h \
-  $(TOP)/ext/fts1/fts1_hash.c \
-  $(TOP)/ext/fts1/fts1_hash.h \
-  $(TOP)/ext/fts1/fts1_porter.c \
-  $(TOP)/ext/fts1/fts1_tokenizer.h \
-  $(TOP)/ext/fts1/fts1_tokenizer1.c
-SRC += \
-  $(TOP)/ext/fts2/fts2.c \
-  $(TOP)/ext/fts2/fts2.h \
-  $(TOP)/ext/fts2/fts2_hash.c \
-  $(TOP)/ext/fts2/fts2_hash.h \
-  $(TOP)/ext/fts2/fts2_icu.c \
-  $(TOP)/ext/fts2/fts2_porter.c \
-  $(TOP)/ext/fts2/fts2_tokenizer.h \
-  $(TOP)/ext/fts2/fts2_tokenizer.c \
-  $(TOP)/ext/fts2/fts2_tokenizer1.c
 SRC += \
   $(TOP)/ext/fts3/fts3.c \
   $(TOP)/ext/fts3/fts3.h \
@@ -228,7 +195,6 @@ TESTSRC = \
   $(TOP)/ext/fts3/fts3_test.c \
   $(TOP)/src/test1.c \
   $(TOP)/src/test2.c \
-  $(TOP)/src/test3.c \
   $(TOP)/src/test4.c \
   $(TOP)/src/test5.c \
   $(TOP)/src/test6.c \
@@ -236,8 +202,6 @@ TESTSRC = \
   $(TOP)/src/test8.c \
   $(TOP)/src/test9.c \
   $(TOP)/src/test_autoext.c \
-  $(TOP)/src/test_backup.c \
-  $(TOP)/src/test_btree.c \
   $(TOP)/src/test_config.c \
   $(TOP)/src/test_demovfs.c \
   $(TOP)/src/test_devsym.c \
@@ -251,11 +215,8 @@ TESTSRC = \
   $(TOP)/src/test_mutex.c \
   $(TOP)/src/test_onefile.c \
   $(TOP)/src/test_osinst.c \
-  $(TOP)/src/test_pcache.c \
-  $(TOP)/src/test_quota.c \
   $(TOP)/src/test_rtree.c \
   $(TOP)/src/test_schema.c \
-  $(TOP)/src/test_server.c \
   $(TOP)/src/test_storage.c \
   $(TOP)/src/test_superlock.c \
   $(TOP)/src/test_syscall.c \
@@ -270,8 +231,6 @@ TESTSRC = \
 
 TESTSRC2 = \
   $(TOP)/src/attach.c \
-  $(TOP)/src/backup.c \
-  $(TOP)/src/btree.c \
   $(TOP)/src/build.c \
   $(TOP)/src/date.c \
   $(TOP)/src/expr.c \
@@ -282,13 +241,10 @@ TESTSRC2 = \
   $(TOP)/src/os_os2.c \
   $(TOP)/src/os_unix.c \
   $(TOP)/src/os_win.c \
-  $(TOP)/src/pager.c \
   $(TOP)/src/pragma.c \
   $(TOP)/src/prepare.c \
   $(TOP)/src/printf.c \
   $(TOP)/src/random.c \
-  $(TOP)/src/pcache.c \
-  $(TOP)/src/pcache1.c \
   $(TOP)/src/select.c \
   $(TOP)/src/tokenize.c \
   $(TOP)/src/utf.c \
@@ -308,8 +264,6 @@ TESTSRC2 = \
 # Header files used by all library source files.
 #
 HDR = \
-   $(TOP)/src/btree.h \
-   $(TOP)/src/btreeInt.h \
    $(TOP)/src/hash.h \
    $(TOP)/src/hwtime.h \
    keywordhash.h \
@@ -317,8 +271,6 @@ HDR = \
    opcodes.h \
    $(TOP)/src/os.h \
    $(TOP)/src/os_common.h \
-   $(TOP)/src/pager.h \
-   $(TOP)/src/pcache.h \
    parse.h  \
    sqlite4.h  \
    $(TOP)/src/sqlite4ext.h \
@@ -328,17 +280,7 @@ HDR = \
    $(TOP)/src/vdbe.h \
    $(TOP)/src/vdbeInt.h
 
-# Header files used by extensions
-#
-EXTHDR += \
-  $(TOP)/ext/fts1/fts1.h \
-  $(TOP)/ext/fts1/fts1_hash.h \
-  $(TOP)/ext/fts1/fts1_tokenizer.h
-EXTHDR += \
-  $(TOP)/ext/fts2/fts2.h \
-  $(TOP)/ext/fts2/fts2_hash.h \
-  $(TOP)/ext/fts2/fts2_tokenizer.h
-EXTHDR += \
+EXTHDR = \
   $(TOP)/ext/fts3/fts3.h \
   $(TOP)/ext/fts3/fts3Int.h \
   $(TOP)/ext/fts3/fts3_hash.h \

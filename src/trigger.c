@@ -503,7 +503,6 @@ void sqlite4DropTrigger(Parse *pParse, SrcList *pName, int noErr){
   zDb = pName->a[0].zDatabase;
   zName = pName->a[0].zName;
   nName = sqlite4Strlen30(zName);
-  assert( zDb!=0 || sqlite4BtreeHoldsAllMutexes(db) );
   for(i=OMIT_TEMPDB; i<db->nDb; i++){
     int j = (i<2) ? i^1 : i;  /* Search TEMP before MAIN */
     if( zDb && sqlite4StrICmp(db->aDb[j].zName, zDb) ) continue;

@@ -140,15 +140,6 @@ int sqlite4_db_status(
     case SQLITE_DBSTATUS_CACHE_USED: {
       int totalUsed = 0;
       int i;
-      sqlite4BtreeEnterAll(db);
-      for(i=0; i<db->nDb; i++){
-        Btree *pBt = db->aDb[i].pBt;
-        if( pBt ){
-          Pager *pPager = sqlite4BtreePager(pBt);
-          totalUsed += sqlite4PagerMemUsed(pPager);
-        }
-      }
-      sqlite4BtreeLeaveAll(db);
       *pCurrent = totalUsed;
       *pHighwater = 0;
       break;
@@ -163,7 +154,6 @@ int sqlite4_db_status(
       int i;                      /* Used to iterate through schemas */
       int nByte = 0;              /* Used to accumulate return value */
 
-      sqlite4BtreeEnterAll(db);
       db->pnBytesFreed = &nByte;
       for(i=0; i<db->nDb; i++){
         Schema *pSchema = db->aDb[i].pSchema;
@@ -190,7 +180,6 @@ int sqlite4_db_status(
         }
       }
       db->pnBytesFreed = 0;
-      sqlite4BtreeLeaveAll(db);
 
       *pHighwater = 0;
       *pCurrent = nByte;
@@ -227,14 +216,6 @@ int sqlite4_db_status(
     case SQLITE_DBSTATUS_CACHE_MISS: {
       int i;
       int nRet = 0;
-      assert( SQLITE_DBSTATUS_CACHE_MISS==SQLITE_DBSTATUS_CACHE_HIT+1 );
-
-      for(i=0; i<db->nDb; i++){
-        if( db->aDb[i].pBt ){
-          Pager *pPager = sqlite4BtreePager(db->aDb[i].pBt);
-          sqlite4PagerCacheStat(pPager, op, resetFlag, &nRet);
-        }
-      }
       *pHighwater = 0;
       *pCurrent = nRet;
       break;

@@ -24,8 +24,8 @@
 ** for content to be read.  The transaction level must be at least 2 for 
 ** content to be modified.
 ** 
-** The xBegin method increases transaction level.  The increase may only be
-** by an amount of 1 unless the transaction level is initially 0 in which case
+** The xBegin method increases transaction level.  The increase may be no
+** more than 1 unless the transaction level is initially 0 in which case
 ** it can be increased immediately to 2.  Increasing the transaction level
 ** to 1 or more makes a "snapshot" of the complete store such that changes
 ** made by other connections are not visible.  An xBegin call may fail
@@ -68,6 +68,20 @@
 ** is found if it is available, otherwise the cursor is left pointing the
 ** the smallest entry that is larger than the search key, or to EOF if there
 ** are no entries larger than the search key.
+**
+** The xSeek return code might be one of the following:
+**
+**    SQLITE_OK        The cursor is left pointing to any entry that
+**                     exactly matchings the probe key.
+**
+**    SQLITE_INEXACT   The cursor is left pointing to the nearest entry
+**                     to the probe it could find, either before or after
+**                     the probe, according to the dir argument.
+**
+**    SQLITE_NOTFOUND  No suitable entry could be found.  Either dir==0 and
+**                     there was no exact match, or dir<0 and the probe is
+**                     smaller than every entry in the database, or dir>0 and
+**                     the probe is larger than every entry in the database.
 ** 
 ** The xNext method may only be used following an xSeek with a positive dir,
 ** or another xNext.  The xPrev method may only be used following an xSeek with
@@ -96,7 +110,7 @@ typedef int KVSize;
 
 /*
 ** A Key-Value storage engine is defined by an instance of the following
-** structure.
+** structures:
 */
 struct KVStoreMethods {
   int (*xReplace)(KVStore*, const KVByteArray *pKey, KVSize nKey,
@@ -129,14 +143,20 @@ struct KVStore {
 struct KVCursor {
   KVStore *pStore;                    /* The owner of this cursor */
   const KVStoreMethods *pStoreVfunc;  /* Methods */
+  int iTransLevel;                    /* Current transaction level */
   u16 curId;                          /* Unique ID for tracing */
   u8 fTrace;                          /* True to enable tracing */
   /* Subclasses will typically add additional fields */
 };
 
+/*
+** Valid flags for sqlite4KVStorageOpen()
+*/
+#define SQLITE_KVOPEN_TEMPORARY       0x0001  /* A temporary database */
+#define SQLITE_KVOPEN_NO_TRANSACTIONS 0x0002  /* No transactions will be used */
 
 int sqlite4KVStoreOpenMem(KVStore**);
-int sqlite4KVStoreOpen(const char *zUri, KVStore**);
+int sqlite4KVStoreOpen(const char *zUri, KVStore**, unsigned flags);
 int sqlite4KVStoreReplace(
  KVStore*,
  const KVByteArray *pKey, KVSize nKey,

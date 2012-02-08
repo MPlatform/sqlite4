@@ -138,16 +138,14 @@ static void attachFunc(
   }
   assert( pVfs );
   flags |= SQLITE_OPEN_MAIN_DB;
-  rc = sqlite4BtreeOpen(pVfs, zPath, db, &aNew->pBt, 0, flags);
-  if( rc==SQLITE_OK ) sqlite4KVStoreOpen(zPath, &aNew->pKV);
+  rc = sqlite4KVStoreOpen(zPath, &aNew->pKV);
   sqlite4_free( zPath );
   db->nDb++;
   if( rc==SQLITE_CONSTRAINT ){
     rc = SQLITE_ERROR;
     zErrDyn = sqlite4MPrintf(db, "database is already attached");
   }else if( rc==SQLITE_OK ){
-    Pager *pPager;
-    aNew->pSchema = sqlite4SchemaGet(db, aNew->pBt);
+    aNew->pSchema = sqlite4SchemaGet(db);
     if( !aNew->pSchema ){
       rc = SQLITE_NOMEM;
     }else if( aNew->pSchema->file_format && aNew->pSchema->enc!=ENC(db) ){
@@ -155,10 +153,6 @@ static void attachFunc(
         "attached databases must use the same text encoding as main database");
       rc = SQLITE_ERROR;
     }
-    pPager = sqlite4BtreePager(aNew->pBt);
-    sqlite4PagerLockingMode(pPager, db->dfltLockMode);
-    /*sqlite4BtreeSecureDelete(aNew->pBt,
-                             sqlite4BtreeSecureDelete(db->aDb[0].pBt,-1) );*/
   }
   aNew->safety_level = 3;
   aNew->zName = sqlite4DbStrDup(db, zName);
@@ -166,55 +160,18 @@ static void attachFunc(
     rc = SQLITE_NOMEM;
   }
 
-
-#ifdef SQLITE_HAS_CODEC
-  if( rc==SQLITE_OK ){
-    extern int sqlite4CodecAttach(sqlite4*, int, const void*, int);
-    extern void sqlite4CodecGetKey(sqlite4*, int, void**, int*);
-    int nKey;
-    char *zKey;
-    int t = sqlite4_value_type(argv[2]);
-    switch( t ){
-      case SQLITE_INTEGER:
-      case SQLITE_FLOAT:
-        zErrDyn = sqlite4DbStrDup(db, "Invalid key value");
-        rc = SQLITE_ERROR;
-        break;
-        
-      case SQLITE_TEXT:
-      case SQLITE_BLOB:
-        nKey = sqlite4_value_bytes(argv[2]);
-        zKey = (char *)sqlite4_value_blob(argv[2]);
-        rc = sqlite4CodecAttach(db, db->nDb-1, zKey, nKey);
-        break;
-
-      case SQLITE_NULL:
-        /* No key specified.  Use the key from the main database */
-        sqlite4CodecGetKey(db, 0, (void**)&zKey, &nKey);
-        if( nKey>0 || sqlite4BtreeGetReserve(db->aDb[0].pBt)>0 ){
-          rc = sqlite4CodecAttach(db, db->nDb-1, zKey, nKey);
-        }
-        break;
-    }
-  }
-#endif
-
   /* If the file was opened successfully, read the schema for the new database.
   ** If this fails, or if opening the file failed, then close the file and 
   ** remove the entry from the db->aDb[] array. i.e. put everything back the way
   ** we found it.
   */
   if( rc==SQLITE_OK ){
-    sqlite4BtreeEnterAll(db);
     rc = sqlite4Init(db, &zErrDyn);
-    sqlite4BtreeLeaveAll(db);
   }
   if( rc ){
     int iDb = db->nDb - 1;
     assert( iDb>=2 );
     if( db->aDb[iDb].pBt ){
-      sqlite4BtreeClose(db->aDb[iDb].pBt);
-      db->aDb[iDb].pBt = 0;
       sqlite4KVStoreClose(db->aDb[iDb].pKV);
       db->aDb[iDb].pKV = 0;
       db->aDb[iDb].pSchema = 0;
@@ -283,13 +240,11 @@ static void detachFunc(
                      "cannot DETACH database within transaction");
     goto detach_error;
   }
-  if( sqlite4BtreeIsInReadTrans(pDb->pBt) || sqlite4BtreeIsInBackup(pDb->pBt) ){
+  if( pDb->pKV->iTransLevel ){
     sqlite4_snprintf(sizeof(zErr),zErr, "database %s is locked", zName);
     goto detach_error;
   }
 
-  sqlite4BtreeClose(pDb->pBt);
-  pDb->pBt = 0;
   sqlite4KVStoreClose(pDb->pKV);
   pDb->pKV = 0;
   pDb->pSchema = 0;

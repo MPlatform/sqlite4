@@ -1622,7 +1622,7 @@ static int isSortingIndex(
   assert( nTerm>0 );
 
   /* Argument pIdx must either point to a 'real' named index structure, 
-  ** or an index structure allocated on the stack by bestBtreeIndex() to
+  ** or an index structure allocated on the stack by bestKVIndex() to
   ** represent the rowid index that is part of every table.  */
   assert( pIdx->zName || (pIdx->nColumn==1 && pIdx->aiColumn[0]==-1) );
 
@@ -2414,7 +2414,7 @@ static void bestVirtualIndex(
 
   /* If there is an ORDER BY clause, and the selected virtual table index
   ** does not satisfy it, increase the cost of the scan accordingly. This
-  ** matches the processing for non-virtual tables in bestBtreeIndex().
+  ** matches the processing for non-virtual tables in bestKVIndex().
   */
   rCost = pIdxInfo->estimatedCost;
   if( pOrderBy && pIdxInfo->orderByConsumed==0 ){
@@ -2871,7 +2871,7 @@ static int whereInScanEst(
 ** selected plan may still take advantage of the built-in rowid primary key
 ** index.
 */
-static void bestBtreeIndex(
+static void bestKVIndex(
   Parse *pParse,              /* The parsing context */
   WhereClause *pWC,           /* The WHERE clause */
   struct SrcList_item *pSrc,  /* The FROM clause term to search */
@@ -3374,7 +3374,7 @@ static void bestIndex(
   }else
 #endif
   {
-    bestBtreeIndex(pParse, pWC, pSrc, notReady, notValid, pOrderBy, 0, pCost);
+    bestKVIndex(pParse, pWC, pSrc, notReady, notValid, pOrderBy, 0, pCost);
   }
 }
 
@@ -4538,7 +4538,7 @@ static void whereInfoFree(sqlite4 *db, WhereInfo *pWInfo){
 ** the WHERE clause, it might result in additional nested loops for
 ** scanning through all values on the right-hand side of the IN.
 **
-** There are Btree cursors associated with each table.  t1 uses cursor
+** There are cursors associated with each table.  t1 uses cursor
 ** number pTabList->a[0].iCursor.  t2 uses the cursor pTabList->a[1].iCursor.
 ** And so forth.  This routine generates code to open those VDBE cursors
 ** and sqlite4WhereEnd() generates the code to close them.
@@ -4848,7 +4848,7 @@ WhereInfo *sqlite4WhereBegin(
         }else 
 #endif
         {
-          bestBtreeIndex(pParse, pWC, pTabItem, mask, notReady, pOrderBy,
+          bestKVIndex(pParse, pWC, pTabItem, mask, notReady, pOrderBy,
               pDist, &sCost);
         }
         assert( isOptimal || (sCost.used&notReady)==0 );

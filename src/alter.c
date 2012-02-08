@@ -339,7 +339,6 @@ static void reloadTableSchema(Parse *pParse, Table *pTab, const char *zName){
 
   v = sqlite4GetVdbe(pParse);
   if( NEVER(v==0) ) return;
-  assert( sqlite4BtreeHoldsAllMutexes(pParse->db) );
   iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
   assert( iDb>=0 );
 
@@ -412,7 +411,6 @@ void sqlite4AlterRenameTable(
   savedDbFlags = db->flags;  
   if( NEVER(db->mallocFailed) ) goto exit_rename_table;
   assert( pSrc->nSrc==1 );
-  assert( sqlite4BtreeHoldsAllMutexes(pParse->db) );
 
   pTab = sqlite4LocateTable(pParse, 0, pSrc->a[0].zName, pSrc->a[0].zDatabase);
   if( !pTab ) goto exit_rename_table;
@@ -588,31 +586,6 @@ exit_rename_table:
 
 
 /*
-** Generate code to make sure the file format number is at least minFormat.
-** The generated code will increase the file format number if necessary.
-*/
-void sqlite4MinimumFileFormat(Parse *pParse, int iDb, int minFormat){
-  Vdbe *v;
-  v = sqlite4GetVdbe(pParse);
-  /* The VDBE should have been allocated before this routine is called.
-  ** If that allocation failed, we would have quit before reaching this
-  ** point */
-  if( ALWAYS(v) ){
-    int r1 = sqlite4GetTempReg(pParse);
-    int r2 = sqlite4GetTempReg(pParse);
-    int j1;
-    sqlite4VdbeAddOp3(v, OP_ReadCookie, iDb, r1, BTREE_FILE_FORMAT);
-    sqlite4VdbeUsesBtree(v, iDb);
-    sqlite4VdbeAddOp2(v, OP_Integer, minFormat, r2);
-    j1 = sqlite4VdbeAddOp3(v, OP_Ge, r2, 0, r1);
-    sqlite4VdbeAddOp3(v, OP_SetCookie, iDb, BTREE_FILE_FORMAT, r2);
-    sqlite4VdbeJumpHere(v, j1);
-    sqlite4ReleaseTempReg(pParse, r1);
-    sqlite4ReleaseTempReg(pParse, r2);
-  }
-}
-
-/*
 ** This function is called after an "ALTER TABLE ... ADD" statement
 ** has been parsed. Argument pColDef contains the text of the new
 ** column definition.
@@ -636,7 +609,6 @@ void sqlite4AlterFinishAddColumn(Parse *pParse, Token *pColDef){
   pNew = pParse->pNewTable;
   assert( pNew );
 
-  assert( sqlite4BtreeHoldsAllMutexes(db) );
   iDb = sqlite4SchemaToIndex(db, pNew->pSchema);
   zDb = db->aDb[iDb].zName;
   zTab = &pNew->zName[16];  /* Skip the "sqlite_altertab_" prefix on the name */
@@ -719,12 +691,6 @@ void sqlite4AlterFinishAddColumn(Parse *pParse, Token *pColDef){
     db->flags = savedDbFlags;
   }
 
-  /* If the default value of the new column is NULL, then set the file
-  ** format to 2. If the default value of the new column is not NULL,
-  ** the file format becomes 3.
-  */
-  sqlite4MinimumFileFormat(pParse, iDb, pDflt ? 3 : 2);
-
   /* Reload the schema of the modified table. */
   reloadTableSchema(pParse, pTab, pTab->zName);
 }
@@ -755,7 +721,6 @@ void sqlite4AlterBeginAddColumn(Parse *pParse, SrcList *pSrc){
 
   /* Look up the table being altered. */
   assert( pParse->pNewTable==0 );
-  assert( sqlite4BtreeHoldsAllMutexes(db) );
   if( db->mallocFailed ) goto exit_begin_add_column;
   pTab = sqlite4LocateTable(pParse, 0, pSrc->a[0].zName, pSrc->a[0].zDatabase);
   if( !pTab ) goto exit_begin_add_column;

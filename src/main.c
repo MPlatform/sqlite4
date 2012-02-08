@@ -541,15 +541,6 @@ sqlite4_mutex *sqlite4_db_mutex(sqlite4 *db){
 int sqlite4_db_release_memory(sqlite4 *db){
   int i;
   sqlite4_mutex_enter(db->mutex);
-  sqlite4BtreeEnterAll(db);
-  for(i=0; i<db->nDb; i++){
-    Btree *pBt = db->aDb[i].pBt;
-    if( pBt ){
-      Pager *pPager = sqlite4BtreePager(pBt);
-      sqlite4PagerShrink(pPager);
-    }
-  }
-  sqlite4BtreeLeaveAll(db);
   sqlite4_mutex_leave(db->mutex);
   return SQLITE_OK;
 }
@@ -756,24 +747,12 @@ int sqlite4_close(sqlite4 *db){
   }
   assert( sqlite4SafetyCheckSickOrOk(db) );
 
-  for(j=0; j<db->nDb; j++){
-    Btree *pBt = db->aDb[j].pBt;
-    if( pBt && sqlite4BtreeIsInBackup(pBt) ){
-      sqlite4Error(db, SQLITE_BUSY, 
-          "unable to close due to unfinished backup operation");
-      sqlite4_mutex_leave(db->mutex);
-      return SQLITE_BUSY;
-    }
-  }
-
   /* Free any outstanding Savepoint structures. */
   sqlite4CloseSavepoints(db);
 
   for(j=0; j<db->nDb; j++){
     struct Db *pDb = &db->aDb[j];
-    if( pDb->pBt ){
-      sqlite4BtreeClose(pDb->pBt);
-      pDb->pBt = 0;
+    if( pDb->pKV ){
       sqlite4KVStoreClose(pDb->pKV);
       pDb->pKV = 0;
       if( j!=1 ){
@@ -833,7 +812,7 @@ int sqlite4_close(sqlite4 *db){
   db->magic = SQLITE_MAGIC_ERROR;
 
   /* The temp-database schema is allocated differently from the other schema
-  ** objects (using sqliteMalloc() directly, instead of sqlite4BtreeSchema()).
+  ** objects (using sqliteMalloc() directly, instead of sqlite4BTreeSchema()).
   ** So it needs to be freed here. Todo: Why not roll the temp schema into
   ** the same sqliteMalloc() as the one that allocates the database 
   ** structure?
@@ -859,11 +838,11 @@ void sqlite4RollbackAll(sqlite4 *db){
   assert( sqlite4_mutex_held(db->mutex) );
   sqlite4BeginBenignMalloc();
   for(i=0; i<db->nDb; i++){
-    if( db->aDb[i].pBt ){
-      if( sqlite4BtreeIsInTrans(db->aDb[i].pBt) ){
+    if( db->aDb[i].pKV ){
+      if( db->aDb[i].pKV->iTransLevel ){
         inTrans = 1;
       }
-      sqlite4BtreeRollback(db->aDb[i].pBt);
+      sqlite4StorageRollback(db->aDb[i].pKV, 0);
       db->aDb[i].inTrans = 0;
     }
   }
@@ -1480,51 +1459,6 @@ int sqlite4_wal_checkpoint(sqlite4 *db, const char *zDb){
   return sqlite4_wal_checkpoint_v2(db, zDb, SQLITE_CHECKPOINT_PASSIVE, 0, 0);
 }
 
-#ifndef SQLITE_OMIT_WAL
-/*
-** Run a checkpoint on database iDb. This is a no-op if database iDb is
-** not currently open in WAL mode.
-**
-** If a transaction is open on the database being checkpointed, this 
-** function returns SQLITE_LOCKED and a checkpoint is not attempted. If 
-** an error occurs while running the checkpoint, an SQLite error code is 
-** returned (i.e. SQLITE_IOERR). Otherwise, SQLITE_OK.
-**
-** The mutex on database handle db should be held by the caller. The mutex
-** associated with the specific b-tree being checkpointed is taken by
-** this function while the checkpoint is running.
-**
-** If iDb is passed SQLITE_MAX_ATTACHED, then all attached databases are
-** checkpointed. If an error is encountered it is returned immediately -
-** no attempt is made to checkpoint any remaining databases.
-**
-** Parameter eMode is one of SQLITE_CHECKPOINT_PASSIVE, FULL or RESTART.
-*/
-int sqlite4Checkpoint(sqlite4 *db, int iDb, int eMode, int *pnLog, int *pnCkpt){
-  int rc = SQLITE_OK;             /* Return code */
-  int i;                          /* Used to iterate through attached dbs */
-  int bBusy = 0;                  /* True if SQLITE_BUSY has been encountered */
-
-  assert( sqlite4_mutex_held(db->mutex) );
-  assert( !pnLog || *pnLog==-1 );
-  assert( !pnCkpt || *pnCkpt==-1 );
-
-  for(i=0; i<db->nDb && rc==SQLITE_OK; i++){
-    if( i==iDb || iDb==SQLITE_MAX_ATTACHED ){
-      rc = sqlite4BtreeCheckpoint(db->aDb[i].pBt, eMode, pnLog, pnCkpt);
-      pnLog = 0;
-      pnCkpt = 0;
-      if( rc==SQLITE_BUSY ){
-        bBusy = 1;
-        rc = SQLITE_OK;
-      }
-    }
-  }
-
-  return (rc==SQLITE_OK && bBusy) ? SQLITE_BUSY : rc;
-}
-#endif /* SQLITE_OMIT_WAL */
-
 /*
 ** This function returns true if main-memory should be used instead of
 ** a temporary file for transient pager files and statement journals.
@@ -2079,7 +2013,7 @@ static int openDatabase(
   sqlite4 *db;                    /* Store allocated handle here */
   int rc;                         /* Return code */
   int isThreadsafe;               /* True for threadsafe connections */
-  char *zOpen = 0;                /* Filename argument to pass to BtreeOpen() */
+  char *zOpen = 0;                /* Filename passed to StorageOpen() */
   char *zErrMsg = 0;              /* Error message from sqlite4ParseUri() */
 
   *ppDb = 0;
@@ -2213,8 +2147,7 @@ static int openDatabase(
   }
 
   /* Open the backend database driver */
-  rc = sqlite4BtreeOpen(db->pVfs, zOpen, db, &db->aDb[0].pBt, 0,
-                        flags | SQLITE_OPEN_MAIN_DB);
+  rc = sqlite4KVStoreOpen(zOpen, &db->aDb[0].pKV);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_IOERR_NOMEM ){
       rc = SQLITE_NOMEM;
@@ -2222,9 +2155,8 @@ static int openDatabase(
     sqlite4Error(db, rc, 0);
     goto opendb_out;
   }
-  db->aDb[0].pSchema = sqlite4SchemaGet(db, db->aDb[0].pBt);
-  db->aDb[1].pSchema = sqlite4SchemaGet(db, 0);
-  sqlite4KVStoreOpen(zOpen, &db->aDb[0].pKV);
+  db->aDb[0].pSchema = sqlite4SchemaGet(db);
+  db->aDb[1].pSchema = sqlite4SchemaGet(db);
 
   /* The default safety_level for the main database is 'full'; for the temp
   ** database it is 'NONE'. This matches the pager layer defaults.  
@@ -2291,16 +2223,6 @@ static int openDatabase(
 #endif
 
   sqlite4Error(db, rc, 0);
-
-  /* -DSQLITE_DEFAULT_LOCKING_MODE=1 makes EXCLUSIVE the default locking
-  ** mode.  -DSQLITE_DEFAULT_LOCKING_MODE=0 make NORMAL the default locking
-  ** mode.  Doing nothing at all also makes NORMAL the default.
-  */
-#ifdef SQLITE_DEFAULT_LOCKING_MODE
-  db->dfltLockMode = SQLITE_DEFAULT_LOCKING_MODE;
-  sqlite4PagerLockingMode(sqlite4BtreePager(db->aDb[0].pBt),
-                          SQLITE_DEFAULT_LOCKING_MODE);
-#endif
 
   /* Enable the lookaside-malloc subsystem */
   setupLookaside(db, 0, sqlite4GlobalConfig.szLookaside,
@@ -2496,131 +2418,6 @@ int sqlite4CantopenError(int lineno){
 }
 
 
-#ifndef SQLITE_OMIT_DEPRECATED
-/*
-** This is a convenience routine that makes sure that all thread-specific
-** data for this thread has been deallocated.
-**
-** SQLite no longer uses thread-specific data so this routine is now a
-** no-op.  It is retained for historical compatibility.
-*/
-void sqlite4_thread_cleanup(void){
-}
-#endif
-
-/*
-** Return meta information about a specific column of a database table.
-** See comment in sqlite4.h (sqlite.h.in) for details.
-*/
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
-int sqlite4_table_column_metadata(
-  sqlite4 *db,                /* Connection handle */
-  const char *zDbName,        /* Database name or NULL */
-  const char *zTableName,     /* Table name */
-  const char *zColumnName,    /* Column name */
-  char const **pzDataType,    /* OUTPUT: Declared data type */
-  char const **pzCollSeq,     /* OUTPUT: Collation sequence name */
-  int *pNotNull,              /* OUTPUT: True if NOT NULL constraint exists */
-  int *pPrimaryKey,           /* OUTPUT: True if column part of PK */
-  int *pAutoinc               /* OUTPUT: True if column is auto-increment */
-){
-  int rc;
-  char *zErrMsg = 0;
-  Table *pTab = 0;
-  Column *pCol = 0;
-  int iCol;
-
-  char const *zDataType = 0;
-  char const *zCollSeq = 0;
-  int notnull = 0;
-  int primarykey = 0;
-  int autoinc = 0;
-
-  /* Ensure the database schema has been loaded */
-  sqlite4_mutex_enter(db->mutex);
-  sqlite4BtreeEnterAll(db);
-  rc = sqlite4Init(db, &zErrMsg);
-  if( SQLITE_OK!=rc ){
-    goto error_out;
-  }
-
-  /* Locate the table in question */
-  pTab = sqlite4FindTable(db, zTableName, zDbName);
-  if( !pTab || pTab->pSelect ){
-    pTab = 0;
-    goto error_out;
-  }
-
-  /* Find the column for which info is requested */
-  if( sqlite4IsRowid(zColumnName) ){
-    iCol = pTab->iPKey;
-    if( iCol>=0 ){
-      pCol = &pTab->aCol[iCol];
-    }
-  }else{
-    for(iCol=0; iCol<pTab->nCol; iCol++){
-      pCol = &pTab->aCol[iCol];
-      if( 0==sqlite4StrICmp(pCol->zName, zColumnName) ){
-        break;
-      }
-    }
-    if( iCol==pTab->nCol ){
-      pTab = 0;
-      goto error_out;
-    }
-  }
-
-  /* The following block stores the meta information that will be returned
-  ** to the caller in local variables zDataType, zCollSeq, notnull, primarykey
-  ** and autoinc. At this point there are two possibilities:
-  ** 
-  **     1. The specified column name was rowid", "oid" or "_rowid_" 
-  **        and there is no explicitly declared IPK column. 
-  **
-  **     2. The table is not a view and the column name identified an 
-  **        explicitly declared column. Copy meta information from *pCol.
-  */ 
-  if( pCol ){
-    zDataType = pCol->zType;
-    zCollSeq = pCol->zColl;
-    notnull = pCol->notNull!=0;
-    primarykey  = pCol->isPrimKey!=0;
-    autoinc = pTab->iPKey==iCol && (pTab->tabFlags & TF_Autoincrement)!=0;
-  }else{
-    zDataType = "INTEGER";
-    primarykey = 1;
-  }
-  if( !zCollSeq ){
-    zCollSeq = "BINARY";
-  }
-
-error_out:
-  sqlite4BtreeLeaveAll(db);
-
-  /* Whether the function call succeeded or failed, set the output parameters
-  ** to whatever their local counterparts contain. If an error did occur,
-  ** this has the effect of zeroing all output parameters.
-  */
-  if( pzDataType ) *pzDataType = zDataType;
-  if( pzCollSeq ) *pzCollSeq = zCollSeq;
-  if( pNotNull ) *pNotNull = notnull;
-  if( pPrimaryKey ) *pPrimaryKey = primarykey;
-  if( pAutoinc ) *pAutoinc = autoinc;
-
-  if( SQLITE_OK==rc && !pTab ){
-    sqlite4DbFree(db, zErrMsg);
-    zErrMsg = sqlite4MPrintf(db, "no such table column: %s.%s", zTableName,
-        zColumnName);
-    rc = SQLITE_ERROR;
-  }
-  sqlite4Error(db, rc, (zErrMsg?"%s":0), zErrMsg);
-  sqlite4DbFree(db, zErrMsg);
-  rc = sqlite4ApiExit(db, rc);
-  sqlite4_mutex_leave(db->mutex);
-  return rc;
-}
-#endif
-
 /*
 ** Sleep for a little while.  Return the amount of time slept.
 */
@@ -2647,44 +2444,6 @@ int sqlite4_extended_result_codes(sqlite4 *db, int onoff){
   return SQLITE_OK;
 }
 
-/*
-** Invoke the xFileControl method on a particular database.
-*/
-int sqlite4_file_control(sqlite4 *db, const char *zDbName, int op, void *pArg){
-  int rc = SQLITE_ERROR;
-  int iDb;
-  sqlite4_mutex_enter(db->mutex);
-  if( zDbName==0 ){
-    iDb = 0;
-  }else{
-    for(iDb=0; iDb<db->nDb; iDb++){
-      if( strcmp(db->aDb[iDb].zName, zDbName)==0 ) break;
-    }
-  }
-  if( iDb<db->nDb ){
-    Btree *pBtree = db->aDb[iDb].pBt;
-    if( pBtree ){
-      Pager *pPager;
-      sqlite4_file *fd;
-      sqlite4BtreeEnter(pBtree);
-      pPager = sqlite4BtreePager(pBtree);
-      assert( pPager!=0 );
-      fd = sqlite4PagerFile(pPager);
-      assert( fd!=0 );
-      if( op==SQLITE_FCNTL_FILE_POINTER ){
-        *(sqlite4_file**)pArg = fd;
-        rc = SQLITE_OK;
-      }else if( fd->pMethods ){
-        rc = sqlite4OsFileControl(fd, op, pArg);
-      }else{
-        rc = SQLITE_NOTFOUND;
-      }
-      sqlite4BtreeLeave(pBtree);
-    }
-  }
-  sqlite4_mutex_leave(db->mutex);
-  return rc;   
-}
 
 /*
 ** Interface to the testing logic.
@@ -2830,20 +2589,6 @@ int sqlite4_test_control(int op, ...){
       break;
     }
 
-    /*   sqlite4_test_control(SQLITE_TESTCTRL_RESERVE, sqlite4 *db, int N)
-    **
-    ** Set the nReserve size to N for the main database on the database
-    ** connection db.
-    */
-    case SQLITE_TESTCTRL_RESERVE: {
-      sqlite4 *db = va_arg(ap, sqlite4*);
-      int x = va_arg(ap,int);
-      sqlite4_mutex_enter(db->mutex);
-      sqlite4BtreeSetPageSize(db->aDb[0].pBt, 0, x, 0);
-      sqlite4_mutex_leave(db->mutex);
-      break;
-    }
-
     /*  sqlite4_test_control(SQLITE_TESTCTRL_OPTIMIZATIONS, sqlite4 *db, int N)
     **
     ** Enable or disable various optimizations for testing purposes.  The 
@@ -2972,18 +2717,4 @@ sqlite4_int64 sqlite4_uri_int64(
     bDflt = v;
   }
   return bDflt;
-}
-
-/*
-** Return the filename of the database associated with a database
-** connection.
-*/
-const char *sqlite4_db_filename(sqlite4 *db, const char *zDbName){
-  int i;
-  for(i=0; i<db->nDb; i++){
-    if( db->aDb[i].pBt && sqlite4StrICmp(zDbName, db->aDb[i].zName)==0 ){
-      return sqlite4BtreeGetFilename(db->aDb[i].pBt);
-    }
-  }
-  return 0;
 }

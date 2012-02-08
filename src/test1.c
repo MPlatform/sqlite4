@@ -1464,44 +1464,6 @@ static int sqlite4_mprintf_hexdouble(
 }
 
 /*
-** Usage: sqlite4_enable_shared_cache ?BOOLEAN?
-**
-*/
-#if !defined(SQLITE_OMIT_SHARED_CACHE)
-static int test_enable_shared(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  int rc;
-  int enable;
-  int ret = 0;
-
-  if( objc!=2 && objc!=1 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "?BOOLEAN?");
-    return TCL_ERROR;
-  }
-  ret = sqlite4GlobalConfig.sharedCacheEnabled;
-
-  if( objc==2 ){
-    if( Tcl_GetBooleanFromObj(interp, objv[1], &enable) ){
-      return TCL_ERROR;
-    }
-    rc = sqlite4_enable_shared_cache(enable);
-    if( rc!=SQLITE_OK ){
-      Tcl_SetResult(interp, (char *)sqlite4ErrStr(rc), TCL_STATIC);
-      return TCL_ERROR;
-    }
-  }
-  Tcl_SetObjResult(interp, Tcl_NewBooleanObj(ret));
-  return TCL_OK;
-}
-#endif
-
-
-
-/*
 ** Usage: sqlite4_extended_result_codes   DB    BOOLEAN
 **
 */
@@ -1593,212 +1555,6 @@ static int test_table_column_metadata(
 }
 #endif
 
-#ifndef SQLITE_OMIT_INCRBLOB
-
-static int blobHandleFromObj(
-  Tcl_Interp *interp, 
-  Tcl_Obj *pObj,
-  sqlite4_blob **ppBlob
-){
-  char *z;
-  int n;
-
-  z = Tcl_GetStringFromObj(pObj, &n);
-  if( n==0 ){
-    *ppBlob = 0;
-  }else{
-    int notUsed;
-    Tcl_Channel channel;
-    ClientData instanceData;
-    
-    channel = Tcl_GetChannel(interp, z, &notUsed);
-    if( !channel ) return TCL_ERROR;
-
-    Tcl_Flush(channel);
-    Tcl_Seek(channel, 0, SEEK_SET);
-
-    instanceData = Tcl_GetChannelInstanceData(channel);
-    *ppBlob = *((sqlite4_blob **)instanceData);
-  }
-
-  return TCL_OK;
-}
-
-/*
-** sqlite4_blob_bytes  CHANNEL
-*/
-static int test_blob_bytes(
-  ClientData clientData, /* Not used */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4_blob *pBlob;
-  int nByte;
-  
-  if( objc!=2 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "CHANNEL");
-    return TCL_ERROR;
-  }
-
-  if( blobHandleFromObj(interp, objv[1], &pBlob) ) return TCL_ERROR;
-  nByte = sqlite4_blob_bytes(pBlob);
-  Tcl_SetObjResult(interp, Tcl_NewIntObj(nByte));
-
-  return TCL_OK;
-}
-
-/*
-** sqlite4_blob_close  CHANNEL
-*/
-static int test_blob_close(
-  ClientData clientData, /* Not used */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4_blob *pBlob;
-  
-  if( objc!=2 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "CHANNEL");
-    return TCL_ERROR;
-  }
-
-  if( blobHandleFromObj(interp, objv[1], &pBlob) ) return TCL_ERROR;
-  sqlite4_blob_close(pBlob);
-
-  return TCL_OK;
-}
-
-/*
-** sqlite4_blob_read  CHANNEL OFFSET N
-**
-**   This command is used to test the sqlite4_blob_read() in ways that
-**   the Tcl channel interface does not. The first argument should
-**   be the name of a valid channel created by the [incrblob] method
-**   of a database handle. This function calls sqlite4_blob_read()
-**   to read N bytes from offset OFFSET from the underlying SQLite
-**   blob handle.
-**
-**   On success, a byte-array object containing the read data is 
-**   returned. On failure, the interpreter result is set to the
-**   text representation of the returned error code (i.e. "SQLITE_NOMEM")
-**   and a Tcl exception is thrown.
-*/
-static int test_blob_read(
-  ClientData clientData, /* Not used */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4_blob *pBlob;
-  int nByte;
-  int iOffset;
-  unsigned char *zBuf = 0;
-  int rc;
-  
-  if( objc!=4 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "CHANNEL OFFSET N");
-    return TCL_ERROR;
-  }
-
-  if( blobHandleFromObj(interp, objv[1], &pBlob) ) return TCL_ERROR;
-  if( TCL_OK!=Tcl_GetIntFromObj(interp, objv[2], &iOffset)
-   || TCL_OK!=Tcl_GetIntFromObj(interp, objv[3], &nByte)
-  ){ 
-    return TCL_ERROR;
-  }
-
-  if( nByte>0 ){
-    zBuf = (unsigned char *)Tcl_Alloc(nByte);
-  }
-  rc = sqlite4_blob_read(pBlob, zBuf, nByte, iOffset);
-  if( rc==SQLITE_OK ){
-    Tcl_SetObjResult(interp, Tcl_NewByteArrayObj(zBuf, nByte));
-  }else{
-    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
-  }
-  Tcl_Free((char *)zBuf);
-
-  return (rc==SQLITE_OK ? TCL_OK : TCL_ERROR);
-}
-
-/*
-** sqlite4_blob_write CHANNEL OFFSET DATA ?NDATA?
-**
-**   This command is used to test the sqlite4_blob_write() in ways that
-**   the Tcl channel interface does not. The first argument should
-**   be the name of a valid channel created by the [incrblob] method
-**   of a database handle. This function calls sqlite4_blob_write()
-**   to write the DATA byte-array to the underlying SQLite blob handle.
-**   at offset OFFSET.
-**
-**   On success, an empty string is returned. On failure, the interpreter
-**   result is set to the text representation of the returned error code 
-**   (i.e. "SQLITE_NOMEM") and a Tcl exception is thrown.
-*/
-static int test_blob_write(
-  ClientData clientData, /* Not used */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4_blob *pBlob;
-  int iOffset;
-  int rc;
-
-  unsigned char *zBuf;
-  int nBuf;
-  
-  if( objc!=4 && objc!=5 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "CHANNEL OFFSET DATA ?NDATA?");
-    return TCL_ERROR;
-  }
-
-  if( blobHandleFromObj(interp, objv[1], &pBlob) ) return TCL_ERROR;
-  if( TCL_OK!=Tcl_GetIntFromObj(interp, objv[2], &iOffset) ){ 
-    return TCL_ERROR;
-  }
-
-  zBuf = Tcl_GetByteArrayFromObj(objv[3], &nBuf);
-  if( objc==5 && Tcl_GetIntFromObj(interp, objv[4], &nBuf) ){
-    return TCL_ERROR;
-  }
-  rc = sqlite4_blob_write(pBlob, zBuf, nBuf, iOffset);
-  if( rc!=SQLITE_OK ){
-    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
-  }
-
-  return (rc==SQLITE_OK ? TCL_OK : TCL_ERROR);
-}
-
-static int test_blob_reopen(
-  ClientData clientData, /* Not used */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  Tcl_WideInt iRowid;
-  sqlite4_blob *pBlob;
-  int rc;
-
-  if( objc!=3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "CHANNEL ROWID");
-    return TCL_ERROR;
-  }
-
-  if( blobHandleFromObj(interp, objv[1], &pBlob) ) return TCL_ERROR;
-  if( Tcl_GetWideIntFromObj(interp, objv[2], &iRowid) ) return TCL_ERROR;
-
-  rc = sqlite4_blob_reopen(pBlob, iRowid);
-  if( rc!=SQLITE_OK ){
-    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
-  }
-
-  return (rc==SQLITE_OK ? TCL_OK : TCL_ERROR);
-}
-
-#endif
 
 /*
 ** Usage: sqlite4_create_collation DB-HANDLE NAME CMP-PROC DEL-PROC
@@ -4696,45 +4452,6 @@ static int test_thread_cleanup(
   return TCL_OK;
 }
 
-/*
-** Usage:   sqlite4_pager_refcounts  DB
-**
-** Return a list of numbers which are the PagerRefcount for all
-** pagers on each database connection.
-*/
-static int test_pager_refcounts(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  sqlite4 *db;
-  int i;
-  int v, *a;
-  Tcl_Obj *pResult;
-
-  if( objc!=2 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " DB", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  pResult = Tcl_NewObj();
-  for(i=0; i<db->nDb; i++){
-    if( db->aDb[i].pBt==0 ){
-      v = -1;
-    }else{
-      sqlite4_mutex_enter(db->mutex);
-      a = sqlite4PagerStats(sqlite4BtreePager(db->aDb[i].pBt));
-      v = a[0];
-      sqlite4_mutex_leave(db->mutex);
-    }
-    Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(v));
-  }
-  Tcl_SetObjResult(interp, pResult);
-  return TCL_OK;
-}
-
 
 /*
 ** tclcmd:   working_64bit_int
@@ -5946,8 +5663,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
   extern int sqlite4_hostid_num;
 #endif
   extern int sqlite4_max_blobsize;
-  extern int sqlite4BtreeSharedCacheReport(void*,
-                                          Tcl_Interp*,int,Tcl_Obj*CONST*);
   static struct {
      char *zName;
      Tcl_CmdProc *xProc;
@@ -6044,7 +5759,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_db_filename",           test_db_filename,        0},
      { "sqlite4_soft_heap_limit",       test_soft_heap_limit,    0},
      { "sqlite4_thread_cleanup",        test_thread_cleanup,     0},
-     { "sqlite4_pager_refcounts",       test_pager_refcounts,    0},
 
      { "sqlite4_load_extension",        test_load_extension,     0},
      { "sqlite4_enable_load_extension", test_enable_load,        0},
@@ -6122,25 +5836,8 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 #endif
      { "sqlite4_test_errstr",     test_errstr, 0             },
      { "tcl_variable_type",       tcl_variable_type, 0       },
-#ifndef SQLITE_OMIT_SHARED_CACHE
-     { "sqlite4_enable_shared_cache", test_enable_shared, 0  },
-     { "sqlite4_shared_cache_report", sqlite4BtreeSharedCacheReport, 0},
-#endif
      { "sqlite4_libversion_number", test_libversion_number, 0  },
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
-     { "sqlite4_table_column_metadata", test_table_column_metadata, 0  },
-#endif
-#ifndef SQLITE_OMIT_INCRBLOB
-     { "sqlite4_blob_read",   test_blob_read, 0  },
-     { "sqlite4_blob_write",  test_blob_write, 0  },
-     { "sqlite4_blob_reopen", test_blob_reopen, 0  },
-     { "sqlite4_blob_bytes",  test_blob_bytes, 0  },
-     { "sqlite4_blob_close",  test_blob_close, 0  },
-#endif
      { "pcache_stats",       test_pcache_stats, 0  },
-#ifdef SQLITE_ENABLE_UNLOCK_NOTIFY
-     { "sqlite4_unlock_notify", test_unlock_notify, 0  },
-#endif
      { "sqlite4_wal_checkpoint",   test_wal_checkpoint, 0  },
      { "sqlite4_wal_checkpoint_v2",test_wal_checkpoint_v2, 0  },
      { "test_sqlite4_log",         test_sqlite4_log, 0  },

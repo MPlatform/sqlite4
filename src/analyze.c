@@ -157,7 +157,6 @@ static void openStatTable(
   Db *pDb;
   Vdbe *v = sqlite4GetVdbe(pParse);
   if( v==0 ) return;
-  assert( sqlite4BtreeHoldsAllMutexes(db) );
   assert( sqlite4VdbeDb(v)==db );
   pDb = &db->aDb[iDb];
 
@@ -478,7 +477,6 @@ static void analyzeOneTable(
     /* Do not gather statistics on system tables */
     return;
   }
-  assert( sqlite4BtreeHoldsAllMutexes(db) );
   iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
   assert( iDb>=0 );
   assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
@@ -745,7 +743,6 @@ static void analyzeTable(Parse *pParse, Table *pTab, Index *pOnlyIdx){
   int iStatCur;
 
   assert( pTab!=0 );
-  assert( sqlite4BtreeHoldsAllMutexes(pParse->db) );
   iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
   sqlite4BeginWriteOperation(pParse, 0, iDb);
   iStatCur = pParse->nTab;
@@ -782,7 +779,6 @@ void sqlite4Analyze(Parse *pParse, Token *pName1, Token *pName2){
 
   /* Read the database schema. If an error occurs, leave an error message
   ** and code in pParse and return NULL. */
-  assert( sqlite4BtreeHoldsAllMutexes(pParse->db) );
   if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
     return;
   }

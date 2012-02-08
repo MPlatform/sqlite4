@@ -205,11 +205,6 @@ struct sqlite4_api_routines {
   sqlite4_stmt *(*next_stmt)(sqlite4*,sqlite4_stmt*);
   const char *(*sql)(sqlite4_stmt*);
   int (*status)(int,int*,int*,int);
-  int (*backup_finish)(sqlite4_backup*);
-  sqlite4_backup *(*backup_init)(sqlite4*,const char*,sqlite4*,const char*);
-  int (*backup_pagecount)(sqlite4_backup*);
-  int (*backup_remaining)(sqlite4_backup*);
-  int (*backup_step)(sqlite4_backup*,int);
   const char *(*compileoption_get)(int);
   int (*compileoption_used)(const char*);
   int (*create_function_v2)(sqlite4*,const char*,int,int,void*,
@@ -410,11 +405,6 @@ struct sqlite4_api_routines {
 #define sqlite4_next_stmt              sqlite4_api->next_stmt
 #define sqlite4_sql                    sqlite4_api->sql
 #define sqlite4_status                 sqlite4_api->status
-#define sqlite4_backup_finish          sqlite4_api->backup_finish
-#define sqlite4_backup_init            sqlite4_api->backup_init
-#define sqlite4_backup_pagecount       sqlite4_api->backup_pagecount
-#define sqlite4_backup_remaining       sqlite4_api->backup_remaining
-#define sqlite4_backup_step            sqlite4_api->backup_step
 #define sqlite4_compileoption_get      sqlite4_api->compileoption_get
 #define sqlite4_compileoption_used     sqlite4_api->compileoption_used
 #define sqlite4_create_function_v2     sqlite4_api->create_function_v2

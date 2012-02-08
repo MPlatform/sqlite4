@@ -142,7 +142,13 @@ int sqlite4VdbeDecodeValue(
       sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0, SQLITE_TRANSIENT);
     }
   }
-  if( i<iVal ) sqlite4VdbeMemShallowCopy(pOut, pDefault, MEM_Static);
+  if( i<iVal ){
+    if( pDefault ){
+      sqlite4VdbeMemShallowCopy(pOut, pDefault, MEM_Static);
+    }else{
+      sqlite4VdbeMemSetNull(pOut);
+    }
+  }
   return SQLITE_OK; 
 }
 
@@ -548,7 +554,8 @@ int sqlite4VdbeEncodeKey(
   int iTabno,                  /* The table this key applies to */
   KeyInfo *pKeyInfo,           /* Collating sequence information */
   u8 **paOut,                  /* Write the resulting key here */
-  int *pnOut                   /* Number of bytes in the key */
+  int *pnOut,                  /* Number of bytes in the key */
+  int *pnShort                 /* Number of bytes without the primary key */
 ){
   int i;
   int rc = SQLITE_OK;
@@ -564,11 +571,9 @@ int sqlite4VdbeEncodeKey(
   if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE_NOMEM;
   x.nOut = sqlite4PutVarint64(x.aOut, iTabno);
   for(i=0; i<pKeyInfo->nField && rc==SQLITE_OK; i++){
+    if( pnShort && i==pKeyInfo->nField-pKeyInfo->nPK ) *pnShort = x.nOut;
     rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC,
                            pKeyInfo->aColl[i]);
-  }
-  for(; i<nIn && rc==SQLITE_OK; i++){
-    rc = encodeOneKeyValue(&x, aIn+i, SQLITE_SO_ASC, pKeyInfo->aColl[0]);
   }
   if( rc ){
     sqlite4DbFree(db, x.aOut);

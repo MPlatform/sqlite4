@@ -1051,14 +1051,6 @@ static int display_stats(
     sqlite4_db_status(db, SQLITE_DBSTATUS_LOOKASIDE_MISS_FULL, &iCur, &iHiwtr, bReset);
     fprintf(pArg->out, "Lookaside failures due to OOM:       %d\n", iHiwtr);
     iHiwtr = iCur = -1;
-    sqlite4_db_status(db, SQLITE_DBSTATUS_CACHE_USED, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Pager Heap Usage:                    %d bytes\n", iCur);    iHiwtr = iCur = -1;
-    sqlite4_db_status(db, SQLITE_DBSTATUS_CACHE_HIT, &iCur, &iHiwtr, 1);
-    fprintf(pArg->out, "Page cache hits:                     %d\n", iCur);
-    iHiwtr = iCur = -1;
-    sqlite4_db_status(db, SQLITE_DBSTATUS_CACHE_MISS, &iCur, &iHiwtr, 1);
-    fprintf(pArg->out, "Page cache misses:                   %d\n", iCur); 
-    iHiwtr = iCur = -1;
     sqlite4_db_status(db, SQLITE_DBSTATUS_SCHEMA_USED, &iCur, &iHiwtr, bReset);
     fprintf(pArg->out, "Schema Heap Usage:                   %d bytes\n", iCur); 
     iHiwtr = iCur = -1;
@@ -1359,7 +1351,6 @@ static int run_schema_dump_query(
 ** Text of a help message
 */
 static char zHelp[] =
-  ".backup ?DB? FILE      Backup DB (default \"main\") to FILE\n"
   ".bail ON|OFF           Stop after hitting an error.  Default OFF\n"
   ".databases             List names and files of attached databases\n"
   ".dump ?TABLE? ...      Dump the database in an SQL text format\n"
@@ -1397,7 +1388,6 @@ static char zHelp[] =
   ".prompt MAIN CONTINUE  Replace the standard prompts\n"
   ".quit                  Exit this program\n"
   ".read FILENAME         Execute SQL in FILENAME\n"
-  ".restore ?DB? FILE     Restore content of DB (default \"main\") from FILE\n"
   ".schema ?TABLE?        Show the CREATE statements\n"
   "                         If TABLE specified, only show tables matching\n"
   "                         LIKE pattern TABLE.\n"
@@ -1531,46 +1521,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
     }
   }
 
-  /* Process the input line.
-  */
-  if( nArg==0 ) return 0; /* no tokens, no error */
-  n = strlen30(azArg[0]);
-  c = azArg[0][0];
-  if( c=='b' && n>=3 && strncmp(azArg[0], "backup", n)==0 && nArg>1 && nArg<4){
-    const char *zDestFile;
-    const char *zDb;
-    sqlite4 *pDest;
-    sqlite4_backup *pBackup;
-    if( nArg==2 ){
-      zDestFile = azArg[1];
-      zDb = "main";
-    }else{
-      zDestFile = azArg[2];
-      zDb = azArg[1];
-    }
-    rc = sqlite4_open(zDestFile, &pDest);
-    if( rc!=SQLITE_OK ){
-      fprintf(stderr, "Error: cannot open \"%s\"\n", zDestFile);
-      sqlite4_close(pDest);
-      return 1;
-    }
-    open_db(p);
-    pBackup = sqlite4_backup_init(pDest, "main", p->db, zDb);
-    if( pBackup==0 ){
-      fprintf(stderr, "Error: %s\n", sqlite4_errmsg(pDest));
-      sqlite4_close(pDest);
-      return 1;
-    }
-    while(  (rc = sqlite4_backup_step(pBackup,100))==SQLITE_OK ){}
-    sqlite4_backup_finish(pBackup);
-    if( rc==SQLITE_DONE ){
-      rc = 0;
-    }else{
-      fprintf(stderr, "Error: %s\n", sqlite4_errmsg(pDest));
-      rc = 1;
-    }
-    sqlite4_close(pDest);
-  }else
 
   if( c=='b' && n>=3 && strncmp(azArg[0], "bail", n)==0 && nArg>1 && nArg<3 ){
     bail_on_error = booleanValue(azArg[1]);
@@ -2017,52 +1967,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
     }
   }else
 
-  if( c=='r' && n>=3 && strncmp(azArg[0], "restore", n)==0 && nArg>1 && nArg<4){
-    const char *zSrcFile;
-    const char *zDb;
-    sqlite4 *pSrc;
-    sqlite4_backup *pBackup;
-    int nTimeout = 0;
-
-    if( nArg==2 ){
-      zSrcFile = azArg[1];
-      zDb = "main";
-    }else{
-      zSrcFile = azArg[2];
-      zDb = azArg[1];
-    }
-    rc = sqlite4_open(zSrcFile, &pSrc);
-    if( rc!=SQLITE_OK ){
-      fprintf(stderr, "Error: cannot open \"%s\"\n", zSrcFile);
-      sqlite4_close(pSrc);
-      return 1;
-    }
-    open_db(p);
-    pBackup = sqlite4_backup_init(p->db, zDb, pSrc, "main");
-    if( pBackup==0 ){
-      fprintf(stderr, "Error: %s\n", sqlite4_errmsg(p->db));
-      sqlite4_close(pSrc);
-      return 1;
-    }
-    while( (rc = sqlite4_backup_step(pBackup,100))==SQLITE_OK
-          || rc==SQLITE_BUSY  ){
-      if( rc==SQLITE_BUSY ){
-        if( nTimeout++ >= 3 ) break;
-        sqlite4_sleep(100);
-      }
-    }
-    sqlite4_backup_finish(pBackup);
-    if( rc==SQLITE_DONE ){
-      rc = 0;
-    }else if( rc==SQLITE_BUSY || rc==SQLITE_LOCKED ){
-      fprintf(stderr, "Error: source database is busy\n");
-      rc = 1;
-    }else{
-      fprintf(stderr, "Error: %s\n", sqlite4_errmsg(p->db));
-      rc = 1;
-    }
-    sqlite4_close(pSrc);
-  }else
 
   if( c=='s' && strncmp(azArg[0], "schema", n)==0 && nArg<3 ){
     struct callback_data data;

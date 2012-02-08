@@ -18,17 +18,17 @@
 /*
 ** Open a storage engine via URI
 */
-int sqlite4KVStoreOpen(const char *zUri, KVStore **ppKVStore){
+int sqlite4KVStoreOpen(const char *zUri, KVStore **ppKVStore, unsigned flags){
   KVStore *pNew = 0;
   int rc;
 
-  rc = sqlite4KVStoreOpenMem(&pNew);
+  rc = sqlite4KVStoreOpenMem(&pNew, flags);
   *ppKVStore = pNew;
   if( pNew ){
     sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);
     pNew->fTrace = 0;
     if( pNew->fTrace ){
-      printf("KVopen(%s,%d)\n", zUri, pNew->kvId);
+      printf("KVopen(%s,%d, 0x%04x)\n", zUri, pNew->kvId, flags);
     }
   }
   return rc;
@@ -171,24 +171,35 @@ int sqlite4KVCursorClose(KVCursor *p){
   return rc;
 }
 int sqlite4KVStoreBegin(KVStore *p, int iLevel){
-  int rc = p->pStoreVfunc->xBegin(p, iLevel);
+  int rc;
+  assert( (iLevel==2 && p->iTransLevel==0) || p->iTransLevel+1==iLevel;
+  rc = p->pStoreVfunc->xBegin(p, iLevel);
   if( p->fTrace ){
     printf("KV.xBegin(%d,%d) -> %d\n", p->kvId, iLevel, rc);
   }
+  assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
 int sqlite4KVStoreCommit(KVStore *p, int iLevel){
-  int rc = p->pStoreVfunc->xCommit(p, iLevel);
+  int rc;
+  assert( iLevel>=0 );
+  assert( iLevel>=p->iTransLevel );
+  rc = p->pStoreVfunc->xCommit(p, iLevel);
   if( p->fTrace ){
     printf("KV.xCommit(%d,%d) -> %d\n", p->kvId, iLevel, rc);
   }
+  assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
 int sqlite4KVStoreRollback(KVStore *p, int iLevel){
-  int rc = p->pStoreVfunc->xRollback(p, iLevel);
+  int rc;
+  assert( iLevel>=0 );
+  assert( iLevel>=p->iTransLevel );
+  rc = p->pStoreVfunc->xRollback(p, iLevel);
   if( p->fTrace ){
     printf("KV.xRollback(%d,%d) -> %d\n", p->kvId, iLevel, rc);
   }
+  assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
 int sqlite4KVStoreClose(KVStore *p){

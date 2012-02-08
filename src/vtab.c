@@ -205,7 +205,6 @@ void sqlite4VtabUnlockList(sqlite4 *db){
   VTable *p = db->pDisconnect;
   db->pDisconnect = 0;
 
-  assert( sqlite4BtreeHoldsAllMutexes(db) );
   assert( sqlite4_mutex_held(db->mutex) );
 
   if( p ){
