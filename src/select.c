@@ -1617,7 +1617,6 @@ static int multiSelect(
   if( dest.eDest==SRT_EphemTab ){
     assert( p->pEList );
     sqlite4VdbeAddOp2(v, OP_OpenEphemeral, dest.iParm, p->pEList->nExpr);
-    sqlite4VdbeChangeP5(v, BTREE_UNORDERED);
     dest.eDest = SRT_Table;
   }
 
@@ -4006,7 +4005,6 @@ int sqlite4Select(
     pKeyInfo = keyInfoFromExprList(pParse, p->pEList);
     addrDistinctIndex = sqlite4VdbeAddOp4(v, OP_OpenEphemeral, distinct, 0, 0,
         (char*)pKeyInfo, P4_KEYINFO_HANDOFF);
-    sqlite4VdbeChangeP5(v, BTREE_UNORDERED);
   }else{
     distinct = addrDistinctIndex = -1;
   }

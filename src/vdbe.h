@@ -33,6 +33,7 @@ typedef struct Vdbe Vdbe;
 typedef struct VdbeFunc VdbeFunc;
 typedef struct Mem Mem;
 typedef struct SubProgram SubProgram;
+typedef struct VdbeCursor VdbeCursor;
 
 /*
 ** A single instruction of the virtual machine has an opcode
@@ -61,7 +62,7 @@ struct VdbeOp {
     KeyInfo *pKeyInfo;     /* Used when p4type is P4_KEYINFO */
     int *ai;               /* Used when p4type is P4_INTARRAY */
     SubProgram *pProgram;  /* Used when p4type is P4_SUBPROGRAM */
-    int (*xAdvance)(BtCursor *, int *);
+    int (*xAdvance)(VdbeCursor*);
   } p4;
 #ifdef SQLITE_DEBUG
   char *zComment;          /* Comment to improve readability */

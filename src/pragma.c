@@ -42,36 +42,6 @@ u8 sqlite4GetBoolean(const char *z){
 #if !defined(SQLITE_OMIT_PRAGMA)
 
 /*
-** Interpret the given string as a locking mode value.
-*/
-static int getLockingMode(const char *z){
-  if( z ){
-    if( 0==sqlite4StrICmp(z, "exclusive") ) return PAGER_LOCKINGMODE_EXCLUSIVE;
-    if( 0==sqlite4StrICmp(z, "normal") ) return PAGER_LOCKINGMODE_NORMAL;
-  }
-  return PAGER_LOCKINGMODE_QUERY;
-}
-
-#ifndef SQLITE_OMIT_PAGER_PRAGMAS
-/*
-** Interpret the given string as a temp db location. Return 1 for file
-** backed temporary databases, 2 for the Red-Black tree in memory database
-** and 0 to use the compile-time default.
-*/
-static int getTempStore(const char *z){
-  if( z[0]>='0' && z[0]<='2' ){
-    return z[0] - '0';
-  }else if( sqlite4StrICmp(z, "file")==0 ){
-    return 1;
-  }else if( sqlite4StrICmp(z, "memory")==0 ){
-    return 2;
-  }else{
-    return 0;
-  }
-}
-#endif /* SQLITE_PAGER_PRAGMAS */
-
-/*
 ** Generate code to return a single integer value.
 */
 static void returnSingleInt(Parse *pParse, const char *zLabel, i64 value){
@@ -356,7 +326,7 @@ void sqlite4Pragma(
     sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE_STATIC);
     sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "file", SQLITE_STATIC);
     for(i=0; i<db->nDb; i++){
-      if( db->aDb[i].pBt==0 ) continue;
+      if( db->aDb[i].pKV==0 ) continue;
       assert( db->aDb[i].zName!=0 );
       sqlite4VdbeAddOp2(v, OP_Integer, i, 1);
       sqlite4VdbeAddOp4(v, OP_String8, 0, 2, 0, db->aDb[i].zName, 0);

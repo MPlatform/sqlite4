@@ -64,7 +64,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          random.o resolve.o rowset.o rtree.o select.o status.o storage.o \
          table.o tokenize.o trigger.o \
          update.o util.o varint.o \
-         vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o \
+         vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
          vdbemem.o vdbesort.o vdbetrace.o \
          walker.o where.o utf.o vtab.o
 

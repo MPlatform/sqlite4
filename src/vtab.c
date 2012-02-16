@@ -153,14 +153,6 @@ static VTable *vtabDisconnectAll(sqlite4 *db, Table *p){
   VTable *pVTable = p->pVTable;
   p->pVTable = 0;
 
-  /* Assert that the mutex (if any) associated with the BtShared database 
-  ** that contains table p is held by the caller. See header comments 
-  ** above function sqlite4VtabUnlockList() for an explanation of why
-  ** this makes it safe to access the sqlite4.pDisconnect list of any
-  ** database connection that may have an entry in the p->pVTable list.
-  */
-  assert( db==0 || sqlite4SchemaMutexHeld(db, 0, p->pSchema) );
-
   while( pVTable ){
     sqlite4 *db2 = pVTable->db;
     VTable *pNext = pVTable->pNext;
@@ -397,7 +389,6 @@ void sqlite4VtabFinishParse(Parse *pParse, Token *pEnd){
     Schema *pSchema = pTab->pSchema;
     const char *zName = pTab->zName;
     int nName = sqlite4Strlen30(zName);
-    assert( sqlite4SchemaMutexHeld(db, 0, pSchema) );
     pOld = sqlite4HashInsert(&pSchema->tblHash, zName, nName, pTab);
     if( pOld ){
       db->mallocFailed = 1;

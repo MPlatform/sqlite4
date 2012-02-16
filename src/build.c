@@ -153,10 +153,8 @@ void sqlite4FinishCoding(Parse *pParse){
       sqlite4VdbeJumpHere(v, pParse->cookieGoto-1);
       for(iDb=0, mask=1; iDb<db->nDb; mask<<=1, iDb++){
         if( (mask & pParse->cookieMask)==0 ) continue;
-        sqlite4VdbeUsesStorage(v, iDb);
         sqlite4VdbeAddOp2(v,OP_Transaction, iDb, (mask & pParse->writeMask)!=0);
         if( db->init.busy==0 ){
-          assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
           sqlite4VdbeAddOp3(v, OP_VerifyCookie,
                             iDb, pParse->cookieValue[iDb],
                             db->aDb[iDb].pSchema->iGeneration);
@@ -274,7 +272,6 @@ Table *sqlite4FindTable(sqlite4 *db, const char *zName, const char *zDatabase){
   for(i=OMIT_TEMPDB; i<db->nDb; i++){
     int j = (i<2) ? i^1 : i;   /* Search TEMP before MAIN */
     if( zDatabase!=0 && sqlite4StrICmp(zDatabase, db->aDb[j].zName) ) continue;
-    assert( sqlite4SchemaMutexHeld(db, j, 0) );
     p = sqlite4HashFind(&db->aDb[j].pSchema->tblHash, zName, nName);
     if( p ) break;
   }
@@ -340,7 +337,6 @@ Index *sqlite4FindIndex(sqlite4 *db, const char *zName, const char *zDb){
     Schema *pSchema = db->aDb[j].pSchema;
     assert( pSchema );
     if( zDb && sqlite4StrICmp(zDb, db->aDb[j].zName) ) continue;
-    assert( sqlite4SchemaMutexHeld(db, j, 0) );
     p = sqlite4HashFind(&pSchema->idxHash, zName, nName);
     if( p ) break;
   }
@@ -369,7 +365,6 @@ void sqlite4UnlinkAndDeleteIndex(sqlite4 *db, int iDb, const char *zIdxName){
   int len;
   Hash *pHash;
 
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   pHash = &db->aDb[iDb].pSchema->idxHash;
   len = sqlite4Strlen30(zIdxName);
   pIndex = sqlite4HashInsert(pHash, zIdxName, len, 0);
@@ -409,7 +404,6 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
   if( iDb>=0 ){
     /* Case 1:  Reset the single schema identified by iDb */
     Db *pDb = &db->aDb[iDb];
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     assert( pDb->pSchema!=0 );
     sqlite4SchemaClear(pDb->pSchema);
 
@@ -444,7 +438,7 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
   */
   for(i=j=2; i<db->nDb; i++){
     struct Db *pDb = &db->aDb[i];
-    if( pDb->pBt==0 ){
+    if( pDb->pKV==0 ){
       sqlite4DbFree(db, pDb->zName);
       pDb->zName = 0;
       continue;
@@ -517,7 +511,6 @@ void sqlite4DeleteTable(sqlite4 *db, Table *pTable){
       TESTONLY ( Index *pOld = ) sqlite4HashInsert(
 	  &pIndex->pSchema->idxHash, zName, sqlite4Strlen30(zName), 0
       );
-      assert( db==0 || sqlite4SchemaMutexHeld(db, 0, pIndex->pSchema) );
       assert( pOld==pIndex || pOld==0 );
     }
     freeIndex(db, pIndex);
@@ -552,7 +545,6 @@ void sqlite4UnlinkAndDeleteTable(sqlite4 *db, int iDb, const char *zTabName){
   assert( db!=0 );
   assert( iDb>=0 && iDb<db->nDb );
   assert( zTabName );
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   testcase( zTabName[0]==0 );  /* Zero-length table names are allowed */
   pDb = &db->aDb[iDb];
   p = sqlite4HashInsert(&pDb->pSchema->tblHash, zTabName,
@@ -840,7 +832,6 @@ void sqlite4StartTable(
   */
 #ifndef SQLITE_OMIT_AUTOINCREMENT
   if( !pParse->nested && strcmp(zName, "sqlite_sequence")==0 ){
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     pTable->pSchema->pSeqTab = pTable;
   }
 #endif
@@ -854,8 +845,6 @@ void sqlite4StartTable(
   ** now.
   */
   if( !db->init.busy && (v = sqlite4GetVdbe(pParse))!=0 ){
-    int j1;
-    int fileFormat;
     int reg1, reg2, reg3;
     sqlite4BeginWriteOperation(pParse, 0, iDb);
 
@@ -1288,9 +1277,8 @@ void sqlite4ChangeCookie(Parse *pParse, int iDb){
   int r1 = sqlite4GetTempReg(pParse);
   sqlite4 *db = pParse->db;
   Vdbe *v = pParse->pVdbe;
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   sqlite4VdbeAddOp2(v, OP_Integer, db->aDb[iDb].pSchema->schema_cookie+1, r1);
-  sqlite4VdbeAddOp3(v, OP_SetCookie, iDb, BTREE_SCHEMA_VERSION, r1);
+  sqlite4VdbeAddOp3(v, OP_SetCookie, iDb, 0, r1);
   sqlite4ReleaseTempReg(pParse, r1);
 }
 
@@ -1591,7 +1579,6 @@ void sqlite4EndTable(
     */
     if( p->tabFlags & TF_Autoincrement ){
       Db *pDb = &db->aDb[iDb];
-      assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
       if( pDb->pSchema->pSeqTab==0 ){
         sqlite4NestedParse(pParse,
           "CREATE TABLE %Q.sqlite_sequence(name,seq)",
@@ -1612,7 +1599,6 @@ void sqlite4EndTable(
   if( db->init.busy ){
     Table *pOld;
     Schema *pSchema = p->pSchema;
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     pOld = sqlite4HashInsert(&pSchema->tblHash, p->zName,
                              sqlite4Strlen30(p->zName),p);
     if( pOld ){
@@ -1797,7 +1783,6 @@ int sqlite4ViewGetColumnNames(Parse *pParse, Table *pTable){
       pSelTab->nCol = 0;
       pSelTab->aCol = 0;
       sqlite4DeleteTable(db, pSelTab);
-      assert( sqlite4SchemaMutexHeld(db, 0, pTable->pSchema) );
       pTable->pSchema->flags |= DB_UnresetViews;
     }else{
       pTable->nCol = 0;
@@ -1818,7 +1803,6 @@ int sqlite4ViewGetColumnNames(Parse *pParse, Table *pTable){
 */
 static void sqliteViewResetAll(sqlite4 *db, int idx){
   HashElem *i;
-  assert( sqlite4SchemaMutexHeld(db, idx, 0) );
   if( !DbHasProperty(db, idx, DB_UnresetViews) ) return;
   for(i=sqliteHashFirst(&db->aDb[idx].pSchema->tblHash); i;i=sqliteHashNext(i)){
     Table *pTab = sqliteHashData(i);
@@ -2165,7 +2149,6 @@ void sqlite4CreateForeignKey(
   pFKey->aAction[0] = (u8)(flags & 0xff);            /* ON DELETE action */
   pFKey->aAction[1] = (u8)((flags >> 8 ) & 0xff);    /* ON UPDATE action */
 
-  assert( sqlite4SchemaMutexHeld(db, 0, p->pSchema) );
   pNextTo = (FKey *)sqlite4HashInsert(&p->pSchema->fkeyHash, 
       pFKey->zTo, sqlite4Strlen30(pFKey->zTo), (void *)pFKey
   );
@@ -2572,7 +2555,6 @@ Index *sqlite4CreateIndex(
   pIndex->onError = (u8)onError;
   pIndex->autoIndex = (u8)(pName==0);
   pIndex->pSchema = db->aDb[iDb].pSchema;
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
 
   /* Check to see if we should honor DESC requests on index columns
   */
@@ -2702,7 +2684,6 @@ Index *sqlite4CreateIndex(
   */
   if( db->init.busy ){
     Index *p;
-    assert( sqlite4SchemaMutexHeld(db, 0, pIndex->pSchema) );
     p = sqlite4HashInsert(&pIndex->pSchema->idxHash, 
                           pIndex->zName, sqlite4Strlen30(pIndex->zName),
                           pIndex);
@@ -3307,7 +3288,6 @@ void sqlite4BeginTransaction(Parse *pParse, int type){
   assert( pParse!=0 );
   db = pParse->db;
   assert( db!=0 );
-/*  if( db->aDb[0].pBt==0 ) return; */
   if( sqlite4AuthCheck(pParse, SQLITE_TRANSACTION, "BEGIN", 0, 0) ){
     return;
   }
@@ -3382,7 +3362,7 @@ void sqlite4Savepoint(Parse *pParse, int op, Token *pName){
 */
 int sqlite4OpenTempDatabase(Parse *pParse){
   sqlite4 *db = pParse->db;
-  if( db->aDb[1].pBt==0 && !pParse->explain ){
+  if( db->aDb[1].pKV==0 && !pParse->explain ){
     int rc;
 #if 0
     static const int flags = 
@@ -3393,7 +3373,8 @@ int sqlite4OpenTempDatabase(Parse *pParse){
           SQLITE_OPEN_TEMP_DB;
 #endif
 
-    rc = sqlite4KVStoreOpen(":memory:", &db->aDb[1].pKV);
+    rc = sqlite4KVStoreOpen(":memory:", &db->aDb[1].pKV,
+                            SQLITE_KVOPEN_TEMPORARY);
     if( rc!=SQLITE_OK ){
       sqlite4ErrorMsg(pParse, "unable to open a temporary database "
         "file for storing temporary tables");
@@ -3440,9 +3421,8 @@ void sqlite4CodeVerifySchema(Parse *pParse, int iDb){
     yDbMask mask;
 
     assert( iDb<db->nDb );
-    assert( db->aDb[iDb].pBt!=0 || iDb==1 );
+    assert( db->aDb[iDb].pKV!=0 || iDb==1 );
     assert( iDb<SQLITE_MAX_ATTACHED+2 );
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     mask = ((yDbMask)1)<<iDb;
     if( (pToplevel->cookieMask & mask)==0 ){
       pToplevel->cookieMask |= mask;
@@ -3463,7 +3443,7 @@ void sqlite4CodeVerifyNamedSchema(Parse *pParse, const char *zDb){
   int i;
   for(i=0; i<db->nDb; i++){
     Db *pDb = &db->aDb[i];
-    if( pDb->pBt && (!zDb || 0==sqlite4StrICmp(zDb, pDb->zName)) ){
+    if( pDb->pKV && (!zDb || 0==sqlite4StrICmp(zDb, pDb->zName)) ){
       sqlite4CodeVerifySchema(pParse, i);
     }
   }

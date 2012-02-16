@@ -1652,7 +1652,6 @@ int sqlite4CodeSubselect(
       */
       pExpr->iTable = pParse->nTab++;
       addr = sqlite4VdbeAddOp2(v, OP_OpenEphemeral, pExpr->iTable, !isRowid);
-      if( rMayHaveNull==0 ) sqlite4VdbeChangeP5(v, BTREE_UNORDERED);
       memset(&keyInfo, 0, sizeof(keyInfo));
       keyInfo.nField = 1;
 

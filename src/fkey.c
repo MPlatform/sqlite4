@@ -1184,7 +1184,6 @@ void sqlite4FkDelete(sqlite4 *db, Table *pTab){
   FKey *pFKey;                    /* Iterator variable */
   FKey *pNext;                    /* Copy of pFKey->pNextFrom */
 
-  assert( db==0 || sqlite4SchemaMutexHeld(db, 0, pTab->pSchema) );
   for(pFKey=pTab->pFKey; pFKey; pFKey=pNext){
 
     /* Remove the FK from the fkeyHash hash table. */

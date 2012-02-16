@@ -132,6 +132,7 @@ struct KVStoreMethods {
 };
 struct KVStore {
   const KVStoreMethods *pStoreVfunc;    /* Virtual method table */
+  int iTransLevel;                      /* Current transaction level */
   u16 kvId;                             /* Unique ID used for tracing */
   u8 fTrace;                            /* True to enable tracing */
   /* Subclasses will typically append additional fields */
@@ -155,7 +156,7 @@ struct KVCursor {
 #define SQLITE_KVOPEN_TEMPORARY       0x0001  /* A temporary database */
 #define SQLITE_KVOPEN_NO_TRANSACTIONS 0x0002  /* No transactions will be used */
 
-int sqlite4KVStoreOpenMem(KVStore**);
+int sqlite4KVStoreOpenMem(KVStore**, unsigned);
 int sqlite4KVStoreOpen(const char *zUri, KVStore**, unsigned flags);
 int sqlite4KVStoreReplace(
  KVStore*,

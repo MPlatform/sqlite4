@@ -207,7 +207,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   /* Create a cursor to hold the database open
   */
   pDb = &db->aDb[iDb];
-  if( pDb->pBt==0 ){
+  if( pDb->pKV==0 ){
     if( !OMIT_TEMPDB && ALWAYS(iDb==1) ){
       DbSetProperty(db, 1, DB_SchemaLoaded);
     }
@@ -218,7 +218,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   ** on the database, open one now. If a transaction is opened, it 
   ** will be closed before this function returns.  */
   if( pDb->pKV->iTransLevel==0 ){
-    rc = sqlite4StorageBegin(pDb->pKV, 1);
+    rc = sqlite4KVStoreBegin(pDb->pKV, 1);
     if( rc!=SQLITE_OK ){
       sqlite4SetString(pzErrMsg, db, "%s", sqlite4ErrStr(rc));
       goto initone_error_out;
@@ -244,61 +244,9 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   ** the possible values of meta[4].
   */
   for(i=0; i<ArraySize(meta); i++){
-    sqlite4StorageGetMeta(pDb->pBt, i+1, (u32 *)&meta[i]);
+    sqlite4KVStoreGetMeta(pDb->pKV, i+1, (u32 *)&meta[i]);
   }
-  pDb->pSchema->schema_cookie = meta[BTREE_SCHEMA_VERSION-1];
-
-  /* If opening a non-empty database, check the text encoding. For the
-  ** main database, set sqlite4.enc to the encoding of the main database.
-  ** For an attached db, it is an error if the encoding is not the same
-  ** as sqlite4.enc.
-  */
-  if( meta[BTREE_TEXT_ENCODING-1] ){  /* text encoding */
-    if( iDb==0 ){
-      u8 encoding;
-      /* If opening the main database, set ENC(db). */
-      encoding = (u8)meta[BTREE_TEXT_ENCODING-1] & 3;
-      if( encoding==0 ) encoding = SQLITE_UTF8;
-      ENC(db) = encoding;
-      db->pDfltColl = sqlite4FindCollSeq(db, SQLITE_UTF8, "BINARY", 0);
-    }else{
-      /* If opening an attached database, the encoding much match ENC(db) */
-      if( meta[BTREE_TEXT_ENCODING-1]!=ENC(db) ){
-        sqlite4SetString(pzErrMsg, db, "attached databases must use the same"
-            " text encoding as main database");
-        rc = SQLITE_ERROR;
-        goto initone_error_out;
-      }
-    }
-  }else{
-    DbSetProperty(db, iDb, DB_Empty);
-  }
-  pDb->pSchema->enc = ENC(db);
-
-  /*
-  ** file_format==1    Version 3.0.0.
-  ** file_format==2    Version 3.1.3.  // ALTER TABLE ADD COLUMN
-  ** file_format==3    Version 3.1.4.  // ditto but with non-NULL defaults
-  ** file_format==4    Version 3.3.0.  // DESC indices.  Boolean constants
-  */
-  pDb->pSchema->file_format = (u8)meta[BTREE_FILE_FORMAT-1];
-  if( pDb->pSchema->file_format==0 ){
-    pDb->pSchema->file_format = 1;
-  }
-  if( pDb->pSchema->file_format>SQLITE_MAX_FILE_FORMAT ){
-    sqlite4SetString(pzErrMsg, db, "unsupported file format");
-    rc = SQLITE_ERROR;
-    goto initone_error_out;
-  }
-
-  /* Ticket #2804:  When we open a database in the newer file format,
-  ** clear the legacy_file_format pragma flag so that a VACUUM will
-  ** not downgrade the database and thus invalidate any descending
-  ** indices that the user might have created.
-  */
-  if( iDb==0 && meta[BTREE_FILE_FORMAT-1]>=4 ){
-    db->flags &= ~SQLITE_LegacyFileFmt;
-  }
+  pDb->pSchema->schema_cookie = meta[0];
 
   /* Read the schema information out of the schema tables
   */
@@ -349,7 +297,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   */
 initone_error_out:
   if( openedTransaction ){
-    sqlite4StorageCommit(pDb->pKV, 0);
+    sqlite4KVStoreCommit(pDb->pKV, 0);
   }
 
 error_out:
@@ -440,14 +388,14 @@ static void schemaIsValid(Parse *pParse){
   assert( sqlite4_mutex_held(db->mutex) );
   for(iDb=0; iDb<db->nDb; iDb++){
     int openedTransaction = 0;         /* True if a transaction is opened */
-    KVStore *pKV = db->aDb[iDb].KVt;   /* Database to read cookie from */
+    KVStore *pKV = db->aDb[iDb].pKV;   /* Database to read cookie from */
     if( pKV==0 ) continue;
 
     /* If there is not already a read-only (or read-write) transaction opened
     ** on the b-tree database, open one now. If a transaction is opened, it 
     ** will be closed immediately after reading the meta-value. */
     if( pKV->iTransLevel==0 ){
-      rc = sqlite4StorageBegin(pKV, 1);
+      rc = sqlite4KVStoreBegin(pKV, 1);
       if( rc==SQLITE_NOMEM || rc==SQLITE_IOERR_NOMEM ){
         db->mallocFailed = 1;
       }
@@ -458,8 +406,7 @@ static void schemaIsValid(Parse *pParse){
     /* Read the schema cookie from the database. If it does not match the 
     ** value stored as part of the in-memory schema representation,
     ** set Parse.rc to SQLITE_SCHEMA. */
-    sqlite4StorageGetMeta(pBt, BTREE_SCHEMA_VERSION, (u32 *)&cookie);
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
+    /* sqlite4KVStoreGetMeta(pBt, BTREE_SCHEMA_VERSION, (u32 *)&cookie); */
     if( cookie!=db->aDb[iDb].pSchema->schema_cookie ){
       sqlite4ResetInternalSchema(db, iDb);
       pParse->rc = SQLITE_SCHEMA;
@@ -467,7 +414,7 @@ static void schemaIsValid(Parse *pParse){
 
     /* Close the transaction, if one was opened. */
     if( openedTransaction ){
-      sqlite4StorageCommit(pBt, 0);
+      sqlite4KVStoreCommit(pKV, 0);
     }
   }
 }

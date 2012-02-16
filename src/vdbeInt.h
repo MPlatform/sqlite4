@@ -388,8 +388,8 @@ int sqlite4VdbeEncodeKey(
   int *pnOut,                  /* Number of bytes in the key */
   int *pnShort                 /* Number of bytes omitting primary key */
 );
-int sqlite4VdbeIdxKeyCompare(VdbeCursor*,UnpackedRecord*,int*);
-int sqlite4VdbeIdxRowid(sqlite4*, BtCursor *, i64 *);
+int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_uint64 v);
+int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);
 int sqlite4MemCompare(const Mem*, const Mem*, const CollSeq*);
 int sqlite4VdbeExec(Vdbe*);
 int sqlite4VdbeList(Vdbe*);
@@ -432,6 +432,9 @@ void sqlite4VdbeFrameDelete(VdbeFrame*);
 int sqlite4VdbeFrameRestore(VdbeFrame *);
 void sqlite4VdbeMemStoreType(Mem *pMem);
 int sqlite4VdbeTransferError(Vdbe *p);
+int sqlite4VdbeSeekEnd(VdbeCursor*, int);
+int sqlite4VdbeNext(VdbeCursor*);
+int sqlite4VdbePrevious(VdbeCursor*);
 
 #ifdef SQLITE_OMIT_MERGE_SORT
 # define sqlite4VdbeSorterInit(Y,Z)      SQLITE_OK

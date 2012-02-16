@@ -435,10 +435,10 @@ static void resolveP2Values(Vdbe *p, int *pMaxFuncArgs){
       if( n>nMaxArgs ) nMaxArgs = n;
 #endif
     }else if( opcode==OP_Next || opcode==OP_SorterNext ){
-      pOp->p4.xAdvance = sqlite4BtreeNext;
+      pOp->p4.xAdvance = sqlite4VdbeNext;
       pOp->p4type = P4_ADVANCE;
     }else if( opcode==OP_Prev ){
-      pOp->p4.xAdvance = sqlite4BtreePrevious;
+      pOp->p4.xAdvance = sqlite4VdbePrevious;
       pOp->p4type = P4_ADVANCE;
     }
 
@@ -1762,32 +1762,6 @@ static void checkActiveVdbeCnt(sqlite4 *db){
 #endif
 
 /*
-** For every Btree that in database connection db which 
-** has been modified, "trip" or invalidate each cursor in
-** that Btree might have been modified so that the cursor
-** can never be used again.  This happens when a rollback
-*** occurs.  We have to trip all the other cursors, even
-** cursor from other VMs in different database connections,
-** so that none of them try to use the data at which they
-** were pointing and which now may have been changed due
-** to the rollback.
-**
-** Remember that a rollback can delete tables completely and
-** reorder rootpages.  So it is not sufficient just to save
-** the state of the cursor.  We have to invalidate the cursor
-** so that it is never used again.
-*/
-static void invalidateCursorsOnModifiedBtrees(sqlite4 *db){
-  int i;
-  for(i=0; i<db->nDb; i++){
-    KVStore *p = db->aDb[i].pKV;
-    if( p && db->aDb[i].chngFlag ){
-      sqlite4TripAllCursors(p, SQLITE_ABORT);
-    }
-  }
-}
-
-/*
 ** If the Vdbe passed as the first argument opened a statement-transaction,
 ** close it now. Argument eOp must be either SAVEPOINT_ROLLBACK or
 ** SAVEPOINT_RELEASE. If it is SAVEPOINT_ROLLBACK, then the statement
@@ -2546,124 +2520,6 @@ int sqlite4VdbeRecordCompare(
   return rc;
 }
  
-
-/*
-** pCur points at an index entry created using the OP_MakeRecord opcode.
-** Read the rowid (the last field in the record) and store it in *rowid.
-** Return SQLITE_OK if everything works, or an error code otherwise.
-**
-** pCur might be pointing to text obtained from a corrupt database file.
-** So the content cannot be trusted.  Do appropriate checks on the content.
-*/
-int sqlite4VdbeIdxRowid(sqlite4 *db, BtCursor *pCur, i64 *rowid){
-  i64 nCellKey = 0;
-  int rc;
-  u32 szHdr;        /* Size of the header */
-  u32 typeRowid;    /* Serial type of the rowid */
-  u32 lenRowid;     /* Size of the rowid */
-  Mem m, v;
-
-  UNUSED_PARAMETER(db);
-
-  /* Get the size of the index entry.  Only indices entries of less
-  ** than 2GiB are support - anything large must be database corruption.
-  ** Any corruption is detected in sqlite4BtreeParseCellPtr(), though, so
-  ** this code can safely assume that nCellKey is 32-bits  
-  */
-  assert( sqlite4BtreeCursorIsValid(pCur) );
-  VVA_ONLY(rc =) sqlite4BtreeKeySize(pCur, &nCellKey);
-  assert( rc==SQLITE_OK );     /* pCur is always valid so KeySize cannot fail */
-  assert( (nCellKey & SQLITE_MAX_U32)==(u64)nCellKey );
-
-  /* Read in the complete content of the index entry */
-  memset(&m, 0, sizeof(m));
-  rc = sqlite4VdbeMemFromBtree(pCur, 0, (int)nCellKey, 1, &m);
-  if( rc ){
-    return rc;
-  }
-
-  /* The index entry must begin with a header size */
-  (void)getVarint32((u8*)m.z, szHdr);
-  testcase( szHdr==3 );
-  testcase( szHdr==m.n );
-  if( unlikely(szHdr<3 || (int)szHdr>m.n) ){
-    goto idx_rowid_corruption;
-  }
-
-  /* The last field of the index should be an integer - the ROWID.
-  ** Verify that the last entry really is an integer. */
-  (void)getVarint32((u8*)&m.z[szHdr-1], typeRowid);
-  testcase( typeRowid==1 );
-  testcase( typeRowid==2 );
-  testcase( typeRowid==3 );
-  testcase( typeRowid==4 );
-  testcase( typeRowid==5 );
-  testcase( typeRowid==6 );
-  testcase( typeRowid==8 );
-  testcase( typeRowid==9 );
-  if( unlikely(typeRowid<1 || typeRowid>9 || typeRowid==7) ){
-    goto idx_rowid_corruption;
-  }
-  lenRowid = sqlite4VdbeSerialTypeLen(typeRowid);
-  testcase( (u32)m.n==szHdr+lenRowid );
-  if( unlikely((u32)m.n<szHdr+lenRowid) ){
-    goto idx_rowid_corruption;
-  }
-
-  /* Fetch the integer off the end of the index record */
-  sqlite4VdbeSerialGet((u8*)&m.z[m.n-lenRowid], typeRowid, &v);
-  *rowid = v.u.i;
-  sqlite4VdbeMemRelease(&m);
-  return SQLITE_OK;
-
-  /* Jump here if database corruption is detected after m has been
-  ** allocated.  Free the m object and return SQLITE_CORRUPT. */
-idx_rowid_corruption:
-  testcase( m.zMalloc!=0 );
-  sqlite4VdbeMemRelease(&m);
-  return SQLITE_CORRUPT_BKPT;
-}
-
-/*
-** Compare the key of the index entry that cursor pC is pointing to against
-** the key string in pUnpacked.  Write into *pRes a number
-** that is negative, zero, or positive if pC is less than, equal to,
-** or greater than pUnpacked.  Return SQLITE_OK on success.
-**
-** pUnpacked is either created without a rowid or is truncated so that it
-** omits the rowid at the end.  The rowid at the end of the index entry
-** is ignored as well.  Hence, this routine only compares the prefixes 
-** of the keys prior to the final rowid, not the entire key.
-*/
-int sqlite4VdbeIdxKeyCompare(
-  VdbeCursor *pC,             /* The cursor to compare against */
-  UnpackedRecord *pUnpacked,  /* Unpacked version of key to compare against */
-  int *res                    /* Write the comparison result here */
-){
-  i64 nCellKey = 0;
-  int rc;
-  BtCursor *pCur = pC->pCursor;
-  Mem m;
-
-  assert( sqlite4BtreeCursorIsValid(pCur) );
-  VVA_ONLY(rc =) sqlite4BtreeKeySize(pCur, &nCellKey);
-  assert( rc==SQLITE_OK );    /* pCur is always valid so KeySize cannot fail */
-  /* nCellKey will always be between 0 and 0xffffffff because of the say
-  ** that btreeParseCellPtr() and sqlite4GetVarint32() are implemented */
-  if( nCellKey<=0 || nCellKey>0x7fffffff ){
-    *res = 0;
-    return SQLITE_CORRUPT_BKPT;
-  }
-  memset(&m, 0, sizeof(m));
-  rc = sqlite4VdbeMemFromBtree(pC->pCursor, 0, (int)nCellKey, 1, &m);
-  if( rc ){
-    return rc;
-  }
-  assert( pUnpacked->flags & UNPACKED_PREFIX_MATCH );
-  *res = sqlite4VdbeRecordCompare(m.n, m.z, pUnpacked);
-  sqlite4VdbeMemRelease(&m);
-  return SQLITE_OK;
-}
 
 /*
 ** This routine sets the value to be returned by subsequent calls to

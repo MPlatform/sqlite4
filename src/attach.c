@@ -138,7 +138,7 @@ static void attachFunc(
   }
   assert( pVfs );
   flags |= SQLITE_OPEN_MAIN_DB;
-  rc = sqlite4KVStoreOpen(zPath, &aNew->pKV);
+  rc = sqlite4KVStoreOpen(zPath, &aNew->pKV, 0);
   sqlite4_free( zPath );
   db->nDb++;
   if( rc==SQLITE_CONSTRAINT ){
@@ -154,7 +154,6 @@ static void attachFunc(
       rc = SQLITE_ERROR;
     }
   }
-  aNew->safety_level = 3;
   aNew->zName = sqlite4DbStrDup(db, zName);
   if( rc==SQLITE_OK && aNew->zName==0 ){
     rc = SQLITE_NOMEM;
@@ -171,7 +170,7 @@ static void attachFunc(
   if( rc ){
     int iDb = db->nDb - 1;
     assert( iDb>=2 );
-    if( db->aDb[iDb].pBt ){
+    if( db->aDb[iDb].pKV ){
       sqlite4KVStoreClose(db->aDb[iDb].pKV);
       db->aDb[iDb].pKV = 0;
       db->aDb[iDb].pSchema = 0;
@@ -223,7 +222,7 @@ static void detachFunc(
   if( zName==0 ) zName = "";
   for(i=0; i<db->nDb; i++){
     pDb = &db->aDb[i];
-    if( pDb->pBt==0 ) continue;
+    if( pDb->pKV==0 ) continue;
     if( sqlite4StrICmp(pDb->zName, zName)==0 ) break;
   }
 

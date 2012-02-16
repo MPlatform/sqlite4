@@ -479,7 +479,6 @@ static void analyzeOneTable(
   }
   iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
   assert( iDb>=0 );
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
 #ifndef SQLITE_OMIT_AUTHORIZATION
   if( sqlite4AuthCheck(pParse, SQLITE_ANALYZE, pTab->zName, 0,
       db->aDb[iDb].zName ) ){
@@ -725,7 +724,6 @@ static void analyzeDatabase(Parse *pParse, int iDb){
   pParse->nTab += 3;
   openStatTable(pParse, iDb, iStatCur, 0, 0);
   iMem = pParse->nMem+1;
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   for(k=sqliteHashFirst(&pSchema->tblHash); k; k=sqliteHashNext(k)){
     Table *pTab = (Table*)sqliteHashData(k);
     analyzeOneTable(pParse, pTab, 0, iStatCur, iMem);
@@ -1069,10 +1067,9 @@ int sqlite4AnalysisLoad(sqlite4 *db, int iDb){
   int rc;
 
   assert( iDb>=0 && iDb<db->nDb );
-  assert( db->aDb[iDb].pBt!=0 );
+  assert( db->aDb[iDb].pKV!=0 );
 
   /* Clear any prior statistics */
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   for(i=sqliteHashFirst(&db->aDb[iDb].pSchema->idxHash);i;i=sqliteHashNext(i)){
     Index *pIdx = sqliteHashData(i);
     sqlite4DefaultRowEst(pIdx);

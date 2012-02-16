@@ -237,7 +237,6 @@ void sqlite4AutoincrementBegin(Parse *pParse){
   for(p = pParse->pAinc; p; p = p->pNext){
     pDb = &db->aDb[p->iDb];
     memId = p->regCtr;
-    assert( sqlite4SchemaMutexHeld(db, 0, pDb->pSchema) );
     sqlite4OpenTable(pParse, 0, p->iDb, pDb->pSchema->pSeqTab, OP_OpenRead);
     sqlite4VdbeAddOp3(v, OP_Null, 0, memId, memId+1);
     addr = sqlite4VdbeCurrentAddr(v);
@@ -289,7 +288,6 @@ void sqlite4AutoincrementEnd(Parse *pParse){
     int memId = p->regCtr;
 
     iRec = sqlite4GetTempReg(pParse);
-    assert( sqlite4SchemaMutexHeld(db, 0, pDb->pSchema) );
     sqlite4OpenTable(pParse, 0, p->iDb, pDb->pSchema->pSeqTab, OP_OpenWrite);
     j1 = sqlite4VdbeAddOp1(v, OP_NotNull, memId+1);
     j2 = sqlite4VdbeAddOp0(v, OP_Rewind);

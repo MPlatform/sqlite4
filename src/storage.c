@@ -172,7 +172,7 @@ int sqlite4KVCursorClose(KVCursor *p){
 }
 int sqlite4KVStoreBegin(KVStore *p, int iLevel){
   int rc;
-  assert( (iLevel==2 && p->iTransLevel==0) || p->iTransLevel+1==iLevel;
+  assert( (iLevel==2 && p->iTransLevel==0) || p->iTransLevel+1==iLevel );
   rc = p->pStoreVfunc->xBegin(p, iLevel);
   if( p->fTrace ){
     printf("KV.xBegin(%d,%d) -> %d\n", p->kvId, iLevel, rc);

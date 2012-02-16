@@ -360,36 +360,6 @@ int sqlite4_config(int op, ...){
       sqlite4GlobalConfig.nScratch = va_arg(ap, int);
       break;
     }
-    case SQLITE_CONFIG_PAGECACHE: {
-      /* Designate a buffer for page cache memory space */
-      sqlite4GlobalConfig.pPage = va_arg(ap, void*);
-      sqlite4GlobalConfig.szPage = va_arg(ap, int);
-      sqlite4GlobalConfig.nPage = va_arg(ap, int);
-      break;
-    }
-
-    case SQLITE_CONFIG_PCACHE: {
-      /* no-op */
-      break;
-    }
-    case SQLITE_CONFIG_GETPCACHE: {
-      /* now an error */
-      rc = SQLITE_ERROR;
-      break;
-    }
-
-    case SQLITE_CONFIG_PCACHE2: {
-      /* Specify an alternative page cache implementation */
-      sqlite4GlobalConfig.pcache2 = *va_arg(ap, sqlite4_pcache_methods2*);
-      break;
-    }
-    case SQLITE_CONFIG_GETPCACHE2: {
-      if( sqlite4GlobalConfig.pcache2.xInit==0 ){
-        sqlite4PCacheSetDefault();
-      }
-      *va_arg(ap, sqlite4_pcache_methods2*) = sqlite4GlobalConfig.pcache2;
-      break;
-    }
 
 #if defined(SQLITE_ENABLE_MEMSYS3) || defined(SQLITE_ENABLE_MEMSYS5)
     case SQLITE_CONFIG_HEAP: {
@@ -539,7 +509,6 @@ sqlite4_mutex *sqlite4_db_mutex(sqlite4 *db){
 ** connection.
 */
 int sqlite4_db_release_memory(sqlite4 *db){
-  int i;
   sqlite4_mutex_enter(db->mutex);
   sqlite4_mutex_leave(db->mutex);
   return SQLITE_OK;
@@ -842,7 +811,7 @@ void sqlite4RollbackAll(sqlite4 *db){
       if( db->aDb[i].pKV->iTransLevel ){
         inTrans = 1;
       }
-      sqlite4StorageRollback(db->aDb[i].pKV, 0);
+      sqlite4KVStoreRollback(db->aDb[i].pKV, 0);
       db->aDb[i].inTrans = 0;
     }
   }
@@ -1599,7 +1568,7 @@ static int createCollation(
   u8 enc,
   void* pCtx,
   int(*xCompare)(void*,int,const void*,int,const void*),
-  int(*xMakeKey)(void*,int,const void*,int,const void*),
+  int(*xMakeKey)(void*,const void*,int,const void*,int),
   void(*xDel)(void*)
 ){
   CollSeq *pColl;
@@ -2147,7 +2116,7 @@ static int openDatabase(
   }
 
   /* Open the backend database driver */
-  rc = sqlite4KVStoreOpen(zOpen, &db->aDb[0].pKV);
+  rc = sqlite4KVStoreOpen(zOpen, &db->aDb[0].pKV, 0);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_IOERR_NOMEM ){
       rc = SQLITE_NOMEM;
@@ -2162,9 +2131,7 @@ static int openDatabase(
   ** database it is 'NONE'. This matches the pager layer defaults.  
   */
   db->aDb[0].zName = "main";
-  db->aDb[0].safety_level = 3;
   db->aDb[1].zName = "temp";
-  db->aDb[1].safety_level = 1;
 
   db->magic = SQLITE_MAGIC_OPEN;
   if( db->mallocFailed ){

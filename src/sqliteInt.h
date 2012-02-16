@@ -679,14 +679,11 @@ typedef struct WhereInfo WhereInfo;
 typedef struct WhereLevel WhereLevel;
 
 /*
-** Defer sourcing vdbe.h and btree.h until after the "u8" and 
+** Defer sourcing vdbe.h until after the "u8" and 
 ** "BusyHandler" typedefs. vdbe.h also requires a few of the opaque
 ** pointer types (i.e. FuncDef) defined above.
 */
-#include "btree.h"
 #include "vdbe.h"
-#include "pager.h"
-#include "pcache.h"
 #include "storage.h"
 
 #include "os.h"
@@ -2968,7 +2965,7 @@ int sqlite4PutVarint32(unsigned char*, u32);
 u8 sqlite4GetVarint(const unsigned char *, u64 *);
 u8 sqlite4GetVarint32(const unsigned char *, u32 *);
 int sqlite4VarintLen(u64 v);
-int sqlite4GetVarint64(const unsigned char*, sqlite4_uint64 *pResult);
+int sqlite4GetVarint64(const unsigned char*, int, sqlite4_uint64 *pResult);
 int sqlite4PutVarint64(unsigned char*, sqlite4_uint64);
 
 /*
