@@ -133,12 +133,10 @@ int sqlite4InitCallback(void *pInit, int argc, char **argv, char **NotUsed){
 */
 static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   int rc;
-  int i;
-  int size;
   Table *pTab;
   Db *pDb;
   char const *azArg[4];
-  int meta[5];
+  unsigned int meta[5];
   InitData initData;
   char const *zMasterSchema;
   char const *zMasterName;
@@ -230,11 +228,11 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   **
   ** Meta values are as follows:
   **    meta[0]   Schema cookie.  Changes with each schema change.
-  **    meta[1]   File format of schema layer.
+  **    meta[1]   unused
   **    meta[2]   unused
   **    meta[3]   unused
-  **    meta[4]   Db text encoding. 1:UTF-8 2:UTF-16LE 3:UTF-16BE
-  **    meta[5]   User version
+  **    meta[4]   unused
+  **    meta[5]   unused
   **    meta[6]   unused
   **    meta[7]   unused
   **    meta[8]   unused
@@ -243,9 +241,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   ** Note: The #defined SQLITE_UTF* symbols in sqliteInt.h correspond to
   ** the possible values of meta[4].
   */
-  for(i=0; i<ArraySize(meta); i++){
-    sqlite4KVStoreGetMeta(pDb->pKV, i+1, (u32 *)&meta[i]);
-  }
+  sqlite4KVStoreGetMeta(pDb->pKV, 0, ArraySize(meta), meta);
   pDb->pSchema->schema_cookie = meta[0];
 
   /* Read the schema information out of the schema tables
@@ -406,7 +402,7 @@ static void schemaIsValid(Parse *pParse){
     /* Read the schema cookie from the database. If it does not match the 
     ** value stored as part of the in-memory schema representation,
     ** set Parse.rc to SQLITE_SCHEMA. */
-    /* sqlite4KVStoreGetMeta(pBt, BTREE_SCHEMA_VERSION, (u32 *)&cookie); */
+    sqlite4KVStoreGetMeta(pKV, 0, 1, (u32 *)&cookie);
     if( cookie!=db->aDb[iDb].pSchema->schema_cookie ){
       sqlite4ResetInternalSchema(db, iDb);
       pParse->rc = SQLITE_SCHEMA;

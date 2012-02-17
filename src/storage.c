@@ -212,3 +212,96 @@ int sqlite4KVStoreClose(KVStore *p){
   }
   return rc;
 }
+
+/*
+** Key for the meta-data
+*/
+static const KVByteArray metadataKey[] = { 0x00, 0x00 };
+
+/*
+** Read nMeta unsigned 32-bit integers of metadata beginning at iStart.
+*/
+int sqlite4KVStoreGetMeta(KVStore *p, int iStart, int nMeta, unsigned int *a){
+  KVCursor *pCur;
+  int rc;
+  int i, j;
+  KVSize nData;
+  const KVByteArray *aData;
+
+  rc = sqlite4KVStoreOpenCursor(p, &pCur);
+  if( rc==SQLITE_OK ){
+    rc = sqlite4KVCursorSeek(pCur, metadataKey, sizeof(metadataKey), 0);
+    if( rc==SQLITE_OK ){
+      rc = sqlite4KVCursorData(pCur, 0, -1, &aData, &nData);
+      if( rc==SQLITE_OK ){
+        i = 0;
+        j = iStart*4;
+        while( i<nMeta && j+3<nData ){
+          a[i] = (aData[j]<<24) | (aData[j+1]<<16)
+                       | (aData[j+2]<<8) | aData[j+3];
+          i++;
+          j += 4;
+        }
+        while( i<nMeta ) a[i++] = 0;
+      }  
+    }
+    sqlite4KVCursorClose(pCur);
+  }
+  return rc;
+}
+
+/*
+** Write nMeta unsigned 32-bit integers beginning with iStart.
+*/
+int sqlite4KVStorePutMeta(
+  sqlite4 *db,            /* Database connection.  Needed to malloc */
+  KVStore *p,             /* Write to this database */
+  int iStart,             /* Start writing here */
+  int nMeta,              /* number of 32-bit integers to be written */
+  unsigned int *a         /* The integers to write */
+){
+  KVCursor *pCur;
+  int rc;
+  int i, j;
+  KVSize nData;
+  const KVByteArray *aData;
+  KVByteArray *aNew;
+  KVSize nNew;
+
+  rc = sqlite4KVStoreOpenCursor(p, &pCur);
+  if( rc==SQLITE_OK ){
+    rc = sqlite4KVCursorSeek(pCur, metadataKey, sizeof(metadataKey), 0);
+    if( rc==SQLITE_OK ){
+      rc = sqlite4KVCursorData(pCur, 0, -1, &aData, &nData);
+      if( rc==SQLITE_NOTFOUND ){
+        nData = 0;
+        rc = SQLITE_OK;
+      }
+      if( rc==SQLITE_OK ){
+        nNew = iStart+nMeta;
+        if( nNew<nData ) nNew = nData;
+        aNew = sqlite4DbMallocRaw(db, nNew*sizeof(a[0]) );
+        if( aNew==0 ){
+          rc = SQLITE_NOMEM;
+        }else{
+          memcpy(aNew, aData, nData);
+          i = 0;
+          j = iStart*4;
+          while( i<nMeta && j+3<nData ){
+            aNew[j] = (a[i]>>24)&0xff;
+            aNew[j+1] = (a[i]>>16)&0xff;
+            aNew[j+2] = (a[i]>>8)&0xff;
+            aNew[j+3] = a[i] & 0xff;
+            i++;
+            j += 4;
+          }
+          rc = sqlite4KVStoreReplace(p, metadataKey, sizeof(metadataKey),
+                                     aNew, nNew);
+          sqlite4DbFree(db, aNew);
+        }
+      }  
+    }
+    sqlite4KVCursorClose(pCur);
+  }
+  return rc;
+}

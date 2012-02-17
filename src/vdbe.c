@@ -2274,25 +2274,13 @@ case OP_MakeRecord: {
 case OP_Count: {         /* out2-prerelease */
   i64 nEntry;
   VdbeCursor *pC;
-  KVCursor *pKVCur;
-  KVByteArray *pKey;
-  KVSize nKey;
-  int n;
-  KVByteArray initKey[20];
   
   pC = p->apCsr[pOp->p1];
-  pKVCur = pC->pKVCur;
-  n = sqlite4PutVarint64(initKey, pC->iRoot);
-  initKey[n++] = 0x04;
-  rc = sqlite4KVCursorSeek(pKVCur, initKey, n, +1);
-  if( rc!=SQLITE_NOTFOUND ){
-    initKey[n] = 0xff;
-    while( (rc = sqlite4KVCursorLT(pKVCur, initKey, n))==SQLITE_OK ){
-      nEntry++;
-      rc = sqlite4KVCursorNext(pKVCur);
-      if( rc ) break;
-    }
-    if( rc==SQLITE_DONE ) rc = SQLITE_OK;
+  rc = sqlite4VdbeSeekEnd(pC, +1);
+  nEntry = 0;
+  while( rc!=SQLITE_NOTFOUND ){
+    nEntry++;
+    rc = sqlite4VdbeNext(pC);
   }
   sqlite4VdbeMemSetInt64(pOut, nEntry);
   break;
@@ -2425,13 +2413,8 @@ case OP_VerifyCookie: {
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   pKV = db->aDb[pOp->p1].pKV;
   if( pKV ){
-    static const KVByteArray aKey[] = { 0x00, 0x00, 0x01 };
-    rc = sqlite4KVStoreRead(pKV, aKey, 3, &aData, &nData);
-    if( rc==SQLITE_OK && nData==4 ){
-      iMeta = (aData[0]<<24) | (aData[1]<<16) | (aData[2]<<8) | aData[3];
-    }else{
-      iMeta = 0xffffffff;
-    }
+    rc = sqlite4KVStoreGetMeta(pKV, 0, 1, &iMeta);
+    if( rc ) break;
     iGen = db->aDb[pOp->p1].pSchema->iGeneration;
   }else{
     iGen = iMeta = 0;

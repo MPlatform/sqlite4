@@ -1495,9 +1495,8 @@ static int booleanValue(char *zArg){
 static int do_meta_command(char *zLine, struct callback_data *p){
   int i = 1;
   int nArg = 0;
-  int n = 0;
-  int c = 0;
   int rc = 0;
+  int c, n;
   char *azArg[50];
 
   /* Parse the input line into tokens.
@@ -1522,10 +1521,13 @@ static int do_meta_command(char *zLine, struct callback_data *p){
   }
 
 
+  if( nArg==0 ) return 0; /* no tokens, no error */
+  n = strlen30(azArg[0]);
+  c = azArg[0][0];
+
   if( c=='b' && n>=3 && strncmp(azArg[0], "bail", n)==0 && nArg>1 && nArg<3 ){
     bail_on_error = booleanValue(azArg[1]);
   }else
-
   if( c=='d' && n>1 && strncmp(azArg[0], "databases", n)==0 && nArg==1 ){
     struct callback_data data;
     char *zErrMsg = 0;

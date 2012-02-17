@@ -186,3 +186,6 @@ int sqlite4KVStoreBegin(KVStore *p, int iLevel);
 int sqlite4KVStoreCommit(KVStore *p, int iLevel);
 int sqlite4KVStoreRollback(KVStore *p, int iLevel);
 int sqlite4KVStoreClose(KVStore *p);
+
+int sqlite4KVStoreGetMeta(KVStore *p, int, int, unsigned int*);
+int sqlite4KVStorePutMeta(sqlite4*, KVStore *p, int, int, unsigned int*);
