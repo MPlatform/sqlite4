@@ -138,7 +138,7 @@ static void attachFunc(
   }
   assert( pVfs );
   flags |= SQLITE_OPEN_MAIN_DB;
-  rc = sqlite4KVStoreOpen(zPath, &aNew->pKV, 0);
+  rc = sqlite4KVStoreOpen(db, zName, zPath, &aNew->pKV, 0);
   sqlite4_free( zPath );
   db->nDb++;
   if( rc==SQLITE_CONSTRAINT ){

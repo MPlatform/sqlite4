@@ -73,6 +73,9 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
     { "sql_trace",                SQLITE_SqlTrace      },
     { "vdbe_listing",             SQLITE_VdbeListing   },
     { "vdbe_trace",               SQLITE_VdbeTrace     },
+    { "kv_trace",                 SQLITE_KvTrace       },
+    { "trace",                    SQLITE_SqlTrace | SQLITE_VdbeListing |
+                                  SQLITE_VdbeTrace | SQLITE_KvTrace },
 #endif
 #ifndef SQLITE_OMIT_CHECK
     { "ignore_check_constraints", SQLITE_IgnoreChecks  },
@@ -86,7 +89,7 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
     { "foreign_keys",             SQLITE_ForeignKeys },
 #endif
   };
-  int i;
+  int i, j;
   const struct sPragmaType *p;
   for(i=0, p=aPragma; i<ArraySize(aPragma); i++, p++){
     if( sqlite4StrICmp(zLeft, p->zName)==0 ){
@@ -116,6 +119,11 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
           ** compiled SQL statements after modifying a pragma value.
           */
           sqlite4VdbeAddOp2(v, OP_Expire, 0, 0);
+        }
+        for(j=0; j<db->nDb; j++){
+          if( db->aDb[j].pKV ){
+            db->aDb[j].pKV->fTrace = (db->flags & SQLITE_KvTrace)!=0;
+          }
         }
       }
 

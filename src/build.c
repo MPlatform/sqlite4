@@ -3373,7 +3373,7 @@ int sqlite4OpenTempDatabase(Parse *pParse){
           SQLITE_OPEN_TEMP_DB;
 #endif
 
-    rc = sqlite4KVStoreOpen(":memory:", &db->aDb[1].pKV,
+    rc = sqlite4KVStoreOpen(db, "temp", ":memory:", &db->aDb[1].pKV,
                             SQLITE_KVOPEN_TEMPORARY);
     if( rc!=SQLITE_OK ){
       sqlite4ErrorMsg(pParse, "unable to open a temporary database "

@@ -42,13 +42,15 @@ static int test_storage_open(
   KVStore *pNew = 0;
   int rc;
   int flags;
+  sqlite4 db;
   char zRes[50];
   if( objc!=3 ){
     Tcl_WrongNumArgs(interp, 2, objv, "URI FLAGS");
     return TCL_ERROR;
   }
   if( Tcl_GetIntFromObj(interp, objv[2], &flags) ) return TCL_ERROR;
-  rc = sqlite4KVStoreOpen(Tcl_GetString(objv[1]), &pNew, flags);
+  memset(&db, 0, sizeof(db));
+  rc = sqlite4KVStoreOpen(&db, "test", Tcl_GetString(objv[1]), &pNew, flags);
   if( rc ){
     sqlite4KVStoreClose(pNew);
     storageSetTclErrorName(interp, rc);

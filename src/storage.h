@@ -135,6 +135,7 @@ struct KVStore {
   int iTransLevel;                      /* Current transaction level */
   u16 kvId;                             /* Unique ID used for tracing */
   u8 fTrace;                            /* True to enable tracing */
+  char zKVName[12];                     /* Used for debugging */
   /* Subclasses will typically append additional fields */
 };
 
@@ -157,7 +158,13 @@ struct KVCursor {
 #define SQLITE_KVOPEN_NO_TRANSACTIONS 0x0002  /* No transactions will be used */
 
 int sqlite4KVStoreOpenMem(KVStore**, unsigned);
-int sqlite4KVStoreOpen(const char *zUri, KVStore**, unsigned flags);
+int sqlite4KVStoreOpen(
+  sqlite4*,
+  const char *zLabel, 
+  const char *zUri,
+  KVStore**,
+  unsigned flags
+);
 int sqlite4KVStoreReplace(
  KVStore*,
  const KVByteArray *pKey, KVSize nKey,

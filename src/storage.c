@@ -11,14 +11,39 @@
 *************************************************************************
 **
 ** General wrapper functions around the various KV storage engine
-** implementations.
+** implementations.  It also implements tracing of calls to the KV
+** engine and some higher-level ensembles of the low-level storage
+** calls.
 */
 #include "sqliteInt.h"
 
 /*
+** Do any requested tracing
+*/
+static void kvTrace(KVStore *p, const char *zFormat, ...){
+  if( p->fTrace ){
+    va_list ap;
+    char *z;
+
+    va_start(ap, zFormat);
+    z = sqlite4_vmprintf(zFormat, ap);
+    va_end(ap);
+    printf("%s.%s\n", p->zKVName, z);
+    fflush(stdout);
+    sqlite4_free(z);
+  }
+}
+
+/*
 ** Open a storage engine via URI
 */
-int sqlite4KVStoreOpen(const char *zUri, KVStore **ppKVStore, unsigned flags){
+int sqlite4KVStoreOpen(
+  sqlite4 *db,             /* The database connection doing the open */
+  const char *zName,       /* Symbolic name for this database */
+  const char *zUri,        /* URI for this database */
+  KVStore **ppKVStore,     /* Write the new KVStore object here */
+  unsigned flags           /* Option flags */
+){
   KVStore *pNew = 0;
   int rc;
 
@@ -26,10 +51,10 @@ int sqlite4KVStoreOpen(const char *zUri, KVStore **ppKVStore, unsigned flags){
   *ppKVStore = pNew;
   if( pNew ){
     sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);
-    pNew->fTrace = 0;
-    if( pNew->fTrace ){
-      printf("KVopen(%s,%d, 0x%04x)\n", zUri, pNew->kvId, flags);
-    }
+    sqlite4_snprintf(sizeof(pNew->zKVName), pNew->zKVName,
+                     "%s", zName);
+    pNew->fTrace = (db->flags & SQLITE_KvTrace)!=0;
+    kvTrace(pNew, "open(%s,%d,0x%04x)", zUri, pNew->kvId, flags);
   }
   return rc;
 }
@@ -58,7 +83,7 @@ int sqlite4KVStoreReplace(
     char zKey[52], zData[52];
     binToHex(zKey, sizeof(zKey), pKey, nKey);
     binToHex(zData, sizeof(zKey), pData, nData);
-    printf("KV.xReplace(%d,%s,%d,%s,%d)\n",
+    kvTrace(p, "xReplace(%d,%s,%d,%s,%d)",
            p->kvId, zKey, (int)nKey, zData, (int)nData);
   }
   return p->pStoreVfunc->xReplace(p,pKey,nKey,pData,nData);
@@ -72,10 +97,9 @@ int sqlite4KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor){
   if( pCur ){
     sqlite4_randomness(sizeof(pCur->curId), &pCur->curId);
     pCur->fTrace = p->fTrace;
+    pCur->pStore = p;
   }
-  if( p->fTrace ){
-    printf("KV.xOpenCursor(%d,%d) -> %d\n", p->kvId, pCur?pCur->curId:-1, rc);
-  }
+  kvTrace(p, "xOpenCursor(%d,%d) -> %d", p->kvId, pCur?pCur->curId:-1, rc);
   return rc;
 }
 int sqlite4KVCursorSeek(
@@ -88,40 +112,32 @@ int sqlite4KVCursorSeek(
   if( p->fTrace ){
     char zKey[52];
     binToHex(zKey, sizeof(zKey), pKey, nKey);
-    printf("KV.xSeek(%d,%s,%d,%d) -> %d\n", p->curId, zKey, (int)nKey,dir,rc);
+    kvTrace(p->pStore, "xSeek(%d,%s,%d,%d) -> %d", p->curId, zKey, (int)nKey,dir,rc);
   }
   return rc;
 }
 int sqlite4KVCursorNext(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xNext(p);
-  if( p->fTrace ){
-    printf("KV.xNext(%d) -> %d\n", p->curId, rc);
-  }
+  kvTrace(p->pStore, "xNext(%d) -> %d", p->curId, rc);
   return rc;
 }
 int sqlite4KVCursorPrev(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xPrev(p);
-  if( p->fTrace ){
-    printf("KV.xPrev(%d) -> %d\n", p->curId, rc);
-  }
+  kvTrace(p->pStore, "xPrev(%d) -> %d", p->curId, rc);
   return rc;
 }
 int sqlite4KVCursorDelete(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xDelete(p);
-  if( p->fTrace ){
-    printf("KV.xDelete(%d) -> %d\n", p->curId, rc);
-  }
+  kvTrace(p->pStore, "xDelete(%d) -> %d", p->curId, rc);
   return rc;
 }
 int sqlite4KVCursorReset(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xReset(p);
-  if( p->fTrace ){
-    printf("KV.xReset(%d) -> %d\n", p->curId, rc);
-  }
+  kvTrace(p->pStore, "xReset(%d) -> %d", p->curId, rc);
   return rc;
 }
 int sqlite4KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey){
@@ -131,9 +147,9 @@ int sqlite4KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey){
     if( rc==SQLITE_OK ){
       char zKey[52];
       binToHex(zKey, sizeof(zKey), *ppKey, *pnKey);
-      printf("KV.xKey(%d,%s,%d)\n", p->curId, zKey, (int)*pnKey);
+      kvTrace(p->pStore, "xKey(%d,%s,%d)", p->curId, zKey, (int)*pnKey);
     }else{
-      printf("KV.xKey(%d,<error-%d>)\n", p->curId, rc);
+      kvTrace(p->pStore, "xKey(%d,<error-%d>)", p->curId, rc);
     }
   }
   return rc;
@@ -151,10 +167,10 @@ int sqlite4KVCursorData(
     if( rc==SQLITE_OK ){
       char zData[52];
       binToHex(zData, sizeof(zData), *ppData, *pnData);
-      printf("KV.xData(%d,%d,%d,%s,%d)\n",
+      kvTrace(p->pStore, "xData(%d,%d,%d,%s,%d)",
              p->curId, (int)ofst, (int)n, zData, (int)*pnData);
     }else{
-      printf("KV.xData(%d,%d,%d,<error-%d>)\n",
+      kvTrace(p->pStore, "xData(%d,%d,%d,<error-%d>)\n",
              p->curId, (int)ofst, (int)n, rc);
     }
   }
@@ -163,10 +179,9 @@ int sqlite4KVCursorData(
 int sqlite4KVCursorClose(KVCursor *p){
   int rc = SQLITE_OK;
   if( p ){
+    KVStore *pStore = p->pStore;
     rc = p->pStoreVfunc->xCloseCursor(p);
-    if( p->fTrace ){
-      printf("KV.xCloseCursor(%d) -> %d\n", p->curId, rc);
-    }
+    kvTrace(pStore, "xCloseCursor(%d) -> %d\n", p->curId, rc);
   }
   return rc;
 }
@@ -174,40 +189,32 @@ int sqlite4KVStoreBegin(KVStore *p, int iLevel){
   int rc;
   assert( (iLevel==2 && p->iTransLevel==0) || p->iTransLevel+1==iLevel );
   rc = p->pStoreVfunc->xBegin(p, iLevel);
-  if( p->fTrace ){
-    printf("KV.xBegin(%d,%d) -> %d\n", p->kvId, iLevel, rc);
-  }
+  kvTrace(p, "xBegin(%d,%d) -> %d", p->kvId, iLevel, rc);
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
 int sqlite4KVStoreCommit(KVStore *p, int iLevel){
   int rc;
   assert( iLevel>=0 );
-  assert( iLevel>=p->iTransLevel );
+  assert( iLevel<=p->iTransLevel );
   rc = p->pStoreVfunc->xCommit(p, iLevel);
-  if( p->fTrace ){
-    printf("KV.xCommit(%d,%d) -> %d\n", p->kvId, iLevel, rc);
-  }
+  kvTrace(p, "xCommit(%d,%d) -> %d", p->kvId, iLevel, rc);
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
 int sqlite4KVStoreRollback(KVStore *p, int iLevel){
   int rc;
   assert( iLevel>=0 );
-  assert( iLevel>=p->iTransLevel );
+  assert( iLevel<=p->iTransLevel );
   rc = p->pStoreVfunc->xRollback(p, iLevel);
-  if( p->fTrace ){
-    printf("KV.xRollback(%d,%d) -> %d\n", p->kvId, iLevel, rc);
-  }
+  kvTrace(p, "xRollback(%d,%d) -> %d", p->kvId, iLevel, rc);
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
 int sqlite4KVStoreClose(KVStore *p){
   int rc;
   if( p ){
-    if( p->fTrace ){
-      printf("KV.xClose(%d)\n", p->kvId);
-    }
+    kvTrace(p, "xClose(%d)", p->kvId);
     rc = p->pStoreVfunc->xClose(p);
   }
   return rc;

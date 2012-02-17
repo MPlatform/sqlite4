@@ -2093,7 +2093,7 @@ static int openDatabase(
   }
 
   /* Open the backend database driver */
-  rc = sqlite4KVStoreOpen(zOpen, &db->aDb[0].pKV, 0);
+  rc = sqlite4KVStoreOpen(db, "main", zOpen, &db->aDb[0].pKV, 0);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_IOERR_NOMEM ){
       rc = SQLITE_NOMEM;

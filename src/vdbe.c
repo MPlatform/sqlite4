@@ -2358,22 +2358,13 @@ case OP_SetCookie: {       /* in3 */
   Db *pDb;
   u32 v;
   int n;
-  KVByteArray aKey[4];
-  KVByteArray aData[4];
 
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   pDb = &db->aDb[pOp->p1];
   pIn3 = &aMem[pOp->p3];
   sqlite4VdbeMemIntegerify(pIn3);
   v = (u32)pIn3->u.i;
-  aData[0] = v>>24;
-  aData[1] = (v>>16)&0xff;
-  aData[2] = (v>>8)&0xff;
-  aData[3] = v&0xff;
-  aKey[0] = 0x00;
-  aKey[1] = 0x00;
-  aKey[2] = 0x01;
-  rc = sqlite4KVStoreReplace(pDb->pKV, aKey, 3, aData, 4);
+  rc = sqlite4KVStorePutMeta(db, pDb->pKV, 0, 1, &v);
   pDb->pSchema->schema_cookie = (int)pIn3->u.i;
   db->flags |= SQLITE_InternChanges;
   if( pOp->p1==1 ){
@@ -2514,7 +2505,7 @@ case OP_OpenWrite: {
   p2 = pOp->p2;
   iDb = pOp->p3;
   assert( iDb>=0 && iDb<db->nDb );
-  assert( (p->storageMask & (((yDbMask)1)<<iDb))!=0 );
+  /* assert( (p->storageMask & (((yDbMask)1)<<iDb))!=0 ); */
   pDb = &db->aDb[iDb];
   pX = pDb->pKV;
   assert( pX!=0 );
@@ -2598,7 +2589,7 @@ case OP_OpenEphemeral: {
   pCx = allocateCursor(p, pOp->p1, pOp->p2, -1, 1);
   if( pCx==0 ) goto no_mem;
   pCx->nullRow = 1;
-  rc = sqlite4KVStoreOpen(":memory:", &pCx->pTmpKV,
+  rc = sqlite4KVStoreOpen(db, "ephm", ":memory:", &pCx->pTmpKV,
           SQLITE_KVOPEN_TEMPORARY | SQLITE_KVOPEN_NO_TRANSACTIONS);
   pCx->pKeyInfo = pOp->p4.pKeyInfo;
   if( pCx->pKeyInfo ) pCx->pKeyInfo->enc = ENC(p->db);
