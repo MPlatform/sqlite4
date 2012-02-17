@@ -3029,9 +3029,7 @@ case OP_NewRowid: {           /* out2-prerelease */
   VdbeCursor *pC;          /* Cursor of table to get the new rowid */
   const KVByteArray *aKey; /* Key of an existing row */
   KVSize nKey;             /* Size of the existing row key */
-  int nProbe;              /* Size of the probe key */
   int n;                   /* Number of bytes decoded */
-  KVByteArray aProbe[40];  /* Probe key content */
 
   v = 0;
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
@@ -3059,28 +3057,24 @@ case OP_NewRowid: {           /* out2-prerelease */
   */
   assert( pC->isTable );
 
-  nProbe = sqlite4PutVarint64(aProbe, pC->iRoot);
-  aProbe[nProbe++] = 0x0d;
-  rc = sqlite4KVCursorSeek(pC->pKVCur, aProbe, nProbe, -1);
-  if( rc ) break;
-  rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
-  if( rc ) break;
-  if( nKey<nProbe-1 || memcmp(aProbe, aKey, nProbe-1)!=0 ){
-    /* An empty table.  The new rowid will be 1. */
+  rc = sqlite4VdbeSeekEnd(pC, -1);
+  if( rc==SQLITE_NOTFOUND ){
     v = 1;
+    rc = SQLITE_OK;
+  }else if( rc==SQLITE_OK ){
+    rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
+    if( rc==SQLITE_OK ){
+      n = sqlite4GetVarint64(aKey, nKey, &v);
+      if( n==0 ) rc = SQLITE_CORRUPT;
+    }
+    if( rc==SQLITE_OK ){
+      n = sqlite4VdbeDecodeIntKey(&aKey[n], nKey-n, &v);
+      if( n==0 ) rc = SQLITE_CORRUPT;
+    }
   }else{
-    n = sqlite4VdbeDecodeIntKey(&aKey[nProbe-1], nKey-nProbe+1, &v);
-    if( n==0 ){
-      rc = SQLITE_CORRUPT_BKPT;
-      goto abort_due_to_error;
-    }
-    if( v<MAX_ROWID ){
-      v++;
-    }else{
-      rc = SQLITE_FULL;
-      break;
-    }
+    break;
   }
+  pOut->flags = MEM_Int;
   pOut->u.i = v;
   break;
 }
@@ -3756,9 +3750,12 @@ case OP_CreateTable: {          /* out2-prerelease */
   if( rc==SQLITE_NOTFOUND ){
     iTabno = 1;
     n = 1;
-  }else{
+    rc = SQLITE_OK;
+  }else if( rc==SQLITE_INEXACT ){
     rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
     n = sqlite4GetVarint64(aKey, nKey, &iTabno);
+  }else{
+    break;
   }
   sqlite4KVCursorClose(pCur);
   if( n==0 ){

@@ -170,7 +170,7 @@ int sqlite4KVCursorData(
       kvTrace(p->pStore, "xData(%d,%d,%d,%s,%d)",
              p->curId, (int)ofst, (int)n, zData, (int)*pnData);
     }else{
-      kvTrace(p->pStore, "xData(%d,%d,%d,<error-%d>)\n",
+      kvTrace(p->pStore, "xData(%d,%d,%d,<error-%d>)",
              p->curId, (int)ofst, (int)n, rc);
     }
   }
@@ -181,7 +181,7 @@ int sqlite4KVCursorClose(KVCursor *p){
   if( p ){
     KVStore *pStore = p->pStore;
     rc = p->pStoreVfunc->xCloseCursor(p);
-    kvTrace(pStore, "xCloseCursor(%d) -> %d\n", p->curId, rc);
+    kvTrace(pStore, "xCloseCursor(%d) -> %d", p->curId, rc);
   }
   return rc;
 }
@@ -238,19 +238,22 @@ int sqlite4KVStoreGetMeta(KVStore *p, int iStart, int nMeta, unsigned int *a){
   rc = sqlite4KVStoreOpenCursor(p, &pCur);
   if( rc==SQLITE_OK ){
     rc = sqlite4KVCursorSeek(pCur, metadataKey, sizeof(metadataKey), 0);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE_NOTFOUND ){
+      rc = SQLITE_OK;
+      nData = 0;
+    }else if( rc==SQLITE_OK ){
       rc = sqlite4KVCursorData(pCur, 0, -1, &aData, &nData);
-      if( rc==SQLITE_OK ){
-        i = 0;
-        j = iStart*4;
-        while( i<nMeta && j+3<nData ){
-          a[i] = (aData[j]<<24) | (aData[j+1]<<16)
-                       | (aData[j+2]<<8) | aData[j+3];
-          i++;
-          j += 4;
-        }
-        while( i<nMeta ) a[i++] = 0;
-      }  
+    }
+    if( rc==SQLITE_OK ){
+      i = 0;
+      j = iStart*4;
+      while( i<nMeta && j+3<nData ){
+        a[i] = (aData[j]<<24) | (aData[j+1]<<16)
+                     | (aData[j+2]<<8) | aData[j+3];
+        i++;
+        j += 4;
+      }
+      while( i<nMeta ) a[i++] = 0;
     }
     sqlite4KVCursorClose(pCur);
   }
