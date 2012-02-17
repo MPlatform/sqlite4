@@ -1906,22 +1906,9 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   ** default.
   */
   case DB_ENABLE_LOAD_EXTENSION: {
-#ifndef SQLITE_OMIT_LOAD_EXTENSION
-    int onoff;
-    if( objc!=3 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "BOOLEAN");
-      return TCL_ERROR;
-    }
-    if( Tcl_GetBooleanFromObj(interp, objv[2], &onoff) ){
-      return TCL_ERROR;
-    }
-    sqlite4_enable_load_extension(pDb->db, onoff);
-    break;
-#else
     Tcl_AppendResult(interp, "extension loading is turned off at compile-time",
                      0);
     return TCL_ERROR;
-#endif
   }
 
   /*
@@ -3248,7 +3235,6 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitetest7_Init(Tcl_Interp*);
     extern int Sqlitetest8_Init(Tcl_Interp*);
     extern int Sqlitetest9_Init(Tcl_Interp*);
-    extern int Sqlitetest_autoext_Init(Tcl_Interp*);
     extern int Sqlitetest_demovfs_Init(Tcl_Interp *);
     extern int Sqlitetest_func_Init(Tcl_Interp*);
     extern int Sqlitetest_hexio_Init(Tcl_Interp*);

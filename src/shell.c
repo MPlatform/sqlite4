@@ -1398,7 +1398,6 @@ static char zHelp[] =
   "                         If TABLE specified, only list tables matching\n"
   "                         LIKE pattern TABLE.\n"
   ".timeout MS            Try opening locked tables for MS milliseconds\n"
-  ".vfsname ?AUX?         Print the name of the VFS stack\n"
   ".width NUM1 NUM2 ...   Set column widths for \"column\" mode\n"
 ;
 
@@ -1426,7 +1425,7 @@ static void open_db(struct callback_data *p){
           p->zDbFilename, sqlite4_errmsg(db));
       exit(1);
     }
-#ifndef SQLITE_OMIT_LOAD_EXTENSION
+#if 0 /*ndef SQLITE_OMIT_LOAD_EXTENSION*/
     sqlite4_enable_load_extension(p->db, 1);
 #endif
   }
@@ -1496,7 +1495,8 @@ static int booleanValue(char *zArg){
 static int do_meta_command(char *zLine, struct callback_data *p){
   int i = 1;
   int nArg = 0;
-  int n, c;
+  int n = 0;
+  int c = 0;
   int rc = 0;
   char *azArg[50];
 
@@ -1839,7 +1839,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
   }else
 #endif
 
-#ifndef SQLITE_OMIT_LOAD_EXTENSION
+#if 0 /*ndef SQLITE_OMIT_LOAD_EXTENSION*/
   if( c=='l' && strncmp(azArg[0], "load", n)==0 && nArg>=2 ){
     const char *zFile, *zProc;
     char *zErrMsg = 0;
@@ -2265,18 +2265,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
   if( c=='v' && strncmp(azArg[0], "version", n)==0 ){
     printf("SQLite %s %s\n" /*extra-version-info*/,
         sqlite4_libversion(), sqlite4_sourceid());
-  }else
-
-  if( c=='v' && strncmp(azArg[0], "vfsname", n)==0 ){
-    const char *zDbName = nArg==2 ? azArg[1] : "main";
-    char *zVfsName = 0;
-    if( p->db ){
-      sqlite4_file_control(p->db, zDbName, SQLITE_FCNTL_VFSNAME, &zVfsName);
-      if( zVfsName ){
-        printf("%s\n", zVfsName);
-        sqlite4_free(zVfsName);
-      }
-    }
   }else
 
   if( c=='w' && strncmp(azArg[0], "width", n)==0 && nArg>1 ){

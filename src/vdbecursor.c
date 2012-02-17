@@ -32,11 +32,12 @@
 *  Other error codes are also possible for various kinds of errors.
 */
 int sqlite4VdbeSeekEnd(VdbeCursor *pC, int iEnd){
-  KVCur *pKVCur = pC->pKVCur;
-  KVByteArray *aKey;
+  KVCursor *pCur = pC->pKVCur;
+  const KVByteArray *aKey;
   KVSize nKey;
   KVSize nProbe;
-  KVByteArray aProbe[16]
+  int rc;
+  KVByteArray aProbe[16];
 
   assert( iEnd==(+1) || iEnd==(-1) );  
   nProbe = sqlite4PutVarint64(aProbe, pC->iRoot);
@@ -59,14 +60,15 @@ int sqlite4VdbeSeekEnd(VdbeCursor *pC, int iEnd){
 ** Return SQLITE_NOTFOUND if the seek falls of the end of the table.
 */
 int sqlite4VdbeNext(VdbeCursor *pC){
-  KVCur *pKVCur = pC->pKVCur;
-  KVByteArray *aKey;
+  KVCursor *pCur = pC->pKVCur;
+  const KVByteArray *aKey;
   KVSize nKey;
+  int rc;
   sqlite4_uint64 iTabno;
 
-  rc = sqlite4KVCursorNext(pKVCur);
+  rc = sqlite4KVCursorNext(pCur);
   if( rc==SQLITE_OK ){
-    rc = sqlite4KVCursorKey(pKVCur, &aKey, &nKey);
+    rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
     if( rc==SQLITE_OK ){
       iTabno = 0;
       sqlite4GetVarint64(aKey, nKey, &iTabno);
@@ -81,14 +83,15 @@ int sqlite4VdbeNext(VdbeCursor *pC){
 ** Return SQLITE_NOTFOUND if the seek falls of the end of the table.
 */
 int sqlite4VdbePrevious(VdbeCursor *pC){
-  KVCur *pKVCur = pC->pKVCur;
-  KVByteArray *aKey;
+  KVCursor *pCur = pC->pKVCur;
+  const KVByteArray *aKey;
   KVSize nKey;
+  int rc;
   sqlite4_uint64 iTabno;
 
-  rc = sqlite4KVCursorPrevious(pKVCur);
+  rc = sqlite4KVCursorPrev(pCur);
   if( rc==SQLITE_OK ){
-    rc = sqlite4KVCursorKey(pKVCur, &aKey, &nKey);
+    rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
     if( rc==SQLITE_OK ){
       iTabno = 0;
       sqlite4GetVarint64(aKey, nKey, &iTabno);

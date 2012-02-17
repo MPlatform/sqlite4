@@ -477,7 +477,7 @@ VdbeOp *sqlite4VdbeTakeOpArray(Vdbe *p, int *pnOp, int *pnMaxArg){
   assert( aOp && !p->db->mallocFailed );
 
   /* Check that sqlite4VdbeUsesStorage() was not called on this VM */
-  assert( p->btreeMask==0 );
+  assert( p->storageMask==0 );
 
   resolveP2Values(p, pnMaxArg);
   *pnOp = p->nOp;
@@ -965,12 +965,12 @@ static char *displayP4(Op *pOp, char *zTemp, int nTemp){
 **
 ** The prepared statements need to know in advance the complete set of
 ** attached databases that will be use.  A mask of these databases
-** is maintained in p->btreeMask.  The p->lockMask value is the subset of
-** p->btreeMask of databases that will require a lock.
+** is maintained in p->storageMask.  The p->lockMask value is the subset of
+** p->storageMask of databases that will require a lock.
 */
 void sqlite4VdbeUsesStorage(Vdbe *p, int i){
   assert( i>=0 && i<p->db->nDb && i<(int)sizeof(yDbMask)*8 );
-  assert( i<(int)sizeof(p->btreeMask)*8 );
+  assert( i<(int)sizeof(p->storageMask)*8 );
   p->storageMask |= ((yDbMask)1)<<i;
   p->lockMask |= ((yDbMask)1)<<i;
 }
@@ -1517,9 +1517,9 @@ void sqlite4VdbeFreeCursor(Vdbe *p, VdbeCursor *pCx){
   }
   sqlite4VdbeSorterClose(p->db, pCx);
   if( pCx->pKVCur ){
-    sqlite4KVCursorClose(pCX->pKVCur);
+    sqlite4KVCursorClose(pCx->pKVCur);
   }
-  if( pCx->pKV ){
+  if( pCx->pTmpKV ){
     sqlite4KVStoreClose(pCx->pTmpKV);
   }
 #ifndef SQLITE_OMIT_VIRTUALTABLE

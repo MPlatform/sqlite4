@@ -56,7 +56,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          fts3.o fts3_aux.o fts3_expr.o fts3_hash.o fts3_icu.o fts3_porter.o \
          fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
          fts3_write.o func.o global.o hash.o \
-         icu.o insert.o kvmem.o legacy.o loadext.o \
+         icu.o insert.o kvmem.o legacy.o \
          main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          mutex.o mutex_noop.o mutex_os2.o mutex_unix.o mutex_w32.o \
          opcodes.o os.o os_os2.o os_unix.o os_win.o \
@@ -95,7 +95,6 @@ SRC = \
   $(TOP)/src/insert.c \
   $(TOP)/src/kvmem.c \
   $(TOP)/src/legacy.c \
-  $(TOP)/src/loadext.c \
   $(TOP)/src/main.c \
   $(TOP)/src/malloc.c \
   $(TOP)/src/math.c \
@@ -126,7 +125,6 @@ SRC = \
   $(TOP)/src/select.c \
   $(TOP)/src/shell.c \
   $(TOP)/src/sqlite.h.in \
-  $(TOP)/src/sqlite4ext.h \
   $(TOP)/src/sqliteInt.h \
   $(TOP)/src/sqliteLimit.h \
   $(TOP)/src/status.c \
@@ -201,7 +199,6 @@ TESTSRC = \
   $(TOP)/src/test7.c \
   $(TOP)/src/test8.c \
   $(TOP)/src/test9.c \
-  $(TOP)/src/test_autoext.c \
   $(TOP)/src/test_config.c \
   $(TOP)/src/test_demovfs.c \
   $(TOP)/src/test_devsym.c \
@@ -273,7 +270,6 @@ HDR = \
    $(TOP)/src/os_common.h \
    parse.h  \
    sqlite4.h  \
-   $(TOP)/src/sqlite4ext.h \
    $(TOP)/src/sqliteInt.h  \
    $(TOP)/src/sqliteLimit.h \
    $(TOP)/src/storage.h \

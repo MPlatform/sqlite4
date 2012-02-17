@@ -2531,7 +2531,7 @@ case OP_OpenWrite: {
   p2 = pOp->p2;
   iDb = pOp->p3;
   assert( iDb>=0 && iDb<db->nDb );
-  assert( (p->btreeMask & (((yDbMask)1)<<iDb))!=0 );
+  assert( (p->storageMask & (((yDbMask)1)<<iDb))!=0 );
   pDb = &db->aDb[iDb];
   pX = pDb->pKV;
   assert( pX!=0 );
@@ -3768,7 +3768,7 @@ case OP_CreateTable: {          /* out2-prerelease */
 
   iTabno = 0;
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
-  assert( (p->btreeMask & (((yDbMask)1)<<pOp->p1))!=0 );
+  assert( (p->storageMask & (((yDbMask)1)<<pOp->p1))!=0 );
   pDb = &db->aDb[pOp->p1];
   memset(aProbe, 0xff, 9);
   rc = sqlite4KVStoreOpenCursor(pDb->pKV, &pCur);

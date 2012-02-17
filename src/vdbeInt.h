@@ -308,7 +308,7 @@ struct Vdbe {
   u8 readOnly;            /* True for read-only statements */
   u8 isPrepareV2;         /* True if prepared with prepare_v2() */
   int nChange;            /* Number of db changes made since last reset */
-  yDbMask btreeMask;      /* Bitmask of db->aDb[] entries referenced */
+  yDbMask storageMask;    /* Bitmask of db->aDb[] entries referenced */
   yDbMask lockMask;       /* Subset of btreeMask that requires a lock */
   int iStatement;         /* Statement number (or 0 if has not opened stmt) */
   int aCounter[3];        /* Counters used by sqlite4_stmt_status() */
@@ -388,7 +388,7 @@ int sqlite4VdbeEncodeKey(
   int *pnOut,                  /* Number of bytes in the key */
   int *pnShort                 /* Number of bytes omitting primary key */
 );
-int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_uint64 v);
+int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_int64 v);
 int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);
 int sqlite4MemCompare(const Mem*, const Mem*, const CollSeq*);
 int sqlite4VdbeExec(Vdbe*);

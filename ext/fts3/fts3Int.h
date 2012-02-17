@@ -29,12 +29,6 @@
 
 #if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
 
-/* If not building as part of the core, include sqlite4ext.h. */
-#ifndef SQLITE_CORE
-# include "sqlite4ext.h" 
-extern const sqlite4_api_routines *sqlite4_api;
-#endif
-
 #include "sqlite4.h"
 #include "fts3_tokenizer.h"
 #include "fts3_hash.h"

@@ -94,9 +94,6 @@ static void *thread_main(void *pArg){
     p->zErr = 0;
   }
   p->completed++;
-#ifndef SQLITE_OMIT_DEPRECATED
-  sqlite4_thread_cleanup();
-#endif
   return 0;
 }
 

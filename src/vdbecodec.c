@@ -359,6 +359,7 @@ static int enlargeEncoderAllocation(KeyEncoder *p, int needed){
 */
 static void encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
   int i;
+  unsigned char aDigits[20];
   assert( m>0 );
   for(i=0; m; i++){ aDigits[i] = m%100; m /= 100; }
   p->nOut += sqlite4PutVarint64(p->aOut+p->nOut, i);
@@ -372,10 +373,10 @@ static void encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
 ** The return value is the number of bytes of a[] used.  
 */
 int sqlite4VdbeEncodeIntKey(u8 *a, sqlite4_int64 v){
-  int n;
+  int i;
   KeyEncoder s;
   s.aOut = a;
-  a.nOut = 1;
+  s.nOut = 1;
   if( v<0 ){
     a[0] = 0x08;
     encodeIntKey((sqlite4_uint64)-v, &s);
@@ -401,7 +402,7 @@ int sqlite4VdbeEncodeIntKey(u8 *a, sqlite4_int64 v){
 */
 static void encodeSmallFloatKey(double r, KeyEncoder *p){
   int e = 0;
-  int i, j, n;
+  int i, n;
   assert( r>0.0 && r<1.0 );
   while( r<1e-8 ){ r *= 1e8; e+=4; }
   while( r<1.0 ){ r *= 100.0; e++; }
@@ -430,8 +431,7 @@ static void encodeSmallFloatKey(double r, KeyEncoder *p){
 */
 static void encodeLargeFloatKey(double r, KeyEncoder *p){
   int e = 0;
-  int i, j, n;
-  unsigned char aDigits[30];
+  int i, n;
   assert( r>=1.0 );
   while( r>=1e32 && e<=350 ){ r *= 1e-32; e+=16; }
   while( r>=1e8 && e<=350 ){ r *= 1e-8; e+=4; }
@@ -610,23 +610,23 @@ int sqlite4VdbeDecodeIntKey(
 ){
   int isNeg;
   int e;
-  int i;
+  int i, n;
   sqlite4_int64 m;
   KVByteArray aBuf[12];
 
-  if( n<3 ) return 0;
+  if( nKey<3 ) return 0;
   if( nKey>sizeof(aBuf) ) nKey = sizeof(aBuf);
   if( aKey[0]==0x08 ){
     isNeg = 1;
     memcpy(aBuf, aKey, nKey);
     aKey = aBuf;
-    for(i=1; i<nKey; i++) aKey ^= 0xff;
+    for(i=1; i<nKey; i++) aBuf[i] ^= 0xff;
   }else if( aKey[0]==0x0c ){
     isNeg = 0;
   }else{
     return 0;
   }
-  n = sqlite4GetVarint64(aKey+1, nKey-1, &m);
+  n = sqlite4GetVarint64(aKey+1, nKey-1, (sqlite4_uint64*)&m);
   if( m>10 || m==0 ) return 0;
   e = m;
   if( n==0 || n+1>=nKey ) return 0;

@@ -173,13 +173,6 @@ int sqlite4_initialize(void){
   ** sqlite4_initialize().  The recursive calls normally come through
   ** sqlite4_os_init() when it invokes sqlite4_vfs_register(), but other
   ** recursive calls might also be possible.
-  **
-  ** IMPLEMENTATION-OF: R-00140-37445 SQLite automatically serializes calls
-  ** to the xInit method, so the xInit method need not be threadsafe.
-  **
-  ** The following mutex is what serializes access to the appdef pcache xInit
-  ** methods.  The sqlite4_pcache_methods.xInit() all is embedded in the
-  ** call to sqlite4PcacheInitialize().
   */
   sqlite4_mutex_enter(sqlite4GlobalConfig.pInitMutex);
   if( sqlite4GlobalConfig.isInit==0 && sqlite4GlobalConfig.inProgress==0 ){
@@ -187,18 +180,7 @@ int sqlite4_initialize(void){
     sqlite4GlobalConfig.inProgress = 1;
     memset(pHash, 0, sizeof(sqlite4GlobalFunctions));
     sqlite4RegisterGlobalFunctions();
-    if( sqlite4GlobalConfig.isPCacheInit==0 ){
-      rc = sqlite4PcacheInitialize();
-    }
-    if( rc==SQLITE_OK ){
-      sqlite4GlobalConfig.isPCacheInit = 1;
-      rc = sqlite4OsInit();
-    }
-    if( rc==SQLITE_OK ){
-      sqlite4PCacheBufferSetup( sqlite4GlobalConfig.pPage, 
-          sqlite4GlobalConfig.szPage, sqlite4GlobalConfig.nPage);
-      sqlite4GlobalConfig.isInit = 1;
-    }
+    rc = sqlite4OsInit();
     sqlite4GlobalConfig.inProgress = 0;
   }
   sqlite4_mutex_leave(sqlite4GlobalConfig.pInitMutex);
@@ -262,12 +244,8 @@ int sqlite4_shutdown(void){
     SQLITE_EXTRA_SHUTDOWN();
 #endif
     sqlite4_os_end();
-    sqlite4_reset_auto_extension();
+    /* sqlite4_reset_auto_extension(); */
     sqlite4GlobalConfig.isInit = 0;
-  }
-  if( sqlite4GlobalConfig.isPCacheInit ){
-    sqlite4PcacheShutdown();
-    sqlite4GlobalConfig.isPCacheInit = 0;
   }
   if( sqlite4GlobalConfig.isMallocInit ){
     sqlite4MallocEnd();
@@ -776,7 +754,6 @@ int sqlite4_close(sqlite4 *db){
   if( db->pErr ){
     sqlite4ValueFree(db->pErr);
   }
-  sqlite4CloseExtensions(db);
 
   db->magic = SQLITE_MAGIC_ERROR;
 
@@ -2150,7 +2127,7 @@ static int openDatabase(
   */
   rc = sqlite4_errcode(db);
   if( rc==SQLITE_OK ){
-    sqlite4AutoLoadExtensions(db);
+    /* sqlite4AutoLoadExtensions(db); */
     rc = sqlite4_errcode(db);
     if( rc!=SQLITE_OK ){
       goto opendb_out;

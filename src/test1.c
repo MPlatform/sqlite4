@@ -4435,23 +4435,6 @@ static int test_soft_heap_limit(
   return TCL_OK;
 }
 
-/*
-** Usage:   sqlite4_thread_cleanup
-**
-** Call the sqlite4_thread_cleanup API.
-*/
-static int test_thread_cleanup(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#ifndef SQLITE_OMIT_DEPRECATED
-  sqlite4_thread_cleanup();
-#endif
-  return TCL_OK;
-}
-
 
 /*
 ** tclcmd:   working_64bit_int
@@ -5758,7 +5741,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_db_release_memory",     test_db_release_memory,  0},
      { "sqlite4_db_filename",           test_db_filename,        0},
      { "sqlite4_soft_heap_limit",       test_soft_heap_limit,    0},
-     { "sqlite4_thread_cleanup",        test_thread_cleanup,     0},
 
      { "sqlite4_load_extension",        test_load_extension,     0},
      { "sqlite4_enable_load_extension", test_enable_load,        0},

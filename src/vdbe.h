@@ -184,7 +184,7 @@ void sqlite4VdbeChangeP5(Vdbe*, u8 P5);
 void sqlite4VdbeJumpHere(Vdbe*, int addr);
 void sqlite4VdbeChangeToNoop(Vdbe*, int addr);
 void sqlite4VdbeChangeP4(Vdbe*, int addr, const char *zP4, int N);
-void sqlite4VdbeUsesBtree(Vdbe*, int);
+void sqlite4VdbeUsesStorage(Vdbe*, int);
 VdbeOp *sqlite4VdbeGetOp(Vdbe*, int);
 int sqlite4VdbeMakeLabel(Vdbe*);
 void sqlite4VdbeRunOnlyOnce(Vdbe*);
