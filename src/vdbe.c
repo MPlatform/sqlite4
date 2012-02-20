@@ -2857,6 +2857,7 @@ case OP_Seek: {    /* in2 */
 */
 case OP_NotExists: {    /* jump, in3 */
   pOp->p4.i = 1;
+  pOp->p4type = P4_INT32;
   /* Fall through into OP_NotFound */
 }
 case OP_NotFound:       /* jump, in3 */

@@ -82,7 +82,7 @@ int sqlite4KVStoreReplace(
   if( p->fTrace ){
     char zKey[52], zData[52];
     binToHex(zKey, sizeof(zKey), pKey, nKey);
-    binToHex(zData, sizeof(zKey), pData, nData);
+    binToHex(zData, sizeof(zData), pData, nData);
     kvTrace(p, "xReplace(%d,%s,%d,%s,%d)",
            p->kvId, zKey, (int)nKey, zData, (int)nData);
   }
@@ -180,8 +180,9 @@ int sqlite4KVCursorClose(KVCursor *p){
   int rc = SQLITE_OK;
   if( p ){
     KVStore *pStore = p->pStore;
+    int curId = p->curId;
     rc = p->pStoreVfunc->xCloseCursor(p);
-    kvTrace(pStore, "xCloseCursor(%d) -> %d", p->curId, rc);
+    kvTrace(pStore, "xCloseCursor(%d) -> %d", curId, rc);
   }
   return rc;
 }

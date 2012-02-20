@@ -575,7 +575,12 @@ int sqlite4VdbeEncodeKey(
   int i;
   int rc = SQLITE_OK;
   KeyEncoder x;
-  u8 *so = pKeyInfo->aSortOrder;
+  u8 *so;
+  int iShort;
+  int nField;
+  CollSeq **aColl;
+  CollSeq *xColl;
+  static const CollSeq defaultColl;
 
   x.db = db;
   x.aOut = 0;
@@ -585,10 +590,21 @@ int sqlite4VdbeEncodeKey(
   *pnOut = 0;
   if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE_NOMEM;
   x.nOut = sqlite4PutVarint64(x.aOut, iTabno);
-  for(i=0; i<pKeyInfo->nField && rc==SQLITE_OK; i++){
-    if( pnShort && i==pKeyInfo->nField-pKeyInfo->nPK ) *pnShort = x.nOut;
-    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC,
-                           pKeyInfo->aColl[i]);
+  if( pKeyInfo ){
+    nField = pKeyInfo->nField;
+    iShort = nField - pKeyInfo->nPK;
+    aColl = pKeyInfo->aColl;
+    so = pKeyInfo->aSortOrder;
+  }else{
+    nField = 1;
+    iShort = 0;
+    xColl = &defaultColl;
+    aColl = &xColl;
+    so = 0;
+  }
+  for(i=0; i<nField && rc==SQLITE_OK; i++){
+    if( pnShort && i==iShort ) *pnShort = x.nOut;
+    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC, aColl[i]);
   }
   if( rc ){
     sqlite4DbFree(db, x.aOut);
