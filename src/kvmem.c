@@ -425,10 +425,17 @@ static int kvmemBegin(KVStore *pKVStore, int iLevel){
 ** The argument iLevel will always be less than the current transaction
 ** level when this routine is called.
 **
+** Commit is divided into two phases.  A rollback is still possible after
+** phase one completes.  In this implementation, phase one is a no-op since
+** phase two cannot fail.
+**
 ** After this routine returns successfully, the transaction level will be 
 ** equal to iLevel.
 */
-static int kvmemCommit(KVStore *pKVStore, int iLevel){
+static int kvmemCommitPhaseOne(KVStore *pKVStore, int iLevel){
+  return SQLITE_OK;
+}
+static int kvmemCommitPhaseTwo(KVStore *pKVStore, int iLevel){
   KVMem *p = (KVMem*)pKVStore;
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( iLevel>=0 );
@@ -489,6 +496,16 @@ static int kvmemRollback(KVStore *pKVStore, int iLevel){
   return SQLITE_OK;
 }
 
+/*
+** Revert a transaction back to what it was when it started.
+*/
+static int kvmemRevert(KVStore *pKVStore, int iLevel){
+  int rc = kvmemRollback(pKVStore, iLevel-1);
+  if( rc==SQLITE_OK ){
+    rc = kvmemBegin(pKVStore, iLevel);
+  }
+  return rc;
+}
 
 /*
 ** Implementation of the xReplace(X, aKey, nKey, aData, nData) method.
@@ -780,7 +797,10 @@ static int kvmemClose(KVStore *pKVStore){
   if( p==0 ) return SQLITE_OK;
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( p->nCursor==0 );
-  if( p->base.iTransLevel ) kvmemCommit(pKVStore, 0);
+  if( p->base.iTransLevel ){
+    kvmemCommitPhaseOne(pKVStore, 0);
+    kvmemCommitPhaseTwo(pKVStore, 0);
+  }
   sqlite4_free(p->apLog);
   kvmemClearTree(p->pRoot);
   memset(p, 0, sizeof(*p));
@@ -801,8 +821,10 @@ static const KVStoreMethods kvmemMethods = {
   kvmemReset,
   kvmemCloseCursor,
   kvmemBegin,
-  kvmemCommit,
+  kvmemCommitPhaseOne,
+  kvmemCommitPhaseTwo,
   kvmemRollback,
+  kvmemRevert,
   kvmemClose
 };
 

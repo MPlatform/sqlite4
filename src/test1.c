@@ -2136,7 +2136,7 @@ static int uses_stmt_journal(
 
   if( getStmtPointer(interp, Tcl_GetString(objv[1]), &pStmt) ) return TCL_ERROR;
   rc = sqlite4_stmt_readonly(pStmt);
-  Tcl_SetObjResult(interp, Tcl_NewBooleanObj(((Vdbe *)pStmt)->usesStmtJournal));
+  Tcl_SetObjResult(interp, Tcl_NewBooleanObj(((Vdbe *)pStmt)->needSavepoint));
   return TCL_OK;
 }
 

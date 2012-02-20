@@ -304,13 +304,11 @@ struct Vdbe {
   u8 runOnlyOnce;         /* Automatically expire on reset */
   u8 minWriteFileFormat;  /* Minimum file format for writable database files */
   u8 inVtabMethod;        /* See comments above */
-  u8 usesStmtJournal;     /* True if uses a statement journal */
+  u8 needSavepoint;       /* True if a change might abort and needs savepoint */
   u8 readOnly;            /* True for read-only statements */
   u8 isPrepareV2;         /* True if prepared with prepare_v2() */
   int nChange;            /* Number of db changes made since last reset */
-  yDbMask storageMask;    /* Bitmask of db->aDb[] entries referenced */
-  yDbMask lockMask;       /* Subset of btreeMask that requires a lock */
-  int iStatement;         /* Statement number (or 0 if has not opened stmt) */
+  yDbMask stmtTransMask;  /* db->aDb[] entries that have a subtransaction */
   int aCounter[3];        /* Counters used by sqlite4_stmt_status() */
 #ifndef SQLITE_OMIT_TRACE
   i64 startTime;          /* Time when query started - used for profiling */

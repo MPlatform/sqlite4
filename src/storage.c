@@ -193,13 +193,34 @@ int sqlite4KVStoreBegin(KVStore *p, int iLevel){
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
-int sqlite4KVStoreCommit(KVStore *p, int iLevel){
+int sqlite4KVStoreCommitPhaseOne(KVStore *p, int iLevel){
   int rc;
   assert( iLevel>=0 );
   assert( iLevel<=p->iTransLevel );
-  rc = p->pStoreVfunc->xCommit(p, iLevel);
-  kvTrace(p, "xCommit(%d,%d) -> %d", p->kvId, iLevel, rc);
+  if( p->iTransLevel==iLevel ) return SQLITE_OK;
+  if( p->pStoreVfunc->xCommitPhaseOne ){
+    rc = p->pStoreVfunc->xCommitPhaseOne(p, iLevel);
+  }else{
+    rc = SQLITE_OK;
+  }
+  kvTrace(p, "xCommitPhaseOne(%d,%d) -> %d", p->kvId, iLevel, rc);
+  assert( p->iTransLevel>iLevel );
+  return rc;
+}
+int sqlite4KVStoreCommitPhaseTwo(KVStore *p, int iLevel){
+  int rc;
+  assert( iLevel>=0 );
+  assert( iLevel<=p->iTransLevel );
+  if( p->iTransLevel==iLevel ) return SQLITE_OK;
+  rc = p->pStoreVfunc->xCommitPhaseTwo(p, iLevel);
+  kvTrace(p, "xCommitPhaseTwo(%d,%d) -> %d", p->kvId, iLevel, rc);
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
+  return rc;
+}
+int sqlite4KVStoreCommit(KVStore *p, int iLevel){
+  int rc;
+  rc = sqlite4KVStoreCommitPhaseOne(p, iLevel);
+  if( rc==SQLITE_OK ) rc = sqlite4KVStoreCommitPhaseTwo(p, iLevel);
   return rc;
 }
 int sqlite4KVStoreRollback(KVStore *p, int iLevel){
@@ -208,6 +229,22 @@ int sqlite4KVStoreRollback(KVStore *p, int iLevel){
   assert( iLevel<=p->iTransLevel );
   rc = p->pStoreVfunc->xRollback(p, iLevel);
   kvTrace(p, "xRollback(%d,%d) -> %d", p->kvId, iLevel, rc);
+  assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
+  return rc;
+}
+int sqlite4KVStoreRevert(KVStore *p, int iLevel){
+  int rc;
+  assert( iLevel>0 );
+  assert( iLevel<=p->iTransLevel );
+  if( p->pStoreVfunc->xRevert ){
+    rc = p->pStoreVfunc->xRevert(p, iLevel);
+    kvTrace(p, "xRevert(%d,%d) -> %d", p->kvId, iLevel, rc);
+  }else{
+    rc = sqlite4KVStoreRollback(p, iLevel-1);
+    if( rc==SQLITE_OK ){
+      rc = sqlite4KVStoreBegin(p, iLevel);
+    }
+  }
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }

@@ -1085,7 +1085,7 @@ case OP_ResultRow: {
   ** transaction. It needs to be rolled back.  */
   if( SQLITE_OK!=(rc = sqlite4VdbeCheckFk(p, 0)) ){
     assert( db->flags&SQLITE_CountRows );
-    assert( p->usesStmtJournal );
+    assert( p->needSavepoint );
     break;
   }
 
@@ -1104,7 +1104,6 @@ case OP_ResultRow: {
   ** The statement transaction is never a top-level transaction.  Hence
   ** the RELEASE call below can never fail.
   */
-  assert( p->iStatement==0 || db->flags&SQLITE_CountRows );
   rc = sqlite4VdbeCloseStatement(p, SAVEPOINT_RELEASE);
   if( NEVER(rc!=SQLITE_OK) ){
     break;
@@ -2311,24 +2310,17 @@ case OP_AutoCommit: {
 
 /* Opcode: Transaction P1 P2 * * *
 **
-** Begin a transaction.  The transaction ends when a Commit or Rollback
-** opcode is encountered.  Depending on the ON CONFLICT setting, the
-** transaction might also be rolled back if an error is encountered.
+** Begin a transaction.
 **
 ** P1 is the index of the database file on which the transaction is
 ** started.  Index 0 is the main database file and index 1 is the
 ** file used for temporary tables.  Indices of 2 or more are used for
 ** attached databases.
 **
-** If P2 is non-zero, then a write-transaction is started.  A RESERVED lock is
-** obtained on the database file when a write-transaction is started.  No
-** other process can start another write transaction while this transaction is
-** underway.  Starting a write transaction also creates a rollback journal. A
-** write transaction must be started before any changes can be made to the
-** database.  If P2 is 2 or greater then an EXCLUSIVE lock is also obtained
-** on the file.
+** If P2 is non-zero, then a write-transaction is started.  If P2 is zero
+** then a read-transaction is started.
 **
-** If a write-transaction is started and the Vdbe.usesStmtJournal flag is
+** If a write-transaction is started and the Vdbe.needSavepoint flag is
 ** true (this flag is set if the Vdbe may modify more than one row and may
 ** throw an ABORT exception), a statement transaction may also be opened.
 ** More specifically, a statement transaction is opened iff the database
@@ -2337,10 +2329,32 @@ case OP_AutoCommit: {
 ** VDBE to be rolled back after an error without having to roll back the
 ** entire transaction. If no error is encountered, the statement transaction
 ** will automatically commit when the VDBE halts.
-**
-** If P2 is zero, then a read-lock is obtained on the database file.
 */
 case OP_Transaction: {
+  Db *pDb;
+  KVStore *pKV;
+  int needStmt;
+
+  assert( pOp->p1>=0 && pOp->p1<db->nDb );
+  pDb = &db->aDb[pOp->p1];
+  pKV = pDb->pKV;
+  if( pOp->p2==0 ){
+    /* Read transaction needed.  Start if we are not already in one. */
+    if( pKV->iTransLevel==0 ){
+      rc = sqlite4KVStoreBegin(pKV, 1);
+    }
+  }else{
+    /* A write transaction is needed */
+    needStmt = pKV->iTransLevel>0 && (p->needSavepoint || db->activeVdbeCnt>1);
+    if( pKV->iTransLevel<2 ){
+      rc = sqlite4KVStoreBegin(pKV, 2);
+    }else if( p->needSavepoint ){
+      rc = sqlite4KVStoreBegin(pKV, pKV->iTransLevel+1);
+      if( rc==SQLITE_OK ){
+        p->stmtTransMask |= ((yDbMask)1)<<pOp->p1;
+      }
+    }
+  }
   break;
 }
 
@@ -2505,7 +2519,6 @@ case OP_OpenWrite: {
   p2 = pOp->p2;
   iDb = pOp->p3;
   assert( iDb>=0 && iDb<db->nDb );
-  /* assert( (p->storageMask & (((yDbMask)1)<<iDb))!=0 ); */
   pDb = &db->aDb[iDb];
   pX = pDb->pKV;
   assert( pX!=0 );
@@ -3736,7 +3749,6 @@ case OP_CreateTable: {          /* out2-prerelease */
 
   iTabno = 0;
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
-  assert( (p->storageMask & (((yDbMask)1)<<pOp->p1))!=0 );
   pDb = &db->aDb[pOp->p1];
   memset(aProbe, 0xff, 9);
   rc = sqlite4KVStoreOpenCursor(pDb->pKV, &pCur);

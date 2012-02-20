@@ -231,7 +231,12 @@ static int test_storage_commit(
   }
   p = sqlite4TestTextToPtr(Tcl_GetString(objv[1]));
   if( Tcl_GetIntFromObj(interp, objv[2], &iLevel) ) return TCL_ERROR;
-  rc = sqlite4KVStoreCommit(p, iLevel);
+  rc = sqlite4KVStoreCommitPhaseOne(p, iLevel);
+  if( rc ){
+    storageSetTclErrorName(interp, rc);
+    return TCL_ERROR;
+  }
+  rc = sqlite4KVStoreCommitPhaseTwo(p, iLevel);
   if( rc ){
     storageSetTclErrorName(interp, rc);
     return TCL_ERROR;

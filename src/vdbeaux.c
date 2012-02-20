@@ -476,9 +476,6 @@ VdbeOp *sqlite4VdbeTakeOpArray(Vdbe *p, int *pnOp, int *pnMaxArg){
   VdbeOp *aOp = p->aOp;
   assert( aOp && !p->db->mallocFailed );
 
-  /* Check that sqlite4VdbeUsesStorage() was not called on this VM */
-  assert( p->storageMask==0 );
-
   resolveP2Values(p, pnMaxArg);
   *pnOp = p->nOp;
   p->aOp = 0;
@@ -961,18 +958,10 @@ static char *displayP4(Op *pOp, char *zTemp, int nTemp){
 #endif
 
 /*
-** Declare to the Vdbe that the BTree object at db->aDb[i] is used.
-**
-** The prepared statements need to know in advance the complete set of
-** attached databases that will be use.  A mask of these databases
-** is maintained in p->storageMask.  The p->lockMask value is the subset of
-** p->storageMask of databases that will require a lock.
+** Declare to the Vdbe that the database at db->aDb[i] is used.
 */
 void sqlite4VdbeUsesStorage(Vdbe *p, int i){
   assert( i>=0 && i<p->db->nDb && i<(int)sizeof(yDbMask)*8 );
-  assert( i<(int)sizeof(p->storageMask)*8 );
-  p->storageMask |= ((yDbMask)1)<<i;
-  p->lockMask |= ((yDbMask)1)<<i;
 }
 
 
@@ -1372,7 +1361,7 @@ void sqlite4VdbeRewind(Vdbe *p){
   p->nChange = 0;
   p->cacheCtr = 1;
   p->minWriteFileFormat = 255;
-  p->iStatement = 0;
+  p->stmtTransMask = 0;
   p->nFkConstraint = 0;
 #ifdef VDBE_PROFILE
   for(i=0; i<p->nOp; i++){
@@ -1446,7 +1435,7 @@ void sqlite4VdbeMakeReady(
   zEnd = (u8*)&p->aOp[p->nOpAlloc];  /* First byte past end of zCsr[] */
 
   resolveP2Values(p, &nArg);
-  p->usesStmtJournal = (u8)(pParse->isMultiWrite && pParse->mayAbort);
+  p->needSavepoint = (u8)(pParse->isMultiWrite && pParse->mayAbort);
   if( pParse->explain && nMem<10 ){
     nMem = 10;
   }
@@ -1691,27 +1680,17 @@ static int vdbeCommit(sqlite4 *db, Vdbe *p){
 #endif
 
   /* Before doing anything else, call the xSync() callback for any
-  ** virtual module tables written in this transaction. This has to
-  ** be done before determining whether a master journal file is 
-  ** required, as an xSync() callback may add an attached database
-  ** to the transaction.
+  ** virtual module tables written in this transaction.
   */
   rc = sqlite4VtabSync(db, &p->zErrMsg);
 
-  /* This loop determines (a) if the commit hook should be invoked and
-  ** (b) how many database files have open write transactions, not 
-  ** including the temp database. (b) is important because if more than 
-  ** one database file has an open write transaction, a master journal
-  ** file is required for an atomic commit.
-  */ 
-  for(i=0; rc==SQLITE_OK && i<db->nDb; i++){ 
-    if( db->aDb[i].chngFlag ){
+  /* Phase one commit */
+  for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
+    KVStore *pKV = db->aDb[i].pKV;
+    if( pKV && pKV->iTransLevel ){
       needXcommit = 1;
-      if( i!=1 ) nTrans++;
+      rc = sqlite4KVStoreCommitPhaseOne(pKV, 0);
     }
-  }
-  if( rc!=SQLITE_OK ){
-    return rc;
   }
 
   /* If there are any write-transactions at all, invoke the commit hook */
@@ -1722,10 +1701,11 @@ static int vdbeCommit(sqlite4 *db, Vdbe *p){
     }
   }
 
+  /* Do phase two of the commit */
   for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
     KVStore *pKV = db->aDb[i].pKV;
     if( pKV ){
-      rc = sqlite4KVStoreCommit(pKV, 0);
+      rc = sqlite4KVStoreCommitPhaseTwo(pKV, 0);
     }
   }
 
@@ -1812,8 +1792,83 @@ int sqlite4VdbeCheckFk(Vdbe *p, int deferred){
 ** means the close did not happen and needs to be repeated.
 */
 int sqlite4VdbeHalt(Vdbe *p){
-  int rc;                         /* Used to store transient return codes */
+  int rc;
   sqlite4 *db = p->db;
+
+  if( db->mallocFailed ) p->rc = SQLITE_NOMEM;
+  if( p->aOnceFlag ) memset(p->aOnceFlag, 0, p->nOnceFlag);
+  closeAllCursors(p);
+  if( p->magic!=VDBE_MAGIC_RUN ){
+    return SQLITE_OK;
+  }
+  checkActiveVdbeCnt(db);
+
+  if( p->pc<0 ){
+    /* No commit or rollback needed if the program never started */
+  }else{
+    /* Check for immediate foreign key violations. */
+    if( p->rc==SQLITE_OK ){
+      sqlite4VdbeCheckFk(p, 0);
+    }
+  
+    /* If the auto-commit flag is set and this is the only active writer 
+    ** VM, then we do either a commit or rollback of the current transaction. 
+    */
+    if( !sqlite4VtabInSync(db) 
+     && db->autoCommit 
+     && db->writeVdbeCnt==(p->readOnly==0) 
+    ){
+      rc = sqlite4VdbeCheckFk(p, 1);
+      if( rc!=SQLITE_OK ){
+        rc = SQLITE_CONSTRAINT;
+      }else{ 
+        /* The auto-commit flag is true, the vdbe program was successful 
+        ** or hit an 'OR FAIL' constraint and there are no deferred foreign
+        ** key constraints to hold up the transaction. This means a commit 
+        ** is required. */
+        rc = vdbeCommit(db, p);
+      }
+      if( rc==SQLITE_BUSY && p->readOnly ){
+        /* will return the error */
+      }else if( rc!=SQLITE_OK ){
+        p->rc = rc;
+        sqlite4RollbackAll(db);
+      }else{
+        db->nDeferredCons = 0;
+        sqlite4CommitInternalChanges(db);
+      }
+    }else{
+      /* Not in auto-commit mode.  If the statement failed, rollback
+      ** the effects of just this one statement */
+      if( p->rc!=SQLITE_OK && p->stmtTransMask!=0 ){
+        int i;
+        for(i=0; i<db->nDb; i++){
+          if( p->stmtTransMask & ((yDbMask)1)<<i ){
+            KVStore *pKV = db->aDb[i].pKV;
+            rc = sqlite4KVStoreRollback(pKV, pKV->iTransLevel-1);
+            if( rc ){
+              sqlite4RollbackAll(db);
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /* We have successfully halted and closed the VM.  Record this fact. */
+  if( p->pc>=0 ){
+    db->activeVdbeCnt--;
+    if( !p->readOnly ){
+      db->writeVdbeCnt--;
+    }
+    assert( db->activeVdbeCnt>=db->writeVdbeCnt );
+  }
+  p->magic = VDBE_MAGIC_HALT;
+  checkActiveVdbeCnt(db);
+  if( p->db->mallocFailed ){
+    p->rc = SQLITE_NOMEM;
+  }
 
   return (p->rc==SQLITE_BUSY ? SQLITE_BUSY : SQLITE_OK);
 }

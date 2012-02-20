@@ -953,13 +953,9 @@ struct sqlite4 {
 */
 #define SQLITE_VdbeTrace      0x00000100  /* True to trace VDBE execution */
 #define SQLITE_InternChanges  0x00000200  /* Uncommitted Hash table changes */
-#define SQLITE_FullColNames   0x00000400  /* Show full column names on SELECT */
-#define SQLITE_ShortColNames  0x00000800  /* Show short columns names */
 #define SQLITE_CountRows      0x00001000  /* Count rows changed by INSERT, */
                                           /*   DELETE, or UPDATE and return */
                                           /*   the count using a callback. */
-#define SQLITE_NullCallback   0x00002000  /* Invoke the callback once if the */
-                                          /*   result set is empty */
 #define SQLITE_SqlTrace       0x00004000  /* Debug print SQL as it executes */
 #define SQLITE_VdbeListing    0x00008000  /* Debug listings of VDBE programs */
 #define SQLITE_WriteSchema    0x00010000  /* OK to update SQLITE_MASTER */

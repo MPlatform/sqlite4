@@ -35,15 +35,25 @@
 ** implementation that does not support nested transactions will fail any
 ** attempt to increase the transaction level above 2.
 ** 
-** The xCommit method lowers the transaction level to the value given in its
-** argument, and makes all the changes made at higher transaction levels
-** permanent.
+** The xCommitPhaseOne and xCommitPhaseTwo methods implementat a 2-phase
+** commit that lowers the transaction level to the value given in the
+** second argument, and makes all the changes made at higher transaction levels
+** permanent.  A rollback is still possible following phase one.  If
+** possible, errors should be reported during phase one so that a
+** multiple-database transaction can still be rolled back if the
+** phase one fails on a different database.  Implementations that do not
+** support two-phase commit can implement xCommitPhaseOne as a no-op function
+** returning SQLITE_OK.
 ** 
 ** The xRollback method lowers the transaction level to the value given in
 ** its argument and reverts or undoes all changes made at higher transaction
 ** levels.  An xRollback to level N causes the database to revert to the state
 ** it was in on the most recent xBegin to level N+1.
 ** 
+** The xRevert(N) method causes the state of the database file to go back
+** to what it was immediately after the most recent xCommit(N).  Higher-level
+** subtransactions are cancelled.  This call is equivalent to xRollback(N-1)
+** followed by xBegin(N) but might be more efficient.
 ** 
 ** The xReplace method replaces the value for an existing entry with the
 ** given key, or creates a new entry with the given key and value if no
@@ -126,8 +136,10 @@ struct KVStoreMethods {
   int (*xReset)(KVCursor*);
   int (*xCloseCursor)(KVCursor*);
   int (*xBegin)(KVStore*, int);
-  int (*xCommit)(KVStore*, int);
+  int (*xCommitPhaseOne)(KVStore*, int);
+  int (*xCommitPhaseTwo)(KVStore*, int);
   int (*xRollback)(KVStore*, int);
+  int (*xRevert)(KVStore*, int);
   int (*xClose)(KVStore*);
 };
 struct KVStore {
@@ -190,8 +202,11 @@ int sqlite4KVCursorData(
 );
 int sqlite4KVCursorClose(KVCursor *p);
 int sqlite4KVStoreBegin(KVStore *p, int iLevel);
+int sqlite4KVStoreCommitPhaseOne(KVStore *p, int iLevel);
+int sqlite4KVStoreCommitPhaseTwo(KVStore *p, int iLevel);
 int sqlite4KVStoreCommit(KVStore *p, int iLevel);
 int sqlite4KVStoreRollback(KVStore *p, int iLevel);
+int sqlite4KVStoreRevert(KVStore *p, int iLevel);
 int sqlite4KVStoreClose(KVStore *p);
 
 int sqlite4KVStoreGetMeta(KVStore *p, int, int, unsigned int*);
