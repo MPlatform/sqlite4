@@ -3559,13 +3559,16 @@ case OP_Next: {        /* jump */
     assert( pOp->opcode!=OP_Prev || pOp->p4.xAdvance==sqlite4VdbePrevious );
     rc = pOp->p4.xAdvance(pC);
   }
-  pC->nullRow = rc==SQLITE_NOTFOUND;
   if( rc==SQLITE_OK ){
     pc = pOp->p2 - 1;
     if( pOp->p5 ) p->aCounter[pOp->p5-1]++;
+    pC->nullRow = 0;
 #ifdef SQLITE_TEST
     sqlite4_search_count++;
 #endif
+  }else if( rc==SQLITE_NOTFOUND ){
+    pC->nullRow = 1;
+    rc = SQLITE_OK;
   }
   pC->rowidIsValid = 0;
   break;

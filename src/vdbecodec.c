@@ -84,6 +84,7 @@ int sqlite4VdbeDecodeValue(
   assert( iVal<=p->mxCol );
   n = sqlite4GetVarint64(p->a, p->n, &ofst);
   if( n==0 ) return SQLITE_CORRUPT;
+  ofst += n;
   endHdr = ofst;
   if( endHdr>p->n ) return SQLITE_CORRUPT;
   for(i=0; i<=iVal && n<endHdr; i++){

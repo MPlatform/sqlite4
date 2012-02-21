@@ -734,7 +734,7 @@ static int kvmemNextEntry(KVCursor *pKVCursor){
     pCur->pNode = kvmemNodeRef(pNode);
     pCur->pData = kvmemDataRef(pNode->pData);
   }
-  return pNode ? SQLITE_OK : SQLITE_DONE;
+  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
 }
 
 /*
@@ -755,7 +755,7 @@ static int kvmemPrevEntry(KVCursor *pKVCursor){
     pCur->pNode = kvmemNodeRef(pNode);
     pCur->pData = kvmemDataRef(pNode->pData);
   }
-  return pNode ? SQLITE_OK : SQLITE_DONE;
+  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
 }
 
 /*
