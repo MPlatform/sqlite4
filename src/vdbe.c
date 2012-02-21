@@ -3074,13 +3074,14 @@ case OP_NewRowid: {           /* out2-prerelease */
 
   rc = sqlite4VdbeSeekEnd(pC, -1);
   if( rc==SQLITE_NOTFOUND ){
-    v = 1;
+    v = 0;
     rc = SQLITE_OK;
   }else if( rc==SQLITE_OK ){
     rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
     if( rc==SQLITE_OK ){
       n = sqlite4GetVarint64(aKey, nKey, &v);
       if( n==0 ) rc = SQLITE_CORRUPT;
+      if( v!=pC->iRoot ) rc = SQLITE_CORRUPT;
     }
     if( rc==SQLITE_OK ){
       n = sqlite4VdbeDecodeIntKey(&aKey[n], nKey-n, &v);
@@ -3090,7 +3091,7 @@ case OP_NewRowid: {           /* out2-prerelease */
     break;
   }
   pOut->flags = MEM_Int;
-  pOut->u.i = v;
+  pOut->u.i = v+1;
   break;
 }
 

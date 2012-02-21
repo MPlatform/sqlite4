@@ -18,6 +18,47 @@
 #include "sqliteInt.h"
 
 /*
+** Names of error codes used for tracing.
+*/
+static const char *kvErrName(int e){
+  const char *zName;
+  switch( e ){
+    case SQLITE_OK:                  zName = "OK";                break;
+    case SQLITE_ERROR:               zName = "ERROR";             break;
+    case SQLITE_INTERNAL:            zName = "INTERNAL";          break;
+    case SQLITE_PERM:                zName = "PERM";              break;
+    case SQLITE_ABORT:               zName = "ABORT";             break;
+    case SQLITE_BUSY:                zName = "BUSY";              break;
+    case SQLITE_LOCKED:              zName = "LOCKED";            break;
+    case SQLITE_NOMEM:               zName = "NOMEM";             break;
+    case SQLITE_READONLY:            zName = "READONLY";          break;
+    case SQLITE_INTERRUPT:           zName = "INTERRUPT";         break;
+    case SQLITE_IOERR:               zName = "IOERR";             break;
+    case SQLITE_CORRUPT:             zName = "CORRUPT";           break;
+    case SQLITE_NOTFOUND:            zName = "NOTFOUND";          break;
+    case SQLITE_FULL:                zName = "FULL";              break;
+    case SQLITE_CANTOPEN:            zName = "CANTOPEN";          break;
+    case SQLITE_PROTOCOL:            zName = "PROTOCOL";          break;
+    case SQLITE_EMPTY:               zName = "EMPTY";             break;
+    case SQLITE_SCHEMA:              zName = "SCHEMA";            break;
+    case SQLITE_TOOBIG:              zName = "TOOBIG";            break;
+    case SQLITE_CONSTRAINT:          zName = "CONSTRAINT";        break;
+    case SQLITE_MISMATCH:            zName = "MISMATCH";          break;
+    case SQLITE_MISUSE:              zName = "MISUSE";            break;
+    case SQLITE_NOLFS:               zName = "NOLFS";             break;
+    case SQLITE_AUTH:                zName = "AUTH";              break;
+    case SQLITE_FORMAT:              zName = "FORMAT";            break;
+    case SQLITE_RANGE:               zName = "RANGE";             break;
+    case SQLITE_NOTADB:              zName = "NOTADB";            break;
+    case SQLITE_ROW:                 zName = "ROW";               break;
+    case SQLITE_DONE:                zName = "DONE";              break;
+    case SQLITE_INEXACT:             zName = "INEXACT";           break;
+    default:                         zName = "???";               break;
+  }
+  return zName;
+}
+
+/*
 ** Do any requested tracing
 */
 static void kvTrace(KVStore *p, const char *zFormat, ...){
@@ -99,7 +140,8 @@ int sqlite4KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor){
     pCur->fTrace = p->fTrace;
     pCur->pStore = p;
   }
-  kvTrace(p, "xOpenCursor(%d,%d) -> %d", p->kvId, pCur?pCur->curId:-1, rc);
+  kvTrace(p, "xOpenCursor(%d,%d) -> %s",
+          p->kvId, pCur?pCur->curId:-1, kvErrName(rc));
   return rc;
 }
 int sqlite4KVCursorSeek(
@@ -112,32 +154,33 @@ int sqlite4KVCursorSeek(
   if( p->fTrace ){
     char zKey[52];
     binToHex(zKey, sizeof(zKey), pKey, nKey);
-    kvTrace(p->pStore, "xSeek(%d,%s,%d,%d) -> %d", p->curId, zKey, (int)nKey,dir,rc);
+    kvTrace(p->pStore, "xSeek(%d,%s,%d,%d) -> %s",
+            p->curId, zKey, (int)nKey, dir, kvErrName(rc));
   }
   return rc;
 }
 int sqlite4KVCursorNext(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xNext(p);
-  kvTrace(p->pStore, "xNext(%d) -> %d", p->curId, rc);
+  kvTrace(p->pStore, "xNext(%d) -> %s", p->curId, kvErrName(rc));
   return rc;
 }
 int sqlite4KVCursorPrev(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xPrev(p);
-  kvTrace(p->pStore, "xPrev(%d) -> %d", p->curId, rc);
+  kvTrace(p->pStore, "xPrev(%d) -> %s", p->curId, kvErrName(rc));
   return rc;
 }
 int sqlite4KVCursorDelete(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xDelete(p);
-  kvTrace(p->pStore, "xDelete(%d) -> %d", p->curId, rc);
+  kvTrace(p->pStore, "xDelete(%d) -> %s", p->curId, kvErrName(rc));
   return rc;
 }
 int sqlite4KVCursorReset(KVCursor *p){
   int rc;
   rc = p->pStoreVfunc->xReset(p);
-  kvTrace(p->pStore, "xReset(%d) -> %d", p->curId, rc);
+  kvTrace(p->pStore, "xReset(%d) -> %s", p->curId, kvErrName(rc));
   return rc;
 }
 int sqlite4KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey){
@@ -182,7 +225,7 @@ int sqlite4KVCursorClose(KVCursor *p){
     KVStore *pStore = p->pStore;
     int curId = p->curId;
     rc = p->pStoreVfunc->xCloseCursor(p);
-    kvTrace(pStore, "xCloseCursor(%d) -> %d", curId, rc);
+    kvTrace(pStore, "xCloseCursor(%d) -> %s", curId, kvErrName(rc));
   }
   return rc;
 }
@@ -190,7 +233,7 @@ int sqlite4KVStoreBegin(KVStore *p, int iLevel){
   int rc;
   assert( (iLevel==2 && p->iTransLevel==0) || p->iTransLevel+1==iLevel );
   rc = p->pStoreVfunc->xBegin(p, iLevel);
-  kvTrace(p, "xBegin(%d,%d) -> %d", p->kvId, iLevel, rc);
+  kvTrace(p, "xBegin(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
@@ -204,7 +247,7 @@ int sqlite4KVStoreCommitPhaseOne(KVStore *p, int iLevel){
   }else{
     rc = SQLITE_OK;
   }
-  kvTrace(p, "xCommitPhaseOne(%d,%d) -> %d", p->kvId, iLevel, rc);
+  kvTrace(p, "xCommitPhaseOne(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
   assert( p->iTransLevel>iLevel );
   return rc;
 }
@@ -214,7 +257,7 @@ int sqlite4KVStoreCommitPhaseTwo(KVStore *p, int iLevel){
   assert( iLevel<=p->iTransLevel );
   if( p->iTransLevel==iLevel ) return SQLITE_OK;
   rc = p->pStoreVfunc->xCommitPhaseTwo(p, iLevel);
-  kvTrace(p, "xCommitPhaseTwo(%d,%d) -> %d", p->kvId, iLevel, rc);
+  kvTrace(p, "xCommitPhaseTwo(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
@@ -229,7 +272,7 @@ int sqlite4KVStoreRollback(KVStore *p, int iLevel){
   assert( iLevel>=0 );
   assert( iLevel<=p->iTransLevel );
   rc = p->pStoreVfunc->xRollback(p, iLevel);
-  kvTrace(p, "xRollback(%d,%d) -> %d", p->kvId, iLevel, rc);
+  kvTrace(p, "xRollback(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
   assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
   return rc;
 }
@@ -239,7 +282,7 @@ int sqlite4KVStoreRevert(KVStore *p, int iLevel){
   assert( iLevel<=p->iTransLevel );
   if( p->pStoreVfunc->xRevert ){
     rc = p->pStoreVfunc->xRevert(p, iLevel);
-    kvTrace(p, "xRevert(%d,%d) -> %d", p->kvId, iLevel, rc);
+    kvTrace(p, "xRevert(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
   }else{
     rc = sqlite4KVStoreRollback(p, iLevel-1);
     if( rc==SQLITE_OK ){
