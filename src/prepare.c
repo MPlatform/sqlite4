@@ -133,12 +133,10 @@ int sqlite4InitCallback(void *pInit, int argc, char **argv, char **NotUsed){
 */
 static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   int rc;
-  int i;
-  int size;
   Table *pTab;
   Db *pDb;
   char const *azArg[4];
-  int meta[5];
+  unsigned int meta[5];
   InitData initData;
   char const *zMasterSchema;
   char const *zMasterName;
@@ -173,7 +171,6 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   assert( iDb>=0 && iDb<db->nDb );
   assert( db->aDb[iDb].pSchema );
   assert( sqlite4_mutex_held(db->mutex) );
-  assert( iDb==1 || sqlite4BtreeHoldsMutex(db->aDb[iDb].pBt) );
 
   /* zMasterSchema and zInitScript are set to point at the master schema
   ** and initialisation script appropriate for the database being
@@ -208,7 +205,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   /* Create a cursor to hold the database open
   */
   pDb = &db->aDb[iDb];
-  if( pDb->pBt==0 ){
+  if( pDb->pKV==0 ){
     if( !OMIT_TEMPDB && ALWAYS(iDb==1) ){
       DbSetProperty(db, 1, DB_SchemaLoaded);
     }
@@ -216,11 +213,10 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   }
 
   /* If there is not already a read-only (or read-write) transaction opened
-  ** on the b-tree database, open one now. If a transaction is opened, it 
+  ** on the database, open one now. If a transaction is opened, it 
   ** will be closed before this function returns.  */
-  sqlite4BtreeEnter(pDb->pBt);
-  if( !sqlite4BtreeIsInReadTrans(pDb->pBt) ){
-    rc = sqlite4BtreeBeginTrans(pDb->pBt, 0);
+  if( pDb->pKV->iTransLevel==0 ){
+    rc = sqlite4KVStoreBegin(pDb->pKV, 1);
     if( rc!=SQLITE_OK ){
       sqlite4SetString(pzErrMsg, db, "%s", sqlite4ErrStr(rc));
       goto initone_error_out;
@@ -232,12 +228,12 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   **
   ** Meta values are as follows:
   **    meta[0]   Schema cookie.  Changes with each schema change.
-  **    meta[1]   File format of schema layer.
-  **    meta[2]   Size of the page cache.
-  **    meta[3]   Largest rootpage (auto/incr_vacuum mode)
-  **    meta[4]   Db text encoding. 1:UTF-8 2:UTF-16LE 3:UTF-16BE
-  **    meta[5]   User version
-  **    meta[6]   Incremental vacuum mode
+  **    meta[1]   unused
+  **    meta[2]   unused
+  **    meta[3]   unused
+  **    meta[4]   unused
+  **    meta[5]   unused
+  **    meta[6]   unused
   **    meta[7]   unused
   **    meta[8]   unused
   **    meta[9]   unused
@@ -245,73 +241,8 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   ** Note: The #defined SQLITE_UTF* symbols in sqliteInt.h correspond to
   ** the possible values of meta[4].
   */
-  for(i=0; i<ArraySize(meta); i++){
-    sqlite4BtreeGetMeta(pDb->pBt, i+1, (u32 *)&meta[i]);
-  }
-  pDb->pSchema->schema_cookie = meta[BTREE_SCHEMA_VERSION-1];
-
-  /* If opening a non-empty database, check the text encoding. For the
-  ** main database, set sqlite4.enc to the encoding of the main database.
-  ** For an attached db, it is an error if the encoding is not the same
-  ** as sqlite4.enc.
-  */
-  if( meta[BTREE_TEXT_ENCODING-1] ){  /* text encoding */
-    if( iDb==0 ){
-      u8 encoding;
-      /* If opening the main database, set ENC(db). */
-      encoding = (u8)meta[BTREE_TEXT_ENCODING-1] & 3;
-      if( encoding==0 ) encoding = SQLITE_UTF8;
-      ENC(db) = encoding;
-      db->pDfltColl = sqlite4FindCollSeq(db, SQLITE_UTF8, "BINARY", 0);
-    }else{
-      /* If opening an attached database, the encoding much match ENC(db) */
-      if( meta[BTREE_TEXT_ENCODING-1]!=ENC(db) ){
-        sqlite4SetString(pzErrMsg, db, "attached databases must use the same"
-            " text encoding as main database");
-        rc = SQLITE_ERROR;
-        goto initone_error_out;
-      }
-    }
-  }else{
-    DbSetProperty(db, iDb, DB_Empty);
-  }
-  pDb->pSchema->enc = ENC(db);
-
-  if( pDb->pSchema->cache_size==0 ){
-#ifndef SQLITE_OMIT_DEPRECATED
-    size = sqlite4AbsInt32(meta[BTREE_DEFAULT_CACHE_SIZE-1]);
-    if( size==0 ){ size = SQLITE_DEFAULT_CACHE_SIZE; }
-    pDb->pSchema->cache_size = size;
-#else
-    pDb->pSchema->cache_size = SQLITE_DEFAULT_CACHE_SIZE;
-#endif
-    sqlite4BtreeSetCacheSize(pDb->pBt, pDb->pSchema->cache_size);
-  }
-
-  /*
-  ** file_format==1    Version 3.0.0.
-  ** file_format==2    Version 3.1.3.  // ALTER TABLE ADD COLUMN
-  ** file_format==3    Version 3.1.4.  // ditto but with non-NULL defaults
-  ** file_format==4    Version 3.3.0.  // DESC indices.  Boolean constants
-  */
-  pDb->pSchema->file_format = (u8)meta[BTREE_FILE_FORMAT-1];
-  if( pDb->pSchema->file_format==0 ){
-    pDb->pSchema->file_format = 1;
-  }
-  if( pDb->pSchema->file_format>SQLITE_MAX_FILE_FORMAT ){
-    sqlite4SetString(pzErrMsg, db, "unsupported file format");
-    rc = SQLITE_ERROR;
-    goto initone_error_out;
-  }
-
-  /* Ticket #2804:  When we open a database in the newer file format,
-  ** clear the legacy_file_format pragma flag so that a VACUUM will
-  ** not downgrade the database and thus invalidate any descending
-  ** indices that the user might have created.
-  */
-  if( iDb==0 && meta[BTREE_FILE_FORMAT-1]>=4 ){
-    db->flags &= ~SQLITE_LegacyFileFmt;
-  }
+  sqlite4KVStoreGetMeta(pDb->pKV, 0, ArraySize(meta), meta);
+  pDb->pSchema->schema_cookie = meta[0];
 
   /* Read the schema information out of the schema tables
   */
@@ -358,14 +289,12 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   }
 
   /* Jump here for an error that occurs after successfully allocating
-  ** curMain and calling sqlite4BtreeEnter(). For an error that occurs
-  ** before that point, jump to error_out.
+  ** curMain. For an error that occurs before that point, jump to error_out.
   */
 initone_error_out:
   if( openedTransaction ){
-    sqlite4BtreeCommit(pDb->pBt);
+    sqlite4KVStoreCommit(pDb->pKV, 0);
   }
-  sqlite4BtreeLeave(pDb->pBt);
 
 error_out:
   if( rc==SQLITE_NOMEM || rc==SQLITE_IOERR_NOMEM ){
@@ -455,14 +384,14 @@ static void schemaIsValid(Parse *pParse){
   assert( sqlite4_mutex_held(db->mutex) );
   for(iDb=0; iDb<db->nDb; iDb++){
     int openedTransaction = 0;         /* True if a transaction is opened */
-    Btree *pBt = db->aDb[iDb].pBt;     /* Btree database to read cookie from */
-    if( pBt==0 ) continue;
+    KVStore *pKV = db->aDb[iDb].pKV;   /* Database to read cookie from */
+    if( pKV==0 ) continue;
 
     /* If there is not already a read-only (or read-write) transaction opened
     ** on the b-tree database, open one now. If a transaction is opened, it 
     ** will be closed immediately after reading the meta-value. */
-    if( !sqlite4BtreeIsInReadTrans(pBt) ){
-      rc = sqlite4BtreeBeginTrans(pBt, 0);
+    if( pKV->iTransLevel==0 ){
+      rc = sqlite4KVStoreBegin(pKV, 1);
       if( rc==SQLITE_NOMEM || rc==SQLITE_IOERR_NOMEM ){
         db->mallocFailed = 1;
       }
@@ -473,8 +402,7 @@ static void schemaIsValid(Parse *pParse){
     /* Read the schema cookie from the database. If it does not match the 
     ** value stored as part of the in-memory schema representation,
     ** set Parse.rc to SQLITE_SCHEMA. */
-    sqlite4BtreeGetMeta(pBt, BTREE_SCHEMA_VERSION, (u32 *)&cookie);
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
+    sqlite4KVStoreGetMeta(pKV, 0, 1, (u32 *)&cookie);
     if( cookie!=db->aDb[iDb].pSchema->schema_cookie ){
       sqlite4ResetInternalSchema(db, iDb);
       pParse->rc = SQLITE_SCHEMA;
@@ -482,7 +410,7 @@ static void schemaIsValid(Parse *pParse){
 
     /* Close the transaction, if one was opened. */
     if( openedTransaction ){
-      sqlite4BtreeCommit(pBt);
+      sqlite4KVStoreCommit(pKV, 0);
     }
   }
 }
@@ -546,43 +474,6 @@ static int sqlite4Prepare(
   assert( ppStmt && *ppStmt==0 );
   assert( !db->mallocFailed );
   assert( sqlite4_mutex_held(db->mutex) );
-
-  /* Check to verify that it is possible to get a read lock on all
-  ** database schemas.  The inability to get a read lock indicates that
-  ** some other database connection is holding a write-lock, which in
-  ** turn means that the other connection has made uncommitted changes
-  ** to the schema.
-  **
-  ** Were we to proceed and prepare the statement against the uncommitted
-  ** schema changes and if those schema changes are subsequently rolled
-  ** back and different changes are made in their place, then when this
-  ** prepared statement goes to run the schema cookie would fail to detect
-  ** the schema change.  Disaster would follow.
-  **
-  ** This thread is currently holding mutexes on all Btrees (because
-  ** of the sqlite4BtreeEnterAll() in sqlite4LockAndPrepare()) so it
-  ** is not possible for another thread to start a new schema change
-  ** while this routine is running.  Hence, we do not need to hold 
-  ** locks on the schema, we just need to make sure nobody else is 
-  ** holding them.
-  **
-  ** Note that setting READ_UNCOMMITTED overrides most lock detection,
-  ** but it does *not* override schema lock detection, so this all still
-  ** works even if READ_UNCOMMITTED is set.
-  */
-  for(i=0; i<db->nDb; i++) {
-    Btree *pBt = db->aDb[i].pBt;
-    if( pBt ){
-      assert( sqlite4BtreeHoldsMutex(pBt) );
-      rc = sqlite4BtreeSchemaLocked(pBt);
-      if( rc ){
-        const char *zDb = db->aDb[i].zName;
-        sqlite4Error(db, rc, "database schema is locked: %s", zDb);
-        testcase( db->flags & SQLITE_ReadUncommitted );
-        goto end_prepare;
-      }
-    }
-  }
 
   sqlite4VtabUnlockList(db);
 
@@ -698,13 +589,11 @@ static int sqlite4LockAndPrepare(
     return SQLITE_MISUSE_BKPT;
   }
   sqlite4_mutex_enter(db->mutex);
-  sqlite4BtreeEnterAll(db);
   rc = sqlite4Prepare(db, zSql, nBytes, saveSqlFlag, pOld, ppStmt, pzTail);
   if( rc==SQLITE_SCHEMA ){
     sqlite4_finalize(*ppStmt);
     rc = sqlite4Prepare(db, zSql, nBytes, saveSqlFlag, pOld, ppStmt, pzTail);
   }
-  sqlite4BtreeLeaveAll(db);
   sqlite4_mutex_leave(db->mutex);
   return rc;
 }

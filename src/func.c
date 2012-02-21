@@ -1194,7 +1194,7 @@ static void soundexFunc(
 }
 #endif /* SQLITE_SOUNDEX */
 
-#ifndef SQLITE_OMIT_LOAD_EXTENSION
+#if 0 /*ndef SQLITE_OMIT_LOAD_EXTENSION*/
 /*
 ** A function that loads a shared-library extension then returns NULL.
 */
@@ -1568,7 +1568,7 @@ void sqlite4RegisterGlobalFunctions(void){
   #ifdef SQLITE_SOUNDEX
     FUNCTION(soundex,            1, 0, 0, soundexFunc      ),
   #endif
-  #ifndef SQLITE_OMIT_LOAD_EXTENSION
+  #if 0 /*ndef SQLITE_OMIT_LOAD_EXTENSION*/
     FUNCTION(load_extension,     1, 0, 0, loadExt          ),
     FUNCTION(load_extension,     2, 0, 0, loadExt          ),
   #endif

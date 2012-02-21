@@ -206,7 +206,7 @@ void sqlite4VdbeAddParseSchemaOp(Vdbe *p, int iDb, char *zWhere){
   int j;
   int addr = sqlite4VdbeAddOp3(p, OP_ParseSchema, iDb, 0, 0);
   sqlite4VdbeChangeP4(p, addr, zWhere, P4_DYNAMIC);
-  for(j=0; j<p->db->nDb; j++) sqlite4VdbeUsesBtree(p, j);
+  for(j=0; j<p->db->nDb; j++) sqlite4VdbeUsesStorage(p, j);
 }
 
 /*
@@ -435,10 +435,10 @@ static void resolveP2Values(Vdbe *p, int *pMaxFuncArgs){
       if( n>nMaxArgs ) nMaxArgs = n;
 #endif
     }else if( opcode==OP_Next || opcode==OP_SorterNext ){
-      pOp->p4.xAdvance = sqlite4BtreeNext;
+      pOp->p4.xAdvance = sqlite4VdbeNext;
       pOp->p4type = P4_ADVANCE;
     }else if( opcode==OP_Prev ){
-      pOp->p4.xAdvance = sqlite4BtreePrevious;
+      pOp->p4.xAdvance = sqlite4VdbePrevious;
       pOp->p4type = P4_ADVANCE;
     }
 
@@ -475,9 +475,6 @@ int sqlite4VdbeCurrentAddr(Vdbe *p){
 VdbeOp *sqlite4VdbeTakeOpArray(Vdbe *p, int *pnOp, int *pnMaxArg){
   VdbeOp *aOp = p->aOp;
   assert( aOp && !p->db->mallocFailed );
-
-  /* Check that sqlite4VdbeUsesBtree() was not called on this VM */
-  assert( p->btreeMask==0 );
 
   resolveP2Values(p, pnMaxArg);
   *pnOp = p->nOp;
@@ -961,83 +958,12 @@ static char *displayP4(Op *pOp, char *zTemp, int nTemp){
 #endif
 
 /*
-** Declare to the Vdbe that the BTree object at db->aDb[i] is used.
-**
-** The prepared statements need to know in advance the complete set of
-** attached databases that will be use.  A mask of these databases
-** is maintained in p->btreeMask.  The p->lockMask value is the subset of
-** p->btreeMask of databases that will require a lock.
+** Declare to the Vdbe that the database at db->aDb[i] is used.
 */
-void sqlite4VdbeUsesBtree(Vdbe *p, int i){
+void sqlite4VdbeUsesStorage(Vdbe *p, int i){
   assert( i>=0 && i<p->db->nDb && i<(int)sizeof(yDbMask)*8 );
-  assert( i<(int)sizeof(p->btreeMask)*8 );
-  p->btreeMask |= ((yDbMask)1)<<i;
-  if( i!=1 && sqlite4BtreeSharable(p->db->aDb[i].pBt) ){
-    p->lockMask |= ((yDbMask)1)<<i;
-  }
 }
 
-#if !defined(SQLITE_OMIT_SHARED_CACHE) && SQLITE_THREADSAFE>0
-/*
-** If SQLite is compiled to support shared-cache mode and to be threadsafe,
-** this routine obtains the mutex associated with each BtShared structure
-** that may be accessed by the VM passed as an argument. In doing so it also
-** sets the BtShared.db member of each of the BtShared structures, ensuring
-** that the correct busy-handler callback is invoked if required.
-**
-** If SQLite is not threadsafe but does support shared-cache mode, then
-** sqlite4BtreeEnter() is invoked to set the BtShared.db variables
-** of all of BtShared structures accessible via the database handle 
-** associated with the VM.
-**
-** If SQLite is not threadsafe and does not support shared-cache mode, this
-** function is a no-op.
-**
-** The p->btreeMask field is a bitmask of all btrees that the prepared 
-** statement p will ever use.  Let N be the number of bits in p->btreeMask
-** corresponding to btrees that use shared cache.  Then the runtime of
-** this routine is N*N.  But as N is rarely more than 1, this should not
-** be a problem.
-*/
-void sqlite4VdbeEnter(Vdbe *p){
-  int i;
-  yDbMask mask;
-  sqlite4 *db;
-  Db *aDb;
-  int nDb;
-  if( p->lockMask==0 ) return;  /* The common case */
-  db = p->db;
-  aDb = db->aDb;
-  nDb = db->nDb;
-  for(i=0, mask=1; i<nDb; i++, mask += mask){
-    if( i!=1 && (mask & p->lockMask)!=0 && ALWAYS(aDb[i].pBt!=0) ){
-      sqlite4BtreeEnter(aDb[i].pBt);
-    }
-  }
-}
-#endif
-
-#if !defined(SQLITE_OMIT_SHARED_CACHE) && SQLITE_THREADSAFE>0
-/*
-** Unlock all of the btrees previously locked by a call to sqlite4VdbeEnter().
-*/
-void sqlite4VdbeLeave(Vdbe *p){
-  int i;
-  yDbMask mask;
-  sqlite4 *db;
-  Db *aDb;
-  int nDb;
-  if( p->lockMask==0 ) return;  /* The common case */
-  db = p->db;
-  aDb = db->aDb;
-  nDb = db->nDb;
-  for(i=0, mask=1; i<nDb; i++, mask += mask){
-    if( i!=1 && (mask & p->lockMask)!=0 && ALWAYS(aDb[i].pBt!=0) ){
-      sqlite4BtreeLeave(aDb[i].pBt);
-    }
-  }
-}
-#endif
 
 #if defined(VDBE_PROFILE) || defined(SQLITE_DEBUG)
 /*
@@ -1435,7 +1361,7 @@ void sqlite4VdbeRewind(Vdbe *p){
   p->nChange = 0;
   p->cacheCtr = 1;
   p->minWriteFileFormat = 255;
-  p->iStatement = 0;
+  p->stmtTransMask = 0;
   p->nFkConstraint = 0;
 #ifdef VDBE_PROFILE
   for(i=0; i<p->nOp; i++){
@@ -1509,7 +1435,7 @@ void sqlite4VdbeMakeReady(
   zEnd = (u8*)&p->aOp[p->nOpAlloc];  /* First byte past end of zCsr[] */
 
   resolveP2Values(p, &nArg);
-  p->usesStmtJournal = (u8)(pParse->isMultiWrite && pParse->mayAbort);
+  p->needSavepoint = (u8)(pParse->isMultiWrite && pParse->mayAbort);
   if( pParse->explain && nMem<10 ){
     nMem = 10;
   }
@@ -1579,14 +1505,11 @@ void sqlite4VdbeFreeCursor(Vdbe *p, VdbeCursor *pCx){
     return;
   }
   sqlite4VdbeSorterClose(p->db, pCx);
-  if( pCx->pBt ){
-    sqlite4BtreeClose(pCx->pBt);
-    sqlite4KVStoreClose(pCx->pTmpKV);
-    /* The pCx->pCursor will be close automatically, if it exists, by
-    ** the call above. */
-  }else if( pCx->pCursor ){
-    sqlite4BtreeCloseCursor(pCx->pCursor);
+  if( pCx->pKVCur ){
     sqlite4KVCursorClose(pCx->pKVCur);
+  }
+  if( pCx->pTmpKV ){
+    sqlite4KVStoreClose(pCx->pTmpKV);
   }
 #ifndef SQLITE_OMIT_VIRTUALTABLE
   if( pCx->pVtabCursor ){
@@ -1757,29 +1680,17 @@ static int vdbeCommit(sqlite4 *db, Vdbe *p){
 #endif
 
   /* Before doing anything else, call the xSync() callback for any
-  ** virtual module tables written in this transaction. This has to
-  ** be done before determining whether a master journal file is 
-  ** required, as an xSync() callback may add an attached database
-  ** to the transaction.
+  ** virtual module tables written in this transaction.
   */
   rc = sqlite4VtabSync(db, &p->zErrMsg);
 
-  /* This loop determines (a) if the commit hook should be invoked and
-  ** (b) how many database files have open write transactions, not 
-  ** including the temp database. (b) is important because if more than 
-  ** one database file has an open write transaction, a master journal
-  ** file is required for an atomic commit.
-  */ 
-  for(i=0; rc==SQLITE_OK && i<db->nDb; i++){ 
-    Btree *pBt = db->aDb[i].pBt;
-    if( sqlite4BtreeIsInTrans(pBt) ){
+  /* Phase one commit */
+  for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
+    KVStore *pKV = db->aDb[i].pKV;
+    if( pKV && pKV->iTransLevel ){
       needXcommit = 1;
-      if( i!=1 ) nTrans++;
-      rc = sqlite4PagerExclusiveLock(sqlite4BtreePager(pBt));
+      rc = sqlite4KVStoreCommitPhaseOne(pKV, 0);
     }
-  }
-  if( rc!=SQLITE_OK ){
-    return rc;
   }
 
   /* If there are any write-transactions at all, invoke the commit hook */
@@ -1790,190 +1701,13 @@ static int vdbeCommit(sqlite4 *db, Vdbe *p){
     }
   }
 
-  /* The simple case - no more than one database file (not counting the
-  ** TEMP database) has a transaction active.   There is no need for the
-  ** master-journal.
-  **
-  ** If the return value of sqlite4BtreeGetFilename() is a zero length
-  ** string, it means the main database is :memory: or a temp file.  In 
-  ** that case we do not support atomic multi-file commits, so use the 
-  ** simple case then too.
-  */
-  if( 0==sqlite4Strlen30(sqlite4BtreeGetFilename(db->aDb[0].pBt))
-   || nTrans<=1
-  ){
-    for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
-      Btree *pBt = db->aDb[i].pBt;
-      if( pBt ){
-        rc = sqlite4BtreeCommitPhaseOne(pBt, 0);
-      }
-    }
-
-    /* Do the commit only if all databases successfully complete phase 1. 
-    ** If one of the BtreeCommitPhaseOne() calls fails, this indicates an
-    ** IO error while deleting or truncating a journal file. It is unlikely,
-    ** but could happen. In this case abandon processing and return the error.
-    */
-    for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
-      Btree *pBt = db->aDb[i].pBt;
-      if( pBt ){
-        rc = sqlite4BtreeCommitPhaseTwo(pBt, 0);
-      }
-    }
-    if( rc==SQLITE_OK ){
-      sqlite4VtabCommit(db);
+  /* Do phase two of the commit */
+  for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
+    KVStore *pKV = db->aDb[i].pKV;
+    if( pKV ){
+      rc = sqlite4KVStoreCommitPhaseTwo(pKV, 0);
     }
   }
-
-  /* The complex case - There is a multi-file write-transaction active.
-  ** This requires a master journal file to ensure the transaction is
-  ** committed atomicly.
-  */
-#ifndef SQLITE_OMIT_DISKIO
-  else{
-    sqlite4_vfs *pVfs = db->pVfs;
-    int needSync = 0;
-    char *zMaster = 0;   /* File-name for the master journal */
-    char const *zMainFile = sqlite4BtreeGetFilename(db->aDb[0].pBt);
-    sqlite4_file *pMaster = 0;
-    i64 offset = 0;
-    int res;
-    int retryCount = 0;
-    int nMainFile;
-
-    /* Select a master journal file name */
-    nMainFile = sqlite4Strlen30(zMainFile);
-    zMaster = sqlite4MPrintf(db, "%s-mjXXXXXX9XXz", zMainFile);
-    if( zMaster==0 ) return SQLITE_NOMEM;
-    do {
-      u32 iRandom;
-      if( retryCount ){
-        if( retryCount>100 ){
-          sqlite4_log(SQLITE_FULL, "MJ delete: %s", zMaster);
-          sqlite4OsDelete(pVfs, zMaster, 0);
-          break;
-        }else if( retryCount==1 ){
-          sqlite4_log(SQLITE_FULL, "MJ collide: %s", zMaster);
-        }
-      }
-      retryCount++;
-      sqlite4_randomness(sizeof(iRandom), &iRandom);
-      sqlite4_snprintf(13, &zMaster[nMainFile], "-mj%06X9%02X",
-                               (iRandom>>8)&0xffffff, iRandom&0xff);
-      /* The antipenultimate character of the master journal name must
-      ** be "9" to avoid name collisions when using 8+3 filenames. */
-      assert( zMaster[sqlite4Strlen30(zMaster)-3]=='9' );
-      sqlite4FileSuffix3(zMainFile, zMaster);
-      rc = sqlite4OsAccess(pVfs, zMaster, SQLITE_ACCESS_EXISTS, &res);
-    }while( rc==SQLITE_OK && res );
-    if( rc==SQLITE_OK ){
-      /* Open the master journal. */
-      rc = sqlite4OsOpenMalloc(pVfs, zMaster, &pMaster, 
-          SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|
-          SQLITE_OPEN_EXCLUSIVE|SQLITE_OPEN_MASTER_JOURNAL, 0
-      );
-    }
-    if( rc!=SQLITE_OK ){
-      sqlite4DbFree(db, zMaster);
-      return rc;
-    }
- 
-    /* Write the name of each database file in the transaction into the new
-    ** master journal file. If an error occurs at this point close
-    ** and delete the master journal file. All the individual journal files
-    ** still have 'null' as the master journal pointer, so they will roll
-    ** back independently if a failure occurs.
-    */
-    for(i=0; i<db->nDb; i++){
-      Btree *pBt = db->aDb[i].pBt;
-      if( sqlite4BtreeIsInTrans(pBt) ){
-        char const *zFile = sqlite4BtreeGetJournalname(pBt);
-        if( zFile==0 ){
-          continue;  /* Ignore TEMP and :memory: databases */
-        }
-        assert( zFile[0]!=0 );
-        if( !needSync && !sqlite4BtreeSyncDisabled(pBt) ){
-          needSync = 1;
-        }
-        rc = sqlite4OsWrite(pMaster, zFile, sqlite4Strlen30(zFile)+1, offset);
-        offset += sqlite4Strlen30(zFile)+1;
-        if( rc!=SQLITE_OK ){
-          sqlite4OsCloseFree(pMaster);
-          sqlite4OsDelete(pVfs, zMaster, 0);
-          sqlite4DbFree(db, zMaster);
-          return rc;
-        }
-      }
-    }
-
-    /* Sync the master journal file. If the IOCAP_SEQUENTIAL device
-    ** flag is set this is not required.
-    */
-    if( needSync 
-     && 0==(sqlite4OsDeviceCharacteristics(pMaster)&SQLITE_IOCAP_SEQUENTIAL)
-     && SQLITE_OK!=(rc = sqlite4OsSync(pMaster, SQLITE_SYNC_NORMAL))
-    ){
-      sqlite4OsCloseFree(pMaster);
-      sqlite4OsDelete(pVfs, zMaster, 0);
-      sqlite4DbFree(db, zMaster);
-      return rc;
-    }
-
-    /* Sync all the db files involved in the transaction. The same call
-    ** sets the master journal pointer in each individual journal. If
-    ** an error occurs here, do not delete the master journal file.
-    **
-    ** If the error occurs during the first call to
-    ** sqlite4BtreeCommitPhaseOne(), then there is a chance that the
-    ** master journal file will be orphaned. But we cannot delete it,
-    ** in case the master journal file name was written into the journal
-    ** file before the failure occurred.
-    */
-    for(i=0; rc==SQLITE_OK && i<db->nDb; i++){ 
-      Btree *pBt = db->aDb[i].pBt;
-      if( pBt ){
-        rc = sqlite4BtreeCommitPhaseOne(pBt, zMaster);
-      }
-    }
-    sqlite4OsCloseFree(pMaster);
-    assert( rc!=SQLITE_BUSY );
-    if( rc!=SQLITE_OK ){
-      sqlite4DbFree(db, zMaster);
-      return rc;
-    }
-
-    /* Delete the master journal file. This commits the transaction. After
-    ** doing this the directory is synced again before any individual
-    ** transaction files are deleted.
-    */
-    rc = sqlite4OsDelete(pVfs, zMaster, 1);
-    sqlite4DbFree(db, zMaster);
-    zMaster = 0;
-    if( rc ){
-      return rc;
-    }
-
-    /* All files and directories have already been synced, so the following
-    ** calls to sqlite4BtreeCommitPhaseTwo() are only closing files and
-    ** deleting or truncating journals. If something goes wrong while
-    ** this is happening we don't really care. The integrity of the
-    ** transaction is already guaranteed, but some stray 'cold' journals
-    ** may be lying around. Returning an error code won't help matters.
-    */
-    disable_simulated_io_errors();
-    sqlite4BeginBenignMalloc();
-    for(i=0; i<db->nDb; i++){ 
-      Btree *pBt = db->aDb[i].pBt;
-      if( pBt ){
-        sqlite4BtreeCommitPhaseTwo(pBt, 1);
-      }
-    }
-    sqlite4EndBenignMalloc();
-    enable_simulated_io_errors();
-
-    sqlite4VtabCommit(db);
-  }
-#endif
 
   return rc;
 }
@@ -2008,32 +1742,6 @@ static void checkActiveVdbeCnt(sqlite4 *db){
 #endif
 
 /*
-** For every Btree that in database connection db which 
-** has been modified, "trip" or invalidate each cursor in
-** that Btree might have been modified so that the cursor
-** can never be used again.  This happens when a rollback
-*** occurs.  We have to trip all the other cursors, even
-** cursor from other VMs in different database connections,
-** so that none of them try to use the data at which they
-** were pointing and which now may have been changed due
-** to the rollback.
-**
-** Remember that a rollback can delete tables complete and
-** reorder rootpages.  So it is not sufficient just to save
-** the state of the cursor.  We have to invalidate the cursor
-** so that it is never used again.
-*/
-static void invalidateCursorsOnModifiedBtrees(sqlite4 *db){
-  int i;
-  for(i=0; i<db->nDb; i++){
-    Btree *p = db->aDb[i].pBt;
-    if( p && sqlite4BtreeIsInTrans(p) ){
-      sqlite4BtreeTripAllCursors(p, SQLITE_ABORT);
-    }
-  }
-}
-
-/*
 ** If the Vdbe passed as the first argument opened a statement-transaction,
 ** close it now. Argument eOp must be either SAVEPOINT_ROLLBACK or
 ** SAVEPOINT_RELEASE. If it is SAVEPOINT_ROLLBACK, then the statement
@@ -2044,57 +1752,7 @@ static void invalidateCursorsOnModifiedBtrees(sqlite4 *db){
 ** Otherwise SQLITE_OK.
 */
 int sqlite4VdbeCloseStatement(Vdbe *p, int eOp){
-  sqlite4 *const db = p->db;
-  int rc = SQLITE_OK;
-
-  /* If p->iStatement is greater than zero, then this Vdbe opened a 
-  ** statement transaction that should be closed here. The only exception
-  ** is that an IO error may have occured, causing an emergency rollback.
-  ** In this case (db->nStatement==0), and there is nothing to do.
-  */
-  if( db->nStatement && p->iStatement ){
-    int i;
-    const int iSavepoint = p->iStatement-1;
-
-    assert( eOp==SAVEPOINT_ROLLBACK || eOp==SAVEPOINT_RELEASE);
-    assert( db->nStatement>0 );
-    assert( p->iStatement==(db->nStatement+db->nSavepoint) );
-
-    for(i=0; i<db->nDb; i++){ 
-      int rc2 = SQLITE_OK;
-      Btree *pBt = db->aDb[i].pBt;
-      if( pBt ){
-        if( eOp==SAVEPOINT_ROLLBACK ){
-          rc2 = sqlite4BtreeSavepoint(pBt, SAVEPOINT_ROLLBACK, iSavepoint);
-        }
-        if( rc2==SQLITE_OK ){
-          rc2 = sqlite4BtreeSavepoint(pBt, SAVEPOINT_RELEASE, iSavepoint);
-        }
-        if( rc==SQLITE_OK ){
-          rc = rc2;
-        }
-      }
-    }
-    db->nStatement--;
-    p->iStatement = 0;
-
-    if( rc==SQLITE_OK ){
-      if( eOp==SAVEPOINT_ROLLBACK ){
-        rc = sqlite4VtabSavepoint(db, SAVEPOINT_ROLLBACK, iSavepoint);
-      }
-      if( rc==SQLITE_OK ){
-        rc = sqlite4VtabSavepoint(db, SAVEPOINT_RELEASE, iSavepoint);
-      }
-    }
-
-    /* If the statement transaction is being rolled back, also restore the 
-    ** database handles deferred constraint counter to the value it had when 
-    ** the statement transaction was opened.  */
-    if( eOp==SAVEPOINT_ROLLBACK ){
-      db->nDeferredCons = p->nStmtDefCons;
-    }
-  }
-  return rc;
+  return SQLITE_OK;
 }
 
 /*
@@ -2134,28 +1792,10 @@ int sqlite4VdbeCheckFk(Vdbe *p, int deferred){
 ** means the close did not happen and needs to be repeated.
 */
 int sqlite4VdbeHalt(Vdbe *p){
-  int rc;                         /* Used to store transient return codes */
+  int rc;
   sqlite4 *db = p->db;
 
-  /* This function contains the logic that determines if a statement or
-  ** transaction will be committed or rolled back as a result of the
-  ** execution of this virtual machine. 
-  **
-  ** If any of the following errors occur:
-  **
-  **     SQLITE_NOMEM
-  **     SQLITE_IOERR
-  **     SQLITE_FULL
-  **     SQLITE_INTERRUPT
-  **
-  ** Then the internal cache might have been left in an inconsistent
-  ** state.  We need to rollback the statement transaction, if there is
-  ** one, or the complete transaction if there is no statement transaction.
-  */
-
-  if( p->db->mallocFailed ){
-    p->rc = SQLITE_NOMEM;
-  }
+  if( db->mallocFailed ) p->rc = SQLITE_NOMEM;
   if( p->aOnceFlag ) memset(p->aOnceFlag, 0, p->nOnceFlag);
   closeAllCursors(p);
   if( p->magic!=VDBE_MAGIC_RUN ){
@@ -2163,48 +1803,9 @@ int sqlite4VdbeHalt(Vdbe *p){
   }
   checkActiveVdbeCnt(db);
 
-  /* No commit or rollback needed if the program never started */
-  if( p->pc>=0 ){
-    int mrc;   /* Primary error code from p->rc */
-    int eStatementOp = 0;
-    int isSpecialError;            /* Set to true if a 'special' error */
-
-    /* Lock all btrees used by the statement */
-    sqlite4VdbeEnter(p);
-
-    /* Check for one of the special errors */
-    mrc = p->rc & 0xff;
-    assert( p->rc!=SQLITE_IOERR_BLOCKED );  /* This error no longer exists */
-    isSpecialError = mrc==SQLITE_NOMEM || mrc==SQLITE_IOERR
-                     || mrc==SQLITE_INTERRUPT || mrc==SQLITE_FULL;
-    if( isSpecialError ){
-      /* If the query was read-only and the error code is SQLITE_INTERRUPT, 
-      ** no rollback is necessary. Otherwise, at least a savepoint 
-      ** transaction must be rolled back to restore the database to a 
-      ** consistent state.
-      **
-      ** Even if the statement is read-only, it is important to perform
-      ** a statement or transaction rollback operation. If the error 
-      ** occured while writing to the journal, sub-journal or database
-      ** file as part of an effort to free up cache space (see function
-      ** pagerStress() in pager.c), the rollback is required to restore 
-      ** the pager to a consistent state.
-      */
-      if( !p->readOnly || mrc!=SQLITE_INTERRUPT ){
-        if( (mrc==SQLITE_NOMEM || mrc==SQLITE_FULL) && p->usesStmtJournal ){
-          eStatementOp = SAVEPOINT_ROLLBACK;
-        }else{
-          /* We are forced to roll back the active transaction. Before doing
-          ** so, abort any other statements this handle currently has active.
-          */
-          invalidateCursorsOnModifiedBtrees(db);
-          sqlite4RollbackAll(db);
-          sqlite4CloseSavepoints(db);
-          db->autoCommit = 1;
-        }
-      }
-    }
-
+  if( p->pc<0 ){
+    /* No commit or rollback needed if the program never started */
+  }else{
     /* Check for immediate foreign key violations. */
     if( p->rc==SQLITE_OK ){
       sqlite4VdbeCheckFk(p, 0);
@@ -2212,97 +1813,47 @@ int sqlite4VdbeHalt(Vdbe *p){
   
     /* If the auto-commit flag is set and this is the only active writer 
     ** VM, then we do either a commit or rollback of the current transaction. 
-    **
-    ** Note: This block also runs if one of the special errors handled 
-    ** above has occurred. 
     */
     if( !sqlite4VtabInSync(db) 
      && db->autoCommit 
      && db->writeVdbeCnt==(p->readOnly==0) 
     ){
-      if( p->rc==SQLITE_OK || (p->errorAction==OE_Fail && !isSpecialError) ){
-        rc = sqlite4VdbeCheckFk(p, 1);
-        if( rc!=SQLITE_OK ){
-          if( NEVER(p->readOnly) ){
-            sqlite4VdbeLeave(p);
-            return SQLITE_ERROR;
+      rc = sqlite4VdbeCheckFk(p, 1);
+      if( rc!=SQLITE_OK ){
+        rc = SQLITE_CONSTRAINT;
+      }else{ 
+        /* The auto-commit flag is true, the vdbe program was successful 
+        ** or hit an 'OR FAIL' constraint and there are no deferred foreign
+        ** key constraints to hold up the transaction. This means a commit 
+        ** is required. */
+        rc = vdbeCommit(db, p);
+      }
+      if( rc==SQLITE_BUSY && p->readOnly ){
+        /* will return the error */
+      }else if( rc!=SQLITE_OK ){
+        p->rc = rc;
+        sqlite4RollbackAll(db);
+      }else{
+        db->nDeferredCons = 0;
+        sqlite4CommitInternalChanges(db);
+      }
+    }else{
+      /* Not in auto-commit mode.  If the statement failed, rollback
+      ** the effects of just this one statement */
+      if( p->rc!=SQLITE_OK && p->stmtTransMask!=0 ){
+        int i;
+        for(i=0; i<db->nDb; i++){
+          if( p->stmtTransMask & ((yDbMask)1)<<i ){
+            KVStore *pKV = db->aDb[i].pKV;
+            rc = sqlite4KVStoreRollback(pKV, pKV->iTransLevel-1);
+            if( rc ){
+              sqlite4RollbackAll(db);
+              break;
+            }
           }
-          rc = SQLITE_CONSTRAINT;
-        }else{ 
-          /* The auto-commit flag is true, the vdbe program was successful 
-          ** or hit an 'OR FAIL' constraint and there are no deferred foreign
-          ** key constraints to hold up the transaction. This means a commit 
-          ** is required. */
-          rc = vdbeCommit(db, p);
         }
-        if( rc==SQLITE_BUSY && p->readOnly ){
-          sqlite4VdbeLeave(p);
-          return SQLITE_BUSY;
-        }else if( rc!=SQLITE_OK ){
-          p->rc = rc;
-          sqlite4RollbackAll(db);
-        }else{
-          db->nDeferredCons = 0;
-          sqlite4CommitInternalChanges(db);
-        }
-      }else{
-        sqlite4RollbackAll(db);
-      }
-      db->nStatement = 0;
-    }else if( eStatementOp==0 ){
-      if( p->rc==SQLITE_OK || p->errorAction==OE_Fail ){
-        eStatementOp = SAVEPOINT_RELEASE;
-      }else if( p->errorAction==OE_Abort ){
-        eStatementOp = SAVEPOINT_ROLLBACK;
-      }else{
-        invalidateCursorsOnModifiedBtrees(db);
-        sqlite4RollbackAll(db);
-        sqlite4CloseSavepoints(db);
-        db->autoCommit = 1;
       }
     }
-  
-    /* If eStatementOp is non-zero, then a statement transaction needs to
-    ** be committed or rolled back. Call sqlite4VdbeCloseStatement() to
-    ** do so. If this operation returns an error, and the current statement
-    ** error code is SQLITE_OK or SQLITE_CONSTRAINT, then promote the
-    ** current statement error code.
-    */
-    if( eStatementOp ){
-      rc = sqlite4VdbeCloseStatement(p, eStatementOp);
-      if( rc ){
-        if( p->rc==SQLITE_OK || p->rc==SQLITE_CONSTRAINT ){
-          p->rc = rc;
-          sqlite4DbFree(db, p->zErrMsg);
-          p->zErrMsg = 0;
-        }
-        invalidateCursorsOnModifiedBtrees(db);
-        sqlite4RollbackAll(db);
-        sqlite4CloseSavepoints(db);
-        db->autoCommit = 1;
-      }
-    }
-  
-    /* If this was an INSERT, UPDATE or DELETE and no statement transaction
-    ** has been rolled back, update the database connection change-counter. 
-    */
-    if( p->changeCntOn ){
-      if( eStatementOp!=SAVEPOINT_ROLLBACK ){
-        sqlite4VdbeSetChanges(db, p->nChange);
-      }else{
-        sqlite4VdbeSetChanges(db, 0);
-      }
-      p->nChange = 0;
-    }
-  
-    /* Rollback or commit any schema changes that occurred. */
-    if( p->rc!=SQLITE_OK && db->flags&SQLITE_InternChanges ){
-      sqlite4ResetInternalSchema(db, -1);
-      db->flags = (db->flags | SQLITE_InternChanges);
-    }
-
-    /* Release the locks */
-    sqlite4VdbeLeave(p);
   }
 
   /* We have successfully halted and closed the VM.  Record this fact. */
@@ -2319,15 +1870,6 @@ int sqlite4VdbeHalt(Vdbe *p){
     p->rc = SQLITE_NOMEM;
   }
 
-  /* If the auto-commit flag is set to true, then any locks that were held
-  ** by connection db have now been released. Call sqlite4ConnectionUnlocked() 
-  ** to invoke any required unlock-notify callbacks.
-  */
-  if( db->autoCommit ){
-    sqlite4ConnectionUnlocked(db);
-  }
-
-  assert( db->activeVdbeCnt>0 || db->autoCommit==0 || db->nStatement==0 );
   return (p->rc==SQLITE_BUSY ? SQLITE_BUSY : SQLITE_OK);
 }
 
@@ -2521,48 +2063,6 @@ void sqlite4VdbeDelete(Vdbe *p){
   p->magic = VDBE_MAGIC_DEAD;
   p->db = 0;
   sqlite4VdbeDeleteObject(db, p);
-}
-
-/*
-** Make sure the cursor p is ready to read or write the row to which it
-** was last positioned.  Return an error code if an OOM fault or I/O error
-** prevents us from positioning the cursor to its correct position.
-**
-** If a MoveTo operation is pending on the given cursor, then do that
-** MoveTo now.  If no move is pending, check to see if the row has been
-** deleted out from under the cursor and if it has, mark the row as
-** a NULL row.
-**
-** If the cursor is already pointing to the correct row and that row has
-** not been deleted out from under the cursor, then this routine is a no-op.
-*/
-int sqlite4VdbeCursorMoveto(VdbeCursor *p){
-  if( p->deferredMoveto ){
-    int res, rc;
-#ifdef SQLITE_TEST
-    extern int sqlite4_search_count;
-#endif
-    assert( p->isTable );
-    rc = sqlite4BtreeMovetoUnpacked(p->pCursor, 0, p->movetoTarget, 0, &res);
-    if( rc ) return rc;
-    p->lastRowid = p->movetoTarget;
-    if( res!=0 ) return SQLITE_CORRUPT_BKPT;
-    p->rowidIsValid = 1;
-#ifdef SQLITE_TEST
-    sqlite4_search_count++;
-#endif
-    p->deferredMoveto = 0;
-    p->cacheStatus = CACHE_STALE;
-  }else if( ALWAYS(p->pCursor) ){
-    int hasMoved;
-    int rc = sqlite4BtreeCursorHasMoved(p->pCursor, &hasMoved);
-    if( rc ) return rc;
-    if( hasMoved ){
-      p->cacheStatus = CACHE_STALE;
-      p->nullRow = 1;
-    }
-  }
-  return SQLITE_OK;
 }
 
 /*
@@ -3075,124 +2575,6 @@ int sqlite4VdbeRecordCompare(
   return rc;
 }
  
-
-/*
-** pCur points at an index entry created using the OP_MakeRecord opcode.
-** Read the rowid (the last field in the record) and store it in *rowid.
-** Return SQLITE_OK if everything works, or an error code otherwise.
-**
-** pCur might be pointing to text obtained from a corrupt database file.
-** So the content cannot be trusted.  Do appropriate checks on the content.
-*/
-int sqlite4VdbeIdxRowid(sqlite4 *db, BtCursor *pCur, i64 *rowid){
-  i64 nCellKey = 0;
-  int rc;
-  u32 szHdr;        /* Size of the header */
-  u32 typeRowid;    /* Serial type of the rowid */
-  u32 lenRowid;     /* Size of the rowid */
-  Mem m, v;
-
-  UNUSED_PARAMETER(db);
-
-  /* Get the size of the index entry.  Only indices entries of less
-  ** than 2GiB are support - anything large must be database corruption.
-  ** Any corruption is detected in sqlite4BtreeParseCellPtr(), though, so
-  ** this code can safely assume that nCellKey is 32-bits  
-  */
-  assert( sqlite4BtreeCursorIsValid(pCur) );
-  VVA_ONLY(rc =) sqlite4BtreeKeySize(pCur, &nCellKey);
-  assert( rc==SQLITE_OK );     /* pCur is always valid so KeySize cannot fail */
-  assert( (nCellKey & SQLITE_MAX_U32)==(u64)nCellKey );
-
-  /* Read in the complete content of the index entry */
-  memset(&m, 0, sizeof(m));
-  rc = sqlite4VdbeMemFromBtree(pCur, 0, (int)nCellKey, 1, &m);
-  if( rc ){
-    return rc;
-  }
-
-  /* The index entry must begin with a header size */
-  (void)getVarint32((u8*)m.z, szHdr);
-  testcase( szHdr==3 );
-  testcase( szHdr==m.n );
-  if( unlikely(szHdr<3 || (int)szHdr>m.n) ){
-    goto idx_rowid_corruption;
-  }
-
-  /* The last field of the index should be an integer - the ROWID.
-  ** Verify that the last entry really is an integer. */
-  (void)getVarint32((u8*)&m.z[szHdr-1], typeRowid);
-  testcase( typeRowid==1 );
-  testcase( typeRowid==2 );
-  testcase( typeRowid==3 );
-  testcase( typeRowid==4 );
-  testcase( typeRowid==5 );
-  testcase( typeRowid==6 );
-  testcase( typeRowid==8 );
-  testcase( typeRowid==9 );
-  if( unlikely(typeRowid<1 || typeRowid>9 || typeRowid==7) ){
-    goto idx_rowid_corruption;
-  }
-  lenRowid = sqlite4VdbeSerialTypeLen(typeRowid);
-  testcase( (u32)m.n==szHdr+lenRowid );
-  if( unlikely((u32)m.n<szHdr+lenRowid) ){
-    goto idx_rowid_corruption;
-  }
-
-  /* Fetch the integer off the end of the index record */
-  sqlite4VdbeSerialGet((u8*)&m.z[m.n-lenRowid], typeRowid, &v);
-  *rowid = v.u.i;
-  sqlite4VdbeMemRelease(&m);
-  return SQLITE_OK;
-
-  /* Jump here if database corruption is detected after m has been
-  ** allocated.  Free the m object and return SQLITE_CORRUPT. */
-idx_rowid_corruption:
-  testcase( m.zMalloc!=0 );
-  sqlite4VdbeMemRelease(&m);
-  return SQLITE_CORRUPT_BKPT;
-}
-
-/*
-** Compare the key of the index entry that cursor pC is pointing to against
-** the key string in pUnpacked.  Write into *pRes a number
-** that is negative, zero, or positive if pC is less than, equal to,
-** or greater than pUnpacked.  Return SQLITE_OK on success.
-**
-** pUnpacked is either created without a rowid or is truncated so that it
-** omits the rowid at the end.  The rowid at the end of the index entry
-** is ignored as well.  Hence, this routine only compares the prefixes 
-** of the keys prior to the final rowid, not the entire key.
-*/
-int sqlite4VdbeIdxKeyCompare(
-  VdbeCursor *pC,             /* The cursor to compare against */
-  UnpackedRecord *pUnpacked,  /* Unpacked version of key to compare against */
-  int *res                    /* Write the comparison result here */
-){
-  i64 nCellKey = 0;
-  int rc;
-  BtCursor *pCur = pC->pCursor;
-  Mem m;
-
-  assert( sqlite4BtreeCursorIsValid(pCur) );
-  VVA_ONLY(rc =) sqlite4BtreeKeySize(pCur, &nCellKey);
-  assert( rc==SQLITE_OK );    /* pCur is always valid so KeySize cannot fail */
-  /* nCellKey will always be between 0 and 0xffffffff because of the say
-  ** that btreeParseCellPtr() and sqlite4GetVarint32() are implemented */
-  if( nCellKey<=0 || nCellKey>0x7fffffff ){
-    *res = 0;
-    return SQLITE_CORRUPT_BKPT;
-  }
-  memset(&m, 0, sizeof(m));
-  rc = sqlite4VdbeMemFromBtree(pC->pCursor, 0, (int)nCellKey, 1, &m);
-  if( rc ){
-    return rc;
-  }
-  assert( pUnpacked->flags & UNPACKED_PREFIX_MATCH );
-  *res = sqlite4VdbeRecordCompare(m.n, m.z, pUnpacked);
-  sqlite4VdbeMemRelease(&m);
-  return SQLITE_OK;
-}
 
 /*
 ** This routine sets the value to be returned by subsequent calls to

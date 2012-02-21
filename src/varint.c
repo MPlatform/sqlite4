@@ -96,19 +96,29 @@
 #include "sqliteInt.h"
 
 /*
-** Decode the varint in z[].  Write the integer value into *pResult and
-** return the number of bytes in the varint.
+** Decode the varint in the first n bytes z[].  Write the integer value
+** into *pResult and return the number of bytes in the varint.
+**
+** If the decode fails because there are not enough bytes in z[] then
+** return 0;
 */
-int sqlite4GetVarint64(const unsigned char *z, sqlite4_uint64 *pResult){
+int sqlite4GetVarint64(
+  const unsigned char *z,
+  int n,
+  sqlite4_uint64 *pResult
+){
   unsigned int x;
+  if( n<1 ) return 0;
   if( z[0]<=240 ){
     *pResult = z[0];
     return 1;
   }
   if( z[0]<=248 ){
+    if( n<2 ) return 0;
     *pResult = (z[0]-241)*256 + z[1] + 240;
     return 2;
   }
+  if( n<z[0]-246 ) return 0;
   if( z[0]==249 ){
     *pResult = 2288 + 256*z[1] + z[2];
     return 3;
@@ -244,9 +254,11 @@ int main(int argc,char **argv){
     }
     n1 = sqlite4PutVarint64(z, x);
     assert( n1>=1 && n1<=9 );
-    n2 = sqlite4GetVarint64(z, &y);
+    n2 = sqlite4GetVarint64(z, n1, &y);
     assert( n1==n2 );
     assert( x==y );
+    n2 = sqlite4GetVarint64(z, n1-1, &y);
+    assert( n2==0 );
     if( i>0 ){
       int c = memcmp(z,zp,pn<n1?pn:n1);
       if( x<px ){

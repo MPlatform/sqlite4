@@ -239,9 +239,6 @@ static const char * const azCompileOpt[] = {
 #ifdef SQLITE_OMIT_GET_TABLE
   "OMIT_GET_TABLE",
 #endif
-#ifdef SQLITE_OMIT_INCRBLOB
-  "OMIT_INCRBLOB",
-#endif
 #ifdef SQLITE_OMIT_INTEGRITY_CHECK
   "OMIT_INTEGRITY_CHECK",
 #endif

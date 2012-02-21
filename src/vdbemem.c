@@ -135,35 +135,6 @@ int sqlite4VdbeMemMakeWriteable(Mem *pMem){
   return SQLITE_OK;
 }
 
-/*
-** If the given Mem* has a zero-filled tail, turn it into an ordinary
-** blob stored in dynamically allocated space.
-*/
-#ifndef SQLITE_OMIT_INCRBLOB
-int sqlite4VdbeMemExpandBlob(Mem *pMem){
-  if( pMem->flags & MEM_Zero ){
-    int nByte;
-    assert( pMem->flags&MEM_Blob );
-    assert( (pMem->flags&MEM_RowSet)==0 );
-    assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
-
-    /* Set nByte to the number of bytes required to store the expanded blob. */
-    nByte = pMem->n + pMem->u.nZero;
-    if( nByte<=0 ){
-      nByte = 1;
-    }
-    if( sqlite4VdbeMemGrow(pMem, nByte, 1) ){
-      return SQLITE_NOMEM;
-    }
-
-    memset(&pMem->z[pMem->n], 0, pMem->u.nZero);
-    pMem->n += pMem->u.nZero;
-    pMem->flags &= ~(MEM_Zero|MEM_Term);
-  }
-  return SQLITE_OK;
-}
-#endif
-
 
 /*
 ** Make sure the given Mem is \u0000 terminated.
@@ -500,14 +471,6 @@ void sqlite4VdbeMemSetZeroBlob(Mem *pMem, int n){
   if( n<0 ) n = 0;
   pMem->u.nZero = n;
   pMem->enc = SQLITE_UTF8;
-
-#ifdef SQLITE_OMIT_INCRBLOB
-  sqlite4VdbeMemGrow(pMem, n, 0);
-  if( pMem->z ){
-    pMem->n = n;
-    memset(pMem->z, 0, n);
-  }
-#endif
 }
 
 /*
@@ -871,66 +834,6 @@ int sqlite4MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
   if( rc==0 ){
     rc = pMem1->n - pMem2->n;
   }
-  return rc;
-}
-
-/*
-** Move data out of a btree key or data field and into a Mem structure.
-** The data or key is taken from the entry that pCur is currently pointing
-** to.  offset and amt determine what portion of the data or key to retrieve.
-** key is true to get the key or false to get data.  The result is written
-** into the pMem element.
-**
-** The pMem structure is assumed to be uninitialized.  Any prior content
-** is overwritten without being freed.
-**
-** If this routine fails for any reason (malloc returns NULL or unable
-** to read from the disk) then the pMem is left in an inconsistent state.
-*/
-int sqlite4VdbeMemFromBtree(
-  BtCursor *pCur,   /* Cursor pointing at record to retrieve. */
-  int offset,       /* Offset from the start of data to return bytes from. */
-  int amt,          /* Number of bytes to return. */
-  int key,          /* If true, retrieve from the btree key, not data. */
-  Mem *pMem         /* OUT: Return data in this Mem structure. */
-){
-  char *zData;        /* Data from the btree layer */
-  int available = 0;  /* Number of bytes available on the local btree page */
-  int rc = SQLITE_OK; /* Return code */
-
-  assert( sqlite4BtreeCursorIsValid(pCur) );
-
-  /* Note: the calls to BtreeKeyFetch() and DataFetch() below assert() 
-  ** that both the BtShared and database handle mutexes are held. */
-  assert( (pMem->flags & MEM_RowSet)==0 );
-  if( key ){
-    zData = (char *)sqlite4BtreeKeyFetch(pCur, &available);
-  }else{
-    zData = (char *)sqlite4BtreeDataFetch(pCur, &available);
-  }
-  assert( zData!=0 );
-
-  if( offset+amt<=available && (pMem->flags&MEM_Dyn)==0 ){
-    sqlite4VdbeMemRelease(pMem);
-    pMem->z = &zData[offset];
-    pMem->flags = MEM_Blob|MEM_Ephem;
-  }else if( SQLITE_OK==(rc = sqlite4VdbeMemGrow(pMem, amt+2, 0)) ){
-    pMem->flags = MEM_Blob|MEM_Dyn|MEM_Term;
-    pMem->enc = 0;
-    pMem->type = SQLITE_BLOB;
-    if( key ){
-      rc = sqlite4BtreeKey(pCur, offset, amt, pMem->z);
-    }else{
-      rc = sqlite4BtreeData(pCur, offset, amt, pMem->z);
-    }
-    pMem->z[amt] = 0;
-    pMem->z[amt+1] = 0;
-    if( rc!=SQLITE_OK ){
-      sqlite4VdbeMemRelease(pMem);
-    }
-  }
-  pMem->n = amt;
-
   return rc;
 }
 

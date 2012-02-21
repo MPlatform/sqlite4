@@ -77,18 +77,27 @@ int sqlite4VdbeDecodeValue(
   int cclass;                  /* class of content */
   int n;                       /* Offset into the header */
   int i;                       /* Loop counter */
+  int sz;                      /* Size of a varint */
   int endHdr;                  /* First byte past header */
 
   sqlite4VdbeMemSetNull(pOut);
   assert( iVal<=p->mxCol );
-  n = sqlite4GetVarint64(p->a, &ofst);
+  n = sqlite4GetVarint64(p->a, p->n, &ofst);
+  if( n==0 ) return SQLITE_CORRUPT;
+  ofst += n;
   endHdr = ofst;
   if( endHdr>p->n ) return SQLITE_CORRUPT;
   for(i=0; i<=iVal && n<endHdr; i++){
-    n += sqlite4GetVarint64(p->a+n, &type);
+    sz = sqlite4GetVarint64(p->a+n, p->n-n, &type);
+    if( sz==0 ) return SQLITE_CORRUPT;
+    n += sz;
     if( type>=22 ){
       cclass = (type-22)%3;
-      if( cclass==2 ) n += sqlite4GetVarint64(p->a+n, &subtype);
+      if( cclass==2 ){
+         sz = sqlite4GetVarint64(p->a+n, p->n-n, &subtype);
+         if( sz==0 ) return SQLITE_CORRUPT;
+         n += sz;
+      }
       size = (type-22)/3;
     }else if( type<=2 ){
       size = 0;
@@ -111,9 +120,9 @@ int sqlite4VdbeDecodeValue(
       sqlite4_uint64 x;
       int e;
       double r;
-      n = sqlite4GetVarint64(p->a+ofst, &x);
+      n = sqlite4GetVarint64(p->a+ofst, p->n-ofst, &x);
       e = (int)x;
-      n += sqlite4GetVarint64(p->a+ofst+n, &x);
+      n += sqlite4GetVarint64(p->a+ofst+n, p->n-(ofst+n), &x);
       if( n!=size ) return SQLITE_CORRUPT;
       r = (double)x;
       if( e&1 ) r = -r;
@@ -142,7 +151,13 @@ int sqlite4VdbeDecodeValue(
       sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0, SQLITE_TRANSIENT);
     }
   }
-  if( i<iVal ) sqlite4VdbeMemShallowCopy(pOut, pDefault, MEM_Static);
+  if( i<iVal ){
+    if( pDefault ){
+      sqlite4VdbeMemShallowCopy(pOut, pDefault, MEM_Static);
+    }else{
+      sqlite4VdbeMemSetNull(pOut);
+    }
+  }
   return SQLITE_OK; 
 }
 
@@ -344,17 +359,36 @@ static int enlargeEncoderAllocation(KeyEncoder *p, int needed){
 ** the final byte, if necessary.
 */
 static void encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
+  int i = 0;
+  unsigned char aDigits[20];
+  assert( m>0 );
+  do{
+    aDigits[i++] = m%100; m /= 100;
+  }while( m );
+  p->nOut += sqlite4PutVarint64(p->aOut+p->nOut, i);
+  while( i ) p->aOut[p->nOut++] = aDigits[--i]*2 + 1;
+  p->aOut[p->nOut-1] &= 0xfe;
+}
+
+/*
+** Encode a single integer using the key encoding.  The caller must 
+** ensure that sufficient space exits in a[] (at least 12 bytes).  
+** The return value is the number of bytes of a[] used.  
+*/
+int sqlite4VdbeEncodeIntKey(u8 *a, sqlite4_int64 v){
   int i;
-  unsigned char aDigits[30];
-  aDigits[0] = 0;
-  aDigits[1] = 0;
-  for(i=2; m; i++){ aDigits[i] = (m%10)+1; m /= 10; }
-  p->nOut += sqlite4PutVarint64(p->aOut+p->nOut, (i-2));
-  i--;
-  while( i>0 ){
-    p->aOut[p->nOut++] = aDigits[i]*16 + aDigits[i-1];
-    i -= 2;
+  KeyEncoder s;
+  s.aOut = a;
+  s.nOut = 1;
+  if( v<0 ){
+    a[0] = 0x08;
+    encodeIntKey((sqlite4_uint64)-v, &s);
+    for(i=1; i<s.nOut; i++) a[i] ^= 0xff;
+  }else{
+    a[0] = 0x0c;
+    encodeIntKey((sqlite4_uint64)v, &s);
   }
+  return s.nOut;
 }
 
 /*
@@ -371,25 +405,20 @@ static void encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
 */
 static void encodeSmallFloatKey(double r, KeyEncoder *p){
   int e = 0;
-  int i, j, n;
-  unsigned char aDigits[30];
+  int i, n;
   assert( r>0.0 && r<1.0 );
-  while( r<1e-8 ){ r *= 1e8; e=8; }
-  while( r<1.0 ){ r *= 10.0; e++; }
+  while( r<1e-8 ){ r *= 1e8; e+=4; }
+  while( r<1.0 ){ r *= 100.0; e++; }
   n = sqlite4PutVarint64(p->aOut+p->nOut, e);
   for(i=0; i<n; i++) p->aOut[i+p->nOut] ^= 0xff;
   p->nOut += n;
   for(i=0; i<18 && r!=0.0; i++){
     int d = r;
-    aDigits[i] = 1+d;
+    p->aOut[p->nOut++] = 2*d + 1;
     r -= d;
-    r *= 10.0;
+    r *= 100.0;
   }
-  aDigits[i] = 0;
-  aDigits[i+1] = 0;
-  for(j=0; j<=i; j += 2){
-    p->aOut[p->nOut++] = aDigits[j]*16 + aDigits[j+1];
-  }
+  p->aOut[p->nOut-1] &= 0xfe;
 }
 
 /*
@@ -405,26 +434,21 @@ static void encodeSmallFloatKey(double r, KeyEncoder *p){
 */
 static void encodeLargeFloatKey(double r, KeyEncoder *p){
   int e = 0;
-  int i, j, n;
-  unsigned char aDigits[30];
+  int i, n;
   assert( r>=1.0 );
-  while( r>=1e32 && e<=350 ){ r *= 1e-32; e+=32; }
-  while( r>=1e8 && e<=350 ){ r *= 1e-8; e+=8; }
-  while( r>=10.0 && e<=350 ){ r *= 0.1; e++; }
+  while( r>=1e32 && e<=350 ){ r *= 1e-32; e+=16; }
+  while( r>=1e8 && e<=350 ){ r *= 1e-8; e+=4; }
+  while( r>=100.0 && e<=350 ){ r *= 0.01; e++; }
   while( r<1.0 ){ r *= 10.0; e--; }
   n = sqlite4PutVarint64(p->aOut+p->nOut, e);
   p->nOut += n;
   for(i=0; i<18 && r!=0.0; i++){
     int d = r;
-    aDigits[i] = 1+d;
+    p->aOut[p->nOut++] = 2*d + 1;
     r -= d;
-    r *= 10.0;
+    r *= 100.0;
   }
-  aDigits[i] = 0;
-  aDigits[i+1] = 0;
-  for(j=0; j<=i; j += 2){
-    p->aOut[p->nOut++] = aDigits[j]*16 + aDigits[j+1];
-  }
+  p->aOut[p->nOut-1] &= 0xfe;
 }
 
 
@@ -548,12 +572,18 @@ int sqlite4VdbeEncodeKey(
   int iTabno,                  /* The table this key applies to */
   KeyInfo *pKeyInfo,           /* Collating sequence information */
   u8 **paOut,                  /* Write the resulting key here */
-  int *pnOut                   /* Number of bytes in the key */
+  int *pnOut,                  /* Number of bytes in the key */
+  int *pnShort                 /* Number of bytes without the primary key */
 ){
   int i;
   int rc = SQLITE_OK;
   KeyEncoder x;
-  u8 *so = pKeyInfo->aSortOrder;
+  u8 *so;
+  int iShort;
+  int nField;
+  CollSeq **aColl;
+  CollSeq *xColl;
+  static const CollSeq defaultColl;
 
   x.db = db;
   x.aOut = 0;
@@ -563,12 +593,21 @@ int sqlite4VdbeEncodeKey(
   *pnOut = 0;
   if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE_NOMEM;
   x.nOut = sqlite4PutVarint64(x.aOut, iTabno);
-  for(i=0; i<pKeyInfo->nField && rc==SQLITE_OK; i++){
-    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC,
-                           pKeyInfo->aColl[i]);
+  if( pKeyInfo ){
+    nField = pKeyInfo->nField;
+    iShort = nField - pKeyInfo->nPK;
+    aColl = pKeyInfo->aColl;
+    so = pKeyInfo->aSortOrder;
+  }else{
+    nField = 1;
+    iShort = 0;
+    xColl = &defaultColl;
+    aColl = &xColl;
+    so = 0;
   }
-  for(; i<nIn && rc==SQLITE_OK; i++){
-    rc = encodeOneKeyValue(&x, aIn+i, SQLITE_SO_ASC, pKeyInfo->aColl[0]);
+  for(i=0; i<nField && rc==SQLITE_OK; i++){
+    if( pnShort && i==iShort ) *pnShort = x.nOut;
+    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC, aColl[i]);
   }
   if( rc ){
     sqlite4DbFree(db, x.aOut);
@@ -577,4 +616,49 @@ int sqlite4VdbeEncodeKey(
     *pnOut = x.nOut;
   }
   return rc;
+}
+
+/*
+** Decode an integer key encoding.  Return the number of bytes in the
+** encoding on success.  On an error, return 0.
+*/
+int sqlite4VdbeDecodeIntKey(
+  const KVByteArray *aKey,       /* Input encoding */
+  KVSize nKey,                   /* Number of bytes in aKey[] */
+  sqlite4_int64 *pVal            /* Write the result here */
+){
+  int isNeg;
+  int e;
+  int i, n;
+  sqlite4_int64 m;
+  KVByteArray aBuf[12];
+
+  if( nKey<3 ) return 0;
+  if( nKey>sizeof(aBuf) ) nKey = sizeof(aBuf);
+  if( aKey[0]==0x08 ){
+    isNeg = 1;
+    memcpy(aBuf, aKey, nKey);
+    aKey = aBuf;
+    for(i=1; i<nKey; i++) aBuf[i] ^= 0xff;
+  }else if( aKey[0]==0x0c ){
+    isNeg = 0;
+  }else{
+    return 0;
+  }
+  n = sqlite4GetVarint64(aKey+1, nKey-1, (sqlite4_uint64*)&m);
+  if( m>10 || m==0 ) return 0;
+  e = m;
+  if( n==0 || n+1>=nKey ) return 0;
+  m = 0;
+  i = n+1;
+  do{
+    m = m*100 + aKey[i]/2;
+    e--;
+  }while( aKey[i++] & 1 );
+  if( isNeg ){
+    *pVal = -m;
+  }else{
+    *pVal = m;
+  }
+  return m==0 ? 0 : i;
 }

@@ -40,9 +40,9 @@ typedef struct Explain Explain;
 typedef struct ValueDecoder ValueDecoder;
 
 /*
-** A cursor is a pointer into a single BTree within a database file.
-** The cursor can seek to a BTree entry with a particular key, or
-** loop over all entries of the Btree.  You can also insert new BTree
+** A cursor is a pointer into a single database.
+** The cursor can seek to an entry with a particular key, or
+** loop over all entries.  You can also insert new
 ** entries or retrieve the key or data from the entry that the cursor
 ** is currently pointing to.
 ** 
@@ -50,9 +50,7 @@ typedef struct ValueDecoder ValueDecoder;
 ** instance of the following structure.
 */
 struct VdbeCursor {
-  BtCursor *pCursor;    /* The cursor structure of the backend */
   KVCursor *pKVCur;     /* The cursor structure of the backend */
-  Btree *pBt;           /* Separate file holding temporary table */
   KVStore *pTmpKV;      /* Separate file holding a temporary table */
   KeyInfo *pKeyInfo;    /* Info about index keys needed by index cursors */
   int iDb;              /* Index of cursor database in db->aDb[] (or -1) */
@@ -64,7 +62,6 @@ struct VdbeCursor {
   Bool atFirst;         /* True if pointing to first entry */
   Bool useRandomRowid;  /* Generate new record numbers semi-randomly */
   Bool nullRow;         /* True if pointing to a row with no data */
-  Bool deferredMoveto;  /* A call to sqlite4BtreeMoveto() is needed */
   Bool isTable;         /* True if a table requiring integer keys */
   Bool isIndex;         /* True if an index containing keys only - no data */
   Bool isOrdered;       /* True if the underlying table is BTREE_UNORDERED */
@@ -72,28 +69,13 @@ struct VdbeCursor {
   sqlite4_vtab_cursor *pVtabCursor;  /* The cursor for a virtual table */
   const sqlite4_module *pModule;     /* Module for cursor pVtabCursor */
   i64 seqCount;         /* Sequence counter */
-  i64 movetoTarget;     /* Argument to the deferred sqlite4BtreeMoveto() */
+  i64 movetoTarget;     /* Argument to the deferred move-to */
   i64 lastRowid;        /* Last rowid from a Next or NextIdx operation */
   VdbeSorter *pSorter;  /* Sorter object for OP_SorterOpen cursors */
 
-  /* Result of last sqlite4BtreeMoveto() done by an OP_NotExists or 
+  /* Result of last sqlite4-Moveto() done by an OP_NotExists or 
   ** OP_IsUnique opcode on this cursor. */
   int seekResult;
-
-  /* Cached information about the header for the data record that the
-  ** cursor is currently pointing to.  Only valid if cacheStatus matches
-  ** Vdbe.cacheCtr.  Vdbe.cacheCtr will never take on the value of
-  ** CACHE_STALE and so setting cacheStatus=CACHE_STALE guarantees that
-  ** the cache is out of date.
-  **
-  ** aRow might point to (ephemeral) data for the current row, or it might
-  ** be NULL.
-  */
-  u32 cacheStatus;      /* Cache is valid if this matches Vdbe.cacheCtr */
-  int payloadSize;      /* Total number of bytes in the record */
-  u32 *aType;           /* Type values for all entries in the record */
-  u32 *aOffset;         /* Cached offsets to the start of each columns data */
-  u8 *aRow;             /* Data for the current row, if all on one page */
 };
 typedef struct VdbeCursor VdbeCursor;
 
@@ -206,10 +188,6 @@ struct Mem {
 #define MEM_Ephem     0x1000   /* Mem.z points to an ephemeral string */
 #define MEM_Agg       0x2000   /* Mem.z points to an agg function context */
 #define MEM_Zero      0x4000   /* Mem.i contains count of 0s appended to blob */
-#ifdef SQLITE_OMIT_INCRBLOB
-  #undef MEM_Zero
-  #define MEM_Zero 0x0000
-#endif
 
 /*
 ** Clear any existing type flags from a Mem and replace them with f
@@ -326,13 +304,11 @@ struct Vdbe {
   u8 runOnlyOnce;         /* Automatically expire on reset */
   u8 minWriteFileFormat;  /* Minimum file format for writable database files */
   u8 inVtabMethod;        /* See comments above */
-  u8 usesStmtJournal;     /* True if uses a statement journal */
+  u8 needSavepoint;       /* True if a change might abort and needs savepoint */
   u8 readOnly;            /* True for read-only statements */
   u8 isPrepareV2;         /* True if prepared with prepare_v2() */
   int nChange;            /* Number of db changes made since last reset */
-  yDbMask btreeMask;      /* Bitmask of db->aDb[] entries referenced */
-  yDbMask lockMask;       /* Subset of btreeMask that requires a lock */
-  int iStatement;         /* Statement number (or 0 if has not opened stmt) */
+  yDbMask stmtTransMask;  /* db->aDb[] entries that have a subtransaction */
   int aCounter[3];        /* Counters used by sqlite4_stmt_status() */
 #ifndef SQLITE_OMIT_TRACE
   i64 startTime;          /* Time when query started - used for profiling */
@@ -370,7 +346,6 @@ struct Vdbe {
 */
 void sqlite4VdbeFreeCursor(Vdbe *, VdbeCursor*);
 void sqliteVdbePopStack(Vdbe*,int);
-int sqlite4VdbeCursorMoveto(VdbeCursor*);
 #if defined(SQLITE_DEBUG) || defined(VDBE_PROFILE)
 void sqlite4VdbePrintOp(FILE*, int, Op*);
 #endif
@@ -408,11 +383,11 @@ int sqlite4VdbeEncodeKey(
   int iTabno,                  /* The table this key applies to */
   KeyInfo *pKeyInfo,           /* Collating sequence information */
   u8 **pzOut,                  /* Write the resulting key here */
-  int *pnOut                   /* Number of bytes in the key */
+  int *pnOut,                  /* Number of bytes in the key */
+  int *pnShort                 /* Number of bytes omitting primary key */
 );
-int sqlite2BtreeKeyCompare(BtCursor *, const void *, int, int, int *);
-int sqlite4VdbeIdxKeyCompare(VdbeCursor*,UnpackedRecord*,int*);
-int sqlite4VdbeIdxRowid(sqlite4*, BtCursor *, i64 *);
+int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_int64 v);
+int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);
 int sqlite4MemCompare(const Mem*, const Mem*, const CollSeq*);
 int sqlite4VdbeExec(Vdbe*);
 int sqlite4VdbeList(Vdbe*);
@@ -441,7 +416,7 @@ double sqlite4VdbeRealValue(Mem*);
 void sqlite4VdbeIntegerAffinity(Mem*);
 int sqlite4VdbeMemRealify(Mem*);
 int sqlite4VdbeMemNumerify(Mem*);
-int sqlite4VdbeMemFromBtree(BtCursor*,int,int,int,Mem*);
+
 void sqlite4VdbeMemRelease(Mem *p);
 void sqlite4VdbeMemReleaseExternal(Mem *p);
 #define VdbeMemRelease(X)  \
@@ -455,6 +430,9 @@ void sqlite4VdbeFrameDelete(VdbeFrame*);
 int sqlite4VdbeFrameRestore(VdbeFrame *);
 void sqlite4VdbeMemStoreType(Mem *pMem);
 int sqlite4VdbeTransferError(Vdbe *p);
+int sqlite4VdbeSeekEnd(VdbeCursor*, int);
+int sqlite4VdbeNext(VdbeCursor*);
+int sqlite4VdbePrevious(VdbeCursor*);
 
 #ifdef SQLITE_OMIT_MERGE_SORT
 # define sqlite4VdbeSorterInit(Y,Z)      SQLITE_OK
@@ -474,14 +452,6 @@ int sqlite4VdbeSorterWrite(sqlite4 *, VdbeCursor *, Mem *);
 int sqlite4VdbeSorterCompare(VdbeCursor *, Mem *, int *);
 #endif
 
-#if !defined(SQLITE_OMIT_SHARED_CACHE) && SQLITE_THREADSAFE>0
-  void sqlite4VdbeEnter(Vdbe*);
-  void sqlite4VdbeLeave(Vdbe*);
-#else
-# define sqlite4VdbeEnter(X)
-# define sqlite4VdbeLeave(X)
-#endif
-
 #ifdef SQLITE_DEBUG
 void sqlite4VdbeMemAboutToChange(Vdbe*,Mem*);
 #endif
@@ -499,12 +469,8 @@ int sqlite4VdbeMemTranslate(Mem*, u8);
 #endif
 int sqlite4VdbeMemHandleBom(Mem *pMem);
 
-#ifndef SQLITE_OMIT_INCRBLOB
-  int sqlite4VdbeMemExpandBlob(Mem *);
-  #define ExpandBlob(P) (((P)->flags&MEM_Zero)?sqlite4VdbeMemExpandBlob(P):0)
-#else
-  #define sqlite4VdbeMemExpandBlob(x) SQLITE_OK
-  #define ExpandBlob(P) SQLITE_OK
-#endif
+
+#define sqlite4VdbeMemExpandBlob(x) SQLITE_OK
+#define ExpandBlob(P) SQLITE_OK
 
 #endif /* !defined(_VDBEINT_H_) */

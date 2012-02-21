@@ -405,11 +405,10 @@ FuncDef *sqlite4FindFunction(
 **
 ** The Schema.cache_size variable is not cleared.
 */
-void sqlite4SchemaClear(void *p){
+void sqlite4SchemaClear(Schema *pSchema){
   Hash temp1;
   Hash temp2;
   HashElem *pElem;
-  Schema *pSchema = (Schema *)p;
 
   temp1 = pSchema->tblHash;
   temp2 = pSchema->trigHash;
@@ -437,13 +436,9 @@ void sqlite4SchemaClear(void *p){
 ** Find and return the schema associated with a BTree.  Create
 ** a new one if necessary.
 */
-Schema *sqlite4SchemaGet(sqlite4 *db, Btree *pBt){
+Schema *sqlite4SchemaGet(sqlite4 *db){
   Schema * p;
-  if( pBt ){
-    p = (Schema *)sqlite4BtreeSchema(pBt, sizeof(Schema), sqlite4SchemaClear);
-  }else{
-    p = (Schema *)sqlite4DbMallocZero(0, sizeof(Schema));
-  }
+  p = (Schema *)sqlite4DbMallocZero(0, sizeof(Schema));
   if( !p ){
     db->mallocFailed = 1;
   }else if ( 0==p->file_format ){

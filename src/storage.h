@@ -24,8 +24,8 @@
 ** for content to be read.  The transaction level must be at least 2 for 
 ** content to be modified.
 ** 
-** The xBegin method increases transaction level.  The increase may only be
-** by an amount of 1 unless the transaction level is initially 0 in which case
+** The xBegin method increases transaction level.  The increase may be no
+** more than 1 unless the transaction level is initially 0 in which case
 ** it can be increased immediately to 2.  Increasing the transaction level
 ** to 1 or more makes a "snapshot" of the complete store such that changes
 ** made by other connections are not visible.  An xBegin call may fail
@@ -35,15 +35,25 @@
 ** implementation that does not support nested transactions will fail any
 ** attempt to increase the transaction level above 2.
 ** 
-** The xCommit method lowers the transaction level to the value given in its
-** argument, and makes all the changes made at higher transaction levels
-** permanent.
+** The xCommitPhaseOne and xCommitPhaseTwo methods implementat a 2-phase
+** commit that lowers the transaction level to the value given in the
+** second argument, and makes all the changes made at higher transaction levels
+** permanent.  A rollback is still possible following phase one.  If
+** possible, errors should be reported during phase one so that a
+** multiple-database transaction can still be rolled back if the
+** phase one fails on a different database.  Implementations that do not
+** support two-phase commit can implement xCommitPhaseOne as a no-op function
+** returning SQLITE_OK.
 ** 
 ** The xRollback method lowers the transaction level to the value given in
 ** its argument and reverts or undoes all changes made at higher transaction
 ** levels.  An xRollback to level N causes the database to revert to the state
 ** it was in on the most recent xBegin to level N+1.
 ** 
+** The xRevert(N) method causes the state of the database file to go back
+** to what it was immediately after the most recent xCommit(N).  Higher-level
+** subtransactions are cancelled.  This call is equivalent to xRollback(N-1)
+** followed by xBegin(N) but might be more efficient.
 ** 
 ** The xReplace method replaces the value for an existing entry with the
 ** given key, or creates a new entry with the given key and value if no
@@ -68,6 +78,20 @@
 ** is found if it is available, otherwise the cursor is left pointing the
 ** the smallest entry that is larger than the search key, or to EOF if there
 ** are no entries larger than the search key.
+**
+** The xSeek return code might be one of the following:
+**
+**    SQLITE_OK        The cursor is left pointing to any entry that
+**                     exactly matchings the probe key.
+**
+**    SQLITE_INEXACT   The cursor is left pointing to the nearest entry
+**                     to the probe it could find, either before or after
+**                     the probe, according to the dir argument.
+**
+**    SQLITE_NOTFOUND  No suitable entry could be found.  Either dir==0 and
+**                     there was no exact match, or dir<0 and the probe is
+**                     smaller than every entry in the database, or dir>0 and
+**                     the probe is larger than every entry in the database.
 ** 
 ** The xNext method may only be used following an xSeek with a positive dir,
 ** or another xNext.  The xPrev method may only be used following an xSeek with
@@ -96,7 +120,7 @@ typedef int KVSize;
 
 /*
 ** A Key-Value storage engine is defined by an instance of the following
-** structure.
+** structures:
 */
 struct KVStoreMethods {
   int (*xReplace)(KVStore*, const KVByteArray *pKey, KVSize nKey,
@@ -112,14 +136,18 @@ struct KVStoreMethods {
   int (*xReset)(KVCursor*);
   int (*xCloseCursor)(KVCursor*);
   int (*xBegin)(KVStore*, int);
-  int (*xCommit)(KVStore*, int);
+  int (*xCommitPhaseOne)(KVStore*, int);
+  int (*xCommitPhaseTwo)(KVStore*, int);
   int (*xRollback)(KVStore*, int);
+  int (*xRevert)(KVStore*, int);
   int (*xClose)(KVStore*);
 };
 struct KVStore {
   const KVStoreMethods *pStoreVfunc;    /* Virtual method table */
+  int iTransLevel;                      /* Current transaction level */
   u16 kvId;                             /* Unique ID used for tracing */
   u8 fTrace;                            /* True to enable tracing */
+  char zKVName[12];                     /* Used for debugging */
   /* Subclasses will typically append additional fields */
 };
 
@@ -129,14 +157,26 @@ struct KVStore {
 struct KVCursor {
   KVStore *pStore;                    /* The owner of this cursor */
   const KVStoreMethods *pStoreVfunc;  /* Methods */
+  int iTransLevel;                    /* Current transaction level */
   u16 curId;                          /* Unique ID for tracing */
   u8 fTrace;                          /* True to enable tracing */
   /* Subclasses will typically add additional fields */
 };
 
+/*
+** Valid flags for sqlite4KVStorageOpen()
+*/
+#define SQLITE_KVOPEN_TEMPORARY       0x0001  /* A temporary database */
+#define SQLITE_KVOPEN_NO_TRANSACTIONS 0x0002  /* No transactions will be used */
 
-int sqlite4KVStoreOpenMem(KVStore**);
-int sqlite4KVStoreOpen(const char *zUri, KVStore**);
+int sqlite4KVStoreOpenMem(KVStore**, unsigned);
+int sqlite4KVStoreOpen(
+  sqlite4*,
+  const char *zLabel, 
+  const char *zUri,
+  KVStore**,
+  unsigned flags
+);
 int sqlite4KVStoreReplace(
  KVStore*,
  const KVByteArray *pKey, KVSize nKey,
@@ -162,6 +202,12 @@ int sqlite4KVCursorData(
 );
 int sqlite4KVCursorClose(KVCursor *p);
 int sqlite4KVStoreBegin(KVStore *p, int iLevel);
+int sqlite4KVStoreCommitPhaseOne(KVStore *p, int iLevel);
+int sqlite4KVStoreCommitPhaseTwo(KVStore *p, int iLevel);
 int sqlite4KVStoreCommit(KVStore *p, int iLevel);
 int sqlite4KVStoreRollback(KVStore *p, int iLevel);
+int sqlite4KVStoreRevert(KVStore *p, int iLevel);
 int sqlite4KVStoreClose(KVStore *p);
+
+int sqlite4KVStoreGetMeta(KVStore *p, int, int, unsigned int*);
+int sqlite4KVStorePutMeta(sqlite4*, KVStore *p, int, int, unsigned int*);

@@ -384,7 +384,6 @@ static int vdbeSorterDoCompare(VdbeCursor *pCsr, int iOut){
 ** Initialize the temporary index cursor just opened as a sorter cursor.
 */
 int sqlite4VdbeSorterInit(sqlite4 *db, VdbeCursor *pCsr){
-  int pgsz;                       /* Page size of main database */
   int mxCache;                    /* Cache size */
   VdbeSorter *pSorter;            /* The new sorter */
   char *d;                        /* Dummy */
@@ -400,11 +399,7 @@ int sqlite4VdbeSorterInit(sqlite4 *db, VdbeCursor *pCsr){
   assert( pSorter->pUnpacked==(UnpackedRecord *)d );
 
   if( !sqlite4TempInMemory(db) ){
-    pgsz = sqlite4BtreeGetPageSize(db->aDb[0].pBt);
-    pSorter->mnPmaSize = SORTER_MIN_WORKING * pgsz;
-    mxCache = db->aDb[0].pSchema->cache_size;
-    if( mxCache<SORTER_MIN_WORKING ) mxCache = SORTER_MIN_WORKING;
-    pSorter->mxPmaSize = mxCache * pgsz;
+    pSorter->mnPmaSize = 100000;
   }
 
   return SQLITE_OK;

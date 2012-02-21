@@ -307,10 +307,6 @@
 #include <stdarg.h>
 
 #include "fts3.h"
-#ifndef SQLITE_CORE 
-# include "sqlite4ext.h"
-  SQLITE_EXTENSION_INIT1
-#endif
 
 static int fts3EvalNext(Fts3Cursor *pCsr);
 static int fts3EvalStart(Fts3Cursor *pCsr);

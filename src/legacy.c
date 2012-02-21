@@ -70,9 +70,7 @@ int sqlite4_exec(
       rc = sqlite4_step(pStmt);
 
       /* Invoke the callback function if required */
-      if( xCallback && (SQLITE_ROW==rc || 
-          (SQLITE_DONE==rc && !callbackIsInit
-                           && db->flags&SQLITE_NullCallback)) ){
+      if( xCallback && SQLITE_ROW==rc ){
         if( !callbackIsInit ){
           azCols = sqlite4DbMallocZero(db, 2*nCol*sizeof(const char*) + 1);
           if( azCols==0 ){

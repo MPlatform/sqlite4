@@ -92,40 +92,58 @@ Small values have an absolute value less than 1.  Large values have an
 absolute value of 1 or more.  The value 1.0 is considered large.
 
 For both large and small values, we compute a mantissa M and an
-exponent E.  The mantissa is a base-10 representation of the
+exponent E.  The mantissa is a base-100 representation of the
 value.  The exponent E determines where to put the decimal point.
 
-Each decimal digit of the mantissa is stored in a half-byte.  There
-are two decimal digits per byte.  Digit 0 has a value of 1.  Digit 9
-has a value of A (binary 1010).  The other digits have values in 
-between.  A value of 0 is the end-of-content marker.  The mantissa 
-is composed  of one or more bytes, ending with a single byte where
-the lower four bits at least are the end-of-content mark.  The upper
-four bits of the last byte may or may not be zero too, depending on
-how many other digits exist in the mantissa.
+Each centimal digit of the mantissa is stored in a byte.  If the
+value of the centimal digit is X (hence X>=0 and X<=99) then the
+byte value will be 2*X+1 for every byte of the mantissa, except
+for the last byte which will be 2*X+0.
 
 If we assume all digits of the mantissa occur to the right of the
-decimal point, then the exponent E is one less than the power of ten 
-by which one must multiply the mantissa to recover the original value. 
-Or, E is one less than the number of digits that occur to the left of 
-the decimal point.
+decimal point, then the exponent E is the power of one hundred
+by which one must multiply the mantissa to recover the original 
+value.
 
 Examples:
 
-   Value          Exponent E      Significand M (in hex)
-  --------        ----------      ----------------------
-    1.0              0              20
-    100.0            2              20
-    1234             3              23 45 00
-    12345            4              23 45 60
-    12.345           1              23 45 60
-    0.123            -1             23 40
+   Value               Exponent E    Significand M (in hex)
+  --------             ----------    ----------------------
+    1.0                    1          02
+    10.0                   1          14
+    99.0                   1          b4
+    99.01                  1          b5 02
+    99.0001                1          b5 01 02
+    100.0                  2          03 00
+    100.1                  2          03 02
+    100.01                 2          03 01 02
+    1234                   2          19 44
+    9999                   2          c7 c6
+    9999.000001            2          c7 c7 01 01 02
+    9999.000009            2          c7 c7 01 01 12
+    9999.00001             2          c7 c7 01 01 14
+    9999.00009             2          c7 c7 01 01 b4
+    9999.000099            2          c7 c7 01 01 c6
+    9999.0001              2          c7 c7 01 02
+    9999.001               2          c7 c7 01 14
+    9999.01                2          c7 c7 02
+    9999.1                 2          c7 c7 14
+    10000                  3          02
+    10001                  3          03 00 02
+    12345                  3          03 2f 5a
+    123450                 4          19 45 64
+    1234.5                 3          19 45 64 
+    12.345                 2          19 45 64
+    0.123                  0          19 3c
+    0.0123                 0          03 2e
+    0.00123               -1          19 3c
+    9223372036854775807   10          13 2d 43 91 07 89 6d 9b 75 0e
 
 The E value is stored in the encoding as an unsigned varint.  And 
 since E can be negative, that means we need separate cases for positive
 and negative E value.  That is why large and small numbers are treated
-differently.  Large numbers have a positive or zero E and small numbers
-have a negative E.
+differently.  Large numbers have a positive E and small numbers
+have a zero or negative E.
 
 Large negative numbers have an initial byte of 0x08 followed by the
 ones-complement of the varint of E followed by the ones-complement of
@@ -138,7 +156,8 @@ an initial byte of 0x0c followed by the varint of E followed by M.
 SUMMARY
 
 Each SQL value is encoded as one or more bytes.  The first byte of
-the encoding is as follows:
+the encoding, its meaning, and a terse description of the bytes that
+follow is given by the following table:
 
   0x05 NULL
   0x06 NaN

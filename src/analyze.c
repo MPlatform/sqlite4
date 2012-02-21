@@ -157,7 +157,6 @@ static void openStatTable(
   Db *pDb;
   Vdbe *v = sqlite4GetVdbe(pParse);
   if( v==0 ) return;
-  assert( sqlite4BtreeHoldsAllMutexes(db) );
   assert( sqlite4VdbeDb(v)==db );
   pDb = &db->aDb[iDb];
 
@@ -478,10 +477,8 @@ static void analyzeOneTable(
     /* Do not gather statistics on system tables */
     return;
   }
-  assert( sqlite4BtreeHoldsAllMutexes(db) );
   iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
   assert( iDb>=0 );
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
 #ifndef SQLITE_OMIT_AUTHORIZATION
   if( sqlite4AuthCheck(pParse, SQLITE_ANALYZE, pTab->zName, 0,
       db->aDb[iDb].zName ) ){
@@ -727,7 +724,6 @@ static void analyzeDatabase(Parse *pParse, int iDb){
   pParse->nTab += 3;
   openStatTable(pParse, iDb, iStatCur, 0, 0);
   iMem = pParse->nMem+1;
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   for(k=sqliteHashFirst(&pSchema->tblHash); k; k=sqliteHashNext(k)){
     Table *pTab = (Table*)sqliteHashData(k);
     analyzeOneTable(pParse, pTab, 0, iStatCur, iMem);
@@ -745,7 +741,6 @@ static void analyzeTable(Parse *pParse, Table *pTab, Index *pOnlyIdx){
   int iStatCur;
 
   assert( pTab!=0 );
-  assert( sqlite4BtreeHoldsAllMutexes(pParse->db) );
   iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
   sqlite4BeginWriteOperation(pParse, 0, iDb);
   iStatCur = pParse->nTab;
@@ -782,7 +777,6 @@ void sqlite4Analyze(Parse *pParse, Token *pName1, Token *pName2){
 
   /* Read the database schema. If an error occurs, leave an error message
   ** and code in pParse and return NULL. */
-  assert( sqlite4BtreeHoldsAllMutexes(pParse->db) );
   if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
     return;
   }
@@ -1073,10 +1067,9 @@ int sqlite4AnalysisLoad(sqlite4 *db, int iDb){
   int rc;
 
   assert( iDb>=0 && iDb<db->nDb );
-  assert( db->aDb[iDb].pBt!=0 );
+  assert( db->aDb[iDb].pKV!=0 );
 
   /* Clear any prior statistics */
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   for(i=sqliteHashFirst(&db->aDb[iDb].pSchema->idxHash);i;i=sqliteHashNext(i)){
     Index *pIdx = sqliteHashData(i);
     sqlite4DefaultRowEst(pIdx);

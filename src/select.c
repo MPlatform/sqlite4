@@ -1189,7 +1189,6 @@ static void generateColumnNames(
   Vdbe *v = pParse->pVdbe;
   int i, j;
   sqlite4 *db = pParse->db;
-  int fullNames, shortNames;
 
 #ifndef SQLITE_OMIT_EXPLAIN
   /* If this is an EXPLAIN, skip this step */
@@ -1200,8 +1199,6 @@ static void generateColumnNames(
 
   if( pParse->colNamesSet || NEVER(v==0) || db->mallocFailed ) return;
   pParse->colNamesSet = 1;
-  fullNames = (db->flags & SQLITE_FullColNames)!=0;
-  shortNames = (db->flags & SQLITE_ShortColNames)!=0;
   sqlite4VdbeSetNumCols(v, pEList->nExpr);
   for(i=0; i<pEList->nExpr; i++){
     Expr *p;
@@ -1226,16 +1223,7 @@ static void generateColumnNames(
       }else{
         zCol = pTab->aCol[iCol].zName;
       }
-      if( !shortNames && !fullNames ){
-        sqlite4VdbeSetColName(v, i, COLNAME_NAME, 
-            sqlite4DbStrDup(db, pEList->a[i].zSpan), SQLITE_DYNAMIC);
-      }else if( fullNames ){
-        char *zName = 0;
-        zName = sqlite4MPrintf(db, "%s.%s", pTab->zName, zCol);
-        sqlite4VdbeSetColName(v, i, COLNAME_NAME, zName, SQLITE_DYNAMIC);
-      }else{
-        sqlite4VdbeSetColName(v, i, COLNAME_NAME, zCol, SQLITE_TRANSIENT);
-      }
+      sqlite4VdbeSetColName(v, i, COLNAME_NAME, zCol, SQLITE_TRANSIENT);
     }else{
       sqlite4VdbeSetColName(v, i, COLNAME_NAME, 
           sqlite4DbStrDup(db, pEList->a[i].zSpan), SQLITE_DYNAMIC);
@@ -1391,15 +1379,10 @@ static void selectAddColumnTypeAndCollation(
 Table *sqlite4ResultSetOfSelect(Parse *pParse, Select *pSelect){
   Table *pTab;
   sqlite4 *db = pParse->db;
-  int savedFlags;
 
-  savedFlags = db->flags;
-  db->flags &= ~SQLITE_FullColNames;
-  db->flags |= SQLITE_ShortColNames;
   sqlite4SelectPrep(pParse, pSelect, 0);
   if( pParse->nErr ) return 0;
   while( pSelect->pPrior ) pSelect = pSelect->pPrior;
-  db->flags = savedFlags;
   pTab = sqlite4DbMallocZero(db, sizeof(Table) );
   if( pTab==0 ){
     return 0;
@@ -1617,7 +1600,6 @@ static int multiSelect(
   if( dest.eDest==SRT_EphemTab ){
     assert( p->pEList );
     sqlite4VdbeAddOp2(v, OP_OpenEphemeral, dest.iParm, p->pEList->nExpr);
-    sqlite4VdbeChangeP5(v, BTREE_UNORDERED);
     dest.eDest = SRT_Table;
   }
 
@@ -3317,8 +3299,6 @@ static int selectExpander(Walker *pWalker, Select *p){
     struct ExprList_item *a = pEList->a;
     ExprList *pNew = 0;
     int flags = pParse->db->flags;
-    int longNames = (flags & SQLITE_FullColNames)!=0
-                      && (flags & SQLITE_ShortColNames)==0;
 
     for(k=0; k<pEList->nExpr; k++){
       Expr *pE = a[k].pExpr;
@@ -3390,14 +3370,10 @@ static int selectExpander(Walker *pWalker, Select *p){
             pRight = sqlite4Expr(db, TK_ID, zName);
             zColname = zName;
             zToFree = 0;
-            if( longNames || pTabList->nSrc>1 ){
+            if( pTabList->nSrc>1 ){
               Expr *pLeft;
               pLeft = sqlite4Expr(db, TK_ID, zTabName);
               pExpr = sqlite4PExpr(pParse, TK_DOT, pLeft, pRight, 0);
-              if( longNames ){
-                zColname = sqlite4MPrintf(db, "%s.%s", zTabName, zName);
-                zToFree = zColname;
-              }
             }else{
               pExpr = pRight;
             }
@@ -4006,7 +3982,6 @@ int sqlite4Select(
     pKeyInfo = keyInfoFromExprList(pParse, p->pEList);
     addrDistinctIndex = sqlite4VdbeAddOp4(v, OP_OpenEphemeral, distinct, 0, 0,
         (char*)pKeyInfo, P4_KEYINFO_HANDOFF);
-    sqlite4VdbeChangeP5(v, BTREE_UNORDERED);
   }else{
     distinct = addrDistinctIndex = -1;
   }

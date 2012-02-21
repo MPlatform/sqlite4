@@ -29,7 +29,7 @@ static void storageSetTclErrorName(Tcl_Interp *interp, int rc){
 }
 
 /*
-** TCLCMD:    storage_open URI
+** TCLCMD:    storage_open URI FLAGS
 **
 ** Return a string that identifies the new storage object.
 */
@@ -41,12 +41,16 @@ static int test_storage_open(
 ){
   KVStore *pNew = 0;
   int rc;
+  int flags;
+  sqlite4 db;
   char zRes[50];
-  if( objc!=2 ){
-    Tcl_WrongNumArgs(interp, 2, objv, "URI");
+  if( objc!=3 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "URI FLAGS");
     return TCL_ERROR;
   }
-  rc = sqlite4KVStoreOpen(Tcl_GetString(objv[1]), &pNew);
+  if( Tcl_GetIntFromObj(interp, objv[2], &flags) ) return TCL_ERROR;
+  memset(&db, 0, sizeof(db));
+  rc = sqlite4KVStoreOpen(&db, "test", Tcl_GetString(objv[1]), &pNew, flags);
   if( rc ){
     sqlite4KVStoreClose(pNew);
     storageSetTclErrorName(interp, rc);
@@ -227,7 +231,12 @@ static int test_storage_commit(
   }
   p = sqlite4TestTextToPtr(Tcl_GetString(objv[1]));
   if( Tcl_GetIntFromObj(interp, objv[2], &iLevel) ) return TCL_ERROR;
-  rc = sqlite4KVStoreCommit(p, iLevel);
+  rc = sqlite4KVStoreCommitPhaseOne(p, iLevel);
+  if( rc ){
+    storageSetTclErrorName(interp, rc);
+    return TCL_ERROR;
+  }
+  rc = sqlite4KVStoreCommitPhaseTwo(p, iLevel);
   if( rc ){
     storageSetTclErrorName(interp, rc);
     return TCL_ERROR;

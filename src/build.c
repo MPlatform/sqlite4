@@ -153,10 +153,8 @@ void sqlite4FinishCoding(Parse *pParse){
       sqlite4VdbeJumpHere(v, pParse->cookieGoto-1);
       for(iDb=0, mask=1; iDb<db->nDb; mask<<=1, iDb++){
         if( (mask & pParse->cookieMask)==0 ) continue;
-        sqlite4VdbeUsesBtree(v, iDb);
         sqlite4VdbeAddOp2(v,OP_Transaction, iDb, (mask & pParse->writeMask)!=0);
         if( db->init.busy==0 ){
-          assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
           sqlite4VdbeAddOp3(v, OP_VerifyCookie,
                             iDb, pParse->cookieValue[iDb],
                             db->aDb[iDb].pSchema->iGeneration);
@@ -271,11 +269,9 @@ Table *sqlite4FindTable(sqlite4 *db, const char *zName, const char *zDatabase){
   assert( zName!=0 );
   nName = sqlite4Strlen30(zName);
   /* All mutexes are required for schema access.  Make sure we hold them. */
-  assert( zDatabase!=0 || sqlite4BtreeHoldsAllMutexes(db) );
   for(i=OMIT_TEMPDB; i<db->nDb; i++){
     int j = (i<2) ? i^1 : i;   /* Search TEMP before MAIN */
     if( zDatabase!=0 && sqlite4StrICmp(zDatabase, db->aDb[j].zName) ) continue;
-    assert( sqlite4SchemaMutexHeld(db, j, 0) );
     p = sqlite4HashFind(&db->aDb[j].pSchema->tblHash, zName, nName);
     if( p ) break;
   }
@@ -336,13 +332,11 @@ Index *sqlite4FindIndex(sqlite4 *db, const char *zName, const char *zDb){
   int i;
   int nName = sqlite4Strlen30(zName);
   /* All mutexes are required for schema access.  Make sure we hold them. */
-  assert( zDb!=0 || sqlite4BtreeHoldsAllMutexes(db) );
   for(i=OMIT_TEMPDB; i<db->nDb; i++){
     int j = (i<2) ? i^1 : i;  /* Search TEMP before MAIN */
     Schema *pSchema = db->aDb[j].pSchema;
     assert( pSchema );
     if( zDb && sqlite4StrICmp(zDb, db->aDb[j].zName) ) continue;
-    assert( sqlite4SchemaMutexHeld(db, j, 0) );
     p = sqlite4HashFind(&pSchema->idxHash, zName, nName);
     if( p ) break;
   }
@@ -371,7 +365,6 @@ void sqlite4UnlinkAndDeleteIndex(sqlite4 *db, int iDb, const char *zIdxName){
   int len;
   Hash *pHash;
 
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   pHash = &db->aDb[iDb].pSchema->idxHash;
   len = sqlite4Strlen30(zIdxName);
   pIndex = sqlite4HashInsert(pHash, zIdxName, len, 0);
@@ -411,7 +404,6 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
   if( iDb>=0 ){
     /* Case 1:  Reset the single schema identified by iDb */
     Db *pDb = &db->aDb[iDb];
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     assert( pDb->pSchema!=0 );
     sqlite4SchemaClear(pDb->pSchema);
 
@@ -429,7 +421,6 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
   /* Case 2 (from here to the end): Reset all schemas for all attached
   ** databases. */
   assert( iDb<0 );
-  sqlite4BtreeEnterAll(db);
   for(i=0; i<db->nDb; i++){
     Db *pDb = &db->aDb[i];
     if( pDb->pSchema ){
@@ -438,7 +429,6 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
   }
   db->flags &= ~SQLITE_InternChanges;
   sqlite4VtabUnlockList(db);
-  sqlite4BtreeLeaveAll(db);
 
   /* If one or more of the auxiliary database files has been closed,
   ** then remove them from the auxiliary database list.  We take the
@@ -448,7 +438,7 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
   */
   for(i=j=2; i<db->nDb; i++){
     struct Db *pDb = &db->aDb[i];
-    if( pDb->pBt==0 ){
+    if( pDb->pKV==0 ){
       sqlite4DbFree(db, pDb->zName);
       pDb->zName = 0;
       continue;
@@ -521,7 +511,6 @@ void sqlite4DeleteTable(sqlite4 *db, Table *pTable){
       TESTONLY ( Index *pOld = ) sqlite4HashInsert(
 	  &pIndex->pSchema->idxHash, zName, sqlite4Strlen30(zName), 0
       );
-      assert( db==0 || sqlite4SchemaMutexHeld(db, 0, pIndex->pSchema) );
       assert( pOld==pIndex || pOld==0 );
     }
     freeIndex(db, pIndex);
@@ -556,7 +545,6 @@ void sqlite4UnlinkAndDeleteTable(sqlite4 *db, int iDb, const char *zTabName){
   assert( db!=0 );
   assert( iDb>=0 && iDb<db->nDb );
   assert( zTabName );
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   testcase( zTabName[0]==0 );  /* Zero-length table names are allowed */
   pDb = &db->aDb[iDb];
   p = sqlite4HashInsert(&pDb->pSchema->tblHash, zTabName,
@@ -844,7 +832,6 @@ void sqlite4StartTable(
   */
 #ifndef SQLITE_OMIT_AUTOINCREMENT
   if( !pParse->nested && strcmp(zName, "sqlite_sequence")==0 ){
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     pTable->pSchema->pSeqTab = pTable;
   }
 #endif
@@ -858,8 +845,6 @@ void sqlite4StartTable(
   ** now.
   */
   if( !db->init.busy && (v = sqlite4GetVdbe(pParse))!=0 ){
-    int j1;
-    int fileFormat;
     int reg1, reg2, reg3;
     sqlite4BeginWriteOperation(pParse, 0, iDb);
 
@@ -869,22 +854,6 @@ void sqlite4StartTable(
     }
 #endif
 
-    /* If the file format and encoding in the database have not been set, 
-    ** set them now.
-    */
-    reg1 = pParse->regRowid = ++pParse->nMem;
-    reg2 = pParse->regRoot = ++pParse->nMem;
-    reg3 = ++pParse->nMem;
-    sqlite4VdbeAddOp3(v, OP_ReadCookie, iDb, reg3, BTREE_FILE_FORMAT);
-    sqlite4VdbeUsesBtree(v, iDb);
-    j1 = sqlite4VdbeAddOp1(v, OP_If, reg3);
-    fileFormat = (db->flags & SQLITE_LegacyFileFmt)!=0 ?
-                  1 : SQLITE_MAX_FILE_FORMAT;
-    sqlite4VdbeAddOp2(v, OP_Integer, fileFormat, reg3);
-    sqlite4VdbeAddOp3(v, OP_SetCookie, iDb, BTREE_FILE_FORMAT, reg3);
-    sqlite4VdbeAddOp2(v, OP_Integer, ENC(db), reg3);
-    sqlite4VdbeAddOp3(v, OP_SetCookie, iDb, BTREE_TEXT_ENCODING, reg3);
-    sqlite4VdbeJumpHere(v, j1);
 
     /* This just creates a place-holder record in the sqlite_master table.
     ** The record created does not contain anything yet.  It will be replaced
@@ -895,6 +864,9 @@ void sqlite4StartTable(
     ** The rowid and root page number values are needed by the code that
     ** sqlite4EndTable will generate.
     */
+    reg1 = pParse->regRowid = ++pParse->nMem;
+    reg2 = pParse->regRoot = ++pParse->nMem;
+    reg3 = ++pParse->nMem;
 #if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_VIRTUALTABLE)
     if( isView || isVirtual ){
       sqlite4VdbeAddOp2(v, OP_Integer, 0, reg2);
@@ -1305,9 +1277,8 @@ void sqlite4ChangeCookie(Parse *pParse, int iDb){
   int r1 = sqlite4GetTempReg(pParse);
   sqlite4 *db = pParse->db;
   Vdbe *v = pParse->pVdbe;
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   sqlite4VdbeAddOp2(v, OP_Integer, db->aDb[iDb].pSchema->schema_cookie+1, r1);
-  sqlite4VdbeAddOp3(v, OP_SetCookie, iDb, BTREE_SCHEMA_VERSION, r1);
+  sqlite4VdbeAddOp3(v, OP_SetCookie, iDb, 0, r1);
   sqlite4ReleaseTempReg(pParse, r1);
 }
 
@@ -1608,7 +1579,6 @@ void sqlite4EndTable(
     */
     if( p->tabFlags & TF_Autoincrement ){
       Db *pDb = &db->aDb[iDb];
-      assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
       if( pDb->pSchema->pSeqTab==0 ){
         sqlite4NestedParse(pParse,
           "CREATE TABLE %Q.sqlite_sequence(name,seq)",
@@ -1629,7 +1599,6 @@ void sqlite4EndTable(
   if( db->init.busy ){
     Table *pOld;
     Schema *pSchema = p->pSchema;
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     pOld = sqlite4HashInsert(&pSchema->tblHash, p->zName,
                              sqlite4Strlen30(p->zName),p);
     if( pOld ){
@@ -1814,7 +1783,6 @@ int sqlite4ViewGetColumnNames(Parse *pParse, Table *pTable){
       pSelTab->nCol = 0;
       pSelTab->aCol = 0;
       sqlite4DeleteTable(db, pSelTab);
-      assert( sqlite4SchemaMutexHeld(db, 0, pTable->pSchema) );
       pTable->pSchema->flags |= DB_UnresetViews;
     }else{
       pTable->nCol = 0;
@@ -1835,7 +1803,6 @@ int sqlite4ViewGetColumnNames(Parse *pParse, Table *pTable){
 */
 static void sqliteViewResetAll(sqlite4 *db, int idx){
   HashElem *i;
-  assert( sqlite4SchemaMutexHeld(db, idx, 0) );
   if( !DbHasProperty(db, idx, DB_UnresetViews) ) return;
   for(i=sqliteHashFirst(&db->aDb[idx].pSchema->tblHash); i;i=sqliteHashNext(i)){
     Table *pTab = sqliteHashData(i);
@@ -2182,7 +2149,6 @@ void sqlite4CreateForeignKey(
   pFKey->aAction[0] = (u8)(flags & 0xff);            /* ON DELETE action */
   pFKey->aAction[1] = (u8)((flags >> 8 ) & 0xff);    /* ON UPDATE action */
 
-  assert( sqlite4SchemaMutexHeld(db, 0, p->pSchema) );
   pNextTo = (FKey *)sqlite4HashInsert(&p->pSchema->fkeyHash, 
       pFKey->zTo, sqlite4Strlen30(pFKey->zTo), (void *)pFKey
   );
@@ -2238,8 +2204,8 @@ void sqlite4DeferForeignKey(Parse *pParse, int isDeferred){
 */
 static void sqlite4RefillIndex(Parse *pParse, Index *pIndex, int memRootPage){
   Table *pTab = pIndex->pTable;  /* The table that is indexed */
-  int iTab = pParse->nTab++;     /* Btree cursor used for pTab */
-  int iIdx = pParse->nTab++;     /* Btree cursor used for pIndex */
+  int iTab = pParse->nTab++;     /* Cursor used for pTab */
+  int iIdx = pParse->nTab++;     /* Cursor used for pIndex */
   int iSorter;                   /* Cursor opened by OpenSorter (if in use) */
   int addr1;                     /* Address of top of loop */
   int addr2;                     /* Address to jump to for next iteration */
@@ -2589,7 +2555,6 @@ Index *sqlite4CreateIndex(
   pIndex->onError = (u8)onError;
   pIndex->autoIndex = (u8)(pName==0);
   pIndex->pSchema = db->aDb[iDb].pSchema;
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
 
   /* Check to see if we should honor DESC requests on index columns
   */
@@ -2719,7 +2684,6 @@ Index *sqlite4CreateIndex(
   */
   if( db->init.busy ){
     Index *p;
-    assert( sqlite4SchemaMutexHeld(db, 0, pIndex->pSchema) );
     p = sqlite4HashInsert(&pIndex->pSchema->idxHash, 
                           pIndex->zName, sqlite4Strlen30(pIndex->zName),
                           pIndex);
@@ -3324,7 +3288,6 @@ void sqlite4BeginTransaction(Parse *pParse, int type){
   assert( pParse!=0 );
   db = pParse->db;
   assert( db!=0 );
-/*  if( db->aDb[0].pBt==0 ) return; */
   if( sqlite4AuthCheck(pParse, SQLITE_TRANSACTION, "BEGIN", 0, 0) ){
     return;
   }
@@ -3333,7 +3296,7 @@ void sqlite4BeginTransaction(Parse *pParse, int type){
   if( type!=TK_DEFERRED ){
     for(i=0; i<db->nDb; i++){
       sqlite4VdbeAddOp2(v, OP_Transaction, i, (type==TK_EXCLUSIVE)+1);
-      sqlite4VdbeUsesBtree(v, i);
+      sqlite4VdbeUsesStorage(v, i);
     }
   }
   sqlite4VdbeAddOp2(v, OP_AutoCommit, 0, 0);
@@ -3399,30 +3362,26 @@ void sqlite4Savepoint(Parse *pParse, int op, Token *pName){
 */
 int sqlite4OpenTempDatabase(Parse *pParse){
   sqlite4 *db = pParse->db;
-  if( db->aDb[1].pBt==0 && !pParse->explain ){
+  if( db->aDb[1].pKV==0 && !pParse->explain ){
     int rc;
-    Btree *pBt;
+#if 0
     static const int flags = 
           SQLITE_OPEN_READWRITE |
           SQLITE_OPEN_CREATE |
           SQLITE_OPEN_EXCLUSIVE |
           SQLITE_OPEN_DELETEONCLOSE |
           SQLITE_OPEN_TEMP_DB;
+#endif
 
-    rc = sqlite4BtreeOpen(db->pVfs, 0, db, &pBt, 0, flags);
+    rc = sqlite4KVStoreOpen(db, "temp", ":memory:", &db->aDb[1].pKV,
+                            SQLITE_KVOPEN_TEMPORARY);
     if( rc!=SQLITE_OK ){
       sqlite4ErrorMsg(pParse, "unable to open a temporary database "
         "file for storing temporary tables");
       pParse->rc = rc;
       return 1;
     }
-    sqlite4KVStoreOpen(":memory", &db->aDb[1].pKV);
-    db->aDb[1].pBt = pBt;
     assert( db->aDb[1].pSchema );
-    if( SQLITE_NOMEM==sqlite4BtreeSetPageSize(pBt, db->nextPagesize, -1, 0) ){
-      db->mallocFailed = 1;
-      return 1;
-    }
   }
   return 0;
 }
@@ -3462,9 +3421,8 @@ void sqlite4CodeVerifySchema(Parse *pParse, int iDb){
     yDbMask mask;
 
     assert( iDb<db->nDb );
-    assert( db->aDb[iDb].pBt!=0 || iDb==1 );
+    assert( db->aDb[iDb].pKV!=0 || iDb==1 );
     assert( iDb<SQLITE_MAX_ATTACHED+2 );
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     mask = ((yDbMask)1)<<iDb;
     if( (pToplevel->cookieMask & mask)==0 ){
       pToplevel->cookieMask |= mask;
@@ -3485,7 +3443,7 @@ void sqlite4CodeVerifyNamedSchema(Parse *pParse, const char *zDb){
   int i;
   for(i=0; i<db->nDb; i++){
     Db *pDb = &db->aDb[i];
-    if( pDb->pBt && (!zDb || 0==sqlite4StrICmp(zDb, pDb->zName)) ){
+    if( pDb->pKV && (!zDb || 0==sqlite4StrICmp(zDb, pDb->zName)) ){
       sqlite4CodeVerifySchema(pParse, i);
     }
   }
@@ -3607,7 +3565,6 @@ static void reindexDatabases(Parse *pParse, char const *zColl){
   HashElem *k;                /* For looping over tables in pDb */
   Table *pTab;                /* A table in the database */
 
-  assert( sqlite4BtreeHoldsAllMutexes(db) );  /* Needed for schema access */
   for(iDb=0, pDb=db->aDb; iDb<db->nDb; iDb++, pDb++){
     assert( pDb!=0 );
     for(k=sqliteHashFirst(&pDb->pSchema->tblHash);  k; k=sqliteHashNext(k)){

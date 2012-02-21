@@ -54,7 +54,6 @@ Trigger *sqlite4TriggerList(Parse *pParse, Table *pTab){
 
   if( pTmpSchema!=pTab->pSchema ){
     HashElem *p;
-    assert( sqlite4SchemaMutexHeld(pParse->db, 0, pTmpSchema) );
     for(p=sqliteHashFirst(&pTmpSchema->trigHash); p; p=sqliteHashNext(p)){
       Trigger *pTrig = (Trigger *)sqliteHashData(p);
       if( pTrig->pTabSchema==pTab->pSchema
@@ -179,7 +178,6 @@ void sqlite4BeginTrigger(
   if( !zName || SQLITE_OK!=sqlite4CheckObjectName(pParse, zName) ){
     goto trigger_cleanup;
   }
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   if( sqlite4HashFind(&(db->aDb[iDb].pSchema->trigHash),
                       zName, sqlite4Strlen30(zName)) ){
     if( !noErr ){
@@ -321,7 +319,6 @@ void sqlite4FinishTrigger(
   if( db->init.busy ){
     Trigger *pLink = pTrig;
     Hash *pHash = &db->aDb[iDb].pSchema->trigHash;
-    assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
     pTrig = sqlite4HashInsert(pHash, zName, sqlite4Strlen30(zName), pTrig);
     if( pTrig ){
       db->mallocFailed = 1;
@@ -503,11 +500,9 @@ void sqlite4DropTrigger(Parse *pParse, SrcList *pName, int noErr){
   zDb = pName->a[0].zDatabase;
   zName = pName->a[0].zName;
   nName = sqlite4Strlen30(zName);
-  assert( zDb!=0 || sqlite4BtreeHoldsAllMutexes(db) );
   for(i=OMIT_TEMPDB; i<db->nDb; i++){
     int j = (i<2) ? i^1 : i;  /* Search TEMP before MAIN */
     if( zDb && sqlite4StrICmp(db->aDb[j].zName, zDb) ) continue;
-    assert( sqlite4SchemaMutexHeld(db, j, 0) );
     pTrigger = sqlite4HashFind(&(db->aDb[j].pSchema->trigHash), zName, nName);
     if( pTrigger ) break;
   }
@@ -601,7 +596,6 @@ void sqlite4UnlinkAndDeleteTrigger(sqlite4 *db, int iDb, const char *zName){
   Trigger *pTrigger;
   Hash *pHash;
 
-  assert( sqlite4SchemaMutexHeld(db, iDb, 0) );
   pHash = &(db->aDb[iDb].pSchema->trigHash);
   pTrigger = sqlite4HashInsert(pHash, zName, sqlite4Strlen30(zName), 0);
   if( ALWAYS(pTrigger) ){

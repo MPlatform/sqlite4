@@ -679,14 +679,11 @@ typedef struct WhereInfo WhereInfo;
 typedef struct WhereLevel WhereLevel;
 
 /*
-** Defer sourcing vdbe.h and btree.h until after the "u8" and 
+** Defer sourcing vdbe.h until after the "u8" and 
 ** "BusyHandler" typedefs. vdbe.h also requires a few of the opaque
 ** pointer types (i.e. FuncDef) defined above.
 */
-#include "btree.h"
 #include "vdbe.h"
-#include "pager.h"
-#include "pcache.h"
 #include "storage.h"
 
 #include "os.h"
@@ -702,28 +699,25 @@ typedef struct WhereLevel WhereLevel;
 */
 struct Db {
   char *zName;         /* Name of this database */
-  Btree *pBt;          /* The B*Tree structure for this database file */
   KVStore *pKV;        /* KV store for the database file */
   u8 inTrans;          /* 0: not writable.  1: Transaction.  2: Checkpoint */
-  u8 safety_level;     /* How aggressive at syncing data to disk */
+  u8 chngFlag;         /* True if modified */
   Schema *pSchema;     /* Pointer to database schema (possibly shared) */
 };
 
 /*
 ** An instance of the following structure stores a database schema.
 **
-** Most Schema objects are associated with a Btree.  The exception is
+** Most Schema objects are associated with a database file.  The exception is
 ** the Schema for the TEMP databaes (sqlite4.aDb[1]) which is free-standing.
-** In shared cache mode, a single Schema object can be shared by multiple
-** Btrees that refer to the same underlying BtShared object.
 ** 
-** Schema objects are automatically deallocated when the last Btree that
+** Schema objects are automatically deallocated when the last database that
 ** references them is destroyed.   The TEMP Schema is manually freed by
 ** sqlite4_close().
 *
-** A thread must be holding a mutex on the corresponding Btree in order
+** A thread must be holding a mutex on the corresponding database in order
 ** to access Schema content.  This implies that the thread must also be
-** holding a mutex on the sqlite4 connection pointer that owns the Btree.
+** holding a mutex on the sqlite4 connection pointer that owns the database
 ** For a TEMP Schema, only the connection mutex is required.
 */
 struct Schema {
@@ -959,29 +953,22 @@ struct sqlite4 {
 */
 #define SQLITE_VdbeTrace      0x00000100  /* True to trace VDBE execution */
 #define SQLITE_InternChanges  0x00000200  /* Uncommitted Hash table changes */
-#define SQLITE_FullColNames   0x00000400  /* Show full column names on SELECT */
-#define SQLITE_ShortColNames  0x00000800  /* Show short columns names */
 #define SQLITE_CountRows      0x00001000  /* Count rows changed by INSERT, */
                                           /*   DELETE, or UPDATE and return */
                                           /*   the count using a callback. */
-#define SQLITE_NullCallback   0x00002000  /* Invoke the callback once if the */
-                                          /*   result set is empty */
 #define SQLITE_SqlTrace       0x00004000  /* Debug print SQL as it executes */
 #define SQLITE_VdbeListing    0x00008000  /* Debug listings of VDBE programs */
 #define SQLITE_WriteSchema    0x00010000  /* OK to update SQLITE_MASTER */
-                         /*   0x00020000  Unused */
+#define SQLITE_KvTrace        0x00020000  /* Trace Key/value storage calls */
 #define SQLITE_IgnoreChecks   0x00040000  /* Do not enforce check constraints */
 #define SQLITE_ReadUncommitted 0x0080000  /* For shared-cache mode */
 #define SQLITE_LegacyFileFmt  0x00100000  /* Create new databases in format 1 */
-#define SQLITE_FullFSync      0x00200000  /* Use full fsync on the backend */
-#define SQLITE_CkptFullFSync  0x00400000  /* Use full fsync for checkpoint */
 #define SQLITE_RecoveryMode   0x00800000  /* Ignore schema errors */
 #define SQLITE_ReverseOrder   0x01000000  /* Reverse unordered SELECTs */
 #define SQLITE_RecTriggers    0x02000000  /* Enable recursive triggers */
 #define SQLITE_ForeignKeys    0x04000000  /* Enforce foreign key constraints  */
 #define SQLITE_AutoIndex      0x08000000  /* Enable automatic indexes */
 #define SQLITE_PreferBuiltin  0x10000000  /* Preference to built-in funcs */
-#define SQLITE_LoadExtension  0x20000000  /* Enable load_extension */
 #define SQLITE_EnableTrigger  0x40000000  /* True to enable triggers */
 
 /*
@@ -1436,14 +1423,15 @@ struct FKey {
 
 
 /*
-** An instance of the following structure is passed as the first
-** argument to sqlite4VdbeKeyCompare and is used to control the 
-** comparison of the two index keys.
+** An instance of the following structure describes an index key.  It 
+** includes information such as sort order and collating sequence for
+** each key, and the number of primary key fields appended to the end.
 */
 struct KeyInfo {
   sqlite4 *db;        /* The database connection */
   u8 enc;             /* Text encoding - one of the SQLITE_UTF* values */
-  u16 nField;         /* Number of entries in aColl[] */
+  u16 nField;         /* Total number of entries in aColl[] */
+  u16 nPK;            /* Number of primary key entries at the end of aColl[] */
   u8 *aSortOrder;     /* Sort order for each column.  May be NULL */
   CollSeq *aColl[1];  /* Collating sequence for each term of the key */
 };
@@ -2328,7 +2316,7 @@ struct AuthContext {
 #define OPFLAG_LASTROWID     0x02    /* Set to update db->lastRowid */
 #define OPFLAG_ISUPDATE      0x04    /* This OP_Insert is an sql UPDATE */
 #define OPFLAG_APPEND        0x08    /* This is likely to be an append */
-#define OPFLAG_USESEEKRESULT 0x10    /* Try to avoid a seek in BtreeInsert() */
+#define OPFLAG_USESEEKRESULT 0x10    /* Try to avoid a seek on insert */
 #define OPFLAG_CLEARCACHE    0x20    /* Clear pseudo-table cache in OP_Column */
 #define OPFLAG_APPENDBIAS    0x40    /* Bias inserts for appending */
 
@@ -2970,7 +2958,7 @@ int sqlite4PutVarint32(unsigned char*, u32);
 u8 sqlite4GetVarint(const unsigned char *, u64 *);
 u8 sqlite4GetVarint32(const unsigned char *, u32 *);
 int sqlite4VarintLen(u64 v);
-int sqlite4GetVarint64(const unsigned char*, sqlite4_uint64 *pResult);
+int sqlite4GetVarint64(const unsigned char*, int, sqlite4_uint64 *pResult);
 int sqlite4PutVarint64(unsigned char*, sqlite4_uint64);
 
 /*
@@ -3076,9 +3064,8 @@ void sqlite4DeleteIndexSamples(sqlite4*,Index*);
 void sqlite4DefaultRowEst(Index*);
 void sqlite4RegisterLikeFunctions(sqlite4*, int);
 int sqlite4IsLikeFunction(sqlite4*,Expr*,int*,char*);
-void sqlite4MinimumFileFormat(Parse*, int, int);
-void sqlite4SchemaClear(void *);
-Schema *sqlite4SchemaGet(sqlite4 *, Btree *);
+void sqlite4SchemaClear(Schema*);
+Schema *sqlite4SchemaGet(sqlite4*);
 int sqlite4SchemaToIndex(sqlite4 *db, Schema *);
 KeyInfo *sqlite4IndexKeyinfo(Parse *, Index *);
 int sqlite4CreateFunc(sqlite4 *, const char *, int, int, void *, 
@@ -3096,9 +3083,6 @@ char *sqlite4StrAccumFinish(StrAccum*);
 void sqlite4StrAccumReset(StrAccum*);
 void sqlite4SelectDestInit(SelectDest*,int,int);
 Expr *sqlite4CreateColumnExpr(sqlite4 *, SrcList *, int, int);
-
-void sqlite4BackupRestart(sqlite4_backup *);
-void sqlite4BackupUpdate(sqlite4_backup *, Pgno, const u8 *);
 
 /*
 ** The interface to the LEMON-generated parser

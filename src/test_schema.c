@@ -30,17 +30,8 @@
   "pk"                 /* True if this column is part of the primary key */  \
 ")"
 
-/* If SQLITE_TEST is defined this code is preprocessed for use as part
-** of the sqlite test binary "testfixture". Otherwise it is preprocessed
-** to be compiled into an sqlite dynamic extension.
-*/
-#ifdef SQLITE_TEST
-  #include "sqliteInt.h"
-  #include "tcl.h"
-#else
-  #include "sqlite4ext.h"
-  SQLITE_EXTENSION_INIT1
-#endif
+#include "sqliteInt.h"
+#include "tcl.h"
 
 #include <stdlib.h>
 #include <string.h>
