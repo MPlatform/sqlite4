@@ -321,33 +321,33 @@ int sqlite4KVStorePutMeta(
     rc = sqlite4KVCursorSeek(pCur, metadataKey, sizeof(metadataKey), 0);
     if( rc==SQLITE_OK ){
       rc = sqlite4KVCursorData(pCur, 0, -1, &aData, &nData);
-      if( rc==SQLITE_NOTFOUND ){
-        nData = 0;
-        rc = SQLITE_OK;
-      }
-      if( rc==SQLITE_OK ){
-        nNew = iStart+nMeta;
-        if( nNew<nData ) nNew = nData;
-        aNew = sqlite4DbMallocRaw(db, nNew*sizeof(a[0]) );
-        if( aNew==0 ){
-          rc = SQLITE_NOMEM;
-        }else{
-          memcpy(aNew, aData, nData);
-          i = 0;
-          j = iStart*4;
-          while( i<nMeta && j+3<nData ){
-            aNew[j] = (a[i]>>24)&0xff;
-            aNew[j+1] = (a[i]>>16)&0xff;
-            aNew[j+2] = (a[i]>>8)&0xff;
-            aNew[j+3] = a[i] & 0xff;
-            i++;
-            j += 4;
-          }
-          rc = sqlite4KVStoreReplace(p, metadataKey, sizeof(metadataKey),
-                                     aNew, nNew);
-          sqlite4DbFree(db, aNew);
+    }else if( rc==SQLITE_NOTFOUND ){
+      nData = 0;
+      aData = 0;
+      rc = SQLITE_OK;
+    }
+    if( rc==SQLITE_OK ){
+      nNew = iStart+nMeta;
+      if( nNew<nData ) nNew = nData;
+      aNew = sqlite4DbMallocRaw(db, nNew*sizeof(a[0]) );
+      if( aNew==0 ){
+        rc = SQLITE_NOMEM;
+      }else{
+        memcpy(aNew, aData, nData);
+        i = 0;
+        j = iStart*4;
+        while( i<nMeta && j+3<nData ){
+          aNew[j] = (a[i]>>24)&0xff;
+          aNew[j+1] = (a[i]>>16)&0xff;
+          aNew[j+2] = (a[i]>>8)&0xff;
+          aNew[j+3] = a[i] & 0xff;
+          i++;
+          j += 4;
         }
-      }  
+        rc = sqlite4KVStoreReplace(p, metadataKey, sizeof(metadataKey),
+                                   aNew, nNew);
+        sqlite4DbFree(db, aNew);
+      }
     }
     sqlite4KVCursorClose(pCur);
   }

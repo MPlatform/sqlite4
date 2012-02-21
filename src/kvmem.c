@@ -328,7 +328,7 @@ static KVMemNode *kvmemNewNode(
   assert( p->base.iTransLevel>=2 );
   pNode = sqlite4_malloc( sizeof(*pNode)+nKey-2 );
   if( pNode ){
-    memset(pNode, 0, sizeof(*p));
+    memset(pNode, 0, sizeof(*pNode));
     memcpy(pNode->aKey, aKey, nKey);
     pNode->nKey = nKey;
     pNode->nRef = 1;
