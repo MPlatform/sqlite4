@@ -3268,17 +3268,13 @@ static void init_all(Tcl_Interp *interp){
 
     Sqliteconfig_Init(interp);
     Sqlitetest1_Init(interp);
-    Sqlitetest2_Init(interp);
-    Sqlitetest3_Init(interp);
     Sqlitetest4_Init(interp);
     Sqlitetest5_Init(interp);
     Sqlitetest6_Init(interp);
     Sqlitetest7_Init(interp);
     Sqlitetest8_Init(interp);
     Sqlitetest9_Init(interp);
-    Sqlitetest_autoext_Init(interp);
     Sqlitetest_demovfs_Init(interp);
-    Sqlitetest_func_Init(interp);
     Sqlitetest_hexio_Init(interp);
     Sqlitetest_init_Init(interp);
     Sqlitetest_malloc_Init(interp);
@@ -3291,9 +3287,6 @@ static void init_all(Tcl_Interp *interp){
     Sqlitetestintarray_Init(interp);
     Sqlitetestvfs_Init(interp);
     Sqlitetestrtree_Init(interp);
-    Sqlitequota_Init(interp);
-    SqliteSuperlock_Init(interp);
-    SqlitetestSyscall_Init(interp);
     Sqlitetestfuzzer_Init(interp);
     Sqlitetestwholenumber_Init(interp);
     Sqliteteststorage_Init(interp);

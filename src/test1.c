@@ -1764,103 +1764,6 @@ static int test_create_function_v2(
   return TCL_OK;
 }
 
-/*
-** Usage: sqlite4_load_extension DB-HANDLE FILE ?PROC?
-*/
-static int test_load_extension(
-  ClientData clientData, /* Not used */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  Tcl_CmdInfo cmdInfo;
-  sqlite4 *db;
-  int rc;
-  char *zDb;
-  char *zFile;
-  char *zProc = 0;
-  char *zErr = 0;
-
-  if( objc!=4 && objc!=3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "DB-HANDLE FILE ?PROC?");
-    return TCL_ERROR;
-  }
-  zDb = Tcl_GetString(objv[1]);
-  zFile = Tcl_GetString(objv[2]);
-  if( objc==4 ){
-    zProc = Tcl_GetString(objv[3]);
-  }
-
-  /* Extract the C database handle from the Tcl command name */
-  if( !Tcl_GetCommandInfo(interp, zDb, &cmdInfo) ){
-    Tcl_AppendResult(interp, "command not found: ", zDb, (char*)0);
-    return TCL_ERROR;
-  }
-  db = ((struct SqliteDb*)cmdInfo.objClientData)->db;
-  assert(db);
-
-  /* Call the underlying C function. If an error occurs, set rc to 
-  ** TCL_ERROR and load any error string into the interpreter. If no 
-  ** error occurs, set rc to TCL_OK.
-  */
-#ifdef SQLITE_OMIT_LOAD_EXTENSION
-  rc = SQLITE_ERROR;
-  zErr = sqlite4_mprintf("this build omits sqlite4_load_extension()");
-#else
-  rc = sqlite4_load_extension(db, zFile, zProc, &zErr);
-#endif
-  if( rc!=SQLITE_OK ){
-    Tcl_SetResult(interp, zErr ? zErr : "", TCL_VOLATILE);
-    rc = TCL_ERROR;
-  }else{
-    rc = TCL_OK;
-  }
-  sqlite4_free(zErr);
-
-  return rc;
-}
-
-/*
-** Usage: sqlite4_enable_load_extension DB-HANDLE ONOFF
-*/
-static int test_enable_load(
-  ClientData clientData, /* Not used */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  Tcl_CmdInfo cmdInfo;
-  sqlite4 *db;
-  char *zDb;
-  int onoff;
-
-  if( objc!=3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "DB-HANDLE ONOFF");
-    return TCL_ERROR;
-  }
-  zDb = Tcl_GetString(objv[1]);
-
-  /* Extract the C database handle from the Tcl command name */
-  if( !Tcl_GetCommandInfo(interp, zDb, &cmdInfo) ){
-    Tcl_AppendResult(interp, "command not found: ", zDb, (char*)0);
-    return TCL_ERROR;
-  }
-  db = ((struct SqliteDb*)cmdInfo.objClientData)->db;
-  assert(db);
-
-  /* Get the onoff parameter */
-  if( Tcl_GetBooleanFromObj(interp, objv[2], &onoff) ){
-    return TCL_ERROR;
-  }
-
-#ifdef SQLITE_OMIT_LOAD_EXTENSION
-  Tcl_AppendResult(interp, "this build omits sqlite4_load_extension()");
-  return TCL_ERROR;
-#else
-  sqlite4_enable_load_extension(db, onoff);
-  return TCL_OK;
-#endif
-}
 
 /*
 ** Usage:  sqlite_abort
@@ -4386,29 +4289,6 @@ static int test_db_release_memory(
 }
 
 /*
-** Usage:  sqlite4_db_filename DB DBNAME
-**
-** Return the name of a file associated with a database.
-*/
-static int test_db_filename(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  sqlite4 *db;
-  const char *zDbName;
-  if( objc!=3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME");
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  zDbName = Tcl_GetString(objv[2]);
-  Tcl_AppendResult(interp, sqlite4_db_filename(db, zDbName), (void*)0);
-  return TCL_OK;
-}
-
-/*
 ** Usage:  sqlite4_soft_heap_limit ?N?
 **
 ** Query or set the soft heap limit for the current thread.  The
@@ -4637,353 +4517,6 @@ static int vfs_reregister_all(
 }
 
 
-/*
-** tclcmd:   file_control_test DB
-**
-** This TCL command runs the sqlite4_file_control interface and
-** verifies correct operation of the same.
-*/
-static int file_control_test(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  int iArg = 0;
-  sqlite4 *db;
-  int rc;
-
-  if( objc!=2 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " DB", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  rc = sqlite4_file_control(db, 0, 0, &iArg);
-  assert( rc==SQLITE_NOTFOUND );
-  rc = sqlite4_file_control(db, "notadatabase", SQLITE_FCNTL_LOCKSTATE, &iArg);
-  assert( rc==SQLITE_ERROR );
-  rc = sqlite4_file_control(db, "main", -1, &iArg);
-  assert( rc==SQLITE_NOTFOUND );
-  rc = sqlite4_file_control(db, "temp", -1, &iArg);
-  assert( rc==SQLITE_NOTFOUND || rc==SQLITE_ERROR );
-
-  return TCL_OK;
-}
-
-
-/*
-** tclcmd:   file_control_lasterrno_test DB
-**
-** This TCL command runs the sqlite4_file_control interface and
-** verifies correct operation of the SQLITE_LAST_ERRNO verb.
-*/
-static int file_control_lasterrno_test(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  int iArg = 0;
-  sqlite4 *db;
-  int rc;
-
-  if( objc!=2 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " DB", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ){
-    return TCL_ERROR;
-  }
-  rc = sqlite4_file_control(db, NULL, SQLITE_LAST_ERRNO, &iArg);
-  if( rc ){ 
-    Tcl_SetObjResult(interp, Tcl_NewIntObj(rc)); 
-    return TCL_ERROR; 
-  }
-  if( iArg!=0 ) {
-    Tcl_AppendResult(interp, "Unexpected non-zero errno: ",
-                     Tcl_GetStringFromObj(Tcl_NewIntObj(iArg), 0), " ", 0);
-    return TCL_ERROR;
-  }
-  return TCL_OK;  
-}
-
-/*
-** tclcmd:   file_control_chunksize_test DB DBNAME SIZE
-**
-** This TCL command runs the sqlite4_file_control interface and
-** verifies correct operation of the SQLITE_GET_LOCKPROXYFILE and
-** SQLITE_SET_LOCKPROXYFILE verbs.
-*/
-static int file_control_chunksize_test(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  int nSize;                      /* New chunk size */
-  char *zDb;                      /* Db name ("main", "temp" etc.) */
-  sqlite4 *db;                    /* Database handle */
-  int rc;                         /* file_control() return code */
-
-  if( objc!=4 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME SIZE");
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) 
-   || Tcl_GetIntFromObj(interp, objv[3], &nSize)
-  ){
-   return TCL_ERROR;
-  }
-  zDb = Tcl_GetString(objv[2]);
-  if( zDb[0]=='\0' ) zDb = NULL;
-
-  rc = sqlite4_file_control(db, zDb, SQLITE_FCNTL_CHUNK_SIZE, (void *)&nSize);
-  if( rc ){
-    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
-    return TCL_ERROR;
-  }
-  return TCL_OK;
-}
-
-/*
-** tclcmd:   file_control_sizehint_test DB DBNAME SIZE
-**
-** This TCL command runs the sqlite4_file_control interface 
-** with SQLITE_FCNTL_SIZE_HINT
-*/
-static int file_control_sizehint_test(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4_int64 nSize;            /* Hinted size */
-  char *zDb;                      /* Db name ("main", "temp" etc.) */
-  sqlite4 *db;                    /* Database handle */
-  int rc;                         /* file_control() return code */
-
-  if( objc!=4 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME SIZE");
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) 
-   || Tcl_GetWideIntFromObj(interp, objv[3], &nSize)
-  ){
-   return TCL_ERROR;
-  }
-  zDb = Tcl_GetString(objv[2]);
-  if( zDb[0]=='\0' ) zDb = NULL;
-
-  rc = sqlite4_file_control(db, zDb, SQLITE_FCNTL_SIZE_HINT, (void *)&nSize);
-  if( rc ){
-    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
-    return TCL_ERROR;
-  }
-  return TCL_OK;
-}
-
-/*
-** tclcmd:   file_control_lockproxy_test DB PWD
-**
-** This TCL command runs the sqlite4_file_control interface and
-** verifies correct operation of the SQLITE_GET_LOCKPROXYFILE and
-** SQLITE_SET_LOCKPROXYFILE verbs.
-*/
-static int file_control_lockproxy_test(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4 *db;
-  const char *zPwd;
-  int nPwd;
-  
-  if( objc!=3 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-                     Tcl_GetStringFromObj(objv[0], 0), " DB PWD", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ){
-   return TCL_ERROR;
-  }
-  zPwd = Tcl_GetStringFromObj(objv[2], &nPwd);
-  
-#if !defined(SQLITE_ENABLE_LOCKING_STYLE)
-#  if defined(__APPLE__)
-#    define SQLITE_ENABLE_LOCKING_STYLE 1
-#  else
-#    define SQLITE_ENABLE_LOCKING_STYLE 0
-#  endif
-#endif
-#if SQLITE_ENABLE_LOCKING_STYLE && defined(__APPLE__)
-  {
-    char *testPath;
-    int rc;
-    char proxyPath[400];
-    
-    if( sizeof(proxyPath)<nPwd+20 ){
-      Tcl_AppendResult(interp, "PWD too big", (void*)0);
-      return TCL_ERROR;
-    }
-    sprintf(proxyPath, "%s/test.proxy", zPwd);
-    rc = sqlite4_file_control(db, NULL, SQLITE_SET_LOCKPROXYFILE, proxyPath);
-    if( rc ){
-      Tcl_SetObjResult(interp, Tcl_NewIntObj(rc)); 
-      return TCL_ERROR;
-    }
-    rc = sqlite4_file_control(db, NULL, SQLITE_GET_LOCKPROXYFILE, &testPath);
-    if( strncmp(proxyPath,testPath,11) ){
-      Tcl_AppendResult(interp, "Lock proxy file did not match the "
-                               "previously assigned value", 0);
-      return TCL_ERROR;
-    }
-    if( rc ){
-      Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
-      return TCL_ERROR;
-    }
-    rc = sqlite4_file_control(db, NULL, SQLITE_SET_LOCKPROXYFILE, proxyPath);
-    if( rc ){
-      Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
-      return TCL_ERROR;
-    }
-  }
-#endif
-  return TCL_OK;  
-}
-
-/*
-** tclcmd:   file_control_win32_av_retry DB  NRETRY  DELAY
-**
-** This TCL command runs the sqlite4_file_control interface with
-** the SQLITE_FCNTL_WIN32_AV_RETRY opcode.
-*/
-static int file_control_win32_av_retry(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4 *db;
-  int rc;
-  int a[2];
-  char z[100];
-
-  if( objc!=4 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " DB NRETRY DELAY", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ){
-    return TCL_ERROR;
-  }
-  if( Tcl_GetIntFromObj(interp, objv[2], &a[0]) ) return TCL_ERROR;
-  if( Tcl_GetIntFromObj(interp, objv[3], &a[1]) ) return TCL_ERROR;
-  rc = sqlite4_file_control(db, NULL, SQLITE_FCNTL_WIN32_AV_RETRY, (void*)a);
-  sqlite4_snprintf(sizeof(z), z, "%d %d %d", rc, a[0], a[1]);
-  Tcl_AppendResult(interp, z, (char*)0);
-  return TCL_OK;  
-}
-
-/*
-** tclcmd:   file_control_persist_wal DB PERSIST-FLAG
-**
-** This TCL command runs the sqlite4_file_control interface with
-** the SQLITE_FCNTL_PERSIST_WAL opcode.
-*/
-static int file_control_persist_wal(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4 *db;
-  int rc;
-  int bPersist;
-  char z[100];
-
-  if( objc!=3 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " DB FLAG", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ){
-    return TCL_ERROR;
-  }
-  if( Tcl_GetIntFromObj(interp, objv[2], &bPersist) ) return TCL_ERROR;
-  rc = sqlite4_file_control(db, NULL, SQLITE_FCNTL_PERSIST_WAL, (void*)&bPersist);
-  sqlite4_snprintf(sizeof(z), z, "%d %d", rc, bPersist);
-  Tcl_AppendResult(interp, z, (char*)0);
-  return TCL_OK;  
-}
-
-/*
-** tclcmd:   file_control_powersafe_overwrite DB PSOW-FLAG
-**
-** This TCL command runs the sqlite4_file_control interface with
-** the SQLITE_FCNTL_POWERSAFE_OVERWRITE opcode.
-*/
-static int file_control_powersafe_overwrite(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4 *db;
-  int rc;
-  int b;
-  char z[100];
-
-  if( objc!=3 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " DB FLAG", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ){
-    return TCL_ERROR;
-  }
-  if( Tcl_GetIntFromObj(interp, objv[2], &b) ) return TCL_ERROR;
-  rc = sqlite4_file_control(db,NULL,SQLITE_FCNTL_POWERSAFE_OVERWRITE,(void*)&b);
-  sqlite4_snprintf(sizeof(z), z, "%d %d", rc, b);
-  Tcl_AppendResult(interp, z, (char*)0);
-  return TCL_OK;  
-}
-
-
-/*
-** tclcmd:   file_control_vfsname DB ?AUXDB?
-**
-** Return a string that describes the stack of VFSes.
-*/
-static int file_control_vfsname(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4 *db;
-  const char *zDbName = "main";
-  char *zVfsName = 0;
-
-  if( objc!=2 && objc!=3 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " DB ?AUXDB?", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ){
-    return TCL_ERROR;
-  }
-  if( objc==3 ){
-    zDbName = Tcl_GetString(objv[2]);
-  }
-  sqlite4_file_control(db, zDbName, SQLITE_FCNTL_VFSNAME,(void*)&zVfsName);
-  Tcl_AppendResult(interp, zVfsName, (char*)0);
-  sqlite4_free(zVfsName);
-  return TCL_OK;  
-}
-
 
 /*
 ** tclcmd:   sqlite4_vfs_list
@@ -5115,37 +4648,6 @@ static int reset_prng_state(
   return TCL_OK;
 }
 
-/*
-** tclcmd:  pcache_stats
-*/
-static int test_pcache_stats(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  int nMin;
-  int nMax;
-  int nCurrent;
-  int nRecyclable;
-  Tcl_Obj *pRet;
-
-  sqlite4PcacheStats(&nCurrent, &nMax, &nMin, &nRecyclable);
-
-  pRet = Tcl_NewObj();
-  Tcl_ListObjAppendElement(interp, pRet, Tcl_NewStringObj("current", -1));
-  Tcl_ListObjAppendElement(interp, pRet, Tcl_NewIntObj(nCurrent));
-  Tcl_ListObjAppendElement(interp, pRet, Tcl_NewStringObj("max", -1));
-  Tcl_ListObjAppendElement(interp, pRet, Tcl_NewIntObj(nMax));
-  Tcl_ListObjAppendElement(interp, pRet, Tcl_NewStringObj("min", -1));
-  Tcl_ListObjAppendElement(interp, pRet, Tcl_NewIntObj(nMin));
-  Tcl_ListObjAppendElement(interp, pRet, Tcl_NewStringObj("recyclable", -1));
-  Tcl_ListObjAppendElement(interp, pRet, Tcl_NewIntObj(nRecyclable));
-
-  Tcl_SetObjResult(interp, pRet);
-
-  return TCL_OK;
-}
 
 #ifdef SQLITE_ENABLE_UNLOCK_NOTIFY
 static void test_unlock_notify_cb(void **aArg, int nArg){
@@ -5739,11 +5241,8 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 
      { "sqlite4_release_memory",        test_release_memory,     0},
      { "sqlite4_db_release_memory",     test_db_release_memory,  0},
-     { "sqlite4_db_filename",           test_db_filename,        0},
      { "sqlite4_soft_heap_limit",       test_soft_heap_limit,    0},
 
-     { "sqlite4_load_extension",        test_load_extension,     0},
-     { "sqlite4_enable_load_extension", test_enable_load,        0},
      { "sqlite4_extended_result_codes", test_extended_result_codes, 0},
      { "sqlite4_limit",                 test_limit,                 0},
 
@@ -5798,15 +5297,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "vfs_initfail_test",          vfs_initfail_test,   0   },
      { "vfs_unregister_all",         vfs_unregister_all,  0   },
      { "vfs_reregister_all",         vfs_reregister_all,  0   },
-     { "file_control_test",          file_control_test,   0   },
-     { "file_control_lasterrno_test", file_control_lasterrno_test,  0   },
-     { "file_control_lockproxy_test", file_control_lockproxy_test,  0   },
-     { "file_control_chunksize_test", file_control_chunksize_test,  0   },
-     { "file_control_sizehint_test",  file_control_sizehint_test,   0   },
-     { "file_control_win32_av_retry", file_control_win32_av_retry,  0   },
-     { "file_control_persist_wal",    file_control_persist_wal,     0   },
-     { "file_control_powersafe_overwrite",file_control_powersafe_overwrite,0},
-     { "file_control_vfsname",        file_control_vfsname,         0   },
      { "sqlite4_vfs_list",           vfs_list,     0   },
      { "sqlite4_create_function_v2", test_create_function_v2, 0 },
 
@@ -5819,7 +5309,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_test_errstr",     test_errstr, 0             },
      { "tcl_variable_type",       tcl_variable_type, 0       },
      { "sqlite4_libversion_number", test_libversion_number, 0  },
-     { "pcache_stats",       test_pcache_stats, 0  },
      { "sqlite4_wal_checkpoint",   test_wal_checkpoint, 0  },
      { "sqlite4_wal_checkpoint_v2",test_wal_checkpoint_v2, 0  },
      { "test_sqlite4_log",         test_sqlite4_log, 0  },
@@ -5883,12 +5372,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 #endif
   Tcl_LinkVar(interp, "sqlite4_xferopt_count",
       (char*)&sqlite4_xferopt_count, TCL_LINK_INT);
-  Tcl_LinkVar(interp, "sqlite4_pager_readdb_count",
-      (char*)&sqlite4_pager_readdb_count, TCL_LINK_INT);
-  Tcl_LinkVar(interp, "sqlite4_pager_writedb_count",
-      (char*)&sqlite4_pager_writedb_count, TCL_LINK_INT);
-  Tcl_LinkVar(interp, "sqlite4_pager_writej_count",
-      (char*)&sqlite4_pager_writej_count, TCL_LINK_INT);
 #ifndef SQLITE_OMIT_UTF16
   Tcl_LinkVar(interp, "unaligned_string_counter",
       (char*)&unaligned_string_counter, TCL_LINK_INT);
@@ -5910,16 +5393,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
       (char*)&sqlite4VdbeAddopTrace, TCL_LINK_INT);
   Tcl_LinkVar(interp, "sqlite_where_trace",
       (char*)&sqlite4WhereTrace, TCL_LINK_INT);
-  Tcl_LinkVar(interp, "sqlite_os_trace",
-      (char*)&sqlite4OSTrace, TCL_LINK_INT);
-#ifndef SQLITE_OMIT_WAL
-  Tcl_LinkVar(interp, "sqlite_wal_trace",
-      (char*)&sqlite4WalTrace, TCL_LINK_INT);
-#endif
-#endif
-#ifndef SQLITE_OMIT_DISKIO
-  Tcl_LinkVar(interp, "sqlite_opentemp_count",
-      (char*)&sqlite4_opentemp_count, TCL_LINK_INT);
 #endif
   Tcl_LinkVar(interp, "sqlite_static_bind_value",
       (char*)&sqlite_static_bind_value, TCL_LINK_STRING);

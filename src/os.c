@@ -18,42 +18,6 @@
 #undef _SQLITE_OS_C_
 
 /*
-** The default SQLite sqlite4_vfs implementations do not allocate
-** memory (actually, os_unix.c allocates a small amount of memory
-** from within OsOpen()), but some third-party implementations may.
-** So we test the effects of a malloc() failing and the sqlite4OsXXX()
-** function returning SQLITE_IOERR_NOMEM using the DO_OS_MALLOC_TEST macro.
-**
-** The following functions are instrumented for malloc() failure 
-** testing:
-**
-**     sqlite4OsRead()
-**     sqlite4OsWrite()
-**     sqlite4OsSync()
-**     sqlite4OsFileSize()
-**     sqlite4OsLock()
-**     sqlite4OsCheckReservedLock()
-**     sqlite4OsFileControl()
-**     sqlite4OsShmMap()
-**     sqlite4OsOpen()
-**     sqlite4OsDelete()
-**     sqlite4OsAccess()
-**     sqlite4OsFullPathname()
-**
-*/
-#if defined(SQLITE_TEST)
-int sqlite4_memdebug_vfs_oom_test = 1;
-  #define DO_OS_MALLOC_TEST(x)                                       \
-  if (sqlite4_memdebug_vfs_oom_test && (!x || !sqlite4IsMemJournal(x))) {  \
-    void *pTstAlloc = sqlite4Malloc(10);                             \
-    if (!pTstAlloc) return SQLITE_IOERR_NOMEM;                       \
-    sqlite4_free(pTstAlloc);                                         \
-  }
-#else
-  #define DO_OS_MALLOC_TEST(x)
-#endif
-
-/*
 ** The following routines are convenience wrappers around methods
 ** of the sqlite4_file object.  This is mostly just syntactic sugar. All
 ** of this would be completely automatic if SQLite were coded using
@@ -68,33 +32,27 @@ int sqlite4OsClose(sqlite4_file *pId){
   return rc;
 }
 int sqlite4OsRead(sqlite4_file *id, void *pBuf, int amt, i64 offset){
-  DO_OS_MALLOC_TEST(id);
   return id->pMethods->xRead(id, pBuf, amt, offset);
 }
 int sqlite4OsWrite(sqlite4_file *id, const void *pBuf, int amt, i64 offset){
-  DO_OS_MALLOC_TEST(id);
   return id->pMethods->xWrite(id, pBuf, amt, offset);
 }
 int sqlite4OsTruncate(sqlite4_file *id, i64 size){
   return id->pMethods->xTruncate(id, size);
 }
 int sqlite4OsSync(sqlite4_file *id, int flags){
-  DO_OS_MALLOC_TEST(id);
   return id->pMethods->xSync(id, flags);
 }
 int sqlite4OsFileSize(sqlite4_file *id, i64 *pSize){
-  DO_OS_MALLOC_TEST(id);
   return id->pMethods->xFileSize(id, pSize);
 }
 int sqlite4OsLock(sqlite4_file *id, int lockType){
-  DO_OS_MALLOC_TEST(id);
   return id->pMethods->xLock(id, lockType);
 }
 int sqlite4OsUnlock(sqlite4_file *id, int lockType){
   return id->pMethods->xUnlock(id, lockType);
 }
 int sqlite4OsCheckReservedLock(sqlite4_file *id, int *pResOut){
-  DO_OS_MALLOC_TEST(id);
   return id->pMethods->xCheckReservedLock(id, pResOut);
 }
 
@@ -107,7 +65,6 @@ int sqlite4OsCheckReservedLock(sqlite4_file *id, int *pResOut){
 ** routine has no return value since the return value would be meaningless.
 */
 int sqlite4OsFileControl(sqlite4_file *id, int op, void *pArg){
-  DO_OS_MALLOC_TEST(id);
   return id->pMethods->xFileControl(id, op, pArg);
 }
 void sqlite4OsFileControlHint(sqlite4_file *id, int op, void *pArg){
@@ -137,7 +94,6 @@ int sqlite4OsShmMap(
   int bExtend,                    /* True to extend file if necessary */
   void volatile **pp              /* OUT: Pointer to mapping */
 ){
-  DO_OS_MALLOC_TEST(id);
   return id->pMethods->xShmMap(id, iPage, pgsz, bExtend, pp);
 }
 
@@ -153,7 +109,6 @@ int sqlite4OsOpen(
   int *pFlagsOut
 ){
   int rc;
-  DO_OS_MALLOC_TEST(0);
   /* 0x87f7f is a mask of SQLITE_OPEN_ flags that are valid to be passed
   ** down into the VFS layer.  Some SQLITE_OPEN_ flags (for example,
   ** SQLITE_OPEN_FULLMUTEX or SQLITE_OPEN_SHAREDCACHE) are blocked before
@@ -163,7 +118,6 @@ int sqlite4OsOpen(
   return rc;
 }
 int sqlite4OsDelete(sqlite4_vfs *pVfs, const char *zPath, int dirSync){
-  DO_OS_MALLOC_TEST(0);
   assert( dirSync==0 || dirSync==1 );
   return pVfs->xDelete(pVfs, zPath, dirSync);
 }
@@ -173,7 +127,6 @@ int sqlite4OsAccess(
   int flags, 
   int *pResOut
 ){
-  DO_OS_MALLOC_TEST(0);
   return pVfs->xAccess(pVfs, zPath, flags, pResOut);
 }
 int sqlite4OsFullPathname(
@@ -182,7 +135,6 @@ int sqlite4OsFullPathname(
   int nPathOut, 
   char *zPathOut
 ){
-  DO_OS_MALLOC_TEST(0);
   zPathOut[0] = 0;
   return pVfs->xFullPathname(pVfs, zPath, nPathOut, zPathOut);
 }

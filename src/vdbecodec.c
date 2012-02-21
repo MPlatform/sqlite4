@@ -358,12 +358,14 @@ static int enlargeEncoderAllocation(KeyEncoder *p, int needed){
 ** the final byte, if necessary.
 */
 static void encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
-  int i;
+  int i = 0;
   unsigned char aDigits[20];
   assert( m>0 );
-  for(i=0; m; i++){ aDigits[i] = m%100; m /= 100; }
+  do{
+    aDigits[i++] = m%100; m /= 100;
+  }while( m );
   p->nOut += sqlite4PutVarint64(p->aOut+p->nOut, i);
-  while( i ) p->aOut[p->nOut++] = aDigits[i--]*2 + 1;
+  while( i ) p->aOut[p->nOut++] = aDigits[--i]*2 + 1;
   p->aOut[p->nOut-1] &= 0xfe;
 }
 
