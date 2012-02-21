@@ -643,7 +643,9 @@ static int kvmemSeek(
 ){
   KVMemCursor *pCur;
   KVMemNode *pNode;
+  KVMemNode *pBest = 0;
   int c;
+  int rc = SQLITE_NOTFOUND;
 
   kvmemReset(pKVCursor);
   pCur = (KVMemCursor*)pKVCursor;
@@ -652,17 +654,34 @@ static int kvmemSeek(
   pNode = pCur->pOwner->pRoot;
   while( pNode ){
     c = kvmemKeyCompare(aKey, nKey, pNode->aKey, pNode->nKey);
-    if( c==0
-     || (c<0 && pNode->pBefore==0 && direction>0)
-     || (c>0 && pNode->pAfter==0 && direction<0)
-    ){
-      pCur->pNode = kvmemNodeRef(pNode);
-      pCur->pData = kvmemDataRef(pNode->pData);
-      return c==0 ? SQLITE_OK : SQLITE_INEXACT;
+    if( c==0 ){
+      pBest = pNode;
+      rc = SQLITE_OK;
+      pNode = 0;
+    }else if( c>0 ){
+      if( direction<0 ){
+        pBest = pNode;
+        rc = SQLITE_INEXACT;
+      }
+      pNode = pNode->pAfter;
+    }else{
+      if( direction>0 ){
+        pBest = pNode;
+        rc = SQLITE_INEXACT;
+      }
+      pNode = pNode->pBefore;
     }
-    pNode = (c<0) ? pNode->pBefore : pNode->pAfter;
   }
-  return SQLITE_NOTFOUND;
+  kvmemNodeUnref(pCur->pNode);
+  kvmemDataUnref(pCur->pData);
+  if( pBest ){
+    pCur->pNode = kvmemNodeRef(pBest);
+    pCur->pData = kvmemDataRef(pBest->pData);
+  }else{
+    pCur->pNode = 0;
+    pCur->pData = 0;
+  }
+  return rc;
 }
 
 /*
