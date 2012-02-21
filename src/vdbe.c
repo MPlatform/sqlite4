@@ -3762,7 +3762,7 @@ case OP_CreateTable: {          /* out2-prerelease */
     break;
   }
   if( rc==SQLITE_NOTFOUND ){
-    iTabno = 1;
+    iTabno = 2;
     n = 1;
     rc = SQLITE_OK;
   }else if( rc==SQLITE_INEXACT ){
