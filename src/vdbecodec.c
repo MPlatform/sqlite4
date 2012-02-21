@@ -659,5 +659,5 @@ int sqlite4VdbeDecodeIntKey(
   }else{
     *pVal = m;
   }
-  return m==0 ? i : 0;
+  return m==0 ? 0 : i;
 }

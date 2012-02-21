@@ -2893,10 +2893,11 @@ case OP_Found: {        /* jump, in3 */
   }
   if( rc==SQLITE_OK ){
     rc = sqlite4KVCursorSeek(pC->pKVCur, pProbe, nProbe, +1);
-    if( rc==SQLITE_INEXACT ){
+    if( rc==SQLITE_INEXACT || rc==SQLITE_OK ){
       rc = sqlite4KVCursorKey(pC->pKVCur, &pKey, &nKey);
       if( rc==SQLITE_OK && nKey>=nProbe && memcmp(pKey, pProbe, nKey)==0 ){
         alreadyExists = 1;
+        pC->nullRow = 0;
       }
     }
   }
@@ -3388,15 +3389,11 @@ case OP_Rowid: {                 /* out2-prerelease */
     importVtabErrMsg(p, pVtab);
 #endif /* SQLITE_OMIT_VIRTUALTABLE */
   }else{
-    if( pC->rowidIsValid ){
-      v = pC->lastRowid;
-    }else{
-      rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
-      if( rc==SQLITE_OK ){
-        n = sqlite4GetVarint64(aKey, nKey, (sqlite4_uint64*)&v);
-        n = sqlite4VdbeDecodeIntKey(&aKey[n], nKey-n, &v);
-        if( n==0 ) rc = SQLITE_CORRUPT;
-      }
+    rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
+    if( rc==SQLITE_OK ){
+      n = sqlite4GetVarint64(aKey, nKey, (sqlite4_uint64*)&v);
+      n = sqlite4VdbeDecodeIntKey(&aKey[n], nKey-n, &v);
+      if( n==0 ) rc = SQLITE_CORRUPT;
     }
   }
   pOut->u.i = v;

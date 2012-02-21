@@ -41,7 +41,7 @@ int sqlite4VdbeSeekEnd(VdbeCursor *pC, int iEnd){
 
   assert( iEnd==(+1) || iEnd==(-1) );  
   nProbe = sqlite4PutVarint64(aProbe, pC->iRoot);
-  aProbe[nProbe++] = 10 + iEnd*6;
+  aProbe[nProbe++] = 10 - iEnd*6;
   rc = sqlite4KVCursorSeek(pCur, aProbe, nProbe, iEnd);
   if( rc==SQLITE_OK ){
     return SQLITE_CORRUPT;
