@@ -223,3 +223,6 @@ int sqlite4KVStoreClose(KVStore *p);
 
 int sqlite4KVStoreGetMeta(KVStore *p, int, int, unsigned int*);
 int sqlite4KVStorePutMeta(sqlite4*, KVStore *p, int, int, unsigned int*);
+#ifdef SQLITE_DEBUG
+  void sqlite4KVStoreDump(KVStore *p);
+#endif

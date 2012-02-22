@@ -526,6 +526,17 @@ void sqlite4Pragma(
   }else
 #endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
 
+#ifdef SQLITE_DEBUG
+  /*
+  **   PRAGMA kvdump
+  **
+  ** Print an ascii rendering of the complete content of the database file.
+  */
+  if( sqlite4StrICmp(zLeft, "kvdump")==0 ){
+    sqlite4KVStoreDump(db->aDb[0].pKV);
+  }else
+#endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
+
 
   /*
   **  PRAGMA shrink_memory

@@ -396,3 +396,68 @@ int sqlite4KVStorePutMeta(
   }
   return rc;
 }
+
+#if defined(SQLITE_DEBUG)
+/*
+** Output binary data for debugging display purposes.
+*/
+static void outputBinary(
+  KVByteArray *a,
+  KVSize n,
+  const char *zPrefix
+){
+  int i, j;
+  char zOut[80];
+  static const char base16[] = "0123456789abcdef";
+  memset(zOut, ' ', sizeof(zOut));
+  zOut[16*3+3+16] = 0;
+  while( n>=0 ){
+    for(i=0; i<16 && i<n; i++){
+      unsigned char v = a[i];
+      zOut[i*3] = base16[v>>4];
+      zOut[i*3+1] = base16[v&0xf];
+      zOut[16*3+3+i] = (v>=0x20 && v<=0x7e) ? v : '.';
+    }
+    while( i<16 ){
+      zOut[i*3] = ' ';
+      zOut[i*3+1] = ' ';
+      zOut[16*3+3+i] = ' ';
+      i++;
+    }
+    sqlite4DebugPrintf("%.3s %s\n", zPrefix, zOut);
+    n -= 16;
+    if( n<=0 ) break;
+    a += 16;
+    zPrefix = "   ";
+  }
+}
+
+/*
+** Dump the entire content of a key-value database
+*/
+void sqlite4KVStoreDump(KVStore *pStore){
+  int rc;
+  int nRow = 0;
+  KVCursor *pCur;
+  KVSize nKey, nData;
+  KVByteArray *aKey, *aData;
+  static const KVByteArray aProbe[] = { 0x00 };
+
+  rc = sqlite4KVStoreOpenCursor(pStore, &pCur);
+  if( rc==SQLITE_OK ){
+    rc = sqlite4KVCursorSeek(pCur, aProbe, 1, +1);
+    while( rc!=SQLITE_NOTFOUND ){
+      rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
+      if( rc ) break;
+      if( nRow>0 ) sqlite4DebugPrintf("\n");
+      nRow++;
+      outputBinary(aKey, nKey, "K: ");
+      rc = sqlite4KVCursorData(pCur, 0, -1, &aData, &nData);
+      if( rc ) break;
+      outputBinary(aData, nData, "V: ");
+      rc = sqlite4KVCursorNext(pCur);
+    }
+    sqlite4KVCursorClose(pCur);
+  }
+}
+#endif /* SQLITE_DEBUG */
