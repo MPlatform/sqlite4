@@ -1844,10 +1844,8 @@ static void sqliteViewResetAll(sqlite4 *db, int idx){
 */ 
 static void destroyRootPage(Parse *pParse, int iTable, int iDb){
   Vdbe *v = sqlite4GetVdbe(pParse);
-  int r1 = sqlite4GetTempReg(pParse);
-  sqlite4VdbeAddOp3(v, OP_Destroy, iTable, r1, iDb);
+  sqlite4VdbeAddOp2(v, OP_Clear, iTable, iDb);
   sqlite4MayAbort(pParse);
-  sqlite4ReleaseTempReg(pParse, r1);
 }
 
 /*

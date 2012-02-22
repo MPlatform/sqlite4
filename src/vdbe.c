@@ -3678,27 +3678,10 @@ case OP_IdxGE: {        /* jump */
   break;
 }
 
-/* Opcode: Destroy P1 P2 P3 * *
-**
-** Delete an entire database table or index whose root page in the database
-** file is given by P1.
-**
-** The table being destroyed is in the main database file if P3==0.  If
-** P3==1 then the table to be clear is in the auxiliary database file
-** that is used to store tables create using CREATE TEMPORARY TABLE.
-**
-** See also: Clear
-*/
-case OP_Destroy: {     /* out2-prerelease */
-  assert( 0 );
-  break;
-}
-
 /* Opcode: Clear P1 P2 P3
 **
-** Delete all contents of the database table or index whose root page
-** in the database file is given by P1.  But, unlike Destroy, do not
-** remove the table or index from the database file.
+** Delete all contents of the database table or index whose table number
+** in the database file is given by P1.  
 **
 ** The table being clear is in the main database file if P2==0.  If
 ** P2==1 then the table to be clear is in the auxiliary database file
@@ -3713,7 +3696,28 @@ case OP_Destroy: {     /* out2-prerelease */
 ** See also: Destroy
 */
 case OP_Clear: {
-  assert( 0 );
+  sqlite4_uint64 cnt;
+  KVCursor *pCur;
+  KVByteArray *aKey;
+  KVSize nKey;
+  KVSize nProbe;
+  KVByteArray aProbe[12];
+
+  nProbe = sqlite4PutVarint64(aProbe, pOp->p1);
+  rc = sqlite4KVStoreOpenCursor(db->aDb[pOp->p2].pKV, &pCur);
+  if( rc ) break;
+  rc = sqlite4KVCursorSeek(pCur, aProbe, nProbe, +1);
+  while( rc!=SQLITE_NOTFOUND ){
+    rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
+    if( rc!=SQLITE_OK ) break;
+    if( nKey<nProbe ){ rc = SQLITE_CORRUPT; break; }
+    if( memcmp(aKey, aProbe, nProbe)!=0 ) break;
+    rc = sqlite4KVCursorDelete(pCur);
+    if( rc ) break;
+    rc = sqlite4KVCursorNext(pCur);
+  }
+  sqlite4KVCursorClose(pCur);
+  if( rc==SQLITE_NOTFOUND) rc = SQLITE_OK;
   break;
 }
 
