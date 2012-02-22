@@ -644,7 +644,7 @@ int sqlite4GenerateIndexKey(
     }else{
       zAff = sqlite4IndexAffinityStr(v, pIdx);
     }
-    sqlite4VdbeAddOp1(v, OP_MakeKey, iIdxCur);
+    sqlite4VdbeAddOp2(v, OP_MakeKey, iIdxCur, regOut+1);
     sqlite4VdbeAddOp3(v, OP_MakeRecord, regBase, nCol+1, regOut);
     sqlite4VdbeChangeP4(v, -1, zAff, P4_TRANSIENT);
   }

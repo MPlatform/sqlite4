@@ -2208,6 +2208,9 @@ case OP_MakeRecord: {
     pc++;
     pOp++;
     assert( pOp->opcode==OP_MakeRecord );
+#ifdef SQLITE_DEBUG
+    if( p->trace ) sqlite4VdbePrintOp(p->trace, pc, pOp);
+#endif
   }else{
     pC = 0;
   }
@@ -3605,20 +3608,37 @@ case OP_SorterInsert: {      /* in2 */
 }
 
 
-/* Opcode: IdxInsert P1 P2 * * P5
+/* Opcode: IdxInsert P1 P2 P3 * P5
 **
-** Register P2 holds an SQL index key made using the
-** MakeRecord instructions.  This opcode writes that key
-** into the index P1.  Data for the entry is nil.
+** Register P2 holds the data and register P3 holds the key for an
+** index record.  Write this record into the index specified by the
+** cursor P1.
 **
-** P3 is a flag that provides a hint to the b-tree layer that this
+** P5 is a flag that provides a hint to the storage layer that this
 ** insert is likely to be an append.
 **
 ** This instruction only works for indices.  The equivalent instruction
 ** for tables is OP_Insert.
 */
 case OP_IdxInsert: {        /* in2 */
-  assert( 0 );
+  VdbeCursor *pC;
+  Mem *pKey;
+  Mem *pData;
+
+  assert( pOp->p1>=0 && pOp->p1<p->nCursor );
+  pC = p->apCsr[pOp->p1];
+  assert( pC );
+  assert( pC->pKVCur );
+  assert( pC->pKVCur->pStore );
+  pKey = &aMem[pOp->p3];
+  assert( pKey->flags & MEM_Blob );
+  pData = &aMem[pOp->p2];
+  assert( pData->flags & MEM_Blob );
+  rc = sqlite4KVStoreReplace(
+     pC->pKVCur->pStore,
+     pKey->z, pKey->n,
+     pData->z, pData->n
+  );
   break;
 }
 
