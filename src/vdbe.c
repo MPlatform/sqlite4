@@ -3717,67 +3717,6 @@ case OP_Clear: {
   break;
 }
 
-/* Opcode: CreateTable P1 P2 * * *
-**
-** Allocate a new table in the main database file if P1==0 or in the
-** auxiliary database file if P1==1 or in an attached database if
-** P1>1.  Write the root page number of the new table into
-** register P2
-**
-** The difference between a table and an index is this:  A table must
-** have a 4-byte integer key and can have arbitrary data.  An index
-** has an arbitrary key but no data.
-**
-** See also: CreateIndex
-*/
-/* Opcode: CreateIndex P1 P2 * * *
-**
-** Allocate a new index in the main database file if P1==0 or in the
-** auxiliary database file if P1==1 or in an attached database if
-** P1>1.  Write the root page number of the new table into
-** register P2.
-**
-** See documentation on OP_CreateTable for additional information.
-*/
-case OP_CreateIndex:            /* out2-prerelease */
-case OP_CreateTable: {          /* out2-prerelease */
-  sqlite4_uint64 iTabno;
-  Db *pDb;
-  KVCursor *pCur;
-  const KVByteArray *aKey;
-  KVSize nKey;
-  int n;
-  KVByteArray aProbe[12];
-
-  iTabno = 0;
-  assert( pOp->p1>=0 && pOp->p1<db->nDb );
-  pDb = &db->aDb[pOp->p1];
-  memset(aProbe, 0xff, 9);
-  rc = sqlite4KVStoreOpenCursor(pDb->pKV, &pCur);
-  if( rc ) break;
-  rc = sqlite4KVCursorSeek(pCur, aProbe, 9, -1);
-  if( rc==SQLITE_OK ){
-    sqlite4KVCursorClose(pCur);
-    rc = SQLITE_CORRUPT;
-    break;
-  }
-  if( rc==SQLITE_NOTFOUND ){
-    iTabno = 2;
-    n = 1;
-    rc = SQLITE_OK;
-  }else if( rc==SQLITE_INEXACT ){
-    rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
-    n = sqlite4GetVarint64(aKey, nKey, &iTabno);
-  }else{
-    break;
-  }
-  sqlite4KVCursorClose(pCur);
-  if( n==0 ){
-    rc = SQLITE_CORRUPT;
-  }
-  pOut->u.i = iTabno;
-  break;
-}
 
 /* Opcode: ParseSchema P1 * * P4 *
 **

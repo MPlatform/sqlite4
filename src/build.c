@@ -213,6 +213,23 @@ void sqlite4FinishCoding(Parse *pParse){
 }
 
 /*
+** Find an available table number for database iDb
+*/
+static int firstAvailableTableNumber(sqlite4 *db, int iDb){
+  HashElem *i;
+  int maxTab = 1;
+  for(i=sqliteHashFirst(&db->aDb[iDb].pSchema->tblHash); i;i=sqliteHashNext(i)){
+    Table *pTab = (Table*)sqliteHashData(i);
+    if( pTab->tnum > maxTab ) maxTab = pTab->tnum;
+  }
+  for(i=sqliteHashFirst(&db->aDb[iDb].pSchema->idxHash); i;i=sqliteHashNext(i)){
+    Index *pIdx = (Index*)sqliteHashData(i);
+    if( pIdx->tnum > maxTab ) maxTab = pIdx->tnum;
+  }
+  return maxTab+1;
+}
+
+/*
 ** Run the parser and code generator recursively in order to generate
 ** code for the SQL statement given onto the end of the pParse context
 ** currently under construction.  When the parser is run recursively
@@ -854,7 +871,6 @@ void sqlite4StartTable(
     }
 #endif
 
-
     /* This just creates a place-holder record in the sqlite_master table.
     ** The record created does not contain anything yet.  It will be replaced
     ** by the real entry in code generated at sqlite4EndTable().
@@ -873,7 +889,8 @@ void sqlite4StartTable(
     }else
 #endif
     {
-      sqlite4VdbeAddOp2(v, OP_CreateTable, iDb, reg2);
+      int tnum = firstAvailableTableNumber(db, iDb);
+      sqlite4VdbeAddOp2(v, OP_Integer, tnum, reg2);
     }
     sqlite4OpenMasterTable(pParse, iDb);
     sqlite4VdbeAddOp2(v, OP_NewRowid, 0, reg1);
@@ -2195,14 +2212,8 @@ void sqlite4DeferForeignKey(Parse *pParse, int isDeferred){
 ** Generate code that will erase and refill index *pIdx.  This is
 ** used to initialize a newly created index or to recompute the
 ** content of an index in response to a REINDEX command.
-**
-** if memRootPage is not negative, it means that the index is newly
-** created.  The register specified by memRootPage contains the
-** root page number of the index.  If memRootPage is negative, then
-** the index already exists and must be cleared before being refilled and
-** the root page number of the index is taken from pIndex->tnum.
 */
-static void sqlite4RefillIndex(Parse *pParse, Index *pIndex, int memRootPage){
+static void sqlite4RefillIndex(Parse *pParse, Index *pIndex){
   Table *pTab = pIndex->pTable;  /* The table that is indexed */
   int iTab = pParse->nTab++;     /* Cursor used for pTab */
   int iIdx = pParse->nTab++;     /* Cursor used for pIndex */
@@ -2231,18 +2242,11 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIndex, int memRootPage){
 
   v = sqlite4GetVdbe(pParse);
   if( v==0 ) return;
-  if( memRootPage>=0 ){
-    tnum = memRootPage;
-  }else{
-    tnum = pIndex->tnum;
-    sqlite4VdbeAddOp2(v, OP_Clear, tnum, iDb);
-  }
+  tnum = pIndex->tnum;
+  sqlite4VdbeAddOp2(v, OP_Clear, tnum, iDb);
   pKey = sqlite4IndexKeyinfo(pParse, pIndex);
   sqlite4VdbeAddOp4(v, OP_OpenWrite, iIdx, tnum, iDb, 
                     (char *)pKey, P4_KEYINFO_HANDOFF);
-  if( memRootPage>=0 ){
-    sqlite4VdbeChangeP5(v, 1);
-  }
 
 #ifndef SQLITE_OMIT_MERGE_SORT
   /* Open the sorter cursor if we are to use one. */
@@ -2716,7 +2720,6 @@ Index *sqlite4CreateIndex(
   else{ /* if( db->init.busy==0 ) */
     Vdbe *v;
     char *zStmt;
-    int iMem = ++pParse->nMem;
 
     v = sqlite4GetVdbe(pParse);
     if( v==0 ) goto exit_create_index;
@@ -2725,7 +2728,7 @@ Index *sqlite4CreateIndex(
     /* Create the rootpage for the index
     */
     sqlite4BeginWriteOperation(pParse, 1, iDb);
-    sqlite4VdbeAddOp2(v, OP_CreateIndex, iDb, iMem);
+    pIndex->tnum = firstAvailableTableNumber(db, iDb);
 
     /* Gather the complete text of the CREATE INDEX statement into
     ** the zStmt variable
@@ -2746,11 +2749,11 @@ Index *sqlite4CreateIndex(
     /* Add an entry in sqlite_master for this index
     */
     sqlite4NestedParse(pParse, 
-        "INSERT INTO %Q.%s VALUES('index',%Q,%Q,#%d,%Q);",
+        "INSERT INTO %Q.%s VALUES('index',%Q,%Q,%d,%Q);",
         db->aDb[iDb].zName, SCHEMA_TABLE(iDb),
         pIndex->zName,
         pTab->zName,
-        iMem,
+        pIndex->tnum,
         zStmt
     );
     sqlite4DbFree(db, zStmt);
@@ -2759,7 +2762,7 @@ Index *sqlite4CreateIndex(
     ** to invalidate all pre-compiled statements.
     */
     if( pTblName ){
-      sqlite4RefillIndex(pParse, pIndex, iMem);
+      sqlite4RefillIndex(pParse, pIndex);
       sqlite4ChangeCookie(pParse, iDb);
       sqlite4VdbeAddParseSchemaOp(v, iDb,
          sqlite4MPrintf(db, "name='%q' AND type='index'", pIndex->zName));
@@ -3546,7 +3549,7 @@ static void reindexTable(Parse *pParse, Table *pTab, char const *zColl){
     if( zColl==0 || collationMatch(zColl, pIndex) ){
       int iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
       sqlite4BeginWriteOperation(pParse, 0, iDb);
-      sqlite4RefillIndex(pParse, pIndex, -1);
+      sqlite4RefillIndex(pParse, pIndex);
     }
   }
 }
@@ -3636,7 +3639,7 @@ void sqlite4Reindex(Parse *pParse, Token *pName1, Token *pName2){
   sqlite4DbFree(db, z);
   if( pIndex ){
     sqlite4BeginWriteOperation(pParse, 0, iDb);
-    sqlite4RefillIndex(pParse, pIndex, -1);
+    sqlite4RefillIndex(pParse, pIndex);
     return;
   }
   sqlite4ErrorMsg(pParse, "unable to identify the object to be reindexed");
