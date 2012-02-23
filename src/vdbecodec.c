@@ -358,16 +358,18 @@ static int enlargeEncoderAllocation(KeyEncoder *p, int needed){
 ** marks the end of the significand.  An extra zero is added to fill out
 ** the final byte, if necessary.
 */
-static void encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
+static int encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
   int i = 0;
+  int e;
   unsigned char aDigits[20];
   assert( m>0 );
   do{
     aDigits[i++] = m%100; m /= 100;
   }while( m );
-  p->nOut += sqlite4PutVarint64(p->aOut+p->nOut, i);
+  e = i;
   while( i ) p->aOut[p->nOut++] = aDigits[--i]*2 + 1;
   p->aOut[p->nOut-1] &= 0xfe;
+  return e;
 }
 
 /*
@@ -376,17 +378,21 @@ static void encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
 ** The return value is the number of bytes of a[] used.  
 */
 int sqlite4VdbeEncodeIntKey(u8 *a, sqlite4_int64 v){
-  int i;
+  int i, e;
   KeyEncoder s;
   s.aOut = a;
   s.nOut = 1;
   if( v<0 ){
-    a[0] = 0x08;
-    encodeIntKey((sqlite4_uint64)-v, &s);
+    e = encodeIntKey((sqlite4_uint64)-v, &s);
+    assert( e<=10 );
+    a[0] = 0x13-e;
     for(i=1; i<s.nOut; i++) a[i] ^= 0xff;
+  }else if( v>0 ){
+    e = encodeIntKey((sqlite4_uint64)v, &s);
+    assert( e<=10 );
+    a[0] = 0x17+e;
   }else{
-    a[0] = 0x0c;
-    encodeIntKey((sqlite4_uint64)v, &s);
+    a[0] = 0x15;
   }
   return s.nOut;
 }
@@ -432,7 +438,7 @@ static void encodeSmallFloatKey(double r, KeyEncoder *p){
 ** be non-negative here. The mantissa is stored two-digits per byte
 ** as described for the integer encoding above.
 */
-static void encodeLargeFloatKey(double r, KeyEncoder *p){
+static int encodeLargeFloatKey(double r, KeyEncoder *p){
   int e = 0;
   int i, n;
   assert( r>=1.0 );
@@ -440,8 +446,10 @@ static void encodeLargeFloatKey(double r, KeyEncoder *p){
   while( r>=1e8 && e<=350 ){ r *= 1e-8; e+=4; }
   while( r>=100.0 && e<=350 ){ r *= 0.01; e++; }
   while( r<1.0 ){ r *= 10.0; e--; }
-  n = sqlite4PutVarint64(p->aOut+p->nOut, e);
-  p->nOut += n;
+  if( e>10 ){
+    n = sqlite4PutVarint64(p->aOut+p->nOut, e);
+    p->nOut += n;
+  }
   for(i=0; i<18 && r!=0.0; i++){
     int d = r;
     p->aOut[p->nOut++] = 2*d + 1;
@@ -449,6 +457,7 @@ static void encodeLargeFloatKey(double r, KeyEncoder *p){
     r *= 100.0;
   }
   p->aOut[p->nOut-1] &= 0xfe;
+  return e;
 }
 
 
@@ -462,7 +471,7 @@ static int encodeOneKeyValue(
   CollSeq *pColl
 ){
   int flags = pMem->flags;
-  int i;
+  int i, e;
   int n;
   int iStart = p->nOut;
   if( flags & MEM_Null ){
@@ -473,42 +482,48 @@ static int encodeOneKeyValue(
     sqlite4_int64 v = pMem->u.i;
     if( enlargeEncoderAllocation(p, 11) ) return SQLITE_NOMEM;
     if( v==0 ){
-      p->aOut[p->nOut++] = 0x0a;  /* Numeric zero */
+      p->aOut[p->nOut++] = 0x15;  /* Numeric zero */
     }else if( v<0 ){
       p->aOut[p->nOut++] = 0x08;  /* Large negative number */
       i = p->nOut;
-      encodeIntKey((sqlite4_uint64)-v, p);
+      e = encodeIntKey((sqlite4_uint64)-v, p);
+      if( e<=10 ) p->aOut[i-1] = 0x13-e;
       while( i<p->nOut ) p->aOut[i++] ^= 0xff;
     }else{
-      p->aOut[p->nOut++] = 0x0c;  /* Large positive number */
-      encodeIntKey((sqlite4_uint64)v, p);
+      i = p->nOut;
+      p->aOut[p->nOut++] = 0x22;  /* Large positive number */
+      e = encodeIntKey((sqlite4_uint64)v, p);
+      if( e<=10 ) p->aOut[i] = 0x17+e;
     }
   }else
   if( flags & MEM_Real ){
     double r = pMem->r;
     if( enlargeEncoderAllocation(p, 16) ) return SQLITE_NOMEM;
     if( r==0.0 ){
-      p->aOut[p->nOut++] = 0x0a;  /* Numeric zero */
+      p->aOut[p->nOut++] = 0x15;  /* Numeric zero */
     }else if( sqlite4IsNaN(r) ){
       p->aOut[p->nOut++] = 0x06;  /* NaN */
     }else if( (n = sqlite4IsInf(r))!=0 ){
-      p->aOut[p->nOut++] = n<0 ? 0x07 : 0x0d;  /* Neg and Pos infinity */
+      p->aOut[p->nOut++] = n<0 ? 0x07 : 0x23;  /* Neg and Pos infinity */
     }else if( r<=-1.0 ){
       p->aOut[p->nOut++] = 0x08;  /* Large negative values */
       i = p->nOut;
-      encodeLargeFloatKey(-r, p);
+      e = encodeLargeFloatKey(-r, p);
+      if( e<=10 ) p->aOut[i-1] = 0x13-e;
       while( i<p->nOut ) p->aOut[i++] ^= 0xff;
     }else if( r<0.0 ){
-      p->aOut[p->nOut++] = 0x09;  /* Small negative values */
+      p->aOut[p->nOut++] = 0x14;  /* Small negative values */
       i = p->nOut;
       encodeSmallFloatKey(-r, p);
       while( i<p->nOut ) p->aOut[i++] ^= 0xff;
     }else if( r<1.0 ){
-      p->aOut[p->nOut++] = 0x0b;  /* Small positive values */
+      p->aOut[p->nOut++] = 0x16;  /* Small positive values */
       encodeSmallFloatKey(r, p);
     }else{
-      p->aOut[p->nOut++] = 0x0c;  /* Large positive values */
-      encodeLargeFloatKey(r, p);
+      i = p->nOut;
+      p->aOut[p->nOut++] = 0x22;  /* Large positive values */
+      e = encodeLargeFloatKey(r, p);
+      if( e<=10 ) p->aOut[i] = 0x17+e;
     }
   }else
   if( flags & MEM_Str ){
@@ -628,29 +643,28 @@ int sqlite4VdbeDecodeIntKey(
   sqlite4_int64 *pVal            /* Write the result here */
 ){
   int isNeg;
-  int e;
+  int e, x;
   int i, n;
   sqlite4_int64 m;
   KVByteArray aBuf[12];
 
-  if( nKey<3 ) return 0;
+  if( nKey<2 ) return 0;
   if( nKey>sizeof(aBuf) ) nKey = sizeof(aBuf);
-  if( aKey[0]==0x08 ){
+  x = aKey[0];
+  if( x>=0x09 && x<=0x13 ){
     isNeg = 1;
     memcpy(aBuf, aKey, nKey);
     aKey = aBuf;
     for(i=1; i<nKey; i++) aBuf[i] ^= 0xff;
-  }else if( aKey[0]==0x0c ){
+    e = 0x13-x;
+  }else if( x>=0x17 && x<=0x21 ){
     isNeg = 0;
+    e = x-0x17;
   }else{
     return 0;
   }
-  n = sqlite4GetVarint64(aKey+1, nKey-1, (sqlite4_uint64*)&m);
-  if( m>10 || m==0 ) return 0;
-  e = m;
-  if( n==0 || n+1>=nKey ) return 0;
   m = 0;
-  i = n+1;
+  i = 1;
   do{
     m = m*100 + aKey[i]/2;
     e--;

@@ -37,7 +37,7 @@ forces NULL values to sort first.
 
 TEXT ENCODING
 
-Each SQL value that is TEXT begins with a single byte of 0x0e and ends
+Each SQL value that is TEXT begins with a single byte of 0x24 and ends
 with a single byte of 0x00.  There are zero or more intervening bytes that
 encode the text value.  The intervening bytes are chosen so that the
 encoding will sort in the desired collating order.  The default sequence
@@ -51,7 +51,7 @@ will sort first.
 
 BINARY ENCODING
 
-Each SQL value that is BINARY begins with a single byte of 0x0f and
+Each SQL value that is BINARY begins with a single byte of 0x25 and
 ends with a single byte of 0x00.  There are zero or more intervening bytes
 that encode the binary value.  None of the intervening bytes may be zero.
 Each of the intervening bytes contains 7 bits of blob content with a 1 in
@@ -77,23 +77,19 @@ initial byte, this encoding ensures that negative infinity will sort prior
 to every other numeric value other than NaN.
 
 If the numeric value is a positive infinity then the encoding is a single
-byte of 0x0d.  Every other numeric value encoding begins with a smaller
+byte of 0x23.  Every other numeric value encoding begins with a smaller
 byte, ensuring that positive infinity always sorts last among numeric
 values.  0x0d is also smaller than 0x0e, the initial byte of a text value,
 ensuring that every numeric value sorts before every text value.
 
 If the numeric value is exactly zero then then is encoded is a single
-byte of 0x0a.  Finite negative values will have initial bytes of 0x08
-or 0x09 and finite positive values will have initial bytes of 0x0b
-and 0x0c.
+byte of 0x15.  Finite negative values will have initial bytes of 0x08
+through 0x14 and finite positive values will have initial bytes of 0x16
+through 0x22.
 
-Finite non-zero values are classified as either large, or small.
-Small values have an absolute value less than 1.  Large values have an
-absolute value of 1 or more.  The value 1.0 is considered large.
-
-For both large and small values, we compute a mantissa M and an
-exponent E.  The mantissa is a base-100 representation of the
-value.  The exponent E determines where to put the decimal point.
+For all values, we compute a mantissa M and an exponent E.  The mantissa
+is a base-100 representation of the value.  The exponent E determines
+where to put the decimal point.
 
 Each centimal digit of the mantissa is stored in a byte.  If the
 value of the centimal digit is X (hence X>=0 and X<=99) then the
@@ -139,19 +135,22 @@ Examples:
     0.00123               -1          19 3c
     9223372036854775807   10          13 2d 43 91 07 89 6d 9b 75 0e
 
-The E value is stored in the encoding as an unsigned varint.  And 
-since E can be negative, that means we need separate cases for positive
-and negative E value.  That is why large and small numbers are treated
-differently.  Large numbers have a positive E and small numbers
-have a zero or negative E.
+Values are classified as large, medium, or small according to the value
+of E.  If E is 11 or more, the value is large.  For E between 0 and 10,
+the value is medium.  For E less than zero, the value is small.
 
-Large negative numbers have an initial byte of 0x08 followed by the
-ones-complement of the varint of E followed by the ones-complement of
-M.  Small negative numbers have an initial byte of 0x09 followed by
-the varint of -E followed by the ones-complement of M.  Small positive
-numbers have an initial byte of 0x0b followed by the ones-complement of
-the varint of -E followed by M.  Finally, large positive nubmers have
-an initial byte of 0x0c followed by the varint of E followed by M.
+Large positive values are encoded as a single byte 0x22 followed by
+E as a varint and then M.  Medium positive values are a single byte of
+0x17+E followed by M.  Small positive values are encoded as a single
+byte 0x16 followed by the ones-complement of the varint for -E followed
+by M.
+
+Small negative values are encoded as a single byte 0x14 followed by
+-E as a varint and then the ones-complement of M.  Medium negative
+values are encoded as a byte 0x13-E followed by the ones-complement of M.
+Large negative values consist of the single byte 0x08 followed by the
+ones-complement of the varint encoding of E followed by the ones-complement
+of M.
 
 SUMMARY
 
@@ -159,14 +158,18 @@ Each SQL value is encoded as one or more bytes.  The first byte of
 the encoding, its meaning, and a terse description of the bytes that
 follow is given by the following table:
 
-  0x05 NULL
-  0x06 NaN
-  0x07 negative infinity
-  0x08 negative-large ~E ~M
-  0x09 negative-small -E ~M
-  0x0a zero
-  0x0b positive-small ~-E M
-  0x0c positive-large E M
-  0x0d positive infinity
-  0x0e text T
-  0x0f binary B
+  Content Type         Encoding
+  ------------------   -----------------
+  NULL                 0x05
+  NaN                  0x06
+  negative infinity    0x07
+  negative large       0x08    ~E   ~M
+  negative medium      0x13-E  ~M
+  negative small       0x14    -E   ~M
+  zero                 0x15
+  positive small       0x16    ~-E  M
+  positive medium      0x17+E  M
+  positive large       0x22    E    M
+  positive infinity    0x23
+  text                 0x24    T
+  binary               0x25    B
