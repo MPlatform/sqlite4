@@ -77,7 +77,6 @@ struct VdbeCursor {
   ** OP_IsUnique opcode on this cursor. */
   int seekResult;
 };
-typedef struct VdbeCursor VdbeCursor;
 
 /*
 ** When a sub-program is executed (OP_Program), a structure of this type
