@@ -1015,7 +1015,7 @@ static void releaseMemArray(Mem *p, int N){
       ** with no indexes using a single prepared INSERT statement, bind() 
       ** and reset(). Inserts are grouped into a transaction.
       */
-      if( p->flags&(MEM_Agg|MEM_Dyn|MEM_Frame|MEM_RowSet) ){
+      if( p->flags&(MEM_Agg|MEM_Dyn|MEM_Frame|MEM_KeySet) ){
         sqlite4VdbeMemRelease(p);
       }else if( p->zMalloc ){
         sqlite4DbFree(db, p->zMalloc);

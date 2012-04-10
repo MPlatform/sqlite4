@@ -215,17 +215,26 @@ void sqlite4FinishCoding(Parse *pParse){
 /*
 ** Find an available table number for database iDb
 */
-static int firstAvailableTableNumber(sqlite4 *db, int iDb){
+static int firstAvailableTableNumber(
+  sqlite4 *db,                    /* Database handle */
+  int iDb,                        /* Index of database in db->aDb[] */
+  Table *pTab                     /* New table being constructed */
+){
   HashElem *i;
   int maxTab = 1;
-  for(i=sqliteHashFirst(&db->aDb[iDb].pSchema->tblHash); i;i=sqliteHashNext(i)){
-    Table *pTab = (Table*)sqliteHashData(i);
-    if( pTab->tnum > maxTab ) maxTab = pTab->tnum;
-  }
+
   for(i=sqliteHashFirst(&db->aDb[iDb].pSchema->idxHash); i;i=sqliteHashNext(i)){
     Index *pIdx = (Index*)sqliteHashData(i);
     if( pIdx->tnum > maxTab ) maxTab = pIdx->tnum;
   }
+
+  if( pTab ){
+    Index *pIdx;
+    for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
+      if( pIdx->tnum > maxTab ) maxTab = pIdx->tnum;
+    }
+  }
+
   return maxTab+1;
 }
 
@@ -862,7 +871,7 @@ void sqlite4StartTable(
   ** now.
   */
   if( !db->init.busy && (v = sqlite4GetVdbe(pParse))!=0 ){
-    int reg1, reg2, reg3;
+    int reg1, reg3;
     sqlite4BeginWriteOperation(pParse, 0, iDb);
 
 #ifndef SQLITE_OMIT_VIRTUALTABLE
@@ -881,8 +890,8 @@ void sqlite4StartTable(
     ** sqlite4EndTable will generate.
     */
     reg1 = pParse->regRowid = ++pParse->nMem;
-    reg2 = pParse->regRoot = ++pParse->nMem;
     reg3 = ++pParse->nMem;
+#if 0
 #if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_VIRTUALTABLE)
     if( isView || isVirtual ){
       sqlite4VdbeAddOp2(v, OP_Integer, 0, reg2);
@@ -892,6 +901,7 @@ void sqlite4StartTable(
       int tnum = firstAvailableTableNumber(db, iDb);
       sqlite4VdbeAddOp2(v, OP_Integer, tnum, reg2);
     }
+#endif
     sqlite4OpenMasterTable(pParse, iDb);
     sqlite4VdbeAddOp2(v, OP_NewRowid, 0, reg1);
     sqlite4VdbeAddOp2(v, OP_Null, 0, reg3);
@@ -1129,7 +1139,9 @@ void sqlite4AddPrimaryKey(
   int sortOrder     /* SQLITE_SO_ASC or SQLITE_SO_DESC */
 ){
   Table *pTab = pParse->pNewTable;
+#if 0
   char *zType = 0;
+#endif
   int iCol = -1, i;
   if( pTab==0 || IN_DECLARE_VTAB ) goto primary_key_exit;
   if( pTab->tabFlags & TF_HasPrimaryKey ){
@@ -1154,9 +1166,12 @@ void sqlite4AddPrimaryKey(
     }
     if( pList->nExpr>1 ) iCol = -1;
   }
+
+#if 0
   if( iCol>=0 && iCol<pTab->nCol ){
     zType = pTab->aCol[iCol].zType;
   }
+
   if( zType && sqlite4StrICmp(zType, "INTEGER")==0
         && sortOrder==SQLITE_SO_ASC ){
     pTab->iPKey = iCol;
@@ -1168,12 +1183,14 @@ void sqlite4AddPrimaryKey(
     sqlite4ErrorMsg(pParse, "AUTOINCREMENT is only allowed on an "
        "INTEGER PRIMARY KEY");
 #endif
-  }else{
+  }else
+#endif
+
+  {
     Index *p;
-    p = sqlite4CreateIndex(pParse, 0, 0, 0, pList, onError, 0, 0, sortOrder, 0);
-    if( p ){
-      p->autoIndex = 2;
-    }
+    p = sqlite4CreateIndex(
+        pParse, 0, 0, 0, pList, onError, 0, 0, sortOrder, 0, 1
+    );
     pList = 0;
   }
 
@@ -1420,6 +1437,105 @@ static char *createTableStmt(sqlite4 *db, Table *p){
   return zStmt;
 }
 
+static Index *newIndex(
+  Parse *pParse,                  /* Parse context for current statement */
+  Table *pTab,                    /* Table index is created on */
+  const char *zName,              /* Name of index object to create */
+  int nCol,                       /* Number of columns in index */
+  int onError,                    /* One of OE_Abort, OE_Replace etc. */
+  int nExtra,                     /* Bytes of extra space to allocate */
+  char **pzExtra                  /* OUT: Pointer to extra space */
+){
+  sqlite4 *db = pParse->db;       /* Database handle */
+  Index *pIndex;                  /* Return value */
+  char *zExtra = 0;               /* nExtra bytes of extra space allocated */
+  int nName;                      /* Length of zName in bytes */
+
+  /* Allocate the index structure. */
+  nName = sqlite4Strlen30(zName);
+  pIndex = sqlite4DbMallocZero(db, 
+      ROUND8(sizeof(Index)) +              /* Index structure  */
+      ROUND8(sizeof(tRowcnt)*(nCol+1)) +   /* Index.aiRowEst   */
+      sizeof(char *)*nCol +                /* Index.azColl     */
+      sizeof(int)*nCol +                   /* Index.aiColumn   */
+      sizeof(u8)*nCol +                    /* Index.aSortOrder */
+      nName + 1 +                          /* Index.zName      */
+      nExtra                               /* Collation sequence names */
+  );
+  assert( pIndex || db->mallocFailed );
+
+  if( pIndex ){
+    zExtra = (char*)pIndex;
+    pIndex->aiRowEst = (tRowcnt*)&zExtra[ROUND8(sizeof(Index))];
+    pIndex->azColl = (char**)
+      ((char*)pIndex->aiRowEst + ROUND8(sizeof(tRowcnt)*nCol+1));
+    assert( EIGHT_BYTE_ALIGNMENT(pIndex->aiRowEst) );
+    assert( EIGHT_BYTE_ALIGNMENT(pIndex->azColl) );
+    pIndex->aiColumn = (int *)(&pIndex->azColl[nCol]);
+    pIndex->aSortOrder = (u8 *)(&pIndex->aiColumn[nCol]);
+    pIndex->zName = (char *)(&pIndex->aSortOrder[nCol]);
+    zExtra = (char *)(&pIndex->zName[nName+1]);
+    memcpy(pIndex->zName, zName, nName+1);
+    pIndex->pTable = pTab;
+    pIndex->nColumn = nCol;
+    pIndex->onError = (u8)onError;
+    pIndex->pSchema = pTab->pSchema;
+
+    if( db->init.busy ){
+      Hash *pIdxHash = &pIndex->pSchema->idxHash;
+      Index *p;
+
+      p = sqlite4HashInsert(pIdxHash, pIndex->zName, nName, pIndex);
+      if( p ){
+        assert( p==pIndex );
+        db->mallocFailed = 1;
+        sqlite4DbFree(db, pIndex);
+        pIndex = 0;
+      }
+    }
+  }
+
+  *pzExtra = zExtra;
+  return pIndex;
+}
+
+
+/*
+** Allocate and populate an Index structure representing an implicit 
+** primary key. In implicit primary key behaves similarly to the built-in
+** INTEGER PRIMARY KEY columns in SQLite 3.
+*/
+static void addImplicitPrimaryKey(
+  Parse *pParse,                  /* Parse context */
+  Table *pTab,                    /* Table to add implicit PRIMARY KEY to */
+  int iDb
+){
+  Index *pIndex;                  /* New index */
+  char *zExtra;
+
+  assert( !pTab->pIndex || pTab->pIndex->eIndexType!=SQLITE_INDEX_PRIMARYKEY );
+  assert( sqlite4Strlen30("binary")==6 );
+  pIndex = newIndex(pParse, pTab, pTab->zName, 1, OE_Abort, 1+6, &zExtra);
+  if( pIndex ){
+    sqlite4 *db = pParse->db;
+
+    pIndex->aiColumn[0] = -1;
+    pIndex->azColl[0] = zExtra;
+    memcpy(zExtra, "binary", 7);
+    pIndex->eIndexType = SQLITE_INDEX_PRIMARYKEY;
+    pIndex->pNext = pTab->pIndex;
+    pTab->pIndex = pIndex;
+    sqlite4DefaultRowEst(pIndex);
+    pTab->tabFlags |= TF_HasPrimaryKey;
+
+    if( db->init.busy ){
+      pIndex->tnum = db->init.newTnum;
+    }else{
+      pIndex->tnum = firstAvailableTableNumber(db, iDb, pTab);
+    }
+  }
+}
+
 /*
 ** This routine is called to report the final ")" that terminates
 ** a CREATE TABLE statement.
@@ -1449,6 +1565,8 @@ void sqlite4EndTable(
   Table *p;
   sqlite4 *db = pParse->db;
   int iDb;
+  int iPkRoot = 0;                /* Root page of primary key index */
+  Index *pPk;                     /* PRIMARY KEY index for table p */
 
   if( (pEnd==0 && pSelect==0) || db->mallocFailed ){
     return;
@@ -1457,8 +1575,18 @@ void sqlite4EndTable(
   if( p==0 ) return;
 
   assert( !db->init.busy || !pSelect );
-
   iDb = sqlite4SchemaToIndex(db, p->pSchema);
+
+  if( 0==(p->tabFlags & TF_HasPrimaryKey) ){
+    /* If no explicit PRIMARY KEY has been created, add an implicit 
+    ** primary key here.  An implicit primary key works the way "rowid" did
+    ** in SQLite 3.  */
+    addImplicitPrimaryKey(pParse, p, iDb);
+  }
+  pPk = sqlite4FindPrimaryKey(p, 0);
+  assert( pPk || pParse->nErr || db->mallocFailed );
+  if( pPk ) iPkRoot = pPk->tnum;
+
 
 #ifndef SQLITE_OMIT_CHECK
   /* Resolve names in all CHECK constraint expressions.
@@ -1481,16 +1609,6 @@ void sqlite4EndTable(
     }
   }
 #endif /* !defined(SQLITE_OMIT_CHECK) */
-
-  /* If the db->init.busy is 1 it means we are reading the SQL off the
-  ** "sqlite_master" or "sqlite_temp_master" table on the disk.
-  ** So do not write to the disk again.  Extract the root page number
-  ** for the table from the db->init.newTnum field.  (The page number
-  ** should have been put there by the sqliteOpenCb routine.)
-  */
-  if( db->init.busy ){
-    p->tnum = db->init.newTnum;
-  }
 
   /* If not initializing, then create a record for the new table
   ** in the SQLITE_MASTER table of the database.
@@ -1543,8 +1661,7 @@ void sqlite4EndTable(
       Table *pSelTab;
 
       assert(pParse->nTab==1);
-      sqlite4VdbeAddOp3(v, OP_OpenWrite, 1, pParse->regRoot, iDb);
-      sqlite4VdbeChangeP5(v, 1);
+      sqlite4VdbeAddOp3(v, OP_OpenWrite, 1, iPkRoot, iDb);
       pParse->nTab = 2;
       sqlite4SelectDestInit(&dest, SRT_Table, 1);
       sqlite4Select(pParse, pSelect, &dest);
@@ -1577,13 +1694,13 @@ void sqlite4EndTable(
     */
     sqlite4NestedParse(pParse,
       "UPDATE %Q.%s "
-         "SET type='%s', name=%Q, tbl_name=%Q, rootpage=#%d, sql=%Q "
+         "SET type='%s', name=%Q, tbl_name=%Q, rootpage=%d, sql=%Q "
        "WHERE rowid=#%d",
       db->aDb[iDb].zName, SCHEMA_TABLE(iDb),
       zType,
       p->zName,
       p->zName,
-      pParse->regRoot,
+      iPkRoot,
       zStmt,
       pParse->regRowid
     );
@@ -1857,7 +1974,6 @@ static void destroyRootPage(Parse *pParse, int iTable, int iDb){
 static void destroyTable(Parse *pParse, Table *pTab){
   Index *pIdx;
   int iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
-  destroyRootPage(pParse, pTab->tnum, iDb);
   for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
     destroyRootPage(pParse, pIdx->tnum, iDb);
   }
@@ -2256,7 +2372,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIndex){
 
   /* Open the table. Loop through all rows of the table, inserting index
   ** records into the sorter. */
-  sqlite4OpenTable(pParse, iTab, iDb, pTab, OP_OpenRead);
+  sqlite4OpenPrimaryKey(pParse, iTab, iDb, pTab, OP_OpenRead);
   addr1 = sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
   regRecord = sqlite4GetTempRange(pParse,2);
 
@@ -2339,13 +2455,13 @@ Index *sqlite4CreateIndex(
   Token *pStart,     /* The CREATE token that begins this statement */
   Token *pEnd,       /* The ")" that closes the CREATE INDEX statement */
   int sortOrder,     /* Sort order of primary key when pList==NULL */
-  int ifNotExist     /* Omit error if index already exists */
+  int ifNotExist,    /* Omit error if index already exists */
+  int bPrimaryKey    /* True to create the tables primary key */
 ){
   Index *pRet = 0;     /* Pointer to return */
   Table *pTab = 0;     /* Table to be indexed */
   Index *pIndex = 0;   /* The index to be created */
   char *zName = 0;     /* Name of the index */
-  int nName;           /* Number of characters in zName */
   int i, j;
   Token nullId;        /* Fake token for an empty ID list */
   DbFixer sFix;        /* For assigning database names to pTable */
@@ -2355,7 +2471,6 @@ Index *sqlite4CreateIndex(
   int iDb;             /* Index of the database that is being written */
   Token *pName = 0;    /* Unqualified name of the index to create */
   struct ExprList_item *pListItem; /* For looping over pList */
-  int nCol;
   int nExtra = 0;
   char *zExtra;
 
@@ -2377,6 +2492,7 @@ Index *sqlite4CreateIndex(
     ** to search for the table. 'Fix' the table name to this db
     ** before looking up the table.
     */
+    assert( !bPrimaryKey );
     assert( pName1 && pName2 );
     iDb = sqlite4TwoPartName(pParse, pName1, pName2, &pName);
     if( iDb<0 ) goto exit_create_index;
@@ -2417,19 +2533,27 @@ Index *sqlite4CreateIndex(
 
   assert( pTab!=0 );
   assert( pParse->nErr==0 );
+
+  /* TODO: We will need to reinstate this block when sqlite_master is 
+  ** modified to use an implicit primary key.  */
+#if 0
   if( sqlite4StrNICmp(pTab->zName, "sqlite_", 7)==0 
        && memcmp(&pTab->zName[7],"altertab_",9)!=0 ){
     sqlite4ErrorMsg(pParse, "table %s may not be indexed", pTab->zName);
     goto exit_create_index;
   }
+#endif
+
 #ifndef SQLITE_OMIT_VIEW
   if( pTab->pSelect ){
+    assert( !bPrimaryKey );
     sqlite4ErrorMsg(pParse, "views may not be indexed");
     goto exit_create_index;
   }
 #endif
 #ifndef SQLITE_OMIT_VIRTUALTABLE
   if( IsVirtual(pTab) ){
+    assert( !bPrimaryKey );
     sqlite4ErrorMsg(pParse, "virtual tables may not be indexed");
     goto exit_create_index;
   }
@@ -2449,6 +2573,7 @@ Index *sqlite4CreateIndex(
   ** own name.
   */
   if( pName ){
+    assert( !bPrimaryKey );
     zName = sqlite4NameFromToken(db, pName);
     if( zName==0 ) goto exit_create_index;
     assert( pName->z!=0 );
@@ -2470,20 +2595,22 @@ Index *sqlite4CreateIndex(
       }
       goto exit_create_index;
     }
-  }else{
+  }else if( !bPrimaryKey ){
     int n;
     Index *pLoop;
     for(pLoop=pTab->pIndex, n=1; pLoop; pLoop=pLoop->pNext, n++){}
     zName = sqlite4MPrintf(db, "sqlite_autoindex_%s_%d", pTab->zName, n);
-    if( zName==0 ){
-      goto exit_create_index;
-    }
+  }else{
+    zName = sqlite4MPrintf(db, "%s", pTab->zName);
+  }
+  if( zName==0 ){
+    goto exit_create_index;
   }
 
   /* Check for authorization to create an index.
   */
 #ifndef SQLITE_OMIT_AUTHORIZATION
-  {
+  if( bPrimaryKey==0 ){
     const char *zDb = pDb->zName;
     if( sqlite4AuthCheck(pParse, SQLITE_INSERT, SCHEMA_TABLE(iDb), 0, zDb) ){
       goto exit_create_index;
@@ -2496,9 +2623,12 @@ Index *sqlite4CreateIndex(
   }
 #endif
 
-  /* If pList==0, it means this routine was called to make a primary
-  ** key out of the last column added to the table under construction.
-  ** So create a fake list to simulate this.
+  /* If pList==0, it means this routine was called as a result of a PRIMARY
+  ** KEY or UNIQUE constraint attached to the last column added to the table 
+  ** under construction. So create a fake list to simulate this.
+  **
+  ** TODO: This 'fake list' could be created by the caller to reduce the
+  ** number of parameters passed to this function.
   */
   if( pList==0 ){
     nullId.z = pTab->aCol[pTab->nCol-1].zName;
@@ -2524,39 +2654,18 @@ Index *sqlite4CreateIndex(
     }
   }
 
-  /* 
-  ** Allocate the index structure. 
-  */
-  nName = sqlite4Strlen30(zName);
-  nCol = pList->nExpr;
-  pIndex = sqlite4DbMallocZero(db, 
-      ROUND8(sizeof(Index)) +              /* Index structure  */
-      ROUND8(sizeof(tRowcnt)*(nCol+1)) +   /* Index.aiRowEst   */
-      sizeof(char *)*nCol +                /* Index.azColl     */
-      sizeof(int)*nCol +                   /* Index.aiColumn   */
-      sizeof(u8)*nCol +                    /* Index.aSortOrder */
-      nName + 1 +                          /* Index.zName      */
-      nExtra                               /* Collation sequence names */
-  );
-  if( db->mallocFailed ){
-    goto exit_create_index;
+  /* Allocate the new Index structure. */
+  pIndex = newIndex(pParse, pTab, zName, pList->nExpr, onError, nExtra,&zExtra);
+  if( !pIndex ) goto exit_create_index;
+
+  assert( pIndex->eIndexType==SQLITE_INDEX_USER );
+  if( pName==0 ){
+    if( bPrimaryKey ){
+      pIndex->eIndexType = SQLITE_INDEX_PRIMARYKEY;
+    }else{
+      pIndex->eIndexType = SQLITE_INDEX_UNIQUE;
+    }
   }
-  zExtra = (char*)pIndex;
-  pIndex->aiRowEst = (tRowcnt*)&zExtra[ROUND8(sizeof(Index))];
-  pIndex->azColl = (char**)
-     ((char*)pIndex->aiRowEst + ROUND8(sizeof(tRowcnt)*nCol+1));
-  assert( EIGHT_BYTE_ALIGNMENT(pIndex->aiRowEst) );
-  assert( EIGHT_BYTE_ALIGNMENT(pIndex->azColl) );
-  pIndex->aiColumn = (int *)(&pIndex->azColl[nCol]);
-  pIndex->aSortOrder = (u8 *)(&pIndex->aiColumn[nCol]);
-  pIndex->zName = (char *)(&pIndex->aSortOrder[nCol]);
-  zExtra = (char *)(&pIndex->zName[nName+1]);
-  memcpy(pIndex->zName, zName, nName+1);
-  pIndex->pTable = pTab;
-  pIndex->nColumn = pList->nExpr;
-  pIndex->onError = (u8)onError;
-  pIndex->autoIndex = (u8)(pName==0);
-  pIndex->pSchema = db->aDb[iDb].pSchema;
 
   /* Check to see if we should honor DESC requests on index columns
   */
@@ -2647,7 +2756,7 @@ Index *sqlite4CreateIndex(
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
       int k;
       assert( pIdx->onError!=OE_None );
-      assert( pIdx->autoIndex );
+      assert( pIdx->eIndexType!=SQLITE_INDEX_USER );
       assert( pIndex->onError!=OE_None );
 
       if( pIdx->nColumn!=pIndex->nColumn ) continue;
@@ -2685,17 +2794,8 @@ Index *sqlite4CreateIndex(
   ** in-memory database structures. 
   */
   if( db->init.busy ){
-    Index *p;
-    p = sqlite4HashInsert(&pIndex->pSchema->idxHash, 
-                          pIndex->zName, sqlite4Strlen30(pIndex->zName),
-                          pIndex);
-    if( p ){
-      assert( p==pIndex );  /* Malloc must have failed */
-      db->mallocFailed = 1;
-      goto exit_create_index;
-    }
     db->flags |= SQLITE_InternChanges;
-    if( pTblName!=0 ){
+    if( pTblName!=0 || bPrimaryKey ){
       pIndex->tnum = db->init.newTnum;
     }
   }
@@ -2715,56 +2815,58 @@ Index *sqlite4CreateIndex(
   ** has just been created, it contains no data and the index initialization
   ** step can be skipped.
   */
-  else{ /* if( db->init.busy==0 ) */
-    Vdbe *v;
-    char *zStmt;
+  else{
+    pIndex->tnum = firstAvailableTableNumber(db, iDb, pTab);
+    if( bPrimaryKey==0 ){
+      Vdbe *v;
+      char *zStmt;
 
-    v = sqlite4GetVdbe(pParse);
-    if( v==0 ) goto exit_create_index;
+      v = sqlite4GetVdbe(pParse);
+      if( v==0 ) goto exit_create_index;
 
+      /* Create the rootpage for the index
+      */
+      sqlite4BeginWriteOperation(pParse, 1, iDb);
+      pIndex->tnum = firstAvailableTableNumber(db, iDb, pTab);
 
-    /* Create the rootpage for the index
-    */
-    sqlite4BeginWriteOperation(pParse, 1, iDb);
-    pIndex->tnum = firstAvailableTableNumber(db, iDb);
+      /* Gather the complete text of the CREATE INDEX statement into
+       ** the zStmt variable
+       */
+      if( pStart ){
+        assert( pEnd!=0 );
+        /* A named index with an explicit CREATE INDEX statement */
+        zStmt = sqlite4MPrintf(db, "CREATE%s INDEX %.*s",
+            onError==OE_None ? "" : " UNIQUE",
+            (int)(pEnd->z - pName->z) + 1,
+            pName->z);
+      }else{
+        /* An automatic index created by a PRIMARY KEY or UNIQUE constraint */
+        /* zStmt = sqlite4MPrintf(""); */
+        zStmt = 0;
+      }
 
-    /* Gather the complete text of the CREATE INDEX statement into
-    ** the zStmt variable
-    */
-    if( pStart ){
-      assert( pEnd!=0 );
-      /* A named index with an explicit CREATE INDEX statement */
-      zStmt = sqlite4MPrintf(db, "CREATE%s INDEX %.*s",
-        onError==OE_None ? "" : " UNIQUE",
-        (int)(pEnd->z - pName->z) + 1,
-        pName->z);
-    }else{
-      /* An automatic index created by a PRIMARY KEY or UNIQUE constraint */
-      /* zStmt = sqlite4MPrintf(""); */
-      zStmt = 0;
-    }
+      /* Add an entry in sqlite_master for this index
+      */
+      sqlite4NestedParse(pParse, 
+          "INSERT INTO %Q.%s VALUES('index',%Q,%Q,%d,%Q);",
+          db->aDb[iDb].zName, SCHEMA_TABLE(iDb),
+          pIndex->zName,
+          pTab->zName,
+          pIndex->tnum,
+          zStmt
+          );
+      sqlite4DbFree(db, zStmt);
 
-    /* Add an entry in sqlite_master for this index
-    */
-    sqlite4NestedParse(pParse, 
-        "INSERT INTO %Q.%s VALUES('index',%Q,%Q,%d,%Q);",
-        db->aDb[iDb].zName, SCHEMA_TABLE(iDb),
-        pIndex->zName,
-        pTab->zName,
-        pIndex->tnum,
-        zStmt
-    );
-    sqlite4DbFree(db, zStmt);
-
-    /* Fill the index with data and reparse the schema. Code an OP_Expire
-    ** to invalidate all pre-compiled statements.
-    */
-    if( pTblName ){
-      sqlite4RefillIndex(pParse, pIndex);
-      sqlite4ChangeCookie(pParse, iDb);
-      sqlite4VdbeAddParseSchemaOp(v, iDb,
-         sqlite4MPrintf(db, "name='%q' AND type='index'", pIndex->zName));
-      sqlite4VdbeAddOp1(v, OP_Expire, 0);
+      /* Fill the index with data and reparse the schema. Code an OP_Expire
+       ** to invalidate all pre-compiled statements.
+       */
+      if( pTblName ){
+        sqlite4RefillIndex(pParse, pIndex);
+        sqlite4ChangeCookie(pParse, iDb);
+        sqlite4VdbeAddParseSchemaOp(v, iDb,
+            sqlite4MPrintf(db, "name='%q' AND type='index'", pIndex->zName));
+        sqlite4VdbeAddOp1(v, OP_Expire, 0);
+      }
     }
   }
 
@@ -2813,7 +2915,7 @@ exit_create_index:
 ** first column of the index.  aiRowEst[2] is an estimate of the number
 ** of rows that match any particular combiniation of the first 2 columns
 ** of the index.  And so forth.  It must always be the case that
-*
+**
 **           aiRowEst[N]<=aiRowEst[N-1]
 **           aiRowEst[N]>=1
 **
@@ -2866,7 +2968,7 @@ void sqlite4DropIndex(Parse *pParse, SrcList *pName, int ifExists){
     pParse->checkSchema = 1;
     goto exit_drop_index;
   }
-  if( pIndex->autoIndex ){
+  if( pIndex->eIndexType!=SQLITE_INDEX_USER ){
     sqlite4ErrorMsg(pParse, "index associated with UNIQUE "
       "or PRIMARY KEY constraint cannot be dropped", 0);
     goto exit_drop_index;
@@ -3655,23 +3757,48 @@ void sqlite4Reindex(Parse *pParse, Token *pName1, Token *pName2){
 ** the error.
 */
 KeyInfo *sqlite4IndexKeyinfo(Parse *pParse, Index *pIdx){
+  Index *pPk;                     /* Primary key index on same table */
   int i;
-  int nCol = pIdx->nColumn;
-  int nBytes = sizeof(KeyInfo) + (nCol-1)*sizeof(CollSeq*) + nCol;
+  int nCol;
+  int nBytes;
   sqlite4 *db = pParse->db;
-  KeyInfo *pKey = (KeyInfo *)sqlite4DbMallocZero(db, nBytes);
+  KeyInfo *pKey;
 
+  if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+    pPk = 0;
+  }else{
+    pPk = sqlite4FindPrimaryKey(pIdx->pTable, 0);
+  }
+  nCol = pIdx->nColumn + (pPk ? pPk->nColumn : 0);
+
+  nBytes = sizeof(KeyInfo) + (nCol-1)*sizeof(CollSeq*) + nCol;
+  pKey = (KeyInfo *)sqlite4DbMallocZero(db, nBytes);
   if( pKey ){
     pKey->db = pParse->db;
     pKey->aSortOrder = (u8 *)&(pKey->aColl[nCol]);
     assert( &pKey->aSortOrder[nCol]==&(((u8 *)pKey)[nBytes]) );
-    for(i=0; i<nCol; i++){
+
+    for(i=0; i<pIdx->nColumn; i++){
       char *zColl = pIdx->azColl[i];
       assert( zColl );
       pKey->aColl[i] = sqlite4LocateCollSeq(pParse, zColl);
       pKey->aSortOrder[i] = pIdx->aSortOrder[i];
     }
+    if( pPk ){
+      for(i=0; i<pPk->nColumn; i++){
+        char *zColl = pIdx->azColl[i];
+        assert( zColl );
+        pKey->aColl[i+pIdx->nColumn] = sqlite4LocateCollSeq(pParse, zColl);
+        pKey->aSortOrder[i+pIdx->nColumn] = pPk->aSortOrder[i];
+      }
+    }
+
     pKey->nField = (u16)nCol;
+    if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+      pKey->nData = pIdx->pTable->nCol;
+    }else{
+      pKey->nPK = pPk->nColumn;
+    }
   }
 
   if( pParse->nErr ){

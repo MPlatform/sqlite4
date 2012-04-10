@@ -654,6 +654,7 @@ typedef struct Index Index;
 typedef struct IndexSample IndexSample;
 typedef struct KeyClass KeyClass;
 typedef struct KeyInfo KeyInfo;
+typedef struct KeySet KeySet;
 typedef struct Lookaside Lookaside;
 typedef struct LookasideSlot LookasideSlot;
 typedef struct Module Module;
@@ -677,6 +678,7 @@ typedef struct Walker Walker;
 typedef struct WherePlan WherePlan;
 typedef struct WhereInfo WhereInfo;
 typedef struct WhereLevel WhereLevel;
+
 
 /*
 ** Defer sourcing vdbe.h until after the "u8" and 
@@ -1297,7 +1299,9 @@ struct Table {
   int nCol;            /* Number of columns in this table */
   Column *aCol;        /* Information about each column */
   Index *pIndex;       /* List of SQL indexes on this table. */
+#if 0
   int tnum;            /* Root BTree node for this table (see note above) */
+#endif
   tRowcnt nRowEst;     /* Estimated rows in table - from sqlite_stat1 table */
   Select *pSelect;     /* NULL for tables.  Points to definition if a view. */
   u16 nRef;            /* Number of pointers to this Table */
@@ -1432,6 +1436,7 @@ struct KeyInfo {
   u8 enc;             /* Text encoding - one of the SQLITE_UTF* values */
   u16 nField;         /* Total number of entries in aColl[] */
   u16 nPK;            /* Number of primary key entries at the end of aColl[] */
+  u16 nData;          /* Number of columns of data in KV entry value */
   u8 *aSortOrder;     /* Sort order for each column.  May be NULL */
   CollSeq *aColl[1];  /* Collating sequence for each term of the key */
 };
@@ -1499,7 +1504,7 @@ struct Index {
   Table *pTable;   /* The SQL table being indexed */
   int tnum;        /* Page containing root of this index in database file */
   u8 onError;      /* OE_Abort, OE_Ignore, OE_Replace, or OE_None */
-  u8 autoIndex;    /* True if is automatically created (ex: by UNIQUE) */
+  u8 eIndexType;   /* SQLITE_INDEX_USER, UNIQUE or PRIMARYKEY */
   u8 bUnordered;   /* Use this index for == or IN queries only */
   char *zColAff;   /* String defining the affinity of each column */
   Index *pNext;    /* The next index associated with the same table */
@@ -1512,6 +1517,11 @@ struct Index {
   IndexSample *aSample;    /* Samples of the left-most key */
 #endif
 };
+
+/* Index.eIndexType must be set to one of the following. */
+#define SQLITE_INDEX_USER       0 /* Index created by CREATE INDEX statement */
+#define SQLITE_INDEX_UNIQUE     1 /* Index created by UNIQUE constraint */
+#define SQLITE_INDEX_PRIMARYKEY 2 /* Index is the tables PRIMARY KEY */
 
 /*
 ** Each sample stored in the sqlite_stat3 table is represented in memory 
@@ -2248,7 +2258,9 @@ struct Parse {
   TableLock *aTableLock; /* Required table locks for shared-cache mode */
 #endif
   int regRowid;        /* Register holding rowid of CREATE TABLE entry */
+#if 0
   int regRoot;         /* Register holding root page number for new objects */
+#endif
   AutoincInfo *pAinc;  /* Information about AUTOINCREMENT counters */
   int nMaxArg;         /* Max args passed to user function by sub-program */
 
@@ -2754,6 +2766,12 @@ void sqlite4RowSetInsert(RowSet*, i64);
 int sqlite4RowSetTest(RowSet*, u8 iBatch, i64);
 int sqlite4RowSetNext(RowSet*, i64*);
 
+KeySet *sqlite4KeySetInit(sqlite4*);
+void sqlite4KeySetInsert(KeySet *, const char *, int);
+const char *sqlite4KeySetRead(KeySet *, int *);
+int sqlite4KeySetNext(KeySet *);
+void sqlite4KeySetFree(KeySet *);
+
 void sqlite4CreateView(Parse*,Token*,Token*,Token*,Select*,int,int);
 
 #if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_VIRTUALTABLE)
@@ -2787,7 +2805,7 @@ void sqlite4SrcListAssignCursors(Parse*, SrcList*);
 void sqlite4IdListDelete(sqlite4*, IdList*);
 void sqlite4SrcListDelete(sqlite4*, SrcList*);
 Index *sqlite4CreateIndex(Parse*,Token*,Token*,SrcList*,ExprList*,int,Token*,
-                        Token*, int, int);
+                        Token*, int, int, int);
 void sqlite4DropIndex(Parse*, SrcList*, int);
 int sqlite4Select(Parse*, Select*, SelectDest*);
 Select *sqlite4SelectNew(Parse*,ExprList*,SrcList*,Expr*,ExprList*,
@@ -3083,6 +3101,12 @@ char *sqlite4StrAccumFinish(StrAccum*);
 void sqlite4StrAccumReset(StrAccum*);
 void sqlite4SelectDestInit(SelectDest*,int,int);
 Expr *sqlite4CreateColumnExpr(sqlite4 *, SrcList *, int, int);
+
+void sqlite4OpenPrimaryKey(Parse*, int iCur, int iDb, Table*, int);
+void sqlite4OpenIndex(Parse*, int iCur, int iDb, Index*, int);
+int sqlite4OpenAllIndexes(Parse *, Table *, int, int);
+void sqlite4CloseAllIndexes(Parse *, Table *, int);
+Index *sqlite4FindPrimaryKey(Table *, int *);
 
 /*
 ** The interface to the LEMON-generated parser

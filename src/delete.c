@@ -227,7 +227,7 @@ void sqlite4DeleteFrom(
   Vdbe *v;               /* The virtual database engine */
   Table *pTab;           /* The table from which records will be deleted */
   const char *zDb;       /* Name of database holding pTab */
-  int end, addr = 0;     /* A couple addresses of generated code */
+  int addr = 0;     /* A couple addresses of generated code */
   int i;                 /* Loop counter */
   WhereInfo *pWInfo;     /* Information about the WHERE clause */
   Index *pIdx;           /* For looping over indices of the table */
@@ -254,14 +254,12 @@ void sqlite4DeleteFrom(
   /* Locate the table which we want to delete.  This table has to be
   ** put in an SrcList structure because some of the subroutines we
   ** will be calling are designed to work with multiple tables and expect
-  ** an SrcList* parameter instead of just a Table* parameter.
-  */
+  ** an SrcList* parameter instead of just a Table* parameter.  */
   pTab = sqlite4SrcListLookup(pParse, pTabList);
   if( pTab==0 )  goto delete_from_cleanup;
 
   /* Figure out if we have any triggers and if the table being
-  ** deleted from is a view
-  */
+  ** deleted from is a view.  */
 #ifndef SQLITE_OMIT_TRIGGER
   pTrigger = sqlite4TriggersExist(pParse, pTab, TK_DELETE, 0, 0);
   isView = pTab->pSelect!=0;
@@ -274,15 +272,20 @@ void sqlite4DeleteFrom(
 # define isView 0
 #endif
 
-  /* If pTab is really a view, make sure it has been initialized.
-  */
+  /* If pTab is really a view, make sure it has been initialized. */
   if( sqlite4ViewGetColumnNames(pParse, pTab) ){
     goto delete_from_cleanup;
   }
 
+  /* Check the table is not read-only (e.g. sqlite_master or sqlite_stat).
+  ** Also, check that if pTab is really an SQL view, one or more INSTEAD 
+  ** OF DELETE triggers have been configured.  */
   if( sqlite4IsReadOnly(pParse, pTab, (pTrigger?1:0)) ){
     goto delete_from_cleanup;
   }
+  assert(!isView || pTrigger);
+
+  /* Invoke the authorization callback */
   iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
   assert( iDb<db->nDb );
   zDb = db->aDb[iDb].zName;
@@ -291,10 +294,8 @@ void sqlite4DeleteFrom(
   if( rcauth==SQLITE_DENY ){
     goto delete_from_cleanup;
   }
-  assert(!isView || pTrigger);
 
-  /* Assign  cursor number to the table and all its indices.
-  */
+  /* Assign  cursor number to the table and all its indices. */
   assert( pTabList->nSrc==1 );
   iCur = pTabList->a[0].iCursor = pParse->nTab++;
   for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
@@ -351,8 +352,6 @@ void sqlite4DeleteFrom(
    && 0==sqlite4FkRequired(pParse, pTab, 0, 0)
   ){
     assert( !isView );
-    sqlite4VdbeAddOp4(v, OP_Clear, pTab->tnum, iDb, memCnt,
-                      pTab->zName, P4_STATIC);
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
       assert( pIdx->pSchema==pTab->pSchema );
       sqlite4VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
@@ -363,38 +362,36 @@ void sqlite4DeleteFrom(
   ** the table and pick which records to delete.
   */
   {
-    int iRowSet = ++pParse->nMem;   /* Register for rowset of rows to delete */
-    int iRowid = ++pParse->nMem;    /* Used for storing rowid values. */
-    int regRowid;                   /* Actual register containing rowids */
+    int regSet = ++pParse->nMem;  /* Register for rowset of rows to delete */
+    int regKey = ++pParse->nMem;  /* Used for storing row keys */
+    int addrTop;                  /* Instruction (KeySetRead) at top of loop */
 
-    /* Collect rowids of every row to be deleted.
-    */
-    sqlite4VdbeAddOp2(v, OP_Null, 0, iRowSet);
+    /* Query the table for all rows that match the WHERE clause. Store the
+    ** PRIMARY KEY for each matching row in the KeySet object in register
+    ** regSet. After the scan is complete, the VM will loop through the set 
+    ** of keys in the KeySet and delete each row. Rows must be deleted after 
+    ** the scan is complete because deleting an item can change the scan 
+    ** order.  */
+    sqlite4VdbeAddOp2(v, OP_Null, 0, regSet);
+    VdbeComment((v, "initialize KeySet"));
     pWInfo = sqlite4WhereBegin(
         pParse, pTabList, pWhere, 0, 0, WHERE_DUPLICATES_OK
     );
     if( pWInfo==0 ) goto delete_from_cleanup;
-    regRowid = sqlite4ExprCodeGetColumn(pParse, pTab, -1, iCur, iRowid);
-    sqlite4VdbeAddOp2(v, OP_RowSetAdd, iRowSet, regRowid);
+    sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regKey);
+    sqlite4VdbeAddOp2(v, OP_KeySetAdd, regSet, regKey);
     if( db->flags & SQLITE_CountRows ){
       sqlite4VdbeAddOp2(v, OP_AddImm, memCnt, 1);
     }
     sqlite4WhereEnd(pWInfo);
 
-    /* Delete every item whose key was written to the list during the
-    ** database scan.  We have to delete items after the scan is complete
-    ** because deleting an item can change the scan order.  */
-    end = sqlite4VdbeMakeLabel(v);
-
-    /* Unless this is a view, open cursors for the table we are 
-    ** deleting from and all its indices. If this is a view, then the
-    ** only effect this statement has is to fire the INSTEAD OF 
-    ** triggers.  */
+    /* Unless this is a view, open cursors for all indexes on the table
+    ** from which we are deleting.  */
     if( !isView ){
-      sqlite4OpenTableAndIndices(pParse, pTab, iCur, OP_OpenWrite);
+      sqlite4OpenAllIndexes(pParse, pTab, iCur, OP_OpenWrite);
     }
 
-    addr = sqlite4VdbeAddOp3(v, OP_RowSetRead, iRowSet, end, iRowid);
+    addrTop = sqlite4VdbeAddOp3(v, OP_KeySetRead, regSet, 0, regKey);
 
     /* Delete the row */
 #ifndef SQLITE_OMIT_VIRTUALTABLE
@@ -408,20 +405,17 @@ void sqlite4DeleteFrom(
 #endif
     {
       int count = (pParse->nested==0);    /* True to count changes */
-      sqlite4GenerateRowDelete(pParse, pTab, iCur, iRowid, count, pTrigger, OE_Default);
+      sqlite4GenerateRowDelete(
+          pParse, pTab, iCur, regKey, count, pTrigger, OE_Default
+      );
     }
 
     /* End of the delete loop */
-    sqlite4VdbeAddOp2(v, OP_Goto, 0, addr);
-    sqlite4VdbeResolveLabel(v, end);
+    sqlite4VdbeAddOp2(v, OP_Goto, 0, addrTop);
+    sqlite4VdbeJumpHere(v, addrTop);
 
-    /* Close the cursors open on the table and its indexes. */
-    if( !isView && !IsVirtual(pTab) ){
-      for(i=1, pIdx=pTab->pIndex; pIdx; i++, pIdx=pIdx->pNext){
-        sqlite4VdbeAddOp2(v, OP_Close, iCur + i, pIdx->tnum);
-      }
-      sqlite4VdbeAddOp1(v, OP_Close, iCur);
-    }
+    /* Close all open cursors */
+    sqlite4CloseAllIndexes(pParse, pTab, iCur);
   }
 
   /* Update the sqlite_sequence table by storing the content of the
@@ -478,29 +472,33 @@ delete_from_cleanup:
 ** index entries that point to that record.
 */
 void sqlite4GenerateRowDelete(
-  Parse *pParse,     /* Parsing context */
-  Table *pTab,       /* Table containing the row to be deleted */
-  int iCur,          /* Cursor number for the table */
-  int iRowid,        /* Memory cell that contains the rowid to delete */
-  int count,         /* If non-zero, increment the row change counter */
-  Trigger *pTrigger, /* List of triggers to (potentially) fire */
-  int onconf         /* Default ON CONFLICT policy for triggers */
+  Parse *pParse,                  /* Parsing context */
+  Table *pTab,                    /* Table containing the row to be deleted */
+  int baseCur,                    /* Base cursor number */
+  int regKey,                     /* Register containing PK of row to delete */
+  int bCount,                     /* True to increment the row change counter */
+  Trigger *pTrigger,              /* List of triggers to (potentially) fire */
+  int onconf                      /* Default ON CONFLICT policy for triggers */
 ){
   Vdbe *v = pParse->pVdbe;        /* Vdbe */
   int iOld = 0;                   /* First register in OLD.* array */
   int iLabel;                     /* Label resolved to end of generated code */
+  int iPk;
 
   /* Vdbe is guaranteed to have been allocated by this stage. */
   assert( v );
+
+  sqlite4FindPrimaryKey(pTab, &iPk);
 
   /* Seek cursor iCur to the row to delete. If this row no longer exists 
   ** (this can happen if a trigger program has already deleted it), do
   ** not attempt to delete it or fire any DELETE triggers.  */
   iLabel = sqlite4VdbeMakeLabel(v);
-  sqlite4VdbeAddOp3(v, OP_NotExists, iCur, iLabel, iRowid);
+  sqlite4VdbeAddOp4(v, OP_NotFound, baseCur+iPk, iLabel, regKey, 0, P4_INT32);
  
   /* If there are any triggers to fire, allocate a range of registers to
   ** use for the old.* references in the triggers.  */
+#if 0
   if( sqlite4FkRequired(pParse, pTab, 0, 0) || pTrigger ){
     u32 mask;                     /* Mask of OLD.* columns in use */
     int iCol;                     /* Iterator used while populating OLD.* */
@@ -539,16 +537,18 @@ void sqlite4GenerateRowDelete(
     ** are not violated by deleting this row.  */
     sqlite4FkCheck(pParse, pTab, iOld, 0);
   }
+#endif
 
   /* Delete the index and table entries. Skip this step if pTab is really
   ** a view (in which case the only effect of the DELETE statement is to
   ** fire the INSTEAD OF triggers).  */ 
   if( pTab->pSelect==0 ){
-    sqlite4GenerateRowIndexDelete(pParse, pTab, iCur, 0);
-    sqlite4VdbeAddOp2(v, OP_Delete, iCur, (count?OPFLAG_NCHANGE:0));
+    sqlite4GenerateRowIndexDelete(pParse, pTab, baseCur, 0);
+#if 0
     if( count ){
       sqlite4VdbeChangeP4(v, -1, pTab->zName, P4_TRANSIENT);
     }
+#endif
   }
 
   /* Do any ON CASCADE, SET NULL or SET DEFAULT operations required to
@@ -565,6 +565,44 @@ void sqlite4GenerateRowDelete(
   ** trigger programs were invoked. Or if a trigger program throws a 
   ** RAISE(IGNORE) exception.  */
   sqlite4VdbeResolveLabel(v, iLabel);
+}
+
+static void generateIndexKey(
+  Parse *pParse,
+  Index *pPk, int iPkCsr,
+  Index *pIdx, int iIdxCsr,
+  int regOut
+){
+  Vdbe *v = pParse->pVdbe;        /* VM to write code to */
+  int nTmpReg;                    /* Number of temp registers required */
+  int regTmp;                     /* First register in temp array */
+  int i;                          /* Iterator variable */
+
+  /* Allocate temp registers */
+  assert( pIdx!=pPk );
+  nTmpReg = pIdx->nColumn + pPk->nColumn;
+  regTmp = sqlite4GetTempRange(pParse, nTmpReg);
+
+  /* Assemble the values for the key in the array of temp registers */
+  for(i=0; i<pIdx->nColumn; i++){
+    int regVal = regTmp + i;
+    sqlite4VdbeAddOp3(v, OP_Column, iPkCsr, pIdx->aiColumn[i], regVal);
+  }
+  for(i=0; i<pPk->nColumn; i++){
+    int iCol = pPk->aiColumn[i];
+    int regVal = pIdx->nColumn + regTmp + i;
+    if( iCol<0 ){
+      sqlite4VdbeAddOp2(v, OP_Rowid, iPkCsr, regVal);
+    }else{
+      sqlite4VdbeAddOp3(v, OP_Column, iPkCsr, pPk->aiColumn[i], regVal);
+    }
+  }
+
+  /* Build the index key */
+  sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iIdxCsr, regTmp, regOut);
+
+  /* Release temp registers */
+  sqlite4ReleaseTempRange(pParse, regTmp, nTmpReg);
 }
 
 /*
@@ -584,20 +622,36 @@ void sqlite4GenerateRowDelete(
 **       deleted.
 */
 void sqlite4GenerateRowIndexDelete(
-  Parse *pParse,     /* Parsing and code generating context */
-  Table *pTab,       /* Table containing the row to be deleted */
-  int iCur,          /* Cursor number for the table */
-  int *aRegIdx       /* Only delete if aRegIdx!=0 && aRegIdx[i]>0 */
+  Parse *pParse,                  /* Parsing and code generating context */
+  Table *pTab,                    /* Table containing the row to be deleted */
+  int baseCur,                    /* Cursor number for the table */
+  int *aRegIdx                    /* Only delete if (aRegIdx && aRegIdx[i]>0) */
 ){
+  Vdbe *v = pParse->pVdbe;
+  Index *pPk;
+  int iPk;
   int i;
+  int regKey;
   Index *pIdx;
-  int r1;
 
-  for(i=1, pIdx=pTab->pIndex; pIdx; i++, pIdx=pIdx->pNext){
-    if( aRegIdx!=0 && aRegIdx[i-1]==0 ) continue;
-    r1 = sqlite4GenerateIndexKey(pParse, pIdx, iCur, 0, 0, 0);
-    sqlite4VdbeAddOp3(pParse->pVdbe, OP_IdxDelete, iCur+i, r1,pIdx->nColumn+1);
+  regKey = sqlite4GetTempReg(pParse);
+  pPk = sqlite4FindPrimaryKey(pTab, &iPk);
+
+  for(i=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, i++){
+    if( pIdx!=pPk && (aRegIdx==0 || aRegIdx[i]>0) ){
+      int addrNotFound;
+      generateIndexKey(pParse, pPk, baseCur+iPk, pIdx, baseCur+i, regKey);
+      addrNotFound = sqlite4VdbeAddOp4(v,
+          OP_NotFound, baseCur+i, 0, regKey, 0, P4_INT32
+      );
+      sqlite4VdbeAddOp1(v, OP_Delete, baseCur+i);
+      sqlite4VdbeJumpHere(v, addrNotFound);
+    }
   }
+
+  sqlite4VdbeAddOp1(v, OP_Delete, baseCur+iPk);
+
+  sqlite4ReleaseTempReg(pParse, regKey);
 }
 
 /*

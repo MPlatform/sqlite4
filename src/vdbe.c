@@ -2126,10 +2126,13 @@ case OP_Column: {
     MemSetTypeFlag(pDest, MEM_Null);
   }
   if( rc==SQLITE_OK && aData ){
-    rc = sqlite4VdbeCreateDecoder(db, aData, nData, pC->nField, &pCodec);
+    int nField = pC->nField;
+    if( pC->pKeyInfo ) nField = pC->pKeyInfo->nData;
+    rc = sqlite4VdbeCreateDecoder(db, aData, nData, nField, &pCodec);
     if( rc==0 ){
       pDefault = (pOp->p4type==P4_MEM) ? pOp->p4.pMem : 0;
       rc = sqlite4VdbeDecodeValue(pCodec, pOp->p2, pDefault, pDest);
+      assert( rc==SQLITE_OK );
       sqlite4VdbeDestroyDecoder(pCodec);
     }
   }else{
@@ -2165,6 +2168,59 @@ case OP_Affinity: {
   break;
 }
 
+/* Opcode: MakeIdxKey P1 P2 P3 P4 *
+**
+** P1 is an open cursor. P2 is the first register in a contiguous array
+** of N registers containing values to encode into a database key. N is
+** equal to the number of columns indexed by P1, plus the number of 
+** trailing primary key columns (if any).
+**
+** This instruction encodes the N values into a database key and writes
+** the result to register P3.
+**
+** If P4 is of type P4_INT32, then it is a register number. This instruction
+** sets register P4 to an integer value - the number of bytes in the 
+** generated index key not including any appended primary key column values.
+*/
+case OP_MakeIdxKey: {
+  VdbeCursor *pC;
+  KeyInfo *pKeyInfo;
+  Mem *pData0;
+  u8 *aRec;                       /* The constructed database key */
+  int nRec;                       /* Size of aRec[] in bytes */
+  int nShort;                     /* Size of aRec[] without PK values */
+  Mem *pShort;                    /* Memory cell to write nShort to */
+  
+  pC = p->apCsr[pOp->p1];
+  pKeyInfo = pC->pKeyInfo;
+  pData0 = &aMem[pOp->p2];
+  pOut = &aMem[pOp->p3];
+  aRec = 0;
+
+  memAboutToChange(p, pOut);
+
+  rc = sqlite4VdbeEncodeKey(
+    db, pData0, pKeyInfo->nField, pC->iRoot, pKeyInfo, &aRec, &nRec, &nShort
+  );
+
+  if( rc ){
+    sqlite4DbFree(db, aRec);
+  }else{
+    if( pOp->p4type==P4_INT32 ){
+      pShort = &aMem[pOp->p4.i];
+      memAboutToChange(p, pShort);
+      pShort->u.i = nShort;
+      MemSetTypeFlag(pShort, MEM_Int);
+      REGISTER_TRACE(pOp->p4.i, pShort);
+    }
+    rc = sqlite4VdbeMemSetStr(pOut, aRec, nRec, 0, SQLITE_DYNAMIC);
+    REGISTER_TRACE(pOp->p3, pOut);
+    UPDATE_MAX_BLOBSIZE(pOut);
+  }
+
+  break;
+}
+
 /* Opcode: MakeKey P1 P2 * * *
 **
 ** This must be followed immediately by a MakeRecord opcode.  This
@@ -2173,17 +2229,21 @@ case OP_Affinity: {
 */
 /* Opcode: MakeRecord P1 P2 P3 P4 *
 **
-** Convert registers P1..P1+P2-1 into a data record and store the result
-** in register P3.  The OP_Column opcode can be used to decode the record.
+** This opcode uses the array of P2 registers starting at P1 as inputs.
 **
-** P4 may be a string that is P2 characters long.  The nth character of the
-** string indicates the column affinity that should be used for the nth
-** field of the index key.
+** P4 may be a string that is P2 characters long, or it may be NULL. The nth 
+** character of the string indicates the column affinity that should be used
+** for the nth field of the index key. The mapping from character to affinity
+** is given by the SQLITE_AFF_ macros defined in sqliteInt.h. If P4 is NULL
+** then all index fields have the affinity NONE.
 **
-** The mapping from character to affinity is given by the SQLITE_AFF_
-** macros defined in sqliteInt.h.
+** This opcode expands any zero-blobs within the input array. Then if
+** P4 is not NULL it applies the affinities that it specifies to the input
+** array elements. Finally, if P3 is not 0, it encodes the input array
+** into a data record and stores the result in register P3. The OP_Column 
+** opcode can be used to decode the record.
 **
-** If P4 is NULL then all index fields have the affinity NONE.
+** Specifying P3==0 is only useful if the previous opcode is an OP_MakeKey.
 */
 case OP_MakeKey:
 case OP_MakeRecord: {
@@ -2221,11 +2281,6 @@ case OP_MakeRecord: {
   nField = pOp->p2;
   pLast = &pData0[nField-1];
 
-  /* Identify the output register */
-  assert( pOp->p3<pOp->p1 || pOp->p3>=pOp->p1+pOp->p2 );
-  pOut = &aMem[pOp->p3];
-  memAboutToChange(p, pOut);
-
   /* Loop through the input elements.  Apply affinity to each one and
   ** expand all zero-blobs.
   */
@@ -2253,8 +2308,11 @@ case OP_MakeRecord: {
     }
   }
 
-  /* Compute the value */
-  if( rc==SQLITE_OK ){
+  /* If P3 is not 0, compute the data rescord */
+  if( rc==SQLITE_OK && pOp->p3 ){
+    assert( pOp->p3<pOp->p1 || pOp->p3>=pOp->p1+pOp->p2 );
+    pOut = &aMem[pOp->p3];
+    memAboutToChange(p, pOut);
     aRec = 0;
     rc = sqlite4VdbeEncodeData(db, pData0, nField, &aRec, &nRec);
     if( rc ){
@@ -2606,9 +2664,17 @@ case OP_OpenEphemeral: {
   if( pCx==0 ) goto no_mem;
   pCx->nullRow = 1;
   rc = sqlite4KVStoreOpen(db, "ephm", ":memory:", &pCx->pTmpKV,
-          SQLITE_KVOPEN_TEMPORARY | SQLITE_KVOPEN_NO_TRANSACTIONS);
+          SQLITE_KVOPEN_TEMPORARY | SQLITE_KVOPEN_NO_TRANSACTIONS
+  );
+  if( rc==SQLITE_OK ){
+    rc = sqlite4KVStoreOpenCursor(pCx->pTmpKV, &pCx->pKVCur);
+  }
+  if( rc==SQLITE_OK ){
+    rc = sqlite4KVStoreBegin(pCx->pTmpKV, 2);
+  }
   pCx->pKeyInfo = pOp->p4.pKeyInfo;
   if( pCx->pKeyInfo ) pCx->pKeyInfo->enc = ENC(p->db);
+
   pCx->isIndex = !pCx->isTable;
   break;
 }
@@ -2758,6 +2824,7 @@ case OP_SeekGt: {       /* jump, in3 */
   }else{
     nField = pOp->p4.i;
   }
+  pIn3 = &aMem[pOp->p3];
   rc = sqlite4VdbeEncodeKey(db, pIn3, nField, pC->iRoot, pC->pKeyInfo,
                             &aProbe, &nProbe, 0);
   if( rc ){
@@ -2902,6 +2969,8 @@ case OP_Found: {        /* jump, in3 */
         alreadyExists = 1;
         pC->nullRow = 0;
       }
+    }else if( rc==SQLITE_NOTFOUND ){
+      rc = SQLITE_OK;
     }
   }
   sqlite4DbFree(db, pFree);
@@ -2915,29 +2984,52 @@ case OP_Found: {        /* jump, in3 */
 
 /* Opcode: IsUnique P1 P2 P3 P4 *
 **
-** Cursor P1 is open on an index.
+** Cursor P1 is open on an index that enforces a UNIQUE constraint. 
+** Register P3 contains an encoded key suitable to be inserted into the 
+** index.
 **
-** The P3 register contains an integer record number. Call this record 
-** number R. Register P4 is the first in a set of N contiguous registers
-** that make up an unpacked index key that can be used with cursor P1.
-** The value of N can be inferred from the KeyInfo.nField of the cursor.
-** N includes the rowid value appended to the end of the index record.
-** This rowid value may or may not be the same as R.
-**
-** If any of the N registers beginning with register P4 contains a NULL
-** value, jump immediately to P2.
-**
-** Otherwise, this instruction checks if cursor P1 contains an entry
-** where the first (N-1) fields match but the rowid value at the end
-** of the index entry is not R. If there is no such entry (meaning that
-** a row about to be inserted with rowid R is unique) then control jumps
-** to instruction P2. Otherwise, the rowid of the conflicting index
-** entry is copied to register P3 and control falls through to the next
-** instruction.
-**
-** See also: NotFound, NotExists, Found
+** Jump to instruction P2 if the encoded key can be inserted into the 
+** index without violating a unique constraint. Otherwise, fall through
+** to the next instruction.
 */
 case OP_IsUnique: {        /* jump, in3 */
+  VdbeCursor *pC;
+  Mem *pShort;
+  Mem *pProbe;
+  int nShort;
+  int dir;
+
+  KVByteArray *aKey;              /* Key read from cursor */
+  KVSize nKey;                    /* Size of aKey in bytes */
+
+  assert( pOp->p4type==P4_INT32 );
+
+  pProbe = &aMem[pOp->p3];
+  pShort = &aMem[pOp->p4.i];
+  nShort = pShort->u.i;
+  pC = p->apCsr[pOp->p1];
+  assert( nShort<=pProbe->n );
+  assert( (nShort==pProbe->n)==(pC->pKeyInfo->nPK==0) );
+
+  dir = (nShort < pProbe->n);
+  rc = sqlite4KVCursorSeek(pC->pKVCur, pProbe->z, nShort, dir);
+
+  if( rc==SQLITE_NOTFOUND ){
+    rc = SQLITE_OK;
+    pc = pOp->p2-1;
+  }else if( rc==SQLITE_INEXACT ){
+    assert( nShort<pProbe->n );
+    rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
+    if( rc==SQLITE_OK ){
+      if( nKey<nShort 
+       || memcmp(pProbe->z, aKey, nKey)
+       || (nKey==pProbe->n && 0==memcmp(pProbe->z, aKey, nKey))
+      ){
+        pc = pOp->p2-1;
+      }
+    }
+  }
+
 #if 0
   u16 ii;
   VdbeCursor *pCx;
@@ -3035,7 +3127,7 @@ case OP_Sequence: {           /* out2-prerelease */
 }
 
 
-/* Opcode: NewRowid P1 P2 P3 * *
+/* Opcode: NewRowid P1 P2 * * *
 **
 ** Get a new integer record number (a.k.a "rowid") used as the key to a table.
 ** The record number is not previously used as a key in the database
@@ -3073,7 +3165,6 @@ case OP_NewRowid: {           /* out2-prerelease */
   ** succeeded.  If the random rowid does exist, we select a new one
   ** and try again, up to 100 times.
   */
-  assert( pC->isTable );
 
   rc = sqlite4VdbeSeekEnd(pC, -1);
   if( rc==SQLITE_NOTFOUND ){
@@ -3159,7 +3250,6 @@ case OP_InsertInt: {
   assert( memIsValid(pData) );
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
-  assert( pC->isTable );
   REGISTER_TRACE(pOp->p2, pData);
 
   if( pOp->opcode==OP_Insert ){
@@ -3337,7 +3427,6 @@ case OP_RowData: {
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
   assert( pC->isSorter==0 );
-  assert( pC->isIndex || pOp->opcode==OP_RowData );
   assert( pC!=0 );
   assert( pC->nullRow==0 );
   assert( pC->pseudoTableReg==0 );
@@ -3353,7 +3442,7 @@ case OP_RowData: {
   if( rc==SQLITE_OK && nData>db->aLimit[SQLITE_LIMIT_LENGTH] ){
     goto too_big;
   }
-  sqlite4VdbeMemSetStr(pOut, (const char*)pData, nData, 0, SQLITE_DYNAMIC);
+  sqlite4VdbeMemSetStr(pOut, (const char*)pData, nData, 0, SQLITE_TRANSIENT);
   pOut->enc = SQLITE_UTF8;  /* In case the blob is ever cast to text */
   UPDATE_MAX_BLOBSIZE(pOut);
   break;
@@ -3608,48 +3697,40 @@ case OP_SorterInsert: {      /* in2 */
 }
 
 
-/* Opcode: IdxInsert P1 P2 P3 * P5
+/* Opcode: IdxInsert P1 P2 P3 * *
 **
 ** Register P2 holds the data and register P3 holds the key for an
 ** index record.  Write this record into the index specified by the
 ** cursor P1.
-**
-** P5 is a flag that provides a hint to the storage layer that this
-** insert is likely to be an append.
-**
-** This instruction only works for indices.  The equivalent instruction
-** for tables is OP_Insert.
 */
-case OP_IdxInsert: {        /* in2 */
+case OP_IdxInsert: {
   VdbeCursor *pC;
   Mem *pKey;
   Mem *pData;
 
-  assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
-  assert( pC );
-  assert( pC->pKVCur );
-  assert( pC->pKVCur->pStore );
   pKey = &aMem[pOp->p3];
+  pData = pOp->p2 ? &aMem[pOp->p2] : 0;
+
+  assert( pOp->p1>=0 && pOp->p1<p->nCursor );
+  assert( pC && pC->pKVCur && pC->pKVCur->pStore );
   assert( pKey->flags & MEM_Blob );
-  pData = &aMem[pOp->p2];
-  assert( pData->flags & MEM_Blob );
+  assert( pData==0 || (pData->flags & MEM_Blob) );
+
   rc = sqlite4KVStoreReplace(
      pC->pKVCur->pStore,
      pKey->z, pKey->n,
-     pData->z, pData->n
+     (pData ? pData->z : 0), (pData ? pData->n : 0)
   );
   break;
 }
 
-/* Opcode: IdxDelete P1 P2 P3 * *
+/* Opcode: IdxDelete P1 * P3 * *
 **
-** The content of P3 registers starting at register P2 form
-** an unpacked index key. This opcode removes that entry from the 
-** index opened by cursor P1.
+** P1 is a cursor open on a database index. P3 contains a key suitable for
+** the index. Delete P3 from P1.
 */
 case OP_IdxDelete: {
-  assert( 0 );
   break;
 }
 
@@ -3666,35 +3747,36 @@ case OP_IdxRowid: {              /* out2-prerelease */
   break;
 }
 
-/* Opcode: IdxGE P1 P2 P3 P4 P5
+/* Opcode: IdxGE P1 P2 P3
 **
-** The P4 register values beginning with P3 form an unpacked index 
-** key that omits the ROWID.  Compare this key value against the index 
-** that P1 is currently pointing to, ignoring the ROWID on the P1 index.
+** P1 is an open cursor. P3 contains a database key formatted by MakeKey.
+** This opcode compares the current key that index P1 points to with
+** the key in register P3.
 **
-** If the P1 index entry is greater than or equal to the key value
-** then jump to P2.  Otherwise fall through to the next instruction.
-**
-** If P5 is non-zero then the key value is increased by an epsilon 
-** prior to the comparison.  This make the opcode work like IdxGT except
-** that if the key from register P3 is a prefix of the key in the cursor,
-** the result is false whereas it would be true with IdxGT.
-*/
-/* Opcode: IdxLT P1 P2 P3 P4 P5
-**
-** The P4 register values beginning with P3 form an unpacked index 
-** key that omits the ROWID.  Compare this key value against the index 
-** that P1 is currently pointing to, ignoring the ROWID on the P1 index.
-**
-** If the P1 index entry is less than the key value then jump to P2.
-** Otherwise fall through to the next instruction.
-**
-** If P5 is non-zero then the key value is increased by an epsilon prior 
-** to the comparison.  This makes the opcode work like IdxLE.
+** If the index key is greater than...
 */
 case OP_IdxLT:          /* jump */
 case OP_IdxGE: {        /* jump */
-  assert( 0 );
+  VdbeCursor *pC;
+  KVByteArray *aKey;              /* Key from cursor P1 */
+  KVSize nKey;                    /* Size of aKey[] in bytes */
+  Mem *pCmp;
+  int nCmp;
+  int res;
+
+  pCmp = &aMem[pOp->p3];
+  assert( pCmp->flags & MEM_Blob );
+  pC = p->apCsr[pOp->p1];
+  rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
+  if( rc==SQLITE_OK ){
+    nCmp = pCmp->n;
+    if( nCmp>nKey ) nCmp = nKey;
+
+    res = memcmp(aKey, pCmp->z, nCmp);
+    if( res>0 ){
+      pc = pOp->p2 - 1;
+    }
+  }
   break;
 }
 
@@ -3862,6 +3944,49 @@ case OP_IntegrityCk: {
   break;
 }
 #endif /* SQLITE_OMIT_INTEGRITY_CHECK */
+
+/* Opcode: KeySetAdd P1 P2 * * *
+**
+** Read the blob value from register P2 and store it in KeySet object P1.
+*/
+case OP_KeySetAdd: {         /* in1, in2 */
+  pIn1 = &aMem[pOp->p1];
+  if( (pIn1->flags & MEM_KeySet)==0 ){
+    sqlite4VdbeMemSetKeySet(pIn1);
+    if( (pIn1->flags & MEM_KeySet)==0 ) goto no_mem;
+  }
+  pIn2 = &aMem[pOp->p2];
+  assert( pIn2->flags & MEM_Blob );
+  sqlite4KeySetInsert(pIn1->u.pKeySet, pIn2->z, pIn2->n);
+  break;
+}
+
+/* Opcode: KeySetRead P1 P2 P3 * *
+**
+** Remove a value from MemSet object P1 and store it in register P3.
+** Or, if MemSet P1 is already empty, leave P3 unchanged and jump to 
+** instruction P2.
+*/
+case OP_KeySetRead: {       /* in1 */
+  const char *aKey;
+  int nKey;
+
+  CHECK_FOR_INTERRUPT;
+  pIn1 = &aMem[pOp->p1];
+  pOut = &aMem[pOp->p3];
+  if( (pIn1->flags & MEM_KeySet)
+   && (aKey = sqlite4KeySetRead(pIn1->u.pKeySet, &nKey))
+  ){
+    rc = sqlite4VdbeMemSetStr(pOut, aKey, nKey, 0, SQLITE_TRANSIENT);
+    sqlite4KeySetNext(pIn1->u.pKeySet);
+  }else{
+    /* The KeySet is empty */
+    sqlite4VdbeMemSetNull(pIn1);
+    pc = pOp->p2 - 1;
+  }
+
+  break;
+}
 
 /* Opcode: RowSetAdd P1 P2 * * *
 **

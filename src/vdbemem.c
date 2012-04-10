@@ -33,7 +33,7 @@
 */
 int sqlite4VdbeChangeEncoding(Mem *pMem, int desiredEnc){
   int rc;
-  assert( (pMem->flags&MEM_RowSet)==0 );
+  assert( (pMem->flags&MEM_KeySet)==0 );
   assert( desiredEnc==SQLITE_UTF8 || desiredEnc==SQLITE_UTF16LE
            || desiredEnc==SQLITE_UTF16BE );
   if( !(pMem->flags&MEM_Str) || pMem->enc==desiredEnc ){
@@ -75,7 +75,7 @@ int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve){
     ((pMem->flags&MEM_Ephem) ? 1 : 0) + 
     ((pMem->flags&MEM_Static) ? 1 : 0)
   );
-  assert( (pMem->flags&MEM_RowSet)==0 );
+  assert( (pMem->flags&MEM_KeySet)==0 );
 
   if( n<32 ) n = 32;
   if( sqlite4DbMallocSize(pMem->db, pMem->zMalloc)<n ){
@@ -117,7 +117,7 @@ int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve){
 int sqlite4VdbeMemMakeWriteable(Mem *pMem){
   int f;
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
-  assert( (pMem->flags&MEM_RowSet)==0 );
+  assert( (pMem->flags&MEM_KeySet)==0 );
   ExpandBlob(pMem);
   f = pMem->flags;
   if( (f&(MEM_Str|MEM_Blob)) && pMem->z!=pMem->zMalloc ){
@@ -175,7 +175,7 @@ int sqlite4VdbeMemStringify(Mem *pMem, int enc){
   assert( !(fg&MEM_Zero) );
   assert( !(fg&(MEM_Str|MEM_Blob)) );
   assert( fg&(MEM_Int|MEM_Real) );
-  assert( (pMem->flags&MEM_RowSet)==0 );
+  assert( (pMem->flags&MEM_KeySet)==0 );
   assert( EIGHT_BYTE_ALIGNMENT(pMem) );
 
 
@@ -242,12 +242,12 @@ void sqlite4VdbeMemReleaseExternal(Mem *p){
     assert( (p->flags & MEM_Agg)==0 );
     sqlite4VdbeMemRelease(p);
   }else if( p->flags&MEM_Dyn && p->xDel ){
-    assert( (p->flags&MEM_RowSet)==0 );
+    assert( (p->flags&MEM_KeySet)==0 );
     assert( p->xDel!=SQLITE_DYNAMIC );
     p->xDel((void *)p->z);
     p->xDel = 0;
-  }else if( p->flags&MEM_RowSet ){
-    sqlite4RowSetClear(p->u.pRowSet);
+  }else if( p->flags&MEM_KeySet ){
+    sqlite4KeySetFree(p->u.pKeySet);
   }else if( p->flags&MEM_Frame ){
     sqlite4VdbeMemSetNull(p);
   }
@@ -452,8 +452,8 @@ void sqlite4VdbeMemSetNull(Mem *pMem){
     pFrame->pParent = pFrame->v->pDelFrame;
     pFrame->v->pDelFrame = pFrame;
   }
-  if( pMem->flags & MEM_RowSet ){
-    sqlite4RowSetClear(pMem->u.pRowSet);
+  if( pMem->flags & MEM_KeySet ){
+    sqlite4KeySetFree(pMem->u.pKeySet);
   }
   MemSetTypeFlag(pMem, MEM_Null);
   pMem->type = SQLITE_NULL;
@@ -520,6 +520,16 @@ void sqlite4VdbeMemSetRowSet(Mem *pMem){
     assert( pMem->u.pRowSet!=0 );
     pMem->flags = MEM_RowSet;
   }
+}
+
+void sqlite4VdbeMemSetKeySet(Mem *pMem){
+  sqlite4 *db = pMem->db;
+  assert( db!=0 );
+  assert( (pMem->flags & MEM_KeySet)==0 );
+  sqlite4VdbeMemRelease(pMem);
+
+  pMem->u.pKeySet = sqlite4KeySetInit(db);
+  pMem->flags = MEM_KeySet;
 }
 
 /*

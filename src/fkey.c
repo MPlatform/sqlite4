@@ -232,7 +232,7 @@ static int locateFkeyIndex(
         /* If zKey is NULL, then this foreign key is implicitly mapped to 
         ** the PRIMARY KEY of table pParent. The PRIMARY KEY index may be 
         ** identified by the test (Index.autoIndex==2).  */
-        if( pIdx->autoIndex==2 ){
+        if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
           if( aiCol ){
             int i;
             for(i=0; i<nCol; i++) aiCol[i] = pFKey->aCol[i].iFrom;

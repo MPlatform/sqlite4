@@ -108,6 +108,8 @@ int sqlite4VdbeDecodeValue(
     }
     if( i<iVal ){
       ofst += size;
+    }else if( type==0 ){
+      /* no-op */
     }else if( type<=2 ){
       sqlite4VdbeMemSetInt64(pOut, type-1);
     }else if( type<=10 ){
@@ -585,7 +587,7 @@ int sqlite4VdbeEncodeKey(
   Mem *aIn,                    /* Values to be encoded */
   int nIn,                     /* Number of entries in aIn[] */
   int iTabno,                  /* The table this key applies to */
-  KeyInfo *pKeyInfo,           /* Collating sequence information */
+  KeyInfo *pKeyInfo,           /* Collating sequence and sort-order info */
   u8 **paOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
   int *pnShort                 /* Number of bytes without the primary key */
@@ -621,8 +623,8 @@ int sqlite4VdbeEncodeKey(
     so = 0;
   }
   for(i=0; i<nField && rc==SQLITE_OK; i++){
-    if( pnShort && i==iShort ) *pnShort = x.nOut;
     rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC, aColl[i]);
+    if( pnShort && i+1==iShort ) *pnShort = x.nOut;
   }
   if( rc ){
     sqlite4DbFree(db, x.aOut);

@@ -1,0 +1,298 @@
+# 2012 April 02
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# The tests in this file were used while developing the SQLite 4 code. 
+#
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix simple
+
+#set sqlite_where_trace 1
+
+do_execsql_test 1.0 { 
+  PRAGMA table_info = sqlite_master
+} {
+    0 type text        0 {} 0 
+    1 name text        0 {} 0 
+    2 tbl_name text    0 {} 0 
+    3 rootpage integer 0 {} 0 
+    4 sql text         0 {} 0 
+}
+
+do_execsql_test 1.1 { SELECT * FROM sqlite_master } {}
+
+#explain { CREATE TABLE t1(a, b) }
+#execsql { PRAGMA kv_trace = 1 }
+#execsql { PRAGMA vdbe_trace = 1 }
+
+do_execsql_test 1.2 { 
+  CREATE TABLE t1(a, b);
+  PRAGMA table_info = t1;
+} {
+    0 a {} 0 {} 0 
+    1 b {} 0 {} 0 
+}
+
+do_execsql_test 1.3 { 
+  CREATE TABLE t2(x, y);
+  PRAGMA table_info = t2;
+} {
+    0 x {} 0 {} 0 
+    1 y {} 0 {} 0 
+}
+
+do_execsql_test 1.4 { 
+  CREATE TABLE t3(k PRIMARY KEY, v);
+  PRAGMA table_info = t3;
+} {
+    0 k {} 0 {} 1 
+    1 v {} 0 {} 0 
+}
+
+do_execsql_test 1.5 { 
+  SELECT name, rootpage FROM sqlite_master 
+} {t1 2 t2 3 t3 4}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 2.1 { 
+  CREATE TABLE t1(k PRIMARY KEY, v);
+  CREATE TABLE t2(x, y); 
+} {}
+
+do_execsql_test 2.2.1 { INSERT INTO t1 VALUES('a', 'AAA') }
+do_execsql_test 2.2.2 { SELECT * FROM t1 } {a AAA}
+do_execsql_test 2.2.3 { INSERT INTO t1 VALUES('b', 'BBB') }
+do_execsql_test 2.2.4 { SELECT * FROM t1 } {a AAA b BBB}
+
+do_execsql_test 2.3.1 { INSERT INTO t2 VALUES('123', '456') }
+do_execsql_test 2.3.2 { SELECT * FROM t2 } {123 456}
+do_execsql_test 2.3.3 { INSERT INTO t2 VALUES('789', '0ab') }
+do_execsql_test 2.3.4 { SELECT * FROM t2 } {123 456 789 0ab}
+
+do_catchsql_test 2.2.5 {
+  INSERT INTO t1 VALUES('a', 'CCC')
+} {1 {column k is not unique}}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 3.1 { CREATE TABLE t1(k PRIMARY KEY, v UNIQUE) }
+
+do_execsql_test 3.2 { 
+  SELECT * FROM sqlite_master
+} {
+  table t1                    t1 2 {CREATE TABLE t1(k PRIMARY KEY, v UNIQUE)} 
+  index sqlite_autoindex_t1_2 t1 3 {}
+}
+
+#explain { INSERT INTO t1 VALUES('one', '111') }
+#execsql { PRAGMA vdbe_trace = 1 }
+#execsql { PRAGMA kv_trace = 1 }
+#
+do_execsql_test 3.3 { INSERT INTO t1 VALUES('one', '111') } {}
+
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 4.1 { CREATE TABLE t1(k PRIMARY KEY, v) }
+do_execsql_test 4.2 { CREATE INDEX i1 ON t1(v) }
+
+do_execsql_test 4.3 { 
+  SELECT * FROM sqlite_master
+} {
+  table t1 t1 2 {CREATE TABLE t1(k PRIMARY KEY, v)} 
+  index i1 t1 3 {CREATE INDEX i1 ON t1(v)}
+}
+do_execsql_test 4.4 { INSERT INTO t1 VALUES('one', '111') } {}
+do_execsql_test 4.5 { SELECT * FROM t1 } {one 111} 
+
+do_execsql_test 4.6 { PRAGMA integrity_check } {ok}
+
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 5.1 { CREATE TABLE t1(k, v UNIQUE) }
+do_execsql_test 5.2 { CREATE INDEX i1 ON t1(v) }
+
+do_execsql_test 5.3 { 
+  SELECT * FROM sqlite_master
+} {
+  table t1                    t1 3 {CREATE TABLE t1(k, v UNIQUE)} 
+  index sqlite_autoindex_t1_1 t1 2 {}
+  index i1                    t1 4 {CREATE INDEX i1 ON t1(v)}
+}
+
+do_execsql_test 5.3 { INSERT INTO t1 VALUES('one', '111') } {}
+do_execsql_test 5.4 { SELECT * FROM t1 } {one 111} 
+do_execsql_test 5.5 { PRAGMA integrity_check } {ok}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 6.1 { 
+  CREATE TABLE t1(k PRIMARY KEY, v);
+  CREATE INDEX i1 ON t1(v);
+  INSERT INTO t1 VALUES('one', 1);
+  INSERT INTO t1 VALUES('two', 2);
+  INSERT INTO t1 VALUES('three', 3);
+  INSERT INTO t1 VALUES('four', 4);
+  INSERT INTO t1 VALUES('five', 5);
+}
+
+do_execsql_test 6.2 { 
+  SELECT * FROM t1
+} {five 5 four 4 one 1 three 3 two 2}
+
+do_execsql_test 6.3 { 
+  CREATE TABLE t2(x PRIMARY KEY, y);
+  INSERT INTO t2 SELECT v, k FROM t1;
+  SELECT * FROM t2
+} {1 one 2 two 3 three 4 four 5 five}
+do_execsql_test 6.4 { PRAGMA integrity_check } {ok}
+
+do_execsql_test 6.5 { 
+  CREATE TABLE t3(a, b);
+  INSERT INTO t3 SELECT k, v FROM t1;
+  SELECT * FROM t3
+} {five 5 four 4 one 1 three 3 two 2}
+
+do_execsql_test 6.6 { 
+  INSERT INTO t3 SELECT a, b FROM t3;
+  SELECT * FROM t3;
+} {five 5 four 4 one 1 three 3 two 2 five 5 four 4 one 1 three 3 two 2}
+
+do_execsql_test 6.7 { PRAGMA integrity_check } {ok}
+do_execsql_test 6.8 { CREATE INDEX i2 ON t3(a) }
+do_execsql_test 6.9 { PRAGMA integrity_check } {ok}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 7.1 {
+  CREATE TABLE t1(a, b);
+  CREATE INDEX i1 ON t1(a);
+}
+do_execsql_test 7.2.1 { INSERT INTO t1 VALUES('xyz', '123') }
+do_execsql_test 7.2.2 { INSERT INTO t1 VALUES('xyz', '123') }
+do_execsql_test 7.2.3 { INSERT INTO t1 VALUES('xyz', '123') }
+
+do_execsql_test 7.3 {
+  SELECT * FROM t1;
+} {xyz 123 xyz 123 xyz 123}
+
+do_execsql_test 7.4 { PRAGMA integrity_check } {ok}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 8.1 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  INSERT INTO t1 VALUES('a', 'b');
+}
+
+do_execsql_test 8.2 { DELETE FROM t1 WHERE b = 'b' }
+do_execsql_test 8.3 { SELECT * FROM t1 } {}
+do_execsql_test 8.4 {
+  INSERT INTO t1 VALUES('a', 'A');
+  INSERT INTO t1 VALUES('b', 'B');
+  INSERT INTO t1 VALUES('c', 'A');
+  INSERT INTO t1 VALUES('d', 'B');
+  INSERT INTO t1 VALUES('e', 'A');
+  INSERT INTO t1 VALUES('f', 'B');
+}
+do_execsql_test 8.5 { DELETE FROM t1 WHERE b = 'B' }
+do_execsql_test 8.6 { SELECT * FROM t1 } {a A c A e A}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 9.1 {
+  CREATE TABLE t1(a, b);
+  CREATE INDEX i1 ON t1(b);
+}
+
+do_execsql_test 9.2 {
+  INSERT INTO t1 VALUES('a', 'A');
+  INSERT INTO t1 VALUES('b', 'B');
+  INSERT INTO t1 VALUES('c', 'A');
+  INSERT INTO t1 VALUES('d', 'B');
+  INSERT INTO t1 VALUES('e', 'A');
+  INSERT INTO t1 VALUES('f', 'B');
+}
+do_execsql_test 9.3 { DELETE FROM t1 WHERE +b = 'B' }
+do_execsql_test 9.4 { SELECT * FROM t1 } {a A c A e A}
+do_execsql_test 9.5 { PRAGMA integrity_check } {ok}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 10.1 {
+  CREATE TABLE t1(a, b);
+  CREATE INDEX i1 ON t1(b);
+}
+do_execsql_test 10.2 {
+  INSERT INTO t1 VALUES(1, 2);
+  INSERT INTO t1 VALUES(3, 4);
+}
+
+# explain { UPDATE t1 SET b = 10 WHERE a=3 }
+#  execsql { PRAGMA vdbe_trace = 1 }
+
+do_execsql_test 10.3 { 
+  UPDATE t1 SET b = 10 WHERE a=3;
+  SELECT * FROM t1;
+} {1 2 3 10}
+
+do_execsql_test 10.4 { PRAGMA integrity_check } {ok}
+execsql { PRAGMA kvdump }
+
+finish_test
+
+#proc populate_t1 {} {
+#  db eval {
+#    INSERT INTO t1(a, b) VALUES(4, 'four');
+#    INSERT INTO t1(a, b) VALUES(9, 'nine');
+#    INSERT INTO t1(a, b) VALUES(5, 'five');
+#    INSERT INTO t1(a, b) VALUES(1, 'one');
+#    INSERT INTO t1(a, b) VALUES(7, 'seven');
+#    INSERT INTO t1(a, b) VALUES(8, 'eight');
+#    INSERT INTO t1(a, b) VALUES(2, 'two');
+#    INSERT INTO t1(a, b) VALUES(3, 'three');
+#    INSERT INTO t1(a, b) VALUES(6, 'six');
+#    INSERT INTO t1(a, b) VALUES(10, 'ten');
+#  }
+#}
+#
+#foreach {t schema} {
+#  1 "CREATE TABLE t1(a, b)"
+#  2 "CREATE TABLE t1(a, b); CREATE INDEX i1 ON t1(a);"
+#  3 "CREATE TABLE t1(a, b); CREATE INDEX i1 ON t1(b);"
+#  4 "CREATE TABLE t1(a PRIMARY KEY, b)"
+#} {
+#
+#  do_test 1.$t.0 {
+#    reset_db
+#    execsql $schema
+#    populate_t1
+#  } {}
+#
+#  foreach {u sql res} {
+#    1 "SELECT * FROM t1 WHERE a = 7"        {7 seven}
+#    2 "SELECT * FROM t1 WHERE b = 'seven'"  {7 seven}
+#  } {
+#    do_execsql_test 1.$t.$u $sql $res
+#  }
+#}
+
+finish_test
