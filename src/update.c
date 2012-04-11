@@ -134,6 +134,7 @@ void sqlite4Update(
   int iPk;                        /* Offset of primary key in aRegIdx[] */
   int bChngPk = 0;                /* True if any PK columns are updated */
   int bOpenAll = 0;               /* True if all indexes were opened */
+  int bImplicitPk;                /* True if pTab has an implicit PK */
 
   memset(&sContext, 0, sizeof(sContext));
   db = pParse->db;
@@ -147,6 +148,7 @@ void sqlite4Update(
   if( pTab==0 ) goto update_cleanup;
   iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
   pPk = sqlite4FindPrimaryKey(pTab, &iPk);
+  bImplicitPk = (pPk->aiColumn[0]<0);
 
   /* Figure out if we have any triggers and if the table being
   ** updated is a view.
@@ -285,9 +287,12 @@ void sqlite4Update(
     regOld = pParse->nMem + 1;
     pParse->nMem += pTab->nCol;
   }
+#if 0
   if( chngRowid || pTrigger || hasFK ){
     regNewRowid = ++pParse->nMem;
   }
+#endif
+  if( bImplicitPk ) pParse->nMem++;
   regNew = pParse->nMem + 1;
   pParse->nMem += pTab->nCol;
 
@@ -440,6 +445,9 @@ void sqlite4Update(
       sqlite4ColumnDefault(v, pTab, i, regNew+i);
     }
   }
+  if( bImplicitPk ){
+    sqlite4VdbeAddOp2(v, OP_Rowid, iCur+iPk, regNew-1);
+  }
 
   /* Fire any BEFORE UPDATE triggers. This happens before constraints are
   ** verified. One could argue that this is wrong.
@@ -464,7 +472,7 @@ void sqlite4Update(
     ** registers in case this has happened.
     */
     for(i=0; i<pTab->nCol; i++){
-      if( aXRef[i]<0 && i!=pTab->iPKey ){
+      if( aXRef[i]<0 ){
         sqlite4VdbeAddOp3(v, OP_Column, iCur, i, regNew+i);
         sqlite4ColumnDefault(v, pTab, i, regNew+i);
       }
@@ -476,7 +484,7 @@ void sqlite4Update(
 
 
     /* Do constraint checks. */
-    assert( bChngPk==0 || pPk->aiColumn[0]>=0 );
+    assert( bChngPk==0 || bImplicitPk==0 );
     if( bChngPk==0 ) aRegIdx[iPk] = 0;
     sqlite4GenerateConstraintChecks(
         pParse, pTab, iCur, regNew, aRegIdx, 0, 1, onError, addr, 0

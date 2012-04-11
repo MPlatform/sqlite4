@@ -220,8 +220,7 @@ static int lookupName(
             pExpr->pTab = pTab;
             pMatch = pItem;
             pSchema = pTab->pSchema;
-            /* Substitute the rowid (column -1) for the INTEGER PRIMARY KEY */
-            pExpr->iColumn = j==pTab->iPKey ? -1 : (i16)j;
+            pExpr->iColumn = (i16)j;
             break;
           }
         }
@@ -251,9 +250,6 @@ static int lookupName(
         for(iCol=0; iCol<pTab->nCol; iCol++){
           Column *pCol = &pTab->aCol[iCol];
           if( sqlite4StrICmp(pCol->zName, zCol)==0 ){
-            if( iCol==pTab->iPKey ){
-              iCol = -1;
-            }
             break;
           }
         }
@@ -417,14 +413,10 @@ Expr *sqlite4CreateColumnExpr(sqlite4 *db, SrcList *pSrc, int iSrc, int iCol){
     struct SrcList_item *pItem = &pSrc->a[iSrc];
     p->pTab = pItem->pTab;
     p->iTable = pItem->iCursor;
-    if( p->pTab->iPKey==iCol ){
-      p->iColumn = -1;
-    }else{
-      p->iColumn = (ynVar)iCol;
-      testcase( iCol==BMS );
-      testcase( iCol==BMS-1 );
-      pItem->colUsed |= ((Bitmask)1)<<(iCol>=BMS ? BMS-1 : iCol);
-    }
+    p->iColumn = (ynVar)iCol;
+    testcase( iCol==BMS );
+    testcase( iCol==BMS-1 );
+    pItem->colUsed |= ((Bitmask)1)<<(iCol>=BMS ? BMS-1 : iCol);
     ExprSetProperty(p, EP_Resolved);
   }
   return p;

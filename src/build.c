@@ -845,7 +845,6 @@ void sqlite4StartTable(
     goto begin_table_error;
   }
   pTable->zName = zName;
-  pTable->iPKey = -1;
   pTable->pSchema = db->aDb[iDb].pSchema;
   pTable->nRef = 1;
   pTable->nRowEst = 1000000;

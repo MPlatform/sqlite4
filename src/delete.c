@@ -684,7 +684,7 @@ int sqlite4GenerateIndexKey(
   sqlite4VdbeAddOp2(v, OP_Rowid, iCur, regBase+nCol);
   for(j=0; j<nCol; j++){
     int idx = pIdx->aiColumn[j];
-    if( idx==pTab->iPKey ){
+    if( idx<0 ){
       sqlite4VdbeAddOp2(v, OP_SCopy, regBase+nCol, regBase+j);
     }else{
       sqlite4VdbeAddOp3(v, OP_Column, iCur, idx, regBase+j);

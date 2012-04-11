@@ -3022,7 +3022,7 @@ case OP_IsUnique: {        /* jump, in3 */
     rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
     if( rc==SQLITE_OK ){
       if( nKey<nShort 
-       || memcmp(pProbe->z, aKey, nKey)
+       || memcmp(pProbe->z, aKey, nShort)
        || (nKey==pProbe->n && 0==memcmp(pProbe->z, aKey, nKey))
       ){
         pc = pOp->p2-1;

@@ -189,7 +189,7 @@ static int kvmemKeyCompare(
 ){
   int c;
   c = memcmp(aK1, aK2, nK1<nK2 ? nK1 : nK2);
-  if( c==0 ) c = nK2 - nK1;
+  if( c==0 ) c = nK1 - nK2;
   return c;
 }
 

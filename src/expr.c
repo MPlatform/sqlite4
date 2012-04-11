@@ -2150,7 +2150,7 @@ void sqlite4ExprCodeGetColumnOfTable(
   int iCol,       /* Index of the column to extract */
   int regOut      /* Extract the valud into this register */
 ){
-  if( iCol<0 || iCol==pTab->iPKey ){
+  if( iCol<0 ){
     sqlite4VdbeAddOp2(v, OP_Rowid, iTabCur, regOut);
   }else{
     int op = IsVirtual(pTab) ? OP_VColumn : OP_Column;
@@ -2733,7 +2733,6 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
 
       assert( pExpr->iTable==0 || pExpr->iTable==1 );
       assert( pExpr->iColumn>=-1 && pExpr->iColumn<pTab->nCol );
-      assert( pTab->iPKey<0 || pExpr->iColumn!=pTab->iPKey );
       assert( p1>=0 && p1<(pTab->nCol*2+2) );
 
       sqlite4VdbeAddOp2(v, OP_Param, p1, target);

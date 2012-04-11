@@ -1092,7 +1092,6 @@ static const char *columnType(
       }else if( ALWAYS(pTab->pSchema) ){
         /* A real table */
         assert( !pS );
-        if( iCol<0 ) iCol = pTab->iPKey;
         assert( iCol==-1 || (iCol>=0 && iCol<pTab->nCol) );
         if( iCol<0 ){
           zType = "INTEGER";
@@ -1216,7 +1215,6 @@ static void generateColumnNames(
       }
       assert( j<pTabList->nSrc );
       pTab = pTabList->a[j].pTab;
-      if( iCol<0 ) iCol = pTab->iPKey;
       assert( iCol==-1 || (iCol>=0 && iCol<pTab->nCol) );
       if( iCol<0 ){
         zCol = "rowid";
@@ -1283,7 +1281,6 @@ static int selectColumnsFromExprList(
         /* For columns use the column name name */
         int iCol = pColExpr->iColumn;
         pTab = pColExpr->pTab;
-        if( iCol<0 ) iCol = pTab->iPKey;
         zName = sqlite4MPrintf(db, "%s",
                  iCol>=0 ? pTab->aCol[iCol].zName : "rowid");
       }else if( pColExpr->op==TK_ID ){
@@ -1395,7 +1392,6 @@ Table *sqlite4ResultSetOfSelect(Parse *pParse, Select *pSelect){
   pTab->nRowEst = 1000000;
   selectColumnsFromExprList(pParse, pSelect->pEList, &pTab->nCol, &pTab->aCol);
   selectAddColumnTypeAndCollation(pParse, pTab->nCol, pTab->aCol, pSelect);
-  pTab->iPKey = -1;
   if( db->mallocFailed ){
     sqlite4DeleteTable(db, pTab);
     return 0;
@@ -3239,7 +3235,6 @@ static int selectExpander(Walker *pWalker, Select *p){
       pTab->zName = sqlite4MPrintf(db, "sqlite_subquery_%p_", (void*)pTab);
       while( pSel->pPrior ){ pSel = pSel->pPrior; }
       selectColumnsFromExprList(pParse, pSel->pEList, &pTab->nCol, &pTab->aCol);
-      pTab->iPKey = -1;
       pTab->nRowEst = 1000000;
       pTab->tabFlags |= TF_Ephemeral;
 #endif

@@ -246,16 +246,21 @@ do_execsql_test 10.2 {
   INSERT INTO t1 VALUES(3, 4);
 }
 
-# explain { UPDATE t1 SET b = 10 WHERE a=3 }
-#  execsql { PRAGMA vdbe_trace = 1 }
+do_execsql_test 10.3 { UPDATE t1 SET b = 10 WHERE a=3 }
+do_execsql_test 10.4 { SELECT * FROM t1 } {1 2 3 10}
+do_execsql_test 10.5 { PRAGMA integrity_check } {ok}
 
-do_execsql_test 10.3 { 
-  UPDATE t1 SET b = 10 WHERE a=3;
-  SELECT * FROM t1;
-} {1 2 3 10}
+#-------------------------------------------------------------------------
+reset_db
 
-do_execsql_test 10.4 { PRAGMA integrity_check } {ok}
-execsql { PRAGMA kvdump }
+do_execsql_test 11.1 {
+  CREATE TABLE t1(a, b, c, UNIQUE(a));
+  INSERT INTO t1 VALUES(1,2,3);
+}
+do_catchsql_test 11.2 { 
+  INSERT INTO t1 VALUES(1,2,4)
+} {1 {column a is not unique}}
+
 
 finish_test
 

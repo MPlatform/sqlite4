@@ -1654,9 +1654,6 @@ static int isSortingIndex(
     }
     if( pIdx->zName && i<pIdx->nColumn ){
       iColumn = pIdx->aiColumn[i];
-      if( iColumn==pIdx->pTable->iPKey ){
-        iColumn = -1;
-      }
       iSortOrder = pIdx->aSortOrder[i];
       zColl = pIdx->azColl[i];
     }else{
