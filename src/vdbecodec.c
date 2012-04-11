@@ -530,7 +530,7 @@ static int encodeOneKeyValue(
   }else
   if( flags & MEM_Str ){
     if( enlargeEncoderAllocation(p, pMem->n*4 + 2) ) return SQLITE_NOMEM;
-    p->aOut[p->nOut++] = 0x0e;   /* Text */
+    p->aOut[p->nOut++] = 0x24;   /* Text */
     if( pColl==0 || pColl->xMkKey==0 ){
       memcpy(p->aOut+p->nOut, pMem->z, pMem->n);
       p->nOut += pMem->n;
@@ -554,7 +554,7 @@ static int encodeOneKeyValue(
     s = 1;
     t = 0;
     if( enlargeEncoderAllocation(p, (n*8+6)/7 + 2) ) return SQLITE_NOMEM;
-    p->aOut[p->nOut++] = 0x0f;   /* Blob */
+    p->aOut[p->nOut++] = 0x25;   /* Blob */
      for(i=0; i<n; i++){
       unsigned char x = a[i];
       p->aOut[p->nOut++] = 0x80 | t | (x>>s);
@@ -574,6 +574,55 @@ static int encodeOneKeyValue(
     for(i=iStart; i<p->nOut; i++) p->aOut[i] ^= 0xff;
   }
   return SQLITE_OK;
+}
+
+/*
+** Variables aKey/nKey contain an encoded index key. This function returns
+** the length (in bytes) of the key with all but the first nField fields
+** removed.
+*/
+int sqlite4VdbeShortKey(
+  u8 *aKey,                       /* Buffer containing encoded key */
+  int nKey,                       /* Size of buffer aKey[] in bytes */
+  int nField                      /* Number of fields */
+){
+  u8 *p = aKey;
+  u8 *pEnd = &aKey[nKey];
+  u64 dummy;
+  int i;
+
+  p = aKey;
+  p += sqlite4GetVarint64(p, pEnd-p, &dummy);
+
+  for(i=0; i<nField; i++){
+    switch( *(p++) ){
+      case 0x05:                  /* NULL */
+      case 0x06:                  /* NaN */
+      case 0x07:                  /* -ve infinity */
+      case 0x15:                  /* zero */
+      case 0x23:                  /* +ve infinity */
+        break;
+
+      case 0x24:                  /* Text */
+      case 0x25:                  /* Blob */
+        while( *(p++) );
+        break;
+
+      case 0x22:                  /* Large positive number */
+      case 0x16:                  /* Small positive number */
+      case 0x14:                  /* Small negative number */
+      case 0x08:                  /* Large negative number */
+        p += sqlite4GetVarint64(p, pEnd-p, &dummy);
+        p += sqlite4GetVarint64(p, pEnd-p, &dummy);
+        break;
+
+      default:                    /* Medium sized number */
+        p += sqlite4GetVarint64(p, pEnd-p, &dummy);
+        break;
+    }
+  }
+
+  return (p - aKey);
 }
 
 /*

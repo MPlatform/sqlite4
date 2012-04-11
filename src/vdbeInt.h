@@ -390,6 +390,7 @@ int sqlite4VdbeEncodeKey(
 );
 int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_int64 v);
 int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);
+int sqlite4VdbeShortKey(u8 *, int, int);
 int sqlite4MemCompare(const Mem*, const Mem*, const CollSeq*);
 int sqlite4VdbeExec(Vdbe*);
 int sqlite4VdbeList(Vdbe*);

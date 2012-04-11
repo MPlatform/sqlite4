@@ -2986,18 +2986,27 @@ case OP_Found: {        /* jump, in3 */
 **
 ** Cursor P1 is open on an index that enforces a UNIQUE constraint. 
 ** Register P3 contains an encoded key suitable to be inserted into the 
-** index.
-**
-** Jump to instruction P2 if the encoded key can be inserted into the 
-** index without violating a unique constraint. Otherwise, fall through
+** index. If the key can be inserted into the index without violating
+** a UNIQUE constraint, jump to instruction P2. Otherwise, fall through
 ** to the next instruction.
+**
+** If P4 is a non-zero integer and the jump is not taken, then it is
+** a register that currently contains a blob. At the start of the blob
+** is a varint that contains the index number for the PRIMARY KEY index
+** of the table. The contents of P4 are overwritten with an index key
+** composed of the varint from the start of the initial blob content
+** and the PRIMARY KEY values from the index entry causing the UNIQUE
+** constraint to fail.
 */
 case OP_IsUnique: {        /* jump, in3 */
   VdbeCursor *pC;
   Mem *pShort;
   Mem *pProbe;
+  Mem *pOut;
+  int iOut;
   int nShort;
   int dir;
+  u64 dummy;
 
   KVByteArray *aKey;              /* Key read from cursor */
   KVSize nKey;                    /* Size of aKey in bytes */
@@ -3005,9 +3014,13 @@ case OP_IsUnique: {        /* jump, in3 */
   assert( pOp->p4type==P4_INT32 );
 
   pProbe = &aMem[pOp->p3];
-  pShort = &aMem[pOp->p4.i];
-  nShort = pShort->u.i;
   pC = p->apCsr[pOp->p1];
+  pOut = (pOp->p4.i==0 ? 0 : &aMem[pOp->p4.i]);
+  assert( pOut==0 || (pOut->flags & MEM_Blob) );
+
+  nShort = sqlite4VdbeShortKey(pProbe->z, pProbe->n, 
+      pC->pKeyInfo->nField - pC->pKeyInfo->nPK
+  );
   assert( nShort<=pProbe->n );
   assert( (nShort==pProbe->n)==(pC->pKeyInfo->nPK==0) );
 
@@ -3026,6 +3039,13 @@ case OP_IsUnique: {        /* jump, in3 */
        || (nKey==pProbe->n && 0==memcmp(pProbe->z, aKey, nKey))
       ){
         pc = pOp->p2-1;
+      }else if( pOut ){
+        iOut = sqlite4GetVarint64(pOut->z, pOut->n, &dummy);
+        rc = sqlite4VdbeMemGrow(pOut, iOut+(pProbe->n - nShort), 1);
+        if( rc==SQLITE_OK ){
+          memcpy(&pOut->z[iOut], &aKey[nShort], (pProbe->n - nShort));
+          pOut->n = iOut + (pProbe->n - nShort);
+        }
       }
     }
   }

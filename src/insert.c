@@ -1217,6 +1217,34 @@ Index *sqlite4FindPrimaryKey(
 }
 
 /*
+** Index pIdx is a UNIQUE index. This function returns a pointer to a buffer
+** containing an error message to tell the user that the UNIQUE constraint
+** has failed.
+**
+** The returned buffer should be freed by the caller using sqlite4DbFree().
+*/
+static char *notUniqueMessage(
+  Parse *pParse,                  /* Parse context */
+  Index *pIdx                     /* Index to generate error message for */
+){
+  const int nCol = pIdx->nColumn; /* Number of columns indexed by pIdx */
+  StrAccum errMsg;                /* Buffer to build error message within */
+  int iCol;                       /* Used to iterate through indexed columns */
+
+  sqlite4StrAccumInit(&errMsg, 0, 0, 200);
+  errMsg.db = pParse->db;
+  sqlite4StrAccumAppend(&errMsg, (nCol>1 ? "columns " : "column "), -1);
+  for(iCol=0; iCol<pIdx->nColumn; iCol++){
+    const char *zCol = indexColumnName(pIdx, iCol);
+    sqlite4StrAccumAppend(&errMsg, (iCol==0 ? "" : ", "), -1);
+    sqlite4StrAccumAppend(&errMsg, zCol, -1);
+  }
+  sqlite4StrAccumAppend(&errMsg, (nCol>1 ? " are" : " is"), -1);
+  sqlite4StrAccumAppend(&errMsg, " not unique", -1);
+  return sqlite4StrAccumFinish(&errMsg);
+}
+
+/*
 ** This function generates code used as part of both INSERT and UPDATE
 ** statements. The generated code performs two tasks:
 **
@@ -1252,8 +1280,8 @@ Index *sqlite4FindPrimaryKey(
 **
 **   If an array entry is non-zero, it contains the register that the 
 **   corresponding index key should be written to. If an entry is zero, then
-**   the corresponding index key is not required by the caller and that any 
-**   UNIQUE enforced by the index does not need to be checked.
+**   the corresponding index key is not required by the caller. In this case
+**   any UNIQUE constraint enforced by the index does not need to be checked.
 **
 ** 
 **
@@ -1345,6 +1373,8 @@ void sqlite4GenerateConstraintChecks(
   int ignoreDest,     /* Jump to this label on an OE_Ignore resolution */
   int *pbMayReplace   /* OUT: Set to true if constraint may cause a replace */
 ){
+  u8 aPkRoot[10];                 /* Root page number for pPk as a varint */ 
+  int nPkRoot;                    /* Size of aPkRoot in bytes */
   Index *pPk;                     /* Primary key index for table pTab */
   int i;              /* loop counter */
   Vdbe *v;            /* VDBE under constrution */
@@ -1359,6 +1389,7 @@ void sqlite4GenerateConstraintChecks(
   assert( pTab->pSelect==0 );  /* This table is not a VIEW */
   nCol = pTab->nCol;
   pPk = sqlite4FindPrimaryKey(pTab, 0);
+  nPkRoot = sqlite4PutVarint64(aPkRoot, pPk->tnum);
 
   assert( pPk->eIndexType==SQLITE_INDEX_PRIMARYKEY );
 
@@ -1375,7 +1406,7 @@ void sqlite4GenerateConstraintChecks(
   for(iCur=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, iCur++){
     int nTmpReg;                  /* Number of temp registers required */
     int regTmp;                   /* First temp register allocated */
-    int regShort;                 /* Reg. for number of bytes in short key */
+    int regPk;                    /* PK of conflicting row (for REPLACE) */
 
     if( aRegIdx[iCur]==0 ) continue;  /* Skip unused indices */
 
@@ -1384,7 +1415,8 @@ void sqlite4GenerateConstraintChecks(
     ** the primary key values.  */
     nTmpReg = 1 + pIdx->nColumn + (pIdx==pPk ? 0 : pPk->nColumn);
     regTmp = sqlite4GetTempRange(pParse, nTmpReg);
-    regShort = regTmp + nTmpReg - 1;
+    regPk = regTmp + nTmpReg - 1;
+
     for(i=0; i<pIdx->nColumn; i++){
       int idx = pIdx->aiColumn[i];
       sqlite4VdbeAddOp2(v, OP_SCopy, regContent+idx, regTmp+i);
@@ -1396,7 +1428,6 @@ void sqlite4GenerateConstraintChecks(
       }
     }
     sqlite4VdbeAddOp3(v, OP_MakeIdxKey, baseCur+iCur, regTmp, aRegIdx[iCur]);
-    sqlite4VdbeChangeP4(v, -1, (const char *)regShort, P4_INT32);
     VdbeComment((v, "key for %s", pIdx->zName));
 
     /* If Index.onError==OE_None, then pIdx is not a UNIQUE or PRIMARY KEY 
@@ -1406,9 +1437,7 @@ void sqlite4GenerateConstraintChecks(
     onError = pIdx->onError;
     if( onError!=OE_None ){
       int iTest;                  /* Address of OP_IsUnique instruction */
-
-      iTest = sqlite4VdbeAddOp3(v, OP_IsUnique, baseCur+iCur, 0, aRegIdx[iCur]);
-      sqlite4VdbeChangeP4(v, -1, (const char *)regShort, P4_INT32);
+      int regOut = 0;
 
       /* Figure out what to do if a UNIQUE constraint is encountered. 
       **
@@ -1423,51 +1452,39 @@ void sqlite4GenerateConstraintChecks(
         if( onError==OE_Ignore ) onError = OE_Replace;
         else if( onError==OE_Fail ) onError = OE_Abort;
       }
+
+      if( onError==OE_Replace ){
+        sqlite4VdbeAddOp3(v, OP_Blob, nPkRoot, regPk, 0);
+        sqlite4VdbeChangeP4(v, -1, aPkRoot, nPkRoot);
+        regOut = regPk;
+      }
+      iTest = sqlite4VdbeAddOp3(v, OP_IsUnique, baseCur+iCur, 0, aRegIdx[iCur]);
+      sqlite4VdbeChangeP4(v, -1, SQLITE_INT_TO_PTR(regOut), P4_INT32);
       
       switch( onError ){
         case OE_Rollback:
         case OE_Abort:
         case OE_Fail: {
-          int j;
-          StrAccum errMsg;
-          const char *zSep;
-          char *zErr;
-
-          sqlite4StrAccumInit(&errMsg, 0, 0, 200);
-          errMsg.db = pParse->db;
-          zSep = pIdx->nColumn>1 ? "columns " : "column ";
-          for(j=0; j<pIdx->nColumn; j++){
-            const char *zCol = indexColumnName(pIdx, j);
-            sqlite4StrAccumAppend(&errMsg, zSep, -1);
-            zSep = ", ";
-            sqlite4StrAccumAppend(&errMsg, zCol, -1);
-          }
-          sqlite4StrAccumAppend(&errMsg,
-              pIdx->nColumn>1 ? " are not unique" : " is not unique", -1);
-          zErr = sqlite4StrAccumFinish(&errMsg);
+          char *zErr = notUniqueMessage(pParse, pIdx);
           sqlite4HaltConstraint(pParse, onError, zErr, 0);
-          sqlite4DbFree(errMsg.db, zErr);
+          sqlite4DbFree(pParse->db, zErr);
           break;
         }
+
         case OE_Ignore: {
           assert( seenReplace==0 );
           sqlite4VdbeAddOp2(v, OP_Goto, 0, ignoreDest);
           break;
         }
         default: {
-          assert( 0 );
-#if 0
-          Trigger *pTrigger = 0;
+          Trigger *pTrigger;
           assert( onError==OE_Replace );
           sqlite4MultiWrite(pParse);
-          if( pParse->db->flags&SQLITE_RecTriggers ){
-            pTrigger = sqlite4TriggersExist(pParse, pTab, TK_DELETE, 0, 0);
-          }
+          pTrigger = sqlite4TriggersExist(pParse, pTab, TK_DELETE, 0, 0);
           sqlite4GenerateRowDelete(
-              pParse, pTab, baseCur, regR, 0, pTrigger, OE_Replace
+              pParse, pTab, baseCur, regOut, 0, pTrigger, OE_Replace
           );
           seenReplace = 1;
-#endif
           break;
         }
       }

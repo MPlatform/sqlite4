@@ -1961,7 +1961,9 @@ static void sqliteViewResetAll(sqlite4 *db, int idx){
 static void destroyRootPage(Parse *pParse, int iTable, int iDb){
   Vdbe *v = sqlite4GetVdbe(pParse);
   sqlite4VdbeAddOp2(v, OP_Clear, iTable, iDb);
+#if 0
   sqlite4MayAbort(pParse);
+#endif
 }
 
 /*
