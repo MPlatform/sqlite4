@@ -548,8 +548,7 @@ void sqlite4Insert(
     goto insert_cleanup;
   }
 
-  /* Locate the table into which we will be inserting new information.
-  */
+  /* Locate the table into which we will be inserting new information. */
   assert( pTabList->nSrc==1 );
   zTab = pTabList->a[0].zName;
   if( NEVER(zTab==0) ) goto insert_cleanup;
@@ -565,13 +564,15 @@ void sqlite4Insert(
     goto insert_cleanup;
   }
 
-  /* Set bImplicitPK to true for an implicit PRIMARY KEY, or false otherwise */
+  /* Set bImplicitPK to true for an implicit PRIMARY KEY, or false otherwise.
+  ** Also set pPk to point to the primary key, and iPk to the cursor offset
+  ** of the primary key cursor (i.e. so that the cursor opened on the primary
+  ** key index is VDBE cursor (baseCur+iPk).  */
   pPk = sqlite4FindPrimaryKey(pTab, &iPk);
   bImplicitPK = pPk->aiColumn[0]==-1;
 
   /* Figure out if we have any triggers and if the table being
-  ** inserted into is a view
-  */
+  ** inserted into is a view. */
 #ifndef SQLITE_OMIT_TRIGGER
   pTrigger = sqlite4TriggersExist(pParse, pTab, TK_INSERT, 0, &tmask);
   isView = pTab->pSelect!=0;
@@ -1026,10 +1027,13 @@ void sqlite4Insert(
 #endif
     {
       int isReplace;    /* Set to true if constraints may cause a replace */
+
       sqlite4GenerateConstraintChecks(pParse, pTab, baseCur, 
           regContent, aRegIdx, keyColumn>=0, 0, onError, endOfLoop, &isReplace
       );
-      sqlite4FkCheck(pParse, pTab, 0, regIns);
+
+      sqlite4FkCheck(pParse, pTab, 0, regContent);
+
       sqlite4CompleteInsertion(pParse, pTab, baseCur, 
           regContent, aRegIdx, 0, appendFlag, isReplace==0
       );

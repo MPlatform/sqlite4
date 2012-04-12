@@ -202,7 +202,12 @@ do_execsql_test 8.1 {
 }
 
 do_execsql_test 8.2 { DELETE FROM t1 WHERE b = 'b' }
+
+execsql {PRAGMA vdbe_trace = 1}
+breakpoint
 do_execsql_test 8.3 { SELECT * FROM t1 } {}
+finish_test
+
 do_execsql_test 8.4 {
   INSERT INTO t1 VALUES('a', 'A');
   INSERT INTO t1 VALUES('b', 'B');
@@ -261,6 +266,111 @@ do_catchsql_test 11.2 {
   INSERT INTO t1 VALUES(1,2,4)
 } {1 {column a is not unique}}
 
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 12.1 {
+  CREATE TABLE t1(a, b);
+  INSERT INTO t1 VALUES(3, 'three');
+  INSERT INTO t1 VALUES(1, 'one');
+  INSERT INTO t1 VALUES(2, 'two');
+}
+do_execsql_test 12.2 { SELECT * FROM t1 ORDER BY a } {1 one 2 two 3 three}
+do_execsql_test 12.3 { SELECT * FROM t1 ORDER BY b } {1 one 3 three 2 two}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 13.1 {
+  CREATE TABLE t1(a, b);
+  INSERT INTO t1 VALUES(3, 'three');
+  INSERT INTO t1 VALUES(1, 'one');
+  INSERT INTO t1 VALUES(2, 'two');
+}
+do_execsql_test 13.2  { SELECT a FROM t1 } {3 1 2}
+do_execsql_test 13.3  { CREATE TABLE t2(x, y) }
+do_execsql_test 13.4  { SELECT a FROM t1 } {3 1 2}
+do_execsql_test 13.5  { DROP TABLE t2 }
+do_execsql_test 13.6  { SELECT a FROM t1 } {3 1 2}
+do_execsql_test 13.7  { CREATE TABLE t2 AS SELECT * FROM t1 }
+do_execsql_test 13.8  { SELECT a FROM t2 } {3 1 2}
+do_execsql_test 13.9  { DROP TABLE t1 }
+do_execsql_test 13.10 { SELECT a FROM t2 } {3 1 2}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 14.1 {
+  CREATE TABLE t1(a,b,c NOT NULL  DEFAULT 5);
+  CREATE TABLE t2(a,b,c); 
+  CREATE TABLE t3(x);
+
+  INSERT INTO t2 VALUES(1,2,1);
+  INSERT INTO t2 VALUES(2,3,2);
+  INSERT INTO t2 VALUES(3,4,1);
+  INSERT INTO t2 VALUES(4,5,4);
+
+  INSERT INTO t3 VALUES(1);
+}
+
+do_execsql_test 14.2 { DROP TABLE t1 }
+do_execsql_test 14.3 { SELECT * FROM t3 } 1
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 15.1.1 {
+  CREATE TABLE t1(x PRIMARY KEY);
+  BEGIN;
+    INSERT INTO t1 VALUES('rollback is not implemented yet');
+}
+
+do_execsql_test 15.1.2 { ROLLBACK }
+do_execsql_test 15.1.3 { SELECT * FROM t1 } {}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 16.1.1 {
+  PRAGMA foreign_keys = ON;
+  CREATE TABLE p1(x PRIMARY KEY);
+  CREATE TABLE c1(y REFERENCES p1);
+
+  INSERT INTO p1 VALUES(2);
+  INSERT INTO p1 VALUES(4);
+  INSERT INTO p1 VALUES(6);
+}
+
+do_execsql_test  16.1.2 { INSERT INTO c1 VALUES(2) }
+do_catchsql_test 16.1.3 { 
+  INSERT INTO c1 VALUES(3) 
+} {1 {foreign key constraint failed}}
+do_execsql_test 16.1.4 { SELECT * FROM c1 } {2}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 17.1 {
+
+  PRAGMA foreign_keys = ON;
+  CREATE TABLE t1(x PRIMARY KEY);
+  CREATE TABLE t2(a PRIMARY KEY, b);
+
+  INSERT INTO t1 VALUES('X');
+
+  INSERT INTO t2 VALUES(1, 'A');
+  INSERT INTO t2 VALUES(2, 'B');
+  INSERT INTO t2 VALUES(3, 'C');
+  INSERT INTO t2 VALUES(4, 'D');
+  INSERT INTO t2 VALUES(5, 'A');
+}
+
+breakpoint
+do_catchsql_test 17.2 { 
+  INSERT INTO t1 SELECT b FROM t2;
+} {1 {column x is not unique}}
+
+do_execsql_test 17.3 { SELECT * FROM t1 } {X}
 
 finish_test
 

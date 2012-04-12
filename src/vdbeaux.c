@@ -1805,50 +1805,66 @@ int sqlite4VdbeHalt(Vdbe *p){
   if( p->pc<0 ){
     /* No commit or rollback needed if the program never started */
   }else{
-    /* Check for immediate foreign key violations. */
-    if( p->rc==SQLITE_OK ){
-      sqlite4VdbeCheckFk(p, 0);
-    }
-  
-    /* If the auto-commit flag is set and this is the only active writer 
-    ** VM, then we do either a commit or rollback of the current transaction. 
+    /* eAction:
+    **
+    **    0 - Do commit, either statement or transaction.
+    **    1 - Do rollback, either statement or transaction.
+    **    2 - Do transaction rollback.
     */
-    if( !sqlite4VtabInSync(db) 
-     && db->autoCommit 
-     && db->writeVdbeCnt==(p->readOnly==0) 
-    ){
-      rc = sqlite4VdbeCheckFk(p, 1);
-      if( rc!=SQLITE_OK ){
-        rc = SQLITE_CONSTRAINT;
-      }else{ 
-        /* The auto-commit flag is true, the vdbe program was successful 
-        ** or hit an 'OR FAIL' constraint and there are no deferred foreign
-        ** key constraints to hold up the transaction. This means a commit 
-        ** is required. */
-        rc = vdbeCommit(db, p);
+    int eAction;
+
+    /* Check if an error has already occurred */
+    if( p->rc==SQLITE_CONSTRAINT ){
+      if( p->errorAction==OE_Rollback ){
+        eAction = 2;
+      }else if( p->errorAction==OE_Fail ){
+        eAction = 0;
       }
-      if( rc==SQLITE_BUSY && p->readOnly ){
-        /* will return the error */
-      }else if( rc!=SQLITE_OK ){
-        p->rc = rc;
+    }else if( p->rc ){
+      eAction = 1;
+    }
+
+    if( eAction==0 && sqlite4VdbeCheckFk(p, 0) ){
+      eAction = 1;
+    }
+
+    if( eAction==2 || ( 
+          !sqlite4VtabInSync(db)==0 
+       && db->writeVdbeCnt==(p->readOnly==0) 
+       && db->autoCommit 
+    )){
+      if( eAction==0 && sqlite4VdbeCheckFk(p, 1) ){
+        eAction = 1;
+      }
+
+      if( eAction==0 ){
+        int rc = vdbeCommit(db, p);
+        if( rc!=SQLITE_OK ){
+          p->rc = rc;
+          eAction = 1;
+        }else{
+          assert( db->nDeferredCons<=0 );
+          sqlite4CommitInternalChanges(db);
+        }
+      }
+
+      if( eAction ){
         sqlite4RollbackAll(db);
-      }else{
-        db->nDeferredCons = 0;
-        sqlite4CommitInternalChanges(db);
       }
-    }else{
-      /* Not in auto-commit mode.  If the statement failed, rollback
-      ** the effects of just this one statement */
-      if( p->rc!=SQLITE_OK && p->stmtTransMask!=0 ){
-        int i;
-        for(i=0; i<db->nDb; i++){
-          if( p->stmtTransMask & ((yDbMask)1)<<i ){
-            KVStore *pKV = db->aDb[i].pKV;
-            rc = sqlite4KVStoreRollback(pKV, pKV->iTransLevel-1);
-            if( rc ){
-              sqlite4RollbackAll(db);
-              break;
-            }
+
+      db->nDeferredCons = 0;
+    }else if( p->stmtTransMask ){
+      int i;
+      int (*xFunc)(KVStore *,int);
+      xFunc = (eAction ? sqlite4KVStoreRollback : sqlite4KVStoreCommit);
+
+      for(i=0; i<db->nDb; i++){
+        if( p->stmtTransMask & ((yDbMask)1)<<i ){
+          KVStore *pKV = db->aDb[i].pKV;
+          rc = xFunc(pKV, pKV->iTransLevel-1);
+          if( rc ){
+            sqlite4RollbackAll(db);
+            break;
           }
         }
       }
@@ -1863,12 +1879,12 @@ int sqlite4VdbeHalt(Vdbe *p){
     }
     assert( db->activeVdbeCnt>=db->writeVdbeCnt );
   }
+
   p->magic = VDBE_MAGIC_HALT;
   checkActiveVdbeCnt(db);
   if( p->db->mallocFailed ){
     p->rc = SQLITE_NOMEM;
   }
-
   return (p->rc==SQLITE_BUSY ? SQLITE_BUSY : SQLITE_OK);
 }
 

@@ -317,8 +317,8 @@ foreach {i conf1 cmd t0 t1 t2 t3 t4} {
     set t3 [expr {$t3+$t4}]
   }
   do_test conflict-6.$i {
-    db close
-    sqlite4 db test.db 
+    #db close
+    #sqlite4 db test.db 
     if {$conf1!=""} {set conf1 "ON CONFLICT $conf1"}
     execsql {pragma temp_store=file}
     set ::sqlite_opentemp_count 0

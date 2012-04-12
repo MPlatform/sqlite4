@@ -22,7 +22,8 @@
 #define SQLITE_OMIT_SHARED_CACHE 1
 /*#define SQLITE_OMIT_PAGER_PRAGMAS 1*/
 #define SQLITE_OMIT_PROGRESS_CALLBACK 1
-#define SQLITE_OMIT_MERGE_SORT 1
+
+#define SQLITE_OMIT_MERGE_SORT 1 
 
 /*
 ** These #defines should enable >2GB file support on POSIX if the

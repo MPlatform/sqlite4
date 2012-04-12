@@ -474,7 +474,6 @@ static int kvmemRollback(KVStore *pKVStore, int iLevel){
   KVMem *p = (KVMem*)pKVStore;
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( iLevel>=0 );
-  assert( iLevel<p->base.iTransLevel );
   while( p->base.iTransLevel>iLevel && p->base.iTransLevel>1 ){
     KVMemChng *pChng, *pNext;
     for(pChng=p->apLog[p->base.iTransLevel-2]; pChng; pChng=pNext){
@@ -681,6 +680,7 @@ static int kvmemSeek(
     pCur->pNode = 0;
     pCur->pData = 0;
   }
+  assert( rc!=SQLITE_DONE );
   return rc;
 }
 

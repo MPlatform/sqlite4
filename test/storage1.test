@@ -69,7 +69,7 @@ do_test storage1-1.5 {
   storage_close_cursor $c1
   storage_close $x
   set res
-} {SQLITE_INEXACT 014557 EF01 SQLITE_OK 012345 ABCD SQLITE_DONE}
+} {SQLITE_INEXACT 014557 EF01 SQLITE_OK 012345 ABCD SQLITE_NOTFOUND}
 do_test storage1-1.6 {
   set x [storage_open :memory:]
   storage_begin $x 2

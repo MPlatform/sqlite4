@@ -2140,6 +2140,7 @@ case OP_Column: {
   }
   UPDATE_MAX_BLOBSIZE(pDest);
   REGISTER_TRACE(pOp->p3, pDest);
+      assert( rc<100 );
   break;
 }
 
@@ -2168,28 +2169,27 @@ case OP_Affinity: {
   break;
 }
 
-/* Opcode: MakeIdxKey P1 P2 P3 P4 *
+/* Opcode: MakeIdxKey P1 P2 P3 * P5
 **
 ** P1 is an open cursor. P2 is the first register in a contiguous array
-** of N registers containing values to encode into a database key. N is
-** equal to the number of columns indexed by P1, plus the number of 
-** trailing primary key columns (if any).
+** of N registers containing values to encode into a database key. Normally,
+** N is equal to the number of columns indexed by P1, plus the number of 
+** trailing primary key columns (if any). 
+**
+** Or, if P5 is non-zero, then any trailing primary key columns are omitted.
 **
 ** This instruction encodes the N values into a database key and writes
 ** the result to register P3.
 **
-** If P4 is of type P4_INT32, then it is a register number. This instruction
-** sets register P4 to an integer value - the number of bytes in the 
-** generated index key not including any appended primary key column values.
+** No affinity transformations are applied to the input values before 
+** they are encoded. 
 */
 case OP_MakeIdxKey: {
   VdbeCursor *pC;
   KeyInfo *pKeyInfo;
-  Mem *pData0;
+  Mem *pData0;                    /* First in array of input registers */
   u8 *aRec;                       /* The constructed database key */
   int nRec;                       /* Size of aRec[] in bytes */
-  int nShort;                     /* Size of aRec[] without PK values */
-  Mem *pShort;                    /* Memory cell to write nShort to */
   
   pC = p->apCsr[pOp->p1];
   pKeyInfo = pC->pKeyInfo;
@@ -2199,20 +2199,14 @@ case OP_MakeIdxKey: {
 
   memAboutToChange(p, pOut);
 
+  assert( pOp->p5==0 );
   rc = sqlite4VdbeEncodeKey(
-    db, pData0, pKeyInfo->nField, pC->iRoot, pKeyInfo, &aRec, &nRec, &nShort
+    db, pData0, pKeyInfo->nField, pC->iRoot, pKeyInfo, &aRec, &nRec, 0
   );
 
   if( rc ){
     sqlite4DbFree(db, aRec);
   }else{
-    if( pOp->p4type==P4_INT32 ){
-      pShort = &aMem[pOp->p4.i];
-      memAboutToChange(p, pShort);
-      pShort->u.i = nShort;
-      MemSetTypeFlag(pShort, MEM_Int);
-      REGISTER_TRACE(pOp->p4.i, pShort);
-    }
     rc = sqlite4VdbeMemSetStr(pOut, aRec, nRec, 0, SQLITE_DYNAMIC);
     REGISTER_TRACE(pOp->p3, pOut);
     UPDATE_MAX_BLOBSIZE(pOut);
@@ -2663,18 +2657,15 @@ case OP_OpenEphemeral: {
   pCx = allocateCursor(p, pOp->p1, pOp->p2, -1, 1);
   if( pCx==0 ) goto no_mem;
   pCx->nullRow = 1;
+
   rc = sqlite4KVStoreOpen(db, "ephm", ":memory:", &pCx->pTmpKV,
           SQLITE_KVOPEN_TEMPORARY | SQLITE_KVOPEN_NO_TRANSACTIONS
   );
-  if( rc==SQLITE_OK ){
-    rc = sqlite4KVStoreOpenCursor(pCx->pTmpKV, &pCx->pKVCur);
-  }
-  if( rc==SQLITE_OK ){
-    rc = sqlite4KVStoreBegin(pCx->pTmpKV, 2);
-  }
+  if( rc==SQLITE_OK ) rc = sqlite4KVStoreOpenCursor(pCx->pTmpKV, &pCx->pKVCur);
+  if( rc==SQLITE_OK ) rc = sqlite4KVStoreBegin(pCx->pTmpKV, 2);
+
   pCx->pKeyInfo = pOp->p4.pKeyInfo;
   if( pCx->pKeyInfo ) pCx->pKeyInfo->enc = ENC(p->db);
-
   pCx->isIndex = !pCx->isTable;
   break;
 }
@@ -3407,7 +3398,7 @@ case OP_SorterData: {
   assert( pC->isSorter );
   rc = sqlite4VdbeSorterRowkey(pC, pOut);
 #else
-  pOp->opcode = OP_RowKey;
+  pOp->opcode = OP_RowData;
   pc--;
 #endif
   break;
@@ -3687,21 +3678,11 @@ case OP_Next: {        /* jump */
   break;
 }
 
-/* Opcode: IdxInsert P1 P2 * * P5
-**
-** Register P2 holds an SQL index key made using the
-** MakeRecord instructions.  This opcode writes that key
-** into the index P1.  Data for the entry is nil.
-**
-** P3 is a flag that provides a hint to the b-tree layer that this
-** insert is likely to be an append.
-**
-** This instruction only works for indices.  The equivalent instruction
-** for tables is OP_Insert.
+/* Opcode: SorterInsert P1 P2 P3
 */
 case OP_SorterInsert: {      /* in2 */
+#ifndef SQLITE_OMIT_MERGE_SORT
   VdbeCursor *pC;
-
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
@@ -3714,13 +3695,15 @@ case OP_SorterInsert: {      /* in2 */
     rc = sqlite4VdbeSorterWrite(db, pC, pIn2);
   }
   break;
-}
+#endif
 
+  /* If OMIT_MERGE_SORT is defined, fall through to IdxInsert. */
+}
 
 /* Opcode: IdxInsert P1 P2 P3 * *
 **
-** Register P2 holds the data and register P3 holds the key for an
-** index record.  Write this record into the index specified by the
+** Register P3 holds the key and register P2 holds the data for an
+** index entry.  Write this record into the index specified by the
 ** cursor P1.
 */
 case OP_IdxInsert: {

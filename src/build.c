@@ -2395,7 +2395,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIndex){
     addr2 = sqlite4VdbeCurrentAddr(v);
   }
   sqlite4VdbeAddOp2(v, OP_SorterData, iSorter, regRecord);
-  sqlite4VdbeAddOp2(v, OP_IdxInsert, iIdx, regRecord);  ***** busted
+  sqlite4VdbeAddOp2(v, OP_IdxInsert, iIdx, regRecord);  
   sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT | OPFLAG_APPENDBIAS);
 #else
   regIdxKey = sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1, iIdx);

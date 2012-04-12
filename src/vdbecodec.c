@@ -595,7 +595,9 @@ int sqlite4VdbeShortKey(
   p += sqlite4GetVarint64(p, pEnd-p, &dummy);
 
   for(i=0; i<nField; i++){
-    switch( *(p++) ){
+    u8 c = *(p++);
+    switch( c ){
+
       case 0x05:                  /* NULL */
       case 0x06:                  /* NaN */
       case 0x07:                  /* -ve infinity */

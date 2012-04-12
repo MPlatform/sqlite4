@@ -29,7 +29,7 @@ static void storageSetTclErrorName(Tcl_Interp *interp, int rc){
 }
 
 /*
-** TCLCMD:    storage_open URI FLAGS
+** TCLCMD:    storage_open URI ?FLAGS?
 **
 ** Return a string that identifies the new storage object.
 */
@@ -41,14 +41,16 @@ static int test_storage_open(
 ){
   KVStore *pNew = 0;
   int rc;
-  int flags;
+  int flags = 0;
   sqlite4 db;
   char zRes[50];
-  if( objc!=3 ){
-    Tcl_WrongNumArgs(interp, 2, objv, "URI FLAGS");
+  if( objc!=2 && objc!=3 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "URI ?FLAGS?");
     return TCL_ERROR;
   }
-  if( Tcl_GetIntFromObj(interp, objv[2], &flags) ) return TCL_ERROR;
+  if( objc==3 && Tcl_GetIntFromObj(interp, objv[2], &flags) ){
+    return TCL_ERROR;
+  }
   memset(&db, 0, sizeof(db));
   rc = sqlite4KVStoreOpen(&db, "test", Tcl_GetString(objv[1]), &pNew, flags);
   if( rc ){
