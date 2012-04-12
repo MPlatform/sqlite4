@@ -346,9 +346,8 @@ static KVMemNode *kvmemNewNode(
 /* Remove node pOld from the tree.  pOld must be an element of the tree.
 */
 static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
-  KVMemNode **ppParent;
-  KVMemNode *pBalance;
-
+  KVMemNode **ppParent;           /* Location of pointer to pOld */
+  KVMemNode *pBalance;            /* Node to run kvmemBalance() on */
   kvmemDataUnref(pOld->pData);
   pOld->pData = 0;
   ppParent = kvmemFromPtr(pOld, &p->pRoot);
@@ -358,7 +357,8 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
   }else if( pOld->pBefore && pOld->pAfter ){
     KVMemNode *pX, *pY;
     pX = kvmemFirst(pOld->pAfter);
-    *kvmemFromPtr(pX, 0) = 0;
+    assert( pX->pBefore==0 );
+    *kvmemFromPtr(pX, 0) = pX->pAfter;
     pBalance = pX->pUp;
     pX->pAfter = pOld->pAfter;
     if( pX->pAfter ){
