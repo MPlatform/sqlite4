@@ -1811,17 +1811,14 @@ int sqlite4VdbeHalt(Vdbe *p){
     **    1 - Do rollback, either statement or transaction.
     **    2 - Do transaction rollback.
     */
-    int eAction;
+    int eAction = (p->rc!=SQLITE_OK);
 
-    /* Check if an error has already occurred */
     if( p->rc==SQLITE_CONSTRAINT ){
       if( p->errorAction==OE_Rollback ){
         eAction = 2;
       }else if( p->errorAction==OE_Fail ){
         eAction = 0;
       }
-    }else if( p->rc ){
-      eAction = 1;
     }
 
     if( eAction==0 && sqlite4VdbeCheckFk(p, 0) ){
@@ -1829,7 +1826,7 @@ int sqlite4VdbeHalt(Vdbe *p){
     }
 
     if( eAction==2 || ( 
-          !sqlite4VtabInSync(db)==0 
+          sqlite4VtabInSync(db)==0 
        && db->writeVdbeCnt==(p->readOnly==0) 
        && db->autoCommit 
     )){
@@ -1854,10 +1851,15 @@ int sqlite4VdbeHalt(Vdbe *p){
 
       db->nDeferredCons = 0;
     }else if( p->stmtTransMask ){
-      int i;
-      int (*xFunc)(KVStore *,int);
-      xFunc = (eAction ? sqlite4KVStoreRollback : sqlite4KVStoreCommit);
+      /* Auto-commit mode is turned off and no "OR ROLLBACK" constraint was
+      ** encountered. So either commit (if eAction==0) or rollback (if 
+      ** eAction==1) any statement transactions opened by this VM.  */
 
+      int i;                           /* Used to iterate thru attached dbs */
+      int (*xFunc)(KVStore *,int);     /* Commit or rollback function */
+
+      assert( eAction==0 || eAction==1 );
+      xFunc = (eAction ? sqlite4KVStoreRollback : sqlite4KVStoreCommit);
       for(i=0; i<db->nDb; i++){
         if( p->stmtTransMask & ((yDbMask)1)<<i ){
           KVStore *pKV = db->aDb[i].pKV;

@@ -2360,6 +2360,26 @@ case OP_Savepoint: {
 ** This instruction causes the VM to halt.
 */
 case OP_AutoCommit: {
+  int bAutoCommit;                /* New value for auto-commit flag */
+  int bRollback;                  /* True to do transaction rollback */
+
+  bAutoCommit = pOp->p1;
+  bRollback = pOp->p2;
+  assert( bAutoCommit==1 || bRollback==0 );
+
+  if( bAutoCommit==0 ){
+    db->autoCommit = 0;
+  }else{
+    if( bRollback ){
+      sqlite4RollbackAll(db);
+    }else if( sqlite4VdbeCheckFk(p, 1) ){
+      goto vdbe_return;
+    }
+
+    sqlite4VdbeHalt(p);
+  }
+
+  db->autoCommit = bAutoCommit;
   break;
 }
 
