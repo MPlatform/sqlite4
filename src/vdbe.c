@@ -2367,7 +2367,23 @@ case OP_AutoCommit: {
   bRollback = pOp->p2;
   assert( bAutoCommit==1 || bRollback==0 );
 
-  if( bAutoCommit==0 ){
+  if( bAutoCommit==db->autoCommit ){
+    /* This branch is taken if the user is trying to BEGIN a transaction
+    ** when one is already open, or trying to commit or rollback a transaction
+    ** when none is open. Return a suitable error message.  */
+    const char *zErr;
+    if( bAutoCommit==0 ){
+      zErr = "cannot start a transaction within a transaction";
+    }else if( bRollback ){
+      zErr = "cannot rollback - no transaction is active";
+    }else{
+      zErr = "cannot commit - no transaction is active";
+    }
+    sqlite4SetString(&p->zErrMsg, db, zErr);
+    rc = SQLITE_ERROR;
+  }
+
+  else if( bAutoCommit==0 ){
     db->autoCommit = 0;
   }else{
     if( bRollback ){
@@ -2376,10 +2392,10 @@ case OP_AutoCommit: {
       goto vdbe_return;
     }
 
+    db->autoCommit = 1;
     sqlite4VdbeHalt(p);
   }
 
-  db->autoCommit = bAutoCommit;
   break;
 }
 
@@ -3035,7 +3051,7 @@ case OP_IsUnique: {        /* jump, in3 */
   assert( nShort<=pProbe->n );
   assert( (nShort==pProbe->n)==(pC->pKeyInfo->nPK==0) );
 
-  dir = (nShort < pProbe->n);
+  dir = (pC->pKeyInfo->nPK==0 ? 0 : 1);
   rc = sqlite4KVCursorSeek(pC->pKVCur, pProbe->z, nShort, dir);
 
   if( rc==SQLITE_NOTFOUND ){

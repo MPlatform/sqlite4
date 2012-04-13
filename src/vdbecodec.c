@@ -615,11 +615,11 @@ int sqlite4VdbeShortKey(
       case 0x14:                  /* Small negative number */
       case 0x08:                  /* Large negative number */
         p += sqlite4GetVarint64(p, pEnd-p, &dummy);
-        p += sqlite4GetVarint64(p, pEnd-p, &dummy);
+        while( (*p++) & 0x01 );
         break;
 
       default:                    /* Medium sized number */
-        p += sqlite4GetVarint64(p, pEnd-p, &dummy);
+        while( (*p++) & 0x01 );
         break;
     }
   }

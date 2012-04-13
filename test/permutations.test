@@ -133,7 +133,7 @@ lappend ::testsuitelist xxx
 
 test_suite "src4" -prefix "" -description {
 } -files [
-  test_set simple.test fkey1.test
+  test_set simple.test fkey1.test conflict.test
 ]
 
 test_suite "veryquick" -prefix "" -description {

@@ -349,7 +349,7 @@ void sqlite4Update(
   if( !isView ){
     /* Set bOpenAll to true if this UPDATE might strike a REPLACE */
     bOpenAll = (onError==OE_Replace);
-    for(i=0, pIdx=pTab->pIndex->pNext; pIdx; pIdx=pIdx->pNext, i++){
+    for(i=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, i++){
       if( aRegIdx[i] && pIdx->onError==OE_Replace ) bOpenAll = 1;
     }
 
@@ -501,7 +501,7 @@ void sqlite4Update(
     sqlite4GenerateRowIndexDelete(pParse, pTab, iCur, aRegIdx);
   
     /* Delete the old record */
-    if( hasFK || chngRowid ){
+    if( hasFK || bChngPk ){
       sqlite4VdbeAddOp2(v, OP_Delete, iCur, 0);
     }
     sqlite4VdbeJumpHere(v, j1);

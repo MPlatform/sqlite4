@@ -366,6 +366,64 @@ do_catchsql_test 17.2 {
 
 do_execsql_test 17.3 { SELECT * FROM t1 } {X}
 
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 18.1 {
+  CREATE TABLE t1(a, b, c, UNIQUE(a,b) ON CONFLICT IGNORE);
+  CREATE TABLE t2(x);
+
+  INSERT INTO t1 VALUES(1,2,3);
+  BEGIN;
+    INSERT INTO t2 VALUES(1); 
+    INSERT INTO t1 VALUES(1,2,4);
+  COMMIT;
+}
+
+do_execsql_test 18.2 { SELECT * FROM t1 } {1 2 3}
+do_execsql_test 18.3 { SELECT * FROM t2 } {1}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_test 19.1 {
+  catchsql {
+    CREATE TABLE t4(x);
+    CREATE UNIQUE INDEX t4x ON t4(x);
+    BEGIN;
+    INSERT INTO t4 VALUES(1);
+    INSERT OR ROLLBACK INTO t4 VALUES(1);
+  }
+  execsql { SELECT * FROM t4 }
+} {}
+
+# Check the above closed the transaction.
+do_execsql_test 19.2 { BEGIN }
+do_execsql_test 19.3 { COMMIT }
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 20.1 {
+  CREATE TABLE def(d, e, f);
+  BEGIN;
+  INSERT INTO def VALUES('a', 'b', 'c');
+
+  INSERT INTO def SELECT * FROM def;
+  INSERT INTO def SELECT * FROM def;
+  INSERT INTO def SELECT * FROM def;
+  INSERT INTO def SELECT * FROM def;
+  INSERT INTO def SELECT * FROM def;
+
+  SELECT count(*) FROM def;
+} {32}
+
+do_execsql_test 20.2 { ROLLBACK }
+do_execsql_test 20.3 { SELECT count(*) FROM def } 0
+
+
+#execsql {PRAGMA  kvdump }
+
 finish_test
 
 #proc populate_t1 {} {

@@ -478,17 +478,35 @@ static int kvmemCommitPhaseTwo(KVStore *pKVStore, int iLevel){
   assertUpPointers(p->pRoot);
   while( p->base.iTransLevel>iLevel && p->base.iTransLevel>1 ){
     KVMemChng *pChng, *pNext;
-    for(pChng=p->apLog[p->base.iTransLevel-2]; pChng; pChng=pNext){
-      KVMemNode *pNode = pChng->pNode;
-      if( pNode->pData ){
-        pNode->mxTrans = pChng->oldTrans;
-      }else{
-        kvmemRemoveNode(p, pNode);
+
+    if( iLevel<2 ){
+      for(pChng=p->apLog[p->base.iTransLevel-2]; pChng; pChng=pNext){
+        KVMemNode *pNode = pChng->pNode;
+        if( pNode->pData ){
+          pNode->mxTrans = pChng->oldTrans;
+        }else{
+          kvmemRemoveNode(p, pNode);
+        }
+        kvmemDataUnref(pChng->pData);
+        pNext = pChng->pNext;
+        sqlite4_free(pChng);
       }
-      kvmemDataUnref(pChng->pData);
-      pNext = pChng->pNext;
-      sqlite4_free(pChng);
+    }else{
+      KVMemChng **pp;
+      int iFrom = p->base.iTransLevel-2;
+      int iTo = p->base.iTransLevel-3;
+      assert( iTo>=0 );
+
+      for(pp=&p->apLog[iFrom]; *pp; pp=&((*pp)->pNext)){
+        assert( (*pp)->pNode->mxTrans==p->base.iTransLevel 
+             || (*pp)->pNode->mxTrans==(p->base.iTransLevel-1)
+        );
+        (*pp)->pNode->mxTrans = p->base.iTransLevel - 1;
+      }
+      *pp = p->apLog[iTo];
+      p->apLog[iTo] = p->apLog[iFrom];
     }
+
     p->apLog[p->base.iTransLevel-2] = 0;
     p->base.iTransLevel--;
   }

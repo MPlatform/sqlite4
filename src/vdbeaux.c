@@ -1847,6 +1847,7 @@ int sqlite4VdbeHalt(Vdbe *p){
 
       if( eAction ){
         sqlite4RollbackAll(db);
+        db->autoCommit = 1;
       }
 
       db->nDeferredCons = 0;
