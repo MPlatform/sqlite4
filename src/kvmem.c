@@ -632,6 +632,48 @@ static int kvmemCloseCursor(KVCursor *pKVCursor){
 }
 
 /*
+** Move a cursor to the next non-deleted node.
+*/
+static int kvmemNextEntry(KVCursor *pKVCursor){
+  KVMemCursor *pCur;
+  KVMemNode *pNode;
+
+  pCur = (KVMemCursor*)pKVCursor;
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
+  pNode = pCur->pNode;
+  kvmemReset(pKVCursor);
+  do{
+    pNode = kvmemNext(pNode);
+  }while( pNode && pNode->pData==0 );
+  if( pNode ){
+    pCur->pNode = kvmemNodeRef(pNode);
+    pCur->pData = kvmemDataRef(pNode->pData);
+  }
+  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
+}
+
+/*
+** Move a cursor to the previous non-deleted node.
+*/
+static int kvmemPrevEntry(KVCursor *pKVCursor){
+  KVMemCursor *pCur;
+  KVMemNode *pNode;
+
+  pCur = (KVMemCursor*)pKVCursor;
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
+  pNode = pCur->pNode;
+  kvmemReset(pKVCursor);
+  do{
+    pNode = kvmemPrev(pNode);
+  }while( pNode && pNode->pData==0 );
+  if( pNode ){
+    pCur->pNode = kvmemNodeRef(pNode);
+    pCur->pData = kvmemDataRef(pNode->pData);
+  }
+  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
+}
+
+/*
 ** Seek a cursor.
 */
 static int kvmemSeek(
@@ -676,6 +718,23 @@ static int kvmemSeek(
   if( pBest ){
     pCur->pNode = kvmemNodeRef(pBest);
     pCur->pData = kvmemDataRef(pBest->pData);
+
+    /* The cursor currently points to a deleted node. If parameter 'direction'
+    ** was zero (exact matches only), then the search has failed - return
+    ** SQLITE_NOTFOUND. Otherwise, advance to the next (if direction is +ve)
+    ** or the previous (if direction is -ve) undeleted node in the tree.  */
+    if( pCur->pData==0 ){
+      if( direction==0 ){
+        rc = SQLITE_NOTFOUND;
+      }else{ 
+        if( (direction>0 ? kvmemNextEntry : kvmemPrevEntry)(pCur) ){
+          rc = SQLITE_NOTFOUND;
+        }else{
+          rc = SQLITE_INEXACT;
+        }
+      }
+    }
+
   }else{
     pCur->pNode = 0;
     pCur->pData = 0;
@@ -714,48 +773,6 @@ static int kvmemDelete(KVCursor *pKVCursor){
     pNode->pData = 0;
   }
   return SQLITE_OK;
-}
-
-/*
-** Move a cursor to the next non-deleted node.
-*/
-static int kvmemNextEntry(KVCursor *pKVCursor){
-  KVMemCursor *pCur;
-  KVMemNode *pNode;
-
-  pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
-  pNode = pCur->pNode;
-  kvmemReset(pKVCursor);
-  do{
-    pNode = kvmemNext(pNode);
-  }while( pNode && pNode->pData==0 );
-  if( pNode ){
-    pCur->pNode = kvmemNodeRef(pNode);
-    pCur->pData = kvmemDataRef(pNode->pData);
-  }
-  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
-}
-
-/*
-** Move a cursor to the previous non-deleted node.
-*/
-static int kvmemPrevEntry(KVCursor *pKVCursor){
-  KVMemCursor *pCur;
-  KVMemNode *pNode;
-
-  pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
-  pNode = pCur->pNode;
-  kvmemReset(pKVCursor);
-  do{
-    pNode = kvmemPrev(pNode);
-  }while( pNode && pNode->pData==0 );
-  if( pNode ){
-    pCur->pNode = kvmemNodeRef(pNode);
-    pCur->pData = kvmemDataRef(pNode->pData);
-  }
-  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
 }
 
 /*

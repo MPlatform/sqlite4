@@ -202,11 +202,7 @@ do_execsql_test 8.1 {
 }
 
 do_execsql_test 8.2 { DELETE FROM t1 WHERE b = 'b' }
-
-execsql {PRAGMA vdbe_trace = 1}
-breakpoint
 do_execsql_test 8.3 { SELECT * FROM t1 } {}
-finish_test
 
 do_execsql_test 8.4 {
   INSERT INTO t1 VALUES('a', 'A');
