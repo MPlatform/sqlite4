@@ -150,6 +150,7 @@ static KVMemNode *kvmemRotateAfter(KVMemNode *pP){
 static KVMemNode **kvmemFromPtr(KVMemNode *p, KVMemNode **pp){
   KVMemNode *pUp = p->pUp;
   if( pUp==0 ) return pp;
+  assert( pUp->pAfter==p || pUp->pBefore==p );
   if( pUp->pAfter==p ) return &pUp->pAfter;
   return &pUp->pBefore;
 }
@@ -343,6 +344,38 @@ static KVMemNode *kvmemNewNode(
   return pNode;
 }
 
+#ifdef SQLITE_DEBUG
+/*
+** Return the number of times that node pNode occurs in the sub-tree 
+** headed by node pSub. This is used to assert() that no node structure
+** is linked into the tree more than once.
+*/
+static int countNodeOccurences(KVMemNode *pSub, KVMemNode *pNode){
+  int iRet = (pSub==pNode);
+  if( pSub ){
+    iRet += countNodeOccurences(pSub->pBefore, pNode);
+    iRet += countNodeOccurences(pSub->pAfter, pNode);
+  }
+  return iRet;
+}
+
+/*
+** Check that all the pUp pointers in the sub-tree headed by pSub are
+** correct. Fail an assert if this is not the case.
+*/
+static void assertUpPointers(KVMemNode *pSub){
+  if( pSub ){
+    assert( pSub->pBefore==0 || pSub->pBefore->pUp==pSub );
+    assert( pSub->pAfter==0 || pSub->pAfter->pUp==pSub );
+    assertUpPointers(pSub->pBefore);
+    assertUpPointers(pSub->pAfter);
+  }
+}
+
+#else
+#define assertUpPointers(x)
+#endif
+
 /* Remove node pOld from the tree.  pOld must be an element of the tree.
 */
 static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
@@ -355,10 +388,12 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
     *ppParent = 0;
     pBalance = pOld->pUp;
   }else if( pOld->pBefore && pOld->pAfter ){
-    KVMemNode *pX, *pY;
+    KVMemNode *pX;                /* Smallest node that is larger than pOld */
+    KVMemNode *pY;                /* Left-hand child of pOld */
     pX = kvmemFirst(pOld->pAfter);
     assert( pX->pBefore==0 );
     *kvmemFromPtr(pX, 0) = pX->pAfter;
+    if( pX->pAfter ) pX->pAfter->pUp = pX->pUp;
     pBalance = pX->pUp;
     pX->pAfter = pOld->pAfter;
     if( pX->pAfter ){
@@ -440,6 +475,7 @@ static int kvmemCommitPhaseTwo(KVStore *pKVStore, int iLevel){
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( iLevel>=0 );
   assert( iLevel<p->base.iTransLevel );
+  assertUpPointers(p->pRoot);
   while( p->base.iTransLevel>iLevel && p->base.iTransLevel>1 ){
     KVMemChng *pChng, *pNext;
     for(pChng=p->apLog[p->base.iTransLevel-2]; pChng; pChng=pNext){
@@ -456,6 +492,7 @@ static int kvmemCommitPhaseTwo(KVStore *pKVStore, int iLevel){
     p->apLog[p->base.iTransLevel-2] = 0;
     p->base.iTransLevel--;
   }
+  assertUpPointers(p->pRoot);
   p->base.iTransLevel = iLevel;
   return SQLITE_OK;
 }
