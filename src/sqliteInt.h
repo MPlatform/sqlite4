@@ -3186,7 +3186,7 @@ int sqlite4WalDefaultHook(void*,sqlite4*,const char*,int);
   void sqlite4FkCheck(Parse*, Table*, int, int);
   void sqlite4FkDropTable(Parse*, SrcList *, Table*);
   void sqlite4FkActions(Parse*, Table*, ExprList*, int);
-  int sqlite4FkRequired(Parse*, Table*, int*, int);
+  int sqlite4FkRequired(Parse*, Table*, int*);
   u32 sqlite4FkOldmask(Parse*, Table*);
   FKey *sqlite4FkReferences(Table *);
 #else
@@ -3194,7 +3194,7 @@ int sqlite4WalDefaultHook(void*,sqlite4*,const char*,int);
   #define sqlite4FkCheck(a,b,c,d)
   #define sqlite4FkDropTable(a,b,c)
   #define sqlite4FkOldmask(a,b)      0
-  #define sqlite4FkRequired(a,b,c,d) 0
+  #define sqlite4FkRequired(a,b,c) 0
 #endif
 #ifndef SQLITE_OMIT_FOREIGN_KEY
   void sqlite4FkDelete(sqlite4 *, Table*);

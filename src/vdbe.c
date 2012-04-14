@@ -2155,17 +2155,20 @@ case OP_Column: {
 case OP_Affinity: {
   const char *zAffinity;   /* The affinity to be applied */
   char cAff;               /* A single character of affinity */
+  Mem *pEnd;
 
   zAffinity = pOp->p4.z;
   assert( zAffinity!=0 );
-  assert( zAffinity[pOp->p2]==0 );
-  pIn1 = &aMem[pOp->p1];
-  while( (cAff = *(zAffinity++))!=0 ){
-    assert( pIn1 <= &p->aMem[p->nMem] );
+  assert( sqlite4Strlen30(zAffinity)>=pOp->p2 );
+
+  pEnd = &aMem[pOp->p2+pOp->p1];
+  for(pIn1=&aMem[pOp->p1]; pIn1<pEnd; pIn1++){
     assert( memIsValid(pIn1) );
-    applyAffinity(pIn1, cAff, encoding);
-    pIn1++;
+    memAboutToChange(p, pIn1);
+    applyAffinity(pIn1, *(zAffinity++), encoding);
+    REGISTER_TRACE(pIn1-aMem, pIn1);
   }
+
   break;
 }
 
@@ -2190,6 +2193,7 @@ case OP_MakeIdxKey: {
   Mem *pData0;                    /* First in array of input registers */
   u8 *aRec;                       /* The constructed database key */
   int nRec;                       /* Size of aRec[] in bytes */
+  int nField;                     /* Number of fields in encoded record */
   
   pC = p->apCsr[pOp->p1];
   pKeyInfo = pC->pKeyInfo;
@@ -2199,9 +2203,9 @@ case OP_MakeIdxKey: {
 
   memAboutToChange(p, pOut);
 
-  assert( pOp->p5==0 );
+  nField = pKeyInfo->nField - (pOp->p5 ? pKeyInfo->nPK : 0);
   rc = sqlite4VdbeEncodeKey(
-    db, pData0, pKeyInfo->nField, pC->iRoot, pKeyInfo, &aRec, &nRec, 0
+    db, pData0, nField, pC->iRoot, pKeyInfo, &aRec, &nRec, 0
   );
 
   if( rc ){
@@ -2291,8 +2295,9 @@ case OP_MakeRecord: {
   /* Compute the key (if this is a MakeKey opcode) */
   if( pC ){
     aRec = 0;
-    rc = sqlite4VdbeEncodeKey(db, pData0, nField, pC->iRoot, pC->pKeyInfo,
-                              &aRec, &nRec, 0);
+    rc = sqlite4VdbeEncodeKey(db, 
+        pData0, pC->pKeyInfo->nField, pC->iRoot, pC->pKeyInfo, &aRec, &nRec, 0
+    );
     if( rc ){
       sqlite4DbFree(db, aRec);
     }else{
@@ -2388,12 +2393,15 @@ case OP_AutoCommit: {
   }else{
     if( bRollback ){
       sqlite4RollbackAll(db);
-    }else if( sqlite4VdbeCheckFk(p, 1) ){
+    }else if( rc = sqlite4VdbeCheckFk(p, 1) ){
+      rc = SQLITE_ERROR;
       goto vdbe_return;
     }
 
     db->autoCommit = 1;
     sqlite4VdbeHalt(p);
+    rc = (p->rc ? SQLITE_DONE : SQLITE_ERROR);
+    goto vdbe_return;
   }
 
   break;
@@ -2436,10 +2444,11 @@ case OP_Transaction: {
     }
   }else{
     /* A write transaction is needed */
-    needStmt = pKV->iTransLevel>0 && (p->needSavepoint || db->activeVdbeCnt>1);
+    needStmt = db->autoCommit==0 && (p->needSavepoint || db->activeVdbeCnt>1);
     if( pKV->iTransLevel<2 ){
       rc = sqlite4KVStoreBegin(pKV, 2);
-    }else if( p->needSavepoint ){
+    }
+    if( needStmt ){
       rc = sqlite4KVStoreBegin(pKV, pKV->iTransLevel+1);
       if( rc==SQLITE_OK ){
         p->stmtTransMask |= ((yDbMask)1)<<pOp->p1;
@@ -2992,7 +3001,7 @@ case OP_Found: {        /* jump, in3 */
     rc = sqlite4KVCursorSeek(pC->pKVCur, pProbe, nProbe, +1);
     if( rc==SQLITE_INEXACT || rc==SQLITE_OK ){
       rc = sqlite4KVCursorKey(pC->pKVCur, &pKey, &nKey);
-      if( rc==SQLITE_OK && nKey>=nProbe && memcmp(pKey, pProbe, nKey)==0 ){
+      if( rc==SQLITE_OK && nKey>=nProbe && memcmp(pKey, pProbe, nProbe)==0 ){
         alreadyExists = 1;
         pC->nullRow = 0;
       }

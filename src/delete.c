@@ -335,21 +335,13 @@ void sqlite4DeleteFrom(
     goto delete_from_cleanup;
   }
 
-  /* Initialize the counter of the number of rows deleted, if
-  ** we are counting rows.
-  */
-  if( db->flags & SQLITE_CountRows ){
-    memCnt = ++pParse->nMem;
-    sqlite4VdbeAddOp2(v, OP_Integer, 0, memCnt);
-  }
-
 #ifndef SQLITE_OMIT_TRUNCATE_OPTIMIZATION
   /* Special case: A DELETE without a WHERE clause deletes everything.
   ** It is easier just to erase the whole table. Prior to version 3.6.5,
   ** this optimization caused the row change count (the value returned by 
   ** API function sqlite4_count_changes) to be set incorrectly.  */
   if( rcauth==SQLITE_OK && pWhere==0 && !pTrigger && !IsVirtual(pTab) 
-   && 0==sqlite4FkRequired(pParse, pTab, 0, 0)
+   && 0==sqlite4FkRequired(pParse, pTab, 0)
   ){
     assert( !isView );
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
@@ -481,63 +473,69 @@ void sqlite4GenerateRowDelete(
   int onconf                      /* Default ON CONFLICT policy for triggers */
 ){
   Vdbe *v = pParse->pVdbe;        /* Vdbe */
-  int iOld = 0;                   /* First register in OLD.* array */
+  int regOld = 0;                 /* First register in OLD.* array */
   int iLabel;                     /* Label resolved to end of generated code */
   int iPk;
+  int iPkCsr;                     /* Primary key cursor number */
 
   /* Vdbe is guaranteed to have been allocated by this stage. */
   assert( v );
 
   sqlite4FindPrimaryKey(pTab, &iPk);
+  iPkCsr = baseCur + iPk;
 
-  /* Seek cursor iCur to the row to delete. If this row no longer exists 
+  /* Seek the PK cursor to the row to delete. If this row no longer exists 
   ** (this can happen if a trigger program has already deleted it), do
   ** not attempt to delete it or fire any DELETE triggers.  */
   iLabel = sqlite4VdbeMakeLabel(v);
-  sqlite4VdbeAddOp4(v, OP_NotFound, baseCur+iPk, iLabel, regKey, 0, P4_INT32);
+  sqlite4VdbeAddOp4Int(v, OP_NotFound, iPkCsr, iLabel, regKey, 0);
  
   /* If there are any triggers to fire, allocate a range of registers to
   ** use for the old.* references in the triggers.  */
-#if 0
-  if( sqlite4FkRequired(pParse, pTab, 0, 0) || pTrigger ){
+  if( sqlite4FkRequired(pParse, pTab, 0) || pTrigger ){
     u32 mask;                     /* Mask of OLD.* columns in use */
     int iCol;                     /* Iterator used while populating OLD.* */
 
-    /* TODO: Could use temporary registers here. Also could attempt to
-    ** avoid copying the contents of the rowid register.  */
+    /* Determine which table columns may be required by either foreign key
+    ** logic or triggers. This block sets stack variable mask to a 32-bit mask
+    ** where bit 0 corresponds to the left-most table column, bit 1 to the
+    ** second left-most, and so on. If an OLD.* column may be required, then
+    ** the corresponding bit is set.
+    **
+    ** Or, if the table contains more than 32 columns and at least one of
+    ** the columns following the 32nd is required, set mask to 0xffffffff.  */
     mask = sqlite4TriggerColmask(
         pParse, pTrigger, 0, 0, TRIGGER_BEFORE|TRIGGER_AFTER, pTab, onconf
     );
     mask |= sqlite4FkOldmask(pParse, pTab);
-    iOld = pParse->nMem+1;
-    pParse->nMem += (1 + pTab->nCol);
 
-    /* Populate the OLD.* pseudo-table register array. These values will be 
-    ** used by any BEFORE and AFTER triggers that exist.  */
-    sqlite4VdbeAddOp2(v, OP_Copy, iRowid, iOld);
+    /* Allocate an array of registers - one for each column in the table.
+    ** Then populate those array elements that may be used by FK or trigger
+    ** logic with the OLD.* values.  */
+    regOld = pParse->nMem+1;
+    pParse->nMem += pTab->nCol;
     for(iCol=0; iCol<pTab->nCol; iCol++){
       if( mask==0xffffffff || mask&(1<<iCol) ){
-        sqlite4ExprCodeGetColumnOfTable(v, pTab, iCur, iCol, iOld+iCol+1);
+        sqlite4ExprCodeGetColumnOfTable(v, pTab, iPkCsr, iCol, regOld+iCol);
       }
     }
 
     /* Invoke BEFORE DELETE trigger programs. */
     sqlite4CodeRowTrigger(pParse, pTrigger, 
-        TK_DELETE, 0, TRIGGER_BEFORE, pTab, iOld, onconf, iLabel
+        TK_DELETE, 0, TRIGGER_BEFORE, pTab, regOld, onconf, iLabel
     );
 
     /* Seek the cursor to the row to be deleted again. It may be that
     ** the BEFORE triggers coded above have already removed the row
     ** being deleted. Do not attempt to delete the row a second time, and 
     ** do not fire AFTER triggers.  */
-    sqlite4VdbeAddOp3(v, OP_NotExists, iCur, iLabel, iRowid);
+    sqlite4VdbeAddOp4Int(v, OP_NotFound, iPkCsr, iLabel, regKey, 0);
 
     /* Do FK processing. This call checks that any FK constraints that
     ** refer to this table (i.e. constraints attached to other tables) 
     ** are not violated by deleting this row.  */
-    sqlite4FkCheck(pParse, pTab, iOld, 0);
+    sqlite4FkCheck(pParse, pTab, regOld, 0);
   }
-#endif
 
   /* Delete the index and table entries. Skip this step if pTab is really
   ** a view (in which case the only effect of the DELETE statement is to
@@ -553,12 +551,13 @@ void sqlite4GenerateRowDelete(
 
   /* Do any ON CASCADE, SET NULL or SET DEFAULT operations required to
   ** handle rows (possibly in other tables) that refer via a foreign key
-  ** to the row just deleted. */ 
-  sqlite4FkActions(pParse, pTab, 0, iOld);
+  ** to the row just deleted. This is a no-op if there are no configured
+  ** foreign keys that use this table as a parent table.  */ 
+  sqlite4FkActions(pParse, pTab, 0, regOld);
 
   /* Invoke AFTER DELETE trigger programs. */
   sqlite4CodeRowTrigger(pParse, pTrigger, 
-      TK_DELETE, 0, TRIGGER_AFTER, pTab, iOld, onconf, iLabel
+      TK_DELETE, 0, TRIGGER_AFTER, pTab, regOld, onconf, iLabel
   );
 
   /* Jump here if the row had already been deleted before any BEFORE

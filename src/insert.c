@@ -788,13 +788,6 @@ void sqlite4Insert(
     }
   }
 
-  /* Initialize the count of rows to be inserted
-  */
-  if( db->flags & SQLITE_CountRows ){
-    regRowCount = ++pParse->nMem;
-    sqlite4VdbeAddOp2(v, OP_Integer, 0, regRowCount);
-  }
-
   /* If this is not a view, open a write cursor on each index. Allocate
   ** a contiguous array of (nIdx+1) registers, where nIdx is the total
   ** number of indexes (including the PRIMARY KEY index). 
@@ -984,8 +977,7 @@ void sqlite4Insert(
 #endif
 
     /* Push onto the stack, data for all columns of the new entry, beginning
-    ** with the first column.
-    */
+    ** with the first column.  */
     nHidden = 0;
     for(i=0; i<pTab->nCol; i++){
       int iRegStore = regContent + i;
@@ -1013,6 +1005,9 @@ void sqlite4Insert(
       }
     }
 
+    sqlite4VdbeAddOp2(v, OP_Affinity, regContent, pTab->nCol);
+    sqlite4TableAffinityStr(v, pTab);
+
     /* Generate code to check constraints and generate index keys and
     ** do the insertion.
     */
@@ -1029,7 +1024,7 @@ void sqlite4Insert(
       int isReplace;    /* Set to true if constraints may cause a replace */
 
       sqlite4GenerateConstraintChecks(pParse, pTab, baseCur, 
-          regContent, aRegIdx, keyColumn>=0, 0, onError, endOfLoop, &isReplace
+          regContent, aRegIdx, 0, 0, onError, endOfLoop, &isReplace
       );
 
       sqlite4FkCheck(pParse, pTab, 0, regContent);
@@ -1038,12 +1033,6 @@ void sqlite4Insert(
           regContent, aRegIdx, 0, appendFlag, isReplace==0
       );
     }
-  }
-
-  /* Update the count of rows that are inserted
-  */
-  if( (db->flags & SQLITE_CountRows)!=0 ){
-    sqlite4VdbeAddOp2(v, OP_AddImm, regRowCount, 1);
   }
 
   if( pTrigger ){
@@ -1079,17 +1068,6 @@ insert_end:
   */
   if( pParse->nested==0 && pParse->pTriggerTab==0 ){
     sqlite4AutoincrementEnd(pParse);
-  }
-
-  /*
-  ** Return the number of rows inserted. If this routine is 
-  ** generating code because of a call to sqlite4NestedParse(), do not
-  ** invoke the callback function.
-  */
-  if( (db->flags&SQLITE_CountRows) && !pParse->nested && !pParse->pTriggerTab ){
-    sqlite4VdbeAddOp2(v, OP_ResultRow, regRowCount, 1);
-    sqlite4VdbeSetNumCols(v, 1);
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "rows inserted", SQLITE_STATIC);
   }
 
 insert_cleanup:
@@ -1369,10 +1347,8 @@ void sqlite4GenerateConstraintChecks(
   int baseCur,        /* First in array of cursors for pTab indexes */
   int regContent,     /* Index of the range of input registers */
   int *aRegIdx,       /* Register used by each index.  0 for unused indices */
-
-  int rowidChng,      /* True if the rowid might collide with existing entry */
+  int regOldKey,      /* For an update, the original encoded PK */
   int isUpdate,       /* True for UPDATE, False for INSERT */
-
   int overrideError,  /* Override onError to this if not OE_Default */
   int ignoreDest,     /* Jump to this label on an OE_Ignore resolution */
   int *pbMayReplace   /* OUT: Set to true if constraint may cause a replace */
@@ -1441,7 +1417,8 @@ void sqlite4GenerateConstraintChecks(
     onError = pIdx->onError;
     if( onError!=OE_None ){
       int iTest;                  /* Address of OP_IsUnique instruction */
-      int regOut = 0;
+      int iTest2 = 0;             /* Address of OP_Eq instruction */
+      int regOut = 0;             /* PK of row to replace */
 
       /* Figure out what to do if a UNIQUE constraint is encountered. 
       **
@@ -1461,6 +1438,9 @@ void sqlite4GenerateConstraintChecks(
         sqlite4VdbeAddOp3(v, OP_Blob, nPkRoot, regPk, 0);
         sqlite4VdbeChangeP4(v, -1, aPkRoot, nPkRoot);
         regOut = regPk;
+      }
+      if( regOldKey && pIdx==pPk ){
+        iTest2 = sqlite4VdbeAddOp3(v, OP_Eq, regOldKey, 0, aRegIdx[iCur]);
       }
       iTest = sqlite4VdbeAddOp3(v, OP_IsUnique, baseCur+iCur, 0, aRegIdx[iCur]);
       sqlite4VdbeChangeP4(v, -1, SQLITE_INT_TO_PTR(regOut), P4_INT32);
@@ -1495,6 +1475,7 @@ void sqlite4GenerateConstraintChecks(
 
       /* If the OP_IsUnique passes (no constraint violation) jump here */
       sqlite4VdbeJumpHere(v, iTest);
+      if( iTest2 ) sqlite4VdbeJumpHere(v, iTest2);
     }
 
     sqlite4ReleaseTempRange(pParse, regTmp, nTmpReg);
@@ -1848,9 +1829,6 @@ static int xferOptimization(
     return 0;
   }
 #endif
-  if( (pParse->db->flags & SQLITE_CountRows)!=0 ){
-    return 0;  /* xfer opt does not play well with PRAGMA count_changes */
-  }
 
   /* If we get this far, it means that the xfer optimization is at
   ** least a possibility, though it might only work if the destination

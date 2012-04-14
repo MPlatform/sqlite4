@@ -106,7 +106,6 @@ void sqlite4Update(
   int *aXRef = 0;        /* aXRef[i] is the index in pChanges->a[] of the
                          ** an expression for the i-th column of the table.
                          ** aXRef[i]==-1 if the i-th column is not changed. */
-  int chngRowid;         /* True if the record number is being changed */
   Expr *pRowidExpr = 0;  /* Expression defining the new record number */
   AuthContext sContext;  /* The authorization context */
   NameContext sNC;       /* The name-context to resolve expressions in */
@@ -256,7 +255,7 @@ void sqlite4Update(
   }
 #endif
 
-  hasFK = sqlite4FkRequired(pParse, pTab, aXRef, chngRowid);
+  hasFK = sqlite4FkRequired(pParse, pTab, aXRef);
 
   /* Allocate memory for the array aRegIdx[].  There is one entry in the
   ** array for each index associated with table being updated.  Fill in
@@ -407,9 +406,11 @@ void sqlite4Update(
         sqlite4VdbeAddOp2(v, OP_Null, 0, regOld+i);
       }
     }
+#if 0
     if( chngRowid==0 ){
       sqlite4VdbeAddOp2(v, OP_Copy, regOldKey, regNewRowid);
     }
+#endif
   }
 
   /* Populate the array of registers beginning at regNew with the new
@@ -482,18 +483,17 @@ void sqlite4Update(
   if( !isView ){
     int j1;                       /* Address of jump instruction */
 
-
     /* Do constraint checks. */
     assert( bChngPk==0 || bImplicitPk==0 );
     if( bChngPk==0 ) aRegIdx[iPk] = 0;
     sqlite4GenerateConstraintChecks(
-        pParse, pTab, iCur, regNew, aRegIdx, 0, 1, onError, addr, 0
+        pParse, pTab, iCur, regNew, aRegIdx, regOldKey, 1, onError, addr, 0
     );
     if( bChngPk==0 ) aRegIdx[iPk] = regOldKey;
 
     /* Do FK constraint checks. */
     if( hasFK ){
-      sqlite4FkCheck(pParse, pTab, regOldKey, 0);
+      sqlite4FkCheck(pParse, pTab, regOld, 0);
     }
 
     /* Delete the index entries associated with the current record.  */
@@ -507,7 +507,7 @@ void sqlite4Update(
     sqlite4VdbeJumpHere(v, j1);
 
     if( hasFK ){
-      sqlite4FkCheck(pParse, pTab, 0, regNewRowid);
+      sqlite4FkCheck(pParse, pTab, 0, regNew);
     }
   
     /* Insert the new index entries and the new record. */

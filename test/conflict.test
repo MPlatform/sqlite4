@@ -360,10 +360,9 @@ do_test conflict-7.1 {
 } {50 1 51}
 do_test conflict-7.2 {
   execsql {
-    PRAGMA count_changes=on;
     UPDATE OR IGNORE t1 SET a=1000;
   }
-} {1}
+} {}
 do_test conflict-7.2.1 {
   db changes
 } {1}
@@ -379,10 +378,9 @@ do_test conflict-7.4 {
 } {50}
 do_test conflict-7.5 {
   execsql {
-    PRAGMA count_changes=on;
     UPDATE OR REPLACE t1 SET a=1001;
   }
-} {50}
+} {}
 do_test conflict-7.5.1 {
   db changes
 } {50}
@@ -414,7 +412,7 @@ do_test conflict-8.1 {
   execsql {
     INSERT OR IGNORE INTO t1 VALUES(2,3);
   }
-} {1}
+} {}
 do_test conflict-8.1.1 {
   db changes
 } {1}
@@ -422,7 +420,7 @@ do_test conflict-8.2 {
   execsql {
     INSERT OR IGNORE INTO t1 VALUES(2,4);
   }
-} {0}
+} {}
 do_test conflict-8.2.1 {
   db changes
 } {0}
@@ -430,7 +428,7 @@ do_test conflict-8.3 {
   execsql {
     INSERT OR REPLACE INTO t1 VALUES(2,4);
   }
-} {1}
+} {}
 do_test conflict-8.3.1 {
   db changes
 } {1}
@@ -438,7 +436,7 @@ do_test conflict-8.4 {
   execsql {
     INSERT OR IGNORE INTO t1 SELECT * FROM t1;
   }
-} {0}
+} {}
 do_test conflict-8.4.1 {
   db changes
 } {0}
@@ -446,7 +444,7 @@ do_test conflict-8.5 {
   execsql {
     INSERT OR IGNORE INTO t1 SELECT a+2,b+2 FROM t1;
   }
-} {2}
+} {}
 do_test conflict-8.5.1 {
   db changes
 } {2}
@@ -454,7 +452,7 @@ do_test conflict-8.6 {
   execsql {
     INSERT OR IGNORE INTO t1 SELECT a+3,b+3 FROM t1;
   }
-} {3}
+} {}
 do_test conflict-8.6.1 {
   db changes
 } {3}
@@ -463,7 +461,6 @@ integrity_check conflict-8.99
 
 do_test conflict-9.1 {
   execsql {
-    PRAGMA count_changes=0;
     CREATE TABLE t2(
       a INTEGER UNIQUE ON CONFLICT IGNORE,
       b INTEGER UNIQUE ON CONFLICT FAIL,

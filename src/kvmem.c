@@ -392,15 +392,19 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
     KVMemNode *pY;                /* Left-hand child of pOld */
     pX = kvmemFirst(pOld->pAfter);
     assert( pX->pBefore==0 );
-    *kvmemFromPtr(pX, 0) = pX->pAfter;
-    if( pX->pAfter ) pX->pAfter->pUp = pX->pUp;
-    pBalance = pX->pUp;
-    pX->pAfter = pOld->pAfter;
-    if( pX->pAfter ){
-      pX->pAfter->pUp = pX;
-    }else{
-      assert( pBalance==pOld );
+    if( pX==pOld->pAfter ){
       pBalance = pX;
+    }else{
+      *kvmemFromPtr(pX, 0) = pX->pAfter;
+      if( pX->pAfter ) pX->pAfter->pUp = pX->pUp;
+      pBalance = pX->pUp;
+      pX->pAfter = pOld->pAfter;
+      if( pX->pAfter ){
+        pX->pAfter->pUp = pX;
+      }else{
+        assert( pBalance==pOld );
+        pBalance = pX;
+      }
     }
     pX->pBefore = pY = pOld->pBefore;
     if( pY ) pY->pUp = pX;
@@ -413,7 +417,9 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
     *ppParent = pBalance = pOld->pBefore;
     pBalance->pUp = pOld->pUp;
   }
+  assertUpPointers(p->pRoot);
   p->pRoot = kvmemBalance(pBalance);
+  assertUpPointers(p->pRoot);
   kvmemNodeUnref(pOld);
 }
 

@@ -421,8 +421,131 @@ do_execsql_test 20.1 {
 do_execsql_test 20.2 { ROLLBACK }
 do_execsql_test 20.3 { SELECT count(*) FROM def } 0
 
+#-------------------------------------------------------------------------
+reset_db
 
-#execsql {PRAGMA  kvdump }
+do_execsql_test 21.1 {
+  PRAGMA foreign_keys = on;
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  CREATE TABLE t2(c REFERENCES t1(a), d);
+}
+
+do_execsql_test 21.2 {
+  INSERT INTO t1 VALUES(1, 2);
+  INSERT INTO t2 VALUES(1, 3);
+  INSERT INTO t2 VALUES(NULL, 4);
+}
+
+do_catchsql_test 21.3 {
+  UPDATE t2 SET c=2 WHERE d=4;
+} {1 {foreign key constraint failed}}
+
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 22.1 {
+  CREATE TABLE t1(x PRIMARY KEY);
+  INSERT INTO t1 VALUES('abc');
+}
+
+do_execsql_test 22.2 { UPDATE t1 SET x = 'abc' }
+do_execsql_test 22.3 { SELECT * FROM t1 } {abc}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 23.1 {
+  PRAGMA foreign_keys = on;
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  CREATE TABLE t2(c REFERENCES t1(a), d);
+}
+proc out {} {
+  set t1 [execsql {SELECT a FROM t1}]
+  set t2 [execsql {SELECT c FROM t2}]
+  puts "t1: $t1       t2: $t2"
+}
+
+do_test 23.2 {
+  catchsql "BEGIN; INSERT INTO t2 VALUES(1, 3)" ; execsql COMMIT
+} {}
+do_test 23.3 {
+  catchsql "BEGIN; INSERT INTO t1 VALUES(1, 2)" ; execsql COMMIT
+} {}
+do_test 23.4 {
+  catchsql "BEGIN; INSERT INTO t2 VALUES(1, 3)" ; execsql COMMIT
+} {}
+do_test 23.5 {
+  catchsql "BEGIN; INSERT INTO t2 VALUES(2, 4)" ; execsql COMMIT
+} {}
+do_test 23.6 {
+  catchsql "BEGIN; INSERT INTO t2 VALUES(NULL, 4)" ; execsql COMMIT
+} {}
+do_test 23.7 {
+  catchsql "BEGIN; UPDATE t2 SET c=2 WHERE d=4" ; execsql COMMIT
+} {}
+do_test 23.8 {
+  catchsql "BEGIN; UPDATE t2 SET c=1 WHERE d=4" ; execsql COMMIT
+} {}
+do_test 23.9 {
+  catchsql "BEGIN; UPDATE t2 SET c=1 WHERE d=4" ; execsql COMMIT
+} {}
+do_test 23.10 {
+  catchsql "BEGIN; UPDATE t2 SET c=NULL WHERE d=4" ; execsql COMMIT
+} {}
+do_test 23.11 {
+  execsql BEGIN
+  catchsql "DELETE FROM t1 WHERE a=1"
+  execsql COMMIT
+} {}
+
+do_catchsql_test 23.3 {
+  BEGIN;
+    UPDATE t1 SET a = 2;
+  COMMIT;
+} {1 {foreign key constraint failed}}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 24.1 {
+  CREATE TABLE p(x INTEGER);
+  INSERT INTO p VALUES(35.0);
+  SELECT typeof(x) FROM p;
+} {integer}
+
+do_execsql_test 24.2 {
+  CREATE TABLE p2(x INTEGER PRIMARY KEY);
+  INSERT INTO p2 VALUES(35.0);
+  SELECT typeof(x) FROM p2;
+} {integer}
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 25.1 {
+  PRAGMA foreign_keys = on;
+  CREATE TABLE p(x INT PRIMARY KEY);
+  CREATE TABLE c(y REFERENCES p);
+  INSERT INTO p VALUES(35);
+PRAGMA vdbe_trace = 1;
+  INSERT INTO c VALUES(35.0);
+}
+execsql { PRAGMA vdbe_trace = 0; }
+
+explain {
+  INSERT INTO c VALUES(35.0);
+}
+finish_test
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 26.1 {
+  PRAGMA foreign_keys = on;
+  CREATE TABLE p(x INT PRIMARY KEY);
+  CREATE TABLE c(y REFERENCES p);
+  INSERT INTO p VALUES(35.0);
+  INSERT INTO c VALUES(35.0);
+}
 
 finish_test
 
