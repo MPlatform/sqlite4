@@ -842,7 +842,7 @@ void sqlite4Insert(
   ** new row. If the table has an explicit primary key, we need one register
   ** for each table column. If the table uses an implicit primary key, the
   ** nCol+1 registers are required.  */
-  if( bImplicitPK ) regRowid = ++pParse->nMem;
+  regRowid = ++pParse->nMem;
   regContent = pParse->nMem+1;
   pParse->nMem += pTab->nCol;
 
@@ -853,164 +853,49 @@ void sqlite4Insert(
     pParse->nMem++;
   }
 
-  /* Run the BEFORE and INSTEAD OF triggers, if there are any
-  */
   endOfLoop = sqlite4VdbeMakeLabel(v);
-  if( tmask & TRIGGER_BEFORE ){
-    int regCols = sqlite4GetTempRange(pParse, pTab->nCol+1);
 
-    /* build the NEW.* reference row.  Note that if there is an INTEGER
-    ** PRIMARY KEY into which a NULL is being inserted, that NULL will be
-    ** translated into a unique ID for the row.  But on a BEFORE trigger,
-    ** we do not know what the unique ID will be (because the insert has
-    ** not happened yet) so we substitute a rowid of -1
-    */
-    if( keyColumn<0 ){
-      sqlite4VdbeAddOp2(v, OP_Integer, -1, regCols);
+  for(i=0; i<pTab->nCol; i++){
+    j = i;
+    if( pColumn ){
+      for(j=0; j<pColumn->nId; j++){
+        if( pColumn->a[j].idx==i ) break;
+      }
+    }
+
+    if( nColumn==0 || (pColumn && j>=pColumn->nId) ){
+      sqlite4ExprCode(pParse, pTab->aCol[i].pDflt, regContent+i);
+    }else if( useTempTable ){
+      sqlite4VdbeAddOp3(v, OP_Column, srcTab, j, regContent+i);
+    }else if( pSelect ){
+      sqlite4VdbeAddOp2(v, OP_SCopy, regFromSelect+j, regContent+i);
     }else{
-      int j1;
-      if( useTempTable ){
-        sqlite4VdbeAddOp3(v, OP_Column, srcTab, keyColumn, regCols);
-      }else{
-        assert( pSelect==0 );  /* Otherwise useTempTable is true */
-        sqlite4ExprCode(pParse, pList->a[keyColumn].pExpr, regCols);
-      }
-      j1 = sqlite4VdbeAddOp1(v, OP_NotNull, regCols);
-      sqlite4VdbeAddOp2(v, OP_Integer, -1, regCols);
-      sqlite4VdbeJumpHere(v, j1);
-      sqlite4VdbeAddOp1(v, OP_MustBeInt, regCols);
+      assert( pSelect==0 ); /* Otherwise useTempTable is true */
+      sqlite4ExprCodeAndCache(pParse, pList->a[j].pExpr, regContent+i);
     }
-
-    /* Cannot have triggers on a virtual table. If it were possible,
-    ** this block would have to account for hidden column.
-    */
-    assert( !IsVirtual(pTab) );
-
-    /* Create the new column data
-    */
-    for(i=0; i<pTab->nCol; i++){
-      if( pColumn==0 ){
-        j = i;
-      }else{
-        for(j=0; j<pColumn->nId; j++){
-          if( pColumn->a[j].idx==i ) break;
-        }
-      }
-      if( (!useTempTable && !pList) || (pColumn && j>=pColumn->nId) ){
-        sqlite4ExprCode(pParse, pTab->aCol[i].pDflt, regCols+i+1);
-      }else if( useTempTable ){
-        sqlite4VdbeAddOp3(v, OP_Column, srcTab, j, regCols+i+1); 
-      }else{
-        assert( pSelect==0 ); /* Otherwise useTempTable is true */
-        sqlite4ExprCodeAndCache(pParse, pList->a[j].pExpr, regCols+i+1);
-      }
-    }
-
-    /* If this is an INSERT on a view with an INSTEAD OF INSERT trigger,
-    ** do not attempt any conversions before assembling the record.
-    ** If this is a real table, attempt conversions as required by the
-    ** table column affinities.
-    */
-    if( !isView ){
-      sqlite4VdbeAddOp2(v, OP_Affinity, regCols+1, pTab->nCol);
-      sqlite4TableAffinityStr(v, pTab);
-    }
-
-    /* Fire BEFORE or INSTEAD OF triggers */
-    sqlite4CodeRowTrigger(pParse, pTrigger, TK_INSERT, 0, TRIGGER_BEFORE, 
-        pTab, regCols-pTab->nCol-1, onError, endOfLoop);
-
-    sqlite4ReleaseTempRange(pParse, regCols, pTab->nCol+1);
   }
 
   if( !isView ){
-    /* If this table has an implicit PRIMARY KEY, populate the regRowid
-    ** register with the value to use for the new row.  */
-    if( bImplicitPK ){
-      sqlite4VdbeAddOp2(v, OP_NewRowid, baseCur+iPk, regRowid);
-    }
-
-#if 0
-    if( IsVirtual(pTab) ){
-      /* The row that the VUpdate opcode will delete: none */
-      sqlite4VdbeAddOp2(v, OP_Null, 0, regIns);
-    }
-    if( keyColumn>=0 ){
-      if( useTempTable ){
-        sqlite4VdbeAddOp3(v, OP_Column, srcTab, keyColumn, regRowid);
-      }else if( pSelect ){
-        sqlite4VdbeAddOp2(v, OP_SCopy, regFromSelect+keyColumn, regRowid);
-      }else{
-        VdbeOp *pOp;
-        sqlite4ExprCode(pParse, pList->a[keyColumn].pExpr, regRowid);
-        pOp = sqlite4VdbeGetOp(v, -1);
-        if( ALWAYS(pOp) && pOp->opcode==OP_Null && !IsVirtual(pTab) ){
-          appendFlag = 1;
-          pOp->opcode = OP_NewRowid;
-          pOp->p1 = baseCur;
-          pOp->p2 = regRowid;
-          pOp->p3 = regAutoinc;
-        }
-      }
-      /* If the PRIMARY KEY expression is NULL, then use OP_NewRowid
-      ** to generate a unique primary key value.
-      */
-      if( !appendFlag ){
-        int j1;
-        if( !IsVirtual(pTab) ){
-          j1 = sqlite4VdbeAddOp1(v, OP_NotNull, regRowid);
-          sqlite4VdbeAddOp3(v, OP_NewRowid, baseCur, regRowid, regAutoinc);
-          sqlite4VdbeJumpHere(v, j1);
-        }else{
-          j1 = sqlite4VdbeCurrentAddr(v);
-          sqlite4VdbeAddOp2(v, OP_IsNull, regRowid, j1+2);
-        }
-        sqlite4VdbeAddOp1(v, OP_MustBeInt, regRowid);
-      }
-    }else if( IsVirtual(pTab) ){
-      sqlite4VdbeAddOp2(v, OP_Null, 0, regRowid);
-    }else{
-      sqlite4VdbeAddOp3(v, OP_NewRowid, baseCur, regRowid, regAutoinc);
-      appendFlag = 1;
-    }
-    autoIncStep(pParse, regAutoinc, regRowid);
-#endif
-
-    /* Push onto the stack, data for all columns of the new entry, beginning
-    ** with the first column.  */
-    nHidden = 0;
-    for(i=0; i<pTab->nCol; i++){
-      int iRegStore = regContent + i;
-      if( pColumn==0 ){
-        if( IsHiddenColumn(&pTab->aCol[i]) ){
-          assert( IsVirtual(pTab) );
-          j = -1;
-          nHidden++;
-        }else{
-          j = i - nHidden;
-        }
-      }else{
-        for(j=0; j<pColumn->nId; j++){
-          if( pColumn->a[j].idx==i ) break;
-        }
-      }
-      if( j<0 || nColumn==0 || (pColumn && j>=pColumn->nId) ){
-        sqlite4ExprCode(pParse, pTab->aCol[i].pDflt, iRegStore);
-      }else if( useTempTable ){
-        sqlite4VdbeAddOp3(v, OP_Column, srcTab, j, iRegStore); 
-      }else if( pSelect ){
-        sqlite4VdbeAddOp2(v, OP_SCopy, regFromSelect+j, iRegStore);
-      }else{
-        sqlite4ExprCode(pParse, pList->a[j].pExpr, iRegStore);
-      }
-    }
-
     sqlite4VdbeAddOp2(v, OP_Affinity, regContent, pTab->nCol);
     sqlite4TableAffinityStr(v, pTab);
+  }
 
-    /* Generate code to check constraints and generate index keys and
-    ** do the insertion.
-    */
+  /* Fire BEFORE or INSTEAD OF triggers */
+  if( pTrigger ){
+    sqlite4VdbeAddOp2(v, OP_Integer, -1, regRowid);
+    VdbeComment((v, "new.rowid value for BEFORE triggers"));
+    sqlite4CodeRowTrigger(
+        pParse, pTrigger, TK_INSERT, 0, TRIGGER_BEFORE, 
+        pTab, (regRowid - pTab->nCol - 1), onError, endOfLoop
+    );
+  }
+
+  if( bImplicitPK ){
+    assert( !isView );
+    sqlite4VdbeAddOp2(v, OP_NewRowid, baseCur+iPk, regRowid);
+  }
+
+  if( !isView ){
 #ifndef SQLITE_OMIT_VIRTUALTABLE
     if( IsVirtual(pTab) ){
       const char *pVTab = (const char *)sqlite4GetVTable(db, pTab);
@@ -1021,25 +906,24 @@ void sqlite4Insert(
     }else
 #endif
     {
+      /* Generate code to check constraints and generate index keys and
+      ** do the insertion.  */
       int isReplace;    /* Set to true if constraints may cause a replace */
-
       sqlite4GenerateConstraintChecks(pParse, pTab, baseCur, 
           regContent, aRegIdx, 0, 0, onError, endOfLoop, &isReplace
       );
-
       sqlite4FkCheck(pParse, pTab, 0, regContent);
-
       sqlite4CompleteInsertion(pParse, pTab, baseCur, 
           regContent, aRegIdx, 0, appendFlag, isReplace==0
       );
     }
   }
 
-  if( pTrigger ){
-    /* Code AFTER triggers */
-    sqlite4CodeRowTrigger(pParse, pTrigger, TK_INSERT, 0, TRIGGER_AFTER, 
-        pTab, regData-2-pTab->nCol, onError, endOfLoop);
-  }
+  /* Code AFTER triggers */
+  sqlite4CodeRowTrigger(
+      pParse, pTrigger, TK_INSERT, 0, TRIGGER_AFTER, 
+      pTab, regRowid - pTab->nCol - 1, onError, endOfLoop
+  );
 
   /* The bottom of the main insertion loop, if the data source
   ** is a SELECT statement.
@@ -1546,6 +1430,7 @@ void sqlite4CompleteInsertion(
         flags = pik_flags;
       }
       sqlite4VdbeAddOp3(v, OP_IdxInsert, baseCur+i, regData, aRegIdx[i]);
+      sqlite4VdbeChangeP5(v, flags);
     }
   }
 }

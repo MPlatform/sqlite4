@@ -113,9 +113,10 @@ int sqlite4VdbeDecodeValue(
     }else if( type<=2 ){
       sqlite4VdbeMemSetInt64(pOut, type-1);
     }else if( type<=10 ){
+      int iByte;
       sqlite4_int64 v = ((char*)p->a)[ofst];
-      for(i=4; i<type; i++){
-        v = v*256 + p->a[ofst+i-3];
+      for(iByte=1; iByte<size; iByte++){
+        v = v*256 + p->a[ofst+iByte];
       }
       sqlite4VdbeMemSetInt64(pOut, v);
     }else if( type<=21 ){

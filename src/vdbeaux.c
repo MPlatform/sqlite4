@@ -1872,6 +1872,11 @@ int sqlite4VdbeHalt(Vdbe *p){
         }
       }
     }
+
+    if( p->changeCntOn ){
+      sqlite4VdbeSetChanges(db, (eAction ? 0 : p->nChange));
+    }
+    p->nChange = 0;
   }
 
   /* We have successfully halted and closed the VM.  Record this fact. */

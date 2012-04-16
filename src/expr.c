@@ -2708,7 +2708,7 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
       ** trigger programs. In this case Expr.iTable is set to 1 for the
       ** new.* pseudo-table, or 0 for the old.* pseudo-table. Expr.iColumn
       ** is set to the column of the pseudo-table to read, or to -1 to
-      ** read the rowid field.
+      ** read the rowid field (if applicable - see below).
       **
       ** The expression is implemented using an OP_Param opcode. The p1
       ** parameter is set to 0 for an old.rowid reference, or to (i+1)
@@ -2727,6 +2727,11 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
       **   p1==0   ->    old.rowid     p1==3   ->    new.rowid
       **   p1==1   ->    old.a         p1==4   ->    new.a
       **   p1==2   ->    old.b         p1==5   ->    new.b       
+      **
+      ** As of SQLite 4, the rowid references are only valid if the table is
+      ** declared without an explicit PRIMARY KEY (as it is in the example
+      ** above). If the table does have an explicit PRIMARY KEY, the contents
+      ** of the old.rowid and new.rowid registers are not defined.
       */
       Table *pTab = pExpr->pTab;
       int p1 = pExpr->iTable * (pTab->nCol+1) + 1 + pExpr->iColumn;

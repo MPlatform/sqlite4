@@ -236,7 +236,6 @@ void sqlite4DeleteFrom(
   AuthContext sContext;  /* Authorization context */
   NameContext sNC;       /* Name context to resolve expressions in */
   int iDb;               /* Database number */
-  int memCnt = -1;       /* Memory cell used for change counting */
   int rcauth;            /* Value returned by authorization callback */
 
 #ifndef SQLITE_OMIT_TRIGGER
@@ -295,7 +294,7 @@ void sqlite4DeleteFrom(
     goto delete_from_cleanup;
   }
 
-  /* Assign  cursor number to the table and all its indices. */
+  /* Assign cursor numbers to each of the tables indexes. */
   assert( pTabList->nSrc==1 );
   iCur = pTabList->a[0].iCursor = pParse->nTab++;
   for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
@@ -372,9 +371,6 @@ void sqlite4DeleteFrom(
     if( pWInfo==0 ) goto delete_from_cleanup;
     sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regKey);
     sqlite4VdbeAddOp2(v, OP_KeySetAdd, regSet, regKey);
-    if( db->flags & SQLITE_CountRows ){
-      sqlite4VdbeAddOp2(v, OP_AddImm, memCnt, 1);
-    }
     sqlite4WhereEnd(pWInfo);
 
     /* Unless this is a view, open cursors for all indexes on the table
@@ -416,16 +412,6 @@ void sqlite4DeleteFrom(
   */
   if( pParse->nested==0 && pParse->pTriggerTab==0 ){
     sqlite4AutoincrementEnd(pParse);
-  }
-
-  /* Return the number of rows that were deleted. If this routine is 
-  ** generating code because of a call to sqlite4NestedParse(), do not
-  ** invoke the callback function.
-  */
-  if( (db->flags&SQLITE_CountRows) && !pParse->nested && !pParse->pTriggerTab ){
-    sqlite4VdbeAddOp2(v, OP_ResultRow, memCnt, 1);
-    sqlite4VdbeSetNumCols(v, 1);
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "rows deleted", SQLITE_STATIC);
   }
 
 delete_from_cleanup:
@@ -475,13 +461,14 @@ void sqlite4GenerateRowDelete(
   Vdbe *v = pParse->pVdbe;        /* Vdbe */
   int regOld = 0;                 /* First register in OLD.* array */
   int iLabel;                     /* Label resolved to end of generated code */
-  int iPk;
+  int iPk;                        /* Offset of PK cursor in cursor array */
   int iPkCsr;                     /* Primary key cursor number */
+  Index *pPk;                     /* Primary key index */
 
   /* Vdbe is guaranteed to have been allocated by this stage. */
   assert( v );
 
-  sqlite4FindPrimaryKey(pTab, &iPk);
+  pPk = sqlite4FindPrimaryKey(pTab, &iPk);
   iPkCsr = baseCur + iPk;
 
   /* Seek the PK cursor to the row to delete. If this row no longer exists 
@@ -511,13 +498,22 @@ void sqlite4GenerateRowDelete(
 
     /* Allocate an array of registers - one for each column in the table.
     ** Then populate those array elements that may be used by FK or trigger
-    ** logic with the OLD.* values.  */
+    ** logic with the OLD.* values.
+    **
+    ** The array is (nCol+1) registers in size, where nCol is the number of
+    ** columns in the table. If the table has an implicit PK, the first 
+    ** register in the array contains the rowid. Otherwise, its contents are
+    ** undefined.  
+    */
     regOld = pParse->nMem+1;
-    pParse->nMem += pTab->nCol;
+    pParse->nMem += (pTab->nCol+1);
     for(iCol=0; iCol<pTab->nCol; iCol++){
       if( mask==0xffffffff || mask&(1<<iCol) ){
-        sqlite4ExprCodeGetColumnOfTable(v, pTab, iPkCsr, iCol, regOld+iCol);
+        sqlite4ExprCodeGetColumnOfTable(v, pTab, iPkCsr, iCol, regOld+iCol+1);
       }
+    }
+    if( pPk->aiColumn[0]<0 ){
+      sqlite4VdbeAddOp2(v, OP_Rowid, iPkCsr, regOld);
     }
 
     /* Invoke BEFORE DELETE trigger programs. */
@@ -534,7 +530,7 @@ void sqlite4GenerateRowDelete(
     /* Do FK processing. This call checks that any FK constraints that
     ** refer to this table (i.e. constraints attached to other tables) 
     ** are not violated by deleting this row.  */
-    sqlite4FkCheck(pParse, pTab, regOld, 0);
+    sqlite4FkCheck(pParse, pTab, regOld+1, 0);
   }
 
   /* Delete the index and table entries. Skip this step if pTab is really
@@ -553,7 +549,7 @@ void sqlite4GenerateRowDelete(
   ** handle rows (possibly in other tables) that refer via a foreign key
   ** to the row just deleted. This is a no-op if there are no configured
   ** foreign keys that use this table as a parent table.  */ 
-  sqlite4FkActions(pParse, pTab, 0, regOld);
+  sqlite4FkActions(pParse, pTab, 0, regOld+1);
 
   /* Invoke AFTER DELETE trigger programs. */
   sqlite4CodeRowTrigger(pParse, pTrigger, 
@@ -649,7 +645,6 @@ void sqlite4GenerateRowIndexDelete(
   }
 
   sqlite4VdbeAddOp1(v, OP_Delete, baseCur+iPk);
-
   sqlite4ReleaseTempReg(pParse, regKey);
 }
 

@@ -3036,7 +3036,6 @@ case OP_Found: {        /* jump, in3 */
 */
 case OP_IsUnique: {        /* jump, in3 */
   VdbeCursor *pC;
-  Mem *pShort;
   Mem *pProbe;
   Mem *pOut;
   int iOut;
@@ -3063,7 +3062,9 @@ case OP_IsUnique: {        /* jump, in3 */
   dir = (pC->pKeyInfo->nPK==0 ? 0 : 1);
   rc = sqlite4KVCursorSeek(pC->pKVCur, pProbe->z, nShort, dir);
 
-  if( rc==SQLITE_NOTFOUND ){
+  if( rc==SQLITE_OK && pOut ){
+    sqlite4VdbeMemCopy(pOut, pProbe);
+  }else if( rc==SQLITE_NOTFOUND ){
     rc = SQLITE_OK;
     pc = pOp->p2-1;
   }else if( rc==SQLITE_INEXACT ){
@@ -3745,7 +3746,7 @@ case OP_SorterInsert: {      /* in2 */
   /* If OMIT_MERGE_SORT is defined, fall through to IdxInsert. */
 }
 
-/* Opcode: IdxInsert P1 P2 P3 * *
+/* Opcode: IdxInsert P1 P2 P3 * P5
 **
 ** Register P3 holds the key and register P2 holds the data for an
 ** index entry.  Write this record into the index specified by the
@@ -3765,11 +3766,14 @@ case OP_IdxInsert: {
   assert( pKey->flags & MEM_Blob );
   assert( pData==0 || (pData->flags & MEM_Blob) );
 
+  if( pOp->p5 & OPFLAG_NCHANGE ) p->nChange++;
+
   rc = sqlite4KVStoreReplace(
      pC->pKVCur->pStore,
      pKey->z, pKey->n,
      (pData ? pData->z : 0), (pData ? pData->n : 0)
   );
+
   break;
 }
 
@@ -4274,6 +4278,7 @@ case OP_Param: {           /* out2-prerelease */
   Mem *pIn;
   pFrame = p->pFrame;
   pIn = &pFrame->aMem[pOp->p1 + pFrame->aOp[pFrame->pc].p1];   
+  assert( memIsValid(pIn) );
   sqlite4VdbeMemShallowCopy(pOut, pIn, MEM_Ephem);
   break;
 }

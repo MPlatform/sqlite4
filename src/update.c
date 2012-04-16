@@ -106,7 +106,6 @@ void sqlite4Update(
   int *aXRef = 0;        /* aXRef[i] is the index in pChanges->a[] of the
                          ** an expression for the i-th column of the table.
                          ** aXRef[i]==-1 if the i-th column is not changed. */
-  Expr *pRowidExpr = 0;  /* Expression defining the new record number */
   AuthContext sContext;  /* The authorization context */
   NameContext sNC;       /* The name-context to resolve expressions in */
   int iDb;               /* Database containing the table being updated */
@@ -123,17 +122,18 @@ void sqlite4Update(
   /* Register Allocations */
   int regOldKey;                  /* Register containing the original PK */
 
-  int regRowCount = 0;   /* A count of rows changed */
   int regNewRowid;       /* The new rowid */
   int regNew;            /* Content of the NEW.* table in triggers */
-  int regOld = 0;        /* Content of OLD.* table in triggers */
 
+  int regOld = 0;                 /* Content of OLD.* table in triggers */
   int regKeySet = 0;              /* Register containing KeySet object */
   Index *pPk;                     /* The primary key index of this table */
   int iPk;                        /* Offset of primary key in aRegIdx[] */
   int bChngPk = 0;                /* True if any PK columns are updated */
   int bOpenAll = 0;               /* True if all indexes were opened */
   int bImplicitPk;                /* True if pTab has an implicit PK */
+  int regOldTr = 0;               /* Content of OLD.* table including IPK */
+  int regNewTr = 0;               /* Content of NEW.* table including IPK */
 
   memset(&sContext, 0, sizeof(sContext));
   db = pParse->db;
@@ -142,7 +142,13 @@ void sqlite4Update(
   }
   assert( pSrc->nSrc==1 );
 
-  /* Locate the table which we want to update. */
+  /* Locate and analyze the table to be updated. This block sets:
+  **
+  **   pTab
+  **   iDb
+  **   pPk
+  **   bImplicitPk
+  */
   pTab = sqlite4SrcListLookup(pParse, pSrc);
   if( pTab==0 ) goto update_cleanup;
   iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
@@ -166,12 +172,9 @@ void sqlite4Update(
 # define isView 0
 #endif
 
-  if( sqlite4ViewGetColumnNames(pParse, pTab) ){
-    goto update_cleanup;
-  }
-  if( sqlite4IsReadOnly(pParse, pTab, tmask) ){
-    goto update_cleanup;
-  }
+  if( sqlite4ViewGetColumnNames(pParse, pTab) ) goto update_cleanup;
+  if( sqlite4IsReadOnly(pParse, pTab, tmask) ) goto update_cleanup;
+
   aXRef = sqlite4DbMallocRaw(db, sizeof(int) * pTab->nCol );
   if( aXRef==0 ) goto update_cleanup;
   for(i=0; i<pTab->nCol; i++) aXRef[i] = -1;
@@ -179,12 +182,12 @@ void sqlite4Update(
   /* Allocate a cursors for the main database table and for all indices.
   ** The index cursors might not be used, but if they are used they
   ** need to occur right after the database cursor.  So go ahead and
-  ** allocate enough space, just in case.
-  */
-  pSrc->a[0].iCursor = iCur = pParse->nTab++;
+  ** allocate enough space, just in case.  */
+  iCur = pParse->nTab;
   for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
     pParse->nTab++;
   }
+  pSrc->a[0].iCursor = iCur+iPk;
 
   /* Initialize the name-context */
   memset(&sNC, 0, sizeof(sNC));
@@ -245,10 +248,10 @@ void sqlite4Update(
   sqlite4BeginWriteOperation(pParse, 1, iDb);
 
 #ifndef SQLITE_OMIT_VIRTUALTABLE
+  /* TODO: This is currently broken */
   /* Virtual tables must be handled separately */
   if( IsVirtual(pTab) ){
-    updateVirtualTable(pParse, pSrc, pTab, pChanges, pRowidExpr, aXRef,
-                       pWhere, onError);
+    updateVirtualTable(pParse, pSrc, pTab, pChanges, 0, aXRef, pWhere, onError);
     pWhere = 0;
     pSrc = 0;
     goto update_cleanup;
@@ -279,21 +282,30 @@ void sqlite4Update(
     }
   }
 
-  /* Allocate other required registers. */
+  /* Allocate other required registers. Specifically:
+  **
+  **     regKeySet:     1 register
+  **     regOldKey:     1 register
+  **     regOldTr:      nCol+1 registers
+  **     regNewTr:      nCol+1 registers
+  **
+  ** The regOldTr allocation is only required if there are either triggers 
+  ** or foreign keys to be processed.
+  **
+  ** The regOldTr and regNewTr register arrays include space for the 
+  ** implicit primary key value if the table in question does not have an
+  ** explicit PRIMARY KEY.
+  */
   regKeySet = ++pParse->nMem;
   regOldKey = ++pParse->nMem;
   if( pTrigger || hasFK ){
-    regOld = pParse->nMem + 1;
-    pParse->nMem += pTab->nCol;
+    regOldTr = pParse->nMem + 1;
+    regOld = regOldTr+1;
+    pParse->nMem += (pTab->nCol + 1);
   }
-#if 0
-  if( chngRowid || pTrigger || hasFK ){
-    regNewRowid = ++pParse->nMem;
-  }
-#endif
-  if( bImplicitPk ) pParse->nMem++;
-  regNew = pParse->nMem + 1;
-  pParse->nMem += pTab->nCol;
+  regNewTr = pParse->nMem + 1;
+  regNew = regNewTr+1;
+  pParse->nMem += (pTab->nCol+1);
 
   /* Start the view context. */
   if( isView ){
@@ -330,17 +342,11 @@ void sqlite4Update(
   pWInfo = sqlite4WhereBegin(pParse, pSrc, pWhere, 0, 0, WHERE_ONEPASS_DESIRED);
   if( pWInfo==0 ) goto update_cleanup;
   okOnePass = pWInfo->okOnePass;
-  sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regOldKey);
+  sqlite4VdbeAddOp2(v, OP_RowKey, iCur+iPk, regOldKey);
   if( !okOnePass ){
     sqlite4VdbeAddOp2(v, OP_KeySetAdd, regKeySet, regOldKey);
   }
   sqlite4WhereEnd(pWInfo);
-
-  /* Initialize the count of updated rows */
-  if( (db->flags & SQLITE_CountRows) && !pParse->pTriggerTab ){
-    regRowCount = ++pParse->nMem;
-    sqlite4VdbeAddOp2(v, OP_Integer, 0, regRowCount);
-  }
 
   /* Open every index that needs updating. If any index could potentially 
   ** invoke a REPLACE conflict resolution action, then we need to open all 
@@ -399,18 +405,17 @@ void sqlite4Update(
     oldmask |= sqlite4TriggerColmask(pParse, 
         pTrigger, pChanges, 0, TRIGGER_BEFORE|TRIGGER_AFTER, pTab, onError
     );
+
+    if( bImplicitPk ){
+      sqlite4VdbeAddOp2(v, OP_Rowid, iCur+iPk, regOldTr);
+    }
     for(i=0; i<pTab->nCol; i++){
       if( aXRef[i]<0 || oldmask==0xffffffff || (i<32 && (oldmask & (1<<i))) ){
-        sqlite4ExprCodeGetColumnOfTable(v, pTab, iCur, i, regOld+i);
+        sqlite4ExprCodeGetColumnOfTable(v, pTab, iCur+iPk, i, regOld+i);
       }else{
         sqlite4VdbeAddOp2(v, OP_Null, 0, regOld+i);
       }
     }
-#if 0
-    if( chngRowid==0 ){
-      sqlite4VdbeAddOp2(v, OP_Copy, regOldKey, regNewRowid);
-    }
-#endif
   }
 
   /* Populate the array of registers beginning at regNew with the new
@@ -457,7 +462,7 @@ void sqlite4Update(
     sqlite4VdbeAddOp2(v, OP_Affinity, regNew, pTab->nCol);
     sqlite4TableAffinityStr(v, pTab);
     sqlite4CodeRowTrigger(pParse, pTrigger, TK_UPDATE, pChanges, 
-        TRIGGER_BEFORE, pTab, regOldKey, onError, addr);
+        TRIGGER_BEFORE, pTab, regOldTr, onError, addr);
 
     /* The row-trigger may have deleted the row being updated. In this
     ** case, jump to the next row. No updates or AFTER triggers are 
@@ -465,7 +470,7 @@ void sqlite4Update(
     ** is deleted or renamed by a BEFORE trigger - is left undefined in the
     ** documentation.
     */
-    sqlite4VdbeAddOp3(v, OP_NotExists, iCur, addr, regOldKey);
+    sqlite4VdbeAddOp4Int(v, OP_NotFound, iCur+iPk, addr, regOldKey, 0);
 
     /* If it did not delete it, the row-trigger may still have modified 
     ** some of the columns of the row being updated. Load the values for 
@@ -474,7 +479,7 @@ void sqlite4Update(
     */
     for(i=0; i<pTab->nCol; i++){
       if( aXRef[i]<0 ){
-        sqlite4VdbeAddOp3(v, OP_Column, iCur, i, regNew+i);
+        sqlite4VdbeAddOp3(v, OP_Column, iCur+iPk, i, regNew+i);
         sqlite4ColumnDefault(v, pTab, i, regNew+i);
       }
     }
@@ -521,14 +526,8 @@ void sqlite4Update(
     }
   }
 
-  /* Increment the row counter 
-  */
-  if( (db->flags & SQLITE_CountRows) && !pParse->pTriggerTab){
-    sqlite4VdbeAddOp2(v, OP_AddImm, regRowCount, 1);
-  }
-
   sqlite4CodeRowTrigger(pParse, pTrigger, TK_UPDATE, pChanges, 
-      TRIGGER_AFTER, pTab, regOldKey, onError, addr);
+      TRIGGER_AFTER, pTab, regOldTr, onError, addr);
 
   /* Repeat the above with the next record to be updated, until
   ** all record selected by the WHERE clause have been updated.
@@ -536,14 +535,13 @@ void sqlite4Update(
   sqlite4VdbeAddOp2(v, OP_Goto, 0, addr);
   sqlite4VdbeJumpHere(v, addr);
 
-  /* Close all tables */
+  /* Close all cursors */
   for(i=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, i++){
     assert( aRegIdx );
     if( bOpenAll || aRegIdx[i] ){
-      sqlite4VdbeAddOp2(v, OP_Close, iCur+i+1, 0);
+      sqlite4VdbeAddOp2(v, OP_Close, iCur+i, 0);
     }
   }
-  sqlite4VdbeAddOp2(v, OP_Close, iCur, 0);
 
   /* Update the sqlite_sequence table by storing the content of the
   ** maximum rowid counter values recorded while inserting into
@@ -551,17 +549,6 @@ void sqlite4Update(
   */
   if( pParse->nested==0 && pParse->pTriggerTab==0 ){
     sqlite4AutoincrementEnd(pParse);
-  }
-
-  /*
-  ** Return the number of rows that were changed. If this routine is 
-  ** generating code because of a call to sqlite4NestedParse(), do not
-  ** invoke the callback function.
-  */
-  if( (db->flags&SQLITE_CountRows) && !pParse->pTriggerTab && !pParse->nested ){
-    sqlite4VdbeAddOp2(v, OP_ResultRow, regRowCount, 1);
-    sqlite4VdbeSetNumCols(v, 1);
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "rows updated", SQLITE_STATIC);
   }
 
 update_cleanup:

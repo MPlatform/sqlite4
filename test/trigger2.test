@@ -122,22 +122,18 @@ ifcapable subquery {
   	  new.a, new.b);
       END;
     }
-  
-    do_test trigger2-1.$ii.1 {
-      set r {}
-      foreach v [execsql { 
-        UPDATE tbl SET a = a * 10, b = b * 10;
-        SELECT * FROM rlog ORDER BY idx;
-        SELECT * FROM clog ORDER BY idx;
-      }] {
-        lappend r [expr {int($v)}]
-      }
-      set r
-    } [list 1 1 2  4  6 10 20 \
-            2 1 2 13 24 10 20 \
-  	    3 3 4 13 24 30 40 \
-  	    4 3 4 40 60 30 40 \
-            1 1 2 13 24 10 20 ]
+
+    do_execsql_test trigger2-1.$ii.1 {
+      UPDATE tbl SET a = a * 10, b = b * 10;
+      SELECT * FROM rlog ORDER BY idx;
+      SELECT * FROM clog ORDER BY idx;
+    } {
+      1 1 2  4  6 10 20
+      2 1 2 13 24 10 20
+      3 3 4 13 24 30 40
+      4 3 4 40 60 30 40
+      1 1 2 13 24 10 20
+    }
   
     execsql {
       DELETE FROM rlog;
@@ -162,19 +158,15 @@ ifcapable subquery {
   	  0, 0);
       END;
     }
-    do_test trigger2-1.$ii.2 {
-      set r {}
-      foreach v [execsql {
+    do_execsql_test trigger2-1.$ii.2 {
         DELETE FROM tbl;
         SELECT * FROM rlog;
-      }] {
-        lappend r [expr {int($v)}]
-      }
-      set r
-    } [list 1 100 100 400 300 0 0 \
-            2 100 100 300 200 0 0 \
-            3 300 200 300 200 0 0 \
-            4 300 200 0 0 0 0 ]
+    } {
+      1 100 100 400 300 0 0
+      2 100 100 300 200 0 0
+      3 300 200 300 200 0 0
+      4 300 200 0 0 0 0 
+    }
   
     execsql {
       DELETE FROM rlog;
@@ -195,22 +187,22 @@ ifcapable subquery {
           (SELECT coalesce(sum(b),0) FROM tbl), 
   	  new.a, new.b);
       END;
+
+      CREATE TABLE other_tbl(a, b);
+      INSERT INTO other_tbl VALUES(1, 2);
+      INSERT INTO other_tbl VALUES(3, 4);
     }
-    do_test trigger2-1.$ii.3 {
-      execsql {
-  
-        CREATE TABLE other_tbl(a, b);
-        INSERT INTO other_tbl VALUES(1, 2);
-        INSERT INTO other_tbl VALUES(3, 4);
-        -- INSERT INTO tbl SELECT * FROM other_tbl;
-        INSERT INTO tbl VALUES(5, 6);
-        DROP TABLE other_tbl;
-  
-        SELECT * FROM rlog;
-      }
-    } [list 1 0 0 0 0 5 6 \
-            2 0 0 5 6 5 6 ]
-  
+
+    do_execsql_test trigger2-1.$ii.3 {
+      -- INSERT INTO tbl SELECT * FROM other_tbl;
+      INSERT INTO tbl VALUES(5, 6);
+      SELECT * FROM rlog;
+    } {
+      1 0 0 0 0 5 6
+      2 0 0 5 6 5 6 
+    }
+
+    execsql { DROP TABLE other_tbl }
     integrity_check trigger2-1.$ii.4
   }
   catchsql {
@@ -329,6 +321,7 @@ foreach tr_program {
 
     do_test trigger2-2.$ii-after "execsql {$statement $query}" $after_data
     execsql "DROP TRIGGER the_trigger;"
+
 
     integrity_check trigger2-2.$ii-integrity
   }
@@ -513,12 +506,14 @@ ifcapable conflict {
       SELECT * from tbl;
     }
   } {1 2 3 2 2 3}
+
   do_test trigger2-6.1f {
     execsql {
       INSERT OR REPLACE INTO tbl values (2, 2, 3);
       SELECT * from tbl;
     }
   } {1 2 3 2 0 0}
+
   do_test trigger2-6.1g {
     catchsql {
       INSERT OR ROLLBACK INTO tbl values (3, 2, 3);
