@@ -2126,8 +2126,10 @@ case OP_Column: {
     MemSetTypeFlag(pDest, MEM_Null);
   }
   if( rc==SQLITE_OK && aData ){
+    /* TODO: Fix this somehow... */
     int nField = pC->nField;
-    if( pC->pKeyInfo ) nField = pC->pKeyInfo->nData;
+    if( pC->pKeyInfo && pC->pKeyInfo->nData ) nField = pC->pKeyInfo->nData;
+
     rc = sqlite4VdbeCreateDecoder(db, aData, nData, nField, &pCodec);
     if( rc==0 ){
       pDefault = (pOp->p4type==P4_MEM) ? pOp->p4.pMem : 0;
@@ -2853,13 +2855,10 @@ case OP_SeekGt: {       /* jump, in3 */
   assert( OP_SeekGe == OP_SeekLt+2 );
   assert( OP_SeekGt == OP_SeekLt+3 );
   assert( pC->isOrdered );
+
   oc = pOp->opcode;
   pC->nullRow = 0;
-  if( pC->isTable ){
-    nField = 1;
-  }else{
-    nField = pOp->p4.i;
-  }
+  nField = pOp->p4.i;
   pIn3 = &aMem[pOp->p3];
   rc = sqlite4VdbeEncodeKey(db, pIn3, nField, pC->iRoot, pC->pKeyInfo,
                             &aProbe, &nProbe, 0);
@@ -2867,8 +2866,7 @@ case OP_SeekGt: {       /* jump, in3 */
     sqlite4DbFree(db, aProbe);
     break;
   }
-  rc = sqlite4KVCursorSeek(pC->pKVCur, aProbe, nProbe, 
-                           oc<=OP_SeekLe ? -1 : 1);
+  rc = sqlite4KVCursorSeek(pC->pKVCur, aProbe, nProbe, oc<=OP_SeekLe ? -1 : 1);
   sqlite4DbFree(db, aProbe);
   if( rc==SQLITE_OK ){
     if( oc==OP_SeekLt ){
@@ -2879,17 +2877,18 @@ case OP_SeekGt: {       /* jump, in3 */
   }else if( rc==SQLITE_INEXACT ){
     rc = SQLITE_OK;
   }
+
   if( rc==SQLITE_OK ){
     rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
     if( rc==SQLITE_OK ){
       iRoot = 0;
       n = sqlite4GetVarint64(aKey, nKey, &iRoot);
-      if( iRoot!=pC->iRoot ) rc = SQLITE_DONE;
+      if( iRoot!=pC->iRoot ) rc = SQLITE_NOTFOUND;
       c = aKey[n];
-      if( c<0x05 || c>0xfa ) rc = SQLITE_DONE;
+      if( c<0x05 || c>0xfa ) rc = SQLITE_NOTFOUND;
     }
   }
-  if( rc==SQLITE_DONE ){
+  if( rc==SQLITE_NOTFOUND ){
     rc = SQLITE_OK;
     pc = pOp->p2 - 1;
   }
@@ -3585,6 +3584,8 @@ case OP_Last: {        /* jump */
   if( rc==SQLITE_NOTFOUND ){  
     rc = SQLITE_OK;
     if( pOp->p2 ) pc = pOp->p2 - 1;
+  }else{
+    pC->nullRow = 0;
   }
   break;
 }

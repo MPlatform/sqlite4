@@ -708,10 +708,45 @@ reset_db
 do_execsql_test 39.1 {
   CREATE TABLE t1(a PRIMARY KEY, b);
 }
-breakpoint
 do_catchsql_test 39.2 {
   INSERT INTO t1 VALUES(NULL, 'xyz');
 } {1 {t1.a may not be NULL}}
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 40.1 {
+    CREATE TABLE abc(a, b, c, PRIMARY KEY(a, b));
+    INSERT INTO abc VALUES(1, 1, 1);
+    SELECT * FROM abc;
+} {1 1 1}
+do_execsql_test 40.2 { SELECT max(a) FROM abc } {1}
+do_execsql_test 40.3 {
+  SELECT a+(select max(a) FROM abc), 
+         b+(select max(a) FROM abc), 
+         c+(select max(a) FROM abc) 
+  FROM abc
+} {2 2 2}
+do_execsql_test 40.4 {
+  INSERT INTO abc SELECT 
+      a+(select max(a) FROM abc), 
+      b+(select max(a) FROM abc), 
+      c+(select max(a) FROM abc) 
+  FROM abc;
+}
+do_execsql_test 40.5 { SELECT * FROM abc } {1 1 1 2 2 2}
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 41.1 {
+  CREATE TABLE x(a, b);
+  INSERT INTO x VALUES(1, 'one');
+  INSERT INTO x VALUES(2, 'two');
+  INSERT INTO x VALUES(1, 'three');
+} 
+
+do_execsql_test 41.2 {
+  SELECT * FROM x ORDER BY a;
+} {1 one 1 three 2 two}
 
 #proc populate_t1 {} {
 #  db eval {

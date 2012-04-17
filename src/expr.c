@@ -1459,6 +1459,10 @@ int sqlite4FindInIndex(Parse *pParse, Expr *pX, int *prNotFound){
     Expr *pExpr;                           /* Expression <column> */
     int iCol;                              /* Index of column <column> */
     int iDb;                               /* Database idx for pTab */
+    Index *pIdx;
+    CollSeq *pReq;
+    char aff;
+    int affinity_ok;
 
     assert( p );                        /* Because of isCandidateForInOpt(p) */
     assert( p->pEList!=0 );             /* Because of isCandidateForInOpt(p) */
@@ -1478,51 +1482,39 @@ int sqlite4FindInIndex(Parse *pParse, Expr *pX, int *prNotFound){
     ** successful here.
     */
     assert(v);
-    if( iCol<0 ){
-      int iAddr;
 
-      iAddr = sqlite4CodeOnce(pParse);
+    /* The collation sequence used by the comparison. If an index is to
+    ** be used in place of a temp-table, it must be ordered according
+    ** to this collation sequence.  */
+    pReq = sqlite4BinaryCompareCollSeq(pParse, pX->pLeft, pExpr);
 
-      sqlite4OpenTable(pParse, iTab, iDb, pTab, OP_OpenRead);
-      eType = IN_INDEX_ROWID;
+    /* Check that the affinity that will be used to perform the 
+    ** comparison is the same as the affinity of the column. If
+    ** it is not, it is not possible to use any index.
+    */
+    aff = comparisonAffinity(pX);
+    affinity_ok = (pTab->aCol[iCol].affinity==aff||aff==SQLITE_AFF_NONE);
 
-      sqlite4VdbeJumpHere(v, iAddr);
-    }else{
-      Index *pIdx;                         /* Iterator variable */
-
-      /* The collation sequence used by the comparison. If an index is to
-      ** be used in place of a temp-table, it must be ordered according
-      ** to this collation sequence.  */
-      CollSeq *pReq = sqlite4BinaryCompareCollSeq(pParse, pX->pLeft, pExpr);
-
-      /* Check that the affinity that will be used to perform the 
-      ** comparison is the same as the affinity of the column. If
-      ** it is not, it is not possible to use any index.
-      */
-      char aff = comparisonAffinity(pX);
-      int affinity_ok = (pTab->aCol[iCol].affinity==aff||aff==SQLITE_AFF_NONE);
-
-      for(pIdx=pTab->pIndex; pIdx && eType==0 && affinity_ok; pIdx=pIdx->pNext){
-        if( (pIdx->aiColumn[0]==iCol)
-         && sqlite4FindCollSeq(db, ENC(db), pIdx->azColl[0], 0)==pReq
-         && (!mustBeUnique || (pIdx->nColumn==1 && pIdx->onError!=OE_None))
+    for(pIdx=pTab->pIndex; pIdx && eType==0 && affinity_ok; pIdx=pIdx->pNext){
+      if( (pIdx->aiColumn[0]==iCol)
+          && sqlite4FindCollSeq(db, ENC(db), pIdx->azColl[0], 0)==pReq
+          && (!mustBeUnique || (pIdx->nColumn==1 && pIdx->onError!=OE_None))
         ){
-          int iAddr;
-          char *pKey;
-  
-          pKey = (char *)sqlite4IndexKeyinfo(pParse, pIdx);
-          iAddr = sqlite4CodeOnce(pParse);
-  
-          sqlite4VdbeAddOp4(v, OP_OpenRead, iTab, pIdx->tnum, iDb,
-                               pKey,P4_KEYINFO_HANDOFF);
-          VdbeComment((v, "%s", pIdx->zName));
-          eType = IN_INDEX_INDEX;
+        int iAddr;
+        char *pKey;
 
-          sqlite4VdbeJumpHere(v, iAddr);
-          if( prNotFound && !pTab->aCol[iCol].notNull ){
-            *prNotFound = ++pParse->nMem;
-            sqlite4VdbeAddOp2(v, OP_Null, 0, *prNotFound);
-          }
+        pKey = (char *)sqlite4IndexKeyinfo(pParse, pIdx);
+        iAddr = sqlite4CodeOnce(pParse);
+
+        sqlite4VdbeAddOp4(v, OP_OpenRead, iTab, pIdx->tnum, iDb,
+            pKey,P4_KEYINFO_HANDOFF);
+        VdbeComment((v, "%s", pIdx->zName));
+        eType = IN_INDEX_INDEX;
+
+        sqlite4VdbeJumpHere(v, iAddr);
+        if( prNotFound && !pTab->aCol[iCol].notNull ){
+          *prNotFound = ++pParse->nMem;
+          sqlite4VdbeAddOp2(v, OP_Null, 0, *prNotFound);
         }
       }
     }
