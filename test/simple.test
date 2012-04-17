@@ -52,7 +52,7 @@ do_execsql_test 1.4 {
   CREATE TABLE t3(k PRIMARY KEY, v);
   PRAGMA table_info = t3;
 } {
-    0 k {} 0 {} 1 
+    0 k {} 1 {} 1 
     1 v {} 0 {} 0 
 }
 
@@ -698,12 +698,20 @@ do_execsql_test 38.1 {
     INSERT INTO log VALUES(old.b, old.a);
   END;
 }
-
 do_execsql_test 38.2 {
   DELETE FROM v1 WHERE a = 3;
   SELECT * FROM log;
 } {4 3}
 
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 39.1 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+}
+breakpoint
+do_catchsql_test 39.2 {
+  INSERT INTO t1 VALUES(NULL, 'xyz');
+} {1 {t1.a may not be NULL}}
 
 #proc populate_t1 {} {
 #  db eval {

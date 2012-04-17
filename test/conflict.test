@@ -359,9 +359,6 @@ do_test conflict-7.1 {
   }
 } {50 1 51}
 do_test conflict-7.2 {
-  explain {
-    UPDATE OR IGNORE t1 SET a=1000;
-  }
   execsql {
     UPDATE OR IGNORE t1 SET a=1000;
   }

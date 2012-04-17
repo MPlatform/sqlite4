@@ -26,7 +26,6 @@
 **
 **    pSrc->a[0].pTab       Pointer to the Table object
 **    pSrc->a[0].pIndex     Pointer to the INDEXED BY index, if there is one
-**
 */
 Table *sqlite4SrcListLookup(Parse *pParse, SrcList *pSrc){
   struct SrcList_item *pItem = pSrc->a;
@@ -377,14 +376,6 @@ void sqlite4DeleteFrom(
 
     /* Close all open cursors */
     sqlite4CloseAllIndexes(pParse, pTab, baseCur);
-  }
-
-  /* Update the sqlite_sequence table by storing the content of the
-  ** maximum rowid counter values recorded while inserting into
-  ** autoincrement tables.
-  */
-  if( pParse->nested==0 && pParse->pTriggerTab==0 ){
-    sqlite4AutoincrementEnd(pParse);
   }
 
 delete_from_cleanup:
