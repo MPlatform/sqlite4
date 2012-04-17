@@ -337,9 +337,8 @@ static KVMemNode *kvmemNewNode(
     if( pChng==0 ){
       sqlite4_free(pNode);
       pNode = 0;
-    }else{
-      pChng->pData = 0;
     }
+    assert( pChng==0 || pChng->pData==0 );
   }
   return pNode;
 }
@@ -539,7 +538,7 @@ static int kvmemRollback(KVStore *pKVStore, int iLevel){
     KVMemChng *pChng, *pNext;
     for(pChng=p->apLog[p->base.iTransLevel-2]; pChng; pChng=pNext){
       KVMemNode *pNode = pChng->pNode;
-      if( pChng->pData ){
+      if( pChng->pData || pChng->oldTrans>0 ){
         kvmemDataUnref(pNode->pData);
         pNode->pData = pChng->pData;
         pNode->mxTrans = pChng->oldTrans;
@@ -829,6 +828,7 @@ static int kvmemDelete(KVCursor *pKVCursor){
   if( pNode->mxTrans<p->base.iTransLevel ){
     pChng = kvmemNewChng(p, pNode);
     if( pChng==0 ) return SQLITE_NOMEM;
+    assert( pNode->pData==0 );
   }else{
     kvmemDataUnref(pNode->pData);
     pNode->pData = 0;
