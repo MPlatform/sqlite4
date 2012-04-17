@@ -569,7 +569,8 @@ void sqlite4Insert(
   ** of the primary key cursor (i.e. so that the cursor opened on the primary
   ** key index is VDBE cursor (baseCur+iPk).  */
   pPk = sqlite4FindPrimaryKey(pTab, &iPk);
-  bImplicitPK = pPk->aiColumn[0]==-1;
+  assert( (pPk==0)==IsView(pTab) );
+  bImplicitPK = (pPk && pPk->aiColumn[0]==-1);
 
   /* Figure out if we have any triggers and if the table being
   ** inserted into is a view. */
@@ -1475,9 +1476,7 @@ void sqlite4CloseAllIndexes(
   Vdbe *v;
 
   assert( pTab->pIndex==0 || IsVirtual(pTab)==0 );
-#ifndef SQLITE_OMIT_VIEW
-  assert( pTab->pIndex==0 || pTab->pSelect==0 );
-#endif
+  assert( pTab->pIndex==0 || IsView(pTab)==0 );
 
   v = sqlite4GetVdbe(pParse);
   for(i=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, i++){

@@ -127,11 +127,11 @@ void sqlite4Update(
 
   int regOld = 0;                 /* Content of OLD.* table in triggers */
   int regKeySet = 0;              /* Register containing KeySet object */
-  Index *pPk;                     /* The primary key index of this table */
-  int iPk;                        /* Offset of primary key in aRegIdx[] */
+  Index *pPk = 0;                 /* The primary key index of this table */
+  int iPk = 0;                    /* Offset of primary key in aRegIdx[] */
   int bChngPk = 0;                /* True if any PK columns are updated */
   int bOpenAll = 0;               /* True if all indexes were opened */
-  int bImplicitPk;                /* True if pTab has an implicit PK */
+  int bImplicitPk = 0;            /* True if pTab has an implicit PK */
   int regOldTr = 0;               /* Content of OLD.* table including IPK */
   int regNewTr = 0;               /* Content of NEW.* table including IPK */
 
@@ -152,8 +152,10 @@ void sqlite4Update(
   pTab = sqlite4SrcListLookup(pParse, pSrc);
   if( pTab==0 ) goto update_cleanup;
   iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
-  pPk = sqlite4FindPrimaryKey(pTab, &iPk);
-  bImplicitPk = (pPk->aiColumn[0]<0);
+  if( IsView(pTab)==0 ){
+    pPk = sqlite4FindPrimaryKey(pTab, &iPk);
+    bImplicitPk = (pPk->aiColumn[0]<0);
+  }
 
   /* Figure out if we have any triggers and if the table being
   ** updated is a view.
@@ -184,10 +186,11 @@ void sqlite4Update(
   ** need to occur right after the database cursor.  So go ahead and
   ** allocate enough space, just in case.  */
   iCur = pParse->nTab;
+  pSrc->a[0].iCursor = iCur+iPk;
   for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
     pParse->nTab++;
   }
-  pSrc->a[0].iCursor = iCur+iPk;
+  if( IsView(pTab) ) pParse->nTab++;
 
   /* Initialize the name-context */
   memset(&sNC, 0, sizeof(sNC));
@@ -223,8 +226,10 @@ void sqlite4Update(
     aXRef[j] = i;
 
     /* Check if this column is part of the primary key. If so, set bChngPk. */
-    for(iPkCol=0; iPkCol<pPk->nColumn; iPkCol++){
-      if( pPk->aiColumn[iPkCol]==j ) bChngPk = 1;
+    if( !IsView(pTab) ){
+      for(iPkCol=0; iPkCol<pPk->nColumn; iPkCol++){
+        if( pPk->aiColumn[iPkCol]==j ) bChngPk = 1;
+      }
     }
 
 #ifndef SQLITE_OMIT_AUTHORIZATION

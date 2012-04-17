@@ -586,6 +586,9 @@ void sqlite4Pragma(
         Index *pPk;
         int iCsr;
 
+        /* Do nothing for views */
+        if( IsView(pTab) ) continue;
+
         /* Open all indexes for table pTab. */
         for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
           if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){

@@ -224,110 +224,81 @@ void sqlite4DeleteFrom(
   SrcList *pTabList,     /* The table from which we should delete things */
   Expr *pWhere           /* The WHERE clause.  May be null */
 ){
-  Vdbe *v;               /* The virtual database engine */
-  Table *pTab;           /* The table from which records will be deleted */
-  const char *zDb;       /* Name of database holding pTab */
-  int addr = 0;     /* A couple addresses of generated code */
-  int i;                 /* Loop counter */
-  WhereInfo *pWInfo;     /* Information about the WHERE clause */
-  Index *pIdx;           /* For looping over indices of the table */
-  int iCur;              /* VDBE Cursor number for pTab */
-  sqlite4 *db;           /* Main database structure */
-  AuthContext sContext;  /* Authorization context */
-  NameContext sNC;       /* Name context to resolve expressions in */
-  int iDb;               /* Database number */
-  int rcauth;            /* Value returned by authorization callback */
-
-#ifndef SQLITE_OMIT_TRIGGER
-  int isView;                  /* True if attempting to delete from a view */
-  Trigger *pTrigger;           /* List of table triggers, if required */
-#endif
+  sqlite4 *db = pParse->db;       /* Main database structure */
+  Vdbe *v;                        /* The virtual database engine */
+  Table *pTab;                    /* Table to delete from */
+  const char *zDb;                /* Name of database holding pTab */
+  AuthContext sContext;           /* Authorization context */
+  NameContext sNC;                /* Name context to resolve WHERE expression */
+  int iDb;                        /* Database number */
+  int rcauth;                     /* Value returned by authorization callback */
+  int iCur;                       /* Cursor number used by where.c */
+  Trigger *pTrigger;              /* List of triggers, or NULL */
 
   memset(&sContext, 0, sizeof(sContext));
+  memset(&sNC, 0, sizeof(sNC));
+
   db = pParse->db;
   if( pParse->nErr || db->mallocFailed ){
     goto delete_from_cleanup;
   }
   assert( pTabList->nSrc==1 );
 
-  /* Locate the table which we want to delete.  This table has to be
-  ** put in an SrcList structure because some of the subroutines we
-  ** will be calling are designed to work with multiple tables and expect
-  ** an SrcList* parameter instead of just a Table* parameter.  */
+  /* Locate the table which we want to delete. If it is a view, make sure
+  ** that the column names are initialized. */
   pTab = sqlite4SrcListLookup(pParse, pTabList);
   if( pTab==0 )  goto delete_from_cleanup;
+  iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
+  zDb = db->aDb[iDb].zName;
+  assert( iDb<db->nDb );
 
-  /* Figure out if we have any triggers and if the table being
-  ** deleted from is a view.  */
-#ifndef SQLITE_OMIT_TRIGGER
+  /* Figure out if there are any triggers */
   pTrigger = sqlite4TriggersExist(pParse, pTab, TK_DELETE, 0, 0);
-  isView = pTab->pSelect!=0;
-#else
-# define pTrigger 0
-# define isView 0
-#endif
-#ifdef SQLITE_OMIT_VIEW
-# undef isView
-# define isView 0
-#endif
 
   /* If pTab is really a view, make sure it has been initialized. */
-  if( sqlite4ViewGetColumnNames(pParse, pTab) ){
-    goto delete_from_cleanup;
-  }
+  if( sqlite4ViewGetColumnNames(pParse, pTab) ) goto delete_from_cleanup;
 
-  /* Check the table is not read-only (e.g. sqlite_master or sqlite_stat).
-  ** Also, check that if pTab is really an SQL view, one or more INSTEAD 
-  ** OF DELETE triggers have been configured.  */
-  if( sqlite4IsReadOnly(pParse, pTab, (pTrigger?1:0)) ){
-    goto delete_from_cleanup;
-  }
-  assert(!isView || pTrigger);
+  /* Check the table is not read-only. A table is read-only if it is one
+  ** of the built-in system tables (e.g. sqlite_master, sqlite_stat) or
+  ** if it is a view and there are no INSTEAD OF triggers to handle the 
+  ** delete.  */
+  if( sqlite4IsReadOnly(pParse, pTab, pTrigger!=0) ) goto delete_from_cleanup;
+  assert( !IsView(pTab) || pTrigger );
+  assert( !IsView(pTab) || pTab->pIndex==0 );
 
   /* Invoke the authorization callback */
-  iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
-  assert( iDb<db->nDb );
-  zDb = db->aDb[iDb].zName;
   rcauth = sqlite4AuthCheck(pParse, SQLITE_DELETE, pTab->zName, 0, zDb);
   assert( rcauth==SQLITE_OK || rcauth==SQLITE_DENY || rcauth==SQLITE_IGNORE );
   if( rcauth==SQLITE_DENY ){
     goto delete_from_cleanup;
   }
 
-  /* Assign cursor numbers to each of the tables indexes. */
-  assert( pTabList->nSrc==1 );
-  iCur = pTabList->a[0].iCursor = pParse->nTab++;
-  for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
-    pParse->nTab++;
-  }
+  /* Assign a cursor number to the table or view this statement is 
+  ** deleting from. If pTab is actually a view, this will be used as the
+  ** ephemeral table cursor. 
+  **
+  ** Or, if this is a real table, it is the number of a read-only cursor 
+  ** used by where.c to iterate through those records that match the WHERE 
+  ** clause supplied by the user. This is a separate cursor from the array
+  ** of read-write cursors used to delete entries from each of the tables
+  ** indexes.  */
+  pTabList->a[0].iCursor = iCur = pParse->nTab++;
 
-  /* Start the view context
-  */
-  if( isView ){
-    sqlite4AuthContextPush(pParse, &sContext, pTab->zName);
-  }
-
-  /* Begin generating code.
-  */
+  /* Begin generating code */
   v = sqlite4GetVdbe(pParse);
-  if( v==0 ){
-    goto delete_from_cleanup;
-  }
+  if( v==0 ) goto delete_from_cleanup;
   if( pParse->nested==0 ) sqlite4VdbeCountChanges(v);
   sqlite4BeginWriteOperation(pParse, 1, iDb);
 
   /* If we are trying to delete from a view, realize that view into
-  ** a ephemeral table.
-  */
-#if !defined(SQLITE_OMIT_VIEW) && !defined(SQLITE_OMIT_TRIGGER)
-  if( isView ){
+  ** a ephemeral table.  */
+  if( IsView(pTab) ){
+    sqlite4AuthContextPush(pParse, &sContext, pTab->zName);
     sqlite4MaterializeView(pParse, pTab, pWhere, iCur);
   }
-#endif
 
-  /* Resolve the column names in the WHERE clause.
-  */
-  memset(&sNC, 0, sizeof(sNC));
+  /* Resolve the column names in the WHERE clause. This has to come after
+  ** the call to sqlite4MaterializeView() above.  */
   sNC.pParse = pParse;
   sNC.pSrcList = pTabList;
   if( sqlite4ResolveExprNames(&sNC, pWhere) ){
@@ -342,7 +313,7 @@ void sqlite4DeleteFrom(
   if( rcauth==SQLITE_OK && pWhere==0 && !pTrigger && !IsVirtual(pTab) 
    && 0==sqlite4FkRequired(pParse, pTab, 0)
   ){
-    assert( !isView );
+    Index *pIdx;                  /* For looping over indices of the table */
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
       assert( pIdx->pSchema==pTab->pSchema );
       sqlite4VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
@@ -353,6 +324,8 @@ void sqlite4DeleteFrom(
   ** the table and pick which records to delete.
   */
   {
+    WhereInfo *pWInfo;            /* Information about the WHERE clause */
+    int baseCur = 0;
     int regSet = ++pParse->nMem;  /* Register for rowset of rows to delete */
     int regKey = ++pParse->nMem;  /* Used for storing row keys */
     int addrTop;                  /* Instruction (KeySetRead) at top of loop */
@@ -375,8 +348,9 @@ void sqlite4DeleteFrom(
 
     /* Unless this is a view, open cursors for all indexes on the table
     ** from which we are deleting.  */
-    if( !isView ){
-      sqlite4OpenAllIndexes(pParse, pTab, iCur, OP_OpenWrite);
+    if( !IsView(pTab) ){
+      baseCur = pParse->nTab;
+      sqlite4OpenAllIndexes(pParse, pTab, baseCur, OP_OpenWrite);
     }
 
     addrTop = sqlite4VdbeAddOp3(v, OP_KeySetRead, regSet, 0, regKey);
@@ -392,9 +366,8 @@ void sqlite4DeleteFrom(
     }else
 #endif
     {
-      int count = (pParse->nested==0);    /* True to count changes */
       sqlite4GenerateRowDelete(
-          pParse, pTab, iCur, regKey, count, pTrigger, OE_Default
+          pParse, pTab, baseCur, regKey, pParse->nested==0, pTrigger, OE_Default
       );
     }
 
@@ -403,7 +376,7 @@ void sqlite4DeleteFrom(
     sqlite4VdbeJumpHere(v, addrTop);
 
     /* Close all open cursors */
-    sqlite4CloseAllIndexes(pParse, pTab, iCur);
+    sqlite4CloseAllIndexes(pParse, pTab, baseCur);
   }
 
   /* Update the sqlite_sequence table by storing the content of the
@@ -420,15 +393,6 @@ delete_from_cleanup:
   sqlite4ExprDelete(db, pWhere);
   return;
 }
-/* Make sure "isView" and other macros defined above are undefined. Otherwise
-** thely may interfere with compilation of other functions in this file
-** (or in another file, if this file becomes part of the amalgamation).  */
-#ifdef isView
- #undef isView
-#endif
-#ifdef pTrigger
- #undef pTrigger
-#endif
 
 /*
 ** This routine generates VDBE code that causes a single row of a
@@ -496,15 +460,12 @@ void sqlite4GenerateRowDelete(
     );
     mask |= sqlite4FkOldmask(pParse, pTab);
 
-    /* Allocate an array of registers - one for each column in the table.
-    ** Then populate those array elements that may be used by FK or trigger
-    ** logic with the OLD.* values.
+    /* Allocate an array of (nCol+1) registers, where nCol is the number
+    ** of columns in the table. 
     **
-    ** The array is (nCol+1) registers in size, where nCol is the number of
-    ** columns in the table. If the table has an implicit PK, the first 
-    ** register in the array contains the rowid. Otherwise, its contents are
-    ** undefined.  
-    */
+    ** If the table has an implicit PK, the first register in the array 
+    ** contains the rowid. Otherwise, its contents are undefined. The 
+    ** remaining registers contain the OLD.* column values, in order. */
     regOld = pParse->nMem+1;
     pParse->nMem += (pTab->nCol+1);
     for(iCol=0; iCol<pTab->nCol; iCol++){
@@ -512,7 +473,8 @@ void sqlite4GenerateRowDelete(
         sqlite4ExprCodeGetColumnOfTable(v, pTab, iPkCsr, iCol, regOld+iCol+1);
       }
     }
-    if( pPk->aiColumn[0]<0 ){
+    assert( (pPk==0)==IsView(pTab) );
+    if( pPk && pPk->aiColumn[0]<0 ){
       sqlite4VdbeAddOp2(v, OP_Rowid, iPkCsr, regOld);
     }
 
@@ -536,13 +498,8 @@ void sqlite4GenerateRowDelete(
   /* Delete the index and table entries. Skip this step if pTab is really
   ** a view (in which case the only effect of the DELETE statement is to
   ** fire the INSTEAD OF triggers).  */ 
-  if( pTab->pSelect==0 ){
+  if( !IsView(pTab) ){
     sqlite4GenerateRowIndexDelete(pParse, pTab, baseCur, 0);
-#if 0
-    if( count ){
-      sqlite4VdbeChangeP4(v, -1, pTab->zName, P4_TRANSIENT);
-    }
-#endif
   }
 
   /* Do any ON CASCADE, SET NULL or SET DEFAULT operations required to

@@ -1565,7 +1565,6 @@ void sqlite4EndTable(
   sqlite4 *db = pParse->db;
   int iDb;
   int iPkRoot = 0;                /* Root page of primary key index */
-  Index *pPk;                     /* PRIMARY KEY index for table p */
 
   if( (pEnd==0 && pSelect==0) || db->mallocFailed ){
     return;
@@ -1576,16 +1575,18 @@ void sqlite4EndTable(
   assert( !db->init.busy || !pSelect );
   iDb = sqlite4SchemaToIndex(db, p->pSchema);
 
-  if( 0==(p->tabFlags & TF_HasPrimaryKey) ){
-    /* If no explicit PRIMARY KEY has been created, add an implicit 
-    ** primary key here.  An implicit primary key works the way "rowid" did
-    ** in SQLite 3.  */
-    addImplicitPrimaryKey(pParse, p, iDb);
+  if( !IsView(p) ){
+    Index *pPk;                   /* PRIMARY KEY index of table p */
+    if( 0==(p->tabFlags & TF_HasPrimaryKey) ){
+      /* If no explicit PRIMARY KEY has been created, add an implicit 
+      ** primary key here.  An implicit primary key works the way "rowid" 
+      ** did in SQLite 3.  */
+      addImplicitPrimaryKey(pParse, p, iDb);
+    }
+    pPk = sqlite4FindPrimaryKey(p, 0);
+    assert( pPk || pParse->nErr || db->mallocFailed );
+    if( pPk ) iPkRoot = pPk->tnum;
   }
-  pPk = sqlite4FindPrimaryKey(p, 0);
-  assert( pPk || pParse->nErr || db->mallocFailed );
-  if( pPk ) iPkRoot = pPk->tnum;
-
 
 #ifndef SQLITE_OMIT_CHECK
   /* Resolve names in all CHECK constraint expressions.

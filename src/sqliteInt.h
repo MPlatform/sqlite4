@@ -1346,6 +1346,13 @@ struct Table {
 #  define IsHiddenColumn(X) 0
 #endif
 
+/* Test to see if a table is actually a view. */
+#ifndef SQLITE_OMIT_VIEW
+#  define IsView(X)         ((X)->pSelect!=0)
+#else
+#  define IsView(X)         0
+#endif
+
 /*
 ** Each foreign key constraint is an instance of the following structure.
 **
@@ -2894,6 +2901,8 @@ void sqlite4ChangeCookie(Parse*, int);
 
 #if !defined(SQLITE_OMIT_VIEW) && !defined(SQLITE_OMIT_TRIGGER)
 void sqlite4MaterializeView(Parse*, Table*, Expr*, int);
+#else
+# define sqlite4MaterializeView(w,x,y,z)
 #endif
 
 #ifndef SQLITE_OMIT_TRIGGER

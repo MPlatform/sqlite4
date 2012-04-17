@@ -600,53 +600,60 @@ do_test trigger2-7.1 {
   INSERT INTO ab VALUES (0, 0);
   INSERT INTO cd VALUES (3, 4);
 
-  CREATE TABLE tlog(ii INTEGER PRIMARY KEY, 
-      olda, oldb, oldc, oldd, newa, newb, newc, newd);
+  CREATE TABLE tlog(olda, oldb, oldc, oldd, newa, newb, newc, newd);
 
   CREATE VIEW abcd AS SELECT a, b, c, d FROM ab, cd;
 
   CREATE TRIGGER before_update INSTEAD OF UPDATE ON abcd BEGIN
-    INSERT INTO tlog VALUES(NULL, 
+    INSERT INTO tlog VALUES(
 	old.a, old.b, old.c, old.d, new.a, new.b, new.c, new.d);
   END;
   CREATE TRIGGER after_update INSTEAD OF UPDATE ON abcd BEGIN
-    INSERT INTO tlog VALUES(NULL, 
+    INSERT INTO tlog VALUES(
 	old.a, old.b, old.c, old.d, new.a, new.b, new.c, new.d);
   END;
 
   CREATE TRIGGER before_delete INSTEAD OF DELETE ON abcd BEGIN
-    INSERT INTO tlog VALUES(NULL, 
+    INSERT INTO tlog VALUES(
 	old.a, old.b, old.c, old.d, 0, 0, 0, 0);
   END;
   CREATE TRIGGER after_delete INSTEAD OF DELETE ON abcd BEGIN
-    INSERT INTO tlog VALUES(NULL, 
+    INSERT INTO tlog VALUES(
 	old.a, old.b, old.c, old.d, 0, 0, 0, 0);
   END;
 
   CREATE TRIGGER before_insert INSTEAD OF INSERT ON abcd BEGIN
-    INSERT INTO tlog VALUES(NULL, 
+    INSERT INTO tlog VALUES(
 	0, 0, 0, 0, new.a, new.b, new.c, new.d);
   END;
    CREATE TRIGGER after_insert INSTEAD OF INSERT ON abcd BEGIN
-    INSERT INTO tlog VALUES(NULL, 
+    INSERT INTO tlog VALUES(
 	0, 0, 0, 0, new.a, new.b, new.c, new.d);
    END;
   }
 } {};
 
-do_test trigger2-7.2 {
-  execsql {
-    UPDATE abcd SET a = 100, b = 5*5 WHERE a = 1;
-    DELETE FROM abcd WHERE a = 1;
-    INSERT INTO abcd VALUES(10, 20, 30, 40);
-    SELECT * FROM tlog;
-  }
-} [ list 1 1 2 3 4 100 25 3 4 \
-         2 1 2 3 4 100 25 3 4 \
-	 3 1 2 3 4 0 0 0 0 \
-	 4 1 2 3 4 0 0 0 0 \
-	 5 0 0 0 0 10 20 30 40 \
-	 6 0 0 0 0 10 20 30 40 ]
+do_execsql_test trigger2-7.2.1 { UPDATE abcd SET a = 100, b = 5*5 WHERE a = 1 }
+do_execsql_test trigger2.7.2.2 { SELECT * FROM tlog } {
+  1 2 3 4 100 25 3 4 
+  1 2 3 4 100 25 3 4 
+}
+do_execsql_test trigger2-7.2.3 { DELETE FROM abcd WHERE a = 1 }
+do_execsql_test trigger2.7.2.4 { SELECT * FROM tlog } {
+  1 2 3 4 100 25 3 4 
+  1 2 3 4 100 25 3 4 
+  1 2 3 4 0 0 0 0 
+  1 2 3 4 0 0 0 0
+}
+do_execsql_test trigger2-7.2.5 { INSERT INTO abcd VALUES(10, 20, 30, 40) }
+do_execsql_test trigger2.7.2.6 { SELECT * FROM tlog } {
+  1 2 3 4 100 25 3 4 
+  1 2 3 4 100 25 3 4 
+  1 2 3 4 0 0 0 0 
+  1 2 3 4 0 0 0 0
+  0 0 0 0 10 20 30 40 
+  0 0 0 0 10 20 30 40 
+}
 
 do_test trigger2-7.3 {
   execsql {
@@ -657,12 +664,12 @@ do_test trigger2-7.3 {
     SELECT * FROM tlog;
   }
 } [ list \
-   1 0 0 0 0 10 20 30 40 \
-   2 0 0 0 0 10 20 30 40 \
-   3 1 2 3 4 100 25 3 4 \
-   4 1 2 3 4 100 25 3 4 \
-   5 1 2 3 4 0 0 0 0 \
-   6 1 2 3 4 0 0 0 0 \
+   0 0 0 0 10 20 30 40 \
+   0 0 0 0 10 20 30 40 \
+   1 2 3 4 100 25 3 4 \
+   1 2 3 4 100 25 3 4 \
+   1 2 3 4 0 0 0 0 \
+   1 2 3 4 0 0 0 0 \
 ]
 do_test trigger2-7.4 {
   execsql {
@@ -673,12 +680,12 @@ do_test trigger2-7.4 {
     SELECT * FROM tlog;
   }
 } [ list \
-   1 1 2 3 4 0 0 0 0 \
-   2 1 2 3 4 0 0 0 0 \
-   3 0 0 0 0 10 20 30 40 \
-   4 0 0 0 0 10 20 30 40 \
-   5 1 2 3 4 100 25 3 4 \
-   6 1 2 3 4 100 25 3 4 \
+   1 2 3 4 0 0 0 0 \
+   1 2 3 4 0 0 0 0 \
+   0 0 0 0 10 20 30 40 \
+   0 0 0 0 10 20 30 40 \
+   1 2 3 4 100 25 3 4 \
+   1 2 3 4 100 25 3 4 \
 ]
 
 do_test trigger2-8.1 {
