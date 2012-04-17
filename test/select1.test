@@ -410,6 +410,7 @@ execsql {INSERT INTO test2 VALUES('abc','xyz')}
 
 # Check for column naming
 #
+if 0 {
 do_test select1-6.1 {
   set v [catch {execsql2 {SELECT f1 FROM test1 ORDER BY f2}} msg]
   lappend v $msg
@@ -610,6 +611,7 @@ db eval {
   PRAGMA short_column_names=ON;
   PRAGMA full_column_names=OFF;
 }
+} ;# if 0 ...
 
 ifcapable compound {
 do_test select1-6.10 {
