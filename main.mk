@@ -56,7 +56,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          fts3.o fts3_aux.o fts3_expr.o fts3_hash.o fts3_icu.o fts3_porter.o \
          fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
          fts3_write.o func.o global.o hash.o \
-         icu.o insert.o kvmem.o legacy.o \
+         icu.o insert.o kvlsm.o kvmem.o legacy.o \
          main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          mutex.o mutex_noop.o mutex_os2.o mutex_unix.o mutex_w32.o \
          opcodes.o os.o os_os2.o os_unix.o os_win.o \
@@ -93,6 +93,7 @@ SRC = \
   $(TOP)/src/hash.h \
   $(TOP)/src/hwtime.h \
   $(TOP)/src/insert.c \
+  $(TOP)/src/kvlsm.c \
   $(TOP)/src/kvmem.c \
   $(TOP)/src/legacy.c \
   $(TOP)/src/main.c \
@@ -460,10 +461,16 @@ tclsqlite4:	$(TOP)/src/tclsqlite.c libsqlite4.a
 TESTFIXTURE_FLAGS  = -DSQLITE_TEST=1 -DSQLITE_CRASH_TEST=1
 TESTFIXTURE_FLAGS += -DSQLITE_SERVER=1 -DSQLITE_PRIVATE="" -DSQLITE_CORE 
 
-testfixture$(EXE): $(TESTSRC2) libsqlite4.a $(TESTSRC) $(TOP)/src/tclsqlite.c
+TESTFIXTURE_PREREQ  = $(TESTSRC) $(TESTSRC2) 
+TESTFIXTURE_PREREQ += $(TOP)/src/tclsqlite.c
+TESTFIXTURE_PREREQ += libsqlite4.a
+TESTFIXTURE_PREREQ += $(LIBEXTRA)
+
+testfixture$(EXE): $(TESTFIXTURE_PREREQ)
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \
 		$(TESTSRC) $(TESTSRC2) $(TOP)/src/tclsqlite.c                \
-		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB) libsqlite4.a
+		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB) libsqlite4.a     \
+		$(LIBEXTRA)
 
 amalgamation-testfixture$(EXE): sqlite4.c $(TESTSRC) $(TOP)/src/tclsqlite.c
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \

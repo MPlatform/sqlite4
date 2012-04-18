@@ -226,3 +226,8 @@ int sqlite4KVStorePutMeta(sqlite4*, KVStore *p, int, int, unsigned int*);
 #ifdef SQLITE_DEBUG
   void sqlite4KVStoreDump(KVStore *p);
 #endif
+
+#ifdef SQLITE_ENABLE_LSM
+int sqlite4KVStoreOpenLsm(KVStore**, const char *, unsigned);
+#endif
+

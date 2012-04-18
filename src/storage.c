@@ -88,7 +88,14 @@ int sqlite4KVStoreOpen(
   KVStore *pNew = 0;
   int rc;
 
+#ifdef SQLITE_ENABLE_LSM
+  if( zUri && zUri[0] ){
+    rc = sqlite4KVStoreOpenLsm(&pNew, zUri, flags);
+  }else
+#endif
+
   rc = sqlite4KVStoreOpenMem(&pNew, flags);
+
   *ppKVStore = pNew;
   if( pNew ){
     sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);

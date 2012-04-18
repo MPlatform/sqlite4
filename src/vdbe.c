@@ -2705,7 +2705,7 @@ case OP_OpenEphemeral: {
   if( pCx==0 ) goto no_mem;
   pCx->nullRow = 1;
 
-  rc = sqlite4KVStoreOpen(db, "ephm", ":memory:", &pCx->pTmpKV,
+  rc = sqlite4KVStoreOpen(db, "ephm", 0, &pCx->pTmpKV,
           SQLITE_KVOPEN_TEMPORARY | SQLITE_KVOPEN_NO_TRANSACTIONS
   );
   if( rc==SQLITE_OK ) rc = sqlite4KVStoreOpenCursor(pCx->pTmpKV, &pCx->pKVCur);
