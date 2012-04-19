@@ -214,6 +214,7 @@ TESTSRC = \
   $(TOP)/src/test_rtree.c \
   $(TOP)/src/test_schema.c \
   $(TOP)/src/test_storage.c \
+  $(TOP)/src/test_storage2.c \
   $(TOP)/src/test_tclvar.c \
   $(TOP)/src/test_thread.c \
   $(TOP)/src/test_vfs.c \

@@ -356,6 +356,7 @@ if {[info exists cmdlinearg]==0} {
   #
   sqlite4_shutdown 
   install_malloc_faultsim 1 
+  kvwrap install
   sqlite4_initialize
   #autoinstall_test_functions
 

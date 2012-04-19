@@ -244,8 +244,6 @@ struct WhereCost {
 ** ISNULL constraints will then not be used on the right table of a left
 ** join.  Tickets #2177 and #2189.
 */
-#define WHERE_ROWID_EQ     0x00001000  /* rowid=EXPR or rowid IN (...) */
-#define WHERE_ROWID_RANGE  0x00002000  /* rowid<EXPR and/or rowid>EXPR */
 #define WHERE_COLUMN_EQ    0x00010000  /* x=EXPR or x IN (...) or x IS NULL */
 #define WHERE_COLUMN_RANGE 0x00020000  /* x<EXPR and/or x>EXPR */
 #define WHERE_COLUMN_IN    0x00040000  /* x IN (...) */
@@ -640,7 +638,10 @@ static void exprAnalyze(SrcList*, WhereClause*, int);
 /*
 ** Call exprAnalyze on all terms in a WHERE clause.  
 **
-**
+** Note that exprAnalyze() might add new virtual terms onto the end of 
+** the WHERE clause.  We do not want to analyze these virtual terms, so 
+** start analyzing at the end and work forward so that the added virtual 
+** terms are never processed.
 */
 static void exprAnalyzeAll(
   SrcList *pTabList,       /* the FROM clause */
@@ -2883,7 +2884,6 @@ static void bestKVIndex(
   Index *pFirst;              /* First index to evaluate */
   int eqTermMask;             /* Current mask of valid equality operators */
   int idxEqTermMask;          /* Index mask of valid equality operators */
-  int wsFlagMask;             /* Allowed flags in pCost->plan.wsFlag */
 
   /* Initialize the cost to a worst-case value */
   memset(pCost, 0, sizeof(*pCost));
@@ -2922,7 +2922,6 @@ static void bestKVIndex(
     pFirst = pSrc->pTab->pIndex;
   }
 #else
-  wsFlagMask = ~(WHERE_ROWID_EQ|WHERE_ROWID_RANGE);
   eqTermMask = idxEqTermMask;
   pFirst = pSrc->pTab->pIndex;
 #endif
@@ -3006,7 +3005,7 @@ static void bestKVIndex(
     int nBound = 0;               /* Number of range constraints seen */
     int bSort = !!pOrderBy;       /* True if external sort required */
     int bDist = !!pDistinct;      /* True if index cannot help with DISTINCT */
-    int bLookup = 0;              /* True if not a covering index */
+    int bLookup = 0;              /* True if not the PK index */
     WhereTerm *pTerm;             /* A single term of the WHERE clause */
 #ifdef SQLITE_ENABLE_STAT3
     WhereTerm *pFirstTerm = 0;    /* First term matching the index */
@@ -3017,7 +3016,7 @@ static void bestKVIndex(
       int j = pProbe->aiColumn[nEq];
       pTerm = findTerm(pWC, iCur, j, notReady, eqTermMask, pProbe);
       if( pTerm==0 ) break;
-      wsFlags |= (WHERE_COLUMN_EQ|WHERE_ROWID_EQ);
+      wsFlags |= WHERE_COLUMN_EQ;
       testcase( pTerm->pWC!=pWC );
       if( pTerm->eOperator & WO_IN ){
         Expr *pExpr = pTerm->pExpr;
@@ -3072,7 +3071,7 @@ static void bestKVIndex(
           used |= pBtm->prereqRight;
           testcase( pBtm->pWC!=pWC );
         }
-        wsFlags |= (WHERE_COLUMN_RANGE|WHERE_ROWID_RANGE);
+        wsFlags |= WHERE_COLUMN_RANGE;
       }
     }
 
@@ -3084,7 +3083,7 @@ static void bestKVIndex(
           pParse, pWC->pMaskSet, pProbe, iCur, pOrderBy, nEq, wsFlags, &rev)
     ){
       bSort = 0;
-      wsFlags |= WHERE_ROWID_RANGE|WHERE_COLUMN_RANGE|WHERE_ORDERBY;
+      wsFlags |= WHERE_COLUMN_RANGE|WHERE_ORDERBY;
       wsFlags |= (rev ? WHERE_REVERSE : 0);
     }
 
@@ -3093,7 +3092,7 @@ static void bestKVIndex(
     ** flags in wsFlags. */
     if( isDistinctIndex(pParse, pWC, pProbe, iCur, pDistinct, nEq) ){
       bDist = 0;
-      wsFlags |= WHERE_ROWID_RANGE|WHERE_COLUMN_RANGE|WHERE_DISTINCT;
+      wsFlags |= WHERE_COLUMN_RANGE|WHERE_DISTINCT;
     }
 
     /* If currently calculating the cost of using an index (not the PK
@@ -3294,7 +3293,7 @@ static void bestKVIndex(
       pCost->rCost = cost;
       pCost->used = used;
       pCost->plan.nRow = nRow;
-      pCost->plan.wsFlags = (wsFlags&wsFlagMask);
+      pCost->plan.wsFlags = wsFlags;
       pCost->plan.nEq = nEq;
       pCost->plan.u.pIdx = pProbe;
     }
@@ -3304,7 +3303,6 @@ static void bestKVIndex(
     if( pSrc->pIndex || pSrc->notIndexed ) break;
 
     /* Reset masks for the next index in the loop */
-    wsFlagMask = ~(WHERE_ROWID_EQ|WHERE_ROWID_RANGE);
     eqTermMask = idxEqTermMask;
   }
 
@@ -3318,7 +3316,6 @@ static void bestKVIndex(
   }
 
   assert( pOrderBy || (pCost->plan.wsFlags&WHERE_ORDERBY)==0 );
-  assert( pCost->plan.u.pIdx==0 || (pCost->plan.wsFlags&WHERE_ROWID_EQ)==0 );
   assert( pSrc->pIndex==0 
        || pCost->plan.u.pIdx==0 
        || pCost->plan.u.pIdx==pSrc->pIndex 
@@ -3744,18 +3741,6 @@ static void explainOneScan(
           zWhere
       );
       sqlite4DbFree(db, zWhere);
-    }else if( flags & (WHERE_ROWID_EQ|WHERE_ROWID_RANGE) ){
-      zMsg = sqlite4MAppendf(db, zMsg, "%s USING INTEGER PRIMARY KEY", zMsg);
-
-      if( flags&WHERE_ROWID_EQ ){
-        zMsg = sqlite4MAppendf(db, zMsg, "%s (rowid=?)", zMsg);
-      }else if( (flags&WHERE_BOTH_LIMIT)==WHERE_BOTH_LIMIT ){
-        zMsg = sqlite4MAppendf(db, zMsg, "%s (rowid>? AND rowid<?)", zMsg);
-      }else if( flags&WHERE_BTM_LIMIT ){
-        zMsg = sqlite4MAppendf(db, zMsg, "%s (rowid>?)", zMsg);
-      }else if( flags&WHERE_TOP_LIMIT ){
-        zMsg = sqlite4MAppendf(db, zMsg, "%s (rowid<?)", zMsg);
-      }
     }
 #ifndef SQLITE_OMIT_VIRTUALTABLE
     else if( (flags & WHERE_VIRTUALTABLE)!=0 ){
@@ -3883,104 +3868,7 @@ static Bitmask codeOneLoopStart(
   }else
 #endif /* SQLITE_OMIT_VIRTUALTABLE */
 
-  if( pLevel->plan.wsFlags & WHERE_ROWID_EQ ){
-    /* Case 1:  We can directly reference a single row using an
-    **          equality comparison against the ROWID field.  Or
-    **          we reference multiple rows using a "rowid IN (...)"
-    **          construct.
-    */
-    iReleaseReg = sqlite4GetTempReg(pParse);
-    pTerm = findTerm(pWC, iCur, -1, notReady, WO_EQ|WO_IN, 0);
-    assert( pTerm!=0 );
-    assert( pTerm->pExpr!=0 );
-    assert( pTerm->leftCursor==iCur );
-    assert( omitTable==0 );
-    testcase( pTerm->wtFlags & TERM_VIRTUAL ); /* EV: R-30575-11662 */
-    iRowidReg = codeEqualityTerm(pParse, pTerm, pLevel, iReleaseReg);
-    addrNxt = pLevel->addrNxt;
-    sqlite4VdbeAddOp2(v, OP_MustBeInt, iRowidReg, addrNxt);
-    sqlite4VdbeAddOp3(v, OP_NotExists, iCur, addrNxt, iRowidReg);
-    sqlite4ExprCacheStore(pParse, iCur, -1, iRowidReg);
-    VdbeComment((v, "pk"));
-    pLevel->op = OP_Noop;
-  }else if( pLevel->plan.wsFlags & WHERE_ROWID_RANGE ){
-    /* Case 2:  We have an inequality comparison against the ROWID field.
-    */
-    int testOp = OP_Noop;
-    int start;
-    int memEndValue = 0;
-    WhereTerm *pStart, *pEnd;
-
-    assert( omitTable==0 );
-    pStart = findTerm(pWC, iCur, -1, notReady, WO_GT|WO_GE, 0);
-    pEnd = findTerm(pWC, iCur, -1, notReady, WO_LT|WO_LE, 0);
-    if( bRev ){
-      pTerm = pStart;
-      pStart = pEnd;
-      pEnd = pTerm;
-    }
-    if( pStart ){
-      Expr *pX;             /* The expression that defines the start bound */
-      int r1, rTemp;        /* Registers for holding the start boundary */
-
-      /* The following constant maps TK_xx codes into corresponding 
-      ** seek opcodes.  It depends on a particular ordering of TK_xx
-      */
-      const u8 aMoveOp[] = {
-           /* TK_GT */  OP_SeekGt,
-           /* TK_LE */  OP_SeekLe,
-           /* TK_LT */  OP_SeekLt,
-           /* TK_GE */  OP_SeekGe
-      };
-      assert( TK_LE==TK_GT+1 );      /* Make sure the ordering.. */
-      assert( TK_LT==TK_GT+2 );      /*  ... of the TK_xx values... */
-      assert( TK_GE==TK_GT+3 );      /*  ... is correcct. */
-
-      testcase( pStart->wtFlags & TERM_VIRTUAL ); /* EV: R-30575-11662 */
-      pX = pStart->pExpr;
-      assert( pX!=0 );
-      assert( pStart->leftCursor==iCur );
-      r1 = sqlite4ExprCodeTemp(pParse, pX->pRight, &rTemp);
-      sqlite4VdbeAddOp3(v, aMoveOp[pX->op-TK_GT], iCur, addrBrk, r1);
-      VdbeComment((v, "pk"));
-      sqlite4ExprCacheAffinityChange(pParse, r1, 1);
-      sqlite4ReleaseTempReg(pParse, rTemp);
-      disableTerm(pLevel, pStart);
-    }else{
-      sqlite4VdbeAddOp2(v, bRev ? OP_Last : OP_Rewind, iCur, addrBrk);
-    }
-    if( pEnd ){
-      Expr *pX;
-      pX = pEnd->pExpr;
-      assert( pX!=0 );
-      assert( pEnd->leftCursor==iCur );
-      testcase( pEnd->wtFlags & TERM_VIRTUAL ); /* EV: R-30575-11662 */
-      memEndValue = ++pParse->nMem;
-      sqlite4ExprCode(pParse, pX->pRight, memEndValue);
-      if( pX->op==TK_LT || pX->op==TK_GT ){
-        testOp = bRev ? OP_Le : OP_Ge;
-      }else{
-        testOp = bRev ? OP_Lt : OP_Gt;
-      }
-      disableTerm(pLevel, pEnd);
-    }
-    start = sqlite4VdbeCurrentAddr(v);
-    pLevel->op = bRev ? OP_Prev : OP_Next;
-    pLevel->p1 = iCur;
-    pLevel->p2 = start;
-    if( pStart==0 && pEnd==0 ){
-      pLevel->p5 = SQLITE_STMTSTATUS_FULLSCAN_STEP;
-    }else{
-      assert( pLevel->p5==0 );
-    }
-    if( testOp!=OP_Noop ){
-      iRowidReg = iReleaseReg = sqlite4GetTempReg(pParse);
-      sqlite4VdbeAddOp2(v, OP_Rowid, iCur, iRowidReg);
-      sqlite4ExprCacheStore(pParse, iCur, -1, iRowidReg);
-      sqlite4VdbeAddOp3(v, testOp, memEndValue, addrBrk, iRowidReg);
-      sqlite4VdbeChangeP5(v, SQLITE_AFF_NUMERIC | SQLITE_JUMPIFNULL);
-    }
-  }else if( pLevel->plan.wsFlags & (WHERE_COLUMN_RANGE|WHERE_COLUMN_EQ) ){
+  if( pLevel->plan.wsFlags & (WHERE_COLUMN_RANGE|WHERE_COLUMN_EQ) ){
     /* Case 3: A scan using an index.
     **
     **         The WHERE clause may contain zero or more equality 
@@ -4024,9 +3912,12 @@ static Bitmask codeOneLoopStart(
     };
     static const u8 aEndOp[] = {
       OP_Noop,             /* 0: (!end_constraints) */
-      OP_IdxGE,            /* 1: (end_constraints && !bRev) */
-      OP_IdxLT             /* 2: (end_constraints && bRev) */
+      OP_IdxGE,            /* 1: (end_constraints && !endEq && !bRev) */
+      OP_IdxLE,            /* 2: (end_constraints && !endEq &&  bRev) */
+      OP_IdxGT,            /* 3: (end_constraints &&  endEq && !bRev) */
+      OP_IdxLT             /* 4: (end_constraints &&  endEq &&  bRev) */
     };
+
     int nEq = pLevel->plan.nEq;  /* Number of == or IN terms */
     int isMinQuery = 0;          /* If this is an optimized SELECT min(x).. */
     int regBase;                 /* Base register holding constraint values */
@@ -4068,8 +3959,7 @@ static Bitmask codeOneLoopStart(
     }
 
     /* Find any inequality constraint terms for the start and end 
-    ** of the range. 
-    */
+    ** of the range.  */
     if( pLevel->plan.wsFlags & WHERE_TOP_LIMIT ){
       pRangeEnd = findTerm(pWC, iCur, k, notReady, (WO_LT|WO_LE), pIdx);
       nExtraReg = 1;
@@ -4081,18 +3971,20 @@ static Bitmask codeOneLoopStart(
 
     /* Generate code to evaluate all constraint terms using == or IN
     ** and store the values of those terms in an array of registers
-    ** starting at regBase.
+    ** starting at regBase. Ensure that nExtraReg registers are allocated
+    ** immediately following the array.
     */
     regBase = codeAllEqualityTerms(
         pParse, pLevel, pWC, notReady, nExtraReg, &zStartAff
     );
+    assert( (regBase+nEq+nExtraReg-1)<=pParse->nMem );
+
     zEndAff = sqlite4DbStrDup(pParse->db, zStartAff);
     addrNxt = pLevel->addrNxt;
 
     /* If we are doing a reverse order scan on an ascending index, or
     ** a forward order scan on a descending index, interchange the 
-    ** start and end terms (pRangeStart and pRangeEnd).
-    */
+    ** start and end terms (pRangeStart and pRangeEnd).  */
     if( (nEq<pIdx->nColumn && bRev==(pIdx->aSortOrder[nEq]==SQLITE_SO_ASC))
      || (bRev && pIdx->nColumn==nEq)
     ){
@@ -4148,12 +4040,15 @@ static Bitmask codeOneLoopStart(
     /* Set variable op to the instruction required to determine if the
     ** cursor is passed the end of the range. If the range is unbounded,
     ** then set op to OP_Noop. Nothing to do in this case.  */
-    op = aEndOp[(pRangeEnd || nEq) * (1 + bRev)];
+    assert( (endEq==0 || endEq==1) );
+    op = aEndOp[(pRangeEnd || nEq) * (1 + (endEq+endEq) + bRev)];
     testcase( op==OP_Noop );
     testcase( op==OP_IdxGE );
     testcase( op==OP_IdxLT );
-    if( op!=OP_Noop ){
+    testcase( op==OP_IdxLE );
+    testcase( op==OP_IdxGT );
 
+    if( op!=OP_Noop ){
       /* If there is an inequality at the end of this range, compute its
       ** value here.  */
       nConstraint = nEq;
@@ -4180,10 +4075,10 @@ static Bitmask codeOneLoopStart(
         testcase( pRangeEnd->wtFlags & TERM_VIRTUAL ); /* EV: R-30575-11662 */
       }
 
-      /* Now compute an end-key using OP_MakeKey */
+      /* Now compute an end-key using OP_MakeIdxKey */
       regEndKey = ++pParse->nMem;
-      sqlite4VdbeAddOp2(v, OP_MakeKey, iIdxCur, regEndKey);
-      sqlite4VdbeAddOp3(v, OP_MakeRecord, regBase, nConstraint, 0);
+      sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iIdxCur, regBase, regEndKey);
+      sqlite4VdbeChangeP4(v, -1, (char *)nConstraint, P4_INT32);
     }
 
     sqlite4DbFree(pParse->db, zStartAff);
@@ -4193,15 +4088,12 @@ static Bitmask codeOneLoopStart(
     pLevel->p2 = sqlite4VdbeCurrentAddr(v);
 
     if( op!=OP_Noop ){
-      /* XXX */
       sqlite4VdbeAddOp4Int(v, op, iIdxCur, addrNxt, regEndKey, nConstraint);
-      sqlite4VdbeChangeP5(v, endEq!=bRev ?1:0);
     }
 
     /* If there are inequality constraints, check that the value
-    ** of the table column that the inequality contrains is not NULL.
-    ** If it is, jump to the next iteration of the loop.
-    */
+    ** of the table column that the inequality constrains is not NULL.
+    ** If it is, jump to the next iteration of the loop.  */
     r1 = sqlite4GetTempReg(pParse);
     testcase( pLevel->plan.wsFlags & WHERE_BTM_LIMIT );
     testcase( pLevel->plan.wsFlags & WHERE_TOP_LIMIT );
@@ -4211,15 +4103,11 @@ static Bitmask codeOneLoopStart(
     }
     sqlite4ReleaseTempReg(pParse, r1);
 
-    /* Seek the table cursor, if required */
+    /* Seek the PK cursor, if required */
     disableTerm(pLevel, pRangeStart);
     disableTerm(pLevel, pRangeEnd);
     if( pIdx->eIndexType!=SQLITE_INDEX_PRIMARYKEY ){
-      assert( 0 );
-      iRowidReg = iReleaseReg = sqlite4GetTempReg(pParse);
-      sqlite4VdbeAddOp2(v, OP_IdxRowid, iIdxCur, iRowidReg);
-      sqlite4ExprCacheStore(pParse, iCur, -1, iRowidReg);
-      sqlite4VdbeAddOp2(v, OP_Seek, iCur, iRowidReg);  /* Deferred seek */
+      sqlite4VdbeAddOp3(v, OP_SeekPk, iCur, 0, iIdxCur);
     }
 
     /* Record the instruction used to terminate the loop. Disable 
@@ -4721,11 +4609,7 @@ WhereInfo *sqlite4WhereBegin(
   }
 #endif
 
-  /* Analyze all of the subexpressions.  Note that exprAnalyze() might
-  ** add new virtual terms onto the end of the WHERE clause.  We do not
-  ** want to analyze these virtual terms, so start analyzing at the end
-  ** and work forward so that the added virtual terms are never processed.
-  */
+  /* Analyze all of the subexpressions. */
   exprAnalyzeAll(pTabList, pWC);
   if( db->mallocFailed ){
     goto whereBeginError;
@@ -5077,12 +4961,7 @@ WhereInfo *sqlite4WhereBegin(
       }
       sqlite4_query_plan[nQPlan++] = ' ';
     }
-    testcase( pLevel->plan.wsFlags & WHERE_ROWID_EQ );
-    testcase( pLevel->plan.wsFlags & WHERE_ROWID_RANGE );
-    if( pLevel->plan.wsFlags & (WHERE_ROWID_EQ|WHERE_ROWID_RANGE) ){
-      memcpy(&sqlite4_query_plan[nQPlan], "* ", 2);
-      nQPlan += 2;
-    }else if( (pLevel->plan.wsFlags & WHERE_INDEXED)!=0 ){
+    if( (pLevel->plan.wsFlags & WHERE_INDEXED)!=0 ){
       n = sqlite4Strlen30(pLevel->plan.u.pIdx->zName);
       if( n+nQPlan < sizeof(sqlite4_query_plan)-2 ){
         memcpy(&sqlite4_query_plan[nQPlan], pLevel->plan.u.pIdx->zName, n);
@@ -5209,6 +5088,7 @@ void sqlite4WhereEnd(WhereInfo *pWInfo){
     ** that reference the table and converts them into opcodes that
     ** reference the index.
     */
+#if 0
     if( (pLevel->plan.wsFlags & WHERE_INDEXED)!=0 && !db->mallocFailed){
       int k, j, last;
       VdbeOp *pOp;
@@ -5235,6 +5115,7 @@ void sqlite4WhereEnd(WhereInfo *pWInfo){
         }
       }
     }
+#endif
   }
 
   /* Final cleanup

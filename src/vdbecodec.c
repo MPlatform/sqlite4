@@ -629,7 +629,7 @@ int sqlite4VdbeShortKey(
 }
 
 /*
-** Generate a record key from one or more data values
+** Generate a database key from one or more data values.
 **
 ** Space to hold the key is obtained from sqlite4DbMalloc() and should
 ** be freed by the caller using sqlite4DbFree() to avoid a memory leak.
@@ -642,7 +642,7 @@ int sqlite4VdbeEncodeKey(
   KeyInfo *pKeyInfo,           /* Collating sequence and sort-order info */
   u8 **paOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
-  int *pnShort                 /* Number of bytes without the primary key */
+  int bIncr                    /* See above */
 ){
   int i;
   int rc = SQLITE_OK;
@@ -670,8 +670,9 @@ int sqlite4VdbeEncodeKey(
   so = pKeyInfo->aSortOrder;
   for(i=0; i<nIn && rc==SQLITE_OK; i++){
     rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC, aColl[i]);
-    if( pnShort && i+1==iShort ) *pnShort = x.nOut;
   }
+
+  if( rc==SQLITE_OK && bIncr ){ rc = enlargeEncoderAllocation(&x, 1); }
   if( rc ){
     sqlite4DbFree(db, x.aOut);
   }else{

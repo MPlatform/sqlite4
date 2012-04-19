@@ -386,7 +386,7 @@ int sqlite4VdbeEncodeKey(
   KeyInfo *pKeyInfo,           /* Collating sequence information */
   u8 **pzOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
-  int *pnShort                 /* Number of bytes omitting primary key */
+  int bIncr                    /* Make the key "incrementable" */
 );
 int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_int64 v);
 int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);

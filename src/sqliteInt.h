@@ -2504,6 +2504,8 @@ struct Sqlite3Config {
   void (*xLog)(void*,int,const char*); /* Function for logging */
   void *pLogArg;                       /* First argument to xLog() */
   int bLocaltimeFault;              /* True to fail localtime() calls */
+  int (*xKVFile)(KVStore **, const char *, unsigned int);
+  int (*xKVTmp)(KVStore **, unsigned int);
 };
 
 /*

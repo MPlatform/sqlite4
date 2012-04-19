@@ -1533,6 +1533,9 @@ struct sqlite4_mem_methods {
 #define SQLITE_CONFIG_PCACHE2      18  /* sqlite4_pcache_methods2* */
 #define SQLITE_CONFIG_GETPCACHE2   19  /* sqlite4_pcache_methods2* */
 
+#define SQLITE_CONFIG_SET_KVFACTORY 20 /* int(*)(KVStore**,const char*,u32) */
+#define SQLITE_CONFIG_GET_KVFACTORY 21 /* int(**)(KVStore**,const char*,u32) */
+
 /*
 ** CAPI3REF: Database Connection Configuration Options
 **

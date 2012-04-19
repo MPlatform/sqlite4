@@ -53,8 +53,10 @@ do_test where-1.0 {
 # Do an SQL statement.  Append the search count to the end of the result.
 #
 proc count sql {
-  set ::sqlite_search_count 0
-  return [concat [execsql $sql] $::sqlite_search_count]
+  kvwrap reset
+  set res [execsql $sql]
+  #puts "sql={$sql} seek=[kvwrap seek] step=[kvwrap step]"
+  return [concat $res [expr [kvwrap step] + [kvwrap seek]]]
 }
 
 # Verify that queries use an index.  We are using the special variable
@@ -134,7 +136,7 @@ do_test where-1.8.2 {
 do_test where-1.8.3 {
   count {SELECT x, y FROM t1 WHERE y=144 AND x=3}
   set sqlite_query_plan
-} {{} i1xy}
+} {t1 i1xy}
 do_test where-1.9 {
   count {SELECT x, y FROM t1 WHERE y=144 AND w>10 AND x=3}
 } {3 144 3}

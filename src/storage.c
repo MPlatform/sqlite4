@@ -88,13 +88,14 @@ int sqlite4KVStoreOpen(
   KVStore *pNew = 0;
   int rc;
 
-#ifdef SQLITE_ENABLE_LSM
-  if( zUri && zUri[0] ){
-    rc = sqlite4KVStoreOpenLsm(&pNew, zUri, flags);
-  }else
-#endif
-
-  rc = sqlite4KVStoreOpenMem(&pNew, flags);
+  if( zUri && zUri[0] 
+   && sqlite4GlobalConfig.xKVFile 
+   && memcmp(":memory:", zUri, 8)
+  ){
+    rc = sqlite4GlobalConfig.xKVFile(&pNew, zUri, flags);
+  }else{
+    rc = sqlite4GlobalConfig.xKVTmp(&pNew, flags);
+  }
 
   *ppKVStore = pNew;
   if( pNew ){

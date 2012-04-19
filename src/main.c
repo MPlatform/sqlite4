@@ -278,6 +278,18 @@ int sqlite4_config(int op, ...){
 
   va_start(ap, op);
   switch( op ){
+    case SQLITE_CONFIG_SET_KVFACTORY: {
+      sqlite4GlobalConfig.xKVFile = *va_arg(ap, 
+          int (*)(KVStore **, const char *, unsigned int)
+      );
+      break;
+    }
+
+    case SQLITE_CONFIG_GET_KVFACTORY: {
+      *va_arg(ap, int (**)(KVStore **, const char *, unsigned int)) =
+          sqlite4GlobalConfig.xKVFile;
+      break;
+    }
 
     /* Mutex configuration options are only available in a threadsafe
     ** compile. 

@@ -362,8 +362,7 @@ static void fkLookupParent(
       sqlite4VdbeAddOp2(v, OP_Goto, 0, iOk);
     }
 
-    sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iCur, regTemp, regRec);
-    sqlite4VdbeChangeP5(v, 1);
+    sqlite4VdbeAddOp4Int(v, OP_MakeIdxKey, iCur, regTemp, regRec, nCol);
     sqlite4VdbeAddOp4Int(v, OP_Found, iCur, iOk, regRec, 0);
 
 #if 0
