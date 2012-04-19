@@ -4091,6 +4091,13 @@ static Bitmask codeOneLoopStart(
       sqlite4VdbeAddOp4Int(v, op, iIdxCur, addrNxt, regEndKey, nConstraint);
     }
 
+    /* Seek the PK cursor, if required */
+    disableTerm(pLevel, pRangeStart);
+    disableTerm(pLevel, pRangeEnd);
+    if( pIdx->eIndexType!=SQLITE_INDEX_PRIMARYKEY ){
+      sqlite4VdbeAddOp3(v, OP_SeekPk, iCur, 0, iIdxCur);
+    }
+
     /* If there are inequality constraints, check that the value
     ** of the table column that the inequality constrains is not NULL.
     ** If it is, jump to the next iteration of the loop.  */
@@ -4098,17 +4105,10 @@ static Bitmask codeOneLoopStart(
     testcase( pLevel->plan.wsFlags & WHERE_BTM_LIMIT );
     testcase( pLevel->plan.wsFlags & WHERE_TOP_LIMIT );
     if( (pLevel->plan.wsFlags & (WHERE_BTM_LIMIT|WHERE_TOP_LIMIT))!=0 ){
-      sqlite4VdbeAddOp3(v, OP_Column, iIdxCur, nEq, r1);
+      sqlite4VdbeAddOp3(v, OP_Column, iCur, pIdx->aiColumn[nEq], r1);
       sqlite4VdbeAddOp2(v, OP_IsNull, r1, addrCont);
     }
     sqlite4ReleaseTempReg(pParse, r1);
-
-    /* Seek the PK cursor, if required */
-    disableTerm(pLevel, pRangeStart);
-    disableTerm(pLevel, pRangeEnd);
-    if( pIdx->eIndexType!=SQLITE_INDEX_PRIMARYKEY ){
-      sqlite4VdbeAddOp3(v, OP_SeekPk, iCur, 0, iIdxCur);
-    }
 
     /* Record the instruction used to terminate the loop. Disable 
     ** WHERE clause terms made redundant by the index range scan.
