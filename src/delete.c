@@ -510,7 +510,7 @@ void sqlite4GenerateRowDelete(
   sqlite4VdbeResolveLabel(v, iLabel);
 }
 
-static void generateIndexKey(
+void sqlite4EncodeIndexKey(
   Parse *pParse,
   Index *pPk, int iPkCsr,
   Index *pIdx, int iIdxCsr,
@@ -583,7 +583,7 @@ void sqlite4GenerateRowIndexDelete(
   for(i=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, i++){
     if( pIdx!=pPk && (aRegIdx==0 || aRegIdx[i]>0) ){
       int addrNotFound;
-      generateIndexKey(pParse, pPk, baseCur+iPk, pIdx, baseCur+i, regKey);
+      sqlite4EncodeIndexKey(pParse, pPk, baseCur+iPk, pIdx, baseCur+i, regKey);
       addrNotFound = sqlite4VdbeAddOp4(v,
           OP_NotFound, baseCur+i, 0, regKey, 0, P4_INT32
       );

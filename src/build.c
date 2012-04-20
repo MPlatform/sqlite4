@@ -2331,106 +2331,63 @@ void sqlite4DeferForeignKey(Parse *pParse, int isDeferred){
 ** used to initialize a newly created index or to recompute the
 ** content of an index in response to a REINDEX command.
 */
-static void sqlite4RefillIndex(Parse *pParse, Index *pIndex){
-  Table *pTab = pIndex->pTable;  /* The table that is indexed */
-  int iTab = pParse->nTab++;     /* Cursor used for pTab */
-  int iIdx = pParse->nTab++;     /* Cursor used for pIndex */
+static void sqlite4RefillIndex(Parse *pParse, Index *pIdx){
+  Table *pTab = pIdx->pTable;    /* The table that is indexed */
+  int iTab = pParse->nTab++;     /* Cursor used for PK of pTab */
+  int iIdx = pParse->nTab++;     /* Cursor used for pIdx */
   int iSorter;                   /* Cursor opened by OpenSorter (if in use) */
   int addr1;                     /* Address of top of loop */
   int addr2;                     /* Address to jump to for next iteration */
   int tnum;                      /* Root page of index */
   Vdbe *v;                       /* Generate code into this virtual machine */
-  KeyInfo *pKey;                 /* KeyInfo for index */
-#ifdef SQLITE_OMIT_MERGE_SORT
-  int regIdxKey;                 /* Registers containing the index key */
-#endif
+  int regKey;                    /* Registers containing the index key */
   int regRecord;                 /* Register holding assemblied index record */
   sqlite4 *db = pParse->db;      /* The database connection */
-  int iDb = sqlite4SchemaToIndex(db, pIndex->pSchema);
+  int iDb = sqlite4SchemaToIndex(db, pIdx->pSchema);
+  Index *pPk;
 
 #ifndef SQLITE_OMIT_AUTHORIZATION
-  if( sqlite4AuthCheck(pParse, SQLITE_REINDEX, pIndex->zName, 0,
+  if( sqlite4AuthCheck(pParse, SQLITE_REINDEX, pIdx->zName, 0,
       db->aDb[iDb].zName ) ){
     return;
   }
 #endif
 
-  /* Require a write-lock on the table to perform this operation */
-  sqlite4TableLock(pParse, iDb, pTab->tnum, 1, pTab->zName);
-
+  pPk = sqlite4FindPrimaryKey(pTab, 0);
   v = sqlite4GetVdbe(pParse);
   if( v==0 ) return;
-  tnum = pIndex->tnum;
-  sqlite4VdbeAddOp2(v, OP_Clear, tnum, iDb);
-  pKey = sqlite4IndexKeyinfo(pParse, pIndex);
-  sqlite4VdbeAddOp4(v, OP_OpenWrite, iIdx, tnum, iDb, 
-                    (char *)pKey, P4_KEYINFO_HANDOFF);
 
-#ifndef SQLITE_OMIT_MERGE_SORT
-  /* Open the sorter cursor if we are to use one. */
-  iSorter = pParse->nTab++;
-  sqlite4VdbeAddOp4(v, OP_SorterOpen, iSorter, 0, 0, (char*)pKey, P4_KEYINFO);
-#else
-  iSorter = iTab;
-#endif
+  /* A write-lock on the table is required to perform this operation. Easiest
+  ** way to do this is to open a write-cursor on the PK - even though this
+  ** operation only requires read access.  */
+  sqlite4OpenPrimaryKey(pParse, iTab, iDb, pTab, OP_OpenWrite);
 
-  /* Open the table. Loop through all rows of the table, inserting index
-  ** records into the sorter. */
-  sqlite4OpenPrimaryKey(pParse, iTab, iDb, pTab, OP_OpenRead);
+  /* Delete the current contents (if any) of the index. Then open a write
+  ** cursor on it.  */
+  sqlite4VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
+  sqlite4OpenIndex(pParse, iIdx, iDb, pIdx, OP_OpenWrite);
+
+  /* Loop through the contents of the PK index. At each row, insert the
+  ** corresponding entry into the auxiliary index.  */
   addr1 = sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
   regRecord = sqlite4GetTempRange(pParse,2);
-
-#ifndef SQLITE_OMIT_MERGE_SORT
-  sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1, iIdx);
-  sqlite4VdbeAddOp2(v, OP_SorterInsert, iSorter, regRecord);
+  regKey = sqlite4GetTempReg(pParse);
+  sqlite4EncodeIndexKey(pParse, pPk, iTab, pIdx, iIdx, regKey);
+  if( pIdx->onError!=OE_None ){
+    const char *zErr = "indexed columns are not unique";
+    int addrTest;
+     
+    addrTest = sqlite4VdbeAddOp4Int(v, OP_IsUnique, iIdx, 0, regKey, 0);
+    sqlite4HaltConstraint(pParse, OE_Abort, zErr, P4_STATIC);
+    sqlite4VdbeJumpHere(v, addrTest);
+  }
+  sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, 0, regKey);  
   sqlite4VdbeAddOp2(v, OP_Next, iTab, addr1+1);
   sqlite4VdbeJumpHere(v, addr1);
-  addr1 = sqlite4VdbeAddOp2(v, OP_SorterSort, iSorter, 0);
-  if( pIndex->onError!=OE_None ){
-    int j2 = sqlite4VdbeCurrentAddr(v) + 3;
-    sqlite4VdbeAddOp2(v, OP_Goto, 0, j2);
-    addr2 = sqlite4VdbeCurrentAddr(v);
-    sqlite4VdbeAddOp3(v, OP_SorterCompare, iSorter, j2, regRecord);
-    sqlite4HaltConstraint(
-        pParse, OE_Abort, "indexed columns are not unique", P4_STATIC
-    );
-  }else{
-    addr2 = sqlite4VdbeCurrentAddr(v);
-  }
-  sqlite4VdbeAddOp2(v, OP_SorterData, iSorter, regRecord);
-  sqlite4VdbeAddOp2(v, OP_IdxInsert, iIdx, regRecord);  
-  sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT | OPFLAG_APPENDBIAS);
-#else
-  regIdxKey = sqlite4GenerateIndexKey(pParse, pIndex, iTab, regRecord, 1, iIdx);
-  addr2 = addr1 + 1;
-  if( pIndex->onError!=OE_None ){
-    const int regRowid = regIdxKey + pIndex->nColumn;
-    const int j2 = sqlite4VdbeCurrentAddr(v) + 2;
-    void * const pRegKey = SQLITE_INT_TO_PTR(regIdxKey);
-
-    /* The registers accessed by the OP_IsUnique opcode were allocated
-    ** using sqlite4GetTempRange() inside of the sqlite4GenerateIndexKey()
-    ** call above. Just before that function was freed they were released
-    ** (made available to the compiler for reuse) using 
-    ** sqlite4ReleaseTempRange(). So in some ways having the OP_IsUnique
-    ** opcode use the values stored within seems dangerous. However, since
-    ** we can be sure that no other temp registers have been allocated
-    ** since sqlite4ReleaseTempRange() was called, it is safe to do so.
-    */
-    sqlite4VdbeAddOp4(v, OP_IsUnique, iIdx, j2, regRowid, pRegKey, P4_INT32);
-    sqlite4HaltConstraint(
-        pParse, OE_Abort, "indexed columns are not unique", P4_STATIC);
-  }
-  sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, regRecord, regRecord+1);
-  sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT);
-#endif
-  sqlite4ReleaseTempRange(pParse, regRecord, 2);
-  sqlite4VdbeAddOp2(v, OP_SorterNext, iSorter, addr2);
-  sqlite4VdbeJumpHere(v, addr1);
+  sqlite4ReleaseTempReg(pParse, regKey);
 
   sqlite4VdbeAddOp1(v, OP_Close, iTab);
   sqlite4VdbeAddOp1(v, OP_Close, iIdx);
-  sqlite4VdbeAddOp1(v, OP_Close, iSorter);
 }
 
 /*

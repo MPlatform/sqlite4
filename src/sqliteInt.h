@@ -23,7 +23,7 @@
 /*#define SQLITE_OMIT_PAGER_PRAGMAS 1*/
 #define SQLITE_OMIT_PROGRESS_CALLBACK 1
 
-#define SQLITE_OMIT_MERGE_SORT 1 
+#define SQLITE_OMIT_MERGE_SORT 1
 
 /*
 ** These #defines should enable >2GB file support on POSIX if the
@@ -2879,6 +2879,7 @@ int sqlite4IsRowid(const char*);
 void sqlite4GenerateRowDelete(Parse*, Table*, int, int, int, Trigger *, int);
 void sqlite4GenerateRowIndexDelete(Parse*, Table*, int, int*);
 int sqlite4GenerateIndexKey(Parse*, Index*, int, int, int, int);
+void sqlite4EncodeIndexKey(Parse *, Index *, int, Index *, int, int);
 void sqlite4GenerateConstraintChecks(Parse*,Table*,int,int,
                                      int*,int,int,int,int,int*);
 void sqlite4CompleteInsertion(Parse*, Table*, int, int, int*, int, int, int);

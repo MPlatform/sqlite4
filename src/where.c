@@ -592,7 +592,6 @@ static WhereTerm *findTerm(
   Index *pIdx           /* Must be compatible with this index, if not NULL */
 ){
   sqlite4 *db = pWC->pParse->db;  /* Database handle */
-  Table *pTab = pIdx->pTable;     /* Table object for cursor iCur */
   WhereTerm *pTerm;
   int k;
 
@@ -606,6 +605,7 @@ static WhereTerm *findTerm(
          && (pTerm->eOperator & op)!=0
       ){
         if( iColumn>=0 && pIdx && pTerm->eOperator!=WO_ISNULL ){
+          Table *pTab = pIdx->pTable;
           const char *zColl;      /* Collation sequence used by index */
           CollSeq *pColl;         /* Collation sequence used by expression */
           Expr *pX = pTerm->pExpr;
