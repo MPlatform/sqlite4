@@ -942,7 +942,7 @@ static void generateSortTail(
   }else{
     addr = 1 + sqlite4VdbeAddOp2(v, OP_Sort, iTab, addrBreak);
     codeOffset(v, p, addrContinue);
-    sqlite4VdbeAddOp3(v, OP_Column, iTab, pOrderBy->nExpr+1, regRow);
+    /* sqlite4VdbeAddOp3(v, OP_Column, iTab, pOrderBy->nExpr+1, regRow); */
   }
   switch( eDest ){
     case SRT_Table:

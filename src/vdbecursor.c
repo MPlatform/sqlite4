@@ -41,17 +41,18 @@ int sqlite4VdbeSeekEnd(VdbeCursor *pC, int iEnd){
 
   assert( iEnd==(+1) || iEnd==(-1) );  
   nProbe = sqlite4PutVarint64(aProbe, pC->iRoot);
-  aProbe[nProbe++] = 16 - iEnd*12;
-  rc = sqlite4KVCursorSeek(pCur, aProbe, nProbe, iEnd);
+  aProbe[nProbe] = 0xFF;
+
+  rc = sqlite4KVCursorSeek(pCur, aProbe, nProbe+(iEnd==-1), iEnd);
   if( rc==SQLITE_OK ){
-    return SQLITE_CORRUPT;
-  }
-  if( rc==SQLITE_INEXACT ){
+    rc = SQLITE_CORRUPT_BKPT;
+  }else if( rc==SQLITE_INEXACT ){
     rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
-    if( rc==SQLITE_OK && (nKey<nProbe-1 || memcmp(aKey, aProbe, nProbe-1)!=0) ){
+    if( rc==SQLITE_OK && (nKey<nProbe || memcmp(aKey, aProbe, nProbe)!=0) ){
       rc = SQLITE_NOTFOUND;
     }
   }
+
   return rc;
 }
 

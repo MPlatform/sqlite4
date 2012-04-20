@@ -591,8 +591,11 @@ static WhereTerm *findTerm(
   u32 op,               /* Mask of WO_xx values describing operator */
   Index *pIdx           /* Must be compatible with this index, if not NULL */
 ){
+  sqlite4 *db = pWC->pParse->db;  /* Database handle */
+  Table *pTab = pIdx->pTable;     /* Table object for cursor iCur */
   WhereTerm *pTerm;
   int k;
+
   assert( iCur>=0 );
   op &= WO_ALL;
   for(; pWC; pWC=pWC->pOuter){
@@ -603,27 +606,32 @@ static WhereTerm *findTerm(
          && (pTerm->eOperator & op)!=0
       ){
         if( iColumn>=0 && pIdx && pTerm->eOperator!=WO_ISNULL ){
+          const char *zColl;      /* Collation sequence used by index */
+          CollSeq *pColl;         /* Collation sequence used by expression */
           Expr *pX = pTerm->pExpr;
-          CollSeq *pColl;
-          char idxaff;
           int j;
           Parse *pParse = pWC->pParse;
   
-          idxaff = pIdx->pTable->aCol[iColumn].affinity;
-          if( !sqlite4IndexAffinityOk(pX, idxaff) ) continue;
+          if( !sqlite4IndexAffinityOk(pX, pTab->aCol[iColumn].affinity) ){
+            continue;
+          }
   
-          /* Figure out the collation sequence required from an index for
-          ** it to be useful for optimising expression pX. Store this
-          ** value in variable pColl.
-          */
+          /* Figure out the collation sequence used by expression pX. Store
+          ** this in pColl. Also the collation sequence used by the index.
+          ** Store this one in zColl.  */
           assert(pX->pLeft);
           pColl = sqlite4BinaryCompareCollSeq(pParse, pX->pLeft, pX->pRight);
-          assert(pColl || pParse->nErr);
-  
-          for(j=0; pIdx->aiColumn[j]!=iColumn; j++){
-            if( NEVER(j>=pIdx->nColumn) ) return 0;
+          assert( pParse->nErr || (pColl && pColl->enc==pIdx->pSchema->enc)  );
+          for(j=0; pIdx->aiColumn[j]!=iColumn && j<pIdx->nColumn; j++);
+          if( j>=pIdx->nColumn ){
+            zColl = pTab->aCol[iColumn].zColl;
+          }else{
+            zColl = pIdx->azColl[j];
           }
-          if( pColl && sqlite4StrICmp(pColl->zName, pIdx->azColl[j]) ) continue;
+
+          /* If the collation sequence used by the index is not the same as
+          ** that used by the expression, then this term is not a match.  */
+          if( pColl!=sqlite4FindCollSeq(db, ENC(db), zColl, 0) ) continue;
         }
         return pTerm;
       }
@@ -1580,6 +1588,31 @@ static int isDistinctRedundant(
   return 0;
 }
 
+
+/*
+** Return the table column number of the iIdxCol'th field in the index
+** keys used by index pIdx, including any appended PRIMARY KEY fields.
+** If there is no iIdxCol'th field in index pIdx, return -2.
+**
+** Example:
+**
+**   CREATE TABLE t1(a, b, c, PRIMARY KEY(a, b));
+**   CREATE INDEX i1 ON t1(c);
+**
+** Index i1 in the example above consists of three fields - the indexed
+** field "c" followed by the two primary key fields. The automatic PRIMARY
+** KEY index consists of two fields only.
+*/
+static int idxColumnNumber(Index *pIdx, Index *pPk, int iIdxCol){
+  int iRet = -2;
+  if( iIdxCol<pIdx->nColumn ){
+    iRet = pIdx->aiColumn[iIdxCol];
+  }else if( iIdxCol<(pIdx->nColumn + pPk->nColumn) ){
+    iRet = pPk->aiColumn[iIdxCol - pIdx->nColumn];
+  }
+  return iRet;
+}
+
 /*
 ** This routine decides if pIdx can be used to satisfy the ORDER BY
 ** clause.  If it can, it returns 1.  If pIdx cannot satisfy the
@@ -1609,91 +1642,83 @@ static int isSortingIndex(
   int wsFlags,            /* Index usages flags */
   int *pbRev              /* Set to 1 if ORDER BY is DESC */
 ){
-  int i, j;                       /* Loop counters */
+  sqlite4 *db = pParse->db;       /* Database handle */
   int sortOrder = 0;              /* XOR of index and ORDER BY sort direction */
   int nTerm;                      /* Number of ORDER BY terms */
-  struct ExprList_item *pTerm;    /* A term of the ORDER BY clause */
-  sqlite4 *db = pParse->db;
+  int iTerm;                      /* Used to iterate through nTerm terms */
+  int iNext = nEqCol;             /* Index of next unmatched column in index */
+  int nIdxCol;                    /* Number of columns in index, incl. PK */
+  Index *pPk;
+  Table *pTab;
 
   if( !pOrderBy ) return 0;
   if( wsFlags & WHERE_COLUMN_IN ) return 0;
   if( pIdx->bUnordered ) return 0;
 
+  pTab = pIdx->pTable;
+  pPk = sqlite4FindPrimaryKey(pTab, 0);
   nTerm = pOrderBy->nExpr;
+  nIdxCol = pIdx->nColumn + (pIdx==pPk ? 0 : pPk->nColumn);
+
   assert( nTerm>0 );
+  assert( pIdx && pIdx->zName );
 
-  /* Argument pIdx must either point to a 'real' named index structure, 
-  ** or an index structure allocated on the stack by bestKVIndex() to
-  ** represent the rowid index that is part of every table.  */
-  assert( pIdx->zName || (pIdx->nColumn==1 && pIdx->aiColumn[0]==-1) );
+  for(iTerm=0; iTerm<nTerm; iTerm++){
+    struct ExprList_item *pTerm;  /* iTerm'th term of ORDER BY clause */
+    int iIdxCol;                  /* Index of column in index records */
 
-  /* Match terms of the ORDER BY clause against columns of
-  ** the index.
-  **
-  ** Note that indices have pIdx->nColumn regular columns plus
-  ** one additional column containing the rowid.  The rowid column
-  ** of the index is also allowed to match against the ORDER BY
-  ** clause.
-  */
-  for(i=j=0, pTerm=pOrderBy->a; j<nTerm && i<=pIdx->nColumn; i++){
     Expr *pExpr;       /* The expression of the ORDER BY pTerm */
     CollSeq *pColl;    /* The collating sequence of pExpr */
     int termSortOrder; /* Sort order for this term */
     int iColumn;       /* The i-th column of the index.  -1 for rowid */
-    int iSortOrder;    /* 1 for DESC, 0 for ASC on the i-th index term */
     const char *zColl; /* Name of the collating sequence for i-th index term */
 
+    /* Can not use an index sort on anything that is not a column in the
+    ** left-most table of the FROM clause. Break out of the loop if this
+    ** expression is anything other than that. */
+    pTerm = &pOrderBy->a[iTerm];
     pExpr = pTerm->pExpr;
-    if( pExpr->op!=TK_COLUMN || pExpr->iTable!=base ){
-      /* Can not use an index sort on anything that is not a column in the
-      ** left-most table of the FROM clause */
-      break;
+    if( pExpr->op!=TK_COLUMN || pExpr->iTable!=base ) break;
+    iColumn = pExpr->iColumn;
+
+    /* Check that column iColumn is a part of the index. If it is not, then
+    ** this index may not be used as a sorting index. This block also checks
+    ** that column iColumn is either the iNext'th column of the index, or
+    ** else one of the nEqCol columns that the index guarantees will be 
+    ** constant.  */
+    for(iIdxCol=0; iIdxCol<nIdxCol; iIdxCol++){
+      if( idxColumnNumber(pIdx, pPk, iIdxCol)==iColumn ) break;
     }
+    if( iIdxCol==nIdxCol || (iIdxCol>=nEqCol && iIdxCol!=iNext) ) break;
+
+    /* Check that the collation sequence used by the expression is the same
+    ** as the collation sequence used by the index. If not, this is not a
+    ** sorting index.  */
     pColl = sqlite4ExprCollSeq(pParse, pExpr);
-    if( !pColl ){
-      pColl = db->pDfltColl;
-    }
-    if( pIdx->zName && i<pIdx->nColumn ){
-      iColumn = pIdx->aiColumn[i];
-      iSortOrder = pIdx->aSortOrder[i];
-      zColl = pIdx->azColl[i];
+    if( !pColl ) pColl = db->pDfltColl;
+    if( iIdxCol<pIdx->nColumn ){
+      zColl = pIdx->azColl[iIdxCol];
     }else{
-      iColumn = -1;
-      iSortOrder = 0;
-      zColl = pColl->zName;
+      zColl = pTab->aCol[iColumn].zColl;
     }
-    if( pExpr->iColumn!=iColumn || sqlite4StrICmp(pColl->zName, zColl) ){
-      /* Term j of the ORDER BY clause does not match column i of the index */
-      if( i<nEqCol ){
-        /* If an index column that is constrained by == fails to match an
-        ** ORDER BY term, that is OK.  Just ignore that column of the index
-        */
-        continue;
-      }else if( i==pIdx->nColumn ){
-        /* Index column i is the rowid.  All other terms match. */
+    if( pColl!=sqlite4FindCollSeq(db, ENC(db), zColl, 0) ) break;
+
+    if( iIdxCol==iNext ){
+      u8 reqSortOrder;
+      u8 idxSortOrder = SQLITE_SO_ASC;
+      if( iIdxCol<pIdx->nColumn ) idxSortOrder = pIdx->aSortOrder[iIdxCol];
+      assert( idxSortOrder==SQLITE_SO_ASC || idxSortOrder==SQLITE_SO_DESC );
+
+      reqSortOrder = (idxSortOrder ^ pTerm->sortOrder);
+      if( iNext==nEqCol ){
+        sortOrder = reqSortOrder;
+      }else if( sortOrder!=reqSortOrder ){
         break;
-      }else{
-        /* If an index column fails to match and is not constrained by ==
-        ** then the index cannot satisfy the ORDER BY constraint.
-        */
-        return 0;
       }
+      iNext++;
     }
-    assert( pIdx->aSortOrder!=0 || iColumn==-1 );
-    assert( pTerm->sortOrder==0 || pTerm->sortOrder==1 );
-    assert( iSortOrder==0 || iSortOrder==1 );
-    termSortOrder = iSortOrder ^ pTerm->sortOrder;
-    if( i>nEqCol ){
-      if( termSortOrder!=sortOrder ){
-        /* Indices can only be used if all ORDER BY terms past the
-        ** equality constraints are all either DESC or ASC. */
-        return 0;
-      }
-    }else{
-      sortOrder = termSortOrder;
-    }
-    j++;
-    pTerm++;
+
+#if 0
     if( iColumn<0 && !referencesOtherTables(pOrderBy, pMaskSet, j, base) ){
       /* If the indexed column is the primary key and everything matches
       ** so far and none of the ORDER BY terms to the right reference other
@@ -1703,25 +1728,47 @@ static int isSortingIndex(
       */
       j = nTerm;
     }
+#endif
   }
 
   *pbRev = sortOrder!=0;
-  if( j>=nTerm ){
-    /* All terms of the ORDER BY clause are covered by this index so
-    ** this index can be used for sorting. */
+
+  if( iTerm>=nTerm ){
+    /* All terms of the ORDER BY clause are covered by this index. The
+    ** index can therefore be used for sorting.  */
     return 1;
   }
-  if( pIdx->onError!=OE_None && i==pIdx->nColumn
-      && (wsFlags & WHERE_COLUMN_NULL)==0
-      && !referencesOtherTables(pOrderBy, pMaskSet, j, base) ){
-    /* All terms of this index match some prefix of the ORDER BY clause
-    ** and the index is UNIQUE and no terms on the tail of the ORDER BY
-    ** clause reference other tables in a join.  If this is all true then
-    ** the order by clause is superfluous.  Not that if the matching
-    ** condition is IS NULL then the result is not necessarily unique
-    ** even on a UNIQUE index, so disallow those cases. */
-    return 1;
+
+  if( pIdx->onError!=OE_None
+   && iNext>=pIdx->nColumn 
+   && (wsFlags & WHERE_COLUMN_NULL)==0
+   && !referencesOtherTables(pOrderBy, pMaskSet, iTerm, base) 
+  ){
+
+    if( iNext==nIdxCol ){
+      /* All columns indexed by this UNIQUE index, and all PK columns are
+      ** are matched by a prefix of the ORDER BY clause. And since the PK
+      ** columns are guaranteed to be unique and NOT NULL, there is no way
+      ** for the trailing ORDER BY terms to affect the sort order. Therefore,
+      ** we have a sorting index.  */
+      return 1;
+    }else{
+      int i;
+      for(i=nEqCol; i<pIdx->nColumn; i++){
+        int iCol = pIdx->aiColumn[i];
+        if( iCol>=0 && pTab->aCol[iCol].notNull==0 ) break;
+      }
+
+      /* All columns indexed by this UNIQUE index are matched by a prefix
+      ** of the ORDER BY clause. And there is reason to believe that none
+      ** of the expressions in the ORDER BY prefix will evalulate to NULL.
+      ** The index may be used for sorting in this case too since it is
+      ** guaranteed that none of the trailing, unmatched ORDER BY terms 
+      ** affect the sort order.  */
+      return (i>=pIdx->nColumn);
+    }
   }
+
   return 0;
 }
 
@@ -2840,7 +2887,6 @@ static int whereInScanEst(
 }
 #endif /* defined(SQLITE_ENABLE_STAT3) */
 
-
 /*
 ** Find the best query plan for accessing a particular table.  Write the
 ** best query plan and its cost into the WhereCost object supplied as the
@@ -2882,6 +2928,7 @@ static void bestKVIndex(
   int iCur = pSrc->iCursor;   /* The cursor of the table to be accessed */
   Index *pProbe;              /* An index we are evaluating */
   Index *pFirst;              /* First index to evaluate */
+  Index *pPk;                 /* Primary Key index */
   int eqTermMask;             /* Current mask of valid equality operators */
   int idxEqTermMask;          /* Index mask of valid equality operators */
 
@@ -2925,6 +2972,7 @@ static void bestKVIndex(
   eqTermMask = idxEqTermMask;
   pFirst = pSrc->pTab->pIndex;
 #endif
+  pPk = sqlite4FindPrimaryKey(pSrc->pTab, 0);
 
   /* Loop over all indices looking for the best one to use */
   for(pProbe=pFirst; pProbe; pProbe=pProbe->pNext){
@@ -3010,11 +3058,19 @@ static void bestKVIndex(
 #ifdef SQLITE_ENABLE_STAT3
     WhereTerm *pFirstTerm = 0;    /* First term matching the index */
 #endif
+    int nCol = pProbe->nColumn;   /* Total columns in index record */
+
+    /* Unless pProbe is the primary key index, then the encoded PK column 
+    ** values are at the end of each record. Set variable nCol to the total
+    ** number of columns encoded into each index record, including the PK  
+    ** columns.  */
+    if( pProbe!=pPk ) nCol += pPk->nColumn;
 
     /* Determine the values of nEq and nInMul */
-    for(nEq=0; nEq<pProbe->nColumn; nEq++){
-      int j = pProbe->aiColumn[nEq];
-      pTerm = findTerm(pWC, iCur, j, notReady, eqTermMask, pProbe);
+    for(nEq=0; nEq<nCol; nEq++){
+      int iCol;                   /* Table column of nEq'th index field */
+      iCol = idxColumnNumber(pProbe, pPk, nEq);
+      pTerm = findTerm(pWC, iCur, iCol, notReady, eqTermMask, pProbe);
       if( pTerm==0 ) break;
       wsFlags |= WHERE_COLUMN_EQ;
       testcase( pTerm->pWC!=pWC );
@@ -3047,14 +3103,14 @@ static void bestKVIndex(
     ** there is a range constraint on indexed column (nEq+1) that can be 
     ** optimized using the index. 
     */
-    if( nEq==pProbe->nColumn && pProbe->onError!=OE_None ){
+    if( nEq>=pProbe->nColumn && pProbe->onError!=OE_None ){
       testcase( wsFlags & WHERE_COLUMN_IN );
       testcase( wsFlags & WHERE_COLUMN_NULL );
       if( (wsFlags & (WHERE_COLUMN_IN|WHERE_COLUMN_NULL))==0 ){
         wsFlags |= WHERE_UNIQUE;
       }
     }else if( pProbe->bUnordered==0 ){
-      int j = (nEq==pProbe->nColumn ? -1 : pProbe->aiColumn[nEq]);
+      int j = idxColumnNumber(pProbe, pPk, nEq);
       if( findTerm(pWC, iCur, j, notReady, WO_LT|WO_LE|WO_GT|WO_GE, pProbe) ){
         WhereTerm *pTop = findTerm(pWC, iCur, j, notReady, WO_LT|WO_LE, pProbe);
         WhereTerm *pBtm = findTerm(pWC, iCur, j, notReady, WO_GT|WO_GE, pProbe);
@@ -3763,7 +3819,6 @@ static void explainOneScan(
 # define explainOneScan(u,v,w,x,y,z)
 #endif /* SQLITE_OMIT_EXPLAIN */
 
-
 /*
 ** Generate code for the start of the iLevel-th loop in the WHERE clause
 ** implementation described by pWInfo.
@@ -3778,7 +3833,6 @@ static Bitmask codeOneLoopStart(
   int j, k;            /* Loop counters */
   int iCur;            /* The VDBE cursor for the table */
   int addrNxt;         /* Where to jump to continue with the next IN case */
-  int omitTable;       /* True if we use the index only */
   int bRev;            /* True if we need to scan in reverse order */
   WhereLevel *pLevel;  /* The where level to be coded */
   WhereClause *pWC;    /* Decomposition of the entire WHERE clause */
@@ -3798,8 +3852,6 @@ static Bitmask codeOneLoopStart(
   pTabItem = &pWInfo->pTabList->a[pLevel->iFrom];
   iCur = pTabItem->iCursor;
   bRev = (pLevel->plan.wsFlags & WHERE_REVERSE)!=0;
-  omitTable = (pLevel->plan.wsFlags & WHERE_IDX_ONLY)!=0 
-           && (wctrlFlags & WHERE_FORCE_TABLE)==0;
 
   /* Create labels for the "break" and "continue" instructions
   ** for the current loop.  Jump to addrBrk to break out of a loop.
@@ -3935,10 +3987,13 @@ static Bitmask codeOneLoopStart(
     char *zStartAff;             /* Affinity for start of range constraint */
     char *zEndAff;               /* Affinity for end of range constraint */
     int regEndKey;               /* Register for end-key */
+    int iIneq;                   /* The table column subject to inequality */
+    Index *pPk;                  /* Primary key index on same table as pIdx */
 
     pIdx = pLevel->plan.u.pIdx;
+    pPk = sqlite4FindPrimaryKey(pIdx->pTable, 0);
     iIdxCur = pLevel->iIdxCur;
-    k = (nEq==pIdx->nColumn ? -1 : pIdx->aiColumn[nEq]);
+    iIneq = idxColumnNumber(pIdx, pPk, nEq);
 
     /* If this loop satisfies a sort order (pOrderBy) request that 
     ** was passed to this function to implement a "SELECT min(x) ..." 
@@ -3961,11 +4016,11 @@ static Bitmask codeOneLoopStart(
     /* Find any inequality constraint terms for the start and end 
     ** of the range.  */
     if( pLevel->plan.wsFlags & WHERE_TOP_LIMIT ){
-      pRangeEnd = findTerm(pWC, iCur, k, notReady, (WO_LT|WO_LE), pIdx);
+      pRangeEnd = findTerm(pWC, iCur, iIneq, notReady, (WO_LT|WO_LE), pIdx);
       nExtraReg = 1;
     }
     if( pLevel->plan.wsFlags & WHERE_BTM_LIMIT ){
-      pRangeStart = findTerm(pWC, iCur, k, notReady, (WO_GT|WO_GE), pIdx);
+      pRangeStart = findTerm(pWC, iCur, iIneq, notReady, (WO_GT|WO_GE), pIdx);
       nExtraReg = 1;
     }
 
@@ -4291,7 +4346,6 @@ static Bitmask codeOneLoopStart(
     static const u8 aStep[] = { OP_Next, OP_Prev };
     static const u8 aStart[] = { OP_Rewind, OP_Last };
     assert( bRev==0 || bRev==1 );
-    assert( omitTable==0 );
     pLevel->op = aStep[bRev];
     pLevel->p1 = iCur;
     pLevel->p2 = 1 + sqlite4VdbeAddOp2(v, aStart[bRev], iCur, addrBrk);
