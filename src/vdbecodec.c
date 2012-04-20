@@ -709,6 +709,9 @@ int sqlite4VdbeDecodeIntKey(
   }else if( x>=0x17 && x<=0x21 ){
     isNeg = 0;
     e = x-0x17;
+  }else if( x==0x15 ){
+    *pVal = 0;
+    return 1;
   }else{
     return 0;
   }
