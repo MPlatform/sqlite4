@@ -124,11 +124,18 @@ if {[info exists ::env(QUICKTEST_INCLUDE)]} {
 #-------------------------------------------------------------------------
 # Define the generic test suites:
 #
+#   src4
 #   veryquick
 #   quick
 #   full
 #
 lappend ::testsuitelist xxx
+
+test_suite "src4" -prefix "" -description {
+} -files {
+  simple.test fkey1.test conflict.test trigger2.test select1.test
+  where.test
+}
 
 test_suite "veryquick" -prefix "" -description {
   "Very" quick test suite. Runs in less than 5 minutes on a workstation. 

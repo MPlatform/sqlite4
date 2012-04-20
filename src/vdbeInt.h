@@ -140,6 +140,7 @@ struct Mem {
     int nZero;          /* Used when bit MEM_Zero is set in flags */
     FuncDef *pDef;      /* Used only when flags==MEM_Agg */
     RowSet *pRowSet;    /* Used only when flags==MEM_RowSet */
+    KeySet *pKeySet;    /* Used only when flags==MEM_KeySet */
     VdbeFrame *pFrame;  /* Used when flags==MEM_Frame */
   } u;
   int n;              /* Number of characters in string value, excluding '\0' */
@@ -175,6 +176,8 @@ struct Mem {
 #define MEM_Frame     0x0040   /* Value is a VdbeFrame object */
 #define MEM_Invalid   0x0080   /* Value is undefined */
 #define MEM_TypeMask  0x00ff   /* Mask of type bits */
+
+#define MEM_KeySet    0x0020   /* Value is a KeySet object */
 
 /* Whenever Mem contains a valid string or blob representation, one of
 ** the following flags must be set to determine the memory management
@@ -383,10 +386,11 @@ int sqlite4VdbeEncodeKey(
   KeyInfo *pKeyInfo,           /* Collating sequence information */
   u8 **pzOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
-  int *pnShort                 /* Number of bytes omitting primary key */
+  int bIncr                    /* Make the key "incrementable" */
 );
 int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_int64 v);
 int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);
+int sqlite4VdbeShortKey(u8 *, int, int);
 int sqlite4MemCompare(const Mem*, const Mem*, const CollSeq*);
 int sqlite4VdbeExec(Vdbe*);
 int sqlite4VdbeList(Vdbe*);

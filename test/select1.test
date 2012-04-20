@@ -242,8 +242,8 @@ do_test select1-2.22 {
 do_test select1-2.23 {
   execsql {
     CREATE TABLE tkt2526(a,b,c PRIMARY KEY);
-    INSERT INTO tkt2526 VALUES('x','y',NULL);
-    INSERT INTO tkt2526 VALUES('x','z',NULL);
+    INSERT INTO tkt2526 VALUES('x','y',1);
+    INSERT INTO tkt2526 VALUES('x','z',2);
   }
   catchsql {
     SELECT count(a) AS cn FROM tkt2526 GROUP BY a HAVING cn<max(cn)
@@ -410,6 +410,7 @@ execsql {INSERT INTO test2 VALUES('abc','xyz')}
 
 # Check for column naming
 #
+if 0 {
 do_test select1-6.1 {
   set v [catch {execsql2 {SELECT f1 FROM test1 ORDER BY f2}} msg]
   lappend v $msg
@@ -610,6 +611,7 @@ db eval {
   PRAGMA short_column_names=ON;
   PRAGMA full_column_names=OFF;
 }
+} ;# if 0 ...
 
 ifcapable compound {
 do_test select1-6.10 {
@@ -1038,6 +1040,7 @@ do_test select1-14.1 {
     SELECT * FROM sqlite_master;
   }
 } {}
+
 do_test select1-14.2 {
   execsql { 
     SELECT 10 IN (SELECT rowid FROM sqlite_master);

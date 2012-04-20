@@ -536,6 +536,166 @@ void sqlite4Pragma(
     sqlite4KVStoreDump(db->aDb[0].pKV);
   }else
 #endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
+  /*
+  **   PRAGMA integrity_check
+  **
+  ** Check that for each table, the content of any auxilliary indexes are 
+  ** consistent with the primary key index.
+  */
+  if( sqlite4StrICmp(zLeft, "integrity_check")==0 ){
+    const int baseCsr = 1;        /* Base cursor for OpenAllIndexes() call */
+
+    const int regErrcnt = 1;      /* Register containing error count */
+    const int regErrstr = 2;      /* Register containing error string */
+    const int regTmp = 3;         /* Register for tmp use */
+    const int regRowcnt1 = 4;     /* Register containing row count (from PK) */
+    const int regRowcnt2 = 5;     /* Register containing error count */
+    const int regResult = 6;      /* Register containing result string */
+    const int regKey = 7;         /* Register containing encoded key */
+    const int regArray = 8;       /* First in array of registers */
+
+    int i;
+    int nMaxArray = 1;
+    int addrNot = 0;
+    Vdbe *v;
+
+    if( sqlite4ReadSchema(pParse) ) goto pragma_out;
+
+    for(i=0; i<db->nDb; i++){
+      if( OMIT_TEMPDB && i==1 ) continue;
+      sqlite4CodeVerifySchema(pParse, i);
+    }
+
+    v = sqlite4GetVdbe(pParse);
+    sqlite4VdbeAddOp2(v, OP_Integer, 0, regErrcnt);
+    sqlite4VdbeAddOp4(v, OP_String8, 0, regErrstr, 0, "", 0);
+
+    for(i=0; i<db->nDb; i++){
+      Hash *pTbls;
+      HashElem *x;
+
+      if( OMIT_TEMPDB && i==1 ) continue;
+
+      pTbls = &db->aDb[i].pSchema->tblHash;
+      for(x=sqliteHashFirst(pTbls); x; x=sqliteHashNext(x)){
+        Index *pIdx;
+        Table *pTab = (Table *)sqliteHashData(x);
+        int addrRewind;
+        int nIdx = 0;
+        int iPkCsr;
+        Index *pPk;
+        int iCsr;
+
+        /* Do nothing for views */
+        if( IsView(pTab) ) continue;
+
+        /* Open all indexes for table pTab. */
+        for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
+          if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+            pPk = pIdx;
+            iPkCsr = nIdx+baseCsr;
+          }
+          nIdx++;
+        }
+        sqlite4OpenAllIndexes(pParse, pTab, baseCsr, OP_OpenRead);
+
+        sqlite4VdbeAddOp2(v, OP_Integer, 0, regRowcnt1);
+        addrRewind = sqlite4VdbeAddOp1(v, OP_Rewind, iPkCsr);
+
+        /* Increment the row-count register */
+        sqlite4VdbeAddOp2(v, OP_AddImm, regRowcnt1, 1);
+
+        for(iCsr=baseCsr, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, iCsr++){
+          assert( (pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY)==(iCsr==iPkCsr) );
+          if( iCsr!=iPkCsr ){
+            char *zErr;
+            int iCol;
+            int jmp;
+            for(iCol=0; iCol<pIdx->nColumn; iCol++){
+              int r = regArray + iCol;
+              sqlite4VdbeAddOp3(v, OP_Column, iPkCsr, pIdx->aiColumn[iCol], r);
+              assert( pIdx->aiColumn[iCol]>=0 );
+            }
+            for(iCol=0; iCol<pPk->nColumn; iCol++){
+              int reg = regArray + pIdx->nColumn + iCol;
+              int iTblCol = pPk->aiColumn[iCol];
+              if( iTblCol<0 ){
+                sqlite4VdbeAddOp2(v, OP_Rowid, iPkCsr, reg);
+              }else{
+                sqlite4VdbeAddOp3(v, OP_Column, iPkCsr, iTblCol, reg);
+              }
+            }
+
+            if( (pPk->nColumn+pIdx->nColumn)>nMaxArray ){
+              nMaxArray = pPk->nColumn + pIdx->nColumn;
+            }
+
+            sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iCsr, regArray, regKey);
+            jmp = sqlite4VdbeAddOp4(v, OP_Found, iCsr, 0, regKey, 0, P4_INT32);
+            sqlite4VdbeAddOp2(v, OP_AddImm, regErrcnt, 1);
+            zErr = sqlite4MPrintf(
+                db, "entry missing from index %s: ", pIdx->zName
+            );
+            sqlite4VdbeAddOp4(v, OP_String8, 0, regTmp, 0, zErr, 0);
+            sqlite4VdbeAddOp3(v, OP_Concat, regTmp, regErrstr, regErrstr);
+            sqlite4VdbeAddOp3(v, OP_Function, 0, regKey, regTmp);
+            sqlite4VdbeChangeP4(v, -1,
+                (char *)sqlite4FindFunction(db, "hex", 3, 1, SQLITE_UTF8, 0), 
+                P4_FUNCDEF
+            );
+            sqlite4VdbeChangeP5(v, 1);
+            sqlite4VdbeAddOp3(v, OP_Concat, regTmp, regErrstr, regErrstr);
+            sqlite4VdbeAddOp4(v, OP_String8, 0, regTmp, 0, "\n", 0);
+            sqlite4VdbeAddOp3(v, OP_Concat, regTmp, regErrstr, regErrstr);
+            sqlite4VdbeJumpHere(v, jmp);
+            sqlite4DbFree(db, zErr);
+          }
+        }
+        sqlite4VdbeAddOp2(v, OP_Next, iPkCsr, addrRewind+1);
+        sqlite4VdbeJumpHere(v, addrRewind);
+
+        for(iCsr=baseCsr, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, iCsr++){
+          if( iCsr!=iPkCsr ){
+            char *zErr;
+            int addrEq;
+            int addrRewind2;
+            sqlite4VdbeAddOp2(v, OP_Integer, 0, regRowcnt2);
+            addrRewind2 = sqlite4VdbeAddOp1(v, OP_Rewind, iCsr);
+            sqlite4VdbeAddOp2(v, OP_AddImm, regRowcnt2, 1);
+            sqlite4VdbeAddOp2(v, OP_Next, iCsr, addrRewind2+1);
+            sqlite4VdbeJumpHere(v, addrRewind2);
+            zErr = sqlite4MPrintf(
+                db, "wrong # number of entries in index %s\n", pIdx->zName
+            );
+            addrEq = sqlite4VdbeAddOp3(v, OP_Eq, regRowcnt1, 0, regRowcnt2);
+            sqlite4VdbeAddOp2(v, OP_AddImm, regErrcnt, 1);
+            sqlite4VdbeAddOp4(v, OP_String8, 0, regTmp, 0, zErr, 0);
+            sqlite4VdbeAddOp3(v, OP_Concat, regTmp, regErrstr, regErrstr);
+
+            sqlite4VdbeJumpHere(v, addrEq);
+            sqlite4DbFree(db, zErr);
+          }
+        }
+
+        for(iCsr=baseCsr; iCsr<(baseCsr+nIdx); iCsr++){
+          sqlite4VdbeAddOp1(v, OP_Close, iCsr);
+        }
+      }
+    }
+
+    sqlite4VdbeAddOp4(v, OP_String8, 0, regResult, 0, "ok", 0);
+    addrNot = sqlite4VdbeAddOp1(v, OP_IfNot, regErrcnt);
+    sqlite4VdbeAddOp4(v, OP_String8, 0, regArray, 0, " errors:\n", 0);
+    sqlite4VdbeAddOp3(v, OP_Concat, regArray, regErrcnt, regResult);
+    sqlite4VdbeAddOp3(v, OP_Concat, regErrstr, regResult, regResult);
+    sqlite4VdbeJumpHere(v, addrNot);
+
+    pParse->nMem = (regArray + nMaxArray);
+    sqlite4VdbeSetNumCols(v, 1);
+    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "integrity_check", SQLITE_STATIC);
+    sqlite4VdbeAddOp2(v, OP_ResultRow, regResult, 1);
+
+  }else
 
 
   /*

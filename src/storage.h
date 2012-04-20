@@ -181,7 +181,7 @@ struct KVCursor {
 #define SQLITE_KVOPEN_TEMPORARY       0x0001  /* A temporary database */
 #define SQLITE_KVOPEN_NO_TRANSACTIONS 0x0002  /* No transactions will be used */
 
-int sqlite4KVStoreOpenMem(KVStore**, unsigned);
+int sqlite4KVStoreOpenMem(KVStore**, const char *, unsigned);
 int sqlite4KVStoreOpen(
   sqlite4*,
   const char *zLabel, 
@@ -226,3 +226,8 @@ int sqlite4KVStorePutMeta(sqlite4*, KVStore *p, int, int, unsigned int*);
 #ifdef SQLITE_DEBUG
   void sqlite4KVStoreDump(KVStore *p);
 #endif
+
+#ifdef SQLITE_ENABLE_LSM
+int sqlite4KVStoreOpenLsm(KVStore**, const char *, unsigned);
+#endif
+

@@ -108,12 +108,15 @@ int sqlite4VdbeDecodeValue(
     }
     if( i<iVal ){
       ofst += size;
+    }else if( type==0 ){
+      /* no-op */
     }else if( type<=2 ){
       sqlite4VdbeMemSetInt64(pOut, type-1);
     }else if( type<=10 ){
+      int iByte;
       sqlite4_int64 v = ((char*)p->a)[ofst];
-      for(i=4; i<type; i++){
-        v = v*256 + p->a[ofst+i-3];
+      for(iByte=1; iByte<size; iByte++){
+        v = v*256 + p->a[ofst+iByte];
       }
       sqlite4VdbeMemSetInt64(pOut, v);
     }else if( type<=21 ){
@@ -528,7 +531,7 @@ static int encodeOneKeyValue(
   }else
   if( flags & MEM_Str ){
     if( enlargeEncoderAllocation(p, pMem->n*4 + 2) ) return SQLITE_NOMEM;
-    p->aOut[p->nOut++] = 0x0e;   /* Text */
+    p->aOut[p->nOut++] = 0x24;   /* Text */
     if( pColl==0 || pColl->xMkKey==0 ){
       memcpy(p->aOut+p->nOut, pMem->z, pMem->n);
       p->nOut += pMem->n;
@@ -552,7 +555,7 @@ static int encodeOneKeyValue(
     s = 1;
     t = 0;
     if( enlargeEncoderAllocation(p, (n*8+6)/7 + 2) ) return SQLITE_NOMEM;
-    p->aOut[p->nOut++] = 0x0f;   /* Blob */
+    p->aOut[p->nOut++] = 0x25;   /* Blob */
      for(i=0; i<n; i++){
       unsigned char x = a[i];
       p->aOut[p->nOut++] = 0x80 | t | (x>>s);
@@ -575,7 +578,58 @@ static int encodeOneKeyValue(
 }
 
 /*
-** Generate a record key from one or more data values
+** Variables aKey/nKey contain an encoded index key. This function returns
+** the length (in bytes) of the key with all but the first nField fields
+** removed.
+*/
+int sqlite4VdbeShortKey(
+  u8 *aKey,                       /* Buffer containing encoded key */
+  int nKey,                       /* Size of buffer aKey[] in bytes */
+  int nField                      /* Number of fields */
+){
+  u8 *p = aKey;
+  u8 *pEnd = &aKey[nKey];
+  u64 dummy;
+  int i;
+
+  p = aKey;
+  p += sqlite4GetVarint64(p, pEnd-p, &dummy);
+
+  for(i=0; i<nField; i++){
+    u8 c = *(p++);
+    switch( c ){
+
+      case 0x05:                  /* NULL */
+      case 0x06:                  /* NaN */
+      case 0x07:                  /* -ve infinity */
+      case 0x15:                  /* zero */
+      case 0x23:                  /* +ve infinity */
+        break;
+
+      case 0x24:                  /* Text */
+      case 0x25:                  /* Blob */
+        while( *(p++) );
+        break;
+
+      case 0x22:                  /* Large positive number */
+      case 0x16:                  /* Small positive number */
+      case 0x14:                  /* Small negative number */
+      case 0x08:                  /* Large negative number */
+        p += sqlite4GetVarint64(p, pEnd-p, &dummy);
+        while( (*p++) & 0x01 );
+        break;
+
+      default:                    /* Medium sized number */
+        while( (*p++) & 0x01 );
+        break;
+    }
+  }
+
+  return (p - aKey);
+}
+
+/*
+** Generate a database key from one or more data values.
 **
 ** Space to hold the key is obtained from sqlite4DbMalloc() and should
 ** be freed by the caller using sqlite4DbFree() to avoid a memory leak.
@@ -585,20 +639,22 @@ int sqlite4VdbeEncodeKey(
   Mem *aIn,                    /* Values to be encoded */
   int nIn,                     /* Number of entries in aIn[] */
   int iTabno,                  /* The table this key applies to */
-  KeyInfo *pKeyInfo,           /* Collating sequence information */
+  KeyInfo *pKeyInfo,           /* Collating sequence and sort-order info */
   u8 **paOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
-  int *pnShort                 /* Number of bytes without the primary key */
+  int bIncr                    /* See above */
 ){
   int i;
   int rc = SQLITE_OK;
   KeyEncoder x;
   u8 *so;
   int iShort;
-  int nField;
   CollSeq **aColl;
   CollSeq *xColl;
   static const CollSeq defaultColl;
+
+  assert( pKeyInfo );
+  assert( nIn<=pKeyInfo->nField );
 
   x.db = db;
   x.aOut = 0;
@@ -606,24 +662,17 @@ int sqlite4VdbeEncodeKey(
   x.nAlloc = 0;
   *paOut = 0;
   *pnOut = 0;
+
   if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE_NOMEM;
   x.nOut = sqlite4PutVarint64(x.aOut, iTabno);
-  if( pKeyInfo ){
-    nField = pKeyInfo->nField;
-    iShort = nField - pKeyInfo->nPK;
-    aColl = pKeyInfo->aColl;
-    so = pKeyInfo->aSortOrder;
-  }else{
-    nField = 1;
-    iShort = 0;
-    xColl = &defaultColl;
-    aColl = &xColl;
-    so = 0;
-  }
-  for(i=0; i<nField && rc==SQLITE_OK; i++){
-    if( pnShort && i==iShort ) *pnShort = x.nOut;
+  iShort = pKeyInfo->nField - pKeyInfo->nPK;
+  aColl = pKeyInfo->aColl;
+  so = pKeyInfo->aSortOrder;
+  for(i=0; i<nIn && rc==SQLITE_OK; i++){
     rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC, aColl[i]);
   }
+
+  if( rc==SQLITE_OK && bIncr ){ rc = enlargeEncoderAllocation(&x, 1); }
   if( rc ){
     sqlite4DbFree(db, x.aOut);
   }else{
@@ -660,6 +709,9 @@ int sqlite4VdbeDecodeIntKey(
   }else if( x>=0x17 && x<=0x21 ){
     isNeg = 0;
     e = x-0x17;
+  }else if( x==0x15 ){
+    *pVal = 0;
+    return 1;
   }else{
     return 0;
   }

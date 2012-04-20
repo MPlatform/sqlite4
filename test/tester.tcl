@@ -82,7 +82,7 @@
 # very large database files.
 #
 set tcl_precision 15
-sqlite4_test_control_pending_byte 0x0010000
+#sqlite4_test_control_pending_byte 0x0010000
 
 
 # If the pager codec is available, create a wrapper for the [sqlite4] 
@@ -356,8 +356,9 @@ if {[info exists cmdlinearg]==0} {
   #
   sqlite4_shutdown 
   install_malloc_faultsim 1 
+  kvwrap install
   sqlite4_initialize
-  autoinstall_test_functions
+  #autoinstall_test_functions
 
   # If the --binarylog option was specified, create the logging VFS. This
   # call installs the new VFS as the default for all SQLite connections.
@@ -694,11 +695,11 @@ proc finalize_testing {} {
   catch {db2 close}
   catch {db3 close}
 
-  vfs_unlink_test
+  #vfs_unlink_test
   sqlite4 db {}
   # sqlite4_clear_tsd_memdebug
   db close
-  sqlite4_reset_auto_extension
+  #sqlite4_reset_auto_extension
 
   sqlite4_soft_heap_limit 0
   set nTest [incr_ntest]

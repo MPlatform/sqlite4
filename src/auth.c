@@ -170,9 +170,6 @@ void sqlite4AuthRead(
   if( iCol>=0 ){
     assert( iCol<pTab->nCol );
     zCol = pTab->aCol[iCol].zName;
-  }else if( pTab->iPKey>=0 ){
-    assert( pTab->iPKey<pTab->nCol );
-    zCol = pTab->aCol[pTab->iPKey].zName;
   }else{
     zCol = "ROWID";
   }

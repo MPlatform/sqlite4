@@ -88,7 +88,15 @@ int sqlite4KVStoreOpen(
   KVStore *pNew = 0;
   int rc;
 
-  rc = sqlite4KVStoreOpenMem(&pNew, flags);
+  if( zUri && zUri[0] 
+   && sqlite4GlobalConfig.xKVFile 
+   && memcmp(":memory:", zUri, 8)
+  ){
+    rc = sqlite4GlobalConfig.xKVFile(&pNew, zUri, flags);
+  }else{
+    rc = sqlite4GlobalConfig.xKVTmp(&pNew, zUri, flags);
+  }
+
   *ppKVStore = pNew;
   if( pNew ){
     sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);
@@ -306,6 +314,14 @@ int sqlite4KVStoreClose(KVStore *p){
 */
 static const KVByteArray metadataKey[] = { 0x00, 0x00 };
 
+static void writeMetaArray(KVByteArray *aMeta, int iElem, u32 iVal){
+  int i = sizeof(u32) * iElem;
+  aMeta[i+0] = (iVal>>24)&0xff;
+  aMeta[i+1] = (iVal>>16)&0xff;
+  aMeta[i+2] = (iVal>>8) &0xff;
+  aMeta[i+3] = (iVal>>0) &0xff;
+}
+
 /*
 ** Read nMeta unsigned 32-bit integers of metadata beginning at iStart.
 */
@@ -353,14 +369,16 @@ int sqlite4KVStorePutMeta(
 ){
   KVCursor *pCur;
   int rc;
-  int i, j;
-  KVSize nData;
-  const KVByteArray *aData;
-  KVByteArray *aNew;
-  KVSize nNew;
+
 
   rc = sqlite4KVStoreOpenCursor(p, &pCur);
   if( rc==SQLITE_OK ){
+    const KVByteArray *aData;     /* Original database meta-array value */
+    KVSize nData;                 /* Size of aData[] in bytes */
+    KVByteArray *aNew;            /* New database meta-array value */
+    KVSize nNew;                  /* Size of aNew[] in bytes */
+
+    /* Read the current meta-array value from the database */
     rc = sqlite4KVCursorSeek(pCur, metadataKey, sizeof(metadataKey), 0);
     if( rc==SQLITE_OK ){
       rc = sqlite4KVCursorData(pCur, 0, -1, &aData, &nData);
@@ -369,29 +387,26 @@ int sqlite4KVStorePutMeta(
       aData = 0;
       rc = SQLITE_OK;
     }
+
+    /* Encode and write the new meta-array value to the database */
     if( rc==SQLITE_OK ){
-      nNew = iStart+nMeta;
+      nNew = sizeof(a[0]) * (iStart+nMeta);
       if( nNew<nData ) nNew = nData;
-      aNew = sqlite4DbMallocRaw(db, nNew*sizeof(a[0]) );
+      aNew = sqlite4DbMallocRaw(db, nNew);
       if( aNew==0 ){
         rc = SQLITE_NOMEM;
       }else{
+        int i;
         memcpy(aNew, aData, nData);
-        i = 0;
-        j = iStart*4;
-        while( i<nMeta && j+3<nData ){
-          aNew[j] = (a[i]>>24)&0xff;
-          aNew[j+1] = (a[i]>>16)&0xff;
-          aNew[j+2] = (a[i]>>8)&0xff;
-          aNew[j+3] = a[i] & 0xff;
-          i++;
-          j += 4;
+        for(i=iStart; i<iStart+nMeta; i++){
+          writeMetaArray(aNew, i, a[i]);
         }
         rc = sqlite4KVStoreReplace(p, metadataKey, sizeof(metadataKey),
                                    aNew, nNew);
         sqlite4DbFree(db, aNew);
       }
     }
+
     sqlite4KVCursorClose(pCur);
   }
   return rc;

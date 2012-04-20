@@ -289,15 +289,15 @@ ccons ::= DEFAULT id(X).              {
 // UNIQUE constraints.
 //
 ccons ::= NULL onconf.
-ccons ::= NOT NULL onconf(R).    {sqlite4AddNotNull(pParse, R);}
+ccons ::= NOT NULL onconf(R).  {sqlite4AddNotNull(pParse, R);}
 ccons ::= PRIMARY KEY sortorder(Z) onconf(R) autoinc(I).
-                                 {sqlite4AddPrimaryKey(pParse,0,R,I,Z);}
-ccons ::= UNIQUE onconf(R).      {sqlite4CreateIndex(pParse,0,0,0,0,R,0,0,0,0);}
-ccons ::= CHECK LP expr(X) RP.   {sqlite4AddCheckConstraint(pParse,X.pExpr);}
+                               {sqlite4AddPrimaryKey(pParse,0,R,I,Z);}
+ccons ::= UNIQUE onconf(R).    {sqlite4CreateIndex(pParse,0,0,0,0,R,0,0,0,0,0);}
+ccons ::= CHECK LP expr(X) RP. {sqlite4AddCheckConstraint(pParse,X.pExpr);}
 ccons ::= REFERENCES nm(T) idxlist_opt(TA) refargs(R).
-                                 {sqlite4CreateForeignKey(pParse,0,&T,TA,R);}
-ccons ::= defer_subclause(D).    {sqlite4DeferForeignKey(pParse,D);}
-ccons ::= COLLATE ids(C).        {sqlite4AddCollateType(pParse, &C);}
+                               {sqlite4CreateForeignKey(pParse,0,&T,TA,R);}
+ccons ::= defer_subclause(D).  {sqlite4DeferForeignKey(pParse,D);}
+ccons ::= COLLATE ids(C).      {sqlite4AddCollateType(pParse, &C);}
 
 // The optional AUTOINCREMENT keyword
 %type autoinc {int}
@@ -341,11 +341,11 @@ conslist ::= conslist tcons.
 conslist ::= tcons.
 tcons ::= CONSTRAINT nm.
 tcons ::= PRIMARY KEY LP idxlist(X) autoinc(I) RP onconf(R).
-                                 {sqlite4AddPrimaryKey(pParse,X,R,I,0);}
+                             {sqlite4AddPrimaryKey(pParse,X,R,I,0);}
 tcons ::= UNIQUE LP idxlist(X) RP onconf(R).
-                                 {sqlite4CreateIndex(pParse,0,0,0,X,R,0,0,0,0);}
+                             {sqlite4CreateIndex(pParse,0,0,0,X,R,0,0,0,0,0);}
 tcons ::= CHECK LP expr(E) RP onconf.
-                                 {sqlite4AddCheckConstraint(pParse,E.pExpr);}
+                             {sqlite4AddCheckConstraint(pParse,E.pExpr);}
 tcons ::= FOREIGN KEY LP idxlist(FA) RP
           REFERENCES nm(T) idxlist_opt(TA) refargs(R) defer_subclause_opt(D). {
     sqlite4CreateForeignKey(pParse, FA, &T, TA, R);
@@ -1091,7 +1091,7 @@ cmd ::= createkw(S) uniqueflag(U) INDEX ifnotexists(NE) nm(X) dbnm(D)
         ON nm(Y) LP idxlist(Z) RP(E). {
   sqlite4CreateIndex(pParse, &X, &D, 
                      sqlite4SrcListAppend(pParse->db,0,&Y,0), Z, U,
-                      &S, &E, SQLITE_SO_ASC, NE);
+                      &S, &E, SQLITE_SO_ASC, NE, 0);
 }
 
 %type uniqueflag {int}

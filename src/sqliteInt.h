@@ -22,6 +22,7 @@
 #define SQLITE_OMIT_SHARED_CACHE 1
 /*#define SQLITE_OMIT_PAGER_PRAGMAS 1*/
 #define SQLITE_OMIT_PROGRESS_CALLBACK 1
+
 #define SQLITE_OMIT_MERGE_SORT 1
 
 /*
@@ -654,6 +655,7 @@ typedef struct Index Index;
 typedef struct IndexSample IndexSample;
 typedef struct KeyClass KeyClass;
 typedef struct KeyInfo KeyInfo;
+typedef struct KeySet KeySet;
 typedef struct Lookaside Lookaside;
 typedef struct LookasideSlot LookasideSlot;
 typedef struct Module Module;
@@ -677,6 +679,7 @@ typedef struct Walker Walker;
 typedef struct WherePlan WherePlan;
 typedef struct WhereInfo WhereInfo;
 typedef struct WhereLevel WhereLevel;
+
 
 /*
 ** Defer sourcing vdbe.h until after the "u8" and 
@@ -1293,16 +1296,13 @@ struct VTable {
 */
 struct Table {
   char *zName;         /* Name of the table or view */
-  int iPKey;           /* If not negative, use aCol[iPKey] as the primary key */
   int nCol;            /* Number of columns in this table */
   Column *aCol;        /* Information about each column */
   Index *pIndex;       /* List of SQL indexes on this table. */
-  int tnum;            /* Root BTree node for this table (see note above) */
   tRowcnt nRowEst;     /* Estimated rows in table - from sqlite_stat1 table */
   Select *pSelect;     /* NULL for tables.  Points to definition if a view. */
   u16 nRef;            /* Number of pointers to this Table */
   u8 tabFlags;         /* Mask of TF_* values */
-  u8 keyConf;          /* What to do in case of uniqueness conflict on iPKey */
   FKey *pFKey;         /* Linked list of all foreign keys in this table */
   char *zColAff;       /* String defining the affinity of each column */
 #ifndef SQLITE_OMIT_CHECK
@@ -1344,6 +1344,13 @@ struct Table {
 #else
 #  define IsVirtual(X)      0
 #  define IsHiddenColumn(X) 0
+#endif
+
+/* Test to see if a table is actually a view. */
+#ifndef SQLITE_OMIT_VIEW
+#  define IsView(X)         ((X)->pSelect!=0)
+#else
+#  define IsView(X)         0
 #endif
 
 /*
@@ -1432,6 +1439,7 @@ struct KeyInfo {
   u8 enc;             /* Text encoding - one of the SQLITE_UTF* values */
   u16 nField;         /* Total number of entries in aColl[] */
   u16 nPK;            /* Number of primary key entries at the end of aColl[] */
+  u16 nData;          /* Number of columns of data in KV entry value */
   u8 *aSortOrder;     /* Sort order for each column.  May be NULL */
   CollSeq *aColl[1];  /* Collating sequence for each term of the key */
 };
@@ -1499,7 +1507,7 @@ struct Index {
   Table *pTable;   /* The SQL table being indexed */
   int tnum;        /* Page containing root of this index in database file */
   u8 onError;      /* OE_Abort, OE_Ignore, OE_Replace, or OE_None */
-  u8 autoIndex;    /* True if is automatically created (ex: by UNIQUE) */
+  u8 eIndexType;   /* SQLITE_INDEX_USER, UNIQUE or PRIMARYKEY */
   u8 bUnordered;   /* Use this index for == or IN queries only */
   char *zColAff;   /* String defining the affinity of each column */
   Index *pNext;    /* The next index associated with the same table */
@@ -1512,6 +1520,11 @@ struct Index {
   IndexSample *aSample;    /* Samples of the left-most key */
 #endif
 };
+
+/* Index.eIndexType must be set to one of the following. */
+#define SQLITE_INDEX_USER       0 /* Index created by CREATE INDEX statement */
+#define SQLITE_INDEX_UNIQUE     1 /* Index created by UNIQUE constraint */
+#define SQLITE_INDEX_PRIMARYKEY 2 /* Index is the tables PRIMARY KEY */
 
 /*
 ** Each sample stored in the sqlite_stat3 table is represented in memory 
@@ -2248,7 +2261,9 @@ struct Parse {
   TableLock *aTableLock; /* Required table locks for shared-cache mode */
 #endif
   int regRowid;        /* Register holding rowid of CREATE TABLE entry */
+#if 0
   int regRoot;         /* Register holding root page number for new objects */
+#endif
   AutoincInfo *pAinc;  /* Information about AUTOINCREMENT counters */
   int nMaxArg;         /* Max args passed to user function by sub-program */
 
@@ -2489,6 +2504,8 @@ struct Sqlite3Config {
   void (*xLog)(void*,int,const char*); /* Function for logging */
   void *pLogArg;                       /* First argument to xLog() */
   int bLocaltimeFault;              /* True to fail localtime() calls */
+  int (*xKVFile)(KVStore **, const char *, unsigned int);
+  int (*xKVTmp)(KVStore **, const char *, unsigned int);
 };
 
 /*
@@ -2754,6 +2771,12 @@ void sqlite4RowSetInsert(RowSet*, i64);
 int sqlite4RowSetTest(RowSet*, u8 iBatch, i64);
 int sqlite4RowSetNext(RowSet*, i64*);
 
+KeySet *sqlite4KeySetInit(sqlite4*);
+void sqlite4KeySetInsert(KeySet *, const char *, int);
+const char *sqlite4KeySetRead(KeySet *, int *);
+int sqlite4KeySetNext(KeySet *);
+void sqlite4KeySetFree(KeySet *);
+
 void sqlite4CreateView(Parse*,Token*,Token*,Token*,Select*,int,int);
 
 #if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_VIRTUALTABLE)
@@ -2787,7 +2810,7 @@ void sqlite4SrcListAssignCursors(Parse*, SrcList*);
 void sqlite4IdListDelete(sqlite4*, IdList*);
 void sqlite4SrcListDelete(sqlite4*, SrcList*);
 Index *sqlite4CreateIndex(Parse*,Token*,Token*,SrcList*,ExprList*,int,Token*,
-                        Token*, int, int);
+                        Token*, int, int, int);
 void sqlite4DropIndex(Parse*, SrcList*, int);
 int sqlite4Select(Parse*, Select*, SelectDest*);
 Select *sqlite4SelectNew(Parse*,ExprList*,SrcList*,Expr*,ExprList*,
@@ -2856,6 +2879,7 @@ int sqlite4IsRowid(const char*);
 void sqlite4GenerateRowDelete(Parse*, Table*, int, int, int, Trigger *, int);
 void sqlite4GenerateRowIndexDelete(Parse*, Table*, int, int*);
 int sqlite4GenerateIndexKey(Parse*, Index*, int, int, int, int);
+void sqlite4EncodeIndexKey(Parse *, Index *, int, Index *, int, int);
 void sqlite4GenerateConstraintChecks(Parse*,Table*,int,int,
                                      int*,int,int,int,int,int*);
 void sqlite4CompleteInsertion(Parse*, Table*, int, int, int*, int, int, int);
@@ -2880,6 +2904,8 @@ void sqlite4ChangeCookie(Parse*, int);
 
 #if !defined(SQLITE_OMIT_VIEW) && !defined(SQLITE_OMIT_TRIGGER)
 void sqlite4MaterializeView(Parse*, Table*, Expr*, int);
+#else
+# define sqlite4MaterializeView(w,x,y,z)
 #endif
 
 #ifndef SQLITE_OMIT_TRIGGER
@@ -3084,6 +3110,12 @@ void sqlite4StrAccumReset(StrAccum*);
 void sqlite4SelectDestInit(SelectDest*,int,int);
 Expr *sqlite4CreateColumnExpr(sqlite4 *, SrcList *, int, int);
 
+void sqlite4OpenPrimaryKey(Parse*, int iCur, int iDb, Table*, int);
+void sqlite4OpenIndex(Parse*, int iCur, int iDb, Index*, int);
+int sqlite4OpenAllIndexes(Parse *, Table *, int, int);
+void sqlite4CloseAllIndexes(Parse *, Table *, int);
+Index *sqlite4FindPrimaryKey(Table *, int *);
+
 /*
 ** The interface to the LEMON-generated parser
 */
@@ -3166,7 +3198,7 @@ int sqlite4WalDefaultHook(void*,sqlite4*,const char*,int);
   void sqlite4FkCheck(Parse*, Table*, int, int);
   void sqlite4FkDropTable(Parse*, SrcList *, Table*);
   void sqlite4FkActions(Parse*, Table*, ExprList*, int);
-  int sqlite4FkRequired(Parse*, Table*, int*, int);
+  int sqlite4FkRequired(Parse*, Table*, int*);
   u32 sqlite4FkOldmask(Parse*, Table*);
   FKey *sqlite4FkReferences(Table *);
 #else
@@ -3174,7 +3206,7 @@ int sqlite4WalDefaultHook(void*,sqlite4*,const char*,int);
   #define sqlite4FkCheck(a,b,c,d)
   #define sqlite4FkDropTable(a,b,c)
   #define sqlite4FkOldmask(a,b)      0
-  #define sqlite4FkRequired(a,b,c,d) 0
+  #define sqlite4FkRequired(a,b,c) 0
 #endif
 #ifndef SQLITE_OMIT_FOREIGN_KEY
   void sqlite4FkDelete(sqlite4 *, Table*);

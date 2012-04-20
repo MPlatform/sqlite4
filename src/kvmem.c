@@ -150,6 +150,7 @@ static KVMemNode *kvmemRotateAfter(KVMemNode *pP){
 static KVMemNode **kvmemFromPtr(KVMemNode *p, KVMemNode **pp){
   KVMemNode *pUp = p->pUp;
   if( pUp==0 ) return pp;
+  assert( pUp->pAfter==p || pUp->pBefore==p );
   if( pUp->pAfter==p ) return &pUp->pAfter;
   return &pUp->pBefore;
 }
@@ -189,7 +190,7 @@ static int kvmemKeyCompare(
 ){
   int c;
   c = memcmp(aK1, aK2, nK1<nK2 ? nK1 : nK2);
-  if( c==0 ) c = nK2 - nK1;
+  if( c==0 ) c = nK1 - nK2;
   return c;
 }
 
@@ -336,19 +337,49 @@ static KVMemNode *kvmemNewNode(
     if( pChng==0 ){
       sqlite4_free(pNode);
       pNode = 0;
-    }else{
-      pChng->pData = 0;
     }
+    assert( pChng==0 || pChng->pData==0 );
   }
   return pNode;
 }
 
+#ifdef SQLITE_DEBUG
+/*
+** Return the number of times that node pNode occurs in the sub-tree 
+** headed by node pSub. This is used to assert() that no node structure
+** is linked into the tree more than once.
+*/
+static int countNodeOccurences(KVMemNode *pSub, KVMemNode *pNode){
+  int iRet = (pSub==pNode);
+  if( pSub ){
+    iRet += countNodeOccurences(pSub->pBefore, pNode);
+    iRet += countNodeOccurences(pSub->pAfter, pNode);
+  }
+  return iRet;
+}
+
+/*
+** Check that all the pUp pointers in the sub-tree headed by pSub are
+** correct. Fail an assert if this is not the case.
+*/
+static void assertUpPointers(KVMemNode *pSub){
+  if( pSub ){
+    assert( pSub->pBefore==0 || pSub->pBefore->pUp==pSub );
+    assert( pSub->pAfter==0 || pSub->pAfter->pUp==pSub );
+    assertUpPointers(pSub->pBefore);
+    assertUpPointers(pSub->pAfter);
+  }
+}
+
+#else
+#define assertUpPointers(x)
+#endif
+
 /* Remove node pOld from the tree.  pOld must be an element of the tree.
 */
 static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
-  KVMemNode **ppParent;
-  KVMemNode *pBalance;
-
+  KVMemNode **ppParent;           /* Location of pointer to pOld */
+  KVMemNode *pBalance;            /* Node to run kvmemBalance() on */
   kvmemDataUnref(pOld->pData);
   pOld->pData = 0;
   ppParent = kvmemFromPtr(pOld, &p->pRoot);
@@ -356,16 +387,23 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
     *ppParent = 0;
     pBalance = pOld->pUp;
   }else if( pOld->pBefore && pOld->pAfter ){
-    KVMemNode *pX, *pY;
+    KVMemNode *pX;                /* Smallest node that is larger than pOld */
+    KVMemNode *pY;                /* Left-hand child of pOld */
     pX = kvmemFirst(pOld->pAfter);
-    *kvmemFromPtr(pX, 0) = 0;
-    pBalance = pX->pUp;
-    pX->pAfter = pOld->pAfter;
-    if( pX->pAfter ){
-      pX->pAfter->pUp = pX;
-    }else{
-      assert( pBalance==pOld );
+    assert( pX->pBefore==0 );
+    if( pX==pOld->pAfter ){
       pBalance = pX;
+    }else{
+      *kvmemFromPtr(pX, 0) = pX->pAfter;
+      if( pX->pAfter ) pX->pAfter->pUp = pX->pUp;
+      pBalance = pX->pUp;
+      pX->pAfter = pOld->pAfter;
+      if( pX->pAfter ){
+        pX->pAfter->pUp = pX;
+      }else{
+        assert( pBalance==pOld );
+        pBalance = pX;
+      }
     }
     pX->pBefore = pY = pOld->pBefore;
     if( pY ) pY->pUp = pX;
@@ -378,7 +416,9 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
     *ppParent = pBalance = pOld->pBefore;
     pBalance->pUp = pOld->pUp;
   }
+  assertUpPointers(p->pRoot);
   p->pRoot = kvmemBalance(pBalance);
+  assertUpPointers(p->pRoot);
   kvmemNodeUnref(pOld);
 }
 
@@ -440,22 +480,42 @@ static int kvmemCommitPhaseTwo(KVStore *pKVStore, int iLevel){
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( iLevel>=0 );
   assert( iLevel<p->base.iTransLevel );
+  assertUpPointers(p->pRoot);
   while( p->base.iTransLevel>iLevel && p->base.iTransLevel>1 ){
     KVMemChng *pChng, *pNext;
-    for(pChng=p->apLog[p->base.iTransLevel-2]; pChng; pChng=pNext){
-      KVMemNode *pNode = pChng->pNode;
-      if( pNode->pData ){
-        pNode->mxTrans = pChng->oldTrans;
-      }else{
-        kvmemRemoveNode(p, pNode);
+
+    if( iLevel<2 ){
+      for(pChng=p->apLog[p->base.iTransLevel-2]; pChng; pChng=pNext){
+        KVMemNode *pNode = pChng->pNode;
+        if( pNode->pData ){
+          pNode->mxTrans = pChng->oldTrans;
+        }else{
+          kvmemRemoveNode(p, pNode);
+        }
+        kvmemDataUnref(pChng->pData);
+        pNext = pChng->pNext;
+        sqlite4_free(pChng);
       }
-      kvmemDataUnref(pChng->pData);
-      pNext = pChng->pNext;
-      sqlite4_free(pChng);
+    }else{
+      KVMemChng **pp;
+      int iFrom = p->base.iTransLevel-2;
+      int iTo = p->base.iTransLevel-3;
+      assert( iTo>=0 );
+
+      for(pp=&p->apLog[iFrom]; *pp; pp=&((*pp)->pNext)){
+        assert( (*pp)->pNode->mxTrans==p->base.iTransLevel 
+             || (*pp)->pNode->mxTrans==(p->base.iTransLevel-1)
+        );
+        (*pp)->pNode->mxTrans = p->base.iTransLevel - 1;
+      }
+      *pp = p->apLog[iTo];
+      p->apLog[iTo] = p->apLog[iFrom];
     }
+
     p->apLog[p->base.iTransLevel-2] = 0;
     p->base.iTransLevel--;
   }
+  assertUpPointers(p->pRoot);
   p->base.iTransLevel = iLevel;
   return SQLITE_OK;
 }
@@ -474,12 +534,11 @@ static int kvmemRollback(KVStore *pKVStore, int iLevel){
   KVMem *p = (KVMem*)pKVStore;
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
   assert( iLevel>=0 );
-  assert( iLevel<p->base.iTransLevel );
   while( p->base.iTransLevel>iLevel && p->base.iTransLevel>1 ){
     KVMemChng *pChng, *pNext;
     for(pChng=p->apLog[p->base.iTransLevel-2]; pChng; pChng=pNext){
       KVMemNode *pNode = pChng->pNode;
-      if( pChng->pData ){
+      if( pChng->pData || pChng->oldTrans>0 ){
         kvmemDataUnref(pNode->pData);
         pNode->pData = pChng->pData;
         pNode->mxTrans = pChng->oldTrans;
@@ -633,6 +692,48 @@ static int kvmemCloseCursor(KVCursor *pKVCursor){
 }
 
 /*
+** Move a cursor to the next non-deleted node.
+*/
+static int kvmemNextEntry(KVCursor *pKVCursor){
+  KVMemCursor *pCur;
+  KVMemNode *pNode;
+
+  pCur = (KVMemCursor*)pKVCursor;
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
+  pNode = pCur->pNode;
+  kvmemReset(pKVCursor);
+  do{
+    pNode = kvmemNext(pNode);
+  }while( pNode && pNode->pData==0 );
+  if( pNode ){
+    pCur->pNode = kvmemNodeRef(pNode);
+    pCur->pData = kvmemDataRef(pNode->pData);
+  }
+  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
+}
+
+/*
+** Move a cursor to the previous non-deleted node.
+*/
+static int kvmemPrevEntry(KVCursor *pKVCursor){
+  KVMemCursor *pCur;
+  KVMemNode *pNode;
+
+  pCur = (KVMemCursor*)pKVCursor;
+  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
+  pNode = pCur->pNode;
+  kvmemReset(pKVCursor);
+  do{
+    pNode = kvmemPrev(pNode);
+  }while( pNode && pNode->pData==0 );
+  if( pNode ){
+    pCur->pNode = kvmemNodeRef(pNode);
+    pCur->pData = kvmemDataRef(pNode->pData);
+  }
+  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
+}
+
+/*
 ** Seek a cursor.
 */
 static int kvmemSeek(
@@ -677,10 +778,28 @@ static int kvmemSeek(
   if( pBest ){
     pCur->pNode = kvmemNodeRef(pBest);
     pCur->pData = kvmemDataRef(pBest->pData);
+
+    /* The cursor currently points to a deleted node. If parameter 'direction'
+    ** was zero (exact matches only), then the search has failed - return
+    ** SQLITE_NOTFOUND. Otherwise, advance to the next (if direction is +ve)
+    ** or the previous (if direction is -ve) undeleted node in the tree.  */
+    if( pCur->pData==0 ){
+      if( direction==0 ){
+        rc = SQLITE_NOTFOUND;
+      }else{ 
+        if( (direction>0 ? kvmemNextEntry : kvmemPrevEntry)(pCur) ){
+          rc = SQLITE_NOTFOUND;
+        }else{
+          rc = SQLITE_INEXACT;
+        }
+      }
+    }
+
   }else{
     pCur->pNode = 0;
     pCur->pData = 0;
   }
+  assert( rc!=SQLITE_DONE );
   return rc;
 }
 
@@ -709,53 +828,12 @@ static int kvmemDelete(KVCursor *pKVCursor){
   if( pNode->mxTrans<p->base.iTransLevel ){
     pChng = kvmemNewChng(p, pNode);
     if( pChng==0 ) return SQLITE_NOMEM;
+    assert( pNode->pData==0 );
   }else{
     kvmemDataUnref(pNode->pData);
     pNode->pData = 0;
   }
   return SQLITE_OK;
-}
-
-/*
-** Move a cursor to the next non-deleted node.
-*/
-static int kvmemNextEntry(KVCursor *pKVCursor){
-  KVMemCursor *pCur;
-  KVMemNode *pNode;
-
-  pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
-  pNode = pCur->pNode;
-  kvmemReset(pKVCursor);
-  do{
-    pNode = kvmemNext(pNode);
-  }while( pNode && pNode->pData==0 );
-  if( pNode ){
-    pCur->pNode = kvmemNodeRef(pNode);
-    pCur->pData = kvmemDataRef(pNode->pData);
-  }
-  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
-}
-
-/*
-** Move a cursor to the previous non-deleted node.
-*/
-static int kvmemPrevEntry(KVCursor *pKVCursor){
-  KVMemCursor *pCur;
-  KVMemNode *pNode;
-
-  pCur = (KVMemCursor*)pKVCursor;
-  assert( pCur->iMagicKVMemCur==SQLITE_KVMEMCUR_MAGIC );
-  pNode = pCur->pNode;
-  kvmemReset(pKVCursor);
-  do{
-    pNode = kvmemPrev(pNode);
-  }while( pNode && pNode->pData==0 );
-  if( pNode ){
-    pCur->pNode = kvmemNodeRef(pNode);
-    pCur->pData = kvmemDataRef(pNode->pData);
-  }
-  return pNode ? SQLITE_OK : SQLITE_NOTFOUND;
 }
 
 /*
@@ -850,7 +928,11 @@ static const KVStoreMethods kvmemMethods = {
 /*
 ** Create a new in-memory storage engine and return a pointer to it.
 */
-int sqlite4KVStoreOpenMem(KVStore **ppKVStore, unsigned openFlags){
+int sqlite4KVStoreOpenMem(
+  KVStore **ppKVStore, 
+  const char *zName,
+  unsigned openFlags
+){
   KVMem *pNew = sqlite4_malloc( sizeof(*pNew) );
   if( pNew==0 ) return SQLITE_NOMEM;
   memset(pNew, 0, sizeof(*pNew));
@@ -860,3 +942,4 @@ int sqlite4KVStoreOpenMem(KVStore **ppKVStore, unsigned openFlags){
   *ppKVStore = (KVStore*)pNew;
   return SQLITE_OK;
 }
+

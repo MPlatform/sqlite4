@@ -142,11 +142,10 @@
 ** A foreign key constraint requires that the key columns in the parent
 ** table are collectively subject to a UNIQUE or PRIMARY KEY constraint.
 ** Given that pParent is the parent table for foreign key constraint pFKey, 
-** search the schema a unique index on the parent key columns. 
+** search the schema for a unique index on the parent key columns. 
 **
-** If successful, zero is returned. If the parent key is an INTEGER PRIMARY 
-** KEY column, then output variable *ppIdx is set to NULL. Otherwise, *ppIdx 
-** is set to point to the unique index. 
+** If successful, zero is returned and *ppIdx is set to point to the 
+** unique index.
 ** 
 ** If the parent key consists of a single column (the foreign key constraint
 ** is not a composite foreign key), output variable *paiCol is set to NULL.
@@ -185,37 +184,22 @@ static int locateFkeyIndex(
   Index **ppIdx,                  /* OUT: Unique index on parent table */
   int **paiCol                    /* OUT: Map of index columns in pFKey */
 ){
-  Index *pIdx = 0;                    /* Value to return via *ppIdx */
-  int *aiCol = 0;                     /* Value to return via *paiCol */
-  int nCol = pFKey->nCol;             /* Number of columns in parent key */
-  char *zKey = pFKey->aCol[0].zCol;   /* Name of left-most parent key column */
+  Index *pIdx = 0;                /* Value to return via *ppIdx */
+  int *aiCol = 0;                 /* Value to return via *paiCol */
+  int nCol = pFKey->nCol;         /* Number of columns in parent key */
+  int bImplicit;                  /* True if no explicit parent columns */
 
   /* The caller is responsible for zeroing output parameters. */
   assert( ppIdx && *ppIdx==0 );
   assert( !paiCol || *paiCol==0 );
   assert( pParse );
 
-  /* If this is a non-composite (single column) foreign key, check if it 
-  ** maps to the INTEGER PRIMARY KEY of table pParent. If so, leave *ppIdx 
-  ** and *paiCol set to zero and return early. 
-  **
-  ** Otherwise, for a composite foreign key (more than one column), allocate
+  bImplicit = (pFKey->aCol[0].zCol==0);
+
+  /* If this is a composite foreign key (more than one column), allocate
   ** space for the aiCol array (returned via output parameter *paiCol).
-  ** Non-composite foreign keys do not require the aiCol array.
-  */
-  if( nCol==1 ){
-    /* The FK maps to the IPK if any of the following are true:
-    **
-    **   1) There is an INTEGER PRIMARY KEY column and the FK is implicitly 
-    **      mapped to the primary key of table pParent, or
-    **   2) The FK is explicitly mapped to a column declared as INTEGER
-    **      PRIMARY KEY.
-    */
-    if( pParent->iPKey>=0 ){
-      if( !zKey ) return 0;
-      if( !sqlite4StrICmp(pParent->aCol[pParent->iPKey].zName, zKey) ) return 0;
-    }
-  }else if( paiCol ){
+  ** Non-composite foreign keys do not require the aiCol array.  */
+  if( paiCol && nCol>1 ){
     assert( nCol>1 );
     aiCol = (int *)sqlite4DbMallocRaw(pParse->db, nCol*sizeof(int));
     if( !aiCol ) return 1;
@@ -228,11 +212,8 @@ static int locateFkeyIndex(
       ** of columns. If each indexed column corresponds to a foreign key
       ** column of pFKey, then this index is a winner.  */
 
-      if( zKey==0 ){
-        /* If zKey is NULL, then this foreign key is implicitly mapped to 
-        ** the PRIMARY KEY of table pParent. The PRIMARY KEY index may be 
-        ** identified by the test (Index.autoIndex==2).  */
-        if( pIdx->autoIndex==2 ){
+      if( bImplicit ){
+        if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
           if( aiCol ){
             int i;
             for(i=0; i<nCol; i++) aiCol[i] = pFKey->aCol[i].iFrom;
@@ -240,10 +221,10 @@ static int locateFkeyIndex(
           break;
         }
       }else{
-        /* If zKey is non-NULL, then this foreign key was declared to
-        ** map to an explicit list of columns in table pParent. Check if this
-        ** index matches those columns. Also, check that the index uses
-        ** the default collation sequences for each column. */
+        /* If this foreign key was declared to map to an explicit list of 
+        ** columns in table pParent. Check if this index matches those 
+        ** columns. Also, check that the index uses the default collation 
+        ** sequences for each column. */
         int i, j;
         for(i=0; i<nCol; i++){
           int iCol = pIdx->aiColumn[i];     /* Index of column in parent tbl */
@@ -318,7 +299,7 @@ static void fkLookupParent(
   Index *pIdx,          /* Unique index on parent key columns in pTab */
   FKey *pFKey,          /* Foreign key constraint */
   int *aiCol,           /* Map from parent key columns to child table columns */
-  int regData,          /* Address of array containing child table row */
+  int regContent,       /* Address of array containing child table row */
   int nIncr,            /* Increment constraint counter by this */
   int isIgnore          /* If true, pretend pTab contains all NULL values */
 ){
@@ -327,95 +308,71 @@ static void fkLookupParent(
   int iCur = pParse->nTab - 1;              /* Cursor number to use */
   int iOk = sqlite4VdbeMakeLabel(v);        /* jump here if parent key found */
 
-  /* If nIncr is less than zero, then check at runtime if there are any
-  ** outstanding constraints to resolve. If there are not, there is no need
-  ** to check if deleting this row resolves any outstanding violations.
-  **
-  ** Check if any of the key columns in the child table row are NULL. If 
-  ** any are, then the constraint is considered satisfied. No need to 
-  ** search for a matching row in the parent table.  */
+  assert( pIdx );
+
+  /* If nIncr is less than zero (this is a DELETE), then check at runtime if
+  ** there are any outstanding constraints to resolve. If there are not, 
+  ** there is no need to check if deleting this row resolves any outstanding 
+  ** violations.  */
   if( nIncr<0 ){
     sqlite4VdbeAddOp2(v, OP_FkIfZero, pFKey->isDeferred, iOk);
   }
+
+  /* Check if any of the key columns in the child table row are NULL. If 
+  ** any are, then the constraint is considered satisfied. No need to 
+  ** search for a matching row in the parent table.  */
   for(i=0; i<pFKey->nCol; i++){
-    int iReg = aiCol[i] + regData + 1;
+    int iReg = aiCol[i] + regContent;
     sqlite4VdbeAddOp2(v, OP_IsNull, iReg, iOk);
   }
 
   if( isIgnore==0 ){
-    if( pIdx==0 ){
-      /* If pIdx is NULL, then the parent key is the INTEGER PRIMARY KEY
-      ** column of the parent table (table pTab).  */
-      int iMustBeInt;               /* Address of MustBeInt instruction */
-      int regTemp = sqlite4GetTempReg(pParse);
-  
-      /* Invoke MustBeInt to coerce the child key value to an integer (i.e. 
-      ** apply the affinity of the parent key). If this fails, then there
-      ** is no matching parent key. Before using MustBeInt, make a copy of
-      ** the value. Otherwise, the value inserted into the child key column
-      ** will have INTEGER affinity applied to it, which may not be correct.  */
-      sqlite4VdbeAddOp2(v, OP_SCopy, aiCol[0]+1+regData, regTemp);
-      iMustBeInt = sqlite4VdbeAddOp2(v, OP_MustBeInt, regTemp, 0);
-  
-      /* If the parent table is the same as the child table, and we are about
-      ** to increment the constraint-counter (i.e. this is an INSERT operation),
-      ** then check if the row being inserted matches itself. If so, do not
-      ** increment the constraint-counter.  */
-      if( pTab==pFKey->pFrom && nIncr==1 ){
-        sqlite4VdbeAddOp3(v, OP_Eq, regData, iOk, regTemp);
-      }
-  
-      sqlite4OpenTable(pParse, iCur, iDb, pTab, OP_OpenRead);
-      sqlite4VdbeAddOp3(v, OP_NotExists, iCur, 0, regTemp);
-      sqlite4VdbeAddOp2(v, OP_Goto, 0, iOk);
-      sqlite4VdbeJumpHere(v, sqlite4VdbeCurrentAddr(v)-2);
-      sqlite4VdbeJumpHere(v, iMustBeInt);
-      sqlite4ReleaseTempReg(pParse, regTemp);
-    }else{
-      int nCol = pFKey->nCol;
-      int regTemp = sqlite4GetTempRange(pParse, nCol);
-      int regRec = sqlite4GetTempReg(pParse);
-      KeyInfo *pKey = sqlite4IndexKeyinfo(pParse, pIdx);
-  
-      sqlite4VdbeAddOp3(v, OP_OpenRead, iCur, pIdx->tnum, iDb);
-      sqlite4VdbeChangeP4(v, -1, (char*)pKey, P4_KEYINFO_HANDOFF);
-      for(i=0; i<nCol; i++){
-        sqlite4VdbeAddOp2(v, OP_Copy, aiCol[i]+1+regData, regTemp+i);
-      }
-  
-      /* If the parent table is the same as the child table, and we are about
-      ** to increment the constraint-counter (i.e. this is an INSERT operation),
-      ** then check if the row being inserted matches itself. If so, do not
-      ** increment the constraint-counter. 
-      **
-      ** If any of the parent-key values are NULL, then the row cannot match 
-      ** itself. So set JUMPIFNULL to make sure we do the OP_Found if any
-      ** of the parent-key values are NULL (at this point it is known that
-      ** none of the child key values are).
-      */
-      if( pTab==pFKey->pFrom && nIncr==1 ){
-        int iJump = sqlite4VdbeCurrentAddr(v) + nCol + 1;
-        for(i=0; i<nCol; i++){
-          int iChild = aiCol[i]+1+regData;
-          int iParent = pIdx->aiColumn[i]+1+regData;
-          assert( aiCol[i]!=pTab->iPKey );
-          if( pIdx->aiColumn[i]==pTab->iPKey ){
-            /* The parent key is a composite key that includes the IPK column */
-            iParent = regData;
-          }
-          sqlite4VdbeAddOp3(v, OP_Ne, iChild, iJump, iParent);
-          sqlite4VdbeChangeP5(v, SQLITE_JUMPIFNULL);
-        }
-        sqlite4VdbeAddOp2(v, OP_Goto, 0, iOk);
-      }
-  
-      sqlite4VdbeAddOp3(v, OP_MakeRecord, regTemp, nCol, regRec);
-      sqlite4VdbeChangeP4(v, -1, sqlite4IndexAffinityStr(v,pIdx), P4_TRANSIENT);
-      sqlite4VdbeAddOp4Int(v, OP_Found, iCur, iOk, regRec, 0);
-  
-      sqlite4ReleaseTempReg(pParse, regRec);
-      sqlite4ReleaseTempRange(pParse, regTemp, nCol);
+    int nCol = pFKey->nCol;
+    int regTemp = sqlite4GetTempRange(pParse, nCol);
+    int regRec = sqlite4GetTempReg(pParse);
+
+    sqlite4OpenIndex(pParse, iCur, iDb, pIdx, OP_OpenRead);
+
+    /* Assemble the child key values in a contiguous array of registers.
+    ** Then apply the affinity transformation for the parent index.  */
+    for(i=0; i<nCol; i++){
+      sqlite4VdbeAddOp2(v, OP_Copy, aiCol[i]+regContent, regTemp+i);
     }
+    sqlite4VdbeAddOp2(v, OP_Affinity, regTemp, nCol);
+    sqlite4VdbeChangeP4(v, -1, sqlite4IndexAffinityStr(v, pIdx), P4_TRANSIENT);
+
+    /* If the parent table is the same as the child table, and we are about
+    ** to increment the constraint-counter (i.e. this is an INSERT operation),
+    ** then check if the row being inserted matches itself. If so, do not
+    ** increment the constraint-counter. 
+    **
+    ** If any of the parent-key values are NULL, then the row cannot match 
+    ** itself. So set JUMPIFNULL to make sure we do the OP_Found if any
+    ** of the parent-key values are NULL (at this point it is known that
+    ** none of the child key values are).  */
+    if( pTab==pFKey->pFrom && nIncr==1 ){
+      int iJump = sqlite4VdbeCurrentAddr(v) + nCol + 1;
+      for(i=0; i<nCol; i++){
+        int iChild = regTemp+i;
+        int iParent = pIdx->aiColumn[i]+regContent;
+        sqlite4VdbeAddOp3(v, OP_Ne, iChild, iJump, iParent);
+        sqlite4VdbeChangeP5(v, SQLITE_JUMPIFNULL);
+        assert( iChild<=pParse->nMem && iParent<=pParse->nMem );
+      }
+      sqlite4VdbeAddOp2(v, OP_Goto, 0, iOk);
+    }
+
+    sqlite4VdbeAddOp4Int(v, OP_MakeIdxKey, iCur, regTemp, regRec, nCol);
+    sqlite4VdbeAddOp4Int(v, OP_Found, iCur, iOk, regRec, 0);
+
+#if 0
+    sqlite4VdbeAddOp3(v, OP_MakeRecord, regTemp, nCol, regRec);
+    sqlite4VdbeChangeP4(v, -1, sqlite4IndexAffinityStr(v,pIdx), P4_TRANSIENT);
+    sqlite4VdbeAddOp4Int(v, OP_Found, iCur, iOk, regRec, 0);
+#endif
+
+    sqlite4ReleaseTempReg(pParse, regRec);
+    sqlite4ReleaseTempRange(pParse, regTemp, nCol);
   }
 
   if( !pFKey->isDeferred && !pParse->pToplevel && !pParse->isMultiWrite ){
@@ -439,11 +396,11 @@ static void fkLookupParent(
 }
 
 /*
-** This function is called to generate code executed when a row is deleted
-** from the parent table of foreign key constraint pFKey and, if pFKey is 
-** deferred, when a row is inserted into the same table. When generating
-** code for an SQL UPDATE operation, this function may be called twice -
-** once to "delete" the old row and once to "insert" the new row.
+** This function is called to generate code executed when a row is inserted
+** into or deleted from the parent table of foreign key constraint pFKey.
+** When generating code for an SQL UPDATE operation, this function may be 
+** called twice - once to "delete" the old row and once to "insert" the 
+** new row.
 **
 ** The code generated by this function scans through the rows in the child
 ** table that correspond to the parent table row being deleted or inserted.
@@ -484,7 +441,7 @@ static void fkScanChildren(
   int iFkIfZero = 0;              /* Address of OP_FkIfZero */
   Vdbe *v = sqlite4GetVdbe(pParse);
 
-  assert( !pIdx || pIdx->pTable==pTab );
+  assert( pIdx && pIdx->pTable==pTab );
 
   if( nIncr<0 ){
     iFkIfZero = sqlite4VdbeAddOp2(v, OP_FkIfZero, pFKey->isDeferred, 0);
@@ -509,18 +466,12 @@ static void fkScanChildren(
     if( pLeft ){
       /* Set the collation sequence and affinity of the LHS of each TK_EQ
       ** expression to the parent key column defaults.  */
-      if( pIdx ){
-        Column *pCol;
-        iCol = pIdx->aiColumn[i];
-        pCol = &pTab->aCol[iCol];
-        if( pTab->iPKey==iCol ) iCol = -1;
-        pLeft->iTable = regData+iCol+1;
-        pLeft->affinity = pCol->affinity;
-        pLeft->pColl = sqlite4LocateCollSeq(pParse, pCol->zColl);
-      }else{
-        pLeft->iTable = regData;
-        pLeft->affinity = SQLITE_AFF_INTEGER;
-      }
+      Column *pCol;
+      iCol = pIdx->aiColumn[i];
+      pCol = &pTab->aCol[iCol];
+      pLeft->iTable = regData+iCol;
+      pLeft->affinity = pCol->affinity;
+      pLeft->pColl = sqlite4LocateCollSeq(pParse, pCol->zColl);
     }
     iCol = aiCol ? aiCol[i] : pFKey->aCol[0].iFrom;
     assert( iCol>=0 );
@@ -557,9 +508,8 @@ static void fkScanChildren(
   sqlite4ResolveExprNames(&sNameContext, pWhere);
 
   /* Create VDBE to loop through the entries in pSrc that match the WHERE
-  ** clause. If the constraint is not deferred, throw an exception for
-  ** each row found. Otherwise, for deferred constraints, increment the
-  ** deferred constraint counter by nIncr for each row selected.  */
+  ** clause. For each row found, increment the relevant constraint counter
+  ** by nIncr.  */
   pWInfo = sqlite4WhereBegin(pParse, pSrc, pWhere, 0, 0, 0);
   if( nIncr>0 && pFKey->isDeferred==0 ){
     sqlite4ParseToplevel(pParse)->mayAbort = 1;
@@ -762,22 +712,19 @@ void sqlite4FkCheck(
       iCol = pFKey->aCol[0].iFrom;
       aiCol = &iCol;
     }
-    for(i=0; i<pFKey->nCol; i++){
-      if( aiCol[i]==pTab->iPKey ){
-        aiCol[i] = -1;
-      }
 #ifndef SQLITE_OMIT_AUTHORIZATION
+    for(i=0; i<pFKey->nCol; i++){
       /* Request permission to read the parent key columns. If the 
       ** authorization callback returns SQLITE_IGNORE, behave as if any
       ** values read from the parent table are NULL. */
       if( db->xAuth ){
         int rcauth;
-        char *zCol = pTo->aCol[pIdx ? pIdx->aiColumn[i] : pTo->iPKey].zName;
+        char *zCol = pTo->aCol[pIdx->aiColumn[i]].zName;
         rcauth = sqlite4AuthReadCol(pParse, pTo->zName, zCol, iDb);
         isIgnore = (rcauth==SQLITE_IGNORE);
       }
-#endif
     }
+#endif
 
     /* Take a shared-cache advisory read-lock on the parent table. Allocate 
     ** a cursor to use to search the unique index on the parent key columns 
@@ -853,7 +800,7 @@ void sqlite4FkCheck(
 
 /*
 ** This function is called before generating code to update or delete a 
-** row contained in table pTab.
+** row contained in table pTab. 
 */
 u32 sqlite4FkOldmask(
   Parse *pParse,                  /* Parse context */
@@ -894,8 +841,7 @@ u32 sqlite4FkOldmask(
 int sqlite4FkRequired(
   Parse *pParse,                  /* Parse context */
   Table *pTab,                    /* Table being modified */
-  int *aChange,                   /* Non-NULL for UPDATE operations */
-  int chngRowid                   /* True for UPDATE that affects rowid */
+  int *aChange                    /* Non-NULL for UPDATE operations */
 ){
   if( pParse->db->flags&SQLITE_ForeignKeys ){
     if( !aChange ){
@@ -914,7 +860,6 @@ int sqlite4FkRequired(
         for(i=0; i<p->nCol; i++){
           int iChildKey = p->aCol[i].iFrom;
           if( aChange[iChildKey]>=0 ) return 1;
-          if( iChildKey==pTab->iPKey && chngRowid ) return 1;
         }
       }
 
@@ -927,7 +872,6 @@ int sqlite4FkRequired(
             Column *pCol = &pTab->aCol[iKey];
             if( (zKey ? !sqlite4StrICmp(pCol->zName, zKey) : pCol->isPrimKey) ){
               if( aChange[iKey]>=0 ) return 1;
-              if( iKey==pTab->iPKey && chngRowid ) return 1;
             }
           }
         }

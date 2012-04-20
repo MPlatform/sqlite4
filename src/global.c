@@ -170,6 +170,13 @@ SQLITE_WSD struct Sqlite3Config sqlite4Config = {
    0,                         /* xLog */
    0,                         /* pLogArg */
    0,                         /* bLocaltimeFault */
+
+#ifdef SQLITE_ENABLE_LSM
+   sqlite4KVStoreOpenLsm,     /* xKVFile */
+#else
+   sqlite4KVStoreOpenMem,     /* xKVFile */
+#endif
+   sqlite4KVStoreOpenMem,     /* xKVTmp */
 };
 
 

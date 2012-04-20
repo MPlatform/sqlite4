@@ -53,8 +53,10 @@ do_test where-1.0 {
 # Do an SQL statement.  Append the search count to the end of the result.
 #
 proc count sql {
-  set ::sqlite_search_count 0
-  return [concat [execsql $sql] $::sqlite_search_count]
+  kvwrap reset
+  set res [execsql $sql]
+  #puts "sql={$sql} seek=[kvwrap seek] step=[kvwrap step]"
+  return [concat $res [expr [kvwrap step] + [kvwrap seek]]]
 }
 
 # Verify that queries use an index.  We are using the special variable
@@ -134,7 +136,7 @@ do_test where-1.8.2 {
 do_test where-1.8.3 {
   count {SELECT x, y FROM t1 WHERE y=144 AND x=3}
   set sqlite_query_plan
-} {{} i1xy}
+} {t1 i1xy}
 do_test where-1.9 {
   count {SELECT x, y FROM t1 WHERE y=144 AND w>10 AND x=3}
 } {3 144 3}
@@ -199,65 +201,65 @@ do_test where-1.25 {
 
 do_test where-1.27 {
   count {SELECT w FROM t1 WHERE x=3 AND y+1==122}
-} {10 10}
+} {10 17}
 
 do_test where-1.28 {
   count {SELECT w FROM t1 WHERE x+1=4 AND y+1==122}
-} {10 99}
+} {10 101}
 do_test where-1.29 {
   count {SELECT w FROM t1 WHERE y==121}
-} {10 99}
+} {10 101}
 
 
 do_test where-1.30 {
   count {SELECT w FROM t1 WHERE w>97}
-} {98 99 100 3}
+} {98 99 100 7}
 do_test where-1.31 {
   count {SELECT w FROM t1 WHERE w>=97}
-} {97 98 99 100 4}
+} {97 98 99 100 9}
 do_test where-1.33 {
   count {SELECT w FROM t1 WHERE w==97}
-} {97 2}
+} {97 3}
 do_test where-1.33.1  {
   count {SELECT w FROM t1 WHERE w<=97 AND w==97}
-} {97 2}
+} {97 3}
 do_test where-1.33.2  {
   count {SELECT w FROM t1 WHERE w<98 AND w==97}
-} {97 2}
+} {97 3}
 do_test where-1.33.3  {
   count {SELECT w FROM t1 WHERE w>=97 AND w==97}
-} {97 2}
+} {97 3}
 do_test where-1.33.4  {
   count {SELECT w FROM t1 WHERE w>96 AND w==97}
-} {97 2}
+} {97 3}
 do_test where-1.33.5  {
   count {SELECT w FROM t1 WHERE w==97 AND w==97}
-} {97 2}
+} {97 3}
 do_test where-1.34 {
   count {SELECT w FROM t1 WHERE w+1==98}
-} {97 99}
+} {97 101}
 do_test where-1.35 {
   count {SELECT w FROM t1 WHERE w<3}
-} {1 2 2}
+} {1 2 5}
 do_test where-1.36 {
   count {SELECT w FROM t1 WHERE w<=3}
-} {1 2 3 3}
+} {1 2 3 7}
 do_test where-1.37 {
   count {SELECT w FROM t1 WHERE w+1<=4 ORDER BY w}
-} {1 2 3 99}
+} {1 2 3 201}
 
 do_test where-1.38 {
   count {SELECT (w) FROM t1 WHERE (w)>(97)}
-} {98 99 100 3}
+} {98 99 100 7}
 do_test where-1.39 {
   count {SELECT (w) FROM t1 WHERE (w)>=(97)}
-} {97 98 99 100 4}
+} {97 98 99 100 9}
 do_test where-1.40 {
   count {SELECT (w) FROM t1 WHERE (w)==(97)}
-} {97 2}
+} {97 3}
 do_test where-1.41 {
   count {SELECT (w) FROM t1 WHERE ((w)+(1))==(98)}
-} {97 99}
+} {97 101}
 
 
 # Do the same kind of thing except use a join as the data source.
@@ -312,19 +314,19 @@ do_test where-3.1 {
     SELECT A.w, B.p, C.w FROM t1 as A, t2 as B, t1 as C
     WHERE C.w=101-B.p AND B.r=10202-A.y AND A.w=11
   }
-} {11 90 11 8}
+} {11 90 11 9}
 do_test where-3.2 {
   count {
     SELECT A.w, B.p, C.w FROM t1 as A, t2 as B, t1 as C
     WHERE C.w=101-B.p AND B.r=10202-A.y AND A.w=12
   }
-} {12 89 12 8}
+} {12 89 12 9}
 do_test where-3.3 {
   count {
     SELECT A.w, B.p, C.w FROM t1 as A, t2 as B, t1 as C
     WHERE A.w=15 AND B.p=C.w AND B.r=10202-A.y
   }
-} {15 86 86 8}
+} {15 86 86 9}
 
 # Test to see that the special case of a constant WHERE clause is
 # handled.
@@ -338,7 +340,7 @@ do_test where-4.2 {
   count {
     SELECT * FROM t1 WHERE 1 LIMIT 1
   }
-} {1 0 4 0}
+} {1 0 4 1}
 do_test where-4.3 {
   execsql {
     SELECT 99 WHERE 0
@@ -373,85 +375,85 @@ ifcapable subquery {
     count {
       SELECT * FROM t1 WHERE rowid IN (1,2,3,1234) order by 1;
     }
-  } {1 0 4 2 1 9 3 1 16 4}
+  } {1 0 4 2 1 9 3 1 16 7}
   do_test where-5.2 {
     count {
       SELECT * FROM t1 WHERE rowid+0 IN (1,2,3,1234) order by 1;
     }
-  } {1 0 4 2 1 9 3 1 16 102}
+  } {1 0 4 2 1 9 3 1 16 201}
   do_test where-5.3 {
     count {
       SELECT * FROM t1 WHERE w IN (-1,1,2,3) order by 1;
     }
-  } {1 0 4 2 1 9 3 1 16 14}
+  } {1 0 4 2 1 9 3 1 16 10}
   do_test where-5.4 {
     count {
       SELECT * FROM t1 WHERE w+0 IN (-1,1,2,3) order by 1;
     }
-  } {1 0 4 2 1 9 3 1 16 102}
+  } {1 0 4 2 1 9 3 1 16 201}
   do_test where-5.5 {
     count {
       SELECT * FROM t1 WHERE rowid IN 
          (select rowid from t1 where rowid IN (-1,2,4))
       ORDER BY 1;
     }
-  } {2 1 9 4 2 25 3}
+  } {2 1 9 4 2 25 9}
   do_test where-5.6 {
     count {
       SELECT * FROM t1 WHERE rowid+0 IN 
          (select rowid from t1 where rowid IN (-1,2,4))
       ORDER BY 1;
     }
-  } {2 1 9 4 2 25 103}
+  } {2 1 9 4 2 25 206}
   do_test where-5.7 {
     count {
       SELECT * FROM t1 WHERE w IN 
          (select rowid from t1 where rowid IN (-1,2,4))
       ORDER BY 1;
     }
-  } {2 1 9 4 2 25 9}
+  } {2 1 9 4 2 25 11}
   do_test where-5.8 {
     count {
       SELECT * FROM t1 WHERE w+0 IN 
          (select rowid from t1 where rowid IN (-1,2,4))
       ORDER BY 1;
     }
-  } {2 1 9 4 2 25 103}
+  } {2 1 9 4 2 25 206}
   do_test where-5.9 {
     count {
       SELECT * FROM t1 WHERE x IN (1,7) ORDER BY 1;
     }
-  } {2 1 9 3 1 16 7}
+  } {2 1 9 3 1 16 6}
   do_test where-5.10 {
     count {
       SELECT * FROM t1 WHERE x+0 IN (1,7) ORDER BY 1;
     }
-  } {2 1 9 3 1 16 199}
+  } {2 1 9 3 1 16 201}
   do_test where-5.11 {
     count {
       SELECT * FROM t1 WHERE y IN (6400,8100) ORDER BY 1;
     }
-  } {79 6 6400 89 6 8100 199}
+  } {79 6 6400 89 6 8100 201}
   do_test where-5.12 {
     count {
       SELECT * FROM t1 WHERE x=6 AND y IN (6400,8100) ORDER BY 1;
     }
-  } {79 6 6400 89 6 8100 7}
+  } {79 6 6400 89 6 8100 6}
   do_test where-5.13 {
     count {
       SELECT * FROM t1 WHERE x IN (1,7) AND y NOT IN (6400,8100) ORDER BY 1;
     }
-  } {2 1 9 3 1 16 7}
+  } {2 1 9 3 1 16 6}
   do_test where-5.14 {
     count {
       SELECT * FROM t1 WHERE x IN (1,7) AND y IN (9,10) ORDER BY 1;
     }
-  } {2 1 9 8}
+  } {2 1 9 6}
   do_test where-5.15 {
     count {
       SELECT * FROM t1 WHERE x IN (1,7) AND y IN (9,16) ORDER BY 1;
     }
-  } {2 1 9 3 1 16 11}
+  } {2 1 9 3 1 16 8}
 }
 
 # This procedure executes the SQL.  Then it checks to see if the OP_Sort
@@ -495,6 +497,7 @@ do_test where-6.4 {
     SELECT * FROM t3 WHERE a<10 ORDER BY a LIMIT 3
   }
 } {1 100 4 2 99 9 3 98 16 nosort}
+
 do_test where-6.5 {
   cksort {
     SELECT * FROM t3 WHERE a>0 AND a<10 ORDER BY a LIMIT 3
@@ -505,11 +508,15 @@ do_test where-6.6 {
     SELECT * FROM t3 WHERE a>0 ORDER BY a LIMIT 3
   }
 } {1 100 4 2 99 9 3 98 16 nosort}
+
 do_test where-6.7 {
+  # UPDATE: src4 does a sort here. It picks a different index because it
+  # does not support the covering index optimization.
   cksort {
     SELECT * FROM t3 WHERE b>0 ORDER BY a LIMIT 3
   }
-} {1 100 4 2 99 9 3 98 16 nosort}
+} {1 100 4 2 99 9 3 98 16 sort}
+
 ifcapable subquery {
   do_test where-6.8 {
     cksort {
@@ -558,10 +565,11 @@ do_test where-6.9.6 {
   }
 } {1 100 4 nosort}
 do_test where-6.9.7 {
+  # UPDATE: src4 uses t3acb here. So does not require an external sort.
   cksort {
     SELECT * FROM t3 WHERE a=1 AND c>0 ORDER BY c,a LIMIT 3
   }
-} {1 100 4 sort}
+} {1 100 4 nosort}
 do_test where-6.9.8 {
   cksort {
     SELECT * FROM t3 WHERE a=1 AND c>0 ORDER BY a DESC, c ASC LIMIT 3
@@ -622,11 +630,13 @@ do_test where-6.20 {
     SELECT y FROM t1 ORDER BY rowid LIMIT 3;
   }
 } {4 9 16 nosort}
+
 do_test where-6.21 {
   cksort {
     SELECT y FROM t1 ORDER BY rowid, y LIMIT 3;
   }
 } {4 9 16 nosort}
+
 do_test where-6.22 {
   cksort {
     SELECT y FROM t1 ORDER BY rowid, y DESC LIMIT 3;
@@ -1108,12 +1118,12 @@ do_test where-14.5 {
   cksort {
     SELECT x.a || '/' || y.a FROM t8 x, t8 y ORDER BY x.b, x.a||x.b
   } 
-} {4/1 4/4 1/1 1/4 nosort}
+} {4/1 4/4 1/1 1/4 sort}
 do_test where-14.6 {
   cksort {
     SELECT x.a || '/' || y.a FROM t8 x, t8 y ORDER BY x.b, x.a||x.b DESC
   } 
-} {4/1 4/4 1/1 1/4 nosort}
+} {4/1 4/4 1/1 1/4 sort}
 do_test where-14.7 {
   cksort {
     SELECT x.a || '/' || y.a FROM t8 x, t8 y ORDER BY x.b, y.a||y.b
@@ -1124,11 +1134,13 @@ do_test where-14.7.1 {
     SELECT x.a || '/' || y.a FROM t8 x, t8 y ORDER BY x.b, x.a, y.a||y.b
   } 
 } {4/1 4/4 1/1 1/4 sort}
+
 do_test where-14.7.2 {
   cksort {
     SELECT x.a || '/' || y.a FROM t8 x, t8 y ORDER BY x.b, x.a, x.a||x.b
   } 
 } {4/1 4/4 1/1 1/4 nosort}
+
 do_test where-14.8 {
   cksort {
     SELECT x.a || '/' || y.a FROM t8 x, t8 y ORDER BY x.b, y.a||y.b DESC

@@ -414,32 +414,43 @@ static int sqliteProcessJoin(Parse *pParse, Select *p){
 ** stack into the sorter.
 */
 static void pushOntoSorter(
-  Parse *pParse,         /* Parser context */
-  ExprList *pOrderBy,    /* The ORDER BY clause */
-  Select *pSelect,       /* The whole SELECT statement */
-  int regData            /* Register holding data to be sorted */
+  Parse *pParse,                  /* Parser context */
+  ExprList *pOrderBy,             /* The ORDER BY clause */
+  Select *pSelect,                /* The whole SELECT statement */
+  int regData                     /* Register holding data to be sorted */
 ){
   Vdbe *v = pParse->pVdbe;
   int nExpr = pOrderBy->nExpr;
-  int regBase = sqlite4GetTempRange(pParse, nExpr+2);
-  int regRecord = sqlite4GetTempReg(pParse);
+  int regBase = sqlite4GetTempRange(pParse, nExpr+1);
   int regKey = sqlite4GetTempReg(pParse);
   int op;
+
+  /* Assemble the sort-key values in a contiguous array of registers
+  ** starting at regBase. The sort-key consists of the result of each 
+  ** expression in the ORDER BY clause followed by a unique sequence 
+  ** number. The sequence number allows more than one row with the same
+  ** sort-key.  */
   sqlite4ExprCacheClear(pParse);
   sqlite4ExprCodeExprList(pParse, pOrderBy, regBase, 0);
   sqlite4VdbeAddOp2(v, OP_Sequence, pOrderBy->iECursor, regBase+nExpr);
-  sqlite4ExprCodeMove(pParse, regData, regBase+nExpr+1, 1);
-  sqlite4VdbeAddOp2(v, OP_MakeKey, pOrderBy->iECursor, regKey);
-  sqlite4VdbeAddOp3(v, OP_MakeRecord, regBase, nExpr + 2, regRecord);
+
+  /* Encode the sort-key. */
+  sqlite4VdbeAddOp3(v, OP_MakeIdxKey, pOrderBy->iECursor, regBase, regKey);
+
+  /* Insert an entry into the sorter. The key inserted is the encoded key
+  ** created by the OP_MakeIdxKey coded above. The value is the record
+  ** currently stored in register regData.  */
   if( pSelect->selFlags & SF_UseSorter ){
     op = OP_SorterInsert;
   }else{
     op = OP_IdxInsert;
   }
-  sqlite4VdbeAddOp3(v, op, pOrderBy->iECursor, regRecord, regKey);
-  sqlite4ReleaseTempReg(pParse, regRecord);
+  sqlite4VdbeAddOp3(v, op, pOrderBy->iECursor, regData, regKey);
+
+  /* Release the temporary registers */
   sqlite4ReleaseTempReg(pParse, regKey);
-  sqlite4ReleaseTempRange(pParse, regBase, nExpr+2);
+  sqlite4ReleaseTempRange(pParse, regBase, nExpr+1);
+
   if( pSelect->iLimit ){
     int addr1, addr2;
     int iLimit;
@@ -766,28 +777,36 @@ static void selectInnerLoop(
 ** freed.  Add the KeyInfo structure to the P4 field of an opcode using
 ** P4_KEYINFO_HANDOFF is the usual way of dealing with this.
 */
-static KeyInfo *keyInfoFromExprList(Parse *pParse, ExprList *pList){
-  sqlite4 *db = pParse->db;
-  int nExpr;
-  KeyInfo *pInfo;
-  struct ExprList_item *pItem;
-  int i;
+static KeyInfo *keyInfoFromExprList(
+  Parse *pParse, 
+  ExprList *pList,
+  int bOrderBy
+){
+  sqlite4 *db = pParse->db;       /* Database handle */
+  int nField;                     /* Number of fields in keys */
+  KeyInfo *pInfo;                 /* Object to return */
+  int nByte;                      /* Bytes of space to allocate */
 
-  nExpr = pList->nExpr;
-  pInfo = sqlite4DbMallocZero(db, sizeof(*pInfo) + nExpr*(sizeof(CollSeq*)+1) );
+  assert( bOrderBy==0 || bOrderBy==1 );
+
+  nField = pList->nExpr + bOrderBy;
+  nByte = sizeof(KeyInfo) + nField * sizeof(CollSeq *) + nField;
+  pInfo = (KeyInfo *)sqlite4DbMallocZero(db, nByte);
+
   if( pInfo ){
-    pInfo->aSortOrder = (u8*)&pInfo->aColl[nExpr];
-    pInfo->nField = (u16)nExpr;
+    int i;                        /* Used to iterate through pList */
+
+    pInfo->aSortOrder = (u8*)&pInfo->aColl[nField];
+    pInfo->nField = (u16)nField;
     pInfo->enc = ENC(db);
     pInfo->db = db;
-    for(i=0, pItem=pList->a; i<nExpr; i++, pItem++){
+
+    for(i=0; i<pList->nExpr; i++){
       CollSeq *pColl;
-      pColl = sqlite4ExprCollSeq(pParse, pItem->pExpr);
-      if( !pColl ){
-        pColl = db->pDfltColl;
-      }
+      pColl = sqlite4ExprCollSeq(pParse, pList->a[i].pExpr);
+      if( !pColl ) pColl = db->pDfltColl;
       pInfo->aColl[i] = pColl;
-      pInfo->aSortOrder[i] = pItem->sortOrder;
+      pInfo->aSortOrder[i] = pList->a[i].sortOrder;
     }
   }
   return pInfo;
@@ -882,39 +901,35 @@ static void explainComposite(
 
 /*
 ** If the inner loop was generated using a non-null pOrderBy argument,
-** then the results were placed in a sorter.  After the loop is terminated
-** we need to run the sorter and output the results.  The following
-** routine generates the code needed to do that.
+** then the results were placed in a sorter. After the loop is terminated
+** we need to loop through the contents of the sorter and output the 
+** results. The following routine generates the code needed to do that.
 */
 static void generateSortTail(
-  Parse *pParse,    /* Parsing context */
-  Select *p,        /* The SELECT statement */
-  Vdbe *v,          /* Generate code into this VDBE */
-  int nColumn,      /* Number of columns of data */
-  SelectDest *pDest /* Write the sorted results here */
+  Parse *pParse,                  /* Parsing context */
+  Select *p,                      /* The SELECT statement */
+  Vdbe *v,                        /* Generate code into this VDBE */
+  int nColumn,                    /* Number of columns of data */
+  SelectDest *pDest               /* Write the sorted results here */
 ){
   int addrBreak = sqlite4VdbeMakeLabel(v);     /* Jump here to exit loop */
   int addrContinue = sqlite4VdbeMakeLabel(v);  /* Jump here for next cycle */
   int addr;
-  int iTab;
-  int pseudoTab = 0;
+  int iTab;                       /* Sorter object cursor */
   ExprList *pOrderBy = p->pOrderBy;
 
   int eDest = pDest->eDest;
   int iParm = pDest->iParm;
 
   int regRow;
-  int regRowid;
+  int regRowid = 0;
 
   iTab = pOrderBy->iECursor;
   regRow = sqlite4GetTempReg(pParse);
-  if( eDest==SRT_Output || eDest==SRT_Coroutine ){
-    pseudoTab = pParse->nTab++;
-    sqlite4VdbeAddOp3(v, OP_OpenPseudo, pseudoTab, regRow, nColumn);
-    regRowid = 0;
-  }else{
+  if( eDest!=SRT_Output && eDest!=SRT_Coroutine ){
     regRowid = sqlite4GetTempReg(pParse);
   }
+
   if( p->selFlags & SF_UseSorter ){
     int regSortOut = ++pParse->nMem;
     int ptab2 = pParse->nTab++;
@@ -927,7 +942,7 @@ static void generateSortTail(
   }else{
     addr = 1 + sqlite4VdbeAddOp2(v, OP_Sort, iTab, addrBreak);
     codeOffset(v, p, addrContinue);
-    sqlite4VdbeAddOp3(v, OP_Column, iTab, pOrderBy->nExpr+1, regRow);
+    /* sqlite4VdbeAddOp3(v, OP_Column, iTab, pOrderBy->nExpr+1, regRow); */
   }
   switch( eDest ){
     case SRT_Table:
@@ -962,13 +977,13 @@ static void generateSortTail(
       assert( eDest==SRT_Output || eDest==SRT_Coroutine ); 
       testcase( eDest==SRT_Output );
       testcase( eDest==SRT_Coroutine );
+
+      /* Read the data out of the sorter and into the array of nColumn
+      ** contiguous registers starting at pDest->iMem.  */
       for(i=0; i<nColumn; i++){
-        assert( regRow!=pDest->iMem+i );
-        sqlite4VdbeAddOp3(v, OP_Column, pseudoTab, i, pDest->iMem+i);
-        if( i==0 ){
-          sqlite4VdbeChangeP5(v, OPFLAG_CLEARCACHE);
-        }
+        sqlite4VdbeAddOp3(v, OP_Column, iTab, i, pDest->iMem+i);
       }
+
       if( eDest==SRT_Output ){
         sqlite4VdbeAddOp2(v, OP_ResultRow, pDest->iMem, nColumn);
         sqlite4ExprCacheAffinityChange(pParse, pDest->iMem, nColumn);
@@ -990,9 +1005,6 @@ static void generateSortTail(
     sqlite4VdbeAddOp2(v, OP_Next, iTab, addr);
   }
   sqlite4VdbeResolveLabel(v, addrBreak);
-  if( eDest==SRT_Output || eDest==SRT_Coroutine ){
-    sqlite4VdbeAddOp2(v, OP_Close, pseudoTab, 0);
-  }
 }
 
 /*
@@ -1092,7 +1104,6 @@ static const char *columnType(
       }else if( ALWAYS(pTab->pSchema) ){
         /* A real table */
         assert( !pS );
-        if( iCol<0 ) iCol = pTab->iPKey;
         assert( iCol==-1 || (iCol>=0 && iCol<pTab->nCol) );
         if( iCol<0 ){
           zType = "INTEGER";
@@ -1216,7 +1227,6 @@ static void generateColumnNames(
       }
       assert( j<pTabList->nSrc );
       pTab = pTabList->a[j].pTab;
-      if( iCol<0 ) iCol = pTab->iPKey;
       assert( iCol==-1 || (iCol>=0 && iCol<pTab->nCol) );
       if( iCol<0 ){
         zCol = "rowid";
@@ -1283,7 +1293,6 @@ static int selectColumnsFromExprList(
         /* For columns use the column name name */
         int iCol = pColExpr->iColumn;
         pTab = pColExpr->pTab;
-        if( iCol<0 ) iCol = pTab->iPKey;
         zName = sqlite4MPrintf(db, "%s",
                  iCol>=0 ? pTab->aCol[iCol].zName : "rowid");
       }else if( pColExpr->op==TK_ID ){
@@ -1395,7 +1404,6 @@ Table *sqlite4ResultSetOfSelect(Parse *pParse, Select *pSelect){
   pTab->nRowEst = 1000000;
   selectColumnsFromExprList(pParse, pSelect->pEList, &pTab->nCol, &pTab->aCol);
   selectAddColumnTypeAndCollation(pParse, pTab->nCol, pTab->aCol, pSelect);
-  pTab->iPKey = -1;
   if( db->mallocFailed ){
     sqlite4DeleteTable(db, pTab);
     return 0;
@@ -3239,7 +3247,6 @@ static int selectExpander(Walker *pWalker, Select *p){
       pTab->zName = sqlite4MPrintf(db, "sqlite_subquery_%p_", (void*)pTab);
       while( pSel->pPrior ){ pSel = pSel->pPrior; }
       selectColumnsFromExprList(pParse, pSel->pEList, &pTab->nCol, &pTab->aCol);
-      pTab->iPKey = -1;
       pTab->nRowEst = 1000000;
       pTab->tabFlags |= TF_Ephemeral;
 #endif
@@ -3554,7 +3561,7 @@ static void resetAccumulator(Parse *pParse, AggInfo *pAggInfo){
            "argument");
         pFunc->iDistinct = -1;
       }else{
-        KeyInfo *pKeyInfo = keyInfoFromExprList(pParse, pE->x.pList);
+        KeyInfo *pKeyInfo = keyInfoFromExprList(pParse, pE->x.pList, 0);
         sqlite4VdbeAddOp4(v, OP_OpenEphemeral, pFunc->iDistinct, 0, 0,
                           (char*)pKeyInfo, P4_KEYINFO_HANDOFF);
       }
@@ -3948,7 +3955,9 @@ int sqlite4Select(
   */
   if( pOrderBy ){
     KeyInfo *pKeyInfo;
-    pKeyInfo = keyInfoFromExprList(pParse, pOrderBy);
+    pKeyInfo = keyInfoFromExprList(pParse, pOrderBy, 1);
+    if( pKeyInfo ) pKeyInfo->nData = pEList->nExpr;
+
     pOrderBy->iECursor = pParse->nTab++;
     p->addrOpenEphm[2] = addrSortIndex =
       sqlite4VdbeAddOp4(v, OP_OpenEphemeral,
@@ -3979,7 +3988,7 @@ int sqlite4Select(
   if( p->selFlags & SF_Distinct ){
     KeyInfo *pKeyInfo;
     distinct = pParse->nTab++;
-    pKeyInfo = keyInfoFromExprList(pParse, p->pEList);
+    pKeyInfo = keyInfoFromExprList(pParse, p->pEList, 0);
     addrDistinctIndex = sqlite4VdbeAddOp4(v, OP_OpenEphemeral, distinct, 0, 0,
         (char*)pKeyInfo, P4_KEYINFO_HANDOFF);
   }else{
@@ -4133,7 +4142,7 @@ int sqlite4Select(
       ** will be converted into a Noop.  
       */
       sAggInfo.sortingIdx = pParse->nTab++;
-      pKeyInfo = keyInfoFromExprList(pParse, pGroupBy);
+      pKeyInfo = keyInfoFromExprList(pParse, pGroupBy, 0);
       addrSortingIdx = sqlite4VdbeAddOp4(v, OP_SorterOpen, 
           sAggInfo.sortingIdx, sAggInfo.nSortingColumn, 
           0, (char*)pKeyInfo, P4_KEYINFO_HANDOFF);

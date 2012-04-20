@@ -420,3 +420,74 @@ int sqlite4RowSetTest(RowSet *pRowSet, u8 iBatch, sqlite4_int64 iRowid){
   }
   return 0;
 }
+
+typedef struct KeySetEntry KeySetEntry;
+
+struct KeySetEntry {
+  char *z;
+  int n;
+  KeySetEntry *pNext;
+};
+
+struct KeySet {
+  sqlite4 *db;                    /* Database handle for sqlite4DbMalloc() */
+  KeySetEntry *pFirst;
+  KeySetEntry *pLast;
+};
+
+KeySet *sqlite4KeySetInit(sqlite4 *db){
+  KeySet *pRet;
+  pRet = (KeySet *)sqlite4DbMallocZero(db, sizeof(KeySet));
+  if( pRet ){
+    pRet->db = db;
+  }
+  return pRet;
+}
+
+void sqlite4KeySetInsert(KeySet *pKeySet, const char *z, int n){
+  KeySetEntry *pNew;
+  int nByte = n + sizeof(KeySetEntry);
+
+  pNew = (KeySetEntry *)sqlite4DbMallocZero(pKeySet->db, nByte);
+  if( pNew ){
+    pNew->z = (char *)&pNew[1];
+    pNew->n =n;
+    memcpy(pNew->z, z, n);
+    if( pKeySet->pFirst ){
+      pKeySet->pLast = pKeySet->pLast->pNext = pNew;
+    }else{
+      pKeySet->pLast = pKeySet->pFirst = pNew;
+    }
+  }
+}
+
+/*
+** Read the blob of data stored in the current key-set entry.
+*/
+const char *sqlite4KeySetRead(KeySet *pKeySet, int *pn){
+  const char *pRet;
+  if( pKeySet->pFirst ){
+    *pn = pKeySet->pFirst->n;
+    pRet = pKeySet->pFirst->z;
+  }else{
+    pRet = 0;
+    *pn = 0;
+  }
+  return pRet;
+}
+
+int sqlite4KeySetNext(KeySet *pKeySet){
+  KeySetEntry *pFirst = pKeySet->pFirst->pNext;
+  sqlite4DbFree(pKeySet->db, pKeySet->pFirst);
+  pKeySet->pFirst = pFirst;
+  return (pFirst!=0);
+}
+
+void sqlite4KeySetFree(KeySet *pKeySet){
+  while( pKeySet->pFirst ){
+    sqlite4KeySetNext(pKeySet);
+  }
+  sqlite4DbFree(pKeySet->db, pKeySet);
+}
+
+
