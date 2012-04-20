@@ -94,7 +94,7 @@ int sqlite4KVStoreOpen(
   ){
     rc = sqlite4GlobalConfig.xKVFile(&pNew, zUri, flags);
   }else{
-    rc = sqlite4GlobalConfig.xKVTmp(&pNew, flags);
+    rc = sqlite4GlobalConfig.xKVTmp(&pNew, zUri, flags);
   }
 
   *ppKVStore = pNew;

@@ -174,7 +174,7 @@ SQLITE_WSD struct Sqlite3Config sqlite4Config = {
 #ifdef SQLITE_ENABLE_LSM
    sqlite4KVStoreOpenLsm,     /* xKVFile */
 #else
-   0,                         /* xKVFile */
+   sqlite4KVStoreOpenMem,     /* xKVFile */
 #endif
    sqlite4KVStoreOpenMem,     /* xKVTmp */
 };
