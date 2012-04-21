@@ -353,13 +353,25 @@ static int enlargeEncoderAllocation(KeyEncoder *p, int needed){
 /*
 ** Encode the positive integer m using the key encoding.
 **
-** The key encoding for a positive integer consists of a varint which
-** is the number of digits in the integer, followed by the digits of
-** the integer from most significant to least significant, packed to
-** digits to a byte.  Each digit is represented by a number between 1
-** and 10 with 1 representing 0 and 10 representing 9.  A zero value 
-** marks the end of the significand.  An extra zero is added to fill out
-** the final byte, if necessary.
+** To encode an integer, the integer value is represented as centimal
+** (base-100) with E digits.  Each centimal digit is stored in one byte
+** with the most significant digits coming first.  For each centimal
+** digit X (with X>=0 and X<=99) the byte value will be 2*X+1 except
+** for the last digit for which the value is 2*X.  Trailing 0 digits are
+** omitted, so that the encoding of the mantissa will never contain
+** a zero byte.
+**
+** The key encoding consists of the E value (the number of
+** centimal digits in the original number, before trailing zero digits
+** are removed), followed by the mantissa encoding M.  This routine
+** only writes the mantissa.  The E values will be embedded in the
+** initial byte of the encoding by the calling function.  This
+** routine returns the value of E.  E will always be at least 1 and
+** no more than 10.
+**
+** Note that values encoded by this routine have exactly the same
+** byte representation as the equivalent floating-point values encoded
+** by the encodeLargeFloatKey() routine below.
 */
 static int encodeIntKey(sqlite4_uint64 m, KeyEncoder *p){
   int i = 0;
@@ -404,6 +416,18 @@ int sqlite4VdbeEncodeIntKey(u8 *a, sqlite4_int64 v){
 ** Encode the small positive floating point number r using the key
 ** encoding.  The caller guarantees that r will be less than 1.0 and
 ** greater than 0.0.
+**
+** A floating point value is encoded as an integer exponent E and a 
+** mantissa M.  The original value is equal to (M * 100^E). E is set
+** to the smallest value possible without making M greater than or equal 
+** to 1.0.
+**
+** For this routine, E will always be zero or negative, since the original
+** value is less than one.  The encoding written by this routine is the
+** ones-complement of the varint of the negative of E followed by the
+** mantissa:
+**
+**   Encoding:   ~-E  M
 */
 static void encodeSmallFloatKey(double r, KeyEncoder *p){
   int e = 0;
@@ -441,11 +465,16 @@ static void encodeSmallFloatKey(double r, KeyEncoder *p){
 ** This means that the mantissa will never contain a byte with the 
 ** value 0x00.
 **
-** If E is greater than 10, the encoded value consists of E as a varint
-** followed by the mantissa as described above. Otherwise, it consists
-** of the mantissa only.
+** If E is greater than 10, then this routine writes of E as a varint
+** followed by the mantissa as described above. Otherwise, if E is 10 or
+** less, this routine only writes the mantissa and leaves the E value
+** to be encoded as part of the opening byte of the field by the
+** calling function.
 **
-** The value returned by this function is E.
+**   Encoding:  M       (if E<=10)
+**              E M     (if E>10)
+**
+** This routine returns the value of E.
 */
 static int encodeLargeFloatKey(double r, KeyEncoder *p){
   int e = 0;
@@ -653,7 +682,6 @@ int sqlite4VdbeEncodeKey(
   int rc = SQLITE_OK;
   KeyEncoder x;
   u8 *so;
-  int iShort;
   CollSeq **aColl;
   CollSeq *xColl;
   static const CollSeq defaultColl;
@@ -670,7 +698,6 @@ int sqlite4VdbeEncodeKey(
 
   if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE_NOMEM;
   x.nOut = sqlite4PutVarint64(x.aOut, iTabno);
-  iShort = pKeyInfo->nField - pKeyInfo->nPK;
   aColl = pKeyInfo->aColl;
   so = pKeyInfo->aSortOrder;
   for(i=0; i<nIn && rc==SQLITE_OK; i++){
