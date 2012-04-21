@@ -409,11 +409,6 @@ int sqlite4_config(int op, ...){
       break;
     }
 
-    case SQLITE_CONFIG_URI: {
-      sqlite4GlobalConfig.bOpenUri = va_arg(ap, int);
-      break;
-    }
-
     default: {
       rc = SQLITE_ERROR;
       break;
@@ -1663,18 +1658,12 @@ int sqlite4ParseUri(
 
   assert( *pzErrMsg==0 );
 
-  if( ((flags & SQLITE_OPEN_URI) || sqlite4GlobalConfig.bOpenUri) 
-   && nUri>=5 && memcmp(zUri, "file:", 5)==0 
-  ){
+  if( nUri>=5 && memcmp(zUri, "file:", 5)==0 ){
     char *zOpt;
     int eState;                   /* Parser state when parsing URI */
     int iIn;                      /* Input character index */
     int iOut = 0;                 /* Output character index */
     int nByte = nUri+2;           /* Bytes of space to allocate */
-
-    /* Make sure the SQLITE_OPEN_URI flag is set to indicate to the VFS xOpen 
-    ** method that there may be extra parameters following the file-name.  */
-    flags |= SQLITE_OPEN_URI;
 
     for(iIn=0; iIn<nUri; iIn++) nByte += (zUri[iIn]=='&');
     zFile = sqlite4_malloc(nByte);

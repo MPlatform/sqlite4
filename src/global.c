@@ -129,10 +129,6 @@ const unsigned char sqlite4CtypeMap[256] = {
 };
 #endif
 
-#ifndef SQLITE_USE_URI
-# define  SQLITE_USE_URI 0
-#endif
-
 /*
 ** The following singleton contains the global configuration for
 ** the SQLite library.
@@ -141,7 +137,6 @@ SQLITE_WSD struct Sqlite3Config sqlite4Config = {
    SQLITE_DEFAULT_MEMSTATUS,  /* bMemstat */
    1,                         /* bCoreMutex */
    SQLITE_THREADSAFE==1,      /* bFullMutex */
-   SQLITE_USE_URI,            /* bOpenUri */
    0x7ffffffe,                /* mxStrlen */
    128,                       /* szLookaside */
    500,                       /* nLookaside */

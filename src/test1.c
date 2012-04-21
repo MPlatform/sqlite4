@@ -3346,7 +3346,6 @@ static int test_open_v2(
       { "SQLITE_OPEN_NOMUTEX", SQLITE_OPEN_NOMUTEX },
       { "SQLITE_OPEN_FULLMUTEX", SQLITE_OPEN_FULLMUTEX },
       { "SQLITE_OPEN_WAL", SQLITE_OPEN_WAL },
-      { "SQLITE_OPEN_URI", SQLITE_OPEN_URI },
       { 0, 0 }
     };
     rc = Tcl_GetIndexFromObjStruct(interp, apFlag[i], aFlag, sizeof(aFlag[0]), 

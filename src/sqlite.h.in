@@ -1475,19 +1475,6 @@ struct sqlite4_mem_methods {
 ** In a multi-threaded application, the application-defined logger
 ** function must be threadsafe. </dd>
 **
-** [[SQLITE_CONFIG_URI]] <dt>SQLITE_CONFIG_URI
-** <dd> This option takes a single argument of type int. If non-zero, then
-** URI handling is globally enabled. If the parameter is zero, then URI handling
-** is globally disabled. If URI handling is globally enabled, all filenames
-** passed to [sqlite4_open()], [sqlite4_open_v2()], [sqlite4_open16()] or
-** specified as part of [ATTACH] commands are interpreted as URIs, regardless
-** of whether or not the [SQLITE_OPEN_URI] flag is set when the database
-** connection is opened. If it is globally disabled, filenames are
-** only interpreted as URIs if the SQLITE_OPEN_URI flag is set when the
-** database connection is opened. By default, URI handling is globally
-** disabled. The default value may be changed by compiling with the
-** [SQLITE_USE_URI] symbol defined.
-**
 ** [[SQLITE_CONFIG_PCACHE]] [[SQLITE_CONFIG_GETPCACHE]]
 ** <dt>SQLITE_CONFIG_PCACHE and SQLITE_CONFNIG_GETPCACHE
 ** <dd> These options are obsolete and should not be used by new code.
@@ -1510,7 +1497,6 @@ struct sqlite4_mem_methods {
 #define SQLITE_CONFIG_PCACHE       14  /* no-op */
 #define SQLITE_CONFIG_GETPCACHE    15  /* no-op */
 #define SQLITE_CONFIG_LOG          16  /* xFunc, void* */
-#define SQLITE_CONFIG_URI          17  /* int */
 #define SQLITE_CONFIG_PCACHE2      18  /* sqlite4_pcache_methods2* */
 #define SQLITE_CONFIG_GETPCACHE2   19  /* sqlite4_pcache_methods2* */
 
@@ -2380,17 +2366,8 @@ void sqlite4_progress_handler(sqlite4*, int, int(*)(void*), void*);
 **
 ** [[URI filenames in sqlite4_open()]] <h3>URI Filenames</h3>
 **
-** ^If [URI filename] interpretation is enabled, and the filename argument
-** begins with "file:", then the filename is interpreted as a URI. ^URI
-** filename interpretation is enabled if the [SQLITE_OPEN_URI] flag is
-** set in the fourth argument to sqlite4_open_v2(), or if it has
-** been enabled globally using the [SQLITE_CONFIG_URI] option with the
-** [sqlite4_config()] method or by the [SQLITE_USE_URI] compile-time option.
-** As of SQLite version 3.7.7, URI filename interpretation is turned off
-** by default, but future releases of SQLite might enable URI filename
-** interpretation by default.  See "[URI filenames]" for additional
-** information.
-**
+** ^If the filename argument
+** begins with "file:", then the filename is interpreted as a URI.
 ** URI filenames are parsed according to RFC 3986. ^If the URI contains an
 ** authority, then it must be either an empty string or the string 
 ** "localhost". ^If the authority is not an empty string or "localhost", an 
