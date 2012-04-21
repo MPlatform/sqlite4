@@ -145,12 +145,6 @@ SQLITE_WSD struct Sqlite3Config sqlite4Config = {
    (void*)0,                  /* pHeap */
    0,                         /* nHeap */
    0, 0,                      /* mnHeap, mxHeap */
-   (void*)0,                  /* pScratch */
-   0,                         /* szScratch */
-   0,                         /* nScratch */
-   (void*)0,                  /* pPage */
-   0,                         /* szPage */
-   0,                         /* nPage */
    0,                         /* mxParserStack */
    /* All the rest should always be initialized to zero */
    0,                         /* isInit */

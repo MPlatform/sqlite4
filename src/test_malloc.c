@@ -876,86 +876,6 @@ static int test_memdebug_log(
 }
 
 /*
-** Usage:    sqlite4_config_scratch SIZE N
-**
-** Set the scratch memory buffer using SQLITE_CONFIG_SCRATCH.
-** The buffer is static and is of limited size.  N might be
-** adjusted downward as needed to accomodate the requested size.
-** The revised value of N is returned.
-**
-** A negative SIZE causes the buffer pointer to be NULL.
-*/
-static int test_config_scratch(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  int sz, N, rc;
-  Tcl_Obj *pResult;
-  static char *buf = 0;
-  if( objc!=3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "SIZE N");
-    return TCL_ERROR;
-  }
-  if( Tcl_GetIntFromObj(interp, objv[1], &sz) ) return TCL_ERROR;
-  if( Tcl_GetIntFromObj(interp, objv[2], &N) ) return TCL_ERROR;
-  free(buf);
-  if( sz<0 ){
-    buf = 0;
-    rc = sqlite4_config(SQLITE_CONFIG_SCRATCH, 0, 0, 0);
-  }else{
-    buf = malloc( sz*N + 1 );
-    rc = sqlite4_config(SQLITE_CONFIG_SCRATCH, buf, sz, N);
-  }
-  pResult = Tcl_NewObj();
-  Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(rc));
-  Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(N));
-  Tcl_SetObjResult(interp, pResult);
-  return TCL_OK;
-}
-
-/*
-** Usage:    sqlite4_config_pagecache SIZE N
-**
-** Set the page-cache memory buffer using SQLITE_CONFIG_PAGECACHE.
-** The buffer is static and is of limited size.  N might be
-** adjusted downward as needed to accomodate the requested size.
-** The revised value of N is returned.
-**
-** A negative SIZE causes the buffer pointer to be NULL.
-*/
-static int test_config_pagecache(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  int sz, N, rc;
-  Tcl_Obj *pResult;
-  static char *buf = 0;
-  if( objc!=3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "SIZE N");
-    return TCL_ERROR;
-  }
-  if( Tcl_GetIntFromObj(interp, objv[1], &sz) ) return TCL_ERROR;
-  if( Tcl_GetIntFromObj(interp, objv[2], &N) ) return TCL_ERROR;
-  free(buf);
-  if( sz<0 ){
-    buf = 0;
-    rc = sqlite4_config(SQLITE_CONFIG_PAGECACHE, 0, 0, 0);
-  }else{
-    buf = malloc( sz*N );
-    rc = sqlite4_config(SQLITE_CONFIG_PAGECACHE, buf, sz, N);
-  }
-  pResult = Tcl_NewObj();
-  Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(rc));
-  Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(N));
-  Tcl_SetObjResult(interp, pResult);
-  return TCL_OK;
-}
-
-/*
 ** Usage:    sqlite4_config_memstatus BOOLEAN
 **
 ** Enable or disable memory status reporting using SQLITE_CONFIG_MEMSTATUS.
@@ -1187,12 +1107,6 @@ static int test_status(
   } aOp[] = {
     { "SQLITE_STATUS_MEMORY_USED",         SQLITE_STATUS_MEMORY_USED         },
     { "SQLITE_STATUS_MALLOC_SIZE",         SQLITE_STATUS_MALLOC_SIZE         },
-    { "SQLITE_STATUS_PAGECACHE_USED",      SQLITE_STATUS_PAGECACHE_USED      },
-    { "SQLITE_STATUS_PAGECACHE_OVERFLOW",  SQLITE_STATUS_PAGECACHE_OVERFLOW  },
-    { "SQLITE_STATUS_PAGECACHE_SIZE",      SQLITE_STATUS_PAGECACHE_SIZE      },
-    { "SQLITE_STATUS_SCRATCH_USED",        SQLITE_STATUS_SCRATCH_USED        },
-    { "SQLITE_STATUS_SCRATCH_OVERFLOW",    SQLITE_STATUS_SCRATCH_OVERFLOW    },
-    { "SQLITE_STATUS_SCRATCH_SIZE",        SQLITE_STATUS_SCRATCH_SIZE        },
     { "SQLITE_STATUS_PARSER_STACK",        SQLITE_STATUS_PARSER_STACK        },
     { "SQLITE_STATUS_MALLOC_COUNT",        SQLITE_STATUS_MALLOC_COUNT        },
   };
@@ -1349,8 +1263,6 @@ int Sqlitetest_malloc_Init(Tcl_Interp *interp){
      { "sqlite4_memdebug_settitle",  test_memdebug_settitle        ,0 },
      { "sqlite4_memdebug_malloc_count", test_memdebug_malloc_count ,0 },
      { "sqlite4_memdebug_log",       test_memdebug_log             ,0 },
-     { "sqlite4_config_scratch",     test_config_scratch           ,0 },
-     { "sqlite4_config_pagecache",   test_config_pagecache         ,0 },
      { "sqlite4_status",             test_status                   ,0 },
      { "sqlite4_db_status",          test_db_status                ,0 },
      { "install_malloc_faultsim",    test_install_malloc_faultsim  ,0 },

@@ -343,13 +343,6 @@ int sqlite4_config(int op, ...){
       sqlite4GlobalConfig.bMemstat = va_arg(ap, int);
       break;
     }
-    case SQLITE_CONFIG_SCRATCH: {
-      /* Designate a buffer for scratch memory space */
-      sqlite4GlobalConfig.pScratch = va_arg(ap, void*);
-      sqlite4GlobalConfig.szScratch = va_arg(ap, int);
-      sqlite4GlobalConfig.nScratch = va_arg(ap, int);
-      break;
-    }
 
 #if defined(SQLITE_ENABLE_MEMSYS3) || defined(SQLITE_ENABLE_MEMSYS5)
     case SQLITE_CONFIG_HEAP: {
@@ -2433,22 +2426,6 @@ int sqlite4_test_control(int op, ...){
       break;
     }
 #endif 
-
-    /* sqlite4_test_control(SQLITE_TESTCTRL_SCRATCHMALLOC, sz, &pNew, pFree);
-    **
-    ** Pass pFree into sqlite4ScratchFree(). 
-    ** If sz>0 then allocate a scratch buffer into pNew.  
-    */
-    case SQLITE_TESTCTRL_SCRATCHMALLOC: {
-      void *pFree, **ppNew;
-      int sz;
-      sz = va_arg(ap, int);
-      ppNew = va_arg(ap, void**);
-      pFree = va_arg(ap, void*);
-      if( sz ) *ppNew = sqlite4ScratchMalloc(sz);
-      sqlite4ScratchFree(pFree);
-      break;
-    }
 
     /*   sqlite4_test_control(SQLITE_TESTCTRL_LOCALTIME_FAULT, int onoff);
     **

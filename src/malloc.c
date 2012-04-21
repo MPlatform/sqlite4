@@ -33,14 +33,6 @@ int sqlite4_release_memory(int n){
 }
 
 /*
-** An instance of the following object records the location of
-** each unused scratch buffer.
-*/
-typedef struct ScratchFreeslot {
-  struct ScratchFreeslot *pNext;   /* Next unused scratch buffer */
-} ScratchFreeslot;
-
-/*
 ** State information local to the memory allocation subsystem.
 */
 static SQLITE_WSD struct Mem0Global {
@@ -55,16 +47,6 @@ static SQLITE_WSD struct Mem0Global {
   sqlite4_int64 alarmThreshold;
   void (*alarmCallback)(void*, sqlite4_int64,int);
   void *alarmArg;
-
-  /*
-  ** Pointers to the end of sqlite4GlobalConfig.pScratch memory
-  ** (so that a range test can be used to determine if an allocation
-  ** being freed came from pScratch) and a pointer to the list of
-  ** unused scratch allocations.
-  */
-  void *pScratchEnd;
-  ScratchFreeslot *pScratchFree;
-  u32 nScratchFree;
 
   /*
   ** True if heap is nearly "full" where "full" is defined by the
@@ -161,34 +143,6 @@ int sqlite4MallocInit(void){
   memset(&mem0, 0, sizeof(mem0));
   if( sqlite4GlobalConfig.bCoreMutex ){
     mem0.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
-  }
-  if( sqlite4GlobalConfig.pScratch && sqlite4GlobalConfig.szScratch>=100
-      && sqlite4GlobalConfig.nScratch>0 ){
-    int i, n, sz;
-    ScratchFreeslot *pSlot;
-    sz = ROUNDDOWN8(sqlite4GlobalConfig.szScratch);
-    sqlite4GlobalConfig.szScratch = sz;
-    pSlot = (ScratchFreeslot*)sqlite4GlobalConfig.pScratch;
-    n = sqlite4GlobalConfig.nScratch;
-    mem0.pScratchFree = pSlot;
-    mem0.nScratchFree = n;
-    for(i=0; i<n-1; i++){
-      pSlot->pNext = (ScratchFreeslot*)(sz+(char*)pSlot);
-      pSlot = pSlot->pNext;
-    }
-    pSlot->pNext = 0;
-    mem0.pScratchEnd = (void*)&pSlot[1];
-  }else{
-    mem0.pScratchEnd = 0;
-    sqlite4GlobalConfig.pScratch = 0;
-    sqlite4GlobalConfig.szScratch = 0;
-    sqlite4GlobalConfig.nScratch = 0;
-  }
-  if( sqlite4GlobalConfig.pPage==0 || sqlite4GlobalConfig.szPage<512
-      || sqlite4GlobalConfig.nPage<1 ){
-    sqlite4GlobalConfig.pPage = 0;
-    sqlite4GlobalConfig.szPage = 0;
-    sqlite4GlobalConfig.nPage = 0;
   }
   return sqlite4GlobalConfig.m.xInit(sqlite4GlobalConfig.m.pAppData);
 }
@@ -328,105 +282,6 @@ void *sqlite4_malloc(int n){
   return sqlite4Malloc(n);
 }
 
-/*
-** Each thread may only have a single outstanding allocation from
-** xScratchMalloc().  We verify this constraint in the single-threaded
-** case by setting scratchAllocOut to 1 when an allocation
-** is outstanding clearing it when the allocation is freed.
-*/
-#if SQLITE_THREADSAFE==0 && !defined(NDEBUG)
-static int scratchAllocOut = 0;
-#endif
-
-
-/*
-** Allocate memory that is to be used and released right away.
-** This routine is similar to alloca() in that it is not intended
-** for situations where the memory might be held long-term.  This
-** routine is intended to get memory to old large transient data
-** structures that would not normally fit on the stack of an
-** embedded processor.
-*/
-void *sqlite4ScratchMalloc(int n){
-  void *p;
-  assert( n>0 );
-
-  sqlite4_mutex_enter(mem0.mutex);
-  if( mem0.nScratchFree && sqlite4GlobalConfig.szScratch>=n ){
-    p = mem0.pScratchFree;
-    mem0.pScratchFree = mem0.pScratchFree->pNext;
-    mem0.nScratchFree--;
-    sqlite4StatusAdd(SQLITE_STATUS_SCRATCH_USED, 1);
-    sqlite4StatusSet(SQLITE_STATUS_SCRATCH_SIZE, n);
-    sqlite4_mutex_leave(mem0.mutex);
-  }else{
-    if( sqlite4GlobalConfig.bMemstat ){
-      sqlite4StatusSet(SQLITE_STATUS_SCRATCH_SIZE, n);
-      n = mallocWithAlarm(n, &p);
-      if( p ) sqlite4StatusAdd(SQLITE_STATUS_SCRATCH_OVERFLOW, n);
-      sqlite4_mutex_leave(mem0.mutex);
-    }else{
-      sqlite4_mutex_leave(mem0.mutex);
-      p = sqlite4GlobalConfig.m.xMalloc(n);
-    }
-    sqlite4MemdebugSetType(p, MEMTYPE_SCRATCH);
-  }
-  assert( sqlite4_mutex_notheld(mem0.mutex) );
-
-
-#if SQLITE_THREADSAFE==0 && !defined(NDEBUG)
-  /* Verify that no more than two scratch allocations per thread
-  ** are outstanding at one time.  (This is only checked in the
-  ** single-threaded case since checking in the multi-threaded case
-  ** would be much more complicated.) */
-  assert( scratchAllocOut<=1 );
-  if( p ) scratchAllocOut++;
-#endif
-
-  return p;
-}
-void sqlite4ScratchFree(void *p){
-  if( p ){
-
-#if SQLITE_THREADSAFE==0 && !defined(NDEBUG)
-    /* Verify that no more than two scratch allocation per thread
-    ** is outstanding at one time.  (This is only checked in the
-    ** single-threaded case since checking in the multi-threaded case
-    ** would be much more complicated.) */
-    assert( scratchAllocOut>=1 && scratchAllocOut<=2 );
-    scratchAllocOut--;
-#endif
-
-    if( p>=sqlite4GlobalConfig.pScratch && p<mem0.pScratchEnd ){
-      /* Release memory from the SQLITE_CONFIG_SCRATCH allocation */
-      ScratchFreeslot *pSlot;
-      pSlot = (ScratchFreeslot*)p;
-      sqlite4_mutex_enter(mem0.mutex);
-      pSlot->pNext = mem0.pScratchFree;
-      mem0.pScratchFree = pSlot;
-      mem0.nScratchFree++;
-      assert( mem0.nScratchFree <= (u32)sqlite4GlobalConfig.nScratch );
-      sqlite4StatusAdd(SQLITE_STATUS_SCRATCH_USED, -1);
-      sqlite4_mutex_leave(mem0.mutex);
-    }else{
-      /* Release memory back to the heap */
-      assert( sqlite4MemdebugHasType(p, MEMTYPE_SCRATCH) );
-      assert( sqlite4MemdebugNoType(p, ~MEMTYPE_SCRATCH) );
-      sqlite4MemdebugSetType(p, MEMTYPE_HEAP);
-      if( sqlite4GlobalConfig.bMemstat ){
-        int iSize = sqlite4MallocSize(p);
-        sqlite4_mutex_enter(mem0.mutex);
-        sqlite4StatusAdd(SQLITE_STATUS_SCRATCH_OVERFLOW, -iSize);
-        sqlite4StatusAdd(SQLITE_STATUS_MEMORY_USED, -iSize);
-        sqlite4StatusAdd(SQLITE_STATUS_MALLOC_COUNT, -1);
-        sqlite4GlobalConfig.m.xFree(p);
-        sqlite4_mutex_leave(mem0.mutex);
-      }else{
-        sqlite4GlobalConfig.m.xFree(p);
-      }
-    }
-  }
-}
 
 /*
 ** TRUE if p is a lookaside memory allocation from db

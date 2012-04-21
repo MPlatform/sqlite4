@@ -1007,14 +1007,8 @@ static int display_stats(
     sqlite4_status(SQLITE_STATUS_MALLOC_COUNT, &iCur, &iHiwtr, bReset);
     fprintf(pArg->out, "Number of Outstanding Allocations:   %d (max %d)\n", iCur, iHiwtr);
     iHiwtr = iCur = -1;
-    sqlite4_status(SQLITE_STATUS_SCRATCH_OVERFLOW, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Number of Scratch Overflow Bytes:    %d (max %d) bytes\n", iCur, iHiwtr);
-    iHiwtr = iCur = -1;
     sqlite4_status(SQLITE_STATUS_MALLOC_SIZE, &iCur, &iHiwtr, bReset);
     fprintf(pArg->out, "Largest Allocation:                  %d bytes\n", iHiwtr);
-    iHiwtr = iCur = -1;
-    sqlite4_status(SQLITE_STATUS_SCRATCH_SIZE, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Largest Scratch Allocation:          %d bytes\n", iHiwtr);
 #ifdef YYTRACKMAXSTACKDEPTH
     iHiwtr = iCur = -1;
     sqlite4_status(SQLITE_STATUS_PARSER_STACK, &iCur, &iHiwtr, bReset);
@@ -2131,7 +2125,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
       { "reserve",               SQLITE_TESTCTRL_RESERVE                },
       { "optimizations",         SQLITE_TESTCTRL_OPTIMIZATIONS          },
       { "iskeyword",             SQLITE_TESTCTRL_ISKEYWORD              },
-      { "scratchmalloc",         SQLITE_TESTCTRL_SCRATCHMALLOC          },
     };
     int testctrl = -1;
     int rc = 0;
@@ -2225,7 +2218,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
         case SQLITE_TESTCTRL_BITVEC_TEST:         
         case SQLITE_TESTCTRL_FAULT_INSTALL:       
         case SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS: 
-        case SQLITE_TESTCTRL_SCRATCHMALLOC:       
         default:
           fprintf(stderr,"Error: CLI support for testctrl %s not implemented\n",
                   azArg[1]);
