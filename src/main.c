@@ -863,87 +863,6 @@ const char *sqlite4ErrStr(int rc){
   }
 }
 
-/*
-** This routine implements a busy callback that sleeps and tries
-** again until a timeout value is reached.  The timeout value is
-** an integer number of milliseconds passed in as the first
-** argument.
-*/
-static int sqliteDefaultBusyCallback(
- void *ptr,               /* Database connection */
- int count                /* Number of times table has been busy */
-){
-#if SQLITE_OS_WIN || (defined(HAVE_USLEEP) && HAVE_USLEEP)
-  static const u8 delays[] =
-     { 1, 2, 5, 10, 15, 20, 25, 25,  25,  50,  50, 100 };
-  static const u8 totals[] =
-     { 0, 1, 3,  8, 18, 33, 53, 78, 103, 128, 178, 228 };
-# define NDELAY ArraySize(delays)
-  sqlite4 *db = (sqlite4 *)ptr;
-  int timeout = db->busyTimeout;
-  int delay, prior;
-
-  assert( count>=0 );
-  if( count < NDELAY ){
-    delay = delays[count];
-    prior = totals[count];
-  }else{
-    delay = delays[NDELAY-1];
-    prior = totals[NDELAY-1] + delay*(count-(NDELAY-1));
-  }
-  if( prior + delay > timeout ){
-    delay = timeout - prior;
-    if( delay<=0 ) return 0;
-  }
-  sqlite4OsSleep(db->pVfs, delay*1000);
-  return 1;
-#else
-  sqlite4 *db = (sqlite4 *)ptr;
-  int timeout = ((sqlite4 *)ptr)->busyTimeout;
-  if( (count+1)*1000 > timeout ){
-    return 0;
-  }
-  sqlite4OsSleep(db->pVfs, 1000000);
-  return 1;
-#endif
-}
-
-/*
-** Invoke the given busy handler.
-**
-** This routine is called when an operation failed with a lock.
-** If this routine returns non-zero, the lock is retried.  If it
-** returns 0, the operation aborts with an SQLITE_BUSY error.
-*/
-int sqlite4InvokeBusyHandler(BusyHandler *p){
-  int rc;
-  if( NEVER(p==0) || p->xFunc==0 || p->nBusy<0 ) return 0;
-  rc = p->xFunc(p->pArg, p->nBusy);
-  if( rc==0 ){
-    p->nBusy = -1;
-  }else{
-    p->nBusy++;
-  }
-  return rc; 
-}
-
-/*
-** This routine sets the busy callback for an Sqlite database to the
-** given callback function with the given argument.
-*/
-int sqlite4_busy_handler(
-  sqlite4 *db,
-  int (*xBusy)(void*,int),
-  void *pArg
-){
-  sqlite4_mutex_enter(db->mutex);
-  db->busyHandler.xFunc = xBusy;
-  db->busyHandler.pArg = pArg;
-  db->busyHandler.nBusy = 0;
-  sqlite4_mutex_leave(db->mutex);
-  return SQLITE_OK;
-}
-
 #ifndef SQLITE_OMIT_PROGRESS_CALLBACK
 /*
 ** This routine sets the progress callback for an Sqlite database to the
@@ -969,21 +888,6 @@ void sqlite4_progress_handler(
   sqlite4_mutex_leave(db->mutex);
 }
 #endif
-
-
-/*
-** This routine installs a default busy handler that waits for the
-** specified number of milliseconds before returning 0.
-*/
-int sqlite4_busy_timeout(sqlite4 *db, int ms){
-  if( ms>0 ){
-    db->busyTimeout = ms;
-    sqlite4_busy_handler(db, sqliteDefaultBusyCallback, (void*)db);
-  }else{
-    sqlite4_busy_handler(db, 0, 0);
-  }
-  return SQLITE_OK;
-}
 
 /*
 ** Cause any pending operation to stop at its earliest opportunity.
@@ -1535,15 +1439,6 @@ int sqlite4_errcode(sqlite4 *db){
   if( !db || db->mallocFailed ){
     return SQLITE_NOMEM;
   }
-  return db->errCode & db->errMask;
-}
-int sqlite4_extended_errcode(sqlite4 *db){
-  if( db && !sqlite4SafetyCheckSickOrOk(db) ){
-    return SQLITE_MISUSE_BKPT;
-  }
-  if( !db || db->mallocFailed ){
-    return SQLITE_NOMEM;
-  }
   return db->errCode;
 }
 
@@ -2048,7 +1943,6 @@ static int openDatabase(
     }
   }
   sqlite4_mutex_enter(db->mutex);
-  db->errMask = 0xff;
   db->nDb = 2;
   db->magic = SQLITE_MAGIC_BUSY;
   db->aDb = db->aDbStatic;
@@ -2388,16 +2282,6 @@ int sqlite4_sleep(int ms){
   */
   rc = (sqlite4OsSleep(pVfs, 1000*ms)/1000);
   return rc;
-}
-
-/*
-** Enable or disable the extended result codes.
-*/
-int sqlite4_extended_result_codes(sqlite4 *db, int onoff){
-  sqlite4_mutex_enter(db->mutex);
-  db->errMask = onoff ? 0xffffffff : 0xff;
-  sqlite4_mutex_leave(db->mutex);
-  return SQLITE_OK;
 }
 
 

@@ -454,7 +454,6 @@ static int sqlite4Prepare(
   sqlite4 *db,              /* Database handle. */
   const char *zSql,         /* UTF-8 encoded SQL statement. */
   int nBytes,               /* Length of zSql in bytes. */
-  int saveSqlFlag,          /* True to copy SQL text into the sqlite4_stmt */
   Vdbe *pReprepare,         /* VM being reprepared */
   sqlite4_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
   const char **pzTail       /* OUT: End of parsed string */
@@ -540,10 +539,9 @@ static int sqlite4Prepare(
   }
 #endif
 
-  assert( db->init.busy==0 || saveSqlFlag==0 );
   if( db->init.busy==0 ){
     Vdbe *pVdbe = pParse->pVdbe;
-    sqlite4VdbeSetSql(pVdbe, zSql, (int)(pParse->zTail-zSql), saveSqlFlag);
+    sqlite4VdbeSetSql(pVdbe, zSql, (int)(pParse->zTail-zSql));
   }
   if( pParse->pVdbe && (rc!=SQLITE_OK || db->mallocFailed) ){
     sqlite4VdbeFinalize(pParse->pVdbe);
@@ -570,14 +568,12 @@ end_prepare:
 
   sqlite4StackFree(db, pParse);
   rc = sqlite4ApiExit(db, rc);
-  assert( (rc&db->errMask)==rc );
   return rc;
 }
 static int sqlite4LockAndPrepare(
   sqlite4 *db,              /* Database handle. */
   const char *zSql,         /* UTF-8 encoded SQL statement. */
   int nBytes,               /* Length of zSql in bytes. */
-  int saveSqlFlag,          /* True to copy SQL text into the sqlite4_stmt */
   Vdbe *pOld,               /* VM being reprepared */
   sqlite4_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
   const char **pzTail       /* OUT: End of parsed string */
@@ -589,10 +585,10 @@ static int sqlite4LockAndPrepare(
     return SQLITE_MISUSE_BKPT;
   }
   sqlite4_mutex_enter(db->mutex);
-  rc = sqlite4Prepare(db, zSql, nBytes, saveSqlFlag, pOld, ppStmt, pzTail);
+  rc = sqlite4Prepare(db, zSql, nBytes, pOld, ppStmt, pzTail);
   if( rc==SQLITE_SCHEMA ){
     sqlite4_finalize(*ppStmt);
-    rc = sqlite4Prepare(db, zSql, nBytes, saveSqlFlag, pOld, ppStmt, pzTail);
+    rc = sqlite4Prepare(db, zSql, nBytes, pOld, ppStmt, pzTail);
   }
   sqlite4_mutex_leave(db->mutex);
   return rc;
@@ -614,10 +610,9 @@ int sqlite4Reprepare(Vdbe *p){
 
   assert( sqlite4_mutex_held(sqlite4VdbeDb(p)->mutex) );
   zSql = sqlite4_sql((sqlite4_stmt *)p);
-  assert( zSql!=0 );  /* Reprepare only called for prepare_v2() statements */
   db = sqlite4VdbeDb(p);
   assert( sqlite4_mutex_held(db->mutex) );
-  rc = sqlite4LockAndPrepare(db, zSql, -1, 0, p, &pNew, 0);
+  rc = sqlite4LockAndPrepare(db, zSql, -1, p, &pNew, 0);
   if( rc ){
     if( rc==SQLITE_NOMEM ){
       db->mallocFailed = 1;
@@ -651,101 +646,7 @@ int sqlite4_prepare(
   const char **pzTail       /* OUT: End of parsed string */
 ){
   int rc;
-  rc = sqlite4LockAndPrepare(db,zSql,nBytes,0,0,ppStmt,pzTail);
+  rc = sqlite4LockAndPrepare(db,zSql,nBytes,0,ppStmt,pzTail);
   assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
   return rc;
 }
-int sqlite4_prepare_v2(
-  sqlite4 *db,              /* Database handle. */
-  const char *zSql,         /* UTF-8 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  sqlite4_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const char **pzTail       /* OUT: End of parsed string */
-){
-  int rc;
-  rc = sqlite4LockAndPrepare(db,zSql,nBytes,1,0,ppStmt,pzTail);
-  assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
-  return rc;
-}
-
-
-#ifndef SQLITE_OMIT_UTF16
-/*
-** Compile the UTF-16 encoded SQL statement zSql into a statement handle.
-*/
-static int sqlite4Prepare16(
-  sqlite4 *db,              /* Database handle. */ 
-  const void *zSql,         /* UTF-16 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  int saveSqlFlag,          /* True to save SQL text into the sqlite4_stmt */
-  sqlite4_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const void **pzTail       /* OUT: End of parsed string */
-){
-  /* This function currently works by first transforming the UTF-16
-  ** encoded string to UTF-8, then invoking sqlite4_prepare(). The
-  ** tricky bit is figuring out the pointer to return in *pzTail.
-  */
-  char *zSql8;
-  const char *zTail8 = 0;
-  int rc = SQLITE_OK;
-
-  assert( ppStmt );
-  *ppStmt = 0;
-  if( !sqlite4SafetyCheckOk(db) ){
-    return SQLITE_MISUSE_BKPT;
-  }
-  sqlite4_mutex_enter(db->mutex);
-  zSql8 = sqlite4Utf16to8(db, zSql, nBytes, SQLITE_UTF16NATIVE);
-  if( zSql8 ){
-    rc = sqlite4LockAndPrepare(db, zSql8, -1, saveSqlFlag, 0, ppStmt, &zTail8);
-  }
-
-  if( zTail8 && pzTail ){
-    /* If sqlite4_prepare returns a tail pointer, we calculate the
-    ** equivalent pointer into the UTF-16 string by counting the unicode
-    ** characters between zSql8 and zTail8, and then returning a pointer
-    ** the same number of characters into the UTF-16 string.
-    */
-    int chars_parsed = sqlite4Utf8CharLen(zSql8, (int)(zTail8-zSql8));
-    *pzTail = (u8 *)zSql + sqlite4Utf16ByteLen(zSql, chars_parsed);
-  }
-  sqlite4DbFree(db, zSql8); 
-  rc = sqlite4ApiExit(db, rc);
-  sqlite4_mutex_leave(db->mutex);
-  return rc;
-}
-
-/*
-** Two versions of the official API.  Legacy and new use.  In the legacy
-** version, the original SQL text is not saved in the prepared statement
-** and so if a schema change occurs, SQLITE_SCHEMA is returned by
-** sqlite4_step().  In the new version, the original SQL text is retained
-** and the statement is automatically recompiled if an schema change
-** occurs.
-*/
-int sqlite4_prepare16(
-  sqlite4 *db,              /* Database handle. */ 
-  const void *zSql,         /* UTF-16 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  sqlite4_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const void **pzTail       /* OUT: End of parsed string */
-){
-  int rc;
-  rc = sqlite4Prepare16(db,zSql,nBytes,0,ppStmt,pzTail);
-  assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
-  return rc;
-}
-int sqlite4_prepare16_v2(
-  sqlite4 *db,              /* Database handle. */ 
-  const void *zSql,         /* UTF-16 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  sqlite4_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const void **pzTail       /* OUT: End of parsed string */
-){
-  int rc;
-  rc = sqlite4Prepare16(db,zSql,nBytes,1,ppStmt,pzTail);
-  assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
-  return rc;
-}
-
-#endif /* SQLITE_OMIT_UTF16 */

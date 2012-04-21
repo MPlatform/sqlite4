@@ -298,7 +298,7 @@ static void test_eval(
   const char *zSql;
 
   zSql = (char*)sqlite4_value_text(argv[0]);
-  rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
+  rc = sqlite4_prepare(db, zSql, -1, &pStmt, 0);
   if( rc==SQLITE_OK ){
     rc = sqlite4_step(pStmt);
     if( rc==SQLITE_ROW ){
@@ -309,7 +309,7 @@ static void test_eval(
   if( rc ){
     char *zErr;
     assert( pStmt==0 );
-    zErr = sqlite4_mprintf("sqlite4_prepare_v2() error: %s",sqlite4_errmsg(db));
+    zErr = sqlite4_mprintf("sqlite4_prepare() error: %s",sqlite4_errmsg(db));
     sqlite4_result_text(pCtx, zErr, -1, sqlite4_free);
     sqlite4_result_error_code(pCtx, rc);
   }

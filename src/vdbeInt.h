@@ -308,7 +308,6 @@ struct Vdbe {
   u8 inVtabMethod;        /* See comments above */
   u8 needSavepoint;       /* True if a change might abort and needs savepoint */
   u8 readOnly;            /* True for read-only statements */
-  u8 isPrepareV2;         /* True if prepared with prepare_v2() */
   int nChange;            /* Number of db changes made since last reset */
   yDbMask stmtTransMask;  /* db->aDb[] entries that have a subtransaction */
   int aCounter[3];        /* Counters used by sqlite4_stmt_status() */

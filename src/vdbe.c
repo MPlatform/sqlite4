@@ -552,7 +552,6 @@ int sqlite4VdbeExec(
   p->rc = SQLITE_OK;
   assert( p->explain==0 );
   p->pResultSet = 0;
-  db->busyHandler.nBusy = 0;
   CHECK_FOR_INTERRUPT;
   sqlite4VdbeIOTraceSql(p);
 #ifndef SQLITE_OMIT_PROGRESS_CALLBACK
@@ -3265,7 +3264,7 @@ case OP_NewRowid: {           /* out2-prerelease */
 ** This works exactly like OP_Insert except that the key is the
 ** integer value P3, not the value of the integer stored in register P3.
 */
-case OP_Insert: 
+case OP_Insert:
 case OP_InsertInt: {
   Mem *pData;       /* MEM cell holding data for the record to be inserted */
   Mem *pKey;        /* MEM cell holding key  for the record */
@@ -3291,7 +3290,7 @@ case OP_InsertInt: {
     REGISTER_TRACE(pOp->p3, pKey);
     iKey = pKey->u.i;
   }else{
-    assert( pOp->opcode==OP_InsertInt );
+    /* assert( pOp->opcode==OP_InsertInt ); */
     iKey = pOp->p3;
   }
 

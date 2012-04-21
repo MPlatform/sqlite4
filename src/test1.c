@@ -1464,29 +1464,6 @@ static int sqlite4_mprintf_hexdouble(
 }
 
 /*
-** Usage: sqlite4_extended_result_codes   DB    BOOLEAN
-**
-*/
-static int test_extended_result_codes(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  int enable;
-  sqlite4 *db;
-
-  if( objc!=3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "DB BOOLEAN");
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  if( Tcl_GetBooleanFromObj(interp, objv[2], &enable) ) return TCL_ERROR;
-  sqlite4_extended_result_codes(db, enable);
-  return TCL_OK;
-}
-
-/*
 ** Usage: sqlite4_libversion_number
 **
 */
@@ -3100,32 +3077,6 @@ static int test_sleep(
   return TCL_OK;
 }
 
-/*
-** Usage: sqlite4_extended_errcode DB
-**
-** Return the string representation of the most recent sqlite4_* API
-** error code. e.g. "SQLITE_ERROR".
-*/
-static int test_ex_errcode(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  sqlite4 *db;
-  int rc;
-
-  if( objc!=2 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"", 
-       Tcl_GetString(objv[0]), " DB", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  rc = sqlite4_extended_errcode(db);
-  Tcl_AppendResult(interp, (char *)t1ErrorName(rc), 0);
-  return TCL_OK;
-}
-
 
 /*
 ** Usage: sqlite4_errcode DB
@@ -3275,61 +3226,6 @@ static int test_prepare(
 }
 
 /*
-** Usage: sqlite4_prepare_v2 DB sql bytes ?tailvar?
-**
-** Compile up to <bytes> bytes of the supplied SQL string <sql> using
-** database handle <DB>. The parameter <tailval> is the name of a global
-** variable that is set to the unused portion of <sql> (if any). A
-** STMT handle is returned.
-*/
-static int test_prepare_v2(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  sqlite4 *db;
-  const char *zSql;
-  int bytes;
-  const char *zTail = 0;
-  sqlite4_stmt *pStmt = 0;
-  char zBuf[50];
-  int rc;
-
-  if( objc!=5 && objc!=4 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"", 
-       Tcl_GetString(objv[0]), " DB sql bytes tailvar", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  zSql = Tcl_GetString(objv[2]);
-  if( Tcl_GetIntFromObj(interp, objv[3], &bytes) ) return TCL_ERROR;
-
-  rc = sqlite4_prepare_v2(db, zSql, bytes, &pStmt, objc>=5 ? &zTail : 0);
-  assert(rc==SQLITE_OK || pStmt==0);
-  Tcl_ResetResult(interp);
-  if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
-  if( zTail && objc>=5 ){
-    if( bytes>=0 ){
-      bytes = bytes - (zTail-zSql);
-    }
-    Tcl_ObjSetVar2(interp, objv[4], 0, Tcl_NewStringObj(zTail, bytes), 0);
-  }
-  if( rc!=SQLITE_OK ){
-    assert( pStmt==0 );
-    sprintf(zBuf, "(%d) ", rc);
-    Tcl_AppendResult(interp, zBuf, sqlite4_errmsg(db), 0);
-    return TCL_ERROR;
-  }
-
-  if( pStmt ){
-    if( sqlite4TestMakePointerStr(interp, zBuf, pStmt) ) return TCL_ERROR;
-    Tcl_AppendResult(interp, zBuf, 0);
-  }
-  return TCL_OK;
-}
-
-/*
 ** Usage: sqlite4_prepare_tkt3134 DB
 **
 ** Generate a prepared statement for a zero-byte string as a test
@@ -3353,7 +3249,7 @@ static int test_prepare_tkt3134(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  rc = sqlite4_prepare_v2(db, &zSql[1], 0, &pStmt, 0);
+  rc = sqlite4_prepare(db, &zSql[1], 0, &pStmt, 0);
   assert(rc==SQLITE_OK || pStmt==0);
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
   if( rc!=SQLITE_OK ){
@@ -3367,126 +3263,6 @@ static int test_prepare_tkt3134(
     if( sqlite4TestMakePointerStr(interp, zBuf, pStmt) ) return TCL_ERROR;
     Tcl_AppendResult(interp, zBuf, 0);
   }
-  return TCL_OK;
-}
-
-/*
-** Usage: sqlite4_prepare16 DB sql bytes tailvar
-**
-** Compile up to <bytes> bytes of the supplied SQL string <sql> using
-** database handle <DB>. The parameter <tailval> is the name of a global
-** variable that is set to the unused portion of <sql> (if any). A
-** STMT handle is returned.
-*/
-static int test_prepare16(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#ifndef SQLITE_OMIT_UTF16
-  sqlite4 *db;
-  const void *zSql;
-  const void *zTail = 0;
-  Tcl_Obj *pTail = 0;
-  sqlite4_stmt *pStmt = 0;
-  char zBuf[50]; 
-  int rc;
-  int bytes;                /* The integer specified as arg 3 */
-  int objlen;               /* The byte-array length of arg 2 */
-
-  if( objc!=5 && objc!=4 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"", 
-       Tcl_GetString(objv[0]), " DB sql bytes ?tailvar?", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  zSql = Tcl_GetByteArrayFromObj(objv[2], &objlen);
-  if( Tcl_GetIntFromObj(interp, objv[3], &bytes) ) return TCL_ERROR;
-
-  rc = sqlite4_prepare16(db, zSql, bytes, &pStmt, objc>=5 ? &zTail : 0);
-  if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
-  if( rc ){
-    return TCL_ERROR;
-  }
-
-  if( objc>=5 ){
-    if( zTail ){
-      objlen = objlen - ((u8 *)zTail-(u8 *)zSql);
-    }else{
-      objlen = 0;
-    }
-    pTail = Tcl_NewByteArrayObj((u8 *)zTail, objlen);
-    Tcl_IncrRefCount(pTail);
-    Tcl_ObjSetVar2(interp, objv[4], 0, pTail, 0);
-    Tcl_DecrRefCount(pTail);
-  }
-
-  if( pStmt ){
-    if( sqlite4TestMakePointerStr(interp, zBuf, pStmt) ) return TCL_ERROR;
-  }
-  Tcl_AppendResult(interp, zBuf, 0);
-#endif /* SQLITE_OMIT_UTF16 */
-  return TCL_OK;
-}
-
-/*
-** Usage: sqlite4_prepare16_v2 DB sql bytes ?tailvar?
-**
-** Compile up to <bytes> bytes of the supplied SQL string <sql> using
-** database handle <DB>. The parameter <tailval> is the name of a global
-** variable that is set to the unused portion of <sql> (if any). A
-** STMT handle is returned.
-*/
-static int test_prepare16_v2(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#ifndef SQLITE_OMIT_UTF16
-  sqlite4 *db;
-  const void *zSql;
-  const void *zTail = 0;
-  Tcl_Obj *pTail = 0;
-  sqlite4_stmt *pStmt = 0;
-  char zBuf[50]; 
-  int rc;
-  int bytes;                /* The integer specified as arg 3 */
-  int objlen;               /* The byte-array length of arg 2 */
-
-  if( objc!=5 && objc!=4 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"", 
-       Tcl_GetString(objv[0]), " DB sql bytes ?tailvar?", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-  zSql = Tcl_GetByteArrayFromObj(objv[2], &objlen);
-  if( Tcl_GetIntFromObj(interp, objv[3], &bytes) ) return TCL_ERROR;
-
-  rc = sqlite4_prepare16_v2(db, zSql, bytes, &pStmt, objc>=5 ? &zTail : 0);
-  if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
-  if( rc ){
-    return TCL_ERROR;
-  }
-
-  if( objc>=5 ){
-    if( zTail ){
-      objlen = objlen - ((u8 *)zTail-(u8 *)zSql);
-    }else{
-      objlen = 0;
-    }
-    pTail = Tcl_NewByteArrayObj((u8 *)zTail, objlen);
-    Tcl_IncrRefCount(pTail);
-    Tcl_ObjSetVar2(interp, objv[4], 0, pTail, 0);
-    Tcl_DecrRefCount(pTail);
-  }
-
-  if( pStmt ){
-    if( sqlite4TestMakePointerStr(interp, zBuf, pStmt) ) return TCL_ERROR;
-  }
-  Tcl_AppendResult(interp, zBuf, 0);
-#endif /* SQLITE_OMIT_UTF16 */
   return TCL_OK;
 }
 
@@ -4181,33 +3957,6 @@ static int get_autocommit(
 }
 
 /*
-** Usage: sqlite4_busy_timeout DB MS
-**
-** Set the busy timeout.  This is more easily done using the timeout
-** method of the TCL interface.  But we need a way to test the case
-** where it returns SQLITE_MISUSE.
-*/
-static int test_busy_timeout(
-  void * clientData,
-  Tcl_Interp *interp,
-  int argc,
-  char **argv
-){
-  int rc, ms;
-  sqlite4 *db;
-  if( argc!=3 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0], 
-        " DB", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  if( Tcl_GetInt(interp, argv[2], &ms) ) return TCL_ERROR;
-  rc = sqlite4_busy_timeout(db, ms);
-  Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
-  return TCL_OK;
-}
-
-/*
 ** Usage:  tcl_variable_type VARIABLENAME
 **
 ** Return the name of the internal representation for the
@@ -4868,7 +4617,7 @@ int printExplainQueryPlan(sqlite4_stmt *pStmt){
   const char *zSql;               /* Input SQL */
   char *zExplain;                 /* SQL with EXPLAIN QUERY PLAN prepended */
   sqlite4_stmt *pExplain;         /* Compiled EXPLAIN QUERY PLAN command */
-  int rc;                         /* Return code from sqlite4_prepare_v2() */
+  int rc;                         /* Return code from sqlite4_prepare() */
 
   zSql = sqlite4_sql(pStmt);
   if( zSql==0 ) return SQLITE_ERROR;
@@ -4876,7 +4625,7 @@ int printExplainQueryPlan(sqlite4_stmt *pStmt){
   zExplain = sqlite4_mprintf("EXPLAIN QUERY PLAN %s", zSql);
   if( zExplain==0 ) return SQLITE_NOMEM;
 
-  rc = sqlite4_prepare_v2(sqlite4_db_handle(pStmt), zExplain, -1, &pExplain, 0);
+  rc = sqlite4_prepare(sqlite4_db_handle(pStmt), zExplain, -1, &pExplain, 0);
   sqlite4_free(zExplain);
   if( rc!=SQLITE_OK ) return rc;
 
@@ -5189,7 +4938,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite_delete_collation",       (Tcl_CmdProc*)delete_collation      },
      { "sqlite4_get_autocommit",        (Tcl_CmdProc*)get_autocommit        },
      { "sqlite4_stack_used",            (Tcl_CmdProc*)test_stack_used       },
-     { "sqlite4_busy_timeout",          (Tcl_CmdProc*)test_busy_timeout     },
      { "printf",                        (Tcl_CmdProc*)test_printf           },
      { "sqlite4IoTrace",              (Tcl_CmdProc*)test_io_trace         },
   };
@@ -5213,7 +4961,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_clear_bindings",        test_clear_bindings, 0},
      { "sqlite4_sleep",                 test_sleep,          0},
      { "sqlite4_errcode",               test_errcode       ,0 },
-     { "sqlite4_extended_errcode",      test_ex_errcode    ,0 },
      { "sqlite4_errmsg",                test_errmsg        ,0 },
      { "sqlite4_errmsg16",              test_errmsg16      ,0 },
      { "sqlite4_open",                  test_open          ,0 },
@@ -5222,10 +4969,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_complete16",            test_complete16    ,0 },
 
      { "sqlite4_prepare",               test_prepare       ,0 },
-     { "sqlite4_prepare16",             test_prepare16     ,0 },
-     { "sqlite4_prepare_v2",            test_prepare_v2    ,0 },
      { "sqlite4_prepare_tkt3134",       test_prepare_tkt3134, 0},
-     { "sqlite4_prepare16_v2",          test_prepare16_v2  ,0 },
      { "sqlite4_finalize",              test_finalize      ,0 },
      { "sqlite4_stmt_status",           test_stmt_status   ,0 },
      { "sqlite4_reset",                 test_reset         ,0 },
@@ -5243,7 +4987,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_db_release_memory",     test_db_release_memory,  0},
      { "sqlite4_soft_heap_limit",       test_soft_heap_limit,    0},
 
-     { "sqlite4_extended_result_codes", test_extended_result_codes, 0},
      { "sqlite4_limit",                 test_limit,                 0},
 
      { "save_prng_state",               save_prng_state,    0 },

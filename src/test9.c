@@ -145,31 +145,6 @@ static int c_misuse_test(
   }
   assert( pStmt==0 ); /* Verify that pStmt is zeroed even on a MISUSE error */
 
-  pStmt = (sqlite4_stmt*)1234;
-  rc = sqlite4_prepare_v2(db, 0, 0, &pStmt, 0);
-  if( rc!=SQLITE_MISUSE ){
-    zErrFunction = "sqlite4_prepare_v2";
-    goto error_out;
-  }
-  assert( pStmt==0 );
-
-#ifndef SQLITE_OMIT_UTF16
-  pStmt = (sqlite4_stmt*)1234;
-  rc = sqlite4_prepare16(db, 0, 0, &pStmt, 0);
-  if( rc!=SQLITE_MISUSE ){
-    zErrFunction = "sqlite4_prepare16";
-    goto error_out;
-  }
-  assert( pStmt==0 );
-  pStmt = (sqlite4_stmt*)1234;
-  rc = sqlite4_prepare16_v2(db, 0, 0, &pStmt, 0);
-  if( rc!=SQLITE_MISUSE ){
-    zErrFunction = "sqlite4_prepare16_v2";
-    goto error_out;
-  }
-  assert( pStmt==0 );
-#endif
-
   return TCL_OK;
 
 error_out:

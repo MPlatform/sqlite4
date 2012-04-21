@@ -195,7 +195,6 @@ TESTSRC = \
   $(TOP)/src/test1.c \
   $(TOP)/src/test4.c \
   $(TOP)/src/test5.c \
-  $(TOP)/src/test6.c \
   $(TOP)/src/test7.c \
   $(TOP)/src/test8.c \
   $(TOP)/src/test9.c \
@@ -206,7 +205,6 @@ TESTSRC = \
   $(TOP)/src/test_hexio.c \
   $(TOP)/src/test_init.c \
   $(TOP)/src/test_intarray.c \
-  $(TOP)/src/test_journal.c \
   $(TOP)/src/test_malloc.c \
   $(TOP)/src/test_mutex.c \
   $(TOP)/src/test_onefile.c \
@@ -491,7 +489,7 @@ soaktest:	testfixture$(EXE) sqlite4$(EXE)
 	./testfixture$(EXE) $(TOP)/test/all.test -soak=1
 
 test:	testfixture$(EXE) sqlite4$(EXE)
-	./testfixture$(EXE) $(TOP)/test/veryquick.test
+	./testfixture$(EXE) $(TOP)/test/src4.test
 
 # The next two rules are used to support the "threadtest" target. Building
 # threadtest runs a few thread-safety tests that are implemented in C. This

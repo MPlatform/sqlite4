@@ -774,5 +774,5 @@ int sqlite4ApiExit(sqlite4* db, int rc){
     db->mallocFailed = 0;
     rc = SQLITE_NOMEM;
   }
-  return rc & (db ? db->errMask : 0xff);
+  return rc;
 }

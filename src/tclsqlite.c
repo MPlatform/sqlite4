@@ -105,11 +105,6 @@ struct SqlPreparedStmt {
 /*
 ** There is one instance of this structure for each SQLite database
 ** that has been opened by the SQLite TCL interface.
-**
-** If this module is built with SQLITE_TEST defined (to create the SQLite
-** testfixture executable), then it may be configured to use either
-** sqlite4_prepare_v2() or sqlite4_prepare() to prepare SQL statements.
-** If SqliteDb.bLegacyPrepare is true, sqlite4_prepare() is used.
 */
 typedef struct SqliteDb SqliteDb;
 struct SqliteDb {
@@ -137,9 +132,6 @@ struct SqliteDb {
   int nStmt;                 /* Number of statements in stmtList */
   int nStep, nSort, nIndex;  /* Statistics for most recent operation */
   int nTransaction;          /* Number of nested [transaction] methods */
-#ifdef SQLITE_TEST
-  int bLegacyPrepare;        /* True to use sqlite4_prepare() */
-#endif
 };
 
 /*
@@ -282,23 +274,6 @@ static void DbDeleteCmd(void *db){
     Tcl_DecrRefCount(pDb->pCollateNeeded);
   }
   Tcl_Free((char*)pDb);
-}
-
-/*
-** This routine is called when a database file is locked while trying
-** to execute SQL.
-*/
-static int DbBusyHandler(void *cd, int nTries){
-  SqliteDb *pDb = (SqliteDb*)cd;
-  int rc;
-  char zVal[30];
-
-  sqlite4_snprintf(sizeof(zVal), zVal, "%d", nTries);
-  rc = Tcl_VarEval(pDb->interp, pDb->zBusy, " ", zVal, (char*)0);
-  if( rc!=TCL_OK || atoi(Tcl_GetStringResult(pDb->interp)) ){
-    return 0;
-  }
-  return 1;
 }
 
 #ifndef SQLITE_OMIT_PROGRESS_CALLBACK
@@ -817,27 +792,6 @@ static int DbTransPostCmd(
 }
 
 /*
-** Unless SQLITE_TEST is defined, this function is a simple wrapper around
-** sqlite4_prepare_v2(). If SQLITE_TEST is defined, then it uses either
-** sqlite4_prepare_v2() or legacy interface sqlite4_prepare(), depending
-** on whether or not the [db_use_legacy_prepare] command has been used to 
-** configure the connection.
-*/
-static int dbPrepare(
-  SqliteDb *pDb,                  /* Database object */
-  const char *zSql,               /* SQL to compile */
-  sqlite4_stmt **ppStmt,          /* OUT: Prepared statement */
-  const char **pzOut              /* OUT: Pointer to next SQL statement */
-){
-#ifdef SQLITE_TEST
-  if( pDb->bLegacyPrepare ){
-    return sqlite4_prepare(pDb->db, zSql, -1, ppStmt, pzOut);
-  }
-#endif
-  return sqlite4_prepare_v2(pDb->db, zSql, -1, ppStmt, pzOut);
-}
-
-/*
 ** Search the cache for a prepared-statement object that implements the
 ** first SQL statement in the buffer pointed to by parameter zIn. If
 ** no such prepared-statement can be found, allocate and prepare a new
@@ -907,7 +861,7 @@ static int dbPrepareAndBind(
   if( pPreStmt==0 ){
     int nByte;
 
-    if( SQLITE_OK!=dbPrepare(pDb, zSql, &pStmt, pzOut) ){
+    if( SQLITE_OK!=sqlite4_prepare(pDb->db, zSql, -1, &pStmt, pzOut) ){
       Tcl_SetObjResult(interp, dbTextToObj(sqlite4_errmsg(pDb->db)));
       return TCL_ERROR;
     }
@@ -1209,17 +1163,6 @@ static int dbEvalStep(DbEvalContext *p){
         /* If a run-time error occurs, report the error and stop reading
         ** the SQL.  */
         dbReleaseStmt(pDb, pPreStmt, 1);
-#if SQLITE_TEST
-        if( p->pDb->bLegacyPrepare && rcs==SQLITE_SCHEMA && zPrevSql ){
-          /* If the runtime error was an SQLITE_SCHEMA, and the database
-          ** handle is configured to use the legacy sqlite4_prepare() 
-          ** interface, retry prepare()/step() on the same SQL statement.
-          ** This only happens once. If there is a second SQLITE_SCHEMA
-          ** error, the error will be returned to the caller. */
-          p->zSql = zPrevSql;
-          continue;
-        }
-#endif
         Tcl_SetObjResult(pDb->interp, dbTextToObj(sqlite4_errmsg(pDb->db)));
         return TCL_ERROR;
       }else{
@@ -1395,30 +1338,28 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   int choice;
   int rc = TCL_OK;
   static const char *DB_strs[] = {
-    "authorizer",         "busy",              "cache",
-    "changes",            "close",             "collate",
-    "collation_needed",   "commit_hook",       "complete",
-    "copy",               "enable_load_extension","errorcode",
-    "eval",               "exists",            "function",
-    "interrupt",          "last_insert_rowid", "nullvalue",
-    "onecolumn",          "profile",           "rekey",
-    "rollback_hook",      "status",            "timeout",
-    "total_changes",      "trace",             "transaction",
-    "unlock_notify",      "update_hook",       "version",
-    "wal_hook",           0                    
+    "authorizer",         "cache",             "changes",
+    "close",              "collate",           "collation_needed",
+    "commit_hook",        "complete",          "copy",
+    "enable_load_extension", "errorcode",         "eval",
+    "exists",             "function",          "interrupt",
+    "last_insert_rowid",  "nullvalue",         "onecolumn",
+    "profile",            "rekey",             "rollback_hook",
+    "status",             "total_changes",     "trace",
+    "transaction",        "unlock_notify",     "update_hook",
+    "version",            "wal_hook",          0
   };
   enum DB_enum {
-    DB_AUTHORIZER,        DB_BUSY,             DB_CACHE,
-    DB_CHANGES,           DB_CLOSE,            DB_COLLATE,
-    DB_COLLATION_NEEDED,  DB_COMMIT_HOOK,      DB_COMPLETE,
-    DB_COPY,              DB_ENABLE_LOAD_EXTENSION,DB_ERRORCODE,
-    DB_EVAL,              DB_EXISTS,           DB_FUNCTION,
-    DB_INTERRUPT,         DB_LAST_INSERT_ROWID,DB_NULLVALUE,
-    DB_ONECOLUMN,         DB_PROFILE,          DB_REKEY,
-    DB_ROLLBACK_HOOK,     DB_STATUS,           DB_TIMEOUT,
-    DB_TOTAL_CHANGES,     DB_TRACE,            DB_TRANSACTION,
-    DB_UNLOCK_NOTIFY,     DB_UPDATE_HOOK,      DB_VERSION,
-    DB_WAL_HOOK         
+    DB_AUTHORIZER,        DB_CACHE,            DB_CHANGES,
+    DB_CLOSE,             DB_COLLATE,          DB_COLLATION_NEEDED,
+    DB_COMMIT_HOOK,       DB_COMPLETE,         DB_COPY,
+    DB_ENABLE_LOAD_EXTENSION, DB_ERRORCODE,        DB_EVAL,
+    DB_EXISTS,            DB_FUNCTION,         DB_INTERRUPT,
+    DB_LAST_INSERT_ROWID, DB_NULLVALUE,        DB_ONECOLUMN,
+    DB_PROFILE,           DB_REKEY,            DB_ROLLBACK_HOOK,
+    DB_STATUS,            DB_TOTAL_CHANGES,    DB_TRACE,
+    DB_TRANSACTION,       DB_UNLOCK_NOTIFY,    DB_UPDATE_HOOK,
+    DB_VERSION,           DB_WAL_HOOK,         
   };
   /* don't leave trailing commas on DB_enum, it confuses the AIX xlc compiler */
 
@@ -1483,42 +1424,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       }
     }
 #endif
-    break;
-  }
-
-  /*    $db busy ?CALLBACK?
-  **
-  ** Invoke the given callback if an SQL statement attempts to open
-  ** a locked database file.
-  */
-  case DB_BUSY: {
-    if( objc>3 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "CALLBACK");
-      return TCL_ERROR;
-    }else if( objc==2 ){
-      if( pDb->zBusy ){
-        Tcl_AppendResult(interp, pDb->zBusy, 0);
-      }
-    }else{
-      char *zBusy;
-      int len;
-      if( pDb->zBusy ){
-        Tcl_Free(pDb->zBusy);
-      }
-      zBusy = Tcl_GetStringFromObj(objv[2], &len);
-      if( zBusy && len>0 ){
-        pDb->zBusy = Tcl_Alloc( len + 1 );
-        memcpy(pDb->zBusy, zBusy, len+1);
-      }else{
-        pDb->zBusy = 0;
-      }
-      if( pDb->zBusy ){
-        pDb->interp = interp;
-        sqlite4_busy_handler(pDb->db, DbBusyHandler, pDb);
-      }else{
-        sqlite4_busy_handler(pDb->db, 0, 0);
-      }
-    }
     break;
   }
 
@@ -2219,22 +2124,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   }
   
   /*
-  **     $db timeout MILLESECONDS
-  **
-  ** Delay for the number of milliseconds specified when a file is locked.
-  */
-  case DB_TIMEOUT: {
-    int ms;
-    if( objc!=3 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "MILLISECONDS");
-      return TCL_ERROR;
-    }
-    if( Tcl_GetIntFromObj(interp, objv[2], &ms) ) return TCL_ERROR;
-    sqlite4_busy_timeout(pDb->db, ms);
-    break;
-  }
-  
-  /*
   **     $db total_changes
   **
   ** Return the number of rows that were modified, inserted, or deleted 
@@ -2509,7 +2398,7 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   if( objc==2 ){
     zArg = Tcl_GetStringFromObj(objv[1], 0);
     if( strcmp(zArg,"-version")==0 ){
-      Tcl_AppendResult(interp,sqlite4_version,0);
+      Tcl_AppendResult(interp,sqlite4_libversion(),0);
       return TCL_OK;
     }
     if( strcmp(zArg,"-has-codec")==0 ){
@@ -3199,8 +3088,6 @@ static int db_use_legacy_prepare_cmd(
     return TCL_ERROR;
   }
 
-  pDb->bLegacyPrepare = bPrepare;
-
   Tcl_ResetResult(interp);
   return TCL_OK;
 }
@@ -3231,7 +3118,6 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitetest3_Init(Tcl_Interp*);
     extern int Sqlitetest4_Init(Tcl_Interp*);
     extern int Sqlitetest5_Init(Tcl_Interp*);
-    extern int Sqlitetest6_Init(Tcl_Interp*);
     extern int Sqlitetest7_Init(Tcl_Interp*);
     extern int Sqlitetest8_Init(Tcl_Interp*);
     extern int Sqlitetest9_Init(Tcl_Interp*);
@@ -3271,7 +3157,6 @@ static void init_all(Tcl_Interp *interp){
     Sqlitetest1_Init(interp);
     Sqlitetest4_Init(interp);
     Sqlitetest5_Init(interp);
-    Sqlitetest6_Init(interp);
     Sqlitetest7_Init(interp);
     Sqlitetest8_Init(interp);
     Sqlitetest9_Init(interp);

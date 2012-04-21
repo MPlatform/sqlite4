@@ -1097,7 +1097,7 @@ static int shell_exec(
   }
 
   while( zSql[0] && (SQLITE_OK == rc) ){
-    rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, &zLeftover);
+    rc = sqlite4_prepare(db, zSql, -1, &pStmt, &zLeftover);
     if( SQLITE_OK != rc ){
       if( pzErrMsg ){
         *pzErrMsg = save_err_msg(db);
@@ -1397,7 +1397,6 @@ static char zHelp[] =
   ".tables ?TABLE?        List names of tables\n"
   "                         If TABLE specified, only list tables matching\n"
   "                         LIKE pattern TABLE.\n"
-  ".timeout MS            Try opening locked tables for MS milliseconds\n"
   ".width NUM1 NUM2 ...   Set column widths for \"column\" mode\n"
 ;
 
@@ -2251,11 +2250,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
           break;
       }
     }
-  }else
-
-  if( c=='t' && n>4 && strncmp(azArg[0], "timeout", n)==0 && nArg==2 ){
-    open_db(p);
-    sqlite4_busy_timeout(p->db, atoi(azArg[1]));
   }else
     
   if( HAS_TIMER && c=='t' && n>=5 && strncmp(azArg[0], "timer", n)==0

@@ -538,22 +538,6 @@ extern const int sqlite4one;
 
 
 /*
-** An instance of the following structure is used to store the busy-handler
-** callback for a given sqlite handle. 
-**
-** The sqlite.busyHandler member of the sqlite struct contains the busy
-** callback for the database handle. Each pager opened via the sqlite
-** handle is passed a pointer to sqlite.busyHandler. The busy-handler
-** callback is currently invoked only from within pager.c.
-*/
-typedef struct BusyHandler BusyHandler;
-struct BusyHandler {
-  int (*xFunc)(void *,int);  /* The busy callback */
-  void *pArg;                /* First arg to busy callback */
-  int nBusy;                 /* Incremented with each busy call */
-};
-
-/*
 ** Name of the master database table.  The master database table
 ** is a special table that holds the names and attributes of all
 ** user tables and indices.
@@ -681,11 +665,6 @@ typedef struct WhereInfo WhereInfo;
 typedef struct WhereLevel WhereLevel;
 
 
-/*
-** Defer sourcing vdbe.h until after the "u8" and 
-** "BusyHandler" typedefs. vdbe.h also requires a few of the opaque
-** pointer types (i.e. FuncDef) defined above.
-*/
 #include "vdbe.h"
 #include "storage.h"
 
@@ -844,7 +823,6 @@ struct sqlite4 {
   int flags;                    /* Miscellaneous flags. See below */
   unsigned int openFlags;       /* Flags passed to sqlite4_vfs.xOpen() */
   int errCode;                  /* Most recent error code (SQLITE_*) */
-  int errMask;                  /* & result codes with this before returning */
   u8 autoCommit;                /* The auto-commit flag. */
   u8 temp_store;                /* 1: file 2: memory 0: default */
   u8 mallocFailed;              /* True if we have seen a malloc failure */
@@ -917,8 +895,6 @@ struct sqlite4 {
 #endif
   FuncDefHash aFunc;            /* Hash table of connection functions */
   Hash aCollSeq;                /* All collating sequences */
-  BusyHandler busyHandler;      /* Busy callback */
-  int busyTimeout;              /* Busy handler timeout, in msec */
   Db aDbStatic[2];              /* Static space for the 2 default backends */
   Savepoint *pSavepoint;        /* List of active savepoints */
   int nSavepoint;               /* Number of non-transaction savepoints */
@@ -3082,7 +3058,6 @@ void sqlite4AlterBeginAddColumn(Parse *, SrcList *);
 CollSeq *sqlite4GetCollSeq(sqlite4*, u8, CollSeq *, const char*);
 char sqlite4AffinityType(const char*);
 void sqlite4Analyze(Parse*, Token*, Token*);
-int sqlite4InvokeBusyHandler(BusyHandler*);
 int sqlite4FindDb(sqlite4*, Token*);
 int sqlite4FindDbName(sqlite4 *, const char *);
 int sqlite4AnalysisLoad(sqlite4*,int iDB);

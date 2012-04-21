@@ -205,7 +205,7 @@ void sqlite4VdbeSetNumCols(Vdbe*,int);
 int sqlite4VdbeSetColName(Vdbe*, int, int, const char *, void(*)(void*));
 void sqlite4VdbeCountChanges(Vdbe*);
 sqlite4 *sqlite4VdbeDb(Vdbe*);
-void sqlite4VdbeSetSql(Vdbe*, const char *z, int n, int);
+void sqlite4VdbeSetSql(Vdbe*, const char *z, int n);
 void sqlite4VdbeSwap(Vdbe*,Vdbe*);
 VdbeOp *sqlite4VdbeTakeOpArray(Vdbe*, int*, int*);
 sqlite4_value *sqlite4VdbeGetValue(Vdbe*, int, u8);

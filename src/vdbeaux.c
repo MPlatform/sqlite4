@@ -50,15 +50,10 @@ Vdbe *sqlite4VdbeCreate(sqlite4 *db){
 /*
 ** Remember the SQL string for a prepared statement.
 */
-void sqlite4VdbeSetSql(Vdbe *p, const char *z, int n, int isPrepareV2){
-  assert( isPrepareV2==1 || isPrepareV2==0 );
+void sqlite4VdbeSetSql(Vdbe *p, const char *z, int n){
   if( p==0 ) return;
-#ifdef SQLITE_OMIT_TRACE
-  if( !isPrepareV2 ) return;
-#endif
   assert( p->zSql==0 );
   p->zSql = sqlite4DbStrNDup(p->db, z, n);
-  p->isPrepareV2 = (u8)isPrepareV2;
 }
 
 /*
@@ -66,7 +61,7 @@ void sqlite4VdbeSetSql(Vdbe *p, const char *z, int n, int isPrepareV2){
 */
 const char *sqlite4_sql(sqlite4_stmt *pStmt){
   Vdbe *p = (Vdbe *)pStmt;
-  return (p && p->isPrepareV2) ? p->zSql : 0;
+  return p ? p->zSql : 0;
 }
 
 /*
@@ -87,7 +82,6 @@ void sqlite4VdbeSwap(Vdbe *pA, Vdbe *pB){
   zTmp = pA->zSql;
   pA->zSql = pB->zSql;
   pB->zSql = zTmp;
-  pB->isPrepareV2 = pA->isPrepareV2;
 }
 
 #ifdef SQLITE_DEBUG
@@ -2000,7 +1994,7 @@ int sqlite4VdbeReset(Vdbe *p){
   }
 #endif
   p->magic = VDBE_MAGIC_INIT;
-  return p->rc & db->errMask;
+  return p->rc;
 }
  
 /*
@@ -2011,7 +2005,6 @@ int sqlite4VdbeFinalize(Vdbe *p){
   int rc = SQLITE_OK;
   if( p->magic==VDBE_MAGIC_RUN || p->magic==VDBE_MAGIC_HALT ){
     rc = sqlite4VdbeReset(p);
-    assert( (rc & p->db->errMask)==rc );
   }
   sqlite4VdbeDelete(p);
   return rc;

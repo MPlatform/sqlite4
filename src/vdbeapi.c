@@ -103,7 +103,6 @@ int sqlite4_reset(sqlite4_stmt *pStmt){
     sqlite4_mutex_enter(v->db->mutex);
     rc = sqlite4VdbeReset(v);
     sqlite4VdbeRewind(v);
-    assert( (rc & (v->db->errMask))==rc );
     rc = sqlite4ApiExit(v->db, rc);
     sqlite4_mutex_leave(v->db->mutex);
   }
@@ -125,7 +124,7 @@ int sqlite4_clear_bindings(sqlite4_stmt *pStmt){
     sqlite4VdbeMemRelease(&p->aVar[i]);
     p->aVar[i].flags = MEM_Null;
   }
-  if( p->isPrepareV2 && p->expmask ){
+  if( p->expmask ){
     p->expired = 1;
   }
   sqlite4_mutex_leave(mutex);
@@ -420,14 +419,10 @@ end_of_step:
        || rc==SQLITE_BUSY || rc==SQLITE_MISUSE
   );
   assert( p->rc!=SQLITE_ROW && p->rc!=SQLITE_DONE );
-  if( p->isPrepareV2 && rc!=SQLITE_ROW && rc!=SQLITE_DONE ){
-    /* If this statement was prepared using sqlite4_prepare_v2(), and an
-    ** error has occured, then return the error code in p->rc to the
-    ** caller. Set the error code in the database handle to the same value.
-    */ 
+  if( rc!=SQLITE_ROW && rc!=SQLITE_DONE ){
     rc = sqlite4VdbeTransferError(p);
   }
-  return (rc&db->errMask);
+  return rc;
 }
 
 /*
@@ -461,7 +456,7 @@ int sqlite4_step(sqlite4_stmt *pStmt){
     sqlite4_reset(pStmt);
     assert( v->expired==0 );
   }
-  if( rc2!=SQLITE_OK && ALWAYS(v->isPrepareV2) && ALWAYS(db->pErr) ){
+  if( rc2!=SQLITE_OK && ALWAYS(db->pErr) ){
     /* This case occurs after failing to recompile an sql statement. 
     ** The error message from the SQL compiler has already been loaded 
     ** into the database handle. This block copies the error message 
@@ -989,8 +984,7 @@ static int vdbeUnbind(Vdbe *p, int i){
   ** as if there had been a schema change, on the first sqlite4_step() call
   ** following any change to the bindings of that parameter.
   */
-  if( p->isPrepareV2 &&
-     ((i<32 && p->expmask & ((u32)1 << i)) || p->expmask==0xffffffff)
+  if( ((i<32 && p->expmask & ((u32)1 << i)) || p->expmask==0xffffffff)
   ){
     p->expired = 1;
   }
@@ -1220,10 +1214,10 @@ int sqlite4_transfer_bindings(sqlite4_stmt *pFromStmt, sqlite4_stmt *pToStmt){
   if( pFrom->nVar!=pTo->nVar ){
     return SQLITE_ERROR;
   }
-  if( pTo->isPrepareV2 && pTo->expmask ){
+  if( pTo->expmask ){
     pTo->expired = 1;
   }
-  if( pFrom->isPrepareV2 && pFrom->expmask ){
+  if( pFrom->expmask ){
     pFrom->expired = 1;
   }
   return sqlite4TransferBindings(pFromStmt, pToStmt);

@@ -137,7 +137,6 @@ exec_out:
     *pzErrMsg = 0;
   }
 
-  assert( (rc&db->errMask)==rc );
   sqlite4_mutex_leave(db->mutex);
   return rc;
 }
