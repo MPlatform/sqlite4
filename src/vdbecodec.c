@@ -404,42 +404,48 @@ int sqlite4VdbeEncodeIntKey(u8 *a, sqlite4_int64 v){
 ** Encode the small positive floating point number r using the key
 ** encoding.  The caller guarantees that r will be less than 1.0 and
 ** greater than 0.0.
-**
-** The key encoding is the negative of the exponent E followed by the
-** mantessa M.  The exponent E is one less than the number of digits to
-** the left of the decimal point.  Since r is less than 1, E will always
-** be negative here.  E is output as a varint, and varints must be
-** positive, which is why we output -E.  The mantissa is stored two-digits
-** per byte as described for the integer encoding above.
 */
 static void encodeSmallFloatKey(double r, KeyEncoder *p){
   int e = 0;
   int i, n;
   assert( r>0.0 && r<1.0 );
-  while( r<1e-8 ){ r *= 1e8; e+=4; }
-  while( r<1.0 ){ r *= 100.0; e++; }
+  while( r<1e-10 ){ r *= 1e8; e+=4; }
+  while( r<0.01 ){ r *= 100.0; e++; }
   n = sqlite4PutVarint64(p->aOut+p->nOut, e);
   for(i=0; i<n; i++) p->aOut[i+p->nOut] ^= 0xff;
   p->nOut += n;
   for(i=0; i<18 && r!=0.0; i++){
+    r *= 100.0;
     int d = r;
     p->aOut[p->nOut++] = 2*d + 1;
     r -= d;
-    r *= 100.0;
   }
   p->aOut[p->nOut-1] &= 0xfe;
 }
 
 /*
 ** Encode the large positive floating point number r using the key
-** encoding.  The caller guarantees that r will be finite and greater than
+** encoding. The caller guarantees that r will be finite and greater than
 ** or equal to 1.0.
 **
-** The key encoding is the exponent E followed by the mantessa M.  
-** The exponent E is one less than the number of digits to the left 
-** of the decimal point.  Since r is at least than 1.0, E will always
-** be non-negative here. The mantissa is stored two-digits per byte
-** as described for the integer encoding above.
+** A floating point value is encoded as an integer exponent E and a 
+** mantissa M. The original value is equal to (M * 100^E). E is set to
+** the smallest value possible without making M greater than or equal 
+** to 1.0.
+**
+** Each centimal digit of the mantissa is stored in a byte. If the value 
+** of the centimal digit is X (hence X>=0 and X<=99) then the byte value 
+** will be 2*X+1 for every byte of the mantissa, except for the last byte 
+** which will be 2*X+0. The mantissa must be the minimum number of bytes 
+** necessary to represent the value; trailing X==0 digits are omitted. 
+** This means that the mantissa will never contain a byte with the 
+** value 0x00.
+**
+** If E is greater than 10, the encoded value consists of E as a varint
+** followed by the mantissa as described above. Otherwise, it consists
+** of the mantissa only.
+**
+** The value returned by this function is E.
 */
 static int encodeLargeFloatKey(double r, KeyEncoder *p){
   int e = 0;
@@ -447,17 +453,16 @@ static int encodeLargeFloatKey(double r, KeyEncoder *p){
   assert( r>=1.0 );
   while( r>=1e32 && e<=350 ){ r *= 1e-32; e+=16; }
   while( r>=1e8 && e<=350 ){ r *= 1e-8; e+=4; }
-  while( r>=100.0 && e<=350 ){ r *= 0.01; e++; }
-  while( r<1.0 ){ r *= 10.0; e--; }
+  while( r>=1.0 && e<=350 ){ r *= 0.01; e++; }
   if( e>10 ){
     n = sqlite4PutVarint64(p->aOut+p->nOut, e);
     p->nOut += n;
   }
   for(i=0; i<18 && r!=0.0; i++){
+    r *= 100.0;
     int d = r;
     p->aOut[p->nOut++] = 2*d + 1;
     r -= d;
-    r *= 100.0;
   }
   p->aOut[p->nOut-1] &= 0xfe;
   return e;

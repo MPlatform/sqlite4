@@ -16,7 +16,6 @@ set testprefix simple
 
 #set sqlite_where_trace 1
 #
-if 1 {
 
 do_execsql_test 1.0 { 
   PRAGMA table_info = sqlite_master
@@ -789,8 +788,6 @@ foreach {t schema} {
   }
 }
 
-}
-
 #-------------------------------------------------------------------------
 reset_db
 
@@ -806,4 +803,43 @@ do_execsql_test 43.2 {
   SELECT a, sum(b) FROM t1 GROUP BY a;
 } {a 3 b 9}
 
+#-------------------------------------------------------------------------
+# Test sorting numeric values.
+#
+reset_db
+do_execsql_test 44.1 { CREATE TABLE t1(x PRIMARY KEY, y) }
+do_test 44.2 {
+  set lVal [list]
+  set val 5.0
+  for {set i 0} {$i < 10} {incr i ; set val [expr {$val*5.0}] } {
+    lappend lVal $val
+  }
+  set val 5
+  for {set i 0} {$i < 10} {incr i ; set val [expr {$val*5}] } {
+    lappend lVal [expr $val-1]
+    set val [expr {$val*5}]
+  }
+  set val 5.0
+  for {set i 0} {$i < 10} {incr i ; set val [expr {$val/5.0}] } {
+    lappend lVal $val
+    set val [expr {$val/5.0}]
+  }
+
+  set lVal2 [list]
+  foreach val $lVal { lappend lVal2 [expr $val * -1] }
+  set lVal [concat $lVal $lVal2]
+
+  foreach v $lVal {
+    execsql "INSERT INTO t1 VALUES(randomblob(16), $v)"
+  }
+} {}
+
+do_execsql_test 44.3 {
+  SELECT y FROM t1 ORDER BY y;
+} [lsort -real $lVal]
+do_execsql_test 44.4 {
+  SELECT count(*) FROM t1;
+} {60}
+
 finish_test
+
