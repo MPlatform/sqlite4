@@ -1006,30 +1006,12 @@ static int display_stats(
     iHiwtr = iCur = -1;
     sqlite4_status(SQLITE_STATUS_MALLOC_COUNT, &iCur, &iHiwtr, bReset);
     fprintf(pArg->out, "Number of Outstanding Allocations:   %d (max %d)\n", iCur, iHiwtr);
-/*
-** Not currently used by the CLI.
-**    iHiwtr = iCur = -1;
-**    sqlite4_status(SQLITE_STATUS_PAGECACHE_USED, &iCur, &iHiwtr, bReset);
-**    fprintf(pArg->out, "Number of Pcache Pages Used:         %d (max %d) pages\n", iCur, iHiwtr);
-*/
-    iHiwtr = iCur = -1;
-    sqlite4_status(SQLITE_STATUS_PAGECACHE_OVERFLOW, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Number of Pcache Overflow Bytes:     %d (max %d) bytes\n", iCur, iHiwtr);
-/*
-** Not currently used by the CLI.
-**    iHiwtr = iCur = -1;
-**    sqlite4_status(SQLITE_STATUS_SCRATCH_USED, &iCur, &iHiwtr, bReset);
-**    fprintf(pArg->out, "Number of Scratch Allocations Used:  %d (max %d)\n", iCur, iHiwtr);
-*/
     iHiwtr = iCur = -1;
     sqlite4_status(SQLITE_STATUS_SCRATCH_OVERFLOW, &iCur, &iHiwtr, bReset);
     fprintf(pArg->out, "Number of Scratch Overflow Bytes:    %d (max %d) bytes\n", iCur, iHiwtr);
     iHiwtr = iCur = -1;
     sqlite4_status(SQLITE_STATUS_MALLOC_SIZE, &iCur, &iHiwtr, bReset);
     fprintf(pArg->out, "Largest Allocation:                  %d bytes\n", iHiwtr);
-    iHiwtr = iCur = -1;
-    sqlite4_status(SQLITE_STATUS_PAGECACHE_SIZE, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Largest Pcache Allocation:           %d bytes\n", iHiwtr);
     iHiwtr = iCur = -1;
     sqlite4_status(SQLITE_STATUS_SCRATCH_SIZE, &iCur, &iHiwtr, bReset);
     fprintf(pArg->out, "Largest Scratch Allocation:          %d bytes\n", iHiwtr);

@@ -2440,7 +2440,6 @@ struct Sqlite3Config {
   int nLookaside;                   /* Default lookaside buffer count */
   sqlite4_mem_methods m;            /* Low-level memory allocation interface */
   sqlite4_mutex_methods mutex;      /* Low-level mutex interface */
-  sqlite4_pcache_methods2 pcache2;  /* Low-level page-cache interface */
   void *pHeap;                      /* Heap storage space */
   int nHeap;                        /* Size of pHeap[] */
   int mnReq, mxReq;                 /* Min and max heap requests sizes */
@@ -2457,7 +2456,6 @@ struct Sqlite3Config {
   int inProgress;                   /* True while initialization in progress */
   int isMutexInit;                  /* True after mutexes are initialized */
   int isMallocInit;                 /* True after malloc is initialized */
-  int isPCacheInit;                 /* True after malloc is initialized */
   sqlite4_mutex *pInitMutex;        /* Mutex used by sqlite4_initialize() */
   int nRefInitMutex;                /* Number of users of pInitMutex */
   void (*xLog)(void*,int,const char*); /* Function for logging */
@@ -3284,7 +3282,6 @@ SQLITE_EXTERN void (*sqlite4IoTrace)(const char*,...);
 #define MEMTYPE_HEAP       0x01  /* General heap allocations */
 #define MEMTYPE_LOOKASIDE  0x02  /* Might have been lookaside memory */
 #define MEMTYPE_SCRATCH    0x04  /* Scratch allocations */
-#define MEMTYPE_PCACHE     0x08  /* Page cache allocations */
 #define MEMTYPE_DB         0x10  /* Uses sqlite4DbMalloc, not sqlite_malloc */
 
 #endif /* _SQLITEINT_H_ */

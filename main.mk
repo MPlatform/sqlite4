@@ -202,7 +202,6 @@ TESTSRC = \
   $(TOP)/src/test_devsym.c \
   $(TOP)/src/test_fuzzer.c \
   $(TOP)/src/test_hexio.c \
-  $(TOP)/src/test_init.c \
   $(TOP)/src/test_intarray.c \
   $(TOP)/src/test_malloc.c \
   $(TOP)/src/test_mutex.c \

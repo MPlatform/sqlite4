@@ -956,50 +956,6 @@ static int test_config_pagecache(
 }
 
 /*
-** Usage:    sqlite4_config_alt_pcache INSTALL_FLAG DISCARD_CHANCE PRNG_SEED
-**
-** Set up the alternative test page cache.  Install if INSTALL_FLAG is
-** true and uninstall (reverting to the default page cache) if INSTALL_FLAG
-** is false.  DISCARD_CHANGE is an integer between 0 and 100 inclusive
-** which determines the chance of discarding a page when unpinned.  100
-** is certainty.  0 is never.  PRNG_SEED is the pseudo-random number generator
-** seed.
-*/
-static int test_alt_pcache(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  int installFlag;
-  int discardChance = 0;
-  int prngSeed = 0;
-  int highStress = 0;
-  extern void installTestPCache(int,unsigned,unsigned,unsigned);
-  if( objc<2 || objc>5 ){
-    Tcl_WrongNumArgs(interp, 1, objv, 
-        "INSTALLFLAG DISCARDCHANCE PRNGSEEED HIGHSTRESS");
-    return TCL_ERROR;
-  }
-  if( Tcl_GetIntFromObj(interp, objv[1], &installFlag) ) return TCL_ERROR;
-  if( objc>=3 && Tcl_GetIntFromObj(interp, objv[2], &discardChance) ){
-     return TCL_ERROR;
-  }
-  if( objc>=4 && Tcl_GetIntFromObj(interp, objv[3], &prngSeed) ){
-     return TCL_ERROR;
-  }
-  if( objc>=5 && Tcl_GetIntFromObj(interp, objv[4], &highStress) ){
-    return TCL_ERROR;
-  }
-  if( discardChance<0 || discardChance>100 ){
-    Tcl_AppendResult(interp, "discard-chance should be between 0 and 100",
-                     (char*)0);
-    return TCL_ERROR;
-  }
-  return TCL_OK;
-}
-
-/*
 ** Usage:    sqlite4_config_memstatus BOOLEAN
 **
 ** Enable or disable memory status reporting using SQLITE_CONFIG_MEMSTATUS.
@@ -1395,7 +1351,6 @@ int Sqlitetest_malloc_Init(Tcl_Interp *interp){
      { "sqlite4_memdebug_log",       test_memdebug_log             ,0 },
      { "sqlite4_config_scratch",     test_config_scratch           ,0 },
      { "sqlite4_config_pagecache",   test_config_pagecache         ,0 },
-     { "sqlite4_config_alt_pcache",  test_alt_pcache               ,0 },
      { "sqlite4_status",             test_status                   ,0 },
      { "sqlite4_db_status",          test_db_status                ,0 },
      { "install_malloc_faultsim",    test_install_malloc_faultsim  ,0 },

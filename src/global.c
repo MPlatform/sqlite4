@@ -142,7 +142,6 @@ SQLITE_WSD struct Sqlite3Config sqlite4Config = {
    500,                       /* nLookaside */
    {0,0,0,0,0,0,0,0},         /* m */
    {0,0,0,0,0,0,0,0,0},       /* mutex */
-   {0,0,0,0,0,0,0,0,0,0,0,0,0},/* pcache2 */
    (void*)0,                  /* pHeap */
    0,                         /* nHeap */
    0, 0,                      /* mnHeap, mxHeap */
@@ -158,7 +157,6 @@ SQLITE_WSD struct Sqlite3Config sqlite4Config = {
    0,                         /* inProgress */
    0,                         /* isMutexInit */
    0,                         /* isMallocInit */
-   0,                         /* isPCacheInit */
    0,                         /* pInitMutex */
    0,                         /* nRefInitMutex */
    0,                         /* xLog */
