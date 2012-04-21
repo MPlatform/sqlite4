@@ -1472,10 +1472,9 @@ int sqlite4FindInIndex(Parse *pParse, Expr *pX, int *prNotFound){
     pExpr = p->pEList->a[0].pExpr;
     iCol = pExpr->iColumn;
    
-    /* Code an OP_VerifyCookie and OP_TableLock for <table>. */
+    /* Code an OP_VerifyCookie for <table> */
     iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
     sqlite4CodeVerifySchema(pParse, iDb);
-    sqlite4TableLock(pParse, iDb, pTab->tnum, 0, pTab->zName);
 
     /* This function is only called from two places. In both cases the vdbe
     ** has already been allocated. So assume sqlite4GetVdbe() is always

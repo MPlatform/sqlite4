@@ -181,7 +181,6 @@ static void openStatTable(
       ** associated with the table zWhere. If zWhere is NULL, delete the
       ** entire contents of the table. */
       aRoot[i] = pStat->tnum;
-      sqlite4TableLock(pParse, iDb, aRoot[i], 1, zTab);
       if( zWhere ){
         sqlite4NestedParse(pParse,
            "DELETE FROM %Q.%s WHERE %s=%Q", pDb->zName, zTab, zWhereType, zWhere
@@ -485,9 +484,6 @@ static void analyzeOneTable(
     return;
   }
 #endif
-
-  /* Establish a read-lock on the table at the shared-cache level. */
-  sqlite4TableLock(pParse, iDb, pTab->tnum, 0, pTab->zName);
 
   iIdxCur = pParse->nTab++;
   sqlite4VdbeAddOp4(v, OP_String8, 0, regTabname, 0, pTab->zName, 0);

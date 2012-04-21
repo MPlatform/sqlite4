@@ -4940,18 +4940,6 @@ WhereInfo *sqlite4WhereBegin(
       sqlite4OpenPrimaryKey(pParse, pTabItem->iCursor, iDb, pTab, op);
       testcase( pTab->nCol==BMS-1 );
       testcase( pTab->nCol==BMS );
-#if 0
-      if( !pWInfo->okOnePass && pTab->nCol<BMS ){
-        Bitmask b = pTabItem->colUsed;
-        int n = 0;
-        for(; b; b=b>>1, n++){}
-        sqlite4VdbeChangeP4(v, sqlite4VdbeCurrentAddr(v)-1, 
-                            SQLITE_INT_TO_PTR(n), P4_INT32);
-        assert( n<=pTab->nCol );
-      }
-#endif
-    }else{
-      sqlite4TableLock(pParse, iDb, pTab->tnum, 0, pTab->zName);
     }
 #ifndef SQLITE_OMIT_AUTOMATIC_INDEX
     if( (pLevel->plan.wsFlags & WHERE_TEMP_INDEX)!=0 ){

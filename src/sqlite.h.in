@@ -477,8 +477,6 @@ int sqlite4_exec(
 #define SQLITE_OPEN_MASTER_JOURNAL   0x00004000  /* VFS only */
 #define SQLITE_OPEN_NOMUTEX          0x00008000  /* Ok for sqlite4_open_v2() */
 #define SQLITE_OPEN_FULLMUTEX        0x00010000  /* Ok for sqlite4_open_v2() */
-#define SQLITE_OPEN_SHAREDCACHE      0x00020000  /* Ok for sqlite4_open_v2() */
-#define SQLITE_OPEN_PRIVATECACHE     0x00040000  /* Ok for sqlite4_open_v2() */
 #define SQLITE_OPEN_WAL              0x00080000  /* VFS only */
 
 /* Reserved:                         0x00F00000 */
@@ -2332,8 +2330,8 @@ void sqlite4_progress_handler(sqlite4*, int, int(*)(void*), void*);
 ** over the new database connection.  ^(The flags parameter to
 ** sqlite4_open_v2() can take one of
 ** the following three values, optionally combined with the 
-** [SQLITE_OPEN_NOMUTEX], [SQLITE_OPEN_FULLMUTEX], [SQLITE_OPEN_SHAREDCACHE],
-** [SQLITE_OPEN_PRIVATECACHE], and/or [SQLITE_OPEN_URI] flags:)^
+** [SQLITE_OPEN_NOMUTEX], [SQLITE_OPEN_FULLMUTEX],
+** and/or [SQLITE_OPEN_URI] flags:)^
 **
 ** <dl>
 ** ^(<dt>[SQLITE_OPEN_READONLY]</dt>
@@ -2362,11 +2360,6 @@ void sqlite4_progress_handler(sqlite4*, int, int(*)(void*), void*);
 ** [SQLITE_OPEN_FULLMUTEX] flag is set then the database connection opens
 ** in the serialized [threading mode] unless single-thread was
 ** previously selected at compile-time or start-time.
-** ^The [SQLITE_OPEN_SHAREDCACHE] flag causes the database connection to be
-** eligible to use [shared cache mode], regardless of whether or not shared
-** cache is enabled using [sqlite4_enable_shared_cache()].  ^The
-** [SQLITE_OPEN_PRIVATECACHE] flag causes the database connection to not
-** participate in [shared cache mode] even if it is enabled.
 **
 ** ^The fourth parameter to sqlite4_open_v2() is the name of the
 ** [sqlite4_vfs] object that defines the operating system interface that
@@ -2438,15 +2431,6 @@ void sqlite4_progress_handler(sqlite4*, int, int(*)(void*), void*);
 **     used, it is an error to specify a value for the mode parameter that is 
 **     less restrictive than that specified by the flags passed as the third 
 **     parameter.
-**
-**   <li> <b>cache</b>: ^The cache parameter may be set to either "shared" or
-**     "private". ^Setting it to "shared" is equivalent to setting the
-**     SQLITE_OPEN_SHAREDCACHE bit in the flags argument passed to
-**     sqlite4_open_v2(). ^Setting the cache parameter to "private" is 
-**     equivalent to setting the SQLITE_OPEN_PRIVATECACHE bit.
-**     ^If sqlite4_open_v2() is used and the "cache" parameter is present in
-**     a URI filename, its value overrides any behaviour requested by setting
-**     SQLITE_OPEN_PRIVATECACHE or SQLITE_OPEN_SHAREDCACHE flag.
 ** </ul>
 **
 ** ^Specifying an unknown parameter in the query component of a URI is not an

@@ -69,7 +69,6 @@ void sqlite4OpenPrimaryKey(
     Index *pIdx;                  /* PRIMARY KEY index for table pTab */
 
     pIdx = sqlite4FindPrimaryKey(pTab, 0);
-    sqlite4TableLock(p, iDb, pIdx->tnum, (opcode==OP_OpenWrite), pTab->zName);
     sqlite4OpenIndex(p, iCur, iDb, pIdx, opcode);
     assert( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY );
   }

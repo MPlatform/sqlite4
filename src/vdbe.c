@@ -2364,8 +2364,7 @@ case OP_Savepoint: {
 **
 ** Set the database auto-commit flag to P1 (1 or 0). If P2 is true, roll
 ** back any currently active btree transactions. If there are any active
-** VMs (apart from this one), then a ROLLBACK fails.  A COMMIT fails if
-** there are active writing VMs or active VMs that use shared cache.
+** VMs (apart from this one), then a ROLLBACK fails.
 **
 ** This instruction causes the VM to halt.
 */
@@ -4514,25 +4513,6 @@ case OP_Expire: {
   break;
 }
 
-#ifndef SQLITE_OMIT_SHARED_CACHE
-/* Opcode: TableLock P1 P2 P3 P4 *
-**
-** Obtain a lock on a particular table. This instruction is only used when
-** the shared-cache feature is enabled. 
-**
-** P1 is the index of the database in sqlite4.aDb[] of the database
-** on which the lock is acquired.  A readlock is obtained if P3==0 or
-** a write lock if P3==1.
-**
-** P2 contains the root-page of the table to lock.
-**
-** P4 contains a pointer to the name of the table being locked. This is only
-** used to generate an error message if the lock cannot be obtained.
-*/
-case OP_TableLock: {
-  break;
-}
-#endif /* SQLITE_OMIT_SHARED_CACHE */
 
 #ifndef SQLITE_OMIT_VIRTUALTABLE
 /* Opcode: VBegin * * * P4 *

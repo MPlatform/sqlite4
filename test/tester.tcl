@@ -1485,11 +1485,6 @@ proc slave_test_file {zFile} {
     unset ::G(start:file)
   }
 
-  # Remember the value of the shared-cache setting. So that it is possible
-  # to check afterwards that it was not modified by the test script.
-  #
-  ifcapable shared_cache { set scs [sqlite4_enable_shared_cache] }
-
   # Run the test script in a slave interpreter.
   #
   unset -nocomplain ::run_thread_tests_called
@@ -1506,14 +1501,6 @@ proc slave_test_file {zFile} {
     do_test ${tail}-closeallfiles { expr {$::sqlite_open_file_count>0} } {0}
   }
   set ::sqlite_open_file_count 0
-
-  # Test that the global "shared-cache" setting was not altered by 
-  # the test script.
-  #
-  ifcapable shared_cache { 
-    set res [expr {[sqlite4_enable_shared_cache] == $scs}]
-    do_test ${tail}-sharedcachesetting [list set {} $res] 1
-  }
 
   # Add some info to the output.
   #

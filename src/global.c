@@ -158,7 +158,6 @@ SQLITE_WSD struct Sqlite3Config sqlite4Config = {
    0,                         /* szPage */
    0,                         /* nPage */
    0,                         /* mxParserStack */
-   0,                         /* sharedCacheEnabled */
    /* All the rest should always be initialized to zero */
    0,                         /* isInit */
    0,                         /* inProgress */

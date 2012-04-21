@@ -195,7 +195,6 @@ TESTSRC = \
   $(TOP)/src/test1.c \
   $(TOP)/src/test4.c \
   $(TOP)/src/test5.c \
-  $(TOP)/src/test7.c \
   $(TOP)/src/test8.c \
   $(TOP)/src/test9.c \
   $(TOP)/src/test_config.c \

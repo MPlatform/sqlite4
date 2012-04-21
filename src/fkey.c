@@ -726,12 +726,7 @@ void sqlite4FkCheck(
     }
 #endif
 
-    /* Take a shared-cache advisory read-lock on the parent table. Allocate 
-    ** a cursor to use to search the unique index on the parent key columns 
-    ** in the parent table.  */
-    sqlite4TableLock(pParse, iDb, pTo->tnum, 0, pTo->zName);
     pParse->nTab++;
-
     if( regOld!=0 ){
       /* A row is being removed from the child table. Search for the parent.
       ** If the parent does not exist, removing the child row resolves an 

@@ -486,13 +486,6 @@ abort_parse:
     sqlite4VdbeDelete(pParse->pVdbe);
     pParse->pVdbe = 0;
   }
-#ifndef SQLITE_OMIT_SHARED_CACHE
-  if( pParse->nested==0 ){
-    sqlite4DbFree(db, pParse->aTableLock);
-    pParse->aTableLock = 0;
-    pParse->nTableLock = 0;
-  }
-#endif
 #ifndef SQLITE_OMIT_VIRTUALTABLE
   sqlite4_free(pParse->apVtabLock);
 #endif

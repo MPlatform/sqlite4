@@ -451,12 +451,6 @@ Tcl_SetVar2(interp, "sqlite_options", "long_double",
 #endif
     
     
-#ifdef SQLITE_OMIT_SHARED_CACHE
-  Tcl_SetVar2(interp, "sqlite_options", "shared_cache", "0", TCL_GLOBAL_ONLY);
-#else
-  Tcl_SetVar2(interp, "sqlite_options", "shared_cache", "1", TCL_GLOBAL_ONLY);
-#endif
-
 #ifdef SQLITE_OMIT_SUBQUERY
   Tcl_SetVar2(interp, "sqlite_options", "subquery", "0", TCL_GLOBAL_ONLY);
 #else

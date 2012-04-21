@@ -3118,7 +3118,6 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitetest3_Init(Tcl_Interp*);
     extern int Sqlitetest4_Init(Tcl_Interp*);
     extern int Sqlitetest5_Init(Tcl_Interp*);
-    extern int Sqlitetest7_Init(Tcl_Interp*);
     extern int Sqlitetest8_Init(Tcl_Interp*);
     extern int Sqlitetest9_Init(Tcl_Interp*);
     extern int Sqlitetest_demovfs_Init(Tcl_Interp *);
@@ -3157,7 +3156,6 @@ static void init_all(Tcl_Interp *interp){
     Sqlitetest1_Init(interp);
     Sqlitetest4_Init(interp);
     Sqlitetest5_Init(interp);
-    Sqlitetest7_Init(interp);
     Sqlitetest8_Init(interp);
     Sqlitetest9_Init(interp);
     Sqlitetest_demovfs_Init(interp);

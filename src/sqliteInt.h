@@ -19,7 +19,6 @@
 #define SQLITE_OMIT_WAL 1
 #define SQLITE_OMIT_VACUUM 1
 #define SQLITE_OMIT_AUTOVACUUM 1
-#define SQLITE_OMIT_SHARED_CACHE 1
 /*#define SQLITE_OMIT_PAGER_PRAGMAS 1*/
 #define SQLITE_OMIT_PROGRESS_CALLBACK 1
 
@@ -651,7 +650,6 @@ typedef struct Select Select;
 typedef struct SrcList SrcList;
 typedef struct StrAccum StrAccum;
 typedef struct Table Table;
-typedef struct TableLock TableLock;
 typedef struct Token Token;
 typedef struct Trigger Trigger;
 typedef struct TriggerPrg TriggerPrg;
@@ -2188,12 +2186,6 @@ struct TriggerPrg {
 ** generate call themselves recursively, the first part of the structure
 ** is constant but the second part is reset at the beginning and end of
 ** each recursion.
-**
-** The nTableLock and aTableLock variables are only used if the shared-cache 
-** feature is enabled (if sqlite4Tsd()->useSharedData is true). They are
-** used to store the set of table-locks required by the statement being
-** compiled. Function sqlite4TableLock() is used to add entries to the
-** list.
 */
 struct Parse {
   sqlite4 *db;         /* The main database structure */
@@ -2232,14 +2224,7 @@ struct Parse {
   u8 mayAbort;         /* True if statement may throw an ABORT exception */
   int cookieGoto;      /* Address of OP_Goto to cookie verifier subroutine */
   int cookieValue[SQLITE_MAX_ATTACHED+2];  /* Values of cookies to verify */
-#ifndef SQLITE_OMIT_SHARED_CACHE
-  int nTableLock;        /* Number of locks in aTableLock */
-  TableLock *aTableLock; /* Required table locks for shared-cache mode */
-#endif
   int regRowid;        /* Register holding rowid of CREATE TABLE entry */
-#if 0
-  int regRoot;         /* Register holding root page number for new objects */
-#endif
   AutoincInfo *pAinc;  /* Information about AUTOINCREMENT counters */
   int nMaxArg;         /* Max args passed to user function by sub-program */
 
@@ -2467,7 +2452,6 @@ struct Sqlite3Config {
   int szPage;                       /* Size of each page in pPage[] */
   int nPage;                        /* Number of pages in pPage[] */
   int mxParserStack;                /* maximum depth of the parser stack */
-  int sharedCacheEnabled;           /* true if shared-cache mode enabled */
   /* The above might be initialized to non-zero.  The following need to always
   ** initially be zero, however. */
   int isInit;                       /* True after initialization has finished */
@@ -3106,12 +3090,6 @@ void sqlite4AutoLoadExtensions(sqlite4*);
   void sqlite4CloseExtensions(sqlite4*);
 #else
 # define sqlite4CloseExtensions(X)
-#endif
-
-#ifndef SQLITE_OMIT_SHARED_CACHE
-  void sqlite4TableLock(Parse *, int, int, u8, const char *);
-#else
-  #define sqlite4TableLock(v,w,x,y,z)
 #endif
 
 #ifdef SQLITE_TEST

@@ -482,14 +482,6 @@ static int wait_for_unlock_notify(sqlite4 *db){
 
 /*
 ** This function is a wrapper around the SQLite function sqlite4_step().
-** It functions in the same way as step(), except that if a required
-** shared-cache lock cannot be obtained, this function may block waiting for
-** the lock to become available. In this scenario the normal API step()
-** function always returns SQLITE_LOCKED.
-**
-** If this function returns SQLITE_LOCKED, the caller should rollback
-** the current transaction (if any) and try again later. Otherwise, the
-** system may become deadlocked.
 */
 int sqlite4_blocking_step(sqlite4_stmt *pStmt){
   int rc;

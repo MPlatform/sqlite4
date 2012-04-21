@@ -4362,7 +4362,6 @@ int sqlite4Select(
         int iRoot = pTab->tnum;              /* Root page of scanned b-tree */
 
         sqlite4CodeVerifySchema(pParse, iDb);
-        sqlite4TableLock(pParse, iDb, pTab->tnum, 0, pTab->zName);
 
         /* Search for the index that has the least amount of columns. If
         ** there is such an index, and it has less columns than the table

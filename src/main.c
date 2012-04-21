@@ -1774,18 +1774,6 @@ int sqlite4ParseUri(
         int mask = 0;
         int limit = 0;
 
-        if( nOpt==5 && memcmp("cache", zOpt, 5)==0 ){
-          static struct OpenMode aCacheMode[] = {
-            { "shared",  SQLITE_OPEN_SHAREDCACHE },
-            { "private", SQLITE_OPEN_PRIVATECACHE },
-            { 0, 0 }
-          };
-
-          mask = SQLITE_OPEN_SHAREDCACHE|SQLITE_OPEN_PRIVATECACHE;
-          aMode = aCacheMode;
-          limit = mask;
-          zModeType = "cache";
-        }
         if( nOpt==4 && memcmp("mode", zOpt, 4)==0 ){
           static struct OpenMode aOpenMode[] = {
             { "ro",  SQLITE_OPEN_READONLY },
@@ -1902,20 +1890,14 @@ static int openDatabase(
   }else{
     isThreadsafe = sqlite4GlobalConfig.bFullMutex;
   }
-  if( flags & SQLITE_OPEN_PRIVATECACHE ){
-    flags &= ~SQLITE_OPEN_SHAREDCACHE;
-  }else if( sqlite4GlobalConfig.sharedCacheEnabled ){
-    flags |= SQLITE_OPEN_SHAREDCACHE;
-  }
 
   /* Remove harmful bits from the flags parameter
   **
   ** The SQLITE_OPEN_NOMUTEX and SQLITE_OPEN_FULLMUTEX flags were
   ** dealt with in the previous code block.  Besides these, the only
   ** valid input flags for sqlite4_open_v2() are SQLITE_OPEN_READONLY,
-  ** SQLITE_OPEN_READWRITE, SQLITE_OPEN_CREATE, SQLITE_OPEN_SHAREDCACHE,
-  ** SQLITE_OPEN_PRIVATECACHE, and some reserved bits.  Silently mask
-  ** off all other flags.
+  ** SQLITE_OPEN_READWRITE, SQLITE_OPEN_CREATE and some
+  ** reserved bits.  Silently mask off all other flags.
   */
   flags &=  ~( SQLITE_OPEN_DELETEONCLOSE |
                SQLITE_OPEN_EXCLUSIVE |

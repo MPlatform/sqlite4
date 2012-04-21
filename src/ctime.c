@@ -284,9 +284,6 @@ static const char * const azCompileOpt[] = {
 #ifdef SQLITE_OMIT_SCHEMA_VERSION_PRAGMAS
   "OMIT_SCHEMA_VERSION_PRAGMAS",
 #endif
-#ifdef SQLITE_OMIT_SHARED_CACHE
-  "OMIT_SHARED_CACHE",
-#endif
 #ifdef SQLITE_OMIT_SUBQUERY
   "OMIT_SUBQUERY",
 #endif
