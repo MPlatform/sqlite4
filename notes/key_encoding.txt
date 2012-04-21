@@ -94,7 +94,10 @@ where to put the decimal point.
 Each centimal digit of the mantissa is stored in a byte.  If the
 value of the centimal digit is X (hence X>=0 and X<=99) then the
 byte value will be 2*X+1 for every byte of the mantissa, except
-for the last byte which will be 2*X+0.
+for the last byte which will be 2*X+0.  The mantissa must be the
+minimum number of bytes necessary to represent the value; trailing
+X==0 digits are omitted.  This means that the mantissa will never
+contain a byte with the value 0x00.
 
 If we assume all digits of the mantissa occur to the right of the
 decimal point, then the exponent E is the power of one hundred
@@ -110,7 +113,7 @@ Examples:
     99.0                   1          b4
     99.01                  1          b5 02
     99.0001                1          b5 01 02
-    100.0                  2          03 00
+    100.0                  2          02
     100.1                  2          03 02
     100.01                 2          03 01 02
     1234                   2          19 44
@@ -125,7 +128,7 @@ Examples:
     9999.01                2          c7 c7 02
     9999.1                 2          c7 c7 14
     10000                  3          02
-    10001                  3          03 00 02
+    10001                  3          03 01 02
     12345                  3          03 2f 5a
     123450                 4          19 45 64
     1234.5                 3          19 45 64 
