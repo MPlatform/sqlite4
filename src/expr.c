@@ -2296,8 +2296,8 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
         inReg = pCol->iMem;
         break;
       }else if( pAggInfo->useSortingIdx ){
-        sqlite4VdbeAddOp3(v, OP_Column, pAggInfo->sortingIdxPTab,
-                              pCol->iSorterColumn, target);
+        sqlite4VdbeAddOp3(v, OP_Column, pAggInfo->sortingIdx,
+                              pExpr->iAgg, target);
         break;
       }
       /* Otherwise, fall thru into the TK_COLUMN case */

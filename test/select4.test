@@ -462,7 +462,6 @@ do_test select4-6.7 {
   }
 } {}
 
-
 # Make sure column names are correct when a compound select appears as
 # an expression in the WHERE clause.
 #

@@ -642,7 +642,7 @@ int sqlite4VdbeEncodeKey(
   KeyInfo *pKeyInfo,           /* Collating sequence and sort-order info */
   u8 **paOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
-  int bIncr                    /* See above */
+  int nExtra                   /* See above */
 ){
   int i;
   int rc = SQLITE_OK;
@@ -672,7 +672,7 @@ int sqlite4VdbeEncodeKey(
     rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC, aColl[i]);
   }
 
-  if( rc==SQLITE_OK && bIncr ){ rc = enlargeEncoderAllocation(&x, 1); }
+  if( rc==SQLITE_OK && nExtra ){ rc = enlargeEncoderAllocation(&x, nExtra); }
   if( rc ){
     sqlite4DbFree(db, x.aOut);
   }else{

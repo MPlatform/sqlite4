@@ -621,13 +621,17 @@ static WhereTerm *findTerm(
           ** Store this one in zColl.  */
           assert(pX->pLeft);
           pColl = sqlite4BinaryCompareCollSeq(pParse, pX->pLeft, pX->pRight);
-          assert( pParse->nErr || (pColl && pColl->enc==pIdx->pSchema->enc)  );
           for(j=0; pIdx->aiColumn[j]!=iColumn && j<pIdx->nColumn; j++);
           if( j>=pIdx->nColumn ){
             zColl = pTab->aCol[iColumn].zColl;
           }else{
             zColl = pIdx->azColl[j];
           }
+
+          assert( pParse->nErr 
+               || pIdx->pSchema==0 
+               || pColl->enc==pIdx->pSchema->enc 
+          );
 
           /* If the collation sequence used by the index is not the same as
           ** that used by the expression, then this term is not a match.  */

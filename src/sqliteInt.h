@@ -1550,7 +1550,9 @@ struct AggInfo {
   u8 useSortingIdx;       /* In direct mode, reference the sorting index rather
                           ** than the source table */
   int sortingIdx;         /* Cursor number of the sorting index */
+#if 0
   int sortingIdxPTab;     /* Cursor number of pseudo-table */
+#endif
   ExprList *pGroupBy;     /* The group by clause */
   int nSortingColumn;     /* Number of columns in the sorting index */
   struct AggInfo_col {    /* For each column used in source tables */

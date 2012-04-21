@@ -763,12 +763,12 @@ static void selectInnerLoop(
 }
 
 /*
-** Given an expression list, generate a KeyInfo structure that records
-** the collating sequence for each expression in that expression list.
+** Given an expression list, generate a KeyInfo structure that can be
+** used to encode the results of the expressions into an index key.
 **
 ** If the ExprList is an ORDER BY or GROUP BY clause then the resulting
 ** KeyInfo structure is appropriate for initializing a virtual index to
-** implement that clause.  If the ExprList is the result set of a SELECT
+** implement that clause. If the ExprList is the result set of a SELECT
 ** then the KeyInfo structure is appropriate for initializing a virtual
 ** index to implement a DISTINCT test.
 **
@@ -780,7 +780,7 @@ static void selectInnerLoop(
 static KeyInfo *keyInfoFromExprList(
   Parse *pParse, 
   ExprList *pList,
-  int bOrderBy
+  int bOrderBy                    /* True for ORDER BY */
 ){
   sqlite4 *db = pParse->db;       /* Database handle */
   int nField;                     /* Number of fields in keys */
@@ -3767,12 +3767,13 @@ int sqlite4Select(
   pParse->iSelectId = pParse->iNextSelectId++;
 #endif
 
+  memset(&sAggInfo, 0, sizeof(sAggInfo));
+
   db = pParse->db;
   if( p==0 || db->mallocFailed || pParse->nErr ){
     return 1;
   }
   if( sqlite4AuthCheck(pParse, SQLITE_SELECT, 0, 0, 0) ) return 1;
-  memset(&sAggInfo, 0, sizeof(sAggInfo));
 
   if( IgnorableOrderby(pDest) ){
     assert(pDest->eDest==SRT_Exists || pDest->eDest==SRT_Union || 
@@ -4180,87 +4181,81 @@ int sqlite4Select(
         */
         pGroupBy = p->pGroupBy;
         groupBySort = 0;
+
+        /* Evaluate the current GROUP BY terms and store in b0, b1, b2...
+        ** (b0 is memory location iBMem+0, b1 is iBMem+1, and so forth)
+        ** Then compare the current GROUP BY terms against the GROUP BY terms
+        ** from the previous row currently stored in a0, a1, a2...
+        */
+        sAggInfo.directMode = 1;
+        addrTopOfLoop = sqlite4VdbeCurrentAddr(v);
+        sqlite4ExprCacheClear(pParse);
+        for(j=0; j<pGroupBy->nExpr; j++){
+          sqlite4ExprCode(pParse, pGroupBy->a[j].pExpr, iBMem+j);
+        }
+        sqlite4VdbeAddOp4(v, OP_Compare, iAMem, iBMem, pGroupBy->nExpr,
+            (char*)pKeyInfo, P4_KEYINFO);
+        j1 = sqlite4VdbeCurrentAddr(v);
+        sqlite4VdbeAddOp3(v, OP_Jump, j1+1, 0, j1+1);
       }else{
         /* Rows are coming out in undetermined order.  We have to push
         ** each row into a sorting index, terminate the first loop,
         ** then loop over the sorting index in order to get the output
-        ** in sorted order
-        */
+        ** in sorted order */
         int regBase;
-        int regRecord;
-        int nCol;
-        int nGroupBy;
+        int nCol = sAggInfo.nColumn;
+        int nGroup = pGroupBy->nExpr;
+        int regKey = ++pParse->nMem;
+        int regRecord = ++pParse->nMem;
+
+        groupBySort = 1;
 
         explainTempTable(pParse, 
             isDistinct && !(p->selFlags&SF_Distinct)?"DISTINCT":"GROUP BY");
 
-        groupBySort = 1;
-        nGroupBy = pGroupBy->nExpr;
-        nCol = nGroupBy + 1;
-        j = nGroupBy+1;
-        for(i=0; i<sAggInfo.nColumn; i++){
-          if( sAggInfo.aCol[i].iSorterColumn>=j ){
-            nCol++;
-            j++;
-          }
-        }
-        regBase = sqlite4GetTempRange(pParse, nCol);
+        /* Encode the key for the sorting index. The key consists of each
+        ** of the expressions in the GROUP BY list followed by a sequence
+        ** number (to ensure each key is unique - the point of this is just
+        ** to sort the rows, not to eliminate duplicates).  */
         sqlite4ExprCacheClear(pParse);
+        regBase = sqlite4GetTempRange(pParse, nGroup);
         sqlite4ExprCodeExprList(pParse, pGroupBy, regBase, 0);
-        sqlite4VdbeAddOp2(v, OP_Sequence, sAggInfo.sortingIdx,regBase+nGroupBy);
-        j = nGroupBy+1;
-        for(i=0; i<sAggInfo.nColumn; i++){
-          struct AggInfo_col *pCol = &sAggInfo.aCol[i];
-          if( pCol->iSorterColumn>=j ){
-            int r1 = j + regBase;
-            int r2;
+        sqlite4VdbeAddOp3(v, OP_MakeIdxKey, sAggInfo.sortingIdx,regBase,regKey);
+        sqlite4VdbeChangeP5(v, 1);
+        sqlite4ReleaseTempRange(pParse, regBase, nGroup);
 
-            r2 = sqlite4ExprCodeGetColumn(pParse, 
-                               pCol->pTab, pCol->iColumn, pCol->iTable, r1);
-            if( r1!=r2 ){
-              sqlite4VdbeAddOp2(v, OP_SCopy, r2, r1);
-            }
-            j++;
+        /* Encode the record for the sorting index. The record contains all
+        ** required column values from the elements of the FROM clause.  */
+        regBase = sqlite4GetTempRange(pParse, nCol);
+        for(i=0; i<nCol; i++){
+          struct AggInfo_col *pCol = &sAggInfo.aCol[i];
+          int regDest = i + regBase;
+          int regValue = sqlite4ExprCodeGetColumn(
+              pParse, pCol->pTab, pCol->iColumn, pCol->iTable, regDest
+          );
+          if( regDest!=regValue ){
+            sqlite4VdbeAddOp2(v, OP_SCopy, regValue, regDest);
           }
         }
-        regRecord = sqlite4GetTempReg(pParse);
         sqlite4VdbeAddOp3(v, OP_MakeRecord, regBase, nCol, regRecord);
-        sqlite4VdbeAddOp2(v, OP_SorterInsert, sAggInfo.sortingIdx, regRecord);
-        sqlite4ReleaseTempReg(pParse, regRecord);
         sqlite4ReleaseTempRange(pParse, regBase, nCol);
+
+        /* Insert the key/value into the sorting index and end the loop
+        ** generated by where.c code.  */
+        sqlite4VdbeAddOp3(
+            v, OP_SorterInsert, sAggInfo.sortingIdx, regRecord, regKey
+        );
         sqlite4WhereEnd(pWInfo);
-        sAggInfo.sortingIdxPTab = sortPTab = pParse->nTab++;
-        sortOut = sqlite4GetTempReg(pParse);
-        sqlite4VdbeAddOp3(v, OP_OpenPseudo, sortPTab, sortOut, nCol);
+
+        sqlite4VdbeAddOp2(v, OP_Null, 0, regKey);
         sqlite4VdbeAddOp2(v, OP_SorterSort, sAggInfo.sortingIdx, addrEnd);
         VdbeComment((v, "GROUP BY sort"));
         sAggInfo.useSortingIdx = 1;
         sqlite4ExprCacheClear(pParse);
-      }
 
-      /* Evaluate the current GROUP BY terms and store in b0, b1, b2...
-      ** (b0 is memory location iBMem+0, b1 is iBMem+1, and so forth)
-      ** Then compare the current GROUP BY terms against the GROUP BY terms
-      ** from the previous row currently stored in a0, a1, a2...
-      */
-      addrTopOfLoop = sqlite4VdbeCurrentAddr(v);
-      sqlite4ExprCacheClear(pParse);
-      if( groupBySort ){
-        sqlite4VdbeAddOp2(v, OP_SorterData, sAggInfo.sortingIdx, sortOut);
+        j1 = sqlite4VdbeAddOp3(v, OP_GrpCompare, sAggInfo.sortingIdx, 0,regKey);
+        addrTopOfLoop = j1;
       }
-      for(j=0; j<pGroupBy->nExpr; j++){
-        if( groupBySort ){
-          sqlite4VdbeAddOp3(v, OP_Column, sortPTab, j, iBMem+j);
-          if( j==0 ) sqlite4VdbeChangeP5(v, OPFLAG_CLEARCACHE);
-        }else{
-          sAggInfo.directMode = 1;
-          sqlite4ExprCode(pParse, pGroupBy->a[j].pExpr, iBMem+j);
-        }
-      }
-      sqlite4VdbeAddOp4(v, OP_Compare, iAMem, iBMem, pGroupBy->nExpr,
-                          (char*)pKeyInfo, P4_KEYINFO);
-      j1 = sqlite4VdbeCurrentAddr(v);
-      sqlite4VdbeAddOp3(v, OP_Jump, j1+1, 0, j1+1);
 
       /* Generate code that runs whenever the GROUP BY changes.
       ** Changes in the GROUP BY are detected by the previous code
@@ -4271,7 +4266,9 @@ int sqlite4Select(
       ** and resets the aggregate accumulator registers in preparation
       ** for the next GROUP BY batch.
       */
-      sqlite4ExprCodeMove(pParse, iBMem, iAMem, pGroupBy->nExpr);
+      if( groupBySort==0 ){
+        sqlite4ExprCodeMove(pParse, iBMem, iAMem, pGroupBy->nExpr);
+      }
       sqlite4VdbeAddOp2(v, OP_Gosub, regOutputRow, addrOutputRow);
       VdbeComment((v, "output one row"));
       sqlite4VdbeAddOp2(v, OP_IfPos, iAbortFlag, addrEnd);

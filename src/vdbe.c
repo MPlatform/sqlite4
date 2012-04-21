@@ -2173,7 +2173,7 @@ case OP_Affinity: {
   break;
 }
 
-/* Opcode: MakeIdxKey P1 P2 P3 P4 *
+/* Opcode: MakeIdxKey P1 P2 P3 P4 P5
 **
 ** P1 is an open cursor. P2 is the first register in a contiguous array
 ** of N registers containing values to encode into a database key. Normally,
@@ -2183,10 +2183,12 @@ case OP_Affinity: {
 ** Or, if P4 is a non-zero integer, then it contains the value for N.
 **
 ** This instruction encodes the N values into a database key and writes
-** the result to register P3.
+** the result to register P3. No affinity transformations are applied to 
+** the input values before they are encoded. 
 **
-** No affinity transformations are applied to the input values before 
-** they are encoded. 
+** If P5 is non-zero, then a sequence number (unique within the cursor)
+** is appended to the record. The sole purpose of this is to ensure that
+** the key blob is unique within the cursors table.
 */
 case OP_MakeIdxKey: {
   VdbeCursor *pC;
@@ -2195,12 +2197,30 @@ case OP_MakeIdxKey: {
   u8 *aRec;                       /* The constructed database key */
   int nRec;                       /* Size of aRec[] in bytes */
   int nField;                     /* Number of fields in encoded record */
+  u8 aSeq[10];                    /* Encoded sequence number */
+  int nSeq;                       /* Size of sequence number in bytes */
+  u64 iSeq;                       /* Sequence number, if any */
   
   pC = p->apCsr[pOp->p1];
   pKeyInfo = pC->pKeyInfo;
   pData0 = &aMem[pOp->p2];
   pOut = &aMem[pOp->p3];
   aRec = 0;
+
+  /* If pOp->p5 is non-zero, encode the sequence number blob to append to
+  ** the end of the key. Variable nSeq is set to the number of bytes in
+  ** the encoded key.
+  */
+  nSeq = 0;
+  if( pOp->p5 ){
+    iSeq = pC->seqCount++;
+    do {
+      nSeq++;
+      aSeq[sizeof(aSeq)-nSeq] = (u8)(iSeq & 0x007F);
+      iSeq = iSeq >> 7;
+    }while( iSeq );
+    aSeq[sizeof(aSeq)-nSeq] |= 0x80;
+  }
 
   memAboutToChange(p, pOut);
 
@@ -2210,13 +2230,16 @@ case OP_MakeIdxKey: {
     assert( nField<=pKeyInfo->nField );
   }
   rc = sqlite4VdbeEncodeKey(
-    db, pData0, nField, pC->iRoot, pKeyInfo, &aRec, &nRec, 0
+    db, pData0, nField, pC->iRoot, pKeyInfo, &aRec, &nRec, nSeq
   );
 
   if( rc ){
     sqlite4DbFree(db, aRec);
   }else{
-    rc = sqlite4VdbeMemSetStr(pOut, aRec, nRec, 0, SQLITE_DYNAMIC);
+    if( nSeq ){
+      memcpy(&aRec[nRec], &aSeq[sizeof(aSeq)-nSeq], nSeq);
+    }
+    rc = sqlite4VdbeMemSetStr(pOut, aRec, nRec+nSeq, 0, SQLITE_DYNAMIC);
     REGISTER_TRACE(pOp->p3, pOut);
     UPDATE_MAX_BLOBSIZE(pOut);
   }
@@ -2716,6 +2739,8 @@ case OP_OpenEphemeral: {
   pCx->pKeyInfo = pOp->p4.pKeyInfo;
   if( pCx->pKeyInfo ) pCx->pKeyInfo->enc = ENC(p->db);
   pCx->isIndex = !pCx->isTable;
+
+  pCx->isOrdered = 1;
   break;
 }
 
@@ -3401,6 +3426,43 @@ case OP_SorterCompare: {
   if( res ){
     pc = pOp->p2-1;
   }
+  break;
+};
+
+/* Opcode: GrpCompare P1 P2 P3
+**
+** P1 is a cursor used to sort records. Its keys consist of the fields being
+** sorted on encoded as an ordinary database key, followed by a sequence 
+** number encoded as defined by the comments surrounding OP_MakeIdxKey. 
+** Register P3 either contains NULL, or such a key truncated so as to 
+** remove the sequence number.
+**
+** This opcode compares the current key of P1, less the sequence number, 
+** with the contents of register P3. If they are identical, jump to 
+** instruction P2. Otherwise, replace the contents of P3 with the current
+** key of P1 (minus the sequence number) and fall through to the next
+** instruction.
+*/
+case OP_GrpCompare: {
+  VdbeCursor *pC;                 /* Cursor P1 */
+  KVByteArray *aKey;              /* Key from cursor P1 */
+  KVSize nKey;                    /* Size of aKey[] in bytes */
+
+  pC = p->apCsr[pOp->p1];
+  rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
+  if( rc==SQLITE_OK ){
+    for(nKey--; (aKey[nKey] & 0x80)==0; nKey--);
+  }
+
+  pIn3 = &aMem[pOp->p3];
+  if( (pIn3->flags & MEM_Blob) 
+   && pIn3->n==nKey && 0==memcmp(pIn3->z, aKey, nKey) 
+  ){
+    pc = pOp->p2-1;
+  }else{
+    sqlite4VdbeMemSetStr(pIn3, (const char*)aKey, nKey, 0, SQLITE_TRANSIENT);
+  }
+
   break;
 };
 
