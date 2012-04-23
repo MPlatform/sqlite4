@@ -567,71 +567,6 @@ static int test_snprintf_int(
   return TCL_OK;
 }
 
-#ifndef SQLITE_OMIT_GET_TABLE
-
-/*
-** Usage:  sqlite4_get_table_printf  DB  FORMAT  STRING  ?--no-counts?
-**
-** Invoke the sqlite4_get_table_printf() interface using the open database
-** DB.  The SQL is the string FORMAT.  The format string should contain
-** one %s or %q.  STRING is the value inserted into %s or %q.
-*/
-static int test_get_table_printf(
-  void *NotUsed,
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int argc,              /* Number of arguments */
-  char **argv            /* Text of each argument */
-){
-  sqlite4 *db;
-  Tcl_DString str;
-  int rc;
-  char *zErr = 0;
-  int nRow, nCol;
-  char **aResult;
-  int i;
-  char zBuf[30];
-  char *zSql;
-  int resCount = -1;
-  if( argc==5 ){
-    if( Tcl_GetInt(interp, argv[4], &resCount) ) return TCL_ERROR;
-  }
-  if( argc!=4 && argc!=5 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0], 
-       " DB FORMAT STRING ?COUNT?", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  Tcl_DStringInit(&str);
-  zSql = sqlite4_mprintf(argv[2],argv[3]);
-  if( argc==5 ){
-    rc = sqlite4_get_table(db, zSql, &aResult, 0, 0, &zErr);
-  }else{
-    rc = sqlite4_get_table(db, zSql, &aResult, &nRow, &nCol, &zErr);
-    resCount = (nRow+1)*nCol;
-  }
-  sqlite4_free(zSql);
-  sprintf(zBuf, "%d", rc);
-  Tcl_AppendElement(interp, zBuf);
-  if( rc==SQLITE_OK ){
-    if( argc==4 ){
-      sprintf(zBuf, "%d", nRow);
-      Tcl_AppendElement(interp, zBuf);
-      sprintf(zBuf, "%d", nCol);
-      Tcl_AppendElement(interp, zBuf);
-    }
-    for(i=0; i<resCount; i++){
-      Tcl_AppendElement(interp, aResult[i] ? aResult[i] : "NULL");
-    }
-  }else{
-    Tcl_AppendElement(interp, zErr);
-  }
-  sqlite4_free_table(aResult);
-  if( zErr ) sqlite4_free(zErr);
-  if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
-  return TCL_OK;
-}
-
-#endif /* SQLITE_OMIT_GET_TABLE */
 
 
 /*
@@ -4917,9 +4852,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_exec_hex",              (Tcl_CmdProc*)test_exec_hex         },
      { "sqlite4_exec",                  (Tcl_CmdProc*)test_exec             },
      { "sqlite4_exec_nr",               (Tcl_CmdProc*)test_exec_nr          },
-#ifndef SQLITE_OMIT_GET_TABLE
-     { "sqlite4_get_table_printf",      (Tcl_CmdProc*)test_get_table_printf },
-#endif
      { "sqlite4_close",                 (Tcl_CmdProc*)sqlite_test_close     },
      { "sqlite4_create_function",       (Tcl_CmdProc*)test_create_function  },
      { "sqlite4_create_aggregate",      (Tcl_CmdProc*)test_create_aggregate },

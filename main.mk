@@ -62,7 +62,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          opcodes.o os.o os_os2.o os_unix.o os_win.o \
          parse.o pragma.o prepare.o printf.o \
          random.o resolve.o rowset.o rtree.o select.o status.o storage.o \
-         table.o tokenize.o trigger.o \
+         tokenize.o trigger.o \
          update.o util.o varint.o \
          vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
          vdbemem.o vdbesort.o vdbetrace.o \
@@ -131,7 +131,6 @@ SRC = \
   $(TOP)/src/status.c \
   $(TOP)/src/storage.c \
   $(TOP)/src/storage.h \
-  $(TOP)/src/table.c \
   $(TOP)/src/tclsqlite.c \
   $(TOP)/src/tokenize.c \
   $(TOP)/src/trigger.c \
