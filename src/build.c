@@ -3656,7 +3656,7 @@ KeyInfo *sqlite4IndexKeyinfo(Parse *pParse, Index *pIdx){
     }
     if( pPk ){
       for(i=0; i<pPk->nColumn; i++){
-        char *zColl = pIdx->azColl[i];
+        char *zColl = pPk->azColl[i];
         assert( zColl );
         pKey->aColl[i+pIdx->nColumn] = sqlite4LocateCollSeq(pParse, zColl);
         pKey->aSortOrder[i+pIdx->nColumn] = pPk->aSortOrder[i];
