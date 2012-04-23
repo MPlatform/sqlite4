@@ -3817,9 +3817,26 @@ case OP_IdxInsert: {
 /* Opcode: IdxDelete P1 * P3 * *
 **
 ** P1 is a cursor open on a database index. P3 contains a key suitable for
-** the index. Delete P3 from P1.
+** the index. Delete P3 from P1 if it is present.
 */
 case OP_IdxDelete: {
+  VdbeCursor *pC;
+  Mem *pKey;
+
+  pC = p->apCsr[pOp->p1];
+  pKey = &aMem[pOp->p3];
+
+  assert( pOp->p1>=0 && pOp->p1<p->nCursor );
+  assert( pC && pC->pKVCur && pC->pKVCur->pStore );
+  assert( pKey->flags & MEM_Blob );
+
+  rc = sqlite4KVCursorSeek(pC->pKVCur, pKey->z, pKey->n, 0);
+  if( rc==SQLITE_OK ){
+    rc = sqlite4KVCursorDelete(pC->pKVCur);
+  }else if( rc==SQLITE_NOTFOUND ){
+    rc = SQLITE_OK;
+  }
+
   break;
 }
 

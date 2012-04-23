@@ -636,12 +636,18 @@ static void selectInnerLoop(
       break;
     }
 
-    /* Construct a record from the query result, but instead of
-    ** saving that record, use it as a key to delete elements from
-    ** the temporary table iParm.
-    */
+    /* This is used for processing queries of the form:
+    **
+    **     <select-1> EXCEPT <select-2>
+    **
+    ** Temporary index iParm contains the results of <select-1>. This
+    ** code is processing the results of <select-2>. For each row of
+    ** <select-2>, remove any identical row from iParm.  */
     case SRT_Except: {
-      sqlite4VdbeAddOp3(v, OP_IdxDelete, iParm, regResult, nColumn);
+      int regKey = sqlite4GetTempReg(pParse);
+      sqlite4VdbeAddOp4Int(v, OP_MakeIdxKey, iParm, regResult, regKey, 0);
+      sqlite4VdbeAddOp3(v, OP_IdxDelete, iParm, 0, regKey);
+      sqlite4ReleaseTempReg(pParse, regKey);
       break;
     }
 #endif

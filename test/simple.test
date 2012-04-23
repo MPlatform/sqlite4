@@ -841,5 +841,29 @@ do_execsql_test 44.4 {
   SELECT count(*) FROM t1;
 } {60}
 
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 45.1 {
+  CREATE TABLE t1(a, b, c);
+  CREATE TABLE t2(d, e, f);
+
+  INSERT INTO t2 VALUES(3,   6,  9);
+  INSERT INTO t2 VALUES(12, 15, 18);
+  INSERT INTO t2 VALUES(21, 24, 27);
+}
+
+do_execsql_test 45.2 {
+  SELECT d FROM t2 EXCEPT SELECT d FROM t2;
+} {}
+
+do_execsql_test 45.3 {
+  SELECT d FROM t2 
+  EXCEPT 
+  SELECT a FROM (SELECT a FROM t1 UNION ALL SELECT d FROM t2)
+} {}
+
+
+
 finish_test
 
