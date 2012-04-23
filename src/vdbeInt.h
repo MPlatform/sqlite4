@@ -65,7 +65,6 @@ struct VdbeCursor {
   Bool isTable;         /* True if a table requiring integer keys */
   Bool isIndex;         /* True if an index containing keys only - no data */
   Bool isOrdered;       /* True if the underlying table is BTREE_UNORDERED */
-  Bool isSorter;        /* True if a new-style sorter */
   sqlite4_vtab_cursor *pVtabCursor;  /* The cursor for a virtual table */
   const sqlite4_module *pModule;     /* Module for cursor pVtabCursor */
   i64 seqCount;         /* Sequence counter */
@@ -435,24 +434,6 @@ int sqlite4VdbeTransferError(Vdbe *p);
 int sqlite4VdbeSeekEnd(VdbeCursor*, int);
 int sqlite4VdbeNext(VdbeCursor*);
 int sqlite4VdbePrevious(VdbeCursor*);
-
-#ifdef SQLITE_OMIT_MERGE_SORT
-# define sqlite4VdbeSorterInit(Y,Z)      SQLITE_OK
-# define sqlite4VdbeSorterWrite(X,Y,Z)   SQLITE_OK
-# define sqlite4VdbeSorterClose(Y,Z)
-# define sqlite4VdbeSorterRowkey(Y,Z)    SQLITE_OK
-# define sqlite4VdbeSorterRewind(X,Y,Z)  SQLITE_OK
-# define sqlite4VdbeSorterNext(X,Y,Z)    SQLITE_OK
-# define sqlite4VdbeSorterCompare(X,Y,Z) SQLITE_OK
-#else
-int sqlite4VdbeSorterInit(sqlite4 *, VdbeCursor *);
-void sqlite4VdbeSorterClose(sqlite4 *, VdbeCursor *);
-int sqlite4VdbeSorterRowkey(VdbeCursor *, Mem *);
-int sqlite4VdbeSorterNext(sqlite4 *, VdbeCursor *, int *);
-int sqlite4VdbeSorterRewind(sqlite4 *, VdbeCursor *, int *);
-int sqlite4VdbeSorterWrite(sqlite4 *, VdbeCursor *, Mem *);
-int sqlite4VdbeSorterCompare(VdbeCursor *, Mem *, int *);
-#endif
 
 #ifdef SQLITE_DEBUG
 void sqlite4VdbeMemAboutToChange(Vdbe*,Mem*);

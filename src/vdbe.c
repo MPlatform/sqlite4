@@ -151,13 +151,6 @@ int sqlite4_found_count = 0;
    if( ((P)->flags&MEM_Ephem)!=0 \
        && sqlite4VdbeMemMakeWriteable(P) ){ goto no_mem;}
 
-/* Return true if the cursor was opened using the OP_OpenSorter opcode. */
-#ifdef SQLITE_OMIT_MERGE_SORT
-# define isSorter(x) 0
-#else
-# define isSorter(x) ((x)->pSorter!=0)
-#endif
-
 /*
 ** Argument pMem points at a register that will be passed to a
 ** user-defined function or returned to the user as the result of a query.
@@ -2761,17 +2754,8 @@ case OP_OpenEphemeral: {
 */
 case OP_SorterOpen: {
   /* VdbeCursor *pCx; */
-#ifndef SQLITE_OMIT_MERGE_SORT
-  pCx = allocateCursor(p, pOp->p1, pOp->p2, -1, 1);
-  if( pCx==0 ) goto no_mem;
-  pCx->pKeyInfo = pOp->p4.pKeyInfo;
-  pCx->pKeyInfo->enc = ENC(p->db);
-  pCx->isSorter = 1;
-  rc = sqlite4VdbeSorterInit(db, pCx);
-#else
   pOp->opcode = OP_OpenEphemeral;
   pc--;
-#endif
   break;
 }
 
@@ -3416,28 +3400,6 @@ case OP_ResetCount: {
   break;
 }
 
-/* Opcode: SorterCompare P1 P2 P3
-**
-** P1 is a sorter cursor. This instruction compares the record blob in 
-** register P3 with the entry that the sorter cursor currently points to.
-** If, excluding the rowid fields at the end, the two records are a match,
-** fall through to the next instruction. Otherwise, jump to instruction P2.
-*/
-case OP_SorterCompare: {
-  VdbeCursor *pC;
-  int res;
-
-  pC = p->apCsr[pOp->p1];
-  assert( pC->iRoot>0 );
-  assert( isSorter(pC) );
-  pIn3 = &aMem[pOp->p3];
-  rc = sqlite4VdbeSorterCompare(pC, pIn3, &res);
-  if( res ){
-    pc = pOp->p2-1;
-  }
-  break;
-};
-
 /* Opcode: GrpCompare P1 P2 P3
 **
 ** P1 is a cursor used to sort records. Its keys consist of the fields being
@@ -3484,13 +3446,8 @@ case OP_SorterData: {
   pOut = &aMem[pOp->p2];
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
-#ifndef SQLITE_OMIT_MERGE_SORT
-  assert( pC->isSorter );
-  rc = sqlite4VdbeSorterRowkey(pC, pOut);
-#else
   pOp->opcode = OP_RowData;
   pc--;
-#endif
   break;
 }
 
@@ -3527,11 +3484,9 @@ case OP_RowData: {
   /* Note that RowKey and RowData are really exactly the same instruction */
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
-  assert( pC->isSorter==0 );
   assert( pC!=0 );
   assert( pC->nullRow==0 );
   assert( pC->pseudoTableReg==0 );
-  assert( !pC->isSorter );
   assert( pC->pKVCur!=0 );
   pCrsr = pC->pKVCur;
 
@@ -3649,9 +3604,7 @@ case OP_Last: {        /* jump */
 ** correctly optimizing out sorts.
 */
 case OP_SorterSort:    /* jump */
-#ifdef SQLITE_OMIT_MERGE_SORT
   pOp->opcode = OP_Sort;
-#endif
 case OP_Sort: {        /* jump */
 #ifdef SQLITE_TEST
   sqlite4_sort_count++;
@@ -3675,18 +3628,13 @@ case OP_Rewind: {        /* jump */
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
-  assert( pC->isSorter==(pOp->opcode==OP_SorterSort) );
   doJump = 1;
-  if( isSorter(pC) ){
-    rc = sqlite4VdbeSorterRewind(db, pC, &doJump);
+  rc = sqlite4VdbeSeekEnd(pC, +1);
+  if( rc==SQLITE_NOTFOUND ){
+    rc = SQLITE_OK;
+    doJump = 1;
   }else{
-    rc = sqlite4VdbeSeekEnd(pC, +1);
-    if( rc==SQLITE_NOTFOUND ){
-      rc = SQLITE_OK;
-      doJump = 1;
-    }else{
-      doJump = 0;
-    }
+    doJump = 0;
   }
   pC->nullRow = (u8)doJump;
   assert( pOp->p2>0 && pOp->p2<p->nOp );
@@ -3729,9 +3677,7 @@ case OP_Rewind: {        /* jump */
 ** number P5-1 in the prepared statement is incremented.
 */
 case OP_SorterNext:    /* jump */
-#ifdef SQLITE_OMIT_MERGE_SORT
   pOp->opcode = OP_Next;
-#endif
 case OP_Prev:          /* jump */
 case OP_Next: {        /* jump */
   VdbeCursor *pC;
@@ -3744,17 +3690,10 @@ case OP_Next: {        /* jump */
   if( pC==0 ){
     break;  /* See ticket #2273 */
   }
-  assert( pC->isSorter==(pOp->opcode==OP_SorterNext) );
-  if( isSorter(pC) ){
-    assert( pOp->opcode==OP_SorterNext );
-    rc = sqlite4VdbeSorterNext(db, pC, &res);
-    if( rc==SQLITE_OK && res ) rc = SQLITE_NOTFOUND;
-  }else{
-    res = 1;
-    assert( pOp->opcode!=OP_Next || pOp->p4.xAdvance==sqlite4VdbeNext );
-    assert( pOp->opcode!=OP_Prev || pOp->p4.xAdvance==sqlite4VdbePrevious );
-    rc = pOp->p4.xAdvance(pC);
-  }
+  res = 1;
+  assert( pOp->opcode!=OP_Next || pOp->p4.xAdvance==sqlite4VdbeNext );
+  assert( pOp->opcode!=OP_Prev || pOp->p4.xAdvance==sqlite4VdbePrevious );
+  rc = pOp->p4.xAdvance(pC);
   if( rc==SQLITE_OK ){
     pc = pOp->p2 - 1;
     if( pOp->p5 ) p->aCounter[pOp->p5-1]++;
@@ -3770,34 +3709,16 @@ case OP_Next: {        /* jump */
   break;
 }
 
+
 /* Opcode: SorterInsert P1 P2 P3
 */
-case OP_SorterInsert: {      /* in2 */
-#ifndef SQLITE_OMIT_MERGE_SORT
-  VdbeCursor *pC;
-  assert( pOp->p1>=0 && pOp->p1<p->nCursor );
-  pC = p->apCsr[pOp->p1];
-  assert( pC!=0 );
-  assert( pC->isSorter==(pOp->opcode==OP_SorterInsert) );
-  pIn2 = &aMem[pOp->p2];
-  assert( pIn2->flags & MEM_Blob );
-  assert( pC->isTable==0 );
-  rc = ExpandBlob(pIn2);
-  if( rc==SQLITE_OK ){
-    rc = sqlite4VdbeSorterWrite(db, pC, pIn2);
-  }
-  break;
-#endif
-
-  /* If OMIT_MERGE_SORT is defined, fall through to IdxInsert. */
-}
-
 /* Opcode: IdxInsert P1 P2 P3 * P5
 **
 ** Register P3 holds the key and register P2 holds the data for an
 ** index entry.  Write this record into the index specified by the
 ** cursor P1.
 */
+case OP_SorterInsert:      /* in2 */
 case OP_IdxInsert: {
   VdbeCursor *pC;
   Mem *pKey;

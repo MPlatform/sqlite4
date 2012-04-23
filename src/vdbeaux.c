@@ -1497,7 +1497,6 @@ void sqlite4VdbeFreeCursor(Vdbe *p, VdbeCursor *pCx){
   if( pCx==0 ){
     return;
   }
-  sqlite4VdbeSorterClose(p->db, pCx);
   if( pCx->pKVCur ){
     sqlite4KVCursorClose(pCx->pKVCur);
   }

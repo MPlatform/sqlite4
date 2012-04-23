@@ -65,7 +65,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          tokenize.o trigger.o \
          update.o util.o varint.o \
          vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
-         vdbemem.o vdbesort.o vdbetrace.o \
+         vdbemem.o vdbetrace.o \
          walker.o where.o utf.o vtab.o
 
 
@@ -143,7 +143,6 @@ SRC = \
   $(TOP)/src/vdbeapi.c \
   $(TOP)/src/vdbeaux.c \
   $(TOP)/src/vdbemem.c \
-  $(TOP)/src/vdbesort.c \
   $(TOP)/src/vdbetrace.c \
   $(TOP)/src/vdbeInt.h \
   $(TOP)/src/vtab.c \
