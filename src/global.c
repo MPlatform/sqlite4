@@ -165,6 +165,11 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    sqlite4KVStoreOpenMem,     /* xKVTmp */
 };
 
+/*
+** Return the default environment
+*/
+sqlite4_env *sqlite4_env_default(void){ return &sqlite4DefaultEnv; }
+
 
 /*
 ** Hash table for global functions - functions common to all

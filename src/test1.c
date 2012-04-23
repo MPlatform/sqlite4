@@ -3222,7 +3222,7 @@ static int test_open(
   }
 
   zFilename = objc>1 ? Tcl_GetString(objv[1]) : 0;
-  rc = sqlite4_open(zFilename, &db);
+  rc = sqlite4_open(0, zFilename, &db, 0);
   
   if( sqlite4TestMakePointerStr(interp, zBuf, db) ) return TCL_ERROR;
   Tcl_AppendResult(interp, zBuf, 0);
@@ -3290,65 +3290,9 @@ static int test_open_v2(
     flags |= aFlag[iFlag].flag;
   }
 
-  rc = sqlite4_open_v2(zFilename, &db, flags, zVfs);
+  rc = sqlite4_open(0, zFilename, &db, 0);
   if( sqlite4TestMakePointerStr(interp, zBuf, db) ) return TCL_ERROR;
   Tcl_AppendResult(interp, zBuf, 0);
-  return TCL_OK;
-}
-
-/*
-** Usage: sqlite4_open16 filename options
-*/
-static int test_open16(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#ifndef SQLITE_OMIT_UTF16
-  const void *zFilename;
-  sqlite4 *db;
-  int rc;
-  char zBuf[100];
-
-  if( objc!=3 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"", 
-       Tcl_GetString(objv[0]), " filename options-list", 0);
-    return TCL_ERROR;
-  }
-
-  zFilename = Tcl_GetByteArrayFromObj(objv[1], 0);
-  rc = sqlite4_open16(zFilename, &db);
-  
-  if( sqlite4TestMakePointerStr(interp, zBuf, db) ) return TCL_ERROR;
-  Tcl_AppendResult(interp, zBuf, 0);
-#endif /* SQLITE_OMIT_UTF16 */
-  return TCL_OK;
-}
-
-/*
-** Usage: sqlite4_complete16 <UTF-16 string>
-**
-** Return 1 if the supplied argument is a complete SQL statement, or zero
-** otherwise.
-*/
-static int test_complete16(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#if !defined(SQLITE_OMIT_COMPLETE) && !defined(SQLITE_OMIT_UTF16)
-  char *zBuf;
-
-  if( objc!=2 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "<utf-16 sql>");
-    return TCL_ERROR;
-  }
-
-  zBuf = (char*)Tcl_GetByteArrayFromObj(objv[1], 0);
-  Tcl_SetObjResult(interp, Tcl_NewIntObj(sqlite4_complete16(zBuf)));
-#endif /* SQLITE_OMIT_COMPLETE && SQLITE_OMIT_UTF16 */
   return TCL_OK;
 }
 
@@ -4893,9 +4837,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_errmsg",                test_errmsg        ,0 },
      { "sqlite4_errmsg16",              test_errmsg16      ,0 },
      { "sqlite4_open",                  test_open          ,0 },
-     { "sqlite4_open16",                test_open16        ,0 },
      { "sqlite4_open_v2",               test_open_v2       ,0 },
-     { "sqlite4_complete16",            test_complete16    ,0 },
 
      { "sqlite4_prepare",               test_prepare       ,0 },
      { "sqlite4_prepare_tkt3134",       test_prepare_tkt3134, 0},

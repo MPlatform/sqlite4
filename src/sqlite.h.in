@@ -244,8 +244,8 @@ int sqlite4_threadsafe(void);
 **
 ** Each open SQLite database is represented by a pointer to an instance of
 ** the opaque structure named "sqlite4".  It is useful to think of an sqlite4
-** pointer as an object.  The [sqlite4_open()], [sqlite4_open16()], and
-** [sqlite4_open_v2()] interfaces are its constructors, and [sqlite4_close()]
+** pointer as an object.  The [sqlite4_open()]
+** interface is its constructors, and [sqlite4_close()]
 ** is its destructor.  There are many other interfaces (such as
 ** [sqlite4_prepare_v2()], [sqlite4_create_function()], and
 ** [sqlite4_busy_timeout()] to name but three) that are methods on an
@@ -309,8 +309,7 @@ typedef sqlite_uint64 sqlite4_uint64;
 **
 ** The C parameter to [sqlite4_close(C)] must be either a NULL
 ** pointer or an [sqlite4] object pointer obtained
-** from [sqlite4_open()], [sqlite4_open16()], or
-** [sqlite4_open_v2()], and not previously closed.
+** from [sqlite4_open()] and not previously closed.
 ** ^Calling sqlite4_close() with a NULL pointer argument is a 
 ** harmless no-op.
 */
@@ -493,17 +492,16 @@ int sqlite4_exec(
 /*
 ** CAPIREF: Flags For File Open Operations
 **
-** These bit values are intended for use in the
-** 3rd parameter to the [sqlite4_open_v2()] interface and
-** in the 4th parameter to the [sqlite4_vfs.xOpen] method.
+** These bit values are intended for use as options in the
+** [sqlite4_open()] interface
 */
-#define SQLITE_OPEN_READONLY         0x00000001  /* Ok for sqlite4_open_v2() */
-#define SQLITE_OPEN_READWRITE        0x00000002  /* Ok for sqlite4_open_v2() */
-#define SQLITE_OPEN_CREATE           0x00000004  /* Ok for sqlite4_open_v2() */
+#define SQLITE_OPEN_READONLY         0x00000001  /* Ok for sqlite4_open() */
+#define SQLITE_OPEN_READWRITE        0x00000002  /* Ok for sqlite4_open() */
+#define SQLITE_OPEN_CREATE           0x00000004  /* Ok for sqlite4_open() */
 #define SQLITE_OPEN_DELETEONCLOSE    0x00000008  /* VFS only */
 #define SQLITE_OPEN_EXCLUSIVE        0x00000010  /* VFS only */
 #define SQLITE_OPEN_AUTOPROXY        0x00000020  /* VFS only */
-#define SQLITE_OPEN_URI              0x00000040  /* Ok for sqlite4_open_v2() */
+#define SQLITE_OPEN_URI              0x00000040  /* Ok for sqlite4_open() */
 #define SQLITE_OPEN_MAIN_DB          0x00000100  /* VFS only */
 #define SQLITE_OPEN_TEMP_DB          0x00000200  /* VFS only */
 #define SQLITE_OPEN_TRANSIENT_DB     0x00000400  /* VFS only */
@@ -511,8 +509,8 @@ int sqlite4_exec(
 #define SQLITE_OPEN_TEMP_JOURNAL     0x00001000  /* VFS only */
 #define SQLITE_OPEN_SUBJOURNAL       0x00002000  /* VFS only */
 #define SQLITE_OPEN_MASTER_JOURNAL   0x00004000  /* VFS only */
-#define SQLITE_OPEN_NOMUTEX          0x00008000  /* Ok for sqlite4_open_v2() */
-#define SQLITE_OPEN_FULLMUTEX        0x00010000  /* Ok for sqlite4_open_v2() */
+#define SQLITE_OPEN_NOMUTEX          0x00008000  /* Ok for sqlite4_open() */
+#define SQLITE_OPEN_FULLMUTEX        0x00010000  /* Ok for sqlite4_open() */
 #define SQLITE_OPEN_WAL              0x00080000  /* VFS only */
 
 /* Reserved:                         0x00F00000 */
@@ -1229,6 +1227,14 @@ int sqlite4_config(int, ...);
 ** the call is considered successful.
 */
 int sqlite4_db_config(sqlite4*, int op, ...);
+
+/*
+** CAPIREF: Run-time environment of a database connection
+**
+** Return the sqlite4_env object to which the database connection
+** belongs.
+*/
+sqlite4_env *sqlite4_db_env(sqlite4*);
 
 /*
 ** CAPIREF: Memory Allocation Routines
@@ -2187,187 +2193,28 @@ void sqlite4_progress_handler(sqlite4*, int, int(*)(void*), void*);
 /*
 ** CAPIREF: Opening A New Database Connection
 **
-** ^These routines open an SQLite database file as specified by the 
-** filename argument. ^The filename argument is interpreted as UTF-8 for
-** sqlite4_open() and sqlite4_open_v2() and as UTF-16 in the native byte
-** order for sqlite4_open16(). ^(A [database connection] handle is usually
+** ^These routines open an SQLite4 database file as specified by the 
+** URI argument.
+** ^(A [database connection] handle is usually
 ** returned in *ppDb, even if an error occurs.  The only exception is that
 ** if SQLite is unable to allocate memory to hold the [sqlite4] object,
 ** a NULL will be written into *ppDb instead of a pointer to the [sqlite4]
 ** object.)^ ^(If the database is opened (and/or created) successfully, then
 ** [SQLITE_OK] is returned.  Otherwise an [error code] is returned.)^ ^The
-** [sqlite4_errmsg()] or [sqlite4_errmsg16()] routines can be used to obtain
+** [sqlite4_errmsg()] routine can be used to obtain
 ** an English language description of the error following a failure of any
 ** of the sqlite4_open() routines.
-**
-** ^The default encoding for the database will be UTF-8 if
-** sqlite4_open() or sqlite4_open_v2() is called and
-** UTF-16 in the native byte order if sqlite4_open16() is used.
 **
 ** Whether or not an error occurs when it is opened, resources
 ** associated with the [database connection] handle should be released by
 ** passing it to [sqlite4_close()] when it is no longer required.
 **
-** The sqlite4_open_v2() interface works like sqlite4_open()
-** except that it accepts two additional parameters for additional control
-** over the new database connection.  ^(The flags parameter to
-** sqlite4_open_v2() can take one of
-** the following three values, optionally combined with the 
-** [SQLITE_OPEN_NOMUTEX], [SQLITE_OPEN_FULLMUTEX],
-** and/or [SQLITE_OPEN_URI] flags:)^
-**
-** <dl>
-** ^(<dt>[SQLITE_OPEN_READONLY]</dt>
-** <dd>The database is opened in read-only mode.  If the database does not
-** already exist, an error is returned.</dd>)^
-**
-** ^(<dt>[SQLITE_OPEN_READWRITE]</dt>
-** <dd>The database is opened for reading and writing if possible, or reading
-** only if the file is write protected by the operating system.  In either
-** case the database must already exist, otherwise an error is returned.</dd>)^
-**
-** ^(<dt>[SQLITE_OPEN_READWRITE] | [SQLITE_OPEN_CREATE]</dt>
-** <dd>The database is opened for reading and writing, and is created if
-** it does not already exist. This is the behavior that is always used for
-** sqlite4_open() and sqlite4_open16().</dd>)^
-** </dl>
-**
-** If the 3rd parameter to sqlite4_open_v2() is not one of the
-** combinations shown above optionally combined with other
-** [SQLITE_OPEN_READONLY | SQLITE_OPEN_* bits]
-** then the behavior is undefined.
-**
-** ^If the [SQLITE_OPEN_NOMUTEX] flag is set, then the database connection
-** opens in the multi-thread [threading mode] as long as the single-thread
-** mode has not been set at compile-time or start-time.  ^If the
-** [SQLITE_OPEN_FULLMUTEX] flag is set then the database connection opens
-** in the serialized [threading mode] unless single-thread was
-** previously selected at compile-time or start-time.
-**
-** ^The fourth parameter to sqlite4_open_v2() is the name of the
-** [sqlite4_vfs] object that defines the operating system interface that
-** the new database connection should use.  ^If the fourth parameter is
-** a NULL pointer then the default [sqlite4_vfs] object is used.
-**
-** ^If the filename is ":memory:", then a private, temporary in-memory database
-** is created for the connection.  ^This in-memory database will vanish when
-** the database connection is closed.  Future versions of SQLite might
-** make use of additional special filenames that begin with the ":" character.
-** It is recommended that when a database filename actually does begin with
-** a ":" character you should prefix the filename with a pathname such as
-** "./" to avoid ambiguity.
-**
-** ^If the filename is an empty string, then a private, temporary
-** on-disk database will be created.  ^This private database will be
-** automatically deleted as soon as the database connection is closed.
-**
-** [[URI filenames in sqlite4_open()]] <h3>URI Filenames</h3>
-**
-** ^If the filename argument
-** begins with "file:", then the filename is interpreted as a URI.
-** URI filenames are parsed according to RFC 3986. ^If the URI contains an
-** authority, then it must be either an empty string or the string 
-** "localhost". ^If the authority is not an empty string or "localhost", an 
-** error is returned to the caller. ^The fragment component of a URI, if 
-** present, is ignored.
-**
-** ^SQLite uses the path component of the URI as the name of the disk file
-** which contains the database. ^If the path begins with a '/' character, 
-** then it is interpreted as an absolute path. ^If the path does not begin 
-** with a '/' (meaning that the authority section is omitted from the URI)
-** then the path is interpreted as a relative path. 
-** ^On windows, the first component of an absolute path 
-** is a drive specification (e.g. "C:").
-**
-** [[core URI query parameters]]
-** The query component of a URI may contain parameters that are interpreted
-** either by SQLite itself, or by a [VFS | custom VFS implementation].
-** SQLite interprets the following three query parameters:
-**
-** <ul>
-**   <li> <b>vfs</b>: ^The "vfs" parameter may be used to specify the name of
-**     a VFS object that provides the operating system interface that should
-**     be used to access the database file on disk. ^If this option is set to
-**     an empty string the default VFS object is used. ^Specifying an unknown
-**     VFS is an error. ^If sqlite4_open_v2() is used and the vfs option is
-**     present, then the VFS specified by the option takes precedence over
-**     the value passed as the fourth parameter to sqlite4_open_v2().
-**
-**   <li> <b>mode</b>: ^(The mode parameter may be set to either "ro", "rw" or
-**     "rwc". Attempting to set it to any other value is an error)^. 
-**     ^If "ro" is specified, then the database is opened for read-only 
-**     access, just as if the [SQLITE_OPEN_READONLY] flag had been set in the 
-**     third argument to sqlite4_prepare_v2(). ^If the mode option is set to 
-**     "rw", then the database is opened for read-write (but not create) 
-**     access, as if SQLITE_OPEN_READWRITE (but not SQLITE_OPEN_CREATE) had 
-**     been set. ^Value "rwc" is equivalent to setting both 
-**     SQLITE_OPEN_READWRITE and SQLITE_OPEN_CREATE. ^If sqlite4_open_v2() is 
-**     used, it is an error to specify a value for the mode parameter that is 
-**     less restrictive than that specified by the flags passed as the third 
-**     parameter.
-** </ul>
-**
-** ^Specifying an unknown parameter in the query component of a URI is not an
-** error.  Future versions of SQLite might understand additional query
-** parameters.  See "[query parameters with special meaning to SQLite]" for
-** additional information.
-**
-** [[URI filename examples]] <h3>URI filename examples</h3>
-**
-** <table border="1" align=center cellpadding=5>
-** <tr><th> URI filenames <th> Results
-** <tr><td> file:data.db <td> 
-**          Open the file "data.db" in the current directory.
-** <tr><td> file:/home/fred/data.db<br>
-**          file:///home/fred/data.db <br> 
-**          file://localhost/home/fred/data.db <br> <td> 
-**          Open the database file "/home/fred/data.db".
-** <tr><td> file://darkstar/home/fred/data.db <td> 
-**          An error. "darkstar" is not a recognized authority.
-** <tr><td style="white-space:nowrap"> 
-**          file:///C:/Documents%20and%20Settings/fred/Desktop/data.db
-**     <td> Windows only: Open the file "data.db" on fred's desktop on drive
-**          C:. Note that the %20 escaping in this example is not strictly 
-**          necessary - space characters can be used literally
-**          in URI filenames.
-** <tr><td> file:data.db?mode=ro&cache=private <td> 
-**          Open file "data.db" in the current directory for read-only access.
-**          Regardless of whether or not shared-cache mode is enabled by
-**          default, use a private cache.
-** <tr><td> file:/home/fred/data.db?vfs=unix-nolock <td>
-**          Open file "/home/fred/data.db". Use the special VFS "unix-nolock".
-** <tr><td> file:data.db?mode=readonly <td> 
-**          An error. "readonly" is not a valid option for the "mode" parameter.
-** </table>
-**
-** ^URI hexadecimal escape sequences (%HH) are supported within the path and
-** query components of a URI. A hexadecimal escape sequence consists of a
-** percent sign - "%" - followed by exactly two hexadecimal digits 
-** specifying an octet value. ^Before the path or query components of a
-** URI filename are interpreted, they are encoded using UTF-8 and all 
-** hexadecimal escape sequences replaced by a single byte containing the
-** corresponding octet. If this process generates an invalid UTF-8 encoding,
-** the results are undefined.
-**
-** <b>Note to Windows users:</b>  The encoding used for the filename argument
-** of sqlite4_open() and sqlite4_open_v2() must be UTF-8, not whatever
-** codepage is currently defined.  Filenames containing international
-** characters must be converted to UTF-8 prior to passing them into
-** sqlite4_open() or sqlite4_open_v2().
 */
 int sqlite4_open(
-  const char *filename,   /* Database filename (UTF-8) */
-  sqlite4 **ppDb          /* OUT: SQLite db handle */
-);
-int sqlite4_open16(
-  const void *filename,   /* Database filename (UTF-16) */
-  sqlite4 **ppDb          /* OUT: SQLite db handle */
-);
-int sqlite4_open_v2(
-  const char *filename,   /* Database filename (UTF-8) */
-  sqlite4 **ppDb,         /* OUT: SQLite db handle */
-  int flags,              /* Flags */
-  const char *zVfs        /* Name of VFS module to use */
+  sqlite4_env *pEnv,     /* Run-time environment. NULL means use the default */
+  const char *filename,  /* Database filename (UTF-8) */
+  sqlite4 **ppDb,        /* OUT: SQLite db handle */
+  ...                    /* Optional parameters.  Zero terminates options */
 );
 
 /*
@@ -2582,8 +2429,8 @@ int sqlite4_limit(sqlite4*, int id, int newVal);
 ** program using one of these routines.
 **
 ** The first argument, "db", is a [database connection] obtained from a
-** prior successful call to [sqlite4_open()], [sqlite4_open_v2()] or
-** [sqlite4_open16()].  The database connection must not have been closed.
+** prior successful call to [sqlite4_open()].
+** The database connection must not have been closed.
 **
 ** The second argument, "zSql", is the statement to be compiled, encoded
 ** as either UTF-8 or UTF-16.  The sqlite4_prepare() and sqlite4_prepare_v2()
@@ -4448,51 +4295,6 @@ int sqlite4_load_extension(
 ** it back off again.
 */
 int sqlite4_enable_load_extension(sqlite4 *db, int onoff);
-
-/*
-** CAPIREF: Automatically Load Statically Linked Extensions
-**
-** ^This interface causes the xEntryPoint() function to be invoked for
-** each new [database connection] that is created.  The idea here is that
-** xEntryPoint() is the entry point for a statically linked SQLite extension
-** that is to be automatically loaded into all new database connections.
-**
-** ^(Even though the function prototype shows that xEntryPoint() takes
-** no arguments and returns void, SQLite invokes xEntryPoint() with three
-** arguments and expects and integer result as if the signature of the
-** entry point where as follows:
-**
-** <blockquote><pre>
-** &nbsp;  int xEntryPoint(
-** &nbsp;    sqlite4 *db,
-** &nbsp;    const char **pzErrMsg,
-** &nbsp;    const struct sqlite4_api_routines *pThunk
-** &nbsp;  );
-** </pre></blockquote>)^
-**
-** If the xEntryPoint routine encounters an error, it should make *pzErrMsg
-** point to an appropriate error message (obtained from [sqlite4_mprintf()])
-** and return an appropriate [error code].  ^SQLite ensures that *pzErrMsg
-** is NULL before calling the xEntryPoint().  ^SQLite will invoke
-** [sqlite4_free()] on *pzErrMsg after xEntryPoint() returns.  ^If any
-** xEntryPoint() returns an error, the [sqlite4_open()], [sqlite4_open16()],
-** or [sqlite4_open_v2()] call that provoked the xEntryPoint() will fail.
-**
-** ^Calling sqlite4_auto_extension(X) with an entry point X that is already
-** on the list of automatic extensions is a harmless no-op. ^No entry point
-** will be called more than once for each database connection that is opened.
-**
-** See also: [sqlite4_reset_auto_extension()].
-*/
-int sqlite4_auto_extension(void (*xEntryPoint)(void));
-
-/*
-** CAPIREF: Reset Automatic Extension Loading
-**
-** ^This interface disables all automatic extensions previously
-** registered using [sqlite4_auto_extension()].
-*/
-void sqlite4_reset_auto_extension(void);
 
 /*
 ** The interface to the virtual-table mechanism is currently considered

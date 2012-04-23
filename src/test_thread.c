@@ -274,7 +274,7 @@ static int sqlthread_open(
   UNUSED_PARAMETER(objc);
 
   zFilename = Tcl_GetString(objv[2]);
-  rc = sqlite4_open(zFilename, &db);
+  rc = sqlite4_open(0, zFilename, &db, 0);
 #ifdef SQLITE_HAS_CODEC
   if( db && objc>=4 ){
     const char *zKey;

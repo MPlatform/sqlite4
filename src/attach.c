@@ -129,7 +129,7 @@ static void attachFunc(
   ** or may not be initialised.
   */
   flags = db->openFlags;
-  rc = sqlite4ParseUri(db->pVfs->zName, zFile, &flags, &pVfs, &zPath, &zErr);
+  rc = sqlite4ParseUri(db->pEnv, zFile, &flags, &zPath, &zErr);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_NOMEM ) db->mallocFailed = 1;
     sqlite4_result_error(context, zErr, -1);

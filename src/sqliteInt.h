@@ -793,6 +793,7 @@ struct FuncDefHash {
 ** consistently.
 */
 struct sqlite4 {
+  sqlite4_env *pEnv;            /* The run-time environment */
   sqlite4_vfs *pVfs;            /* OS Interface */
   int nDb;                      /* Number of backends currently in use */
   Db *aDb;                      /* All backends */
@@ -2682,8 +2683,7 @@ void sqlite4AddColumnType(Parse*,Token*);
 void sqlite4AddDefaultValue(Parse*,ExprSpan*);
 void sqlite4AddCollateType(Parse*, Token*);
 void sqlite4EndTable(Parse*,Token*,Token*,Select*);
-int sqlite4ParseUri(const char*,const char*,unsigned int*,
-                    sqlite4_vfs**,char**,char **);
+int sqlite4ParseUri(sqlite4_env*,const char*,unsigned int*,char**,char **);
 int sqlite4CodeOnce(Parse *);
 
 Bitvec *sqlite4BitvecCreate(u32);

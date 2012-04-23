@@ -111,7 +111,6 @@ typedef struct SqliteDb SqliteDb;
 struct SqliteDb {
   sqlite4 *db;               /* The "real" database structure. MUST BE FIRST */
   Tcl_Interp *interp;        /* The interpreter used for this database */
-  char *zBusy;               /* The busy callback routine */
   char *zCommit;             /* The commit hook callback routine */
   char *zTrace;              /* The trace callback routine */
   char *zProfile;            /* The profile callback routine */
@@ -246,9 +245,6 @@ static void DbDeleteCmd(void *db){
     SqlCollate *pCollate = pDb->pCollate;
     pDb->pCollate = pCollate->pNext;
     Tcl_Free((char*)pCollate);
-  }
-  if( pDb->zBusy ){
-    Tcl_Free(pDb->zBusy);
   }
   if( pDb->zTrace ){
     Tcl_Free(pDb->zTrace);
@@ -2511,7 +2507,7 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   memset(p, 0, sizeof(*p));
   zFile = Tcl_GetStringFromObj(objv[2], 0);
   zFile = Tcl_TranslateFileName(interp, zFile, &translatedFilename);
-  sqlite4_open_v2(zFile, &p->db, flags, zVfs);
+  sqlite4_open(0, zFile, &p->db, 0);
   Tcl_DStringFree(&translatedFilename);
   if( SQLITE_OK!=sqlite4_errcode(p->db) ){
     zErrMsg = sqlite4_mprintf("%s", sqlite4_errmsg(p->db));

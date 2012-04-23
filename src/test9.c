@@ -38,7 +38,7 @@ static int c_collation_test(
   }
 
   /* Open a database. */
-  rc = sqlite4_open(":memory:", &db);
+  rc = sqlite4_open(0, ":memory:", &db, 0);
   if( rc!=SQLITE_OK ){
     zErrFunction = "sqlite4_open";
     goto error_out;
@@ -123,7 +123,7 @@ static int c_misuse_test(
   /* Open a database. Then close it again. We need to do this so that
   ** we have a "closed database handle" to pass to various API functions.
   */
-  rc = sqlite4_open(":memory:", &db);
+  rc = sqlite4_open(0, ":memory:", &db, 0);
   if( rc!=SQLITE_OK ){
     zErrFunction = "sqlite4_open";
     goto error_out;

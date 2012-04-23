@@ -1628,7 +1628,7 @@ int sqlite4_limit(sqlite4 *db, int limitId, int newLimit){
 
 /*
 ** This function is used to parse both URIs and non-URI filenames passed by the
-** user to API functions sqlite4_open() or sqlite4_open_v2(), and for database
+** user to API functions sqlite4_open() and for database
 ** URIs specified as part of ATTACH statements.
 **
 ** The first argument to this function is the name of the VFS to use (or
@@ -1651,16 +1651,14 @@ int sqlite4_limit(sqlite4 *db, int limitId, int newLimit){
 ** this buffer by calling sqlite4_free().
 */
 int sqlite4ParseUri(
-  const char *zDefaultVfs,        /* VFS to use if no "vfs=xxx" query option */
+  sqlite4_env *pEnv,              /* Run-time environment */
   const char *zUri,               /* Nul-terminated URI to parse */
   unsigned int *pFlags,           /* IN/OUT: SQLITE_OPEN_XXX flags */
-  sqlite4_vfs **ppVfs,            /* OUT: VFS to use */ 
   char **pzFile,                  /* OUT: Filename component of URI */
   char **pzErrMsg                 /* OUT: Error message (if rc!=SQLITE_OK) */
 ){
   int rc = SQLITE_OK;
   unsigned int flags = *pFlags;
-  const char *zVfs = zDefaultVfs;
   char *zFile;
   char c;
   int nUri = sqlite4Strlen30(zUri);
@@ -1753,62 +1751,57 @@ int sqlite4ParseUri(
 
     /* Check if there were any options specified that should be interpreted 
     ** here. Options that are interpreted here include "vfs" and those that
-    ** correspond to flags that may be passed to the sqlite4_open_v2()
+    ** correspond to flags that may be passed to the sqlite4_open()
     ** method. */
     zOpt = &zFile[sqlite4Strlen30(zFile)+1];
     while( zOpt[0] ){
       int nOpt = sqlite4Strlen30(zOpt);
       char *zVal = &zOpt[nOpt+1];
       int nVal = sqlite4Strlen30(zVal);
+      struct OpenMode {
+        const char *z;
+        int mode;
+      } *aMode = 0;
+      char *zModeType = 0;
+      int mask = 0;
+      int limit = 0;
 
-      if( nOpt==3 && memcmp("vfs", zOpt, 3)==0 ){
-        zVfs = zVal;
-      }else{
-        struct OpenMode {
-          const char *z;
-          int mode;
-        } *aMode = 0;
-        char *zModeType = 0;
-        int mask = 0;
-        int limit = 0;
+      if( nOpt==4 && memcmp("mode", zOpt, 4)==0 ){
+        static struct OpenMode aOpenMode[] = {
+          { "ro",  SQLITE_OPEN_READONLY },
+          { "rw",  SQLITE_OPEN_READWRITE }, 
+          { "rwc", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE },
+          { 0, 0 }
+        };
 
-        if( nOpt==4 && memcmp("mode", zOpt, 4)==0 ){
-          static struct OpenMode aOpenMode[] = {
-            { "ro",  SQLITE_OPEN_READONLY },
-            { "rw",  SQLITE_OPEN_READWRITE }, 
-            { "rwc", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE },
-            { 0, 0 }
-          };
+        mask = SQLITE_OPEN_READONLY|SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE;
+        aMode = aOpenMode;
+        limit = mask & flags;
+        zModeType = "access";
+      }
 
-          mask = SQLITE_OPEN_READONLY|SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE;
-          aMode = aOpenMode;
-          limit = mask & flags;
-          zModeType = "access";
+      if( aMode ){
+        int i;
+        int mode = 0;
+        for(i=0; aMode[i].z; i++){
+          const char *z = aMode[i].z;
+          if( nVal==sqlite4Strlen30(z) && 0==memcmp(zVal, z, nVal) ){
+            mode = aMode[i].mode;
+            break;
+          }
         }
-
-        if( aMode ){
-          int i;
-          int mode = 0;
-          for(i=0; aMode[i].z; i++){
-            const char *z = aMode[i].z;
-            if( nVal==sqlite4Strlen30(z) && 0==memcmp(zVal, z, nVal) ){
-              mode = aMode[i].mode;
-              break;
-            }
-          }
-          if( mode==0 ){
-            *pzErrMsg = sqlite4_mprintf("no such %s mode: %s", zModeType, zVal);
-            rc = SQLITE_ERROR;
-            goto parse_uri_out;
-          }
-          if( mode>limit ){
-            *pzErrMsg = sqlite4_mprintf("%s mode not allowed: %s",
-                                        zModeType, zVal);
-            rc = SQLITE_PERM;
-            goto parse_uri_out;
-          }
-          flags = (flags & ~mask) | mode;
+        if( mode==0 ){
+          *pzErrMsg = sqlite4_mprintf("no such %s mode: %s", zModeType, zVal);
+          rc = SQLITE_ERROR;
+          goto parse_uri_out;
         }
+        if( mode>limit ){
+          *pzErrMsg = sqlite4_mprintf("%s mode not allowed: %s",
+                                      zModeType, zVal);
+          rc = SQLITE_PERM;
+          goto parse_uri_out;
+        }
+        flags = (flags & ~mask) | mode;
       }
 
       zOpt = &zVal[nVal+1];
@@ -1822,11 +1815,6 @@ int sqlite4ParseUri(
     zFile[nUri+1] = '\0';
   }
 
-  *ppVfs = sqlite4_vfs_find(zVfs);
-  if( *ppVfs==0 ){
-    *pzErrMsg = sqlite4_mprintf("no such vfs: %s", zVfs);
-    rc = SQLITE_ERROR;
-  }
  parse_uri_out:
   if( rc!=SQLITE_OK ){
     sqlite4_free(zFile);
@@ -1840,14 +1828,14 @@ int sqlite4ParseUri(
 
 /*
 ** This routine does the work of opening a database on behalf of
-** sqlite4_open() and sqlite4_open16(). The database filename "zFilename"  
-** is UTF-8 encoded.
+** sqlite4_open(). The database filename "zFilename" is UTF-8 encoded.
 */
 static int openDatabase(
+  sqlite4_env *pEnv,     /* The run-time environment */
   const char *zFilename, /* Database filename UTF-8 encoded */
+  unsigned int flags,    /* Flags influencing the open */
   sqlite4 **ppDb,        /* OUT: Returned database handle */
-  unsigned int flags,    /* Operational flags */
-  const char *zVfs       /* Name of the VFS to use */
+  va_list ap             /* Zero-terminated list of options */
 ){
   sqlite4 *db;                    /* Store allocated handle here */
   int rc;                         /* Return code */
@@ -1861,24 +1849,6 @@ static int openDatabase(
   if( rc ) return rc;
 #endif
 
-  /* Only allow sensible combinations of bits in the flags argument.  
-  ** Throw an error if any non-sense combination is used.  If we
-  ** do not block illegal combinations here, it could trigger
-  ** assert() statements in deeper layers.  Sensible combinations
-  ** are:
-  **
-  **  1:  SQLITE_OPEN_READONLY
-  **  2:  SQLITE_OPEN_READWRITE
-  **  6:  SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
-  */
-  assert( SQLITE_OPEN_READONLY  == 0x01 );
-  assert( SQLITE_OPEN_READWRITE == 0x02 );
-  assert( SQLITE_OPEN_CREATE    == 0x04 );
-  testcase( (1<<(flags&7))==0x02 ); /* READONLY */
-  testcase( (1<<(flags&7))==0x04 ); /* READWRITE */
-  testcase( (1<<(flags&7))==0x40 ); /* READWRITE | CREATE */
-  if( ((1<<(flags&7)) & 0x46)==0 ) return SQLITE_MISUSE_BKPT;
-
   if( sqlite4DefaultEnv.bCoreMutex==0 ){
     isThreadsafe = 0;
   }else if( flags & SQLITE_OPEN_NOMUTEX ){
@@ -1889,31 +1859,10 @@ static int openDatabase(
     isThreadsafe = sqlite4DefaultEnv.bFullMutex;
   }
 
-  /* Remove harmful bits from the flags parameter
-  **
-  ** The SQLITE_OPEN_NOMUTEX and SQLITE_OPEN_FULLMUTEX flags were
-  ** dealt with in the previous code block.  Besides these, the only
-  ** valid input flags for sqlite4_open_v2() are SQLITE_OPEN_READONLY,
-  ** SQLITE_OPEN_READWRITE, SQLITE_OPEN_CREATE and some
-  ** reserved bits.  Silently mask off all other flags.
-  */
-  flags &=  ~( SQLITE_OPEN_DELETEONCLOSE |
-               SQLITE_OPEN_EXCLUSIVE |
-               SQLITE_OPEN_MAIN_DB |
-               SQLITE_OPEN_TEMP_DB | 
-               SQLITE_OPEN_TRANSIENT_DB | 
-               SQLITE_OPEN_MAIN_JOURNAL | 
-               SQLITE_OPEN_TEMP_JOURNAL | 
-               SQLITE_OPEN_SUBJOURNAL | 
-               SQLITE_OPEN_MASTER_JOURNAL |
-               SQLITE_OPEN_NOMUTEX |
-               SQLITE_OPEN_FULLMUTEX |
-               SQLITE_OPEN_WAL
-             );
-
   /* Allocate the sqlite data structure */
   db = sqlite4MallocZero( sizeof(sqlite4) );
   if( db==0 ) goto opendb_out;
+  db->pEnv = pEnv;
   if( isThreadsafe ){
     db->mutex = sqlite4MutexAlloc(SQLITE_MUTEX_RECURSIVE);
     if( db->mutex==0 ){
@@ -1932,20 +1881,14 @@ static int openDatabase(
   db->autoCommit = 1;
   db->nextAutovac = -1;
   db->nextPagesize = 0;
-  db->flags |=  SQLITE_AutoIndex | SQLITE_EnableTrigger
-#if SQLITE_DEFAULT_FILE_FORMAT<4
-                 | SQLITE_LegacyFileFmt
-#endif
-#ifdef SQLITE_ENABLE_LOAD_EXTENSION
-                 | SQLITE_LoadExtension
-#endif
+  db->flags |=  SQLITE_AutoIndex
+                 | SQLITE_EnableTrigger
 #if SQLITE_DEFAULT_RECURSIVE_TRIGGERS
                  | SQLITE_RecTriggers
 #endif
-#if defined(SQLITE_DEFAULT_FOREIGN_KEYS) && SQLITE_DEFAULT_FOREIGN_KEYS
                  | SQLITE_ForeignKeys
-#endif
-      ;
+            ;
+
   sqlite4HashInit(&db->aCollSeq);
 #ifndef SQLITE_OMIT_VIRTUALTABLE
   sqlite4HashInit(&db->aModule);
@@ -1972,7 +1915,7 @@ static int openDatabase(
 
   /* Parse the filename/URI argument. */
   db->openFlags = flags;
-  rc = sqlite4ParseUri(zVfs, zFilename, &flags, &db->pVfs, &zOpen, &zErrMsg);
+  rc = sqlite4ParseUri(pEnv, zFilename, &flags, &zOpen, &zErrMsg);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_NOMEM ) db->mallocFailed = 1;
     sqlite4Error(db, rc, zErrMsg ? "%s" : 0, zErrMsg);
@@ -2022,20 +1965,6 @@ static int openDatabase(
     }
   }
 
-#ifdef SQLITE_ENABLE_FTS1
-  if( !db->mallocFailed ){
-    extern int sqlite4Fts1Init(sqlite4*);
-    rc = sqlite4Fts1Init(db);
-  }
-#endif
-
-#ifdef SQLITE_ENABLE_FTS2
-  if( !db->mallocFailed && rc==SQLITE_OK ){
-    extern int sqlite4Fts2Init(sqlite4*);
-    rc = sqlite4Fts2Init(db);
-  }
-#endif
-
 #ifdef SQLITE_ENABLE_FTS3
   if( !db->mallocFailed && rc==SQLITE_OK ){
     rc = sqlite4Fts3Init(db);
@@ -2060,8 +1989,6 @@ static int openDatabase(
   setupLookaside(db, 0, sqlite4DefaultEnv.szLookaside,
                         sqlite4DefaultEnv.nLookaside);
 
-  sqlite4_wal_autocheckpoint(db, SQLITE_DEFAULT_WAL_AUTOCHECKPOINT);
-
 opendb_out:
   sqlite4_free(zOpen);
   if( db ){
@@ -2084,58 +2011,27 @@ opendb_out:
 ** Open a new database handle.
 */
 int sqlite4_open(
+  sqlite4_env *pEnv,
   const char *zFilename, 
-  sqlite4 **ppDb 
+  sqlite4 **ppDb,
+  ...
 ){
-  return openDatabase(zFilename, ppDb,
-                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 0);
-}
-int sqlite4_open_v2(
-  const char *filename,   /* Database filename (UTF-8) */
-  sqlite4 **ppDb,         /* OUT: SQLite db handle */
-  int flags,              /* Flags */
-  const char *zVfs        /* Name of VFS module to use */
-){
-  return openDatabase(filename, ppDb, (unsigned int)flags, zVfs);
-}
-
-#ifndef SQLITE_OMIT_UTF16
-/*
-** Open a new database handle.
-*/
-int sqlite4_open16(
-  const void *zFilename, 
-  sqlite4 **ppDb
-){
-  char const *zFilename8;   /* zFilename encoded in UTF-8 instead of UTF-16 */
-  sqlite4_value *pVal;
+  va_list ap;
   int rc;
-
-  assert( zFilename );
-  assert( ppDb );
-  *ppDb = 0;
-#ifndef SQLITE_OMIT_AUTOINIT
-  rc = sqlite4_initialize();
-  if( rc ) return rc;
-#endif
-  pVal = sqlite4ValueNew(0);
-  sqlite4ValueSetStr(pVal, -1, zFilename, SQLITE_UTF16NATIVE, SQLITE_STATIC);
-  zFilename8 = sqlite4ValueText(pVal, SQLITE_UTF8);
-  if( zFilename8 ){
-    rc = openDatabase(zFilename8, ppDb,
-                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 0);
-    assert( *ppDb || rc==SQLITE_NOMEM );
-    if( rc==SQLITE_OK && !DbHasProperty(*ppDb, 0, DB_SchemaLoaded) ){
-      ENC(*ppDb) = SQLITE_UTF16NATIVE;
-    }
-  }else{
-    rc = SQLITE_NOMEM;
-  }
-  sqlite4ValueFree(pVal);
-
-  return sqlite4ApiExit(0, rc);
+  if( pEnv==0 ) pEnv = sqlite4_env_default();
+  va_start(ppDb, ap);
+  rc = openDatabase(pEnv, zFilename,
+                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, ppDb, ap);
+  va_end(ap);
+  return rc;
 }
-#endif /* SQLITE_OMIT_UTF16 */
+
+/*
+** Return the environment of a database connection
+*/
+sqlite4_env *sqlite4_db_env(sqlite4 *db){
+  return db ? db->pEnv : sqlite4_env_default();
+}
 
 /*
 ** Register a new collation sequence with the database handle db.

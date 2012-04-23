@@ -1389,7 +1389,7 @@ static int process_input(struct callback_data *p, FILE *in);
 */
 static void open_db(struct callback_data *p){
   if( p->db==0 ){
-    sqlite4_open(p->zDbFilename, &p->db);
+    sqlite4_open(0, p->zDbFilename, &p->db, 0);
     db = p->db;
     if( db && sqlite4_errcode(db)==SQLITE_OK ){
       sqlite4_create_function(db, "shellstatic", 0, SQLITE_UTF8, 0,
