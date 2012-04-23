@@ -215,14 +215,14 @@ static int test_install_mutex_counters(
 
   if( isInstall ){
     assert( g.m.xMutexAlloc==0 );
-    rc = sqlite4_config(SQLITE_CONFIG_GETMUTEX, &g.m);
+    rc = sqlite4_config(0, SQLITE_CONFIG_GETMUTEX, &g.m);
     if( rc==SQLITE_OK ){
-      sqlite4_config(SQLITE_CONFIG_MUTEX, &counter_methods);
+      sqlite4_config(0, SQLITE_CONFIG_MUTEX, &counter_methods);
     }
     g.disableTry = 0;
   }else{
     assert( g.m.xMutexAlloc );
-    rc = sqlite4_config(SQLITE_CONFIG_MUTEX, &g.m);
+    rc = sqlite4_config(0, SQLITE_CONFIG_MUTEX, &g.m);
     memset(&g.m, 0, sizeof(sqlite4_mutex_methods));
   }
 
@@ -353,7 +353,7 @@ static int test_config(
     i = aOpt[i].iValue;
   }
 
-  rc = sqlite4_config(i);
+  rc = sqlite4_config(0, i);
   Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
 }

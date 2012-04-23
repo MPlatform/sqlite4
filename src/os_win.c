@@ -901,7 +901,7 @@ const sqlite4_mem_methods *sqlite4MemGetWin32(void){
 }
 
 void sqlite4MemSetDefault(void){
-  sqlite4_config(SQLITE_CONFIG_MALLOC, sqlite4MemGetWin32());
+  sqlite4_config(0, SQLITE_CONFIG_MALLOC, sqlite4MemGetWin32());
 }
 #endif /* SQLITE_WIN32_MALLOC */
 

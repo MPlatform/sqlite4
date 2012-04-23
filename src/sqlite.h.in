@@ -1182,16 +1182,17 @@ int sqlite4_os_end(void);
 /*
 ** CAPIREF: Configuring The SQLite Library
 **
-** The sqlite4_config() interface is used to make global configuration
-** changes to SQLite in order to tune SQLite to the specific needs of
-** the application.  The default configuration is recommended for most
+** The sqlite4_config() interface is used to make configuration
+** changes to an [sqlite4_env] object that describes the run-time
+** environment used by SQLite4.
+** The default sqlite4_env is recommended for most
 ** applications and so this routine is usually not necessary.  It is
 ** provided to support rare applications with unusual needs.
 **
 ** The sqlite4_config() interface is not threadsafe.  The application
-** must insure that no other SQLite interfaces are invoked by other
-** threads while sqlite4_config() is running.  Furthermore, sqlite4_config()
-** may only be invoked prior to library initialization using
+** must insure that no other SQLite interfaces are used with the same
+** sqlite4_env object while sqlite4_config() is running.  Furthermore,
+** sqlite4_config() may only be invoked prior to library initialization using
 ** [sqlite4_initialize()] or after shutdown by [sqlite4_shutdown()].
 ** ^If sqlite4_config() is called after [sqlite4_initialize()] and before
 ** [sqlite4_shutdown()] then it will return SQLITE_MISUSE.
@@ -1208,7 +1209,7 @@ int sqlite4_os_end(void);
 ** ^If the option is unknown or SQLite is unable to set the option
 ** then this routine returns a non-zero [error code].
 */
-int sqlite4_config(int, ...);
+int sqlite4_config(sqlite4_env *pEnv, int, ...);
 
 /*
 ** CAPIREF: Configure database connections

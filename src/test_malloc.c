@@ -202,10 +202,10 @@ static int faultsimInstall(int install){
   }
 
   if( install ){
-    rc = sqlite4_config(SQLITE_CONFIG_GETMALLOC, &memfault.m);
+    rc = sqlite4_config(0, SQLITE_CONFIG_GETMALLOC, &memfault.m);
     assert(memfault.m.xMalloc);
     if( rc==SQLITE_OK ){
-      rc = sqlite4_config(SQLITE_CONFIG_MALLOC, &m);
+      rc = sqlite4_config(0, SQLITE_CONFIG_MALLOC, &m);
     }
     sqlite4_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 
         faultsimBeginBenign, faultsimEndBenign
@@ -217,11 +217,11 @@ static int faultsimInstall(int install){
     /* One should be able to reset the default memory allocator by storing
     ** a zeroed allocator then calling GETMALLOC. */
     memset(&m, 0, sizeof(m));
-    sqlite4_config(SQLITE_CONFIG_MALLOC, &m);
-    sqlite4_config(SQLITE_CONFIG_GETMALLOC, &m);
+    sqlite4_config(0, SQLITE_CONFIG_MALLOC, &m);
+    sqlite4_config(0, SQLITE_CONFIG_GETMALLOC, &m);
     assert( memcmp(&m, &memfault.m, sizeof(m))==0 );
 
-    rc = sqlite4_config(SQLITE_CONFIG_MALLOC, &memfault.m);
+    rc = sqlite4_config(0, SQLITE_CONFIG_MALLOC, &memfault.m);
     sqlite4_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 0, 0);
   }
 
@@ -892,7 +892,7 @@ static int test_config_memstatus(
     return TCL_ERROR;
   }
   if( Tcl_GetBooleanFromObj(interp, objv[1], &enable) ) return TCL_ERROR;
-  rc = sqlite4_config(SQLITE_CONFIG_MEMSTATUS, enable);
+  rc = sqlite4_config(0, SQLITE_CONFIG_MEMSTATUS, enable);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return TCL_OK;
 }
@@ -923,7 +923,7 @@ static int test_config_lookaside(
   Tcl_ListObjAppendElement(
       interp, pRet, Tcl_NewIntObj(sqlite4DefaultEnv.nLookaside)
   );
-  rc = sqlite4_config(SQLITE_CONFIG_LOOKASIDE, sz, cnt);
+  rc = sqlite4_config(0, SQLITE_CONFIG_LOOKASIDE, sz, cnt);
   Tcl_SetObjResult(interp, pRet);
   return TCL_OK;
 }
@@ -999,11 +999,11 @@ static int test_config_heap(
     free( zBuf );
     zBuf = 0;
     szBuf = 0;
-    rc = sqlite4_config(SQLITE_CONFIG_HEAP, (void*)0, 0, 0);
+    rc = sqlite4_config(0, SQLITE_CONFIG_HEAP, (void*)0, 0, 0);
   }else{
     zBuf = realloc(zBuf, nByte);
     szBuf = nByte;
-    rc = sqlite4_config(SQLITE_CONFIG_HEAP, zBuf, nByte, nMinAlloc);
+    rc = sqlite4_config(0, SQLITE_CONFIG_HEAP, zBuf, nByte, nMinAlloc);
   }
 
   Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
@@ -1038,9 +1038,9 @@ static int test_config_error(
       return TCL_ERROR;
     }
   }else{
-    if( sqlite4_config(99999)!=SQLITE_ERROR ){
+    if( sqlite4_config(0, 99999)!=SQLITE_ERROR ){
       Tcl_AppendResult(interp, 
-          "sqlite4_config(99999) does not return SQLITE_ERROR",
+          "sqlite4_config(0, 99999) does not return SQLITE_ERROR",
           (char*)0);
       return TCL_ERROR;
     }
@@ -1234,7 +1234,7 @@ static int test_install_memsys3(
   int rc = SQLITE_MISUSE;
 #ifdef SQLITE_ENABLE_MEMSYS3
   const sqlite4_mem_methods *sqlite4MemGetMemsys3(void);
-  rc = sqlite4_config(SQLITE_CONFIG_MALLOC, sqlite4MemGetMemsys3());
+  rc = sqlite4_config(0, SQLITE_CONFIG_MALLOC, sqlite4MemGetMemsys3());
 #endif
   Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;

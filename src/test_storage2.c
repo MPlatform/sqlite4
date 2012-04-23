@@ -279,8 +279,8 @@ static int kvwrap_install_cmd(Tcl_Interp *interp, int objc, Tcl_Obj **objv){
   }
 
   if( kvwg.xFactory==0 ){
-    sqlite4_config(SQLITE_CONFIG_GET_KVFACTORY, &kvwg.xFactory);
-    sqlite4_config(SQLITE_CONFIG_SET_KVFACTORY, newFileStorage);
+    sqlite4_config(0, SQLITE_CONFIG_GET_KVFACTORY, &kvwg.xFactory);
+    sqlite4_config(0, SQLITE_CONFIG_SET_KVFACTORY, newFileStorage);
   }
   return TCL_OK;
 }

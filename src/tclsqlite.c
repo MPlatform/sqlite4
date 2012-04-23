@@ -3226,7 +3226,7 @@ int TCLSH_MAIN(int argc, char **argv){
   interp = Tcl_CreateInterp();
 
 #if TCLSH==2
-  sqlite4_config(SQLITE_CONFIG_SINGLETHREAD);
+  sqlite4_config(0, SQLITE_CONFIG_SINGLETHREAD);
 #endif
 
   init_all(interp);

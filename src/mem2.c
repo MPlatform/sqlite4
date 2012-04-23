@@ -372,7 +372,7 @@ void sqlite4MemSetDefault(void){
      sqlite4MemShutdown,
      0
   };
-  sqlite4_config(SQLITE_CONFIG_MALLOC, &defaultMethods);
+  sqlite4_config(0, SQLITE_CONFIG_MALLOC, &defaultMethods);
 }
 
 /*

@@ -4437,13 +4437,13 @@ static int test_sqlite4_log(
     Tcl_DecrRefCount(logcallback.pObj);
     logcallback.pObj = 0;
     logcallback.pInterp = 0;
-    sqlite4_config(SQLITE_CONFIG_LOG, 0, 0);
+    sqlite4_config(0, SQLITE_CONFIG_LOG, 0, 0);
   }
   if( objc>1 ){
     logcallback.pObj = objv[1];
     Tcl_IncrRefCount(logcallback.pObj);
     logcallback.pInterp = interp;
-    sqlite4_config(SQLITE_CONFIG_LOG, xLogcallback, 0);
+    sqlite4_config(0, SQLITE_CONFIG_LOG, xLogcallback, 0);
   }
   return TCL_OK;
 }

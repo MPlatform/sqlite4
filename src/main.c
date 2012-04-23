@@ -268,18 +268,20 @@ int sqlite4_shutdown(void){
 ** threadsafe.  Failure to heed these warnings can lead to unpredictable
 ** behavior.
 */
-int sqlite4_config(int op, ...){
+int sqlite4_config(sqlite4_env *pEnv, int op, ...){
   va_list ap;
   int rc = SQLITE_OK;
 
+  if( pEnv==0 ) pEnv = sqlite4_env_default();
+
   /* sqlite4_config() shall return SQLITE_MISUSE if it is invoked while
   ** the SQLite library is in use. */
-  if( sqlite4DefaultEnv.isInit ) return SQLITE_MISUSE_BKPT;
+  if( pEnv->isInit ) return SQLITE_MISUSE_BKPT;
 
   va_start(ap, op);
   switch( op ){
     case SQLITE_CONFIG_SET_KVFACTORY: {
-      sqlite4DefaultEnv.xKVFile = *va_arg(ap, 
+      pEnv->xKVFile = *va_arg(ap, 
           int (*)(KVStore **, const char *, unsigned int)
       );
       break;
@@ -287,7 +289,7 @@ int sqlite4_config(int op, ...){
 
     case SQLITE_CONFIG_GET_KVFACTORY: {
       *va_arg(ap, int (**)(KVStore **, const char *, unsigned int)) =
-          sqlite4DefaultEnv.xKVFile;
+          pEnv->xKVFile;
       break;
     }
 
@@ -297,31 +299,31 @@ int sqlite4_config(int op, ...){
 #if defined(SQLITE_THREADSAFE) && SQLITE_THREADSAFE>0
     case SQLITE_CONFIG_SINGLETHREAD: {
       /* Disable all mutexing */
-      sqlite4DefaultEnv.bCoreMutex = 0;
-      sqlite4DefaultEnv.bFullMutex = 0;
+      pEnv->bCoreMutex = 0;
+      pEnv->bFullMutex = 0;
       break;
     }
     case SQLITE_CONFIG_MULTITHREAD: {
       /* Disable mutexing of database connections */
       /* Enable mutexing of core data structures */
-      sqlite4DefaultEnv.bCoreMutex = 1;
-      sqlite4DefaultEnv.bFullMutex = 0;
+      pEnv->bCoreMutex = 1;
+      pEnv->bFullMutex = 0;
       break;
     }
     case SQLITE_CONFIG_SERIALIZED: {
       /* Enable all mutexing */
-      sqlite4DefaultEnv.bCoreMutex = 1;
-      sqlite4DefaultEnv.bFullMutex = 1;
+      pEnv->bCoreMutex = 1;
+      pEnv->bFullMutex = 1;
       break;
     }
     case SQLITE_CONFIG_MUTEX: {
       /* Specify an alternative mutex implementation */
-      sqlite4DefaultEnv.mutex = *va_arg(ap, sqlite4_mutex_methods*);
+      pEnv->mutex = *va_arg(ap, sqlite4_mutex_methods*);
       break;
     }
     case SQLITE_CONFIG_GETMUTEX: {
       /* Retrieve the current mutex implementation */
-      *va_arg(ap, sqlite4_mutex_methods*) = sqlite4DefaultEnv.mutex;
+      *va_arg(ap, sqlite4_mutex_methods*) = pEnv->mutex;
       break;
     }
 #endif
@@ -329,52 +331,52 @@ int sqlite4_config(int op, ...){
 
     case SQLITE_CONFIG_MALLOC: {
       /* Specify an alternative malloc implementation */
-      sqlite4DefaultEnv.m = *va_arg(ap, sqlite4_mem_methods*);
+      pEnv->m = *va_arg(ap, sqlite4_mem_methods*);
       break;
     }
     case SQLITE_CONFIG_GETMALLOC: {
       /* Retrieve the current malloc() implementation */
-      if( sqlite4DefaultEnv.m.xMalloc==0 ) sqlite4MemSetDefault();
-      *va_arg(ap, sqlite4_mem_methods*) = sqlite4DefaultEnv.m;
+      if( pEnv->m.xMalloc==0 ) sqlite4MemSetDefault();
+      *va_arg(ap, sqlite4_mem_methods*) = pEnv->m;
       break;
     }
     case SQLITE_CONFIG_MEMSTATUS: {
       /* Enable or disable the malloc status collection */
-      sqlite4DefaultEnv.bMemstat = va_arg(ap, int);
+      pEnv->bMemstat = va_arg(ap, int);
       break;
     }
 
 #if defined(SQLITE_ENABLE_MEMSYS3) || defined(SQLITE_ENABLE_MEMSYS5)
     case SQLITE_CONFIG_HEAP: {
       /* Designate a buffer for heap memory space */
-      sqlite4DefaultEnv.pHeap = va_arg(ap, void*);
-      sqlite4DefaultEnv.nHeap = va_arg(ap, int);
-      sqlite4DefaultEnv.mnReq = va_arg(ap, int);
+      pEnv->pHeap = va_arg(ap, void*);
+      pEnv->nHeap = va_arg(ap, int);
+      pEnv->mnReq = va_arg(ap, int);
 
-      if( sqlite4DefaultEnv.mnReq<1 ){
-        sqlite4DefaultEnv.mnReq = 1;
-      }else if( sqlite4DefaultEnv.mnReq>(1<<12) ){
+      if( pEnv->mnReq<1 ){
+        pEnv->mnReq = 1;
+      }else if( pEnv->mnReq>(1<<12) ){
         /* cap min request size at 2^12 */
-        sqlite4DefaultEnv.mnReq = (1<<12);
+        pEnv->mnReq = (1<<12);
       }
 
-      if( sqlite4DefaultEnv.pHeap==0 ){
+      if( pEnv->pHeap==0 ){
         /* If the heap pointer is NULL, then restore the malloc implementation
         ** back to NULL pointers too.  This will cause the malloc to go
         ** back to its default implementation when sqlite4_initialize() is
         ** run.
         */
-        memset(&sqlite4DefaultEnv.m, 0, sizeof(sqlite4DefaultEnv.m));
+        memset(&pEnv->m, 0, sizeof(pEnv->m));
       }else{
         /* The heap pointer is not NULL, then install one of the
         ** mem5.c/mem3.c methods. If neither ENABLE_MEMSYS3 nor
         ** ENABLE_MEMSYS5 is defined, return an error.
         */
 #ifdef SQLITE_ENABLE_MEMSYS3
-        sqlite4DefaultEnv.m = *sqlite4MemGetMemsys3();
+        pEnv->m = *sqlite4MemGetMemsys3();
 #endif
 #ifdef SQLITE_ENABLE_MEMSYS5
-        sqlite4DefaultEnv.m = *sqlite4MemGetMemsys5();
+        pEnv->m = *sqlite4MemGetMemsys5();
 #endif
       }
       break;
@@ -382,8 +384,8 @@ int sqlite4_config(int op, ...){
 #endif
 
     case SQLITE_CONFIG_LOOKASIDE: {
-      sqlite4DefaultEnv.szLookaside = va_arg(ap, int);
-      sqlite4DefaultEnv.nLookaside = va_arg(ap, int);
+      pEnv->szLookaside = va_arg(ap, int);
+      pEnv->nLookaside = va_arg(ap, int);
       break;
     }
     
@@ -394,11 +396,11 @@ int sqlite4_config(int op, ...){
     case SQLITE_CONFIG_LOG: {
       /* MSVC is picky about pulling func ptrs from va lists.
       ** http://support.microsoft.com/kb/47961
-      ** sqlite4DefaultEnv.xLog = va_arg(ap, void(*)(void*,int,const char*));
+      ** pEnv->xLog = va_arg(ap, void(*)(void*,int,const char*));
       */
       typedef void(*LOGFUNC_t)(void*,int,const char*);
-      sqlite4DefaultEnv.xLog = va_arg(ap, LOGFUNC_t);
-      sqlite4DefaultEnv.pLogArg = va_arg(ap, void*);
+      pEnv->xLog = va_arg(ap, LOGFUNC_t);
+      pEnv->pLogArg = va_arg(ap, void*);
       break;
     }
 
@@ -1849,14 +1851,14 @@ static int openDatabase(
   if( rc ) return rc;
 #endif
 
-  if( sqlite4DefaultEnv.bCoreMutex==0 ){
+  if( pEnv->bCoreMutex==0 ){
     isThreadsafe = 0;
   }else if( flags & SQLITE_OPEN_NOMUTEX ){
     isThreadsafe = 0;
   }else if( flags & SQLITE_OPEN_FULLMUTEX ){
     isThreadsafe = 1;
   }else{
-    isThreadsafe = sqlite4DefaultEnv.bFullMutex;
+    isThreadsafe = pEnv->bFullMutex;
   }
 
   /* Allocate the sqlite data structure */
@@ -1986,13 +1988,13 @@ static int openDatabase(
   sqlite4Error(db, rc, 0);
 
   /* Enable the lookaside-malloc subsystem */
-  setupLookaside(db, 0, sqlite4DefaultEnv.szLookaside,
-                        sqlite4DefaultEnv.nLookaside);
+  setupLookaside(db, 0, pEnv->szLookaside,
+                        pEnv->nLookaside);
 
 opendb_out:
   sqlite4_free(zOpen);
   if( db ){
-    assert( db->mutex!=0 || isThreadsafe==0 || sqlite4DefaultEnv.bFullMutex==0 );
+    assert( db->mutex!=0 || isThreadsafe==0 || pEnv->bFullMutex==0 );
     sqlite4_mutex_leave(db->mutex);
   }
   rc = sqlite4_errcode(db);
