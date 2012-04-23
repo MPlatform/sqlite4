@@ -2043,15 +2043,24 @@ case OP_IfNot: {            /* jump, in1 */
   break;
 }
 
-/* Opcode: IsNull P1 P2 * * *
+/* Opcode: IsNull P1 P2 P3 * *
 **
-** Jump to P2 if the value in register P1 is NULL.
+** P1 is the first in an array of P3 registers. Or, if P3 is 0, the first
+** in an array of a single register. If any registers in the array are
+** NULL, jump to instruction P2.
 */
 case OP_IsNull: {            /* same as TK_ISNULL, jump, in1 */
+  Mem *pEnd;
   pIn1 = &aMem[pOp->p1];
-  if( (pIn1->flags & MEM_Null)!=0 ){
-    pc = pOp->p2 - 1;
-  }
+  pEnd = &aMem[pOp->p1+pOp->p3];
+
+  do {
+    if( (pIn1->flags & MEM_Null)!=0 ){
+      pc = pOp->p2 - 1;
+      break;
+    }
+  }while( (++pIn1)<pEnd );
+
   break;
 }
 

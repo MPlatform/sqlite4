@@ -1301,8 +1301,11 @@ void sqlite4GenerateConstraintChecks(
     onError = pIdx->onError;
     if( onError!=OE_None ){
       int iTest;                  /* Address of OP_IsUnique instruction */
+      int iTest3;                 /* Address of OP_IsNull */
       int iTest2 = 0;             /* Address of OP_Eq instruction */
       int regOut = 0;             /* PK of row to replace */
+
+      iTest3 = sqlite4VdbeAddOp3(v, OP_IsNull, regTmp, 0, pIdx->nColumn);
 
       /* Figure out what to do if a UNIQUE constraint is encountered. 
       **
@@ -1359,6 +1362,7 @@ void sqlite4GenerateConstraintChecks(
 
       /* If the OP_IsUnique passes (no constraint violation) jump here */
       sqlite4VdbeJumpHere(v, iTest);
+      sqlite4VdbeJumpHere(v, iTest3);
       if( iTest2 ) sqlite4VdbeJumpHere(v, iTest2);
     }
 

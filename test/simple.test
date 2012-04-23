@@ -848,6 +848,10 @@ do_execsql_test 45.1 {
   CREATE TABLE t1(a, b, c);
   CREATE TABLE t2(d, e, f);
 
+  INSERT INTO t1 VALUES( 2,  4,  6);
+  INSERT INTO t1 VALUES( 8, 10, 12);
+  INSERT INTO t1 VALUES(14, 16, 18);
+
   INSERT INTO t2 VALUES(3,   6,  9);
   INSERT INTO t2 VALUES(12, 15, 18);
   INSERT INTO t2 VALUES(21, 24, 27);
@@ -863,7 +867,30 @@ do_execsql_test 45.3 {
   SELECT a FROM (SELECT a FROM t1 UNION ALL SELECT d FROM t2)
 } {}
 
+do_execsql_test 45.4 {
+   SELECT c, d FROM t1 LEFT JOIN t2 ON (c=d)
+} {6 {} 12 12 18 {}}
 
+do_execsql_test 45.5 {
+   SELECT a AS x, b AS y FROM t1
+     UNION ALL
+   SELECT a*10 + 0.1, f*10 + 0.1 FROM t1 LEFT JOIN t2 ON (c=d)
+     UNION ALL
+   SELECT a*100, b*100 FROM t1
+
+   ORDER BY 1;
+} {2 4 8 10 14 16 20.1 {} 80.1 180.1 140.1 {} 200 400 800 1000 1400 1600}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 46.1 {
+  CREATE TABLE t1(x);
+  CREATE UNIQUE INDEX i1 ON t1(x);
+}
+
+do_execsql_test 46.2 { INSERT INTO t1 VALUES(NULL) }
+do_execsql_test 46.3 { INSERT INTO t1 VALUES(NULL) }
 
 finish_test
 
