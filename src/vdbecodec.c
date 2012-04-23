@@ -570,13 +570,13 @@ static int encodeOneKeyValue(
       memcpy(p->aOut+p->nOut, pMem->z, pMem->n);
       p->nOut += pMem->n;
     }else{
-      n = pColl->xMkKey(pColl->pUser, pMem->z, pMem->n, p->aOut+p->nOut,
-                        p->nAlloc - p->nOut);
-      if( n > p->nAlloc - p->nOut ){
+      int nSpc = p->nAlloc-p->nOut;
+      n = pColl->xMkKey(pColl->pUser, pMem->n, pMem->z, nSpc, p->aOut+p->nOut);
+      if( n>nSpc ){
         if( enlargeEncoderAllocation(p, n) ) return SQLITE_NOMEM;
-        pColl->xMkKey(pColl->pUser, pMem->z, pMem->n, p->aOut+p->nOut,
-                        p->nAlloc - p->nOut);
+        pColl->xMkKey(pColl->pUser, pMem->n, pMem->z, n, p->aOut+p->nOut);
       }
+      p->nOut += n;
     }
     p->aOut[p->nOut++] = 0x00;
   }else

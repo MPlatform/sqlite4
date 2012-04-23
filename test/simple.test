@@ -892,5 +892,18 @@ do_execsql_test 46.1 {
 do_execsql_test 46.2 { INSERT INTO t1 VALUES(NULL) }
 do_execsql_test 46.3 { INSERT INTO t1 VALUES(NULL) }
 
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 46.1 {
+  CREATE TABLE t1(x, y COLLATE nocase);
+  CREATE UNIQUE INDEX i1 ON t1(y);
+}
+
+do_catchsql_test 46.2 {
+  INSERT INTO t1 VALUES(1, 'ABC');
+  INSERT INTO t1 VALUES(2, 'abc');
+} {1 {column y is not unique}}
+
 finish_test
 

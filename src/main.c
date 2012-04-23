@@ -590,7 +590,7 @@ static int binCollFunc(
 **
 ** At the moment there is only a UTF-8 implementation.
 */
-static int nocaseCollatingFunc(
+static int collNocaseCmp(
   void *NotUsed,
   int nKey1, const void *pKey1,
   int nKey2, const void *pKey2
@@ -602,6 +602,22 @@ static int nocaseCollatingFunc(
     r = nKey1-nKey2;
   }
   return r;
+}
+
+static int collNocaseMkKey(
+  void *NotUsed,
+  int nIn, const void *pKey1,
+  int nOut, void *pKey2
+){
+  if( nOut<nIn ){
+    int i;
+    u8 *aIn = (u8 *)pKey1;
+    u8 *aOut = (u8 *)pKey2;
+    for(i=0; i<nIn; i++){
+      aOut[i] = sqlite4UpperToLower[aIn[i]];
+    }
+  }
+  return nIn;
 }
 
 /*
@@ -1440,7 +1456,7 @@ static int createCollation(
   u8 enc,
   void* pCtx,
   int(*xCompare)(void*,int,const void*,int,const void*),
-  int(*xMakeKey)(void*,const void*,int,const void*,int),
+  int(*xMakeKey)(void*,int,const void*,int,void*),
   void(*xDel)(void*)
 ){
   CollSeq *pColl;
@@ -1950,7 +1966,9 @@ static int openDatabase(
   assert( db->pDfltColl!=0 );
 
   /* Also add a UTF-8 case-insensitive collation sequence. */
-  createCollation(db, "NOCASE", SQLITE_UTF8, 0, nocaseCollatingFunc, 0, 0);
+  createCollation(db, 
+      "NOCASE", SQLITE_UTF8, 0, collNocaseCmp, collNocaseMkKey, 0
+  );
 
   /* Parse the filename/URI argument. */
   db->openFlags = flags;
@@ -2128,7 +2146,7 @@ int sqlite4_create_collation(
   int enc, 
   void* pCtx,
   int(*xCompare)(void*,int,const void*,int,const void*),
-  int(*xMakeKey)(void*,int,const void*,int,const void*),
+  int(*xMakeKey)(void*,int,const void*,int,void*),
   void(*xDel)(void*)
 ){
   int rc;

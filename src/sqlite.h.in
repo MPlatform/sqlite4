@@ -3901,7 +3901,7 @@ int sqlite4_create_collation(
   int eTextRep, 
   void *pArg,
   int(*xCompare)(void*,int,const void*,int,const void*),
-  int(*xMakeKey)(void*,int,const void*,int,const void*),
+  int(*xMakeKey)(void*,int,const void*,int,void*),
   void(*xDestroy)(void*)
 );
 
