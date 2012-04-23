@@ -237,8 +237,8 @@ void sqlite4AlterFunctions(void){
 #endif
   };
   int i;
-  FuncDefHash *pHash = &GLOBAL(FuncDefHash, sqlite4GlobalFunctions);
-  FuncDef *aFunc = (FuncDef*)&GLOBAL(FuncDef, aAlterTableFuncs);
+  FuncDefHash *pHash = &sqlite4GlobalFunctions;
+  FuncDef *aFunc = (FuncDef*)aAlterTableFuncs;
 
   for(i=0; i<ArraySize(aAlterTableFuncs); i++){
     sqlite4FuncDefInsert(pHash, &aFunc[i]);

@@ -114,7 +114,7 @@ static void *sqlite4MemMalloc(int nByte){
 #ifdef SQLITE_MALLOCSIZE
   void *p = SQLITE_MALLOC( nByte );
   if( p==0 ){
-    testcase( sqlite4GlobalConfig.xLog!=0 );
+    testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
   }
   return p;
@@ -127,7 +127,7 @@ static void *sqlite4MemMalloc(int nByte){
     p[0] = nByte;
     p++;
   }else{
-    testcase( sqlite4GlobalConfig.xLog!=0 );
+    testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
   }
   return (void *)p;
@@ -183,7 +183,7 @@ static void *sqlite4MemRealloc(void *pPrior, int nByte){
 #ifdef SQLITE_MALLOCSIZE
   void *p = SQLITE_REALLOC(pPrior, nByte);
   if( p==0 ){
-    testcase( sqlite4GlobalConfig.xLog!=0 );
+    testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(SQLITE_NOMEM,
       "failed memory resize %u to %u bytes",
       SQLITE_MALLOCSIZE(pPrior), nByte);
@@ -199,7 +199,7 @@ static void *sqlite4MemRealloc(void *pPrior, int nByte){
     p[0] = nByte;
     p++;
   }else{
-    testcase( sqlite4GlobalConfig.xLog!=0 );
+    testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(SQLITE_NOMEM,
       "failed memory resize %u to %u bytes",
       sqlite4MemSize(pPrior), nByte);
@@ -263,7 +263,7 @@ static void sqlite4MemShutdown(void *NotUsed){
 ** This routine is the only routine in this file with external linkage.
 **
 ** Populate the low-level memory allocation function pointers in
-** sqlite4GlobalConfig.m with pointers to the routines in this file.
+** sqlite4DefaultEnv.m with pointers to the routines in this file.
 */
 void sqlite4MemSetDefault(void){
   static const sqlite4_mem_methods defaultMethods = {

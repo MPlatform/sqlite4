@@ -489,5 +489,3 @@ void sqlite4KeySetFree(KeySet *pKeySet){
   }
   sqlite4DbFree(pKeySet->db, pKeySet);
 }
-
-

@@ -1592,8 +1592,8 @@ void sqlite4RegisterGlobalFunctions(void){
   };
 
   int i;
-  FuncDefHash *pHash = &GLOBAL(FuncDefHash, sqlite4GlobalFunctions);
-  FuncDef *aFunc = (FuncDef*)&GLOBAL(FuncDef, aBuiltinFunc);
+  FuncDefHash *pHash = &sqlite4GlobalFunctions;
+  FuncDef *aFunc = (FuncDef*)aBuiltinFunc;
 
   for(i=0; i<ArraySize(aBuiltinFunc); i++){
     sqlite4FuncDefInsert(pHash, &aFunc[i]);

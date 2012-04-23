@@ -130,11 +130,6 @@ static SQLITE_WSD struct Mem5Global {
 } mem5;
 
 /*
-** Access the static variable through a macro for SQLITE_OMIT_WSD
-*/
-#define mem5 GLOBAL(struct Mem5Global, mem5)
-
-/*
 ** Assuming mem5.zPool is divided up into an array of Mem5Link
 ** structures, return a pointer to the idx-th such lik.
 */
@@ -185,7 +180,7 @@ static void memsys5Link(int i, int iLogsize){
 /*
 ** If the STATIC_MEM mutex is not already held, obtain it now. The mutex
 ** will already be held (obtained by code in malloc.c) if
-** sqlite4GlobalConfig.bMemStat is true.
+** sqlite4DefaultEnv.bMemStat is true.
 */
 static void memsys5Enter(void){
   sqlite4_mutex_enter(mem5.mutex);
@@ -269,7 +264,7 @@ static void *memsys5MallocUnsafe(int nByte){
   */
   for(iBin=iLogsize; mem5.aiFreelist[iBin]<0 && iBin<=LOGMAX; iBin++){}
   if( iBin>LOGMAX ){
-    testcase( sqlite4GlobalConfig.xLog!=0 );
+    testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes", nByte);
     return 0;
   }
@@ -469,12 +464,12 @@ static int memsys5Init(void *NotUsed){
   */
   assert( (sizeof(Mem5Link)&(sizeof(Mem5Link)-1))==0 );
 
-  nByte = sqlite4GlobalConfig.nHeap;
-  zByte = (u8*)sqlite4GlobalConfig.pHeap;
+  nByte = sqlite4DefaultEnv.nHeap;
+  zByte = (u8*)sqlite4DefaultEnv.pHeap;
   assert( zByte!=0 );  /* sqlite4_config() does not allow otherwise */
 
-  /* boundaries on sqlite4GlobalConfig.mnReq are enforced in sqlite4_config() */
-  nMinLog = memsys5Log(sqlite4GlobalConfig.mnReq);
+  /* boundaries on sqlite4DefaultEnv.mnReq are enforced in sqlite4_config() */
+  nMinLog = memsys5Log(sqlite4DefaultEnv.mnReq);
   mem5.szAtom = (1<<nMinLog);
   while( (int)sizeof(Mem5Link)>mem5.szAtom ){
     mem5.szAtom = mem5.szAtom << 1;
@@ -500,7 +495,7 @@ static int memsys5Init(void *NotUsed){
   }
 
   /* If a mutex is required for normal operation, allocate one */
-  if( sqlite4GlobalConfig.bMemstat==0 ){
+  if( sqlite4DefaultEnv.bMemstat==0 ){
     mem5.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
   }
 

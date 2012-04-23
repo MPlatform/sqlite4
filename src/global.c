@@ -133,7 +133,7 @@ const unsigned char sqlite4CtypeMap[256] = {
 ** The following singleton contains the global configuration for
 ** the SQLite library.
 */
-SQLITE_WSD struct Sqlite3Config sqlite4Config = {
+SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    SQLITE_DEFAULT_MEMSTATUS,  /* bMemstat */
    1,                         /* bCoreMutex */
    SQLITE_THREADSAFE==1,      /* bFullMutex */

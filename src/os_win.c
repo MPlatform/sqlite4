@@ -880,7 +880,7 @@ static void winMemShutdown(void *pAppData){
 
 /*
 ** Populate the low-level memory allocation function pointers in
-** sqlite4GlobalConfig.m with pointers to the routines in this file. The
+** sqlite4DefaultEnv.m with pointers to the routines in this file. The
 ** arguments specify the block of memory to manage.
 **
 ** This routine is only called by sqlite4_config(), and therefore

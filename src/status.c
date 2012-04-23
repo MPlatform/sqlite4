@@ -25,28 +25,12 @@ static SQLITE_WSD struct sqlite4StatType {
   int mxValue[10];          /* Maximum value */
 } sqlite4Stat = { {0,}, {0,} };
 
-
-/* The "wsdStat" macro will resolve to the status information
-** state vector.  If writable static data is unsupported on the target,
-** we have to locate the state vector at run-time.  In the more common
-** case where writable static data is supported, wsdStat can refer directly
-** to the "sqlite4Stat" state vector declared above.
-*/
-#ifdef SQLITE_OMIT_WSD
-# define wsdStatInit  sqlite4StatType *x = &GLOBAL(sqlite4StatType,sqlite4Stat)
-# define wsdStat x[0]
-#else
-# define wsdStatInit
-# define wsdStat sqlite4Stat
-#endif
-
 /*
 ** Return the current value of a status parameter.
 */
 int sqlite4StatusValue(int op){
-  wsdStatInit;
-  assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
-  return wsdStat.nowValue[op];
+  assert( op>=0 && op<ArraySize(sqlite4Stat.nowValue) );
+  return sqlite4Stat.nowValue[op];
 }
 
 /*
@@ -54,11 +38,10 @@ int sqlite4StatusValue(int op){
 ** caller holds appropriate locks.
 */
 void sqlite4StatusAdd(int op, int N){
-  wsdStatInit;
-  assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
-  wsdStat.nowValue[op] += N;
-  if( wsdStat.nowValue[op]>wsdStat.mxValue[op] ){
-    wsdStat.mxValue[op] = wsdStat.nowValue[op];
+  assert( op>=0 && op<ArraySize(sqlite4Stat.nowValue) );
+  sqlite4Stat.nowValue[op] += N;
+  if( sqlite4Stat.nowValue[op]>sqlite4Stat.mxValue[op] ){
+    sqlite4Stat.mxValue[op] = sqlite4Stat.nowValue[op];
   }
 }
 
@@ -66,11 +49,10 @@ void sqlite4StatusAdd(int op, int N){
 ** Set the value of a status to X.
 */
 void sqlite4StatusSet(int op, int X){
-  wsdStatInit;
-  assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
-  wsdStat.nowValue[op] = X;
-  if( wsdStat.nowValue[op]>wsdStat.mxValue[op] ){
-    wsdStat.mxValue[op] = wsdStat.nowValue[op];
+  assert( op>=0 && op<ArraySize(sqlite4Stat.nowValue) );
+  sqlite4Stat.nowValue[op] = X;
+  if( sqlite4Stat.nowValue[op]>sqlite4Stat.mxValue[op] ){
+    sqlite4Stat.mxValue[op] = sqlite4Stat.nowValue[op];
   }
 }
 
@@ -82,14 +64,13 @@ void sqlite4StatusSet(int op, int X){
 ** then this routine is not threadsafe.
 */
 int sqlite4_status(int op, int *pCurrent, int *pHighwater, int resetFlag){
-  wsdStatInit;
-  if( op<0 || op>=ArraySize(wsdStat.nowValue) ){
+  if( op<0 || op>=ArraySize(sqlite4Stat.nowValue) ){
     return SQLITE_MISUSE_BKPT;
   }
-  *pCurrent = wsdStat.nowValue[op];
-  *pHighwater = wsdStat.mxValue[op];
+  *pCurrent = sqlite4Stat.nowValue[op];
+  *pHighwater = sqlite4Stat.mxValue[op];
   if( resetFlag ){
-    wsdStat.mxValue[op] = wsdStat.nowValue[op];
+    sqlite4Stat.mxValue[op] = sqlite4Stat.nowValue[op];
   }
   return SQLITE_OK;
 }
@@ -160,7 +141,7 @@ int sqlite4_db_status(
         if( ALWAYS(pSchema!=0) ){
           HashElem *p;
 
-          nByte += sqlite4GlobalConfig.m.xRoundup(sizeof(HashElem)) * (
+          nByte += sqlite4DefaultEnv.m.xRoundup(sizeof(HashElem)) * (
               pSchema->tblHash.count 
             + pSchema->trigHash.count
             + pSchema->idxHash.count

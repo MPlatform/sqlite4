@@ -1072,7 +1072,7 @@ int sqlite4SafetyCheckOk(sqlite4 *db){
   magic = db->magic;
   if( magic!=SQLITE_MAGIC_OPEN ){
     if( sqlite4SafetyCheckSickOrOk(db) ){
-      testcase( sqlite4GlobalConfig.xLog!=0 );
+      testcase( sqlite4DefaultEnv.xLog!=0 );
       logBadConnection("unopened");
     }
     return 0;
@@ -1086,7 +1086,7 @@ int sqlite4SafetyCheckSickOrOk(sqlite4 *db){
   if( magic!=SQLITE_MAGIC_SICK &&
       magic!=SQLITE_MAGIC_OPEN &&
       magic!=SQLITE_MAGIC_BUSY ){
-    testcase( sqlite4GlobalConfig.xLog!=0 );
+    testcase( sqlite4DefaultEnv.xLog!=0 );
     logBadConnection("invalid");
     return 0;
   }else{

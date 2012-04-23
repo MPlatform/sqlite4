@@ -920,7 +920,7 @@ static void renderLogMsg(int iErrCode, const char *zFormat, va_list ap){
   sqlite4StrAccumInit(&acc, zMsg, sizeof(zMsg), 0);
   acc.useMalloc = 0;
   sqlite4VXPrintf(&acc, 0, zFormat, ap);
-  sqlite4GlobalConfig.xLog(sqlite4GlobalConfig.pLogArg, iErrCode,
+  sqlite4DefaultEnv.xLog(sqlite4DefaultEnv.pLogArg, iErrCode,
                            sqlite4StrAccumFinish(&acc));
 }
 
@@ -929,7 +929,7 @@ static void renderLogMsg(int iErrCode, const char *zFormat, va_list ap){
 */
 void sqlite4_log(int iErrCode, const char *zFormat, ...){
   va_list ap;                             /* Vararg list */
-  if( sqlite4GlobalConfig.xLog ){
+  if( sqlite4DefaultEnv.xLog ){
     va_start(ap, zFormat);
     renderLogMsg(iErrCode, zFormat, ap);
     va_end(ap);

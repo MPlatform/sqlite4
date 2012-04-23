@@ -76,7 +76,43 @@ extern "C" {
 #endif
 
 /*
-** CAPI3REF: Compile-Time Library Version Numbers
+** CAPIREF: Run-time Environment Object
+**
+** An instance of the following object defines the run-time environment 
+** for an SQLite4 database connection.  This object defines the interface
+** to appropriate mutex routines, memory allocation routines, a
+** pseudo-random number generator, real-time clock, and the key-value
+** backend stores.
+*/
+typedef struct sqlite4_env sqlite4_env;
+
+/*
+** CAPIREF: Find the default run-time environment
+**
+** Return a pointer to the default run-time environment.
+*/
+sqlite4_env *sqlite4_env_default(void);
+
+/*
+** CAPIREF: Configure a run-time environment
+*/
+int sqlite4_env_config(sqlite4_env*, int op, ...);
+
+/*
+** CAPIREF: Configuration options for sqlite4_env_config().
+*/
+#define SQLITE_ENVCONFIG_MUTEX        1   /* sqlite4_mutex_methods* */
+#define SQLITE_ENVCONFIG_GETMUTEX     2   /* sqlite4_mutex_methods* */
+#define SQLITE_ENVCONFIG_THREADSAFE   3   /* int, int* */   
+#define SQLITE_ENVCONFIG_MALLOC       4   /* sqlite4_mem_methods* */
+#define SQLITE_ENVCONFIG_GETMALLOC    5   /* sqlite4_mem_methods* */
+#define SQLITE_ENVCONFIG_HEAP         6   /* void*, int nByte, int szMin */
+#define SQLITE_ENVCONFIG_MEMSTATUS    7   /* boolean */
+#define SQLITE_ENVCONFIG_KVSTORE      8   /* name, ??? */
+
+
+/*
+** CAPIREF: Compile-Time Library Version Numbers
 **
 ** ^(The [SQLITE_VERSION] C preprocessor macro in the sqlite4.h header
 ** evaluates to a string literal that is the SQLite version in the
@@ -107,7 +143,7 @@ extern "C" {
 #define SQLITE_SOURCE_ID      "--SOURCE-ID--"
 
 /*
-** CAPI3REF: Run-Time Library Version Numbers
+** CAPIREF: Run-Time Library Version Numbers
 ** KEYWORDS: sqlite4_version, sqlite4_sourceid
 **
 ** These interfaces provide the same information as the [SQLITE_VERSION],
@@ -138,7 +174,7 @@ const char *sqlite4_sourceid(void);
 int sqlite4_libversion_number(void);
 
 /*
-** CAPI3REF: Run-Time Library Compilation Options Diagnostics
+** CAPIREF: Run-Time Library Compilation Options Diagnostics
 **
 ** ^The sqlite4_compileoption_used() function returns 0 or 1 
 ** indicating whether the specified option was defined at 
@@ -165,7 +201,7 @@ const char *sqlite4_compileoption_get(int N);
 #endif
 
 /*
-** CAPI3REF: Test To See If The Library Is Threadsafe
+** CAPIREF: Test To See If The Library Is Threadsafe
 **
 ** ^The sqlite4_threadsafe() function returns zero if and only if
 ** SQLite was compiled with mutexing code omitted due to the
@@ -203,7 +239,7 @@ const char *sqlite4_compileoption_get(int N);
 int sqlite4_threadsafe(void);
 
 /*
-** CAPI3REF: Database Connection Handle
+** CAPIREF: Database Connection Handle
 ** KEYWORDS: {database connection} {database connections}
 **
 ** Each open SQLite database is represented by a pointer to an instance of
@@ -218,7 +254,7 @@ int sqlite4_threadsafe(void);
 typedef struct sqlite4 sqlite4;
 
 /*
-** CAPI3REF: 64-Bit Integer Types
+** CAPIREF: 64-Bit Integer Types
 ** KEYWORDS: sqlite_int64 sqlite_uint64
 **
 ** Because there is no cross-platform way to specify 64-bit integer types
@@ -255,7 +291,7 @@ typedef sqlite_uint64 sqlite4_uint64;
 #endif
 
 /*
-** CAPI3REF: Closing A Database Connection
+** CAPIREF: Closing A Database Connection
 **
 ** ^The sqlite4_close() routine is the destructor for the [sqlite4] object.
 ** ^Calls to sqlite4_close() return SQLITE_OK if the [sqlite4] object is
@@ -288,7 +324,7 @@ int sqlite4_close(sqlite4 *);
 typedef int (*sqlite4_callback)(void*,int,char**, char**);
 
 /*
-** CAPI3REF: One-Step Query Execution Interface
+** CAPIREF: One-Step Query Execution Interface
 **
 ** The sqlite4_exec() interface is a convenience wrapper around
 ** [sqlite4_prepare_v2()], [sqlite4_step()], and [sqlite4_finalize()],
@@ -357,7 +393,7 @@ int sqlite4_exec(
 );
 
 /*
-** CAPI3REF: Result Codes
+** CAPIREF: Result Codes
 ** KEYWORDS: SQLITE_OK {error code} {error codes}
 ** KEYWORDS: {result code} {result codes}
 **
@@ -403,7 +439,7 @@ int sqlite4_exec(
 /* end-of-error-codes */
 
 /*
-** CAPI3REF: Extended Result Codes
+** CAPIREF: Extended Result Codes
 ** KEYWORDS: {extended error code} {extended error codes}
 ** KEYWORDS: {extended result code} {extended result codes}
 **
@@ -455,7 +491,7 @@ int sqlite4_exec(
 #define SQLITE_READONLY_CANTLOCK       (SQLITE_READONLY | (2<<8))
 
 /*
-** CAPI3REF: Flags For File Open Operations
+** CAPIREF: Flags For File Open Operations
 **
 ** These bit values are intended for use in the
 ** 3rd parameter to the [sqlite4_open_v2()] interface and
@@ -482,7 +518,7 @@ int sqlite4_exec(
 /* Reserved:                         0x00F00000 */
 
 /*
-** CAPI3REF: Device Characteristics
+** CAPIREF: Device Characteristics
 **
 ** The xDeviceCharacteristics method of the [sqlite4_io_methods]
 ** object returns an integer which is a vector of the these
@@ -520,7 +556,7 @@ int sqlite4_exec(
 #define SQLITE_IOCAP_POWERSAFE_OVERWRITE    0x00001000
 
 /*
-** CAPI3REF: Synchronization Type Flags
+** CAPIREF: Synchronization Type Flags
 **
 ** When SQLite invokes the xSync() method of an
 ** [sqlite4_io_methods] object it uses a combination of
@@ -550,7 +586,7 @@ int sqlite4_exec(
 #define SQLITE_SYNC_DATAONLY      0x00010
 
 /*
-** CAPI3REF: OS Interface Open File Handle
+** CAPIREF: OS Interface Open File Handle
 **
 ** An [sqlite4_file] object represents an open file in the 
 ** [sqlite4_vfs | OS interface layer].  Individual OS interface
@@ -566,7 +602,7 @@ struct sqlite4_file {
 };
 
 /*
-** CAPI3REF: OS Interface File Virtual Methods Object
+** CAPIREF: OS Interface File Virtual Methods Object
 **
 ** Every file opened by the [sqlite4_vfs.xOpen] method populates an
 ** [sqlite4_file] object (or, more commonly, a subclass of the
@@ -680,7 +716,7 @@ struct sqlite4_io_methods {
 };
 
 /*
-** CAPI3REF: Standard File Control Opcodes
+** CAPIREF: Standard File Control Opcodes
 **
 ** These integer constants are opcodes for the xFileControl method
 ** of the [sqlite4_io_methods] object and for the [sqlite4_file_control()]
@@ -794,7 +830,7 @@ struct sqlite4_io_methods {
 #define SQLITE_FCNTL_POWERSAFE_OVERWRITE    13
 
 /*
-** CAPI3REF: Mutex Handle
+** CAPIREF: Mutex Handle
 **
 ** The mutex module within SQLite defines [sqlite4_mutex] to be an
 ** abstract type for a mutex object.  The SQLite core never looks
@@ -806,7 +842,7 @@ struct sqlite4_io_methods {
 typedef struct sqlite4_mutex sqlite4_mutex;
 
 /*
-** CAPI3REF: OS Interface Object
+** CAPIREF: OS Interface Object
 **
 ** An instance of the sqlite4_vfs object defines the interface between
 ** the SQLite core and the underlying operating system.  The "vfs"
@@ -1004,7 +1040,7 @@ struct sqlite4_vfs {
 };
 
 /*
-** CAPI3REF: Flags for the xAccess VFS method
+** CAPIREF: Flags for the xAccess VFS method
 **
 ** These integer constants can be used as the third parameter to
 ** the xAccess method of an [sqlite4_vfs] object.  They determine
@@ -1028,7 +1064,7 @@ struct sqlite4_vfs {
 #define SQLITE_ACCESS_READ      2   /* Unused */
 
 /*
-** CAPI3REF: Flags for the xShmLock VFS method
+** CAPIREF: Flags for the xShmLock VFS method
 **
 ** These integer constants define the various locking operations
 ** allowed by the xShmLock method of [sqlite4_io_methods].  The
@@ -1055,7 +1091,7 @@ struct sqlite4_vfs {
 #define SQLITE_SHM_EXCLUSIVE    8
 
 /*
-** CAPI3REF: Maximum xShmLock index
+** CAPIREF: Maximum xShmLock index
 **
 ** The xShmLock method on [sqlite4_io_methods] may use values
 ** between 0 and this upper bound as its "offset" argument.
@@ -1066,7 +1102,7 @@ struct sqlite4_vfs {
 
 
 /*
-** CAPI3REF: Initialize The SQLite Library
+** CAPIREF: Initialize The SQLite Library
 **
 ** ^The sqlite4_initialize() routine initializes the
 ** SQLite library.  ^The sqlite4_shutdown() routine
@@ -1146,7 +1182,7 @@ int sqlite4_os_init(void);
 int sqlite4_os_end(void);
 
 /*
-** CAPI3REF: Configuring The SQLite Library
+** CAPIREF: Configuring The SQLite Library
 **
 ** The sqlite4_config() interface is used to make global configuration
 ** changes to SQLite in order to tune SQLite to the specific needs of
@@ -1177,7 +1213,7 @@ int sqlite4_os_end(void);
 int sqlite4_config(int, ...);
 
 /*
-** CAPI3REF: Configure database connections
+** CAPIREF: Configure database connections
 **
 ** The sqlite4_db_config() interface is used to make configuration
 ** changes to a [database connection].  The interface is similar to
@@ -1195,7 +1231,7 @@ int sqlite4_config(int, ...);
 int sqlite4_db_config(sqlite4*, int op, ...);
 
 /*
-** CAPI3REF: Memory Allocation Routines
+** CAPIREF: Memory Allocation Routines
 **
 ** An instance of this object defines the interface between SQLite
 ** and low-level memory allocation routines.
@@ -1270,7 +1306,7 @@ struct sqlite4_mem_methods {
 };
 
 /*
-** CAPI3REF: Configuration Options
+** CAPIREF: Configuration Options
 ** KEYWORDS: {configuration option}
 **
 ** These constants are the available integer configuration options that
@@ -1446,7 +1482,7 @@ struct sqlite4_mem_methods {
 #define SQLITE_CONFIG_GET_KVFACTORY 21 /* int(**)(KVStore**,const char*,u32) */
 
 /*
-** CAPI3REF: Database Connection Configuration Options
+** CAPIREF: Database Connection Configuration Options
 **
 ** These constants are the available integer configuration options that
 ** can be passed as the second argument to the [sqlite4_db_config()] interface.
@@ -1509,7 +1545,7 @@ struct sqlite4_mem_methods {
 
 
 /*
-** CAPI3REF: Last Insert Rowid
+** CAPIREF: Last Insert Rowid
 **
 ** ^Each entry in an SQLite table has a unique 64-bit signed
 ** integer key called the [ROWID | "rowid"]. ^The rowid is always available
@@ -1558,7 +1594,7 @@ struct sqlite4_mem_methods {
 sqlite4_int64 sqlite4_last_insert_rowid(sqlite4*);
 
 /*
-** CAPI3REF: Count The Number Of Rows Modified
+** CAPIREF: Count The Number Of Rows Modified
 **
 ** ^This function returns the number of database rows that were changed
 ** or inserted or deleted by the most recently completed SQL statement
@@ -1612,7 +1648,7 @@ sqlite4_int64 sqlite4_last_insert_rowid(sqlite4*);
 int sqlite4_changes(sqlite4*);
 
 /*
-** CAPI3REF: Total Number Of Rows Modified
+** CAPIREF: Total Number Of Rows Modified
 **
 ** ^This function returns the number of row changes caused by [INSERT],
 ** [UPDATE] or [DELETE] statements since the [database connection] was opened.
@@ -1638,7 +1674,7 @@ int sqlite4_changes(sqlite4*);
 int sqlite4_total_changes(sqlite4*);
 
 /*
-** CAPI3REF: Interrupt A Long-Running Query
+** CAPIREF: Interrupt A Long-Running Query
 **
 ** ^This function causes any pending database operation to abort and
 ** return at its earliest opportunity. This routine is typically
@@ -1677,7 +1713,7 @@ int sqlite4_total_changes(sqlite4*);
 void sqlite4_interrupt(sqlite4*);
 
 /*
-** CAPI3REF: Determine If An SQL Statement Is Complete
+** CAPIREF: Determine If An SQL Statement Is Complete
 **
 ** These routines are useful during command-line input to determine if the
 ** currently entered text seems to form a complete SQL statement or
@@ -1714,7 +1750,7 @@ int sqlite4_complete16(const void *sql);
 
 
 /*
-** CAPI3REF: Formatted String Printing Functions
+** CAPIREF: Formatted String Printing Functions
 **
 ** These routines are work-alikes of the "printf()" family of functions
 ** from the standard C library.
@@ -1813,7 +1849,7 @@ char *sqlite4_snprintf(int,char*,const char*, ...);
 char *sqlite4_vsnprintf(int,char*,const char*, va_list);
 
 /*
-** CAPI3REF: Memory Allocation Subsystem
+** CAPIREF: Memory Allocation Subsystem
 **
 ** The SQLite core uses these three routines for all of its own
 ** internal memory allocation needs. "Core" in the previous sentence
@@ -1887,7 +1923,7 @@ void *sqlite4_realloc(void*, int);
 void sqlite4_free(void*);
 
 /*
-** CAPI3REF: Memory Allocator Statistics
+** CAPIREF: Memory Allocator Statistics
 **
 ** SQLite provides these two interfaces for reporting on the status
 ** of the [sqlite4_malloc()], [sqlite4_free()], and [sqlite4_realloc()]
@@ -1913,7 +1949,7 @@ sqlite4_int64 sqlite4_memory_used(void);
 sqlite4_int64 sqlite4_memory_highwater(int resetFlag);
 
 /*
-** CAPI3REF: Pseudo-Random Number Generator
+** CAPIREF: Pseudo-Random Number Generator
 **
 ** SQLite contains a high-quality pseudo-random number generator (PRNG) used to
 ** select random [ROWID | ROWIDs] when inserting new records into a table that
@@ -1933,7 +1969,7 @@ sqlite4_int64 sqlite4_memory_highwater(int resetFlag);
 void sqlite4_randomness(int N, void *P);
 
 /*
-** CAPI3REF: Compile-Time Authorization Callbacks
+** CAPIREF: Compile-Time Authorization Callbacks
 **
 ** ^This routine registers an authorizer callback with a particular
 ** [database connection], supplied in the first argument.
@@ -2019,7 +2055,7 @@ int sqlite4_set_authorizer(
 );
 
 /*
-** CAPI3REF: Authorizer Return Codes
+** CAPIREF: Authorizer Return Codes
 **
 ** The [sqlite4_set_authorizer | authorizer callback function] must
 ** return either [SQLITE_OK] or one of these two constants in order
@@ -2034,7 +2070,7 @@ int sqlite4_set_authorizer(
 #define SQLITE_IGNORE 2   /* Don't allow access, but don't generate an error */
 
 /*
-** CAPI3REF: Authorizer Action Codes
+** CAPIREF: Authorizer Action Codes
 **
 ** The [sqlite4_set_authorizer()] interface registers a callback function
 ** that is invoked to authorize certain SQL statement actions.  The
@@ -2088,7 +2124,7 @@ int sqlite4_set_authorizer(
 #define SQLITE_COPY                  0   /* No longer used */
 
 /*
-** CAPI3REF: Tracing And Profiling Functions
+** CAPIREF: Tracing And Profiling Functions
 **
 ** These routines register callback functions that can be used for
 ** tracing and profiling the execution of SQL statements.
@@ -2117,7 +2153,7 @@ SQLITE_EXPERIMENTAL void *sqlite4_profile(sqlite4*,
    void(*xProfile)(void*,const char*,sqlite4_uint64), void*);
 
 /*
-** CAPI3REF: Query Progress Callbacks
+** CAPIREF: Query Progress Callbacks
 **
 ** ^The sqlite4_progress_handler(D,N,X,P) interface causes the callback
 ** function X to be invoked periodically during long running calls to
@@ -2149,7 +2185,7 @@ SQLITE_EXPERIMENTAL void *sqlite4_profile(sqlite4*,
 void sqlite4_progress_handler(sqlite4*, int, int(*)(void*), void*);
 
 /*
-** CAPI3REF: Opening A New Database Connection
+** CAPIREF: Opening A New Database Connection
 **
 ** ^These routines open an SQLite database file as specified by the 
 ** filename argument. ^The filename argument is interpreted as UTF-8 for
@@ -2335,7 +2371,7 @@ int sqlite4_open_v2(
 );
 
 /*
-** CAPI3REF: Obtain Values For URI Parameters
+** CAPIREF: Obtain Values For URI Parameters
 **
 ** These are utility routines, useful to VFS implementations, that check
 ** to see if a database file was a URI that contained a specific query 
@@ -2374,7 +2410,7 @@ sqlite4_int64 sqlite4_uri_int64(const char*, const char*, sqlite4_int64);
 
 
 /*
-** CAPI3REF: Error Codes And Messages
+** CAPIREF: Error Codes And Messages
 **
 ** ^The sqlite4_errcode() interface returns the numeric 
 ** [extended result code] for the most recent failed sqlite4_* API call
@@ -2408,7 +2444,7 @@ const char *sqlite4_errmsg(sqlite4*);
 const void *sqlite4_errmsg16(sqlite4*);
 
 /*
-** CAPI3REF: SQL Statement Object
+** CAPIREF: SQL Statement Object
 ** KEYWORDS: {prepared statement} {prepared statements}
 **
 ** An instance of this object represents a single SQL statement.
@@ -2434,7 +2470,7 @@ const void *sqlite4_errmsg16(sqlite4*);
 typedef struct sqlite4_stmt sqlite4_stmt;
 
 /*
-** CAPI3REF: Run-time Limits
+** CAPIREF: Run-time Limits
 **
 ** ^(This interface allows the size of various constructs to be limited
 ** on a connection by connection basis.  The first parameter is the
@@ -2475,7 +2511,7 @@ typedef struct sqlite4_stmt sqlite4_stmt;
 int sqlite4_limit(sqlite4*, int id, int newVal);
 
 /*
-** CAPI3REF: Run-Time Limit Categories
+** CAPIREF: Run-Time Limit Categories
 ** KEYWORDS: {limit category} {*limit categories}
 **
 ** These constants define various performance limits
@@ -2539,7 +2575,7 @@ int sqlite4_limit(sqlite4*, int id, int newVal);
 #define SQLITE_LIMIT_TRIGGER_DEPTH            10
 
 /*
-** CAPI3REF: Compiling An SQL Statement
+** CAPIREF: Compiling An SQL Statement
 ** KEYWORDS: {SQL statement compiler}
 **
 ** To execute an SQL query, it must first be compiled into a byte-code
@@ -2590,7 +2626,7 @@ int sqlite4_prepare(
 );
 
 /*
-** CAPI3REF: Retrieving Statement SQL
+** CAPIREF: Retrieving Statement SQL
 **
 ** ^This interface can be used to retrieve a saved copy of the original
 ** SQL text used to create a [prepared statement] if that statement was
@@ -2599,7 +2635,7 @@ int sqlite4_prepare(
 const char *sqlite4_sql(sqlite4_stmt *pStmt);
 
 /*
-** CAPI3REF: Determine If An SQL Statement Writes The Database
+** CAPIREF: Determine If An SQL Statement Writes The Database
 **
 ** ^The sqlite4_stmt_readonly(X) interface returns true (non-zero) if
 ** and only if the [prepared statement] X makes no direct changes to
@@ -2630,7 +2666,7 @@ const char *sqlite4_sql(sqlite4_stmt *pStmt);
 int sqlite4_stmt_readonly(sqlite4_stmt *pStmt);
 
 /*
-** CAPI3REF: Determine If A Prepared Statement Has Been Reset
+** CAPIREF: Determine If A Prepared Statement Has Been Reset
 **
 ** ^The sqlite4_stmt_busy(S) interface returns true (non-zero) if the
 ** [prepared statement] S has been stepped at least once using 
@@ -2649,7 +2685,7 @@ int sqlite4_stmt_readonly(sqlite4_stmt *pStmt);
 int sqlite4_stmt_busy(sqlite4_stmt*);
 
 /*
-** CAPI3REF: Dynamically Typed Value Object
+** CAPIREF: Dynamically Typed Value Object
 ** KEYWORDS: {protected sqlite4_value} {unprotected sqlite4_value}
 **
 ** SQLite uses the sqlite4_value object to represent all values
@@ -2688,7 +2724,7 @@ int sqlite4_stmt_busy(sqlite4_stmt*);
 typedef struct Mem sqlite4_value;
 
 /*
-** CAPI3REF: SQL Function Context Object
+** CAPIREF: SQL Function Context Object
 **
 ** The context in which an SQL function executes is stored in an
 ** sqlite4_context object.  ^A pointer to an sqlite4_context object
@@ -2702,7 +2738,7 @@ typedef struct Mem sqlite4_value;
 typedef struct sqlite4_context sqlite4_context;
 
 /*
-** CAPI3REF: Binding Values To Prepared Statements
+** CAPIREF: Binding Values To Prepared Statements
 ** KEYWORDS: {host parameter} {host parameters} {host parameter name}
 ** KEYWORDS: {SQL parameter} {SQL parameters} {parameter binding}
 **
@@ -2801,7 +2837,7 @@ int sqlite4_bind_value(sqlite4_stmt*, int, const sqlite4_value*);
 int sqlite4_bind_zeroblob(sqlite4_stmt*, int, int n);
 
 /*
-** CAPI3REF: Number Of SQL Parameters
+** CAPIREF: Number Of SQL Parameters
 **
 ** ^This routine can be used to find the number of [SQL parameters]
 ** in a [prepared statement].  SQL parameters are tokens of the
@@ -2821,7 +2857,7 @@ int sqlite4_bind_zeroblob(sqlite4_stmt*, int, int n);
 int sqlite4_bind_parameter_count(sqlite4_stmt*);
 
 /*
-** CAPI3REF: Name Of A Host Parameter
+** CAPIREF: Name Of A Host Parameter
 **
 ** ^The sqlite4_bind_parameter_name(P,N) interface returns
 ** the name of the N-th [SQL parameter] in the [prepared statement] P.
@@ -2848,7 +2884,7 @@ int sqlite4_bind_parameter_count(sqlite4_stmt*);
 const char *sqlite4_bind_parameter_name(sqlite4_stmt*, int);
 
 /*
-** CAPI3REF: Index Of A Parameter With A Given Name
+** CAPIREF: Index Of A Parameter With A Given Name
 **
 ** ^Return the index of an SQL parameter given its name.  ^The
 ** index value returned is suitable for use as the second
@@ -2864,7 +2900,7 @@ const char *sqlite4_bind_parameter_name(sqlite4_stmt*, int);
 int sqlite4_bind_parameter_index(sqlite4_stmt*, const char *zName);
 
 /*
-** CAPI3REF: Reset All Bindings On A Prepared Statement
+** CAPIREF: Reset All Bindings On A Prepared Statement
 **
 ** ^Contrary to the intuition of many, [sqlite4_reset()] does not reset
 ** the [sqlite4_bind_blob | bindings] on a [prepared statement].
@@ -2873,7 +2909,7 @@ int sqlite4_bind_parameter_index(sqlite4_stmt*, const char *zName);
 int sqlite4_clear_bindings(sqlite4_stmt*);
 
 /*
-** CAPI3REF: Number Of Columns In A Result Set
+** CAPIREF: Number Of Columns In A Result Set
 **
 ** ^Return the number of columns in the result set returned by the
 ** [prepared statement]. ^This routine returns 0 if pStmt is an SQL
@@ -2884,7 +2920,7 @@ int sqlite4_clear_bindings(sqlite4_stmt*);
 int sqlite4_column_count(sqlite4_stmt *pStmt);
 
 /*
-** CAPI3REF: Column Names In A Result Set
+** CAPIREF: Column Names In A Result Set
 **
 ** ^These routines return the name assigned to a particular column
 ** in the result set of a [SELECT] statement.  ^The sqlite4_column_name()
@@ -2913,7 +2949,7 @@ const char *sqlite4_column_name(sqlite4_stmt*, int N);
 const void *sqlite4_column_name16(sqlite4_stmt*, int N);
 
 /*
-** CAPI3REF: Source Of Data In A Query Result
+** CAPIREF: Source Of Data In A Query Result
 **
 ** ^These routines provide a means to determine the database, table, and
 ** table column that is the origin of a particular result column in
@@ -2965,7 +3001,7 @@ const char *sqlite4_column_origin_name(sqlite4_stmt*,int);
 const void *sqlite4_column_origin_name16(sqlite4_stmt*,int);
 
 /*
-** CAPI3REF: Declared Datatype Of A Query Result
+** CAPIREF: Declared Datatype Of A Query Result
 **
 ** ^(The first parameter is a [prepared statement].
 ** If this statement is a [SELECT] statement and the Nth column of the
@@ -2997,7 +3033,7 @@ const char *sqlite4_column_decltype(sqlite4_stmt*,int);
 const void *sqlite4_column_decltype16(sqlite4_stmt*,int);
 
 /*
-** CAPI3REF: Evaluate An SQL Statement
+** CAPIREF: Evaluate An SQL Statement
 **
 ** After a [prepared statement] has been prepared using either
 ** [sqlite4_prepare_v2()] or [sqlite4_prepare16_v2()] or one of the legacy
@@ -3076,7 +3112,7 @@ const void *sqlite4_column_decltype16(sqlite4_stmt*,int);
 int sqlite4_step(sqlite4_stmt*);
 
 /*
-** CAPI3REF: Number of columns in a result set
+** CAPIREF: Number of columns in a result set
 **
 ** ^The sqlite4_data_count(P) interface returns the number of columns in the
 ** current row of the result set of [prepared statement] P.
@@ -3096,7 +3132,7 @@ int sqlite4_step(sqlite4_stmt*);
 int sqlite4_data_count(sqlite4_stmt *pStmt);
 
 /*
-** CAPI3REF: Fundamental Datatypes
+** CAPIREF: Fundamental Datatypes
 ** KEYWORDS: SQLITE_TEXT
 **
 ** ^(Every value in SQLite has one of five fundamental datatypes:
@@ -3128,7 +3164,7 @@ int sqlite4_data_count(sqlite4_stmt *pStmt);
 #define SQLITE3_TEXT     3
 
 /*
-** CAPI3REF: Result Values From A Query
+** CAPIREF: Result Values From A Query
 ** KEYWORDS: {column access functions}
 **
 ** These routines form the "result set" interface.
@@ -3301,7 +3337,7 @@ int sqlite4_column_type(sqlite4_stmt*, int iCol);
 sqlite4_value *sqlite4_column_value(sqlite4_stmt*, int iCol);
 
 /*
-** CAPI3REF: Destroy A Prepared Statement Object
+** CAPIREF: Destroy A Prepared Statement Object
 **
 ** ^The sqlite4_finalize() function is called to delete a [prepared statement].
 ** ^If the most recent evaluation of the statement encountered no errors
@@ -3328,7 +3364,7 @@ sqlite4_value *sqlite4_column_value(sqlite4_stmt*, int iCol);
 int sqlite4_finalize(sqlite4_stmt *pStmt);
 
 /*
-** CAPI3REF: Reset A Prepared Statement Object
+** CAPIREF: Reset A Prepared Statement Object
 **
 ** The sqlite4_reset() function is called to reset a [prepared statement]
 ** object back to its initial state, ready to be re-executed.
@@ -3354,7 +3390,7 @@ int sqlite4_finalize(sqlite4_stmt *pStmt);
 int sqlite4_reset(sqlite4_stmt *pStmt);
 
 /*
-** CAPI3REF: Create Or Redefine SQL Functions
+** CAPIREF: Create Or Redefine SQL Functions
 ** KEYWORDS: {function creation routines}
 ** KEYWORDS: {application-defined SQL function}
 ** KEYWORDS: {application-defined SQL functions}
@@ -3474,7 +3510,7 @@ int sqlite4_create_function_v2(
 );
 
 /*
-** CAPI3REF: Text Encodings
+** CAPIREF: Text Encodings
 **
 ** These constant define integer codes that represent the various
 ** text encodings supported by SQLite.
@@ -3487,7 +3523,7 @@ int sqlite4_create_function_v2(
 #define SQLITE_UTF16_ALIGNED  8    /* sqlite4_create_collation only */
 
 /*
-** CAPI3REF: Deprecated Functions
+** CAPIREF: Deprecated Functions
 ** DEPRECATED
 **
 ** These functions are [deprecated].  In order to maintain
@@ -3505,7 +3541,7 @@ SQLITE_DEPRECATED int sqlite4_memory_alarm(void(*)(void*,sqlite4_int64,int),void
 #endif
 
 /*
-** CAPI3REF: Obtaining SQL Function Parameter Values
+** CAPIREF: Obtaining SQL Function Parameter Values
 **
 ** The C-language implementation of SQL functions and aggregates uses
 ** this set of interface routines to access the parameter values on
@@ -3563,7 +3599,7 @@ int sqlite4_value_type(sqlite4_value*);
 int sqlite4_value_numeric_type(sqlite4_value*);
 
 /*
-** CAPI3REF: Obtain Aggregate Function Context
+** CAPIREF: Obtain Aggregate Function Context
 **
 ** Implementations of aggregate SQL functions use this
 ** routine to allocate memory for storing their state.
@@ -3604,7 +3640,7 @@ int sqlite4_value_numeric_type(sqlite4_value*);
 void *sqlite4_aggregate_context(sqlite4_context*, int nBytes);
 
 /*
-** CAPI3REF: User Data For Functions
+** CAPIREF: User Data For Functions
 **
 ** ^The sqlite4_user_data() interface returns a copy of
 ** the pointer that was the pUserData parameter (the 5th parameter)
@@ -3618,7 +3654,7 @@ void *sqlite4_aggregate_context(sqlite4_context*, int nBytes);
 void *sqlite4_user_data(sqlite4_context*);
 
 /*
-** CAPI3REF: Database Connection For Functions
+** CAPIREF: Database Connection For Functions
 **
 ** ^The sqlite4_context_db_handle() interface returns a copy of
 ** the pointer to the [database connection] (the 1st parameter)
@@ -3629,7 +3665,7 @@ void *sqlite4_user_data(sqlite4_context*);
 sqlite4 *sqlite4_context_db_handle(sqlite4_context*);
 
 /*
-** CAPI3REF: Function Auxiliary Data
+** CAPIREF: Function Auxiliary Data
 **
 ** The following two functions may be used by scalar SQL functions to
 ** associate metadata with argument values. If the same value is passed to
@@ -3675,7 +3711,7 @@ void sqlite4_set_auxdata(sqlite4_context*, int N, void*, void (*)(void*));
 
 
 /*
-** CAPI3REF: Constants Defining Special Destructor Behavior
+** CAPIREF: Constants Defining Special Destructor Behavior
 **
 ** These are special values for the destructor that is passed in as the
 ** final argument to routines like [sqlite4_result_blob()].  ^If the destructor
@@ -3693,7 +3729,7 @@ typedef void (*sqlite4_destructor_type)(void*);
 #define SQLITE_TRANSIENT   ((sqlite4_destructor_type)-1)
 
 /*
-** CAPI3REF: Setting The Result Of An SQL Function
+** CAPIREF: Setting The Result Of An SQL Function
 **
 ** These routines are used by the xFunc or xFinal callbacks that
 ** implement SQL functions and aggregates.  See
@@ -3820,7 +3856,7 @@ void sqlite4_result_value(sqlite4_context*, sqlite4_value*);
 void sqlite4_result_zeroblob(sqlite4_context*, int n);
 
 /*
-** CAPI3REF: Define New Collating Sequences
+** CAPIREF: Define New Collating Sequences
 **
 ** ^This function adds, removes, or modifies a [collation] associated
 ** with the [database connection] specified as the first argument.
@@ -3906,7 +3942,7 @@ int sqlite4_create_collation(
 );
 
 /*
-** CAPI3REF: Collation Needed Callbacks
+** CAPIREF: Collation Needed Callbacks
 **
 ** ^To avoid having to register all collation sequences before a database
 ** can be used, a single callback function may be registered with the
@@ -3988,7 +4024,7 @@ void sqlite4_activate_cerod(
 #endif
 
 /*
-** CAPI3REF: Suspend Execution For A Short Time
+** CAPIREF: Suspend Execution For A Short Time
 **
 ** The sqlite4_sleep() function causes the current thread to suspend execution
 ** for at least a number of milliseconds specified in its parameter.
@@ -4007,7 +4043,7 @@ void sqlite4_activate_cerod(
 int sqlite4_sleep(int);
 
 /*
-** CAPI3REF: Name Of The Folder Holding Temporary Files
+** CAPIREF: Name Of The Folder Holding Temporary Files
 **
 ** ^(If this global variable is made to point to a string which is
 ** the name of a folder (a.k.a. directory), then all temporary files
@@ -4038,7 +4074,7 @@ int sqlite4_sleep(int);
 SQLITE_EXTERN char *sqlite4_temp_directory;
 
 /*
-** CAPI3REF: Test For Auto-Commit Mode
+** CAPIREF: Test For Auto-Commit Mode
 ** KEYWORDS: {autocommit mode}
 **
 ** ^The sqlite4_get_autocommit() interface returns non-zero or
@@ -4061,7 +4097,7 @@ SQLITE_EXTERN char *sqlite4_temp_directory;
 int sqlite4_get_autocommit(sqlite4*);
 
 /*
-** CAPI3REF: Find The Database Handle Of A Prepared Statement
+** CAPIREF: Find The Database Handle Of A Prepared Statement
 **
 ** ^The sqlite4_db_handle interface returns the [database connection] handle
 ** to which a [prepared statement] belongs.  ^The [database connection]
@@ -4073,7 +4109,7 @@ int sqlite4_get_autocommit(sqlite4*);
 sqlite4 *sqlite4_db_handle(sqlite4_stmt*);
 
 /*
-** CAPI3REF: Return The Filename For A Database Connection
+** CAPIREF: Return The Filename For A Database Connection
 **
 ** ^The sqlite4_db_filename(D,N) interface returns a pointer to a filename
 ** associated with database N of connection D.  ^The main database file
@@ -4089,7 +4125,7 @@ sqlite4 *sqlite4_db_handle(sqlite4_stmt*);
 const char *sqlite4_db_filename(sqlite4 *db, const char *zDbName);
 
 /*
-** CAPI3REF: Find the next prepared statement
+** CAPIREF: Find the next prepared statement
 **
 ** ^This interface returns a pointer to the next [prepared statement] after
 ** pStmt associated with the [database connection] pDb.  ^If pStmt is NULL
@@ -4104,7 +4140,7 @@ const char *sqlite4_db_filename(sqlite4 *db, const char *zDbName);
 sqlite4_stmt *sqlite4_next_stmt(sqlite4 *pDb, sqlite4_stmt *pStmt);
 
 /*
-** CAPI3REF: Commit And Rollback Notification Callbacks
+** CAPIREF: Commit And Rollback Notification Callbacks
 **
 ** ^The sqlite4_commit_hook() interface registers a callback
 ** function to be invoked whenever a transaction is [COMMIT | committed].
@@ -4153,7 +4189,7 @@ void *sqlite4_commit_hook(sqlite4*, int(*)(void*), void*);
 void *sqlite4_rollback_hook(sqlite4*, void(*)(void *), void*);
 
 /*
-** CAPI3REF: Data Change Notification Callbacks
+** CAPIREF: Data Change Notification Callbacks
 **
 ** ^The sqlite4_update_hook() interface registers a callback function
 ** with the [database connection] identified by the first argument
@@ -4205,7 +4241,7 @@ void *sqlite4_update_hook(
 );
 
 /*
-** CAPI3REF: Attempt To Free Heap Memory
+** CAPIREF: Attempt To Free Heap Memory
 **
 ** ^The sqlite4_release_memory() interface attempts to free N bytes
 ** of heap memory by deallocating non-essential memory allocations
@@ -4221,7 +4257,7 @@ void *sqlite4_update_hook(
 int sqlite4_release_memory(int);
 
 /*
-** CAPI3REF: Free Memory Used By A Database Connection
+** CAPIREF: Free Memory Used By A Database Connection
 **
 ** ^The sqlite4_db_release_memory(D) interface attempts to free as much heap
 ** memory as possible from database connection D. Unlike the
@@ -4234,7 +4270,7 @@ int sqlite4_release_memory(int);
 int sqlite4_db_release_memory(sqlite4*);
 
 /*
-** CAPI3REF: Impose A Limit On Heap Size
+** CAPIREF: Impose A Limit On Heap Size
 **
 ** ^The sqlite4_soft_heap_limit64() interface sets and/or queries the
 ** soft limit on the amount of heap memory that may be allocated by SQLite.
@@ -4281,7 +4317,7 @@ int sqlite4_db_release_memory(sqlite4*);
 sqlite4_int64 sqlite4_soft_heap_limit64(sqlite4_int64 N);
 
 /*
-** CAPI3REF: Deprecated Soft Heap Limit Interface
+** CAPIREF: Deprecated Soft Heap Limit Interface
 ** DEPRECATED
 **
 ** This is a deprecated version of the [sqlite4_soft_heap_limit64()]
@@ -4293,7 +4329,7 @@ SQLITE_DEPRECATED void sqlite4_soft_heap_limit(int N);
 
 
 /*
-** CAPI3REF: Extract Metadata About A Column Of A Table
+** CAPIREF: Extract Metadata About A Column Of A Table
 **
 ** ^This routine returns metadata about a specific column of a specific
 ** database table accessible using the [database connection] handle
@@ -4367,7 +4403,7 @@ int sqlite4_table_column_metadata(
 );
 
 /*
-** CAPI3REF: Load An Extension
+** CAPIREF: Load An Extension
 **
 ** ^This interface loads an SQLite extension library from the named file.
 **
@@ -4399,7 +4435,7 @@ int sqlite4_load_extension(
 );
 
 /*
-** CAPI3REF: Enable Or Disable Extension Loading
+** CAPIREF: Enable Or Disable Extension Loading
 **
 ** ^So as not to open security holes in older applications that are
 ** unprepared to deal with extension loading, and as a means of disabling
@@ -4414,7 +4450,7 @@ int sqlite4_load_extension(
 int sqlite4_enable_load_extension(sqlite4 *db, int onoff);
 
 /*
-** CAPI3REF: Automatically Load Statically Linked Extensions
+** CAPIREF: Automatically Load Statically Linked Extensions
 **
 ** ^This interface causes the xEntryPoint() function to be invoked for
 ** each new [database connection] that is created.  The idea here is that
@@ -4451,7 +4487,7 @@ int sqlite4_enable_load_extension(sqlite4 *db, int onoff);
 int sqlite4_auto_extension(void (*xEntryPoint)(void));
 
 /*
-** CAPI3REF: Reset Automatic Extension Loading
+** CAPIREF: Reset Automatic Extension Loading
 **
 ** ^This interface disables all automatic extensions previously
 ** registered using [sqlite4_auto_extension()].
@@ -4476,7 +4512,7 @@ typedef struct sqlite4_vtab_cursor sqlite4_vtab_cursor;
 typedef struct sqlite4_module sqlite4_module;
 
 /*
-** CAPI3REF: Virtual Table Object
+** CAPIREF: Virtual Table Object
 ** KEYWORDS: sqlite4_module {virtual table module}
 **
 ** This structure, sometimes called a "virtual table module", 
@@ -4527,7 +4563,7 @@ struct sqlite4_module {
 };
 
 /*
-** CAPI3REF: Virtual Table Indexing Information
+** CAPIREF: Virtual Table Indexing Information
 ** KEYWORDS: sqlite4_index_info
 **
 ** The sqlite4_index_info structure and its substructures is used as part
@@ -4606,7 +4642,7 @@ struct sqlite4_index_info {
 };
 
 /*
-** CAPI3REF: Virtual Table Constraint Operator Codes
+** CAPIREF: Virtual Table Constraint Operator Codes
 **
 ** These macros defined the allowed values for the
 ** [sqlite4_index_info].aConstraint[].op field.  Each value represents
@@ -4621,7 +4657,7 @@ struct sqlite4_index_info {
 #define SQLITE_INDEX_CONSTRAINT_MATCH 64
 
 /*
-** CAPI3REF: Register A Virtual Table Implementation
+** CAPIREF: Register A Virtual Table Implementation
 **
 ** ^These routines are used to register a new [virtual table module] name.
 ** ^Module names must be registered before
@@ -4660,7 +4696,7 @@ int sqlite4_create_module_v2(
 );
 
 /*
-** CAPI3REF: Virtual Table Instance Object
+** CAPIREF: Virtual Table Instance Object
 ** KEYWORDS: sqlite4_vtab
 **
 ** Every [virtual table module] implementation uses a subclass
@@ -4685,7 +4721,7 @@ struct sqlite4_vtab {
 };
 
 /*
-** CAPI3REF: Virtual Table Cursor Object
+** CAPIREF: Virtual Table Cursor Object
 ** KEYWORDS: sqlite4_vtab_cursor {virtual table cursor}
 **
 ** Every [virtual table module] implementation uses a subclass of the
@@ -4707,7 +4743,7 @@ struct sqlite4_vtab_cursor {
 };
 
 /*
-** CAPI3REF: Declare The Schema Of A Virtual Table
+** CAPIREF: Declare The Schema Of A Virtual Table
 **
 ** ^The [xCreate] and [xConnect] methods of a
 ** [virtual table module] call this interface
@@ -4717,7 +4753,7 @@ struct sqlite4_vtab_cursor {
 int sqlite4_declare_vtab(sqlite4*, const char *zSQL);
 
 /*
-** CAPI3REF: Overload A Function For A Virtual Table
+** CAPIREF: Overload A Function For A Virtual Table
 **
 ** ^(Virtual tables can provide alternative implementations of functions
 ** using the [xFindFunction] method of the [virtual table module].  
@@ -4745,7 +4781,7 @@ int sqlite4_overload_function(sqlite4*, const char *zFuncName, int nArg);
 */
 
 /*
-** CAPI3REF: Virtual File System Objects
+** CAPIREF: Virtual File System Objects
 **
 ** A virtual filesystem (VFS) is an [sqlite4_vfs] object
 ** that SQLite uses to interact
@@ -4778,7 +4814,7 @@ int sqlite4_vfs_register(sqlite4_vfs*, int makeDflt);
 int sqlite4_vfs_unregister(sqlite4_vfs*);
 
 /*
-** CAPI3REF: Mutexes
+** CAPIREF: Mutexes
 **
 ** The SQLite core uses these routines for thread
 ** synchronization. Though they are intended for internal
@@ -4897,7 +4933,7 @@ int sqlite4_mutex_try(sqlite4_mutex*);
 void sqlite4_mutex_leave(sqlite4_mutex*);
 
 /*
-** CAPI3REF: Mutex Methods Object
+** CAPIREF: Mutex Methods Object
 **
 ** An instance of this structure defines the low-level routines
 ** used to allocate and use mutexes.
@@ -4975,7 +5011,7 @@ struct sqlite4_mutex_methods {
 };
 
 /*
-** CAPI3REF: Mutex Verification Routines
+** CAPIREF: Mutex Verification Routines
 **
 ** The sqlite4_mutex_held() and sqlite4_mutex_notheld() routines
 ** are intended for use inside assert() statements.  ^The SQLite core
@@ -5009,7 +5045,7 @@ int sqlite4_mutex_notheld(sqlite4_mutex*);
 #endif
 
 /*
-** CAPI3REF: Mutex Types
+** CAPIREF: Mutex Types
 **
 ** The [sqlite4_mutex_alloc()] interface takes a single argument
 ** which is one of these integer constants.
@@ -5030,7 +5066,7 @@ int sqlite4_mutex_notheld(sqlite4_mutex*);
 #define SQLITE_MUTEX_STATIC_PMEM      7  /* sqlite4PageMalloc() */
 
 /*
-** CAPI3REF: Retrieve the mutex for a database connection
+** CAPIREF: Retrieve the mutex for a database connection
 **
 ** ^This interface returns a pointer the [sqlite4_mutex] object that 
 ** serializes access to the [database connection] given in the argument
@@ -5041,7 +5077,7 @@ int sqlite4_mutex_notheld(sqlite4_mutex*);
 sqlite4_mutex *sqlite4_db_mutex(sqlite4*);
 
 /*
-** CAPI3REF: Low-Level Control Of Database Files
+** CAPIREF: Low-Level Control Of Database Files
 **
 ** ^The [sqlite4_file_control()] interface makes a direct call to the
 ** xFileControl method for the [sqlite4_io_methods] object associated
@@ -5075,7 +5111,7 @@ sqlite4_mutex *sqlite4_db_mutex(sqlite4*);
 int sqlite4_file_control(sqlite4*, const char *zDbName, int op, void*);
 
 /*
-** CAPI3REF: Testing Interface
+** CAPIREF: Testing Interface
 **
 ** ^The sqlite4_test_control() interface is used to read out internal
 ** state of SQLite and to inject faults into SQLite for testing
@@ -5094,7 +5130,7 @@ int sqlite4_file_control(sqlite4*, const char *zDbName, int op, void*);
 int sqlite4_test_control(int op, ...);
 
 /*
-** CAPI3REF: Testing Interface Operation Codes
+** CAPIREF: Testing Interface Operation Codes
 **
 ** These constants are the valid operation code parameters used
 ** as the first argument to [sqlite4_test_control()].
@@ -5122,7 +5158,7 @@ int sqlite4_test_control(int op, ...);
 #define SQLITE_TESTCTRL_LAST                    19
 
 /*
-** CAPI3REF: SQLite Runtime Status
+** CAPIREF: SQLite Runtime Status
 **
 ** ^This interface is used to retrieve runtime status information
 ** about the performance of SQLite, and optionally to reset various
@@ -5154,7 +5190,7 @@ int sqlite4_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 
 
 /*
-** CAPI3REF: Status Parameters
+** CAPIREF: Status Parameters
 ** KEYWORDS: {status parameters}
 **
 ** These integer constants designate various run-time status parameters
@@ -5195,7 +5231,7 @@ int sqlite4_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 #define SQLITE_STATUS_MALLOC_COUNT         9
 
 /*
-** CAPI3REF: Database Connection Status
+** CAPIREF: Database Connection Status
 **
 ** ^This interface is used to retrieve runtime status information 
 ** about a single [database connection].  ^The first argument is the
@@ -5219,7 +5255,7 @@ int sqlite4_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 int sqlite4_db_status(sqlite4*, int op, int *pCur, int *pHiwtr, int resetFlg);
 
 /*
-** CAPI3REF: Status Parameters for database connections
+** CAPIREF: Status Parameters for database connections
 ** KEYWORDS: {SQLITE_DBSTATUS options}
 **
 ** These constants are the available integer "verbs" that can be passed as
@@ -5304,7 +5340,7 @@ int sqlite4_db_status(sqlite4*, int op, int *pCur, int *pHiwtr, int resetFlg);
 
 
 /*
-** CAPI3REF: Prepared Statement Status
+** CAPIREF: Prepared Statement Status
 **
 ** ^(Each prepared statement maintains various
 ** [SQLITE_STMTSTATUS counters] that measure the number
@@ -5329,7 +5365,7 @@ int sqlite4_db_status(sqlite4*, int op, int *pCur, int *pHiwtr, int resetFlg);
 int sqlite4_stmt_status(sqlite4_stmt*, int op,int resetFlg);
 
 /*
-** CAPI3REF: Status Parameters for prepared statements
+** CAPIREF: Status Parameters for prepared statements
 ** KEYWORDS: {SQLITE_STMTSTATUS counter} {SQLITE_STMTSTATUS counters}
 **
 ** These preprocessor macros define integer codes that name counter
@@ -5362,7 +5398,7 @@ int sqlite4_stmt_status(sqlite4_stmt*, int op,int resetFlg);
 
 
 /*
-** CAPI3REF: Unlock Notification
+** CAPIREF: Unlock Notification
 **
 ** ^When running in shared-cache mode, a database operation may fail with
 ** an [SQLITE_LOCKED] error if the required locks on the shared-cache or
@@ -5483,7 +5519,7 @@ int sqlite4_unlock_notify(
 
 
 /*
-** CAPI3REF: String Comparison
+** CAPIREF: String Comparison
 **
 ** ^The [sqlite4_strnicmp()] API allows applications and extensions to
 ** compare the contents of two buffers containing UTF-8 strings in a
@@ -5493,7 +5529,7 @@ int sqlite4_unlock_notify(
 int sqlite4_strnicmp(const char *, const char *, int);
 
 /*
-** CAPI3REF: Error Logging Interface
+** CAPIREF: Error Logging Interface
 **
 ** ^The [sqlite4_log()] interface writes a message into the error log
 ** established by the [SQLITE_CONFIG_LOG] option to [sqlite4_config()].
@@ -5516,7 +5552,7 @@ int sqlite4_strnicmp(const char *, const char *, int);
 void sqlite4_log(int iErrCode, const char *zFormat, ...);
 
 /*
-** CAPI3REF: Write-Ahead Log Commit Hook
+** CAPIREF: Write-Ahead Log Commit Hook
 **
 ** ^The [sqlite4_wal_hook()] function is used to register a callback that
 ** will be invoked each time a database connection commits data to a
@@ -5557,7 +5593,7 @@ void *sqlite4_wal_hook(
 );
 
 /*
-** CAPI3REF: Configure an auto-checkpoint
+** CAPIREF: Configure an auto-checkpoint
 **
 ** ^The [sqlite4_wal_autocheckpoint(D,N)] is a wrapper around
 ** [sqlite4_wal_hook()] that causes any database on [database connection] D
@@ -5584,7 +5620,7 @@ void *sqlite4_wal_hook(
 int sqlite4_wal_autocheckpoint(sqlite4 *db, int N);
 
 /*
-** CAPI3REF: Checkpoint a database
+** CAPIREF: Checkpoint a database
 **
 ** ^The [sqlite4_wal_checkpoint(D,X)] interface causes database named X
 ** on [database connection] D to be [checkpointed].  ^If X is NULL or an
@@ -5602,7 +5638,7 @@ int sqlite4_wal_autocheckpoint(sqlite4 *db, int N);
 int sqlite4_wal_checkpoint(sqlite4 *db, const char *zDb);
 
 /*
-** CAPI3REF: Checkpoint a database
+** CAPIREF: Checkpoint a database
 **
 ** Run a checkpoint operation on WAL database zDb attached to database 
 ** handle db. The specific operation is determined by the value of the 
@@ -5680,7 +5716,7 @@ int sqlite4_wal_checkpoint_v2(
 );
 
 /*
-** CAPI3REF: Checkpoint operation parameters
+** CAPIREF: Checkpoint operation parameters
 **
 ** These constants can be used as the 3rd parameter to
 ** [sqlite4_wal_checkpoint_v2()].  See the [sqlite4_wal_checkpoint_v2()]
@@ -5692,7 +5728,7 @@ int sqlite4_wal_checkpoint_v2(
 #define SQLITE_CHECKPOINT_RESTART 2
 
 /*
-** CAPI3REF: Virtual Table Interface Configuration
+** CAPIREF: Virtual Table Interface Configuration
 **
 ** This function may be called by either the [xConnect] or [xCreate] method
 ** of a [virtual table] implementation to configure
@@ -5708,7 +5744,7 @@ int sqlite4_wal_checkpoint_v2(
 int sqlite4_vtab_config(sqlite4*, int op, ...);
 
 /*
-** CAPI3REF: Virtual Table Configuration Options
+** CAPIREF: Virtual Table Configuration Options
 **
 ** These macros define the various options to the
 ** [sqlite4_vtab_config()] interface that [virtual table] implementations
@@ -5749,7 +5785,7 @@ int sqlite4_vtab_config(sqlite4*, int op, ...);
 #define SQLITE_VTAB_CONSTRAINT_SUPPORT 1
 
 /*
-** CAPI3REF: Determine The Virtual Table Conflict Policy
+** CAPIREF: Determine The Virtual Table Conflict Policy
 **
 ** This function may only be called from within a call to the [xUpdate] method
 ** of a [virtual table] implementation for an INSERT or UPDATE operation. ^The
@@ -5761,7 +5797,7 @@ int sqlite4_vtab_config(sqlite4*, int op, ...);
 int sqlite4_vtab_on_conflict(sqlite4 *);
 
 /*
-** CAPI3REF: Conflict resolution modes
+** CAPIREF: Conflict resolution modes
 **
 ** These constants are returned by [sqlite4_vtab_on_conflict()] to
 ** inform a [virtual table] implementation what the [ON CONFLICT] mode
@@ -5815,7 +5851,6 @@ int sqlite4_num_to_text(sqlite4_num, char*);
 */
 #define SQLITE_PREFIX_ONLY         0x10
 #define SQLITE_IGNORE_WHITESPACE   0x20
-
 
 /*
 ** Undo the hack that converts floating point types to integer for

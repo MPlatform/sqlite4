@@ -364,7 +364,7 @@ FuncDef *sqlite4FindFunction(
   ** So we must not search for built-ins when creating a new function.
   */ 
   if( !createFlag && (pBest==0 || (db->flags & SQLITE_PreferBuiltin)!=0) ){
-    FuncDefHash *pHash = &GLOBAL(FuncDefHash, sqlite4GlobalFunctions);
+    FuncDefHash *pHash = &sqlite4GlobalFunctions;
     bestScore = 0;
     p = functionSearch(pHash, h, zName, nName);
     while( p ){

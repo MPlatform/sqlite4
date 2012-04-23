@@ -360,4 +360,3 @@ int Sqliteteststorage2_Init(Tcl_Interp *interp){
   Tcl_CreateObjCommand(interp, "kvwrap", kvwrap_command, 0, 0);
   return TCL_OK;
 }
-

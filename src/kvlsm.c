@@ -411,6 +411,3 @@ int sqlite4KVStoreOpenLsm(
 }
 
 #endif /* SQLITE_ENABLE_LSM */
-
-
-

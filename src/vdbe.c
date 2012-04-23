@@ -817,10 +817,10 @@ case OP_Halt: {
   if( pOp->p4.z ){
     assert( p->rc!=SQLITE_OK );
     sqlite4SetString(&p->zErrMsg, db, "%s", pOp->p4.z);
-    testcase( sqlite4GlobalConfig.xLog!=0 );
+    testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(pOp->p1, "abort at %d in [%s]: %s", pc, p->zSql, pOp->p4.z);
   }else if( p->rc ){
-    testcase( sqlite4GlobalConfig.xLog!=0 );
+    testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(pOp->p1, "constraint failed at %d in [%s]", pc, p->zSql);
   }
   rc = sqlite4VdbeHalt(p);
@@ -4976,7 +4976,7 @@ default: {          /* This is really OP_Noop and OP_Explain */
 vdbe_error_halt:
   assert( rc );
   p->rc = rc;
-  testcase( sqlite4GlobalConfig.xLog!=0 );
+  testcase( sqlite4DefaultEnv.xLog!=0 );
   sqlite4_log(rc, "statement aborts at %d: [%s] %s", 
                    pc, p->zSql, p->zErrMsg);
   sqlite4VdbeHalt(p);

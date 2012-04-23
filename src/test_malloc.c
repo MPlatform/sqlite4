@@ -918,10 +918,10 @@ static int test_config_lookaside(
   if( Tcl_GetIntFromObj(interp, objv[2], &cnt) ) return TCL_ERROR;
   pRet = Tcl_NewObj();
   Tcl_ListObjAppendElement(
-      interp, pRet, Tcl_NewIntObj(sqlite4GlobalConfig.szLookaside)
+      interp, pRet, Tcl_NewIntObj(sqlite4DefaultEnv.szLookaside)
   );
   Tcl_ListObjAppendElement(
-      interp, pRet, Tcl_NewIntObj(sqlite4GlobalConfig.nLookaside)
+      interp, pRet, Tcl_NewIntObj(sqlite4DefaultEnv.nLookaside)
   );
   rc = sqlite4_config(SQLITE_CONFIG_LOOKASIDE, sz, cnt);
   Tcl_SetObjResult(interp, pRet);

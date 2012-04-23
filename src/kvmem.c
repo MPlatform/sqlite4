@@ -940,4 +940,3 @@ int sqlite4KVStoreOpenMem(
   *ppKVStore = (KVStore*)pNew;
   return SQLITE_OK;
 }
-

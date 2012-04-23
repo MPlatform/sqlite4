@@ -121,7 +121,7 @@ int sqlite4_initialize(void){
   ** must be complete.  So isInit must not be set until the very end
   ** of this routine.
   */
-  if( sqlite4GlobalConfig.isInit ) return SQLITE_OK;
+  if( sqlite4DefaultEnv.isInit ) return SQLITE_OK;
 
   /* Make sure the mutex subsystem is initialized.  If unable to 
   ** initialize the mutex subsystem, return early with the error.
@@ -142,22 +142,22 @@ int sqlite4_initialize(void){
   */
   MUTEX_LOGIC( pMaster = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MASTER); )
   sqlite4_mutex_enter(pMaster);
-  sqlite4GlobalConfig.isMutexInit = 1;
-  if( !sqlite4GlobalConfig.isMallocInit ){
+  sqlite4DefaultEnv.isMutexInit = 1;
+  if( !sqlite4DefaultEnv.isMallocInit ){
     rc = sqlite4MallocInit();
   }
   if( rc==SQLITE_OK ){
-    sqlite4GlobalConfig.isMallocInit = 1;
-    if( !sqlite4GlobalConfig.pInitMutex ){
-      sqlite4GlobalConfig.pInitMutex =
+    sqlite4DefaultEnv.isMallocInit = 1;
+    if( !sqlite4DefaultEnv.pInitMutex ){
+      sqlite4DefaultEnv.pInitMutex =
            sqlite4MutexAlloc(SQLITE_MUTEX_RECURSIVE);
-      if( sqlite4GlobalConfig.bCoreMutex && !sqlite4GlobalConfig.pInitMutex ){
+      if( sqlite4DefaultEnv.bCoreMutex && !sqlite4DefaultEnv.pInitMutex ){
         rc = SQLITE_NOMEM;
       }
     }
   }
   if( rc==SQLITE_OK ){
-    sqlite4GlobalConfig.nRefInitMutex++;
+    sqlite4DefaultEnv.nRefInitMutex++;
   }
   sqlite4_mutex_leave(pMaster);
 
@@ -174,26 +174,26 @@ int sqlite4_initialize(void){
   ** sqlite4_os_init() when it invokes sqlite4_vfs_register(), but other
   ** recursive calls might also be possible.
   */
-  sqlite4_mutex_enter(sqlite4GlobalConfig.pInitMutex);
-  if( sqlite4GlobalConfig.isInit==0 && sqlite4GlobalConfig.inProgress==0 ){
-    FuncDefHash *pHash = &GLOBAL(FuncDefHash, sqlite4GlobalFunctions);
-    sqlite4GlobalConfig.inProgress = 1;
+  sqlite4_mutex_enter(sqlite4DefaultEnv.pInitMutex);
+  if( sqlite4DefaultEnv.isInit==0 && sqlite4DefaultEnv.inProgress==0 ){
+    FuncDefHash *pHash = &sqlite4GlobalFunctions;
+    sqlite4DefaultEnv.inProgress = 1;
     memset(pHash, 0, sizeof(sqlite4GlobalFunctions));
     sqlite4RegisterGlobalFunctions();
     rc = sqlite4OsInit();
-    sqlite4GlobalConfig.inProgress = 0;
+    sqlite4DefaultEnv.inProgress = 0;
   }
-  sqlite4_mutex_leave(sqlite4GlobalConfig.pInitMutex);
+  sqlite4_mutex_leave(sqlite4DefaultEnv.pInitMutex);
 
   /* Go back under the static mutex and clean up the recursive
   ** mutex to prevent a resource leak.
   */
   sqlite4_mutex_enter(pMaster);
-  sqlite4GlobalConfig.nRefInitMutex--;
-  if( sqlite4GlobalConfig.nRefInitMutex<=0 ){
-    assert( sqlite4GlobalConfig.nRefInitMutex==0 );
-    sqlite4_mutex_free(sqlite4GlobalConfig.pInitMutex);
-    sqlite4GlobalConfig.pInitMutex = 0;
+  sqlite4DefaultEnv.nRefInitMutex--;
+  if( sqlite4DefaultEnv.nRefInitMutex<=0 ){
+    assert( sqlite4DefaultEnv.nRefInitMutex==0 );
+    sqlite4_mutex_free(sqlite4DefaultEnv.pInitMutex);
+    sqlite4DefaultEnv.pInitMutex = 0;
   }
   sqlite4_mutex_leave(pMaster);
 
@@ -220,7 +220,7 @@ int sqlite4_initialize(void){
   ** compile-time option.
   */
 #ifdef SQLITE_EXTRA_INIT
-  if( rc==SQLITE_OK && sqlite4GlobalConfig.isInit ){
+  if( rc==SQLITE_OK && sqlite4DefaultEnv.isInit ){
     int SQLITE_EXTRA_INIT(const char*);
     rc = SQLITE_EXTRA_INIT(0);
   }
@@ -238,22 +238,22 @@ int sqlite4_initialize(void){
 ** when this routine is invoked, then this routine is a harmless no-op.
 */
 int sqlite4_shutdown(void){
-  if( sqlite4GlobalConfig.isInit ){
+  if( sqlite4DefaultEnv.isInit ){
 #ifdef SQLITE_EXTRA_SHUTDOWN
     void SQLITE_EXTRA_SHUTDOWN(void);
     SQLITE_EXTRA_SHUTDOWN();
 #endif
     sqlite4_os_end();
     /* sqlite4_reset_auto_extension(); */
-    sqlite4GlobalConfig.isInit = 0;
+    sqlite4DefaultEnv.isInit = 0;
   }
-  if( sqlite4GlobalConfig.isMallocInit ){
+  if( sqlite4DefaultEnv.isMallocInit ){
     sqlite4MallocEnd();
-    sqlite4GlobalConfig.isMallocInit = 0;
+    sqlite4DefaultEnv.isMallocInit = 0;
   }
-  if( sqlite4GlobalConfig.isMutexInit ){
+  if( sqlite4DefaultEnv.isMutexInit ){
     sqlite4MutexEnd();
-    sqlite4GlobalConfig.isMutexInit = 0;
+    sqlite4DefaultEnv.isMutexInit = 0;
   }
 
   return SQLITE_OK;
@@ -274,12 +274,12 @@ int sqlite4_config(int op, ...){
 
   /* sqlite4_config() shall return SQLITE_MISUSE if it is invoked while
   ** the SQLite library is in use. */
-  if( sqlite4GlobalConfig.isInit ) return SQLITE_MISUSE_BKPT;
+  if( sqlite4DefaultEnv.isInit ) return SQLITE_MISUSE_BKPT;
 
   va_start(ap, op);
   switch( op ){
     case SQLITE_CONFIG_SET_KVFACTORY: {
-      sqlite4GlobalConfig.xKVFile = *va_arg(ap, 
+      sqlite4DefaultEnv.xKVFile = *va_arg(ap, 
           int (*)(KVStore **, const char *, unsigned int)
       );
       break;
@@ -287,7 +287,7 @@ int sqlite4_config(int op, ...){
 
     case SQLITE_CONFIG_GET_KVFACTORY: {
       *va_arg(ap, int (**)(KVStore **, const char *, unsigned int)) =
-          sqlite4GlobalConfig.xKVFile;
+          sqlite4DefaultEnv.xKVFile;
       break;
     }
 
@@ -297,31 +297,31 @@ int sqlite4_config(int op, ...){
 #if defined(SQLITE_THREADSAFE) && SQLITE_THREADSAFE>0
     case SQLITE_CONFIG_SINGLETHREAD: {
       /* Disable all mutexing */
-      sqlite4GlobalConfig.bCoreMutex = 0;
-      sqlite4GlobalConfig.bFullMutex = 0;
+      sqlite4DefaultEnv.bCoreMutex = 0;
+      sqlite4DefaultEnv.bFullMutex = 0;
       break;
     }
     case SQLITE_CONFIG_MULTITHREAD: {
       /* Disable mutexing of database connections */
       /* Enable mutexing of core data structures */
-      sqlite4GlobalConfig.bCoreMutex = 1;
-      sqlite4GlobalConfig.bFullMutex = 0;
+      sqlite4DefaultEnv.bCoreMutex = 1;
+      sqlite4DefaultEnv.bFullMutex = 0;
       break;
     }
     case SQLITE_CONFIG_SERIALIZED: {
       /* Enable all mutexing */
-      sqlite4GlobalConfig.bCoreMutex = 1;
-      sqlite4GlobalConfig.bFullMutex = 1;
+      sqlite4DefaultEnv.bCoreMutex = 1;
+      sqlite4DefaultEnv.bFullMutex = 1;
       break;
     }
     case SQLITE_CONFIG_MUTEX: {
       /* Specify an alternative mutex implementation */
-      sqlite4GlobalConfig.mutex = *va_arg(ap, sqlite4_mutex_methods*);
+      sqlite4DefaultEnv.mutex = *va_arg(ap, sqlite4_mutex_methods*);
       break;
     }
     case SQLITE_CONFIG_GETMUTEX: {
       /* Retrieve the current mutex implementation */
-      *va_arg(ap, sqlite4_mutex_methods*) = sqlite4GlobalConfig.mutex;
+      *va_arg(ap, sqlite4_mutex_methods*) = sqlite4DefaultEnv.mutex;
       break;
     }
 #endif
@@ -329,52 +329,52 @@ int sqlite4_config(int op, ...){
 
     case SQLITE_CONFIG_MALLOC: {
       /* Specify an alternative malloc implementation */
-      sqlite4GlobalConfig.m = *va_arg(ap, sqlite4_mem_methods*);
+      sqlite4DefaultEnv.m = *va_arg(ap, sqlite4_mem_methods*);
       break;
     }
     case SQLITE_CONFIG_GETMALLOC: {
       /* Retrieve the current malloc() implementation */
-      if( sqlite4GlobalConfig.m.xMalloc==0 ) sqlite4MemSetDefault();
-      *va_arg(ap, sqlite4_mem_methods*) = sqlite4GlobalConfig.m;
+      if( sqlite4DefaultEnv.m.xMalloc==0 ) sqlite4MemSetDefault();
+      *va_arg(ap, sqlite4_mem_methods*) = sqlite4DefaultEnv.m;
       break;
     }
     case SQLITE_CONFIG_MEMSTATUS: {
       /* Enable or disable the malloc status collection */
-      sqlite4GlobalConfig.bMemstat = va_arg(ap, int);
+      sqlite4DefaultEnv.bMemstat = va_arg(ap, int);
       break;
     }
 
 #if defined(SQLITE_ENABLE_MEMSYS3) || defined(SQLITE_ENABLE_MEMSYS5)
     case SQLITE_CONFIG_HEAP: {
       /* Designate a buffer for heap memory space */
-      sqlite4GlobalConfig.pHeap = va_arg(ap, void*);
-      sqlite4GlobalConfig.nHeap = va_arg(ap, int);
-      sqlite4GlobalConfig.mnReq = va_arg(ap, int);
+      sqlite4DefaultEnv.pHeap = va_arg(ap, void*);
+      sqlite4DefaultEnv.nHeap = va_arg(ap, int);
+      sqlite4DefaultEnv.mnReq = va_arg(ap, int);
 
-      if( sqlite4GlobalConfig.mnReq<1 ){
-        sqlite4GlobalConfig.mnReq = 1;
-      }else if( sqlite4GlobalConfig.mnReq>(1<<12) ){
+      if( sqlite4DefaultEnv.mnReq<1 ){
+        sqlite4DefaultEnv.mnReq = 1;
+      }else if( sqlite4DefaultEnv.mnReq>(1<<12) ){
         /* cap min request size at 2^12 */
-        sqlite4GlobalConfig.mnReq = (1<<12);
+        sqlite4DefaultEnv.mnReq = (1<<12);
       }
 
-      if( sqlite4GlobalConfig.pHeap==0 ){
+      if( sqlite4DefaultEnv.pHeap==0 ){
         /* If the heap pointer is NULL, then restore the malloc implementation
         ** back to NULL pointers too.  This will cause the malloc to go
         ** back to its default implementation when sqlite4_initialize() is
         ** run.
         */
-        memset(&sqlite4GlobalConfig.m, 0, sizeof(sqlite4GlobalConfig.m));
+        memset(&sqlite4DefaultEnv.m, 0, sizeof(sqlite4DefaultEnv.m));
       }else{
         /* The heap pointer is not NULL, then install one of the
         ** mem5.c/mem3.c methods. If neither ENABLE_MEMSYS3 nor
         ** ENABLE_MEMSYS5 is defined, return an error.
         */
 #ifdef SQLITE_ENABLE_MEMSYS3
-        sqlite4GlobalConfig.m = *sqlite4MemGetMemsys3();
+        sqlite4DefaultEnv.m = *sqlite4MemGetMemsys3();
 #endif
 #ifdef SQLITE_ENABLE_MEMSYS5
-        sqlite4GlobalConfig.m = *sqlite4MemGetMemsys5();
+        sqlite4DefaultEnv.m = *sqlite4MemGetMemsys5();
 #endif
       }
       break;
@@ -382,8 +382,8 @@ int sqlite4_config(int op, ...){
 #endif
 
     case SQLITE_CONFIG_LOOKASIDE: {
-      sqlite4GlobalConfig.szLookaside = va_arg(ap, int);
-      sqlite4GlobalConfig.nLookaside = va_arg(ap, int);
+      sqlite4DefaultEnv.szLookaside = va_arg(ap, int);
+      sqlite4DefaultEnv.nLookaside = va_arg(ap, int);
       break;
     }
     
@@ -394,11 +394,11 @@ int sqlite4_config(int op, ...){
     case SQLITE_CONFIG_LOG: {
       /* MSVC is picky about pulling func ptrs from va lists.
       ** http://support.microsoft.com/kb/47961
-      ** sqlite4GlobalConfig.xLog = va_arg(ap, void(*)(void*,int,const char*));
+      ** sqlite4DefaultEnv.xLog = va_arg(ap, void(*)(void*,int,const char*));
       */
       typedef void(*LOGFUNC_t)(void*,int,const char*);
-      sqlite4GlobalConfig.xLog = va_arg(ap, LOGFUNC_t);
-      sqlite4GlobalConfig.pLogArg = va_arg(ap, void*);
+      sqlite4DefaultEnv.xLog = va_arg(ap, LOGFUNC_t);
+      sqlite4DefaultEnv.pLogArg = va_arg(ap, void*);
       break;
     }
 
@@ -1879,14 +1879,14 @@ static int openDatabase(
   testcase( (1<<(flags&7))==0x40 ); /* READWRITE | CREATE */
   if( ((1<<(flags&7)) & 0x46)==0 ) return SQLITE_MISUSE_BKPT;
 
-  if( sqlite4GlobalConfig.bCoreMutex==0 ){
+  if( sqlite4DefaultEnv.bCoreMutex==0 ){
     isThreadsafe = 0;
   }else if( flags & SQLITE_OPEN_NOMUTEX ){
     isThreadsafe = 0;
   }else if( flags & SQLITE_OPEN_FULLMUTEX ){
     isThreadsafe = 1;
   }else{
-    isThreadsafe = sqlite4GlobalConfig.bFullMutex;
+    isThreadsafe = sqlite4DefaultEnv.bFullMutex;
   }
 
   /* Remove harmful bits from the flags parameter
@@ -2057,15 +2057,15 @@ static int openDatabase(
   sqlite4Error(db, rc, 0);
 
   /* Enable the lookaside-malloc subsystem */
-  setupLookaside(db, 0, sqlite4GlobalConfig.szLookaside,
-                        sqlite4GlobalConfig.nLookaside);
+  setupLookaside(db, 0, sqlite4DefaultEnv.szLookaside,
+                        sqlite4DefaultEnv.nLookaside);
 
   sqlite4_wal_autocheckpoint(db, SQLITE_DEFAULT_WAL_AUTOCHECKPOINT);
 
 opendb_out:
   sqlite4_free(zOpen);
   if( db ){
-    assert( db->mutex!=0 || isThreadsafe==0 || sqlite4GlobalConfig.bFullMutex==0 );
+    assert( db->mutex!=0 || isThreadsafe==0 || sqlite4DefaultEnv.bFullMutex==0 );
     sqlite4_mutex_leave(db->mutex);
   }
   rc = sqlite4_errcode(db);
@@ -2228,21 +2228,21 @@ int sqlite4_get_autocommit(sqlite4 *db){
 **       a low-level error is first detected.
 */
 int sqlite4CorruptError(int lineno){
-  testcase( sqlite4GlobalConfig.xLog!=0 );
+  testcase( sqlite4DefaultEnv.xLog!=0 );
   sqlite4_log(SQLITE_CORRUPT,
               "database corruption at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
   return SQLITE_CORRUPT;
 }
 int sqlite4MisuseError(int lineno){
-  testcase( sqlite4GlobalConfig.xLog!=0 );
+  testcase( sqlite4DefaultEnv.xLog!=0 );
   sqlite4_log(SQLITE_MISUSE, 
               "misuse at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
   return SQLITE_MISUSE;
 }
 int sqlite4CantopenError(int lineno){
-  testcase( sqlite4GlobalConfig.xLog!=0 );
+  testcase( sqlite4DefaultEnv.xLog!=0 );
   sqlite4_log(SQLITE_CANTOPEN, 
               "cannot open file at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
@@ -2452,7 +2452,7 @@ int sqlite4_test_control(int op, ...){
     ** undo this setting.
     */
     case SQLITE_TESTCTRL_LOCALTIME_FAULT: {
-      sqlite4GlobalConfig.bLocaltimeFault = va_arg(ap, int);
+      sqlite4DefaultEnv.bLocaltimeFault = va_arg(ap, int);
       break;
     }
 

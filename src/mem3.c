@@ -138,8 +138,6 @@ static SQLITE_WSD struct Mem3Global {
   u32 aiHash[N_HASH];        /* For sizes MX_SMALL+1 and larger */
 } mem3 = { 97535575 };
 
-#define mem3 GLOBAL(struct Mem3Global, mem3)
-
 /*
 ** Unlink the chunk at mem3.aPool[i] from list it is currently
 ** on.  *pRoot is the list that i is a member of.
@@ -217,10 +215,10 @@ static void memsys3Link(u32 i){
 /*
 ** If the STATIC_MEM mutex is not already held, obtain it now. The mutex
 ** will already be held (obtained by code in malloc.c) if
-** sqlite4GlobalConfig.bMemStat is true.
+** sqlite4DefaultEnv.bMemStat is true.
 */
 static void memsys3Enter(void){
-  if( sqlite4GlobalConfig.bMemstat==0 && mem3.mutex==0 ){
+  if( sqlite4DefaultEnv.bMemstat==0 && mem3.mutex==0 ){
     mem3.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
   }
   sqlite4_mutex_enter(mem3.mutex);
@@ -551,14 +549,14 @@ static void *memsys3Realloc(void *pPrior, int nBytes){
 */
 static int memsys3Init(void *NotUsed){
   UNUSED_PARAMETER(NotUsed);
-  if( !sqlite4GlobalConfig.pHeap ){
+  if( !sqlite4DefaultEnv.pHeap ){
     return SQLITE_ERROR;
   }
 
   /* Store a pointer to the memory block in global structure mem3. */
   assert( sizeof(Mem3Block)==8 );
-  mem3.aPool = (Mem3Block *)sqlite4GlobalConfig.pHeap;
-  mem3.nPool = (sqlite4GlobalConfig.nHeap / sizeof(Mem3Block)) - 2;
+  mem3.aPool = (Mem3Block *)sqlite4DefaultEnv.pHeap;
+  mem3.nPool = (sqlite4DefaultEnv.nHeap / sizeof(Mem3Block)) - 2;
 
   /* Initialize the master block. */
   mem3.szMaster = mem3.nPool;
@@ -664,7 +662,7 @@ void sqlite4Memsys3Dump(const char *zFilename){
 ** linkage.
 **
 ** Populate the low-level memory allocation function pointers in
-** sqlite4GlobalConfig.m with pointers to the routines in this file. The
+** sqlite4DefaultEnv.m with pointers to the routines in this file. The
 ** arguments specify the block of memory to manage.
 **
 ** This routine is only called by sqlite4_config(), and therefore

@@ -45,7 +45,7 @@ static SQLITE_WSD struct BenignMallocHooks {
 */
 #ifdef SQLITE_OMIT_WSD
 # define wsdHooksInit \
-  BenignMallocHooks *x = &GLOBAL(BenignMallocHooks,sqlite4Hooks)
+  BenignMallocHooks *x = sqlite4Hooks;
 # define wsdHooks x[0]
 #else
 # define wsdHooksInit

@@ -424,7 +424,7 @@ static void clearYMD_HMS_TZ(DateTime *p){
 ** is available.  This routine returns 0 on success and
 ** non-zero on any kind of error.
 **
-** If the sqlite4GlobalConfig.bLocaltimeFault variable is true then this
+** If the sqlite4DefaultEnv.bLocaltimeFault variable is true then this
 ** routine will always fail.
 */
 static int osLocaltime(time_t *t, struct tm *pTm){
@@ -438,14 +438,14 @@ static int osLocaltime(time_t *t, struct tm *pTm){
   sqlite4_mutex_enter(mutex);
   pX = localtime(t);
 #ifndef SQLITE_OMIT_BUILTIN_TEST
-  if( sqlite4GlobalConfig.bLocaltimeFault ) pX = 0;
+  if( sqlite4DefaultEnv.bLocaltimeFault ) pX = 0;
 #endif
   if( pX ) *pTm = *pX;
   sqlite4_mutex_leave(mutex);
   rc = pX==0;
 #else
 #ifndef SQLITE_OMIT_BUILTIN_TEST
-  if( sqlite4GlobalConfig.bLocaltimeFault ) return 1;
+  if( sqlite4DefaultEnv.bLocaltimeFault ) return 1;
 #endif
 #if defined(HAVE_LOCALTIME_R) && HAVE_LOCALTIME_R
   rc = localtime_r(t, pTm)==0;
@@ -1119,8 +1119,8 @@ void sqlite4RegisterDateTimeFunctions(void){
 #endif
   };
   int i;
-  FuncDefHash *pHash = &GLOBAL(FuncDefHash, sqlite4GlobalFunctions);
-  FuncDef *aFunc = (FuncDef*)&GLOBAL(FuncDef, aDateTimeFuncs);
+  FuncDefHash *pHash = &sqlite4GlobalFunctions;
+  FuncDef *aFunc = (FuncDef*)aDateTimeFuncs;
 
   for(i=0; i<ArraySize(aDateTimeFuncs); i++){
     sqlite4FuncDefInsert(pHash, &aFunc[i]);

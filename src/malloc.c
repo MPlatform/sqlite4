@@ -55,8 +55,6 @@ static SQLITE_WSD struct Mem0Global {
   int nearlyFull;
 } mem0 = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
-#define mem0 GLOBAL(struct Mem0Global, mem0)
-
 /*
 ** This routine runs when the memory allocator sees that the
 ** total memory allocation is about to exceed the soft heap
@@ -137,14 +135,14 @@ void sqlite4_soft_heap_limit(int n){
 ** Initialize the memory allocation subsystem.
 */
 int sqlite4MallocInit(void){
-  if( sqlite4GlobalConfig.m.xMalloc==0 ){
+  if( sqlite4DefaultEnv.m.xMalloc==0 ){
     sqlite4MemSetDefault();
   }
   memset(&mem0, 0, sizeof(mem0));
-  if( sqlite4GlobalConfig.bCoreMutex ){
+  if( sqlite4DefaultEnv.bCoreMutex ){
     mem0.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
   }
-  return sqlite4GlobalConfig.m.xInit(sqlite4GlobalConfig.m.pAppData);
+  return sqlite4DefaultEnv.m.xInit(sqlite4DefaultEnv.m.pAppData);
 }
 
 /*
@@ -160,8 +158,8 @@ int sqlite4HeapNearlyFull(void){
 ** Deinitialize the memory allocation subsystem.
 */
 void sqlite4MallocEnd(void){
-  if( sqlite4GlobalConfig.m.xShutdown ){
-    sqlite4GlobalConfig.m.xShutdown(sqlite4GlobalConfig.m.pAppData);
+  if( sqlite4DefaultEnv.m.xShutdown ){
+    sqlite4DefaultEnv.m.xShutdown(sqlite4DefaultEnv.m.pAppData);
   }
   memset(&mem0, 0, sizeof(mem0));
 }
@@ -217,7 +215,7 @@ static int mallocWithAlarm(int n, void **pp){
   int nFull;
   void *p;
   assert( sqlite4_mutex_held(mem0.mutex) );
-  nFull = sqlite4GlobalConfig.m.xRoundup(n);
+  nFull = sqlite4DefaultEnv.m.xRoundup(n);
   sqlite4StatusSet(SQLITE_STATUS_MALLOC_SIZE, n);
   if( mem0.alarmCallback!=0 ){
     int nUsed = sqlite4StatusValue(SQLITE_STATUS_MEMORY_USED);
@@ -228,11 +226,11 @@ static int mallocWithAlarm(int n, void **pp){
       mem0.nearlyFull = 0;
     }
   }
-  p = sqlite4GlobalConfig.m.xMalloc(nFull);
+  p = sqlite4DefaultEnv.m.xMalloc(nFull);
 #ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
   if( p==0 && mem0.alarmCallback ){
     sqlite4MallocAlarm(nFull);
-    p = sqlite4GlobalConfig.m.xMalloc(nFull);
+    p = sqlite4DefaultEnv.m.xMalloc(nFull);
   }
 #endif
   if( p ){
@@ -259,12 +257,12 @@ void *sqlite4Malloc(int n){
     ** 255 bytes of overhead.  SQLite itself will never use anything near
     ** this amount.  The only way to reach the limit is with sqlite4_malloc() */
     p = 0;
-  }else if( sqlite4GlobalConfig.bMemstat ){
+  }else if( sqlite4DefaultEnv.bMemstat ){
     sqlite4_mutex_enter(mem0.mutex);
     mallocWithAlarm(n, &p);
     sqlite4_mutex_leave(mem0.mutex);
   }else{
-    p = sqlite4GlobalConfig.m.xMalloc(n);
+    p = sqlite4DefaultEnv.m.xMalloc(n);
   }
   assert( EIGHT_BYTE_ALIGNMENT(p) );  /* IMP: R-04675-44850 */
   return p;
@@ -301,7 +299,7 @@ static int isLookaside(sqlite4 *db, void *p){
 int sqlite4MallocSize(void *p){
   assert( sqlite4MemdebugHasType(p, MEMTYPE_HEAP) );
   assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
-  return sqlite4GlobalConfig.m.xSize(p);
+  return sqlite4DefaultEnv.m.xSize(p);
 }
 int sqlite4DbMallocSize(sqlite4 *db, void *p){
   assert( db==0 || sqlite4_mutex_held(db->mutex) );
@@ -311,7 +309,7 @@ int sqlite4DbMallocSize(sqlite4 *db, void *p){
     assert( sqlite4MemdebugHasType(p, MEMTYPE_DB) );
     assert( sqlite4MemdebugHasType(p, MEMTYPE_LOOKASIDE|MEMTYPE_HEAP) );
     assert( db!=0 || sqlite4MemdebugNoType(p, MEMTYPE_LOOKASIDE) );
-    return sqlite4GlobalConfig.m.xSize(p);
+    return sqlite4DefaultEnv.m.xSize(p);
   }
 }
 
@@ -322,14 +320,14 @@ void sqlite4_free(void *p){
   if( p==0 ) return;  /* IMP: R-49053-54554 */
   assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
   assert( sqlite4MemdebugHasType(p, MEMTYPE_HEAP) );
-  if( sqlite4GlobalConfig.bMemstat ){
+  if( sqlite4DefaultEnv.bMemstat ){
     sqlite4_mutex_enter(mem0.mutex);
     sqlite4StatusAdd(SQLITE_STATUS_MEMORY_USED, -sqlite4MallocSize(p));
     sqlite4StatusAdd(SQLITE_STATUS_MALLOC_COUNT, -1);
-    sqlite4GlobalConfig.m.xFree(p);
+    sqlite4DefaultEnv.m.xFree(p);
     sqlite4_mutex_leave(mem0.mutex);
   }else{
-    sqlite4GlobalConfig.m.xFree(p);
+    sqlite4DefaultEnv.m.xFree(p);
   }
 }
 
@@ -380,10 +378,10 @@ void *sqlite4Realloc(void *pOld, int nBytes){
   /* IMPLEMENTATION-OF: R-46199-30249 SQLite guarantees that the second
   ** argument to xRealloc is always a value returned by a prior call to
   ** xRoundup. */
-  nNew = sqlite4GlobalConfig.m.xRoundup(nBytes);
+  nNew = sqlite4DefaultEnv.m.xRoundup(nBytes);
   if( nOld==nNew ){
     pNew = pOld;
-  }else if( sqlite4GlobalConfig.bMemstat ){
+  }else if( sqlite4DefaultEnv.bMemstat ){
     sqlite4_mutex_enter(mem0.mutex);
     sqlite4StatusSet(SQLITE_STATUS_MALLOC_SIZE, nBytes);
     nDiff = nNew - nOld;
@@ -393,10 +391,10 @@ void *sqlite4Realloc(void *pOld, int nBytes){
     }
     assert( sqlite4MemdebugHasType(pOld, MEMTYPE_HEAP) );
     assert( sqlite4MemdebugNoType(pOld, ~MEMTYPE_HEAP) );
-    pNew = sqlite4GlobalConfig.m.xRealloc(pOld, nNew);
+    pNew = sqlite4DefaultEnv.m.xRealloc(pOld, nNew);
     if( pNew==0 && mem0.alarmCallback ){
       sqlite4MallocAlarm(nBytes);
-      pNew = sqlite4GlobalConfig.m.xRealloc(pOld, nNew);
+      pNew = sqlite4DefaultEnv.m.xRealloc(pOld, nNew);
     }
     if( pNew ){
       nNew = sqlite4MallocSize(pNew);
@@ -404,7 +402,7 @@ void *sqlite4Realloc(void *pOld, int nBytes){
     }
     sqlite4_mutex_leave(mem0.mutex);
   }else{
-    pNew = sqlite4GlobalConfig.m.xRealloc(pOld, nNew);
+    pNew = sqlite4DefaultEnv.m.xRealloc(pOld, nNew);
   }
   assert( EIGHT_BYTE_ALIGNMENT(pNew) ); /* IMP: R-04675-44850 */
   return pNew;

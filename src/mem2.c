@@ -188,7 +188,7 @@ static int sqlite4MemSize(void *p){
 static int sqlite4MemInit(void *NotUsed){
   UNUSED_PARAMETER(NotUsed);
   assert( (sizeof(struct MemBlockHdr)&7) == 0 );
-  if( !sqlite4GlobalConfig.bMemstat ){
+  if( !sqlite4DefaultEnv.bMemstat ){
     /* If memory status is enabled, then the malloc.c wrapper will already
     ** hold the STATIC_MEM mutex when the routines here are invoked. */
     mem.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
@@ -302,7 +302,7 @@ static void sqlite4MemFree(void *pPrior){
   struct MemBlockHdr *pHdr;
   void **pBt;
   char *z;
-  assert( sqlite4GlobalConfig.bMemstat || sqlite4GlobalConfig.bCoreMutex==0 
+  assert( sqlite4DefaultEnv.bMemstat || sqlite4DefaultEnv.bCoreMutex==0 
        || mem.mutex!=0 );
   pHdr = sqlite4MemsysGetHeader(pPrior);
   pBt = (void**)pHdr;
@@ -359,7 +359,7 @@ static void *sqlite4MemRealloc(void *pPrior, int nByte){
 
 /*
 ** Populate the low-level memory allocation function pointers in
-** sqlite4GlobalConfig.m with pointers to the routines in this file.
+** sqlite4DefaultEnv.m with pointers to the routines in this file.
 */
 void sqlite4MemSetDefault(void){
   static const sqlite4_mem_methods defaultMethods = {
@@ -379,7 +379,7 @@ void sqlite4MemSetDefault(void){
 ** Set the "type" of an allocation.
 */
 void sqlite4MemdebugSetType(void *p, u8 eType){
-  if( p && sqlite4GlobalConfig.m.xMalloc==sqlite4MemMalloc ){
+  if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
     pHdr = sqlite4MemsysGetHeader(p);
     assert( pHdr->iForeGuard==FOREGUARD );
@@ -398,7 +398,7 @@ void sqlite4MemdebugSetType(void *p, u8 eType){
 */
 int sqlite4MemdebugHasType(void *p, u8 eType){
   int rc = 1;
-  if( p && sqlite4GlobalConfig.m.xMalloc==sqlite4MemMalloc ){
+  if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
     pHdr = sqlite4MemsysGetHeader(p);
     assert( pHdr->iForeGuard==FOREGUARD );         /* Allocation is valid */
@@ -420,7 +420,7 @@ int sqlite4MemdebugHasType(void *p, u8 eType){
 */
 int sqlite4MemdebugNoType(void *p, u8 eType){
   int rc = 1;
-  if( p && sqlite4GlobalConfig.m.xMalloc==sqlite4MemMalloc ){
+  if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
     pHdr = sqlite4MemsysGetHeader(p);
     assert( pHdr->iForeGuard==FOREGUARD );         /* Allocation is valid */

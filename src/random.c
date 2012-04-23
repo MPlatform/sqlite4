@@ -54,7 +54,7 @@ static u8 randomByte(void){
   ** to the "sqlite4Prng" state vector declared above.
   */
 #ifdef SQLITE_OMIT_WSD
-  struct sqlite4PrngType *p = &GLOBAL(struct sqlite4PrngType, sqlite4Prng);
+  struct sqlite4PrngType *p = sqlite4Prng;
 # define wsdPrng p[0]
 #else
 # define wsdPrng sqlite4Prng
@@ -126,20 +126,12 @@ void sqlite4_randomness(int N, void *pBuf){
 */
 static SQLITE_WSD struct sqlite4PrngType sqlite4SavedPrng;
 void sqlite4PrngSaveState(void){
-  memcpy(
-    &GLOBAL(struct sqlite4PrngType, sqlite4SavedPrng),
-    &GLOBAL(struct sqlite4PrngType, sqlite4Prng),
-    sizeof(sqlite4Prng)
-  );
+  memcpy(&sqlite4SavedPrng, &sqlite4Prng, sizeof(sqlite4Prng));
 }
 void sqlite4PrngRestoreState(void){
-  memcpy(
-    &GLOBAL(struct sqlite4PrngType, sqlite4Prng),
-    &GLOBAL(struct sqlite4PrngType, sqlite4SavedPrng),
-    sizeof(sqlite4Prng)
-  );
+  memcpy(&sqlite4Prng, &sqlite4SavedPrng, sizeof(sqlite4Prng));
 }
 void sqlite4PrngResetState(void){
-  GLOBAL(struct sqlite4PrngType, sqlite4Prng).isInit = 0;
+  sqlite4Prng.isInit = 0;
 }
 #endif /* SQLITE_OMIT_BUILTIN_TEST */

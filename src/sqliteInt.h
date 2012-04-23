@@ -569,30 +569,10 @@ extern const int sqlite4one;
 #define SQLITE_DYNAMIC   ((sqlite4_destructor_type)sqlite4MallocSize)
 
 /*
-** When SQLITE_OMIT_WSD is defined, it means that the target platform does
-** not support Writable Static Data (WSD) such as global and static variables.
-** All variables must either be on the stack or dynamically allocated from
-** the heap.  When WSD is unsupported, the variable declarations scattered
-** throughout the SQLite code must become constants instead.  The SQLITE_WSD
-** macro is used for this purpose.  And instead of referencing the variable
-** directly, we use its constant as a key to lookup the run-time allocated
-** buffer that holds real variable.  The constant is also the initializer
-** for the run-time allocated buffer.
-**
-** In the usual case where WSD is supported, the SQLITE_WSD and GLOBAL
-** macros become no-ops and have zero performance impact.
+** Mark instances of static data that needs to be folded into the
+** environment structure.
 */
-#ifdef SQLITE_OMIT_WSD
-  #define SQLITE_WSD const
-  #define GLOBAL(t,v) (*(t*)sqlite4_wsd_find((void*)&(v), sizeof(v)))
-  #define sqlite4GlobalConfig GLOBAL(struct Sqlite3Config, sqlite4Config)
-  int sqlite4_wsd_init(int N, int J);
-  void *sqlite4_wsd_find(void *K, int L);
-#else
-  #define SQLITE_WSD 
-  #define GLOBAL(t,v) v
-  #define sqlite4GlobalConfig sqlite4Config
-#endif
+#define SQLITE_WSD 
 
 /*
 ** The following macros are used to suppress compiler warnings and to
@@ -2427,11 +2407,9 @@ typedef struct {
 } InitData;
 
 /*
-** Structure containing global configuration data for the SQLite library.
-**
-** This structure also contains some state information.
+** An instance of this structure defines the run-time environment.
 */
-struct Sqlite3Config {
+struct sqlite4_env {
   int bMemstat;                     /* True to enable memory status */
   int bCoreMutex;                   /* True to enable core mutexing */
   int bFullMutex;                   /* True to enable full mutexing */
@@ -3009,7 +2987,7 @@ extern const unsigned char sqlite4OpcodeProperty[];
 extern const unsigned char sqlite4UpperToLower[];
 extern const unsigned char sqlite4CtypeMap[];
 extern const Token sqlite4IntTokens[];
-extern SQLITE_WSD struct Sqlite3Config sqlite4Config;
+extern SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv;
 extern SQLITE_WSD FuncDefHash sqlite4GlobalFunctions;
 #ifndef SQLITE_OMIT_WSD
 extern int sqlite4PendingByte;

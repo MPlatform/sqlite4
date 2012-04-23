@@ -221,7 +221,6 @@ int sqlite4OsInit(void){
 ** The list of all registered VFS implementations.
 */
 static sqlite4_vfs * SQLITE_WSD vfsList = 0;
-#define vfsList GLOBAL(sqlite4_vfs *, vfsList)
 
 /*
 ** Locate a VFS by name.  If no name is given, simply return the
