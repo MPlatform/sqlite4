@@ -135,7 +135,9 @@ test_suite "src4" -prefix "" -description {
 } -files {
   simple.test fkey1.test conflict.test trigger2.test select1.test
   where.test select3.test select5.test select7.test select8.test
-  selectA.test selectB.test selectC.test
+  select9.test selectA.test selectB.test selectC.test
+
+  collate1.test
 }
 
 test_suite "veryquick" -prefix "" -description {

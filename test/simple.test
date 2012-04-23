@@ -921,5 +921,69 @@ do_execsql_test 47.3 {
   SELECT x FROM t1 ORDER BY x COLLATE nocase;
 } {a B c D}
 
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 48.1 {
+  CREATE TABLE t1(a, b, c);
+  CREATE TABLE t2(d, e, f);
+  BEGIN;
+  INSERT INTO t1 VALUES(1,  'one',   'I');
+  INSERT INTO t1 VALUES(3,  NULL,    NULL);
+  INSERT INTO t1 VALUES(5,  'five',  'V');
+  INSERT INTO t1 VALUES(7,  'seven', 'VII');
+  INSERT INTO t1 VALUES(9,  NULL,    NULL);
+  INSERT INTO t1 VALUES(2,  'two',   'II');
+  INSERT INTO t1 VALUES(4,  'four',  'IV');
+  INSERT INTO t1 VALUES(6,  NULL,    NULL);
+  INSERT INTO t1 VALUES(8,  'eight', 'VIII');
+  INSERT INTO t1 VALUES(10, 'ten',   'X');
+
+  INSERT INTO t2 VALUES(1,  'two',      'IV');
+  INSERT INTO t2 VALUES(2,  'four',     'VIII');
+  INSERT INTO t2 VALUES(3,  NULL,       NULL);
+  INSERT INTO t2 VALUES(4,  'eight',    'XVI');
+  INSERT INTO t2 VALUES(5,  'ten',      'XX');
+  INSERT INTO t2 VALUES(6,  NULL,       NULL);
+  INSERT INTO t2 VALUES(7,  'fourteen', 'XXVIII');
+  INSERT INTO t2 VALUES(8,  'sixteen',  'XXXII');
+  INSERT INTO t2 VALUES(9,  NULL,       NULL);
+  INSERT INTO t2 VALUES(10, 'twenty',   'XL');
+
+  COMMIT;
+}
+
+do_execsql_test 48.2 {
+  SELECT a, b FROM t1 UNION ALL SELECT d, e FROM t2 ORDER BY 1 
+} {
+  1 one 1 two 2 two 2 four 3 
+  {} 3 {} 4 four 4 eight 5 
+  five 5 ten 6 {} 6 {} 7 
+  seven 7 fourteen 8 eight 8 sixteen 9 
+  {} 9 {} 10 ten 10 twenty
+}
+
+proc reverse_cmp {lhs rhs} {
+  return [string compare $rhs $lhs]
+}
+proc reverse_mkkey {zIn} {
+  set res ""
+  binary scan $zIn c* lChar
+  foreach c $lChar {
+    append res [format "%02X" [expr 255-$c]]
+  }
+  set res
+}
+db collate reverse reverse_cmp reverse_mkkey
+
+do_execsql_test 48.3 {
+    SELECT * FROM t1 WHERE a<5 UNION SELECT * FROM t2 WHERE d>=5 
+    ORDER BY 2 COLLATE reverse, 1
+} { 
+  3 {} {}            6 {} {}         9 {} {} 
+  2 two II           10 twenty XL    5 ten XX 
+  8 sixteen XXXII    1 one I         7 fourteen XXVIII 
+  4 four IV
+}
+
 finish_test
 

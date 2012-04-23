@@ -83,7 +83,8 @@ struct SqlFunc {
 typedef struct SqlCollate SqlCollate;
 struct SqlCollate {
   Tcl_Interp *interp;   /* The TCL interpret to execute the function */
-  char *zScript;        /* The script to be run */
+  char *zCmp;           /* The script to compare two values */
+  char *zMkkey;         /* The script to encode a key value */
   SqlCollate *pNext;    /* Next function on the list of them all */
 };
 
@@ -465,13 +466,38 @@ static int tclSqlCollate(
   SqlCollate *p = (SqlCollate *)pCtx;
   Tcl_Obj *pCmd;
 
-  pCmd = Tcl_NewStringObj(p->zScript, -1);
+  pCmd = Tcl_NewStringObj(p->zCmp, -1);
   Tcl_IncrRefCount(pCmd);
   Tcl_ListObjAppendElement(p->interp, pCmd, Tcl_NewStringObj(zA, nA));
   Tcl_ListObjAppendElement(p->interp, pCmd, Tcl_NewStringObj(zB, nB));
   Tcl_EvalObjEx(p->interp, pCmd, TCL_EVAL_DIRECT);
   Tcl_DecrRefCount(pCmd);
   return (atoi(Tcl_GetStringResult(p->interp)));
+}
+
+static int tclSqlMkkey(
+  void *pCtx,
+  int nIn,
+  const void *zIn,
+  int nOut,
+  void *zOut
+){
+  SqlCollate *p = (SqlCollate *)pCtx;
+  Tcl_Obj *pCmd;
+  int nRes;
+  char *zRes;
+
+  pCmd = Tcl_NewStringObj(p->zMkkey, -1);
+  Tcl_IncrRefCount(pCmd);
+  Tcl_ListObjAppendElement(p->interp, pCmd, Tcl_NewStringObj(zIn, nIn));
+  Tcl_EvalObjEx(p->interp, pCmd, TCL_EVAL_DIRECT);
+  Tcl_DecrRefCount(pCmd);
+
+  zRes = Tcl_GetStringFromObj(Tcl_GetObjResult(p->interp), &nRes);
+  if( nRes<=nOut ){
+    memcpy(zOut, zRes, nRes);
+  }
+  return nRes;
 }
 
 /*
@@ -1503,7 +1529,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   }
 
   /*
-  **     $db collate NAME SCRIPT
+  **     $db collate NAME COMPARE-SCRIPT MKKEY-SCRIPT
   **
   ** Create a new SQL collation function called NAME.  Whenever
   ** that function is called, invoke SCRIPT to evaluate the function.
@@ -1511,23 +1537,30 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   case DB_COLLATE: {
     SqlCollate *pCollate;
     char *zName;
-    char *zScript;
-    int nScript;
-    if( objc!=4 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "NAME SCRIPT");
+    char *zCmp; int nCmp;
+    char *zMkkey; int nMkkey;
+    int nByte;
+
+    if( objc!=5 ){
+      Tcl_WrongNumArgs(interp, 2, objv, "NAME CMP-SCRIPT MKKEY-SCRIPT");
       return TCL_ERROR;
     }
     zName = Tcl_GetStringFromObj(objv[2], 0);
-    zScript = Tcl_GetStringFromObj(objv[3], &nScript);
-    pCollate = (SqlCollate*)Tcl_Alloc( sizeof(*pCollate) + nScript + 1 );
-    if( pCollate==0 ) return TCL_ERROR;
+    zCmp = Tcl_GetStringFromObj(objv[3], &nCmp);
+    zMkkey = Tcl_GetStringFromObj(objv[4], &nMkkey);
+
+    nByte = sizeof(SqlCollate) + nCmp + 1 + nMkkey + 1;
+    pCollate = (SqlCollate*)Tcl_Alloc(nByte);
     pCollate->interp = interp;
     pCollate->pNext = pDb->pCollate;
-    pCollate->zScript = (char*)&pCollate[1];
+    pCollate->zCmp = (char*)&pCollate[1];
+    pCollate->zMkkey = &pCollate->zCmp[nCmp + 1];
     pDb->pCollate = pCollate;
-    memcpy(pCollate->zScript, zScript, nScript+1);
+
+    memcpy(pCollate->zCmp, zCmp, nCmp+1);
+    memcpy(pCollate->zMkkey, zMkkey, nMkkey+1);
     if( sqlite4_create_collation(pDb->db, zName, SQLITE_UTF8, 
-        pCollate, tclSqlCollate, 0, 0) ){
+        pCollate, tclSqlCollate, tclSqlMkkey, 0) ){
       Tcl_SetResult(interp, (char *)sqlite4_errmsg(pDb->db), TCL_VOLATILE);
       return TCL_ERROR;
     }

@@ -27,13 +27,13 @@ source $testdir/tester.tcl
 # collate1-4.* - ORDER BY using a data type.
 #
 
-#
+#-------------------------------------------------------------------------
 # Collation type 'HEX'. If an argument can be interpreted as a hexadecimal
 # number, then it is converted to one before the comparison is performed. 
-# Numbers are less than other strings. If neither argument is a number, 
-# [string compare] is used.
+# Hex numbers are less than other strings. If neither argument is a 
+# number, [string compare] is used.
 #
-db collate HEX hex_collate
+db collate HEX hex_collate hex_mkkey
 proc hex_collate {lhs rhs} {
   set lhs_ishex [regexp {^(0x|)[1234567890abcdefABCDEF]+$} $lhs]
   set rhs_ishex [regexp {^(0x|)[1234567890abcdefABCDEF]+$} $rhs]
@@ -52,13 +52,48 @@ proc hex_collate {lhs rhs} {
   }
   return [string compare $lhs $rhs]
 }
+
+proc hex_mkkey {zIn} {
+  set ishex [regexp {^(0x|)[1234567890abcdefABCDEF]+$} $zIn]
+  if {$ishex==0} {
+    set res "b_$zIn"
+  } else {
+    set num [scan $zIn %x]
+    set res [format "a_%024d" $num]
+  }
+  return $res
+}
+
 db function hex {format 0x%X}
 
-# Mimic the SQLite 2 collation type NUMERIC.
-db collate numeric numeric_collate
+#-------------------------------------------------------------------------
+# Mimic the SQLite 2 collation type NUMERIC. Sort of. Use the following
+# rules:
+#
+#   * If [string is integer] says both sides of a comparison are integers,
+#     do an integer comparison.
+#
+#   * If one side is an integer and the other not, the integer is less
+#     than the other value.
+#
+#   * Otherwise, if neither side is an integer, do a memcmp() comparison.
+#
+db collate numeric numeric_collate numeric_mkkey
 proc numeric_collate {lhs rhs} {
-  if {$lhs == $rhs} {return 0} 
-  return [expr ($lhs>$rhs)?1:-1]
+  set lhs_isint [string is integer $lhs]
+  set rhs_isint [string is integer $rhs]
+
+  if {$lhs_isint && $rhs_isint} { return [expr $lhs - $rhs] }
+  if {$lhs_isint != $rhs_isint} { return [expr $rhs_isint - $lhs_isint] }
+  return [string compare $lhs $rhs]
+}
+proc numeric_mkkey {zIn} {
+  if {[string is integer $zIn]} {
+    set res [format "a_%024d" $zIn]
+  } else {
+    set res "b_$zIn"
+  }
+  return $res
 }
 
 do_test collate1-1.0 {

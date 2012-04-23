@@ -263,10 +263,20 @@ do_test select9-2.0 {
   }
 } {}
 
-proc reverse {lhs rhs} {
+proc reverse_cmp {lhs rhs} {
   return [string compare $rhs $lhs]
 }
-db collate reverse reverse
+
+proc reverse_mkkey {zIn} {
+  set res ""
+  binary scan $zIn c* lChar
+  foreach c $lChar {
+    append res [format "%02X" [expr 255-$c]]
+  }
+  set res
+}
+
+db collate reverse reverse_cmp reverse_mkkey
 
 # This loop is similar to the previous one (test cases select9-1.*) 
 # except that the simple select statements have WHERE clauses attached
