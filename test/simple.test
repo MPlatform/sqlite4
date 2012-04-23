@@ -899,11 +899,27 @@ do_execsql_test 46.1 {
   CREATE TABLE t1(x, y COLLATE nocase);
   CREATE UNIQUE INDEX i1 ON t1(y);
 }
-
 do_catchsql_test 46.2 {
   INSERT INTO t1 VALUES(1, 'ABC');
   INSERT INTO t1 VALUES(2, 'abc');
 } {1 {column y is not unique}}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 47.1 {
+  CREATE TABLE t1(x);
+  INSERT INTO t1 VALUES('D');
+  INSERT INTO t1 VALUES('a');
+  INSERT INTO t1 VALUES('c');
+  INSERT INTO t1 VALUES('B');
+}
+do_execsql_test 47.2 {
+  SELECT x FROM t1 ORDER BY x;
+} {B D a c}
+do_execsql_test 47.3 {
+  SELECT x FROM t1 ORDER BY x COLLATE nocase;
+} {a B c D}
 
 finish_test
 

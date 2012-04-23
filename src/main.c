@@ -609,7 +609,7 @@ static int collNocaseMkKey(
   int nIn, const void *pKey1,
   int nOut, void *pKey2
 ){
-  if( nOut<nIn ){
+  if( nOut>=nIn ){
     int i;
     u8 *aIn = (u8 *)pKey1;
     u8 *aOut = (u8 *)pKey2;
