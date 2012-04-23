@@ -416,9 +416,7 @@ static void kvmemRemoveNode(KVMem *p, KVMemNode *pOld){
     *ppParent = pBalance = pOld->pBefore;
     pBalance->pUp = pOld->pUp;
   }
-  assertUpPointers(p->pRoot);
   p->pRoot = kvmemBalance(pBalance);
-  assertUpPointers(p->pRoot);
   kvmemNodeUnref(pOld);
 }
 

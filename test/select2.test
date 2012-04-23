@@ -117,24 +117,18 @@ do_test select2-3.2c {
   execsql {SELECT f1 FROM tbl2 WHERE f2=1000}
 } {500}
 do_test select2-3.2d {
-  set sqlite_search_count 0
   execsql {SELECT * FROM tbl2 WHERE 1000=f2}
-  set sqlite_search_count
-} {3}
+} {500 1000 1500}
 do_test select2-3.2e {
-  set sqlite_search_count 0
   execsql {SELECT * FROM tbl2 WHERE f2=1000}
-  set sqlite_search_count
-} {3}
+} {500 1000 1500}
 
 # Make sure queries run faster with an index than without
 #
 do_test select2-3.3 {
   execsql {DROP INDEX idx1}
-  set sqlite_search_count 0
   execsql {SELECT f1 FROM tbl2 WHERE f2==2000}
-  set sqlite_search_count
-} {29999}
+} {1000}
 
 # Make sure we can optimize functions in the WHERE clause that
 # use fields from two or more different table.  (Bug #6)

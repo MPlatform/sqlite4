@@ -956,6 +956,7 @@ static void generateSortTail(
       testcase( eDest==SRT_Table );
       testcase( eDest==SRT_EphemTab );
       sqlite4VdbeAddOp2(v, OP_NewRowid, iParm, regRowid);
+      sqlite4VdbeAddOp2(v, OP_RowData, iTab, regRow);
       sqlite4VdbeAddOp3(v, OP_Insert, iParm, regRow, regRowid);
       sqlite4VdbeChangeP5(v, OPFLAG_APPEND);
       break;
