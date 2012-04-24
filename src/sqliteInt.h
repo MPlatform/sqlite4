@@ -599,7 +599,6 @@ extern const int sqlite4one;
 typedef struct AggInfo AggInfo;
 typedef struct AuthContext AuthContext;
 typedef struct AutoincInfo AutoincInfo;
-typedef struct Bitvec Bitvec;
 typedef struct CollSeq CollSeq;
 typedef struct Column Column;
 typedef struct Db Db;
@@ -2685,14 +2684,6 @@ void sqlite4AddCollateType(Parse*, Token*);
 void sqlite4EndTable(Parse*,Token*,Token*,Select*);
 int sqlite4ParseUri(sqlite4_env*,const char*,unsigned int*,char**,char **);
 int sqlite4CodeOnce(Parse *);
-
-Bitvec *sqlite4BitvecCreate(u32);
-int sqlite4BitvecTest(Bitvec*, u32);
-int sqlite4BitvecSet(Bitvec*, u32);
-void sqlite4BitvecClear(Bitvec*, u32, void*);
-void sqlite4BitvecDestroy(Bitvec*);
-u32 sqlite4BitvecSize(Bitvec*);
-int sqlite4BitvecBuiltinTest(int,int*);
 
 RowSet *sqlite4RowSetInit(sqlite4*, void*, unsigned int);
 void sqlite4RowSetClear(RowSet*);

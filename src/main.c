@@ -2204,21 +2204,6 @@ int sqlite4_test_control(int op, ...){
     }
 
     /*
-    **  sqlite4_test_control(BITVEC_TEST, size, program)
-    **
-    ** Run a test against a Bitvec object of size.  The program argument
-    ** is an array of integers that defines the test.  Return -1 on a
-    ** memory allocation error, 0 on success, or non-zero for an error.
-    ** See the sqlite4BitvecBuiltinTest() for additional information.
-    */
-    case SQLITE_TESTCTRL_BITVEC_TEST: {
-      int sz = va_arg(ap, int);
-      int *aProg = va_arg(ap, int*);
-      rc = sqlite4BitvecBuiltinTest(sz, aProg);
-      break;
-    }
-
-    /*
     **  sqlite4_test_control(BENIGN_MALLOC_HOOKS, xBegin, xEnd)
     **
     ** Register hooks to call to indicate which malloc() failures 

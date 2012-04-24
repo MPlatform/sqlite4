@@ -51,7 +51,7 @@ TCCX += -I$(TOP)/ext/async
 # Object files for the SQLite library.
 #
 LIBOBJ+= alter.o analyze.o attach.o auth.o \
-         bitvec.o build.o \
+         build.o \
          callback.o complete.o ctime.o date.o delete.o expr.o fault.o fkey.o \
          fts3.o fts3_aux.o fts3_expr.o fts3_hash.o fts3_icu.o fts3_porter.o \
          fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
@@ -77,7 +77,6 @@ SRC = \
   $(TOP)/src/analyze.c \
   $(TOP)/src/attach.c \
   $(TOP)/src/auth.c \
-  $(TOP)/src/bitvec.c \
   $(TOP)/src/build.c \
   $(TOP)/src/callback.c \
   $(TOP)/src/complete.c \

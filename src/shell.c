@@ -2142,7 +2142,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
       { "prng_save",             SQLITE_TESTCTRL_PRNG_SAVE              },
       { "prng_restore",          SQLITE_TESTCTRL_PRNG_RESTORE           },
       { "prng_reset",            SQLITE_TESTCTRL_PRNG_RESET             },
-      { "bitvec_test",           SQLITE_TESTCTRL_BITVEC_TEST            },
       { "fault_install",         SQLITE_TESTCTRL_FAULT_INSTALL          },
       { "benign_malloc_hooks",   SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS    },
       { "pending_byte",          SQLITE_TESTCTRL_PENDING_BYTE           },
@@ -2241,7 +2240,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
           break;
 #endif
 
-        case SQLITE_TESTCTRL_BITVEC_TEST:         
         case SQLITE_TESTCTRL_FAULT_INSTALL:       
         case SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS: 
         default:
