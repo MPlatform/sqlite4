@@ -3,23 +3,22 @@
 # invoked:
 #
 # TOP              The toplevel directory of the source tree.  This is the
-#                  directory that contains this "Makefile.in" and the
-#                  "configure.in" script.
+#                  directory that contains files "VERSION" and "README".
 #
 # BCC              C Compiler and options for use in building executables that
 #                  will run on the platform that is doing the build.
 #
-# THREADLIB        Specify any extra linker options needed to make the library
-#                  thread safe
-#
-# OPTS             Extra compiler command-line options.
-#
-# EXE              The suffix to add to executable files.  ".exe" for windows
-#                  and "" for Unix.
-#
 # TCC              C Compiler and options for use in building executables that 
 #                  will run on the target platform.  This is usually the same
 #                  as BCC, unless you are cross-compiling.
+#
+# THREADLIB        Specify any extra linker options needed to make the library
+#                  thread safe
+#
+# OPTS             Extra compiler command-line options for the TCC compiler
+#
+# EXE              The suffix to add to executable files.  ".exe" for windows
+#                  and "" for Unix.
 #
 # AR               Tools used to build a static library.
 # RANLIB
@@ -357,23 +356,23 @@ tclsqlite.o:	$(TOP)/src/tclsqlite.c $(HDR)
 
 # Rules to build opcodes.c and opcodes.h
 #
-opcodes.c:	opcodes.h $(TOP)/mkopcodec.awk
-	$(NAWK) -f $(TOP)/mkopcodec.awk opcodes.h >opcodes.c
+opcodes.c:	opcodes.h $(TOP)/tool/mkopcodec.awk
+	$(NAWK) -f $(TOP)/tool/mkopcodec.awk opcodes.h >opcodes.c
 
-opcodes.h:	parse.h $(TOP)/src/vdbe.c $(TOP)/mkopcodeh.awk
+opcodes.h:	parse.h $(TOP)/src/vdbe.c $(TOP)/tool/mkopcodeh.awk
 	cat parse.h $(TOP)/src/vdbe.c | \
-		$(NAWK) -f $(TOP)/mkopcodeh.awk >opcodes.h
+		$(NAWK) -f $(TOP)/tool/mkopcodeh.awk >opcodes.h
 
 # Rules to build parse.c and parse.h - the outputs of lemon.
 #
 parse.h:	parse.c
 
-parse.c:	$(TOP)/src/parse.y lemon $(TOP)/addopcodes.awk
+parse.c:	$(TOP)/src/parse.y lemon $(TOP)/tool/addopcodes.awk
 	cp $(TOP)/src/parse.y .
 	rm -f parse.h
 	./lemon $(OPTS) parse.y
 	mv parse.h parse.h.temp
-	$(NAWK) -f $(TOP)/addopcodes.awk parse.h.temp >parse.h
+	$(NAWK) -f $(TOP)/tool/addopcodes.awk parse.h.temp >parse.h
 
 sqlite4.h:	$(TOP)/src/sqlite.h.in $(TOP)/manifest.uuid $(TOP)/VERSION
 	tclsh $(TOP)/tool/mksqlite4h.tcl $(TOP) >sqlite4.h
