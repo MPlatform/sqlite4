@@ -45,6 +45,13 @@ of bytes is simply UTF8.  The intervening bytes may not contain a 0x00
 character; the only 0x00 byte allowed in a text encoding is the final
 byte.
 
+Note that all key-encoded text with the BINARY collating sequence is simply
+UTF8 text.  UTF8 not UTF16.  Strings must be converted to UTF8 so that
+equivalent strings in different encodings compare the same and so that
+the strings contain no embedded 0x00 bytes.  If a collating function is
+used, it needs to work like ucol_getSortKey() in the ICU library.  In
+other words, strcmp() should be sufficient for comparing two text keys.
+
 The text encoding ends in 0x00 in order to ensure that when there are
 two strings where one is a prefix of the other that the shorter string
 will sort first.
