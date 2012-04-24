@@ -1408,7 +1408,6 @@ void sqlite4CompleteInsertion(
   int regRec;
 
   v = sqlite4GetVdbe(pParse);
-  assert( aRegIdx[0] );
   assert( v!=0 );
   assert( pTab->pSelect==0 );  /* This table is not a VIEW */
 
@@ -1426,6 +1425,7 @@ void sqlite4CompleteInsertion(
 
   /* Write the entry to each index. */
   for(i=0, pIdx=pTab->pIndex; pIdx; i++, pIdx=pIdx->pNext){
+    assert( pIdx->eIndexType!=SQLITE_INDEX_PRIMARYKEY || aRegIdx[i] );
     if( aRegIdx[i] ){
       int regData = 0;
       int flags = 0;
