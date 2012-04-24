@@ -261,7 +261,8 @@ HDR = \
    $(TOP)/src/sqliteLimit.h \
    $(TOP)/src/storage.h \
    $(TOP)/src/vdbe.h \
-   $(TOP)/src/vdbeInt.h
+   $(TOP)/src/vdbeInt.h \
+   $(LSM_HDR)
 
 EXTHDR = \
   $(TOP)/ext/fts3/fts3.h \
@@ -454,13 +455,13 @@ TESTFIXTURE_FLAGS += -DSQLITE_SERVER=1 -DSQLITE_PRIVATE="" -DSQLITE_CORE
 TESTFIXTURE_PREREQ  = $(TESTSRC) $(TESTSRC2) 
 TESTFIXTURE_PREREQ += $(TOP)/src/tclsqlite.c
 TESTFIXTURE_PREREQ += libsqlite4.a
-TESTFIXTURE_PREREQ += $(LIBEXTRA)
+TESTFIXTURE_PREREQ += $(LSM_OBJ) 
 
 testfixture$(EXE): $(TESTFIXTURE_PREREQ)
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \
 		$(TESTSRC) $(TESTSRC2) $(TOP)/src/tclsqlite.c                \
 		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB) libsqlite4.a     \
-		$(LIBEXTRA)
+		$(LSM_OBJ)
 
 amalgamation-testfixture$(EXE): sqlite4.c $(TESTSRC) $(TOP)/src/tclsqlite.c
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \

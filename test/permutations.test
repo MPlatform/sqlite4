@@ -136,8 +136,15 @@ test_suite "src4" -prefix "" -description {
   simple.test fkey1.test conflict.test trigger2.test where.test 
   select1.test select2.test select3.test select4.test select5.test 
   select6.test select7.test select8.test select9.test selectA.test 
-  selectB.test selectC.test 
-  collate1.test
+  selectB.test selectC.test collate1.test collate2.test
+}
+
+test_suite "lsm" -prefix "" -description {
+} -files {
+  simple.test fkey1.test conflict.test trigger2.test where.test 
+  select1.test select2.test select3.test select4.test select5.test 
+  select6.test select7.test select8.test select9.test selectA.test 
+  selectB.test selectC.test collate1.test collate2.test
 }
 
 test_suite "veryquick" -prefix "" -description {

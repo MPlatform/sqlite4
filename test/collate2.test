@@ -30,12 +30,15 @@ source $testdir/tester.tcl
 # Create a collation type BACKWARDS for use in testing. This collation type
 # is similar to the built-in TEXT collation type except the order of
 # characters in each string is reversed before the comparison is performed.
-db collate BACKWARDS backwards_collate
-proc backwards_collate {a b} {
-  set ra {};
-  set rb {}
-  foreach c [split $a {}] { set ra $c$ra }
-  foreach c [split $b {}] { set rb $c$rb }
+db collate BACKWARDS backwards_cmp backwards_mkkey
+proc backwards_mkkey {a} {
+  set res ""
+  foreach c [split $a {}] { set res $c$res }
+  set res
+}
+proc backwards_cmp {a b} {
+  set ra [backwards_mkkey $a]
+  set rb [backwards_mkkey $b]
   return [string compare $ra $rb]
 }
 

@@ -17,10 +17,11 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-db collate TEXT text_collate
+db collate TEXT text_collate text_mkkey
 proc text_collate {a b} {
   return [string compare $a $b]
 }
+proc text_mkkey {a} { set a }
 
 # Do an SQL statement.  Append the search count to the end of the result.
 #
@@ -104,7 +105,7 @@ do_test collate4-1.1.7 {
       b UNIQUE COLLATE TEXT
     );
     INSERT INTO collate4t2 VALUES( 'a', 'a' );
-    INSERT INTO collate4t2 VALUES( NULL, NULL );
+    INSERT INTO collate4t2 VALUES( '', NULL );
     INSERT INTO collate4t2 VALUES( 'B', 'B' );
   }
 } {}
@@ -135,7 +136,7 @@ do_test collate4-1.1.14 {
       UNIQUE(a), PRIMARY KEY(b)
     );
     INSERT INTO collate4t3 VALUES( 'a', 'a' );
-    INSERT INTO collate4t3 VALUES( NULL, NULL );
+    INSERT INTO collate4t3 VALUES( '', NULL );
     INSERT INTO collate4t3 VALUES( 'B', 'B' );
   }
 } {}
@@ -236,7 +237,7 @@ do_test collate4-1.2.7 {
       PRIMARY KEY(a, b)
     );
     INSERT INTO collate4t2 VALUES( 'a', 'a' );
-    INSERT INTO collate4t2 VALUES( NULL, NULL );
+    INSERT INTO collate4t2 VALUES( '', '' );
     INSERT INTO collate4t2 VALUES( 'B', 'B' );
   }
 } {}

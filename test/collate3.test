@@ -71,7 +71,7 @@ execsql {
 # * An ORDER BY on a compound SELECT with an explicit ORDER BY.
 #
 do_test collate3-2.0 {
-  db collate string_compare {string compare}
+  db collate string_compare {string compare} {set {}}
   execsql {
     CREATE TABLE collate3t1(c1 COLLATE string_compare, c2);
   }
@@ -192,7 +192,7 @@ ifcapable compound {
 # apply after the index has been created.
 #
 do_test collate3-3.0 {
-  db collate string_compare {string compare}
+  db collate string_compare {string compare} {set {}}
   execsql {
     CREATE INDEX collate3t1_i1 ON collate3t1(c1);
     INSERT INTO collate3t1 VALUES('xxx', 'yyy');
@@ -278,7 +278,7 @@ do_test collate3-3.15 {
 # Check we can create an index that uses an explicit collation 
 # sequence and then close and re-open the database.
 do_test collate3-4.6 {
-  db collate user_defined "string compare"
+  db collate user_defined "string compare" {set {}}
   execsql {
     CREATE TABLE collate3t1(a, b);
     INSERT INTO collate3t1 VALUES('hello', NULL);
@@ -293,7 +293,7 @@ do_test collate3-4.7 {
   }
 } {1 {no such collation sequence: user_defined}}
 do_test collate3-4.8.1 {
-  db collate user_defined "string compare"
+  db collate user_defined "string compare" {set {}}
   catchsql {
     SELECT * FROM collate3t1 ORDER BY a COLLATE user_defined;
   }
@@ -312,19 +312,17 @@ do_test collate3-4.8.3 {
 
 # Compare strings as numbers.
 proc numeric_compare {lhs rhs} {
-  if {$rhs > $lhs} {
-    set res -1
-  } else {
-    set res [expr ($lhs > $rhs)?1:0]
-  }
-  return $res
+  return [string compare [numeric_mkkey $lhs] [numeric_mkkey $rhs]]
+}
+proc numeric_mkkey {a} {
+  format %032d $a
 }
 
 # Check we can create a view that uses an explicit collation 
 # sequence and then close and re-open the database.
 ifcapable view {
 do_test collate3-4.9 {
-  db collate user_defined numeric_compare
+  db collate user_defined numeric_compare numeric_mkkey
   execsql {
     CREATE TABLE collate3t1(a, b);
     INSERT INTO collate3t1 VALUES('2', NULL);
@@ -343,7 +341,7 @@ do_test collate3-4.10 {
   }
 } {1 {no such collation sequence: user_defined}}
 do_test collate3-4.11 {
-  db collate user_defined numeric_compare
+  db collate user_defined numeric_compare numeric_mkkey
   catchsql {
     SELECT * FROM collate3v1;
   }

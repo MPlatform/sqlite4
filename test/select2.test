@@ -76,7 +76,7 @@ ifcapable tclvar {
   } {}
   puts "time with cache: $::t1"
 }
-catch {execsql {DROP TABLE tbl2}}
+reset_db
 do_test select2-2.0.2 {
   set t2 [time {
     execsql {CREATE TABLE tbl2(f1 int, f2 int, f3 int); BEGIN;}
@@ -95,6 +95,7 @@ puts "time without cache: $t2"
 #    expr {[lindex $t1 0]<[lindex $t2 0]}
 #  } 1
 #}
+#
 
 do_test select2-2.1 {
   execsql {SELECT count(*) FROM tbl2}
