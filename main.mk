@@ -186,30 +186,30 @@ SRC += \
 TESTSRC = \
   $(TOP)/ext/fts3/fts3_term.c \
   $(TOP)/ext/fts3/fts3_test.c \
-  $(TOP)/src/test1.c \
-  $(TOP)/src/test4.c \
-  $(TOP)/src/test5.c \
-  $(TOP)/src/test8.c \
-  $(TOP)/src/test9.c \
-  $(TOP)/src/test_config.c \
-  $(TOP)/src/test_demovfs.c \
-  $(TOP)/src/test_devsym.c \
-  $(TOP)/src/test_fuzzer.c \
-  $(TOP)/src/test_hexio.c \
-  $(TOP)/src/test_intarray.c \
-  $(TOP)/src/test_malloc.c \
-  $(TOP)/src/test_mutex.c \
-  $(TOP)/src/test_onefile.c \
-  $(TOP)/src/test_osinst.c \
-  $(TOP)/src/test_rtree.c \
-  $(TOP)/src/test_schema.c \
-  $(TOP)/src/test_storage.c \
-  $(TOP)/src/test_storage2.c \
-  $(TOP)/src/test_tclvar.c \
-  $(TOP)/src/test_thread.c \
-  $(TOP)/src/test_vfs.c \
-  $(TOP)/src/test_wholenumber.c \
-  $(TOP)/src/test_wsd.c
+  $(TOP)/test/test_main.c \
+  $(TOP)/test/test_thread0.c \
+  $(TOP)/test/test_utf.c \
+  $(TOP)/test/test_echo.c \
+  $(TOP)/test/test_misc1.c \
+  $(TOP)/test/test_config.c \
+  $(TOP)/test/test_demovfs.c \
+  $(TOP)/test/test_devsym.c \
+  $(TOP)/test/test_fuzzer.c \
+  $(TOP)/test/test_hexio.c \
+  $(TOP)/test/test_intarray.c \
+  $(TOP)/test/test_malloc.c \
+  $(TOP)/test/test_mutex.c \
+  $(TOP)/test/test_onefile.c \
+  $(TOP)/test/test_osinst.c \
+  $(TOP)/test/test_rtree.c \
+  $(TOP)/test/test_schema.c \
+  $(TOP)/test/test_storage.c \
+  $(TOP)/test/test_storage2.c \
+  $(TOP)/test/test_tclvar.c \
+  $(TOP)/test/test_thread.c \
+  $(TOP)/test/test_vfs.c \
+  $(TOP)/test/test_wholenumber.c \
+  $(TOP)/test/test_wsd.c
 
 #TESTSRC += $(TOP)/ext/fts2/fts2_tokenizer.c
 #TESTSRC += $(TOP)/ext/fts3/fts3_tokenizer.c
@@ -494,8 +494,8 @@ threadtest: threadtest3$(EXE)
 	./threadtest3$(EXE)
 
 TEST_EXTENSION = $(SHPREFIX)testloadext.$(SO)
-$(TEST_EXTENSION): $(TOP)/src/test_loadext.c
-	$(MKSHLIB) $(TOP)/src/test_loadext.c -o $(TEST_EXTENSION)
+$(TEST_EXTENSION): $(TOP)/test/test_loadext.c
+	$(MKSHLIB) $(TOP)/test/test_loadext.c -o $(TEST_EXTENSION)
 
 extensiontest: testfixture$(EXE) $(TEST_EXTENSION)
 	./testfixture$(EXE) $(TOP)/test/loadext.test
