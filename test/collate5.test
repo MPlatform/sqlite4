@@ -29,13 +29,23 @@ source $testdir/tester.tcl
 
 # Create the collation sequence 'TEXT', purely for asthetic reasons. The
 # test cases in this script could just as easily use BINARY.
-db collate TEXT [list string compare]
+db collate TEXT [list string compare] [list set {}]
 
 # Mimic the SQLite 2 collation type NUMERIC.
-db collate numeric numeric_collate
+db collate numeric numeric_collate numeric_mkkey
 proc numeric_collate {lhs rhs} {
   if {$lhs == $rhs} {return 0} 
   return [expr ($lhs>$rhs)?1:-1]
+}
+
+proc numeric_mkkey {zIn} {
+  if {[string is double $zIn]} {
+    set d [expr abs(int(($zIn - int($zIn)) * 1000000))]
+    set res [format "a_%024d.%06d" [expr int($zIn)] $d]
+  } else {
+    set res "b_$zIn"
+  }
+  return $res
 }
 
 #
@@ -84,7 +94,12 @@ do_test collate5-1.12 {
   db2 eval {
     PRAGMA encoding=UTF16le;
     CREATE TABLE tkt3376(a COLLATE nocase PRIMARY KEY);
-    INSERT INTO tkt3376 VALUES('abc');
+  }
+
+  explain { INSERT INTO tkt3376 VALUES('abc') } db2
+  db2 eval { PRAGMA vdbe_trace = 1 }
+  db2 eval { INSERT INTO tkt3376 VALUES('abc') }
+  db2 eval {
     INSERT INTO tkt3376 VALUES('ABX');
     SELECT DISTINCT a FROM tkt3376;
   }

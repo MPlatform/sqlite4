@@ -2335,7 +2335,6 @@ Index *sqlite4CreateIndex(
   int i, j;
   Token nullId;        /* Fake token for an empty ID list */
   DbFixer sFix;        /* For assigning database names to pTable */
-  int sortOrderMask;   /* 1 to honor DESC in index.  0 to ignore. */
   sqlite4 *db = pParse->db;
   Db *pDb;             /* The specific table containing the indexed database */
   int iDb;             /* Index of the database that is being written */
@@ -2537,14 +2536,6 @@ Index *sqlite4CreateIndex(
     }
   }
 
-  /* Check to see if we should honor DESC requests on index columns
-  */
-  if( pDb->pSchema->file_format>=4 ){
-    sortOrderMask = -1;   /* Honor DESC */
-  }else{
-    sortOrderMask = 0;    /* Ignore DESC */
-  }
-
   /* Scan the names of the columns of the table to be indexed and
   ** load the column indices into the Index structure.  Report an error
   ** if any column is not found.
@@ -2558,7 +2549,6 @@ Index *sqlite4CreateIndex(
   for(i=0, pListItem=pList->a; i<pList->nExpr; i++, pListItem++){
     const char *zColName = pListItem->zName;
     Column *pTabCol;
-    int requestedSortOrder;
     char *zColl;                   /* Collation sequence name */
 
     for(j=0, pTabCol=pTab->aCol; j<pTab->nCol; j++, pTabCol++){
@@ -2595,8 +2585,7 @@ Index *sqlite4CreateIndex(
       goto exit_create_index;
     }
     pIndex->azColl[i] = zColl;
-    requestedSortOrder = pListItem->sortOrder & sortOrderMask;
-    pIndex->aSortOrder[i] = (u8)requestedSortOrder;
+    pIndex->aSortOrder[i] = (u8)pListItem->sortOrder;
   }
   sqlite4DefaultRowEst(pIndex);
 

@@ -633,28 +633,51 @@ int sqlite4VdbeShortKey(
     u8 c = *(p++);
     switch( c ){
 
-      case 0x05:                  /* NULL */
-      case 0x06:                  /* NaN */
-      case 0x07:                  /* -ve infinity */
-      case 0x15:                  /* zero */
-      case 0x23:                  /* +ve infinity */
+      case 0x05: case 0xFA:       /* NULL */
+      case 0x06: case 0xF9:       /* NaN */
+      case 0x07: case 0xF8:       /* -ve infinity */
+      case 0x15: case 0xEA:       /* zero */
+      case 0x23: case 0xDC:       /* +ve infinity */
         break;
 
-      case 0x24:                  /* Text */
-      case 0x25:                  /* Blob */
+      case 0x24:                  /* Text (ascending index) */
+      case 0x25:                  /* Blob (ascending index) */
         while( *(p++) );
         break;
 
-      case 0x22:                  /* Large positive number */
-      case 0x16:                  /* Small positive number */
-      case 0x14:                  /* Small negative number */
-      case 0x08:                  /* Large negative number */
-        p += sqlite4GetVarint64(p, pEnd-p, &dummy);
-        while( (*p++) & 0x01 );
+      case 0xDB:                  /* Text (descending index) */
+      case 0xDA:                  /* Blob (descending index) */
+        while( (0xFF!=*(p++)) );
         break;
 
+      case 0x22: case 0xDD:       /* Large positive number */
+      case 0x14: case 0xEB:       /* Small negative number */
+      case 0x16: case 0xE9:       /* Small positive number */
+      case 0x08: case 0xF7: {     /* Large negative number */
+        u8 d;                     /* Value of byte following "c" */
+
+        /* For large positive and small negative integer keys skip over
+        ** a varint here. For small positive integers and larger negative 
+        ** integers, skip over the ones-complement varint.  */
+        if( c==0x16 || c==0x08 || c==0xDD || c==0xEB ){
+          d = ~(*(p++));
+        }else{
+          d = *(p++);
+        }
+        if( d>240 ){
+          p++;
+          if( d>248 ) p += (d - 248);
+        }
+
+        /* Fall through */
+      }
+
       default:                    /* Medium sized number */
-        while( (*p++) & 0x01 );
+        if( c<0x15 || (c>0xDC && c<0xEA) ){
+          while( !((*p++) & 0x01) );
+        }else{
+          while( ((*p++) & 0x01) );
+        }
         break;
     }
   }

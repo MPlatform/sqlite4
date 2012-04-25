@@ -368,7 +368,7 @@ do_test collate3-5.0 {
 do_test collate3-5.1 {
   set ::cfact_cnt 0
   proc cfact {nm} {
-    db collate $nm {string compare}
+    db collate $nm {string compare} {set {}}
     incr ::cfact_cnt
   }
   db collation_needed cfact
@@ -408,7 +408,7 @@ do_test collate3-5.7 {
 do_test collate3-5.8 {
   set ::cfact_cnt 0
   proc cfact {nm} {
-    db collate $nm {string compare}
+    db collate $nm {string compare} {set {}}
     incr ::cfact_cnt
   }
   db collation_needed cfact

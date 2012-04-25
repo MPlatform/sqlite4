@@ -16,6 +16,7 @@ set testprefix simple
 
 #set sqlite_where_trace 1
 #
+#
 
 do_execsql_test 1.0 { 
   PRAGMA table_info = sqlite_master
@@ -837,9 +838,28 @@ do_test 44.2 {
 do_execsql_test 44.3 {
   SELECT y FROM t1 ORDER BY y;
 } [lsort -real $lVal]
+
 do_execsql_test 44.4 {
   SELECT count(*) FROM t1;
-} {60}
+} [llength $lVal]
+
+do_execsql_test 44.5 {
+  CREATE INDEX i1 ON t1(y);
+  SELECT y FROM t1 ORDER BY y;
+} [lsort -real $lVal]
+
+do_execsql_test 44.6 {
+  DROP INDEX i1;
+  CREATE INDEX i1 ON t1(y DESC);
+}
+
+do_execsql_test 44.7 {
+  SELECT y FROM t1 ORDER BY y;
+} [lsort -real $lVal]
+
+do_execsql_test 44.8 {
+  SELECT y FROM t1 ORDER BY y DESC;
+} [lsort -decreasing -real $lVal]
 
 #-------------------------------------------------------------------------
 reset_db
@@ -1006,6 +1026,70 @@ do_execsql_test 49.3 {
   ) ORDER BY 2;
 } {4 2   3 3}
 
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 50.1 {
+  CREATE TABLE t1(x, y);
+  CREATE INDEX i1 ON t1(x);
+} {}
+do_execsql_test 50.2 {
+  INSERT INTO t1 VALUES(0.0003, 'three');
+  INSERT INTO t1 VALUES(0.0001, 'one');
+  INSERT INTO t1 VALUES(0.0002, 'two');
+}
+do_execsql_test 50.3 {
+  SELECT * FROM t1 ORDER BY x;
+} {0.0001 one 0.0002 two 0.0003 three}
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 51.1 {
+  CREATE TABLE t1(x, y);
+  CREATE INDEX i1 ON t1(x);
+} {}
+do_execsql_test 51.2 {
+  INSERT INTO t1 VALUES(-1, 'one');
+  INSERT INTO t1 VALUES(-2, 'two');
+}
+do_execsql_test 51.3 {
+  SELECT * FROM t1 ORDER BY x;
+} {-2 two -1 one}
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 52.1 {
+  CREATE TABLE t1(x PRIMARY KEY, y, z);
+} {}
+do_execsql_test 52.2 {
+  CREATE INDEX i1 ON t1(y DESC, z ASC);
+}
+do_execsql_test 52.3 {
+  INSERT INTO t1 VALUES('a', 'one', 'before');
+  INSERT INTO t1 VALUES('c', 'two', 'before');
+  INSERT INTO t1 VALUES('b', 'one', 'after');
+  INSERT INTO t1 VALUES('d', 'two', 'after');
+}
+do_execsql_test 52.4 {
+  SELECT x FROM t1 ORDER BY y DESC, z ASC;
+} {d c b a}
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 53.1 {
+  CREATE TABLE t1(x PRIMARY KEY, y);
+} {}
+do_execsql_test 52.2 {
+  CREATE INDEX i1 ON t1(y DESC);
+}
+do_execsql_test 52.3 {
+  INSERT INTO t1 VALUES('a', -0.0000001);
+  INSERT INTO t1 VALUES('b', +0.0000001);
+  INSERT INTO t1 VALUES('c', 10);
+  INSERT INTO t1 VALUES('d', -10);
+}
+do_execsql_test 52.4 {
+  SELECT x FROM t1 ORDER BY y DESC;
+} {c b a d}
 
 finish_test
 
