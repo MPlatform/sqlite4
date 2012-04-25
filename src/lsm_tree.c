@@ -1,5 +1,15 @@
-
 /*
+** 2011-08-18
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
 ** This file contains the implementation of an in-memory tree structure.
 **
 ** Technically the tree is a B-tree of order 4 (in the Knuth sense - each 
@@ -1264,5 +1274,3 @@ void lsmTreeRelease(Tree *pTree){
   assert( pTree->nTreeRef>0 && pTree->pCommit );
   lsmTreeReleaseReadVersion(pTree->pCommit);
 }
-
-

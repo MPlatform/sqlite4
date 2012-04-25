@@ -1,7 +1,18 @@
-
-#ifndef _LSM_INT_H
-# include "lsmInt.h"
-#endif
+/*
+** 2011-08-18
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
+** The main interface to the LSM module.
+*/
+#include "lsmInt.h"
 
 #ifdef LSM_DEBUG
 /*
@@ -747,4 +758,3 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
   dbReleaseClientSnapshot(pDb);
   return rc;
 }
-

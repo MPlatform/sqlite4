@@ -1,7 +1,18 @@
-
-#ifndef _LSM_INT_H
-# include "lsmInt.h"
-#endif
+/*
+** 2011-08-18
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
+** Helper routines for memory allocation.
+*/
+#include "lsmInt.h"
 
 /* Default allocation size. */
 #define CHUNKSIZE 16*1024
@@ -307,5 +318,3 @@ void lsmPoolRollback(Mempool *pPool, void *pChunk, int iOff){
   pLast->iOff = iOff;
   pPool->pLast = pLast;
 }
-
-

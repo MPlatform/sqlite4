@@ -1,5 +1,15 @@
-
 /*
+** 2011-08-14
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
 ** SORTED FILE FORMAT:
 **
 **   A sorted file is divided into pages. The page-size is not stored anywhere
@@ -4026,4 +4036,3 @@ static void assertAllPointersOk(int rc, lsm_db *pDb){
 }
 
 #endif /* ifdef LSM_DEBUG_EXPENSIVE */
-

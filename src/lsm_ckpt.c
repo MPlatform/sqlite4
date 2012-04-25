@@ -1,5 +1,15 @@
-
 /*
+** 2011-09-11
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
 ** This file contains code to read and write checkpoints.
 **
 ** A checkpoint represents the database layout at a single point in time.
@@ -8,9 +18,7 @@
 ** it with all committed transactions from the log that follow the specified
 ** offset.
 */
-#ifndef _LSM_INT_H
-# include "lsmInt.h"
-#endif
+#include "lsmInt.h"
 
 /*
 ** CHECKPOINT BLOB FORMAT:
@@ -571,4 +579,3 @@ int lsmCheckpointRead(lsm_db *pDb){
 
   return rc;
 }
-

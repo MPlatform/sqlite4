@@ -1,4 +1,17 @@
-
+/*
+** 2011-12-03
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
+** Operating-system interface for LSM.
+*/
 #include "lsm.h"
 
 #include <sys/types.h>
@@ -124,5 +137,3 @@ lsm_vfs *lsm_default_vfs(void **ppCtx){
   if( ppCtx ) *ppCtx = 0;
   return &posix_vfs;
 }
-
-

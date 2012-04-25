@@ -1,7 +1,18 @@
-
-#ifndef _LSM_INT_H
-# include "lsmInt.h"
-#endif
+/*
+** 2012-01-30
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
+** Mutex implementation for LSM.
+*/
+#include "lsmInt.h"
 
 /*
 ** One of the following must be defined:
@@ -248,4 +259,3 @@ int lsmMutexHeld(lsm_mutex *pMutex, int bExpect){
   if( gMutex.xMutexHeld==0 ) return bExpect;
   return gMutex.xMutexHeld(pMutex);
 }
-

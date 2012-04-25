@@ -1,5 +1,15 @@
-
 /*
+** 2011-08-13
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
 ** This file contains the implementation of LSM database logging. Logging
 ** has one purpose in LSM - to make transactions durable.
 **
@@ -913,4 +923,3 @@ int lsmLogClose(lsm_db *pDb){
   }
   return LSM_OK;
 }
-

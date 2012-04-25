@@ -1,5 +1,15 @@
-
-/* 
+/*
+** 2011-08-26
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+** 
 ** DATABASE FILE FORMAT
 **
 ** A database file is divided into pages. The first 8KB of the file consists
@@ -18,9 +28,8 @@
 ** The database file is also divided into blocks. The default block size is
 ** 2MB. When writing to the database file, an attempt is made to write data
 ** in contiguous block-sized chunks.
-*/
-
-/*
+**
+**
 ** TWO FILE DATABASE FORMAT:
 **
 ** The database is stored in two files - the db file and the log file. 
@@ -41,9 +50,8 @@
 ** Say, for now, that a checkpoint is always stored in the log file. 
 ** Either at the start of it or the end. Only sorted runs are stored in 
 ** the database file.
-*/
-
-/* 
+**
+**
 ** BLOCK ALLOCATION AND TRACKING
 **
 ** Each block is allocated to a single sorted run. All blocks are freed
@@ -74,9 +82,8 @@
 ** merged. Which means that all blocks in a single run could be linked 
 ** together in a list for tracking purposes, rather than having an external
 ** data structure.
-*/
-
-/*
+**
+**
 ** META PAGES.
 **
 ** Meta pages are used to store checkpoint blobs and the block free-list.
@@ -93,10 +100,7 @@
 ** while writing to a meta page there is no risk of damage to the other
 ** meta page or any other part of the database file.
 */
-
-#ifndef _LSM_INT_H
-# include "lsmInt.h"
-#endif
+#include "lsmInt.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>

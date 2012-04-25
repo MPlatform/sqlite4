@@ -1,10 +1,19 @@
 
-
-
-
-#ifndef _LSM_INT_H
-# include "lsmInt.h"
-#endif
+/*
+** 2012-02-08
+**
+** The author disclaims copyright to this source code.  In place of
+** a legal notice, here is a blessing:
+**
+**    May you do good and not evil.
+**    May you find forgiveness for yourself and forgive others.
+**    May you share freely, never taking more than you give.
+**
+*************************************************************************
+**
+** SQLite4-compatible varint implementation.
+*/
+#include "lsmInt.h"
 
 /*************************************************************************
 ** The following is a copy of the varint.c module from SQLite 4.
@@ -167,4 +176,3 @@ int lsmVarintSize(u8 c){
   if( c<249 ) return 2;
   return (int)(c - 247);
 }
-
