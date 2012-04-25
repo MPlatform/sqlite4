@@ -14,8 +14,6 @@
 ** defined by storage.h
 */
 #include "sqliteInt.h"
-
-#ifdef SQLITE_ENABLE_LSM
 #include "lsm.h"
 
 typedef struct KVLsm KVLsm;
@@ -409,5 +407,3 @@ int sqlite4KVStoreOpenLsm(
   *ppKVStore = (KVStore*)pNew;
   return rc;
 }
-
-#endif /* SQLITE_ENABLE_LSM */

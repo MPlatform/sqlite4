@@ -157,11 +157,7 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    0,                         /* pLogArg */
    0,                         /* bLocaltimeFault */
 
-#ifdef SQLITE_ENABLE_LSM
    sqlite4KVStoreOpenLsm,     /* xKVFile */
-#else
-   sqlite4KVStoreOpenMem,     /* xKVFile */
-#endif
    sqlite4KVStoreOpenMem,     /* xKVTmp */
 };
 

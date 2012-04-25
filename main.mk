@@ -67,6 +67,9 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          vdbemem.o vdbetrace.o \
          walker.o where.o utf.o vtab.o
 
+LIBOBJ += lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o
+LIBOBJ += lsm_mem.o lsm_mutex.o lsm_os.o lsm_shared.o
+LIBOBJ += lsm_sorted.o lsm_tree.o lsm_varint.o
 
 
 # All of the source code files.
@@ -94,6 +97,17 @@ SRC = \
   $(TOP)/src/kvlsm.c \
   $(TOP)/src/kvmem.c \
   $(TOP)/src/legacy.c \
+  $(TOP)/src/lsm_ckpt.c \
+  $(TOP)/src/lsm_file.c \
+  $(TOP)/src/lsm_log.c \
+  $(TOP)/src/lsm_main.c \
+  $(TOP)/src/lsm_mem.c \
+  $(TOP)/src/lsm_mutex.c \
+  $(TOP)/src/lsm_os.c \
+  $(TOP)/src/lsm_shared.c \
+  $(TOP)/src/lsm_sorted.c \
+  $(TOP)/src/lsm_tree.c \
+  $(TOP)/src/lsm_varint.c \
   $(TOP)/src/main.c \
   $(TOP)/src/malloc.c \
   $(TOP)/src/math.c \
@@ -251,6 +265,8 @@ HDR = \
    $(TOP)/src/hash.h \
    $(TOP)/src/hwtime.h \
    keywordhash.h \
+   $(TOP)/src/lsm.h \
+   $(TOP)/src/lsmInt.h \
    $(TOP)/src/mutex.h \
    opcodes.h \
    $(TOP)/src/os.h \
@@ -261,8 +277,7 @@ HDR = \
    $(TOP)/src/sqliteLimit.h \
    $(TOP)/src/storage.h \
    $(TOP)/src/vdbe.h \
-   $(TOP)/src/vdbeInt.h \
-   $(LSM_HDR)
+   $(TOP)/src/vdbeInt.h
 
 EXTHDR = \
   $(TOP)/ext/fts3/fts3.h \
@@ -455,13 +470,11 @@ TESTFIXTURE_FLAGS += -DSQLITE_SERVER=1 -DSQLITE_PRIVATE="" -DSQLITE_CORE
 TESTFIXTURE_PREREQ  = $(TESTSRC) $(TESTSRC2) 
 TESTFIXTURE_PREREQ += $(TOP)/src/tclsqlite.c
 TESTFIXTURE_PREREQ += libsqlite4.a
-TESTFIXTURE_PREREQ += $(LSM_OBJ) 
 
 testfixture$(EXE): $(TESTFIXTURE_PREREQ)
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \
 		$(TESTSRC) $(TESTSRC2) $(TOP)/src/tclsqlite.c                \
-		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB) libsqlite4.a     \
-		$(LSM_OBJ)
+		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB) libsqlite4.a
 
 amalgamation-testfixture$(EXE): sqlite4.c $(TESTSRC) $(TOP)/src/tclsqlite.c
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \
