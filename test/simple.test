@@ -1078,18 +1078,42 @@ reset_db
 do_execsql_test 53.1 {
   CREATE TABLE t1(x PRIMARY KEY, y);
 } {}
-do_execsql_test 52.2 {
+do_execsql_test 53.2 {
   CREATE INDEX i1 ON t1(y DESC);
 }
-do_execsql_test 52.3 {
+do_execsql_test 53.3 {
   INSERT INTO t1 VALUES('a', -0.0000001);
   INSERT INTO t1 VALUES('b', +0.0000001);
   INSERT INTO t1 VALUES('c', 10);
   INSERT INTO t1 VALUES('d', -10);
 }
-do_execsql_test 52.4 {
+do_execsql_test 53.4 {
   SELECT x FROM t1 ORDER BY y DESC;
 } {c b a d}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 54.1 {
+  CREATE TABLE t1(x INTEGER PRIMARY KEY, y);
+  CREATE TABLE t2(x, y);
+} {}
+
+foreach {tn sql res} {
+  1  { SELECT rowid FROM t1 }   {1 {no such column: rowid}}
+  2  { SELECT rowid FROM t2 }   {0 {}}
+  3  { SELECT rOWId FROM t1 }   {1 {no such column: rOWId}}
+  4  { SELECT rOWId FROM t2 }   {0 {}}
+  5  { SELECT oid FROM t1 }     {1 {no such column: oid}}
+  6  { SELECT oid FROM t2 }     {1 {no such column: oid}}
+  7  { SELECT _rowid_ FROM t1 } {1 {no such column: _rowid_}}
+  8  { SELECT _rowid_ FROM t2 } {1 {no such column: _rowid_}}
+
+} {
+  do_catchsql_test 54.2.$tn $sql $res
+}
+
+
 
 finish_test
 

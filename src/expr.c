@@ -1323,16 +1323,6 @@ int sqlite4ExprNeedsNoAffinityChange(const Expr *p, char aff){
 }
 
 /*
-** Return TRUE if the given string is a row-id column name.
-*/
-int sqlite4IsRowid(const char *z){
-  if( sqlite4StrICmp(z, "_ROWID_")==0 ) return 1;
-  if( sqlite4StrICmp(z, "ROWID")==0 ) return 1;
-  if( sqlite4StrICmp(z, "OID")==0 ) return 1;
-  return 0;
-}
-
-/*
 ** Return true if we are able to the IN operator optimization on a
 ** query of the form
 **

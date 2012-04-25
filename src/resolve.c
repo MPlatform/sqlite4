@@ -115,6 +115,18 @@ static int nameInUsingClause(IdList *pUsing, const char *zCol){
   return 0;
 }
 
+/*
+** Return true if table pTab has an implicit primary key, and zCol points
+** to a column name that resolves to the implity primary key (i.e. "rowid").
+*/
+int isRowidReference(Table *pTab, const char *zCol){
+  int ret = 0;
+  if( 0==sqlite4StrICmp(zCol, "ROWID") ){
+    Index *pPk = sqlite4FindPrimaryKey(pTab, 0);
+    if( pPk->aiColumn[0]==-1 ) ret = 1;
+  }
+  return ret;
+}
 
 /*
 ** Given the name of a column of the form X.Y.Z or Y.Z or just Z, look up
@@ -253,7 +265,7 @@ static int lookupName(
             break;
           }
         }
-        if( iCol>=pTab->nCol && sqlite4IsRowid(zCol) ){
+        if( iCol>=pTab->nCol && isRowidReference(pTab, zCol) ){
           iCol = -1;        /* IMP: R-44911-55124 */
         }
         if( iCol<pTab->nCol ){
@@ -280,7 +292,7 @@ static int lookupName(
     /*
     ** Perhaps the name is a reference to the ROWID
     */
-    if( cnt==0 && cntTab==1 && sqlite4IsRowid(zCol) ){
+    if( cnt==0 && cntTab==1 && isRowidReference(pExpr->pTab, zCol) ){
       cnt = 1;
       pExpr->iColumn = -1;     /* IMP: R-44911-55124 */
       pExpr->affinity = SQLITE_AFF_INTEGER;

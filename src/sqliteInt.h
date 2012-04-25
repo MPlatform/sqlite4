@@ -2795,7 +2795,6 @@ int sqlite4ExprIsInteger(Expr*, int*);
 int sqlite4ExprCanBeNull(const Expr*);
 void sqlite4ExprCodeIsNullJump(Vdbe*, const Expr*, int, int);
 int sqlite4ExprNeedsNoAffinityChange(const Expr*, char);
-int sqlite4IsRowid(const char*);
 void sqlite4GenerateRowDelete(Parse*, Table*, int, int, int, Trigger *, int);
 void sqlite4GenerateRowIndexDelete(Parse*, Table*, int, int*);
 int sqlite4GenerateIndexKey(Parse*, Index*, int, int, int, int);

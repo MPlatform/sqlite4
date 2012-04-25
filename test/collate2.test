@@ -118,25 +118,25 @@ do_test collate2-1.1.3 {
 } {ab bA bB ba bb}
 do_test collate2-1.2 {
   execsql {
-    SELECT b FROM collate2t1 WHERE b > 'aa' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE b > 'aa' ORDER BY 1, rowid;
   }
 } {ab aB Ab AB ba bA Ba BA bb bB Bb BB}
 do_test collate2-1.2.1 {
   execsql {
     SELECT b FROM collate2t1 WHERE a COLLATE nocase > 'aa'
-     ORDER BY 1, oid;
+     ORDER BY 1, rowid;
   }
 } {ab aB Ab AB ba bA Ba BA bb bB Bb BB}
 do_test collate2-1.2.2 {
   execsql {
     SELECT b FROM collate2t1 WHERE b COLLATE nocase > 'aa'
-     ORDER BY 1, oid;
+     ORDER BY 1, rowid;
   }
 } {ab aB Ab AB ba bA Ba BA bb bB Bb BB}
 do_test collate2-1.2.3 {
   execsql {
     SELECT b FROM collate2t1 WHERE c COLLATE nocase > 'aa'
-     ORDER BY 1, oid;
+     ORDER BY 1, rowid;
   }
 } {ab aB Ab AB ba bA Ba BA bb bB Bb BB}
 do_test collate2-1.2.4 {
@@ -189,7 +189,7 @@ do_test collate2-1.4 {
 } {AA AB Aa Ab BA BB Ba Bb aA aB}
 do_test collate2-1.5 {
   execsql {
-    SELECT b FROM collate2t1 WHERE b < 'aa' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE b < 'aa' ORDER BY 1, rowid;
   }
 } {}
 do_test collate2-1.5.1 {
@@ -209,7 +209,7 @@ do_test collate2-1.7 {
 } {aa}
 do_test collate2-1.8 {
   execsql {
-    SELECT b FROM collate2t1 WHERE b = 'aa' ORDER BY oid;
+    SELECT b FROM collate2t1 WHERE b = 'aa' ORDER BY rowid;
   }
 } {aa aA Aa AA}
 do_test collate2-1.9 {
@@ -224,7 +224,7 @@ do_test collate2-1.10 {
 } {aa ab bA bB ba bb}
 do_test collate2-1.11 {
   execsql {
-    SELECT b FROM collate2t1 WHERE b >= 'aa' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE b >= 'aa' ORDER BY 1, rowid;
   }
 } {aa aA Aa AA ab aB Ab AB ba bA Ba BA bb bB Bb BB}
 do_test collate2-1.12 {
@@ -239,7 +239,7 @@ do_test collate2-1.13 {
 } {AA AB Aa Ab BA BB Ba Bb aA aB aa}
 do_test collate2-1.14 {
   execsql {
-    SELECT b FROM collate2t1 WHERE b <= 'aa' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE b <= 'aa' ORDER BY 1, rowid;
   }
 } {aa aA Aa AA}
 do_test collate2-1.15 {
@@ -254,7 +254,7 @@ do_test collate2-1.16 {
 } {Aa Ab BA BB Ba Bb}
 do_test collate2-1.17 {
   execsql {
-    SELECT b FROM collate2t1 WHERE b BETWEEN 'Aa' AND 'Bb' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE b BETWEEN 'Aa' AND 'Bb' ORDER BY 1, rowid;
   }
 } {aa aA Aa AA ab aB Ab AB ba bA Ba BA bb bB Bb BB}
 do_test collate2-1.17.1 {
@@ -271,38 +271,38 @@ do_test collate2-1.19 {
   execsql {
     SELECT a FROM collate2t1 WHERE 
       CASE a WHEN 'aa' THEN 1 ELSE 0 END
-        ORDER BY 1, oid;
+        ORDER BY 1, rowid;
   }
 } {aa}
 do_test collate2-1.20 {
   execsql {
     SELECT b FROM collate2t1 WHERE 
       CASE b WHEN 'aa' THEN 1 ELSE 0 END
-        ORDER BY 1, oid;
+        ORDER BY 1, rowid;
   }
 } {aa aA Aa AA}
 do_test collate2-1.21 {
   execsql {
     SELECT c FROM collate2t1 WHERE 
       CASE c WHEN 'aa' THEN 1 ELSE 0 END
-        ORDER BY 1, oid;
+        ORDER BY 1, rowid;
   }
 } {aa}
 
 ifcapable subquery {
   do_test collate2-1.22 {
     execsql {
-      SELECT a FROM collate2t1 WHERE a IN ('aa', 'bb') ORDER BY 1, oid;
+      SELECT a FROM collate2t1 WHERE a IN ('aa', 'bb') ORDER BY 1, rowid;
     }
   } {aa bb}
   do_test collate2-1.23 {
     execsql {
-      SELECT b FROM collate2t1 WHERE b IN ('aa', 'bb') ORDER BY 1, oid;
+      SELECT b FROM collate2t1 WHERE b IN ('aa', 'bb') ORDER BY 1, rowid;
     }
   } {aa aA Aa AA bb bB Bb BB}
   do_test collate2-1.24 {
     execsql {
-      SELECT c FROM collate2t1 WHERE c IN ('aa', 'bb') ORDER BY 1, oid;
+      SELECT c FROM collate2t1 WHERE c IN ('aa', 'bb') ORDER BY 1, rowid;
     }
   } {aa bb}
   do_test collate2-1.25 {
@@ -332,7 +332,7 @@ do_test collate2-2.1 {
 } {AA AB Aa Ab BA BB Ba Bb aA aB aa}
 do_test collate2-2.2 {
   execsql {
-    SELECT b FROM collate2t1 WHERE NOT b > 'aa' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE NOT b > 'aa' ORDER BY 1, rowid;
   }
 } {aa aA Aa AA}
 do_test collate2-2.3 {
@@ -347,7 +347,7 @@ do_test collate2-2.4 {
 } {aa ab bA bB ba bb}
 do_test collate2-2.5 {
   execsql {
-    SELECT b FROM collate2t1 WHERE NOT b < 'aa' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE NOT b < 'aa' ORDER BY 1, rowid;
   }
 } {aa aA Aa AA ab aB Ab AB ba bA Ba BA bb bB Bb BB}
 do_test collate2-2.6 {
@@ -377,7 +377,7 @@ do_test collate2-2.10 {
 } {AA AB Aa Ab BA BB Ba Bb aA aB}
 do_test collate2-2.11 {
   execsql {
-    SELECT b FROM collate2t1 WHERE NOT b >= 'aa' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE NOT b >= 'aa' ORDER BY 1, rowid;
   }
 } {}
 do_test collate2-2.12 {
@@ -392,7 +392,7 @@ do_test collate2-2.13 {
 } {ab bA bB ba bb}
 do_test collate2-2.14 {
   execsql {
-    SELECT b FROM collate2t1 WHERE NOT b <= 'aa' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE NOT b <= 'aa' ORDER BY 1, rowid;
   }
 } {ab aB Ab AB ba bA Ba BA bb bB Bb BB}
 do_test collate2-2.15 {
@@ -407,7 +407,7 @@ do_test collate2-2.16 {
 } {AA AB aA aB aa ab bA bB ba bb}
 do_test collate2-2.17 {
   execsql {
-    SELECT b FROM collate2t1 WHERE b NOT BETWEEN 'Aa' AND 'Bb' ORDER BY 1, oid;
+    SELECT b FROM collate2t1 WHERE b NOT BETWEEN 'Aa' AND 'Bb' ORDER BY 1, rowid;
   }
 } {}
 do_test collate2-2.18 {
@@ -685,7 +685,7 @@ do_test collate2-5.3 {
 } {aa}
 do_test collate2-5.4 {
   execsql {
-    SELECT collate2t2.b FROM collate2t1 LEFT OUTER JOIN collate2t2 USING (b) order by collate2t1.oid;
+    SELECT collate2t2.b FROM collate2t1 LEFT OUTER JOIN collate2t2 USING (b) order by collate2t1.rowid;
   }
 } {{} aa {} {} {} aa {} {} {} aa {} {} {} aa {} {} {}}
 do_test collate2-5.5 {

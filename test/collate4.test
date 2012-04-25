@@ -553,10 +553,22 @@ do_test collate4-3.15 {
 } {}
 
 # Mimic the SQLite 2 collation type NUMERIC.
-db collate numeric numeric_collate
+db collate numeric numeric_collate numeric_mkkey
 proc numeric_collate {lhs rhs} {
-  if {$lhs == $rhs} {return 0} 
-  return [expr ($lhs>$rhs)?1:-1]
+  set lhs_isint [string is integer $lhs]
+  set rhs_isint [string is integer $rhs]
+
+  if {$lhs_isint && $rhs_isint} { return [expr $lhs - $rhs] }
+  if {$lhs_isint != $rhs_isint} { return [expr $rhs_isint - $lhs_isint] }
+  return [string compare $lhs $rhs]
+}
+proc numeric_mkkey {zIn} {
+  if {[string is integer $zIn]} {
+    set res [format "a_%024d" $zIn]
+  } else {
+    set res "b_$zIn"
+  }
+  return $res
 }
 
 #

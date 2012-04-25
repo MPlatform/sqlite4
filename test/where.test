@@ -659,12 +659,12 @@ do_test where-6.25 {
 } {9 16 nosort}
 do_test where-6.26 {
   cksort {
-    SELECT y FROM t1 WHERE y>=4 AND y<=25 ORDER BY oid;
+    SELECT y FROM t1 WHERE y>=4 AND y<=25 ORDER BY rowid;
   }
 } {4 9 16 25 nosort}
 do_test where-6.27 {
   cksort {
-    SELECT y FROM t1 WHERE y<=25 ORDER BY _rowid_, w+y;
+    SELECT y FROM t1 WHERE y<=25 ORDER BY rowid, w+y;
   }
 } {4 9 16 25 nosort}
 

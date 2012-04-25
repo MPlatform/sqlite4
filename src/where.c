@@ -2939,6 +2939,7 @@ static void bestKVIndex(
   /* Initialize the cost to a worst-case value */
   memset(pCost, 0, sizeof(*pCost));
   pCost->rCost = SQLITE_BIG_DBL;
+  pPk = sqlite4FindPrimaryKey(pSrc->pTab, 0);
 
   /* If the pSrc table is the right table of a LEFT JOIN then we may not
   ** use an index to satisfy IS NULL constraints on that table.  This is
@@ -2956,27 +2957,15 @@ static void bestKVIndex(
   ** the named index is considered. And if a NOT INDEXED clause was present
   ** only the PRIMARY KEY index may be considered.  
   */
-  assert( pSrc->notIndexed==0 && "TODO: Re-enable this" );
   assert( pSrc->pIndex==0 && "TODO: Re-enable this" );
-#if 0
-  if( pSrc->pIndex ){
-    /* An INDEXED BY clause specifies a particular index to use */
-    assert(!"TODO: Fix this");
+  if( pSrc->notIndexed ){
+    pFirst = pPk;
+  }else if( pSrc->pIndex ){
     pFirst = pSrc->pIndex;
-    wsFlagMask = ~(WHERE_ROWID_EQ|WHERE_ROWID_RANGE);
-    eqTermMask = idxEqTermMask;
   }else{
-    wsFlagMask = ~(
-        WHERE_COLUMN_IN|WHERE_COLUMN_EQ|WHERE_COLUMN_NULL|WHERE_COLUMN_RANGE
-    );
-    eqTermMask = WO_EQ|WO_IN;
     pFirst = pSrc->pTab->pIndex;
   }
-#else
   eqTermMask = idxEqTermMask;
-  pFirst = pSrc->pTab->pIndex;
-#endif
-  pPk = sqlite4FindPrimaryKey(pSrc->pTab, 0);
 
   /* Loop over all indices looking for the best one to use */
   for(pProbe=pFirst; pProbe; pProbe=pProbe->pNext){
@@ -3361,9 +3350,6 @@ static void bestKVIndex(
     /* If there was an INDEXED BY or NOT INDEXED clause, only one index is
     ** considered. */
     if( pSrc->pIndex || pSrc->notIndexed ) break;
-
-    /* Reset masks for the next index in the loop */
-    eqTermMask = idxEqTermMask;
   }
 
   /* If there is no ORDER BY clause and the SQLITE_ReverseOrder flag
