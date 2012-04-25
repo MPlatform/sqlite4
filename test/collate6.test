@@ -27,9 +27,12 @@ ifcapable {!trigger} {
 
 # Create a case-insensitive collation type NOCASE for use in testing. 
 # Normally, capital letters are less than their lower-case counterparts.
-db collate NOCASE nocase_collate
+db collate NOCASE nocase_collate nocase_mkkey
 proc nocase_collate {a b} {
   return [string compare -nocase $a $b]
+}
+proc nocase_mkkey {a} {
+  string tolower $a
 }
 
 #

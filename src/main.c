@@ -584,6 +584,24 @@ static int binCollFunc(
 }
 
 /*
+** The xMakeKey callback for the built-in RTRIM collation. The output
+** is the same as the input, with any trailing ' ' characters removed.
+** (e.g.  " abc   "  ->   " abc").
+*/
+static int collRtrimMkKey(
+  void *NotUsed,                  /* Not used */
+  int nIn, const void *pIn,       /* Input text. UTF-8. */
+  int nOut, void *pOut            /* Output buffer */
+){
+  int nCopy = nIn;
+  while( nCopy>0 && ((const char *)pIn)[nCopy-1]==' ' ) nCopy--;
+  if( nCopy<=nOut ){
+    memcpy(pOut, pIn, nCopy);
+  }
+  return nCopy;
+}
+
+/*
 ** Another built-in collating sequence: NOCASE. 
 **
 ** This collating sequence is intended to be used for "case independant
@@ -1903,7 +1921,9 @@ static int openDatabase(
   createCollation(db, "BINARY", SQLITE_UTF8, 0, binCollFunc, 0, 0);
   createCollation(db, "BINARY", SQLITE_UTF16BE, 0, binCollFunc, 0, 0);
   createCollation(db, "BINARY", SQLITE_UTF16LE, 0, binCollFunc, 0, 0);
-  createCollation(db, "RTRIM", SQLITE_UTF8, (void*)1, binCollFunc, 0, 0);
+  createCollation(
+      db, "RTRIM", SQLITE_UTF8, (void*)1, binCollFunc, collRtrimMkKey, 0
+  );
   if( db->mallocFailed ){
     goto opendb_out;
   }

@@ -1540,6 +1540,16 @@ proc db_delete_and_reopen {{file test.db}} {
   sqlite4 db $file
 }
 
+# Do an SQL statement.  Append the search count to the end of the result.
+#
+proc count {sql} {
+  kvwrap reset
+  set res [execsql $sql]
+  #puts "sql={$sql} seek=[kvwrap seek] step=[kvwrap step]"
+  return [concat $res [expr [kvwrap step] + [kvwrap seek]]]
+}
+
+
 # If the library is compiled with the SQLITE_DEFAULT_AUTOVACUUM macro set
 # to non-zero, then set the global variable $AUTOVACUUM to 1.
 set AUTOVACUUM $sqlite_options(default_autovacuum)

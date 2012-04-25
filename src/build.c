@@ -3505,6 +3505,7 @@ static void reindexTable(Parse *pParse, Table *pTab, char const *zColl){
   Index *pIndex;              /* An index associated with pTab */
 
   for(pIndex=pTab->pIndex; pIndex; pIndex=pIndex->pNext){
+    if( pIndex->eIndexType==SQLITE_INDEX_PRIMARYKEY ) continue;
     if( zColl==0 || collationMatch(zColl, pIndex) ){
       int iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
       sqlite4BeginWriteOperation(pParse, 0, iDb);
@@ -3596,7 +3597,7 @@ void sqlite4Reindex(Parse *pParse, Token *pName1, Token *pName2){
   }
   pIndex = sqlite4FindIndex(db, z, zDb);
   sqlite4DbFree(db, z);
-  if( pIndex ){
+  if( pIndex && pIndex->eIndexType!=SQLITE_INDEX_PRIMARYKEY ){
     sqlite4BeginWriteOperation(pParse, 0, iDb);
     sqlite4RefillIndex(pParse, pIndex);
     return;
