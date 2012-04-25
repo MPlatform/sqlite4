@@ -564,21 +564,49 @@ static int encodeOneKeyValue(
     }
   }else
   if( flags & MEM_Str ){
+    Mem *pEnc;                    /* Pointer to memory cell in correct enc. */
+    Mem sMem;                     /* Value converted to different encoding */
+    int enc;                      /* Required encoding */
+
+    /* Figure out the current encoding of pMem, and the encoding required
+    ** (either the encoding specified by the collation sequence, or utf-8
+    ** if there is no collation sequence).  */
+    enc = ((pColl && pColl->xMkKey) ? pColl->enc : SQLITE_UTF8);
+    assert( enc==SQLITE_UTF8 || enc==SQLITE_UTF16LE || enc==SQLITE_UTF16BE );
+    assert( pMem->enc==SQLITE_UTF8 || pMem->enc==SQLITE_UTF16LE 
+         || pMem->enc==SQLITE_UTF16BE 
+    );
+    
+    /* If necessary, convert the encoding of the input text. */
+    if( pMem->enc!=enc ){
+      memset(&sMem, 0, sizeof(sMem));
+      sqlite4VdbeMemShallowCopy(&sMem, pMem, MEM_Static);
+      sqlite4VdbeMemTranslate(&sMem, enc);
+      pEnc = &sMem;
+    }else{
+      pEnc = pMem;
+    }
+
+    /* Write the encoded key to the output buffer. */
     if( enlargeEncoderAllocation(p, pMem->n*4 + 2) ) return SQLITE_NOMEM;
     p->aOut[p->nOut++] = 0x24;   /* Text */
     if( pColl==0 || pColl->xMkKey==0 ){
-      memcpy(p->aOut+p->nOut, pMem->z, pMem->n);
-      p->nOut += pMem->n;
+      memcpy(p->aOut+p->nOut, pEnc->z, pEnc->n);
+      p->nOut += pEnc->n;
     }else{
       int nSpc = p->nAlloc-p->nOut;
-      n = pColl->xMkKey(pColl->pUser, pMem->n, pMem->z, nSpc, p->aOut+p->nOut);
+      n = pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, nSpc, p->aOut+p->nOut);
       if( n>nSpc ){
         if( enlargeEncoderAllocation(p, n) ) return SQLITE_NOMEM;
-        pColl->xMkKey(pColl->pUser, pMem->n, pMem->z, n, p->aOut+p->nOut);
+        n + pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, n, p->aOut+p->nOut);
       }
       p->nOut += n;
     }
     p->aOut[p->nOut++] = 0x00;
+
+    /* Release any memory allocated to hold the translated text */
+    if( pEnc==&sMem ) sqlite4VdbeMemRelease(&sMem);
+
   }else
   {
     const unsigned char *a;

@@ -96,10 +96,8 @@ do_test collate5-1.12 {
     CREATE TABLE tkt3376(a COLLATE nocase PRIMARY KEY);
   }
 
-  explain { INSERT INTO tkt3376 VALUES('abc') } db2
-  db2 eval { PRAGMA vdbe_trace = 1 }
-  db2 eval { INSERT INTO tkt3376 VALUES('abc') }
   db2 eval {
+    INSERT INTO tkt3376 VALUES('abc');
     INSERT INTO tkt3376 VALUES('ABX');
     SELECT DISTINCT a FROM tkt3376;
   }
