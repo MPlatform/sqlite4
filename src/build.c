@@ -2244,10 +2244,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx){
   Table *pTab = pIdx->pTable;    /* The table that is indexed */
   int iTab = pParse->nTab++;     /* Cursor used for PK of pTab */
   int iIdx = pParse->nTab++;     /* Cursor used for pIdx */
-  int iSorter;                   /* Cursor opened by OpenSorter (if in use) */
   int addr1;                     /* Address of top of loop */
-  int addr2;                     /* Address to jump to for next iteration */
-  int tnum;                      /* Root page of index */
   Vdbe *v;                       /* Generate code into this virtual machine */
   int regKey;                    /* Registers containing the index key */
   int regRecord;                 /* Register holding assemblied index record */
@@ -2287,7 +2284,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx){
     int addrTest;
      
     addrTest = sqlite4VdbeAddOp4Int(v, OP_IsUnique, iIdx, 0, regKey, 0);
-    sqlite4HaltConstraint(pParse, OE_Abort, zErr, P4_STATIC);
+    sqlite4HaltConstraint(pParse, OE_Abort, (char *)zErr, P4_STATIC);
     sqlite4VdbeJumpHere(v, addrTest);
   }
   sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, 0, regKey);  
@@ -3261,7 +3258,7 @@ void sqlite4BeginTransaction(Parse *pParse, int type){
       sqlite4VdbeUsesStorage(v, i);
     }
   }
-  sqlite4VdbeAddOp2(v, OP_AutoCommit, 0, 0);
+  sqlite4VdbeAddOp1(v, OP_Savepoint, SAVEPOINT_BEGIN);
 }
 
 /*
@@ -3277,7 +3274,7 @@ void sqlite4CommitTransaction(Parse *pParse){
   }
   v = sqlite4GetVdbe(pParse);
   if( v ){
-    sqlite4VdbeAddOp2(v, OP_AutoCommit, 1, 0);
+    sqlite4VdbeAddOp1(v, OP_Savepoint, SAVEPOINT_RELEASE);
   }
 }
 
@@ -3294,7 +3291,7 @@ void sqlite4RollbackTransaction(Parse *pParse){
   }
   v = sqlite4GetVdbe(pParse);
   if( v ){
-    sqlite4VdbeAddOp2(v, OP_AutoCommit, 1, 1);
+    sqlite4VdbeAddOp1(v, OP_Savepoint, SAVEPOINT_ROLLBACK);
   }
 }
 

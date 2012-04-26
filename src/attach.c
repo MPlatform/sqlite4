@@ -96,7 +96,7 @@ static void attachFunc(
     );
     goto attach_error;
   }
-  if( !db->autoCommit ){
+  if( db->pSavepoint ){
     zErrDyn = sqlite4MPrintf(db, "cannot ATTACH database within transaction");
     goto attach_error;
   }
@@ -234,7 +234,7 @@ static void detachFunc(
     sqlite4_snprintf(sizeof(zErr),zErr, "cannot detach database %s", zName);
     goto detach_error;
   }
-  if( !db->autoCommit ){
+  if( db->pSavepoint ){
     sqlite4_snprintf(sizeof(zErr), zErr,
                      "cannot DETACH database within transaction");
     goto detach_error;

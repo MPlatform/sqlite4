@@ -219,7 +219,6 @@ do_test fkey2-1.6.2 {
 
 # Use a collation sequence on the parent key.
 drop_all_tables
-puts "src4: the following requires collation support"
 do_test fkey2-1.7.1 {
   execsql {
     CREATE TABLE i(i TEXT COLLATE nocase PRIMARY KEY);

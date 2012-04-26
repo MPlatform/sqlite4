@@ -2157,7 +2157,6 @@ case OP_Column: {
 */
 case OP_Affinity: {
   const char *zAffinity;   /* The affinity to be applied */
-  char cAff;               /* A single character of affinity */
   Mem *pEnd;
 
   zAffinity = pOp->p4.z;
@@ -2241,7 +2240,7 @@ case OP_MakeIdxKey: {
     if( nSeq ){
       memcpy(&aRec[nRec], &aSeq[sizeof(aSeq)-nSeq], nSeq);
     }
-    rc = sqlite4VdbeMemSetStr(pOut, aRec, nRec+nSeq, 0, SQLITE_DYNAMIC);
+    rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec+nSeq, 0, SQLITE_DYNAMIC);
     REGISTER_TRACE(pOp->p3, pOut);
     UPDATE_MAX_BLOBSIZE(pOut);
   }
@@ -2331,7 +2330,7 @@ case OP_MakeRecord: {
     if( rc ){
       sqlite4DbFree(db, aRec);
     }else{
-      rc = sqlite4VdbeMemSetStr(pKeyOut, aRec, nRec, 0, SQLITE_DYNAMIC);
+      rc = sqlite4VdbeMemSetStr(pKeyOut, (char *)aRec, nRec, 0, SQLITE_DYNAMIC);
       REGISTER_TRACE(keyReg, pKeyOut);
       UPDATE_MAX_BLOBSIZE(pKeyOut);
     }
@@ -2347,7 +2346,7 @@ case OP_MakeRecord: {
     if( rc ){
       sqlite4DbFree(db, aRec);
     }else{
-      rc = sqlite4VdbeMemSetStr(pOut, aRec, nRec, 0, SQLITE_DYNAMIC);
+      rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec, 0, SQLITE_DYNAMIC);
       REGISTER_TRACE(pOp->p3, pOut);
       UPDATE_MAX_BLOBSIZE(pOut);
     }
@@ -2377,60 +2376,103 @@ case OP_Count: {         /* out2-prerelease */
 
 /* Opcode: Savepoint P1 * * P4 *
 **
-** Open, release or rollback the savepoint named by parameter P4, depending
-** on the value of P1. To open a new savepoint, P1==0. To release (commit) an
-** existing savepoint, P1==1, or to rollback an existing savepoint P1==2.
+** This opcode is used to implement the SQL BEGIN, COMMIT, ROLLBACK,
+** SAVEPOINT, RELEASE and ROLLBACK TO commands. As follows:
+**
+**     sql command      p1     p4
+**     -------------------------------------
+**     BEGIN            0      0
+**     COMMIT           1      0
+**     ROLLBACK         2      0
+**     SAVEPOINT        0      <name of savepoint to open>
+**     RELEASE          1      <name of savepoint to release>
+**     ROLLBACK TO      2      <name of savepoint to rollback>
 */
 case OP_Savepoint: {
-  break;
-}
+  Savepoint *pSave;               /* Savepoint object operated upon */
+  Savepoint *pDel;                /* Iterator used to delete savepoints */
+  const char *zSave;              /* Name of savepoint (or NULL for trans.) */
+  int nSave;                      /* Size of zSave in bytes */
+  int iOp;                        /* SAVEPOINT_XXX operation */
+  const char *zErr;               /* Static error message */
 
-/* Opcode: AutoCommit P1 P2 * * *
-**
-** Set the database auto-commit flag to P1 (1 or 0). If P2 is true, roll
-** back any currently active btree transactions. If there are any active
-** VMs (apart from this one), then a ROLLBACK fails.
-**
-** This instruction causes the VM to halt.
-*/
-case OP_AutoCommit: {
-  int bAutoCommit;                /* New value for auto-commit flag */
-  int bRollback;                  /* True to do transaction rollback */
+  zErr = 0;
+  zSave = pOp->p4.z;
+  nSave = zSave ? sqlite4Strlen30(zSave) : 0;
+  iOp = pOp->p1;
+  assert( pOp->p1==SAVEPOINT_BEGIN
+       || pOp->p1==SAVEPOINT_RELEASE
+       || pOp->p1==SAVEPOINT_ROLLBACK
+  );
 
-  bAutoCommit = pOp->p1;
-  bRollback = pOp->p2;
-  assert( bAutoCommit==1 || bRollback==0 );
-
-  if( bAutoCommit==db->autoCommit ){
-    /* This branch is taken if the user is trying to BEGIN a transaction
-    ** when one is already open, or trying to commit or rollback a transaction
-    ** when none is open. Return a suitable error message.  */
-    const char *zErr;
-    if( bAutoCommit==0 ){
+  if( iOp==SAVEPOINT_BEGIN ){
+    if( zSave==0 && db->pSavepoint ){
+      /* If zSave==0 this is a "BEGIN" command. Return an error if there is
+      ** already an open transaction in this case.  */
       zErr = "cannot start a transaction within a transaction";
-    }else if( bRollback ){
-      zErr = "cannot rollback - no transaction is active";
     }else{
-      zErr = "cannot commit - no transaction is active";
+      pSave = (Savepoint *)sqlite4DbMallocZero(db, nSave+1+sizeof(Savepoint));
+      if( pSave==0 ) break;
+      if( zSave ){
+        pSave->zName = (char *)&pSave[1];
+        memcpy(pSave->zName, zSave, nSave);
+      }
+      pSave->pNext = db->pSavepoint;
+      db->pSavepoint = pSave;
     }
-    sqlite4SetString(&p->zErrMsg, db, zErr);
-    rc = SQLITE_ERROR;
   }
 
-  else if( bAutoCommit==0 ){
-    db->autoCommit = 0;
-  }else{
-    if( bRollback ){
-      sqlite4RollbackAll(db);
-    }else if( rc = sqlite4VdbeCheckFk(p, 1) ){
-      rc = SQLITE_ERROR;
-      goto vdbe_return;
+  else{
+    /* Find the named savepoint */
+    for(pSave=db->pSavepoint; pSave; pSave=pSave->pNext){
+      if( zSave ){
+        if( pSave->zName && 0==sqlite4StrICmp(zSave, pSave->zName) ) break;
+      }else{
+        if( pSave->pNext==0 ) break;
+      }
     }
 
-    db->autoCommit = 1;
-    sqlite4VdbeHalt(p);
-    rc = (p->rc ? SQLITE_DONE : SQLITE_ERROR);
-    goto vdbe_return;
+    if( pSave==0 ){
+      if( zSave ){
+        sqlite4SetString(&p->zErrMsg, db, "no such savepoint: %s", zSave);
+        rc = SQLITE_ERROR;
+      }else if( iOp==SAVEPOINT_RELEASE ){
+        zErr = "cannot rollback - no transaction is active";
+      }else{
+        zErr = "cannot rollback - no transaction is active";
+      }
+    }else{
+
+      if( iOp==SAVEPOINT_ROLLBACK ){
+        sqlite4RollbackAll(db);
+      }else if( SQLITE_OK!=(rc = sqlite4VdbeCheckFk(p, 1)) ){
+        rc = SQLITE_ERROR;
+        goto vdbe_return;
+      }
+
+      if( db->pSavepoint ){
+
+        for(pDel=db->pSavepoint; db->pSavepoint!=pSave; pDel=db->pSavepoint){
+          db->pSavepoint = pDel->pNext;
+          sqlite4DbFree(db, pDel);
+        }
+
+        assert( pDel==db->pSavepoint );
+        if( iOp==SAVEPOINT_RELEASE || zSave==0 ){
+          db->pSavepoint = pDel->pNext;
+          sqlite4DbFree(db, pDel);
+        }
+      }
+
+      sqlite4VdbeHalt(p);
+      rc = (p->rc ? SQLITE_DONE : SQLITE_ERROR);
+      goto vdbe_return;
+    }
+  }
+
+  if( zErr ){
+    sqlite4SetString(&p->zErrMsg, db, "%s", zErr);
+    rc = SQLITE_ERROR;
   }
 
   break;
@@ -2473,7 +2515,7 @@ case OP_Transaction: {
     }
   }else{
     /* A write transaction is needed */
-    needStmt = db->autoCommit==0 && (p->needSavepoint || db->activeVdbeCnt>1);
+    needStmt = db->pSavepoint && (p->needSavepoint || db->activeVdbeCnt>1);
     if( pKV->iTransLevel<2 ){
       rc = sqlite4KVStoreBegin(pKV, 2);
     }

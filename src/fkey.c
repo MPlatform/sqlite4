@@ -207,7 +207,10 @@ static int locateFkeyIndex(
   }
 
   for(pIdx=pParent->pIndex; pIdx; pIdx=pIdx->pNext){
-    if( pIdx->nColumn==nCol && pIdx->onError!=OE_None ){ 
+    if( pIdx->nColumn==nCol 
+     && pIdx->onError!=OE_None
+     && pIdx->aiColumn[0]!=-1
+    ){ 
       /* pIdx is a UNIQUE index (or a PRIMARY KEY) and has the right number
       ** of columns. If each indexed column corresponds to a foreign key
       ** column of pFKey, then this index is a winner.  */

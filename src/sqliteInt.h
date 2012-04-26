@@ -799,7 +799,6 @@ struct sqlite4 {
   int flags;                    /* Miscellaneous flags. See below */
   unsigned int openFlags;       /* Flags passed to sqlite4_vfs.xOpen() */
   int errCode;                  /* Most recent error code (SQLITE_*) */
-  u8 autoCommit;                /* The auto-commit flag. */
   u8 temp_store;                /* 1: file 2: memory 0: default */
   u8 mallocFailed;              /* True if we have seen a malloc failure */
   u8 dfltLockMode;              /* Default locking-mode for attached dbs */
@@ -1528,9 +1527,6 @@ struct AggInfo {
   u8 useSortingIdx;       /* In direct mode, reference the sorting index rather
                           ** than the source table */
   int sortingIdx;         /* Cursor number of the sorting index */
-#if 0
-  int sortingIdxPTab;     /* Cursor number of pseudo-table */
-#endif
   ExprList *pGroupBy;     /* The group by clause */
   int nSortingColumn;     /* Number of columns in the sorting index */
   struct AggInfo_col {    /* For each column used in source tables */

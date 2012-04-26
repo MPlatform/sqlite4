@@ -815,8 +815,9 @@ int sqlite4_close(sqlite4 *db){
 ** Rollback all database files.
 */
 void sqlite4RollbackAll(sqlite4 *db){
+  Savepoint *pSave;
   int i;
-  int inTrans = 0;
+  int inTrans = (db->pSavepoint!=0);
   assert( sqlite4_mutex_held(db->mutex) );
   sqlite4BeginBenignMalloc();
   for(i=0; i<db->nDb; i++){
@@ -840,8 +841,14 @@ void sqlite4RollbackAll(sqlite4 *db){
   db->nDeferredCons = 0;
 
   /* If one has been configured, invoke the rollback-hook callback */
-  if( db->xRollbackCallback && (inTrans || !db->autoCommit) ){
+  if( db->xRollbackCallback && inTrans ){
     db->xRollbackCallback(db->pRollbackArg);
+  }
+
+  /* Free all savepoint structures */
+  for(pSave=db->pSavepoint; pSave; pSave=db->pSavepoint){
+    db->pSavepoint = pSave->pNext;
+    sqlite4DbFree(db, pSave);
   }
 }
 
@@ -1898,7 +1905,6 @@ static int openDatabase(
 
   assert( sizeof(db->aLimit)==sizeof(aHardLimit) );
   memcpy(db->aLimit, aHardLimit, sizeof(db->aLimit));
-  db->autoCommit = 1;
   db->nextAutovac = -1;
   db->nextPagesize = 0;
   db->flags |=  SQLITE_AutoIndex
@@ -2041,7 +2047,7 @@ int sqlite4_open(
   va_list ap;
   int rc;
   if( pEnv==0 ) pEnv = sqlite4_env_default();
-  va_start(ppDb, ap);
+  va_start(ap, ppDb);
   rc = openDatabase(pEnv, zFilename,
                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, ppDb, ap);
   va_end(ap);
@@ -2131,7 +2137,7 @@ int sqlite4_global_recover(void){
 ******* THIS IS AN EXPERIMENTAL API AND IS SUBJECT TO CHANGE ******
 */
 int sqlite4_get_autocommit(sqlite4 *db){
-  return db->autoCommit;
+  return (db->pSavepoint==0);
 }
 
 /*

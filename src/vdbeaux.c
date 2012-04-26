@@ -1821,7 +1821,7 @@ int sqlite4VdbeHalt(Vdbe *p){
     if( eAction==2 || ( 
           sqlite4VtabInSync(db)==0 
        && db->writeVdbeCnt==(p->readOnly==0) 
-       && db->autoCommit 
+       && db->pSavepoint==0 
     )){
       if( eAction==0 && sqlite4VdbeCheckFk(p, 1) ){
         eAction = 1;
@@ -1840,7 +1840,6 @@ int sqlite4VdbeHalt(Vdbe *p){
 
       if( eAction ){
         sqlite4RollbackAll(db);
-        db->autoCommit = 1;
       }
 
       db->nDeferredCons = 0;

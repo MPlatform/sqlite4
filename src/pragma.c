@@ -102,7 +102,7 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
           returnSingleInt(pParse, p->zName, (db->flags & p->mask)!=0 );
         }else{
           int mask = p->mask;          /* Mask of bits to set or clear. */
-          if( db->autoCommit==0 ){
+          if( db->pSavepoint ){
             /* Foreign key support may not be enabled or disabled while not
             ** in auto-commit mode.  */
             mask &= ~(SQLITE_ForeignKeys);
