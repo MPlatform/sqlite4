@@ -2389,6 +2389,7 @@ case OP_Count: {         /* out2-prerelease */
 **     ROLLBACK TO      2      <name of savepoint to rollback>
 */
 case OP_Savepoint: {
+  int iSave;
   Savepoint *pSave;               /* Savepoint object operated upon */
   Savepoint *pDel;                /* Iterator used to delete savepoints */
   const char *zSave;              /* Name of savepoint (or NULL for trans.) */
@@ -2419,17 +2420,24 @@ case OP_Savepoint: {
       }
       pSave->pNext = db->pSavepoint;
       db->pSavepoint = pSave;
+      db->nSavepoint++;
     }
   }
 
   else{
-    /* Find the named savepoint */
+    /* Determine which of the zero or more nested savepoints (if any) to 
+    ** commit or rollback to. This block sets variable pSave to point
+    ** to the Savepoint object and iSave to the kvstore layer transaction
+    ** number. For example, to commit or rollback the top level transaction
+    ** iSave==2.  */
+    iSave = db->nSavepoint+1;
     for(pSave=db->pSavepoint; pSave; pSave=pSave->pNext){
       if( zSave ){
         if( pSave->zName && 0==sqlite4StrICmp(zSave, pSave->zName) ) break;
       }else{
         if( pSave->pNext==0 ) break;
       }
+      iSave--;
     }
 
     if( pSave==0 ){
@@ -2443,30 +2451,21 @@ case OP_Savepoint: {
       }
     }else{
 
-      if( iOp==SAVEPOINT_ROLLBACK ){
-        sqlite4RollbackAll(db);
-      }else if( SQLITE_OK!=(rc = sqlite4VdbeCheckFk(p, 1)) ){
-        rc = SQLITE_ERROR;
-        goto vdbe_return;
+      /* If this is an attempt to commit the top level transaction, check
+      ** that there are no outstanding deferred foreign key violations. If
+      ** there are, return an SQLITE_CONSTRAINT error. Do not release any
+      ** savepoints in this case.  */
+      if( iOp==SAVEPOINT_RELEASE && iSave==2 ){
+        rc = sqlite4VdbeCheckFk(p, 1);
+        if( rc!=SQLITE_OK ) break;
       }
 
-      if( db->pSavepoint ){
-
-        for(pDel=db->pSavepoint; db->pSavepoint!=pSave; pDel=db->pSavepoint){
-          db->pSavepoint = pDel->pNext;
-          sqlite4DbFree(db, pDel);
-        }
-
-        assert( pDel==db->pSavepoint );
-        if( iOp==SAVEPOINT_RELEASE || zSave==0 ){
-          db->pSavepoint = pDel->pNext;
-          sqlite4DbFree(db, pDel);
-        }
+      if( iOp==SAVEPOINT_RELEASE ){
+        rc = sqlite4VdbeCommit(db, iSave-1);
+      }else{
+        rc = sqlite4VdbeRollback(db, iSave-(zSave==0));
       }
 
-      sqlite4VdbeHalt(p);
-      rc = (p->rc ? SQLITE_DONE : SQLITE_ERROR);
-      goto vdbe_return;
     }
   }
 
@@ -2474,7 +2473,6 @@ case OP_Savepoint: {
     sqlite4SetString(&p->zErrMsg, db, "%s", zErr);
     rc = SQLITE_ERROR;
   }
-
   break;
 }
 
@@ -2503,7 +2501,8 @@ case OP_Savepoint: {
 case OP_Transaction: {
   Db *pDb;
   KVStore *pKV;
-  int needStmt;
+  int bStmt;                      /* True to open statement transaction */
+  int iLevel;                     /* Savepoint level to open */
 
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   pDb = &db->aDb[pOp->p1];
@@ -2515,11 +2514,13 @@ case OP_Transaction: {
     }
   }else{
     /* A write transaction is needed */
-    needStmt = db->pSavepoint && (p->needSavepoint || db->activeVdbeCnt>1);
-    if( pKV->iTransLevel<2 ){
-      rc = sqlite4KVStoreBegin(pKV, 2);
+    iLevel = db->nSavepoint + 1;
+    if( iLevel<2 ) iLevel = 2;
+    bStmt = db->pSavepoint && (p->needSavepoint || db->activeVdbeCnt>1);
+    if( pKV->iTransLevel<iLevel ){
+      rc = sqlite4KVStoreBegin(pKV, iLevel);
     }
-    if( needStmt ){
+    if( rc==SQLITE_OK && bStmt ){
       rc = sqlite4KVStoreBegin(pKV, pKV->iTransLevel+1);
       if( rc==SQLITE_OK ){
         p->stmtTransMask |= ((yDbMask)1)<<pOp->p1;

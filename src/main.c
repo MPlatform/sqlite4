@@ -674,7 +674,6 @@ void sqlite4CloseSavepoints(sqlite4 *db){
   }
   db->nSavepoint = 0;
   db->nStatement = 0;
-  db->isTransactionSavepoint = 0;
 }
 
 /*

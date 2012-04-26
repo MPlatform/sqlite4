@@ -492,9 +492,9 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
   */
   if( bCommit ){
     if( rc==LSM_OK ){
-      rc = lsm_commit(pDb, 1);
+      rc = lsm_commit(pDb, 0);
     }else{
-      lsm_rollback(pDb, 1);
+      lsm_rollback(pDb, 0);
     }
   }
 
@@ -674,10 +674,8 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 
   assert_db_state( pDb );
 
-  /* A value less than zero is against the rules. A value of 0 means commit
-  ** the innermost transaction.  */
-  if( iLevel<0 ) return LSM_MISUSE;
-  if( iLevel<1 ) iLevel = pDb->nTransOpen + 1;
+  /* A value less than zero means open one more transaction. */
+  if( iLevel<0 ) iLevel = pDb->nTransOpen + 1;
 
   if( iLevel>pDb->nTransOpen ){
     int i;
@@ -713,13 +711,11 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
   assert_db_state( pDb );
 
-  /* A value less than zero is against the rules. A value of 0 means open
-  ** one more nested transaction.  */
-  if( iLevel<0 ) return LSM_MISUSE;
-  if( iLevel<1 ) iLevel = MIN(1, pDb->nTransOpen - 1);
+  /* A value less than zero means close the innermost nested transaction. */
+  if( iLevel<0 ) iLevel = MAX(0, pDb->nTransOpen - 1);
 
-  if( iLevel<=pDb->nTransOpen ){
-    if( iLevel==1 ){
+  if( iLevel<pDb->nTransOpen ){
+    if( iLevel==0 ){
       rc = lsmLogCommit(pDb);
       if( rc==LSM_OK && pDb->eSafety==LSM_SAFETY_FULL ){
         rc = lsmFsLogSync(pDb->pFS);
@@ -731,7 +727,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
       }
       lsmFinishWriteTrans(pDb);
     }
-    pDb->nTransOpen = iLevel-1;
+    pDb->nTransOpen = iLevel;
   }
   dbReleaseClientSnapshot(pDb);
   return rc;
@@ -742,14 +738,12 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
 
   assert_db_state( pDb );
 
-  /* A value less than zero is against the rules. A value of 0 means roll
-  ** back the innermost transaction.  */
-  if( iLevel<0 ) return LSM_MISUSE;
-  if( iLevel<1 ) iLevel = MIN(1, pDb->nTransOpen - 1);
+  /* A value less than zero means close the innermost nested transaction. */
+  if( iLevel<0 ) iLevel = MAX(0, pDb->nTransOpen - 1);
 
   if( iLevel<=pDb->nTransOpen ){
-    lsmTreeRollback(pDb->pTV, &pDb->aTrans[iLevel-1]);
-    pDb->nTransOpen = iLevel-1;
+    lsmTreeRollback(pDb->pTV, &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)]);
+    pDb->nTransOpen = iLevel;
   }
 
   if( pDb->nTransOpen==0 ){

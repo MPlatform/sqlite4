@@ -872,9 +872,8 @@ struct sqlite4 {
   Hash aCollSeq;                /* All collating sequences */
   Db aDbStatic[2];              /* Static space for the 2 default backends */
   Savepoint *pSavepoint;        /* List of active savepoints */
-  int nSavepoint;               /* Number of non-transaction savepoints */
+  int nSavepoint;               /* Number of open savepoints */
   int nStatement;               /* Number of nested statement-transactions  */
-  u8 isTransactionSavepoint;    /* True if the outermost savepoint is a TS */
   i64 nDeferredCons;            /* Net deferred constraints this transaction. */
   int *pnBytesFreed;            /* If not NULL, increment this in DbFree() */
 

@@ -2064,12 +2064,11 @@ int lsmMCursorKey(MultiCursor *pCsr, void **ppKey, int *pnKey){
 }
 
 int lsmMCursorValue(MultiCursor *pCsr, void **ppVal, int *pnVal){
-#ifdef LSM_DEBUG
   assert( pCsr->aTree );
   assert( rtIsDelete(pCsr->eType)==0 || !(pCsr->flags & CURSOR_IGNORE_DELETE) );
-#endif
 
   multiCursorGetVal(pCsr, pCsr->aTree[1], ppVal, pnVal);
+  assert( *pnVal>=0 );
   return LSM_OK;
 }
 

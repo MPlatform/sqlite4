@@ -91,7 +91,7 @@ static int kvlsmCommitPhaseTwo(KVStore *pKVStore, int iLevel){
 
   if( pKVStore->iTransLevel>iLevel ){
     if( pKVStore->iTransLevel>=2 ){
-      rc = lsm_commit(p->pDb, MAX(1, iLevel));
+      rc = lsm_commit(p->pDb, MAX(0, iLevel-1));
     }
     if( iLevel==0 ){
       lsm_csr_close(p->pCsr);
@@ -118,9 +118,9 @@ static int kvlsmRollback(KVStore *pKVStore, int iLevel){
   int rc = SQLITE_OK;
   KVLsm *p = (KVLsm *)pKVStore;
 
-  if( pKVStore->iTransLevel>iLevel ){
+  if( pKVStore->iTransLevel>=iLevel ){
     if( pKVStore->iTransLevel>=2 ){
-      rc = lsm_rollback(p->pDb, MAX(1, iLevel));
+      rc = lsm_rollback(p->pDb, MAX(0, iLevel-1));
     }
     if( iLevel==0 ){
       lsm_csr_close(p->pCsr);
@@ -325,7 +325,7 @@ static int kvlsmData(
       *pNData = nData;
     }else{
       int nOut = n;
-      if( (ofst+n)> nData ) nOut = nData - ofst;
+      if( (ofst+n)>nData ) nOut = nData - ofst;
       if( nOut<0 ) nOut = 0;
 
       *paData = &((u8 *)pData)[n];

@@ -199,6 +199,32 @@ int lsm_info(lsm_db *, int, ...);
 
 /* 
 ** Open and close transactions and nested transactions.
+**
+** lsm_begin():
+**   Used to open transactions and sub-transactions. A successful call to 
+**   lsm_begin() ensures that there are at least iLevel nested transactions 
+**   open. To open a top-level transaction, pass iLevel==1. To open a 
+**   sub-transaction within the top-level transaction, iLevel==2. Passing 
+**   iLevel==0 is a no-op.
+**
+** lsm_commit():
+**   Used to commit transactions and sub-transactions. A successful call 
+**   to lsm_commit() ensures that there are at most iLevel nested 
+**   transactions open. To commit a top-level transaction, pass iLevel==0. 
+**   To commit all sub-transactions inside the main transaction, pass
+**   iLevel==1.
+**
+** lsm_rollback():
+**   Used to roll back transactions and sub-transactions. A successful call 
+**   to lsm_rollback() restores the database to the state it was in when
+**   the iLevel'th nested sub-transaction (if any) was first opened. And then
+**   closes transactions to ensure that there are at most iLevel nested
+**   transactions open.
+**
+**   Passing iLevel==0 rolls back and closes the top-level transaction.
+**   iLevel==1 also rolls back the top-level transaction, but leaves it
+**   open. iLevel==2 rolls back the sub-transaction nested directly inside
+**   the top-level transaction (and leaves it open).
 */
 int lsm_begin(lsm_db *pDb, int iLevel);
 int lsm_commit(lsm_db *pDb, int iLevel);

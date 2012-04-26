@@ -1704,6 +1704,130 @@ static int vdbeCommit(sqlite4 *db, Vdbe *p){
   return rc;
 }
 
+static void freeSavepoints(sqlite4 *db, int iLevel){
+  if( iLevel<1 ) iLevel = 1;
+  while( (iLevel-1)<db->nSavepoint ){
+    Savepoint *pDel = db->pSavepoint;
+    db->pSavepoint = pDel->pNext;
+    db->nSavepoint--;
+    sqlite4DbFree(db, pDel);
+  }
+}
+
+#ifdef SQLITE_DEBUG
+static int countSavepoints(sqlite4 *db){
+  int nRet = 0;
+  Savepoint *p;
+  for(p=db->pSavepoint; p; p=p->pNext) nRet++;
+  return nRet;
+}
+#endif
+
+/*
+** Rollback to transaction level iLevel. iLevel is as defined by the kv-store
+** layer. For example, if the user has done:
+**
+**   BEGIN;
+**     write 1;
+**       SAVEPOINT one;
+**         write 2;
+**           SAVEPOINT two;
+**             write 3;
+**
+** then:
+**
+**   iLevel==1     Roll back and close top-level transaction.
+**   iLevel==2     Roll back top-level transaction. Transaction remains open.
+**   iLevel==3     Roll back to just after "write 1". Savepoint "one" remains
+**                 open. Savepoint "two" is closed.
+**   iLevel==4     Roll back to just after "write 2". Both savepoints remain
+**                 open (but "write 3" has been backed out).
+*/
+int sqlite4VdbeRollback(sqlite4 *db, int iLevel){
+  int i;
+  assert( sqlite4_mutex_held(db->mutex) );
+  assert( db->nSavepoint==countSavepoints(db) );
+
+  /* Invoke the xRollback() hook on all backends. */
+  sqlite4BeginBenignMalloc();
+  for(i=0; i<db->nDb; i++){
+    KVStore *pKV = db->aDb[i].pKV;
+    if( pKV && pKV->iTransLevel>=iLevel ){
+      sqlite4KVStoreRollback(pKV, iLevel);
+    }
+  }
+  sqlite4EndBenignMalloc();
+
+  /* If the InternChanges flag is set, expire prepared statements and
+  ** reload the schema. If this is not a rollback of the top-level 
+  ** transaction, do not clear the SQLITE_InternChanges flag.  */ 
+  if( db->flags&SQLITE_InternChanges ){
+    sqlite4ExpirePreparedStatements(db);
+    sqlite4ResetInternalSchema(db, -1);
+    if( iLevel>2 ) db->flags |= SQLITE_InternChanges;
+  }
+
+  /* Free elements from the db->pSavepoint list. Restore the deferred FK
+  ** constraint counter to the value consistent with the restored database
+  ** state.  */
+  freeSavepoints(db, iLevel);
+  db->nDeferredCons = (db->pSavepoint ? db->pSavepoint->nDeferredCons : 0);
+  assert( db->nSavepoint==countSavepoints(db) );
+
+  return SQLITE_OK;
+}
+
+/*
+** Commit to transaction level iLevel.
+*/
+int sqlite4VdbeCommit(sqlite4 *db, int iLevel){
+  int rc = SQLITE_OK;
+  int i;
+  assert( sqlite4_mutex_held(db->mutex) );
+  assert( db->nSavepoint==countSavepoints(db) );
+  assert( db->nDeferredCons==0 );
+
+  /* Invoke the xCommit() hook on all backends. */
+  for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
+    KVStore *pKV = db->aDb[i].pKV;
+    if( pKV && pKV->iTransLevel>iLevel ){
+      rc = sqlite4KVStoreCommit(pKV, iLevel);
+    }
+  }
+
+  if( rc!=SQLITE_OK ){
+    sqlite4VdbeRollback(db, 1);
+  }else{
+    freeSavepoints(db, iLevel);
+  }
+  assert( db->nSavepoint==countSavepoints(db) );
+  return rc;
+}
+
+static int vdbeCloseStatement(Vdbe *p, int bRollback){
+  int i;
+  int rc = SQLITE_OK;
+  sqlite4 *db = p->db;
+
+  for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
+    if( p->stmtTransMask & ((yDbMask)1)<<i ){
+      KVStore *pKV = db->aDb[i].pKV;
+      assert( pKV->iTransLevel>2 );
+      if( bRollback ){
+        rc = sqlite4KVStoreRollback(pKV, pKV->iTransLevel);
+      }
+      if( rc==SQLITE_OK ){
+        rc = sqlite4KVStoreCommit(pKV, pKV->iTransLevel-1);
+      }
+    }
+  }
+
+  if( rc ){
+    sqlite4VdbeRollback(db, 1);
+  }
+  return rc;
+}
+
 /* 
 ** This routine checks that the sqlite4.activeVdbeCnt count variable
 ** matches the number of vdbe's in the list sqlite4.pVdbe that are
@@ -1746,6 +1870,8 @@ static void checkActiveVdbeCnt(sqlite4 *db){
 int sqlite4VdbeCloseStatement(Vdbe *p, int eOp){
   return SQLITE_OK;
 }
+
+
 
 /*
 ** This function is called when a transaction opened by the database 
@@ -1795,10 +1921,9 @@ int sqlite4VdbeHalt(Vdbe *p){
   }
   checkActiveVdbeCnt(db);
 
-  if( p->pc<0 ){
-    /* No commit or rollback needed if the program never started */
-  }else{
-    /* eAction:
+  if( p->pc>=0 ){
+    /* Figure out if a transaction or statement transaction needs to be
+    ** committed or rolled back.
     **
     **    0 - Do commit, either statement or transaction.
     **    1 - Do rollback, either statement or transaction.
@@ -1813,22 +1938,16 @@ int sqlite4VdbeHalt(Vdbe *p){
         eAction = 0;
       }
     }
-
     if( eAction==0 && sqlite4VdbeCheckFk(p, 0) ){
       eAction = 1;
     }
 
-    if( eAction==2 || ( 
-          sqlite4VtabInSync(db)==0 
-       && db->writeVdbeCnt==(p->readOnly==0) 
-       && db->pSavepoint==0 
+    if( eAction==2 || (
+       db->writeVdbeCnt==(p->readOnly==0) && db->pSavepoint==0
     )){
-      if( eAction==0 && sqlite4VdbeCheckFk(p, 1) ){
-        eAction = 1;
-      }
 
       if( eAction==0 ){
-        int rc = vdbeCommit(db, p);
+        int rc = sqlite4VdbeCommit(db, 1);
         if( rc!=SQLITE_OK ){
           p->rc = rc;
           eAction = 1;
@@ -1839,7 +1958,7 @@ int sqlite4VdbeHalt(Vdbe *p){
       }
 
       if( eAction ){
-        sqlite4RollbackAll(db);
+        sqlite4VdbeRollback(db, 1);
       }
 
       db->nDeferredCons = 0;
@@ -1847,37 +1966,25 @@ int sqlite4VdbeHalt(Vdbe *p){
       /* Auto-commit mode is turned off and no "OR ROLLBACK" constraint was
       ** encountered. So either commit (if eAction==0) or rollback (if 
       ** eAction==1) any statement transactions opened by this VM.  */
-
-      int i;                           /* Used to iterate thru attached dbs */
-      int (*xFunc)(KVStore *,int);     /* Commit or rollback function */
-
       assert( eAction==0 || eAction==1 );
-      xFunc = (eAction ? sqlite4KVStoreRollback : sqlite4KVStoreCommit);
-      for(i=0; i<db->nDb; i++){
-        if( p->stmtTransMask & ((yDbMask)1)<<i ){
-          KVStore *pKV = db->aDb[i].pKV;
-          rc = xFunc(pKV, pKV->iTransLevel-1);
-          if( rc ){
-            sqlite4RollbackAll(db);
-            break;
-          }
-        }
-      }
+      rc = vdbeCloseStatement(p, eAction);
     }
 
     if( p->changeCntOn ){
       sqlite4VdbeSetChanges(db, (eAction ? 0 : p->nChange));
     }
     p->nChange = 0;
-  }
 
-  /* We have successfully halted and closed the VM.  Record this fact. */
-  if( p->pc>=0 ){
+    /* We have successfully halted and closed the VM.  Record this fact. */
     db->activeVdbeCnt--;
     if( !p->readOnly ){
       db->writeVdbeCnt--;
     }
     assert( db->activeVdbeCnt>=db->writeVdbeCnt );
+
+    if( db->pSavepoint==0 && db->activeVdbeCnt==0 ){
+      sqlite4VdbeRollback(db, 0);
+    }
   }
 
   p->magic = VDBE_MAGIC_HALT;

@@ -435,6 +435,9 @@ int sqlite4VdbeSeekEnd(VdbeCursor*, int);
 int sqlite4VdbeNext(VdbeCursor*);
 int sqlite4VdbePrevious(VdbeCursor*);
 
+int sqlite4VdbeRollback(sqlite4 *db, int iLevel);
+int sqlite4VdbeCommit(sqlite4 *db, int iLevel);
+
 #ifdef SQLITE_DEBUG
 void sqlite4VdbeMemAboutToChange(Vdbe*,Mem*);
 #endif

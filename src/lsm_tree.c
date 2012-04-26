@@ -1114,6 +1114,7 @@ int lsmTreeCursorValid(TreeCursor *pCsr){
 */
 void lsmTreeRollback(TreeVersion *pTV, TreeMark *pMark){
   Tree *pTree = pTV->pTree;
+  TreeNode *p;
 
   assert( lsmTreeIsWriteVersion(pTV) );
 
@@ -1121,16 +1122,19 @@ void lsmTreeRollback(TreeVersion *pTV, TreeMark *pMark){
   pTree->tvWorking.nHeight = pMark->nHeight;
 
   if( pMark->pRollback ){
-    TreeNode *p;
-    TreeNode *pNext;
-    for(p=((TreeNode *)pMark->pRollback)->pNext; p; p=pNext){
-      pNext = p->pNext;
-      assert( p->iV2!=0 );
-      p->iV2 = 0;
-      p->iV2Ptr = 0;
-      p->pV2Ptr = 0;
-      p->pNext = 0;
-    }
+    p = ((TreeNode *)pMark->pRollback)->pNext;
+  }else{
+    p = pTree->pRollback;
+  }
+
+  while( p ){
+    TreeNode *pNext = p->pNext;
+    assert( p->iV2!=0 );
+    p->iV2 = 0;
+    p->iV2Ptr = 0;
+    p->pV2Ptr = 0;
+    p->pNext = 0;
+    p = pNext;
   }
 
   pTree->pRollback = (TreeNode *)pMark->pRollback;
