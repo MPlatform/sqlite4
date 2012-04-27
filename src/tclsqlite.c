@@ -2514,6 +2514,12 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     sqlite4_close(p->db);
     p->db = 0;
   }
+#ifdef SQLITE_TEST
+  else{
+    extern int sqlite4test_install_test_functions(sqlite4*);
+    sqlite4test_install_test_functions(p->db);
+  }
+#endif
 #ifdef SQLITE_HAS_CODEC
   if( p->db ){
     sqlite4_key(p->db, pKey, nKey);

@@ -208,6 +208,7 @@ TESTSRC = \
   $(TOP)/test/test_config.c \
   $(TOP)/test/test_demovfs.c \
   $(TOP)/test/test_devsym.c \
+  $(TOP)/test/test_func.c \
   $(TOP)/test/test_fuzzer.c \
   $(TOP)/test/test_hexio.c \
   $(TOP)/test/test_intarray.c \

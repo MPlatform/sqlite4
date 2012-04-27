@@ -139,6 +139,7 @@ test_suite "src4" -prefix "" -description {
   selectB.test selectC.test 
   collate1.test collate2.test collate3.test collate4.test collate5.test
   collate6.test collate7.test collate8.test collate9.test collateA.test
+  savepoint.test savepoint2.test savepoint5.test
 }
 
 test_suite "veryquick" -prefix "" -description {

@@ -75,7 +75,6 @@ static void attachFunc(
   unsigned int flags;
   Db *aNew;
   char *zErrDyn = 0;
-  sqlite4_vfs *pVfs;
 
   UNUSED_PARAMETER(NotUsed);
 
@@ -136,7 +135,6 @@ static void attachFunc(
     sqlite4_free(zErr);
     return;
   }
-  assert( pVfs );
   flags |= SQLITE_OPEN_MAIN_DB;
   rc = sqlite4KVStoreOpen(db, zName, zPath, &aNew->pKV, 0);
   sqlite4_free( zPath );

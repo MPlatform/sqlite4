@@ -459,28 +459,6 @@ static int registerTestFunctions(sqlite4 *db){
 }
 
 /*
-** TCLCMD:  autoinstall_test_functions
-**
-** Invoke this TCL command to use sqlite4_auto_extension() to cause
-** the standard set of test functions to be loaded into each new
-** database connection.
-*/
-static int autoinstall_test_funcs(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  extern int Md5_Register(sqlite4*);
-  int rc = sqlite4_auto_extension((void*)registerTestFunctions);
-  if( rc==SQLITE_OK ){
-    rc = sqlite4_auto_extension((void*)Md5_Register);
-  }
-  Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
-  return TCL_OK;
-}
-
-/*
 ** A bogus step function and finalizer function.
 */
 static void tStep(sqlite4_context *a, int b, sqlite4_value **c){}
@@ -567,17 +545,24 @@ int Sqlitetest_func_Init(Tcl_Interp *interp){
      char *zName;
      Tcl_ObjCmdProc *xProc;
   } aObjCmd[] = {
-     { "autoinstall_test_functions",    autoinstall_test_funcs },
      { "abuse_create_function",         abuse_create_function  },
   };
   int i;
-  extern int Md5_Register(sqlite4*);
 
   for(i=0; i<sizeof(aObjCmd)/sizeof(aObjCmd[0]); i++){
     Tcl_CreateObjCommand(interp, aObjCmd[i].zName, aObjCmd[i].xProc, 0, 0);
   }
-  sqlite4_initialize();
-  sqlite4_auto_extension((void*)registerTestFunctions);
-  sqlite4_auto_extension((void*)Md5_Register);
   return TCL_OK;
 }
+
+int sqlite4test_install_test_functions(sqlite4 *db){
+  int rc;
+  extern int Md5_Register(sqlite4*);
+
+  rc = registerTestFunctions(db);
+  if( rc==SQLITE_OK ){
+    rc = Md5_Register(db);
+  }
+  return rc;
+}
+
