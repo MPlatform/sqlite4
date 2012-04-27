@@ -365,7 +365,7 @@ int lsmVarintPut32(u8 *aOut, int n){
 
 static int sortedBlobGrow(Blob *pBlob, int nData){
   if( pBlob->nAlloc<nData ){
-    pBlob->pData = lsmReallocOrFree(pBlob->pData, nData);
+    pBlob->pData = lsmReallocOrFree(0, pBlob->pData, nData);
     if( !pBlob->pData ) return LSM_NOMEM;
     pBlob->nAlloc = nData;
   }
@@ -386,7 +386,7 @@ static int sortedBlobCopy(Blob *pDest, Blob *pSrc){
 #endif
 
 static void sortedBlobFree(Blob *pBlob){
-  lsmFree(pBlob->pData);
+  lsmFree(0, pBlob->pData);
   memset(pBlob, 0, sizeof(Blob));
 }
 
@@ -680,12 +680,12 @@ void lsmSortedSplitkey(lsm_db *pDb, Level *pLevel, int *pRc){
         );
       }
       if( res<0 ){
-        lsmFree(pLevel->pSplitKey);
+        lsmFree(pDb->pEnv, pLevel->pSplitKey);
         pLevel->iSplitTopic = iTopic;
         pLevel->pSplitKey = blob.pData;
         pLevel->nSplitKey = blob.nData;
       }else{
-        lsmFree(blob.pData);
+        lsmFree(pDb->pEnv, blob.pData);
       }
     }
     lsmFsPageRelease(pPg);
@@ -712,7 +712,8 @@ static int levelCursorInit(
   pCsr->xCmp = xCmp;
   pCsr->pLevel = pLevel;
   pCsr->nPtr = 1 + pLevel->nRight;
-  pCsr->aPtr = (SegmentPtr*)lsmMallocZeroRc(sizeof(SegmentPtr)*pCsr->nPtr, &rc);
+  pCsr->aPtr = (SegmentPtr*)lsmMallocZeroRc(0, 
+                                     sizeof(SegmentPtr)*pCsr->nPtr, &rc);
 
   if( rc==LSM_OK ){
     int i;
@@ -742,7 +743,8 @@ static int levelCursorInitRun(
   pCsr->bIgnoreSeparators = 1;
   pCsr->xCmp = xCmp;
   pCsr->nPtr = 1;
-  pCsr->aPtr = (SegmentPtr*)lsmMallocZeroRc(sizeof(SegmentPtr)*pCsr->nPtr, &rc);
+  pCsr->aPtr = (SegmentPtr*)lsmMallocZeroRc(0, 
+                                      sizeof(SegmentPtr)*pCsr->nPtr, &rc);
 
   if( rc==LSM_OK ){
     pCsr->aPtr[0].pRun = pRun;
@@ -779,7 +781,7 @@ static void segmentCursorReset(LevelCursor *pCsr){
 */
 static void segmentCursorClose(LevelCursor *pCsr){
   segmentCursorReset(pCsr);
-  lsmFree(pCsr->aPtr);
+  lsmFree(0, pCsr->aPtr);
   memset(pCsr, 0, sizeof(LevelCursor));
 }
 
@@ -896,7 +898,7 @@ static int segmentCursorValid(LevelCursor *pCsr){
 static char *keyToString(void *pKey, int nKey){
   int i;
   u8 *aKey = (u8 *)pKey;
-  char *zRet = (char *)lsmMalloc(nKey+1);
+  char *zRet = (char *)lsmMalloc(0, nKey+1);
 
   for(i=0; i<nKey; i++){
     zRet[i] = (char)(isalnum(aKey[i]) ? aKey[i] : '.');
@@ -1401,6 +1403,7 @@ static int segmentCursorEnd(LevelCursor *pCsr, int bLast){
 
 static void mcursorFreeComponents(MultiCursor *pCsr){
   int i;
+  lsm_env *pEnv = 0;
 
   /* Close the tree cursor, if any. */
   lsmTreeCursorDestroy(pCsr->pTreeCsr);
@@ -1411,9 +1414,9 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
   }
 
   /* Free allocations */
-  lsmFree(pCsr->aSegCsr);
-  lsmFree(pCsr->aTree);
-  lsmFree(pCsr->aFreelist);
+  lsmFree(pEnv, pCsr->aSegCsr);
+  lsmFree(pEnv, pCsr->aTree);
+  lsmFree(pEnv, pCsr->aFreelist);
 
   /* Zero fields */
   pCsr->nSegCsr = 0;
@@ -1433,7 +1436,7 @@ void lsmMCursorClose(MultiCursor *pCsr){
     mcursorFreeComponents(pCsr);
 
     /* Free the cursor structure itself */
-    lsmFree(pCsr);
+    lsmFree(0, pCsr);
   }
 }
 
@@ -1485,7 +1488,7 @@ int multiCursorAddLevel(
       int nByte;
       LevelCursor *aNew;
       nByte = sizeof(LevelCursor) * (pCsr->nSegCsr+16);
-      aNew = (LevelCursor *)lsmRealloc(pCsr->aSegCsr, nByte);
+      aNew = (LevelCursor *)lsmRealloc(0, pCsr->aSegCsr, nByte);
       if( aNew==0 ) return LSM_NOMEM_BKPT;
       pCsr->aSegCsr = aNew;
     }
@@ -1526,7 +1529,7 @@ static int multiCursorNew(
   MultiCursor *pCsr = *ppCsr;     /* Allocated multi-cursor */
 
   if( pCsr==0 ){
-    pCsr = (MultiCursor *)lsmMallocZeroRc(sizeof(MultiCursor), &rc);
+    pCsr = (MultiCursor *)lsmMallocZeroRc(pDb->pEnv, sizeof(MultiCursor), &rc);
   }
 
   if( rc==LSM_OK ){
@@ -1782,7 +1785,7 @@ static int multiCursorAllocTree(MultiCursor *pCsr){
     while( pCsr->nTree<(CURSOR_DATA_SEGMENT+pCsr->nSegCsr) ){
       pCsr->nTree = pCsr->nTree*2;
     }
-    pCsr->aTree = (int *)lsmMallocZero(sizeof(int) * pCsr->nTree * 2);
+    pCsr->aTree = (int *)lsmMallocZero(0, sizeof(int) * pCsr->nTree * 2);
     if( pCsr->aTree==0 ){
       rc = LSM_NOMEM_BKPT;
     }
@@ -2206,7 +2209,7 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
       aData = lsmFsPageData(pPg, &nData);
       flags = pageGetFlags(aData, nData);
       if( flags&SEGMENT_BTREE_FLAG ){
-        Page **apNew = (Page **)lsmRealloc(apHier, sizeof(Page *)*(nHier+1));
+        Page **apNew = (Page **)lsmRealloc(0, apHier, sizeof(Page *)*(nHier+1));
         if( apNew==0 ){
           rc = LSM_NOMEM_BKPT;
           break;
@@ -2232,7 +2235,7 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
       for(i=0; i<nHier; i++){
         lsmFsPageRelease(apHier[i]);
       }
-      lsmFree(apHier);
+      lsmFree(0, apHier);
     }
   }
 
@@ -2334,7 +2337,7 @@ static int mergeWorkerPushHierarchy(
     if( iLevel==pMW->nHier ){
       /* Extend the array and allocate a new root page. */
       Page **aNew;
-      aNew = (Page **)lsmRealloc(pMW->apHier, sizeof(Page *)*(pMW->nHier+1));
+      aNew = (Page **)lsmRealloc(0, pMW->apHier, sizeof(Page *)*(pMW->nHier+1));
       if( !aNew ){
         rc = LSM_NOMEM_BKPT;
         goto push_hierarchy_out;
@@ -2753,7 +2756,7 @@ static void mergeWorkerShutdown(MergeWorker *pMW){
   for(i=0; i<pMW->nHier; i++){
     lsmFsPageRelease(pMW->apHier[i]);
   }
-  lsmFree(pMW->apHier);
+  lsmFree(0, pMW->apHier);
 
   pMW->pCsr = 0;
   pMW->apHier = 0;
@@ -2882,9 +2885,9 @@ static int mergeWorkerDone(MergeWorker *pMW){
 
 static void sortedFreeLevel(Level *p){
   if( p ){
-    lsmFree(p->pMerge);
-    lsmFree(p->aRhs);
-    lsmFree(p);
+    lsmFree(0, p->pMerge);
+    lsmFree(0, p->aRhs);
+    lsmFree(0, p);
   }
 }
 
@@ -2932,7 +2935,7 @@ int lsmSortedFlushTree(
   }
 
   /* Allocate the new level structure to write to. */
-  pNew = (Level *)lsmMallocZeroRc(sizeof(Level), &rc);
+  pNew = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
 
   /* Create a cursor to gather the data required by the new segment. The new
   ** segment contains everything in the tree and pointers to the next segment
@@ -3046,9 +3049,10 @@ static int sortedMergeSetup(
   int nByte;                      /* Bytes of space allocated at pMerge */
 
   /* Allocate the new Level object */
-  pNew = (Level *)lsmMallocZeroRc(sizeof(Level), &rc);
+  pNew = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
   if( pNew ){
-    pNew->aRhs = (Segment *)lsmMallocZeroRc(nMerge * sizeof(Segment), &rc);
+    pNew->aRhs = (Segment *)lsmMallocZeroRc(pDb->pEnv, 
+                                        nMerge * sizeof(Segment), &rc);
   }
 
   /* Populate the new Level object */
@@ -3062,7 +3066,7 @@ static int sortedMergeSetup(
     for(i=0; i<nMerge; i++){
       pNext = p->pNext;
       pNew->aRhs[i] = p->lhs;
-      lsmFree(p);
+      lsmFree(pDb->pEnv, p);
       p = pNext;
     }
 
@@ -3081,7 +3085,7 @@ static int sortedMergeSetup(
 
   /* Allocate the merge object */
   nByte = sizeof(Merge) + sizeof(MergeInput) * (nMerge + bUseNext);
-  pMerge = (Merge *)lsmMallocZeroRc(nByte, &rc);
+  pMerge = (Merge *)lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
   if( pMerge ){
     pMerge->aInput = (MergeInput *)&pMerge[1];
     pMerge->nInput = nMerge + bUseNext;
@@ -3339,12 +3343,12 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
             lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->aRhs[i].run);
             lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->aRhs[i].sep);
           }
-          lsmFree(pLevel->aRhs);
+          lsmFree(pDb->pEnv, pLevel->aRhs);
           pLevel->nRight = 0;
           pLevel->aRhs = 0;
 
           /* Free the Merge object */
-          lsmFree(pLevel->pMerge);
+          lsmFree(pDb->pEnv, pLevel->pMerge);
           pLevel->pMerge = 0;
         }
       }
@@ -3509,8 +3513,8 @@ static char *segToString(SortedRun *pRun, int nMin){
   }else{
     z = lsmMallocPrintf("|%s % *s%s|", z1, nPad, "", z2);
   }
-  lsmFree(z1);
-  lsmFree(z2);
+  lsmFree(0, z1);
+  lsmFree(0, z2);
 
   return z;
 }
@@ -3526,7 +3530,7 @@ static int fileToString(
 
   zSeg = segToString(pRun, nMin);
   i += snprintf(&aBuf[i], nBuf-i, "%s", zSeg);
-  lsmFree(zSeg);
+  lsmFree(0, zSeg);
 
   return i;
 }
@@ -3594,7 +3598,7 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg){
   zRet = lsmMallocAPrintf(zRet, "}");
 
   lsmLogMessage(pDb, LSM_OK, "      Page %d: %s", lsmFsPageNumber(pPg), zRet);
-  lsmFree(zRet);
+  lsmFree(pDb->pEnv, zRet);
   sortedBlobFree(&blob);
 }
 
@@ -3606,7 +3610,7 @@ void sortedDumpSegment(lsm_db *pDb, SortedRun *pRun){
 
     zSeg = segToString(pRun, 0);
     lsmLogMessage(pDb, LSM_OK, "Segment: %s", zSeg);
-    lsmFree(zSeg);
+    lsmFree(pDb->pEnv, zSeg);
 
     lsmFsDbPageEnd(pDb->pFS, pRun, 0, &pPg);
     while( pPg ){

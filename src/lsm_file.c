@@ -126,6 +126,7 @@ struct PhantomRun {
 
 struct FileSystem {
   lsm_db *pDb;
+  lsm_env *pEnv;
 
   char *zDb;                      /* Database name */
   int nMetasize;                  /* Size of meta pages in bytes */
@@ -133,7 +134,6 @@ struct FileSystem {
   int nBlocksize;                 /* Database block-size in bytes */
 
   lsm_vfs *pVfs;                  /* VFS object */
-  void *pVfsCtx;                  /* Context argument for pVfs->xOpen() */
 
   /* r/w file descriptors for both files */
   lsm_file *fdDb;                 /* Database file */
@@ -210,7 +210,7 @@ struct Page {
 */
 static int fsIListGrow(IList *pList, int nElem){
   if( pList->nAlloc<nElem ){
-    pList->a= (int *)lsmReallocOrFree(pList->a, nElem * sizeof(int));
+    pList->a= (int *)lsmReallocOrFree(0, pList->a, nElem * sizeof(int));
     if( pList->a==0 ) return LSM_NOMEM;
     memset(&pList->a[pList->nAlloc], 0, (nElem-pList->nAlloc)*sizeof(int));
     pList->nAlloc = nElem;
@@ -278,9 +278,9 @@ static lsm_file *fsOpenFile(
     if( !zName ){
       *pRc = LSM_NOMEM;
     }else{
-      *pRc = pFS->pVfs->xOpen(pFS->pVfsCtx, zName, &pFile);
+      *pRc = pFS->pVfs->xOpen(pFS->pEnv, zName, &pFile);
     }
-    lsmFree(zName);
+    lsmFree(pFS->pEnv, zName);
   }
   return pFile;
 }
@@ -296,19 +296,19 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb, int nPgsz){
   assert( pDb->pFS==0 );
   assert( pDb->pWorker==0 && pDb->pClient==0 );
 
-  pFS = (FileSystem *)lsmMallocZeroRc(sizeof(FileSystem), &rc);
+  pFS = (FileSystem *)lsmMallocZeroRc(pDb->pEnv, sizeof(FileSystem), &rc);
   if( pFS ){
     pFS->nPagesize = nPgsz;
     pFS->nMetasize = 4 * 1024;
     pFS->nBlocksize = 2 * 1024 * 1024;
     pFS->pDb = pDb;
+    pFS->pEnv = pDb->pEnv;
 
     /* Copy pointers to the VFS */
     if( pDb->pVfs ){
-      pFS->pVfsCtx = pDb->pVfsCtx;
       pFS->pVfs = pDb->pVfs;
     }else{
-      pFS->pVfs = lsm_default_vfs(&pFS->pVfsCtx);
+      pFS->pVfs = lsm_default_vfs();
     }
 
     /* Make a copy of the database name. */
@@ -319,7 +319,7 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb, int nPgsz){
     ** so that it can grow dynamicly. */
     pFS->nCacheMax = 2048;
     pFS->nHash = 4096;
-    pFS->apHash = lsmMallocZeroRc(sizeof(Page *) * pFS->nHash, &rc);
+    pFS->apHash = lsmMallocZeroRc(pDb->pEnv, sizeof(Page *) * pFS->nHash, &rc);
 
     /* Open the files */
     pFS->fdDb = fsOpenFile(pFS, 0, &rc);
@@ -341,14 +341,15 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb, int nPgsz){
 void lsmFsClose(FileSystem *pFS){
   if( pFS ){
     Page *pPg;
+    lsm_env *pEnv = pFS->pEnv;
 
     assert( pFS->nOut==0 );
 
     pPg = pFS->pLruFirst;
     while( pPg ){
       Page *pNext = pPg->pLruNext;
-      lsmFree(pPg->aData);
-      lsmFree(pPg);
+      lsmFree(pEnv, pPg->aData);
+      lsmFree(pEnv, pPg);
       pPg = pNext;
     }
 
@@ -356,17 +357,17 @@ void lsmFsClose(FileSystem *pFS){
     while( pPg ){
       Page *pNext = pPg->pHashNext;
       assert( pPg->nRef==0 );
-      lsmFree(pPg->aData);
-      lsmFree(pPg);
+      lsmFree(pEnv, pPg->aData);
+      lsmFree(pEnv, pPg);
       pPg = pNext;
     }
 
     if( pFS->fdDb ) pFS->pVfs->xClose(pFS->fdDb);
     if( pFS->fdLog ) pFS->pVfs->xClose(pFS->fdLog);
 
-    lsmFree(pFS->zDb);
-    lsmFree(pFS->apHash);
-    lsmFree(pFS);
+    lsmFree(pEnv, pFS->zDb);
+    lsmFree(pEnv, pFS->apHash);
+    lsmFree(pEnv, pFS);
   }
 }
 
@@ -505,15 +506,15 @@ static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
   int rc = LSM_OK;
   Page *pPage = 0;
   if( pFS->pLruFirst==0 || pFS->nCacheAlloc<pFS->nCacheMax ){
-    pPage = lsmMallocZero(sizeof(Page));
+    pPage = lsmMallocZero(pFS->pEnv, sizeof(Page));
     if( !pPage ){
       rc = LSM_NOMEM_BKPT;
     }else{
       int nByte;
       nByte = (bMeta ? pFS->nMetasize : pFS->nPagesize);
-      pPage->aData = (u8 *)lsmMalloc(nByte);
+      pPage->aData = (u8 *)lsmMalloc(pFS->pEnv, nByte);
       if( !pPage->aData ){
-        lsmFree(pPage);
+        lsmFree(pFS->pEnv, pPage);
         rc = LSM_NOMEM_BKPT;
         pPage = 0;
       }
@@ -530,8 +531,8 @@ static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
 }
 
 static void fsPageBufferFree(Page *pPg){
-  lsmFree(pPg->aData);
-  lsmFree(pPg);
+  lsmFree(0, pPg->aData);
+  lsmFree(0, pPg);
 }
 
 Pgno lsmFsSortedRoot(SortedRun *p){
@@ -913,7 +914,7 @@ int lsmFsPhantomMaterialize(
     assert( i==p->iLast+1 );
 
     p->nSize = pPhantom->nPhantom;
-    lsmFree(pPhantom);
+    lsmFree(pFS->pEnv, pPhantom);
   }
   return rc;
 }
@@ -1101,9 +1102,9 @@ int lsmFsMetaPageGet(FileSystem *pFS, int iPg, Page **ppPg){
   if( pPg==0 ){
     i64 iOff;
 
-    pPg = lsmMallocZeroRc(sizeof(Page), &rc);
+    pPg = lsmMallocZeroRc(pFS->pEnv, sizeof(Page), &rc);
     if( rc ) goto meta_page_out;
-    pPg->aData = lsmMallocZeroRc(pFS->nMetasize, &rc);
+    pPg->aData = lsmMallocZeroRc(pFS->pEnv, pFS->nMetasize, &rc);
     if( rc ) goto meta_page_out;
     iOff = fsMetaOffset(pFS, iPg);
     rc = pFS->pVfs->xRead(pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
@@ -1120,8 +1121,8 @@ meta_page_out:
   if( rc==LSM_OK ){
     pPg->nRef++;
   }else if( pPg ){
-    lsmFree(pPg->aData);
-    lsmFree(pPg);
+    lsmFree(pFS->pEnv, pPg->aData);
+    lsmFree(pFS->pEnv, pPg);
     pPg = 0;
   }
   *ppPg = pPg;
@@ -1140,8 +1141,8 @@ int lsmFsLogPageGet(
   Page *pPg;
   u8 *aData;
 
-  pPg = lsmMallocZeroRc(sizeof(Page), &rc);
-  aData = lsmMallocRc(LOG_FILE_PGSZ, &rc);
+  pPg = lsmMallocZeroRc(pFS->pEnv, sizeof(Page), &rc);
+  aData = lsmMallocRc(pFS->pEnv, LOG_FILE_PGSZ, &rc);
   if( rc==LSM_OK ){
     i64 iOff = LOG_FILE_PGSZ * (iPg-1);
 #ifdef LSM_DEBUG
@@ -1157,8 +1158,8 @@ int lsmFsLogPageGet(
     pPg->nRef = 1;
     pPg->pFS = pFS;
   }else{
-    lsmFree(pPg);
-    lsmFree(aData);
+    lsmFree(pFS->pEnv, pPg);
+    lsmFree(pFS->pEnv, aData);
     pPg = 0;
   }
 
@@ -1229,8 +1230,8 @@ int lsmFsPageRelease(Page *pPg){
       rc = lsmFsPagePersist(pPg);
 
       if( pPg->eType==LSM_LOG_FILE ){
-        lsmFree(pPg->aData);
-        lsmFree(pPg);
+        lsmFree(0, pPg->aData);
+        lsmFree(0, pPg);
       }else if( pPg->eType!=LSM_CKPT_FILE ){
         pFS->nOut--;
         assert( pPg->pLruNext==0 );
@@ -1245,8 +1246,8 @@ int lsmFsPageRelease(Page *pPg){
         pFS->pLruLast = pPg;
 #else
         fsPageRemoveFromHash(pFS, pPg);
-        lsmFree(pPg->aData);
-        lsmFree(pPg);
+        lsmFree(0, pPg->aData);
+        lsmFree(0, pPg);
 #endif
       }
     }
@@ -1269,7 +1270,8 @@ int lsmFsSortedPhantom(FileSystem *pFS, SortedRun *pRun){
   int rc = LSM_OK;
   assert( pFS->pPhantom==0 );
 
-  pFS->pPhantom = (PhantomRun *)lsmMallocZeroRc(sizeof(PhantomRun), &rc);
+  pFS->pPhantom = (PhantomRun *)lsmMallocZeroRc(pFS->pEnv, 
+                                     sizeof(PhantomRun), &rc);
   if( pFS->pPhantom ){
     pFS->pPhantom->pRun = pRun;
   }
@@ -1306,8 +1308,8 @@ void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
 
     zMsg = lsmMallocPrintf("%d..%d: ", p->iFirst, p->iLast);
     lsmLogMessage(pDb, LSM_OK, "    % -15s %s", zMsg, zBlk);
-    lsmFree(zMsg);
-    lsmFree(zBlk);
+    lsmFree(pDb->pEnv, zMsg);
+    lsmFree(pDb->pEnv, zBlk);
   }
 }
 
@@ -1336,9 +1338,9 @@ void lsmFsDumpBlocklists(lsm_db *pDb){
 
   lsmLogMessage(pDb, LSM_OK, "Free list (%s):    %s", zTag, zFree);
 
-  lsmFree(zFree);
-  lsmFree(zPending);
-  lsmFree(zAppend);
+  lsmFree(pDb->pEnv, zFree);
+  lsmFree(pDb->pEnv, zPending);
+  lsmFree(pDb->pEnv, zAppend);
 }
 #endif
 
@@ -1407,7 +1409,7 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   Level *pLevel;
 
   nBlock = pFS->nBlock;
-  aUsed = lsmMallocZero(nBlock);
+  aUsed = lsmMallocZero(pDb->pEnv, nBlock);
   assert( aUsed );
 
   for(pLevel=pDb->pLevel; pLevel; pLevel=pLevel->pNext){
@@ -1432,7 +1434,7 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
 
   for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
 
-  lsmFree(aUsed);
+  lsmFree(pDb->pEnv, aUsed);
   return 1;
 }
 #endif

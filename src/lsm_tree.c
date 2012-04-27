@@ -288,7 +288,7 @@ void dump_node(TreeNode *pNode, int nIndent, int isNode){
     z = appendIndent(0, nIndent);
     z = lsmMallocAPrintf(z, "0x%p", (void *)pNode);
     printf("%s\n", z);
-    lsmFree(z);
+    lsmFree(0, z);
 
     for(i=0; i<4; i++){
 
@@ -297,13 +297,13 @@ void dump_node(TreeNode *pNode, int nIndent, int isNode){
           z = appendIndent(0, nIndent+2);
           z = lsmMallocAPrintf(z, "if( version>=%d )", pNode->iV2);
           printf("%s\n", z);
-          lsmFree(z);
+          lsmFree(0, z);
           dump_node(pNode->pV2Ptr, nIndent + 4, isNode-1);
           if( pNode->apChild[i] ){
             z = appendIndent(0, nIndent+2);
             z = lsmMallocAPrintf(z, "else");
             printf("%s\n", z);
-            lsmFree(z);
+            lsmFree(0, z);
           }
         }
 
@@ -315,7 +315,7 @@ void dump_node(TreeNode *pNode, int nIndent, int isNode){
         z = lsmMallocAPrintf(z, "k%d: ", i);
         z = appendKeyValue(z, pNode->apKey[i]);
         printf("%s\n", z);
-        lsmFree(z);
+        lsmFree(0, z);
       }
 
     }
@@ -336,7 +336,7 @@ void dump_node_contents(TreeNode *pNode, int iVersion, int nIndent, int isNode){
   }
 
   printf("%s\n", zLine);
-  lsmFree(zLine);
+  lsmFree(0, zLine);
 
   for(i=0; i<4 && isNode>0; i++){
     TreeNode *pChild = getChildPtr(pNode, iVersion, i);
@@ -853,7 +853,7 @@ int lsmTreeIsEmpty(Tree *pTree){
 */
 int lsmTreeCursorNew(TreeVersion *pVersion, TreeCursor **ppCsr){
   TreeCursor *pCsr;
-  *ppCsr = pCsr = lsmMalloc(sizeof(TreeCursor));
+  *ppCsr = pCsr = lsmMalloc(0, sizeof(TreeCursor));
   if( pCsr ){
     treeCursorInit(pVersion, pCsr);
     pCsr->pNext = pVersion->pCsrList;
@@ -874,7 +874,7 @@ void lsmTreeCursorDestroy(TreeCursor *pCsr){
     for(pp=&pVersion->pCsrList; *pp!=pCsr; pp=&(*pp)->pNext);
     *pp = (*pp)->pNext;
 
-    lsmFree(pCsr);
+    lsmFree(0, pCsr);
   }
 }
 
@@ -1285,7 +1285,7 @@ int lsmTreeReleaseWriteVersion(
   assert( lsmTreeIsWriteVersion(pWriteVersion) );
   assert( pWriteVersion->nRef==1 );
 
-  pNew = (TreeVersion *)lsmMalloc(sizeof(TreeVersion));
+  pNew = (TreeVersion *)lsmMalloc(0, sizeof(TreeVersion));
   if( !pNew ) return LSM_NOMEM;
 
   memcpy(pNew, pWriteVersion, sizeof(TreeVersion));
@@ -1327,7 +1327,7 @@ void lsmTreeReleaseReadVersion(TreeVersion *pTreeVersion){
     pTreeVersion->nRef--;
     if( pTreeVersion->nRef==0 ){
       lsmTreeDecrRefcount(pTreeVersion->pTree);
-      lsmFree(pTreeVersion);
+      lsmFree(0, pTreeVersion);
     }
   }
 }

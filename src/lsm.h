@@ -24,6 +24,7 @@ extern "C" {
 */
 typedef struct lsm_db lsm_db;               /* Database connection handle */
 typedef struct lsm_cursor lsm_cursor;       /* Database cursor handle */
+typedef struct lsm_mutex lsm_mutex;         /* Mutex handle */
 
 /*
 ** Types required to implement new OS interfaces for lsm.
@@ -32,11 +33,51 @@ typedef struct lsm_vfs lsm_vfs;             /* OS interface structure */
 typedef struct lsm_file lsm_file;           /* OS file handle */
 typedef long long int lsm_i64;              /* 64-bit signed integer type */
 
+/* Forward reference */
+typedef struct lsm_env lsm_env;             /* Runtime environment */
+
 typedef struct lsm_heap_methods lsm_heap_methods;
 typedef struct lsm_mutex_methods lsm_mutex_methods;
 
+/*
+** Run-time environoment used by LSM
+*/
+struct lsm_env {
+  int nByte;                 /* Size of this structure in bytes */
+  int iVersion;              /* Version number of this structure */
+  /****** file i/o ***********************************************/
+  void *pVfsCtx;
+  int (*xOpen)(lsm_env*, const char *, lsm_file **);
+  int (*xRead)(lsm_file *, lsm_i64, void *, int);
+  int (*xWrite)(lsm_file *, lsm_i64, void *, int);
+  int (*xSync)(lsm_file *);
+  int (*xClose)(lsm_file *);
+  /****** memory allocation ****************************************/
+  void *pMemCtx;
+  void *(*xMalloc)(lsm_env*, int);            /* malloc(3) function */
+  void *(*xRealloc)(lsm_env*, void *, int);   /* realloc(3) function */
+  void (*xFree)(lsm_env*, void *);            /* free(3) function */
+  /****** mutexes ****************************************************/
+  void *pMutexCtx;
+  int (*xMutexStatic)(lsm_env*,int,lsm_mutex**); /* Obtain a static mutex */
+  int (*xMutexNew)(lsm_env*, lsm_mutex**);       /* Get a new dynamic mutex */
+  void (*xMutexDel)(lsm_mutex *);           /* Delete an allocated mutex */
+  void (*xMutexEnter)(lsm_mutex *);         /* Grab a mutex */
+  int (*xMutexTry)(lsm_mutex *);            /* Attempt to obtain a mutex */
+  void (*xMutexLeave)(lsm_mutex *);         /* Leave a mutex */
+  int (*xMutexHeld)(lsm_mutex *);           /* Return true if mutex is held */
+  int (*xMutexNotHeld)(lsm_mutex *);        /* Return true if mutex not held */
+  /* New fields may be added in future releases, in which case the
+  ** iVersion value will increase. */
+};
+
+/*
+** Return a pointer to the default LSM run-time environment
+*/
+lsm_env *lsm_default_env(void);
+
 struct lsm_vfs {
-  int (*xOpen)(void *, const char *, lsm_file **);
+  int (*xOpen)(lsm_env*, const char *, lsm_file **);
   int (*xRead)(lsm_file *, lsm_i64, void *, int);
   int (*xWrite)(lsm_file *, lsm_i64, void *, int);
   int (*xSync)(lsm_file *);
@@ -57,7 +98,7 @@ struct lsm_vfs {
 /* 
 ** Open and close a connection to a named database.
 */
-int lsm_new(lsm_db **ppDb);
+int lsm_new(lsm_env*, lsm_db **ppDb);
 int lsm_open(lsm_db *pDb, const char *zFilename);
 int lsm_close(lsm_db *pDb);
 
@@ -125,12 +166,11 @@ int lsm_config(lsm_db *, int, ...);
 ** lsm_global_config(). Or the system defaults if no memory allocation
 ** functions have been registered.
 */
-void *lsm_malloc(int);
-void *lsm_realloc(void *, int);
-void lsm_free(void *);
+void *lsm_malloc(lsm_env*, int);
+void *lsm_realloc(lsm_env*, void *, int);
+void lsm_free(lsm_env*, void *);
 
-int lsm_config_vfs(lsm_db *, void *, lsm_vfs *);
-lsm_vfs *lsm_default_vfs(void **);
+lsm_vfs *lsm_default_vfs(void);
 
 /*
 ** Configure a callback to which debugging and other messages should 
@@ -351,12 +391,10 @@ int lsm_global_config(int, ...);
 #define LSM_GLOBAL_CONFIG_SET_MUTEX    3
 #define LSM_GLOBAL_CONFIG_GET_MUTEX    4
 
-typedef struct lsm_mutex lsm_mutex;         /* Mutex handle */
-
 struct lsm_heap_methods {
-  void *(*xMalloc)(int);                    /* malloc(3) function */
-  void *(*xRealloc)(void *, int);           /* realloc(3) function */
-  void (*xFree)(void *);                    /* free(3) function */
+  void *(*xMalloc)(lsm_env*,int);                    /* malloc(3) function */
+  void *(*xRealloc)(lsm_env*,void *, int);           /* realloc(3) function */
+  void (*xFree)(lsm_env*,void *);                    /* free(3) function */
 };
 
 /*
@@ -370,8 +408,8 @@ struct lsm_heap_methods {
 **   not affected.
 */
 struct lsm_mutex_methods {
-  int (*xMutexStatic)(int, lsm_mutex **);   /* Obtain a static mutex pointer */
-  int (*xMutexNew)(lsm_mutex **);           /* Allocate a new dynamic mutex */
+  int (*xMutexStatic)(lsm_env*, int, lsm_mutex **);   /* new static mutex  */
+  int (*xMutexNew)(lsm_env*, lsm_mutex **);           /* new dynamic mutex */
   void (*xMutexDel)(lsm_mutex *);           /* Delete an allocated mutex */
   void (*xMutexEnter)(lsm_mutex *);         /* Grab a mutex */
   int (*xMutexTry)(lsm_mutex *);            /* Attempt to obtain a mutex */

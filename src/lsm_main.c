@@ -57,11 +57,11 @@ static int xCmp(void *p1, int n1, void *p2, int n2){
 /*
 ** Allocate a new db handle.
 */
-int lsm_new(lsm_db **ppDb){
+int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   lsm_db *pDb;
-  *ppDb = pDb = (lsm_db *)lsmMallocZero(sizeof(lsm_db));
+  *ppDb = pDb = (lsm_db *)lsmMallocZero(pEnv, sizeof(lsm_db));
   if( pDb==0 ) return LSM_NOMEM_BKPT;
-
+  pDb->pEnv = pEnv;
   pDb->nTreeLimit = LSM_TREE_BYTES;
   pDb->eCola = LSM_ECOLA;
   pDb->bAutowork = 1;
@@ -178,7 +178,7 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
   }else{
 
     /* Open the shared data handle. */
-    rc = lsmDbDatabaseFind(zFilename, &pDb->pDatabase);
+    rc = lsmDbDatabaseFind(pDb->pEnv, zFilename, &pDb->pDatabase);
 
     /* Open the database file */
     if( rc==LSM_OK ){
@@ -238,19 +238,10 @@ int lsm_close(lsm_db *pDb){
     lsmDbDatabaseRelease(pDb);
     lsmLogClose(pDb);
     lsmFsClose(pDb->pFS);
-    lsmFree(pDb->aTrans);
-    lsmFree(pDb);
+    lsmFree(pDb->pEnv, pDb->aTrans);
+    lsmFree(pDb->pEnv, pDb);
   }
   return rc;
-}
-
-int lsm_config_vfs(lsm_db *pDb, void *pVfsCtx, lsm_vfs *pVfs){
-  if( pDb->pFS ){
-    return LSM_MISUSE;
-  }
-  pDb->pVfs = pVfs;
-  pDb->pVfsCtx = pVfsCtx;
-  return LSM_OK;
 }
 
 int lsm_config(lsm_db *pDb, int eParam, ...){
@@ -524,7 +515,7 @@ int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
 
   /* Allocate the lsm_cursor structure */
   if( rc==LSM_OK ){
-    *ppCsr = pCsr = (lsm_cursor *)lsmMallocZero(sizeof(lsm_cursor));
+    *ppCsr = pCsr = (lsm_cursor *)lsmMallocZero(pDb->pEnv, sizeof(lsm_cursor));
     if( !pCsr ){
       rc = LSM_NOMEM_BKPT;
     }
@@ -569,7 +560,7 @@ int lsm_csr_close(lsm_cursor *pCsr){
     *pp = (*pp)->pNext;
 
     lsmMCursorClose(pCsr->pMC);
-    lsmFree(pCsr);
+    lsmFree(pDb->pEnv, pCsr);
 
     dbReleaseClientSnapshot(pDb);
     assert_db_state(pDb);
@@ -665,7 +656,7 @@ void lsmLogMessage(lsm_db *pDb, int rc, const char *zFormat, ...){
     va_end(ap1);
     va_end(ap2);
     if( z ) pDb->xLog(pDb->pLogCtx, rc, z);
-    lsmFree(z);
+    lsmFree(pDb->pEnv, z);
   }
 }
 
@@ -686,7 +677,8 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 
     if( rc==LSM_OK && pDb->nTransAlloc<iLevel ){
       TreeMark *aNew;
-      aNew = (TreeMark *)lsmRealloc(pDb->aTrans, sizeof(TreeMark)*(iLevel+1));
+      aNew = (TreeMark *)lsmRealloc(pDb->pEnv, pDb->aTrans,
+                                    sizeof(TreeMark)*(iLevel+1));
       if( !aNew ){
         rc = LSM_NOMEM;
       }else{

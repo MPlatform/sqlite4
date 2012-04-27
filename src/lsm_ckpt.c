@@ -166,7 +166,7 @@ struct CkptBuffer {
 static void ckptSetValue(CkptBuffer *p, int iIdx, u32 iVal, int *pRc){
   if( iIdx>=p->nAlloc ){
     int nNew = MAX(8, iIdx*2);
-    p->aCkpt = (u32 *)lsmReallocOrFree(p->aCkpt, nNew*sizeof(u32));
+    p->aCkpt = (u32 *)lsmReallocOrFree(0, p->aCkpt, nNew*sizeof(u32));
     if( !p->aCkpt ){
       *pRc = LSM_NOMEM_BKPT;
       return;
@@ -355,7 +355,7 @@ static int ckptSetupMerge(u32 *aInt, int *piIn, Level *pLevel){
 
   /* Allocate the Merge object. If malloc() fails, return LSM_NOMEM. */
   nInput = (int)aInt[iIn++];
-  pMerge = (Merge *)lsmMallocZero(sizeof(Merge) + sizeof(MergeInput) * nInput);
+  pMerge = (Merge *)lsmMallocZero(0, sizeof(Merge) + sizeof(MergeInput) * nInput);
   if( !pMerge ) return LSM_NOMEM_BKPT;
   pLevel->pMerge = pMerge;
 
@@ -412,12 +412,12 @@ int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
       Level *pLevel;
 
       /* Allocate space for the Level structure and Level.apRight[] array */
-      pLevel = (Level *)lsmMallocZeroRc(sizeof(Level), &rc);
+      pLevel = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
       if( rc==LSM_OK ){
         pLevel->nRight = aInt[iIn++];
         if( pLevel->nRight ){
           int nByte = sizeof(Segment) * pLevel->nRight;
-          pLevel->aRhs = (Segment *)lsmMallocZeroRc(nByte, &rc);
+          pLevel->aRhs = (Segment *)lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
         }
 
         pLevel->pNext = lsmDbSnapshotLevel(pSnap);
@@ -515,7 +515,7 @@ static int ckptTryRead(
    && nCkpt<65536 
   ){
     u32 *aCkpt;
-    aCkpt = (u32 *)lsmMallocZeroRc(sizeof(u32)*nCkpt, pRc);
+    aCkpt = (u32 *)lsmMallocZeroRc(pDb->pEnv, sizeof(u32)*nCkpt, pRc);
     if( aCkpt ){
       int rc = LSM_OK;
       int iPg;
@@ -545,7 +545,7 @@ static int ckptTryRead(
 
       *pRc = rc;
       ret = ckptImport(pDb, aCkpt, nCkpt, &rc);
-      lsmFree(aCkpt);
+      lsmFree(pDb->pEnv, aCkpt);
     }
   }
 

@@ -392,7 +392,7 @@ int sqlite4KVStoreOpenLsm(
     memset(pNew, 0, sizeof(KVLsm));
     pNew->base.pStoreVfunc = &kvlsmMethods;
 
-    rc = lsm_new(&pNew->pDb);
+    rc = lsm_new(0, &pNew->pDb);
     if( rc==SQLITE_OK ){
       rc = lsm_open(pNew->pDb, zName);
     }

@@ -32,9 +32,11 @@ struct Mempool {
   int nUsed;                      /* Total number of bytes allocated */
 };
 
-static void *dflt_malloc(int N){ return malloc(N); }
-static void dflt_free(void *p){ free(p); }
-static void *dflt_realloc(void *p, int N){ return realloc(p, N); }
+static void *dflt_malloc(lsm_env *pEnv, int N){ return malloc(N); }
+static void dflt_free(lsm_env *pEnv, void *p){ free(p); }
+static void *dflt_realloc(lsm_env *pEnv, void *p, int N){
+  return realloc(p, N);
+}
 
 static lsm_heap_methods gMem = {
   dflt_malloc,
@@ -42,37 +44,37 @@ static lsm_heap_methods gMem = {
   dflt_free
 };
 
-void *lsmMalloc(int N){
-    return gMem.xMalloc(N);
+void *lsmMalloc(lsm_env *pEnv, int N){
+    return gMem.xMalloc(pEnv, N);
 }
-void lsmFree(void *p){
-    gMem.xFree(p);
+void lsmFree(lsm_env *pEnv, void *p){
+    gMem.xFree(pEnv, p);
 }
-void *lsmRealloc(void *p, int N){
-    return gMem.xRealloc(p, N);
-}
-
-void *lsm_malloc(int N){
-    return gMem.xMalloc(N);
-}
-void lsm_free(void *p){
-    gMem.xFree(p);
-}
-void *lsm_realloc(void *p, int N){
-    return gMem.xRealloc(p, N);
+void *lsmRealloc(lsm_env *pEnv, void *p, int N){
+    return gMem.xRealloc(pEnv, p, N);
 }
 
-void *lsmMallocZero(int N){
+void *lsm_malloc(lsm_env *pEnv, int N){
+    return gMem.xMalloc(pEnv, N);
+}
+void lsm_free(lsm_env *pEnv, void *p){
+    gMem.xFree(pEnv, p);
+}
+void *lsm_realloc(lsm_env *pEnv, void *p, int N){
+    return gMem.xRealloc(pEnv, p, N);
+}
+
+void *lsmMallocZero(lsm_env *pEnv, int N){
   void *pRet;
-  pRet = gMem.xMalloc(N);
+  pRet = gMem.xMalloc(pEnv, N);
   if( pRet ) memset(pRet, 0, N);
   return pRet;
 }
 
-void *lsmMallocRc(int N, int *pRc){
+void *lsmMallocRc(lsm_env *pEnv, int N, int *pRc){
   void *pRet = 0;
   if( *pRc==LSM_OK ){
-    pRet = lsmMalloc(N);
+    pRet = lsmMalloc(pEnv, N);
     if( pRet==0 ){
       *pRc = LSM_NOMEM_BKPT;
     }
@@ -80,10 +82,10 @@ void *lsmMallocRc(int N, int *pRc){
   return pRet;
 }
 
-void *lsmMallocZeroRc(int N, int *pRc){
+void *lsmMallocZeroRc(lsm_env *pEnv, int N, int *pRc){
   void *pRet = 0;
   if( *pRc==LSM_OK ){
-    pRet = lsmMallocZero(N);
+    pRet = lsmMallocZero(pEnv, N);
     if( pRet==0 ){
       *pRc = LSM_NOMEM_BKPT;
     }
@@ -91,10 +93,10 @@ void *lsmMallocZeroRc(int N, int *pRc){
   return pRet;
 }
 
-void *lsmReallocOrFree(void *p, int N){
+void *lsmReallocOrFree(lsm_env *pEnv, void *p, int N){
   void *pNew;
-  pNew = gMem.xRealloc(p, N);
-  if( !pNew ) lsmFree(p);
+  pNew = gMem.xRealloc(pEnv, p, N);
+  if( !pNew ) lsmFree(pEnv, p);
   return pNew;
 }
 
@@ -115,7 +117,7 @@ char *lsmMallocVPrintf(const char *zFormat, va_list ap1, va_list ap2){
 
   nByte = vsnprintf(0, 0, zFormat, ap1);
   assert( nByte>=0 );
-  zRet = lsmMalloc(nByte+1);
+  zRet = lsmMalloc(0, nByte+1);
   if( zRet ){
     vsnprintf(zRet, nByte+1, zFormat, ap2);
   }
@@ -150,12 +152,12 @@ char *lsmMallocVAPrintf(
   nByte = vsnprintf(0, 0, zFormat, ap1) + nIn;
 
   assert( nByte>=0 );
-  zRet = lsmMalloc(nByte+1);
+  zRet = lsmMalloc(0, nByte+1);
   if( zRet ){
     memcpy(zRet, zIn, nIn);
     vsnprintf(&zRet[nIn], nByte+1-nIn, zFormat, ap2);
   }
-  lsmFree(zIn);
+  lsmFree(0, zIn);
 
   return zRet;
 }
@@ -193,7 +195,7 @@ char *lsmMallocStrdup(const char *zIn){
   int nByte;
   char *zRet;
   nByte = strlen(zIn);
-  zRet = lsmMalloc(nByte+1);
+  zRet = lsmMalloc(0, nByte+1);
   if( zRet ){
     memcpy(zRet, zIn, nByte+1);
   }
@@ -208,7 +210,7 @@ static Chunk * poolChunkNew(int nMin){
   Chunk *pChunk;
   int nAlloc = MAX(CHUNKSIZE, nMin + sizeof(Chunk));
 
-  pChunk = (Chunk *)lsmMalloc(nAlloc);
+  pChunk = (Chunk *)lsmMalloc(0, nAlloc);
   if( pChunk ){
     pChunk->pNext = 0;
     pChunk->iOff = 0;
@@ -254,7 +256,7 @@ void lsmPoolDestroy(Mempool *pPool){
   while( pChunk ){
     Chunk *pFree = pChunk;
     pChunk = pChunk->pNext;
-    lsmFree(pFree);
+    lsmFree(0, pFree);
   }
 }
 
@@ -311,7 +313,7 @@ void lsmPoolRollback(Mempool *pPool, void *pChunk, int iOff){
   for(p=pLast->pNext; p; p=pNext){
     pPool->nUsed -= p->iOff;
     pNext = p->pNext;
-    lsmFree(p);
+    lsmFree(0, p);
   }
 
   pLast->pNext = 0;

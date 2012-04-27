@@ -72,7 +72,7 @@ static int pthreads_mutex_new(lsm_mutex **ppNew){
   PthreadMutex *pMutex;           /* Pointer to new mutex */
   pthread_mutexattr_t attr;       /* Attributes object */
 
-  pMutex = (PthreadMutex *)lsmMallocZero(sizeof(PthreadMutex));
+  pMutex = (PthreadMutex *)lsmMallocZero(0, sizeof(PthreadMutex));
   if( !pMutex ) return LSM_NOMEM_BKPT;
 
   pthread_mutexattr_init(&attr);
@@ -87,7 +87,7 @@ static int pthreads_mutex_new(lsm_mutex **ppNew){
 static void pthreads_mutex_del(lsm_mutex *p){
   PthreadMutex *pMutex = (PthreadMutex *)p;
   pthread_mutex_destroy(&pMutex->mutex);
-  lsmFree(pMutex);
+  lsmFree(0, pMutex);
 }
 
 static void pthreads_mutex_enter(lsm_mutex *p){
@@ -153,20 +153,20 @@ static NoopMutex aStaticNoopMutex[2] = {
   {0, 1},
 };
 
-static int noop_mutex_static(int iMutex, lsm_mutex **ppStatic){
+static int noop_mutex_static(lsm_env *pEnv, int iMutex, lsm_mutex **ppStatic){
   assert( iMutex>=1 && iMutex<=(int)array_size(aStaticNoopMutex) );
   *ppStatic = (lsm_mutex *)&aStaticNoopMutex[iMutex-1];
   return LSM_OK;
 }
-static int noop_mutex_new(lsm_mutex **ppNew){
+static int noop_mutex_new(lsm_env *pEnv, lsm_mutex **ppNew){
   int rc = LSM_OK;
-  *ppNew = (lsm_mutex *)lsmMallocZeroRc(sizeof(NoopMutex), &rc);
+  *ppNew = (lsm_mutex *)lsmMallocZeroRc(0, sizeof(NoopMutex), &rc);
   return rc;
 }
 static void noop_mutex_del(lsm_mutex *pMutex)  { 
   NoopMutex *p = (NoopMutex *)pMutex;
   assert( p->bStatic==0 );
-  lsmFree(p);
+  lsmFree(0, p);
 }
 static void noop_mutex_enter(lsm_mutex *pMutex){ 
   NoopMutex *p = (NoopMutex *)pMutex;
@@ -230,13 +230,13 @@ void lsmConfigGetMutex(lsm_mutex_methods *pMutex){
   *pMutex = gMutex;
 }
 
-int lsmMutexNew(lsm_mutex **ppNew){
-  return gMutex.xMutexNew(ppNew);
+int lsmMutexNew(lsm_env *pEnv, lsm_mutex **ppNew){
+  return gMutex.xMutexNew(pEnv, ppNew);
 }
 
-int lsmMutexStatic(int iMutex, lsm_mutex **ppStatic){
+int lsmMutexStatic(lsm_env *pEnv, int iMutex, lsm_mutex **ppStatic){
   assert( iMutex==LSM_MUTEX_GLOBAL );
-  return gMutex.xMutexStatic(iMutex, ppStatic);
+  return gMutex.xMutexStatic(pEnv, iMutex, ppStatic);
 }
 
 void lsmMutexDel(lsm_mutex *pMutex){
@@ -255,7 +255,7 @@ void lsmMutexLeave(lsm_mutex *pMutex){
   gMutex.xMutexLeave(pMutex);
 }
 
-int lsmMutexHeld(lsm_mutex *pMutex, int bExpect){
-  if( gMutex.xMutexHeld==0 ) return bExpect;
+int lsmMutexHeld(lsm_mutex *pMutex){
+  if( gMutex.xMutexHeld==0 ) return 1;
   return gMutex.xMutexHeld(pMutex);
 }

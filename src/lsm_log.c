@@ -462,8 +462,8 @@ static u8 *logFileReadData(
 
     pBuf = &pDbLog->aBuf[iBuf];
     if( pBuf->nAlloc<nByte ){
-      lsmFree(pBuf->aAlloc);
-      pBuf->aAlloc = lsmMallocRc(nByte*2, &rc);
+      lsmFree(pDb->pEnv, pBuf->aAlloc);
+      pBuf->aAlloc = lsmMallocRc(pDb->pEnv, nByte*2, &rc);
       pBuf->nAlloc = nByte*2;
     }
 
@@ -606,7 +606,8 @@ static int logFileReadRecord(
 static DbLog *getLog(lsm_db *pDb, int *pRc){
   DbLog *pDbLog = pDb->pDbLog;
   if( pDbLog==0 ){
-    pDb->pDbLog = pDbLog = (DbLog *)lsmMallocZeroRc(sizeof(DbLog), pRc);
+    pDb->pDbLog = pDbLog = (DbLog *)lsmMallocZeroRc(pDb->pEnv, 
+                                                    sizeof(DbLog), pRc);
     if( pDbLog ) pDbLog->bRequireCkpt = 1;
   }
   return pDbLog;
@@ -915,10 +916,10 @@ int lsmLogClose(lsm_db *pDb){
   if( pDbLog ){
     lsmFsPageRelease(pDbLog->pPg);
 
-    lsmFree(pDbLog->aBuf[0].aAlloc);
-    lsmFree(pDbLog->aBuf[1].aAlloc);
+    lsmFree(pDb->pEnv, pDbLog->aBuf[0].aAlloc);
+    lsmFree(pDb->pEnv, pDbLog->aBuf[1].aAlloc);
 
-    lsmFree(pDbLog);
+    lsmFree(pDb->pEnv, pDbLog);
     pDb->pDbLog = 0;
   }
   return LSM_OK;

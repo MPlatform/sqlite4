@@ -30,27 +30,28 @@
 typedef struct PosixFile PosixFile;
 
 struct PosixFile {
+  lsm_env *pEnv;
   int fd;
 };
 
 static int lsm_ioerr(void){ return LSM_IOERR; }
 
 static int posixOsOpen(
-  void *pCtx,                     /* Unused */
+  lsm_env *pEnv,
   const char *zFile, 
   lsm_file **ppFile
 ){
   int rc = LSM_OK;
   PosixFile *p;
-  (void)pCtx;
 
-  p = lsm_malloc(sizeof(PosixFile));
+  p = lsm_malloc(pEnv, sizeof(PosixFile));
   if( p==0 ){
     rc = LSM_NOMEM;
   }else{
+    p->pEnv = pEnv;
     p->fd = open(zFile, O_RDWR|O_CREAT, 0644);
     if( p->fd<0 ){
-      lsm_free(p);
+      lsm_free(pEnv, p);
       p = 0;
       rc = lsm_ioerr();
     }
@@ -121,11 +122,11 @@ static int posixOsSync(lsm_file *pFile){
 static int posixOsClose(lsm_file *pFile){
   PosixFile *p = (PosixFile *)pFile;
   close(p->fd);
-  lsm_free(p);
+  lsm_free(p->pEnv, p);
   return LSM_OK;
 }
 
-lsm_vfs *lsm_default_vfs(void **ppCtx){
+lsm_vfs *lsm_default_vfs(void){
   static lsm_vfs posix_vfs = {
     posixOsOpen,
     posixOsRead,
@@ -133,7 +134,5 @@ lsm_vfs *lsm_default_vfs(void **ppCtx){
     posixOsSync,
     posixOsClose
   };
-
-  if( ppCtx ) *ppCtx = 0;
   return &posix_vfs;
 }

@@ -205,23 +205,23 @@ struct Database {
 ** Functions to enter and leave the global mutex. This mutex is used
 ** to protect the global linked-list headed at 
 */
-static int enterGlobalMutex(void){
+static int enterGlobalMutex(lsm_env *pEnv){
   lsm_mutex *p;
-  int rc = lsmMutexStatic(LSM_MUTEX_GLOBAL, &p);
+  int rc = lsmMutexStatic(pEnv, LSM_MUTEX_GLOBAL, &p);
   if( rc==LSM_OK ) lsmMutexEnter(p);
   return rc;
 }
-static void leaveGlobalMutex(void){
+static void leaveGlobalMutex(lsm_env *pEnv){
   lsm_mutex *p;
-  lsmMutexStatic(LSM_MUTEX_GLOBAL, &p);
+  lsmMutexStatic(pEnv, LSM_MUTEX_GLOBAL, &p);
   lsmMutexLeave(p);
 }
 
 #ifdef LSM_DEBUG
-static int holdingGlobalMutex(int bExpect){
+static int holdingGlobalMutex(lsm_env *pEnv){
   lsm_mutex *p;
-  lsmMutexStatic(LSM_MUTEX_GLOBAL, &p);
-  return lsmMutexHeld(p, bExpect);
+  lsmMutexStatic(pEnv, LSM_MUTEX_GLOBAL, &p);
+  return lsmMutexHeld(p);
 }
 static void assertNotInFreelist(Freelist *p, int iBlk){
   int i; 
@@ -231,7 +231,7 @@ static void assertNotInFreelist(Freelist *p, int iBlk){
 }
 static void assertMustbeWorker(lsm_db *pDb){
   assert( pDb->pWorker );
-  assert( lsmMutexHeld(pDb->pDatabase->pWorkerMutex, 1) );
+  assert( lsmMutexHeld(pDb->pDatabase->pWorkerMutex) );
 }
 static void assertSnapshotListOk(Database *p){
   Snapshot *pIter;
@@ -264,7 +264,8 @@ static int flAppendEntry(Freelist *p, int iBlk, i64 iId){
     FreelistEntry *aNew;
 
     nNew = (p->nAlloc==0 ? 4 : p->nAlloc*2);
-    aNew = (FreelistEntry *)lsmRealloc(p->aEntry, sizeof(FreelistEntry)*nNew);
+    aNew = (FreelistEntry *)lsmRealloc(0, p->aEntry,
+                                       sizeof(FreelistEntry)*nNew);
     if( !aNew ) return LSM_NOMEM_BKPT;
     p->nAlloc = nNew;
     p->aEntry = aNew;
@@ -299,7 +300,7 @@ static void freeDatabase(Database *p){
   lsmMutexDel(p->pCkptMutex);
 
   /* Free the memory allocated for the Database struct itself */
-  lsmFree(p);
+  lsmFree(0, p);
 }
 
 /*
@@ -316,13 +317,14 @@ static void freeDatabase(Database *p){
 ** by a call to lsmDbDatabaseRelease().
 */
 int lsmDbDatabaseFind(
+  lsm_env *pEnv,                  /* Runtime environment */
   const char *zName,              /* Canonical path to db file */
   Database **ppDatabase           /* OUT: Database object */
 ){
   int rc;                         /* Return code */
   Database *p = 0;                /* Pointer returned via *ppDatabase */
 
-  rc = enterGlobalMutex();
+  rc = enterGlobalMutex(pEnv);
   if( rc==LSM_OK ){
 
     /* Search the global list for an existing object. TODO: Need something
@@ -335,12 +337,12 @@ int lsmDbDatabaseFind(
     /* If no suitable Database object was found, allocate a new one. */
     if( p==0 ){
       int nName = strlen(zName);
-      p = (Database *)lsmMallocZeroRc(sizeof(Database) + nName + 1, &rc);
+      p = (Database *)lsmMallocZeroRc(pEnv, sizeof(Database) + nName + 1, &rc);
 
       /* Allocate the three mutexes */
-      if( rc==LSM_OK ) rc = lsmMutexNew(&p->pWorkerMutex);
-      if( rc==LSM_OK ) rc = lsmMutexNew(&p->pClientMutex);
-      if( rc==LSM_OK ) rc = lsmMutexNew(&p->pCkptMutex);
+      if( rc==LSM_OK ) rc = lsmMutexNew(0, &p->pWorkerMutex);
+      if( rc==LSM_OK ) rc = lsmMutexNew(0, &p->pClientMutex);
+      if( rc==LSM_OK ) rc = lsmMutexNew(0, &p->pCkptMutex);
 
       /* If no error has occurred, fill in other fields and link the new 
       ** Database structure into the global list starting at 
@@ -365,7 +367,7 @@ int lsmDbDatabaseFind(
     }
 
     if( p ) p->nDbRef++;
-    leaveGlobalMutex();
+    leaveGlobalMutex(pEnv);
   }
 
   *ppDatabase = p;
@@ -376,10 +378,10 @@ void freeClientSnapshot(Snapshot *p){
   Level *pLevel;
   assert( p->nRef==0 );
   for(pLevel=p->pLevel; pLevel; pLevel=pLevel->pNext){
-    lsmFree(pLevel->pSplitKey);
+    lsmFree(0, pLevel->pSplitKey);
   }
-  lsmFree(p->pExport);
-  lsmFree(p);
+  lsmFree(0, p->pExport);
+  lsmFree(0, p);
 }
 
 /*
@@ -390,7 +392,7 @@ void freeClientSnapshot(Snapshot *p){
 void lsmDbDatabaseRelease(lsm_db *pDb){
   Database *p = pDb->pDatabase;
   if( p ){
-    enterGlobalMutex();
+    enterGlobalMutex(pDb->pEnv);
     p->nDbRef--;
     if( p->nDbRef==0 ){
       int rc = LSM_OK;
@@ -418,8 +420,8 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
 
       /* Free the contents of the worker snapshot */
       lsmSortedFreeLevel(p->worker.pLevel);
-      lsmFree(p->worker.freelist.aEntry);
-      lsmFree(p->worker.lAppend.a);
+      lsmFree(pDb->pEnv, p->worker.freelist.aEntry);
+      lsmFree(pDb->pEnv, p->worker.lAppend.a);
       
       /* Free the client snapshot */
       if( p->pClient ){
@@ -430,7 +432,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
 
       freeDatabase(p);
     }
-    leaveGlobalMutex();
+    leaveGlobalMutex(pDb->pEnv);
   }
 }
 
@@ -444,7 +446,7 @@ void lsmDbSnapshotSetLevel(Snapshot *pSnap, Level *pLevel){
 }
 
 void lsmDatabaseDirty(Database *p){
-  assert( lsmMutexHeld(p->pWorkerMutex, 1) );
+  assert( lsmMutexHeld(p->pWorkerMutex) );
   if( p->bDirty==0 ){
     p->worker.iId++;
     p->bDirty = 1;
@@ -452,7 +454,7 @@ void lsmDatabaseDirty(Database *p){
 }
 
 int lsmDatabaseIsDirty(Database *p){
-  assert( lsmMutexHeld(p->pWorkerMutex, 1) );
+  assert( lsmMutexHeld(p->pWorkerMutex) );
   return p->bDirty;
 }
 
@@ -519,8 +521,8 @@ IList *lsmSnapshotList(Snapshot *pSnap, int iList){
 */
 int lsmIListSet(IList *p, int *aElem, int nElem){
   if( p->nAlloc < nElem ){
-    lsmFree(p->a);
-    p->a = (int *)lsmMalloc(sizeof(int) * nElem);
+    lsmFree(0, p->a);
+    p->a = (int *)lsmMalloc(0, sizeof(int) * nElem);
     if( p->a==0 ) return LSM_NOMEM_BKPT;
     p->nAlloc = nElem;
   }
@@ -531,7 +533,7 @@ int lsmIListSet(IList *p, int *aElem, int nElem){
 
 int lsmIListGrow(IList *pList, int nElem){
   if( pList->nAlloc<nElem ){
-    pList->a= (int *)lsmReallocOrFree(pList->a, nElem * sizeof(int));
+    pList->a= (int *)lsmReallocOrFree(0, pList->a, nElem * sizeof(int));
     if( pList->a==0 ) return LSM_NOMEM;
     memset(&pList->a[pList->nAlloc], 0, (nElem-pList->nAlloc)*sizeof(int));
     pList->nAlloc = nElem;
@@ -598,7 +600,7 @@ Snapshot *lsmDbSnapshotRecover(Database *p){
 */
 void lsmDbRecoveryComplete(Database *p, int bVal){
   assert( bVal==1 || bVal==0 );
-  assert( lsmMutexHeld(p->pWorkerMutex, 1) );
+  assert( lsmMutexHeld(p->pWorkerMutex) );
   assert( p->pTree );
 
   p->bRecovered = bVal;
@@ -675,7 +677,7 @@ int lsmDbUpdateClient(lsm_db *db){
         + nLevel * sizeof(Level)
         + nRight * sizeof(Segment)
         + nKeySpace;
-  pNew = (Snapshot *)lsmMallocZero(nByte);
+  pNew = (Snapshot *)lsmMallocZero(db->pEnv, nByte);
   if( !pNew ) return LSM_NOMEM_BKPT;
   pNew->pDatabase = pDb;
   pNew->iId = pDb->worker.iId;
@@ -878,7 +880,7 @@ int lsmSnapshotFreelist(Snapshot *pSnap, int **paFree, int *pnFree){
   p = &pSnap->freelist;
   nFree = p->nEntry;
   if( nFree && paFree ){
-    aFree = lsmMallocRc(sizeof(int) * nFree, &rc);
+    aFree = lsmMallocRc(0, sizeof(int) * nFree, &rc);
     if( aFree ){
       int i;
       for(i=0; i<nFree; i++){
@@ -1016,7 +1018,7 @@ int lsmBeginRecovery(lsm_db *pDb){
   assert( pDb->pWorker );
   assert( pDb->pClient==0 );
   assert( pDb->pTV==0 );
-  assert( lsmMutexHeld(pDb->pDatabase->pWorkerMutex, 1) );
+  assert( lsmMutexHeld(pDb->pDatabase->pWorkerMutex) );
 
   rc = lsmTreeNew(pDb->xCmp, &p->pTree);
   if( rc==LSM_OK ){
@@ -1032,7 +1034,7 @@ int lsmFinishRecovery(lsm_db *pDb){
   int rc;
   assert( pDb->pWorker );
   assert( pDb->pClient==0 );
-  assert( lsmMutexHeld(pDb->pDatabase->pWorkerMutex, 1) );
+  assert( lsmMutexHeld(pDb->pDatabase->pWorkerMutex) );
   rc = lsmTreeReleaseWriteVersion(pDb->pTV, 0);
   pDb->pTV = 0;
   return rc;
@@ -1191,7 +1193,7 @@ int lsmBeginFlush(lsm_db *pDb){
 
   assert( pDb->pWorker );
   assert( (p->bWriter && lsmTreeIsWriteVersion(pDb->pTV))
-       || (pDb->pTV==0 && holdingGlobalMutex(1))
+       || (pDb->pTV==0 && holdingGlobalMutex(pDb->pEnv))
   );
 
   if( pDb->pTV==0 ){

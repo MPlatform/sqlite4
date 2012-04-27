@@ -118,7 +118,8 @@ struct TreeMark {
 struct lsm_db {
 
   /* Database handle configuration */
-  int (*xCmp)(void *, int, void *, int);         /* Compare function */
+  lsm_env *pEnv;                            /* runtime environment */
+  int (*xCmp)(void *, int, void *, int);    /* Compare function */
   int nTreeLimit;                 /* Maximum size of in-memory tree in bytes */
   int eCola;                      /* Max size ratio between adjacent segments */
   int bAutowork;                  /* True to do auto-work after writing */
@@ -292,15 +293,15 @@ int lsmPoolUsed(Mempool *pPool);
 void lsmPoolMark(Mempool *pPool, void **, int *);
 void lsmPoolRollback(Mempool *pPool, void *, int);
 
-void *lsmMalloc(int);
-void lsmFree(void *);
-void *lsmRealloc(void *, int);
-void *lsmReallocOrFree(void *, int);
+void *lsmMalloc(lsm_env*, int);
+void lsmFree(lsm_env*, void *);
+void *lsmRealloc(lsm_env*, void *, int);
+void *lsmReallocOrFree(lsm_env*, void *, int);
 
-void *lsmMallocZeroRc(int, int *);
-void *lsmMallocRc(int, int *);
+void *lsmMallocZeroRc(lsm_env*, int, int *);
+void *lsmMallocRc(lsm_env*, int, int *);
 
-void *lsmMallocZero(int);
+void *lsmMallocZero(lsm_env *pEnv, int);
 char *lsmMallocStrdup(const char *);
 char *lsmMallocPrintf(const char *, ...);
 char *lsmMallocVPrintf(const char *, va_list, va_list);
@@ -313,8 +314,8 @@ void lsmConfigSetMalloc(lsm_heap_methods *);
 /* 
 ** Functions from file "mutex.c".
 */
-int lsmMutexStatic(int, lsm_mutex **);
-int lsmMutexNew(lsm_mutex **);
+int lsmMutexStatic(lsm_env*, int, lsm_mutex **);
+int lsmMutexNew(lsm_env*, lsm_mutex **);
 void lsmMutexDel(lsm_mutex *);
 void lsmMutexEnter(lsm_mutex *);
 int lsmMutexTry(lsm_mutex *);
@@ -324,7 +325,7 @@ void lsmConfigSetMutex(lsm_mutex_methods *);
 void lsmConfigGetMutex(lsm_mutex_methods *);
 
 #ifdef LSM_DEBUG
-  int lsmMutexHeld(lsm_mutex *, int bExpect);
+  int lsmMutexHeld(lsm_mutex *);
 #endif
 
 /* 
@@ -474,7 +475,7 @@ void lsmDefaultVfs(lsm_vfs **, void **);
 /**************************************************************************
 ** Functions from file "shared.c".
 */
-int lsmDbDatabaseFind(const char *, Database **);
+int lsmDbDatabaseFind(lsm_env*, const char *, Database **);
 void lsmDbDatabaseRelease(lsm_db *);
 
 int lsmBeginRecovery(lsm_db *);
