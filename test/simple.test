@@ -1130,5 +1130,21 @@ do_execsql_test 55.2 {
 }
 do_execsql_test 55.3 { SELECT * FROM t1 } {1 one 3 three}
 
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 56.1 {
+  CREATE TABLE t1(x, y);
+  CREATE UNIQUE INDEX i1 ON t1(x);
+  INSERT INTO t1 VALUES(1, 'one');
+  INSERT INTO t1 VALUES(2, 'two');
+} {}
+
+do_execsql_test 56.2 {
+  INSERT OR REPLACE INTO t1 VALUES(2, 'three');
+}
+
+do_execsql_test 55.3 { SELECT * FROM t1 } {1 one 2 three}
+
 finish_test
 

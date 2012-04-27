@@ -229,6 +229,7 @@ foreach zSetup [list {
   if {[wal_is_wal_mode]} continue
   set testname tempdb
   sqlite4 db ""
+continue
 } {
   if {[permutation] eq "journaltest"} {
     continue
@@ -260,11 +261,6 @@ foreach zSetup [list {
   } {ok}
   
   for {set i 0} {$i < $::G(savepoint6_iterations)} {incr i} {
-    do_test savepoint6-$testname.$i.1 {
-      savepoint_op
-      checkdb
-    } {ok}
-  
     do_test savepoint6-$testname.$i.2 {
       database_op
       database_op

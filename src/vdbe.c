@@ -3191,10 +3191,10 @@ case OP_IsUnique: {        /* jump, in3 */
         pc = pOp->p2-1;
       }else if( pOut ){
         iOut = sqlite4GetVarint64(pOut->z, pOut->n, &dummy);
-        rc = sqlite4VdbeMemGrow(pOut, iOut+(pProbe->n - nShort), 1);
+        rc = sqlite4VdbeMemGrow(pOut, iOut+(nKey - nShort), 1);
         if( rc==SQLITE_OK ){
-          memcpy(&pOut->z[iOut], &aKey[nShort], (pProbe->n - nShort));
-          pOut->n = iOut + (pProbe->n - nShort);
+          memcpy(&pOut->z[iOut], &aKey[nShort], (nKey - nShort));
+          pOut->n = iOut + (nKey - nShort);
         }
       }
     }
