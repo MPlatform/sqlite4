@@ -169,7 +169,9 @@ struct Tree {
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
   TreeVersion *pCommit;           /* Committed version of tree (for readers) */
   TreeVersion tvWorking;          /* Working verson (for writers) */
-  TreeNode *pRollback;
+
+  TreeNode *pRbFirst;
+  TreeNode *pRbLast;
 };
 
 /*
@@ -253,6 +255,73 @@ char *appendStrBlob(char *zIn, void *pBlob, int nBlob){
   return z;
 }
 
+char *appendIndent(char *zIn, int nIndent){
+  char *z = zIn;
+  int i;
+  for(i=0; i<nIndent; i++) z = lsmMallocAPrintf(z, " ");
+  return z;
+}
+
+char *appendKeyValue(char *zIn, TreeKey *pKey){
+  int i;
+  char *z = zIn;
+
+  for(i=0; i<pKey->nKey; i++){
+    z = lsmMallocAPrintf(z, "%.2X ", ((u8 *)(pKey->pKey))[i]);
+  }
+  z = lsmMallocAPrintf(z, "      ");
+
+  if( pKey->nValue<0 ){
+    z = lsmMallocAPrintf(z, "<deleted>");
+  }else{
+    z = appendStrBlob(z, pKey->pValue, pKey->nValue);
+  }
+
+  return z;
+}
+
+void dump_node(TreeNode *pNode, int nIndent, int isNode){
+  if( pNode ){
+    char *z;
+    int i;
+
+    z = appendIndent(0, nIndent);
+    z = lsmMallocAPrintf(z, "0x%p", (void *)pNode);
+    printf("%s\n", z);
+    lsmFree(z);
+
+    for(i=0; i<4; i++){
+
+      if( isNode ){
+        if( pNode->iV2 && i==pNode->iV2Ptr ){
+          z = appendIndent(0, nIndent+2);
+          z = lsmMallocAPrintf(z, "if( version>=%d )", pNode->iV2);
+          printf("%s\n", z);
+          lsmFree(z);
+          dump_node(pNode->pV2Ptr, nIndent + 4, isNode-1);
+          if( pNode->apChild[i] ){
+            z = appendIndent(0, nIndent+2);
+            z = lsmMallocAPrintf(z, "else");
+            printf("%s\n", z);
+            lsmFree(z);
+          }
+        }
+
+        dump_node(pNode->apChild[i], nIndent + 4, isNode-1);
+      }
+
+      if( i<3 && pNode->apKey[i] ){
+        z = appendIndent(0, nIndent);
+        z = lsmMallocAPrintf(z, "k%d: ", i);
+        z = appendKeyValue(z, pNode->apKey[i]);
+        printf("%s\n", z);
+        lsmFree(z);
+      }
+
+    }
+  }
+}
+
 void dump_node_contents(TreeNode *pNode, int iVersion, int nIndent, int isNode){
   int i;
   char *zLine = 0;
@@ -290,7 +359,7 @@ void dump_tree_contents(Tree *pTree, const char *zCaption){
 void dump_tv_contents(TreeVersion *pTV, const char *zCaption){
   printf("\n%s\n", zCaption);
   if( pTV->pRoot ){
-    dump_node_contents(pTV->pRoot, pTV->iVersion, 0, pTV->nHeight-1);
+    dump_node(pTV->pRoot, 2, pTV->nHeight-1);
   }
   fflush(stdout);
 }
@@ -441,11 +510,13 @@ static int treeUpdatePtr(Tree *pTree, TreeCursor *pCsr, TreeNode *pNew){
       p->iV2 = pTree->tvWorking.iVersion;
       p->iV2Ptr = (u8)iChildPtr;
       p->pV2Ptr = (void *)pNew;
-      if( pTree->pRollback ){
-        pTree->pRollback->pNext = p;
+      if( pTree->pRbLast ){
+        pTree->pRbLast->pNext = p;
+      }else{
+        pTree->pRbFirst = p;
       }
-      pTree->pRollback = p;
-      assert( pTree->pRollback->pNext==0 );
+      pTree->pRbLast = p;
+      assert( pTree->pRbLast->pNext==0 );
     }
   }
 
@@ -1124,12 +1195,13 @@ void lsmTreeRollback(TreeVersion *pTV, TreeMark *pMark){
   if( pMark->pRollback ){
     p = ((TreeNode *)pMark->pRollback)->pNext;
   }else{
-    p = pTree->pRollback;
+    p = pTree->pRbFirst;
   }
 
   while( p ){
     TreeNode *pNext = p->pNext;
     assert( p->iV2!=0 );
+    assert( pNext || p==pTree->pRbLast );
     p->iV2 = 0;
     p->iV2Ptr = 0;
     p->pV2Ptr = 0;
@@ -1137,8 +1209,13 @@ void lsmTreeRollback(TreeVersion *pTV, TreeMark *pMark){
     p = pNext;
   }
 
-  pTree->pRollback = (TreeNode *)pMark->pRollback;
-  if( pTree->pRollback ) pTree->pRollback->pNext = 0;
+  pTree->pRbLast = (TreeNode *)pMark->pRollback;
+  if( pTree->pRbLast ){
+    pTree->pRbLast->pNext = 0;
+  }else{
+    pTree->pRbFirst = 0;
+  }
+
   lsmPoolRollback(pTree->pPool, pMark->pMpChunk, pMark->iMpOff);
 }
 
@@ -1152,7 +1229,7 @@ void lsmTreeMark(TreeVersion *pTV, TreeMark *pMark){
   memset(pMark, 0, sizeof(TreeMark));
   pMark->pRoot = (void *)pTV->pRoot;
   pMark->nHeight = pTV->nHeight;
-  pMark->pRollback = (void *)pTree->pRollback;
+  pMark->pRollback = (void *)pTree->pRbLast;
   lsmPoolMark(pTree->pPool, &pMark->pMpChunk, &pMark->iMpOff);
 
   assert( lsmTreeIsWriteVersion(pTV) );

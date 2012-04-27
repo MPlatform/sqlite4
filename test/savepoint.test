@@ -187,33 +187,35 @@ wal_check_journal_mode savepoint-2.12
 #
 # These tests do not work in WAL mode. WAL mode does not take RESERVED
 # locks on the database file.
+#
+# UPDATE: Nor do they work with SQLite 4.
 # 
-if {[wal_is_wal_mode]==0} {
-  do_test savepoint-3.1 {
-    execsql { SAVEPOINT "transaction" }
-    execsql { PRAGMA lock_status }
-  } {main unlocked temp closed}
-  
-  do_test savepoint-3.2 {
-    execsql { INSERT INTO t1 VALUES(1, 2, 3) }
-    execsql { PRAGMA lock_status }
-  } {main reserved temp closed}
-  
-  do_test savepoint-3.3 {
-    execsql { ROLLBACK TO "transaction" }
-    execsql { PRAGMA lock_status }
-  } {main reserved temp closed}
-  
-  do_test savepoint-3.4 {
-    execsql { INSERT INTO t1 VALUES(1, 2, 3) }
-    execsql { PRAGMA lock_status }
-  } {main reserved temp closed}
-  
-  do_test savepoint-3.5 {
-    execsql { RELEASE "transaction" }
-    execsql { PRAGMA lock_status }
-  } {main unlocked temp closed}
-}
+#if {[wal_is_wal_mode]==0} {
+#  do_test savepoint-3.1 {
+#    execsql { SAVEPOINT "transaction" }
+#    execsql { PRAGMA lock_status }
+#  } {main unlocked temp closed}
+#  
+#  do_test savepoint-3.2 {
+#    execsql { INSERT INTO t1 VALUES(1, 2, 3) }
+#    execsql { PRAGMA lock_status }
+#  } {main reserved temp closed}
+#  
+#  do_test savepoint-3.3 {
+#    execsql { ROLLBACK TO "transaction" }
+#    execsql { PRAGMA lock_status }
+#  } {main reserved temp closed}
+#  
+#  do_test savepoint-3.4 {
+#    execsql { INSERT INTO t1 VALUES(1, 2, 3) }
+#    execsql { PRAGMA lock_status }
+#  } {main reserved temp closed}
+#  
+#  do_test savepoint-3.5 {
+#    execsql { RELEASE "transaction" }
+#    execsql { PRAGMA lock_status }
+#  } {main unlocked temp closed}
+#}
 
 #------------------------------------------------------------------------
 # Test that savepoints that include schema modifications are handled
@@ -265,6 +267,8 @@ do_test savepoint-4.6 {
 do_test savepoint-4.7 {
   execsql {
     ROLLBACK TO sp1;
+  }
+  execsql {
     CREATE TABLE t3(a);
     INSERT INTO t3 VALUES('value');
   }
@@ -279,7 +283,7 @@ wal_check_journal_mode savepoint-4.9
 # Test some logic errors to do with the savepoint feature.
 # 
 
-ifcapable incrblob {
+if 0 {
   do_test savepoint-5.1.1 {
     execsql {
       CREATE TABLE blobs(x);

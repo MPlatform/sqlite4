@@ -1113,7 +1113,22 @@ foreach {tn sql res} {
   do_catchsql_test 54.2.$tn $sql $res
 }
 
+#-------------------------------------------------------------------------
+reset_db
 
+do_execsql_test 55.1 {
+  CREATE TABLE t1(x INTEGER PRIMARY KEY, y);
+  INSERT INTO t1 VALUES(1, 'one');
+  INSERT INTO t1 VALUES(3, 'three');
+} {}
+breakpoint
+do_execsql_test 55.2 {
+  BEGIN;
+    INSERT INTO t1 VALUES(2, 'too');
+    UPDATE t1 SET y = 'two' WHERE x=2;
+  ROLLBACK;
+}
+do_execsql_test 55.3 { SELECT * FROM t1 } {1 one 3 three}
 
 finish_test
 
