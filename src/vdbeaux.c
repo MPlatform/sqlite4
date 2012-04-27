@@ -1785,7 +1785,7 @@ int sqlite4VdbeCommit(sqlite4 *db, int iLevel){
   int i;
   assert( sqlite4_mutex_held(db->mutex) );
   assert( db->nSavepoint==countSavepoints(db) );
-  assert( db->nDeferredCons==0 );
+  assert( iLevel>1 || db->nDeferredCons==0 );
 
   /* Invoke the xCommit() hook on all backends. */
   for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
@@ -1820,6 +1820,10 @@ static int vdbeCloseStatement(Vdbe *p, int bRollback){
         rc = sqlite4KVStoreCommit(pKV, pKV->iTransLevel-1);
       }
     }
+  }
+
+  if( bRollback ){
+    p->db->nDeferredCons = p->nStmtDefCons;
   }
 
   if( rc ){
@@ -1938,14 +1942,13 @@ int sqlite4VdbeHalt(Vdbe *p){
         eAction = 0;
       }
     }
-    if( eAction==0 && sqlite4VdbeCheckFk(p, 0) ){
-      eAction = 1;
-    }
+    if( eAction==0 && sqlite4VdbeCheckFk(p, 0) ) eAction = 1;
 
     if( eAction==2 || (
        db->writeVdbeCnt==(p->readOnly==0) && db->pSavepoint==0
     )){
 
+      if( eAction==0 && sqlite4VdbeCheckFk(p, 1) ) eAction = 1;
       if( eAction==0 ){
         int rc = sqlite4VdbeCommit(db, 1);
         if( rc!=SQLITE_OK ){

@@ -2419,6 +2419,7 @@ case OP_Savepoint: {
         memcpy(pSave->zName, zSave, nSave);
       }
       pSave->pNext = db->pSavepoint;
+      pSave->nDeferredCons = db->nDeferredCons;
       db->pSavepoint = pSave;
       db->nSavepoint++;
     }
@@ -2445,7 +2446,7 @@ case OP_Savepoint: {
         sqlite4SetString(&p->zErrMsg, db, "no such savepoint: %s", zSave);
         rc = SQLITE_ERROR;
       }else if( iOp==SAVEPOINT_RELEASE ){
-        zErr = "cannot rollback - no transaction is active";
+        zErr = "cannot commit - no transaction is active";
       }else{
         zErr = "cannot rollback - no transaction is active";
       }
@@ -2525,6 +2526,7 @@ case OP_Transaction: {
       if( rc==SQLITE_OK ){
         p->stmtTransMask |= ((yDbMask)1)<<pOp->p1;
       }
+      p->nStmtDefCons = db->nDeferredCons;
     }
   }
   break;
