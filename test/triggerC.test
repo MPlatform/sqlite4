@@ -167,7 +167,7 @@ do_test triggerC-1.15 {
 #
 do_test triggerC-2.1.0 {
   execsql {
-    CREATE TABLE t2(a PRIMARY KEY);
+    CREATE TABLE t2(a UNIQUE);
   }
 } {}
 

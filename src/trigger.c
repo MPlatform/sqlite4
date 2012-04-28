@@ -968,19 +968,10 @@ void sqlite4CodeRowTriggerDirect(
   /* Code the OP_Program opcode in the parent VDBE. P4 of the OP_Program 
   ** is a pointer to the sub-vdbe containing the trigger program.  */
   if( pPrg ){
-    int bRecursive = (p->zName && 0==(pParse->db->flags&SQLITE_RecTriggers));
-
     sqlite4VdbeAddOp3(v, OP_Program, reg, ignoreJump, ++pParse->nMem);
     sqlite4VdbeChangeP4(v, -1, (const char *)pPrg->pProgram, P4_SUBPROGRAM);
     VdbeComment(
         (v, "Call: %s.%s", (p->zName?p->zName:"fkey"), onErrorText(orconf)));
-
-    /* Set the P5 operand of the OP_Program instruction to non-zero if
-    ** recursive invocation of this trigger program is disallowed. Recursive
-    ** invocation is disallowed if (a) the sub-program is really a trigger,
-    ** not a foreign key action, and (b) the flag to enable recursive triggers
-    ** is clear.  */
-    sqlite4VdbeChangeP5(v, (u8)bRecursive);
   }
 }
 

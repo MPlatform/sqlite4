@@ -3186,10 +3186,7 @@ case OP_IsUnique: {        /* jump, in3 */
     assert( nShort<pProbe->n );
     rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
     if( rc==SQLITE_OK ){
-      if( nKey<nShort 
-       || memcmp(pProbe->z, aKey, nShort)
-       || (nKey==pProbe->n && 0==memcmp(pProbe->z, aKey, nKey))
-      ){
+      if( nKey<nShort || memcmp(pProbe->z, aKey, nShort) ){
         pc = pOp->p2-1;
       }else if( pOut ){
         iOut = sqlite4GetVarint64(pOut->z, pOut->n, &dummy);
@@ -4209,23 +4206,6 @@ case OP_Program: {        /* jump */
   pProgram = pOp->p4.pProgram;
   pRt = &aMem[pOp->p3];
   assert( pProgram->nOp>0 );
-  
-  /* If the p5 flag is clear, then recursive invocation of triggers is 
-  ** disabled for backwards compatibility (p5 is set if this sub-program
-  ** is really a trigger, not a foreign key action, and the flag set
-  ** and cleared by the "PRAGMA recursive_triggers" command is clear).
-  ** 
-  ** It is recursive invocation of triggers, at the SQL level, that is 
-  ** disabled. In some cases a single trigger may generate more than one 
-  ** SubProgram (if the trigger may be executed with more than one different 
-  ** ON CONFLICT algorithm). SubProgram structures associated with a
-  ** single trigger all have the same value for the SubProgram.token 
-  ** variable.  */
-  if( pOp->p5 ){
-    t = pProgram->token;
-    for(pFrame=p->pFrame; pFrame && pFrame->token!=t; pFrame=pFrame->pParent);
-    if( pFrame ) break;
-  }
 
   if( p->nFrame>=db->aLimit[SQLITE_LIMIT_TRIGGER_DEPTH] ){
     rc = SQLITE_ERROR;

@@ -1908,9 +1908,6 @@ static int openDatabase(
   db->nextPagesize = 0;
   db->flags |=  SQLITE_AutoIndex
                  | SQLITE_EnableTrigger
-#if SQLITE_DEFAULT_RECURSIVE_TRIGGERS
-                 | SQLITE_RecTriggers
-#endif
                  | SQLITE_ForeignKeys
             ;
 

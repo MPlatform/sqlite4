@@ -218,11 +218,11 @@ set ii 0
 foreach tr_program {
   {UPDATE tbl SET b = old.b;}
   {INSERT INTO log VALUES(new.c, 2, 3);}
-  {DELETE FROM log WHERE a = 1;}
-  {INSERT INTO tbl VALUES(500, new.b * 10, 700); 
-    UPDATE tbl SET c = old.c; 
-    DELETE FROM log;}
-  {INSERT INTO log select * from tbl;} 
+  {DELETE FROM log WHERE a = 1; }
+  {INSERT INTO tbl VALUES(500, new.b * 10, 700);}
+  {UPDATE tbl SET c = old.c;}
+  {DELETE FROM log;}
+  {INSERT INTO log select * from tbl;}  
 } {
   foreach test_varset [ list \
     {
@@ -264,6 +264,12 @@ foreach tr_program {
     eval $test_varset
 
     set statement_type [string range $statement 0 5]
+
+    # Update for SQLite 4: Triggers are now always recursive. But
+    # this test code assumes that they are not. So do not run any
+    # test case that could result in recursive trigger execution.
+    if {[string range $tr_program 0 5] == $statement_type} continue
+
     set tr_program_fixed $tr_program
     if {$statement_type == "DELETE"} {
       regsub -all new\.a $tr_program_fixed {''} tr_program_fixed 
@@ -440,11 +446,8 @@ execsql {
     END;
 }
 do_test trigger2-4.2 {
-  execsql {
-    INSERT INTO tbl VALUES (1, 2, 3);
-    select * from tbl;
-  }
-} {1 2 3 1 2 3}
+  catchsql { INSERT INTO tbl VALUES (1, 2, 3) }
+} {1 {too many levels of trigger recursion}}
 execsql {
   DROP TABLE tbl;
 }
@@ -452,7 +455,7 @@ execsql {
 # 5.
 execsql {
   CREATE TABLE tbl(a, b, c);
-  CREATE TRIGGER tbl_trig BEFORE INSERT ON tbl 
+  CREATE TRIGGER tbl_trig BEFORE INSERT ON tbl WHEN new.a>10
     BEGIN
       INSERT INTO tbl VALUES (1, 2, 3);
       INSERT INTO tbl VALUES (2, 2, 3);
@@ -475,7 +478,7 @@ ifcapable conflict {
   # Handling of ON CONFLICT by INSERT statements inside triggers
   execsql {
     CREATE TABLE tbl (a primary key, b, c);
-    CREATE TRIGGER ai_tbl AFTER INSERT ON tbl BEGIN
+    CREATE TRIGGER ai_tbl AFTER INSERT ON tbl WHEN new.c!=0 BEGIN
       INSERT OR IGNORE INTO tbl values (new.a, 0, 0);
     END;
   }
@@ -490,7 +493,7 @@ ifcapable conflict {
     catchsql {
       INSERT OR ABORT INTO tbl values (2, 2, 3);
     }
-  } {1 {column a is not unique}}
+  } {1 {PRIMARY KEY must be unique}}
   do_test trigger2-6.1c {
     execsql {
       SELECT * from tbl;
@@ -500,7 +503,7 @@ ifcapable conflict {
     catchsql {
       INSERT OR FAIL INTO tbl values (2, 2, 3);
     }
-  } {1 {column a is not unique}}
+  } {1 {PRIMARY KEY must be unique}}
   do_test trigger2-6.1e {
     execsql {
       SELECT * from tbl;
@@ -518,7 +521,7 @@ ifcapable conflict {
     catchsql {
       INSERT OR ROLLBACK INTO tbl values (3, 2, 3);
     }
-  } {1 {column a is not unique}}
+  } {1 {PRIMARY KEY must be unique}}
   do_test trigger2-6.1h {
     execsql {
       SELECT * from tbl;
@@ -531,22 +534,22 @@ ifcapable conflict {
   execsql {
     INSERT INTO tbl values (4, 2, 3);
     INSERT INTO tbl values (6, 3, 4);
-    CREATE TRIGGER au_tbl AFTER UPDATE ON tbl BEGIN
+    CREATE TRIGGER au_tbl AFTER UPDATE OF b ON tbl BEGIN
       UPDATE OR IGNORE tbl SET a = new.a, c = 10;
     END;
   }
   do_test trigger2-6.2a {
     execsql {
       BEGIN;
-      UPDATE tbl SET a = 1 WHERE a = 4;
+      UPDATE tbl SET a = 1, b = b WHERE a = 4;
       SELECT * from tbl;
     }
   } {1 2 10 6 3 4}
   do_test trigger2-6.2b {
     catchsql {
-      UPDATE OR ABORT tbl SET a = 4 WHERE a = 1;
+      UPDATE OR ABORT tbl SET a = 4, b = b WHERE a = 1;
     }
-  } {1 {column a is not unique}}
+  } {1 {PRIMARY KEY must be unique}}
   do_test trigger2-6.2c {
     execsql {
       SELECT * from tbl;
@@ -554,9 +557,9 @@ ifcapable conflict {
   } {1 2 10 6 3 4}
   do_test trigger2-6.2d {
     catchsql {
-      UPDATE OR FAIL tbl SET a = 4 WHERE a = 1;
+      UPDATE OR FAIL tbl SET a = 4, b = b WHERE a = 1;
     }
-  } {1 {column a is not unique}}
+  } {1 {PRIMARY KEY must be unique}}
   do_test trigger2-6.2e {
     execsql {
       SELECT * from tbl;
@@ -564,7 +567,7 @@ ifcapable conflict {
   } {4 2 10 6 3 4}
   do_test trigger2-6.2f.1 {
     execsql {
-      UPDATE OR REPLACE tbl SET a = 1 WHERE a = 4;
+      UPDATE OR REPLACE tbl SET a = 1, b = b WHERE a = 4;
       SELECT * from tbl;
     }
   } {1 3 10}
@@ -576,9 +579,9 @@ ifcapable conflict {
   } {1 3 10 2 3 4}
   do_test trigger2-6.2g {
     catchsql {
-      UPDATE OR ROLLBACK tbl SET a = 4 WHERE a = 1;
+      UPDATE OR ROLLBACK tbl SET a = 4, b = b WHERE a = 1;
     }
-  } {1 {column a is not unique}}
+  } {1 {PRIMARY KEY must be unique}}
   do_test trigger2-6.2h {
     execsql {
       SELECT * from tbl;

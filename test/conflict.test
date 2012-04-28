@@ -784,7 +784,7 @@ do_test conflict-12.3 {
   catchsql {
     UPDATE t5 SET a=a+1 WHERE a=1;
   }
-} {1 {column a is not unique}}
+} {1 {PRIMARY KEY must be unique}}
 do_test conflict-12.4 {
   execsql {
     UPDATE OR REPLACE t5 SET a=a+1 WHERE a=1;

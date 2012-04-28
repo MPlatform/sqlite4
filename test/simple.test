@@ -82,7 +82,7 @@ do_execsql_test 2.3.4 { SELECT * FROM t2 } {123 456 789 0ab}
 
 do_catchsql_test 2.2.5 {
   INSERT INTO t1 VALUES('a', 'CCC')
-} {1 {column k is not unique}}
+} {1 {PRIMARY KEY must be unique}}
 
 #-------------------------------------------------------------------------
 reset_db
@@ -364,7 +364,7 @@ do_execsql_test 17.1 {
 
 do_catchsql_test 17.2 { 
   INSERT INTO t1 SELECT b FROM t2;
-} {1 {column x is not unique}}
+} {1 {PRIMARY KEY must be unique}}
 
 do_execsql_test 17.3 { SELECT * FROM t1 } {X}
 
@@ -646,7 +646,7 @@ do_execsql_test 35.1 {
   CREATE TABLE tbl (a primary key, b, c);
   INSERT INTO tbl VALUES(1, 2, 3);
   INSERT INTO tbl VALUES(2, 2, 3);
-  CREATE TRIGGER ai_tbl AFTER INSERT ON tbl BEGIN
+  CREATE TRIGGER ai_tbl AFTER INSERT ON tbl WHEN new.c!=0 BEGIN
     INSERT OR IGNORE INTO tbl values (new.a, 0, 0);
   END;
 }
@@ -668,7 +668,7 @@ do_execsql_test 36.1 {
 }
 do_catchsql_test 36.2 {
   UPDATE OR ROLLBACK tbl SET a = 4 WHERE a = 1;
-} {1 {column a is not unique}}
+} {1 {PRIMARY KEY must be unique}}
 
 #-------------------------------------------------------------------------
 reset_db
@@ -1121,7 +1121,6 @@ do_execsql_test 55.1 {
   INSERT INTO t1 VALUES(1, 'one');
   INSERT INTO t1 VALUES(3, 'three');
 } {}
-breakpoint
 do_execsql_test 55.2 {
   BEGIN;
     INSERT INTO t1 VALUES(2, 'too');
@@ -1145,6 +1144,19 @@ do_execsql_test 56.2 {
 }
 
 do_execsql_test 55.3 { SELECT * FROM t1 } {1 one 2 three}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 57.1 {
+  CREATE TABLE t1(a INTEGER PRIMARY KEY, b UNIQUE, c, d, e);
+  INSERT INTO t1 VALUES(1, 2, 3, 4, 5);
+  INSERT INTO t1 VALUES(6, 7, 8, 9, 10);
+} {}
+
+do_execsql_test 57.2 {
+  UPDATE t1 SET a = 11 WHERE a=1;
+}
 
 finish_test
 

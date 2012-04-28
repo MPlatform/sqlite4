@@ -133,13 +133,19 @@ lappend ::testsuitelist xxx
 
 test_suite "src4" -prefix "" -description {
 } -files {
-  simple.test fkey1.test conflict.test trigger2.test where.test 
+  simple.test fkey1.test conflict.test where.test 
+
   select1.test select2.test select3.test select4.test select5.test 
   select6.test select7.test select8.test select9.test selectA.test 
   selectB.test selectC.test 
+
   collate1.test collate2.test collate3.test collate4.test collate5.test
   collate6.test collate7.test collate8.test collate9.test collateA.test
+
   savepoint.test savepoint2.test savepoint5.test 
+
+  trigger1.test trigger2.test trigger3.test trigger4.test trigger5.test 
+  trigger6.test trigger7.test trigger8.test trigger9.test triggerB.test
 }
 
 test_suite "veryquick" -prefix "" -description {

@@ -634,10 +634,10 @@ do_test trigger1-15.1 {
     INSERT INTO tA VALUES(1, 2, 3);
   }
   catchsql { UPDATE tA SET a = 'abc' }
-} {1 {datatype mismatch}}
+} {0 {}}
 do_test trigger1-15.2 {
   catchsql { INSERT INTO tA VALUES('abc', 2, 3) }
-} {1 {datatype mismatch}}
+} {1 {PRIMARY KEY must be unique}}
 
 # Ticket #3947:  Do not allow qualified table names on INSERT, UPDATE, and
 # DELETE statements within triggers.  Actually, this has never been allowed

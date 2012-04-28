@@ -71,14 +71,6 @@ ifcapable explain {
     set txt [db eval {EXPLAIN UPDATE t1 SET y=5}]
     string match *___update_t1.y___* $txt
   } 1
-  do_test trigger7-2.5 {
-    set txt [db eval {EXPLAIN UPDATE t1 SET rowid=5}]
-    string match *___update_t1.x___* $txt
-  } 0
-  do_test trigger7-2.6 {
-    set txt [db eval {EXPLAIN UPDATE t1 SET rowid=5}]
-    string match *___update_t1.x___* $txt
-  } 0
 }
 
 # Test the ability to create many triggers on the same table, then

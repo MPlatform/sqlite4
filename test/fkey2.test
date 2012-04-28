@@ -400,6 +400,8 @@ do_test fkey2-3.1.2 {
     INSERT INTO ef VALUES(1, 'e');
   }
 } {}
+  explain { UPDATE ab SET a = 5 }
+  execsql { PRAGMA vdbe_trace = 1 }
 do_test fkey2-3.1.3 {
   catchsql { UPDATE ab SET a = 5 }
 } {1 {constraint failed}}

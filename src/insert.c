@@ -1099,14 +1099,18 @@ static char *notUniqueMessage(
 
   sqlite4StrAccumInit(&errMsg, 0, 0, 200);
   errMsg.db = pParse->db;
-  sqlite4StrAccumAppend(&errMsg, (nCol>1 ? "columns " : "column "), -1);
-  for(iCol=0; iCol<pIdx->nColumn; iCol++){
-    const char *zCol = indexColumnName(pIdx, iCol);
-    sqlite4StrAccumAppend(&errMsg, (iCol==0 ? "" : ", "), -1);
-    sqlite4StrAccumAppend(&errMsg, zCol, -1);
+  if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+    sqlite4StrAccumAppend(&errMsg, "PRIMARY KEY must be unique", -1);
+  }else{
+    sqlite4StrAccumAppend(&errMsg, (nCol>1 ? "columns " : "column "), -1);
+    for(iCol=0; iCol<pIdx->nColumn; iCol++){
+      const char *zCol = indexColumnName(pIdx, iCol);
+      sqlite4StrAccumAppend(&errMsg, (iCol==0 ? "" : ", "), -1);
+      sqlite4StrAccumAppend(&errMsg, zCol, -1);
+    }
+    sqlite4StrAccumAppend(&errMsg, (nCol>1 ? " are" : " is"), -1);
+    sqlite4StrAccumAppend(&errMsg, " not unique", -1);
   }
-  sqlite4StrAccumAppend(&errMsg, (nCol>1 ? " are" : " is"), -1);
-  sqlite4StrAccumAppend(&errMsg, " not unique", -1);
   return sqlite4StrAccumFinish(&errMsg);
 }
 
@@ -1271,8 +1275,11 @@ void sqlite4GenerateConstraintChecks(
     int nTmpReg;                  /* Number of temp registers required */
     int regTmp;                   /* First temp register allocated */
     int regPk;                    /* PK of conflicting row (for REPLACE) */
+    int regKey = aRegIdx[iCur];   /* Write encoded index key for pIdx here */
+    int iIdx = baseCur+iCur;      /* Cursor for index pIdx */
 
-    if( aRegIdx[iCur]==0 ) continue;  /* Skip unused indices */
+    /* If regKey is 0, pIdx will not be updated. */
+    if( regKey==0 ) continue;
 
     /* Create an index key. Primary key indexes consists of just the primary
     ** key values. Other indexes consists of the indexed columns followed by
@@ -1291,22 +1298,17 @@ void sqlite4GenerateConstraintChecks(
         sqlite4VdbeAddOp2(v, OP_SCopy, regContent+idx, regTmp+i+pIdx->nColumn);
       }
     }
-    sqlite4VdbeAddOp3(v, OP_MakeIdxKey, baseCur+iCur, regTmp, aRegIdx[iCur]);
+    sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iIdx, regTmp, regKey);
     VdbeComment((v, "key for %s", pIdx->zName));
 
     /* If Index.onError==OE_None, then pIdx is not a UNIQUE or PRIMARY KEY 
     ** index. In this case there is no need to test the index for uniqueness
-    ** - all that is required is to populate the aRegIdx[iCur] register. Jump 
+    ** - all that is required is to populate the regKey register. Jump 
     ** to the next iteration of the loop if this is the case.  */
     onError = pIdx->onError;
     if( onError!=OE_None ){
-      int iTest;                  /* Address of OP_IsUnique instruction */
-      int iTest3;                 /* Address of OP_IsNull */
-      int iTest2 = 0;             /* Address of OP_Eq instruction */
-      int regOut = 0;             /* PK of row to replace */
-
-      iTest3 = sqlite4VdbeAddOp3(v, OP_IsNull, regTmp, 0, pIdx->nColumn);
-
+      int iLabel;
+     
       /* Figure out what to do if a UNIQUE constraint is encountered. 
       **
       ** TODO: If a previous constraint is a REPLACE, why change IGNORE to
@@ -1321,16 +1323,18 @@ void sqlite4GenerateConstraintChecks(
         else if( onError==OE_Fail ) onError = OE_Abort;
       }
 
-      if( onError==OE_Replace ){
-        sqlite4VdbeAddOp3(v, OP_Blob, nPkRoot, regPk, 0);
-        sqlite4VdbeChangeP4(v, -1, aPkRoot, nPkRoot);
-        regOut = regPk;
+      iLabel = sqlite4VdbeMakeLabel(v);
+      if( pIdx!=pPk ){
+        sqlite4VdbeAddOp3(v, OP_IsNull, regTmp, iLabel, pIdx->nColumn);
       }
       if( regOldKey && pIdx==pPk ){
-        iTest2 = sqlite4VdbeAddOp3(v, OP_Eq, regOldKey, 0, aRegIdx[iCur]);
+        sqlite4VdbeAddOp3(v, OP_Eq, regOldKey, iLabel, regKey);
       }
-      iTest = sqlite4VdbeAddOp3(v, OP_IsUnique, baseCur+iCur, 0, aRegIdx[iCur]);
-      sqlite4VdbeChangeP4(v, -1, SQLITE_INT_TO_PTR(regOut), P4_INT32);
+      sqlite4VdbeAddOp4(v, OP_Blob, nPkRoot, regPk, 0, aPkRoot, nPkRoot);
+      sqlite4VdbeAddOp4Int(v, OP_IsUnique, iIdx, iLabel, regKey, regPk);
+      if( regOldKey && pIdx!=pPk ){
+        sqlite4VdbeAddOp3(v, OP_Eq, regOldKey, iLabel, regPk);
+      }
       
       switch( onError ){
         case OE_Rollback:
@@ -1353,17 +1357,14 @@ void sqlite4GenerateConstraintChecks(
           sqlite4MultiWrite(pParse);
           pTrigger = sqlite4TriggersExist(pParse, pTab, TK_DELETE, 0, 0);
           sqlite4GenerateRowDelete(
-              pParse, pTab, baseCur, regOut, 0, pTrigger, OE_Replace
+              pParse, pTab, baseCur, regPk, 0, pTrigger, OE_Replace
           );
           seenReplace = 1;
           break;
         }
       }
 
-      /* If the OP_IsUnique passes (no constraint violation) jump here */
-      sqlite4VdbeJumpHere(v, iTest);
-      sqlite4VdbeJumpHere(v, iTest3);
-      if( iTest2 ) sqlite4VdbeJumpHere(v, iTest2);
+      sqlite4VdbeResolveLabel(v, iLabel);
     }
 
     sqlite4ReleaseTempRange(pParse, regTmp, nTmpReg);

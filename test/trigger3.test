@@ -139,17 +139,19 @@ do_test trigger3-5.2 {
 } {1 2 3}
 
 # Check that RAISE(IGNORE) works correctly for nested triggers:
-execsql {CREATE TABLE tbl2(a, b, c)}
+execsql {CREATE TABLE tbl2(a, b, c, auto)}
 execsql {
-    CREATE TRIGGER after_tbl2_insert AFTER INSERT ON tbl2 BEGIN
+    CREATE TRIGGER after_tbl2_insert AFTER INSERT ON tbl2 
+      WHEN NOT new.auto
+    BEGIN
         UPDATE tbl SET c = 10;
-        INSERT INTO tbl2 VALUES (new.a, new.b, new.c);
+        INSERT INTO tbl2 VALUES (new.a, new.b, new.c, 1);
     END;
 }
 do_test trigger3-6 {
     execsql {
-        INSERT INTO tbl2 VALUES (1, 2, 3);
-        SELECT * FROM tbl2;
+        INSERT INTO tbl2 VALUES (1, 2, 3, 0);
+        SELECT a, b, c FROM tbl2;
         SELECT * FROM tbl;
     }
 } {1 2 3 1 2 3 1 2 3}
