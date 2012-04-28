@@ -1071,15 +1071,7 @@ case OP_ResultRow: {
   assert( p->nResColumn==pOp->p2 );
   assert( pOp->p1>0 );
   assert( pOp->p1+pOp->p2<=p->nMem+1 );
-
-  /* If this statement has violated immediate foreign key constraints, do
-  ** not return the number of rows modified. And do not RELEASE the statement
-  ** transaction. It needs to be rolled back.  */
-  if( SQLITE_OK!=(rc = sqlite4VdbeCheckFk(p, 0)) ){
-    assert( db->flags&SQLITE_CountRows );
-    assert( p->needSavepoint );
-    break;
-  }
+  assert( p->nFkConstraint==0 );
 
   /* If the SQLITE_CountRows flag is set in sqlite4.flags mask, then 
   ** DML statements invoke this opcode to return the number of rows 

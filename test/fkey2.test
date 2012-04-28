@@ -360,7 +360,7 @@ fkey2-2-test 65 1   "INSERT INTO leaf VALUES('b', 2)"
 fkey2-2-test 66 1   "INSERT INTO leaf VALUES('c', 1)"
 do_test fkey2-2-test-67 {
   catchsql          "INSERT INTO node SELECT parent, 3 FROM leaf"
-} {1 {column nodeid is not unique}}
+} {1 {PRIMARY KEY must be unique}}
 fkey2-2-test 68 0 "COMMIT"           FKV
 fkey2-2-test 69 1   "INSERT INTO node VALUES(1, NULL)"
 fkey2-2-test 70 0   "INSERT INTO node VALUES(2, NULL)"
@@ -400,8 +400,6 @@ do_test fkey2-3.1.2 {
     INSERT INTO ef VALUES(1, 'e');
   }
 } {}
-  explain { UPDATE ab SET a = 5 }
-  execsql { PRAGMA vdbe_trace = 1 }
 do_test fkey2-3.1.3 {
   catchsql { UPDATE ab SET a = 5 }
 } {1 {constraint failed}}
@@ -429,6 +427,8 @@ do_test fkey2-3.2.2 {
 #-------------------------------------------------------------------------
 # Test cases fkey2-4.* test that recursive foreign key actions 
 # (i.e. CASCADE) are allowed even if recursive triggers are disabled.
+#
+# UPDATE: SQLite 4 does not support non-recursive triggers.
 #
 drop_all_tables
 do_test fkey2-4.1 {
@@ -465,7 +465,7 @@ do_test fkey2-4.3 {
       SELECT node FROM t2;
     ROLLBACK;
   }
-} {4 5 6 7}
+} {}
 do_test fkey2-4.4 {
   execsql { PRAGMA recursive_triggers = on }
   execsql { 
@@ -481,40 +481,6 @@ do_test fkey2-4.3 {
     ROLLBACK;
   }
 } {}
-
-#-------------------------------------------------------------------------
-# Test cases fkey2-5.* verify that the incremental blob API may not
-# write to a foreign key column while foreign-keys are enabled.
-#
-drop_all_tables
-ifcapable incrblob {
-  do_test fkey2-5.1 {
-    execsql {
-      CREATE TABLE t1(a PRIMARY KEY, b);
-      CREATE TABLE t2(a PRIMARY KEY, b REFERENCES t1(a));
-      INSERT INTO t1 VALUES('hello', 'world');
-      INSERT INTO t2 VALUES('key', 'hello');
-    }
-  } {}
-  do_test fkey2-5.2 {
-    set rc [catch { set fd [db incrblob t2 b 1] } msg]
-    list $rc $msg
-  } {1 {cannot open foreign key column for writing}}
-  do_test fkey2-5.3 {
-    set rc [catch { set fd [db incrblob -readonly t2 b 1] } msg]
-    close $fd
-    set rc
-  } {0}
-  do_test fkey2-5.4 {
-    execsql { PRAGMA foreign_keys = off }
-    set rc [catch { set fd [db incrblob t2 b 1] } msg]
-    close $fd
-    set rc
-  } {0}
-  do_test fkey2-5.5 {
-    execsql { PRAGMA foreign_keys = on }
-  } {}
-}
 
 drop_all_tables
 ifcapable vacuum {
@@ -564,9 +530,6 @@ do_test fkey2-7.7 {
 } {}
 do_test fkey2-7.8 {
   catchsql { UPDATE t1 SET a = 3 }
-} {1 {foreign key constraint failed}}
-do_test fkey2-7.9 {
-  catchsql { UPDATE t2 SET rowid = 3 }
 } {1 {foreign key constraint failed}}
 
 #-------------------------------------------------------------------------
@@ -712,7 +675,7 @@ do_test fkey2-10.2.1 {
   catchsql {
     CREATE TABLE t1(a, b);
     CREATE TABLE t2(c, d, FOREIGN KEY(c) REFERENCES t1(rowid));
-    INSERT INTO t1(rowid, a, b) VALUES(1, 1, 1);
+    INSERT INTO t1(a, b) VALUES(1, 1);
     INSERT INTO t2 VALUES(1, 1);
   }
 } {1 {foreign key mismatch}}
@@ -884,7 +847,6 @@ do_test fkey2-13.1.1 {
 } {}
 foreach {tn stmt} {
   1   "REPLACE INTO pp VALUES(1, 4, 5)"
-  2   "REPLACE INTO pp(rowid, a, b, c) VALUES(1, 2, 3, 4)"
 } {
   do_test fkey2-13.1.$tn.1 {
     catchsql $stmt
@@ -909,18 +871,18 @@ foreach {tn stmt} {
 }
 do_test fkey2-13.1.3 {
   execsql { 
-    REPLACE INTO pp(rowid, a, b, c) VALUES(1, 2, 2, 3);
-    SELECT rowid, * FROM pp;
+    REPLACE INTO pp(a, b, c) VALUES(2, 2, 3);
+    SELECT * FROM pp;
     SELECT * FROM cc;
   }
-} {1 2 2 3 2 3 1}
+} {2 2 3 2 3 1}
 do_test fkey2-13.1.4 {
   execsql { 
-    REPLACE INTO pp(rowid, a, b, c) VALUES(2, 2, 2, 3);
-    SELECT rowid, * FROM pp;
+    REPLACE INTO pp(a, b, c) VALUES(2, 2, 3);
+    SELECT * FROM pp;
     SELECT * FROM cc;
   }
-} {2 2 2 3 2 3 1}
+} {2 2 3 2 3 1}
 
 #-------------------------------------------------------------------------
 # The following tests, fkey2-14.*, test that the "DROP TABLE" and "ALTER
@@ -1302,6 +1264,7 @@ ifcapable vtab {
 # The following tests, fkey2-15.*, test that unnecessary FK related scans 
 # and lookups are avoided when the constraint counters are zero.
 #
+if 0 {
 drop_all_tables
 proc execsqlS {zSql} {
   set ::sqlite_search_count 0
@@ -1353,6 +1316,7 @@ do_test fkey2-15.1.7 {
     ROLLBACK;
   }
 } {2}
+}
 
 #-------------------------------------------------------------------------
 # This next block of tests, fkey2-16.*, test that rows that refer to
@@ -1395,133 +1359,6 @@ foreach {tn zSchema} {
     catchsql { INSERT INTO self VALUES(20, 21) }
   } {1 {foreign key constraint failed}}
 }
-
-#-------------------------------------------------------------------------
-# This next block of tests, fkey2-17.*, tests that if "PRAGMA count_changes"
-# is turned on statements that violate immediate FK constraints return
-# SQLITE_CONSTRAINT immediately, not after returning a number of rows.
-# Whereas statements that violate deferred FK constraints return the number
-# of rows before failing.
-#
-# Also test that rows modified by FK actions are not counted in either the
-# returned row count or the values returned by sqlite4_changes(). Like
-# trigger related changes, they are included in sqlite4_total_changes() though.
-#
-drop_all_tables
-do_test fkey2-17.1.1 {
-  execsql { PRAGMA count_changes = 1 }
-  execsql { 
-    CREATE TABLE one(a, b, c, UNIQUE(b, c));
-    CREATE TABLE two(d, e, f, FOREIGN KEY(e, f) REFERENCES one(b, c));
-    INSERT INTO one VALUES(1, 2, 3);
-  }
-} {1}
-do_test fkey2-17.1.2 {
-  set STMT [sqlite4_prepare_v2 db "INSERT INTO two VALUES(4, 5, 6)" -1 dummy]
-  sqlite4_step $STMT
-} {SQLITE_CONSTRAINT}
-ifcapable autoreset {
-  do_test fkey2-17.1.3 {
-    sqlite4_step $STMT
-  } {SQLITE_CONSTRAINT}
-} else {
-  do_test fkey2-17.1.3 {
-    sqlite4_step $STMT
-  } {SQLITE_MISUSE}
-}
-do_test fkey2-17.1.4 {
-  sqlite4_finalize $STMT
-} {SQLITE_CONSTRAINT}
-do_test fkey2-17.1.5 {
-  execsql {
-    INSERT INTO one VALUES(2, 3, 4);
-    INSERT INTO one VALUES(3, 4, 5);
-    INSERT INTO two VALUES(1, 2, 3);
-    INSERT INTO two VALUES(2, 3, 4);
-    INSERT INTO two VALUES(3, 4, 5);
-  }
-} {1 1 1 1 1}
-do_test fkey2-17.1.6 {
-  catchsql {
-    BEGIN;
-      INSERT INTO one VALUES(0, 0, 0);
-      UPDATE two SET e=e+1, f=f+1;
-  }
-} {1 {foreign key constraint failed}}
-do_test fkey2-17.1.7 {
-  execsql { SELECT * FROM one }
-} {1 2 3 2 3 4 3 4 5 0 0 0}
-do_test fkey2-17.1.8 {
-  execsql { SELECT * FROM two }
-} {1 2 3 2 3 4 3 4 5}
-do_test fkey2-17.1.9 {
-  execsql COMMIT
-} {}
-do_test fkey2-17.1.10 {
-  execsql {
-    CREATE TABLE three(
-      g, h, i, 
-      FOREIGN KEY(h, i) REFERENCES one(b, c) DEFERRABLE INITIALLY DEFERRED
-    );
-  }
-} {}
-do_test fkey2-17.1.11 {
-  set STMT [sqlite4_prepare_v2 db "INSERT INTO three VALUES(7, 8, 9)" -1 dummy]
-  sqlite4_step $STMT
-} {SQLITE_ROW}
-do_test fkey2-17.1.12 {
-  sqlite4_column_text $STMT 0
-} {1}
-do_test fkey2-17.1.13 {
-  sqlite4_step $STMT
-} {SQLITE_CONSTRAINT}
-do_test fkey2-17.1.14 {
-  sqlite4_finalize $STMT
-} {SQLITE_CONSTRAINT}
-
-drop_all_tables
-do_test fkey2-17.2.1 {
-  execsql {
-    CREATE TABLE high("a'b!" PRIMARY KEY, b);
-    CREATE TABLE low(
-      c, 
-      "d&6" REFERENCES high ON UPDATE CASCADE ON DELETE CASCADE
-    );
-  }
-} {}
-do_test fkey2-17.2.2 {
-  execsql {
-    INSERT INTO high VALUES('a', 'b');
-    INSERT INTO low VALUES('b', 'a');
-  }
-  db changes
-} {1}
-set nTotal [db total_changes]
-do_test fkey2-17.2.3 {
-  execsql { UPDATE high SET "a'b!" = 'c' }
-} {1}
-do_test fkey2-17.2.4 {
-  db changes
-} {1}
-do_test fkey2-17.2.5 {
-  expr [db total_changes] - $nTotal
-} {2}
-do_test fkey2-17.2.6 {
-  execsql { SELECT * FROM high ; SELECT * FROM low }
-} {c b b c}
-do_test fkey2-17.2.7 {
-  execsql { DELETE FROM high }
-} {1}
-do_test fkey2-17.2.8 {
-  db changes
-} {1}
-do_test fkey2-17.2.9 {
-  expr [db total_changes] - $nTotal
-} {4}
-do_test fkey2-17.2.10 {
-  execsql { SELECT * FROM high ; SELECT * FROM low }
-} {}
-execsql { PRAGMA count_changes = 0 }
 
 #-------------------------------------------------------------------------
 # Test that the authorization callback works.
@@ -1627,7 +1464,7 @@ do_test fkey2-19.1 {
   }
 } {}
 do_test fkey2-19.2 {
-  set S [sqlite4_prepare_v2 db "DELETE FROM main WHERE id = ?" -1 dummy]
+  set S [sqlite4_prepare db "DELETE FROM main WHERE id = ?" -1 dummy]
   sqlite4_bind_int $S 1 2
   sqlite4_step $S
 } {SQLITE_CONSTRAINT}
@@ -1772,7 +1609,7 @@ do_test fkey2-genfkey.1.8 {
 } {1 {foreign key constraint failed}}
 do_test fkey2-genfkey.1.9 {
   catchsql { UPDATE t1 SET a = NULL }
-} {1 {datatype mismatch}}
+} {1 {t1.a may not be NULL}}
 do_test fkey2-genfkey.1.10 {
   catchsql { DELETE FROM t1 }
 } {1 {foreign key constraint failed}}

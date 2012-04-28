@@ -497,7 +497,7 @@ void sqlite4GenerateRowDelete(
   ** handle rows (possibly in other tables) that refer via a foreign key
   ** to the row just deleted. This is a no-op if there are no configured
   ** foreign keys that use this table as a parent table.  */ 
-  sqlite4FkActions(pParse, pTab, 0, regOld+1);
+  sqlite4FkActions(pParse, pTab, 0, regOld);
 
   /* Invoke AFTER DELETE trigger programs. */
   sqlite4CodeRowTrigger(pParse, pTrigger, 

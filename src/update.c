@@ -527,7 +527,7 @@ void sqlite4Update(
     ** handle rows (possibly in other tables) that refer via a foreign key
     ** to the row just updated. */ 
     if( hasFK ){
-      sqlite4FkActions(pParse, pTab, pChanges, regOldKey);
+      sqlite4FkActions(pParse, pTab, pChanges, regOldTr);
     }
   }
 

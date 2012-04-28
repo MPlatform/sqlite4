@@ -133,7 +133,9 @@ lappend ::testsuitelist xxx
 
 test_suite "src4" -prefix "" -description {
 } -files {
-  simple.test fkey1.test conflict.test where.test 
+  simple.test conflict.test where.test 
+
+  fkey1.test fkey2.test
 
   select1.test select2.test select3.test select4.test select5.test 
   select6.test select7.test select8.test select9.test selectA.test 
