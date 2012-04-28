@@ -951,7 +951,7 @@ static int assertKeyLocation(
           if( res==0 ) res = pCsr->xCmp(pKey, nKey, pPgKey, nPgKey);
           if( (eDir==1 && res>0) || (eDir==-1 && res<0) ){
             /* Taking this branch means something has gone wrong. */
-            char *zMsg = lsmMallocPrintf("Key \"%s\" is not on page %d", 
+            char *zMsg = lsmMallocPrintf(0, "Key \"%s\" is not on page %d", 
                 keyToString(pKey, nKey), lsmFsPageNumber(pPtr->pPg)
             );
             fprintf(stderr, "%s\n", zMsg);
@@ -3498,20 +3498,20 @@ static char *segToString(SortedRun *pRun, int nMin){
   char *z2;
   int nPad;
 
-  z1 = lsmMallocPrintf("%d.%d", iFirst, iLast);
+  z1 = lsmMallocPrintf(0, "%d.%d", iFirst, iLast);
   if( iRoot ){
-    z2 = lsmMallocPrintf("root=%d", iRoot);
+    z2 = lsmMallocPrintf(0, "root=%d", iRoot);
   }else{
-    z2 = lsmMallocPrintf("size=%d", nSize);
+    z2 = lsmMallocPrintf(0, "size=%d", nSize);
   }
 
   nPad = nMin - 2 - strlen(z1) - 1 - strlen(z2);
   nPad = MAX(0, nPad);
 
   if( iRoot ){
-    z = lsmMallocPrintf("/%s % *s%s\\", z1, nPad, "", z2);
+    z = lsmMallocPrintf(0, "/%s %*s%s\\", z1, nPad, "", z2);
   }else{
-    z = lsmMallocPrintf("|%s % *s%s|", z1, nPad, "", z2);
+    z = lsmMallocPrintf(0, "|%s %*s%s|", z1, nPad, "", z2);
   }
   lsmFree(0, z1);
   lsmFree(0, z2);
@@ -3537,7 +3537,7 @@ static int fileToString(
 
 void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg){
   Blob blob = {0, 0, 0};
-  char *zRet = 0;
+  LsmString s;
   int i;
 
   int nRec;
@@ -3552,9 +3552,8 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg){
   iPtr = pageGetPtr(aData, nData);
   flags = pageGetFlags(aData, nData);
 
-  zRet = lsmMallocAPrintf(
-      zRet, "nCell=%d iPtr=%d flags=%d {", nRec, iPtr, flags
-  );
+  lsmStringInit(&s, pDb->pEnv);
+  lsmStringAppendf(&s,"nCell=%d iPtr=%d flags=%d {", nRec, iPtr, flags);
   if( flags&SEGMENT_BTREE_FLAG ) iPtr = 0;
 
   for(i=0; i<nRec; i++){
@@ -3586,19 +3585,19 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg){
       iTopic = eType;
     }
 
-    zRet = lsmMallocAPrintf(zRet, "%s%.2X:", (i==0?"":" "), iTopic);
+    lsmStringAppendf(&s, "%s%2X:", (i==0?"":" "), iTopic);
     for(iChar=0; iChar<nKey; iChar++){
-      zRet = lsmMallocAPrintf(zRet, "%c", 
+      lsmStringAppendf(&s, "%c",
           isalnum(aKey[iChar]) ? aKey[iChar] : '.'
       );
     }
-    zRet = lsmMallocAPrintf(zRet, " %d", iPgPtr+iPtr);
+    lsmStringAppendf(&s, " %d", iPgPtr+iPtr);
     lsmFsPageRelease(pRef);
   }
-  zRet = lsmMallocAPrintf(zRet, "}");
+  lsmStringAppend(&s, "}", 1);
 
-  lsmLogMessage(pDb, LSM_OK, "      Page %d: %s", lsmFsPageNumber(pPg), zRet);
-  lsmFree(pDb->pEnv, zRet);
+  lsmLogMessage(pDb, LSM_OK, "      Page %d: %s", lsmFsPageNumber(pPg), s.z);
+  lsmStringClear(&s);
   sortedBlobFree(&blob);
 }
 

@@ -244,66 +244,64 @@ void assert_tree_looks_ok(int rc, Tree *pTree){
 #endif
 
 #ifdef LSM_DEBUG
-char *appendStrBlob(char *zIn, void *pBlob, int nBlob){
-  char *z = zIn;
+static void lsmAppendStrBlob(LsmString *pStr, void *pBlob, int nBlob){
   int i;
-
+  lsmStringExtend(pStr, nBlob);
+  if( pStr->nAlloc==0 ) return;
   for(i=0; i<nBlob; i++){
-    u8 c = ((u8 *)pBlob)[i];
-    z = lsmMallocAPrintf(z, "%c", isalnum(c) ? c : '.');
+    u8 c = ((u8*)pBlob)[i];
+    pStr->z[pStr->n++] = "0123456789abcdef"[(c>>4)&0xf];
+    pStr->z[pStr->n++] = "0123456789abcdef"[c&0xf];
   }
-  return z;
+  pStr->z[pStr->n] = 0;
 }
 
-char *appendIndent(char *zIn, int nIndent){
-  char *z = zIn;
+static void lsmAppendIndent(LsmString *pStr, int nIndent){
   int i;
-  for(i=0; i<nIndent; i++) z = lsmMallocAPrintf(z, " ");
-  return z;
+  lsmStringExtend(pStr, nIndent);
+  for(i=0; i<nIndent; i++) lsmStringAppend(pStr, " ", 1);
 }
 
-char *appendKeyValue(char *zIn, TreeKey *pKey){
+static void lsmAppendKeyValue(LsmString *pStr, TreeKey *pKey){
   int i;
-  char *z = zIn;
 
   for(i=0; i<pKey->nKey; i++){
-    z = lsmMallocAPrintf(z, "%.2X ", ((u8 *)(pKey->pKey))[i]);
+    lsmStringAppendf(pStr, "%2X ", ((u8 *)(pKey->pKey))[i]);
   }
-  z = lsmMallocAPrintf(z, "      ");
+  lsmStringAppend(pStr, "      ", -1);
 
   if( pKey->nValue<0 ){
-    z = lsmMallocAPrintf(z, "<deleted>");
+    lsmStringAppend(pStr, "<deleted>", -1);
   }else{
-    z = appendStrBlob(z, pKey->pValue, pKey->nValue);
+    lsmAppendStrBlob(pStr, pKey->pValue, pKey->nValue);
   }
-
-  return z;
 }
 
 void dump_node(TreeNode *pNode, int nIndent, int isNode){
   if( pNode ){
-    char *z;
+    LsmString s;
     int i;
 
-    z = appendIndent(0, nIndent);
-    z = lsmMallocAPrintf(z, "0x%p", (void *)pNode);
-    printf("%s\n", z);
-    lsmFree(0, z);
+    lsmStringInit(&s, NEED_ENV);
+    lsmAppendIndent(&s, nIndent);
+    lsmStringAppendf(&s, "0x%p", (void*)pNode);
+    printf("%s\n", s.z);
+    lsmStringClear(&s);
 
     for(i=0; i<4; i++){
 
       if( isNode ){
         if( pNode->iV2 && i==pNode->iV2Ptr ){
-          z = appendIndent(0, nIndent+2);
-          z = lsmMallocAPrintf(z, "if( version>=%d )", pNode->iV2);
-          printf("%s\n", z);
-          lsmFree(0, z);
+          lsmAppendIndent(&s, nIndent+2);
+          lsmStringAppendf(&s, "if( version>=%d )", pNode->iV2);
+          printf("%s\n", s.z);
+          lsmStringClear(&s);
           dump_node(pNode->pV2Ptr, nIndent + 4, isNode-1);
           if( pNode->apChild[i] ){
-            z = appendIndent(0, nIndent+2);
-            z = lsmMallocAPrintf(z, "else");
-            printf("%s\n", z);
-            lsmFree(0, z);
+            lsmAppendIndent(&s, nIndent+2);
+            lsmStringAppendf(&s, "else");
+            printf("%s\n", s.z);
+            lsmStringClear(&s);
           }
         }
 
@@ -311,11 +309,11 @@ void dump_node(TreeNode *pNode, int nIndent, int isNode){
       }
 
       if( i<3 && pNode->apKey[i] ){
-        z = appendIndent(0, nIndent);
-        z = lsmMallocAPrintf(z, "k%d: ", i);
-        z = appendKeyValue(z, pNode->apKey[i]);
-        printf("%s\n", z);
-        lsmFree(0, z);
+        lsmAppendIndent(&s, nIndent);
+        lsmStringAppendf(&s, "k%d: ", i);
+        lsmAppendKeyValue(&s, pNode->apKey[i]);
+        printf("%s\n", s.z);
+        lsmStringClear(&s);
       }
 
     }
@@ -324,19 +322,20 @@ void dump_node(TreeNode *pNode, int nIndent, int isNode){
 
 void dump_node_contents(TreeNode *pNode, int iVersion, int nIndent, int isNode){
   int i;
-  char *zLine = 0;
+  LsmString s;
 
-  for(i=0; i<nIndent; i++) zLine = lsmMallocAPrintf(zLine, " ");
+  lsmStringInit(&s, NEED_ENV);
+  lsmAppendIndent(&s, nIndent);
   for(i=0; i<3; i++){
     if( pNode->apKey[i] ){
       TreeKey *pKey = pNode->apKey[i];
-      zLine = appendStrBlob(zLine, pKey->pKey, pKey->nKey);
-      zLine = lsmMallocAPrintf(zLine, "     ");
+      lsmAppendStrBlob(&s, pKey->pKey, pKey->nKey);
+      lsmStringAppend(&s, "     ", -1);
     }
   }
 
-  printf("%s\n", zLine);
-  lsmFree(0, zLine);
+  printf("%s\n", s.z);
+  lsmStringClear(&s);
 
   for(i=0; i<4 && isNode>0; i++){
     TreeNode *pChild = getChildPtr(pNode, iVersion, i);

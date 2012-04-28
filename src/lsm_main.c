@@ -352,14 +352,9 @@ int lsm_global_config(int eParam, ...){
   return rc;
 }
 
-static char *appendSegmentList(char *zIn, int *pRc, char *zPre, Segment *pSeg){
-  char *zOut;
-
-  zOut = lsmMallocAPrintfRc(zIn, pRc, "%s{%d %d}", zPre,
-      pSeg->run.nSize,
-      segmentHasSeparators(pSeg)
-  );
-  return zOut;
+void lsmAppendSegmentList(LsmString *pStr, char *zPre, Segment *pSeg){
+  lsmStringAppendf(pStr, "%s{%d %d}", zPre, pSeg->run.nSize,
+                         segmentHasSeparators(pSeg));
 }
 
 int lsmStructList(
@@ -369,7 +364,7 @@ int lsmStructList(
   Level *pTopLevel = 0;           /* Top level of snapshot to report on */
   int rc = LSM_OK;
   Level *p;
-  char *zOut = 0;
+  LsmString s;
   Snapshot *pWorker;              /* Worker snapshot */
   Snapshot *pRelease = 0;         /* Snapshot to release */
 
@@ -381,19 +376,21 @@ int lsmStructList(
 
   /* Format the contents of the snapshot as text */
   pTopLevel = lsmDbSnapshotLevel(pWorker);
+  lsmStringInit(&s, pDb->pEnv);
   for(p=pTopLevel; rc==LSM_OK && p; p=p->pNext){
     int i;
-    zOut = lsmMallocAPrintfRc(zOut, &rc, "%s{", (zOut ? " " : ""));
-    zOut = appendSegmentList(zOut, &rc, "", &p->lhs);
+    lsmStringAppendf(&s, "%s{", (s.n ? " " : ""));
+    lsmAppendSegmentList(&s, "", &p->lhs);
     for(i=0; rc==LSM_OK && i<p->nRight; i++){
-      zOut = appendSegmentList(zOut, &rc, " ", &p->aRhs[i]);
+      lsmAppendSegmentList(&s, " ", &p->aRhs[i]);
     }
-    zOut = lsmMallocAPrintfRc(zOut, &rc, "}");
+    lsmStringAppend(&s, "}", 1);
   }
+  rc = s.n>=0 ? LSM_OK : LSM_NOMEM;
 
   /* Release the snapshot and return */
   lsmDbSnapshotRelease(pRelease);
-  *pzOut = zOut;
+  *pzOut = s.z;
   return rc;
 }
 
@@ -647,16 +644,14 @@ void lsm_config_work_hook(
 
 void lsmLogMessage(lsm_db *pDb, int rc, const char *zFormat, ...){
   if( pDb->xLog ){
-    va_list ap1;
-    va_list ap2;
-    char *z;                      /* String to pass to log callback */
-    va_start(ap1, zFormat);
-    va_start(ap2, zFormat);
-    z = lsmMallocVPrintf(zFormat, ap1, ap2);
-    va_end(ap1);
-    va_end(ap2);
-    if( z ) pDb->xLog(pDb->pLogCtx, rc, z);
-    lsmFree(pDb->pEnv, z);
+    LsmString s;
+    va_list ap;
+    lsmStringInit(&s, pDb->pEnv);
+    va_start(ap, zFormat);
+    lsmStringAppendf(&s, zFormat, ap);
+    va_end(ap);
+    pDb->xLog(pDb->pLogCtx, rc, s.z);
+    lsmStringClear(&s);
   }
 }
 

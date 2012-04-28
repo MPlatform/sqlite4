@@ -44,6 +44,10 @@
 #define LSM_TREE_BYTES (2 * 1024 * 1024)
 #define LSM_ECOLA      4
 
+/* Places where a NULL needs to be changed to a real lsm_env pointer
+** are marked with NEED_ENV */
+#define NEED_ENV ((lsm_env*)0)
+
 
 /* The size of log file pages does not change. It is always 4KB. */
 #define LOG_FILE_PGSZ 4096
@@ -52,6 +56,7 @@ typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
 typedef struct Level Level;
+typedef struct LsmString LsmString;
 typedef struct Mempool Mempool;
 typedef struct MultiCursor MultiCursor;
 typedef struct Page Page;
@@ -221,6 +226,16 @@ struct MergeInput {
 };
 
 
+/*
+** A string that can grow by appending.
+*/
+struct LsmString {
+  lsm_env *pEnv;              /* Run-time environment */
+  int n;                      /* Size of string.  -1 indicates error */
+  int nAlloc;                 /* Space allocated for z[] */
+  char *z;                    /* The string content */
+};
+
 /* 
 ** The first argument to this macro is a pointer to a Segment structure.
 ** Returns true if the structure instance indicates that the separators
@@ -303,10 +318,6 @@ void *lsmMallocRc(lsm_env*, int, int *);
 
 void *lsmMallocZero(lsm_env *pEnv, int);
 char *lsmMallocStrdup(const char *);
-char *lsmMallocPrintf(const char *, ...);
-char *lsmMallocVPrintf(const char *, va_list, va_list);
-char *lsmMallocAPrintf(char *, const char *, ...);
-char *lsmMallocAPrintfRc(char *, int *, const char *, ...);
 
 void lsmConfigGetMalloc(lsm_heap_methods *);
 void lsmConfigSetMalloc(lsm_heap_methods *);
@@ -531,6 +542,19 @@ u32 *lsmFreelistDeltaPtr(lsm_db *pDb);
 
 void lsmDatabaseDirty(Database *p);
 int lsmDatabaseIsDirty(Database *p);
+
+
+/**************************************************************************
+** functions in lsm_str.c
+*/
+void lsmStringInit(LsmString*, lsm_env *pEnv);
+void lsmStringExtend(LsmString*, int);
+void lsmStringAppend(LsmString*, const char *, int);
+void lsmStringVAppendf(LsmString*, const char *zFormat, va_list ap);
+void lsmStringAppendf(LsmString*, const char *zFormat, ...);
+void lsmStringClear(LsmString*);
+char *lsmMallocPrintf(lsm_env*, const char*, ...);
+
 
 
 /* 

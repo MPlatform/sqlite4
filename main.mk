@@ -56,6 +56,8 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
          fts3_write.o func.o global.o hash.o \
          icu.o insert.o kvlsm.o kvmem.o legacy.o \
+         lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o lsm_mem.o lsm_mutex.o \
+         lsm_os.o lsm_shared.o lsm_str.o lsm_sorted.o lsm_tree.o lsm_varint.o \
          main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          mutex.o mutex_noop.o mutex_unix.o mutex_w32.o \
          opcodes.o os.o os_unix.o os_win.o \
@@ -66,11 +68,6 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
          vdbemem.o vdbetrace.o \
          walker.o where.o utf.o vtab.o
-
-LIBOBJ += lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o
-LIBOBJ += lsm_mem.o lsm_mutex.o lsm_os.o lsm_shared.o
-LIBOBJ += lsm_sorted.o lsm_tree.o lsm_varint.o
-
 
 # All of the source code files.
 #
@@ -105,6 +102,7 @@ SRC = \
   $(TOP)/src/lsm_mutex.c \
   $(TOP)/src/lsm_os.c \
   $(TOP)/src/lsm_shared.c \
+  $(TOP)/src/lsm_str.c \
   $(TOP)/src/lsm_sorted.c \
   $(TOP)/src/lsm_tree.c \
   $(TOP)/src/lsm_varint.c \

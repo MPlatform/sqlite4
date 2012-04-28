@@ -274,7 +274,7 @@ static lsm_file *fsOpenFile(
   lsm_file *pFile = 0;
   if( *pRc==LSM_OK ){
     char *zName;
-    zName = lsmMallocPrintf("%s%s", pFS->zDb, (bLog ? "-log" : ""));
+    zName = lsmMallocPrintf(pFS->pEnv, "%s%s", pFS->zDb, (bLog ? "-log" : ""));
     if( !zName ){
       *pRc = LSM_NOMEM;
     }else{
@@ -1292,13 +1292,14 @@ void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
     int iBlk;
     int iLastBlk;
     char *zMsg = 0;
-    char *zBlk = 0;
+    LsmString zBlk;
 
+    lsmStringInit(&zBlk, pDb->pEnv);
     iBlk = fsPageToBlock(pFS, p->iFirst);
     iLastBlk = fsPageToBlock(pFS, p->iLast);
 
     while( iBlk ){
-      zBlk = lsmMallocAPrintf(zBlk, " %d", iBlk);
+      lsmStringAppendf(&zBlk, " %d", iBlk);
       if( iBlk!=iLastBlk ){
         fsBlockNext(pFS, iBlk, &iBlk);
       }else{
@@ -1306,43 +1307,12 @@ void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
       }
     }
 
-    zMsg = lsmMallocPrintf("%d..%d: ", p->iFirst, p->iLast);
-    lsmLogMessage(pDb, LSM_OK, "    % -15s %s", zMsg, zBlk);
+    zMsg = lsmMallocPrintf(pDb->pEnv, "%d..%d: ", p->iFirst, p->iLast);
+    lsmLogMessage(pDb, LSM_OK, "    % -15s %s", zMsg, zBlk.z);
     lsmFree(pDb->pEnv, zMsg);
-    lsmFree(pDb->pEnv, zBlk);
+    lsmStringClear(&zBlk);
   }
 }
-
-#if 0
-static char *fsIListToString(IList *pList){
-  int i;
-  char *z;
-
-  z = lsmMallocPrintf("");
-  for(i=0; z && i<pList->n; i++){
-    z = lsmMallocAPrintf(z, " %d", pList->a[i]);
-  }
-  return z;
-}
-
-void lsmFsDumpBlocklists(lsm_db *pDb){
-  FileSystem *pFS = pDb->pFS;
-  char *zFree = 0;
-  char *zPending = 0;
-  char *zAppend = 0;
-
-
-  zFree = fsIListToString(&pFS->lFree);
-  zPending = fsIListToString(&pFS->lPending);
-  zAppend = fsIListToString(&pFS->lAppend);
-
-  lsmLogMessage(pDb, LSM_OK, "Free list (%s):    %s", zTag, zFree);
-
-  lsmFree(pDb->pEnv, zFree);
-  lsmFree(pDb->pEnv, zPending);
-  lsmFree(pDb->pEnv, zAppend);
-}
-#endif
 
 #ifdef LSM_EXPENSIVE_DEBUG
 /*
