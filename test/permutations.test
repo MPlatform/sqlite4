@@ -135,7 +135,7 @@ test_suite "src4" -prefix "" -description {
 } -files {
   simple.test conflict.test where.test 
 
-  fkey1.test fkey2.test
+  fkey1.test fkey2.test fkey3.test fkey4.test
 
   select1.test select2.test select3.test select4.test select5.test 
   select6.test select7.test select8.test select9.test selectA.test 

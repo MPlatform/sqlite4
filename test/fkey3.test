@@ -109,10 +109,10 @@ do_catchsql_test 3.2.2 {
 
 do_execsql_test 3.3.1 {
   CREATE TABLE t5(a INTEGER PRIMARY KEY, b REFERENCES t5(a));
-  INSERT INTO t5 VALUES(NULL, 1);
+  INSERT INTO t5 VALUES(1, 1);
 } {}
 do_catchsql_test 3.3.2 {
-  INSERT INTO t5 VALUES(NULL, 3);
+  INSERT INTO t5 VALUES(2, 3);
 } {1 {foreign key constraint failed}}
 
 do_execsql_test 3.4.1 {
@@ -121,12 +121,12 @@ do_execsql_test 3.4.1 {
   );
   CREATE UNIQUE INDEX t6i ON t6(b, a);
 }
-do_execsql_test 3.4.2  { INSERT INTO t6 VALUES(NULL, 'a', 1, 'a'); } {}
-do_execsql_test 3.4.3  { INSERT INTO t6 VALUES(2, 'a', 2, 'a');    } {}
-do_execsql_test 3.4.4  { INSERT INTO t6 VALUES(NULL, 'a', 1, 'a'); } {}
+do_execsql_test 3.4.2  { INSERT INTO t6 VALUES(1, 'a', 1, 'a'); } {}
+do_execsql_test 3.4.3  { INSERT INTO t6 VALUES(2, 'a', 2, 'a'); } {}
+do_execsql_test 3.4.4  { INSERT INTO t6 VALUES(3, 'a', 1, 'a'); } {}
 do_execsql_test 3.4.5  { INSERT INTO t6 VALUES(5, 'a', 2, 'a'); } {}
 do_catchsql_test 3.4.6 { 
-  INSERT INTO t6 VALUES(NULL, 'a', 65, 'a');    
+  INSERT INTO t6 VALUES(6, 'a', 65, 'a');    
 } {1 {foreign key constraint failed}}
 
 do_execsql_test 3.4.7 {
@@ -145,10 +145,10 @@ do_execsql_test 3.5.1 {
   );
   CREATE UNIQUE INDEX t7i ON t7(a, b);
 }
-do_execsql_test 3.5.2  { INSERT INTO t7 VALUES('x', 1, 'x', NULL) } {}
+do_execsql_test 3.5.2  { INSERT INTO t7 VALUES('x', 1, 'x', 1) } {}
 do_execsql_test 3.5.3  { INSERT INTO t7 VALUES('x', 2, 'x', 2) } {}
 do_catchsql_test 3.5.4  { 
-  INSERT INTO t7 VALUES('x', 450, 'x', NULL);
+  INSERT INTO t7 VALUES('x', 450, 'x', 3);
 } {1 {foreign key constraint failed}}
 do_catchsql_test 3.5.5  { 
   INSERT INTO t7 VALUES('x', 450, 'x', 451);
