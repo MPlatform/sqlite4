@@ -1234,5 +1234,6 @@ do_execsql_test 61.1 {
 
 do_execsql_test 61.2 { SELECT count(*) FROM t2 GROUP BY a } 1
 
+
 finish_test
 

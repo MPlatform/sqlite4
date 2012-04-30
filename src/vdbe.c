@@ -2500,25 +2500,27 @@ case OP_Transaction: {
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   pDb = &db->aDb[pOp->p1];
   pKV = pDb->pKV;
-  if( pOp->p2==0 ){
-    /* Read transaction needed.  Start if we are not already in one. */
-    if( pKV->iTransLevel==0 ){
-      rc = sqlite4KVStoreBegin(pKV, 1);
-    }
-  }else{
-    /* A write transaction is needed */
-    iLevel = db->nSavepoint + 1;
-    if( iLevel<2 ) iLevel = 2;
-    bStmt = db->pSavepoint && (p->needSavepoint || db->activeVdbeCnt>1);
-    if( pKV->iTransLevel<iLevel ){
-      rc = sqlite4KVStoreBegin(pKV, iLevel);
-    }
-    if( rc==SQLITE_OK && bStmt ){
-      rc = sqlite4KVStoreBegin(pKV, pKV->iTransLevel+1);
-      if( rc==SQLITE_OK ){
-        p->stmtTransMask |= ((yDbMask)1)<<pOp->p1;
+  if( pKV ){
+    if( pOp->p2==0 ){
+      /* Read transaction needed.  Start if we are not already in one. */
+      if( pKV->iTransLevel==0 ){
+        rc = sqlite4KVStoreBegin(pKV, 1);
       }
-      p->nStmtDefCons = db->nDeferredCons;
+    }else{
+      /* A write transaction is needed */
+      iLevel = db->nSavepoint + 1;
+      if( iLevel<2 ) iLevel = 2;
+      bStmt = db->pSavepoint && (p->needSavepoint || db->activeVdbeCnt>1);
+      if( pKV->iTransLevel<iLevel ){
+        rc = sqlite4KVStoreBegin(pKV, iLevel);
+      }
+      if( rc==SQLITE_OK && bStmt ){
+        rc = sqlite4KVStoreBegin(pKV, pKV->iTransLevel+1);
+        if( rc==SQLITE_OK ){
+          p->stmtTransMask |= ((yDbMask)1)<<pOp->p1;
+        }
+        p->nStmtDefCons = db->nDeferredCons;
+      }
     }
   }
   break;

@@ -149,6 +149,8 @@ test_suite "src4" -prefix "" -description {
 
   savepoint.test savepoint2.test savepoint5.test 
 
+  storage1.test
+
   trigger1.test trigger2.test trigger3.test trigger4.test trigger5.test 
   trigger6.test trigger7.test trigger8.test trigger9.test triggerB.test
   triggerC.test

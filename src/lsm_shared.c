@@ -411,7 +411,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       }
 
       /* Write a checkpoint, also if required */
-      if( rc==LSM_OK ){
+      if( rc==LSM_OK && pDb->pClient ){
         rc = lsmCheckpointWrite(pDb);
       }
 
