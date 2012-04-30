@@ -1176,5 +1176,28 @@ do_test 57.3 {
   db changes
 } {2}
 
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 59.1 {
+  CREATE TABLE t1(a INTEGER PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(1, 2);
+  INSERT INTO t1 VALUES(3, 4);
+  INSERT INTO t1 VALUES(5, 6);
+  INSERT INTO t1 VALUES(7, 8);
+} {}
+
+do_test 59.2 {
+  set res [list]
+  db eval { SELECT a, b FROM t1 ORDER BY a } {
+    if {$a==3} { db eval "DELETE FROM t1" }
+    lappend res $a $b
+  }
+  set res
+} {1 2 3 4}
+
+do_execsql_test 59.3 { 
+  SELECT * FROM t1;
+} {}
+
 finish_test
 

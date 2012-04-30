@@ -1139,6 +1139,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
     }
     pDb->pTV = pWrite;
     p->bWriter = 1;
+    lsmSortedFixTreeVersions(pDb);
   }else{
     /* Failed to open a write transaction (for one of the two reasons
     ** enumerated above). Return LSM_BUSY.  */
@@ -1170,6 +1171,7 @@ int lsmFinishWriteTrans(lsm_db *pDb){
   assert( p->bWriter );
   p->bWriter = 0;
   lsmTreeReleaseWriteVersion(pDb->pTV, &pDb->pTV);
+  lsmSortedFixTreeVersions(pDb);
   
   lsmMutexLeave(p->pClientMutex);
   return LSM_OK;

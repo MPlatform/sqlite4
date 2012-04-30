@@ -295,6 +295,8 @@ void lsmTreeDecrRefcount(Tree *);
 void lsmTreeIncrRefcount(Tree *);
 
 void lsmTreeRelease(Tree *);
+void lsmTreeFixVersion(TreeCursor *, TreeVersion *);
+void lsmTreeCursorSave(TreeCursor *);
 
 /* 
 ** Functions from file "mem.c".
@@ -420,6 +422,9 @@ int lsmSortedLoadFreelist(lsm_db *pDb);
 
 void *lsmSortedSplitKey(Level *pLevel, int *pnByte);
 
+void lsmSortedFixTreeVersions(lsm_db *);
+void lsmSortedSaveTreeCursors(lsm_db *);
+
 int lsmMCursorNew(lsm_db *, MultiCursor **);
 void lsmMCursorClose(MultiCursor *);
 int lsmMCursorSeek(MultiCursor *, void *, int , int);
@@ -438,6 +443,7 @@ int lsmMCursorRestore(lsm_db *, MultiCursor *);
 void lsmSortedDumpStructure(lsm_db *pDb, Snapshot *, int, const char *);
 void lsmFsDumpBlockmap(lsm_db *, SortedRun *);
 void lsmFsDumpBlocklists(lsm_db *);
+
 
 void lsmPutU32(u8 *, u32);
 u32 lsmGetU32(u8 *);

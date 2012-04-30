@@ -3757,6 +3757,20 @@ int lsmSortedFlushDb(lsm_db *pDb){
   return LSM_OK;
 }
 
+void lsmSortedFixTreeVersions(lsm_db *pDb){
+  lsm_cursor *pCsr;
+  for(pCsr=pDb->pCsr; pCsr; pCsr=pCsr->pNext){
+    lsmTreeFixVersion(pCsr->pMC->pTreeCsr, pDb->pTV);
+  }
+}
+
+void lsmSortedSaveTreeCursors(lsm_db *pDb){
+  lsm_cursor *pCsr;
+  for(pCsr=pDb->pCsr; pCsr; pCsr=pCsr->pNext){
+    lsmTreeCursorSave(pCsr->pMC->pTreeCsr);
+  }
+}
+
 
 #ifdef LSM_DEBUG_EXPENSIVE
 

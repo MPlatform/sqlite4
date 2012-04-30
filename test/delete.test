@@ -352,7 +352,7 @@ do_test delete-9.2 {
     lappend res $r $c $d
   }
   set res
-} {1 a b 1 c d 2 a b {} c d}
+} {1 a b 1 c d 2 a b 2 c d}
 do_test delete-9.3 {
   execsql {
     INSERT INTO t5 VALUES(1, 2);
@@ -365,7 +365,7 @@ do_test delete-9.3 {
     lappend res $r $c $d
   }
   set res
-} {1 a b 1 c d 2 a b {} c d 3 a b 3 c d}
+} {1 a b 1 c d 2 a b 2 c d 3 a b 3 c d}
 do_test delete-9.4 {
   execsql {
     DELETE FROM t5;
@@ -394,6 +394,5 @@ do_test delete-9.5 {
   }
   set res
 } {1 a b 1 c d 2 a b 2 c d}
-
 
 finish_test

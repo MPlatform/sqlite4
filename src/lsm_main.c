@@ -462,6 +462,8 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
     rc = lsmLogWrite(pDb, pKey, nKey, pVal, nVal);
   }
 
+  lsmSortedSaveTreeCursors(pDb);
+
   if( rc==LSM_OK ){
     int pgsz = lsmFsPageSize(pDb->pFS);
     int nBefore;
