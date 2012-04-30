@@ -3751,8 +3751,11 @@ case OP_Next: {        /* jump */
 ** Register P3 holds the key and register P2 holds the data for an
 ** index entry.  Write this record into the index specified by the
 ** cursor P1.
+**
+** If the OPFLAG_NCHANGE flag of P5 is set, then the row change count is
+** incremented (otherwise not).
 */
-case OP_SorterInsert:      /* in2 */
+case OP_SorterInsert:
 case OP_IdxInsert: {
   VdbeCursor *pC;
   Mem *pKey;

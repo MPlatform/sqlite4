@@ -1225,5 +1225,14 @@ do_execsql_test 60.5 {
   SELECT a FROM t1 WHERE b IN (SELECT b FROM t1); 
 } {1 2 3 4}
 
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 61.1 {
+  CREATE TABLE t2(y,a);
+  INSERT INTO t2 VALUES(22,2);
+}
+
+do_execsql_test 61.2 { SELECT count(*) FROM t2 GROUP BY a } 1
+
 finish_test
 

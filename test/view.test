@@ -559,7 +559,7 @@ do_test view-19.2 {
 } {rowid 1 a 1 t1.b+t1.c 5 rowid 2 a 4 t1.b+t1.c 11}
 do_test view-19.3 {
   execsql {
-    CREATE VIEW v3308c AS SELECT t1.oid, A, t1.b+t1.c AS x FROM t1;
+    CREATE VIEW v3308c AS SELECT t1.rowid, A, t1.b+t1.c AS x FROM t1;
   }
   execsql2 {
     SELECT * FROM v3308c

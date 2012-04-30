@@ -147,13 +147,15 @@ test_suite "src4" -prefix "" -description {
   select6.test select7.test select8.test select9.test selectA.test 
   selectB.test selectC.test 
 
-  update.test
-
   savepoint.test savepoint2.test savepoint5.test 
 
   trigger1.test trigger2.test trigger3.test trigger4.test trigger5.test 
   trigger6.test trigger7.test trigger8.test trigger9.test triggerB.test
   triggerC.test
+
+  update.test
+  view.test
+
 }
 
 test_suite "veryquick" -prefix "" -description {
