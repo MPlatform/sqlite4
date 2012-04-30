@@ -316,6 +316,9 @@ void sqlite4DeleteFrom(
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
       assert( pIdx->pSchema==pTab->pSchema );
       sqlite4VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
+      if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+        sqlite4VdbeChangeP5(v, OPFLAG_NCHANGE);
+      }
     }
   }else
 #endif /* SQLITE_OMIT_TRUNCATE_OPTIMIZATION */
@@ -490,7 +493,7 @@ void sqlite4GenerateRowDelete(
   ** a view (in which case the only effect of the DELETE statement is to
   ** fire the INSTEAD OF triggers).  */ 
   if( !IsView(pTab) ){
-    sqlite4GenerateRowIndexDelete(pParse, pTab, baseCur, 0);
+    sqlite4GenerateRowIndexDelete(pParse, pTab, bCount, baseCur, 0);
   }
 
   /* Do any ON CASCADE, SET NULL or SET DEFAULT operations required to
@@ -567,6 +570,7 @@ void sqlite4EncodeIndexKey(
 void sqlite4GenerateRowIndexDelete(
   Parse *pParse,                  /* Parsing and code generating context */
   Table *pTab,                    /* Table containing the row to be deleted */
+  int bCount,                     /* Non-zero to increment change counter */
   int baseCur,                    /* Cursor number for the table */
   int *aRegIdx                    /* Only delete if (aRegIdx && aRegIdx[i]>0) */
 ){
@@ -592,7 +596,7 @@ void sqlite4GenerateRowIndexDelete(
     }
   }
 
-  sqlite4VdbeAddOp1(v, OP_Delete, baseCur+iPk);
+  sqlite4VdbeAddOp2(v, OP_Delete, baseCur+iPk, (bCount ? OPFLAG_NCHANGE: 0));
   sqlite4ReleaseTempReg(pParse, regKey);
 }
 

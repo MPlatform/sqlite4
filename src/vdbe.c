@@ -3862,7 +3862,7 @@ case OP_IdxGT: {        /* jump */
   break;
 }
 
-/* Opcode: Clear P1 P2 P3
+/* Opcode: Clear P1 P2 * * P5
 **
 ** Delete all contents of the database table or index whose table number
 ** in the database file is given by P1.  
@@ -3871,11 +3871,8 @@ case OP_IdxGT: {        /* jump */
 ** P2==1 then the table to be clear is in the auxiliary database file
 ** that is used to store tables create using CREATE TEMPORARY TABLE.
 **
-** If the P3 value is non-zero, then the table referred to must be an
-** intkey table (an SQL table, not an index). In this case the row change 
-** count is incremented by the number of rows in the table being cleared. 
-** If P3 is greater than zero, then the value stored in register P3 is
-** also incremented by the number of rows in the table being cleared.
+** If the OPFLAG_NCHANGE flag of P5 is set, then the row change count is
+** incremented (otherwise not).
 **
 ** See also: Destroy
 */
@@ -3892,6 +3889,7 @@ case OP_Clear: {
   if( rc ) break;
   rc = sqlite4KVCursorSeek(pCur, aProbe, nProbe, +1);
   while( rc!=SQLITE_NOTFOUND ){
+    if( pOp->p5 & OPFLAG_NCHANGE ) p->nChange++;
     rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
     if( rc!=SQLITE_OK ) break;
     if( nKey<nProbe ){ rc = SQLITE_CORRUPT; break; }

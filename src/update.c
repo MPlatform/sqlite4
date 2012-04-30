@@ -508,7 +508,7 @@ void sqlite4Update(
 
     /* Delete the index entries associated with the current record.  */
     j1 = sqlite4VdbeAddOp4(v, OP_NotFound, iCur+iPk, 0, regOldKey, 0, P4_INT32);
-    sqlite4GenerateRowIndexDelete(pParse, pTab, iCur, aRegIdx);
+    sqlite4GenerateRowIndexDelete(pParse, pTab, 0, iCur, aRegIdx);
   
     /* Delete the old record */
     if( hasFK || bChngPk ){

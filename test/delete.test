@@ -48,18 +48,18 @@ do_test delete-3.1.3 {
 } {1 2 2 4 4 16}
 do_test delete-3.1.4 {
   execsql {CREATE INDEX index1 ON table1(f1)}
-  execsql {PRAGMA count_changes=on}
   ifcapable explain {
     execsql {EXPLAIN DELETE FROM table1 WHERE f1=3}
   }
   execsql {DELETE FROM 'table1' WHERE f1=3}
+  db changes
 } {0}
 do_test delete-3.1.5 {
   execsql {SELECT * FROM table1 ORDER BY f1}
 } {1 2 2 4 4 16}
 do_test delete-3.1.6.1 {
   execsql {DELETE FROM table1 WHERE f1=2}
-} {1}
+} {}
 do_test delete-3.1.6.2 {
   db changes
 } 1
@@ -87,6 +87,7 @@ integrity_check delete-4.3
 #
 do_test delete-5.1.1 {
   execsql {DELETE FROM table1}
+  db changes
 } {2}
 do_test delete-5.1.2 {
   execsql {SELECT count(*) FROM table1}
@@ -101,6 +102,7 @@ do_test delete-5.2.1 {
 } {200}
 do_test delete-5.2.2 {
   execsql {DELETE FROM table1}
+  db changes
 } {200}
 do_test delete-5.2.3 {
   execsql {BEGIN TRANSACTION}
@@ -253,10 +255,11 @@ ifcapable {trigger} {
       INSERT INTO t3 SELECT a+1 FROM t3;
       INSERT INTO t3 SELECT a+2 FROM t3;
       CREATE TABLE t4 AS SELECT * FROM t3;
-      PRAGMA count_changes=ON;
-      DELETE FROM t3;
-      DELETE FROM t4;
     }
+    execsql { DELETE FROM t3 }
+    set res [db changes]
+    execsql { DELETE FROM t4 }
+    list $res [db changes]
   } {4 4}
 } ;# endif trigger
 ifcapable {!trigger} {
@@ -267,6 +270,7 @@ integrity_check delete-7.7
 # Make sure error messages are consistent when attempting to delete
 # from a read-only database.  Ticket #304.
 #
+if 0 {
 do_test delete-8.0 {
   execsql {
     PRAGMA count_changes=OFF;
@@ -310,6 +314,7 @@ do_test delete-8.6 {
   execsql {SELECT * FROM t3}
 } {123}
 integrity_check delete-8.7
+}
 
 # Need to do the following for tcl 8.5 on mac. On that configuration, the
 # -readonly flag is taken so seriously that a subsequent [forcedelete]

@@ -1153,10 +1153,28 @@ do_execsql_test 57.1 {
   INSERT INTO t1 VALUES(1, 2, 3, 4, 5);
   INSERT INTO t1 VALUES(6, 7, 8, 9, 10);
 } {}
-
 do_execsql_test 57.2 {
   UPDATE t1 SET a = 11 WHERE a=1;
-}
+  SELECT * FROM t1;
+} {6 7 8 9 10 11 2 3 4 5 }
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 58.1 {
+  CREATE TABLE t1(a INTEGER PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(1, 2);
+  INSERT INTO t1 VALUES(3, 4);
+  CREATE TABLE t2(a INTEGER PRIMARY KEY, b);
+  INSERT INTO t2 SELECT * FROM t1;
+} {}
+do_test 57.2 {
+  execsql { DELETE FROM t1 WHERE a!=5 }
+  db changes
+} {2}
+do_test 57.3 {
+  execsql { DELETE FROM t2 }
+  db changes
+} {2}
 
 finish_test
 

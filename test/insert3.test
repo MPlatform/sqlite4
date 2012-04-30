@@ -92,20 +92,20 @@ do_test insert3-2.1 {
       INSERT INTO t2dup(a,b,c) VALUES(new.a,new.b,new.c);
     END;
     INSERT INTO t2(a) VALUES(123);
-    INSERT INTO t2(b) VALUES(234);
-    INSERT INTO t2(c) VALUES(345);
+    INSERT INTO t2(a, b) VALUES(124, 234);
+    INSERT INTO t2(a, c) VALUES(125, 345);
     SELECT * FROM t2dup;
   }
-} {123 b c -1 234 c -1 b 345}
+} {123 b c 124 234 c 125 b 345}
 do_test insert3-2.2 {
   execsql {
     DELETE FROM t2dup;
     INSERT INTO t2(a) SELECT 1 FROM t1 LIMIT 1;
-    INSERT INTO t2(b) SELECT 987 FROM t1 LIMIT 1;
-    INSERT INTO t2(c) SELECT 876 FROM t1 LIMIT 1;
+    INSERT INTO t2(a, b) SELECT 2, 987 FROM t1 LIMIT 1;
+    INSERT INTO t2(a, c) SELECT 3, 876 FROM t1 LIMIT 1;
     SELECT * FROM t2dup;
   }
-} {1 b c -1 987 c -1 b 876}
+} {1 b c 2 987 c 3 b 876}
 
 # Test for proper detection of malformed WHEN clauses on INSERT triggers.
 #
@@ -143,7 +143,7 @@ do_test insert3-3.4 {
 do_test insert3-3.5 {
   execsql {
     CREATE TABLE t5(
-      a INTEGER PRIMARY KEY,
+      a INTEGER PRIMARY KEY DEFAULT 1,
       b DEFAULT 'xyz'
     );
     INSERT INTO t5 DEFAULT VALUES;
@@ -152,6 +152,7 @@ do_test insert3-3.5 {
 } {1 xyz}
 do_test insert3-3.6 {
   execsql {
+    UPDATE t5 SET a=2;
     INSERT INTO t5 DEFAULT VALUES;
     SELECT * FROM t5;
   }

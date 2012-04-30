@@ -33,7 +33,6 @@ do_test insert2-1.0 {
 do_test insert2-1.1.1 {
   execsql {
     CREATE TABLE t1(log int, cnt int);
-    PRAGMA count_changes=on;
   }
   ifcapable explain {
     execsql {
@@ -43,7 +42,7 @@ do_test insert2-1.1.1 {
   execsql {
     INSERT INTO t1 SELECT log, count(*) FROM d1 GROUP BY log;
   }
-} {6}
+} {}
 do_test insert2-1.1.2 {
   db changes
 } {6}
@@ -60,7 +59,7 @@ do_test insert2-1.2.1 {
        SELECT log, count(*) FROM d1 GROUP BY log
        EXCEPT SELECT n-1,log FROM d1;
   }
-} {4}
+} {}
 do_test insert2-1.2.2 {
   execsql {
     SELECT * FROM t1 ORDER BY log;
@@ -239,7 +238,7 @@ ifcapable tempdb {
          VALUES(-1, 0, 1, 0, 2, 'libc.so.6', 'GLIBC_2.0');
       INSERT INTO Dependencies 
          SELECT DISTINCT 
-             NULL, 
+             1, 
              DepCheck.class, 
              DepCheck.name, 
              DepCheck.flag 
