@@ -70,7 +70,7 @@ integrity_check delete2-1.5
 #
 do_test delete2-1.6 {
   catchsql {
-    DELETE FROM q WHERE rowid=1
+    DELETE FROM q WHERE id='id.1'
   }
 } {0 {}}
 integrity_check delete2-1.7
@@ -86,7 +86,7 @@ do_test delete2-1.8 {
 do_test delete2-1.9 {
   sqlite4_finalize $STMT
   catchsql {
-    DELETE FROM q WHERE rowid=1
+    DELETE FROM q WHERE id='id.1'
   }
 } {0 {}}
 integrity_check delete2-1.10

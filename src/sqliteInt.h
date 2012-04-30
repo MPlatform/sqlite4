@@ -3145,6 +3145,7 @@ int sqlite4WalDefaultHook(void*,sqlite4*,const char*,int);
 #define IN_INDEX_EPH             2
 #define IN_INDEX_INDEX           3
 int sqlite4FindInIndex(Parse *, Expr *, int*);
+Index *sqlite4FindExistingInIndex(Parse *, Expr *, int);
 
 #ifdef SQLITE_ENABLE_ATOMIC_WRITE
   int sqlite4JournalOpen(sqlite4_vfs *, const char *, sqlite4_file *, int, int);

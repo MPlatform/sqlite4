@@ -1199,5 +1199,31 @@ do_execsql_test 59.3 {
   SELECT * FROM t1;
 } {}
 
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 60.1 {
+  CREATE TABLE t1(a PRIMARY KEY, b , c);
+  CREATE UNIQUE INDEX i1 ON t1(b);
+  INSERT INTO t1 VALUES(1, 'abc', 'xxx');
+  INSERT INTO t1 VALUES(2, 'def', 'jkl');
+  INSERT INTO t1 VALUES(3, 'ghi', 'abc');
+  INSERT INTO t1 VALUES(4, 'jkl', 'yyy');
+}
+do_execsql_test 60.2 {
+  SELECT a FROM t1 WHERE c IN (SELECT b FROM t1); 
+} {2 3}
+
+do_execsql_test 60.3 {
+  SELECT a FROM t1 WHERE b IN (SELECT c FROM t1); 
+} {1 4}
+
+do_execsql_test 60.4 {
+  SELECT a FROM t1 WHERE c IN (SELECT c FROM t1); 
+} {1 2 3 4}
+
+do_execsql_test 60.5 {
+  SELECT a FROM t1 WHERE b IN (SELECT b FROM t1); 
+} {1 2 3 4}
+
 finish_test
 

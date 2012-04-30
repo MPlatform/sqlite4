@@ -3517,34 +3517,62 @@ static int codeEqualityTerm(
     sqlite4VdbeAddOp2(v, OP_Null, 0, iReg);
 #ifndef SQLITE_OMIT_SUBQUERY
   }else{
+    /* Code a loop that iterates through the set of distinct, non-null 
+    ** values in the set on the right-hand-side of the IN(...) operator.
+    ** There are two ways to do this:
+    **
+    **   * If the SELECT statement is of the form "SELECT x FROM tbl", 
+    **     and column x is subject to a UNIQUE constraint, and the 
+    **     default affinity and collation sequence of column "x" match
+    **     those required by the comparison, iterate through the PK
+    **     index.
+    **
+    **   * Otherwise, materialize the set into an ephemeral index using
+    **     "x" as both the key and value. Then loop through the contents
+    **     of the ephemeral index.
+    */
+    sqlite4 *db = pParse->db;
     int eType;
     int iTab;
+    int iCol;                     /* Value to read from cursor iTab */
     struct InLoop *pIn;
 
     assert( pX->op==TK_IN );
     iReg = iTarget;
-    eType = sqlite4FindInIndex(pParse, pX, 0);
-    iTab = pX->iTable;
+
+    if( sqlite4FindExistingInIndex(pParse, pX, 1) ){
+      /* This branch is taken if the rhs of the IN is a select of the
+      ** form "SELECT x FROM tble" and column x is subject to a UNIQUE 
+      ** constraint that uses the same collation sequence and affinity as
+      ** this IN (...) test. In this case just loop through all values of
+      ** "x", skipping any NULLs.  */
+      Table *pTab = pX->x.pSelect->pSrc->a[0].pTab;
+      int iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
+      iTab = pX->iTable = pParse->nTab++;
+      sqlite4OpenPrimaryKey(pParse, iTab, iDb, pTab, OP_OpenRead);
+      iCol = pX->pLeft->iColumn;
+    }else{
+      sqlite4CodeSubselect(pParse, pX, 0, 0);
+      iTab = pX->iTable;
+      iCol = 0;
+    }
     sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
     assert( pLevel->plan.wsFlags & WHERE_IN_ABLE );
-    if( pLevel->u.in.nIn==0 ){
-      pLevel->addrNxt = sqlite4VdbeMakeLabel(v);
-    }
+
+    if( pLevel->u.in.nIn==0 ) pLevel->addrNxt = sqlite4VdbeMakeLabel(v);
     pLevel->u.in.nIn++;
-    pLevel->u.in.aInLoop =
-       sqlite4DbReallocOrFree(pParse->db, pLevel->u.in.aInLoop,
-                              sizeof(pLevel->u.in.aInLoop[0])*pLevel->u.in.nIn);
+    pLevel->u.in.aInLoop = sqlite4DbReallocOrFree(db, pLevel->u.in.aInLoop, 
+        (sizeof(pLevel->u.in.aInLoop[0])*pLevel->u.in.nIn)
+    );
     pIn = pLevel->u.in.aInLoop;
+
     if( pIn ){
       pIn += pLevel->u.in.nIn - 1;
       pIn->iCur = iTab;
-      if( eType==IN_INDEX_ROWID ){
-        pIn->addrInTop = sqlite4VdbeAddOp2(v, OP_Rowid, iTab, iReg);
-      }else{
-        pIn->addrInTop = sqlite4VdbeAddOp3(v, OP_Column, iTab, 0, iReg);
-      }
+      pIn->addrInTop = sqlite4VdbeAddOp3(v, OP_Column, iTab, iCol, iReg);
       sqlite4VdbeAddOp1(v, OP_IsNull, iReg);
     }else{
+      assert( db->mallocFailed );
       pLevel->u.in.nIn = 0;
     }
 #endif

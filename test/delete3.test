@@ -18,7 +18,7 @@ source $testdir/tester.tcl
 
 # Create a table that contains a large number of rows.
 #
-do_test delete3-1.1 {
+do_test delete3-1.1.this_is_slow {
   execsql {
     CREATE TABLE t1(x integer primary key);
     BEGIN;

@@ -135,8 +135,10 @@ test_suite "src4" -prefix "" -description {
 } -files {
   simple.test conflict.test where.test 
 
-  delete.test
+  collate1.test collate2.test collate3.test collate4.test collate5.test
+  collate6.test collate7.test collate8.test collate9.test collateA.test
 
+  delete.test delete2.test
   fkey1.test fkey2.test fkey3.test fkey4.test
 
   insert.test insert2.test insert3.test
@@ -145,8 +147,7 @@ test_suite "src4" -prefix "" -description {
   select6.test select7.test select8.test select9.test selectA.test 
   selectB.test selectC.test 
 
-  collate1.test collate2.test collate3.test collate4.test collate5.test
-  collate6.test collate7.test collate8.test collate9.test collateA.test
+  update.test
 
   savepoint.test savepoint2.test savepoint5.test 
 

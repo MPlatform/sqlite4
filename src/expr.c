@@ -1323,6 +1323,15 @@ int sqlite4ExprNeedsNoAffinityChange(const Expr *p, char aff){
 }
 
 /*
+** Code an OP_Once instruction and allocate space for its flag. Return the 
+** address of the new instruction.
+*/
+int sqlite4CodeOnce(Parse *pParse){
+  Vdbe *v = sqlite4GetVdbe(pParse);      /* Virtual machine being coded */
+  return sqlite4VdbeAddOp1(v, OP_Once, pParse->nOnce++);
+}
+
+/*
 ** Return true if we are able to the IN operator optimization on a
 ** query of the form
 **
@@ -1363,16 +1372,44 @@ static int isCandidateForInOpt(Select *p){
   if( pEList->a[0].pExpr->op!=TK_COLUMN ) return 0; /* Result is a column */
   return 1;
 }
-#endif /* SQLITE_OMIT_SUBQUERY */
 
-/*
-** Code an OP_Once instruction and allocate space for its flag. Return the 
-** address of the new instruction.
-*/
-int sqlite4CodeOnce(Parse *pParse){
-  Vdbe *v = sqlite4GetVdbe(pParse);      /* Virtual machine being coded */
-  return sqlite4VdbeAddOp1(v, OP_Once, pParse->nOnce++);
+Index *sqlite4FindExistingInIndex(Parse *pParse, Expr *pX, int bReqUnique){
+  Index *pIdx = 0;
+  Select *p;
+
+  p = (ExprHasProperty(pX, EP_xIsSelect) ? pX->x.pSelect : 0);
+  if( ALWAYS(pParse->nErr==0) && isCandidateForInOpt(p) ){
+    sqlite4 *db = pParse->db;
+    Table *pTab = p->pSrc->a[0].pTab;
+    Expr *pRhs = p->pEList->a[0].pExpr;
+    int iCol = pRhs->iColumn;
+    CollSeq *pReq;
+    char aff;
+
+    /* The collation sequence used by the comparison. If an index is to
+    ** be used in place of a temp-table, it must be ordered according
+    ** to this collation sequence.  */
+    pReq = sqlite4BinaryCompareCollSeq(pParse, pX->pLeft, pRhs);
+
+    /* Check that the affinity that will be used to perform the 
+    ** comparison is the same as the affinity of the column. If
+    ** it is not, it is not possible to use any index.  */
+    aff = comparisonAffinity(pX);
+    if( aff!=SQLITE_AFF_NONE && aff!=pTab->aCol[iCol].affinity ) return 0;
+
+    for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
+      if( (pIdx->aiColumn[0]==iCol)
+       && sqlite4FindCollSeq(db, ENC(db), pIdx->azColl[0], 0)==pReq
+       && (!bReqUnique || (pIdx->nColumn==1 && pIdx->onError!=OE_None))
+      ){
+        break;
+      }
+    }
+  }
+
+  return pIdx;
 }
+#endif /* SQLITE_OMIT_SUBQUERY */
 
 /*
 ** This function is used by the implementation of the IN (...) operator.
@@ -1430,6 +1467,7 @@ int sqlite4CodeOnce(Parse *pParse){
 */
 #ifndef SQLITE_OMIT_SUBQUERY
 int sqlite4FindInIndex(Parse *pParse, Expr *pX, int *prNotFound){
+  Index *pIdx;
   Select *p;                            /* SELECT to the right of IN operator */
   int eType = 0;                        /* Type of RHS table. IN_INDEX_* */
   int iTab = pParse->nTab++;            /* Cursor of the RHS table */
@@ -1439,80 +1477,28 @@ int sqlite4FindInIndex(Parse *pParse, Expr *pX, int *prNotFound){
   assert( pX->op==TK_IN );
 
   /* Check to see if an existing table or index can be used to
-  ** satisfy the query.  This is preferable to generating a new 
-  ** ephemeral table.
-  */
-  p = (ExprHasProperty(pX, EP_xIsSelect) ? pX->x.pSelect : 0);
-  if( ALWAYS(pParse->nErr==0) && isCandidateForInOpt(p) ){
-    sqlite4 *db = pParse->db;              /* Database connection */
-    Table *pTab;                           /* Table <table>. */
-    Expr *pExpr;                           /* Expression <column> */
-    int iCol;                              /* Index of column <column> */
-    int iDb;                               /* Database idx for pTab */
-    Index *pIdx;
-    CollSeq *pReq;
-    char aff;
-    int affinity_ok;
+  ** satisfy the query. This is preferable to generating a new 
+  ** ephemeral table.  */
+  pIdx = sqlite4FindExistingInIndex(pParse, pX, 0);
+  if( pIdx ){
+    int iAddr;
+    char *pKey;
+    int iDb;                      /* aDb[] Index of database containing pIdx */
 
-    assert( p );                        /* Because of isCandidateForInOpt(p) */
-    assert( p->pEList!=0 );             /* Because of isCandidateForInOpt(p) */
-    assert( p->pEList->a[0].pExpr!=0 ); /* Because of isCandidateForInOpt(p) */
-    assert( p->pSrc!=0 );               /* Because of isCandidateForInOpt(p) */
-    pTab = p->pSrc->a[0].pTab;
-    pExpr = p->pEList->a[0].pExpr;
-    iCol = pExpr->iColumn;
-   
-    /* Code an OP_VerifyCookie for <table> */
-    iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
-    sqlite4CodeVerifySchema(pParse, iDb);
+    iDb = sqlite4SchemaToIndex(pParse->db, pIdx->pSchema);
+    pKey = (char *)sqlite4IndexKeyinfo(pParse, pIdx);
+    iAddr = sqlite4CodeOnce(pParse);
+    sqlite4VdbeAddOp3(v, OP_OpenRead, iTab, pIdx->tnum, iDb);
+    sqlite4VdbeChangeP4(v, -1 , pKey, P4_KEYINFO_HANDOFF);
+    VdbeComment((v, "%s", pIdx->zName));
+    sqlite4VdbeJumpHere(v, iAddr);
 
-    /* This function is only called from two places. In both cases the vdbe
-    ** has already been allocated. So assume sqlite4GetVdbe() is always
-    ** successful here.
-    */
-    assert(v);
-
-    /* The collation sequence used by the comparison. If an index is to
-    ** be used in place of a temp-table, it must be ordered according
-    ** to this collation sequence.  */
-    pReq = sqlite4BinaryCompareCollSeq(pParse, pX->pLeft, pExpr);
-
-    /* Check that the affinity that will be used to perform the 
-    ** comparison is the same as the affinity of the column. If
-    ** it is not, it is not possible to use any index.
-    */
-    aff = comparisonAffinity(pX);
-    affinity_ok = (pTab->aCol[iCol].affinity==aff||aff==SQLITE_AFF_NONE);
-
-    for(pIdx=pTab->pIndex; pIdx && eType==0 && affinity_ok; pIdx=pIdx->pNext){
-      if( (pIdx->aiColumn[0]==iCol)
-          && sqlite4FindCollSeq(db, ENC(db), pIdx->azColl[0], 0)==pReq
-          && (!mustBeUnique || (pIdx->nColumn==1 && pIdx->onError!=OE_None))
-        ){
-        int iAddr;
-        char *pKey;
-
-        pKey = (char *)sqlite4IndexKeyinfo(pParse, pIdx);
-        iAddr = sqlite4CodeOnce(pParse);
-
-        sqlite4VdbeAddOp4(v, OP_OpenRead, iTab, pIdx->tnum, iDb,
-            pKey,P4_KEYINFO_HANDOFF);
-        VdbeComment((v, "%s", pIdx->zName));
-        eType = IN_INDEX_INDEX;
-
-        sqlite4VdbeJumpHere(v, iAddr);
-        if( prNotFound && !pTab->aCol[iCol].notNull ){
-          *prNotFound = ++pParse->nMem;
-          sqlite4VdbeAddOp2(v, OP_Null, 0, *prNotFound);
-        }
-      }
-    }
-  }
-
-  if( eType==0 ){
-    /* Could not found an existing table or index to use as the RHS b-tree.
-    ** We will have to generate an ephemeral table to do the job.
-    */
+    *prNotFound = ++pParse->nMem;
+    sqlite4VdbeAddOp2(v, OP_Null, 0, *prNotFound);
+    pX->iTable = iTab;
+  }else{
+    /* Could not find an existing table or index to use as the RHS b-tree.
+    ** We will have to generate an ephemeral table to do the job.  */
     double savedNQueryLoop = pParse->nQueryLoop;
     int rMayHaveNull = 0;
     eType = IN_INDEX_EPH;
@@ -1528,9 +1514,8 @@ int sqlite4FindInIndex(Parse *pParse, Expr *pX, int *prNotFound){
     }
     sqlite4CodeSubselect(pParse, pX, rMayHaveNull, eType==IN_INDEX_ROWID);
     pParse->nQueryLoop = savedNQueryLoop;
-  }else{
-    pX->iTable = iTab;
   }
+  
   return eType;
 }
 #endif
