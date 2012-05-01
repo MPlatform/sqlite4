@@ -1234,6 +1234,32 @@ do_execsql_test 61.1 {
 
 do_execsql_test 61.2 { SELECT count(*) FROM t2 GROUP BY a } 1
 
+#-------------------------------------------------------------------------
+# TODO: See ticket [f3d711b1e5] 
+#reset_db
+#do_execsql_test 62.1 {
+#  CREATE TABLE t2(x int, y int, z int);
+#  CREATE INDEX i2x ON t2(x);
+#}
+#
+#set r1 [expr {rand()}]
+#set r2 [expr {rand()}]
+#set r3 [expr {rand()}]
+#
+#set sql "INSERT INTO t2 VALUES($r1,$r2,$r3)" 
+#execsql $sql
+#integrity_check 62.2
+#-------------------------------------------------------------------------
+#reset_db
+#set r1 [expr 0.684377705997032]
+#do_execsql_test 63.1 { CREATE TABLE t1(x UNIQUE); }
+#execsql { PRAGMA trace = 1 }
+#breakpoint
+#do_execsql_test 63.2 "INSERT INTO t1 VALUES($r1)"
+##do_execsql_test 63.3 "SELECT * FROM t1" $r1
+#integrity_check 63.4
+#execsql { PRAGMA kvdump }
+#-------------------------------------------------------------------------
 
 finish_test
 
