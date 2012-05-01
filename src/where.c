@@ -2959,7 +2959,6 @@ static void bestKVIndex(
   ** the named index is considered. And if a NOT INDEXED clause was present
   ** only the PRIMARY KEY index may be considered.  
   */
-  assert( pSrc->pIndex==0 && "TODO: Re-enable this" );
   if( pSrc->notIndexed ){
     pFirst = pPk;
   }else if( pSrc->pIndex ){
