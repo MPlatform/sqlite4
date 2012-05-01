@@ -133,7 +133,7 @@ lappend ::testsuitelist xxx
 
 test_suite "src4" -prefix "" -description {
 } -files {
-  simple.test conflict.test where.test 
+  simple.test conflict.test 
 
   collate1.test collate2.test collate3.test collate4.test collate5.test
   collate6.test collate7.test collate8.test collate9.test collateA.test
@@ -158,6 +158,7 @@ test_suite "src4" -prefix "" -description {
   update.test
   view.test
 
+  where.test whereC.test
 }
 
 test_suite "veryquick" -prefix "" -description {

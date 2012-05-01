@@ -2988,6 +2988,18 @@ case OP_SeekGt: {       /* jump, in3 */
   if( rc==SQLITE_OK ){
     rc = sqlite4KVCursorSeek(pC->pKVCur, aProbe, nProbe, dir);
   }
+
+  if( rc==SQLITE_OK ){
+    if( op==OP_SeekLt ){
+      rc = sqlite4KVCursorPrev(pC->pKVCur);
+    }else if( op==OP_SeekGt ){
+      rc = sqlite4KVCursorNext(pC->pKVCur);
+    }
+  }
+
+  /* Check that the KV cursor currently points to an entry belonging
+  ** to index pC->iRoot (and not an entry that is part of some other 
+  ** index).  */
   if( rc==SQLITE_OK || rc==SQLITE_INEXACT ){
     rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
     if( rc==SQLITE_OK && memcmp(aKey, aProbe, sqlite4VarintLen(pC->iRoot)) ){
