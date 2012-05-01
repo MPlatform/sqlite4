@@ -158,7 +158,7 @@ test_suite "src4" -prefix "" -description {
   update.test
   view.test
 
-  where.test whereC.test
+  where.test where5.test where6.test whereA.test whereB.test whereC.test
 }
 
 test_suite "veryquick" -prefix "" -description {

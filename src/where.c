@@ -1702,8 +1702,10 @@ static int isSortingIndex(
     if( !pColl ) pColl = db->pDfltColl;
     if( iIdxCol<pIdx->nColumn ){
       zColl = pIdx->azColl[iIdxCol];
-    }else{
+    }else if( iColumn>=0 ) {
       zColl = pTab->aCol[iColumn].zColl;
+    }else{
+      zColl = 0;
     }
     if( pColl!=sqlite4FindCollSeq(db, ENC(db), zColl, 0) ) break;
 
@@ -4242,8 +4244,8 @@ static Bitmask codeOneLoopStart(
     SrcList *pOrTab;       /* Shortened table list or OR-clause generation */
 
     int regReturn = ++pParse->nMem;           /* Register used with OP_Gosub */
-    int regRowset = 0;                        /* Register for RowSet object */
-    int regRowid = 0;                         /* Register holding rowid */
+    int regKeyset = 0;                        /* Register for KeySet object */
+    int regKey = 0;                           /* Register holding key */
     int iLoopBody = sqlite4VdbeMakeLabel(v);  /* Start of loop body */
     int iRetInit;                             /* Address of regReturn init */
     int untestedTerms = 0;             /* Some terms not completely tested */
@@ -4258,7 +4260,7 @@ static Bitmask codeOneLoopStart(
     pLevel->op = OP_Return;
     pLevel->p1 = regReturn;
 
-    /* Set up a new SrcList ni pOrTab containing the table being scanned
+    /* Set up a new SrcList in pOrTab containing the table being scanned
     ** by this loop in the a[0] slot and all notReady tables in a[1..] slots.
     ** This becomes the SrcList in the recursive call to sqlite4WhereBegin().
     */
@@ -4280,7 +4282,7 @@ static Bitmask codeOneLoopStart(
       pOrTab = pWInfo->pTabList;
     }
 
-    /* Initialize the rowset register to contain NULL. An SQL NULL is 
+    /* Initialize the keyset register to contain NULL. An SQL NULL is 
     ** equivalent to an empty rowset.
     **
     ** Also initialize regReturn to contain the address of the instruction 
@@ -4292,9 +4294,9 @@ static Bitmask codeOneLoopStart(
     ** called on an uninitialized cursor.
     */
     if( (wctrlFlags & WHERE_DUPLICATES_OK)==0 ){
-      regRowset = ++pParse->nMem;
-      regRowid = ++pParse->nMem;
-      sqlite4VdbeAddOp2(v, OP_Null, 0, regRowset);
+      regKeyset = ++pParse->nMem;
+      regKey = ++pParse->nMem;
+      sqlite4VdbeAddOp2(v, OP_Null, 0, regKeyset);
     }
     iRetInit = sqlite4VdbeAddOp2(v, OP_Integer, 0, regReturn);
 
@@ -4327,11 +4329,10 @@ static Bitmask codeOneLoopStart(
           );
           if( (wctrlFlags & WHERE_DUPLICATES_OK)==0 ){
             int iSet = ((ii==pOrWc->nTerm-1)?-1:ii);
-            int r;
-            r = sqlite4ExprCodeGetColumn(pParse, pTabItem->pTab, -1, iCur, 
-                                         regRowid);
-            sqlite4VdbeAddOp4Int(v, OP_RowSetTest, regRowset,
-                                 sqlite4VdbeCurrentAddr(v)+2, r, iSet);
+            int addrJump = sqlite4VdbeCurrentAddr(v) + 3;
+
+            sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regKey);
+            sqlite4VdbeAddOp3(v, OP_KeySetTest, regKeyset, addrJump, regKey);
           }
           sqlite4VdbeAddOp2(v, OP_Gosub, regReturn, iLoopBody);
 

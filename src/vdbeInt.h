@@ -138,7 +138,6 @@ struct Mem {
     i64 i;              /* Integer value used when MEM_Int is set in flags */
     int nZero;          /* Used when bit MEM_Zero is set in flags */
     FuncDef *pDef;      /* Used only when flags==MEM_Agg */
-    RowSet *pRowSet;    /* Used only when flags==MEM_RowSet */
     KeySet *pKeySet;    /* Used only when flags==MEM_KeySet */
     VdbeFrame *pFrame;  /* Used when flags==MEM_Frame */
   } u;
@@ -171,12 +170,11 @@ struct Mem {
 #define MEM_Int       0x0004   /* Value is an integer */
 #define MEM_Real      0x0008   /* Value is a real number */
 #define MEM_Blob      0x0010   /* Value is a BLOB */
-#define MEM_RowSet    0x0020   /* Value is a RowSet object */
+#define MEM_KeySet    0x0020   /* Value is a KeySet object */
 #define MEM_Frame     0x0040   /* Value is a VdbeFrame object */
 #define MEM_Invalid   0x0080   /* Value is undefined */
 #define MEM_TypeMask  0x00ff   /* Mask of type bits */
 
-#define MEM_KeySet    0x0020   /* Value is a KeySet object */
 
 /* Whenever Mem contains a valid string or blob representation, one of
 ** the following flags must be set to determine the memory management
@@ -408,7 +406,6 @@ void sqlite4VdbeMemSetInt64(Mem*, i64);
 #endif
 void sqlite4VdbeMemSetNull(Mem*);
 void sqlite4VdbeMemSetZeroBlob(Mem*,int);
-void sqlite4VdbeMemSetRowSet(Mem*);
 int sqlite4VdbeMemMakeWriteable(Mem*);
 int sqlite4VdbeMemStringify(Mem*, int);
 i64 sqlite4VdbeIntValue(Mem*);
@@ -421,7 +418,7 @@ int sqlite4VdbeMemNumerify(Mem*);
 void sqlite4VdbeMemRelease(Mem *p);
 void sqlite4VdbeMemReleaseExternal(Mem *p);
 #define VdbeMemRelease(X)  \
-  if((X)->flags&(MEM_Agg|MEM_Dyn|MEM_RowSet|MEM_Frame)) \
+  if((X)->flags&(MEM_Agg|MEM_Dyn|MEM_KeySet|MEM_Frame)) \
     sqlite4VdbeMemReleaseExternal(X);
 int sqlite4VdbeMemFinalize(Mem*, FuncDef*);
 const char *sqlite4OpcodeName(int);

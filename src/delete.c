@@ -345,7 +345,7 @@ void sqlite4DeleteFrom(
     );
     if( pWInfo==0 ) goto delete_from_cleanup;
     sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regKey);
-    sqlite4VdbeAddOp2(v, OP_KeySetAdd, regSet, regKey);
+    sqlite4VdbeAddOp3(v, OP_KeySetAdd, regSet, 0, regKey);
     sqlite4WhereEnd(pWInfo);
 
     /* Unless this is a view, open cursors for all indexes on the table

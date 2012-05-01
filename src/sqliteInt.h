@@ -621,7 +621,6 @@ typedef struct LookasideSlot LookasideSlot;
 typedef struct Module Module;
 typedef struct NameContext NameContext;
 typedef struct Parse Parse;
-typedef struct RowSet RowSet;
 typedef struct Savepoint Savepoint;
 typedef struct Select Select;
 typedef struct SrcList SrcList;
@@ -2680,17 +2679,12 @@ void sqlite4EndTable(Parse*,Token*,Token*,Select*);
 int sqlite4ParseUri(sqlite4_env*,const char*,unsigned int*,char**,char **);
 int sqlite4CodeOnce(Parse *);
 
-RowSet *sqlite4RowSetInit(sqlite4*, void*, unsigned int);
-void sqlite4RowSetClear(RowSet*);
-void sqlite4RowSetInsert(RowSet*, i64);
-int sqlite4RowSetTest(RowSet*, u8 iBatch, i64);
-int sqlite4RowSetNext(RowSet*, i64*);
-
 KeySet *sqlite4KeySetInit(sqlite4*);
-void sqlite4KeySetInsert(KeySet *, const char *, int);
+void sqlite4KeySetFree(KeySet *);
 const char *sqlite4KeySetRead(KeySet *, int *);
 int sqlite4KeySetNext(KeySet *);
-void sqlite4KeySetFree(KeySet *);
+void sqlite4KeySetInsert(KeySet *, const char *, int);
+int sqlite4KeySetTest(KeySet *, const char *, int);
 
 void sqlite4CreateView(Parse*,Token*,Token*,Token*,Select*,int,int);
 

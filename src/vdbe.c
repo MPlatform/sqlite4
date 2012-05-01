@@ -416,8 +416,8 @@ static void memTracePrint(FILE *out, Mem *p){
   }else if( p->flags & MEM_Real ){
     fprintf(out, " r:%g", p->r);
 #endif
-  }else if( p->flags & MEM_RowSet ){
-    fprintf(out, " (rowset)");
+  }else if( p->flags & MEM_KeySet ){
+    fprintf(out, " (keyset)");
   }else{
     char zBuf[200];
     sqlite4VdbeMemPrettyPrint(p, zBuf);
@@ -4015,46 +4015,42 @@ case OP_DropTrigger: {
   break;
 }
 
-
-#ifndef SQLITE_OMIT_INTEGRITY_CHECK
-/* Opcode: IntegrityCk P1 P2 P3 * P5
+/* Opcode: KeySetTest P1 P2 P3 * *
 **
-** Do an analysis of the currently open database.  Store in
-** register P1 the text of an error message describing any problems.
-** If no problems are found, store a NULL in register P1.
+** Register P1 contains a KeySet object. Register P3 contains a database 
+** key. This function checks if the KeySet already contains an equal key.
+** If so, control jumps to instruction P2. Otherwise, fall through to the
+** next instruction.
 **
-** The register P3 contains the maximum number of allowed errors.
-** At most reg(P3) errors will be reported.
-** In other words, the analysis stops as soon as reg(P1) errors are 
-** seen.  Reg(P1) is updated with the number of errors remaining.
-**
-** The root page numbers of all tables in the database are integer
-** stored in reg(P1), reg(P1+1), reg(P1+2), ....  There are P2 tables
-** total.
-**
-** If P5 is not zero, the check is done on the auxiliary database
-** file, not the main database file.
-**
-** This opcode is used to implement the integrity_check pragma.
+** TODO: Optimization similar to SQLite 3 using P4.
 */
-case OP_IntegrityCk: {
-  break;
+case OP_KeySetTest: {        /* in1, in3, jump */
+  pIn1 = &aMem[pOp->p1];
+  pIn3 = &aMem[pOp->p3];
+
+  if( 0!=(pIn1->flags & MEM_KeySet)
+   && 0!=sqlite4KeySetTest(pIn1->u.pKeySet, pIn3->z, pIn3->n)
+  ){
+    pc = pOp->p2-1;
+    break;
+  }
+
+  /* Fall through to KeySetAdd */
 }
-#endif /* SQLITE_OMIT_INTEGRITY_CHECK */
 
 /* Opcode: KeySetAdd P1 P2 * * *
 **
 ** Read the blob value from register P2 and store it in KeySet object P1.
 */
-case OP_KeySetAdd: {         /* in1, in2 */
+case OP_KeySetAdd: {         /* in1, in3 */
   pIn1 = &aMem[pOp->p1];
   if( (pIn1->flags & MEM_KeySet)==0 ){
     sqlite4VdbeMemSetKeySet(pIn1);
     if( (pIn1->flags & MEM_KeySet)==0 ) goto no_mem;
   }
-  pIn2 = &aMem[pOp->p2];
-  assert( pIn2->flags & MEM_Blob );
-  sqlite4KeySetInsert(pIn1->u.pKeySet, pIn2->z, pIn2->n);
+  pIn3 = &aMem[pOp->p3];
+  assert( pIn3->flags & MEM_Blob );
+  sqlite4KeySetInsert(pIn1->u.pKeySet, pIn3->z, pIn3->n);
   break;
 }
 
@@ -4084,106 +4080,6 @@ case OP_KeySetRead: {       /* in1 */
 
   break;
 }
-
-/* Opcode: RowSetAdd P1 P2 * * *
-**
-** Insert the integer value held by register P2 into a boolean index
-** held in register P1.
-**
-** An assertion fails if P2 is not an integer.
-*/
-case OP_RowSetAdd: {       /* in1, in2 */
-  pIn1 = &aMem[pOp->p1];
-  pIn2 = &aMem[pOp->p2];
-  assert( (pIn2->flags & MEM_Int)!=0 );
-  if( (pIn1->flags & MEM_RowSet)==0 ){
-    sqlite4VdbeMemSetRowSet(pIn1);
-    if( (pIn1->flags & MEM_RowSet)==0 ) goto no_mem;
-  }
-  sqlite4RowSetInsert(pIn1->u.pRowSet, pIn2->u.i);
-  break;
-}
-
-/* Opcode: RowSetRead P1 P2 P3 * *
-**
-** Extract the smallest value from boolean index P1 and put that value into
-** register P3.  Or, if boolean index P1 is initially empty, leave P3
-** unchanged and jump to instruction P2.
-*/
-case OP_RowSetRead: {       /* jump, in1, out3 */
-  i64 val;
-  CHECK_FOR_INTERRUPT;
-  pIn1 = &aMem[pOp->p1];
-  if( (pIn1->flags & MEM_RowSet)==0 
-   || sqlite4RowSetNext(pIn1->u.pRowSet, &val)==0
-  ){
-    /* The boolean index is empty */
-    sqlite4VdbeMemSetNull(pIn1);
-    pc = pOp->p2 - 1;
-  }else{
-    /* A value was pulled from the index */
-    sqlite4VdbeMemSetInt64(&aMem[pOp->p3], val);
-  }
-  break;
-}
-
-/* Opcode: RowSetTest P1 P2 P3 P4
-**
-** Register P3 is assumed to hold a 64-bit integer value. If register P1
-** contains a RowSet object and that RowSet object contains
-** the value held in P3, jump to register P2. Otherwise, insert the
-** integer in P3 into the RowSet and continue on to the
-** next opcode.
-**
-** The RowSet object is optimized for the case where successive sets
-** of integers, where each set contains no duplicates. Each set
-** of values is identified by a unique P4 value. The first set
-** must have P4==0, the final set P4=-1.  P4 must be either -1 or
-** non-negative.  For non-negative values of P4 only the lower 4
-** bits are significant.
-**
-** This allows optimizations: (a) when P4==0 there is no need to test
-** the rowset object for P3, as it is guaranteed not to contain it,
-** (b) when P4==-1 there is no need to insert the value, as it will
-** never be tested for, and (c) when a value that is part of set X is
-** inserted, there is no need to search to see if the same value was
-** previously inserted as part of set X (only if it was previously
-** inserted as part of some other set).
-*/
-case OP_RowSetTest: {                     /* jump, in1, in3 */
-  int iSet;
-  int exists;
-
-  pIn1 = &aMem[pOp->p1];
-  pIn3 = &aMem[pOp->p3];
-  iSet = pOp->p4.i;
-  assert( pIn3->flags&MEM_Int );
-
-  /* If there is anything other than a rowset object in memory cell P1,
-  ** delete it now and initialize P1 with an empty rowset
-  */
-  if( (pIn1->flags & MEM_RowSet)==0 ){
-    sqlite4VdbeMemSetRowSet(pIn1);
-    if( (pIn1->flags & MEM_RowSet)==0 ) goto no_mem;
-  }
-
-  assert( pOp->p4type==P4_INT32 );
-  assert( iSet==-1 || iSet>=0 );
-  if( iSet ){
-    exists = sqlite4RowSetTest(pIn1->u.pRowSet, 
-                               (u8)(iSet>=0 ? iSet & 0xf : 0xff),
-                               pIn3->u.i);
-    if( exists ){
-      pc = pOp->p2 - 1;
-      break;
-    }
-  }
-  if( iSet>=0 ){
-    sqlite4RowSetInsert(pIn1->u.pRowSet, pIn3->u.i);
-  }
-  break;
-}
-
 
 #ifndef SQLITE_OMIT_TRIGGER
 

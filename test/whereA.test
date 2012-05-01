@@ -45,13 +45,12 @@ do_test whereA-1.4 {
   sqlite4 db test.db
   db eval {
     PRAGMA reverse_unordered_selects=1;
-    SELECT * FROM t1 ORDER BY rowid;
+    SELECT * FROM t1 ORDER BY a;
   }
 } {1 2 3 2 hello world 3 4.53 {}}
 do_test whereA-1.5 {
   db eval {
-    VACUUM;
-    SELECT * FROM t1 ORDER BY rowid;
+    SELECT * FROM t1 ORDER BY a;
   }
 } {1 2 3 2 hello world 3 4.53 {}}
 do_test whereA-1.6 {
@@ -64,7 +63,6 @@ do_test whereA-1.7 {
   sqlite4 db test.db
   db eval {
     PRAGMA reverse_unordered_selects=1;
-    VACUUM;
     SELECT * FROM t1;
   }
 } {3 4.53 {} 2 hello world 1 2 3}
@@ -85,7 +83,7 @@ do_test whereA-2.2 {
 do_test whereA-2.3 {
   db eval {
     PRAGMA reverse_unordered_selects=1;
-    SELECT * FROM t1 WHERE a>0 ORDER BY rowid;
+    SELECT * FROM t1 WHERE a>0 ORDER BY a;
   }
 } {1 2 3 2 hello world 3 4.53 {}}
 

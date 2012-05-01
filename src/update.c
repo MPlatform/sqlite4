@@ -349,7 +349,7 @@ void sqlite4Update(
   okOnePass = pWInfo->okOnePass;
   sqlite4VdbeAddOp2(v, OP_RowKey, iCur+iPk, regOldKey);
   if( !okOnePass ){
-    sqlite4VdbeAddOp2(v, OP_KeySetAdd, regKeySet, regOldKey);
+    sqlite4VdbeAddOp3(v, OP_KeySetAdd, regKeySet, 0, regOldKey);
   }
   sqlite4WhereEnd(pWInfo);
 

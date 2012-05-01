@@ -62,6 +62,7 @@
 */
 #include "sqliteInt.h"
 
+#if 0
 
 /*
 ** Target size for allocation chunks.
@@ -421,6 +422,8 @@ int sqlite4RowSetTest(RowSet *pRowSet, u8 iBatch, sqlite4_int64 iRowid){
   return 0;
 }
 
+#endif
+
 typedef struct KeySetEntry KeySetEntry;
 
 struct KeySetEntry {
@@ -442,6 +445,22 @@ KeySet *sqlite4KeySetInit(sqlite4 *db){
     pRet->db = db;
   }
   return pRet;
+}
+
+/*
+** Parameter zKey points to a buffer containing a database key nKey bytes 
+** in length. This function returns true if the KeySet passed as the first
+** argument already contains a key equal to the key in the buffer, or
+** false otherwise.
+*/
+int sqlite4KeySetTest(KeySet *pKeySet, const char *zKey, int nKey){
+  KeySetEntry *p;
+
+  for(p=pKeySet->pFirst; p; p=p->pNext){
+    if( p->n==nKey && 0==memcmp(p->z, zKey, nKey) ) break;
+  }
+
+  return p!=0;
 }
 
 void sqlite4KeySetInsert(KeySet *pKeySet, const char *z, int n){
