@@ -139,7 +139,7 @@ static int kvwrapNextEntry(KVCursor *pKVCursor){
   KVWrap *p = (KVWrap *)(pKVCursor->pStore);
   KVWrapCsr *pCsr = (KVWrapCsr *)pKVCursor;
   rc = p->pReal->pStoreVfunc->xNext(pCsr->pReal);
-  if( rc==SQLITE_OK ) kvwg.nStep++;
+  kvwg.nStep++;
   return rc;
 }
 
@@ -151,7 +151,7 @@ static int kvwrapPrevEntry(KVCursor *pKVCursor){
   KVWrap *p = (KVWrap *)(pKVCursor->pStore);
   KVWrapCsr *pCsr = (KVWrapCsr *)pKVCursor;
   rc = p->pReal->pStoreVfunc->xPrev(pCsr->pReal);
-  if( rc==SQLITE_OK ) kvwg.nStep++;
+  kvwg.nStep++;
   return rc;
 }
 

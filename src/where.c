@@ -3808,12 +3808,19 @@ static void explainOneScan(
     }
     if( (flags & WHERE_INDEXED)!=0 ){
       char *zWhere = explainIndexRange(db, pLevel, pItem->pTab);
-      zMsg = sqlite4MAppendf(db, zMsg, "%s USING %s%sINDEX%s%s%s", zMsg, 
+      Index *pIdx = pLevel->plan.u.pIdx;
+      const char *zName = "";
+      const char *zType = "INDEX";
+
+      if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+        zType = "PRIMARY KEY";
+      }else if( 0==(flags & WHERE_TEMP_INDEX) ){
+        zName = pIdx->zName;
+      }
+      zMsg = sqlite4MAppendf(db, zMsg, "%s USING %s%s%s%s%s%s", zMsg, 
           ((flags & WHERE_TEMP_INDEX)?"AUTOMATIC ":""),
           ((flags & WHERE_IDX_ONLY)?"COVERING ":""),
-          ((flags & WHERE_TEMP_INDEX)?"":" "),
-          ((flags & WHERE_TEMP_INDEX)?"": pLevel->plan.u.pIdx->zName),
-          zWhere
+          zType, (zName[0] ? " " : ""), zName, zWhere
       );
       sqlite4DbFree(db, zWhere);
     }

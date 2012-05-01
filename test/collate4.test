@@ -336,7 +336,7 @@ do_test collate4-2.1.0 {
 } {}
 do_test collate4-2.1.1 {
   count { SELECT * FROM collate4t2, collate4t1 WHERE a = b }
-} {A a A A 24}
+} {A a A A 25}
 do_test collate4-2.1.2 {
   execsql { CREATE INDEX collate4i1 ON collate4t1(a) }
   count {
@@ -419,7 +419,7 @@ do_test collate4-2.2.1 {
   count {
     SELECT * FROM collate4t2 NOT INDEXED NATURAL JOIN collate4t1 NOT INDEXED;
   }
-} {0 0 0 0 0 1 0 1 0 0 1 1 1 0 0 1 0 1 1 1 0 1 1 1 80}
+} {0 0 0 0 0 1 0 1 0 0 1 1 1 0 0 1 0 1 1 1 0 1 1 1 81}
 do_test collate4-2.2.1b {
   execsql {
     CREATE INDEX collate4i1 ON collate4t1(a, b, c);
@@ -427,7 +427,7 @@ do_test collate4-2.2.1b {
   count {
     SELECT * FROM collate4t2 NATURAL JOIN collate4t1;
   }
-} {0 0 0 0 0 1 0 1 0 0 1 1 1 0 0 1 0 1 1 1 0 1 1 1 47}
+} {0 0 0 0 0 1 0 1 0 0 1 1 1 0 0 1 0 1 1 1 0 1 1 1 49}
 do_test collate4-2.2.2 {
   execsql {
     DROP INDEX collate4i1;
@@ -436,7 +436,7 @@ do_test collate4-2.2.2 {
   count {
     SELECT * FROM collate4t2 NATURAL JOIN collate4t1;
   }
-} {0 0 0 0 0 1 0 1 0 0 1 1 1 0 0 1 0 1 1 1 0 1 1 1 32}
+} {0 0 0 0 0 1 0 1 0 0 1 1 1 0 0 1 0 1 1 1 0 1 1 1 33}
 
 do_test collate4-2.2.10 {
   execsql {
@@ -580,12 +580,12 @@ do_test collate4-4.1 {
   count {
     SELECT max(a) FROM collate4t1
   }
-} {20 4}
+} {20 5}
 do_test collate4-4.2 {
   count {
     SELECT min(a) FROM collate4t1
   }
-} {10 4}
+} {10 5}
 do_test collate4-4.3 {
   # Test that the index with collation type TEXT is used.
   execsql {
