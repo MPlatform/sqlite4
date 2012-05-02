@@ -811,47 +811,6 @@ int sqlite4_close(sqlite4 *db){
 }
 
 /*
-** Rollback all database files.
-*/
-void sqlite4RollbackAll(sqlite4 *db){
-  Savepoint *pSave;
-  int i;
-  int inTrans = (db->pSavepoint!=0);
-  assert( sqlite4_mutex_held(db->mutex) );
-  sqlite4BeginBenignMalloc();
-  for(i=0; i<db->nDb; i++){
-    if( db->aDb[i].pKV ){
-      if( db->aDb[i].pKV->iTransLevel ){
-        inTrans = 1;
-      }
-      sqlite4KVStoreRollback(db->aDb[i].pKV, 0);
-      db->aDb[i].inTrans = 0;
-    }
-  }
-  sqlite4VtabRollback(db);
-  sqlite4EndBenignMalloc();
-
-  if( db->flags&SQLITE_InternChanges ){
-    sqlite4ExpirePreparedStatements(db);
-    sqlite4ResetInternalSchema(db, -1);
-  }
-
-  /* Any deferred constraint violations have now been resolved. */
-  db->nDeferredCons = 0;
-
-  /* If one has been configured, invoke the rollback-hook callback */
-  if( db->xRollbackCallback && inTrans ){
-    db->xRollbackCallback(db->pRollbackArg);
-  }
-
-  /* Free all savepoint structures */
-  for(pSave=db->pSavepoint; pSave; pSave=db->pSavepoint){
-    db->pSavepoint = pSave->pNext;
-    sqlite4DbFree(db, pSave);
-  }
-}
-
-/*
 ** Return a static string that describes the kind of error specified in the
 ** argument.
 */

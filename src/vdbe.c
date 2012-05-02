@@ -2457,7 +2457,6 @@ case OP_Savepoint: {
       }else{
         rc = sqlite4VdbeRollback(db, iSave-(zSave==0));
       }
-
     }
   }
 

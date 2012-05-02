@@ -3262,37 +3262,26 @@ void sqlite4BeginTransaction(Parse *pParse, int type){
 }
 
 /*
-** Commit a transaction
+** Write VDBE code for either a "COMMIT" or "ROLLBACK" statement.
+**
+** For COMMIT, the second argument should be SAVEPOINT_RELEASE. For a
+** ROLLBACK, the second argument to this function should be 
+** SAVEPOINT_ROLLBACK.
 */
-void sqlite4CommitTransaction(Parse *pParse){
+void sqlite4EndTransaction(Parse *pParse, int op){
   Vdbe *v;
 
-  assert( pParse!=0 );
-  assert( pParse->db!=0 );
-  if( sqlite4AuthCheck(pParse, SQLITE_TRANSACTION, "COMMIT", 0, 0) ){
-    return;
-  }
-  v = sqlite4GetVdbe(pParse);
-  if( v ){
-    sqlite4VdbeAddOp1(v, OP_Savepoint, SAVEPOINT_RELEASE);
-  }
-}
+  /* Invoke the authorization callback */
+#ifndef SQLITE_OMIT_AUTHORIZATION
+  const char *azCmd[] = { "COMMIT", "ROLLBACK" };
+  assert( op==SAVEPOINT_RELEASE || op==SAVEPOINT_ROLLBACK );
+  assert( SAVEPOINT_RELEASE==1 && SAVEPOINT_ROLLBACK==2 );
+  if( sqlite4AuthCheck(pParse, SQLITE_TRANSACTION, azCmd[op-1], 0, 0) ) return;
+#endif
 
-/*
-** Rollback a transaction
-*/
-void sqlite4RollbackTransaction(Parse *pParse){
-  Vdbe *v;
-
-  assert( pParse!=0 );
-  assert( pParse->db!=0 );
-  if( sqlite4AuthCheck(pParse, SQLITE_TRANSACTION, "ROLLBACK", 0, 0) ){
-    return;
-  }
+  /* Code the OP_Savepoint instruction. */
   v = sqlite4GetVdbe(pParse);
-  if( v ){
-    sqlite4VdbeAddOp1(v, OP_Savepoint, SAVEPOINT_ROLLBACK);
-  }
+  if( v ) sqlite4VdbeAddOp1(v, OP_Savepoint, op);
 }
 
 /*

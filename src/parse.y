@@ -121,9 +121,9 @@ transtype(A) ::= .             {A = TK_DEFERRED;}
 transtype(A) ::= DEFERRED(X).  {A = @X;}
 transtype(A) ::= IMMEDIATE(X). {A = @X;}
 transtype(A) ::= EXCLUSIVE(X). {A = @X;}
-cmd ::= COMMIT trans_opt.      {sqlite4CommitTransaction(pParse);}
-cmd ::= END trans_opt.         {sqlite4CommitTransaction(pParse);}
-cmd ::= ROLLBACK trans_opt.    {sqlite4RollbackTransaction(pParse);}
+cmd ::= COMMIT trans_opt.   {sqlite4EndTransaction(pParse, SAVEPOINT_RELEASE);}
+cmd ::= END trans_opt.      {sqlite4EndTransaction(pParse, SAVEPOINT_RELEASE);}
+cmd ::= ROLLBACK trans_opt. {sqlite4EndTransaction(pParse, SAVEPOINT_ROLLBACK);}
 
 savepoint_opt ::= SAVEPOINT.
 savepoint_opt ::= .
