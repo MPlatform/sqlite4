@@ -1611,7 +1611,7 @@ static int idxColumnNumber(Index *pIdx, Index *pPk, int iIdxCol){
   int iRet = -2;
   if( iIdxCol<pIdx->nColumn ){
     iRet = pIdx->aiColumn[iIdxCol];
-  }else if( iIdxCol<(pIdx->nColumn + pPk->nColumn) ){
+  }else if( pPk && iIdxCol<(pIdx->nColumn + pPk->nColumn) ){
     iRet = pPk->aiColumn[iIdxCol - pIdx->nColumn];
   }
   return iRet;
@@ -1994,6 +1994,9 @@ static void bestAutomaticIndex(
     /* Automatic indices are disabled at run-time */
     return;
   }
+  if( (pWC->wctrlFlags & WHERE_NO_AUTOINDEX)!=0 ){
+    return;
+  }
   if( (pCost->plan.wsFlags & WHERE_NOT_FULLSCAN)!=0 ){
     /* We already have some kind of index in use for this query. */
     return;
@@ -2050,33 +2053,35 @@ static void constructAutomaticIndex(
   Bitmask notReady,           /* Mask of cursors that are not available */
   WhereLevel *pLevel          /* Write new index here */
 ){
-  int nColumn;                /* Number of columns in the constructed index */
+  int nCol = 0;               /* Number of columns in index keys */
   WhereTerm *pTerm;           /* A single term of the WHERE clause */
   WhereTerm *pWCEnd;          /* End of pWC->a[] */
   int nByte;                  /* Byte of memory needed for pIdx */
   Index *pIdx;                /* Object describing the transient index */
   Vdbe *v;                    /* Prepared statement under construction */
-  int addrInit;               /* Address of the initialization bypass jump */
+  int addrOnce;               /* Address of the initialization bypass jump */
   Table *pTable;              /* The table being indexed */
   KeyInfo *pKeyinfo;          /* Key information for the index */   
-  int addrTop;                /* Top of the index fill loop */
+  int addrRewind;             /* Top of the index fill loop */
   int regRecord;              /* Register holding an index record */
+  int regKey;                 /* Register holding an index key */
   int n;                      /* Column counter */
   int i;                      /* Loop counter */
   int mxBitCol;               /* Maximum column in pSrc->colUsed */
   CollSeq *pColl;             /* Collating sequence to on a column */
   Bitmask idxCols;            /* Bitmap of columns used for indexing */
   Bitmask extraCols;          /* Bitmap of additional columns */
+  int iPkCur = pLevel->iTabCur;   /* Primary key cursor to read data from */
 
   /* Generate code to skip over the creation and initialization of the
   ** transient index on 2nd and subsequent iterations of the loop. */
   v = pParse->pVdbe;
   assert( v!=0 );
-  addrInit = sqlite4CodeOnce(pParse);
+  addrOnce = sqlite4CodeOnce(pParse);
 
-  /* Count the number of columns that will be added to the index
-  ** and used to match WHERE clause constraints */
-  nColumn = 0;
+  /* Count the number of columns that will be encoded into the index keys.
+  ** set nCol to this value. Use the idxCols mask to ensure that the same
+  ** column is not added to the index more than once.  */
   pTable = pSrc->pTab;
   pWCEnd = &pWC->a[pWC->nTerm];
   idxCols = 0;
@@ -2087,47 +2092,29 @@ static void constructAutomaticIndex(
       testcase( iCol==BMS );
       testcase( iCol==BMS-1 );
       if( (idxCols & cMask)==0 ){
-        nColumn++;
+        nCol++;
         idxCols |= cMask;
       }
     }
   }
-  assert( nColumn>0 );
-  pLevel->plan.nEq = nColumn;
-
-  /* Count the number of additional columns needed to create a
-  ** covering index.  A "covering index" is an index that contains all
-  ** columns that are needed by the query.  With a covering index, the
-  ** original table never needs to be accessed.  Automatic indices must
-  ** be a covering index because the index will not be updated if the
-  ** original table changes and the index and table cannot both be used
-  ** if they go out of sync.
-  */
-  extraCols = pSrc->colUsed & (~idxCols | (((Bitmask)1)<<(BMS-1)));
-  mxBitCol = (pTable->nCol >= BMS-1) ? BMS-1 : pTable->nCol;
-  testcase( pTable->nCol==BMS-1 );
-  testcase( pTable->nCol==BMS-2 );
-  for(i=0; i<mxBitCol; i++){
-    if( extraCols & (((Bitmask)1)<<i) ) nColumn++;
-  }
-  if( pSrc->colUsed & (((Bitmask)1)<<(BMS-1)) ){
-    nColumn += pTable->nCol - BMS + 1;
-  }
+  assert( nCol>0 );
+  pLevel->plan.nEq = nCol;
   pLevel->plan.wsFlags |= WHERE_COLUMN_EQ | WHERE_IDX_ONLY | WO_EQ;
 
   /* Construct the Index object to describe this index */
-  nByte = sizeof(Index);
-  nByte += nColumn*sizeof(int);     /* Index.aiColumn */
-  nByte += nColumn*sizeof(char*);   /* Index.azColl */
-  nByte += nColumn;                 /* Index.aSortOrder */
+  nByte = sizeof(Index);          /* Index */
+  nByte += nCol*sizeof(int);      /* Index.aiColumn */
+  nByte += nCol*sizeof(char*);    /* Index.azColl */
+  nByte += nCol;                  /* Index.aSortOrder */
   pIdx = sqlite4DbMallocZero(pParse->db, nByte);
   if( pIdx==0 ) return;
   pLevel->plan.u.pIdx = pIdx;
+  pIdx->eIndexType = SQLITE_INDEX_TEMP;
   pIdx->azColl = (char**)&pIdx[1];
-  pIdx->aiColumn = (int*)&pIdx->azColl[nColumn];
-  pIdx->aSortOrder = (u8*)&pIdx->aiColumn[nColumn];
+  pIdx->aiColumn = (int*)&pIdx->azColl[nCol];
+  pIdx->aSortOrder = (u8*)&pIdx->aiColumn[nCol];
   pIdx->zName = "auto-index";
-  pIdx->nColumn = nColumn;
+  pIdx->nColumn = nCol;
   pIdx->pTable = pTable;
   n = 0;
   idxCols = 0;
@@ -2147,45 +2134,27 @@ static void constructAutomaticIndex(
   }
   assert( (u32)n==pLevel->plan.nEq );
 
-  /* Add additional columns needed to make the automatic index into
-  ** a covering index */
-  for(i=0; i<mxBitCol; i++){
-    if( extraCols & (((Bitmask)1)<<i) ){
-      pIdx->aiColumn[n] = i;
-      pIdx->azColl[n] = "BINARY";
-      n++;
-    }
-  }
-  if( pSrc->colUsed & (((Bitmask)1)<<(BMS-1)) ){
-    for(i=BMS-1; i<pTable->nCol; i++){
-      pIdx->aiColumn[n] = i;
-      pIdx->azColl[n] = "BINARY";
-      n++;
-    }
-  }
-  assert( n==nColumn );
-
-  /* Create the automatic index */
+  /* Open the automatic index cursor */
   pKeyinfo = sqlite4IndexKeyinfo(pParse, pIdx);
   assert( pLevel->iIdxCur>=0 );
-  sqlite4VdbeAddOp4(v, OP_OpenAutoindex, pLevel->iIdxCur, nColumn+1, 0,
-                    (char*)pKeyinfo, P4_KEYINFO_HANDOFF);
+  sqlite4VdbeAddOp3(v, OP_OpenAutoindex, pLevel->iIdxCur, 0, 0);
+  sqlite4VdbeChangeP4(v, -1, (char*)pKeyinfo, P4_KEYINFO_HANDOFF);
   VdbeComment((v, "for %s", pTable->zName));
 
-  /* Fill the automatic index with content */
-  addrTop = sqlite4VdbeAddOp1(v, OP_Rewind, pLevel->iTabCur);
+  /* Populate the automatic index */
   regRecord = sqlite4GetTempRange(pParse, 2);
-  sqlite4GenerateIndexKey(pParse, pIdx, pLevel->iTabCur, regRecord,
-                          1, pLevel->iIdxCur);
-  sqlite4VdbeAddOp3(v, OP_IdxInsert, pLevel->iIdxCur, regRecord, regRecord+1);
-  sqlite4VdbeChangeP5(v, OPFLAG_USESEEKRESULT);
-  sqlite4VdbeAddOp2(v, OP_Next, pLevel->iTabCur, addrTop+1);
+  regKey = regRecord+1;
+  addrRewind = sqlite4VdbeAddOp1(v, OP_Rewind, iPkCur);
+  sqlite4EncodeIndexKey(pParse, 0, iPkCur, pIdx, pLevel->iIdxCur, 1, regKey);
+  sqlite4VdbeAddOp2(v, OP_RowData, iPkCur, regRecord);
+  sqlite4VdbeAddOp3(v, OP_IdxInsert, pLevel->iIdxCur, regRecord, regKey);
+  sqlite4VdbeAddOp2(v, OP_Next, iPkCur, addrRewind+1);
   sqlite4VdbeChangeP5(v, SQLITE_STMTSTATUS_AUTOINDEX);
-  sqlite4VdbeJumpHere(v, addrTop);
+  sqlite4VdbeJumpHere(v, addrRewind);
   sqlite4ReleaseTempRange(pParse, regRecord, 2);
   
   /* Jump here when skipping the initialization */
-  sqlite4VdbeJumpHere(v, addrInit);
+  sqlite4VdbeJumpHere(v, addrOnce);
 }
 #endif /* SQLITE_OMIT_AUTOMATIC_INDEX */
 
@@ -3535,7 +3504,7 @@ static int codeEqualityTerm(
     sqlite4 *db = pParse->db;
     int eType;
     int iTab;
-    int iCol;                     /* Value to read from cursor iTab */
+    int iCol;                     /* Column to read from cursor iTab */
     struct InLoop *pIn;
 
     assert( pX->op==TK_IN );
@@ -3553,7 +3522,14 @@ static int codeEqualityTerm(
       sqlite4OpenPrimaryKey(pParse, iTab, iDb, pTab, OP_OpenRead);
       iCol = pX->pLeft->iColumn;
     }else{
+      /* Set Parse.nQueryLoop to 1 before calling sqlite4CodeSubselect().
+      ** This informs the optimizer that there is no point in constructing
+      ** any automatic indexes for the outer loop of the sub-select, as it
+      ** will only be run once. See also bestAutomaticIndex().  */
+      int nQueryLoopSave = pParse->nQueryLoop;
+      pParse->nQueryLoop = (double)1;
       sqlite4CodeSubselect(pParse, pX, 0, 0);
+      pParse->nQueryLoop = nQueryLoopSave;
       iTab = pX->iTable;
       iCol = 0;
     }
@@ -3817,9 +3793,8 @@ static void explainOneScan(
       }else if( 0==(flags & WHERE_TEMP_INDEX) ){
         zName = pIdx->zName;
       }
-      zMsg = sqlite4MAppendf(db, zMsg, "%s USING %s%s%s%s%s%s", zMsg, 
+      zMsg = sqlite4MAppendf(db, zMsg, "%s USING %s%s%s%s%s", zMsg, 
           ((flags & WHERE_TEMP_INDEX)?"AUTOMATIC ":""),
-          ((flags & WHERE_IDX_ONLY)?"COVERING ":""),
           zType, (zName[0] ? " " : ""), zName, zWhere
       );
       sqlite4DbFree(db, zWhere);
@@ -4018,8 +3993,9 @@ static Bitmask codeOneLoopStart(
 
     pIdx = pLevel->plan.u.pIdx;
     pPk = sqlite4FindPrimaryKey(pIdx->pTable, 0);
-    iIdxCur = pLevel->iIdxCur;
     iIneq = idxColumnNumber(pIdx, pPk, nEq);
+    iIdxCur = pLevel->iIdxCur;
+    assert( iCur==pLevel->iTabCur );
 
     /* If this loop satisfies a sort order (pOrderBy) request that 
     ** was passed to this function to implement a "SELECT min(x) ..." 
@@ -4175,7 +4151,9 @@ static Bitmask codeOneLoopStart(
     /* Seek the PK cursor, if required */
     disableTerm(pLevel, pRangeStart);
     disableTerm(pLevel, pRangeEnd);
-    if( pIdx->eIndexType!=SQLITE_INDEX_PRIMARYKEY ){
+    if( pIdx->eIndexType!=SQLITE_INDEX_PRIMARYKEY
+     && pIdx->eIndexType!=SQLITE_INDEX_TEMP
+    ){
       sqlite4VdbeAddOp3(v, OP_SeekPk, iCur, 0, iIdxCur);
     }
 
@@ -4328,16 +4306,16 @@ static Bitmask codeOneLoopStart(
         /* Loop through table entries that match term pOrTerm. */
         pSubWInfo = sqlite4WhereBegin(pParse, pOrTab, pOrExpr, 0, 0,
                         WHERE_OMIT_OPEN_CLOSE | WHERE_AND_ONLY |
-                        WHERE_FORCE_TABLE | WHERE_ONETABLE_ONLY);
+                        WHERE_NO_AUTOINDEX | WHERE_ONETABLE_ONLY);
         if( pSubWInfo ){
           explainOneScan(
               pParse, pOrTab, &pSubWInfo->a[0], iLevel, pLevel->iFrom, 0
           );
           if( (wctrlFlags & WHERE_DUPLICATES_OK)==0 ){
             int iSet = ((ii==pOrWc->nTerm-1)?-1:ii);
-            int addrJump = sqlite4VdbeCurrentAddr(v) + 3;
-
+            int addrJump;
             sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regKey);
+            addrJump = sqlite4VdbeCurrentAddr(v) + 2;
             sqlite4VdbeAddOp3(v, OP_KeySetTest, regKeyset, addrJump, regKey);
           }
           sqlite4VdbeAddOp2(v, OP_Gosub, regReturn, iLoopBody);
@@ -5155,34 +5133,22 @@ void sqlite4WhereEnd(WhereInfo *pWInfo){
     ** that reference the table and converts them into opcodes that
     ** reference the index.
     */
-#if 0
-    if( (pLevel->plan.wsFlags & WHERE_INDEXED)!=0 && !db->mallocFailed){
-      int k, j, last;
+    if( (pLevel->plan.wsFlags & WHERE_TEMP_INDEX) && !db->mallocFailed ){
       VdbeOp *pOp;
-      Index *pIdx = pLevel->plan.u.pIdx;
+      VdbeOp *pEnd;
 
-      assert( pIdx!=0 );
+      assert( pLevel->plan.u.pIdx );
+      assert( pLevel->iTabCur!=pLevel->iIdxCur );
       pOp = sqlite4VdbeGetOp(v, pWInfo->iTop);
-      last = sqlite4VdbeCurrentAddr(v);
-      for(k=pWInfo->iTop; k<last; k++, pOp++){
-        if( pOp->p1!=pLevel->iTabCur ) continue;
-        if( pOp->opcode==OP_Column ){
-          for(j=0; j<pIdx->nColumn; j++){
-            if( pOp->p2==pIdx->aiColumn[j] ){
-              pOp->p2 = j;
-              pOp->p1 = pLevel->iIdxCur;
-              break;
-            }
-          }
-          assert( (pLevel->plan.wsFlags & WHERE_IDX_ONLY)==0
-               || j<pIdx->nColumn );
-        }else if( pOp->opcode==OP_Rowid ){
+      pEnd = &pOp[sqlite4VdbeCurrentAddr(v) - pWInfo->iTop];
+
+      while( pOp<pEnd ){
+        if( pOp->p1==pLevel->iTabCur && pOp->opcode==OP_Column ){
           pOp->p1 = pLevel->iIdxCur;
-          pOp->opcode = OP_IdxRowid;
         }
+        pOp++;
       }
     }
-#endif
   }
 
   /* Final cleanup

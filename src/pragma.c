@@ -69,6 +69,7 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
     int mask;           /* Mask for the db->flags value */
   } aPragma[] = {
     { "reverse_unordered_selects", SQLITE_ReverseOrder  },
+    { "automatic_index",           SQLITE_AutoIndex  },
 #ifdef SQLITE_DEBUG
     { "sql_trace",                SQLITE_SqlTrace      },
     { "vdbe_listing",             SQLITE_VdbeListing   },

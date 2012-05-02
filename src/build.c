@@ -2278,7 +2278,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx){
   addr1 = sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
   regRecord = sqlite4GetTempRange(pParse,2);
   regKey = sqlite4GetTempReg(pParse);
-  sqlite4EncodeIndexKey(pParse, pPk, iTab, pIdx, iIdx, regKey);
+  sqlite4EncodeIndexKey(pParse, pPk, iTab, pIdx, iIdx, 0, regKey);
   if( pIdx->onError!=OE_None ){
     const char *zErr = "indexed columns are not unique";
     int addrTest;
@@ -3621,7 +3621,9 @@ KeyInfo *sqlite4IndexKeyinfo(Parse *pParse, Index *pIdx){
   sqlite4 *db = pParse->db;
   KeyInfo *pKey;
 
-  if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+  if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY
+   || pIdx->eIndexType==SQLITE_INDEX_TEMP
+  ){
     pPk = 0;
   }else{
     pPk = sqlite4FindPrimaryKey(pIdx->pTable, 0);
@@ -3651,10 +3653,10 @@ KeyInfo *sqlite4IndexKeyinfo(Parse *pParse, Index *pIdx){
     }
 
     pKey->nField = (u16)nCol;
-    if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
-      pKey->nData = pIdx->pTable->nCol;
-    }else{
+    if( pPk ){
       pKey->nPK = pPk->nColumn;
+    }else{
+      pKey->nData = pIdx->pTable->nCol;
     }
   }
 

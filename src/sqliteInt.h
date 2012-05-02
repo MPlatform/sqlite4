@@ -1474,6 +1474,7 @@ struct Index {
 #define SQLITE_INDEX_USER       0 /* Index created by CREATE INDEX statement */
 #define SQLITE_INDEX_UNIQUE     1 /* Index created by UNIQUE constraint */
 #define SQLITE_INDEX_PRIMARYKEY 2 /* Index is the tables PRIMARY KEY */
+#define SQLITE_INDEX_TEMP       3 /* Index is an automatic index */
 
 /*
 ** Each sample stored in the sqlite_stat3 table is represented in memory 
@@ -1942,7 +1943,7 @@ struct WhereLevel {
 #define WHERE_ONEPASS_DESIRED  0x0004 /* Want to do one-pass UPDATE/DELETE */
 #define WHERE_DUPLICATES_OK    0x0008 /* Ok to return a row more than once */
 #define WHERE_OMIT_OPEN_CLOSE  0x0010 /* Table cursors are already open */
-#define WHERE_FORCE_TABLE      0x0020 /* Do not use an index-only search */
+#define WHERE_NO_AUTOINDEX     0x0020 /* Do not use an auto-index search */
 #define WHERE_ONETABLE_ONLY    0x0040 /* Only code the 1st table in pTabList */
 #define WHERE_AND_ONLY         0x0080 /* Don't use indices for OR terms */
 
@@ -2787,7 +2788,7 @@ int sqlite4ExprNeedsNoAffinityChange(const Expr*, char);
 void sqlite4GenerateRowDelete(Parse*, Table*, int, int, int, Trigger *, int);
 void sqlite4GenerateRowIndexDelete(Parse*, Table*, int, int, int*);
 int sqlite4GenerateIndexKey(Parse*, Index*, int, int, int, int);
-void sqlite4EncodeIndexKey(Parse *, Index *, int, Index *, int, int);
+void sqlite4EncodeIndexKey(Parse *, Index *, int, Index *, int, int, int);
 void sqlite4GenerateConstraintChecks(Parse*,Table*,int,int,
                                      int*,int,int,int,int,int*);
 void sqlite4CompleteInsertion(Parse*, Table*, int, int, int*, int, int, int);

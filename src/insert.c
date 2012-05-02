@@ -116,7 +116,7 @@ const char *sqlite4IndexAffinityStr(Vdbe *v, Index *pIdx){
     ** of the table pIdx indexes.  */ 
     nAff = pIdx->nColumn;
     pPk = sqlite4FindPrimaryKey(pTab, 0);
-    if( pIdx!=pPk ){
+    if( pPk && pIdx!=pPk ){
       nAff += pPk->nColumn;
     }
 

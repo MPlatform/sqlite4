@@ -517,16 +517,19 @@ void sqlite4EncodeIndexKey(
   Parse *pParse,
   Index *pPk, int iPkCsr,
   Index *pIdx, int iIdxCsr,
+  int bAddSeq,                    /* True to append a sequence number */
   int regOut
 ){
   Vdbe *v = pParse->pVdbe;        /* VM to write code to */
   int nTmpReg;                    /* Number of temp registers required */
   int regTmp;                     /* First register in temp array */
   int i;                          /* Iterator variable */
-
+  int nPkCol;                     /* Number of columns to copy from PK */
+ 
   /* Allocate temp registers */
   assert( pIdx!=pPk );
-  nTmpReg = pIdx->nColumn + pPk->nColumn;
+  nPkCol = (pPk ? pPk->nColumn : 0);
+  nTmpReg = pIdx->nColumn + nPkCol;
   regTmp = sqlite4GetTempRange(pParse, nTmpReg);
 
   /* Assemble the values for the key in the array of temp registers */
@@ -534,7 +537,7 @@ void sqlite4EncodeIndexKey(
     int regVal = regTmp + i;
     sqlite4VdbeAddOp3(v, OP_Column, iPkCsr, pIdx->aiColumn[i], regVal);
   }
-  for(i=0; i<pPk->nColumn; i++){
+  for(i=0; i<nPkCol; i++){
     int iCol = pPk->aiColumn[i];
     int regVal = pIdx->nColumn + regTmp + i;
     if( iCol<0 ){
@@ -544,8 +547,10 @@ void sqlite4EncodeIndexKey(
     }
   }
 
-  /* Build the index key */
+  /* Build the index key. If bAddSeq is true, append a sequence number to 
+  ** the end of the key to ensure it is unique.  */
   sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iIdxCsr, regTmp, regOut);
+  if( bAddSeq ) sqlite4VdbeChangeP5(v, 1);
 
   /* Release temp registers */
   sqlite4ReleaseTempRange(pParse, regTmp, nTmpReg);
@@ -587,7 +592,7 @@ void sqlite4GenerateRowIndexDelete(
   for(i=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, i++){
     if( pIdx!=pPk && (aRegIdx==0 || aRegIdx[i]>0) ){
       int addrNotFound;
-      sqlite4EncodeIndexKey(pParse, pPk, baseCur+iPk, pIdx, baseCur+i, regKey);
+      sqlite4EncodeIndexKey(pParse, pPk, baseCur+iPk, pIdx, baseCur+i,0,regKey);
       addrNotFound = sqlite4VdbeAddOp4(v,
           OP_NotFound, baseCur+i, 0, regKey, 0, P4_INT32
       );
