@@ -93,7 +93,6 @@ void lsmStringAppendf(LsmString *pStr, const char *zFormat, ...){
 char *lsmMallocPrintf(lsm_env *pEnv, const char *zFormat, ...){
   LsmString s;
   va_list ap;
-  char *z;
   lsmStringInit(&s, pEnv);
   va_start(ap, zFormat);
   lsmStringVAppendf(&s, zFormat, ap);

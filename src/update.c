@@ -98,8 +98,8 @@ void sqlite4Update(
   int addr = 0;          /* VDBE instruction address of the start of the loop */
   WhereInfo *pWInfo;     /* Information about the WHERE clause */
   Vdbe *v;               /* The virtual database engine */
-  Index *pIdx;           /* For looping over indices */
-  int nIdx;              /* Number of indices that need updating */
+  Index *pIdx;           /* Iterator variable */
+  int nIdx;              /* Total number of indexes on table (incl. PK) */
   int iCur;              /* VDBE Cursor number of pTab */
   sqlite4 *db;           /* The database structure */
   int *aRegIdx = 0;      /* One register assigned to each index to be updated */
@@ -119,12 +119,8 @@ void sqlite4Update(
 #endif
   int newmask;           /* Mask of NEW.* columns accessed by BEFORE triggers */
 
-  /* Register Allocations */
   int regOldKey;                  /* Register containing the original PK */
-
-  int regNewRowid;       /* The new rowid */
-  int regNew;            /* Content of the NEW.* table in triggers */
-
+  int regNew;                     /* Content of the NEW.* table in triggers */
   int regOld = 0;                 /* Content of OLD.* table in triggers */
   int regKeySet = 0;              /* Register containing KeySet object */
   Index *pPk = 0;                 /* The primary key index of this table */

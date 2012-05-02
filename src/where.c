@@ -1673,7 +1673,6 @@ static int isSortingIndex(
 
     Expr *pExpr;       /* The expression of the ORDER BY pTerm */
     CollSeq *pColl;    /* The collating sequence of pExpr */
-    int termSortOrder; /* Sort order for this term */
     int iColumn;       /* The i-th column of the index.  -1 for rowid */
     const char *zColl; /* Name of the collating sequence for i-th index term */
 
@@ -2066,11 +2065,8 @@ static void constructAutomaticIndex(
   int regRecord;              /* Register holding an index record */
   int regKey;                 /* Register holding an index key */
   int n;                      /* Column counter */
-  int i;                      /* Loop counter */
-  int mxBitCol;               /* Maximum column in pSrc->colUsed */
   CollSeq *pColl;             /* Collating sequence to on a column */
   Bitmask idxCols;            /* Bitmap of columns used for indexing */
-  Bitmask extraCols;          /* Bitmap of additional columns */
   int iPkCur = pLevel->iTabCur;   /* Primary key cursor to read data from */
 
   /* Generate code to skip over the creation and initialization of the
@@ -3502,7 +3498,6 @@ static int codeEqualityTerm(
     **     of the ephemeral index.
     */
     sqlite4 *db = pParse->db;
-    int eType;
     int iTab;
     int iCol;                     /* Column to read from cursor iTab */
     struct InLoop *pIn;
@@ -3843,8 +3838,7 @@ static Bitmask codeOneLoopStart(
   struct SrcList_item *pTabItem;  /* FROM clause term being coded */
   int addrBrk;                    /* Jump here to break out of the loop */
   int addrCont;                   /* Jump here to continue with next cycle */
-  int iRowidReg = 0;        /* Rowid is stored in this register, if not zero */
-  int iReleaseReg = 0;      /* Temp register to free before returning */
+  int iReleaseReg = 0;            /* Temp register to free before returning */
 
   pParse = pWInfo->pParse;
   v = pParse->pVdbe;
@@ -4134,8 +4128,9 @@ static Bitmask codeOneLoopStart(
 
       /* Now compute an end-key using OP_MakeIdxKey */
       regEndKey = ++pParse->nMem;
-      sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iIdxCur, regBase, regEndKey);
-      sqlite4VdbeChangeP4(v, -1, (char *)nConstraint, P4_INT32);
+      sqlite4VdbeAddOp4Int(
+          v, OP_MakeIdxKey, iIdxCur, regBase, regEndKey, nConstraint
+      );
     }
 
     sqlite4DbFree(pParse->db, zStartAff);
@@ -4312,7 +4307,6 @@ static Bitmask codeOneLoopStart(
               pParse, pOrTab, &pSubWInfo->a[0], iLevel, pLevel->iFrom, 0
           );
           if( (wctrlFlags & WHERE_DUPLICATES_OK)==0 ){
-            int iSet = ((ii==pOrWc->nTerm-1)?-1:ii);
             int addrJump;
             sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regKey);
             addrJump = sqlite4VdbeCurrentAddr(v) + 2;

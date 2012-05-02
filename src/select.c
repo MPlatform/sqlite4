@@ -3133,6 +3133,7 @@ static u8 minMaxQuery(Select *p){
 ** does match this pattern, then a pointer to the Table object representing
 ** <tbl> is returned. Otherwise, 0 is returned.
 */
+#ifndef SQLITE_OMIT_BTREECOUNT
 static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
   Table *pTab;
   Expr *pExpr;
@@ -3155,6 +3156,7 @@ static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
 
   return pTab;
 }
+#endif
 
 /*
 ** If the source-list item passed as an argument was augmented with an
@@ -3312,7 +3314,6 @@ static int selectExpander(Walker *pWalker, Select *p){
     */
     struct ExprList_item *a = pEList->a;
     ExprList *pNew = 0;
-    int flags = pParse->db->flags;
 
     for(k=0; k<pEList->nExpr; k++){
       Expr *pE = a[k].pExpr;
@@ -3669,6 +3670,7 @@ static void updateAccumulator(Parse *pParse, AggInfo *pAggInfo){
 ** Add a single OP_Explain instruction to the VDBE to explain a simple
 ** count(*) query ("SELECT count(*) FROM pTab").
 */
+#ifndef SQLITE_OMIT_BTREECOUNT
 #ifndef SQLITE_OMIT_EXPLAIN
 static void explainSimpleCount(
   Parse *pParse,                  /* Parse context */
@@ -3690,6 +3692,7 @@ static void explainSimpleCount(
 #else
 # define explainSimpleCount(a,b,c)
 #endif
+#endif  /* ifndef SQLITE_OMIT_BTREECOUNT */
 
 /*
 ** Generate code for the SELECT statement given in the p argument.  
@@ -4083,8 +4086,6 @@ int sqlite4Select(
     int iAbortFlag;     /* Mem address which causes query abort if positive */
     int groupBySort;    /* Rows come from source in GROUP BY order */
     int addrEnd;        /* End of processing for this SELECT */
-    int sortPTab = 0;   /* Pseudotable used to decode sorting results */
-    int sortOut = 0;    /* Output register from the sorter */
 
     /* Remove any and all aliases between the result set and the
     ** GROUP BY clause.

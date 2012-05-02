@@ -2787,7 +2787,6 @@ void sqlite4ExprCodeIsNullJump(Vdbe*, const Expr*, int, int);
 int sqlite4ExprNeedsNoAffinityChange(const Expr*, char);
 void sqlite4GenerateRowDelete(Parse*, Table*, int, int, int, Trigger *, int);
 void sqlite4GenerateRowIndexDelete(Parse*, Table*, int, int, int*);
-int sqlite4GenerateIndexKey(Parse*, Index*, int, int, int, int);
 void sqlite4EncodeIndexKey(Parse *, Index *, int, Index *, int, int, int);
 void sqlite4GenerateConstraintChecks(Parse*,Table*,int,int,
                                      int*,int,int,int,int,int*);

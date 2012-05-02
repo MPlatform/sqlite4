@@ -349,6 +349,7 @@ static KVMemNode *kvmemNewNode(
 ** headed by node pSub. This is used to assert() that no node structure
 ** is linked into the tree more than once.
 */
+#if 0
 static int countNodeOccurences(KVMemNode *pSub, KVMemNode *pNode){
   int iRet = (pSub==pNode);
   if( pSub ){
@@ -357,6 +358,7 @@ static int countNodeOccurences(KVMemNode *pSub, KVMemNode *pNode){
   }
   return iRet;
 }
+#endif
 
 /*
 ** Check that all the pUp pointers in the sub-tree headed by pSub are
@@ -785,7 +787,7 @@ static int kvmemSeek(
       if( direction==0 ){
         rc = SQLITE_NOTFOUND;
       }else{ 
-        if( (direction>0 ? kvmemNextEntry : kvmemPrevEntry)(pCur) ){
+        if( (direction>0 ? kvmemNextEntry : kvmemPrevEntry)(pKVCursor) ){
           rc = SQLITE_NOTFOUND;
         }else{
           rc = SQLITE_INEXACT;

@@ -1660,7 +1660,6 @@ int sqlite4VdbeSetColName(
 */
 static int vdbeCommit(sqlite4 *db, Vdbe *p){
   int i;
-  int nTrans = 0;  /* Number of databases with an active write-transaction */
   int rc = SQLITE_OK;
   int needXcommit = 0;
 

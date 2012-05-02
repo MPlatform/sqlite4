@@ -35,6 +35,7 @@ struct PosixFile {
 };
 
 static int lsm_ioerr(void){ return LSM_IOERR; }
+static int lsm_cantopen(void){ return LSM_CANTOPEN; }
 
 static int posixOsOpen(
   lsm_env *pEnv,
@@ -53,7 +54,7 @@ static int posixOsOpen(
     if( p->fd<0 ){
       lsm_free(pEnv, p);
       p = 0;
-      rc = lsm_ioerr();
+      rc = lsm_cantopen();
     }
   }
 

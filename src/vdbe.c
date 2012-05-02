@@ -2309,7 +2309,7 @@ case OP_MakeRecord: {
       applyAffinity(pMem, *(zAffinity++), encoding);
     }
     if( pMem->flags&MEM_Zero ){
-      sqlite4VdbeMemExpandBlob(pMem);
+      ExpandBlob(pMem);
     }
   }
 
@@ -2383,7 +2383,6 @@ case OP_Count: {         /* out2-prerelease */
 case OP_Savepoint: {
   int iSave;
   Savepoint *pSave;               /* Savepoint object operated upon */
-  Savepoint *pDel;                /* Iterator used to delete savepoints */
   const char *zSave;              /* Name of savepoint (or NULL for trans.) */
   int nSave;                      /* Size of zSave in bytes */
   int iOp;                        /* SAVEPOINT_XXX operation */
@@ -2539,7 +2538,6 @@ case OP_Transaction: {
 case OP_SetCookie: {       /* in3 */
   Db *pDb;
   u32 v;
-  int n;
 
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   pDb = &db->aDb[pOp->p1];
@@ -2577,11 +2575,9 @@ case OP_SetCookie: {       /* in3 */
 ** invoked.
 */
 case OP_VerifyCookie: {
-  int iMeta;
+  unsigned int iMeta;
   int iGen;
   KVStore *pKV;
-  KVByteArray *aData;
-  KVSize nData;
 
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   pKV = db->aDb[pOp->p1].pKV;
@@ -2852,12 +2848,11 @@ case OP_Close: {
 case OP_SeekPk: {
   VdbeCursor *pPk;                /* Cursor P1 */
   VdbeCursor *pIdx;               /* Cursor P3 */
-  KVByteArray *aKey;              /* Key data from cursor pIdx */
+  KVByteArray const *aKey;        /* Key data from cursor pIdx */
   KVSize nKey;                    /* Size of aKey[] in bytes */
   int nShort;                     /* Size of aKey[] without PK fields */
   KVByteArray *aPkKey;
   KVSize nPkKey;
-  int nVarint;
 
   pPk = p->apCsr[pOp->p1];
   pIdx = p->apCsr[pOp->p3];
@@ -3164,7 +3159,7 @@ case OP_IsUnique: {        /* jump, in3 */
   int dir;
   u64 dummy;
 
-  KVByteArray *aKey;              /* Key read from cursor */
+  KVByteArray const *aKey;        /* Key read from cursor */
   KVSize nKey;                    /* Size of aKey in bytes */
 
   assert( pOp->p4type==P4_INT32 );
@@ -3174,14 +3169,14 @@ case OP_IsUnique: {        /* jump, in3 */
   pOut = (pOp->p4.i==0 ? 0 : &aMem[pOp->p4.i]);
   assert( pOut==0 || (pOut->flags & MEM_Blob) );
 
-  nShort = sqlite4VdbeShortKey(pProbe->z, pProbe->n, 
+  nShort = sqlite4VdbeShortKey((u8 *)pProbe->z, pProbe->n, 
       pC->pKeyInfo->nField - pC->pKeyInfo->nPK
   );
   assert( nShort<=pProbe->n );
   assert( (nShort==pProbe->n)==(pC->pKeyInfo->nPK==0) );
 
   dir = (pC->pKeyInfo->nPK==0 ? 0 : 1);
-  rc = sqlite4KVCursorSeek(pC->pKVCur, pProbe->z, nShort, dir);
+  rc = sqlite4KVCursorSeek(pC->pKVCur, (u8 *)pProbe->z, nShort, dir);
 
   if( rc==SQLITE_OK && pOut ){
     sqlite4VdbeMemCopy(pOut, pProbe);
@@ -3195,7 +3190,7 @@ case OP_IsUnique: {        /* jump, in3 */
       if( nKey<nShort || memcmp(pProbe->z, aKey, nShort) ){
         pc = pOp->p2-1;
       }else if( pOut ){
-        iOut = sqlite4GetVarint64(pOut->z, pOut->n, &dummy);
+        iOut = sqlite4GetVarint64((u8 *)pOut->z, pOut->n, &dummy);
         rc = sqlite4VdbeMemGrow(pOut, iOut+(nKey - nShort), 1);
         if( rc==SQLITE_OK ){
           memcpy(&pOut->z[iOut], &aKey[nShort], (nKey - nShort));
@@ -3269,7 +3264,7 @@ case OP_NewRowid: {           /* out2-prerelease */
   }else if( rc==SQLITE_OK ){
     rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
     if( rc==SQLITE_OK ){
-      n = sqlite4GetVarint64(aKey, nKey, &v);
+      n = sqlite4GetVarint64((u8 *)aKey, nKey, (u64 *)&v);
       if( n==0 ) rc = SQLITE_CORRUPT;
       if( v!=pC->iRoot ) rc = SQLITE_CORRUPT;
     }
@@ -3464,7 +3459,7 @@ case OP_ResetCount: {
 */
 case OP_GrpCompare: {
   VdbeCursor *pC;                 /* Cursor P1 */
-  KVByteArray *aKey;              /* Key from cursor P1 */
+  KVByteArray const *aKey;        /* Key from cursor P1 */
   KVSize nKey;                    /* Size of aKey[] in bytes */
 
   pC = p->apCsr[pOp->p1];
@@ -3788,8 +3783,8 @@ case OP_IdxInsert: {
 
   rc = sqlite4KVStoreReplace(
      pC->pKVCur->pStore,
-     pKey->z, pKey->n,
-     (pData ? pData->z : 0), (pData ? pData->n : 0)
+     (u8 *)pKey->z, pKey->n,
+     (u8 *)(pData ? pData->z : 0), (pData ? pData->n : 0)
   );
 
   break;
@@ -3811,7 +3806,7 @@ case OP_IdxDelete: {
   assert( pC && pC->pKVCur && pC->pKVCur->pStore );
   assert( pKey->flags & MEM_Blob );
 
-  rc = sqlite4KVCursorSeek(pC->pKVCur, pKey->z, pKey->n, 0);
+  rc = sqlite4KVCursorSeek(pC->pKVCur, (u8 *)pKey->z, pKey->n, 0);
   if( rc==SQLITE_OK ){
     rc = sqlite4KVCursorDelete(pC->pKVCur);
   }else if( rc==SQLITE_NOTFOUND ){
@@ -3850,7 +3845,7 @@ case OP_IdxLE:          /* jump */
 case OP_IdxGE:          /* jump */
 case OP_IdxGT: {        /* jump */
   VdbeCursor *pC;                 /* Cursor P1 */
-  KVByteArray *aKey;              /* Key from cursor P1 */
+  KVByteArray const *aKey;        /* Key from cursor P1 */
   KVSize nKey;                    /* Size of aKey[] in bytes */
   Mem *pCmp;                      /* Memory cell to compare index key with */
   int nCmp;                       /* Bytes of data to compare using memcmp() */
@@ -3894,9 +3889,8 @@ case OP_IdxGT: {        /* jump */
 ** See also: Destroy
 */
 case OP_Clear: {
-  sqlite4_uint64 cnt;
   KVCursor *pCur;
-  KVByteArray *aKey;
+  KVByteArray const *aKey;
   KVSize nKey;
   KVSize nProbe;
   KVByteArray aProbe[12];
@@ -4104,7 +4098,6 @@ case OP_Program: {        /* jump */
   Mem *pEnd;              /* Last memory cell in new array */
   VdbeFrame *pFrame;      /* New vdbe frame to execute in */
   SubProgram *pProgram;   /* Sub-program to execute */
-  void *t;                /* Token identifying trigger */
 
   pProgram = pOp->p4.pProgram;
   pRt = &aMem[pOp->p3];

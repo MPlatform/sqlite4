@@ -120,7 +120,6 @@ int sqlite4_db_status(
     */
     case SQLITE_DBSTATUS_CACHE_USED: {
       int totalUsed = 0;
-      int i;
       *pCurrent = totalUsed;
       *pHighwater = 0;
       break;
@@ -195,7 +194,6 @@ int sqlite4_db_status(
     */
     case SQLITE_DBSTATUS_CACHE_HIT:
     case SQLITE_DBSTATUS_CACHE_MISS: {
-      int i;
       int nRet = 0;
       *pHighwater = 0;
       *pCurrent = nRet;

@@ -416,11 +416,11 @@ int sqlite4KVStorePutMeta(
 ** Output binary data for debugging display purposes.
 */
 static void outputBinary(
-  KVByteArray *a,
+  KVByteArray const *a,
   KVSize n,
   const char *zPrefix
 ){
-  int i, j;
+  int i;
   char zOut[80];
   static const char base16[] = "0123456789abcdef";
   memset(zOut, ' ', sizeof(zOut));
@@ -454,7 +454,8 @@ void sqlite4KVStoreDump(KVStore *pStore){
   int nRow = 0;
   KVCursor *pCur;
   KVSize nKey, nData;
-  KVByteArray *aKey, *aData;
+  KVByteArray const *aKey;
+  KVByteArray const *aData;
   static const KVByteArray aProbe[] = { 0x00 };
 
   rc = sqlite4KVStoreOpenCursor(pStore, &pCur);

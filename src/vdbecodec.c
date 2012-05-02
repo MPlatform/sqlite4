@@ -645,7 +645,7 @@ static int encodeOneKeyValue(
 ** removed.
 */
 int sqlite4VdbeShortKey(
-  u8 *aKey,                       /* Buffer containing encoded key */
+  const u8 *aKey,                 /* Buffer containing encoded key */
   int nKey,                       /* Size of buffer aKey[] in bytes */
   int nField                      /* Number of fields */
 ){

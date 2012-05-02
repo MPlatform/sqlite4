@@ -135,6 +135,7 @@ test_suite "src4" -prefix "" -description {
 } -files {
   simple.test 
 
+  attach.test
   autoindex1.test
 
   conflict.test 

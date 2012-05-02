@@ -386,7 +386,7 @@ int sqlite4VdbeEncodeKey(
 );
 int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_int64 v);
 int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);
-int sqlite4VdbeShortKey(u8 *, int, int);
+int sqlite4VdbeShortKey(const u8 *, int, int);
 int sqlite4MemCompare(const Mem*, const Mem*, const CollSeq*);
 int sqlite4VdbeExec(Vdbe*);
 int sqlite4VdbeList(Vdbe*);
@@ -414,6 +414,7 @@ double sqlite4VdbeRealValue(Mem*);
 void sqlite4VdbeIntegerAffinity(Mem*);
 int sqlite4VdbeMemRealify(Mem*);
 int sqlite4VdbeMemNumerify(Mem*);
+void sqlite4VdbeMemSetKeySet(Mem *pMem);
 
 void sqlite4VdbeMemRelease(Mem *p);
 void sqlite4VdbeMemReleaseExternal(Mem *p);

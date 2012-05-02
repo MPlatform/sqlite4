@@ -507,7 +507,6 @@ void sqlite4Insert(
   int nColumn;          /* Number of columns in the data */
   int nHidden = 0;      /* Number of hidden columns if TABLE is virtual */
   int baseCur = 0;      /* VDBE Cursor number for pTab */
-  int keyColumn = -1;   /* Column that is the INTEGER PRIMARY KEY */
   int endOfLoop;        /* Label for the end of the insertion loop */
   int useTempTable = 0; /* Store SELECT results in intermediate table */
   int srcTab = 0;       /* Data comes from this temporary cursor if >=0 */
@@ -521,10 +520,6 @@ void sqlite4Insert(
 
   /* Register allocations */
   int regFromSelect = 0;/* Base register for data coming from SELECT */
-  int regAutoinc = 0;   /* Register holding the AUTOINCREMENT counter */
-  int regRowCount = 0;  /* Memory cell used for the row counter */
-  int regIns;           /* Block of regs holding rowid+data being inserted */
-  int regData;          /* register holding first column to insert */
   int regEof = 0;       /* Register recording end of SELECT data */
   int *aRegIdx = 0;     /* One register allocated to each index */
 
@@ -708,7 +703,6 @@ void sqlite4Insert(
       */
       int regRec;          /* Register to hold packed record */
       int regTempRowid;    /* Register to hold temp table ROWID */
-      int regTempKey;      /* Register to hold key encoded rowid */
       int addrTop;         /* Label "L" */
       int addrIf;          /* Address of jump to M */
 
@@ -1330,7 +1324,7 @@ void sqlite4GenerateConstraintChecks(
       if( regOldKey && pIdx==pPk ){
         sqlite4VdbeAddOp3(v, OP_Eq, regOldKey, iLabel, regKey);
       }
-      sqlite4VdbeAddOp4(v, OP_Blob, nPkRoot, regPk, 0, aPkRoot, nPkRoot);
+      sqlite4VdbeAddOp4(v, OP_Blob, nPkRoot, regPk, 0, (char*)aPkRoot, nPkRoot);
       sqlite4VdbeAddOp4Int(v, OP_IsUnique, iIdx, iLabel, regKey, regPk);
       if( regOldKey && pIdx!=pPk ){
         sqlite4VdbeAddOp3(v, OP_Eq, regOldKey, iLabel, regPk);

@@ -1468,13 +1468,12 @@ Index *sqlite4FindExistingInIndex(Parse *pParse, Expr *pX, int bReqUnique){
 #ifndef SQLITE_OMIT_SUBQUERY
 int sqlite4FindInIndex(Parse *pParse, Expr *pX, int *prNotFound){
   Index *pIdx;
-  Select *p;                            /* SELECT to the right of IN operator */
   int eType = 0;                        /* Type of RHS table. IN_INDEX_* */
   int iTab = pParse->nTab++;            /* Cursor of the RHS table */
-  int mustBeUnique = (prNotFound==0);   /* True if RHS must be unique */
   Vdbe *v = sqlite4GetVdbe(pParse);     /* Virtual machine being coded */
 
   assert( pX->op==TK_IN );
+  assert( prNotFound );
 
   /* Check to see if an existing table or index can be used to
   ** satisfy the query. This is preferable to generating a new 
@@ -1502,16 +1501,8 @@ int sqlite4FindInIndex(Parse *pParse, Expr *pX, int *prNotFound){
     double savedNQueryLoop = pParse->nQueryLoop;
     int rMayHaveNull = 0;
     eType = IN_INDEX_EPH;
-    if( prNotFound ){
-      *prNotFound = rMayHaveNull = ++pParse->nMem;
-      sqlite4VdbeAddOp2(v, OP_Null, 0, *prNotFound);
-    }else{
-      testcase( pParse->nQueryLoop>(double)1 );
-      pParse->nQueryLoop = (double)1;
-      if( pX->pLeft->iColumn<0 && !ExprHasAnyProperty(pX, EP_xIsSelect) ){
-        eType = IN_INDEX_ROWID;
-      }
-    }
+    *prNotFound = rMayHaveNull = ++pParse->nMem;
+    sqlite4VdbeAddOp2(v, OP_Null, 0, *prNotFound);
     sqlite4CodeSubselect(pParse, pX, rMayHaveNull, eType==IN_INDEX_ROWID);
     pParse->nQueryLoop = savedNQueryLoop;
   }
@@ -1654,7 +1645,7 @@ int sqlite4CodeSubselect(
         int i;
         ExprList *pList = pExpr->x.pList;
         struct ExprList_item *pItem;
-        int r1, r2, r3, r4;
+        int r1, r2, r3;
 
         if( !affinity ){
           affinity = SQLITE_AFF_NONE;

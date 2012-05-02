@@ -728,7 +728,6 @@ int lsmTreeInsert(
   int rc = LSM_OK;                /* Return Code */
   TreeKey *pTreeKey;              /* New key-value being inserted */
   int nTreeKey;                   /* Number of bytes allocated at pTreeKey */
-  TreeCursor *pCsr;
 
   assert( nVal>=0 || pVal==0 );
   assert( pTV==&pTree->tvWorking );

@@ -243,19 +243,17 @@ void sqlite4DeleteFrom(
   }
   assert( pTabList->nSrc==1 );
 
-  /* Locate the table which we want to delete. If it is a view, make sure
-  ** that the column names are initialized. */
+  /* Locate the table to delete records from. If it is a view, make sure
+  ** that the column names are initialized.  */
   pTab = sqlite4SrcListLookup(pParse, pTabList);
-  if( pTab==0 )  goto delete_from_cleanup;
+  if( pTab==0 || sqlite4ViewGetColumnNames(pParse, pTab) ){
+    goto delete_from_cleanup;
+  }
   iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
   zDb = db->aDb[iDb].zName;
-  assert( iDb<db->nDb );
 
   /* Figure out if there are any triggers */
   pTrigger = sqlite4TriggersExist(pParse, pTab, TK_DELETE, 0, 0);
-
-  /* If pTab is really a view, make sure it has been initialized. */
-  if( sqlite4ViewGetColumnNames(pParse, pTab) ) goto delete_from_cleanup;
 
   /* Check the table is not read-only. A table is read-only if it is one
   ** of the built-in system tables (e.g. sqlite_master, sqlite_stat) or
@@ -513,12 +511,17 @@ void sqlite4GenerateRowDelete(
   sqlite4VdbeResolveLabel(v, iLabel);
 }
 
+/*
+** Generate code that will assemble an index key and put it in register
+** regOut. The key is for use with index pIdx. 
+*/
 void sqlite4EncodeIndexKey(
-  Parse *pParse,
-  Index *pPk, int iPkCsr,
-  Index *pIdx, int iIdxCsr,
+  Parse *pParse,                  /* Parse context */
+  Index *pPk,                     /* Primary key index (or NULL) */ 
+  int iPkCsr,                     /* Cursor open on primary key */
+  Index *pIdx, int iIdxCsr,       /* Index and cursor to create a key for */
   int bAddSeq,                    /* True to append a sequence number */
-  int regOut
+  int regOut                      /* Output register */
 ){
   Vdbe *v = pParse->pVdbe;        /* VM to write code to */
   int nTmpReg;                    /* Number of temp registers required */
@@ -605,54 +608,3 @@ void sqlite4GenerateRowIndexDelete(
   sqlite4ReleaseTempReg(pParse, regKey);
 }
 
-/*
-** Generate code that will assemble an index key and put it in register
-** regOut.  The key with be for index pIdx which is an index on pTab.
-** iCur is the index of a cursor open on the pTab table and pointing to
-** the entry that needs indexing.
-**
-** Return a register number which is the first in a block of
-** registers that holds the elements of the index key.  The
-** block of registers has already been deallocated by the time
-** this routine returns.
-*/
-int sqlite4GenerateIndexKey(
-  Parse *pParse,     /* Parsing context */
-  Index *pIdx,       /* The index for which to generate a key */
-  int iCur,          /* Cursor number for the pIdx->pTable table */
-  int regOut,        /* Write the new index key to this register */
-  int doMakeRec,     /* Run the OP_MakeRecord instruction if true */
-  int iIdxCur        /* Index cursor number.  Only needed with doMakeRec */
-){
-  Vdbe *v = pParse->pVdbe;
-  int j;
-  Table *pTab = pIdx->pTable;
-  int regBase;
-  int nCol;
-
-  nCol = pIdx->nColumn;
-  regBase = sqlite4GetTempRange(pParse, nCol+1);
-  sqlite4VdbeAddOp2(v, OP_Rowid, iCur, regBase+nCol);
-  for(j=0; j<nCol; j++){
-    int idx = pIdx->aiColumn[j];
-    if( idx<0 ){
-      sqlite4VdbeAddOp2(v, OP_SCopy, regBase+nCol, regBase+j);
-    }else{
-      sqlite4VdbeAddOp3(v, OP_Column, iCur, idx, regBase+j);
-      sqlite4ColumnDefault(v, pTab, idx, -1);
-    }
-  }
-  if( doMakeRec ){
-    const char *zAff;
-    if( pTab->pSelect || (pParse->db->flags & SQLITE_IdxRealAsInt)!=0 ){
-      zAff = 0;
-    }else{
-      zAff = sqlite4IndexAffinityStr(v, pIdx);
-    }
-    sqlite4VdbeAddOp2(v, OP_MakeKey, iIdxCur, regOut+1);
-    sqlite4VdbeAddOp3(v, OP_MakeRecord, regBase, nCol+1, regOut);
-    sqlite4VdbeChangeP4(v, -1, zAff, P4_TRANSIENT);
-  }
-  sqlite4ReleaseTempRange(pParse, regBase, nCol+1);
-  return regBase;
-}
