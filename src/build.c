@@ -2641,6 +2641,13 @@ Index *sqlite4CreateIndex(
             pIdx->onError = pIndex->onError;
           }
         }
+
+        /* If this index was to be the PRIMARY KEY, mark the UNIQUE index
+        ** that makes it redundant as the PRIMARY KEY instead.  */
+        if( bPrimaryKey ){
+          assert( pIdx->eIndexType==SQLITE_INDEX_UNIQUE );
+          pIdx->eIndexType = SQLITE_INDEX_PRIMARYKEY;
+        }
         goto exit_create_index;
       }
     }

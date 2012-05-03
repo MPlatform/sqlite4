@@ -1272,6 +1272,7 @@ do_execsql_test 61.2 { SELECT count(*) FROM t2 GROUP BY a } 1
 #   INSERT INTO t1 VALUES(18446744073709551616);
 # }
 
+#-------------------------------------------------------------------------
 reset_db
 do_execsql_test 65.1 {
   CREATE TABLE t1(x);
@@ -1279,14 +1280,40 @@ do_execsql_test 65.1 {
   INSERT INTO t1 VALUES('a');
   INSERT INTO t1 VALUES('b');
   INSERT INTO t1 VALUES('c');
-
   INSERT INTO t2 VALUES('d');
   INSERT INTO t2 VALUES('e');
 }
-
 do_execsql_test 65.2 { SELECT DISTINCT t1.rowid FROM t1 }     {1 2 3}
 do_execsql_test 65.3 { SELECT DISTINCT t1.rowid FROM t1, t2 } {1 2 3}
 
+#-------------------------------------------------------------------------
+# The three CREATE TABLE statements below should be equivalent.
+#
+reset_db
+do_execsql_test 66.1 {
+  CREATE TABLE t1(x, y UNIQUE PRIMARY KEY);
+  CREATE TABLE t2(x, y PRIMARY KEY UNIQUE);
+  CREATE TABLE t3(x, y PRIMARY KEY);
+}
+
+do_execsql_test 66.2 {
+  PRAGMA table_info=t1;
+} {
+  0 x {} 0 {} 0 
+  1 y {} 1 {} 1
+}
+do_execsql_test 66.3 {
+  PRAGMA table_info=t2;
+} {
+  0 x {} 0 {} 0 
+  1 y {} 1 {} 1
+}
+do_execsql_test 66.4 {
+  PRAGMA table_info=t3;
+} {
+  0 x {} 0 {} 0 
+  1 y {} 1 {} 1
+}
 
 finish_test
 

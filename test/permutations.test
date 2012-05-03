@@ -151,7 +151,7 @@ test_suite "src4" -prefix "" -description {
   collate6.test collate7.test collate8.test collate9.test collateA.test
 
   delete.test delete2.test
-  distinct.test
+  distinct.test distinctagg.test
   fkey1.test fkey2.test fkey3.test fkey4.test
 
   insert.test insert2.test insert3.test
