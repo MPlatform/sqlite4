@@ -829,12 +829,6 @@ struct sqlite4 {
   void *pTraceArg;                          /* Argument to the trace function */
   void (*xProfile)(void*,const char*,u64);  /* Profiling function */
   void *pProfileArg;                        /* Argument to profile function */
-  void *pCommitArg;                 /* Argument to xCommitCallback() */   
-  int (*xCommitCallback)(void*);    /* Invoked at every commit. */
-  void *pRollbackArg;               /* Argument to xRollbackCallback() */   
-  void (*xRollbackCallback)(void*); /* Invoked at every commit. */
-  void *pUpdateArg;
-  void (*xUpdateCallback)(void*,int, const char*,const char*,sqlite_int64);
 #ifndef SQLITE_OMIT_WAL
   int (*xWalCallback)(void *, sqlite4 *, const char *, int);
   void *pWalArg;

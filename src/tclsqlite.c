@@ -111,7 +111,6 @@ typedef struct SqliteDb SqliteDb;
 struct SqliteDb {
   sqlite4 *db;               /* The "real" database structure. MUST BE FIRST */
   Tcl_Interp *interp;        /* The interpreter used for this database */
-  char *zCommit;             /* The commit hook callback routine */
   char *zTrace;              /* The trace callback routine */
   char *zProfile;            /* The profile callback routine */
   char *zProgress;           /* The progress callback routine */
@@ -119,9 +118,6 @@ struct SqliteDb {
   int disableAuth;           /* Disable the authorizer if it exists */
   char *zNull;               /* Text to substitute for an SQL NULL value */
   SqlFunc *pFunc;            /* List of SQL functions */
-  Tcl_Obj *pUpdateHook;      /* Update hook script (if any) */
-  Tcl_Obj *pRollbackHook;    /* Rollback hook script (if any) */
-  Tcl_Obj *pWalHook;         /* WAL hook script (if any) */
   Tcl_Obj *pUnlockNotify;    /* Unlock notify script (if any) */
   SqlCollate *pCollate;      /* List of SQL collation functions */
   int rc;                    /* Return code of most recent sqlite4_exec() */
@@ -258,15 +254,6 @@ static void DbDeleteCmd(void *db){
   if( pDb->zNull ){
     Tcl_Free(pDb->zNull);
   }
-  if( pDb->pUpdateHook ){
-    Tcl_DecrRefCount(pDb->pUpdateHook);
-  }
-  if( pDb->pRollbackHook ){
-    Tcl_DecrRefCount(pDb->pRollbackHook);
-  }
-  if( pDb->pWalHook ){
-    Tcl_DecrRefCount(pDb->pWalHook);
-  }
   if( pDb->pCollateNeeded ){
     Tcl_DecrRefCount(pDb->pCollateNeeded);
   }
@@ -329,60 +316,6 @@ static void DbProfileHandler(void *cd, const char *zSql, sqlite_uint64 tm){
 }
 #endif
 
-/*
-** This routine is called when a transaction is committed.  The
-** TCL script in pDb->zCommit is executed.  If it returns non-zero or
-** if it throws an exception, the transaction is rolled back instead
-** of being committed.
-*/
-static int DbCommitHandler(void *cd){
-  SqliteDb *pDb = (SqliteDb*)cd;
-  int rc;
-
-  rc = Tcl_Eval(pDb->interp, pDb->zCommit);
-  if( rc!=TCL_OK || atoi(Tcl_GetStringResult(pDb->interp)) ){
-    return 1;
-  }
-  return 0;
-}
-
-static void DbRollbackHandler(void *clientData){
-  SqliteDb *pDb = (SqliteDb*)clientData;
-  assert(pDb->pRollbackHook);
-  if( TCL_OK!=Tcl_EvalObjEx(pDb->interp, pDb->pRollbackHook, 0) ){
-    Tcl_BackgroundError(pDb->interp);
-  }
-}
-
-/*
-** This procedure handles wal_hook callbacks.
-*/
-static int DbWalHandler(
-  void *clientData, 
-  sqlite4 *db, 
-  const char *zDb, 
-  int nEntry
-){
-  int ret = SQLITE_OK;
-  Tcl_Obj *p;
-  SqliteDb *pDb = (SqliteDb*)clientData;
-  Tcl_Interp *interp = pDb->interp;
-  assert(pDb->pWalHook);
-
-  p = Tcl_DuplicateObj(pDb->pWalHook);
-  Tcl_IncrRefCount(p);
-  Tcl_ListObjAppendElement(interp, p, Tcl_NewStringObj(zDb, -1));
-  Tcl_ListObjAppendElement(interp, p, Tcl_NewIntObj(nEntry));
-  if( TCL_OK!=Tcl_EvalObjEx(interp, p, 0) 
-   || TCL_OK!=Tcl_GetIntFromObj(interp, Tcl_GetObjResult(interp), &ret)
-  ){
-    Tcl_BackgroundError(interp);
-  }
-  Tcl_DecrRefCount(p);
-
-  return ret;
-}
-
 #if defined(SQLITE_TEST) && defined(SQLITE_ENABLE_UNLOCK_NOTIFY)
 static void setTestUnlockNotifyVars(Tcl_Interp *interp, int iArg, int nArg){
   char zBuf[64];
@@ -409,30 +342,6 @@ static void DbUnlockNotify(void **apArg, int nArg){
   }
 }
 #endif
-
-static void DbUpdateHandler(
-  void *p, 
-  int op,
-  const char *zDb, 
-  const char *zTbl, 
-  sqlite_int64 rowid
-){
-  SqliteDb *pDb = (SqliteDb *)p;
-  Tcl_Obj *pCmd;
-
-  assert( pDb->pUpdateHook );
-  assert( op==SQLITE_INSERT || op==SQLITE_UPDATE || op==SQLITE_DELETE );
-
-  pCmd = Tcl_DuplicateObj(pDb->pUpdateHook);
-  Tcl_IncrRefCount(pCmd);
-  Tcl_ListObjAppendElement(0, pCmd, Tcl_NewStringObj(
-    ( (op==SQLITE_INSERT)?"INSERT":(op==SQLITE_UPDATE)?"UPDATE":"DELETE"), -1));
-  Tcl_ListObjAppendElement(0, pCmd, Tcl_NewStringObj(zDb, -1));
-  Tcl_ListObjAppendElement(0, pCmd, Tcl_NewStringObj(zTbl, -1));
-  Tcl_ListObjAppendElement(0, pCmd, Tcl_NewWideIntObj(rowid));
-  Tcl_EvalObjEx(pDb->interp, pCmd, TCL_EVAL_DIRECT);
-  Tcl_DecrRefCount(pCmd);
-}
 
 static void tclCollateNeeded(
   void *pCtx,
@@ -1362,26 +1271,24 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   static const char *DB_strs[] = {
     "authorizer",         "cache",             "changes",
     "close",              "collate",           "collation_needed",
-    "commit_hook",        "complete",          "copy",
-    "enable_load_extension", "errorcode",         "eval",
-    "exists",             "function",          "interrupt",
-    "last_insert_rowid",  "nullvalue",         "onecolumn",
-    "profile",            "rekey",             "rollback_hook",
-    "status",             "total_changes",     "trace",
-    "transaction",        "unlock_notify",     "update_hook",
-    "version",            "wal_hook",          0
+    "complete",           "copy",              "enable_load_extension", 
+    "errorcode",          "eval",              "exists",             
+    "function",           "interrupt",         "last_insert_rowid",
+    "nullvalue",          "onecolumn",         "profile",
+    "rekey",              "status",            "total_changes",
+    "trace",              "transaction",       "unlock_notify",
+    "version",            0
   };
   enum DB_enum {
     DB_AUTHORIZER,        DB_CACHE,            DB_CHANGES,
     DB_CLOSE,             DB_COLLATE,          DB_COLLATION_NEEDED,
-    DB_COMMIT_HOOK,       DB_COMPLETE,         DB_COPY,
-    DB_ENABLE_LOAD_EXTENSION, DB_ERRORCODE,        DB_EVAL,
-    DB_EXISTS,            DB_FUNCTION,         DB_INTERRUPT,
-    DB_LAST_INSERT_ROWID, DB_NULLVALUE,        DB_ONECOLUMN,
-    DB_PROFILE,           DB_REKEY,            DB_ROLLBACK_HOOK,
-    DB_STATUS,            DB_TOTAL_CHANGES,    DB_TRACE,
-    DB_TRANSACTION,       DB_UNLOCK_NOTIFY,    DB_UPDATE_HOOK,
-    DB_VERSION,           DB_WAL_HOOK,         
+    DB_COMPLETE,          DB_COPY,             DB_ENABLE_LOAD_EXTENSION, 
+    DB_ERRORCODE,         DB_EVAL,             DB_EXISTS,            
+    DB_FUNCTION,          DB_INTERRUPT,        DB_LAST_INSERT_ROWID, 
+    DB_NULLVALUE,         DB_ONECOLUMN,        DB_PROFILE,           
+    DB_REKEY,             DB_STATUS,           DB_TOTAL_CHANGES,    
+    DB_TRACE,             DB_TRANSACTION,      DB_UNLOCK_NOTIFY,
+    DB_VERSION
   };
   /* don't leave trailing commas on DB_enum, it confuses the AIX xlc compiler */
 
@@ -1580,44 +1487,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     pDb->pCollateNeeded = Tcl_DuplicateObj(objv[2]);
     Tcl_IncrRefCount(pDb->pCollateNeeded);
     sqlite4_collation_needed(pDb->db, pDb, tclCollateNeeded);
-    break;
-  }
-
-  /*    $db commit_hook ?CALLBACK?
-  **
-  ** Invoke the given callback just before committing every SQL transaction.
-  ** If the callback throws an exception or returns non-zero, then the
-  ** transaction is aborted.  If CALLBACK is an empty string, the callback
-  ** is disabled.
-  */
-  case DB_COMMIT_HOOK: {
-    if( objc>3 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "?CALLBACK?");
-      return TCL_ERROR;
-    }else if( objc==2 ){
-      if( pDb->zCommit ){
-        Tcl_AppendResult(interp, pDb->zCommit, 0);
-      }
-    }else{
-      char *zCommit;
-      int len;
-      if( pDb->zCommit ){
-        Tcl_Free(pDb->zCommit);
-      }
-      zCommit = Tcl_GetStringFromObj(objv[2], &len);
-      if( zCommit && len>0 ){
-        pDb->zCommit = Tcl_Alloc( len + 1 );
-        memcpy(pDb->zCommit, zCommit, len+1);
-      }else{
-        pDb->zCommit = 0;
-      }
-      if( pDb->zCommit ){
-        pDb->interp = interp;
-        sqlite4_commit_hook(pDb->db, DbCommitHandler, pDb);
-      }else{
-        sqlite4_commit_hook(pDb->db, 0, 0);
-      }
-    }
     break;
   }
 
@@ -2304,53 +2173,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       }
     }
 #endif
-    break;
-  }
-
-  /*
-  **    $db wal_hook ?script?
-  **    $db update_hook ?script?
-  **    $db rollback_hook ?script?
-  */
-  case DB_WAL_HOOK: 
-  case DB_UPDATE_HOOK: 
-  case DB_ROLLBACK_HOOK: {
-
-    /* set ppHook to point at pUpdateHook or pRollbackHook, depending on 
-    ** whether [$db update_hook] or [$db rollback_hook] was invoked.
-    */
-    Tcl_Obj **ppHook; 
-    if( choice==DB_UPDATE_HOOK ){
-      ppHook = &pDb->pUpdateHook;
-    }else if( choice==DB_WAL_HOOK ){
-      ppHook = &pDb->pWalHook;
-    }else{
-      ppHook = &pDb->pRollbackHook;
-    }
-
-    if( objc!=2 && objc!=3 ){
-       Tcl_WrongNumArgs(interp, 2, objv, "?SCRIPT?");
-       return TCL_ERROR;
-    }
-    if( *ppHook ){
-      Tcl_SetObjResult(interp, *ppHook);
-      if( objc==3 ){
-        Tcl_DecrRefCount(*ppHook);
-        *ppHook = 0;
-      }
-    }
-    if( objc==3 ){
-      assert( !(*ppHook) );
-      if( Tcl_GetCharLength(objv[2])>0 ){
-        *ppHook = objv[2];
-        Tcl_IncrRefCount(*ppHook);
-      }
-    }
-
-    sqlite4_update_hook(pDb->db, (pDb->pUpdateHook?DbUpdateHandler:0), pDb);
-    sqlite4_rollback_hook(pDb->db,(pDb->pRollbackHook?DbRollbackHandler:0),pDb);
-    sqlite4_wal_hook(pDb->db,(pDb->pWalHook?DbWalHandler:0),pDb);
-
     break;
   }
 

@@ -3305,7 +3305,7 @@ case OP_NewRowid: {           /* out2-prerelease */
 ** is part of an INSERT operation.  The difference is only important to
 ** the update hook.
 **
-** Parameter P4 may point to a string containing the table-name, or
+** Parameter P4 may point to a string containing the table-name, or 
 ** may be NULL. If it is not NULL, then the update-hook 
 ** (sqlite4.xUpdateCallback) is invoked following a successful insert.
 **
@@ -3366,19 +3366,10 @@ case OP_InsertInt: {
   rc = sqlite4KVStoreReplace(pC->pKVCur->pStore, aKey, n,
                              (const KVByteArray*)pData->z, pData->n);
 
-  /* Invoke the update-hook if required. */
-  if( rc==SQLITE_OK && db->xUpdateCallback && pOp->p4.z ){
-    zDb = db->aDb[pC->iDb].zName;
-    zTbl = pOp->p4.z;
-    op = ((pOp->p5 & OPFLAG_ISUPDATE) ? SQLITE_UPDATE : SQLITE_INSERT);
-    assert( pC->isTable );
-    db->xUpdateCallback(db->pUpdateArg, op, zDb, zTbl, iKey);
-    assert( pC->iDb>=0 );
-  }
   break;
 }
 
-/* Opcode: Delete P1 P2 * P4 *
+/* Opcode: Delete P1 P2 * * *
 **
 ** Delete the record at which the P1 cursor is currently pointing.
 **
@@ -3390,41 +3381,14 @@ case OP_InsertInt: {
 ** If the OPFLAG_NCHANGE flag of P2 is set, then the row change count is
 ** incremented (otherwise not).
 **
-** P1 must not be pseudo-table.  It has to be a real table with
-** multiple rows.
-**
-** If P4 is not NULL, then it is the name of the table that P1 is
-** pointing to.  The update hook will be invoked, if it exists.
-** If P4 is not NULL then the P1 cursor must have been positioned
-** using OP_NotFound prior to invoking this opcode.
+** P1 must not be pseudo-table. It has to be a real table.
 */
 case OP_Delete: {
-  i64 iKey;
   VdbeCursor *pC;
-
-  iKey = 0;
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
-
-  /* If the update-hook will be invoked, set iKey to the rowid of the
-  ** row being deleted.
-  */
-  if( db->xUpdateCallback && pOp->p4.z ){
-    assert( pC->isTable );
-    assert( pC->rowidIsValid );  /* lastRowid set by previous OP_NotFound */
-    iKey = pC->lastRowid;
-  }
-
   rc = sqlite4KVCursorDelete(pC->pKVCur);
-
-  /* Invoke the update-hook if required. */
-  if( rc==SQLITE_OK && db->xUpdateCallback && pOp->p4.z ){
-    const char *zDb = db->aDb[pC->iDb].zName;
-    const char *zTbl = pOp->p4.z;
-    db->xUpdateCallback(db->pUpdateArg, SQLITE_DELETE, zDb, zTbl, iKey);
-    assert( pC->iDb>=0 );
-  }
   if( pOp->p2 & OPFLAG_NCHANGE ) p->nChange++;
   break;
 }

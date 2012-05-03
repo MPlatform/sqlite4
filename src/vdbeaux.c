@@ -1698,7 +1698,6 @@ static int countSavepoints(sqlite4 *db){
 */
 int sqlite4VdbeRollback(sqlite4 *db, int iLevel){
   int i;
-  int bOpen = 0;
   assert( sqlite4_mutex_held(db->mutex) );
   assert( db->nSavepoint==countSavepoints(db) );
 
@@ -1707,7 +1706,6 @@ int sqlite4VdbeRollback(sqlite4 *db, int iLevel){
   for(i=0; i<db->nDb; i++){
     KVStore *pKV = db->aDb[i].pKV;
     if( pKV && pKV->iTransLevel>=iLevel ){
-      if( pKV->iTransLevel>1 ) bOpen = 1;
       sqlite4KVStoreRollback(pKV, iLevel);
     }
   }
@@ -1720,10 +1718,6 @@ int sqlite4VdbeRollback(sqlite4 *db, int iLevel){
     sqlite4ExpirePreparedStatements(db);
     sqlite4ResetInternalSchema(db, -1);
     if( iLevel>2 ) db->flags |= SQLITE_InternChanges;
-  }
-
-  if( iLevel<=1 && db->xRollbackCallback && (bOpen || db->pSavepoint) ){
-    db->xRollbackCallback(db->pRollbackArg);
   }
 
   /* Free elements from the db->pSavepoint list. Restore the deferred FK
@@ -1745,18 +1739,6 @@ int sqlite4VdbeCommit(sqlite4 *db, int iLevel){
   assert( sqlite4_mutex_held(db->mutex) );
   assert( db->nSavepoint==countSavepoints(db) );
   assert( iLevel>1 || db->nDeferredCons==0 );
-
-  /* Invoke the database commit hook if one is defined and at least one
-  ** backend has an open write transaction.  */
-  if( iLevel<=1 && db->xCommitCallback ){
-    for(i=0; i<db->nDb; i++){
-      KVStore *pKV = db->aDb[i].pKV;
-      if( pKV && pKV->iTransLevel>iLevel ){
-        if( db->xCommitCallback(db->pCommitArg) ) rc = SQLITE_CONSTRAINT;
-        break;
-      }
-    }
-  }
 
   /* Invoke the xCommit() hook on all backends. */
   for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
