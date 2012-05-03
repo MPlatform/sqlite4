@@ -36,7 +36,7 @@ foreach x {
   0x7fffffffff
   0x7fffffffffff
   0x7fffffffffffff
-  0x7fffffffffffffff
+  0x7ffffffffffffff
 } {
   set x [expr {wide($x)}]
   set boundarynum($x) 1
@@ -110,7 +110,7 @@ set nums2 [scramble [array names boundarynum]]
 set tname boundary1
 puts "do_test $tname-1.1 \173"
 puts "  db eval \173"
-puts "    CREATE TABLE t1(a,x);"
+puts "    CREATE TABLE t1(oid INTEGER PRIMARY KEY,a,x);"
 set a 0
 foreach r $nums1 {
   incr a
@@ -130,7 +130,7 @@ puts "do_test $tname-1.2 \173"
 puts "  db eval \173"
 puts "    SELECT count(*) FROM t1"
 puts "  \175"
-puts "\175 {64}"
+puts "\175 {70}"
 
 set nums3 $nums2
 lappend nums3 9.22337303685477580800e+18
@@ -147,17 +147,17 @@ foreach r $nums3 {
     set r0 $r.0
     puts "do_test $tname-2.$i.1 \173"
     puts "  db eval \173"
-    puts "    SELECT * FROM t1 WHERE rowid=$r"
+    puts "    SELECT a, x FROM t1 WHERE oid=$r"
     puts "  \175"
     puts "\175 {$a $x}"
     puts "do_test $tname-2.$i.2 \173"
     puts "  db eval \173"
-    puts "    SELECT rowid, a FROM t1 WHERE x='$x'"
+    puts "    SELECT oid, a FROM t1 WHERE x='$x'"
     puts "  \175"
     puts "\175 {$r $a}"
     puts "do_test $tname-2.$i.3 \173"
     puts "  db eval \173"
-    puts "    SELECT rowid, x FROM t1 WHERE a=$a"
+    puts "    SELECT oid, x FROM t1 WHERE a=$a"
     puts "  \175"
     puts "\175 {$r $x}"
   }
@@ -175,14 +175,14 @@ foreach r $nums3 {
     }
     puts "do_test $tname-2.$i.$subno.1 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r ORDER BY a"
+    puts "    SELECT a FROM t1 WHERE oid $op $r ORDER BY a"
     puts "  \175"
     puts "\175 {[sort $aset]}"
   
     ################################################################ 2.x.y.2
     puts "do_test $tname-2.$i.$subno.2 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r ORDER BY a DESC"
+    puts "    SELECT a FROM t1 WHERE oid $op $r ORDER BY a DESC"
     puts "  \175"
     puts "\175 {[reverse [sort $aset]]}"
   
@@ -193,7 +193,7 @@ foreach r $nums3 {
     }
     puts "do_test $tname-2.$i.$subno.3 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r ORDER BY rowid"
+    puts "    SELECT a FROM t1 WHERE oid $op $r ORDER BY oid"
     puts "  \175"
     puts "\175 {$aset}"
   
@@ -204,7 +204,7 @@ foreach r $nums3 {
     }
     puts "do_test $tname-2.$i.$subno.4 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r ORDER BY rowid DESC"
+    puts "    SELECT a FROM t1 WHERE oid $op $r ORDER BY oid DESC"
     puts "  \175"
     puts "\175 {$aset}"
   
@@ -220,7 +220,7 @@ foreach r $nums3 {
     }
     puts "do_test $tname-2.$i.$subno.5 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r ORDER BY x"
+    puts "    SELECT a FROM t1 WHERE oid $op $r ORDER BY x"
     puts "  \175"
     puts "\175 {$aset}"
   
@@ -238,7 +238,7 @@ foreach r $nums3 {
     }
     puts "do_test $tname-2.$i.$subno.10 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r0 ORDER BY rowid"
+    puts "    SELECT a FROM t1 WHERE oid $op $r0 ORDER BY oid"
     puts "  \175"
     puts "\175 {$aset}"
   
@@ -249,7 +249,7 @@ foreach r $nums3 {
     }
     puts "do_test $tname-2.$i.$subno.11 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r0 ORDER BY rowid DESC"
+    puts "    SELECT a FROM t1 WHERE oid $op $r0 ORDER BY oid DESC"
     puts "  \175"
     puts "\175 {$aset}"
 
@@ -267,7 +267,7 @@ foreach r $nums3 {
     }
     puts "do_test $tname-2.$i.$subno.12 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r5 ORDER BY rowid"
+    puts "    SELECT a FROM t1 WHERE oid $op $r5 ORDER BY oid"
     puts "  \175"
     puts "\175 {$aset}"
   
@@ -278,7 +278,7 @@ foreach r $nums3 {
     }
     puts "do_test $tname-2.$i.$subno.13 \173"
     puts "  db eval \173"
-    puts "    SELECT a FROM t1 WHERE rowid $op $r5 ORDER BY rowid DESC"
+    puts "    SELECT a FROM t1 WHERE oid $op $r5 ORDER BY oid DESC"
     puts "  \175"
     puts "\175 {$aset}"
   }
