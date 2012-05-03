@@ -135,8 +135,15 @@ test_suite "src4" -prefix "" -description {
 } -files {
   simple.test 
 
+  aggerror.test
   attach.test
   autoindex1.test
+  badutf.test
+  between.test
+  bigrow.test
+  bind.test
+  bindxfer.test
+  boundary1.test boundary4.test
 
   conflict.test 
 
@@ -144,6 +151,7 @@ test_suite "src4" -prefix "" -description {
   collate6.test collate7.test collate8.test collate9.test collateA.test
 
   delete.test delete2.test
+  distinct.test
   fkey1.test fkey2.test fkey3.test fkey4.test
 
   insert.test insert2.test insert3.test
@@ -172,7 +180,9 @@ test_suite "veryquick" -prefix "" -description {
   This test suite is the same as the "quick" tests, except that some files
   that test malloc and IO errors are omitted.
 } -files [
-  test_set $allquicktests -exclude *malloc* *ioerr* *fault*
+  test_set $allquicktests -exclude *malloc* *ioerr* *fault* \
+    boundary3.test busy.test cache.test capi* corrupt*      \
+    date.test dbstatus.test
 ]
 
 test_suite "valgrind" -prefix "" -description {

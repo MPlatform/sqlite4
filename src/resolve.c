@@ -117,13 +117,15 @@ static int nameInUsingClause(IdList *pUsing, const char *zCol){
 
 /*
 ** Return true if table pTab has an implicit primary key, and zCol points
-** to a column name that resolves to the implity primary key (i.e. "rowid").
+** to a column name that resolves to the implicit primary key (i.e. "rowid").
 */
 int isRowidReference(Table *pTab, const char *zCol){
   int ret = 0;
   if( 0==sqlite4StrICmp(zCol, "ROWID") ){
+    /* If the call to FindPrimaryKey() returns NULL, then pTab must be a
+    ** sub-select or a view. Neither of these have an IPK.  */
     Index *pPk = sqlite4FindPrimaryKey(pTab, 0);
-    if( pPk->aiColumn[0]==-1 ) ret = 1;
+    if( pPk && pPk->aiColumn[0]==-1 ) ret = 1;
   }
   return ret;
 }

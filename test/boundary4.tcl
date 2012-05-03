@@ -35,7 +35,7 @@ foreach x {
   0x7fffffffff
   0x7fffffffffff
   0x7fffffffffffff
-  0x7fffffffffffffff
+  0x7ffffffffffffff
 } {
   set x [expr {wide($x)}]
   set boundarynum($x) 1
@@ -109,7 +109,7 @@ set nums2 [scramble [array names boundarynum]]
 set tname boundary4
 puts "do_test $tname-1.1 \173"
 puts "  db eval \173"
-puts "    CREATE TABLE t1(a,x);"
+puts "    CREATE TABLE t1(oid PRIMARY KEY, a,x);"
 set a 0
 set all_rowid {}
 set all_a {}
@@ -149,192 +149,192 @@ set ans {}
 foreach r [sort $all_rowid] {
   lappend ans $r $t1ra($r) $t1rx($r)
 }
-maketest 1.3 {SELECT rowid, a, x FROM t1 ORDER BY +rowid} $ans
-maketest 1.4 {SELECT rowid, a, x FROM t1 ORDER BY rowid} $ans
+maketest 1.3 {SELECT oid, a, x FROM t1 ORDER BY +oid} $ans
+maketest 1.4 {SELECT oid, a, x FROM t1 ORDER BY oid} $ans
 
 set ans {}
 foreach r [reverse [sort $all_rowid]] {
   lappend ans $r $t1ra($r) $t1rx($r)
 }
-maketest 1.5 {SELECT rowid, a, x FROM t1 ORDER BY +rowid DESC} $ans
-maketest 1.6 {SELECT rowid, a, x FROM t1 ORDER BY rowid DESC} $ans
+maketest 1.5 {SELECT oid, a, x FROM t1 ORDER BY +oid DESC} $ans
+maketest 1.6 {SELECT oid, a, x FROM t1 ORDER BY oid DESC} $ans
 
 set ans {}
 foreach a [sort $all_a] {
   set r $t1ar($a)
   lappend ans $r $a $t1rx($r)
 }
-maketest 1.7 {SELECT rowid, a, x FROM t1 ORDER BY +a} $ans
-maketest 1.8 {SELECT rowid, a, x FROM t1 ORDER BY a} $ans
+maketest 1.7 {SELECT oid, a, x FROM t1 ORDER BY +a} $ans
+maketest 1.8 {SELECT oid, a, x FROM t1 ORDER BY a} $ans
 
 set ans {}
 foreach a [reverse [sort $all_a]] {
   set r $t1ar($a)
   lappend ans $r $a $t1rx($r)
 }
-maketest 1.9 {SELECT rowid, a, x FROM t1 ORDER BY +a DESC} $ans
-maketest 1.10 {SELECT rowid, a, x FROM t1 ORDER BY a DESC} $ans
+maketest 1.9 {SELECT oid, a, x FROM t1 ORDER BY +a DESC} $ans
+maketest 1.10 {SELECT oid, a, x FROM t1 ORDER BY a DESC} $ans
 
 set ans {}
 foreach x [sort $all_x] {
   set r $t1xr($x)
   lappend ans $r $t1ra($r) $x
 }
-maketest 1.11 {SELECT rowid, a, x FROM t1 ORDER BY +x} $ans
-maketest 1.12 {SELECT rowid, a, x FROM t1 ORDER BY x} $ans
+maketest 1.11 {SELECT oid, a, x FROM t1 ORDER BY +x} $ans
+maketest 1.12 {SELECT oid, a, x FROM t1 ORDER BY x} $ans
 
 set ans {}
 foreach x [reverse [sort $all_x]] {
   set r $t1xr($x)
   lappend ans $r $t1ra($r) $x
 }
-maketest 1.13 {SELECT rowid, a, x FROM t1 ORDER BY +x DESC} $ans
-maketest 1.14 {SELECT rowid, a, x FROM t1 ORDER BY x DESC} $ans
+maketest 1.13 {SELECT oid, a, x FROM t1 ORDER BY +x DESC} $ans
+maketest 1.14 {SELECT oid, a, x FROM t1 ORDER BY x DESC} $ans
 
-maketest 2.1 {UPDATE t1 SET rowid=a, a=rowid} {}
+maketest 2.1 {UPDATE t1 SET oid=a, a=oid} {}
 
 set ans {}
 foreach r [sort $all_rowid] {
   lappend ans $r $t1ra($r) $t1rx($r)
 }
-maketest 2.3 {SELECT a, rowid, x FROM t1 ORDER BY +a} $ans
-maketest 2.4 {SELECT a, rowid, x FROM t1 ORDER BY a} $ans
+maketest 2.3 {SELECT a, oid, x FROM t1 ORDER BY +a} $ans
+maketest 2.4 {SELECT a, oid, x FROM t1 ORDER BY a} $ans
 
 set ans {}
 foreach r [reverse [sort $all_rowid]] {
   lappend ans $r $t1ra($r) $t1rx($r)
 }
-maketest 2.5 {SELECT a, rowid, x FROM t1 ORDER BY +a DESC} $ans
-maketest 2.6 {SELECT a, rowid, x FROM t1 ORDER BY a DESC} $ans
+maketest 2.5 {SELECT a, oid, x FROM t1 ORDER BY +a DESC} $ans
+maketest 2.6 {SELECT a, oid, x FROM t1 ORDER BY a DESC} $ans
 
 set ans {}
 foreach a [sort $all_a] {
   set r $t1ar($a)
   lappend ans $r $a $t1rx($r)
 }
-maketest 2.7 {SELECT a, rowid, x FROM t1 ORDER BY +rowid} $ans
-maketest 2.8 {SELECT a, rowid, x FROM t1 ORDER BY rowid} $ans
+maketest 2.7 {SELECT a, oid, x FROM t1 ORDER BY +oid} $ans
+maketest 2.8 {SELECT a, oid, x FROM t1 ORDER BY oid} $ans
 
 set ans {}
 foreach a [reverse [sort $all_a]] {
   set r $t1ar($a)
   lappend ans $r $a $t1rx($r)
 }
-maketest 2.9 {SELECT a, rowid, x FROM t1 ORDER BY +rowid DESC} $ans
-maketest 2.10 {SELECT a, rowid, x FROM t1 ORDER BY rowid DESC} $ans
+maketest 2.9 {SELECT a, oid, x FROM t1 ORDER BY +oid DESC} $ans
+maketest 2.10 {SELECT a, oid, x FROM t1 ORDER BY oid DESC} $ans
 
 set ans {}
 foreach x [sort $all_x] {
   set r $t1xr($x)
   lappend ans $r $t1ra($r) $x
 }
-maketest 2.11 {SELECT a, rowid, x FROM t1 ORDER BY +x} $ans
-maketest 2.12 {SELECT a, rowid, x FROM t1 ORDER BY x} $ans
+maketest 2.11 {SELECT a, oid, x FROM t1 ORDER BY +x} $ans
+maketest 2.12 {SELECT a, oid, x FROM t1 ORDER BY x} $ans
 
 set ans {}
 foreach x [reverse [sort $all_x]] {
   set r $t1xr($x)
   lappend ans $r $t1ra($r) $x
 }
-maketest 2.13 {SELECT a, rowid, x FROM t1 ORDER BY +x DESC} $ans
-maketest 2.14 {SELECT a, rowid, x FROM t1 ORDER BY x DESC} $ans
+maketest 2.13 {SELECT a, oid, x FROM t1 ORDER BY +x DESC} $ans
+maketest 2.14 {SELECT a, oid, x FROM t1 ORDER BY x DESC} $ans
 
-maketest 3.1 {UPDATE t1 SET rowid=a, a=rowid} {}
+maketest 3.1 {UPDATE t1 SET oid=a, a=oid} {}
 maketest 3.2 {ALTER TABLE t1 ADD COLUMN z; UPDATE t1 SET z=zeroblob(600)} {}
 
 set ans {}
 foreach r [sort $all_rowid] {
   lappend ans $r $t1ra($r) $t1rx($r)
 }
-maketest 3.3 {SELECT rowid, a, x FROM t1 ORDER BY +rowid} $ans
-maketest 3.4 {SELECT rowid, a, x FROM t1 ORDER BY rowid} $ans
+maketest 3.3 {SELECT oid, a, x FROM t1 ORDER BY +oid} $ans
+maketest 3.4 {SELECT oid, a, x FROM t1 ORDER BY oid} $ans
 
 set ans {}
 foreach r [reverse [sort $all_rowid]] {
   lappend ans $r $t1ra($r) $t1rx($r)
 }
-maketest 3.5 {SELECT rowid, a, x FROM t1 ORDER BY +rowid DESC} $ans
-maketest 3.6 {SELECT rowid, a, x FROM t1 ORDER BY rowid DESC} $ans
+maketest 3.5 {SELECT oid, a, x FROM t1 ORDER BY +oid DESC} $ans
+maketest 3.6 {SELECT oid, a, x FROM t1 ORDER BY oid DESC} $ans
 
 set ans {}
 foreach a [sort $all_a] {
   set r $t1ar($a)
   lappend ans $r $a $t1rx($r)
 }
-maketest 3.7 {SELECT rowid, a, x FROM t1 ORDER BY +a} $ans
-maketest 3.8 {SELECT rowid, a, x FROM t1 ORDER BY a} $ans
+maketest 3.7 {SELECT oid, a, x FROM t1 ORDER BY +a} $ans
+maketest 3.8 {SELECT oid, a, x FROM t1 ORDER BY a} $ans
 
 set ans {}
 foreach a [reverse [sort $all_a]] {
   set r $t1ar($a)
   lappend ans $r $a $t1rx($r)
 }
-maketest 3.9 {SELECT rowid, a, x FROM t1 ORDER BY +a DESC} $ans
-maketest 3.10 {SELECT rowid, a, x FROM t1 ORDER BY a DESC} $ans
+maketest 3.9 {SELECT oid, a, x FROM t1 ORDER BY +a DESC} $ans
+maketest 3.10 {SELECT oid, a, x FROM t1 ORDER BY a DESC} $ans
 
 set ans {}
 foreach x [sort $all_x] {
   set r $t1xr($x)
   lappend ans $r $t1ra($r) $x
 }
-maketest 3.11 {SELECT rowid, a, x FROM t1 ORDER BY +x} $ans
-maketest 3.12 {SELECT rowid, a, x FROM t1 ORDER BY x} $ans
+maketest 3.11 {SELECT oid, a, x FROM t1 ORDER BY +x} $ans
+maketest 3.12 {SELECT oid, a, x FROM t1 ORDER BY x} $ans
 
 set ans {}
 foreach x [reverse [sort $all_x]] {
   set r $t1xr($x)
   lappend ans $r $t1ra($r) $x
 }
-maketest 3.13 {SELECT rowid, a, x FROM t1 ORDER BY +x DESC} $ans
-maketest 3.14 {SELECT rowid, a, x FROM t1 ORDER BY x DESC} $ans
+maketest 3.13 {SELECT oid, a, x FROM t1 ORDER BY +x DESC} $ans
+maketest 3.14 {SELECT oid, a, x FROM t1 ORDER BY x DESC} $ans
 
 
-maketest 4.1 {UPDATE t1 SET rowid=a, a=rowid, x=z, z=x} {}
+maketest 4.1 {UPDATE t1 SET oid=a, a=oid, x=z, z=x} {}
 
 set ans {}
 foreach r [sort $all_rowid] {
   lappend ans $r $t1ra($r) $t1rx($r)
 }
-maketest 4.3 {SELECT a, rowid, z FROM t1 ORDER BY +a} $ans
-maketest 4.4 {SELECT a, rowid, z FROM t1 ORDER BY a} $ans
+maketest 4.3 {SELECT a, oid, z FROM t1 ORDER BY +a} $ans
+maketest 4.4 {SELECT a, oid, z FROM t1 ORDER BY a} $ans
 
 set ans {}
 foreach r [reverse [sort $all_rowid]] {
   lappend ans $r $t1ra($r) $t1rx($r)
 }
-maketest 4.5 {SELECT a, rowid, z FROM t1 ORDER BY +a DESC} $ans
-maketest 4.6 {SELECT a, rowid, z FROM t1 ORDER BY a DESC} $ans
+maketest 4.5 {SELECT a, oid, z FROM t1 ORDER BY +a DESC} $ans
+maketest 4.6 {SELECT a, oid, z FROM t1 ORDER BY a DESC} $ans
 
 set ans {}
 foreach a [sort $all_a] {
   set r $t1ar($a)
   lappend ans $r $a $t1rx($r)
 }
-maketest 4.7 {SELECT a, rowid, z FROM t1 ORDER BY +rowid} $ans
-maketest 4.8 {SELECT a, rowid, z FROM t1 ORDER BY rowid} $ans
+maketest 4.7 {SELECT a, oid, z FROM t1 ORDER BY +oid} $ans
+maketest 4.8 {SELECT a, oid, z FROM t1 ORDER BY oid} $ans
 
 set ans {}
 foreach a [reverse [sort $all_a]] {
   set r $t1ar($a)
   lappend ans $r $a $t1rx($r)
 }
-maketest 4.9 {SELECT a, rowid, z FROM t1 ORDER BY +rowid DESC} $ans
-maketest 4.10 {SELECT a, rowid, z FROM t1 ORDER BY rowid DESC} $ans
+maketest 4.9 {SELECT a, oid, z FROM t1 ORDER BY +oid DESC} $ans
+maketest 4.10 {SELECT a, oid, z FROM t1 ORDER BY oid DESC} $ans
 
 set ans {}
 foreach x [sort $all_x] {
   set r $t1xr($x)
   lappend ans $r $t1ra($r) $x
 }
-maketest 4.11 {SELECT a, rowid, z FROM t1 ORDER BY +z} $ans
-maketest 4.12 {SELECT a, rowid, z FROM t1 ORDER BY z} $ans
+maketest 4.11 {SELECT a, oid, z FROM t1 ORDER BY +z} $ans
+maketest 4.12 {SELECT a, oid, z FROM t1 ORDER BY z} $ans
 
 set ans {}
 foreach x [reverse [sort $all_x]] {
   set r $t1xr($x)
   lappend ans $r $t1ra($r) $x
 }
-maketest 4.13 {SELECT a, rowid, z FROM t1 ORDER BY +z DESC} $ans
-maketest 4.14 {SELECT a, rowid, z FROM t1 ORDER BY z DESC} $ans
+maketest 4.13 {SELECT a, oid, z FROM t1 ORDER BY +z DESC} $ans
+maketest 4.14 {SELECT a, oid, z FROM t1 ORDER BY z DESC} $ans
 
 puts {finish_test}

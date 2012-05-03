@@ -1261,5 +1261,32 @@ do_execsql_test 61.2 { SELECT count(*) FROM t2 GROUP BY a } 1
 #execsql { PRAGMA kvdump }
 #-------------------------------------------------------------------------
 
+#-------------------------------------------------------------------------
+# reset_db
+# do_execsql_test 64.1 {
+#   CREATE TABLE t1(x PRIMARY KEY);
+# }
+# do_execsql_test 64.2 { 
+# PRAGMA trace = 1;
+#   INSERT INTO t1 VALUES(18446744073709551615);
+#   INSERT INTO t1 VALUES(18446744073709551616);
+# }
+
+reset_db
+do_execsql_test 65.1 {
+  CREATE TABLE t1(x);
+  CREATE TABLE t2(y);
+  INSERT INTO t1 VALUES('a');
+  INSERT INTO t1 VALUES('b');
+  INSERT INTO t1 VALUES('c');
+
+  INSERT INTO t2 VALUES('d');
+  INSERT INTO t2 VALUES('e');
+}
+
+do_execsql_test 65.2 { SELECT DISTINCT t1.rowid FROM t1 }     {1 2 3}
+do_execsql_test 65.3 { SELECT DISTINCT t1.rowid FROM t1, t2 } {1 2 3}
+
+
 finish_test
 

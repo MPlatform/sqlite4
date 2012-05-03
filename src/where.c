@@ -1462,7 +1462,8 @@ static int findIndexCol(
      && p->iTable==iBase
     ){
       CollSeq *pColl = sqlite4ExprCollSeq(pParse, p);
-      if( ALWAYS(pColl) && 0==sqlite4StrICmp(pColl->zName, zColl) ){
+      assert( pColl || p->iColumn==-1 );
+      if( 0==pColl || 0==sqlite4StrICmp(pColl->zName, zColl) ){
         return i;
       }
     }

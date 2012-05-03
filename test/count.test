@@ -40,11 +40,11 @@ foreach zIndex [list {
   /* no-op */
 } {
   CREATE INDEX i1 ON t1(a);
-}] { 
+}] {
   incr iTest
   do_test count-1.$iTest.1 {
+    reset_db
     execsql {
-      DROP TABLE IF EXISTS t1;
       CREATE TABLE t1(a, b);
     }
     execsql $zIndex
@@ -107,7 +107,7 @@ do_test count-2.1 {
     CREATE TABLE t2(a, b);
   }
   uses_op_count {SELECT count(*) FROM t2}
-} {1}
+} {0}
 do_test count-2.2 {
   catchsql {SELECT count(DISTINCT *) FROM t2}
 } {1 {near "*": syntax error}}
@@ -119,7 +119,7 @@ do_test count-2.4 {
 } {0}
 do_test count-2.5 {
   uses_op_count {SELECT count() FROM t2}
-} {1}
+} {0}
 do_test count-2.6 {
   catchsql {SELECT count(DISTINCT) FROM t2}
 } {1 {DISTINCT aggregates must have exactly one argument}}
