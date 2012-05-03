@@ -55,7 +55,7 @@ foreach enc $encodings {
   foreach init $inits {
 
     do_test enc4-$i.$j.2 {
-      set S [sqlite4_prepare_v2 db "SELECT $init+?" -1 dummy]
+      set S [sqlite4_prepare db "SELECT $init+?" -1 dummy]
       sqlite4_expired $S
     } {0}
       
@@ -101,7 +101,7 @@ do_test enc4-4.1 {
 } {2.0}
 
 do_test enc4-4.2.1 {
-  set S [sqlite4_prepare_v2 db "SELECT 1+1." -1 dummy]
+  set S [sqlite4_prepare db "SELECT 1+1." -1 dummy]
   sqlite4_step $S
   sqlite4_column_text $S 0
 } {2.0}
@@ -111,7 +111,7 @@ do_test enc4-4.2.2 {
 } {SQLITE_OK}
 
 do_test enc4-4.3.1 {
-  set S [sqlite4_prepare_v2 db "SELECT 1+?" -1 dummy]
+  set S [sqlite4_prepare db "SELECT 1+?" -1 dummy]
   sqlite4_bind_text $S 1 "1." 2
   sqlite4_step $S
   sqlite4_column_text $S 0
@@ -122,7 +122,7 @@ do_test enc4-4.3.2 {
 } {SQLITE_OK}
 
 do_test enc4-4.4.1 {
-  set S [sqlite4_prepare_v2 db "SELECT 1+?" -1 dummy]
+  set S [sqlite4_prepare db "SELECT 1+?" -1 dummy]
   sqlite4_bind_text $S 1 "1.0" 2
   sqlite4_step $S
   sqlite4_column_text $S 0

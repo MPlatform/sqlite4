@@ -103,8 +103,11 @@ proc sort_by_value {lhs rhs} {
   return [string compare $lhs $rhs]
 }
 
-db collate collA sort_by_length
-db collate collB sort_by_value
+proc key_by_length {x} { format %06d_%s [string length $x] $x }
+proc key_by_value {x} { set ::V($x) }
+
+db collate collA sort_by_length key_by_length
+db collate collB sort_by_value  key_by_value 
 
 set BY(length) {one six two five four eight seven three}
 set BY(value)  {one two three four five six seven eight}
@@ -142,8 +145,8 @@ proc test_index {tn tbl collation expected} {
 }
 
 proc set_collations {a b} {
-  db collate collA "sort_by_$a"
-  db collate collB "sort_by_$b"
+  db collate collA "sort_by_$a" "key_by_$a"
+  db collate collB "sort_by_$b" "key_by_$b"
 }
 
 test_index 1.1   t1     collA   length

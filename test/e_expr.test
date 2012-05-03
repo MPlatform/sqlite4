@@ -357,7 +357,7 @@ proc reverse_str {zStr} {
 proc reverse_collate {zLeft zRight} {
   string compare [reverse_str $zLeft] [reverse_str $zRight]
 }
-db collate reverse reverse_collate
+db collate reverse reverse_collate reverse_str
 
 # EVIDENCE-OF: R-59577-33471 The COLLATE operator is a unary postfix
 # operator that assigns a collating sequence to an expression.
@@ -465,7 +465,7 @@ do_execsql_test e_expr-10.5.2 { SELECT typeof(NULL) } {null}
 #
 
 proc parameter_test {tn sql params result} {
-  set stmt [sqlite4_prepare_v2 db $sql -1]
+  set stmt [sqlite4_prepare db $sql -1]
 
   foreach {number name} $params {
     set nm [sqlite4_bind_parameter_name $stmt $number]
@@ -614,7 +614,7 @@ foreach {tn sql} [list                           \
 # using sqlite4_bind() are treated as NULL.
 #
 do_test e_expr-11.7.1 {
-  set stmt [sqlite4_prepare_v2 db { SELECT ?, :a, @b, $d } -1]
+  set stmt [sqlite4_prepare db { SELECT ?, :a, @b, $d } -1]
   sqlite4_step $stmt
 
   list [sqlite4_column_type $stmt 0] \

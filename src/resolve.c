@@ -284,9 +284,9 @@ static int lookupName(
             pParse->newmask |= (iCol>=32 ? 0xffffffff : (((u32)1)<<iCol));
           }
           pExpr->iColumn = (i16)iCol;
-          pExpr->pTab = pTab;
           isTrigger = 1;
         }
+        pExpr->pTab = pTab;
       }
     }
 #endif /* !defined(SQLITE_OMIT_TRIGGER) */

@@ -1315,5 +1315,34 @@ do_execsql_test 66.4 {
   1 y {} 1 {} 1
 }
 
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 67.1 { 
+  CREATE TABLE t1(x PRIMARY KEY); 
+  CREATE TABLE t2(y);
+}
+do_execsql_test 67.2 { 
+  CREATE TRIGGER tr1 AFTER DELETE ON t1 BEGIN
+    INSERT INTO t2 VALUES(old.rowid);
+  END;
+}
+
+#-------------------------------------------------------------------------
+reset_db
+
+do_execsql_test 68.1 {
+  CREATE TABLE p(a, b, c, PRIMARY KEY(b, c));
+  CREATE TABLE c(d, e, f, FOREIGN KEY(e, f) REFERENCES p);
+}
+do_execsql_test 68.2 {
+  INSERT INTO p VALUES(1, 2, 3);
+  INSERT INTO c VALUES('w', 2, 3);
+  INSERT INTO c VALUES('x', 'x', NULL);
+  INSERT INTO c VALUES('y', NULL, 'x');
+  INSERT INTO c VALUES('z', NULL, NULL);
+}
+
+
 finish_test
 

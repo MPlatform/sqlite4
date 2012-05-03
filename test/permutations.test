@@ -182,7 +182,8 @@ test_suite "veryquick" -prefix "" -description {
 } -files [
   test_set $allquicktests -exclude *malloc* *ioerr* *fault* \
     boundary3.test busy.test cache.test capi* corrupt*      \
-    date.test dbstatus.test
+    date.test dbstatus.test e_createtable.test e_expr.test  \
+    e_uri.test
 ]
 
 test_suite "valgrind" -prefix "" -description {

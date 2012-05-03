@@ -2718,6 +2718,14 @@ do_test e_fkey-60.2 {
   execsql { PRAGMA foreign_keys = ON }
   catchsql { DELETE FROM p }
 } {1 {no such table: main.nosuchtable}}
+
+
+breakpoint
+execsql { PRAGMA trace = 1 }
+execsql { DROP TABLE p }
+execsql { PRAGMA trace = 0 }
+
+
 do_test e_fkey-60.3 {
   execsql {
     BEGIN;
@@ -2829,8 +2837,8 @@ foreach zMatch [list SIMPLE PARTIAL FULL Simple parTIAL FuLL ] {
   drop_all_tables
   do_test e_fkey-62.$zMatch.1 {
     execsql "
-      CREATE TABLE p(a, b, c, PRIMARY KEY(b, c));
       CREATE TABLE c(d, e, f, FOREIGN KEY(e, f) REFERENCES p MATCH $zMatch);
+      CREATE TABLE p(a, b, c, PRIMARY KEY(b, c));
     "
   } {}
   do_test e_fkey-62.$zMatch.2 {

@@ -700,7 +700,7 @@ void sqlite4FkCheck(
         Vdbe *v = sqlite4GetVdbe(pParse);
         int iJump = sqlite4VdbeCurrentAddr(v) + pFKey->nCol + 1;
         for(i=0; i<pFKey->nCol; i++){
-          int iReg = pFKey->aCol[i].iFrom + regOld + 1;
+          int iReg = pFKey->aCol[i].iFrom + regOld;
           sqlite4VdbeAddOp2(v, OP_IsNull, iReg, iJump);
         }
         sqlite4VdbeAddOp2(v, OP_FkCounter, pFKey->isDeferred, -1);

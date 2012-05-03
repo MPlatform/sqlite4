@@ -628,11 +628,6 @@ static WhereTerm *findTerm(
             zColl = pIdx->azColl[j];
           }
 
-          assert( pParse->nErr 
-               || pIdx->pSchema==0 
-               || pColl->enc==pIdx->pSchema->enc 
-          );
-
           /* If the collation sequence used by the index is not the same as
           ** that used by the expression, then this term is not a match.  */
           if( pColl!=sqlite4FindCollSeq(db, ENC(db), zColl, 0) ) continue;
