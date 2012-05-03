@@ -14,6 +14,7 @@
 */
 #ifndef _LSM_H
 #define _LSM_H
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,11 +37,10 @@ typedef long long int lsm_i64;              /* 64-bit signed integer type */
 /* Forward reference */
 typedef struct lsm_env lsm_env;             /* Runtime environment */
 
-typedef struct lsm_heap_methods lsm_heap_methods;
 typedef struct lsm_mutex_methods lsm_mutex_methods;
 
 /*
-** Run-time environoment used by LSM
+** Run-time environment used by LSM
 */
 struct lsm_env {
   int nByte;                 /* Size of this structure in bytes */
@@ -167,8 +167,8 @@ int lsm_config(lsm_db *, int, ...);
 ** lsm_global_config(). Or the system defaults if no memory allocation
 ** functions have been registered.
 */
-void *lsm_malloc(lsm_env*, int);
-void *lsm_realloc(lsm_env*, void *, int);
+void *lsm_malloc(lsm_env*, size_t);
+void *lsm_realloc(lsm_env*, void *, size_t);
 void lsm_free(lsm_env*, void *);
 
 lsm_vfs *lsm_default_vfs(void);
@@ -355,17 +355,6 @@ int lsm_csr_value(lsm_cursor *pCsr, void **ppVal, int *pnVal);
 /*
 ** Set or query global library configuration parameters.
 **
-**   LSM_GLOBAL_CONFIG_SET_HEAP:
-**     By default, LSM uses the system malloc(), realloc() and free() 
-**     functions to allocate and relinquish dynamic memory. Calling the
-**     lsm_global_config() function with LSM_GLOBAL_CONFIG_SET_HEAP as
-**     the first argument allows the user to override this and force the 
-**     library to use custom routines instead.
-**
-**     The second parameter passed to lsm_global_config() should be a pointer
-**     to an instance of struct lsm_heap_methods containing pointers to the
-**     custom routines.
-**
 **   LSM_GLOBAL_CONFIG_SET_MUTEX:
 **     Configure the functions LSM uses to allocate, enter, leave and free
 **     mutex objects.
@@ -373,11 +362,6 @@ int lsm_csr_value(lsm_cursor *pCsr, void **ppVal, int *pnVal);
 **     The second parameter passed to lsm_global_config() should be a pointer
 **     to an instance of struct lsm_mutex_methods containing pointers to the
 **     custom routines.
-**
-**   LSM_GLOBAL_CONFIG_GET_HEAP:
-**     The second parameter to this call should be a pointer to a struct
-**     of type lsm_heap_methods. Before returning, the structure is populated
-**     with pointers to the routines used for dynamic memory management.
 **
 **   LSM_GLOBAL_CONFIG_GET_MUTEX:
 **     The second parameter to this call should be a pointer to a struct
@@ -387,16 +371,8 @@ int lsm_csr_value(lsm_cursor *pCsr, void **ppVal, int *pnVal);
 */
 int lsm_global_config(int, ...);
 
-#define LSM_GLOBAL_CONFIG_SET_HEAP     1
-#define LSM_GLOBAL_CONFIG_GET_HEAP     2
 #define LSM_GLOBAL_CONFIG_SET_MUTEX    3
 #define LSM_GLOBAL_CONFIG_GET_MUTEX    4
-
-struct lsm_heap_methods {
-  void *(*xMalloc)(lsm_env*,int);                    /* malloc(3) function */
-  void *(*xRealloc)(lsm_env*,void *, int);           /* realloc(3) function */
-  void (*xFree)(lsm_env*,void *);                    /* free(3) function */
-};
 
 /*
 ** xMutexHeld:

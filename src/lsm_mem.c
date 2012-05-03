@@ -38,40 +38,46 @@ static void *dflt_realloc(lsm_env *pEnv, void *p, int N){
   return realloc(p, N);
 }
 
-static lsm_heap_methods gMem = {
-  dflt_malloc,
-  dflt_realloc,
-  dflt_free
-};
-
-void *lsmMalloc(lsm_env *pEnv, int N){
-    return gMem.xMalloc(pEnv, N);
-}
-void lsmFree(lsm_env *pEnv, void *p){
-    gMem.xFree(pEnv, p);
-}
-void *lsmRealloc(lsm_env *pEnv, void *p, int N){
-    return gMem.xRealloc(pEnv, p, N);
-}
-
-void *lsm_malloc(lsm_env *pEnv, int N){
-    return gMem.xMalloc(pEnv, N);
+/*
+** Core memory allocation routines for LSM.
+*/
+void *lsm_malloc(lsm_env *pEnv, size_t N){
+  if( pEnv==0 ) pEnv = lsm_default_env();
+  return pEnv->xMalloc(pEnv, N);
 }
 void lsm_free(lsm_env *pEnv, void *p){
-    gMem.xFree(pEnv, p);
+  if( pEnv==0 ) pEnv = lsm_default_env();
+  pEnv->xFree(pEnv, p);
 }
-void *lsm_realloc(lsm_env *pEnv, void *p, int N){
-    return gMem.xRealloc(pEnv, p, N);
+void *lsm_realloc(lsm_env *pEnv, void *p, size_t N){
+  if( pEnv==0 ) pEnv = lsm_default_env();
+  pEnv->xRealloc(pEnv, p, N);
 }
 
-void *lsmMallocZero(lsm_env *pEnv, int N){
+/*
+** Memory allocation routines which guarantee that pEnv!=0
+*/
+void *lsmMalloc(lsm_env *pEnv, size_t N){
+  if( pEnv==0 ) pEnv = lsm_default_env();
+  return pEnv->xMalloc(pEnv, N);
+}
+void lsmFree(lsm_env *pEnv, void *p){
+  if( pEnv==0 ) pEnv = lsm_default_env();
+  pEnv->xFree(pEnv, p);
+}
+void *lsmRealloc(lsm_env *pEnv, void *p, size_t N){
+  if( pEnv==0 ) pEnv = lsm_default_env();
+  pEnv->xRealloc(pEnv, p, N);
+}
+
+void *lsmMallocZero(lsm_env *pEnv, size_t N){
   void *pRet;
-  pRet = gMem.xMalloc(pEnv, N);
+  pRet = lsm_malloc(pEnv, N);
   if( pRet ) memset(pRet, 0, N);
   return pRet;
 }
 
-void *lsmMallocRc(lsm_env *pEnv, int N, int *pRc){
+void *lsmMallocRc(lsm_env *pEnv, size_t N, int *pRc){
   void *pRet = 0;
   if( *pRc==LSM_OK ){
     pRet = lsmMalloc(pEnv, N);
@@ -82,7 +88,7 @@ void *lsmMallocRc(lsm_env *pEnv, int N, int *pRc){
   return pRet;
 }
 
-void *lsmMallocZeroRc(lsm_env *pEnv, int N, int *pRc){
+void *lsmMallocZeroRc(lsm_env *pEnv, size_t N, int *pRc){
   void *pRet = 0;
   if( *pRc==LSM_OK ){
     pRet = lsmMallocZero(pEnv, N);
@@ -93,18 +99,11 @@ void *lsmMallocZeroRc(lsm_env *pEnv, int N, int *pRc){
   return pRet;
 }
 
-void *lsmReallocOrFree(lsm_env *pEnv, void *p, int N){
+void *lsmReallocOrFree(lsm_env *pEnv, void *p, size_t N){
   void *pNew;
-  pNew = gMem.xRealloc(pEnv, p, N);
-  if( !pNew ) lsmFree(pEnv, p);
+  pNew = lsm_realloc(pEnv, p, N);
+  if( !pNew ) lsm_free(pEnv, p);
   return pNew;
-}
-
-void lsmConfigSetMalloc(lsm_heap_methods *pHeap){
-  gMem = *pHeap;
-}
-void lsmConfigGetMalloc(lsm_heap_methods *pHeap){
-  *pHeap = gMem;
 }
 
 

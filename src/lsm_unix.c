@@ -12,7 +12,7 @@
 **
 ** Unix-specific run-time environment implementation for LSM.
 */
-#include "lsm.h"
+#include "lsmInt.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -128,6 +128,16 @@ static int lsmPosixOsClose(lsm_file *pFile){
   return LSM_OK;
 }
 
+/****************************************************************************
+** Memory allocation routines.
+*/
+static void *lsmPosixOsMalloc(lsm_env *pEnv, int N){ return malloc(N); }
+static void lsmPosixOsFree(lsm_env *pEnv, void *p){ free(p); }
+static void *lsmPosixOsRealloc(lsm_env *pEnv, void *p, int N){
+  return realloc(p, N);
+}
+
+
 #ifdef LSM_MUTEX_PTHREADS 
 /*************************************************************************
 ** Mutex methods for pthreads based systems.  If LSM_MUTEX_PTHREADS is
@@ -239,7 +249,73 @@ static int lsmPosixOsMutexNotHeld(lsm_mutex *p){
 /*
 ** End of pthreads mutex implementation.
 *************************************************************************/
+#else
+/*************************************************************************
+** Noop mutex implementation
+*/
+typedef struct NoopMutex NoopMutex;
+struct NoopMutex {
+  int bHeld;                      /* True if mutex is held */
+  int bStatic;                    /* True for a static mutex */
+};
+static NoopMutex aStaticNoopMutex[2] = {
+  {0, 1},
+  {0, 1},
+};
 
+static int lsmPosixOsMutexStatic(
+  lsm_env *pEnv,
+  int iMutex,
+  lsm_mutex **ppStatic
+){
+  assert( iMutex>=1 && iMutex<=(int)array_size(aStaticNoopMutex) );
+  *ppStatic = (lsm_mutex *)&aStaticNoopMutex[iMutex-1];
+  return LSM_OK;
+}
+static int lsmPosixOsMutexNew(lsm_env *pEnv, lsm_mutex **ppNew){
+  int rc = LSM_OK;
+  *ppNew = (lsm_mutex *)lsmMallocZeroRc(pEnv, sizeof(NoopMutex), &rc);
+  return rc;
+}
+static void lsmPosixOsMutexDel(lsm_mutex *pMutex)  { 
+  NoopMutex *p = (NoopMutex *)pMutex;
+  assert( p->bStatic==0 );
+  lsmFree(0, p);
+}
+static void lsmPosixOsMutexEnter(lsm_mutex *pMutex){ 
+  NoopMutex *p = (NoopMutex *)pMutex;
+  assert( p->bHeld==0 );
+  p->bHeld = 1;
+}
+static int lsmPosixOsMutexTry(lsm_mutex *pMutex){
+  NoopMutex *p = (NoopMutex *)pMutex;
+  assert( p->bHeld==0 );
+  p->bHeld = 1;
+  return 0;
+}
+static void lsmPosixOsMutexLeave(lsm_mutex *pMutex){ 
+  NoopMutex *p = (NoopMutex *)pMutex;
+  assert( p->bHeld==1 );
+  p->bHeld = 0;
+}
+#ifdef LSM_DEBUG
+static int lsmPosixOsMutexHeld(lsm_mutex *pMutex){ 
+  NoopMutex *p = (NoopMutex *)pMutex;
+  return p ? p->bHeld : 1;
+}
+static int lsmPosixOsMutexNotHeld(lsm_mutex *pMutex){ 
+  NoopMutex *p = (NoopMutex *)pMutex;
+  return p ? !p->bHeld : 1;
+}
+#endif
+/***************************************************************************/
+#endif /* else LSM_MUTEX_NONE */
+
+/* Without LSM_DEBUG, the MutexHeld tests are never called */
+#ifndef LSM_DEBUG
+# define lsmPosixOsMutexHeld    0
+# define lsmPosixOsMutexNotHeld 0
+#endif
 
 lsm_env *lsm_default_env(void){
   static lsm_env posix_env = {

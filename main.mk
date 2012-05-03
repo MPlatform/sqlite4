@@ -57,7 +57,8 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          fts3_write.o func.o global.o hash.o \
          icu.o insert.o kvlsm.o kvmem.o legacy.o \
          lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o lsm_mem.o lsm_mutex.o \
-         lsm_os.o lsm_shared.o lsm_str.o lsm_sorted.o lsm_tree.o lsm_varint.o \
+         lsm_os.o lsm_shared.o lsm_str.o lsm_sorted.o lsm_tree.o \
+         lsm_unix.o lsm_varint.o \
          main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          mutex.o mutex_noop.o mutex_unix.o mutex_w32.o \
          opcodes.o os.o os_unix.o os_win.o \
@@ -105,6 +106,7 @@ SRC = \
   $(TOP)/src/lsm_str.c \
   $(TOP)/src/lsm_sorted.c \
   $(TOP)/src/lsm_tree.c \
+  $(TOP)/src/lsm_unix.c \
   $(TOP)/src/lsm_varint.c \
   $(TOP)/src/main.c \
   $(TOP)/src/malloc.c \

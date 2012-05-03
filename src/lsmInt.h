@@ -310,19 +310,16 @@ int lsmPoolUsed(Mempool *pPool);
 void lsmPoolMark(Mempool *pPool, void **, int *);
 void lsmPoolRollback(Mempool *pPool, void *, int);
 
-void *lsmMalloc(lsm_env*, int);
+void *lsmMalloc(lsm_env*, size_t);
 void lsmFree(lsm_env*, void *);
-void *lsmRealloc(lsm_env*, void *, int);
-void *lsmReallocOrFree(lsm_env*, void *, int);
+void *lsmRealloc(lsm_env*, void *, size_t);
+void *lsmReallocOrFree(lsm_env*, void *, size_t);
 
-void *lsmMallocZeroRc(lsm_env*, int, int *);
-void *lsmMallocRc(lsm_env*, int, int *);
+void *lsmMallocZeroRc(lsm_env*, size_t, int *);
+void *lsmMallocRc(lsm_env*, size_t, int *);
 
-void *lsmMallocZero(lsm_env *pEnv, int);
+void *lsmMallocZero(lsm_env *pEnv, size_t);
 char *lsmMallocStrdup(const char *);
-
-void lsmConfigGetMalloc(lsm_heap_methods *);
-void lsmConfigSetMalloc(lsm_heap_methods *);
 
 /* 
 ** Functions from file "mutex.c".

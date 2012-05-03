@@ -319,18 +319,6 @@ int lsm_global_config(int eParam, ...){
   va_start(ap, eParam);
 
   switch( eParam ){
-    case LSM_GLOBAL_CONFIG_SET_HEAP: {
-      lsm_heap_methods *pHeap = va_arg(ap, lsm_heap_methods *);
-      lsmConfigSetMalloc(pHeap);
-      break;
-    }
-
-    case LSM_GLOBAL_CONFIG_GET_HEAP: {
-      lsm_heap_methods *pHeap = va_arg(ap, lsm_heap_methods *);
-      lsmConfigGetMalloc(pHeap);
-      break;
-    }
-
     case LSM_GLOBAL_CONFIG_SET_MUTEX: {
       lsm_mutex_methods *pMutex = va_arg(ap, lsm_mutex_methods *);
       lsmConfigSetMutex(pMutex);
