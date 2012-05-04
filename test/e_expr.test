@@ -1290,9 +1290,9 @@ proc rev {str} {
   set ret
 }
 proc reverse {lhs rhs} {
-  string compare [rev $lhs] [ref $rhs]
+  string compare [rev $lhs] [rev $rhs]
 }
-db collate reverse reverse
+db collate reverse reverse rev
 do_execsql_test e_expr-23.1.1 {
   CREATE TABLE t1(
     a TEXT     COLLATE NOCASE,

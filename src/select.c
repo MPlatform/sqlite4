@@ -715,7 +715,10 @@ static void selectInnerLoop(
     case SRT_Mem: {
       assert( nColumn==1 );
       if( pOrderBy ){
-        pushOntoSorter(pParse, pOrderBy, p, regResult);
+        int regRecord = sqlite4GetTempReg(pParse);
+        sqlite4VdbeAddOp3(v, OP_MakeRecord, regResult, 1, regRecord);
+        pushOntoSorter(pParse, pOrderBy, p, regRecord);
+        sqlite4ReleaseTempReg(pParse, regRecord);
       }else{
         sqlite4ExprCodeMove(pParse, regResult, iParm, 1);
         /* The LIMIT clause will jump out of the loop for us */
@@ -974,7 +977,7 @@ static void generateSortTail(
     }
     case SRT_Mem: {
       assert( nColumn==1 );
-      sqlite4ExprCodeMove(pParse, regRow, iParm, 1);
+      sqlite4VdbeAddOp3(v, OP_Column, iTab, 0, iParm);
       /* The LIMIT clause will terminate the loop for us */
       break;
     }

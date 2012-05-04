@@ -5463,15 +5463,6 @@ static int unixSleep(sqlite4_vfs *NotUsed, int microseconds){
 }
 
 /*
-** The following variable, if set to a non-zero value, is interpreted as
-** the number of seconds since 1970 and is used to set the result of
-** sqlite4OsCurrentTime() during testing.
-*/
-#ifdef SQLITE_TEST
-int sqlite4_current_time = 0;  /* Fake system time in seconds since 1970. */
-#endif
-
-/*
 ** Find the current time (in Universal Coordinated Time).  Write into *piNow
 ** the current time and date as a Julian Day number times 86_400_000.  In
 ** other words, write into *piNow the number of milliseconds since the Julian

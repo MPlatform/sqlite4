@@ -687,7 +687,6 @@ proc finish_test {} {
   if {0==[info exists ::SLAVE]} { finalize_testing }
 }
 proc finalize_testing {} {
-  global sqlite_open_file_count
 
   set omitList [set_test_counter omit_list]
 
@@ -728,10 +727,6 @@ proc finalize_testing {} {
   }
   if {$::cmdlinearg(binarylog)} {
     vfslog finalize binarylog
-  }
-  if {$sqlite_open_file_count} {
-    puts "$sqlite_open_file_count files were left open"
-    incr nErr
   }
   if {[lindex [sqlite4_status SQLITE_STATUS_MALLOC_COUNT 0] 1]>0 ||
               [sqlite4_memory_used]>0} {
@@ -1473,18 +1468,8 @@ proc slave_test_file {zFile} {
   #
   unset -nocomplain ::run_thread_tests_called
   reset_prng_state
-  set ::sqlite_open_file_count 0
   set time [time { slave_test_script [list source $zFile] }]
   set ms [expr [lindex $time 0] / 1000]
-
-  # Test that all files opened by the test script were closed. Omit this
-  # if the test script has "thread" in its name. The open file counter
-  # is not thread-safe.
-  #
-  if {[info exists ::run_thread_tests_called]==0} {
-    do_test ${tail}-closeallfiles { expr {$::sqlite_open_file_count>0} } {0}
-  }
-  set ::sqlite_open_file_count 0
 
   # Add some info to the output.
   #

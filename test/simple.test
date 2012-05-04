@@ -17,7 +17,6 @@ set testprefix simple
 #set sqlite_where_trace 1
 #
 #
-
 do_execsql_test 1.0 { 
   PRAGMA table_info = sqlite_master
 } {
@@ -1330,7 +1329,6 @@ do_execsql_test 67.2 {
 
 #-------------------------------------------------------------------------
 reset_db
-
 do_execsql_test 68.1 {
   CREATE TABLE p(a, b, c, PRIMARY KEY(b, c));
   CREATE TABLE c(d, e, f, FOREIGN KEY(e, f) REFERENCES p);
@@ -1342,6 +1340,17 @@ do_execsql_test 68.2 {
   INSERT INTO c VALUES('y', NULL, 'x');
   INSERT INTO c VALUES('z', NULL, NULL);
 }
+
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 69.1 {
+  CREATE TABLE t4(x, y);
+  INSERT INTO t4 VALUES(1, 'one');
+} {}
+
+do_execsql_test 69.2 { SELECT x FROM t4 ORDER BY x LIMIT 1 } {1}
+do_execsql_test 69.3 { SELECT (SELECT x FROM t4 ORDER BY x) } {1}
+
 
 
 finish_test

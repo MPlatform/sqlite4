@@ -3014,7 +3014,6 @@ static void init_all(Tcl_Interp *interp){
     Sqlitetesttclvar_Init(interp);
     SqlitetestThread_Init(interp);
     SqlitetestOnefile_Init(interp);
-    SqlitetestOsinst_Init(interp);
     Sqlitetestintarray_Init(interp);
     Sqlitetestvfs_Init(interp);
     Sqlitetestrtree_Init(interp);

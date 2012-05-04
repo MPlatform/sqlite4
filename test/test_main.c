@@ -4671,7 +4671,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
   extern int sqlite4_search_count;
   extern int sqlite4_found_count;
   extern int sqlite4_interrupt_count;
-  extern int sqlite4_open_file_count;
   extern int sqlite4_sort_count;
   extern int sqlite4_current_time;
 #if SQLITE_OS_UNIX && defined(__APPLE__) && SQLITE_ENABLE_LOCKING_STYLE
@@ -4836,7 +4835,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
   };
   static int bitmask_size = sizeof(Bitmask)*8;
   int i;
-  extern int sqlite4_sync_count, sqlite4_fullsync_count;
   extern int sqlite4_opentemp_count;
   extern int sqlite4_like_count;
   extern int sqlite4_xferopt_count;
@@ -4878,8 +4876,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
       (char*)&sqlite4_like_count, TCL_LINK_INT);
   Tcl_LinkVar(interp, "sqlite_interrupt_count", 
       (char*)&sqlite4_interrupt_count, TCL_LINK_INT);
-  Tcl_LinkVar(interp, "sqlite_open_file_count", 
-      (char*)&sqlite4_open_file_count, TCL_LINK_INT);
+
   Tcl_LinkVar(interp, "sqlite_current_time", 
       (char*)&sqlite4_current_time, TCL_LINK_INT);
 #if SQLITE_OS_UNIX && defined(__APPLE__) && SQLITE_ENABLE_LOCKING_STYLE
@@ -4918,10 +4915,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
       (char*)&sqlite4_temp_directory, TCL_LINK_STRING);
   Tcl_LinkVar(interp, "bitmask_size",
       (char*)&bitmask_size, TCL_LINK_INT|TCL_LINK_READ_ONLY);
-  Tcl_LinkVar(interp, "sqlite_sync_count",
-      (char*)&sqlite4_sync_count, TCL_LINK_INT);
-  Tcl_LinkVar(interp, "sqlite_fullsync_count",
-      (char*)&sqlite4_fullsync_count, TCL_LINK_INT);
 #if defined(SQLITE_ENABLE_FTS3) && defined(SQLITE_TEST)
   Tcl_LinkVar(interp, "sqlite_fts3_enable_parentheses",
       (char*)&sqlite4_fts3_enable_parentheses, TCL_LINK_INT);
