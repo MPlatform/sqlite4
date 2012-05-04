@@ -69,18 +69,6 @@ struct DateTime {
 
 
 /*
-** The following variable, if set to a non-zero value, is interpreted as
-** the number of seconds since 1970 and is used to set the result of
-** sqlite4OsCurrentTime() during testing.
-*/
-int sqlite4_current_time = 0;  /* Fake system time in seconds since 1970. */
-static int currentTimeInt64(void *pVfs, sqlite4_int64 *piTime){
-  UNUSED_PARAMETER(pVfs);
-  *piTime = (sqlite4_int64)sqlite4_current_time * 1000;
-  return SQLITE_OK;
-}
-
-/*
 ** Convert zDate into one or more integers.  Additional arguments
 ** come in groups of 5 as follows:
 **
@@ -307,7 +295,7 @@ static int parseYyyyMmDd(const char *zDate, DateTime *p){
 */
 static int setDateTimeToCurrent(sqlite4_context *context, DateTime *p){
   sqlite4 *db = sqlite4_context_db_handle(context);
-  if( currentTimeInt64(db->pVfs, &p->iJD)==SQLITE_OK ){
+  if( sqlite4OsCurrentTimeInt64(db->pVfs, &p->iJD)==SQLITE_OK ){
     p->validJD = 1;
     return 0;
   }else{
@@ -1091,7 +1079,7 @@ static void currentTimeFunc(
   UNUSED_PARAMETER(argv);
 
   db = sqlite4_context_db_handle(context);
-  if( currentTimeInt64(db->pVfs, &iT) ) return;
+  if( sqlite4OsCurrentTimeInt64(db->pVfs, &iT) ) return;
   t = iT/1000 - 10000*(sqlite4_int64)21086676;
 #ifdef HAVE_GMTIME_R
   pTm = gmtime_r(&t, &sNow);

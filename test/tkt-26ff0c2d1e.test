@@ -18,7 +18,7 @@ source $testdir/tester.tcl
 do_test bug-20100512-1 {
   set DB [sqlite4_connection_pointer db]
   set SQL {SELECT case when 1 then 99 else ? end + ?}
-  set STMT [sqlite4_prepare_v2 $DB $SQL -1 TAIL]
+  set STMT [sqlite4_prepare $DB $SQL -1 TAIL]
   set TAIL
 } {}
 do_test bug-20100512-2 {

@@ -1950,15 +1950,18 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
 }
 
 int lsmMCursorValid(MultiCursor *pCsr){
-  int iKey = pCsr->aTree[1];
-
-  if( iKey==CURSOR_DATA_TREE ){
-    return lsmTreeCursorValid(pCsr->pTreeCsr);
-  }else{
-    void *pKey; 
-    multiCursorGetKey(pCsr, iKey, 0, &pKey, 0);
-    return pKey!=0;
+  int res = 0;
+  if( pCsr->aTree ){
+    int iKey = pCsr->aTree[1];
+    if( iKey==CURSOR_DATA_TREE ){
+      res = lsmTreeCursorValid(pCsr->pTreeCsr);
+    }else{
+      void *pKey; 
+      multiCursorGetKey(pCsr, iKey, 0, &pKey, 0);
+      res = pKey!=0;
+    }
   }
+  return res;
 }
 
 static int mcursorAdvanceOk(

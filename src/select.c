@@ -679,6 +679,7 @@ static void selectInnerLoop(
     ** item into the set table with bogus data.
     */
     case SRT_Set: {
+      int r1 = sqlite4GetTempReg(pParse);
       assert( nColumn==1 );
       p->affinity = sqlite4CompareAffinity(pEList->a[0].pExpr, pDest->affinity);
       if( pOrderBy ){
@@ -686,17 +687,17 @@ static void selectInnerLoop(
         ** ORDER BY in this case since the order of entries in the set
         ** does not matter.  But there might be a LIMIT clause, in which
         ** case the order does matter */
-        pushOntoSorter(pParse, pOrderBy, p, regResult);
+        sqlite4VdbeAddOp4(v, OP_MakeRecord, regResult, 1, r1, &p->affinity, 1);
+        pushOntoSorter(pParse, pOrderBy, p, r1);
       }else{
-        int r1 = sqlite4GetTempReg(pParse);
         int r2 = sqlite4GetTempReg(pParse);
         sqlite4VdbeAddOp2(v, OP_MakeKey, iParm, r2);
         sqlite4VdbeAddOp4(v, OP_MakeRecord, regResult, 1, r1, &p->affinity, 1);
         sqlite4ExprCacheAffinityChange(pParse, regResult, 1);
         sqlite4VdbeAddOp3(v, OP_IdxInsert, iParm, r1, r2);
-        sqlite4ReleaseTempReg(pParse, r1);
         sqlite4ReleaseTempReg(pParse, r2);
       }
+      sqlite4ReleaseTempReg(pParse, r1);
       break;
     }
 

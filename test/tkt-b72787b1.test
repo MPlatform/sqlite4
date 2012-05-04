@@ -56,7 +56,7 @@ do_test tkt-b72787b1.1 {
   db func runsql ::runsql
   set DB [sqlite4_connection_pointer db]
   set sql {SELECT max(x) FROM t1}
-  set ::STMT [sqlite4_prepare_v2 $DB $sql -1 TAIL]
+  set ::STMT [sqlite4_prepare $DB $sql -1 TAIL]
 
   # The runsql() call on the second row of the first query will
   # cause all $::STMT to hit an expired cookie.  Prior to the fix

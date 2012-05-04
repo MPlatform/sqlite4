@@ -107,10 +107,10 @@ set allquicktests [test_set $alltests -exclude {
   misc7.test mutex2.test notify2.test onefile.test pagerfault2.test 
   savepoint4.test savepoint6.test select9.test 
   speed1.test speed1p.test speed2.test speed3.test speed4.test 
-  speed4p.test sqllimits1.test tkt2686.test thread001.test thread002.test
-  thread003.test thread004.test thread005.test trans2.test vacuum3.test 
-  incrvacuum_ioerr.test autovacuum_crash.test btree8.test shared_err.test
-  vtab_err.test walslow.test walcrash.test walcrash3.test
+  speed4p.test sqllimits1.test src4.test tkt2686.test thread001.test 
+  thread002.test thread003.test thread004.test thread005.test trans2.test 
+  vacuum3.test incrvacuum_ioerr.test autovacuum_crash.test btree8.test 
+  shared_err.test vtab_err.test walslow.test walcrash.test walcrash3.test
   walthread.test rtree3.test indexfault.test 
 }]
 if {[info exists ::env(QUICKTEST_INCLUDE)]} {
@@ -184,6 +184,12 @@ test_suite "veryquick" -prefix "" -description {
   test_set $allquicktests -exclude *malloc* *ioerr* *fault*    \
     boundary3.test busy.test cache.test capi* corrupt*         \
     dbstatus.test e_createtable.test e_uri.test fallocate.test \
+    io* memsubsys* mutex* oserror.test pager* pcache* quota*   \
+    rollback.test where8m.test schema* savepoint3.test         \
+    temptrigger.test tkt-fc62af4523.test tkt2332.test          \
+    tkt2409.test tkt2506.test tkt2565.test tkt2854.test        \
+    tkt3793.test triggerA.test unordered.test uri.test         \
+    zeroblob.test
 ]
 
 test_suite "valgrind" -prefix "" -description {

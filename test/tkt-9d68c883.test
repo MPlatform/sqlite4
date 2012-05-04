@@ -31,7 +31,6 @@ do_test tkt-9d68c88-1.1 {
 
 for {set i 0} {$i < 100} {incr i} {
   db close
-  sqlite4_simulate_device -sectorsize 8192
   sqlite4 db test.db -vfs devsym
 
   do_test tkt-9d68c88-2.$i {

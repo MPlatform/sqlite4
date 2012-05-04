@@ -23,8 +23,17 @@ proc usual {lhs rhs} {
   return [string compare $lhs $rhs]
 }
 
-db collate reverse reverse
-db collate usual usual
+proc reverse_mkkey {zIn} {
+  set res ""
+  binary scan $zIn c* lChar
+  foreach c $lChar {
+    append res [format "%02X" [expr 255-$c]]
+  }
+  set res
+}
+
+db collate reverse reverse reverse_mkkey
+db collate usual usual {set {}}
 
 do_test tkt3997-1.1 {
   execsql {

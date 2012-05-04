@@ -158,7 +158,18 @@ int sqlite4OsRandomness(sqlite4_vfs *pVfs, int nByte, char *zBufOut){
 int sqlite4OsSleep(sqlite4_vfs *pVfs, int nMicro){
   return pVfs->xSleep(pVfs, nMicro);
 }
+
+/*
+** The following variable, if set to a non-zero value, is interpreted as
+** the number of seconds since 1970 and is used to set the result of
+** sqlite4OsCurrentTime() during testing.
+*/
+int sqlite4_current_time = 0;  /* Fake system time in seconds since 1970. */
 int sqlite4OsCurrentTimeInt64(sqlite4_vfs *pVfs, sqlite4_int64 *pTimeOut){
+  UNUSED_PARAMETER(pVfs);
+  *pTimeOut = (sqlite4_int64)sqlite4_current_time * 1000;
+  return SQLITE_OK;
+#if 0
   int rc;
   /* IMPLEMENTATION-OF: R-49045-42493 SQLite will use the xCurrentTimeInt64()
   ** method to get the current date and time if that method is available
@@ -174,6 +185,7 @@ int sqlite4OsCurrentTimeInt64(sqlite4_vfs *pVfs, sqlite4_int64 *pTimeOut){
     *pTimeOut = (sqlite4_int64)(r*86400000.0);
   }
   return rc;
+#endif
 }
 
 int sqlite4OsOpenMalloc(
