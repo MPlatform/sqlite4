@@ -152,6 +152,7 @@ test_suite "src4" -prefix "" -description {
 
   delete.test delete2.test
   distinct.test distinctagg.test
+  exists.test
   fkey1.test fkey2.test fkey3.test fkey4.test
 
   insert.test insert2.test insert3.test

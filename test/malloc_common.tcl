@@ -158,12 +158,10 @@ proc faultsim_save_and_close {args} { uplevel db_save_and_close $args }
 proc faultsim_restore {args} { uplevel db_restore $args }
 proc faultsim_restore_and_reopen {args} { 
   uplevel db_restore_and_reopen $args 
-  sqlite4_extended_result_codes db 1
   sqlite4_db_config_lookaside db 0 0 0
 }
 proc faultsim_delete_and_reopen {args} {
   uplevel db_delete_and_reopen $args 
-  sqlite4_extended_result_codes db 1
   sqlite4_db_config_lookaside db 0 0 0
 }
 
@@ -428,9 +426,6 @@ proc do_malloc_test {tn args} {
           copy_file $::mallocopts(-testdb) test.db
         }
         catch { sqlite4 db test.db }
-        if {[info commands db] ne ""} {
-          sqlite4_extended_result_codes db 1
-        }
         sqlite4_db_config_lookaside db 0 0 0
   
         # Execute any -tclprep and -sqlprep scripts.

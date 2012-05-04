@@ -1614,6 +1614,15 @@ static int idxColumnNumber(Index *pIdx, Index *pPk, int iIdxCol){
 }
 
 /*
+** Return the name of the iCol'th column of table pTab. Or, if iCol is less
+** than zero, return a pointer to the constant string "rowid".
+*/
+static const char *tblColumnName(Table *pTab, int iCol){
+  if( iCol<0 ) return "rowid";
+  return pTab->aCol[iCol].zName;
+}
+
+/*
 ** This routine decides if pIdx can be used to satisfy the ORDER BY
 ** clause.  If it can, it returns 1.  If pIdx cannot satisfy the
 ** ORDER BY clause, this routine returns 0.
@@ -3703,31 +3712,33 @@ static void explainAppendTerm(
 */
 static char *explainIndexRange(sqlite4 *db, WhereLevel *pLevel, Table *pTab){
   WherePlan *pPlan = &pLevel->plan;
-  Index *pIndex = pPlan->u.pIdx;
+  Index *pPk;
+  Index *pIdx = pPlan->u.pIdx;
   int nEq = pPlan->nEq;
   int i, j;
   Column *aCol = pTab->aCol;
-  int *aiColumn = pIndex->aiColumn;
+  int *aiColumn = pIdx->aiColumn;
   StrAccum txt;
 
+  pPk = sqlite4FindPrimaryKey(pTab, 0);
   if( nEq==0 && (pPlan->wsFlags & (WHERE_BTM_LIMIT|WHERE_TOP_LIMIT))==0 ){
     return 0;
   }
   sqlite4StrAccumInit(&txt, 0, 0, SQLITE_MAX_LENGTH);
   txt.db = db;
+
   sqlite4StrAccumAppend(&txt, " (", 2);
   for(i=0; i<nEq; i++){
-    explainAppendTerm(&txt, i, aCol[aiColumn[i]].zName, "=");
+    const char *zCol = tblColumnName(pTab, idxColumnNumber(pIdx, pPk, i));
+    explainAppendTerm(&txt, i, zCol, "=");
   }
-
-  j = i;
   if( pPlan->wsFlags&WHERE_BTM_LIMIT ){
-    char *z = (j==pIndex->nColumn ) ? "rowid" : aCol[aiColumn[j]].zName;
-    explainAppendTerm(&txt, i++, z, ">");
+    const char *zCol = tblColumnName(pTab, idxColumnNumber(pIdx, pPk, nEq));
+    explainAppendTerm(&txt, i++, zCol, ">");
   }
   if( pPlan->wsFlags&WHERE_TOP_LIMIT ){
-    char *z = (j==pIndex->nColumn ) ? "rowid" : aCol[aiColumn[j]].zName;
-    explainAppendTerm(&txt, i, z, "<");
+    const char *zCol = tblColumnName(pTab, idxColumnNumber(pIdx, pPk, nEq));
+    explainAppendTerm(&txt, i, zCol, "<");
   }
   sqlite4StrAccumAppend(&txt, ")", 1);
   return sqlite4StrAccumFinish(&txt);

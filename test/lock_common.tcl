@@ -16,6 +16,8 @@
 proc do_multiclient_test {varname script} {
 
   foreach code [list {
+    puts "Skipping multi-process tests..."
+    continue
     if {[info exists ::G(valgrind)]} { db close ; continue }
     set ::code2_chan [launch_testfixture]
     set ::code3_chan [launch_testfixture]
