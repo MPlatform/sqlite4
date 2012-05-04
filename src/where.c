@@ -2034,6 +2034,7 @@ static void bestAutomaticIndex(
       pCost->rCost = costTempIdx;
       pCost->plan.nRow = logN + 1;
       pCost->plan.wsFlags = WHERE_TEMP_INDEX;
+      pCost->plan.u.pIdx = 0;
       pCost->used = pTerm->prereqRight;
       break;
     }
@@ -4441,6 +4442,7 @@ static void whereInfoFree(sqlite4 *db, WhereInfo *pWInfo){
       if( pWInfo->a[i].plan.wsFlags & WHERE_TEMP_INDEX ){
         Index *pIdx = pWInfo->a[i].plan.u.pIdx;
         if( pIdx ){
+          assert( pIdx->eIndexType==SQLITE_INDEX_TEMP );
           sqlite4DbFree(db, pIdx->zColAff);
           sqlite4DbFree(db, pIdx);
         }
@@ -5026,7 +5028,7 @@ WhereInfo *sqlite4WhereBegin(
   nQPlan = 0;
 #endif /* SQLITE_TEST // Testing and debugging use only */
 
-  /* Record the continuation address in the WhereInfo structure.  Then
+  /* Record the continuation address in the WhereInfo structure. Then
   ** clean up and return.
   */
   return pWInfo;

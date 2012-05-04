@@ -61,7 +61,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          lsm_unix.o lsm_varint.o \
          main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          mutex.o mutex_noop.o mutex_unix.o mutex_w32.o \
-         opcodes.o os.o os_win.o \
+         opcodes.o os.o os_unix.o os_win.o \
          parse.o pragma.o prepare.o printf.o \
          random.o resolve.o rowset.o rtree.o select.o status.o storage.o \
          tokenize.o trigger.o \
@@ -124,6 +124,7 @@ SRC = \
   $(TOP)/src/os.c \
   $(TOP)/src/os.h \
   $(TOP)/src/os_common.h \
+  $(TOP)/src/os_unix.c \
   $(TOP)/src/os_win.c \
   $(TOP)/src/parse.y \
   $(TOP)/src/pragma.c \
@@ -236,6 +237,7 @@ TESTSRC2 = \
   $(TOP)/src/insert.c \
   $(TOP)/src/mem5.c \
   $(TOP)/src/os.c \
+  $(TOP)/src/os_unix.c \
   $(TOP)/src/os_win.c \
   $(TOP)/src/pragma.c \
   $(TOP)/src/prepare.c \

@@ -5493,9 +5493,11 @@ static int unixCurrentTimeInt64(sqlite4_vfs *NotUsed, sqlite4_int64 *piNow){
 #endif
 
 #ifdef SQLITE_TEST
+#if 0
   if( sqlite4_current_time ){
     *piNow = 1000*(sqlite4_int64)sqlite4_current_time + unixEpoch;
   }
+#endif
 #endif
   UNUSED_PARAMETER(NotUsed);
   return rc;

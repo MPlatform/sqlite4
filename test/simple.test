@@ -14,9 +14,8 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 set testprefix simple
 
-#set sqlite_where_trace 1
-#
-#
+if 0 {
+
 do_execsql_test 1.0 { 
   PRAGMA table_info = sqlite_master
 } {
@@ -1351,7 +1350,27 @@ do_execsql_test 69.1 {
 do_execsql_test 69.2 { SELECT x FROM t4 ORDER BY x LIMIT 1 } {1}
 do_execsql_test 69.3 { SELECT (SELECT x FROM t4 ORDER BY x) } {1}
 
+}
 
+#-------------------------------------------------------------------------
+reset_db
+do_execsql_test 70.1 {
+  CREATE TABLE maintable( id integer);
+  CREATE TABLE joinme(id_int integer, id_text text);
+  CREATE INDEX joinme_id_text_idx on joinme(id_text);
+  CREATE INDEX joinme_id_int_idx on joinme(id_int);
+}
+
+breakpoint
+do_catchsql_test 70.2 {
+  select * from maintable as m inner join
+    joinme as j indexed by joinme_id_text_idx
+    on ( m.id  = j.id_int)
+} {1 {cannot use index: joinme_id_text_idx}}
+
+do_catchsql_test 70.3 {
+  select * from maintable, joinme INDEXED by joinme_id_text_idx
+} {1 {cannot use index: joinme_id_text_idx}}
 
 finish_test
 
