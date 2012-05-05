@@ -143,27 +143,53 @@ test_suite "src4" -prefix "" -description {
   bigrow.test
   bind.test
   bindxfer.test
+
   boundary1.test boundary4.test
-
-  conflict.test 
-
+  cast.test
+  coalesce.test 
   collate1.test collate2.test collate3.test collate4.test collate5.test
   collate6.test collate7.test collate8.test collate9.test collateA.test
-
+  conflict.test 
+  count.test
+  cse.test
+  ctime.test
   delete.test delete2.test
   distinct.test distinctagg.test
   exists.test
+  e_droptrigger.test e_dropview.test
+  e_resolve.test e_dropview.test
+  e_select2.test
+  enc4.test
   fkey1.test fkey2.test fkey3.test fkey4.test
+  func2.test func3.test 
+  fuzz2.test 
+  in.test in4.test
+  index2.test index3.test index4.test 
+  insert.test insert2.test insert3.test insert5.test
+  join.test join2.test join3.test join4.test join5.test join6.test
+  keyword1.test
+  limit.test
+  main.test
+  manydb.test
+  misc5.test misc6.test
+  misuse.test
+  notnull.test
+  null.test
+  printf.test 
+  ptrchng.test
+  quote.test
 
-  insert.test insert2.test insert3.test
+  savepoint.test savepoint2.test savepoint5.test 
 
   select1.test select2.test select3.test select4.test select5.test 
   select6.test select7.test select8.test select9.test selectA.test 
   selectB.test selectC.test 
 
-  savepoint.test savepoint2.test savepoint5.test 
-
+  sort.test
   storage1.test
+
+  subquery.test subquery2.test
+  substr.test 
 
   trigger1.test trigger2.test trigger3.test trigger4.test trigger5.test 
   trigger6.test trigger7.test trigger8.test trigger9.test triggerB.test
@@ -174,6 +200,27 @@ test_suite "src4" -prefix "" -description {
 
   where.test  where5.test where6.test where7.test where8.test whereA.test 
   whereB.test whereC.test
+
+  tkt-02a8e81d44.test tkt-26ff0c2d1e.test tkt-2d1a5c67d.test
+  tkt-2ea2425d34.test tkt-31338dca7e.test tkt-313723c356.test
+  tkt-38cb5df375.test tkt-3998683a16.test tkt-3a77c9714e.test
+  tkt-3fe897352e.test tkt-4a03edc4c8.test tkt-54844eea3f.test
+  tkt-5e10420e8d.test tkt-752e1646fc.test tkt-80ba201079.test
+  tkt-80e031a00f.test tkt-91e2e8ba6f.test tkt-9d68c883.test
+  tkt-b1d3a2e531.test tkt-b351d95f9.test  tkt-b72787b1.test
+  tkt-bd484a090c.test tkt-cbd054fa6b.test tkt-d11f09d36e.test
+  tkt-d635236375.test tkt-f973c7ac31.test tkt-fa7bf5ec.test
+  tkt1443.test tkt1444.test tkt1449.test tkt1473.test tkt1501.test
+  tkt1512.test tkt1514.test tkt1537.test tkt1667.test tkt1873.test
+  tkt2141.test tkt2192.test tkt2213.test tkt2285.test tkt2339.test
+  tkt2391.test tkt2450.test tkt2640.test tkt2767.test tkt2817.test
+  tkt2822.test tkt2832.test tkt2927.test tkt2942.test tkt3121.test
+  tkt3201.test tkt3292.test tkt3298.test tkt3334.test tkt3346.test
+  tkt3419.test tkt3424.test tkt3442.test tkt3461.test tkt3493.test
+  tkt3508.test tkt3522.test tkt3527.test tkt3541.test tkt3554.test
+  tkt3581.test tkt35xx.test tkt3630.test tkt3718.test tkt3761.test
+  tkt3773.test tkt3841.test tkt3871.test tkt3879.test tkt3911.test
+  tkt3918.test tkt3922.test tkt3929.test tkt3935.test tkt3997.test
 }
 
 test_suite "veryquick" -prefix "" -description {
