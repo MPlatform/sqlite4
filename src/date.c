@@ -295,7 +295,7 @@ static int parseYyyyMmDd(const char *zDate, DateTime *p){
 */
 static int setDateTimeToCurrent(sqlite4_context *context, DateTime *p){
   sqlite4 *db = sqlite4_context_db_handle(context);
-  if( sqlite4OsCurrentTimeInt64(db->pVfs, &p->iJD)==SQLITE_OK ){
+  if( sqlite4OsCurrentTimeInt64(0, &p->iJD)==SQLITE_OK ){
     p->validJD = 1;
     return 0;
   }else{

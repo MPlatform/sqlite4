@@ -792,7 +792,6 @@ struct FuncDefHash {
 */
 struct sqlite4 {
   sqlite4_env *pEnv;            /* The run-time environment */
-  sqlite4_vfs *pVfs;            /* OS Interface */
   int nDb;                      /* Number of backends currently in use */
   Db *aDb;                      /* All backends */
   int flags;                    /* Miscellaneous flags. See below */
