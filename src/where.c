@@ -4231,7 +4231,7 @@ static Bitmask codeOneLoopStart(
     SrcList *pOrTab;       /* Shortened table list or OR-clause generation */
 
     int regReturn = ++pParse->nMem;           /* Register used with OP_Gosub */
-    int regKeyset = 0;                        /* Register for KeySet object */
+    int regKeyset = 0;                        /* Register for RowSet object */
     int regKey = 0;                           /* Register holding key */
     int iLoopBody = sqlite4VdbeMakeLabel(v);  /* Start of loop body */
     int iRetInit;                             /* Address of regReturn init */
@@ -4318,7 +4318,9 @@ static Bitmask codeOneLoopStart(
             int addrJump;
             sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regKey);
             addrJump = sqlite4VdbeCurrentAddr(v) + 2;
-            sqlite4VdbeAddOp3(v, OP_KeySetTest, regKeyset, addrJump, regKey);
+            sqlite4VdbeAddOp4Int(v, OP_RowSetTest, 
+                regKeyset, addrJump, regKey, ((ii==pOrWc->nTerm-1)?-1:ii)
+            );
           }
           sqlite4VdbeAddOp2(v, OP_Gosub, regReturn, iLoopBody);
 

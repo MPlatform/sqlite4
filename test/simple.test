@@ -14,8 +14,6 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 set testprefix simple
 
-if 0 {
-
 do_execsql_test 1.0 { 
   PRAGMA table_info = sqlite_master
 } {
@@ -1349,8 +1347,6 @@ do_execsql_test 69.1 {
 
 do_execsql_test 69.2 { SELECT x FROM t4 ORDER BY x LIMIT 1 } {1}
 do_execsql_test 69.3 { SELECT (SELECT x FROM t4 ORDER BY x) } {1}
-
-}
 
 #-------------------------------------------------------------------------
 reset_db

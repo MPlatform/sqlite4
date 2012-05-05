@@ -416,7 +416,7 @@ static void memTracePrint(FILE *out, Mem *p){
   }else if( p->flags & MEM_Real ){
     fprintf(out, " r:%g", p->r);
 #endif
-  }else if( p->flags & MEM_KeySet ){
+  }else if( p->flags & MEM_RowSet ){
     fprintf(out, " (keyset)");
   }else{
     char zBuf[200];
@@ -3972,65 +3972,67 @@ case OP_DropTrigger: {
   break;
 }
 
-/* Opcode: KeySetTest P1 P2 P3 * *
+/* Opcode: RowSetTest P1 P2 P3 * *
 **
-** Register P1 contains a KeySet object. Register P3 contains a database 
-** key. This function checks if the KeySet already contains an equal key.
+** Register P1 contains a RowSet object. Register P3 contains a database 
+** key. This function checks if the RowSet already contains an equal key.
 ** If so, control jumps to instruction P2. Otherwise, fall through to the
 ** next instruction.
 **
 ** TODO: Optimization similar to SQLite 3 using P4.
 */
-case OP_KeySetTest: {        /* in1, in3, jump */
+case OP_RowSetTest: {        /* in1, in3, jump */
+  int iSet;
   pIn1 = &aMem[pOp->p1];
   pIn3 = &aMem[pOp->p3];
+  iSet = pOp->p4.i;
 
-  if( 0!=(pIn1->flags & MEM_KeySet)
-   && 0!=sqlite4KeySetTest(pIn1->u.pKeySet, pIn3->z, pIn3->n)
+  if( 0!=(pIn1->flags & MEM_RowSet)
+   && 0!=sqlite4RowSetTest(pIn1->u.pRowSet, iSet, (u8 *)pIn3->z, pIn3->n)
   ){
     pc = pOp->p2-1;
     break;
   }
 
-  /* Fall through to KeySetAdd */
+  /* Fall through to RowSetAdd */
 }
 
-/* Opcode: KeySetAdd P1 P2 * * *
+/* Opcode: RowSetAdd P1 P2 * * *
 **
-** Read the blob value from register P2 and store it in KeySet object P1.
+** Read the blob value from register P2 and store it in RowSet object P1.
 */
-case OP_KeySetAdd: {         /* in1, in3 */
+case OP_RowSetAdd: {         /* in1, in3 */
   pIn1 = &aMem[pOp->p1];
-  if( (pIn1->flags & MEM_KeySet)==0 ){
-    sqlite4VdbeMemSetKeySet(pIn1);
-    if( (pIn1->flags & MEM_KeySet)==0 ) goto no_mem;
+  if( (pIn1->flags & MEM_RowSet)==0 ){
+    sqlite4VdbeMemSetRowSet(pIn1);
+    if( (pIn1->flags & MEM_RowSet)==0 ) goto no_mem;
   }
   pIn3 = &aMem[pOp->p3];
   assert( pIn3->flags & MEM_Blob );
-  sqlite4KeySetInsert(pIn1->u.pKeySet, pIn3->z, pIn3->n);
+  sqlite4RowSetInsert(pIn1->u.pRowSet, (u8 *)pIn3->z, pIn3->n);
   break;
 }
 
-/* Opcode: KeySetRead P1 P2 P3 * *
+/* Opcode: RowSetRead P1 P2 P3 * *
 **
 ** Remove a value from MemSet object P1 and store it in register P3.
 ** Or, if MemSet P1 is already empty, leave P3 unchanged and jump to 
 ** instruction P2.
 */
-case OP_KeySetRead: {       /* in1 */
+case OP_RowSetRead: {       /* in1 */
   const char *aKey;
   int nKey;
 
   CHECK_FOR_INTERRUPT;
   pIn1 = &aMem[pOp->p1];
   pOut = &aMem[pOp->p3];
-  if( (pIn1->flags & MEM_KeySet)
-   && (aKey = sqlite4KeySetRead(pIn1->u.pKeySet, &nKey))
+  if( (pIn1->flags & MEM_RowSet)
+   && (aKey = sqlite4RowSetRead(pIn1->u.pRowSet, &nKey))
   ){
     rc = sqlite4VdbeMemSetStr(pOut, aKey, nKey, 0, SQLITE_TRANSIENT);
-    sqlite4KeySetNext(pIn1->u.pKeySet);
+    sqlite4RowSetNext(pIn1->u.pRowSet);
   }else{
-    /* The KeySet is empty */
+    /* The RowSet is empty */
     sqlite4VdbeMemSetNull(pIn1);
     pc = pOp->p2 - 1;
   }

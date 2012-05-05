@@ -513,6 +513,8 @@ extern const int sqlite4one;
 */
 #define ROUND8(x)     (((x)+7)&~7)
 
+#define MIN(a,b) (((a)<(b)) ? (a) : (b))
+
 /*
 ** Round down to the nearest multiple of 8
 */
@@ -615,12 +617,12 @@ typedef struct Index Index;
 typedef struct IndexSample IndexSample;
 typedef struct KeyClass KeyClass;
 typedef struct KeyInfo KeyInfo;
-typedef struct KeySet KeySet;
 typedef struct Lookaside Lookaside;
 typedef struct LookasideSlot LookasideSlot;
 typedef struct Module Module;
 typedef struct NameContext NameContext;
 typedef struct Parse Parse;
+typedef struct RowSet RowSet;
 typedef struct Savepoint Savepoint;
 typedef struct Select Select;
 typedef struct SrcList SrcList;
@@ -2673,12 +2675,12 @@ void sqlite4EndTable(Parse*,Token*,Token*,Select*);
 int sqlite4ParseUri(sqlite4_env*,const char*,unsigned int*,char**,char **);
 int sqlite4CodeOnce(Parse *);
 
-KeySet *sqlite4KeySetInit(sqlite4*);
-void sqlite4KeySetFree(KeySet *);
-const char *sqlite4KeySetRead(KeySet *, int *);
-int sqlite4KeySetNext(KeySet *);
-void sqlite4KeySetInsert(KeySet *, const char *, int);
-int sqlite4KeySetTest(KeySet *, const char *, int);
+RowSet *sqlite4RowSetInit(sqlite4 *, void *, unsigned int);
+void sqlite4RowSetClear(RowSet *);
+void sqlite4RowSetInsert(RowSet *, u8 *, int);
+int sqlite4RowSetNext(RowSet *);
+const u8 *sqlite4RowSetRead(RowSet *, int *);
+int sqlite4RowSetTest(RowSet *, u8, u8 *, int);
 
 void sqlite4CreateView(Parse*,Token*,Token*,Token*,Select*,int,int);
 

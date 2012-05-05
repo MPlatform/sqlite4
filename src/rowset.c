@@ -10,12 +10,12 @@
 **
 *************************************************************************
 **
-** This module implements an object we call a "RowSet".
+** This module implements an object called a "RowSet".
 **
-** The RowSet object is a collection of rowids.  Rowids
+** The RowSet object is a collection of database keys.  Keys
 ** are inserted into the RowSet in an arbitrary order.  Inserts
-** can be intermixed with tests to see if a given rowid has been
-** previously inserted into the RowSet.
+** can be intermixed with tests to see if a given key is present
+** in the RowSet.
 **
 ** After all inserts are finished, it is possible to extract the
 ** elements of the RowSet in sorted order.  Once this extraction
@@ -56,32 +56,33 @@
 ** The cost of a TEST using the same batch number is O(logN).  The cost
 ** of the first SMALLEST is O(NlogN).  Second and subsequent SMALLEST
 ** primitives are constant time.  The cost of DESTROY is O(N).
-**
 ** There is an added cost of O(N) when switching between TEST and
 ** SMALLEST primitives.
 */
 #include "sqliteInt.h"
 
-#if 0
+typedef struct RowSetEntry RowSetEntry;
+typedef struct RowSetChunk RowSetChunk;
 
 /*
 ** Target size for allocation chunks.
 */
-#define ROWSET_ALLOCATION_SIZE 1024
 
 /*
-** The number of rowset entries per allocation chunk.
+** Total size of allocation chunks, and the number of bytes of usable 
+** space per chunk.
 */
-#define ROWSET_ENTRY_PER_CHUNK  \
-                       ((ROWSET_ALLOCATION_SIZE-8)/sizeof(struct RowSetEntry))
+#define ROWSET_ALLOCATION_SIZE 1024
+#define ROWSET_BYTES_PER_CHUNK (ROWSET_ALLOCATION_SIZE - sizeof(RowSetChunk))
 
 /*
 ** Each entry in a RowSet is an instance of the following object.
 */
 struct RowSetEntry {            
-  i64 v;                        /* ROWID value for this entry */
-  struct RowSetEntry *pRight;   /* Right subtree (larger entries) or list */
-  struct RowSetEntry *pLeft;    /* Left subtree (smaller entries) */
+  struct RowSetEntry *pRight;     /* Right subtree (larger entries) or list */
+  struct RowSetEntry *pLeft;      /* Left subtree (smaller entries) */
+  int nKey;                       /* Number of bytes in buffer aKey[] */
+  u8 aKey[0];                     /* Buffer containing nKey byte key */
 };
 
 /*
@@ -91,8 +92,7 @@ struct RowSetEntry {
 ** when the RowSet is destroyed.
 */
 struct RowSetChunk {
-  struct RowSetChunk *pNextChunk;        /* Next chunk on list of them all */
-  struct RowSetEntry aEntry[ROWSET_ENTRY_PER_CHUNK]; /* Allocated entries */
+  struct RowSetChunk *pNextChunk; /* Next chunk on list of them all */
 };
 
 /*
@@ -105,9 +105,9 @@ struct RowSet {
   sqlite4 *db;                   /* The database connection */
   struct RowSetEntry *pEntry;    /* List of entries using pRight */
   struct RowSetEntry *pLast;     /* Last entry on the pEntry list */
-  struct RowSetEntry *pFresh;    /* Source of new entry objects */
   struct RowSetEntry *pTree;     /* Binary tree of entries */
-  u16 nFresh;                    /* Number of objects on pFresh */
+  u8 *aSpace;                    /* Space for new entries */
+  u16 nSpace;                    /* Number of bytes in buffer aSpace */
   u8 isSorted;                   /* True if pEntry is sorted */
   u8 iBatch;                     /* Current insert batch */
 };
@@ -133,8 +133,8 @@ RowSet *sqlite4RowSetInit(sqlite4 *db, void *pSpace, unsigned int N){
   p->pEntry = 0;
   p->pLast = 0;
   p->pTree = 0;
-  p->pFresh = (struct RowSetEntry*)(ROUND8(sizeof(*p)) + (char*)p);
-  p->nFresh = (u16)((N - ROUND8(sizeof(*p)))/sizeof(struct RowSetEntry));
+  p->aSpace = 0;
+  p->nSpace = 0;
   p->isSorted = 1;
   p->iBatch = 0;
   return p;
@@ -151,42 +151,67 @@ void sqlite4RowSetClear(RowSet *p){
     pNextChunk = pChunk->pNextChunk;
     sqlite4DbFree(p->db, pChunk);
   }
-  p->pChunk = 0;
-  p->nFresh = 0;
-  p->pEntry = 0;
-  p->pLast = 0;
-  p->pTree = 0;
+  memset(p, 0, sizeof(RowSet));
   p->isSorted = 1;
 }
 
+
+static u8 *rowsetAllocateChunk(RowSet *p, int nByte){
+  RowSetChunk *pNew;              /* New RowSetChunk */
+  int nAlloc;                     /* Bytes to request from malloc() */
+  nAlloc = ROUND8(sizeof(RowSetChunk)) + nByte;
+  pNew = (RowSetChunk *)sqlite4DbMallocRaw(p->db, nAlloc);
+  return (pNew ? &((u8 *)pNew)[ROUND8(sizeof(RowSetChunk))] : 0);
+}
+
+static int rowsetEntryKeyCmp(RowSetEntry *pLeft, const u8 *aKey, int nKey){
+  int nCmp = MIN(pLeft->nKey, nKey);
+  int res;
+  res = memcmp(pLeft->aKey, aKey, nCmp);
+  return (res ? res : (pLeft->nKey - nKey));
+}
+
+static int rowsetEntryCmp(RowSetEntry *pLeft, RowSetEntry *pRight){
+  return rowsetEntryKeyCmp(pLeft, pRight->aKey, pRight->nKey);
+}
+
+
 /*
-** Insert a new value into a RowSet.
+** Insert a new database key into a RowSet.
 **
 ** The mallocFailed flag of the database connection is set if a
 ** memory allocation fails.
 */
-void sqlite4RowSetInsert(RowSet *p, i64 rowid){
+void sqlite4RowSetInsert(RowSet *p, u8 *aKey, int nKey){
+  int nByte;                   /* Space (in bytes) required by new entry */
   struct RowSetEntry *pEntry;  /* The new entry */
   struct RowSetEntry *pLast;   /* The last prior entry */
   assert( p!=0 );
-  if( p->nFresh==0 ){
-    struct RowSetChunk *pNew;
-    pNew = sqlite4DbMallocRaw(p->db, sizeof(*pNew));
-    if( pNew==0 ){
-      return;
+
+  nByte = ROUND8(sizeof(RowSetEntry) + nKey);
+
+  if( nByte>(ROWSET_BYTES_PER_CHUNK/4) ){
+    /* This is quite a large key. Store it in a chunk of its own. */
+    pEntry = (RowSetEntry *)rowsetAllocateChunk(p, nByte);
+  }else{
+    if( nByte>p->nSpace ){
+      p->aSpace = rowsetAllocateChunk(p, ROWSET_BYTES_PER_CHUNK);
+      p->nSpace = ROWSET_BYTES_PER_CHUNK;
     }
-    pNew->pNextChunk = p->pChunk;
-    p->pChunk = pNew;
-    p->pFresh = pNew->aEntry;
-    p->nFresh = ROWSET_ENTRY_PER_CHUNK;
+    pEntry = (RowSetEntry *)p->aSpace;
+    p->aSpace += nByte;
+    p->nSpace -= nByte;
   }
-  pEntry = p->pFresh++;
-  p->nFresh--;
-  pEntry->v = rowid;
+  if( pEntry==0 ) return;
+
   pEntry->pRight = 0;
+  pEntry->pLeft = 0;
+  pEntry->nKey = nKey;
+  memcpy(pEntry->aKey, aKey, nKey);
+
   pLast = p->pLast;
   if( pLast ){
-    if( p->isSorted && rowid<=pLast->v ){
+    if( p->isSorted && rowsetEntryCmp(pEntry, pLast)<0 ){
       p->isSorted = 0;
     }
     pLast->pRight = pEntry;
@@ -212,13 +237,15 @@ static struct RowSetEntry *rowSetMerge(
 
   pTail = &head;
   while( pA && pB ){
-    assert( pA->pRight==0 || pA->v<=pA->pRight->v );
-    assert( pB->pRight==0 || pB->v<=pB->pRight->v );
-    if( pA->v<pB->v ){
+    int res;
+    assert( pA->pRight==0 || rowsetEntryCmp(pA, pA->pRight)<=0 );
+    assert( pB->pRight==0 || rowsetEntryCmp(pB, pB->pRight)<=0 );
+    res = rowsetEntryCmp(pA, pB);
+    if( res<0 ){
       pTail->pRight = pA;
       pA = pA->pRight;
       pTail = pTail->pRight;
-    }else if( pB->v<pA->v ){
+    }else if( res>0 ){
       pTail->pRight = pB;
       pB = pB->pRight;
       pTail = pTail->pRight;
@@ -227,10 +254,10 @@ static struct RowSetEntry *rowSetMerge(
     }
   }
   if( pA ){
-    assert( pA->pRight==0 || pA->v<=pA->pRight->v );
+    assert( pA->pRight==0 || rowsetEntryCmp(pA, pA->pRight)<=0 );
     pTail->pRight = pA;
   }else{
-    assert( pB==0 || pB->pRight==0 || pB->v<=pB->pRight->v );
+    assert( pB==0 || pB->pRight==0 || rowsetEntryCmp(pB, pB->pRight)<=0 );
     pTail->pRight = pB;
   }
   return head.pRight;
@@ -380,25 +407,28 @@ static void rowSetToList(RowSet *p){
 ** After this routine has been called, the sqlite4RowSetInsert()
 ** routine may not be called again.  
 */
-int sqlite4RowSetNext(RowSet *p, i64 *pRowid){
+int sqlite4RowSetNext(RowSet *p){
+  rowSetToList(p);
+  assert( p->pEntry );
+  p->pEntry = p->pEntry->pRight;
+  return (p->pEntry!=0);
+}
+
+const u8 *sqlite4RowSetRead(RowSet *p, int *pnKey){
+  const u8 *aRet = 0;
   rowSetToList(p);
   if( p->pEntry ){
-    *pRowid = p->pEntry->v;
-    p->pEntry = p->pEntry->pRight;
-    if( p->pEntry==0 ){
-      sqlite4RowSetClear(p);
-    }
-    return 1;
-  }else{
-    return 0;
+    *pnKey = p->pEntry->nKey;
+    aRet = p->pEntry->aKey;
   }
+  return aRet;
 }
 
 /*
-** Check to see if element iRowid was inserted into the the rowset as
-** part of any insert batch prior to iBatch.  Return 1 or 0.
+** Check to see if element aKey/nKey has been inserted into the the 
+** rowset as part of any insert batch prior to iBatch.  Return 1 or 0.
 */
-int sqlite4RowSetTest(RowSet *pRowSet, u8 iBatch, sqlite4_int64 iRowid){
+int sqlite4RowSetTest(RowSet *pRowSet, u8 iBatch, u8 *aKey, int nKey){
   struct RowSetEntry *p;
   if( iBatch!=pRowSet->iBatch ){
     if( pRowSet->pEntry ){
@@ -411,100 +441,14 @@ int sqlite4RowSetTest(RowSet *pRowSet, u8 iBatch, sqlite4_int64 iRowid){
   }
   p = pRowSet->pTree;
   while( p ){
-    if( p->v<iRowid ){
+    int res = rowsetEntryKeyCmp(p, aKey, nKey);
+    if( res<0 ){
       p = p->pRight;
-    }else if( p->v>iRowid ){
+    }else if( res>0 ){
       p = p->pLeft;
     }else{
       return 1;
     }
   }
   return 0;
-}
-
-#endif
-
-typedef struct KeySetEntry KeySetEntry;
-
-struct KeySetEntry {
-  char *z;
-  int n;
-  KeySetEntry *pNext;
-};
-
-struct KeySet {
-  sqlite4 *db;                    /* Database handle for sqlite4DbMalloc() */
-  KeySetEntry *pFirst;
-  KeySetEntry *pLast;
-};
-
-KeySet *sqlite4KeySetInit(sqlite4 *db){
-  KeySet *pRet;
-  pRet = (KeySet *)sqlite4DbMallocZero(db, sizeof(KeySet));
-  if( pRet ){
-    pRet->db = db;
-  }
-  return pRet;
-}
-
-/*
-** Parameter zKey points to a buffer containing a database key nKey bytes 
-** in length. This function returns true if the KeySet passed as the first
-** argument already contains a key equal to the key in the buffer, or
-** false otherwise.
-*/
-int sqlite4KeySetTest(KeySet *pKeySet, const char *zKey, int nKey){
-  KeySetEntry *p;
-
-  for(p=pKeySet->pFirst; p; p=p->pNext){
-    if( p->n==nKey && 0==memcmp(p->z, zKey, nKey) ) break;
-  }
-
-  return p!=0;
-}
-
-void sqlite4KeySetInsert(KeySet *pKeySet, const char *z, int n){
-  KeySetEntry *pNew;
-  int nByte = n + sizeof(KeySetEntry);
-
-  pNew = (KeySetEntry *)sqlite4DbMallocZero(pKeySet->db, nByte);
-  if( pNew ){
-    pNew->z = (char *)&pNew[1];
-    pNew->n =n;
-    memcpy(pNew->z, z, n);
-    if( pKeySet->pFirst ){
-      pKeySet->pLast = pKeySet->pLast->pNext = pNew;
-    }else{
-      pKeySet->pLast = pKeySet->pFirst = pNew;
-    }
-  }
-}
-
-/*
-** Read the blob of data stored in the current key-set entry.
-*/
-const char *sqlite4KeySetRead(KeySet *pKeySet, int *pn){
-  const char *pRet;
-  if( pKeySet->pFirst ){
-    *pn = pKeySet->pFirst->n;
-    pRet = pKeySet->pFirst->z;
-  }else{
-    pRet = 0;
-    *pn = 0;
-  }
-  return pRet;
-}
-
-int sqlite4KeySetNext(KeySet *pKeySet){
-  KeySetEntry *pFirst = pKeySet->pFirst->pNext;
-  sqlite4DbFree(pKeySet->db, pKeySet->pFirst);
-  pKeySet->pFirst = pFirst;
-  return (pFirst!=0);
-}
-
-void sqlite4KeySetFree(KeySet *pKeySet){
-  while( pKeySet->pFirst ){
-    sqlite4KeySetNext(pKeySet);
-  }
-  sqlite4DbFree(pKeySet->db, pKeySet);
 }

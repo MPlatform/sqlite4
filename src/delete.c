@@ -328,22 +328,22 @@ void sqlite4DeleteFrom(
     int baseCur = 0;
     int regSet = ++pParse->nMem;  /* Register for rowset of rows to delete */
     int regKey = ++pParse->nMem;  /* Used for storing row keys */
-    int addrTop;                  /* Instruction (KeySetRead) at top of loop */
+    int addrTop;                  /* Instruction (RowSetRead) at top of loop */
 
     /* Query the table for all rows that match the WHERE clause. Store the
-    ** PRIMARY KEY for each matching row in the KeySet object in register
+    ** PRIMARY KEY for each matching row in the RowSet object in register
     ** regSet. After the scan is complete, the VM will loop through the set 
-    ** of keys in the KeySet and delete each row. Rows must be deleted after 
+    ** of keys in the RowSet and delete each row. Rows must be deleted after 
     ** the scan is complete because deleting an item can change the scan 
     ** order.  */
     sqlite4VdbeAddOp2(v, OP_Null, 0, regSet);
-    VdbeComment((v, "initialize KeySet"));
+    VdbeComment((v, "initialize RowSet"));
     pWInfo = sqlite4WhereBegin(
         pParse, pTabList, pWhere, 0, 0, WHERE_DUPLICATES_OK
     );
     if( pWInfo==0 ) goto delete_from_cleanup;
     sqlite4VdbeAddOp2(v, OP_RowKey, iCur, regKey);
-    sqlite4VdbeAddOp3(v, OP_KeySetAdd, regSet, 0, regKey);
+    sqlite4VdbeAddOp3(v, OP_RowSetAdd, regSet, 0, regKey);
     sqlite4WhereEnd(pWInfo);
 
     /* Unless this is a view, open cursors for all indexes on the table
@@ -353,7 +353,7 @@ void sqlite4DeleteFrom(
       sqlite4OpenAllIndexes(pParse, pTab, baseCur, OP_OpenWrite);
     }
 
-    addrTop = sqlite4VdbeAddOp3(v, OP_KeySetRead, regSet, 0, regKey);
+    addrTop = sqlite4VdbeAddOp3(v, OP_RowSetRead, regSet, 0, regKey);
 
     /* Delete the row */
 #ifndef SQLITE_OMIT_VIRTUALTABLE

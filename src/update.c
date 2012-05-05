@@ -122,7 +122,7 @@ void sqlite4Update(
   int regOldKey;                  /* Register containing the original PK */
   int regNew;                     /* Content of the NEW.* table in triggers */
   int regOld = 0;                 /* Content of OLD.* table in triggers */
-  int regKeySet = 0;              /* Register containing KeySet object */
+  int regRowSet = 0;              /* Register containing RowSet object */
   Index *pPk = 0;                 /* The primary key index of this table */
   int iPk = 0;                    /* Offset of primary key in aRegIdx[] */
   int bChngPk = 0;                /* True if any PK columns are updated */
@@ -285,7 +285,7 @@ void sqlite4Update(
 
   /* Allocate other required registers. Specifically:
   **
-  **     regKeySet:     1 register
+  **     regRowSet:     1 register
   **     regOldKey:     1 register
   **     regOldTr:      nCol+1 registers
   **     regNewTr:      nCol+1 registers
@@ -297,7 +297,7 @@ void sqlite4Update(
   ** implicit primary key value if the table in question does not have an
   ** explicit PRIMARY KEY.
   */
-  regKeySet = ++pParse->nMem;
+  regRowSet = ++pParse->nMem;
   regOldKey = ++pParse->nMem;
   if( pTrigger || hasFK ){
     regOldTr = pParse->nMem + 1;
@@ -331,21 +331,21 @@ void sqlite4Update(
 
   /* This block codes a loop that iterates through all rows of the table
   ** identified by the UPDATE statements WHERE clause. The primary key
-  ** of each row visited by the loop is added to the KeySet object stored
-  ** in register regKeySet.
+  ** of each row visited by the loop is added to the RowSet object stored
+  ** in register regRowSet.
   **
   ** There is one exception to the above: If static analysis of the WHERE 
   ** clause indicates that the loop will visit at most one row, then the
-  ** KeySet object is bypassed and the primary key of the single row (if
+  ** RowSet object is bypassed and the primary key of the single row (if
   ** any) left in register regOldKey. This is called the "one-pass"
   ** approach. Set okOnePass to true if it can be used in this case.  */
-  sqlite4VdbeAddOp3(v, OP_Null, 0, regKeySet, regOldKey);
+  sqlite4VdbeAddOp3(v, OP_Null, 0, regRowSet, regOldKey);
   pWInfo = sqlite4WhereBegin(pParse, pSrc, pWhere, 0, 0, WHERE_ONEPASS_DESIRED);
   if( pWInfo==0 ) goto update_cleanup;
   okOnePass = pWInfo->okOnePass;
   sqlite4VdbeAddOp2(v, OP_RowKey, iCur+iPk, regOldKey);
   if( !okOnePass ){
-    sqlite4VdbeAddOp3(v, OP_KeySetAdd, regKeySet, 0, regOldKey);
+    sqlite4VdbeAddOp3(v, OP_RowSetAdd, regRowSet, 0, regOldKey);
   }
   sqlite4WhereEnd(pWInfo);
 
@@ -380,22 +380,22 @@ void sqlite4Update(
   ** without doing anything. Otherwise - if okOnePass is true and regOldKey 
   ** contains something other than NULL - proceed.
   **
-  ** Or, if okOnePass is false, then the KeySet object stored in register
-  ** regKeySet contains the set of encoded PKs for the rows that will
+  ** Or, if okOnePass is false, then the RowSet object stored in register
+  ** regRowSet contains the set of encoded PKs for the rows that will
   ** be updated by this statement. Read the next one into register regOldKey.
-  ** Or, if the KeySet is already empty, jump to the end of the loop.
+  ** Or, if the RowSet is already empty, jump to the end of the loop.
   */
   if( okOnePass ){
     int a1 = sqlite4VdbeAddOp1(v, OP_NotNull, regOldKey);
     addr = sqlite4VdbeAddOp0(v, OP_Goto);
     sqlite4VdbeJumpHere(v, a1);
   }else{
-    addr = sqlite4VdbeAddOp3(v, OP_KeySetRead, regKeySet, 0, regOldKey);
+    addr = sqlite4VdbeAddOp3(v, OP_RowSetRead, regRowSet, 0, regOldKey);
   }
 
   /* Make cursor iCur point to the record that is being updated. If
   ** this record does not exist for some reason (deleted by a trigger,
-  ** for example, then jump to the next iteration of the KeySet loop. 
+  ** for example, then jump to the next iteration of the RowSet loop. 
   ** TODO: If okOnePass is true, does iCur already point to this record? */
   sqlite4VdbeAddOp4(v, OP_NotFound, iCur+iPk, addr, regOldKey, 0, P4_INT32);
 

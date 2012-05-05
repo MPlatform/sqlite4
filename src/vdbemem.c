@@ -33,7 +33,7 @@
 */
 int sqlite4VdbeChangeEncoding(Mem *pMem, int desiredEnc){
   int rc;
-  assert( (pMem->flags&MEM_KeySet)==0 );
+  assert( (pMem->flags&MEM_RowSet)==0 );
   assert( desiredEnc==SQLITE_UTF8 || desiredEnc==SQLITE_UTF16LE
            || desiredEnc==SQLITE_UTF16BE );
   if( !(pMem->flags&MEM_Str) || pMem->enc==desiredEnc ){
@@ -75,7 +75,7 @@ int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve){
     ((pMem->flags&MEM_Ephem) ? 1 : 0) + 
     ((pMem->flags&MEM_Static) ? 1 : 0)
   );
-  assert( (pMem->flags&MEM_KeySet)==0 );
+  assert( (pMem->flags&MEM_RowSet)==0 );
 
   if( n<32 ) n = 32;
   if( sqlite4DbMallocSize(pMem->db, pMem->zMalloc)<n ){
@@ -117,7 +117,7 @@ int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve){
 int sqlite4VdbeMemMakeWriteable(Mem *pMem){
   int f;
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
-  assert( (pMem->flags&MEM_KeySet)==0 );
+  assert( (pMem->flags&MEM_RowSet)==0 );
   ExpandBlob(pMem);
   f = pMem->flags;
   if( (f&(MEM_Str|MEM_Blob)) && pMem->z!=pMem->zMalloc ){
@@ -175,7 +175,7 @@ int sqlite4VdbeMemStringify(Mem *pMem, int enc){
   assert( !(fg&MEM_Zero) );
   assert( !(fg&(MEM_Str|MEM_Blob)) );
   assert( fg&(MEM_Int|MEM_Real) );
-  assert( (pMem->flags&MEM_KeySet)==0 );
+  assert( (pMem->flags&MEM_RowSet)==0 );
   assert( EIGHT_BYTE_ALIGNMENT(pMem) );
 
 
@@ -242,12 +242,12 @@ void sqlite4VdbeMemReleaseExternal(Mem *p){
     assert( (p->flags & MEM_Agg)==0 );
     sqlite4VdbeMemRelease(p);
   }else if( p->flags&MEM_Dyn && p->xDel ){
-    assert( (p->flags&MEM_KeySet)==0 );
+    assert( (p->flags&MEM_RowSet)==0 );
     assert( p->xDel!=SQLITE_DYNAMIC );
     p->xDel((void *)p->z);
     p->xDel = 0;
-  }else if( p->flags&MEM_KeySet ){
-    sqlite4KeySetFree(p->u.pKeySet);
+  }else if( p->flags&MEM_RowSet ){
+    sqlite4RowSetClear(p->u.pRowSet);
   }else if( p->flags&MEM_Frame ){
     sqlite4VdbeMemSetNull(p);
   }
@@ -368,7 +368,7 @@ double sqlite4VdbeRealValue(Mem *pMem){
 */
 void sqlite4VdbeIntegerAffinity(Mem *pMem){
   assert( pMem->flags & MEM_Real );
-  assert( (pMem->flags & MEM_KeySet)==0 );
+  assert( (pMem->flags & MEM_RowSet)==0 );
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
   assert( EIGHT_BYTE_ALIGNMENT(pMem) );
 
@@ -397,7 +397,7 @@ void sqlite4VdbeIntegerAffinity(Mem *pMem){
 */
 int sqlite4VdbeMemIntegerify(Mem *pMem){
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
-  assert( (pMem->flags & MEM_KeySet)==0 );
+  assert( (pMem->flags & MEM_RowSet)==0 );
   assert( EIGHT_BYTE_ALIGNMENT(pMem) );
 
   pMem->u.i = sqlite4VdbeIntValue(pMem);
@@ -452,8 +452,8 @@ void sqlite4VdbeMemSetNull(Mem *pMem){
     pFrame->pParent = pFrame->v->pDelFrame;
     pFrame->v->pDelFrame = pFrame;
   }
-  if( pMem->flags & MEM_KeySet ){
-    sqlite4KeySetFree(pMem->u.pKeySet);
+  if( pMem->flags & MEM_RowSet ){
+    sqlite4RowSetClear(pMem->u.pRowSet);
   }
   MemSetTypeFlag(pMem, MEM_Null);
   pMem->type = SQLITE_NULL;
@@ -503,16 +503,21 @@ void sqlite4VdbeMemSetDouble(Mem *pMem, double val){
 
 /*
 ** Delete any previous value and set the value of pMem to be an
-** empty KeySet object.
+** empty RowSet object.
 */
-void sqlite4VdbeMemSetKeySet(Mem *pMem){
+void sqlite4VdbeMemSetRowSet(Mem *pMem){
   sqlite4 *db = pMem->db;
   assert( db!=0 );
-  assert( (pMem->flags & MEM_KeySet)==0 );
+  assert( (pMem->flags & MEM_RowSet)==0 );
   sqlite4VdbeMemRelease(pMem);
-
-  pMem->u.pKeySet = sqlite4KeySetInit(db);
-  pMem->flags = MEM_KeySet;
+  sqlite4VdbeMemGrow(pMem, 64, 0);
+  if( db->mallocFailed ){
+    pMem->flags = MEM_Null;
+  }else{
+    int nAlloc = sqlite4DbMallocSize(db, pMem->zMalloc);
+    pMem->u.pRowSet = sqlite4RowSetInit(db, pMem->zMalloc, nAlloc);
+    pMem->flags = MEM_RowSet;
+  }
 }
 
 /*
@@ -565,7 +570,7 @@ void sqlite4VdbeMemAboutToChange(Vdbe *pVdbe, Mem *pMem){
 ** and flags gets srcType (either MEM_Ephem or MEM_Static).
 */
 void sqlite4VdbeMemShallowCopy(Mem *pTo, const Mem *pFrom, int srcType){
-  assert( (pFrom->flags & MEM_KeySet)==0 );
+  assert( (pFrom->flags & MEM_RowSet)==0 );
   VdbeMemRelease(pTo);
   memcpy(pTo, pFrom, MEMCELLSIZE);
   pTo->xDel = 0;
@@ -583,7 +588,7 @@ void sqlite4VdbeMemShallowCopy(Mem *pTo, const Mem *pFrom, int srcType){
 int sqlite4VdbeMemCopy(Mem *pTo, const Mem *pFrom){
   int rc = SQLITE_OK;
 
-  assert( (pFrom->flags & MEM_KeySet)==0 );
+  assert( (pFrom->flags & MEM_RowSet)==0 );
   VdbeMemRelease(pTo);
   memcpy(pTo, pFrom, MEMCELLSIZE);
   pTo->flags &= ~MEM_Dyn;
@@ -643,7 +648,7 @@ int sqlite4VdbeMemSetStr(
   u16 flags = 0;      /* New value for pMem->flags */
 
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
-  assert( (pMem->flags & MEM_KeySet)==0 );
+  assert( (pMem->flags & MEM_RowSet)==0 );
 
   /* If z is a NULL pointer, set pMem to contain an SQL NULL. */
   if( !z ){
@@ -729,7 +734,7 @@ int sqlite4MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
   f1 = pMem1->flags;
   f2 = pMem2->flags;
   combined_flags = f1|f2;
-  assert( (combined_flags & MEM_KeySet)==0 );
+  assert( (combined_flags & MEM_RowSet)==0 );
  
   /* If one value is NULL, it is less than the other. If both values
   ** are NULL, return 0.
@@ -845,7 +850,7 @@ const void *sqlite4ValueText(sqlite4_value* pVal, u8 enc){
 
   assert( pVal->db==0 || sqlite4_mutex_held(pVal->db->mutex) );
   assert( (enc&3)==(enc&~SQLITE_UTF16_ALIGNED) );
-  assert( (pVal->flags & MEM_KeySet)==0 );
+  assert( (pVal->flags & MEM_RowSet)==0 );
 
   if( pVal->flags&MEM_Null ){
     return 0;

@@ -138,7 +138,7 @@ struct Mem {
     i64 i;              /* Integer value used when MEM_Int is set in flags */
     int nZero;          /* Used when bit MEM_Zero is set in flags */
     FuncDef *pDef;      /* Used only when flags==MEM_Agg */
-    KeySet *pKeySet;    /* Used only when flags==MEM_KeySet */
+    RowSet *pRowSet;    /* Used only when flags==MEM_RowSet */
     VdbeFrame *pFrame;  /* Used when flags==MEM_Frame */
   } u;
   int n;              /* Number of characters in string value, excluding '\0' */
@@ -170,7 +170,7 @@ struct Mem {
 #define MEM_Int       0x0004   /* Value is an integer */
 #define MEM_Real      0x0008   /* Value is a real number */
 #define MEM_Blob      0x0010   /* Value is a BLOB */
-#define MEM_KeySet    0x0020   /* Value is a KeySet object */
+#define MEM_RowSet    0x0020   /* Value is a RowSet object */
 #define MEM_Frame     0x0040   /* Value is a VdbeFrame object */
 #define MEM_Invalid   0x0080   /* Value is undefined */
 #define MEM_TypeMask  0x00ff   /* Mask of type bits */
@@ -414,12 +414,12 @@ double sqlite4VdbeRealValue(Mem*);
 void sqlite4VdbeIntegerAffinity(Mem*);
 int sqlite4VdbeMemRealify(Mem*);
 int sqlite4VdbeMemNumerify(Mem*);
-void sqlite4VdbeMemSetKeySet(Mem *pMem);
+void sqlite4VdbeMemSetRowSet(Mem *pMem);
 
 void sqlite4VdbeMemRelease(Mem *p);
 void sqlite4VdbeMemReleaseExternal(Mem *p);
 #define VdbeMemRelease(X)  \
-  if((X)->flags&(MEM_Agg|MEM_Dyn|MEM_KeySet|MEM_Frame)) \
+  if((X)->flags&(MEM_Agg|MEM_Dyn|MEM_RowSet|MEM_Frame)) \
     sqlite4VdbeMemReleaseExternal(X);
 int sqlite4VdbeMemFinalize(Mem*, FuncDef*);
 const char *sqlite4OpcodeName(int);
