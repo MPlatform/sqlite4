@@ -30,7 +30,6 @@ typedef struct lsm_mutex lsm_mutex;         /* Mutex handle */
 /*
 ** Types required to implement new OS interfaces for lsm.
 */
-typedef struct lsm_vfs lsm_vfs;             /* OS interface structure */
 typedef struct lsm_file lsm_file;           /* OS file handle */
 typedef long long int lsm_i64;              /* 64-bit signed integer type */
 
@@ -75,14 +74,6 @@ struct lsm_env {
 ** Return a pointer to the default LSM run-time environment
 */
 lsm_env *lsm_default_env(void);
-
-struct lsm_vfs {
-  int (*xOpen)(lsm_env*, const char *, lsm_file **);
-  int (*xRead)(lsm_file *, lsm_i64, void *, int);
-  int (*xWrite)(lsm_file *, lsm_i64, void *, int);
-  int (*xSync)(lsm_file *);
-  int (*xClose)(lsm_file *);
-};
 
 /*
 ** Error codes.
@@ -177,8 +168,6 @@ int lsm_config(lsm_db *, int, ...);
 void *lsm_malloc(lsm_env*, size_t);
 void *lsm_realloc(lsm_env*, void *, size_t);
 void lsm_free(lsm_env*, void *);
-
-lsm_vfs *lsm_default_vfs(void);
 
 /*
 ** Configure a callback to which debugging and other messages should 

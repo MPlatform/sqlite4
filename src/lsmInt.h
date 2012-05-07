@@ -153,10 +153,6 @@ struct lsm_db {
   /* Work done notification callback */
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
-
-  /* Configured VFS, if any. */
-  void *pVfsCtx;
-  lsm_vfs *pVfs;
 };
 
 /*
@@ -483,11 +479,6 @@ int lsmLogSeek(lsm_db *, LogMark *);
 int lsmLogRecover(lsm_db *);
 #endif
 
-
-/*
-** Functions from file "os.c".
-*/
-void lsmDefaultVfs(lsm_vfs **, void **);
 
 /**************************************************************************
 ** Functions from file "shared.c".

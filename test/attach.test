@@ -753,7 +753,7 @@ if {$tcl_platform(platform)=="unix"} {
   } {1 {unable to open database: cannot-read}}
   do_test attach-6.2.2 {
     db errorcode
-  } {14}
+  } {10}
   forcedelete cannot-read
 }
 

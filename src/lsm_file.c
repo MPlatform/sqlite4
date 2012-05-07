@@ -133,8 +133,6 @@ struct FileSystem {
   int nPagesize;                  /* Database page-size in bytes */
   int nBlocksize;                 /* Database block-size in bytes */
 
-  lsm_vfs *pVfs;                  /* VFS object */
-
   /* r/w file descriptors for both files */
   lsm_file *fdDb;                 /* Database file */
   lsm_file *fdLog;                /* Log file */
@@ -253,6 +251,38 @@ static void fsIListRemove(IList *pList, int iRem){
 ** End of IList functions.
 **************************************************************************/
 
+/*
+** Wrappers around the VFS methods of the lsm_env object.
+*/
+static int lsmEnvOpen(lsm_env *pEnv, const char *zFile, lsm_file **ppNew){
+  return pEnv->xOpen(pEnv, zFile, ppNew);
+}
+static int lsmEnvRead(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  lsm_i64 iOff, 
+  void *pRead, 
+  int nRead
+){
+  return pEnv->xRead(pFile, iOff, pRead, nRead);
+}
+static int lsmEnvWrite(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  lsm_i64 iOff, 
+  void *pWrite, 
+  int nWrite
+){
+  return pEnv->xWrite(pFile, iOff, pWrite, nWrite);
+}
+static int lsmEnvSync(lsm_env *pEnv, lsm_file *pFile){
+  return pEnv->xSync(pFile);
+}
+static int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
+  return pEnv->xClose(pFile);
+}
+
+
 
 /*
 ** Given that there are currently nHash slots in the hash table, return 
@@ -278,7 +308,7 @@ static lsm_file *fsOpenFile(
     if( !zName ){
       *pRc = LSM_NOMEM;
     }else{
-      *pRc = pFS->pVfs->xOpen(pFS->pEnv, zName, &pFile);
+      *pRc = lsmEnvOpen(pFS->pEnv, zName, &pFile);
     }
     lsmFree(pFS->pEnv, zName);
   }
@@ -303,13 +333,6 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb, int nPgsz){
     pFS->nBlocksize = 2 * 1024 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
-
-    /* Copy pointers to the VFS */
-    if( pDb->pVfs ){
-      pFS->pVfs = pDb->pVfs;
-    }else{
-      pFS->pVfs = lsm_default_vfs();
-    }
 
     /* Make a copy of the database name. */
     pFS->zDb = lsmMallocStrdup(pDb->pEnv, zDb);
@@ -362,8 +385,8 @@ void lsmFsClose(FileSystem *pFS){
       pPg = pNext;
     }
 
-    if( pFS->fdDb ) pFS->pVfs->xClose(pFS->fdDb);
-    if( pFS->fdLog ) pFS->pVfs->xClose(pFS->fdLog);
+    if( pFS->fdDb ) lsmEnvClose(pFS->pEnv, pFS->fdDb );
+    if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
 
     lsmFree(pEnv, pFS->zDb);
     lsmFree(pEnv, pFS->apHash);
@@ -622,7 +645,7 @@ int fsPageGet(
         i64 iOff;
 
         iOff = (i64)(iPg-1) * pFS->nPagesize;
-        rc = pFS->pVfs->xRead(pFS->fdDb, iOff, p->aData, nByte);
+        rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, p->aData, nByte);
         pFS->nRead++;
       }
 
@@ -1107,7 +1130,7 @@ int lsmFsMetaPageGet(FileSystem *pFS, int iPg, Page **ppPg){
     pPg->aData = lsmMallocZeroRc(pFS->pEnv, pFS->nMetasize, &rc);
     if( rc ) goto meta_page_out;
     iOff = fsMetaOffset(pFS, iPg);
-    rc = pFS->pVfs->xRead(pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
+    rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
     if( rc ) goto meta_page_out;
 
     pPg->iPg = iPg;
@@ -1148,7 +1171,7 @@ int lsmFsLogPageGet(
 #ifdef LSM_DEBUG
     memset(aData, 0x55, LOG_FILE_PGSZ);
 #endif
-    rc = pFS->pVfs->xRead(pFS->fdLog, iOff, aData, LOG_FILE_PGSZ);
+    rc = lsmEnvRead(pFS->pEnv, pFS->fdLog, iOff, aData, LOG_FILE_PGSZ);
   }
 
   if( rc==LSM_OK ){
@@ -1190,15 +1213,15 @@ int lsmFsPagePersist(Page *pPg){
     if( eType==LSM_CKPT_FILE ){
       i64 iOff;
       iOff = fsMetaOffset(pFS, pPg->iPg);
-      rc = pFS->pVfs->xWrite(pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
+      rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
     }else if( eType==LSM_LOG_FILE ){
       i64 iOff = (pPg->iPg-1) * LOG_FILE_PGSZ;
-      rc = pFS->pVfs->xWrite(pFS->fdLog, iOff, pPg->aData, LOG_FILE_PGSZ);
+      rc = lsmEnvWrite(pFS->pEnv, pFS->fdLog, iOff, pPg->aData, LOG_FILE_PGSZ);
     }else{
       i64 iOff;                 /* Offset to write within database file */
 
       iOff = pFS->nPagesize * (pPg->iPg-1);
-      rc = pFS->pVfs->xWrite(pFS->fdDb, iOff, pPg->aData, pFS->nPagesize);
+      rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nPagesize);
     }
     pPg->flags &= ~PAGE_DIRTY;
     pFS->nWrite++;
@@ -1279,11 +1302,11 @@ int lsmFsSortedPhantom(FileSystem *pFS, SortedRun *pRun){
 }
 
 int lsmFsDbSync(FileSystem *pFS){
-  return pFS->pVfs->xSync(pFS->fdDb);
+  return lsmEnvSync(pFS->pEnv, pFS->fdDb);
 }
 
 int lsmFsLogSync(FileSystem *pFS){
-  return pFS->pVfs->xSync(pFS->fdLog);
+  return lsmEnvSync(pFS->pEnv, pFS->fdLog);
 }
 
 void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
