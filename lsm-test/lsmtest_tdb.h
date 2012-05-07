@@ -1,0 +1,127 @@
+
+/*
+** This file is the interface to a very simple database library used for
+** testing. The interface is similar to that of the LSM. The main virtue 
+** of this library is that the same API may be used to access a key-value
+** store implemented by LSM, SQLite or another database system. Which 
+** makes it easy to use for correctness and performance tests.
+*/
+
+#ifndef __WRAPPER_H_
+#define __WRAPPER_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "lsm.h"
+
+typedef struct TestDb TestDb;
+
+/*
+** Open a new database connection. The first argument is the name of the
+** database library to use. e.g. something like:
+**
+**     "sqlite3"
+**     "lsm"
+**
+** See function tdb_system_name() for a list of available database systems.
+**
+** The second argument is the name of the database to open (e.g. a filename).
+**
+** If the third parameter is non-zero, then any existing database by the
+** name of zDb is removed before opening a new one. If it is zero, then an
+** existing database may be opened.
+*/
+int tdb_open(const char *zLibrary, const char *zDb, int bClear, TestDb **ppDb);
+
+/*
+** Close a database handle.
+*/
+int tdb_close(TestDb *pDb);
+
+/*
+** Write a new key/value into the database.
+*/
+int tdb_write(TestDb *pDb, void *pKey, int nKey, void *pVal, int nVal);
+
+/*
+** Delete a key from the database.
+*/
+int tdb_delete(TestDb *pDb, void *pKey, int nKey);
+
+/*
+** Query the database for key (pKey/nKey). If no entry is found, set *ppVal
+** to 0 and *pnVal to -1 before returning. Otherwise, set *ppVal and *pnVal
+** to a pointer to and size of the value associated with (pKey/nKey).
+*/
+int tdb_fetch(TestDb *pDb, void *pKey, int nKey, void **ppVal, int *pnVal);
+
+/*
+** Open and close nested transactions. Currently, these functions only 
+** work for SQLite and LSM systems. Use the tdb_transaction_support() function
+** to determine if a given TestDb handle supports these methods.
+**
+** A value of 0 is a read-transaction. Values above 0 are write transactions.
+** Passing a negative value as the second parameter to any of these functions
+** is an error.
+*/
+int tdb_begin(TestDb *pDb, int iLevel);
+int tdb_commit(TestDb *pDb, int iLevel);
+int tdb_rollback(TestDb *pDb, int iLevel);
+
+/*
+** Return true if transactions are supported, or false otherwise.
+*/
+int tdb_transaction_support(TestDb *pDb);
+
+/*
+** Return the name of the database library (as passed to tdb_open()) used
+** by the handled passed as the first argument.
+*/
+const char *tdb_library_name(TestDb *pDb);
+
+/*
+** Scan a range of database keys. Invoke the callback function for each
+** key visited.
+*/
+int tdb_scan(
+  TestDb *pDb,                    /* Database handle */
+  void *pCtx,                     /* Context pointer to pass to xCallback */
+  int bReverse,                   /* True to scan in reverse order */
+  void *pKey1, int nKey1,         /* Start of search */
+  void *pKey2, int nKey2,         /* End of search */
+  void (*xCallback)(void *pCtx, void *pKey, int nKey, void *pVal, int nVal)
+);
+
+const char *tdb_system_name(int i);
+
+/*
+** If the TestDb handle passed as an argument is a wrapper around an LSM
+** database, return the LSM handle. Otherwise, if the argument is some other
+** database system, return NULL.
+*/
+lsm_db *tdb_lsm(TestDb *pDb);
+
+/*
+** The following functions only work with LSM database handles. It is
+** illegal to call them with any other type of database handle specified
+** as an argument.
+*/
+void tdb_lsm_enable_log(TestDb *pDb, int bEnable);
+void tdb_lsm_application_crash(TestDb *pDb);
+void tdb_lsm_prepare_system_crash(TestDb *pDb);
+void tdb_lsm_system_crash(TestDb *pDb);
+
+void tdb_lsm_safety(TestDb *pDb, int eMode);
+void tdb_lsm_prepare_system_crash(TestDb *pDb);
+void tdb_lsm_prepare_sync_crash(TestDb *pDb, int iSync);
+
+void tdb_lsm_config_work_hook(TestDb *pDb, void (*)(lsm_db *, void *), void *);
+
+#ifdef __cplusplus
+}  /* End of the 'extern "C"' block */
+#endif
+
+#endif
+

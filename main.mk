@@ -289,6 +289,14 @@ EXTHDR += \
 EXTHDR += \
   $(TOP)/ext/icu/sqliteicu.h
 
+LSMTESTSRC = $(TOP)/lsm-test/lsmtest1.c $(TOP)/lsm-test/lsmtest2.c           \
+             $(TOP)/lsm-test/lsmtest3.c $(TOP)/lsm-test/lsmtest4.c           \
+             $(TOP)/lsm-test/lsmtest5.c $(TOP)/lsm-test/lsmtest_datasource.c \
+             $(TOP)/lsm-test/lsmtest_func.c $(TOP)/lsm-test/lsmtest_io.c     \
+             $(TOP)/lsm-test/lsmtest_main.c $(TOP)/lsm-test/lsmtest_mem.c    \
+             $(TOP)/lsm-test/lsmtest_tdb.c $(TOP)/lsm-test/lsmtest_tdb3.c    \
+             $(TOP)/lsm-test/lsmtest_util.c 
+
 # This is the default Makefile target.  The objects listed here
 # are what get build when you type just "make" with no arguments.
 #
@@ -495,6 +503,11 @@ soaktest:	testfixture$(EXE) sqlite4$(EXE)
 
 test:	testfixture$(EXE) sqlite4$(EXE)
 	./testfixture$(EXE) $(TOP)/test/src4.test
+
+# Rules to build the 'lsmtest' application.
+#
+lsmtest$(EXE): libsqlite4.a $(LSMTESTSRC)
+	$(TCCX) $(LSMTESTSRC) libsqlite4.a -o lsmtest$(EXE) $(THREADLIB) -lsqlite3
 
 # The next two rules are used to support the "threadtest" target. Building
 # threadtest runs a few thread-safety tests that are implemented in C. This

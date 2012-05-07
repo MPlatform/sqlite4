@@ -71,6 +71,11 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   return LSM_OK;
 }
 
+lsm_env *lsm_get_env(lsm_db *pDb){
+  assert( pDb->pEnv );
+  return pDb->pEnv;
+}
+
 /*
 ** Release snapshot handle *ppSnap. Then set *ppSnap to zero. This
 ** is useful for doing (say):

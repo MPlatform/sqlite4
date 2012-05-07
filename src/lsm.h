@@ -104,6 +104,13 @@ int lsm_open(lsm_db *pDb, const char *zFilename);
 int lsm_close(lsm_db *pDb);
 
 /*
+** Return a pointer to the environment used by the database connection 
+** passed as the first argument. Assuming the argument is valid, this 
+** function always returns a valid environment pointer - it cannot fail.
+*/
+lsm_env *lsm_get_env(lsm_db *pDb);
+
+/*
 ** Configure a database connection.
 */
 int lsm_config(lsm_db *, int, ...);
