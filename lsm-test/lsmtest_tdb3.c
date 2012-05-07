@@ -153,6 +153,7 @@ static int testIvecBitGet(IVector *p, int iBit){
 **************************************************************************
 ** Begin test VFS code.
 */
+#if 0
 struct TestFile {
   lsm_file *pReal;
   LsmDb *pDb;                     /* Database handle that uses this file */
@@ -471,6 +472,7 @@ static int testVfsClose(lsm_file *pFile){
 
   return rc;
 }
+#endif
 
 static int installTestVFS(LsmDb *pDb){
 #if 0
@@ -962,7 +964,7 @@ static int mt_start_worker(
   p->lsm_work_npage = nPage;
 
   /* Open the worker connection */
-  if( rc==0 ) rc = lsm_new(&p->pWorker);
+  if( rc==0 ) rc = lsm_new(0, &p->pWorker);
   if( rc==0 ) rc = lsm_open(p->pWorker, zFilename);
 
   /* Configure the work-hook */
