@@ -322,16 +322,14 @@ char *lsmMallocStrdup(lsm_env *pEnv, const char *);
 */
 int lsmMutexStatic(lsm_env*, int, lsm_mutex **);
 int lsmMutexNew(lsm_env*, lsm_mutex **);
-void lsmMutexDel(lsm_mutex *);
-void lsmMutexEnter(lsm_mutex *);
-int lsmMutexTry(lsm_mutex *);
-void lsmMutexLeave(lsm_mutex *);
+void lsmMutexDel(lsm_env*, lsm_mutex *);
+void lsmMutexEnter(lsm_env*, lsm_mutex *);
+int lsmMutexTry(lsm_env*, lsm_mutex *);
+void lsmMutexLeave(lsm_env*, lsm_mutex *);
 
-void lsmConfigSetMutex(lsm_mutex_methods *);
-void lsmConfigGetMutex(lsm_mutex_methods *);
-
-#ifdef LSM_DEBUG
-  int lsmMutexHeld(lsm_mutex *);
+#ifndef NDEBUG
+int lsmMutexHeld(lsm_env *, lsm_mutex *);
+int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 #endif
 
 /* 

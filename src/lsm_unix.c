@@ -255,12 +255,13 @@ static int lsmPosixOsMutexNotHeld(lsm_mutex *p){
 */
 typedef struct NoopMutex NoopMutex;
 struct NoopMutex {
+  lsm_env *pEnv;                  /* Environment handle (for xFree()) */
   int bHeld;                      /* True if mutex is held */
   int bStatic;                    /* True for a static mutex */
 };
 static NoopMutex aStaticNoopMutex[2] = {
-  {0, 1},
-  {0, 1},
+  {0, 0, 1},
+  {0, 0, 1},
 };
 
 static int lsmPosixOsMutexStatic(
@@ -273,14 +274,16 @@ static int lsmPosixOsMutexStatic(
   return LSM_OK;
 }
 static int lsmPosixOsMutexNew(lsm_env *pEnv, lsm_mutex **ppNew){
-  int rc = LSM_OK;
-  *ppNew = (lsm_mutex *)lsmMallocZeroRc(pEnv, sizeof(NoopMutex), &rc);
-  return rc;
+  NoopMutex *p;
+  p = (NoopMutex *)lsmMallocZero(pEnv, sizeof(NoopMutex));
+  if( p ) p->pEnv = pEnv;
+  *ppNew = (lsm_mutex *)p;
+  return (p ? LSM_OK : LSM_NOMEM_BKPT);
 }
 static void lsmPosixOsMutexDel(lsm_mutex *pMutex)  { 
   NoopMutex *p = (NoopMutex *)pMutex;
-  assert( p->bStatic==0 );
-  lsmFree(0, p);
+  assert( p->bStatic==0 && p->pEnv );
+  lsmFree(p->pEnv, p);
 }
 static void lsmPosixOsMutexEnter(lsm_mutex *pMutex){ 
   NoopMutex *p = (NoopMutex *)pMutex;

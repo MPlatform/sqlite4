@@ -327,30 +327,7 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 }
 
 int lsm_global_config(int eParam, ...){
-  int rc = LSM_OK;
-  va_list ap;
-  va_start(ap, eParam);
-
-  switch( eParam ){
-    case LSM_GLOBAL_CONFIG_SET_MUTEX: {
-      lsm_mutex_methods *pMutex = va_arg(ap, lsm_mutex_methods *);
-      lsmConfigSetMutex(pMutex);
-      break;
-    }
-
-    case LSM_GLOBAL_CONFIG_GET_MUTEX: {
-      lsm_mutex_methods *pMutex = va_arg(ap, lsm_mutex_methods *);
-      lsmConfigGetMutex(pMutex);
-      break;
-    }
-
-    default:
-      rc = LSM_MISUSE;
-      break;
-  }
-
-  va_end(ap);
-  return rc;
+  return LSM_MISUSE;
 }
 
 void lsmAppendSegmentList(LsmString *pStr, char *zPre, Segment *pSeg){
