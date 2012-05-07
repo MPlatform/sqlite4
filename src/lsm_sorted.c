@@ -137,6 +137,7 @@ typedef struct SegmentPtr SegmentPtr;
 typedef struct Blob Blob;
 
 struct Blob {
+  lsm_env *pEnv;
   void *pData;
   int nData;
   int nAlloc;
@@ -216,8 +217,11 @@ struct LevelCursor {
 **   lsmMCursorValid()
 */
 struct MultiCursor {
+  lsm_db *pDb;                    /* Connection that owns this cursor */
   TreeCursor *pTreeCsr;           /* Single tree cursor */
+#if 0
   FileSystem *pFS;                /* File-system to read from */
+#endif
   int flags;                      /* Mask of CURSOR_XXX flags */
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
   int eType;                      /* Cache of current key type */
@@ -299,81 +303,19 @@ u32 lsmGetU32(u8 *aOut){
        + ((u32)aOut[3]);
 }
 
-#if 0
-int lsmVarintLen32(int n){
-  if( 0==((u32)n & ~0x0000007F) ) return 1;
-  if( 0==((u32)n & ~0x00003FFF) ) return 2;
-  if( 0==((u32)n & ~0x001FFFFF) ) return 3;
-  if( 0==((u32)n & ~0x0FFFFFFF) ) return 4;
-  return 5;
-}
-
-int lsmVarintGet32(u8 *aIn, int *pnOut){
-  if( 0==(aIn[0]&0x80) ){
-    *pnOut = aIn[0];
-    return 1;
-  }else{
-    int ret = 0;
-    int n = 0;
-    do {
-      n = n << 7;
-      n += aIn[ret] & 0x7F;
-    }while( aIn[ret++]&0x80 );
-    *pnOut = n;
-    return ret;
-  }
-}
-
-int lsmVarintPut32(u8 *aOut, int n){
-  if( (n & ~0x7f)==0 ){
-    *aOut = (u8)n;
-    return 1;
-  }else if( (n & ~0x3FFF)==0 ){
-    aOut[0] = (u8)((n>>7) | 0x80);
-    aOut[1] = (u8)(n & 0x7F);
-    return 2;
-  }else{
-    u32 v = (u32)n;
-    u8 buf[10];
-    int i = 10;
-    int ret;
-
-    do {
-      assert( i>0 );
-      buf[--i] = (v & 0x7F);
-      v = v>>7;
-    }while( v );
-
-    ret = 10-i;
-    memcpy(aOut, &buf[i], ret);
-    for(i=0; i<ret-1; i++){
-      aOut[i] |= 0x80;
-    }
-
-    assert( lsmVarintLen32(n)==ret );
-#ifdef LSM_DEBUG
-    {
-      int nRead;
-      lsmVarintGet32(aOut, &nRead);
-      assert( nRead==n );
-    }
-#endif
-    return ret;
-  }
-}
-#endif
-
-static int sortedBlobGrow(Blob *pBlob, int nData){
+static int sortedBlobGrow(lsm_env *pEnv, Blob *pBlob, int nData){
+  assert( pBlob->pEnv==pEnv || (pBlob->pEnv==0 && pBlob->pData==0) );
   if( pBlob->nAlloc<nData ){
-    pBlob->pData = lsmReallocOrFree(0, pBlob->pData, nData);
+    pBlob->pData = lsmReallocOrFree(pEnv, pBlob->pData, nData);
     if( !pBlob->pData ) return LSM_NOMEM;
     pBlob->nAlloc = nData;
+    pBlob->pEnv = pEnv;
   }
   return LSM_OK;
 }
 
-static int sortedBlobSet(Blob *pBlob, void *pData, int nData){
-  if( sortedBlobGrow(pBlob, nData) ) return LSM_NOMEM;
+static int sortedBlobSet(lsm_env *pEnv, Blob *pBlob, void *pData, int nData){
+  if( sortedBlobGrow(pEnv, pBlob, nData) ) return LSM_NOMEM;
   memcpy(pBlob->pData, pData, nData);
   pBlob->nData = nData;
   return LSM_OK;
@@ -386,7 +328,8 @@ static int sortedBlobCopy(Blob *pDest, Blob *pSrc){
 #endif
 
 static void sortedBlobFree(Blob *pBlob){
-  lsmFree(0, pBlob->pData);
+  assert( pBlob->pEnv || pBlob->pData==0 );
+  if( pBlob->pData ) lsmFree(pBlob->pEnv, pBlob->pData);
   memset(pBlob, 0, sizeof(Blob));
 }
 
@@ -499,7 +442,7 @@ static int sortedReadData(
     u8 *aDest;
 
     /* Make sure the blob is big enough to store the value being loaded. */
-    rc = sortedBlobGrow(pBlob, nByte);
+    rc = sortedBlobGrow(lsmPageEnv(pPg), pBlob, nByte);
     if( rc!=LSM_OK ) return rc;
     pBlob->nData = nByte;
     aDest = (u8 *)pBlob->pData;
@@ -588,6 +531,7 @@ static u8 *pageGetKey(
 }
 
 static int pageGetKeyCopy(
+  lsm_env *pEnv,                  /* Environment handle */
   Page *pPg,                      /* Page to read from */
   int iCell,                      /* Index of cell on page to read */
   int *piTopic,                   /* OUT: Topic associated with this key */
@@ -600,7 +544,7 @@ static int pageGetKeyCopy(
   aKey = pageGetKey(pPg, iCell, piTopic, &nKey, pBlob);
   assert( (void *)aKey!=pBlob->pData || nKey==pBlob->nData );
   if( (void *)aKey!=pBlob->pData ){
-    rc = sortedBlobSet(pBlob, aKey, nKey);
+    rc = sortedBlobSet(pEnv, pBlob, aKey, nKey);
   }
 
   return rc;
@@ -655,6 +599,7 @@ static int sortedKeyCompare(
 }
 
 void lsmSortedSplitkey(lsm_db *pDb, Level *pLevel, int *pRc){
+  lsm_env *pEnv = pDb->pEnv;      /* Environment handle */
   int rc = *pRc;
   int i;
   Merge *pMerge = pLevel->pMerge;
@@ -662,14 +607,14 @@ void lsmSortedSplitkey(lsm_db *pDb, Level *pLevel, int *pRc){
   for(i=0; rc==LSM_OK && i<pLevel->nRight; i++){
     Page *pPg = 0;
     int iTopic;
-    Blob blob = {0, 0, 0};
+    Blob blob = {0, 0, 0, 0};
     SortedRun *pRun = &pLevel->aRhs[i].run;
 
     assert( pRun->iFirst!=0 );
 
     rc = lsmFsDbPageGet(pDb->pFS, pRun, pMerge->aInput[i].iPg, &pPg);
     if( rc==LSM_OK ){
-      rc = pageGetKeyCopy(pPg, pMerge->aInput[i].iCell, &iTopic, &blob);
+      rc = pageGetKeyCopy(pEnv, pPg, pMerge->aInput[i].iCell, &iTopic, &blob);
     }
     if( rc==LSM_OK ){
       int res = -1;
@@ -680,12 +625,12 @@ void lsmSortedSplitkey(lsm_db *pDb, Level *pLevel, int *pRc){
         );
       }
       if( res<0 ){
-        lsmFree(pDb->pEnv, pLevel->pSplitKey);
+        lsmFree(pEnv, pLevel->pSplitKey);
         pLevel->iSplitTopic = iTopic;
         pLevel->pSplitKey = blob.pData;
         pLevel->nSplitKey = blob.nData;
       }else{
-        lsmFree(pDb->pEnv, blob.pData);
+        lsmFree(pEnv, blob.pData);
       }
     }
     lsmFsPageRelease(pPg);
@@ -699,7 +644,7 @@ void lsmSortedSplitkey(lsm_db *pDb, Level *pLevel, int *pRc){
 ** allocating the memory that the structure itself occupies.
 */
 static int levelCursorInit(
-  FileSystem *pFS, 
+  lsm_db *pDb,
   Level *pLevel, 
   int (*xCmp)(void *, int, void *, int),
   LevelCursor *pCsr              /* Cursor structure to initialize */
@@ -707,13 +652,14 @@ static int levelCursorInit(
   int rc = LSM_OK;
 
   memset(pCsr, 0, sizeof(LevelCursor));
-  pCsr->pFS = pFS;
+  pCsr->pFS = pDb->pFS;
   pCsr->bIgnoreSeparators = 1;
   pCsr->xCmp = xCmp;
   pCsr->pLevel = pLevel;
   pCsr->nPtr = 1 + pLevel->nRight;
-  pCsr->aPtr = (SegmentPtr*)lsmMallocZeroRc(0, 
-                                     sizeof(SegmentPtr)*pCsr->nPtr, &rc);
+  pCsr->aPtr = (SegmentPtr*)lsmMallocZeroRc(pDb->pEnv, 
+      sizeof(SegmentPtr)*pCsr->nPtr, &rc
+  );
 
   if( rc==LSM_OK ){
     int i;
@@ -731,7 +677,7 @@ static int levelCursorInit(
 }
 
 static int levelCursorInitRun(
-  FileSystem *pFS, 
+  lsm_db *pDb,
   SortedRun *pRun, 
   int (*xCmp)(void *, int, void *, int),
   LevelCursor *pCsr              /* Cursor structure to initialize */
@@ -739,12 +685,13 @@ static int levelCursorInitRun(
   int rc = LSM_OK;
 
   memset(pCsr, 0, sizeof(LevelCursor));
-  pCsr->pFS = pFS;
+  pCsr->pFS = pDb->pFS;
   pCsr->bIgnoreSeparators = 1;
   pCsr->xCmp = xCmp;
   pCsr->nPtr = 1;
-  pCsr->aPtr = (SegmentPtr*)lsmMallocZeroRc(0, 
-                                      sizeof(SegmentPtr)*pCsr->nPtr, &rc);
+  pCsr->aPtr = (SegmentPtr*)lsmMallocZeroRc(pDb->pEnv, 
+      sizeof(SegmentPtr)*pCsr->nPtr, &rc
+  );
 
   if( rc==LSM_OK ){
     pCsr->aPtr[0].pRun = pRun;
@@ -779,9 +726,9 @@ static void segmentCursorReset(LevelCursor *pCsr){
 ** by the LevelCursor structure itself is not released. It is assumed to
 ** be managed by the caller.
 */
-static void segmentCursorClose(LevelCursor *pCsr){
+static void segmentCursorClose(lsm_env *pEnv, LevelCursor *pCsr){
   segmentCursorReset(pCsr);
-  lsmFree(0, pCsr->aPtr);
+  lsmFree(pEnv, pCsr->aPtr);
   memset(pCsr, 0, sizeof(LevelCursor));
 }
 
@@ -1403,14 +1350,14 @@ static int segmentCursorEnd(LevelCursor *pCsr, int bLast){
 
 static void mcursorFreeComponents(MultiCursor *pCsr){
   int i;
-  lsm_env *pEnv = 0;
+  lsm_env *pEnv = pCsr->pDb->pEnv;
 
   /* Close the tree cursor, if any. */
   lsmTreeCursorDestroy(pCsr->pTreeCsr);
 
   /* Close the sorted file cursors */
   for(i=0; i<pCsr->nSegCsr; i++){
-    segmentCursorClose(&pCsr->aSegCsr[i]);
+    segmentCursorClose(pEnv, &pCsr->aSegCsr[i]);
   }
 
   /* Free allocations */
@@ -1436,7 +1383,7 @@ void lsmMCursorClose(MultiCursor *pCsr){
     mcursorFreeComponents(pCsr);
 
     /* Free the cursor structure itself */
-    lsmFree(0, pCsr);
+    lsmFree(pCsr->pDb->pEnv, pCsr);
   }
 }
 
@@ -1482,13 +1429,14 @@ int multiCursorAddLevel(
 
   for(i=0; i<nAdd; i++){
     LevelCursor *pNew;
+    lsm_db *pDb = pCsr->pDb;
 
     /* Grow the pCsr->aSegCsr array if required */
     if( 0==(pCsr->nSegCsr % 16) ){
       int nByte;
       LevelCursor *aNew;
       nByte = sizeof(LevelCursor) * (pCsr->nSegCsr+16);
-      aNew = (LevelCursor *)lsmRealloc(0, pCsr->aSegCsr, nByte);
+      aNew = (LevelCursor *)lsmRealloc(pDb->pEnv, pCsr->aSegCsr, nByte);
       if( aNew==0 ) return LSM_NOMEM_BKPT;
       pCsr->aSegCsr = aNew;
     }
@@ -1497,15 +1445,15 @@ int multiCursorAddLevel(
 
     switch( eMode ){
       case MULTICURSOR_ADDLEVEL_ALL:
-        levelCursorInit(pCsr->pFS, pLevel, pCsr->xCmp, pNew);
+        levelCursorInit(pDb, pLevel, pCsr->xCmp, pNew);
         break;
 
       case MULTICURSOR_ADDLEVEL_RHS:
-        levelCursorInitRun(pCsr->pFS, &pLevel->aRhs[i].run, pCsr->xCmp, pNew);
+        levelCursorInitRun(pDb, &pLevel->aRhs[i].run, pCsr->xCmp, pNew);
         break;
 
       case MULTICURSOR_ADDLEVEL_LHS_SEP:
-        levelCursorInitRun(pCsr->pFS, &pLevel->lhs.sep, pCsr->xCmp, pNew);
+        levelCursorInitRun(pDb, &pLevel->lhs.sep, pCsr->xCmp, pNew);
         break;
     }
     if( pCsr->flags & CURSOR_IGNORE_SYSTEM ){
@@ -1537,7 +1485,7 @@ static int multiCursorNew(
       assert( pDb->pTV );
       rc = lsmTreeCursorNew(pDb->pTV, &pCsr->pTreeCsr);
     }
-    pCsr->pFS = pDb->pFS;
+    pCsr->pDb = pDb;
     pCsr->pSnap = pSnap;
     pCsr->xCmp = pDb->xCmp;
     if( bUserOnly ){
@@ -1781,14 +1729,14 @@ static void multiCursorDoCompare(MultiCursor *pCsr, int iOut, int bReverse){
 static int multiCursorAllocTree(MultiCursor *pCsr){
   int rc = LSM_OK;
   if( pCsr->aTree==0 ){
+    int nByte;                    /* Bytes of space to allocate */
     pCsr->nTree = 2;
     while( pCsr->nTree<(CURSOR_DATA_SEGMENT+pCsr->nSegCsr) ){
       pCsr->nTree = pCsr->nTree*2;
     }
-    pCsr->aTree = (int *)lsmMallocZero(0, sizeof(int) * pCsr->nTree * 2);
-    if( pCsr->aTree==0 ){
-      rc = LSM_NOMEM_BKPT;
-    }
+
+    nByte = sizeof(int)*pCsr->nTree*2;
+    pCsr->aTree = (int *)lsmMallocZeroRc(pCsr->pDb->pEnv, nByte, &rc);
   }
   return rc;
 }
@@ -1798,7 +1746,7 @@ static void multiCursorCacheKey(MultiCursor *pCsr, int *pRc){
     void *pKey;
     int nKey;
     multiCursorGetKey(pCsr, pCsr->aTree[1], &pCsr->eType, &pKey, &nKey);
-    *pRc = sortedBlobSet(&pCsr->key, pKey, nKey);
+    *pRc = sortedBlobSet(pCsr->pDb->pEnv, &pCsr->key, pKey, nKey);
   }
 }
 
@@ -2196,6 +2144,7 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
   if( pMW->apHier==0 && pSep->iRoot!=0 ){
     int bHierReadonly = pMW->pLevel->pMerge->bHierReadonly;
     FileSystem *pFS = pMW->pDb->pFS;
+    lsm_env *pEnv = pMW->pDb->pEnv;
     Page **apHier = 0;
     int nHier = 0;
     int iPg = pSep->iRoot;
@@ -2212,7 +2161,9 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
       aData = lsmFsPageData(pPg, &nData);
       flags = pageGetFlags(aData, nData);
       if( flags&SEGMENT_BTREE_FLAG ){
-        Page **apNew = (Page **)lsmRealloc(0, apHier, sizeof(Page *)*(nHier+1));
+        Page **apNew = (Page **)lsmRealloc(
+            pEnv, apHier, sizeof(Page *)*(nHier+1)
+        );
         if( apNew==0 ){
           rc = LSM_NOMEM_BKPT;
           break;
@@ -2238,7 +2189,7 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
       for(i=0; i<nHier; i++){
         lsmFsPageRelease(apHier[i]);
       }
-      lsmFree(0, apHier);
+      lsmFree(pEnv, apHier);
     }
   }
 
@@ -2340,7 +2291,9 @@ static int mergeWorkerPushHierarchy(
     if( iLevel==pMW->nHier ){
       /* Extend the array and allocate a new root page. */
       Page **aNew;
-      aNew = (Page **)lsmRealloc(0, pMW->apHier, sizeof(Page *)*(pMW->nHier+1));
+      aNew = (Page **)lsmRealloc(
+          pMW->pDb->pEnv, pMW->apHier, sizeof(Page *)*(pMW->nHier+1)
+      );
       if( !aNew ){
         rc = LSM_NOMEM_BKPT;
         goto push_hierarchy_out;
@@ -2759,7 +2712,7 @@ static void mergeWorkerShutdown(MergeWorker *pMW){
   for(i=0; i<pMW->nHier; i++){
     lsmFsPageRelease(pMW->apHier[i]);
   }
-  lsmFree(0, pMW->apHier);
+  lsmFree(pMW->pDb->pEnv, pMW->apHier);
 
   pMW->pCsr = 0;
   pMW->apHier = 0;
@@ -2886,11 +2839,11 @@ static int mergeWorkerDone(MergeWorker *pMW){
   return pMW->pCsr==0 || !lsmMCursorValid(pMW->pCsr);
 }
 
-static void sortedFreeLevel(Level *p){
+static void sortedFreeLevel(lsm_env *pEnv, Level *p){
   if( p ){
-    lsmFree(0, p->pMerge);
-    lsmFree(0, p->aRhs);
-    lsmFree(0, p);
+    lsmFree(pEnv, p->pMerge);
+    lsmFree(pEnv, p->aRhs);
+    lsmFree(pEnv, p);
   }
 }
 
@@ -3011,7 +2964,7 @@ int lsmSortedFlushTree(
       memset(pDel, 0, sizeof(SortedRun));
     }
   }else{
-    sortedFreeLevel(pNew);
+    sortedFreeLevel(pDb->pEnv, pNew);
   }
 
   if( rc==LSM_OK ){
@@ -3330,7 +3283,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
 
           /* Free the Level structure. */
           lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->lhs.run);
-          sortedFreeLevel(pLevel);
+          sortedFreeLevel(pDb->pEnv, pLevel);
         }else{
           int i;
 
@@ -3733,13 +3686,13 @@ void lsmSortedDumpStructure(
   }
 }
 
-void lsmSortedFreeLevel(Level *pLevel){
+void lsmSortedFreeLevel(lsm_env *pEnv, Level *pLevel){
   Level *pNext;
   Level *p;
 
   for(p=pLevel; p; p=pNext){
     pNext = p->pNext;
-    sortedFreeLevel(p);
+    sortedFreeLevel(pEnv, p);
   }
 }
 

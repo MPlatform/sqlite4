@@ -208,9 +208,9 @@ struct Page {
 /**************************************************************************
 ** Start of functions for use with the IList structure.
 */
-static int fsIListGrow(IList *pList, int nElem){
+static int fsIListGrow(lsm_env *pEnv, IList *pList, int nElem){
   if( pList->nAlloc<nElem ){
-    pList->a= (int *)lsmReallocOrFree(0, pList->a, nElem * sizeof(int));
+    pList->a= (int *)lsmReallocOrFree(pEnv, pList->a, nElem * sizeof(int));
     if( pList->a==0 ) return LSM_NOMEM;
     memset(&pList->a[pList->nAlloc], 0, (nElem-pList->nAlloc)*sizeof(int));
     pList->nAlloc = nElem;
@@ -218,9 +218,9 @@ static int fsIListGrow(IList *pList, int nElem){
   return LSM_OK;
 }
 
-static int fsIListSet(IList *pList, int iElem, int iVal){
+static int fsIListSet(lsm_env *pEnv, IList *pList, int iElem, int iVal){
   int rc;
-  rc = fsIListGrow(pList, iElem+1);
+  rc = fsIListGrow(pEnv, pList, iElem+1);
   if( rc==LSM_OK ){
     pList->a[iElem] = iVal;
     pList->n = MAX(pList->n, iElem+1);
@@ -228,9 +228,9 @@ static int fsIListSet(IList *pList, int iElem, int iVal){
   return rc;
 }
 
-static void fsIListAppend(IList *pList, int iVal, int *pRc){
+static void fsIListAppend(lsm_env *pEnv, IList *pList, int iVal, int *pRc){
   if( *pRc==LSM_OK ){
-    *pRc = fsIListSet(pList, pList->n, iVal);
+    *pRc = fsIListSet(pEnv, pList, pList->n, iVal);
   }
 }
 
@@ -312,7 +312,7 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb, int nPgsz){
     }
 
     /* Make a copy of the database name. */
-    pFS->zDb = lsmMallocStrdup(zDb);
+    pFS->zDb = lsmMallocStrdup(pDb->pEnv, zDb);
     if( pFS->zDb==0 ) rc = LSM_NOMEM;
 
     /* Allocate the hash-table here. At some point, it should be changed
@@ -531,8 +531,8 @@ static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
 }
 
 static void fsPageBufferFree(Page *pPg){
-  lsmFree(0, pPg->aData);
-  lsmFree(0, pPg);
+  lsmFree(pPg->pFS->pEnv, pPg->aData);
+  lsmFree(pPg->pFS->pEnv, pPg);
 }
 
 Pgno lsmFsSortedRoot(SortedRun *p){
@@ -1071,7 +1071,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
       }
     }else{
       IList *pAppend = lsmSnapshotList(pSnap, LSM_APPEND_LIST);
-      fsIListAppend(pAppend, p->iLast+1, &rc);
+      fsIListAppend(pFS->pEnv, pAppend, p->iLast+1, &rc);
     }
   }
   return rc;
@@ -1230,8 +1230,8 @@ int lsmFsPageRelease(Page *pPg){
       rc = lsmFsPagePersist(pPg);
 
       if( pPg->eType==LSM_LOG_FILE ){
-        lsmFree(0, pPg->aData);
-        lsmFree(0, pPg);
+        lsmFree(pFS->pEnv, pPg->aData);
+        lsmFree(pFS->pEnv, pPg);
       }else if( pPg->eType!=LSM_CKPT_FILE ){
         pFS->nOut--;
         assert( pPg->pLruNext==0 );
@@ -1246,8 +1246,8 @@ int lsmFsPageRelease(Page *pPg){
         pFS->pLruLast = pPg;
 #else
         fsPageRemoveFromHash(pFS, pPg);
-        lsmFree(0, pPg->aData);
-        lsmFree(0, pPg);
+        lsmFree(pFS->pEnv, pPg->aData);
+        lsmFree(pFS->pEnv, pPg);
 #endif
       }
     }
@@ -1312,7 +1312,10 @@ void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
     lsmFree(pDb->pEnv, zMsg);
     lsmStringClear(&zBlk);
   }
-}
+} 
+
+lsm_env *lsmFsEnv(FileSystem *pFS) { return pFS->pEnv; }
+lsm_env *lsmPageEnv(Page *pPg) { return pPg->pFS->pEnv; }
 
 #ifdef LSM_EXPENSIVE_DEBUG
 /*

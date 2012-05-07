@@ -1357,7 +1357,6 @@ do_execsql_test 70.1 {
   CREATE INDEX joinme_id_int_idx on joinme(id_int);
 }
 
-breakpoint
 do_catchsql_test 70.2 {
   select * from maintable as m inner join
     joinme as j indexed by joinme_id_text_idx

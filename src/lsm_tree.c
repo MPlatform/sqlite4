@@ -163,6 +163,7 @@ struct TreeVersion {
 **
 */
 struct Tree {
+  lsm_env *pEnv;                  /* Environment handle */
   int nTreeRef;                   /* Current number of pointers to this */
   Mempool *pPool;                 /* Memory pool to allocate from */
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
@@ -366,19 +367,21 @@ void dump_tv_contents(TreeVersion *pTV, const char *zCaption){
 ** Allocate a new tree structure.
 */
 int lsmTreeNew(
+  lsm_env *pEnv,                            /* Environment handle */
   int (*xCmp)(void *, int, void *, int),    /* Compare function */
   Tree **ppTree                             /* OUT: New tree object */
 ){
   int rc;
   Mempool *pPool;                 /* Memory pool used by the new tree */
 
-  rc = lsmPoolNew(&pPool);
+  rc = lsmPoolNew(pEnv, &pPool);
   assert( rc==LSM_OK || pPool==0 );
   if( rc==LSM_OK ){
     Tree *pTree;
     pTree = (Tree *)lsmPoolMallocZero(pPool, sizeof(Tree));
     assert( pTree );
     pTree->pPool = pPool;
+    pTree->pEnv = pEnv;
     pTree->xCmp = xCmp;
     pTree->tvWorking.iVersion = 1;
     pTree->tvWorking.pTree = pTree;
@@ -843,7 +846,7 @@ int lsmTreeIsEmpty(Tree *pTree){
 */
 int lsmTreeCursorNew(TreeVersion *pVersion, TreeCursor **ppCsr){
   TreeCursor *pCsr;
-  *ppCsr = pCsr = lsmMalloc(0, sizeof(TreeCursor));
+  *ppCsr = pCsr = lsmMalloc(pVersion->pTree->pEnv, sizeof(TreeCursor));
   if( pCsr ){
     treeCursorInit(pVersion, pCsr);
     return LSM_OK;
@@ -856,7 +859,7 @@ int lsmTreeCursorNew(TreeVersion *pVersion, TreeCursor **ppCsr){
 */
 void lsmTreeCursorDestroy(TreeCursor *pCsr){
   if( pCsr ){
-    lsmFree(0, pCsr);
+    lsmFree(pCsr->pVersion->pTree->pEnv, pCsr);
   }
 }
 
@@ -1267,7 +1270,7 @@ int lsmTreeReleaseWriteVersion(
   assert( lsmTreeIsWriteVersion(pWriteVersion) );
   assert( pWriteVersion->nRef==1 );
 
-  pNew = (TreeVersion *)lsmMalloc(0, sizeof(TreeVersion));
+  pNew = (TreeVersion *)lsmMalloc(pTree->pEnv, sizeof(TreeVersion));
   if( !pNew ) return LSM_NOMEM;
 
   memcpy(pNew, pWriteVersion, sizeof(TreeVersion));
@@ -1308,8 +1311,9 @@ void lsmTreeReleaseReadVersion(TreeVersion *pTreeVersion){
     assert( pTreeVersion->nRef>0 );
     pTreeVersion->nRef--;
     if( pTreeVersion->nRef==0 ){
-      lsmTreeDecrRefcount(pTreeVersion->pTree);
-      lsmFree(0, pTreeVersion);
+      Tree *pTree = pTreeVersion->pTree;
+      lsmFree(pTree->pEnv, pTreeVersion);
+      lsmTreeDecrRefcount(pTree);
     }
   }
 }

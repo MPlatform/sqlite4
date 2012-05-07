@@ -59,8 +59,16 @@ static int xCmp(void *p1, int n1, void *p2, int n2){
 */
 int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   lsm_db *pDb;
+
+  /* If the user did not provide an environment, use the default. */
+  if( pEnv==0 ) pEnv = lsm_default_env();
+  assert( pEnv );
+
+  /* Allocate the new database handle */
   *ppDb = pDb = (lsm_db *)lsmMallocZero(pEnv, sizeof(lsm_db));
   if( pDb==0 ) return LSM_NOMEM_BKPT;
+
+  /* Initialize the new object */
   pDb->pEnv = pEnv;
   pDb->nTreeLimit = LSM_TREE_BYTES;
   pDb->eCola = LSM_ECOLA;

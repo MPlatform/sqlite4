@@ -177,6 +177,7 @@ struct Snapshot {
 **
 */
 struct Database {
+  lsm_env *pEnv;                  /* Environment handle */
   char *zName;                    /* Canonical path to database file */
   Tree *pTree;                    /* Current in-memory tree structure */
   Snapshot *pClient;              /* Client (reader) snapshot */
@@ -252,7 +253,7 @@ static void assertSnapshotListOk(Database *p){
 /*
 ** Append an entry to the free-list.
 */
-static int flAppendEntry(Freelist *p, int iBlk, i64 iId){
+static int flAppendEntry(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId){
 
   /* Assert that this is not an attempt to insert a duplicate block number */
   assertNotInFreelist(p, iBlk);
@@ -264,7 +265,7 @@ static int flAppendEntry(Freelist *p, int iBlk, i64 iId){
     FreelistEntry *aNew;
 
     nNew = (p->nAlloc==0 ? 4 : p->nAlloc*2);
-    aNew = (FreelistEntry *)lsmRealloc(0, p->aEntry,
+    aNew = (FreelistEntry *)lsmRealloc(pEnv, p->aEntry,
                                        sizeof(FreelistEntry)*nNew);
     if( !aNew ) return LSM_NOMEM_BKPT;
     p->nAlloc = nNew;
@@ -300,7 +301,7 @@ static void freeDatabase(Database *p){
   lsmMutexDel(p->pCkptMutex);
 
   /* Free the memory allocated for the Database struct itself */
-  lsmFree(0, p);
+  lsmFree(p->pEnv, p);
 }
 
 /*
@@ -340,9 +341,9 @@ int lsmDbDatabaseFind(
       p = (Database *)lsmMallocZeroRc(pEnv, sizeof(Database) + nName + 1, &rc);
 
       /* Allocate the three mutexes */
-      if( rc==LSM_OK ) rc = lsmMutexNew(0, &p->pWorkerMutex);
-      if( rc==LSM_OK ) rc = lsmMutexNew(0, &p->pClientMutex);
-      if( rc==LSM_OK ) rc = lsmMutexNew(0, &p->pCkptMutex);
+      if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pWorkerMutex);
+      if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pClientMutex);
+      if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pCkptMutex);
 
       /* If no error has occurred, fill in other fields and link the new 
       ** Database structure into the global list starting at 
@@ -350,6 +351,7 @@ int lsmDbDatabaseFind(
       ** resources allocated and return without linking anything new into
       ** the gShared.pDatabase list.  */
       if( rc==LSM_OK ){
+        p->pEnv = pEnv;
         p->zName = (char *)&p[1];
         memcpy((void *)p->zName, zName, nName+1);
         p->worker.pDatabase = p;
@@ -375,13 +377,15 @@ int lsmDbDatabaseFind(
 }
 
 void freeClientSnapshot(Snapshot *p){
+  lsm_env *pEnv = p->pDatabase->pEnv;
   Level *pLevel;
+  
   assert( p->nRef==0 );
   for(pLevel=p->pLevel; pLevel; pLevel=pLevel->pNext){
-    lsmFree(0, pLevel->pSplitKey);
+    lsmFree(pEnv, pLevel->pSplitKey);
   }
-  lsmFree(0, p->pExport);
-  lsmFree(0, p);
+  lsmFree(pEnv, p->pExport);
+  lsmFree(pEnv, p);
 }
 
 /*
@@ -419,7 +423,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       lsmTreeDestroy(p->pTree);
 
       /* Free the contents of the worker snapshot */
-      lsmSortedFreeLevel(p->worker.pLevel);
+      lsmSortedFreeLevel(p->pEnv, p->worker.pLevel);
       lsmFree(pDb->pEnv, p->worker.freelist.aEntry);
       lsmFree(pDb->pEnv, p->worker.lAppend.a);
       
@@ -519,10 +523,10 @@ IList *lsmSnapshotList(Snapshot *pSnap, int iList){
 **
 ** Return LSM_OK if successful or LSM_NOMEM if an OOM error occurs.
 */
-int lsmIListSet(IList *p, int *aElem, int nElem){
+int lsmIListSet(lsm_env *pEnv, IList *p, int *aElem, int nElem){
   if( p->nAlloc < nElem ){
-    lsmFree(0, p->a);
-    p->a = (int *)lsmMalloc(0, sizeof(int) * nElem);
+    lsmFree(pEnv, p->a);
+    p->a = (int *)lsmMalloc(pEnv, sizeof(int) * nElem);
     if( p->a==0 ) return LSM_NOMEM_BKPT;
     p->nAlloc = nElem;
   }
@@ -809,7 +813,7 @@ int lsmBlockFree(lsm_db *pDb, int iBlk){
   assert( pWorker->bRecordDelta==0 );
   assert( pDb->pDatabase->bDirty );
 
-  rc = flAppendEntry(&pWorker->freelist, iBlk, pWorker->iId);
+  rc = flAppendEntry(pDb->pEnv, &pWorker->freelist, iBlk, pWorker->iId);
   return rc;
 }
 
@@ -833,7 +837,7 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
     assert( pWorker->aDelta[2]==0 );
     pWorker->aDelta[1 + (pWorker->aDelta[1]!=0)] = iBlk;
   }else{
-    rc = flAppendEntry(&pWorker->freelist, iBlk, 0);
+    rc = flAppendEntry(pDb->pEnv, &pWorker->freelist, iBlk, 0);
   }
 
   return rc;
@@ -880,7 +884,7 @@ int lsmSnapshotFreelist(Snapshot *pSnap, int **paFree, int *pnFree){
   p = &pSnap->freelist;
   nFree = p->nEntry;
   if( nFree && paFree ){
-    aFree = lsmMallocRc(0, sizeof(int) * nFree, &rc);
+    aFree = lsmMallocRc(pSnap->pDatabase->pEnv, sizeof(int) * nFree, &rc);
     if( aFree ){
       int i;
       for(i=0; i<nFree; i++){
@@ -896,6 +900,7 @@ int lsmSnapshotFreelist(Snapshot *pSnap, int **paFree, int *pnFree){
 
 
 int lsmSnapshotSetFreelist(Snapshot *pSnap, int *aElem, int nElem){
+  lsm_env * const pEnv = pSnap->pDatabase->pEnv;
   int rc = LSM_OK;                /* Return code */
   int i;                          /* Iterator variable */
   int nIgnore;                    /* Number of entries to ignore */
@@ -911,11 +916,11 @@ int lsmSnapshotSetFreelist(Snapshot *pSnap, int *aElem, int nElem){
 
   pFree = &pSnap->freelist;
   for(i=nIgnore; rc==LSM_OK && i<nElem; i++){
-    rc = flAppendEntry(pFree, aElem[i], 0);
+    rc = flAppendEntry(pEnv, pFree, aElem[i], 0);
   }
 
-  if( rc==LSM_OK && iRefree1!=0 ) rc = flAppendEntry(pFree, iRefree1, 0);
-  if( rc==LSM_OK && iRefree2!=0 ) rc = flAppendEntry(pFree, iRefree2, 0);
+  if( rc==LSM_OK && iRefree1!=0 ) rc = flAppendEntry(pEnv, pFree, iRefree1, 0);
+  if( rc==LSM_OK && iRefree2!=0 ) rc = flAppendEntry(pEnv, pFree, iRefree2, 0);
 
   return rc;
 }
@@ -1020,7 +1025,7 @@ int lsmBeginRecovery(lsm_db *pDb){
   assert( pDb->pTV==0 );
   assert( lsmMutexHeld(pDb->pDatabase->pWorkerMutex) );
 
-  rc = lsmTreeNew(pDb->xCmp, &p->pTree);
+  rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
   if( rc==LSM_OK ){
     pDb->pTV = lsmTreeWriteVersion(p->pTree, 0);
   }
@@ -1058,7 +1063,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
 
     /* If there is no in-memory tree structure, allocate one now */
     if( p->pTree==0 ){
-      rc = lsmTreeNew(pDb->xCmp, &p->pTree);
+      rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
     }
 
     if( rc==LSM_OK ){
@@ -1223,7 +1228,7 @@ int lsmFinishFlush(lsm_db *pDb, int bEmpty){
     }
     pDb->pTV = 0;
     lsmTreeRelease(p->pTree);
-    rc = lsmTreeNew(pDb->xCmp, &p->pTree);
+    rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
   }
 
   if( p->bWriter ){

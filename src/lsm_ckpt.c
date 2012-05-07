@@ -159,6 +159,7 @@ void lsmChecksumBytes(
 
 typedef struct CkptBuffer CkptBuffer;
 struct CkptBuffer {
+  lsm_env *pEnv;
   int nAlloc;
   u32 *aCkpt;
 };
@@ -166,7 +167,7 @@ struct CkptBuffer {
 static void ckptSetValue(CkptBuffer *p, int iIdx, u32 iVal, int *pRc){
   if( iIdx>=p->nAlloc ){
     int nNew = MAX(8, iIdx*2);
-    p->aCkpt = (u32 *)lsmReallocOrFree(0, p->aCkpt, nNew*sizeof(u32));
+    p->aCkpt = (u32 *)lsmReallocOrFree(p->pEnv, p->aCkpt, nNew*sizeof(u32));
     if( !p->aCkpt ){
       *pRc = LSM_NOMEM_BKPT;
       return;
@@ -244,6 +245,7 @@ int lsmCheckpointExport(
 
   CkptBuffer ckpt;
   memset(&ckpt, 0, sizeof(CkptBuffer));
+  ckpt.pEnv = pDb->pEnv;
   iOut = CKPT_HDRSIZE;
 
   pTopLevel = lsmDbSnapshotLevel(pSnap);
@@ -347,15 +349,17 @@ static void ckptNewSegment(
   *piIn = iIn;
 }
 
-static int ckptSetupMerge(u32 *aInt, int *piIn, Level *pLevel){
+static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
   Merge *pMerge;                  /* Allocated Merge object */
   int nInput;                     /* Number of input segments in merge */
   int iIn = *piIn;                /* Next value to read from aInt[] */
   int i;                          /* Iterator variable */
+  int nByte;                      /* Number of bytes to allocate */
 
   /* Allocate the Merge object. If malloc() fails, return LSM_NOMEM. */
   nInput = (int)aInt[iIn++];
-  pMerge = (Merge *)lsmMallocZero(0, sizeof(Merge) + sizeof(MergeInput) * nInput);
+  nByte = sizeof(Merge) + sizeof(MergeInput) * nInput;
+  pMerge = (Merge *)lsmMallocZero(pDb->pEnv, nByte);
   if( !pMerge ) return LSM_NOMEM_BKPT;
   pLevel->pMerge = pMerge;
 
@@ -435,7 +439,7 @@ int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
 
         /* Set up the Merge object, if required */
         if( pLevel->nRight>0 ){
-          ckptSetupMerge(aInt, &iIn, pLevel);
+          ckptSetupMerge(pDb, aInt, &iIn, pLevel);
         }
       }
     }
@@ -444,7 +448,7 @@ int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
     if( rc==LSM_OK ){
       int nApp = aInt[iIn++];
       IList *pAppend = lsmSnapshotList(pSnap, LSM_APPEND_LIST);
-      rc = lsmIListSet(pAppend, (int *)&aInt[iIn], nApp);
+      rc = lsmIListSet(pDb->pEnv, pAppend, (int *)&aInt[iIn], nApp);
       iIn += nApp;
     }
 

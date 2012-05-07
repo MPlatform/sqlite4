@@ -260,7 +260,7 @@ void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
 /* 
 ** Functions from file "tree.c".
 */
-int lsmTreeNew(int (*)(void *, int, void *, int), Tree **ppTree);
+int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeDestroy(Tree *pTree);
 int lsmTreeSize(TreeVersion *pTV);
 int lsmTreeIsEmpty(Tree *pTree);
@@ -301,7 +301,7 @@ void lsmTreeCursorSave(TreeCursor *);
 /* 
 ** Functions from file "mem.c".
 */
-int lsmPoolNew(Mempool **ppPool);
+int lsmPoolNew(lsm_env *pEnv, Mempool **ppPool);
 void lsmPoolDestroy(Mempool *pPool);
 void *lsmPoolMalloc(Mempool *pPool, int nByte);
 void *lsmPoolMallocZero(Mempool *pPool, int nByte);
@@ -319,7 +319,7 @@ void *lsmMallocZeroRc(lsm_env*, size_t, int *);
 void *lsmMallocRc(lsm_env*, size_t, int *);
 
 void *lsmMallocZero(lsm_env *pEnv, size_t);
-char *lsmMallocStrdup(const char *);
+char *lsmMallocStrdup(lsm_env *pEnv, const char *);
 
 /* 
 ** Functions from file "mutex.c".
@@ -365,6 +365,9 @@ int lsmFsSortedFinish(FileSystem *, Snapshot *, SortedRun *);
 int lsmFsSortedAppend(FileSystem *, Snapshot *, SortedRun *, Page **);
 int lsmFsPhantomMaterialize(FileSystem *, Snapshot *, SortedRun *);
 
+lsm_env *lsmFsEnv(FileSystem *);
+lsm_env *lsmPageEnv(Page *);
+
 void lsmSortedSplitkey(lsm_db *, Level *, int *);
 
 /* Reading sorted run content. */
@@ -408,7 +411,7 @@ int lsmSortedFlushTree(lsm_db *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *);
 
-void lsmSortedFreeLevel(Level *);
+void lsmSortedFreeLevel(lsm_env *pEnv, Level *);
 
 int lsmSortedFlushDb(lsm_db *);
 int lsmSortedAdvanceAll(lsm_db *pDb);
@@ -529,7 +532,7 @@ void lsmDbSnapshotSetLevel(Snapshot *, Level *);
 
 #define LSM_APPEND_LIST  1
 IList *lsmSnapshotList(Snapshot *, int);
-int lsmIListSet(IList *, int *, int);
+int lsmIListSet(lsm_env *pEnv, IList *, int *, int);
 
 void lsmDbRecoveryComplete(Database *, int);
 void lsmDbCheckpointed(lsm_db *, i64);

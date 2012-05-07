@@ -145,12 +145,13 @@ static int pthreads_mutex_held(lsm_mutex *p){
 
 typedef struct NoopMutex NoopMutex;
 struct NoopMutex {
+  lsm_env *pEnv;                  /* Environment handle (for xFree()) */
   int bHeld;                      /* True if mutex is held */
   int bStatic;                    /* True for a static mutex */
 };
 static NoopMutex aStaticNoopMutex[2] = {
-  {0, 1},
-  {0, 1},
+  {0, 0, 1},
+  {0, 0, 1},
 };
 
 static int noop_mutex_static(lsm_env *pEnv, int iMutex, lsm_mutex **ppStatic){
@@ -159,14 +160,16 @@ static int noop_mutex_static(lsm_env *pEnv, int iMutex, lsm_mutex **ppStatic){
   return LSM_OK;
 }
 static int noop_mutex_new(lsm_env *pEnv, lsm_mutex **ppNew){
-  int rc = LSM_OK;
-  *ppNew = (lsm_mutex *)lsmMallocZeroRc(0, sizeof(NoopMutex), &rc);
-  return rc;
+  NoopMutex *p;
+  p = (NoopMutex *)lsmMallocZero(pEnv, sizeof(NoopMutex));
+  if( p ) p->pEnv = pEnv;
+  *ppNew = (lsm_mutex *)p;
+  return (p ? LSM_OK : LSM_NOMEM_BKPT);
 }
 static void noop_mutex_del(lsm_mutex *pMutex)  { 
   NoopMutex *p = (NoopMutex *)pMutex;
-  assert( p->bStatic==0 );
-  lsmFree(0, p);
+  assert( p->bStatic==0 && p->pEnv!=0 );
+  lsmFree(p->pEnv, p);
 }
 static void noop_mutex_enter(lsm_mutex *pMutex){ 
   NoopMutex *p = (NoopMutex *)pMutex;
