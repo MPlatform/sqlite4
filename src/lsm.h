@@ -26,17 +26,13 @@ extern "C" {
 typedef struct lsm_db lsm_db;               /* Database connection handle */
 typedef struct lsm_cursor lsm_cursor;       /* Database cursor handle */
 typedef struct lsm_mutex lsm_mutex;         /* Mutex handle */
-
-/*
-** Types required to implement new OS interfaces for lsm.
-*/
 typedef struct lsm_file lsm_file;           /* OS file handle */
+
+/* 64-bit integer type used for file offsets. */
 typedef long long int lsm_i64;              /* 64-bit signed integer type */
 
 /* Forward reference */
 typedef struct lsm_env lsm_env;             /* Runtime environment */
-
-typedef struct lsm_mutex_methods lsm_mutex_methods;
 
 /*
 ** Run-time environment used by LSM
@@ -69,6 +65,12 @@ struct lsm_env {
   /* New fields may be added in future releases, in which case the
   ** iVersion value will increase. */
 };
+
+/* 
+** Values that may be passed as the second argument to xMutexStatic. 
+*/
+#define LSM_MUTEX_GLOBAL 1
+#define LSM_MUTEX_HEAP   2
 
 /*
 ** Return a pointer to the default LSM run-time environment
@@ -346,55 +348,6 @@ int lsm_csr_prev(lsm_cursor *pCsr);
 int lsm_csr_valid(lsm_cursor *pCsr);
 int lsm_csr_key(lsm_cursor *pCsr, void **ppKey, int *pnKey);
 int lsm_csr_value(lsm_cursor *pCsr, void **ppVal, int *pnVal);
-
-
-/*
-** Set or query global library configuration parameters.
-**
-**   LSM_GLOBAL_CONFIG_SET_MUTEX:
-**     Configure the functions LSM uses to allocate, enter, leave and free
-**     mutex objects.
-**
-**     The second parameter passed to lsm_global_config() should be a pointer
-**     to an instance of struct lsm_mutex_methods containing pointers to the
-**     custom routines.
-**
-**   LSM_GLOBAL_CONFIG_GET_MUTEX:
-**     The second parameter to this call should be a pointer to a struct
-**     of type lsm_mutex_methods. Before returning, the structure is populated
-**     with pointers to the routines used to create and manipulate mutex
-**     objects.
-*/
-int lsm_global_config(int, ...);
-
-#define LSM_GLOBAL_CONFIG_SET_MUTEX    3
-#define LSM_GLOBAL_CONFIG_GET_MUTEX    4
-
-/*
-** xMutexHeld:
-**   Return true if the calling thread hold the specified mutex.
-**
-**   The xMutexHeld() method is not strictly required. If present, it is used
-**   by assert() statements only to verify that the LSM code is operating as
-**   expected. If the xMutexHeld pointer of an lsm_mutex_methods struct is 
-**   NULL, these assert() statements are omitted. Library functionality is 
-**   not affected.
-*/
-struct lsm_mutex_methods {
-  int (*xMutexStatic)(lsm_env*, int, lsm_mutex **);   /* new static mutex  */
-  int (*xMutexNew)(lsm_env*, lsm_mutex **);           /* new dynamic mutex */
-  void (*xMutexDel)(lsm_mutex *);           /* Delete an allocated mutex */
-  void (*xMutexEnter)(lsm_mutex *);         /* Grab a mutex */
-  int (*xMutexTry)(lsm_mutex *);            /* Attempt to obtain a mutex */
-  void (*xMutexLeave)(lsm_mutex *);         /* Leave a mutex */
-  int (*xMutexHeld)(lsm_mutex *);           /* Return true if mutex is held */
-};
-
-/* 
-** Values that may be passed as the first argument to xMutexStatic. 
-*/
-#define LSM_MUTEX_GLOBAL 1
-#define LSM_MUTEX_HEAP   2
 
 #ifdef __cplusplus
 }  /* End of the 'extern "C"' block */

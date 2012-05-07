@@ -102,9 +102,8 @@ void testTimeInit(void);
 int  testTimeGet(void);
 
 /* Functions in testmem.c. */
-void testMallocConfigure(void);
+void testMallocInstall(lsm_env *pEnv);
 void testMallocCheck(int *, int *, FILE *);
-void testMallocDisable(void);
 
 /* lsmtest.c */
 TestDb *testOpen(const char *zSystem, int, int *pRc);

@@ -243,62 +243,54 @@ void testMallocCheck(
 
 typedef struct LsmMutex LsmMutex;
 struct LsmMutex {
-  lsm_mutex_methods methods;
+  lsm_env *pEnv;
   lsm_mutex *pMutex;
 };
+
 static void tmLsmMutexEnter(void *pCtx){
   LsmMutex *p = (LsmMutex *)pCtx;
-  p->methods.xMutexEnter(p->pMutex);
+  p->pEnv->xMutexEnter(p->pMutex);
 }
 static void tmLsmMutexLeave(void *pCtx){
   LsmMutex *p = (LsmMutex *)pCtx;
-  p->methods.xMutexLeave(p->pMutex);
+  p->pEnv->xMutexLeave(p->pMutex);
 }
 static void tmLsmMutexDel(void *pCtx){
+  LsmMutex *p = (LsmMutex *)pCtx;
+  p->pEnv->xMutexDel(p->pMutex);
   tmglobal.xFree(pCtx);
 }
+static void *tmLsmMalloc(int n){ return malloc(n); }
+static void tmLsmFree(void *ptr){ free(ptr); }
+static void *tmLsmRealloc(void *ptr, int n){ return realloc(ptr, n); }
 
-void testMallocConfigure(){
-#if 0
+static void *tmLsmEnvMalloc(lsm_env *p, int n){ return tmMalloc(n); }
+static void tmLsmEnvFree(lsm_env *p, void *ptr){ tmFree(ptr); }
+static void *tmLsmEnvRealloc(lsm_env *p, void *ptr, int n){ 
+  return tmRealloc(ptr, n);
+}
+
+void testMallocInstall(lsm_env *pEnv){
+  pEnv->pMemCtx = 0;
+  pEnv->xMalloc = tmLsmEnvMalloc;
+  pEnv->xRealloc = tmLsmEnvRealloc;
+  pEnv->xFree = tmLsmEnvFree;
+
   if( tmglobal_isinit==0 ){
-    lsm_heap_methods heap = { tmMalloc, tmRealloc, tmFree };
-    lsm_heap_methods heap_old;
     LsmMutex *p;
 
     memset(&tmglobal, 0, sizeof(tmglobal));
-    lsm_global_config(LSM_GLOBAL_CONFIG_GET_HEAP, &heap_old);
-    lsm_global_config(LSM_GLOBAL_CONFIG_SET_HEAP, &heap);
-
-    tmglobal.xMalloc = heap_old.xMalloc;
-    tmglobal.xRealloc = heap_old.xRealloc;
-    tmglobal.xFree = heap_old.xFree;
-    tmglobal_isinit = 1;
-
+    tmglobal.xMalloc = tmLsmMalloc;
+    tmglobal.xRealloc = tmLsmRealloc;
+    tmglobal.xFree = tmLsmFree;
     p = (LsmMutex *)tmglobal.xMalloc(sizeof(LsmMutex));
-    lsm_global_config(LSM_GLOBAL_CONFIG_GET_MUTEX, &p->methods);
-    p->methods.xMutexStatic(LSM_MUTEX_HEAP, &p->pMutex);
+    p->pEnv = pEnv;
+    pEnv->xMutexStatic(pEnv, LSM_MUTEX_HEAP, &p->pMutex);
     tmglobal.xEnterMutex = tmLsmMutexEnter;
     tmglobal.xLeaveMutex = tmLsmMutexLeave;
     tmglobal.xDelMutex = tmLsmMutexDel;
     tmglobal.pMutex = (void *)p;
+    tmglobal_isinit = 1;
   }
-#endif
-}
-
-void testMallocDisable(){
-#if 0
-  if( tmglobal_isinit ){
-    lsm_heap_methods heap;
-    assert( tmglobal.pFirst==0 );
-
-    heap.xMalloc = tmglobal.xMalloc;
-    heap.xRealloc = tmglobal.xRealloc;
-    heap.xFree = tmglobal.xFree;
-
-    lsm_global_config(LSM_GLOBAL_CONFIG_SET_HEAP, &heap);
-    tmglobal.xDelMutex(tmglobal.pMutex);
-    tmglobal_isinit = 0;
-  }
-#endif
 }
 

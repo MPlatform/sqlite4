@@ -1003,16 +1003,14 @@ int main(int argc, char **argv){
 
   int nLeakAlloc;                 /* Allocations leaked by lsm */
   int nLeakByte;                  /* Bytes leaked by lsm */
+
 #ifdef LSM_DEBUG_MEM
   FILE *pReport = 0;              /* lsm malloc() report file */
 #endif
 
 #ifndef NDEBUG
-#if 0
-  testMallocConfigure();
+  testMallocInstall(tdb_lsm_env());
 #endif
-#endif
-
 
   if( argc<2 ){
     testPrintError("Usage: %s sub-command ?args...?\n", argv[0]);
@@ -1030,7 +1028,6 @@ int main(int argc, char **argv){
     rc = aTest[iFunc].xFunc(argc-2, &argv[2]);
   }
 
-#if 0
 #ifdef LSM_DEBUG_MEM
   pReport = fopen("malloc.txt", "w");
   testMallocCheck(&nLeakAlloc, &nLeakByte, pReport);
@@ -1042,7 +1039,6 @@ int main(int argc, char **argv){
     testPrintError("Leaked %d bytes in %d allocations\n", nLeakByte,nLeakAlloc);
     if( rc==0 ) rc = -1;
   }
-#endif
 
   lsmtest_rusage_report();
   return rc;

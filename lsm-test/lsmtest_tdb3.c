@@ -59,6 +59,16 @@ struct LsmWorker { int worker_rc; };
 
 static void mt_shutdown(LsmDb *);
 
+lsm_env *tdb_lsm_env(void){
+  static int bInit = 0;
+  static lsm_env env;
+  if( bInit==0 ){
+    memcpy(&env, lsm_default_env(), sizeof(env));
+    bInit = 1;
+  }
+  return &env;
+}
+
 /*
 ** bPrepareCrash:
 **   If non-zero, the file wrappers maintain enough in-memory data to
@@ -712,7 +722,7 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
   pDb->nSectorsize = 256;
   pDb->bSyncDebug = 0;
 
-  rc = lsm_new(0, &pDb->db);
+  rc = lsm_new(tdb_lsm_env(), &pDb->db);
   if( rc==LSM_OK ){
     lsm_config_log(pDb->db, xLog, 0);
     lsm_config_work_hook(pDb->db, xWorkHook, (void *)pDb);
@@ -964,7 +974,7 @@ static int mt_start_worker(
   p->lsm_work_npage = nPage;
 
   /* Open the worker connection */
-  if( rc==0 ) rc = lsm_new(0, &p->pWorker);
+  if( rc==0 ) rc = lsm_new(tdb_lsm_env(), &p->pWorker);
   if( rc==0 ) rc = lsm_open(p->pWorker, zFilename);
 
   /* Configure the work-hook */

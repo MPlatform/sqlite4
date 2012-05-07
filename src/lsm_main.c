@@ -326,10 +326,6 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
   return rc;
 }
 
-int lsm_global_config(int eParam, ...){
-  return LSM_MISUSE;
-}
-
 void lsmAppendSegmentList(LsmString *pStr, char *zPre, Segment *pSeg){
   lsmStringAppendf(pStr, "%s{%d %d}", zPre, pSeg->run.nSize,
                          segmentHasSeparators(pSeg));

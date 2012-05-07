@@ -104,6 +104,14 @@ const char *tdb_system_name(int i);
 lsm_db *tdb_lsm(TestDb *pDb);
 
 /*
+** Return a pointer to the lsm_env object used by all lsm database
+** connections initialized as a copy of the object returned by 
+** lsm_default_env(). It may be modified (e.g. to override functions)
+** if the caller can guarantee that it is not already in use.
+*/
+lsm_env *tdb_lsm_env(void);
+
+/*
 ** The following functions only work with LSM database handles. It is
 ** illegal to call them with any other type of database handle specified
 ** as an argument.
