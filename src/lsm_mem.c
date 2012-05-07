@@ -32,12 +32,6 @@ struct Mempool {
   int nUsed;                      /* Total number of bytes allocated */
 };
 
-static void *dflt_malloc(lsm_env *pEnv, int N){ return malloc(N); }
-static void dflt_free(lsm_env *pEnv, void *p){ free(p); }
-static void *dflt_realloc(lsm_env *pEnv, void *p, int N){
-  return realloc(p, N);
-}
-
 /*
 ** Core memory allocation routines for LSM.
 */
