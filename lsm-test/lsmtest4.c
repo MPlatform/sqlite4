@@ -81,7 +81,7 @@ static void do_mc_test(
     /* Have reader (iStep % nReader) open a read transaction here. */
     iBegin = (iStep % pTest->nReader);
     if( iBegin<iStep ) tdb_commit(aReader[iBegin].pDb, 0);
-    tdb_begin(aReader[iBegin].pDb, 0);
+    tdb_begin(aReader[iBegin].pDb, 1);
     aReader[iBegin].iLast = iLast;
 
     /* Check that the db is Ok for each open reader */
