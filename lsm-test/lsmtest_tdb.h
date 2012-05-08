@@ -59,12 +59,37 @@ int tdb_fetch(TestDb *pDb, void *pKey, int nKey, void **ppVal, int *pnVal);
 
 /*
 ** Open and close nested transactions. Currently, these functions only 
-** work for SQLite and LSM systems. Use the tdb_transaction_support() function
-** to determine if a given TestDb handle supports these methods.
+** work for SQLite3 and LSM systems. Use the tdb_transaction_support() 
+** function to determine if a given TestDb handle supports these methods.
 **
-** A value of 0 is a read-transaction. Values above 0 are write transactions.
-** Passing a negative value as the second parameter to any of these functions
-** is an error.
+** These functions and the iLevel parameter follow the same conventions as
+** the SQLite 4 transaction interface. Note that this is slightly different
+** from the way LSM does things. As follows:
+**
+** tdb_begin():
+**   A successful call to tdb_begin() with (iLevel>1) guarantees that 
+**   there are at least (iLevel-1) write transactions open. If iLevel==1,
+**   then it guarantees that at least a read-transaction is open. Calling
+**   tdb_begin() with iLevel==0 is a no-op.
+**
+** tdb_commit():
+**   A successful call to tdb_commit() with (iLevel>1) guarantees that 
+**   there are at most (iLevel-1) write transactions open. If iLevel==1,
+**   then it guarantees that there are no write transactions open (although
+**   a read-transaction may remain open).  Calling tdb_commit() with 
+**   iLevel==0 ensures that all transactions, read or write, have been 
+**   closed and committed.
+**
+** tdb_rollback():
+**   This call is similar to tdb_commit(), except that instead of committing
+**   transactions, it reverts them. For example, calling tdb_rollback() with
+**   iLevel==2 ensures that there is at most one write transaction open, and
+**   restores the database to the state that it was in when that transaction
+**   was opened.
+**
+**   In other words, tdb_commit() just closes transactions - tdb_rollback()
+**   closes transactions and then restores the database to the state it
+**   was in before those transactions were even opened.
 */
 int tdb_begin(TestDb *pDb, int iLevel);
 int tdb_commit(TestDb *pDb, int iLevel);

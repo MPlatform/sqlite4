@@ -178,6 +178,14 @@ static int kc_open(const char *zFilename, int bClear, TestDb **ppDb){
 ** Begin wrapper for SQLite.
 */
 
+/*
+** nOpenTrans:
+**   The number of open nested transactions, in the same sense as used
+**   by the tdb_begin/commit/rollback and SQLite 4 KV interfaces. If this
+**   value is 0, there are no transactions open at all. If it is 1, then
+**   there is a read transaction. If it is 2 or greater, then there are
+**   (nOpenTrans-1) nested write transactions open.
+*/
 struct SqlDb {
   TestDb base;
   sqlite3 *db;
@@ -186,10 +194,6 @@ struct SqlDb {
   sqlite3_stmt *pFetch;
   sqlite3_stmt *apScan[8];
 
-  /* Number of currently open transactions. If this value is 0, no 
-  ** transaction is open. If it is 1, a read transaction is open. If
-  ** it is 2 or greater, a write-transaction and (nOpenTrans-2) nested
-  ** savepoint transactions are open. */
   int nOpenTrans;
 
   /* Used by sql_fetch() to allocate space for results */
@@ -312,77 +316,78 @@ static int sql_begin(TestDb *pTestDb, int iLevel){
   int i;
   SqlDb *pDb = (SqlDb *)pTestDb;
 
-  assert( iLevel>=0 );
+  /* iLevel==0 is a no-op */
+  if( iLevel==0 ) return 0;
 
+  /* If there are no transactions at all open, open a read transaction. */
   if( pDb->nOpenTrans==0 ){
-    int rc;
-    const char *zSql;
-    if( iLevel==0 ){
-      zSql = "BEGIN; SELECT * FROM sqlite_master LIMIT 1;";
-    }else{
-      zSql = "BEGIN EXCLUSIVE;";
-    }
-    rc = sqlite3_exec(pDb->db, zSql, 0, 0, 0);
-    if( rc!=SQLITE_OK ) return rc;
-    pDb->nOpenTrans = 2;
+    int rc = sqlite3_exec(pDb->db, 
+        "BEGIN; SELECT * FROM sqlite_master LIMIT 1;" , 0, 0, 0
+    );
+    if( rc!=0 ) return rc;
+    pDb->nOpenTrans = 1;
   }
 
-  for(i=pDb->nOpenTrans; i<=iLevel; i++){
+  /* Open any required write transactions */
+  for(i=pDb->nOpenTrans; i<iLevel; i++){
     char *zSql = sqlite3_mprintf("SAVEPOINT x%d", i);
     int rc = sqlite3_exec(pDb->db, zSql, 0, 0, 0);
     sqlite3_free(zSql);
-    if( rc!=SQLITE_OK ){
-      return rc;
-    }
+    if( rc!=SQLITE_OK ) return rc;
   }
-  pDb->nOpenTrans = iLevel+1;
 
+  pDb->nOpenTrans = iLevel;
   return 0;
 }
 
 static int sql_commit(TestDb *pTestDb, int iLevel){
-  int rc = 0;
+  int i;
   SqlDb *pDb = (SqlDb *)pTestDb;
   assert( iLevel>=0 );
 
-  if( pDb->nOpenTrans>=1 && iLevel<=1 ){
-    rc = sqlite3_exec(pDb->db, "COMMIT", 0, 0, 0);
+  /* Close the read transaction if requested. */
+  if( pDb->nOpenTrans>=1 && iLevel==0 ){
+    int rc = sqlite3_exec(pDb->db, "COMMIT", 0, 0, 0);
+    if( rc!=0 ) return rc;
     pDb->nOpenTrans = 0;
-  }else{
-    if( iLevel<pDb->nOpenTrans ){
-      char *zSql = sqlite3_mprintf("RELEASE x%d", iLevel);
-      rc = sqlite3_exec(pDb->db, zSql, 0, 0, 0);
-      sqlite3_free(zSql);
-      if( rc==SQLITE_OK ){
-        pDb->nOpenTrans = iLevel;
-      }
-    }
   }
 
-  return rc;
+  /* Close write transactions as required */
+  if( pDb->nOpenTrans>iLevel ){
+    char *zSql = sqlite3_mprintf("RELEASE x%d", iLevel);
+    int rc = sqlite3_exec(pDb->db, zSql, 0, 0, 0);
+    sqlite3_free(zSql);
+    if( rc!=0 ) return rc;
+  }
+
+  pDb->nOpenTrans = iLevel;
+  return 0;
 }
 
 static int sql_rollback(TestDb *pTestDb, int iLevel){
-  int rc = 0;
+  int i;
   SqlDb *pDb = (SqlDb *)pTestDb;
   assert( iLevel>=0 );
-  if( pDb->nOpenTrans>=2 && iLevel<=1 ){
-    rc = sqlite3_exec(pDb->db, "ROLLBACK", 0, 0, 0);
-    pDb->nOpenTrans = 0;
+
+  if( pDb->nOpenTrans>=1 && iLevel==0 ){
+    /* Close the read transaction if requested. */
+    int rc = sqlite3_exec(pDb->db, "ROLLBACK", 0, 0, 0);
+    if( rc!=0 ) return rc;
+  }else if( pDb->nOpenTrans>1 && iLevel==1 ){
+    /* Or, rollback and close the top-level write transaction */
+    char *zSql = sqlite3_mprintf("ROLLBACK TO x1", iLevel-1);
+    int rc = sqlite3_exec(pDb->db, "ROLLBACK TO x1; RELEASE x1;", 0, 0, 0);
+    if( rc!=0 ) return rc;
   }else{
-    if( iLevel<pDb->nOpenTrans ){
-      char *zSql = sqlite3_mprintf(
-          "ROLLBACK TO x%d ; RELEASE x%d", iLevel, iLevel
-          );
-      rc = sqlite3_exec(pDb->db, zSql, 0, 0, 0);
-      sqlite3_free(zSql);
-      if( rc==SQLITE_OK ){
-        pDb->nOpenTrans = iLevel;
-      }
-    }
+    /* Or, just roll back some nested transactions */
+    char *zSql = sqlite3_mprintf("ROLLBACK TO x%d", iLevel-1);
+    int rc = sqlite3_exec(pDb->db, zSql, 0, 0, 0);
+    sqlite3_free(zSql);
+    if( rc!=0 ) return rc;
   }
 
-  return rc;
+  pDb->nOpenTrans = iLevel;
+  return 0;
 }
 
 static int sql_open(const char *zFilename, int bClear, TestDb **ppDb){

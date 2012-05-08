@@ -638,34 +638,39 @@ static int test_lsm_scan(
 static int test_lsm_begin(TestDb *pTestDb, int iLevel){
   int rc = LSM_OK;
   LsmDb *pDb = (LsmDb *)pTestDb;
-  if( iLevel==0 ){
-    if( pDb->pCsr==0 ) rc = lsm_csr_open(pDb->db, &pDb->pCsr);
-  }else{
-    rc = lsm_begin(pDb->db, iLevel);
+
+  /* iLevel==0 is a no-op. */
+  if( iLevel==0 ) return 0;
+
+  if( pDb->pCsr==0 ) rc = lsm_csr_open(pDb->db, &pDb->pCsr);
+  if( rc==LSM_OK && iLevel>1 ){
+    rc = lsm_begin(pDb->db, iLevel-1);
   }
+
   return rc;
 }
 static int test_lsm_commit(TestDb *pTestDb, int iLevel){
   LsmDb *pDb = (LsmDb *)pTestDb;
-  if( iLevel==0 ){
-    if( pDb->pCsr ){
-      lsm_csr_close(pDb->pCsr);
-      pDb->pCsr = 0;
-    }
-    iLevel = 1;
+
+  /* If iLevel==0, close any open read transaction */
+  if( iLevel==0 && pDb->pCsr ){
+    lsm_csr_close(pDb->pCsr);
+    pDb->pCsr = 0;
   }
-  return lsm_commit(pDb->db, iLevel);
+
+  /* If iLevel==0, close any open read transaction */
+  return lsm_commit(pDb->db, MAX(0, iLevel-1));
 }
 static int test_lsm_rollback(TestDb *pTestDb, int iLevel){
   LsmDb *pDb = (LsmDb *)pTestDb;
-  if( iLevel==0 ){
-    if( pDb->pCsr ){
-      lsm_csr_close(pDb->pCsr);
-      pDb->pCsr = 0;
-    }
-    iLevel = 1;
+
+  /* If iLevel==0, close any open read transaction */
+  if( iLevel==0 && pDb->pCsr ){
+    lsm_csr_close(pDb->pCsr);
+    pDb->pCsr = 0;
   }
-  return lsm_rollback(pDb->db, iLevel);
+
+  return lsm_rollback(pDb->db, MAX(0, iLevel-1));
 }
 
 /*

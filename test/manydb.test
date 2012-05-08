@@ -97,6 +97,4 @@ for {set i 0} {$i<$N} {incr i} {
 }
 
 
-
-
 finish_test

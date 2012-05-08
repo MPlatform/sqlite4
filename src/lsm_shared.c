@@ -1228,7 +1228,13 @@ int lsmFinishFlush(lsm_db *pDb, int bEmpty){
     }
     pDb->pTV = 0;
     lsmTreeRelease(p->pTree);
-    rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
+
+    if( p->nDbRef>0 ){
+      rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
+    }else{
+      /* This is the case if the Database object is being deleted */
+      p->pTree = 0;
+    }
   }
 
   if( p->bWriter ){

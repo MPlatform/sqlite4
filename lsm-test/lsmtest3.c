@@ -5,6 +5,7 @@
 ** transactions and sub-transactions.
 */
 
+
 /*
 ** Repeat 2000 times (until the db contains 100,000 entries):
 **
@@ -16,15 +17,8 @@
 **
 **   3. Every second iteration, roll back the main transaction. Check the
 **      db checksum is correct. Every other iteration, commit the main
-**      transaction.
+**      transaction (increasing the size of the db by 100 rows).
 */
-
-
-
-
-
-
-
 
 
 #include "lsmtest.h"
@@ -46,6 +40,8 @@ CksumDb *testCksumArrayNew(Datasource *pData, int nEntry, int nStep){
   pRet->nEntry = nEntry;
   pRet->nStep = nStep;
 
+  /* Allocate space so that azCksum is an array of nEntry pointers to
+  ** buffers each TEST_CKSUM_BYTES in size.  */
   pRet->azCksum = (char **)malloc(nEntry * (sizeof(char *) + TEST_CKSUM_BYTES));
   for(i=0; i<nEntry; i++){
     char *pStart = (char *)(&pRet->azCksum[nEntry]);
@@ -85,6 +81,10 @@ void testCksumArrayFree(CksumDb *p){
 /* End of CksumDb code.
 **************************************************************************/
 
+/*
+** Test utility function. Write key-value pair $i from datasource pData 
+** into database pDb.
+*/
 void testWriteDatasource(TestDb *pDb, Datasource *pData, int i, int *pRc){
   void *pKey; int nKey;
   void *pVal; int nVal;
@@ -92,6 +92,9 @@ void testWriteDatasource(TestDb *pDb, Datasource *pData, int i, int *pRc){
   testWrite(pDb, pKey, nKey, pVal, nVal, pRc);
 }
 
+/*
+** Test utility function. Delete datasource pData key $i from database pDb.
+*/
 void testDeleteDatasource(TestDb *pDb, Datasource *pData, int i, int *pRc){
   void *pKey; int nKey;
   testDatasourceEntry(pData, i, &pKey, &nKey, 0, 0);
@@ -128,7 +131,9 @@ void testDeleteDatasourceRange(
   }
 }
 
-static char *getName(const char *zSystem){ char *zRet; zRet = testMallocPrintf("rollback.%s", zSystem);
+static char *getName(const char *zSystem){ 
+  char *zRet; 
+  zRet = testMallocPrintf("rollback.%s", zSystem);
   return zRet;
 }
 
@@ -167,18 +172,16 @@ static int rollback_test_1(
     nDbRow = testCountDatabase(pDb);
     testCompareInt(nCurrent, nDbRow, &rc);
 
-    iInsert = nCurrent;
-    for(iTrans=1; iTrans<=5 && rc==0; iTrans++){
-      int j;
+    for(iTrans=2; iTrans<=6 && rc==0; iTrans++){
       tdb_begin(pDb, iTrans);
-      for(j=0; j<100; j++) testWriteDatasource(pDb, pData, iInsert++, &rc);
+      testWriteDatasourceRange(pDb, pData, nCurrent, 100, &rc);
+      nCurrent += 100;
     }
-    nCurrent = iInsert;
 
     testCksumDatabase(pDb, zCksum);
     testCompareStr(zCksum, testCksumArrayGet(pCksum, nCurrent), &rc);
 
-    for(iTrans=5; iTrans>1 && rc==0; iTrans--){
+    for(iTrans=6; iTrans>2 && rc==0; iTrans--){
       tdb_rollback(pDb, iTrans);
       nCurrent -= 100;
       testCksumDatabase(pDb, zCksum);
@@ -186,12 +189,12 @@ static int rollback_test_1(
     }
 
     if( i%2 ){
-      tdb_rollback(pDb, 1);
+      tdb_rollback(pDb, 0);
       nCurrent -= 100;
       testCksumDatabase(pDb, zCksum);
       testCompareStr(zCksum, testCksumArrayGet(pCksum, nCurrent), &rc);
     }else{
-      tdb_commit(pDb, 1);
+      tdb_commit(pDb, 0);
     }
   }
   testCaseFinish(rc);
