@@ -116,7 +116,6 @@ typedef struct PhantomRun PhantomRun;
 **   fsIListGrow()
 **   fsIListFree()
 */
-
 struct PhantomRun {
   SortedRun *pRun;                /* Accompanying SortedRun object */
   int nPhantom;                   /* Number of pages in run */
@@ -137,15 +136,6 @@ struct FileSystem {
   lsm_file *fdDb;                 /* Database file */
   lsm_file *fdLog;                /* Log file */
 
-  /* The following list is used for two things:
-  **
-  **   To figure out if any other run is using a block when a block is 
-  **   freed, and to delete all SortedRun objects when the FileSystem is
-  **   deleted. The second isn't really a reason...
-  */
-#if 0
-  SortedRun *pSorted;             /* Linked list of all sorted runs */
-#endif
   PhantomRun *pPhantom;           /* Phantom run currently being constructed */
 
   /* Statistics */
@@ -874,6 +864,8 @@ int lsmFsDbPageNext(SortedRun *pRun, Page *pPg, int eDir, Page **ppNext){
 
   return fsPageGet(pFS, pRun, iPg, 0, ppNext);
 }
+
+
 int lsmFsPhantomMaterialize(
   FileSystem *pFS, 
   Snapshot *pSnapshot, 
@@ -1291,14 +1283,27 @@ int lsmFsNWrite(FileSystem *pFS){
 
 int lsmFsSortedPhantom(FileSystem *pFS, SortedRun *pRun){
   int rc = LSM_OK;
-  assert( pFS->pPhantom==0 );
+  PhantomRun *p;                  /* New phantom run object */
 
-  pFS->pPhantom = (PhantomRun *)lsmMallocZeroRc(pFS->pEnv, 
-                                     sizeof(PhantomRun), &rc);
-  if( pFS->pPhantom ){
-    pFS->pPhantom->pRun = pRun;
-  }
+  p = (PhantomRun *)lsmMallocZeroRc(pFS->pEnv, sizeof(PhantomRun), &rc);
+  if( p ) p->pRun = pRun;
+  assert( pFS->pPhantom==0 );
+  pFS->pPhantom = p;
   return rc;
+}
+
+void lsmFsSortedPhantomFree(FileSystem *pFS){
+  PhantomRun *p = pFS->pPhantom;
+  if( p ){
+    Page *pPg;
+    Page *pNext;
+    for(pPg=p->pFirst; pPg; pPg=pNext){
+      pNext = pPg->pHashNext;
+      fsPageBufferFree(pPg);
+    }
+    lsmFree(pFS->pEnv, p);
+    pFS->pPhantom = 0;
+  }
 }
 
 int lsmFsDbSync(FileSystem *pFS){

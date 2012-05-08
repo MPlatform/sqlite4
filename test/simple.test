@@ -1367,5 +1367,26 @@ do_catchsql_test 70.3 {
   select * from maintable, joinme INDEXED by joinme_id_text_idx
 } {1 {cannot use index: joinme_id_text_idx}}
 
+#-------------------------------------------------------------------------
+# This is testing that the "phantom" runs feature works.
+reset_db
+do_execsql_test 71.1 {
+  CREATE TABLE t1(x);
+  INSERT INTO t1 VALUES(randomblob(1024));           --   1
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --   2
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --   4
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --   8
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --  16
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --  32
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --  64
+}
+do_execsql_test 71.2 { SELECT count(*) FROM t1 } 64
+db close
+sqlite4 db test.db
+do_execsql_test 71.3 { SELECT count(*) FROM t1 } 64
+do_test 71.4 { 
+  expr {[file size test.db] < 256*1024}
+} {1}
+
 finish_test
 

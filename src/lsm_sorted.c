@@ -842,10 +842,10 @@ static int segmentCursorValid(LevelCursor *pCsr){
 
 #ifdef LSM_DEBUG
 
-static char *keyToString(void *pKey, int nKey){
+static char *keyToString(lsm_env *pEnv, void *pKey, int nKey){
   int i;
   u8 *aKey = (u8 *)pKey;
-  char *zRet = (char *)lsmMalloc(0, nKey+1);
+  char *zRet = (char *)lsmMalloc(pEnv, nKey+1);
 
   for(i=0; i<nKey; i++){
     zRet[i] = (char)(isalnum(aKey[i]) ? aKey[i] : '.');
@@ -864,6 +864,7 @@ static int assertKeyLocation(
   SegmentPtr *pPtr, 
   void *pKey, int nKey
 ){
+  lsm_env *pEnv = lsmFsEnv(pCsr->pFS);
   Blob blob = {0, 0, 0};
   int eDir;
   int iTopic = 0;                 /* TODO: Fix me */
@@ -898,8 +899,8 @@ static int assertKeyLocation(
           if( res==0 ) res = pCsr->xCmp(pKey, nKey, pPgKey, nPgKey);
           if( (eDir==1 && res>0) || (eDir==-1 && res<0) ){
             /* Taking this branch means something has gone wrong. */
-            char *zMsg = lsmMallocPrintf(0, "Key \"%s\" is not on page %d", 
-                keyToString(pKey, nKey), lsmFsPageNumber(pPtr->pPg)
+            char *zMsg = lsmMallocPrintf(pEnv, "Key \"%s\" is not on page %d", 
+                keyToString(pEnv, pKey, nKey), lsmFsPageNumber(pPtr->pPg)
             );
             fprintf(stderr, "%s\n", zMsg);
             assert( !"assertKeyLocation() failed" );
@@ -2255,6 +2256,8 @@ static int mergeWorkerPushHierarchy(
   Pgno iPtr;                      /* Pointer value to accompany pKey/nKey */
   int bIndirect;                  /* True to use an indirect record */
 
+  assert( !pMW->bFlush );
+
   /* If there exists a b-tree hierarchy and it is not loaded into 
   ** memory, load it now.  */
   rc = mergeWorkerLoadHierarchy(pMW);
@@ -2381,25 +2384,37 @@ push_hierarchy_out:
   return rc;
 }
 
-#if 0
-static int sortedWriterBuildHierarchy(SegWriter *p){
+/*
+** The merge-worker object passed as the first argument to this function
+** was used for an in-memory tree flush. If one was required, the separators 
+** array has been assembled in-memory (as a "phantom"). In this case it
+** consists of leaf nodes only, there are no b-tree nodes. This function 
+** materializes the phantom run (writes it into the db file) and appends
+** any required b-tree nodes.
+*/
+static int mergeWorkerBuildHierarchy(MergeWorker *pMW){
   int rc = LSM_OK;
-  if( p->pPage ){
+
+  assert( pMW->bFlush );
+  if( pMW->apPage[1] ){
+    SortedRun *pRun;              /* Separators run to materialize */
+    lsm_db *db = pMW->pDb;
     Blob blob = {0, 0, 0};
     Page *pPg;
-    Pgno iLast;
 
-    rc = lsmFsPhantomMaterialize(p->pDb->pFS, p->pDb->pWorker, p->pRun);
+    /* Write the leaf pages into the file. They now have page numbers,
+    ** which can be used as pointers in the b-tree hierarchy.  */
+    pRun = &pMW->pLevel->lhs.sep;
+    rc = lsmFsPhantomMaterialize(db->pFS, db->pWorker, pRun);
 
     if( rc==LSM_OK ){
-      rc = lsmFsDbPageEnd(p->pDb->pFS, p->pRun, 0, &pPg);
-      iLast = lsmFsPageNumber(p->pPage);
+      rc = lsmFsDbPageEnd(db->pFS, pRun, 0, &pPg);
     }
 
-    while( rc==LSM_OK && lsmFsPageNumber(pPg)!=iLast ){
+    while( rc==LSM_OK && lsmFsPageNumber(pPg)!=pRun->iLast ){
       Page *pNext = 0;
 
-      rc = lsmFsDbPageNext(p->pRun, pPg, 1, &pNext);
+      rc = lsmFsDbPageNext(pRun, pPg, 1, &pNext);
       lsmFsPageRelease(pPg);
       pPg = pNext;
 
@@ -2414,17 +2429,17 @@ static int sortedWriterBuildHierarchy(SegWriter *p){
           Pgno iPg = lsmFsPageNumber(pPg);
 
           pKey = pageGetKey(pPg, 0, &iTopic, &nKey, &blob);
-          rc = segWriterPushHierarchy(p, iPg, iTopic, pKey, nKey);
+          rc = mergeWorkerPushHierarchy(pMW, iPg, iTopic, pKey, nKey);
         }
       }
     }
 
-    if( p->nHier>0 ){
-      Page *pRoot = p->apHier[p->nHier-1];
-      lsmFsSortedSetRoot(p->pRun, lsmFsPageNumber(pRoot));
+    if( pMW->nHier>0 ){
+      Page *pRoot = pMW->apHier[pMW->nHier-1];
+      lsmFsSortedSetRoot(pRun, lsmFsPageNumber(pRoot));
     }else{
-      Pgno iRoot = lsmFsFirstPgno(p->pRun);
-      lsmFsSortedSetRoot(p->pRun, iRoot);
+      Pgno iRoot = lsmFsFirstPgno(pRun);
+      lsmFsSortedSetRoot(pRun, iRoot);
     }
 
     lsmFsPageRelease(pPg);
@@ -2432,7 +2447,6 @@ static int sortedWriterBuildHierarchy(SegWriter *p){
   }
   return rc;
 }
-#endif
 
 static int keyszToSkip(FileSystem *pFS, int nKey){
   int nPgsz;                /* Nominal database page size */
@@ -2792,7 +2806,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
     }
 
     /* If the separators array has not been started, start it now. */
-    if( rc==LSM_OK && pSeg->sep.iFirst==0 ){
+    if( rc==LSM_OK && pMW->apPage[1]==0 ){
       assert( iSPtr==0 );
       assert( pSeg->run.iFirst!=0 );
       rc = mergeWorkerNextPage(pMW, 1, pSeg->run.iFirst);
@@ -2804,7 +2818,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
     if( rc==LSM_OK && iSPtr ){
       int eSType;                 /* Type of record for separators array */
 
-      assert( pMW->apPage[1] && pSeg->sep.iFirst );
+      assert( pMW->apPage[1] && (pSeg->sep.iFirst || pMW->bFlush) );
 
       /* Figure out how many (if any) keys to skip from this point. */
       pMW->pLevel->pMerge->nSkip = keyszToSkip(pDb->pFS, nKey);
@@ -2939,6 +2953,10 @@ int lsmSortedFlushTree(
     mergeworker.pDb = pDb;
     mergeworker.pLevel = pNew;
     mergeworker.pCsr = pCsr;
+    mergeworker.bFlush = 1;
+
+    /* Mark the separators array for the new level as a "phantom". */
+    lsmFsSortedPhantom(pDb->pFS, &pNew->lhs.sep);
 
     /* Allocate the first page of the output segment. */
     rc = mergeWorkerNextPage(&mergeworker, 0, iLeftPtr);
@@ -2948,6 +2966,12 @@ int lsmSortedFlushTree(
     while( rc==LSM_OK && mergeWorkerDone(&mergeworker)==0 ){
       rc = mergeWorkerStep(&mergeworker);
     }
+
+    if( rc==LSM_OK ){
+      rc = mergeWorkerBuildHierarchy(&mergeworker);
+    }
+
+    lsmFsSortedPhantomFree(pDb->pFS);
     mergeWorkerShutdown(&mergeworker);
     pNew->pMerge = 0;
   }

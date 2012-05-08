@@ -351,6 +351,7 @@ int lsmFsSetFreelist(FileSystem *, int, u32 *, int);
 
 /* Creating and populating sorted runs. */
 int lsmFsSortedPhantom(FileSystem *, SortedRun *);
+void lsmFsSortedPhantomFree(FileSystem *pFS);
 void lsmFsSortedSetRoot(SortedRun *, Pgno);
 
 void lsmFsGobble(Snapshot *, SortedRun *, Page *);
