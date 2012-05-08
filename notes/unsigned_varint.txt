@@ -1,11 +1,24 @@
 A variable length integer is an encoding of 64-bit unsigned integers
-into between 1 and 9 bytes.  The encoding is designed so that small
-(and common) values take much less space that larger values.  Futhermore,
-the length of the varint can be determined after examining just the
+into between 1 and 9 bytes.  The encoding has the following properties:
+
+(1) Smaller (and common) values use fewer bytes and take up less space
+than larger (and less common) values.
+
+(2) The length of any varint can be determined by looking at just the
 first byte of the encoding.
 
-Treat each byte of the encoding as an unsigned integer between 0 and 255.
-Let the bytes of the encoding be called A0, A1, A2, ..., A8.
+(3) Lexicographical and numeric ordering for varints are the same.  Hence
+if a group of varints are order lexicographically (that is to say, if they
+are order by memcmp() with shorted varints coming first) then those varints
+will also be in numeric order.  This property means that varints can be
+used as keys in the key/value backend storage and the records will occur
+in numerical order of the keys.
+
+The encoding is described by algorithms to decode (convert from
+varint to 8-byte unsigned integer) and to encode (convert from
+8-byte unsigned integer to varint).  Treat each byte of the encoding
+as an unsigned integer between 0 and 255.  Let the bytes of the
+encoding be called A0, A1, A2, ..., A8.
 
 DECODE
 
