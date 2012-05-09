@@ -2994,7 +2994,7 @@ int lsmSortedFlushTree(
     sortedInvokeWorkHook(pDb);
   }
 #if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, "tree flush");
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 1, "tree flush");
 #endif
 
   assertAllBtreesOk(rc, pDb);
@@ -3339,7 +3339,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 1, "work");
 #endif
 
     }
@@ -3515,8 +3515,8 @@ static int fileToString(
   return i;
 }
 
-void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg){
-  Blob blob = {0, 0, 0};
+void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg, int bVals){
+  Blob blob = {0, 0, 0};         /* Blob used for keys */
   LsmString s;
   int i;
 
@@ -3539,10 +3539,9 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg){
   for(i=0; i<nRec; i++){
     Page *pRef = 0;               /* Pointer to page iRef */
     int iChar;
-    u8 *aKey;
-    int nKey;
+    u8 *aKey; int nKey = 0;       /* Key */
+    u8 *aVal; int nVal = 0;       /* Value */
     int iTopic;
-    int nVal;
     u8 *aCell;
     int iPgPtr;
     int eType;
@@ -3560,17 +3559,22 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg){
     }else{
       aCell += lsmVarintGet32(aCell, &nKey);
       if( rtIsWrite(eType) ) aCell += lsmVarintGet32(aCell, &nVal);
-      sortedReadData(pPg, (aCell-aData), nKey, (void **)&aKey, &blob);
-      /* iTopic = rtTopic(eType); */
+      sortedReadData(pPg, (aCell-aData), nKey+nVal, (void **)&aKey, &blob);
+      aVal = &aKey[nKey];
       iTopic = eType;
     }
 
     lsmStringAppendf(&s, "%s%2X:", (i==0?"":" "), iTopic);
     for(iChar=0; iChar<nKey; iChar++){
-      lsmStringAppendf(&s, "%c",
-          isalnum(aKey[iChar]) ? aKey[iChar] : '.'
-      );
+      lsmStringAppendf(&s, "%c", isalnum(aKey[iChar]) ? aKey[iChar] : '.');
     }
+    if( nVal>0 && bVals ){
+      lsmStringAppendf(&s, "##");
+      for(iChar=0; iChar<nVal; iChar++){
+        lsmStringAppendf(&s, "%c", isalnum(aVal[iChar]) ? aVal[iChar] : '.');
+      }
+    }
+
     lsmStringAppendf(&s, " %d", iPgPtr+iPtr);
     lsmFsPageRelease(pRef);
   }
@@ -3578,10 +3582,11 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg){
 
   lsmLogMessage(pDb, LSM_OK, "      Page %d: %s", lsmFsPageNumber(pPg), s.z);
   lsmStringClear(&s);
+
   sortedBlobFree(&blob);
 }
 
-void sortedDumpSegment(lsm_db *pDb, SortedRun *pRun){
+void sortedDumpSegment(lsm_db *pDb, SortedRun *pRun, int bVals){
   assert( pDb->xLog );
   if( pRun ){
     char *zSeg;
@@ -3594,7 +3599,7 @@ void sortedDumpSegment(lsm_db *pDb, SortedRun *pRun){
     lsmFsDbPageEnd(pDb->pFS, pRun, 0, &pPg);
     while( pPg ){
       Page *pNext;
-      sortedDumpPage(pDb, pRun, pPg);
+      sortedDumpPage(pDb, pRun, pPg, bVals);
       lsmFsDbPageNext(pRun, pPg, 1, &pNext);
       lsmFsPageRelease(pPg);
       pPg = pNext;
@@ -3610,6 +3615,7 @@ void lsmSortedDumpStructure(
   lsm_db *pDb,                    /* Database handle (used for xLog callback) */
   Snapshot *pSnap,                /* Snapshot to dump */
   int bKeys,                      /* Output the keys from each segment */
+  int bVals,                      /* Output the values from each segment */
   const char *zWhy                /* Caption to print near top of dump */
 ){
   Snapshot *pDump = pSnap;
@@ -3699,13 +3705,13 @@ void lsmSortedDumpStructure(
     if( bKeys ){
       for(pLevel=pTopLevel; pLevel; pLevel=pLevel->pNext){
         int i;
-        sortedDumpSegment(pDb, &pLevel->lhs.sep);
-        sortedDumpSegment(pDb, &pLevel->lhs.run);
+        sortedDumpSegment(pDb, &pLevel->lhs.sep, 0);
+        sortedDumpSegment(pDb, &pLevel->lhs.run, bVals);
         for(i=0; i<pLevel->nRight; i++){
           if( pLevel->aRhs[i].sep.iFirst>0 ){
-            sortedDumpSegment(pDb, &pLevel->aRhs[i].sep);
+            sortedDumpSegment(pDb, &pLevel->aRhs[i].sep, 0);
           }
-          sortedDumpSegment(pDb, &pLevel->aRhs[i].run);
+          sortedDumpSegment(pDb, &pLevel->aRhs[i].run, bVals);
         }
       }
     }

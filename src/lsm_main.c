@@ -239,7 +239,7 @@ int lsmFlushToDisk(lsm_db *pDb){
   }
 
 #if 0
-  if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, "flush");
+  if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "flush");
 #endif
 
   return rc;

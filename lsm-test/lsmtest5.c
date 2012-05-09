@@ -184,7 +184,7 @@ static void dbReadOperation(
   const int iMax = dbMaxLevel(pParam);
   int i;
 
-  if( tdb_transaction_support(pDb) ) testBegin(pDb, 0, pRc);
+  if( tdb_transaction_support(pDb) ) testBegin(pDb, 1, pRc);
   for(i=1; *pRc==0 && i<=iMax; i++){
     char zCksum[DB_KEY_BYTES];
     char zKey[DB_KEY_BYTES];
@@ -218,7 +218,7 @@ static int dbWriteOperation(
 
   /* Open a write transaction. This may fail - SQLITE_BUSY */
   if( *pRc==0 && tdb_transaction_support(pDb) ){
-    rc = tdb_begin(pDb, 1);
+    rc = tdb_begin(pDb, 2);
     if( rc==5 ) return 0;
     *pRc = rc;
   }
@@ -457,6 +457,10 @@ static void testThreadSetResult(ThreadSet *a, int b, int c, char *d, ...){
 /* End of threads wrapper.
 *************************************************************************/
 
+/*************************************************************************
+** Below this point is the third part of this file - the implementation
+** of the mt1.* tests.
+*/
 typedef struct Mt1Test Mt1Test;
 struct Mt1Test {
   DbParameters param;             /* Description of database to read/write */

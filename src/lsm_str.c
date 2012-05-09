@@ -74,7 +74,7 @@ void lsmStringAppend(LsmString *pStr, const char *z, int N){
 ** FIXME!!!
 */
 void lsmStringVAppendf(LsmString *pStr, const char *zFormat, va_list ap){
-  lsmStringExtend(pStr, 500);
+  lsmStringExtend(pStr, 5000);
   if( pStr->nAlloc ){
     pStr->n += vsnprintf(pStr->z+pStr->n, pStr->nAlloc-pStr->n-1, zFormat, ap);
     pStr->z[pStr->n] = 0;

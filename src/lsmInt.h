@@ -435,7 +435,7 @@ int lsmMCursorType(MultiCursor *, int *);
 int lsmMCursorSave(MultiCursor *);
 int lsmMCursorRestore(lsm_db *, MultiCursor *);
 
-void lsmSortedDumpStructure(lsm_db *pDb, Snapshot *, int, const char *);
+void lsmSortedDumpStructure(lsm_db *pDb, Snapshot *, int, int, const char *);
 void lsmFsDumpBlockmap(lsm_db *, SortedRun *);
 void lsmFsDumpBlocklists(lsm_db *);
 
