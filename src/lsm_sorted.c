@@ -1238,7 +1238,6 @@ static int segmentCursorSeek(
     ){
       res = 0;
     }
-    assert( rc!=LSM_OK || iOut!=0 );
   }
   
   if( res>=0 ){
@@ -2256,8 +2255,6 @@ static int mergeWorkerPushHierarchy(
   Pgno iPtr;                      /* Pointer value to accompany pKey/nKey */
   int bIndirect;                  /* True to use an indirect record */
 
-  assert( !pMW->bFlush );
-
   /* If there exists a b-tree hierarchy and it is not loaded into 
   ** memory, load it now.  */
   rc = mergeWorkerLoadHierarchy(pMW);
@@ -2401,6 +2398,7 @@ static int mergeWorkerBuildHierarchy(MergeWorker *pMW){
     lsm_db *db = pMW->pDb;
     Blob blob = {0, 0, 0};
     Page *pPg;
+    int iLast;
 
     /* Write the leaf pages into the file. They now have page numbers,
     ** which can be used as pointers in the b-tree hierarchy.  */
@@ -2411,7 +2409,8 @@ static int mergeWorkerBuildHierarchy(MergeWorker *pMW){
       rc = lsmFsDbPageEnd(db->pFS, pRun, 0, &pPg);
     }
 
-    while( rc==LSM_OK && lsmFsPageNumber(pPg)!=pRun->iLast ){
+    iLast = pRun->iLast;
+    while( rc==LSM_OK && lsmFsPageNumber(pPg)!=iLast ){
       Page *pNext = 0;
 
       rc = lsmFsDbPageNext(pRun, pPg, 1, &pNext);
@@ -2836,15 +2835,19 @@ static int mergeWorkerStep(MergeWorker *pMW){
   /* If the cursor is at EOF, the merge is finished. Release all page
   ** references currently held by the merge worker and inform the 
   ** FileSystem object that no further pages will be appended to either 
-  ** the main or separators array.  */
+  ** the main or separators array. 
+  */
   if( rc==LSM_OK && !lsmMCursorValid(pMW->pCsr) ){
-    mergeWorkerShutdown(pMW);
     if( pSeg->run.iFirst ){
       rc = lsmFsSortedFinish(pDb->pFS, pDb->pWorker, &pSeg->run);
     }
-    if( pSeg->sep.iFirst ){
+    if( rc==LSM_OK && pMW->bFlush ){
+      rc = mergeWorkerBuildHierarchy(pMW);
+    }
+    if( rc==LSM_OK && pSeg->sep.iFirst ){
       rc = lsmFsSortedFinish(pDb->pFS, pDb->pWorker, &pSeg->sep);
     }
+    mergeWorkerShutdown(pMW);
   }
   return rc;
 }
@@ -2889,7 +2892,7 @@ int lsmSortedFlushTree(
   Level *pNext = 0;               /* The current top level */
   Level *pNew;                    /* The new level itself */
   SortedRun *pDel = 0;
-  int iLeftPtr = 1;
+  int iLeftPtr = 0;
 
   assert( pDb->pWorker );
   assert( pDb->pTV==0 || lsmTreeIsWriteVersion(pDb->pTV) );
@@ -2953,9 +2956,9 @@ int lsmSortedFlushTree(
     mergeworker.pDb = pDb;
     mergeworker.pLevel = pNew;
     mergeworker.pCsr = pCsr;
-    mergeworker.bFlush = 1;
 
     /* Mark the separators array for the new level as a "phantom". */
+    mergeworker.bFlush = 1;
     lsmFsSortedPhantom(pDb->pFS, &pNew->lhs.sep);
 
     /* Allocate the first page of the output segment. */
@@ -2965,10 +2968,6 @@ int lsmSortedFlushTree(
     if( rc==LSM_OK ) rc = lsmMCursorFirst(pCsr);
     while( rc==LSM_OK && mergeWorkerDone(&mergeworker)==0 ){
       rc = mergeWorkerStep(&mergeworker);
-    }
-
-    if( rc==LSM_OK ){
-      rc = mergeWorkerBuildHierarchy(&mergeworker);
     }
 
     lsmFsSortedPhantomFree(pDb->pFS);
@@ -2995,7 +2994,7 @@ int lsmSortedFlushTree(
     sortedInvokeWorkHook(pDb);
   }
 #if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 0, "tree flush");
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, "tree flush");
 #endif
 
   assertAllBtreesOk(rc, pDb);
@@ -3340,7 +3339,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, "work");
 #endif
 
     }
@@ -3467,7 +3466,7 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
 ** Space for the returned string is allocated using lsmMalloc(), and should
 ** be freed by the caller using lsmFree().
 */
-static char *segToString(SortedRun *pRun, int nMin){
+static char *segToString(lsm_env *pEnv, SortedRun *pRun, int nMin){
   int nSize = lsmFsSortedSize(pRun);
   Pgno iRoot = lsmFsSortedRoot(pRun);
   Pgno iFirst = lsmFsFirstPgno(pRun);
@@ -3478,28 +3477,29 @@ static char *segToString(SortedRun *pRun, int nMin){
   char *z2;
   int nPad;
 
-  z1 = lsmMallocPrintf(0, "%d.%d", iFirst, iLast);
+  z1 = lsmMallocPrintf(pEnv, "%d.%d", iFirst, iLast);
   if( iRoot ){
-    z2 = lsmMallocPrintf(0, "root=%d", iRoot);
+    z2 = lsmMallocPrintf(pEnv, "root=%d", iRoot);
   }else{
-    z2 = lsmMallocPrintf(0, "size=%d", nSize);
+    z2 = lsmMallocPrintf(pEnv, "size=%d", nSize);
   }
 
   nPad = nMin - 2 - strlen(z1) - 1 - strlen(z2);
   nPad = MAX(0, nPad);
 
   if( iRoot ){
-    z = lsmMallocPrintf(0, "/%s %*s%s\\", z1, nPad, "", z2);
+    z = lsmMallocPrintf(pEnv, "/%s %*s%s\\", z1, nPad, "", z2);
   }else{
-    z = lsmMallocPrintf(0, "|%s %*s%s|", z1, nPad, "", z2);
+    z = lsmMallocPrintf(pEnv, "|%s %*s%s|", z1, nPad, "", z2);
   }
-  lsmFree(0, z1);
-  lsmFree(0, z2);
+  lsmFree(pEnv, z1);
+  lsmFree(pEnv, z2);
 
   return z;
 }
 
 static int fileToString(
+  lsm_env *pEnv,                  /* For xMalloc() */
   char *aBuf, 
   int nBuf, 
   int nMin,
@@ -3508,9 +3508,9 @@ static int fileToString(
   int i = 0;
   char *zSeg;
 
-  zSeg = segToString(pRun, nMin);
+  zSeg = segToString(pEnv, pRun, nMin);
   i += snprintf(&aBuf[i], nBuf-i, "%s", zSeg);
-  lsmFree(0, zSeg);
+  lsmFree(pEnv, zSeg);
 
   return i;
 }
@@ -3587,7 +3587,7 @@ void sortedDumpSegment(lsm_db *pDb, SortedRun *pRun){
     char *zSeg;
     Page *pPg;
 
-    zSeg = segToString(pRun, 0);
+    zSeg = segToString(pDb->pEnv, pRun, 0);
     lsmLogMessage(pDb, LSM_OK, "Segment: %s", zSeg);
     lsmFree(pDb->pEnv, zSeg);
 
@@ -3657,8 +3657,12 @@ void lsmSortedDumpStructure(
         zLeft[0] = '\0';
         zRight[0] = '\0';
 
-        if( i<nLeft ){ fileToString(zLeft, sizeof(zLeft), 28, aLeft[i]); }
-        if( i<nRight ){ fileToString(zRight, sizeof(zRight), 28, aRight[i]); }
+        if( i<nLeft ){ 
+          fileToString(pDb->pEnv, zLeft, sizeof(zLeft), 28, aLeft[i]); 
+        }
+        if( i<nRight ){ 
+          fileToString(pDb->pEnv, zRight, sizeof(zRight), 28, aRight[i]); 
+        }
 
         if( i==0 ){
           snprintf(zLevel, sizeof(zLevel), "L%d:", iLevel);
@@ -3698,7 +3702,9 @@ void lsmSortedDumpStructure(
         sortedDumpSegment(pDb, &pLevel->lhs.sep);
         sortedDumpSegment(pDb, &pLevel->lhs.run);
         for(i=0; i<pLevel->nRight; i++){
-          sortedDumpSegment(pDb, &pLevel->aRhs[i].sep);
+          if( pLevel->aRhs[i].sep.iFirst>0 ){
+            sortedDumpSegment(pDb, &pLevel->aRhs[i].sep);
+          }
           sortedDumpSegment(pDb, &pLevel->aRhs[i].run);
         }
       }

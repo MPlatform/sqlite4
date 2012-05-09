@@ -369,6 +369,7 @@ static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
   pMerge->aiOutputOff[0] = -1;
   pMerge->aiOutputOff[1] = -1;
   pMerge->nSkip = (int)aInt[iIn++];
+  pMerge->bHierReadonly = 1;
   for(i=0; i<nInput; i++){
     pMerge->aInput[i].iPg = (Pgno)aInt[iIn++];
     pMerge->aInput[i].iCell = (int)aInt[iIn++];
