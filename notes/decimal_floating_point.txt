@@ -41,12 +41,13 @@ signed 64-bit integer, which IEEE 754 binary64 cannot do.  Any decimal
 floating point number with an 3-digit exponent and 18 or fewer significant
 digits can be represented exactly in this representation.
 
-An SQLite4 number can always be stored in 10 bytes.  However, for
-significants with fewer than 18 significant digits and/or exponents with
-fewer than 3 significant digits, one can devise alternative representation
-that use less space.  Current plans are to support 1-, 2-, 3-, 4-, 6-,
-8-, and 10-byte on-disk representations.
+The on-disk storage format for numbers uses between 1 and 13 bytes of
+space, depending on the magnitude of the number.  Numbers with fewer
+significant digits require less storage than numbers with more significant
+digits.  There are two encoding format, one for keys (that must sort in
+lexicographical order) and another for data.
 
+A proposed interface to decimal math routines is as follows:
 
    typedef struct sqlite4_num sqlite4_num;
    struct sqlite4_num {
