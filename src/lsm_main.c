@@ -624,7 +624,7 @@ void lsmLogMessage(lsm_db *pDb, int rc, const char *zFormat, ...){
     va_list ap;
     lsmStringInit(&s, pDb->pEnv);
     va_start(ap, zFormat);
-    lsmStringAppendf(&s, zFormat, ap);
+    lsmStringVAppendf(&s, zFormat, ap);
     va_end(ap);
     pDb->xLog(pDb->pLogCtx, rc, s.z);
     lsmStringClear(&s);
