@@ -20,7 +20,7 @@
 <li> The PRIMARY KEY of a table really is used as the key to the storage
      engine.
 <li> Decimal arithmetic is used.
-<li> Foreign key constraints are on by default.
+<li> Foreign key constraints and recursive triggers are on by default.
 <li> Covering indices can be declared explicitly.
 </ol>
 
@@ -234,13 +234,17 @@ space required for SQLite4 numbers varies from between 1 and 12 bytes,
 depending on the magnitude and the number of significant digits in the
 value.
 
-<h2>3.5 Foreign Key Constraints Are On By Default</h2>
+<h2>3.5 Foreign Key Constraints And Recursive Triggers Are On By Default</h2>
 
 <p>Foreign key constraints were not available in early versions of SQLite3
 and so they default off for backwards compatibility.  But foreign key 
 constraints are always available and default on in SQLite4.  All foreign
-key constraints are deferred, however.  There is no mechanism to create
-immediate foreign key constraints.
+key constraints are deferred by default, though they can be declared to
+be immediate when created.  There is no mechanism available to toggle
+foreign key constraints between deferred and immediate.
+
+<p>SQLite3 supports recursive triggers, but only if a run-time option is
+available.  In SQLite4, all triggers are recursive all the time.</p>
 
 <h2>3.6 Explicit Index Cover</h2>
 
