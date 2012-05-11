@@ -147,7 +147,7 @@ int key_compare(const void *key1, int n1, const void *key2, int n2){
 </pre></blockquote>
 
 <p>SQLite4 needs to be able to seek to the nearest key for a given probe
-value, then step through keys in lexicographical order in either the
+key, then step through keys in lexicographical order in either the
 ascending or the descending direction.  Inserts with a preexisting key
 overwrite the old data.  Transactions, including atomic commit and
 rollback, are the responsibility of the storage engine.
@@ -194,17 +194,17 @@ In SQLite3, a search on the primary key means doing a search on an
 automatic index created for that primary key to find the rowid,
 then doing a second search on the main table using the rowid.
 
-<p>SQLite4 requires all elements of the PRIMARY KEY to be not-null.
+<p>SQLite4 requires all elements of the PRIMARY KEY to be non-null.
 This is an SQL standard.  Due to an oversight in early versions,
-SQLite3 does not enforce the NOT NULL constraint on PRIMARY KEY columns,
-since by the time this oversight was discovered, SQLite3 was in such
-widespread use that activating enforcement of NOT NULL in
-primary key columns would likely break too many programs.
+SQLite3 does not enforce the NOT NULL constraint on PRIMARY KEY columns
+since by the time the omission was discovered SQLite3 was in such
+widespread use, activation of NOT NULL enforcement would have broken
+too many programs.
 
 <h2>3.4 Decimal Math</h2>
 
-<p>SQLite does all numeric computations using decimal arithmetic.
-SQLite never uses C datatypes <tt>double</tt> or <tt>float</tt>
+<p>SQLite4 does all numeric computations using decimal arithmetic.
+SQLite4 never uses C datatypes <tt>double</tt> or <tt>float</tt>
 (except in interface routines when converting between double and
 the internal decimal representation).  Instead, all numeric values
 are represented internally as an 18-digit decimal number with a
@@ -248,7 +248,7 @@ available.  In SQLite4, all triggers are recursive all the time.</p>
 
 <h2>3.6 Explicit Index Cover</h2>
 
-<p>SQLite4 adds an optional clause on CREATE TABLE statement that
+<p>SQLite4 adds an optional clause to CREATE TABLE statements that
 defines extra columns of information that are duplicated in the index.
 This allows the application developer to explicitly create covering indices
 in SQLite4 without resorting to trickery and subterfuge.  For example:
@@ -260,7 +260,7 @@ CREATE INDEX cover1 ON table1(a,b) COVERING(c,d);
 <p>The cover1 index above allows queries of the form
 "SELECT c,d FROM table1 WHERE a=?1 AND b=?2" to be executed 
 with only a single lookup into the storage engine.  Without the extra
-COVERING close on the index, SQLite4 would have to do two lookups in the
+COVERING clause on the index, SQLite4 would have to do two lookups in the
 storage engine; one to find the primary key based on the values of a and b
 and a second to find the values of c and d based on the primary key.  The
 COVERING clause makes the values of c and d available in the index, which
