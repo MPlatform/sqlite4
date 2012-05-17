@@ -272,6 +272,29 @@ static int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xClose(pFile);
 }
 
+/*
+** Functions to write and sync the log file.
+*/
+int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr){
+  return lsmEnvWrite(pFS->pEnv, pFS->fdLog, iOff, pStr->z, pStr->n);
+}
+
+int lsmFsSyncLog(FileSystem *pFS){
+  return lsmEnvSync(pFS->pEnv, pFS->fdLog);
+}
+
+int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr){
+  int rc;
+
+  rc = lsmStringExtend(pStr, nRead);
+  if( rc==LSM_OK ){
+    rc = lsmEnvRead(pFS->pEnv, pFS->fdLog, iOff, &pStr->z[pStr->n], nRead);
+    pStr->n += nRead;
+  }
+
+  return rc;
+}
+
 
 
 /*

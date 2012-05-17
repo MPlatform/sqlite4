@@ -226,7 +226,9 @@ int lsmFlushToDisk(lsm_db *pDb){
   ** tree into the database file and update the worker snapshot accordingly.
   ** Then flush the contents of the db file to disk too. No calls to fsync()
   ** are made here - just write().  */
+#if 0
   rc = lsmLogFlush(pDb);
+#endif
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb);
   if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
 

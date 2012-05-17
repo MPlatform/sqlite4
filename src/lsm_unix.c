@@ -99,7 +99,12 @@ static int lsmPosixOsRead(
     rc = lsm_ioerr();
   }else{
     ssize_t prc = read(p->fd, pData, (size_t)nData);
-    if( prc<0 ) rc = lsm_ioerr();
+    if( prc<0 ){ 
+      rc = lsm_ioerr();
+    }else if( prc<nData ){
+      memset(&((u8 *)pData)[prc], 0, nData - prc);
+    }
+
   }
 
   return rc;

@@ -1,0 +1,160 @@
+# 2012 May 16
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# The tests in this file focus on testing test that the LSM log file is 
+# written and recovered correctly.
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix log1
+
+proc do_filesize_test {tn dbsz logsz} {
+  uplevel [list do_test $tn { 
+      list [file size test.db] [file size test.db-log] 
+  } [list $dbsz $logsz]]
+}
+
+proc copy_db_files {from to} {
+  forcecopy $from $to
+  forcecopy $from-log $to-log
+}
+
+
+#-------------------------------------------------------------------------
+# Super simple tests:
+#
+# 1.1-2  Test that writing to a database does write data into the log. 
+# 1.3    Test that an existing log file can be opened and recovered. 
+# 1.4-5  Test that an existing log file can be opened, recovered, appended
+#        to, and then recovered again.
+#
+do_execsql_test 1.1 { 
+  CREATE TABLE t1(a, b); 
+  INSERT INTO t1 VALUES(1, 2);
+  INSERT INTO t1 VALUES(3, 4);
+}
+do_filesize_test 1.2    0 112
+
+do_test 1.3 {
+  copy_db_files test.db test.db2
+  sqlite4 db2 test.db2
+  execsql { SELECT * FROM t1 } db2
+} {1 2 3 4}
+
+do_test 1.4 { execsql { INSERT INTO t1 VALUES(5, 6) } db2 } {}
+
+do_test 1.5 {
+  copy_db_files test.db2 test.db3
+  sqlite4 db3 test.db3
+  execsql { SELECT * FROM t1 } db3
+} {1 2 3 4 5 6}
+
+foreach db {db2 db3} { catch {$db close} }
+
+#-------------------------------------------------------------------------
+# Test that recovery is verifying checksums.
+#
+reset_db
+do_execsql_test  2.1 { 
+  CREATE TABLE t1(a, b); 
+  INSERT INTO t1 VALUES('a', 'b');
+  INSERT INTO t1 VALUES('c', 'd');
+  INSERT INTO t1 VALUES('e', 'f');
+}
+do_filesize_test 2.2    0 132
+do_execsql_test  2.3 { 
+  INSERT INTO t1 VALUES('ggggggggggggggggggggggggggggggggggggggggg', 'h');
+}
+do_filesize_test 2.4    0 192
+
+do_test 2.5 {
+  copy_db_files test.db test.db2
+  sqlite4 db2 test.db2
+  execsql { SELECT * FROM t1 } db2
+} {a b c d e f ggggggggggggggggggggggggggggggggggggggggg h}
+
+# Scribble some garbage into the part of the log containing the 'ggggg.'
+# record. Then recover it again. This time, the 'gggg.' transaction should
+# be ignored.
+do_test 2.6 {
+  db2 close
+  copy_db_files test.db test.db2
+  hexio_write test.db2-log 150 5858585858
+  sqlite4 db2 test.db2
+  execsql { SELECT * FROM t1 } db2
+} {a b c d e f}
+
+catch { db2 close }
+
+#-------------------------------------------------------------------------
+# Test recovery of a larger log file.
+#
+reset_db
+do_execsql_test 3.1 {
+  CREATE TABLE t1(a, b);
+  INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --   2
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --   4
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --   8
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  16
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  32
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  64
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 128
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 256
+  SELECT count(*) FROM t1;
+} {256}
+
+do_test 3.2 {
+  set cksum [execsql { SELECT md5sum(a, b) FROM t1 }]
+  copy_db_files test.db test.db2
+} {}
+
+breakpoint
+do_test 3.3 {
+  sqlite4 db2 test.db2
+  execsql { SELECT md5sum(a, b) FROM t1 } db2
+} $cksum
+
+exit
+
+do_test 3.4 {
+  execsql { SELECT count(*) FROM t1 } db2
+} {256}
+db2 close
+finish_test
+
+#-------------------------------------------------------------------------
+# Test recovery of a larger log file.
+#
+reset_db
+do_execsql_test 4.1 {
+  CREATE TABLE t1(a, b);
+  BEGIN;
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+  COMMIT;
+}
+
+do_test 4.2 {
+  copy_db_files test.db test.db2
+  sqlite4 db2 test.db2
+  execsql { SELECT count(*) FROM t1 } db2
+} {8}
+
+finish_test
+
+

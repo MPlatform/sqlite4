@@ -29,18 +29,22 @@ void lsmStringInit(LsmString *pStr, lsm_env *pEnv){
 ** allocation.  If a prior memory allocation has occurred, this routine is a
 ** no-op.
 */
-void lsmStringExtend(LsmString *pStr, int nNew){
-  if( pStr->n<0 ) return;
+int lsmStringExtend(LsmString *pStr, int nNew){
+  assert( nNew>0 );
+  if( pStr->n<0 ) return LSM_NOMEM;
   if( pStr->n + nNew >= pStr->nAlloc ){
     int nAlloc = pStr->n + nNew + 100;
     char *zNew = lsmRealloc(pStr->pEnv, pStr->z, nAlloc);
     if( zNew==0 ){
       lsmFree(pStr->pEnv, pStr->z);
       nAlloc = 0;
+      pStr->n = -1;
+    }else{
+      pStr->nAlloc = nAlloc;
+      pStr->z = zNew;
     }
-    pStr->z = zNew;
-    pStr->nAlloc = nAlloc;
   }
+  return (pStr->z ? LSM_OK : LSM_NOMEM_BKPT);
 }
 
 /*
@@ -58,14 +62,25 @@ void lsmStringClear(LsmString *pStr){
 **
 ** If the string is in an error state, this routine is a no-op.
 */
-void lsmStringAppend(LsmString *pStr, const char *z, int N){
-  if( pStr->n<0 ) return;
+int lsmStringAppend(LsmString *pStr, const char *z, int N){
+  int rc;
   if( N<0 ) N = (int)strlen(z);
-  lsmStringExtend(pStr, N+1);
+  rc = lsmStringExtend(pStr, N+1);
   if( pStr->nAlloc ){
     memcpy(pStr->z+pStr->n, z, N+1);
     pStr->n += N;
   }
+  return rc;
+}
+
+int lsmStringBinAppend(LsmString *pStr, const u8 *a, int n){
+  int rc;
+  rc = lsmStringExtend(pStr, n);
+  if( pStr->nAlloc ){
+    memcpy(pStr->z+pStr->n, a, n);
+    pStr->n += n;
+  }
+  return rc;
 }
 
 /*

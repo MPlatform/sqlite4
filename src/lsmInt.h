@@ -56,6 +56,7 @@ typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
 typedef struct Level Level;
+typedef struct LogMark LogMark;
 typedef struct LsmString LsmString;
 typedef struct Mempool Mempool;
 typedef struct MultiCursor MultiCursor;
@@ -64,12 +65,10 @@ typedef struct Segment Segment;
 typedef struct SegmentMerger SegmentMerger;
 typedef struct Snapshot Snapshot;
 typedef struct SortedRun SortedRun;
-
 typedef struct Tree Tree;
 typedef struct TreeMark TreeMark;
 typedef struct TreeVersion TreeVersion;
 typedef struct TreeCursor TreeCursor;
-
 typedef struct Merge Merge;
 typedef struct MergeInput MergeInput;
 
@@ -115,6 +114,16 @@ struct TreeMark {
   void *pRollback;                /* Zero v2 information starting here */
   void *pRoot;                    /* Root node to restore */
   int nHeight;                    /* Height of tree at pRoot */
+};
+
+/*
+** An instance of this structure represents a point in the database log.
+*/
+struct LogMark {
+  i64 iOff;                       /* Offset into log (see lsm_log.c) */
+  int nBuf;                       /* Size of in-memory buffer here */
+  u32 cksum0;                     /* Checksum 0 at offset iOff */
+  u32 cksum1;                     /* Checksum 1 at offset iOff */
 };
 
 /*
@@ -399,6 +408,10 @@ int lsmFsIntegrityCheck(lsm_db *);
 
 int lsmFsPageWritable(Page *);
 
+int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr);
+int lsmFsSyncLog(FileSystem *pFS);
+int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr);
+
 /* 
 ** Functions from file "sorted.c".
 */
@@ -463,20 +476,21 @@ int lsmFlushToDisk(lsm_db *);
 /*
 ** Functions from file "log.c".
 */
+#if 0
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
 int lsmLogClose(lsm_db *);
 int lsmLogFlush(lsm_db *);
 int lsmLogRecover(lsm_db *);
+#endif
 
 
-#if 0
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
-int lsmLogTell(lsm_db *, LogMark *);
+void lsmLogClose(lsm_db *);
+void lsmLogTell(lsm_db *, LogMark *);
 int lsmLogSeek(lsm_db *, LogMark *);
 int lsmLogRecover(lsm_db *);
-#endif
 
 
 /**************************************************************************
@@ -544,12 +558,14 @@ int lsmDatabaseIsDirty(Database *p);
 ** functions in lsm_str.c
 */
 void lsmStringInit(LsmString*, lsm_env *pEnv);
-void lsmStringExtend(LsmString*, int);
-void lsmStringAppend(LsmString*, const char *, int);
+int lsmStringExtend(LsmString*, int);
+int lsmStringAppend(LsmString*, const char *, int);
 void lsmStringVAppendf(LsmString*, const char *zFormat, va_list ap);
 void lsmStringAppendf(LsmString*, const char *zFormat, ...);
 void lsmStringClear(LsmString*);
 char *lsmMallocPrintf(lsm_env*, const char*, ...);
+
+int lsmStringBinAppend(LsmString *pStr, const u8 *a, int n);
 
 
 

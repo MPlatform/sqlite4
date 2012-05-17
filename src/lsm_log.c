@@ -19,7 +19,7 @@
 ** prevent loss of data in this case, each time a record is written to the
 ** in-memory tree, an equivalent record is appended to the log on disk.
 ** If a power failure or application crash does occur, data can be recovered
-** by reading the log file.
+** by reading the log.
 **
 ** A log file consists of the following types of records representing data
 ** written into the database:
@@ -28,10 +28,10 @@
 **   LOG_DELETE: A delete key issued to the database.
 **   LOG_COMMIT: A transaction commit.
 **
-** And the following types of records for ancilliary purposes..
+** And the following types of records for ancillary purposes..
 **
 **   LOG_CKSUM:  A record containing a checksum.
-**   LOG_EOF:    A record indicating the end of the log file.
+**   LOG_EOF:    A record indicating the end of a log file.
 **   LOG_PAD1:   A single byte padding record.
 **   LOG_PAD2:   An N byte padding record (N>1).
 **
@@ -42,18 +42,24 @@
 **
 ** LOG CHECKSUMS & RECOVERY
 **
-**   Checksums are found in two types of log file records: LOG_COMMIT and
-**   LOG_CKSUM records. In order to recover content from a log file, a client
-**   reads each record from the start of the file, calculating a checksum as
+**   Checksums are found in two types of log records: LOG_COMMIT and
+**   LOG_CKSUM records. In order to recover content from a log, a client
+**   reads each record from the start of the log, calculating a checksum as
 **   it does. Each time a LOG_COMMIT or LOG_CKSUM is encountered, the 
-**   recovery process verifies that the checksum stored in the log file 
+**   recovery process verifies that the checksum stored in the log 
 **   matches the calculated checksum. If it does not, the recovery process
-**   can stop reading the log file.
+**   can stop reading the log.
 **
 **   If a recovery process reads records (other than COMMIT or CKSUM) 
 **   consisting of at least LSM_CKSUM_MAXDATA bytes, then the next record in
-**   the log file must be either a LOG_CKSUM or LOG_COMMIT record. If it is
-**   not, the recovery process also stops reading the log file.
+**   the log must be either a LOG_CKSUM or LOG_COMMIT record. If it is
+**   not, the recovery process also stops reading the log.
+**
+**   To recover the log file, it must be read twice. The first time to 
+**   determine the location of the last valid commit record. And the second
+**   time to load data into the in-memory tree.
+**
+**   Todo: Surely there is a better way...
 **
 ** LOG WRAPPING
 **
@@ -74,9 +80,9 @@
 **
 **   This implementation uses two files on disk to store the log. File B and
 **   file C. First, file B is written to until it reaches some configured
-**   limit (say 1MB). Then, the log continues in file C. Once $O reaches
-**   an offset high enough to correspond to file C, writing switches back
-**   to file B. And so on.
+**   limit (say 1MB). It appends a LOG_EOF to file B and the log continues 
+**   in file C. Once $O reaches an offset high enough to correspond to file 
+**   C, writing switches back to file B. And so on.
 **
 **   Offsets are 64-bit numbers. The least-significant bit is set to 0 for
 **   file B and 1 for file C. The offset within the file is ($offset/2).
@@ -88,9 +94,7 @@
 **   PAD1 and PAD2 records may appear in a log file at any point. They allow
 **   a process writing the log file align the beginning of transactions with 
 **   the beginning of disk sectors, which increases robustness.
-*/
-
-/*
+**
 ** RECORD FORMATS:
 **
 **   LOG_PAD1:   * A single 0x01 byte.
@@ -116,6 +120,8 @@
 **               * An 8-byte checksum.
 **
 **   LOG_EOF:    * A single 0x07 byte.
+**
+**   Varints are as described in lsm_varint.c (SQLite 4 format).
 **
 ** CHECKSUMS:
 **
@@ -143,105 +149,33 @@
 */
 
 
-
-/*
-** LOG FILE FORMAT:
-**
-** A log file is a series of records. Each record is one of the following 
-** types:
-**
-** Each transaction written to the log file consists of one or more LOG_WRITE
-** and/or LOG_DELETE records followed by a single LOG_COMMIT. The LOG_COMMIT
-** record contains a 64-bit checksum calculated based on the checksum of
-** the previous COMMIT record and the contents of the log file from the
-** end of the previous COMMIT up to the start of the checksum itself (i.e.
-** including the first byte of the LOG_COMMIT record).
-**
-** LOG_PAD1 and LOG_PAD2 records may appear at any point in the file. They
-** have three purposes:
-**
-**     * To ensure that the 8 checksum bytes in a LOG_COMMIT record are
-**       always 8-byte aligned,
-**
-**     * To add padding immediately after a LOG_COMMIT record so that the
-**       next write to the log file is aligned to the next sector boundary,
-**
-**     * To add some random salt to the start of the log file. Or as 
-**       required.
-**
-** The log file is divided into 4KB pages. Each page contains up to 4088
-** bytes of log data and an 8 byte checksum. The checksum is computed based
-** on the contents of the current page and the checksum of the previous page
-** in the log. When the log file is read to recover the database state, a 
-** record is only considered valid if all pages up to and including the page 
-** containing the commit record for the records transaction have valid 
-** checksums.
-**   LOG_CKPTID: * A single 0x06 byte,
-**               * 8-bytes of pseudo-random data.
-**
-** The page checksum is calculated using the same method as the checksum in 
-** an SQLite WAL file. By treating the input as an array of big-endian 
-** unsigned 32-bit integers x[0] through x[N] where N is a multiple of 2. If 
-** the size of the input is not a multiple of 8-byte it is treated as if it 
-** has been padded with zero bytes. The checksum is then calculated as in 
-** the following pseudo-code, where s0 and s1 are both 32-bit numbers. The 
-** checksum is formed by concatenating the two of them together (s0 becomes
-** the most significant 4 bytes, s1 the least).
-**
-**   for i from 0 to n-1 step 2:
-**     s0 += x[i] + s1;
-**     s1 += x[i+1] + s0;
-**   endfor
-*/
-
-/*
-** RECOVERY:
-**
-** To recover the log file, it must be read twice. The first time to 
-** determine the location of the last valid commit record. And the second
-** time to load data into the in-memory tree.
-**
-** Todo: Surely there is a better way...
-*/
-
-/*
-** VARIABLE LENGTH INTEGER FORMAT:
-**
-** See lsm_varint.c.
-*/
-
 #ifndef _LSM_INT_H
 # include "lsmInt.h"
 #endif
 
+/* Log record types */
 #define LSM_LOG_EOF      0x00
-
 #define LSM_LOG_PAD1     0x01
 #define LSM_LOG_PAD2     0x02
 #define LSM_LOG_WRITE    0x03
 #define LSM_LOG_DELETE   0x04
 #define LSM_LOG_COMMIT   0x05
-#define LSM_LOG_CKPTID   0x06
+#define LSM_LOG_CKSUM    0x06
 
-#define LOG_CKSUM0_INIT 1
-#define LOG_CKSUM1_INIT 1
+/* Require a checksum every 32KB. */
+/* #define LSM_CKSUM_MAXDATA (32*1024) */
+#define LSM_CKSUM_MAXDATA 256
 
-typedef struct DbLogBuffer DbLogBuffer;
-
-struct DbLogBuffer {
-  int nAlloc;
-  u8 *aAlloc;
-};
+/* Initial values for checksum (required only if there is no checkpoint
+** at all in the database file).  */
+#define LSM_CKSUM0_INIT 42
+#define LSM_CKSUM1_INIT 42
 
 struct DbLog {
-  Page *pPg;                      /* Log file page currently being filled */
-  int iPgOff;                     /* Current write offset within page pPg */
-  u32 aCksum[2];                  /* Current checksum values */
-  DbLogBuffer aBuf[2];            /* Buffers for keys+values read from log */
-
-  int bRequireCkpt;               /* True if an LSM_LOG_CKPTID is required */
-  Pgno iCkptPg;                   /* Last page an LSM_LOG_CKPTID was written */
-  u32 aCkptSalt[2];               /* Initial checksum values for iCkptPg */
+  i64 iOff;                       /* Offset into log (see lsm_log.c) */
+  u32 cksum0;                     /* Checksum 0 at offset iOff */
+  u32 cksum1;                     /* Checksum 1 at offset iOff */
+  LsmString buf;                  /* Buffer containing data not yet written */
 };
 
 /*
@@ -253,674 +187,499 @@ struct DbLog {
 **
 **     lsmLogWrite()
 **     lsmLogCommit()
-**     lsmLogFlush()
 */
 static int logFileEnabled(lsm_db *pDb){
-  /* TODO: Re-enable logging */
-  return 0;
-}
-
-/*
-** Make sure the current page has been stored on disk.
-*/
-static int logFilePersistPage(DbLog *pDbLog, int bRelease){
-  Page *pPg = pDbLog->pPg;        /* Current page object */
-  u32 aCksum[2] = {0, 0};         /* Page checksum */
-  int rc;                         /* Return code */
-  u8 *aData;                      /* Data for page pPg */
-  int nData;                      /* Size of aData[] in bytes */
-
-  aData = lsmFsPageData(pPg, &nData);
-  nData -= 8;
-  lsmChecksumBytes(aData, nData, pDbLog->aCksum, aCksum);
-  lsmPutU32(&aData[nData], aCksum[0]);
-  lsmPutU32(&aData[nData+4], aCksum[1]);
-
-  if( bRelease ){
-    pDbLog->aCksum[0] = aCksum[0];
-    pDbLog->aCksum[1] = aCksum[1];
-    rc = lsmFsPageRelease(pPg);
-    pDbLog->pPg = 0;
-  }else{
-    rc = lsmFsPagePersist(pPg);
-  }
-
-  return rc;
-}
-
-/*
-** Write data to the current log file offset. This is just an IO function.
-** It does not interpret the blob of data read.
-*/
-static int logFileWrite(lsm_db *pDb, DbLog *pDbLog, u8 *a, int n){
-  int rc = LSM_OK;
-  int nRem = n;
-
-  while( nRem && rc==LSM_OK ){
-    rc = lsmFsPageWrite(pDbLog->pPg);
-    if( rc==LSM_OK ){
-      u8 *aData;
-      int nData;
-      int nCopy;
-
-      /* Set aData[] to point to the page data. And nData to the size of
-      ** aData[], not including the 8-byte checksum that will be added
-      ** at the end of the page. */
-      aData = lsmFsPageData(pDbLog->pPg, &nData);
-      nData -= 8;
-
-      /* Copy as much data as will fit into the body of the current page */
-      nCopy = MIN(nRem, nData - pDbLog->iPgOff);
-      assert( nCopy>=0 );
-      if( a ){
-        memcpy(&aData[pDbLog->iPgOff], &a[n-nRem], nCopy);
-      }else{
-        memset(&aData[pDbLog->iPgOff], 0, nCopy);
-      }
-      pDbLog->iPgOff += nCopy;
-      nRem -= nCopy;
-
-      /* If the current page is now full, write it out to disk and load
-      ** the next page in the log file. */
-      if( pDbLog->iPgOff==nData ){
-        int iNext = 1 + lsmFsPageNumber(pDbLog->pPg);
-        rc = logFilePersistPage(pDbLog, 1);
-        if( rc==LSM_OK ){
-          pDbLog->iPgOff = 0;
-          rc = lsmFsLogPageGet(pDb->pFS, iNext, &pDbLog->pPg);
-        }
-      }else{
-        assert( nRem==0 );
-        aData[pDbLog->iPgOff] = '\0';
-      }
-    }
-  }
-  return LSM_OK;
-}
-
-static void logFileLoadPage(
-  lsm_db *pDb,
-  DbLog *pDbLog,
-  Pgno iPg,
-  int *pbEof,
-  int *pRc
-){
-  if( *pRc==LSM_OK ){
-    int rc = LSM_OK;
-
-    assert( *pbEof==0 );
-    if( pDbLog->pPg && lsmFsPageWritable(pDbLog->pPg) ){
-      rc = logFilePersistPage(pDbLog, 0);
-    }
-    assert( pDbLog->pPg==0 || lsmFsPageWritable(pDbLog->pPg)==0 );
-    lsmFsPageRelease(pDbLog->pPg);
-    pDbLog->pPg = 0;
-
-    /* Load the requested page */
-    if( rc==LSM_OK ){
-      rc = lsmFsLogPageGet(pDb->pFS, iPg, &pDbLog->pPg);
-      pDbLog->iPgOff = 0;
-    }
-
-    /* If the page was loaded successfully, verify that the checksum is 
-    ** correct. If not, set *pbEof to true to indicate that there is no
-    ** valid content on this page.  */
-    if( rc==LSM_OK ){
-      u8 *aData;
-      int nData;
-      u32 aCksum[2];
-
-      aData = lsmFsPageData(pDbLog->pPg, &nData);
-      lsmChecksumBytes(aData, nData-8, pDbLog->aCksum, aCksum);
-      if( aCksum[0]!=lsmGetU32(&aData[nData-8])
-       || aCksum[1]!=lsmGetU32(&aData[nData-4])
-      ){
-        *pbEof = 1;
-      }
-    }
-
-    *pRc = rc;
-  }
-}
-
-static void logFileNextPage(
-  lsm_db *pDb,
-  DbLog *pDbLog,
-  int *pbEof,
-  int *pRc
-){
-  if( *pbEof==0 && *pRc==LSM_OK ){
-    int iNext = 1;
-
-    assert( pDbLog->pPg==0 || lsmFsPageWritable(pDbLog->pPg)==0 );
-    if( pDbLog->pPg ){
-      u8 *aData;
-      int nData;
-      aData = lsmFsPageData(pDbLog->pPg, &nData);
-      pDbLog->aCksum[0] = lsmGetU32(&aData[nData-8]);
-      pDbLog->aCksum[1] = lsmGetU32(&aData[nData-4]);
-
-      iNext = lsmFsPageNumber(pDbLog->pPg) + 1;
-      lsmFsPageRelease(pDbLog->pPg);
-      pDbLog->pPg = 0;
-    }
-
-    logFileLoadPage(pDb, pDbLog, iNext, pbEof, pRc); 
-  }
-}
-
-static i64 logFileReadVarint2(
-  lsm_db *pDb,
-  DbLog *pDbLog,
-  int *pbEof,
-  int *pRc
-){
-  i64 iRet = 0;
-  if( *pbEof==0 && *pRc==LSM_OK ){
-    u8 *aData;
-    int nData;
-
-    aData = lsmFsPageData(pDbLog->pPg, &nData);
-    nData -= 8;
-
-    /* Figure out if this varint overflow onto the next log file page */
-    if( pDbLog->iPgOff + lsmVarintSize(aData[pDbLog->iPgOff]) > nData ){
-      u8 aTmp[9];                 /* Tmp buffer for next 9 bytes of input */
-      int nCopy;                  /* Number of bytes copied from current page */
-      nCopy = (nData - pDbLog->iPgOff);
-      memcpy(aTmp, &aData[pDbLog->iPgOff], nCopy);
-      logFileNextPage(pDb, pDbLog, pbEof, pRc);
-      if( *pbEof==0 && *pRc==0 ){
-        aData = lsmFsPageData(pDbLog->pPg, 0);
-        memcpy(&aTmp[nCopy], aData, 9-nCopy);
-        pDbLog->iPgOff = (lsmVarintGet64(aTmp, &iRet) - nCopy);
-      }
-    }else{
-      pDbLog->iPgOff += lsmVarintGet64(&aData[pDbLog->iPgOff], &iRet);
-    }
-  }
-
-  return iRet;
-}
-
-static u8 *logFileReadData(
-  lsm_db *pDb,
-  DbLog *pDbLog,
-  int nByte,
-  int iBuf,                       /* Buffer to store result in, if required */
-  int *pbEof,
-  int *pRc
-){
-  u8 *aRet = 0;
-
-  assert( iBuf==0 || iBuf==1 );
-
-  if( *pbEof==0 && *pRc==LSM_OK ){
-    DbLogBuffer *pBuf;
-    int nRem;
-    int rc = LSM_OK;
-
-    pBuf = &pDbLog->aBuf[iBuf];
-    if( pBuf->nAlloc<nByte ){
-      lsmFree(pDb->pEnv, pBuf->aAlloc);
-      pBuf->aAlloc = lsmMallocRc(pDb->pEnv, nByte*2, &rc);
-      pBuf->nAlloc = nByte*2;
-    }
-
-    nRem = nByte;
-    while( rc==LSM_OK && nRem>0 ){
-      u8 *aData;
-      int nData;
-      int nCopy;
-
-      aData = lsmFsPageData(pDbLog->pPg, &nData);
-      nData -=8;
-      nCopy = MIN(nRem, nData-pDbLog->iPgOff);
-      assert( nCopy>=0 );
-
-      memcpy(&pBuf->aAlloc[nByte-nRem], &aData[pDbLog->iPgOff], nCopy);
-      nRem -= nCopy;
-      pDbLog->iPgOff += nCopy;
-
-      if( nRem>0 ){
-        logFileNextPage(pDb, pDbLog, pbEof, &rc);
-        if( *pbEof ) return 0;
-      }
-    }
-
-    if( rc==LSM_OK ){
-      aRet = pBuf->aAlloc;
-    }else{
-      *pRc = rc;
-    }
-  }
-  return aRet;
-}
-
-static int logFileReadByte(
-  lsm_db *pDb,
-  DbLog *pDbLog,
-  int *pbEof,
-  int *pRc
-){
-  int iRet = 0;
-  if( pDbLog->pPg==0 ){
-    logFileNextPage(pDb, pDbLog, pbEof, pRc);
-  }
-  if( *pRc==LSM_OK && *pbEof==0 ){
-    u8 *aVal;
-    aVal = logFileReadData(pDb, pDbLog, 1, 0, pbEof, pRc);
-    if( aVal ) iRet = (int)aVal[0];
-  }
-
-  return iRet;
-}
-
-static u32 logFileReadU32(DbLog *pDbLog){
-  u8 *aData;                      /* Data for current log page */
-  u32 ret;                        /* Return value (read from page) */
-
-  assert( pDbLog->pPg );
-  assert( (LOG_FILE_PGSZ - pDbLog->iPgOff) > 4 );
-
-  aData = lsmFsPageData(pDbLog->pPg, 0);
-  ret = lsmGetU32(&aData[pDbLog->iPgOff]);
-  pDbLog->iPgOff += 4;
-  return ret;
-}
-
-static int logFileReadRecord(
-  lsm_db *pDb,                    /* Database connection handle */
-  DbLog *pDbLog,                  /* Database log handle */
-  int *peType,                    /* OUT: Record type (LSM_LOG_XXX) */
-  u8 **paKey, int *pnKey,         /* OUT: Key */
-  u8 **paVal, int *pnVal          /* OUT: Value */
-){
-  int bEof = 0;
-  int rc = LSM_OK;
-  int eType;                      /* Type of record read. Or LOG_EOF. */
-
-  /* Read the type byte */
-  eType = logFileReadByte(pDb, pDbLog, &bEof, &rc);
-  assert( (bEof==0 && rc==LSM_OK) || eType==LSM_LOG_EOF );
-  assert( eType==LSM_LOG_EOF    || eType==LSM_LOG_PAD1
-       || eType==LSM_LOG_PAD2   || eType==LSM_LOG_WRITE
-       || eType==LSM_LOG_DELETE || eType==LSM_LOG_COMMIT
-       || eType==LSM_LOG_CKPTID
-  );
-
-  if( eType==LSM_LOG_CKPTID ){
-    u32 iSalt1;                   /* First salt value read from log file */
-    u32 iSalt2;                   /* Second salt value read from log file */
-
-    /* LSM_LOG_CKPTID entries appear at the start of pages only */
-    assert( pDbLog->iPgOff==1 );
-    iSalt1 = logFileReadU32(pDbLog);
-    iSalt2 = logFileReadU32(pDbLog);
-
-#if 0
-    if( rc==LSM_OK && pDb->pWorker ){
-      u32 iExpect1;
-      u32 iExpect2;
-      lsmSnapshotGetSalt(pDb->pWorker, &iExpect1, &iExpect2);
-      if( iExpect1!=iSalt1 || iExpect2!=iSalt2 ){
-      }
-      bEof = 1;
-    }
-#endif
-  }else
-
-  if( eType==LSM_LOG_PAD2 || eType==LSM_LOG_DELETE || eType==LSM_LOG_WRITE ){
-    int nKey;
-    u8 *aKey;
-    int nVal;
-    u8 *aVal;
-
-    nKey = (int)logFileReadVarint2(pDb, pDbLog, &bEof, &rc);
-    aKey = logFileReadData(pDb, pDbLog, nKey, 0, &bEof, &rc);
-    if( eType==LSM_LOG_WRITE ){
-      nVal = (int)logFileReadVarint2(pDb, pDbLog, &bEof, &rc);
-      aVal = logFileReadData(pDb, pDbLog, nVal, 1, &bEof, &rc);
-    }else{
-      nVal = 0;
-      aVal = 0;
-    }
-
-    if( paKey ){
-      *paKey = aKey;
-      *pnKey = nKey;
-      *paVal = aVal;
-      *pnVal = nVal;
-    }
-  }
-
-  if( bEof ) eType = LSM_LOG_EOF;
-  *peType = eType;
-  return rc;
+  return 1;
 }
 
 /*
 ** Return a pointer to the DbLog object associated with connection pDb.
 ** Allocate and initialize it if necessary.
 */
-static DbLog *getLog(lsm_db *pDb, int *pRc){
-  DbLog *pDbLog = pDb->pDbLog;
-  if( pDbLog==0 ){
-    pDb->pDbLog = pDbLog = (DbLog *)lsmMallocZeroRc(pDb->pEnv, 
-                                                    sizeof(DbLog), pRc);
-    if( pDbLog ) pDbLog->bRequireCkpt = 1;
+static DbLog *logGetHandle(lsm_db *pDb, int *pRc){
+  if( pDb->pDbLog==0 ){
+    DbLog *pLog;
+    pLog = (DbLog *)lsmMallocZeroRc(pDb->pEnv, sizeof(DbLog), pRc);
+    if( pLog ){
+      pLog->cksum0 = LSM_CKSUM0_INIT;
+      pLog->cksum1 = LSM_CKSUM1_INIT;
+      lsmStringInit(&pLog->buf, pDb->pEnv);
+    }
+    pDb->pDbLog = pLog;
   }
-  return pDbLog;
+
+  return pDb->pDbLog;
+}
+
+void lsmLogClose(lsm_db *pDb){
+  DbLog *pLog = pDb->pDbLog;
+  if( pLog ){
+    lsmStringClear(&pLog->buf);
+    lsmFree(pDb->pEnv, pLog);
+    pDb->pDbLog = 0;
+  }
 }
 
 /*
-** If required, write an LSM_LOG_CKPTID record to the log file.
+** Return the result of interpreting the first 4 bytes in buffer aIn as 
+** a 32-bit unsigned little-endian integer.
 */
-static int logFileCkptid(lsm_db *pDb){
-  int rc = LSM_OK;                /* Return code */
-  DbLog *pDbLog = pDb->pDbLog;    /* Log system handle */
+static u32 getU32le(u8 *aIn){
+  return ((u32)aIn[3] << 24) 
+       + ((u32)aIn[2] << 16) 
+       + ((u32)aIn[1] << 8) 
+       + ((u32)aIn[0]);
+}
 
-  if( pDbLog->bRequireCkpt ){
-    u32 iSalt1;
-    u32 iSalt2;
+/*
+** This function is used to calculate log checksums.
+*/
+void logCksum(
+  const char *a,                  /* Input buffer */
+  int n,                          /* Size of input buffer in bytes */
+  u32 *pCksum0,                   /* IN/OUT: Checksum value 1 */
+  u32 *pCksum1                    /* IN/OUT: Checksum value 2 */
+){
+  u32 cksum0 = *pCksum0;
+  u32 cksum1 = *pCksum1;
+  u32 *aIn = (u32 *)a;
+  int nIn = ((n+7)/8) * 2;
+  int i;
 
-    lsmSnapshotGetSalt(pDb->pClient, &iSalt1, &iSalt2);
+  /* Check that the input buffer is aligned to an 8-byte boundary. Also
+  ** that if the input is not an integer multiple of 8 bytes in size, it
+  ** has been padded with 0x00 bytes.  */
+  /* assert( EIGHT_BYTE_ALIGNMENT(a) ); */
+  assert( nIn*4==n || memcmp("\00\00\00\00\00\00\00", &a[n], nIn*4-n) );
 
-    assert( pDbLog->iPgOff==0 );
-    assert( pDbLog->pPg );
-#if 0 
-    if( pDbLog->pPg==0 ){
-      rc = lsmFsLogPageGet(pDb->pFS, 1, &pDbLog->pPg);
-    }
-#endif
-
-    /* Assemble the LSM_LOG_CKPTID log entry in memory. Then write it to
-    ** the log file.  */
-    if( rc==LSM_OK ){
-      u8 aCkpt[9];
-      aCkpt[0] = LSM_LOG_CKPTID;
-      lsmPutU32(&aCkpt[1], iSalt1);
-      lsmPutU32(&aCkpt[5], iSalt2);
-      rc = logFileWrite(pDb, pDbLog, aCkpt, 9);
-    }
-
-    if( rc==LSM_OK ){
-      pDbLog->bRequireCkpt = 0;
-      pDbLog->iCkptPg = lsmFsPageNumber(pDbLog->pPg);
-      pDbLog->aCksum[0] = iSalt1;
-      pDbLog->aCksum[1] = iSalt2;
-    }
+  for(i=0; i<nIn; i+=2){
+    cksum0 += aIn[0] + cksum1;
+    cksum1 += aIn[1] + cksum0;
   }
 
+  *pCksum0 = cksum0;
+  *pCksum1 = cksum1;
+}
+
+/*
+** This function is the same as logCksum(), except that pointer "a" need
+** not be aligned to an 8-byte boundary or padded with zero bytes. This
+** version is slower, but sometimes more convenient to use.
+*/
+void logCksumUnaligned(
+  char *z,                        /* Input buffer */
+  int n,                          /* Size of input buffer in bytes */
+  u32 *pCksum0,                   /* IN/OUT: Checksum value 1 */
+  u32 *pCksum1                    /* IN/OUT: Checksum value 2 */
+){
+  u8 *a = (u8 *)z;
+  u32 cksum0 = *pCksum0;
+  u32 cksum1 = *pCksum1;
+  int nIn = (n/8) * 8;
+  int i;
+
+  assert( n>0 );
+  for(i=0; i<nIn; i+=8){
+    cksum0 += getU32le(&a[i]) + cksum1;
+    cksum1 += getU32le(&a[i+4]) + cksum0;
+  }
+
+  if( nIn!=n ){
+    u8 aBuf[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    assert( (n-nIn)<8 && n>nIn );
+    memcpy(aBuf, &a[nIn], n-nIn);
+    cksum0 += getU32le(aBuf) + cksum1;
+    cksum1 += getU32le(&aBuf[4]) + cksum0;
+  }
+
+  *pCksum0 = cksum0;
+  *pCksum1 = cksum1;
+}
+
+
+/*
+** Write the contents of the log-buffer to disk. Then write either a CKSUM
+** or COMMIT record, depending on the value of parameter eType.
+*/
+static int logFlush(lsm_db *pDb, int eType){
+  int rc;
+  DbLog *pLog = pDb->pDbLog;
+  
+#if 0
+printf("write type %d\n", eType);
+fflush(stdout);
+#endif
+
+  assert( eType==LSM_LOG_COMMIT || eType==LSM_LOG_CKSUM );
+  assert( pLog );
+
+  /* Make sure there is room in the log-buffer to add the CKSUM or COMMIT
+  ** record. Then add the first byte of it.  */
+  rc = lsmStringExtend(&pLog->buf, 9);
+  if( rc!=LSM_OK ) return rc;
+  pLog->buf.z[pLog->buf.n++] = eType;
+  memset(&pLog->buf.z[pLog->buf.n], 0, 8);
+
+  /* Calculate the checksum value. Append it to the buffer*/
+#if 0
+  logCksum(pLog->buf.z, ROUND8(pLog->buf.n), &pLog->cksum0, &pLog->cksum1);
+#else
+  logCksumUnaligned(pLog->buf.z, pLog->buf.n, &pLog->cksum0, &pLog->cksum1);
+#endif
+
+  lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum0);
+  pLog->buf.n += 4;
+  lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum1);
+  pLog->buf.n += 4;
+
+  /* Write the contents of the buffer to disk. */
+  rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
+  pLog->iOff += pLog->buf.n;
+  pLog->buf.n = 0;
+
+  /* If this is a commit and synchronous=full, sync the log to disk. */
+  if( rc==LSM_OK && eType==LSM_LOG_COMMIT && pDb->eSafety==LSM_SAFETY_FULL ){
+    rc = lsmFsSyncLog(pDb->pFS);
+  }
   return rc;
 }
 
-static int logFileAppendRecord(
-  lsm_db *pDb,                    /* Database connection */
-  int eType,                      /* Record type - LSM_LOG_XXX */
-  void *pKey, int nKey,           /* Key, if applicable */
-  void *pVal, int nVal            /* Value, if applicable */
+/*
+** Append an LSM_LOG_WRITE (if nVal>=0) or LSM_LOG_DELETE (if nVal<0) 
+** record to the database log.
+*/
+int lsmLogWrite(
+  lsm_db *pDb,                    /* Database handle */
+  void *pKey, int nKey,           /* Database key to write to log */
+  void *pVal, int nVal            /* Database value (or nVal<0) to write */
 ){
   int rc = LSM_OK;
-  DbLog *pDbLog = getLog(pDb, &rc);
-
-  assert( eType==LSM_LOG_WRITE 
-       || eType==LSM_LOG_DELETE 
-       || eType==LSM_LOG_PAD2 
-  );
-
-  /* If required, write an LSM_LOG_CKPTID record to the log file. */
-  rc = logFileCkptid(pDb);
-
-  if( rc==LSM_OK ){
-    int nVarint;
-    u8 aVarint[10];
-    aVarint[0] = eType;
-
-    nVarint = 1 + lsmVarintPut32(&aVarint[1], nKey);
-    rc = logFileWrite(pDb, pDbLog, aVarint, nVarint);
-    if( rc==LSM_OK ){
-      rc = logFileWrite(pDb, pDbLog, pKey, nKey);
-    }
-
-    if( rc==LSM_OK && eType==LSM_LOG_WRITE ){
-      nVarint = lsmVarintPut32(aVarint, nVal);
-      rc = logFileWrite(pDb, pDbLog, aVarint, nVarint);
-      if( rc==LSM_OK ){
-        rc = logFileWrite(pDb, pDbLog, pVal, nVal);
-      }
-    }
-  }
-
-  return rc;
-}
-
-/*
-** If the current log file offset is not at the start of a page, fill
-** the remainder of the current page with LSM_LOG_PAD1 and LSM_LOG_PAD2 
-** records. So that (DbLog.iPgOff==0) when this function returns.
-*/
-static int logFilePad(lsm_db *pDb){
-  int rc = LSM_OK;                /* Return Code */
-  DbLog *pDbLog = pDb->pDbLog;    /* Log handle */
-
-  if( pDbLog->iPgOff!=0 ){
-    /* Pad out the rest of the page. */
-    int nData;
-    int nPad;
-
-    lsmFsPageData(pDbLog->pPg, &nData);
-    nPad = nData - pDbLog->iPgOff - 8;
-
-    while( nPad>0 && rc==LSM_OK ){
-      if( nPad==1 ){
-        u8 aPad1[1] = { LSM_LOG_PAD1 };
-        rc = logFileWrite(pDb, pDbLog, aPad1, 1);
-        nPad--;
-      }else{
-        int nWrite = MIN(129, nPad);
-        rc = logFileAppendRecord(pDb, LSM_LOG_PAD2, 0, nWrite-2, 0, 0);
-        nPad -= nWrite;
-      }
-    }
-
-    assert( rc!=LSM_OK || pDbLog->iPgOff==0 );
-  }
-
-  return rc;
-}
+  DbLog *pLog;                    /* Log object to write to */
 
 #if 0
-/*
-** Restart the log from the beginning. This is called only after all data
-** in the current log file has been safely stored elsewhere in the 
-** database.
-*/
-int lsmLogRestart(lsm_db *pDb){
-  DbLog *pDbLog = pDb->pDbLog;
-  int rc = LSM_OK;
-  if( pDbLog ){
-    lsmFsPageRelease(pDbLog->pPg);
-    pDbLog->pPg = 0;
-    pDbLog->iPgOff = 0;
-    pDbLog->bRequireCkpt = 1;
-    pDbLog->aCksum[0] = LOG_CKSUM0_INIT;
-    pDbLog->aCksum[1] = LOG_CKSUM1_INIT;
-  }
-  return rc;
-}
+printf("write type %d\n", LSM_LOG_WRITE);
+fflush(stdout);
 #endif
 
-static void logFileReset(lsm_db *pDb){
-  DbLog *pDbLog = pDb->pDbLog;
-
-  lsmFsPageRelease(pDbLog->pPg);
-  pDbLog->pPg = 0;
-  pDbLog->iPgOff = 0;
-  pDbLog->aCksum[0] = LOG_CKSUM0_INIT;
-  pDbLog->aCksum[1] = LOG_CKSUM1_INIT;
-}
-
-static int logFilePlayback(lsm_db *pDb, int iPg, int iOff){
-  int rc = LSM_OK;
-  int bEof = 0;
-  DbLog *pDbLog = pDb->pDbLog;
-
-  /* Jump back to the start of the log */
-  pDbLog->aCksum[0] = pDbLog->aCkptSalt[0];
-  pDbLog->aCksum[1] = pDbLog->aCkptSalt[1];
-  logFileLoadPage(pDb, pDbLog, pDbLog->iCkptPg, &bEof, &rc);
-
-  if( bEof==0 ){
-    while( !rc && (iPg!=lsmFsPageNumber(pDbLog->pPg) || iOff!=pDbLog->iPgOff) ){
-      u8 *aKey; int nKey;
-      u8 *aVal; int nVal;
-      int eType;
-
-      rc = logFileReadRecord(pDb, pDbLog, &eType, &aKey,&nKey, &aVal,&nVal);
-      if( rc==LSM_OK ){
-        if( eType==LSM_LOG_WRITE ){
-          rc = lsmTreeInsert(pDb->pTV, aKey, nKey, aVal, nVal);
-        }else if( eType==LSM_LOG_DELETE ){
-          rc = lsmTreeInsert(pDb->pTV, aKey, nKey, NULL, -1);
-        }
+  pLog = logGetHandle(pDb, &rc);
+  if( pLog ){
+    int nReq;
+    nReq = 1 + lsmVarintLen32(nKey) + nKey;
+    if( nVal>=0 ) nReq += lsmVarintLen32(nVal) + nVal;
+    rc = lsmStringExtend(&pLog->buf, nReq);
+    if( rc==LSM_OK ){
+      u8 *a = (u8 *)&pLog->buf.z[pLog->buf.n];
+      *(a++) = (nVal>=0 ? LSM_LOG_WRITE : LSM_LOG_DELETE);
+      a += lsmVarintPut32(a, nKey);
+      memcpy(a, pKey, nKey);
+      a += nKey;
+      if( nVal>=0 ){
+        a += lsmVarintPut32(a, nVal);
+        memcpy(a, pVal, nVal);
+      }
+      pLog->buf.n += nReq;
+      assert( pLog->buf.n<=pLog->buf.nAlloc );
+      if( pLog->buf.n>=LSM_CKSUM_MAXDATA ){
+        rc = logFlush(pDb, LSM_LOG_CKSUM);
+        assert( rc!=LSM_OK || pLog->buf.n==0 );
       }
     }
-
-    assert( rc!=LSM_OK || pDbLog->pPg );
   }
 
   return rc;
 }
 
 /*
-** Append an LSM_LOG_WRITE (if nVal>=0) or LSM_LOG_DELETE (if nVal<0) record 
-** to the current log file.
-*/
-int lsmLogWrite(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
-  int rc = LSM_OK;
-  if( logFileEnabled(pDb) ){
-    if( nVal>=0 ){
-      rc = logFileAppendRecord(pDb, LSM_LOG_WRITE, pKey, nKey, pVal, nVal);
-    }else{
-      rc = logFileAppendRecord(pDb, LSM_LOG_DELETE, pKey, nKey, 0, 0);
-    }
-  }
-  return rc;
-}
-
-/*
-** Append a commit record to the current log file.
+** Append an LSM_LOG_COMMIT record to the database log.
 */
 int lsmLogCommit(lsm_db *pDb){
   int rc = LSM_OK;
-  DbLog *pDbLog = pDb->pDbLog;
-  if( pDbLog && logFileEnabled(pDb) ){
-    u8 aCommit[1] = { LSM_LOG_COMMIT };
-    rc = logFileWrite(pDb, pDbLog, aCommit, 1);
-
-    if( rc==LSM_OK ){
-      if( pDb->eSafety==LSM_SAFETY_FULL ){
-        rc = logFilePad(pDb);
-      }else if( pDbLog->iPgOff>0 ){
-        rc = logFilePersistPage(pDbLog, 0);
-      }
-    }
+  if( pDb->pDbLog ){
+    rc = logFlush(pDb, LSM_LOG_COMMIT);
   }
   return rc;
 }
+
+void lsmLogTell(
+  lsm_db *pDb,                    /* Database handle */
+  LogMark *pMark                  /* Populate this object with current offset */
+){
+  DbLog *pLog = pDb->pDbLog;
+  if( pLog ){
+    pMark->iOff = pLog->iOff;
+    pMark->nBuf = pLog->buf.n;
+    pMark->cksum0 = pLog->cksum0;
+    pMark->cksum1 = pLog->cksum1;
+  }else{
+    pMark->iOff = 0;
+    pMark->nBuf = 0;
+    pMark->cksum0 = LSM_CKSUM0_INIT;
+    pMark->cksum1 = LSM_CKSUM1_INIT;
+  }
+}
+
+int lsmLogSeek(
+  lsm_db *pDb,                    /* Database handle */
+  LogMark *pMark                  /* Object containing log offset to seek to */
+){
+  DbLog *pLog = pDb->pDbLog;      /* Database log handle */
+  int rc;                         /* This functions return code */
+
+  assert( pLog );
+  assert( pLog->iOff!=pMark->iOff || pLog->cksum0==pMark->cksum0 );
+  assert( pLog->iOff!=pMark->iOff || pLog->cksum1==pMark->cksum1 );
+
+  if( pLog->iOff==pMark->iOff ){
+    pLog->buf.n = pMark->nBuf;
+    rc = LSM_OK;
+  }else{
+    pLog->iOff = pMark->iOff;
+    pLog->cksum0 = pMark->cksum0;
+    pLog->cksum1 = pMark->cksum1;
+    pLog->buf.n = 0;
+    rc = lsmFsReadLog(pDb->pFS, pLog->iOff, pMark->nBuf, &pLog->buf);
+  }
+
+  return rc;
+}
+
+
+/*************************************************************************
+** Begin code for log recovery.
+*/
+
+typedef struct LogReader LogReader;
+struct LogReader {
+  FileSystem *pFS;                /* File system to read from */
+  i64 iOff;                       /* File offset at end of buf content */
+  int iBuf;                       /* Current read offset in buf */
+  LsmString buf;                  /* Buffer containing file content */
+
+  int iCksumBuf;                  /* Offset in buf corresponding to cksum[01] */
+  u32 cksum0;                     /* Checksum 0 at offset iCksumBuf */
+  u32 cksum1;                     /* Checksum 1 at offset iCksumBuf */
+};
+
+static int logReaderBlob(
+  LogReader *p,                   /* Log reader object */
+  LsmString *pBuf,                /* Dynamic storage, if required */
+  int nBlob,                      /* Number of bytes to read */
+  u8 **ppBlob                     /* OUT: Pointer to blob read */
+){
+  static const int LOG_READ_SIZE = 512;
+  int rc = LSM_OK;                /* Return code */
+  int nReq = nBlob;               /* Bytes required */
+
+  while( nReq>0 ){
+    int nAvail;                   /* Bytes of data available in p->buf */
+    if( p->buf.n==p->iBuf ){
+      int nCksum;                 /* Total bytes requiring checksum */
+      int nCarry = 0;             /* Total bytes requiring checksum */
+
+      nCksum = p->iBuf - p->iCksumBuf;
+      nCarry = nCksum % 8;
+      nCksum = ((nCksum / 8) * 8);
+
+      if( nCksum>0 ){
+        logCksumUnaligned(
+            &p->buf.z[p->iCksumBuf], (nCksum/8)*8, &p->cksum0, &p->cksum1
+        );
+        if( nCarry>0 ) memcpy(p->buf.z, &p->buf.z[p->iBuf-nCarry], nCarry);
+      }
+      p->buf.n = nCarry;
+      p->iBuf = nCarry;
+
+      rc = lsmFsReadLog(p->pFS, p->iOff, LOG_READ_SIZE, &p->buf);
+      if( rc!=LSM_OK ) break;
+
+      p->iCksumBuf = 0;
+      p->iOff += LOG_READ_SIZE;
+    }
+    nAvail = p->buf.n - p->iBuf;
+
+    if( ppBlob && nReq==nBlob && nBlob<=nAvail ){
+      *ppBlob = (u8 *)&p->buf.z[p->iBuf];
+      p->iBuf += nBlob;
+      nReq = 0;
+    }else{
+      int nCopy = MIN(nAvail, nReq);
+      if( nBlob==nReq ){
+        if( ppBlob ) *ppBlob = (u8 *)pBuf->z;
+        pBuf->n = 0;
+      }
+      rc = lsmStringBinAppend(pBuf, &p->buf.z[p->iBuf], nCopy);
+      if( rc!=LSM_OK ) break;
+      nReq -= nCopy;
+      p->iBuf += nCopy;
+    }
+  }
+
+  return rc;
+}
+
+static int logReaderVarint(LogReader *p, LsmString *pBuf, int *piVal){
+  u8 *aVarint;
+  if( p->buf.n==p->iBuf ){
+    int rc = logReaderBlob(p, 0, 1, &aVarint);
+    if( rc!=LSM_OK ) return rc;
+    p->iBuf = 0;
+  }
+  logReaderBlob(p, 0, lsmVarintSize(p->buf.z[p->iBuf]), &aVarint);
+  lsmVarintGet32(aVarint, piVal);
+  return LSM_OK;
+}
+
+static int logReaderByte(LogReader *p, u8 *pByte){
+  int rc;
+  u8 *pPtr;
+  rc = logReaderBlob(p, 0, 1, &pPtr);
+  *pByte = *pPtr;
+  return rc;
+}
+
+static void logReaderCksum(LogReader *p, LsmString *pBuf, int *pbOk){
+  u8 *pPtr;
+  u32 cksum0, cksum1;
+  int nCksum = p->iBuf - p->iCksumBuf;
+
+  /* Update in-memory (expected) checksums */
+  assert( nCksum>=0 );
+  logCksumUnaligned(&p->buf.z[p->iCksumBuf], nCksum, &p->cksum0, &p->cksum1);
+  p->iCksumBuf = p->iBuf + 8;
+  logReaderBlob(p, pBuf, 8, &pPtr);
+
+  /* Read the checksums from the log file. Set *pbOk if they match. */
+  cksum0 = lsmGetU32(pPtr);
+  cksum1 = lsmGetU32(&pPtr[4]);
+#if 0
+  printf("Expecting (%x %x) have (%x %x)\n", p->cksum0,p->cksum1,cksum0,cksum1);
+#endif
+
+  *pbOk = (cksum0==p->cksum0 && cksum1==p->cksum1);
+  p->iCksumBuf = p->iBuf;
+}
+
+static void logReaderInit(lsm_db *pDb, LogReader *p){
+  memset(p, 0, sizeof(LogReader));
+  p->pFS = pDb->pFS;
+  lsmStringInit(&p->buf, pDb->pEnv);
+  p->cksum0 = LSM_CKSUM0_INIT;
+  p->cksum1 = LSM_CKSUM1_INIT;
+}
+
 
 /*
 ** Recover the contents of the log file.
 */
 int lsmLogRecover(lsm_db *pDb){
-  int rc = LSM_OK;
-  DbLog *pDbLog;
+  LsmString buf1;                 /* Key buffer */
+  LsmString buf2;                 /* Value buffer */
+  LogReader reader;               /* Log reader object */
+  int rc;                         /* Return code */
+  int nCommit = 0;                /* Number of transactions to recover */
+  int iPass;
+  DbLog *pLog;
 
-  assert( pDb->pDbLog==0 );
-  pDbLog = getLog(pDb, &rc);
-  if( pDbLog ){
+  rc = lsmBeginRecovery(pDb);
+  if( rc!=LSM_OK ) return rc;
+
+  logReaderInit(pDb, &reader);
+  lsmStringInit(&buf1, pDb->pEnv);
+  lsmStringInit(&buf2, pDb->pEnv);
+
+  /* The outer for() loop runs at most twice. The first iteration is to 
+  ** count the number of committed transactions in the log. The second 
+  ** iterates through those transactions and updates the in-memory tree 
+  ** structure with their contents.  */
+  for(iPass=0; iPass<2; iPass++){
     int bEof = 0;
-    Pgno iPg;
 
-    assert( pDbLog->pPg==0 );
-    assert( pDb->pWorker );
-    assert( pDbLog->bRequireCkpt==1 );
-    assert( rc==LSM_OK );
+    while( rc==LSM_OK && !bEof ){
+      u8 eType;
+      rc = logReaderByte(&reader, &eType);
+#if 0
+static int iRead = 0;
+      printf("iPass=%d %d read type %d\n", iPass, ++iRead, (int)eType);
+fflush(stdout);
+#endif
 
-    lsmSnapshotGetSalt(pDb->pWorker, &pDbLog->aCksum[0], &pDbLog->aCksum[1]);
-    iPg = lsmSnapshotGetLogpgno(pDb->pWorker);
-    assert( iPg!=0 );
+      switch( eType ){
+        case LSM_LOG_PAD1:
+        case LSM_LOG_PAD2:
+          assert( 0 );
+          break;
 
-    pDbLog->iCkptPg = iPg;
-    pDbLog->aCkptSalt[0] = pDbLog->aCksum[0];
-    pDbLog->aCkptSalt[1] = pDbLog->aCksum[1];
-
-    /* Load the first page of this log file. */
-    rc = lsmBeginRecovery(pDb);
-    logFileLoadPage(pDb, pDbLog, iPg, &bEof, &rc);
-    if( rc==LSM_OK && bEof==0 ){
-      int eType;                  /* Record type */
-      int iCommitOff = 0;
-      int iCommitPg = 0;
-
-      /* First pass. Read from the start of the log file until the checksums
-      ** fail. Store the location of the last commit record in the file in
-      ** stack variables iCommitPg and iCommitOff.  */
-      do {
-        rc = logFileReadRecord(pDb, pDbLog, &eType, 0, 0, 0, 0);
-        if( eType==LSM_LOG_COMMIT ){
-          iCommitPg = lsmFsPageNumber(pDbLog->pPg);
-          iCommitOff = pDbLog->iPgOff;
+        case LSM_LOG_WRITE: {
+          int nKey; u8 *aKey;
+          int nVal; u8 *aVal;
+          logReaderVarint(&reader, &buf1, &nKey);
+          logReaderBlob(&reader, &buf1, nKey, 0);
+          logReaderVarint(&reader, &buf2, &nVal);
+          logReaderBlob(&reader, &buf2, nVal, &aVal);
+          if( iPass==1 ){ 
+            rc = lsmTreeInsert(pDb->pTV, (u8 *)buf1.z, nKey, aVal, nVal);
+          }
+          break;
         }
-      }while( rc==LSM_OK && eType!=LSM_LOG_EOF );
 
-      /* Second pass. Populate the in-memory b-tree with the contents of the
-      ** log file.  */
-      if( rc==LSM_OK ) rc = logFilePlayback(pDb, iCommitPg, iCommitOff);
-      if( rc==LSM_OK ) pDbLog->bRequireCkpt = 0;
+        case LSM_LOG_DELETE: {
+          int nKey; u8 *aKey;
+          logReaderVarint(&reader, &buf1, &nKey);
+          logReaderBlob(&reader, &buf1, nKey, &aKey);
+          if( iPass==1 ){ 
+            rc = lsmTreeInsert(pDb->pTV, aKey, nKey, NULL, -1);
+          }
+          break;
+        }
+
+        case LSM_LOG_COMMIT:
+        case LSM_LOG_CKSUM: {
+          int bOk;
+          logReaderCksum(&reader, &buf1, &bOk);
+          if( !bOk ){
+            bEof = 1;
+            assert( iPass==0 );
+          }else if( eType==LSM_LOG_COMMIT ){
+            nCommit++;
+            assert( nCommit>0 || iPass==1 );
+            if( nCommit==0 ) bEof = 1;
+          }
+          break;
+        }
+
+        default:
+          /* Including LSM_LOG_EOF */
+          bEof = 1;
+          break;
+      }
     }
 
-    lsmFinishRecovery(pDb);
+    if( iPass==0 ){
+      reader.iOff = 0;
+      reader.iBuf = 0;
+      reader.buf.n = 0;
+      reader.cksum0 = LSM_CKSUM0_INIT;
+      reader.cksum1 = LSM_CKSUM1_INIT;
+      reader.iCksumBuf = 0;
+      if( nCommit==0 ) break;
+      nCommit = nCommit * -1;
+    }
   }
+
+  /* Initialize DbLog object */
+  pLog = logGetHandle(pDb, &rc);
+  assert( pLog || rc!=LSM_OK );
+  if( pLog ){
+    pLog->iOff = reader.iOff - reader.buf.n + reader.iBuf;
+    pLog->cksum0 = reader.cksum0;
+    pLog->cksum1 = reader.cksum1;
+  }
+
+  lsmFinishRecovery(pDb);
+  lsmStringClear(&buf1);
+  lsmStringClear(&buf2);
   return rc;
 }
 
-/*
-** This function is called when a checkpoint is run.
-*/
-int lsmLogFlush(lsm_db *pDb){
-  int rc = LSM_OK;
-  DbLog *pDbLog = pDb->pDbLog;
 
-  assert( pDb->pWorker );
-  if( pDbLog && logFileEnabled(pDb) ){
-    rc = logFilePad(pDb);
-    if( rc==LSM_OK ){
-      pDbLog->bRequireCkpt = 1;
-      pDbLog->iCkptPg = lsmFsPageNumber(pDbLog->pPg);
-      pDbLog->aCkptSalt[0] = pDbLog->aCksum[0];
-      pDbLog->aCkptSalt[1] = pDbLog->aCksum[1];
-      lsmSnapshotSetSalt(pDb->pWorker, pDbLog->aCksum[0], pDbLog->aCksum[1]);
-      lsmSnapshotSetLogpgno(pDb->pWorker, pDbLog->iCkptPg);
-    }
-  }
-  return rc;
-}
 
-/*
-** This function is called to shut down the logging sub-system.
-*/
-int lsmLogClose(lsm_db *pDb){
-  DbLog *pDbLog = pDb->pDbLog;
-  if( pDbLog ){
-    lsmFsPageRelease(pDbLog->pPg);
-
-    lsmFree(pDb->pEnv, pDbLog->aBuf[0].aAlloc);
-    lsmFree(pDb->pEnv, pDbLog->aBuf[1].aAlloc);
-
-    lsmFree(pDb->pEnv, pDbLog);
-    pDb->pDbLog = 0;
-  }
-  return LSM_OK;
-}

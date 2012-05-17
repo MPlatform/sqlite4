@@ -385,8 +385,7 @@ sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 proc reset_db {} {
   catch {db close}
   forcedelete test.db
-  forcedelete test.db-journal
-  forcedelete test.db-wal
+  forcedelete test.db-log
   sqlite4 db ./test.db
   set ::DB [sqlite4_connection_pointer db]
   if {[info exists ::SETUP_SQL]} {
