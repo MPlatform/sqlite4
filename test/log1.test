@@ -27,7 +27,6 @@ proc copy_db_files {from to} {
   forcecopy $from-log $to-log
 }
 
-
 #-------------------------------------------------------------------------
 # Super simple tests:
 #
@@ -117,22 +116,17 @@ do_test 3.2 {
   copy_db_files test.db test.db2
 } {}
 
-breakpoint
 do_test 3.3 {
   sqlite4 db2 test.db2
   execsql { SELECT md5sum(a, b) FROM t1 } db2
 } $cksum
 
-exit
-
 do_test 3.4 {
   execsql { SELECT count(*) FROM t1 } db2
 } {256}
 db2 close
-finish_test
 
 #-------------------------------------------------------------------------
-# Test recovery of a larger log file.
 #
 reset_db
 do_execsql_test 4.1 {

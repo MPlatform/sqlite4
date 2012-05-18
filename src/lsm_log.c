@@ -164,7 +164,7 @@
 
 /* Require a checksum every 32KB. */
 /* #define LSM_CKSUM_MAXDATA (32*1024) */
-#define LSM_CKSUM_MAXDATA 256
+#define LSM_CKSUM_MAXDATA (32*1024)
 
 /* Initial values for checksum (required only if there is no checkpoint
 ** at all in the database file).  */
@@ -305,11 +305,6 @@ static int logFlush(lsm_db *pDb, int eType){
   int rc;
   DbLog *pLog = pDb->pDbLog;
   
-#if 0
-printf("write type %d\n", eType);
-fflush(stdout);
-#endif
-
   assert( eType==LSM_LOG_COMMIT || eType==LSM_LOG_CKSUM );
   assert( pLog );
 
@@ -325,6 +320,12 @@ fflush(stdout);
   logCksum(pLog->buf.z, ROUND8(pLog->buf.n), &pLog->cksum0, &pLog->cksum1);
 #else
   logCksumUnaligned(pLog->buf.z, pLog->buf.n, &pLog->cksum0, &pLog->cksum1);
+#endif
+
+#if 0
+  static int iCksum = 0;
+printf("%d write type %d (%x %x)\n", ++iCksum, eType, pLog->cksum0, pLog->cksum1);
+fflush(stdout);
 #endif
 
   lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum0);
@@ -484,8 +485,8 @@ static int logReaderBlob(
         logCksumUnaligned(
             &p->buf.z[p->iCksumBuf], (nCksum/8)*8, &p->cksum0, &p->cksum1
         );
-        if( nCarry>0 ) memcpy(p->buf.z, &p->buf.z[p->iBuf-nCarry], nCarry);
       }
+      if( nCarry>0 ) memcpy(p->buf.z, &p->buf.z[p->iBuf-nCarry], nCarry);
       p->buf.n = nCarry;
       p->iBuf = nCarry;
 
@@ -507,7 +508,7 @@ static int logReaderBlob(
         if( ppBlob ) *ppBlob = (u8 *)pBuf->z;
         pBuf->n = 0;
       }
-      rc = lsmStringBinAppend(pBuf, &p->buf.z[p->iBuf], nCopy);
+      rc = lsmStringBinAppend(pBuf, (u8 *)&p->buf.z[p->iBuf], nCopy);
       if( rc!=LSM_OK ) break;
       nReq -= nCopy;
       p->iBuf += nCopy;
@@ -553,6 +554,7 @@ static void logReaderCksum(LogReader *p, LsmString *pBuf, int *pbOk){
   cksum1 = lsmGetU32(&pPtr[4]);
 #if 0
   printf("Expecting (%x %x) have (%x %x)\n", p->cksum0,p->cksum1,cksum0,cksum1);
+  fflush(stdout);
 #endif
 
   *pbOk = (cksum0==p->cksum0 && cksum1==p->cksum1);
