@@ -166,18 +166,6 @@
 /* #define LSM_CKSUM_MAXDATA (32*1024) */
 #define LSM_CKSUM_MAXDATA (32*1024)
 
-/* Initial values for checksum (required only if there is no checkpoint
-** at all in the database file).  */
-#define LSM_CKSUM0_INIT 42
-#define LSM_CKSUM1_INIT 42
-
-struct DbLog {
-  i64 iOff;                       /* Offset into log (see lsm_log.c) */
-  u32 cksum0;                     /* Checksum 0 at offset iOff */
-  u32 cksum1;                     /* Checksum 1 at offset iOff */
-  LsmString buf;                  /* Buffer containing data not yet written */
-};
-
 /*
 ** The logging sub-system may be enabled or disabled on a per-database
 ** basis (per-database, not per-connection). This function returns true if
@@ -190,34 +178,6 @@ struct DbLog {
 */
 static int logFileEnabled(lsm_db *pDb){
   return 1;
-}
-
-/*
-** Return a pointer to the DbLog object associated with connection pDb.
-** Allocate and initialize it if necessary.
-*/
-static DbLog *logGetHandle(lsm_db *pDb, int *pRc){
-  if( pDb->pDbLog==0 ){
-    DbLog *pLog;
-    pLog = (DbLog *)lsmMallocZeroRc(pDb->pEnv, sizeof(DbLog), pRc);
-    if( pLog ){
-      pLog->cksum0 = LSM_CKSUM0_INIT;
-      pLog->cksum1 = LSM_CKSUM1_INIT;
-      lsmStringInit(&pLog->buf, pDb->pEnv);
-    }
-    pDb->pDbLog = pLog;
-  }
-
-  return pDb->pDbLog;
-}
-
-void lsmLogClose(lsm_db *pDb){
-  DbLog *pLog = pDb->pDbLog;
-  if( pLog ){
-    lsmStringClear(&pLog->buf);
-    lsmFree(pDb->pEnv, pLog);
-    pDb->pDbLog = 0;
-  }
 }
 
 /*
@@ -303,7 +263,7 @@ void logCksumUnaligned(
 */
 static int logFlush(lsm_db *pDb, int eType){
   int rc;
-  DbLog *pLog = pDb->pDbLog;
+  DbLog *pLog = lsmDatabaseLog(pDb);
   
   assert( eType==LSM_LOG_COMMIT || eType==LSM_LOG_CKSUM );
   assert( pLog );
@@ -362,7 +322,7 @@ printf("write type %d\n", LSM_LOG_WRITE);
 fflush(stdout);
 #endif
 
-  pLog = logGetHandle(pDb, &rc);
+  pLog = lsmDatabaseLog(pDb);
   if( pLog ){
     int nReq;
     nReq = 1 + lsmVarintLen32(nKey) + nKey;
@@ -394,37 +354,26 @@ fflush(stdout);
 ** Append an LSM_LOG_COMMIT record to the database log.
 */
 int lsmLogCommit(lsm_db *pDb){
-  int rc = LSM_OK;
-  if( pDb->pDbLog ){
-    rc = logFlush(pDb, LSM_LOG_COMMIT);
-  }
-  return rc;
+  return logFlush(pDb, LSM_LOG_COMMIT);
 }
 
 void lsmLogTell(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Populate this object with current offset */
 ){
-  DbLog *pLog = pDb->pDbLog;
-  if( pLog ){
-    pMark->iOff = pLog->iOff;
-    pMark->nBuf = pLog->buf.n;
-    pMark->cksum0 = pLog->cksum0;
-    pMark->cksum1 = pLog->cksum1;
-  }else{
-    pMark->iOff = 0;
-    pMark->nBuf = 0;
-    pMark->cksum0 = LSM_CKSUM0_INIT;
-    pMark->cksum1 = LSM_CKSUM1_INIT;
-  }
+  DbLog *pLog = lsmDatabaseLog(pDb);
+  pMark->iOff = pLog->iOff;
+  pMark->nBuf = pLog->buf.n;
+  pMark->cksum0 = pLog->cksum0;
+  pMark->cksum1 = pLog->cksum1;
 }
 
 int lsmLogSeek(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Object containing log offset to seek to */
 ){
-  DbLog *pLog = pDb->pDbLog;      /* Database log handle */
   int rc;                         /* This functions return code */
+  DbLog *pLog = lsmDatabaseLog(pDb);
 
   assert( pLog );
   assert( pLog->iOff!=pMark->iOff || pLog->cksum0==pMark->cksum0 );
@@ -612,8 +561,9 @@ fflush(stdout);
           break;
 
         case LSM_LOG_WRITE: {
-          int nKey; u8 *aKey;
-          int nVal; u8 *aVal;
+          int nKey;
+          int nVal;
+          u8 *aVal;
           logReaderVarint(&reader, &buf1, &nKey);
           logReaderBlob(&reader, &buf1, nKey, 0);
           logReaderVarint(&reader, &buf2, &nVal);
@@ -669,13 +619,10 @@ fflush(stdout);
   }
 
   /* Initialize DbLog object */
-  pLog = logGetHandle(pDb, &rc);
-  assert( pLog || rc!=LSM_OK );
-  if( pLog ){
-    pLog->iOff = reader.iOff - reader.buf.n + reader.iBuf;
-    pLog->cksum0 = reader.cksum0;
-    pLog->cksum1 = reader.cksum1;
-  }
+  pLog = lsmDatabaseLog(pDb);
+  pLog->iOff = reader.iOff - reader.buf.n + reader.iBuf;
+  pLog->cksum0 = reader.cksum0;
+  pLog->cksum1 = reader.cksum1;
 
   lsmFinishRecovery(pDb);
   lsmStringClear(&buf1);

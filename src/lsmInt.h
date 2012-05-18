@@ -48,6 +48,10 @@
 ** are marked with NEED_ENV */
 #define NEED_ENV ((lsm_env*)0)
 
+/* Initial values for log file checksums. These are only used if the 
+** database file does not contain a valid checkpoint.  */
+#define LSM_CKSUM0_INIT 42
+#define LSM_CKSUM1_INIT 42
 
 /* The size of log file pages does not change. It is always 4KB. */
 #define LOG_FILE_PGSZ 4096
@@ -141,7 +145,6 @@ struct lsm_db {
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
-  DbLog *pDbLog;                  /* Database logging sub-system */
   Database *pDatabase;            /* Database shared data */
 
   /* Client transaction context */
@@ -239,6 +242,13 @@ struct LsmString {
   int n;                      /* Size of string.  -1 indicates error */
   int nAlloc;                 /* Space allocated for z[] */
   char *z;                    /* The string content */
+};
+
+struct DbLog {
+  i64 iOff;                       /* Current offset in log file */
+  u32 cksum0;                     /* Checksum 0 at offset iOff */
+  u32 cksum1;                     /* Checksum 1 at offset iOff */
+  LsmString buf;                  /* Buffer containing data not yet written */
 };
 
 /* 
@@ -487,7 +497,6 @@ int lsmLogRecover(lsm_db *);
 
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
-void lsmLogClose(lsm_db *);
 void lsmLogTell(lsm_db *, LogMark *);
 int lsmLogSeek(lsm_db *, LogMark *);
 int lsmLogRecover(lsm_db *);
@@ -552,6 +561,8 @@ u32 *lsmFreelistDeltaPtr(lsm_db *pDb);
 
 void lsmDatabaseDirty(Database *p);
 int lsmDatabaseIsDirty(Database *p);
+
+DbLog *lsmDatabaseLog(lsm_db *pDb);
 
 
 /**************************************************************************

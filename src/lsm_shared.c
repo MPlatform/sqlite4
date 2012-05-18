@@ -179,7 +179,10 @@ struct Snapshot {
 struct Database {
   lsm_env *pEnv;                  /* Environment handle */
   char *zName;                    /* Canonical path to database file */
+
   Tree *pTree;                    /* Current in-memory tree structure */
+  DbLog log;                      /* Database log state object */
+
   Snapshot *pClient;              /* Client (reader) snapshot */
   Snapshot worker;                /* Worker (writer) snapshot */
   lsm_mutex *pWorkerMutex;        /* Protects the worker snapshot */
@@ -300,6 +303,9 @@ static void freeDatabase(Database *p){
   lsmMutexDel(p->pEnv, p->pWorkerMutex);
   lsmMutexDel(p->pEnv, p->pCkptMutex);
 
+  /* Free the log buffer. */
+  lsmStringClear(&p->log.buf);
+
   /* Free the memory allocated for the Database struct itself */
   lsmFree(p->pEnv, p);
 }
@@ -339,6 +345,13 @@ int lsmDbDatabaseFind(
     if( p==0 ){
       int nName = strlen(zName);
       p = (Database *)lsmMallocZeroRc(pEnv, sizeof(Database) + nName + 1, &rc);
+
+      /* Initialize the log handle */
+      if( rc==LSM_OK ){
+        p->log.cksum0 = LSM_CKSUM0_INIT;
+        p->log.cksum1 = LSM_CKSUM1_INIT;
+        lsmStringInit(&p->log.buf, pEnv);
+      }
 
       /* Allocate the three mutexes */
       if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pWorkerMutex);
@@ -387,6 +400,7 @@ void freeClientSnapshot(Snapshot *p){
   lsmFree(pEnv, p->pExport);
   lsmFree(pEnv, p);
 }
+
 
 /*
 ** Release a reference to a Database object obtained from lsmDbDatabaseFind().
@@ -1246,3 +1260,13 @@ int lsmFinishFlush(lsm_db *pDb, int bEmpty){
   lsmMutexLeave(p->pEnv, p->pClientMutex);
   return rc;
 }
+
+/*
+** Return a pointer to the DbLog object associated with connection pDb.
+** Allocate and initialize it if necessary.
+*/
+DbLog *lsmDatabaseLog(lsm_db *pDb){
+  Database *p = pDb->pDatabase;
+  return &p->log;
+}
+

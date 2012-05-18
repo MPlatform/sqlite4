@@ -251,7 +251,6 @@ int lsm_close(lsm_db *pDb){
   int rc = LSM_OK;
   if( pDb ){
     lsmDbDatabaseRelease(pDb);
-    lsmLogClose(pDb);
     lsmFsClose(pDb->pFS);
     lsmFree(pDb->pEnv, pDb->aTrans);
     lsmFree(pDb->pEnv, pDb);

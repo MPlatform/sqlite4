@@ -149,6 +149,37 @@ do_test 4.2 {
   execsql { SELECT count(*) FROM t1 } db2
 } {8}
 
+#-------------------------------------------------------------------------
+#
+reset_db
+do_execsql_test 5.1 {
+  CREATE TABLE t1(a, b);
+  BEGIN;
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+  COMMIT;
+}
+
+breakpoint
+do_test 5.2 {
+  sqlite4 db2 ./test.db
+  execsql {
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    SELECT count(*) FROM t1;
+  } db2
+} {5}
+
+do_test 5.3 {
+  copy_db_files test.db test.db2
+  sqlite4 db3 test.db2
+  execsql { SELECT count(*) FROM t1 } db3
+} {5}
+
+catch { db2 close }
+catch { db3 close }
+
 finish_test
 
 
