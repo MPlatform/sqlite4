@@ -421,6 +421,7 @@ int lsmFsPageWritable(Page *);
 int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr);
 int lsmFsSyncLog(FileSystem *pFS);
 int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr);
+int lsmFsTruncateLog(FileSystem *pFS, i64 nByte);
 
 /* 
 ** Functions from file "sorted.c".

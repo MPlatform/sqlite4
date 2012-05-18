@@ -45,6 +45,7 @@ struct lsm_env {
   int (*xOpen)(lsm_env*, const char *, lsm_file **);
   int (*xRead)(lsm_file *, lsm_i64, void *, int);
   int (*xWrite)(lsm_file *, lsm_i64, void *, int);
+  int (*xTruncate)(lsm_file *, lsm_i64);
   int (*xSync)(lsm_file *);
   int (*xClose)(lsm_file *);
   /****** memory allocation ****************************************/

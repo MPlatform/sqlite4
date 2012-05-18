@@ -150,6 +150,7 @@ do_test 4.2 {
 } {8}
 
 #-------------------------------------------------------------------------
+# Two clients writing to the same log file.
 #
 reset_db
 do_execsql_test 5.1 {
@@ -179,6 +180,23 @@ do_test 5.3 {
 
 catch { db2 close }
 catch { db3 close }
+
+#-------------------------------------------------------------------------
+# Check that a clean shutdown truncates the log file to zero bytes in 
+# size.
+reset_db
+do_execsql_test 6.1 {
+  CREATE TABLE t1(a, b);
+  BEGIN;
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+    INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+  COMMIT;
+}
+
+do_filesize_test 6.2   0 714
+do_test          6.3 { db close } {}
+do_filesize_test 6.4   16384 0
 
 finish_test
 

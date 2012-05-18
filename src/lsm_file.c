@@ -271,9 +271,12 @@ static int lsmEnvSync(lsm_env *pEnv, lsm_file *pFile){
 static int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xClose(pFile);
 }
+static int lsmEnvTruncate(lsm_env *pEnv, lsm_file *pFile, lsm_i64 nByte){
+  return pEnv->xTruncate(pFile, nByte);
+}
 
 /*
-** Functions to write and sync the log file.
+** Functions to read, write, sync and truncate the log file.
 */
 int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr){
   return lsmEnvWrite(pFS->pEnv, pFS->fdLog, iOff, pStr->z, pStr->n);
@@ -295,7 +298,9 @@ int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr){
   return rc;
 }
 
-
+int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
+  return lsmEnvTruncate(pFS->pEnv, pFS->fdLog, nByte);
+}
 
 /*
 ** Given that there are currently nHash slots in the hash table, return 

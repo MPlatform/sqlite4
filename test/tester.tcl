@@ -684,7 +684,7 @@ proc finish_test {} {
   catch {db2 close}
   catch {db3 close}
   # TODO: Remove this line. LSM should be deleting its own log files.
-  foreach L [glob -nocomp test*-log] {forcedelete $L}
+  # foreach L [glob -nocomp test*-log] {forcedelete $L}
   if {0==[info exists ::SLAVE]} { finalize_testing }
 }
 proc finalize_testing {} {

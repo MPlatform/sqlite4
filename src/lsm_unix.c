@@ -84,6 +84,20 @@ static int lsmPosixOsWrite(
   return rc;
 }
 
+static int lsmPosixOsTruncate(
+  lsm_file *pFile,                /* File to write to */
+  lsm_i64 nSize                   /* Size to truncate file to */
+){
+  int rc = LSM_OK;
+  int prc;                        /* Posix Return Code */
+  PosixFile *p = (PosixFile *)pFile;
+
+  prc = ftruncate(p->fd, (off_t)nSize);
+  if( prc<0 ) rc = lsm_ioerr();
+
+  return rc;
+}
+
 static int lsmPosixOsRead(
   lsm_file *pFile,                /* File to read from */
   lsm_i64 iOff,                   /* Offset to read from */
@@ -334,6 +348,7 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsOpen,          /* xOpen */
     lsmPosixOsRead,          /* xRead */
     lsmPosixOsWrite,         /* xWrite */
+    lsmPosixOsTruncate,      /* xTruncate */
     lsmPosixOsSync,          /* xSync */
     lsmPosixOsClose,         /* xClose */
     /***** memory allocation *********/

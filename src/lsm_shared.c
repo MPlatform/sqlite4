@@ -433,6 +433,9 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
         rc = lsmCheckpointWrite(pDb);
       }
 
+      /* If the checkpoint was written successfully, truncate the log file. */
+      if( rc==LSM_OK ) lsmFsTruncateLog(pDb->pFS, 0);
+
       /* Free the in-memory tree object */
       lsmTreeDestroy(p->pTree);
 
