@@ -180,7 +180,6 @@ struct Page {
 ** Values for Page.eType.
 */
 #define LSM_CKPT_FILE 1
-#define LSM_LOG_FILE 2
 #define LSM_DB_FILE 3
 
 /*
@@ -484,9 +483,6 @@ u8 *lsmFsPageData(Page *pPage, int *pnData){
     switch( pPage->eType ){
       case LSM_CKPT_FILE:
         *pnData = pFS->nMetasize;
-        break;
-      case LSM_LOG_FILE:
-        *pnData = LOG_FILE_PGSZ;
         break;
       default: {
         /* If this page is the first or last of its block, then it is 4
@@ -1173,44 +1169,6 @@ meta_page_out:
 }
 
 /*
-** Return a reference to a log file page object.
-*/
-int lsmFsLogPageGet(
-  FileSystem *pFS,                /* File-system object */
-  int iPg,                        /* Page number of log file to return */
-  Page **ppPg                     /* OUT: Page handle */
-){
-  int rc = LSM_OK;
-  Page *pPg;
-  u8 *aData;
-
-  pPg = lsmMallocZeroRc(pFS->pEnv, sizeof(Page), &rc);
-  aData = lsmMallocRc(pFS->pEnv, LOG_FILE_PGSZ, &rc);
-  if( rc==LSM_OK ){
-    i64 iOff = LOG_FILE_PGSZ * (iPg-1);
-#ifdef LSM_DEBUG
-    memset(aData, 0x55, LOG_FILE_PGSZ);
-#endif
-    rc = lsmEnvRead(pFS->pEnv, pFS->fdLog, iOff, aData, LOG_FILE_PGSZ);
-  }
-
-  if( rc==LSM_OK ){
-    pPg->aData = aData;
-    pPg->iPg = iPg;
-    pPg->eType = LSM_LOG_FILE;
-    pPg->nRef = 1;
-    pPg->pFS = pFS;
-  }else{
-    lsmFree(pFS->pEnv, pPg);
-    lsmFree(pFS->pEnv, aData);
-    pPg = 0;
-  }
-
-  *ppPg = pPg;
-  return rc;
-}
-
-/*
 ** Notify the file-system that the page needs to be written back to disk
 ** when the reference count next drops to zero.
 */
@@ -1234,12 +1192,8 @@ int lsmFsPagePersist(Page *pPg){
       i64 iOff;
       iOff = fsMetaOffset(pFS, pPg->iPg);
       rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
-    }else if( eType==LSM_LOG_FILE ){
-      i64 iOff = (pPg->iPg-1) * LOG_FILE_PGSZ;
-      rc = lsmEnvWrite(pFS->pEnv, pFS->fdLog, iOff, pPg->aData, LOG_FILE_PGSZ);
     }else{
       i64 iOff;                 /* Offset to write within database file */
-
       iOff = pFS->nPagesize * (pPg->iPg-1);
       rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nPagesize);
     }
@@ -1272,10 +1226,7 @@ int lsmFsPageRelease(Page *pPg){
       FileSystem *pFS = pPg->pFS;
       rc = lsmFsPagePersist(pPg);
 
-      if( pPg->eType==LSM_LOG_FILE ){
-        lsmFree(pFS->pEnv, pPg->aData);
-        lsmFree(pFS->pEnv, pPg);
-      }else if( pPg->eType!=LSM_CKPT_FILE ){
+      if( pPg->eType!=LSM_CKPT_FILE ){
         pFS->nOut--;
         assert( pPg->pLruNext==0 );
         assert( pPg->pLruPrev==0 );

@@ -222,20 +222,17 @@ int lsmFlushToDisk(lsm_db *pDb){
     rc = lsmMCursorSave(pCsr->pMC);
   }
 
-  /* Flush the log file to disk. Then write the contents of the in-memory
-  ** tree into the database file and update the worker snapshot accordingly.
-  ** Then flush the contents of the db file to disk too. No calls to fsync()
-  ** are made here - just write().  */
-#if 0
-  rc = lsmLogFlush(pDb);
-#endif
+  /* Write the contents of the in-memory tree into the database file and 
+  ** update the worker snapshot accordingly. Then flush the contents of 
+  ** the db file to disk too. No calls to fsync() are made here - just 
+  ** write().  */
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb);
   if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
 
-  /* Update the shared data to reflect the newly checkpointed snapshot */
+  /* Create a new client snapshot - one that uses the new runs created above. */
   if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb);
 
-  /* Restore the position open cursors */
+  /* Restore the position of any open cursors */
   for(pCsr=pDb->pCsr; rc==LSM_OK && pCsr; pCsr=pCsr->pNext){
     rc = lsmMCursorRestore(pDb, pCsr->pMC);
   }

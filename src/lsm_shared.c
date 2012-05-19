@@ -420,7 +420,10 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       for(pp=&gShared.pDatabase; *pp!=p; pp=&((*pp)->pDbNext));
       *pp = p->pDbNext;
 
-      /* Flush the in-memory tree, if required */
+      /* Flush the in-memory tree, if required. If there is data to flush,
+      ** this will create a new client snapshot in Database.pClient. The
+      ** checkpoint (serialization) of this snapshot may be written to disk
+      ** by the following block.  */
       if( p->bDirty || 0==lsmTreeIsEmpty(p->pTree) ){
         pDb->pWorker = lsmDbSnapshotWorker(p);
         rc = lsmFlushToDisk(pDb);

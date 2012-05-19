@@ -32,13 +32,14 @@
 **     2. The checkpoint id LSW.
 **     3. The number of integer values in the entire checkpoint, including 
 **        the two checksum values.
-**     4. Log file page to begin recovery at.
-**     5. Log file salt 1.
-**     6. Log file salt 2.
-**     7. The total number of blocks in the database.
-**     8. The block size.
-**     9. The number of levels.
-**     10. The nominal database page size.
+**     4. The total number of blocks in the database.
+**     5. The block size.
+**     6. The number of levels.
+**     7. The nominal database page size.
+**
+**   Log pointer:
+**
+**     4 integers. See ckptExportLog() and ckptImportLog().
 **
 **   For each level in the database, a level record. Formatted as follows:
 **
@@ -93,19 +94,16 @@ static const int one = 1;
 #define LSM_LITTLE_ENDIAN (*(u8 *)(&one))
 
 /* Total number of 32-bit integers in the checkpoint header. */
-#define CKPT_HDRSIZE      10
+#define CKPT_HDRSIZE      7
 
 /* A #define to describe each integer in the checkpoint header. */
 #define CKPT_HDR_ID_MSW   0
 #define CKPT_HDR_ID_LSW   1
 #define CKPT_HDR_NCKPT    2
-#define CKPT_HDR_LOGPGNO  3
-#define CKPT_HDR_LOGSALT1 4
-#define CKPT_HDR_LOGSALT2 5
-#define CKPT_HDR_NBLOCK   6
-#define CKPT_HDR_BLKSZ    7
-#define CKPT_HDR_NLEVEL   8
-#define CKPT_HDR_PGSZ     9
+#define CKPT_HDR_NBLOCK   3
+#define CKPT_HDR_BLKSZ    4
+#define CKPT_HDR_NLEVEL   5
+#define CKPT_HDR_PGSZ     6
 
 /*
 ** Generate or extend an 8 byte checksum based on the data in array aByte[]
@@ -222,6 +220,34 @@ static void ckptExportSegment(
   *piOut = iOut;
 }
 
+/*
+** Write the current log offset into the checkpoint buffer. 4 values.
+*/
+static void ckptExportLog(DbLog *pLog, CkptBuffer *p, int *piOut, int *pRc){
+  int iOut = *piOut;
+
+  ckptSetValue(p, iOut++, (pLog->iOff >> 32) & 0xFFFFFFFF, pRc);
+  ckptSetValue(p, iOut++, (pLog->iOff & 0xFFFFFFFF), pRc);
+  ckptSetValue(p, iOut++, pLog->cksum0, pRc);
+  ckptSetValue(p, iOut++, pLog->cksum1, pRc);
+
+  *piOut = iOut;
+}
+
+/*
+** Import a log offset.
+*/
+static void ckptImportLog(u32 *aIn, int *piIn, DbLog *pLog){
+  int iIn = *piIn;
+
+  pLog->iOff = (((i64)aIn[iIn]) << 32) + (i64)aIn[iIn+1];
+  pLog->cksum0 = aIn[iIn+2];
+  pLog->cksum1 = aIn[iIn+3];
+
+  *piIn = iIn+4;
+}
+
+
 int lsmCheckpointExport( 
   lsm_db *pDb,                    /* Connection handle */
   i64 iId,                        /* Checkpoint id */
@@ -247,6 +273,9 @@ int lsmCheckpointExport(
   memset(&ckpt, 0, sizeof(CkptBuffer));
   ckpt.pEnv = pDb->pEnv;
   iOut = CKPT_HDRSIZE;
+
+  /* Write the current log offset */
+  ckptExportLog(lsmDatabaseLog(pDb), &ckpt, &iOut, &rc);
 
   pTopLevel = lsmDbSnapshotLevel(pSnap);
   while( pNext!=pTopLevel ){
@@ -300,9 +329,6 @@ int lsmCheckpointExport(
   ckptSetValue(&ckpt, CKPT_HDR_ID_MSW, (u32)(iId>>32), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_ID_LSW, (u32)(iId&0xFFFFFFFF), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NCKPT, iOut+2, &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_LOGPGNO, lsmSnapshotGetLogpgno(pSnap), &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_LOGSALT1, iSalt1, &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_LOGSALT2, iSalt2, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NBLOCK, lsmSnapshotGetNBlock(pSnap), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_BLKSZ, lsmFsBlockSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nLevel, &rc);
@@ -406,10 +432,11 @@ int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
     lsmSnapshotSetCkptid(pSnap, iId);
     nLevel = (int)aInt[CKPT_HDR_NLEVEL];
     lsmSnapshotSetNBlock(pSnap, (int)aInt[CKPT_HDR_NBLOCK]);
-    lsmSnapshotSetLogpgno(pSnap, aInt[CKPT_HDR_LOGPGNO]);
-    lsmSnapshotSetSalt(pSnap, aInt[CKPT_HDR_LOGSALT1], aInt[CKPT_HDR_LOGSALT2]);
     lsmFsSetPageSize(pFS, (int)aInt[CKPT_HDR_PGSZ]);
     lsmFsSetBlockSize(pFS, (int)aInt[CKPT_HDR_BLKSZ]);
+
+    /* Import log offset */
+    ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));
 
     /* Import each level. This loop runs once for each db level. */
     for(i=0; rc==LSM_OK && i<nLevel; i++){
@@ -556,7 +583,6 @@ static int ckptTryRead(
 
   return ret;
 }
-
 
 int lsmCheckpointRead(lsm_db *pDb){
   int rc = LSM_OK;                /* Return Code */

@@ -53,9 +53,6 @@
 #define LSM_CKSUM0_INIT 42
 #define LSM_CKSUM1_INIT 42
 
-/* The size of log file pages does not change. It is always 4KB. */
-#define LOG_FILE_PGSZ 4096
-
 typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
@@ -487,15 +484,6 @@ int lsmFlushToDisk(lsm_db *);
 /*
 ** Functions from file "log.c".
 */
-#if 0
-int lsmLogWrite(lsm_db *, void *, int, void *, int);
-int lsmLogCommit(lsm_db *);
-int lsmLogClose(lsm_db *);
-int lsmLogFlush(lsm_db *);
-int lsmLogRecover(lsm_db *);
-#endif
-
-
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
 void lsmLogTell(lsm_db *, LogMark *);

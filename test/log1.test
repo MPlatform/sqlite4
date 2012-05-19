@@ -184,6 +184,7 @@ catch { db3 close }
 #-------------------------------------------------------------------------
 # Check that a clean shutdown truncates the log file to zero bytes in 
 # size.
+#
 reset_db
 do_execsql_test 6.1 {
   CREATE TABLE t1(a, b);
@@ -197,6 +198,28 @@ do_execsql_test 6.1 {
 do_filesize_test 6.2   0 714
 do_test          6.3 { db close } {}
 do_filesize_test 6.4   16384 0
+
+#-------------------------------------------------------------------------
+#
+reset_db
+do_execsql_test 7.1 {
+  CREATE TABLE x(a PRIMARY KEY, b);
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+}
+db close
+do_filesize_test 7.2   16384 0
+
+sqlite4 db test.db
+do_execsql_test 7.3 { SELECT count(*) FROM x } 2
+do_execsql_test 7.4 { INSERT INTO x VALUES(randstr(10,10), randstr(100,100)) }
+
+copy_db_files test.db test.db2
+do_test 7.5 { 
+  sqlite4 db2 test.db2
+  execsql { SELECT count(*) FROM x } db2
+} 3
+
 
 finish_test
 

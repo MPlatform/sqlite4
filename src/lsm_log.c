@@ -67,27 +67,64 @@
 **   read it from start to end each time is required recovery (i.e each time
 **   the number of database clients changes from 0 to 1). Effectively reading
 **   the entire history of the database each time. This would quickly become 
-**   inefficient.
+**   inefficient. Additionally, since the log file would grow without bound,
+**   it wastes storage space.
 **
 **   Instead, part of each checkpoint written into the database file contains 
-**   a log file offset (and the current value of the log file checksum at that 
-**   offset) at which to begin recovery. Offset $O.
+**   a log offset (and other information required to read the log starting at
+**   at this offset) at which to begin recovery. Offset $O.
 **
 **   Once a checkpoint has been written and synced into the database file, it
 **   is guaranteed that no recovery process will need to read any data before
 **   offset $O of the log file. It is therefore safe to begin overwriting
 **   any data that occurs before offset $O.
 **
-**   This implementation uses two files on disk to store the log. File B and
-**   file C. First, file B is written to until it reaches some configured
-**   limit (say 1MB). It appends a LOG_EOF to file B and the log continues 
-**   in file C. Once $O reaches an offset high enough to correspond to file 
-**   C, writing switches back to file B. And so on.
+**   This implementation separates the log into three regions mapped into
+**   the log file - regions 1, 2 and 3. During recovery, regions are read
+**   in ascending order (i.e. 1, then 2, then 3). Each region is zero or
+**   more bytes in size. Regions occur in the file in the order 2, 1, 3.
+**   For example:
 **
-**   Offsets are 64-bit numbers. The least-significant bit is set to 0 for
-**   file B and 1 for file C. The offset within the file is ($offset/2).
-**   It doesn't matter that this may result in non-increasing offsets for
-**   a log file. 
+**     |---2---|..|--1--|.|--3--|....
+**
+**   New records are always appended to region 3.
+**
+**   Initially (when it is empty), all three regions are zero bytes in size.
+**   Each of them are located at the beginning of the file. As records are
+**   added to the log, region 3 grows, so that the log consists of a zero
+**   byte region 2, followed by a zero byte region 1, followed by an N byte
+**   regions 3. After one or more checkpoints have been written to disk, 
+**   the start point of region 3 is moved to $O. For example:
+**
+**     A) ||.........|--3--|....
+**   
+**   (both regions 1 and 2 are 0 bytes in size at offset 0).
+**
+**   Eventually, the log wraps around to write new records into the start.
+**   At this point, region 3 is renamed to region 1. Region 1 is renamed
+**   to region 3. After appending a few records to the new region 3, the
+**   log file looks like this:
+**
+**     B) ||--3--|...|--1--|....
+**
+**   (region 2 is still 0 bytes in size, located at offset 0).
+**
+**   Any checkpoints made at this point may reduce the size of region 1.
+**   However, if they do not, and region 3 expands so that it is about to
+**   overwrite the start of region 1, then region 3 is renamed to region 2,
+**   and a new region 3 created at the end of the file following the existing
+**   region 1.
+**
+**     C) |---2---|..|--1--|.|-3-|
+**
+**   In this state records are appended to region 3 until checkpoints have
+**   contracted regions 1 and 2 until they are zero bytes in size. They are
+**   then shifted to the start of the log file, leaving the system in the
+**   equivalent of state A above.
+**
+**   Alternatively, state B may transition directly to state A if the size
+**   of region 1 is reduced to zero bytes before region 3 threatens to 
+**   encroach upon it.
 **
 ** LOG_PAD1 & LOG_PAD2 RECORDS
 **
@@ -96,6 +133,8 @@
 **   the beginning of disk sectors, which increases robustness.
 **
 ** RECORD FORMATS:
+**
+**   LOG_EOF:    * A single 0x00 byte.
 **
 **   LOG_PAD1:   * A single 0x01 byte.
 **
@@ -119,7 +158,8 @@
 **   LOG_CKSUM:  * A single 0x06 byte.
 **               * An 8-byte checksum.
 **
-**   LOG_EOF:    * A single 0x07 byte.
+**   LOG_JUMP:   * A single 0x07 byte.
+**               * Absolute file offset to jump to, encoded as a varint.
 **
 **   Varints are as described in lsm_varint.c (SQLite 4 format).
 **
