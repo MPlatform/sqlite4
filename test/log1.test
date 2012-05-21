@@ -162,7 +162,6 @@ do_execsql_test 5.1 {
   COMMIT;
 }
 
-breakpoint
 do_test 5.2 {
   sqlite4 db2 ./test.db
   execsql {
@@ -220,7 +219,51 @@ do_test 7.5 {
   execsql { SELECT count(*) FROM x } db2
 } 3
 
+#-------------------------------------------------------------------------
+#
+reset_db
+
+# 8.1-8.6: Write data to the database. Then call lsm_work() with 
+#          LSM_WORK_FLUSH specified to flush data to disk. Write to the 
+#          database some more. Then call lsm_work() with LSM_WORK_CHECKPOINT.
+#          If recovery is required at this point, everything from the start
+#          of the log file up until the point where LSM_WORK_FLUSH was invoked
+#          should be ignored.
+#
+# 8.7:     Check that the database can be recovered in its current state.
+# 
+# 8.8:     Damage the first part of the log file. Then check that the db
+#          can still be recovered. This should be possible, as the damaged
+#          part of the log file should not be read anyway.
+#
+do_execsql_test 8.1 {
+  CREATE TABLE x(a PRIMARY KEY, b);
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+}
+do_filesize_test 8.2   0 776
+do_test          8.3 { sqlite4_lsm_work db main -flush } 0
+do_execsql_test  8.4 { INSERT INTO x VALUES(randstr(10,10), randstr(100,100)) }
+do_filesize_test 8.5   16384 915
+do_test          8.6 { sqlite4_lsm_work db main -checkpoint } 0
+
+do_test 8.7 {
+  copy_db_files test.db test.db2
+  sqlite4 db2 test.db2
+  execsql { SELECT count(*) FROM x ; PRAGMA integrity_check } db2
+} {6 ok}
+
+do_test 8.8 {
+  db2 close
+  copy_db_files test.db test.db2
+  hexio_write test.db2-log 20 00000000000000
+breakpoint
+  sqlite4 db2 test.db2
+  execsql { SELECT count(*) FROM x ; PRAGMA integrity_check } db2
+} {6 ok}
 
 finish_test
-
 

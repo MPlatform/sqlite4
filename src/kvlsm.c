@@ -353,6 +353,24 @@ static int kvlsmClose(KVStore *pKVStore){
   return SQLITE_OK;
 }
 
+static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
+  int rc = SQLITE_OK;
+  KVLsm *p = (KVLsm *)pKVStore;
+
+  switch( op ){
+    case SQLITE_KVCTRL_LSM_HANDLE: {
+      KVLsm **ppOut = (KVLsm **)pArg;
+      *ppOut = p->pDb;
+      break;
+    }
+    default:
+      rc = SQLITE_NOTFOUND;
+      break;
+  }
+
+  return rc;
+}
+
 /*
 ** Create a new in-memory storage engine and return a pointer to it.
 */
@@ -379,7 +397,8 @@ int sqlite4KVStoreOpenLsm(
     kvlsmCommitPhaseTwo,
     kvlsmRollback,
     kvlsmRevert,
-    kvlsmClose
+    kvlsmClose,
+    kvlsmControl
   };
 
   KVLsm *pNew;
@@ -407,3 +426,4 @@ int sqlite4KVStoreOpenLsm(
   *ppKVStore = (KVStore*)pNew;
   return rc;
 }
+

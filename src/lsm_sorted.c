@@ -3436,14 +3436,21 @@ int lsmSortedAutoWork(lsm_db *pDb){
 int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   int rc = LSM_OK;                /* Return code */
 
-  /* If any unrecognized bits are set in the flags argument, return an
-  ** error immediately.  */
-  if( flags & ~(LSM_WORK_CHECKPOINT | LSM_WORK_OPTIMIZE) ){
-    rc = LSM_MISUSE_BKPT;
+  /* This function may not be called if pDb has an open read or write
+  ** transaction. Return LSM_MISUSE if an application attempts this.  */
+  if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
+
+  if( (flags & LSM_WORK_FLUSH) ){
+    rc = lsmBeginWriteTrans(pDb);
+    if( rc==LSM_OK ){
+      rc = lsmFlushToDisk(pDb);
+      lsmFinishWriteTrans(pDb);
+      lsmFinishReadTrans(pDb);
+    }
   }
 
-  /* If the LSM_WORK_CHECKPOINT flag is specified, run a checkpoint if
-  ** one is required. */ 
+  /* If the LSM_WORK_CHECKPOINT flag is specified and one is available,
+  ** write a checkpoint out to disk.  */
   if( rc==LSM_OK && (flags & LSM_WORK_CHECKPOINT) ){
     rc = lsmCheckpointWrite(pDb);
   }

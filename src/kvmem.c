@@ -905,6 +905,10 @@ static int kvmemClose(KVStore *pKVStore){
   return SQLITE_OK;
 }
 
+static int kvmemControl(KVStore *pKVStore, int op, void *pArg){
+  return SQLITE_NOTFOUND;
+}
+
 /* Virtual methods for the in-memory storage engine */
 static const KVStoreMethods kvmemMethods = {
   kvmemReplace,
@@ -922,7 +926,8 @@ static const KVStoreMethods kvmemMethods = {
   kvmemCommitPhaseTwo,
   kvmemRollback,
   kvmemRevert,
-  kvmemClose
+  kvmemClose,
+  kvmemControl
 };
 
 /*

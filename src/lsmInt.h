@@ -58,6 +58,7 @@ typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
 typedef struct Level Level;
 typedef struct LogMark LogMark;
+typedef struct LogRegion LogRegion;
 typedef struct LsmString LsmString;
 typedef struct Mempool Mempool;
 typedef struct MultiCursor MultiCursor;
@@ -104,6 +105,16 @@ struct IList {
 };
 
 /*
+** A string that can grow by appending.
+*/
+struct LsmString {
+  lsm_env *pEnv;              /* Run-time environment */
+  int n;                      /* Size of string.  -1 indicates error */
+  int nAlloc;                 /* Space allocated for z[] */
+  char *z;                    /* The string content */
+};
+
+/*
 ** An instance of this structure represents a point in the history of the
 ** tree structure to roll back to. Refer to comments in tree.c for details.
 **
@@ -125,6 +136,23 @@ struct LogMark {
   int nBuf;                       /* Size of in-memory buffer here */
   u32 cksum0;                     /* Checksum 0 at offset iOff */
   u32 cksum1;                     /* Checksum 1 at offset iOff */
+};
+
+/*
+** A structure that defines the start and end offsets of a region in the
+** log file. The size of the region in bytes is (iEnd - iStart), so if
+** iEnd==iStart the region is zero bytes in size.
+*/
+struct LogRegion {
+  i64 iStart;                     /* Start of region in log file */
+  i64 iEnd;                       /* End of region in log file */
+};
+
+struct DbLog {
+  u32 cksum0;                     /* Checksum 0 at offset iOff */
+  u32 cksum1;                     /* Checksum 1 at offset iOff */
+  LogRegion aRegion[3];           /* Log file regions (see docs in lsm_log.c) */
+  LsmString buf;                  /* Buffer containing data not yet written */
 };
 
 /*
@@ -228,24 +256,6 @@ struct Merge {
 struct MergeInput {
   Pgno iPg;                       /* Page on which next input is stored */
   int iCell;                      /* Cell containing next input to merge */
-};
-
-
-/*
-** A string that can grow by appending.
-*/
-struct LsmString {
-  lsm_env *pEnv;              /* Run-time environment */
-  int n;                      /* Size of string.  -1 indicates error */
-  int nAlloc;                 /* Space allocated for z[] */
-  char *z;                    /* The string content */
-};
-
-struct DbLog {
-  i64 iOff;                       /* Current offset in log file */
-  u32 cksum0;                     /* Checksum 0 at offset iOff */
-  u32 cksum1;                     /* Checksum 1 at offset iOff */
-  LsmString buf;                  /* Buffer containing data not yet written */
 };
 
 /* 

@@ -1966,6 +1966,39 @@ int sqlite4_sleep(int ms){
   return rc;
 }
 
+/*
+** Invoke the xFileControl method on a particular database.
+*/
+int sqlite4_kvstore_control(
+  sqlite4 *db,                    /* Database handle */
+  const char *zDbName,            /* Name of database backend ("main" etc.) */
+  int op,                         /* First argument to pass to xControl() */
+  void *pArg                      /* Second argument to pass to xControl() */
+){
+  int rc = SQLITE_ERROR;
+  KVStore *pKV = 0;
+  int i;
+
+  sqlite4_mutex_enter(db->mutex);
+
+  /* Find the named key-value store */
+  for(i=0; i<db->nDb; i++){
+    Db *pDb = &db->aDb[i];
+    if( pDb->pKV && (0==zDbName || 0==sqlite4StrICmp(zDbName, pDb->zName)) ){
+      pKV = pDb->pKV;
+      break;
+    }
+  }
+
+  /* If the named key-value store was located, invoke its xControl() method. */
+  if( pKV ){
+    rc = pKV->pStoreVfunc->xControl(pKV, op, pArg);
+  }
+
+  sqlite4_mutex_leave(db->mutex);
+  return rc;   
+}
+
 
 /*
 ** Interface to the testing logic.

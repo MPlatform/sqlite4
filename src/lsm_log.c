@@ -80,50 +80,50 @@
 **   any data that occurs before offset $O.
 **
 **   This implementation separates the log into three regions mapped into
-**   the log file - regions 1, 2 and 3. During recovery, regions are read
-**   in ascending order (i.e. 1, then 2, then 3). Each region is zero or
-**   more bytes in size. Regions occur in the file in the order 2, 1, 3.
+**   the log file - regions 0, 1 and 2. During recovery, regions are read
+**   in ascending order (i.e. 0, then 1, then 2). Each region is zero or
+**   more bytes in size. Regions occur in the file in the order 1, 0, 2.
 **   For example:
 **
-**     |---2---|..|--1--|.|--3--|....
+**     |---1---|..|--0--|.|--2--|....
 **
-**   New records are always appended to region 3.
+**   New records are always appended to the end of region 2.
 **
 **   Initially (when it is empty), all three regions are zero bytes in size.
 **   Each of them are located at the beginning of the file. As records are
-**   added to the log, region 3 grows, so that the log consists of a zero
-**   byte region 2, followed by a zero byte region 1, followed by an N byte
-**   regions 3. After one or more checkpoints have been written to disk, 
-**   the start point of region 3 is moved to $O. For example:
+**   added to the log, region 2 grows, so that the log consists of a zero
+**   byte region 1, followed by a zero byte region 0, followed by an N byte
+**   region 2. After one or more checkpoints have been written to disk, 
+**   the start point of region 2 is moved to $O. For example:
 **
-**     A) ||.........|--3--|....
+**     A) ||.........|--2--|....
 **   
-**   (both regions 1 and 2 are 0 bytes in size at offset 0).
+**   (both regions 0 and 1 are 0 bytes in size at offset 0).
 **
 **   Eventually, the log wraps around to write new records into the start.
-**   At this point, region 3 is renamed to region 1. Region 1 is renamed
-**   to region 3. After appending a few records to the new region 3, the
+**   At this point, region 2 is renamed to region 0. Region 0 is renamed
+**   to region 2. After appending a few records to the new region 2, the
 **   log file looks like this:
 **
-**     B) ||--3--|...|--1--|....
+**     B) ||--2--|...|--0--|....
 **
-**   (region 2 is still 0 bytes in size, located at offset 0).
+**   (region 1 is still 0 bytes in size, located at offset 0).
 **
-**   Any checkpoints made at this point may reduce the size of region 1.
-**   However, if they do not, and region 3 expands so that it is about to
-**   overwrite the start of region 1, then region 3 is renamed to region 2,
-**   and a new region 3 created at the end of the file following the existing
-**   region 1.
+**   Any checkpoints made at this point may reduce the size of region 0.
+**   However, if they do not, and region 2 expands so that it is about to
+**   overwrite the start of region 0, then region 2 is renamed to region 1,
+**   and a new region 2 created at the end of the file following the existing
+**   region 0.
 **
-**     C) |---2---|..|--1--|.|-3-|
+**     C) |---1---|..|--0--|.|-2-|
 **
-**   In this state records are appended to region 3 until checkpoints have
-**   contracted regions 1 and 2 until they are zero bytes in size. They are
-**   then shifted to the start of the log file, leaving the system in the
-**   equivalent of state A above.
+**   In this state records are appended to region 2 until checkpoints have
+**   contracted regions 0 and 1 until they are both zero bytes in size. They 
+**   are then shifted to the start of the log file, leaving the system in 
+**   the equivalent of state A above.
 **
 **   Alternatively, state B may transition directly to state A if the size
-**   of region 1 is reduced to zero bytes before region 3 threatens to 
+**   of region 0 is reduced to zero bytes before region 2 threatens to 
 **   encroach upon it.
 **
 ** LOG_PAD1 & LOG_PAD2 RECORDS
@@ -302,6 +302,7 @@ void logCksumUnaligned(
 ** or COMMIT record, depending on the value of parameter eType.
 */
 static int logFlush(lsm_db *pDb, int eType){
+  i64 iOff;                       /* Absolute log file offset to write to */
   int rc;
   DbLog *pLog = lsmDatabaseLog(pDb);
   
@@ -322,21 +323,17 @@ static int logFlush(lsm_db *pDb, int eType){
   logCksumUnaligned(pLog->buf.z, pLog->buf.n, &pLog->cksum0, &pLog->cksum1);
 #endif
 
-#if 0
-  static int iCksum = 0;
-printf("%d write type %d (%x %x)\n", ++iCksum, eType, pLog->cksum0, pLog->cksum1);
-fflush(stdout);
-#endif
-
   lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum0);
   pLog->buf.n += 4;
   lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum1);
   pLog->buf.n += 4;
 
   /* Write the contents of the buffer to disk. */
-  rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
-  pLog->iOff += pLog->buf.n;
+  iOff = pLog->aRegion[2].iEnd;
+  rc = lsmFsWriteLog(pDb->pFS, iOff, &pLog->buf);
+  iOff += pLog->buf.n;
   pLog->buf.n = 0;
+  pLog->aRegion[2].iEnd = iOff;
 
   /* If this is a commit and synchronous=full, sync the log to disk. */
   if( rc==LSM_OK && eType==LSM_LOG_COMMIT && pDb->eSafety==LSM_SAFETY_FULL ){
@@ -356,11 +353,6 @@ int lsmLogWrite(
 ){
   int rc = LSM_OK;
   DbLog *pLog;                    /* Log object to write to */
-
-#if 0
-printf("write type %d\n", LSM_LOG_WRITE);
-fflush(stdout);
-#endif
 
   pLog = lsmDatabaseLog(pDb);
   if( pLog ){
@@ -402,7 +394,7 @@ void lsmLogTell(
   LogMark *pMark                  /* Populate this object with current offset */
 ){
   DbLog *pLog = lsmDatabaseLog(pDb);
-  pMark->iOff = pLog->iOff;
+  pMark->iOff = pLog->aRegion[2].iEnd;
   pMark->nBuf = pLog->buf.n;
   pMark->cksum0 = pLog->cksum0;
   pMark->cksum1 = pLog->cksum1;
@@ -412,7 +404,8 @@ int lsmLogSeek(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Object containing log offset to seek to */
 ){
-  int rc;                         /* This functions return code */
+  int rc = LSM_OK;                /* This functions return code */
+#if 0
   DbLog *pLog = lsmDatabaseLog(pDb);
 
   assert( pLog );
@@ -421,7 +414,6 @@ int lsmLogSeek(
 
   if( pLog->iOff==pMark->iOff ){
     pLog->buf.n = pMark->nBuf;
-    rc = LSM_OK;
   }else{
     pLog->iOff = pMark->iOff;
     pLog->cksum0 = pMark->cksum0;
@@ -429,6 +421,7 @@ int lsmLogSeek(
     pLog->buf.n = 0;
     rc = lsmFsReadLog(pDb->pFS, pLog->iOff, pMark->nBuf, &pLog->buf);
   }
+#endif
 
   return rc;
 }
@@ -541,21 +534,25 @@ static void logReaderCksum(LogReader *p, LsmString *pBuf, int *pbOk){
   /* Read the checksums from the log file. Set *pbOk if they match. */
   cksum0 = lsmGetU32(pPtr);
   cksum1 = lsmGetU32(&pPtr[4]);
-#if 0
-  printf("Expecting (%x %x) have (%x %x)\n", p->cksum0,p->cksum1,cksum0,cksum1);
-  fflush(stdout);
-#endif
 
   *pbOk = (cksum0==p->cksum0 && cksum1==p->cksum1);
   p->iCksumBuf = p->iBuf;
 }
 
-static void logReaderInit(lsm_db *pDb, LogReader *p){
-  memset(p, 0, sizeof(LogReader));
+static void logReaderInit(
+  lsm_db *pDb,                    /* Database handle */
+  DbLog *pLog,                    /* Log object associated with pDb */
+  int bInitBuf,                   /* True if p->buf is uninitialized */
+  LogReader *p                    /* Initialize this LogReader object */
+){
   p->pFS = pDb->pFS;
-  lsmStringInit(&p->buf, pDb->pEnv);
-  p->cksum0 = LSM_CKSUM0_INIT;
-  p->cksum1 = LSM_CKSUM1_INIT;
+  p->iOff = pLog->aRegion[2].iEnd;
+  p->cksum0 = pLog->cksum0;
+  p->cksum1 = pLog->cksum1;
+  if( bInitBuf ){ lsmStringInit(&p->buf, pDb->pEnv); }
+  p->buf.n = 0;
+  p->iCksumBuf = 0;
+  p->iBuf = 0;
 }
 
 
@@ -574,7 +571,8 @@ int lsmLogRecover(lsm_db *pDb){
   rc = lsmBeginRecovery(pDb);
   if( rc!=LSM_OK ) return rc;
 
-  logReaderInit(pDb, &reader);
+  pLog = lsmDatabaseLog(pDb);
+  logReaderInit(pDb, pLog, 1, &reader);
   lsmStringInit(&buf1, pDb->pEnv);
   lsmStringInit(&buf2, pDb->pEnv);
 
@@ -588,11 +586,6 @@ int lsmLogRecover(lsm_db *pDb){
     while( rc==LSM_OK && !bEof ){
       u8 eType;
       rc = logReaderByte(&reader, &eType);
-#if 0
-static int iRead = 0;
-      printf("iPass=%d %d read type %d\n", iPass, ++iRead, (int)eType);
-fflush(stdout);
-#endif
 
       switch( eType ){
         case LSM_LOG_PAD1:
@@ -647,20 +640,14 @@ fflush(stdout);
     }
 
     if( iPass==0 ){
-      reader.iOff = 0;
-      reader.iBuf = 0;
-      reader.buf.n = 0;
-      reader.cksum0 = LSM_CKSUM0_INIT;
-      reader.cksum1 = LSM_CKSUM1_INIT;
-      reader.iCksumBuf = 0;
+      logReaderInit(pDb, pLog, 0, &reader);
       if( nCommit==0 ) break;
       nCommit = nCommit * -1;
     }
   }
 
   /* Initialize DbLog object */
-  pLog = lsmDatabaseLog(pDb);
-  pLog->iOff = reader.iOff - reader.buf.n + reader.iBuf;
+  pLog->aRegion[2].iEnd = reader.iOff - reader.buf.n + reader.iBuf;
   pLog->cksum0 = reader.cksum0;
   pLog->cksum1 = reader.cksum1;
 

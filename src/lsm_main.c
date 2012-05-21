@@ -214,8 +214,9 @@ int lsmFlushToDisk(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
   lsm_cursor *pCsr;               /* Used to iterate through open cursors */
 
-  /* Must hold the worker snapshot to do this. */
-  assert( pDb->pWorker );
+  /* Must not hold the worker snapshot when this is called. */
+  assert( pDb->pWorker==0 );
+  dbWorkerStart(pDb);
 
   /* Save the position of each open cursor belonging to pDb. */
   for(pCsr=pDb->pCsr; rc==LSM_OK && pCsr; pCsr=pCsr->pNext){
@@ -241,6 +242,7 @@ int lsmFlushToDisk(lsm_db *pDb){
   if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "flush");
 #endif
 
+  dbWorkerDone(pDb);
   return rc;
 }
 
@@ -682,9 +684,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
         rc = lsmFsLogSync(pDb->pFS);
       }
       if( rc==LSM_OK && pDb->pTV && lsmTreeSize(pDb->pTV)>pDb->nTreeLimit ){
-        dbWorkerStart(pDb);
         rc = lsmFlushToDisk(pDb);
-        dbWorkerDone(pDb);
       }
       lsmFinishWriteTrans(pDb);
     }

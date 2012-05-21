@@ -226,6 +226,14 @@ static int kvwrapClose(KVStore *pKVStore){
   return rc;
 }
 
+/*
+** Invoke the xControl() method of the underlying KVStore object.
+*/
+static int kvwrapControl(KVStore *pKVStore, int op, void *pArg){
+  KVWrap *p = (KVWrap *)pKVStore;
+  return p->pReal->pStoreVfunc->xControl(p->pReal, op, pArg);
+}
+
 static int newFileStorage(
   KVStore **ppKVStore,
   const char *zName,
@@ -249,7 +257,8 @@ static int newFileStorage(
     kvwrapCommitPhaseTwo,
     kvwrapRollback,
     kvwrapRevert,
-    kvwrapClose
+    kvwrapClose,
+    kvwrapControl
   };
 
   KVWrap *pNew;

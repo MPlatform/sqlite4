@@ -211,6 +211,7 @@ TESTSRC = \
   $(TOP)/test/test_fuzzer.c \
   $(TOP)/test/test_hexio.c \
   $(TOP)/test/test_intarray.c \
+  $(TOP)/test/test_lsm.c \
   $(TOP)/test/test_malloc.c \
   $(TOP)/test/test_mutex.c \
   $(TOP)/test/test_onefile.c \

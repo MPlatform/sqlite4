@@ -225,9 +225,10 @@ static void ckptExportSegment(
 */
 static void ckptExportLog(DbLog *pLog, CkptBuffer *p, int *piOut, int *pRc){
   int iOut = *piOut;
+  i64 iOff = pLog->aRegion[2].iEnd;
 
-  ckptSetValue(p, iOut++, (pLog->iOff >> 32) & 0xFFFFFFFF, pRc);
-  ckptSetValue(p, iOut++, (pLog->iOff & 0xFFFFFFFF), pRc);
+  ckptSetValue(p, iOut++, (iOff >> 32) & 0xFFFFFFFF, pRc);
+  ckptSetValue(p, iOut++, (iOff & 0xFFFFFFFF), pRc);
   ckptSetValue(p, iOut++, pLog->cksum0, pRc);
   ckptSetValue(p, iOut++, pLog->cksum1, pRc);
 
@@ -240,7 +241,8 @@ static void ckptExportLog(DbLog *pLog, CkptBuffer *p, int *piOut, int *pRc){
 static void ckptImportLog(u32 *aIn, int *piIn, DbLog *pLog){
   int iIn = *piIn;
 
-  pLog->iOff = (((i64)aIn[iIn]) << 32) + (i64)aIn[iIn+1];
+  /* TODO: Look at this again after updating lsmLogRecover() */
+  pLog->aRegion[2].iEnd = (((i64)aIn[iIn]) << 32) + (i64)aIn[iIn+1];
   pLog->cksum0 = aIn[iIn+2];
   pLog->cksum1 = aIn[iIn+3];
 

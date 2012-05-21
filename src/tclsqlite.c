@@ -2989,6 +2989,7 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitetestwholenumber_Init(Tcl_Interp*);
     extern int Sqliteteststorage_Init(Tcl_Interp*);
     extern int Sqliteteststorage2_Init(Tcl_Interp*);
+    extern int SqlitetestLsm_Init(Tcl_Interp*);
 
 #if defined(SQLITE_ENABLE_FTS3) || defined(SQLITE_ENABLE_FTS4)
     extern int Sqlitetestfts3_Init(Tcl_Interp *interp);
@@ -3019,6 +3020,7 @@ static void init_all(Tcl_Interp *interp){
     Sqlitetestwholenumber_Init(interp);
     Sqliteteststorage_Init(interp);
     Sqliteteststorage2_Init(interp);
+    SqlitetestLsm_Init(interp);
 
 #if defined(SQLITE_ENABLE_FTS3) || defined(SQLITE_ENABLE_FTS4)
     Sqlitetestfts3_Init(interp);

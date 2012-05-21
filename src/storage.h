@@ -153,6 +153,7 @@ struct KVStoreMethods {
   int (*xRollback)(KVStore*, int);
   int (*xRevert)(KVStore*, int);
   int (*xClose)(KVStore*);
+  int (*xControl)(KVStore*, int, void *);
 };
 struct KVStore {
   const KVStoreMethods *pStoreVfunc;    /* Virtual method table */

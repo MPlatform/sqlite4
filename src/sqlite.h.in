@@ -4778,38 +4778,31 @@ int sqlite4_mutex_notheld(sqlite4_mutex*);
 sqlite4_mutex *sqlite4_db_mutex(sqlite4*);
 
 /*
-** CAPIREF: Low-Level Control Of Database Files
+** CAPIREF: Low-Level Control Of Database Backends
 **
-** ^The [sqlite4_file_control()] interface makes a direct call to the
-** xFileControl method for the [sqlite4_io_methods] object associated
-** with a particular database identified by the second argument. ^The
-** name of the database is "main" for the main database or "temp" for the
-** TEMP database, or the name that appears after the AS keyword for
-** databases that are added using the [ATTACH] SQL command.
-** ^A NULL pointer can be used in place of "main" to refer to the
-** main database file.
-** ^The third and fourth parameters to this routine
-** are passed directly through to the second and third parameters of
-** the xFileControl method.  ^The return value of the xFileControl
-** method becomes the return value of this routine.
+** ^The [sqlite4_kvstore_control()] interface makes a direct call to the
+** xControl method of the key-value store associated with the particular 
+** database identified by the second argument. ^The name of the database 
+** is "main" for the main database or "temp" for the TEMP database, or the 
+** name that appears after the AS keyword for databases that were added 
+** using the [ATTACH] SQL command. ^A NULL pointer can be used in place 
+** of "main" to refer to the main database file.
 **
-** ^The SQLITE_FCNTL_FILE_POINTER value for the op parameter causes
-** a pointer to the underlying [sqlite4_file] object to be written into
-** the space pointed to by the 4th parameter.  ^The SQLITE_FCNTL_FILE_POINTER
-** case is a short-circuit path which does not actually invoke the
-** underlying sqlite4_io_methods.xFileControl method.
+** ^The third and fourth parameters to this routine are passed directly 
+** through to the second and third parameters of the KVStoreMethods.xControl 
+** method. ^The return value of the xControl call becomes the return value 
+** of this routine.
 **
 ** ^If the second parameter (zDbName) does not match the name of any
 ** open database file, then SQLITE_ERROR is returned.  ^This error
 ** code is not remembered and will not be recalled by [sqlite4_errcode()]
-** or [sqlite4_errmsg()].  The underlying xFileControl method might
-** also return SQLITE_ERROR.  There is no way to distinguish between
-** an incorrect zDbName and an SQLITE_ERROR return from the underlying
-** xFileControl method.
-**
-** See also: [SQLITE_FCNTL_LOCKSTATE]
+** or [sqlite4_errmsg()]. The underlying xControl method might also return 
+** SQLITE_ERROR. There is no way to distinguish between an incorrect zDbName 
+** and an SQLITE_ERROR return from the underlying xControl method.
 */
-int sqlite4_file_control(sqlite4*, const char *zDbName, int op, void*);
+int sqlite4_kvstore_control(sqlite4*, const char *zDbName, int op, void*);
+
+#define SQLITE_KVCTRL_LSM_HANDLE   1
 
 /*
 ** CAPIREF: Testing Interface

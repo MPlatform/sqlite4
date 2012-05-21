@@ -425,10 +425,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       ** checkpoint (serialization) of this snapshot may be written to disk
       ** by the following block.  */
       if( p->bDirty || 0==lsmTreeIsEmpty(p->pTree) ){
-        pDb->pWorker = lsmDbSnapshotWorker(p);
         rc = lsmFlushToDisk(pDb);
-        lsmDbSnapshotRelease(pDb->pWorker);
-        pDb->pWorker = 0;
       }
 
       /* Write a checkpoint, also if required */

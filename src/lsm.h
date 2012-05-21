@@ -284,19 +284,29 @@ int lsm_delete(lsm_db *pDb, void *pKey, int nKey);
 
 /*
 ** This function is called by a thread to work on the database structure.
-** Work performed within this function takes two forms:
+** The actual operations performed by this function depend on the value 
+** passed as the "flags" parameter:
 **
-**   * Checkpointing, and
-**   * Merging.
+** LSM_WORK_FLUSH:
+**   Attempt to flush the contents of the in-memory tree to disk.
 **
-** TODO: Describe the flags and arguments.
+** LSM_WORK_CHECKPOINT:
+**   Write a checkpoint (if one exists in memory) to the database file.
 **
-** TODO: Define the auto-work algorithm somewhere.
+** LSM_WORK_MERGE:
+**   Merge two or more existing runs together. Paramter nPage is used as
+**   an approximate limit to the number of database pages written to disk 
+**   before the lsm_work() call returns.
+**
+** LSM_WORK_OPTIMIZE:
+**   This flag is only regcognized if LSM_WORK_MERGE is also set.
 */
 int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite);
 
-#define LSM_WORK_CHECKPOINT      0x00000001
-#define LSM_WORK_OPTIMIZE        0x00000002
+#define LSM_WORK_FLUSH           0x00000001
+#define LSM_WORK_CHECKPOINT      0x00000002
+#define LSM_WORK_MERGE           0x00000004
+#define LSM_WORK_OPTIMIZE        0x00000008
 
 /* 
 ** Open and close a database cursor.
