@@ -489,7 +489,7 @@ static void xMt1Delay(void *pCtx){
 static void xMt1Work(lsm_db *pDb, void *pCtx){
 #if 0
   char *z = 0;
-  lsm_info(pDb, LSM_INFO_STRUCTLIST, &z);
+  lsm_info(pDb, LSM_INFO_DB_STRUCTURE, &z);
   printf("%s\n", z);
   fflush(stdout);
 #endif

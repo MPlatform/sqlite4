@@ -1001,9 +1001,22 @@ int lsmCheckpointWrite(lsm_db *pDb){
       ** written is on the disk.  */
       if( rc==LSM_OK && doSync ) rc = lsmFsDbSync(pFS);
 
-      /* Update the "last checkpointed snapshot" field on the Database object.
-      ** Grab the worker mutex while doing so.
+      /* This is where space on disk is reclaimed. Now that the checkpoint 
+      ** has been written to the database and synced, part of the database
+      ** log (the part containing the data just synced to disk) is no longer
+      ** required and so the space that it was taking up on disk can be 
+      ** reused.
+      **
+      ** It is also possible that database file blocks may be made available
+      ** for reuse here. A database file block is free if it is not used by
+      ** the most recently checkpointed snapshot, or by a snapshot that is 
+      ** in use by any existing database client. And "the most recently
+      ** checkpointed snapshot" has just changed.
       */
+      if( rc==LSM_OK ){
+        lsm_i64 iOff = lsmCheckpointLogOffset(pSnap->pExport);
+        lsmLogCheckpoint(pDb, iOff);
+      }
       if( rc==LSM_OK ){
         lsmMutexEnter(p->pEnv, p->pWorkerMutex);
         p->iCheckpointId = pSnap->iId;

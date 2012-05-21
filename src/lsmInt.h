@@ -271,16 +271,17 @@ struct MergeInput {
 #define LSM_FREELIST_DELTA_SIZE 3
 
 /* 
-** Functions from file "checkpoint.c".
+** Functions from file "lsm_ckpt.c".
 */
 int lsmCheckpointRead(lsm_db *);
 int lsmCheckpointWrite(lsm_db *);
 int lsmCheckpointExport(lsm_db *, i64, int, void **, int *);
 void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
+lsm_i64 lsmCheckpointLogOffset(void *pExport);
 
 
 /* 
-** Functions from file "tree.c".
+** Functions from file "lsm_tree.c".
 */
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeDestroy(Tree *pTree);
@@ -492,13 +493,14 @@ void lsmLogMessage(lsm_db *, int, const char *, ...);
 int lsmFlushToDisk(lsm_db *);
 
 /*
-** Functions from file "log.c".
+** Functions from file "lsm_log.c".
 */
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
 void lsmLogTell(lsm_db *, LogMark *);
 int lsmLogSeek(lsm_db *, LogMark *);
 int lsmLogRecover(lsm_db *);
+int lsmLogCheckpoint(lsm_db *, lsm_i64);
 
 
 /**************************************************************************

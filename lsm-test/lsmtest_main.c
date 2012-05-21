@@ -901,7 +901,7 @@ static int do_writer_test(int nArg, char **azArg){
 
 static void do_insert_work_hook(lsm_db *db, void *p){
   char *z = 0;
-  lsm_info(db, LSM_INFO_STRUCTLIST, &z);
+  lsm_info(db, LSM_INFO_DB_STRUCTURE, &z);
   if( z ){
     printf("%s\n", z);
     fflush(stdout);

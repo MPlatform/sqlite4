@@ -242,11 +242,20 @@ static void ckptImportLog(u32 *aIn, int *piIn, DbLog *pLog){
   int iIn = *piIn;
 
   /* TODO: Look at this again after updating lsmLogRecover() */
-  pLog->aRegion[2].iEnd = (((i64)aIn[iIn]) << 32) + (i64)aIn[iIn+1];
+  pLog->aRegion[2].iStart = (((i64)aIn[iIn]) << 32) + (i64)aIn[iIn+1];
   pLog->cksum0 = aIn[iIn+2];
   pLog->cksum1 = aIn[iIn+3];
 
   *piIn = iIn+4;
+}
+
+lsm_i64 lsmCheckpointLogOffset(void *pExport){
+  u8 *aIn = (u8 *)pExport;
+  u32 i1;
+  u32 i2;
+  i1 = lsmGetU32(&aIn[CKPT_HDRSIZE*4]);
+  i2 = lsmGetU32(&aIn[CKPT_HDRSIZE*4+4]);
+  return (((i64)i1) << 32) + (i64)i2;
 }
 
 

@@ -218,6 +218,7 @@ do_test 7.5 {
   sqlite4 db2 test.db2
   execsql { SELECT count(*) FROM x } db2
 } 3
+catch { db2 close }
 
 #-------------------------------------------------------------------------
 #
@@ -260,10 +261,75 @@ do_test 8.8 {
   db2 close
   copy_db_files test.db test.db2
   hexio_write test.db2-log 20 00000000000000
-breakpoint
   sqlite4 db2 test.db2
   execsql { SELECT count(*) FROM x ; PRAGMA integrity_check } db2
 } {6 ok}
+catch { db2 close }
+
+#-------------------------------------------------------------------------
+#
+# 9.1-9.3: Write some data to the db. Then disconnect so that the log file
+#          is truncated to zero bytes in size.
+#
+# 9.4-9.5: Open the db and write a small amount of data to it. Check that
+#          the new records are written into the start of the log file (not
+#          to the offset that was the end of the log file before it was
+#          truncated).
+#
+# 9.6:     Check that recovery can be run on a db in the state produced
+#          by test case 9.5.
+#
+reset_db
+do_execsql_test 9.1 {
+  CREATE TABLE x(a PRIMARY KEY, b);
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
+}
+do_filesize_test 9.2   0 776
+db close
+do_filesize_test 9.3   16384 0
+
+sqlite4 db ./test.db
+do_execsql_test  9.4 { INSERT INTO x VALUES(randstr(10,10), randstr(100,100)) }
+do_filesize_test 9.5   16384 139
+
+do_test 9.6 {
+  copy_db_files test.db test.db2
+  sqlite4 db2 ./test.db2
+  execsql { SELECT count(*) FROM x ; PRAGMA integrity_check } db2
+} {6 ok}
+
+catch { db2 close }
+
+#-------------------------------------------------------------------------
+#
+reset_db
+do_execsql_test 10.1 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+do_test 10.2 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 223}
+do_test 10.3 { db close ; sqlite4 db test.db } {}
+do_test 10.4 { sqlite4_lsm_info db main db-structure } {{{1 1}}}
+do_test 10.5 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 0}
+
+do_execsql_test 10.6 {
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+do_test 10.7 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 556}
+do_test 10.8 { sqlite4_lsm_work db main -flush } 0
+do_execsql_test 10.9 {
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+do_test 10.9  { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 695}
+do_test 10.10 { sqlite4_lsm_work db main -checkpoint } 0
+do_test 10.11 { sqlite4_lsm_info db main log-structure } {0 0 0 0 556 695}
 
 finish_test
 

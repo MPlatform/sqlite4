@@ -214,7 +214,7 @@ int lsm_info(lsm_db *, int, ...);
 **     The returned array should eventually be freed by the caller using
 **     lsm_free().  
 **
-**   LSM_INFO_STRUCTLIST
+**   LSM_INFO_DB_STRUCTURE
 **     The third argument should be of type (char **). The location pointed
 **     to is populated with a pointer to a nul-terminated string containing
 **     the string representation of a Tcl data-structure reflecting the 
@@ -229,12 +229,21 @@ int lsm_info(lsm_db *, int, ...);
 **
 **   LSM_INFO_BLOCKLIST
 **
+**   LSM_INFO_LOG_STRUCTURE
+**     The third argument should be of type (char **). The location pointed
+**     to is populated with a pointer to a nul-terminated string containing
+**     the string representation of a Tcl data-structure. The returned 
+**     string should be eventually freed by the caller using lsm_free().
+**
+**     The Tcl structure returned is a list of six integers that describe
+**     the current structure of the log file.
 */
-#define LSM_INFO_NWRITE       1
-#define LSM_INFO_NREAD        2
-#define LSM_INFO_CKPT         3
-#define LSM_INFO_BLOCKLIST    4
-#define LSM_INFO_STRUCTLIST   5
+#define LSM_INFO_NWRITE         1
+#define LSM_INFO_NREAD          2
+#define LSM_INFO_CKPT           3
+#define LSM_INFO_BLOCKLIST      4
+#define LSM_INFO_DB_STRUCTURE   5
+#define LSM_INFO_LOG_STRUCTURE  6
 
 
 /* 

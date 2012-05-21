@@ -188,6 +188,32 @@
 ** See s4_varint.c.
 */
 
+/*
+** THREAD SAFETY NOTES
+**
+** The DbLog object that the functions in this file operate on is shared by
+** multiple database connections. Access to the DbLog object associated with
+** a database is required in the following scenarios:
+**
+**   * During recovery. The DbLog object is initialized during database 
+**     recovery. Since while recovery is running there may be no other 
+**     database users of any type, this is not much of a concern.
+**
+**   * By writers. Records are appended to the log file and the DbLog 
+**     object updated as a result of calls to lsm_write()/delete()/commit()
+**     etc.
+**
+**     Also when creating a new snapshot (after flushing the contents of
+**     the in-memory tree to disk).
+**
+**   * By checkpointers. After a checkpoint is written to the database file,
+**     the DbLog object must be updated.
+**
+**   * For LSM_INFO_LOG_STRUCTURE requests.
+**
+** TODO: Come back to this.
+*/
+
 
 #ifndef _LSM_INT_H
 # include "lsmInt.h"
@@ -426,6 +452,38 @@ int lsmLogSeek(
   return rc;
 }
 
+/*
+** TODO: Thread safety of this function?
+*/
+int lsmLogStructure(lsm_db *pDb, char **pzVal){
+  DbLog *pLog = lsmDatabaseLog(pDb);
+  *pzVal = lsmMallocPrintf(pDb->pEnv, 
+      "%d %d %d %d %d %d", 
+      (int)pLog->aRegion[0].iStart, (int)pLog->aRegion[0].iEnd,
+      (int)pLog->aRegion[1].iStart, (int)pLog->aRegion[1].iEnd,
+      (int)pLog->aRegion[2].iStart, (int)pLog->aRegion[2].iEnd
+  );
+  return (*pzVal ? LSM_OK : LSM_NOMEM_BKPT);
+}
+
+/*
+** This function is called after a checkpoint is synced into the database
+** file. The checkpoint specifies that the log starts at offset iOff.
+*/ 
+int lsmLogCheckpoint(lsm_db *pDb, lsm_i64 iOff){
+  DbLog *pLog = lsmDatabaseLog(pDb);
+  int iRegion;
+
+  for(iRegion=0; iRegion<3; iRegion++){
+    LogRegion *p = &pLog->aRegion[iRegion];
+    if( iOff>=p->iStart && iOff<=p->iEnd ) break;
+  }
+  assert( iRegion<3 );
+
+  pLog->aRegion[iRegion].iStart = iOff;
+
+  return LSM_OK;
+}
 
 /*************************************************************************
 ** Begin code for log recovery.
@@ -546,7 +604,7 @@ static void logReaderInit(
   LogReader *p                    /* Initialize this LogReader object */
 ){
   p->pFS = pDb->pFS;
-  p->iOff = pLog->aRegion[2].iEnd;
+  p->iOff = pLog->aRegion[2].iStart;
   p->cksum0 = pLog->cksum0;
   p->cksum1 = pLog->cksum1;
   if( bInitBuf ){ lsmStringInit(&p->buf, pDb->pEnv); }
@@ -640,8 +698,15 @@ int lsmLogRecover(lsm_db *pDb){
     }
 
     if( iPass==0 ){
+      if( nCommit==0 ){
+        if( pLog->aRegion[2].iStart==0 ){
+          iPass = 1;
+        }else{
+          pLog->aRegion[2].iStart = 0;
+          iPass = -1;
+        }
+      }
       logReaderInit(pDb, pLog, 0, &reader);
-      if( nCommit==0 ) break;
       nCommit = nCommit * -1;
     }
   }
@@ -650,6 +715,7 @@ int lsmLogRecover(lsm_db *pDb){
   pLog->aRegion[2].iEnd = reader.iOff - reader.buf.n + reader.iBuf;
   pLog->cksum0 = reader.cksum0;
   pLog->cksum1 = reader.cksum1;
+  assert( pLog->aRegion[2].iEnd >= pLog->aRegion[2].iStart );
 
   lsmFinishRecovery(pDb);
   lsmStringClear(&buf1);

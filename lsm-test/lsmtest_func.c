@@ -372,7 +372,7 @@ int do_show(int nArg, char **azArg){
   if( rc==LSM_OK ){
     if( bList ){
       char *zList = 0;
-      rc = lsm_info(pDb, LSM_INFO_STRUCTLIST, &zList);
+      rc = lsm_info(pDb, LSM_INFO_DB_STRUCTURE, &zList);
       assert( rc==LSM_OK );
       printf("List: %s\n", zList);
       fflush(stdout);
@@ -383,7 +383,7 @@ int do_show(int nArg, char **azArg){
     }
     if( bStructure ){
       char *z = 0;
-      lsm_info(pDb, LSM_INFO_STRUCTLIST, &z);
+      lsm_info(pDb, LSM_INFO_DB_STRUCTURE, &z);
       if( z ){
         printf("%s\n", z);
         lsm_free(lsm_get_env(pDb), z);

@@ -404,9 +404,15 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       break;
     }
 
-    case LSM_INFO_STRUCTLIST: {
+    case LSM_INFO_DB_STRUCTURE: {
       char **pzVal = va_arg(ap, char **);
       rc = lsmStructList(pDb, pzVal);
+      break;
+    }
+
+    case LSM_INFO_LOG_STRUCTURE: {
+      char **pzVal = va_arg(ap, char **);
+      rc = lsmLogStructure(pDb, pzVal);
       break;
     }
 
