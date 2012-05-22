@@ -1015,8 +1015,11 @@ int lsmCheckpointWrite(lsm_db *pDb){
       */
       if( rc==LSM_OK ){
         lsm_i64 iOff = lsmCheckpointLogOffset(pSnap->pExport);
-        lsmLogCheckpoint(pDb, iOff);
+        lsmMutexEnter(p->pEnv, p->pClientMutex);
+        lsmLogCheckpoint(pDb, &p->log, iOff);
+        lsmMutexLeave(p->pEnv, p->pClientMutex);
       }
+
       if( rc==LSM_OK ){
         lsmMutexEnter(p->pEnv, p->pWorkerMutex);
         p->iCheckpointId = pSnap->iId;
@@ -1181,6 +1184,8 @@ int lsmBeginWriteTrans(lsm_db *pDb){
     rc = LSM_BUSY;
   }
 
+  if( rc==LSM_OK ) rc = lsmLogBegin(pDb, &p->log);
+
   lsmMutexLeave(p->pEnv, p->pClientMutex);
   return rc;
 }
@@ -1198,7 +1203,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 **
 ** LSM_OK is returned if successful, or an LSM error code otherwise.
 */
-int lsmFinishWriteTrans(lsm_db *pDb){
+int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   Database *p = pDb->pDatabase;
   lsmMutexEnter(p->pEnv, p->pClientMutex);
 
@@ -1207,7 +1212,8 @@ int lsmFinishWriteTrans(lsm_db *pDb){
   p->bWriter = 0;
   lsmTreeReleaseWriteVersion(pDb->pTV, &pDb->pTV);
   lsmSortedFixTreeVersions(pDb);
-  
+
+  lsmLogEnd(pDb, &p->log, bCommit);
   lsmMutexLeave(p->pEnv, p->pClientMutex);
   return LSM_OK;
 }
@@ -1285,4 +1291,14 @@ DbLog *lsmDatabaseLog(lsm_db *pDb){
   Database *p = pDb->pDatabase;
   return &p->log;
 }
+
+/*
+** Return non-zero if the caller is holding the client mutex.
+*/
+#ifdef LSM_DEBUG
+int lsmHoldingClientMutex(lsm_db *pDb){
+  return lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pClientMutex);
+}
+#endif
+
 

@@ -128,6 +128,9 @@ int lsm_config(lsm_db *, int, ...);
 **   LSM_CONFIG_BLOCK_SIZE
 **     A read/write integer parameter.
 **
+**   LSM_CONFIG_LOG_SIZE
+**     A read/write integer parameter.
+**
 **   LSM_CONFIG_SAFETY
 **     A read/write integer parameter. Valid values are 1, 2 (the default) 
 **     and 3. This parameter determines how robust the database is in the
@@ -157,6 +160,8 @@ int lsm_config(lsm_db *, int, ...);
 
 #define LSM_CONFIG_SEGMENT_RATIO 2
 #define LSM_CONFIG_AUTOWORK      6
+
+#define LSM_CONFIG_LOG_SIZE      7
 
 #define LSM_SAFETY_OFF    1
 #define LSM_SAFETY_NORMAL 2
@@ -227,8 +232,6 @@ int lsm_info(lsm_db *, int, ...);
 **     starting with the lhs segment, then each of the rhs segments (if any)
 **     in order from most to least recent.
 **
-**   LSM_INFO_BLOCKLIST
-**
 **   LSM_INFO_LOG_STRUCTURE
 **     The third argument should be of type (char **). The location pointed
 **     to is populated with a pointer to a nul-terminated string containing
@@ -237,6 +240,8 @@ int lsm_info(lsm_db *, int, ...);
 **
 **     The Tcl structure returned is a list of six integers that describe
 **     the current structure of the log file.
+**
+**   LSM_INFO_BLOCKLIST
 */
 #define LSM_INFO_NWRITE         1
 #define LSM_INFO_NREAD          2

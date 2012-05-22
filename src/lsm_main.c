@@ -75,6 +75,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->bAutowork = 1;
   pDb->eSafety = LSM_SAFETY_NORMAL;
   pDb->xCmp = xCmp;
+  pDb->nLogSz = LSM_DEFAULT_LOG_SIZE;
 
   return LSM_OK;
 }
@@ -287,6 +288,15 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
         pDb->bAutowork = *piVal;
       }
       *piVal = pDb->bAutowork;
+      break;
+    }
+
+    case LSM_CONFIG_LOG_SIZE: {
+      int *piVal = va_arg(ap, int *);
+      if( *piVal>0 ){
+        pDb->nLogSz = *piVal;
+      }
+      *piVal = pDb->nLogSz;
       break;
     }
 
@@ -692,7 +702,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
       if( rc==LSM_OK && pDb->pTV && lsmTreeSize(pDb->pTV)>pDb->nTreeLimit ){
         rc = lsmFlushToDisk(pDb);
       }
-      lsmFinishWriteTrans(pDb);
+      lsmFinishWriteTrans(pDb, (rc==LSM_OK));
     }
     pDb->nTransOpen = iLevel;
   }
@@ -714,7 +724,7 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
   }
 
   if( pDb->nTransOpen==0 ){
-    lsmFinishWriteTrans(pDb);
+    lsmFinishWriteTrans(pDb, 0);
   }
   dbReleaseClientSnapshot(pDb);
   return rc;

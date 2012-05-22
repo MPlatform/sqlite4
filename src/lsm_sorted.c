@@ -3444,7 +3444,7 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
     rc = lsmBeginWriteTrans(pDb);
     if( rc==LSM_OK ){
       rc = lsmFlushToDisk(pDb);
-      lsmFinishWriteTrans(pDb);
+      lsmFinishWriteTrans(pDb, 0);
       lsmFinishReadTrans(pDb);
     }
   }

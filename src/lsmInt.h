@@ -44,6 +44,8 @@
 #define LSM_TREE_BYTES (2 * 1024 * 1024)
 #define LSM_ECOLA      4
 
+#define LSM_DEFAULT_LOG_SIZE (128*1024)
+
 /* Places where a NULL needs to be changed to a real lsm_env pointer
 ** are marked with NEED_ENV */
 #define NEED_ENV ((lsm_env*)0)
@@ -57,8 +59,11 @@ typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
 typedef struct Level Level;
+
 typedef struct LogMark LogMark;
 typedef struct LogRegion LogRegion;
+typedef struct LogWriter LogWriter;
+
 typedef struct LsmString LsmString;
 typedef struct Mempool Mempool;
 typedef struct MultiCursor MultiCursor;
@@ -167,6 +172,7 @@ struct lsm_db {
   int eCola;                      /* Max size ratio between adjacent segments */
   int bAutowork;                  /* True to do auto-work after writing */
   int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
+  int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
@@ -179,6 +185,7 @@ struct lsm_db {
   int nTransOpen;                 /* Number of opened write transactions */
   int nTransAlloc;                /* Allocated size of aTrans[] array */
   TreeMark *aTrans;               /* Array of marks for transaction rollback */
+  LogWriter *pLogWriter;
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
@@ -497,10 +504,14 @@ int lsmFlushToDisk(lsm_db *);
 */
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
+
 void lsmLogTell(lsm_db *, LogMark *);
 int lsmLogSeek(lsm_db *, LogMark *);
 int lsmLogRecover(lsm_db *);
-int lsmLogCheckpoint(lsm_db *, lsm_i64);
+
+int lsmLogCheckpoint(lsm_db *, DbLog *pLog, lsm_i64);
+int lsmLogBegin(lsm_db *pDb, DbLog *pLog);
+void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit);
 
 
 /**************************************************************************
@@ -516,7 +527,7 @@ int lsmBeginFlush(lsm_db *);
 
 int lsmFinishRecovery(lsm_db *);
 void lsmFinishReadTrans(lsm_db *);
-int lsmFinishWriteTrans(lsm_db *);
+int lsmFinishWriteTrans(lsm_db *, int);
 int lsmFinishFlush(lsm_db *, int);
 
 int lsmDbUpdateClient(lsm_db *);
@@ -564,6 +575,10 @@ void lsmDatabaseDirty(Database *p);
 int lsmDatabaseIsDirty(Database *p);
 
 DbLog *lsmDatabaseLog(lsm_db *pDb);
+
+#ifdef LSM_DEBUG
+  int lsmHoldingClientMutex(lsm_db *pDb);
+#endif
 
 
 /**************************************************************************

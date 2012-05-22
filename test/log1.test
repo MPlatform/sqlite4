@@ -331,5 +331,94 @@ do_test 10.9  { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 695}
 do_test 10.10 { sqlite4_lsm_work db main -checkpoint } 0
 do_test 10.11 { sqlite4_lsm_info db main log-structure } {0 0 0 0 556 695}
 
+#-------------------------------------------------------------------------
+#
+reset_db
+do_test         11.1 { sqlite4_lsm_config db main log-size 800 } 800
+do_test         11.2 { sqlite4_lsm_config db main log-size     } 800
+do_execsql_test 11.3 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+
+do_test 11.4 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 1335}
+do_test 11.5 { sqlite4_lsm_work db main -flush } 0
+do_execsql_test 11.6 {
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+do_test 11.7 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 1474}
+do_test 11.8 { sqlite4_lsm_work db main -checkpoint } 0
+do_test 11.9 { sqlite4_lsm_info db main log-structure } {0 0 0 0 1335 1474}
+do_execsql_test 11.10 {
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+do_test 11.11 { sqlite4_lsm_info db main log-structure } {1335 1476 0 0 0 139}
+do_test 11.12 {
+  execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } 
+} {11 ok}
+
+do_test 11.13 {
+  copy_db_files test.db test.db2
+  sqlite4 db2 test.db2
+  execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } db2
+} {11 ok}
+do_test 11.14 { sqlite4_lsm_info db2 main log-structure } {1335 1476 0 0 0 139}
+do_test 11.15 {
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100)) } db2
+  execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } db2
+} {12 ok}
+do_test 11.16 {
+  copy_db_files test.db2 test.db3
+  sqlite4 db3 test.db3
+  execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } db3
+} {12 ok}
+db2 close
+db3 close
+do_execsql_test 11.17 {
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+do_test 11.18 { 
+  sqlite4_lsm_info db main log-structure 
+} {1335 1476 0 1254 1477 1755}
+do_test 11.19 {
+  execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } 
+} {21 ok}
+do_test 11.20 {
+  copy_db_files test.db test.db2
+  sqlite4 db2 test.db2
+  execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } db2
+} {21 ok}
+db2 close
+
+do_test 11.21 { sqlite4_lsm_work db main -flush } {0}
+do_execsql_test 11.22 {
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+do_test 11.23 { 
+  sqlite4_lsm_info db main log-structure 
+} {1335 1476 0 1254 1477 1894}
+do_test 11.21 { sqlite4_lsm_work db main -checkpoint } {0}
+do_test 11.23 { 
+  sqlite4_lsm_info db main log-structure 
+} {0 0 0 0 1755 1894}
+
 finish_test
+
 

@@ -82,8 +82,7 @@
 **   This implementation separates the log into three regions mapped into
 **   the log file - regions 0, 1 and 2. During recovery, regions are read
 **   in ascending order (i.e. 0, then 1, then 2). Each region is zero or
-**   more bytes in size. Regions occur in the file in the order 1, 0, 2.
-**   For example:
+**   more bytes in size.
 **
 **     |---1---|..|--0--|.|--2--|....
 **
@@ -227,10 +226,120 @@
 #define LSM_LOG_DELETE   0x04
 #define LSM_LOG_COMMIT   0x05
 #define LSM_LOG_CKSUM    0x06
+#define LSM_LOG_JUMP     0x07
 
 /* Require a checksum every 32KB. */
 /* #define LSM_CKSUM_MAXDATA (32*1024) */
 #define LSM_CKSUM_MAXDATA (32*1024)
+
+struct LogWriter {
+  u32 cksum0;                     /* Checksum 0 at offset iOff */
+  u32 cksum1;                     /* Checksum 1 at offset iOff */
+  i64 iOff;                       /* Offset at start of buffer buf */
+  LogRegion jump;                 /* Avoid writing to this region */
+  LsmString buf;                  /* Buffer containing data not yet written */
+  int nWritten;                   /* First nWritten bytes of buf are written */
+  i64 iRegion1End;
+  i64 iRegion2Start;
+};
+
+int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
+  int rc = LSM_OK;
+  LogWriter *pNew;
+  LogRegion *aReg;
+
+  assert( lsmHoldingClientMutex(pDb) );
+
+  pNew = lsmMallocZeroRc(pDb->pEnv, sizeof(LogWriter), &rc);
+  if( pNew ){
+    lsmStringInit(&pNew->buf, pDb->pEnv);
+    rc = lsmStringExtend(&pNew->buf, 2);
+  }
+  if( rc!=LSM_OK ) return rc;
+
+  /* There are now three scenarios:
+  **
+  **   1) Regions 0 and 1 are both zero bytes in size and region 2 begins
+  **      at a file offset greater than N, where N is the value configured
+  **      by LSM_CONFIG_LOG_SIZE. In this case, wrap around to the start
+  **      and write data into the start of the log file. 
+  **
+  **   2) Region 1 is zero bytes in size and region 2 occurs earlier in the 
+  **      file than region 0. In this case, append data to region 2, but
+  **      remember to jump over region 1 if required.
+  **
+  **   3) Region 2 is the last in the file. Append to it.
+  */
+  aReg = &pLog->aRegion[0];
+
+  assert( aReg[0].iEnd==0 || aReg[0].iEnd>aReg[0].iStart );
+  assert( aReg[1].iEnd==0 || aReg[1].iEnd>aReg[1].iStart );
+
+  pNew->cksum0 = pLog->cksum0;
+  pNew->cksum1 = pLog->cksum1;
+
+  if( aReg[0].iEnd==0 && aReg[1].iEnd==0 && aReg[2].iStart>=pDb->nLogSz ){
+    /* Case 1. Wrap around to the start of the file. Write an LSM_LOG_JUMP 
+    ** into the log file in this case. */
+    u8 aJump[] = { LSM_LOG_JUMP, 0x00 };
+    lsmStringBinAppend(&pNew->buf, aJump, sizeof(aJump));
+    rc = lsmFsWriteLog(pDb->pFS, aReg[2].iEnd, &pNew->buf);
+    aReg[2].iEnd += 2;
+    pNew->nWritten = 2;
+    pNew->jump = aReg[0] = aReg[2];
+    aReg[2].iStart = aReg[2].iEnd = 0;
+  }else if( aReg[1].iEnd==0 && aReg[2].iEnd<aReg[0].iEnd ){
+    /* Case 2. */
+    pNew->iOff = aReg[2].iEnd;
+    pNew->jump = aReg[0];
+  }else{
+    /* Case 3. */
+    assert( aReg[2].iStart>=aReg[0].iEnd && aReg[2].iStart>=aReg[1].iEnd );
+    pNew->iOff = aReg[2].iEnd;
+  }
+
+  pDb->pLogWriter = pNew;
+  return rc;
+}
+
+void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
+  LogWriter *p;
+  assert( lsmHoldingClientMutex(pDb) );
+  p = pDb->pLogWriter;
+  if( bCommit ){
+    pLog->aRegion[2].iEnd = p->iOff;
+    pLog->cksum0 = p->cksum0;
+    pLog->cksum1 = p->cksum1;
+    if( p->iRegion1End ){
+      pLog->aRegion[1].iEnd = p->iRegion1End;
+      pLog->aRegion[2].iStart = p->iRegion2Start;
+    }
+  }
+  lsmFree(pDb->pEnv, p);
+  pDb->pLogWriter = 0;
+}
+
+/*
+** This function is called after a checkpoint is synced into the database
+** file. The checkpoint specifies that the log starts at offset iOff.
+*/ 
+int lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
+  int iRegion;
+
+  assert( lsmHoldingClientMutex(pDb) );
+
+  for(iRegion=0; iRegion<3; iRegion++){
+    LogRegion *p = &pLog->aRegion[iRegion];
+    if( iOff>=p->iStart && iOff<=p->iEnd ) break;
+  }
+  assert( iRegion<3 );
+
+  pLog->aRegion[iRegion].iStart = iOff;
+  return LSM_OK;
+}
+
+
+
 
 /*
 ** The logging sub-system may be enabled or disabled on a per-database
@@ -328,9 +437,8 @@ void logCksumUnaligned(
 ** or COMMIT record, depending on the value of parameter eType.
 */
 static int logFlush(lsm_db *pDb, int eType){
-  i64 iOff;                       /* Absolute log file offset to write to */
   int rc;
-  DbLog *pLog = lsmDatabaseLog(pDb);
+  LogWriter *pLog = pDb->pLogWriter;
   
   assert( eType==LSM_LOG_COMMIT || eType==LSM_LOG_CKSUM );
   assert( pLog );
@@ -355,11 +463,18 @@ static int logFlush(lsm_db *pDb, int eType){
   pLog->buf.n += 4;
 
   /* Write the contents of the buffer to disk. */
-  iOff = pLog->aRegion[2].iEnd;
-  rc = lsmFsWriteLog(pDb->pFS, iOff, &pLog->buf);
-  iOff += pLog->buf.n;
+  if( pLog->nWritten ){
+    LsmString str = {0, 0, 0, 0};
+    str.z = &pLog->buf.z[pLog->nWritten];
+    str.n = pLog->buf.n - pLog->nWritten;
+    rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &str);
+    pLog->iOff -= pLog->nWritten;
+    pLog->nWritten = 0;
+  }else{
+    rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
+  }
+  pLog->iOff += pLog->buf.n;
   pLog->buf.n = 0;
-  pLog->aRegion[2].iEnd = iOff;
 
   /* If this is a commit and synchronous=full, sync the log to disk. */
   if( rc==LSM_OK && eType==LSM_LOG_COMMIT && pDb->eSafety==LSM_SAFETY_FULL ){
@@ -378,30 +493,52 @@ int lsmLogWrite(
   void *pVal, int nVal            /* Database value (or nVal<0) to write */
 ){
   int rc = LSM_OK;
-  DbLog *pLog;                    /* Log object to write to */
+  LogWriter *pLog;                /* Log object to write to */
+  int nReq;                       /* Bytes of space required in log */
+  pLog = pDb->pLogWriter;
 
-  pLog = lsmDatabaseLog(pDb);
-  if( pLog ){
-    int nReq;
-    nReq = 1 + lsmVarintLen32(nKey) + nKey;
-    if( nVal>=0 ) nReq += lsmVarintLen32(nVal) + nVal;
-    rc = lsmStringExtend(&pLog->buf, nReq);
-    if( rc==LSM_OK ){
-      u8 *a = (u8 *)&pLog->buf.z[pLog->buf.n];
-      *(a++) = (nVal>=0 ? LSM_LOG_WRITE : LSM_LOG_DELETE);
-      a += lsmVarintPut32(a, nKey);
-      memcpy(a, pKey, nKey);
-      a += nKey;
-      if( nVal>=0 ){
-        a += lsmVarintPut32(a, nVal);
-        memcpy(a, pVal, nVal);
-      }
-      pLog->buf.n += nReq;
-      assert( pLog->buf.n<=pLog->buf.nAlloc );
-      if( pLog->buf.n>=LSM_CKSUM_MAXDATA ){
-        rc = logFlush(pDb, LSM_LOG_CKSUM);
-        assert( rc!=LSM_OK || pLog->buf.n==0 );
-      }
+  /* Determine how many bytes of space are required for this record. Store
+  ** this value in stack variable nReq. */
+  nReq = 1 + lsmVarintLen32(nKey) + nKey;
+  if( nVal>=0 ) nReq += lsmVarintLen32(nVal) + nVal;
+
+  if( (pLog->jump.iStart > (pLog->iOff + pLog->buf.n)) 
+   && (pLog->jump.iStart < (pLog->iOff + pLog->buf.n + (nReq + 9) + 10)) 
+  ){
+    i64 iJump;                    /* Offset to jump to */
+    u8 aJump[10];
+    int nJump;
+
+    iJump = pLog->jump.iEnd+1;
+    aJump[0] = LSM_LOG_JUMP;
+    nJump = 1 + lsmVarintPut64(&aJump[1], iJump);
+    rc = lsmStringBinAppend(&pLog->buf, aJump, nJump);
+    if( rc!=LSM_OK ) return rc;
+    rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
+    if( rc!=LSM_OK ) return rc;
+
+    pLog->iRegion1End = (pLog->iOff + pLog->buf.n);
+    pLog->iRegion2Start = iJump;
+    pLog->nWritten = pLog->buf.n;
+    pLog->iOff = iJump;
+  }
+
+  rc = lsmStringExtend(&pLog->buf, nReq);
+  if( rc==LSM_OK ){
+    u8 *a = (u8 *)&pLog->buf.z[pLog->buf.n];
+    *(a++) = (nVal>=0 ? LSM_LOG_WRITE : LSM_LOG_DELETE);
+    a += lsmVarintPut32(a, nKey);
+    memcpy(a, pKey, nKey);
+    a += nKey;
+    if( nVal>=0 ){
+      a += lsmVarintPut32(a, nVal);
+      memcpy(a, pVal, nVal);
+    }
+    pLog->buf.n += nReq;
+    assert( pLog->buf.n<=pLog->buf.nAlloc );
+    if( pLog->buf.n>=LSM_CKSUM_MAXDATA ){
+      rc = logFlush(pDb, LSM_LOG_CKSUM);
+      assert( rc!=LSM_OK || pLog->buf.n==0 );
     }
   }
 
@@ -419,8 +556,8 @@ void lsmLogTell(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Populate this object with current offset */
 ){
-  DbLog *pLog = lsmDatabaseLog(pDb);
-  pMark->iOff = pLog->aRegion[2].iEnd;
+  LogWriter *pLog = pDb->pLogWriter;
+  pMark->iOff = pLog->iOff;
   pMark->nBuf = pLog->buf.n;
   pMark->cksum0 = pLog->cksum0;
   pMark->cksum1 = pLog->cksum1;
@@ -464,25 +601,6 @@ int lsmLogStructure(lsm_db *pDb, char **pzVal){
       (int)pLog->aRegion[2].iStart, (int)pLog->aRegion[2].iEnd
   );
   return (*pzVal ? LSM_OK : LSM_NOMEM_BKPT);
-}
-
-/*
-** This function is called after a checkpoint is synced into the database
-** file. The checkpoint specifies that the log starts at offset iOff.
-*/ 
-int lsmLogCheckpoint(lsm_db *pDb, lsm_i64 iOff){
-  DbLog *pLog = lsmDatabaseLog(pDb);
-  int iRegion;
-
-  for(iRegion=0; iRegion<3; iRegion++){
-    LogRegion *p = &pLog->aRegion[iRegion];
-    if( iOff>=p->iStart && iOff<=p->iEnd ) break;
-  }
-  assert( iRegion<3 );
-
-  pLog->aRegion[iRegion].iStart = iOff;
-
-  return LSM_OK;
 }
 
 /*************************************************************************
@@ -531,6 +649,7 @@ static int logReaderBlob(
       p->iBuf = nCarry;
 
       rc = lsmFsReadLog(p->pFS, p->iOff, LOG_READ_SIZE, &p->buf);
+assert( rc==LSM_OK );
       if( rc!=LSM_OK ) break;
 
       p->iCksumBuf = 0;
@@ -549,6 +668,7 @@ static int logReaderBlob(
         pBuf->n = 0;
       }
       rc = lsmStringBinAppend(pBuf, (u8 *)&p->buf.z[p->iBuf], nCopy);
+assert( rc==LSM_OK );
       if( rc!=LSM_OK ) break;
       nReq -= nCopy;
       p->iBuf += nCopy;
@@ -624,6 +744,7 @@ int lsmLogRecover(lsm_db *pDb){
   int rc;                         /* Return code */
   int nCommit = 0;                /* Number of transactions to recover */
   int iPass;
+  int nJump = 0;                  /* Number of LSM_LOG_JUMP records in pass 0 */
   DbLog *pLog;
 
   rc = lsmBeginRecovery(pDb);
@@ -690,6 +811,31 @@ int lsmLogRecover(lsm_db *pDb){
           break;
         }
 
+        case LSM_LOG_JUMP: {
+          int iOff = 0;
+          logReaderVarint(&reader, &buf1, &iOff);
+
+          if( iPass==1 ){
+            if( pLog->aRegion[2].iStart==0 ){
+              assert( pLog->aRegion[1].iStart==0 );
+              pLog->aRegion[1].iEnd = reader.iOff;
+            }else{
+              assert( pLog->aRegion[0].iStart==0 );
+              pLog->aRegion[0].iStart = pLog->aRegion[2].iStart;
+              pLog->aRegion[0].iEnd = reader.iOff - reader.buf.n + reader.iBuf;
+            }
+            pLog->aRegion[2].iStart = iOff;
+          }else{
+            if( (nJump++)==2 ){
+              bEof = 1;
+            }
+          }
+
+          reader.iOff = iOff;
+          reader.buf.n = reader.iBuf;
+          break;
+        }
+
         default:
           /* Including LSM_LOG_EOF */
           bEof = 1;
@@ -715,13 +861,11 @@ int lsmLogRecover(lsm_db *pDb){
   pLog->aRegion[2].iEnd = reader.iOff - reader.buf.n + reader.iBuf;
   pLog->cksum0 = reader.cksum0;
   pLog->cksum1 = reader.cksum1;
-  assert( pLog->aRegion[2].iEnd >= pLog->aRegion[2].iStart );
 
   lsmFinishRecovery(pDb);
   lsmStringClear(&buf1);
   lsmStringClear(&buf2);
   return rc;
 }
-
 
 
