@@ -311,6 +311,8 @@ void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
     pLog->cksum0 = p->cksum0;
     pLog->cksum1 = p->cksum1;
     if( p->iRegion1End ){
+      assert( pLog->aRegion[1].iEnd==0 );
+      assert( pLog->aRegion[2].iStart==0 );
       pLog->aRegion[1].iEnd = p->iRegion1End;
       pLog->aRegion[2].iStart = p->iRegion2Start;
     }
@@ -325,21 +327,19 @@ void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
 */ 
 int lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
   int iRegion;
-
   assert( lsmHoldingClientMutex(pDb) );
 
   for(iRegion=0; iRegion<3; iRegion++){
     LogRegion *p = &pLog->aRegion[iRegion];
     if( iOff>=p->iStart && iOff<=p->iEnd ) break;
+    p->iStart = 0;
+    p->iEnd = 0;
   }
   assert( iRegion<3 );
 
   pLog->aRegion[iRegion].iStart = iOff;
   return LSM_OK;
 }
-
-
-
 
 /*
 ** The logging sub-system may be enabled or disabled on a per-database
@@ -636,13 +636,14 @@ static int logReaderBlob(
       int nCarry = 0;             /* Total bytes requiring checksum */
 
       nCksum = p->iBuf - p->iCksumBuf;
-      nCarry = nCksum % 8;
-      nCksum = ((nCksum / 8) * 8);
-
       if( nCksum>0 ){
-        logCksumUnaligned(
-            &p->buf.z[p->iCksumBuf], (nCksum/8)*8, &p->cksum0, &p->cksum1
-        );
+        nCarry = nCksum % 8;
+        nCksum = ((nCksum / 8) * 8);
+        if( nCksum>0 ){
+          logCksumUnaligned(
+              &p->buf.z[p->iCksumBuf], nCksum, &p->cksum0, &p->cksum1
+          );
+        }
       }
       if( nCarry>0 ) memcpy(p->buf.z, &p->buf.z[p->iBuf-nCarry], nCarry);
       p->buf.n = nCarry;

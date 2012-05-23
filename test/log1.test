@@ -414,11 +414,37 @@ do_execsql_test 11.22 {
 do_test 11.23 { 
   sqlite4_lsm_info db main log-structure 
 } {1335 1476 0 1254 1477 1894}
-do_test 11.21 { sqlite4_lsm_work db main -checkpoint } {0}
-do_test 11.23 { 
+do_test 11.24 { sqlite4_lsm_work db main -checkpoint } {0}
+do_test 11.25 { 
   sqlite4_lsm_info db main log-structure 
 } {0 0 0 0 1755 1894}
 
-finish_test
+#-------------------------------------------------------------------------
+#
+reset_db
+do_test         12.1 { sqlite4_lsm_config db main log-size 800 } 800
+do_execsql_test 12.2 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  CREATE INDEX i1 ON t1(b);
+}
 
+for {set iTest 1} {$iTest<50} {incr iTest} {
+  expr srand(0)
+  do_test 12.3.$iTest {
+    for {set i 0} {$i < 10} {incr i} {
+      execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100)) }
+      if { int(rand()*10.0)==0 } { sqlite4_lsm_work db main -flush }
+      if { int(rand()*10.0)==0 } { sqlite4_lsm_work db main -checkpoint }
+    }
+  
+    copy_db_files test.db test.db2
+    sqlite4 db2 test.db2
+    set res [execsql { SELECT count(*) FROM t1; PRAGMA integrity_check } db2]
+    db2 close
+    set res
+  } [list [expr ($iTest)*10] ok]
+}
+
+
+finish_test
 
