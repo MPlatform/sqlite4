@@ -846,6 +846,7 @@ static int isAppendPoint(
   if( iLast==0 ) return 0;
   iLastInBlock = ((((iLast-1) / nPagePerBlock)+1) * nPagePerBlock);
   if( (iLast+nMin)>=iLastInBlock ) return 0;
+  iLast++;
 
 #define IS_BETWEEN(a, x, y) ((a)>=(x) && (a)<=(y))
   for(p=pLevel; p; p=p->pNext){
@@ -860,7 +861,7 @@ static int isAppendPoint(
   }
 #undef IS_BETWEEN
 
-  return iLast+1;
+  return iLast;
 }
 
 static Pgno findAppendPoint(FileSystem *pFS, Snapshot *pSnap, int nMin){
