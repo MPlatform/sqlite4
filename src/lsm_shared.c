@@ -101,7 +101,6 @@ struct Snapshot {
 
   /* The following are populated and used by worker snapshots only */
   int nBlock;                     /* Number of blocks tracked by this ss */
-  IList lAppend;                  /* List of db append points */
   Freelist freelist;              /* Database free-list */
 
   int bRecordDelta;               /* True when recording freelist delta */
@@ -442,7 +441,6 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       /* Free the contents of the worker snapshot */
       lsmSortedFreeLevel(p->pEnv, p->worker.pLevel);
       lsmFree(pDb->pEnv, p->worker.freelist.aEntry);
-      lsmFree(pDb->pEnv, p->worker.lAppend.a);
       
       /* Free the client snapshot */
       if( p->pClient ){
@@ -515,67 +513,6 @@ void lsmSnapshotSetLogpgno(Snapshot *pSnap, Pgno iLogPg){
 }
 Pgno lsmSnapshotGetLogpgno(Snapshot *pSnap){
   return pSnap->iLogPg;
-}
-
-IList *lsmSnapshotList(Snapshot *pSnap, int iList){
-  IList *pRet = 0;
-
-  /* This should only be called on the worker snapshot. */
-  assert( isWorker(pSnap) );
-
-  assert( iList==LSM_APPEND_LIST );
-
-  switch( iList ){
-    case LSM_APPEND_LIST:
-      pRet = &pSnap->lAppend;
-      break;
-  }
-
-  return pRet;
-}
-
-/*
-** Replace the contents of IList *p with the contents of integer array
-** aElem. Array aElem is nElem elements in size.
-**
-** Return LSM_OK if successful or LSM_NOMEM if an OOM error occurs.
-*/
-int lsmIListSet(lsm_env *pEnv, IList *p, int *aElem, int nElem){
-  if( p->nAlloc < nElem ){
-    lsmFree(pEnv, p->a);
-    p->a = (int *)lsmMalloc(pEnv, sizeof(int) * nElem);
-    if( p->a==0 ) return LSM_NOMEM_BKPT;
-    p->nAlloc = nElem;
-  }
-  memcpy(p->a, aElem, nElem * sizeof(int));
-  p->n = nElem;
-  return LSM_OK;
-}
-
-int lsmIListGrow(IList *pList, int nElem){
-  if( pList->nAlloc<nElem ){
-    pList->a= (int *)lsmReallocOrFree(0, pList->a, nElem * sizeof(int));
-    if( pList->a==0 ) return LSM_NOMEM;
-    memset(&pList->a[pList->nAlloc], 0, (nElem-pList->nAlloc)*sizeof(int));
-    pList->nAlloc = nElem;
-  }
-  return LSM_OK;
-}
-
-int lsmIListInsert(IList *pList, int iElem, int iVal){
-  int rc;
-  rc = lsmIListGrow(pList, iElem+1);
-  if( rc==LSM_OK ){
-    pList->a[iElem] = iVal;
-    pList->n = MAX(pList->n, iElem+1);
-  }
-  return rc;
-}
-
-void lsmIListAppend(IList *pList, int iVal, int *pRc){
-  if( *pRc==LSM_OK ){
-    *pRc = lsmIListInsert(pList, pList->n, iVal);
-  }
 }
 
 

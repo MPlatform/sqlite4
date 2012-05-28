@@ -317,6 +317,7 @@ void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
       pLog->aRegion[2].iStart = p->iRegion2Start;
     }
   }
+  lsmStringClear(&p->buf);
   lsmFree(pDb->pEnv, p);
   pDb->pLogWriter = 0;
 }
@@ -866,6 +867,7 @@ int lsmLogRecover(lsm_db *pDb){
   lsmFinishRecovery(pDb);
   lsmStringClear(&buf1);
   lsmStringClear(&buf2);
+  lsmStringClear(&reader.buf);
   return rc;
 }
 

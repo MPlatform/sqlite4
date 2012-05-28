@@ -52,11 +52,6 @@
 **        5a. Page number of next cell to read during merge
 **        5b. Cell number of next cell to read during merge
 **
-**   A list of all append-points in the database file:
-**
-**     1. The number (possibly 0) of append points in the file.
-**     2. The page number of each append point.
-**
 **   The freelist delta. Currently consists of (this will change):
 **
 **     1. The size to truncate the free list to after it is loaded.
@@ -76,6 +71,28 @@
 **     4. First page of separators array (or 0),
 **     5. Last page of separators array (or 0),
 **     6. Root page of separators array (or 0).
+*/
+
+/*
+** OVERSIZED CHECKPOINT BLOBS:
+**
+** There are two slots allocated for checkpoints at the start of each 
+** database file. Each are 4096 bytes in size, so may accommodate 
+** checkpoints that consist of up to 1024 32-bit integers. Normally,
+** this is enough.
+**
+** However, if a database contains a sufficiently large number of levels,
+** a checkpoint may exceed 1024 integers in size. In most circumstances this 
+** is an undesirable scenario, as a database with so many levels will be 
+** slow to query. If this does happen, then only the uppermost (more recent)
+** levels are stored in the checkpoint blob itself. The remainder are stored
+** in an LSM record with the system key "LEVELS". The payload of the entry
+** is a series of 32-bit big-endian integers, as follows:
+**
+**    1. Number of levels (store in the LEVELS record, not total).
+**    2. For each level, a "level record" (as desribed above).
+**
+** There is no checksum in the LEVELS record.
 */
 
 /*
@@ -273,7 +290,6 @@ int lsmCheckpointExport(
   int iOut = 0;                   /* Current offset in aCkpt[] */
   Level *pNext = 0;               /* Used to help iterate through levels */
   Level *pTopLevel;               /* Top level of database snapshot */
-  IList *pAppend;                 /* Pointer to append-point list */
   int i;                          /* Iterator used for several purposes */
   u32 aDelta[LSM_FREELIST_DELTA_SIZE];
 
@@ -319,13 +335,6 @@ int lsmCheckpointExport(
 
     pNext = pLevel;
     nLevel++;
-  }
-
-  /* Export the append-point list */
-  pAppend = lsmSnapshotList(pSnap, LSM_APPEND_LIST);
-  ckptSetValue(&ckpt, iOut++, pAppend->n, &rc);
-  for(i=0; i<pAppend->n; i++){
-    ckptSetValue(&ckpt, iOut++, pAppend->a[i], &rc);
   }
 
   /* Write the freelist delta */
@@ -481,14 +490,6 @@ int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
           ckptSetupMerge(pDb, aInt, &iIn, pLevel);
         }
       }
-    }
-
-    /* Import the append list */
-    if( rc==LSM_OK ){
-      int nApp = aInt[iIn++];
-      IList *pAppend = lsmSnapshotList(pSnap, LSM_APPEND_LIST);
-      rc = lsmIListSet(pDb->pEnv, pAppend, (int *)&aInt[iIn], nApp);
-      iIn += nApp;
     }
 
     /* Import the freelist delta */

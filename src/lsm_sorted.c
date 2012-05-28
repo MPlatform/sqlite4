@@ -2393,6 +2393,8 @@ static int mergeWorkerBuildHierarchy(MergeWorker *pMW){
   int rc = LSM_OK;
 
   assert( pMW->bFlush );
+  assert( pMW->pLevel->lhs.sep.iRoot==0 );
+
   if( pMW->apPage[1] ){
     SortedRun *pRun;              /* Separators run to materialize */
     lsm_db *db = pMW->pDb;
@@ -2633,8 +2635,10 @@ static int mergeWorkerWrite(
     assert( pMerge->nSkip>=0 );
 
     if( bSep ){
-      Pgno iPg = lsmFsPageNumber(pPg);
-      rc = mergeWorkerPushHierarchy(pMW, iPg, rtTopic(eType), pKey, nKey);
+      if( pMW->bFlush==0 ){
+        Pgno iPg = lsmFsPageNumber(pPg);
+        rc = mergeWorkerPushHierarchy(pMW, iPg, rtTopic(eType), pKey, nKey);
+      }
     }else{
       if( pMerge->nSkip ){
         pMerge->nSkip--;
@@ -2915,8 +2919,11 @@ int lsmSortedFlushTree(
   ** in the database (if any).  */
   if( rc==LSM_OK ){
     pNext = lsmDbSnapshotLevel(pDb->pWorker);
-    rc = multiCursorNew(pDb, pDb->pWorker, 1, 0, &pCsr);
 
+    pNew->pNext = pNext;
+    lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
+
+    rc = multiCursorNew(pDb, pDb->pWorker, 1, 0, &pCsr);
     if( pNext ){
       assert( pNext->pMerge==0 || pNext->nRight>0 );
       if( pNext->pMerge==0 ){
@@ -2978,8 +2985,6 @@ int lsmSortedFlushTree(
   /* Link the new level into the top of the tree. Delete the separators
   ** array (if any) that was merged into the new level. */
   if( rc==LSM_OK ){
-    pNew->pNext = lsmDbSnapshotLevel(pDb->pWorker);
-    lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
     if( pDel ){
       /* lsmFsSortedDelete() has already been called on pDel. So all
       ** that is required here is to zero it (so that it is not used by
@@ -2987,6 +2992,7 @@ int lsmSortedFlushTree(
       memset(pDel, 0, sizeof(SortedRun));
     }
   }else{
+    lsmDbSnapshotSetLevel(pDb->pWorker, pNext);
     sortedFreeLevel(pDb->pEnv, pNew);
   }
 
@@ -2994,7 +3000,7 @@ int lsmSortedFlushTree(
     sortedInvokeWorkHook(pDb);
   }
 #if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 1, "tree flush");
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "tree flush");
 #endif
 
   assertAllBtreesOk(rc, pDb);
@@ -3339,7 +3345,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 1, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
 #endif
 
     }

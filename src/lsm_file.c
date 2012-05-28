@@ -119,6 +119,7 @@ typedef struct PhantomRun PhantomRun;
 struct PhantomRun {
   SortedRun *pRun;                /* Accompanying SortedRun object */
   int nPhantom;                   /* Number of pages in run */
+  int bRunFinished;               /* True if the associated run is finished */
   Page *pFirst;                   /* First page in phantom run */
   Page *pLast;                    /* Current last page in phantom run */
 };
@@ -191,54 +192,6 @@ struct Page {
     (pFS)->pPhantom && (pFS)->pPhantom->pRun==(pSorted)              \
 )
 
-
-/**************************************************************************
-** Start of functions for use with the IList structure.
-*/
-static int fsIListGrow(lsm_env *pEnv, IList *pList, int nElem){
-  if( pList->nAlloc<nElem ){
-    pList->a= (int *)lsmReallocOrFree(pEnv, pList->a, nElem * sizeof(int));
-    if( pList->a==0 ) return LSM_NOMEM;
-    memset(&pList->a[pList->nAlloc], 0, (nElem-pList->nAlloc)*sizeof(int));
-    pList->nAlloc = nElem;
-  }
-  return LSM_OK;
-}
-
-static int fsIListSet(lsm_env *pEnv, IList *pList, int iElem, int iVal){
-  int rc;
-  rc = fsIListGrow(pEnv, pList, iElem+1);
-  if( rc==LSM_OK ){
-    pList->a[iElem] = iVal;
-    pList->n = MAX(pList->n, iElem+1);
-  }
-  return rc;
-}
-
-static void fsIListAppend(lsm_env *pEnv, IList *pList, int iVal, int *pRc){
-  if( *pRc==LSM_OK ){
-    *pRc = fsIListSet(pEnv, pList, pList->n, iVal);
-  }
-}
-
-static int fsIListPop(IList *pList){
-  int iRet;
-  assert( pList->n>0 );
-  pList->n--;
-  iRet = pList->a[pList->n];
-  pList->a[pList->n] = 0;
-  return iRet;
-}
-
-static void fsIListRemove(IList *pList, int iRem){
-  assert( iRem<pList->n );
-  memmove(&pList->a[iRem], &pList->a[iRem+1], (pList->n-1-iRem)*sizeof(int));
-  pList->n--;
-}
-
-/*
-** End of IList functions.
-**************************************************************************/
 
 /*
 ** Wrappers around the VFS methods of the lsm_env object.
@@ -751,7 +704,6 @@ static int fsFreeBlock(
   int iLast;                      /* Last page on block iBlk */
   int i;                          /* Used to iterate through append points */
   Level *pLevel;                  /* Used to iterate through levels */
-  IList *pAppend;                 /* List of append points */
 
   iFirst = fsFirstPageOnBlock(pFS, iBlk);
   iLast = fsLastPageOnBlock(pFS, iBlk);
@@ -761,15 +713,6 @@ static int fsFreeBlock(
   for(pLevel=lsmDbSnapshotLevel(pSnapshot); pLevel; pLevel=pLevel->pNext){
     if( fsLevelEndsBetween(pLevel, pIgnore, iFirst, iLast) ){
       return LSM_OK;
-    }
-  }
-
-  pAppend = lsmSnapshotList(pSnapshot, LSM_APPEND_LIST);
-  for(i=0; i<pAppend->n; i++){
-    int iApp = pAppend->a[i];
-    if( iApp>=iFirst && iApp<=iLast ){
-      fsIListRemove(pAppend, i);
-      i--;
     }
   }
 
@@ -889,6 +832,60 @@ int lsmFsDbPageNext(SortedRun *pRun, Page *pPg, int eDir, Page **ppNext){
   return fsPageGet(pFS, pRun, iPg, 0, ppNext);
 }
 
+static int isAppendPoint(
+  FileSystem *pFS, 
+  Level *pLevel,
+  SortedRun *pRun, 
+  int nMin
+){
+  const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+  int iLastInBlock;
+  int iLast = pRun->iLast;
+  Level *p;
+
+  if( iLast==0 ) return 0;
+  iLastInBlock = ((((iLast-1) / nPagePerBlock)+1) * nPagePerBlock);
+  if( (iLast+nMin)>=iLastInBlock ) return 0;
+
+#define IS_BETWEEN(a, x, y) ((a)>=(x) && (a)<=(y))
+  for(p=pLevel; p; p=p->pNext){
+    int i;
+    if( IS_BETWEEN(p->lhs.sep.iFirst, iLast, iLastInBlock) ) return 0;
+    if( IS_BETWEEN(p->lhs.run.iFirst, iLast, iLastInBlock) ) return 0;
+
+    for(i=0; i<p->nRight; i++){
+      if( IS_BETWEEN(p->aRhs[i].sep.iFirst, iLast, iLastInBlock) ) return 0;
+      if( IS_BETWEEN(p->aRhs[i].run.iFirst, iLast, iLastInBlock) ) return 0;
+    }
+  }
+#undef IS_BETWEEN
+
+  return iLast+1;
+}
+
+static Pgno findAppendPoint(FileSystem *pFS, Snapshot *pSnap, int nMin){
+  Level *pRoot;
+  Level *p;
+  Pgno iApp = 0;
+
+  pRoot = lsmDbSnapshotLevel(pSnap);
+  if( nMin && pFS->pPhantom->bRunFinished==0 && pRoot ){
+    pRoot = pRoot->pNext;
+  }
+  for(p=pRoot; p; p=p->pNext){
+    int ii;
+    for(ii=0; ii<p->nRight; ii++){
+      if( (iApp = isAppendPoint(pFS, pRoot, &p->aRhs[ii].sep, nMin)) ) break;
+      if( (iApp = isAppendPoint(pFS, pRoot, &p->aRhs[ii].run, nMin)) ) break;
+    }
+    if( p->nRight==0 ){
+      if( (iApp = isAppendPoint(pFS, pRoot, &p->lhs.sep, nMin)) ) break;
+      if( (iApp = isAppendPoint(pFS, pRoot, &p->lhs.run, nMin)) ) break;
+    }
+  }
+
+  return iApp;
+}
 
 int lsmFsPhantomMaterialize(
   FileSystem *pFS, 
@@ -903,22 +900,10 @@ int lsmFsPhantomMaterialize(
     Page *pNext;
     int i;
     Pgno iFirst = 0;
-    IList *pAppend;
 
-    /* Search the lAppend list for a point to materialize this array. */
-    pAppend = lsmSnapshotList(pSnapshot, LSM_APPEND_LIST);
-    for(i=0; i<pAppend->n; i++){
-      Pgno iApp;                  /* Candidate first page to write run to */
-      int nAvail;                 /* Pages available starting at iApp */
-
-      iApp = pAppend->a[i];
-      nAvail = nPagePerBlock - ((iApp-1) % nPagePerBlock) - 1;
-      if( nAvail>=pPhantom->nPhantom ){
-        iFirst = iApp;
-        fsIListRemove(pAppend, i);
-        break;
-      }
-    }
+    /* Search for an existing run in the database that this run can be
+    ** appended to. See comments surrounding findAppendPoint() for details. */
+    iFirst = findAppendPoint(pFS, pSnapshot, pPhantom->nPhantom);
 
     /* If the array can not be written into any partially used block, 
     ** allocate a new block. The first page of the materialized run will
@@ -1033,8 +1018,7 @@ int lsmFsSortedAppend(
     int iPrev = p->iLast;
 
     if( iPrev==0 ){
-      IList *pAppend = lsmSnapshotList(pSnapshot, LSM_APPEND_LIST);
-      if( pAppend->n>0 ) iApp = fsIListPop(pAppend);
+      iApp = findAppendPoint(pFS, pSnapshot, 0);
     }else if( fsIsLast(pFS, iPrev) ){
       Page *pLast = 0;
       rc = fsPageGet(pFS, p, iPrev, 0, &pLast);
@@ -1089,6 +1073,8 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
   if( p ){
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
 
+    if( pFS->pPhantom ) pFS->pPhantom->bRunFinished = 1;
+
     /* Check if the last page of this run happens to be the last of a block.
     ** If it is, then an extra block has already been allocated for this run.
     ** Shift this extra block back to the free-block list. 
@@ -1108,9 +1094,6 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
         lsmBlockRefree(pFS->pDb, iBlk);
         lsmFsPageRelease(pLast);
       }
-    }else{
-      IList *pAppend = lsmSnapshotList(pSnap, LSM_APPEND_LIST);
-      fsIListAppend(pFS->pEnv, pAppend, p->iLast+1, &rc);
     }
   }
   return rc;
@@ -1265,7 +1248,9 @@ int lsmFsSortedPhantom(FileSystem *pFS, SortedRun *pRun){
   PhantomRun *p;                  /* New phantom run object */
 
   p = (PhantomRun *)lsmMallocZeroRc(pFS->pEnv, sizeof(PhantomRun), &rc);
-  if( p ) p->pRun = pRun;
+  if( p ){
+    p->pRun = pRun;
+  }
   assert( pFS->pPhantom==0 );
   pFS->pPhantom = p;
   return rc;

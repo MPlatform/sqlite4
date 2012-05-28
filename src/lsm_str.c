@@ -89,9 +89,11 @@ int lsmStringBinAppend(LsmString *pStr, const u8 *a, int n){
 ** FIXME!!!
 */
 void lsmStringVAppendf(LsmString *pStr, const char *zFormat, va_list ap){
-  lsmStringExtend(pStr, 5000);
+  static const int nExtend = 50000;
+
+  lsmStringExtend(pStr, nExtend);
   if( pStr->nAlloc ){
-    pStr->n += vsnprintf(pStr->z+pStr->n, pStr->nAlloc-pStr->n-1, zFormat, ap);
+    pStr->n += vsnprintf(pStr->z+pStr->n, nExtend-1, zFormat, ap);
     pStr->z[pStr->n] = 0;
   }
 }

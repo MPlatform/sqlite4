@@ -102,13 +102,6 @@ int lsmErrorBkpt(int);
 #define unused_parameter(x) (void)(x)
 #define array_size(x) (sizeof(x)/sizeof(x[0]))
 
-typedef struct IList IList;
-struct IList {
-  int nAlloc;
-  int n;
-  int *a;
-};
-
 /*
 ** A string that can grow by appending.
 */
@@ -554,10 +547,6 @@ Pgno lsmSnapshotGetLogpgno(Snapshot *pSnap);
 
 Level *lsmDbSnapshotLevel(Snapshot *);
 void lsmDbSnapshotSetLevel(Snapshot *, Level *);
-
-#define LSM_APPEND_LIST  1
-IList *lsmSnapshotList(Snapshot *, int);
-int lsmIListSet(lsm_env *pEnv, IList *, int *, int);
 
 void lsmDbRecoveryComplete(Database *, int);
 void lsmDbCheckpointed(lsm_db *, i64);
