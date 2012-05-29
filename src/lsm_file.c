@@ -746,6 +746,8 @@ int lsmFsSortedDelete(
       int iNext = 0;
       if( iBlk!=iLastBlk ){
         rc = fsBlockNext(pFS, iBlk, &iNext);
+      }else if( bZero==0 && pDel->iLast!=fsLastPageOnBlock(pFS, iLastBlk) ){
+        break;
       }
       rc = fsFreeBlock(pFS, pSnapshot, pDel, iBlk);
       iBlk = iNext;
@@ -881,6 +883,8 @@ static Pgno findAppendPoint(FileSystem *pFS, Snapshot *pSnap, int nMin){
       if( (iApp = isAppendPoint(pFS, pRoot, &p->aRhs[ii].run, nMin)) ) break;
     }
     if( p->nRight==0 ){
+      /* Separators array must be considered before the main run. See
+      ** lsmFsSortedDelete() for details.  */
       if( (iApp = isAppendPoint(pFS, pRoot, &p->lhs.sep, nMin)) ) break;
       if( (iApp = isAppendPoint(pFS, pRoot, &p->lhs.run, nMin)) ) break;
     }
