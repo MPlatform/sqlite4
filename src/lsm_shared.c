@@ -433,7 +433,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       }
 
       /* If the checkpoint was written successfully, truncate the log file. */
-      if( rc==LSM_OK ) lsmFsTruncateLog(pDb->pFS, 0);
+      if( rc==LSM_OK && pDb->pFS ) lsmFsTruncateLog(pDb->pFS, 0);
 
       /* Free the in-memory tree object */
       lsmTreeDestroy(p->pTree);
@@ -670,7 +670,7 @@ int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
 
   /* Create the serialized version of the new client snapshot. */
   if( pDb->bDirty && rc==LSM_OK ){
-    assert( nHdrLevel>0 || p->worker.pLevel==0 );
+    assert( nHdrLevel>0 || pDb->worker.pLevel==0 );
     rc = lsmCheckpointExport(
         db, nHdrLevel, pNew->iId, 1, &pNew->pExport, &pNew->nExport
     );

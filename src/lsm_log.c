@@ -187,33 +187,6 @@
 ** See s4_varint.c.
 */
 
-/*
-** THREAD SAFETY NOTES
-**
-** The DbLog object that the functions in this file operate on is shared by
-** multiple database connections. Access to the DbLog object associated with
-** a database is required in the following scenarios:
-**
-**   * During recovery. The DbLog object is initialized during database 
-**     recovery. Since while recovery is running there may be no other 
-**     database users of any type, this is not much of a concern.
-**
-**   * By writers. Records are appended to the log file and the DbLog 
-**     object updated as a result of calls to lsm_write()/delete()/commit()
-**     etc.
-**
-**     Also when creating a new snapshot (after flushing the contents of
-**     the in-memory tree to disk).
-**
-**   * By checkpointers. After a checkpoint is written to the database file,
-**     the DbLog object must be updated.
-**
-**   * For LSM_INFO_LOG_STRUCTURE requests.
-**
-** TODO: Come back to this.
-*/
-
-
 #ifndef _LSM_INT_H
 # include "lsmInt.h"
 #endif

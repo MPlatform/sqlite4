@@ -251,6 +251,7 @@ int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr){
 }
 
 int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
+  if( pFS->fdLog==0 ) return LSM_OK;
   return lsmEnvTruncate(pFS->pEnv, pFS->fdLog, nByte);
 }
 
