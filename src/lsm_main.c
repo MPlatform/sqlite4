@@ -152,12 +152,9 @@ static int dbRecoverIfRequired(lsm_db *pDb){
     /* Read the database structure */
     rc = lsmCheckpointRead(pDb);
 
-    /* Read the free block list */
+    /* Read the free block list and any level records stored in the LSM. */
     if( rc==LSM_OK ){
-      /* TODO: This (reading the free block list) should be delayed until
-      ** the first time it is actually required. Readers never require the
-      ** free block list.  */
-      rc = lsmSortedLoadFreelist(pDb);
+      rc = lsmSortedLoadSystem(pDb);
     }
 
     /* Populate the in-memory tree by reading the log file. */
@@ -172,7 +169,7 @@ static int dbRecoverIfRequired(lsm_db *pDb){
 
     /* Set up the initial client snapshot. */
     if( rc==LSM_OK ){
-      rc = lsmDbUpdateClient(pDb);
+      rc = lsmDbUpdateClient(pDb, 0);
     }
 
     dbReleaseSnapshot(&pDb->pWorker);
@@ -213,6 +210,7 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
 */
 int lsmFlushToDisk(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
+  int nHdrLevel;
   lsm_cursor *pCsr;               /* Used to iterate through open cursors */
 
   /* Must not hold the worker snapshot when this is called. */
@@ -228,11 +226,11 @@ int lsmFlushToDisk(lsm_db *pDb){
   ** update the worker snapshot accordingly. Then flush the contents of 
   ** the db file to disk too. No calls to fsync() are made here - just 
   ** write().  */
-  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb);
+  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, &nHdrLevel);
   if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
 
   /* Create a new client snapshot - one that uses the new runs created above. */
-  if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb);
+  if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nHdrLevel);
 
   /* Restore the position of any open cursors */
   for(pCsr=pDb->pCsr; rc==LSM_OK && pCsr; pCsr=pCsr->pNext){
@@ -406,7 +404,7 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       if( pDb->pWorker==0 ){
         rc = LSM_BUSY;
       }else{
-        rc = lsmCheckpointExport(pDb, 0, 0, (void **)paVal, 0);
+        rc = lsmCheckpointExport(pDb, 0, 0, 0, (void **)paVal, 0);
         if( bRelease ){
           dbReleaseSnapshot(&pDb->pWorker);
         }

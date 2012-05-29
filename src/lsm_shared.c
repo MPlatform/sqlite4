@@ -610,7 +610,7 @@ void lsmDbSnapshotRelease(Snapshot *pSnap){
 ** Create a new client snapshot based on the current contents of the worker 
 ** snapshot. The connection must be the worker to call this function.
 */
-int lsmDbUpdateClient(lsm_db *db){
+int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
   Database *pDb = db->pDatabase;  /* Database handle */
   Snapshot *pOld;                 /* Old client snapshot object */
   Snapshot *pNew;                 /* New client snapshot object */
@@ -670,7 +670,10 @@ int lsmDbUpdateClient(lsm_db *db){
 
   /* Create the serialized version of the new client snapshot. */
   if( pDb->bDirty && rc==LSM_OK ){
-    rc = lsmCheckpointExport(db, pNew->iId, 1, &pNew->pExport, &pNew->nExport);
+    assert( nHdrLevel>0 || p->worker.pLevel==0 );
+    rc = lsmCheckpointExport(
+        db, nHdrLevel, pNew->iId, 1, &pNew->pExport, &pNew->nExport
+    );
   }
 
   if( rc==LSM_OK ){

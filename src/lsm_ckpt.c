@@ -192,18 +192,19 @@ static void ckptSetValue(CkptBuffer *p, int iIdx, u32 iVal, int *pRc){
   p->aCkpt[iIdx] = iVal;
 }
 
+static void ckptChangeEndianness(u32 *a, int n){
+  if( LSM_LITTLE_ENDIAN ){
+    int i;
+    for(i=0; i<n; i++) a[i] = BYTESWAP32(a[i]);
+  }
+}
+
 static void ckptAddChecksum(CkptBuffer *p, int nCkpt, int *pRc){
   if( *pRc==LSM_OK ){
     u32 aCksum[2] = {0, 0};
-    if( LSM_LITTLE_ENDIAN ){
-      int i;
-      for(i=0; i<nCkpt; i++) p->aCkpt[i] = BYTESWAP32(p->aCkpt[i]);
-    }
+    ckptChangeEndianness(p->aCkpt, nCkpt);
     lsmChecksumBytes((u8 *)p->aCkpt, sizeof(u32)*nCkpt, 0, aCksum);
-    if( LSM_LITTLE_ENDIAN ){
-      aCksum[0] = BYTESWAP32(aCksum[0]);
-      aCksum[1] = BYTESWAP32(aCksum[1]);
-    }
+    ckptChangeEndianness(aCksum, 2);
     ckptSetValue(p, nCkpt, aCksum[0], pRc);
     ckptSetValue(p, nCkpt+1, aCksum[1], pRc);
   }
@@ -232,6 +233,39 @@ static void ckptExportSegment(
     ckptSetValue(p, iOut++, 0, pRc);
     ckptSetValue(p, iOut++, 0, pRc);
     ckptSetValue(p, iOut++, 0, pRc);
+  }
+
+  *piOut = iOut;
+}
+
+static void ckptExportLevel(
+  Level *pLevel,
+  CkptBuffer *p,
+  int *piOut,
+  int *pRc
+){
+  int iOut = *piOut;
+  Merge *pMerge;
+
+  pMerge = pLevel->pMerge;
+  ckptSetValue(p, iOut++, pLevel->nRight, pRc);
+  ckptExportSegment(&pLevel->lhs, p, &iOut, pRc);
+
+  assert( (pLevel->nRight>0)==(pMerge!=0) );
+  if( pMerge ){
+    int i;
+    for(i=0; i<pLevel->nRight; i++){
+      ckptExportSegment(&pLevel->aRhs[i], p, &iOut, pRc);
+    }
+    assert( pMerge->nInput==pLevel->nRight 
+         || pMerge->nInput==pLevel->nRight+1 
+    );
+    ckptSetValue(p, iOut++, pMerge->nInput, pRc);
+    ckptSetValue(p, iOut++, pMerge->nSkip, pRc);
+    for(i=0; i<pMerge->nInput; i++){
+      ckptSetValue(p, iOut++, pMerge->aInput[i].iPg, pRc);
+      ckptSetValue(p, iOut++, pMerge->aInput[i].iCell, pRc);
+    }
   }
 
   *piOut = iOut;
@@ -278,6 +312,7 @@ lsm_i64 lsmCheckpointLogOffset(void *pExport){
 
 int lsmCheckpointExport( 
   lsm_db *pDb,                    /* Connection handle */
+  int nHdrLevel,                  /* Number of levels to store in checkpoint */
   i64 iId,                        /* Checkpoint id */
   int bCksum,                     /* If true, include checksums */
   void **ppCkpt,                  /* OUT: Buffer containing checkpoint */
@@ -288,9 +323,8 @@ int lsmCheckpointExport(
   Snapshot *pSnap = pDb->pWorker; /* Worker snapshot */
   u32 nLevel = 0;                 /* Number of levels in db file */
   int iOut = 0;                   /* Current offset in aCkpt[] */
-  Level *pNext = 0;               /* Used to help iterate through levels */
-  Level *pTopLevel;               /* Top level of database snapshot */
   int i;                          /* Iterator used for several purposes */
+  Level *pLevel;                  /* Level iterator */
   u32 aDelta[LSM_FREELIST_DELTA_SIZE];
 
   u32 iSalt1;
@@ -304,36 +338,12 @@ int lsmCheckpointExport(
   /* Write the current log offset */
   ckptExportLog(lsmDatabaseLog(pDb), &ckpt, &iOut, &rc);
 
-  pTopLevel = lsmDbSnapshotLevel(pSnap);
-  while( pNext!=pTopLevel ){
-    Level *pLevel;                /* This level */
-    Merge *pMerge;
-
-    for(pLevel=pTopLevel; pLevel->pNext!=pNext; pLevel=pLevel->pNext);
-    pMerge = pLevel->pMerge;
-    assert( (pLevel->nRight>0)==(pMerge!=0) );
-
-    ckptSetValue(&ckpt, iOut++, pLevel->nRight, &rc);
-    ckptExportSegment(&pLevel->lhs, &ckpt, &iOut, &rc);
-    if( pMerge ){
-
-      for(i=0; i<pLevel->nRight; i++){
-        ckptExportSegment(&pLevel->aRhs[i], &ckpt, &iOut, &rc);
-      }
-
-      assert( pMerge->nInput==pLevel->nRight 
-           || pMerge->nInput==pLevel->nRight+1 
-      );
-
-      ckptSetValue(&ckpt, iOut++, pMerge->nInput, &rc);
-      ckptSetValue(&ckpt, iOut++, pMerge->nSkip, &rc);
-      for(i=0; i<pMerge->nInput; i++){
-        ckptSetValue(&ckpt, iOut++, pMerge->aInput[i].iPg, &rc);
-        ckptSetValue(&ckpt, iOut++, pMerge->aInput[i].iCell, &rc);
-      }
-    }
-
-    pNext = pLevel;
+  /* Export up to nHdrLevel levels. Or, if nHdrLevel==0, export all levels. */
+  for(pLevel=lsmDbSnapshotLevel(pSnap); 
+      pLevel && (nHdrLevel==0 || nLevel<nHdrLevel); 
+      pLevel=pLevel->pNext
+  ){
+    ckptExportLevel(pLevel, &ckpt, &iOut, &rc);
     nLevel++;
   }
 
@@ -426,6 +436,56 @@ static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
   return LSM_OK;
 }
 
+
+static int ckptLoadLevels(
+  lsm_db *pDb,
+  u32 *aIn, 
+  int *piIn, 
+  int nLevel,
+  Level **ppLevel
+){
+  int i;
+  int rc = LSM_OK;
+  Level *pRet = 0;
+  Level **ppNext;
+  int iIn = *piIn;
+
+  ppNext = &pRet;
+  for(i=0; rc==LSM_OK && i<nLevel; i++){
+    int iRight;
+    Level *pLevel;
+
+    /* Allocate space for the Level structure and Level.apRight[] array */
+    pLevel = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
+    if( rc==LSM_OK ){
+      pLevel->nRight = aIn[iIn++];
+      if( pLevel->nRight ){
+        int nByte = sizeof(Segment) * pLevel->nRight;
+        pLevel->aRhs = (Segment *)lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
+      }
+      *ppNext = pLevel;
+      ppNext = &pLevel->pNext;
+
+      /* Allocate the main segment */
+      ckptNewSegment(aIn, &iIn, &pLevel->lhs);
+
+      /* Allocate each of the right-hand segments, if any */
+      for(iRight=0; iRight<pLevel->nRight; iRight++){
+        ckptNewSegment(aIn, &iIn, &pLevel->aRhs[iRight]);
+      }
+
+      /* Set up the Merge object, if required */
+      if( pLevel->nRight>0 ){
+        ckptSetupMerge(pDb, aIn, &iIn, pLevel);
+      }
+    }
+  }
+
+  *ppLevel = pRet;
+  *piIn = iIn;
+  return rc;
+}
+
 int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
   int ret = 0;
   Snapshot *pSnap = pDb->pWorker;
@@ -440,12 +500,13 @@ int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
   }
 
   if( aInt[nInt-2]==cksum[0] && aInt[nInt-1]==cksum[1] ){
-    int rc = LSM_OK;
     int i;
     int nLevel;
     int iIn = CKPT_HDRSIZE;
     i64 iId;
     u32 *aDelta;
+
+    Level *pTopLevel = 0;
 
     /* Read header fields */
     iId = ((i64)aInt[CKPT_HDR_ID_MSW] << 32) + (i64)aInt[CKPT_HDR_ID_LSW];
@@ -459,38 +520,8 @@ int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
     ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));
 
     /* Import each level. This loop runs once for each db level. */
-    for(i=0; rc==LSM_OK && i<nLevel; i++){
-      int iRight;
-      Level *pLevel;
-
-      /* Allocate space for the Level structure and Level.apRight[] array */
-      pLevel = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
-      if( rc==LSM_OK ){
-        pLevel->nRight = aInt[iIn++];
-        if( pLevel->nRight ){
-          int nByte = sizeof(Segment) * pLevel->nRight;
-          pLevel->aRhs = (Segment *)lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
-        }
-
-        pLevel->pNext = lsmDbSnapshotLevel(pSnap);
-        lsmDbSnapshotSetLevel(pSnap, pLevel);
-      }
-
-      if( rc==LSM_OK ){
-        /* Allocate the main segment */
-        ckptNewSegment(aInt, &iIn, &pLevel->lhs);
-
-        /* Allocate each of the right-hand segments, if any */
-        for(iRight=0; iRight<pLevel->nRight; iRight++){
-          ckptNewSegment(aInt, &iIn, &pLevel->aRhs[iRight]);
-        }
-
-        /* Set up the Merge object, if required */
-        if( pLevel->nRight>0 ){
-          ckptSetupMerge(pDb, aInt, &iIn, pLevel);
-        }
-      }
-    }
+    *pRc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);
+    lsmDbSnapshotSetLevel(pSnap, pTopLevel);
 
     /* Import the freelist delta */
     aDelta = lsmFreelistDeltaPtr(pDb);
@@ -503,6 +534,40 @@ int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
  
   assert( *pRc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   return ret;
+}
+
+
+int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal){
+  int rc = LSM_OK;
+  if( nVal>0 ){
+    u32 *aIn;
+
+    aIn = lsmMallocRc(pDb->pEnv, nVal, &rc);
+    if( aIn ){
+      Level *pLevel = 0;
+      Level *pParent;
+
+      int nIn;
+      int nLevel;
+      int iIn = 1;
+      memcpy(aIn, pVal, nVal);
+      nIn = nVal / sizeof(u32);
+
+      ckptChangeEndianness(aIn, nIn);
+      nLevel = aIn[0];
+      rc = ckptLoadLevels(pDb, aIn, &iIn, nLevel, &pLevel);
+      lsmFree(pDb->pEnv, aIn);
+      assert( rc==LSM_OK || pLevel==0 );
+      if( rc==LSM_OK ){
+        pParent = lsmDbSnapshotLevel(pDb->pWorker);
+        assert( pParent );
+        while( pParent->pNext ) pParent = pParent->pNext;
+        pParent->pNext = pLevel;
+      }
+    }
+  }
+
+  return rc;
 }
 
 
@@ -594,6 +659,79 @@ static int ckptTryRead(
   }
 
   return ret;
+}
+
+/*
+** Return the data for the LEVELS record.
+**
+** The size of the checkpoint that can be stored in the database header
+** must not exceed 1024 32-bit integers. Normally, it does not. However,
+** if it does, part of the checkpoint must be stored in the LSM. This
+** routine returns that part.
+*/
+int lsmCheckpointLevels(
+  lsm_db *pDb,                    /* Database handle */
+  int *pnHdrLevel,                /* OUT: Levels to write to db header */
+  void **paVal,                   /* OUT: Pointer to LEVELS blob */
+  int *pnVal                      /* OUT: Size of LEVELS blob in bytes */
+){
+  int rc = LSM_OK;                /* Return code */
+  const int SEGMENT_SIZE = 6;     /* Size of a checkpoint segment record */
+  Level *p;                       /* Used to iterate through levels */
+  int nFree;                      /* Free integers remaining in db header */
+  int nHdr = 0;                   /* Number of levels stored in db header */
+  int nLevels = 0;                /* Number of levels stored in LEVELS */
+ 
+  /* Number of free integers - 1024 less those used by the checkpoint header,
+  ** less the 4 used for the log-pointer, less the 3 used for the 
+  ** free-list delta and the 2 used for the checkpoint checksum.  */
+  nFree = 1024 - CKPT_HDRSIZE - 4 - 3 - 2;
+
+  /* Each level record not currently undergoing a merge consumes 1 + 6
+  ** integers. Each level that is undergoing a merge consumes 1 + 6 +
+  ** (nRhs * 6) + 1 + 1 + (nMerge * 2), where nRhs is the number of levels
+  ** used as input to the merge and nMerge is the total number of segments
+  ** (same as the number of levels, possibly plus 1 separators array). 
+  **
+  ** The calculation in the following block may overestimate the number
+  ** of integers required by a single level by 2 (as it assumes 
+  ** that nMerge==nRhs+1).
+  */
+  for(p=lsmDbSnapshotLevel(pDb->pWorker); p; p=p->pNext){
+    int nThis;                    /* Number of integers required by level p */
+    if( p->pMerge ){
+      nThis = 1 + (1 + p->nRight) * (2 + SEGMENT_SIZE) + 1 + 1;
+    }else{
+      nThis = 1 + SEGMENT_SIZE;
+    }
+    if( nFree<nThis ) break;
+    nFree -= nThis;
+    nHdr++;
+  }
+
+  if( p ){
+    int iOut;
+    CkptBuffer ckpt;
+
+    memset(&ckpt, 0, sizeof(CkptBuffer));
+    ckpt.pEnv = pDb->pEnv;
+    iOut = 1;
+    do{
+      nLevels++;
+      ckptExportLevel(p, &ckpt, &iOut, &rc);
+    } while( 0!=(p = p->pNext) );
+    ckptSetValue(&ckpt, 0, (u32)nLevels, &rc);
+
+    ckptChangeEndianness(ckpt.aCkpt, iOut);
+    *paVal = (void *)ckpt.aCkpt;
+    *pnVal = iOut * sizeof(u32);
+  }else{
+    *pnVal = 0;
+    *paVal = 0;
+  }
+
+  *pnHdrLevel = nHdr;
+  return rc;
 }
 
 int lsmCheckpointRead(lsm_db *pDb){

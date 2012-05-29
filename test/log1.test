@@ -428,7 +428,7 @@ do_execsql_test 12.2 {
   CREATE INDEX i1 ON t1(b);
 }
 
-for {set iTest 1} {$iTest<50} {incr iTest} {
+for {set iTest 1} {$iTest<100} {incr iTest} {
   expr srand(0)
   do_test 12.3.$iTest {
     for {set i 0} {$i < 10} {incr i} {

@@ -275,9 +275,10 @@ struct MergeInput {
 */
 int lsmCheckpointRead(lsm_db *);
 int lsmCheckpointWrite(lsm_db *);
-int lsmCheckpointExport(lsm_db *, i64, int, void **, int *);
+int lsmCheckpointExport(lsm_db *, int, i64, int, void **, int *);
 void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
 lsm_i64 lsmCheckpointLogOffset(void *pExport);
+int lsmCheckpointLevels(lsm_db *, int *, void **, int *);
 
 
 /* 
@@ -434,7 +435,7 @@ int lsmFsTruncateLog(FileSystem *pFS, i64 nByte);
 /* 
 ** Functions from file "sorted.c".
 */
-int lsmSortedFlushTree(lsm_db *);
+int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *);
 
@@ -445,7 +446,7 @@ int lsmSortedAdvanceAll(lsm_db *pDb);
 
 int lsmSortedLoadMerge(lsm_db *, Level *, u32 *, int *);
 
-int lsmSortedLoadFreelist(lsm_db *pDb);
+int lsmSortedLoadSystem(lsm_db *pDb);
 
 void *lsmSortedSplitKey(Level *pLevel, int *pnByte);
 
@@ -523,7 +524,7 @@ void lsmFinishReadTrans(lsm_db *);
 int lsmFinishWriteTrans(lsm_db *, int);
 int lsmFinishFlush(lsm_db *, int);
 
-int lsmDbUpdateClient(lsm_db *);
+int lsmDbUpdateClient(lsm_db *, int);
 
 int lsmSnapshotFreelist(Snapshot *, int **, int *);
 int lsmSnapshotSetFreelist(Snapshot *pSnap, int *aElem, int nElem);

@@ -219,9 +219,7 @@ struct LevelCursor {
 struct MultiCursor {
   lsm_db *pDb;                    /* Connection that owns this cursor */
   TreeCursor *pTreeCsr;           /* Single tree cursor */
-#if 0
-  FileSystem *pFS;                /* File-system to read from */
-#endif
+
   int flags;                      /* Mask of CURSOR_XXX flags */
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
   int eType;                      /* Cache of current key type */
@@ -231,7 +229,8 @@ struct MultiCursor {
   int nTree;
   int *aTree;
 
-  int *aFreelist;
+  int *pnHdrLevel;
+  void *pSystemVal;
   Snapshot *pSnap;
 };
 
@@ -239,23 +238,29 @@ struct MultiCursor {
 ** CURSOR_IGNORE_DELETE
 **   If set, this cursor will not visit SORTED_DELETE keys.
 **
-** CURSOR_VISIT_FREELIST
-**   If set, then after all user data from the in-memory tree has been
-**   visited, the cursor visits the live (uncommitted) free block list 
-**   key. This is used when flushing the in-memory tree to disk - the
-**   new free-list record is flushed along with it.
+** CURSOR_NEW_SYSTEM
+**   If set, then after all user data from the in-memory tree and any other
+**   cursors has been visited, the cursor visits the live (uncommitted) 
+**   versions of the two system keys: FREELIST AND LEVELS. This is used when 
+**   flushing the in-memory tree to disk - the new free-list and levels record
+**   are flushed along with it.
 **
 ** CURSOR_AT_FREELIST
-**   This flag is set when sub-cursor CURSOR_DATA_FREELIST is actually
+**   This flag is set when sub-cursor CURSOR_DATA_SYSTEM is actually
+**   pointing at a free list.
+**
+** CURSOR_AT_LEVELS
+**   This flag is set when sub-cursor CURSOR_DATA_SYSTEM is actually
 **   pointing at a free list.
 **
 ** CURSOR_IGNORE_SYSTEM
 **   If set, this cursor ignores system keys.
 */
 #define CURSOR_IGNORE_DELETE    0x00000001
-#define CURSOR_VISIT_FREELIST   0x00000002
+#define CURSOR_NEW_SYSTEM       0x00000002
 #define CURSOR_AT_FREELIST      0x00000004
-#define CURSOR_IGNORE_SYSTEM    0x00000008
+#define CURSOR_AT_LEVELS        0x00000008
+#define CURSOR_IGNORE_SYSTEM    0x00000010
 
 typedef struct MergeWorker MergeWorker;
 struct MergeWorker {
@@ -1363,14 +1368,14 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
   /* Free allocations */
   lsmFree(pEnv, pCsr->aSegCsr);
   lsmFree(pEnv, pCsr->aTree);
-  lsmFree(pEnv, pCsr->aFreelist);
+  lsmFree(pEnv, pCsr->pSystemVal);
 
   /* Zero fields */
   pCsr->nSegCsr = 0;
   pCsr->aSegCsr = 0;
   pCsr->nTree = 0;
   pCsr->aTree = 0;
-  pCsr->aFreelist = 0;
+  pCsr->pSystemVal = 0;
   pCsr->pSnap = 0;
 }
 
@@ -1520,7 +1525,7 @@ static void multiCursorIgnoreDelete(MultiCursor *pCsr){
 */
 static void multiCursorVisitFreelist(MultiCursor *pCsr){
   assert( pCsr );
-  pCsr->flags |= CURSOR_VISIT_FREELIST;
+  pCsr->flags |= CURSOR_NEW_SYSTEM;
 }
 
 /*
@@ -1574,7 +1579,7 @@ int lsmMCursorNew(
 }
 
 #define CURSOR_DATA_TREE      0
-#define CURSOR_DATA_FREELIST  1
+#define CURSOR_DATA_SYSTEM    1
 #define CURSOR_DATA_SEGMENT   2
 
 static void multiCursorGetKey(
@@ -1600,10 +1605,15 @@ static void multiCursorGetKey(
       }
       break;
 
-    case CURSOR_DATA_FREELIST:
+    case CURSOR_DATA_SYSTEM:
       if( pCsr->flags & CURSOR_AT_FREELIST ){
         pKey = (void *)"FREELIST";
         nKey = 8;
+        eType = SORTED_SYSTEM_WRITE;
+      }
+      else if( pCsr->flags & CURSOR_AT_LEVELS ){
+        pKey = (void *)"LEVELS";
+        nKey = 6;
         eType = SORTED_SYSTEM_WRITE;
       }
       break;
@@ -1636,14 +1646,18 @@ static void multiCursorGetVal(
       *ppVal = 0;
       *pnVal = 0;
     }
-  }else if( iVal==CURSOR_DATA_FREELIST ){
+  }else if( iVal==CURSOR_DATA_SYSTEM ){
     if( pCsr->flags & CURSOR_AT_FREELIST ){
       int *aVal;
       int nVal;
-      assert( pCsr->aFreelist==0 );
+      assert( pCsr->pSystemVal==0 );
       lsmSnapshotFreelist(pCsr->pSnap, &aVal, &nVal);
-      pCsr->aFreelist = *ppVal = (void *)aVal;
+      pCsr->pSystemVal = *ppVal = (void *)aVal;
       *pnVal = sizeof(int) * nVal;
+    }else if( pCsr->flags & CURSOR_AT_LEVELS ){
+      lsmFree(pCsr->pDb->pEnv, pCsr->pSystemVal);
+      lsmCheckpointLevels(pCsr->pDb, pCsr->pnHdrLevel, ppVal, pnVal);
+      pCsr->pSystemVal = *ppVal;
     }else{
       *ppVal = 0;
       *pnVal = 0;
@@ -1658,23 +1672,41 @@ static void multiCursorGetVal(
   }
 }
 
-int lsmSortedLoadFreelist(lsm_db *pDb){
+int lsmSortedLoadSystem(lsm_db *pDb){
   MultiCursor *pCsr = 0;          /* Cursor used to retreive free-list */
   int rc;                         /* Return Code */
 
   assert( pDb->pWorker );
   rc = multiCursorAllocate(pDb, 1, &pCsr);
   if( rc==LSM_OK ){
-    rc = lsmMCursorLast(pCsr);
-    if( rc==LSM_OK && pCsr->eType==SORTED_SYSTEM_WRITE ){
-      void *pVal;
-      int nVal;
+    void *pVal; int nVal;         /* Value read from database */
 
+    rc = lsmMCursorLast(pCsr);
+    if( rc==LSM_OK 
+     && pCsr->eType==SORTED_SYSTEM_WRITE 
+     && pCsr->key.nData==6 
+     && 0==memcmp(pCsr->key.pData, "LEVELS", 6)
+    ){
+      rc = lsmMCursorValue(pCsr, &pVal, &nVal);
+      if( rc==LSM_OK ){
+        lsmCheckpointLoadLevels(pDb, pVal, nVal);
+      }
+      if( rc==LSM_OK ){
+        rc = lsmMCursorPrev(pCsr);
+      }
+    }
+
+    if( rc==LSM_OK 
+     && pCsr->eType==SORTED_SYSTEM_WRITE 
+     && pCsr->key.nData==8 
+     && 0==memcmp(pCsr->key.pData, "FREELIST", 8)
+    ){
       rc = lsmMCursorValue(pCsr, &pVal, &nVal);
       if( rc==LSM_OK ){
         lsmSnapshotSetFreelist(pDb->pWorker, (int *)pVal, nVal/sizeof(u32));
       }
     }
+
     lsmMCursorClose(pCsr);
   }
   return rc;
@@ -1757,7 +1789,8 @@ static int multiCursorEnd(MultiCursor *pCsr, int bLast){
   if( pCsr->pTreeCsr ){
     rc = lsmTreeCursorEnd(pCsr->pTreeCsr, bLast);
   }
-  if( pCsr->flags & CURSOR_VISIT_FREELIST ){
+  if( pCsr->flags & CURSOR_NEW_SYSTEM ){
+    assert( bLast==0 );
     pCsr->flags |= CURSOR_AT_FREELIST;
   }
   for(i=0; rc==LSM_OK && i<pCsr->nSegCsr; i++){
@@ -1838,8 +1871,9 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
   int res; 
   int iPtr = 0; 
 
-  assert( (pCsr->flags & CURSOR_VISIT_FREELIST)==0 );
+  assert( (pCsr->flags & CURSOR_NEW_SYSTEM)==0 );
   assert( (pCsr->flags & CURSOR_AT_FREELIST)==0 );
+  assert( (pCsr->flags & CURSOR_AT_LEVELS)==0 );
   
   lsmTreeCursorSeek(pCsr->pTreeCsr, pKey, nKey, &res);
   switch( eSeek ){
@@ -1963,10 +1997,17 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
         }else{
           rc = lsmTreeCursorNext(pCsr->pTreeCsr);
         }
-      }else if( iKey==CURSOR_DATA_FREELIST ){
-        assert( pCsr->flags & CURSOR_AT_FREELIST );
-        assert( pCsr->flags & CURSOR_VISIT_FREELIST );
-        pCsr->flags &= ~CURSOR_AT_FREELIST;
+      }else if( iKey==CURSOR_DATA_SYSTEM ){
+        assert( pCsr->flags & (CURSOR_AT_FREELIST | CURSOR_AT_LEVELS) );
+        assert( pCsr->flags & CURSOR_NEW_SYSTEM );
+        assert( bReverse==0 );
+
+        if( pCsr->flags & CURSOR_AT_FREELIST ){
+          pCsr->flags &= ~CURSOR_AT_FREELIST;
+          pCsr->flags |= CURSOR_AT_LEVELS;
+        }else{
+          pCsr->flags &= ~CURSOR_AT_LEVELS;
+        }
       }else{
         LevelCursor *pLevel = &pCsr->aSegCsr[iKey-CURSOR_DATA_SEGMENT];
         rc = segmentCursorAdvance(pLevel, bReverse);
@@ -2889,7 +2930,8 @@ static void sortedInvokeWorkHook(lsm_db *pDb){
 ** In the second, no in-memory tree version reference is held at all.
 */
 int lsmSortedFlushTree(
-  lsm_db *pDb                     /* Connection handle */
+  lsm_db *pDb,                    /* Connection handle */
+  int *pnHdrLevel                 /* OUT: Number of levels not stored in LSM */
 ){
   int rc = LSM_OK;                /* Return Code */
   MultiCursor *pCsr = 0;
@@ -2947,6 +2989,7 @@ int lsmSortedFlushTree(
     }
     multiCursorVisitFreelist(pCsr);
     multiCursorReadSeparators(pCsr);
+    pCsr->pnHdrLevel = pnHdrLevel;
     lsmFreelistDeltaBegin(pDb);
   }
 
