@@ -142,18 +142,21 @@ void testDbContents(
 
       iKey1 = testPrngValue((iFirst<<8) + (iLast<<16)) % nRow;
       iKey2 = testPrngValue((iLast<<8) + (iFirst<<16)) % nRow;
-      testDatasourceEntry(pData, iKey1, &pKey1, &nKey1, 0, 0);
+      testDatasourceEntry(pData, iKey1, &pKey2, &nKey1, 0, 0);
+      pKey1 = testMalloc(nKey1+1);
+      memcpy(pKey1, pKey2, nKey1+1);
       testDatasourceEntry(pData, iKey2, &pKey2, &nKey2, 0, 0);
 
       testScanCompare(pDb2, pDb, 0, 0, 0,         0, 0,         &rc);
       testScanCompare(pDb2, pDb, 0, 0, 0,         pKey2, nKey2, &rc);
       testScanCompare(pDb2, pDb, 0, pKey1, nKey1, 0, 0,         &rc);
       testScanCompare(pDb2, pDb, 0, pKey1, nKey1, pKey2, nKey2, &rc);
-
       testScanCompare(pDb2, pDb, 1, 0, 0,         0, 0,         &rc);
       testScanCompare(pDb2, pDb, 1, 0, 0,         pKey2, nKey2, &rc);
       testScanCompare(pDb2, pDb, 1, pKey1, nKey1, 0, 0,         &rc);
       testScanCompare(pDb2, pDb, 1, pKey1, nKey1, pKey2, nKey2, &rc);
+
+      testFree(pKey1);
     }
     tdb_close(pDb2);
   }

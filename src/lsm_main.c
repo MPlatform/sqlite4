@@ -157,6 +157,11 @@ static int dbRecoverIfRequired(lsm_db *pDb){
       rc = lsmSortedLoadSystem(pDb);
     }
 
+    /* Set up the initial append list */
+    if( rc==LSM_OK ){
+      rc = lsmFsSetupAppendList(pDb);
+    }
+
     /* Populate the in-memory tree by reading the log file. */
     if( rc==LSM_OK ){
       rc = lsmLogRecover(pDb);

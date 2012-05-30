@@ -16,6 +16,7 @@
 #include "lsmInt.h"
 
 typedef struct Freelist Freelist;
+typedef struct AppendList AppendList;
 typedef struct FreelistEntry FreelistEntry;
 
 /*
@@ -68,6 +69,12 @@ struct Freelist {
 struct FreelistEntry {
   int iBlk;                       /* Block number */
   i64 iId;                        /* Largest snapshot id to use this block */
+};
+
+struct AppendList {
+  Pgno *aPoint;
+  int nPoint;
+  int nAlloc;
 };
 
 /*
@@ -183,7 +190,10 @@ struct Database {
   DbLog log;                      /* Database log state object */
 
   Snapshot *pClient;              /* Client (reader) snapshot */
+
   Snapshot worker;                /* Worker (writer) snapshot */
+  AppendList append;              /* List of appendable points */
+
   lsm_mutex *pWorkerMutex;        /* Protects the worker snapshot */
   lsm_mutex *pClientMutex;        /* Protects pClient */
   lsm_mutex *pCkptMutex;          /* Checkpointer mutex */
@@ -251,6 +261,44 @@ static void assertSnapshotListOk(Database *p){
 # define assertSnapshotListOk(x)
 #endif
 
+
+Pgno *lsmSharedAppendList(lsm_db *db, int *pnApp){
+  Database *p = db->pDatabase;
+  assert( db->pWorker );
+  *pnApp = p->append.nPoint;
+  return p->append.aPoint;
+}
+
+int lsmSharedAppendListAdd(lsm_db *db, Pgno iPg){
+  AppendList *pList;
+  assert( db->pWorker );
+  pList = &db->pDatabase->append;
+
+  assert( pList->nAlloc>=pList->nPoint );
+  if( pList->nAlloc<=pList->nPoint ){
+    int nNew = pList->nAlloc+8;
+    Pgno *aNew = (Pgno *)lsmRealloc(db->pEnv, pList->aPoint, sizeof(Pgno)*nNew);
+    if( aNew==0 ) return LSM_NOMEM_BKPT;
+    pList->aPoint = aNew;
+    pList->nAlloc = nNew;
+  }
+
+  pList->aPoint[pList->nPoint++] = iPg;
+  return LSM_OK;
+}
+
+void lsmSharedAppendListRemove(lsm_db *db, int iIdx){
+  AppendList *pList;
+  int i;
+  assert( db->pWorker );
+  pList = &db->pDatabase->append;
+
+  assert( pList->nPoint>iIdx );
+  for(i=iIdx+1; i<pList->nPoint;i++){
+    pList->aPoint[i-1] = pList->aPoint[i];
+  }
+  pList->nPoint--;
+}
 
 /*
 ** Append an entry to the free-list.
@@ -441,6 +489,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       /* Free the contents of the worker snapshot */
       lsmSortedFreeLevel(p->pEnv, p->worker.pLevel);
       lsmFree(pDb->pEnv, p->worker.freelist.aEntry);
+      lsmFree(pDb->pEnv, p->append.aPoint);
       
       /* Free the client snapshot */
       if( p->pClient ){
@@ -554,7 +603,7 @@ Snapshot *lsmDbSnapshotRecover(Database *p){
 /*
 ** Set (bVal==1) or clear (bVal==0) the "recovery done" flag.
 **
-** TODO: Should be combined with BeginRecovery()/FinishRecovery().
+** TODO: Should this be combined with BeginRecovery()/FinishRecovery()?
 */
 void lsmDbRecoveryComplete(Database *p, int bVal){
   assert( bVal==1 || bVal==0 );

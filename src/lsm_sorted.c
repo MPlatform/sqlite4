@@ -766,6 +766,8 @@ static int segmentPtrAdvance(
         (pCsr->bIgnoreSeparators && rtIsSeparator(pPtr->eType))
      || (pCsr->bIgnoreSystem && rtTopic(pPtr->eType)!=0)
   ));
+
+
   return LSM_OK;
 }
 

@@ -706,6 +706,9 @@ static int fsFreeBlock(
   int i;                          /* Used to iterate through append points */
   Level *pLevel;                  /* Used to iterate through levels */
 
+  Pgno *aAppend;
+  int nAppend;
+
   iFirst = fsFirstPageOnBlock(pFS, iBlk);
   iLast = fsLastPageOnBlock(pFS, iBlk);
 
@@ -714,6 +717,14 @@ static int fsFreeBlock(
   for(pLevel=lsmDbSnapshotLevel(pSnapshot); pLevel; pLevel=pLevel->pNext){
     if( fsLevelEndsBetween(pLevel, pIgnore, iFirst, iLast) ){
       return LSM_OK;
+    }
+  }
+
+  aAppend = lsmSharedAppendList(pFS->pDb, &nAppend);
+  for(i=0; i<nAppend; i++){
+    if( aAppend[i]>=iFirst && aAppend[i]<=iLast ){
+      lsmSharedAppendListRemove(pFS->pDb, i);
+      break;
     }
   }
 
@@ -867,30 +878,112 @@ static int isAppendPoint(
   return iLast;
 }
 
-static Pgno findAppendPoint(FileSystem *pFS, Snapshot *pSnap, int nMin){
-  Level *pRoot;
-  Level *p;
-  Pgno iApp = 0;
+static Pgno findAppendPoint(FileSystem *pFS, int nMin){
+  Pgno ret = 0;
+  Pgno *aAppend;
+  int nAppend;
+  int i;
 
-  pRoot = lsmDbSnapshotLevel(pSnap);
-  if( nMin && pFS->pPhantom->bRunFinished==0 && pRoot ){
-    pRoot = pRoot->pNext;
-  }
-  for(p=pRoot; p; p=p->pNext){
-    int ii;
-    for(ii=0; ii<p->nRight; ii++){
-      if( (iApp = isAppendPoint(pFS, pRoot, &p->aRhs[ii].sep, nMin)) ) break;
-      if( (iApp = isAppendPoint(pFS, pRoot, &p->aRhs[ii].run, nMin)) ) break;
-    }
-    if( p->nRight==0 ){
-      /* Separators array must be considered before the main run. See
-      ** lsmFsSortedDelete() for details.  */
-      if( (iApp = isAppendPoint(pFS, pRoot, &p->lhs.sep, nMin)) ) break;
-      if( (iApp = isAppendPoint(pFS, pRoot, &p->lhs.run, nMin)) ) break;
+  aAppend = lsmSharedAppendList(pFS->pDb, &nAppend);
+  for(i=0; i<nAppend; i++){
+    Pgno iLastOnBlock;
+    iLastOnBlock = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, aAppend[i]));
+    if( (iLastOnBlock - aAppend[i])>=nMin ){
+      ret = aAppend[i];
+      lsmSharedAppendListRemove(pFS->pDb, i);
+      break;
     }
   }
 
-  return iApp;
+  return ret;
+}
+
+static void addAppendPoint(
+  lsm_db *db, 
+  Pgno iLast,
+  int *pRc                        /* IN/OUT: Error code */
+){
+  if( *pRc==LSM_OK && iLast>0 ){
+    FileSystem *pFS = db->pFS;
+
+    Pgno *aPoint;
+    int nPoint;
+    int i;
+    int iBlk;
+    int bLast;
+
+    iBlk = fsPageToBlock(pFS, iLast);
+    bLast = (iLast==fsLastPageOnBlock(pFS, iBlk));
+
+    aPoint = lsmSharedAppendList(db, &nPoint);
+    for(i=0; i<nPoint; i++){
+      if( iBlk==fsPageToBlock(pFS, aPoint[i]) ){
+        if( bLast ){
+          lsmSharedAppendListRemove(db, i);
+        }else if( iLast>=aPoint[i] ){
+          aPoint[i] = iLast+1;
+        }
+        return;
+      }
+    }
+
+    if( bLast==0 ){
+      *pRc = lsmSharedAppendListAdd(db, iLast+1);
+    }
+  }
+}
+
+static void subAppendPoint(lsm_db *db, Pgno iFirst){
+  if( iFirst>0 ){
+    FileSystem *pFS = db->pFS;
+    Pgno *aPoint;
+    int nPoint;
+    int i;
+    int iBlk;
+
+    iBlk = fsPageToBlock(pFS, iFirst);
+    aPoint = lsmSharedAppendList(db, &nPoint);
+    for(i=0; i<nPoint; i++){
+      if( iBlk==fsPageToBlock(pFS, aPoint[i]) ){
+        if( iFirst>=aPoint[i] ) lsmSharedAppendListRemove(db, i);
+        return;
+      }
+    }
+  }
+}
+
+int lsmFsSetupAppendList(lsm_db *db){
+  int rc = LSM_OK;
+  Level *pLvl;
+
+  assert( db->pWorker );
+  for(pLvl=lsmDbSnapshotLevel(db->pWorker); 
+      rc==LSM_OK && pLvl; 
+      pLvl=pLvl->pNext
+  ){
+    if( pLvl->nRight==0 ){
+      addAppendPoint(db, pLvl->lhs.sep.iLast, &rc);
+      addAppendPoint(db, pLvl->lhs.run.iLast, &rc);
+    }else{
+      int i;
+      for(i=0; i<pLvl->nRight; i++){
+        addAppendPoint(db, pLvl->aRhs[i].sep.iLast, &rc);
+        addAppendPoint(db, pLvl->aRhs[i].run.iLast, &rc);
+      }
+    }
+  }
+
+  for(pLvl=lsmDbSnapshotLevel(db->pWorker); pLvl; pLvl=pLvl->pNext){
+    int i;
+    subAppendPoint(db, pLvl->lhs.sep.iFirst);
+    subAppendPoint(db, pLvl->lhs.run.iFirst);
+    for(i=0; i<pLvl->nRight; i++){
+      subAppendPoint(db, pLvl->aRhs[i].sep.iFirst);
+      subAppendPoint(db, pLvl->aRhs[i].run.iFirst);
+    }
+  }
+
+  return rc;
 }
 
 int lsmFsPhantomMaterialize(
@@ -901,7 +994,6 @@ int lsmFsPhantomMaterialize(
   int rc = LSM_OK;
   if( isPhantom(pFS, p) ){
     PhantomRun *pPhantom = pFS->pPhantom;
-    const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
     Page *pPg;
     Page *pNext;
     int i;
@@ -909,7 +1001,7 @@ int lsmFsPhantomMaterialize(
 
     /* Search for an existing run in the database that this run can be
     ** appended to. See comments surrounding findAppendPoint() for details. */
-    iFirst = findAppendPoint(pFS, pSnapshot, pPhantom->nPhantom);
+    iFirst = findAppendPoint(pFS, pPhantom->nPhantom);
 
     /* If the array can not be written into any partially used block, 
     ** allocate a new block. The first page of the materialized run will
@@ -1024,7 +1116,7 @@ int lsmFsSortedAppend(
     int iPrev = p->iLast;
 
     if( iPrev==0 ){
-      iApp = findAppendPoint(pFS, pSnapshot, 0);
+      iApp = findAppendPoint(pFS, 0);
     }else if( fsIsLast(pFS, iPrev) ){
       Page *pLast = 0;
       rc = fsPageGet(pFS, p, iPrev, 0, &pLast);
@@ -1100,6 +1192,8 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
         lsmBlockRefree(pFS->pDb, iBlk);
         lsmFsPageRelease(pLast);
       }
+    }else{
+      rc = lsmSharedAppendListAdd(pFS->pDb, p->iLast+1);
     }
   }
   return rc;

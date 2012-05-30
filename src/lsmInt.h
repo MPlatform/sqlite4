@@ -393,6 +393,8 @@ lsm_env *lsmPageEnv(Page *);
 
 void lsmSortedSplitkey(lsm_db *, Level *, int *);
 
+int lsmFsSetupAppendList(lsm_db *db);
+
 /* Reading sorted run content. */
 int lsmFsDbPageGet(FileSystem *, SortedRun *, Pgno, Page **);
 int lsmFsDbPageNext(SortedRun *, Page *, int eDir, Page **);
@@ -565,6 +567,10 @@ void lsmDatabaseDirty(Database *p);
 int lsmDatabaseIsDirty(Database *p);
 
 DbLog *lsmDatabaseLog(lsm_db *pDb);
+
+Pgno *lsmSharedAppendList(lsm_db *db, int *pnApp);
+int lsmSharedAppendListAdd(lsm_db *db, Pgno iPg);
+void lsmSharedAppendListRemove(lsm_db *db, int iIdx);
 
 #ifdef LSM_DEBUG
   int lsmHoldingClientMutex(lsm_db *pDb);
