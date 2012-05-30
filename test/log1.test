@@ -360,7 +360,7 @@ do_test 11.9 { sqlite4_lsm_info db main log-structure } {0 0 0 0 1335 1474}
 do_execsql_test 11.10 {
   INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
 }
-do_test 11.11 { sqlite4_lsm_info db main log-structure } {1335 1476 0 0 0 139}
+do_test 11.11 { sqlite4_lsm_info db main log-structure } {1335 1482 0 0 0 139}
 do_test 11.12 {
   execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } 
 } {11 ok}
@@ -370,7 +370,7 @@ do_test 11.13 {
   sqlite4 db2 test.db2
   execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } db2
 } {11 ok}
-do_test 11.14 { sqlite4_lsm_info db2 main log-structure } {1335 1476 0 0 0 139}
+do_test 11.14 { sqlite4_lsm_info db2 main log-structure } {1335 1482 0 0 0 139}
 do_test 11.15 {
   execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100)) } db2
   execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } db2
@@ -396,7 +396,7 @@ do_execsql_test 11.17 {
 }
 do_test 11.18 { 
   sqlite4_lsm_info db main log-structure 
-} {1335 1476 0 1254 1477 1755}
+} {1335 1482 0 1259 1483 1761}
 do_test 11.19 {
   execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } 
 } {21 ok}
@@ -413,11 +413,11 @@ do_execsql_test 11.22 {
 }
 do_test 11.23 { 
   sqlite4_lsm_info db main log-structure 
-} {1335 1476 0 1254 1477 1894}
+} {1335 1482 0 1259 1483 1900}
 do_test 11.24 { sqlite4_lsm_work db main -checkpoint } {0}
 do_test 11.25 { 
   sqlite4_lsm_info db main log-structure 
-} {0 0 0 0 1755 1894}
+} {0 0 0 0 1761 1900}
 
 #-------------------------------------------------------------------------
 #
@@ -427,8 +427,7 @@ do_execsql_test 12.2 {
   CREATE TABLE t1(a PRIMARY KEY, b);
   CREATE INDEX i1 ON t1(b);
 }
-
-for {set iTest 1} {$iTest<100} {incr iTest} {
+for {set iTest 1} {$iTest<=150} {incr iTest} {
   expr srand(0)
   do_test 12.3.$iTest {
     for {set i 0} {$i < 10} {incr i} {
@@ -436,14 +435,24 @@ for {set iTest 1} {$iTest<100} {incr iTest} {
       if { int(rand()*10.0)==0 } { sqlite4_lsm_work db main -flush }
       if { int(rand()*10.0)==0 } { sqlite4_lsm_work db main -checkpoint }
     }
-  
     copy_db_files test.db test.db2
     sqlite4 db2 test.db2
-    set res [execsql { SELECT count(*) FROM t1; PRAGMA integrity_check } db2]
+    set sql "SELECT count(*) FROM t1 ; "
+    if {0==($iTest % 25)} {
+      append sql "PRAGMA integrity_check"
+    } else {
+      append sql "SELECT 'ok'"
+    }
+    set res [execsql $sql db2]
     db2 close
     set res
   } [list [expr ($iTest)*10] ok]
 }
+
+#-------------------------------------------------------------------------
+#
+reset_db
+
 
 
 finish_test

@@ -666,12 +666,15 @@ int lsm_begin(lsm_db *pDb, int iLevel){
     }
 
     if( rc==LSM_OK && pDb->nTransAlloc<iLevel ){
-      TreeMark *aNew;
-      aNew = (TreeMark *)lsmRealloc(pDb->pEnv, pDb->aTrans,
-                                    sizeof(TreeMark)*(iLevel+1));
+      TransMark *aNew;            /* New allocation */
+
+      int nByte = sizeof(TransMark) * (iLevel+1);
+      aNew = (TransMark *)lsmRealloc(pDb->pEnv, pDb->aTrans, nByte);
       if( !aNew ){
         rc = LSM_NOMEM;
       }else{
+        nByte = sizeof(TransMark) * (iLevel+1 - pDb->nTransAlloc);
+        memset(&aNew[pDb->nTransAlloc], 0, nByte);
         pDb->nTransAlloc = iLevel+1;
         pDb->aTrans = aNew;
       }
@@ -679,7 +682,7 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 
     if( rc==LSM_OK ){
       for(i=pDb->nTransOpen; i<iLevel; i++){
-        lsmTreeMark(pDb->pTV, &pDb->aTrans[i]);
+        lsmTreeMark(pDb->pTV, &pDb->aTrans[i].tree);
       }
       pDb->nTransOpen = iLevel;
     }
@@ -722,7 +725,8 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
   if( iLevel<0 ) iLevel = MAX(0, pDb->nTransOpen - 1);
 
   if( iLevel<=pDb->nTransOpen ){
-    lsmTreeRollback(pDb->pTV, &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)]);
+    TransMark *pMark = &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)];
+    lsmTreeRollback(pDb->pTV, &pMark->tree);
     pDb->nTransOpen = iLevel;
   }
 

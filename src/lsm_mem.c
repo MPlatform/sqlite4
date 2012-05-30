@@ -47,7 +47,7 @@ void lsmFree(lsm_env *pEnv, void *p){
 }
 void *lsmRealloc(lsm_env *pEnv, void *p, size_t N){
   assert( pEnv );
-  pEnv->xRealloc(pEnv, p, N);
+  return pEnv->xRealloc(pEnv, p, N);
 }
 
 /*

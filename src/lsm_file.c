@@ -846,38 +846,6 @@ int lsmFsDbPageNext(SortedRun *pRun, Page *pPg, int eDir, Page **ppNext){
   return fsPageGet(pFS, pRun, iPg, 0, ppNext);
 }
 
-static int isAppendPoint(
-  FileSystem *pFS, 
-  Level *pLevel,
-  SortedRun *pRun, 
-  int nMin
-){
-  const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
-  int iLastInBlock;
-  int iLast = pRun->iLast;
-  Level *p;
-
-  if( iLast==0 ) return 0;
-  iLastInBlock = ((((iLast-1) / nPagePerBlock)+1) * nPagePerBlock);
-  if( (iLast+nMin)>=iLastInBlock ) return 0;
-  iLast++;
-
-#define IS_BETWEEN(a, x, y) ((a)>=(x) && (a)<=(y))
-  for(p=pLevel; p; p=p->pNext){
-    int i;
-    if( IS_BETWEEN(p->lhs.sep.iFirst, iLast, iLastInBlock) ) return 0;
-    if( IS_BETWEEN(p->lhs.run.iFirst, iLast, iLastInBlock) ) return 0;
-
-    for(i=0; i<p->nRight; i++){
-      if( IS_BETWEEN(p->aRhs[i].sep.iFirst, iLast, iLastInBlock) ) return 0;
-      if( IS_BETWEEN(p->aRhs[i].run.iFirst, iLast, iLastInBlock) ) return 0;
-    }
-  }
-#undef IS_BETWEEN
-
-  return iLast;
-}
-
 static Pgno findAppendPoint(FileSystem *pFS, int nMin){
   Pgno ret = 0;
   Pgno *aAppend;
@@ -1186,9 +1154,6 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
       if( rc==LSM_OK ){
         int iPg = (int)lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
         int iBlk = fsPageToBlock(pFS, iPg);
-#if 0
-  fprintf(stderr, "refreeing block %d\n", iBlk);
-#endif
         lsmBlockRefree(pFS->pDb, iBlk);
         lsmFsPageRelease(pLast);
       }

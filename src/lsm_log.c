@@ -15,9 +15,9 @@
 **
 ** When data is written to an LSM database, it is initially stored in an
 ** in-memory tree structure. Since this structure is in volatile memory,
-** if a power failure or application crash occurs, it may be lost. To
+** if a power failure or application crash occurs it may be lost. To
 ** prevent loss of data in this case, each time a record is written to the
-** in-memory tree, an equivalent record is appended to the log on disk.
+** in-memory tree an equivalent record is appended to the log on disk.
 ** If a power failure or application crash does occur, data can be recovered
 ** by reading the log.
 **
@@ -34,6 +34,7 @@
 **   LOG_EOF:    A record indicating the end of a log file.
 **   LOG_PAD1:   A single byte padding record.
 **   LOG_PAD2:   An N byte padding record (N>1).
+**   LOG_JUMP:   A pointer to another offset within the log file.
 **
 ** Each transaction written to the log contains one or more LOG_WRITE and/or
 ** LOG_DELETE records, followed by a LOG_COMMIT record. The LOG_COMMIT record
@@ -209,12 +210,60 @@ struct LogWriter {
   u32 cksum0;                     /* Checksum 0 at offset iOff */
   u32 cksum1;                     /* Checksum 1 at offset iOff */
   i64 iOff;                       /* Offset at start of buffer buf */
-  LogRegion jump;                 /* Avoid writing to this region */
   LsmString buf;                  /* Buffer containing data not yet written */
-  int nWritten;                   /* First nWritten bytes of buf are written */
-  i64 iRegion1End;
-  i64 iRegion2Start;
+
+  LogRegion jump;                 /* Avoid writing to this region */
+  i64 iRegion1End;                /* End of first region written by trans */
+  i64 iRegion2Start;              /* Start of second regions written by trans */
 };
+
+/*
+** Return the result of interpreting the first 4 bytes in buffer aIn as 
+** a 32-bit unsigned little-endian integer.
+*/
+static u32 getU32le(u8 *aIn){
+  return ((u32)aIn[3] << 24) 
+       + ((u32)aIn[2] << 16) 
+       + ((u32)aIn[1] << 8) 
+       + ((u32)aIn[0]);
+}
+
+
+/*
+** This function is the same as logCksum(), except that pointer "a" need
+** not be aligned to an 8-byte boundary or padded with zero bytes. This
+** version is slower, but sometimes more convenient to use.
+*/
+void logCksumUnaligned(
+  char *z,                        /* Input buffer */
+  int n,                          /* Size of input buffer in bytes */
+  u32 *pCksum0,                   /* IN/OUT: Checksum value 1 */
+  u32 *pCksum1                    /* IN/OUT: Checksum value 2 */
+){
+  u8 *a = (u8 *)z;
+  u32 cksum0 = *pCksum0;
+  u32 cksum1 = *pCksum1;
+  int nIn = (n/8) * 8;
+  int i;
+
+  assert( n>0 );
+  for(i=0; i<nIn; i+=8){
+    cksum0 += getU32le(&a[i]) + cksum1;
+    cksum1 += getU32le(&a[i+4]) + cksum0;
+  }
+
+  if( nIn!=n ){
+    u8 aBuf[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    assert( (n-nIn)<8 && n>nIn );
+    memcpy(aBuf, &a[nIn], n-nIn);
+    cksum0 += getU32le(aBuf) + cksum1;
+    cksum1 += getU32le(&aBuf[4]) + cksum0;
+  }
+
+  *pCksum0 = cksum0;
+  *pCksum1 = cksum1;
+}
+
 
 int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
   int rc = LSM_OK;
@@ -253,12 +302,16 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
 
   if( aReg[0].iEnd==0 && aReg[1].iEnd==0 && aReg[2].iStart>=pDb->nLogSz ){
     /* Case 1. Wrap around to the start of the file. Write an LSM_LOG_JUMP 
-    ** into the log file in this case. */
-    u8 aJump[] = { LSM_LOG_JUMP, 0x00 };
+    ** into the log file in this case. Pad it out to 8 bytes using a PAD2
+    ** record so that the checksums can be updated immediately.  */
+    u8 aJump[] = { 
+      LSM_LOG_PAD2, 0x04, 0x00, 0x00, 0x00, 0x00, LSM_LOG_JUMP, 0x00 
+    };
     lsmStringBinAppend(&pNew->buf, aJump, sizeof(aJump));
     rc = lsmFsWriteLog(pDb->pFS, aReg[2].iEnd, &pNew->buf);
-    aReg[2].iEnd += 2;
-    pNew->nWritten = 2;
+    pNew->buf.n = 0;
+    logCksumUnaligned((char *)aJump, 8, &pNew->cksum0, &pNew->cksum1);
+    aReg[2].iEnd += 8;
     pNew->jump = aReg[0] = aReg[2];
     aReg[2].iStart = aReg[2].iEnd = 0;
   }else if( aReg[1].iEnd==0 && aReg[2].iEnd<aReg[0].iEnd ){
@@ -330,17 +383,6 @@ static int logFileEnabled(lsm_db *pDb){
 }
 
 /*
-** Return the result of interpreting the first 4 bytes in buffer aIn as 
-** a 32-bit unsigned little-endian integer.
-*/
-static u32 getU32le(u8 *aIn){
-  return ((u32)aIn[3] << 24) 
-       + ((u32)aIn[2] << 16) 
-       + ((u32)aIn[1] << 8) 
-       + ((u32)aIn[0]);
-}
-
-/*
 ** This function is used to calculate log checksums.
 */
 void logCksum(
@@ -364,41 +406,6 @@ void logCksum(
   for(i=0; i<nIn; i+=2){
     cksum0 += aIn[0] + cksum1;
     cksum1 += aIn[1] + cksum0;
-  }
-
-  *pCksum0 = cksum0;
-  *pCksum1 = cksum1;
-}
-
-/*
-** This function is the same as logCksum(), except that pointer "a" need
-** not be aligned to an 8-byte boundary or padded with zero bytes. This
-** version is slower, but sometimes more convenient to use.
-*/
-void logCksumUnaligned(
-  char *z,                        /* Input buffer */
-  int n,                          /* Size of input buffer in bytes */
-  u32 *pCksum0,                   /* IN/OUT: Checksum value 1 */
-  u32 *pCksum1                    /* IN/OUT: Checksum value 2 */
-){
-  u8 *a = (u8 *)z;
-  u32 cksum0 = *pCksum0;
-  u32 cksum1 = *pCksum1;
-  int nIn = (n/8) * 8;
-  int i;
-
-  assert( n>0 );
-  for(i=0; i<nIn; i+=8){
-    cksum0 += getU32le(&a[i]) + cksum1;
-    cksum1 += getU32le(&a[i+4]) + cksum0;
-  }
-
-  if( nIn!=n ){
-    u8 aBuf[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-    assert( (n-nIn)<8 && n>nIn );
-    memcpy(aBuf, &a[nIn], n-nIn);
-    cksum0 += getU32le(aBuf) + cksum1;
-    cksum1 += getU32le(&aBuf[4]) + cksum0;
   }
 
   *pCksum0 = cksum0;
@@ -437,16 +444,7 @@ static int logFlush(lsm_db *pDb, int eType){
   pLog->buf.n += 4;
 
   /* Write the contents of the buffer to disk. */
-  if( pLog->nWritten ){
-    LsmString str = {0, 0, 0, 0};
-    str.z = &pLog->buf.z[pLog->nWritten];
-    str.n = pLog->buf.n - pLog->nWritten;
-    rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &str);
-    pLog->iOff -= pLog->nWritten;
-    pLog->nWritten = 0;
-  }else{
-    rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
-  }
+  rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
   pLog->iOff += pLog->buf.n;
   pLog->buf.n = 0;
 
@@ -477,24 +475,41 @@ int lsmLogWrite(
   if( nVal>=0 ) nReq += lsmVarintLen32(nVal) + nVal;
 
   if( (pLog->jump.iStart > (pLog->iOff + pLog->buf.n)) 
-   && (pLog->jump.iStart < (pLog->iOff + pLog->buf.n + (nReq + 9) + 10)) 
+   && (pLog->jump.iStart < (pLog->iOff + pLog->buf.n + (nReq + 9) + 17)) 
   ){
     i64 iJump;                    /* Offset to jump to */
     u8 aJump[10];
-    int nJump;
+    int nJump;                    /* Valid bytes in aJump[] */
+    int nPad;                     /* Bytes of padding required */
 
     iJump = pLog->jump.iEnd+1;
     aJump[0] = LSM_LOG_JUMP;
     nJump = 1 + lsmVarintPut64(&aJump[1], iJump);
+    nPad = (pLog->buf.n + nJump) % 8;
+    if( nPad ){
+      u8 aPad[7] = {0,0,0,0,0,0,0};
+      nPad = 8-nPad;
+      if( nPad==1 ){
+        aPad[0] = LSM_LOG_PAD1;
+      }else{
+        aPad[0] = LSM_LOG_PAD2;
+        aPad[1] = (nPad-2);
+      }
+      rc = lsmStringBinAppend(&pLog->buf, aPad, nPad);
+      if( rc!=LSM_OK ) return rc;
+    }
+
     rc = lsmStringBinAppend(&pLog->buf, aJump, nJump);
     if( rc!=LSM_OK ) return rc;
+    assert( (pLog->buf.n % 8)==0 );
     rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
     if( rc!=LSM_OK ) return rc;
+    logCksumUnaligned(pLog->buf.z, pLog->buf.n, &pLog->cksum0, &pLog->cksum1);
 
     pLog->iRegion1End = (pLog->iOff + pLog->buf.n);
     pLog->iRegion2Start = iJump;
-    pLog->nWritten = pLog->buf.n;
     pLog->iOff = iJump;
+    pLog->buf.n = 0;
   }
 
   rc = lsmStringExtend(&pLog->buf, nReq);
@@ -531,10 +546,14 @@ void lsmLogTell(
   LogMark *pMark                  /* Populate this object with current offset */
 ){
   LogWriter *pLog = pDb->pLogWriter;
+
+
+#if 0
   pMark->iOff = pLog->iOff;
   pMark->nBuf = pLog->buf.n;
   pMark->cksum0 = pLog->cksum0;
   pMark->cksum1 = pLog->cksum1;
+#endif
 }
 
 int lsmLogSeek(
@@ -743,9 +762,14 @@ int lsmLogRecover(lsm_db *pDb){
 
       switch( eType ){
         case LSM_LOG_PAD1:
-        case LSM_LOG_PAD2:
-          assert( 0 );
           break;
+
+        case LSM_LOG_PAD2: {
+          int nPad;
+          logReaderVarint(&reader, &buf1, &nPad);
+          logReaderBlob(&reader, &buf1, nPad, 0);
+          break;
+        }
 
         case LSM_LOG_WRITE: {
           int nKey;

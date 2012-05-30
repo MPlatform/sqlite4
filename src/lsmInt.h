@@ -59,11 +59,9 @@ typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
 typedef struct Level Level;
-
 typedef struct LogMark LogMark;
 typedef struct LogRegion LogRegion;
 typedef struct LogWriter LogWriter;
-
 typedef struct LsmString LsmString;
 typedef struct Mempool Mempool;
 typedef struct MultiCursor MultiCursor;
@@ -72,6 +70,7 @@ typedef struct Segment Segment;
 typedef struct SegmentMerger SegmentMerger;
 typedef struct Snapshot Snapshot;
 typedef struct SortedRun SortedRun;
+typedef struct TransMark TransMark;
 typedef struct Tree Tree;
 typedef struct TreeMark TreeMark;
 typedef struct TreeVersion TreeVersion;
@@ -132,8 +131,14 @@ struct TreeMark {
 struct LogMark {
   i64 iOff;                       /* Offset into log (see lsm_log.c) */
   int nBuf;                       /* Size of in-memory buffer here */
-  u32 cksum0;                     /* Checksum 0 at offset iOff */
-  u32 cksum1;                     /* Checksum 1 at offset iOff */
+  u8 aBuf[8];                     /* Bytes of content in aBuf[] */
+  u32 cksum0;                     /* Checksum 0 at offset (iOff-nBuf) */
+  u32 cksum1;                     /* Checksum 1 at offset (iOff-nBuf) */
+};
+
+struct TransMark {
+  TreeMark tree;
+  LogMark log;
 };
 
 /*
@@ -175,10 +180,10 @@ struct lsm_db {
   TreeVersion *pTV;               /* In-memory tree snapshot (non-NULL in rt) */
   Snapshot *pClient;              /* Client snapshot (non-NULL in read trans) */
   lsm_cursor *pCsr;               /* List of open cursors */
+  LogWriter *pLogWriter;
   int nTransOpen;                 /* Number of opened write transactions */
   int nTransAlloc;                /* Allocated size of aTrans[] array */
-  TreeMark *aTrans;               /* Array of marks for transaction rollback */
-  LogWriter *pLogWriter;
+  TransMark *aTrans;              /* Array of marks for transaction rollback */
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
@@ -508,6 +513,8 @@ int lsmLogRecover(lsm_db *);
 int lsmLogCheckpoint(lsm_db *, DbLog *pLog, lsm_i64);
 int lsmLogBegin(lsm_db *pDb, DbLog *pLog);
 void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit);
+
+int lsmLogStructure(lsm_db *pDb, char **pzVal);
 
 
 /**************************************************************************
