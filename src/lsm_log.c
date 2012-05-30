@@ -185,7 +185,7 @@
 **
 ** VARINT FORMAT
 **
-** See s4_varint.c.
+** See lsm_varint.c.
 */
 
 #ifndef _LSM_INT_H
@@ -203,7 +203,6 @@
 #define LSM_LOG_JUMP     0x07
 
 /* Require a checksum every 32KB. */
-/* #define LSM_CKSUM_MAXDATA (32*1024) */
 #define LSM_CKSUM_MAXDATA (32*1024)
 
 struct LogWriter {
@@ -235,7 +234,7 @@ static u32 getU32le(u8 *aIn){
 ** not be aligned to an 8-byte boundary or padded with zero bytes. This
 ** version is slower, but sometimes more convenient to use.
 */
-void logCksumUnaligned(
+static void logCksumUnaligned(
   char *z,                        /* Input buffer */
   int n,                          /* Size of input buffer in bytes */
   u32 *pCksum0,                   /* IN/OUT: Checksum value 1 */
@@ -265,6 +264,10 @@ void logCksumUnaligned(
   *pCksum1 = cksum1;
 }
 
+/*
+** Update pLog->cksum0 and pLog->cksum1 so that the first nBuf bytes in the 
+** write buffer (pLog->buf) are included in the checksum.
+*/
 static void logUpdateCksum(LogWriter *pLog, int nBuf){
   assert( (pLog->iCksumBuf % 8)==0 );
   assert( pLog->iCksumBuf<=nBuf );
@@ -278,6 +281,15 @@ static void logUpdateCksum(LogWriter *pLog, int nBuf){
   pLog->iCksumBuf = nBuf;
 }
 
+/*
+** This function is called when a write-transaction is first opened. It
+** is assumed that the caller is holding the client-mutex when it is 
+** called.
+**
+** Before returning, this function allocates the LogWriter object that
+** will be used to write to the log file during the write transaction.
+** LSM_OK is returned if no error occurs, otherwise an LSM error code.
+*/
 int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
   int rc = LSM_OK;
   LogWriter *pNew;
@@ -343,6 +355,16 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
   return rc;
 }
 
+/*
+** This function is called when a write-transaction is being closed.
+** Parameter bCommit is true if the transaction is being committed,
+** or false otherwise. The caller must hold the client-mutex to call
+** this function.
+**
+** A call to this function deletes the LogWriter object allocated by
+** lsmLogBegin(). If the transaction is being committed, the shared state
+** in *pLog is updated before returning.
+*/
 void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
   LogWriter *p;
   assert( lsmHoldingClientMutex(pDb) );
@@ -352,8 +374,11 @@ void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
     pLog->cksum0 = p->cksum0;
     pLog->cksum1 = p->cksum1;
     if( p->iRegion1End ){
+      /* This happens when the transaction had to jump over some other
+      ** part of the log.  */
       assert( pLog->aRegion[1].iEnd==0 );
-      assert( pLog->aRegion[2].iStart==0 );
+      assert( pLog->aRegion[2].iStart<p->iRegion1End );
+      pLog->aRegion[1].iStart = pLog->aRegion[2].iStart;
       pLog->aRegion[1].iEnd = p->iRegion1End;
       pLog->aRegion[2].iStart = p->iRegion2Start;
     }
@@ -366,8 +391,11 @@ void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
 /*
 ** This function is called after a checkpoint is synced into the database
 ** file. The checkpoint specifies that the log starts at offset iOff.
+** The shared state in *pLog is updated to reflect the fact that space
+** in the log file that occurs logically before offset iOff may now
+** be reused.
 */ 
-int lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
+void lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
   int iRegion;
   assert( lsmHoldingClientMutex(pDb) );
 
@@ -380,51 +408,6 @@ int lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
   assert( iRegion<3 );
 
   pLog->aRegion[iRegion].iStart = iOff;
-  return LSM_OK;
-}
-
-/*
-** The logging sub-system may be enabled or disabled on a per-database
-** basis (per-database, not per-connection). This function returns true if
-** the logging sub-system is enabled, or false otherwise.
-**
-** If the logging sub-system is disabled, the following functions are no-ops:
-**
-**     lsmLogWrite()
-**     lsmLogCommit()
-*/
-static int logFileEnabled(lsm_db *pDb){
-  return 1;
-}
-
-/*
-** This function is used to calculate log checksums.
-*/
-void logCksum(
-  const char *a,                  /* Input buffer */
-  int n,                          /* Size of input buffer in bytes */
-  u32 *pCksum0,                   /* IN/OUT: Checksum value 1 */
-  u32 *pCksum1                    /* IN/OUT: Checksum value 2 */
-){
-  u32 cksum0 = *pCksum0;
-  u32 cksum1 = *pCksum1;
-  u32 *aIn = (u32 *)a;
-  int nIn = ((n+7)/8) * 2;
-  int i;
-
-  /* Check that the input buffer is aligned to an 8-byte boundary. Also
-  ** that if the input is not an integer multiple of 8 bytes in size, it
-  ** has been padded with 0x00 bytes.  */
-  /* assert( EIGHT_BYTE_ALIGNMENT(a) ); */
-  assert( nIn*4==n || memcmp("\00\00\00\00\00\00\00", &a[n], nIn*4-n) );
-
-  for(i=0; i<nIn; i+=2){
-    cksum0 += aIn[0] + cksum1;
-    cksum1 += aIn[1] + cksum0;
-  }
-
-  *pCksum0 = cksum0;
-  *pCksum1 = cksum1;
 }
 
 
@@ -551,6 +534,12 @@ int lsmLogCommit(lsm_db *pDb){
   return logFlush(pDb, LSM_LOG_COMMIT);
 }
 
+/*
+** Store the current offset and other checksum related information in the
+** structure *pMark. Later, *pMark can be passed to lsmLogSeek() to "rewind"
+** the LogWriter object to the current log file offset. This is used when
+** rolling back savepoint transactions.
+*/
 void lsmLogTell(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Populate this object with current offset */
@@ -569,6 +558,10 @@ void lsmLogTell(
   pMark->cksum1 = pLog->cksum1;
 }
 
+/*
+** Seek (rewind) back to the log file offset stored by an ealier call to
+** lsmLogTell() in *pMark.
+*/
 void lsmLogSeek(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Object containing log offset to seek to */
@@ -653,7 +646,6 @@ static int logReaderBlob(
       p->iBuf = nCarry;
 
       rc = lsmFsReadLog(p->pFS, p->iOff, LOG_READ_SIZE, &p->buf);
-assert( rc==LSM_OK );
       if( rc!=LSM_OK ) break;
 
       p->iCksumBuf = 0;
@@ -672,7 +664,6 @@ assert( rc==LSM_OK );
         pBuf->n = 0;
       }
       rc = lsmStringBinAppend(pBuf, (u8 *)&p->buf.z[p->iBuf], nCopy);
-assert( rc==LSM_OK );
       if( rc!=LSM_OK ) break;
       nReq -= nCopy;
       p->iBuf += nCopy;
@@ -877,5 +868,4 @@ int lsmLogRecover(lsm_db *pDb){
   lsmStringClear(&reader.buf);
   return rc;
 }
-
 

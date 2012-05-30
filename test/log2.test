@@ -90,5 +90,46 @@ do_execsql_test  2.7.1 { SELECT * FROM t1 } {1 2 3 4 5 6 7 8}
 do_recover_test  2.7.2 { SELECT * FROM t1 } {1 2 3 4 5 6 7 8}
     
 
+#-------------------------------------------------------------------------
+#
+reset_db
+do_test         3.1 { sqlite4_lsm_config db main log-size 800 } 800
+do_execsql_test 3.2 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(1000,1000));
+}
+do_test         3.3 { sqlite4_lsm_work db main -flush } {0}
+do_execsql_test 3.4 {
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
+}
+do_test         3.5 { sqlite4_lsm_work db main -check } {0}
+do_execsql_test 3.6 { INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100)) }
+do_test         3.7 { 
+  sqlite4_lsm_info db main log-structure 
+} {1124 1271 0 0 0 139}
+do_test         3.8 { sqlite4_lsm_work db main -flush } {0}
+do_execsql_test 3.9 { INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100)) }
+do_test         3.10 { 
+  execsql BEGIN
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  sqlite4 db2 ./test.db
+  sqlite4_lsm_work db2 main -check
+  db2 close
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100, 100)) }
+  execsql COMMIT
+} {}
+do_test         3.11 { 
+  sqlite4_lsm_info db main log-structure 
+} {0 0 139 1062 1272 1801}
+do_recover_test 3.12 { SELECT * FROM t1 } [execsql {SELECT * FROM t1}]
+
 finish_test
 

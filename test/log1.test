@@ -449,11 +449,6 @@ for {set iTest 1} {$iTest<=150} {incr iTest} {
   } [list [expr ($iTest)*10] ok]
 }
 
-#-------------------------------------------------------------------------
-#
-reset_db
-
-
 
 finish_test
 
