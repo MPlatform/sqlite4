@@ -683,6 +683,7 @@ int lsm_begin(lsm_db *pDb, int iLevel){
     if( rc==LSM_OK ){
       for(i=pDb->nTransOpen; i<iLevel; i++){
         lsmTreeMark(pDb->pTV, &pDb->aTrans[i].tree);
+        lsmLogTell(pDb, &pDb->aTrans[i].log);
       }
       pDb->nTransOpen = iLevel;
     }
@@ -727,6 +728,7 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
   if( iLevel<=pDb->nTransOpen ){
     TransMark *pMark = &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)];
     lsmTreeRollback(pDb->pTV, &pMark->tree);
+    lsmLogSeek(pDb, &pMark->log);
     pDb->nTransOpen = iLevel;
   }
 

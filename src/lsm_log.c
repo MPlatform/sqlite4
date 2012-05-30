@@ -209,6 +209,7 @@
 struct LogWriter {
   u32 cksum0;                     /* Checksum 0 at offset iOff */
   u32 cksum1;                     /* Checksum 1 at offset iOff */
+  int iCksumBuf;                  /* Bytes of buf that have been checksummed */
   i64 iOff;                       /* Offset at start of buffer buf */
   LsmString buf;                  /* Buffer containing data not yet written */
 
@@ -264,6 +265,18 @@ void logCksumUnaligned(
   *pCksum1 = cksum1;
 }
 
+static void logUpdateCksum(LogWriter *pLog, int nBuf){
+  assert( (pLog->iCksumBuf % 8)==0 );
+  assert( pLog->iCksumBuf<=nBuf );
+  assert( (nBuf % 8)==0 || nBuf==pLog->buf.n );
+  if( nBuf>pLog->iCksumBuf ){
+    logCksumUnaligned(
+        &pLog->buf.z[pLog->iCksumBuf], nBuf-pLog->iCksumBuf, 
+        &pLog->cksum0, &pLog->cksum1
+    );
+  }
+  pLog->iCksumBuf = nBuf;
+}
 
 int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
   int rc = LSM_OK;
@@ -307,10 +320,12 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
     u8 aJump[] = { 
       LSM_LOG_PAD2, 0x04, 0x00, 0x00, 0x00, 0x00, LSM_LOG_JUMP, 0x00 
     };
+
     lsmStringBinAppend(&pNew->buf, aJump, sizeof(aJump));
+    logUpdateCksum(pNew, pNew->buf.n);
     rc = lsmFsWriteLog(pDb->pFS, aReg[2].iEnd, &pNew->buf);
-    pNew->buf.n = 0;
-    logCksumUnaligned((char *)aJump, 8, &pNew->cksum0, &pNew->cksum1);
+    pNew->iCksumBuf = pNew->buf.n = 0;
+
     aReg[2].iEnd += 8;
     pNew->jump = aReg[0] = aReg[2];
     aReg[2].iStart = aReg[2].iEnd = 0;
@@ -431,13 +446,8 @@ static int logFlush(lsm_db *pDb, int eType){
   pLog->buf.z[pLog->buf.n++] = eType;
   memset(&pLog->buf.z[pLog->buf.n], 0, 8);
 
-  /* Calculate the checksum value. Append it to the buffer*/
-#if 0
-  logCksum(pLog->buf.z, ROUND8(pLog->buf.n), &pLog->cksum0, &pLog->cksum1);
-#else
-  logCksumUnaligned(pLog->buf.z, pLog->buf.n, &pLog->cksum0, &pLog->cksum1);
-#endif
-
+  /* Calculate the checksum value. Append it to the buffer. */
+  logUpdateCksum(pLog, pLog->buf.n);
   lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum0);
   pLog->buf.n += 4;
   lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum1);
@@ -446,7 +456,7 @@ static int logFlush(lsm_db *pDb, int eType){
   /* Write the contents of the buffer to disk. */
   rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
   pLog->iOff += pLog->buf.n;
-  pLog->buf.n = 0;
+  pLog->iCksumBuf = pLog->buf.n = 0;
 
   /* If this is a commit and synchronous=full, sync the log to disk. */
   if( rc==LSM_OK && eType==LSM_LOG_COMMIT && pDb->eSafety==LSM_SAFETY_FULL ){
@@ -504,12 +514,12 @@ int lsmLogWrite(
     assert( (pLog->buf.n % 8)==0 );
     rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
     if( rc!=LSM_OK ) return rc;
-    logCksumUnaligned(pLog->buf.z, pLog->buf.n, &pLog->cksum0, &pLog->cksum1);
+    logUpdateCksum(pLog, pLog->buf.n);
 
     pLog->iRegion1End = (pLog->iOff + pLog->buf.n);
     pLog->iRegion2Start = iJump;
     pLog->iOff = iJump;
-    pLog->buf.n = 0;
+    pLog->iCksumBuf = pLog->buf.n = 0;
   }
 
   rc = lsmStringExtend(&pLog->buf, nReq);
@@ -546,40 +556,40 @@ void lsmLogTell(
   LogMark *pMark                  /* Populate this object with current offset */
 ){
   LogWriter *pLog = pDb->pLogWriter;
+  int nCksum;
 
+  nCksum = pLog->buf.n & 0xFFFFFFF8;
+  logUpdateCksum(pLog, nCksum);
+  assert( pLog->iCksumBuf==nCksum );
+  pMark->nBuf = pLog->buf.n - nCksum;
+  memcpy(pMark->aBuf, &pLog->buf.z[nCksum], pMark->nBuf);
 
-#if 0
-  pMark->iOff = pLog->iOff;
-  pMark->nBuf = pLog->buf.n;
+  pMark->iOff = pLog->iOff + pLog->buf.n;
   pMark->cksum0 = pLog->cksum0;
   pMark->cksum1 = pLog->cksum1;
-#endif
 }
 
-int lsmLogSeek(
+void lsmLogSeek(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Object containing log offset to seek to */
 ){
-  int rc = LSM_OK;                /* This functions return code */
-#if 0
-  DbLog *pLog = lsmDatabaseLog(pDb);
+  LogWriter *pLog = pDb->pLogWriter;
 
-  assert( pLog );
-  assert( pLog->iOff!=pMark->iOff || pLog->cksum0==pMark->cksum0 );
-  assert( pLog->iOff!=pMark->iOff || pLog->cksum1==pMark->cksum1 );
-
-  if( pLog->iOff==pMark->iOff ){
-    pLog->buf.n = pMark->nBuf;
+  assert( pMark->iOff<=pLog->iOff+pLog->buf.n );
+  if( (pMark->iOff & 0xFFFFFFF8)>=pLog->iOff ){
+    pLog->buf.n = pMark->iOff - pLog->iOff;
+    pLog->iCksumBuf = (pLog->buf.n & 0xFFFFFFF8);
   }else{
-    pLog->iOff = pMark->iOff;
-    pLog->cksum0 = pMark->cksum0;
-    pLog->cksum1 = pMark->cksum1;
-    pLog->buf.n = 0;
-    rc = lsmFsReadLog(pDb->pFS, pLog->iOff, pMark->nBuf, &pLog->buf);
+    pLog->buf.n = pMark->nBuf;
+    memcpy(pLog->buf.z, pMark->aBuf, pMark->nBuf);
+    pLog->iCksumBuf = 0;
+    pLog->iOff = pMark->iOff - pMark->nBuf;
   }
-#endif
+  pLog->cksum0 = pMark->cksum0;
+  pLog->cksum1 = pMark->cksum1;
 
-  return rc;
+  if( pMark->iOff > pLog->iRegion1End ) pLog->iRegion1End = 0;
+  if( pMark->iOff > pLog->iRegion2Start ) pLog->iRegion2Start = 0;
 }
 
 /*

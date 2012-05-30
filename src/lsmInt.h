@@ -507,7 +507,7 @@ int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
 
 void lsmLogTell(lsm_db *, LogMark *);
-int lsmLogSeek(lsm_db *, LogMark *);
+void lsmLogSeek(lsm_db *, LogMark *);
 int lsmLogRecover(lsm_db *);
 
 int lsmLogCheckpoint(lsm_db *, DbLog *pLog, lsm_i64);
