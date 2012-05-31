@@ -313,7 +313,7 @@ do_execsql_test 10.1 {
 }
 do_test 10.2 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 223}
 do_test 10.3 { db close ; sqlite4 db test.db } {}
-do_test 10.4 { sqlite4_lsm_info db main db-structure } {{{1 1}}}
+do_test 10.4 { sqlite4_lsm_info db main db-structure } {{{4 4 4 3 3 1}}}
 do_test 10.5 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 0}
 
 do_execsql_test 10.6 {

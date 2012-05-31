@@ -592,7 +592,7 @@ void lsmSharedAppendListRemove(lsm_db *db, int iIdx);
 void lsmStringInit(LsmString*, lsm_env *pEnv);
 int lsmStringExtend(LsmString*, int);
 int lsmStringAppend(LsmString*, const char *, int);
-void lsmStringVAppendf(LsmString*, const char *zFormat, va_list ap);
+void lsmStringVAppendf(LsmString*, const char *zFormat, va_list, va_list);
 void lsmStringAppendf(LsmString*, const char *zFormat, ...);
 void lsmStringClear(LsmString*);
 char *lsmMallocPrintf(lsm_env*, const char*, ...);

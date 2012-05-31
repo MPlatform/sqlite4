@@ -238,6 +238,15 @@ proc new_input {C S args} {
   fileevent stdin readable [list new_input $C $S]
 }
 
+proc load_db {C S zDb} {
+  set data [string trim [exec lsmtest show $zDb]]
+  lappend ::G(data) $data
+
+  set end [expr [llength $::G(data)] - 1]
+  $S configure -from 0 -to $end
+  $S set $end
+}
+
 
 set C [scrollable canvas .c -background white -width 600 -height 600]
 set S [scale .s -orient horiz]
@@ -245,12 +254,21 @@ set S [scale .s -orient horiz]
 pack .s -side bottom -fill x
 pack .c -expand 1 -fill both
 
-set ::G(data)    [list]
+set ::G(data)    [list {}]
 
 bind $C <Configure>  [list redraw $C $S]
 bind $C <KeyPress-q> exit
 focus $C
 $S configure -command [list redraw $C $S]
 update
-fileevent stdin readable [list new_input $C $S]
+
+if {[llength $argv] > 1} {
+  puts stderr "Usage: $argv0 ?DATABASE?"
+  exit -1
+}
+if {[llength $argv]==1} {
+  load_db $C $S [lindex $argv 0]
+} else {
+  fileevent stdin readable [list new_input $C $S]
+}
 

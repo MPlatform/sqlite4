@@ -85,24 +85,36 @@ int lsmStringBinAppend(LsmString *pStr, const u8 *a, int n){
 
 /*
 ** Append printf-formatted content to an LsmString.
-**
-** FIXME!!!
 */
-void lsmStringVAppendf(LsmString *pStr, const char *zFormat, va_list ap){
-  static const int nExtend = 50000;
+void lsmStringVAppendf(
+  LsmString *pStr, 
+  const char *zFormat, 
+  va_list ap1,
+  va_list ap2
+){
+  int nWrite;
+  int nAvail;
 
-  lsmStringExtend(pStr, nExtend);
-  if( pStr->nAlloc ){
-    pStr->n += vsnprintf(pStr->z+pStr->n, nExtend-1, zFormat, ap);
-    pStr->z[pStr->n] = 0;
+  nAvail = pStr->nAlloc - pStr->n;
+  nWrite = vsnprintf(pStr->z + pStr->n, nAvail, zFormat, ap1);
+
+  if( nWrite>=nAvail ){
+    lsmStringExtend(pStr, nWrite+1);
+    if( pStr->nAlloc==0 ) return;
+    nWrite = vsnprintf(pStr->z + pStr->n, nWrite+1, zFormat, ap2);
   }
+
+  pStr->n += nWrite;
+  pStr->z[pStr->n] = 0;
 }
 
 void lsmStringAppendf(LsmString *pStr, const char *zFormat, ...){
-  va_list ap;
+  va_list ap, ap2;
   va_start(ap, zFormat);
-  lsmStringVAppendf(pStr, zFormat, ap);
+  va_start(ap2, zFormat);
+  lsmStringVAppendf(pStr, zFormat, ap, ap2);
   va_end(ap);
+  va_end(ap2);
 }
 
 /*
@@ -110,10 +122,12 @@ void lsmStringAppendf(LsmString *pStr, const char *zFormat, ...){
 */
 char *lsmMallocPrintf(lsm_env *pEnv, const char *zFormat, ...){
   LsmString s;
-  va_list ap;
+  va_list ap, ap2;
   lsmStringInit(&s, pEnv);
   va_start(ap, zFormat);
-  lsmStringVAppendf(&s, zFormat, ap);
+  va_start(ap2, zFormat);
+  lsmStringVAppendf(&s, zFormat, ap, ap2);
   va_end(ap);
+  va_end(ap2);
   return lsm_realloc(pEnv, s.z, s.n+1);
 }
