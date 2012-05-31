@@ -340,8 +340,10 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 }
 
 void lsmAppendSegmentList(LsmString *pStr, char *zPre, Segment *pSeg){
-  lsmStringAppendf(pStr, "%s{%d %d}", zPre, pSeg->run.nSize,
-                         segmentHasSeparators(pSeg));
+  lsmStringAppendf(pStr, "%s{%d %d %d %d %d %d}", zPre, 
+        pSeg->sep.iFirst, pSeg->sep.iLast, pSeg->sep.iRoot,
+        pSeg->run.iFirst, pSeg->run.iLast, pSeg->run.nSize
+  );
 }
 
 int lsmStructList(
@@ -420,6 +422,20 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
     case LSM_INFO_DB_STRUCTURE: {
       char **pzVal = va_arg(ap, char **);
       rc = lsmStructList(pDb, pzVal);
+      break;
+    }
+
+    case LSM_INFO_ARRAY_STRUCTURE: {
+      Pgno pgno = va_arg(ap, Pgno);
+      char **pzVal = va_arg(ap, char **);
+      rc = lsmInfoArrayStructure(pDb, pgno, pzVal);
+      break;
+    }
+
+    case LSM_INFO_PAGE_DUMP: {
+      Pgno pgno = va_arg(ap, Pgno);
+      char **pzVal = va_arg(ap, char **);
+      rc = lsmInfoPageDump(pDb, pgno, pzVal);
       break;
     }
 

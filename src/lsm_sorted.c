@@ -957,7 +957,7 @@ int segmentPtrSeek(
         pPtr->pPg, pPtr->nCell-1, &iLastTopic, &nLastKey, &pPtr->blob1
     );
 
-    /* If the loaded key is >= that (pKey/nKey), break out of the loop.
+    /* If the loaded key is >= than (pKey/nKey), break out of the loop.
     ** If (pKey/nKey) is present in this array, it must be on the current 
     ** page.  */
     res = iLastTopic - iTopic;
@@ -3642,6 +3642,140 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg, int bVals){
   lsmStringClear(&s);
 
   sortedBlobFree(&blob);
+}
+
+static void infoCellDump(
+  lsm_db *pDb,
+  Page *pPg,
+  int iCell,
+  int *peType,
+  int *piPgPtr,
+  u8 **paKey, int *pnKey,
+  u8 **paVal, int *pnVal,
+  Blob *pBlob
+){
+  u8 *aData; int nData;           /* Page data */
+  u8 *aKey; int nKey = 0;         /* Key */
+  u8 *aVal; int nVal = 0;         /* Value */
+  int eType;
+  int iPgPtr;
+  Page *pRef = 0;                 /* Pointer to page iRef */
+  u8 *aCell;
+
+  aData = lsmFsPageData(pPg, &nData);
+
+  aCell = pageGetCell(aData, nData, iCell);
+  eType = *aCell++;
+  aCell += lsmVarintGet32(aCell, &iPgPtr);
+
+  if( eType==0 ){
+    int dummy;
+    Pgno iRef;                  /* Page number of referenced page */
+    aCell += lsmVarintGet32(aCell, &iRef);
+    lsmFsDbPageGet(pDb->pFS, 0, iRef, &pRef);
+    pageGetKeyCopy(pDb->pEnv, pRef, 0, &dummy, pBlob);
+    aKey = (u8 *)pBlob->pData;
+    nKey = pBlob->nData;
+    lsmFsPageRelease(pRef);
+  }else{
+    aCell += lsmVarintGet32(aCell, &nKey);
+    if( rtIsWrite(eType) ) aCell += lsmVarintGet32(aCell, &nVal);
+    sortedReadData(pPg, (aCell-aData), nKey+nVal, (void **)&aKey, pBlob);
+    aVal = &aKey[nKey];
+  }
+
+  if( peType ) *peType = eType;
+  if( piPgPtr ) *piPgPtr = iPgPtr;
+  if( paKey ) *paKey = aKey;
+  if( paVal ) *paVal = aVal;
+  if( pnKey ) *pnKey = nKey;
+  if( pnVal ) *pnVal = nVal;
+}
+
+
+
+int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, char **pzOut){
+  int rc = LSM_OK;
+  Snapshot *pWorker;              /* Worker snapshot */
+  Snapshot *pRelease = 0;         /* Snapshot to release */
+  Page *pPg = 0;
+
+  *pzOut = 0;
+  if( iPg==0 ) return LSM_ERROR;
+
+  /* Obtain the worker snapshot */
+  pWorker = pDb->pWorker;
+  if( !pWorker ){
+    pRelease = pWorker = lsmDbSnapshotWorker(pDb->pDatabase);
+  }
+
+  rc = lsmFsDbPageGet(pDb->pFS, 0, iPg, &pPg);
+  if( rc==LSM_OK ){
+    Blob blob = {0, 0, 0, 0};
+    int nKeyWidth = 0;
+    LsmString str;
+    int nRec;
+    int iPtr;
+    int flags;
+    int iCell;
+    u8 *aData; int nData;         /* Page data and size thereof */
+
+    aData = lsmFsPageData(pPg, &nData);
+    nRec = pageGetNRec(aData, nData);
+    iPtr = pageGetPtr(aData, nData);
+    flags = pageGetFlags(aData, nData);
+
+    lsmStringInit(&str, pDb->pEnv);
+    lsmStringAppendf(&str, "nRec : %d\n", nRec);
+    lsmStringAppendf(&str, "iPtr : %d\n", iPtr);
+    lsmStringAppendf(&str, "flags: %04x\n", flags);
+    lsmStringAppendf(&str, "\n");
+
+    for(iCell=0; iCell<nRec; iCell++){
+      int nKey;
+      infoCellDump(pDb, pPg, iCell, 0, 0, 0, &nKey, 0, 0, &blob);
+      if( nKey>nKeyWidth ) nKeyWidth = nKey;
+    }
+
+    for(iCell=0; iCell<nRec; iCell++){
+      u8 *aKey; int nKey = 0;       /* Key */
+      u8 *aVal; int nVal = 0;       /* Value */
+      int iChar;
+      int iPgPtr;
+      int eType;
+      char cType = '?';
+
+      infoCellDump(pDb, pPg, iCell, &eType, &iPgPtr,
+          &aKey, &nKey, &aVal, &nVal, &blob
+      );
+
+      if( rtIsDelete(eType) ) cType = 'D';
+      if( rtIsWrite(eType) ) cType = 'W';
+      if( rtIsSeparator(eType) ) cType = 'S';
+      lsmStringAppendf(&str, "%c %d (%s) ", 
+          cType, (iPtr+iPgPtr), (rtTopic(eType) ? "sys" : "usr")
+      );
+      for(iChar=0; iChar<nKey; iChar++){
+        lsmStringAppendf(&str, "%c", isalnum(aKey[iChar]) ? aKey[iChar] : '.');
+      }
+      lsmStringAppendf(&str, "%*s", nKeyWidth - nKey, "");
+      if( nVal>0 ){
+        lsmStringAppendf(&str, " ");
+        for(iChar=0; iChar<nVal; iChar++){
+          lsmStringAppendf(&str, "%c", isalnum(aVal[iChar])?aVal[iChar]:'.');
+        }
+      }
+      lsmStringAppendf(&str, "\n");
+    }
+
+
+    *pzOut = str.z;
+    sortedBlobFree(&blob);
+    lsmFsPageRelease(pPg);
+  }
+
+  lsmDbSnapshotRelease(pRelease);
+  return rc;
 }
 
 void sortedDumpSegment(lsm_db *pDb, SortedRun *pRun, int bVals){

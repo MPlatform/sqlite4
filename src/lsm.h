@@ -82,6 +82,7 @@ lsm_env *lsm_default_env(void);
 ** Error codes.
 */
 #define LSM_OK         0
+#define LSM_ERROR      1
 #define LSM_BUSY       5
 #define LSM_NOMEM      7
 #define LSM_IOERR     10
@@ -223,14 +224,54 @@ int lsm_info(lsm_db *, int, ...);
 **     The third argument should be of type (char **). The location pointed
 **     to is populated with a pointer to a nul-terminated string containing
 **     the string representation of a Tcl data-structure reflecting the 
-**     current structure of the database. The returned string should be
-**     eventually freed by the caller using lsm_free().
+**     current structure of the database file. Specifically, the current state
+**     of the worker snapshot. The returned string should be eventually freed 
+**     by the caller using lsm_free().
 **
 **     The returned list contains one element for each level in the database,
 **     in order from most to least recent. Each element contains a 
 **     single element for each segment comprising the corresponding level,
 **     starting with the lhs segment, then each of the rhs segments (if any)
 **     in order from most to least recent.
+**
+**     Each segment element is itself a list of 6 integer values, as follows:
+**
+**        1. First page of separators array, or 0 if n/a.
+**        2. Last page of separators array, or 0 if n/a.
+**        3. Root page of separators array, or 0 if n/a.
+**        4. First page of main array.
+**        5. Last page of main array.
+**        6. Total number of pages in main array.
+**
+**   LSM_INFO_ARRAY_STRUCTURE
+**     There should be two arguments passed following this option (i.e. a 
+**     total of four arguments passed to lsm_info()). The first argument 
+**     should be the page number of the first page in a database array 
+**     (perhaps obtained from an earlier INFO_DB_STRUCTURE call). The second 
+**     trailing argument should be of type (char **). The location pointed 
+**     to is populated with a pointer to a nul-terminated string that must 
+**     be eventually freed using lsm_free() by the caller.
+**
+**     The output string contains the text representation of a Tcl list of
+**     integers. Each pair of integers represent a range of pages used by
+**     the identified array. For example, if the array occupies database
+**     pages 993 to 1024, then pages 2048 to 2777, then the returned string
+**     will be "993 1024 2048 2777".
+**
+**     If the specified integer argument does not correspond to the first
+**     page of any database array, LSM_ERROR is returned and the output
+**     pointer is set to a NULL value.
+**
+**   LSM_INFO_PAGE_DUMP
+**     As with LSM_INFO_ARRAY_STRUCTURE, there should be two arguments passed
+**     with calls that specify this option - an integer page number and a
+**     (char **) used to return a nul-terminated string that must be later
+**     freed using lsm_free(). In this case the output string is populated
+**     with a human-readable description of the page content.
+**
+**     If the page cannot be decoded, it is not an error. In this case the
+**     human-readable output message will report the systems failure to 
+**     interpret the page data.
 **
 **   LSM_INFO_LOG_STRUCTURE
 **     The third argument should be of type (char **). The location pointed
@@ -243,12 +284,14 @@ int lsm_info(lsm_db *, int, ...);
 **
 **   LSM_INFO_BLOCKLIST
 */
-#define LSM_INFO_NWRITE         1
-#define LSM_INFO_NREAD          2
-#define LSM_INFO_CKPT           3
-#define LSM_INFO_BLOCKLIST      4
-#define LSM_INFO_DB_STRUCTURE   5
-#define LSM_INFO_LOG_STRUCTURE  6
+#define LSM_INFO_NWRITE          1
+#define LSM_INFO_NREAD           2
+#define LSM_INFO_CKPT            3
+#define LSM_INFO_BLOCKLIST       4
+#define LSM_INFO_DB_STRUCTURE    5
+#define LSM_INFO_LOG_STRUCTURE   6
+#define LSM_INFO_ARRAY_STRUCTURE 7
+#define LSM_INFO_PAGE_DUMP       8
 
 
 /* 

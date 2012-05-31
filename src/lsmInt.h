@@ -366,7 +366,7 @@ int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 #endif
 
 /* 
-** Functions from file "file.c".
+** Functions from file "lsm_file.c".
 */
 int lsmFsOpen(lsm_db *, const char *, int);
 void lsmFsClose(FileSystem *);
@@ -439,9 +439,12 @@ int lsmFsSyncLog(FileSystem *pFS);
 int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr);
 int lsmFsTruncateLog(FileSystem *pFS, i64 nByte);
 
+int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
+
 /* 
-** Functions from file "sorted.c".
+** Functions from file "lsm_sorted.c".
 */
+int lsmInfoPageDump(lsm_db *, Pgno, char **);
 int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *);
@@ -503,17 +506,16 @@ int lsmFlushToDisk(lsm_db *);
 /*
 ** Functions from file "lsm_log.c".
 */
+int lsmLogBegin(lsm_db *pDb, DbLog *pLog);
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
+void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit);
 
 void lsmLogTell(lsm_db *, LogMark *);
 void lsmLogSeek(lsm_db *, LogMark *);
+
 int lsmLogRecover(lsm_db *);
-
 void lsmLogCheckpoint(lsm_db *, DbLog *pLog, lsm_i64);
-int lsmLogBegin(lsm_db *pDb, DbLog *pLog);
-void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit);
-
 int lsmLogStructure(lsm_db *pDb, char **pzVal);
 
 

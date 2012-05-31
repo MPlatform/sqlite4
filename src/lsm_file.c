@@ -1165,7 +1165,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
 }
 
 int lsmFsDbPageGet(FileSystem *pFS, SortedRun *p, int iLoad, Page **ppPg){
-  assert( p && pFS );
+  assert( pFS );
   return fsPageGet(pFS, p, iLoad, 0, ppPg);
 }
 
@@ -1373,6 +1373,67 @@ void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
 
 lsm_env *lsmFsEnv(FileSystem *pFS) { return pFS->pEnv; }
 lsm_env *lsmPageEnv(Page *pPg) { return pPg->pFS->pEnv; }
+
+static SortedRun *startsWith(SortedRun *pRun, Pgno iFirst){
+  return (iFirst==pRun->iFirst) ? pRun : 0;
+}
+
+int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
+  int rc = LSM_OK;
+  Snapshot *pWorker;              /* Worker snapshot */
+  Snapshot *pRelease = 0;         /* Snapshot to release */
+  SortedRun *pArray = 0;          /* Array to report on */
+  Level *pLvl;                    /* Used to iterate through db levels */
+
+  if( iFirst==0 ) return LSM_ERROR;
+
+  /* Obtain the worker snapshot */
+  pWorker = pDb->pWorker;
+  if( !pWorker ){
+    pRelease = pWorker = lsmDbSnapshotWorker(pDb->pDatabase);
+  }
+
+  /* Search for the array that starts on page iFirst */
+  for(pLvl=lsmDbSnapshotLevel(pWorker); pLvl && pArray==0; pLvl=pLvl->pNext){
+    if( 0==(pArray = startsWith(&pLvl->lhs.sep, iFirst))
+     && 0==(pArray = startsWith(&pLvl->lhs.run, iFirst))
+    ){
+      int i;
+      for(i=0; i<pLvl->nRight; i++){
+        if( (pArray = startsWith(&pLvl->aRhs[i].sep, iFirst)) ) break;
+        if( (pArray = startsWith(&pLvl->aRhs[i].run, iFirst)) ) break;
+      }
+    }
+  }
+
+  if( pArray==0 ){
+    /* Could not find the requested array. This is an error. */
+    *pzOut = 0;
+    rc = LSM_ERROR;
+  }else{
+    FileSystem *pFS = pDb->pFS;
+    LsmString str;
+    int iBlk;
+    int iLastBlk;
+   
+    iBlk = fsPageToBlock(pFS, pArray->iFirst);
+    iLastBlk = fsPageToBlock(pFS, pArray->iLast);
+
+    lsmStringInit(&str, pDb->pEnv);
+    lsmStringAppendf(&str, "%d", pArray->iFirst);
+    while( iBlk!=iLastBlk ){
+      lsmStringAppendf(&str, " %d", fsLastPageOnBlock(pFS, iBlk));
+      fsBlockNext(pFS, iBlk, &iBlk);
+      lsmStringAppendf(&str, " %d", fsFirstPageOnBlock(pFS, iBlk));
+    }
+    lsmStringAppendf(&str, " %d", pArray->iLast);
+
+    *pzOut = str.z;
+  }
+
+  lsmDbSnapshotRelease(pRelease);
+  return rc;
+}
 
 #ifdef LSM_EXPENSIVE_DEBUG
 /*

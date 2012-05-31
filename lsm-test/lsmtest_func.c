@@ -321,43 +321,38 @@ int do_work(int nArg, char **azArg){
 
 
 /*
-**   lsmtest show checkpoint DATABASE
+**   lsmtest show DATABASE ?array|page PGNO?
 */
 int do_show(int nArg, char **azArg){
   lsm_db *pDb;
   int rc;
-  int i;
-  int bData = 0;
-  int bCheckpoint = 0;
-  int bList = 0;
-  int bStructure = 1;
   const char *zDb;
+
+  int eOpt = LSM_INFO_DB_STRUCTURE;
+  unsigned int iPg = 0;
 
   struct Option {
     const char *zName;
+    int eOpt;
   } aOpt [] = { 
-    { "data" },                   /* 0 */
-    { "checkpoint" },             /* 1 */
-    { "list" },                   /* 2 */
-    { 0 } 
+    { "array", LSM_INFO_ARRAY_STRUCTURE },
+    { "page",  LSM_INFO_PAGE_DUMP },
+    { 0, 0 } 
   };
 
-  if( nArg==0 ){
-    testPrintUsage("?data? ?checkpoint? ?list? DATABASE");
+  char *z = 0;
+
+  if( nArg!=1 && nArg!=3 ){
+    testPrintUsage("DATABASE ?array|page PGNO?");
     return -1;
   }
-
-  zDb = azArg[nArg-1];
-  for(i=0; i<nArg-1; i++){
-    int iSel;
-    rc = testArgSelect(aOpt, "option", azArg[0], &iSel);
+  if( nArg==3 ){
+    rc = testArgSelect(aOpt, "option", azArg[1], &eOpt);
     if( rc!=0 ) return rc;
-    switch( iSel ){
-      case 0: bData = 1; break;
-      case 1: bCheckpoint = 1; break;
-      case 2: bList = 1; break;
-    }
+    eOpt = aOpt[eOpt].eOpt;
+    iPg = atoi(azArg[2]);
   }
+  zDb = azArg[0];
 
   rc = lsm_new(0, &pDb);
   if( rc!=LSM_OK ){
@@ -370,35 +365,27 @@ int do_show(int nArg, char **azArg){
   }
 
   if( rc==LSM_OK ){
-    if( bList ){
-      char *zList = 0;
-      rc = lsm_info(pDb, LSM_INFO_DB_STRUCTURE, &zList);
-      assert( rc==LSM_OK );
-      printf("List: %s\n", zList);
+    switch( eOpt ){
+      case LSM_INFO_DB_STRUCTURE:
+        rc = lsm_info(pDb, LSM_INFO_DB_STRUCTURE, &z);
+        break;
+      case LSM_INFO_ARRAY_STRUCTURE:
+      case LSM_INFO_PAGE_DUMP:
+        rc = lsm_info(pDb, eOpt, iPg, &z);
+        break;
+      default:
+        assert( !"no chance" );
+    }
+
+    if( rc==LSM_OK ){
+      printf("%s\n", z);
       fflush(stdout);
-      lsm_free(lsm_get_env(pDb), zList);
     }
-    if( bCheckpoint ){
-      dumpCheckpoint(pDb);
-    }
-    if( bStructure ){
-      char *z = 0;
-      lsm_info(pDb, LSM_INFO_DB_STRUCTURE, &z);
-      if( z ){
-        printf("%s\n", z);
-        lsm_free(lsm_get_env(pDb), z);
-      }
-#if 1
-      if( bData ){
-        lsm_config_log(pDb, xLog, 0);
-        dumpBlockMap(pDb, bData);
-      }
-#endif
-    }
+    lsm_free(lsm_get_env(pDb), z);
   }
 
   lsm_close(pDb);
-  return 0;
+  return rc;
 }
 
 

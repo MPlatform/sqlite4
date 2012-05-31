@@ -991,9 +991,7 @@ int main(int argc, char **argv){
     {"show",        st_do_show},
     {"work",        st_do_work},
     {"io",          st_do_io},
-
     {"insert",      do_insert},
-
     {"crash",       st_do_crash_test},
     {"test",        do_test},
     {0, 0}
@@ -1040,7 +1038,9 @@ int main(int argc, char **argv){
     if( rc==0 ) rc = -1;
   }
 
+#if 0
   lsmtest_rusage_report();
+#endif
   return rc;
 }
 

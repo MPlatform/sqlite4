@@ -97,6 +97,7 @@ void lsmStringVAppendf(LsmString *pStr, const char *zFormat, va_list ap){
     pStr->z[pStr->n] = 0;
   }
 }
+
 void lsmStringAppendf(LsmString *pStr, const char *zFormat, ...){
   va_list ap;
   va_start(ap, zFormat);
