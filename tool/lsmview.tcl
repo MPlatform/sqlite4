@@ -90,8 +90,9 @@ proc draw_segment {C segment tags} {
 
   set w [expr {$::G(scale) * [log2 [expr max($nSize, 2)]]}]
   set h $::G(segment_height)
-
   set y 0
+
+  set w [expr max( $w,  [font measure default "1 pages"] )]
 
   # Draw the separators stack if required.
   if {$bSep} {
@@ -156,7 +157,7 @@ proc draw_level {C level tags} {
 }
 
 proc draw_structure {canvas structure} {
-  link_varset $canvas mySelected
+  link_varset $canvas mySelected myVertShift
 
   set C $canvas
   set W [winfo width $C]
@@ -193,9 +194,11 @@ proc draw_structure {canvas structure} {
     $C create text 10 $y1 -anchor nw -text [string toupper "${tag}:"]
   }
 
-  set H [winfo height $C]
-  set region [$C bbox all]
-  if {$y < $H} { $C move all 0 [expr $H-$y] }
+  if {[info exists myVertShift]} {
+    set H [winfo height $C]
+    set region [$C bbox all]
+    if {$y < $H} { $C move all 0 [expr $H-$y] }
+  }
 
   set region [$C bbox all]
   lset region 0 0
@@ -266,7 +269,7 @@ proc draw_pointers {C structure} {
 # array is appended to the list $script and the result evaulated.
 #
 proc draw_canvas_content {canvas db script} {
-  link_varset $canvas myScript
+  link_varset $canvas myScript 
   set myScript $script
   draw_structure $canvas $db
   draw_pointers $canvas $db
@@ -311,6 +314,9 @@ proc dynamic_setup {} {
   pack .s -side bottom -fill x
   pack .c -expand 1 -fill both
 
+  link_varset $C myVertShift
+  set myVertShift 1
+
   bind $C <Configure>  [list dynamic_redraw $C $S]
   bind $C <KeyPress-q> exit
   focus $C
@@ -336,7 +342,8 @@ proc static_select_callback {C pgno} {
 
   foreach {first last} $data {
     set nPg [expr {$last - $first + 1}]
-    set id [$myTree insert {} end -text "${first}..${last} ($nPg pages)"]
+    set caption "${first}..${last} ($nPg pages)"
+    set id [$myTree insert {} end -text $caption]
     for {set i $first} {$i <= $last} {incr i} {
       $myTree insert $id end -text $i
     }

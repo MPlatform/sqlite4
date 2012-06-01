@@ -3745,16 +3745,18 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, char **pzOut){
       int iPgPtr;
       int eType;
       char cType = '?';
+      Pgno iAbsPtr;
 
       infoCellDump(pDb, pPg, iCell, &eType, &iPgPtr,
           &aKey, &nKey, &aVal, &nVal, &blob
       );
+      iAbsPtr = iPgPtr + ((flags & SEGMENT_BTREE_FLAG) ? 0 : iPtr);
 
       if( rtIsDelete(eType) ) cType = 'D';
       if( rtIsWrite(eType) ) cType = 'W';
       if( rtIsSeparator(eType) ) cType = 'S';
       lsmStringAppendf(&str, "%c %d (%s) ", 
-          cType, (iPtr+iPgPtr), (rtTopic(eType) ? "sys" : "usr")
+          cType, iAbsPtr, (rtTopic(eType) ? "sys" : "usr")
       );
       for(iChar=0; iChar<nKey; iChar++){
         lsmStringAppendf(&str, "%c", isalnum(aKey[iChar]) ? aKey[iChar] : '.');
