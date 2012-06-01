@@ -371,6 +371,10 @@ void *testMalloc(int n){
   return pRet;
 }
 
+void *testRealloc(void *p, int n){
+  return realloc(p, n);
+}
+
 /*
 ** Free an allocation made by an earlier call to testMalloc().
 */
@@ -992,6 +996,7 @@ int main(int argc, char **argv){
     {"work",        st_do_work},
     {"io",          st_do_io},
     {"insert",      do_insert},
+
     {"crash",       st_do_crash_test},
     {"test",        do_test},
     {0, 0}

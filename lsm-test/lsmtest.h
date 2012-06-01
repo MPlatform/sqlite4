@@ -128,6 +128,7 @@ int testGlobMatch(const char *zPattern, const char *zStr);
 void testScanCompare(TestDb *, TestDb *, int, void *, int, void *, int, int *);
 
 void *testMalloc(int);
+void *testRealloc(void *, int);
 void testFree(void *);
 
 

@@ -14,30 +14,7 @@
 
 typedef struct LsmDb LsmDb;
 typedef struct LsmWorker LsmWorker;
-typedef struct TestFile TestFile;
-typedef struct IVector IVector;
-typedef struct Sector Sector;
-
-/*
-** This structure is used to implement an array of type int. It supports
-** the following methods:
-**
-**     testIvecSet()
-**     testIvecGet()
-**     testIvecSize()
-**     testIvecClear()
-*/
-struct IVector {
-  int nEntry;                     /* Size of array */
-  int nAlloc;                     /* Size of allocated array */
-  int *aEntry;                    /* Array of integers */
-};
-
-struct Sector {
-  u8 *aData;                      /* A sectors worth of data */
-  int iSector;                    /* Sector number. */
-  Sector *pNext;                  /* Next sector with same hash */
-};
+typedef struct LsmFile LsmFile;
 
 #ifdef LSM_MUTEX_PTHREADS
 #include <pthread.h>
@@ -69,6 +46,18 @@ lsm_env *tdb_lsm_env(void){
   return &env;
 }
 
+typedef struct FileSector FileSector;
+typedef struct FileData FileData;
+
+struct FileSector {
+  u8 *aOld;                       /* Old data for this sector */
+};
+
+struct FileData {
+  int nSector;                    /* Allocated size of apSector[] array */
+  FileSector *aSector;            /* Array of file sectors */
+};
+
 /*
 ** bPrepareCrash:
 **   If non-zero, the file wrappers maintain enough in-memory data to
@@ -80,22 +69,30 @@ lsm_env *tdb_lsm_env(void){
 **   Set to true after a crash is simulated. Once this variable is true, all
 **   VFS methods other than xClose() return LSM_IOERR as soon as they are
 **   called (without affecting the contents of the file-system).
+**
+** env:
+**   The environment object used by all lsm_db* handles opened by this
+**   object (i.e. LsmDb.db plus any worker connections). Variable env.pVfsCtx
+**   always points to the containing LsmDb structure.
 */
 struct LsmDb {
   TestDb base;                    /* Base class - methods table */
+  lsm_env env;                    /* Environment used by connection db */
+  char *zName;                    /* Database file name */
   lsm_db *db;                     /* LSM database handle */
+
   lsm_cursor *pCsr;               /* Cursor held open during read transaction */
   void *pBuf;                     /* Buffer for tdb_fetch() output */
   int nBuf;                       /* Allocated (not used) size of pBuf */
 
   /* Crash testing related state */
+  int bCrashed;                   /* True once a crash has occurred */
   int nAutoCrash;                 /* Number of syncs until a crash */
   int bPrepareCrash;              /* True to store writes in memory */
-  int bCrashed;                   /* True once a crash has occurred */
-  int nSectorsize;                /* Assumed size of disk sectors (512B) */
 
-  /* xSync timing related */
-  int bSyncDebug;                 /* True to print out debugging at xSync() */
+  /* Unsynced data (while crash testing) */
+  int szSector;                /* Assumed size of disk sectors (512B) */
+  FileData aFile[2];              /* Database and log file data */
 
   /* Work hook redirection */
   void (*xWork)(lsm_db *, void *);
@@ -108,396 +105,166 @@ struct LsmDb {
 
 /*************************************************************************
 **************************************************************************
-** Begin code for IVector
-*/
-static void testIvecSet(IVector *p, int iIdx, int iVal){
-  if( p->nAlloc<=iIdx ){
-    int nNew = (iIdx+1)*2;
-    int *aNew;
-    aNew = (int *)realloc(p->aEntry, nNew*sizeof(int));
-    memset(&aNew[p->nAlloc], 0, (nNew-p->nAlloc)*sizeof(int));
-    p->nAlloc = nNew;
-    p->aEntry = aNew;
-  }
-
-  p->aEntry[iIdx] = iVal;
-  p->nEntry = MAX(iIdx+1, p->nEntry);
-}
-
-#if 0
-static int testIvecGet(IVector *p, int iIdx){
-  return ((p->nAlloc>iIdx) ? p->aEntry[iIdx] : 0);
-}
-#endif
-
-static int testIvecSize(IVector *p){
-  return p->nEntry;
-}
-
-static void testIvecClear(IVector *p){
-  free(p->aEntry);
-  memset(p, 0, sizeof(IVector));
-}
-
-static void testIvecBitSet(IVector *p, int iBit){
-  int iIdx = (iBit >> 5);
-  int mask = (1 << (iBit & 0x1F));
-
-  if( p->nAlloc<=iIdx ) testIvecSet(p, iIdx, 0);
-  p->aEntry[iIdx] |= mask;
-}
-
-static int testIvecBitGet(IVector *p, int iBit){
-  int iIdx = (iBit >> 5);
-  int mask = (1 << (iBit & 0x1F));
-  if( p->nAlloc<=iIdx ) testIvecSet(p, iIdx, 0);
-  return ((p->aEntry[iIdx] & mask)!=0);
-}
-/*
-** End of IVector code
-**************************************************************************
-*************************************************************************/
-
-
-/*************************************************************************
-**************************************************************************
 ** Begin test VFS code.
 */
-#if 0
-struct TestFile {
-  lsm_file *pReal;
-  LsmDb *pDb;                     /* Database handle that uses this file */
 
-  /* Used by system crash simulation */
-  int nHash;
-  Sector **aHash;
-  
-  /* Used by sync-logging. */
-  IVector aiUnsynced;             /* Map of synced and unsynced blocks */
-  i64 iWriteStart;                /* Start of current contiguous write() */
-  int nWrite;                     /* Number of bytes in the same */
-  FILE *iolog;                    /* Write IO log here */
-  int nSynced;                    /* Running count of sectors synced */
+struct LsmFile {
+  lsm_file *pReal;                /* Real underlying file */
+  int bLog;                       /* True for log file. False for db file */
+  LsmDb *pDb;                     /* Database handle that uses this file */
 };
 
-static void createHashTable(TestFile *p){
-  assert( p->pDb->bPrepareCrash );
-  if( p->aHash==0 ){
-    p->nHash = 10000;
-    p->aHash = (Sector **)malloc(p->nHash * sizeof(Sector *));
-    memset(p->aHash, 0, p->nHash*sizeof(Sector *));
-  }
-}
 
-int sectorHash(TestFile *p, int iSector){
-  createHashTable(p);
-  return (iSector % p->nHash);
-}
-
-
-
-static int testVfsOpen(void *pCtx, const char *zFile, lsm_file **ppFile){
+static int testEnvOpen(
+  lsm_env *pEnv,                  /* Environment for current LsmDb */
+  const char *zFile,              /* Name of file to open */
+  lsm_file **ppFile               /* OUT: New file handle object */
+){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmDb *pDb = (LsmDb *)pEnv->pVfsCtx;
   int rc;                         /* Return Code */
-  TestFile *pRet;                 /* The new file handle */
-  lsm_vfs *pRealVfs;              /* The actual interface to the OS */
-  void *pRealCtx;
+  LsmFile *pRet;                  /* The new file handle */
+  int nFile;                      /* Length of string zFile in bytes */
 
-  pRet = malloc(sizeof(TestFile));
-  memset(pRet, 0, sizeof(TestFile));
-  pRet->pDb = (LsmDb *)pCtx;
-  assert( pRet->pDb->bCrashed==0 );
+  nFile = strlen(zFile);
+  pRet = (LsmFile *)testMalloc(sizeof(LsmFile));
+  pRet->pDb = pDb;
+  pRet->bLog = (nFile > 4 && 0==memcmp("-log", &zFile[nFile-4], 4));
 
-  pRealVfs = lsm_default_vfs();
-  rc = pRealVfs->xOpen(pRealCtx, zFile, &pRet->pReal);
+  rc = pRealEnv->xOpen(pRealEnv, zFile, &pRet->pReal);
   if( rc!=LSM_OK ){
-    free(pRet);
+    testFree(pRet);
     pRet = 0;
   }
-
-#if 0 
-  if( zFile[strlen(zFile)-1]=='b' ) pRet->iolog = stderr;
-#endif
 
   *ppFile = (lsm_file *)pRet;
   return rc;
 }
 
-static int testVfsRead(lsm_file *pFile, lsm_i64 iOff, void *pData, int nData){
-  int rc;
-  TestFile *p = (TestFile *)pFile;
+static int testEnvRead(lsm_file *pFile, lsm_i64 iOff, void *pData, int nData){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
+  if( p->pDb->bCrashed ) return LSM_IOERR;
+  return pRealEnv->xRead(p->pReal, iOff, pData, nData);
+}
+
+static int testEnvWrite(lsm_file *pFile, lsm_i64 iOff, void *pData, int nData){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
   LsmDb *pDb = p->pDb;
 
-  if( pDb->bCrashed ){
-    return LSM_IOERR;
-  }else if( pDb->bPrepareCrash ){
-    int i;
-    int nSectorsize = pDb->nSectorsize;
-    int iFirst = (iOff / nSectorsize);
-    int iLast = iFirst + (nData / nSectorsize);
-    u8 *aData = (u8 *)pData;
+  if( pDb->bCrashed ) return LSM_IOERR;
 
-    assert( (iOff % nSectorsize)==0 );
-    assert( (nData % nSectorsize)==0 );
+  if( pDb->bPrepareCrash ){
+    FileData *pData = &pDb->aFile[p->bLog];
+    int iFirst;                 
+    int iLast;
+    int iSector;
 
-    for(i=iFirst; i<iLast; i++){
-      Sector *pSector;
-      int iHash;
+    iFirst = (iOff / pDb->szSector);
+    iLast =  ((iOff + nData - 1) / pDb->szSector);
 
-      iHash = sectorHash(p, i);
-      pSector = p->aHash[iHash];
-      while( pSector && pSector->iSector!=i ){
-        pSector = pSector->pNext;
-      }
+    if( pData->nSector<(iLast+1) ){
+      int nNew = ( ((iLast + 1) + 63) / 64 ) * 64;
+      assert( nNew>iLast );
+      pData->aSector = (FileSector *)testRealloc(
+          pData->aSector, nNew*sizeof(FileSector)
+      );
+      memset(&pData->aSector[pData->nSector], 
+          0, (nNew - pData->nSector) * sizeof(FileSector)
+      );
+      pData->nSector = nNew;
+    }
 
-      if( pSector ){
-        memcpy(aData, pSector->aData, nSectorsize);
-      }else{
-        rc = lsm_default_vfs()->xRead(
-            p->pReal, ((i64)nSectorsize * i), aData, nSectorsize
+    for(iSector=iFirst; iSector<=iLast; iSector++){
+      if( pData->aSector[iSector].aOld==0 ){
+        u8 *aOld = (u8 *)testMalloc(pDb->szSector);
+        pRealEnv->xRead(
+            p->pReal, (lsm_i64)iSector*pDb->szSector, aOld, pDb->szSector
         );
+        pData->aSector[iSector].aOld = aOld;
       }
-      aData += nSectorsize;
     }
-    rc = LSM_OK;
-  }else{
-    rc = lsm_default_vfs()->xRead(p->pReal, iOff, pData, nData);
   }
-  return rc;
+
+  return pRealEnv->xWrite(p->pReal, iOff, pData, nData);
 }
 
-static int testVfsWrite(lsm_file *pFile, lsm_i64 iOff, void *pData, int nData){
-  TestFile *p = (TestFile *)pFile;
+static int testEnvSync(lsm_file *pFile){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
   LsmDb *pDb = p->pDb;
-  int rc;
-
-  if( pDb->bSyncDebug ){
-    int iFirst;                   /* First sector being written */
-    int iLast;                    /* Last sector being written */
-    int i;                        /* Iterator variable */
-
-    iFirst = iOff / pDb->nSectorsize;
-    iLast = (iOff+nData-1) / pDb->nSectorsize;
-
-    for(i=iFirst; i<=iLast; i++){
-      testIvecBitSet(&p->aiUnsynced, i);
-    }
-  }
-
-  if( p->iolog ){
-    if( p->nWrite ){
-      if( iOff!=(p->iWriteStart + p->nWrite) ){
-        fprintf(p->iolog, "%dK@%dK\n", 
-            p->nWrite/1024, (int)(p->iWriteStart/1024)
-            );
-        p->iWriteStart = iOff;
-        p->nWrite = 0;
-      }
-      p->nWrite += nData;
-    }else{
-      p->iWriteStart = iOff;
-      p->nWrite = nData;
-    }
-  }
-
-  /* If this database has already crashed, return LSM_IOERR immediately. 
-  ** Otherwise, if a crash is scheduled, then store the modified sector
-  ** data in the Testfile.aHash[] hash table. Or, if no crash is scheduled
-  ** and none has occurred, write to the underlying file.
-  */
-  if( pDb->bCrashed ){
-    rc = LSM_IOERR;
-  }else if( pDb->bPrepareCrash ){
-    int i;
-    int nSectorsize = pDb->nSectorsize;
-    int iFirst = (iOff / nSectorsize);
-    int iLast = iFirst + (nData / nSectorsize);
-    u8 *aData = (u8 *)pData;
-
-    assert( (iOff % nSectorsize)==0 );
-    assert( (nData % nSectorsize)==0 );
-
-    for(i=iFirst; i<iLast; i++){
-      Sector *pSector;
-      int iHash;
-
-      iHash = sectorHash(p, i);
-      pSector = p->aHash[iHash];
-      while( pSector && pSector->iSector!=i ){
-        pSector = pSector->pNext;
-      }
-      if( pSector==0 ){
-        pSector = malloc(sizeof(Sector) + nSectorsize);
-        memset(pSector, 0, sizeof(Sector));
-        pSector->aData = (u8 *)&pSector[1];
-        pSector->iSector = i;
-        pSector->pNext = p->aHash[iHash];
-        p->aHash[iHash] = pSector;
-      }
-      memcpy(pSector->aData, aData, nSectorsize);
-      aData += nSectorsize;
-    }
-    rc = LSM_OK;
-  }else{
-    rc = lsm_default_vfs()->xWrite(p->pReal, iOff, pData, nData);
-  }
-
-  return rc;
-}
-
-static void printDirty(TestFile *p){
+  FileData *pData = &pDb->aFile[p->bLog];
   int i;
-  int nSector;
 
-  int iStart;
-  int bOn = 0;
-  int nTotal = 0;
+  if( pDb->bCrashed ) return LSM_IOERR;
 
-  nSector = testIvecSize(&p->aiUnsynced) * 32;
-
-  for(i=0; i<=nSector; i++){
-    int bit = (i==nSector ? 0 : testIvecBitGet(&p->aiUnsynced, i));
-    if( bit && !bOn ){
-      iStart = i;
-      bOn = 1;
-    }
-
-    if( !bit && bOn ){
-      fprintf(stderr, "%dK@%dK ", i-iStart, iStart); 
-      bOn = 0;
-      nTotal += i-iStart;
+  if( pDb->bPrepareCrash ){
+    for(i=0; i<pData->nSector; i++){
+      testFree(pData->aSector[i].aOld);
+      pData->aSector[i].aOld = 0;
     }
   }
 
-  p->nSynced += nTotal;
+  return pRealEnv->xSync(p->pReal);
 }
 
-static void flushFileBuffers(TestFile *p, int iCrash){
-  if( p->aHash ){
-    LsmDb *pDb = p->pDb;
-    int nSectorsize = pDb->nSectorsize;
+static int testEnvTruncate(lsm_file *pFile, lsm_i64 iOff){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
+  if( p->pDb->bCrashed ) return LSM_IOERR;
+  return pRealEnv->xTruncate(p->pReal, iOff);
+}
+
+static int testEnvClose(lsm_file *pFile){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
+
+  pRealEnv->xClose(p->pReal);
+  testFree(p);
+  return LSM_OK;
+}
+
+static void doSystemCrash(LsmDb *pDb){
+  lsm_env *pEnv = tdb_lsm_env();
+  int iFile;
+  int iSeed = pDb->aFile[0].nSector + pDb->aFile[1].nSector;
+
+  char *zFile = pDb->zName;
+  char *zFree = 0;
+
+  for(iFile=0; iFile<2; iFile++){
+    lsm_file *pFile = 0;
     int i;
-    for(i=0; i<p->nHash; i++){
-      Sector *pSector;
-      Sector *pNext;
 
-      for(pSector=p->aHash[i]; pSector; pSector=pNext){
-        i64 iOff = pSector->iSector * (i64)nSectorsize;
+    pEnv->xOpen(pEnv, zFile, &pFile);
+    for(i=0; i<pDb->aFile[iFile].nSector; i++){
+      u8 *aOld = pDb->aFile[iFile].aSector[i].aOld;
+      if( aOld ){
+        int iOpt = testPrngValue(iSeed++) % 3;
+        switch( iOpt ){
+          case 0:
+            break;
 
-        /* Set variable iOpt to indicate the action taken for this sector:
-        **
-        **     iOpt==0    ->    Do nothing. Do not write the sector to disk.
-        **     iOpt==1    ->    Write garbage to disk in place of sector data.
-        **     iOpt==2    ->    Write sector data to disk.
-        */
-        int iOpt = 2;
-        if( iCrash ){
-          iOpt = (testPrngValue(iCrash + pSector->iSector) % 3);
-#if 0
-          fprintf(stderr, "file=%p sector=%d iOpt=%d\n", 
-              p, pSector->iSector, iOpt
-          );
-#endif
+          case 1:
+            testPrngArray(iSeed++, (u32 *)aOld, pDb->szSector/4);
+
+          case 2:
+            pEnv->xWrite(
+                pFile, (lsm_i64)i * pDb->szSector, aOld, pDb->szSector
+            );
+            break;
         }
-
-        if( iOpt ){
-          if( iOpt==1 ){
-            memset(pSector->aData, 0x01, nSectorsize);
-          }
-          lsm_default_vfs()->xWrite(
-              p->pReal, iOff, pSector->aData, nSectorsize
-          );
-        }
-
-        pNext = pSector->pNext;
-        free(pSector);
+        testFree(aOld);
+        pDb->aFile[iFile].aSector[i].aOld = 0;
       }
     }
-    memset(p->aHash, 0, sizeof(Sector *)*p->nHash);
-  }
-}
-
-static int testVfsSync(lsm_file *pFile){
-  TestFile *p = (TestFile *)pFile;
-  LsmDb *pDb = p->pDb;
-  int rc = LSM_OK;
-
-  if( pDb->bCrashed ){
-    rc = LSM_IOERR;
-  }else if( pDb->bPrepareCrash ){
-    if( pDb->nAutoCrash>0 ){
-      pDb->nAutoCrash--;
-      if( pDb->nAutoCrash==0 ){
-        pDb->bCrashed = 1;
-        rc = LSM_IOERR;
-      }else{
-        flushFileBuffers(p, 0);
-      }
-    }else{
-      flushFileBuffers(p, 0);
-    }
+    pEnv->xClose(pFile);
+    zFree = zFile = sqlite3_mprintf("%s-log", pDb->zName);
   }
 
-  if( p->iolog ){
-    if( p->nWrite ){
-      fprintf(p->iolog, "%dK@%dK\n", p->nWrite/1024,(int)(p->iWriteStart/1024));
-      p->nWrite = 0;
-    }
-    fprintf(p->iolog, "S\n");
-  }
-
-  if( rc==LSM_OK ){
-    if( p->pDb->bSyncDebug ){
-      struct timeval one;
-      struct timeval two;
-      int ms;
-
-      gettimeofday(&one, 0);
-      rc = lsm_default_vfs()->xSync(p->pReal);
-      gettimeofday(&two, 0);
-      ms = (((int)two.tv_sec - (int)one.tv_sec)*1000) +
-           (((int)two.tv_usec - (int)one.tv_usec)/1000);
-
-#if 0
-      fprintf(stderr, "SYNC: (%d ms) ", ms);
-#endif
-      printDirty(p);
-      fprintf(stderr, "S\n");
-      testIvecClear(&p->aiUnsynced);
-    }else{
-      rc = lsm_default_vfs()->xSync(p->pReal);
-    }
-  }
-
-  return rc;
+  sqlite3_free(zFree);
 }
-
-static int testVfsClose(lsm_file *pFile){
-  TestFile *p = (TestFile *)pFile;
-  int rc;
-
-  flushFileBuffers(p, p->pDb->bCrashed);
-  rc = lsm_default_vfs()->xClose(p->pReal);
-  free(p->aHash);
-  free(p);
-
-  return rc;
-}
-#endif
-
-static int installTestVFS(LsmDb *pDb){
-#if 0
-  static lsm_vfs test_vfs = {
-    testVfsOpen,
-    testVfsRead,
-    testVfsWrite,
-    testVfsSync,
-    testVfsClose
-  };
-  return lsm_config_vfs(pDb->db, (void *)pDb, &test_vfs);
-#endif
-  return 0;
-}
-
 /*
 ** End test VFS code.
 **************************************************************************
@@ -516,6 +283,15 @@ static int test_lsm_close(TestDb *pTestDb){
   for(i=0; i<pDb->nWorker && rc==LSM_OK; i++){
     rc = pDb->aWorker[i].worker_rc;
   }
+
+  for(i=0; i<pDb->aFile[0].nSector; i++){
+    testFree(pDb->aFile[0].aSector[i].aOld);
+  }
+  testFree(pDb->aFile[0].aSector);
+  for(i=0; i<pDb->aFile[1].nSector; i++){
+    testFree(pDb->aFile[1].aSector[i].aOld);
+  }
+  testFree(pDb->aFile[1].aSector);
 
   free((char *)pDb->pBuf);
   free((char *)pDb);
@@ -704,9 +480,11 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
   };
 
   int rc;
+  int nFilename;
   LsmDb *pDb;
 
-  if( bClear && zFilename && zFilename[0] ){
+  assert( zFilename);
+  if( bClear ){
     char *zCmd = sqlite3_mprintf("rm -rf %s\n", zFilename);
     system(zCmd);
     sqlite3_free(zCmd);
@@ -715,23 +493,34 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
     sqlite3_free(zCmd);
   }
 
-  pDb = (LsmDb *)malloc(sizeof(LsmDb));
+  nFilename = strlen(zFilename);
+
+  pDb = (LsmDb *)malloc(sizeof(LsmDb) + nFilename + 1);
   memset(pDb, 0, sizeof(LsmDb));
   pDb->base.pMethods = &LsmMethods;
+  pDb->zName = (char *)&pDb[1];
+  memcpy(pDb->zName, zFilename, nFilename + 1);
 
   /* Default the sector size used for crash simulation to 512 bytes. 
   ** Todo: There should be an OS method to obtain this value - just as
   ** there is in SQLite. For now, LSM assumes that it is smaller than
   ** the page size (default 4KB).
   */
-  pDb->nSectorsize = 256;
-  pDb->bSyncDebug = 0;
+  pDb->szSector = 256;
 
-  rc = lsm_new(tdb_lsm_env(), &pDb->db);
+  memcpy(&pDb->env, tdb_lsm_env(), sizeof(lsm_env));
+  pDb->env.pVfsCtx = (void *)pDb;
+  pDb->env.xOpen = testEnvOpen;
+  pDb->env.xRead = testEnvRead;
+  pDb->env.xWrite = testEnvWrite;
+  pDb->env.xTruncate = testEnvTruncate;
+  pDb->env.xSync = testEnvSync;
+  pDb->env.xClose = testEnvClose;
+
+  rc = lsm_new(&pDb->env, &pDb->db);
   if( rc==LSM_OK ){
     lsm_config_log(pDb->db, xLog, 0);
     lsm_config_work_hook(pDb->db, xWorkHook, (void *)pDb);
-    installTestVFS(pDb);
     rc = lsm_open(pDb->db, zFilename);
     if( rc!=LSM_OK ){
       test_lsm_close((TestDb *)pDb);
@@ -814,6 +603,7 @@ void tdb_lsm_system_crash(TestDb *pDb){
   if( tdb_lsm(pDb) ){
     LsmDb *p = (LsmDb *)pDb;
     p->bCrashed = 1;
+    doSystemCrash(p);
   }
 }
 
@@ -979,7 +769,7 @@ static int mt_start_worker(
   p->lsm_work_npage = nPage;
 
   /* Open the worker connection */
-  if( rc==0 ) rc = lsm_new(tdb_lsm_env(), &p->pWorker);
+  if( rc==0 ) rc = lsm_new(&pDb->env, &p->pWorker);
   if( rc==0 ) rc = lsm_open(p->pWorker, zFilename);
 
   /* Configure the work-hook */
