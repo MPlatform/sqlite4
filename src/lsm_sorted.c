@@ -3695,10 +3695,10 @@ static void infoCellDump(
 
 
 int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, char **pzOut){
-  int rc = LSM_OK;
+  int rc = LSM_OK;                /* Return code */
   Snapshot *pWorker;              /* Worker snapshot */
   Snapshot *pRelease = 0;         /* Snapshot to release */
-  Page *pPg = 0;
+  Page *pPg = 0;                  /* Handle for page iPg */
 
   *pzOut = 0;
   if( iPg==0 ) return LSM_ERROR;
@@ -3726,6 +3726,7 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, char **pzOut){
     flags = pageGetFlags(aData, nData);
 
     lsmStringInit(&str, pDb->pEnv);
+    lsmStringAppendf(&str, "Page : %d\n", iPg);
     lsmStringAppendf(&str, "nRec : %d\n", nRec);
     lsmStringAppendf(&str, "iPtr : %d\n", iPtr);
     lsmStringAppendf(&str, "flags: %04x\n", flags);

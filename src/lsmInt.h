@@ -596,7 +596,6 @@ void lsmStringVAppendf(LsmString*, const char *zFormat, va_list, va_list);
 void lsmStringAppendf(LsmString*, const char *zFormat, ...);
 void lsmStringClear(LsmString*);
 char *lsmMallocPrintf(lsm_env*, const char*, ...);
-
 int lsmStringBinAppend(LsmString *pStr, const u8 *a, int n);
 
 
