@@ -443,6 +443,22 @@ int do_test(int nArg, char **azArg){
   return (nFail!=0);
 }
 
+int do_crash(int nArg, char **azArg){
+  int rc = LSM_OK;
+  const char *zPattern = 0;
+
+  if( nArg>1 ){
+    testPrintError("Usage: crash ?PATTERN?\n");
+    return 1;
+  }
+  if( nArg==1 ){
+    zPattern = azArg[0];
+  }
+
+  do_crash_test(zPattern, &rc);
+  return rc;
+}
+
 int do_speed_tests(int nArg, char **azArg){
 
   struct DbSystem {
@@ -959,7 +975,6 @@ static int do_insert(int nArg, char **azArg){
 static int st_do_show(int a, char **b)      { return do_show(a, b); }
 static int st_do_work(int a, char **b)      { return do_work(a, b); }
 static int st_do_io(int a, char **b)        { return do_io(a, b); }
-static int st_do_crash_test(int a, char **b){ return do_crash_test(a, b); }
 
 
 #ifdef __linux__
@@ -997,7 +1012,7 @@ int main(int argc, char **argv){
     {"io",          st_do_io},
     {"insert",      do_insert},
 
-    {"crash",       st_do_crash_test},
+    {"crash",       do_crash},
     {"test",        do_test},
     {0, 0}
   };

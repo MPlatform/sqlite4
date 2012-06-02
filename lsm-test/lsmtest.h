@@ -143,8 +143,8 @@ int do_work(int nArg, char **azArg);
 /* testio.c */
 int do_io(int nArg, char **azArg);
 
-/* test2.c */
-int do_crash_test(int nArg, char **azArg);
+/* lsmtest2.c */
+void do_crash_test(const char *zPattern, int *pRc);
 int do_rollback_test(int nArg, char **azArg);
 
 /* test3.c */

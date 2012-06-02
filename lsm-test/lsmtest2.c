@@ -227,6 +227,7 @@ static Datasource *getDatasource(int iTest){
 }
 
 static int crash_test1(
+  const char *zPattern,
   const char *zTitle,
   const char *zSystem,            /* Database system to test */
   int eSyncMode                   /* Either LSM_SAFETY_NORMAL or FULL */
@@ -247,13 +248,15 @@ static int crash_test1(
   for(iDatasource=0; (pData = getDatasource(iDatasource)); iDatasource++){
     int iDot = 0;                 /* testCaseProgress() context */
     TestDb *pDb;
-    int rc;
+    int rc = LSM_OK;
     int i, j;
 
     char zCksum1[TEST_CKSUM_BYTES];
     int nCksumRow = -1;
 
-    testCaseBegin(&rc, 0, "crash.%s.%d", zTitle, iDatasource);
+    if( 0==testCaseBegin(&rc, zPattern, "crash.%s.%d", zTitle, iDatasource) ){
+      continue;
+    }
 
     /* Open and configure the LSM database connection. */
     pDb = 0;
@@ -404,32 +407,21 @@ static int crash_test2(
 #endif
 
 
-int do_crash_test(int nArg, char **azArg){
+void do_crash_test(const char *zPattern, int *pRc){
   struct Test {
     const char *zTest;
     const char *zSystem;
     int eSafety;
-    int (*x)(const char *, const char *, int eSyncMode);
+    int (*x)(const char *, const char *, const char *, int eSyncMode);
   } aTest [] = {
     { "sys.full.lomem.1",   "lsm_lomem", LSM_SAFETY_FULL  , crash_test1 },
     { "sys.normal.lomem.1", "lsm_lomem", LSM_SAFETY_NORMAL, crash_test1 },
-    { 0, 0, 0, 0, 0 }
   };
-  int iSel = -1;
   int i;
-  int rc = 0;
 
-  if( nArg>0 ){
-    rc = testArgSelect(aTest, "test", azArg[0], &iSel);
+  for(i=0; *pRc==LSM_OK && i<ArraySize(aTest); i++){
+    struct Test *p = &aTest[i];
+    *pRc = p->x(zPattern, p->zTest, p->zSystem, p->eSafety);
   }
-
-  for(i=0; rc==0 && i<(ArraySize(aTest)-1); i++){
-    if( i==iSel || iSel<0 ){
-      struct Test *p = &aTest[i];
-      rc = p->x(p->zTest, p->zSystem, p->eSafety);
-    }
-  }
-
-  return rc;
 }
 
