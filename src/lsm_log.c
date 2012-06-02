@@ -118,7 +118,7 @@
 **     C) |---1---|..|--0--|.|-2-|
 **
 **   In this state records are appended to region 2 until checkpoints have
-**   contracted regions 0 and 1 until they are both zero bytes in size. They 
+**   contracted regions 0 AND 1 UNTil they are both zero bytes in size. They 
 **   are then shifted to the start of the log file, leaving the system in 
 **   the equivalent of state A above.
 **
@@ -205,13 +205,20 @@
 /* Require a checksum every 32KB. */
 #define LSM_CKSUM_MAXDATA (32*1024)
 
+/*
+** szSector:
+**   Commit records must be aligned to end on szSector boundaries. If
+**   the safety-mode is set to NORMAL or OFF, this value is 1. Otherwise,
+**   if the safety-mode is set to FULL, it is the size of the file-system
+**   sectors as reported by lsmFsSectorSize().
+*/
 struct LogWriter {
   u32 cksum0;                     /* Checksum 0 at offset iOff */
   u32 cksum1;                     /* Checksum 1 at offset iOff */
   int iCksumBuf;                  /* Bytes of buf that have been checksummed */
   i64 iOff;                       /* Offset at start of buffer buf */
   LsmString buf;                  /* Buffer containing data not yet written */
-
+  int szSector;                   /* Sector size for this transaction */
   LogRegion jump;                 /* Avoid writing to this region */
   i64 iRegion1End;                /* End of first region written by trans */
   i64 iRegion2Start;              /* Start of second regions written by trans */
@@ -281,6 +288,13 @@ static void logUpdateCksum(LogWriter *pLog, int nBuf){
   pLog->iCksumBuf = nBuf;
 }
 
+static i64 firstByteOnSector(LogWriter *pLog, i64 iOff){
+  return (iOff / pLog->szSector) * pLog->szSector;
+}
+static i64 lastByteOnSector(LogWriter *pLog, i64 iOff){
+  return firstByteOnSector(pLog, iOff) + pLog->szSector - 1;
+}
+
 /*
 ** This function is called when a write-transaction is first opened. It
 ** is assumed that the caller is holding the client-mutex when it is 
@@ -303,6 +317,16 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
     rc = lsmStringExtend(&pNew->buf, 2);
   }
   if( rc!=LSM_OK ) return rc;
+
+  /* Set the effective sector-size for this transaction. Sectors are assumed
+  ** to be one byte in size if the safety-mode is OFF or NORMAL, or as
+  ** reported by lsmFsSectorSize if it is FULL.  */
+  if( pDb->eSafety==LSM_SAFETY_FULL ){
+    pNew->szSector = lsmFsSectorSize(pDb->pFS);
+    assert( pNew->szSector>0 );
+  }else{
+    pNew->szSector = 1;
+  }
 
   /* There are now three scenarios:
   **
@@ -349,6 +373,15 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
     /* Case 3. */
     assert( aReg[2].iStart>=aReg[0].iEnd && aReg[2].iStart>=aReg[1].iEnd );
     pNew->iOff = aReg[2].iEnd;
+  }
+
+  if( pNew->jump.iStart ){
+    i64 iRound;
+    assert( pNew->jump.iStart>pNew->iOff );
+
+    iRound = firstByteOnSector(pNew, pNew->jump.iStart);
+    if( iRound>pNew->iOff ) pNew->jump.iStart = iRound;
+    pNew->jump.iEnd = lastByteOnSector(pNew, pNew->jump.iEnd);
   }
 
   pDb->pLogWriter = pNew;
@@ -410,6 +443,68 @@ void lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
   pLog->aRegion[iRegion].iStart = iOff;
 }
 
+static int jumpIfRequired(
+  lsm_db *pDb,
+  LogWriter *pLog,
+  int nReq
+){
+  /* Determine if it is necessary to add an LSM_LOG_JUMP to jump over the
+  ** jump region before writing the LSM_LOG_WRITE or DELETE record. This
+  ** is necessary if there is insufficient room between the current offset
+  ** and the jump region to fit the new WRITE/DELETE record and the largest
+  ** possible JUMP record with up to 7 bytes of padding (a total of 17 
+  ** bytes).  */
+  if( (pLog->jump.iStart > (pLog->iOff + pLog->buf.n))
+   && (pLog->jump.iStart < (pLog->iOff + pLog->buf.n + (nReq + 17))) 
+  ){
+    int rc;                       /* Return code */
+    i64 iJump;                    /* Offset to jump to */
+    u8 aJump[10];                 /* Encoded jump record */
+    int nJump;                    /* Valid bytes in aJump[] */
+    int nPad;                     /* Bytes of padding required */
+
+    /* Serialize the JUMP record */
+    iJump = pLog->jump.iEnd+1;
+    aJump[0] = LSM_LOG_JUMP;
+    nJump = 1 + lsmVarintPut64(&aJump[1], iJump);
+
+    /* Adding padding to the contents of the buffer so that it will be a 
+    ** multiple of 8 bytes in size after the JUMP record is appended. This
+    ** is not strictly required, it just makes the keeping the running 
+    ** checksum up to date in this file a little simpler.  */
+    nPad = (pLog->buf.n + nJump) % 8;
+    if( nPad ){
+      u8 aPad[7] = {0,0,0,0,0,0,0};
+      nPad = 8-nPad;
+      if( nPad==1 ){
+        aPad[0] = LSM_LOG_PAD1;
+      }else{
+        aPad[0] = LSM_LOG_PAD2;
+        aPad[1] = (nPad-2);
+      }
+      rc = lsmStringBinAppend(&pLog->buf, aPad, nPad);
+      if( rc!=LSM_OK ) return rc;
+    }
+
+    /* Append the JUMP record to the buffer. Then flush the buffer to disk
+    ** and update the checksums. The next write to the log file (assuming
+    ** there is no transaction rollback) will be to offset iJump (just past
+    ** the jump region).  */
+    rc = lsmStringBinAppend(&pLog->buf, aJump, nJump);
+    if( rc!=LSM_OK ) return rc;
+    assert( (pLog->buf.n % 8)==0 );
+    rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
+    if( rc!=LSM_OK ) return rc;
+    logUpdateCksum(pLog, pLog->buf.n);
+    pLog->iRegion1End = (pLog->iOff + pLog->buf.n);
+    pLog->iRegion2Start = iJump;
+    pLog->iOff = iJump;
+    pLog->iCksumBuf = pLog->buf.n = 0;
+  }
+
+  return LSM_OK;
+}
+
 
 /*
 ** Write the contents of the log-buffer to disk. Then write either a CKSUM
@@ -417,10 +512,45 @@ void lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
 */
 static int logFlush(lsm_db *pDb, int eType){
   int rc;
+  int nReq;
   LogWriter *pLog = pDb->pLogWriter;
   
   assert( eType==LSM_LOG_COMMIT || eType==LSM_LOG_CKSUM );
   assert( pLog );
+
+  /* Commit record is always 9 bytes in size. */
+  nReq = 9;
+  if( eType==LSM_LOG_COMMIT && pLog->szSector>1 ) nReq += pLog->szSector + 17;
+  rc = jumpIfRequired(pDb, pLog, nReq);
+
+  /* If this is a COMMIT, add padding to the log so that the COMMIT record
+  ** is aligned against the end of a disk sector. In other words, add padding
+  ** so that the first byte following the COMMIT record lies on a different
+  ** sector.  */
+  if( eType==LSM_LOG_COMMIT && pLog->szSector>1 ){
+    int nPad;                     /* Bytes of padding to add */
+
+    /* Determine the value of nPad. */
+    nPad = ((pLog->iOff + pLog->buf.n + 9) % pLog->szSector);
+    if( nPad ) nPad = pLog->szSector - nPad;
+    rc = lsmStringExtend(&pLog->buf, nPad);
+    if( rc!=LSM_OK ) return rc;
+
+    while( nPad ){
+      if( nPad==1 ){
+        pLog->buf.z[pLog->buf.n++] = LSM_LOG_PAD1;
+        nPad = 0;
+      }else{
+        int n = MIN(200, nPad-2);
+        pLog->buf.z[pLog->buf.n++] = LSM_LOG_PAD2;
+        pLog->buf.z[pLog->buf.n++] = n;
+        nPad -= 2;
+        memset(&pLog->buf.z[pLog->buf.n], 0x2B, n);
+        pLog->buf.n += n;
+        nPad -= n;
+      }
+    }
+  }
 
   /* Make sure there is room in the log-buffer to add the CKSUM or COMMIT
   ** record. Then add the first byte of it.  */
@@ -435,6 +565,7 @@ static int logFlush(lsm_db *pDb, int eType){
   pLog->buf.n += 4;
   lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum1);
   pLog->buf.n += 4;
+  assert( eType!=LSM_LOG_COMMIT || (pLog->buf.n % pLog->szSector)==0 );
 
   /* Write the contents of the buffer to disk. */
   rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
@@ -467,45 +598,11 @@ int lsmLogWrite(
   nReq = 1 + lsmVarintLen32(nKey) + nKey;
   if( nVal>=0 ) nReq += lsmVarintLen32(nVal) + nVal;
 
-  if( (pLog->jump.iStart > (pLog->iOff + pLog->buf.n)) 
-   && (pLog->jump.iStart < (pLog->iOff + pLog->buf.n + (nReq + 9) + 17)) 
-  ){
-    i64 iJump;                    /* Offset to jump to */
-    u8 aJump[10];
-    int nJump;                    /* Valid bytes in aJump[] */
-    int nPad;                     /* Bytes of padding required */
+  rc = jumpIfRequired(pDb, pLog, nReq);
 
-    iJump = pLog->jump.iEnd+1;
-    aJump[0] = LSM_LOG_JUMP;
-    nJump = 1 + lsmVarintPut64(&aJump[1], iJump);
-    nPad = (pLog->buf.n + nJump) % 8;
-    if( nPad ){
-      u8 aPad[7] = {0,0,0,0,0,0,0};
-      nPad = 8-nPad;
-      if( nPad==1 ){
-        aPad[0] = LSM_LOG_PAD1;
-      }else{
-        aPad[0] = LSM_LOG_PAD2;
-        aPad[1] = (nPad-2);
-      }
-      rc = lsmStringBinAppend(&pLog->buf, aPad, nPad);
-      if( rc!=LSM_OK ) return rc;
-    }
-
-    rc = lsmStringBinAppend(&pLog->buf, aJump, nJump);
-    if( rc!=LSM_OK ) return rc;
-    assert( (pLog->buf.n % 8)==0 );
-    rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
-    if( rc!=LSM_OK ) return rc;
-    logUpdateCksum(pLog, pLog->buf.n);
-
-    pLog->iRegion1End = (pLog->iOff + pLog->buf.n);
-    pLog->iRegion2Start = iJump;
-    pLog->iOff = iJump;
-    pLog->iCksumBuf = pLog->buf.n = 0;
+  if( rc==LSM_OK ){
+    rc = lsmStringExtend(&pLog->buf, nReq);
   }
-
-  rc = lsmStringExtend(&pLog->buf, nReq);
   if( rc==LSM_OK ){
     u8 *a = (u8 *)&pLog->buf.z[pLog->buf.n];
     *(a++) = (nVal>=0 ? LSM_LOG_WRITE : LSM_LOG_DELETE);

@@ -33,13 +33,14 @@ static int test_lsm_config(
     int iVal;
   } aParam[] = {
     { "log-size", LSM_CONFIG_LOG_SIZE }, 
+    { "safety",   LSM_CONFIG_SAFETY }, 
     { 0, 0 }
   };
 
   const char *zDb;                /* objv[1] as a string */
   const char *zName;              /* objv[2] as a string */
   int iParam;                     /* Second argument for lsm_config() */
-  int iConfig = 0;                /* Third argument for lsm_config() */
+  int iConfig = -1;               /* Third argument for lsm_config() */
   int rc;
   sqlite4 *db;
   lsm_db *pLsm;

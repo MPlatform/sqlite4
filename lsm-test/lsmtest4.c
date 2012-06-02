@@ -93,7 +93,7 @@ static void do_mc_test(
     }
 
     /* Report progress */
-    testCaseProgress(iStep, pTest->nStep, 20, &iDot);
+    testCaseProgress(iStep, pTest->nStep, testCaseNDot(), &iDot);
   }
 
   /* Close all readers */

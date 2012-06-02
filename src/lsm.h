@@ -138,13 +138,13 @@ int lsm_config(lsm_db *, int, ...);
 **     face of a system crash (e.g. a power failure or operating system 
 **     crash). As follows:
 **
-**       1 (off):    No robustness. A system crash may corrupt the database.
+**       0 (off):    No robustness. A system crash may corrupt the database.
 **
-**       2 (normal): Some robustness. A system crash may not corrupt the
+**       1 (normal): Some robustness. A system crash may not corrupt the
 **                   database file, but recently committed transactions may
 **                   be lost following recovery.
 **
-**       3 (full):   Full robustness. A system crash may not corrupt the
+**       2 (full):   Full robustness. A system crash may not corrupt the
 **                   database file. Following recovery the database file
 **                   contains all successfully committed transactions.
 **
@@ -158,15 +158,13 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_PAGE_SIZE     3
 #define LSM_CONFIG_SAFETY        4
 #define LSM_CONFIG_BLOCK_SIZE    5
-
 #define LSM_CONFIG_SEGMENT_RATIO 2
 #define LSM_CONFIG_AUTOWORK      6
-
 #define LSM_CONFIG_LOG_SIZE      7
 
-#define LSM_SAFETY_OFF    1
-#define LSM_SAFETY_NORMAL 2
-#define LSM_SAFETY_FULL   3
+#define LSM_SAFETY_OFF    0
+#define LSM_SAFETY_NORMAL 1
+#define LSM_SAFETY_FULL   2
 
 
 /*
@@ -351,7 +349,7 @@ int lsm_delete(lsm_db *pDb, void *pKey, int nKey);
 **   Write a checkpoint (if one exists in memory) to the database file.
 **
 ** LSM_WORK_MERGE:
-**   Merge two or more existing runs together. Paramter nPage is used as
+**   Merge two or more existing runs together. Parameter nPage is used as
 **   an approximate limit to the number of database pages written to disk 
 **   before the lsm_work() call returns.
 **

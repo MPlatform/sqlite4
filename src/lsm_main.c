@@ -323,7 +323,7 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
     case LSM_CONFIG_SAFETY: {
       int *piVal = va_arg(ap, int *);
-      if( *piVal && *piVal>=1 && *piVal<=3 ){
+      if( *piVal>=0 && *piVal<=2 ){
         pDb->eSafety = *piVal;
       }
       *piVal = pDb->eSafety;

@@ -185,14 +185,21 @@ void testDbContents(
   *pRc = rc;
 }
 
+/*
+** This function should be called during long running test cases to output
+** the progress dots (...) to stdout.
+*/
 void testCaseProgress(int i, int n, int nDot, int *piDot){
   int iDot = *piDot;
   while( iDot < ( ((nDot*2+1) * i) / (n*2) ) ){
-    testCaseDot();
+    printf(".");
+    fflush(stdout);
     iDot++;
   }
   *piDot = iDot;
 }
+
+int testCaseNDot(void){ return 20; }
 
 static void printScanCb(
     void *pCtx, void *pKey, int nKey, void *pVal, int nVal
@@ -213,7 +220,6 @@ static void doDataTest(
   TestDb *pDb;
 
   /* Start the test case, open a database and allocate the datasource. */
-  startTestCase(&rc, zSystem, p);
   pDb = testOpen(zSystem, 1, &rc);
   pData = testDatasourceNew(&p->defn);
 
@@ -235,7 +241,7 @@ static void doDataTest(
     testDbContents(pDb, pData, p->nRow, 0, i-1, p->nTest, p->bTestScan, &rc);
 
     /* Update the progress dots... */
-    testCaseProgress(i, p->nRow, 10, &iDot);
+    testCaseProgress(i, p->nRow, testCaseNDot()/2, &iDot);
   }
 
   i = 0;
@@ -256,7 +262,7 @@ static void doDataTest(
     testDbContents(pDb, pData, p->nRow, i, p->nRow-1,p->nTest,p->bTestScan,&rc);
 
     /* Update the progress dots... */
-    testCaseProgress(i, p->nRow, 10, &iDot);
+    testCaseProgress(i, p->nRow, testCaseNDot()/2, &iDot);
   }
 
   /* Free the datasource, close the database and finish the test case. */
@@ -291,17 +297,11 @@ void test_data_3(
   int i;
 
   for(i=0; *pRc==LSM_OK && i<ArraySize(aTest); i++){
-    int bRun = 1;
-
-    if( zPattern ){
-      char *zName = getName(zSystem, &aTest[i]);
-      bRun = testGlobMatch(zPattern, zName);
-      free(zName);
-    }
-
-    if( bRun ){
+    char *zName = getName(zSystem, &aTest[i]);
+    if( testCaseBegin(pRc, zPattern, "%s", zName) ){
       doDataTest(zSystem, &aTest[i], pRc);
     }
+    testFree(zName);
   }
 }
 

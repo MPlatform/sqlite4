@@ -178,7 +178,7 @@ int testCaseBegin(int *pRc, const char *zPattern, const char *zFmt, ...){
     zTest = testMallocVPrintf(zFmt, ap);
     va_end(ap);
     if( zPattern==0 || testGlobMatch(zPattern, zTest) ){
-      printf("%s ...", zTest);
+      printf("%-50s ...", zTest);
       res = 1;
     }
     testFree(zTest);
@@ -186,11 +186,6 @@ int testCaseBegin(int *pRc, const char *zPattern, const char *zFmt, ...){
   }
 
   return res;
-}
-
-void testCaseDot(){
-  printf(".");
-  fflush(stdout);
 }
 
 void testCaseFinish(int rc){
@@ -210,18 +205,6 @@ void testCaseSkip(){
 /* Above this point are reusable test routines. Not clear that they
 ** should really be in this file.
 *************************************************************************/
-
-/*
-** The database handle passed as the only argument must be an LSM database.
-** This function simulates an application crash by configuring the VFS
-** wrapper to return LSM_IOERR for all subsequent IO calls, then closing 
-** the database handle.
-*/
-void testApplicationCrash(TestDb *pDb){
-  assert( tdb_lsm(pDb) );
-  tdb_lsm_application_crash(pDb);
-  tdb_close(pDb);
-}
 
 /*
 ** The database handle passed as the only argument must be an LSM database.
@@ -262,6 +245,7 @@ static int crash_test1(
   /* Function getDatasource() provides a couple of different datasources.
   ** The following loop runs the test case once with each datasource.  */
   for(iDatasource=0; (pData = getDatasource(iDatasource)); iDatasource++){
+    int iDot = 0;                 /* testCaseProgress() context */
     TestDb *pDb;
     int rc;
     int i, j;
@@ -269,7 +253,7 @@ static int crash_test1(
     char zCksum1[TEST_CKSUM_BYTES];
     int nCksumRow = -1;
 
-    testCaseStart(&rc, "crash.%s.%d", zTitle, iDatasource);
+    testCaseBegin(&rc, 0, "crash.%s.%d", zTitle, iDatasource);
 
     /* Open and configure the LSM database connection. */
     pDb = 0;
@@ -280,8 +264,6 @@ static int crash_test1(
     for(i=0; rc==LSM_OK && i<nTrial; i++){
       int nCurrent;               /* Current number of rows in db */
       int nRequired;              /* Desired number of rows */
-
-      testCaseDot();
      
       nCurrent = testCountDatabase(pDb);
       nRequired = (i + 1) * nRow;
@@ -328,6 +310,8 @@ static int crash_test1(
         ** supposed to match (see above).  */
         testCompareStr(zCksum1, zCksum2, &rc);
       }
+
+      testCaseProgress(i, nTrial, testCaseNDot(), &iDot);
     }
 
     tdb_close(pDb);
@@ -338,6 +322,7 @@ static int crash_test1(
   return LSM_OK;
 }
 
+#if 0
 static int crash_test2(
   const char *zTitle,
   const char *zSystem,
@@ -416,6 +401,7 @@ static int crash_test2(
 
   return LSM_OK;
 }
+#endif
 
 
 int do_crash_test(int nArg, char **azArg){

@@ -1,0 +1,78 @@
+# 2012 June 02
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# The tests in this file focus on testing test that the LSM log file is 
+# written and recovered correctly. This file focuses on the reading and
+# writing of the log file with synchronous=FULL
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+source $testdir/log_common.tcl
+set testprefix log3
+
+#-------------------------------------------------------------------------
+# Test that get/set LSM_CONFIG_SAFETY lsm_config() requests appear to
+# work. Integer values 0, 1 and 2 should be accepted, all else rejected.
+#
+do_test 1.0 { sqlite4_lsm_config db main safety    } {1}
+do_test 1.1 { sqlite4_lsm_config db main safety -1 } {1}
+do_test 1.2 { sqlite4_lsm_config db main safety 0  } {0}
+do_test 1.3 { sqlite4_lsm_config db main safety    } {0}
+do_test 1.4 { sqlite4_lsm_config db main safety 1  } {1}
+do_test 1.5 { sqlite4_lsm_config db main safety    } {1}
+do_test 1.6 { sqlite4_lsm_config db main safety 2  } {2}
+do_test 1.7 { sqlite4_lsm_config db main safety    } {2}
+do_test 1.8 { sqlite4_lsm_config db main safety 3  } {2}
+do_test 1.9 { sqlite4_lsm_config db main safety    } {2}
+
+#-------------------------------------------------------------------------
+reset_db
+do_test 2.0 { sqlite4_lsm_config db main safety   2    } {2}
+do_test 2.1 { sqlite4_lsm_config db main log-size 1024 } {1024}
+
+do_execsql_test 2.2 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50));
+} {}
+do_filesize_test 2.3   0 1024
+
+do_execsql_test 2.4 {
+  BEGIN;
+    INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50));
+    INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50));
+    INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50));
+    INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50));
+    INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50));
+    INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50));
+  COMMIT;
+} {}
+do_filesize_test 2.5   0 2048
+
+do_test         2.6 { sqlite4_lsm_work db main -flush 0 } {0}
+do_execsql_test 2.7 { INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50)) }
+do_test         2.8 { sqlite4_lsm_work db main -check 0 } {0}
+do_test 2.9 { sqlite4_lsm_info db main log-structure } {0 0 0 0 2048 2560}
+
+for {set i 1} {$i <= 6} {incr i} {
+  do_execsql_test 2.10.$i.1 {
+    INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50));
+  }
+  do_execsql_test 2.10.$i.2 { SELECT count(*) FROM t1 } [expr 8 + $i]
+  do_recover_test 2.10.$i.3 { SELECT count(*) FROM t1 } [expr 8 + $i]
+}
+
+do_test 2.11 { 
+  sqlite4_lsm_info db main log-structure 
+} {2048 2568 0 1704 3072 4608}
+
+
+finish_test
+

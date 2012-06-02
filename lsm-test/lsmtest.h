@@ -192,6 +192,7 @@ void test_data_2(TestDb *pDb, int *pRc);
 void test_data_3(const char *, const char *, int *pRc);
 void testDbContents(TestDb *, Datasource *, int, int, int, int, int, int *);
 void testCaseProgress(int, int, int, int *);
+int testCaseNDot(void);
 
 typedef struct CksumDb CksumDb;
 CksumDb *testCksumArrayNew(Datasource *, int, int);
@@ -199,7 +200,6 @@ char *testCksumArrayGet(CksumDb *, int);
 void testCksumArrayFree(CksumDb *);
 void testCaseStart(int *pRc, char *zFmt, ...);
 void testCaseFinish(int rc);
-void testCaseDot(void);
 void testCaseSkip(void);
 int testCaseBegin(int *, const char *, const char *, ...);
 

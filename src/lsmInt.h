@@ -396,6 +396,8 @@ int lsmFsPhantomMaterialize(FileSystem *, Snapshot *, SortedRun *);
 lsm_env *lsmFsEnv(FileSystem *);
 lsm_env *lsmPageEnv(Page *);
 
+int lsmFsSectorSize(FileSystem *);
+
 void lsmSortedSplitkey(lsm_db *, Level *, int *);
 
 int lsmFsSetupAppendList(lsm_db *db);

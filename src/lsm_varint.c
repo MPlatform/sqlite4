@@ -174,5 +174,5 @@ int lsmVarintLen32(int n){
 int lsmVarintSize(u8 c){
   if( c<241 ) return 1;
   if( c<249 ) return 2;
-  return (int)(c - 247);
+  return (int)(c - 246);
 }

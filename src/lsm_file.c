@@ -1378,6 +1378,13 @@ static SortedRun *startsWith(SortedRun *pRun, Pgno iFirst){
   return (iFirst==pRun->iFirst) ? pRun : 0;
 }
 
+/*
+** Sector-size routine.
+*/
+int lsmFsSectorSize(FileSystem *pFS){
+  return 512;
+}
+
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   int rc = LSM_OK;
   Snapshot *pWorker;              /* Worker snapshot */

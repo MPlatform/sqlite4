@@ -363,6 +363,15 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
       *ppOut = p->pDb;
       break;
     }
+
+    case SQLITE_KVCTRL_SYNCHRONOUS: {
+      int *peSafety = (int *)pArg;
+      int eParam = *peSafety + 1;
+      lsm_config(p->pDb, LSM_CONFIG_SAFETY, &eParam);
+      *peSafety = eParam-1;
+      break;
+    }
+
     default:
       rc = SQLITE_NOTFOUND;
       break;

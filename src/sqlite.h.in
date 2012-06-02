@@ -4802,7 +4802,22 @@ sqlite4_mutex *sqlite4_db_mutex(sqlite4*);
 */
 int sqlite4_kvstore_control(sqlite4*, const char *zDbName, int op, void*);
 
+/*
+** <dl>
+** <dt>SQLITE_KVCTRL_LSM_HANDLE</dt><dd>
+**
+** <dt>SQLITE_KVCTRL_SYNCHRONOUS</dt><dd>
+** This op is used to configure or query the synchronous level of the 
+** database backend (either OFF, NORMAL or FULL). The fourth parameter passed 
+** to kvstore_control should be of type (int *). Call the value that the
+** parameter points to N. If N is initially 0, 1 or 2, then the database 
+** backend should attempt to change the synchronous level to OFF, NORMAL 
+** or FULL, respectively. Regardless of its initial value, N is set to 
+** the current (possibly updated) synchronous level before returning (
+** 0, 1 or 2).
+*/
 #define SQLITE_KVCTRL_LSM_HANDLE   1
+#define SQLITE_KVCTRL_SYNCHRONOUS  2
 
 /*
 ** CAPIREF: Testing Interface
