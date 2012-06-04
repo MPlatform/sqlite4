@@ -126,6 +126,31 @@ do_test 3.4 {
 } {256}
 db2 close
 
+reset_db
+do_execsql_test 3.5 { CREATE TABLE t1(a, b) }
+do_test 3.6 {
+  sqlite4_lsm_work db main -flush -checkpoint 0
+  for {set i 0} {$i < 203} {incr i} {
+    execsql { INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100)) }
+  }
+  execsql { SELECT count(*) FROM t1 }
+} {203}
+
+do_test 3.7 {
+  set cksum [execsql { SELECT md5sum(a, b) FROM t1 }]
+  copy_db_files test.db test.db2
+} {}
+
+do_test 3.8 {
+  sqlite4 db2 test.db2
+  execsql { SELECT md5sum(a, b) FROM t1 } db2
+} $cksum
+
+do_test 3.9 {
+  execsql { SELECT count(*) FROM t1 } db2
+} {203}
+db2 close
+
 #-------------------------------------------------------------------------
 #
 reset_db
@@ -396,7 +421,7 @@ do_execsql_test 11.17 {
 }
 do_test 11.18 { 
   sqlite4_lsm_info db main log-structure 
-} {1335 1482 0 1259 1483 1761}
+} {1335 1482 0 1259 1483 1769}
 do_test 11.19 {
   execsql { SELECT count(*) FROM t1 ; PRAGMA integrity_check } 
 } {21 ok}
@@ -413,11 +438,11 @@ do_execsql_test 11.22 {
 }
 do_test 11.23 { 
   sqlite4_lsm_info db main log-structure 
-} {1335 1482 0 1259 1483 1900}
+} {1335 1482 0 1259 1483 1908}
 do_test 11.24 { sqlite4_lsm_work db main -checkpoint } {0}
 do_test 11.25 { 
   sqlite4_lsm_info db main log-structure 
-} {0 0 0 0 1761 1900}
+} {0 0 0 0 1769 1908}
 
 #-------------------------------------------------------------------------
 #

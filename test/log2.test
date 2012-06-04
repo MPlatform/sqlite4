@@ -104,8 +104,84 @@ do_test         3.10 {
 } {}
 do_test         3.11 { 
   sqlite4_lsm_info db main log-structure 
-} {0 0 139 1062 1272 1801}
+} {0 0 139 1062 1272 1809}
 do_recover_test 3.12 { SELECT * FROM t1 } [execsql {SELECT * FROM t1}]
 
+#-------------------------------------------------------------------------
+#
+reset_db
+do_execsql_test 4.1 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(1000,1000));
+  BEGIN;
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --    2
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --    4
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --    8
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --   16
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --   32
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --   64
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --  128
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --  256
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; --  512
+    INSERT INTO t1 SELECT randstr(10,10), randstr(1000,1000) FROM t1; -- 1024
+  COMMIT
+}
+
+do_recover_test 4.2 { SELECT count(*) FROM t1 } 1024
+
+#-------------------------------------------------------------------------
+# The point of this test case is to try to trick LSM into making a large
+# allocation internally as the result of a corrupt log file.
+#
+reset_db
+do_execsql_test 5.1 {
+  CREATE TABLE t1(a PRIMARY KEY, b);
+  INSERT INTO t1 VALUES(randstr(10,10), randstr(1000,1000));
+}
+
+do_test 5.2 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 1124}
+do_test 5.3 { 
+  copy_db_files test.db test.db2
+  
+  # A WRITE (0x06) record specifying an 8 (varint 08) byte key and 
+  # 2,000,000,000 (varint FB77359400) byte value. And a few bytes of garbage
+  # following.
+  hexio_write test.db2-log 1124 0608FB77359400
+  hexio_write test.db2-log 1130 5555555555555555555555555555 
+
+  sqlite4 db2 ./test.db2
+  execsql { SELECT count(*) FROM t1 } db2
+} {1}
+
+#-------------------------------------------------------------------------
+#
+reset_db
+
+set a [string repeat A 50000]
+set b [string repeat B 50000]
+set c [string repeat C 50000]
+set d [string repeat D 50000]
+
+do_execsql_test 6.1 {
+  CREATE TABLE t1(a, b, PRIMARY KEY(a, b));
+  INSERT INTO t1 VALUES($a, $b);
+  INSERT INTO t1 VALUES($b, $c);
+  INSERT INTO t1 VALUES($c, $d);
+  INSERT INTO t1 VALUES($d, $a);
+} {}
+
+do_test 6.2 {
+  set cksum [db one { SELECT md5sum(a, b) FROM t1 }]
+  execsql { PRAGMA integrity_check }
+} {ok}
+
+do_test 6.3 { file size test.db } 0
+
+do_recover_test 6.4 {
+  SELECT md5sum(a, b) FROM t1;
+} [list $cksum]
+
 finish_test
+
+
 

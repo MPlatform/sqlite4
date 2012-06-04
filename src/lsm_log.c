@@ -30,7 +30,6 @@
 **
 ** And the following types of records for ancillary purposes..
 **
-**   LOG_CKSUM:  A record containing a checksum.
 **   LOG_EOF:    A record indicating the end of a log file.
 **   LOG_PAD1:   A single byte padding record.
 **   LOG_PAD2:   An N byte padding record (N>1).
@@ -142,24 +141,23 @@
 **               * The number of unused bytes (N) as a varint,
 **               * An N byte block of unused space.
 **
-**   LOG_WRITE:  * A single 0x03 byte, 
+**   LOG_COMMIT: * A single 0x03 byte.
+**               * An 8-byte checksum.
+**
+**   LOG_JUMP:   * A single 0x04 byte.
+**               * Absolute file offset to jump to, encoded as a varint.
+**
+**   LOG_WRITE:  * A single 0x06 or 0x07 byte, 
 **               * The number of bytes in the key, encoded as a varint, 
-**               * The key data,
 **               * The number of bytes in the value, encoded as a varint, 
+**               * If the first byte was 0x07, an 8 byte checksum.
+**               * The key data,
 **               * The value data.
 **
-**   LOG_DELETE: * A single 0x04 byte, 
+**   LOG_DELETE: * A single 0x08 or 0x09 byte, 
 **               * The number of bytes in the key, encoded as a varint, 
+**               * If the first byte was 0x09, an 8 byte checksum.
 **               * The key data.
-**
-**   LOG_COMMIT: * A single 0x05 byte.
-**               * An 8-byte checksum.
-**
-**   LOG_CKSUM:  * A single 0x06 byte.
-**               * An 8-byte checksum.
-**
-**   LOG_JUMP:   * A single 0x07 byte.
-**               * Absolute file offset to jump to, encoded as a varint.
 **
 **   Varints are as described in lsm_varint.c (SQLite 4 format).
 **
@@ -179,9 +177,9 @@
 **   If the record is not an even multiple of 8-bytes in size it is padded
 **   with zeroes to make it so before the checksum is updated.
 **
-**   The checksum stored in a CKSUM or COMMIT record is based on all records
-**   that appear in the file before it, but not the contents of the CKSUM or
-**   COMMIT itself.
+**   The checksum stored in a COMMIT, WRITE or DELETE is based on all bytes
+**   up to the start of the 8-byte checksum itself, including the COMMIT,
+**   WRITE or DELETE fields that appear before the checksum in the record.
 **
 ** VARINT FORMAT
 **
@@ -193,14 +191,16 @@
 #endif
 
 /* Log record types */
-#define LSM_LOG_EOF      0x00
-#define LSM_LOG_PAD1     0x01
-#define LSM_LOG_PAD2     0x02
-#define LSM_LOG_WRITE    0x03
-#define LSM_LOG_DELETE   0x04
-#define LSM_LOG_COMMIT   0x05
-#define LSM_LOG_CKSUM    0x06
-#define LSM_LOG_JUMP     0x07
+#define LSM_LOG_EOF          0x00
+#define LSM_LOG_PAD1         0x01
+#define LSM_LOG_PAD2         0x02
+#define LSM_LOG_COMMIT       0x03
+#define LSM_LOG_JUMP         0x04
+
+#define LSM_LOG_WRITE        0x06
+#define LSM_LOG_WRITE_CKSUM  0x07
+#define LSM_LOG_DELETE       0x08
+#define LSM_LOG_DELETE_CKSUM 0x09
 
 /* Require a checksum every 32KB. */
 #define LSM_CKSUM_MAXDATA (32*1024)
@@ -446,7 +446,8 @@ void lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
 static int jumpIfRequired(
   lsm_db *pDb,
   LogWriter *pLog,
-  int nReq
+  int nReq,
+  int *pbJump
 ){
   /* Determine if it is necessary to add an LSM_LOG_JUMP to jump over the
   ** jump region before writing the LSM_LOG_WRITE or DELETE record. This
@@ -500,11 +501,30 @@ static int jumpIfRequired(
     pLog->iRegion2Start = iJump;
     pLog->iOff = iJump;
     pLog->iCksumBuf = pLog->buf.n = 0;
+    if( pbJump ) *pbJump = 1;
   }
 
   return LSM_OK;
 }
 
+static int logCksumAndFlush(lsm_db *pDb){
+  int rc;                         /* Return code */
+  LogWriter *pLog = pDb->pLogWriter;
+
+  /* Calculate the checksum value. Append it to the buffer. */
+  logUpdateCksum(pLog, pLog->buf.n);
+  lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum0);
+  pLog->buf.n += 4;
+  lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum1);
+  pLog->buf.n += 4;
+
+  /* Write the contents of the buffer to disk. */
+  rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
+  pLog->iOff += pLog->buf.n;
+  pLog->iCksumBuf = pLog->buf.n = 0;
+
+  return rc;
+}
 
 /*
 ** Write the contents of the log-buffer to disk. Then write either a CKSUM
@@ -515,13 +535,13 @@ static int logFlush(lsm_db *pDb, int eType){
   int nReq;
   LogWriter *pLog = pDb->pLogWriter;
   
-  assert( eType==LSM_LOG_COMMIT || eType==LSM_LOG_CKSUM );
+  assert( eType==LSM_LOG_COMMIT );
   assert( pLog );
 
   /* Commit record is always 9 bytes in size. */
   nReq = 9;
   if( eType==LSM_LOG_COMMIT && pLog->szSector>1 ) nReq += pLog->szSector + 17;
-  rc = jumpIfRequired(pDb, pLog, nReq);
+  rc = jumpIfRequired(pDb, pLog, nReq, 0);
 
   /* If this is a COMMIT, add padding to the log so that the COMMIT record
   ** is aligned against the end of a disk sector. In other words, add padding
@@ -559,18 +579,7 @@ static int logFlush(lsm_db *pDb, int eType){
   pLog->buf.z[pLog->buf.n++] = eType;
   memset(&pLog->buf.z[pLog->buf.n], 0, 8);
 
-  /* Calculate the checksum value. Append it to the buffer. */
-  logUpdateCksum(pLog, pLog->buf.n);
-  lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum0);
-  pLog->buf.n += 4;
-  lsmPutU32((u8 *)&pLog->buf.z[pLog->buf.n], pLog->cksum1);
-  pLog->buf.n += 4;
-  assert( eType!=LSM_LOG_COMMIT || (pLog->buf.n % pLog->szSector)==0 );
-
-  /* Write the contents of the buffer to disk. */
-  rc = lsmFsWriteLog(pDb->pFS, pLog->iOff, &pLog->buf);
-  pLog->iOff += pLog->buf.n;
-  pLog->iCksumBuf = pLog->buf.n = 0;
+  rc = logCksumAndFlush(pDb);
 
   /* If this is a commit and synchronous=full, sync the log to disk. */
   if( rc==LSM_OK && eType==LSM_LOG_COMMIT && pDb->eSafety==LSM_SAFETY_FULL ){
@@ -591,34 +600,50 @@ int lsmLogWrite(
   int rc = LSM_OK;
   LogWriter *pLog;                /* Log object to write to */
   int nReq;                       /* Bytes of space required in log */
+  int bCksum = 0;                 /* True to embed a checksum in this record */
   pLog = pDb->pLogWriter;
 
-  /* Determine how many bytes of space are required for this record. Store
-  ** this value in stack variable nReq. */
-  nReq = 1 + lsmVarintLen32(nKey) + nKey;
+  /* Determine how many bytes of space are required, assuming that a checksum
+  ** will be embedded in this record (even though it may not be).  */
+  nReq = 1 + lsmVarintLen32(nKey) + 8 + nKey;
   if( nVal>=0 ) nReq += lsmVarintLen32(nVal) + nVal;
 
-  rc = jumpIfRequired(pDb, pLog, nReq);
+  /* Jump over the jump region if required. Set bCksum to true to tell the
+  ** code below to include a checksum in the record if either (a) writing
+  ** this record would mean that more than LSM_CKSUM_MAXDATA bytes of data
+  ** have been written to the log since the last checksum, or (b) the jump
+  ** is taken.  */
+  rc = jumpIfRequired(pDb, pLog, nReq, &bCksum);
+  if( (pLog->buf.n+nReq) > LSM_CKSUM_MAXDATA ) bCksum = 1;
 
   if( rc==LSM_OK ){
     rc = lsmStringExtend(&pLog->buf, nReq);
   }
   if( rc==LSM_OK ){
     u8 *a = (u8 *)&pLog->buf.z[pLog->buf.n];
-    *(a++) = (nVal>=0 ? LSM_LOG_WRITE : LSM_LOG_DELETE);
+    
+    /* Write the record header - the type byte followed by either 1 (for
+    ** DELETE) or 2 (for WRITE) varints.  */
+    assert( LSM_LOG_WRITE_CKSUM == (LSM_LOG_WRITE | 0x0001) );
+    assert( LSM_LOG_DELETE_CKSUM == (LSM_LOG_DELETE | 0x0001) );
+    *(a++) = (nVal>=0 ? LSM_LOG_WRITE : LSM_LOG_DELETE) | (u8)bCksum;
     a += lsmVarintPut32(a, nKey);
+    if( nVal>=0 ) a += lsmVarintPut32(a, nVal);
+
+    if( bCksum ){
+      pLog->buf.n = (a - (u8 *)pLog->buf.z);
+      rc = logCksumAndFlush(pDb);
+      a = (u8 *)&pLog->buf.z[pLog->buf.n];
+    }
+
     memcpy(a, pKey, nKey);
     a += nKey;
     if( nVal>=0 ){
-      a += lsmVarintPut32(a, nVal);
       memcpy(a, pVal, nVal);
+      a += nVal;
     }
-    pLog->buf.n += nReq;
+    pLog->buf.n = a - (u8 *)pLog->buf.z;
     assert( pLog->buf.n<=pLog->buf.nAlloc );
-    if( pLog->buf.n>=LSM_CKSUM_MAXDATA ){
-      rc = logFlush(pDb, LSM_LOG_CKSUM);
-      assert( rc!=LSM_OK || pLog->buf.n==0 );
-    }
   }
 
   return rc;
@@ -773,12 +798,13 @@ static int logReaderBlob(
 static int logReaderVarint(LogReader *p, LsmString *pBuf, int *piVal){
   u8 *aVarint;
   if( p->buf.n==p->iBuf ){
-    int rc = logReaderBlob(p, 0, 1, &aVarint);
+    int rc = logReaderBlob(p, 0, 10, &aVarint);
     if( rc!=LSM_OK ) return rc;
-    p->iBuf = 0;
+    p->iBuf -= (10 - lsmVarintGet32(aVarint, piVal));
+  }else{
+    logReaderBlob(p, pBuf, lsmVarintSize(p->buf.z[p->iBuf]), &aVarint);
+    lsmVarintGet32(aVarint, piVal);
   }
-  logReaderBlob(p, 0, lsmVarintSize(p->buf.z[p->iBuf]), &aVarint);
-  lsmVarintGet32(aVarint, piVal);
   return LSM_OK;
 }
 
@@ -790,7 +816,7 @@ static int logReaderByte(LogReader *p, u8 *pByte){
   return rc;
 }
 
-static void logReaderCksum(LogReader *p, LsmString *pBuf, int *pbOk){
+static void logReaderCksum(LogReader *p, LsmString *pBuf, int *pbEof){
   u8 *pPtr;
   u32 cksum0, cksum1;
   int nCksum = p->iBuf - p->iCksumBuf;
@@ -801,11 +827,11 @@ static void logReaderCksum(LogReader *p, LsmString *pBuf, int *pbOk){
   p->iCksumBuf = p->iBuf + 8;
   logReaderBlob(p, pBuf, 8, &pPtr);
 
-  /* Read the checksums from the log file. Set *pbOk if they match. */
+  /* Read the checksums from the log file. Set *pbEof if they do not match. */
   cksum0 = lsmGetU32(pPtr);
   cksum1 = lsmGetU32(&pPtr[4]);
 
-  *pbOk = (cksum0==p->cksum0 && cksum1==p->cksum1);
+  *pbEof = (cksum0!=p->cksum0 || cksum1!=p->cksum1);
   p->iCksumBuf = p->iBuf;
 }
 
@@ -825,6 +851,15 @@ static void logReaderInit(
   p->iBuf = 0;
 }
 
+/*
+** This function is called after reading the header of a LOG_DELETE or
+** LOG_WRITE record. Parameter nByte is the total size of the key and
+** value that follow the header just read. Return true if the size and
+** position of the record indicate that it should contain a checksum.
+*/
+static int logRequireCksum(LogReader *p, int nByte){
+  return ((p->iBuf + nByte - p->iCksumBuf) > LSM_CKSUM_MAXDATA);
+}
 
 /*
 ** Recover the contents of the log file.
@@ -869,13 +904,22 @@ int lsmLogRecover(lsm_db *pDb){
           break;
         }
 
-        case LSM_LOG_WRITE: {
+        case LSM_LOG_WRITE:
+        case LSM_LOG_WRITE_CKSUM: {
           int nKey;
           int nVal;
           u8 *aVal;
           logReaderVarint(&reader, &buf1, &nKey);
-          logReaderBlob(&reader, &buf1, nKey, 0);
           logReaderVarint(&reader, &buf2, &nVal);
+
+          if( eType==LSM_LOG_WRITE_CKSUM ){
+            logReaderCksum(&reader, &buf1, &bEof);
+          }else{
+            bEof = logRequireCksum(&reader, nKey+nVal);
+          }
+          if( bEof ) break;
+
+          logReaderBlob(&reader, &buf1, nKey, 0);
           logReaderBlob(&reader, &buf2, nVal, &aVal);
           if( iPass==1 ){ 
             rc = lsmTreeInsert(pDb->pTV, (u8 *)buf1.z, nKey, aVal, nVal);
@@ -883,9 +927,18 @@ int lsmLogRecover(lsm_db *pDb){
           break;
         }
 
-        case LSM_LOG_DELETE: {
+        case LSM_LOG_DELETE:
+        case LSM_LOG_DELETE_CKSUM: {
           int nKey; u8 *aKey;
           logReaderVarint(&reader, &buf1, &nKey);
+
+          if( eType==LSM_LOG_DELETE_CKSUM ){
+            logReaderCksum(&reader, &buf1, &bEof);
+          }else{
+            bEof = logRequireCksum(&reader, nKey);
+          }
+          if( bEof ) break;
+
           logReaderBlob(&reader, &buf1, nKey, &aKey);
           if( iPass==1 ){ 
             rc = lsmTreeInsert(pDb->pTV, aKey, nKey, NULL, -1);
@@ -894,19 +947,13 @@ int lsmLogRecover(lsm_db *pDb){
         }
 
         case LSM_LOG_COMMIT:
-        case LSM_LOG_CKSUM: {
-          int bOk;
-          logReaderCksum(&reader, &buf1, &bOk);
-          if( !bOk ){
-            bEof = 1;
-            assert( iPass==0 );
-          }else if( eType==LSM_LOG_COMMIT ){
+          logReaderCksum(&reader, &buf1, &bEof);
+          if( bEof==0 ){
             nCommit++;
             assert( nCommit>0 || iPass==1 );
             if( nCommit==0 ) bEof = 1;
           }
           break;
-        }
 
         case LSM_LOG_JUMP: {
           int iOff = 0;
