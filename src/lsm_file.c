@@ -111,10 +111,7 @@
 typedef struct PhantomRun PhantomRun;
 
 /* 
-** Structure to store a growable list of integers. See functions:
-**
-**   fsIListGrow()
-**   fsIListFree()
+** A phantom-run under construction.
 */
 struct PhantomRun {
   SortedRun *pRun;                /* Accompanying SortedRun object */
@@ -128,7 +125,7 @@ struct FileSystem {
   lsm_db *pDb;
   lsm_env *pEnv;
 
-  char *zDb;                      /* Database name */
+  char *zDb;                      /* Database file name */
   int nMetasize;                  /* Size of meta pages in bytes */
   int nPagesize;                  /* Database page-size in bytes */
   int nBlocksize;                 /* Database block-size in bytes */

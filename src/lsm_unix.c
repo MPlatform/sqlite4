@@ -12,9 +12,9 @@
 **
 ** Unix-specific run-time environment implementation for LSM.
 */
-#include "lsmInt.h"
-
+#include <unistd.h>
 #include <sys/types.h>
+
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <assert.h>
@@ -26,6 +26,8 @@
 #include <ctype.h>
 
 #include <unistd.h>
+
+#include "lsmInt.h"
 
 /*
 ** An open file is an instance of the following object

@@ -31,70 +31,190 @@ static int error_transaction_function(TestDb *p, int iLevel){
 ** Begin wrapper for LevelDB.
 */
 #ifdef HAVE_LEVELDB
-static int leveldb_close(TestDb *pTestDb){
-  return test_leveldb_close(pTestDb);
+
+#include <leveldb/c.h>
+
+typedef struct LevelDb LevelDb;
+struct LevelDb {
+  TestDb base;
+  leveldb_t *db;
+  leveldb_options_t *pOpt;
+  leveldb_writeoptions_t *pWriteOpt;
+  leveldb_readoptions_t *pReadOpt;
+
+  char *pVal;
+};
+
+static int test_leveldb_close(TestDb *pTestDb){
+  LevelDb *pDb = (LevelDb *)pTestDb;
+
+  leveldb_close(pDb->db);
+  leveldb_writeoptions_destroy(pDb->pWriteOpt);
+  leveldb_readoptions_destroy(pDb->pReadOpt);
+  leveldb_options_destroy(pDb->pOpt);
+  free(pDb->pVal);
+  free(pDb);
+
+  return 0;
 }
 
-static int leveldb_write(
+static int test_leveldb_write(
   TestDb *pTestDb, 
   void *pKey, 
   int nKey, 
   void *pVal, 
   int nVal
 ){
-  return test_leveldb_write(pTestDb, pKey, nKey, pVal, nVal);
+  LevelDb *pDb = (LevelDb *)pTestDb;
+  char *zErr = 0;
+  leveldb_put(pDb->db, pDb->pWriteOpt, pKey, nKey, pVal, nVal, &zErr);
+  return (zErr!=0);
 }
 
-static int leveldb_delete(TestDb *pTestDb, void *pKey, int nKey){
-  return test_leveldb_delete(pTestDb, pKey, nKey);
+static int test_leveldb_delete(TestDb *pTestDb, void *pKey, int nKey){
+  LevelDb *pDb = (LevelDb *)pTestDb;
+  char *zErr = 0;
+  leveldb_delete(pDb->db, pDb->pWriteOpt, pKey, nKey, &zErr);
+  return (zErr!=0);
 }
 
-static int leveldb_fetch(
+static int test_leveldb_fetch(
   TestDb *pTestDb, 
   void *pKey, 
   int nKey, 
   void **ppVal, 
   int *pnVal
 ){
-  if( pKey==0 ) return LSM_OK;
-  return test_leveldb_fetch(pTestDb, pKey, nKey, ppVal, pnVal);
+  LevelDb *pDb = (LevelDb *)pTestDb;
+  char *zErr = 0;
+  size_t nVal = 0;
+
+  if( pKey==0 ) return 0;
+  free(pDb->pVal);
+  pDb->pVal = leveldb_get(pDb->db, pDb->pReadOpt, pKey, nKey, &nVal, &zErr);
+  *ppVal = (void *)(pDb->pVal);
+  if( pDb->pVal==0 ){
+    *pnVal = -1;
+  }else{
+    *pnVal = (int)nVal;
+  }
+
+  return (zErr!=0);
 }
 
-static int leveldb_scan(
+static int test_leveldb_scan(
   TestDb *pTestDb,
   void *pCtx,
   int bReverse,
-  void *pFirst, int nFirst,
-  void *pLast, int nLast,
+  void *pKey1, int nKey1,         /* Start of search */
+  void *pKey2, int nKey2,         /* End of search */
   void (*xCallback)(void *, void *, int , void *, int)
 ){
-  return test_leveldb_scan(
-      pTestDb, pCtx, bReverse, pFirst, nFirst, pLast, nLast, xCallback
-  );
+  LevelDb *pDb = (LevelDb *)pTestDb;
+  leveldb_iterator_t *iter;
+
+  iter = leveldb_create_iterator(pDb->db, pDb->pReadOpt);
+
+  if( bReverse==0 ){
+    if( pKey1 ){
+      leveldb_iter_seek(iter, pKey1, nKey1);
+    }else{
+      leveldb_iter_seek_to_first(iter);
+    }
+  }else{
+    if( pKey2 ){
+      leveldb_iter_seek(iter, pKey2, nKey2);
+
+      if( leveldb_iter_valid(iter)==0 ){
+        leveldb_iter_seek_to_last(iter);
+      }else{
+        const char *k; size_t n;
+        int res;
+        k = leveldb_iter_key(iter, &n);
+        res = memcmp(k, pKey2, MIN(n, nKey2));
+        if( res==0 ) res = n - nKey2;
+        assert( res>=0 );
+        if( res>0 ){
+          leveldb_iter_prev(iter);
+        }
+      }
+    }else{
+      leveldb_iter_seek_to_last(iter);
+    }
+  }
+
+
+  while( leveldb_iter_valid(iter) ){
+    const char *k; size_t n;
+    const char *v; size_t n2;
+    int res;
+
+    k = leveldb_iter_key(iter, &n);
+    if( bReverse==0 && pKey2 ){
+      res = memcmp(k, pKey2, MIN(n, nKey2));
+      if( res==0 ) res = n - nKey2;
+      if( res>0 ) break;
+    }
+    if( bReverse!=0 && pKey1 ){
+      res = memcmp(k, pKey1, MIN(n, nKey1));
+      if( res==0 ) res = n - nKey1;
+      if( res<0 ) break;
+    }
+
+    v = leveldb_iter_value(iter, &n2);
+
+    xCallback(pCtx, (void *)k, n, (void *)v, n2);
+
+    if( bReverse==0 ){
+      leveldb_iter_next(iter);
+    }else{
+      leveldb_iter_prev(iter);
+    }
+  }
+
+  leveldb_iter_destroy(iter);
+  return 0;
 }
 
-static int leveldb_open(const char *zFilename, int bClear, TestDb **ppDb){
+static int test_leveldb_open(const char *zFilename, int bClear, TestDb **ppDb){
   static const DatabaseMethods LeveldbMethods = {
-    leveldb_close,
-    leveldb_write,
-    leveldb_delete,
-    leveldb_fetch,
-    leveldb_scan,
+    test_leveldb_close,
+    test_leveldb_write,
+    test_leveldb_delete,
+    test_leveldb_fetch,
+    test_leveldb_scan,
     error_transaction_function,
     error_transaction_function,
     error_transaction_function
   };
 
-  int rc;
-  TestDb *pTestDb = 0;
+  LevelDb *pLevelDb;
+  char *zErr = 0;
 
-  rc = test_leveldb_open(zFilename, bClear, &pTestDb);
-  if( rc!=0 ){
-    *ppDb = 0;
-    return rc;
+  if( bClear ){
+    char *zCmd = sqlite3_mprintf("rm -rf %s\n", zFilename);
+    system(zCmd);
+    sqlite3_free(zCmd);
   }
-  pTestDb->pMethods = &LeveldbMethods;
-  *ppDb = pTestDb;
+
+  pLevelDb = (LevelDb *)malloc(sizeof(LevelDb));
+  memset(pLevelDb, 0, sizeof(LevelDb));
+
+  pLevelDb->pOpt = leveldb_options_create();
+  leveldb_options_set_create_if_missing(pLevelDb->pOpt, 1);
+  pLevelDb->pWriteOpt = leveldb_writeoptions_create();
+  pLevelDb->pReadOpt = leveldb_readoptions_create();
+
+  pLevelDb->db = leveldb_open(pLevelDb->pOpt, zFilename, &zErr);
+
+  if( zErr ){
+    test_leveldb_close((TestDb *)pLevelDb);
+    *ppDb = 0;
+    return 1;
+  }
+
+  *ppDb = (TestDb *)pLevelDb;
+  pLevelDb->base.pMethods = &LeveldbMethods;
   return 0;
 }
 #endif  /* HAVE_LEVELDB */
@@ -341,7 +461,6 @@ static int sql_begin(TestDb *pTestDb, int iLevel){
 }
 
 static int sql_commit(TestDb *pTestDb, int iLevel){
-  int i;
   SqlDb *pDb = (SqlDb *)pTestDb;
   assert( iLevel>=0 );
 
@@ -484,7 +603,7 @@ static struct Lib {
   { "lsm_mt3",      "testdb.lsm_mt3",   test_lsm_mt3 },
 #endif
 #ifdef HAVE_LEVELDB
-  { "leveldb",      "testdb.leveldb",   leveldb_open },
+  { "leveldb",      "testdb.leveldb",   test_leveldb_open },
 #endif
 #ifdef HAVE_KYOTOCABINET
   { "kyotocabinet", "testdb.kc",        kc_open }

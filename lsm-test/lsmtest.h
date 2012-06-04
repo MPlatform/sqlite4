@@ -57,17 +57,9 @@ struct DatabaseMethods {
 
 /* 
 ** Functions in wrapper2.cc (a C++ source file). wrapper2.cc contains the
-** wrappers for Leveldb and Kyoto Cabinet. Kyoto cabinet has a C API, but
+** wrapper for Kyoto Cabinet. Kyoto cabinet has a C API, but
 ** the primary interface is the C++ API.
 */
-int test_leveldb_open(const char *zFilename, int bClear, TestDb **ppDb);
-int test_leveldb_close(TestDb *);
-int test_leveldb_write(TestDb *, void *, int , void *, int);
-int test_leveldb_delete(TestDb *, void *, int);
-int test_leveldb_fetch(TestDb *, void *, int, void **, int *);
-int test_leveldb_scan(TestDb *, void *, int, void *, int, void *, int,
-  void (*)(void *, void *, int , void *, int)
-);
 int test_kc_open(const char *zFilename, int bClear, TestDb **ppDb);
 int test_kc_close(TestDb *);
 int test_kc_write(TestDb *, void *, int , void *, int);
