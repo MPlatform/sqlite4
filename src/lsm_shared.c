@@ -729,6 +729,8 @@ int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
     /* Initialize the new snapshot ref-count to 1 */
     pNew->nRef = 1;
 
+    lsmDbSnapshotRelease(db->pClient);
+
     /* Install the new client snapshot and release the old. */
     lsmMutexEnter(pDb->pEnv, pDb->pClientMutex);
     assertSnapshotListOk(pDb);
@@ -736,10 +738,18 @@ int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
     pNew->pSnapshotNext = pOld;
     pDb->pClient = pNew;
     assertSnapshotListOk(pDb);
+    if( db->pClient ){
+      assert( db->pClient==pOld );
+      db->pClient = pDb->pClient;
+      pDb->pClient->nRef++;
+    }
     lsmMutexLeave(pDb->pEnv, pDb->pClientMutex);
 
     lsmDbSnapshotRelease(pOld);
     pDb->bDirty = 0;
+
+    /* Upgrade the user connection to the new client snapshot */
+
   }else{
     /* An error has occurred. Delete the allocated object. */
     freeClientSnapshot(pNew);

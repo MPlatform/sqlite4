@@ -1,0 +1,98 @@
+# 2012 Jun 4
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+#
+
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix csr1
+
+proc populate_db {} {
+  reset_db
+  execsql { CREATE TABLE t1(a, b) }
+  for {set i 0} {$i < 10} {incr i} {
+    execsql { INSERT INTO t1 VALUES($i, $i*$i) }
+  }
+}
+
+proc populate_db_2 {} {
+  reset_db
+  execsql { CREATE TABLE t1(a, b) }
+  for {set i 0} {$i < 10} {incr i} {
+    execsql { INSERT INTO t1 VALUES($i, randstr(900+$i, 900+$i)) }
+  }
+}
+
+#-------------------------------------------------------------------------
+# Check that it is not possible to make an explicit call to lsm_work() 
+# while there is a read or write transaction open on the connection.
+#
+populate_db
+
+do_execsql_test 1.1 { SELECT * FROM t1 } {
+  0 0 1 1 2 4 3 9 4 16 5 25 6 36 7 49 8 64 9 81
+}
+db eval { SELECT a, b FROM t1 } {
+  do_test 1.2.1 { 
+    list [catch { sqlite4_lsm_work db main -flush 0 } msg] $msg
+  } {1 SQLITE_MISUSE}
+  do_test 1.2.2 { 
+    list [catch { sqlite4_lsm_work db main -merge 1 } msg] $msg
+  } {1 SQLITE_MISUSE}
+  break
+}
+
+
+#-------------------------------------------------------------------------
+#
+populate_db
+do_execsql_test 2.1 { 
+  BEGIN;
+    INSERT INTO t1 VALUES(10, 100);
+}
+do_test 2.2 { 
+  sqlite4 db2 ./test.db
+  list [catch { sqlite4_lsm_work db2 main -flush 0 } msg] $msg
+} {1 SQLITE_BUSY}
+
+do_execsql_test 2.3 { COMMIT }
+do_test 2.4 { sqlite4_lsm_work db2 main -flush 0 } {0}
+db2 close
+
+
+#-------------------------------------------------------------------------
+# Check that if a transaction is committed and this causes the in-memory
+# tree to be flushed to disk, 
+#
+populate_db_2
+do_execsql_test 3.1 {
+  BEGIN;
+    INSERT INTO t1 VALUES(10, randstr(910, 910));
+}
+do_test 3.2 { sqlite4_lsm_config db main write-buffer } [expr 2*1024*1024]
+do_test 3.3 { sqlite4_lsm_config db main write-buffer 4096 } 4096
+
+do_test 3.4 {
+  set res [list]
+  db eval { SELECT a, length(b) AS l FROM t1 } {
+    lappend res $a $l
+    # The following commit will flush the in-memory tree to disk.
+    if {$a == 5} { db eval COMMIT }
+  }
+  set res
+} [list \
+    0 900 1 901 2 902 3 903 4 904 5 905  \
+    6 906 7 907 8 908 9 909 10 910       \
+]
+
+
+finish_test
+

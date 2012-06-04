@@ -1379,6 +1379,7 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
   pCsr->aTree = 0;
   pCsr->pSystemVal = 0;
   pCsr->pSnap = 0;
+  pCsr->pTreeCsr = 0;
 }
 
 void lsmMCursorClose(MultiCursor *pCsr){
@@ -1838,7 +1839,7 @@ int lsmMCursorSave(MultiCursor *pCsr){
 
 int lsmMCursorRestore(lsm_db *pDb, MultiCursor *pCsr){
   int rc;
-  rc = multiCursorAllocate(pDb, 1, &pCsr);
+  rc = multiCursorAllocate(pDb, 0, &pCsr);
   if( rc==LSM_OK && pCsr->key.pData ){
     rc = lsmMCursorSeek(pCsr, pCsr->key.pData, pCsr->key.nData, +1);
   }
@@ -3488,7 +3489,8 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   int rc = LSM_OK;                /* Return code */
 
   /* This function may not be called if pDb has an open read or write
-  ** transaction. Return LSM_MISUSE if an application attempts this.  */
+  ** transaction. Return LSM_MISUSE if an application attempts this.  
+  */
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
 
   if( (flags & LSM_WORK_FLUSH) ){

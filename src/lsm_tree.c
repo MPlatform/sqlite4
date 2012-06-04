@@ -920,7 +920,7 @@ int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
       iNode++;
       pCsr->apTreeNode[iNode] = pNode;
 
-      /* Compare (pKey/nKey) with the key in the middle slow of B-tree node
+      /* Compare (pKey/nKey) with the key in the middle slot of B-tree node
       ** pNode. The middle slot is never empty. If the comparison is a match,
       ** then the search is finished. Break out of the loop. */
       pTreeKey = pNode->apKey[1];

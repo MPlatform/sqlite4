@@ -133,7 +133,7 @@ lappend ::testsuitelist xxx
 
 test_suite "src4" -prefix "" -description {
 } -files {
-  simple.test 
+  simple.test log1.test log2.test csr1.test
 
   aggerror.test
   attach.test
