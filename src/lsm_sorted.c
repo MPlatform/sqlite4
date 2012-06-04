@@ -3692,9 +3692,18 @@ static void infoCellDump(
   if( pnVal ) *pnVal = nVal;
 }
 
+static int infoAppendBlob(LsmString *pStr, int bHex, u8 *z, int n){
+  int iChar;
+  for(iChar=0; iChar<n; iChar++){
+    if( bHex ){
+      lsmStringAppendf(pStr, "%02X", z[iChar]);
+    }else{
+      lsmStringAppendf(pStr, "%c", isalnum(z[iChar]) ?z[iChar] : '.');
+    }
+  }
+}
 
-
-int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, char **pzOut){
+int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
   int rc = LSM_OK;                /* Return code */
   Snapshot *pWorker;              /* Worker snapshot */
   Snapshot *pRelease = 0;         /* Snapshot to release */
@@ -3737,11 +3746,11 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, char **pzOut){
       infoCellDump(pDb, pPg, iCell, 0, 0, 0, &nKey, 0, 0, &blob);
       if( nKey>nKeyWidth ) nKeyWidth = nKey;
     }
+    if( bHex ) nKeyWidth = nKeyWidth * 2;
 
     for(iCell=0; iCell<nRec; iCell++){
       u8 *aKey; int nKey = 0;       /* Key */
       u8 *aVal; int nVal = 0;       /* Value */
-      int iChar;
       int iPgPtr;
       int eType;
       char cType = '?';
@@ -3758,15 +3767,11 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, char **pzOut){
       lsmStringAppendf(&str, "%c %d (%s) ", 
           cType, iAbsPtr, (rtTopic(eType) ? "sys" : "usr")
       );
-      for(iChar=0; iChar<nKey; iChar++){
-        lsmStringAppendf(&str, "%c", isalnum(aKey[iChar]) ? aKey[iChar] : '.');
-      }
-      lsmStringAppendf(&str, "%*s", nKeyWidth - nKey, "");
+      infoAppendBlob(&str, bHex, aKey, nKey); 
+      lsmStringAppendf(&str, "%*s", nKeyWidth - (nKey*(1+bHex)), "");
       if( nVal>0 ){
         lsmStringAppendf(&str, " ");
-        for(iChar=0; iChar<nVal; iChar++){
-          lsmStringAppendf(&str, "%c", isalnum(aVal[iChar])?aVal[iChar]:'.');
-        }
+        infoAppendBlob(&str, bHex, aVal, nVal); 
       }
       lsmStringAppendf(&str, "\n");
     }

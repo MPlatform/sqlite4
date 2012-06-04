@@ -354,8 +354,9 @@ proc static_select_callback {C pgno} {
 }
 
 proc static_page_callback {C pgno} {
-  link_varset $C myText myDb myData
-  set data [string trim [exec lsmtest show $myDb page $pgno]]
+  link_varset $C myText myDb myData myPgno myMode
+  set myPgno $pgno
+  set data [string trim [exec lsmtest show $myDb $myMode $myPgno]]
   $myText delete 0.0 end
   $myText insert 0.0 $data
 }
@@ -369,14 +370,42 @@ proc static_treeview_select {C} {
   }
 }
 
+proc static_toggle_pagemode {C} {
+  link_varset $C myMode myModeButton myPgno myText
+  if {$myMode == "page-ascii"} {
+    set myMode "page-hex"
+    $myModeButton configure -text "Switch to ASCII"
+  } else {
+    set myMode "page-ascii"
+    $myModeButton configure -text "Switch to HEX"
+  }
+
+  set y [lindex [$myText yview] 0]
+  static_page_callback $C $myPgno
+  $myText yview moveto $y
+}
+
 proc static_setup {zDb} {
 
   panedwindow .pan -orient horizontal
   set C [scrollable canvas .pan.c -background white -width 400 -height 600]
 
-  link_varset $C myText myDb myData myTree mySelected
+  link_varset $C myText myDb myData myTree mySelected myMode myModeButton
   set myDb $zDb
-  set myText [scrollable text .pan.t -background white -width 80]
+
+  frame .pan.t
+  frame .pan.t.f
+  set myModeButton [button .pan.t.f.pagemode]
+  $myModeButton configure -command [list static_toggle_pagemode $C]
+  $myModeButton configure -width 20
+  $myModeButton configure -text "Switch to HEX"
+  set myMode page-ascii
+
+  set myText [scrollable text .pan.t.text -background white -width 80]
+  pack .pan.t.f.pagemode -side right
+  pack .pan.t.f -fill x
+  pack .pan.t.text -expand 1 -fill both
+
   set myTree [scrollable ::ttk::treeview .pan.tree]
   set myData [string trim [exec lsmtest show $zDb]]
 

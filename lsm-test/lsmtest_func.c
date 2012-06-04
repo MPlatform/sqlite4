@@ -335,8 +335,9 @@ int do_show(int nArg, char **azArg){
     const char *zName;
     int eOpt;
   } aOpt [] = { 
-    { "array", LSM_INFO_ARRAY_STRUCTURE },
-    { "page",  LSM_INFO_PAGE_DUMP },
+    { "array",      LSM_INFO_ARRAY_STRUCTURE },
+    { "page-ascii", LSM_INFO_PAGE_ASCII_DUMP },
+    { "page-hex",   LSM_INFO_PAGE_HEX_DUMP },
     { 0, 0 } 
   };
 
@@ -370,7 +371,8 @@ int do_show(int nArg, char **azArg){
         rc = lsm_info(pDb, LSM_INFO_DB_STRUCTURE, &z);
         break;
       case LSM_INFO_ARRAY_STRUCTURE:
-      case LSM_INFO_PAGE_DUMP:
+      case LSM_INFO_PAGE_ASCII_DUMP:
+      case LSM_INFO_PAGE_HEX_DUMP:
         rc = lsm_info(pDb, eOpt, iPg, &z);
         break;
       default:

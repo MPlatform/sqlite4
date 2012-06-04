@@ -260,7 +260,7 @@ int lsm_info(lsm_db *, int, ...);
 **     page of any database array, LSM_ERROR is returned and the output
 **     pointer is set to a NULL value.
 **
-**   LSM_INFO_PAGE_DUMP
+**   LSM_INFO_PAGE_ASCII_DUMP
 **     As with LSM_INFO_ARRAY_STRUCTURE, there should be two arguments passed
 **     with calls that specify this option - an integer page number and a
 **     (char **) used to return a nul-terminated string that must be later
@@ -270,6 +270,10 @@ int lsm_info(lsm_db *, int, ...);
 **     If the page cannot be decoded, it is not an error. In this case the
 **     human-readable output message will report the systems failure to 
 **     interpret the page data.
+**
+**   LSM_INFO_PAGE_HEX_DUMP
+**     This argument is similar to PAGE_ASCII_DUMP, except that keys and
+**     values are represented using hexadecimal notation instead of ascii.
 **
 **   LSM_INFO_LOG_STRUCTURE
 **     The third argument should be of type (char **). The location pointed
@@ -282,14 +286,15 @@ int lsm_info(lsm_db *, int, ...);
 **
 **   LSM_INFO_BLOCKLIST
 */
-#define LSM_INFO_NWRITE          1
-#define LSM_INFO_NREAD           2
-#define LSM_INFO_CKPT            3
-#define LSM_INFO_BLOCKLIST       4
-#define LSM_INFO_DB_STRUCTURE    5
-#define LSM_INFO_LOG_STRUCTURE   6
-#define LSM_INFO_ARRAY_STRUCTURE 7
-#define LSM_INFO_PAGE_DUMP       8
+#define LSM_INFO_NWRITE           1
+#define LSM_INFO_NREAD            2
+#define LSM_INFO_CKPT             3
+#define LSM_INFO_BLOCKLIST        4
+#define LSM_INFO_DB_STRUCTURE     5
+#define LSM_INFO_LOG_STRUCTURE    6
+#define LSM_INFO_ARRAY_STRUCTURE  7
+#define LSM_INFO_PAGE_ASCII_DUMP  8
+#define LSM_INFO_PAGE_HEX_DUMP    9
 
 
 /* 

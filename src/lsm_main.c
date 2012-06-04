@@ -432,10 +432,11 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       break;
     }
 
-    case LSM_INFO_PAGE_DUMP: {
+    case LSM_INFO_PAGE_HEX_DUMP:
+    case LSM_INFO_PAGE_ASCII_DUMP: {
       Pgno pgno = va_arg(ap, Pgno);
       char **pzVal = va_arg(ap, char **);
-      rc = lsmInfoPageDump(pDb, pgno, pzVal);
+      rc = lsmInfoPageDump(pDb, pgno, (eParam==LSM_INFO_PAGE_HEX_DUMP), pzVal);
       break;
     }
 
