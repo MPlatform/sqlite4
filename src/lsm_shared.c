@@ -172,15 +172,11 @@ struct Snapshot {
 **
 ** MULTI-THREADING ISSUES
 **
-**   Each Database structure carries with it three mutexes - the client 
-**   mutex, the worker mutex and the checkpoint mutex. In a multi-process
-**   version of LSM, these will be replaced by some other robust locking 
-**   mechanism. Mutexes are used as follows:
+**   Each Database structure carries with it two mutexes - the client 
+**   mutex and the worker mutex. In a multi-process version of LSM, these 
+**   will be replaced by some other robust locking mechanism. 
 **
-**   The CLIENT MUTEX protects the pClient pointer. When a client opens
-**   a read transaction, it does the following under the cover of the 
-**   client mutex:
-**
+**   TODO - this description.
 */
 struct Database {
   lsm_env *pEnv;                  /* Environment handle */
@@ -196,11 +192,11 @@ struct Database {
 
   lsm_mutex *pWorkerMutex;        /* Protects the worker snapshot */
   lsm_mutex *pClientMutex;        /* Protects pClient */
-  lsm_mutex *pCkptMutex;          /* Checkpointer mutex */
   int bDirty;                     /* True if worker has been modified */
   int bRecovered;                 /* True if db does not require recovery */
 
-  int bWriter;                    /* True if there is currently a writer */
+  int bCheckpointer;              /* True if there exists a checkpointer */
+  int bWriter;                    /* True if there exists a writer */
   i64 iCheckpointId;              /* Largest snapshot id stored in db file */
 
   /* Protected by the global mutex (enterGlobalMutex/leaveGlobalMutex): */
@@ -348,7 +344,6 @@ static void freeDatabase(Database *p){
   /* Free the mutexes */
   lsmMutexDel(p->pEnv, p->pClientMutex);
   lsmMutexDel(p->pEnv, p->pWorkerMutex);
-  lsmMutexDel(p->pEnv, p->pCkptMutex);
 
   /* Free the log buffer. */
   lsmStringClear(&p->log.buf);
@@ -403,7 +398,6 @@ int lsmDbDatabaseFind(
       /* Allocate the three mutexes */
       if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pWorkerMutex);
       if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pClientMutex);
-      if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pCkptMutex);
 
       /* If no error has occurred, fill in other fields and link the new 
       ** Database structure into the global list starting at 
@@ -616,10 +610,20 @@ void lsmDbRecoveryComplete(Database *p, int bVal){
   p->iCheckpointId = p->worker.iId;
 }
 
-void lsmDbCheckpointed(lsm_db *pDb, i64 iNew){
-  assert( pDb->pWorker );
-  assert( iNew>pDb->pDatabase->iCheckpointId );
-  pDb->pDatabase->iCheckpointId = iNew;
+static void snapshotDecrRefcnt(Snapshot *pSnap){
+  Database *p = pSnap->pDatabase;
+
+  assertSnapshotListOk(p);
+  pSnap->nRef--;
+  assert( pSnap->nRef>=0 );
+  if( pSnap->nRef==0 ){
+    Snapshot *pIter = p->pClient;
+    assert( pSnap!=pIter );
+    while( pIter->pSnapshotNext!=pSnap ) pIter = pIter->pSnapshotNext;
+    pIter->pSnapshotNext = pSnap->pSnapshotNext;
+    freeClientSnapshot(pSnap);
+    assertSnapshotListOk(p);
+  }
 }
 
 /*
@@ -641,17 +645,7 @@ void lsmDbSnapshotRelease(Snapshot *pSnap){
       lsmMutexLeave(p->pEnv, p->pWorkerMutex);
     }else{
       lsmMutexEnter(p->pEnv, p->pClientMutex);
-      assertSnapshotListOk(p);
-      pSnap->nRef--;
-      assert( pSnap->nRef>=0 );
-      if( pSnap->nRef==0 ){
-        Snapshot *pIter = p->pClient;
-        assert( pSnap!=pIter );
-        while( pIter->pSnapshotNext!=pSnap ) pIter = pIter->pSnapshotNext;
-        pIter->pSnapshotNext = pSnap->pSnapshotNext;
-        freeClientSnapshot(pSnap);
-        assertSnapshotListOk(p);
-      }
+      snapshotDecrRefcnt(pSnap);
       lsmMutexLeave(p->pEnv, p->pClientMutex);
     }
   }
@@ -783,17 +777,18 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     ** snapshot iFree or later has been checkpointed and all currently 
     ** active clients are reading from snapshot iFree or later.
     */
-    i64 iFree = pFree->aEntry[0].iId;
-    i64 iInUse = p->iCheckpointId;
     Snapshot *pIter;
+    i64 iFree = pFree->aEntry[0].iId;
+    i64 iInUse;
 
-    if( iFree<=iInUse ){
-      lsmMutexEnter(p->pEnv, p->pClientMutex);
-      assertSnapshotListOk(p);
-      for(pIter=p->pClient; pIter->pSnapshotNext; pIter=pIter->pSnapshotNext);
-      iInUse = MIN(pIter->iId, iInUse);
-      lsmMutexLeave(p->pEnv, p->pClientMutex);
-    }
+    /* Both Database.iCheckpointId and the Database.pClient list are 
+    ** protected by the client mutex. So grab it here before determining
+    ** the id of the oldest snapshot still potentially in use.  */
+    lsmMutexEnter(p->pEnv, p->pClientMutex);
+    assertSnapshotListOk(p);
+    for(pIter=p->pClient; pIter->pSnapshotNext; pIter=pIter->pSnapshotNext);
+    iInUse = MIN(pIter->iId, p->iCheckpointId);
+    lsmMutexLeave(p->pEnv, p->pClientMutex);
 
     if( iFree<=iInUse ){
       iRet = pFree->aEntry[0].iBlk;
@@ -952,85 +947,87 @@ int lsmSnapshotSetFreelist(Snapshot *pSnap, int *aElem, int nElem){
 ** in-memory tree to disk).
 */
 int lsmCheckpointWrite(lsm_db *pDb){
+  Snapshot *pSnap;                /* Snapshot to checkpoint */
   Database *p = pDb->pDatabase;
   int rc = LSM_OK;                /* Return Code */
 
   assert( pDb->pWorker==0 );
 
+  /* Try to obtain the checkpointer lock, then check if the a checkpoint
+  ** is actually required. If successful, and one is, set stack variable
+  ** pSnap to point to the client snapshot to checkpoint.  
+  */
+  lsmMutexEnter(p->pEnv, p->pClientMutex);
+  pSnap = p->pClient;
+  if( p->bCheckpointer==0 && pSnap->iId>p->iCheckpointId ){
+    p->bCheckpointer = 1;
+    pSnap->nRef++;
+  }else{
+    pSnap = 0;
+  }
+  lsmMutexLeave(p->pEnv, p->pClientMutex);
+
   /* Attempt to grab the checkpoint mutex. If the attempt fails, this 
   ** function becomes a no-op. Some other thread is already running
   ** a checkpoint (or at least checking if one is required).  */
-  if( 0==lsmMutexTry(p->pEnv, p->pCkptMutex) ){
-    Snapshot *pSnap;                /* Snapshot to checkpoint */
+  if( pSnap ){
+    FileSystem *pFS = pDb->pFS;   /* File system object */
+    int iPg = 1;                  /* TODO */
+    Page *pPg = 0;                /* Page to write to */
+    int doSync;                   /* True to sync the db */
 
-    pSnap = lsmDbSnapshotClient(p);
-    if( pSnap->iId>p->iCheckpointId ){
-      FileSystem *pFS = pDb->pFS;   /* File system object */
-      int iPg = 1;                  /* TODO */
-      Page *pPg = 0;                /* Page to write to */
-      int doSync;                   /* True to sync the db */
+    /* If the safety mode is "off", omit calls to xSync(). */
+    doSync = (pDb->eSafety!=LSM_SAFETY_OFF);
 
-      /* If the safety mode is "off", omit calls to xSync(). */
-      doSync = (pDb->eSafety!=LSM_SAFETY_OFF);
+    /* Sync the db. To make sure all runs referred to by the checkpoint
+    ** are safely on disk. If we do not do this and a power failure occurs 
+    ** just after the checkpoint is written into the db header, the
+    ** database could be corrupted following recovery.  */
+    if( doSync ) rc = lsmFsDbSync(pFS);
 
-      /* Sync the db. To make sure all runs referred to by the checkpoint
-      ** are safely on disk. If we do not do this and a power failure occurs 
-      ** just after the checkpoint is written into the db header, the
-      ** database could be corrupted following recovery.  */
-      if( doSync ) rc = lsmFsDbSync(pFS);
+    /* Fetch a reference to the meta-page to write the checkpoint to. */
+    if( rc==LSM_OK ) rc = lsmFsMetaPageGet(pFS, iPg, &pPg);
+    if( rc==LSM_OK ) rc = lsmFsPageWrite(pPg);
 
-      /* Fetch a reference to the meta-page to write the checkpoint to. */
-      if( rc==LSM_OK ) rc = lsmFsMetaPageGet(pFS, iPg, &pPg);
-      if( rc==LSM_OK ) rc = lsmFsPageWrite(pPg);
-
-      /* Unless an error has occurred, copy the checkpoint blob into the
-      ** meta-page, then release the reference to it (which will flush the
-      ** checkpoint into the file).  */
-      if( rc!=LSM_OK ){
-        lsmFsPageRelease(pPg);
-      }else{
-        u8 *aData;                  /* Page buffer */
-        int nData;                  /* Size of buffer aData[] */
-        aData = lsmFsPageData(pPg, &nData);
-        assert( pSnap->nExport<=nData );
-        memcpy(aData, pSnap->pExport, pSnap->nExport);
-        rc = lsmFsPageRelease(pPg);
-        pPg = 0;
-      }
-
-      /* Sync the db file again. To make sure that the checkpoint just 
-      ** written is on the disk.  */
-      if( rc==LSM_OK && doSync ) rc = lsmFsDbSync(pFS);
-
-      /* This is where space on disk is reclaimed. Now that the checkpoint 
-      ** has been written to the database and synced, part of the database
-      ** log (the part containing the data just synced to disk) is no longer
-      ** required and so the space that it was taking up on disk can be 
-      ** reused.
-      **
-      ** It is also possible that database file blocks may be made available
-      ** for reuse here. A database file block is free if it is not used by
-      ** the most recently checkpointed snapshot, or by a snapshot that is 
-      ** in use by any existing database client. And "the most recently
-      ** checkpointed snapshot" has just changed.
-      */
-      if( rc==LSM_OK ){
-        lsm_i64 iOff = lsmCheckpointLogOffset(pSnap->pExport);
-        lsmMutexEnter(p->pEnv, p->pClientMutex);
-        lsmLogCheckpoint(pDb, &p->log, iOff);
-        lsmMutexLeave(p->pEnv, p->pClientMutex);
-      }
-
-      if( rc==LSM_OK ){
-        lsmMutexEnter(p->pEnv, p->pWorkerMutex);
-        p->iCheckpointId = pSnap->iId;
-        lsmMutexLeave(p->pEnv, p->pWorkerMutex);
-      }
+    /* Unless an error has occurred, copy the checkpoint blob into the
+    ** meta-page, then release the reference to it (which will flush the
+    ** checkpoint into the file).  */
+    if( rc!=LSM_OK ){
+      lsmFsPageRelease(pPg);
+    }else{
+      u8 *aData;                  /* Page buffer */
+      int nData;                  /* Size of buffer aData[] */
+      aData = lsmFsPageData(pPg, &nData);
+      assert( pSnap->nExport<=nData );
+      memcpy(aData, pSnap->pExport, pSnap->nExport);
+      rc = lsmFsPageRelease(pPg);
+      pPg = 0;
     }
 
-    /* Release snapshot and checkpoint mutex */
-    lsmDbSnapshotRelease(pSnap);
-    lsmMutexLeave(p->pEnv, p->pCkptMutex);
+    /* Sync the db file again. To make sure that the checkpoint just 
+    ** written is on the disk.  */
+    if( rc==LSM_OK && doSync ) rc = lsmFsDbSync(pFS);
+
+    /* This is where space on disk is reclaimed. Now that the checkpoint 
+    ** has been written to the database and synced, part of the database
+    ** log (the part containing the data just synced to disk) is no longer
+    ** required and so the space that it was taking up on disk can be 
+    ** reused.
+    **
+    ** It is also possible that database file blocks may be made available
+    ** for reuse here. A database file block is free if it is not used by
+    ** the most recently checkpointed snapshot, or by a snapshot that is 
+    ** in use by any existing database client. And "the most recently
+    ** checkpointed snapshot" has just changed.
+    */
+    lsmMutexEnter(p->pEnv, p->pClientMutex);
+    if( rc==LSM_OK ){
+      lsmLogCheckpoint(pDb, &p->log, lsmCheckpointLogOffset(pSnap->pExport));
+      p->iCheckpointId = pSnap->iId;
+    }
+    p->bCheckpointer = 0;
+    snapshotDecrRefcnt(pSnap);
+    lsmMutexLeave(p->pEnv, p->pClientMutex);
   }
 
   return rc;
@@ -1233,10 +1230,9 @@ int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
 ** reading from it).
 */
 int lsmBeginFlush(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
 
   assert( pDb->pWorker );
-  assert( (p->bWriter && lsmTreeIsWriteVersion(pDb->pTV))
+  assert( (pDb->pDatabase->bWriter && lsmTreeIsWriteVersion(pDb->pTV))
        || (pDb->pTV==0 && holdingGlobalMutex(pDb->pEnv))
   );
 

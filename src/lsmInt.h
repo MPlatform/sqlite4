@@ -564,7 +564,6 @@ Level *lsmDbSnapshotLevel(Snapshot *);
 void lsmDbSnapshotSetLevel(Snapshot *, Level *);
 
 void lsmDbRecoveryComplete(Database *, int);
-void lsmDbCheckpointed(lsm_db *, i64);
 
 int lsmBlockAllocate(lsm_db *, int *);
 int lsmBlockFree(lsm_db *, int);

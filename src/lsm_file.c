@@ -1257,7 +1257,7 @@ int lsmFsPagePersist(Page *pPg){
       rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
     }else{
       i64 iOff;                 /* Offset to write within database file */
-      iOff = pFS->nPagesize * (pPg->iPg-1);
+      iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
       rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nPagesize);
     }
     pPg->flags &= ~PAGE_DIRTY;

@@ -1036,14 +1036,14 @@ int main(int argc, char **argv){
     const char *zName;
     int (*xFunc)(int, char **);
   } aTest[] = {
-    {"speed",       do_speed_tests},
     {"random",      do_random_tests},
     {"writespeed",  do_writer_test},
+    {"io",          st_do_io},
+
+    {"speed",       do_speed_tests},
+    {"insert",      do_insert},
     {"show",        st_do_show},
     {"work",        st_do_work},
-    {"io",          st_do_io},
-    {"insert",      do_insert},
-
     {"crash",       do_crash},
     {"test",        do_test},
     {0, 0}

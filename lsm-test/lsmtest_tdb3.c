@@ -233,7 +233,7 @@ static int testEnvClose(lsm_file *pFile){
 
 static int testEnvUnlink(lsm_env *pEnv, const char *zFile){
   lsm_env *pRealEnv = tdb_lsm_env();
-  UNUSED_PARAMETER(pEnv);
+  unused_parameter(pEnv);
   return pRealEnv->xUnlink(pRealEnv, zFile);
 }
 
