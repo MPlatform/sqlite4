@@ -216,6 +216,12 @@ static int testEnvTruncate(lsm_file *pFile, lsm_i64 iOff){
   return pRealEnv->xTruncate(p->pReal, iOff);
 }
 
+static int testEnvSectorSize(lsm_file *pFile){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
+  return pRealEnv->xSectorSize(p->pReal);
+}
+
 static int testEnvClose(lsm_file *pFile){
   lsm_env *pRealEnv = tdb_lsm_env();
   LsmFile *p = (LsmFile *)pFile;
@@ -223,6 +229,12 @@ static int testEnvClose(lsm_file *pFile){
   pRealEnv->xClose(p->pReal);
   testFree(p);
   return LSM_OK;
+}
+
+static int testEnvUnlink(lsm_env *pEnv, const char *zFile){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  UNUSED_PARAMETER(pEnv);
+  return pRealEnv->xUnlink(pRealEnv, zFile);
 }
 
 static void doSystemCrash(LsmDb *pDb){
@@ -515,7 +527,9 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
   pDb->env.xWrite = testEnvWrite;
   pDb->env.xTruncate = testEnvTruncate;
   pDb->env.xSync = testEnvSync;
+  pDb->env.xSectorSize = testEnvSectorSize;
   pDb->env.xClose = testEnvClose;
+  pDb->env.xUnlink = testEnvUnlink;
 
   rc = lsm_new(&pDb->env, &pDb->db);
   if( rc==LSM_OK ){

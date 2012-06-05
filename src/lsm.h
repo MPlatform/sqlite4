@@ -47,7 +47,9 @@ struct lsm_env {
   int (*xWrite)(lsm_file *, lsm_i64, void *, int);
   int (*xTruncate)(lsm_file *, lsm_i64);
   int (*xSync)(lsm_file *);
+  int (*xSectorSize)(lsm_file *);
   int (*xClose)(lsm_file *);
+  int (*xUnlink)(lsm_env*, const char *);
   /****** memory allocation ****************************************/
   void *pMemCtx;
   void *(*xMalloc)(lsm_env*, int);            /* malloc(3) function */

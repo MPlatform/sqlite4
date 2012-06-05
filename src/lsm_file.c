@@ -217,11 +217,17 @@ static int lsmEnvWrite(
 static int lsmEnvSync(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xSync(pFile);
 }
+static int lsmEnvSectorSize(lsm_env *pEnv, lsm_file *pFile){
+  return pEnv->xSectorSize(pFile);
+}
 static int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xClose(pFile);
 }
 static int lsmEnvTruncate(lsm_env *pEnv, lsm_file *pFile, lsm_i64 nByte){
   return pEnv->xTruncate(pFile, nByte);
+}
+static int lsmEnvUnlink(lsm_env *pEnv, const char *zDel){
+  return pEnv->xUnlink(pEnv, zDel);
 }
 
 /*
@@ -250,6 +256,18 @@ int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr){
 int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
   if( pFS->fdLog==0 ) return LSM_OK;
   return lsmEnvTruncate(pFS->pEnv, pFS->fdLog, nByte);
+}
+
+int lsmFsCloseAndDeleteLog(FileSystem *pFS){
+  if( pFS->fdLog ){
+    char *zDel = lsmMallocPrintf(pFS->pEnv, "%s-log", pFS->zDb);
+    if( zDel ){
+      lsmEnvClose(pFS->pEnv, pFS->fdLog );
+      lsmEnvUnlink(pFS->pEnv, zDel);
+      lsmFree(pFS->pEnv, zDel);
+      pFS->fdLog = 0;
+    }
+  }
 }
 
 /*
@@ -1379,7 +1397,7 @@ static SortedRun *startsWith(SortedRun *pRun, Pgno iFirst){
 ** Sector-size routine.
 */
 int lsmFsSectorSize(FileSystem *pFS){
-  return 512;
+  return lsmEnvSectorSize(pFS->pEnv, pFS->fdLog);
 }
 
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){

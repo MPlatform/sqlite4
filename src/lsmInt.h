@@ -440,6 +440,7 @@ int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr);
 int lsmFsSyncLog(FileSystem *pFS);
 int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr);
 int lsmFsTruncateLog(FileSystem *pFS, i64 nByte);
+int lsmFsCloseAndDeleteLog(FileSystem *pFS);
 
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
 

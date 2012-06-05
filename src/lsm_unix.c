@@ -142,11 +142,20 @@ static int lsmPosixOsSync(lsm_file *pFile){
   return rc;
 }
 
+static int lsmPosixOsSectorSize(lsm_file *pFile){
+  return 512;
+}
+
 static int lsmPosixOsClose(lsm_file *pFile){
   PosixFile *p = (PosixFile *)pFile;
   close(p->fd);
   lsm_free(p->pEnv, p);
   return LSM_OK;
+}
+
+static int lsmPosixOsUnlink(lsm_env *pEnv, const char *zFile){
+  int prc = unlink(zFile);
+  return prc ? LSM_IOERR_BKPT : LSM_OK;
 }
 
 /****************************************************************************
@@ -352,7 +361,9 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsWrite,         /* xWrite */
     lsmPosixOsTruncate,      /* xTruncate */
     lsmPosixOsSync,          /* xSync */
+    lsmPosixOsSectorSize,    /* xSectorSize */
     lsmPosixOsClose,         /* xClose */
+    lsmPosixOsUnlink,        /* xUnlink */
     /***** memory allocation *********/
     0,                       /* pMemCtx */
     lsmPosixOsMalloc,        /* xMalloc */
