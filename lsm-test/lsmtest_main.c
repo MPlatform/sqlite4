@@ -491,6 +491,9 @@ int do_speed_tests(int nArg, char **azArg){
   int isFirst = 1;
   int bSleep = 0;
 
+  /* File to write gnuplot script to. */
+  const char *zOut = "lsmtest_speed.gnuplot";
+
   u32 sys_mask = 0;
 
   for(i=0; i<nArg; i++){
@@ -504,9 +507,10 @@ int do_speed_tests(int nArg, char **azArg){
       { "lsm_mt2" , 0},
       { "lsm_mt3" , 0},
       { "kyotocabinet" , 0},
-      { "-rows" , 1},
-      { "-sleep" , 2},
+      { "-rows"     , 1},
+      { "-sleep"    , 2},
       { "-testmode" , 3},
+      { "-out"      , 4},
       { 0, 0}
     };
     int iSel;
@@ -516,6 +520,7 @@ int do_speed_tests(int nArg, char **azArg){
 
     if( aOpt[iSel].isSwitch ){
       i++;
+
       if( i>=nArg ){
         testPrintError("option %s requires an argument\n", aOpt[iSel].zOpt);
         return 1;
@@ -538,6 +543,11 @@ int do_speed_tests(int nArg, char **azArg){
         doReadTest = aMode[iMode].doReadTest;
         doWriteTest = aMode[iMode].doWriteTest;
       }
+      if( aOpt[iSel].isSwitch==4 ){
+        /* The "-out FILE" switch. This option is used to specify a file to
+        ** write the gnuplot script to. */
+        zOut = azArg[i];
+      }
     }else{
       /* A db name */
       rc = testArgSelect(aOpt, "system", azArg[i], &iSel);
@@ -558,13 +568,18 @@ int do_speed_tests(int nArg, char **azArg){
 
   /* This loop collects the INSERT speed data. */
   if( doWriteTest ){
+    printf("Writing output to file \"%s\".\n",  zOut);
+
     for(j=0; aSys[j].zLibrary; j++){
       TestDb *pDb;                  /* Database being tested */
       lsm_db *pLsm;
+      int iDot = 0;
   
       if( ((1<<j)&sys_mask)==0 ) continue;
       if( bSleep && nSleep ) sqlite3_sleep(nSleep);
       bSleep = 1;
+
+      testCaseBegin(&rc, 0, "speed.insert.%s", aSys[j].zLibrary);
 
       rc = tdb_open(aSys[j].zLibrary, 0, 1, &pDb);
       if( rc ) return rc;
@@ -574,6 +589,7 @@ int do_speed_tests(int nArg, char **azArg){
       for(i=0; i<nRow; i+=nStep){
         int iStep;
         int nWrite1, nWrite2;
+        testCaseProgress(i, nRow, testCaseNDot(), &iDot);
         if( pLsm ) lsm_info(pLsm, LSM_INFO_NWRITE, &nWrite1);
         for(iStep=0; iStep<nStep; iStep++){
           u32 aKey[4];                  /* 16-byte key */
@@ -588,25 +604,30 @@ int do_speed_tests(int nArg, char **azArg){
       }
 
       tdb_close(pDb);
+      testCaseFinish(rc);
     }
   }
 
   /* This loop collects the SELECT speed data. */
   if( doReadTest ){
     for(j=0; aSys[j].zLibrary; j++){
+      int iDot = 0;
       TestDb *pDb;                  /* Database being tested */
 
       if( ((1<<j)&sys_mask)==0 ) continue;
       if( bSleep && nSleep ) sqlite3_sleep(nSleep);
       bSleep = 1;
 
+      testCaseBegin(&rc, 0, "speed.select.%s", aSys[j].zLibrary);
+
       if( doWriteTest ){
         rc = tdb_open(aSys[j].zLibrary, 0, 1, &pDb);
         if( rc ) return rc;
-    
+
         for(i=0; i<nRow; i+=nSelStep){
           int iStep;
           int iSel;
+          testCaseProgress(i, nRow, testCaseNDot(), &iDot);
           for(iStep=0; iStep<nSelStep; iStep++){
             u32 aKey[4];                  /* 16-byte key */
             u32 aVal[25];                 /* 100 byte value */
@@ -639,6 +660,8 @@ int do_speed_tests(int nArg, char **azArg){
           int nDummy;
           u32 iKey;
           u32 aKey[4];                  /* 16-byte key */
+
+          testCaseProgress(iSel, nSelTest, testCaseNDot(), &iDot);
     
           iKey = testPrngValue(iSel) % nRow;
           testPrngArray(iKey, aKey, ArraySize(aKey));
@@ -661,33 +684,41 @@ int do_speed_tests(int nArg, char **azArg){
       }
 
       tdb_close(pDb);
+      testCaseFinish(rc);
     }
   }
 
+
   if( doWriteTest ){
-    printf("set xlabel \"Rows Inserted\"\n");
-    printf("set ylabel \"Inserts per second\"\n");
-    if( doReadTest ){
-      printf("set y2label \"Selects per second\"\n");
-    }else if( sys_mask==(1<<2) ){
-      printf("set y2label \"Page writes per %d inserts\"\n", nStep);
+    FILE *pOut = fopen(zOut, "w");
+    if( !pOut ){
+      printf("fopen(\"%s\", \"w\"): %s\n", zOut, strerror(errno));
+      return 1;
     }
-    printf("set yrange [0:*]\n");
-    printf("set y2range [0:*]\n");
-    printf("set xrange [%d:*]\n", MAX(nStep, nRow/20) );
-    printf("set ytics nomirror\n");
-    printf("set y2tics nomirror\n");
-    printf("set key box lw 0.01\n");
-    printf("plot ");
+
+    fprintf(pOut, "set xlabel \"Rows Inserted\"\n");
+    fprintf(pOut, "set ylabel \"Inserts per second\"\n");
+    if( doReadTest ){
+      fprintf(pOut, "set y2label \"Selects per second\"\n");
+    }else if( sys_mask==(1<<2) ){
+      fprintf(pOut, "set y2label \"Page writes per %d inserts\"\n", nStep);
+    }
+    fprintf(pOut, "set yrange [0:*]\n");
+    fprintf(pOut, "set y2range [0:*]\n");
+    fprintf(pOut, "set xrange [%d:*]\n", MAX(nStep, nRow/20) );
+    fprintf(pOut, "set ytics nomirror\n");
+    fprintf(pOut, "set y2tics nomirror\n");
+    fprintf(pOut, "set key box lw 0.01\n");
+    fprintf(pOut, "plot ");
   
     for(j=0; aSys[j].zLibrary; j++){
       if( (1<<j)&sys_mask ){
         const char *zLib = aSys[j].zLibrary;
-        printf("%s\"-\" ti \"%s INSERT\" with lines lc rgb \"%s\" ", 
+        fprintf(pOut, "%s\"-\" ti \"%s INSERT\" with lines lc rgb \"%s\" ", 
             (isFirst?"":", "), zLib, aSys[j].zColor
         );
         if( doReadTest ){
-          printf(", \"-\" ti \"%s SELECT\" "
+          fprintf(pOut, ", \"-\" ti \"%s SELECT\" "
                  "axis x1y2 with points lw 3 lc rgb \"%s\""
               , zLib, aSys[j].zColor
           );
@@ -698,39 +729,40 @@ int do_speed_tests(int nArg, char **azArg){
 
     assert( strcmp(aSys[2].zLibrary, "lsm")==0 );
     if( sys_mask==(1<<2) && !doReadTest ){
-      printf(", \"-\" ti \"lsm pages written\" "
+      fprintf(pOut, ", \"-\" ti \"lsm pages written\" "
         "axis x1y2 with boxes lw 1 lc rgb \"grey\""
       );
     }
   
-    printf("\n");
+    fprintf(pOut, "\n");
   
     for(j=0; aSys[j].zLibrary; j++){
       if( ((1<<j)&sys_mask)==0 ) continue;
-      printf("# Rows    Inserts per second\n");
+      fprintf(pOut, "# Rows    Inserts per second\n");
       for(i=0; i<nRow; i+=nStep){
         int iTime = aTime[(j*nRow+i)/nStep];
         int ips = (int)((i+nStep)*1000.0 / (double)iTime);
-        printf("%d %d\n", i+nStep, ips);
+        fprintf(pOut, "%d %d\n", i+nStep, ips);
       }
-      printf("end\n");
+      fprintf(pOut, "end\n");
   
       if( doReadTest ){
-        printf("# Rows    Selects per second\n");
+        fprintf(pOut, "# Rows    Selects per second\n");
         for(i=0; i<nRow; i+=nSelStep){
           int sps = (int)(nSelTest*1000.0/(double)aSelTime[(j*nRow+i)/nSelStep]);
-          printf("%d %d\n", i+nSelStep, sps);
+          fprintf(pOut, "%d %d\n", i+nSelStep, sps);
         }
-        printf("end\n");
+        fprintf(pOut, "end\n");
       }else if( sys_mask==(1<<2) ){
         for(i=0; i<(nRow/nStep); i++){
-          printf("%d %f\n", i*nStep, (double)aWrite[i] / (double)nStep);
+          fprintf(pOut, "%d %f\n", i*nStep, (double)aWrite[i] / (double)nStep);
         }
-        printf("end\n");
+        fprintf(pOut, "end\n");
       }
     }
   
-    printf("pause -1\n");
+    fprintf(pOut, "pause -1\n");
+    fclose(pOut);
   }
 
   free(aTime);
