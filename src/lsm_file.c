@@ -134,6 +134,11 @@ struct FileSystem {
   lsm_file *fdDb;                 /* Database file */
   lsm_file *fdLog;                /* Log file */
 
+  /* mmap() mode things */
+  int bUseMmap;                   /* True to use mmap() to access db file */
+  void *pMap;                     /* Current mapping of database file */
+  i64 nMap;                       /* Bytes mapped at pMap */
+
   PhantomRun *pPhantom;           /* Phantom run currently being constructed */
 
   /* Statistics */
@@ -149,8 +154,8 @@ struct FileSystem {
   int nHash;                      /* Number of hash slots in hash table */
   Page **apHash;                  /* nHash Hash slots */
 
-  /* All meta pages are stored in the following singly linked-list. The
-  ** list is connected using the Page->pHashNext pointers. */
+  /* All (both) meta pages are stored in the following singly linked-list. 
+  ** The list is connected using the Page->pHashNext pointers. */
   Page *pMeta;
 };
 
@@ -229,6 +234,15 @@ static int lsmEnvTruncate(lsm_env *pEnv, lsm_file *pFile, lsm_i64 nByte){
 static int lsmEnvUnlink(lsm_env *pEnv, const char *zDel){
   return pEnv->xUnlink(pEnv, zDel);
 }
+static int lsmEnvRemap(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  i64 szMin,
+  void **ppMap,
+  i64 *pszMap
+){
+  return pEnv->xRemap(pFile, szMin, ppMap, pszMap);
+}
 
 /*
 ** Functions to read, write, sync and truncate the log file.
@@ -268,6 +282,7 @@ int lsmFsCloseAndDeleteLog(FileSystem *pFS){
       pFS->fdLog = 0;
     }
   }
+  return LSM_OK;
 }
 
 /*
@@ -499,6 +514,17 @@ static void fsPageRemoveFromLru(FileSystem *pFS, Page *pPg){
   pPg->pLruNext = 0;
 }
 
+static void fsPageAddToLru(FileSystem *pFS, Page *pPg){
+  assert( pPg->pLruNext==0 && pPg->pLruPrev==0 );
+  pPg->pLruPrev = pFS->pLruLast;
+  if( pPg->pLruPrev ){
+    pPg->pLruPrev->pLruNext = pPg;
+  }else{
+    pFS->pLruFirst = pPg;
+  }
+  pFS->pLruLast = pPg;
+}
+
 static void fsPageRemoveFromHash(FileSystem *pFS, Page *pPg){
   int iHash;
   Page **pp;
@@ -511,11 +537,11 @@ static void fsPageRemoveFromHash(FileSystem *pFS, Page *pPg){
 static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
   int rc = LSM_OK;
   Page *pPage = 0;
-  if( pFS->pLruFirst==0 || pFS->nCacheAlloc<pFS->nCacheMax ){
+  if( pFS->bUseMmap || pFS->pLruFirst==0 || pFS->nCacheAlloc<pFS->nCacheMax ){
     pPage = lsmMallocZero(pFS->pEnv, sizeof(Page));
     if( !pPage ){
       rc = LSM_NOMEM_BKPT;
-    }else{
+    }else if( pFS->bUseMmap==0 ){
       int nByte;
       nByte = (bMeta ? pFS->nMetasize : pFS->nPagesize);
       pPage->aData = (u8 *)lsmMalloc(pFS->pEnv, nByte);
@@ -525,6 +551,8 @@ static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
         pPage = 0;
       }
       pFS->nCacheAlloc++;
+    }else{
+      fsPageAddToLru(pFS, pPage);
     }
   }else{
     pPage = pFS->pLruFirst;
@@ -537,7 +565,11 @@ static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
 }
 
 static void fsPageBufferFree(Page *pPg){
-  lsmFree(pPg->pFS->pEnv, pPg->aData);
+  if( pPg->pFS->bUseMmap==0 ){
+    lsmFree(pPg->pFS->pEnv, pPg->aData);
+  }else{
+    fsPageRemoveFromLru(pPg->pFS, pPg);
+  }
   lsmFree(pPg->pFS->pEnv, pPg);
 }
 
@@ -615,21 +647,37 @@ int fsPageGet(
       p->iPg = iPg;
       p->nRef = 0;
       p->flags = 0;
-      p->pLruNext = 0;
-      p->pLruPrev = 0;
       p->pFS = pFS;
       p->eType = LSM_DB_FILE;
 
+      if( pFS->bUseMmap ){
+        i64 iEnd = (i64)iPg * pFS->nPagesize;
+        if( iEnd>pFS->nMap ){
+          Page *pFix;
+          rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iEnd, &pFS->pMap, &pFS->nMap);
+          if( rc==LSM_OK ){
+            u8 *aData = (u8 *)pFS->pMap;
+            for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
+              pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
+            }
+          }
+        }
+        if( rc==LSM_OK ){
+          p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (i64)(iPg-1)];
+        }
+      }else{
 #ifdef LSM_DEBUG
-      memset(p->aData, 0x56, pFS->nPagesize);
+        memset(p->aData, 0x56, pFS->nPagesize);
 #endif
-      if( noContent==0 ){
-        int nByte = pFS->nPagesize;
-        i64 iOff;
+        assert( p->pLruNext==0 && p->pLruPrev==0 );
+        if( noContent==0 ){
+          int nByte = pFS->nPagesize;
+          i64 iOff;
 
-        iOff = (i64)(iPg-1) * pFS->nPagesize;
-        rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, p->aData, nByte);
-        pFS->nRead++;
+          iOff = (i64)(iPg-1) * pFS->nPagesize;
+          rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, p->aData, nByte);
+          pFS->nRead++;
+        }
       }
 
       /* If the xRead() call was successful (or not attempted), link the
@@ -643,7 +691,7 @@ int fsPageGet(
         p = 0;
       }
     }
-  }else if( p->nRef==0 ){
+  }else if( p->nRef==0 && pFS->bUseMmap==0 ){
     fsPageRemoveFromLru(pFS, p);
   }
 
@@ -1291,20 +1339,13 @@ int lsmFsPageRelease(Page *pPg){
 
       if( pPg->eType!=LSM_CKPT_FILE ){
         pFS->nOut--;
-        assert( pPg->pLruNext==0 );
-        assert( pPg->pLruPrev==0 );
+        assert( pFS->bUseMmap || pPg->pLruNext==0 );
+        assert( pFS->bUseMmap || pPg->pLruPrev==0 );
 #if 0
-        pPg->pLruPrev = pFS->pLruLast;
-        if( pPg->pLruPrev ){
-          pPg->pLruPrev->pLruNext = pPg;
-        }else{
-          pFS->pLruFirst = pPg;
-        }
-        pFS->pLruLast = pPg;
+        fsPageAddToLru(pFS, pPg);
 #else
         fsPageRemoveFromHash(pFS, pPg);
-        lsmFree(pFS->pEnv, pPg->aData);
-        lsmFree(pFS->pEnv, pPg);
+        fsPageBufferFree(pPg);
 #endif
       }
     }
@@ -1325,14 +1366,16 @@ int lsmFsNWrite(FileSystem *pFS){
 
 int lsmFsSortedPhantom(FileSystem *pFS, SortedRun *pRun){
   int rc = LSM_OK;
-  PhantomRun *p;                  /* New phantom run object */
+  if( pFS->bUseMmap==0 ){
+    PhantomRun *p;                /* New phantom run object */
 
-  p = (PhantomRun *)lsmMallocZeroRc(pFS->pEnv, sizeof(PhantomRun), &rc);
-  if( p ){
-    p->pRun = pRun;
+    p = (PhantomRun *)lsmMallocZeroRc(pFS->pEnv, sizeof(PhantomRun), &rc);
+    if( p ){
+      p->pRun = pRun;
+    }
+    assert( pFS->pPhantom==0 );
+    pFS->pPhantom = p;
   }
-  assert( pFS->pPhantom==0 );
-  pFS->pPhantom = p;
   return rc;
 }
 
@@ -1350,12 +1393,8 @@ void lsmFsSortedPhantomFree(FileSystem *pFS){
   }
 }
 
-int lsmFsDbSync(FileSystem *pFS){
+int lsmFsSyncDb(FileSystem *pFS){
   return lsmEnvSync(pFS->pEnv, pFS->fdDb);
-}
-
-int lsmFsLogSync(FileSystem *pFS){
-  return lsmEnvSync(pFS->pEnv, pFS->fdLog);
 }
 
 void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
@@ -1398,6 +1437,16 @@ static SortedRun *startsWith(SortedRun *pRun, Pgno iFirst){
 */
 int lsmFsSectorSize(FileSystem *pFS){
   return lsmEnvSectorSize(pFS->pEnv, pFS->fdLog);
+}
+
+int lsmConfigMmap(lsm_db *pDb, int *piParam){
+  int iNew = *piParam;
+  FileSystem *pFS = pDb->pFS;
+  if( pFS->nOut==0 && (iNew==0 || iNew==1) ){
+    pFS->bUseMmap = iNew;
+  }
+  *piParam = pFS->bUseMmap;
+  return LSM_OK;
 }
 
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){

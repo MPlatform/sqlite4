@@ -48,6 +48,7 @@ struct lsm_env {
   int (*xTruncate)(lsm_file *, lsm_i64);
   int (*xSync)(lsm_file *);
   int (*xSectorSize)(lsm_file *);
+  int (*xRemap)(lsm_file *, lsm_i64, void **, lsm_i64*);
   int (*xClose)(lsm_file *);
   int (*xUnlink)(lsm_env*, const char *);
   /****** memory allocation ****************************************/
@@ -155,6 +156,10 @@ int lsm_config(lsm_db *, int, ...);
 **
 **     TODO: This should configure some kind of threshold for turning on 
 **     auto-work. Right now it is Boolean - 1 for on and 0 for off. Default 1.
+**
+**   LSM_CONFIG_MMAP
+**     A read/write integer parameter. True to use mmap() to access the 
+**     database file. False otherwise.
 */
 #define LSM_CONFIG_WRITE_BUFFER  1
 #define LSM_CONFIG_PAGE_SIZE     3
@@ -163,6 +168,7 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_SEGMENT_RATIO 2
 #define LSM_CONFIG_AUTOWORK      6
 #define LSM_CONFIG_LOG_SIZE      7
+#define LSM_CONFIG_MMAP          8
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1

@@ -43,6 +43,7 @@
 **
 **   For each level in the database, a level record. Formatted as follows:
 **
+**     0. Age of the level.
 **     1. The number of right-hand segments (possibly 0),
 **     2. Segment record for left-hand segment (6 integers),
 **     3. Segment record for each right-hand segment (6 integers),
@@ -248,6 +249,7 @@ static void ckptExportLevel(
   Merge *pMerge;
 
   pMerge = pLevel->pMerge;
+  ckptSetValue(p, iOut++, pLevel->iAge, pRc);
   ckptSetValue(p, iOut++, pLevel->nRight, pRc);
   ckptExportSegment(&pLevel->lhs, p, &iOut, pRc);
 
@@ -458,6 +460,7 @@ static int ckptLoadLevels(
     /* Allocate space for the Level structure and Level.apRight[] array */
     pLevel = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
     if( rc==LSM_OK ){
+      pLevel->iAge = aIn[iIn++];
       pLevel->nRight = aIn[iIn++];
       if( pLevel->nRight ){
         int nByte = sizeof(Segment) * pLevel->nRight;
@@ -687,8 +690,8 @@ int lsmCheckpointLevels(
   ** free-list delta and the 2 used for the checkpoint checksum.  */
   nFree = 1024 - CKPT_HDRSIZE - 4 - 3 - 2;
 
-  /* Each level record not currently undergoing a merge consumes 1 + 6
-  ** integers. Each level that is undergoing a merge consumes 1 + 6 +
+  /* Each level record not currently undergoing a merge consumes 2 + 6
+  ** integers. Each level that is undergoing a merge consumes 2 + 6 +
   ** (nRhs * 6) + 1 + 1 + (nMerge * 2), where nRhs is the number of levels
   ** used as input to the merge and nMerge is the total number of segments
   ** (same as the number of levels, possibly plus 1 separators array). 
@@ -700,9 +703,9 @@ int lsmCheckpointLevels(
   for(p=lsmDbSnapshotLevel(pDb->pWorker); p; p=p->pNext){
     int nThis;                    /* Number of integers required by level p */
     if( p->pMerge ){
-      nThis = 1 + (1 + p->nRight) * (2 + SEGMENT_SIZE) + 1 + 1;
+      nThis = 2 + (1 + p->nRight) * (2 + SEGMENT_SIZE) + 1 + 1;
     }else{
-      nThis = 1 + SEGMENT_SIZE;
+      nThis = 2 + SEGMENT_SIZE;
     }
     if( nFree<nThis ) break;
     nFree -= nThis;

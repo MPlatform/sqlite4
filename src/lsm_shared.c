@@ -983,7 +983,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
     ** are safely on disk. If we do not do this and a power failure occurs 
     ** just after the checkpoint is written into the db header, the
     ** database could be corrupted following recovery.  */
-    if( doSync ) rc = lsmFsDbSync(pFS);
+    if( doSync ) rc = lsmFsSyncDb(pFS);
 
     /* Fetch a reference to the meta-page to write the checkpoint to. */
     if( rc==LSM_OK ) rc = lsmFsMetaPageGet(pFS, iPg, &pPg);
@@ -1006,7 +1006,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
 
     /* Sync the db file again. To make sure that the checkpoint just 
     ** written is on the disk.  */
-    if( rc==LSM_OK && doSync ) rc = lsmFsDbSync(pFS);
+    if( rc==LSM_OK && doSync ) rc = lsmFsSyncDb(pFS);
 
     /* This is where space on disk is reclaimed. Now that the checkpoint 
     ** has been written to the database and synced, part of the database

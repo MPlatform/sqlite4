@@ -2857,7 +2857,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
       assert( iSPtr==0 );
       assert( pSeg->run.iFirst!=0 );
       rc = mergeWorkerNextPage(pMW, 1, pSeg->run.iFirst);
-      pSeg->sep.iRoot = pSeg->sep.iFirst;
+      if( !pMW->bFlush ) pSeg->sep.iRoot = pSeg->sep.iFirst;
     }
 
     /* If the call to mergeWorkerWrite() above started a new page, then
@@ -3100,6 +3100,7 @@ static int sortedMergeSetup(
       lsmFree(pDb->pEnv, p);
       p = pNext;
     }
+    pNew->iAge = pLevel->iAge+1;
 
     /* Replace the old levels with the new. */
     pTopLevel = lsmDbSnapshotLevel(pDb->pWorker);
@@ -3259,49 +3260,53 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
     int nMxPage;
     Level *pTopLevel = lsmDbSnapshotLevel(pWorker);
 
-    /* Check if we should start a new merge on the top nTopMerge levels. */
-    pLevel = pTopLevel;
-    nMxPage = pDb->nTreeLimit / (lsmFsPageSize(pDb->pFS));
-    for(i=0; i<nTopMerge; i++){
-      if( pLevel==0 
-       || pLevel->pMerge 
-       || pLevel->lhs.run.nSize>nMxPage 
-      ){
-        break;
-      }
-      pLevel = pLevel->pNext;
-    }
+    /* Find the longest contiguous run of levels not currently undergoing a 
+    ** merge with the same age in the structure. Or the level being merged
+    ** with the largest number of right-hand segments. Work on it.  */
+    Level *pBest = 0;
+    int nBest = 4;
 
-    if( i==nTopMerge ){
-      /* Merge the first nTopMerge levels. */
-      rc = sortedMergeSetup(pDb, pTopLevel, nTopMerge, &pLevel);
-    }else{
-      Level *pSearch = pLevel;
+    Level *pThis = 0;
+    int nThis = 0;
 
-      /* Not starting a new merge. Find an existing merge to work on. */
-      while( pLevel && pLevel->pMerge==0 ){
-        pLevel = pLevel->pNext;
-      }
-
-      /* If no in-progress merge was found, merge together any two adjacent
-      ** levels for which level N is larger than level N+1. */
-      if( pLevel==0 ){
-        pLevel = pSearch;
-        while( pLevel && pLevel->pNext ){
-          int sz1 = pLevel->lhs.run.nSize;
-          int sz2 = pLevel->pNext->lhs.run.nSize;
-          if( (sz1*1.1) >= sz2 ){
-            rc = sortedMergeSetup(pDb, pLevel, 2, &pLevel);
-            break;
-          }
-          pLevel = pLevel->pNext;
+    for(pLevel = pTopLevel; pLevel; pLevel=pLevel->pNext){
+      if( pLevel->nRight==0 && pThis && pLevel->iAge==pThis->iAge ){
+        nThis++;
+      }else{
+        if( nThis>=nBest ){
+          pBest = pThis;
+          nBest = nThis;
         }
-        if( pLevel && !pLevel->pMerge ) pLevel = 0;
+        if( pLevel->nRight ){
+          if( pLevel->nRight>=nBest ){
+            nBest = pLevel->nRight;
+            pBest = pLevel;
+            nThis = 0;
+            pThis = 0;
+          }
+        }else{
+          pThis = pLevel;
+          nThis = 1;
+        }
       }
     }
+    if( nThis>nBest ){
+      assert( pThis );
+      pBest = pThis;
+      nBest = nThis;
+    }
 
-    if( pLevel==0 && bOptimize && pTopLevel->pNext ){
-      rc = sortedMergeSetup(pDb, pTopLevel, 2, &pLevel);
+    if( pBest==0 && bOptimize && pTopLevel->pNext ){
+      pBest = pTopLevel;
+      nBest = 2;
+    }
+
+    if( pBest ){
+      if( pBest->nRight==0 ){
+        rc = sortedMergeSetup(pDb, pBest, nBest, &pLevel);
+      }else{
+        pLevel = pBest;
+      }
     }
 
     if( pLevel==0 ){
@@ -3457,7 +3462,7 @@ static void sortedMeasureDb(lsm_db *pDb, Metric *p){
 ** to prevent the height of the tree from growing indefinitely, even if
 ** there are no other calls to sortedWork().
 */
-int lsmSortedAutoWork(lsm_db *pDb){
+int lsmSortedAutoWork(lsm_db *pDb, int nUnit){
   int rc;                         /* Return code */
   const int eCola = pDb->eCola;   /* Max adjacent segment size ratio */
   int nRemaining;                 /* Units of work to do before returning */
@@ -3472,11 +3477,11 @@ int lsmSortedAutoWork(lsm_db *pDb){
   ** work is achieved by writing one page (~4KB) of merged data.  */
   nRemaining = nDepth = 0;
   for(pLevel=lsmDbSnapshotLevel(pDb->pWorker); pLevel; pLevel=pLevel->pNext){
-    nDepth += MAX(1, pLevel->nRight); 
-    /* nDepth += 1; */
+    /* nDepth += MAX(1, pLevel->nRight); */
+    nDepth += 1;
     /* nDepth += pLevel->nRight; */
   }
-  nRemaining = nDepth*1;
+  nRemaining = nUnit * nDepth;
 
   rc = sortedWork(pDb, nRemaining, 0, 0);
   return rc;

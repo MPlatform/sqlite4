@@ -222,6 +222,17 @@ static int testEnvSectorSize(lsm_file *pFile){
   return pRealEnv->xSectorSize(p->pReal);
 }
 
+static int testEnvRemap(
+  lsm_file *pFile, 
+  lsm_i64 iMin, 
+  void **ppOut,
+  lsm_i64 *pnOut
+){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
+  return pRealEnv->xRemap(p->pReal, iMin, ppOut, pnOut);
+}
+
 static int testEnvClose(lsm_file *pFile){
   lsm_env *pRealEnv = tdb_lsm_env();
   LsmFile *p = (LsmFile *)pFile;
@@ -528,6 +539,7 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
   pDb->env.xTruncate = testEnvTruncate;
   pDb->env.xSync = testEnvSync;
   pDb->env.xSectorSize = testEnvSectorSize;
+  pDb->env.xRemap = testEnvRemap;
   pDb->env.xClose = testEnvClose;
   pDb->env.xUnlink = testEnvUnlink;
 

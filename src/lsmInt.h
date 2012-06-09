@@ -225,6 +225,7 @@ struct Segment {
 */
 struct Level {
   Segment lhs;                    /* Left-hand (main) segment */
+  int iAge;                       /* Number of times data has been written */
   int nRight;                     /* Size of apRight[] array */
   Segment *aRhs;                  /* Old segments being merged into this */
   int iSplitTopic;
@@ -365,8 +366,8 @@ int lsmMutexHeld(lsm_env *, lsm_mutex *);
 int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 #endif
 
-/* 
-** Functions from file "lsm_file.c".
+/**************************************************************************
+** Start of functions from "lsm_file.c".
 */
 int lsmFsOpen(lsm_db *, const char *, int);
 void lsmFsClose(FileSystem *);
@@ -377,29 +378,23 @@ void lsmFsSetBlockSize(FileSystem *, int);
 int lsmFsPageSize(FileSystem *);
 void lsmFsSetPageSize(FileSystem *, int);
 
-int lsmFsBlockCnt(FileSystem *);
-void lsmFsSetBlockCnt(FileSystem *pFS, int);
-
-int lsmFsSetFreelist(FileSystem *, int, u32 *, int);
-
-/* Creating and populating sorted runs. */
+/* Creating, populating, gobbling and deleting sorted runs. */
 int lsmFsSortedPhantom(FileSystem *, SortedRun *);
 void lsmFsSortedPhantomFree(FileSystem *pFS);
 void lsmFsSortedSetRoot(SortedRun *, Pgno);
-
 void lsmFsGobble(Snapshot *, SortedRun *, Page *);
 int lsmFsSortedDelete(FileSystem *, Snapshot *, int, SortedRun *);
 int lsmFsSortedFinish(FileSystem *, Snapshot *, SortedRun *);
 int lsmFsSortedAppend(FileSystem *, Snapshot *, SortedRun *, Page **);
 int lsmFsPhantomMaterialize(FileSystem *, Snapshot *, SortedRun *);
 
+/* Functions to retrieve the lsm_env pointer from a FileSystem or Page object */
 lsm_env *lsmFsEnv(FileSystem *);
 lsm_env *lsmPageEnv(Page *);
 
 int lsmFsSectorSize(FileSystem *);
 
 void lsmSortedSplitkey(lsm_db *, Level *, int *);
-
 int lsmFsSetupAppendList(lsm_db *db);
 
 /* Reading sorted run content. */
@@ -422,9 +417,6 @@ Pgno lsmFsPageNumber(Page *);
 int lsmFsNRead(FileSystem *);
 int lsmFsNWrite(FileSystem *);
 
-int lsmFsDbSync(FileSystem *);
-int lsmFsLogSync(FileSystem *);
-
 int lsmFsMetaPageGet(FileSystem *, int, Page **);
 int lsmFsLogPageGet(FileSystem *, int, Page **);
 
@@ -436,13 +428,22 @@ int lsmFsIntegrityCheck(lsm_db *);
 
 int lsmFsPageWritable(Page *);
 
+/* Functions to read, write and sync the log file. */
 int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr);
 int lsmFsSyncLog(FileSystem *pFS);
 int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr);
 int lsmFsTruncateLog(FileSystem *pFS, i64 nByte);
 int lsmFsCloseAndDeleteLog(FileSystem *pFS);
 
+/* And to sync the db file */
+int lsmFsSyncDb(FileSystem *);
+
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
+int lsmConfigMmap(lsm_db *pDb, int *piParam);
+
+/*
+** End of functions from "lsm_file.c".
+**************************************************************************/
 
 /* 
 ** Functions from file "lsm_sorted.c".
@@ -450,7 +451,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
 int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
-int lsmSortedAutoWork(lsm_db *);
+int lsmSortedAutoWork(lsm_db *, int nUnit);
 
 void lsmSortedFreeLevel(lsm_env *pEnv, Level *);
 

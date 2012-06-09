@@ -42,6 +42,19 @@ namespace eval autoscroll {
 namespace import ::autoscroll::*
 #############################################################################
 
+proc exec_lsmtest_show {args} {
+  set fd [open [list |lsmtest show {*}$args]]
+  set res ""
+  while {![eof $fd]} { 
+    set line [gets $fd]
+    if {[regexp {^getrusage*} $line]} continue
+    append res $line
+    append res "\n"
+  }
+  close $fd
+  string trim $res
+}
+
 #############################################################################
 # Constants used by the code that draws the graphical representation of
 # the data structure (the boxes with the arrows and stuff). Changing these
@@ -293,14 +306,16 @@ proc dynamic_input {C S args} {
   if {[eof stdin]} return
 
   set line [gets stdin]
-  if {[llength $line] > 0 && $line != [lindex $::G(data) end]} { 
-    lappend ::G(data) $line 
-  }
+  if { [string range [string trim $line] 0 0]!="g" } {
+    if {[llength $line] > 0 && $line != [lindex $::G(data) end]} { 
+      lappend ::G(data) $line 
+    }
 
-  set end [expr [llength $::G(data)] - 1]
-  if {$end>=0} { 
-    $S configure -from 0 -to $end
-    if {[$S get]==$end-1} { $S set $end }
+    set end [expr [llength $::G(data)] - 1]
+    if {$end>=0} { 
+      $S configure -from 0 -to $end
+      if {[$S get]==$end-1} { $S set $end }
+    }
   }
 
   fileevent stdin readable [list dynamic_input $C $S]
@@ -335,7 +350,7 @@ proc static_redraw {C} {
 
 proc static_select_callback {C pgno} {
   link_varset $C myText myDb myData myTree
-  set data [string trim [exec lsmtest show $myDb array $pgno]]
+  set data [string trim [exec_lsmtest_show $myDb array $pgno]]
   $myText delete 0.0 end
 
   $myTree delete [$myTree children {}]
@@ -356,7 +371,7 @@ proc static_select_callback {C pgno} {
 proc static_page_callback {C pgno} {
   link_varset $C myText myDb myData myPgno myMode
   set myPgno $pgno
-  set data [string trim [exec lsmtest show $myDb $myMode $myPgno]]
+  set data [string trim [exec_lsmtest_show $myDb $myMode $myPgno]]
   $myText delete 0.0 end
   $myText insert 0.0 $data
 }
@@ -407,7 +422,7 @@ proc static_setup {zDb} {
   pack .pan.t.text -expand 1 -fill both
 
   set myTree [scrollable ::ttk::treeview .pan.tree]
-  set myData [string trim [exec lsmtest show $zDb]]
+  set myData [string trim [exec_lsmtest_show $zDb]]
 
   $myText configure -wrap none
   bind $C <KeyPress-q> exit

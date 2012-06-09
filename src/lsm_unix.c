@@ -27,6 +27,8 @@
 
 #include <unistd.h>
 
+#include <sys/mman.h>
+
 #include "lsmInt.h"
 
 /*
@@ -36,6 +38,8 @@ typedef struct PosixFile PosixFile;
 struct PosixFile {
   lsm_env *pEnv;     /* The run-time environment */
   int fd;            /* The open file descriptor */
+  void *pMap;
+  off_t nMap;
 };
 
 static int lsm_ioerr(void){ return LSM_IOERR; }
@@ -52,6 +56,7 @@ static int lsmPosixOsOpen(
   if( p==0 ){
     rc = LSM_NOMEM;
   }else{
+    memset(p, 0, sizeof(PosixFile));
     p->pEnv = pEnv;
     p->fd = open(zFile, O_RDWR|O_CREAT, 0644);
     if( p->fd<0 ){
@@ -146,8 +151,45 @@ static int lsmPosixOsSectorSize(lsm_file *pFile){
   return 512;
 }
 
+static int lsmPosixOsRemap(
+  lsm_file *pFile, 
+  lsm_i64 iMin, 
+  void **ppOut,
+  lsm_i64 *pnOut
+){
+  off_t iSz;
+  int prc;
+  PosixFile *p = (PosixFile *)pFile;
+  struct stat buf;
+
+  if( p->pMap ){
+    munmap(p->pMap, p->nMap);
+    p->pMap = 0;
+    p->nMap = 0;
+  }
+
+  memset(&buf, 0, sizeof(buf));
+  prc = fstat(p->fd, &buf);
+  if( prc!=0 ) return LSM_IOERR_BKPT;
+  iSz = buf.st_size;
+  if( iSz<iMin ){
+    iSz = ((iMin + (2<<20) - 1) / (2<<20)) * (2<<20);
+    prc = ftruncate(p->fd, iSz);
+    if( prc!=0 ) return LSM_IOERR_BKPT;
+  }
+
+  p->pMap = mmap(0, iSz, PROT_READ|PROT_WRITE, MAP_SHARED, p->fd, 0);
+  p->nMap = iSz;
+
+  *ppOut = p->pMap;
+  *pnOut = p->nMap;
+  return LSM_OK;
+}
+
+
 static int lsmPosixOsClose(lsm_file *pFile){
   PosixFile *p = (PosixFile *)pFile;
+  if( p->pMap ) munmap(p->pMap, p->nMap);
   close(p->fd);
   lsm_free(p->pEnv, p);
   return LSM_OK;
@@ -362,6 +404,7 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsTruncate,      /* xTruncate */
     lsmPosixOsSync,          /* xSync */
     lsmPosixOsSectorSize,    /* xSectorSize */
+    lsmPosixOsRemap,         /* xRemap */
     lsmPosixOsClose,         /* xClose */
     lsmPosixOsUnlink,        /* xUnlink */
     /***** memory allocation *********/

@@ -584,6 +584,15 @@ int do_speed_tests(int nArg, char **azArg){
       rc = tdb_open(aSys[j].zLibrary, 0, 1, &pDb);
       if( rc ) return rc;
       pLsm = tdb_lsm(pDb);
+
+      if( pLsm ){
+        int bMmap = 0;
+        int nLimit = 2 * 1024 * 1024;
+        int eSafety = 0;
+        lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nLimit);
+        lsm_config(pLsm, LSM_CONFIG_SAFETY, &eSafety);
+        lsm_config(pLsm, LSM_CONFIG_MMAP, &bMmap);
+      }
   
       testTimeInit();
       for(i=0; i<nRow; i+=nStep){
@@ -653,7 +662,11 @@ int do_speed_tests(int nArg, char **azArg){
       }else{
         int t;
         int iSel;
+        int bMmap = 0;
+
         rc = tdb_open(aSys[j].zLibrary, 0, 0, &pDb);
+        if( tdb_lsm(pDb) ) lsm_config(tdb_lsm(pDb), LSM_CONFIG_MMAP, &bMmap);
+
         testTimeInit();
         for(iSel=0; rc==LSM_OK && iSel<nSelTest; iSel++){
           void *pDummy;
@@ -701,7 +714,7 @@ int do_speed_tests(int nArg, char **azArg){
     if( doReadTest ){
       fprintf(pOut, "set y2label \"Selects per second\"\n");
     }else if( sys_mask==(1<<2) ){
-      fprintf(pOut, "set y2label \"Page writes per %d inserts\"\n", nStep);
+      fprintf(pOut, "set y2label \"Page writes per insert\"\n");
     }
     fprintf(pOut, "set yrange [0:*]\n");
     fprintf(pOut, "set y2range [0:*]\n");
@@ -969,7 +982,7 @@ static int do_insert(int nArg, char **azArg){
   TestDb *pDb = 0;
   int i;
   int rc;
-  const int nRow = 10000000;
+  const int nRow = 1 * 1000 * 1000;
 
   DatasourceDefn defn = { TEST_DATASOURCE_RANDOM, 8, 15, 80, 150 };
   Datasource *pData = 0;
@@ -1021,8 +1034,8 @@ static void lsmtest_rusage_report(void){
   res = getrusage(RUSAGE_SELF, &r);
   assert( res==0 );
 
-  printf("getrusage: { ru_maxrss %d ru_oublock %d }\n", 
-      (int)r.ru_maxrss, (int)r.ru_oublock
+  printf("getrusage: { ru_maxrss %d ru_oublock %d ru_inblock %d }\n", 
+      (int)r.ru_maxrss, (int)r.ru_oublock, (int)r.ru_inblock
   );
 }
 #else
@@ -1090,7 +1103,7 @@ int main(int argc, char **argv){
     if( rc==0 ) rc = -1;
   }
 
-#if 0
+#if 1
   lsmtest_rusage_report();
 #endif
   return rc;

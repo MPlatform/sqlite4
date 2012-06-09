@@ -128,9 +128,7 @@ static int dbAutoWork(lsm_db *pDb, int nUnit){
   rc = lsmCheckpointWrite(pDb);
 
   dbWorkerStart(pDb);
-  for(i=0; i<nUnit && rc==LSM_OK; i++){
-    rc = lsmSortedAutoWork(pDb);
-  }
+  rc = lsmSortedAutoWork(pDb, nUnit);
   dbWorkerDone(pDb);
 
   return rc;
@@ -330,6 +328,12 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
       break;
     }
 
+    case LSM_CONFIG_MMAP: {
+      int *piVal = va_arg(ap, int *);
+      rc = lsmConfigMmap(pDb, piVal);
+      break;
+    }
+
     default:
       rc = LSM_MISUSE;
       break;
@@ -475,6 +479,8 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
   lsmSortedSaveTreeCursors(pDb);
 
   if( rc==LSM_OK ){
+    const int nQuant = 32;
+
     int pgsz = lsmFsPageSize(pDb->pFS);
     int nBefore;
     int nAfter;
@@ -482,8 +488,8 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
     rc = lsmTreeInsert(pDb->pTV, pKey, nKey, pVal, nVal);
     nAfter = lsmTreeSize(pDb->pTV)/pgsz;
 
-    if( rc==LSM_OK && pDb->bAutowork && nAfter!=nBefore ){
-      rc = dbAutoWork(pDb, nAfter - nBefore);
+    if( rc==LSM_OK && pDb->bAutowork && (nAfter/nQuant)!=(nBefore/nQuant) ){
+      rc = dbAutoWork(pDb, (nAfter/nQuant - nBefore/nQuant)*nQuant);
     }
   }
 
@@ -723,7 +729,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
     if( iLevel==0 ){
       rc = lsmLogCommit(pDb);
       if( rc==LSM_OK && pDb->eSafety==LSM_SAFETY_FULL ){
-        rc = lsmFsLogSync(pDb->pFS);
+        rc = lsmFsSyncLog(pDb->pFS);
       }
       if( rc==LSM_OK && pDb->pTV && lsmTreeSize(pDb->pTV)>pDb->nTreeLimit ){
         rc = lsmFlushToDisk(pDb);
