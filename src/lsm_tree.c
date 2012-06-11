@@ -99,8 +99,8 @@ typedef struct NodeVersion NodeVersion;
 */
 struct TreeKey {
   void *pKey;                     /* Pointer to key */
-  int nKey;                       /* Size of pKey in bytes */
   void *pValue;                   /* Pointer to value. May be NULL. */
+  int nKey;                       /* Size of pKey in bytes */
   int nValue;                     /* Size of pValue. Or negative. */
 };
 

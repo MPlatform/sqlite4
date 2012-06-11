@@ -12,72 +12,77 @@
 ** 
 ** DATABASE FILE FORMAT
 **
-** A database file is divided into pages. The first 8KB of the file consists
-** of two 4KB meta-pages. The meta-page size is not configurable. The 
-** remainder of the file is made up of database pages. The default database
-** page size is 4KB. Database pages are aligned to page-size boundaries,
-** so if the database page size is larger than 8KB there is a gap between
-** the end of the meta pages and the start of the database pages.
+** The following database file format concepts are used by the code in
+** this file to read and write the database file.
 **
-** Database pages are numbered based on their position in the file. Page N
-** begins at byte offset ((N-1)*pgsz). This means that page 1 does not 
-** exist - since it would always overlap with the meta pages. If the 
-** page-size is (say) 512 bytes, then the first usable page in the database
-** is page 33.
+** Pages:
 **
-** The database file is also divided into blocks. The default block size is
-** 2MB. When writing to the database file, an attempt is made to write data
-** in contiguous block-sized chunks.
+**   A database file is divided into pages. The first 8KB of the file consists
+**   of two 4KB meta-pages. The meta-page size is not configurable. The 
+**   remainder of the file is made up of database pages. The default database
+**   page size is 4KB. Database pages are aligned to page-size boundaries,
+**   so if the database page size is larger than 8KB there is a gap between
+**   the end of the meta pages and the start of the database pages.
 **
+**   Database pages are numbered based on their position in the file. Page N
+**   begins at byte offset ((N-1)*pgsz). This means that page 1 does not 
+**   exist - since it would always overlap with the meta pages. If the 
+**   page-size is (say) 512 bytes, then the first usable page in the database
+**   is page 33.
 **
+**   It is assumed that the first two meta pages and the data that follows
+**   them are located on different disk sectors. So that if a power failure 
+**   while writing to a meta page there is no risk of damage to the other
+**   meta page or any other part of the database file.
 **
-** BLOCK ALLOCATION AND TRACKING
+** Blocks:
 **
-** Each block is allocated to a single sorted run. All blocks are freed
-** when the sorted run is no longer required.
+**   The database file is also divided into blocks. The default block size is
+**   2MB. When writing to the database file, an attempt is made to write data
+**   in contiguous block-sized chunks.
 **
-** There are two problems with this:
+**   The first and last page on each block are special in that they are 4 
+**   bytes smaller than all other pages. This is because the last four bytes 
+**   of space on the first and last pages of each block are reserved for a 
+**   pointers to other blocks (i.e. a 32-bit block number).
 **
-**   * It means each short separator only run will consume a full 2MB 
-**     on disk. No good at all for small databases. And there is the problem
-**     of the short separator only runs sometimes created. Deal with this
-**     one later - after making the changes to use partially merged runs
-**     in queries.
+** Runs:
 **
-**   * When a very large sorted run is finally discarded, we need to find all
-**     of its blocks to free them. 
+**   A run is a sequence of pages that the upper layer uses to store a 
+**   sorted array of database keys (and accompanying data - values, FC 
+**   pointers and so on). Given a page within a run, it is possible to
+**   navigate to the next page in the run as follows:
 **
-** A 1GB database contains 500 2MB blocks. A 1TB database contains 500,000
-** blocks. If LSM uses 4 bytes for each block for space management, that is
-** 4KB or 4MB respectively. Both are larger than we would like, but will
-** do for the moment. So, to track blocks, there is an array of 32-bit 
-** unsigned integers. One integer per block in the database file. When a 
-** block is free, the array entry is set to 0. Otherwise, it is set to the
-** id number of the sorted run of which it is a part.
+**     a) if the current page is not the last in a block, the next page 
+**        in the run is located immediately after the current page, OR
 **
-** TODO: The data-structure used to track blocks can be optimized for space
-** later on. Once partially complete merges can be linked into the main tree,
-** it will be possible to release blocks as soon as their contents are 
-** merged. Which means that all blocks in a single run could be linked 
-** together in a list for tracking purposes, rather than having an external
-** data structure.
+**     b) if the current page is the last page in a block, the next page 
+**        in the run is the first page on the block identified by the
+**        block pointer stored in the last 4 bytes of the current block.
 **
+**   It is possible to navigate to the previous page in a similar fashion,
+**   using the block pointer embedded in the last 4 bytes of the first page
+**   of each block as required.
 **
-** META PAGES.
+**   The upper layer is responsible for identifying by page number the 
+**   first and last page of any run that it needs to navigate - there are
+**   no "end-of-run" markers stored or identified by this layer. This is
+**   necessary as clients reading different database snapshots may access 
+**   different subsets of a run.
 **
-** Meta pages are used to store checkpoint blobs and the block free-list.
-** Whether or not a page is a meta page depends on its location in the 
-** database file. As follows:
+** THE LOG FILE 
 **
-**   * The file begins with two meta pages, each 4KB in size.
+** This file opens and closes the log file. But it does not contain any
+** logic related to the log file format. Instead, it exports the following
+** functions that are used by the code in lsm_log.c to read and write the
+** log file:
 **
-**   * TODO: By allocating an entire block for meta data once a 
-**           checkpoint blob is larger than 4KB in size? Probably...
+**     lsmFsWriteLog
+**     lsmFsSyncLog
+**     lsmFsReadLog
+**     lsmFsTruncateLog
+**     lsmFsCloseAndDeleteLog
 **
-** It is assumed that the first two meta pages and the data that follows
-** them are located on different disk sectors. So that if a power failure 
-** while writing to a meta page there is no risk of damage to the other
-** meta page or any other part of the database file.
 */
 #include "lsmInt.h"
 
@@ -103,6 +108,19 @@ struct PhantomRun {
 ** File-system object. Each database connection allocates a single instance
 ** of the following structure. It is used for all access to the database and
 ** log files.
+**
+** pLruFirst, pLruLast:
+**   The first and last entries in a doubly-linked list of pages. The 
+**   Page.pLruNext and Page.pLruPrev pointers are used to link the list
+**   elements together.
+**
+**   In mmap() mode, this list contains all currently allocated pages that
+**   are carrying pointers into the database file mapping (pMap/nMap). If the
+**   file has to be unmapped and then remapped (required to grow the mapping
+**   as the file grows), the Page.aData pointers are updated by iterating
+**   through the contents of this list.
+**
+**   In non-mmap() mode, this list is an LRU list of cached pages with nRef==0.
 */
 struct FileSystem {
   lsm_db *pDb;                    /* Database handle that owns this object */
@@ -126,7 +144,7 @@ struct FileSystem {
   int nWrite;                     /* Total number of pages written */
   int nRead;                      /* Total number of pages read */
 
-  /* Page cache */
+  /* Page cache parameters for non-mmap() mode */
   int nOut;                       /* Number of outstanding pages */
   int nCacheMax;                  /* Configured cache size (in pages) */
   int nCacheAlloc;                /* Current cache size (in pages) */
@@ -166,6 +184,7 @@ struct MetaPage {
 */
 #define PAGE_DIRTY 0x00000001     /* Set if page is dirty */
 #define PAGE_FREE  0x00000002     /* Set if Page.aData requires lsmFree() */
+#define PAGE_SHORT 0x00000004     /* Set if page is 4 bytes short */
 
 /*
 ** Number of pgsz byte pages omitted from the start of block 1.
@@ -179,7 +198,17 @@ struct MetaPage {
 #define isPhantom(pFS, pSorted) ((pSorted) && (pFS)->phantom.pRun==(pSorted))
 
 /*
-** Wrappers around the VFS methods of the lsm_env object.
+** Wrappers around the VFS methods of the lsm_env object:
+**
+**     lsmEnvOpen()
+**     lsmEnvRead()
+**     lsmEnvWrite()
+**     lsmEnvSync()
+**     lsmEnvSectorSize()
+**     lsmEnvClose()
+**     lsmEnvTruncate()
+**     lsmEnvUnlink()
+**     lsmEnvRemap()
 */
 static int lsmEnvOpen(lsm_env *pEnv, const char *zFile, lsm_file **ppNew){
   return pEnv->xOpen(pEnv, zFile, ppNew);
@@ -228,33 +257,46 @@ static int lsmEnvRemap(
 }
 
 /*
-** Functions to read, write, sync and truncate the log file.
+** Write the contents of string buffer pStr into the log file, starting at
+** offset iOff.
 */
 int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr){
   return lsmEnvWrite(pFS->pEnv, pFS->fdLog, iOff, pStr->z, pStr->n);
 }
 
+/*
+** fsync() the log file.
+*/
 int lsmFsSyncLog(FileSystem *pFS){
   return lsmEnvSync(pFS->pEnv, pFS->fdLog);
 }
 
+/*
+** Read nRead bytes of data starting at offset iOff of the log file. Store
+** the results in string buffer pStr.
+*/
 int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr){
-  int rc;
-
+  int rc;                         /* Return code */
   rc = lsmStringExtend(pStr, nRead);
   if( rc==LSM_OK ){
     rc = lsmEnvRead(pFS->pEnv, pFS->fdLog, iOff, &pStr->z[pStr->n], nRead);
     pStr->n += nRead;
   }
-
   return rc;
 }
 
+/*
+** Truncate the log file to nByte bytes in size.
+*/
 int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
   if( pFS->fdLog==0 ) return LSM_OK;
   return lsmEnvTruncate(pFS->pEnv, pFS->fdLog, nByte);
 }
 
+/*
+** Close the log file. Then delete it from the file-system. This function
+** is called during database shutdown only.
+*/
 int lsmFsCloseAndDeleteLog(FileSystem *pFS){
   if( pFS->fdLog ){
     char *zDel = lsmMallocPrintf(pFS->pEnv, "%s-log", pFS->zDb);
@@ -303,7 +345,7 @@ static lsm_file *fsOpenFile(
 ** Open a connection to a database stored within the file-system (the
 ** "system of files").
 */
-int lsmFsOpen(lsm_db *pDb, const char *zDb, int nPgsz){
+int lsmFsOpen(lsm_db *pDb, const char *zDb){
   FileSystem *pFS;
   int rc = LSM_OK;
 
@@ -312,9 +354,9 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb, int nPgsz){
 
   pFS = (FileSystem *)lsmMallocZeroRc(pDb->pEnv, sizeof(FileSystem), &rc);
   if( pFS ){
-    pFS->nPagesize = nPgsz;
+    pFS->nPagesize = LSM_PAGE_SIZE;
+    pFS->nBlocksize = LSM_BLOCK_SIZE;
     pFS->nMetasize = 4 * 1024;
-    pFS->nBlocksize = 2 * 1024 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
 
@@ -355,7 +397,7 @@ void lsmFsClose(FileSystem *pFS){
     pPg = pFS->pLruFirst;
     while( pPg ){
       Page *pNext = pPg->pLruNext;
-      lsmFree(pEnv, pPg->aData);
+      if( pPg->flags & PAGE_FREE ) lsmFree(pEnv, pPg->aData);
       lsmFree(pEnv, pPg);
       pPg = pNext;
     }
@@ -400,6 +442,10 @@ void lsmFsSetBlockSize(FileSystem *pFS, int nBlocksize){
   pFS->nBlocksize = nBlocksize;
 }
 
+/*
+** Return the page number of the first page on block iBlock. Blocks are
+** numbered starting from 1.
+*/
 static Pgno fsFirstPageOnBlock(FileSystem *pFS, int iBlock){
   const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
   int iPg;
@@ -411,16 +457,26 @@ static Pgno fsFirstPageOnBlock(FileSystem *pFS, int iBlock){
   return iPg;
 }
 
+/*
+** Return the page number of the last page on block iBlock. Blocks are
+** numbered starting from 1.
+*/
 static Pgno fsLastPageOnBlock(FileSystem *pFS, int iBlock){
   const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
   return iBlock * nPagePerBlock;
 }
 
+/*
+** Return true if page iPg is the last page on its block.
+*/
 static int fsIsLast(FileSystem *pFS, Pgno iPg){
   const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
   return ( iPg && (iPg % nPagePerBlock)==0 );
 }
 
+/*
+** Return true if page iPg is the first page on its block.
+*/
 static int fsIsFirst(FileSystem *pFS, Pgno iPg){
   const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
   return (
@@ -429,7 +485,6 @@ static int fsIsFirst(FileSystem *pFS, Pgno iPg){
   );
 }
 
-
 /*
 ** Given a page reference, return a pointer to the in-memory buffer of the
 ** pages contents. If parameter pnData is not NULL, set *pnData to the size
@@ -437,14 +492,14 @@ static int fsIsFirst(FileSystem *pFS, Pgno iPg){
 */
 u8 *lsmFsPageData(Page *pPage, int *pnData){
   if( pnData ){
-    FileSystem *pFS = pPage->pFS;
-    /* If this page is the first or last of its block, then it is 4
-    ** bytes smaller than the usual pFS->nPagesize bytes.  */
-    int nReserve = 0;
-    if( fsIsFirst(pFS, pPage->iPg) || fsIsLast(pFS, pPage->iPg) ){
-      nReserve = 4;
-    }
-    *pnData = pFS->nPagesize - nReserve;
+#ifndef NDEBUG
+    int bShort = (
+        fsIsFirst(pPage->pFS, pPage->iPg) || fsIsLast(pPage->pFS, pPage->iPg)
+    );
+    assert( bShort==!!(pPage->flags & PAGE_SHORT) );
+    assert( PAGE_SHORT==4 );
+#endif
+    *pnData = pPage->pFS->nPagesize - (pPage->flags & PAGE_SHORT);
   }
   return pPage->aData;
 }
@@ -478,6 +533,9 @@ static void fsPageRemoveFromLru(FileSystem *pFS, Page *pPg){
   pPg->pLruNext = 0;
 }
 
+/*
+** Page pPg is not currently part of the LRU list belonging to pFS. Add it.
+*/
 static void fsPageAddToLru(FileSystem *pFS, Page *pPg){
   assert( pPg->pLruNext==0 && pPg->pLruPrev==0 );
   pPg->pLruPrev = pFS->pLruLast;
@@ -505,7 +563,7 @@ static int fsPageBuffer(
 ){
   int rc = LSM_OK;
   Page *pPage = 0;
-  if( pFS->pLruFirst==0 || pFS->nCacheAlloc<pFS->nCacheMax ){
+  if( pFS->bUseMmap || pFS->pLruFirst==0 || pFS->nCacheAlloc<pFS->nCacheMax ){
     pPage = lsmMallocZero(pFS->pEnv, sizeof(Page));
     if( !pPage ){
       rc = LSM_NOMEM_BKPT;
@@ -540,35 +598,6 @@ static void fsPageBufferFree(Page *pPg){
     fsPageRemoveFromLru(pPg->pFS, pPg);
   }
   lsmFree(pPg->pFS->pEnv, pPg);
-}
-
-Pgno lsmFsSortedRoot(SortedRun *p){
-  return (p ? p->iRoot : 0);
-}
-
-void lsmFsSortedSetRoot(SortedRun *p, Pgno iRoot){
-  p->iRoot = iRoot;
-}
-
-/*
-** Return the number of pages in sorted file iFile.
-*/
-int lsmFsSortedSize(SortedRun *p){
-  return p->nSize;
-}
-
-/*
-** Return the page number of the first page in the sorted run iFile.
-*/
-int lsmFsFirstPgno(SortedRun *p){
-  return p->iFirst;
-}
-
-/*
-** Return the page number of the last page in the sorted run iFile.
-*/
-int lsmFsLastPgno(SortedRun *p){
-  return p->iLast;
 }
 
 static i64 fsMetaOffset(
@@ -629,14 +658,24 @@ int fsPageGet(
   }
 
   if( p==0 ){
-    rc = fsPageBuffer(pFS, (pFS->bUseMmap==0), &p);
+    /* Set bRequireData to true if a buffer allocated by malloc() is required
+    ** to store the page data (the alternative is to have the Page object
+    ** carry a pointer into the mapped region at FileSystem.pMap). In 
+    ** non-mmap mode, this should always be true. In mmap mode, it should
+    ** always be false for readable pages (noContent==0), but may be set
+    ** to either true or false for appended pages (noContent==1). Setting
+    ** it to true in this case causes LSM to do "double-buffered" writes. */
+    int bRequireData = (pFS->bUseMmap==0);
 
+    rc = fsPageBuffer(pFS, bRequireData, &p);
     if( rc==LSM_OK ){
       p->iPg = iPg;
       p->nRef = 0;
       p->pFS = pFS;
+      assert( p->flags==0 || p->flags==PAGE_FREE );
+      if( fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg) ) p->flags |= PAGE_SHORT;
 
-      if( pFS->bUseMmap ){
+      if( pFS->bUseMmap && bRequireData==0 ){
         i64 iEnd = (i64)iPg * pFS->nPagesize;
         fsGrowMapping(pFS, iEnd, &rc);
         if( rc==LSM_OK ){
@@ -847,12 +886,21 @@ void lsmFsGobble(
 
 /*
 ** The first argument to this function is a valid reference to a database
-** file page that is part of a segment. This function attempts to locate and
-** load the next page in the same segment. If successful, *ppNext is set to 
-** point to the next page handle and LSM_OK is returned.
+** file page that is part of a sorted run. If parameter eDir is -1, this 
+** function attempts to locate and load the previous page in the same run. 
+** Or, if eDir is +1, it attempts to find the next page in the same run.
+** The results of passing an eDir value other than positive or negative one
+** are undefined.
 **
-** Or, if an error occurs, *ppNext is set to NULL and and lsm error code
-** returned.
+** If parameter pRun is not NULL then it must point to the run that page
+** pPg belongs to. In this case, if pPg is the first or last page of the
+** run, and the request is for the previous or next page, respectively,
+** *ppNext is set to NULL before returning LSM_OK. If pRun is NULL, then it
+** is assumed that the next or previous page, as requested, exists.
+**
+** If the previous/next page does exist and is successfully loaded, *ppNext
+** is set to point to it and LSM_OK is returned. Otherwise, if an error 
+** occurs, *ppNext is set to NULL and and lsm error code returned.
 **
 ** Page references returned by this function should be released by the 
 ** caller using lsmFsPageRelease().
@@ -1276,6 +1324,9 @@ int lsmFsPageWrite(Page *pPg){
   return LSM_OK;
 }
 
+/*
+** Return true if page is currently writable.
+*/
 int lsmFsPageWritable(Page *pPg){
   return (pPg->flags & PAGE_DIRTY) ? 1 : 0;
 }
@@ -1293,7 +1344,12 @@ int lsmFsPagePersist(Page *pPg){
     }else if( pPg->flags & PAGE_FREE ){
       fsGrowMapping(pFS, iOff + pFS->nPagesize, &rc);
       if( rc==LSM_OK ){
-        memcpy(&((u8 *)(pFS->pMap))[iOff], pPg->aData, pFS->nPagesize);
+        u8 *aTo = &((u8 *)(pFS->pMap))[iOff];
+        memcpy(aTo, pPg->aData, pFS->nPagesize);
+        lsmFree(pFS->pEnv, pPg->aData);
+        pPg->aData = aTo;
+        pPg->flags &= ~PAGE_FREE;
+        fsPageAddToLru(pFS, pPg);
       }
     }
     pPg->flags &= ~PAGE_DIRTY;
@@ -1368,6 +1424,9 @@ void lsmFsSortedPhantomFree(FileSystem *pFS){
   }
 }
 
+/*
+** fsync() the database file.
+*/
 int lsmFsSyncDb(FileSystem *pFS){
   return lsmEnvSync(pFS->pEnv, pFS->fdDb);
 }
@@ -1400,20 +1459,33 @@ void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
   }
 } 
 
-lsm_env *lsmFsEnv(FileSystem *pFS) { return pFS->pEnv; }
-lsm_env *lsmPageEnv(Page *pPg) { return pPg->pFS->pEnv; }
-
-static SortedRun *startsWith(SortedRun *pRun, Pgno iFirst){
-  return (iFirst==pRun->iFirst) ? pRun : 0;
+/*
+** Return a copy of the environment pointer used by the file-system object.
+*/
+lsm_env *lsmFsEnv(FileSystem *pFS) { 
+  return pFS->pEnv; 
 }
 
 /*
-** Sector-size routine.
+** Return a copy of the environment pointer used by the file-system object
+** to which this page belongs.
+*/
+lsm_env *lsmPageEnv(Page *pPg) { 
+  return pPg->pFS->pEnv; 
+}
+
+/*
+** Return the sector-size as reported by the log file handle.
 */
 int lsmFsSectorSize(FileSystem *pFS){
   return lsmEnvSectorSize(pFS->pEnv, pFS->fdLog);
 }
 
+/*
+** This function implements the lsm_config(LSM_CONFIG_MMAP) request. This
+** setting may only be modified if there are currently no outstanding page
+** references.
+*/
 int lsmConfigMmap(lsm_db *pDb, int *piParam){
   int iNew = *piParam;
   FileSystem *pFS = pDb->pFS;
@@ -1424,6 +1496,21 @@ int lsmConfigMmap(lsm_db *pDb, int *piParam){
   return LSM_OK;
 }
 
+/*
+** Helper function for lsmInfoArrayStructure().
+*/
+static SortedRun *startsWith(SortedRun *pRun, Pgno iFirst){
+  return (iFirst==pRun->iFirst) ? pRun : 0;
+}
+
+/*
+** This function implements the lsm_info(LSM_INFO_ARRAY_STRUCTURE) request.
+** If successful, *pzOut is set to point to a nul-terminated string 
+** containing the array structure and LSM_OK is returned. The caller should
+** eventually free the string using lsmFree().
+**
+** If an error occurs, *pzOut is set to NULL and an LSM error code returned.
+*/
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   int rc = LSM_OK;
   Snapshot *pWorker;              /* Worker snapshot */
@@ -1431,6 +1518,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   SortedRun *pArray = 0;          /* Array to report on */
   Level *pLvl;                    /* Used to iterate through db levels */
 
+  *pzOut = 0;
   if( iFirst==0 ) return LSM_ERROR;
 
   /* Obtain the worker snapshot */

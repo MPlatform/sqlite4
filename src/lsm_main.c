@@ -196,7 +196,7 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
 
     /* Open the database file */
     if( rc==LSM_OK ){
-      rc = lsmFsOpen(pDb, zFilename, LSM_PAGE_SIZE);
+      rc = lsmFsOpen(pDb, zFilename);
     }
 
     if( rc==LSM_OK ){

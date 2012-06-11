@@ -40,9 +40,10 @@
 ** Default values for various data structure parameters. These may be
 ** overridden by calls to lsm_config().
 */
-#define LSM_PAGE_SIZE  4096
-#define LSM_TREE_BYTES (2 * 1024 * 1024)
-#define LSM_ECOLA      4
+#define LSM_PAGE_SIZE   4096
+#define LSM_BLOCK_SIZE  (2 * 1024 * 1024)
+#define LSM_TREE_BYTES  (2 * 1024 * 1024)
+#define LSM_ECOLA       4
 
 #define LSM_DEFAULT_LOG_SIZE (128*1024)
 
@@ -370,7 +371,7 @@ int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 /**************************************************************************
 ** Start of functions from "lsm_file.c".
 */
-int lsmFsOpen(lsm_db *, const char *, int);
+int lsmFsOpen(lsm_db *, const char *);
 void lsmFsClose(FileSystem *);
 
 int lsmFsBlockSize(FileSystem *);
@@ -382,7 +383,6 @@ void lsmFsSetPageSize(FileSystem *, int);
 /* Creating, populating, gobbling and deleting sorted runs. */
 int lsmFsSortedPhantom(FileSystem *, SortedRun *);
 void lsmFsSortedPhantomFree(FileSystem *pFS);
-void lsmFsSortedSetRoot(SortedRun *, Pgno);
 void lsmFsGobble(Snapshot *, SortedRun *, Page *);
 int lsmFsSortedDelete(FileSystem *, Snapshot *, int, SortedRun *);
 int lsmFsSortedFinish(FileSystem *, Snapshot *, SortedRun *);
@@ -402,11 +402,6 @@ int lsmFsSetupAppendList(lsm_db *db);
 int lsmFsDbPageGet(FileSystem *, SortedRun *, Pgno, Page **);
 int lsmFsDbPageNext(SortedRun *, Page *, int eDir, Page **);
 int lsmFsDbPageEnd(FileSystem *, SortedRun *, int bLast, Page **);
-
-Pgno lsmFsFirstPgno(SortedRun *);
-Pgno lsmFsLastPgno(SortedRun *);
-Pgno lsmFsSortedRoot(SortedRun *);
-int lsmFsSortedSize(SortedRun *);
 
 int lsmFsPageWrite(Page *);
 u8 *lsmFsPageData(Page *, int *);

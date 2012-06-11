@@ -2481,10 +2481,9 @@ static int mergeWorkerBuildHierarchy(MergeWorker *pMW){
 
     if( pMW->nHier>0 ){
       Page *pRoot = pMW->apHier[pMW->nHier-1];
-      lsmFsSortedSetRoot(pRun, lsmFsPageNumber(pRoot));
+      pRun->iRoot = lsmFsPageNumber(pRoot);
     }else{
-      Pgno iRoot = lsmFsFirstPgno(pRun);
-      lsmFsSortedSetRoot(pRun, iRoot);
+      pRun->iRoot = pRun->iFirst;
     }
 
     lsmFsPageRelease(pPg);
@@ -3533,10 +3532,10 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
 ** be freed by the caller using lsmFree().
 */
 static char *segToString(lsm_env *pEnv, SortedRun *pRun, int nMin){
-  int nSize = lsmFsSortedSize(pRun);
-  Pgno iRoot = lsmFsSortedRoot(pRun);
-  Pgno iFirst = lsmFsFirstPgno(pRun);
-  Pgno iLast = lsmFsLastPgno(pRun);
+  int nSize = pRun->nSize;
+  Pgno iRoot = pRun->iRoot;
+  Pgno iFirst = pRun->iFirst;
+  Pgno iLast = pRun->iLast;
   char *z;
 
   char *z1;
@@ -4216,7 +4215,7 @@ static void assertAllBtreesOk(int rc, lsm_db *pDb){
     Level *p;
     for(p=pDb->pLevel; p; p=p->pNext){
       SortedRun *pSep = p->lhs.pSep;
-      Pgno iRoot = lsmFsSortedRoot(pSep);
+      Pgno iRoot = pSep->iRoot;
       if( pSep && iRoot ){
         assertBtreeRanges(pDb, pSep, iRoot, 0, 0, 0, 0);
         assertBtreeSize(pDb->pFS, pSep, iRoot);
