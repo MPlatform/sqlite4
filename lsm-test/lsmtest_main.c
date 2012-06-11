@@ -588,7 +588,7 @@ int do_speed_tests(int nArg, char **azArg){
       if( pLsm ){
         int bMmap = 0;
         int nLimit = 2 * 1024 * 1024;
-        int eSafety = 0;
+        int eSafety = 1;
         lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nLimit);
         lsm_config(pLsm, LSM_CONFIG_SAFETY, &eSafety);
         lsm_config(pLsm, LSM_CONFIG_MMAP, &bMmap);

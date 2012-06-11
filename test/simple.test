@@ -1386,6 +1386,33 @@ do_test 71.4 {
   expr {[file size test.db] < 256*1024}
 } {1}
 
+#-------------------------------------------------------------------------
+# This is testing that the "phantom" runs feature works with mmap.
+reset_db
+
+do_test 72.0.1 { sqlite4_lsm_config db main mmap   } 0
+do_test 72.0.2 { sqlite4_lsm_config db main mmap 1 } 1
+do_test 72.0.3 { sqlite4_lsm_config db main mmap   } 1
+
+do_execsql_test 72.1 {
+  CREATE TABLE t1(x);
+  INSERT INTO t1 VALUES(randomblob(1024));           --   1
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --   2
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --   4
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --   8
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --  16
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --  32
+  INSERT INTO t1 SELECT randomblob(1024) FROM t1;    --  64
+}
+do_execsql_test 72.2 { SELECT count(*) FROM t1 } 64
+db close
+
+sqlite4 db test.db
+do_execsql_test 72.3 { SELECT count(*) FROM t1 } 64
+do_test 72.4 { 
+  expr {[file size test.db] < 256*1024}
+} {1}
+
 finish_test
 
 

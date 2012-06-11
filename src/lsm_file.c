@@ -30,27 +30,6 @@
 ** in contiguous block-sized chunks.
 **
 **
-** TWO FILE DATABASE FORMAT:
-**
-** The database is stored in two files - the db file and the log file. 
-** Sometimes, the log file is zero bytes in size or completely absent.
-**
-** The database file is broken into pages and blocks. Data is read a
-** page at a time. When the database is written, at attempt is made to
-** write at least one block sequentially before moving the disk head to
-** write elsewhere. Plausible example sizes are 4KB for pages and 2MB 
-** for blocks.
-**
-** Any page in the database file may be identified by its absolute 
-** page number. FC pointers are absolute page numbers.
-**
-** Space within the file is allocated and freed on a per-block basis.
-** Once an existing block is free it is eligible for reuse.
-**
-** Say, for now, that a checkpoint is always stored in the log file. 
-** Either at the start of it or the end. Only sorted runs are stored in 
-** the database file.
-**
 **
 ** BLOCK ALLOCATION AND TRACKING
 **
@@ -108,11 +87,10 @@
 
 #define FS_MAX_PHANTOM_PAGES 32
 
-typedef struct PhantomRun PhantomRun;
-
 /* 
 ** A phantom-run under construction.
 */
+typedef struct PhantomRun PhantomRun;
 struct PhantomRun {
   SortedRun *pRun;                /* Accompanying SortedRun object */
   int nPhantom;                   /* Number of pages in run */
@@ -121,16 +99,21 @@ struct PhantomRun {
   Page *pLast;                    /* Current last page in phantom run */
 };
 
+/*
+** File-system object. Each database connection allocates a single instance
+** of the following structure. It is used for all access to the database and
+** log files.
+*/
 struct FileSystem {
-  lsm_db *pDb;
-  lsm_env *pEnv;
-
+  lsm_db *pDb;                    /* Database handle that owns this object */
+  lsm_env *pEnv;                  /* Environment pointer */
   char *zDb;                      /* Database file name */
   int nMetasize;                  /* Size of meta pages in bytes */
   int nPagesize;                  /* Database page-size in bytes */
   int nBlocksize;                 /* Database block-size in bytes */
+  PhantomRun phantom;             /* Phantom run currently under construction */
 
-  /* r/w file descriptors for both files */
+  /* r/w file descriptors for both files. */
   lsm_file *fdDb;                 /* Database file */
   lsm_file *fdLog;                /* Log file */
 
@@ -138,8 +121,6 @@ struct FileSystem {
   int bUseMmap;                   /* True to use mmap() to access db file */
   void *pMap;                     /* Current mapping of database file */
   i64 nMap;                       /* Bytes mapped at pMap */
-
-  PhantomRun *pPhantom;           /* Phantom run currently being constructed */
 
   /* Statistics */
   int nWrite;                     /* Total number of pages written */
@@ -153,47 +134,49 @@ struct FileSystem {
   Page *pLruLast;                 /* Tail of the LRU list */
   int nHash;                      /* Number of hash slots in hash table */
   Page **apHash;                  /* nHash Hash slots */
-
-  /* All (both) meta pages are stored in the following singly linked-list. 
-  ** The list is connected using the Page->pHashNext pointers. */
-  Page *pMeta;
 };
 
+/*
+** Database page handle.
+*/
 struct Page {
   u8 *aData;                      /* Buffer containing page data */
-
   int iPg;                        /* Page number */
-  int eType;
-
   int nRef;                       /* Number of outstanding references */
   int flags;                      /* Combination of PAGE_XXX flags */
-
   Page *pHashNext;                /* Next page in hash table slot */
   Page *pLruNext;                 /* Next page in LRU list */
   Page *pLruPrev;                 /* Previous page in LRU list */
   FileSystem *pFS;                /* File system that owns this page */
 };
 
+/*
+** Meta-data page handle. There are two meta-data pages at the start of
+** the database file, each FileSystem.nMetasize bytes in size.
+*/
+struct MetaPage {
+  int iPg;                        /* Either 1 or 2 */
+  int bWrite;                     /* Write back to db file on release */
+  u8 *aData;                      /* Pointer to buffer */
+  FileSystem *pFS;                /* FileSystem that owns this page */
+};
+
 /* 
 ** Values for LsmPage.flags 
 */
-#define PAGE_DIRTY 0x00000001
-
-/*
-** Values for Page.eType.
-*/
-#define LSM_CKPT_FILE 1
-#define LSM_DB_FILE 3
+#define PAGE_DIRTY 0x00000001     /* Set if page is dirty */
+#define PAGE_FREE  0x00000002     /* Set if Page.aData requires lsmFree() */
 
 /*
 ** Number of pgsz byte pages omitted from the start of block 1.
 */
 #define BLOCK1_HDR_SIZE(pgsz)  MAX(1, 8192/(pgsz))
 
-#define isPhantom(pFS, pSorted) (                                    \
-    (pFS)->pPhantom && (pFS)->pPhantom->pRun==(pSorted)              \
-)
-
+/*
+** Return true if the SortedRun passed as the second argument is a phantom
+** run currently being constructed by FileSystem object pFS.
+*/
+#define isPhantom(pFS, pSorted) ((pSorted) && (pFS)->phantom.pRun==(pSorted))
 
 /*
 ** Wrappers around the VFS methods of the lsm_env object.
@@ -377,15 +360,6 @@ void lsmFsClose(FileSystem *pFS){
       pPg = pNext;
     }
 
-    pPg = pFS->pMeta;
-    while( pPg ){
-      Page *pNext = pPg->pHashNext;
-      assert( pPg->nRef==0 );
-      lsmFree(pEnv, pPg->aData);
-      lsmFree(pEnv, pPg);
-      pPg = pNext;
-    }
-
     if( pFS->fdDb ) lsmEnvClose(pFS->pEnv, pFS->fdDb );
     if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
 
@@ -464,23 +438,13 @@ static int fsIsFirst(FileSystem *pFS, Pgno iPg){
 u8 *lsmFsPageData(Page *pPage, int *pnData){
   if( pnData ){
     FileSystem *pFS = pPage->pFS;
-    switch( pPage->eType ){
-      case LSM_CKPT_FILE:
-        *pnData = pFS->nMetasize;
-        break;
-      default: {
-        /* If this page is the first or last of its block, then it is 4
-        ** bytes smaller than the usual pFS->nPagesize bytes. 
-        */
-        int nReserve = 0;
-        assert( pPage->eType==LSM_DB_FILE );
-        if( fsIsFirst(pFS, pPage->iPg) || fsIsLast(pFS, pPage->iPg) ){
-          nReserve = 4;
-        }
-        *pnData = pFS->nPagesize - nReserve;
-        break;
-      }
+    /* If this page is the first or last of its block, then it is 4
+    ** bytes smaller than the usual pFS->nPagesize bytes.  */
+    int nReserve = 0;
+    if( fsIsFirst(pFS, pPage->iPg) || fsIsLast(pFS, pPage->iPg) ){
+      nReserve = 4;
     }
+    *pnData = pFS->nPagesize - nReserve;
   }
   return pPage->aData;
 }
@@ -545,6 +509,7 @@ static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
       int nByte;
       nByte = (bMeta ? pFS->nMetasize : pFS->nPagesize);
       pPage->aData = (u8 *)lsmMalloc(pFS->pEnv, nByte);
+      pPage->flags = PAGE_FREE;
       if( !pPage->aData ){
         lsmFree(pFS->pEnv, pPage);
         rc = LSM_NOMEM_BKPT;
@@ -560,14 +525,16 @@ static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
     fsPageRemoveFromHash(pFS, pPage);
   }
 
+  assert( pPage==0 || (pPage->flags & PAGE_DIRTY)==0 );
   *ppOut = pPage;
   return rc;
 }
 
 static void fsPageBufferFree(Page *pPg){
-  if( pPg->pFS->bUseMmap==0 ){
+  if( pPg->flags & PAGE_FREE ){
     lsmFree(pPg->pFS->pEnv, pPg->aData);
-  }else{
+  }
+  if( pPg->pFS->bUseMmap ){
     fsPageRemoveFromLru(pPg->pFS, pPg);
   }
   lsmFree(pPg->pFS->pEnv, pPg);
@@ -617,6 +584,25 @@ int fsPageToBlock(FileSystem *pFS, Pgno iPg){
 }
 
 
+static void fsGrowMapping(
+  FileSystem *pFS,
+  i64 iSz,
+  int *pRc
+){
+  if( *pRc==LSM_OK && iSz>pFS->nMap ){
+    Page *pFix;
+    int rc;
+    rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iSz, &pFS->pMap, &pFS->nMap);
+    if( rc==LSM_OK ){
+      u8 *aData = (u8 *)pFS->pMap;
+      for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
+        pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
+      }
+    }
+    *pRc = rc;
+  }
+}
+
 /*
 ** Return a handle for a database page.
 */
@@ -646,22 +632,11 @@ int fsPageGet(
     if( rc==LSM_OK ){
       p->iPg = iPg;
       p->nRef = 0;
-      p->flags = 0;
       p->pFS = pFS;
-      p->eType = LSM_DB_FILE;
 
       if( pFS->bUseMmap ){
         i64 iEnd = (i64)iPg * pFS->nPagesize;
-        if( iEnd>pFS->nMap ){
-          Page *pFix;
-          rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iEnd, &pFS->pMap, &pFS->nMap);
-          if( rc==LSM_OK ){
-            u8 *aData = (u8 *)pFS->pMap;
-            for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
-              pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
-            }
-          }
-        }
+        fsGrowMapping(pFS, iEnd, &rc);
         if( rc==LSM_OK ){
           p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (i64)(iPg-1)];
         }
@@ -1024,7 +999,7 @@ int lsmFsPhantomMaterialize(
 ){
   int rc = LSM_OK;
   if( isPhantom(pFS, p) ){
-    PhantomRun *pPhantom = pFS->pPhantom;
+    PhantomRun *pPhantom = &pFS->phantom;
     Page *pPg;
     Page *pNext;
     int i;
@@ -1044,7 +1019,6 @@ int lsmFsPhantomMaterialize(
       iFirst = fsFirstPageOnBlock(pFS, iNew) + 1;
     }
 
-    pFS->pPhantom = 0;
     p->iFirst = iFirst;
     p->iLast = iFirst + pPhantom->nPhantom - 1;
     assert( 0==fsIsFirst(pFS, p->iFirst) && 0==fsIsLast(pFS, p->iFirst) );
@@ -1067,7 +1041,7 @@ int lsmFsPhantomMaterialize(
     assert( i==p->iLast+1 );
 
     p->nSize = pPhantom->nPhantom;
-    lsmFree(pFS->pEnv, pPhantom);
+    memset(&pFS->phantom, 0, sizeof(PhantomRun));
   }
   return rc;
 }
@@ -1101,33 +1075,25 @@ int lsmFsSortedAppend(
 ){
   int rc = LSM_OK;
   Page *pPg = 0;
-  PhantomRun *pPhantom = 0;
   *ppOut = 0;
 
   if( isPhantom(pFS, p) ){
-    pPhantom = pFS->pPhantom;
-  }
-
-  if( pPhantom ){
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
     int nLimit = (nPagePerBlock - 2 - (fsFirstPageOnBlock(pFS, 1)-1) );
 
-    if( pPhantom->nPhantom>=nLimit ){ 
+    if( pFS->phantom.nPhantom>=nLimit ){ 
       rc = lsmFsPhantomMaterialize(pFS, pSnapshot, p);
-      if( rc!=LSM_OK ){
-        return rc;
-      }
-      pPhantom = 0;
+      if( rc!=LSM_OK ) return rc;
     }
   }
 
-  if( pPhantom ){
+  if( isPhantom(pFS, p) ){
     rc = fsPageBuffer(pFS, 0, &pPg);
     if( rc==LSM_OK ){
+      PhantomRun *pPhantom = &pFS->phantom;
       pPg->iPg = 0;
-      pPg->eType = LSM_DB_FILE;
       pPg->nRef = 1;
-      pPg->flags = PAGE_DIRTY;
+      pPg->flags |= PAGE_DIRTY;
       pPg->pHashNext = 0;
       pPg->pLruNext = 0;
       pPg->pLruPrev = 0;
@@ -1202,7 +1168,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
   if( p ){
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
 
-    if( pFS->pPhantom ) pFS->pPhantom->bRunFinished = 1;
+    if( pFS->phantom.pRun ) pFS->phantom.bRunFinished = 1;
 
     /* Check if the last page of this run happens to be the last of a block.
     ** If it is, then an extra block has already been allocated for this run.
@@ -1240,43 +1206,63 @@ int lsmFsDbPageGet(FileSystem *pFS, SortedRun *p, int iLoad, Page **ppPg){
 ** Otherwise, if an error occurs, *ppPg is set to NULL and an LSM error 
 ** code is returned.
 */
-int lsmFsMetaPageGet(FileSystem *pFS, int iPg, Page **ppPg){
+int lsmFsMetaPageGet(
+  FileSystem *pFS,                /* File-system connection */
+  int bWrite,                     /* True for write access, false for read */
+  int iPg,                        /* Either 1 or 2 */
+  MetaPage **ppPg                 /* OUT: Pointer to MetaPage object */
+){
   int rc = LSM_OK;
-  Page *pPg;
+  MetaPage *pPg;
+  i64 iOff;
   assert( iPg==1 || iPg==2 );
 
-  /* Search the linked list for the requested page. */
-  for(pPg=pFS->pMeta; pPg && pPg->iPg!=iPg; pPg=pPg->pHashNext);
+  iOff = (iPg-1) * pFS->nMetasize;
+  pPg = lsmMallocZeroRc(pFS->pEnv, sizeof(Page), &rc);
 
-  /* If the page was not found, allocate it. */
-  if( pPg==0 ){
-    i64 iOff;
-
-    pPg = lsmMallocZeroRc(pFS->pEnv, sizeof(Page), &rc);
-    if( rc ) goto meta_page_out;
-    pPg->aData = lsmMallocZeroRc(pFS->pEnv, pFS->nMetasize, &rc);
-    if( rc ) goto meta_page_out;
-    iOff = fsMetaOffset(pFS, iPg);
-    rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
-    if( rc ) goto meta_page_out;
-
-    pPg->iPg = iPg;
-    pPg->eType = LSM_CKPT_FILE;
-    pPg->pFS = pFS;
-    pPg->pHashNext = pFS->pMeta;
-    pFS->pMeta = pPg;
+  if( pFS->bUseMmap ){
+    fsGrowMapping(pFS, 2*pFS->nMetasize, &rc);
+    pPg->aData = (u8 *)(pFS->pMap) + iOff;
+  }else{
+    pPg->aData = lsmMallocRc(pFS->pEnv, pFS->nMetasize, &rc);
+    if( rc==LSM_OK && bWrite==0 ){
+      rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
+    }
   }
 
-meta_page_out:
-  if( rc==LSM_OK ){
-    pPg->nRef++;
-  }else if( pPg ){
-    lsmFree(pFS->pEnv, pPg->aData);
+  if( rc!=LSM_OK ){
+    if( pFS->bUseMmap==0 ) lsmFree(pFS->pEnv, pPg->aData);
     lsmFree(pFS->pEnv, pPg);
     pPg = 0;
+  }else{
+    pPg->iPg = iPg;
+    pPg->bWrite = bWrite;
+    pPg->pFS = pFS;
   }
+
   *ppPg = pPg;
   return rc;
+}
+
+int lsmFsMetaPageRelease(MetaPage *pPg){
+  int rc = LSM_OK;
+  FileSystem *pFS = pPg->pFS;
+
+  if( pFS->bUseMmap==0 ){
+    if( pPg->bWrite ){
+      i64 iOff = (pPg->iPg==2 ? pFS->nMetasize : 0);
+      rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
+    }
+    lsmFree(pFS->pEnv, pPg->aData);
+  }
+
+  lsmFree(pFS->pEnv, pPg);
+  return rc;
+}
+
+u8 *lsmFsMetaPageData(MetaPage *pPg, int *pnData){
+  if( pnData ) *pnData = pPg->pFS->nMetasize;
+  return pPg->aData;
 }
 
 /*
@@ -1297,16 +1283,10 @@ int lsmFsPagePersist(Page *pPg){
   int rc = LSM_OK;
   if( pPg && (pPg->flags & PAGE_DIRTY) ){
     FileSystem *pFS = pPg->pFS;
-    int eType = pPg->eType;
-
-    if( eType==LSM_CKPT_FILE ){
-      i64 iOff;
-      iOff = fsMetaOffset(pFS, pPg->iPg);
-      rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
-    }else{
+    if( pFS->bUseMmap==0 ){
       i64 iOff;                 /* Offset to write within database file */
       iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
-      rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nPagesize);
+      rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData,pFS->nPagesize);
     }
     pPg->flags &= ~PAGE_DIRTY;
     pFS->nWrite++;
@@ -1337,17 +1317,15 @@ int lsmFsPageRelease(Page *pPg){
       FileSystem *pFS = pPg->pFS;
       rc = lsmFsPagePersist(pPg);
 
-      if( pPg->eType!=LSM_CKPT_FILE ){
-        pFS->nOut--;
-        assert( pFS->bUseMmap || pPg->pLruNext==0 );
-        assert( pFS->bUseMmap || pPg->pLruPrev==0 );
+      pFS->nOut--;
+      assert( pFS->bUseMmap || pPg->pLruNext==0 );
+      assert( pFS->bUseMmap || pPg->pLruPrev==0 );
 #if 0
-        fsPageAddToLru(pFS, pPg);
+      fsPageAddToLru(pFS, pPg);
 #else
-        fsPageRemoveFromHash(pFS, pPg);
-        fsPageBufferFree(pPg);
+      fsPageRemoveFromHash(pFS, pPg);
+      fsPageBufferFree(pPg);
 #endif
-      }
     }
   }
 
@@ -1355,41 +1333,32 @@ int lsmFsPageRelease(Page *pPg){
 }
 
 /*
-** Read only access to the number of pages read/written statistics.
+** Return the total number of pages read from the database file.
 */
-int lsmFsNRead(FileSystem *pFS){
-  return pFS->nWrite;
-}
-int lsmFsNWrite(FileSystem *pFS){
-  return pFS->nRead;
-}
+int lsmFsNRead(FileSystem *pFS){ return pFS->nRead; }
+
+/*
+** Return the total number of pages written to the database file.
+*/
+int lsmFsNWrite(FileSystem *pFS){ return pFS->nWrite; }
 
 int lsmFsSortedPhantom(FileSystem *pFS, SortedRun *pRun){
-  int rc = LSM_OK;
   if( pFS->bUseMmap==0 ){
-    PhantomRun *p;                /* New phantom run object */
-
-    p = (PhantomRun *)lsmMallocZeroRc(pFS->pEnv, sizeof(PhantomRun), &rc);
-    if( p ){
-      p->pRun = pRun;
-    }
-    assert( pFS->pPhantom==0 );
-    pFS->pPhantom = p;
+    assert( pFS->phantom.pRun==0 );
+    pFS->phantom.pRun = pRun;
   }
-  return rc;
+  return LSM_OK;
 }
 
 void lsmFsSortedPhantomFree(FileSystem *pFS){
-  PhantomRun *p = pFS->pPhantom;
-  if( p ){
+  if( pFS->phantom.pRun ){
     Page *pPg;
     Page *pNext;
-    for(pPg=p->pFirst; pPg; pPg=pNext){
+    for(pPg=pFS->phantom.pFirst; pPg; pPg=pNext){
       pNext = pPg->pHashNext;
       fsPageBufferFree(pPg);
     }
-    lsmFree(pFS->pEnv, p);
-    pFS->pPhantom = 0;
+    memset(&pFS->phantom, 0, sizeof(PhantomRun));
   }
 }
 

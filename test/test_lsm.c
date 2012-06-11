@@ -35,6 +35,7 @@ static int test_lsm_config(
     { "log-size",       LSM_CONFIG_LOG_SIZE }, 
     { "safety",         LSM_CONFIG_SAFETY }, 
     { "write-buffer",   LSM_CONFIG_WRITE_BUFFER }, 
+    { "mmap",           LSM_CONFIG_MMAP }, 
     { 0, 0 }
   };
 

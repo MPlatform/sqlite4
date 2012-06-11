@@ -64,6 +64,7 @@ typedef struct LogRegion LogRegion;
 typedef struct LogWriter LogWriter;
 typedef struct LsmString LsmString;
 typedef struct Mempool Mempool;
+typedef struct MetaPage MetaPage;
 typedef struct MultiCursor MultiCursor;
 typedef struct Page Page;
 typedef struct Segment Segment;
@@ -417,8 +418,9 @@ Pgno lsmFsPageNumber(Page *);
 int lsmFsNRead(FileSystem *);
 int lsmFsNWrite(FileSystem *);
 
-int lsmFsMetaPageGet(FileSystem *, int, Page **);
-int lsmFsLogPageGet(FileSystem *, int, Page **);
+int lsmFsMetaPageGet(FileSystem *, int, int, MetaPage **);
+int lsmFsMetaPageRelease(MetaPage *);
+u8 *lsmFsMetaPageData(MetaPage *, int *);
 
 #ifdef LSM_EXPENSIVE_DEBUG
 int lsmFsIntegrityCheck(lsm_db *);
@@ -438,6 +440,7 @@ int lsmFsCloseAndDeleteLog(FileSystem *pFS);
 /* And to sync the db file */
 int lsmFsSyncDb(FileSystem *);
 
+/* Used by lsm_info(ARRAY_STRUCTURE) and lsm_config(MMAP) */
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmConfigMmap(lsm_db *pDb, int *piParam);
 

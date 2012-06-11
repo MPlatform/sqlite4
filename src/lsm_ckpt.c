@@ -595,16 +595,16 @@ static i64 ckptReadId(
 
   assert( iSlot==1 || iSlot==2 );
   if( *pRc==LSM_OK ){
-    Page *pPg;                    /* Meta page for slot iSlot */
-    *pRc = lsmFsMetaPageGet(pDb->pFS, iSlot, &pPg);
+    MetaPage *pPg;                    /* Meta page for slot iSlot */
+    *pRc = lsmFsMetaPageGet(pDb->pFS, 0, iSlot, &pPg);
     if( *pRc==LSM_OK ){
-      u8 *aData = lsmFsPageData(pPg, 0);
+      u8 *aData = lsmFsMetaPageData(pPg, 0);
 
       iId = (i64)lsmGetU32(&aData[CKPT_HDR_ID_MSW*4]) << 32;
       iId += (i64)lsmGetU32(&aData[CKPT_HDR_ID_LSW*4]);
       *pnInt = (int)lsmGetU32(&aData[CKPT_HDR_NCKPT*4]);
 
-      lsmFsPageRelease(pPg);
+      lsmFsMetaPageRelease(pPg);
     }
   }
   return iId;
@@ -639,18 +639,18 @@ static int ckptTryRead(
       aRem = (u8 *)aCkpt;
       iPg = iSlot;
       while( rc==LSM_OK && nRem ){
-        Page *pPg;
-        rc = lsmFsMetaPageGet(pDb->pFS, iPg, &pPg);
+        MetaPage *pPg;
+        rc = lsmFsMetaPageGet(pDb->pFS, 0, iPg, &pPg);
         if( rc==LSM_OK ){
           int nCopy;
           int nData;
-          u8 *aData = lsmFsPageData(pPg, &nData);
+          u8 *aData = lsmFsMetaPageData(pPg, &nData);
 
           nCopy = MIN(nRem, nData);
           memcpy(aRem, aData, nCopy);
           aRem += nCopy;
           nRem -= nCopy;
-          lsmFsPageRelease(pPg);
+          lsmFsMetaPageRelease(pPg);
         }
         iPg += 2;
       }

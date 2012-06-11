@@ -973,7 +973,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   if( pSnap ){
     FileSystem *pFS = pDb->pFS;   /* File system object */
     int iPg = 1;                  /* TODO */
-    Page *pPg = 0;                /* Page to write to */
+    MetaPage *pPg = 0;            /* Page to write to */
     int doSync;                   /* True to sync the db */
 
     /* If the safety mode is "off", omit calls to xSync(). */
@@ -986,21 +986,20 @@ int lsmCheckpointWrite(lsm_db *pDb){
     if( doSync ) rc = lsmFsSyncDb(pFS);
 
     /* Fetch a reference to the meta-page to write the checkpoint to. */
-    if( rc==LSM_OK ) rc = lsmFsMetaPageGet(pFS, iPg, &pPg);
-    if( rc==LSM_OK ) rc = lsmFsPageWrite(pPg);
+    if( rc==LSM_OK ) rc = lsmFsMetaPageGet(pFS, 1, iPg, &pPg);
 
     /* Unless an error has occurred, copy the checkpoint blob into the
     ** meta-page, then release the reference to it (which will flush the
     ** checkpoint into the file).  */
     if( rc!=LSM_OK ){
-      lsmFsPageRelease(pPg);
+      lsmFsMetaPageRelease(pPg);
     }else{
       u8 *aData;                  /* Page buffer */
       int nData;                  /* Size of buffer aData[] */
-      aData = lsmFsPageData(pPg, &nData);
+      aData = lsmFsMetaPageData(pPg, &nData);
       assert( pSnap->nExport<=nData );
       memcpy(aData, pSnap->pExport, pSnap->nExport);
-      rc = lsmFsPageRelease(pPg);
+      rc = lsmFsMetaPageRelease(pPg);
       pPg = 0;
     }
 

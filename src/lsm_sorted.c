@@ -2524,6 +2524,7 @@ static int mergeWorkerNextPage(
 
   pRun = (bSep ? &pMW->pLevel->lhs.sep : &pMW->pLevel->lhs.run);
   rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pRun, &pNext);
+  assert( rc!=LSM_OK || bSep || pRun->iFirst>0 );
 
   if( rc==LSM_OK ){
     u8 *aData;                    /* Data buffer belonging to page pNext */
