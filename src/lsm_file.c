@@ -498,17 +498,19 @@ static void fsPageRemoveFromHash(FileSystem *pFS, Page *pPg){
   *pp = pPg->pHashNext;
 }
 
-static int fsPageBuffer(FileSystem *pFS, int bMeta, Page **ppOut){
+static int fsPageBuffer(
+  FileSystem *pFS, 
+  int bRequireData,               /* True to allocate buffer as well */
+  Page **ppOut
+){
   int rc = LSM_OK;
   Page *pPage = 0;
-  if( pFS->bUseMmap || pFS->pLruFirst==0 || pFS->nCacheAlloc<pFS->nCacheMax ){
+  if( pFS->pLruFirst==0 || pFS->nCacheAlloc<pFS->nCacheMax ){
     pPage = lsmMallocZero(pFS->pEnv, sizeof(Page));
     if( !pPage ){
       rc = LSM_NOMEM_BKPT;
-    }else if( pFS->bUseMmap==0 ){
-      int nByte;
-      nByte = (bMeta ? pFS->nMetasize : pFS->nPagesize);
-      pPage->aData = (u8 *)lsmMalloc(pFS->pEnv, nByte);
+    }else if( bRequireData ){
+      pPage->aData = (u8 *)lsmMalloc(pFS->pEnv, pFS->nPagesize);
       pPage->flags = PAGE_FREE;
       if( !pPage->aData ){
         lsmFree(pFS->pEnv, pPage);
@@ -534,7 +536,7 @@ static void fsPageBufferFree(Page *pPg){
   if( pPg->flags & PAGE_FREE ){
     lsmFree(pPg->pFS->pEnv, pPg->aData);
   }
-  if( pPg->pFS->bUseMmap ){
+  else if( pPg->pFS->bUseMmap ){
     fsPageRemoveFromLru(pPg->pFS, pPg);
   }
   lsmFree(pPg->pFS->pEnv, pPg);
@@ -627,7 +629,7 @@ int fsPageGet(
   }
 
   if( p==0 ){
-    rc = fsPageBuffer(pFS, 0, &p);
+    rc = fsPageBuffer(pFS, (pFS->bUseMmap==0), &p);
 
     if( rc==LSM_OK ){
       p->iPg = iPg;
@@ -1088,7 +1090,7 @@ int lsmFsSortedAppend(
   }
 
   if( isPhantom(pFS, p) ){
-    rc = fsPageBuffer(pFS, 0, &pPg);
+    rc = fsPageBuffer(pFS, 1, &pPg);
     if( rc==LSM_OK ){
       PhantomRun *pPhantom = &pFS->phantom;
       pPg->iPg = 0;
@@ -1283,10 +1285,16 @@ int lsmFsPagePersist(Page *pPg){
   int rc = LSM_OK;
   if( pPg && (pPg->flags & PAGE_DIRTY) ){
     FileSystem *pFS = pPg->pFS;
+    i64 iOff;                 /* Offset to write within database file */
+
+    iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
     if( pFS->bUseMmap==0 ){
-      i64 iOff;                 /* Offset to write within database file */
-      iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
       rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData,pFS->nPagesize);
+    }else if( pPg->flags & PAGE_FREE ){
+      fsGrowMapping(pFS, iOff + pFS->nPagesize, &rc);
+      if( rc==LSM_OK ){
+        memcpy(&((u8 *)(pFS->pMap))[iOff], pPg->aData, pFS->nPagesize);
+      }
     }
     pPg->flags &= ~PAGE_DIRTY;
     pFS->nWrite++;
@@ -1343,10 +1351,8 @@ int lsmFsNRead(FileSystem *pFS){ return pFS->nRead; }
 int lsmFsNWrite(FileSystem *pFS){ return pFS->nWrite; }
 
 int lsmFsSortedPhantom(FileSystem *pFS, SortedRun *pRun){
-  if( pFS->bUseMmap==0 ){
-    assert( pFS->phantom.pRun==0 );
-    pFS->phantom.pRun = pRun;
-  }
+  assert( pFS->phantom.pRun==0 );
+  pFS->phantom.pRun = pRun;
   return LSM_OK;
 }
 

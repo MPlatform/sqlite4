@@ -1410,7 +1410,7 @@ db close
 sqlite4 db test.db
 do_execsql_test 72.3 { SELECT count(*) FROM t1 } 64
 do_test 72.4 { 
-  expr {[file size test.db] < 256*1024}
+  expr {[file size test.db] <= 2*1024*1024}
 } {1}
 
 finish_test
