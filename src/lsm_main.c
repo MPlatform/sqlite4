@@ -251,10 +251,14 @@ int lsmFlushToDisk(lsm_db *pDb){
 int lsm_close(lsm_db *pDb){
   int rc = LSM_OK;
   if( pDb ){
-    lsmDbDatabaseRelease(pDb);
-    lsmFsClose(pDb->pFS);
-    lsmFree(pDb->pEnv, pDb->aTrans);
-    lsmFree(pDb->pEnv, pDb);
+    if( pDb->pCsr ){
+      rc = LSM_MISUSE_BKPT;
+    }else{
+      lsmDbDatabaseRelease(pDb);
+      lsmFsClose(pDb->pFS);
+      lsmFree(pDb->pEnv, pDb->aTrans);
+      lsmFree(pDb->pEnv, pDb);
+    }
   }
   return rc;
 }
@@ -538,21 +542,19 @@ int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
 
   /* Allocate the multi-cursor. */
   if( rc==LSM_OK ){
+    pCsr->pDb = pDb;
+    pCsr->pNext = pDb->pCsr;
+    pDb->pCsr = pCsr;
     rc = lsmMCursorNew(pDb, &pCsr->pMC);
   }
 
   /* If an error has occured, set the output to NULL and delete any partially
   ** allocated cursor. If this means there are no open cursors, release the
-  ** client snapshot. Otherwise, link the cursor into the lsm_db.pCsr list.  
-  */
+  ** client snapshot.  */
   if( rc!=LSM_OK ){
     lsm_csr_close(pCsr);
     pCsr = 0;
     dbReleaseClientSnapshot(pDb);
-  }else{
-    pCsr->pNext = pDb->pCsr;
-    pCsr->pDb = pDb;
-    pDb->pCsr = pCsr;
   }
   *ppCsr = pCsr;
 
