@@ -466,22 +466,31 @@ static int ckptLoadLevels(
         int nByte = sizeof(Segment) * pLevel->nRight;
         pLevel->aRhs = (Segment *)lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
       }
-      *ppNext = pLevel;
-      ppNext = &pLevel->pNext;
+      if( rc==LSM_OK ){
+        *ppNext = pLevel;
+        ppNext = &pLevel->pNext;
 
-      /* Allocate the main segment */
-      ckptNewSegment(aIn, &iIn, &pLevel->lhs);
+        /* Allocate the main segment */
+        ckptNewSegment(aIn, &iIn, &pLevel->lhs);
 
-      /* Allocate each of the right-hand segments, if any */
-      for(iRight=0; iRight<pLevel->nRight; iRight++){
-        ckptNewSegment(aIn, &iIn, &pLevel->aRhs[iRight]);
-      }
+        /* Allocate each of the right-hand segments, if any */
+        for(iRight=0; iRight<pLevel->nRight; iRight++){
+          ckptNewSegment(aIn, &iIn, &pLevel->aRhs[iRight]);
+        }
 
-      /* Set up the Merge object, if required */
-      if( pLevel->nRight>0 ){
-        ckptSetupMerge(pDb, aIn, &iIn, pLevel);
+        /* Set up the Merge object, if required */
+        if( pLevel->nRight>0 ){
+          rc = ckptSetupMerge(pDb, aIn, &iIn, pLevel);
+        }
       }
     }
+  }
+
+  if( rc!=LSM_OK ){
+    /* An OOM must have occurred. Free any level structures allocated and
+    ** return the error to the caller. */
+    lsmSortedFreeLevel(pDb->pEnv, pRet);
+    pRet = 0;
   }
 
   *ppLevel = pRet;
@@ -491,51 +500,53 @@ static int ckptLoadLevels(
 
 int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
   int ret = 0;
-  Snapshot *pSnap = pDb->pWorker;
-  FileSystem *pFS = pDb->pFS;
-  u32 cksum[2] = {0, 0};
-  u32 *aInt = (u32 *)pCkpt;
+  if( *pRc==LSM_OK ){
+    Snapshot *pSnap = pDb->pWorker;
+    FileSystem *pFS = pDb->pFS;
+    u32 cksum[2] = {0, 0};
+    u32 *aInt = (u32 *)pCkpt;
 
-  lsmChecksumBytes((u8 *)aInt, sizeof(u32)*(nInt-2), 0, cksum);
-  if( LSM_LITTLE_ENDIAN ){
-    int i;
-    for(i=0; i<nInt; i++) aInt[i] = BYTESWAP32(aInt[i]);
-  }
-
-  if( aInt[nInt-2]==cksum[0] && aInt[nInt-1]==cksum[1] ){
-    int i;
-    int nLevel;
-    int iIn = CKPT_HDRSIZE;
-    i64 iId;
-    u32 *aDelta;
-
-    Level *pTopLevel = 0;
-
-    /* Read header fields */
-    iId = ((i64)aInt[CKPT_HDR_ID_MSW] << 32) + (i64)aInt[CKPT_HDR_ID_LSW];
-    lsmSnapshotSetCkptid(pSnap, iId);
-    nLevel = (int)aInt[CKPT_HDR_NLEVEL];
-    lsmSnapshotSetNBlock(pSnap, (int)aInt[CKPT_HDR_NBLOCK]);
-    lsmFsSetPageSize(pFS, (int)aInt[CKPT_HDR_PGSZ]);
-    lsmFsSetBlockSize(pFS, (int)aInt[CKPT_HDR_BLKSZ]);
-
-    /* Import log offset */
-    ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));
-
-    /* Import each level. This loop runs once for each db level. */
-    *pRc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);
-    lsmDbSnapshotSetLevel(pSnap, pTopLevel);
-
-    /* Import the freelist delta */
-    aDelta = lsmFreelistDeltaPtr(pDb);
-    for(i=0; i<LSM_FREELIST_DELTA_SIZE; i++){
-      aDelta[i] = aInt[iIn++];
+    lsmChecksumBytes((u8 *)aInt, sizeof(u32)*(nInt-2), 0, cksum);
+    if( LSM_LITTLE_ENDIAN ){
+      int i;
+      for(i=0; i<nInt; i++) aInt[i] = BYTESWAP32(aInt[i]);
     }
 
-    ret = 1;
+    if( aInt[nInt-2]==cksum[0] && aInt[nInt-1]==cksum[1] ){
+      int i;
+      int nLevel;
+      int iIn = CKPT_HDRSIZE;
+      i64 iId;
+      u32 *aDelta;
+
+      Level *pTopLevel = 0;
+
+      /* Read header fields */
+      iId = ((i64)aInt[CKPT_HDR_ID_MSW] << 32) + (i64)aInt[CKPT_HDR_ID_LSW];
+      lsmSnapshotSetCkptid(pSnap, iId);
+      nLevel = (int)aInt[CKPT_HDR_NLEVEL];
+      lsmSnapshotSetNBlock(pSnap, (int)aInt[CKPT_HDR_NBLOCK]);
+      lsmFsSetPageSize(pFS, (int)aInt[CKPT_HDR_PGSZ]);
+      lsmFsSetBlockSize(pFS, (int)aInt[CKPT_HDR_BLKSZ]);
+
+      /* Import log offset */
+      ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));
+
+      /* Import each level. This loop runs once for each db level. */
+      *pRc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);
+      lsmDbSnapshotSetLevel(pSnap, pTopLevel);
+
+      /* Import the freelist delta */
+      aDelta = lsmFreelistDeltaPtr(pDb);
+      for(i=0; i<LSM_FREELIST_DELTA_SIZE; i++){
+        aDelta[i] = aInt[iIn++];
+      }
+
+      ret = 1;
+    }
+
+    assert( *pRc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   }
- 
-  assert( *pRc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   return ret;
 }
 
@@ -655,9 +666,9 @@ static int ckptTryRead(
         iPg += 2;
       }
 
-      *pRc = rc;
       ret = ckptImport(pDb, aCkpt, nCkpt, &rc);
       lsmFree(pDb->pEnv, aCkpt);
+      *pRc = rc;
     }
   }
 

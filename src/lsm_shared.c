@@ -341,15 +341,17 @@ static void flRemoveEntry0(Freelist *p){
 ** as the only argument.
 */
 static void freeDatabase(Database *p){
-  /* Free the mutexes */
-  lsmMutexDel(p->pEnv, p->pClientMutex);
-  lsmMutexDel(p->pEnv, p->pWorkerMutex);
+  if( p ){
+    /* Free the mutexes */
+    lsmMutexDel(p->pEnv, p->pClientMutex);
+    lsmMutexDel(p->pEnv, p->pWorkerMutex);
 
-  /* Free the log buffer. */
-  lsmStringClear(&p->log.buf);
+    /* Free the log buffer. */
+    lsmStringClear(&p->log.buf);
 
-  /* Free the memory allocated for the Database struct itself */
-  lsmFree(p->pEnv, p);
+    /* Free the memory allocated for the Database struct itself */
+    lsmFree(p->pEnv, p);
+  }
 }
 
 /*
@@ -390,6 +392,7 @@ int lsmDbDatabaseFind(
 
       /* Initialize the log handle */
       if( rc==LSM_OK ){
+        p->pEnv = pEnv;
         p->log.cksum0 = LSM_CKSUM0_INIT;
         p->log.cksum1 = LSM_CKSUM1_INIT;
         lsmStringInit(&p->log.buf, pEnv);
@@ -405,7 +408,6 @@ int lsmDbDatabaseFind(
       ** resources allocated and return without linking anything new into
       ** the gShared.pDatabase list.  */
       if( rc==LSM_OK ){
-        p->pEnv = pEnv;
         p->zName = (char *)&p[1];
         memcpy((void *)p->zName, zName, nName+1);
         p->worker.pDatabase = p;

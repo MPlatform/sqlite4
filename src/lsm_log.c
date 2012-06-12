@@ -1006,7 +1006,12 @@ int lsmLogRecover(lsm_db *pDb){
   pLog->cksum0 = reader.cksum0;
   pLog->cksum1 = reader.cksum1;
 
-  lsmFinishRecovery(pDb);
+  if( rc==LSM_OK ){
+    rc = lsmFinishRecovery(pDb);
+  }else{
+    lsmFinishRecovery(pDb);
+  }
+
   lsmStringClear(&buf1);
   lsmStringClear(&buf2);
   lsmStringClear(&reader.buf);

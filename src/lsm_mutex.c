@@ -32,7 +32,7 @@ int lsmMutexStatic(lsm_env *pEnv, int iMutex, lsm_mutex **ppStatic){
 ** Free a mutex allocated by lsmMutexNew().
 */
 void lsmMutexDel(lsm_env *pEnv, lsm_mutex *pMutex){
-  pEnv->xMutexDel(pMutex);
+  if( pMutex ) pEnv->xMutexDel(pMutex);
 }
 
 /*

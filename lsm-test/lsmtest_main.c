@@ -418,6 +418,7 @@ int testGlobMatch(const char *zPattern, const char *zStr){
 
 int do_test(int nArg, char **azArg){
   int j;
+  int rc;
   int nFail = 0;
   const char *zPattern = 0;
 
@@ -430,7 +431,7 @@ int do_test(int nArg, char **azArg){
   }
 
   for(j=0; tdb_system_name(j); j++){
-    int rc = LSM_OK;
+    rc = 0;
 
     test_data_3(tdb_system_name(j), zPattern, &rc);
     test_rollback(tdb_system_name(j), zPattern, &rc);
@@ -439,6 +440,10 @@ int do_test(int nArg, char **azArg){
 
     if( rc ) nFail++;
   }
+
+  rc = 0;
+  test_oom(zPattern, &rc);
+  if( rc ) nFail++;
 
   return (nFail!=0);
 }
@@ -1093,10 +1098,10 @@ int main(int argc, char **argv){
 
 #ifdef LSM_DEBUG_MEM
   pReport = fopen("malloc.txt", "w");
-  testMallocCheck(&nLeakAlloc, &nLeakByte, pReport);
+  testMallocCheck(tdb_lsm_env(), &nLeakAlloc, &nLeakByte, pReport);
   fclose(pReport);
 #else
-  testMallocCheck(&nLeakAlloc, &nLeakByte, 0);
+  testMallocCheck(tdb_lsm_env(), &nLeakAlloc, &nLeakByte, 0);
 #endif
   if( nLeakAlloc ){
     testPrintError("Leaked %d bytes in %d allocations\n", nLeakByte,nLeakAlloc);

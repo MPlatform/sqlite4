@@ -600,16 +600,6 @@ static void fsPageBufferFree(Page *pPg){
   lsmFree(pPg->pFS->pEnv, pPg);
 }
 
-static i64 fsMetaOffset(
-  FileSystem *pFS,                /* File-system object */
-  int iMeta                       /* Meta page to return offset of */
-){
-  i64 iOff;                       /* Return value */
-  assert( iMeta==1 || iMeta==2 );
-  iOff = (iMeta-1) * pFS->nMetasize;
-  return iOff;
-}
-
 int fsPageToBlock(FileSystem *pFS, Pgno iPg){
   return 1 + ((iPg-1) / (pFS->nBlocksize / pFS->nPagesize));
 }
@@ -639,7 +629,6 @@ static void fsGrowMapping(
 */
 int fsPageGet(
   FileSystem *pFS,                /* File-system handle */
-  SortedRun *pRun,       
   Pgno iPg,                       /* Page id */
   int noContent,                  /* True to not load content from disk */
   Page **ppPg                     /* OUT: New page handle */
@@ -649,7 +638,6 @@ int fsPageGet(
   int rc = LSM_OK;
 
   assert( iPg>=fsFirstPageOnBlock(pFS, 1) );
-  assert( !isPhantom(pFS, pRun) );
 
   /* Search the hash-table for the page */
   iHash = fsHashKey(pFS->nHash, iPg);
@@ -729,7 +717,7 @@ static int fsBlockNext(
   Page *pLast;
   int rc;
   
-  rc = fsPageGet(pFS, 0, iBlock*nPagePerBlock, 0, &pLast);
+  rc = fsPageGet(pFS, iBlock*nPagePerBlock, 0, &pLast);
   if( rc==LSM_OK ){
     *piNext = fsPageToBlock(pFS, lsmGetU32(&pLast->aData[pFS->nPagesize-4]));
     lsmFsPageRelease(pLast);
@@ -931,7 +919,7 @@ int lsmFsDbPageNext(SortedRun *pRun, Page *pPg, int eDir, Page **ppNext){
     }
   }
 
-  return fsPageGet(pFS, pRun, iPg, 0, ppNext);
+  return fsPageGet(pFS, iPg, 0, ppNext);
 }
 
 static Pgno findAppendPoint(FileSystem *pFS, int nMin){
@@ -1042,6 +1030,24 @@ int lsmFsSetupAppendList(lsm_db *db){
   return rc;
 }
 
+int lsmFsPhantom(FileSystem *pFS, SortedRun *pRun){
+  assert( pFS->phantom.pRun==0 );
+  pFS->phantom.pRun = pRun;
+  return LSM_OK;
+}
+
+void lsmFsPhantomFree(FileSystem *pFS){
+  if( pFS->phantom.pRun ){
+    Page *pPg;
+    Page *pNext;
+    for(pPg=pFS->phantom.pFirst; pPg; pPg=pNext){
+      pNext = pPg->pHashNext;
+      fsPageBufferFree(pPg);
+    }
+    memset(&pFS->phantom, 0, sizeof(PhantomRun));
+  }
+}
+
 int lsmFsPhantomMaterialize(
   FileSystem *pFS, 
   Snapshot *pSnapshot, 
@@ -1093,23 +1099,6 @@ int lsmFsPhantomMaterialize(
     p->nSize = pPhantom->nPhantom;
     memset(&pFS->phantom, 0, sizeof(PhantomRun));
   }
-  return rc;
-}
-
-int lsmFsDbPageEnd(FileSystem *pFS, SortedRun *pRun, int bLast, Page **ppEnd){
-  int iPg;
-  int rc;
-
-  assert( isPhantom(pFS, pRun)==0 );
-
-  iPg = (bLast ? pRun->iLast : pRun->iFirst);
-  *ppEnd = 0;
-  if( iPg==0 ){
-    rc = LSM_OK;
-  }else{
-    rc = fsPageGet(pFS, pRun, iPg, 0, ppEnd);
-  }
-
   return rc;
 }
 
@@ -1166,7 +1155,7 @@ int lsmFsSortedAppend(
       iApp = findAppendPoint(pFS, 0);
     }else if( fsIsLast(pFS, iPrev) ){
       Page *pLast = 0;
-      rc = fsPageGet(pFS, p, iPrev, 0, &pLast);
+      rc = fsPageGet(pFS, iPrev, 0, &pLast);
       if( rc!=LSM_OK ) return rc;
       iApp = lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
       lsmFsPageRelease(pLast);
@@ -1189,7 +1178,7 @@ int lsmFsSortedAppend(
 
     /* Grab the new page. */
     pPg = 0;
-    rc = fsPageGet(pFS, p, iApp, 1, &pPg);
+    rc = fsPageGet(pFS, iApp, 1, &pPg);
     assert( rc==LSM_OK || pPg==0 );
 
     /* If this is the first or last page of a block, fill in the pointer 
@@ -1213,7 +1202,7 @@ int lsmFsSortedAppend(
   return rc;
 }
 
-int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
+int lsmFsSortedFinish(FileSystem *pFS, SortedRun *p){
   int rc = LSM_OK;
   if( p ){
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
@@ -1229,7 +1218,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
     */
     if( (p->iLast % nPagePerBlock)==0 ){
       Page *pLast;
-      rc = fsPageGet(pFS, p, p->iLast, 0, &pLast);
+      rc = fsPageGet(pFS, p->iLast, 0, &pLast);
       if( rc==LSM_OK ){
         int iPg = (int)lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
         int iBlk = fsPageToBlock(pFS, iPg);
@@ -1243,9 +1232,12 @@ int lsmFsSortedFinish(FileSystem *pFS, Snapshot *pSnap, SortedRun *p){
   return rc;
 }
 
-int lsmFsDbPageGet(FileSystem *pFS, SortedRun *p, int iLoad, Page **ppPg){
+/*
+** Obtain a reference to page number iPg.
+*/
+int lsmFsDbPageGet(FileSystem *pFS, int iPg, Page **ppPg){
   assert( pFS );
-  return fsPageGet(pFS, p, iLoad, 0, ppPg);
+  return fsPageGet(pFS, iPg, 0, ppPg);
 }
 
 /*
@@ -1264,36 +1256,40 @@ int lsmFsMetaPageGet(
 ){
   int rc = LSM_OK;
   MetaPage *pPg;
-  i64 iOff;
   assert( iPg==1 || iPg==2 );
 
-  iOff = (iPg-1) * pFS->nMetasize;
   pPg = lsmMallocZeroRc(pFS->pEnv, sizeof(Page), &rc);
 
-  if( pFS->bUseMmap ){
-    fsGrowMapping(pFS, 2*pFS->nMetasize, &rc);
-    pPg->aData = (u8 *)(pFS->pMap) + iOff;
-  }else{
-    pPg->aData = lsmMallocRc(pFS->pEnv, pFS->nMetasize, &rc);
-    if( rc==LSM_OK && bWrite==0 ){
-      rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
+  if( pPg ){
+    i64 iOff = (iPg-1) * pFS->nMetasize;
+    if( pFS->bUseMmap ){
+      fsGrowMapping(pFS, 2*pFS->nMetasize, &rc);
+      pPg->aData = (u8 *)(pFS->pMap) + iOff;
+    }else{
+      pPg->aData = lsmMallocRc(pFS->pEnv, pFS->nMetasize, &rc);
+      if( rc==LSM_OK && bWrite==0 ){
+        rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
+      }
     }
-  }
 
-  if( rc!=LSM_OK ){
-    if( pFS->bUseMmap==0 ) lsmFree(pFS->pEnv, pPg->aData);
-    lsmFree(pFS->pEnv, pPg);
-    pPg = 0;
-  }else{
-    pPg->iPg = iPg;
-    pPg->bWrite = bWrite;
-    pPg->pFS = pFS;
+    if( rc!=LSM_OK ){
+      if( pFS->bUseMmap==0 ) lsmFree(pFS->pEnv, pPg->aData);
+      lsmFree(pFS->pEnv, pPg);
+      pPg = 0;
+    }else{
+      pPg->iPg = iPg;
+      pPg->bWrite = bWrite;
+      pPg->pFS = pFS;
+    }
   }
 
   *ppPg = pPg;
   return rc;
 }
 
+/*
+** Release a meta-page reference obtained via a call to lsmFsMetaPageGet().
+*/
 int lsmFsMetaPageRelease(MetaPage *pPg){
   int rc = LSM_OK;
   FileSystem *pFS = pPg->pFS;
@@ -1310,6 +1306,11 @@ int lsmFsMetaPageRelease(MetaPage *pPg){
   return rc;
 }
 
+/*
+** Return a pointer to a buffer containing the data associated with the
+** meta-page passed as the first argument. If parameter pnData is not NULL,
+** set *pnData to the size of the meta-page in bytes before returning.
+*/
 u8 *lsmFsMetaPageData(MetaPage *pPg, int *pnData){
   if( pnData ) *pnData = pPg->pFS->nMetasize;
   return pPg->aData;
@@ -1406,58 +1407,12 @@ int lsmFsNRead(FileSystem *pFS){ return pFS->nRead; }
 */
 int lsmFsNWrite(FileSystem *pFS){ return pFS->nWrite; }
 
-int lsmFsSortedPhantom(FileSystem *pFS, SortedRun *pRun){
-  assert( pFS->phantom.pRun==0 );
-  pFS->phantom.pRun = pRun;
-  return LSM_OK;
-}
-
-void lsmFsSortedPhantomFree(FileSystem *pFS){
-  if( pFS->phantom.pRun ){
-    Page *pPg;
-    Page *pNext;
-    for(pPg=pFS->phantom.pFirst; pPg; pPg=pNext){
-      pNext = pPg->pHashNext;
-      fsPageBufferFree(pPg);
-    }
-    memset(&pFS->phantom, 0, sizeof(PhantomRun));
-  }
-}
-
 /*
 ** fsync() the database file.
 */
 int lsmFsSyncDb(FileSystem *pFS){
   return lsmEnvSync(pFS->pEnv, pFS->fdDb);
 }
-
-void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
-  if( p ){
-    FileSystem *pFS = pDb->pFS;
-    int iBlk;
-    int iLastBlk;
-    char *zMsg = 0;
-    LsmString zBlk;
-
-    lsmStringInit(&zBlk, pDb->pEnv);
-    iBlk = fsPageToBlock(pFS, p->iFirst);
-    iLastBlk = fsPageToBlock(pFS, p->iLast);
-
-    while( iBlk ){
-      lsmStringAppendf(&zBlk, " %d", iBlk);
-      if( iBlk!=iLastBlk ){
-        fsBlockNext(pFS, iBlk, &iBlk);
-      }else{
-        iBlk = 0;
-      }
-    }
-
-    zMsg = lsmMallocPrintf(pDb->pEnv, "%d..%d: ", p->iFirst, p->iLast);
-    lsmLogMessage(pDb, LSM_OK, "    % -15s %s", zMsg, zBlk.z);
-    lsmFree(pDb->pEnv, zMsg);
-    lsmStringClear(&zBlk);
-  }
-} 
 
 /*
 ** Return a copy of the environment pointer used by the file-system object.
@@ -1568,6 +1523,38 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   lsmDbSnapshotRelease(pRelease);
   return rc;
 }
+
+
+
+
+
+void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
+  if( p ){
+    FileSystem *pFS = pDb->pFS;
+    int iBlk;
+    int iLastBlk;
+    char *zMsg = 0;
+    LsmString zBlk;
+
+    lsmStringInit(&zBlk, pDb->pEnv);
+    iBlk = fsPageToBlock(pFS, p->iFirst);
+    iLastBlk = fsPageToBlock(pFS, p->iLast);
+
+    while( iBlk ){
+      lsmStringAppendf(&zBlk, " %d", iBlk);
+      if( iBlk!=iLastBlk ){
+        fsBlockNext(pFS, iBlk, &iBlk);
+      }else{
+        iBlk = 0;
+      }
+    }
+
+    zMsg = lsmMallocPrintf(pDb->pEnv, "%d..%d: ", p->iFirst, p->iLast);
+    lsmLogMessage(pDb, LSM_OK, "    % -15s %s", zMsg, zBlk.z);
+    lsmFree(pDb->pEnv, zMsg);
+    lsmStringClear(&zBlk);
+  }
+} 
 
 #ifdef LSM_EXPENSIVE_DEBUG
 /*

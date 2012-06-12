@@ -121,6 +121,7 @@ void lsmStringAppendf(LsmString *pStr, const char *zFormat, ...){
 ** Write into memory obtained from lsm_malloc().
 */
 char *lsmMallocPrintf(lsm_env *pEnv, const char *zFormat, ...){
+  char *zRet;
   LsmString s;
   va_list ap, ap2;
   lsmStringInit(&s, pEnv);
@@ -129,5 +130,6 @@ char *lsmMallocPrintf(lsm_env *pEnv, const char *zFormat, ...){
   lsmStringVAppendf(&s, zFormat, ap, ap2);
   va_end(ap);
   va_end(ap2);
-  return lsm_realloc(pEnv, s.z, s.n+1);
+  if( s.n<0 ) return 0;
+  return (char *)lsmReallocOrFree(pEnv, s.z, s.n+1);
 }

@@ -381,11 +381,11 @@ int lsmFsPageSize(FileSystem *);
 void lsmFsSetPageSize(FileSystem *, int);
 
 /* Creating, populating, gobbling and deleting sorted runs. */
-int lsmFsSortedPhantom(FileSystem *, SortedRun *);
-void lsmFsSortedPhantomFree(FileSystem *pFS);
+int lsmFsPhantom(FileSystem *, SortedRun *);
+void lsmFsPhantomFree(FileSystem *pFS);
 void lsmFsGobble(Snapshot *, SortedRun *, Page *);
 int lsmFsSortedDelete(FileSystem *, Snapshot *, int, SortedRun *);
-int lsmFsSortedFinish(FileSystem *, Snapshot *, SortedRun *);
+int lsmFsSortedFinish(FileSystem *, SortedRun *);
 int lsmFsSortedAppend(FileSystem *, Snapshot *, SortedRun *, Page **);
 int lsmFsPhantomMaterialize(FileSystem *, Snapshot *, SortedRun *);
 
@@ -399,9 +399,8 @@ void lsmSortedSplitkey(lsm_db *, Level *, int *);
 int lsmFsSetupAppendList(lsm_db *db);
 
 /* Reading sorted run content. */
-int lsmFsDbPageGet(FileSystem *, SortedRun *, Pgno, Page **);
+int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
 int lsmFsDbPageNext(SortedRun *, Page *, int eDir, Page **);
-int lsmFsDbPageEnd(FileSystem *, SortedRun *, int bLast, Page **);
 
 int lsmFsPageWrite(Page *);
 u8 *lsmFsPageData(Page *, int *);

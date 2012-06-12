@@ -95,7 +95,8 @@ int  testTimeGet(void);
 
 /* Functions in testmem.c. */
 void testMallocInstall(lsm_env *pEnv);
-void testMallocCheck(int *, int *, FILE *);
+void testMallocCheck(lsm_env *pEnv, int *, int *, FILE *);
+void testMallocOom(lsm_env *pEnv, int, int, void(*)(void*), void *);
 
 /* lsmtest.c */
 TestDb *testOpen(const char *zSystem, int, int *pRc);
@@ -123,8 +124,6 @@ void *testMalloc(int);
 void *testRealloc(void *, int);
 void testFree(void *);
 
-
-
 /* testio.c */
 int testVfsConfigureDb(TestDb *pDb);
 
@@ -147,6 +146,9 @@ void test_mc(const char *zSystem, const char *zPattern, int *pRc);
 
 /* test5.c */
 void test_mt(const char *zSystem, const char *zPattern, int *pRc);
+
+/* lsmtest6.c */
+void test_oom(const char *zPattern, int *pRc);
 
 /*************************************************************************
 ** Interface to functionality in test_datasource.c.
