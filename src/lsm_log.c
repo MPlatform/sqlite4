@@ -316,7 +316,11 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
     lsmStringInit(&pNew->buf, pDb->pEnv);
     rc = lsmStringExtend(&pNew->buf, 2);
   }
-  if( rc!=LSM_OK ) return rc;
+  if( rc!=LSM_OK ){
+    assert( pNew==0 || pNew->buf.z==0 );
+    lsmFree(pDb->pEnv, pNew);
+    return rc;
+  }
 
   /* Set the effective sector-size for this transaction. Sectors are assumed
   ** to be one byte in size if the safety-mode is OFF or NORMAL, or as
