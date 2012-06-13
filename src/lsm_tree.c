@@ -1298,7 +1298,7 @@ int lsmTreeReleaseWriteVersion(
 
   pTree->pWorking = 0;
   if( ppReadVersion ){
-    *ppReadVersion = lsmTreeReadVersion(pWorking->pTree);
+    *ppReadVersion = lsmTreeReadVersion(pTree);
   }
   return LSM_OK;
 }

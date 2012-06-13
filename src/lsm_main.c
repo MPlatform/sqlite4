@@ -490,14 +490,17 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
   lsmSortedSaveTreeCursors(pDb);
 
   if( rc==LSM_OK ){
-    const int nQuant = 32;
-
-    int pgsz = lsmFsPageSize(pDb->pFS);
+    int nQuant = 32 * lsmFsPageSize(pDb->pFS);
     int nBefore;
     int nAfter;
-    nBefore = lsmTreeSize(pDb->pTV)/pgsz;
+
+    if( nQuant>pDb->nTreeLimit ){
+      nQuant = pDb->nTreeLimit;
+    }
+
+    nBefore = lsmTreeSize(pDb->pTV);
     rc = lsmTreeInsert(pDb->pTV, pKey, nKey, pVal, nVal);
-    nAfter = lsmTreeSize(pDb->pTV)/pgsz;
+    nAfter = lsmTreeSize(pDb->pTV);
 
     if( rc==LSM_OK && pDb->bAutowork && (nAfter/nQuant)!=(nBefore/nQuant) ){
       rc = dbAutoWork(pDb, (nAfter/nQuant - nBefore/nQuant)*nQuant);
@@ -762,7 +765,7 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
     if( iLevel<=pDb->nTransOpen ){
       TransMark *pMark = &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)];
       lsmTreeRollback(pDb->pTV, &pMark->tree);
-      lsmLogSeek(pDb, &pMark->log);
+      if( iLevel ) lsmLogSeek(pDb, &pMark->log);
       pDb->nTransOpen = iLevel;
     }
 

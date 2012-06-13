@@ -98,6 +98,7 @@ void testMallocInstall(lsm_env *pEnv);
 void testMallocUninstall(lsm_env *pEnv);
 void testMallocCheck(lsm_env *pEnv, int *, int *, FILE *);
 void testMallocOom(lsm_env *pEnv, int, int, void(*)(void*), void *);
+void testMallocOomEnable(lsm_env *pEnv, int);
 
 /* lsmtest.c */
 TestDb *testOpen(const char *zSystem, int, int *pRc);
@@ -168,8 +169,8 @@ struct DatasourceDefn {
 #define TEST_DATASOURCE_RANDOM    1
 #define TEST_DATASOURCE_SEQUENCE  2
 
-char *testDatasourceName(DatasourceDefn *);
-Datasource *testDatasourceNew(DatasourceDefn *);
+char *testDatasourceName(const DatasourceDefn *);
+Datasource *testDatasourceNew(const DatasourceDefn *);
 void testDatasourceFree(Datasource *);
 void testDatasourceEntry(Datasource *, int, void **, int *, void **, int *);
 /* End of test_datasource.c interface.

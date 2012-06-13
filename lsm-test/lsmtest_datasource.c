@@ -53,7 +53,7 @@ void testDatasourceFree(Datasource *p){
 ** contents of the datasource-definition passed as the first argument.
 ** The caller should eventually free the returned pointer using testFree().
 */
-char *testDatasourceName(DatasourceDefn *p){
+char *testDatasourceName(const DatasourceDefn *p){
   char *zRet;
   zRet = testMallocPrintf("%s.(%d-%d).(%d-%d)",
       (p->eType==TEST_DATASOURCE_SEQUENCE ? "seq" : "rnd"),
@@ -63,7 +63,7 @@ char *testDatasourceName(DatasourceDefn *p){
   return zRet;
 }
 
-Datasource *testDatasourceNew(DatasourceDefn *pDefn){
+Datasource *testDatasourceNew(const DatasourceDefn *pDefn){
   Datasource *p;
   int nMinKey; 
   int nMaxKey;

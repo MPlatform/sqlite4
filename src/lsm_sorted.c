@@ -745,6 +745,7 @@ static int segmentPtrAdvance(
 ){
   int eDir = (bReverse ? -1 : 1);
   do {
+    int rc;
     int iCell;                    /* Number of new cell in page */
 
     iCell = pPtr->iCell + eDir;
@@ -752,7 +753,6 @@ static int segmentPtrAdvance(
     assert( iCell<=pPtr->nCell && iCell>=-1 );
 
     if( iCell>=pPtr->nCell || iCell<0 ){
-      int rc;
       do {
         rc = segmentPtrNextPage(pPtr, eDir); 
       }while( rc==LSM_OK 
@@ -762,7 +762,8 @@ static int segmentPtrAdvance(
       if( rc!=LSM_OK ) return rc;
       iCell = bReverse ? (pPtr->nCell-1) : 0;
     }
-    segmentPtrLoadCell(pPtr, iCell);
+    rc = segmentPtrLoadCell(pPtr, iCell);
+    if( rc!=LSM_OK ) return rc;
   }while( pCsr && pPtr->pPg && (
         (pCsr->bIgnoreSeparators && rtIsSeparator(pPtr->eType))
      || (pCsr->bIgnoreSystem && rtTopic(pPtr->eType)!=0)
@@ -807,8 +808,8 @@ static void segmentPtrEnd(
     while( rc==LSM_OK && pPtr->pPg && pPtr->nCell==0 ){
       rc = segmentPtrNextPage(pPtr, (bLast ? -1 : 1));
     }
-    if( pPtr->pPg ){
-      segmentPtrLoadCell(pPtr, bLast ? (pPtr->nCell-1) : 0);
+    if( rc==LSM_OK && pPtr->pPg ){
+      rc = segmentPtrLoadCell(pPtr, bLast ? (pPtr->nCell-1) : 0);
     }
 
     if( rc==LSM_OK && pPtr->pPg && (
@@ -986,7 +987,9 @@ int segmentPtrSeek(
   ** that pKey/nKey is greater than all keys on that page, and then by 
   ** loading (iPg+1) and testing that pKey/nKey is smaller than all
   ** the keys it houses.  */
+#if 0
   assert( assertKeyLocation(pCsr, pPtr, pKey, nKey) );
+#endif
 
   assert( pPtr->nCell>0 
        || pPtr->pRun->nSize==1 
@@ -1005,7 +1008,9 @@ int segmentPtrSeek(
 
       assert( iTry<iMax || iMin==iMax );
 
-      segmentPtrLoadCell(pPtr, iTry);
+      rc = segmentPtrLoadCell(pPtr, iTry);
+      if( rc!=LSM_OK ) break;
+
       segmentPtrKey(pPtr, &pKeyT, &nKeyT);
       iTopicT = rtTopic(pPtr->eType);
 
@@ -1024,16 +1029,17 @@ int segmentPtrSeek(
       }
     }
 
-    assert( res==0 || (iMin==iMax && iMin>=0 && iMin<pPtr->nCell) );
-    if( res ){
-      segmentPtrLoadCell(pPtr, iMin);
-    }
-
-    if( (eSeek==0 && (res!=0 || rtIsSeparator(pPtr->eType) )) ){
-      segmentPtrReset(pPtr);
-    }
-    else if( res && eSeek && (res ^ eSeek)<0 ){
-      rc = segmentPtrAdvance(pCsr, pPtr, eSeek<0);
+    if( rc==LSM_OK ){
+      assert( res==0 || (iMin==iMax && iMin>=0 && iMin<pPtr->nCell) );
+      if( res ){
+        rc = segmentPtrLoadCell(pPtr, iMin);
+      }
+      if( (eSeek==0 && (res!=0 || rtIsSeparator(pPtr->eType) )) ){
+        segmentPtrReset(pPtr);
+      }
+      else if( res && eSeek && (res ^ eSeek)<0 ){
+        rc = segmentPtrAdvance(pCsr, pPtr, eSeek<0);
+      }
     }
 
     if( rc==LSM_OK && pPtr->pPg && (
@@ -1960,6 +1966,8 @@ static int mcursorAdvanceOk(
   void *pNew;                     /* Pointer to buffer containing new key */
   int nNew;                       /* Size of buffer pNew in bytes */
   int eNewType;                   /* Type of new record */
+
+  if( *pRc ) return 1;
 
   /* Check the current key value. If it is not greater than (if bReverse==0)
   ** or less than (if bReverse!=0) the key currently cached in pCsr->key, 

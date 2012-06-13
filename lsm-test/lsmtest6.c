@@ -77,22 +77,20 @@ static void testOomOpen(
   }
 }
 
-static void testOomFetchStr(
+static void testOomFetch(
   OomTest *pOom,
   lsm_db *pDb,
-  const char *zKey,
-  const char *zVal,
+  void *pKey, int nKey,
+  void *pVal, int nVal,
   int *pRc
 ){
   testOomAssertRc(pOom, *pRc);
   if( *pRc==LSM_OK ){
     lsm_cursor *pCsr;
     int rc;
-    int nKey = strlen(zKey);
-    int nVal = strlen(zVal);
 
     rc = lsm_csr_open(pDb, &pCsr);
-    if( rc==LSM_OK ) rc = lsm_csr_seek(pCsr, (void *)zKey, nKey, 0);
+    if( rc==LSM_OK ) rc = lsm_csr_seek(pCsr, pKey, nKey, 0);
     testOomAssertRc(pOom, rc);
 
     if( rc==LSM_OK ){
@@ -101,7 +99,7 @@ static void testOomFetchStr(
 
       rc = lsm_csr_key(pCsr, &p, &n);
       testOomAssertRc(pOom, rc);
-      testOomAssert(pOom, rc!=LSM_OK || (n==nKey && memcmp(zKey, p, nKey)==0) );
+      testOomAssert(pOom, rc!=LSM_OK || (n==nKey && memcmp(pKey, p, nKey)==0) );
     }
 
     if( rc==LSM_OK ){
@@ -110,12 +108,56 @@ static void testOomFetchStr(
 
       rc = lsm_csr_value(pCsr, &p, &n);
       testOomAssertRc(pOom, rc);
-      testOomAssert(pOom, rc!=LSM_OK || (n==nVal && memcmp(zVal, p, nVal)==0) );
+      testOomAssert(pOom, rc!=LSM_OK || (n==nVal && memcmp(pVal, p, nVal)==0) );
     }
 
     lsm_csr_close(pCsr);
     *pRc = rc;
   }
+}
+
+static void testOomWrite(
+  OomTest *pOom,
+  lsm_db *pDb,
+  void *pKey, int nKey,
+  void *pVal, int nVal,
+  int *pRc
+){
+  testOomAssertRc(pOom, *pRc);
+  if( *pRc==LSM_OK ){
+    int rc;
+
+    rc = lsm_write(pDb, pKey, nKey, pVal, nVal);
+    testOomAssertRc(pOom, rc);
+
+    *pRc = rc;
+  }
+}
+
+
+static void testOomFetchStr(
+  OomTest *pOom,
+  lsm_db *pDb,
+  const char *zKey,
+  const char *zVal,
+  int *pRc
+){
+  int nKey = strlen(zKey);
+  int nVal = strlen(zVal);
+  testOomFetch(pOom, pDb, (void *)zKey, nKey, (void *)zVal, nVal, pRc);
+}
+
+static void testOomFetchData(
+  OomTest *pOom,
+  lsm_db *pDb,
+  Datasource *pData,
+  int iKey,
+  int *pRc
+){
+  void *pKey; int nKey;
+  void *pVal; int nVal;
+  testDatasourceEntry(pData, iKey, &pKey, &nKey, &pVal, &nVal);
+  testOomFetch(pOom, pDb, pKey, nKey, pVal, nVal, pRc);
 }
 
 static void testOomWriteStr(
@@ -125,17 +167,22 @@ static void testOomWriteStr(
   const char *zVal,
   int *pRc
 ){
-  testOomAssertRc(pOom, *pRc);
-  if( *pRc==LSM_OK ){
-    int rc;
-    int nKey = strlen(zKey);
-    int nVal = strlen(zVal);
+  int nKey = strlen(zKey);
+  int nVal = strlen(zVal);
+  testOomWrite(pOom, pDb, (void *)zKey, nKey, (void *)zVal, nVal, pRc);
+}
 
-    rc = lsm_write(pDb, (void *)zKey, nKey, (void *)zVal, nVal);
-    testOomAssertRc(pOom, rc);
-
-    *pRc = rc;
-  }
+static void testOomWriteData(
+  OomTest *pOom,
+  lsm_db *pDb,
+  Datasource *pData,
+  int iKey,
+  int *pRc
+){
+  void *pKey; int nKey;
+  void *pVal; int nVal;
+  testDatasourceEntry(pData, iKey, &pKey, &nKey, &pVal, &nVal);
+  testOomWrite(pOom, pDb, pKey, nKey, pVal, nVal, pRc);
 }
 
 #define LSMTEST6_TESTDB "testdb.lsm" 
@@ -176,14 +223,14 @@ static void testRestoreTestdb(const char *zFile){
 }
 
 
-static void setup_delete_db(){
-  testDeleteTestdb(LSMTEST6_TESTDB);
-}
-
 static int lsmWriteStr(lsm_db *pDb, const char *zKey, const char *zVal){
   int nKey = strlen(zKey);
   int nVal = strlen(zVal);
   return lsm_write(pDb, (void *)zKey, nKey, (void *)zVal, nVal);
+}
+
+static void setup_delete_db(){
+  testDeleteTestdb(LSMTEST6_TESTDB);
 }
 
 static void setup_populate_db(){
@@ -211,6 +258,51 @@ static void setup_populate_db(){
   }
   lsm_close(pDb);
 
+  testSaveTestdb(LSMTEST6_TESTDB);
+  assert( rc==LSM_OK );
+}
+
+static Datasource *getDatasource(void){
+  const DatasourceDefn defn = { TEST_DATASOURCE_RANDOM, 10, 15, 200, 250 };
+  return testDatasourceNew(&defn);
+}
+
+/*
+** Set up a database file with the following properties:
+**
+**   * Page size is 1024 bytes.
+**   * Block size is 64 KB.
+**   * Contains 5000 key-value pairs starting at 0 from the
+**     datasource returned getDatasource().
+*/
+static void setup_populate_db2(){
+  Datasource *pData;
+  int ii;
+  int rc;
+  int nBlocksize = 64*1024;
+  int nPagesize = 1024;
+  int nWritebuffer = 4*1024;
+  lsm_db *pDb;
+
+  testDeleteTestdb(LSMTEST6_TESTDB);
+  rc = lsm_new(tdb_lsm_env(), &pDb);
+  if( rc==LSM_OK ) rc = lsm_open(pDb, LSMTEST6_TESTDB);
+
+  lsm_config(pDb, LSM_CONFIG_BLOCK_SIZE, &nBlocksize); 
+  lsm_config(pDb, LSM_CONFIG_PAGE_SIZE, &nPagesize); 
+  lsm_config(pDb, LSM_CONFIG_WRITE_BUFFER, &nWritebuffer); 
+
+  pData = getDatasource();
+  for(ii=0; rc==LSM_OK && ii<5000; ii++){
+    void *pKey; int nKey;
+    void *pVal; int nVal;
+    testDatasourceEntry(pData, ii, &pKey, &nKey, &pVal, &nVal);
+    lsm_write(pDb, pKey, nKey, pVal, nVal);
+  }
+  testDatasourceFree(pData);
+  lsm_close(pDb);
+
+  testSaveTestdb(LSMTEST6_TESTDB);
   assert( rc==LSM_OK );
 }
 
@@ -267,16 +359,52 @@ static void simple_oom_4(OomTest *pOom){
   lsm_close(pDb);
 }
 
+static void simple_oom_5(OomTest *pOom){
+  Datasource *pData = getDatasource();
+  int rc = LSM_OK;
+  lsm_db *pDb;
+
+  testRestoreTestdb(LSMTEST6_TESTDB);
+  testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
+
+  testOomFetchData(pOom, pDb, pData, 3333, &rc);
+  testOomFetchData(pOom, pDb, pData, 0, &rc);
+  testOomFetchData(pOom, pDb, pData, 4999, &rc);
+
+  lsm_close(pDb);
+  testDatasourceFree(pData);
+}
+
+static void simple_oom_6(OomTest *pOom){
+  Datasource *pData = getDatasource();
+  int rc = LSM_OK;
+  lsm_db *pDb;
+
+  testRestoreTestdb(LSMTEST6_TESTDB);
+  testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
+
+  testOomWriteData(pOom, pDb, pData, 5000, &rc);
+  testOomWriteData(pOom, pDb, pData, 5001, &rc);
+  testOomWriteData(pOom, pDb, pData, 5002, &rc);
+
+  testOomFetchData(pOom, pDb, pData, 5001, &rc);
+
+  lsm_close(pDb);
+  testDatasourceFree(pData);
+}
+
 static void do_test_oom1(const char *zPattern, int *pRc){
   struct SimpleOom {
     const char *zName;
     void (*xSetup)(void);
     void (*xFunc)(OomTest *);
   } aSimple[] = {
-    { "oom1.lsm.1", setup_delete_db,   simple_oom_1 },
-    { "oom1.lsm.2", setup_delete_db,   simple_oom_2 },
-    { "oom1.lsm.3", setup_populate_db, simple_oom_3 },
-    { "oom1.lsm.4", setup_delete_db,   simple_oom_4 },
+    { "oom1.lsm.1", setup_delete_db,    simple_oom_1 },
+    { "oom1.lsm.2", setup_delete_db,    simple_oom_2 },
+    { "oom1.lsm.3", setup_populate_db,  simple_oom_3 },
+    { "oom1.lsm.4", setup_delete_db,    simple_oom_4 },
+    { "oom1.lsm.5", setup_populate_db2, simple_oom_5 },
+    { "oom1.lsm.6", setup_populate_db2, simple_oom_6 },
   };
   int i;
 
