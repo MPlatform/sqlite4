@@ -482,7 +482,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       }
 
       /* Free the in-memory tree object */
-      lsmTreeDestroy(p->pTree);
+      lsmTreeRelease(p->pTree);
 
       /* Free the contents of the worker snapshot */
       lsmSortedFreeLevel(p->pEnv, p->worker.pLevel);

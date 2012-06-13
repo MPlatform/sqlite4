@@ -410,6 +410,7 @@ int lsmTreeNew(
 */
 void lsmTreeDestroy(Tree *pTree){
   if( pTree ){
+    assert( pTree->pWorking==0 );
     lsmPoolDestroy(pTree->pPool);
   }
 }
@@ -1359,6 +1360,8 @@ void lsmTreeDecrRefcount(Tree *pTree){
 }
 
 void lsmTreeRelease(Tree *pTree){
-  assert( pTree->nTreeRef>0 && pTree->pCommit );
-  lsmTreeReleaseReadVersion(pTree->pCommit);
+  if( pTree ){
+    assert( pTree->nTreeRef>0 && pTree->pCommit );
+    lsmTreeReleaseReadVersion(pTree->pCommit);
+  }
 }
