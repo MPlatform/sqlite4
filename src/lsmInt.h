@@ -315,10 +315,10 @@ int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal);
 int lsmTreeCursorValid(TreeCursor *pCsr);
 
 TreeVersion *lsmTreeReadVersion(Tree *);
-TreeVersion *lsmTreeWriteVersion(Tree *, TreeVersion *);
+int lsmTreeWriteVersion(Tree *, TreeVersion **);
 TreeVersion *lsmTreeRecoverVersion(Tree *);
 
-int lsmTreeReleaseWriteVersion(TreeVersion *, TreeVersion **);
+int lsmTreeReleaseWriteVersion(TreeVersion *, int, TreeVersion **);
 void lsmTreeReleaseReadVersion(TreeVersion *);
 
 int lsmTreeIsWriteVersion(TreeVersion *);

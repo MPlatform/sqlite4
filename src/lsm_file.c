@@ -1292,17 +1292,20 @@ int lsmFsMetaPageGet(
 */
 int lsmFsMetaPageRelease(MetaPage *pPg){
   int rc = LSM_OK;
-  FileSystem *pFS = pPg->pFS;
+  if( pPg ){
+    FileSystem *pFS = pPg->pFS;
 
-  if( pFS->bUseMmap==0 ){
-    if( pPg->bWrite ){
-      i64 iOff = (pPg->iPg==2 ? pFS->nMetasize : 0);
-      rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
+    if( pFS->bUseMmap==0 ){
+      if( pPg->bWrite ){
+        i64 iOff = (pPg->iPg==2 ? pFS->nMetasize : 0);
+        int nWrite = pFS->nMetasize;
+        rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, nWrite);
+      }
+      lsmFree(pFS->pEnv, pPg->aData);
     }
-    lsmFree(pFS->pEnv, pPg->aData);
-  }
 
-  lsmFree(pFS->pEnv, pPg);
+    lsmFree(pFS->pEnv, pPg);
+  }
   return rc;
 }
 

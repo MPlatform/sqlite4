@@ -12,11 +12,11 @@ struct OomTest {
 static void testOomStart(OomTest *p){
   memset(p, 0, sizeof(OomTest));
   p->iNext = 1;
+  p->nFail = 1;
   p->pEnv = tdb_lsm_env();
 }
 
-static void xOomHook(void *pCtx){
-  OomTest *p = (OomTest *)pCtx;
+static void xOomHook(OomTest *p){
   p->nFail++;
 }
 
@@ -25,8 +25,12 @@ static int testOomContinue(OomTest *p){
     return 0;
   }
   p->nFail = 0;
-  testMallocOom(p->pEnv, p->iNext, 0, xOomHook, (void *)p);
+  testMallocOom(p->pEnv, p->iNext, 0, (void (*)(void*))xOomHook, (void *)p);
   return 1;
+}
+
+static void testOomEnable(OomTest *p, int bEnable){
+  testMallocOomEnable(p->pEnv, bEnable);
 }
 
 static void testOomNext(OomTest *p){
@@ -48,9 +52,90 @@ static void testOomAssert(OomTest *p, int bVal){
   }
 }
 
+/*
+** Test that the error code matches the state of the OomTest object passed
+** as the first argument. Specifically, check that rc is LSM_NOMEM if an 
+** OOM error has already been injected, or LSM_OK if not.
+*/
 static void testOomAssertRc(OomTest *p, int rc){
   testOomAssert(p, rc==LSM_OK || rc==LSM_NOMEM);
   testOomAssert(p, testOomHit(p)==(rc==LSM_NOMEM));
+}
+
+static void testOomOpen(
+  OomTest *pOom,
+  const char *zName,
+  lsm_db **ppDb,
+  int *pRc
+){
+  if( *pRc==LSM_OK ){
+    int rc;
+    rc = lsm_new(tdb_lsm_env(), ppDb);
+    if( rc==LSM_OK ) rc = lsm_open(*ppDb, zName);
+    testOomAssertRc(pOom, rc);
+    *pRc = rc;
+  }
+}
+
+static void testOomFetchStr(
+  OomTest *pOom,
+  lsm_db *pDb,
+  const char *zKey,
+  const char *zVal,
+  int *pRc
+){
+  testOomAssertRc(pOom, *pRc);
+  if( *pRc==LSM_OK ){
+    lsm_cursor *pCsr;
+    int rc;
+    int nKey = strlen(zKey);
+    int nVal = strlen(zVal);
+
+    rc = lsm_csr_open(pDb, &pCsr);
+    if( rc==LSM_OK ) rc = lsm_csr_seek(pCsr, (void *)zKey, nKey, 0);
+    testOomAssertRc(pOom, rc);
+
+    if( rc==LSM_OK ){
+      void *p; int n;
+      testOomAssert(pOom, lsm_csr_valid(pCsr));
+
+      rc = lsm_csr_key(pCsr, &p, &n);
+      testOomAssertRc(pOom, rc);
+      testOomAssert(pOom, rc!=LSM_OK || (n==nKey && memcmp(zKey, p, nKey)==0) );
+    }
+
+    if( rc==LSM_OK ){
+      void *p; int n;
+      testOomAssert(pOom, lsm_csr_valid(pCsr));
+
+      rc = lsm_csr_value(pCsr, &p, &n);
+      testOomAssertRc(pOom, rc);
+      testOomAssert(pOom, rc!=LSM_OK || (n==nVal && memcmp(zVal, p, nVal)==0) );
+    }
+
+    lsm_csr_close(pCsr);
+    *pRc = rc;
+  }
+}
+
+static void testOomWriteStr(
+  OomTest *pOom,
+  lsm_db *pDb,
+  const char *zKey,
+  const char *zVal,
+  int *pRc
+){
+  testOomAssertRc(pOom, *pRc);
+  if( *pRc==LSM_OK ){
+    int rc;
+    int nKey = strlen(zKey);
+    int nVal = strlen(zVal);
+
+    rc = lsm_write(pDb, (void *)zKey, nKey, (void *)zVal, nVal);
+    testOomAssertRc(pOom, rc);
+
+    *pRc = rc;
+  }
 }
 
 #define LSMTEST6_TESTDB "testdb.lsm" 
@@ -110,7 +195,7 @@ static void setup_populate_db(){
     "five",  "twentyfive",
     "six",   "thirtysix",
     "seven", "fourtynine",
-    "eight", "sixtyeight",
+    "eight", "sixtyfour",
   };
   int rc;
   int ii;
@@ -153,44 +238,31 @@ static void simple_oom_2(OomTest *pOom){
 }
 
 static void simple_oom_3(OomTest *pOom){
-  int rc;
+  int rc = LSM_OK;
   lsm_db *pDb;
-  lsm_cursor *pCsr = 0;
 
-  rc = lsm_new(tdb_lsm_env(), &pDb);
-  if( rc==LSM_OK ) rc = lsm_open(pDb, "testdb.lsm");
+  testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
 
-  if( rc==LSM_OK ){
-    rc = lsm_csr_open(pDb, &pCsr);
-    if( rc==LSM_OK ) rc = lsm_csr_seek(pCsr, "four", 4, 0);
-    testOomAssertRc(pOom, rc);
+  testOomFetchStr(pOom, pDb, "four",  "sixteen",    &rc);
+  testOomFetchStr(pOom, pDb, "seven", "fourtynine", &rc);
+  testOomFetchStr(pOom, pDb, "one",   "one",        &rc);
+  testOomFetchStr(pOom, pDb, "eight", "sixtyfour",  &rc);
 
-    if( rc==LSM_OK ){
-      void *pKey; int nKey;
-      testOomAssert(pOom, lsm_csr_valid(pCsr));
+  lsm_close(pDb);
+}
 
-      rc = lsm_csr_key(pCsr, &pKey, &nKey);
-      testOomAssertRc(pOom, rc);
-      if( rc==LSM_OK ){
-        testOomAssert(pOom, nKey==4);
-        testOomAssert(pOom, memcmp("four", pKey, 4)==0 );
-      }
-    }
+static void simple_oom_4(OomTest *pOom){
+  int rc = LSM_OK;
+  lsm_db *pDb;
 
-    if( rc==LSM_OK ){
-      void *pVal; int nVal;
-      testOomAssert(pOom, lsm_csr_valid(pCsr));
+  testDeleteTestdb(LSMTEST6_TESTDB);
+  testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
 
-      rc = lsm_csr_value(pCsr, &pVal, &nVal);
-      testOomAssertRc(pOom, rc);
-      if( rc==LSM_OK ){
-        testOomAssert(pOom, nVal==7);
-        testOomAssert(pOom, memcmp("sixteen", pVal, 7)==0 );
-      }
-    }
-
-    lsm_csr_close(pCsr);
-  }
+  testOomWriteStr(pOom, pDb, "123", "onetwothree", &rc);
+  testOomWriteStr(pOom, pDb, "456", "fourfivesix", &rc);
+  testOomWriteStr(pOom, pDb, "789", "seveneightnine", &rc);
+  testOomWriteStr(pOom, pDb, "123", "teneleventwelve", &rc);
+  testOomWriteStr(pOom, pDb, "456", "fourteenfifteensixteen", &rc);
 
   lsm_close(pDb);
 }
@@ -203,7 +275,8 @@ static void do_test_oom1(const char *zPattern, int *pRc){
   } aSimple[] = {
     { "oom1.lsm.1", setup_delete_db,   simple_oom_1 },
     { "oom1.lsm.2", setup_delete_db,   simple_oom_2 },
-    { "oom1.lsm.3", setup_populate_db, simple_oom_3 }
+    { "oom1.lsm.3", setup_populate_db, simple_oom_3 },
+    { "oom1.lsm.4", setup_delete_db,   simple_oom_4 },
   };
   int i;
 
@@ -219,6 +292,7 @@ static void do_test_oom1(const char *zPattern, int *pRc){
         aSimple[i].xFunc(&t);
       }
 
+      printf("(%d injections).", t.iNext-2);
       testCaseFinish( (*pRc = testOomFinish(&t)) );
       testMallocOom(tdb_lsm_env(), 0, 0, 0, 0);
     }
@@ -233,7 +307,5 @@ void test_oom(
 ){
   do_test_oom1(zPattern, pRc);
 }
-
-
 
 

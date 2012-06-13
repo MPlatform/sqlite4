@@ -2972,31 +2972,38 @@ int lsmSortedFlushTree(
     lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
 
     rc = multiCursorNew(pDb, pDb->pWorker, 1, 0, &pCsr);
-    if( pNext ){
-      assert( pNext->pMerge==0 || pNext->nRight>0 );
-      if( pNext->pMerge==0 ){
-        if( segmentHasSeparators(&pNext->lhs) ){
-          multiCursorAddLevel(pCsr, pNext, MULTICURSOR_ADDLEVEL_LHS_SEP);
-          pDel = &pNext->lhs.sep;
+    if( rc==LSM_OK ){
+      if( pNext ){
+        assert( pNext->pMerge==0 || pNext->nRight>0 );
+        if( pNext->pMerge==0 ){
+          if( segmentHasSeparators(&pNext->lhs) ){
+            rc = multiCursorAddLevel(pCsr, pNext, MULTICURSOR_ADDLEVEL_LHS_SEP);
 
-          /* This call moves any blocks occupied by separators array pDel to
-          ** the pending list. We do this here, even though pDel will be read
-          ** while building the new level, so that the blocks will be included
-          ** in the "FREELIST" entry visited by the cursor (and written into
-          ** the new top level). */
-          rc = lsmFsSortedDelete(pDb->pFS, pDb->pWorker, 0, pDel);
+            /* This call moves any blocks occupied by separators array pDel 
+            ** to the pending list. We do this here, even though pDel will be 
+            ** read while building the new level, so that the blocks will be 
+            ** included in the "FREELIST" entry visited by the cursor (and 
+            ** written into the new top level).  */
+            if( rc==LSM_OK ){
+              pDel = &pNext->lhs.sep;
+              rc = lsmFsSortedDelete(pDb->pFS, pDb->pWorker, 0, pDel);
+            }
+          }
+          iLeftPtr = pNext->lhs.run.iFirst;
         }
-        iLeftPtr = pNext->lhs.run.iFirst;
+      }else{
+        /* The new level will be the only level in the LSM. There is no reason
+         ** to write out delete keys in this case.  */
+        multiCursorIgnoreDelete(pCsr);
       }
-    }else{
-      /* The new level will be the only level in the LSM. There is no reason
-      ** to write out delete keys in this case.  */
-      multiCursorIgnoreDelete(pCsr);
     }
-    multiCursorVisitFreelist(pCsr);
-    multiCursorReadSeparators(pCsr);
-    pCsr->pnHdrLevel = pnHdrLevel;
-    lsmFreelistDeltaBegin(pDb);
+
+    if( rc==LSM_OK ){
+      multiCursorVisitFreelist(pCsr);
+      multiCursorReadSeparators(pCsr);
+      pCsr->pnHdrLevel = pnHdrLevel;
+      lsmFreelistDeltaBegin(pDb);
+    }
   }
 
   if( rc!=LSM_OK ){

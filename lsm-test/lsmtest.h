@@ -95,6 +95,7 @@ int  testTimeGet(void);
 
 /* Functions in testmem.c. */
 void testMallocInstall(lsm_env *pEnv);
+void testMallocUninstall(lsm_env *pEnv);
 void testMallocCheck(lsm_env *pEnv, int *, int *, FILE *);
 void testMallocOom(lsm_env *pEnv, int, int, void(*)(void*), void *);
 

@@ -867,7 +867,6 @@ void lsmFreelistDeltaBegin(lsm_db *pDb){
 
 void lsmFreelistDeltaEnd(lsm_db *pDb){
   Snapshot *pWorker = pDb->pWorker;
-  assert( pWorker->bRecordDelta==1 );
   pWorker->bRecordDelta = 0;
   pWorker->aDelta[0] = pWorker->freelist.nEntry;
 }
@@ -1059,7 +1058,8 @@ int lsmBeginRecovery(lsm_db *pDb){
 
   rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
   if( rc==LSM_OK ){
-    pDb->pTV = lsmTreeWriteVersion(p->pTree, 0);
+    assert( pDb->pTV==0 );
+    rc = lsmTreeWriteVersion(p->pTree, &pDb->pTV);
   }
   return rc;
 }
@@ -1072,7 +1072,7 @@ int lsmFinishRecovery(lsm_db *pDb){
   assert( pDb->pWorker );
   assert( pDb->pClient==0 );
   assert( lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pWorkerMutex) );
-  rc = lsmTreeReleaseWriteVersion(pDb->pTV, 0);
+  rc = lsmTreeReleaseWriteVersion(pDb->pTV, 1, 0);
   pDb->pTV = 0;
   return rc;
 }
@@ -1147,7 +1147,6 @@ void lsmFinishReadTrans(lsm_db *pDb){
 int lsmBeginWriteTrans(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
   Database *p = pDb->pDatabase;   /* Shared database object */
-  TreeVersion *pWrite = 0;        /* Write handle for in-memory tree */ 
 
   lsmMutexEnter(p->pEnv, p->pClientMutex);
   assert( p->pTree );
@@ -1162,29 +1161,37 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   ** If condition 1 is true, then the Database.bWriter flag is set. If the
   ** second is true, then the call to lsmTreeWriteVersion() returns NULL.
   */
-  if( p->bWriter==0 ){
-    pWrite = lsmTreeWriteVersion(p->pTree, pDb->pTV);
+  if( p->bWriter ){
+    rc = LSM_BUSY;
+  }else{
+    rc = lsmTreeWriteVersion(p->pTree, &pDb->pTV);
   }
 
-  if( pWrite ){
-    /* If the client did not have a read transaction open when this function
-    ** was called, lsm_db.pClient will still be NULL. In this case, grab a
-    ** reference to the lastest checkpointed snapshot now.  */
-    if( pDb->pClient==0 ){
+  if( rc==LSM_OK ){
+    rc = lsmLogBegin(pDb, &p->log);
+
+    if( rc!=LSM_OK ){
+      /* If the call to lsmLogBegin() failed, relinquish the read/write
+      ** TreeVersion handle obtained above. The attempt to open a transaction
+      ** has failed.  */
+      TreeVersion *pWrite = pDb->pTV;
+      TreeVersion **ppRestore = (pDb->pClient ? &pDb->pTV : 0);
+      pDb->pTV = 0;
+      lsmTreeReleaseWriteVersion(pWrite, 0, ppRestore);
+    }else if( pDb->pClient==0 ){
+      /* Otherwise, if the lsmLogBegin() attempt was successful and the 
+      ** client did not have a read transaction open when this function
+      ** was called, lsm_db.pClient will still be NULL. In this case, grab 
+      ** a reference to the lastest checkpointed snapshot now.  */
       p->pClient->nRef++;
       pDb->pClient = p->pClient;
     }
-    pDb->pTV = pWrite;
-    p->bWriter = 1;
-    lsmSortedFixTreeVersions(pDb);
-  }else{
-    /* Failed to open a write transaction (for one of the two reasons
-    ** enumerated above). Return LSM_BUSY.  */
-    rc = LSM_BUSY;
   }
 
-  if( rc==LSM_OK ) rc = lsmLogBegin(pDb, &p->log);
-
+  if( rc==LSM_OK ){
+    p->bWriter = 1;
+    lsmSortedFixTreeVersions(pDb);
+  }
   lsmMutexLeave(p->pEnv, p->pClientMutex);
   return rc;
 }
@@ -1209,7 +1216,7 @@ int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   assert( pDb->pTV && lsmTreeIsWriteVersion(pDb->pTV) );
   assert( p->bWriter );
   p->bWriter = 0;
-  lsmTreeReleaseWriteVersion(pDb->pTV, &pDb->pTV);
+  lsmTreeReleaseWriteVersion(pDb->pTV, bCommit, &pDb->pTV);
   lsmSortedFixTreeVersions(pDb);
 
   lsmLogEnd(pDb, &p->log, bCommit);
@@ -1253,12 +1260,12 @@ int lsmFinishFlush(lsm_db *pDb, int bEmpty){
   int rc = LSM_OK;
 
   assert( pDb->pWorker );
-  assert( pDb->pTV && lsmTreeIsWriteVersion(pDb->pTV) );
+  assert( pDb->pTV && (p->nDbRef==0 || lsmTreeIsWriteVersion(pDb->pTV)) );
   lsmMutexEnter(p->pEnv, p->pClientMutex);
 
   if( bEmpty ){
     if( p->bWriter ){
-      lsmTreeReleaseWriteVersion(pDb->pTV, 0);
+      lsmTreeReleaseWriteVersion(pDb->pTV, 1, 0);
     }
     pDb->pTV = 0;
     lsmTreeRelease(p->pTree);
@@ -1273,7 +1280,7 @@ int lsmFinishFlush(lsm_db *pDb, int bEmpty){
 
   if( p->bWriter ){
     assert( pDb->pClient );
-    if( 0==pDb->pTV ) pDb->pTV = lsmTreeWriteVersion(p->pTree, 0);
+    if( 0==pDb->pTV ) rc = lsmTreeWriteVersion(p->pTree, &pDb->pTV);
   }else{
     pDb->pTV = 0;
   }

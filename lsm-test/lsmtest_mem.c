@@ -53,6 +53,7 @@ struct TmGlobal {
   */
   int nCountdown;
   int bPersist;
+  int bEnable;
   void (*xHook)(void *);
   void *pHookCtx;
 };
@@ -112,7 +113,7 @@ static void *tmMalloc(TmGlobal *pTm, int nByte){
   assert( pTm->nCountdown>=0 );
   assert( pTm->bPersist==0 || pTm->bPersist==1 );
 
-  if( pTm->nCountdown==1 ){
+  if( pTm->bEnable && pTm->nCountdown==1 ){
     /* Simulate an OOM error. */
     lsmtest_oom_error();
     pTm->xFree(pNew);
@@ -120,7 +121,7 @@ static void *tmMalloc(TmGlobal *pTm, int nByte){
     if( pTm->xHook ) pTm->xHook(pTm->pHookCtx);
     pUser = 0;
   }else{
-    if( pTm->nCountdown ) pTm->nCountdown--;
+    if( pTm->bEnable && pTm->nCountdown ) pTm->nCountdown--;
 
     pNew->iForeGuard = FOREGUARD;
     pNew->nByte = nByte;
@@ -234,6 +235,14 @@ static void tmMallocOom(
   pTm->bPersist = bPersist;
   pTm->xHook = xHook;
   pTm->pHookCtx = pHookCtx;
+  pTm->bEnable = 1;
+}
+
+static void tmMallocOomEnable(
+  TmGlobal *pTm, 
+  int bEnable
+){
+  pTm->bEnable = bEnable;
 }
 
 static void tmMallocCheck(
@@ -308,7 +317,6 @@ static void tmLsmMutexLeave(TmGlobal *pTm){
 }
 static void tmLsmMutexDel(TmGlobal *pTm){
   LsmMutex *p = (LsmMutex *)pTm->pMutex;
-  p->pEnv->xMutexDel(p->pMutex);
   pTm->xFree(p);
 }
 static void *tmLsmMalloc(int n){ return malloc(n); }
@@ -351,6 +359,15 @@ void testMallocInstall(lsm_env *pEnv){
   pEnv->xFree = tmLsmEnvFree;
 }
 
+void testMallocUninstall(lsm_env *pEnv){
+  TmGlobal *p = (TmGlobal *)pEnv->pMemCtx;
+  pEnv->pMemCtx = 0;
+  if( p ){
+    p->xDelMutex(p);
+    tmLsmFree(p);
+  }
+}
+
 void testMallocCheck(
   lsm_env *pEnv,
   int *pnLeakAlloc,
@@ -369,5 +386,10 @@ void testMallocOom(
 ){
   TmGlobal *pTm = (TmGlobal *)(pEnv->pMemCtx);
   tmMallocOom(pTm, nCountdown, bPersist, xHook, pHookCtx);
+}
+
+void testMallocOomEnable(lsm_env *pEnv, int bEnable){
+  TmGlobal *pTm = (TmGlobal *)(pEnv->pMemCtx);
+  tmMallocOomEnable(pTm, bEnable);
 }
 

@@ -1108,6 +1108,10 @@ int main(int argc, char **argv){
     if( rc==0 ) rc = -1;
   }
 
+#ifndef NDEBUG
+  testMallocUninstall(tdb_lsm_env());
+#endif
+
 #if 1
   lsmtest_rusage_report();
 #endif

@@ -39,6 +39,11 @@ static void assert_db_state(lsm_db *pDb){
   ** - if there are no open cursors and no write transactions then there must 
   ** not be a client snapshot.  */
   assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->pClient!=0) );
+
+  /* If there is a write transaction open according to pDb->nTransOpen, then
+  ** the connection must be holding the read/write TreeVersion.  */
+  assert( pDb->nTransOpen>=0 );
+  assert( pDb->nTransOpen==0 || lsmTreeIsWriteVersion(pDb->pTV) );
 }
 #else
 # define assert_db_state(x) 
@@ -251,9 +256,11 @@ int lsmFlushToDisk(lsm_db *pDb){
 int lsm_close(lsm_db *pDb){
   int rc = LSM_OK;
   if( pDb ){
-    if( pDb->pCsr ){
+    assert_db_state(pDb);
+    if( pDb->pCsr || pDb->nTransOpen ){
       rc = LSM_MISUSE_BKPT;
     }else{
+      assert( pDb->pWorker==0 && pDb->pTV==0 );
       lsmDbDatabaseRelease(pDb);
       lsmFsClose(pDb->pFS);
       lsmFree(pDb->pEnv, pDb->aTrans);
@@ -688,13 +695,9 @@ int lsm_begin(lsm_db *pDb, int iLevel){
   if( iLevel>pDb->nTransOpen ){
     int i;
 
-    if( pDb->nTransOpen==0 ){
-      rc = lsmBeginWriteTrans(pDb);
-    }
-
+    /* Extend the pDb->aTrans[] array if required. */
     if( rc==LSM_OK && pDb->nTransAlloc<iLevel ){
       TransMark *aNew;            /* New allocation */
-
       int nByte = sizeof(TransMark) * (iLevel+1);
       aNew = (TransMark *)lsmRealloc(pDb->pEnv, pDb->aTrans, nByte);
       if( !aNew ){
@@ -705,6 +708,10 @@ int lsm_begin(lsm_db *pDb, int iLevel){
         pDb->nTransAlloc = iLevel+1;
         pDb->aTrans = aNew;
       }
+    }
+
+    if( rc==LSM_OK && pDb->nTransOpen==0 ){
+      rc = lsmBeginWriteTrans(pDb);
     }
 
     if( rc==LSM_OK ){
@@ -746,22 +753,24 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
 int lsm_rollback(lsm_db *pDb, int iLevel){
   int rc = LSM_OK;
-
   assert_db_state( pDb );
 
-  /* A value less than zero means close the innermost nested transaction. */
-  if( iLevel<0 ) iLevel = MAX(0, pDb->nTransOpen - 1);
+  if( pDb->nTransOpen ){
+    /* A value less than zero means close the innermost nested transaction. */
+    if( iLevel<0 ) iLevel = MAX(0, pDb->nTransOpen - 1);
 
-  if( iLevel<=pDb->nTransOpen ){
-    TransMark *pMark = &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)];
-    lsmTreeRollback(pDb->pTV, &pMark->tree);
-    lsmLogSeek(pDb, &pMark->log);
-    pDb->nTransOpen = iLevel;
+    if( iLevel<=pDb->nTransOpen ){
+      TransMark *pMark = &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)];
+      lsmTreeRollback(pDb->pTV, &pMark->tree);
+      lsmLogSeek(pDb, &pMark->log);
+      pDb->nTransOpen = iLevel;
+    }
+
+    if( pDb->nTransOpen==0 ){
+      lsmFinishWriteTrans(pDb, 0);
+    }
+    dbReleaseClientSnapshot(pDb);
   }
 
-  if( pDb->nTransOpen==0 ){
-    lsmFinishWriteTrans(pDb, 0);
-  }
-  dbReleaseClientSnapshot(pDb);
   return rc;
 }

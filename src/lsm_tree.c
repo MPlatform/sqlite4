@@ -168,7 +168,11 @@ struct Tree {
   Mempool *pPool;                 /* Memory pool to allocate from */
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
   TreeVersion *pCommit;           /* Committed version of tree (for readers) */
+
+  TreeVersion *pWorking;          /* Working verson (for writers) */
+#if 0
   TreeVersion tvWorking;          /* Working verson (for writers) */
+#endif
 
   TreeNode *pRbFirst;
   TreeNode *pRbLast;
@@ -232,9 +236,11 @@ void assert_node_looks_ok(TreeNode *pNode, int nHeight){
 */
 void assert_tree_looks_ok(int rc, Tree *pTree){
   if( rc==LSM_OK ){
-    TreeVersion *p = &pTree->tvWorking;
-    assert( (p->nHeight==0)==(p->pRoot==0) );
-    assert_node_looks_ok(p->pRoot, p->nHeight);
+    TreeVersion *p = pTree->pWorking ? pTree->pWorking : pTree->pCommit;
+    if( p ){
+      assert( (p->nHeight==0)==(p->pRoot==0) );
+      assert_node_looks_ok(p->pRoot, p->nHeight);
+    }
   }
 }
 #else
@@ -344,11 +350,10 @@ void dump_node_contents(TreeNode *pNode, int iVersion, int nIndent, int isNode){
 }
 
 void dump_tree_contents(Tree *pTree, const char *zCaption){
+  TreeVersion *p = pTree->pWorking ? pTree->pWorking : pTree->pCommit;
   printf("\n%s\n", zCaption);
-  if( pTree->tvWorking.pRoot ){
-    dump_node_contents(
-        pTree->tvWorking.pRoot, WORKING_VERSION, 0, pTree->tvWorking.nHeight-1
-    );
+  if( p->pRoot ){
+    dump_node_contents(p->pRoot, WORKING_VERSION, 0, p->nHeight-1);
   }
   fflush(stdout);
 }
@@ -372,26 +377,31 @@ int lsmTreeNew(
   Tree **ppTree                             /* OUT: New tree object */
 ){
   int rc;
+  Tree *pTree = 0;
   Mempool *pPool;                 /* Memory pool used by the new tree */
+  TreeVersion *pClient = 0;       /* Initial client access handle */
 
   rc = lsmPoolNew(pEnv, &pPool);
-  assert( rc==LSM_OK || pPool==0 );
+  pClient = (TreeVersion *)lsmMallocZeroRc(pEnv, sizeof(TreeVersion), &rc);
+
   if( rc==LSM_OK ){
-    Tree *pTree;
     pTree = (Tree *)lsmPoolMallocZero(pPool, sizeof(Tree));
     assert( pTree );
     pTree->pPool = pPool;
     pTree->pEnv = pEnv;
     pTree->xCmp = xCmp;
-    pTree->tvWorking.iVersion = 1;
-    pTree->tvWorking.pTree = pTree;
-    *ppTree = pTree;
-    assert( pTree->nTreeRef==0 );
-    rc = lsmTreeReleaseWriteVersion(lsmTreeWriteVersion(pTree, 0), 0);
-    assert( rc!=LSM_OK || pTree->pCommit );
+    pTree->nTreeRef = 1;
+
+    pClient->iVersion = 1;
+    pClient->pTree = pTree;
+    pClient->nRef = 1;
+    pTree->pCommit = pClient;
+  }else{
+    assert( pClient==0 );
+    lsmPoolDestroy(pPool);
   }
 
-  assert( rc!=LSM_OK || 0==lsmTreeSize(&(*ppTree)->tvWorking) );
+  *ppTree = pTree;
   return rc;
 }
 
@@ -482,7 +492,7 @@ static int treeUpdatePtr(Tree *pTree, TreeCursor *pCsr, TreeNode *pNew){
   int rc = LSM_OK;
   if( pCsr->iNode<0 ){
     /* pNew is the new root node */
-    pTree->tvWorking.pRoot = pNew;
+    pTree->pWorking->pRoot = pNew;
   }else{
     /* If this node already has version 2 content, allocate a copy and
     ** update the copy with the new pointer value. Otherwise, store the
@@ -506,7 +516,7 @@ static int treeUpdatePtr(Tree *pTree, TreeCursor *pCsr, TreeNode *pNew){
       }
     }else{
       /* The "v2 data" option */
-      p->iV2 = pTree->tvWorking.iVersion;
+      p->iV2 = pTree->pWorking->iVersion;
       p->iV2Ptr = (u8)iChildPtr;
       p->pV2Ptr = (void *)pNew;
       if( pTree->pRbLast ){
@@ -571,8 +581,8 @@ static int treeInsert(
       pRoot->apChild[1] = pLeft;
       pRoot->apChild[2] = pRight;
 
-      pTree->tvWorking.pRoot = pRoot;
-      pTree->tvWorking.nHeight++;
+      pTree->pWorking->pRoot = pRoot;
+      pTree->pWorking->nHeight++;
     }else{
       TreeKey *pParentKey;        /* Key to insert into parent node */
       pParentKey = pNode->apKey[1];
@@ -733,7 +743,7 @@ int lsmTreeInsert(
   int nTreeKey;                   /* Number of bytes allocated at pTreeKey */
 
   assert( nVal>=0 || pVal==0 );
-  assert( pTV==&pTree->tvWorking );
+  assert( pTV==pTree->pWorking );
   assert_tree_looks_ok(LSM_OK, pTree);
   /* dump_tree_contents(pTree, "before"); */
 
@@ -752,7 +762,7 @@ int lsmTreeInsert(
   pTreeKey->nValue = nVal;
   pTreeKey->nKey = nKey;
 
-  if( pTree->tvWorking.pRoot==0 ){
+  if( pTree->pWorking->pRoot==0 ){
     /* The tree is completely empty. Add a new root node and install
     ** (pKey/nKey) as the middle entry. Even though it is a leaf at the
     ** moment, use newTreeNode() to allocate the node (i.e. allocate enough
@@ -765,16 +775,16 @@ int lsmTreeInsert(
       rc = LSM_NOMEM_BKPT;
     }else{
       pRoot->apKey[1] = pTreeKey;
-      pTree->tvWorking.pRoot = pRoot;
-      assert( pTree->tvWorking.nHeight==0 );
-      pTree->tvWorking.nHeight = 1;
+      pTree->pWorking->pRoot = pRoot;
+      assert( pTree->pWorking->nHeight==0 );
+      pTree->pWorking->nHeight = 1;
     }
   }else{
     TreeCursor csr;
     int res;
 
     /* Seek to the leaf (or internal node) that the new key belongs on */
-    treeCursorInit(&pTree->tvWorking, &csr);
+    treeCursorInit(pTree->pWorking, &csr);
     lsmTreeCursorSeek(&csr, pKey, nKey, &res);
 
     if( res==0 ){
@@ -784,7 +794,7 @@ int lsmTreeInsert(
       int iCell = csr.aiCell[csr.iNode];
 
       /* Create a copy of this node */
-      if( (csr.iNode>0 && csr.iNode==(pTree->tvWorking.nHeight-1)) ){
+      if( (csr.iNode>0 && csr.iNode==(pTree->pWorking->nHeight-1)) ){
         pNew = copyTreeLeaf(pTree, pNode);
       }else{
         pNew = copyTreeNode(pTree, pNode);
@@ -826,19 +836,18 @@ int lsmTreeInsert(
 ** structure.
 */
 int lsmTreeSize(TreeVersion *pTV){
-  assert( lsmTreeIsWriteVersion(pTV) );
   return (lsmPoolUsed(pTV->pTree->pPool) - ROUND8(sizeof(Tree)));
 }
 
 /*
 ** Return true if the tree is empty. Otherwise false.
+**
+** The caller is responsible for ensuring that it has exclusive access
+** to the Tree structure for this call.
 */
 int lsmTreeIsEmpty(Tree *pTree){
-  assert( pTree==0 
-       || pTree->tvWorking.pRoot!=0 
-       || lsmTreeSize(&pTree->tvWorking)==0 
-  );
-  return (pTree==0 || pTree->tvWorking.pRoot==0);
+  assert( pTree==0 || pTree->pWorking==0 );
+  return (pTree==0 || pTree->pCommit->pRoot==0);
 }
 
 /*
@@ -1168,14 +1177,14 @@ int lsmTreeCursorValid(TreeCursor *pCsr){
 ** Roll back to mark pMark. Structure *pMark should have been previously
 ** populated by a call to lsmTreeMark().
 */
-void lsmTreeRollback(TreeVersion *pTV, TreeMark *pMark){
-  Tree *pTree = pTV->pTree;
+void lsmTreeRollback(TreeVersion *pWorking, TreeMark *pMark){
+  Tree *pTree = pWorking->pTree;
   TreeNode *p;
 
-  assert( lsmTreeIsWriteVersion(pTV) );
+  assert( lsmTreeIsWriteVersion(pWorking) );
 
-  pTree->tvWorking.pRoot = (TreeNode *)pMark->pRoot;
-  pTree->tvWorking.nHeight = pMark->nHeight;
+  pWorking->pRoot = (TreeNode *)pMark->pRoot;
+  pWorking->nHeight = pMark->nHeight;
 
   if( pMark->pRollback ){
     p = ((TreeNode *)pMark->pRollback)->pNext;
@@ -1242,53 +1251,60 @@ void lsmTreeMark(TreeVersion *pTV, TreeMark *pMark){
 ** underway. This mechanism merely prevents writing to an out-of-date
 ** snapshot.
 */
-TreeVersion *lsmTreeWriteVersion(Tree *pTree, TreeVersion *pReadVersion){
-  TreeVersion *pRet = &pTree->tvWorking;
+int lsmTreeWriteVersion(
+  Tree *pTree, 
+  TreeVersion **ppVersion
+){
+  TreeVersion *pRead = *ppVersion;
+  TreeVersion *pRet;
 
   /* The caller must ensure that no other write transaction is underway. */
-  assert( pRet->nRef==0 );
+  assert( pTree->pWorking==0 );
+  
+  if( pRead && pTree->pCommit!=pRead ) return LSM_BUSY;
+  pRet = lsmMallocZero(pTree->pEnv, sizeof(TreeVersion));
+  if( pRet==0 ) return LSM_NOMEM_BKPT;
+  pTree->pWorking = pRet;
 
-  if( pReadVersion ){
-    if( pTree->pCommit!=pReadVersion ) return 0;
-    pReadVersion->nRef--;
-  }
-
+  memcpy(pRet, pTree->pCommit, sizeof(TreeVersion));
   pRet->nRef = 1;
-  return pRet;
+  if( pRead ) pRead->nRef--;
+  *ppVersion = pRet;
+  assert( pRet->pTree==pTree );
+  return LSM_OK;
 }
 
 /*
 ** Release a reference to the write-version.
 */
 int lsmTreeReleaseWriteVersion(
-  TreeVersion *pWriteVersion,     /* Write-version reference */
+  TreeVersion *pWorking,          /* Write-version reference */
+  int bCommit,                    /* True for a commit */
   TreeVersion **ppReadVersion     /* OUT: Read-version reference */
 ){
-  Tree *pTree = pWriteVersion->pTree;
-  TreeVersion *pNew;
+  Tree *pTree = pWorking->pTree;
 
-  assert( lsmTreeIsWriteVersion(pWriteVersion) );
-  assert( pWriteVersion->nRef==1 );
+  assert( lsmTreeIsWriteVersion(pWorking) );
+  assert( pWorking->nRef==1 );
 
-  pNew = (TreeVersion *)lsmMalloc(pTree->pEnv, sizeof(TreeVersion));
-  if( !pNew ) return LSM_NOMEM;
-
-  memcpy(pNew, pWriteVersion, sizeof(TreeVersion));
-  pNew->nRef = 1;
-  lsmTreeIncrRefcount(pTree);
-  lsmTreeReleaseReadVersion(pTree->pCommit);
-  pTree->pCommit = pNew;
-  pWriteVersion->nRef = 0;
-  if( ppReadVersion ){
-    *ppReadVersion = lsmTreeReadVersion(pWriteVersion->pTree);
+  if( bCommit ){
+    lsmTreeIncrRefcount(pTree);
+    lsmTreeReleaseReadVersion(pTree->pCommit);
+    pTree->pCommit = pWorking;
+  }else{
+    lsmFree(pTree->pEnv, pWorking);
   }
 
+  pTree->pWorking = 0;
+  if( ppReadVersion ){
+    *ppReadVersion = lsmTreeReadVersion(pWorking->pTree);
+  }
   return LSM_OK;
 }
 
 
 TreeVersion *lsmTreeRecoverVersion(Tree *pTree){
-  return &pTree->tvWorking;
+  return pTree->pCommit;
 }
 
 /*
@@ -1322,7 +1338,7 @@ void lsmTreeReleaseReadVersion(TreeVersion *pTreeVersion){
 ** Return true if the tree-version passed as the first argument is writable. 
 */
 int lsmTreeIsWriteVersion(TreeVersion *pTV){
-  return (pTV==&pTV->pTree->tvWorking);
+  return (pTV==pTV->pTree->pWorking);
 }
 
 void lsmTreeFixVersion(TreeCursor *pCsr, TreeVersion *pTV){
@@ -1337,6 +1353,7 @@ void lsmTreeDecrRefcount(Tree *pTree){
   assert( pTree->nTreeRef>0 );
   pTree->nTreeRef--;
   if( pTree->nTreeRef==0 ){
+    assert( pTree->pWorking==0 );
     lsmTreeDestroy(pTree);
   }
 }

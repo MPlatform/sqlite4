@@ -163,12 +163,14 @@ int lsmPoolNew(lsm_env *pEnv, Mempool **ppPool){
 }
 
 void lsmPoolDestroy(Mempool *pPool){
-  Chunk *pChunk = pPool->pFirst;
-  lsm_env *pEnv = pPool->pEnv;
-  while( pChunk ){
-    Chunk *pFree = pChunk;
-    pChunk = pChunk->pNext;
-    lsmFree(pEnv, pFree);
+  if( pPool ){
+    Chunk *pChunk = pPool->pFirst;
+    lsm_env *pEnv = pPool->pEnv;
+    while( pChunk ){
+      Chunk *pFree = pChunk;
+      pChunk = pChunk->pNext;
+      lsmFree(pEnv, pFree);
+    }
   }
 }
 
