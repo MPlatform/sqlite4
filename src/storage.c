@@ -87,14 +87,15 @@ int sqlite4KVStoreOpen(
 ){
   KVStore *pNew = 0;
   int rc;
+  sqlite4_env *pEnv = &sqlite4DefaultEnv;  /* OR db->pEnv */
 
   if( zUri && zUri[0] 
-   && sqlite4DefaultEnv.xKVFile 
+   && pEnv->xKVFile 
    && memcmp(":memory:", zUri, 8)
   ){
-    rc = sqlite4DefaultEnv.xKVFile(&pNew, zUri, flags);
+    rc = pEnv->xKVFile(pEnv, &pNew, zUri, flags);
   }else{
-    rc = sqlite4DefaultEnv.xKVTmp(&pNew, zUri, flags);
+    rc = pEnv->xKVTmp(pEnv, &pNew, zUri, flags);
   }
 
   *ppKVStore = pNew;

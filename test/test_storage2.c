@@ -16,7 +16,7 @@
 
 
 static struct KVWrapGlobal {
-  int (*xFactory)(KVStore **, const char *, unsigned int);
+  int (*xFactory)(sqlite4_env*, KVStore **, const char *, unsigned int);
   int nStep;                      /* Total number of successful next/prev */
   int nSeek;                      /* Total number of calls to xSeek */
 } kvwg = {0};
@@ -235,6 +235,7 @@ static int kvwrapControl(KVStore *pKVStore, int op, void *pArg){
 }
 
 static int newFileStorage(
+  sqlite4_env *pEnv,
   KVStore **ppKVStore,
   const char *zName,
   unsigned openFlags
@@ -270,7 +271,7 @@ static int newFileStorage(
   }else{
     memset(pNew, 0, sizeof(KVWrap));
     pNew->base.pStoreVfunc = &kvwrapMethods;
-    rc = kvwg.xFactory(&pNew->pReal, zName, openFlags);
+    rc = kvwg.xFactory(pEnv, &pNew->pReal, zName, openFlags);
     if( rc!=SQLITE_OK ){
       sqlite4_free(pNew);
       pNew = 0;

@@ -282,13 +282,13 @@ int sqlite4_config(sqlite4_env *pEnv, int op, ...){
   switch( op ){
     case SQLITE_CONFIG_SET_KVFACTORY: {
       pEnv->xKVFile = *va_arg(ap, 
-          int (*)(KVStore **, const char *, unsigned int)
+          int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
       );
       break;
     }
 
     case SQLITE_CONFIG_GET_KVFACTORY: {
-      *va_arg(ap, int (**)(KVStore **, const char *, unsigned int)) =
+      *va_arg(ap, int(**)(sqlite4_env*, KVStore**, const char*, unsigned int)) =
           pEnv->xKVFile;
       break;
     }

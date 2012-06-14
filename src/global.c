@@ -146,6 +146,8 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    0,                         /* nHeap */
    0, 0,                      /* mnHeap, mxHeap */
    0,                         /* mxParserStack */
+   sqlite4KVStoreOpenLsm,     /* xKVFile */
+   sqlite4KVStoreOpenMem,     /* xKVTmp */
    /* All the rest should always be initialized to zero */
    0,                         /* isInit */
    0,                         /* inProgress */
@@ -156,9 +158,6 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    0,                         /* xLog */
    0,                         /* pLogArg */
    0,                         /* bLocaltimeFault */
-
-   sqlite4KVStoreOpenLsm,     /* xKVFile */
-   sqlite4KVStoreOpenMem,     /* xKVTmp */
 };
 
 /*

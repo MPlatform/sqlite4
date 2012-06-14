@@ -384,9 +384,10 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
 ** Create a new in-memory storage engine and return a pointer to it.
 */
 int sqlite4KVStoreOpenLsm(
-  KVStore **ppKVStore,
-  const char *zName,
-  unsigned openFlags
+  sqlite4_env *pEnv,          /* Run-time environment */
+  KVStore **ppKVStore,        /* OUT: write the new KVStore here */
+  const char *zName,          /* Name of the file to open */
+  unsigned openFlags          /* Flags */
 ){
 
   /* Virtual methods for an LSM data store */
@@ -435,4 +436,3 @@ int sqlite4KVStoreOpenLsm(
   *ppKVStore = (KVStore*)pNew;
   return rc;
 }
-

@@ -934,9 +934,10 @@ static const KVStoreMethods kvmemMethods = {
 ** Create a new in-memory storage engine and return a pointer to it.
 */
 int sqlite4KVStoreOpenMem(
-  KVStore **ppKVStore, 
-  const char *zName,
-  unsigned openFlags
+  sqlite4_env *pEnv,              /* Runtime environment */
+  KVStore **ppKVStore,            /* OUT: Write the new KVStore here */
+  const char *zName,              /* Name of in-memory storage unit */
+  unsigned openFlags              /* Flags */
 ){
   KVMem *pNew = sqlite4_malloc( sizeof(*pNew) );
   if( pNew==0 ) return SQLITE_NOMEM;

@@ -2412,6 +2412,8 @@ struct sqlite4_env {
   int nHeap;                        /* Size of pHeap[] */
   int mnReq, mxReq;                 /* Min and max heap requests sizes */
   int mxParserStack;                /* maximum depth of the parser stack */
+  int (*xKVFile)(sqlite4_env*, KVStore**, const char*, unsigned int);
+  int (*xKVTmp)(sqlite4_env*, KVStore**, const char*, unsigned int);
   /* The above might be initialized to non-zero.  The following need to always
   ** initially be zero, however. */
   int isInit;                       /* True after initialization has finished */
@@ -2423,8 +2425,6 @@ struct sqlite4_env {
   void (*xLog)(void*,int,const char*); /* Function for logging */
   void *pLogArg;                       /* First argument to xLog() */
   int bLocaltimeFault;              /* True to fail localtime() calls */
-  int (*xKVFile)(KVStore **, const char *, unsigned int);
-  int (*xKVTmp)(KVStore **, const char *, unsigned int);
 };
 
 /*

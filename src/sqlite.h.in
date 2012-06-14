@@ -30,8 +30,8 @@
 ** the version number) and changes its name to "sqlite4.h" as
 ** part of the build process.
 */
-#ifndef _SQLITE3_H_
-#define _SQLITE3_H_
+#ifndef _SQLITE4_H_
+#define _SQLITE4_H_
 #include <stdarg.h>     /* Needed for the definition of va_list */
 
 /*
@@ -2993,22 +2993,12 @@ int sqlite4_data_count(sqlite4_stmt *pStmt);
 ** </ul>)^
 **
 ** These constants are codes for each of those types.
-**
-** Note that the SQLITE_TEXT constant was also used in SQLite version 2
-** for a completely different meaning.  Software that links against both
-** SQLite version 2 and SQLite version 3 should use SQLITE3_TEXT, not
-** SQLITE_TEXT.
 */
 #define SQLITE_INTEGER  1
 #define SQLITE_FLOAT    2
+#define SQLITE_TEXT     3
 #define SQLITE_BLOB     4
 #define SQLITE_NULL     5
-#ifdef SQLITE_TEXT
-# undef SQLITE_TEXT
-#else
-# define SQLITE_TEXT     3
-#endif
-#define SQLITE3_TEXT     3
 
 /*
 ** CAPIREF: Result Values From A Query
