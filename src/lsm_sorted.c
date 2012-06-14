@@ -2969,13 +2969,13 @@ int lsmSortedFlushTree(
   }
 
   /* Allocate the new level structure to write to. */
+  pNext = lsmDbSnapshotLevel(pDb->pWorker);
   pNew = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
 
   /* Create a cursor to gather the data required by the new segment. The new
   ** segment contains everything in the tree and pointers to the next segment
   ** in the database (if any).  */
   if( rc==LSM_OK ){
-    pNext = lsmDbSnapshotLevel(pDb->pWorker);
 
     pNew->pNext = pNext;
     lsmDbSnapshotSetLevel(pDb->pWorker, pNew);

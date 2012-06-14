@@ -420,7 +420,6 @@ static void simple_oom_6(OomTest *pOom){
   testOomWriteData(pOom, pDb, pData, 5000, &rc);
   testOomWriteData(pOom, pDb, pData, 5001, &rc);
   testOomWriteData(pOom, pDb, pData, 5002, &rc);
-
   testOomFetchData(pOom, pDb, pData, 5001, &rc);
   testOomFetchData(pOom, pDb, pData, 1234, &rc);
 
@@ -461,8 +460,6 @@ static void do_test_oom1(const char *zPattern, int *pRc){
     }
   }
 }
-
-
 
 void test_oom(
   const char *zPattern,           /* Run test cases that match this pattern */
