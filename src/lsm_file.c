@@ -1482,7 +1482,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   /* Obtain the worker snapshot */
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb->pDatabase);
+    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
   }
 
   /* Search for the array that starts on page iFirst */
@@ -1523,7 +1523,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
     *pzOut = str.z;
   }
 
-  lsmDbSnapshotRelease(pRelease);
+  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
   return rc;
 }
 

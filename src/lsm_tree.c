@@ -154,7 +154,7 @@ struct TreeVersion {
 ** nRef:
 **   Number of references to this tree structure. When it is first created,
 **   (in lsmTreeNew()) nRef is set to 1. There after the ref-count may be
-**   incremented and decremented using lsmTreeIncrRefcount() and 
+**   incremented and decremented using treeIncrRefcount() and 
 **   DecrRefcount(). When the ref-count of a tree structure reaches zero
 **   it is freed.
 **
@@ -163,7 +163,6 @@ struct TreeVersion {
 **
 */
 struct Tree {
-  lsm_env *pEnv;                  /* Environment handle */
   int nTreeRef;                   /* Current number of pointers to this */
   Mempool *pPool;                 /* Memory pool to allocate from */
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
@@ -201,7 +200,7 @@ static TreeNode *getChildPtr(TreeNode *p, int iVersion, int iCell){
 ** the tree.
 */
 struct TreeCursor {
-  TreeVersion *pVersion;          /* Tree version to access */
+  lsm_db *pDb;                    /* Database handle for this cursor */
   int iNode;                      /* Cursor points at apTreeNode[iNode] */
   TreeNode *apTreeNode[MAX_DEPTH];/* Current position in tree */
   u8 aiCell[MAX_DEPTH];           /* Current position in tree */
@@ -385,10 +384,9 @@ int lsmTreeNew(
   pClient = (TreeVersion *)lsmMallocZeroRc(pEnv, sizeof(TreeVersion), &rc);
 
   if( rc==LSM_OK ){
-    pTree = (Tree *)lsmPoolMallocZero(pPool, sizeof(Tree));
+    pTree = (Tree *)lsmPoolMallocZero(pEnv, pPool, sizeof(Tree));
     assert( pTree );
     pTree->pPool = pPool;
-    pTree->pEnv = pEnv;
     pTree->xCmp = xCmp;
     pTree->nTreeRef = 1;
 
@@ -398,7 +396,7 @@ int lsmTreeNew(
     pTree->pCommit = pClient;
   }else{
     assert( pClient==0 );
-    lsmPoolDestroy(pPool);
+    lsmPoolDestroy(pEnv, pPool);
   }
 
   *ppTree = pTree;
@@ -408,10 +406,10 @@ int lsmTreeNew(
 /*
 ** Destroy a tree structure allocated by lsmTreeNew().
 */
-void lsmTreeDestroy(Tree *pTree){
+static void treeDestroy(lsm_env *pEnv, Tree *pTree){
   if( pTree ){
     assert( pTree->pWorking==0 );
-    lsmPoolDestroy(pTree->pPool);
+    lsmPoolDestroy(pEnv, pTree->pPool);
   }
 }
 
@@ -419,23 +417,23 @@ void lsmTreeDestroy(Tree *pTree){
 ** Initialize a cursor object, the space for which has already been
 ** allocated.
 */
-static void treeCursorInit(TreeVersion *p, TreeCursor *pCsr){
+static void treeCursorInit(lsm_db *pDb, TreeCursor *pCsr){
   memset(pCsr, 0, sizeof(TreeCursor));
-  pCsr->pVersion = p;
+  pCsr->pDb = pDb;
   pCsr->iNode = -1;
 }
 
-static TreeNode *newTreeLeaf(Tree *pTree){
-  return (TreeNode *)lsmPoolMallocZero(pTree->pPool, sizeof(TreeLeaf));
+static TreeNode *newTreeLeaf(lsm_env *pEnv, Tree *pTree){
+  return (TreeNode *)lsmPoolMallocZero(pEnv, pTree->pPool, sizeof(TreeLeaf));
 }
 
-static TreeNode *newTreeNode(Tree *pTree){
-  return (TreeNode *)lsmPoolMallocZero(pTree->pPool, sizeof(TreeNode));
+static TreeNode *newTreeNode(lsm_env *pEnv, Tree *pTree){
+  return (TreeNode *)lsmPoolMallocZero(pEnv, pTree->pPool, sizeof(TreeNode));
 }
 
-static TreeNode *copyTreeNode(Tree *pTree, TreeNode *pOld){
+static TreeNode *copyTreeNode(lsm_env *pEnv, Tree *pTree, TreeNode *pOld){
   TreeNode *pNew;
-  pNew = (TreeNode *)lsmPoolMallocZero(pTree->pPool, sizeof(TreeNode));
+  pNew = (TreeNode *)lsmPoolMallocZero(pEnv, pTree->pPool, sizeof(TreeNode));
 
   memcpy(pNew->apKey, pOld->apKey, sizeof(pNew->apKey));
   memcpy(pNew->apChild, pOld->apChild, sizeof(pNew->apChild));
@@ -444,9 +442,9 @@ static TreeNode *copyTreeNode(Tree *pTree, TreeNode *pOld){
   return pNew;
 }
 
-static TreeNode *copyTreeLeaf(Tree *pTree, TreeNode *pOld){
+static TreeNode *copyTreeLeaf(lsm_env *pEnv, Tree *pTree, TreeNode *pOld){
   TreeNode *pNew;
-  pNew = newTreeLeaf(pTree);
+  pNew = newTreeLeaf(pEnv, pTree);
   memcpy(pNew, pOld, sizeof(TreeLeaf));
   return pNew;
 }
@@ -507,7 +505,7 @@ static int treeUpdatePtr(Tree *pTree, TreeCursor *pCsr, TreeNode *pNew){
 
     if( p->iV2 ){
       /* The "allocate new TreeNode" option */
-      TreeNode *pCopy = copyTreeNode(pTree, p);
+      TreeNode *pCopy = copyTreeNode(pCsr->pDb->pEnv, pTree, p);
       if( pCopy ){
         pCopy->apChild[iChildPtr] = pNew;
         pCsr->iNode--;
@@ -546,6 +544,7 @@ static int treeUpdatePtr(Tree *pTree, TreeCursor *pCsr, TreeNode *pNew){
 ** smaller than pTreeKey.
 */
 static int treeInsert(
+  lsm_env *pEnv,
   Tree *pTree, 
   TreeCursor *pCsr,               /* Cursor indicating path to insert at */
   TreeNode *pLeftPtr,             /* New child pointer (or NULL for leaves) */
@@ -561,14 +560,14 @@ static int treeInsert(
     TreeNode *pLeft;              /* New sibling node. */
     TreeNode *pRight;             /* Sibling of pLeft (either new or pNode) */
 
-    pLeft = newTreeNode(pTree);
-    pRight = newTreeNode(pTree);
+    pLeft = newTreeNode(pEnv, pTree);
+    pRight = newTreeNode(pEnv, pTree);
 
     if( pCsr->iNode==0 ){
       /* pNode is the root of the tree. Grow the tree by one level. */
       TreeNode *pRoot;            /* New root node */
 
-      pRoot = newTreeNode(pTree);
+      pRoot = newTreeNode(pEnv, pTree);
 
       pLeft->apChild[1] = getChildPtr(pNode, WORKING_VERSION, 0);
       pLeft->apKey[1] = pNode->apKey[0];
@@ -597,7 +596,7 @@ static int treeInsert(
       pRight->apChild[2] = getChildPtr(pNode, WORKING_VERSION, 3);
 
       pCsr->iNode--;
-      treeInsert(
+      treeInsert(pEnv, 
           pTree, pCsr, pLeft, pParentKey, pRight, pCsr->aiCell[pCsr->iNode]
       );
     }
@@ -633,7 +632,7 @@ static int treeInsert(
     TreeNode **pPtr;
     int i;
 
-    pNew = newTreeNode(pTree);
+    pNew = newTreeNode(pEnv, pTree);
     if( pNew ){
       TreeNode *pStore = 0;
       pOut = pNew->apKey;
@@ -674,6 +673,7 @@ static int treeInsert(
 }
 
 static int treeInsertLeaf(
+  lsm_env *pEnv,
   Tree *pTree,                    /* Tree structure */
   TreeCursor *pCsr,               /* Cursor structure */
   TreeKey *pTreeKey,              /* Key to insert */
@@ -689,13 +689,13 @@ static int treeInsertLeaf(
 
   pCsr->iNode--;
 
-  pNew = newTreeLeaf(pTree);
+  pNew = newTreeLeaf(pEnv, pTree);
   if( !pNew ){
     rc = LSM_NOMEM_BKPT;
   }else if( pLeaf->apKey[0] && pLeaf->apKey[2] ){
     TreeNode *pRight;
 
-    pRight = newTreeLeaf(pTree);
+    pRight = newTreeLeaf(pEnv, pTree);
     if( pRight==0 ){
       rc = LSM_NOMEM_BKPT;
     }else{
@@ -707,7 +707,7 @@ static int treeInsertLeaf(
         case 2: pRight->apKey[0] = pTreeKey; break;
         case 3: pRight->apKey[2] = pTreeKey; break;
       }
-      rc = treeInsert(pTree, pCsr, pNew, pLeaf->apKey[1], pRight, 
+      rc = treeInsert(pEnv, pTree, pCsr, pNew, pLeaf->apKey[1], pRight, 
           pCsr->aiCell[pCsr->iNode]
       );
     }
@@ -732,12 +732,14 @@ static int treeInsertLeaf(
 ** NULL.
 */
 int lsmTreeInsert(
-  TreeVersion *pTV,               /* Tree structure to insert entry into */
+  lsm_db *pDb,                    /* Database handle */
   void *pKey,                     /* Pointer to key data */
   int nKey,                       /* Size of key data in bytes */
   void *pVal,                     /* Pointer to value data (or NULL) */
   int nVal                        /* Bytes in value data (or -ve for delete) */
 ){
+  lsm_env *pEnv = pDb->pEnv;
+  TreeVersion *pTV = pDb->pTV;
   Tree *pTree = pTV->pTree;
   int rc = LSM_OK;                /* Return Code */
   TreeKey *pTreeKey;              /* New key-value being inserted */
@@ -750,7 +752,7 @@ int lsmTreeInsert(
 
   /* Allocate and populate a new key-value pair structure */
   nTreeKey = sizeof(TreeKey) + nKey + (nVal>0 ? nVal : 0);
-  pTreeKey = (TreeKey *)lsmPoolMalloc(pTree->pPool, nTreeKey);
+  pTreeKey = (TreeKey *)lsmPoolMalloc(pDb->pEnv, pTree->pPool, nTreeKey);
   if( !pTreeKey ) return LSM_NOMEM_BKPT;
   pTreeKey->pKey = (void *)&pTreeKey[1];
   memcpy(pTreeKey->pKey, pKey, nKey);
@@ -771,7 +773,7 @@ int lsmTreeInsert(
     ** treeInsert() routine may convert this node to an interior node.  
     */
     TreeNode *pRoot;              /* New tree root node */
-    pRoot = newTreeNode(pTree);
+    pRoot = newTreeNode(pEnv, pTree);
     if( !pRoot ){
       rc = LSM_NOMEM_BKPT;
     }else{
@@ -785,7 +787,7 @@ int lsmTreeInsert(
     int res;
 
     /* Seek to the leaf (or internal node) that the new key belongs on */
-    treeCursorInit(pTree->pWorking, &csr);
+    treeCursorInit(pDb, &csr);
     lsmTreeCursorSeek(&csr, pKey, nKey, &res);
 
     if( res==0 ){
@@ -796,9 +798,9 @@ int lsmTreeInsert(
 
       /* Create a copy of this node */
       if( (csr.iNode>0 && csr.iNode==(pTree->pWorking->nHeight-1)) ){
-        pNew = copyTreeLeaf(pTree, pNode);
+        pNew = copyTreeLeaf(pEnv, pTree, pNode);
       }else{
-        pNew = copyTreeNode(pTree, pNode);
+        pNew = copyTreeNode(pEnv, pTree, pNode);
       }
 
       /* Modify the value in the new version */
@@ -820,9 +822,9 @@ int lsmTreeInsert(
       */
       int iSlot = csr.aiCell[csr.iNode] + (res<0);
       if( csr.iNode==0 ){
-        rc = treeInsert(pTree, &csr, 0, pTreeKey, 0, iSlot);
+        rc = treeInsert(pEnv, pTree, &csr, 0, pTreeKey, 0, iSlot);
       }else{
-        rc = treeInsertLeaf(pTree, &csr, pTreeKey, iSlot);
+        rc = treeInsertLeaf(pEnv, pTree, &csr, pTreeKey, iSlot);
       }
     }
   }
@@ -854,11 +856,11 @@ int lsmTreeIsEmpty(Tree *pTree){
 /*
 ** Open a cursor on the in-memory tree pTree.
 */
-int lsmTreeCursorNew(TreeVersion *pVersion, TreeCursor **ppCsr){
+int lsmTreeCursorNew(lsm_db *pDb, TreeCursor **ppCsr){
   TreeCursor *pCsr;
-  *ppCsr = pCsr = lsmMalloc(pVersion->pTree->pEnv, sizeof(TreeCursor));
+  *ppCsr = pCsr = lsmMalloc(pDb->pEnv, sizeof(TreeCursor));
   if( pCsr ){
-    treeCursorInit(pVersion, pCsr);
+    treeCursorInit(pDb, pCsr);
     return LSM_OK;
   }
   return LSM_NOMEM_BKPT;
@@ -869,7 +871,7 @@ int lsmTreeCursorNew(TreeVersion *pVersion, TreeCursor **ppCsr){
 */
 void lsmTreeCursorDestroy(TreeCursor *pCsr){
   if( pCsr ){
-    lsmFree(pCsr->pVersion->pTree->pEnv, pCsr);
+    lsmFree(pCsr->pDb->pEnv, pCsr);
   }
 }
 
@@ -909,7 +911,7 @@ static int treeCsrCompare(TreeCursor *pCsr, void *pKey, int nKey){
 **   * If the tree is empty, leave the cursor at EOF and set *pRes to -1.
 */
 int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
-  TreeVersion *p = pCsr->pVersion;
+  TreeVersion *p = pCsr->pDb->pTV;
   int (*xCmp)(void *, int, void *, int) = p->pTree->xCmp;
   TreeNode *pNode = p->pRoot;     /* Current node in search */
 
@@ -983,7 +985,7 @@ int lsmTreeCursorNext(TreeCursor *pCsr){
   TreeKey *pK1;
 #endif
 
-  TreeVersion *p = pCsr->pVersion;
+  TreeVersion *p = pCsr->pDb->pTV;
   const int iLeaf = p->nHeight-1;
   int iCell; 
   TreeNode *pNode; 
@@ -1031,7 +1033,7 @@ int lsmTreeCursorNext(TreeCursor *pCsr){
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
     TreeKey *pK2;
-    int (*xCmp)(void *, int, void *, int) = pCsr->pVersion->pTree->xCmp;
+    int (*xCmp)(void *, int, void *, int) = pCsr->pDb->xCmp;
     pK2 = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
     assert( xCmp(pK2->pKey, pK2->nKey, pK1->pKey, pK1->nKey)>0 );
   }
@@ -1045,7 +1047,7 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
   TreeKey *pK1;
 #endif
 
-  TreeVersion *p = pCsr->pVersion;
+  TreeVersion *p = pCsr->pDb->pTV;
   const int iLeaf = p->nHeight-1;
   int iCell; 
   TreeNode *pNode; 
@@ -1094,7 +1096,7 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
     TreeKey *pK2;
-    int (*xCmp)(void *, int, void *, int) = pCsr->pVersion->pTree->xCmp;
+    int (*xCmp)(void *, int, void *, int) = pCsr->pDb->xCmp;
     pK2 = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
     assert( xCmp(pK2->pKey, pK2->nKey, pK1->pKey, pK1->nKey)<0 );
   }
@@ -1108,7 +1110,7 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
 ** in-memory tree.
 */
 int lsmTreeCursorEnd(TreeCursor *pCsr, int bLast){
-  TreeVersion *p = pCsr->pVersion;
+  TreeVersion *p = pCsr->pDb->pTV;
   TreeNode *pNode = p->pRoot;
   pCsr->iNode = -1;
 
@@ -1178,7 +1180,8 @@ int lsmTreeCursorValid(TreeCursor *pCsr){
 ** Roll back to mark pMark. Structure *pMark should have been previously
 ** populated by a call to lsmTreeMark().
 */
-void lsmTreeRollback(TreeVersion *pWorking, TreeMark *pMark){
+void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
+  TreeVersion *pWorking = pDb->pTV;
   Tree *pTree = pWorking->pTree;
   TreeNode *p;
 
@@ -1211,7 +1214,7 @@ void lsmTreeRollback(TreeVersion *pWorking, TreeMark *pMark){
     pTree->pRbFirst = 0;
   }
 
-  lsmPoolRollback(pTree->pPool, pMark->pMpChunk, pMark->iMpOff);
+  lsmPoolRollback(pDb->pEnv, pTree->pPool, pMark->pMpChunk, pMark->iMpOff);
 }
 
 /*
@@ -1253,6 +1256,7 @@ void lsmTreeMark(TreeVersion *pTV, TreeMark *pMark){
 ** snapshot.
 */
 int lsmTreeWriteVersion(
+  lsm_env *pEnv,
   Tree *pTree, 
   TreeVersion **ppVersion
 ){
@@ -1263,7 +1267,7 @@ int lsmTreeWriteVersion(
   assert( pTree->pWorking==0 );
   
   if( pRead && pTree->pCommit!=pRead ) return LSM_BUSY;
-  pRet = lsmMallocZero(pTree->pEnv, sizeof(TreeVersion));
+  pRet = lsmMallocZero(pEnv, sizeof(TreeVersion));
   if( pRet==0 ) return LSM_NOMEM_BKPT;
   pTree->pWorking = pRet;
 
@@ -1275,10 +1279,24 @@ int lsmTreeWriteVersion(
   return LSM_OK;
 }
 
+static void treeIncrRefcount(Tree *pTree){
+  pTree->nTreeRef++;
+}
+
+static void treeDecrRefcount(lsm_env *pEnv, Tree *pTree){
+  assert( pTree->nTreeRef>0 );
+  pTree->nTreeRef--;
+  if( pTree->nTreeRef==0 ){
+    assert( pTree->pWorking==0 );
+    treeDestroy(pEnv, pTree);
+  }
+}
+
 /*
 ** Release a reference to the write-version.
 */
 int lsmTreeReleaseWriteVersion(
+  lsm_env *pEnv,
   TreeVersion *pWorking,          /* Write-version reference */
   int bCommit,                    /* True for a commit */
   TreeVersion **ppReadVersion     /* OUT: Read-version reference */
@@ -1289,11 +1307,11 @@ int lsmTreeReleaseWriteVersion(
   assert( pWorking->nRef==1 );
 
   if( bCommit ){
-    lsmTreeIncrRefcount(pTree);
-    lsmTreeReleaseReadVersion(pTree->pCommit);
+    treeIncrRefcount(pTree);
+    lsmTreeReleaseReadVersion(pEnv, pTree->pCommit);
     pTree->pCommit = pWorking;
   }else{
-    lsmFree(pTree->pEnv, pWorking);
+    lsmFree(pEnv, pWorking);
   }
 
   pTree->pWorking = 0;
@@ -1323,14 +1341,14 @@ TreeVersion *lsmTreeReadVersion(Tree *pTree){
 /*
 ** Release a reference to a read-version.
 */
-void lsmTreeReleaseReadVersion(TreeVersion *pTreeVersion){
+void lsmTreeReleaseReadVersion(lsm_env *pEnv, TreeVersion *pTreeVersion){
   if( pTreeVersion ){
     assert( pTreeVersion->nRef>0 );
     pTreeVersion->nRef--;
     if( pTreeVersion->nRef==0 ){
       Tree *pTree = pTreeVersion->pTree;
-      lsmFree(pTree->pEnv, pTreeVersion);
-      lsmTreeDecrRefcount(pTree);
+      lsmFree(pEnv, pTreeVersion);
+      treeDecrRefcount(pEnv, pTree);
     }
   }
 }
@@ -1342,26 +1360,10 @@ int lsmTreeIsWriteVersion(TreeVersion *pTV){
   return (pTV==pTV->pTree->pWorking);
 }
 
-void lsmTreeFixVersion(TreeCursor *pCsr, TreeVersion *pTV){
-  pCsr->pVersion = pTV;
-}
-
-void lsmTreeIncrRefcount(Tree *pTree){
-  pTree->nTreeRef++;
-}
-
-void lsmTreeDecrRefcount(Tree *pTree){
-  assert( pTree->nTreeRef>0 );
-  pTree->nTreeRef--;
-  if( pTree->nTreeRef==0 ){
-    assert( pTree->pWorking==0 );
-    lsmTreeDestroy(pTree);
-  }
-}
-
-void lsmTreeRelease(Tree *pTree){
+void lsmTreeRelease(lsm_env *pEnv, Tree *pTree){
   if( pTree ){
     assert( pTree->nTreeRef>0 && pTree->pCommit );
-    lsmTreeReleaseReadVersion(pTree->pCommit);
+    lsmTreeReleaseReadVersion(pEnv, pTree->pCommit);
   }
 }
+

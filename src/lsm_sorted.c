@@ -1500,7 +1500,7 @@ static int multiCursorNew(
   if( rc==LSM_OK ){
     if( useTree ){
       assert( pDb->pTV );
-      rc = lsmTreeCursorNew(pDb->pTV, &pCsr->pTreeCsr);
+      rc = lsmTreeCursorNew(pDb, &pCsr->pTreeCsr);
     }
     pCsr->pDb = pDb;
     pCsr->pSnap = pSnap;
@@ -1663,7 +1663,7 @@ static void multiCursorGetVal(
       int *aVal;
       int nVal;
       assert( pCsr->pSystemVal==0 );
-      lsmSnapshotFreelist(pCsr->pSnap, &aVal, &nVal);
+      lsmSnapshotFreelist(pCsr->pDb, &aVal, &nVal);
       pCsr->pSystemVal = *ppVal = (void *)aVal;
       *pnVal = sizeof(int) * nVal;
     }else if( pCsr->flags & CURSOR_AT_LEVELS ){
@@ -1716,7 +1716,7 @@ int lsmSortedLoadSystem(lsm_db *pDb){
       rc = lsmMCursorValue(pCsr, &pVal, &nVal);
       if( rc==LSM_OK ){
         int n32 = nVal / sizeof(u32);
-        rc = lsmSnapshotSetFreelist(pDb->pWorker, (int *)pVal, n32);
+        rc = lsmSnapshotSetFreelist(pDb, (int *)pVal, n32);
       }
     }
 
@@ -2958,12 +2958,12 @@ int lsmSortedFlushTree(
   assert( pDb->pWorker );
   assert( pDb->pTV==0 || lsmTreeIsWriteVersion(pDb->pTV) );
 
-  lsmDatabaseDirty(pDb->pDatabase);    /* ??? */
+  lsmDatabaseDirty(pDb);          /* ??? */
 
   rc = lsmBeginFlush(pDb);
 
   /* If there is nothing to do, return early. */
-  if( lsmTreeSize(pDb->pTV)==0 && lsmDatabaseIsDirty(pDb->pDatabase)==0 ){
+  if( lsmTreeSize(pDb->pTV)==0 && lsmDatabaseIsDirty(pDb)==0 ){
     lsmFinishFlush(pDb, 0);
     return LSM_OK;
   }
@@ -3268,13 +3268,10 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
   assertAllPointersOk(rc, pDb);
 
   if( lsmDbSnapshotLevel(pWorker)==0 ) return LSM_OK;
-  lsmDatabaseDirty(pDb->pDatabase);
+  lsmDatabaseDirty(pDb);
 
   while( nRemaining>0 ){
     Level *pLevel;
-    const int nTopMerge = 4;
-    int i;
-    int nMxPage;
     Level *pTopLevel = lsmDbSnapshotLevel(pWorker);
 
     /* Find the longest contiguous run of levels not currently undergoing a 
@@ -3530,9 +3527,9 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
 
   if( rc==LSM_OK && nPage>0 ){
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
-    pDb->pWorker = lsmDbSnapshotWorker(pDb->pDatabase);
+    pDb->pWorker = lsmDbSnapshotWorker(pDb);
     rc = sortedWork(pDb, nPage, bOptimize, pnWrite);
-    lsmDbSnapshotRelease(pDb->pWorker);
+    lsmDbSnapshotRelease(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;
   }else if( pnWrite ){
     *pnWrite = 0;
@@ -3723,6 +3720,7 @@ static int infoAppendBlob(LsmString *pStr, int bHex, u8 *z, int n){
       lsmStringAppendf(pStr, "%c", isalnum(z[iChar]) ?z[iChar] : '.');
     }
   }
+  return LSM_OK;
 }
 
 int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
@@ -3737,7 +3735,7 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
   /* Obtain the worker snapshot */
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb->pDatabase);
+    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
   }
 
   rc = lsmFsDbPageGet(pDb->pFS, iPg, &pPg);
@@ -3804,7 +3802,7 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
     lsmFsPageRelease(pPg);
   }
 
-  lsmDbSnapshotRelease(pRelease);
+  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
   return rc;
 }
 
@@ -3845,7 +3843,7 @@ void lsmSortedDumpStructure(
 
   if( pDump==0 ){
     assert( pDb->pWorker==0 );
-    pDump = lsmDbSnapshotWorker(pDb->pDatabase);
+    pDump = lsmDbSnapshotWorker(pDb);
   }
 
   pTopLevel = lsmDbSnapshotLevel(pDump);
@@ -3940,7 +3938,7 @@ void lsmSortedDumpStructure(
   }
 
   if( pSnap==0 ){
-    lsmDbSnapshotRelease(pDump);
+    lsmDbSnapshotRelease(pDb->pEnv, pDump);
   }
 }
 
@@ -3972,10 +3970,12 @@ int lsmSortedFlushDb(lsm_db *pDb){
 }
 
 void lsmSortedFixTreeVersions(lsm_db *pDb){
+#if 0
   lsm_cursor *pCsr;
   for(pCsr=pDb->pCsr; pCsr; pCsr=pCsr->pNext){
     lsmTreeFixVersion(pCsr->pMC->pTreeCsr, pDb->pTV);
   }
+#endif
 }
 
 void lsmSortedSaveTreeCursors(lsm_db *pDb){

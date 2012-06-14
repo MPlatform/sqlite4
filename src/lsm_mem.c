@@ -27,7 +27,6 @@ struct Chunk {
 };
 
 struct Mempool {
-  lsm_env *pEnv;                  /* Environment handle */
   Chunk *pFirst;                  /* First in list of chunks */
   Chunk *pLast;                   /* Last in list of chunks */
   int nUsed;                      /* Total number of bytes allocated */
@@ -154,7 +153,6 @@ int lsmPoolNew(lsm_env *pEnv, Mempool **ppPool){
     pPool->pFirst = pChunk;
     pPool->pLast = pChunk;
     pPool->nUsed = 0;
-    pPool->pEnv = pEnv;
     rc = LSM_OK;
   }
 
@@ -162,10 +160,9 @@ int lsmPoolNew(lsm_env *pEnv, Mempool **ppPool){
   return rc;
 }
 
-void lsmPoolDestroy(Mempool *pPool){
+void lsmPoolDestroy(lsm_env *pEnv, Mempool *pPool){
   if( pPool ){
     Chunk *pChunk = pPool->pFirst;
-    lsm_env *pEnv = pPool->pEnv;
     while( pChunk ){
       Chunk *pFree = pChunk;
       pChunk = pChunk->pNext;
@@ -174,13 +171,13 @@ void lsmPoolDestroy(Mempool *pPool){
   }
 }
 
-void *lsmPoolMalloc(Mempool *pPool, int nByte){
+void *lsmPoolMalloc(lsm_env *pEnv, Mempool *pPool, int nByte){
   u8 *pRet = 0;
   Chunk *pLast = pPool->pLast;
 
   nByte = ROUND8(nByte);
   if( nByte > (pLast->nData - pLast->iOff) ){
-    Chunk *pNew = poolChunkNew(pPool->pEnv, nByte);
+    Chunk *pNew = poolChunkNew(pEnv, nByte);
     if( pNew ){
       pLast->pNext = pNew;
       pPool->pLast = pNew;
@@ -195,8 +192,8 @@ void *lsmPoolMalloc(Mempool *pPool, int nByte){
   return (void *)pRet;
 }
 
-void *lsmPoolMallocZero(Mempool *pPool, int nByte){
-  void *pRet = lsmPoolMalloc(pPool, nByte);
+void *lsmPoolMallocZero(lsm_env *pEnv, Mempool *pPool, int nByte){
+  void *pRet = lsmPoolMalloc(pEnv, pPool, nByte);
   if( pRet ) memset(pRet, 0, nByte);
   return pRet;
 }
@@ -213,7 +210,7 @@ void lsmPoolMark(Mempool *pPool, void **ppChunk, int *piOff){
   *piOff = pPool->pLast->iOff;
 }
 
-void lsmPoolRollback(Mempool *pPool, void *pChunk, int iOff){
+void lsmPoolRollback(lsm_env *pEnv, Mempool *pPool, void *pChunk, int iOff){
   Chunk *pLast = (Chunk *)pChunk;
   Chunk *p;
   Chunk *pNext;
@@ -227,7 +224,7 @@ void lsmPoolRollback(Mempool *pPool, void *pChunk, int iOff){
   for(p=pLast->pNext; p; p=pNext){
     pPool->nUsed -= p->iOff;
     pNext = p->pNext;
-    lsmFree(pPool->pEnv, p);
+    lsmFree(pEnv, p);
   }
 
   pLast->pNext = 0;

@@ -179,7 +179,9 @@ struct Snapshot {
 **   TODO - this description.
 */
 struct Database {
+#if 0
   lsm_env *pEnv;                  /* Environment handle */
+#endif
   char *zName;                    /* Canonical path to database file */
 
   Tree *pTree;                    /* Current in-memory tree structure */
@@ -340,17 +342,17 @@ static void flRemoveEntry0(Freelist *p){
 ** This function frees all resources held by the Database structure passed
 ** as the only argument.
 */
-static void freeDatabase(Database *p){
+static void freeDatabase(lsm_env *pEnv, Database *p){
   if( p ){
     /* Free the mutexes */
-    lsmMutexDel(p->pEnv, p->pClientMutex);
-    lsmMutexDel(p->pEnv, p->pWorkerMutex);
+    lsmMutexDel(pEnv, p->pClientMutex);
+    lsmMutexDel(pEnv, p->pWorkerMutex);
 
     /* Free the log buffer. */
     lsmStringClear(&p->log.buf);
 
     /* Free the memory allocated for the Database struct itself */
-    lsmFree(p->pEnv, p);
+    lsmFree(pEnv, p);
   }
 }
 
@@ -392,7 +394,6 @@ int lsmDbDatabaseFind(
 
       /* Initialize the log handle */
       if( rc==LSM_OK ){
-        p->pEnv = pEnv;
         p->log.cksum0 = LSM_CKSUM0_INIT;
         p->log.cksum1 = LSM_CKSUM1_INIT;
         lsmStringInit(&p->log.buf, pEnv);
@@ -419,7 +420,7 @@ int lsmDbDatabaseFind(
         p->worker.iSalt1 = LSM_INITIAL_SALT1;
         p->worker.iSalt2 = LSM_INITIAL_SALT2;
       }else{
-        freeDatabase(p);
+        freeDatabase(pEnv, p);
         p = 0;
       }
     }
@@ -432,8 +433,7 @@ int lsmDbDatabaseFind(
   return rc;
 }
 
-void freeClientSnapshot(Snapshot *p){
-  lsm_env *pEnv = p->pDatabase->pEnv;
+static void freeClientSnapshot(lsm_env *pEnv, Snapshot *p){
   Level *pLevel;
   
   assert( p->nRef==0 );
@@ -482,10 +482,10 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       }
 
       /* Free the in-memory tree object */
-      lsmTreeRelease(p->pTree);
+      lsmTreeRelease(pDb->pEnv, p->pTree);
 
       /* Free the contents of the worker snapshot */
-      lsmSortedFreeLevel(p->pEnv, p->worker.pLevel);
+      lsmSortedFreeLevel(pDb->pEnv, p->worker.pLevel);
       lsmFree(pDb->pEnv, p->worker.freelist.aEntry);
       lsmFree(pDb->pEnv, p->append.aPoint);
       
@@ -493,10 +493,10 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       if( p->pClient ){
         assert( p->pClient->nRef==1 );
         p->pClient->nRef = 0;
-        freeClientSnapshot(p->pClient);
+        freeClientSnapshot(pDb->pEnv, p->pClient);
       }
 
-      freeDatabase(p);
+      freeDatabase(pDb->pEnv, p);
     }
     leaveGlobalMutex(pDb->pEnv);
   }
@@ -511,16 +511,18 @@ void lsmDbSnapshotSetLevel(Snapshot *pSnap, Level *pLevel){
   pSnap->pLevel = pLevel;
 }
 
-void lsmDatabaseDirty(Database *p){
-  assert( lsmMutexHeld(p->pEnv, p->pWorkerMutex) );
+void lsmDatabaseDirty(lsm_db *pDb){
+  Database *p = pDb->pDatabase;
+  assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) );
   if( p->bDirty==0 ){
     p->worker.iId++;
     p->bDirty = 1;
   }
 }
 
-int lsmDatabaseIsDirty(Database *p){
-  assert( lsmMutexHeld(p->pEnv, p->pWorkerMutex) );
+int lsmDatabaseIsDirty(lsm_db *pDb){
+  Database *p = pDb->pDatabase;
+  assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) );
   return p->bDirty;
 }
 
@@ -547,30 +549,35 @@ void lsmSnapshotSetCkptid(Snapshot *pSnap, i64 iNew){
 ** to lsmDbSnapshotClient() must be matched by an lsmDbSnapshotRelease() 
 ** call.
 */
-Snapshot *lsmDbSnapshotClient(Database *p){
+#if 0
+Snapshot *lsmDbSnapshotClient(lsm_db *pDb){
+  Database *p = pDb->pDatabase;
   Snapshot *pRet;
-  lsmMutexEnter(p->pEnv, p->pClientMutex);
+  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
   pRet = p->pClient;
   pRet->nRef++;
-  lsmMutexLeave(p->pEnv, p->pClientMutex);
+  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   return pRet;
 }
+#endif
 
 /*
 ** Return a pointer to the worker snapshot. This call grabs the worker 
 ** mutex. It is released when the pointer to the worker snapshot is passed 
 ** to lsmDbSnapshotRelease().
 */
-Snapshot *lsmDbSnapshotWorker(Database *p){
-  lsmMutexEnter(p->pEnv, p->pWorkerMutex);
+Snapshot *lsmDbSnapshotWorker(lsm_db *pDb){
+  Database *p = pDb->pDatabase;
+  lsmMutexEnter(pDb->pEnv, p->pWorkerMutex);
   return &p->worker;
 }
 
-Snapshot *lsmDbSnapshotRecover(Database *p){
+Snapshot *lsmDbSnapshotRecover(lsm_db *pDb){
+  Database *p = pDb->pDatabase;
   Snapshot *pRet = 0;
-  lsmMutexEnter(p->pEnv, p->pWorkerMutex);
+  lsmMutexEnter(pDb->pEnv, p->pWorkerMutex);
   if( p->bRecovered ){
-    lsmMutexLeave(p->pEnv, p->pWorkerMutex);
+    lsmMutexLeave(pDb->pEnv, p->pWorkerMutex);
   }else{
     pRet = &p->worker;
   }
@@ -582,16 +589,18 @@ Snapshot *lsmDbSnapshotRecover(Database *p){
 **
 ** TODO: Should this be combined with BeginRecovery()/FinishRecovery()?
 */
-void lsmDbRecoveryComplete(Database *p, int bVal){
+void lsmDbRecoveryComplete(lsm_db *pDb, int bVal){
+  Database *p = pDb->pDatabase;
+
   assert( bVal==1 || bVal==0 );
-  assert( lsmMutexHeld(p->pEnv, p->pWorkerMutex) );
+  assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) );
   assert( p->pTree );
 
   p->bRecovered = bVal;
   p->iCheckpointId = p->worker.iId;
 }
 
-static void snapshotDecrRefcnt(Snapshot *pSnap){
+static void snapshotDecrRefcnt(lsm_env *pEnv, Snapshot *pSnap){
   Database *p = pSnap->pDatabase;
 
   assertSnapshotListOk(p);
@@ -602,7 +611,7 @@ static void snapshotDecrRefcnt(Snapshot *pSnap){
     assert( pSnap!=pIter );
     while( pIter->pSnapshotNext!=pSnap ) pIter = pIter->pSnapshotNext;
     pIter->pSnapshotNext = pSnap->pSnapshotNext;
-    freeClientSnapshot(pSnap);
+    freeClientSnapshot(pEnv, pSnap);
     assertSnapshotListOk(p);
   }
 }
@@ -611,7 +620,7 @@ static void snapshotDecrRefcnt(Snapshot *pSnap){
 ** Release a snapshot reference obtained by calling lsmDbSnapshotWorker()
 ** or lsmDbSnapshotClient().
 */
-void lsmDbSnapshotRelease(Snapshot *pSnap){
+void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *pSnap){
   if( pSnap ){
     Database *p = pSnap->pDatabase;
 
@@ -623,11 +632,11 @@ void lsmDbSnapshotRelease(Snapshot *pSnap){
     ** and (nRef==0) test are protected by the database client mutex.
     */
     if( isWorker(pSnap) ){
-      lsmMutexLeave(p->pEnv, p->pWorkerMutex);
+      lsmMutexLeave(pEnv, p->pWorkerMutex);
     }else{
-      lsmMutexEnter(p->pEnv, p->pClientMutex);
-      snapshotDecrRefcnt(pSnap);
-      lsmMutexLeave(p->pEnv, p->pClientMutex);
+      lsmMutexEnter(pEnv, p->pClientMutex);
+      snapshotDecrRefcnt(pEnv, pSnap);
+      lsmMutexLeave(pEnv, p->pClientMutex);
     }
   }
 }
@@ -636,8 +645,8 @@ void lsmDbSnapshotRelease(Snapshot *pSnap){
 ** Create a new client snapshot based on the current contents of the worker 
 ** snapshot. The connection must be the worker to call this function.
 */
-int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
-  Database *pDb = db->pDatabase;  /* Database handle */
+int lsmDbUpdateClient(lsm_db *pDb, int nHdrLevel){
+  Database *p = pDb->pDatabase;   /* Database handle */
   Snapshot *pOld;                 /* Old client snapshot object */
   Snapshot *pNew;                 /* New client snapshot object */
   int nByte;                      /* Memory required for new client snapshot */
@@ -650,10 +659,10 @@ int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
   u8 *pAvail;                     /* Used to divide up allocation */
 
   /* Must be the worker to call this. */
-  assertMustbeWorker(db);
+  assertMustbeWorker(pDb);
 
   /* Allocate space for the client snapshot and all levels. */
-  for(pLevel=pDb->worker.pLevel; pLevel; pLevel=pLevel->pNext){
+  for(pLevel=p->worker.pLevel; pLevel; pLevel=pLevel->pNext){
     nLevel++;
     nRight += pLevel->nRight;
   }
@@ -661,18 +670,18 @@ int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
         + nLevel * sizeof(Level)
         + nRight * sizeof(Segment)
         + nKeySpace;
-  pNew = (Snapshot *)lsmMallocZero(db->pEnv, nByte);
+  pNew = (Snapshot *)lsmMallocZero(pDb->pEnv, nByte);
   if( !pNew ) return LSM_NOMEM_BKPT;
-  pNew->pDatabase = pDb;
-  pNew->iId = pDb->worker.iId;
-  pNew->iLogPg = pDb->worker.iLogPg;
-  pNew->iSalt1 = pDb->worker.iSalt1;
-  pNew->iSalt2 = pDb->worker.iSalt2;
+  pNew->pDatabase = p;
+  pNew->iId = p->worker.iId;
+  pNew->iLogPg = p->worker.iLogPg;
+  pNew->iSalt1 = p->worker.iSalt1;
+  pNew->iSalt2 = p->worker.iSalt2;
 
   /* Copy the linked-list of Level structures */
   pAvail = (u8 *)&pNew[1];
   ppLink = &pNew->pLevel;
-  for(pLevel=pDb->worker.pLevel; pLevel && rc==LSM_OK; pLevel=pLevel->pNext){
+  for(pLevel=p->worker.pLevel; pLevel && rc==LSM_OK; pLevel=pLevel->pNext){
     Level *p;
 
     p = (Level *)pAvail;
@@ -683,7 +692,7 @@ int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
       p->aRhs = (Segment *)pAvail;
       memcpy(p->aRhs, pLevel->aRhs, sizeof(Segment) * p->nRight);
       pAvail += (sizeof(Segment) * p->nRight);
-      lsmSortedSplitkey(db, p, &rc);
+      lsmSortedSplitkey(pDb, p, &rc);
     }
 
     /* This needs to come after any call to lsmSortedSplitkey(). Splitkey()
@@ -695,10 +704,10 @@ int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
   }
 
   /* Create the serialized version of the new client snapshot. */
-  if( pDb->bDirty && rc==LSM_OK ){
-    assert( nHdrLevel>0 || pDb->worker.pLevel==0 );
+  if( p->bDirty && rc==LSM_OK ){
+    assert( nHdrLevel>0 || p->worker.pLevel==0 );
     rc = lsmCheckpointExport(
-        db, nHdrLevel, pNew->iId, 1, &pNew->pExport, &pNew->nExport
+        pDb, nHdrLevel, pNew->iId, 1, &pNew->pExport, &pNew->nExport
     );
   }
 
@@ -706,30 +715,30 @@ int lsmDbUpdateClient(lsm_db *db, int nHdrLevel){
     /* Initialize the new snapshot ref-count to 1 */
     pNew->nRef = 1;
 
-    lsmDbSnapshotRelease(db->pClient);
+    lsmDbSnapshotRelease(pDb->pEnv, pDb->pClient);
 
     /* Install the new client snapshot and release the old. */
-    lsmMutexEnter(pDb->pEnv, pDb->pClientMutex);
-    assertSnapshotListOk(pDb);
-    pOld = pDb->pClient;
+    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
+    assertSnapshotListOk(p);
+    pOld = p->pClient;
     pNew->pSnapshotNext = pOld;
-    pDb->pClient = pNew;
-    assertSnapshotListOk(pDb);
-    if( db->pClient ){
-      assert( db->pClient==pOld );
-      db->pClient = pDb->pClient;
-      pDb->pClient->nRef++;
+    p->pClient = pNew;
+    assertSnapshotListOk(p);
+    if( pDb->pClient ){
+      assert( pDb->pClient==pOld );
+      pDb->pClient = p->pClient;
+      p->pClient->nRef++;
     }
-    lsmMutexLeave(pDb->pEnv, pDb->pClientMutex);
+    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
 
-    lsmDbSnapshotRelease(pOld);
-    pDb->bDirty = 0;
+    lsmDbSnapshotRelease(pDb->pEnv, pOld);
+    p->bDirty = 0;
 
     /* Upgrade the user connection to the new client snapshot */
 
   }else{
     /* An error has occurred. Delete the allocated object. */
-    freeClientSnapshot(pNew);
+    freeClientSnapshot(pDb->pEnv, pNew);
   }
 
   return rc;
@@ -765,11 +774,11 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     /* Both Database.iCheckpointId and the Database.pClient list are 
     ** protected by the client mutex. So grab it here before determining
     ** the id of the oldest snapshot still potentially in use.  */
-    lsmMutexEnter(p->pEnv, p->pClientMutex);
+    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
     assertSnapshotListOk(p);
     for(pIter=p->pClient; pIter->pSnapshotNext; pIter=pIter->pSnapshotNext);
     iInUse = MIN(pIter->iId, p->iCheckpointId);
-    lsmMutexLeave(p->pEnv, p->pClientMutex);
+    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
 
     if( iFree<=iInUse ){
       iRet = pFree->aEntry[0].iBlk;
@@ -866,18 +875,19 @@ u32 *lsmFreelistDeltaPtr(lsm_db *pDb){
 /*
 ** Return the current contents of the free-list as a list of integers.
 */
-int lsmSnapshotFreelist(Snapshot *pSnap, int **paFree, int *pnFree){
+int lsmSnapshotFreelist(lsm_db *pDb, int **paFree, int *pnFree){
   int rc = LSM_OK;                /* Return Code */
   int *aFree = 0;                 /* Integer array to return via *paFree */
   int nFree;                      /* Value to return via *pnFree */
   Freelist *p;                    /* Database free list object */
+  Snapshot *pSnap = pDb->pWorker;
 
   assert( isWorker(pSnap) );
 
   p = &pSnap->freelist;
   nFree = p->nEntry;
   if( nFree && paFree ){
-    aFree = lsmMallocRc(pSnap->pDatabase->pEnv, sizeof(int) * nFree, &rc);
+    aFree = lsmMallocRc(pDb->pEnv, sizeof(int) * nFree, &rc);
     if( aFree ){
       int i;
       for(i=0; i<nFree; i++){
@@ -892,14 +902,15 @@ int lsmSnapshotFreelist(Snapshot *pSnap, int **paFree, int *pnFree){
 }
 
 
-int lsmSnapshotSetFreelist(Snapshot *pSnap, int *aElem, int nElem){
-  lsm_env * const pEnv = pSnap->pDatabase->pEnv;
+int lsmSnapshotSetFreelist(lsm_db *pDb, int *aElem, int nElem){
+  lsm_env *pEnv = pDb->pEnv;
   int rc = LSM_OK;                /* Return code */
   int i;                          /* Iterator variable */
   int nIgnore;                    /* Number of entries to ignore */
   int iRefree1;                   /* A refreed block (or 0) */
   int iRefree2;                   /* A refreed block (or 0) */
   Freelist *pFree;                /* Database free-list */
+  Snapshot *pSnap = pDb->pWorker;
 
   assert( isWorker(pSnap) );
 
@@ -937,7 +948,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   ** is actually required. If successful, and one is, set stack variable
   ** pSnap to point to the client snapshot to checkpoint.  
   */
-  lsmMutexEnter(p->pEnv, p->pClientMutex);
+  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
   pSnap = p->pClient;
   if( p->bCheckpointer==0 && pSnap->iId>p->iCheckpointId ){
     p->bCheckpointer = 1;
@@ -945,7 +956,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   }else{
     pSnap = 0;
   }
-  lsmMutexLeave(p->pEnv, p->pClientMutex);
+  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
 
   /* Attempt to grab the checkpoint mutex. If the attempt fails, this 
   ** function becomes a no-op. Some other thread is already running
@@ -999,14 +1010,14 @@ int lsmCheckpointWrite(lsm_db *pDb){
     ** in use by any existing database client. And "the most recently
     ** checkpointed snapshot" has just changed.
     */
-    lsmMutexEnter(p->pEnv, p->pClientMutex);
+    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
     if( rc==LSM_OK ){
       lsmLogCheckpoint(pDb, &p->log, lsmCheckpointLogOffset(pSnap->pExport));
       p->iCheckpointId = pSnap->iId;
     }
     p->bCheckpointer = 0;
-    snapshotDecrRefcnt(pSnap);
-    lsmMutexLeave(p->pEnv, p->pClientMutex);
+    snapshotDecrRefcnt(pDb->pEnv, pSnap);
+    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   }
 
   return rc;
@@ -1038,7 +1049,7 @@ int lsmBeginRecovery(lsm_db *pDb){
   rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
   if( rc==LSM_OK ){
     assert( pDb->pTV==0 );
-    rc = lsmTreeWriteVersion(p->pTree, &pDb->pTV);
+    rc = lsmTreeWriteVersion(pDb->pEnv, p->pTree, &pDb->pTV);
   }
   return rc;
 }
@@ -1051,7 +1062,7 @@ int lsmFinishRecovery(lsm_db *pDb){
   assert( pDb->pWorker );
   assert( pDb->pClient==0 );
   assert( lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pWorkerMutex) );
-  rc = lsmTreeReleaseWriteVersion(pDb->pTV, 1, 0);
+  rc = lsmTreeReleaseWriteVersion(pDb->pEnv, pDb->pTV, 1, 0);
   pDb->pTV = 0;
   return rc;
 }
@@ -1068,7 +1079,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
 
   if( pDb->pClient==0 ){
     Database *p = pDb->pDatabase;
-    lsmMutexEnter(p->pEnv, p->pClientMutex);
+    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
@@ -1088,7 +1099,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
       assert( pDb->pTV!=0 );
     }
 
-    lsmMutexLeave(p->pEnv, p->pClientMutex);
+    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   }
 
   return rc;
@@ -1109,14 +1120,14 @@ void lsmFinishReadTrans(lsm_db *pDb){
   if( pClient ){
     Database *p = pDb->pDatabase;
 
-    lsmDbSnapshotRelease(pDb->pClient);
+    lsmDbSnapshotRelease(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
 
     /* Release the in-memory tree version */
-    lsmMutexEnter(p->pEnv, p->pClientMutex);
-    lsmTreeReleaseReadVersion(pDb->pTV);
+    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
+    lsmTreeReleaseReadVersion(pDb->pEnv, pDb->pTV);
     pDb->pTV = 0;
-    lsmMutexLeave(p->pEnv, p->pClientMutex);
+    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   }
 }
 
@@ -1127,7 +1138,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
   Database *p = pDb->pDatabase;   /* Shared database object */
 
-  lsmMutexEnter(p->pEnv, p->pClientMutex);
+  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
   assert( p->pTree );
   assert( (pDb->pTV==0)==(pDb->pClient==0) );
 
@@ -1143,7 +1154,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   if( p->bWriter ){
     rc = LSM_BUSY;
   }else{
-    rc = lsmTreeWriteVersion(p->pTree, &pDb->pTV);
+    rc = lsmTreeWriteVersion(pDb->pEnv, p->pTree, &pDb->pTV);
   }
 
   if( rc==LSM_OK ){
@@ -1156,7 +1167,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
       TreeVersion *pWrite = pDb->pTV;
       TreeVersion **ppRestore = (pDb->pClient ? &pDb->pTV : 0);
       pDb->pTV = 0;
-      lsmTreeReleaseWriteVersion(pWrite, 0, ppRestore);
+      lsmTreeReleaseWriteVersion(pDb->pEnv, pWrite, 0, ppRestore);
     }else if( pDb->pClient==0 ){
       /* Otherwise, if the lsmLogBegin() attempt was successful and the 
       ** client did not have a read transaction open when this function
@@ -1171,7 +1182,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
     p->bWriter = 1;
     lsmSortedFixTreeVersions(pDb);
   }
-  lsmMutexLeave(p->pEnv, p->pClientMutex);
+  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   return rc;
 }
 
@@ -1190,16 +1201,16 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 */
 int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   Database *p = pDb->pDatabase;
-  lsmMutexEnter(p->pEnv, p->pClientMutex);
+  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
   assert( pDb->pTV && lsmTreeIsWriteVersion(pDb->pTV) );
   assert( p->bWriter );
   p->bWriter = 0;
-  lsmTreeReleaseWriteVersion(pDb->pTV, bCommit, &pDb->pTV);
+  lsmTreeReleaseWriteVersion(pDb->pEnv, pDb->pTV, bCommit, &pDb->pTV);
   lsmSortedFixTreeVersions(pDb);
 
   lsmLogEnd(pDb, &p->log, bCommit);
-  lsmMutexLeave(p->pEnv, p->pClientMutex);
+  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   return LSM_OK;
 }
 
@@ -1240,14 +1251,14 @@ int lsmFinishFlush(lsm_db *pDb, int bEmpty){
 
   assert( pDb->pWorker );
   assert( pDb->pTV && (p->nDbRef==0 || lsmTreeIsWriteVersion(pDb->pTV)) );
-  lsmMutexEnter(p->pEnv, p->pClientMutex);
+  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
   if( bEmpty ){
     if( p->bWriter ){
-      lsmTreeReleaseWriteVersion(pDb->pTV, 1, 0);
+      lsmTreeReleaseWriteVersion(pDb->pEnv, pDb->pTV, 1, 0);
     }
     pDb->pTV = 0;
-    lsmTreeRelease(p->pTree);
+    lsmTreeRelease(pDb->pEnv, p->pTree);
 
     if( p->nDbRef>0 ){
       rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
@@ -1259,11 +1270,11 @@ int lsmFinishFlush(lsm_db *pDb, int bEmpty){
 
   if( p->bWriter ){
     assert( pDb->pClient );
-    if( 0==pDb->pTV ) rc = lsmTreeWriteVersion(p->pTree, &pDb->pTV);
+    if( 0==pDb->pTV ) rc = lsmTreeWriteVersion(pDb->pEnv, p->pTree, &pDb->pTV);
   }else{
     pDb->pTV = 0;
   }
-  lsmMutexLeave(p->pEnv, p->pClientMutex);
+  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   return rc;
 }
 

@@ -926,7 +926,7 @@ int lsmLogRecover(lsm_db *pDb){
           logReaderBlob(&reader, &buf1, nKey, 0);
           logReaderBlob(&reader, &buf2, nVal, &aVal);
           if( iPass==1 ){ 
-            rc = lsmTreeInsert(pDb->pTV, (u8 *)buf1.z, nKey, aVal, nVal);
+            rc = lsmTreeInsert(pDb, (u8 *)buf1.z, nKey, aVal, nVal);
           }
           break;
         }
@@ -945,7 +945,7 @@ int lsmLogRecover(lsm_db *pDb){
 
           logReaderBlob(&reader, &buf1, nKey, &aKey);
           if( iPass==1 ){ 
-            rc = lsmTreeInsert(pDb->pTV, aKey, nKey, NULL, -1);
+            rc = lsmTreeInsert(pDb, aKey, nKey, NULL, -1);
           }
           break;
         }

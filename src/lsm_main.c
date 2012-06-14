@@ -93,10 +93,10 @@ lsm_env *lsm_get_env(lsm_db *pDb){
 ** Release snapshot handle *ppSnap. Then set *ppSnap to zero. This
 ** is useful for doing (say):
 **
-**   dbReleaseSnapshot(&pDb->pWorker);
+**   dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
 */
-static void dbReleaseSnapshot(Snapshot **ppSnap){
-  lsmDbSnapshotRelease(*ppSnap);
+static void dbReleaseSnapshot(lsm_env *pEnv, Snapshot **ppSnap){
+  lsmDbSnapshotRelease(pEnv, *ppSnap);
   *ppSnap = 0;
 }
 
@@ -112,12 +112,12 @@ static void dbReleaseClientSnapshot(lsm_db *pDb){
 
 static void dbWorkerStart(lsm_db *pDb){
   assert( pDb->pWorker==0 );
-  pDb->pWorker = lsmDbSnapshotWorker(pDb->pDatabase);
+  pDb->pWorker = lsmDbSnapshotWorker(pDb);
 }
 
 static void dbWorkerDone(lsm_db *pDb){
   assert( pDb->pWorker );
-  dbReleaseSnapshot(&pDb->pWorker);
+  dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
 }
 
 static int dbAutoWork(lsm_db *pDb, int nUnit){
@@ -148,7 +148,7 @@ static int dbRecoverIfRequired(lsm_db *pDb){
   assert( pDb->pWorker==0 && pDb->pClient==0 );
 
   /* The following call returns NULL if recovery is not required. */
-  pDb->pWorker = lsmDbSnapshotRecover(pDb->pDatabase);
+  pDb->pWorker = lsmDbSnapshotRecover(pDb);
   if( pDb->pWorker ){
 
     /* Read the database structure */
@@ -171,7 +171,7 @@ static int dbRecoverIfRequired(lsm_db *pDb){
 
     /* Set the "recovery done" flag */
     if( rc==LSM_OK ){
-      lsmDbRecoveryComplete(pDb->pDatabase, 1);
+      lsmDbRecoveryComplete(pDb, 1);
     }
 
     /* Set up the initial client snapshot. */
@@ -179,7 +179,7 @@ static int dbRecoverIfRequired(lsm_db *pDb){
       rc = lsmDbUpdateClient(pDb, 0);
     }
 
-    dbReleaseSnapshot(&pDb->pWorker);
+    dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
   }
 
   return rc;
@@ -365,7 +365,7 @@ int lsmStructList(
   /* Obtain the worker snapshot */
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb->pDatabase);
+    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
   }
 
   /* Format the contents of the snapshot as text */
@@ -383,7 +383,7 @@ int lsmStructList(
   rc = s.n>=0 ? LSM_OK : LSM_NOMEM;
 
   /* Release the snapshot and return */
-  lsmDbSnapshotRelease(pRelease);
+  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
   *pzOut = s.z;
   return rc;
 }
@@ -410,7 +410,7 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       int **paVal = va_arg(ap, int **);
       int bRelease = 0;
       if( pDb->pWorker==0 ){
-        pDb->pWorker = lsmDbSnapshotWorker(pDb->pDatabase);
+        pDb->pWorker = lsmDbSnapshotWorker(pDb);
         bRelease = 1;
       }
       if( pDb->pWorker==0 ){
@@ -418,7 +418,7 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       }else{
         rc = lsmCheckpointExport(pDb, 0, 0, 0, (void **)paVal, 0);
         if( bRelease ){
-          dbReleaseSnapshot(&pDb->pWorker);
+          dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
         }
       }
       break;
@@ -489,7 +489,7 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
     }
 
     nBefore = lsmTreeSize(pDb->pTV);
-    rc = lsmTreeInsert(pDb->pTV, pKey, nKey, pVal, nVal);
+    rc = lsmTreeInsert(pDb, pKey, nKey, pVal, nVal);
     nAfter = lsmTreeSize(pDb->pTV);
 
     if( rc==LSM_OK && pDb->bAutowork && (nAfter/nQuant)!=(nBefore/nQuant) ){
@@ -756,7 +756,7 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
 
     if( iLevel<=pDb->nTransOpen ){
       TransMark *pMark = &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)];
-      lsmTreeRollback(pDb->pTV, &pMark->tree);
+      lsmTreeRollback(pDb, &pMark->tree);
       if( iLevel ) lsmLogSeek(pDb, &pMark->log);
       pDb->nTransOpen = iLevel;
     }

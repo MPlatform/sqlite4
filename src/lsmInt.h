@@ -292,16 +292,14 @@ int lsmCheckpointLevels(lsm_db *, int *, void **, int *);
 ** Functions from file "lsm_tree.c".
 */
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
-void lsmTreeDestroy(Tree *pTree);
 int lsmTreeSize(TreeVersion *pTV);
 int lsmTreeIsEmpty(Tree *pTree);
 
-int lsmTreeInsert(TreeVersion *, void *pKey, int nKey, void *pVal, int nVal);
-
-void lsmTreeRollback(TreeVersion *pTV, TreeMark *pMark);
+int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
+void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);
 void lsmTreeMark(TreeVersion *pTV, TreeMark *pMark);
 
-int lsmTreeCursorNew(TreeVersion *, TreeCursor **);
+int lsmTreeCursorNew(lsm_db *pDb, TreeCursor **);
 void lsmTreeCursorDestroy(TreeCursor *);
 
 int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes);
@@ -314,32 +312,28 @@ int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal);
 int lsmTreeCursorValid(TreeCursor *pCsr);
 
 TreeVersion *lsmTreeReadVersion(Tree *);
-int lsmTreeWriteVersion(Tree *, TreeVersion **);
+int lsmTreeWriteVersion(lsm_env *pEnv, Tree *, TreeVersion **);
 TreeVersion *lsmTreeRecoverVersion(Tree *);
 
-int lsmTreeReleaseWriteVersion(TreeVersion *, int, TreeVersion **);
-void lsmTreeReleaseReadVersion(TreeVersion *);
+int lsmTreeReleaseWriteVersion(lsm_env *, TreeVersion *, int, TreeVersion **);
+void lsmTreeReleaseReadVersion(lsm_env *, TreeVersion *);
 
 int lsmTreeIsWriteVersion(TreeVersion *);
 
-void lsmTreeDecrRefcount(Tree *);
-void lsmTreeIncrRefcount(Tree *);
-
-void lsmTreeRelease(Tree *);
-void lsmTreeFixVersion(TreeCursor *, TreeVersion *);
+void lsmTreeRelease(lsm_env *, Tree *);
 void lsmTreeCursorSave(TreeCursor *);
 
 /* 
 ** Functions from file "mem.c".
 */
 int lsmPoolNew(lsm_env *pEnv, Mempool **ppPool);
-void lsmPoolDestroy(Mempool *pPool);
-void *lsmPoolMalloc(Mempool *pPool, int nByte);
-void *lsmPoolMallocZero(Mempool *pPool, int nByte);
+void lsmPoolDestroy(lsm_env *pEnv, Mempool *pPool);
+void *lsmPoolMalloc(lsm_env *pEnv, Mempool *pPool, int nByte);
+void *lsmPoolMallocZero(lsm_env *pEnv, Mempool *pPool, int nByte);
 int lsmPoolUsed(Mempool *pPool);
 
 void lsmPoolMark(Mempool *pPool, void **, int *);
-void lsmPoolRollback(Mempool *pPool, void *, int);
+void lsmPoolRollback(lsm_env *pEnv, Mempool *pPool, void *, int);
 
 void *lsmMalloc(lsm_env*, size_t);
 void lsmFree(lsm_env*, void *);
@@ -353,7 +347,7 @@ void *lsmMallocZero(lsm_env *pEnv, size_t);
 char *lsmMallocStrdup(lsm_env *pEnv, const char *);
 
 /* 
-** Functions from file "mutex.c".
+** Functions from file "lsm_mutex.c".
 */
 int lsmMutexStatic(lsm_env*, int, lsm_mutex **);
 int lsmMutexNew(lsm_env*, lsm_mutex **);
@@ -537,13 +531,13 @@ int lsmFinishFlush(lsm_db *, int);
 
 int lsmDbUpdateClient(lsm_db *, int);
 
-int lsmSnapshotFreelist(Snapshot *, int **, int *);
-int lsmSnapshotSetFreelist(Snapshot *pSnap, int *aElem, int nElem);
+int lsmSnapshotFreelist(lsm_db *, int **, int *);
+int lsmSnapshotSetFreelist(lsm_db *, int *, int);
 
-Snapshot *lsmDbSnapshotClient(Database *);
-Snapshot *lsmDbSnapshotWorker(Database *);
-Snapshot *lsmDbSnapshotRecover(Database *);
-void lsmDbSnapshotRelease(Snapshot *);
+Snapshot *lsmDbSnapshotClient(lsm_db *);
+Snapshot *lsmDbSnapshotWorker(lsm_db *);
+Snapshot *lsmDbSnapshotRecover(lsm_db *);
+void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *);
 
 void lsmSnapshotSetNBlock(Snapshot *, int);
 int lsmSnapshotGetNBlock(Snapshot *);
@@ -552,7 +546,7 @@ void lsmSnapshotSetCkptid(Snapshot *, i64);
 Level *lsmDbSnapshotLevel(Snapshot *);
 void lsmDbSnapshotSetLevel(Snapshot *, Level *);
 
-void lsmDbRecoveryComplete(Database *, int);
+void lsmDbRecoveryComplete(lsm_db *, int);
 
 int lsmBlockAllocate(lsm_db *, int *);
 int lsmBlockFree(lsm_db *, int);
@@ -563,8 +557,8 @@ void lsmFreelistDeltaEnd(lsm_db *);
 void lsmFreelistDelta(lsm_db *, u32 *);
 u32 *lsmFreelistDeltaPtr(lsm_db *pDb);
 
-void lsmDatabaseDirty(Database *p);
-int lsmDatabaseIsDirty(Database *p);
+void lsmDatabaseDirty(lsm_db *pDb);
+int lsmDatabaseIsDirty(lsm_db *pDb);
 
 DbLog *lsmDatabaseLog(lsm_db *pDb);
 
