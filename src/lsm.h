@@ -372,14 +372,14 @@ int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr);
 int lsm_csr_close(lsm_cursor *pCsr);
 
 /* 
-** Search the database for an entry with key (pKey/nKey). If an error 
-** occurs, return an LSM error code, Otherwise, if the entry exists, 
-** return LSM_OK and leave the cursor is left pointing to the entry with
-** the matching key.
+** If the fourth parameter is LSM_SEEK_EQ, LSM_SEEK_GE or LSM_SEEK_LE,
+** this function searches the database for an entry with key (pKey/nKey). 
+** If an error occurs, an LSM error code is returned. Otherwise, LSM_OK.
 **
-** If no error occurs, but the specified key is not present in the database,
-** LSM_OK is returned. The state of the cursor depends on the value passed
-** as the final parameter to lsm_csr_seek(), as follows:
+** If no error occurs and the requested key is present in the database, the
+** cursor is left pointing to the entry with the specified key. Or, if the 
+** specified key is not present in the database the state of the cursor 
+** depends on the value passed as the final parameter, as follows:
 **
 **   LSM_SEEK_EQ:
 **     The cursor is left at EOF (invalidated). A call to lsm_csr_valid()
@@ -394,15 +394,31 @@ int lsm_csr_close(lsm_cursor *pCsr);
 **     The cursor is left pointing to the smallest key in the database that
 **     is larger than (pKey/nKey). If the database contains no keys larger
 **     than (pKey/nKey), the cursor is left at EOF.
+**
+** If the fourth parameter is LSM_SEEK_LEFAST, this function searches the
+** database in a similar manner to LSM_SEEK_LE, with two differences:
+**
+**   1) Even if a key can be found (the cursor is not left at EOF), the
+**      lsm_csr_value() function may not be used (attempts to do so return
+**      LSM_MISUSE).
+**
+**   2) The key that the cursor is left pointing to may be one that has 
+**      been recently deleted from the database. In this case it is guaranteed
+**      that the returned key is larger than any key currently in the database
+**      that is less than or equal to (pKey/nKey).
+**
+** LSM_SEEK_LEFAST requests are intended to be used to allocate database
+** keys.
 */
 int lsm_csr_seek(lsm_cursor *pCsr, void *pKey, int nKey, int eSeek);
 
 /*
 ** Values that may be passed as the fourth argument to lsm_csr_seek().
 */
-#define LSM_SEEK_EQ  0
-#define LSM_SEEK_GE  1
-#define LSM_SEEK_LE -1
+#define LSM_SEEK_LEFAST   -2
+#define LSM_SEEK_LE       -1
+#define LSM_SEEK_EQ        0
+#define LSM_SEEK_GE        1
 
 int lsm_csr_first(lsm_cursor *pCsr);
 int lsm_csr_last(lsm_cursor *pCsr);

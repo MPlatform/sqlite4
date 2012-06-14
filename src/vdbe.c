@@ -3256,6 +3256,7 @@ case OP_NewRowid: {           /* out2-prerelease */
   ** and try again, up to 100 times.
   */
 
+  /* TODO: Change the following "-1" to "-2" to use LSM_SEEK_LEFAST. */
   rc = sqlite4VdbeSeekEnd(pC, -1);
   if( rc==SQLITE_NOTFOUND ){
     v = 0;

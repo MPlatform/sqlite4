@@ -159,6 +159,7 @@ int sqlite4KVCursorSeek(
   int dir
 ){
   int rc;
+  assert( dir==0 || dir==(+1) || dir==(-1) || dir==(-2) );  
   rc = p->pStoreVfunc->xSeek(p,pKey,nKey,dir);
   if( p->fTrace ){
     char zKey[52];

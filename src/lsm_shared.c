@@ -1180,7 +1180,6 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 
   if( rc==LSM_OK ){
     p->bWriter = 1;
-    lsmSortedFixTreeVersions(pDb);
   }
   lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   return rc;
@@ -1207,7 +1206,6 @@ int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   assert( p->bWriter );
   p->bWriter = 0;
   lsmTreeReleaseWriteVersion(pDb->pEnv, pDb->pTV, bCommit, &pDb->pTV);
-  lsmSortedFixTreeVersions(pDb);
 
   lsmLogEnd(pDb, &p->log, bCommit);
   lsmMutexLeave(pDb->pEnv, p->pClientMutex);

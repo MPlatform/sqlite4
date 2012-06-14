@@ -589,26 +589,6 @@ int lsm_csr_close(lsm_cursor *pCsr){
 ** Attempt to seek the cursor to the database entry specified by pKey/nKey.
 ** If an error occurs (e.g. an OOM or IO error), return an LSM error code.
 ** Otherwise, return LSM_OK.
-**
-** If no error occurs and the database contains the specified key, the
-** cursor is left pointing to it. In this case *pRes is set to 0 before
-** returning.
-**
-** If the database does not contain key (pKey/nKey), then the cursor is 
-** left pointing to a key that (pKey/nKey) would be next to if it were in
-** the database. If the cursor is left pointing to a key that is smaller
-** than (pKey/nKey), then *pRes is set to -1 before returning. If the
-** cursor is left pointing to a key that is larger than (pKey/nKey), it is
-** set to +1 before returning.
-**
-** Whether the cursor is left pointing to a smaller or larger key is
-** influenced by the value of *pRes when this function is called. If *pRes
-** is set to 0, this indicates that the user does not care - LSM selects
-** a smaller or larger key based on the internal tree structure. However,
-** if *pRes is less than zero, then the cursor is guaranteed to be left 
-** pointing to a key smaller than (pKey/nKey), if one exists. And if *pRes
-** is greater than zero, it is similarly guaranteed to point to a key
-** larger than (pKey/nKey), if one exists.
 */
 int lsm_csr_seek(lsm_cursor *pCsr, void *pKey, int nKey, int eSeek){
   int rc;

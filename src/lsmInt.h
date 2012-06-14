@@ -310,18 +310,16 @@ void lsmTreeCursorReset(TreeCursor *pCsr);
 int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey);
 int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal);
 int lsmTreeCursorValid(TreeCursor *pCsr);
+void lsmTreeCursorSave(TreeCursor *pCsr);
 
 TreeVersion *lsmTreeReadVersion(Tree *);
 int lsmTreeWriteVersion(lsm_env *pEnv, Tree *, TreeVersion **);
 TreeVersion *lsmTreeRecoverVersion(Tree *);
-
+int lsmTreeIsWriteVersion(TreeVersion *);
 int lsmTreeReleaseWriteVersion(lsm_env *, TreeVersion *, int, TreeVersion **);
 void lsmTreeReleaseReadVersion(lsm_env *, TreeVersion *);
 
-int lsmTreeIsWriteVersion(TreeVersion *);
-
 void lsmTreeRelease(lsm_env *, Tree *);
-void lsmTreeCursorSave(TreeCursor *);
 
 /* 
 ** Functions from file "mem.c".
@@ -454,7 +452,6 @@ int lsmSortedLoadSystem(lsm_db *pDb);
 
 void *lsmSortedSplitKey(Level *pLevel, int *pnByte);
 
-void lsmSortedFixTreeVersions(lsm_db *);
 void lsmSortedSaveTreeCursors(lsm_db *);
 
 int lsmMCursorNew(lsm_db *, MultiCursor **);

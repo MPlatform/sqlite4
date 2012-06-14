@@ -39,11 +39,11 @@ int sqlite4VdbeSeekEnd(VdbeCursor *pC, int iEnd){
   int rc;
   KVByteArray aProbe[16];
 
-  assert( iEnd==(+1) || iEnd==(-1) );  
+  assert( iEnd==(+1) || iEnd==(-1) || iEnd==(-2) );  
   nProbe = sqlite4PutVarint64(aProbe, pC->iRoot);
   aProbe[nProbe] = 0xFF;
 
-  rc = sqlite4KVCursorSeek(pCur, aProbe, nProbe+(iEnd==-1), iEnd);
+  rc = sqlite4KVCursorSeek(pCur, aProbe, nProbe+(iEnd<0), iEnd);
   if( rc==SQLITE_OK ){
     rc = SQLITE_CORRUPT_BKPT;
   }else if( rc==SQLITE_INEXACT ){

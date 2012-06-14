@@ -1034,19 +1034,26 @@ int segmentPtrSeek(
       if( res ){
         rc = segmentPtrLoadCell(pPtr, iMin);
       }
-      if( (eSeek==0 && (res!=0 || rtIsSeparator(pPtr->eType) )) ){
-        segmentPtrReset(pPtr);
+
+      switch( eSeek ){
+        case LSM_SEEK_EQ:
+          if( res!=0 || rtIsSeparator(pPtr->eType) ) segmentPtrReset(pPtr);
+          break;
+        case LSM_SEEK_LE:
+          if( res>0 ) rc = segmentPtrAdvance(pCsr, pPtr, 1);
+          break;
+        case LSM_SEEK_GE:
+          if( res<0 ) rc = segmentPtrAdvance(pCsr, pPtr, 0);
+          break;
       }
-      else if( res && eSeek && (res ^ eSeek)<0 ){
-        rc = segmentPtrAdvance(pCsr, pPtr, eSeek<0);
-      }
+
     }
 
     if( rc==LSM_OK && pPtr->pPg && (
           (pCsr->bIgnoreSeparators && rtIsSeparator(pPtr->eType))
        || (pCsr->bIgnoreSystem && rtTopic(pPtr->eType)!=0)
     )){
-      rc = segmentPtrAdvance(pCsr, pPtr, eSeek<0);
+      rc = segmentPtrAdvance(pCsr, pPtr, eSeek==LSM_SEEK_LE);
     }
   }
 
@@ -1269,7 +1276,7 @@ static int segmentCursorSeek(
     }
   }
 
-  segmentCursorSetCurrent(pCsr, (eSeek<0));
+  segmentCursorSetCurrent(pCsr, eSeek==LSM_SEEK_LE);
   *piPtr = iOut;
   return rc;
 }
@@ -1879,17 +1886,21 @@ void lsmMCursorReset(MultiCursor *pCsr){
 ** Seek the cursor.
 */
 int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
+  int eESeek = eSeek;             /* Effective eSeek parameter */
   int rc = LSM_OK;
   int i;
   int res; 
   int iPtr = 0; 
 
+  if( eESeek==LSM_SEEK_LEFAST ) eESeek = LSM_SEEK_LE;
+  assert( eESeek==LSM_SEEK_EQ || eESeek==LSM_SEEK_LE || eESeek==LSM_SEEK_GE );
+
   assert( (pCsr->flags & CURSOR_NEW_SYSTEM)==0 );
   assert( (pCsr->flags & CURSOR_AT_FREELIST)==0 );
   assert( (pCsr->flags & CURSOR_AT_LEVELS)==0 );
-  
+
   lsmTreeCursorSeek(pCsr->pTreeCsr, pKey, nKey, &res);
-  switch( eSeek ){
+  switch( eESeek ){
     case LSM_SEEK_EQ:
       if( res!=0 ){
         lsmTreeCursorReset(pCsr->pTreeCsr);
@@ -1901,7 +1912,6 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
       }
       break;
     default:
-      assert( eSeek==LSM_SEEK_LE );
       if( res>0 ){
         assert( lsmTreeCursorValid(pCsr->pTreeCsr) );
         lsmTreeCursorPrev(pCsr->pTreeCsr);
@@ -1910,7 +1920,7 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
   }
 
   for(i=0; rc==LSM_OK && i<pCsr->nSegCsr; i++){
-    rc = segmentCursorSeek(&pCsr->aSegCsr[i], pKey, nKey, iPtr, eSeek, &iPtr);
+    rc = segmentCursorSeek(&pCsr->aSegCsr[i], pKey, nKey, iPtr, eESeek, &iPtr);
   }
 
   if( rc==LSM_OK ){
@@ -1918,16 +1928,17 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
   }
   if( rc==LSM_OK ){
     for(i=pCsr->nTree-1; i>0; i--){
-      multiCursorDoCompare(pCsr, i, eSeek<0);
+      multiCursorDoCompare(pCsr, i, eESeek==LSM_SEEK_LE);
     }
   }
 
   multiCursorCacheKey(pCsr, &rc);
   if( rc==LSM_OK 
-   && (pCsr->flags & CURSOR_IGNORE_DELETE) 
+   && eSeek!=LSM_SEEK_LEFAST
+   && (pCsr->flags & CURSOR_IGNORE_DELETE)
    && rtIsDelete(pCsr->eType)
   ){
-    switch( eSeek ){
+    switch( eESeek ){
       case LSM_SEEK_EQ:
         lsmMCursorReset(pCsr);
         break;
@@ -1935,7 +1946,6 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
         rc = lsmMCursorNext(pCsr);
         break;
       default:
-        assert( eSeek==LSM_SEEK_LE );
         rc = lsmMCursorPrev(pCsr);
         break;
     }
@@ -3967,15 +3977,6 @@ int lsmSortedFlushDb(lsm_db *pDb){
   }
 
   return LSM_OK;
-}
-
-void lsmSortedFixTreeVersions(lsm_db *pDb){
-#if 0
-  lsm_cursor *pCsr;
-  for(pCsr=pDb->pCsr; pCsr; pCsr=pCsr->pNext){
-    lsmTreeFixVersion(pCsr->pMC->pTreeCsr, pDb->pTV);
-  }
-#endif
 }
 
 void lsmSortedSaveTreeCursors(lsm_db *pDb){

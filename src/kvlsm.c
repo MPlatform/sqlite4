@@ -245,8 +245,9 @@ static int kvlsmSeek(
   int rc;
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
 
-  assert( dir==0 || dir==1 || dir==-1 );
+  assert( dir==0 || dir==1 || dir==-1 || dir==-2 );
   assert( LSM_SEEK_EQ==0 && LSM_SEEK_GE==1 && LSM_SEEK_LE==-1 );
+  assert( LSM_SEEK_LEFAST==-2 );
 
   rc = lsm_csr_seek(pCsr->pCsr, (void *)aKey, nKey, dir);
   if( rc==SQLITE_OK ){
