@@ -188,6 +188,9 @@ static void testOomWriteData(
 #define LSMTEST6_TESTDB "testdb.lsm" 
 
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 static void testDeleteTestdb(const char *zFile){
   char *zLog = testMallocPrintf("%s-log", zFile);
@@ -196,6 +199,39 @@ static void testDeleteTestdb(const char *zFile){
   testFree(zLog);
 }
 
+static void copy_file(const char *zFrom, const char *zTo){
+
+  if( access(zFrom, F_OK) ){
+    unlink(zTo);
+  }else{
+    int fd1;
+    int fd2;
+    off_t sz;
+    off_t i;
+    struct stat buf;
+    u8 *aBuf;
+
+    fd1 = open(zFrom, O_RDONLY, 0644);
+    fd2 = open(zTo, O_RDWR | O_CREAT, 0644);
+
+    fstat(fd1, &buf);
+    sz = buf.st_size;
+    ftruncate(fd2, sz);
+
+    aBuf = testMalloc(4096);
+    for(i=0; i<sz; i+=4096){
+      int nByte = MIN(4096, sz - i);
+      read(fd1, aBuf, nByte);
+      write(fd2, aBuf, nByte);
+    }
+    testFree(aBuf);
+
+    close(fd1);
+    close(fd2);
+  }
+}
+
+
 static void testSaveTestdb(const char *zFile){
   char *zLog = testMallocPrintf("%s-log", zFile);
   char *zFileSave = testMallocPrintf("%s-save", zFile);
@@ -203,8 +239,8 @@ static void testSaveTestdb(const char *zFile){
 
   unlink(zFileSave);
   unlink(zLogSave);
-  link(zFile, zFileSave);
-  link(zLog, zLogSave);
+  copy_file(zFile, zFileSave);
+  copy_file(zLog, zLogSave);
 
   testFree(zLog); testFree(zFileSave); testFree(zLogSave);
 }
@@ -214,10 +250,8 @@ static void testRestoreTestdb(const char *zFile){
   char *zFileSave = testMallocPrintf("%s-save", zFile);
   char *zLogSave = testMallocPrintf("%s-log-save", zFile);
 
-  unlink(zFile);
-  unlink(zLog);
-  link(zFileSave, zFile);
-  link(zLogSave, zLog);
+  copy_file(zFileSave, zFile);
+  copy_file(zLogSave, zLog);
 
   testFree(zLog); testFree(zFileSave); testFree(zLogSave);
 }
@@ -388,6 +422,7 @@ static void simple_oom_6(OomTest *pOom){
   testOomWriteData(pOom, pDb, pData, 5002, &rc);
 
   testOomFetchData(pOom, pDb, pData, 5001, &rc);
+  testOomFetchData(pOom, pDb, pData, 1234, &rc);
 
   lsm_close(pDb);
   testDatasourceFree(pData);

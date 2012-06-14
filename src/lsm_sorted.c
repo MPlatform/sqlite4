@@ -1701,7 +1701,7 @@ int lsmSortedLoadSystem(lsm_db *pDb){
     ){
       rc = lsmMCursorValue(pCsr, &pVal, &nVal);
       if( rc==LSM_OK ){
-        lsmCheckpointLoadLevels(pDb, pVal, nVal);
+        rc = lsmCheckpointLoadLevels(pDb, pVal, nVal);
       }
       if( rc==LSM_OK ){
         rc = lsmMCursorPrev(pCsr);
@@ -1715,7 +1715,8 @@ int lsmSortedLoadSystem(lsm_db *pDb){
     ){
       rc = lsmMCursorValue(pCsr, &pVal, &nVal);
       if( rc==LSM_OK ){
-        lsmSnapshotSetFreelist(pDb->pWorker, (int *)pVal, nVal/sizeof(u32));
+        int n32 = nVal / sizeof(u32);
+        rc = lsmSnapshotSetFreelist(pDb->pWorker, (int *)pVal, n32);
       }
     }
 

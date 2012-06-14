@@ -667,7 +667,7 @@ int do_speed_tests(int nArg, char **azArg){
       }else{
         int t;
         int iSel;
-        int bMmap = 0;
+        int bMmap = 1;
 
         rc = tdb_open(aSys[j].zLibrary, 0, 0, &pDb);
         if( tdb_lsm(pDb) ) lsm_config(tdb_lsm(pDb), LSM_CONFIG_MMAP, &bMmap);
@@ -1069,11 +1069,14 @@ int main(int argc, char **argv){
   int rc;                         /* Return Code */
   int iFunc;                      /* Index into aTest[] */
 
-  int nLeakAlloc;                 /* Allocations leaked by lsm */
-  int nLeakByte;                  /* Bytes leaked by lsm */
+  int nLeakAlloc = 0;             /* Allocations leaked by lsm */
+  int nLeakByte = 0;              /* Bytes leaked by lsm */
 
 #ifdef LSM_DEBUG_MEM
   FILE *pReport = 0;              /* lsm malloc() report file */
+  const char *zReport = "malloc.txt generated";
+#else
+  const char *zReport = "malloc.txt NOT generated";
 #endif
 
 #ifndef NDEBUG
@@ -1096,6 +1099,7 @@ int main(int argc, char **argv){
     rc = aTest[iFunc].xFunc(argc-2, &argv[2]);
   }
 
+#ifndef NDEBUG
 #ifdef LSM_DEBUG_MEM
   pReport = fopen("malloc.txt", "w");
   testMallocCheck(tdb_lsm_env(), &nLeakAlloc, &nLeakByte, pReport);
@@ -1103,12 +1107,13 @@ int main(int argc, char **argv){
 #else
   testMallocCheck(tdb_lsm_env(), &nLeakAlloc, &nLeakByte, 0);
 #endif
+
   if( nLeakAlloc ){
-    testPrintError("Leaked %d bytes in %d allocations\n", nLeakByte,nLeakAlloc);
+    testPrintError("Leaked %d bytes in %d allocations (%s)\n", 
+        nLeakByte, nLeakAlloc, zReport
+    );
     if( rc==0 ) rc = -1;
   }
-
-#ifndef NDEBUG
   testMallocUninstall(tdb_lsm_env());
 #endif
 

@@ -739,13 +739,15 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
   if( iLevel<pDb->nTransOpen ){
     if( iLevel==0 ){
-      rc = lsmLogCommit(pDb);
+      /* Commit the transaction to disk. */
+      if( pDb->pTV && lsmTreeSize(pDb->pTV)>pDb->nTreeLimit ){
+        rc = lsmFlushToDisk(pDb);
+      }
+      if( rc==LSM_OK ) rc = lsmLogCommit(pDb);
       if( rc==LSM_OK && pDb->eSafety==LSM_SAFETY_FULL ){
         rc = lsmFsSyncLog(pDb->pFS);
       }
-      if( rc==LSM_OK && pDb->pTV && lsmTreeSize(pDb->pTV)>pDb->nTreeLimit ){
-        rc = lsmFlushToDisk(pDb);
-      }
+
       lsmFinishWriteTrans(pDb, (rc==LSM_OK));
     }
     pDb->nTransOpen = iLevel;

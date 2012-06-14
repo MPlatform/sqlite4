@@ -48,6 +48,7 @@ proc exec_lsmtest_show {args} {
   while {![eof $fd]} { 
     set line [gets $fd]
     if {[regexp {^getrusage*} $line]} continue
+    if {[regexp {^Leaked*} $line]} continue
     append res $line
     append res "\n"
   }
