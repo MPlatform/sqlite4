@@ -316,8 +316,9 @@ static int test_lsm_close(TestDb *pTestDb){
   }
   testFree(pDb->aFile[1].aSector);
 
-  free((char *)pDb->pBuf);
-  free((char *)pDb);
+  memset(pDb, sizeof(LsmDb), 0x11);
+  testFree((char *)pDb->pBuf);
+  testFree((char *)pDb);
   return rc;
 }
 
@@ -360,8 +361,8 @@ static int test_lsm_fetch(
       int nVal;
       rc = lsm_csr_value(csr, &pVal, &nVal);
       if( nVal>pDb->nBuf ){
-        free(pDb->pBuf);
-        pDb->pBuf = malloc(nVal*2);
+        testFree(pDb->pBuf);
+        pDb->pBuf = testMalloc(nVal*2);
         pDb->nBuf = nVal*2;
       }
       memcpy(pDb->pBuf, pVal, nVal);
@@ -518,7 +519,7 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
 
   nFilename = strlen(zFilename);
 
-  pDb = (LsmDb *)malloc(sizeof(LsmDb) + nFilename + 1);
+  pDb = (LsmDb *)testMalloc(sizeof(LsmDb) + nFilename + 1);
   memset(pDb, 0, sizeof(LsmDb));
   pDb->base.pMethods = &LsmMethods;
   pDb->zName = (char *)&pDb[1];
@@ -830,7 +831,7 @@ static int test_lsm_mt(
   }
 
   if( rc==0 ){
-    pDb->aWorker = (LsmWorker *)malloc(sizeof(LsmWorker) * nWorker);
+    pDb->aWorker = (LsmWorker *)testMalloc(sizeof(LsmWorker) * nWorker);
     memset(pDb->aWorker, 0, sizeof(LsmWorker) * nWorker);
     pDb->nWorker = nWorker;
 

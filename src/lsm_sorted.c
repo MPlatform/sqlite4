@@ -3113,13 +3113,13 @@ static int sortedMergeSetup(
     Level *p = pLevel;
     Level **pp;
     pNew->nRight = nMerge;
+    pNew->iAge = pLevel->iAge+1;
     for(i=0; i<nMerge; i++){
       pNext = p->pNext;
       pNew->aRhs[i] = p->lhs;
       lsmFree(pDb->pEnv, p);
       p = pNext;
     }
-    pNew->iAge = pLevel->iAge+1;
 
     /* Replace the old levels with the new. */
     pTopLevel = lsmDbSnapshotLevel(pDb->pWorker);
