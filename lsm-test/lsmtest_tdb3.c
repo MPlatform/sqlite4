@@ -569,14 +569,11 @@ int test_lsm_small_open(
     LsmDb *pDb = (LsmDb *)*ppDb;
     int nPgsz = 256;
     int nBlocksize = 64 * 1024;
-    int nSeg = 2;
 
     lsm_config(pDb->db, LSM_CONFIG_PAGE_SIZE, &nPgsz);
     lsm_config(pDb->db, LSM_CONFIG_BLOCK_SIZE, &nBlocksize);
-    lsm_config(pDb->db, LSM_CONFIG_SEGMENT_RATIO, &nSeg);
     assert( nPgsz==256 || bClear==0 );
     assert( nBlocksize==64*1024 || bClear==0 );
-    assert( nSeg==2 );
   }
   return rc;
 }

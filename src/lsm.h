@@ -121,11 +121,6 @@ int lsm_config(lsm_db *, int, ...);
 **     of space (in bytes) used to accumulate writes in main-memory before 
 **     they are flushed to a level 0 segment.
 **
-**   LSM_CONFIG_SEGMENT_RATIO
-**     A read/write integer parameter. Used as the approximate maximum ratio
-**     between adjacent segments in the data structure. This value must be
-**     greater than or equal to 2.
-**
 **   LSM_CONFIG_PAGE_SIZE
 **     A read/write integer parameter.
 **
@@ -162,13 +157,12 @@ int lsm_config(lsm_db *, int, ...);
 **     database file. False otherwise.
 */
 #define LSM_CONFIG_WRITE_BUFFER  1
-#define LSM_CONFIG_PAGE_SIZE     3
-#define LSM_CONFIG_SAFETY        4
-#define LSM_CONFIG_BLOCK_SIZE    5
-#define LSM_CONFIG_SEGMENT_RATIO 2
-#define LSM_CONFIG_AUTOWORK      6
-#define LSM_CONFIG_LOG_SIZE      7
-#define LSM_CONFIG_MMAP          8
+#define LSM_CONFIG_PAGE_SIZE     2
+#define LSM_CONFIG_SAFETY        3
+#define LSM_CONFIG_BLOCK_SIZE    4
+#define LSM_CONFIG_AUTOWORK      5
+#define LSM_CONFIG_LOG_SIZE      6
+#define LSM_CONFIG_MMAP          7
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1
@@ -207,14 +201,12 @@ int lsm_info(lsm_db *, int, ...);
 **   LSM_INFO_NWRITE
 **     The third parameter should be of type (int *). The location pointed
 **     to by the third parameter is set to the number of 4KB pages written to
-**     the file-system during the lifetime of this connection. Including data
-**     written to the log file.
+**     the database file during the lifetime of this connection. 
 **
 **   LSM_INFO_NREAD
 **     The third parameter should be of type (int *). The location pointed
 **     to by the third parameter is set to the number of 4KB pages read from
-**     the file-system during the lifetime of this connection. Including data
-**     read from the log file.
+**     the database file during the lifetime of this connection.
 **
 **   LSM_INFO_CKPT
 **     The third argument should be of type (int **). The location pointed
@@ -291,18 +283,15 @@ int lsm_info(lsm_db *, int, ...);
 **
 **     The Tcl structure returned is a list of six integers that describe
 **     the current structure of the log file.
-**
-**   LSM_INFO_BLOCKLIST
 */
 #define LSM_INFO_NWRITE           1
 #define LSM_INFO_NREAD            2
 #define LSM_INFO_CKPT             3
-#define LSM_INFO_BLOCKLIST        4
-#define LSM_INFO_DB_STRUCTURE     5
-#define LSM_INFO_LOG_STRUCTURE    6
-#define LSM_INFO_ARRAY_STRUCTURE  7
-#define LSM_INFO_PAGE_ASCII_DUMP  8
-#define LSM_INFO_PAGE_HEX_DUMP    9
+#define LSM_INFO_DB_STRUCTURE     4
+#define LSM_INFO_LOG_STRUCTURE    5
+#define LSM_INFO_ARRAY_STRUCTURE  6
+#define LSM_INFO_PAGE_ASCII_DUMP  7
+#define LSM_INFO_PAGE_HEX_DUMP    8
 
 
 /* 

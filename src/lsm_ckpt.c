@@ -329,9 +329,6 @@ int lsmCheckpointExport(
   Level *pLevel;                  /* Level iterator */
   u32 aDelta[LSM_FREELIST_DELTA_SIZE];
 
-  u32 iSalt1;
-  u32 iSalt2;
-
   CkptBuffer ckpt;
   memset(&ckpt, 0, sizeof(CkptBuffer));
   ckpt.pEnv = pDb->pEnv;
@@ -357,7 +354,6 @@ int lsmCheckpointExport(
 
   /* Write the checkpoint header */
   assert( iId>=0 );
-  lsmSnapshotGetSalt(pSnap, &iSalt1, &iSalt2);
   ckptSetValue(&ckpt, CKPT_HDR_ID_MSW, (u32)(iId>>32), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_ID_LSW, (u32)(iId&0xFFFFFFFF), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NCKPT, iOut+2, &rc);

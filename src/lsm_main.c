@@ -76,7 +76,6 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   /* Initialize the new object */
   pDb->pEnv = pEnv;
   pDb->nTreeLimit = LSM_TREE_BYTES;
-  pDb->eCola = LSM_ECOLA;
   pDb->bAutowork = 1;
   pDb->eSafety = LSM_SAFETY_NORMAL;
   pDb->xCmp = xCmp;
@@ -282,15 +281,6 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
         pDb->nTreeLimit = *piVal;
       }
       *piVal = pDb->nTreeLimit;
-      break;
-    }
-
-    case LSM_CONFIG_SEGMENT_RATIO: {
-      int *piVal = va_arg(ap, int *);
-      if( *piVal>1 ){
-        pDb->eCola = *piVal;
-      }
-      *piVal = pDb->eCola;
       break;
     }
 

@@ -541,27 +541,6 @@ void lsmSnapshotSetCkptid(Snapshot *pSnap, i64 iNew){
   assert( isWorker(pSnap) );
   pSnap->iId = iNew;
 }
-i64 lsmSnapshotGetCkptid(Snapshot *pSnap){
-  return pSnap->iId;
-}
-
-void lsmSnapshotSetSalt(Snapshot *pSnap, u32 iSalt1, u32 iSalt2){
-  assert( isWorker(pSnap) );
-  pSnap->iSalt1 = iSalt1;
-  pSnap->iSalt2 = iSalt2;
-}
-void lsmSnapshotGetSalt(Snapshot *pSnap, u32 *piSalt1, u32 *piSalt2){
-  *piSalt1 = pSnap->iSalt1;
-  *piSalt2 = pSnap->iSalt2;
-}
-
-void lsmSnapshotSetLogpgno(Snapshot *pSnap, Pgno iLogPg){
-  pSnap->iLogPg = iLogPg;
-}
-Pgno lsmSnapshotGetLogpgno(Snapshot *pSnap){
-  return pSnap->iLogPg;
-}
-
 
 /*
 ** Return a pointer to the client snapshot object. Each successful call 

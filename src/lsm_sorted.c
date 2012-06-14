@@ -3261,10 +3261,8 @@ static int mergeWorkerInit(
 int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
   int rc = LSM_OK;                /* Return Code */
   int nRemaining = nWork;         /* Units of work to do before returning */
-  const int eCola = pDb->eCola;   /* Max adjacent segment size ratio */
   Snapshot *pWorker = pDb->pWorker;
 
-  assert( eCola>1 );
   assert( lsmFsIntegrityCheck(pDb) );
   assert( pWorker );
   assertAllPointersOk(rc, pDb);
@@ -3483,12 +3481,10 @@ static void sortedMeasureDb(lsm_db *pDb, Metric *p){
 */
 int lsmSortedAutoWork(lsm_db *pDb, int nUnit){
   int rc;                         /* Return code */
-  const int eCola = pDb->eCola;   /* Max adjacent segment size ratio */
   int nRemaining;                 /* Units of work to do before returning */
   int nDepth;                     /* Current height of tree (longest path) */
   Level *pLevel;                  /* Used to iterate through levels */
 
-  assert( eCola>1 );
   assert( lsmFsIntegrityCheck(pDb) );
   assert( pDb->pWorker );
 

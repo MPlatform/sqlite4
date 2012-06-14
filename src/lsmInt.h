@@ -169,7 +169,6 @@ struct lsm_db {
   lsm_env *pEnv;                            /* runtime environment */
   int (*xCmp)(void *, int, void *, int);    /* Compare function */
   int nTreeLimit;                 /* Maximum size of in-memory tree in bytes */
-  int eCola;                      /* Max size ratio between adjacent segments */
   int bAutowork;                  /* True to do auto-work after writing */
   int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
   int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
@@ -546,17 +545,9 @@ Snapshot *lsmDbSnapshotWorker(Database *);
 Snapshot *lsmDbSnapshotRecover(Database *);
 void lsmDbSnapshotRelease(Snapshot *);
 
-
 void lsmSnapshotSetNBlock(Snapshot *, int);
 int lsmSnapshotGetNBlock(Snapshot *);
-
 void lsmSnapshotSetCkptid(Snapshot *, i64);
-i64 lsmSnapshotGetCkptid(Snapshot *);
-
-void lsmSnapshotSetSalt(Snapshot *, u32, u32);
-void lsmSnapshotGetSalt(Snapshot *, u32 *, u32 *);
-void lsmSnapshotSetLogpgno(Snapshot *pSnap, Pgno iLogPg);
-Pgno lsmSnapshotGetLogpgno(Snapshot *pSnap);
 
 Level *lsmDbSnapshotLevel(Snapshot *);
 void lsmDbSnapshotSetLevel(Snapshot *, Level *);
