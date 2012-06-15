@@ -121,7 +121,6 @@ static void dbWorkerDone(lsm_db *pDb){
 }
 
 static int dbAutoWork(lsm_db *pDb, int nUnit){
-  int i;                          /* Iterator variable */
   int rc = LSM_OK;                /* Return code */
 
   assert( pDb->pWorker==0 );
@@ -218,16 +217,13 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
 int lsmFlushToDisk(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
   int nHdrLevel;
-  lsm_cursor *pCsr;               /* Used to iterate through open cursors */
 
   /* Must not hold the worker snapshot when this is called. */
   assert( pDb->pWorker==0 );
   dbWorkerStart(pDb);
 
   /* Save the position of each open cursor belonging to pDb. */
-  for(pCsr=pDb->pCsr; rc==LSM_OK && pCsr; pCsr=pCsr->pNext){
-    rc = lsmMCursorSave(pCsr->pMC);
-  }
+  rc = lsmSaveCursors(pDb);
 
   /* Write the contents of the in-memory tree into the database file and 
   ** update the worker snapshot accordingly. Then flush the contents of 
@@ -240,9 +236,7 @@ int lsmFlushToDisk(lsm_db *pDb){
   if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nHdrLevel);
 
   /* Restore the position of any open cursors */
-  for(pCsr=pDb->pCsr; rc==LSM_OK && pCsr; pCsr=pCsr->pNext){
-    rc = lsmMCursorRestore(pDb, pCsr->pMC);
-  }
+  rc = lsmRestoreCursors(pDb);
 
 #if 0
   if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "flush");
@@ -526,59 +520,36 @@ int lsm_delete(lsm_db *pDb, void *pKey, int nKey){
 */
 int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
   int rc;                         /* Return code */
-  lsm_cursor *pCsr;               /* New cursor object */
+  MultiCursor *pCsr = 0;          /* New cursor object */
 
   /* Open a read transaction if one is not already open. */
   assert_db_state(pDb);
   rc = lsmBeginReadTrans(pDb);
 
-  /* Allocate the lsm_cursor structure */
-  if( rc==LSM_OK ){
-    *ppCsr = pCsr = (lsm_cursor *)lsmMallocZero(pDb->pEnv, sizeof(lsm_cursor));
-    if( !pCsr ){
-      rc = LSM_NOMEM_BKPT;
-    }
-  }
-
   /* Allocate the multi-cursor. */
-  if( rc==LSM_OK ){
-    pCsr->pDb = pDb;
-    pCsr->pNext = pDb->pCsr;
-    pDb->pCsr = pCsr;
-    rc = lsmMCursorNew(pDb, &pCsr->pMC);
-  }
+  if( rc==LSM_OK ) rc = lsmMCursorNew(pDb, &pCsr);
 
   /* If an error has occured, set the output to NULL and delete any partially
   ** allocated cursor. If this means there are no open cursors, release the
   ** client snapshot.  */
   if( rc!=LSM_OK ){
-    lsm_csr_close(pCsr);
-    pCsr = 0;
+    lsmMCursorClose(pCsr);
     dbReleaseClientSnapshot(pDb);
   }
-  *ppCsr = pCsr;
 
   assert_db_state(pDb);
+  *ppCsr = (lsm_cursor *)pCsr;
   return rc;
 }
 
 /*
 ** Close a cursor opened using lsm_csr_open().
 */
-int lsm_csr_close(lsm_cursor *pCsr){
-  if( pCsr ){
-    lsm_db *pDb = pCsr->pDb;
-    lsm_cursor **pp;
-
+int lsm_csr_close(lsm_cursor *p){
+  if( p ){
+    lsm_db *pDb = lsmMCursorDb((MultiCursor *)p);
     assert_db_state(pDb);
-
-    /* Remove the cursor from the linked list */
-    for(pp=&pDb->pCsr; *pp!=pCsr; pp=&((*pp)->pNext));
-    *pp = (*pp)->pNext;
-
-    lsmMCursorClose(pCsr->pMC);
-    lsmFree(pDb->pEnv, pCsr);
-
+    lsmMCursorClose((MultiCursor *)p);
     dbReleaseClientSnapshot(pDb);
     assert_db_state(pDb);
   }
@@ -591,37 +562,35 @@ int lsm_csr_close(lsm_cursor *pCsr){
 ** Otherwise, return LSM_OK.
 */
 int lsm_csr_seek(lsm_cursor *pCsr, void *pKey, int nKey, int eSeek){
-  int rc;
-  rc = lsmMCursorSeek(pCsr->pMC, pKey, nKey, eSeek);
-  return rc;
+  return lsmMCursorSeek((MultiCursor *)pCsr, pKey, nKey, eSeek);
 }
 
 int lsm_csr_next(lsm_cursor *pCsr){
-  return lsmMCursorNext(pCsr->pMC);
+  return lsmMCursorNext((MultiCursor *)pCsr);
 }
 
 int lsm_csr_prev(lsm_cursor *pCsr){
-  return lsmMCursorPrev(pCsr->pMC);
+  return lsmMCursorPrev((MultiCursor *)pCsr);
 }
 
 int lsm_csr_first(lsm_cursor *pCsr){
-  return lsmMCursorFirst(pCsr->pMC);
+  return lsmMCursorFirst((MultiCursor *)pCsr);
 }
 
 int lsm_csr_last(lsm_cursor *pCsr){
-  return lsmMCursorLast(pCsr->pMC);
+  return lsmMCursorLast((MultiCursor *)pCsr);
 }
 
 int lsm_csr_valid(lsm_cursor *pCsr){
-  return lsmMCursorValid(pCsr->pMC);
+  return lsmMCursorValid((MultiCursor *)pCsr);
 }
 
 int lsm_csr_key(lsm_cursor *pCsr, void **ppKey, int *pnKey){
-  return lsmMCursorKey(pCsr->pMC, ppKey, pnKey);
+  return lsmMCursorKey((MultiCursor *)pCsr, ppKey, pnKey);
 }
 
 int lsm_csr_value(lsm_cursor *pCsr, void **ppVal, int *pnVal){
-  return lsmMCursorValue(pCsr->pMC, ppVal, pnVal);
+  return lsmMCursorValue((MultiCursor *)pCsr, ppVal, pnVal);
 }
 
 void lsm_config_log(

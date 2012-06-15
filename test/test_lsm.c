@@ -153,7 +153,6 @@ static int test_lsm_work(
   } aSwitch[] = {
     { "-flush",      LSM_WORK_FLUSH }, 
     { "-checkpoint", LSM_WORK_CHECKPOINT }, 
-    { "-merge",      LSM_WORK_MERGE }, 
     { "-optimize",   LSM_WORK_OPTIMIZE }, 
     { 0, 0 }
   };

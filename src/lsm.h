@@ -131,8 +131,8 @@ int lsm_config(lsm_db *, int, ...);
 **     A read/write integer parameter.
 **
 **   LSM_CONFIG_SAFETY
-**     A read/write integer parameter. Valid values are 1, 2 (the default) 
-**     and 3. This parameter determines how robust the database is in the
+**     A read/write integer parameter. Valid values are 0, 1 (the default) 
+**     and 2. This parameter determines how robust the database is in the
 **     face of a system crash (e.g. a power failure or operating system 
 **     crash). As follows:
 **
@@ -350,11 +350,6 @@ int lsm_delete(lsm_db *pDb, void *pKey, int nKey);
 ** LSM_WORK_CHECKPOINT:
 **   Write a checkpoint (if one exists in memory) to the database file.
 **
-** LSM_WORK_MERGE:
-**   Merge two or more existing runs together. Parameter nPage is used as
-**   an approximate limit to the number of database pages written to disk 
-**   before the lsm_work() call returns.
-**
 ** LSM_WORK_OPTIMIZE:
 **   This flag is only regcognized if LSM_WORK_MERGE is also set.
 */
@@ -362,8 +357,7 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite);
 
 #define LSM_WORK_FLUSH           0x00000001
 #define LSM_WORK_CHECKPOINT      0x00000002
-#define LSM_WORK_MERGE           0x00000004
-#define LSM_WORK_OPTIMIZE        0x00000008
+#define LSM_WORK_OPTIMIZE        0x00000004
 
 /* 
 ** Open and close a database cursor.
@@ -423,6 +417,30 @@ int lsm_csr_seek(lsm_cursor *pCsr, void *pKey, int nKey, int eSeek);
 int lsm_csr_first(lsm_cursor *pCsr);
 int lsm_csr_last(lsm_cursor *pCsr);
 
+/*
+** Advance the specified cursor to the next or previous key in the database.
+** Return LSM_OK if successful, or an LSM error code otherwise.
+**
+** Functions lsm_csr_next and lsm_csr_prev may only be called if the cursor
+** currently points to a valid entry (not EOF). If it does not, LSM_MISUSE
+** is returned and the cursor position is not modified (i.e. it still points
+** to EOF after the function call returns).
+**
+** Functions lsm_csr_seek(), lsm_csr_first() and lsm_csr_last() are "seek"
+** functions. Whether or not lsm_csr_next and lsm_csr_prev may be called
+** successfully also depends on the most recent seek function called on
+** the cursor. Specifically:
+**
+**   * To call lsm_csr_next(), the most recent call to a seek function must
+**     have been either lsm_csr_first() or a call to lsm_csr_seek() specifying
+**     LSM_SEEK_GE. Otherwise, LSM_MISUSE is returned immediately and the
+**     position of the cursor remains unchanged.
+**
+**   * To call lsm_csr_prev(), the most recent call to a seek function must
+**     have been either lsm_csr_first() or a call to lsm_csr_seek() specifying
+**     LSM_SEEK_GE. Otherwise, LSM_MISUSE is returned immediately and the
+**     position of the cursor remains unchanged.
+*/
 int lsm_csr_next(lsm_cursor *pCsr);
 int lsm_csr_prev(lsm_cursor *pCsr);
 

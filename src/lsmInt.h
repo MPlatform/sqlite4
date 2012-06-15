@@ -180,7 +180,7 @@ struct lsm_db {
   /* Client transaction context */
   TreeVersion *pTV;               /* In-memory tree snapshot (non-NULL in rt) */
   Snapshot *pClient;              /* Client snapshot (non-NULL in read trans) */
-  lsm_cursor *pCsr;               /* List of open cursors */
+  MultiCursor *pCsr;              /* List of all open cursors */
   LogWriter *pLogWriter;
   int nTransOpen;                 /* Number of opened write transactions */
   int nTransAlloc;                /* Allocated size of aTrans[] array */
@@ -196,15 +196,6 @@ struct lsm_db {
   /* Work done notification callback */
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
-};
-
-/*
-** Cursor handle structure.
-*/
-struct lsm_cursor {
-  MultiCursor *pMC;
-  lsm_db *pDb;                    /* Database handle that owns this cursor */
-  lsm_cursor *pNext;              /* Next cursor belonging to same lsm_db */
 };
 
 struct SortedRun {
@@ -465,9 +456,10 @@ int lsmMCursorNext(MultiCursor *);
 int lsmMCursorKey(MultiCursor *, void **, int *);
 int lsmMCursorValue(MultiCursor *, void **, int *);
 int lsmMCursorType(MultiCursor *, int *);
+lsm_db *lsmMCursorDb(MultiCursor *);
 
-int lsmMCursorSave(MultiCursor *);
-int lsmMCursorRestore(lsm_db *, MultiCursor *);
+int lsmSaveCursors(lsm_db *pDb);
+int lsmRestoreCursors(lsm_db *pDb);
 
 void lsmSortedDumpStructure(lsm_db *pDb, Snapshot *, int, int, const char *);
 void lsmFsDumpBlockmap(lsm_db *, SortedRun *);

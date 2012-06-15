@@ -218,8 +218,9 @@ struct LevelCursor {
 */
 struct MultiCursor {
   lsm_db *pDb;                    /* Connection that owns this cursor */
-  TreeCursor *pTreeCsr;           /* Single tree cursor */
+  MultiCursor *pNext;             /* Next cursor owned by connection pDb */
 
+  TreeCursor *pTreeCsr;           /* Single tree cursor */
   int flags;                      /* Mask of CURSOR_XXX flags */
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
   int eType;                      /* Cache of current key type */
@@ -1399,6 +1400,18 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
 
 void lsmMCursorClose(MultiCursor *pCsr){
   if( pCsr ){
+    lsm_db *pDb = pCsr->pDb;
+    MultiCursor **pp;             /* Iterator variable */
+
+    /* The cursor may or may not be currently part of the linked list 
+    ** starting at lsm_db.pCsr. If it is, extract it.  */
+    for(pp=&pDb->pCsr; *pp; pp=&((*pp)->pNext)){
+      if( *pp==pCsr ){
+        *pp = pCsr->pNext;
+        break;
+      }
+    }
+
     /* Free the allocation used to cache the current key, if any. */
     sortedBlobFree(&pCsr->key);
 
@@ -1406,7 +1419,7 @@ void lsmMCursorClose(MultiCursor *pCsr){
     mcursorFreeComponents(pCsr);
 
     /* Free the cursor structure itself */
-    lsmFree(pCsr->pDb->pEnv, pCsr);
+    lsmFree(pDb->pEnv, pCsr);
   }
 }
 
@@ -1593,8 +1606,18 @@ int lsmMCursorNew(
   lsm_db *pDb,                    /* Database handle */
   MultiCursor **ppCsr             /* OUT: Allocated cursor */
 ){
-  *ppCsr = 0;
-  return multiCursorAllocate(pDb, 0, ppCsr);
+  MultiCursor *pCsr = 0;
+  int rc;
+
+  rc = multiCursorAllocate(pDb, 0, &pCsr);
+  if( rc==LSM_OK ){
+    pCsr->pNext = pDb->pCsr;
+    pDb->pCsr = pCsr;
+  }
+
+  assert( (rc==LSM_OK)==(pCsr!=0) );
+  *ppCsr = pCsr;
+  return rc;
 }
 
 #define CURSOR_DATA_TREE      0
@@ -1843,7 +1866,7 @@ static int multiCursorEnd(MultiCursor *pCsr, int bLast){
 }
 
 
-int lsmMCursorSave(MultiCursor *pCsr){
+int mcursorSave(MultiCursor *pCsr){
   int rc = LSM_OK;
   if( pCsr->aTree ){
     if( pCsr->aTree[1]==CURSOR_DATA_TREE ){
@@ -1854,11 +1877,31 @@ int lsmMCursorSave(MultiCursor *pCsr){
   return rc;
 }
 
-int lsmMCursorRestore(lsm_db *pDb, MultiCursor *pCsr){
+int mcursorRestore(lsm_db *pDb, MultiCursor *pCsr){
   int rc;
   rc = multiCursorAllocate(pDb, 0, &pCsr);
   if( rc==LSM_OK && pCsr->key.pData ){
     rc = lsmMCursorSeek(pCsr, pCsr->key.pData, pCsr->key.nData, +1);
+  }
+  return rc;
+}
+
+int lsmSaveCursors(lsm_db *pDb){
+  int rc = LSM_OK;
+  MultiCursor *pCsr;
+
+  for(pCsr=pDb->pCsr; rc==LSM_OK && pCsr; pCsr=pCsr->pNext){
+    rc = mcursorSave(pCsr);
+  }
+  return rc;
+}
+
+int lsmRestoreCursors(lsm_db *pDb){
+  int rc = LSM_OK;
+  MultiCursor *pCsr;
+
+  for(pCsr=pDb->pCsr; rc==LSM_OK && pCsr; pCsr=pCsr->pNext){
+    rc = mcursorRestore(pDb, pCsr);
   }
   return rc;
 }
@@ -1869,6 +1912,10 @@ int lsmMCursorFirst(MultiCursor *pCsr){
 
 int lsmMCursorLast(MultiCursor *pCsr){
   return multiCursorEnd(pCsr, 1);
+}
+
+lsm_db *lsmMCursorDb(MultiCursor *pCsr){
+  return pCsr->pDb;
 }
 
 
@@ -3980,9 +4027,9 @@ int lsmSortedFlushDb(lsm_db *pDb){
 }
 
 void lsmSortedSaveTreeCursors(lsm_db *pDb){
-  lsm_cursor *pCsr;
+  MultiCursor *pCsr;
   for(pCsr=pDb->pCsr; pCsr; pCsr=pCsr->pNext){
-    lsmTreeCursorSave(pCsr->pMC->pTreeCsr);
+    lsmTreeCursorSave(pCsr->pTreeCsr);
   }
 }
 
