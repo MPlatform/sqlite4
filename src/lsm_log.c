@@ -741,17 +741,18 @@ struct LogReader {
   u32 cksum1;                     /* Checksum 1 at offset iCksumBuf */
 };
 
-static int logReaderBlob(
+static void logReaderBlob(
   LogReader *p,                   /* Log reader object */
   LsmString *pBuf,                /* Dynamic storage, if required */
   int nBlob,                      /* Number of bytes to read */
-  u8 **ppBlob                     /* OUT: Pointer to blob read */
+  u8 **ppBlob,                    /* OUT: Pointer to blob read */
+  int *pRc                        /* IN/OUT: Error code */
 ){
   static const int LOG_READ_SIZE = 512;
-  int rc = LSM_OK;                /* Return code */
+  int rc = *pRc;                  /* Return code */
   int nReq = nBlob;               /* Bytes required */
 
-  while( nReq>0 ){
+  while( rc==LSM_OK && nReq>0 ){
     int nAvail;                   /* Bytes of data available in p->buf */
     if( p->buf.n==p->iBuf ){
       int nCksum;                 /* Total bytes requiring checksum */
@@ -773,12 +774,11 @@ static int logReaderBlob(
 
       rc = lsmFsReadLog(p->pFS, p->iOff, LOG_READ_SIZE, &p->buf);
       if( rc!=LSM_OK ) break;
-
       p->iCksumBuf = 0;
       p->iOff += LOG_READ_SIZE;
     }
-    nAvail = p->buf.n - p->iBuf;
 
+    nAvail = p->buf.n - p->iBuf;
     if( ppBlob && nReq==nBlob && nBlob<=nAvail ){
       *ppBlob = (u8 *)&p->buf.z[p->iBuf];
       p->iBuf += nBlob;
@@ -790,53 +790,56 @@ static int logReaderBlob(
         pBuf->n = 0;
       }
       rc = lsmStringBinAppend(pBuf, (u8 *)&p->buf.z[p->iBuf], nCopy);
-      if( rc!=LSM_OK ) break;
       nReq -= nCopy;
       p->iBuf += nCopy;
     }
   }
 
-  return rc;
+  *pRc = rc;
 }
 
-static int logReaderVarint(LogReader *p, LsmString *pBuf, int *piVal){
+static void logReaderVarint(
+  LogReader *p, 
+  LsmString *pBuf,
+  int *piVal,                     /* OUT: Value read from log */
+  int *pRc                        /* IN/OUT: Error code */
+){
   u8 *aVarint;
   if( p->buf.n==p->iBuf ){
-    int rc = logReaderBlob(p, 0, 10, &aVarint);
-    if( rc!=LSM_OK ) return rc;
-    p->iBuf -= (10 - lsmVarintGet32(aVarint, piVal));
+    logReaderBlob(p, 0, 10, &aVarint, pRc);
+    if( LSM_OK==*pRc ) p->iBuf -= (10 - lsmVarintGet32(aVarint, piVal));
   }else{
-    logReaderBlob(p, pBuf, lsmVarintSize(p->buf.z[p->iBuf]), &aVarint);
-    lsmVarintGet32(aVarint, piVal);
+    logReaderBlob(p, pBuf, lsmVarintSize(p->buf.z[p->iBuf]), &aVarint, pRc);
+    if( LSM_OK==*pRc ) lsmVarintGet32(aVarint, piVal);
   }
-  return LSM_OK;
 }
 
-static int logReaderByte(LogReader *p, u8 *pByte){
-  int rc;
-  u8 *pPtr;
-  rc = logReaderBlob(p, 0, 1, &pPtr);
-  *pByte = *pPtr;
-  return rc;
+static void logReaderByte(LogReader *p, u8 *pByte, int *pRc){
+  u8 *pPtr = 0;
+  logReaderBlob(p, 0, 1, &pPtr, pRc);
+  if( pPtr ) *pByte = *pPtr;
 }
 
-static void logReaderCksum(LogReader *p, LsmString *pBuf, int *pbEof){
-  u8 *pPtr;
-  u32 cksum0, cksum1;
-  int nCksum = p->iBuf - p->iCksumBuf;
+static void logReaderCksum(LogReader *p, LsmString *pBuf, int *pbEof, int *pRc){
+  if( *pRc==LSM_OK ){
+    u8 *pPtr = 0;
+    u32 cksum0, cksum1;
+    int nCksum = p->iBuf - p->iCksumBuf;
 
-  /* Update in-memory (expected) checksums */
-  assert( nCksum>=0 );
-  logCksumUnaligned(&p->buf.z[p->iCksumBuf], nCksum, &p->cksum0, &p->cksum1);
-  p->iCksumBuf = p->iBuf + 8;
-  logReaderBlob(p, pBuf, 8, &pPtr);
+    /* Update in-memory (expected) checksums */
+    assert( nCksum>=0 );
+    logCksumUnaligned(&p->buf.z[p->iCksumBuf], nCksum, &p->cksum0, &p->cksum1);
+    p->iCksumBuf = p->iBuf + 8;
+    logReaderBlob(p, pBuf, 8, &pPtr, pRc);
 
-  /* Read the checksums from the log file. Set *pbEof if they do not match. */
-  cksum0 = lsmGetU32(pPtr);
-  cksum1 = lsmGetU32(&pPtr[4]);
-
-  *pbEof = (cksum0!=p->cksum0 || cksum1!=p->cksum1);
-  p->iCksumBuf = p->iBuf;
+    /* Read the checksums from the log file. Set *pbEof if they do not match. */
+    if( pPtr ){
+      cksum0 = lsmGetU32(pPtr);
+      cksum1 = lsmGetU32(&pPtr[4]);
+      *pbEof = (cksum0!=p->cksum0 || cksum1!=p->cksum1);
+      p->iCksumBuf = p->iBuf;
+    }
+  }
 }
 
 static void logReaderInit(
@@ -890,12 +893,12 @@ int lsmLogRecover(lsm_db *pDb){
   ** count the number of committed transactions in the log. The second 
   ** iterates through those transactions and updates the in-memory tree 
   ** structure with their contents.  */
-  for(iPass=0; iPass<2; iPass++){
+  for(iPass=0; iPass<2 && rc==LSM_OK; iPass++){
     int bEof = 0;
 
     while( rc==LSM_OK && !bEof ){
       u8 eType;
-      rc = logReaderByte(&reader, &eType);
+      logReaderByte(&reader, &eType, &rc);
 
       switch( eType ){
         case LSM_LOG_PAD1:
@@ -903,8 +906,8 @@ int lsmLogRecover(lsm_db *pDb){
 
         case LSM_LOG_PAD2: {
           int nPad;
-          logReaderVarint(&reader, &buf1, &nPad);
-          logReaderBlob(&reader, &buf1, nPad, 0);
+          logReaderVarint(&reader, &buf1, &nPad, &rc);
+          logReaderBlob(&reader, &buf1, nPad, 0, &rc);
           break;
         }
 
@@ -913,19 +916,19 @@ int lsmLogRecover(lsm_db *pDb){
           int nKey;
           int nVal;
           u8 *aVal;
-          logReaderVarint(&reader, &buf1, &nKey);
-          logReaderVarint(&reader, &buf2, &nVal);
+          logReaderVarint(&reader, &buf1, &nKey, &rc);
+          logReaderVarint(&reader, &buf2, &nVal, &rc);
 
           if( eType==LSM_LOG_WRITE_CKSUM ){
-            logReaderCksum(&reader, &buf1, &bEof);
+            logReaderCksum(&reader, &buf1, &bEof, &rc);
           }else{
             bEof = logRequireCksum(&reader, nKey+nVal);
           }
           if( bEof ) break;
 
-          logReaderBlob(&reader, &buf1, nKey, 0);
-          logReaderBlob(&reader, &buf2, nVal, &aVal);
-          if( iPass==1 ){ 
+          logReaderBlob(&reader, &buf1, nKey, 0, &rc);
+          logReaderBlob(&reader, &buf2, nVal, &aVal, &rc);
+          if( iPass==1 && rc==LSM_OK ){ 
             rc = lsmTreeInsert(pDb, (u8 *)buf1.z, nKey, aVal, nVal);
           }
           break;
@@ -934,24 +937,24 @@ int lsmLogRecover(lsm_db *pDb){
         case LSM_LOG_DELETE:
         case LSM_LOG_DELETE_CKSUM: {
           int nKey; u8 *aKey;
-          logReaderVarint(&reader, &buf1, &nKey);
+          logReaderVarint(&reader, &buf1, &nKey, &rc);
 
           if( eType==LSM_LOG_DELETE_CKSUM ){
-            logReaderCksum(&reader, &buf1, &bEof);
+            logReaderCksum(&reader, &buf1, &bEof, &rc);
           }else{
             bEof = logRequireCksum(&reader, nKey);
           }
           if( bEof ) break;
 
-          logReaderBlob(&reader, &buf1, nKey, &aKey);
-          if( iPass==1 ){ 
+          logReaderBlob(&reader, &buf1, nKey, &aKey, &rc);
+          if( iPass==1 && rc==LSM_OK ){ 
             rc = lsmTreeInsert(pDb, aKey, nKey, NULL, -1);
           }
           break;
         }
 
         case LSM_LOG_COMMIT:
-          logReaderCksum(&reader, &buf1, &bEof);
+          logReaderCksum(&reader, &buf1, &bEof, &rc);
           if( bEof==0 ){
             nCommit++;
             assert( nCommit>0 || iPass==1 );
@@ -961,26 +964,27 @@ int lsmLogRecover(lsm_db *pDb){
 
         case LSM_LOG_JUMP: {
           int iOff = 0;
-          logReaderVarint(&reader, &buf1, &iOff);
-
-          if( iPass==1 ){
-            if( pLog->aRegion[2].iStart==0 ){
-              assert( pLog->aRegion[1].iStart==0 );
-              pLog->aRegion[1].iEnd = reader.iOff;
+          logReaderVarint(&reader, &buf1, &iOff, &rc);
+          if( rc==LSM_OK ){
+            if( iPass==1 ){
+              if( pLog->aRegion[2].iStart==0 ){
+                assert( pLog->aRegion[1].iStart==0 );
+                pLog->aRegion[1].iEnd = reader.iOff;
+              }else{
+                assert( pLog->aRegion[0].iStart==0 );
+                pLog->aRegion[0].iStart = pLog->aRegion[2].iStart;
+                pLog->aRegion[0].iEnd = reader.iOff - reader.buf.n+reader.iBuf;
+              }
+              pLog->aRegion[2].iStart = iOff;
             }else{
-              assert( pLog->aRegion[0].iStart==0 );
-              pLog->aRegion[0].iStart = pLog->aRegion[2].iStart;
-              pLog->aRegion[0].iEnd = reader.iOff - reader.buf.n + reader.iBuf;
+              if( (nJump++)==2 ){
+                bEof = 1;
+              }
             }
-            pLog->aRegion[2].iStart = iOff;
-          }else{
-            if( (nJump++)==2 ){
-              bEof = 1;
-            }
-          }
 
-          reader.iOff = iOff;
-          reader.buf.n = reader.iBuf;
+            reader.iOff = iOff;
+            reader.buf.n = reader.iBuf;
+          }
           break;
         }
 
@@ -991,7 +995,7 @@ int lsmLogRecover(lsm_db *pDb){
       }
     }
 
-    if( iPass==0 ){
+    if( rc==LSM_OK && iPass==0 ){
       if( nCommit==0 ){
         if( pLog->aRegion[2].iStart==0 ){
           iPass = 1;
@@ -1006,9 +1010,11 @@ int lsmLogRecover(lsm_db *pDb){
   }
 
   /* Initialize DbLog object */
-  pLog->aRegion[2].iEnd = reader.iOff - reader.buf.n + reader.iBuf;
-  pLog->cksum0 = reader.cksum0;
-  pLog->cksum1 = reader.cksum1;
+  if( rc==LSM_OK ){
+    pLog->aRegion[2].iEnd = reader.iOff - reader.buf.n + reader.iBuf;
+    pLog->cksum0 = reader.cksum0;
+    pLog->cksum1 = reader.cksum1;
+  }
 
   if( rc==LSM_OK ){
     rc = lsmFinishRecovery(pDb);

@@ -90,10 +90,25 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#define FS_MAX_PHANTOM_PAGES 32
-
 /* 
-** A phantom-run under construction.
+** A "phantom" run under construction.
+**
+** Phantom runs are constructed entirely in memory, then written out to 
+** disk. This is distinct from normal runs, for which each page is written
+** to disk as soon as it is completely populated. 
+**
+** They are used when the in-memory tree is flushed to disk. In this case, 
+** the main run is written directly to disk and the separators run 
+** accumulated in memory as a phantom run and flushed to disk after the main
+** run is completed. This allows the separators run to immediately follow
+** the main run in the file - making the entire flush operation a single
+** contiguous write.
+**
+** Before they are flushed to disk, the pages of phantom runs do not have
+** page numbers. This means it is not possible to obtain pointers to them.
+** In practice, this means that when creating a separators run, a phantom
+** run is used to accumulate and write all leaf pages to disk, then a
+** second pass is made to populate and append the b-tree hierarchy pages.
 */
 typedef struct PhantomRun PhantomRun;
 struct PhantomRun {
@@ -103,6 +118,14 @@ struct PhantomRun {
   Page *pFirst;                   /* First page in phantom run */
   Page *pLast;                    /* Current last page in phantom run */
 };
+
+/*
+** Maximum number of pages allowed to accumulate in memory when constructing
+** a phantom run. If this limit is exceeded, the phantom run is flushed to
+** disk even if it is not finished.
+*/
+#define FS_MAX_PHANTOM_PAGES 32
+
 
 /*
 ** File-system object. Each database connection allocates a single instance
@@ -187,7 +210,8 @@ struct MetaPage {
 #define PAGE_SHORT 0x00000004     /* Set if page is 4 bytes short */
 
 /*
-** Number of pgsz byte pages omitted from the start of block 1.
+** Number of pgsz byte pages omitted from the start of block 1. The start
+** of block 1 contains two 4096 byte meta pages (8192 bytes in total).
 */
 #define BLOCK1_HDR_SIZE(pgsz)  MAX(1, 8192/(pgsz))
 
@@ -1202,6 +1226,9 @@ int lsmFsSortedAppend(
   return rc;
 }
 
+/*
+** Mark the sorted run passed as the second argument as finished. 
+*/
 int lsmFsSortedFinish(FileSystem *pFS, SortedRun *p){
   int rc = LSM_OK;
   if( p ){
@@ -1336,6 +1363,14 @@ int lsmFsPageWritable(Page *pPg){
 }
 
 
+/*
+** If the page passed as an argument is dirty, update the database file
+** (or mapping of the database file) with its current contents and mark
+** the page as clean.
+**
+** Return LSM_OK if the operation is a success, or an LSM error code
+** otherwise.
+*/
 int lsmFsPagePersist(Page *pPg){
   int rc = LSM_OK;
   if( pPg && (pPg->flags & PAGE_DIRTY) ){
@@ -1526,10 +1561,6 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   lsmDbSnapshotRelease(pDb->pEnv, pRelease);
   return rc;
 }
-
-
-
-
 
 void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
   if( p ){

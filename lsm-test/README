@@ -1,4 +1,5 @@
 
+
 Organization of test case files:
 
   lsmtest1.c: Data tests. Tests that perform many inserts and deletes on a 
@@ -14,6 +15,8 @@ Organization of test case files:
   lsmtest4.c: Multi-client tests.
 
   lsmtest5.c: Multi-client tests with a different thread for each client.
+
+  lsmtest6.c: OOM injection tests.
 
 
 

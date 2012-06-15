@@ -1079,9 +1079,7 @@ int main(int argc, char **argv){
   const char *zReport = "malloc.txt NOT generated";
 #endif
 
-#ifndef NDEBUG
   testMallocInstall(tdb_lsm_env());
-#endif
 
   if( argc<2 ){
     testPrintError("Usage: %s sub-command ?args...?\n", argv[0]);
@@ -1099,7 +1097,6 @@ int main(int argc, char **argv){
     rc = aTest[iFunc].xFunc(argc-2, &argv[2]);
   }
 
-#ifndef NDEBUG
 #ifdef LSM_DEBUG_MEM
   pReport = fopen("malloc.txt", "w");
   testMallocCheck(tdb_lsm_env(), &nLeakAlloc, &nLeakByte, pReport);
@@ -1115,7 +1112,6 @@ int main(int argc, char **argv){
     if( rc==0 ) rc = -1;
   }
   testMallocUninstall(tdb_lsm_env());
-#endif
 
 #if 1
   lsmtest_rusage_report();
