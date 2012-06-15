@@ -445,6 +445,10 @@ int do_test(int nArg, char **azArg){
   test_oom(zPattern, &rc);
   if( rc ) nFail++;
 
+  rc = 0;
+  test_api(zPattern, &rc);
+  if( rc ) nFail++;
+
   return (nFail!=0);
 }
 

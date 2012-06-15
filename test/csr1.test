@@ -45,7 +45,7 @@ db eval { SELECT a, b FROM t1 } {
     list [catch { sqlite4_lsm_work db main -flush 0 } msg] $msg
   } {1 SQLITE_MISUSE}
   do_test 1.2.2 { 
-    list [catch { sqlite4_lsm_work db main -merge 1 } msg] $msg
+    list [catch { sqlite4_lsm_work db main 1 } msg] $msg
   } {1 SQLITE_MISUSE}
   break
 }

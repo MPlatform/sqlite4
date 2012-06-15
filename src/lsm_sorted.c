@@ -256,12 +256,21 @@ struct MultiCursor {
 **
 ** CURSOR_IGNORE_SYSTEM
 **   If set, this cursor ignores system keys.
+**
+** CURSOR_NEXT_OK
+**   Set if it is Ok to call lsm_csr_next().
+**
+** CURSOR_PREV_OK
+**   Set if it is Ok to call lsm_csr_prev().
+**
 */
 #define CURSOR_IGNORE_DELETE    0x00000001
 #define CURSOR_NEW_SYSTEM       0x00000002
 #define CURSOR_AT_FREELIST      0x00000004
 #define CURSOR_AT_LEVELS        0x00000008
 #define CURSOR_IGNORE_SYSTEM    0x00000010
+#define CURSOR_NEXT_OK          0x00000020
+#define CURSOR_PREV_OK          0x00000040
 
 typedef struct MergeWorker MergeWorker;
 struct MergeWorker {
@@ -1829,6 +1838,7 @@ static int multiCursorEnd(MultiCursor *pCsr, int bLast){
   int rc = LSM_OK;
   int i;
 
+  pCsr->flags &= ~(CURSOR_NEXT_OK | CURSOR_PREV_OK);
   if( pCsr->pTreeCsr ){
     rc = lsmTreeCursorEnd(pCsr->pTreeCsr, bLast);
   }
@@ -1848,6 +1858,7 @@ static int multiCursorEnd(MultiCursor *pCsr, int bLast){
     for(i=pCsr->nTree-1; i>0; i--){
       multiCursorDoCompare(pCsr, i, bLast);
     }
+    pCsr->flags |= (bLast ? CURSOR_PREV_OK : CURSOR_NEXT_OK);
   }
 
   multiCursorCacheKey(pCsr, &rc);
@@ -1946,6 +1957,7 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
   assert( (pCsr->flags & CURSOR_AT_FREELIST)==0 );
   assert( (pCsr->flags & CURSOR_AT_LEVELS)==0 );
 
+  pCsr->flags &= ~(CURSOR_NEXT_OK | CURSOR_PREV_OK);
   lsmTreeCursorSeek(pCsr->pTreeCsr, pKey, nKey, &res);
   switch( eESeek ){
     case LSM_SEEK_EQ:
@@ -1977,6 +1989,8 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
     for(i=pCsr->nTree-1; i>0; i--){
       multiCursorDoCompare(pCsr, i, eESeek==LSM_SEEK_LE);
     }
+    if( eSeek==LSM_SEEK_GE ) pCsr->flags |= CURSOR_NEXT_OK;
+    if( eSeek==LSM_SEEK_LE ) pCsr->flags |= CURSOR_PREV_OK;
   }
 
   multiCursorCacheKey(pCsr, &rc);
@@ -2091,15 +2105,19 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
         }
       }
     }while( mcursorAdvanceOk(pCsr, bReverse, &rc)==0 );
+  }else{
+    rc = LSM_MISUSE;
   }
   return rc;
 }
 
 int lsmMCursorNext(MultiCursor *pCsr){
+  if( (pCsr->flags & CURSOR_NEXT_OK)==0 ) return LSM_MISUSE;
   return multiCursorAdvance(pCsr, 0);
 }
 
 int lsmMCursorPrev(MultiCursor *pCsr){
+  if( (pCsr->flags & CURSOR_PREV_OK)==0 ) return LSM_MISUSE;
   return multiCursorAdvance(pCsr, 1);
 }
 

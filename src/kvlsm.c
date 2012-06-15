@@ -211,11 +211,13 @@ static int kvlsmCloseCursor(KVCursor *pKVCursor){
 ** Move a cursor to the next non-deleted node.
 */
 static int kvlsmNextEntry(KVCursor *pKVCursor){
-  int rc;
+  int rc = SQLITE_NOTFOUND;
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
-  rc = lsm_csr_next(pCsr->pCsr);
-  if( rc==SQLITE_OK && lsm_csr_valid(pCsr->pCsr)==0 ){
-    rc = SQLITE_NOTFOUND;
+  if( lsm_csr_valid(pCsr->pCsr) ){
+    rc = lsm_csr_next(pCsr->pCsr);
+    if( rc==LSM_OK && lsm_csr_valid(pCsr->pCsr)==0 ){
+      rc = SQLITE_NOTFOUND;
+    }
   }
   return rc;
 }
@@ -224,11 +226,13 @@ static int kvlsmNextEntry(KVCursor *pKVCursor){
 ** Move a cursor to the previous non-deleted node.
 */
 static int kvlsmPrevEntry(KVCursor *pKVCursor){
-  int rc;
+  int rc = SQLITE_NOTFOUND;;
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
-  rc = lsm_csr_prev(pCsr->pCsr);
-  if( rc==SQLITE_OK && lsm_csr_valid(pCsr->pCsr)==0 ){
-    rc = SQLITE_NOTFOUND;
+  if( lsm_csr_valid(pCsr->pCsr) ){
+    rc = lsm_csr_prev(pCsr->pCsr);
+    if( rc==LSM_OK && lsm_csr_valid(pCsr->pCsr)==0 ){
+      rc = SQLITE_NOTFOUND;
+    }
   }
   return rc;
 }

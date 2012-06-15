@@ -18,6 +18,8 @@ Organization of test case files:
 
   lsmtest6.c: OOM injection tests.
 
+  lsmtest7.c: API tests.
+
 
 
 
