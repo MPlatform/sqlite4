@@ -804,13 +804,15 @@ static void logReaderVarint(
   int *piVal,                     /* OUT: Value read from log */
   int *pRc                        /* IN/OUT: Error code */
 ){
-  u8 *aVarint;
-  if( p->buf.n==p->iBuf ){
-    logReaderBlob(p, 0, 10, &aVarint, pRc);
-    if( LSM_OK==*pRc ) p->iBuf -= (10 - lsmVarintGet32(aVarint, piVal));
-  }else{
-    logReaderBlob(p, pBuf, lsmVarintSize(p->buf.z[p->iBuf]), &aVarint, pRc);
-    if( LSM_OK==*pRc ) lsmVarintGet32(aVarint, piVal);
+  if( *pRc==LSM_OK ){
+    u8 *aVarint;
+    if( p->buf.n==p->iBuf ){
+      logReaderBlob(p, 0, 10, &aVarint, pRc);
+      if( LSM_OK==*pRc ) p->iBuf -= (10 - lsmVarintGet32(aVarint, piVal));
+    }else{
+      logReaderBlob(p, pBuf, lsmVarintSize(p->buf.z[p->iBuf]), &aVarint, pRc);
+      if( LSM_OK==*pRc ) lsmVarintGet32(aVarint, piVal);
+    }
   }
 }
 
