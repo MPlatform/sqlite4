@@ -830,19 +830,6 @@ test_suite "journaltest" -description {
   async4.test bigfile.test backcompat.test
 }]
 
-if {[info commands register_demovfs] != ""} {
-  test_suite "demovfs" -description {
-    Check that the demovfs (code in test_demovfs.c) more or less works.
-  } -initialize {
-    register_demovfs
-  } -shutdown {
-    unregister_demovfs
-  } -files {
-    insert.test   insert2.test  insert3.test rollback.test 
-    select1.test  select2.test  select3.test
-  }
-}
-
 test_suite "wal" -description {
   Run tests with journal_mode=WAL
 } -initialize {

@@ -2969,7 +2969,6 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitetest5_Init(Tcl_Interp*);
     extern int Sqlitetest8_Init(Tcl_Interp*);
     extern int Sqlitetest9_Init(Tcl_Interp*);
-    extern int Sqlitetest_demovfs_Init(Tcl_Interp *);
     extern int Sqlitetest_func_Init(Tcl_Interp*);
     extern int Sqlitetest_hexio_Init(Tcl_Interp*);
     extern int Sqlitetest_malloc_Init(Tcl_Interp*);
@@ -2978,7 +2977,6 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitetestsse_Init(Tcl_Interp*);
     extern int Sqlitetesttclvar_Init(Tcl_Interp*);
     extern int SqlitetestThread_Init(Tcl_Interp*);
-    extern int SqlitetestOsinst_Init(Tcl_Interp*);
     extern int Sqlitetestintarray_Init(Tcl_Interp*);
     extern int Sqlitetestrtree_Init(Tcl_Interp*);
     extern int Sqlitequota_Init(Tcl_Interp*);
@@ -3005,7 +3003,6 @@ static void init_all(Tcl_Interp *interp){
     Sqlitetest5_Init(interp);
     Sqlitetest8_Init(interp);
     Sqlitetest9_Init(interp);
-    Sqlitetest_demovfs_Init(interp);
     Sqlitetest_hexio_Init(interp);
     Sqlitetest_malloc_Init(interp);
     Sqlitetest_mutex_Init(interp);

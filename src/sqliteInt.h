@@ -3137,17 +3137,6 @@ int sqlite4WalDefaultHook(void*,sqlite4*,const char*,int);
 int sqlite4FindInIndex(Parse *, Expr *, int*);
 Index *sqlite4FindExistingInIndex(Parse *, Expr *, int);
 
-#ifdef SQLITE_ENABLE_ATOMIC_WRITE
-  int sqlite4JournalOpen(sqlite4_vfs *, const char *, sqlite4_file *, int, int);
-  int sqlite4JournalSize(sqlite4_vfs *);
-  int sqlite4JournalCreate(sqlite4_file *);
-#else
-  #define sqlite4JournalSize(pVfs) ((pVfs)->szOsFile)
-#endif
-
-void sqlite4MemJournalOpen(sqlite4_file *);
-int sqlite4MemJournalSize(void);
-int sqlite4IsMemJournal(sqlite4_file *);
 
 #if SQLITE_MAX_EXPR_DEPTH>0
   void sqlite4ExprSetHeight(Parse *pParse, Expr *p);

@@ -77,7 +77,6 @@
 */
 int sqlite4OsInit(sqlite4_env*);
 int sqlite4OsRandomness(sqlite4_env*, int, unsigned char*);
-int sqlite4OsNanoSleep(sqlite4_env*, int);
 int sqlite4OsCurrentTime(sqlite4_env*, sqlite4_uint64*);
 
 #endif /* _SQLITE_OS_H_ */

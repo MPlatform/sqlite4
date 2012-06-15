@@ -202,7 +202,6 @@ TESTSRC = \
   $(TOP)/test/test_echo.c \
   $(TOP)/test/test_misc1.c \
   $(TOP)/test/test_config.c \
-  $(TOP)/test/test_demovfs.c \
   $(TOP)/test/test_func.c \
   $(TOP)/test/test_fuzzer.c \
   $(TOP)/test/test_hexio.c \
@@ -210,7 +209,6 @@ TESTSRC = \
   $(TOP)/test/test_lsm.c \
   $(TOP)/test/test_malloc.c \
   $(TOP)/test/test_mutex.c \
-  $(TOP)/test/test_onefile.c \
   $(TOP)/test/test_rtree.c \
   $(TOP)/test/test_schema.c \
   $(TOP)/test/test_storage.c \

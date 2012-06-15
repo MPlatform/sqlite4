@@ -2582,10 +2582,6 @@ static const char zOptions[] =
   "   -stats               print memory stats before each finalize\n"
   "   -nullvalue 'text'    set text string for NULL values\n"
   "   -version             show SQLite version\n"
-  "   -vfs NAME            use NAME as the default VFS\n"
-#ifdef SQLITE_ENABLE_VFSTRACE
-  "   -vfstrace            enable tracing of all VFS calls\n"
-#endif
 #ifdef SQLITE_ENABLE_MULTIPLEX
   "   -multiplex           enable the multiplexor VFS\n"
 #endif
@@ -2678,30 +2674,11 @@ int main(int argc, char **argv){
       if( szHeap>0x7fff0000 ) szHeap = 0x7fff0000;
       sqlite4_config(0,SQLITE_CONFIG_HEAP, malloc((int)szHeap),(int)szHeap,64);
 #endif
-#ifdef SQLITE_ENABLE_VFSTRACE
-    }else if( strcmp(argv[i],"-vfstrace")==0 ){
-      extern int vfstrace_register(
-         const char *zTraceName,
-         const char *zOldVfsName,
-         int (*xOut)(const char*,void*),
-         void *pOutArg,
-         int makeDefault
-      );
-      vfstrace_register("trace",0,(int(*)(const char*,void*))fputs,stderr,1);
-#endif
 #ifdef SQLITE_ENABLE_MULTIPLEX
     }else if( strcmp(argv[i],"-multiplex")==0 ){
       extern int sqlite4_multiple_initialize(const char*,int);
       sqlite4_multiplex_initialize(0, 1);
 #endif
-    }else if( strcmp(argv[i],"-vfs")==0 ){
-      sqlite4_vfs *pVfs = sqlite4_vfs_find(argv[++i]);
-      if( pVfs ){
-        sqlite4_vfs_register(pVfs, 1);
-      }else{
-        fprintf(stderr, "no such VFS: \"%s\"\n", argv[i]);
-        exit(1);
-      }
     }
   }
   if( i<argc ){
@@ -2810,12 +2787,6 @@ int main(int argc, char **argv){
       stdin_is_interactive = 0;
     }else if( strcmp(z,"-heap")==0 ){
       i++;
-    }else if( strcmp(z,"-vfs")==0 ){
-      i++;
-#ifdef SQLITE_ENABLE_VFSTRACE
-    }else if( strcmp(z,"-vfstrace")==0 ){
-      i++;
-#endif
 #ifdef SQLITE_ENABLE_MULTIPLEX
     }else if( strcmp(z,"-multiplex")==0 ){
       i++;
