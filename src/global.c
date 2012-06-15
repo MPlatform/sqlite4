@@ -150,6 +150,8 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    0,                         /* mxParserStack */
    sqlite4KVStoreOpenLsm,     /* xKVFile */
    sqlite4KVStoreOpenMem,     /* xKVTmp */
+   sqlite4OsRandomness,       /* xRandomness */
+   sqlite4OsCurrentTime,      /* xCurrentTime */
    /* All the rest should always be initialized to zero */
    0,                         /* isInit */
    0,                         /* inProgress */

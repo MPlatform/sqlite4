@@ -374,7 +374,7 @@ static int sqlite4Step(Vdbe *p){
 
 #ifndef SQLITE_OMIT_TRACE
     if( db->xProfile && !db->init.busy ){
-      sqlite4OsCurrentTimeInt64(0, &p->startTime);
+      sqlite4OsCurrentTime(0, &p->startTime);
     }
 #endif
 
@@ -398,7 +398,7 @@ static int sqlite4Step(Vdbe *p){
   */
   if( rc!=SQLITE_ROW && db->xProfile && !db->init.busy && p->zSql ){
     sqlite4_int64 iNow;
-    sqlite4OsCurrentTimeInt64(0, &iNow);
+    sqlite4OsCurrentTime(0, &iNow);
     db->xProfile(db->pProfileArg, p->zSql, (iNow - p->startTime)*1000000);
   }
 #endif

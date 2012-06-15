@@ -17,146 +17,12 @@
 #include "sqliteInt.h"
 #undef _SQLITE_OS_C_
 
-/*
-** The following routines are convenience wrappers around methods
-** of the sqlite4_file object.  This is mostly just syntactic sugar. All
-** of this would be completely automatic if SQLite were coded using
-** C++ instead of plain old C.
-*/
-int sqlite4OsClose(sqlite4_file *pId){
-  int rc = SQLITE_OK;
-  if( pId->pMethods ){
-    rc = pId->pMethods->xClose(pId);
-    pId->pMethods = 0;
-  }
-  return rc;
-}
-int sqlite4OsRead(sqlite4_file *id, void *pBuf, int amt, i64 offset){
-  return id->pMethods->xRead(id, pBuf, amt, offset);
-}
-int sqlite4OsWrite(sqlite4_file *id, const void *pBuf, int amt, i64 offset){
-  return id->pMethods->xWrite(id, pBuf, amt, offset);
-}
-int sqlite4OsTruncate(sqlite4_file *id, i64 size){
-  return id->pMethods->xTruncate(id, size);
-}
-int sqlite4OsSync(sqlite4_file *id, int flags){
-  return id->pMethods->xSync(id, flags);
-}
-int sqlite4OsFileSize(sqlite4_file *id, i64 *pSize){
-  return id->pMethods->xFileSize(id, pSize);
-}
-int sqlite4OsLock(sqlite4_file *id, int lockType){
-  return id->pMethods->xLock(id, lockType);
-}
-int sqlite4OsUnlock(sqlite4_file *id, int lockType){
-  return id->pMethods->xUnlock(id, lockType);
-}
-int sqlite4OsCheckReservedLock(sqlite4_file *id, int *pResOut){
-  return id->pMethods->xCheckReservedLock(id, pResOut);
-}
+int sqlite4_os_init(void){}
+int sqlite4_os_end(void){}
 
-/*
-** Use sqlite4OsFileControl() when we are doing something that might fail
-** and we need to know about the failures.  Use sqlite4OsFileControlHint()
-** when simply tossing information over the wall to the VFS and we do not
-** really care if the VFS receives and understands the information since it
-** is only a hint and can be safely ignored.  The sqlite4OsFileControlHint()
-** routine has no return value since the return value would be meaningless.
-*/
-int sqlite4OsFileControl(sqlite4_file *id, int op, void *pArg){
-  return id->pMethods->xFileControl(id, op, pArg);
-}
-void sqlite4OsFileControlHint(sqlite4_file *id, int op, void *pArg){
-  (void)id->pMethods->xFileControl(id, op, pArg);
-}
-
-int sqlite4OsSectorSize(sqlite4_file *id){
-  int (*xSectorSize)(sqlite4_file*) = id->pMethods->xSectorSize;
-  return (xSectorSize ? xSectorSize(id) : SQLITE_DEFAULT_SECTOR_SIZE);
-}
-int sqlite4OsDeviceCharacteristics(sqlite4_file *id){
-  return id->pMethods->xDeviceCharacteristics(id);
-}
-int sqlite4OsShmLock(sqlite4_file *id, int offset, int n, int flags){
-  return id->pMethods->xShmLock(id, offset, n, flags);
-}
-void sqlite4OsShmBarrier(sqlite4_file *id){
-  id->pMethods->xShmBarrier(id);
-}
-int sqlite4OsShmUnmap(sqlite4_file *id, int deleteFlag){
-  return id->pMethods->xShmUnmap(id, deleteFlag);
-}
-int sqlite4OsShmMap(
-  sqlite4_file *id,               /* Database file handle */
-  int iPage,
-  int pgsz,
-  int bExtend,                    /* True to extend file if necessary */
-  void volatile **pp              /* OUT: Pointer to mapping */
-){
-  return id->pMethods->xShmMap(id, iPage, pgsz, bExtend, pp);
-}
-
-/*
-** The next group of routines are convenience wrappers around the
-** VFS methods.
-*/
-int sqlite4OsOpen(
-  sqlite4_vfs *pVfs, 
-  const char *zPath, 
-  sqlite4_file *pFile, 
-  int flags, 
-  int *pFlagsOut
-){
-  int rc;
-  /* 0x87f7f is a mask of SQLITE_OPEN_ flags that are valid to be passed
-  ** down into the VFS layer.  Some SQLITE_OPEN_ flags (for example,
-  ** SQLITE_OPEN_FULLMUTEX or SQLITE_OPEN_SHAREDCACHE) are blocked before
-  ** reaching the VFS. */
-  rc = pVfs->xOpen(pVfs, zPath, pFile, flags & 0x87f7f, pFlagsOut);
-  assert( rc==SQLITE_OK || pFile->pMethods==0 );
-  return rc;
-}
-int sqlite4OsDelete(sqlite4_vfs *pVfs, const char *zPath, int dirSync){
-  assert( dirSync==0 || dirSync==1 );
-  return pVfs->xDelete(pVfs, zPath, dirSync);
-}
-int sqlite4OsAccess(
-  sqlite4_vfs *pVfs, 
-  const char *zPath, 
-  int flags, 
-  int *pResOut
-){
-  return pVfs->xAccess(pVfs, zPath, flags, pResOut);
-}
-int sqlite4OsFullPathname(
-  sqlite4_vfs *pVfs, 
-  const char *zPath, 
-  int nPathOut, 
-  char *zPathOut
-){
-  zPathOut[0] = 0;
-  return pVfs->xFullPathname(pVfs, zPath, nPathOut, zPathOut);
-}
-#ifndef SQLITE_OMIT_LOAD_EXTENSION
-void *sqlite4OsDlOpen(sqlite4_vfs *pVfs, const char *zPath){
-  return pVfs->xDlOpen(pVfs, zPath);
-}
-void sqlite4OsDlError(sqlite4_vfs *pVfs, int nByte, char *zBufOut){
-  pVfs->xDlError(pVfs, nByte, zBufOut);
-}
-void (*sqlite4OsDlSym(sqlite4_vfs *pVfs, void *pHdle, const char *zSym))(void){
-  return pVfs->xDlSym(pVfs, pHdle, zSym);
-}
-void sqlite4OsDlClose(sqlite4_vfs *pVfs, void *pHandle){
-  pVfs->xDlClose(pVfs, pHandle);
-}
-#endif /* SQLITE_OMIT_LOAD_EXTENSION */
-int sqlite4OsRandomness(sqlite4_vfs *pVfs, int nByte, char *zBufOut){
-  return pVfs->xRandomness(pVfs, nByte, zBufOut);
-}
-int sqlite4OsSleep(sqlite4_vfs *pVfs, int nMicro){
-  return pVfs->xSleep(pVfs, nMicro);
+int sqlite4OsRandomness(sqlite4_env *pEnv, int nByte, unsigned char *zBufOut){
+  memset(zBufOut, 0, nByte);
+  return SQLITE_OK;
 }
 
 /*
@@ -164,56 +30,11 @@ int sqlite4OsSleep(sqlite4_vfs *pVfs, int nMicro){
 ** the number of seconds since 1970 and is used to set the result of
 ** sqlite4OsCurrentTime() during testing.
 */
-int sqlite4_current_time = 0;  /* Fake system time in seconds since 1970. */
-int sqlite4OsCurrentTimeInt64(sqlite4_vfs *pVfs, sqlite4_int64 *pTimeOut){
-  UNUSED_PARAMETER(pVfs);
-  *pTimeOut = (sqlite4_int64)sqlite4_current_time * 1000;
+unsigned int sqlite4_current_time = 0; /* Fake system time */
+int sqlite4OsCurrentTime(sqlite4_env *pEnv, sqlite4_uint64 *pTimeOut){
+  UNUSED_PARAMETER(pEnv);
+  *pTimeOut = (sqlite4_uint64)sqlite4_current_time * 1000;
   return SQLITE_OK;
-#if 0
-  int rc;
-  /* IMPLEMENTATION-OF: R-49045-42493 SQLite will use the xCurrentTimeInt64()
-  ** method to get the current date and time if that method is available
-  ** (if iVersion is 2 or greater and the function pointer is not NULL) and
-  ** will fall back to xCurrentTime() if xCurrentTimeInt64() is
-  ** unavailable.
-  */
-  if( pVfs->iVersion>=2 && pVfs->xCurrentTimeInt64 ){
-    rc = pVfs->xCurrentTimeInt64(pVfs, pTimeOut);
-  }else{
-    double r;
-    rc = pVfs->xCurrentTime(pVfs, &r);
-    *pTimeOut = (sqlite4_int64)(r*86400000.0);
-  }
-  return rc;
-#endif
-}
-
-int sqlite4OsOpenMalloc(
-  sqlite4_vfs *pVfs, 
-  const char *zFile, 
-  sqlite4_file **ppFile, 
-  int flags,
-  int *pOutFlags
-){
-  int rc = SQLITE_NOMEM;
-  sqlite4_file *pFile;
-  pFile = (sqlite4_file *)sqlite4MallocZero(pVfs->szOsFile);
-  if( pFile ){
-    rc = sqlite4OsOpen(pVfs, zFile, pFile, flags, pOutFlags);
-    if( rc!=SQLITE_OK ){
-      sqlite4_free(pFile);
-    }else{
-      *ppFile = pFile;
-    }
-  }
-  return rc;
-}
-int sqlite4OsCloseFree(sqlite4_file *pFile){
-  int rc = SQLITE_OK;
-  assert( pFile );
-  rc = sqlite4OsClose(pFile);
-  sqlite4_free(pFile);
-  return rc;
 }
 
 /*
@@ -222,7 +43,7 @@ int sqlite4OsCloseFree(sqlite4_file *pFile){
 ** ability to simulate a malloc failure, so that the handling of an
 ** error in sqlite4_os_init() by the upper layers can be tested.
 */
-int sqlite4OsInit(void){
+int sqlite4OsInit(sqlite4_env *pEnv){
   void *p = sqlite4_malloc(10);
   if( p==0 ) return SQLITE_NOMEM;
   sqlite4_free(p);

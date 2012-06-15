@@ -180,7 +180,7 @@ int sqlite4_initialize(void){
     sqlite4DefaultEnv.inProgress = 1;
     memset(pHash, 0, sizeof(sqlite4GlobalFunctions));
     sqlite4RegisterGlobalFunctions();
-    rc = sqlite4OsInit();
+    rc = sqlite4OsInit(0);
     sqlite4DefaultEnv.inProgress = 0;
   }
   sqlite4_mutex_leave(sqlite4DefaultEnv.pInitMutex);
@@ -1954,16 +1954,7 @@ int sqlite4CantopenError(int lineno){
 ** Sleep for a little while.  Return the amount of time slept.
 */
 int sqlite4_sleep(int ms){
-  sqlite4_vfs *pVfs;
-  int rc;
-  pVfs = sqlite4_vfs_find(0);
-  if( pVfs==0 ) return 0;
-
-  /* This function works in milliseconds, but the underlying OsSleep() 
-  ** API uses microseconds. Hence the 1000's.
-  */
-  rc = (sqlite4OsSleep(pVfs, 1000*ms)/1000);
-  return rc;
+  return SQLITE_MISUSE;
 }
 
 /*
@@ -2051,29 +2042,6 @@ int sqlite4_test_control(int op, ...){
       xBenignBegin = va_arg(ap, void_function);
       xBenignEnd = va_arg(ap, void_function);
       sqlite4BenignMallocHooks(xBenignBegin, xBenignEnd);
-      break;
-    }
-
-    /*
-    **  sqlite4_test_control(SQLITE_TESTCTRL_PENDING_BYTE, unsigned int X)
-    **
-    ** Set the PENDING byte to the value in the argument, if X>0.
-    ** Make no changes if X==0.  Return the value of the pending byte
-    ** as it existing before this routine was called.
-    **
-    ** IMPORTANT:  Changing the PENDING byte from 0x40000000 results in
-    ** an incompatible database file format.  Changing the PENDING byte
-    ** while any database connection is open results in undefined and
-    ** dileterious behavior.
-    */
-    case SQLITE_TESTCTRL_PENDING_BYTE: {
-      rc = PENDING_BYTE;
-#ifndef SQLITE_OMIT_WSD
-      {
-        unsigned int newVal = va_arg(ap, unsigned int);
-        if( newVal ) sqlite4PendingByte = newVal;
-      }
-#endif
       break;
     }
 

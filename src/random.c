@@ -75,7 +75,7 @@ static u8 randomByte(void){
     char k[256];
     wsdPrng.j = 0;
     wsdPrng.i = 0;
-    sqlite4OsRandomness(sqlite4_vfs_find(0), 256, k);
+    sqlite4OsRandomness(0, 256, k);
     for(i=0; i<256; i++){
       wsdPrng.s[i] = (u8)i;
     }

@@ -2416,6 +2416,8 @@ struct sqlite4_env {
   int mxParserStack;                /* maximum depth of the parser stack */
   int (*xKVFile)(sqlite4_env*, KVStore**, const char*, unsigned int);
   int (*xKVTmp)(sqlite4_env*, KVStore**, const char*, unsigned int);
+  int (*xRandomness)(sqlite4_env*, int, unsigned char*);
+  int (*xCurrentTime)(sqlite4_env*, sqlite4_uint64*);
   /* The above might be initialized to non-zero.  The following need to always
   ** initially be zero, however. */
   int isInit;                       /* True after initialization has finished */
