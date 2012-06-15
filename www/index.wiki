@@ -1,6 +1,7 @@
 <title>SQLite4</title>
 
   *  [./design.wiki | The Design Of SQLite4]
+  *  [./env.wiki | The Run-time Environment Object]
   *  [../notes/unsigned_varint.txt | The Varint format]
   *  [../notes/data_encoding.txt | The Data Encoding]
   *  [../notes/key_encoding.txt | The Key Encoding]
