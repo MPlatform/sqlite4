@@ -16,9 +16,6 @@ proc lshift {lvar} {
 }
 while {[set arg [lshift argv]] != ""} {
   switch -- $arg {
-    -sharedpagercache {
-      sqlite4_enable_shared_cache 1
-    }
     default {
       set argv [linsert $argv 0 $arg]
       break

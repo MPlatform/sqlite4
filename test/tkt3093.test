@@ -33,7 +33,6 @@ do_test tkt3093.1 {
 # Establish a separate, independent connection to that database.
 #
 do_test tkt3093.2 {
-  catch {sqlite4_enable_shared_cache 0}
   sqlite4 db2 test.db
   db2 eval {
     SELECT * FROM t1
