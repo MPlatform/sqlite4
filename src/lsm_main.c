@@ -400,24 +400,6 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       break;
     }
 
-    case LSM_INFO_CKPT: {
-      int **paVal = va_arg(ap, int **);
-      int bRelease = 0;
-      if( pDb->pWorker==0 ){
-        pDb->pWorker = lsmDbSnapshotWorker(pDb);
-        bRelease = 1;
-      }
-      if( pDb->pWorker==0 ){
-        rc = LSM_BUSY;
-      }else{
-        rc = lsmCheckpointExport(pDb, 0, 0, 0, (void **)paVal, 0);
-        if( bRelease ){
-          dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
-        }
-      }
-      break;
-    }
-
     case LSM_INFO_DB_STRUCTURE: {
       char **pzVal = va_arg(ap, char **);
       rc = lsmStructList(pDb, pzVal);

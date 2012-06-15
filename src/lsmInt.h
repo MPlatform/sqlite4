@@ -277,6 +277,7 @@ int lsmCheckpointExport(lsm_db *, int, i64, int, void **, int *);
 void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
 lsm_i64 lsmCheckpointLogOffset(void *pExport);
 int lsmCheckpointLevels(lsm_db *, int *, void **, int *);
+int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
 
 
 /* 

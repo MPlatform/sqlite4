@@ -364,7 +364,7 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
 
   switch( op ){
     case SQLITE_KVCTRL_LSM_HANDLE: {
-      KVLsm **ppOut = (KVLsm **)pArg;
+      lsm_db **ppOut = (lsm_db **)pArg;
       *ppOut = p->pDb;
       break;
     }

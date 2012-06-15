@@ -45,6 +45,10 @@ struct TmGlobal {
   void (*xDelMutex)(TmGlobal*);   /* Call this to delete mutex */
   void *pMutex;                   /* Mutex handle */
 
+  void *xSaveMalloc;
+  void *xSaveRealloc;
+  void *xSaveFree;
+
   /* OOM injection scheduling. If nCountdown is greater than zero when a 
   ** malloc attempt is made, it is decremented. If this means nCountdown 
   ** transitions from 1 to 0, then the allocation fails. If bPersist is true 
@@ -87,7 +91,7 @@ static const u32 rearguard = REARGUARD;
 
 #define BLOCK_HDR_SIZE (ROUND8( sizeof(TmBlockHdr) ))
 
-static int lsmtest_oom_error(void){
+static void lsmtest_oom_error(void){
   static int nErr = 0;
   nErr++;
 }
@@ -352,6 +356,10 @@ void testMallocInstall(lsm_env *pEnv){
   pGlobal->xDelMutex = tmLsmMutexDel;
   pGlobal->pMutex = (void *)pMutex;
 
+  pGlobal->xSaveMalloc = (void *)pEnv->xMalloc;
+  pGlobal->xSaveRealloc = (void *)pEnv->xRealloc;
+  pGlobal->xSaveFree = (void *)pEnv->xFree;
+
   /* Set up pEnv to the use the new TmGlobal */
   pEnv->pMemCtx = (void *)pGlobal;
   pEnv->xMalloc = tmLsmEnvMalloc;
@@ -363,6 +371,9 @@ void testMallocUninstall(lsm_env *pEnv){
   TmGlobal *p = (TmGlobal *)pEnv->pMemCtx;
   pEnv->pMemCtx = 0;
   if( p ){
+    pEnv->xMalloc = (void *(*)(lsm_env*, int))(p->xSaveMalloc);
+    pEnv->xRealloc = (void *(*)(lsm_env*, void*, int))(p->xSaveRealloc);
+    pEnv->xFree = (void (*)(lsm_env*, void*))(p->xSaveFree);
     p->xDelMutex(p);
     tmLsmFree(p);
   }
@@ -374,7 +385,12 @@ void testMallocCheck(
   int *pnLeakByte,
   FILE *pFile
 ){
-  tmMallocCheck((TmGlobal *)(pEnv->pMemCtx), pnLeakAlloc, pnLeakByte, pFile);
+  if( pEnv->pMemCtx==0 ){
+    *pnLeakAlloc = 0;
+    *pnLeakByte = 0;
+  }else{
+    tmMallocCheck((TmGlobal *)(pEnv->pMemCtx), pnLeakAlloc, pnLeakByte, pFile);
+  }
 }
 
 void testMallocOom(

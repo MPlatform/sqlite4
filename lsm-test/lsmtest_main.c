@@ -505,6 +505,8 @@ int do_speed_tests(int nArg, char **azArg){
 
   u32 sys_mask = 0;
 
+  testMallocUninstall(tdb_lsm_env());
+
   for(i=0; i<nArg; i++){
     struct Opt { 
       const char *zOpt; 
@@ -790,6 +792,7 @@ int do_speed_tests(int nArg, char **azArg){
   free(aTime);
   free(aSelTime);
   free(aWrite);
+  testMallocInstall(tdb_lsm_env());
   return 0;
 }
 

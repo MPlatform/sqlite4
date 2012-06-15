@@ -208,16 +208,6 @@ int lsm_info(lsm_db *, int, ...);
 **     to by the third parameter is set to the number of 4KB pages read from
 **     the database file during the lifetime of this connection.
 **
-**   LSM_INFO_CKPT
-**     The third argument should be of type (int **). The location pointed
-**     to is populated with a pointer to an array of integers - the same array
-**     saved to the database for a checkpoint. See comments in checkpoint.c
-**     for instructions on interpreting the array. Unlike the data written
-**     to the database file, the integers in the returned array are in native
-**     format (i.e. little-endian on x86) and there are no checksum values.
-**     The returned array should eventually be freed by the caller using
-**     lsm_free().  
-**
 **   LSM_INFO_DB_STRUCTURE
 **     The third argument should be of type (char **). The location pointed
 **     to is populated with a pointer to a nul-terminated string containing
@@ -286,12 +276,11 @@ int lsm_info(lsm_db *, int, ...);
 */
 #define LSM_INFO_NWRITE           1
 #define LSM_INFO_NREAD            2
-#define LSM_INFO_CKPT             3
-#define LSM_INFO_DB_STRUCTURE     4
-#define LSM_INFO_LOG_STRUCTURE    5
-#define LSM_INFO_ARRAY_STRUCTURE  6
-#define LSM_INFO_PAGE_ASCII_DUMP  7
-#define LSM_INFO_PAGE_HEX_DUMP    8
+#define LSM_INFO_DB_STRUCTURE     3
+#define LSM_INFO_LOG_STRUCTURE    4
+#define LSM_INFO_ARRAY_STRUCTURE  5
+#define LSM_INFO_PAGE_ASCII_DUMP  6
+#define LSM_INFO_PAGE_HEX_DUMP    7
 
 
 /* 

@@ -122,7 +122,6 @@ void lsmStringAppendf(LsmString *pStr, const char *zFormat, ...){
 ** Write into memory obtained from lsm_malloc().
 */
 char *lsmMallocPrintf(lsm_env *pEnv, const char *zFormat, ...){
-  char *zRet;
   LsmString s;
   va_list ap, ap2;
   lsmStringInit(&s, pEnv);
