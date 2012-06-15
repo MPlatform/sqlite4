@@ -66,15 +66,6 @@ void (*sqlite4IoTrace)(const char*, ...) = 0;
 #endif
 
 /*
-** If the following global variable points to a string which is the
-** name of a directory, then that directory will be used to store
-** temporary files.
-**
-** See also the "PRAGMA temp_store_directory" SQL command.
-*/
-char *sqlite4_temp_directory = 0;
-
-/*
 ** Initialize SQLite.  
 **
 ** This routine must be called to initialize the memory allocation,

@@ -4648,8 +4648,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
       (char*)&sqlite_static_bind_value, TCL_LINK_STRING);
   Tcl_LinkVar(interp, "sqlite_static_bind_nbyte",
       (char*)&sqlite_static_bind_nbyte, TCL_LINK_INT);
-  Tcl_LinkVar(interp, "sqlite_temp_directory",
-      (char*)&sqlite4_temp_directory, TCL_LINK_STRING);
   Tcl_LinkVar(interp, "bitmask_size",
       (char*)&bitmask_size, TCL_LINK_INT|TCL_LINK_READ_ONLY);
 #if defined(SQLITE_ENABLE_FTS3) && defined(SQLITE_TEST)
