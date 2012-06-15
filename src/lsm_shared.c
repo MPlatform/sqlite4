@@ -1293,5 +1293,3 @@ int lsmHoldingClientMutex(lsm_db *pDb){
   return lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pClientMutex);
 }
 #endif
-
-

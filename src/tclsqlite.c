@@ -3042,7 +3042,7 @@ int TCLSH_MAIN(int argc, char **argv){
   /* Call sqlite4_shutdown() once before doing anything else. This is to
   ** test that sqlite4_shutdown() can be safely called by a process before
   ** sqlite4_initialize() is. */
-  sqlite4_shutdown();
+  sqlite4_shutdown(0);
 
   Tcl_FindExecutable(argv[0]);
   interp = Tcl_CreateInterp();

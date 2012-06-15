@@ -81,7 +81,7 @@ int sqlite4MutexEnd(void){
 */
 sqlite4_mutex *sqlite4_mutex_alloc(int id){
 #ifndef SQLITE_OMIT_AUTOINIT
-  if( sqlite4_initialize() ) return 0;
+  if( sqlite4_initialize(0) ) return 0;
 #endif
   return sqlite4DefaultEnv.mutex.xMutexAlloc(id);
 }

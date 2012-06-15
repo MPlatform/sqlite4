@@ -86,5 +86,3 @@ int lsmMutexNotHeld(lsm_env *pEnv, lsm_mutex *pMutex){
   return pEnv->xMutexNotHeld ? pEnv->xMutexNotHeld(pMutex) : 1;
 }
 #endif
-
-

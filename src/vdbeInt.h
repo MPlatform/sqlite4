@@ -60,7 +60,6 @@ struct VdbeCursor {
   Bool zeroed;          /* True if zeroed out and ready for reuse */
   Bool rowidIsValid;    /* True if lastRowid is valid */
   Bool atFirst;         /* True if pointing to first entry */
-  Bool useRandomRowid;  /* Generate new record numbers semi-randomly */
   Bool nullRow;         /* True if pointing to a row with no data */
   Bool isTable;         /* True if a table requiring integer keys */
   Bool isIndex;         /* True if an index containing keys only - no data */

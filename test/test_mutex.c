@@ -147,7 +147,7 @@ static int test_shutdown(
     return TCL_ERROR;
   }
 
-  rc = sqlite4_shutdown();
+  rc = sqlite4_shutdown(0);
   Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
 }
@@ -168,7 +168,7 @@ static int test_initialize(
     return TCL_ERROR;
   }
 
-  rc = sqlite4_initialize();
+  rc = sqlite4_initialize(0);
   Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
 }

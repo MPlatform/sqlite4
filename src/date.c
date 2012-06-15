@@ -1101,7 +1101,7 @@ static void currentTimeFunc(
 ** functions.  This should be the only routine in this file with
 ** external linkage.
 */
-void sqlite4RegisterDateTimeFunctions(void){
+void sqlite4RegisterDateTimeFunctions(sqlite4_env *pEnv){
   static SQLITE_WSD FuncDef aDateTimeFuncs[] = {
 #ifndef SQLITE_OMIT_DATETIME_FUNCS
     FUNCTION(julianday,        -1, 0, 0, juliandayFunc ),

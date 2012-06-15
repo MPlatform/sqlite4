@@ -17,9 +17,6 @@
 #include "sqliteInt.h"
 #undef _SQLITE_OS_C_
 
-int sqlite4_os_init(void){}
-int sqlite4_os_end(void){}
-
 int sqlite4OsRandomness(sqlite4_env *pEnv, int nByte, unsigned char *zBufOut){
   memset(zBufOut, 0, nByte);
   return SQLITE_OK;
@@ -47,5 +44,5 @@ int sqlite4OsInit(sqlite4_env *pEnv){
   void *p = sqlite4_malloc(10);
   if( p==0 ) return SQLITE_NOMEM;
   sqlite4_free(p);
-  return sqlite4_os_init();
+  return SQLITE_OK; /*sqlite4_os_init();*/
 }

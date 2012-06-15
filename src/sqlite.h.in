@@ -531,39 +531,32 @@ typedef struct sqlite4_mutex sqlite4_mutex;
 /*
 ** CAPIREF: Initialize The SQLite Library
 **
-** ^The sqlite4_initialize() routine initializes the
-** SQLite library.  ^The sqlite4_shutdown() routine
-** deallocates any resources that were allocated by sqlite4_initialize().
-** These routines are designed to aid in process initialization and
-** shutdown on embedded systems.  Workstation applications using
-** SQLite normally do not need to invoke either of these routines.
+** ^The sqlite4_initialize(A) routine initializes an sqlite4_env object A.
+** ^The sqlite4_shutdown(A) routine
+** deallocates any resources that were allocated by sqlite4_initialize(A).
 **
-** A call to sqlite4_initialize() is an "effective" call if it is
-** the first time sqlite4_initialize() is invoked during the lifetime of
-** the process, or if it is the first time sqlite4_initialize() is invoked
-** following a call to sqlite4_shutdown().  ^(Only an effective call
-** of sqlite4_initialize() does any initialization.  All other calls
+** A call to sqlite4_initialize(A) is an "effective" call if it is
+** the first time sqlite4_initialize(A) is invoked during the lifetime of
+** A, or if it is the first time sqlite4_initialize(A) is invoked
+** following a call to sqlite4_shutdown(A).  ^(Only an effective call
+** of sqlite4_initialize(A) does any initialization or A.  All other calls
 ** are harmless no-ops.)^
 **
-** A call to sqlite4_shutdown() is an "effective" call if it is the first
-** call to sqlite4_shutdown() since the last sqlite4_initialize().  ^(Only
-** an effective call to sqlite4_shutdown() does any deinitialization.
-** All other valid calls to sqlite4_shutdown() are harmless no-ops.)^
+** A call to sqlite4_shutdown(A) is an "effective" call if it is the first
+** call to sqlite4_shutdown(A) since the last sqlite4_initialize(A).  ^(Only
+** an effective call to sqlite4_shutdown(A) does any deinitialization.
+** All other valid calls to sqlite4_shutdown(A) are harmless no-ops.)^
 **
-** The sqlite4_initialize() interface is threadsafe, but sqlite4_shutdown()
-** is not.  The sqlite4_shutdown() interface must only be called from a
+** The sqlite4_initialize(A) interface is threadsafe, but sqlite4_shutdown(A)
+** is not.  The sqlite4_shutdown(A) interface must only be called from a
 ** single thread.  All open [database connections] must be closed and all
 ** other SQLite resources must be deallocated prior to invoking
-** sqlite4_shutdown().
+** sqlite4_shutdown(A).
 **
-** Among other things, ^sqlite4_initialize() will invoke
-** sqlite4_os_init().  Similarly, ^sqlite4_shutdown()
-** will invoke sqlite4_os_end().
-**
-** ^The sqlite4_initialize() routine returns [SQLITE_OK] on success.
-** ^If for some reason, sqlite4_initialize() is unable to initialize
-** the library (perhaps it is unable to allocate a needed resource such
-** as a mutex) it returns an [error code] other than [SQLITE_OK].
+** ^The sqlite4_initialize(A) routine returns [SQLITE_OK] on success.
+** ^If for some reason, sqlite4_initialize(A) is unable to initialize
+** the sqlite4_env object A (perhaps it is unable to allocate a needed
+** resource such as a mutex) it returns an [error code] other than [SQLITE_OK].
 **
 ** ^The sqlite4_initialize() routine is called internally by many other
 ** SQLite interfaces so that an application usually does not need to
@@ -579,34 +572,9 @@ typedef struct sqlite4_mutex sqlite4_mutex;
 ** of SQLite may require this.  In other words, the behavior exhibited
 ** when SQLite is compiled with [SQLITE_OMIT_AUTOINIT] might become the
 ** default behavior in some future release of SQLite.
-**
-** The sqlite4_os_init() routine does operating-system specific
-** initialization of the SQLite library.  The sqlite4_os_end()
-** routine undoes the effect of sqlite4_os_init().  Typical tasks
-** performed by these routines include allocation or deallocation
-** of static resources, initialization of global variables,
-** setting up a default [sqlite4_vfs] module, or setting up
-** a default configuration using [sqlite4_config()].
-**
-** The application should never invoke either sqlite4_os_init()
-** or sqlite4_os_end() directly.  The application should only invoke
-** sqlite4_initialize() and sqlite4_shutdown().  The sqlite4_os_init()
-** interface is called automatically by sqlite4_initialize() and
-** sqlite4_os_end() is called by sqlite4_shutdown().  Appropriate
-** implementations for sqlite4_os_init() and sqlite4_os_end()
-** are built into SQLite when it is compiled for Unix, Windows, or OS/2.
-** When [custom builds | built for other platforms]
-** (using the [SQLITE_OS_OTHER=1] compile-time
-** option) the application must supply a suitable implementation for
-** sqlite4_os_init() and sqlite4_os_end().  An application-supplied
-** implementation of sqlite4_os_init() or sqlite4_os_end()
-** must return [SQLITE_OK] on success and some other [error code] upon
-** failure.
 */
-int sqlite4_initialize(void);
-int sqlite4_shutdown(void);
-int sqlite4_os_init(void);
-int sqlite4_os_end(void);
+int sqlite4_initialize(sqlite4_env*);
+int sqlite4_shutdown(sqlite4_env*);
 
 /*
 ** CAPIREF: Configuring The SQLite Library

@@ -1503,13 +1503,13 @@ int sqlite4IsLikeFunction(sqlite4 *db, Expr *pExpr, int *pIsNocase, char *aWc){
 }
 
 /*
-** All all of the FuncDef structures in the aBuiltinFunc[] array above
+** Add all of the FuncDef structures in the aBuiltinFunc[] array above
 ** to the global function hash table.  This occurs at start-time (as
 ** a consequence of calling sqlite4_initialize()).
 **
 ** After this routine runs
 */
-void sqlite4RegisterGlobalFunctions(void){
+void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
   /*
   ** The following array holds FuncDef structures for all of the functions
   ** defined in this file.
@@ -1598,7 +1598,7 @@ void sqlite4RegisterGlobalFunctions(void){
   for(i=0; i<ArraySize(aBuiltinFunc); i++){
     sqlite4FuncDefInsert(pHash, &aFunc[i]);
   }
-  sqlite4RegisterDateTimeFunctions();
+  sqlite4RegisterDateTimeFunctions(pEnv);
 #ifndef SQLITE_OMIT_ALTERTABLE
   sqlite4AlterFunctions();
 #endif

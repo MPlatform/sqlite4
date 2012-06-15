@@ -265,7 +265,7 @@ int sqlite4_complete16(const void *zSql){
   int rc = SQLITE_NOMEM;
 
 #ifndef SQLITE_OMIT_AUTOINIT
-  rc = sqlite4_initialize();
+  rc = sqlite4_initialize(0);
   if( rc ) return rc;
 #endif
   pVal = sqlite4ValueNew(0);

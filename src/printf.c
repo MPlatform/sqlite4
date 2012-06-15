@@ -849,7 +849,7 @@ char *sqlite4_vmprintf(const char *zFormat, va_list ap){
   char zBase[SQLITE_PRINT_BUF_SIZE];
   StrAccum acc;
 #ifndef SQLITE_OMIT_AUTOINIT
-  if( sqlite4_initialize() ) return 0;
+  if( sqlite4_initialize(0) ) return 0;
 #endif
   sqlite4StrAccumInit(&acc, zBase, sizeof(zBase), SQLITE_MAX_LENGTH);
   acc.useMalloc = 2;
@@ -866,7 +866,7 @@ char *sqlite4_mprintf(const char *zFormat, ...){
   va_list ap;
   char *z;
 #ifndef SQLITE_OMIT_AUTOINIT
-  if( sqlite4_initialize() ) return 0;
+  if( sqlite4_initialize(0) ) return 0;
 #endif
   va_start(ap, zFormat);
   z = sqlite4_vmprintf(zFormat, ap);

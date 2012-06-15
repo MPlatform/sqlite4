@@ -607,4 +607,3 @@ void sqlite4GenerateRowIndexDelete(
   sqlite4VdbeAddOp2(v, OP_Delete, baseCur+iPk, (bCount ? OPFLAG_NCHANGE: 0));
   sqlite4ReleaseTempReg(pParse, regKey);
 }
-

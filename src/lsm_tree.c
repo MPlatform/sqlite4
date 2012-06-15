@@ -1366,4 +1366,3 @@ void lsmTreeRelease(lsm_env *pEnv, Tree *pTree){
     lsmTreeReleaseReadVersion(pEnv, pTree->pCommit);
   }
 }
-

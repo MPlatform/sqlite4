@@ -1029,4 +1029,3 @@ int lsmLogRecover(lsm_db *pDb){
   lsmStringClear(&reader.buf);
   return rc;
 }
-

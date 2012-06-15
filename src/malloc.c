@@ -111,7 +111,7 @@ void *sqlite4Malloc(int n){
 */
 void *sqlite4_malloc(int n){
 #ifndef SQLITE_OMIT_AUTOINIT
-  if( sqlite4_initialize() ) return 0;
+  if( sqlite4_initialize(0) ) return 0;
 #endif
   return sqlite4Malloc(n);
 }
@@ -241,7 +241,7 @@ void *sqlite4Realloc(void *pOld, int nBytes){
 */
 void *sqlite4_realloc(void *pOld, int n){
 #ifndef SQLITE_OMIT_AUTOINIT
-  if( sqlite4_initialize() ) return 0;
+  if( sqlite4_initialize(0) ) return 0;
 #endif
   return sqlite4Realloc(pOld, n);
 }
