@@ -20,14 +20,6 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
 
-# These tests depend on the pager holding changes in cache
-# until it is time to commit.  But that won't happen if the
-# soft-heap-limit is set too low.  So disable the soft heap limit
-# for the duration of this test.
-#
-sqlite4_soft_heap_limit 0
-
-
 set DB [sqlite4_connection_pointer db]
 sqlite4 db2 test.db
 set DB2 [sqlite4_connection_pointer db2]
@@ -141,5 +133,4 @@ do_test capi3b-2.12 {
 
 catch {db2 close}
 
-sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 finish_test

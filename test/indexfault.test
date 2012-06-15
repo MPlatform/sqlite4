@@ -88,16 +88,6 @@ do_faultsim_test 1.1 -prep {
   faultsim_test_result {0 {}} 
   faultsim_integrity_check
 }
-ifcapable memorymanage {
-  set soft_limit [sqlite4_soft_heap_limit 50000]
-  do_faultsim_test 2.1 -prep {
-    faultsim_restore_and_reopen
-  } -body {
-    execsql { CREATE INDEX i1 ON t1(x) }
-    faultsim_test_result {0 {}} 
-  }
-  sqlite4_soft_heap_limit $soft_limit
-}
 
 #-------------------------------------------------------------------------
 # These are similar to the indexfault-1.* tests, except they create an
@@ -143,16 +133,6 @@ do_faultsim_test 2.1 -prep {
   execsql { CREATE INDEX i1 ON t1(t,u,v,w,x,y,z) }
   faultsim_test_result {0 {}} 
   faultsim_integrity_check
-}
-ifcapable memorymanage {
-  set soft_limit [sqlite4_soft_heap_limit 50000]
-  do_faultsim_test 2.2 -prep {
-    faultsim_restore_and_reopen
-  } -body {
-    execsql { CREATE INDEX i1 ON t1(t,u,v,w,x,y,z) }
-    faultsim_test_result {0 {}} 
-  }
-  sqlite4_soft_heap_limit $soft_limit
 }
 
 #-------------------------------------------------------------------------
@@ -213,16 +193,6 @@ do_faultsim_test 3.1 -faults custom -prep {
   execsql { CREATE INDEX i1 ON t1(x) }
   faultsim_test_result {0 {}} 
 }
-ifcapable memorymanage {
-  set soft_limit [sqlite4_soft_heap_limit 50000]
-  do_faultsim_test 3.2 -faults custom -prep {
-    faultsim_restore_and_reopen
-  } -body {
-    execsql { CREATE INDEX i1 ON t1(x) }
-    faultsim_test_result {0 {}} 
-  }
-  sqlite4_soft_heap_limit $soft_limit
-}
 
 set ::custom_filter {xOpen xWrite}
 proc xCustom {method args} {
@@ -251,17 +221,6 @@ do_faultsim_test 3.3 -faults custom -prep {
   faultsim_test_result {0 {}} 
 }
 
-ifcapable memorymanage {
-  set soft_limit [sqlite4_soft_heap_limit 50000]
-  do_faultsim_test 3.4 -faults custom -prep {
-    faultsim_restore_and_reopen
-    set ::nTmpOpen 0
-  } -body {
-    execsql { CREATE INDEX i1 ON t1(x) }
-    faultsim_test_result {0 {}} 
-  }
-  sqlite4_soft_heap_limit $soft_limit
-}
 
 uninstall_custom_faultsim
 
@@ -313,10 +272,6 @@ set ::custom_filter xRead
 proc xCustom {method file args} {
   incr ::nReadCall
   if {$::nReadCall >= ($::nRead/5)} {
-    if {$::nReadCall == ($::nRead/5)} {
-      set nByte [sqlite4_release_memory [expr 64*1024*1024]]
-      sqlite4_soft_heap_limit 20000
-    }
     if {$file == ""} {
       incr ::custom_ifail -1
       if {$::custom_ifail==0} {
@@ -331,7 +286,6 @@ proc xCustom {method file args} {
 do_faultsim_test 4.2 -faults custom -prep {
   faultsim_restore_and_reopen
   set ::nReadCall 0
-  sqlite4_soft_heap_limit 0
 } -body {
   execsql { CREATE INDEX i1 ON t1(x) }
   faultsim_test_result {0 {}} 

@@ -20,7 +20,6 @@ source $testdir/tester.tcl
 do_ioerr_test ioerr3-1 -sqlprep {
   CREATE TABLE t1(id INTEGER, name TEXT);
 } -tclbody {
-  sqlite4_soft_heap_limit 8192
   db cache size 0
   execsql BEGIN
   for {set ii 0} {$ii < 100} {incr ii} {
@@ -36,7 +35,5 @@ do_ioerr_test ioerr3-1 -sqlprep {
 do_ioerr_test ioerr3-2 -sqlbody {
   CREATE TEMP TABLE t1(x,y);
 }
-
-sqlite4_soft_heap_limit 0
 
 finish_test

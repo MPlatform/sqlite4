@@ -134,6 +134,8 @@ const unsigned char sqlite4CtypeMap[256] = {
 ** the SQLite library.
 */
 SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
+   sizeof(sqlite4_env),       /* nByte */
+   1,                         /* iVersion */
    SQLITE_DEFAULT_MEMSTATUS,  /* bMemstat */
    1,                         /* bCoreMutex */
    SQLITE_THREADSAFE==1,      /* bFullMutex */

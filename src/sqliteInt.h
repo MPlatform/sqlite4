@@ -2400,6 +2400,8 @@ typedef struct {
 ** An instance of this structure defines the run-time environment.
 */
 struct sqlite4_env {
+  int nByte;                        /* Size of this object in bytes */
+  int iVersion;                     /* Version number of this structure */
   int bMemstat;                     /* True to enable memory status */
   int bCoreMutex;                   /* True to enable core mutexing */
   int bFullMutex;                   /* True to enable full mutexing */
@@ -2548,7 +2550,6 @@ void *sqlite4PageMalloc(int);
 void sqlite4PageFree(void*);
 void sqlite4MemSetDefault(void);
 void sqlite4BenignMallocHooks(void (*)(void), void (*)(void));
-int sqlite4HeapNearlyFull(void);
 
 /*
 ** On systems with ample stack space and that support alloca(), make

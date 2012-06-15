@@ -1414,5 +1414,3 @@ do_test 72.4 {
 } {1}
 
 finish_test
-
-

@@ -27,7 +27,6 @@ ifcapable !memorymanage||!shared_cache {
 db close
 
 set ::enable_shared_cache [sqlite4_enable_shared_cache 1]
-set ::soft_limit [sqlite4_soft_heap_limit 1048576]
 
 # This procedure prepares, steps and finalizes an SQL statement via the
 # UTF-16 APIs. The text representation of an SQLite error code is returned
@@ -79,7 +78,6 @@ do_test ioerr5-1.0 {
 foreach locking_mode {normal exclusive} {
   set nPage 2
   for {set iFail 1} {$iFail<200} {incr iFail} {
-    sqlite4_soft_heap_limit 1048576
     opendatabases
     execsql { pragma locking_mode=exclusive }
     set nRow [db one {SELECT count(*) FROM a}]
@@ -127,7 +125,6 @@ foreach locking_mode {normal exclusive} {
     # with the dirty page.
     #
     do_test ioerr5-1.$locking_mode-$iFail.3 {
-      sqlite4_soft_heap_limit 1024
       compilesql16 "SELECT 10"
     } {SQLITE_OK}
 
@@ -168,7 +165,6 @@ do_test ioerr5-2.0 {
 
 foreach locking_mode {exclusive normal} {
   for {set iFail 1} {$iFail<200} {incr iFail} {
-    sqlite4_soft_heap_limit 1048576
     opendatabases
     execsql { pragma locking_mode=exclusive }
     set nRow [db one {SELECT count(*) FROM a}]
@@ -211,6 +207,5 @@ do_test ioerr5-2.X {
 } 0
 
 sqlite4_enable_shared_cache $::enable_shared_cache
-sqlite4_soft_heap_limit $::soft_limit
 
 finish_test

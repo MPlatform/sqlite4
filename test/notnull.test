@@ -536,4 +536,3 @@ do_test notnull-5.5 {
 } {1 2}
 
 finish_test
-

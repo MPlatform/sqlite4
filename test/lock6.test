@@ -110,7 +110,6 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
     execsql {pragma lock_status}
   } {main unlocked temp closed}
 
-  sqlite4_soft_heap_limit 0
   do_test lock6-1.3 {
     list [catch {
       sqlite4 db test.db
@@ -160,8 +159,6 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
   catch {close $::tf1}
   set env(SQLITE_FORCE_PROXY_LOCKING) $using_proxy
   set sqlite_hostid_num 0
-
-  sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 }
       
 finish_test

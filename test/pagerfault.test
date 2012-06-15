@@ -1247,4 +1247,3 @@ do_faultsim_test pagerfault-27 -faults ioerr-persistent -prep {
 }
 
 finish_test
-

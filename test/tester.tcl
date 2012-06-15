@@ -374,12 +374,6 @@ if {[info exists cmdlinearg]==0} {
   }
 }
 
-# Update the soft-heap-limit each time this script is run. In that
-# way if an individual test file changes the soft-heap-limit, it
-# will be reset at the start of the next test file.
-#
-sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
-
 # Create a test database
 #
 proc reset_db {} {
@@ -701,7 +695,6 @@ proc finalize_testing {} {
   db close
   #sqlite4_reset_auto_extension
 
-  sqlite4_soft_heap_limit 0
   set nTest [incr_ntest]
   set nErr [set_test_counter errors]
 

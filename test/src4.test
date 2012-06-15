@@ -16,4 +16,3 @@ source $testdir/permutations.test
 run_test_suite src4
 
 finish_test
-

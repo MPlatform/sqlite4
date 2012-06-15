@@ -3374,7 +3374,6 @@ SQLITE_DEPRECATED int sqlite4_aggregate_count(sqlite4_context*);
 SQLITE_DEPRECATED int sqlite4_expired(sqlite4_stmt*);
 SQLITE_DEPRECATED int sqlite4_transfer_bindings(sqlite4_stmt*, sqlite4_stmt*);
 SQLITE_DEPRECATED int sqlite4_global_recover(void);
-SQLITE_DEPRECATED int sqlite4_memory_alarm(void(*)(void*,sqlite4_int64,int),void*,sqlite4_int64);
 #endif
 
 /*
@@ -3977,92 +3976,12 @@ const char *sqlite4_db_filename(sqlite4 *db, const char *zDbName);
 sqlite4_stmt *sqlite4_next_stmt(sqlite4 *pDb, sqlite4_stmt *pStmt);
 
 /*
-** CAPIREF: Attempt To Free Heap Memory
-**
-** ^The sqlite4_release_memory() interface attempts to free N bytes
-** of heap memory by deallocating non-essential memory allocations
-** held by the database library.   Memory used to cache database
-** pages to improve performance is an example of non-essential memory.
-** ^sqlite4_release_memory() returns the number of bytes actually freed,
-** which might be more or less than the amount requested.
-** ^The sqlite4_release_memory() routine is a no-op returning zero
-** if SQLite is not compiled with [SQLITE_ENABLE_MEMORY_MANAGEMENT].
-**
-** See also: [sqlite4_db_release_memory()]
-*/
-int sqlite4_release_memory(int);
-
-/*
 ** CAPIREF: Free Memory Used By A Database Connection
 **
 ** ^The sqlite4_db_release_memory(D) interface attempts to free as much heap
-** memory as possible from database connection D. Unlike the
-** [sqlite4_release_memory()] interface, this interface is effect even
-** when then [SQLITE_ENABLE_MEMORY_MANAGEMENT] compile-time option is
-** omitted.
-**
-** See also: [sqlite4_release_memory()]
+** memory as possible from database connection D.
 */
 int sqlite4_db_release_memory(sqlite4*);
-
-/*
-** CAPIREF: Impose A Limit On Heap Size
-**
-** ^The sqlite4_soft_heap_limit64() interface sets and/or queries the
-** soft limit on the amount of heap memory that may be allocated by SQLite.
-** ^SQLite strives to keep heap memory utilization below the soft heap
-** limit by reducing the number of pages held in the page cache
-** as heap memory usages approaches the limit.
-** ^The soft heap limit is "soft" because even though SQLite strives to stay
-** below the limit, it will exceed the limit rather than generate
-** an [SQLITE_NOMEM] error.  In other words, the soft heap limit 
-** is advisory only.
-**
-** ^The return value from sqlite4_soft_heap_limit64() is the size of
-** the soft heap limit prior to the call, or negative in the case of an
-** error.  ^If the argument N is negative
-** then no change is made to the soft heap limit.  Hence, the current
-** size of the soft heap limit can be determined by invoking
-** sqlite4_soft_heap_limit64() with a negative argument.
-**
-** ^If the argument N is zero then the soft heap limit is disabled.
-**
-** ^(The soft heap limit is not enforced in the current implementation
-** if one or more of following conditions are true:
-**
-** <ul>
-** <li> The soft heap limit is set to zero.
-** <li> Memory accounting is disabled using a combination of the
-**      [sqlite4_config]([SQLITE_CONFIG_MEMSTATUS],...) start-time option and
-**      the [SQLITE_DEFAULT_MEMSTATUS] compile-time option.
-** </ul>)^
-**
-** Beginning with SQLite version 3.7.3, the soft heap limit is enforced
-** regardless of whether or not the [SQLITE_ENABLE_MEMORY_MANAGEMENT]
-** compile-time option is invoked.  With [SQLITE_ENABLE_MEMORY_MANAGEMENT],
-** the soft heap limit is enforced on every memory allocation.  Without
-** [SQLITE_ENABLE_MEMORY_MANAGEMENT], the soft heap limit is only enforced
-** when memory is allocated by the page cache.  Testing suggests that because
-** the page cache is the predominate memory user in SQLite, most
-** applications will achieve adequate soft heap limit enforcement without
-** the use of [SQLITE_ENABLE_MEMORY_MANAGEMENT].
-**
-** The circumstances under which SQLite will enforce the soft heap limit may
-** changes in future releases of SQLite.
-*/
-sqlite4_int64 sqlite4_soft_heap_limit64(sqlite4_int64 N);
-
-/*
-** CAPIREF: Deprecated Soft Heap Limit Interface
-** DEPRECATED
-**
-** This is a deprecated version of the [sqlite4_soft_heap_limit64()]
-** interface.  This routine is provided for historical compatibility
-** only.  All new applications should use the
-** [sqlite4_soft_heap_limit64()] interface rather than this one.
-*/
-SQLITE_DEPRECATED void sqlite4_soft_heap_limit(int N);
-
 
 /*
 ** CAPIREF: Extract Metadata About A Column Of A Table

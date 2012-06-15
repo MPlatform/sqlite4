@@ -182,6 +182,3 @@ do_recover_test 6.4 {
 } [list $cksum]
 
 finish_test
-
-
-

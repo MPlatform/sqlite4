@@ -47,5 +47,3 @@ if {$::tcl_platform(platform)=="unix"} {
 }
 
 finish_test
-
-

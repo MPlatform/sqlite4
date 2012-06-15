@@ -25,11 +25,6 @@ ifcapable {!pager_pragmas} {
   return
 }
 
-# This module does not work right if the cache spills at unexpected
-# moments.  So disable the soft-heap-limit.
-#
-sqlite4_soft_heap_limit 0
-
 proc pagerChangeCounter {filename new {fd ""}} {
   if {$fd==""} {
     set fd [open $filename RDWR]
@@ -312,6 +307,5 @@ do_test exclusive2-3.6 {
   }
   readPagerChangeCounter test.db
 } {5}
-sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 
 finish_test

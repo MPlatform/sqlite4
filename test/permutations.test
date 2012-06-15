@@ -343,14 +343,10 @@ test_suite "memsubsys1" -description {
 # Run some tests using pre-allocated page and scratch blocks. This time
 # the allocations are too small to use in most cases.
 #
-# Both ioerr5.test and malloc5.test are excluded because they test the
-# sqlite4_soft_heap_limit() and sqlite4_release_memory() functionality.
-# This functionality is disabled if a pre-allocated page block is provided.
-#
 test_suite "memsubsys2" -description {
   Tests using small pre-allocated page and scratch blocks
 } -files [
-  test_set $::allquicktests -exclude ioerr5.test malloc5.test
+  test_set $::allquicktests
 ] -initialize {
   catch {db close}
   sqlite4_shutdown

@@ -90,7 +90,6 @@ wal_check_journal_mode avtrans-2.12
 
 # Check the locking behavior
 #
-sqlite4_soft_heap_limit 0
 do_test avtrans-3.1 {
   execsql {
     BEGIN;
@@ -165,7 +164,6 @@ do_test avtrans-3.14 {
   } db} msg]
   lappend v $msg
 } {0 {1 2 3 4}}
-sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 integrity_check avtrans-3.15
 
 do_test avtrans-4.1 {

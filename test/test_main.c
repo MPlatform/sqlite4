@@ -3858,38 +3858,6 @@ static int tcl_variable_type(
 }
 
 /*
-** Usage:  sqlite4_release_memory ?N?
-**
-** Attempt to release memory currently held but not actually required.
-** The integer N is the number of bytes we are trying to release.  The 
-** return value is the amount of memory actually released.
-*/
-static int test_release_memory(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#if defined(SQLITE_ENABLE_MEMORY_MANAGEMENT) && !defined(SQLITE_OMIT_DISKIO)
-  int N;
-  int amt;
-  if( objc!=1 && objc!=2 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "?N?");
-    return TCL_ERROR;
-  }
-  if( objc==2 ){
-    if( Tcl_GetIntFromObj(interp, objv[1], &N) ) return TCL_ERROR;
-  }else{
-    N = -1;
-  }
-  amt = sqlite4_release_memory(N);
-  Tcl_SetObjResult(interp, Tcl_NewIntObj(amt));
-#endif
-  return TCL_OK;
-}
-
-
-/*
 ** Usage:  sqlite4_db_release_memory DB
 **
 ** Attempt to release memory currently held by database DB.  Return the
@@ -3910,33 +3878,6 @@ static int test_db_release_memory(
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
   rc = sqlite4_db_release_memory(db);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
-  return TCL_OK;
-}
-
-/*
-** Usage:  sqlite4_soft_heap_limit ?N?
-**
-** Query or set the soft heap limit for the current thread.  The
-** limit is only changed if the N is present.  The previous limit
-** is returned.
-*/
-static int test_soft_heap_limit(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  sqlite4_int64 amt;
-  sqlite4_int64 N = -1;
-  if( objc!=1 && objc!=2 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "?N?");
-    return TCL_ERROR;
-  }
-  if( objc==2 ){
-    if( Tcl_GetWideIntFromObj(interp, objv[1], &N) ) return TCL_ERROR;
-  }
-  amt = sqlite4_soft_heap_limit64(N);
-  Tcl_SetObjResult(interp, Tcl_NewWideIntObj(amt));
   return TCL_OK;
 }
 
@@ -4758,9 +4699,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_stmt_busy",             test_stmt_busy     ,0 },
      { "uses_stmt_journal",             uses_stmt_journal ,0 },
 
-     { "sqlite4_release_memory",        test_release_memory,     0},
      { "sqlite4_db_release_memory",     test_db_release_memory,  0},
-     { "sqlite4_soft_heap_limit",       test_soft_heap_limit,    0},
 
      { "sqlite4_limit",                 test_limit,                 0},
 

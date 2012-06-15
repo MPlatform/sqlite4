@@ -196,10 +196,6 @@ static VdbeCursor *allocateCursor(
   **     different sized allocations. Memory cells provide growable
   **     allocations.
   **
-  **   * When using ENABLE_MEMORY_MANAGEMENT, memory cell buffers can
-  **     be freed lazily via the sqlite4_release_memory() API. This
-  **     minimizes the number of malloc calls made by the system.
-  **
   ** Memory cells for cursors are allocated at the top of the address
   ** space. Memory cell (p->nMem) corresponds to cursor 0. Space for
   ** cursor 1 is managed by memory cell (p->nMem-1), etc.

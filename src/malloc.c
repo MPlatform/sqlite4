@@ -16,120 +16,11 @@
 #include <stdarg.h>
 
 /*
-** Attempt to release up to n bytes of non-essential memory currently
-** held by SQLite. An example of non-essential memory is memory used to
-** cache database pages that are not currently in use.
-*/
-int sqlite4_release_memory(int n){
-#ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
-  return sqlite4PcacheReleaseMemory(n);
-#else
-  /* IMPLEMENTATION-OF: R-34391-24921 The sqlite4_release_memory() routine
-  ** is a no-op returning zero if SQLite is not compiled with
-  ** SQLITE_ENABLE_MEMORY_MANAGEMENT. */
-  UNUSED_PARAMETER(n);
-  return 0;
-#endif
-}
-
-/*
 ** State information local to the memory allocation subsystem.
 */
 static SQLITE_WSD struct Mem0Global {
   sqlite4_mutex *mutex;         /* Mutex to serialize access */
-
-  /*
-  ** The alarm callback and its arguments.  The mem0.mutex lock will
-  ** be held while the callback is running.  Recursive calls into
-  ** the memory subsystem are allowed, but no new callbacks will be
-  ** issued.
-  */
-  sqlite4_int64 alarmThreshold;
-  void (*alarmCallback)(void*, sqlite4_int64,int);
-  void *alarmArg;
-
-  /*
-  ** True if heap is nearly "full" where "full" is defined by the
-  ** sqlite4_soft_heap_limit() setting.
-  */
-  int nearlyFull;
-} mem0 = { 0, 0, 0, 0, 0, 0, 0, 0 };
-
-/*
-** This routine runs when the memory allocator sees that the
-** total memory allocation is about to exceed the soft heap
-** limit.
-*/
-static void softHeapLimitEnforcer(
-  void *NotUsed, 
-  sqlite4_int64 NotUsed2,
-  int allocSize
-){
-  UNUSED_PARAMETER2(NotUsed, NotUsed2);
-  sqlite4_release_memory(allocSize);
-}
-
-/*
-** Change the alarm callback
-*/
-static int sqlite4MemoryAlarm(
-  void(*xCallback)(void *pArg, sqlite4_int64 used,int N),
-  void *pArg,
-  sqlite4_int64 iThreshold
-){
-  int nUsed;
-  sqlite4_mutex_enter(mem0.mutex);
-  mem0.alarmCallback = xCallback;
-  mem0.alarmArg = pArg;
-  mem0.alarmThreshold = iThreshold;
-  nUsed = sqlite4StatusValue(SQLITE_STATUS_MEMORY_USED);
-  mem0.nearlyFull = (iThreshold>0 && iThreshold<=nUsed);
-  sqlite4_mutex_leave(mem0.mutex);
-  return SQLITE_OK;
-}
-
-#ifndef SQLITE_OMIT_DEPRECATED
-/*
-** Deprecated external interface.  Internal/core SQLite code
-** should call sqlite4MemoryAlarm.
-*/
-int sqlite4_memory_alarm(
-  void(*xCallback)(void *pArg, sqlite4_int64 used,int N),
-  void *pArg,
-  sqlite4_int64 iThreshold
-){
-  return sqlite4MemoryAlarm(xCallback, pArg, iThreshold);
-}
-#endif
-
-/*
-** Set the soft heap-size limit for the library. Passing a zero or 
-** negative value indicates no limit.
-*/
-sqlite4_int64 sqlite4_soft_heap_limit64(sqlite4_int64 n){
-  sqlite4_int64 priorLimit;
-  sqlite4_int64 excess;
-#ifndef SQLITE_OMIT_AUTOINIT
-  int rc = sqlite4_initialize();
-  if( rc ) return -1;
-#endif
-  sqlite4_mutex_enter(mem0.mutex);
-  priorLimit = mem0.alarmThreshold;
-  sqlite4_mutex_leave(mem0.mutex);
-  if( n<0 ) return priorLimit;
-  if( n>0 ){
-    sqlite4MemoryAlarm(softHeapLimitEnforcer, 0, n);
-  }else{
-    sqlite4MemoryAlarm(0, 0, 0);
-  }
-  excess = sqlite4_memory_used() - n;
-  if( excess>0 ) sqlite4_release_memory((int)(excess & 0x7fffffff));
-  return priorLimit;
-}
-void sqlite4_soft_heap_limit(int n){
-  if( n<0 ) n = 0;
-  sqlite4_soft_heap_limit64(n);
-}
+} mem0 = { 0 };
 
 /*
 ** Initialize the memory allocation subsystem.
@@ -143,15 +34,6 @@ int sqlite4MallocInit(void){
     mem0.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
   }
   return sqlite4DefaultEnv.m.xInit(sqlite4DefaultEnv.m.pAppData);
-}
-
-/*
-** Return true if the heap is currently under memory pressure - in other
-** words if the amount of heap used is close to the limit set by
-** sqlite4_soft_heap_limit().
-*/
-int sqlite4HeapNearlyFull(void){
-  return mem0.nearlyFull;
 }
 
 /*
@@ -189,60 +71,6 @@ sqlite4_int64 sqlite4_memory_highwater(int resetFlag){
 }
 
 /*
-** Trigger the alarm 
-*/
-static void sqlite4MallocAlarm(int nByte){
-  void (*xCallback)(void*,sqlite4_int64,int);
-  sqlite4_int64 nowUsed;
-  void *pArg;
-  if( mem0.alarmCallback==0 ) return;
-  xCallback = mem0.alarmCallback;
-  nowUsed = sqlite4StatusValue(SQLITE_STATUS_MEMORY_USED);
-  pArg = mem0.alarmArg;
-  mem0.alarmCallback = 0;
-  sqlite4_mutex_leave(mem0.mutex);
-  xCallback(pArg, nowUsed, nByte);
-  sqlite4_mutex_enter(mem0.mutex);
-  mem0.alarmCallback = xCallback;
-  mem0.alarmArg = pArg;
-}
-
-/*
-** Do a memory allocation with statistics and alarms.  Assume the
-** lock is already held.
-*/
-static int mallocWithAlarm(int n, void **pp){
-  int nFull;
-  void *p;
-  assert( sqlite4_mutex_held(mem0.mutex) );
-  nFull = sqlite4DefaultEnv.m.xRoundup(n);
-  sqlite4StatusSet(SQLITE_STATUS_MALLOC_SIZE, n);
-  if( mem0.alarmCallback!=0 ){
-    int nUsed = sqlite4StatusValue(SQLITE_STATUS_MEMORY_USED);
-    if( nUsed >= mem0.alarmThreshold - nFull ){
-      mem0.nearlyFull = 1;
-      sqlite4MallocAlarm(nFull);
-    }else{
-      mem0.nearlyFull = 0;
-    }
-  }
-  p = sqlite4DefaultEnv.m.xMalloc(nFull);
-#ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
-  if( p==0 && mem0.alarmCallback ){
-    sqlite4MallocAlarm(nFull);
-    p = sqlite4DefaultEnv.m.xMalloc(nFull);
-  }
-#endif
-  if( p ){
-    nFull = sqlite4MallocSize(p);
-    sqlite4StatusAdd(SQLITE_STATUS_MEMORY_USED, nFull);
-    sqlite4StatusAdd(SQLITE_STATUS_MALLOC_COUNT, 1);
-  }
-  *pp = p;
-  return nFull;
-}
-
-/*
 ** Allocate memory.  This routine is like sqlite4_malloc() except that it
 ** assumes the memory subsystem has already been initialized.
 */
@@ -258,8 +86,16 @@ void *sqlite4Malloc(int n){
     ** this amount.  The only way to reach the limit is with sqlite4_malloc() */
     p = 0;
   }else if( sqlite4DefaultEnv.bMemstat ){
+    int nFull;
     sqlite4_mutex_enter(mem0.mutex);
-    mallocWithAlarm(n, &p);
+    nFull = sqlite4DefaultEnv.m.xRoundup(n);
+    sqlite4StatusSet(SQLITE_STATUS_MALLOC_SIZE, n);
+    p = sqlite4DefaultEnv.m.xMalloc(nFull);
+    if( p ){
+      nFull = sqlite4MallocSize(p);
+      sqlite4StatusAdd(SQLITE_STATUS_MEMORY_USED, nFull);
+      sqlite4StatusAdd(SQLITE_STATUS_MALLOC_COUNT, 1);
+    }
     sqlite4_mutex_leave(mem0.mutex);
   }else{
     p = sqlite4DefaultEnv.m.xMalloc(n);
@@ -361,7 +197,7 @@ void sqlite4DbFree(sqlite4 *db, void *p){
 ** Change the size of an existing memory allocation
 */
 void *sqlite4Realloc(void *pOld, int nBytes){
-  int nOld, nNew, nDiff;
+  int nOld, nNew;
   void *pNew;
   if( pOld==0 ){
     return sqlite4Malloc(nBytes); /* IMP: R-28354-25769 */
@@ -384,18 +220,9 @@ void *sqlite4Realloc(void *pOld, int nBytes){
   }else if( sqlite4DefaultEnv.bMemstat ){
     sqlite4_mutex_enter(mem0.mutex);
     sqlite4StatusSet(SQLITE_STATUS_MALLOC_SIZE, nBytes);
-    nDiff = nNew - nOld;
-    if( sqlite4StatusValue(SQLITE_STATUS_MEMORY_USED) >= 
-          mem0.alarmThreshold-nDiff ){
-      sqlite4MallocAlarm(nDiff);
-    }
     assert( sqlite4MemdebugHasType(pOld, MEMTYPE_HEAP) );
     assert( sqlite4MemdebugNoType(pOld, ~MEMTYPE_HEAP) );
     pNew = sqlite4DefaultEnv.m.xRealloc(pOld, nNew);
-    if( pNew==0 && mem0.alarmCallback ){
-      sqlite4MallocAlarm(nBytes);
-      pNew = sqlite4DefaultEnv.m.xRealloc(pOld, nNew);
-    }
     if( pNew ){
       nNew = sqlite4MallocSize(pNew);
       sqlite4StatusAdd(SQLITE_STATUS_MEMORY_USED, nNew-nOld);

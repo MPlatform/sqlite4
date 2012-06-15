@@ -42,7 +42,6 @@ do_test lock2-1.1 {
 do_test lock2-1.1.1 {
   execsql {pragma lock_status}
 } {main unlocked temp closed}
-sqlite4_soft_heap_limit 0
 do_test lock2-1.2 {
   execsql {
     BEGIN;
@@ -106,6 +105,5 @@ do_test lock2-1.10 {
 
 catch {testfixture $::tf1 {db close}}
 catch {close $::tf1}
-sqlite4_soft_heap_limit $cmdlinearg(soft-heap-limit)
 
 finish_test
