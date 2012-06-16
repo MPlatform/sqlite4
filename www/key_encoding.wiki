@@ -68,8 +68,8 @@ Each of the intervening bytes contains 7 bits of blob content with a 1 in
 the high-order bit (the 0x80 bit).  The final byte before the 0x00 contains
 any left-over bits of the blob content.
 
-The initial byte of a binary value, 0x0f, is larger than the initial
-byte of a text value, 0x0e, ensuring that every binary value will sort
+The initial byte of a binary value, 0x25, is larger than the initial
+byte of a text value, 0x24, ensuring that every binary value will sort
 after every text value.
 
 <h2>Numeric Encoding</h2>
