@@ -1,0 +1,191 @@
+<title>Key Encoding</title>
+
+This note describes how record keys are encoded.  The encoding is designed
+such that memcmp() can be used to sort the keys into their proper order.
+
+A key consists of a table number followed by a list of one or more SQL 
+values.  Each SQL value in the list has one of the following types:  NULL, 
+numeric, text, or binary.  Keys are compared value by value, from left to 
+right, until a difference if found. The first difference determines the
+key order.
+
+The table number is a [./varint.wiki | varint]
+that identifies the table to which the key
+belongs.  Table numbers always sort in ASCENDING order.
+
+Each SQL value has a sort-order which is either ASCENDING or DESCENDING.  The
+default and the usual case is ASCENDING.
+
+To generate the encoding, the SQL values of the key are visited from left
+to right.  Each SQL value generates one or more bytes that are appended
+to the encoding.  If the SQL value is DESCENDING, then its encoding bytes
+are inverted (ones complement) prior to being appended. The complete key 
+encoding is the concatenation of the individual SQL value encodings, in 
+the same order as the SQL values.
+
+Two key encodings are only compariable if they have the same number of SQL
+values and if corresponding SQL values have the same sort-order.
+
+The first byte of a key past the table number will be in the range of
+0x05..0x0f if ascending or 0xf0..0xfa if descending.  This leaves large
+chunks of key space available for other uses.  For example, the three-byte
+key 0x00 0x00 0x01 stores the schema cookie for the database as a 64-bit
+big-endian integer.
+
+<h2>NULL Encoding</h2>
+
+Each SQL value that is a NULL encodes as a single byte of 0x05.  Since
+every other SQL value encoding begins with a byte greater than 0x05, this
+forces NULL values to sort first.
+
+<h2>Text Encoding</h2>
+
+Each SQL value that is TEXT begins with a single byte of 0x24 and ends
+with a single byte of 0x00.  There are zero or more intervening bytes that
+encode the text value.  The intervening bytes are chosen so that the
+encoding will sort in the desired collating order.  The default sequence
+of bytes is simply UTF8.  The intervening bytes may not contain a 0x00
+character; the only 0x00 byte allowed in a text encoding is the final
+byte.
+
+Note that all key-encoded text with the BINARY collating sequence is simply
+UTF8 text.  UTF8 not UTF16.  Strings must be converted to UTF8 so that
+equivalent strings in different encodings compare the same and so that
+the strings contain no embedded 0x00 bytes.  If a collating function is
+used, it needs to work like ucol_getSortKey() in the ICU library.  In
+other words, strcmp() should be sufficient for comparing two text keys.
+
+The text encoding ends in 0x00 in order to ensure that when there are
+two strings where one is a prefix of the other that the shorter string
+will sort first.
+
+<h2>Binary Encoding</h2>
+
+Each SQL value that is BINARY begins with a single byte of 0x25 and
+ends with a single byte of 0x00.  There are zero or more intervening bytes
+that encode the binary value.  None of the intervening bytes may be zero.
+Each of the intervening bytes contains 7 bits of blob content with a 1 in
+the high-order bit (the 0x80 bit).  The final byte before the 0x00 contains
+any left-over bits of the blob content.
+
+The initial byte of a binary value, 0x0f, is larger than the initial
+byte of a text value, 0x0e, ensuring that every binary value will sort
+after every text value.
+
+<h2>Numeric Encoding</h2>
+
+Numeric SQL values must be coded so as to sort in numeric order.  We assume
+that numeric SQL values can be both integer and floating point values.
+
+Simpliest cases first:  If the numeric value is a NaN, then the encoding
+is a single byte of 0x06.  This causes NaN values to sort prior to every other
+numeric value.  The only value that is less than a NaN is a NULL.
+
+If the numeric value is a negative infinity then the encoding is a single
+byte of 0x07.  Since every other numeric value except NaN has a larger 
+initial byte, this encoding ensures that negative infinity will sort prior
+to every other numeric value other than NaN.
+
+If the numeric value is a positive infinity then the encoding is a single
+byte of 0x23.  Every other numeric value encoding begins with a smaller
+byte, ensuring that positive infinity always sorts last among numeric
+values.  0x0d is also smaller than 0x0e, the initial byte of a text value,
+ensuring that every numeric value sorts before every text value.
+
+If the numeric value is exactly zero then then is encoded is a single
+byte of 0x15.  Finite negative values will have initial bytes of 0x08
+through 0x14 and finite positive values will have initial bytes of 0x16
+through 0x22.
+
+For all values, we compute a mantissa M and an exponent E.  The mantissa
+is a base-100 representation of the value.  The exponent E determines
+where to put the decimal point.
+
+Each centimal digit of the mantissa is stored in a byte.  If the
+value of the centimal digit is X (hence X>=0 and X<=99) then the
+byte value will be 2*X+1 for every byte of the mantissa, except
+for the last byte which will be 2*X+0.  The mantissa must be the
+minimum number of bytes necessary to represent the value; trailing
+X==0 digits are omitted.  This means that the mantissa will never
+contain a byte with the value 0x00.
+
+If we assume all digits of the mantissa occur to the right of the
+decimal point, then the exponent E is the power of one hundred
+by which one must multiply the mantissa to recover the original 
+value.
+
+Examples:
+
+<blockquote><table border=1 cellpadding=2>
+<tr><th> Value <th>       Exponent E <th> Significand M (in hex)
+<tr><td>  1.0                 <td> 1 <td>     02
+<tr><td>    10.0              <td> 1 <td>     14
+<tr><td>    99.0              <td> 1 <td>     b4
+<tr><td>    99.01             <td> 1 <td>     b5 02
+<tr><td>    99.0001           <td> 1 <td>     b5 01 02
+<tr><td>    100.0             <td> 2 <td>     02
+<tr><td>    100.1             <td> 2 <td>     03 02
+<tr><td>    100.01            <td> 2 <td>     03 01 02
+<tr><td>    1234              <td> 2 <td>     19 44
+<tr><td>    9999              <td> 2 <td>     c7 c6
+<tr><td>    9999.000001       <td> 2 <td>     c7 c7 01 01 02
+<tr><td>    9999.000009       <td> 2 <td>     c7 c7 01 01 12
+<tr><td>    9999.00001        <td> 2 <td>     c7 c7 01 01 14
+<tr><td>    9999.00009        <td> 2 <td>     c7 c7 01 01 b4
+<tr><td>    9999.000099       <td> 2 <td>     c7 c7 01 01 c6
+<tr><td>    9999.0001         <td> 2 <td>     c7 c7 01 02
+<tr><td>    9999.001          <td> 2 <td>     c7 c7 01 14
+<tr><td>    9999.01           <td> 2 <td>     c7 c7 02
+<tr><td>    9999.1            <td> 2 <td>     c7 c7 14
+<tr><td>    10000             <td> 3 <td>     02
+<tr><td>    10001             <td> 3 <td>     03 01 02
+<tr><td>    12345             <td> 3 <td>     03 2f 5a
+<tr><td>    123450            <td> 4 <td>     19 45 64
+<tr><td>    1234.5            <td> 3 <td>     19 45 64 
+<tr><td>    12.345            <td> 2 <td>     19 45 64
+<tr><td>    0.123             <td> 0 <td>     19 3c
+<tr><td>    0.0123            <td> 0 <td>     03 2e
+<tr><td>    0.00123          <td> -1 <td>     19 3c
+<tr><td>    9223372036854775807<td>10<td>     13 2d 43 91 07 89 6d 9b 75 0e
+</table></blockquote>
+
+Values are classified as large, medium, or small according to the value
+of E.  If E is 11 or more, the value is large.  For E between 0 and 10,
+the value is medium.  For E less than zero, the value is small.
+
+Large positive values are encoded as a single byte 0x22 followed by
+E as a varint and then M.  Medium positive values are a single byte of
+0x17+E followed by M.  Small positive values are encoded as a single
+byte 0x16 followed by the ones-complement of the varint for -E followed
+by M.
+
+Small negative values are encoded as a single byte 0x14 followed by
+-E as a varint and then the ones-complement of M.  Medium negative
+values are encoded as a byte 0x13-E followed by the ones-complement of M.
+Large negative values consist of the single byte 0x08 followed by the
+ones-complement of the varint encoding of E followed by the ones-complement
+of M.
+
+<h2>Summary</h2>
+
+Each SQL value is encoded as one or more bytes.  The first byte of
+the encoding, its meaning, and a terse description of the bytes that
+follow is given by the following table:
+
+<blockquote><table border=0 cellpadding=0>
+<tr><th align="left"> Content Type   <th>&nbsp;&nbsp;&nbsp;
+                                     <th align="left">Encoding
+<tr><td>  NULL               <td><td> 0x05
+<tr><td>  NaN                <td><td> 0x06
+<tr><td>  negative infinity  <td><td> 0x07
+<tr><td>  negative large     <td><td> 0x08,    ~E,   ~M
+<tr><td>  negative medium    <td><td> 0x13-E,  ~M
+<tr><td>  negative small     <td><td> 0x14,    -E,   ~M
+<tr><td>  zero               <td><td> 0x15
+<tr><td>  positive small     <td><td> 0x16,   ~-E,    M
+<tr><td>  positive medium    <td><td> 0x17+E,   M
+<tr><td>  positive large     <td><td> 0x22,     E,    M
+<tr><td>  positive infinity  <td><td> 0x23
+<tr><td>  text               <td><td> 0x24,     T
+<tr><td>  binary             <td><td> 0x25,     B
+</table><blockquote>

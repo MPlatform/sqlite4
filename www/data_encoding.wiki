@@ -1,0 +1,61 @@
+<title>Data Encoding</title>
+
+The key for each row of a table is the defined PRIMARY KEY in the key
+encoding. Or, if the table does not have a defined PRIMARY KEY, then
+it has an implicit INTEGER PRIMARY KEY as the first column.
+
+The content consists of all columns of the table, in order, in the data
+encoding defined here.  The PRIMARY KEY column or columns are repeated
+in the data, due to the difficulty in decoding the key format.
+
+The data consists of a header area followed by a content area.  The data
+begins with a single [./varint.wiki | varint] which is the size of the header area.  The
+initial varint itself is not considered part of the header.  The header
+is composed of one or two varints for each column in the table.  The varints
+determines the datatype and size of the value for that column:
+
+<blockquote><table border=1 cellpadding=5>
+<tr><td>  0       <td>   NULL
+<tr><td>  1       <td>   zero
+<tr><td>  2       <td>   one
+<tr><td>  3..10   <td>   (N-2)-byte signed integer
+<tr><td>  11..21  <td>   (N-9)-byte number (two varints: min 2, max 12 bytes)
+<tr><td>  22+3*K  <td>   K-byte string
+<tr><td>  23+3*K  <td>   K-byte inline blob
+<tr><td>  24+3*K  <td>   K-byte typed blob, followed by a single varint type code
+</table></blockquote>
+
+Strings can be either UTF8, UTF16le, or UTF16be.  If the first byte of the
+payload is 0x00, 0x01, or 0x02 then that byte is ignored and the remaining
+bytes are UTF8, UTF16le, or UTF16be respectively.  If the first byte is 0x03
+or larger, then the entire string including the first byte is UTF8.
+
+A "typed blob" is a sequence of bytes in an application-defined type.
+The type is determined by a varint that immediately follows the initial
+varint.  Hence, a typed blob uses two varints in the header whereas all
+other types use a single varint.
+
+The content of a number is two varints.  The first varint has a value
+which is abs(e)*4 + (e<0)*2 + (m<0).  The second varint is abs(m).
+The maximum e is 999, which gives a max varint value of 3999 or 0xf906af, for
+a maximum first varint size of 3.  Values of e greater than 999 (used for
+Inf and NaN) are represented as a -0.  The second varint can be a full 9 bytes.
+Example values:
+
+<blockquote><table border=0>
+<tr><td>  0.123   <td>&rarr;<td> e=-3, m=123    <td>&rarr;<td>  0e,7b       <td>(2 bytes)
+<tr><td>  3.14159 <td>&rarr;<td> e=-5, m=314159 <td>&rarr;<td>  16,fa04cb2f <td>(5 bytes)
+<tr><td> -1.2e+99 <td>&rarr;<td> e=98, m=-12    <td>&rarr;<td>  f199,0c     <td>(3 bytes)
+<tr><td> +Inf     <td>&rarr;<td> e=-0, m=1      <td>&rarr;<td>  02,01       <td>(2 bytes)
+<tr><td> -Inf     <td>&rarr;<td> e=-0, m=-1     <td>&rarr;<td>  03,01       <td>(2 bytes)
+<tr><td>  NaN     <td>&rarr;<td> e=-0, m=0      <td>&rarr;<td>  02,00       <td>(2 bytes)
+</table></blockquote>
+
+Initially, the followed typed blobs are defined:
+
+<blockquote><table border=0>
+<tr><td>   0  <td>    external blob
+<tr><td>   1  <td>    big int
+<tr><td>   2  <td>    date/time
+</table></blockquote>
+

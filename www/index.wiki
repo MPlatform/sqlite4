@@ -2,7 +2,7 @@
 
   *  [./design.wiki | The Design Of SQLite4]
   *  [./env.wiki | The Run-time Environment Object]
-  *  [../notes/unsigned_varint.txt | The Varint format]
-  *  [../notes/data_encoding.txt | The Data Encoding]
-  *  [../notes/key_encoding.txt | The Key Encoding]
-  *  [../notes/decimal_floating_point.txt | Internal representation of numeric values]
+  *  [./varint.wiki | The Varint format]
+  *  [./data_encoding.wiki | The Data Encoding]
+  *  [./key_encoding.wiki | The Key Encoding]
+  *  [./decimal.wiki | Internal representation of numeric values]
