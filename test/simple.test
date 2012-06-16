@@ -109,6 +109,7 @@ do_execsql_test 4.3 {
   table t1 t1 2 {CREATE TABLE t1(k PRIMARY KEY, v)} 
   index i1 t1 3 {CREATE INDEX i1 ON t1(v)}
 }
+
 do_execsql_test 4.4 { INSERT INTO t1 VALUES('one', '111') } {}
 do_execsql_test 4.5 { SELECT * FROM t1 } {one 111} 
 
@@ -688,13 +689,14 @@ do_execsql_test 38.1 {
 
   -- INSERT INTO t1 VALUES(1, 2);
   INSERT INTO t1 VALUES(3, 4);
-
+}
+do_execsql_test 38.2 {
   CREATE VIEW v1 AS SELECT a, b FROM t1;
   CREATE TRIGGER tr1 INSTEAD OF DELETE ON v1 BEGIN
     INSERT INTO log VALUES(old.b, old.a);
   END;
 }
-do_execsql_test 38.2 {
+do_execsql_test 38.3 {
   DELETE FROM v1 WHERE a = 3;
   SELECT * FROM log;
 } {4 3}

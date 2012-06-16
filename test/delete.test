@@ -353,6 +353,7 @@ do_test delete-9.2 {
   }
   set res
 } {1 a b 1 c d 2 a b 2 c d}
+optimize_db
 do_test delete-9.3 {
   execsql {
     INSERT INTO t5 VALUES(1, 2);
@@ -367,8 +368,9 @@ do_test delete-9.3 {
   set res
 } {1 a b 1 c d 2 a b 2 c d 3 a b 3 c d}
 do_test delete-9.4 {
+  execsql { DELETE FROM t5; }
+  optimize_db
   execsql {
-    DELETE FROM t5;
     INSERT INTO t5 VALUES(1, 2);
     INSERT INTO t5 VALUES(3, 4);
     INSERT INTO t5 VALUES(5, 6);
@@ -381,8 +383,9 @@ do_test delete-9.4 {
   set res
 } {1 a b 1 c d 2 a b 2 c d 3 a b 3 c d}
 do_test delete-9.5 {
+  execsql { DELETE FROM t5; }
+  optimize_db
   execsql {
-    DELETE FROM t5;
     INSERT INTO t5 VALUES(1, 2);
     INSERT INTO t5 VALUES(3, 4);
     INSERT INTO t5 VALUES(5, 6);

@@ -88,7 +88,7 @@ static void do_test_api1_lsm(lsm_db *pDb, int *pRc){
     testCompareInt(LSM_OK, ret, pRc);
   }
   ret = lsm_csr_next(pCsr);
-  testCompareInt(LSM_MISUSE, ret, pRc);
+  testCompareInt(LSM_OK, ret, pRc);
   ret = lsm_csr_prev(pCsr);
   testCompareInt(LSM_MISUSE, ret, pRc);
 
@@ -98,7 +98,7 @@ static void do_test_api1_lsm(lsm_db *pDb, int *pRc){
     testCompareInt(LSM_OK, ret, pRc);
   }
   ret = lsm_csr_prev(pCsr);
-  testCompareInt(LSM_MISUSE, ret, pRc);
+  testCompareInt(LSM_OK, ret, pRc);
   ret = lsm_csr_next(pCsr);
   testCompareInt(LSM_MISUSE, ret, pRc);
 

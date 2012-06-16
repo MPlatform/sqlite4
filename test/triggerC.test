@@ -538,6 +538,7 @@ foreach {n insert log} {
      1 integer 9.1 text 9.1 real    9.1 real
   }
 } {
+  optimize_db
   do_test triggerC-4.1.$n {
     eval concat [execsql " 
       DELETE FROM log;

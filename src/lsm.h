@@ -170,9 +170,9 @@ int lsm_config(lsm_db *, int, ...);
 
 
 /*
-** Invoke the memory allocation functions registered using 
-** lsm_global_config(). Or the system defaults if no memory allocation
-** functions have been registered.
+** Invoke the memory allocation functions that belong to environment
+** pEnv. Or the system defaults if no memory allocation functions have 
+** been registered.
 */
 void *lsm_malloc(lsm_env*, size_t);
 void *lsm_realloc(lsm_env*, void *, size_t);
@@ -410,25 +410,24 @@ int lsm_csr_last(lsm_cursor *pCsr);
 ** Advance the specified cursor to the next or previous key in the database.
 ** Return LSM_OK if successful, or an LSM error code otherwise.
 **
-** Functions lsm_csr_next and lsm_csr_prev may only be called if the cursor
-** currently points to a valid entry (not EOF). If it does not, LSM_MISUSE
-** is returned and the cursor position is not modified (i.e. it still points
-** to EOF after the function call returns).
-**
 ** Functions lsm_csr_seek(), lsm_csr_first() and lsm_csr_last() are "seek"
 ** functions. Whether or not lsm_csr_next and lsm_csr_prev may be called
 ** successfully also depends on the most recent seek function called on
 ** the cursor. Specifically:
 **
+**   * At least one seek function must have been called on the cursor.
+**
 **   * To call lsm_csr_next(), the most recent call to a seek function must
 **     have been either lsm_csr_first() or a call to lsm_csr_seek() specifying
-**     LSM_SEEK_GE. Otherwise, LSM_MISUSE is returned immediately and the
-**     position of the cursor remains unchanged.
+**     LSM_SEEK_GE. 
 **
 **   * To call lsm_csr_prev(), the most recent call to a seek function must
 **     have been either lsm_csr_first() or a call to lsm_csr_seek() specifying
-**     LSM_SEEK_GE. Otherwise, LSM_MISUSE is returned immediately and the
-**     position of the cursor remains unchanged.
+**     LSM_SEEK_GE. 
+**
+** Otherwise, if the above conditions are not met when lsm_csr_next or 
+** lsm_csr_prev is called, LSM_MISUSE is returned and the cursor position
+** remains unchanged.
 */
 int lsm_csr_next(lsm_cursor *pCsr);
 int lsm_csr_prev(lsm_cursor *pCsr);

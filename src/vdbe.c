@@ -2689,7 +2689,7 @@ case OP_OpenWrite: {
     assert( (pIn2->flags & MEM_Int)!=0 );
     sqlite4VdbeMemIntegerify(pIn2);
     p2 = (int)pIn2->u.i;
-    /* The p2 value always comes from a prior OP_CreateTable opcode and
+    /* The p2 value always comes from a prior OP_NewIdxid opcode and
     ** that opcode will always set the p2 value to 2 or more or else fail.
     ** If there were a failure, the prepared statement would have halted
     ** before reaching this instruction. */
@@ -3252,8 +3252,7 @@ case OP_NewRowid: {           /* out2-prerelease */
   ** and try again, up to 100 times.
   */
 
-  /* TODO: Change the following "-1" to "-2" to use LSM_SEEK_LEFAST. */
-  rc = sqlite4VdbeSeekEnd(pC, -1);
+  rc = sqlite4VdbeSeekEnd(pC, -2);
   if( rc==SQLITE_NOTFOUND ){
     v = 0;
     rc = SQLITE_OK;
@@ -3261,18 +3260,65 @@ case OP_NewRowid: {           /* out2-prerelease */
     rc = sqlite4KVCursorKey(pC->pKVCur, &aKey, &nKey);
     if( rc==SQLITE_OK ){
       n = sqlite4GetVarint64((u8 *)aKey, nKey, (u64 *)&v);
-      if( n==0 ) rc = SQLITE_CORRUPT;
-      if( v!=pC->iRoot ) rc = SQLITE_CORRUPT;
+      if( n==0 ) rc = SQLITE_CORRUPT_BKPT;
+      if( v!=pC->iRoot ) rc = SQLITE_CORRUPT_BKPT;
     }
     if( rc==SQLITE_OK ){
       n = sqlite4VdbeDecodeIntKey(&aKey[n], nKey-n, &v);
-      if( n==0 ) rc = SQLITE_CORRUPT;
+      if( n==0 ) rc = SQLITE_CORRUPT_BKPT;
     }
   }else{
     break;
   }
   pOut->flags = MEM_Int;
   pOut->u.i = v+1;
+  break;
+}
+
+/* Opcode: NewIdxid P1 P2 * * *
+**
+** This opcode is used to allocated new integer index numbers. P1 must
+** be an integer value when this opcode is invoked. Before the opcode
+** concludes, P1 is set to a value 1 greater than the larger of:
+**
+**   * its current value, or 
+**   * the largest index number still visible in the database using the 
+**     LEFAST query mode used by OP_NewRowid in database P2.
+*/
+case OP_NewIdxid: {          /* in1 */
+  u64 iMax;
+  KVStore *pKV;
+  KVCursor *pCsr;
+  int iDb;
+ 
+  pKV = db->aDb[pOp->p2].pKV;
+  pIn1 = &aMem[pOp->p1];
+  iMax = 0;
+  assert( pIn1->flags & MEM_Int );
+
+  rc = sqlite4KVStoreOpenCursor(pKV, &pCsr);
+  if( rc==SQLITE_OK ){
+    const u8 aKey[] = { 0xFF, 0xFF };
+    rc = sqlite4KVCursorSeek(pCsr, aKey, sizeof(aKey), -2);
+    if( rc==SQLITE_OK || rc==SQLITE_INEXACT ){
+      const KVByteArray *pKey;
+      KVSize nKey;
+      rc = sqlite4KVCursorKey(pCsr, &pKey, &nKey);
+      if( rc==SQLITE_OK ){
+        sqlite4GetVarint64((const unsigned char *)pKey, nKey, &iMax);
+      }
+    }else if( rc==SQLITE_NOTFOUND ){
+      rc = SQLITE_OK;
+    }
+    sqlite4KVCursorClose(pCsr);
+  }
+
+  if( pIn1->u.i>=(i64)iMax ){
+    pIn1->u.i++;
+  }else{
+    pIn1->u.i = iMax+1;
+  }
+
   break;
 }
 

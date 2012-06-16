@@ -128,29 +128,34 @@ void sqlite4FinishCoding(Parse *pParse){
 }
 
 /*
-** Find an available table number for database iDb
+** Generate VM code to allocate a new table number. Store the new value
+** in register iReg.
 */
-static int firstAvailableTableNumber(
-  sqlite4 *db,                    /* Database handle */
-  int iDb,                        /* Index of database in db->aDb[] */
-  Table *pTab                     /* New table being constructed */
+static void allocateTableNumber(
+  Parse *pParse,                  /* Parse context */
+  int iDb,                        /* Database number to allocate for */
+  int iReg                        /* Register to store new tnum in */
 ){
-  HashElem *i;
-  int maxTab = 1;
+  Vdbe *v;
 
-  for(i=sqliteHashFirst(&db->aDb[iDb].pSchema->idxHash); i;i=sqliteHashNext(i)){
-    Index *pIdx = (Index*)sqliteHashData(i);
-    if( pIdx->tnum > maxTab ) maxTab = pIdx->tnum;
-  }
+  v = sqlite4GetVdbe(pParse);
+  if( pParse->iNewidxReg==0 ){
+    Schema *pSchema;
+    HashElem *p;
+    int maxTab = 1;
 
-  if( pTab ){
-    Index *pIdx;
-    for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
+    pSchema = pParse->db->aDb[iDb].pSchema;
+    for(p=sqliteHashFirst(&pSchema->idxHash); p;p=sqliteHashNext(p)){
+      Index *pIdx = (Index*)sqliteHashData(p);
       if( pIdx->tnum > maxTab ) maxTab = pIdx->tnum;
     }
+
+    pParse->iNewidxReg = ++pParse->nMem;
+    sqlite4VdbeAddOp2(v, OP_Integer, maxTab, pParse->iNewidxReg);
   }
 
-  return maxTab+1;
+  sqlite4VdbeAddOp2(v, OP_NewIdxid, pParse->iNewidxReg, iDb);
+  sqlite4VdbeAddOp2(v, OP_Copy, pParse->iNewidxReg, iReg);
 }
 
 /*
@@ -1446,7 +1451,8 @@ static void addImplicitPrimaryKey(
     if( db->init.busy ){
       pIndex->tnum = db->init.newTnum;
     }else{
-      pIndex->tnum = firstAvailableTableNumber(db, iDb, pTab);
+      pIndex->tnum = ++pParse->nMem;
+      allocateTableNumber(pParse, iDb, pIndex->tnum);
     }
   }
 }
@@ -1573,6 +1579,7 @@ void sqlite4EndTable(
 
       assert(pParse->nTab==1);
       sqlite4VdbeAddOp3(v, OP_OpenWrite, 1, iPkRoot, iDb);
+      sqlite4VdbeChangeP5(v, 1);
       pParse->nTab = 2;
       sqlite4SelectDestInit(&dest, SRT_Table, 1);
       sqlite4Select(pParse, pSelect, &dest);
@@ -1605,13 +1612,13 @@ void sqlite4EndTable(
     */
     sqlite4NestedParse(pParse,
       "UPDATE %Q.%s "
-         "SET type='%s', name=%Q, tbl_name=%Q, rootpage=%d, sql=%Q "
+         "SET type='%s', name=%Q, tbl_name=%Q, rootpage=%s%d, sql=%Q "
        "WHERE rowid=#%d",
       db->aDb[iDb].zName, SCHEMA_TABLE(iDb),
       zType,
       p->zName,
       p->zName,
-      iPkRoot,
+      (iPkRoot ? "#" : ""), iPkRoot,
       zStmt,
       pParse->regRowid
     );
@@ -2240,7 +2247,7 @@ void sqlite4DeferForeignKey(Parse *pParse, int isDeferred){
 ** used to initialize a newly created index or to recompute the
 ** content of an index in response to a REINDEX command.
 */
-static void sqlite4RefillIndex(Parse *pParse, Index *pIdx){
+static void sqlite4RefillIndex(Parse *pParse, Index *pIdx, int bCreate){
   Table *pTab = pIdx->pTable;    /* The table that is indexed */
   int iTab = pParse->nTab++;     /* Cursor used for PK of pTab */
   int iIdx = pParse->nTab++;     /* Cursor used for pIdx */
@@ -2270,8 +2277,11 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx){
 
   /* Delete the current contents (if any) of the index. Then open a write
   ** cursor on it.  */
-  sqlite4VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
+  if( bCreate==0 ){
+    sqlite4VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
+  }
   sqlite4OpenIndex(pParse, iIdx, iDb, pIdx, OP_OpenWrite);
+  if( bCreate ) sqlite4VdbeChangeP5(v, 1);
 
   /* Loop through the contents of the PK index. At each row, insert the
   ** corresponding entry into the auxiliary index.  */
@@ -2679,7 +2689,8 @@ Index *sqlite4CreateIndex(
   ** step can be skipped.
   */
   else{
-    pIndex->tnum = firstAvailableTableNumber(db, iDb, pTab);
+    pIndex->tnum = ++pParse->nMem;
+    allocateTableNumber(pParse, iDb, pIndex->tnum);
     if( bPrimaryKey==0 ){
       Vdbe *v;
       char *zStmt;
@@ -2690,7 +2701,6 @@ Index *sqlite4CreateIndex(
       /* Create the rootpage for the index
       */
       sqlite4BeginWriteOperation(pParse, 1, iDb);
-      pIndex->tnum = firstAvailableTableNumber(db, iDb, pTab);
 
       /* Gather the complete text of the CREATE INDEX statement into
        ** the zStmt variable
@@ -2711,7 +2721,7 @@ Index *sqlite4CreateIndex(
       /* Add an entry in sqlite_master for this index
       */
       sqlite4NestedParse(pParse, 
-          "INSERT INTO %Q.%s VALUES('index',%Q,%Q,%d,%Q);",
+          "INSERT INTO %Q.%s VALUES('index',%Q,%Q,#%d,%Q);",
           db->aDb[iDb].zName, SCHEMA_TABLE(iDb),
           pIndex->zName,
           pTab->zName,
@@ -2724,7 +2734,7 @@ Index *sqlite4CreateIndex(
        ** to invalidate all pre-compiled statements.
        */
       if( pTblName ){
-        sqlite4RefillIndex(pParse, pIndex);
+        sqlite4RefillIndex(pParse, pIndex, 1);
         sqlite4ChangeCookie(pParse, iDb);
         sqlite4VdbeAddParseSchemaOp(v, iDb,
             sqlite4MPrintf(db, "name='%q' AND type='index'", pIndex->zName));
@@ -3502,7 +3512,7 @@ static void reindexTable(Parse *pParse, Table *pTab, char const *zColl){
     if( zColl==0 || collationMatch(zColl, pIndex) ){
       int iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
       sqlite4BeginWriteOperation(pParse, 0, iDb);
-      sqlite4RefillIndex(pParse, pIndex);
+      sqlite4RefillIndex(pParse, pIndex, 0);
     }
   }
 }
@@ -3592,7 +3602,7 @@ void sqlite4Reindex(Parse *pParse, Token *pName1, Token *pName2){
   sqlite4DbFree(db, z);
   if( pIndex && pIndex->eIndexType!=SQLITE_INDEX_PRIMARYKEY ){
     sqlite4BeginWriteOperation(pParse, 0, iDb);
-    sqlite4RefillIndex(pParse, pIndex);
+    sqlite4RefillIndex(pParse, pIndex, 0);
     return;
   }
   sqlite4ErrorMsg(pParse, "unable to identify the object to be reindexed");

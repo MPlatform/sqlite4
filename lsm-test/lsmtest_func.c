@@ -120,7 +120,7 @@ int do_show(int nArg, char **azArg){
     }
 
     if( rc==LSM_OK ){
-      printf("%s\n", z);
+      printf("%s\n", z ? z : "");
       fflush(stdout);
     }
     lsm_free(lsm_get_env(pDb), z);

@@ -2178,6 +2178,7 @@ struct Parse {
   int ckBase;          /* Base register of data during check constraints */
   int iCacheLevel;     /* ColCache valid when aColCache[].iLevel<=iCacheLevel */
   int iCacheCnt;       /* Counter used to generate aColCache[].lru values */
+  int iNewidxReg;      /* First argument to OP_NewIdxid */
   u8 nColCache;        /* Number of entries in aColCache[] */
   u8 iColCache;        /* Next entry in aColCache[] to replace */
   struct yColCache {

@@ -2105,19 +2105,17 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
         }
       }
     }while( mcursorAdvanceOk(pCsr, bReverse, &rc)==0 );
-  }else{
-    rc = LSM_MISUSE;
   }
   return rc;
 }
 
 int lsmMCursorNext(MultiCursor *pCsr){
-  if( (pCsr->flags & CURSOR_NEXT_OK)==0 ) return LSM_MISUSE;
+  if( (pCsr->flags & CURSOR_NEXT_OK)==0 ) return LSM_MISUSE_BKPT;
   return multiCursorAdvance(pCsr, 0);
 }
 
 int lsmMCursorPrev(MultiCursor *pCsr){
-  if( (pCsr->flags & CURSOR_PREV_OK)==0 ) return LSM_MISUSE;
+  if( (pCsr->flags & CURSOR_PREV_OK)==0 ) return LSM_MISUSE_BKPT;
   return multiCursorAdvance(pCsr, 1);
 }
 
@@ -3005,21 +3003,7 @@ static void sortedInvokeWorkHook(lsm_db *pDb){
   }
 }
 
-/*
-** Flush the contents of the in-memory tree to a new segment on disk.
-** At present, this may occur in two scenarios:
-**
-**   1. When a transaction has just been committed (by connection pDb), 
-**      and the in-memory tree has exceeded the size threshold, or
-**
-**   2. If the in-memory tree is not empty and the last connection to
-**      the database (pDb) is being closed.
-**
-** In both cases, the connection hold a worker snapshot reference. In
-** the first, the connection also holds the in-memory tree write-version.
-** In the second, no in-memory tree version reference is held at all.
-*/
-int lsmSortedFlushTree(
+int lsmSortedNewToplevel(
   lsm_db *pDb,                    /* Connection handle */
   int *pnHdrLevel                 /* OUT: Number of levels not stored in LSM */
 ){
@@ -3029,19 +3013,6 @@ int lsmSortedFlushTree(
   Level *pNew;                    /* The new level itself */
   SortedRun *pDel = 0;
   int iLeftPtr = 0;
-
-  assert( pDb->pWorker );
-  assert( pDb->pTV==0 || lsmTreeIsWriteVersion(pDb->pTV) );
-
-  lsmDatabaseDirty(pDb);          /* ??? */
-
-  rc = lsmBeginFlush(pDb);
-
-  /* If there is nothing to do, return early. */
-  if( lsmTreeSize(pDb->pTV)==0 && lsmDatabaseIsDirty(pDb)==0 ){
-    lsmFinishFlush(pDb, 0);
-    return LSM_OK;
-  }
 
   /* Allocate the new level structure to write to. */
   pNext = lsmDbSnapshotLevel(pDb->pWorker);
@@ -3055,7 +3026,7 @@ int lsmSortedFlushTree(
     pNew->pNext = pNext;
     lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
 
-    rc = multiCursorNew(pDb, pDb->pWorker, 1, 0, &pCsr);
+    rc = multiCursorNew(pDb, pDb->pWorker, (pDb->pTV!=0), 0, &pCsr);
     if( rc==LSM_OK ){
       if( pNext ){
         assert( pNext->pMerge==0 || pNext->nRight>0 );
@@ -3121,6 +3092,7 @@ int lsmSortedFlushTree(
     mergeWorkerShutdown(&mergeworker);
     pNew->pMerge = 0;
   }
+  lsmFreelistDeltaEnd(pDb);
 
   /* Link the new level into the top of the tree. Delete the separators
   ** array (if any) that was merged into the new level. */
@@ -3139,6 +3111,47 @@ int lsmSortedFlushTree(
   if( rc==LSM_OK ){
     sortedInvokeWorkHook(pDb);
   }
+
+  return rc;
+}
+
+/*
+** Flush the contents of the in-memory tree to a new segment on disk.
+** At present, this may occur in two scenarios:
+**
+**   1. When a transaction has just been committed (by connection pDb), 
+**      and the in-memory tree has exceeded the size threshold, or
+**
+**   2. If the in-memory tree is not empty and the last connection to
+**      the database (pDb) is being closed.
+**
+** In both cases, the connection hold a worker snapshot reference. In
+** the first, the connection also holds the in-memory tree write-version.
+** In the second, no in-memory tree version reference is held at all.
+*/
+int lsmSortedFlushTree(
+  lsm_db *pDb,                    /* Connection handle */
+  int *pnHdrLevel                 /* OUT: Number of levels not stored in LSM */
+){
+  int rc;
+
+  assert( pDb->pWorker );
+  assert( pDb->pTV==0 || lsmTreeIsWriteVersion(pDb->pTV) );
+
+  lsmDatabaseDirty(pDb);          /* ??? */
+
+  rc = lsmBeginFlush(pDb);
+
+  /* If there is nothing to do, return early. */
+  if( lsmTreeSize(pDb->pTV)==0 && lsmDatabaseIsDirty(pDb)==0 ){
+    lsmFinishFlush(pDb, 0);
+    return LSM_OK;
+  }
+
+  if( rc==LSM_OK ){
+    lsmSortedNewToplevel(pDb, pnHdrLevel);
+  }
+
 #if 0
   lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "tree flush");
 #endif
@@ -3147,7 +3160,6 @@ int lsmSortedFlushTree(
   assertAllPointersOk(rc, pDb);
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
 
-  lsmFreelistDeltaEnd(pDb);
   lsmFinishFlush(pDb, rc==LSM_OK);
   return rc;
 }
@@ -3327,6 +3339,7 @@ static int mergeWorkerInit(
         rc = multiCursorSetupTree(pCsr, 0);
       }
     }
+    pCsr->flags |= CURSOR_NEXT_OK;
   }
 
   return rc;
@@ -3584,6 +3597,7 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   ** transaction. Return LSM_MISUSE if an application attempts this.  
   */
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
+  assert( pDb->pTV==0 );
 
   if( (flags & LSM_WORK_FLUSH) ){
     rc = lsmBeginWriteTrans(pDb);
@@ -3594,20 +3608,28 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
     }
   }
 
-  /* If the LSM_WORK_CHECKPOINT flag is specified and one is available,
-  ** write a checkpoint out to disk.  */
-  if( rc==LSM_OK && (flags & LSM_WORK_CHECKPOINT) ){
-    rc = lsmCheckpointWrite(pDb);
-  }
-
   if( rc==LSM_OK && nPage>0 ){
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
     pDb->pWorker = lsmDbSnapshotWorker(pDb);
     rc = sortedWork(pDb, nPage, bOptimize, pnWrite);
+
+    if( flags & LSM_WORK_CHECKPOINT ){
+      int nHdrLevel = 0;
+      if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
+      if( rc==LSM_OK ) rc = lsmSortedNewToplevel(pDb, &nHdrLevel);
+      if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nHdrLevel);
+    }
+
     lsmDbSnapshotRelease(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;
   }else if( pnWrite ){
     *pnWrite = 0;
+  }
+
+  /* If the LSM_WORK_CHECKPOINT flag is specified and one is available,
+  ** write a checkpoint out to disk.  */
+  if( rc==LSM_OK && (flags & LSM_WORK_CHECKPOINT) ){
+    rc = lsmCheckpointWrite(pDb);
   }
 
   return rc;

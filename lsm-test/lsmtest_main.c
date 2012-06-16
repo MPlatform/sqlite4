@@ -881,7 +881,10 @@ static int do_writer_test(int nArg, char **azArg){
   i64 syncsize;
 
   /* How long to sleep before running a trial (in ms). */
+#if 0
   const int nSleep = 10000;
+#endif
+  const int nSleep = 0;
 
   if( nArg!=3 ){
     testPrintUsage("FILESIZE BLOCKSIZE SYNCSIZE");
@@ -1007,26 +1010,28 @@ static int do_insert(int nArg, char **azArg){
     zDb = azArg[0];
   }
 
+  testMallocUninstall(tdb_lsm_env());
   rc = tdb_open(zDb, 0, 1, &pDb);
   if( rc!=0 ){
     testPrintError("Error opening db \"%s\": %d\n", zDb, rc);
-    return rc;
+  }else{
+    pData = testDatasourceNew(&defn);
+    tdb_lsm_config_work_hook(pDb, do_insert_work_hook, 0);
+
+    for(i=0; i<nRow; i++){
+      void *pKey; int nKey;         /* Database key to insert */
+      void *pVal; int nVal;         /* Database value to insert */
+
+      testDatasourceEntry(pData, i, &pKey, &nKey, &pVal, &nVal);
+      tdb_write(pDb, pKey, nKey, pVal, nVal);
+    }
+
+    testDatasourceFree(pData);
+    tdb_close(pDb);
   }
-  pData = testDatasourceNew(&defn);
-  tdb_lsm_config_work_hook(pDb, do_insert_work_hook, 0);
+  testMallocInstall(tdb_lsm_env());
 
-  for(i=0; i<nRow; i++){
-    void *pKey; int nKey;         /* Database key to insert */
-    void *pVal; int nVal;         /* Database value to insert */
-
-    testDatasourceEntry(pData, i, &pKey, &nKey, &pVal, &nVal);
-    tdb_write(pDb, pKey, nKey, pVal, nVal);
-  }
-  
-  testDatasourceFree(pData);
-  tdb_close(pDb);
-
-  return 0;
+  return rc;
 }
 
 static int st_do_show(int a, char **b)      { return do_show(a, b); }

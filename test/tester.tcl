@@ -1528,6 +1528,16 @@ proc count {sql} {
   return [concat $res [expr [kvwrap step] + [kvwrap seek]]]
 }
 
+# Flush the in-memory tree to disk and merge all runs together into
+# a single b-tree structure. Because this annihilates all delete keys,
+# the next rowid allocated for each table with an IPK will be as expected
+# by SQLite 3 tests.
+#
+proc optimize_db {} { 
+  catch { sqlite4_lsm_work db main -checkpoint -opt -flush 100000 }
+  return ""
+}
+
 
 # If the library is compiled with the SQLITE_DEFAULT_AUTOVACUUM macro set
 # to non-zero, then set the global variable $AUTOVACUUM to 1.

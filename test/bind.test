@@ -81,6 +81,7 @@ do_test bind-1.8 {
   sqlite_bind $VM 2 {abcdefg} normal
   sqlite_bind $VM 3 {} null
   execsql {DELETE FROM t1}
+  optimize_db
   sqlite_step $VM N VALUES COLNAMES
   execsql {SELECT rowid, * FROM t1}
 } {1 123 abcdefg {}}
@@ -116,6 +117,7 @@ ifcapable {tclvar} {
     execsql {
       DELETE FROM t1;
     }
+    optimize_db
     set VM [sqlite4_prepare $DB {INSERT INTO t1 VALUES($one,$::two,$x(-z-))}\
             -1 TX]
     set TX
@@ -129,6 +131,7 @@ ifcapable {!tclvar} {
     execsql {
       DELETE FROM t1;
     }
+    optimize_db
     set VM [sqlite4_prepare $DB {INSERT INTO t1 VALUES(:one,:two,:_)} -1 TX]
     set TX
   } {}
@@ -185,6 +188,7 @@ do_test bind-2.5 {
   execsql {
     DELETE FROM t1;
   }
+  optimize_db
 } {}
 
 # 64 bit Integers
@@ -203,6 +207,7 @@ do_test bind-3.3 {
   execsql {
     DELETE FROM t1;
   }
+  optimize_db
 } {}
 
 # Doubles
@@ -223,6 +228,7 @@ do_test bind-4.3 {
   execsql {
     DELETE FROM t1;
   }
+  optimize_db
 } {}
 do_test bind-4.4 {
   sqlite4_bind_double $VM 1 NaN
@@ -241,6 +247,7 @@ do_test bind-4.6 {
   execsql {
     DELETE FROM t1;
   }
+  optimize_db
 } {}
 
 # NULL
@@ -259,6 +266,7 @@ do_test bind-5.3 {
   execsql {
     DELETE FROM t1;
   }
+  optimize_db
 } {}
 
 # UTF-8 text
@@ -283,6 +291,7 @@ do_test bind-6.3 {
 #
 do_test bind-6.4 {
   db eval {DELETE FROM t1}
+  optimize_db
   sqlite4_bind_text $VM 1 hello\000there\000 12
   sqlite4_bind_text $VM 2 hello\000there\000 11
   sqlite4_bind_text $VM 3 hello\000there\000 -1
@@ -315,6 +324,7 @@ do_test bind-6.7 {
   execsql {
     DELETE FROM t1;
   }
+  optimize_db
 } {}
 
 # UTF-16 text

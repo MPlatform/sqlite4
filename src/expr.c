@@ -2895,13 +2895,7 @@ int sqlite4ExprCodeAndCache(Parse *pParse, Expr *pExpr, int target){
   int inReg;
   inReg = sqlite4ExprCode(pParse, pExpr, target);
   assert( target>0 );
-  /* This routine is called for terms to INSERT or UPDATE.  And the only
-  ** other place where expressions can be converted into TK_REGISTER is
-  ** in WHERE clause processing.  So as currently implemented, there is
-  ** no way for a TK_REGISTER to exist here.  But it seems prudent to
-  ** keep the ALWAYS() in case the conditions above change with future
-  ** modifications or enhancements. */
-  if( ALWAYS(pExpr->op!=TK_REGISTER) ){  
+  if( pExpr->op!=TK_REGISTER ){  
     int iMem;
     iMem = ++pParse->nMem;
     sqlite4VdbeAddOp2(v, OP_Copy, inReg, iMem);
