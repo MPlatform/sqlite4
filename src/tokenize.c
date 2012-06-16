@@ -462,11 +462,11 @@ abort_parse:
     }
     sqlite4Parser(pEngine, 0, pParse->sLastToken, pParse);
   }
-#ifdef YYTRACKMAXSTACKDEPTH
+#if 0
   sqlite4StatusSet(SQLITE_STATUS_PARSER_STACK,
       sqlite4ParserStackPeak(pEngine)
   );
-#endif /* YYDEBUG */
+#endif
   sqlite4ParserFree(pEngine, sqlite4_free);
   db->lookaside.bEnabled = enableLookaside;
   if( db->mallocFailed ){

@@ -265,7 +265,7 @@ static void sqlite4MemShutdown(void *NotUsed){
 ** Populate the low-level memory allocation function pointers in
 ** sqlite4DefaultEnv.m with pointers to the routines in this file.
 */
-void sqlite4MemSetDefault(void){
+void sqlite4MemSetDefault(sqlite4_env *pEnv){
   static const sqlite4_mem_methods defaultMethods = {
      sqlite4MemMalloc,
      sqlite4MemFree,
@@ -276,7 +276,7 @@ void sqlite4MemSetDefault(void){
      sqlite4MemShutdown,
      0
   };
-  sqlite4_config(0, SQLITE_CONFIG_MALLOC, &defaultMethods);
+  sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MALLOC, &defaultMethods);
 }
 
 #endif /* SQLITE_SYSTEM_MALLOC */

@@ -27,7 +27,7 @@ static SQLITE_WSD struct Mem0Global {
 */
 int sqlite4MallocInit(void){
   if( sqlite4DefaultEnv.m.xMalloc==0 ){
-    sqlite4MemSetDefault();
+    sqlite4MemSetDefault(0);
   }
   memset(&mem0, 0, sizeof(mem0));
   if( sqlite4DefaultEnv.bCoreMutex ){

@@ -246,13 +246,8 @@ int sqlite4_shutdown(sqlite4_env *pEnv){
 }
 
 /*
-** This API allows applications to modify the global configuration of
-** the SQLite library at run-time.
-**
-** This routine should only be called when there are no outstanding
-** database connections or memory allocations.  This routine is not
-** threadsafe.  Failure to heed these warnings can lead to unpredictable
-** behavior.
+** This API allows applications to modify the configuration described by
+** an sqlite4_env object.
 */
 int sqlite4_config(sqlite4_env *pEnv, int op, ...){
   va_list ap;
@@ -322,7 +317,7 @@ int sqlite4_config(sqlite4_env *pEnv, int op, ...){
     }
     case SQLITE_CONFIG_GETMALLOC: {
       /* Retrieve the current malloc() implementation */
-      if( pEnv->m.xMalloc==0 ) sqlite4MemSetDefault();
+      if( pEnv->m.xMalloc==0 ) sqlite4MemSetDefault(pEnv);
       *va_arg(ap, sqlite4_mem_methods*) = pEnv->m;
       break;
     }
@@ -389,6 +384,207 @@ int sqlite4_config(sqlite4_env *pEnv, int op, ...){
       pEnv->pLogArg = va_arg(ap, void*);
       break;
     }
+
+    default: {
+      rc = SQLITE_ERROR;
+      break;
+    }
+  }
+  va_end(ap);
+  return rc;
+}
+
+/*
+** Return the size of an sqlite4_env object
+*/
+int sqlite4_env_size(void){ return sizeof(sqlite4_env); }
+
+/*
+** This API allows applications to modify the configuration described by
+** an sqlite4_env object.
+*/
+int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
+  va_list ap;
+  int rc = SQLITE_OK;
+
+  if( pEnv==0 ) pEnv = sqlite4_env_default();
+
+  va_start(ap, op);
+  switch( op ){
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_INIT, template);
+    **
+    ** Turn bulk memory into a new sqlite4_env object.  The template is
+    ** a prior sqlite4_env that is used as a template in initializing the
+    ** new sqlite4_env object.  The size of the bulk memory must be at
+    ** least as many bytes as returned from sqlite4_env_size().
+    */
+    case SQLITE_ENVCONFIG_INIT: {
+      /* Disable all mutexing */
+      sqlite4_env *pTemplate = va_arg(ap, sqlite4_env*);
+      int n = pTemplate->nByte;
+      if( n>sizeof(sqlite4_env) ) n = sizeof(sqlite4_env);
+      memcpy(pEnv, pTemplate, n);
+      pEnv->isInit = 0;
+      break;
+    }
+
+    /* Mutex configuration options are only available in a threadsafe
+    ** compile. 
+    */
+#if defined(SQLITE_THREADSAFE) && SQLITE_THREADSAFE>0
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_SINGLETHREAD);
+    **
+    ** Configure this environment for a single-threaded application.
+    */
+    case SQLITE_ENVCONFIG_SINGLETHREAD: {
+      /* Disable all mutexing */
+      if( pEnv->isInit ){ rc = SQLITE_MISUSE; break; }
+      pEnv->bCoreMutex = 0;
+      pEnv->bFullMutex = 0;
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MULTITHREAD);
+    **
+    ** Configure this environment for a multi-threaded application where
+    ** the same database connection is never used by more than a single
+    ** thread at a time.
+    */
+    case SQLITE_ENVCONFIG_MULTITHREAD: {
+      /* Disable mutexing of database connections */
+      /* Enable mutexing of core data structures */
+      if( pEnv->isInit ){ rc = SQLITE_MISUSE; break; }
+      pEnv->bCoreMutex = 1;
+      pEnv->bFullMutex = 0;
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MULTITHREAD);
+    **
+    ** Configure this environment for an unrestricted multi-threaded
+    ** application where any thread can do whatever it wants with any
+    ** database connection at any time.
+    */
+    case SQLITE_ENVCONFIG_SERIALIZED: {
+      /* Enable all mutexing */
+      if( pEnv->isInit ){ rc = SQLITE_MISUSE; break; }
+      pEnv->bCoreMutex = 1;
+      pEnv->bFullMutex = 1;
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MUTEXT, sqlite4_mutex_methods*)
+    **
+    ** Configure this environment to use the mutex routines specified by the
+    ** argument.
+    */
+    case SQLITE_ENVCONFIG_MUTEX: {
+      /* Specify an alternative mutex implementation */
+      if( pEnv->isInit ){ rc = SQLITE_MISUSE; break; }
+      pEnv->mutex = *va_arg(ap, sqlite4_mutex_methods*);
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_GETMUTEX, sqlite4_mutex_methods*)
+    **
+    ** Copy the mutex routines in use by this environment into the structure
+    ** given in the argument.
+    */
+    case SQLITE_ENVCONFIG_GETMUTEX: {
+      /* Retrieve the current mutex implementation */
+      *va_arg(ap, sqlite4_mutex_methods*) = pEnv->mutex;
+      break;
+    }
+#endif
+
+
+    /*
+    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_MALLOC, sqlite4_mem_methods*)
+    **
+    ** Set the memory allocation routines to be used by this environment.
+    */
+    case SQLITE_ENVCONFIG_MALLOC: {
+      /* Specify an alternative malloc implementation */
+      if( pEnv->isInit ) return SQLITE_MISUSE;
+      pEnv->m = *va_arg(ap, sqlite4_mem_methods*);
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_GETMALLOC, sqlite4_mem_methods*)
+    **
+    ** Copy the memory allocation routines in use by this environment
+    ** into the structure given in the argument.
+    */
+    case SQLITE_ENVCONFIG_GETMALLOC: {
+      /* Retrieve the current malloc() implementation */
+      if( pEnv->m.xMalloc==0 ) sqlite4MemSetDefault(pEnv);
+      *va_arg(ap, sqlite4_mem_methods*) = pEnv->m;
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_LOOKASIDE, size, count);
+    **
+    ** Set the default lookaside memory settings for all subsequent
+    ** database connections constructed in this environment.  The size
+    ** parameter is the size of each lookaside memory buffer and the
+    ** count parameter is the number of lookaside buffers.  Set both
+    ** to zero to disable lookaside memory.
+    */
+    case SQLITE_ENVCONFIG_LOOKASIDE: {
+      pEnv->szLookaside = va_arg(ap, int);
+      pEnv->nLookaside = va_arg(ap, int);
+      break;
+    }
+    
+    /*
+    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_LOG, xOutput, pArg);
+    **
+    ** Set the log function that is called in response to sqlite4_log()
+    ** calls.
+    */
+    case SQLITE_ENVCONFIG_LOG: {
+      /* MSVC is picky about pulling func ptrs from va lists.
+      ** http://support.microsoft.com/kb/47961
+      ** pEnv->xLog = va_arg(ap, void(*)(void*,int,const char*));
+      */
+      typedef void(*LOGFUNC_t)(void*,int,const char*);
+      pEnv->xLog = va_arg(ap, LOGFUNC_t);
+      pEnv->pLogArg = va_arg(ap, void*);
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_PUSH, zName, xFactory);
+    **
+    ** Push a new KVStore factory onto the factory stack.  The new factory
+    ** takes priority over prior factories.
+    */
+    case SQLITE_ENVCONFIG_KVSTORE_PUSH: {
+      pEnv->xKVFile = *va_arg(ap, 
+          int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
+      );
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_POP, zName);
+    **
+    ** Remove a KVStore factory from the stack.
+    */
+    case SQLITE_ENVCONFIG_KVSTORE_POP: {
+      *va_arg(ap, int(**)(sqlite4_env*, KVStore**, const char*, unsigned int)) =
+          pEnv->xKVFile;
+      break;
+    }
+
 
     default: {
       rc = SQLITE_ERROR;

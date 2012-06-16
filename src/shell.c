@@ -998,24 +998,6 @@ static int display_stats(
   int iCur;
   int iHiwtr;
 
-  if( pArg && pArg->out ){
-    
-    iHiwtr = iCur = -1;
-    sqlite4_status(SQLITE_STATUS_MEMORY_USED, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Memory Used:                         %d (max %d) bytes\n", iCur, iHiwtr);
-    iHiwtr = iCur = -1;
-    sqlite4_status(SQLITE_STATUS_MALLOC_COUNT, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Number of Outstanding Allocations:   %d (max %d)\n", iCur, iHiwtr);
-    iHiwtr = iCur = -1;
-    sqlite4_status(SQLITE_STATUS_MALLOC_SIZE, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Largest Allocation:                  %d bytes\n", iHiwtr);
-#ifdef YYTRACKMAXSTACKDEPTH
-    iHiwtr = iCur = -1;
-    sqlite4_status(SQLITE_STATUS_PARSER_STACK, &iCur, &iHiwtr, bReset);
-    fprintf(pArg->out, "Deepest Parser Stack:                %d (max %d)\n", iCur, iHiwtr);
-#endif
-  }
-
   if( pArg && pArg->out && db ){
     iHiwtr = iCur = -1;
     sqlite4_db_status(db, SQLITE_DBSTATUS_LOOKASIDE_USED, &iCur, &iHiwtr, bReset);

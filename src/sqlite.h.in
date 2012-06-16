@@ -94,6 +94,15 @@ typedef struct sqlite4_env sqlite4_env;
 sqlite4_env *sqlite4_env_default(void);
 
 /*
+** CAPIREF: Size of an sqlite4_env object
+**
+** Return the number of bytes of memory needed to hold an sqlite4_env
+** object.  This number varies from one machine to another, and from
+** one release of SQLite to another.
+*/
+int sqlite4_env_size(void);
+
+/*
 ** CAPIREF: Configure a run-time environment
 */
 int sqlite4_env_config(sqlite4_env*, int op, ...);
@@ -101,14 +110,18 @@ int sqlite4_env_config(sqlite4_env*, int op, ...);
 /*
 ** CAPIREF: Configuration options for sqlite4_env_config().
 */
-#define SQLITE_ENVCONFIG_MUTEX        1   /* sqlite4_mutex_methods* */
-#define SQLITE_ENVCONFIG_GETMUTEX     2   /* sqlite4_mutex_methods* */
-#define SQLITE_ENVCONFIG_THREADSAFE   3   /* int, int* */   
-#define SQLITE_ENVCONFIG_MALLOC       4   /* sqlite4_mem_methods* */
-#define SQLITE_ENVCONFIG_GETMALLOC    5   /* sqlite4_mem_methods* */
-#define SQLITE_ENVCONFIG_HEAP         6   /* void*, int nByte, int szMin */
-#define SQLITE_ENVCONFIG_MEMSTATUS    7   /* boolean */
-#define SQLITE_ENVCONFIG_KVSTORE      8   /* name, ??? */
+#define SQLITE_ENVCONFIG_INIT          1   /* size, template */
+#define SQLITE_ENVCONFIG_SINGLETHREAD  2   /* */
+#define SQLITE_ENVCONFIG_MULTITHREAD   3   /* */
+#define SQLITE_ENVCONFIG_SERIALIZED    4   /* */
+#define SQLITE_ENVCONFIG_MUTEX         5   /* sqlite4_mutex_methods* */
+#define SQLITE_ENVCONFIG_GETMUTEX      6   /* sqlite4_mutex_methods* */
+#define SQLITE_ENVCONFIG_MALLOC        7   /* sqlite4_mem_methods* */
+#define SQLITE_ENVCONFIG_GETMALLOC     8   /* sqlite4_mem_methods* */
+#define SQLITE_ENVCONFIG_LOOKASIDE     9   /* size, count */
+#define SQLITE_ENVCONFIG_LOG          10   /* xLog, pArg */
+#define SQLITE_ENVCONFIG_KVSTORE_PUSH 11   /* name, factory */
+#define SQLITE_ENVCONFIG_KVSTORE_POP  12   /* name */
 
 
 /*

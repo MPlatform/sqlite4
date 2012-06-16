@@ -2550,7 +2550,7 @@ void *sqlite4ScratchMalloc(int);
 void sqlite4ScratchFree(void*);
 void *sqlite4PageMalloc(int);
 void sqlite4PageFree(void*);
-void sqlite4MemSetDefault(void);
+void sqlite4MemSetDefault(sqlite4_env*);
 void sqlite4BenignMallocHooks(void (*)(void), void (*)(void));
 
 /*

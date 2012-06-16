@@ -178,7 +178,7 @@ static void faultsimEndBenign(void){
 }
 
 /*
-** Add or remove the fault-simulation layer using sqlite4_config(). If
+** Add or remove the fault-simulation layer using sqlite4_env_config(). If
 ** the argument is non-zero, the 
 */
 static int faultsimInstall(int install){
@@ -202,10 +202,10 @@ static int faultsimInstall(int install){
   }
 
   if( install ){
-    rc = sqlite4_config(0, SQLITE_CONFIG_GETMALLOC, &memfault.m);
+    rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_GETMALLOC, &memfault.m);
     assert(memfault.m.xMalloc);
     if( rc==SQLITE_OK ){
-      rc = sqlite4_config(0, SQLITE_CONFIG_MALLOC, &m);
+      rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, &m);
     }
     sqlite4_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 
         faultsimBeginBenign, faultsimEndBenign
@@ -217,11 +217,11 @@ static int faultsimInstall(int install){
     /* One should be able to reset the default memory allocator by storing
     ** a zeroed allocator then calling GETMALLOC. */
     memset(&m, 0, sizeof(m));
-    sqlite4_config(0, SQLITE_CONFIG_MALLOC, &m);
-    sqlite4_config(0, SQLITE_CONFIG_GETMALLOC, &m);
+    sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, &m);
+    sqlite4_env_config(0, SQLITE_ENVCONFIG_GETMALLOC, &m);
     assert( memcmp(&m, &memfault.m, sizeof(m))==0 );
 
-    rc = sqlite4_config(0, SQLITE_CONFIG_MALLOC, &memfault.m);
+    rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, &memfault.m);
     sqlite4_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 0, 0);
   }
 
@@ -898,10 +898,10 @@ static int test_config_memstatus(
 }
 
 /*
-** Usage:    sqlite4_config_lookaside  SIZE  COUNT
+** Usage:    sqlite4_envconfig_lookaside  SIZE  COUNT
 **
 */
-static int test_config_lookaside(
+static int test_envconfig_lookaside(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -923,7 +923,7 @@ static int test_config_lookaside(
   Tcl_ListObjAppendElement(
       interp, pRet, Tcl_NewIntObj(sqlite4DefaultEnv.nLookaside)
   );
-  rc = sqlite4_config(0, SQLITE_CONFIG_LOOKASIDE, sz, cnt);
+  rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_LOOKASIDE, sz, cnt);
   Tcl_SetObjResult(interp, pRet);
   return TCL_OK;
 }
@@ -1013,7 +1013,7 @@ static int test_config_heap(
 /*
 ** tclcmd:     sqlite4_config_error  [DB]
 **
-** Invoke sqlite4_config() or sqlite4_db_config() with invalid
+** Invoke sqlite4_env_config() or sqlite4_db_config() with invalid
 ** opcodes and verify that they return errors.
 */
 static int test_config_error(
@@ -1038,9 +1038,9 @@ static int test_config_error(
       return TCL_ERROR;
     }
   }else{
-    if( sqlite4_config(0, 99999)!=SQLITE_ERROR ){
+    if( sqlite4_env_config(0, 99999)!=SQLITE_ERROR ){
       Tcl_AppendResult(interp, 
-          "sqlite4_config(0, 99999) does not return SQLITE_ERROR",
+          "sqlite4_env_config(0, 99999) does not return SQLITE_ERROR",
           (char*)0);
       return TCL_ERROR;
     }
@@ -1048,43 +1048,6 @@ static int test_config_error(
   return TCL_OK;
 }
 
-/*
-** Usage:    
-**
-**   sqlite4_dump_memsys3  FILENAME
-**   sqlite4_dump_memsys5  FILENAME
-**
-** Write a summary of unfreed memsys3 allocations to FILENAME.
-*/
-static int test_dump_memsys3(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  if( objc!=2 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "FILENAME");
-    return TCL_ERROR;
-  }
-
-  switch( SQLITE_PTR_TO_INT(clientData) ){
-    case 3: {
-#ifdef SQLITE_ENABLE_MEMSYS3
-      extern void sqlite4Memsys3Dump(const char*);
-      sqlite4Memsys3Dump(Tcl_GetString(objv[1]));
-      break;
-#endif
-    }
-    case 5: {
-#ifdef SQLITE_ENABLE_MEMSYS5
-      extern void sqlite4Memsys5Dump(const char*);
-      sqlite4Memsys5Dump(Tcl_GetString(objv[1]));
-      break;
-#endif
-    }
-  }
-  return TCL_OK;
-}
 
 /*
 ** Usage:    sqlite4_status  OPCODE  RESETFLAG
@@ -1249,31 +1212,29 @@ int Sqlitetest_malloc_Init(Tcl_Interp *interp){
      Tcl_ObjCmdProc *xProc;
      int clientData;
   } aObjCmd[] = {
-     { "sqlite4_malloc",             test_malloc                   ,0 },
-     { "sqlite4_realloc",            test_realloc                  ,0 },
-     { "sqlite4_free",               test_free                     ,0 },
-     { "memset",                     test_memset                   ,0 },
-     { "memget",                     test_memget                   ,0 },
-     { "sqlite4_memory_used",        test_memory_used              ,0 },
-     { "sqlite4_memory_highwater",   test_memory_highwater         ,0 },
-     { "sqlite4_memdebug_backtrace", test_memdebug_backtrace       ,0 },
-     { "sqlite4_memdebug_dump",      test_memdebug_dump            ,0 },
-     { "sqlite4_memdebug_fail",      test_memdebug_fail            ,0 },
-     { "sqlite4_memdebug_pending",   test_memdebug_pending         ,0 },
-     { "sqlite4_memdebug_settitle",  test_memdebug_settitle        ,0 },
-     { "sqlite4_memdebug_malloc_count", test_memdebug_malloc_count ,0 },
-     { "sqlite4_memdebug_log",       test_memdebug_log             ,0 },
-     { "sqlite4_status",             test_status                   ,0 },
-     { "sqlite4_db_status",          test_db_status                ,0 },
-     { "install_malloc_faultsim",    test_install_malloc_faultsim  ,0 },
-     { "sqlite4_config_heap",        test_config_heap              ,0 },
-     { "sqlite4_config_memstatus",   test_config_memstatus         ,0 },
-     { "sqlite4_config_lookaside",   test_config_lookaside         ,0 },
-     { "sqlite4_config_error",       test_config_error             ,0 },
-     { "sqlite4_db_config_lookaside",test_db_config_lookaside      ,0 },
-     { "sqlite4_dump_memsys3",       test_dump_memsys3             ,3 },
-     { "sqlite4_dump_memsys5",       test_dump_memsys3             ,5 },
-     { "sqlite4_install_memsys3",    test_install_memsys3          ,0 },
+     { "sqlite4_malloc",                 test_malloc                   ,0 },
+     { "sqlite4_realloc",                test_realloc                  ,0 },
+     { "sqlite4_free",                   test_free                     ,0 },
+     { "memset",                         test_memset                   ,0 },
+     { "memget",                         test_memget                   ,0 },
+     { "sqlite4_memory_used",            test_memory_used              ,0 },
+     { "sqlite4_memory_highwater",       test_memory_highwater         ,0 },
+     { "sqlite4_memdebug_backtrace",     test_memdebug_backtrace       ,0 },
+     { "sqlite4_memdebug_dump",          test_memdebug_dump            ,0 },
+     { "sqlite4_memdebug_fail",          test_memdebug_fail            ,0 },
+     { "sqlite4_memdebug_pending",       test_memdebug_pending         ,0 },
+     { "sqlite4_memdebug_settitle",      test_memdebug_settitle        ,0 },
+     { "sqlite4_memdebug_malloc_count",  test_memdebug_malloc_count ,0 },
+     { "sqlite4_memdebug_log",           test_memdebug_log             ,0 },
+     { "sqlite4_status",                 test_status                   ,0 },
+     { "sqlite4_db_status",              test_db_status                ,0 },
+     { "install_malloc_faultsim",        test_install_malloc_faultsim  ,0 },
+     { "sqlite4_config_heap",            test_config_heap              ,0 },
+     { "sqlite4_config_memstatus",       test_config_memstatus         ,0 },
+     { "sqlite4_envconfig_lookaside",    test_envconfig_lookaside      ,0 },
+     { "sqlite4_config_error",           test_config_error             ,0 },
+     { "sqlite4_db_config_lookaside",    test_db_config_lookaside      ,0 },
+     { "sqlite4_install_memsys3",        test_install_memsys3          ,0 },
   };
   int i;
   for(i=0; i<sizeof(aObjCmd)/sizeof(aObjCmd[0]); i++){
