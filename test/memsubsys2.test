@@ -48,15 +48,15 @@ proc build_test_db {testname pragmas} {
 # Reset all of the highwater marks.
 #
 proc reset_highwater_marks {} {
-  sqlite4_status SQLITE_STATUS_MEMORY_USED 1
-  sqlite4_status SQLITE_STATUS_MALLOC_SIZE 1
-  sqlite4_status SQLITE_STATUS_PAGECACHE_USED 1
-  sqlite4_status SQLITE_STATUS_PAGECACHE_OVERFLOW 1
-  sqlite4_status SQLITE_STATUS_PAGECACHE_SIZE 1
-  sqlite4_status SQLITE_STATUS_SCRATCH_USED 1
-  sqlite4_status SQLITE_STATUS_SCRATCH_OVERFLOW 1
-  sqlite4_status SQLITE_STATUS_SCRATCH_SIZE 1
-  sqlite4_status SQLITE_STATUS_PARSER_STACK 1
+  sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 1
+  sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_SIZE 1
+  sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 1
+  sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_OVERFLOW 1
+  sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_SIZE 1
+  sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 1
+  sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_OVERFLOW 1
+  sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_SIZE 1
+  sqlite4_env_status SQLITE_ENVSTATUS_PARSER_STACK 1
 }
 
 # Test 1:  Verify that calling sqlite4_malloc(0) returns a NULL
@@ -89,7 +89,7 @@ do_test memsubsys2-2.2 {
 #
 db close
 sqlite4_shutdown
-sqlite4_config_memstatus 0
+sqlite4_env_config_memstatus 0
 sqlite4_initialize
 reset_highwater_marks
 set highwater [sqlite4_memory_highwater 0]
@@ -127,7 +127,7 @@ do_test memsubsys2-3.9 {
 # tracking.
 #
 sqlite4_shutdown
-sqlite4_config_memstatus 1
+sqlite4_env_config_memstatus 1
 sqlite4_initialize
 reset_highwater_marks
 set highwater [sqlite4_memory_highwater 0]

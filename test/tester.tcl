@@ -394,7 +394,7 @@ if {[info exists TC(count)]} return
 
 # Make sure memory statistics are enabled.
 #
-sqlite4_config_memstatus 1
+sqlite4_env_config_memstatus 1
 
 # Initialize the test counters and set up commands to access them.
 # Or, if this is a slave interpreter, set up aliases to write the
@@ -722,10 +722,10 @@ proc finalize_testing {} {
   if {$::cmdlinearg(binarylog)} {
     vfslog finalize binarylog
   }
-  if {[lindex [sqlite4_status SQLITE_STATUS_MALLOC_COUNT 0] 1]>0 ||
+  if {[lindex [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_COUNT 0] 1]>0 ||
               [sqlite4_memory_used]>0} {
     puts "Unfreed memory: [sqlite4_memory_used] bytes in\
-         [lindex [sqlite4_status SQLITE_STATUS_MALLOC_COUNT 0] 1] allocations"
+         [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_COUNT 0] 1] allocations"
     incr nErr
     ifcapable memdebug||mem5||(mem3&&debug) {
       puts "Writing unfreed memory log to \"./memleak.txt\""
@@ -767,16 +767,16 @@ proc finalize_testing {} {
 # Display memory statistics for analysis and debugging purposes.
 #
 proc show_memstats {} {
-  set x [sqlite4_status SQLITE_STATUS_MEMORY_USED 0]
-  set y [sqlite4_status SQLITE_STATUS_MALLOC_SIZE 0]
+  set x [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0]
+  set y [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_SIZE 0]
   set val [format {now %10d  max %10d  max-size %10d} \
               [lindex $x 1] [lindex $x 2] [lindex $y 2]]
   puts "Memory used:          $val"
-  set x [sqlite4_status SQLITE_STATUS_MALLOC_COUNT 0]
+  set x [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_COUNT 0]
   set val [format {now %10d  max %10d} [lindex $x 1] [lindex $x 2]]
   puts "Allocation count:     $val"
   ifcapable yytrackmaxstackdepth {
-    set x [sqlite4_status SQLITE_STATUS_PARSER_STACK 0]
+    set x [sqlite4_env_status SQLITE_ENVSTATUS_PARSER_STACK 0]
     set val [format {               max %10d} [lindex $x 2]]
     puts "Parser stack depth:    $val"
   }

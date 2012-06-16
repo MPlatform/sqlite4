@@ -466,19 +466,12 @@ do_test misc7-18.1 {
 # Testing boundary conditions on sqlite4_status()
 #
 do_test misc7-19.1 {
-  sqlite4_status -1 0
+  sqlite4_env_status -1 0
 } {21 0 0}
 do_test misc7-19.2 {
-  sqlite4_status 1000 0
+  sqlite4_env_status 1000 0
 } {21 0 0}
 
-
-# sqlite4_global_recover() is a no-op.  But we might as well test it
-# if only to get the test coverage.
-#
-do_test misc7-20.1 {
-  sqlite4_global_recover
-} {SQLITE_OK}
 
 # Try to open a really long file name.
 #

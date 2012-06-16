@@ -118,10 +118,11 @@ int sqlite4_env_config(sqlite4_env*, int op, ...);
 #define SQLITE_ENVCONFIG_GETMUTEX      6   /* sqlite4_mutex_methods* */
 #define SQLITE_ENVCONFIG_MALLOC        7   /* sqlite4_mem_methods* */
 #define SQLITE_ENVCONFIG_GETMALLOC     8   /* sqlite4_mem_methods* */
-#define SQLITE_ENVCONFIG_LOOKASIDE     9   /* size, count */
-#define SQLITE_ENVCONFIG_LOG          10   /* xLog, pArg */
-#define SQLITE_ENVCONFIG_KVSTORE_PUSH 11   /* name, factory */
-#define SQLITE_ENVCONFIG_KVSTORE_POP  12   /* name */
+#define SQLITE_ENVCONFIG_MEMSTATUS     9   /* boolean */
+#define SQLITE_ENVCONFIG_LOOKASIDE    10   /* size, count */
+#define SQLITE_ENVCONFIG_LOG          11   /* xLog, pArg */
+#define SQLITE_ENVCONFIG_KVSTORE_PUSH 12   /* name, factory */
+#define SQLITE_ENVCONFIG_KVSTORE_POP  13   /* name */
 
 
 /*
@@ -882,18 +883,6 @@ struct sqlite4_mem_methods {
 **
 ** </dl>
 */
-#define SQLITE_CONFIG_SINGLETHREAD  1  /* nil */
-#define SQLITE_CONFIG_MULTITHREAD   2  /* nil */
-#define SQLITE_CONFIG_SERIALIZED    3  /* nil */
-#define SQLITE_CONFIG_MALLOC        4  /* sqlite4_mem_methods* */
-#define SQLITE_CONFIG_GETMALLOC     5  /* sqlite4_mem_methods* */
-#define SQLITE_CONFIG_HEAP          8  /* void*, int nByte, int min */
-#define SQLITE_CONFIG_MEMSTATUS     9  /* boolean */
-#define SQLITE_CONFIG_MUTEX        10  /* sqlite4_mutex_methods* */
-#define SQLITE_CONFIG_GETMUTEX     11  /* sqlite4_mutex_methods* */
-#define SQLITE_CONFIG_LOOKASIDE    13  /* int int */
-#define SQLITE_CONFIG_LOG          16  /* xFunc, void* */
-
 #define SQLITE_CONFIG_SET_KVFACTORY 20 /* int(*)(KVStore**,const char*,u32) */
 #define SQLITE_CONFIG_GET_KVFACTORY 21 /* int(**)(KVStore**,const char*,u32) */
 
@@ -1345,10 +1334,11 @@ void sqlite4_free(void*);
 ** of the [sqlite4_malloc()], [sqlite4_free()], and [sqlite4_realloc()]
 ** routines, which form the built-in memory allocation subsystem.
 **
-** ^The [sqlite4_memory_used()] routine returns the number of bytes
-** of memory currently outstanding (malloced but not freed).
-** ^The [sqlite4_memory_highwater()] routine returns the maximum
-** value of [sqlite4_memory_used()] since the high-water mark
+** ^The [sqlite4_memory_used(E)] routine returns the number of bytes
+** of memory currently outstanding (malloced but not freed) for 
+** sqlite4_env environment E.
+** ^The [sqlite4_memory_highwater(E)] routine returns the maximum
+** value of [sqlite4_memory_used(E)] since the high-water mark
 ** was last reset.  ^The values returned by [sqlite4_memory_used()] and
 ** [sqlite4_memory_highwater()] include any overhead
 ** added by SQLite in its implementation of [sqlite4_malloc()],
@@ -1356,13 +1346,13 @@ void sqlite4_free(void*);
 ** routines that [sqlite4_malloc()] may call.
 **
 ** ^The memory high-water mark is reset to the current value of
-** [sqlite4_memory_used()] if and only if the parameter to
-** [sqlite4_memory_highwater()] is true.  ^The value returned
-** by [sqlite4_memory_highwater(1)] is the high-water mark
+** [sqlite4_memory_used(E)] if and only if the R parameter to
+** [sqlite4_memory_highwater(E,R)] is true.  ^The value returned
+** by [sqlite4_memory_highwater(E,1)] is the high-water mark
 ** prior to the reset.
 */
-sqlite4_int64 sqlite4_memory_used(void);
-sqlite4_int64 sqlite4_memory_highwater(int resetFlag);
+sqlite4_uint64 sqlite4_memory_used(sqlite4_env*);
+sqlite4_uint64 sqlite4_memory_highwater(sqlite4_env*, int resetFlag);
 
 /*
 ** CAPIREF: Pseudo-Random Number Generator
@@ -4094,7 +4084,13 @@ int sqlite4_test_control(int op, ...);
 **
 ** See also: [sqlite4_db_status()]
 */
-int sqlite4_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
+int sqlite4_env_status(
+  sqlite4_env *pEnv,
+  int op,
+  sqlite4_uint64 *pCurrent,
+  sqlite4_uint64 *pHighwater,
+  int resetFlag
+);
 
 
 /*
@@ -4133,10 +4129,10 @@ int sqlite4_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 **
 ** New status parameters may be added from time to time.
 */
-#define SQLITE_STATUS_MEMORY_USED          0
-#define SQLITE_STATUS_MALLOC_SIZE          5
-#define SQLITE_STATUS_PARSER_STACK         6
-#define SQLITE_STATUS_MALLOC_COUNT         9
+#define SQLITE_ENVSTATUS_MEMORY_USED          0
+#define SQLITE_ENVSTATUS_MALLOC_SIZE          1
+#define SQLITE_ENVSTATUS_MALLOC_COUNT         2
+#define SQLITE_ENVSTATUS_PARSER_STACK         3
 
 /*
 ** CAPIREF: Database Connection Status

@@ -462,7 +462,7 @@ abort_parse:
     }
     sqlite4Parser(pEngine, 0, pParse->sLastToken, pParse);
   }
-#if 0
+#if YYTRACKMAXSTACKDEPTH
   sqlite4StatusSet(SQLITE_STATUS_PARSER_STACK,
       sqlite4ParserStackPeak(pEngine)
   );

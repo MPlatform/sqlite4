@@ -2589,10 +2589,10 @@ static void main_init(struct callback_data *data) {
   data->mode = MODE_List;
   memcpy(data->separator,"|", 2);
   data->showHeader = 0;
-  sqlite4_config(0, SQLITE_CONFIG_LOG, shellLog, data);
+  sqlite4_env_config(0, SQLITE_ENVCONFIG_LOG, shellLog, data);
   sqlite4_snprintf(sizeof(mainPrompt), mainPrompt,"sqlite> ");
   sqlite4_snprintf(sizeof(continuePrompt), continuePrompt,"   ...> ");
-  sqlite4_config(0, SQLITE_CONFIG_SINGLETHREAD);
+  sqlite4_env_config(0, SQLITE_ENVCONFIG_SINGLETHREAD);
 }
 
 int main(int argc, char **argv){

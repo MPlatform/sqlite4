@@ -489,7 +489,7 @@ static int test_memory_used(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  Tcl_SetObjResult(interp, Tcl_NewWideIntObj(sqlite4_memory_used()));
+  Tcl_SetObjResult(interp, Tcl_NewWideIntObj(sqlite4_memory_used(0)));
   return TCL_OK;
 }
 
@@ -513,7 +513,7 @@ static int test_memory_highwater(
     if( Tcl_GetBooleanFromObj(interp, objv[1], &resetFlag) ) return TCL_ERROR;
   } 
   Tcl_SetObjResult(interp, 
-     Tcl_NewWideIntObj(sqlite4_memory_highwater(resetFlag)));
+     Tcl_NewWideIntObj(sqlite4_memory_highwater(0, resetFlag)));
   return TCL_OK;
 }
 
@@ -876,7 +876,7 @@ static int test_memdebug_log(
 }
 
 /*
-** Usage:    sqlite4_config_memstatus BOOLEAN
+** Usage:    sqlite4_env_config_memstatus BOOLEAN
 **
 ** Enable or disable memory status reporting using SQLITE_CONFIG_MEMSTATUS.
 */
@@ -892,7 +892,7 @@ static int test_config_memstatus(
     return TCL_ERROR;
   }
   if( Tcl_GetBooleanFromObj(interp, objv[1], &enable) ) return TCL_ERROR;
-  rc = sqlite4_config(0, SQLITE_CONFIG_MEMSTATUS, enable);
+  rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MEMSTATUS, enable);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return TCL_OK;
 }
@@ -969,48 +969,6 @@ static int test_db_config_lookaside(
 }
 
 /*
-** Usage:
-**
-**   sqlite4_config_heap NBYTE NMINALLOC
-*/
-static int test_config_heap(
-  void * clientData, 
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  static char *zBuf; /* Use this memory */
-  static int szBuf;  /* Bytes allocated for zBuf */
-  int nByte;         /* Size of buffer to pass to sqlite4_config() */
-  int nMinAlloc;     /* Size of minimum allocation */
-  int rc;            /* Return code of sqlite4_config() */
-
-  Tcl_Obj * CONST *aArg = &objv[1];
-  int nArg = objc-1;
-
-  if( nArg!=2 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "NBYTE NMINALLOC");
-    return TCL_ERROR;
-  }
-  if( Tcl_GetIntFromObj(interp, aArg[0], &nByte) ) return TCL_ERROR;
-  if( Tcl_GetIntFromObj(interp, aArg[1], &nMinAlloc) ) return TCL_ERROR;
-
-  if( nByte==0 ){
-    free( zBuf );
-    zBuf = 0;
-    szBuf = 0;
-    rc = sqlite4_config(0, SQLITE_CONFIG_HEAP, (void*)0, 0, 0);
-  }else{
-    zBuf = realloc(zBuf, nByte);
-    szBuf = nByte;
-    rc = sqlite4_config(0, SQLITE_CONFIG_HEAP, zBuf, nByte, nMinAlloc);
-  }
-
-  Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
-  return TCL_OK;
-}
-
-/*
 ** tclcmd:     sqlite4_config_error  [DB]
 **
 ** Invoke sqlite4_env_config() or sqlite4_db_config() with invalid
@@ -1050,9 +1008,9 @@ static int test_config_error(
 
 
 /*
-** Usage:    sqlite4_status  OPCODE  RESETFLAG
+** Usage:    sqlite4_env_status  OPCODE  RESETFLAG
 **
-** Return a list of three elements which are the sqlite4_status() return
+** Return a list of three elements which are the sqlite4_env_status() return
 ** code, the current value, and the high-water mark value.
 */
 static int test_status(
@@ -1061,17 +1019,18 @@ static int test_status(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc, iValue, mxValue;
+  int rc;
+  sqlite4_uint64 iValue, mxValue;
   int i, op, resetFlag;
   const char *zOpName;
   static const struct {
     const char *zName;
     int op;
   } aOp[] = {
-    { "SQLITE_STATUS_MEMORY_USED",         SQLITE_STATUS_MEMORY_USED         },
-    { "SQLITE_STATUS_MALLOC_SIZE",         SQLITE_STATUS_MALLOC_SIZE         },
-    { "SQLITE_STATUS_PARSER_STACK",        SQLITE_STATUS_PARSER_STACK        },
-    { "SQLITE_STATUS_MALLOC_COUNT",        SQLITE_STATUS_MALLOC_COUNT        },
+    { "SQLITE_ENVSTATUS_MEMORY_USED",   SQLITE_ENVSTATUS_MEMORY_USED         },
+    { "SQLITE_ENVSTATUS_MALLOC_SIZE",   SQLITE_ENVSTATUS_MALLOC_SIZE         },
+    { "SQLITE_ENVSTATUS_PARSER_STACK",  SQLITE_ENVSTATUS_PARSER_STACK        },
+    { "SQLITE_ENVSTATUS_MALLOC_COUNT",  SQLITE_ENVSTATUS_MALLOC_COUNT        },
   };
   Tcl_Obj *pResult;
   if( objc!=3 ){
@@ -1091,11 +1050,11 @@ static int test_status(
   if( Tcl_GetBooleanFromObj(interp, objv[2], &resetFlag) ) return TCL_ERROR;
   iValue = 0;
   mxValue = 0;
-  rc = sqlite4_status(op, &iValue, &mxValue, resetFlag);
+  rc = sqlite4_env_status(0, op, &iValue, &mxValue, resetFlag);
   pResult = Tcl_NewObj();
   Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(rc));
-  Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(iValue));
-  Tcl_ListObjAppendElement(0, pResult, Tcl_NewIntObj(mxValue));
+  Tcl_ListObjAppendElement(0, pResult, Tcl_NewWideIntObj(iValue));
+  Tcl_ListObjAppendElement(0, pResult, Tcl_NewWideIntObj(mxValue));
   Tcl_SetObjResult(interp, pResult);
   return TCL_OK;
 }
@@ -1197,7 +1156,7 @@ static int test_install_memsys3(
   int rc = SQLITE_MISUSE;
 #ifdef SQLITE_ENABLE_MEMSYS3
   const sqlite4_mem_methods *sqlite4MemGetMemsys3(void);
-  rc = sqlite4_config(0, SQLITE_CONFIG_MALLOC, sqlite4MemGetMemsys3());
+  rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, sqlite4MemGetMemsys3());
 #endif
   Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
@@ -1226,11 +1185,10 @@ int Sqlitetest_malloc_Init(Tcl_Interp *interp){
      { "sqlite4_memdebug_settitle",      test_memdebug_settitle        ,0 },
      { "sqlite4_memdebug_malloc_count",  test_memdebug_malloc_count ,0 },
      { "sqlite4_memdebug_log",           test_memdebug_log             ,0 },
-     { "sqlite4_status",                 test_status                   ,0 },
+     { "sqlite4_env_status",             test_status                   ,0 },
      { "sqlite4_db_status",              test_db_status                ,0 },
      { "install_malloc_faultsim",        test_install_malloc_faultsim  ,0 },
-     { "sqlite4_config_heap",            test_config_heap              ,0 },
-     { "sqlite4_config_memstatus",       test_config_memstatus         ,0 },
+     { "sqlite4_env_config_memstatus",   test_config_memstatus         ,0 },
      { "sqlite4_envconfig_lookaside",    test_envconfig_lookaside      ,0 },
      { "sqlite4_config_error",           test_config_error             ,0 },
      { "sqlite4_db_config_lookaside",    test_db_config_lookaside      ,0 },

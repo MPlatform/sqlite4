@@ -274,117 +274,6 @@ int sqlite4_config(sqlite4_env *pEnv, int op, ...){
       break;
     }
 
-    /* Mutex configuration options are only available in a threadsafe
-    ** compile. 
-    */
-#if defined(SQLITE_THREADSAFE) && SQLITE_THREADSAFE>0
-    case SQLITE_CONFIG_SINGLETHREAD: {
-      /* Disable all mutexing */
-      pEnv->bCoreMutex = 0;
-      pEnv->bFullMutex = 0;
-      break;
-    }
-    case SQLITE_CONFIG_MULTITHREAD: {
-      /* Disable mutexing of database connections */
-      /* Enable mutexing of core data structures */
-      pEnv->bCoreMutex = 1;
-      pEnv->bFullMutex = 0;
-      break;
-    }
-    case SQLITE_CONFIG_SERIALIZED: {
-      /* Enable all mutexing */
-      pEnv->bCoreMutex = 1;
-      pEnv->bFullMutex = 1;
-      break;
-    }
-    case SQLITE_CONFIG_MUTEX: {
-      /* Specify an alternative mutex implementation */
-      pEnv->mutex = *va_arg(ap, sqlite4_mutex_methods*);
-      break;
-    }
-    case SQLITE_CONFIG_GETMUTEX: {
-      /* Retrieve the current mutex implementation */
-      *va_arg(ap, sqlite4_mutex_methods*) = pEnv->mutex;
-      break;
-    }
-#endif
-
-
-    case SQLITE_CONFIG_MALLOC: {
-      /* Specify an alternative malloc implementation */
-      pEnv->m = *va_arg(ap, sqlite4_mem_methods*);
-      break;
-    }
-    case SQLITE_CONFIG_GETMALLOC: {
-      /* Retrieve the current malloc() implementation */
-      if( pEnv->m.xMalloc==0 ) sqlite4MemSetDefault(pEnv);
-      *va_arg(ap, sqlite4_mem_methods*) = pEnv->m;
-      break;
-    }
-    case SQLITE_CONFIG_MEMSTATUS: {
-      /* Enable or disable the malloc status collection */
-      pEnv->bMemstat = va_arg(ap, int);
-      break;
-    }
-
-#if defined(SQLITE_ENABLE_MEMSYS3) || defined(SQLITE_ENABLE_MEMSYS5)
-    case SQLITE_CONFIG_HEAP: {
-      /* Designate a buffer for heap memory space */
-      pEnv->pHeap = va_arg(ap, void*);
-      pEnv->nHeap = va_arg(ap, int);
-      pEnv->mnReq = va_arg(ap, int);
-
-      if( pEnv->mnReq<1 ){
-        pEnv->mnReq = 1;
-      }else if( pEnv->mnReq>(1<<12) ){
-        /* cap min request size at 2^12 */
-        pEnv->mnReq = (1<<12);
-      }
-
-      if( pEnv->pHeap==0 ){
-        /* If the heap pointer is NULL, then restore the malloc implementation
-        ** back to NULL pointers too.  This will cause the malloc to go
-        ** back to its default implementation when sqlite4_initialize() is
-        ** run.
-        */
-        memset(&pEnv->m, 0, sizeof(pEnv->m));
-      }else{
-        /* The heap pointer is not NULL, then install one of the
-        ** mem5.c/mem3.c methods. If neither ENABLE_MEMSYS3 nor
-        ** ENABLE_MEMSYS5 is defined, return an error.
-        */
-#ifdef SQLITE_ENABLE_MEMSYS3
-        pEnv->m = *sqlite4MemGetMemsys3();
-#endif
-#ifdef SQLITE_ENABLE_MEMSYS5
-        pEnv->m = *sqlite4MemGetMemsys5();
-#endif
-      }
-      break;
-    }
-#endif
-
-    case SQLITE_CONFIG_LOOKASIDE: {
-      pEnv->szLookaside = va_arg(ap, int);
-      pEnv->nLookaside = va_arg(ap, int);
-      break;
-    }
-    
-    /* Record a pointer to the logger funcction and its first argument.
-    ** The default is NULL.  Logging is disabled if the function pointer is
-    ** NULL.
-    */
-    case SQLITE_CONFIG_LOG: {
-      /* MSVC is picky about pulling func ptrs from va lists.
-      ** http://support.microsoft.com/kb/47961
-      ** pEnv->xLog = va_arg(ap, void(*)(void*,int,const char*));
-      */
-      typedef void(*LOGFUNC_t)(void*,int,const char*);
-      pEnv->xLog = va_arg(ap, LOGFUNC_t);
-      pEnv->pLogArg = va_arg(ap, void*);
-      break;
-    }
-
     default: {
       rc = SQLITE_ERROR;
       break;
@@ -526,6 +415,17 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
       /* Retrieve the current malloc() implementation */
       if( pEnv->m.xMalloc==0 ) sqlite4MemSetDefault(pEnv);
       *va_arg(ap, sqlite4_mem_methods*) = pEnv->m;
+      break;
+    }
+
+    /* sqlite4_env_config(p, SQLITE_ENVCONFIG_MEMSTAT, int onoff);
+    **
+    ** Enable or disable collection of memory usage statistics according to
+    ** the onoff parameter.  
+    */
+    case SQLITE_ENVCONFIG_MEMSTATUS: {
+      /* Enable or disable the malloc status collection */
+      pEnv->bMemstat = va_arg(ap, int);
       break;
     }
 

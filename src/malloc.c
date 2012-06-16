@@ -49,12 +49,11 @@ void sqlite4MallocEnd(void){
 /*
 ** Return the amount of memory currently checked out.
 */
-sqlite4_int64 sqlite4_memory_used(void){
-  int n, mx;
-  sqlite4_int64 res;
-  sqlite4_status(SQLITE_STATUS_MEMORY_USED, &n, &mx, 0);
-  res = (sqlite4_int64)n;  /* Work around bug in Borland C. Ticket #3216 */
-  return res;
+sqlite4_uint64 sqlite4_memory_used(sqlite4_env *pEnv){
+  sqlite4_uint64 n, mx;
+  if( pEnv==0 ) pEnv = sqlite4_env_default();
+  sqlite4_env_status(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, &n, &mx, 0);
+  return n;
 }
 
 /*
@@ -62,12 +61,11 @@ sqlite4_int64 sqlite4_memory_used(void){
 ** checked out since either the beginning of this process
 ** or since the most recent reset.
 */
-sqlite4_int64 sqlite4_memory_highwater(int resetFlag){
-  int n, mx;
-  sqlite4_int64 res;
-  sqlite4_status(SQLITE_STATUS_MEMORY_USED, &n, &mx, resetFlag);
-  res = (sqlite4_int64)mx;  /* Work around bug in Borland C. Ticket #3216 */
-  return res;
+sqlite4_uint64 sqlite4_memory_highwater(sqlite4_env *pEnv, int resetFlag){
+  sqlite4_uint64 n, mx;
+  if( pEnv==0 ) pEnv = sqlite4_env_default();
+  sqlite4_env_status(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, &n, &mx, resetFlag);
+  return mx;
 }
 
 /*
@@ -76,6 +74,8 @@ sqlite4_int64 sqlite4_memory_highwater(int resetFlag){
 */
 void *sqlite4Malloc(int n){
   void *p;
+  sqlite4_env *pEnv = &sqlite4DefaultEnv;
+
   if( n<=0               /* IMP: R-65312-04917 */ 
    || n>=0x7fffff00
   ){
@@ -85,20 +85,20 @@ void *sqlite4Malloc(int n){
     ** 255 bytes of overhead.  SQLite itself will never use anything near
     ** this amount.  The only way to reach the limit is with sqlite4_malloc() */
     p = 0;
-  }else if( sqlite4DefaultEnv.bMemstat ){
+  }else if( pEnv->bMemstat ){
     int nFull;
     sqlite4_mutex_enter(mem0.mutex);
-    nFull = sqlite4DefaultEnv.m.xRoundup(n);
-    sqlite4StatusSet(SQLITE_STATUS_MALLOC_SIZE, n);
-    p = sqlite4DefaultEnv.m.xMalloc(nFull);
+    nFull = pEnv->m.xRoundup(n);
+    sqlite4StatusSet(pEnv, SQLITE_ENVSTATUS_MALLOC_SIZE, n);
+    p = pEnv->m.xMalloc(nFull);
     if( p ){
       nFull = sqlite4MallocSize(p);
-      sqlite4StatusAdd(SQLITE_STATUS_MEMORY_USED, nFull);
-      sqlite4StatusAdd(SQLITE_STATUS_MALLOC_COUNT, 1);
+      sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, nFull);
+      sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MALLOC_COUNT, 1);
     }
     sqlite4_mutex_leave(mem0.mutex);
   }else{
-    p = sqlite4DefaultEnv.m.xMalloc(n);
+    p = pEnv->m.xMalloc(n);
   }
   assert( EIGHT_BYTE_ALIGNMENT(p) );  /* IMP: R-04675-44850 */
   return p;
@@ -153,17 +153,18 @@ int sqlite4DbMallocSize(sqlite4 *db, void *p){
 ** Free memory previously obtained from sqlite4Malloc().
 */
 void sqlite4_free(void *p){
+  sqlite4_env *pEnv = &sqlite4DefaultEnv;
   if( p==0 ) return;  /* IMP: R-49053-54554 */
   assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
   assert( sqlite4MemdebugHasType(p, MEMTYPE_HEAP) );
-  if( sqlite4DefaultEnv.bMemstat ){
+  if( pEnv->bMemstat ){
     sqlite4_mutex_enter(mem0.mutex);
-    sqlite4StatusAdd(SQLITE_STATUS_MEMORY_USED, -sqlite4MallocSize(p));
-    sqlite4StatusAdd(SQLITE_STATUS_MALLOC_COUNT, -1);
-    sqlite4DefaultEnv.m.xFree(p);
+    sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MEMORY_USED, -sqlite4MallocSize(p));
+    sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MALLOC_COUNT, -1);
+    pEnv->m.xFree(p);
     sqlite4_mutex_leave(mem0.mutex);
   }else{
-    sqlite4DefaultEnv.m.xFree(p);
+    pEnv->m.xFree(p);
   }
 }
 
@@ -199,6 +200,8 @@ void sqlite4DbFree(sqlite4 *db, void *p){
 void *sqlite4Realloc(void *pOld, int nBytes){
   int nOld, nNew;
   void *pNew;
+  sqlite4_env *pEnv = &sqlite4DefaultEnv;
+
   if( pOld==0 ){
     return sqlite4Malloc(nBytes); /* IMP: R-28354-25769 */
   }
@@ -214,22 +217,22 @@ void *sqlite4Realloc(void *pOld, int nBytes){
   /* IMPLEMENTATION-OF: R-46199-30249 SQLite guarantees that the second
   ** argument to xRealloc is always a value returned by a prior call to
   ** xRoundup. */
-  nNew = sqlite4DefaultEnv.m.xRoundup(nBytes);
+  nNew = pEnv->m.xRoundup(nBytes);
   if( nOld==nNew ){
     pNew = pOld;
-  }else if( sqlite4DefaultEnv.bMemstat ){
+  }else if( pEnv->bMemstat ){
     sqlite4_mutex_enter(mem0.mutex);
-    sqlite4StatusSet(SQLITE_STATUS_MALLOC_SIZE, nBytes);
+    sqlite4StatusSet(pEnv, SQLITE_ENVSTATUS_MALLOC_SIZE, nBytes);
     assert( sqlite4MemdebugHasType(pOld, MEMTYPE_HEAP) );
     assert( sqlite4MemdebugNoType(pOld, ~MEMTYPE_HEAP) );
-    pNew = sqlite4DefaultEnv.m.xRealloc(pOld, nNew);
+    pNew = pEnv->m.xRealloc(pOld, nNew);
     if( pNew ){
       nNew = sqlite4MallocSize(pNew);
-      sqlite4StatusAdd(SQLITE_STATUS_MEMORY_USED, nNew-nOld);
+      sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, nNew-nOld);
     }
     sqlite4_mutex_leave(mem0.mutex);
   }else{
-    pNew = sqlite4DefaultEnv.m.xRealloc(pOld, nNew);
+    pNew = pEnv->m.xRealloc(pOld, nNew);
   }
   assert( EIGHT_BYTE_ALIGNMENT(pNew) ); /* IMP: R-04675-44850 */
   return pNew;

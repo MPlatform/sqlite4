@@ -2429,6 +2429,8 @@ struct sqlite4_env {
   void (*xLog)(void*,int,const char*); /* Function for logging */
   void *pLogArg;                       /* First argument to xLog() */
   int bLocaltimeFault;              /* True to fail localtime() calls */
+  sqlite4_uint64 nowValue[4];       /* sqlite4_env_status() current values */
+  sqlite4_uint64 mxValue[4];        /* sqlite4_env_status() max values */
 };
 
 /*
@@ -2587,9 +2589,8 @@ const sqlite4_mem_methods *sqlite4MemGetMemsys5(void);
   int sqlite4MutexEnd(void);
 #endif
 
-int sqlite4StatusValue(int);
-void sqlite4StatusAdd(int, int);
-void sqlite4StatusSet(int, int);
+void sqlite4StatusAdd(sqlite4_env*, int, sqlite4_int64);
+void sqlite4StatusSet(sqlite4_env*, int, sqlite4_uint64);
 
 #ifndef SQLITE_OMIT_FLOATING_POINT
   int sqlite4IsNaN(double);

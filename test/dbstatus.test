@@ -18,7 +18,7 @@ source $testdir/tester.tcl
 # Memory statistics must be enabled for this test.
 db close
 sqlite4_shutdown
-sqlite4_config_memstatus 1
+sqlite4_env_config_memstatus 1
 sqlite4_initialize
 sqlite4 db test.db
 
@@ -176,25 +176,25 @@ foreach ::lookaside_buffer_size {0 64 120} {
   
     # Step 2.
     execsql $schema
-    set nAlloc1  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc1  [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0] 1]
     incr nAlloc1 [lookaside db]
     set nSchema1 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
   
     # Step 3.
     drop_all_tables
-    set nAlloc2  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc2  [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0] 1]
     incr nAlloc2 [lookaside db]
     set nSchema2 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
   
     # Step 4.
     execsql $schema
-    set nAlloc3  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc3  [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0] 1]
     incr nAlloc3 [lookaside db]
     set nSchema3 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
     
     # Step 5.
     drop_all_tables
-    set nAlloc4  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc4  [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0] 1]
     incr nAlloc4 [lookaside db]
     set nSchema4 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_SCHEMA_USED 0] 1]
     set nFree [expr {$nAlloc1-$nAlloc2}]
@@ -320,27 +320,27 @@ foreach ::lookaside_buffer_size {0 64 120} {
   
     # Step 2.
     execsql $statements
-    set nAlloc1  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc1  [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0] 1]
     incr nAlloc1 [lookaside db]
     set nStmt1   [lindex [sqlite4_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
     execsql $statements
   
     # Step 3.
     db cache flush
-    set nAlloc2  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc2  [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0] 1]
     incr nAlloc2 [lookaside db]
     set nStmt2   [lindex [sqlite4_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
     
     # Step 3.
     execsql $statements
-    set nAlloc3  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc3  [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0] 1]
     incr nAlloc3 [lookaside db]
     set nStmt3   [lindex [sqlite4_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
     execsql $statements
   
     # Step 4.
     db cache flush
-    set nAlloc4  [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
+    set nAlloc4  [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0] 1]
     incr nAlloc4 [lookaside db]
     set nStmt4 [lindex [sqlite4_db_status db SQLITE_DBSTATUS_STMT_USED 0] 1]
   

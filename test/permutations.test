@@ -706,7 +706,7 @@ ifcapable mem5 {
   } -initialize {
     catch {db close}
     sqlite4_shutdown
-    sqlite4_config_memstatus 0
+    sqlite4_env_config_memstatus 0
     sqlite4_config_heap 40000000 16
     sqlite4_config_lookaside 0 0
     install_malloc_faultsim 1 

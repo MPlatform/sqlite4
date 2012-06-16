@@ -215,14 +215,14 @@ static int test_install_mutex_counters(
 
   if( isInstall ){
     assert( g.m.xMutexAlloc==0 );
-    rc = sqlite4_config(0, SQLITE_CONFIG_GETMUTEX, &g.m);
+    rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_GETMUTEX, &g.m);
     if( rc==SQLITE_OK ){
-      sqlite4_config(0, SQLITE_CONFIG_MUTEX, &counter_methods);
+      sqlite4_env_config(0, SQLITE_ENVCONFIG_MUTEX, &counter_methods);
     }
     g.disableTry = 0;
   }else{
     assert( g.m.xMutexAlloc );
-    rc = sqlite4_config(0, SQLITE_CONFIG_MUTEX, &g.m);
+    rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MUTEX, &g.m);
     memset(&g.m, 0, sizeof(sqlite4_mutex_methods));
   }
 
@@ -311,7 +311,7 @@ static int test_alloc_mutex(
 }
 
 /*
-** sqlite4_config OPTION
+** sqlite4_env_config OPTION
 **
 ** OPTION can be either one of the keywords:
 **
@@ -331,9 +331,9 @@ static int test_config(
     const char *zName;
     int iValue;
   } aOpt[] = {
-    {"singlethread", SQLITE_CONFIG_SINGLETHREAD},
-    {"multithread",  SQLITE_CONFIG_MULTITHREAD},
-    {"serialized",   SQLITE_CONFIG_SERIALIZED},
+    {"singlethread", SQLITE_ENVCONFIG_SINGLETHREAD},
+    {"multithread",  SQLITE_ENVCONFIG_MULTITHREAD},
+    {"serialized",   SQLITE_ENVCONFIG_SERIALIZED},
     {0, 0}
   };
   int s = sizeof(struct ConfigOption);
@@ -353,7 +353,7 @@ static int test_config(
     i = aOpt[i].iValue;
   }
 
-  rc = sqlite4_config(0, i);
+  rc = sqlite4_env_config(0, i);
   Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
 }
@@ -416,7 +416,7 @@ int Sqlitetest_mutex_Init(Tcl_Interp *interp){
   } aCmd[] = {
     { "sqlite4_shutdown",        (Tcl_ObjCmdProc*)test_shutdown },
     { "sqlite4_initialize",      (Tcl_ObjCmdProc*)test_initialize },
-    { "sqlite4_config",          (Tcl_ObjCmdProc*)test_config },
+    { "sqlite4_env_config",      (Tcl_ObjCmdProc*)test_config },
 
     { "enter_db_mutex",          (Tcl_ObjCmdProc*)test_enter_db_mutex },
     { "leave_db_mutex",          (Tcl_ObjCmdProc*)test_leave_db_mutex },

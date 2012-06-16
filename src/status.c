@@ -17,42 +17,25 @@
 #include "vdbeInt.h"
 
 /*
-** Variables in which to record status information.
-*/
-typedef struct sqlite4StatType sqlite4StatType;
-static SQLITE_WSD struct sqlite4StatType {
-  int nowValue[10];         /* Current value */
-  int mxValue[10];          /* Maximum value */
-} sqlite4Stat = { {0,}, {0,} };
-
-/*
-** Return the current value of a status parameter.
-*/
-int sqlite4StatusValue(int op){
-  assert( op>=0 && op<ArraySize(sqlite4Stat.nowValue) );
-  return sqlite4Stat.nowValue[op];
-}
-
-/*
 ** Add N to the value of a status record.  It is assumed that the
 ** caller holds appropriate locks.
 */
-void sqlite4StatusAdd(int op, int N){
-  assert( op>=0 && op<ArraySize(sqlite4Stat.nowValue) );
-  sqlite4Stat.nowValue[op] += N;
-  if( sqlite4Stat.nowValue[op]>sqlite4Stat.mxValue[op] ){
-    sqlite4Stat.mxValue[op] = sqlite4Stat.nowValue[op];
+void sqlite4StatusAdd(sqlite4_env *pEnv, int op, sqlite4_int64 N){
+  assert( op>=0 && op<ArraySize(pEnv->nowValue) );
+  pEnv->nowValue[op] += N;
+  if( pEnv->nowValue[op]>pEnv->mxValue[op] ){
+    pEnv->mxValue[op] = pEnv->nowValue[op];
   }
 }
 
 /*
 ** Set the value of a status to X.
 */
-void sqlite4StatusSet(int op, int X){
-  assert( op>=0 && op<ArraySize(sqlite4Stat.nowValue) );
-  sqlite4Stat.nowValue[op] = X;
-  if( sqlite4Stat.nowValue[op]>sqlite4Stat.mxValue[op] ){
-    sqlite4Stat.mxValue[op] = sqlite4Stat.nowValue[op];
+void sqlite4StatusSet(sqlite4_env *pEnv, int op, sqlite4_uint64 X){
+  assert( op>=0 && op<ArraySize(pEnv->nowValue) );
+  pEnv->nowValue[op] = X;
+  if( pEnv->nowValue[op]>pEnv->mxValue[op] ){
+    pEnv->mxValue[op] = pEnv->nowValue[op];
   }
 }
 
@@ -63,14 +46,21 @@ void sqlite4StatusSet(int op, int X){
 ** 32-bit integer is an atomic operation.  If that assumption is not true,
 ** then this routine is not threadsafe.
 */
-int sqlite4_status(int op, int *pCurrent, int *pHighwater, int resetFlag){
-  if( op<0 || op>=ArraySize(sqlite4Stat.nowValue) ){
+int sqlite4_env_status(
+  sqlite4_env *pEnv,
+  int op,
+  sqlite4_uint64 *pCurrent,
+  sqlite4_uint64 *pHighwater,
+  int resetFlag
+){
+  if( pEnv==0 ) pEnv = sqlite4_env_default();
+  if( op<0 || op>=ArraySize(pEnv->nowValue) ){
     return SQLITE_MISUSE_BKPT;
   }
-  *pCurrent = sqlite4Stat.nowValue[op];
-  *pHighwater = sqlite4Stat.mxValue[op];
+  *pCurrent = pEnv->nowValue[op];
+  *pHighwater = pEnv->mxValue[op];
   if( resetFlag ){
-    sqlite4Stat.mxValue[op] = sqlite4Stat.nowValue[op];
+    pEnv->mxValue[op] = pEnv->nowValue[op];
   }
   return SQLITE_OK;
 }

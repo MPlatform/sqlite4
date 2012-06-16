@@ -405,28 +405,6 @@ do_test memdb-8.2 {
   }
 } 0
 
-# Test that auto-vacuum works with in-memory databases.
-# 
-ifcapable autovacuum {
-  do_test memdb-9.1 {
-    db close
-    sqlite4 db test.db
-    db cache size 0
-    execsql {
-      PRAGMA auto_vacuum = full;
-      CREATE TABLE t1(a);
-      INSERT INTO t1 VALUES(randstr(1000,1000));
-      INSERT INTO t1 VALUES(randstr(1000,1000));
-      INSERT INTO t1 VALUES(randstr(1000,1000));
-    }
-    set memused [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
-    set pgovfl [lindex [sqlite4_status SQLITE_STATUS_PAGECACHE_OVERFLOW 0] 1]
-    execsql { DELETE FROM t1 }
-    set memused2 [lindex [sqlite4_status SQLITE_STATUS_MEMORY_USED 0] 1]
-    expr {($memused2 + 2048 < $memused) || $pgovfl==0}
-  } {1}
-}
-
 } ;# ifcapable memorydb
 
 finish_test
