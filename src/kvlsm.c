@@ -213,6 +213,8 @@ static int kvlsmCloseCursor(KVCursor *pKVCursor){
 static int kvlsmNextEntry(KVCursor *pKVCursor){
   int rc;
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
+
+  if( lsm_csr_valid(pCsr->pCsr)==0 ) return SQLITE_NOTFOUND;
   rc = lsm_csr_next(pCsr->pCsr);
   if( rc==LSM_OK && lsm_csr_valid(pCsr->pCsr)==0 ){
     rc = SQLITE_NOTFOUND;
@@ -226,6 +228,8 @@ static int kvlsmNextEntry(KVCursor *pKVCursor){
 static int kvlsmPrevEntry(KVCursor *pKVCursor){
   int rc;
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
+
+  if( lsm_csr_valid(pCsr->pCsr)==0 ) return SQLITE_NOTFOUND;
   rc = lsm_csr_prev(pCsr->pCsr);
   if( rc==LSM_OK && lsm_csr_valid(pCsr->pCsr)==0 ){
     rc = SQLITE_NOTFOUND;
