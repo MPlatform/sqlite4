@@ -991,6 +991,97 @@ static void do_insert_work_hook(lsm_db *db, void *p){
   unused_parameter(p);
 }
 
+typedef struct InsertWriteHook InsertWriteHook;
+struct InsertWriteHook {
+  FILE *pOut;
+  int bLog;
+  i64 iOff;
+  int nData;
+};
+
+static void flushHook(InsertWriteHook *pHook){
+  if( pHook->nData ){
+    fprintf(pHook->pOut, "write %s %d %d\n", 
+        (pHook->bLog ? "log" : "db"), (int)pHook->iOff, pHook->nData
+    );
+    pHook->nData = 0;
+    fflush(pHook->pOut);
+  }
+}
+
+static void do_insert_write_hook(
+  void *pCtx,
+  int bLog,
+  i64 iOff,
+  int nData
+){
+  InsertWriteHook *pHook = (InsertWriteHook *)pCtx;
+  if( bLog ) return;
+
+  if( nData==0 ){
+    flushHook(pHook);
+    fprintf(pHook->pOut, "sync %s\n", (bLog ? "log" : "db"));
+  }else if( pHook->nData 
+         && bLog==pHook->bLog 
+         && iOff==(pHook->iOff+pHook->nData) 
+  ){
+    pHook->nData += nData;
+  }else{
+    flushHook(pHook);
+    pHook->bLog = bLog;
+    pHook->iOff = iOff;
+    pHook->nData = nData;
+  }
+}
+
+static int do_replay(int nArg, char **azArg){
+  char aBuf[4096];
+  FILE *pInput;
+  const char *zDb;
+
+  lsm_env *pEnv;
+  lsm_file *pOut;
+  int rc;
+
+  if( nArg!=2 ){
+    testPrintError("Usage: replay WRITELOG FILE\n");
+    return 1;
+  }
+
+  pInput = fopen(azArg[0], "r");
+  zDb = azArg[1];
+  pEnv = tdb_lsm_env();
+  rc = pEnv->xOpen(pEnv, zDb, &pOut);
+  if( rc!=LSM_OK ) return rc;
+
+  while( feof(pInput)==0 ){
+    char zLine[80];
+    fgets(zLine, sizeof(zLine)-1, pInput);
+    zLine[sizeof(zLine)-1] = '\0';
+
+    if( 0==memcmp("sync db", zLine, 7) ){
+      rc = pEnv->xSync(pOut);
+      if( rc!=0 ) break;
+    }else{
+      int iOff;
+      int nData;
+      int nMatch;
+      nMatch = sscanf(zLine, "write db %d %d", &iOff, &nData);
+      if( nMatch==2 ){
+        int i;
+        for(i=0; i<nData; i+=sizeof(aBuf)){
+          memset(aBuf, i&0xFF, sizeof(aBuf));
+          rc = pEnv->xWrite(pOut, iOff+i, aBuf, sizeof(aBuf));
+          if( rc!=0 ) break;
+        }
+      }
+    }
+  }
+  fclose(pInput);
+  pEnv->xClose(pOut);
+
+  return rc;
+}
 
 static int do_insert(int nArg, char **azArg){
   const char *zDb = "lsm";
@@ -1015,8 +1106,14 @@ static int do_insert(int nArg, char **azArg){
   if( rc!=0 ){
     testPrintError("Error opening db \"%s\": %d\n", zDb, rc);
   }else{
+
+    InsertWriteHook hook;
+    memset(&hook, 0, sizeof(hook));
+    hook.pOut = fopen("writelog.txt", "w");
+
     pData = testDatasourceNew(&defn);
     tdb_lsm_config_work_hook(pDb, do_insert_work_hook, 0);
+    tdb_lsm_write_hook(pDb, do_insert_write_hook, (void *)&hook);
 
     for(i=0; i<nRow; i++){
       void *pKey; int nKey;         /* Database key to insert */
@@ -1028,6 +1125,8 @@ static int do_insert(int nArg, char **azArg){
 
     testDatasourceFree(pData);
     tdb_close(pDb);
+    flushHook(&hook);
+    fclose(hook.pOut);
   }
   testMallocInstall(tdb_lsm_env());
 
@@ -1070,8 +1169,10 @@ int main(int argc, char **argv){
     {"writespeed",  do_writer_test},
     {"io",          st_do_io},
 
-    {"speed",       do_speed_tests},
     {"insert",      do_insert},
+    {"replay",      do_replay},
+
+    {"speed",       do_speed_tests},
     {"show",        st_do_show},
     {"work",        st_do_work},
     {"crash",       do_crash},

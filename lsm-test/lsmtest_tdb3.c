@@ -97,6 +97,10 @@ struct LsmDb {
   /* Work hook redirection */
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
+
+  /* IO logging hook */
+  void (*xWriteHook)(void *, int, lsm_i64, int);
+  void *pWriteCtx;
   
   /* Worker threads (for lsm_mt) */
   int nWorker;
@@ -186,6 +190,10 @@ static int testEnvWrite(lsm_file *pFile, lsm_i64 iOff, void *pData, int nData){
       }
     }
   }
+  if( pDb->xWriteHook ){
+    assert( nData>0 );
+    pDb->xWriteHook(pDb->pWriteCtx, p->bLog, iOff, nData);
+  }
 
   return pRealEnv->xWrite(p->pReal, iOff, pData, nData);
 }
@@ -204,6 +212,9 @@ static int testEnvSync(lsm_file *pFile){
       testFree(pData->aSector[i].aOld);
       pData->aSector[i].aOld = 0;
     }
+  }
+  if( pDb->xWriteHook ){
+    pDb->xWriteHook(pDb->pWriteCtx, p->bLog, 0, 0);
   }
 
   return pRealEnv->xSync(p->pReal);
@@ -661,6 +672,18 @@ void tdb_lsm_config_work_hook(
     LsmDb *p = (LsmDb *)pDb;
     p->xWork = xWork;
     p->pWorkCtx = pWorkCtx;
+  }
+}
+
+void tdb_lsm_write_hook(
+  TestDb *pDb, 
+  void (*xWrite)(void *, int, lsm_i64, int),
+  void *pWriteCtx
+){
+  if( tdb_lsm(pDb) ){
+    LsmDb *p = (LsmDb *)pDb;
+    p->xWriteHook = xWrite;
+    p->pWriteCtx = pWriteCtx;
   }
 }
 
