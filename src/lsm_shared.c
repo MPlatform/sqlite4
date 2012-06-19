@@ -188,6 +188,8 @@ struct Database {
 
   Tree *pTree;                    /* Current in-memory tree structure */
   DbLog log;                      /* Database log state object */
+  int nPgsz;                      /* Nominal database page size */
+  int nBlksz;                     /* Database block size */
 
   Snapshot *pClient;              /* Client (reader) snapshot */
 
@@ -430,6 +432,8 @@ int lsmDbDatabaseFind(
         p->worker.iId = LSM_INITIAL_SNAPSHOT_ID;
         p->worker.iSalt1 = LSM_INITIAL_SALT1;
         p->worker.iSalt2 = LSM_INITIAL_SALT2;
+        p->nPgsz = LSM_PAGE_SIZE;
+        p->nBlksz = LSM_BLOCK_SIZE;
       }else{
         freeDatabase(pEnv, p);
         p = 0;
@@ -610,6 +614,8 @@ void lsmDbRecoveryComplete(lsm_db *pDb, int bVal){
 
   p->bRecovered = bVal;
   p->iCheckpointId = p->worker.iId;
+  p->nPgsz = lsmFsPageSize(pDb->pFS);
+  p->nBlksz = lsmFsBlockSize(pDb->pFS);
 }
 
 static void snapshotDecrRefcnt(lsm_env *pEnv, Snapshot *pSnap){
@@ -1093,6 +1099,10 @@ int lsmBeginReadTrans(lsm_db *pDb){
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
+
+    /* Make sure the client is using the correct page and block size */
+    lsmFsSetPageSize(pDb->pFS, p->nPgsz);
+    lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
 
     /* If there is no in-memory tree structure, allocate one now */
     if( p->pTree==0 ){

@@ -494,7 +494,7 @@ static int ckptLoadLevels(
   return rc;
 }
 
-int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
+static int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
   int ret = 0;
   if( *pRc==LSM_OK ){
     Snapshot *pSnap = pDb->pWorker;

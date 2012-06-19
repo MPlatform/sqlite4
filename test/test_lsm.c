@@ -36,6 +36,7 @@ static int test_lsm_config(
     { "safety",         LSM_CONFIG_SAFETY }, 
     { "write-buffer",   LSM_CONFIG_WRITE_BUFFER }, 
     { "mmap",           LSM_CONFIG_MMAP }, 
+    { "page-size",      LSM_CONFIG_PAGE_SIZE }, 
     { 0, 0 }
   };
 
