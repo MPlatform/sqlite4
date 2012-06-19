@@ -466,7 +466,7 @@ static int sortedReadData(
     /* Increment the pointer pages ref-count. */
     lsmFsPageRef(pPg);
 
-    while( 1 ){
+    while( rc==LSM_OK ){
       Page *pNext;
       int flags;
 
@@ -1045,18 +1045,19 @@ int segmentPtrSeek(
         rc = segmentPtrLoadCell(pPtr, iMin);
       }
 
-      switch( eSeek ){
-        case LSM_SEEK_EQ:
-          if( res!=0 || rtIsSeparator(pPtr->eType) ) segmentPtrReset(pPtr);
-          break;
-        case LSM_SEEK_LE:
-          if( res>0 ) rc = segmentPtrAdvance(pCsr, pPtr, 1);
-          break;
-        case LSM_SEEK_GE:
-          if( res<0 ) rc = segmentPtrAdvance(pCsr, pPtr, 0);
-          break;
+      if( rc==LSM_OK ){
+        switch( eSeek ){
+          case LSM_SEEK_EQ:
+            if( res!=0 || rtIsSeparator(pPtr->eType) ) segmentPtrReset(pPtr);
+            break;
+          case LSM_SEEK_LE:
+            if( res>0 ) rc = segmentPtrAdvance(pCsr, pPtr, 1);
+            break;
+          case LSM_SEEK_GE:
+            if( res<0 ) rc = segmentPtrAdvance(pCsr, pPtr, 0);
+            break;
+        }
       }
-
     }
 
     if( rc==LSM_OK && pPtr->pPg && (

@@ -911,7 +911,7 @@ int lsmLogRecover(lsm_db *pDb){
     int bEof = 0;
 
     while( rc==LSM_OK && !bEof ){
-      u8 eType;
+      u8 eType = 0;
       logReaderByte(&reader, &eType, &rc);
 
       switch( eType ){

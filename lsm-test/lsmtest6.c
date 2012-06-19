@@ -185,6 +185,57 @@ static void testOomWriteData(
   testOomWrite(pOom, pDb, pKey, nKey, pVal, nVal, pRc);
 }
 
+static void testOomScan(
+  OomTest *pOom, 
+  lsm_db *pDb, 
+  int bReverse,
+  const void *pKey, int nKey,
+  int nScan,
+  int *pRc
+){
+  if( *pRc==0 ){
+    int rc;
+    int iScan = 0;
+    lsm_cursor *pCsr;
+    int (*xAdvance)(lsm_cursor *);
+    
+
+    rc = lsm_csr_open(pDb, &pCsr);
+    testOomAssertRc(pOom, rc);
+
+    if( rc==LSM_OK ){
+      if( bReverse ){
+        rc = lsm_csr_seek(pCsr, pKey, nKey, LSM_SEEK_LE);
+        xAdvance = lsm_csr_prev;
+      }else{
+        rc = lsm_csr_seek(pCsr, pKey, nKey, LSM_SEEK_GE);
+        xAdvance = lsm_csr_next;
+      }
+    }
+    testOomAssertRc(pOom, rc);
+
+    while( rc==LSM_OK && lsm_csr_valid(pCsr) && iScan<nScan ){
+      void *p;
+      int n;
+
+      rc = lsm_csr_key(pCsr, &p, &n);
+      testOomAssertRc(pOom, rc);
+      if( rc==LSM_OK ){
+        rc = lsm_csr_value(pCsr, &p, &n);
+        testOomAssertRc(pOom, rc);
+      }
+      if( rc==LSM_OK ){
+        rc = xAdvance(pCsr);
+        testOomAssertRc(pOom, rc);
+      }
+      iScan++;
+    }
+
+    lsm_csr_close(pCsr);
+    *pRc = rc;
+  }
+}
+
 #define LSMTEST6_TESTDB "testdb.lsm" 
 
 #include <unistd.h>
@@ -427,6 +478,30 @@ static void simple_oom_6(OomTest *pOom){
   testDatasourceFree(pData);
 }
 
+static void simple_oom_7(OomTest *pOom){
+  Datasource *pData = getDatasource();
+  int rc = LSM_OK;
+  lsm_db *pDb;
+
+  testRestoreTestdb(LSMTEST6_TESTDB);
+  testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
+  testOomScan(pOom, pDb, 0, "abc", 3, 20, &rc);
+  lsm_close(pDb);
+  testDatasourceFree(pData);
+}
+
+static void simple_oom_8(OomTest *pOom){
+  Datasource *pData = getDatasource();
+  int rc = LSM_OK;
+  lsm_db *pDb;
+
+  testRestoreTestdb(LSMTEST6_TESTDB);
+  testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
+  testOomScan(pOom, pDb, 1, "xyz", 3, 20, &rc);
+  lsm_close(pDb);
+  testDatasourceFree(pData);
+}
+
 static void do_test_oom1(const char *zPattern, int *pRc){
   struct SimpleOom {
     const char *zName;
@@ -439,6 +514,8 @@ static void do_test_oom1(const char *zPattern, int *pRc){
     { "oom1.lsm.4", setup_delete_db,    simple_oom_4 },
     { "oom1.lsm.5", setup_populate_db2, simple_oom_5 },
     { "oom1.lsm.6", setup_populate_db2, simple_oom_6 },
+    { "oom1.lsm.7", setup_populate_db2, simple_oom_7 },
+    { "oom1.lsm.7", setup_populate_db2, simple_oom_8 },
   };
   int i;
 
