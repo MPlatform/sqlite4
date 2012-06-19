@@ -1415,4 +1415,29 @@ do_test 72.4 {
   expr {[file size test.db] <= 2*1024*1024}
 } {1}
 
+#-------------------------------------------------------------------------
+# This is testing that the "phantom" runs feature works with mmap.
+forcedelete test2.db
+reset_db
+sqlite4 db2 [file join . test.db]
+sqlite4 db3 [file join [pwd] test.db]
+
+sqlite4 db4 [file join .. [file tail [pwd]] test.db]
+
+do_execsql_test 73.1 {
+  CREATE TABLE t1(a, b);
+  INSERT INTO t1 VALUES(1, 2);
+  INSERT INTO t1 VALUES(3, 4);
+}
+do_test 73.2 { db2 eval { SELECT * FROM t1 } } {1 2 3 4}
+do_test 73.3 { db3 eval { SELECT * FROM t1 } } {1 2 3 4}
+do_test 73.4 { db4 eval { SELECT * FROM t1 } } {1 2 3 4}
+
+db2 close
+db3 close
+db4 close
+
+sqlite4 db2 test2.db
+do_test 73.5 { catch { db2 eval { SELECT * FROM t1 } } } {1}
+
 finish_test

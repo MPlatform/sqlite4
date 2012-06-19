@@ -600,9 +600,12 @@ int do_speed_tests(int nArg, char **azArg){
         int bMmap = 0;
         int nLimit = 2 * 1024 * 1024;
         int eSafety = 1;
+        int bUseLog = 1;
+
         lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nLimit);
         lsm_config(pLsm, LSM_CONFIG_SAFETY, &eSafety);
         lsm_config(pLsm, LSM_CONFIG_MMAP, &bMmap);
+        lsm_config(pLsm, LSM_CONFIG_USE_LOG, &bUseLog);
       }
   
       testTimeInit();
@@ -673,7 +676,7 @@ int do_speed_tests(int nArg, char **azArg){
       }else{
         int t;
         int iSel;
-        int bMmap = 1;
+        int bMmap = 0;
 
         rc = tdb_open(aSys[j].zLibrary, 0, 0, &pDb);
         if( tdb_lsm(pDb) ) lsm_config(tdb_lsm(pDb), LSM_CONFIG_MMAP, &bMmap);

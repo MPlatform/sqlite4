@@ -49,6 +49,7 @@ struct lsm_env {
   int (*xSync)(lsm_file *);
   int (*xSectorSize)(lsm_file *);
   int (*xRemap)(lsm_file *, lsm_i64, void **, lsm_i64*);
+  int (*xFileid)(lsm_file *, void *pBuf, int *pnBuf);
   int (*xClose)(lsm_file *);
   int (*xUnlink)(lsm_env*, const char *);
   /****** memory allocation ****************************************/
@@ -155,6 +156,10 @@ int lsm_config(lsm_db *, int, ...);
 **   LSM_CONFIG_MMAP
 **     A read/write integer parameter. True to use mmap() to access the 
 **     database file. False otherwise.
+**
+**   LSM_CONFIG_USE_LOG
+**     A read/write boolean parameter. True (the default) to use the log
+**     file normally. False otherwise.
 */
 #define LSM_CONFIG_WRITE_BUFFER  1
 #define LSM_CONFIG_PAGE_SIZE     2
@@ -163,6 +168,7 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_AUTOWORK      5
 #define LSM_CONFIG_LOG_SIZE      6
 #define LSM_CONFIG_MMAP          7
+#define LSM_CONFIG_USE_LOG       8
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1

@@ -183,6 +183,8 @@ struct Database {
   lsm_env *pEnv;                  /* Environment handle */
 #endif
   char *zName;                    /* Canonical path to database file */
+  void *pId;                      /* Database id (file inode) */
+  int nId;                        /* Size of pId in bytes */
 
   Tree *pTree;                    /* Current in-memory tree structure */
   DbLog log;                      /* Database log state object */
@@ -370,12 +372,18 @@ static void freeDatabase(lsm_env *pEnv, Database *p){
 ** by a call to lsmDbDatabaseRelease().
 */
 int lsmDbDatabaseFind(
-  lsm_env *pEnv,                  /* Runtime environment */
-  const char *zName,              /* Canonical path to db file */
-  Database **ppDatabase           /* OUT: Database object */
+  lsm_db *pDb,                    /* Database handle */
+  const char *zName               /* Path to db file */
 ){
+  lsm_env *pEnv = pDb->pEnv;
   int rc;                         /* Return code */
   Database *p = 0;                /* Pointer returned via *ppDatabase */
+  int nId = 0;
+  void *pId = 0;
+
+  assert( pDb->pDatabase==0 );
+  rc = lsmFsFileid(pDb, &pId, &nId);
+  if( rc!=LSM_OK ) return rc;
 
   rc = enterGlobalMutex(pEnv);
   if( rc==LSM_OK ){
@@ -384,13 +392,13 @@ int lsmDbDatabaseFind(
     ** better than the strcmp() below to figure out if a given Database
     ** object represents the requested file.  */
     for(p=gShared.pDatabase; p; p=p->pDbNext){
-      if( strcmp(zName, p->zName)==0 ) break;
+      if( nId==p->nId && 0==memcmp(pId, p->pId, nId) ) break;
     }
 
     /* If no suitable Database object was found, allocate a new one. */
     if( p==0 ){
       int nName = strlen(zName);
-      p = (Database *)lsmMallocZeroRc(pEnv, sizeof(Database) + nName + 1, &rc);
+      p = (Database *)lsmMallocZeroRc(pEnv, sizeof(Database)+nId+nName+1, &rc);
 
       /* Initialize the log handle */
       if( rc==LSM_OK ){
@@ -411,6 +419,9 @@ int lsmDbDatabaseFind(
       if( rc==LSM_OK ){
         p->zName = (char *)&p[1];
         memcpy((void *)p->zName, zName, nName+1);
+        p->pId = (void *)&p->zName[nName+1];
+        memcpy(p->pId, pId, nId);
+        p->nId = nId;
         p->worker.pDatabase = p;
         p->pDbNext = gShared.pDatabase;
         gShared.pDatabase = p;
@@ -429,7 +440,8 @@ int lsmDbDatabaseFind(
     leaveGlobalMutex(pEnv);
   }
 
-  *ppDatabase = p;
+  lsmFree(pEnv, pId);
+  pDb->pDatabase = p;
   return rc;
 }
 

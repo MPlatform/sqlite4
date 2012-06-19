@@ -189,13 +189,37 @@ static int lsmPosixOsRemap(
   return LSM_OK;
 }
 
+static int lsmPosixOsFileid(
+  lsm_file *pFile, 
+  void *pBuf,
+  int *pnBuf
+){
+  int prc;
+  int nBuf;
+  int nReq;
+  PosixFile *p = (PosixFile *)pFile;
+  struct stat buf;
+
+  nBuf = *pnBuf;
+  nReq = (sizeof(buf.st_dev) + sizeof(buf.st_ino));
+  *pnBuf = nReq;
+  if( nReq>nBuf ) return LSM_OK;
+
+  memset(&buf, 0, sizeof(buf));
+  prc = fstat(p->fd, &buf);
+  if( prc!=0 ) return LSM_IOERR_BKPT;
+
+  memcpy(pBuf, &buf.st_dev, sizeof(buf.st_dev));
+  memcpy(&(((u8 *)pBuf)[sizeof(buf.st_dev)]), &buf.st_ino, sizeof(buf.st_ino));
+  return LSM_OK;
+}
 
 static int lsmPosixOsClose(lsm_file *pFile){
-  PosixFile *p = (PosixFile *)pFile;
-  if( p->pMap ) munmap(p->pMap, p->nMap);
-  close(p->fd);
-  lsm_free(p->pEnv, p);
-  return LSM_OK;
+   PosixFile *p = (PosixFile *)pFile;
+   if( p->pMap ) munmap(p->pMap, p->nMap);
+   close(p->fd);
+   lsm_free(p->pEnv, p);
+   return LSM_OK;
 }
 
 static int lsmPosixOsUnlink(lsm_env *pEnv, const char *zFile){
@@ -408,6 +432,7 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsSync,          /* xSync */
     lsmPosixOsSectorSize,    /* xSectorSize */
     lsmPosixOsRemap,         /* xRemap */
+    lsmPosixOsFileid,        /* xFileid */
     lsmPosixOsClose,         /* xClose */
     lsmPosixOsUnlink,        /* xUnlink */
     /***** memory allocation *********/

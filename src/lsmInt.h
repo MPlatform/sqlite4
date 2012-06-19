@@ -172,6 +172,7 @@ struct lsm_db {
   int bAutowork;                  /* True to do auto-work after writing */
   int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
   int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
+  int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
@@ -363,6 +364,8 @@ void lsmFsSetBlockSize(FileSystem *, int);
 int lsmFsPageSize(FileSystem *);
 void lsmFsSetPageSize(FileSystem *, int);
 
+int lsmFsFileid(lsm_db *pDb, void **ppId, int *pnId);
+
 /* Creating, populating, gobbling and deleting sorted runs. */
 int lsmFsPhantom(FileSystem *, SortedRun *);
 void lsmFsPhantomFree(FileSystem *pFS);
@@ -494,7 +497,6 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog);
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
 void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit);
-
 void lsmLogTell(lsm_db *, LogMark *);
 void lsmLogSeek(lsm_db *, LogMark *);
 
@@ -506,7 +508,7 @@ int lsmLogStructure(lsm_db *pDb, char **pzVal);
 /**************************************************************************
 ** Functions from file "shared.c".
 */
-int lsmDbDatabaseFind(lsm_env*, const char *, Database **);
+int lsmDbDatabaseFind(lsm_db*, const char *);
 void lsmDbDatabaseRelease(lsm_db *);
 
 int lsmBeginRecovery(lsm_db *);

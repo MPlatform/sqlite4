@@ -436,6 +436,35 @@ void lsmFsClose(FileSystem *pFS){
 }
 
 /*
+** Allocate a buffer and populate it with the output of the xFileid() 
+** method of the database file handle. If successful, set *ppId to point 
+** to the buffer and *pnId to the number of bytes in the buffer and return
+** LSM_OK. Otherwise, set *ppId and *pnId to zero and return an LSM
+** error code.
+*/
+int lsmFsFileid(lsm_db *pDb, void **ppId, int *pnId){
+  lsm_env *pEnv = pDb->pEnv;
+  FileSystem *pFS = pDb->pFS;
+  int rc;
+  int nId = 0;
+  void *pId;
+
+  rc = pEnv->xFileid(pFS->fdDb, 0, &nId);
+  pId = lsmMallocZeroRc(pEnv, nId, &rc);
+  if( rc==LSM_OK ) rc = pEnv->xFileid(pFS->fdDb, pId, &nId);
+
+  if( rc!=LSM_OK ){
+    lsmFree(pEnv, pId);
+    pId = 0;
+    nId = 0;
+  }
+
+  *ppId = pId;
+  *pnId = nId;
+  return rc;
+}
+
+/*
 ** Return the nominal page-size used by this file-system. Actual pages
 ** may be smaller or larger than this value.
 */

@@ -80,6 +80,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->eSafety = LSM_SAFETY_NORMAL;
   pDb->xCmp = xCmp;
   pDb->nLogSz = LSM_DEFAULT_LOG_SIZE;
+  pDb->bUseLog = 1;
 
   return LSM_OK;
 }
@@ -194,12 +195,12 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     rc = LSM_MISUSE;
   }else{
 
-    /* Open the shared data handle. */
-    rc = lsmDbDatabaseFind(pDb->pEnv, zFilename, &pDb->pDatabase);
-
     /* Open the database file */
+    rc = lsmFsOpen(pDb, zFilename);
+
+    /* Open the shared data handle. */
     if( rc==LSM_OK ){
-      rc = lsmFsOpen(pDb, zFilename);
+      rc = lsmDbDatabaseFind(pDb, zFilename);
     }
 
     if( rc==LSM_OK ){
@@ -326,6 +327,15 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
     case LSM_CONFIG_MMAP: {
       int *piVal = va_arg(ap, int *);
       rc = lsmConfigMmap(pDb, piVal);
+      break;
+    }
+
+    case LSM_CONFIG_USE_LOG: {
+      int *piVal = va_arg(ap, int *);
+      if( pDb->nTransOpen==0 && (*piVal==0 || *piVal==1) ){
+        pDb->bUseLog = *piVal;
+      }
+      *piVal = pDb->bUseLog;
       break;
     }
 
@@ -456,9 +466,11 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
   lsmSortedSaveTreeCursors(pDb);
 
   if( rc==LSM_OK ){
-    int nQuant = 32 * lsmFsPageSize(pDb->pFS);
+    int pgsz = lsmFsPageSize(pDb->pFS);
+    int nQuant = 32 * pgsz;
     int nBefore;
     int nAfter;
+    int nDiff;
 
     if( nQuant>pDb->nTreeLimit ){
       nQuant = pDb->nTreeLimit;
@@ -468,8 +480,9 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
     rc = lsmTreeInsert(pDb, pKey, nKey, pVal, nVal);
     nAfter = lsmTreeSize(pDb->pTV);
 
-    if( rc==LSM_OK && pDb->bAutowork && (nAfter/nQuant)!=(nBefore/nQuant) ){
-      rc = dbAutoWork(pDb, (nAfter/nQuant - nBefore/nQuant)*nQuant);
+    nDiff = (nAfter/nQuant) - (nBefore/nQuant);
+    if( rc==LSM_OK && pDb->bAutowork && nDiff!=0 ){
+      rc = dbAutoWork(pDb, nDiff*nQuant / pgsz);
     }
   }
 

@@ -310,6 +310,7 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
   LogRegion *aReg;
 
   assert( lsmHoldingClientMutex(pDb) );
+  if( pDb->bUseLog==0 ) return LSM_OK;
 
   pNew = lsmMallocZeroRc(pDb->pEnv, sizeof(LogWriter), &rc);
   if( pNew ){
@@ -405,7 +406,10 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
 void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
   LogWriter *p;
   assert( lsmHoldingClientMutex(pDb) );
+
+  if( pDb->bUseLog==0 ) return;
   p = pDb->pLogWriter;
+
   if( bCommit ){
     pLog->aRegion[2].iEnd = p->iOff;
     pLog->cksum0 = p->cksum0;
@@ -605,6 +609,8 @@ int lsmLogWrite(
   LogWriter *pLog;                /* Log object to write to */
   int nReq;                       /* Bytes of space required in log */
   int bCksum = 0;                 /* True to embed a checksum in this record */
+
+  if( pDb->bUseLog==0 ) return LSM_OK;
   pLog = pDb->pLogWriter;
 
   /* Determine how many bytes of space are required, assuming that a checksum
@@ -657,6 +663,7 @@ int lsmLogWrite(
 ** Append an LSM_LOG_COMMIT record to the database log.
 */
 int lsmLogCommit(lsm_db *pDb){
+  if( pDb->bUseLog==0 ) return LSM_OK;
   return logFlush(pDb, LSM_LOG_COMMIT);
 }
 
@@ -670,9 +677,11 @@ void lsmLogTell(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Populate this object with current offset */
 ){
-  LogWriter *pLog = pDb->pLogWriter;
+  LogWriter *pLog;
   int nCksum;
 
+  if( pDb->bUseLog==0 ) return LSM_OK;
+  pLog = pDb->pLogWriter;
   nCksum = pLog->buf.n & 0xFFFFFFF8;
   logUpdateCksum(pLog, nCksum);
   assert( pLog->iCksumBuf==nCksum );
@@ -692,7 +701,10 @@ void lsmLogSeek(
   lsm_db *pDb,                    /* Database handle */
   LogMark *pMark                  /* Object containing log offset to seek to */
 ){
-  LogWriter *pLog = pDb->pLogWriter;
+  LogWriter *pLog;
+
+  if( pDb->bUseLog==0 ) return LSM_OK;
+  pLog = pDb->pLogWriter;
 
   assert( pMark->iOff<=pLog->iOff+pLog->buf.n );
   if( (pMark->iOff & 0xFFFFFFF8)>=pLog->iOff ){
