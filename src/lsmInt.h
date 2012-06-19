@@ -330,6 +330,7 @@ void *lsmMalloc(lsm_env*, size_t);
 void lsmFree(lsm_env*, void *);
 void *lsmRealloc(lsm_env*, void *, size_t);
 void *lsmReallocOrFree(lsm_env*, void *, size_t);
+void *lsmReallocOrFreeRc(lsm_env *, void *, size_t, int *);
 
 void *lsmMallocZeroRc(lsm_env*, size_t, int *);
 void *lsmMallocRc(lsm_env*, size_t, int *);

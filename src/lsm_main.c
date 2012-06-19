@@ -185,6 +185,32 @@ static int dbRecoverIfRequired(lsm_db *pDb){
   return rc;
 }
 
+static int getFullpathname(
+  lsm_env *pEnv, 
+  const char *zRel,
+  char **pzAbs
+){
+  int nAlloc = 0;
+  char *zAlloc = 0;
+  int nReq = 0;
+  int rc;
+
+  do{
+    nAlloc = nReq;
+    rc = pEnv->xFullpath(pEnv, zRel, zAlloc, &nReq);
+    if( nReq>nAlloc ){
+      zAlloc = lsmReallocOrFreeRc(pEnv, zAlloc, nReq, &rc);
+    }
+  }while( nReq>nAlloc && rc==LSM_OK );
+
+  if( rc!=LSM_OK ){
+    lsmFree(pEnv, zAlloc);
+    zAlloc = 0;
+  }
+  *pzAbs = zAlloc;
+  return rc;
+}
+
 /*
 ** Open a new connection to database zFilename.
 */
@@ -194,9 +220,22 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
   if( pDb->pDatabase ){
     rc = LSM_MISUSE;
   }else{
+    char *zFull;
+
+    /* Translate the possibly relative pathname supplied by the user into
+    ** an absolute pathname. This is required because the supplied path
+    ** is used (either directly or with "-log" appended to it) for more 
+    ** than one purpose - to open both the database and log files, and 
+    ** perhaps to unlink the log file during disconnection. An absolute
+    ** path is required to ensure that the correct files are operated
+    ** on even if the application changes the cwd.  */
+    rc = getFullpathname(pDb->pEnv, zFilename, &zFull);
+    assert( rc==LSM_OK || zFull==0 );
 
     /* Open the database file */
-    rc = lsmFsOpen(pDb, zFilename);
+    if( rc==LSM_OK ){
+      rc = lsmFsOpen(pDb, zFull);
+    }
 
     /* Open the shared data handle. */
     if( rc==LSM_OK ){
@@ -206,6 +245,8 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     if( rc==LSM_OK ){
       rc = dbRecoverIfRequired(pDb);
     }
+
+    lsmFree(pDb->pEnv, zFull);
   }
 
   return rc;

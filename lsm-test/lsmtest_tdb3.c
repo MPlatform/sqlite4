@@ -118,6 +118,15 @@ struct LsmFile {
   LsmDb *pDb;                     /* Database handle that uses this file */
 };
 
+static int testEnvFullpath(
+  lsm_env *pEnv,                  /* Environment for current LsmDb */
+  const char *zFile,              /* Relative path name */
+  char *zOut,                     /* Output buffer */
+  int *pnOut                      /* IN/OUT: Size of output buffer */
+){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  return pRealEnv->xFullpath(pRealEnv, zFile, zOut, pnOut);
+}
 
 static int testEnvOpen(
   lsm_env *pEnv,                  /* Environment for current LsmDb */
@@ -555,6 +564,7 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
 
   memcpy(&pDb->env, tdb_lsm_env(), sizeof(lsm_env));
   pDb->env.pVfsCtx = (void *)pDb;
+  pDb->env.xFullpath = testEnvFullpath;
   pDb->env.xOpen = testEnvOpen;
   pDb->env.xRead = testEnvRead;
   pDb->env.xWrite = testEnvWrite;

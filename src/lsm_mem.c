@@ -99,6 +99,16 @@ void *lsmReallocOrFree(lsm_env *pEnv, void *p, size_t N){
   return pNew;
 }
 
+void *lsmReallocOrFreeRc(lsm_env *pEnv, void *p, size_t N, int *pRc){
+  void *pRet = 0;
+  if( *pRc ){
+    lsmFree(pEnv, p);
+  }else{
+    pRet = lsmReallocOrFree(pEnv, p, N);
+    if( !pRet ) *pRc = LSM_NOMEM_BKPT;
+  }
+}
+
 
 char *lsmMallocStrdup(lsm_env *pEnv, const char *zIn){
   int nByte;
