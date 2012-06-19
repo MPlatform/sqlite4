@@ -407,7 +407,7 @@ int lsmDbDatabaseFind(
         lsmStringInit(&p->log.buf, pEnv);
       }
 
-      /* Allocate the three mutexes */
+      /* Allocate the two mutexes */
       if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pWorkerMutex);
       if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pClientMutex);
 
@@ -868,7 +868,6 @@ void lsmFreelistDeltaBegin(lsm_db *pDb){
 void lsmFreelistDeltaEnd(lsm_db *pDb){
   Snapshot *pWorker = pDb->pWorker;
   pWorker->bRecordDelta = 0;
-  pWorker->aDelta[0] = pWorker->freelist.nEntry;
 }
 
 void lsmFreelistDelta(

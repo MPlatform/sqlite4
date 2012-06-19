@@ -1705,6 +1705,7 @@ static void multiCursorGetVal(
       lsmSnapshotFreelist(pCsr->pDb, &aVal, &nVal);
       pCsr->pSystemVal = *ppVal = (void *)aVal;
       *pnVal = sizeof(int) * nVal;
+      lsmFreelistDeltaBegin(pCsr->pDb);
     }else if( pCsr->flags & CURSOR_AT_LEVELS ){
       lsmFree(pCsr->pDb->pEnv, pCsr->pSystemVal);
       lsmCheckpointLevels(pCsr->pDb, pCsr->pnHdrLevel, ppVal, pnVal);
@@ -3057,7 +3058,6 @@ int lsmSortedNewToplevel(
       multiCursorVisitFreelist(pCsr);
       multiCursorReadSeparators(pCsr);
       pCsr->pnHdrLevel = pnHdrLevel;
-      lsmFreelistDeltaBegin(pDb);
     }
   }
 
