@@ -41,7 +41,7 @@ struct lsm_env {
   int nByte;                 /* Size of this structure in bytes */
   int iVersion;              /* Version number of this structure */
   /****** file i/o ***********************************************/
-  VOID *PvFScTX;
+  void *pVfsCtx;
   int (*xFullpath)(lsm_env*, const char *, char *, int *);
   int (*xOpen)(lsm_env*, const char *, lsm_file **);
   int (*xRead)(lsm_file *, lsm_i64, void *, int);
