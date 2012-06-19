@@ -221,6 +221,7 @@ static int lsmPosixOsFullpath(
       zOut[nTmp] = '/';
       memcpy(&zOut[nTmp+1], zName, strlen(zName)+1);
     }
+    lsmFree(pEnv, zTmp);
   }else{
     nReq = strlen(zName)+1;
     if( nReq<=nBuf ){

@@ -107,6 +107,7 @@ void *lsmReallocOrFreeRc(lsm_env *pEnv, void *p, size_t N, int *pRc){
     pRet = lsmReallocOrFree(pEnv, p, N);
     if( !pRet ) *pRc = LSM_NOMEM_BKPT;
   }
+  return pRet;
 }
 
 

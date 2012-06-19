@@ -220,11 +220,12 @@ struct MultiCursor {
   lsm_db *pDb;                    /* Connection that owns this cursor */
   MultiCursor *pNext;             /* Next cursor owned by connection pDb */
 
-  TreeCursor *pTreeCsr;           /* Single tree cursor */
   int flags;                      /* Mask of CURSOR_XXX flags */
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
   int eType;                      /* Cache of current key type */
   Blob key;                       /* Cache of current key (or NULL) */
+
+  TreeCursor *pTreeCsr;           /* Single tree cursor */
   int nSegCsr;                    /* Size of aSegCsr[] array */
   LevelCursor *aSegCsr;           /* Array of cursors open on sorted files */
   int nTree;
@@ -262,7 +263,6 @@ struct MultiCursor {
 **
 ** CURSOR_PREV_OK
 **   Set if it is Ok to call lsm_csr_prev().
-**
 */
 #define CURSOR_IGNORE_DELETE    0x00000001
 #define CURSOR_NEW_SYSTEM       0x00000002
@@ -1684,12 +1684,13 @@ static void multiCursorGetKey(
   if( ppKey ) *ppKey = pKey;
 }
 
-static void multiCursorGetVal(
+static int multiCursorGetVal(
   MultiCursor *pCsr, 
   int iVal, 
   void **ppVal, 
   int *pnVal
 ){
+  int rc = LSM_OK;
   if( iVal==CURSOR_DATA_TREE ){
     if( lsmTreeCursorValid(pCsr->pTreeCsr) ){
       lsmTreeCursorValue(pCsr->pTreeCsr, ppVal, pnVal);
@@ -1702,7 +1703,7 @@ static void multiCursorGetVal(
       int *aVal;
       int nVal;
       assert( pCsr->pSystemVal==0 );
-      lsmSnapshotFreelist(pCsr->pDb, &aVal, &nVal);
+      rc = lsmSnapshotFreelist(pCsr->pDb, &aVal, &nVal);
       pCsr->pSystemVal = *ppVal = (void *)aVal;
       *pnVal = sizeof(int) * nVal;
       lsmFreelistDeltaBegin(pCsr->pDb);
@@ -1722,6 +1723,7 @@ static void multiCursorGetVal(
     *ppVal = 0;
     *pnVal = 0;
   }
+  return rc;
 }
 
 int lsmSortedLoadSystem(lsm_db *pDb){
@@ -2150,8 +2152,7 @@ int lsmMCursorKey(MultiCursor *pCsr, void **ppKey, int *pnKey){
 int lsmMCursorValue(MultiCursor *pCsr, void **ppVal, int *pnVal){
   assert( pCsr->aTree );
   assert( rtIsDelete(pCsr->eType)==0 || !(pCsr->flags & CURSOR_IGNORE_DELETE) );
-  multiCursorGetVal(pCsr, pCsr->aTree[1], ppVal, pnVal);
-  return LSM_OK;
+  return multiCursorGetVal(pCsr, pCsr->aTree[1], ppVal, pnVal);
 }
 
 int lsmMCursorType(MultiCursor *pCsr, int *peType){
@@ -2893,7 +2894,7 @@ static int mergeWorkerFirstPage(MergeWorker *pMW){
 static int mergeWorkerStep(MergeWorker *pMW){
   lsm_db *pDb = pMW->pDb;       /* Database handle */
   MultiCursor *pCsr;            /* Cursor to read input data from */
-  int rc = LSM_OK;              /* Return code */
+  int rc;                       /* Return code */
   int eType;                    /* SORTED_SEPARATOR, WRITE or DELETE */
   void *pKey; int nKey;         /* Key */
   void *pVal; int nVal;         /* Value */
@@ -2905,8 +2906,9 @@ static int mergeWorkerStep(MergeWorker *pMW){
 
   /* Pull the next record out of the source cursor. */
   lsmMCursorKey(pCsr, &pKey, &nKey);
-  lsmMCursorValue(pCsr, &pVal, &nVal);
+  rc = lsmMCursorValue(pCsr, &pVal, &nVal);
   eType = pCsr->eType;
+  if( rc!=LSM_OK ) return rc;
 
   /* Figure out if the output record may have a different pointer value
   ** than the previous. This is the case if the current key is identical to
