@@ -625,6 +625,8 @@ void lsmDbSetPagesize(lsm_db *pDb, int nPgsz, int nBlksz){
   assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) && p->bRecovered==0 );
   p->nPgsz = nPgsz;
   p->nBlksz = nBlksz;
+  lsmFsSetPageSize(pDb->pFS, p->nPgsz);
+  lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
 }
 
 static void snapshotDecrRefcnt(lsm_env *pEnv, Snapshot *pSnap){
