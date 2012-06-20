@@ -226,7 +226,7 @@ do_execsql_test 6.1 {
 
 do_filesize_test 6.2   0 714
 do_test          6.3 { db close } {}
-do_filesize_test 6.4   16384 0
+do_filesize_test 6.4   12288 0
 
 #-------------------------------------------------------------------------
 #
@@ -237,7 +237,7 @@ do_execsql_test 7.1 {
   INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
 }
 db close
-do_filesize_test 7.2   16384 0
+do_filesize_test 7.2   12288 0
 
 sqlite4 db test.db
 do_execsql_test 7.3 { SELECT count(*) FROM x } 2
@@ -278,7 +278,7 @@ do_execsql_test 8.1 {
 do_filesize_test 8.2   0 776
 do_test          8.3 { sqlite4_lsm_work db main -flush } 0
 do_execsql_test  8.4 { INSERT INTO x VALUES(randstr(10,10), randstr(100,100)) }
-do_filesize_test 8.5   16384 915
+do_filesize_test 8.5   12288 915
 do_test          8.6 { sqlite4_lsm_work db main -checkpoint } 0
 
 do_test 8.7 {
@@ -320,11 +320,11 @@ do_execsql_test 9.1 {
 }
 do_filesize_test 9.2   0 776
 db close
-do_filesize_test 9.3   16384 0
+do_filesize_test 9.3   12288 0
 
 sqlite4 db ./test.db
 do_execsql_test  9.4 { INSERT INTO x VALUES(randstr(10,10), randstr(100,100)) }
-do_filesize_test 9.5   16384 139
+do_filesize_test 9.5   12288 139
 
 do_test 9.6 {
   copy_db_files test.db test.db2
@@ -343,7 +343,7 @@ do_execsql_test 10.1 {
 }
 do_test 10.2 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 223}
 do_test 10.3 { db close ; sqlite4 db test.db } {}
-do_test 10.4 { sqlite4_lsm_info db main db-structure } {{{4 4 4 3 3 1}}}
+do_test 10.4 { sqlite4_lsm_info db main db-structure } {{{0 0 0 3 3 1}}}
 do_test 10.5 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 0}
 
 do_execsql_test 10.6 {
