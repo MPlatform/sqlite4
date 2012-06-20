@@ -3141,8 +3141,6 @@ int lsmSortedFlushTree(
   assert( pDb->pWorker );
   assert( pDb->pTV==0 || lsmTreeIsWriteVersion(pDb->pTV) );
 
-  lsmDatabaseDirty(pDb);          /* ??? */
-
   rc = lsmBeginFlush(pDb);
 
   /* If there is nothing to do, return early. */
@@ -3150,6 +3148,8 @@ int lsmSortedFlushTree(
     lsmFinishFlush(pDb, 0);
     return LSM_OK;
   }
+
+  lsmDatabaseDirty(pDb);
 
   if( rc==LSM_OK ){
     lsmSortedNewToplevel(pDb, pnHdrLevel);
@@ -3616,7 +3616,7 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
     pDb->pWorker = lsmDbSnapshotWorker(pDb);
     rc = sortedWork(pDb, nPage, bOptimize, pnWrite);
 
-    if( flags & LSM_WORK_CHECKPOINT ){
+    if( *pnWrite && (flags & LSM_WORK_CHECKPOINT) ){
       int nHdrLevel = 0;
       if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
       if( rc==LSM_OK ) rc = lsmSortedNewToplevel(pDb, &nHdrLevel);
