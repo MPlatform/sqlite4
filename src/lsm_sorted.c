@@ -2941,27 +2941,28 @@ static int mergeWorkerStep(MergeWorker *pMW){
       rc = mergeWorkerWrite(pMW, 0, eType, pKey, nKey, pVal, nVal, iPtr,&iSPtr);
     }
 
-    /* If the separators array has not been started, start it now. */
-    if( rc==LSM_OK && pMW->apPage[1]==0 ){
-      assert( iSPtr==0 );
-      assert( pSeg->run.iFirst!=0 );
-      rc = mergeWorkerNextPage(pMW, 1, pSeg->run.iFirst);
-      if( !pMW->bFlush ) pSeg->sep.iRoot = pSeg->sep.iFirst;
-    }
-
     /* If the call to mergeWorkerWrite() above started a new page, then
     ** add a SORTED_SEPARATOR key to the separators run.  */
     if( rc==LSM_OK && iSPtr ){
-      int eSType;                 /* Type of record for separators array */
 
-      assert( pMW->apPage[1] && (pSeg->sep.iFirst || pMW->bFlush) );
+      /* If the separators array has not been started, start it now. */
+      if( pMW->apPage[1]==0 ){
+        assert( pSeg->run.iFirst!=0 );
+        rc = mergeWorkerNextPage(pMW, 1, pSeg->run.iFirst);
+        if( !pMW->bFlush ) pSeg->sep.iRoot = pSeg->sep.iFirst;
+      }
 
-      /* Figure out how many (if any) keys to skip from this point. */
-      pMW->pLevel->pMerge->nSkip = keyszToSkip(pDb->pFS, nKey);
+      if( rc==LSM_OK ){
+        int eSType;                 /* Type of record for separators array */
 
-      /* Write the key into the separators array. */
-      eSType = rtTopic(eType) | SORTED_SEPARATOR;
-      rc = mergeWorkerWrite(pMW, 1, eSType, pKey, nKey, 0, 0, iSPtr, 0);
+        /* Figure out how many (if any) keys to skip from this point. */
+        assert( pMW->apPage[1] && (pSeg->sep.iFirst || pMW->bFlush) );
+        pMW->pLevel->pMerge->nSkip = keyszToSkip(pDb->pFS, nKey);
+
+        /* Write the key into the separators array. */
+        eSType = rtTopic(eType) | SORTED_SEPARATOR;
+        rc = mergeWorkerWrite(pMW, 1, eSType, pKey, nKey, 0, 0, iSPtr, 0);
+      }
     }
   }
 
