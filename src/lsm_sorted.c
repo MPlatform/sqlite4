@@ -3614,10 +3614,11 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
 
   if( rc==LSM_OK && nPage>0 ){
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
+    int nWrite = 0;
     pDb->pWorker = lsmDbSnapshotWorker(pDb);
-    rc = sortedWork(pDb, nPage, bOptimize, pnWrite);
+    rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
 
-    if( *pnWrite && (flags & LSM_WORK_CHECKPOINT) ){
+    if( nWrite && (flags & LSM_WORK_CHECKPOINT) ){
       int nHdrLevel = 0;
       if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
       if( rc==LSM_OK ) rc = lsmSortedNewToplevel(pDb, &nHdrLevel);
@@ -3626,6 +3627,7 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
 
     lsmDbSnapshotRelease(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;
+    if( pnWrite ) *pnWrite = nWrite;
   }else if( pnWrite ){
     *pnWrite = 0;
   }
