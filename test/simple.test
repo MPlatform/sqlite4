@@ -1441,31 +1441,4 @@ sqlite4 db2 test2.db
 do_test 73.5 { catch { db2 eval { SELECT * FROM t1 } } } {1}
 db2 close
 
-#-------------------------------------------------------------------------
-#
-reset_db
-sqlite4_lsm_config db main page-size 512
-do_execsql_test 74.1 { 
-  CREATE TABLE t1(a, b, PRIMARY KEY(a, b)); 
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-  INSERT INTO t1 VALUES(randomblob(500), randomblob(500));
-}
-do_test 74.2 {
-  db close
-  sqlite4 db test.db
-  execsql { SELECT count(*) FROM t1 }
-} {9}
-do_test 74.3 {
-  sqlite4 db2 test.db
-  execsql { SELECT count(*) FROM t1 } db2
-} {9}
-db2 close
-
 finish_test

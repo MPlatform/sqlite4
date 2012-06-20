@@ -151,6 +151,7 @@ void test_mt(const char *zSystem, const char *zPattern, int *pRc);
 
 /* lsmtest6.c */
 void test_oom(const char *zPattern, int *pRc);
+void testDeleteTestdb(const char *zFile);
 
 /*************************************************************************
 ** Interface to functionality in test_datasource.c.

@@ -521,7 +521,12 @@ static void xWorkHook(lsm_db *db, void *pArg){
   if( p->xWork ) p->xWork(db, p->pWorkCtx);
 }
 
-int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
+static int testLsmOpen(
+  const char *zFilename, 
+  int bClear, 
+  int bSmall, 
+  TestDb **ppDb
+){
   static const DatabaseMethods LsmMethods = {
     test_lsm_close,
     test_lsm_write,
@@ -580,6 +585,14 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
   if( rc==LSM_OK ){
     lsm_config_log(pDb->db, xLog, 0);
     lsm_config_work_hook(pDb->db, xWorkHook, (void *)pDb);
+    if( bSmall ){
+      int nPgsz = 256;
+      int nBlocksize = 64 * 1024;
+      lsm_config(pDb->db, LSM_CONFIG_PAGE_SIZE, &nPgsz);
+      lsm_config(pDb->db, LSM_CONFIG_BLOCK_SIZE, &nBlocksize);
+      assert( nPgsz==256 );
+      assert( nBlocksize==64*1024 );
+    }
     rc = lsm_open(pDb->db, zFilename);
     if( rc!=LSM_OK ){
       test_lsm_close((TestDb *)pDb);
@@ -591,24 +604,16 @@ int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
   return rc;
 }
 
+int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
+  return testLsmOpen(zFilename, bClear, 0, ppDb);
+}
+
 int test_lsm_small_open(
   const char *zFilename, 
   int bClear, 
   TestDb **ppDb
 ){
-  int rc;
-  rc = test_lsm_open(zFilename, bClear, ppDb);
-  if( rc==0 ){
-    LsmDb *pDb = (LsmDb *)*ppDb;
-    int nPgsz = 256;
-    int nBlocksize = 64 * 1024;
-
-    lsm_config(pDb->db, LSM_CONFIG_PAGE_SIZE, &nPgsz);
-    lsm_config(pDb->db, LSM_CONFIG_BLOCK_SIZE, &nBlocksize);
-    assert( nPgsz==256 || bClear==0 );
-    assert( nBlocksize==64*1024 || bClear==0 );
-  }
-  return rc;
+  return testLsmOpen(zFilename, bClear, 1, ppDb);
 }
 
 int test_lsm_lomem_open(

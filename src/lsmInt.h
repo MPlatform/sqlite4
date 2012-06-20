@@ -171,8 +171,11 @@ struct lsm_db {
   int nTreeLimit;                 /* Maximum size of in-memory tree in bytes */
   int bAutowork;                  /* True to do auto-work after writing */
   int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
+
   int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
+  int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
+  int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
@@ -507,7 +510,7 @@ int lsmLogStructure(lsm_db *pDb, char **pzVal);
 
 
 /**************************************************************************
-** Functions from file "shared.c".
+** Functions from file "lsm_shared.c".
 */
 int lsmDbDatabaseFind(lsm_db*, const char *);
 void lsmDbDatabaseRelease(lsm_db *);
@@ -526,6 +529,8 @@ int lsmDbUpdateClient(lsm_db *, int);
 
 int lsmSnapshotFreelist(lsm_db *, int **, int *);
 int lsmSnapshotSetFreelist(lsm_db *, int *, int);
+
+void lsmDbSetPagesize(lsm_db *pDb, int nPgsz, int nBlksz);
 
 Snapshot *lsmDbSnapshotClient(lsm_db *);
 Snapshot *lsmDbSnapshotWorker(lsm_db *);

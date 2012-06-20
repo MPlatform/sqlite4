@@ -522,8 +522,7 @@ static int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
       lsmSnapshotSetCkptid(pSnap, iId);
       nLevel = (int)aInt[CKPT_HDR_NLEVEL];
       lsmSnapshotSetNBlock(pSnap, (int)aInt[CKPT_HDR_NBLOCK]);
-      lsmFsSetPageSize(pFS, (int)aInt[CKPT_HDR_PGSZ]);
-      lsmFsSetBlockSize(pFS, (int)aInt[CKPT_HDR_BLKSZ]);
+      lsmDbSetPagesize(pDb,(int)aInt[CKPT_HDR_PGSZ],(int)aInt[CKPT_HDR_BLKSZ]);
 
       /* Import log offset */
       ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));

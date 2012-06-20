@@ -243,7 +243,7 @@ static void testOomScan(
 #include <sys/stat.h>
 #include <fcntl.h>
 
-static void testDeleteTestdb(const char *zFile){
+void testDeleteTestdb(const char *zFile){
   char *zLog = testMallocPrintf("%s-log", zFile);
   unlink(zFile);
   unlink(zLog);

@@ -432,8 +432,8 @@ int lsmDbDatabaseFind(
         p->worker.iId = LSM_INITIAL_SNAPSHOT_ID;
         p->worker.iSalt1 = LSM_INITIAL_SALT1;
         p->worker.iSalt2 = LSM_INITIAL_SALT2;
-        p->nPgsz = LSM_PAGE_SIZE;
-        p->nBlksz = LSM_BLOCK_SIZE;
+        p->nPgsz = pDb->nDfltPgsz;
+        p->nBlksz = pDb->nDfltBlksz;
       }else{
         freeDatabase(pEnv, p);
         p = 0;
@@ -593,6 +593,8 @@ Snapshot *lsmDbSnapshotRecover(lsm_db *pDb){
   Snapshot *pRet = 0;
   lsmMutexEnter(pDb->pEnv, p->pWorkerMutex);
   if( p->bRecovered ){
+    lsmFsSetPageSize(pDb->pFS, p->nPgsz);
+    lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
     lsmMutexLeave(pDb->pEnv, p->pWorkerMutex);
   }else{
     pRet = &p->worker;
@@ -614,8 +616,15 @@ void lsmDbRecoveryComplete(lsm_db *pDb, int bVal){
 
   p->bRecovered = bVal;
   p->iCheckpointId = p->worker.iId;
-  p->nPgsz = lsmFsPageSize(pDb->pFS);
-  p->nBlksz = lsmFsBlockSize(pDb->pFS);
+  lsmFsSetPageSize(pDb->pFS, p->nPgsz);
+  lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
+}
+
+void lsmDbSetPagesize(lsm_db *pDb, int nPgsz, int nBlksz){
+  Database *p = pDb->pDatabase;
+  assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) && p->bRecovered==0 );
+  p->nPgsz = nPgsz;
+  p->nBlksz = nBlksz;
 }
 
 static void snapshotDecrRefcnt(lsm_env *pEnv, Snapshot *pSnap){
@@ -1099,10 +1108,6 @@ int lsmBeginReadTrans(lsm_db *pDb){
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
-
-    /* Make sure the client is using the correct page and block size */
-    lsmFsSetPageSize(pDb->pFS, p->nPgsz);
-    lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
 
     /* If there is no in-memory tree structure, allocate one now */
     if( p->pTree==0 ){

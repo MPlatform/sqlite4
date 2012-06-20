@@ -124,10 +124,12 @@ int lsm_config(lsm_db *, int, ...);
 **     they are flushed to a level 0 segment.
 **
 **   LSM_CONFIG_PAGE_SIZE
-**     A read/write integer parameter.
+**     A read/write integer parameter. This parameter may only be set before
+**     lsm_open() has been called.
 **
 **   LSM_CONFIG_BLOCK_SIZE
-**     A read/write integer parameter.
+**     A read/write integer parameter. This parameter may only be set before
+**     lsm_open() has been called.
 **
 **   LSM_CONFIG_LOG_SIZE
 **     A read/write integer parameter.

@@ -80,6 +80,8 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->eSafety = LSM_SAFETY_NORMAL;
   pDb->xCmp = xCmp;
   pDb->nLogSz = LSM_DEFAULT_LOG_SIZE;
+  pDb->nDfltPgsz = LSM_PAGE_SIZE;
+  pDb->nDfltBlksz = LSM_BLOCK_SIZE;
   pDb->bUseLog = 1;
 
   return LSM_OK;
@@ -340,19 +342,35 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
     case LSM_CONFIG_PAGE_SIZE: {
       int *piVal = va_arg(ap, int *);
-      if( *piVal ){
-        lsmFsSetPageSize(pDb->pFS, *piVal);
+      if( pDb->pDatabase ){
+        /* If lsm_open() has been called, this is a read-only parameter. 
+        ** Set the output variable to the page-size according to the 
+        ** FileSystem object.  */
+        *piVal = lsmFsPageSize(pDb->pFS);
+      }else{
+        if( *piVal>=256 && *piVal<=65536 && ((*piVal-1) & *piVal)==0 ){
+          pDb->nDfltPgsz = *piVal;
+        }else{
+          *piVal = pDb->nDfltPgsz;
+        }
       }
-      *piVal = lsmFsPageSize(pDb->pFS);
       break;
     }
 
     case LSM_CONFIG_BLOCK_SIZE: {
       int *piVal = va_arg(ap, int *);
-      if( *piVal ){
-        lsmFsSetBlockSize(pDb->pFS, *piVal);
+      if( pDb->pDatabase ){
+        /* If lsm_open() has been called, this is a read-only parameter. 
+        ** Set the output variable to the page-size according to the 
+        ** FileSystem object.  */
+        *piVal = lsmFsBlockSize(pDb->pFS);
+      }else{
+        if( *piVal>=65536 && ((*piVal-1) & *piVal)==0 ){
+          pDb->nDfltBlksz = *piVal;
+        }else{
+          *piVal = pDb->nDfltBlksz;
+        }
       }
-      *piVal = lsmFsBlockSize(pDb->pFS);
       break;
     }
 

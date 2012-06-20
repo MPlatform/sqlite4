@@ -125,10 +125,85 @@ static void do_test_api1(const char *zPattern, int *pRc){
   }
 }
 
+static lsm_db *newLsmConnection(
+  const char *zDb, 
+  int nPgsz, 
+  int nBlksz,
+  int *pRc
+){
+  lsm_db *db = 0;
+  if( *pRc==0 ){
+    int rc;
+    int n1 = nPgsz;
+    int n2 = nBlksz;
+    *pRc = lsm_new(tdb_lsm_env(), &db);
+    if( *pRc==0 ){
+      if( n1 ) lsm_config(db, LSM_CONFIG_PAGE_SIZE, &n1);
+      if( n2 ) lsm_config(db, LSM_CONFIG_BLOCK_SIZE, &n2);
+      *pRc = lsm_open(db, "testdb.lsm");
+    }
+  }
+  return db;
+}
+
+static void testPagesize(lsm_db *db, int nPgsz, int nBlksz, int *pRc){
+  if( *pRc==0 ){
+    int n1 = 0;
+    int n2 = 0;
+
+    lsm_config(db, LSM_CONFIG_PAGE_SIZE, &n1);
+    lsm_config(db, LSM_CONFIG_BLOCK_SIZE, &n2);
+
+    testCompareInt(n1, nPgsz, pRc);
+    testCompareInt(n2, nBlksz, pRc);
+  }
+}
+
+/*
+** Test case "api2" tests that the default page and block sizes of a 
+** database may only be modified before lsm_open() is called. And that
+** after lsm_open() is called lsm_config() may be used to read the 
+** actual page and block size of the db.
+*/
+static void do_test_api2(const char *zPattern, int *pRc){
+  if( *pRc==0 && testCaseBegin(pRc, zPattern, "api2.lsm") ){
+    lsm_db *db1 = 0;
+    lsm_db *db2 = 0;
+
+    testDeleteTestdb("testdb.lsm");
+    db1 = newLsmConnection("testdb.lsm", 0, 0, pRc);
+    testPagesize(db1, 4096, 2*1024*1024, pRc);
+    db2 = newLsmConnection("testdb.lsm", 1024, 64*1024, pRc);
+    testPagesize(db2, 4096, 2*1024*1024, pRc);
+    lsm_close(db1);
+    lsm_close(db2);
+
+    testDeleteTestdb("testdb.lsm");
+    db1 = newLsmConnection("testdb.lsm", 1024, 64*1024, pRc);
+    testPagesize(db1, 1024, 64*1024, pRc);
+    db2 = newLsmConnection("testdb.lsm", 0, 0, pRc);
+    testPagesize(db2, 1024, 64*1024, pRc);
+    lsm_close(db1);
+    lsm_close(db2);
+
+    testDeleteTestdb("testdb.lsm");
+    db1 = newLsmConnection("testdb.lsm", 8192, 1*1024*1024, pRc);
+    testPagesize(db1, 8192, 1*1024*1024, pRc);
+    db2 = newLsmConnection("testdb.lsm", 1024, 64*1024, pRc);
+    testPagesize(db2, 8192, 1*1024*1024, pRc);
+    lsm_close(db1);
+    lsm_close(db2);
+
+    testCaseFinish(*pRc);
+  }
+}
+
 void test_api(
   const char *zPattern,           /* Run test cases that match this pattern */
   int *pRc                        /* IN/OUT: Error code */
 ){
   do_test_api1(zPattern, pRc);
+  do_test_api2(zPattern, pRc);
 }
+
 
