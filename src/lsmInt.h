@@ -253,7 +253,7 @@ struct Merge {
   MergeInput *aInput;             /* Array nInput entries in size */
   int nSkip;                      /* Number of separators entries to skip */
   int aiOutputOff[2];             /* Write offsets on run output pages */
-  int bHierReadonly;              /* True if b-tree heirarchy is read-only */
+  int abHierReadonly[2];          /* True if b-tree heirarchies are read-only */
 };
 struct MergeInput {
   Pgno iPg;                       /* Page on which next input is stored */

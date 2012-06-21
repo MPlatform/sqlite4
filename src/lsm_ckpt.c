@@ -225,12 +225,15 @@ static void ckptExportSegment(
 
   ckptSetValue(p, iOut++, pSeg->run.iFirst, pRc);
   ckptSetValue(p, iOut++, pSeg->run.iLast, pRc);
+  ckptSetValue(p, iOut++, pSeg->run.iRoot, pRc);
   ckptSetValue(p, iOut++, pSeg->run.nSize, pRc);
   if( segmentHasSeparators(pSeg) ){
     ckptSetValue(p, iOut++, pSeg->sep.iFirst, pRc);
     ckptSetValue(p, iOut++, pSeg->sep.iLast, pRc);
     ckptSetValue(p, iOut++, pSeg->sep.iRoot, pRc);
+    ckptSetValue(p, iOut++, pSeg->sep.nSize, pRc);
   }else{
+    ckptSetValue(p, iOut++, 0, pRc);
     ckptSetValue(p, iOut++, 0, pRc);
     ckptSetValue(p, iOut++, 0, pRc);
     ckptSetValue(p, iOut++, 0, pRc);
@@ -394,11 +397,13 @@ static void ckptNewSegment(
 
   pSegment->run.iFirst = aIn[iIn++];
   pSegment->run.iLast = aIn[iIn++];
+  pSegment->run.iRoot = aIn[iIn++];
   pSegment->run.nSize = aIn[iIn++];
   pSegment->sep.iFirst = aIn[iIn++];
   pSegment->sep.iLast = aIn[iIn++];
   pSegment->sep.iRoot = aIn[iIn++];
-  if( pSegment->sep.iFirst ) pSegment->sep.nSize = 1;
+  pSegment->sep.nSize = aIn[iIn++];
+  if( pSegment->sep.iFirst && pSegment->sep.nSize==0 ) pSegment->sep.nSize = 1;
 
   *piIn = iIn;
 }
@@ -423,7 +428,8 @@ static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
   pMerge->aiOutputOff[0] = -1;
   pMerge->aiOutputOff[1] = -1;
   pMerge->nSkip = (int)aInt[iIn++];
-  pMerge->bHierReadonly = 1;
+  pMerge->abHierReadonly[0] = 1;
+  pMerge->abHierReadonly[1] = 1;
   for(i=0; i<nInput; i++){
     pMerge->aInput[i].iPg = (Pgno)aInt[iIn++];
     pMerge->aInput[i].iCell = (int)aInt[iIn++];
@@ -527,7 +533,7 @@ static int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
       /* Import log offset */
       ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));
 
-      /* Import each level. This loop runs once for each db level. */
+      /* Import all levels stored in the checkpoint. */
       *pRc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);
       lsmDbSnapshotSetLevel(pSnap, pTopLevel);
 
@@ -685,7 +691,7 @@ int lsmCheckpointLevels(
   int *pnVal                      /* OUT: Size of LEVELS blob in bytes */
 ){
   int rc = LSM_OK;                /* Return code */
-  const int SEGMENT_SIZE = 6;     /* Size of a checkpoint segment record */
+  const int SEGMENT_SIZE = 8;     /* Size of a checkpoint segment record */
   Level *p;                       /* Used to iterate through levels */
   int nFree;                      /* Free integers remaining in db header */
   int nHdr = 0;                   /* Number of levels stored in db header */
