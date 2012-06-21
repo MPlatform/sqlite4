@@ -806,7 +806,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
     assertSnapshotListOk(p);
     for(pIter=p->pClient; pIter->pSnapshotNext; pIter=pIter->pSnapshotNext);
-    iInUse = MIN(pIter->iId, p->iCheckpointId);
+    iInUse = LSM_MIN(pIter->iId, p->iCheckpointId);
     lsmMutexLeave(pDb->pEnv, p->pClientMutex);
 
     if( iFree<=iInUse ){

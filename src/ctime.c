@@ -177,17 +177,11 @@ static const char * const azCompileOpt[] = {
 #ifdef SQLITE_OMIT_AUTORESET
   "OMIT_AUTORESET",
 #endif
-#ifdef SQLITE_OMIT_AUTOVACUUM
-  "OMIT_AUTOVACUUM",
-#endif
 #ifdef SQLITE_OMIT_BETWEEN_OPTIMIZATION
   "OMIT_BETWEEN_OPTIMIZATION",
 #endif
 #ifdef SQLITE_OMIT_BLOB_LITERAL
   "OMIT_BLOB_LITERAL",
-#endif
-#ifdef SQLITE_OMIT_BTREECOUNT
-  "OMIT_BTREECOUNT",
 #endif
 #ifdef SQLITE_OMIT_BUILTIN_TEST
   "OMIT_BUILTIN_TEST",
@@ -299,17 +293,11 @@ static const char * const azCompileOpt[] = {
 #ifdef SQLITE_OMIT_UTF16
   "OMIT_UTF16",
 #endif
-#ifdef SQLITE_OMIT_VACUUM
-  "OMIT_VACUUM",
-#endif
 #ifdef SQLITE_OMIT_VIEW
   "OMIT_VIEW",
 #endif
 #ifdef SQLITE_OMIT_VIRTUALTABLE
   "OMIT_VIRTUALTABLE",
-#endif
-#ifdef SQLITE_OMIT_WAL
-  "OMIT_WAL",
 #endif
 #ifdef SQLITE_OMIT_WSD
   "OMIT_WSD",

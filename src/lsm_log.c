@@ -569,7 +569,7 @@ static int logFlush(lsm_db *pDb, int eType){
         pLog->buf.z[pLog->buf.n++] = LSM_LOG_PAD1;
         nPad = 0;
       }else{
-        int n = MIN(200, nPad-2);
+        int n = LSM_MIN(200, nPad-2);
         pLog->buf.z[pLog->buf.n++] = LSM_LOG_PAD2;
         pLog->buf.z[pLog->buf.n++] = n;
         nPad -= 2;
@@ -680,7 +680,7 @@ void lsmLogTell(
   LogWriter *pLog;
   int nCksum;
 
-  if( pDb->bUseLog==0 ) return LSM_OK;
+  if( pDb->bUseLog==0 ) return;
   pLog = pDb->pLogWriter;
   nCksum = pLog->buf.n & 0xFFFFFFF8;
   logUpdateCksum(pLog, nCksum);
@@ -703,7 +703,7 @@ void lsmLogSeek(
 ){
   LogWriter *pLog;
 
-  if( pDb->bUseLog==0 ) return LSM_OK;
+  if( pDb->bUseLog==0 ) return;
   pLog = pDb->pLogWriter;
 
   assert( pMark->iOff<=pLog->iOff+pLog->buf.n );
@@ -796,7 +796,7 @@ static void logReaderBlob(
       p->iBuf += nBlob;
       nReq = 0;
     }else{
-      int nCopy = MIN(nAvail, nReq);
+      int nCopy = LSM_MIN(nAvail, nReq);
       if( nBlob==nReq ){
         if( ppBlob ) *ppBlob = (u8 *)pBuf->z;
         pBuf->n = 0;

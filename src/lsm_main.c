@@ -54,7 +54,7 @@ static void assert_db_state(lsm_db *pDb){
 */
 static int xCmp(void *p1, int n1, void *p2, int n2){
   int res;
-  res = memcmp(p1, p2, MIN(n1, n2));
+  res = memcmp(p1, p2, LSM_MIN(n1, n2));
   if( res==0 ) res = (n1-n2);
   return res;
 }
@@ -728,7 +728,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
   assert_db_state( pDb );
 
   /* A value less than zero means close the innermost nested transaction. */
-  if( iLevel<0 ) iLevel = MAX(0, pDb->nTransOpen - 1);
+  if( iLevel<0 ) iLevel = LSM_MAX(0, pDb->nTransOpen - 1);
 
   if( iLevel<pDb->nTransOpen ){
     if( iLevel==0 ){
@@ -755,7 +755,7 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
 
   if( pDb->nTransOpen ){
     /* A value less than zero means close the innermost nested transaction. */
-    if( iLevel<0 ) iLevel = MAX(0, pDb->nTransOpen - 1);
+    if( iLevel<0 ) iLevel = LSM_MAX(0, pDb->nTransOpen - 1);
 
     if( iLevel<=pDb->nTransOpen ){
       TransMark *pMark = &pDb->aTrans[(iLevel==0 ? 0 : iLevel-1)];

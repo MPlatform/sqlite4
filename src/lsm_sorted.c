@@ -471,7 +471,7 @@ static int sortedReadData(
       int flags;
 
       /* Copy data from pPg into the output buffer. */
-      int nCopy = MIN(nRem, iEnd-i);
+      int nCopy = LSM_MIN(nRem, iEnd-i);
       if( nCopy>0 ){
         memcpy(&aDest[nByte-nRem], &aData[i], nCopy);
         nRem -= nCopy;
@@ -1033,7 +1033,7 @@ int segmentPtrSeek(
       if( res==0 || iMin==iMax ){
         break;
       }else if( res>0 ){
-        iMax = MAX(iTry-1, iMin);
+        iMax = LSM_MAX(iTry-1, iMin);
       }else{
         iMin = iTry+1;
       }
@@ -2583,7 +2583,7 @@ static int mergeWorkerBuildHierarchy(MergeWorker *pMW){
 static int keyszToSkip(FileSystem *pFS, int nKey){
   int nPgsz;                /* Nominal database page size */
   nPgsz = lsmFsPageSize(pFS);
-  return MIN(((nKey * 4) / nPgsz), 3);
+  return LSM_MIN(((nKey * 4) / nPgsz), 3);
 }
 
 /*
@@ -2662,7 +2662,7 @@ static int mergeWorkerData(
     aData = lsmFsPageData(pMW->apPage[bSep], &nData);
     nRec = pageGetNRec(aData, nData);
     iOff = pMerge->aiOutputOff[bSep];
-    nCopy = MIN(nRem, SEGMENT_EOF(nData, nRec) - iOff);
+    nCopy = LSM_MIN(nRem, SEGMENT_EOF(nData, nRec) - iOff);
 
     memcpy(&aData[iOff], &aWrite[nWrite-nRem], nCopy);
     nRem -= nCopy;
@@ -3581,7 +3581,7 @@ int lsmSortedAutoWork(lsm_db *pDb, int nUnit){
   ** work is achieved by writing one page (~4KB) of merged data.  */
   nRemaining = nDepth = 0;
   for(pLevel=lsmDbSnapshotLevel(pDb->pWorker); pLevel; pLevel=pLevel->pNext){
-    /* nDepth += MAX(1, pLevel->nRight); */
+    /* nDepth += LSM_MAX(1, pLevel->nRight); */
     nDepth += 1;
     /* nDepth += pLevel->nRight; */
   }
@@ -3665,7 +3665,7 @@ static char *segToString(lsm_env *pEnv, SortedRun *pRun, int nMin){
   }
 
   nPad = nMin - 2 - strlen(z1) - 1 - strlen(z2);
-  nPad = MAX(0, nPad);
+  nPad = LSM_MAX(0, nPad);
 
   if( iRoot ){
     z = lsmMallocPrintf(pEnv, "/%s %*s%s\\", z1, nPad, "", z2);

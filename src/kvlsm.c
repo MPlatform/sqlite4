@@ -29,8 +29,6 @@ struct KVLsmCsr {
   KVCursor base;                  /* Base class. Must be first */
   lsm_cursor *pCsr;               /* LSM cursor handle */
 };
-
-#define MAX(x,y) (((x)>(y)) ? (x) : (y))
   
 /*
 ** Begin a transaction or subtransaction.
@@ -58,7 +56,7 @@ static int kvlsmBegin(KVStore *pKVStore, int iLevel){
   }
 
   if( rc==SQLITE_OK ){
-    pKVStore->iTransLevel = MAX(iLevel, pKVStore->iTransLevel);
+    pKVStore->iTransLevel = SQLITE_MAX(iLevel, pKVStore->iTransLevel);
   }else if( pKVStore->iTransLevel==0 ){
     lsm_csr_close(p->pCsr);
     p->pCsr = 0;
@@ -91,7 +89,7 @@ static int kvlsmCommitPhaseTwo(KVStore *pKVStore, int iLevel){
 
   if( pKVStore->iTransLevel>iLevel ){
     if( pKVStore->iTransLevel>=2 ){
-      rc = lsm_commit(p->pDb, MAX(0, iLevel-1));
+      rc = lsm_commit(p->pDb, SQLITE_MAX(0, iLevel-1));
     }
     if( iLevel==0 ){
       lsm_csr_close(p->pCsr);
@@ -120,7 +118,7 @@ static int kvlsmRollback(KVStore *pKVStore, int iLevel){
 
   if( pKVStore->iTransLevel>=iLevel ){
     if( pKVStore->iTransLevel>=2 ){
-      rc = lsm_rollback(p->pDb, MAX(0, iLevel-1));
+      rc = lsm_rollback(p->pDb, SQLITE_MAX(0, iLevel-1));
     }
     if( iLevel==0 ){
       lsm_csr_close(p->pCsr);

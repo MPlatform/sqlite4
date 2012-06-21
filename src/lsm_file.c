@@ -213,7 +213,7 @@ struct MetaPage {
 ** Number of pgsz byte pages omitted from the start of block 1. The start
 ** of block 1 contains two 4096 byte meta pages (8192 bytes in total).
 */
-#define BLOCK1_HDR_SIZE(pgsz)  MAX(1, 8192/(pgsz))
+#define BLOCK1_HDR_SIZE(pgsz)  LSM_MAX(1, 8192/(pgsz))
 
 /*
 ** Return true if the SortedRun passed as the second argument is a phantom

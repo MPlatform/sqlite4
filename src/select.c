@@ -3127,42 +3127,6 @@ static u8 minMaxQuery(Select *p){
 }
 
 /*
-** The select statement passed as the first argument is an aggregate query.
-** The second argment is the associated aggregate-info object. This 
-** function tests if the SELECT is of the form:
-**
-**   SELECT count(*) FROM <tbl>
-**
-** where table is a database table, not a sub-select or view. If the query
-** does match this pattern, then a pointer to the Table object representing
-** <tbl> is returned. Otherwise, 0 is returned.
-*/
-#ifndef SQLITE_OMIT_BTREECOUNT
-static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
-  Table *pTab;
-  Expr *pExpr;
-
-  assert( !p->pGroupBy );
-
-  if( p->pWhere || p->pEList->nExpr!=1 
-   || p->pSrc->nSrc!=1 || p->pSrc->a[0].pSelect
-  ){
-    return 0;
-  }
-  pTab = p->pSrc->a[0].pTab;
-  pExpr = p->pEList->a[0].pExpr;
-  assert( pTab && !pTab->pSelect && pExpr );
-
-  if( IsVirtual(pTab) ) return 0;
-  if( pExpr->op!=TK_AGG_FUNCTION ) return 0;
-  if( (pAggInfo->aFunc[0].pFunc->flags&SQLITE_FUNC_COUNT)==0 ) return 0;
-  if( pExpr->flags&EP_Distinct ) return 0;
-
-  return pTab;
-}
-#endif
-
-/*
 ** If the source-list item passed as an argument was augmented with an
 ** INDEXED BY clause, then try to locate the specified index. If there
 ** was such a clause and the named index cannot be found, return 
@@ -3669,34 +3633,6 @@ static void updateAccumulator(Parse *pParse, AggInfo *pAggInfo){
   pAggInfo->directMode = 0;
   sqlite4ExprCacheClear(pParse);
 }
-
-/*
-** Add a single OP_Explain instruction to the VDBE to explain a simple
-** count(*) query ("SELECT count(*) FROM pTab").
-*/
-#ifndef SQLITE_OMIT_BTREECOUNT
-#ifndef SQLITE_OMIT_EXPLAIN
-static void explainSimpleCount(
-  Parse *pParse,                  /* Parse context */
-  Table *pTab,                    /* Table being queried */
-  Index *pIdx                     /* Index used to optimize scan, or NULL */
-){
-  if( pParse->explain==2 ){
-    char *zEqp = sqlite4MPrintf(pParse->db, "SCAN TABLE %s %s%s(~%d rows)",
-        pTab->zName, 
-        pIdx ? "USING COVERING INDEX " : "",
-        pIdx ? pIdx->zName : "",
-        pTab->nRowEst
-    );
-    sqlite4VdbeAddOp4(
-        pParse->pVdbe, OP_Explain, pParse->iSelectId, 0, 0, zEqp, P4_DYNAMIC
-    );
-  }
-}
-#else
-# define explainSimpleCount(a,b,c)
-#endif
-#endif  /* ifndef SQLITE_OMIT_BTREECOUNT */
 
 /*
 ** Generate code for the SELECT statement given in the p argument.  
@@ -4353,64 +4289,6 @@ int sqlite4Select(
     } /* endif pGroupBy.  Begin aggregate queries without GROUP BY: */
     else {
       ExprList *pDel = 0;
-#ifndef SQLITE_OMIT_BTREECOUNT
-      Table *pTab;
-      if( (pTab = isSimpleCount(p, &sAggInfo))!=0 ){
-        /* If isSimpleCount() returns a pointer to a Table structure, then
-        ** the SQL statement is of the form:
-        **
-        **   SELECT count(*) FROM <tbl>
-        **
-        ** where the Table structure returned represents table <tbl>.
-        **
-        ** This statement is so common that it is optimized specially. The
-        ** OP_Count instruction is executed either on the intkey table that
-        ** contains the data for table <tbl> or on one of its indexes. It
-        ** is better to execute the op on an index, as indexes are almost
-        ** always spread across less pages than their corresponding tables.
-        */
-        const int iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
-        const int iCsr = pParse->nTab++;     /* Cursor to scan b-tree */
-        Index *pIdx;                         /* Iterator variable */
-        KeyInfo *pKeyInfo = 0;               /* Keyinfo for scanned index */
-        Index *pBest = 0;                    /* Best index found so far */
-        int iRoot = pTab->tnum;              /* Root page of scanned b-tree */
-
-        sqlite4CodeVerifySchema(pParse, iDb);
-
-        /* Search for the index that has the least amount of columns. If
-        ** there is such an index, and it has less columns than the table
-        ** does, then we can assume that it consumes less space on disk and
-        ** will therefore be cheaper to scan to determine the query result.
-        ** In this case set iRoot to the root page number of the index b-tree
-        ** and pKeyInfo to the KeyInfo structure required to navigate the
-        ** index.
-        **
-        ** (2011-04-15) Do not do a full scan of an unordered index.
-        **
-        ** In practice the KeyInfo structure will not be used. It is only 
-        ** passed to keep OP_OpenRead happy.
-        */
-        for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
-          if( pIdx->bUnordered==0 && (!pBest || pIdx->nColumn<pBest->nColumn) ){
-            pBest = pIdx;
-          }
-        }
-        if( pBest && pBest->nColumn<pTab->nCol ){
-          iRoot = pBest->tnum;
-          pKeyInfo = sqlite4IndexKeyinfo(pParse, pBest);
-        }
-
-        /* Open a read-only cursor, execute the OP_Count, close the cursor. */
-        sqlite4VdbeAddOp3(v, OP_OpenRead, iCsr, iRoot, iDb);
-        if( pKeyInfo ){
-          sqlite4VdbeChangeP4(v, -1, (char *)pKeyInfo, P4_KEYINFO_HANDOFF);
-        }
-        sqlite4VdbeAddOp2(v, OP_Count, iCsr, sAggInfo.aFunc[0].iMem);
-        sqlite4VdbeAddOp1(v, OP_Close, iCsr);
-        explainSimpleCount(pParse, pTab, pBest);
-      }else
-#endif /* SQLITE_OMIT_BTREECOUNT */
       {
         /* Check if the query is of one of the following forms:
         **

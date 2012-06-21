@@ -121,7 +121,7 @@ char *sqlite4VdbeExpandSql(
       }else if( pVar->flags & MEM_Int ){
         sqlite4XPrintf(&out, "%lld", pVar->u.i);
       }else if( pVar->flags & MEM_Real ){
-        sqlite4XPrintf(&out, "%!.15g", pVar->r);
+        sqlite4XPrintf(&out, "%!.16g", pVar->r);
       }else if( pVar->flags & MEM_Str ){
 #ifndef SQLITE_OMIT_UTF16
         u8 enc = ENC(db);

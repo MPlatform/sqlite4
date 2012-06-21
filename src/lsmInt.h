@@ -589,7 +589,7 @@ int lsmStringBinAppend(LsmString *pStr, const u8 *a, int n);
 */
 #define ROUND8(x)     (((x)+7)&~7)
 
-#define MIN(x,y) ((x)>(y) ? (y) : (x))
-#define MAX(x,y) ((x)>(y) ? (x) : (y))
+#define LSM_MIN(x,y) ((x)>(y) ? (y) : (x))
+#define LSM_MAX(x,y) ((x)>(y) ? (x) : (y))
 
 #endif

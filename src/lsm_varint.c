@@ -66,7 +66,7 @@ static int lsmSqlite4GetVarint64(const unsigned char *z, u64 *pResult){
 /*
 ** Write a 32-bit unsigned integer as 4 big-endian bytes.
 */
-static void varintWrite32(unsigned char *z, unsigned int y){
+static void lsmVarintWrite32(unsigned char *z, unsigned int y){
   z[0] = (unsigned char)(y>>24);
   z[1] = (unsigned char)(y>>16);
   z[2] = (unsigned char)(y>>8);
@@ -108,20 +108,20 @@ static int lsmSqlite4PutVarint64(unsigned char *z, u64 x){
       return 4;
     }
     z[0] = 251;
-    varintWrite32(z+1, y);
+    lsmVarintWrite32(z+1, y);
     return 5;
   }
   if( w<=255 ){
     z[0] = 252;
     z[1] = (unsigned char)w;
-    varintWrite32(z+2, y);
+    lsmVarintWrite32(z+2, y);
     return 6;
   }
   if( w<=32767 ){
     z[0] = 253;
     z[1] = (unsigned char)(w>>8);
     z[2] = (unsigned char)w;
-    varintWrite32(z+3, y);
+    lsmVarintWrite32(z+3, y);
     return 7;
   }
   if( w<=16777215 ){
@@ -129,12 +129,12 @@ static int lsmSqlite4PutVarint64(unsigned char *z, u64 x){
     z[1] = (unsigned char)(w>>16);
     z[2] = (unsigned char)(w>>8);
     z[3] = (unsigned char)w;
-    varintWrite32(z+4, y);
+    lsmVarintWrite32(z+4, y);
     return 8;
   }
   z[0] = 255;
-  varintWrite32(z+1, w);
-  varintWrite32(z+5, y);
+  lsmVarintWrite32(z+1, w);
+  lsmVarintWrite32(z+5, y);
   return 9;
 }
 

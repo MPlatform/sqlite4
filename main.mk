@@ -95,6 +95,8 @@ SRC = \
   $(TOP)/src/kvlsm.c \
   $(TOP)/src/kvmem.c \
   $(TOP)/src/legacy.c \
+  $(TOP)/src/lsm.h \
+  $(TOP)/src/lsmInt.h \
   $(TOP)/src/lsm_ckpt.c \
   $(TOP)/src/lsm_file.c \
   $(TOP)/src/lsm_log.c \
@@ -148,10 +150,11 @@ SRC = \
   $(TOP)/src/vdbe.h \
   $(TOP)/src/vdbeapi.c \
   $(TOP)/src/vdbeaux.c \
+  $(TOP)/src/vdbecodec.c \
+  $(TOP)/src/vdbecursor.c \
   $(TOP)/src/vdbemem.c \
   $(TOP)/src/vdbetrace.c \
   $(TOP)/src/vdbeInt.h \
-  $(TOP)/src/vtab.c \
   $(TOP)/src/walker.c \
   $(TOP)/src/where.c
 

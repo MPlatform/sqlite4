@@ -36,7 +36,7 @@ const char sqlite4_version[] = SQLITE_VERSION;
 /* IMPLEMENTATION-OF: R-53536-42575 The sqlite4_libversion() function returns
 ** a pointer to the to the sqlite4_version[] string constant. 
 */
-const char *sqlite4_libversion(void){ return sqlite4_version; }
+const char *sqlite4_libversion(void){ return SQLITE_VERSION; }
 
 /* IMPLEMENTATION-OF: R-63124-39300 The sqlite4_sourceid() function returns a
 ** pointer to a string constant whose value is the same as the

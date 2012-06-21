@@ -128,7 +128,7 @@ char *lsmMallocStrdup(lsm_env *pEnv, const char *zIn){
 */
 static Chunk * poolChunkNew(lsm_env *pEnv, int nMin){
   Chunk *pChunk;
-  int nAlloc = MAX(CHUNKSIZE, nMin + sizeof(Chunk));
+  int nAlloc = LSM_MAX(CHUNKSIZE, nMin + sizeof(Chunk));
 
   pChunk = (Chunk *)lsmMalloc(pEnv, nAlloc);
   if( pChunk ){

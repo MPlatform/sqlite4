@@ -91,29 +91,18 @@ if {$addstatic} {
 # text of the file in-line.  The file only needs to be included once.
 #
 foreach hdr {
-   btree.h
-   btreeInt.h
-   fts3.h
-   fts3Int.h
-   fts3_hash.h
-   fts3_tokenizer.h
    hash.h
    hwtime.h
    keywordhash.h
+   lsm.h
+   lsmInt.h
    mutex.h
    opcodes.h
-   os_common.h
    os.h
-   os_os2.h
-   pager.h
-   parse.h
-   pcache.h
-   rtree.h
-   sqlite4ext.h
    sqlite4.h
-   sqliteicu.h
    sqliteInt.h
    sqliteLimit.h
+   storage.h
    vdbe.h
    vdbeInt.h
 } {
@@ -227,8 +216,8 @@ foreach file {
    ctime.c
    status.c
    date.c
-   os.c
 
+   os.c
    fault.c
    mem0.c
    mem1.c
@@ -237,7 +226,6 @@ foreach file {
    mem5.c
    mutex.c
    mutex_noop.c
-   mutex_os2.c
    mutex_unix.c
    mutex_w32.c
    malloc.c
@@ -245,32 +233,35 @@ foreach file {
    random.c
    utf.c
    util.c
+   varint.c
    hash.c
    opcodes.c
 
-   os_os2.c
-   os_unix.c
-   os_win.c
+   lsm_ckpt.c
+   lsm_file.c
+   lsm_log.c
+   lsm_main.c
+   lsm_mem.c
+   lsm_mutex.c
+   lsm_shared.c
+   lsm_sorted.c
+   lsm_str.c
+   lsm_tree.c
+   lsm_unix.c
+   lsm_varint.c
 
-   bitvec.c
-   pcache.c
-   pcache1.c
+   storage.c
+   kvmem.c
+   kvlsm.c
    rowset.c
-   pager.c
-
-   btmutex.c
-   btree.c
-   backup.c
 
    vdbemem.c
    vdbeaux.c
    vdbeapi.c
+   vdbecodec.c
+   vdbecursor.c
    vdbetrace.c
    vdbe.c
-   vdbeblob.c
-   vdbesort.c
-   journal.c
-   memjournal.c
 
    walker.c
    resolve.c
@@ -286,14 +277,11 @@ foreach file {
    fkey.c
    insert.c
    legacy.c
-   loadext.c
    pragma.c
    prepare.c
    select.c
-   table.c
    trigger.c
    update.c
-   vtab.c
    where.c
 
    parse.c
@@ -302,21 +290,6 @@ foreach file {
    complete.c
 
    main.c
-   notify.c
-
-   fts3.c
-   fts3_aux.c
-   fts3_expr.c
-   fts3_hash.c
-   fts3_porter.c
-   fts3_tokenizer.c
-   fts3_tokenizer1.c
-   fts3_write.c
-   fts3_snippet.c
-
-   rtree.c
-   icu.c
-   fts3_icu.c
 } {
   copy_file tsrc/$file
 }

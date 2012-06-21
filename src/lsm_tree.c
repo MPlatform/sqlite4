@@ -886,7 +886,7 @@ static int treeCsrCompare(TreeCursor *pCsr, void *pKey, int nKey){
   int cmp;
   assert( pCsr->iNode>=0 );
   p = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
-  cmp = memcmp(p->pKey, pKey, MIN(p->nKey, nKey));
+  cmp = memcmp(p->pKey, pKey, LSM_MIN(p->nKey, nKey));
   if( cmp==0 ){
     cmp = p->nKey - nKey;
   }

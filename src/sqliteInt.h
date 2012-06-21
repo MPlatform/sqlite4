@@ -15,12 +15,11 @@
 #ifndef _SQLITEINT_H_
 #define _SQLITEINT_H_
 
-/*#define SQLITE_OMIT_BTREECOUNT 1*/
-#define SQLITE_OMIT_WAL 1
-#define SQLITE_OMIT_VACUUM 1
-#define SQLITE_OMIT_AUTOVACUUM 1
-/*#define SQLITE_OMIT_PAGER_PRAGMAS 1*/
+#define SQLITE_OMIT_ANALYZE 1
 #define SQLITE_OMIT_PROGRESS_CALLBACK 1
+#define SQLITE_OMIT_VIRTUALTABLE 1
+#define SQLITE_OMIT_XFER_OPT 1
+#define SQLITE_OMIT_AUTOMATIC_INDEX 1
 
 /*
 ** These #defines should enable >2GB file support on POSIX if the
@@ -513,7 +512,8 @@ extern const int sqlite4one;
 */
 #define ROUND8(x)     (((x)+7)&~7)
 
-#define MIN(a,b) (((a)<(b)) ? (a) : (b))
+#define SQLITE_MIN(a,b) (((a)<(b)) ? (a) : (b))
+#define SQLITE_MAX(a,b) (((a)>(b)) ? (a) : (b))
 
 /*
 ** Round down to the nearest multiple of 8
