@@ -262,6 +262,7 @@ static void roundFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
   int n = 0;
   double r;
   char *zBuf;
+  sqlite4_env *pEnv = sqlite4_context_env(context);
   assert( argc==1 || argc==2 );
   if( argc==2 ){
     if( SQLITE_NULL==sqlite4_value_type(argv[1]) ) return;
@@ -280,13 +281,13 @@ static void roundFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
   }else if( n==0 && r<0 && (-r)<LARGEST_INT64-1 ){
     r = -(double)((sqlite_int64)((-r)+0.5));
   }else{
-    zBuf = sqlite4_mprintf("%.*f",n,r);
+    zBuf = sqlite4_mprintf(pEnv,"%.*f",n,r);
     if( zBuf==0 ){
       sqlite4_result_error_nomem(context);
       return;
     }
     sqlite4AtoF(zBuf, &r, sqlite4Strlen30(zBuf), SQLITE_UTF8);
-    sqlite4_free(zBuf);
+    sqlite4_free(pEnv, zBuf);
   }
   sqlite4_result_double(context, r);
 }
@@ -309,7 +310,7 @@ static void *contextMalloc(sqlite4_context *context, i64 nByte){
     sqlite4_result_error_toobig(context);
     z = 0;
   }else{
-    z = sqlite4Malloc((int)nByte);
+    z = sqlite4Malloc(db->pEnv, (int)nByte);
     if( !z ){
       sqlite4_result_error_nomem(context);
     }
@@ -335,7 +336,7 @@ static void upperFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
       for(i=0; i<n; i++){
         z1[i] = (char)sqlite4Toupper(z2[i]);
       }
-      sqlite4_result_text(context, z1, n, sqlite4_free);
+      sqlite4_result_text(context, z1, n, SQLITE_DYNAMIC);
     }
   }
 }
@@ -354,7 +355,7 @@ static void lowerFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
       for(i=0; i<n; i++){
         z1[i] = sqlite4Tolower(z2[i]);
       }
-      sqlite4_result_text(context, z1, n, sqlite4_free);
+      sqlite4_result_text(context, z1, n, SQLITE_DYNAMIC);
     }
   }
 }
@@ -398,7 +399,7 @@ static void randomFunc(
 ){
   sqlite_int64 r;
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
-  sqlite4_randomness(sizeof(r), &r);
+  sqlite4_randomness(sqlite4_context_env(context), sizeof(r), &r);
   if( r<0 ){
     /* We need to prevent a random number of 0x8000000000000000 
     ** (or -9223372036854775808) since when you do abs() of that
@@ -432,8 +433,8 @@ static void randomBlob(
   }
   p = contextMalloc(context, n);
   if( p ){
-    sqlite4_randomness(n, p);
-    sqlite4_result_blob(context, (char*)p, n, sqlite4_free);
+    sqlite4_randomness(sqlite4_context_env(context), n, p);
+    sqlite4_result_blob(context, (char*)p, n, SQLITE_DYNAMIC);
   }
 }
 
@@ -877,7 +878,7 @@ static void quoteFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         zText[0] = 'X';
         zText[1] = '\'';
         sqlite4_result_text(context, zText, -1, SQLITE_TRANSIENT);
-        sqlite4_free(zText);
+        sqlite4_free(sqlite4_context_env(context), zText);
       }
       break;
     }
@@ -900,7 +901,7 @@ static void quoteFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         }
         z[j++] = '\'';
         z[j] = 0;
-        sqlite4_result_text(context, z, j, sqlite4_free);
+        sqlite4_result_text(context, z, j, SQLITE_DYNAMIC);
       }
       break;
     }
@@ -937,7 +938,7 @@ static void hexFunc(
       *(z++) = hexdigits[c&0xf];
     }
     *z = 0;
-    sqlite4_result_text(context, zHex, n*2, sqlite4_free);
+    sqlite4_result_text(context, zHex, n*2, SQLITE_DYNAMIC);
   }
 }
 
@@ -1026,14 +1027,14 @@ static void replaceFunc(
       testcase( nOut-2==db->aLimit[SQLITE_LIMIT_LENGTH] );
       if( nOut-1>db->aLimit[SQLITE_LIMIT_LENGTH] ){
         sqlite4_result_error_toobig(context);
-        sqlite4_free(zOut);
+        sqlite4_free(db->pEnv, zOut);
         return;
       }
       zOld = zOut;
-      zOut = sqlite4_realloc(zOut, (int)nOut);
+      zOut = sqlite4_realloc(db->pEnv, zOut, (int)nOut);
       if( zOut==0 ){
         sqlite4_result_error_nomem(context);
-        sqlite4_free(zOld);
+        sqlite4_free(db->pEnv, zOld);
         return;
       }
       memcpy(&zOut[j], zRep, nRep);
@@ -1046,7 +1047,7 @@ static void replaceFunc(
   j += nStr - i;
   assert( j<=nOut );
   zOut[j] = 0;
-  sqlite4_result_text(context, (char*)zOut, j, sqlite4_free);
+  sqlite4_result_text(context, (char*)zOut, j, SQLITE_DYNAMIC);
 }
 
 /*
@@ -1127,7 +1128,7 @@ static void trimFunc(
       }
     }
     if( zCharSet ){
-      sqlite4_free(azChar);
+      sqlite4_free(sqlite4_context_env(context), azChar);
     }
   }
   sqlite4_result_text(context, (char*)zIn, nIn, SQLITE_TRANSIENT);
@@ -1390,6 +1391,7 @@ static void groupConcatStep(
     sqlite4 *db = sqlite4_context_db_handle(context);
     int firstTerm = pAccum->useMalloc==0;
     pAccum->useMalloc = 2;
+    pAccum->pEnv = db->pEnv;
     pAccum->mxAlloc = db->aLimit[SQLITE_LIMIT_LENGTH];
     if( !firstTerm ){
       if( argc==2 ){
@@ -1416,7 +1418,7 @@ static void groupConcatFinalize(sqlite4_context *context){
       sqlite4_result_error_nomem(context);
     }else{    
       sqlite4_result_text(context, sqlite4StrAccumFinish(pAccum), -1, 
-                          sqlite4_free);
+                          SQLITE_DYNAMIC);
     }
   }
 }

@@ -20,12 +20,13 @@
 **
 ** "pNew" is a pointer to the hash table that is to be initialized.
 */
-void sqlite4HashInit(Hash *pNew){
+void sqlite4HashInit(sqlite4_env *pEnv, Hash *pNew){
   assert( pNew!=0 );
   pNew->first = 0;
   pNew->count = 0;
   pNew->htsize = 0;
   pNew->ht = 0;
+  pNew->pEnv = pEnv;
 }
 
 /* Remove all entries from a hash table.  Reclaim all memory.
@@ -38,12 +39,12 @@ void sqlite4HashClear(Hash *pH){
   assert( pH!=0 );
   elem = pH->first;
   pH->first = 0;
-  sqlite4_free(pH->ht);
+  sqlite4_free(pH->pEnv, pH->ht);
   pH->ht = 0;
   pH->htsize = 0;
   while( elem ){
     HashElem *next_elem = elem->next;
-    sqlite4_free(elem);
+    sqlite4_free(pH->pEnv, elem);
     elem = next_elem;
   }
   pH->count = 0;
@@ -115,14 +116,14 @@ static int rehash(Hash *pH, unsigned int new_size){
   ** a performance hit but it is not a fatal error.  So mark the
   ** allocation as a benign.
   */
-  sqlite4BeginBenignMalloc();
-  new_ht = (struct _ht *)sqlite4Malloc( new_size*sizeof(struct _ht) );
-  sqlite4EndBenignMalloc();
+  sqlite4BeginBenignMalloc(pH->pEnv);
+  new_ht = (struct _ht *)sqlite4Malloc(pH->pEnv, new_size*sizeof(struct _ht) );
+  sqlite4EndBenignMalloc(pH->pEnv);
 
   if( new_ht==0 ) return 0;
-  sqlite4_free(pH->ht);
+  sqlite4_free(pH->pEnv, pH->ht);
   pH->ht = new_ht;
-  pH->htsize = new_size = sqlite4MallocSize(new_ht)/sizeof(struct _ht);
+  pH->htsize = new_size = sqlite4MallocSize(pH->pEnv, new_ht)/sizeof(struct _ht);
   memset(new_ht, 0, new_size*sizeof(struct _ht));
   for(elem=pH->first, pH->first=0; elem; elem = next_elem){
     unsigned int h = strHash(elem->pKey, elem->nKey) % new_size;
@@ -187,7 +188,7 @@ static void removeElementGivenHash(
     pEntry->count--;
     assert( pEntry->count>=0 );
   }
-  sqlite4_free( elem );
+  sqlite4_free(pH->pEnv, elem);
   pH->count--;
   if( pH->count<=0 ){
     assert( pH->first==0 );
@@ -256,7 +257,7 @@ void *sqlite4HashInsert(Hash *pH, const char *pKey, int nKey, void *data){
     return old_data;
   }
   if( data==0 ) return 0;
-  new_elem = (HashElem*)sqlite4Malloc( sizeof(HashElem) );
+  new_elem = (HashElem*)sqlite4Malloc(pH->pEnv, sizeof(HashElem) );
   if( new_elem==0 ) return data;
   new_elem->pKey = pKey;
   new_elem->nKey = nKey;

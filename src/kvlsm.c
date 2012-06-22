@@ -168,7 +168,7 @@ static int kvlsmOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
   KVLsm *p = (KVLsm *)pKVStore;
   KVLsmCsr *pCsr;
 
-  pCsr = (KVLsmCsr *)sqlite4_malloc(sizeof(KVLsmCsr));
+  pCsr = (KVLsmCsr *)sqlite4_malloc(pKVStore->pEnv, sizeof(KVLsmCsr));
   if( pCsr==0 ){
     rc = SQLITE_NOMEM;
   }else{
@@ -179,7 +179,7 @@ static int kvlsmOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
       pCsr->base.pStore = pKVStore;
       pCsr->base.pStoreVfunc = pKVStore->pStoreVfunc;
     }else{
-      sqlite4_free(pCsr);
+      sqlite4_free(pCsr->base.pEnv, pCsr);
       pCsr = 0;
     }
   }
@@ -201,7 +201,7 @@ static int kvlsmReset(KVCursor *pKVCursor){
 static int kvlsmCloseCursor(KVCursor *pKVCursor){
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
   lsm_csr_close(pCsr->pCsr);
-  sqlite4_free(pCsr);
+  sqlite4_free(pCsr->base.pEnv, pCsr);
   return SQLITE_OK;
 }
 
@@ -352,7 +352,7 @@ static int kvlsmClose(KVStore *pKVStore){
   assert( p->pCsr==0 );
 
   lsm_close(p->pDb);
-  sqlite4_free(p);
+  sqlite4_free(p->base.pEnv, p);
   return SQLITE_OK;
 }
 
@@ -417,12 +417,13 @@ int sqlite4KVStoreOpenLsm(
   KVLsm *pNew;
   int rc = SQLITE_OK;
 
-  pNew = (KVLsm *)sqlite4_malloc(sizeof(KVLsm));
+  pNew = (KVLsm *)sqlite4_malloc(pEnv, sizeof(KVLsm));
   if( pNew==0 ){
     rc = SQLITE_NOMEM;
   }else{
     memset(pNew, 0, sizeof(KVLsm));
     pNew->base.pStoreVfunc = &kvlsmMethods;
+    pNew->base.pEnv = pEnv;
 
     rc = lsm_new(0, &pNew->pDb);
     if( rc==SQLITE_OK ){
@@ -431,7 +432,7 @@ int sqlite4KVStoreOpenLsm(
 
     if( rc!=SQLITE_OK ){
       lsm_close(pNew->pDb);
-      sqlite4_free(pNew);
+      sqlite4_free(pEnv, pNew);
       pNew = 0;
     }
   }

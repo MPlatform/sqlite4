@@ -25,7 +25,7 @@
 ** the database handle that malloc() has failed.
 */
 static void *testContextMalloc(sqlite4_context *context, int nByte){
-  char *z = sqlite4_malloc(nByte);
+  char *z = sqlite4_malloc(sqlite4_context_env(context), nByte);
   if( !z && nByte>0 ){
     sqlite4_result_error_nomem(context);
   }
@@ -43,6 +43,7 @@ static void randStr(sqlite4_context *context, int argc, sqlite4_value **argv){
      "0123456789"
      ".-!,:*^+=_|?/<> ";
   int iMin, iMax, n, r, i;
+  sqlite4_env *pEnv = sqlite4_context_env(context);
   unsigned char zBuf[1000];
 
   /* It used to be possible to call randstr() with any number of arguments,
@@ -58,12 +59,12 @@ static void randStr(sqlite4_context *context, int argc, sqlite4_value **argv){
   if( iMax>=sizeof(zBuf) ) iMax = sizeof(zBuf)-1;
   n = iMin;
   if( iMax>iMin ){
-    sqlite4_randomness(sizeof(r), &r);
+    sqlite4_randomness(pEnv, sizeof(r), &r);
     r &= 0x7fffffff;
     n += r%(iMax + 1 - iMin);
   }
   assert( n<sizeof(zBuf) );
-  sqlite4_randomness(n, zBuf);
+  sqlite4_randomness(pEnv, n, zBuf);
   for(i=0; i<n; i++){
     zBuf[i] = zSrc[zBuf[i]%(sizeof(zSrc)-1)];
   }
@@ -87,7 +88,7 @@ static void destructor(void *p){
   char *zVal = (char *)p;
   assert(zVal);
   zVal--;
-  sqlite4_free(zVal);
+  sqlite4_free(0, zVal);
   test_destructor_count_var--;
 }
 static void test_destructor(
@@ -181,7 +182,7 @@ static void test_agg_errmsg16_final(sqlite4_context *ctx){
 ** registration, the result for that argument is 1.  The overall result
 ** is the individual argument results separated by spaces.
 */
-static void free_test_auxdata(void *p) {sqlite4_free(p);}
+static void free_test_auxdata(void *p) {sqlite4_free(0, p);}
 static void test_auxdata(
   sqlite4_context *pCtx, 
   int nArg,
@@ -230,6 +231,14 @@ static void test_error(
   }
 }
 
+/* A counter object with its destructor.  Used by counterFunc() below.
+*/
+struct counterObject { int cnt; sqlite4_env *pEnv; };
+void counterFree(void *x){
+  struct counterObject *p = (struct counterObject*)x;
+  sqlite4_free(p->pEnv, p);
+}
+
 /*
 ** Implementation of the counter(X) function.  If X is an integer
 ** constant, then the first invocation will return X.  The second X+1.
@@ -241,19 +250,21 @@ static void counterFunc(
   int nArg,                /* Number of function arguments */
   sqlite4_value **argv     /* Values for all function arguments */
 ){
-  int *pCounter = (int*)sqlite4_get_auxdata(pCtx, 0);
+  struct counterObject *pCounter;
+  pCounter = (struct counterObject*)sqlite4_get_auxdata(pCtx, 0);
   if( pCounter==0 ){
-    pCounter = sqlite4_malloc( sizeof(*pCounter) );
+    pCounter = sqlite4_malloc(sqlite4_context_env(pCtx), sizeof(*pCounter) );
     if( pCounter==0 ){
       sqlite4_result_error_nomem(pCtx);
       return;
     }
-    *pCounter = sqlite4_value_int(argv[0]);
-    sqlite4_set_auxdata(pCtx, 0, pCounter, sqlite4_free);
+    pCounter->cnt = sqlite4_value_int(argv[0]);
+    pCounter->pEnv = sqlite4_context_env(pCtx);
+    sqlite4_set_auxdata(pCtx, 0, pCounter, counterFree);
   }else{
-    ++*pCounter;
+    pCounter->cnt++;
   }
-  sqlite4_result_int(pCtx, *pCounter);
+  sqlite4_result_int(pCtx, pCounter->cnt);
 }
 
 
@@ -308,9 +319,11 @@ static void test_eval(
   }
   if( rc ){
     char *zErr;
+    sqlite4_env *pEnv = sqlite4_context_env(pCtx);
     assert( pStmt==0 );
-    zErr = sqlite4_mprintf("sqlite4_prepare() error: %s",sqlite4_errmsg(db));
-    sqlite4_result_text(pCtx, zErr, -1, sqlite4_free);
+    zErr = sqlite4_mprintf(pEnv, "sqlite4_prepare() error: %s",
+                           sqlite4_errmsg(db));
+    sqlite4_result_text(pCtx, zErr, -1, SQLITE_DYNAMIC);
     sqlite4_result_error_code(pCtx, rc);
   }
 }
@@ -358,12 +371,12 @@ static void testHexToUtf16be(
   assert( nArg==1 );
   n = sqlite4_value_bytes(argv[0]);
   zIn = (const char*)sqlite4_value_text(argv[0]);
-  zOut = sqlite4_malloc( n/2 );
+  zOut = sqlite4_malloc(sqlite4_context_env(pCtx), n/2 );
   if( zOut==0 ){
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text16be(pCtx, zOut, n/2, sqlite4_free);
+    sqlite4_result_text16be(pCtx, zOut, n/2, SQLITE_DYNAMIC);
   }
 }
 #endif
@@ -385,12 +398,12 @@ static void testHexToUtf8(
   assert( nArg==1 );
   n = sqlite4_value_bytes(argv[0]);
   zIn = (const char*)sqlite4_value_text(argv[0]);
-  zOut = sqlite4_malloc( n/2 );
+  zOut = sqlite4_malloc(sqlite4_context_env(pCtx), n/2 );
   if( zOut==0 ){
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text(pCtx, zOut, n/2, sqlite4_free);
+    sqlite4_result_text(pCtx, zOut, n/2, SQLITE_DYNAMIC);
   }
 }
 
@@ -412,12 +425,12 @@ static void testHexToUtf16le(
   assert( nArg==1 );
   n = sqlite4_value_bytes(argv[0]);
   zIn = (const char*)sqlite4_value_text(argv[0]);
-  zOut = sqlite4_malloc( n/2 );
+  zOut = sqlite4_malloc(sqlite4_context_env(pCtx), n/2 );
   if( zOut==0 ){
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text16le(pCtx, zOut, n/2, sqlite4_free);
+    sqlite4_result_text16le(pCtx, zOut, n/2, SQLITE_DYNAMIC);
   }
 }
 #endif
@@ -565,4 +578,3 @@ int sqlite4test_install_test_functions(sqlite4 *db){
   }
   return rc;
 }
-

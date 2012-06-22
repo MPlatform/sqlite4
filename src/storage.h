@@ -157,6 +157,7 @@ struct KVStoreMethods {
 };
 struct KVStore {
   const KVStoreMethods *pStoreVfunc;    /* Virtual method table */
+  sqlite4_env *pEnv;                    /* Runtime environment for this store */
   int iTransLevel;                      /* Current transaction level */
   u16 kvId;                             /* Unique ID used for tracing */
   u8 fTrace;                            /* True to enable tracing */
@@ -170,6 +171,7 @@ struct KVStore {
 struct KVCursor {
   KVStore *pStore;                    /* The owner of this cursor */
   const KVStoreMethods *pStoreVfunc;  /* Methods */
+  sqlite4_env *pEnv;                  /* Runtime environment for this cursor */
   int iTransLevel;                    /* Current transaction level */
   u16 curId;                          /* Unique ID for tracing */
   u8 fTrace;                          /* True to enable tracing */

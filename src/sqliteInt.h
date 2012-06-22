@@ -19,7 +19,7 @@
 #define SQLITE_OMIT_PROGRESS_CALLBACK 1
 #define SQLITE_OMIT_VIRTUALTABLE 1
 #define SQLITE_OMIT_XFER_OPT 1
-#define SQLITE_OMIT_AUTOMATIC_INDEX 1
+/* #define SQLITE_OMIT_AUTOMATIC_INDEX 1 */
 
 /*
 ** These #defines should enable >2GB file support on POSIX if the
@@ -559,16 +559,6 @@ extern const int sqlite4one;
 ** an array.
 */
 #define ArraySize(X)    ((int)(sizeof(X)/sizeof(X[0])))
-
-/*
-** The following value as a destructor means to use sqlite4DbFree().
-** The sqlite4DbFree() routine requires two parameters instead of the 
-** one parameter that destructors normally want.  So we have to introduce 
-** this magic value that the code knows to handle differently.  Any 
-** pointer will work here as long as it is distinct from SQLITE_STATIC
-** and SQLITE_TRANSIENT.
-*/
-#define SQLITE_DYNAMIC   ((sqlite4_destructor_type)sqlite4MallocSize)
 
 /*
 ** Mark instances of static data that needs to be folded into the
@@ -2376,6 +2366,7 @@ struct DbFixer {
 */
 struct StrAccum {
   sqlite4 *db;         /* Optional database for lookaside.  Can be NULL */
+  sqlite4_env *pEnv;   /* Malloc context */
   char *zBase;         /* A base allocation.  Not from malloc. */
   char *zText;         /* The string collected so far */
   int  nChar;          /* Length of the string so far */
@@ -2535,26 +2526,22 @@ int sqlite4StrICmp(const char *, const char *);
 int sqlite4Strlen30(const char*);
 #define sqlite4StrNICmp sqlite4_strnicmp
 
-int sqlite4MallocInit(void);
-void sqlite4MallocEnd(void);
-void *sqlite4Malloc(int);
-void *sqlite4MallocZero(int);
+int sqlite4MallocInit(sqlite4_env*);
+void sqlite4MallocEnd(sqlite4_env*);
+void *sqlite4Malloc(sqlite4_env*, int);
+void *sqlite4MallocZero(sqlite4_env*, int);
 void *sqlite4DbMallocZero(sqlite4*, int);
 void *sqlite4DbMallocRaw(sqlite4*, int);
 char *sqlite4DbStrDup(sqlite4*,const char*);
 char *sqlite4DbStrNDup(sqlite4*,const char*, int);
-void *sqlite4Realloc(void*, int);
+void *sqlite4Realloc(sqlite4_env*, void*, int);
 void *sqlite4DbReallocOrFree(sqlite4 *, void *, int);
 void *sqlite4DbRealloc(sqlite4 *, void *, int);
 void sqlite4DbFree(sqlite4*, void*);
-int sqlite4MallocSize(void*);
+int sqlite4MallocSize(sqlite4_env*, void*);
 int sqlite4DbMallocSize(sqlite4*, void*);
-void *sqlite4ScratchMalloc(int);
-void sqlite4ScratchFree(void*);
-void *sqlite4PageMalloc(int);
-void sqlite4PageFree(void*);
 void sqlite4MemSetDefault(sqlite4_env*);
-void sqlite4BenignMallocHooks(void (*)(void), void (*)(void));
+void sqlite4BenignMallocHooks(sqlite4_env*,void (*)(void), void (*)(void));
 
 /*
 ** On systems with ample stack space and that support alloca(), make
@@ -2995,7 +2982,7 @@ void sqlite4DeleteIndexSamples(sqlite4*,Index*);
 void sqlite4DefaultRowEst(Index*);
 void sqlite4RegisterLikeFunctions(sqlite4*, int);
 int sqlite4IsLikeFunction(sqlite4*,Expr*,int*,char*);
-void sqlite4SchemaClear(Schema*);
+void sqlite4SchemaClear(sqlite4_env*,Schema*);
 Schema *sqlite4SchemaGet(sqlite4*);
 int sqlite4SchemaToIndex(sqlite4 *db, Schema *);
 KeyInfo *sqlite4IndexKeyinfo(Parse *, Index *);
@@ -3024,8 +3011,8 @@ Index *sqlite4FindPrimaryKey(Table *, int *);
 /*
 ** The interface to the LEMON-generated parser
 */
-void *sqlite4ParserAlloc(void*(*)(size_t));
-void sqlite4ParserFree(void*, void(*)(void*));
+void *sqlite4ParserAlloc(void*(*)(void*,size_t), void*);
+void sqlite4ParserFree(void*, void(*)(void*,void*));
 void sqlite4Parser(void*, int, Token, Parse*);
 #ifdef YYTRACKMAXSTACKDEPTH
   int sqlite4ParserStackPeak(void*);
@@ -3126,11 +3113,11 @@ int sqlite4WalDefaultHook(void*,sqlite4*,const char*,int);
 ** is not defined.
 */
 #ifndef SQLITE_OMIT_BUILTIN_TEST
-  void sqlite4BeginBenignMalloc(void);
-  void sqlite4EndBenignMalloc(void);
+  void sqlite4BeginBenignMalloc(sqlite4_env*);
+  void sqlite4EndBenignMalloc(sqlite4_env*);
 #else
-  #define sqlite4BeginBenignMalloc()
-  #define sqlite4EndBenignMalloc()
+  #define sqlite4BeginBenignMalloc(X)
+  #define sqlite4EndBenignMalloc(X)
 #endif
 
 #define IN_INDEX_ROWID           1

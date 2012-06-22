@@ -249,12 +249,13 @@ static void stat3Init(
   tRowcnt nRow;
   int mxSample;
   int n;
+  sqlite4_env *pEnv = sqlite4_context_env(context);
 
   UNUSED_PARAMETER(argc);
   nRow = (tRowcnt)sqlite4_value_int64(argv[0]);
   mxSample = sqlite4_value_int(argv[1]);
   n = sizeof(*p) + sizeof(p->a[0])*mxSample;
-  p = sqlite4_malloc( n );
+  p = sqlite4_malloc(pEnv, n);
   if( p==0 ){
     sqlite4_result_error_nomem(context);
     return;
@@ -264,8 +265,8 @@ static void stat3Init(
   p->nRow = nRow;
   p->mxSample = mxSample;
   p->nPSample = p->nRow/(mxSample/3+1) + 1;
-  sqlite4_randomness(sizeof(p->iPrn), &p->iPrn);
-  sqlite4_result_blob(context, p, sizeof(p), sqlite4_free);
+  sqlite4_randomness(pEnv, sizeof(p->iPrn), &p->iPrn);
+  sqlite4_result_blob(context, p, sizeof(p), SQLITE_DYNAMIC);
 }
 static const FuncDef stat3InitFuncdef = {
   2,                /* nArg */
@@ -948,7 +949,7 @@ static int loadStat3(sqlite4 *db, const char *zDb){
     if( pIdx==0 ) continue;
     assert( pIdx->nSample==0 );
     pIdx->nSample = nSample;
-    pIdx->aSample = sqlite4MallocZero( nSample*sizeof(IndexSample) );
+    pIdx->aSample = sqlite4MallocZero(db->pEnv, nSample*sizeof(IndexSample) );
     pIdx->avgEq = pIdx->aiRowEst[1];
     if( pIdx->aSample==0 ){
       db->mallocFailed = 1;
@@ -1021,7 +1022,7 @@ static int loadStat3(sqlite4 *db, const char *zDb){
         if( n < 1){
           pSample->u.z = 0;
         }else{
-          pSample->u.z = sqlite4Malloc(n);
+          pSample->u.z = sqlite4Malloc(db->pEnv, n);
           if( pSample->u.z==0 ){
             db->mallocFailed = 1;
             sqlite4_finalize(pStmt);

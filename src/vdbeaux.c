@@ -600,7 +600,7 @@ static void freeP4(sqlite4 *db, int p4type, void *p4){
         break;
       }
       case P4_MPRINTF: {
-        if( db->pnBytesFreed==0 ) sqlite4_free(p4);
+        if( db->pnBytesFreed==0 ) sqlite4_free(db->pEnv, p4);
         break;
       }
       case P4_VDBEFUNC: {
@@ -854,8 +854,7 @@ static char *displayP4(Op *pOp, char *zTemp, int nTemp){
     case P4_KEYINFO: {
       int i, j;
       KeyInfo *pKeyInfo = pOp->p4.pKeyInfo;
-      sqlite4_snprintf(nTemp, zTemp, "keyinfo(%d", pKeyInfo->nField);
-      i = sqlite4Strlen30(zTemp);
+      i = sqlite4_snprintf(zTemp, nTemp, "keyinfo(%d", pKeyInfo->nField);
       for(j=0; j<pKeyInfo->nField; j++){
         CollSeq *pColl = pKeyInfo->aColl[j];
         if( pColl ){
@@ -882,24 +881,24 @@ static char *displayP4(Op *pOp, char *zTemp, int nTemp){
     }
     case P4_COLLSEQ: {
       CollSeq *pColl = pOp->p4.pColl;
-      sqlite4_snprintf(nTemp, zTemp, "collseq(%.20s)", pColl->zName);
+      sqlite4_snprintf(zTemp, nTemp, "collseq(%.20s)", pColl->zName);
       break;
     }
     case P4_FUNCDEF: {
       FuncDef *pDef = pOp->p4.pFunc;
-      sqlite4_snprintf(nTemp, zTemp, "%s(%d)", pDef->zName, pDef->nArg);
+      sqlite4_snprintf(zTemp, nTemp, "%s(%d)", pDef->zName, pDef->nArg);
       break;
     }
     case P4_INT64: {
-      sqlite4_snprintf(nTemp, zTemp, "%lld", *pOp->p4.pI64);
+      sqlite4_snprintf(zTemp, nTemp, "%lld", *pOp->p4.pI64);
       break;
     }
     case P4_INT32: {
-      sqlite4_snprintf(nTemp, zTemp, "%d", pOp->p4.i);
+      sqlite4_snprintf(zTemp, nTemp, "%d", pOp->p4.i);
       break;
     }
     case P4_REAL: {
-      sqlite4_snprintf(nTemp, zTemp, "%.16g", *pOp->p4.pReal);
+      sqlite4_snprintf(zTemp, nTemp, "%.16g", *pOp->p4.pReal);
       break;
     }
     case P4_MEM: {
@@ -907,11 +906,11 @@ static char *displayP4(Op *pOp, char *zTemp, int nTemp){
       if( pMem->flags & MEM_Str ){
         zP4 = pMem->z;
       }else if( pMem->flags & MEM_Int ){
-        sqlite4_snprintf(nTemp, zTemp, "%lld", pMem->u.i);
+        sqlite4_snprintf(zTemp, nTemp, "%lld", pMem->u.i);
       }else if( pMem->flags & MEM_Real ){
-        sqlite4_snprintf(nTemp, zTemp, "%.16g", pMem->r);
+        sqlite4_snprintf(zTemp, nTemp, "%.16g", pMem->r);
       }else if( pMem->flags & MEM_Null ){
-        sqlite4_snprintf(nTemp, zTemp, "NULL");
+        sqlite4_snprintf(zTemp, nTemp, "NULL");
       }else{
         assert( pMem->flags & MEM_Blob );
         zP4 = "(blob)";
@@ -921,16 +920,16 @@ static char *displayP4(Op *pOp, char *zTemp, int nTemp){
 #ifndef SQLITE_OMIT_VIRTUALTABLE
     case P4_VTAB: {
       sqlite4_vtab *pVtab = pOp->p4.pVtab->pVtab;
-      sqlite4_snprintf(nTemp, zTemp, "vtab:%p:%p", pVtab, pVtab->pModule);
+      sqlite4_snprintf(zTemp, nTemp, "vtab:%p:%p", pVtab, pVtab->pModule);
       break;
     }
 #endif
     case P4_INTARRAY: {
-      sqlite4_snprintf(nTemp, zTemp, "intarray");
+      sqlite4_snprintf(zTemp, nTemp, "intarray");
       break;
     }
     case P4_SUBPROGRAM: {
-      sqlite4_snprintf(nTemp, zTemp, "program");
+      sqlite4_snprintf(zTemp, nTemp, "program");
       break;
     }
     case P4_ADVANCE: {
@@ -1208,7 +1207,7 @@ int sqlite4VdbeList(
       }
       pMem->flags = MEM_Dyn|MEM_Str|MEM_Term;
       pMem->n = 2;
-      sqlite4_snprintf(3, pMem->z, "%.2x", pOp->p5);   /* P5 */
+      sqlite4_snprintf(pMem->z, 3, "%.2x", pOp->p5);   /* P5 */
       pMem->type = SQLITE_TEXT;
       pMem->enc = SQLITE_UTF8;
       pMem++;
@@ -1267,7 +1266,7 @@ void sqlite4VdbeIOTraceSql(Vdbe *p){
   if( pOp->opcode==OP_Trace && pOp->p4.z!=0 ){
     int i, j;
     char z[1000];
-    sqlite4_snprintf(sizeof(z), z, "%s", pOp->p4.z);
+    sqlite4_snprintf(z, sizeof(z), "%s", pOp->p4.z);
     for(i=0; sqlite4Isspace(z[i]); i++){}
     for(j=0; z[i]; i++){
       if( sqlite4Isspace(z[i]) ){
@@ -1702,14 +1701,14 @@ int sqlite4VdbeRollback(sqlite4 *db, int iLevel){
   assert( db->nSavepoint==countSavepoints(db) );
 
   /* Invoke the xRollback() hook on all backends. */
-  sqlite4BeginBenignMalloc();
+  sqlite4BeginBenignMalloc(db->pEnv);
   for(i=0; i<db->nDb; i++){
     KVStore *pKV = db->aDb[i].pKV;
     if( pKV && pKV->iTransLevel>=iLevel ){
       sqlite4KVStoreRollback(pKV, iLevel);
     }
   }
-  sqlite4EndBenignMalloc();
+  sqlite4EndBenignMalloc(db->pEnv);
 
   /* If the InternChanges flag is set, expire prepared statements and
   ** reload the schema. If this is not a rollback of the top-level 
@@ -1973,9 +1972,9 @@ int sqlite4VdbeTransferError(Vdbe *p){
   int rc = p->rc;
   if( p->zErrMsg ){
     u8 mallocFailed = db->mallocFailed;
-    sqlite4BeginBenignMalloc();
+    sqlite4BeginBenignMalloc(db->pEnv);
     sqlite4ValueSetStr(db->pErr, -1, p->zErrMsg, SQLITE_UTF8, SQLITE_TRANSIENT);
-    sqlite4EndBenignMalloc();
+    sqlite4EndBenignMalloc(db->pEnv);
     db->mallocFailed = mallocFailed;
     db->errCode = rc;
   }else{

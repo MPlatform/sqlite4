@@ -275,21 +275,6 @@ static int sqlthread_open(
 
   zFilename = Tcl_GetString(objv[2]);
   rc = sqlite4_open(0, zFilename, &db, 0);
-#ifdef SQLITE_HAS_CODEC
-  if( db && objc>=4 ){
-    const char *zKey;
-    int nKey;
-    zKey = Tcl_GetStringFromObj(objv[3], &nKey);
-    rc = sqlite4_key(db, zKey, nKey);
-    if( rc!=SQLITE_OK ){
-      char *zErrMsg = sqlite4_mprintf("error %d: %s", rc, sqlite4_errmsg(db));
-      sqlite4_close(db);
-      Tcl_AppendResult(interp, zErrMsg, (char*)0);
-      sqlite4_free(zErrMsg);
-      return TCL_ERROR;
-    }
-  }
-#endif
   Md5_Register(db);
   
   if( sqlite4TestMakePointerStr(interp, zBuf, db) ) return TCL_ERROR;

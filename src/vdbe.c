@@ -341,13 +341,10 @@ void sqlite4VdbeMemPrettyPrint(Mem *pMem, char *zBuf){
       c = 's';
     }
 
-    sqlite4_snprintf(100, zCsr, "%c", c);
-    zCsr += sqlite4Strlen30(zCsr);
-    sqlite4_snprintf(100, zCsr, "%d[", pMem->n);
-    zCsr += sqlite4Strlen30(zCsr);
+    zCsr += sqlite4_snprintf(zCsr, 100, "%c", c);
+    zCsr += sqlite4_snprintf(zCsr, 100, "%d[", pMem->n);
     for(i=0; i<16 && i<pMem->n; i++){
-      sqlite4_snprintf(100, zCsr, "%02X", ((int)pMem->z[i] & 0xFF));
-      zCsr += sqlite4Strlen30(zCsr);
+      zCsr += sqlite4_snprintf(zCsr, 100, "%02X", ((int)pMem->z[i] & 0xFF));
     }
     for(i=0; i<16 && i<pMem->n; i++){
       char z = pMem->z[i];
@@ -355,11 +352,9 @@ void sqlite4VdbeMemPrettyPrint(Mem *pMem, char *zBuf){
       else *zCsr++ = z;
     }
 
-    sqlite4_snprintf(100, zCsr, "]%s", encnames[pMem->enc]);
-    zCsr += sqlite4Strlen30(zCsr);
+    zCsr += sqlite4_snprintf(zCsr, 100, "]%s", encnames[pMem->enc]);
     if( f & MEM_Zero ){
-      sqlite4_snprintf(100, zCsr,"+%dz",pMem->u.nZero);
-      zCsr += sqlite4Strlen30(zCsr);
+      zCsr += sqlite4_snprintf(zCsr, 100, "+%dz",pMem->u.nZero);
     }
     *zCsr = '\0';
   }else if( f & MEM_Str ){
@@ -378,8 +373,7 @@ void sqlite4VdbeMemPrettyPrint(Mem *pMem, char *zBuf){
       zBuf[1] = 's';
     }
     k = 2;
-    sqlite4_snprintf(100, &zBuf[k], "%d", pMem->n);
-    k += sqlite4Strlen30(&zBuf[k]);
+    k += sqlite4_snprintf(&zBuf[k], 100, "%d", pMem->n);
     zBuf[k++] = '[';
     for(j=0; j<15 && j<pMem->n; j++){
       u8 c = pMem->z[j];
@@ -390,8 +384,7 @@ void sqlite4VdbeMemPrettyPrint(Mem *pMem, char *zBuf){
       }
     }
     zBuf[k++] = ']';
-    sqlite4_snprintf(100,&zBuf[k], encnames[pMem->enc]);
-    k += sqlite4Strlen30(&zBuf[k]);
+    k += sqlite4_snprintf(&zBuf[k], 100, encnames[pMem->enc]);
     zBuf[k++] = 0;
   }
 }
@@ -467,7 +460,7 @@ static void importVtabErrMsg(Vdbe *p, sqlite4_vtab *pVtab){
   sqlite4 *db = p->db;
   sqlite4DbFree(db, p->zErrMsg);
   p->zErrMsg = sqlite4DbStrDup(db, pVtab->zErrMsg);
-  sqlite4_free(pVtab->zErrMsg);
+  sqlite4_free(db->pEnv, pVtab->zErrMsg);
   pVtab->zErrMsg = 0;
 }
 
@@ -547,8 +540,8 @@ int sqlite4VdbeExec(
   checkProgress = db->xProgress!=0;
 #endif
 #ifdef SQLITE_DEBUG
-  sqlite4BeginBenignMalloc();
-  if( p->pc==0  && (p->db->flags & SQLITE_VdbeListing)!=0 ){
+  sqlite4BeginBenignMalloc(db->pEnv);
+  if( p->pc==0  && (db->flags & SQLITE_VdbeListing)!=0 ){
     int i;
     printf("VDBE Program Listing:\n");
     sqlite4VdbePrintSql(p);
@@ -556,7 +549,7 @@ int sqlite4VdbeExec(
       sqlite4VdbePrintOp(stdout, i, &aOp[i]);
     }
   }
-  sqlite4EndBenignMalloc();
+  sqlite4EndBenignMalloc(db->pEnv);
 #endif
   for(pc=p->pc; rc==SQLITE_OK; pc++){
     assert( pc>=0 && pc<p->nOp );

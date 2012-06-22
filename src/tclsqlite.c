@@ -305,7 +305,7 @@ static void DbProfileHandler(void *cd, const char *zSql, sqlite_uint64 tm){
   Tcl_DString str;
   char zTm[100];
 
-  sqlite4_snprintf(sizeof(zTm)-1, zTm, "%lld", tm);
+  sqlite4_snprintf(zTm, sizeof(zTm)-1, "%lld", tm);
   Tcl_DStringInit(&str);
   Tcl_DStringAppend(&str, pDb->zProfile, -1);
   Tcl_DStringAppendElement(&str, zSql);
@@ -1583,14 +1583,14 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
             "abort, fail, ignore, or replace", 0);
       return TCL_ERROR;
     }
-    zSql = sqlite4_mprintf("SELECT * FROM '%q'", zTable);
+    zSql = sqlite4_mprintf(0, "SELECT * FROM '%q'", zTable);
     if( zSql==0 ){
       Tcl_AppendResult(interp, "Error: no such table: ", zTable, 0);
       return TCL_ERROR;
     }
     nByte = strlen30(zSql);
     rc = sqlite4_prepare(pDb->db, zSql, -1, &pStmt, 0);
-    sqlite4_free(zSql);
+    sqlite4_free(0, zSql);
     if( rc ){
       Tcl_AppendResult(interp, "Error: ", sqlite4_errmsg(pDb->db), 0);
       nCol = 0;
@@ -1606,9 +1606,8 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       Tcl_AppendResult(interp, "Error: can't malloc()", 0);
       return TCL_ERROR;
     }
-    sqlite4_snprintf(nByte+50, zSql, "INSERT OR %q INTO '%q' VALUES(?",
-         zConflict, zTable);
-    j = strlen30(zSql);
+    j = sqlite4_snprintf(zSql, nByte+50, "INSERT OR %q INTO '%q' VALUES(?",
+                         zConflict, zTable);
     for(i=1; i<nCol; i++){
       zSql[j++] = ',';
       zSql[j++] = '?';
@@ -1655,7 +1654,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
         int nErr = strlen30(zFile) + 200;
         zErr = malloc(nErr);
         if( zErr ){
-          sqlite4_snprintf(nErr, zErr,
+          sqlite4_snprintf(zErr, nErr,
              "Error: %s line %d: expected %d columns of data but found %d",
              zFile, lineno, nCol, i+1);
           Tcl_AppendResult(interp, zErr, 0);
@@ -1695,7 +1694,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       rc = TCL_OK;
     }else{
       /* failure, append lineno where failed */
-      sqlite4_snprintf(sizeof(zLineNum), zLineNum,"%d",lineno);
+      sqlite4_snprintf(zLineNum, sizeof(zLineNum),"%d",lineno);
       Tcl_AppendResult(interp,", failed while processing line: ",zLineNum,0);
       rc = TCL_ERROR;
     }
@@ -2332,7 +2331,7 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   sqlite4_open(0, zFile, &p->db, 0);
   Tcl_DStringFree(&translatedFilename);
   if( SQLITE_OK!=sqlite4_errcode(p->db) ){
-    zErrMsg = sqlite4_mprintf("%s", sqlite4_errmsg(p->db));
+    zErrMsg = sqlite4_mprintf(0, "%s", sqlite4_errmsg(p->db));
     sqlite4_close(p->db);
     p->db = 0;
   }
@@ -2350,7 +2349,7 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   if( p->db==0 ){
     Tcl_SetResult(interp, zErrMsg, TCL_VOLATILE);
     Tcl_Free((char*)p);
-    sqlite4_free(zErrMsg);
+    sqlite4_free(0, zErrMsg);
     return TCL_ERROR;
   }
   p->maxStmt = NUM_PREPARED_STMTS;
@@ -2964,10 +2963,8 @@ static void init_all(Tcl_Interp *interp){
   {
     extern int Sqliteconfig_Init(Tcl_Interp*);
     extern int Sqlitetest1_Init(Tcl_Interp*);
-    extern int Sqlitetest3_Init(Tcl_Interp*);
     extern int Sqlitetest4_Init(Tcl_Interp*);
     extern int Sqlitetest5_Init(Tcl_Interp*);
-    extern int Sqlitetest8_Init(Tcl_Interp*);
     extern int Sqlitetest9_Init(Tcl_Interp*);
     extern int Sqlitetest_func_Init(Tcl_Interp*);
     extern int Sqlitetest_hexio_Init(Tcl_Interp*);
@@ -2982,44 +2979,23 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitequota_Init(Tcl_Interp*);
     extern int SqliteSuperlock_Init(Tcl_Interp*);
     extern int SqlitetestSyscall_Init(Tcl_Interp*);
-    extern int Sqlitetestfuzzer_Init(Tcl_Interp*);
-    extern int Sqlitetestwholenumber_Init(Tcl_Interp*);
     extern int Sqliteteststorage_Init(Tcl_Interp*);
     extern int Sqliteteststorage2_Init(Tcl_Interp*);
     extern int SqlitetestLsm_Init(Tcl_Interp*);
-
-#if defined(SQLITE_ENABLE_FTS3) || defined(SQLITE_ENABLE_FTS4)
-    extern int Sqlitetestfts3_Init(Tcl_Interp *interp);
-#endif
-
-#ifdef SQLITE_ENABLE_ZIPVFS
-    extern int Zipvfs_Init(Tcl_Interp*);
-    Zipvfs_Init(interp);
-#endif
 
     Sqliteconfig_Init(interp);
     Sqlitetest1_Init(interp);
     Sqlitetest4_Init(interp);
     Sqlitetest5_Init(interp);
-    Sqlitetest8_Init(interp);
     Sqlitetest9_Init(interp);
     Sqlitetest_hexio_Init(interp);
     Sqlitetest_malloc_Init(interp);
     Sqlitetest_mutex_Init(interp);
-    Sqlitetestschema_Init(interp);
-    Sqlitetesttclvar_Init(interp);
     SqlitetestThread_Init(interp);
-    Sqlitetestintarray_Init(interp);
-    Sqlitetestrtree_Init(interp);
-    Sqlitetestfuzzer_Init(interp);
-    Sqlitetestwholenumber_Init(interp);
     Sqliteteststorage_Init(interp);
     Sqliteteststorage2_Init(interp);
     SqlitetestLsm_Init(interp);
 
-#if defined(SQLITE_ENABLE_FTS3) || defined(SQLITE_ENABLE_FTS4)
-    Sqlitetestfts3_Init(interp);
-#endif
 
     Tcl_CreateObjCommand(
         interp, "load_testfixture_extensions", init_all_cmd, 0, 0
@@ -3055,7 +3031,7 @@ int TCLSH_MAIN(int argc, char **argv){
   if( argc>=2 ){
     int i;
     char zArgc[32];
-    sqlite4_snprintf(sizeof(zArgc), zArgc, "%d", argc-(3-TCLSH));
+    sqlite4_snprintf(zArgc, sizeof(zArgc), "%d", argc-(3-TCLSH));
     Tcl_SetVar(interp,"argc", zArgc, TCL_GLOBAL_ONLY);
     Tcl_SetVar(interp,"argv0",argv[1],TCL_GLOBAL_ONLY);
     Tcl_SetVar(interp,"argv", "", TCL_GLOBAL_ONLY);

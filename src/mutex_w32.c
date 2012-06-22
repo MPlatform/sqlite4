@@ -189,7 +189,7 @@ static sqlite4_mutex *winMutexAlloc(int iType){
   switch( iType ){
     case SQLITE_MUTEX_FAST:
     case SQLITE_MUTEX_RECURSIVE: {
-      p = sqlite4MallocZero( sizeof(*p) );
+      p = sqlite4MallocZero(0, sizeof(*p) );
       if( p ){  
 #ifdef SQLITE_DEBUG
         p->id = iType;
@@ -223,7 +223,7 @@ static void winMutexFree(sqlite4_mutex *p){
   assert( p->nRef==0 && p->owner==0 );
   assert( p->id==SQLITE_MUTEX_FAST || p->id==SQLITE_MUTEX_RECURSIVE );
   DeleteCriticalSection(&p->mutex);
-  sqlite4_free(p);
+  sqlite4_free(0, p);
 }
 
 /*

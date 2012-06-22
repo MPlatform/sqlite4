@@ -67,11 +67,11 @@ static void kvTrace(KVStore *p, const char *zFormat, ...){
     char *z;
 
     va_start(ap, zFormat);
-    z = sqlite4_vmprintf(zFormat, ap);
+    z = sqlite4_vmprintf(p->pEnv, zFormat, ap);
     va_end(ap);
     printf("%s.%s\n", p->zKVName, z);
     fflush(stdout);
-    sqlite4_free(z);
+    sqlite4_free(p->pEnv, z);
   }
 }
 
@@ -100,8 +100,8 @@ int sqlite4KVStoreOpen(
 
   *ppKVStore = pNew;
   if( pNew ){
-    sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);
-    sqlite4_snprintf(sizeof(pNew->zKVName), pNew->zKVName,
+    sqlite4_randomness(pEnv, sizeof(pNew->kvId), &pNew->kvId);
+    sqlite4_snprintf(pNew->zKVName, sizeof(pNew->zKVName),
                      "%s", zName);
     pNew->fTrace = (db->flags & SQLITE_KvTrace)!=0;
     kvTrace(pNew, "open(%s,%d,0x%04x)", zUri, pNew->kvId, flags);
@@ -145,7 +145,7 @@ int sqlite4KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor){
   rc = p->pStoreVfunc->xOpenCursor(p, &pCur);
   *ppKVCursor = pCur;
   if( pCur ){
-    sqlite4_randomness(sizeof(pCur->curId), &pCur->curId);
+    sqlite4_randomness(pCur->pEnv, sizeof(pCur->curId), &pCur->curId);
     pCur->fTrace = p->fTrace;
     pCur->pStore = p;
   }

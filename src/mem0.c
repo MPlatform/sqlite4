@@ -28,11 +28,12 @@
 /*
 ** No-op versions of all memory allocation routines
 */
-static void *sqlite4MemMalloc(int nByte){ return 0; }
-static void sqlite4MemFree(void *pPrior){ return; }
-static void *sqlite4MemRealloc(void *pPrior, int nByte){ return 0; }
-static int sqlite4MemSize(void *pPrior){ return 0; }
-static int sqlite4MemRoundup(int n){ return n; }
+static void *sqlite4MemMalloc(void *p, sqlite4_size_t nByte){ return 0; }
+static void sqlite4MemFree(void *p, void *pPrior){ return; }
+static void *sqlite4MemRealloc(void *p, void *pPrior, sqlite4_size_t nByte){
+  return 0;
+}
+static int sqlite4MemSize(void*p, void *pPrior){ return 0; }
 static int sqlite4MemInit(void *NotUsed){ return SQLITE_OK; }
 static void sqlite4MemShutdown(void *NotUsed){ return; }
 
@@ -48,12 +49,13 @@ void sqlite4MemSetDefault(sqlite4_env *pEnv){
      sqlite4MemFree,
      sqlite4MemRealloc,
      sqlite4MemSize,
-     sqlite4MemRoundup,
      sqlite4MemInit,
      sqlite4MemShutdown,
+     0, 
+     0,
      0
   };
-  sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MALLOC, &defaultMethods);
+  pEnv->m = defaultMethods;
 }
 
 #endif /* SQLITE_ZERO_MALLOC */

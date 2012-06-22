@@ -1,0 +1,27 @@
+<title>Porting SQLite3 to SQLite4</title>
+<nowiki>
+
+<p>The following are notes on how to port an application from using SQLite3
+to use SQLite4:
+
+<ul>
+<li><p>Global change "sqlite3" to "sqlite4"
+
+<li><p>Add the sqlite4_env* parameter (probably NULL) as the first
+    argument to the following interfaces:
+<ul>
+<li> sqlite4_open()
+<li> sqlite4_malloc()
+<li> sqlite4_realloc()
+<li> sqlite4_free()
+<li> sqlite4_mprintf()
+<li> sqlite4_vmprintf()
+</ul>
+
+<li><p>Check all uses of sqlite4_snprintf() and sqlite4_vnsprintf() for
+    the new function signature:
+<ul>
+<li>The order of the first two arguments is reversed
+<li>Both routines return the length of the result string.
+</ul>
+</ul>

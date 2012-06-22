@@ -3727,6 +3727,7 @@ static char *explainIndexRange(sqlite4 *db, WhereLevel *pLevel, Table *pTab){
   }
   sqlite4StrAccumInit(&txt, 0, 0, SQLITE_MAX_LENGTH);
   txt.db = db;
+  txt.pEnv = db->pEnv;
 
   sqlite4StrAccumAppend(&txt, " (", 2);
   for(i=0; i<nEq; i++){
@@ -4437,7 +4438,7 @@ static void whereInfoFree(sqlite4 *db, WhereInfo *pWInfo){
       if( pInfo ){
         /* assert( pInfo->needToFreeIdxStr==0 || db->mallocFailed ); */
         if( pInfo->needToFreeIdxStr ){
-          sqlite4_free(pInfo->idxStr);
+          sqlite4_free(db->pEnv, pInfo->idxStr);
         }
         sqlite4DbFree(db, pInfo);
       }

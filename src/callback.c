@@ -405,20 +405,20 @@ FuncDef *sqlite4FindFunction(
 **
 ** The Schema.cache_size variable is not cleared.
 */
-void sqlite4SchemaClear(Schema *pSchema){
+void sqlite4SchemaClear(sqlite4_env *pEnv, Schema *pSchema){
   Hash temp1;
   Hash temp2;
   HashElem *pElem;
 
   temp1 = pSchema->tblHash;
   temp2 = pSchema->trigHash;
-  sqlite4HashInit(&pSchema->trigHash);
+  sqlite4HashInit(pEnv, &pSchema->trigHash);
   sqlite4HashClear(&pSchema->idxHash);
   for(pElem=sqliteHashFirst(&temp2); pElem; pElem=sqliteHashNext(pElem)){
     sqlite4DeleteTrigger(0, (Trigger*)sqliteHashData(pElem));
   }
   sqlite4HashClear(&temp2);
-  sqlite4HashInit(&pSchema->tblHash);
+  sqlite4HashInit(pEnv, &pSchema->tblHash);
   for(pElem=sqliteHashFirst(&temp1); pElem; pElem=sqliteHashNext(pElem)){
     Table *pTab = sqliteHashData(pElem);
     sqlite4DeleteTable(0, pTab);
@@ -442,10 +442,10 @@ Schema *sqlite4SchemaGet(sqlite4 *db){
   if( !p ){
     db->mallocFailed = 1;
   }else if ( 0==p->file_format ){
-    sqlite4HashInit(&p->tblHash);
-    sqlite4HashInit(&p->idxHash);
-    sqlite4HashInit(&p->trigHash);
-    sqlite4HashInit(&p->fkeyHash);
+    sqlite4HashInit(db->pEnv, &p->tblHash);
+    sqlite4HashInit(db->pEnv, &p->idxHash);
+    sqlite4HashInit(db->pEnv, &p->trigHash);
+    sqlite4HashInit(db->pEnv, &p->fkeyHash);
     p->enc = SQLITE_UTF8;
   }
   return p;

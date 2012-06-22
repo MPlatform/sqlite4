@@ -184,6 +184,7 @@ struct yyParser {
 #else
   yyStackEntry yystack[YYSTACKDEPTH];  /* The parser's stack */
 #endif
+  void *pEnv;                   /* Malloc context */
 };
 typedef struct yyParser yyParser;
 
@@ -271,9 +272,9 @@ static void yyGrowStack(yyParser *p){
 ** A pointer to a parser.  This pointer is used in subsequent calls
 ** to Parse and ParseFree.
 */
-void *ParseAlloc(void *(*mallocProc)(size_t)){
+void *ParseAlloc(void *(*mallocProc)(void*,size_t), void *pEnv){
   yyParser *pParser;
-  pParser = (yyParser*)(*mallocProc)( (size_t)sizeof(yyParser) );
+  pParser = (yyParser*)(*mallocProc)(pEnv, (size_t)sizeof(yyParser) );
   if( pParser ){
     pParser->yyidx = -1;
 #ifdef YYTRACKMAXSTACKDEPTH
@@ -284,6 +285,7 @@ void *ParseAlloc(void *(*mallocProc)(size_t)){
     pParser->yystksz = 0;
     yyGrowStack(pParser);
 #endif
+    pParser->pEnv = pEnv;
   }
   return pParser;
 }
@@ -356,8 +358,8 @@ static int yy_pop_parser_stack(yyParser *pParser){
 ** </ul>
 */
 void ParseFree(
-  void *p,                    /* The parser to be deleted */
-  void (*freeProc)(void*)     /* Function used to reclaim memory */
+  void *p,                      /* The parser to be deleted */
+  void (*freeProc)(void*,void*) /* Function used to reclaim memory */
 ){
   yyParser *pParser = (yyParser*)p;
   /* In SQLite, we never try to destroy a parser that was not successfully
@@ -367,7 +369,7 @@ void ParseFree(
 #if YYSTACKDEPTH<=0
   free(pParser->yystack);
 #endif
-  (*freeProc)((void*)pParser);
+  (*freeProc)(pParser->pEnv, (void*)pParser);
 }
 
 /*

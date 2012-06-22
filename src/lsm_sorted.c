@@ -4043,7 +4043,7 @@ static int fileToString(
   char *zSeg;
 
   zSeg = segToString(pEnv, pRun, nMin);
-  i += snprintf(&aBuf[i], nBuf-i, "%s", zSeg);
+  i += sqlite4_snprintf(&aBuf[i], nBuf-i, "%s", zSeg);
   lsmFree(pEnv, zSeg);
 
   return i;
@@ -4348,7 +4348,7 @@ void lsmSortedDumpStructure(
         }
 
         if( i==0 ){
-          snprintf(zLevel, sizeof(zLevel), "L%d:", iLevel);
+          sqlite4_snprintf(zLevel, sizeof(zLevel), "L%d:", iLevel);
         }else{
           zLevel[0] = '\0';
         }

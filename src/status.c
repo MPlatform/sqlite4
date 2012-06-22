@@ -76,7 +76,9 @@ int sqlite4_db_status(
   int resetFlag         /* Reset high-water mark if true */
 ){
   int rc = SQLITE_OK;   /* Return code */
+  sqlite4_env *pEnv;
   sqlite4_mutex_enter(db->mutex);
+  pEnv = db->pEnv;
   switch( op ){
     case SQLITE_DBSTATUS_LOOKASIDE_USED: {
       *pCurrent = db->lookaside.nOut;
@@ -130,16 +132,16 @@ int sqlite4_db_status(
         if( ALWAYS(pSchema!=0) ){
           HashElem *p;
 
-          nByte += sqlite4DefaultEnv.m.xRoundup(sizeof(HashElem)) * (
+          nByte += sizeof(HashElem) * (
               pSchema->tblHash.count 
             + pSchema->trigHash.count
             + pSchema->idxHash.count
             + pSchema->fkeyHash.count
           );
-          nByte += sqlite4MallocSize(pSchema->tblHash.ht);
-          nByte += sqlite4MallocSize(pSchema->trigHash.ht);
-          nByte += sqlite4MallocSize(pSchema->idxHash.ht);
-          nByte += sqlite4MallocSize(pSchema->fkeyHash.ht);
+          nByte += sqlite4MallocSize(pEnv, pSchema->tblHash.ht);
+          nByte += sqlite4MallocSize(pEnv, pSchema->trigHash.ht);
+          nByte += sqlite4MallocSize(pEnv, pSchema->idxHash.ht);
+          nByte += sqlite4MallocSize(pEnv, pSchema->fkeyHash.ht);
 
           for(p=sqliteHashFirst(&pSchema->trigHash); p; p=sqliteHashNext(p)){
             sqlite4DeleteTrigger(db, (Trigger*)sqliteHashData(p));

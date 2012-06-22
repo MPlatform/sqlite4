@@ -138,7 +138,7 @@ static sqlite4_mutex *pthreadMutexAlloc(int iType){
   sqlite4_mutex *p;
   switch( iType ){
     case SQLITE_MUTEX_RECURSIVE: {
-      p = sqlite4MallocZero( sizeof(*p) );
+      p = sqlite4MallocZero(0, sizeof(*p) );
       if( p ){
 #ifdef SQLITE_HOMEGROWN_RECURSIVE_MUTEX
         /* If recursive mutexes are not available, we will have to
@@ -159,7 +159,7 @@ static sqlite4_mutex *pthreadMutexAlloc(int iType){
       break;
     }
     case SQLITE_MUTEX_FAST: {
-      p = sqlite4MallocZero( sizeof(*p) );
+      p = sqlite4MallocZero(0, sizeof(*p) );
       if( p ){
 #if SQLITE_MUTEX_NREF
         p->id = iType;
@@ -191,7 +191,7 @@ static void pthreadMutexFree(sqlite4_mutex *p){
   assert( p->nRef==0 );
   assert( p->id==SQLITE_MUTEX_FAST || p->id==SQLITE_MUTEX_RECURSIVE );
   pthread_mutex_destroy(&p->mutex);
-  sqlite4_free(p);
+  sqlite4_free(0, p);
 }
 
 /*

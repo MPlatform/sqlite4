@@ -82,6 +82,7 @@ char *sqlite4VdbeExpandSql(
   sqlite4StrAccumInit(&out, zBase, sizeof(zBase), 
                       db->aLimit[SQLITE_LIMIT_LENGTH]);
   out.db = db;
+  out.pEnv = db->pEnv;
   if( db->vdbeExecCnt>1 ){
     while( *zRawSql ){
       const char *zStart = zRawSql;
@@ -167,18 +168,22 @@ char *sqlite4VdbeExpandSql(
 */
 void sqlite4ExplainBegin(Vdbe *pVdbe){
   if( pVdbe ){
-    sqlite4BeginBenignMalloc();
-    Explain *p = sqlite4_malloc( sizeof(Explain) );
+    Explain *p;
+    sqlite4 *db = pVdbe->db;
+    sqlite4_env *pEnv = db->pEnv;
+    sqlite4BeginBenignMalloc(pEnv);
+    p = sqlite4_malloc(pEnv, sizeof(Explain) );
     if( p ){
       memset(p, 0, sizeof(*p));
       p->pVdbe = pVdbe;
-      sqlite4_free(pVdbe->pExplain);
+      sqlite4_free(pEnv, pVdbe->pExplain);
       pVdbe->pExplain = p;
       sqlite4StrAccumInit(&p->str, p->zBase, sizeof(p->zBase),
                           SQLITE_MAX_LENGTH);
       p->str.useMalloc = 2;
+      p->str.pEnv = pEnv;
     }else{
-      sqlite4EndBenignMalloc();
+      sqlite4EndBenignMalloc(pEnv);
     }
   }
 }
@@ -253,12 +258,13 @@ void sqlite4ExplainPop(Vdbe *p){
 */
 void sqlite4ExplainFinish(Vdbe *pVdbe){
   if( pVdbe && pVdbe->pExplain ){
-    sqlite4_free(pVdbe->zExplain);
+    sqlite4_env *pEnv = pVdbe->db->pEnv;
+    sqlite4_free(pEnv, pVdbe->zExplain);
     sqlite4ExplainNL(pVdbe);
     pVdbe->zExplain = sqlite4StrAccumFinish(&pVdbe->pExplain->str);
-    sqlite4_free(pVdbe->pExplain);
+    sqlite4_free(pEnv, pVdbe->pExplain);
     pVdbe->pExplain = 0;
-    sqlite4EndBenignMalloc();
+    sqlite4EndBenignMalloc(pEnv);
   }
 }
 

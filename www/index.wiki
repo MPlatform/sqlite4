@@ -6,3 +6,4 @@
   *  [./data_encoding.wiki | The Data Encoding]
   *  [./key_encoding.wiki | The Key Encoding]
   *  [./decimal.wiki | Internal representation of numeric values]
+  *  [./porting.wiki | Porting an app from SQLite3 to SQLite4]

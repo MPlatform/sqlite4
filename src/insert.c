@@ -1093,6 +1093,7 @@ static char *notUniqueMessage(
 
   sqlite4StrAccumInit(&errMsg, 0, 0, 200);
   errMsg.db = pParse->db;
+  errMsg.pEnv = errMsg.db->pEnv;
   if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
     sqlite4StrAccumAppend(&errMsg, "PRIMARY KEY must be unique", -1);
   }else{

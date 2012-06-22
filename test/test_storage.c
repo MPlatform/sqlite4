@@ -58,7 +58,7 @@ static int test_storage_open(
     storageSetTclErrorName(interp, rc);
     return TCL_ERROR;
   }
-  sqlite4_snprintf(sizeof(zRes),zRes, "%p", pNew);
+  sqlite4_snprintf(zRes,sizeof(zRes), "%p", pNew);
   Tcl_SetObjResult(interp, Tcl_NewStringObj(zRes,-1));
   return TCL_OK;
 }
@@ -115,7 +115,7 @@ static int test_storage_open_cursor(
     storageSetTclErrorName(interp, rc);
     return TCL_ERROR;
   }
-  sqlite4_snprintf(sizeof(zRes),zRes, "%p", pNew);
+  sqlite4_snprintf(zRes,sizeof(zRes), "%p", pNew);
   Tcl_SetObjResult(interp, Tcl_NewStringObj(zRes,-1));
   return TCL_OK;
 }
