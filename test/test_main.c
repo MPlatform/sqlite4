@@ -2163,6 +2163,7 @@ static int test_collate_func(
   int encin = SQLITE_PTR_TO_INT(pCtx);
   int res;
   int n;
+  sqlite4_env *pEnv = sqlite4_context_env(pCtx);
 
   sqlite4_value *pVal;
   Tcl_Obj *pX;
@@ -2184,7 +2185,7 @@ static int test_collate_func(
       assert(0);
   }
 
-  sqlite4BeginBenignMalloc();
+  sqlite4BeginBenignMalloc(pEnv);
   pVal = sqlite4ValueNew(0);
   if( pVal ){
     sqlite4ValueSetStr(pVal, nA, zA, encin, SQLITE_STATIC);
@@ -2197,7 +2198,7 @@ static int test_collate_func(
         Tcl_NewStringObj((char*)sqlite4_value_text(pVal),n));
     sqlite4ValueFree(pVal);
   }
-  sqlite4EndBenignMalloc();
+  sqlite4EndBenignMalloc(pEnv);
 
   Tcl_EvalObjEx(i, pX, 0);
   Tcl_DecrRefCount(pX);

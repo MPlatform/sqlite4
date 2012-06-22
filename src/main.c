@@ -533,9 +533,9 @@ static int setupLookaside(sqlite4 *db, void *pBuf, int sz, int cnt){
     sz = 0;
     pStart = 0;
   }else if( pBuf==0 ){
-    sqlite4BeginBenignMalloc();
+    sqlite4BeginBenignMalloc(db->pEnv);
     pStart = sqlite4Malloc(db->pEnv, sz*cnt );  /* IMP: R-61949-35727 */
-    sqlite4EndBenignMalloc();
+    sqlite4EndBenignMalloc(db->pEnv);
     if( pStart ) cnt = sqlite4MallocSize(db->pEnv, pStart)/sz;
   }else{
     pStart = pBuf;
@@ -2129,7 +2129,7 @@ int sqlite4_test_control(int op, ...){
       void_function xBenignEnd;
       xBenignBegin = va_arg(ap, void_function);
       xBenignEnd = va_arg(ap, void_function);
-      sqlite4BenignMallocHooks(xBenignBegin, xBenignEnd);
+      sqlite4BenignMallocHooks(0, xBenignBegin, xBenignEnd);
       break;
     }
 

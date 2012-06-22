@@ -116,9 +116,9 @@ static int rehash(Hash *pH, unsigned int new_size){
   ** a performance hit but it is not a fatal error.  So mark the
   ** allocation as a benign.
   */
-  sqlite4BeginBenignMalloc();
+  sqlite4BeginBenignMalloc(pH->pEnv);
   new_ht = (struct _ht *)sqlite4Malloc(pH->pEnv, new_size*sizeof(struct _ht) );
-  sqlite4EndBenignMalloc();
+  sqlite4EndBenignMalloc(pH->pEnv);
 
   if( new_ht==0 ) return 0;
   sqlite4_free(pH->pEnv, pH->ht);

@@ -171,7 +171,7 @@ void sqlite4ExplainBegin(Vdbe *pVdbe){
     Explain *p;
     sqlite4 *db = pVdbe->db;
     sqlite4_env *pEnv = db->pEnv;
-    sqlite4BeginBenignMalloc();
+    sqlite4BeginBenignMalloc(pEnv);
     p = sqlite4_malloc(pEnv, sizeof(Explain) );
     if( p ){
       memset(p, 0, sizeof(*p));
@@ -183,7 +183,7 @@ void sqlite4ExplainBegin(Vdbe *pVdbe){
       p->str.useMalloc = 2;
       p->str.pEnv = pEnv;
     }else{
-      sqlite4EndBenignMalloc();
+      sqlite4EndBenignMalloc(pEnv);
     }
   }
 }
@@ -258,12 +258,13 @@ void sqlite4ExplainPop(Vdbe *p){
 */
 void sqlite4ExplainFinish(Vdbe *pVdbe){
   if( pVdbe && pVdbe->pExplain ){
-    sqlite4_free(pVdbe->db->pEnv, pVdbe->zExplain);
+    sqlite4_env *pEnv = pVdbe->db->pEnv;
+    sqlite4_free(pEnv, pVdbe->zExplain);
     sqlite4ExplainNL(pVdbe);
     pVdbe->zExplain = sqlite4StrAccumFinish(&pVdbe->pExplain->str);
-    sqlite4_free(pVdbe->db->pEnv, pVdbe->pExplain);
+    sqlite4_free(pEnv, pVdbe->pExplain);
     pVdbe->pExplain = 0;
-    sqlite4EndBenignMalloc();
+    sqlite4EndBenignMalloc(pEnv);
   }
 }
 

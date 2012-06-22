@@ -2545,7 +2545,7 @@ void sqlite4ScratchFree(void*);
 void *sqlite4PageMalloc(int);
 void sqlite4PageFree(void*);
 void sqlite4MemSetDefault(sqlite4_env*);
-void sqlite4BenignMallocHooks(void (*)(void), void (*)(void));
+void sqlite4BenignMallocHooks(sqlite4_env*,void (*)(void), void (*)(void));
 
 /*
 ** On systems with ample stack space and that support alloca(), make
@@ -3117,11 +3117,11 @@ int sqlite4WalDefaultHook(void*,sqlite4*,const char*,int);
 ** is not defined.
 */
 #ifndef SQLITE_OMIT_BUILTIN_TEST
-  void sqlite4BeginBenignMalloc(void);
-  void sqlite4EndBenignMalloc(void);
+  void sqlite4BeginBenignMalloc(sqlite4_env*);
+  void sqlite4EndBenignMalloc(sqlite4_env*);
 #else
-  #define sqlite4BeginBenignMalloc()
-  #define sqlite4EndBenignMalloc()
+  #define sqlite4BeginBenignMalloc(X)
+  #define sqlite4EndBenignMalloc(X)
 #endif
 
 #define IN_INDEX_ROWID           1

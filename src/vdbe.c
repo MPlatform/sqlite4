@@ -540,8 +540,8 @@ int sqlite4VdbeExec(
   checkProgress = db->xProgress!=0;
 #endif
 #ifdef SQLITE_DEBUG
-  sqlite4BeginBenignMalloc();
-  if( p->pc==0  && (p->db->flags & SQLITE_VdbeListing)!=0 ){
+  sqlite4BeginBenignMalloc(db->pEnv);
+  if( p->pc==0  && (db->flags & SQLITE_VdbeListing)!=0 ){
     int i;
     printf("VDBE Program Listing:\n");
     sqlite4VdbePrintSql(p);
@@ -549,7 +549,7 @@ int sqlite4VdbeExec(
       sqlite4VdbePrintOp(stdout, i, &aOp[i]);
     }
   }
-  sqlite4EndBenignMalloc();
+  sqlite4EndBenignMalloc(db->pEnv);
 #endif
   for(pc=p->pc; rc==SQLITE_OK; pc++){
     assert( pc>=0 && pc<p->nOp );

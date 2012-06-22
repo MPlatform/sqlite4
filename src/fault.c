@@ -58,6 +58,7 @@ static SQLITE_WSD struct BenignMallocHooks {
 ** sqlite4EndBenignMalloc() are called, respectively.
 */
 void sqlite4BenignMallocHooks(
+  sqlite4_env *pEnv,
   void (*xBenignBegin)(void),
   void (*xBenignEnd)(void)
 ){
@@ -71,13 +72,13 @@ void sqlite4BenignMallocHooks(
 ** subsequent malloc failures are benign. A call to sqlite4EndBenignMalloc()
 ** indicates that subsequent malloc failures are non-benign.
 */
-void sqlite4BeginBenignMalloc(void){
+void sqlite4BeginBenignMalloc(sqlite4_env *pEnv){
   wsdHooksInit;
   if( wsdHooks.xBenignBegin ){
     wsdHooks.xBenignBegin();
   }
 }
-void sqlite4EndBenignMalloc(void){
+void sqlite4EndBenignMalloc(sqlite4_env *pEnv){
   wsdHooksInit;
   if( wsdHooks.xBenignEnd ){
     wsdHooks.xBenignEnd();

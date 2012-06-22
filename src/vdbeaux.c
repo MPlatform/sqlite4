@@ -1701,14 +1701,14 @@ int sqlite4VdbeRollback(sqlite4 *db, int iLevel){
   assert( db->nSavepoint==countSavepoints(db) );
 
   /* Invoke the xRollback() hook on all backends. */
-  sqlite4BeginBenignMalloc();
+  sqlite4BeginBenignMalloc(db->pEnv);
   for(i=0; i<db->nDb; i++){
     KVStore *pKV = db->aDb[i].pKV;
     if( pKV && pKV->iTransLevel>=iLevel ){
       sqlite4KVStoreRollback(pKV, iLevel);
     }
   }
-  sqlite4EndBenignMalloc();
+  sqlite4EndBenignMalloc(db->pEnv);
 
   /* If the InternChanges flag is set, expire prepared statements and
   ** reload the schema. If this is not a rollback of the top-level 
@@ -1972,9 +1972,9 @@ int sqlite4VdbeTransferError(Vdbe *p){
   int rc = p->rc;
   if( p->zErrMsg ){
     u8 mallocFailed = db->mallocFailed;
-    sqlite4BeginBenignMalloc();
+    sqlite4BeginBenignMalloc(db->pEnv);
     sqlite4ValueSetStr(db->pErr, -1, p->zErrMsg, SQLITE_UTF8, SQLITE_TRANSIENT);
-    sqlite4EndBenignMalloc();
+    sqlite4EndBenignMalloc(db->pEnv);
     db->mallocFailed = mallocFailed;
     db->errCode = rc;
   }else{
