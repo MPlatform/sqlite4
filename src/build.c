@@ -351,7 +351,7 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
     /* Case 1:  Reset the single schema identified by iDb */
     Db *pDb = &db->aDb[iDb];
     assert( pDb->pSchema!=0 );
-    sqlite4SchemaClear(pDb->pSchema);
+    sqlite4SchemaClear(db->pEnv, pDb->pSchema);
 
     /* If any database other than TEMP is reset, then also reset TEMP
     ** since TEMP might be holding triggers that reference tables in the
@@ -360,7 +360,7 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
     if( iDb!=1 ){
       pDb = &db->aDb[1];
       assert( pDb->pSchema!=0 );
-      sqlite4SchemaClear(pDb->pSchema);
+      sqlite4SchemaClear(db->pEnv, pDb->pSchema);
     }
     return;
   }
@@ -370,7 +370,7 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
   for(i=0; i<db->nDb; i++){
     Db *pDb = &db->aDb[i];
     if( pDb->pSchema ){
-      sqlite4SchemaClear(pDb->pSchema);
+      sqlite4SchemaClear(db->pEnv, pDb->pSchema);
     }
   }
   db->flags &= ~SQLITE_InternChanges;

@@ -92,7 +92,7 @@ void *sqlite4Malloc(sqlite4_env *pEnv, int n){
     sqlite4StatusSet(pEnv, SQLITE_ENVSTATUS_MALLOC_SIZE, n);
     p = pEnv->m.xMalloc(nFull);
     if( p ){
-      nFull = sqlite4MallocSize(p);
+      nFull = sqlite4MallocSize(pEnv, p);
       sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, nFull);
       sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MALLOC_COUNT, 1);
     }
@@ -132,10 +132,11 @@ static int isLookaside(sqlite4 *db, void *p){
 ** Return the size of a memory allocation previously obtained from
 ** sqlite4Malloc() or sqlite4_malloc().
 */
-int sqlite4MallocSize(void *p){
+int sqlite4MallocSize(sqlite4_env *pEnv, void *p){
   assert( sqlite4MemdebugHasType(p, MEMTYPE_HEAP) );
   assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
-  return sqlite4DefaultEnv.m.xSize(p);
+  if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
+  return pEnv->m.xSize(p);
 }
 int sqlite4DbMallocSize(sqlite4 *db, void *p){
   assert( db==0 || sqlite4_mutex_held(db->mutex) );
@@ -145,7 +146,7 @@ int sqlite4DbMallocSize(sqlite4 *db, void *p){
     assert( sqlite4MemdebugHasType(p, MEMTYPE_DB) );
     assert( sqlite4MemdebugHasType(p, MEMTYPE_LOOKASIDE|MEMTYPE_HEAP) );
     assert( db!=0 || sqlite4MemdebugNoType(p, MEMTYPE_LOOKASIDE) );
-    return sqlite4DefaultEnv.m.xSize(p);
+    return db->pEnv->m.xSize(p);
   }
 }
 
@@ -159,7 +160,8 @@ void sqlite4_free(sqlite4_env *pEnv, void *p){
   if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
   if( pEnv->bMemstat ){
     sqlite4_mutex_enter(mem0.mutex);
-    sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MEMORY_USED, -sqlite4MallocSize(p));
+    sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MEMORY_USED,
+                     -sqlite4MallocSize(pEnv, p));
     sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MALLOC_COUNT, -1);
     pEnv->m.xFree(p);
     sqlite4_mutex_leave(mem0.mutex);
@@ -213,7 +215,7 @@ void *sqlite4Realloc(sqlite4_env *pEnv, void *pOld, int nBytes){
     /* The 0x7ffff00 limit term is explained in comments on sqlite4Malloc() */
     return 0;
   }
-  nOld = sqlite4MallocSize(pOld);
+  nOld = sqlite4MallocSize(pEnv, pOld);
   /* IMPLEMENTATION-OF: R-46199-30249 SQLite guarantees that the second
   ** argument to xRealloc is always a value returned by a prior call to
   ** xRoundup. */
@@ -227,7 +229,7 @@ void *sqlite4Realloc(sqlite4_env *pEnv, void *pOld, int nBytes){
     assert( sqlite4MemdebugNoType(pOld, ~MEMTYPE_HEAP) );
     pNew = pEnv->m.xRealloc(pOld, nNew);
     if( pNew ){
-      nNew = sqlite4MallocSize(pNew);
+      nNew = sqlite4MallocSize(pEnv, pNew);
       sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, nNew-nOld);
     }
     sqlite4_mutex_leave(mem0.mutex);

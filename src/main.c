@@ -536,7 +536,7 @@ static int setupLookaside(sqlite4 *db, void *pBuf, int sz, int cnt){
     sqlite4BeginBenignMalloc();
     pStart = sqlite4Malloc(db->pEnv, sz*cnt );  /* IMP: R-61949-35727 */
     sqlite4EndBenignMalloc();
-    if( pStart ) cnt = sqlite4MallocSize(pStart)/sz;
+    if( pStart ) cnt = sqlite4MallocSize(db->pEnv, pStart)/sz;
   }else{
     pStart = pBuf;
   }
@@ -1779,9 +1779,9 @@ static int openDatabase(
                  | SQLITE_ForeignKeys
             ;
 
-  sqlite4HashInit(&db->aCollSeq);
+  sqlite4HashInit(pEnv, &db->aCollSeq);
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-  sqlite4HashInit(&db->aModule);
+  sqlite4HashInit(pEnv, &db->aModule);
 #endif
 
   /* Add the default collation sequence BINARY. BINARY works for both UTF-8
