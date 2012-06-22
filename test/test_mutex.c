@@ -23,10 +23,11 @@
 const char *sqlite4TestErrorName(int);
 
 /* A countable mutex */
-struct sqlite4_mutex {
+typedef struct sqlite4CounterMutex {
+  sqlite4_mutex base;      /* Base class.  Must be first */
   sqlite4_mutex *pReal;
   int eType;
-};
+} sqlite4CounterMutex;
 
 /* State variables */
 static struct test_mutex_globals {
@@ -36,16 +37,17 @@ static struct test_mutex_globals {
   int isInit;                   /* True if initialized */
   sqlite4_mutex_methods m;      /* Interface to "real" mutex system */
   int aCounter[8];              /* Number of grabs of each type of mutex */
-  sqlite4_mutex aStatic[6];     /* The six static mutexes */
 } g = {0};
 
 /* Return true if the countable mutex is currently held */
-static int counterMutexHeld(sqlite4_mutex *p){
+static int counterMutexHeld(sqlite4_mutex *pMutex){
+  sqlite4CounterMutex *p = (sqlite4CounterMutex*)pMutex;
   return g.m.xMutexHeld(p->pReal);
 }
 
 /* Return true if the countable mutex is not currently held */
-static int counterMutexNotheld(sqlite4_mutex *p){
+static int counterMutexNotheld(sqlite4_mutex *pMutex){
+  sqlite4CounterMutex *p = (sqlite4CounterMutex*)pMutex;
   return g.m.xMutexNotheld(p->pReal);
 }
 
@@ -54,10 +56,10 @@ static int counterMutexNotheld(sqlite4_mutex *p){
 ** return the value of g.disableInit as the result code.  This can be used
 ** to simulate an initialization failure.
 */
-static int counterMutexInit(void){ 
+static int counterMutexInit(void *p){ 
   int rc;
   if( g.disableInit ) return g.disableInit;
-  rc = g.m.xMutexInit();
+  rc = g.m.xMutexInit(p);
   g.isInit = 1;
   return rc;
 }
@@ -65,39 +67,34 @@ static int counterMutexInit(void){
 /*
 ** Uninitialize the mutex subsystem
 */
-static int counterMutexEnd(void){ 
+static int counterMutexEnd(void *p){ 
   g.isInit = 0;
-  return g.m.xMutexEnd();
+  return g.m.xMutexEnd(p);
 }
 
 /*
 ** Allocate a countable mutex
 */
-static sqlite4_mutex *counterMutexAlloc(int eType){
+static sqlite4_mutex *counterMutexAlloc(void *pMutexEnv, int eType){
   sqlite4_mutex *pReal;
-  sqlite4_mutex *pRet = 0;
+  sqlite4CounterMutex *pRet = 0;
 
   assert( g.isInit );
   assert(eType<8 && eType>=0);
 
-  pReal = g.m.xMutexAlloc(eType);
+  pReal = g.m.xMutexAlloc(g.m.pMutexEnv, eType);
   if( !pReal ) return 0;
-
-  if( eType==SQLITE_MUTEX_FAST || eType==SQLITE_MUTEX_RECURSIVE ){
-    pRet = (sqlite4_mutex *)malloc(sizeof(sqlite4_mutex));
-  }else{
-    pRet = &g.aStatic[eType-2];
-  }
-
+  pRet = (sqlite4CounterMutex *)malloc(sizeof(*pRet));
   pRet->eType = eType;
   pRet->pReal = pReal;
-  return pRet;
+  return (sqlite4_mutex*)pRet;
 }
 
 /*
 ** Free a countable mutex
 */
-static void counterMutexFree(sqlite4_mutex *p){
+static void counterMutexFree(sqlite4_mutex *pMutex){
+  sqlite4CounterMutex *p = (sqlite4CounterMutex*)pMutex;
   assert( g.isInit );
   g.m.xMutexFree(p->pReal);
   if( p->eType==SQLITE_MUTEX_FAST || p->eType==SQLITE_MUTEX_RECURSIVE ){
@@ -108,7 +105,8 @@ static void counterMutexFree(sqlite4_mutex *p){
 /*
 ** Enter a countable mutex.  Block until entry is safe.
 */
-static void counterMutexEnter(sqlite4_mutex *p){
+static void counterMutexEnter(sqlite4_mutex *pMutex){
+  sqlite4CounterMutex *p = (sqlite4CounterMutex*)pMutex;
   assert( g.isInit );
   g.aCounter[p->eType]++;
   g.m.xMutexEnter(p->pReal);
@@ -117,7 +115,8 @@ static void counterMutexEnter(sqlite4_mutex *p){
 /*
 ** Try to enter a mutex.  Return true on success.
 */
-static int counterMutexTry(sqlite4_mutex *p){
+static int counterMutexTry(sqlite4_mutex *pMutex){
+  sqlite4CounterMutex *p = (sqlite4CounterMutex*)pMutex;
   assert( g.isInit );
   g.aCounter[p->eType]++;
   if( g.disableTry ) return SQLITE_BUSY;
@@ -126,7 +125,8 @@ static int counterMutexTry(sqlite4_mutex *p){
 
 /* Leave a mutex
 */
-static void counterMutexLeave(sqlite4_mutex *p){
+static void counterMutexLeave(sqlite4_mutex *pMutex){
+  sqlite4CounterMutex *p = (sqlite4CounterMutex*)pMutex;
   assert( g.isInit );
   g.m.xMutexLeave(p->pReal);
 }
@@ -194,7 +194,8 @@ static int test_install_mutex_counters(
     counterMutexTry,
     counterMutexLeave,
     counterMutexHeld,
-    counterMutexNotheld
+    counterMutexNotheld, 
+    0
   };
 
   if( objc!=2 ){
@@ -301,7 +302,7 @@ static int test_alloc_mutex(
   Tcl_Obj *CONST objv[]
 ){
 #if SQLITE_THREADSAFE
-  sqlite4_mutex *p = sqlite4_mutex_alloc(SQLITE_MUTEX_FAST);
+  sqlite4_mutex *p = sqlite4_mutex_alloc(0, SQLITE_MUTEX_FAST);
   char zBuf[100];
   sqlite4_mutex_free(p);
   sqlite4_snprintf(zBuf, sizeof(zBuf), "%p", p);

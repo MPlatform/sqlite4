@@ -1038,7 +1038,7 @@ proc do_ioerr_test {testname args} {
 
   set ::go 1
   #reset_prng_state
-  save_prng_state
+  #save_prng_state
   for {set n $::ioerropts(-start)} {$::go} {incr n} {
     set ::TN $n
     incr ::ioerropts(-count) -1
@@ -1461,7 +1461,7 @@ proc slave_test_file {zFile} {
   # Run the test script in a slave interpreter.
   #
   unset -nocomplain ::run_thread_tests_called
-  reset_prng_state
+  #reset_prng_state
   set time [time { slave_test_script [list source $zFile] }]
   set ms [expr [lindex $time 0] / 1000]
 

@@ -226,7 +226,7 @@ static void renameTriggerFunc(
 /*
 ** Register built-in functions used to help implement ALTER TABLE
 */
-void sqlite4AlterFunctions(void){
+void sqlite4AlterFunctions(sqlite4_env *pEnv){
   static SQLITE_WSD FuncDef aAlterTableFuncs[] = {
     FUNCTION(sqlite_rename_table,   2, 0, 0, renameTableFunc),
 #ifndef SQLITE_OMIT_TRIGGER
@@ -237,7 +237,7 @@ void sqlite4AlterFunctions(void){
 #endif
   };
   int i;
-  FuncDefHash *pHash = &sqlite4GlobalFunctions;
+  FuncDefHash *pHash = &pEnv->hashGlobalFuncs;
   FuncDef *aFunc = (FuncDef*)aAlterTableFuncs;
 
   for(i=0; i<ArraySize(aAlterTableFuncs); i++){

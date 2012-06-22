@@ -142,8 +142,8 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    0x7ffffffe,                /* mxStrlen */
    128,                       /* szLookaside */
    500,                       /* nLookaside */
-   {0,0,0,0,0,0,0,0},         /* m */
-   {0,0,0,0,0,0,0,0,0},       /* mutex */
+   {0,0,0,0,0,0,0,0,0},       /* m */
+   {0,0,0,0,0,0,0,0,0,0},     /* mutex */
    (void*)0,                  /* pHeap */
    0,                         /* nHeap */
    0, 0,                      /* mnHeap, mxHeap */
@@ -154,14 +154,15 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    sqlite4OsCurrentTime,      /* xCurrentTime */
    /* All the rest should always be initialized to zero */
    0,                         /* isInit */
-   0,                         /* inProgress */
-   0,                         /* isMutexInit */
-   0,                         /* isMallocInit */
-   0,                         /* pInitMutex */
-   0,                         /* nRefInitMutex */
+   0,                         /* pPrngMutex */
+   0, 0,                      /* prngX, prngY */
    0,                         /* xLog */
    0,                         /* pLogArg */
    0,                         /* bLocaltimeFault */
+   0,                         /* pMemMutex */
+   {0,0,0,0},                 /* nowValue[] */
+   {0,0,0,0},                 /* mxValue[] */
+   {0,}                       /* hashGlobalFunc */
 };
 
 /*
@@ -169,13 +170,6 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
 */
 sqlite4_env *sqlite4_env_default(void){ return &sqlite4DefaultEnv; }
 
-
-/*
-** Hash table for global functions - functions common to all
-** database connections.  After initialization, this table is
-** read-only.
-*/
-SQLITE_WSD FuncDefHash sqlite4GlobalFunctions;
 
 /*
 ** Constant tokens for values 0 and 1.

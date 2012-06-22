@@ -2121,9 +2121,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
        const char *zCtrlName;   /* Name of a test-control option */
        int ctrlCode;            /* Integer code for that option */
     } aCtrl[] = {
-      { "prng_save",             SQLITE_TESTCTRL_PRNG_SAVE              },
-      { "prng_restore",          SQLITE_TESTCTRL_PRNG_RESTORE           },
-      { "prng_reset",            SQLITE_TESTCTRL_PRNG_RESET             },
       { "fault_install",         SQLITE_TESTCTRL_FAULT_INSTALL          },
       { "benign_malloc_hooks",   SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS    },
       { "pending_byte",          SQLITE_TESTCTRL_PENDING_BYTE           },
@@ -2168,18 +2165,6 @@ static int do_meta_command(char *zLine, struct callback_data *p){
           } else {
             fprintf(stderr,"Error: testctrl %s takes a single int option\n",
                     azArg[1]);
-          }
-          break;
-
-        /* sqlite4_test_control(int) */
-        case SQLITE_TESTCTRL_PRNG_SAVE:           
-        case SQLITE_TESTCTRL_PRNG_RESTORE:        
-        case SQLITE_TESTCTRL_PRNG_RESET:
-          if( nArg==2 ){
-            rc = sqlite4_test_control(testctrl);
-            printf("%d (0x%08x)\n", rc, rc);
-          } else {
-            fprintf(stderr,"Error: testctrl %s takes no options\n", azArg[1]);
           }
           break;
 

@@ -1594,7 +1594,7 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
   };
 
   int i;
-  FuncDefHash *pHash = &sqlite4GlobalFunctions;
+  FuncDefHash *pHash = &pEnv->hashGlobalFuncs;
   FuncDef *aFunc = (FuncDef*)aBuiltinFunc;
 
   for(i=0; i<ArraySize(aBuiltinFunc); i++){
@@ -1602,6 +1602,6 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
   }
   sqlite4RegisterDateTimeFunctions(pEnv);
 #ifndef SQLITE_OMIT_ALTERTABLE
-  sqlite4AlterFunctions();
+  sqlite4AlterFunctions(pEnv);
 #endif
 }

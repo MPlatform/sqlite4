@@ -535,6 +535,10 @@ int sqlite4_exec(
 ** Mutexes are created using [sqlite4_mutex_alloc()].
 */
 typedef struct sqlite4_mutex sqlite4_mutex;
+struct sqlite4_mutex {
+  struct sqlite4_mutex_methods *pMutexMethods;
+  /* Subclasses will typically add additional fields */
+};
 
 /*
 ** CAPIREF: Initialize The SQLite Library
@@ -688,7 +692,7 @@ sqlite4_env *sqlite4_db_env(sqlite4*);
 ** it might allocate any require mutexes or initialize internal data
 ** structures.  The xShutdown method is invoked (indirectly) by
 ** [sqlite4_shutdown()] and should deallocate any resources acquired
-** by xInit.  The pAppData pointer is used as the only parameter to
+** by xInit.  The pMemEnv pointer is used as the only parameter to
 ** xInit and xShutdown.
 **
 ** SQLite holds the [SQLITE_MUTEX_STATIC_MASTER] mutex when it invokes
@@ -715,7 +719,7 @@ struct sqlite4_mem_methods {
   void (*xShutdown)(void*);               /* Deinitialize the allocator */
   void (*xBeginBenign)(void*);            /* Enter a benign malloc region */
   void (*xEndBenign)(void*);              /* Leave a benign malloc region */
-  void *pAppData;                         /* 1st argument to all routines */
+  void *pMemEnv;                         /* 1st argument to all routines */
 };
 
 /*
@@ -3678,6 +3682,9 @@ int sqlite4_declare_vtab(sqlite4*, const char *zSQL);
 int sqlite4_overload_function(sqlite4*, const char *zFuncName, int nArg);
 
 /*
+** 
+
+/*
 ** CAPIREF: Mutexes
 **
 ** The SQLite core uses these routines for thread
@@ -3719,17 +3726,9 @@ int sqlite4_overload_function(sqlite4*, const char *zFuncName, int nArg);
 ** <ul>
 ** <li>  SQLITE_MUTEX_FAST
 ** <li>  SQLITE_MUTEX_RECURSIVE
-** <li>  SQLITE_MUTEX_STATIC_MASTER
-** <li>  SQLITE_MUTEX_STATIC_MEM
-** <li>  SQLITE_MUTEX_STATIC_MEM2
-** <li>  SQLITE_MUTEX_STATIC_PRNG
-** <li>  SQLITE_MUTEX_STATIC_LRU
-** <li>  SQLITE_MUTEX_STATIC_LRU2
 ** </ul>)^
 **
-** ^The first two constants (SQLITE_MUTEX_FAST and SQLITE_MUTEX_RECURSIVE)
-** cause sqlite4_mutex_alloc() to create
-** a new mutex.  ^The new mutex is recursive when SQLITE_MUTEX_RECURSIVE
+** ^The new mutex is recursive when SQLITE_MUTEX_RECURSIVE
 ** is used but not necessarily so when SQLITE_MUTEX_FAST is used.
 ** The mutex implementation does not need to make a distinction
 ** between SQLITE_MUTEX_RECURSIVE and SQLITE_MUTEX_FAST if it does
@@ -3738,27 +3737,8 @@ int sqlite4_overload_function(sqlite4*, const char *zFuncName, int nArg);
 ** implementation is available on the host platform, the mutex subsystem
 ** might return such a mutex in response to SQLITE_MUTEX_FAST.
 **
-** ^The other allowed parameters to sqlite4_mutex_alloc() (anything other
-** than SQLITE_MUTEX_FAST and SQLITE_MUTEX_RECURSIVE) each return
-** a pointer to a static preexisting mutex.  ^Six static mutexes are
-** used by the current version of SQLite.  Future versions of SQLite
-** may add additional static mutexes.  Static mutexes are for internal
-** use by SQLite only.  Applications that use SQLite mutexes should
-** use only the dynamic mutexes returned by SQLITE_MUTEX_FAST or
-** SQLITE_MUTEX_RECURSIVE.
-**
-** ^Note that if one of the dynamic mutex parameters (SQLITE_MUTEX_FAST
-** or SQLITE_MUTEX_RECURSIVE) is used then sqlite4_mutex_alloc()
-** returns a different mutex on every call.  ^But for the static
-** mutex types, the same mutex is returned on every call that has
-** the same type number.
-**
 ** ^The sqlite4_mutex_free() routine deallocates a previously
-** allocated dynamic mutex.  ^SQLite is careful to deallocate every
-** dynamic mutex that it allocates.  The dynamic mutexes must not be in
-** use when they are deallocated.  Attempting to deallocate a static
-** mutex results in undefined behavior.  ^SQLite never deallocates
-** a static mutex.
+** allocated mutex. 
 **
 ** ^The sqlite4_mutex_enter() and sqlite4_mutex_try() routines attempt
 ** to enter a mutex.  ^If another thread is already within the mutex,
@@ -3790,7 +3770,7 @@ int sqlite4_overload_function(sqlite4*, const char *zFuncName, int nArg);
 **
 ** See also: [sqlite4_mutex_held()] and [sqlite4_mutex_notheld()].
 */
-sqlite4_mutex *sqlite4_mutex_alloc(int);
+sqlite4_mutex *sqlite4_mutex_alloc(sqlite4_env*, int);
 void sqlite4_mutex_free(sqlite4_mutex*);
 void sqlite4_mutex_enter(sqlite4_mutex*);
 int sqlite4_mutex_try(sqlite4_mutex*);
@@ -3863,15 +3843,16 @@ void sqlite4_mutex_leave(sqlite4_mutex*);
 */
 typedef struct sqlite4_mutex_methods sqlite4_mutex_methods;
 struct sqlite4_mutex_methods {
-  int (*xMutexInit)(void);
-  int (*xMutexEnd)(void);
-  sqlite4_mutex *(*xMutexAlloc)(int);
+  int (*xMutexInit)(void*);
+  int (*xMutexEnd)(void*);
+  sqlite4_mutex *(*xMutexAlloc)(void*,int);
   void (*xMutexFree)(sqlite4_mutex *);
   void (*xMutexEnter)(sqlite4_mutex *);
   int (*xMutexTry)(sqlite4_mutex *);
   void (*xMutexLeave)(sqlite4_mutex *);
   int (*xMutexHeld)(sqlite4_mutex *);
   int (*xMutexNotheld)(sqlite4_mutex *);
+  void *pMutexEnv;
 };
 
 /*
@@ -3920,14 +3901,6 @@ int sqlite4_mutex_notheld(sqlite4_mutex*);
 */
 #define SQLITE_MUTEX_FAST             0
 #define SQLITE_MUTEX_RECURSIVE        1
-#define SQLITE_MUTEX_STATIC_MASTER    2
-#define SQLITE_MUTEX_STATIC_MEM       3  /* sqlite4_malloc() */
-#define SQLITE_MUTEX_STATIC_MEM2      4  /* NOT USED */
-#define SQLITE_MUTEX_STATIC_OPEN      4  /* NOT USED */
-#define SQLITE_MUTEX_STATIC_PRNG      5  /* sqlite4_random() */
-#define SQLITE_MUTEX_STATIC_LRU       6  /* lru page list */
-#define SQLITE_MUTEX_STATIC_LRU2      7  /* NOT USED */
-#define SQLITE_MUTEX_STATIC_PMEM      7  /* sqlite4PageMalloc() */
 
 /*
 ** CAPIREF: Retrieve the mutex for a database connection
@@ -4012,21 +3985,18 @@ int sqlite4_test_control(int op, ...);
 ** Applications should not use any of these parameters or the
 ** [sqlite4_test_control()] interface.
 */
-#define SQLITE_TESTCTRL_FIRST                    5
-#define SQLITE_TESTCTRL_PRNG_SAVE                5
-#define SQLITE_TESTCTRL_PRNG_RESTORE             6
-#define SQLITE_TESTCTRL_PRNG_RESET               7
-#define SQLITE_TESTCTRL_FAULT_INSTALL            9
-#define SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS     10
-#define SQLITE_TESTCTRL_PENDING_BYTE            11
-#define SQLITE_TESTCTRL_ASSERT                  12
-#define SQLITE_TESTCTRL_ALWAYS                  13
-#define SQLITE_TESTCTRL_RESERVE                 14
-#define SQLITE_TESTCTRL_OPTIMIZATIONS           15
-#define SQLITE_TESTCTRL_ISKEYWORD               16
-#define SQLITE_TESTCTRL_LOCALTIME_FAULT         18
-#define SQLITE_TESTCTRL_EXPLAIN_STMT            19
-#define SQLITE_TESTCTRL_LAST                    19
+#define SQLITE_TESTCTRL_FIRST                    1
+#define SQLITE_TESTCTRL_FAULT_INSTALL            2
+#define SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS      3
+#define SQLITE_TESTCTRL_PENDING_BYTE             4
+#define SQLITE_TESTCTRL_ASSERT                   5
+#define SQLITE_TESTCTRL_ALWAYS                   6
+#define SQLITE_TESTCTRL_RESERVE                  7
+#define SQLITE_TESTCTRL_OPTIMIZATIONS            8
+#define SQLITE_TESTCTRL_ISKEYWORD                9
+#define SQLITE_TESTCTRL_LOCALTIME_FAULT         10
+#define SQLITE_TESTCTRL_EXPLAIN_STMT            11
+#define SQLITE_TESTCTRL_LAST                    11
 
 /*
 ** CAPIREF: SQLite Runtime Status

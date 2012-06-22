@@ -18,85 +18,14 @@
 #include "sqliteInt.h"
 
 
-/* All threads share a single random number generator.
-** This structure is the current state of the generator.
-*/
-static SQLITE_WSD struct sqlite4PrngType {
-  unsigned char isInit;          /* True if initialized */
-  unsigned char i, j;            /* State variables */
-  unsigned char s[256];          /* State variables */
-} sqlite4Prng;
-
 /*
-** Get a single 8-bit random value from the RC4 PRNG.  The Mutex
+** Get a single 8-bit random value from the PRNG.  The Mutex
 ** must be held while executing this routine.
-**
-** Why not just use a library random generator like lrand48() for this?
-** Because the OP_NewRowid opcode in the VDBE depends on having a very
-** good source of random numbers.  The lrand48() library function may
-** well be good enough.  But maybe not.  Or maybe lrand48() has some
-** subtle problems on some systems that could cause problems.  It is hard
-** to know.  To minimize the risk of problems due to bad lrand48()
-** implementations, SQLite uses this random number generator based
-** on RC4, which we know works very well.
-**
-** (Later):  Actually, OP_NewRowid does not depend on a good source of
-** randomness any more.  But we will leave this code in all the same.
 */
-static u8 randomByte(void){
-  unsigned char t;
-
-
-  /* The "wsdPrng" macro will resolve to the pseudo-random number generator
-  ** state vector.  If writable static data is unsupported on the target,
-  ** we have to locate the state vector at run-time.  In the more common
-  ** case where writable static data is supported, wsdPrng can refer directly
-  ** to the "sqlite4Prng" state vector declared above.
-  */
-#ifdef SQLITE_OMIT_WSD
-  struct sqlite4PrngType *p = sqlite4Prng;
-# define wsdPrng p[0]
-#else
-# define wsdPrng sqlite4Prng
-#endif
-
-
-  /* Initialize the state of the random number generator once,
-  ** the first time this routine is called.  The seed value does
-  ** not need to contain a lot of randomness since we are not
-  ** trying to do secure encryption or anything like that...
-  **
-  ** Nothing in this file or anywhere else in SQLite does any kind of
-  ** encryption.  The RC4 algorithm is being used as a PRNG (pseudo-random
-  ** number generator) not as an encryption device.
-  */
-  if( !wsdPrng.isInit ){
-    int i;
-    char k[256];
-    wsdPrng.j = 0;
-    wsdPrng.i = 0;
-    sqlite4OsRandomness(0, 256, k);
-    for(i=0; i<256; i++){
-      wsdPrng.s[i] = (u8)i;
-    }
-    for(i=0; i<256; i++){
-      wsdPrng.j += wsdPrng.s[i] + k[i];
-      t = wsdPrng.s[wsdPrng.j];
-      wsdPrng.s[wsdPrng.j] = wsdPrng.s[i];
-      wsdPrng.s[i] = t;
-    }
-    wsdPrng.isInit = 1;
-  }
-
-  /* Generate and return single random byte
-  */
-  wsdPrng.i++;
-  t = wsdPrng.s[wsdPrng.i];
-  wsdPrng.j += t;
-  wsdPrng.s[wsdPrng.i] = wsdPrng.s[wsdPrng.j];
-  wsdPrng.s[wsdPrng.j] = t;
-  t += wsdPrng.s[wsdPrng.i];
-  return wsdPrng.s[t];
+static u8 randomByte(sqlite4_env *pEnv){
+  pEnv->prngX = (pEnv->prngX>>1) ^ ((1+~(pEnv->prngX&1)) & 0xd0000001);
+  pEnv->prngY = pEnv->prngY*1103515245 + 12345;
+  return (u8)((pEnv->prngX ^ pEnv->prngY)&0xff);
 }
 
 /*
@@ -104,34 +33,10 @@ static u8 randomByte(void){
 */
 void sqlite4_randomness(sqlite4_env *pEnv, int N, void *pBuf){
   unsigned char *zBuf = pBuf;
-#if SQLITE_THREADSAFE
-  sqlite4_mutex *mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_PRNG);
-#endif
-  sqlite4_mutex_enter(mutex);
+  if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
+  sqlite4_mutex_enter(pEnv->pPrngMutex);
   while( N-- ){
-    *(zBuf++) = randomByte();
+    *(zBuf++) = randomByte(pEnv);
   }
-  sqlite4_mutex_leave(mutex);
+  sqlite4_mutex_leave(pEnv->pPrngMutex);
 }
-
-#ifndef SQLITE_OMIT_BUILTIN_TEST
-/*
-** For testing purposes, we sometimes want to preserve the state of
-** PRNG and restore the PRNG to its saved state at a later time, or
-** to reset the PRNG to its initial state.  These routines accomplish
-** those tasks.
-**
-** The sqlite4_test_control() interface calls these routines to
-** control the PRNG.
-*/
-static SQLITE_WSD struct sqlite4PrngType sqlite4SavedPrng;
-void sqlite4PrngSaveState(void){
-  memcpy(&sqlite4SavedPrng, &sqlite4Prng, sizeof(sqlite4Prng));
-}
-void sqlite4PrngRestoreState(void){
-  memcpy(&sqlite4Prng, &sqlite4SavedPrng, sizeof(sqlite4Prng));
-}
-void sqlite4PrngResetState(void){
-  sqlite4Prng.isInit = 0;
-}
-#endif /* SQLITE_OMIT_BUILTIN_TEST */
