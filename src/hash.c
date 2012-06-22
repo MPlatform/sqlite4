@@ -38,12 +38,12 @@ void sqlite4HashClear(Hash *pH){
   assert( pH!=0 );
   elem = pH->first;
   pH->first = 0;
-  sqlite4_free(pH->ht);
+  sqlite4_free(0, pH->ht);
   pH->ht = 0;
   pH->htsize = 0;
   while( elem ){
     HashElem *next_elem = elem->next;
-    sqlite4_free(elem);
+    sqlite4_free(0, elem);
     elem = next_elem;
   }
   pH->count = 0;
@@ -116,11 +116,11 @@ static int rehash(Hash *pH, unsigned int new_size){
   ** allocation as a benign.
   */
   sqlite4BeginBenignMalloc();
-  new_ht = (struct _ht *)sqlite4Malloc( new_size*sizeof(struct _ht) );
+  new_ht = (struct _ht *)sqlite4Malloc(0, new_size*sizeof(struct _ht) );
   sqlite4EndBenignMalloc();
 
   if( new_ht==0 ) return 0;
-  sqlite4_free(pH->ht);
+  sqlite4_free(0, pH->ht);
   pH->ht = new_ht;
   pH->htsize = new_size = sqlite4MallocSize(new_ht)/sizeof(struct _ht);
   memset(new_ht, 0, new_size*sizeof(struct _ht));
@@ -187,7 +187,7 @@ static void removeElementGivenHash(
     pEntry->count--;
     assert( pEntry->count>=0 );
   }
-  sqlite4_free( elem );
+  sqlite4_free(0, elem);
   pH->count--;
   if( pH->count<=0 ){
     assert( pH->first==0 );
@@ -256,7 +256,7 @@ void *sqlite4HashInsert(Hash *pH, const char *pKey, int nKey, void *data){
     return old_data;
   }
   if( data==0 ) return 0;
-  new_elem = (HashElem*)sqlite4Malloc( sizeof(HashElem) );
+  new_elem = (HashElem*)sqlite4Malloc(0, sizeof(HashElem) );
   if( new_elem==0 ) return data;
   new_elem->pKey = pKey;
   new_elem->nKey = nKey;

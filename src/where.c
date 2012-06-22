@@ -4437,7 +4437,7 @@ static void whereInfoFree(sqlite4 *db, WhereInfo *pWInfo){
       if( pInfo ){
         /* assert( pInfo->needToFreeIdxStr==0 || db->mallocFailed ); */
         if( pInfo->needToFreeIdxStr ){
-          sqlite4_free(pInfo->idxStr);
+          sqlite4_free(db->pEnv, pInfo->idxStr);
         }
         sqlite4DbFree(db, pInfo);
       }

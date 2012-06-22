@@ -403,7 +403,7 @@ int sqlite4RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
   pParse->zTail = zSql;
   i = 0;
   assert( pzErrMsg!=0 );
-  pEngine = sqlite4ParserAlloc((void*(*)(size_t))sqlite4Malloc);
+  pEngine = sqlite4ParserAlloc((void*(*)(void*,size_t))sqlite4_malloc,db->pEnv);
   if( pEngine==0 ){
     db->mallocFailed = 1;
     return SQLITE_NOMEM;
@@ -467,7 +467,7 @@ abort_parse:
       sqlite4ParserStackPeak(pEngine)
   );
 #endif
-  sqlite4ParserFree(pEngine, sqlite4_free);
+  sqlite4ParserFree(pEngine, (void(*)(void*,void*))sqlite4_free);
   db->lookaside.bEnabled = enableLookaside;
   if( db->mallocFailed ){
     pParse->rc = SQLITE_NOMEM;
@@ -487,7 +487,7 @@ abort_parse:
     pParse->pVdbe = 0;
   }
 #ifndef SQLITE_OMIT_VIRTUALTABLE
-  sqlite4_free(pParse->apVtabLock);
+  sqlite4_free(0, pParse->apVtabLock);
 #endif
 
   if( !IN_DECLARE_VTAB ){

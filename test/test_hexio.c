@@ -113,7 +113,7 @@ static int hexio_read(
   if( Tcl_GetIntFromObj(interp, objv[2], &offset) ) return TCL_ERROR;
   if( Tcl_GetIntFromObj(interp, objv[3], &amt) ) return TCL_ERROR;
   zFile = Tcl_GetString(objv[1]);
-  zBuf = sqlite4_malloc( amt*2+1 );
+  zBuf = sqlite4_malloc(0, amt*2+1 );
   if( zBuf==0 ){
     return TCL_ERROR;
   }
@@ -133,7 +133,7 @@ static int hexio_read(
   }
   sqlite4TestBinToHex(zBuf, got);
   Tcl_AppendResult(interp, zBuf, 0);
-  sqlite4_free(zBuf);
+  sqlite4_free(0, zBuf);
   return TCL_OK;
 }
 
@@ -164,7 +164,7 @@ static int hexio_write(
   if( Tcl_GetIntFromObj(interp, objv[2], &offset) ) return TCL_ERROR;
   zFile = Tcl_GetString(objv[1]);
   zIn = (const unsigned char *)Tcl_GetStringFromObj(objv[3], &nIn);
-  aOut = sqlite4_malloc( nIn/2 );
+  aOut = sqlite4_malloc(0, nIn/2 );
   if( aOut==0 ){
     return TCL_ERROR;
   }
@@ -179,7 +179,7 @@ static int hexio_write(
   }
   fseek(out, offset, SEEK_SET);
   written = fwrite(aOut, 1, nOut, out);
-  sqlite4_free(aOut);
+  sqlite4_free(0, aOut);
   fclose(out);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(written));
   return TCL_OK;
@@ -209,7 +209,7 @@ static int hexio_get_int(
     return TCL_ERROR;
   }
   zIn = (const unsigned char *)Tcl_GetStringFromObj(objv[1], &nIn);
-  aOut = sqlite4_malloc( nIn/2 );
+  aOut = sqlite4_malloc(0, nIn/2 );
   if( aOut==0 ){
     return TCL_ERROR;
   }
@@ -220,7 +220,7 @@ static int hexio_get_int(
     memset(aNum, 0, sizeof(aNum));
     memcpy(&aNum[4-nOut], aOut, nOut);
   }
-  sqlite4_free(aOut);
+  sqlite4_free(0, aOut);
   val = (aNum[0]<<24) | (aNum[1]<<16) | (aNum[2]<<8) | aNum[3];
   Tcl_SetObjResult(interp, Tcl_NewIntObj(val));
   return TCL_OK;
@@ -305,13 +305,13 @@ static int utf8_to_utf8(
     return TCL_ERROR;
   }
   zOrig = (unsigned char *)Tcl_GetStringFromObj(objv[1], &n);
-  z = sqlite4_malloc( n+3 );
+  z = sqlite4_malloc(0, n+3 );
   n = sqlite4TestHexToBin(zOrig, n, z);
   z[n] = 0;
   nOut = sqlite4Utf8To8(z);
   sqlite4TestBinToHex(z,nOut);
   Tcl_AppendResult(interp, (char*)z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 #else
   Tcl_AppendResult(interp, 

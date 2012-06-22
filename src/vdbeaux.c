@@ -600,7 +600,7 @@ static void freeP4(sqlite4 *db, int p4type, void *p4){
         break;
       }
       case P4_MPRINTF: {
-        if( db->pnBytesFreed==0 ) sqlite4_free(p4);
+        if( db->pnBytesFreed==0 ) sqlite4_free(db->pEnv, p4);
         break;
       }
       case P4_VDBEFUNC: {

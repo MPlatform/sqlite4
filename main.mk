@@ -68,7 +68,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          update.o util.o varint.o \
          vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
          vdbemem.o vdbetrace.o \
-         walker.o where.o utf.o vtab.o
+         walker.o where.o utf.o
 
 # All of the source code files.
 #
@@ -202,23 +202,16 @@ TESTSRC = \
   $(TOP)/test/test_main.c \
   $(TOP)/test/test_thread0.c \
   $(TOP)/test/test_utf.c \
-  $(TOP)/test/test_echo.c \
   $(TOP)/test/test_misc1.c \
   $(TOP)/test/test_config.c \
   $(TOP)/test/test_func.c \
-  $(TOP)/test/test_fuzzer.c \
   $(TOP)/test/test_hexio.c \
-  $(TOP)/test/test_intarray.c \
   $(TOP)/test/test_lsm.c \
   $(TOP)/test/test_malloc.c \
   $(TOP)/test/test_mutex.c \
-  $(TOP)/test/test_rtree.c \
-  $(TOP)/test/test_schema.c \
   $(TOP)/test/test_storage.c \
   $(TOP)/test/test_storage2.c \
-  $(TOP)/test/test_tclvar.c \
   $(TOP)/test/test_thread.c \
-  $(TOP)/test/test_wholenumber.c \
   $(TOP)/test/test_wsd.c
 
 #TESTSRC += $(TOP)/ext/fts2/fts2_tokenizer.c

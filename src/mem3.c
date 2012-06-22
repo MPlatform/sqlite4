@@ -516,14 +516,14 @@ static void memsys3Free(void *pPrior){
 /*
 ** Change the size of an existing memory allocation
 */
-static void *memsys3Realloc(void *pPrior, int nBytes){
+static void *memsys3Realloc(sqlite4_env*pEnv, void *pPrior, int nBytes){
   int nOld;
   void *p;
   if( pPrior==0 ){
-    return sqlite4_malloc(nBytes);
+    return sqlite4_malloc(pEnv, nBytes);
   }
   if( nBytes<=0 ){
-    sqlite4_free(pPrior);
+    sqlite4_free(pEnv, pPrior);
     return 0;
   }
   nOld = memsys3Size(pPrior);

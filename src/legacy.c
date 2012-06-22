@@ -126,7 +126,7 @@ exec_out:
   rc = sqlite4ApiExit(db, rc);
   if( rc!=SQLITE_OK && ALWAYS(rc==sqlite4_errcode(db)) && pzErrMsg ){
     int nErrMsg = 1 + sqlite4Strlen30(sqlite4_errmsg(db));
-    *pzErrMsg = sqlite4Malloc(nErrMsg);
+    *pzErrMsg = sqlite4Malloc(0, nErrMsg);
     if( *pzErrMsg ){
       memcpy(*pzErrMsg, sqlite4_errmsg(db), nErrMsg);
     }else{

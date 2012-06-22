@@ -467,7 +467,7 @@ static void importVtabErrMsg(Vdbe *p, sqlite4_vtab *pVtab){
   sqlite4 *db = p->db;
   sqlite4DbFree(db, p->zErrMsg);
   p->zErrMsg = sqlite4DbStrDup(db, pVtab->zErrMsg);
-  sqlite4_free(pVtab->zErrMsg);
+  sqlite4_free(0, pVtab->zErrMsg);
   pVtab->zErrMsg = 0;
 }
 

@@ -77,7 +77,7 @@ static int c_realloc_test(
     return TCL_ERROR;
   }
 
-  p = sqlite4_malloc(5);
+  p = sqlite4_malloc(0, 5);
   if( !p ){
     zErrFunction = "sqlite4_malloc";
     goto error_out;
@@ -86,7 +86,7 @@ static int c_realloc_test(
   /* Test that realloc()ing a block of memory to a negative size is
   ** the same as free()ing that memory.
   */
-  p = sqlite4_realloc(p, -1);
+  p = sqlite4_realloc(0, p, -1);
   if( p ){
     zErrFunction = "sqlite4_realloc";
     goto error_out;

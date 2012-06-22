@@ -72,9 +72,9 @@ sqlite4_uint64 sqlite4_memory_highwater(sqlite4_env *pEnv, int resetFlag){
 ** Allocate memory.  This routine is like sqlite4_malloc() except that it
 ** assumes the memory subsystem has already been initialized.
 */
-void *sqlite4Malloc(int n){
+void *sqlite4Malloc(sqlite4_env *pEnv, int n){
   void *p;
-  sqlite4_env *pEnv = &sqlite4DefaultEnv;
+  if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
 
   if( n<=0               /* IMP: R-65312-04917 */ 
    || n>=0x7fffff00
@@ -109,11 +109,11 @@ void *sqlite4Malloc(int n){
 ** First make sure the memory subsystem is initialized, then do the
 ** allocation.
 */
-void *sqlite4_malloc(int n){
+void *sqlite4_malloc(sqlite4_env *pEnv, int n){
 #ifndef SQLITE_OMIT_AUTOINIT
-  if( sqlite4_initialize(0) ) return 0;
+  if( sqlite4_initialize(pEnv) ) return 0;
 #endif
-  return sqlite4Malloc(n);
+  return sqlite4Malloc(pEnv, n);
 }
 
 
@@ -152,8 +152,7 @@ int sqlite4DbMallocSize(sqlite4 *db, void *p){
 /*
 ** Free memory previously obtained from sqlite4Malloc().
 */
-void sqlite4_free(void *p){
-  sqlite4_env *pEnv = &sqlite4DefaultEnv;
+void sqlite4_free(sqlite4_env *pEnv, void *p){
   if( p==0 ) return;  /* IMP: R-49053-54554 */
   assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
   assert( sqlite4MemdebugHasType(p, MEMTYPE_HEAP) );
@@ -191,22 +190,21 @@ void sqlite4DbFree(sqlite4 *db, void *p){
   assert( sqlite4MemdebugHasType(p, MEMTYPE_LOOKASIDE|MEMTYPE_HEAP) );
   assert( db!=0 || sqlite4MemdebugNoType(p, MEMTYPE_LOOKASIDE) );
   sqlite4MemdebugSetType(p, MEMTYPE_HEAP);
-  sqlite4_free(p);
+  sqlite4_free(db==0 ? 0 : db->pEnv, p);
 }
 
 /*
 ** Change the size of an existing memory allocation
 */
-void *sqlite4Realloc(void *pOld, int nBytes){
+void *sqlite4Realloc(sqlite4_env *pEnv, void *pOld, int nBytes){
   int nOld, nNew;
   void *pNew;
-  sqlite4_env *pEnv = &sqlite4DefaultEnv;
 
   if( pOld==0 ){
-    return sqlite4Malloc(nBytes); /* IMP: R-28354-25769 */
+    return sqlite4Malloc(pEnv, nBytes); /* IMP: R-28354-25769 */
   }
   if( nBytes<=0 ){
-    sqlite4_free(pOld); /* IMP: R-31593-10574 */
+    sqlite4_free(pEnv, pOld); /* IMP: R-31593-10574 */
     return 0;
   }
   if( nBytes>=0x7fffff00 ){
@@ -242,19 +240,19 @@ void *sqlite4Realloc(void *pOld, int nBytes){
 ** The public interface to sqlite4Realloc.  Make sure that the memory
 ** subsystem is initialized prior to invoking sqliteRealloc.
 */
-void *sqlite4_realloc(void *pOld, int n){
+void *sqlite4_realloc(sqlite4_env *pEnv, void *pOld, int n){
 #ifndef SQLITE_OMIT_AUTOINIT
-  if( sqlite4_initialize(0) ) return 0;
+  if( sqlite4_initialize(pEnv) ) return 0;
 #endif
-  return sqlite4Realloc(pOld, n);
+  return sqlite4Realloc(pEnv, pOld, n);
 }
 
 
 /*
 ** Allocate and zero memory.
 */ 
-void *sqlite4MallocZero(int n){
-  void *p = sqlite4Malloc(n);
+void *sqlite4MallocZero(sqlite4_env *pEnv, int n){
+  void *p = sqlite4Malloc(pEnv, n);
   if( p ){
     memset(p, 0, n);
   }
@@ -322,7 +320,7 @@ void *sqlite4DbMallocRaw(sqlite4 *db, int n){
     return 0;
   }
 #endif
-  p = sqlite4Malloc(n);
+  p = sqlite4Malloc((db ? db->pEnv: 0), n);
   if( !p && db ){
     db->mallocFailed = 1;
   }
@@ -356,7 +354,7 @@ void *sqlite4DbRealloc(sqlite4 *db, void *p, int n){
       assert( sqlite4MemdebugHasType(p, MEMTYPE_DB) );
       assert( sqlite4MemdebugHasType(p, MEMTYPE_LOOKASIDE|MEMTYPE_HEAP) );
       sqlite4MemdebugSetType(p, MEMTYPE_HEAP);
-      pNew = sqlite4_realloc(p, n);
+      pNew = sqlite4_realloc(db->pEnv, p, n);
       if( !pNew ){
         sqlite4MemdebugSetType(p, MEMTYPE_DB|MEMTYPE_HEAP);
         db->mallocFailed = 1;

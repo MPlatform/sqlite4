@@ -1583,14 +1583,14 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
             "abort, fail, ignore, or replace", 0);
       return TCL_ERROR;
     }
-    zSql = sqlite4_mprintf("SELECT * FROM '%q'", zTable);
+    zSql = sqlite4_mprintf(0, "SELECT * FROM '%q'", zTable);
     if( zSql==0 ){
       Tcl_AppendResult(interp, "Error: no such table: ", zTable, 0);
       return TCL_ERROR;
     }
     nByte = strlen30(zSql);
     rc = sqlite4_prepare(pDb->db, zSql, -1, &pStmt, 0);
-    sqlite4_free(zSql);
+    sqlite4_free(0, zSql);
     if( rc ){
       Tcl_AppendResult(interp, "Error: ", sqlite4_errmsg(pDb->db), 0);
       nCol = 0;
@@ -2332,7 +2332,7 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   sqlite4_open(0, zFile, &p->db, 0);
   Tcl_DStringFree(&translatedFilename);
   if( SQLITE_OK!=sqlite4_errcode(p->db) ){
-    zErrMsg = sqlite4_mprintf("%s", sqlite4_errmsg(p->db));
+    zErrMsg = sqlite4_mprintf(0, "%s", sqlite4_errmsg(p->db));
     sqlite4_close(p->db);
     p->db = 0;
   }
@@ -2350,7 +2350,7 @@ static int DbMain(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   if( p->db==0 ){
     Tcl_SetResult(interp, zErrMsg, TCL_VOLATILE);
     Tcl_Free((char*)p);
-    sqlite4_free(zErrMsg);
+    sqlite4_free(0, zErrMsg);
     return TCL_ERROR;
   }
   p->maxStmt = NUM_PREPARED_STMTS;
@@ -2964,10 +2964,8 @@ static void init_all(Tcl_Interp *interp){
   {
     extern int Sqliteconfig_Init(Tcl_Interp*);
     extern int Sqlitetest1_Init(Tcl_Interp*);
-    extern int Sqlitetest3_Init(Tcl_Interp*);
     extern int Sqlitetest4_Init(Tcl_Interp*);
     extern int Sqlitetest5_Init(Tcl_Interp*);
-    extern int Sqlitetest8_Init(Tcl_Interp*);
     extern int Sqlitetest9_Init(Tcl_Interp*);
     extern int Sqlitetest_func_Init(Tcl_Interp*);
     extern int Sqlitetest_hexio_Init(Tcl_Interp*);
@@ -2982,44 +2980,23 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqlitequota_Init(Tcl_Interp*);
     extern int SqliteSuperlock_Init(Tcl_Interp*);
     extern int SqlitetestSyscall_Init(Tcl_Interp*);
-    extern int Sqlitetestfuzzer_Init(Tcl_Interp*);
-    extern int Sqlitetestwholenumber_Init(Tcl_Interp*);
     extern int Sqliteteststorage_Init(Tcl_Interp*);
     extern int Sqliteteststorage2_Init(Tcl_Interp*);
     extern int SqlitetestLsm_Init(Tcl_Interp*);
-
-#if defined(SQLITE_ENABLE_FTS3) || defined(SQLITE_ENABLE_FTS4)
-    extern int Sqlitetestfts3_Init(Tcl_Interp *interp);
-#endif
-
-#ifdef SQLITE_ENABLE_ZIPVFS
-    extern int Zipvfs_Init(Tcl_Interp*);
-    Zipvfs_Init(interp);
-#endif
 
     Sqliteconfig_Init(interp);
     Sqlitetest1_Init(interp);
     Sqlitetest4_Init(interp);
     Sqlitetest5_Init(interp);
-    Sqlitetest8_Init(interp);
     Sqlitetest9_Init(interp);
     Sqlitetest_hexio_Init(interp);
     Sqlitetest_malloc_Init(interp);
     Sqlitetest_mutex_Init(interp);
-    Sqlitetestschema_Init(interp);
-    Sqlitetesttclvar_Init(interp);
     SqlitetestThread_Init(interp);
-    Sqlitetestintarray_Init(interp);
-    Sqlitetestrtree_Init(interp);
-    Sqlitetestfuzzer_Init(interp);
-    Sqlitetestwholenumber_Init(interp);
     Sqliteteststorage_Init(interp);
     Sqliteteststorage2_Init(interp);
     SqlitetestLsm_Init(interp);
 
-#if defined(SQLITE_ENABLE_FTS3) || defined(SQLITE_ENABLE_FTS4)
-    Sqlitetestfts3_Init(interp);
-#endif
 
     Tcl_CreateObjCommand(
         interp, "load_testfixture_extensions", init_all_cmd, 0, 0

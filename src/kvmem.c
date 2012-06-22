@@ -198,7 +198,7 @@ static int kvmemKeyCompare(
 ** Create a new KVMemData object
 */
 static KVMemData *kvmemDataNew(const KVByteArray *aData, KVSize nData){
-  KVMemData *p = sqlite4_malloc( sizeof(*p) + nData - 8 );
+  KVMemData *p = sqlite4_malloc(0, sizeof(*p) + nData - 8 );
   if( p ) {
     p->nRef = 1;
     p->n = nData;
@@ -219,7 +219,7 @@ static KVMemData *kvmemDataRef(KVMemData *p){
 ** Dereference a KVMemData object
 */
 static void kvmemDataUnref(KVMemData *p){
-  if( p && (--p->nRef)<=0 ) sqlite4_free(p);
+  if( p && (--p->nRef)<=0 ) sqlite4_free(0, p);
 }
 
 /*
@@ -236,7 +236,7 @@ static KVMemNode *kvmemNodeRef(KVMemNode *p){
 static void kvmemNodeUnref(KVMemNode *p){
   if( p && (--p->nRef)<=0 ){
     kvmemDataUnref(p->pData);
-    sqlite4_free(p);
+    sqlite4_free(0, p);
   }
 }
 
@@ -304,7 +304,7 @@ static KVMemNode *kvmemPrev(KVMemNode *p){
 static KVMemChng *kvmemNewChng(KVMem *p, KVMemNode *pNode){
   KVMemChng *pChng;
   assert( p->base.iTransLevel>=2 );
-  pChng = sqlite4_malloc( sizeof(*pChng) );
+  pChng = sqlite4_malloc(0, sizeof(*pChng) );
   if( pChng ){
     pChng->pNext = p->apLog[p->base.iTransLevel-2];
     p->apLog[p->base.iTransLevel-2] = pChng;
@@ -327,7 +327,7 @@ static KVMemNode *kvmemNewNode(
   KVMemNode *pNode;
   KVMemChng *pChng;
   assert( p->base.iTransLevel>=2 );
-  pNode = sqlite4_malloc( sizeof(*pNode)+nKey-2 );
+  pNode = sqlite4_malloc(0, sizeof(*pNode)+nKey-2 );
   if( pNode ){
     memset(pNode, 0, sizeof(*pNode));
     memcpy(pNode->aKey, aKey, nKey);
@@ -335,7 +335,7 @@ static KVMemNode *kvmemNewNode(
     pNode->nRef = 1;
     pChng = kvmemNewChng(p, pNode);
     if( pChng==0 ){
-      sqlite4_free(pNode);
+      sqlite4_free(0, pNode);
       pNode = 0;
     }
     assert( pChng==0 || pChng->pData==0 );
@@ -448,7 +448,7 @@ static int kvmemBegin(KVStore *pKVStore, int iLevel){
   assert( iLevel==2 || iLevel==p->base.iTransLevel+1 );
   if( iLevel>=2 ){
     KVMemChng **apNewLog;
-    apNewLog = sqlite4_realloc(p->apLog, sizeof(apNewLog[0])*(iLevel-1) );
+    apNewLog = sqlite4_realloc(0, p->apLog, sizeof(apNewLog[0])*(iLevel-1) );
     if( apNewLog==0 ) return SQLITE_NOMEM;
     p->apLog = apNewLog;
     p->apLog[iLevel-2] = 0;
@@ -494,7 +494,7 @@ static int kvmemCommitPhaseTwo(KVStore *pKVStore, int iLevel){
         }
         kvmemDataUnref(pChng->pData);
         pNext = pChng->pNext;
-        sqlite4_free(pChng);
+        sqlite4_free(0, pChng);
       }
     }else{
       KVMemChng **pp;
@@ -546,7 +546,7 @@ static int kvmemRollback(KVStore *pKVStore, int iLevel){
         kvmemRemoveNode(p, pNode);
       }
       pNext = pChng->pNext;
-      sqlite4_free(pChng);
+      sqlite4_free(0, pChng);
     }
     p->apLog[p->base.iTransLevel-2] = 0;
     p->base.iTransLevel--;
@@ -647,7 +647,7 @@ static int kvmemOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
   KVMem *p = (KVMem*)pKVStore;
   KVMemCursor *pCur;
   assert( p->iMagicKVMemBase==SQLITE_KVMEMBASE_MAGIC );
-  pCur = sqlite4_malloc( sizeof(*pCur) );
+  pCur = sqlite4_malloc(0, sizeof(*pCur) );
   if( pCur==0 ){
     *ppKVCursor = 0;
     return SQLITE_NOMEM;
@@ -686,7 +686,7 @@ static int kvmemCloseCursor(KVCursor *pKVCursor){
     pCur->pOwner->nCursor--;
     kvmemReset(pKVCursor);
     memset(pCur, 0, sizeof(*pCur));
-    sqlite4_free(pCur);
+    sqlite4_free(0, pCur);
   }
   return SQLITE_OK;
 }
@@ -898,10 +898,10 @@ static int kvmemClose(KVStore *pKVStore){
     kvmemCommitPhaseOne(pKVStore, 0);
     kvmemCommitPhaseTwo(pKVStore, 0);
   }
-  sqlite4_free(p->apLog);
+  sqlite4_free(0, p->apLog);
   kvmemClearTree(p->pRoot);
   memset(p, 0, sizeof(*p));
-  sqlite4_free(p);
+  sqlite4_free(0, p);
   return SQLITE_OK;
 }
 
@@ -939,7 +939,7 @@ int sqlite4KVStoreOpenMem(
   const char *zName,              /* Name of in-memory storage unit */
   unsigned openFlags              /* Flags */
 ){
-  KVMem *pNew = sqlite4_malloc( sizeof(*pNew) );
+  KVMem *pNew = sqlite4_malloc(pEnv, sizeof(*pNew) );
   if( pNew==0 ) return SQLITE_NOMEM;
   memset(pNew, 0, sizeof(*pNew));
   pNew->base.pStoreVfunc = &kvmemMethods;

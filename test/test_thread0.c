@@ -74,7 +74,7 @@ static void *thread_main(void *pArg){
   while( p->opnum<=p->completed ) sched_yield();
   while( p->xOp ){
     if( p->zErr && p->zErr!=p->zStaticErr ){
-      sqlite4_free(p->zErr);
+      sqlite4_free(0, p->zErr);
       p->zErr = 0;
     }
     (*p->xOp)(p);
@@ -90,7 +90,7 @@ static void *thread_main(void *pArg){
     p->db = 0;
   }
   if( p->zErr && p->zErr!=p->zStaticErr ){
-    sqlite4_free(p->zErr);
+    sqlite4_free(0, p->zErr);
     p->zErr = 0;
   }
   p->completed++;
@@ -138,14 +138,14 @@ static int tcl_thread_create(
     return TCL_ERROR;
   }
   threadset[i].busy = 1;
-  sqlite4_free(threadset[i].zFilename);
-  threadset[i].zFilename = sqlite4_mprintf("%s", argv[2]);
+  sqlite4_free(0, threadset[i].zFilename);
+  threadset[i].zFilename = sqlite4_mprintf(0, "%s", argv[2]);
   threadset[i].opnum = 1;
   threadset[i].completed = 0;
   rc = pthread_create(&x, 0, thread_main, &threadset[i]);
   if( rc ){
     Tcl_AppendResult(interp, "failed to create the thread", 0);
-    sqlite4_free(threadset[i].zFilename);
+    sqlite4_free(0, threadset[i].zFilename);
     threadset[i].busy = 0;
     return TCL_ERROR;
   }
@@ -196,9 +196,9 @@ static void stop_thread(Thread *p){
   p->xOp = 0;
   p->opnum++;
   thread_wait(p);
-  sqlite4_free(p->zArg);
+  sqlite4_free(0, p->zArg);
   p->zArg = 0;
-  sqlite4_free(p->zFilename);
+  sqlite4_free(0, p->zFilename);
   p->zFilename = 0;
   p->busy = 0;
 }
@@ -472,8 +472,8 @@ static int tcl_thread_compile(
   }
   thread_wait(&threadset[i]);
   threadset[i].xOp = do_compile;
-  sqlite4_free(threadset[i].zArg);
-  threadset[i].zArg = sqlite4_mprintf("%s", argv[2]);
+  sqlite4_free(0, threadset[i].zArg);
+  threadset[i].zArg = sqlite4_mprintf(0, "%s", argv[2]);
   threadset[i].opnum++;
   return TCL_OK;
 }
@@ -567,7 +567,7 @@ static int tcl_thread_finalize(
   }
   thread_wait(&threadset[i]);
   threadset[i].xOp = do_finalize;
-  sqlite4_free(threadset[i].zArg);
+  sqlite4_free(0, threadset[i].zArg);
   threadset[i].zArg = 0;
   threadset[i].opnum++;
   return TCL_OK;

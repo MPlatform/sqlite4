@@ -67,11 +67,11 @@ static void kvTrace(KVStore *p, const char *zFormat, ...){
     char *z;
 
     va_start(ap, zFormat);
-    z = sqlite4_vmprintf(zFormat, ap);
+    z = sqlite4_vmprintf(0, zFormat, ap);
     va_end(ap);
     printf("%s.%s\n", p->zKVName, z);
     fflush(stdout);
-    sqlite4_free(z);
+    sqlite4_free(0, z);
   }
 }
 

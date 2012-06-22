@@ -1248,8 +1248,8 @@ int sqlite4_complete16(const void *sql);
 ** addition that after the string has been read and copied into
 ** the result, [sqlite4_free()] is called on the input string.)^
 */
-char *sqlite4_mprintf(const char*,...);
-char *sqlite4_vmprintf(const char*, va_list);
+char *sqlite4_mprintf(sqlite4_env*, const char*,...);
+char *sqlite4_vmprintf(sqlite4_env*, const char*, va_list);
 char *sqlite4_snprintf(int,char*,const char*, ...);
 char *sqlite4_vsnprintf(int,char*,const char*, va_list);
 
@@ -1323,9 +1323,9 @@ char *sqlite4_vsnprintf(int,char*,const char*, va_list);
 ** a block of memory after it has been released using
 ** [sqlite4_free()] or [sqlite4_realloc()].
 */
-void *sqlite4_malloc(int);
-void *sqlite4_realloc(void*, int);
-void sqlite4_free(void*);
+void *sqlite4_malloc(sqlite4_env*, int);
+void *sqlite4_realloc(sqlite4_env*, void*, int);
+void sqlite4_free(sqlite4_env*, void*);
 
 /*
 ** CAPIREF: Memory Allocator Statistics
@@ -2899,6 +2899,7 @@ void *sqlite4_user_data(sqlite4_context*);
 ** registered the application defined function.
 */
 sqlite4 *sqlite4_context_db_handle(sqlite4_context*);
+sqlite4_env *sqlite4_context_env(sqlite4_context*);
 
 /*
 ** CAPIREF: Function Auxiliary Data
@@ -2961,8 +2962,11 @@ void sqlite4_set_auxdata(sqlite4_context*, int N, void*, void (*)(void*));
 ** C++ compilers.  See ticket #2191.
 */
 typedef void (*sqlite4_destructor_type)(void*);
+void sqlite4_dynamic(void*);
 #define SQLITE_STATIC      ((sqlite4_destructor_type)0)
 #define SQLITE_TRANSIENT   ((sqlite4_destructor_type)-1)
+#define SQLITE_DYNAMIC     (sqlite4_dynamic)
+
 
 /*
 ** CAPIREF: Setting The Result Of An SQL Function

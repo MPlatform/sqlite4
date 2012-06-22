@@ -146,5 +146,3 @@ static void checkpoint_starvation_2(int nMs){
   }
   print_and_free_err(&err);
 }
-
-
