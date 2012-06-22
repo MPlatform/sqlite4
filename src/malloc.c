@@ -156,6 +156,7 @@ void sqlite4_free(sqlite4_env *pEnv, void *p){
   if( p==0 ) return;  /* IMP: R-49053-54554 */
   assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
   assert( sqlite4MemdebugHasType(p, MEMTYPE_HEAP) );
+  if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
   if( pEnv->bMemstat ){
     sqlite4_mutex_enter(mem0.mutex);
     sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MEMORY_USED, -sqlite4MallocSize(p));
@@ -199,6 +200,7 @@ void sqlite4DbFree(sqlite4 *db, void *p){
 void *sqlite4Realloc(sqlite4_env *pEnv, void *pOld, int nBytes){
   int nOld, nNew;
   void *pNew;
+  if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
 
   if( pOld==0 ){
     return sqlite4Malloc(pEnv, nBytes); /* IMP: R-28354-25769 */
