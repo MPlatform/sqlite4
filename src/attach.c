@@ -132,12 +132,12 @@ static void attachFunc(
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_NOMEM ) db->mallocFailed = 1;
     sqlite4_result_error(context, zErr, -1);
-    sqlite4_free(zErr);
+    sqlite4_free(db->pEnv, zErr);
     return;
   }
   flags |= SQLITE_OPEN_MAIN_DB;
   rc = sqlite4KVStoreOpen(db, zName, zPath, &aNew->pKV, 0);
-  sqlite4_free( zPath );
+  sqlite4_free(db->pEnv, zPath);
   db->nDb++;
   if( rc==SQLITE_CONSTRAINT ){
     rc = SQLITE_ERROR;

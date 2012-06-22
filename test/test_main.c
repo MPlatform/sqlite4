@@ -326,14 +326,14 @@ static int test_exec_printf(
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
   Tcl_DStringInit(&str);
-  zSql = sqlite4_mprintf(argv[2], argv[3]);
+  zSql = sqlite4_mprintf(0, argv[2], argv[3]);
   rc = sqlite4_exec(db, zSql, exec_printf_cb, &str, &zErr);
-  sqlite4_free(zSql);
+  sqlite4_free(0, zSql);
   sprintf(zBuf, "%d", rc);
   Tcl_AppendElement(interp, zBuf);
   Tcl_AppendElement(interp, rc==SQLITE_OK ? Tcl_DStringValue(&str) : zErr);
   Tcl_DStringFree(&str);
-  if( zErr ) sqlite4_free(zErr);
+  if( zErr ) sqlite4_free(0, zErr);
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
   return TCL_OK;
 }
@@ -380,7 +380,7 @@ static int test_exec_hex(
   Tcl_AppendElement(interp, zBuf);
   Tcl_AppendElement(interp, rc==SQLITE_OK ? Tcl_DStringValue(&str) : zErr);
   Tcl_DStringFree(&str);
-  if( zErr ) sqlite4_free(zErr);
+  if( zErr ) sqlite4_free(0, zErr);
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
   return TCL_OK;
 }
@@ -449,7 +449,7 @@ static int test_exec(
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
   Tcl_DStringInit(&str);
-  zSql = sqlite4_mprintf("%s", argv[2]);
+  zSql = sqlite4_mprintf(0, "%s", argv[2]);
   for(i=j=0; zSql[i];){
     if( zSql[i]=='%' ){
       zSql[j++] = (testHexToInt(zSql[i+1])<<4) + testHexToInt(zSql[i+2]);
@@ -460,12 +460,12 @@ static int test_exec(
   }
   zSql[j] = 0;
   rc = sqlite4_exec(db, zSql, exec_printf_cb, &str, &zErr);
-  sqlite4_free(zSql);
+  sqlite4_free(0, zSql);
   sprintf(zBuf, "%d", rc);
   Tcl_AppendElement(interp, zBuf);
   Tcl_AppendElement(interp, rc==SQLITE_OK ? Tcl_DStringValue(&str) : zErr);
   Tcl_DStringFree(&str);
-  if( zErr ) sqlite4_free(zErr);
+  if( zErr ) sqlite4_free(0, zErr);
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
   return TCL_OK;
 }
@@ -513,10 +513,10 @@ static int test_mprintf_z(
   int i;
 
   for(i=2; i<argc && (i==2 || zResult); i++){
-    zResult = sqlite4_mprintf("%z%s%s", zResult, argv[1], argv[i]);
+    zResult = sqlite4_mprintf(0, "%z%s%s", zResult, argv[1], argv[i]);
   }
   Tcl_AppendResult(interp, zResult, 0);
-  sqlite4_free(zResult);
+  sqlite4_free(0, zResult);
   return TCL_OK;
 }
 
@@ -534,8 +534,8 @@ static int test_mprintf_n(
 ){
   char *zStr;
   int n = 0;
-  zStr = sqlite4_mprintf("%s%n", argv[1], &n);
-  sqlite4_free(zStr);
+  zStr = sqlite4_mprintf(0, "%s%n", argv[1], &n);
+  sqlite4_free(0, zStr);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(n));
   return TCL_OK;
 }
@@ -740,9 +740,9 @@ static void dstrAppend(struct dstr *p, const char *z, int divider){
   if( p->nUsed + n + 2 > p->nAlloc ){
     char *zNew;
     p->nAlloc = p->nAlloc*2 + n + 200;
-    zNew = sqlite4_realloc(p->z, p->nAlloc);
+    zNew = sqlite4_realloc(0, p->z, p->nAlloc);
     if( zNew==0 ){
-      sqlite4_free(p->z);
+      sqlite4_free(0, p->z);
       memset(p, 0, sizeof(*p));
       return;
     }
@@ -793,7 +793,7 @@ static void sqlite4ExecFunc(
       (char*)sqlite4_value_text(argv[0]),
       execFuncCallback, &x, 0);
   sqlite4_result_text(context, x.z, x.nUsed, SQLITE_TRANSIENT);
-  sqlite4_free(x.z);
+  sqlite4_free(0, x.z);
 }
 
 /*
@@ -830,9 +830,9 @@ static void tkt2213Function(
   if( zText1!=zText2 || zText2!=zText3 ){
     sqlite4_result_error(context, "tkt2213 is not fixed", -1);
   }else{
-    char *zCopy = (char *)sqlite4_malloc(nText);
+    char *zCopy = (char *)sqlite4_malloc(sqlite4_context_env(context),nText);
     memcpy(zCopy, zText1, nText);
-    sqlite4_result_text(context, zCopy, nText, sqlite4_free);
+    sqlite4_result_text(context, zCopy, nText, SQLITE_DYNAMIC);
   }
 }
 
@@ -1149,9 +1149,9 @@ static int sqlite4_mprintf_int(
   for(i=2; i<5; i++){
     if( Tcl_GetInt(interp, argv[i], &a[i-2]) ) return TCL_ERROR;
   }
-  z = sqlite4_mprintf(argv[1], a[0], a[1], a[2]);
+  z = sqlite4_mprintf(0, argv[1], a[0], a[1], a[2]);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1180,9 +1180,9 @@ static int sqlite4_mprintf_int64(
       return TCL_ERROR;
     }
   }
-  z = sqlite4_mprintf(argv[1], a[0], a[1], a[2]);
+  z = sqlite4_mprintf(0, argv[1], a[0], a[1], a[2]);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1213,9 +1213,9 @@ static int sqlite4_mprintf_long(
     a[i-2] = (long int)b[i-2];
     a[i-2] &= (((u64)1)<<(sizeof(int)*8))-1;
   }
-  z = sqlite4_mprintf(argv[1], a[0], a[1], a[2]);
+  z = sqlite4_mprintf(0, argv[1], a[0], a[1], a[2]);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1240,9 +1240,9 @@ static int sqlite4_mprintf_str(
   for(i=2; i<4; i++){
     if( Tcl_GetInt(interp, argv[i], &a[i-2]) ) return TCL_ERROR;
   }
-  z = sqlite4_mprintf(argv[1], a[0], a[1], argc>4 ? argv[4] : NULL);
+  z = sqlite4_mprintf(0, argv[1], a[0], a[1], argc>4 ? argv[4] : NULL);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1273,10 +1273,10 @@ static int sqlite4_snprintf_str(
   for(i=3; i<5; i++){
     if( Tcl_GetInt(interp, argv[i], &a[i-3]) ) return TCL_ERROR;
   }
-  z = sqlite4_malloc( n+1 );
+  z = sqlite4_malloc(0, n+1);
   sqlite4_snprintf(n, z, argv[2], a[0], a[1], argc>4 ? argv[5] : NULL);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1303,9 +1303,9 @@ static int sqlite4_mprintf_double(
     if( Tcl_GetInt(interp, argv[i], &a[i-2]) ) return TCL_ERROR;
   }
   if( Tcl_GetDouble(interp, argv[4], &r) ) return TCL_ERROR;
-  z = sqlite4_mprintf(argv[1], a[0], a[1], r);
+  z = sqlite4_mprintf(0, argv[1], a[0], a[1], r);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1333,9 +1333,9 @@ static int sqlite4_mprintf_scaled(
   for(i=2; i<4; i++){
     if( Tcl_GetDouble(interp, argv[i], &r[i-2]) ) return TCL_ERROR;
   }
-  z = sqlite4_mprintf(argv[1], r[0]*r[1]);
+  z = sqlite4_mprintf(0, argv[1], r[0]*r[1]);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1358,9 +1358,9 @@ static int sqlite4_mprintf_stronly(
        " FORMAT STRING\"", 0);
     return TCL_ERROR;
   }
-  z = sqlite4_mprintf(argv[1], argv[2]);
+  z = sqlite4_mprintf(0, argv[1], argv[2]);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1392,9 +1392,9 @@ static int sqlite4_mprintf_hexdouble(
   d = x2;
   d = (d<<32) + x1;
   memcpy(&r, &d, sizeof(r));
-  z = sqlite4_mprintf(argv[1], r);
+  z = sqlite4_mprintf(0, argv[1], r);
   Tcl_AppendResult(interp, z, 0);
-  sqlite4_free(z);
+  sqlite4_free(0, z);
   return TCL_OK;
 }
 
@@ -1490,7 +1490,7 @@ static void testCreateCollationDel(void *pCtx){
 
   Tcl_DecrRefCount(p->pCmp);
   Tcl_DecrRefCount(p->pDel);
-  sqlite4_free((void *)p);
+  sqlite4_free(0, (void *)p);
 }
 static int testCreateCollationCmp(
   void *pCtx,
@@ -1532,7 +1532,7 @@ static int test_create_collation(
   }
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
 
-  p = (TestCollationX *)sqlite4_malloc(sizeof(TestCollationX));
+  p = (TestCollationX *)sqlite4_malloc(0, sizeof(TestCollationX));
   p->pCmp = objv[3];
   p->pDel = objv[4];
   p->interp = interp;
@@ -1589,7 +1589,7 @@ static void cf2Destroy(void *pUser){
   if( p->pStep ) Tcl_DecrRefCount(p->pStep); 
   if( p->pFinal ) Tcl_DecrRefCount(p->pFinal); 
   if( p->pDestroy ) Tcl_DecrRefCount(p->pDestroy); 
-  sqlite4_free(p);
+  sqlite4_free(0, p);
 }
 static int test_create_function_v2(
   ClientData clientData,          /* Not used */
@@ -1632,7 +1632,7 @@ static int test_create_function_v2(
   }
   enc = aEnc[enc].enc;
 
-  p = sqlite4_malloc(sizeof(CreateFunctionV2));
+  p = sqlite4_malloc(0, sizeof(CreateFunctionV2));
   assert( p );
   memset(p, 0, sizeof(CreateFunctionV2));
   p->interp = interp;
@@ -1641,7 +1641,7 @@ static int test_create_function_v2(
     int iSwitch;
     const char *azSwitch[] = {"-func", "-step", "-final", "-destroy", 0};
     if( Tcl_GetIndexFromObj(interp, objv[i], azSwitch, "switch", 0, &iSwitch) ){
-      sqlite4_free(p);
+      sqlite4_free(0, p);
       return TCL_ERROR;
     }
 
@@ -4147,11 +4147,11 @@ int printExplainQueryPlan(sqlite4_stmt *pStmt){
   zSql = sqlite4_sql(pStmt);
   if( zSql==0 ) return SQLITE_ERROR;
 
-  zExplain = sqlite4_mprintf("EXPLAIN QUERY PLAN %s", zSql);
+  zExplain = sqlite4_mprintf(0, "EXPLAIN QUERY PLAN %s", zSql);
   if( zExplain==0 ) return SQLITE_NOMEM;
 
   rc = sqlite4_prepare(sqlite4_db_handle(pStmt), zExplain, -1, &pExplain, 0);
-  sqlite4_free(zExplain);
+  sqlite4_free(0, zExplain);
   if( rc!=SQLITE_OK ) return rc;
 
   while( SQLITE_ROW==sqlite4_step(pExplain) ){

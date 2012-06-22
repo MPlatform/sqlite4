@@ -26,6 +26,11 @@
 # include "sqliteicu.h"
 #endif
 
+/*
+** Dummy function used as a unique symbol for SQLITE_DYNAMIC
+*/
+void sqlite4_dynamic(void *p){ (void)p; }
+
 #ifndef SQLITE_AMALGAMATION
 /* IMPLEMENTATION-OF: R-46656-45156 The sqlite4_version[] string constant
 ** contains the text of SQLITE_VERSION macro. 
@@ -516,7 +521,7 @@ static int setupLookaside(sqlite4 *db, void *pBuf, int sz, int cnt){
   ** both at the same time.
   */
   if( db->lookaside.bMalloced ){
-    sqlite4_free(db->lookaside.pStart);
+    sqlite4_free(db->pEnv, db->lookaside.pStart);
   }
   /* The size of a lookaside slot after ROUNDDOWN8 needs to be larger
   ** than a pointer to be useful.
@@ -529,7 +534,7 @@ static int setupLookaside(sqlite4 *db, void *pBuf, int sz, int cnt){
     pStart = 0;
   }else if( pBuf==0 ){
     sqlite4BeginBenignMalloc();
-    pStart = sqlite4Malloc( sz*cnt );  /* IMP: R-61949-35727 */
+    pStart = sqlite4Malloc(db->pEnv, sz*cnt );  /* IMP: R-61949-35727 */
     sqlite4EndBenignMalloc();
     if( pStart ) cnt = sqlite4MallocSize(pStart)/sz;
   }else{
@@ -886,9 +891,9 @@ int sqlite4_close(sqlite4 *db){
   sqlite4_mutex_free(db->mutex);
   assert( db->lookaside.nOut==0 );  /* Fails on a lookaside memory leak */
   if( db->lookaside.bMalloced ){
-    sqlite4_free(db->lookaside.pStart);
+    sqlite4_free(db->pEnv, db->lookaside.pStart);
   }
-  sqlite4_free(db);
+  sqlite4_free(db->pEnv, db);
   return SQLITE_OK;
 }
 
@@ -1561,7 +1566,7 @@ int sqlite4ParseUri(
     int nByte = nUri+2;           /* Bytes of space to allocate */
 
     for(iIn=0; iIn<nUri; iIn++) nByte += (zUri[iIn]=='&');
-    zFile = sqlite4_malloc(nByte);
+    zFile = sqlite4_malloc(pEnv, nByte);
     if( !zFile ) return SQLITE_NOMEM;
 
     /* Discard the scheme and authority segments of the URI. */
@@ -1570,7 +1575,7 @@ int sqlite4ParseUri(
       while( zUri[iIn] && zUri[iIn]!='/' ) iIn++;
 
       if( iIn!=7 && (iIn!=16 || memcmp("localhost", &zUri[7], 9)) ){
-        *pzErrMsg = sqlite4_mprintf("invalid uri authority: %.*s", 
+        *pzErrMsg = sqlite4_mprintf(pEnv,"invalid uri authority: %.*s", 
             iIn-7, &zUri[7]);
         rc = SQLITE_ERROR;
         goto parse_uri_out;
@@ -1679,12 +1684,13 @@ int sqlite4ParseUri(
           }
         }
         if( mode==0 ){
-          *pzErrMsg = sqlite4_mprintf("no such %s mode: %s", zModeType, zVal);
+          *pzErrMsg = sqlite4_mprintf(pEnv, "no such %s mode: %s",
+                                      zModeType, zVal);
           rc = SQLITE_ERROR;
           goto parse_uri_out;
         }
         if( mode>limit ){
-          *pzErrMsg = sqlite4_mprintf("%s mode not allowed: %s",
+          *pzErrMsg = sqlite4_mprintf(pEnv, "%s mode not allowed: %s",
                                       zModeType, zVal);
           rc = SQLITE_PERM;
           goto parse_uri_out;
@@ -1696,7 +1702,7 @@ int sqlite4ParseUri(
     }
 
   }else{
-    zFile = sqlite4_malloc(nUri+2);
+    zFile = sqlite4_malloc(pEnv, nUri+2);
     if( !zFile ) return SQLITE_NOMEM;
     memcpy(zFile, zUri, nUri);
     zFile[nUri] = '\0';
@@ -1705,7 +1711,7 @@ int sqlite4ParseUri(
 
  parse_uri_out:
   if( rc!=SQLITE_OK ){
-    sqlite4_free(zFile);
+    sqlite4_free(pEnv, zFile);
     zFile = 0;
   }
   *pFlags = flags;
@@ -1748,13 +1754,13 @@ static int openDatabase(
   }
 
   /* Allocate the sqlite data structure */
-  db = sqlite4MallocZero( sizeof(sqlite4) );
+  db = sqlite4MallocZero(pEnv, sizeof(sqlite4) );
   if( db==0 ) goto opendb_out;
   db->pEnv = pEnv;
   if( isThreadsafe ){
     db->mutex = sqlite4MutexAlloc(SQLITE_MUTEX_RECURSIVE);
     if( db->mutex==0 ){
-      sqlite4_free(db);
+      sqlite4_free(pEnv, db);
       db = 0;
       goto opendb_out;
     }
@@ -1805,7 +1811,7 @@ static int openDatabase(
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_NOMEM ) db->mallocFailed = 1;
     sqlite4Error(db, rc, zErrMsg ? "%s" : 0, zErrMsg);
-    sqlite4_free(zErrMsg);
+    sqlite4_free(pEnv, zErrMsg);
     goto opendb_out;
   }
 
@@ -1876,7 +1882,7 @@ static int openDatabase(
                         pEnv->nLookaside);
 
 opendb_out:
-  sqlite4_free(zOpen);
+  sqlite4_free(pEnv, zOpen);
   if( db ){
     assert( db->mutex!=0 || isThreadsafe==0 || pEnv->bFullMutex==0 );
     sqlite4_mutex_leave(db->mutex);

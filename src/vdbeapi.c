@@ -490,8 +490,7 @@ void *sqlite4_user_data(sqlite4_context *p){
 }
 
 /*
-** Extract the user data from a sqlite4_context structure and return a
-** pointer to it.
+** Return the sqlite4 object that owns the sqlite4_context.
 **
 ** IMPLEMENTATION-OF: R-46798-50301 The sqlite4_context_db_handle() interface
 ** returns a copy of the pointer to the database connection (the 1st
@@ -502,6 +501,14 @@ void *sqlite4_user_data(sqlite4_context *p){
 sqlite4 *sqlite4_context_db_handle(sqlite4_context *p){
   assert( p && p->pFunc );
   return p->s.db;
+}
+
+/*
+** Return the sqlite4_env object associated with the sqlite4_context.
+*/
+sqlite4_env *sqlite4_context_env(sqlite4_context *p){
+  assert( p && p->pFunc );
+  return p->s.db->pEnv;
 }
 
 /*
@@ -519,11 +526,12 @@ void sqlite4InvalidFunction(
 ){
   const char *zName = context->pFunc->zName;
   char *zErr;
+  sqlite4_env *pEnv = sqlite4_context_env(context);
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
-  zErr = sqlite4_mprintf(
+  zErr = sqlite4_mprintf(pEnv,
       "unable to use function %s in the requested context", zName);
   sqlite4_result_error(context, zErr, -1);
-  sqlite4_free(zErr);
+  sqlite4_free(pEnv, zErr);
 }
 
 /*

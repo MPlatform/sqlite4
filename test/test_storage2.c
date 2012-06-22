@@ -91,14 +91,14 @@ static int kvwrapOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
   KVWrap *p = (KVWrap *)pKVStore;
   KVWrapCsr *pCsr;
 
-  pCsr = (KVWrapCsr *)sqlite4_malloc(sizeof(KVWrapCsr));
+  pCsr = (KVWrapCsr *)sqlite4_malloc(0, sizeof(KVWrapCsr));
   if( pCsr==0 ){
     rc = SQLITE_NOMEM;
   }else{
     memset(pCsr, 0, sizeof(KVWrapCsr));
     rc = p->pReal->pStoreVfunc->xOpenCursor(p->pReal, &pCsr->pReal);
     if( rc!=SQLITE_OK ){
-      sqlite4_free(pCsr);
+      sqlite4_free(0, pCsr);
       pCsr = 0;
     }else{
       pCsr->base.pStore = pKVStore;
@@ -127,7 +127,7 @@ static int kvwrapCloseCursor(KVCursor *pKVCursor){
   KVWrap *p = (KVWrap *)(pKVCursor->pStore);
   KVWrapCsr *pCsr = (KVWrapCsr *)pKVCursor;
   rc = p->pReal->pStoreVfunc->xCloseCursor(pCsr->pReal);
-  sqlite4_free(pCsr);
+  sqlite4_free(0, pCsr);
   return rc;
 }
 
@@ -222,7 +222,7 @@ static int kvwrapClose(KVStore *pKVStore){
   int rc;
   KVWrap *p = (KVWrap *)pKVStore;
   rc = p->pReal->pStoreVfunc->xClose(p->pReal);
-  sqlite4_free(p);
+  sqlite4_free(0, p);
   return rc;
 }
 
@@ -265,7 +265,7 @@ static int newFileStorage(
   KVWrap *pNew;
   int rc = SQLITE_OK;
 
-  pNew = (KVWrap *)sqlite4_malloc(sizeof(KVWrap));
+  pNew = (KVWrap *)sqlite4_malloc(0, sizeof(KVWrap));
   if( pNew==0 ){
     rc = SQLITE_NOMEM;
   }else{
@@ -273,7 +273,7 @@ static int newFileStorage(
     pNew->base.pStoreVfunc = &kvwrapMethods;
     rc = kvwg.xFactory(pEnv, &pNew->pReal, zName, openFlags);
     if( rc!=SQLITE_OK ){
-      sqlite4_free(pNew);
+      sqlite4_free(0, pNew);
       pNew = 0;
     }
   }

@@ -41,8 +41,8 @@ int sqlite4OsCurrentTime(sqlite4_env *pEnv, sqlite4_uint64 *pTimeOut){
 ** error in sqlite4_os_init() by the upper layers can be tested.
 */
 int sqlite4OsInit(sqlite4_env *pEnv){
-  void *p = sqlite4_malloc(10);
+  void *p = sqlite4_malloc(pEnv, 10);
   if( p==0 ) return SQLITE_NOMEM;
-  sqlite4_free(p);
+  sqlite4_free(pEnv, p);
   return SQLITE_OK; /*sqlite4_os_init();*/
 }

@@ -202,7 +202,7 @@ test_suite "src4" -prefix "" -description {
   whereB.test whereC.test
 
   tkt-02a8e81d44.test tkt-26ff0c2d1e.test tkt-2d1a5c67d.test
-  tkt-2ea2425d34.test tkt-31338dca7e.test tkt-313723c356.test
+  tkt-2ea2425d34.test tkt-31338dca7e.test
   tkt-38cb5df375.test tkt-3998683a16.test tkt-3a77c9714e.test
   tkt-3fe897352e.test tkt-4a03edc4c8.test tkt-54844eea3f.test
   tkt-5e10420e8d.test tkt-752e1646fc.test tkt-80ba201079.test
@@ -211,7 +211,7 @@ test_suite "src4" -prefix "" -description {
   tkt-bd484a090c.test tkt-cbd054fa6b.test tkt-d11f09d36e.test
   tkt-d635236375.test tkt-f973c7ac31.test tkt-fa7bf5ec.test
   tkt1443.test tkt1444.test tkt1449.test tkt1473.test tkt1501.test
-  tkt1512.test tkt1514.test tkt1537.test tkt1667.test tkt1873.test
+  tkt1514.test tkt1537.test tkt1873.test
   tkt2141.test tkt2192.test tkt2213.test tkt2285.test tkt2339.test
   tkt2391.test tkt2450.test tkt2640.test tkt2767.test tkt2817.test
   tkt2822.test tkt2832.test tkt2927.test tkt2942.test tkt3121.test

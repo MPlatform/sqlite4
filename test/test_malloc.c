@@ -319,7 +319,7 @@ static int test_malloc(
     return TCL_ERROR;
   }
   if( Tcl_GetIntFromObj(interp, objv[1], &nByte) ) return TCL_ERROR;
-  p = sqlite4_malloc((unsigned)nByte);
+  p = sqlite4_malloc(0, (unsigned)nByte);
   pointerToText(p, zOut);
   Tcl_AppendResult(interp, zOut, NULL);
   return TCL_OK;
@@ -348,7 +348,7 @@ static int test_realloc(
     Tcl_AppendResult(interp, "bad pointer: ", Tcl_GetString(objv[1]), (char*)0);
     return TCL_ERROR;
   }
-  p = sqlite4_realloc(pPrior, (unsigned)nByte);
+  p = sqlite4_realloc(0, pPrior, (unsigned)nByte);
   pointerToText(p, zOut);
   Tcl_AppendResult(interp, zOut, NULL);
   return TCL_OK;
@@ -374,7 +374,7 @@ static int test_free(
     Tcl_AppendResult(interp, "bad pointer: ", Tcl_GetString(objv[1]), (char*)0);
     return TCL_ERROR;
   }
-  sqlite4_free(pPrior);
+  sqlite4_free(0, pPrior);
   return TCL_OK;
 }
 

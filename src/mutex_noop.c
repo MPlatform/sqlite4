@@ -112,7 +112,7 @@ static sqlite4_mutex *debugMutexAlloc(int id){
   switch( id ){
     case SQLITE_MUTEX_FAST:
     case SQLITE_MUTEX_RECURSIVE: {
-      pNew = sqlite4Malloc(sizeof(*pNew));
+      pNew = sqlite4Malloc(0, sizeof(*pNew));
       if( pNew ){
         pNew->id = id;
         pNew->cnt = 0;
@@ -137,7 +137,7 @@ static void debugMutexFree(sqlite4_mutex *pX){
   sqlite4_debug_mutex *p = (sqlite4_debug_mutex*)pX;
   assert( p->cnt==0 );
   assert( p->id==SQLITE_MUTEX_FAST || p->id==SQLITE_MUTEX_RECURSIVE );
-  sqlite4_free(p);
+  sqlite4_free(0, p);
 }
 
 /*
