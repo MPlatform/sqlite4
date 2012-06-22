@@ -288,7 +288,7 @@ typedef sqlite_uint64 sqlite4_uint64;
 ** A type for measuring the length of the string.  Like size_t but
 ** does not require &lt;stddef.h&gt;
 */
-typedef int sqlite_size_t;
+typedef int sqlite4_size_t;
 
 /*
 ** If compiling for a processor that lacks floating point support,
@@ -707,14 +707,15 @@ sqlite4_env *sqlite4_db_env(sqlite4*);
 */
 typedef struct sqlite4_mem_methods sqlite4_mem_methods;
 struct sqlite4_mem_methods {
-  void *(*xMalloc)(int);         /* Memory allocation function */
-  void (*xFree)(void*);          /* Free a prior allocation */
-  void *(*xRealloc)(void*,int);  /* Resize an allocation */
-  int (*xSize)(void*);           /* Return the size of an allocation */
-  int (*xRoundup)(int);          /* Round up request size to allocation size */
-  int (*xInit)(void*);           /* Initialize the memory allocator */
-  void (*xShutdown)(void*);      /* Deinitialize the memory allocator */
-  void *pAppData;                /* Argument to xInit() and xShutdown() */
+  void *(*xMalloc)(void*,sqlite4_size_t); /* Memory allocation function */
+  void (*xFree)(void*,void*);             /* Free a prior allocation */
+  void *(*xRealloc)(void*,void*,int);     /* Resize an allocation */
+  sqlite4_size_t (*xSize)(void*,void*);   /* Return the size of an allocation */
+  int (*xInit)(void*);                    /* Initialize the memory allocator */
+  void (*xShutdown)(void*);               /* Deinitialize the allocator */
+  void (*xBeginBenign)(void*);            /* Enter a benign malloc region */
+  void (*xEndBenign)(void*);              /* Leave a benign malloc region */
+  void *pAppData;                         /* 1st argument to all routines */
 };
 
 /*
@@ -1246,8 +1247,8 @@ int sqlite4_complete16(const void *sql);
 */
 char *sqlite4_mprintf(sqlite4_env*, const char*,...);
 char *sqlite4_vmprintf(sqlite4_env*, const char*, va_list);
-sqlite_size_t sqlite4_snprintf(char*,sqlite_size_t,const char*, ...);
-sqlite_size_t sqlite4_vsnprintf(char*,sqlite_size_t,const char*, va_list);
+sqlite4_size_t sqlite4_snprintf(char*,sqlite4_size_t,const char*, ...);
+sqlite4_size_t sqlite4_vsnprintf(char*,sqlite4_size_t,const char*, va_list);
 
 /*
 ** CAPIREF: Memory Allocation Subsystem
@@ -1304,8 +1305,8 @@ sqlite_size_t sqlite4_vsnprintf(char*,sqlite_size_t,const char*, va_list);
 ** a block of memory after it has been released using
 ** [sqlite4_free()] or [sqlite4_realloc()].
 */
-void *sqlite4_malloc(sqlite4_env*, int);
-void *sqlite4_realloc(sqlite4_env*, void*, int);
+void *sqlite4_malloc(sqlite4_env*, sqlite4_size_t);
+void *sqlite4_realloc(sqlite4_env*, void*, sqlite4_size_t);
 void sqlite4_free(sqlite4_env*, void*);
 
 /*

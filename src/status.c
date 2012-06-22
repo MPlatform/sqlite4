@@ -132,7 +132,7 @@ int sqlite4_db_status(
         if( ALWAYS(pSchema!=0) ){
           HashElem *p;
 
-          nByte += pEnv->m.xRoundup(sizeof(HashElem)) * (
+          nByte += sizeof(HashElem) * (
               pSchema->tblHash.count 
             + pSchema->trigHash.count
             + pSchema->idxHash.count

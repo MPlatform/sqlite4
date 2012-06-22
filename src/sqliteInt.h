@@ -2526,8 +2526,8 @@ int sqlite4StrICmp(const char *, const char *);
 int sqlite4Strlen30(const char*);
 #define sqlite4StrNICmp sqlite4_strnicmp
 
-int sqlite4MallocInit(void);
-void sqlite4MallocEnd(void);
+int sqlite4MallocInit(sqlite4_env*);
+void sqlite4MallocEnd(sqlite4_env*);
 void *sqlite4Malloc(sqlite4_env*, int);
 void *sqlite4MallocZero(sqlite4_env*, int);
 void *sqlite4DbMallocZero(sqlite4*, int);
@@ -2540,10 +2540,6 @@ void *sqlite4DbRealloc(sqlite4 *, void *, int);
 void sqlite4DbFree(sqlite4*, void*);
 int sqlite4MallocSize(sqlite4_env*, void*);
 int sqlite4DbMallocSize(sqlite4*, void*);
-void *sqlite4ScratchMalloc(int);
-void sqlite4ScratchFree(void*);
-void *sqlite4PageMalloc(int);
-void sqlite4PageFree(void*);
 void sqlite4MemSetDefault(sqlite4_env*);
 void sqlite4BenignMallocHooks(sqlite4_env*,void (*)(void), void (*)(void));
 

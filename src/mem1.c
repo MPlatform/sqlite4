@@ -110,9 +110,10 @@ static malloc_zone_t* _sqliteZone_;
 ** cases of nByte<=0 will be intercepted and dealt with by higher level
 ** routines.
 */
-static void *sqlite4MemMalloc(int nByte){
+static void *sqlite4MemMalloc(void *NotUsed, sqlite4_size_t nByte){
 #ifdef SQLITE_MALLOCSIZE
   void *p = SQLITE_MALLOC( nByte );
+  UNUSED_PARAMETER(NotUsed);
   if( p==0 ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
@@ -121,6 +122,7 @@ static void *sqlite4MemMalloc(int nByte){
 #else
   sqlite4_int64 *p;
   assert( nByte>0 );
+  UNUSED_PARAMETER(NotUsed);
   nByte = ROUND8(nByte);
   p = SQLITE_MALLOC( nByte+8 );
   if( p ){
@@ -142,11 +144,13 @@ static void *sqlite4MemMalloc(int nByte){
 ** cases where pPrior==0 will have been intecepted and dealt with
 ** by higher-level routines.
 */
-static void sqlite4MemFree(void *pPrior){
+static void sqlite4MemFree(void *NotUsed, void *pPrior){
 #ifdef SQLITE_MALLOCSIZE
+  UNUSED_PARAMETER(NotUsed);
   SQLITE_FREE(pPrior);
 #else
   sqlite4_int64 *p = (sqlite4_int64*)pPrior;
+  UNUSED_PARAMETER(NotUsed);
   assert( pPrior!=0 );
   p--;
   SQLITE_FREE(p);
@@ -157,15 +161,17 @@ static void sqlite4MemFree(void *pPrior){
 ** Report the allocated size of a prior return from xMalloc()
 ** or xRealloc().
 */
-static int sqlite4MemSize(void *pPrior){
+static sqlite4_size_t sqlite4MemSize(void *NotUsed, void *pPrior){
 #ifdef SQLITE_MALLOCSIZE
+  UNUSED_PARAMETER(NotUsed);
   return pPrior ? (int)SQLITE_MALLOCSIZE(pPrior) : 0;
 #else
   sqlite4_int64 *p;
+  UNUSED_PARAMETER(NotUsed);
   if( pPrior==0 ) return 0;
   p = (sqlite4_int64*)pPrior;
   p--;
-  return (int)p[0];
+  return (sqlite4_size_t)p[0];
 #endif
 }
 
@@ -179,9 +185,10 @@ static int sqlite4MemSize(void *pPrior){
 ** cases where nByte<=0 will have been intercepted by higher-level
 ** routines and redirected to xFree.
 */
-static void *sqlite4MemRealloc(void *pPrior, int nByte){
+static void *sqlite4MemRealloc(void *NotUsed, void *pPrior, int nByte){
 #ifdef SQLITE_MALLOCSIZE
   void *p = SQLITE_REALLOC(pPrior, nByte);
+  UNUSED_PARAMETER(NotUsed);
   if( p==0 ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(SQLITE_NOMEM,
@@ -193,6 +200,7 @@ static void *sqlite4MemRealloc(void *pPrior, int nByte){
   sqlite4_int64 *p = (sqlite4_int64*)pPrior;
   assert( pPrior!=0 && nByte>0 );
   assert( nByte==ROUND8(nByte) ); /* EV: R-46199-30249 */
+  UNUSED_PARAMETER(NotUsed);
   p--;
   p = SQLITE_REALLOC(p, nByte+8 );
   if( p ){
@@ -206,13 +214,6 @@ static void *sqlite4MemRealloc(void *pPrior, int nByte){
   }
   return (void*)p;
 #endif
-}
-
-/*
-** Round up a request size to the next valid allocation size.
-*/
-static int sqlite4MemRoundup(int n){
-  return ROUND8(n);
 }
 
 /*
@@ -271,12 +272,13 @@ void sqlite4MemSetDefault(sqlite4_env *pEnv){
      sqlite4MemFree,
      sqlite4MemRealloc,
      sqlite4MemSize,
-     sqlite4MemRoundup,
      sqlite4MemInit,
      sqlite4MemShutdown,
+     0,
+     0,
      0
   };
-  sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MALLOC, &defaultMethods);
+  pEnv->m = defaultMethods;
 }
 
 #endif /* SQLITE_SYSTEM_MALLOC */

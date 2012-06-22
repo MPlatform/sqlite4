@@ -889,9 +889,9 @@ char *sqlite4_mprintf(sqlite4_env *pEnv, const char *zFormat, ...){
 **
 ** sqlite4_vsnprintf() is the varargs version.
 */
-sqlite_size_t sqlite4_vsnprintf(
+sqlite4_size_t sqlite4_vsnprintf(
   char *zBuf,              /* Write results here */
-  sqlite_size_t n,         /* Bytes available in zBuf[] */
+  sqlite4_size_t n,        /* Bytes available in zBuf[] */
   const char *zFormat,     /* Format string */
   va_list ap               /* Arguments */
 ){
@@ -903,9 +903,9 @@ sqlite_size_t sqlite4_vsnprintf(
   sqlite4StrAccumFinish(&acc);
   return acc.nChar;
 }
-sqlite_size_t sqlite4_snprintf(
+sqlite4_size_t sqlite4_snprintf(
   char *zBuf,              /* Write results here */
-  sqlite_size_t n,         /* Bytes available in zBuf[] */
+  sqlite4_size_t n,        /* Bytes available in zBuf[] */
   const char *zFormat,     /* Format string */
   ...                      /* Arguments */
 ){

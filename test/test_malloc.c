@@ -71,10 +71,11 @@ static int faultsimStep(void){
 ** A version of sqlite4_mem_methods.xMalloc() that includes fault simulation
 ** logic.
 */
-static void *faultsimMalloc(int n){
+static void *faultsimMalloc(void *pMem, sqlite4_size_t n){
   void *p = 0;
+  assert( pMem==(void*)&memfault );
   if( !faultsimStep() ){
-    p = memfault.m.xMalloc(n);
+    p = memfault.m.xMalloc(memfault.m.pAppData, n);
   }
   return p;
 }
@@ -84,10 +85,11 @@ static void *faultsimMalloc(int n){
 ** A version of sqlite4_mem_methods.xRealloc() that includes fault simulation
 ** logic.
 */
-static void *faultsimRealloc(void *pOld, int n){
+static void *faultsimRealloc(void *pMem, void *pOld, sqlite4_size_t n){
   void *p = 0;
+  assert( pMem==(void*)&memfault );
   if( !faultsimStep() ){
-    p = memfault.m.xRealloc(pOld, n);
+    p = memfault.m.xRealloc(memfault.m.pAppData, pOld, n);
   }
   return p;
 }
@@ -98,23 +100,21 @@ static void *faultsimRealloc(void *pOld, int n){
 **
 **     xFree
 **     xSize
-**     xRoundup
 **     xInit
 **     xShutdown
 */
-static void faultsimFree(void *p){
-  memfault.m.xFree(p);
+static void faultsimFree(void *pMem, void *p){
+  assert( pMem==(void*)&memfault );
+  memfault.m.xFree(memfault.m.pAppData, p);
 }
-static int faultsimSize(void *p){
-  return memfault.m.xSize(p);
+static sqlite4_size_t faultsimSize(void *pMem, void *p){
+  assert( pMem==(void*)&memfault );
+  return memfault.m.xSize(memfault.m.pAppData, p);
 }
-static int faultsimRoundup(int n){
-  return memfault.m.xRoundup(n);
-}
-static int faultsimInit(void *p){
+static int faultsimInit(void *pMem){
   return memfault.m.xInit(memfault.m.pAppData);
 }
-static void faultsimShutdown(void *p){
+static void faultsimShutdown(void *pMem){
   memfault.m.xShutdown(memfault.m.pAppData);
 }
 
@@ -170,10 +170,10 @@ static int faultsimPending(void){
 }
 
 
-static void faultsimBeginBenign(void){
+static void faultsimBeginBenign(void *pMem){
   memfault.isBenignMode++;
 }
-static void faultsimEndBenign(void){
+static void faultsimEndBenign(void *pMem){
   memfault.isBenignMode--;
 }
 
@@ -187,10 +187,11 @@ static int faultsimInstall(int install){
     faultsimFree,                     /* xFree */
     faultsimRealloc,                  /* xRealloc */
     faultsimSize,                     /* xSize */
-    faultsimRoundup,                  /* xRoundup */
     faultsimInit,                     /* xInit */
     faultsimShutdown,                 /* xShutdown */
-    0                                 /* pAppData */
+    faultsimBeginBenign,              /* xBeginBenign */
+    faultsimEndBenign,                /* xEndBenign */
+    (void*)&memfault                  /* pAppData */
   };
   int rc;
 
@@ -202,6 +203,7 @@ static int faultsimInstall(int install){
   }
 
   if( install ){
+    sqlite4_initialize(0);
     rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_GETMALLOC, &memfault.m);
     assert(memfault.m.xMalloc);
     if( rc==SQLITE_OK ){

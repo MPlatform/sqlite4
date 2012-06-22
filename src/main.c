@@ -135,7 +135,7 @@ int sqlite4_initialize(sqlite4_env *pEnv){
   sqlite4_mutex_enter(pMaster);
   pEnv->isMutexInit = 1;
   if( !pEnv->isMallocInit ){
-    rc = sqlite4MallocInit();
+    rc = sqlite4MallocInit(pEnv);
   }
   if( rc==SQLITE_OK ){
     pEnv->isMallocInit = 1;
@@ -240,12 +240,8 @@ int sqlite4_shutdown(sqlite4_env *pEnv){
     pEnv->isInit = 0;
   }
   if( pEnv->isMallocInit ){
-    sqlite4MallocEnd();
+    sqlite4MallocEnd(pEnv);
     pEnv->isMallocInit = 0;
-  }
-  if( pEnv->isMutexInit ){
-    sqlite4MutexEnd();
-    pEnv->isMutexInit = 0;
   }
 
   return SQLITE_OK;
