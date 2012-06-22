@@ -254,7 +254,7 @@ static void stat3Init(
   nRow = (tRowcnt)sqlite4_value_int64(argv[0]);
   mxSample = sqlite4_value_int(argv[1]);
   n = sizeof(*p) + sizeof(p->a[0])*mxSample;
-  p = sqlite4_malloc(0, n);
+  p = sqlite4_malloc(sqlite4_context_env(context), n);
   if( p==0 ){
     sqlite4_result_error_nomem(context);
     return;
