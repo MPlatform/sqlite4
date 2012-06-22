@@ -82,6 +82,7 @@ char *sqlite4VdbeExpandSql(
   sqlite4StrAccumInit(&out, zBase, sizeof(zBase), 
                       db->aLimit[SQLITE_LIMIT_LENGTH]);
   out.db = db;
+  out.pEnv = db->pEnv;
   if( db->vdbeExecCnt>1 ){
     while( *zRawSql ){
       const char *zStart = zRawSql;
@@ -180,6 +181,7 @@ void sqlite4ExplainBegin(Vdbe *pVdbe){
       sqlite4StrAccumInit(&p->str, p->zBase, sizeof(p->zBase),
                           SQLITE_MAX_LENGTH);
       p->str.useMalloc = 2;
+      p->str.pEnv = pEnv;
     }else{
       sqlite4EndBenignMalloc();
     }

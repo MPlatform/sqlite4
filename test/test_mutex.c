@@ -304,7 +304,7 @@ static int test_alloc_mutex(
   sqlite4_mutex *p = sqlite4_mutex_alloc(SQLITE_MUTEX_FAST);
   char zBuf[100];
   sqlite4_mutex_free(p);
-  sqlite4_snprintf(sizeof(zBuf), zBuf, "%p", p);
+  sqlite4_snprintf(zBuf, sizeof(zBuf), "%p", p);
   Tcl_AppendResult(interp, zBuf, (char*)0);
 #endif
   return TCL_OK;

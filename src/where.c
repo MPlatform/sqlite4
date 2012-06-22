@@ -3727,6 +3727,7 @@ static char *explainIndexRange(sqlite4 *db, WhereLevel *pLevel, Table *pTab){
   }
   sqlite4StrAccumInit(&txt, 0, 0, SQLITE_MAX_LENGTH);
   txt.db = db;
+  txt.pEnv = db->pEnv;
 
   sqlite4StrAccumAppend(&txt, " (", 2);
   for(i=0; i<nEq; i++){

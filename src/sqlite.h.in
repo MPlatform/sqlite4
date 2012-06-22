@@ -297,6 +297,14 @@ typedef sqlite_int64 sqlite4_int64;
 typedef sqlite_uint64 sqlite4_uint64;
 
 /*
+** CAPIREF: String length type
+**
+** A type for measuring the length of the string.  Like size_t but
+** does not require &lt;stddef.h&gt;
+*/
+typedef int sqlite_size_t;
+
+/*
 ** If compiling for a processor that lacks floating point support,
 ** substitute integer for floating-point.
 */
@@ -1250,8 +1258,8 @@ int sqlite4_complete16(const void *sql);
 */
 char *sqlite4_mprintf(sqlite4_env*, const char*,...);
 char *sqlite4_vmprintf(sqlite4_env*, const char*, va_list);
-char *sqlite4_snprintf(int,char*,const char*, ...);
-char *sqlite4_vsnprintf(int,char*,const char*, va_list);
+sqlite_size_t sqlite4_snprintf(char*,sqlite_size_t,const char*, ...);
+sqlite_size_t sqlite4_vsnprintf(char*,sqlite_size_t,const char*, va_list);
 
 /*
 ** CAPIREF: Memory Allocation Subsystem

@@ -101,7 +101,7 @@ int sqlite4KVStoreOpen(
   *ppKVStore = pNew;
   if( pNew ){
     sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);
-    sqlite4_snprintf(sizeof(pNew->zKVName), pNew->zKVName,
+    sqlite4_snprintf(pNew->zKVName, sizeof(pNew->zKVName),
                      "%s", zName);
     pNew->fTrace = (db->flags & SQLITE_KvTrace)!=0;
     kvTrace(pNew, "open(%s,%d,0x%04x)", zUri, pNew->kvId, flags);

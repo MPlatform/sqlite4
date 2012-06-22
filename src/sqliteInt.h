@@ -2366,6 +2366,7 @@ struct DbFixer {
 */
 struct StrAccum {
   sqlite4 *db;         /* Optional database for lookaside.  Can be NULL */
+  sqlite4_env *pEnv;   /* Malloc context */
   char *zBase;         /* A base allocation.  Not from malloc. */
   char *zText;         /* The string collected so far */
   int  nChar;          /* Length of the string so far */

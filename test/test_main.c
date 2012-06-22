@@ -223,7 +223,7 @@ static int getStmtPointer(
 ** that helps.  If nothing works, a fatal error is generated.
 */
 int sqlite4TestMakePointerStr(Tcl_Interp *interp, char *zPtr, void *p){
-  sqlite4_snprintf(100, zPtr, "%p", p);
+  sqlite4_snprintf(zPtr, 100, "%p", p);
   return TCL_OK;
 }
 
@@ -561,8 +561,8 @@ static int test_snprintf_int(
   const char *zFormat = argv[2];
   int a1 = atoi(argv[3]);
   if( n>sizeof(zStr) ) n = sizeof(zStr);
-  sqlite4_snprintf(sizeof(zStr), zStr, "abcdefghijklmnopqrstuvwxyz");
-  sqlite4_snprintf(n, zStr, zFormat, a1);
+  sqlite4_snprintf(zStr, sizeof(zStr), "abcdefghijklmnopqrstuvwxyz");
+  sqlite4_snprintf(zStr, n, zFormat, a1);
   Tcl_AppendResult(interp, zStr, 0);
   return TCL_OK;
 }
@@ -1274,7 +1274,7 @@ static int sqlite4_snprintf_str(
     if( Tcl_GetInt(interp, argv[i], &a[i-3]) ) return TCL_ERROR;
   }
   z = sqlite4_malloc(0, n+1);
-  sqlite4_snprintf(n, z, argv[2], a[0], a[1], argc>4 ? argv[5] : NULL);
+  sqlite4_snprintf(z, n, argv[2], a[0], a[1], argc>4 ? argv[5] : NULL);
   Tcl_AppendResult(interp, z, 0);
   sqlite4_free(0, z);
   return TCL_OK;
@@ -4307,7 +4307,7 @@ static int win32_file_lock(
     return TCL_ERROR;
   }
   if( objc==1 ){
-    sqlite4_snprintf(sizeof(zBuf), zBuf, "%d %d %d %d %d",
+    sqlite4_snprintf(zBuf, sizeof(zBuf), "%d %d %d %d %d",
                      x.ok, x.err, x.delay1, x.delay2, x.h);
     Tcl_AppendResult(interp, zBuf, (char*)0);
     return TCL_OK;
@@ -4338,7 +4338,7 @@ static int win32_file_lock(
   _beginthread(win32_file_locker, 0, (void*)&x);
   Sleep(0);
   if ( (wResult = WaitForSingleObject(ev, 10000))!=WAIT_OBJECT_0 ){
-    sqlite4_snprintf(sizeof(zBuf), zBuf, "0x%x", wResult);
+    sqlite4_snprintf(zBuf, sizeof(zBuf), "0x%x", wResult);
     Tcl_AppendResult(interp, "wait failed: ", zBuf, (char*)0);
     CloseHandle(ev);
     return TCL_ERROR;

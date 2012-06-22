@@ -813,7 +813,7 @@ static void datetimeFunc(
   if( isDate(context, argc, argv, &x)==0 ){
     char zBuf[100];
     computeYMD_HMS(&x);
-    sqlite4_snprintf(sizeof(zBuf), zBuf, "%04d-%02d-%02d %02d:%02d:%02d",
+    sqlite4_snprintf(zBuf,sizeof(zBuf), "%04d-%02d-%02d %02d:%02d:%02d",
                      x.Y, x.M, x.D, x.h, x.m, (int)(x.s));
     sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
   }
@@ -833,7 +833,7 @@ static void timeFunc(
   if( isDate(context, argc, argv, &x)==0 ){
     char zBuf[100];
     computeHMS(&x);
-    sqlite4_snprintf(sizeof(zBuf), zBuf, "%02d:%02d:%02d", x.h, x.m, (int)x.s);
+    sqlite4_snprintf(zBuf,sizeof(zBuf), "%02d:%02d:%02d", x.h, x.m, (int)x.s);
     sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
   }
 }
@@ -852,7 +852,7 @@ static void dateFunc(
   if( isDate(context, argc, argv, &x)==0 ){
     char zBuf[100];
     computeYMD(&x);
-    sqlite4_snprintf(sizeof(zBuf), zBuf, "%04d-%02d-%02d", x.Y, x.M, x.D);
+    sqlite4_snprintf(zBuf,sizeof(zBuf), "%04d-%02d-%02d", x.Y, x.M, x.D);
     sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
   }
 }
@@ -947,15 +947,14 @@ static void strftimeFunc(
     }else{
       i++;
       switch( zFmt[i] ){
-        case 'd':  sqlite4_snprintf(3, &z[j],"%02d",x.D); j+=2; break;
+        case 'd':  sqlite4_snprintf(&z[j],3,"%02d",x.D); j+=2; break;
         case 'f': {
           double s = x.s;
           if( s>59.999 ) s = 59.999;
-          sqlite4_snprintf(7, &z[j],"%06.3f", s);
-          j += sqlite4Strlen30(&z[j]);
+          j += sqlite4_snprintf(&z[j],7,"%06.3f", s);
           break;
         }
-        case 'H':  sqlite4_snprintf(3, &z[j],"%02d",x.h); j+=2; break;
+        case 'H':  sqlite4_snprintf(&z[j],3,"%02d",x.h); j+=2; break;
         case 'W': /* Fall thru */
         case 'j': {
           int nDay;             /* Number of days since 1st day of year */
@@ -968,34 +967,32 @@ static void strftimeFunc(
           if( zFmt[i]=='W' ){
             int wd;   /* 0=Monday, 1=Tuesday, ... 6=Sunday */
             wd = (int)(((x.iJD+43200000)/86400000)%7);
-            sqlite4_snprintf(3, &z[j],"%02d",(nDay+7-wd)/7);
+            sqlite4_snprintf(&z[j],3,"%02d",(nDay+7-wd)/7);
             j += 2;
           }else{
-            sqlite4_snprintf(4, &z[j],"%03d",nDay+1);
+            sqlite4_snprintf(&z[j],4,"%03d",nDay+1);
             j += 3;
           }
           break;
         }
         case 'J': {
-          sqlite4_snprintf(20, &z[j],"%.16g",x.iJD/86400000.0);
-          j+=sqlite4Strlen30(&z[j]);
+          j += sqlite4_snprintf(&z[j],20,"%.16g",x.iJD/86400000.0);
           break;
         }
-        case 'm':  sqlite4_snprintf(3, &z[j],"%02d",x.M); j+=2; break;
-        case 'M':  sqlite4_snprintf(3, &z[j],"%02d",x.m); j+=2; break;
+        case 'm':  sqlite4_snprintf(&z[j],3,"%02d",x.M); j+=2; break;
+        case 'M':  sqlite4_snprintf(&z[j],3,"%02d",x.m); j+=2; break;
         case 's': {
-          sqlite4_snprintf(30,&z[j],"%lld",
-                           (i64)(x.iJD/1000 - 21086676*(i64)10000));
-          j += sqlite4Strlen30(&z[j]);
+          j += sqlite4_snprintf(&z[j],30,"%lld",
+                                (i64)(x.iJD/1000 - 21086676*(i64)10000));
           break;
         }
-        case 'S':  sqlite4_snprintf(3,&z[j],"%02d",(int)x.s); j+=2; break;
+        case 'S':  sqlite4_snprintf(&z[j],3,"%02d",(int)x.s); j+=2; break;
         case 'w': {
           z[j++] = (char)(((x.iJD+129600000)/86400000) % 7) + '0';
           break;
         }
         case 'Y': {
-          sqlite4_snprintf(5,&z[j],"%04d",x.Y); j+=sqlite4Strlen30(&z[j]);
+          sqlite4_snprintf(&z[j],5,"%04d",x.Y); j+=sqlite4Strlen30(&z[j]);
           break;
         }
         default:   z[j++] = '%'; break;

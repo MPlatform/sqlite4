@@ -1391,6 +1391,7 @@ static void groupConcatStep(
     sqlite4 *db = sqlite4_context_db_handle(context);
     int firstTerm = pAccum->useMalloc==0;
     pAccum->useMalloc = 2;
+    pAccum->pEnv = db->pEnv;
     pAccum->mxAlloc = db->aLimit[SQLITE_LIMIT_LENGTH];
     if( !firstTerm ){
       if( argc==2 ){

@@ -1292,7 +1292,7 @@ static int run_schema_dump_query(
     }
     zQ2 = malloc( len+100 );
     if( zQ2==0 ) return rc;
-    sqlite4_snprintf(sizeof(zQ2), zQ2, "%s ORDER BY rowid DESC", zQuery);
+    sqlite4_snprintf(zQ2,sizeof(zQ2), "%s ORDER BY rowid DESC", zQuery);
     rc = sqlite4_exec(p->db, zQ2, dump_callback, p, &zErr);
     if( rc ){
       fprintf(p->out, "/****** ERROR: %s ******/\n", zErr);
@@ -1651,7 +1651,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
       fprintf(stderr, "Error: out of memory\n");
       return 1;
     }
-    sqlite4_snprintf(nByte+20, zSql, "INSERT INTO %s VALUES(?", zTable);
+    sqlite4_snprintf(zSql, nByte+20, "INSERT INTO %s VALUES(?", zTable);
     j = strlen30(zSql);
     for(i=1; i<nCol; i++){
       zSql[j++] = ',';
@@ -1852,10 +1852,10 @@ static int do_meta_command(char *zLine, struct callback_data *p){
       p->mode = MODE_Tcl;
     }else if( n2==3 && strncmp(azArg[1],"csv",n2)==0 ){
       p->mode = MODE_Csv;
-      sqlite4_snprintf(sizeof(p->separator), p->separator, ",");
+      sqlite4_snprintf(p->separator, sizeof(p->separator), ",");
     }else if( n2==4 && strncmp(azArg[1],"tabs",n2)==0 ){
       p->mode = MODE_List;
-      sqlite4_snprintf(sizeof(p->separator), p->separator, "\t");
+      sqlite4_snprintf(p->separator, sizeof(p->separator), "\t");
     }else if( n2==6 && strncmp(azArg[1],"insert",n2)==0 ){
       p->mode = MODE_Insert;
       set_table_name(p, "table");
@@ -1879,7 +1879,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
   }else
 
   if( c=='n' && strncmp(azArg[0], "nullvalue", n)==0 && nArg==2 ) {
-    sqlite4_snprintf(sizeof(p->nullvalue), p->nullvalue,
+    sqlite4_snprintf(p->nullvalue, sizeof(p->nullvalue),
                      "%.*s", (int)ArraySize(p->nullvalue)-1, azArg[1]);
   }else
 
@@ -1889,7 +1889,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
     }
     if( strcmp(azArg[1],"stdout")==0 ){
       p->out = stdout;
-      sqlite4_snprintf(sizeof(p->outfile), p->outfile, "stdout");
+      sqlite4_snprintf(p->outfile, sizeof(p->outfile), "stdout");
     }else{
       p->out = fopen(azArg[1], "wb");
       if( p->out==0 ){
@@ -1897,7 +1897,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
         p->out = stdout;
         rc = 1;
       } else {
-         sqlite4_snprintf(sizeof(p->outfile), p->outfile, "%s", azArg[1]);
+         sqlite4_snprintf(p->outfile, sizeof(p->outfile), "%s", azArg[1]);
       }
     }
   }else
@@ -2002,7 +2002,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
   }else
 
   if( c=='s' && strncmp(azArg[0], "separator", n)==0 && nArg==2 ){
-    sqlite4_snprintf(sizeof(p->separator), p->separator,
+    sqlite4_snprintf(p->separator, sizeof(p->separator),
                      "%.*s", (int)sizeof(p->separator)-1, azArg[1]);
   }else
 
@@ -2406,10 +2406,10 @@ static int process_input(struct callback_data *p, FILE *in){
       if( rc || zErrMsg ){
         char zPrefix[100];
         if( in!=0 || !stdin_is_interactive ){
-          sqlite4_snprintf(sizeof(zPrefix), zPrefix, 
+          sqlite4_snprintf(zPrefix, sizeof(zPrefix),
                            "Error: near line %d:", startline);
         }else{
-          sqlite4_snprintf(sizeof(zPrefix), zPrefix, "Error:");
+          sqlite4_snprintf(zPrefix, sizeof(zPrefix), "Error:");
         }
         if( zErrMsg!=0 ){
           fprintf(stderr, "%s %s\n", zPrefix, zErrMsg);
@@ -2478,7 +2478,7 @@ static char *find_home_dir(void){
       n = strlen30(zDrive) + strlen30(zPath) + 1;
       home_dir = malloc( n );
       if( home_dir==0 ) return 0;
-      sqlite4_snprintf(n, home_dir, "%s%s", zDrive, zPath);
+      sqlite4_snprintf(home_dir, n, "%s%s", zDrive, zPath);
       return home_dir;
     }
     home_dir = "c:\\";
@@ -2528,7 +2528,7 @@ static int process_sqliterc(
       fprintf(stderr,"%s: Error: out of memory\n",Argv0);
       return 1;
     }
-    sqlite4_snprintf(nBuf, zBuf,"%s/.sqliterc",home_dir);
+    sqlite4_snprintf(zBuf,nBuf,"%s/.sqliterc",home_dir);
     free(home_dir);
     sqliterc = (const char*)zBuf;
   }
@@ -2590,8 +2590,8 @@ static void main_init(struct callback_data *data) {
   memcpy(data->separator,"|", 2);
   data->showHeader = 0;
   sqlite4_env_config(0, SQLITE_ENVCONFIG_LOG, shellLog, data);
-  sqlite4_snprintf(sizeof(mainPrompt), mainPrompt,"sqlite> ");
-  sqlite4_snprintf(sizeof(continuePrompt), continuePrompt,"   ...> ");
+  sqlite4_snprintf(mainPrompt,sizeof(mainPrompt),        "sqlite> ");
+  sqlite4_snprintf(continuePrompt,sizeof(continuePrompt),"   ...> ");
   sqlite4_env_config(0, SQLITE_ENVCONFIG_SINGLETHREAD);
 }
 
@@ -2739,7 +2739,7 @@ int main(int argc, char **argv){
         fprintf(stderr,"Use -help for a list of options.\n");
         return 1;
       }
-      sqlite4_snprintf(sizeof(data.separator), data.separator,
+      sqlite4_snprintf(data.separator, sizeof(data.separator),
                        "%.*s",(int)sizeof(data.separator)-1,argv[i]);
     }else if( strcmp(z,"-nullvalue")==0 ){
       i++;
@@ -2748,7 +2748,7 @@ int main(int argc, char **argv){
         fprintf(stderr,"Use -help for a list of options.\n");
         return 1;
       }
-      sqlite4_snprintf(sizeof(data.nullvalue), data.nullvalue,
+      sqlite4_snprintf(data.nullvalue, sizeof(data.nullvalue),
                        "%.*s",(int)sizeof(data.nullvalue)-1,argv[i]);
     }else if( strcmp(z,"-header")==0 ){
       data.showHeader = 1;
@@ -2815,7 +2815,7 @@ int main(int argc, char **argv){
       if( zHome ){
         nHistory = strlen30(zHome) + 20;
         if( (zHistory = malloc(nHistory))!=0 ){
-          sqlite4_snprintf(nHistory, zHistory,"%s/.sqlite_history", zHome);
+          sqlite4_snprintf(zHistory, nHistory, "%s/.sqlite_history", zHome);
         }
       }
 #if defined(HAVE_READLINE) && HAVE_READLINE==1

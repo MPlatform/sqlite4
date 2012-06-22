@@ -305,7 +305,7 @@ static void DbProfileHandler(void *cd, const char *zSql, sqlite_uint64 tm){
   Tcl_DString str;
   char zTm[100];
 
-  sqlite4_snprintf(sizeof(zTm)-1, zTm, "%lld", tm);
+  sqlite4_snprintf(zTm, sizeof(zTm)-1, "%lld", tm);
   Tcl_DStringInit(&str);
   Tcl_DStringAppend(&str, pDb->zProfile, -1);
   Tcl_DStringAppendElement(&str, zSql);
@@ -1606,9 +1606,8 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       Tcl_AppendResult(interp, "Error: can't malloc()", 0);
       return TCL_ERROR;
     }
-    sqlite4_snprintf(nByte+50, zSql, "INSERT OR %q INTO '%q' VALUES(?",
-         zConflict, zTable);
-    j = strlen30(zSql);
+    j = sqlite4_snprintf(zSql, nByte+50, "INSERT OR %q INTO '%q' VALUES(?",
+                         zConflict, zTable);
     for(i=1; i<nCol; i++){
       zSql[j++] = ',';
       zSql[j++] = '?';
@@ -1655,7 +1654,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
         int nErr = strlen30(zFile) + 200;
         zErr = malloc(nErr);
         if( zErr ){
-          sqlite4_snprintf(nErr, zErr,
+          sqlite4_snprintf(zErr, nErr,
              "Error: %s line %d: expected %d columns of data but found %d",
              zFile, lineno, nCol, i+1);
           Tcl_AppendResult(interp, zErr, 0);
@@ -1695,7 +1694,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       rc = TCL_OK;
     }else{
       /* failure, append lineno where failed */
-      sqlite4_snprintf(sizeof(zLineNum), zLineNum,"%d",lineno);
+      sqlite4_snprintf(zLineNum, sizeof(zLineNum),"%d",lineno);
       Tcl_AppendResult(interp,", failed while processing line: ",zLineNum,0);
       rc = TCL_ERROR;
     }
@@ -3032,7 +3031,7 @@ int TCLSH_MAIN(int argc, char **argv){
   if( argc>=2 ){
     int i;
     char zArgc[32];
-    sqlite4_snprintf(sizeof(zArgc), zArgc, "%d", argc-(3-TCLSH));
+    sqlite4_snprintf(zArgc, sizeof(zArgc), "%d", argc-(3-TCLSH));
     Tcl_SetVar(interp,"argc", zArgc, TCL_GLOBAL_ONLY);
     Tcl_SetVar(interp,"argv0",argv[1],TCL_GLOBAL_ONLY);
     Tcl_SetVar(interp,"argv", "", TCL_GLOBAL_ONLY);

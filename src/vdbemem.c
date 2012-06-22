@@ -190,10 +190,10 @@ int sqlite4VdbeMemStringify(Mem *pMem, int enc){
   ** FIX ME: It would be better if sqlite4_snprintf() could do UTF-16.
   */
   if( fg & MEM_Int ){
-    sqlite4_snprintf(nByte, pMem->z, "%lld", pMem->u.i);
+    sqlite4_snprintf(pMem->z, nByte, "%lld", pMem->u.i);
   }else{
     assert( fg & MEM_Real );
-    sqlite4_snprintf(nByte, pMem->z, "%!.15g", pMem->r);
+    sqlite4_snprintf(pMem->z, nByte, "%!.15g", pMem->r);
   }
   pMem->n = sqlite4Strlen30(pMem->z);
   pMem->enc = SQLITE_UTF8;

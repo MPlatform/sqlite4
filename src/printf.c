@@ -356,7 +356,7 @@ void sqlite4VXPrintf(
           zOut = buf;
         }else{
           nOut = precision + 10;
-          zOut = zExtra = sqlite4Malloc(0, nOut);
+          zOut = zExtra = sqlite4Malloc(pAccum->pEnv, nOut);
           if( zOut==0 ){
             pAccum->mallocFailed = 1;
             return;
@@ -471,7 +471,7 @@ void sqlite4VXPrintf(
           e2 = exp;
         }
         if( e2+precision+width > etBUFSIZE - 15 ){
-          bufpt = zExtra = sqlite4Malloc(0, e2+precision+width+15 );
+          bufpt = zExtra = sqlite4Malloc(pAccum->pEnv, e2+precision+width+15 );
           if( bufpt==0 ){
             pAccum->mallocFailed = 1;
             return;
@@ -606,7 +606,7 @@ void sqlite4VXPrintf(
         needQuote = !isnull && xtype==etSQLESCAPE2;
         n += i + 1 + needQuote*2;
         if( n>etBUFSIZE ){
-          bufpt = zExtra = sqlite4Malloc(0, n);
+          bufpt = zExtra = sqlite4Malloc(pAccum->pEnv, n);
           if( bufpt==0 ){
             pAccum->mallocFailed = 1;
             return;
@@ -677,7 +677,7 @@ void sqlite4VXPrintf(
         sqlite4AppendSpace(pAccum, nspace);
       }
     }
-    sqlite4_free(0, zExtra);
+    sqlite4_free(pAccum->pEnv, zExtra);
   }/* End for loop over the format string */
 } /* End of function */
 
@@ -720,7 +720,7 @@ void sqlite4StrAccumAppend(StrAccum *p, const char *z, int N){
       if( p->useMalloc==1 ){
         zNew = sqlite4DbRealloc(p->db, zOld, p->nAlloc);
       }else{
-        zNew = sqlite4_realloc(0, zOld, p->nAlloc);
+        zNew = sqlite4_realloc(p->pEnv, zOld, p->nAlloc);
       }
       if( zNew ){
         if( zOld==0 && p->nChar>0 ) memcpy(zNew, p->zText, p->nChar);
@@ -749,7 +749,7 @@ char *sqlite4StrAccumFinish(StrAccum *p){
       if( p->useMalloc==1 ){
         p->zText = sqlite4DbMallocRaw(p->db, p->nChar+1 );
       }else{
-        p->zText = sqlite4_malloc(0, p->nChar+1);
+        p->zText = sqlite4_malloc(p->pEnv, p->nChar+1);
       }
       if( p->zText ){
         memcpy(p->zText, p->zBase, p->nChar+1);
@@ -769,7 +769,7 @@ void sqlite4StrAccumReset(StrAccum *p){
     if( p->useMalloc==1 ){
       sqlite4DbFree(p->db, p->zText);
     }else{
-      sqlite4_free(0, p->zText);
+      sqlite4_free(p->pEnv, p->zText);
     }
   }
   p->zText = 0;
@@ -781,6 +781,7 @@ void sqlite4StrAccumReset(StrAccum *p){
 void sqlite4StrAccumInit(StrAccum *p, char *zBase, int n, int mx){
   p->zText = p->zBase = zBase;
   p->db = 0;
+  p->pEnv = 0;
   p->nChar = 0;
   p->nAlloc = n;
   p->mxAlloc = mx;
@@ -853,6 +854,7 @@ char *sqlite4_vmprintf(sqlite4_env *pEnv, const char *zFormat, va_list ap){
 #endif
   sqlite4StrAccumInit(&acc, zBase, sizeof(zBase), SQLITE_MAX_LENGTH);
   acc.useMalloc = 2;
+  acc.pEnv = pEnv;
   sqlite4VXPrintf(&acc, 0, zFormat, ap);
   z = sqlite4StrAccumFinish(&acc);
   return z;
@@ -887,21 +889,31 @@ char *sqlite4_mprintf(sqlite4_env *pEnv, const char *zFormat, ...){
 **
 ** sqlite4_vsnprintf() is the varargs version.
 */
-char *sqlite4_vsnprintf(int n, char *zBuf, const char *zFormat, va_list ap){
+sqlite_size_t sqlite4_vsnprintf(
+  char *zBuf,              /* Write results here */
+  sqlite_size_t n,         /* Bytes available in zBuf[] */
+  const char *zFormat,     /* Format string */
+  va_list ap               /* Arguments */
+){
   StrAccum acc;
-  if( n<=0 ) return zBuf;
+  if( n<=0 ) return 0;
   sqlite4StrAccumInit(&acc, zBuf, n, 0);
   acc.useMalloc = 0;
   sqlite4VXPrintf(&acc, 0, zFormat, ap);
-  return sqlite4StrAccumFinish(&acc);
+  sqlite4StrAccumFinish(&acc);
+  return acc.nChar;
 }
-char *sqlite4_snprintf(int n, char *zBuf, const char *zFormat, ...){
-  char *z;
+sqlite_size_t sqlite4_snprintf(
+  char *zBuf,              /* Write results here */
+  sqlite_size_t n,         /* Bytes available in zBuf[] */
+  const char *zFormat,     /* Format string */
+  ...                      /* Arguments */
+){
   va_list ap;
   va_start(ap,zFormat);
-  z = sqlite4_vsnprintf(n, zBuf, zFormat, ap);
+  n = sqlite4_vsnprintf(zBuf, n, zFormat, ap);
   va_end(ap);
-  return z;
+  return n;
 }
 
 /*

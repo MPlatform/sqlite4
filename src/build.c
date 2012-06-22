@@ -1318,8 +1318,7 @@ static char *createTableStmt(sqlite4 *db, Table *p){
     db->mallocFailed = 1;
     return 0;
   }
-  sqlite4_snprintf(n, zStmt, "CREATE TABLE ");
-  k = sqlite4Strlen30(zStmt);
+  k = sqlite4_snprintf(zStmt, n, "CREATE TABLE ");
   identPut(zStmt, &k, p->zName);
   zStmt[k++] = '(';
   for(pCol=p->aCol, i=0; i<p->nCol; i++, pCol++){
@@ -1333,8 +1332,7 @@ static char *createTableStmt(sqlite4 *db, Table *p){
     int len;
     const char *zType;
 
-    sqlite4_snprintf(n-k, &zStmt[k], zSep);
-    k += sqlite4Strlen30(&zStmt[k]);
+    k += sqlite4_snprintf(&zStmt[k], n-k, zSep);
     zSep = zSep2;
     identPut(zStmt, &k, pCol->zName);
     assert( pCol->affinity-SQLITE_AFF_TEXT >= 0 );
@@ -1353,7 +1351,7 @@ static char *createTableStmt(sqlite4 *db, Table *p){
     k += len;
     assert( k<=n );
   }
-  sqlite4_snprintf(n-k, &zStmt[k], "%s", zEnd);
+  sqlite4_snprintf(&zStmt[k], n-k, "%s", zEnd);
   return zStmt;
 }
 
@@ -1913,7 +1911,7 @@ static void sqlite4ClearStatTables(
   const char *zDbName = pParse->db->aDb[iDb].zName;
   for(i=1; i<=3; i++){
     char zTab[24];
-    sqlite4_snprintf(sizeof(zTab),zTab,"sqlite_stat%d",i);
+    sqlite4_snprintf(zTab,sizeof(zTab),"sqlite_stat%d",i);
     if( sqlite4FindTable(pParse->db, zTab, zDbName) ){
       sqlite4NestedParse(pParse,
         "DELETE FROM %Q.%s WHERE %s=%Q",

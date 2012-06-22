@@ -225,20 +225,20 @@ static void detachFunc(
   }
 
   if( i>=db->nDb ){
-    sqlite4_snprintf(sizeof(zErr),zErr, "no such database: %s", zName);
+    sqlite4_snprintf(zErr,sizeof(zErr), "no such database: %s", zName);
     goto detach_error;
   }
   if( i<2 ){
-    sqlite4_snprintf(sizeof(zErr),zErr, "cannot detach database %s", zName);
+    sqlite4_snprintf(zErr,sizeof(zErr), "cannot detach database %s", zName);
     goto detach_error;
   }
   if( db->pSavepoint ){
-    sqlite4_snprintf(sizeof(zErr), zErr,
+    sqlite4_snprintf(zErr,sizeof(zErr),
                      "cannot DETACH database within transaction");
     goto detach_error;
   }
   if( pDb->pKV->iTransLevel ){
-    sqlite4_snprintf(sizeof(zErr),zErr, "database %s is locked", zName);
+    sqlite4_snprintf(zErr,sizeof(zErr), "database %s is locked", zName);
     goto detach_error;
   }
 
