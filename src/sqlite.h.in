@@ -217,40 +217,26 @@ const char *sqlite4_compileoption_get(int N);
 /*
 ** CAPIREF: Test To See If The Library Is Threadsafe
 **
-** ^The sqlite4_threadsafe() function returns zero if and only if
-** SQLite was compiled with mutexing code omitted due to the
-** [SQLITE_THREADSAFE] compile-time option being set to 0.
+** ^The sqlite4_threadsafe(E) function returns zero if the [sqlite4_env]
+** object is configured in such a way that it should only be used by a
+** single thread at a time.  In other words, this routine returns zero
+** if the environment is configured as [SQLITE_ENVCONFIG_SINGLETHREAD].
 **
-** SQLite can be compiled with or without mutexes.  When
-** the [SQLITE_THREADSAFE] C preprocessor macro is 1 or 2, mutexes
-** are enabled and SQLite is threadsafe.  When the
-** [SQLITE_THREADSAFE] macro is 0, 
-** the mutexes are omitted.  Without the mutexes, it is not safe
-** to use SQLite concurrently from more than one thread.
+** ^The sqlite4_threadsafe(E) function returns one if multiple
+** [database connection] objects associated with E can be used at the
+** same time in different threads, so long as no single [database connection]
+** object is used by two or more threads at the same time.  This
+** corresponds to [SQLITE_ENVCONFIG_MULTITHREAD].
 **
-** Enabling mutexes incurs a measurable performance penalty.
-** So if speed is of utmost importance, it makes sense to disable
-** the mutexes.  But for maximum safety, mutexes should be enabled.
-** ^The default behavior is for mutexes to be enabled.
+** ^The sqlite4_threadsafe(E) function returns two if the same
+** [database connection] can be used at the same time from two or more
+** separate threads.  This setting corresponds to [SQLITE_ENVCONFIG_SERIALIZED].
 **
-** This interface can be used by an application to make sure that the
-** version of SQLite that it is linking against was compiled with
-** the desired setting of the [SQLITE_THREADSAFE] macro.
-**
-** This interface only reports on the compile-time mutex setting
-** of the [SQLITE_THREADSAFE] flag.  If SQLite is compiled with
-** SQLITE_THREADSAFE=1 or =2 then mutexes are enabled by default but
-** can be fully or partially disabled using a call to [sqlite4_config()]
-** with the verbs [SQLITE_CONFIG_SINGLETHREAD], [SQLITE_CONFIG_MULTITHREAD],
-** or [SQLITE_CONFIG_MUTEX].  ^(The return value of the
-** sqlite4_threadsafe() function shows only the compile-time setting of
-** thread safety, not any run-time changes to that setting made by
-** sqlite4_config(). In other words, the return value from sqlite4_threadsafe()
-** is unchanged by calls to sqlite4_config().)^
-**
-** See the [threading mode] documentation for additional information.
+** Note that SQLite4 is always threadsafe in this sense: Two or more
+** objects each associated with different [sqlite4_env] objects can
+** always be used at the same time in separate threads.
 */
-int sqlite4_threadsafe(void);
+int sqlite4_threadsafe(sqlite4_env*);
 
 /*
 ** CAPIREF: Database Connection Handle

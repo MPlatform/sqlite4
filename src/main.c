@@ -54,11 +54,12 @@ const char *sqlite4_sourceid(void){ return SQLITE_SOURCE_ID; }
 */
 int sqlite4_libversion_number(void){ return SQLITE_VERSION_NUMBER; }
 
-/* IMPLEMENTATION-OF: R-20790-14025 The sqlite4_threadsafe() function returns
-** zero if and only if SQLite was compiled with mutexing code omitted due to
-** the SQLITE_THREADSAFE compile-time option being set to 0.
+/* Return the thread-safety setting.
 */
-int sqlite4_threadsafe(void){ return SQLITE_THREADSAFE; }
+int sqlite4_threadsafe(sqlite4_env *pEnv){
+  if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
+  return pEnv->bCoreMutex + pEnv->bFullMutex;
+}
 
 #if !defined(SQLITE_OMIT_TRACE) && defined(SQLITE_ENABLE_IOTRACE)
 /*
