@@ -102,7 +102,7 @@ static u8 randomByte(void){
 /*
 ** Return N random bytes.
 */
-void sqlite4_randomness(int N, void *pBuf){
+void sqlite4_randomness(sqlite4_env *pEnv, int N, void *pBuf){
   unsigned char *zBuf = pBuf;
 #if SQLITE_THREADSAFE
   sqlite4_mutex *mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_PRNG);

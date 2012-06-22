@@ -399,7 +399,7 @@ static void randomFunc(
 ){
   sqlite_int64 r;
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
-  sqlite4_randomness(sizeof(r), &r);
+  sqlite4_randomness(sqlite4_context_env(context), sizeof(r), &r);
   if( r<0 ){
     /* We need to prevent a random number of 0x8000000000000000 
     ** (or -9223372036854775808) since when you do abs() of that
@@ -433,7 +433,7 @@ static void randomBlob(
   }
   p = contextMalloc(context, n);
   if( p ){
-    sqlite4_randomness(n, p);
+    sqlite4_randomness(sqlite4_context_env(context), n, p);
     sqlite4_result_blob(context, (char*)p, n, SQLITE_DYNAMIC);
   }
 }

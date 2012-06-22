@@ -100,7 +100,7 @@ int sqlite4KVStoreOpen(
 
   *ppKVStore = pNew;
   if( pNew ){
-    sqlite4_randomness(sizeof(pNew->kvId), &pNew->kvId);
+    sqlite4_randomness(pEnv, sizeof(pNew->kvId), &pNew->kvId);
     sqlite4_snprintf(pNew->zKVName, sizeof(pNew->zKVName),
                      "%s", zName);
     pNew->fTrace = (db->flags & SQLITE_KvTrace)!=0;
@@ -145,7 +145,7 @@ int sqlite4KVStoreOpenCursor(KVStore *p, KVCursor **ppKVCursor){
   rc = p->pStoreVfunc->xOpenCursor(p, &pCur);
   *ppKVCursor = pCur;
   if( pCur ){
-    sqlite4_randomness(sizeof(pCur->curId), &pCur->curId);
+    sqlite4_randomness(pCur->pEnv, sizeof(pCur->curId), &pCur->curId);
     pCur->fTrace = p->fTrace;
     pCur->pStore = p;
   }

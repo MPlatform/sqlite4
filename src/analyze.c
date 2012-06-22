@@ -249,12 +249,13 @@ static void stat3Init(
   tRowcnt nRow;
   int mxSample;
   int n;
+  sqlite4_env *pEnv = sqlite4_context_env(context);
 
   UNUSED_PARAMETER(argc);
   nRow = (tRowcnt)sqlite4_value_int64(argv[0]);
   mxSample = sqlite4_value_int(argv[1]);
   n = sizeof(*p) + sizeof(p->a[0])*mxSample;
-  p = sqlite4_malloc(sqlite4_context_env(context), n);
+  p = sqlite4_malloc(pEnv, n);
   if( p==0 ){
     sqlite4_result_error_nomem(context);
     return;
@@ -264,8 +265,8 @@ static void stat3Init(
   p->nRow = nRow;
   p->mxSample = mxSample;
   p->nPSample = p->nRow/(mxSample/3+1) + 1;
-  sqlite4_randomness(sizeof(p->iPrn), &p->iPrn);
-  sqlite4_result_blob(context, p, sizeof(p), sqlite4_free);
+  sqlite4_randomness(pEnv, sizeof(p->iPrn), &p->iPrn);
+  sqlite4_result_blob(context, p, sizeof(p), SQLITE_DYNAMIC);
 }
 static const FuncDef stat3InitFuncdef = {
   2,                /* nArg */

@@ -1177,19 +1177,21 @@ int sqlite4_complete16(const void *sql);
 **
 ** ^(The sqlite4_snprintf() routine is similar to "snprintf()" from
 ** the standard C library.  The result is written into the
-** buffer supplied as the second parameter whose size is given by
-** the first parameter. Note that the order of the
-** first two parameters is reversed from snprintf().)^  This is an
-** historical accident that cannot be fixed without breaking
-** backwards compatibility.  ^(Note also that sqlite4_snprintf()
-** returns a pointer to its buffer instead of the number of
-** characters actually written into the buffer.)^  We admit that
-** the number of characters written would be a more useful return
-** value but we cannot change the implementation of sqlite4_snprintf()
-** now without breaking compatibility.
+** buffer supplied as the first parameter whose size is given by
+** the second parameter.)^  The return value from sqltie4_snprintf()
+** is the number of bytes actually written into the buffer, not
+** counting the zero terminator.  The buffer is always zero-terminated
+** as long as it it at least one byte in length.
+**
+** The sqlite4_snprintf() differs from the standard library snprintf()
+** routine in two ways:  (1) sqlite4_snprintf() returns the number of
+** bytes actually written, not the number of bytes that would have been
+** written if the buffer had been infinitely long.  (2) If the buffer is
+** at least one byte long, sqlite4_snprintf() always zero-terminates its
+** result.
 **
 ** ^As long as the buffer size is greater than zero, sqlite4_snprintf()
-** guarantees that the buffer is always zero-terminated.  ^The first
+** guarantees that the buffer is always zero-terminated.  ^The second
 ** parameter "n" is the total size of the buffer, including space for
 ** the zero terminator.  So the longest string that can be completely
 ** written will be n-1 characters.
@@ -1265,9 +1267,7 @@ sqlite_size_t sqlite4_vsnprintf(char*,sqlite_size_t,const char*, va_list);
 ** CAPIREF: Memory Allocation Subsystem
 **
 ** The SQLite core uses these three routines for all of its own
-** internal memory allocation needs. "Core" in the previous sentence
-** does not include operating-system specific VFS implementation.  The
-** Windows VFS uses native malloc() and free() for some operations.
+** internal memory allocation needs.
 **
 ** ^The sqlite4_malloc() routine returns a pointer to a block
 ** of memory at least N bytes in length, where N is the parameter.
@@ -1308,19 +1308,6 @@ sqlite_size_t sqlite4_vsnprintf(char*,sqlite_size_t,const char*, va_list);
 ** is always aligned to at least an 8 byte boundary, or to a
 ** 4 byte boundary if the [SQLITE_4_BYTE_ALIGNED_MALLOC] compile-time
 ** option is used.
-**
-** In SQLite version 3.5.0 and 3.5.1, it was possible to define
-** the SQLITE_OMIT_MEMORY_ALLOCATION which would cause the built-in
-** implementation of these routines to be omitted.  That capability
-** is no longer provided.  Only built-in memory allocators can be used.
-**
-** The Windows OS interface layer calls
-** the system malloc() and free() directly when converting
-** filenames between the UTF-8 encoding used by SQLite
-** and whatever filename encoding is used by the particular Windows
-** installation.  Memory allocation errors are detected, but
-** they are reported back as [SQLITE_CANTOPEN] or
-** [SQLITE_IOERR] rather than [SQLITE_NOMEM].
 **
 ** The pointer arguments to [sqlite4_free()] and [sqlite4_realloc()]
 ** must be either NULL or else pointers obtained from a prior
@@ -1365,22 +1352,9 @@ sqlite4_uint64 sqlite4_memory_highwater(sqlite4_env*, int resetFlag);
 /*
 ** CAPIREF: Pseudo-Random Number Generator
 **
-** SQLite contains a high-quality pseudo-random number generator (PRNG) used to
-** select random [ROWID | ROWIDs] when inserting new records into a table that
-** already uses the largest possible [ROWID].  The PRNG is also used for
-** the build-in random() and randomblob() SQL functions.  This interface allows
-** applications to access the same PRNG for other purposes.
-**
-** ^A call to this routine stores N bytes of randomness into buffer P.
-**
-** ^The first time this routine is invoked (either internally or by
-** the application) the PRNG is seeded using randomness obtained
-** from the xRandomness method of the default [sqlite4_vfs] object.
-** ^On all subsequent invocations, the pseudo-randomness is generated
-** internally and without recourse to the [sqlite4_vfs] xRandomness
-** method.
+** ^A call to this routine stores N bytes of pseudo-randomness into buffer P.
 */
-void sqlite4_randomness(int N, void *P);
+void sqlite4_randomness(sqlite4_env*, int N, void *P);
 
 /*
 ** CAPIREF: Compile-Time Authorization Callbacks

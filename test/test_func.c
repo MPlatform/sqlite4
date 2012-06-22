@@ -43,6 +43,7 @@ static void randStr(sqlite4_context *context, int argc, sqlite4_value **argv){
      "0123456789"
      ".-!,:*^+=_|?/<> ";
   int iMin, iMax, n, r, i;
+  sqlite4_env *pEnv = sqlite4_context_env(context);
   unsigned char zBuf[1000];
 
   /* It used to be possible to call randstr() with any number of arguments,
@@ -58,12 +59,12 @@ static void randStr(sqlite4_context *context, int argc, sqlite4_value **argv){
   if( iMax>=sizeof(zBuf) ) iMax = sizeof(zBuf)-1;
   n = iMin;
   if( iMax>iMin ){
-    sqlite4_randomness(sizeof(r), &r);
+    sqlite4_randomness(pEnv, sizeof(r), &r);
     r &= 0x7fffffff;
     n += r%(iMax + 1 - iMin);
   }
   assert( n<sizeof(zBuf) );
-  sqlite4_randomness(n, zBuf);
+  sqlite4_randomness(pEnv, n, zBuf);
   for(i=0; i<n; i++){
     zBuf[i] = zSrc[zBuf[i]%(sizeof(zSrc)-1)];
   }
