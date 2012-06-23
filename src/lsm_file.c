@@ -1496,6 +1496,10 @@ lsm_env *lsmPageEnv(Page *pPg) {
   return pPg->pFS->pEnv; 
 }
 
+FileSystem *lsmPageFS(Page *pPg){
+  return pPg->pFS;
+}
+
 /*
 ** Return the sector-size as reported by the log file handle.
 */

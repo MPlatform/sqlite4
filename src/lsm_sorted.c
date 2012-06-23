@@ -201,8 +201,11 @@ struct LevelCursor {
 ** to finish. Only First() and Next() operations are required.
 **
 **   btreeCursorNew()
+**   btreeCursorFirst()
 **   btreeCursorNext()
 **   btreeCursorFree()
+**   btreeCursorPosition()
+**   btreeCursorRestore()
 */
 typedef struct BtreePg BtreePg;
 typedef struct BtreeCursor BtreeCursor;
@@ -211,6 +214,7 @@ struct BtreePg {
   int iCell;
 };
 struct BtreeCursor {
+  SortedRun *pRun;
   FileSystem *pFS;                /* File system to read pages from */
   int nDepth;                     /* Allocated size of aPg[] */
   int iPg;                        /* Current entry in aPg[]. -1 -> EOF. */
@@ -548,48 +552,63 @@ static int pageGetKeyCopy(
   return rc;
 }
 
+static int pageGetBtreeKey(
+  Page *pPg,
+  int iKey, 
+  int *piPtr, 
+  int *piTopic, 
+  void **ppKey,
+  int *pnKey,
+  Blob *pBlob
+){
+  u8 *aData;
+  int nData;
+  u8 *aCell;
+  int eType;
+
+  aData = lsmFsPageData(pPg, &nData);
+  assert( SEGMENT_BTREE_FLAG & pageGetFlags(aData, nData) );
+
+  aCell = pageGetCell(aData, nData, iKey);
+  eType = *aCell++;
+  aCell += lsmVarintGet32(aCell, piPtr);
+
+  if( eType==0 ){
+    int rc;
+    Pgno iRef;                  /* Page number of referenced page */
+    Page *pRef;
+    aCell += lsmVarintGet32(aCell, &iRef);
+    rc = lsmFsDbPageGet(lsmPageFS(pPg), iRef, &pRef);
+    if( rc!=LSM_OK ) return rc;
+    pageGetKeyCopy(lsmPageEnv(pPg), pRef, 0, &eType, pBlob);
+    lsmFsPageRelease(pRef);
+    *ppKey = pBlob->pData;
+    *pnKey = pBlob->nData;
+  }else{
+    aCell += lsmVarintGet32(aCell, pnKey);
+    *ppKey = aCell;
+  }
+  if( piTopic ) *piTopic = rtTopic(eType);
+
+  return LSM_OK;
+}
 
 static int btreeCursorLoadKey(BtreeCursor *pCsr){
+  int rc = LSM_OK;
   if( pCsr->iPg<0 ){
     pCsr->pKey = 0;
     pCsr->nKey = 0;
     pCsr->eType = 0;
   }else{
-    u8 *aData;
-    int nData;
-    u8 *aCell;
-    int eType;
     int dummy;
-
-    aData = lsmFsPageData(pCsr->aPg[pCsr->iPg].pPage, &nData);
-    aCell = pageGetCell(aData, nData, pCsr->aPg[pCsr->iPg].iCell);
-
-    eType = *aCell++;
-    aCell += lsmVarintGet32(aCell, &dummy);
-    if( eType==0 ){
-      int rc;
-      Pgno iRef;                  /* Page number of referenced page */
-      Page *pRef;
-      aCell += lsmVarintGet32(aCell, &iRef);
-      rc = lsmFsDbPageGet(pCsr->pFS, iRef, &pRef);
-      if( rc!=LSM_OK ) return rc;
-      pageGetKeyCopy(lsmFsEnv(pCsr->pFS), pRef, 0, &eType, &pCsr->blob);
-      lsmFsPageRelease(pRef);
-
-      pCsr->pKey = (u8 *)pCsr->blob.pData;
-      pCsr->nKey = pCsr->blob.nData;
-      pCsr->eType = rtTopic(eType) | SORTED_SEPARATOR;
-    }else{
-      pCsr->eType = eType;
-      aCell += lsmVarintGet32(aCell, &pCsr->nKey);
-      if( rtIsWrite(eType) ) aCell += lsmVarintGet32(aCell, &dummy);
-      sortedReadData(pCsr->aPg[pCsr->iPg].pPage, 
-          (aCell-aData), pCsr->nKey, (void **)&pCsr->pKey, &pCsr->blob
-          );
-    }
+    rc = pageGetBtreeKey(
+        pCsr->aPg[pCsr->iPg].pPage, pCsr->aPg[pCsr->iPg].iCell,
+        &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
+    );
+    pCsr->eType |= SORTED_SEPARATOR;
   }
 
-  return LSM_OK;
+  return rc;
 }
 
 static int btreeCursorPtr(u8 *aData, int nData, int iCell){
@@ -602,11 +621,6 @@ static int btreeCursorPtr(u8 *aData, int nData, int iCell){
   return pageGetRecordPtr(aData, nData, iCell);
 }
 
-/*
-**   btreeCursorNew()
-**   btreeCursorNext()
-**   btreeCursorFree()
-*/
 static int btreeCursorNext(BtreeCursor *pCsr){
   int rc = LSM_OK;
 
@@ -687,6 +701,188 @@ static void btreeCursorFree(BtreeCursor *pCsr){
   }
 }
 
+static int btreeCursorFirst(BtreeCursor *pCsr){
+  int rc;
+
+  Page *pPg = 0;
+  FileSystem *pFS = pCsr->pFS;
+  int iPg = pCsr->pRun->iRoot;
+
+  do {
+    rc = lsmFsDbPageGet(pFS, iPg, &pPg);
+    assert( (rc==LSM_OK)==(pPg!=0) );
+    if( rc==LSM_OK ){
+      u8 *aData;
+      int nData;
+      int flags;
+
+      aData = lsmFsPageData(pPg, &nData);
+      flags = pageGetFlags(aData, nData);
+      if( (flags & SEGMENT_BTREE_FLAG)==0 ) break;
+
+      if( (pCsr->nDepth % 8)==0 ){
+        int nNew = pCsr->nDepth + 8;
+        pCsr->aPg = (BtreePg *)lsmReallocOrFreeRc(
+            lsmFsEnv(pFS), pCsr->aPg, sizeof(BtreePg) * nNew, &rc
+        );
+        if( rc==LSM_OK ){
+          memset(&pCsr->aPg[pCsr->nDepth], 0, sizeof(BtreePg) * 8);
+        }
+      }
+
+      if( rc==LSM_OK ){
+        assert( pCsr->aPg[pCsr->nDepth].iCell==0 );
+        pCsr->aPg[pCsr->nDepth].pPage = pPg;
+        pCsr->nDepth++;
+        iPg = pageGetRecordPtr(aData, nData, 0);
+      }
+    }
+  }while( rc==LSM_OK );
+  lsmFsPageRelease(pPg);
+  pCsr->iPg = pCsr->nDepth-1;
+
+  if( rc==LSM_OK && pCsr->nDepth ){
+    pCsr->aPg[pCsr->iPg].iCell = -1;
+    rc = btreeCursorNext(pCsr);
+  }
+
+  return rc;
+}
+
+static void btreeCursorPosition(BtreeCursor *pCsr, MergeInput *p){
+  if( pCsr->iPg>=0 ){
+    p->iPg = lsmFsPageNumber(pCsr->aPg[pCsr->iPg].pPage);
+    p->iCell = ((pCsr->aPg[pCsr->iPg].iCell + 1) << 8) + pCsr->nDepth;
+  }else{
+    p->iPg = 0;
+    p->iCell = 0;
+  }
+}
+
+static int btreeCursorRestore(
+  BtreeCursor *pCsr, 
+  int (*xCmp)(void *, int, void *, int),
+  MergeInput *p
+){
+  int rc = LSM_OK;
+  if( p->iPg ){
+    lsm_env *pEnv = lsmFsEnv(pCsr->pFS);
+    int iCell;                    /* Current cell number on leaf page */
+    Pgno iPg;                     /* Page number of current leaf page */
+    int nDepth;                   /* Depth of b-tree structure */
+
+    /* Decode the MergeInput structure */
+    iPg = p->iPg;
+    nDepth = (p->iCell & 0x00FF);
+    iCell = (p->iCell >> 8) - 1;
+
+    /* Allocate the BtreeCursor.aPg[] array */
+    assert( pCsr->aPg==0 );
+    pCsr->aPg = (BtreePg *)lsmMallocZeroRc(pEnv, sizeof(BtreePg) * nDepth, &rc);
+
+    /* Populate the last entry of the aPg[] array */
+    if( rc==LSM_OK ){
+      pCsr->iPg = nDepth-1;
+      pCsr->nDepth = nDepth;
+      pCsr->aPg[pCsr->iPg].iCell = iCell;
+      rc = lsmFsDbPageGet(pCsr->pFS, iPg, &pCsr->aPg[nDepth-1].pPage);
+    }
+
+    /* Populate any other aPg[] array entries */
+    if( rc==LSM_OK && nDepth>1 ){
+      Blob blob = {0,0,0};
+      void *pSeek;
+      int nSeek;
+      int iTopicSeek;
+      int dummy;
+
+      int iPg = 0;
+      int iLoad = pCsr->pRun->iRoot;
+
+      rc = pageGetBtreeKey(pCsr->aPg[nDepth-1].pPage, 
+          0, &dummy, &iTopicSeek, &pSeek, &nSeek, &pCsr->blob
+      );
+
+      do {
+        Page *pPg;
+        rc = lsmFsDbPageGet(pCsr->pFS, iLoad, &pPg);
+        assert( rc==LSM_OK || pPg==0 );
+        if( rc==LSM_OK ){
+          u8 *aData;                  /* Buffer containing page data */
+          int nData;                  /* Size of aData[] in bytes */
+          int iMin;
+          int iMax;
+          int iCell;
+
+          aData = lsmFsPageData(pPg, &nData);
+          assert( (pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG) );
+
+          iLoad = pageGetPtr(aData, nData);
+          iCell = pageGetNRec(aData, nData)-1; 
+          iMax = iCell-1;
+          iMin = 0;
+
+          while( iMax>=iMin ){
+            int iTry = (iMin+iMax)/2;
+            void *pKey; int nKey;         /* Key for cell iTry */
+            int iTopic;                   /* Topic for key pKeyT/nKeyT */
+            int iPtr;                     /* Pointer for cell iTry */
+            int res;                      /* (pSeek - pKeyT) */
+
+            rc = pageGetBtreeKey(pPg, iTry, &iPtr, &iTopic, &pKey, &nKey,&blob);
+            if( rc!=LSM_OK ) break;
+
+            res = iTopicSeek - iTopic;
+            if( res==0 ) res = xCmp(pSeek, nSeek, pKey, nKey);
+
+            if( res<0 ){
+              iLoad = iPtr;
+              iCell = iTry;
+              iMax = iTry-1;
+            }else{
+              iMin = iTry+1;
+            }
+          }
+
+          pCsr->aPg[iPg].pPage = pPg;
+          pCsr->aPg[iPg].iCell = iCell;
+          iPg++;
+        }
+      }while( rc==LSM_OK && iPg<(nDepth-1) );
+      sortedBlobFree(&blob);
+    }
+
+    /* Load the current key and pointer */
+    if( rc==LSM_OK ){
+      BtreePg *pBtreePg;
+      u8 *aData;
+      int nData;
+
+      pBtreePg = &pCsr->aPg[pCsr->iPg];
+      aData = lsmFsPageData(pBtreePg->pPage, &nData);
+      pCsr->iPtr = btreeCursorPtr(aData, nData, pBtreePg->iCell+1);
+      if( pBtreePg->iCell<0 ){
+        int dummy;
+        int i;
+        for(i=pCsr->iPg-1; i>=0; i--){
+          if( pCsr->aPg[i].iCell>0 ) break;
+        }
+        assert( i>0 );
+        rc = pageGetBtreeKey(
+            pCsr->aPg[i].pPage, pCsr->aPg[i].iCell,
+            &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
+        );
+        pCsr->eType |= SORTED_SEPARATOR;
+
+      }else{
+        rc = btreeCursorLoadKey(pCsr);
+      }
+    }
+  }
+
+  return rc;
+}
+
 static int btreeCursorNew(
   lsm_db *pDb,
   SortedRun *pRun,
@@ -698,53 +894,9 @@ static int btreeCursorNew(
   assert( pRun->iRoot );
   pCsr = lsmMallocZeroRc(pDb->pEnv, sizeof(BtreeCursor), &rc);
   if( pCsr ){
-    Page *pPg = 0;
-    FileSystem *pFS = pDb->pFS;
-    int iPg = pRun->iRoot;
-
-    do {
-      rc = lsmFsDbPageGet(pFS, iPg, &pPg);
-      assert( (rc==LSM_OK)==(pPg!=0) );
-      if( rc==LSM_OK ){
-        u8 *aData;
-        int nData;
-        int flags;
-
-        aData = lsmFsPageData(pPg, &nData);
-        flags = pageGetFlags(aData, nData);
-        if( (flags & SEGMENT_BTREE_FLAG)==0 ) break;
-
-        if( (pCsr->nDepth % 8)==0 ){
-          int nNew = pCsr->nDepth + 8;
-          pCsr->aPg = (BtreePg *)lsmReallocOrFreeRc(
-              pDb->pEnv, pCsr->aPg, sizeof(BtreePg) * nNew, &rc
-          );
-          if( rc==LSM_OK ){
-            memset(&pCsr->aPg[pCsr->nDepth], 0, sizeof(BtreePg) * 8);
-          }
-        }
-
-        if( rc==LSM_OK ){
-          assert( pCsr->aPg[pCsr->nDepth].iCell==0 );
-          pCsr->aPg[pCsr->nDepth].pPage = pPg;
-          pCsr->nDepth++;
-          iPg = pageGetRecordPtr(aData, nData, 0);
-        }
-      }
-    }while( rc==LSM_OK );
-    lsmFsPageRelease(pPg);
     pCsr->pFS = pDb->pFS;
-    pCsr->iPg = pCsr->nDepth-1;
-  }
-
-  if( rc==LSM_OK && pCsr->nDepth ){
-    pCsr->aPg[pCsr->iPg].iCell = -1;
-    rc = btreeCursorNext(pCsr);
-  }
-
-  if( rc!=LSM_OK ){
-    btreeCursorFree(pCsr);
-    pCsr = 0;
+    pCsr->pRun = pRun;
+    pCsr->iPg = -1;
   }
 
   *ppCsr = pCsr;
@@ -764,6 +916,9 @@ static int assertBtreeOk(
     BtreeCursor *pCsr = 0;        /* Btree cursor */
 
     rc = btreeCursorNew(pDb, pRun, &pCsr);
+    if( rc==LSM_OK ){
+      rc = btreeCursorFirst(pCsr);
+    }
     if( rc==LSM_OK ){
       rc = lsmFsDbPageGet(pFS, pRun->iFirst, &pPg);
     }
@@ -1447,32 +1602,14 @@ static int seekInBtree(
       iMin = 0;
       iMax = nRec-1;
       while( iMax>=iMin ){
-        Page *pRef = 0;
         int iTry = (iMin+iMax)/2;
         void *pKeyT; int nKeyT;       /* Key for cell iTry */
         int iTopicT;                  /* Topic for key pKeyT/nKeyT */
         int iPtr;                     /* Pointer associated with cell iTry */
-        u8 *aCell;                    /* Pointer to cell iTry */
         int res;                      /* (pKey - pKeyT) */
-        int eType;
 
-        aCell = pageGetCell(aData, nData, iTry);
-        eType = *aCell++;
-        aCell += lsmVarintGet32(aCell, &iPtr);
-        if( eType==0 ){
-          /* If eType==0, then this b-tree cell does not contain a key. 
-          ** Instead, it is a reference to another cell in the same separators
-          ** array that does contain a key. */
-          Pgno iRef;
-          aCell += lsmVarintGet32(aCell, &iRef);
-          rc = lsmFsDbPageGet(pCsr->pFS, iRef, &pRef);
-          if( rc!=LSM_OK ) break;
-          pKeyT = pageGetKey(pRef, 0, &iTopicT, &nKeyT, &blob);
-        }else{
-          aCell += lsmVarintGet32(aCell, &nKeyT);
-          pKeyT = (void *)aCell;
-          iTopicT = rtTopic(eType);
-        }
+        rc = pageGetBtreeKey(pPg, iTry, &iPtr, &iTopicT, &pKeyT, &nKeyT, &blob);
+        if( rc!=LSM_OK ) break;
 
         res = iTopic - iTopicT;
         if( res==0 ) res = pCsr->xCmp(pKey, nKey, pKeyT, nKeyT);
@@ -1483,7 +1620,6 @@ static int seekInBtree(
         }else{
           iMin = iTry+1;
         }
-        lsmFsPageRelease(pRef);
       }
       lsmFsPageRelease(pPg);
       pPg = 0;

@@ -382,6 +382,7 @@ int lsmFsPhantomMaterialize(FileSystem *, Snapshot *, SortedRun *);
 /* Functions to retrieve the lsm_env pointer from a FileSystem or Page object */
 lsm_env *lsmFsEnv(FileSystem *);
 lsm_env *lsmPageEnv(Page *);
+FileSystem *lsmPageFS(Page *);
 
 int lsmFsSectorSize(FileSystem *);
 
