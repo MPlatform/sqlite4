@@ -301,7 +301,7 @@ TestDb *testOpen(const char *zSystem, int bClear, int *pRc){
 }
 
 void testReopen(TestDb **ppDb, int *pRc){
-  if( *pRc==0 ){
+  if( 0 && *pRc==0 ){
     const char *zLib;
     zLib = tdb_library_name(*ppDb);
     testClose(ppDb);
