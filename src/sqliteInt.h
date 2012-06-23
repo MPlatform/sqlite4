@@ -3197,8 +3197,8 @@ SQLITE_EXTERN void (*sqlite4IoTrace)(const char*,...);
 */
 #ifdef SQLITE_MEMDEBUG
   void sqlite4MemdebugSetType(void*,u8);
-  int sqlite4MemdebugHasType(void*,u8);
-  int sqlite4MemdebugNoType(void*,u8);
+  int sqlite4MemdebugHasType(const void*,u8);
+  int sqlite4MemdebugNoType(const void*,u8);
 #else
 # define sqlite4MemdebugSetType(X,Y)  /* no-op */
 # define sqlite4MemdebugHasType(X,Y)  1

@@ -395,7 +395,7 @@ void sqlite4MemdebugSetType(void *p, u8 eType){
 **
 **     assert( sqlite4MemdebugHasType(p, MEMTYPE_DB) );
 */
-int sqlite4MemdebugHasType(void *p, u8 eType){
+int sqlite4MemdebugHasType(const void *p, u8 eType){
   int rc = 1;
   if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
@@ -417,7 +417,7 @@ int sqlite4MemdebugHasType(void *p, u8 eType){
 **
 **     assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
 */
-int sqlite4MemdebugNoType(void *p, u8 eType){
+int sqlite4MemdebugNoType(const void *p, u8 eType){
   int rc = 1;
   if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;

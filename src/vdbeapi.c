@@ -195,6 +195,11 @@ static void setResultStrOrError(
   u8 enc,                 /* Encoding of z.  0 for BLOBs */
   void (*xDel)(void*)     /* Destructor function */
 ){
+  if( xDel==SQLITE_DYNAMIC ){
+    assert( sqlite4MemdebugHasType(z, MEMTYPE_HEAP) );
+    assert( sqlite4MemdebugNoType(z, ~MEMTYPE_HEAP) );
+    sqlite4MemdebugSetType(z, MEMTYPE_DB | MEMTYPE_HEAP);
+  }
   if( sqlite4VdbeMemSetStr(&pCtx->s, z, n, enc, xDel)==SQLITE_TOOBIG ){
     sqlite4_result_error_toobig(pCtx);
   }
