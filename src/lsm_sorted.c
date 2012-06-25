@@ -3440,7 +3440,7 @@ static int mergeWorkerFirstPage(MergeWorker *pMW){
 static int mergeWorkerStep(MergeWorker *pMW){
   lsm_db *pDb = pMW->pDb;       /* Database handle */
   MultiCursor *pCsr;            /* Cursor to read input data from */
-  int rc;                       /* Return code */
+  int rc = LSM_OK;              /* Return code */
   int eType;                    /* SORTED_SEPARATOR, WRITE or DELETE */
   void *pKey; int nKey;         /* Key */
   void *pVal; int nVal;         /* Value */
@@ -3452,9 +3452,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
 
   /* Pull the next record out of the source cursor. */
   lsmMCursorKey(pCsr, &pKey, &nKey);
-  rc = lsmMCursorValue(pCsr, &pVal, &nVal);
   eType = pCsr->eType;
-  if( rc!=LSM_OK ) return rc;
 
   /* Figure out if the output record may have a different pointer value
   ** than the previous. This is the case if the current key is identical to
@@ -3492,6 +3490,9 @@ static int mergeWorkerStep(MergeWorker *pMW){
     }
 
     /* Write the record into the main run. */
+    if( rc==LSM_OK ){
+      rc = lsmMCursorValue(pCsr, &pVal, &nVal);
+    }
     if( rc==LSM_OK ){
       rc = mergeWorkerWrite(pMW, 0, eType, pKey, nKey, pVal, nVal, iPtr,&iSPtr);
     }
