@@ -339,8 +339,17 @@ static void assertAllBtreesOk(int rc, lsm_db *);
 # define assertAllBtreesOk(y, z)
 #endif
 
-static int assertPointersOk(lsm_db *, SortedRun *, SortedRun *, int, char **);
+struct FilePage { u8 *aData; int nData; };
+static u8 *fsPageData(Page *pPg, int *pnData){
+  *pnData = ((struct FilePage *)(pPg))->nData;
+  return ((struct FilePage *)(pPg))->aData;
+}
+static u8 *fsPageDataPtr(Page *pPg){
+  return ((struct FilePage *)(pPg))->aData;
+}
 
+
+static int assertPointersOk(lsm_db *, SortedRun *, SortedRun *, int, char **);
 /*
 ** Write nVal as a 16-bit unsigned big-endian integer into buffer aOut.
 */
@@ -410,7 +419,7 @@ static int sortedReadData(
   int nCell;
   u8 *aData;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
   nCell = lsmGetU16(&aData[SEGMENT_NRECORD_OFFSET(nData)]);
   iEnd = SEGMENT_EOF(nData, nCell);
   assert( iEnd>0 && iEnd<nData );
@@ -458,7 +467,7 @@ static int sortedReadData(
         if( rc ) break;
         lsmFsPageRelease(pPg);
         pPg = pNext;
-        aData = lsmFsPageData(pPg, &nData);
+        aData = fsPageData(pPg, &nData);
         flags = lsmGetU16(&aData[SEGMENT_FLAGS_OFFSET(nData)]);
       }while( flags&SEGMENT_BTREE_FLAG );
 
@@ -515,7 +524,7 @@ static u8 *pageGetKey(
   u8 *aData;
   int nData;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
 
   assert( !(pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG) );
   assert( iCell<pageGetNRec(aData, nData) );
@@ -567,7 +576,7 @@ static int pageGetBtreeKey(
   u8 *aCell;
   int eType;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
   assert( SEGMENT_BTREE_FLAG & pageGetFlags(aData, nData) );
 
   aCell = pageGetCell(aData, nData, iKey);
@@ -633,7 +642,7 @@ static int btreeCursorNext(BtreeCursor *pCsr){
   assert( pCsr->iPg>=0 );
   assert( pCsr->iPg==pCsr->nDepth-1 );
 
-  aData = lsmFsPageData(pPg->pPage, &nData);
+  aData = fsPageData(pPg->pPage, &nData);
   nCell = pageGetNRec(aData, nData);
 
   assert( pPg->iCell<=nCell );
@@ -648,7 +657,7 @@ static int btreeCursorNext(BtreeCursor *pCsr){
     pCsr->iPg--;
     while( pCsr->iPg>=0 ){
       pPg = &pCsr->aPg[pCsr->iPg];
-      aData = lsmFsPageData(pPg->pPage, &nData);
+      aData = fsPageData(pPg->pPage, &nData);
       if( pPg->iCell<pageGetNRec(aData, nData) ) break;
       lsmFsPageRelease(pPg->pPage);
       pCsr->iPg--;
@@ -671,7 +680,7 @@ static int btreeCursorNext(BtreeCursor *pCsr){
         pCsr->aPg[pCsr->iPg].iCell = 0;
         if( rc==LSM_OK ){
           if( pCsr->iPg==(pCsr->nDepth-1) ) break;
-          aData = lsmFsPageData(pLoad, &nData);
+          aData = fsPageData(pLoad, &nData);
           iLoad = btreeCursorPtr(aData, nData, 0);
         }
       }while( rc==LSM_OK && pCsr->iPg<(pCsr->nDepth-1) );
@@ -683,7 +692,7 @@ static int btreeCursorNext(BtreeCursor *pCsr){
   }
 
   if( rc==LSM_OK && pCsr->iPg>=0 ){
-    aData = lsmFsPageData(pCsr->aPg[pCsr->iPg].pPage, &nData);
+    aData = fsPageData(pCsr->aPg[pCsr->iPg].pPage, &nData);
     pCsr->iPtr = btreeCursorPtr(aData, nData, pCsr->aPg[pCsr->iPg].iCell+1);
   }
 
@@ -718,7 +727,7 @@ static int btreeCursorFirst(BtreeCursor *pCsr){
       int nData;
       int flags;
 
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       flags = pageGetFlags(aData, nData);
       if( (flags & SEGMENT_BTREE_FLAG)==0 ) break;
 
@@ -779,6 +788,7 @@ static int btreeCursorRestore(
   MergeInput *p
 ){
   int rc = LSM_OK;
+
   if( p->iPg ){
     lsm_env *pEnv = lsmFsEnv(pCsr->pFS);
     int iCell;                    /* Current cell number on leaf page */
@@ -828,7 +838,7 @@ static int btreeCursorRestore(
           int iMax;
           int iCell;
 
-          aData = lsmFsPageData(pPg, &nData);
+          aData = fsPageData(pPg, &nData);
           assert( (pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG) );
 
           iLoad = pageGetPtr(aData, nData);
@@ -876,7 +886,7 @@ static int btreeCursorRestore(
       int nData;
 
       pBtreePg = &pCsr->aPg[pCsr->iPg];
-      aData = lsmFsPageData(pBtreePg->pPage, &nData);
+      aData = fsPageData(pBtreePg->pPage, &nData);
       pCsr->iPtr = btreeCursorPtr(aData, nData, pBtreePg->iCell+1);
       if( pBtreePg->iCell<0 ){
         int dummy;
@@ -949,7 +959,7 @@ static int assertBtreeOk(
       lsmFsPageRelease(pPg);
       pPg = pNext;
       if( pPg==0 ) break;
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       flags = pageGetFlags(aData, nData);
       if( rc==LSM_OK 
        && 0==((SEGMENT_BTREE_FLAG|PGFTR_SKIP_THIS_FLAG) & flags)
@@ -980,7 +990,7 @@ static void segmentPtrSetPage(SegmentPtr *pPtr, Page *pNext){
   lsmFsPageRelease(pPtr->pPg);
   if( pNext ){
     int nData;
-    u8 *aData = lsmFsPageData(pNext, &nData);
+    u8 *aData = fsPageData(pNext, &nData);
     pPtr->nCell = pageGetNRec(aData, nData);
     pPtr->flags = pageGetFlags(aData, nData);
     pPtr->iPtr = pageGetPtr(aData, nData);
@@ -1052,7 +1062,7 @@ static int segmentPtrLoadCell(
 
     assert( iNew<pPtr->nCell );
     pPtr->iCell = iNew;
-    aData = lsmFsPageData(pPtr->pPg, &nPgsz);
+    aData = fsPageData(pPtr->pPg, &nPgsz);
     iOff = lsmGetU16(&aData[SEGMENT_CELLPTR_OFFSET(nPgsz, pPtr->iCell)]);
     pPtr->eType = aData[iOff];
     iOff++;
@@ -1368,7 +1378,7 @@ static int assertKeyLocation(
 
       if( pTest ){
         int nData;
-        u8 *aData = lsmFsPageData(pTest, &nData);
+        u8 *aData = fsPageData(pTest, &nData);
         int nCell = pageGetNRec(aData, nData);
         int flags = pageGetFlags(aData, nData);
         if( nCell && 0==(flags&SEGMENT_BTREE_FLAG) ){
@@ -1603,7 +1613,7 @@ static int seekInBtree(
       int nRec;
       int flags;
 
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       flags = pageGetFlags(aData, nData);
       if( (flags & SEGMENT_BTREE_FLAG)==0 ) break;
 
@@ -1686,9 +1696,7 @@ static int seekInSegment(
     rc = seekInBtree(pCsr, &pPtr->pSeg->run, pKey, nKey, &pPg);
     if( rc==LSM_OK ) segmentPtrSetPage(pPtr, pPg);
   }else{
-    if( segmentHasSeparators(pPtr->pSeg) ){
-      rc = seekInSeparators(pCsr, pPtr, pKey, nKey, &iPtr);
-    }else if( iPtr==0 ){
+    if( iPtr==0 ){
       iPtr = pPtr->pSeg->run.iFirst;
     }
     if( rc==LSM_OK ){
@@ -2012,6 +2020,9 @@ static int multiCursorNew(
     if( bUserOnly ){
       pCsr->flags |= CURSOR_IGNORE_SYSTEM;
     }
+
+    pCsr->pNext = pDb->pCsr;
+    pDb->pCsr = pCsr;
   }
   if( rc!=LSM_OK ){
     lsmMCursorClose(pCsr);
@@ -2019,6 +2030,23 @@ static int multiCursorNew(
   }
   *ppCsr = pCsr;
   return rc;
+}
+
+void lsmSortedRemap(lsm_db *pDb){
+  MultiCursor *pCsr;
+  for(pCsr=pDb->pCsr; pCsr; pCsr=pCsr->pNext){
+    int i;
+    if( pCsr->pBtCsr ){
+      btreeCursorLoadKey(pCsr->pBtCsr);
+    }
+    for(i=0; i<pCsr->nSegCsr; i++){
+      int iPtr;
+      LevelCursor *p = &pCsr->aSegCsr[i];
+      for(iPtr=0; iPtr<p->nPtr; iPtr++){
+        segmentPtrLoadCell(&p->aPtr[iPtr], p->aPtr[iPtr].iCell);
+      }
+    }
+  }
 }
 
 static void multiCursorReadSeparators(MultiCursor *pCsr){
@@ -2094,10 +2122,6 @@ int lsmMCursorNew(
   int rc;
 
   rc = multiCursorAllocate(pDb, 0, &pCsr);
-  if( rc==LSM_OK ){
-    pCsr->pNext = pDb->pCsr;
-    pDb->pCsr = pCsr;
-  }
 
   assert( (rc==LSM_OK)==(pCsr!=0) );
   *ppCsr = pCsr;
@@ -2712,8 +2736,8 @@ static int mergeWorkerMoveHierarchy(
       u8 *a1; int n1;
       u8 *a2; int n2;
 
-      a1 = lsmFsPageData(pNew, &n1);
-      a2 = lsmFsPageData(apHier[i], &n2);
+      a1 = fsPageData(pNew, &n1);
+      a2 = fsPageData(apHier[i], &n2);
       assert( n1==n2 || n1+4==n2 || n2+4==n1 );
 
       if( n1>=n2 ){
@@ -2784,7 +2808,7 @@ static int mergeWorkerLoadHierarchy(
       rc = lsmFsDbPageGet(pFS, iPg, &pPg);
       if( rc!=LSM_OK ) break;
 
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       flags = pageGetFlags(aData, nData);
       if( flags&SEGMENT_BTREE_FLAG ){
         Page **apNew = (Page **)lsmRealloc(
@@ -2895,7 +2919,7 @@ static int mergeWorkerPushHierarchy(
   ** page body. This pointer points to a page that contains keys that are
   ** smaller than pKey/nKey.  */
   if( p->nHier ){
-    aData = lsmFsPageData(p->apHier[0], &nData);
+    aData = fsPageData(p->apHier[0], &nData);
     iPtr = lsmGetU32(&aData[SEGMENT_POINTER_OFFSET(nData)]);
   }else{
     iPtr = pRun->iFirst;
@@ -2938,7 +2962,7 @@ static int mergeWorkerPushHierarchy(
 
       /* If the key will fit on this page, break out of the loop. */
       assert( lsmFsPageWritable(p->apHier[iLevel]) );
-      aData = lsmFsPageData(p->apHier[iLevel], &nData);
+      aData = fsPageData(p->apHier[iLevel], &nData);
       iRight = lsmGetU32(&aData[SEGMENT_POINTER_OFFSET(nData)]);
       if( bIndirect ){
         nByte = 2 + 1 + lsmVarintLen32(iRight) + lsmVarintLen32(iKeyPg);
@@ -2963,7 +2987,7 @@ static int mergeWorkerPushHierarchy(
     }
     if( rc!=LSM_OK ) goto push_hierarchy_out;
 
-    aData = lsmFsPageData(p->apHier[iLevel], &nData);
+    aData = fsPageData(p->apHier[iLevel], &nData);
     memset(aData, 0, nData);
     lsmPutU16(&aData[SEGMENT_FLAGS_OFFSET(nData)], SEGMENT_BTREE_FLAG);
     lsmPutU16(&aData[SEGMENT_NRECORD_OFFSET(nData)], 0);
@@ -2979,7 +3003,7 @@ static int mergeWorkerPushHierarchy(
   }
 
   /* Write the key into page apHier[iLevel]. */
-  aData = lsmFsPageData(p->apHier[iLevel], &nData);
+  aData = fsPageData(p->apHier[iLevel], &nData);
 
   iOff = mergeWorkerPageOffset(aData, nData);
 
@@ -3005,7 +3029,7 @@ static int mergeWorkerPushHierarchy(
 
   /* Write the right-hand pointer of the right-most leaf page of the 
   ** b-tree heirarchy. */
-  aData = lsmFsPageData(p->apHier[0], &nData);
+  aData = fsPageData(p->apHier[0], &nData);
   lsmPutU32(&aData[SEGMENT_POINTER_OFFSET(nData)], iKeyPg);
 
   /* Ensure that the SortedRun.iRoot field is correct. */
@@ -3056,7 +3080,7 @@ static int mergeWorkerBuildHierarchy(MergeWorker *pMW){
       if( rc==LSM_OK ){
         u8 *aData;
         int nData;
-        aData = lsmFsPageData(pPg, &nData);
+        aData = fsPageData(pPg, &nData);
         if( pageGetNRec(aData, nData)>0 ){
           u8 *pKey;
           int nKey;
@@ -3123,7 +3147,7 @@ static int mergeWorkerNextPage(
     pMW->apPage[bSep] = pNext;
     pMW->pLevel->pMerge->aiOutputOff[bSep] = 0;
 
-    aData = lsmFsPageData(pNext, &nData);
+    aData = fsPageData(pNext, &nData);
     lsmPutU16(&aData[SEGMENT_NRECORD_OFFSET(nData)], 0);
     lsmPutU16(&aData[SEGMENT_FLAGS_OFFSET(nData)], 0);
     lsmPutU32(&aData[SEGMENT_POINTER_OFFSET(nData)], iFPtr);
@@ -3161,7 +3185,7 @@ static int mergeWorkerData(
 
     assert( lsmFsPageWritable(pMW->apPage[bSep]) );
    
-    aData = lsmFsPageData(pMW->apPage[bSep], &nData);
+    aData = fsPageData(pMW->apPage[bSep], &nData);
     nRec = pageGetNRec(aData, nData);
     iOff = pMerge->aiOutputOff[bSep];
     nCopy = LSM_MIN(nRem, SEGMENT_EOF(nData, nRec) - iOff);
@@ -3209,7 +3233,7 @@ static int mergeWorkerWrite(
   pRun = (bSep ? &pMW->pLevel->lhs.sep : &pMW->pLevel->lhs.run);
 
   pPg = pMW->apPage[bSep];
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
   nRec = pageGetNRec(aData, nData);
   iFPtr = pageGetPtr(aData, nData);
 
@@ -3251,7 +3275,6 @@ static int mergeWorkerWrite(
     nRec = 0;
     rc = mergeWorkerNextPage(pMW, bSep, iFPtr);
     pPg = pMW->apPage[bSep];
-    aData = lsmFsPageData(pPg, &nData);
   }
 
   /* If this record header will be the first on the page, and the page is 
@@ -3286,6 +3309,8 @@ static int mergeWorkerWrite(
 
   /* Update the output segment */
   if( rc==LSM_OK ){
+    aData = fsPageData(pPg, &nData);
+
     /* Update the page footer. */
     lsmPutU16(&aData[SEGMENT_NRECORD_OFFSET(nData)], nRec+1);
     lsmPutU16(&aData[SEGMENT_CELLPTR_OFFSET(nData, nRec)], iOff);
@@ -3399,7 +3424,7 @@ static int mergeWorkerFirstPage(MergeWorker *pMW){
     if( rc==LSM_OK ){
       u8 *aData;                    /* Buffer for page pPg */
       int nData;                    /* Size of aData[] in bytes */
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       iFPtr = pageGetPtr(aData, nData);
       lsmFsPageRelease(pPg);
     }
@@ -3473,6 +3498,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
 
     /* If the call to mergeWorkerWrite() above started a new page, then
     ** add a SORTED_SEPARATOR key to the separators run.  */
+#if 0
     if( rc==LSM_OK && iSPtr ){
 
       /* If the separators array has not been started, start it now. */
@@ -3494,11 +3520,13 @@ static int mergeWorkerStep(MergeWorker *pMW){
         rc = mergeWorkerWrite(pMW, 1, eSType, pKey, nKey, 0, 0, iSPtr, 0);
       }
     }
+#endif
   }
 
   /* Advance the cursor to the next input record (assuming one exists). */
   assert( lsmMCursorValid(pMW->pCsr) );
   if( rc==LSM_OK ) rc = lsmMCursorNext(pMW->pCsr);
+  assert( pMW->apPage[1]==0 );
 
   /* If the cursor is at EOF, the merge is finished. Release all page
   ** references currently held by the merge worker and inform the 
@@ -3516,7 +3544,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
       rc = lsmFsSortedFinish(pDb->pFS, &pSeg->sep);
     }
 
-#if 0
+#if 1
     assert( LSM_OK==assertBtreeOk(pDb, &pSeg->run) );
     if( pMW->pCsr->pBtCsr ){
       assert( LSM_OK==assertBtreeOk(pDb, &pMW->pLevel->pNext->lhs.run) );
@@ -3577,7 +3605,7 @@ int lsmSortedNewToplevel(
       if( pNext ){
         assert( pNext->pMerge==0 || pNext->nRight>0 );
         if( pNext->pMerge==0 ){
-          if( segmentHasSeparators(&pNext->lhs) ){
+          if( pNext->lhs.run.iRoot ){
             rc = multiCursorAddLevel(pCsr, pNext, MULTICURSOR_ADDLEVEL_LHS_SEP);
 
             /* This call moves any blocks occupied by separators array pDel 
@@ -3762,7 +3790,7 @@ static int sortedMergeSetup(
     lsmDbSnapshotSetLevel(pDb->pWorker, pTopLevel);
 
     /* Determine whether or not the next separators will be linked in */
-    if( pNext && pNext->pMerge==0 && segmentHasSeparators(&pNext->lhs) ){
+    if( pNext && pNext->pMerge==0 && pNext->lhs.run.iRoot ){
       bUseNext = 1;
     }
   }
@@ -3795,7 +3823,7 @@ static int mergeWorkerLoadOutputPage(MergeWorker *pMW, int bSep){
       Page *pNext;
       u8 *aData;
       int nData;
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       if( (pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG)==0 ) break;
       rc = lsmFsDbPageNext(pRun, pPg, -1, &pNext);
       lsmFsPageRelease(pPg);
@@ -4027,7 +4055,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
           /* Free the separators of the next level, if required. */
           if( pLevel->pMerge->nInput > pLevel->nRight ){
             assert( pLevel->pNext );
-            assert( segmentHasSeparators(&pLevel->pNext->lhs) );
+            assert( pLevel->pNext->lhs.run.iRoot );
             lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->pNext->lhs.sep);
             pLevel->pNext->lhs.run.iRoot = 0;
           }
@@ -4258,7 +4286,7 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg, int bVals){
   u8 *aData;
   int nData;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
 
   nRec = pageGetNRec(aData, nData);
   iPtr = pageGetPtr(aData, nData);
@@ -4336,7 +4364,7 @@ static void infoCellDump(
   Page *pRef = 0;                 /* Pointer to page iRef */
   u8 *aCell;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
 
   aCell = pageGetCell(aData, nData, iCell);
   eType = *aCell++;
@@ -4404,7 +4432,7 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
     int iCell;
     u8 *aData; int nData;         /* Page data and size thereof */
 
-    aData = lsmFsPageData(pPg, &nData);
+    aData = fsPageData(pPg, &nData);
     nRec = pageGetNRec(aData, nData);
     iPtr = pageGetPtr(aData, nData);
     flags = pageGetFlags(aData, nData);
@@ -4755,7 +4783,7 @@ static void assertBtreeRanges(
 
   rc = lsmFsDbPageGet(pDb->pFS, iPg, &pPg);
   assert( rc==LSM_OK );
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
 
   nRec = pageGetNRec(aData, nData);
   flags = pageGetFlags(aData, nData);

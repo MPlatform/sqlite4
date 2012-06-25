@@ -468,6 +468,24 @@ int do_crash(int nArg, char **azArg){
   return rc;
 }
 
+
+static lsm_db *configure_lsm_db(TestDb *pDb){
+  lsm_db *pLsm;
+  pLsm = tdb_lsm(pDb);
+  if( pLsm ){
+    int bMmap = 1;
+    int nLimit = 2 * 1024 * 1024;
+    int eSafety = 1;
+    int bUseLog = 1;
+
+    lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nLimit);
+    lsm_config(pLsm, LSM_CONFIG_SAFETY, &eSafety);
+    lsm_config(pLsm, LSM_CONFIG_MMAP, &bMmap);
+    lsm_config(pLsm, LSM_CONFIG_USE_LOG, &bUseLog);
+  }
+  return pLsm;
+}
+
 int do_speed_tests(int nArg, char **azArg){
 
   struct DbSystem {
@@ -594,19 +612,8 @@ int do_speed_tests(int nArg, char **azArg){
 
       rc = tdb_open(aSys[j].zLibrary, 0, 1, &pDb);
       if( rc ) return rc;
-      pLsm = tdb_lsm(pDb);
 
-      if( pLsm ){
-        int bMmap = 0;
-        int nLimit = 2 * 1024 * 1024;
-        int eSafety = 1;
-        int bUseLog = 1;
-
-        lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nLimit);
-        lsm_config(pLsm, LSM_CONFIG_SAFETY, &eSafety);
-        lsm_config(pLsm, LSM_CONFIG_MMAP, &bMmap);
-        lsm_config(pLsm, LSM_CONFIG_USE_LOG, &bUseLog);
-      }
+      pLsm = configure_lsm_db(pDb);
   
       testTimeInit();
       for(i=0; i<nRow; i+=nStep){
@@ -646,6 +653,7 @@ int do_speed_tests(int nArg, char **azArg){
       if( doWriteTest ){
         rc = tdb_open(aSys[j].zLibrary, 0, 1, &pDb);
         if( rc ) return rc;
+        configure_lsm_db(pDb);
 
         for(i=0; i<nRow; i+=nSelStep){
           int iStep;
@@ -676,10 +684,9 @@ int do_speed_tests(int nArg, char **azArg){
       }else{
         int t;
         int iSel;
-        int bMmap = 0;
 
         rc = tdb_open(aSys[j].zLibrary, 0, 0, &pDb);
-        if( tdb_lsm(pDb) ) lsm_config(tdb_lsm(pDb), LSM_CONFIG_MMAP, &bMmap);
+        configure_lsm_db(pDb);
 
         testTimeInit();
         for(iSel=0; rc==LSM_OK && iSel<nSelTest; iSel++){

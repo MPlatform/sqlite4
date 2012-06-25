@@ -441,6 +441,8 @@ int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
 
+void lsmSortedRemap(lsm_db *pDb);
+
 void lsmSortedFreeLevel(lsm_env *pEnv, Level *);
 
 int lsmSortedFlushDb(lsm_db *);

@@ -182,6 +182,7 @@ struct FileSystem {
 */
 struct Page {
   u8 *aData;                      /* Buffer containing page data */
+  int nData;                      /* Bytes of usable data at aData[] */
   int iPg;                        /* Page number */
   int nRef;                       /* Number of outstanding references */
   int flags;                      /* Combination of PAGE_XXX flags */
@@ -672,6 +673,8 @@ static void fsGrowMapping(
       for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
         pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
       }
+
+      lsmSortedRemap(pFS->pDb);
     }
     *pRc = rc;
   }
@@ -742,6 +745,7 @@ int fsPageGet(
       ** free the buffer. */
       if( rc==LSM_OK ){
         p->pHashNext = pFS->apHash[iHash];
+        p->nData =  pFS->nPagesize - (p->flags & PAGE_SHORT);
         pFS->apHash[iHash] = p;
       }else{
         fsPageBufferFree(p);
