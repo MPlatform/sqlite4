@@ -697,6 +697,7 @@ static void btreeCursorFree(BtreeCursor *pCsr){
     for(i=0; i<=pCsr->iPg; i++){
       lsmFsPageRelease(pCsr->aPg[i].pPage);
     }
+    sortedBlobFree(&pCsr->blob);
     lsmFree(pEnv, pCsr->aPg);
     lsmFree(pEnv, pCsr);
   }
@@ -831,8 +832,8 @@ static int btreeCursorRestore(
           assert( (pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG) );
 
           iLoad = pageGetPtr(aData, nData);
-          iCell = pageGetNRec(aData, nData)-1; 
-          iMax = iCell;
+          iCell = pageGetNRec(aData, nData); 
+          iMax = iCell-1;
           iMin = 0;
 
           while( iMax>=iMin ){
@@ -942,14 +943,16 @@ static int assertBtreeOk(
       Page *pNext;
       u8 *aData;
       int nData;
+      int flags;
 
       rc = lsmFsDbPageNext(pRun, pPg, 1, &pNext);
       lsmFsPageRelease(pPg);
       pPg = pNext;
       if( pPg==0 ) break;
       aData = lsmFsPageData(pPg, &nData);
+      flags = pageGetFlags(aData, nData);
       if( rc==LSM_OK 
-       && 0==(SEGMENT_BTREE_FLAG & pageGetFlags(aData, nData)) 
+       && 0==((SEGMENT_BTREE_FLAG|PGFTR_SKIP_THIS_FLAG) & flags)
        && 0!=pageGetNRec(aData, nData)
       ){
         u8 *pKey;
@@ -1274,7 +1277,10 @@ static void segmentPtrEnd(
     int rc = LSM_OK;
 
     segmentPtrEndPage(pCsr->pFS, pPtr, bLast, &rc);
-    while( rc==LSM_OK && pPtr->pPg && pPtr->nCell==0 ){
+    while( rc==LSM_OK 
+        && pPtr->pPg 
+        && (pPtr->nCell==0 || (pPtr->flags & SEGMENT_BTREE_FLAG))
+    ){
       rc = segmentPtrNextPage(pPtr, (bLast ? -1 : 1));
     }
     if( rc==LSM_OK && pPtr->pPg ){
@@ -3262,7 +3268,7 @@ static int mergeWorkerWrite(
   if( rc==LSM_OK && nRec==0 && pRun->iFirst!=pRun->iLast ){
     assert( pMerge->nSkip>=0 );
 
-    if( pMW->bFlush==0 || bSep==0 ){
+    if( (bSep && pMW->bFlush==0) || (bSep==0 && pMerge->nSkip==0) ){
       Pgno iPg = lsmFsPageNumber(pPg);
       rc = mergeWorkerPushHierarchy(pMW, bSep, iPg, rtTopic(eType), pKey, nKey);
     }
@@ -3510,12 +3516,15 @@ static int mergeWorkerStep(MergeWorker *pMW){
       rc = lsmFsSortedFinish(pDb->pFS, &pSeg->sep);
     }
 
+#if 0
     assert( LSM_OK==assertBtreeOk(pDb, &pSeg->run) );
     if( pMW->pCsr->pBtCsr ){
+      assert( LSM_OK==assertBtreeOk(pDb, &pMW->pLevel->pNext->lhs.run) );
       assertPointersOk(
           pDb, &pMW->pLevel->lhs.run, &pMW->pLevel->pNext->lhs.run, 0, 0
       );
     }
+#endif
 
     mergeWorkerShutdown(pMW);
   }
@@ -4454,7 +4463,7 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
 
 void sortedDumpSegment(lsm_db *pDb, SortedRun *pRun, int bVals){
   assert( pDb->xLog );
-  if( pRun ){
+  if( pRun && pRun->iFirst ){
     char *zSeg;
     Page *pPg;
 

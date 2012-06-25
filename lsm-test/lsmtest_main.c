@@ -185,7 +185,7 @@ static void scanCompareCb(
   u8 *aVal = (u8 *)pVal;
   int i;
 
-  if( test_scan_debug ) printf("%s ", (char *)pKey);
+  if( test_scan_debug ) printf("%.20s\n", (char *)pKey);
 
 #if 0
   /* Check tdb_fetch() matches */
@@ -266,9 +266,9 @@ void testScanCompare(
     res2.bReverse = bReverse;
 
     tdb_scan(pDb1, pRes1, bReverse, pKey1, nKey1, pKey2, nKey2, scanCompareCb);
-if( test_scan_debug ) printf("\n");
+if( test_scan_debug ) printf("\n\n\n");
     tdb_scan(pDb2, pRes2, bReverse, pKey1, nKey1, pKey2, nKey2, scanCompareCb);
-if( test_scan_debug ) printf("\n");
+if( test_scan_debug ) printf("\n\n\n");
 
     if( res1.nRow!=res2.nRow 
      || res1.cksum1!=res2.cksum1 
@@ -301,7 +301,7 @@ TestDb *testOpen(const char *zSystem, int bClear, int *pRc){
 }
 
 void testReopen(TestDb **ppDb, int *pRc){
-  if( 0 && *pRc==0 ){
+  if( *pRc==0 ){
     const char *zLib;
     zLib = tdb_library_name(*ppDb);
     testClose(ppDb);
