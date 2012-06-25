@@ -438,6 +438,7 @@ do_test 11.20 {
 db2 close
 
 do_test 11.21 { sqlite4_lsm_work db main -flush } {0}
+db eval {SELECT randstr(5,5)}
 do_execsql_test 11.22 {
   INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
 }

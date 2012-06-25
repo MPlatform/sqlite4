@@ -125,6 +125,8 @@ int sqlite4_initialize(sqlite4_env *pEnv){
   }
   pEnv->isInit = 1;
 
+  sqlite4OsInit(pEnv);
+
   /* Register global functions */
   if( rc==SQLITE_OK ){
     sqlite4RegisterGlobalFunctions(pEnv);

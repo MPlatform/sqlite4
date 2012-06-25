@@ -23,7 +23,7 @@
 ** must be held while executing this routine.
 */
 static u8 randomByte(sqlite4_env *pEnv){
-  pEnv->prngX = (pEnv->prngX>>1) ^ ((1+~(pEnv->prngX&1)) & 0xd0000001);
+  pEnv->prngX = (pEnv->prngX>>1) ^ ((-(pEnv->prngX&1)) & 0xd0000001);
   pEnv->prngY = pEnv->prngY*1103515245 + 12345;
   return (u8)((pEnv->prngX ^ pEnv->prngY)&0xff);
 }
