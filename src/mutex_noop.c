@@ -35,9 +35,10 @@
 **
 ** This routines provide no mutual exclusion or error checking.
 */
-static int noopMutexInit(void){ return SQLITE_OK; }
-static int noopMutexEnd(void){ return SQLITE_OK; }
-static sqlite4_mutex *noopMutexAlloc(int id){ 
+static int noopMutexInit(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
+static int noopMutexEnd(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
+static sqlite4_mutex *noopMutexAlloc(sqlite4_env *pEnv, int id){ 
+  UNUSED_PARAMETER(pEnv);
   UNUSED_PARAMETER(id);
   return (sqlite4_mutex*)8; 
 }
@@ -58,11 +59,10 @@ sqlite4_mutex_methods const *sqlite4NoopMutex(void){
     noopMutexEnter,
     noopMutexTry,
     noopMutexLeave,
-
     0,
     0,
+    0
   };
-
   return &sMutex;
 }
 #endif /* !SQLITE_DEBUG */
@@ -77,55 +77,44 @@ sqlite4_mutex_methods const *sqlite4NoopMutex(void){
 /*
 ** The mutex object
 */
-typedef struct sqlite4_debug_mutex {
-  int id;     /* The mutex type */
-  int cnt;    /* Number of entries without a matching leave */
-} sqlite4_debug_mutex;
+typedef struct sqlite4DebugMutex {
+  sqlite4_mutex base;    /* Base class. Must be first */
+  sqlite4_env *pEnv;     /* Run-time environment */
+  int id;                /* Type of mutex */
+  int cnt;               /* Number of entries without a matching leave */
+} sqlite4DebugMutex;
 
 /*
 ** The sqlite4_mutex_held() and sqlite4_mutex_notheld() routine are
 ** intended for use inside assert() statements.
 */
 static int debugMutexHeld(sqlite4_mutex *pX){
-  sqlite4_debug_mutex *p = (sqlite4_debug_mutex*)pX;
+  sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
   return p==0 || p->cnt>0;
 }
 static int debugMutexNotheld(sqlite4_mutex *pX){
-  sqlite4_debug_mutex *p = (sqlite4_debug_mutex*)pX;
+  sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
   return p==0 || p->cnt==0;
 }
 
 /*
 ** Initialize and deinitialize the mutex subsystem.
 */
-static int debugMutexInit(void){ return SQLITE_OK; }
-static int debugMutexEnd(void){ return SQLITE_OK; }
+static int debugMutexInit(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
+static int debugMutexEnd(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
 
 /*
 ** The sqlite4_mutex_alloc() routine allocates a new
 ** mutex and returns a pointer to it.  If it returns NULL
 ** that means that a mutex could not be allocated. 
 */
-static sqlite4_mutex *debugMutexAlloc(int id){
-  static sqlite4_debug_mutex aStatic[6];
-  sqlite4_debug_mutex *pNew = 0;
-  switch( id ){
-    case SQLITE_MUTEX_FAST:
-    case SQLITE_MUTEX_RECURSIVE: {
-      pNew = sqlite4Malloc(0, sizeof(*pNew));
-      if( pNew ){
-        pNew->id = id;
-        pNew->cnt = 0;
-      }
-      break;
-    }
-    default: {
-      assert( id-2 >= 0 );
-      assert( id-2 < (int)(sizeof(aStatic)/sizeof(aStatic[0])) );
-      pNew = &aStatic[id-2];
-      pNew->id = id;
-      break;
-    }
+static sqlite4_mutex *debugMutexAlloc(sqlite4_env *pEnv, int id){
+  sqlite4DebugMutex *pNew = 0;
+  pNew = sqlite4Malloc(pEnv, sizeof(*pNew));
+  if( pNew ){
+    pNew->id = id;
+    pNew->cnt = 0;
+    pNew->pEnv = pEnv;
   }
   return (sqlite4_mutex*)pNew;
 }
@@ -134,10 +123,9 @@ static sqlite4_mutex *debugMutexAlloc(int id){
 ** This routine deallocates a previously allocated mutex.
 */
 static void debugMutexFree(sqlite4_mutex *pX){
-  sqlite4_debug_mutex *p = (sqlite4_debug_mutex*)pX;
+  sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
   assert( p->cnt==0 );
-  assert( p->id==SQLITE_MUTEX_FAST || p->id==SQLITE_MUTEX_RECURSIVE );
-  sqlite4_free(0, p);
+  sqlite4_free(p->pEnv, p);
 }
 
 /*
@@ -152,12 +140,12 @@ static void debugMutexFree(sqlite4_mutex *pX){
 ** more than once, the behavior is undefined.
 */
 static void debugMutexEnter(sqlite4_mutex *pX){
-  sqlite4_debug_mutex *p = (sqlite4_debug_mutex*)pX;
+  sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
   assert( p->id==SQLITE_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
   p->cnt++;
 }
 static int debugMutexTry(sqlite4_mutex *pX){
-  sqlite4_debug_mutex *p = (sqlite4_debug_mutex*)pX;
+  sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
   assert( p->id==SQLITE_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
   p->cnt++;
   return SQLITE_OK;
@@ -170,7 +158,7 @@ static int debugMutexTry(sqlite4_mutex *pX){
 ** is not currently allocated.  SQLite will never do either.
 */
 static void debugMutexLeave(sqlite4_mutex *pX){
-  sqlite4_debug_mutex *p = (sqlite4_debug_mutex*)pX;
+  sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
   assert( debugMutexHeld(pX) );
   p->cnt--;
   assert( p->id==SQLITE_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
@@ -185,9 +173,9 @@ sqlite4_mutex_methods const *sqlite4NoopMutex(void){
     debugMutexEnter,
     debugMutexTry,
     debugMutexLeave,
-
     debugMutexHeld,
-    debugMutexNotheld
+    debugMutexNotheld, 
+    0
   };
 
   return &sMutex;

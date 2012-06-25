@@ -1116,7 +1116,7 @@ void sqlite4RegisterDateTimeFunctions(sqlite4_env *pEnv){
 #endif
   };
   int i;
-  FuncDefHash *pHash = &sqlite4GlobalFunctions;
+  FuncDefHash *pHash = &pEnv->hashGlobalFuncs;
   FuncDef *aFunc = (FuncDef*)aDateTimeFuncs;
 
   for(i=0; i<ArraySize(aDateTimeFuncs); i++){

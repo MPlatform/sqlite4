@@ -79,7 +79,8 @@ static void renameTableFunc(
 
     zRet = sqlite4MPrintf(db, "%.*s\"%w\"%s", ((u8*)tname.z) - zSql, zSql, 
        zTableName, tname.z+tname.n);
-    sqlite4_result_text(context, zRet, -1, SQLITE_DYNAMIC);
+    sqlite4_result_text(context, zRet, -1, SQLITE_TRANSIENT);
+    sqlite4DbFree(db, zRet);
   }
 }
 
@@ -141,8 +142,9 @@ static void renameParentFunc(
   }
 
   zResult = sqlite4MPrintf(db, "%s%s", (zOutput?zOutput:""), zInput), 
-  sqlite4_result_text(context, zResult, -1, SQLITE_DYNAMIC);
+  sqlite4_result_text(context, zResult, -1, SQLITE_TRANSIENT);
   sqlite4DbFree(db, zOutput);
+  sqlite4DbFree(db, zResult);
 }
 #endif
 
@@ -218,7 +220,8 @@ static void renameTriggerFunc(
     */
     zRet = sqlite4MPrintf(db, "%.*s\"%w\"%s", ((u8*)tname.z) - zSql, zSql, 
        zTableName, tname.z+tname.n);
-    sqlite4_result_text(context, zRet, -1, SQLITE_DYNAMIC);
+    sqlite4_result_text(context, zRet, -1, SQLITE_TRANSIENT);
+    sqlite4DbFree(db, zRet);
   }
 }
 #endif   /* !SQLITE_OMIT_TRIGGER */
@@ -226,7 +229,7 @@ static void renameTriggerFunc(
 /*
 ** Register built-in functions used to help implement ALTER TABLE
 */
-void sqlite4AlterFunctions(void){
+void sqlite4AlterFunctions(sqlite4_env *pEnv){
   static SQLITE_WSD FuncDef aAlterTableFuncs[] = {
     FUNCTION(sqlite_rename_table,   2, 0, 0, renameTableFunc),
 #ifndef SQLITE_OMIT_TRIGGER
@@ -237,7 +240,7 @@ void sqlite4AlterFunctions(void){
 #endif
   };
   int i;
-  FuncDefHash *pHash = &sqlite4GlobalFunctions;
+  FuncDefHash *pHash = &pEnv->hashGlobalFuncs;
   FuncDef *aFunc = (FuncDef*)aAlterTableFuncs;
 
   for(i=0; i<ArraySize(aAlterTableFuncs); i++){

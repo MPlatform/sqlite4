@@ -186,22 +186,23 @@ static int sqlite4MemSize(void *pMem, void *p){
 /*
 ** Initialize the memory allocation subsystem.
 */
-static int sqlite4MemInit(void *pMem){
-  assert( pMem==(void*)&mem2 );
+static int sqlite4MemInit(void *pMallocEnv){
+  sqlite4_env *pEnv = (sqlite4_env*)pMallocEnv;
+  int rc = SQLITE_OK;
   assert( (sizeof(struct MemBlockHdr)&7) == 0 );
-  if( !sqlite4DefaultEnv.bMemstat ){
-    /* If memory status is enabled, then the malloc.c wrapper will already
-    ** hold the STATIC_MEM mutex when the routines here are invoked. */
-    mem2.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
+  if( !pEnv->bMemstat ){
+    mem2.mutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
+    if( mem2.mutex==0 && pEnv->bCoreMutex ) rc = SQLITE_NOMEM;
   }
-  return SQLITE_OK;
+  return rc;
 }
 
 /*
 ** Deinitialize the memory allocation subsystem.
 */
-static void sqlite4MemShutdown(void *pMem){
-  assert( pMem==(void*)&mem2 );
+static void sqlite4MemShutdown(void *NotUsed){
+  UNUSED_PARAMETER(NotUsed);
+  sqlite4_mutex_free(mem2.mutex);
   mem2.mutex = 0;
 }
 
@@ -394,7 +395,7 @@ void sqlite4MemdebugSetType(void *p, u8 eType){
 **
 **     assert( sqlite4MemdebugHasType(p, MEMTYPE_DB) );
 */
-int sqlite4MemdebugHasType(void *p, u8 eType){
+int sqlite4MemdebugHasType(const void *p, u8 eType){
   int rc = 1;
   if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
@@ -416,7 +417,7 @@ int sqlite4MemdebugHasType(void *p, u8 eType){
 **
 **     assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
 */
-int sqlite4MemdebugNoType(void *p, u8 eType){
+int sqlite4MemdebugNoType(const void *p, u8 eType){
   int rc = 1;
   if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;

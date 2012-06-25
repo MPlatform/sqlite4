@@ -2413,16 +2413,15 @@ struct sqlite4_env {
   /* The above might be initialized to non-zero.  The following need to always
   ** initially be zero, however. */
   int isInit;                       /* True after initialization has finished */
-  int inProgress;                   /* True while initialization in progress */
-  int isMutexInit;                  /* True after mutexes are initialized */
-  int isMallocInit;                 /* True after malloc is initialized */
-  sqlite4_mutex *pInitMutex;        /* Mutex used by sqlite4_initialize() */
-  int nRefInitMutex;                /* Number of users of pInitMutex */
+  sqlite4_mutex *pPrngMutex;        /* Mutex for the PRNG */
+  u32 prngX, prngY;                 /* State of the PRNG */
   void (*xLog)(void*,int,const char*); /* Function for logging */
   void *pLogArg;                       /* First argument to xLog() */
   int bLocaltimeFault;              /* True to fail localtime() calls */
+  sqlite4_mutex *pMemMutex;         /* Mutex for nowValue[] and mxValue[] */
   sqlite4_uint64 nowValue[4];       /* sqlite4_env_status() current values */
   sqlite4_uint64 mxValue[4];        /* sqlite4_env_status() max values */
+  FuncDefHash hashGlobalFuncs;      /* Hash table of global functions */
 };
 
 /*
@@ -2572,9 +2571,9 @@ const sqlite4_mem_methods *sqlite4MemGetMemsys5(void);
 #ifndef SQLITE_MUTEX_OMIT
   sqlite4_mutex_methods const *sqlite4DefaultMutex(void);
   sqlite4_mutex_methods const *sqlite4NoopMutex(void);
-  sqlite4_mutex *sqlite4MutexAlloc(int);
-  int sqlite4MutexInit(void);
-  int sqlite4MutexEnd(void);
+  sqlite4_mutex *sqlite4MutexAlloc(sqlite4_env*,int);
+  int sqlite4MutexInit(sqlite4_env*);
+  int sqlite4MutexEnd(sqlite4_env*);
 #endif
 
 void sqlite4StatusAdd(sqlite4_env*, int, sqlite4_int64);
@@ -2959,7 +2958,7 @@ extern int sqlite4PendingByte;
 #endif
 void sqlite4RootPageMoved(sqlite4*, int, int, int);
 void sqlite4Reindex(Parse*, Token*, Token*);
-void sqlite4AlterFunctions(void);
+void sqlite4AlterFunctions(sqlite4_env*);
 void sqlite4AlterRenameTable(Parse*, SrcList*, Token*);
 int sqlite4GetToken(const unsigned char *, int *);
 void sqlite4NestedParse(Parse*, const char*, ...);
@@ -3198,8 +3197,8 @@ SQLITE_EXTERN void (*sqlite4IoTrace)(const char*,...);
 */
 #ifdef SQLITE_MEMDEBUG
   void sqlite4MemdebugSetType(void*,u8);
-  int sqlite4MemdebugHasType(void*,u8);
-  int sqlite4MemdebugNoType(void*,u8);
+  int sqlite4MemdebugHasType(const void*,u8);
+  int sqlite4MemdebugNoType(const void*,u8);
 #else
 # define sqlite4MemdebugSetType(X,Y)  /* no-op */
 # define sqlite4MemdebugHasType(X,Y)  1

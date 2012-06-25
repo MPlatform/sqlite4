@@ -56,6 +56,7 @@ void sqlite4MemSetDefault(sqlite4_env *pEnv){
      0
   };
   pEnv->m = defaultMethods;
+  pEnv->m.pMemEnv = (void*)pEnv;
 }
 
 #endif /* SQLITE_ZERO_MALLOC */
