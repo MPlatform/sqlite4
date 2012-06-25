@@ -590,43 +590,11 @@ int sqlite4_initialize(sqlite4_env*);
 int sqlite4_shutdown(sqlite4_env*);
 
 /*
-** CAPIREF: Configuring The SQLite Library
-**
-** The sqlite4_config() interface is used to make configuration
-** changes to an [sqlite4_env] object that describes the run-time
-** environment used by SQLite4.
-** The default sqlite4_env is recommended for most
-** applications and so this routine is usually not necessary.  It is
-** provided to support rare applications with unusual needs.
-**
-** The sqlite4_config() interface is not threadsafe.  The application
-** must insure that no other SQLite interfaces are used with the same
-** sqlite4_env object while sqlite4_config() is running.  Furthermore,
-** sqlite4_config() may only be invoked prior to library initialization using
-** [sqlite4_initialize()] or after shutdown by [sqlite4_shutdown()].
-** ^If sqlite4_config() is called after [sqlite4_initialize()] and before
-** [sqlite4_shutdown()] then it will return SQLITE_MISUSE.
-** Note, however, that ^sqlite4_config() can be called as part of the
-** implementation of an application-defined [sqlite4_os_init()].
-**
-** The first argument to sqlite4_config() is an integer
-** [configuration option] that determines
-** what property of SQLite is to be configured.  Subsequent arguments
-** vary depending on the [configuration option]
-** in the first argument.
-**
-** ^When a configuration option is set, sqlite4_config() returns [SQLITE_OK].
-** ^If the option is unknown or SQLite is unable to set the option
-** then this routine returns a non-zero [error code].
-*/
-int sqlite4_config(sqlite4_env *pEnv, int, ...);
-
-/*
 ** CAPIREF: Configure database connections
 **
 ** The sqlite4_db_config() interface is used to make configuration
 ** changes to a [database connection].  The interface is similar to
-** [sqlite4_config()] except that the changes apply to a single
+** [sqlite4_env_config()] except that the changes apply to a single
 ** [database connection] (specified in the first argument).
 **
 ** The second argument to sqlite4_db_config(D,V,...)  is the
@@ -3552,7 +3520,7 @@ int sqlite4_overload_function(sqlite4*, const char *zFuncName, int nArg);
 ** macro defined (with "-DSQLITE_MUTEX_APPDEF=1"), then no mutex
 ** implementation is included with the library. In this case the
 ** application must supply a custom mutex implementation using the
-** [SQLITE_CONFIG_MUTEX] option of the sqlite4_config() function
+** [SQLITE_CONFIG_MUTEX] option of the sqlite4_env_config() function
 ** before calling sqlite4_initialize() or any other public sqlite4_
 ** function that calls sqlite4_initialize().)^
 **
@@ -3626,7 +3594,7 @@ void sqlite4_mutex_leave(sqlite4_mutex*);
 ** implementation for specialized deployments or systems for which SQLite
 ** does not provide a suitable implementation. In this case, the user
 ** creates and populates an instance of this structure to pass
-** to sqlite4_config() along with the [SQLITE_CONFIG_MUTEX] option.
+** to sqlite4_env_config() along with the [SQLITE_CONFIG_MUTEX] option.
 ** Additionally, an instance of this structure can be used as an
 ** output variable when querying the system for the current mutex
 ** implementation, using the [SQLITE_CONFIG_GETMUTEX] option.
@@ -4218,7 +4186,7 @@ int sqlite4_strnicmp(const char *, const char *, int);
 ** CAPIREF: Error Logging Interface
 **
 ** ^The [sqlite4_log()] interface writes a message into the error log
-** established by the [SQLITE_CONFIG_LOG] option to [sqlite4_config()].
+** established by the [SQLITE_CONFIG_LOG] option to [sqlite4_env_config()].
 ** ^If logging is enabled, the zFormat string and subsequent arguments are
 ** used with [sqlite4_snprintf()] to generate the final output string.
 **

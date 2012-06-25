@@ -175,31 +175,6 @@ int sqlite4_shutdown(sqlite4_env *pEnv){
 }
 
 /*
-** This API allows applications to modify the configuration described by
-** an sqlite4_env object.
-*/
-int sqlite4_config(sqlite4_env *pEnv, int op, ...){
-  va_list ap;
-  int rc = SQLITE_OK;
-
-  if( pEnv==0 ) pEnv = sqlite4_env_default();
-
-  /* sqlite4_config() shall return SQLITE_MISUSE if it is invoked while
-  ** the SQLite library is in use. */
-  if( pEnv->isInit ) return SQLITE_MISUSE_BKPT;
-
-  va_start(ap, op);
-  switch( op ){
-    default: {
-      rc = SQLITE_ERROR;
-      break;
-    }
-  }
-  va_end(ap);
-  return rc;
-}
-
-/*
 ** Return the size of an sqlite4_env object
 */
 int sqlite4_env_size(void){ return sizeof(sqlite4_env); }
