@@ -925,25 +925,30 @@ sqlite4_size_t sqlite4_snprintf(
 ** allocate memory because it might be called while the memory allocator
 ** mutex is held.
 */
-static void renderLogMsg(int iErrCode, const char *zFormat, va_list ap){
+static void renderLogMsg(
+  sqlite4_env *pEnv,                     /* Run-time environment */
+  int iErrCode,                          /* Error code */
+  const char *zFormat,                   /* Error format string */
+  va_list ap                             /* Arguments */
+){
   StrAccum acc;                          /* String accumulator */
   char zMsg[SQLITE_PRINT_BUF_SIZE*3];    /* Complete log message */
 
   sqlite4StrAccumInit(&acc, zMsg, sizeof(zMsg), 0);
   acc.useMalloc = 0;
   sqlite4VXPrintf(&acc, 0, zFormat, ap);
-  sqlite4DefaultEnv.xLog(sqlite4DefaultEnv.pLogArg, iErrCode,
-                           sqlite4StrAccumFinish(&acc));
+  pEnv->xLog(pEnv->pLogArg, iErrCode, sqlite4StrAccumFinish(&acc));
 }
 
 /*
 ** Format and write a message to the log if logging is enabled.
 */
-void sqlite4_log(int iErrCode, const char *zFormat, ...){
+void sqlite4_log(sqlite4_env *pEnv, int iErrCode, const char *zFormat, ...){
   va_list ap;                             /* Vararg list */
-  if( sqlite4DefaultEnv.xLog ){
+  if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
+  if( pEnv->xLog ){
     va_start(ap, zFormat);
-    renderLogMsg(iErrCode, zFormat, ap);
+    renderLogMsg(pEnv, iErrCode, zFormat, ap);
     va_end(ap);
   }
 }

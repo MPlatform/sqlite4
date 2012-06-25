@@ -807,10 +807,12 @@ case OP_Halt: {
     assert( p->rc!=SQLITE_OK );
     sqlite4SetString(&p->zErrMsg, db, "%s", pOp->p4.z);
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(pOp->p1, "abort at %d in [%s]: %s", pc, p->zSql, pOp->p4.z);
+    sqlite4_log(db->pEnv, pOp->p1,
+                "abort at %d in [%s]: %s", pc, p->zSql, pOp->p4.z);
   }else if( p->rc ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(pOp->p1, "constraint failed at %d in [%s]", pc, p->zSql);
+    sqlite4_log(db->pEnv, pOp->p1,
+                "constraint failed at %d in [%s]", pc, p->zSql);
   }
   rc = sqlite4VdbeHalt(p);
   assert( rc==SQLITE_BUSY || rc==SQLITE_OK || rc==SQLITE_ERROR );
@@ -4899,7 +4901,7 @@ vdbe_error_halt:
   assert( rc );
   p->rc = rc;
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(rc, "statement aborts at %d: [%s] %s", 
+  sqlite4_log(db->pEnv, rc, "statement aborts at %d: [%s] %s", 
                    pc, p->zSql, p->zErrMsg);
   sqlite4VdbeHalt(p);
   if( rc==SQLITE_IOERR_NOMEM ) db->mallocFailed = 1;

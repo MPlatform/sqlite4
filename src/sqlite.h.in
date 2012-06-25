@@ -4203,7 +4203,7 @@ int sqlite4_strnicmp(const char *, const char *, int);
 ** a few hundred characters, it will be truncated to the length of the
 ** buffer.
 */
-void sqlite4_log(int iErrCode, const char *zFormat, ...);
+void sqlite4_log(sqlite4_env*, int iErrCode, const char *zFormat, ...);
 
 /*
 ** CAPIREF: Virtual Table Interface Configuration

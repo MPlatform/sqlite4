@@ -1927,21 +1927,21 @@ int sqlite4_get_autocommit(sqlite4 *db){
 */
 int sqlite4CorruptError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(SQLITE_CORRUPT,
+  sqlite4_log(0, SQLITE_CORRUPT,
               "database corruption at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
   return SQLITE_CORRUPT;
 }
 int sqlite4MisuseError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(SQLITE_MISUSE, 
+  sqlite4_log(0, SQLITE_MISUSE, 
               "misuse at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
   return SQLITE_MISUSE;
 }
 int sqlite4CantopenError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(SQLITE_CANTOPEN, 
+  sqlite4_log(0, SQLITE_CANTOPEN, 
               "cannot open file at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
   return SQLITE_CANTOPEN;

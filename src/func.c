@@ -784,8 +784,8 @@ static void errlogFunc(
   sqlite4_value **argv
 ){
   UNUSED_PARAMETER(argc);
-  UNUSED_PARAMETER(context);
-  sqlite4_log(sqlite4_value_int(argv[0]), "%s", sqlite4_value_text(argv[1]));
+  sqlite4_log(sqlite4_context_env(context),
+              sqlite4_value_int(argv[0]), "%s", sqlite4_value_text(argv[1]));
 }
 
 /*
