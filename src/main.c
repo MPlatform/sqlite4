@@ -748,15 +748,15 @@ int sqlite4_close(sqlite4 *db){
 
   assert( db->nDb<=2 );
   assert( db->aDb==db->aDbStatic );
-  for(j=0; j<ArraySize(db->aFunc.a); j++){
-    FuncDef *pNext, *pHash, *p;
-    for(p=db->aFunc.a[j]; p; p=pHash){
-      pHash = p->pHash;
+  {
+    FuncDef *pNext, *pSame, *p;
+    for(p=db->aFunc.pFirst; p; p=pNext){
+      pNext = p->pNextName;
       while( p ){
         functionDestroy(db, p);
-        pNext = p->pNext;
+        pSame = p->pSameName;
         sqlite4DbFree(db, p);
-        p = pNext;
+        p = pSame;
       }
     }
   }

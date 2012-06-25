@@ -259,17 +259,17 @@ static int matchQuality(FuncDef *p, int nArg, u8 enc){
 }
 
 /*
-** Search a FuncDefHash for a function with the given name.  Return
+** Search a FuncDefTable for a function with the given name.  Return
 ** a pointer to the matching FuncDef if found, or 0 if there is no match.
 */
 static FuncDef *functionSearch(
-  FuncDefHash *pHash,  /* Hash table to search */
-  int h,               /* Hash of the name */
-  const char *zFunc,   /* Name of function */
-  int nFunc            /* Number of bytes in zFunc */
+  FuncDefTable *pFuncTab,  /* Lookup table to search */
+  const char *zFunc,       /* Name of function */
+  int nFunc                /* Number of bytes in zFunc */
 ){
   FuncDef *p;
-  for(p=pHash->a[h]; p; p=p->pHash){
+  if( nFunc<0 ) nFunc = sqlite4Strlen30(zFunc);
+  for(p=pFuncTab->pFirst; p; p=p->pNextName){
     if( sqlite4StrNICmp(p->zName, zFunc, nFunc)==0 && p->zName[nFunc]==0 ){
       return p;
     }
@@ -278,25 +278,39 @@ static FuncDef *functionSearch(
 }
 
 /*
-** Insert a new FuncDef into a FuncDefHash hash table.
+** Insert a new FuncDef into a FuncDefTable.
+**
+** The pDef is private to a single database connection if isBuiltIn==0 but
+** is a global public function if isBuiltIn==1.  In the case of isBuiltIn==1,
+** any changes to pDef are made in a way that is threadsafe, so that if two
+** threads attempt to build the global function table at the same time, the
+** trailing thread will perform harmless no-op assignments.
 */
 void sqlite4FuncDefInsert(
-  FuncDefHash *pHash,  /* The hash table into which to insert */
-  FuncDef *pDef        /* The function definition to insert */
+  FuncDefTable *pFuncTab,  /* The lookup table into which to insert */
+  FuncDef *pDef,           /* The function definition to insert */
+  int isBuiltIn            /* True if pDef is one of the built-in functions */
 ){
   FuncDef *pOther;
-  int nName = sqlite4Strlen30(pDef->zName);
-  u8 c1 = (u8)pDef->zName[0];
-  int h = (sqlite4UpperToLower[c1] + nName) % ArraySize(pHash->a);
-  pOther = functionSearch(pHash, h, pDef->zName, nName);
-  if( pOther ){
-    assert( pOther!=pDef && pOther->pNext!=pDef );
-    pDef->pNext = pOther->pNext;
-    pOther->pNext = pDef;
+  assert( pDef->pSameName==0 || isBuiltIn );
+  assert( pDef->pNextName==0 || isBuiltIn );
+  if( pFuncTab->pFirst==0 ){
+    pFuncTab->pFirst = pDef;
+    pFuncTab->pLast = pDef;
+    pFuncTab->pSame = pDef;
+  }else if( isBuiltIn
+            && sqlite4StrICmp(pDef->zName, pFuncTab->pLast->zName)==0 ){
+    assert( pFuncTab->pSame->pSameName==0 || pFuncTab->pSame->pSameName==pDef );
+    pFuncTab->pSame->pSameName = pDef;
+    pFuncTab->pSame = pDef;
+  }else if( !isBuiltIn && (pOther=functionSearch(pFuncTab,pDef->zName,-1))!=0 ){
+    pDef->pSameName = pOther->pSameName;
+    pOther->pSameName = pDef;
   }else{
-    pDef->pNext = 0;
-    pDef->pHash = pHash->a[h];
-    pHash->a[h] = pDef;
+    assert( pFuncTab->pLast->pNextName==0 || pFuncTab->pLast->pNextName==pDef );
+    pFuncTab->pLast->pNextName = pDef;
+    pFuncTab->pLast = pDef;
+    pFuncTab->pSame = pDef;
   }
 }
   
@@ -333,22 +347,20 @@ FuncDef *sqlite4FindFunction(
   FuncDef *p;         /* Iterator variable */
   FuncDef *pBest = 0; /* Best match found so far */
   int bestScore = 0;  /* Score of best match */
-  int h;              /* Hash value */
 
 
   assert( enc==SQLITE_UTF8 || enc==SQLITE_UTF16LE || enc==SQLITE_UTF16BE );
-  h = (sqlite4UpperToLower[(u8)zName[0]] + nName) % ArraySize(db->aFunc.a);
 
   /* First search for a match amongst the application-defined functions.
   */
-  p = functionSearch(&db->aFunc, h, zName, nName);
+  p = functionSearch(&db->aFunc, zName, nName);
   while( p ){
     int score = matchQuality(p, nArg, enc);
     if( score>bestScore ){
       pBest = p;
       bestScore = score;
     }
-    p = p->pNext;
+    p = p->pSameName;
   }
 
   /* If no match is found, search the built-in functions.
@@ -364,16 +376,16 @@ FuncDef *sqlite4FindFunction(
   ** So we must not search for built-ins when creating a new function.
   */ 
   if( !createFlag && (pBest==0 || (db->flags & SQLITE_PreferBuiltin)!=0) ){
-    FuncDefHash *pHash = &db->pEnv->hashGlobalFuncs;
+    FuncDefTable *pFuncTab = &db->pEnv->aGlobalFuncs;
     bestScore = 0;
-    p = functionSearch(pHash, h, zName, nName);
+    p = functionSearch(pFuncTab, zName, nName);
     while( p ){
       int score = matchQuality(p, nArg, enc);
       if( score>bestScore ){
         pBest = p;
         bestScore = score;
       }
-      p = p->pNext;
+      p = p->pSameName;
     }
   }
 
@@ -388,7 +400,7 @@ FuncDef *sqlite4FindFunction(
     pBest->iPrefEnc = enc;
     memcpy(pBest->zName, zName, nName);
     pBest->zName[nName] = 0;
-    sqlite4FuncDefInsert(&db->aFunc, pBest);
+    sqlite4FuncDefInsert(&db->aFunc, pBest, 0);
   }
 
   if( pBest && (pBest->xStep || pBest->xFunc || createFlag) ){

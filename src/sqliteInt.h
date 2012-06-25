@@ -601,7 +601,7 @@ typedef struct ExprSpan ExprSpan;
 typedef struct FKey FKey;
 typedef struct FuncDestructor FuncDestructor;
 typedef struct FuncDef FuncDef;
-typedef struct FuncDefHash FuncDefHash;
+typedef struct FuncDefTable FuncDefTable;
 typedef struct IdList IdList;
 typedef struct Index Index;
 typedef struct IndexSample IndexSample;
@@ -651,6 +651,40 @@ struct Db {
   u8 inTrans;          /* 0: not writable.  1: Transaction.  2: Checkpoint */
   u8 chngFlag;         /* True if modified */
   Schema *pSchema;     /* Pointer to database schema (possibly shared) */
+};
+
+/*
+** Each SQL function is defined by an instance of the following
+** structure.  A pointer to this structure is stored in the sqlite.aFunc
+** hash table.  When multiple functions have the same name, the hash table
+** points to a linked list of these structures.
+*/
+struct FuncDef {
+  i16 nArg;            /* Number of arguments.  -1 means unlimited */
+  u8 iPrefEnc;         /* Preferred text encoding (SQLITE_UTF8, 16LE, 16BE) */
+  u8 flags;            /* Some combination of SQLITE_FUNC_* */
+  void *pUserData;     /* User data parameter */
+  FuncDef *pSameName;  /* Next with a different name but the same hash */
+  void (*xFunc)(sqlite4_context*,int,sqlite4_value**); /* Regular function */
+  void (*xStep)(sqlite4_context*,int,sqlite4_value**); /* Aggregate step */
+  void (*xFinalize)(sqlite4_context*);                /* Aggregate finalizer */
+  char *zName;         /* SQL name of the function. */
+  FuncDef *pNextName;  /* Next function with a different name */
+  FuncDestructor *pDestructor;   /* Reference counted destructor function */
+};
+
+/*
+** A table of SQL functions.  
+**
+** The content is a linked list of FuncDef structures with branches.  When
+** there are two or more FuncDef objects with the same name, they are 
+** connected using FuncDef.pSameName.  FuncDef objects with different names
+** are connected using FuncDef.pNextName.
+*/
+struct FuncDefTable {
+  FuncDef *pFirst;     /* First function definition */
+  FuncDef *pLast;      /* Last function definition */
+  FuncDef *pSame;      /* Tail of pSameName list for pLast */
 };
 
 /*
@@ -744,16 +778,6 @@ struct Lookaside {
 };
 struct LookasideSlot {
   LookasideSlot *pNext;    /* Next buffer in the list of free buffers */
-};
-
-/*
-** A hash table for function definitions.
-**
-** Hash each FuncDef structure into one of the FuncDefHash.a[] slots.
-** Collisions are on the FuncDef.pHash chain.
-*/
-struct FuncDefHash {
-  FuncDef *a[23];       /* Hash table for functions */
 };
 
 /*
@@ -852,7 +876,7 @@ struct sqlite4 {
   int nVTrans;                  /* Allocated size of aVTrans */
   VTable *pDisconnect;    /* Disconnect these in next sqlite4_prepare() */
 #endif
-  FuncDefHash aFunc;            /* Hash table of connection functions */
+  FuncDefTable aFunc;            /* Hash table of connection functions */
   Hash aCollSeq;                /* All collating sequences */
   Db aDbStatic[2];              /* Static space for the 2 default backends */
   Savepoint *pSavepoint;        /* List of active savepoints */
@@ -934,26 +958,6 @@ struct sqlite4 {
 #define SQLITE_MAGIC_SICK     0x4b771290  /* Error and awaiting close */
 #define SQLITE_MAGIC_BUSY     0xf03b7906  /* Database currently in use */
 #define SQLITE_MAGIC_ERROR    0xb5357930  /* An SQLITE_MISUSE error occurred */
-
-/*
-** Each SQL function is defined by an instance of the following
-** structure.  A pointer to this structure is stored in the sqlite.aFunc
-** hash table.  When multiple functions have the same name, the hash table
-** points to a linked list of these structures.
-*/
-struct FuncDef {
-  i16 nArg;            /* Number of arguments.  -1 means unlimited */
-  u8 iPrefEnc;         /* Preferred text encoding (SQLITE_UTF8, 16LE, 16BE) */
-  u8 flags;            /* Some combination of SQLITE_FUNC_* */
-  void *pUserData;     /* User data parameter */
-  FuncDef *pNext;      /* Next function with same name */
-  void (*xFunc)(sqlite4_context*,int,sqlite4_value**); /* Regular function */
-  void (*xStep)(sqlite4_context*,int,sqlite4_value**); /* Aggregate step */
-  void (*xFinalize)(sqlite4_context*);                /* Aggregate finalizer */
-  char *zName;         /* SQL name of the function. */
-  FuncDef *pHash;      /* Next with a different name but the same hash */
-  FuncDestructor *pDestructor;   /* Reference counted destructor function */
-};
 
 /*
 ** This structure encapsulates a user-function destructor callback (as
@@ -2421,7 +2425,7 @@ struct sqlite4_env {
   sqlite4_mutex *pMemMutex;         /* Mutex for nowValue[] and mxValue[] */
   sqlite4_uint64 nowValue[4];       /* sqlite4_env_status() current values */
   sqlite4_uint64 mxValue[4];        /* sqlite4_env_status() max values */
-  FuncDefHash hashGlobalFuncs;      /* Hash table of global functions */
+  FuncDefTable aGlobalFuncs;        /* Lookup table of global functions */
 };
 
 /*
@@ -2785,7 +2789,7 @@ ExprList *sqlite4ExprListDup(sqlite4*,ExprList*,int);
 SrcList *sqlite4SrcListDup(sqlite4*,SrcList*,int);
 IdList *sqlite4IdListDup(sqlite4*,IdList*);
 Select *sqlite4SelectDup(sqlite4*,Select*,int);
-void sqlite4FuncDefInsert(FuncDefHash*, FuncDef*);
+void sqlite4FuncDefInsert(FuncDefTable*, FuncDef*, int);
 FuncDef *sqlite4FindFunction(sqlite4*,const char*,int,int,u8,int);
 void sqlite4RegisterBuiltinFunctions(sqlite4*);
 void sqlite4RegisterDateTimeFunctions(sqlite4_env*);
@@ -2951,7 +2955,6 @@ extern const unsigned char sqlite4UpperToLower[];
 extern const unsigned char sqlite4CtypeMap[];
 extern const Token sqlite4IntTokens[];
 extern SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv;
-extern SQLITE_WSD FuncDefHash sqlite4GlobalFunctions;
 #ifndef SQLITE_OMIT_WSD
 extern int sqlite4PendingByte;
 #endif

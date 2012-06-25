@@ -1517,8 +1517,7 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
   ** defined in this file.
   **
   ** The array cannot be constant since changes are made to the
-  ** FuncDef.pHash elements at start-time.  The elements of this array
-  ** are read-only after initialization is complete.
+  ** FuncDef.pNextName and FuncDef.pSameName elements at start-time.
   */
   static SQLITE_WSD FuncDef aBuiltinFunc[] = {
     FUNCTION(ltrim,              1, 1, 0, trimFunc         ),
@@ -1594,11 +1593,11 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
   };
 
   int i;
-  FuncDefHash *pHash = &pEnv->hashGlobalFuncs;
+  FuncDefTable *pFuncTab = &pEnv->aGlobalFuncs;
   FuncDef *aFunc = (FuncDef*)aBuiltinFunc;
 
   for(i=0; i<ArraySize(aBuiltinFunc); i++){
-    sqlite4FuncDefInsert(pHash, &aFunc[i]);
+    sqlite4FuncDefInsert(pFuncTab, &aFunc[i], 1);
   }
   sqlite4RegisterDateTimeFunctions(pEnv);
 #ifndef SQLITE_OMIT_ALTERTABLE

@@ -240,11 +240,11 @@ void sqlite4AlterFunctions(sqlite4_env *pEnv){
 #endif
   };
   int i;
-  FuncDefHash *pHash = &pEnv->hashGlobalFuncs;
+  FuncDefTable *pFuncTab = &pEnv->aGlobalFuncs;
   FuncDef *aFunc = (FuncDef*)aAlterTableFuncs;
 
   for(i=0; i<ArraySize(aAlterTableFuncs); i++){
-    sqlite4FuncDefInsert(pHash, &aFunc[i]);
+    sqlite4FuncDefInsert(pFuncTab, &aFunc[i], 1);
   }
 }
 
