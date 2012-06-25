@@ -16,6 +16,10 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
+db close
+kvwrap install
+sqlite4 db test.db
+
 # Build some test data
 #
 do_test where-1.0 {

@@ -190,19 +190,6 @@ int sqlite4_config(sqlite4_env *pEnv, int op, ...){
 
   va_start(ap, op);
   switch( op ){
-    case SQLITE_CONFIG_SET_KVFACTORY: {
-      pEnv->xKVFile = *va_arg(ap, 
-          int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
-      );
-      break;
-    }
-
-    case SQLITE_CONFIG_GET_KVFACTORY: {
-      *va_arg(ap, int(**)(sqlite4_env*, KVStore**, const char*, unsigned int)) =
-          pEnv->xKVFile;
-      break;
-    }
-
     default: {
       rc = SQLITE_ERROR;
       break;
@@ -397,9 +384,16 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     ** takes priority over prior factories.
     */
     case SQLITE_ENVCONFIG_KVSTORE_PUSH: {
-      pEnv->xKVFile = *va_arg(ap, 
-          int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
-      );
+      const char *zName = va_arg(ap, const char*);
+      if( strcmp(zName, "temp")==0 ){
+        pEnv->xKVTmp = *va_arg(ap, 
+            int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
+        );
+      }else{
+        pEnv->xKVFile = *va_arg(ap, 
+            int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
+        );
+      }
       break;
     }
 
@@ -409,8 +403,25 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     ** Remove a KVStore factory from the stack.
     */
     case SQLITE_ENVCONFIG_KVSTORE_POP: {
-      *va_arg(ap, int(**)(sqlite4_env*, KVStore**, const char*, unsigned int)) =
-          pEnv->xKVFile;
+      /* TBD */
+      break;
+    }
+
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_GET, zName,&pxFactory);
+    **
+    ** Get the current factory pointer with the given name.
+    */
+    case SQLITE_ENVCONFIG_KVSTORE_GET: {
+      const char *zName = va_arg(ap, const char*);
+      int(*xFactory)(sqlite4_env*,KVStore**,const char*,unsigned);
+      if( strcmp(zName, "temp")==0 ){
+        xFactory = pEnv->xKVTmp;
+      }else{
+        xFactory = pEnv->xKVFile;
+      }
+      *va_arg(ap, int(**)(sqlite4_env*, KVStore**, const char*, unsigned int))
+            = xFactory;
       break;
     }
 
