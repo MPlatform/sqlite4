@@ -16,6 +16,8 @@ to use SQLite4:
 <li> sqlite4_free()
 <li> sqlite4_mprintf()
 <li> sqlite4_vmprintf()
+<li> sqlite4_log()
+<li> sqlite4_randomness()
 </ul>
 
 <li><p>Check all uses of sqlite4_snprintf() and sqlite4_vnsprintf() for
