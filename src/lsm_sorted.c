@@ -2005,6 +2005,10 @@ static int multiCursorNew(
 
   if( pCsr==0 ){
     pCsr = (MultiCursor *)lsmMallocZeroRc(pDb->pEnv, sizeof(MultiCursor), &rc);
+    if( pCsr ){
+      pCsr->pNext = pDb->pCsr;
+      pDb->pCsr = pCsr;
+    }
   }
 
   if( rc==LSM_OK ){
@@ -2018,9 +2022,6 @@ static int multiCursorNew(
     if( bUserOnly ){
       pCsr->flags |= CURSOR_IGNORE_SYSTEM;
     }
-
-    pCsr->pNext = pDb->pCsr;
-    pDb->pCsr = pCsr;
   }
   if( rc!=LSM_OK ){
     lsmMCursorClose(pCsr);
@@ -2667,14 +2668,15 @@ int lsmMCursorValue(MultiCursor *pCsr, void **ppVal, int *pnVal){
   assert( rtIsDelete(pCsr->eType)==0 || !(pCsr->flags & CURSOR_IGNORE_DELETE) );
 
   rc = multiCursorGetVal(pCsr, pCsr->aTree[1], &pVal, &nVal);
-  if( rc==LSM_OK ) rc = sortedBlobSet(pCsr->pDb->pEnv, &pCsr->val, pVal, nVal);
-  if( rc==LSM_OK ){
+  if( pVal && rc==LSM_OK ){
+    rc = sortedBlobSet(pCsr->pDb->pEnv, &pCsr->val, pVal, nVal);
     pVal = pCsr->val.pData;
-  }else{
+  }
+
+  if( rc!=LSM_OK ){
     pVal = 0;
     nVal = 0;
   }
-
   *ppVal = pVal;
   *pnVal = nVal;
   return rc;
@@ -4217,14 +4219,12 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
     pDb->pWorker = lsmDbSnapshotWorker(pDb);
     rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
 
-#if 0
     if( nWrite && (flags & LSM_WORK_CHECKPOINT) ){
       int nHdrLevel = 0;
       if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
       if( rc==LSM_OK ) rc = lsmSortedNewToplevel(pDb, &nHdrLevel);
       if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nHdrLevel);
     }
-#endif
 
     lsmDbSnapshotRelease(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;
