@@ -243,6 +243,8 @@ static int newFileStorage(
 
   /* Virtual methods for an LSM data store */
   static const KVStoreMethods kvwrapMethods = {
+    1,
+    sizeof(KVStoreMethods),
     kvwrapReplace,
     kvwrapOpenCursor,
     kvwrapSeek,

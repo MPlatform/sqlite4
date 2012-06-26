@@ -4341,6 +4341,8 @@ struct sqlite4_kvcursor {
 ** object.
 */
 struct sqlite4_kv_methods {
+  int iVersion;
+  int szSelf;
   int (*xReplace)(
          sqlite4_kvstore*,
          const unsigned char *pKey, sqlite4_kvsize nKey,

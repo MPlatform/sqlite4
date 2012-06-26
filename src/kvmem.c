@@ -918,23 +918,25 @@ static int kvmemControl(KVStore *pKVStore, int op, void *pArg){
 
 /* Virtual methods for the in-memory storage engine */
 static const KVStoreMethods kvmemMethods = {
-  kvmemReplace,
-  kvmemOpenCursor,
-  kvmemSeek,
-  kvmemNextEntry,
-  kvmemPrevEntry,
-  kvmemDelete,
-  kvmemKey,
-  kvmemData,
-  kvmemReset,
-  kvmemCloseCursor,
-  kvmemBegin,
-  kvmemCommitPhaseOne,
-  kvmemCommitPhaseTwo,
-  kvmemRollback,
-  kvmemRevert,
-  kvmemClose,
-  kvmemControl
+  1,                        /* iVersion */
+  sizeof(KVStoreMethods),   /* szSelf */
+  kvmemReplace,             /* xReplace */
+  kvmemOpenCursor,          /* xOpenCursor */
+  kvmemSeek,                /* xSeek */
+  kvmemNextEntry,           /* xNext */
+  kvmemPrevEntry,           /* xPrev */
+  kvmemDelete,              /* xDelete */
+  kvmemKey,                 /* xKey */
+  kvmemData,                /* xData */
+  kvmemReset,               /* xReset */
+  kvmemCloseCursor,         /* xCloseCursor */
+  kvmemBegin,               /* xBegin */
+  kvmemCommitPhaseOne,      /* xCommitPhaseOne */
+  kvmemCommitPhaseTwo,      /* xCommitPhaseTwo */
+  kvmemRollback,            /* xRollback */
+  kvmemRevert,              /* xRevert */
+  kvmemClose,               /* xClose */
+  kvmemControl              /* xControl */
 };
 
 /*

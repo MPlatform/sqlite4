@@ -1,0 +1,91 @@
+<title>Pluggable Storage Engine</title>
+
+<h2>Overview</h2>
+
+SQLite4 works with run-time interchangeable storage engines with the
+following properties:
+
+  *  The storage engine works with key/value pairs where both the
+     key and the value are byte arrays of arbitrary length and with no
+     restrictions on content.
+
+  *  All keys are unique.
+
+  *  Keys sort in lexicographical order (as if sorted using the
+     memcmp() library function).
+
+  *  Transaction commit and rollback is handled by the storage engine.
+
+SQLite4 comes with two built-in storage engines.  A log-structured merge-tree
+(LSM) storage engine is used for persistent on-disk databases and an
+in-memory binary tree storage engine is used for TEMP databases.
+Future versions of SQLite4 might add other built-in storage engines.
+
+Applicates can add new storage engines to SQLite4 at run-time.  The
+purpose of this document is to describe how that is done.
+
+<h2>Adding A New Storage Engine</h2>
+
+Each storage engine implements a "factory function".  The factory function
+creates an object that defines a single connection to a single database
+file.  The signature of the factory function is as follows:
+
+<blockquote><pre>
+int storageEngineFactor(
+  sqlite4_env *pEnv,            /* The run-time environment */
+  sqlite4_kv_store **ppResult,  /* OUT: storage engine object written here */
+  const char *zName,            /* Name of the database file */
+  unsigned flags                /* Flags */
+);
+</pre></blockquote>
+
+SQLite4 will invoke the factory function whenever it needs to open a
+connection to a database file.  The first argument is the
+[./env.wiki | run-time environment] in use by the database connection.
+The third argument is the name of the database file to be opened.
+The fourth argument is zero or more boolean flags that are hints to the
+factory telling it how the database will be used.  The factory should
+create a new sqlite4_kv_storage object describing the connection to the
+database file and return a pointer to that object in the address
+specified by 2nd argument, then return SQLITE_OK.  Or, if something goes
+wrong, the factory should return an appropriate error code.
+
+<font color="blue"><i>
+Need some way for the factory to return detailed error information back
+up to the core...
+</i></font>
+
+To add a new storage engine to SQLite4, use the sqlite4_env_config()
+interface to register the factory function for the storage engine with
+the run-time environment that will be using the storage engine.  
+For example:
+
+<blockquote><pre>
+sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_PUSH_KVSTORE,
+                   "main", &exampleStorageEngine);
+</pre></blockquote>
+
+The example above adds the factory "exampleStorageEngine()" to the 
+run-time environment as the "main" storage engine.  The "main" storage
+engine is used by default for persistent databases.  The "temp" storage
+engine is used by default for transient and "TEMP" databases.  Storage
+engines with other names can be registered and used by specifying the
+storage engine name in the "kv=" query parameter of the URI passed to
+sqlite4_open().
+
+Storage engines stack.  The built-in includes two storage engines for
+"main" and "temp": the LSM and binary-tree storage engines, respectively.
+If you push a new "main" storage engine, the new one will take precedence
+over the built-in storage engine.  Later, you can call sqlite4_env_config()
+with the SQLITE_ENVCONFIG_POP_KVSTORE argument to remove the added storage
+engine and restore the built-in LSM storage engine as the "main" storage
+engine.  The built-in storage engines cannot be popped from the stack.
+
+The SQLITE_ENVCONFIG_GET_KVSTORE operator for sqlite3_env_config() is
+available for querying the current storage engines.
+
+<h2>Storage Engine Implementation</h2>
+
+<font color="blue"><i>
+To be continued...
+</i></font>
