@@ -46,6 +46,7 @@
 #define LSM_ECOLA       4
 
 #define LSM_DEFAULT_LOG_SIZE (128*1024)
+#define LSM_DEFAULT_NMERGE   4
 
 /* Places where a NULL needs to be changed to a real lsm_env pointer
 ** are marked with NEED_ENV */
@@ -172,6 +173,7 @@ struct lsm_db {
   int bAutowork;                  /* True to do auto-work after writing */
   int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
 
+  int nMerge;                     /* Configured by LSM_CONFIG_NMERGE */
   int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */

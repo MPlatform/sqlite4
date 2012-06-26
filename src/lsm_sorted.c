@@ -3946,7 +3946,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
     ** merge with the same age in the structure. Or the level being merged
     ** with the largest number of right-hand segments. Work on it.  */
     Level *pBest = 0;
-    int nBest = 4;
+    int nBest = pDb->nMerge;
 
     Level *pThis = 0;
     int nThis = 0;

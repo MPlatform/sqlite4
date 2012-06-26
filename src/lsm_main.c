@@ -82,6 +82,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nLogSz = LSM_DEFAULT_LOG_SIZE;
   pDb->nDfltPgsz = LSM_PAGE_SIZE;
   pDb->nDfltBlksz = LSM_BLOCK_SIZE;
+  pDb->nMerge = LSM_DEFAULT_NMERGE;
   pDb->bUseLog = 1;
 
   return LSM_OK;
@@ -395,6 +396,13 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
         pDb->bUseLog = *piVal;
       }
       *piVal = pDb->bUseLog;
+      break;
+    }
+
+    case LSM_CONFIG_NMERGE: {
+      int *piVal = va_arg(ap, int *);
+      if( *piVal>1 ) pDb->nMerge = *piVal;
+      *piVal = pDb->nMerge;
       break;
     }
 

@@ -720,15 +720,14 @@ static void *worker_main(void *pArg){
   lsm_db *pWorker;                /* Connection to access db through */
 
   pthread_mutex_lock(&p->worker_mutex);
-  pWorker = p->pWorker;
-  pthread_mutex_unlock(&p->worker_mutex);
-
-  while( pWorker ){
+  while( (pWorker = p->pWorker) ){
     int nWrite = 0;
     int rc;
 
     /* Do some work. If an error occurs, exit. */
+    pthread_mutex_unlock(&p->worker_mutex);
     rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
+    pthread_mutex_lock(&p->worker_mutex);
     if( rc!=LSM_OK ){
       p->worker_rc = rc;
       break;
@@ -740,15 +739,13 @@ static void *worker_main(void *pArg){
     ** flushed an in-memory tree into the db file or when the connection
     ** is being closed.  */
     if( nWrite==0 ){
-      pthread_mutex_lock(&p->worker_mutex);
       if( p->pWorker && p->bDoWork==0 ){
         pthread_cond_wait(&p->worker_cond, &p->worker_mutex);
       }
       p->bDoWork = 0;
-      pWorker = p->pWorker;
-      pthread_mutex_unlock(&p->worker_mutex);
     }
   }
+  pthread_mutex_unlock(&p->worker_mutex);
   
   return 0;
 }
@@ -885,12 +882,12 @@ static int test_lsm_mt(
     pDb->nWorker = nWorker;
 
     rc = mt_start_worker(pDb, 0, zFilename, LSM_WORK_CHECKPOINT, 
-        nWorker==1 ? 32 : 0
+        nWorker==1 ? 512 : 0
     );
   }
 
   if( rc==0 && nWorker==2 ){
-    rc = mt_start_worker(pDb, 1, zFilename, 0, 32);
+    rc = mt_start_worker(pDb, 1, zFilename, 0, 512);
   }
 
   return rc;
@@ -903,6 +900,82 @@ int test_lsm_mt2(const char *zFilename, int bClear, TestDb **ppDb){
 int test_lsm_mt3(const char *zFilename, int bClear, TestDb **ppDb){
   return test_lsm_mt(zFilename, 2, bClear, ppDb);
 }
+
+int test_lsm_config_str(lsm_db *pDb, const char *zStr){
+  
+  struct CfgParam {
+    const char *zParam;
+    int eParam;
+  } aParam[] = {
+    { "write_buffer",   LSM_CONFIG_WRITE_BUFFER },
+    { "page_size",      LSM_CONFIG_PAGE_SIZE },
+    { "safety",         LSM_CONFIG_SAFETY },
+    { "autowork",       LSM_CONFIG_AUTOWORK },
+    { "log_size",       LSM_CONFIG_LOG_SIZE },
+    { "mmap",           LSM_CONFIG_MMAP },
+    { "use_log",        LSM_CONFIG_USE_LOG },
+    { "nmerge",         LSM_CONFIG_NMERGE },
+    { 0, 0 }
+  };
+  char *z = zStr;
+
+  while( z[0] && pDb ){
+    char *zStart;
+
+    /* Skip whitespace */
+    while( *z==' ' ) z++;
+    zStart = z;
+
+    while( *z && *z!='=' ) z++;
+    if( *z ){
+      int iParam;
+      int iVal;
+      int rc;
+      char zParam[32];
+      int nParam = z-zStart;
+      if( nParam==0 || nParam>sizeof(zParam)-1 ) goto syntax_error;
+
+      memcpy(zParam, zStart, nParam);
+      zParam[nParam] = '\0';
+      rc = testArgSelect(aParam, "param", zParam, &iParam);
+      if( rc!=0 ) return rc;
+      iParam = aParam[iParam].eParam;
+
+      z++;
+      zStart = z;
+      while( *z>='0' && *z<='9' ) z++;
+      nParam = z-zStart;
+      if( nParam==0 || nParam>sizeof(zParam)-1 ) goto syntax_error;
+      memcpy(zParam, zStart, nParam);
+      zParam[nParam] = '\0';
+      iVal = atoi(zParam);
+
+      lsm_config(pDb, iParam, &iVal);
+    }else if( z!=zStart ){
+      goto syntax_error;
+    }
+  }
+
+  return 0;
+ syntax_error:
+  testPrintError("syntax error at: \"%s\"\n", z);
+  return 1;
+}
+
+int tdb_lsm_config_str(TestDb *pDb, const char *zStr){
+  int rc = 0;
+  if( tdb_lsm(pDb) ){
+    int i;
+    LsmDb *pLsm = (LsmDb *)pDb;
+
+    rc = test_lsm_config_str(pLsm->db, zStr);
+    for(i=0; rc==0 && i<pLsm->nWorker; i++){
+      rc = test_lsm_config_str(pLsm->aWorker[i].pWorker, zStr);
+    }
+  }
+  return rc;
+}
+
 
 #else
 static void mt_shutdown(LsmDb *pDb) { 
