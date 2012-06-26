@@ -1519,7 +1519,7 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
   ** The array cannot be constant since changes are made to the
   ** FuncDef.pNextName and FuncDef.pSameName elements at start-time.
   */
-  static SQLITE_WSD FuncDef aBuiltinFunc[] = {
+  static FuncDef aBuiltinFunc[] = {
     FUNCTION(ltrim,              1, 1, 0, trimFunc         ),
     FUNCTION(ltrim,              2, 1, 0, trimFunc         ),
     FUNCTION(rtrim,              1, 2, 0, trimFunc         ),

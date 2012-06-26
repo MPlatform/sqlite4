@@ -149,7 +149,7 @@ KVFactory sqlite4BuiltinFactory = {
 ** The following singleton contains the global configuration for
 ** the SQLite library.
 */
-SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
+struct sqlite4_env sqlite4DefaultEnv = {
    sizeof(sqlite4_env),       /* nByte */
    1,                         /* iVersion */
    SQLITE_DEFAULT_MEMSTATUS,  /* bMemstat */
@@ -193,29 +193,6 @@ const Token sqlite4IntTokens[] = {
    { "0", 1 },
    { "1", 1 }
 };
-
-
-/*
-** The value of the "pending" byte must be 0x40000000 (1 byte past the
-** 1-gibabyte boundary) in a compatible database.  SQLite never uses
-** the database page that contains the pending byte.  It never attempts
-** to read or write that page.  The pending byte page is set assign
-** for use by the VFS layers as space for managing file locks.
-**
-** During testing, it is often desirable to move the pending byte to
-** a different position in the file.  This allows code that has to
-** deal with the pending byte to run on files that are much smaller
-** than 1 GiB.  The sqlite4_test_control() interface can be used to
-** move the pending byte.
-**
-** IMPORTANT:  Changing the pending byte to any value other than
-** 0x40000000 results in an incompatible database file format!
-** Changing the pending byte during operating results in undefined
-** and dileterious behavior.
-*/
-#ifndef SQLITE_OMIT_WSD
-int sqlite4PendingByte = 0x40000000;
-#endif
 
 #include "opcodes.h"
 /*

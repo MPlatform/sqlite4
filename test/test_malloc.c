@@ -209,9 +209,6 @@ static int faultsimInstall(int install){
     if( rc==SQLITE_OK ){
       rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, &m);
     }
-    sqlite4_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 
-        faultsimBeginBenign, faultsimEndBenign
-    );
   }else{
     sqlite4_mem_methods m;
     assert(memfault.m.xMalloc);
@@ -224,7 +221,6 @@ static int faultsimInstall(int install){
     assert( memcmp(&m, &memfault.m, sizeof(m))==0 );
 
     rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, &memfault.m);
-    sqlite4_test_control(SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS, 0, 0);
   }
 
   if( rc==SQLITE_OK ){

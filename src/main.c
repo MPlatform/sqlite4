@@ -2024,23 +2024,6 @@ int sqlite4_test_control(int op, ...){
   va_list ap;
   va_start(ap, op);
   switch( op ){
-
-    /*
-    **  sqlite4_test_control(BENIGN_MALLOC_HOOKS, xBegin, xEnd)
-    **
-    ** Register hooks to call to indicate which malloc() failures 
-    ** are benign.
-    */
-    case SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS: {
-      typedef void (*void_function)(void);
-      void_function xBenignBegin;
-      void_function xBenignEnd;
-      xBenignBegin = va_arg(ap, void_function);
-      xBenignEnd = va_arg(ap, void_function);
-      sqlite4BenignMallocHooks(0, xBenignBegin, xBenignEnd);
-      break;
-    }
-
     /*
     **  sqlite4_test_control(SQLITE_TESTCTRL_ASSERT, int X)
     **

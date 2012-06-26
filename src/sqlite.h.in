@@ -3781,16 +3781,14 @@ int sqlite4_test_control(int op, ...);
 */
 #define SQLITE_TESTCTRL_FIRST                    1
 #define SQLITE_TESTCTRL_FAULT_INSTALL            2
-#define SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS      3
-#define SQLITE_TESTCTRL_PENDING_BYTE             4
-#define SQLITE_TESTCTRL_ASSERT                   5
-#define SQLITE_TESTCTRL_ALWAYS                   6
-#define SQLITE_TESTCTRL_RESERVE                  7
-#define SQLITE_TESTCTRL_OPTIMIZATIONS            8
-#define SQLITE_TESTCTRL_ISKEYWORD                9
-#define SQLITE_TESTCTRL_LOCALTIME_FAULT         10
-#define SQLITE_TESTCTRL_EXPLAIN_STMT            11
-#define SQLITE_TESTCTRL_LAST                    11
+#define SQLITE_TESTCTRL_ASSERT                   3
+#define SQLITE_TESTCTRL_ALWAYS                   4
+#define SQLITE_TESTCTRL_RESERVE                  5
+#define SQLITE_TESTCTRL_OPTIMIZATIONS            6
+#define SQLITE_TESTCTRL_ISKEYWORD                7
+#define SQLITE_TESTCTRL_LOCALTIME_FAULT          8
+#define SQLITE_TESTCTRL_EXPLAIN_STMT             9
+#define SQLITE_TESTCTRL_LAST                     9
 
 /*
 ** CAPIREF: SQLite Runtime Status

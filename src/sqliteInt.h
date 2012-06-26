@@ -561,12 +561,6 @@ extern const int sqlite4one;
 #define ArraySize(X)    ((int)(sizeof(X)/sizeof(X[0])))
 
 /*
-** Mark instances of static data that needs to be folded into the
-** environment structure.
-*/
-#define SQLITE_WSD 
-
-/*
 ** The following macros are used to suppress compiler warnings and to
 ** make it clear to human readers when a function parameter is deliberately 
 ** left unused within the body of a function. This usually happens when
@@ -2964,11 +2958,8 @@ extern const unsigned char sqlite4OpcodeProperty[];
 extern const unsigned char sqlite4UpperToLower[];
 extern const unsigned char sqlite4CtypeMap[];
 extern const Token sqlite4IntTokens[];
-extern SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv;
+extern struct sqlite4_env sqlite4DefaultEnv;
 extern struct KVFactory sqlite4BuiltinFactory;
-#ifndef SQLITE_OMIT_WSD
-extern int sqlite4PendingByte;
-#endif
 #endif
 void sqlite4RootPageMoved(sqlite4*, int, int, int);
 void sqlite4Reindex(Parse*, Token*, Token*);

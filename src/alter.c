@@ -230,7 +230,7 @@ static void renameTriggerFunc(
 ** Register built-in functions used to help implement ALTER TABLE
 */
 void sqlite4AlterFunctions(sqlite4_env *pEnv){
-  static SQLITE_WSD FuncDef aAlterTableFuncs[] = {
+  static FuncDef aAlterTableFuncs[] = {
     FUNCTION(sqlite_rename_table,   2, 0, 0, renameTableFunc),
 #ifndef SQLITE_OMIT_TRIGGER
     FUNCTION(sqlite_rename_trigger, 2, 0, 0, renameTriggerFunc),

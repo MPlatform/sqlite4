@@ -1099,7 +1099,7 @@ static void currentTimeFunc(
 ** external linkage.
 */
 void sqlite4RegisterDateTimeFunctions(sqlite4_env *pEnv){
-  static SQLITE_WSD FuncDef aDateTimeFuncs[] = {
+  static FuncDef aDateTimeFuncs[] = {
 #ifndef SQLITE_OMIT_DATETIME_FUNCS
     FUNCTION(julianday,        -1, 0, 0, juliandayFunc ),
     FUNCTION(date,             -1, 0, 0, dateFunc      ),
