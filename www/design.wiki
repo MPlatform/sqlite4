@@ -82,6 +82,10 @@ whole, the programming interface for SQLite4 is remarkably similar to
 SQLite3, and porting an application from SQLite3 to SQLite4 will usually
 involve only an hour or two search-and-replace.</p>
 
+<p>SQLite3 and SQLite4 share no symbols in common, so it is possible to
+link both SQLite3 and SQLite4 into the same process and use them both at
+the same time.</p>
+
 <h1>3.0 Key Changes In SQLite4</h1>
 
 <h2>3.1 The Run-Time Environment Object</h2>
@@ -112,8 +116,8 @@ the rest of the system.  An sqlite4_env object includes methods to:
 <li> record error log message.
 </ul>
 
-<p>Builds of SQLite4 for standard platforms (windows and unix) contain
-a global sqlite4_env that is normally appropriate for use on that platform.
+<p>Builds of SQLite4 for standard platforms (windows and unix) contain a global
+sqlite4_env object that is normally appropriate for use on that platform.
 Any interface routine that requires a pointer to an sqlite4_env object
 will use the global default sqlite4_env object if a NULL pointer is passed
 on its sqlite4_env parameter.  Most applications never need to pass anything
