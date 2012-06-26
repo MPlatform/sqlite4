@@ -130,6 +130,22 @@ const unsigned char sqlite4CtypeMap[256] = {
 #endif
 
 /*
+** Default factory objects
+*/
+static KVFactory memFactory = {
+   0,
+   "temp",
+   sqlite4KVStoreOpenMem,
+   1
+};
+KVFactory sqlite4BuiltinFactory = {
+   &memFactory,
+   "main",
+   sqlite4KVStoreOpenLsm,
+   1
+};
+
+/*
 ** The following singleton contains the global configuration for
 ** the SQLite library.
 */
@@ -148,8 +164,7 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    0,                         /* nHeap */
    0, 0,                      /* mnHeap, mxHeap */
    0,                         /* mxParserStack */
-   sqlite4KVStoreOpenLsm,     /* xKVFile */
-   sqlite4KVStoreOpenMem,     /* xKVTmp */
+   &sqlite4BuiltinFactory,    /* pFactory */
    sqlite4OsRandomness,       /* xRandomness */
    sqlite4OsCurrentTime,      /* xCurrentTime */
    /* All the rest should always be initialized to zero */

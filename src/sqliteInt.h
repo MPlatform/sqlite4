@@ -2393,6 +2393,16 @@ typedef struct {
 } InitData;
 
 /*
+** A pluggable storage engine
+*/
+typedef struct KVFactory {
+  struct KVFactory *pNext;          /* Next in list of them all */
+  const char *zName;                /* Name of this factory */
+  int (*xFactory)(sqlite4_env*,sqlite4_kvstore**,const char*,unsigned);
+  int isPerm;                       /* True if a built-in.  Cannot be popped */
+} KVFactory;
+
+/*
 ** An instance of this structure defines the run-time environment.
 */
 struct sqlite4_env {
@@ -2410,13 +2420,13 @@ struct sqlite4_env {
   int nHeap;                        /* Size of pHeap[] */
   int mnReq, mxReq;                 /* Min and max heap requests sizes */
   int mxParserStack;                /* maximum depth of the parser stack */
-  int (*xKVFile)(sqlite4_env*, KVStore**, const char*, unsigned int);
-  int (*xKVTmp)(sqlite4_env*, KVStore**, const char*, unsigned int);
+  KVFactory *pFactory;              /* List of factories */
   int (*xRandomness)(sqlite4_env*, int, unsigned char*);
   int (*xCurrentTime)(sqlite4_env*, sqlite4_uint64*);
   /* The above might be initialized to non-zero.  The following need to always
   ** initially be zero, however. */
   int isInit;                       /* True after initialization has finished */
+  sqlite4_mutex *pFactoryMutex;     /* Mutex for pFactory */
   sqlite4_mutex *pPrngMutex;        /* Mutex for the PRNG */
   u32 prngX, prngY;                 /* State of the PRNG */
   void (*xLog)(void*,int,const char*); /* Function for logging */
@@ -2955,6 +2965,7 @@ extern const unsigned char sqlite4UpperToLower[];
 extern const unsigned char sqlite4CtypeMap[];
 extern const Token sqlite4IntTokens[];
 extern SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv;
+extern struct KVFactory sqlite4BuiltinFactory;
 #ifndef SQLITE_OMIT_WSD
 extern int sqlite4PendingByte;
 #endif

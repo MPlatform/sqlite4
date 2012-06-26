@@ -88,16 +88,32 @@ int sqlite4KVStoreOpen(
   KVStore *pNew = 0;
   int rc;
   sqlite4_env *pEnv = &sqlite4DefaultEnv;  /* OR db->pEnv */
+  const char *zStorageName;
+  KVFactory *pMkr;
+  int (*xFactory)(sqlite4_env*,sqlite4_kvstore**,const char*,unsigned);
 
-  if( zUri && zUri[0] 
-   && pEnv->xKVFile 
-   && memcmp(":memory:", zUri, 8)
-  ){
-    rc = pEnv->xKVFile(pEnv, &pNew, zUri, flags);
+  if( (flags & SQLITE_KVOPEN_TEMPORARY)!=0 || zUri==0 || zUri[0]==0 ){
+    zStorageName = "temp";
   }else{
-    rc = pEnv->xKVTmp(pEnv, &pNew, zUri, flags);
+    zStorageName = sqlite4_uri_parameter(zName, "kv");
+    if( zStorageName==0 ){
+      if( memcmp(":memory:", zUri, 8)==0 ){
+        zStorageName = "temp";
+      }else{
+        zStorageName = "main";
+      }
+    }
   }
-
+  *ppKVStore = 0;
+  sqlite4_mutex_enter(pEnv->pFactoryMutex);
+  for(pMkr=pEnv->pFactory; pMkr && strcmp(zStorageName,pMkr->zName);
+      pMkr=pMkr->pNext){}
+  xFactory = pMkr ? pMkr->xFactory : 0;
+  sqlite4_mutex_leave(pEnv->pFactoryMutex);
+  if( xFactory==0 ){
+    return SQLITE_ERROR;
+  }
+  rc = xFactory(pEnv, &pNew, zUri, flags);
   *ppKVStore = pNew;
   if( pNew ){
     sqlite4_randomness(pEnv, sizeof(pNew->kvId), &pNew->kvId);

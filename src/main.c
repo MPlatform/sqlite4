@@ -118,7 +118,13 @@ int sqlite4_initialize(sqlite4_env *pEnv){
   if( pEnv->bCoreMutex ){
     pEnv->pMemMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
     pEnv->pPrngMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
-    if( pEnv->pMemMutex==0 || pEnv->pPrngMutex==0 ) rc = SQLITE_NOMEM;
+    pEnv->pFactoryMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
+    if( pEnv->pMemMutex==0
+     || pEnv->pPrngMutex==0
+     || pEnv->pFactoryMutex==0
+    ){
+      rc = SQLITE_NOMEM;
+    }
   }else{
     pEnv->pMemMutex = 0;
     pEnv->pPrngMutex = 0;
@@ -165,8 +171,16 @@ int sqlite4_initialize(sqlite4_env *pEnv){
 int sqlite4_shutdown(sqlite4_env *pEnv){
   if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
   if( pEnv->isInit ){
+    KVFactory *pMkr;
+    sqlite4_mutex_free(pEnv->pFactoryMutex);
+    sqlite4_mutex_free(pEnv->pPrngMutex);
     sqlite4_mutex_free(pEnv->pMemMutex);
     pEnv->pMemMutex = 0;
+    while( (pMkr = pEnv->pFactory)!=0 && pMkr->isPerm==0 ){
+      KVFactory *pNext = pMkr->pNext;
+      sqlite4_free(pEnv, pMkr);
+      pMkr = pNext;
+    }
     sqlite4MutexEnd(pEnv);
     sqlite4MallocEnd(pEnv);
     pEnv->isInit = 0;
@@ -205,6 +219,7 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
       int n = pTemplate->nByte;
       if( n>sizeof(sqlite4_env) ) n = sizeof(sqlite4_env);
       memcpy(pEnv, pTemplate, n);
+      pEnv->pFactory = &sqlite4BuiltinFactory;
       pEnv->isInit = 0;
       break;
     }
@@ -360,43 +375,58 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     */
     case SQLITE_ENVCONFIG_KVSTORE_PUSH: {
       const char *zName = va_arg(ap, const char*);
-      if( strcmp(zName, "temp")==0 ){
-        pEnv->xKVTmp = *va_arg(ap, 
-            int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
+      int nName = sqlite4Strlen30(zName);
+      KVFactory *pMkr = sqlite4_malloc(pEnv, sizeof(*pMkr)+nName+1);
+      char *z;
+      if( pMkr==0 ) return SQLITE_NOMEM;
+      z = (char*)&pMkr[1];
+      memcpy(z, zName, nName+1);
+      memset(pMkr, 0, sizeof(*pMkr));
+      pMkr->zName = z;
+      pMkr->xFactory = va_arg(ap, 
+            int(*)(sqlite4_env*, KVStore **, const char *, unsigned int)
         );
-      }else{
-        pEnv->xKVFile = *va_arg(ap, 
-            int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
-        );
-      }
+      sqlite4_mutex_enter(pEnv->pFactoryMutex);
+      pMkr->pNext = pEnv->pFactory;
+      pEnv->pFactory = pMkr;
+      sqlite4_mutex_leave(pEnv->pFactoryMutex);
       break;
     }
 
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_POP, zName);
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_POP, zName, &pxFact);
     **
     ** Remove a KVStore factory from the stack.
     */
-    case SQLITE_ENVCONFIG_KVSTORE_POP: {
-      /* TBD */
-      break;
-    }
-
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_GET, zName,&pxFactory);
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_GET, zName, &pxFact);
     **
-    ** Get the current factory pointer with the given name.
+    ** Get the current factory pointer with the given name but leave the
+    ** factory on the stack.
     */
+    case SQLITE_ENVCONFIG_KVSTORE_POP:
     case SQLITE_ENVCONFIG_KVSTORE_GET: {
       const char *zName = va_arg(ap, const char*);
-      int(*xFactory)(sqlite4_env*,KVStore**,const char*,unsigned);
-      if( strcmp(zName, "temp")==0 ){
-        xFactory = pEnv->xKVTmp;
-      }else{
-        xFactory = pEnv->xKVFile;
+      KVFactory *pMkr, **ppPrev;
+      int (**pxFact)(sqlite4_env*,KVStore**,const char*,unsigned);
+
+      pxFact = va_arg(ap,int(**)(sqlite4_env*,KVStore*,const char*,unsigned));
+      *pxFact = 0;
+      sqlite4_mutex_enter(pEnv->pFactoryMutex);
+      ppPrev = &pEnv->pFactory;
+      pMkr = *ppPrev;
+      while( pMkr && strcmp(zName, pMkr->zName)!=0 ){
+        ppPrev = &pMkr->pNext;
+        pMkr = *ppPrev;
       }
-      *va_arg(ap, int(**)(sqlite4_env*, KVStore**, const char*, unsigned int))
-            = xFactory;
+      if( pMkr ){
+        *pxFact = pMkr->xFactory;
+        if( op==SQLITE_ENVCONFIG_KVSTORE_POP && pMkr->isPerm==0 ){
+          *ppPrev = pMkr->pNext;
+          sqlite4_free(pEnv, pMkr);
+        }
+      }
+      sqlite4_mutex_leave(pEnv->pFactoryMutex);
       break;
     }
 
@@ -1655,10 +1685,6 @@ static int openDatabase(
 
   if( pEnv->bCoreMutex==0 ){
     isThreadsafe = 0;
-  }else if( flags & SQLITE_OPEN_NOMUTEX ){
-    isThreadsafe = 0;
-  }else if( flags & SQLITE_OPEN_FULLMUTEX ){
-    isThreadsafe = 1;
   }else{
     isThreadsafe = pEnv->bFullMutex;
   }
@@ -1716,7 +1742,6 @@ static int openDatabase(
   );
 
   /* Parse the filename/URI argument. */
-  db->openFlags = flags;
   rc = sqlite4ParseUri(pEnv, zFilename, &flags, &zOpen, &zErrMsg);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_NOMEM ) db->mallocFailed = 1;
@@ -1724,9 +1749,10 @@ static int openDatabase(
     sqlite4_free(pEnv, zErrMsg);
     goto opendb_out;
   }
+  db->openFlags = flags;
 
   /* Open the backend database driver */
-  rc = sqlite4KVStoreOpen(db, "main", zOpen, &db->aDb[0].pKV, 0);
+  rc = sqlite4KVStoreOpen(db, "main", zOpen, &db->aDb[0].pKV, flags);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_IOERR_NOMEM ){
       rc = SQLITE_NOMEM;

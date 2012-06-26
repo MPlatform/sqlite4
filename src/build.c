@@ -3327,15 +3327,6 @@ int sqlite4OpenTempDatabase(Parse *pParse){
   sqlite4 *db = pParse->db;
   if( db->aDb[1].pKV==0 && !pParse->explain ){
     int rc;
-#if 0
-    static const int flags = 
-          SQLITE_OPEN_READWRITE |
-          SQLITE_OPEN_CREATE |
-          SQLITE_OPEN_EXCLUSIVE |
-          SQLITE_OPEN_DELETEONCLOSE |
-          SQLITE_OPEN_TEMP_DB;
-#endif
-
     rc = sqlite4KVStoreOpen(db, "temp", ":memory:", &db->aDb[1].pKV,
                             SQLITE_KVOPEN_TEMPORARY);
     if( rc!=SQLITE_OK ){

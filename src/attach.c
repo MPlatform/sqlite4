@@ -135,8 +135,7 @@ static void attachFunc(
     sqlite4_free(db->pEnv, zErr);
     return;
   }
-  flags |= SQLITE_OPEN_MAIN_DB;
-  rc = sqlite4KVStoreOpen(db, zName, zPath, &aNew->pKV, 0);
+  rc = sqlite4KVStoreOpen(db, zName, zPath, &aNew->pKV, flags);
   sqlite4_free(db->pEnv, zPath);
   db->nDb++;
   if( rc==SQLITE_CONSTRAINT ){
