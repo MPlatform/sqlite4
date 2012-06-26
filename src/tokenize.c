@@ -478,7 +478,7 @@ abort_parse:
   assert( pzErrMsg!=0 );
   if( pParse->zErrMsg ){
     *pzErrMsg = pParse->zErrMsg;
-    sqlite4_log(pParse->rc, "%s", *pzErrMsg);
+    sqlite4_log(db->pEnv, pParse->rc, "%s", *pzErrMsg);
     pParse->zErrMsg = 0;
     nErr++;
   }

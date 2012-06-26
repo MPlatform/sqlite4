@@ -54,16 +54,16 @@
 /*
 ** If this is a no-op implementation, implement everything as macros.
 */
-#define sqlite4_mutex_alloc(X)    ((sqlite4_mutex*)8)
+#define sqlite4_mutex_alloc(X,Y)  ((sqlite4_mutex*)8)
 #define sqlite4_mutex_free(X)
 #define sqlite4_mutex_enter(X)    
 #define sqlite4_mutex_try(X)      SQLITE_OK
 #define sqlite4_mutex_leave(X)    
 #define sqlite4_mutex_held(X)     ((void)(X),1)
 #define sqlite4_mutex_notheld(X)  ((void)(X),1)
-#define sqlite4MutexAlloc(X)      ((sqlite4_mutex*)8)
-#define sqlite4MutexInit()        SQLITE_OK
-#define sqlite4MutexEnd()
+#define sqlite4MutexAlloc(X,Y)    ((sqlite4_mutex*)8)
+#define sqlite4MutexInit(E)       SQLITE_OK
+#define sqlite4MutexEnd(E)
 #define MUTEX_LOGIC(X)
 #else
 #define MUTEX_LOGIC(X)            X

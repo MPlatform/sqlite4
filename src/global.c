@@ -130,10 +130,26 @@ const unsigned char sqlite4CtypeMap[256] = {
 #endif
 
 /*
+** Default factory objects
+*/
+static KVFactory memFactory = {
+   0,
+   "temp",
+   sqlite4KVStoreOpenMem,
+   1
+};
+KVFactory sqlite4BuiltinFactory = {
+   &memFactory,
+   "main",
+   sqlite4KVStoreOpenLsm,
+   1
+};
+
+/*
 ** The following singleton contains the global configuration for
 ** the SQLite library.
 */
-SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
+struct sqlite4_env sqlite4DefaultEnv = {
    sizeof(sqlite4_env),       /* nByte */
    1,                         /* iVersion */
    SQLITE_DEFAULT_MEMSTATUS,  /* bMemstat */
@@ -142,26 +158,26 @@ SQLITE_WSD struct sqlite4_env sqlite4DefaultEnv = {
    0x7ffffffe,                /* mxStrlen */
    128,                       /* szLookaside */
    500,                       /* nLookaside */
-   {0,0,0,0,0,0,0,0},         /* m */
-   {0,0,0,0,0,0,0,0,0},       /* mutex */
+   {0,0,0,0,0,0,0,0,0},       /* m */
+   {0,0,0,0,0,0,0,0,0,0},     /* mutex */
    (void*)0,                  /* pHeap */
    0,                         /* nHeap */
    0, 0,                      /* mnHeap, mxHeap */
    0,                         /* mxParserStack */
-   sqlite4KVStoreOpenLsm,     /* xKVFile */
-   sqlite4KVStoreOpenMem,     /* xKVTmp */
+   &sqlite4BuiltinFactory,    /* pFactory */
    sqlite4OsRandomness,       /* xRandomness */
    sqlite4OsCurrentTime,      /* xCurrentTime */
    /* All the rest should always be initialized to zero */
    0,                         /* isInit */
-   0,                         /* inProgress */
-   0,                         /* isMutexInit */
-   0,                         /* isMallocInit */
-   0,                         /* pInitMutex */
-   0,                         /* nRefInitMutex */
+   0,                         /* pPrngMutex */
+   0, 0,                      /* prngX, prngY */
    0,                         /* xLog */
    0,                         /* pLogArg */
    0,                         /* bLocaltimeFault */
+   0,                         /* pMemMutex */
+   {0,0,0,0},                 /* nowValue[] */
+   {0,0,0,0},                 /* mxValue[] */
+   {0,}                       /* hashGlobalFunc */
 };
 
 /*
@@ -171,42 +187,12 @@ sqlite4_env *sqlite4_env_default(void){ return &sqlite4DefaultEnv; }
 
 
 /*
-** Hash table for global functions - functions common to all
-** database connections.  After initialization, this table is
-** read-only.
-*/
-SQLITE_WSD FuncDefHash sqlite4GlobalFunctions;
-
-/*
 ** Constant tokens for values 0 and 1.
 */
 const Token sqlite4IntTokens[] = {
    { "0", 1 },
    { "1", 1 }
 };
-
-
-/*
-** The value of the "pending" byte must be 0x40000000 (1 byte past the
-** 1-gibabyte boundary) in a compatible database.  SQLite never uses
-** the database page that contains the pending byte.  It never attempts
-** to read or write that page.  The pending byte page is set assign
-** for use by the VFS layers as space for managing file locks.
-**
-** During testing, it is often desirable to move the pending byte to
-** a different position in the file.  This allows code that has to
-** deal with the pending byte to run on files that are much smaller
-** than 1 GiB.  The sqlite4_test_control() interface can be used to
-** move the pending byte.
-**
-** IMPORTANT:  Changing the pending byte to any value other than
-** 0x40000000 results in an incompatible database file format!
-** Changing the pending byte during operating results in undefined
-** and dileterious behavior.
-*/
-#ifndef SQLITE_OMIT_WSD
-int sqlite4PendingByte = 0x40000000;
-#endif
 
 #include "opcodes.h"
 /*

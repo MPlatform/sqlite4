@@ -1,0 +1,274 @@
+<title>Pluggable Storage Engine</title>
+
+<h2>Overview</h2>
+
+SQLite4 works with run-time interchangeable storage engines with the
+following properties:
+
+  *  The storage engine works with key/value pairs where both the
+     key and the value are byte arrays of arbitrary length and with no
+     restrictions on content.
+
+  *  All keys are unique.
+
+  *  Keys sort in lexicographical order (as if sorted using the
+     memcmp() library function).  When one key is a prefix of another,
+     the shorter key occurs first.
+
+  *  Transaction commit and rollback is handled by the storage engine.
+
+SQLite4 comes with two built-in storage engines.  A log-structured merge-tree
+(LSM) storage engine is used for persistent on-disk databases and an
+in-memory binary tree storage engine is used for TEMP databases.
+Future versions of SQLite4 might add other built-in storage engines.
+
+Applicates can add new storage engines to SQLite4 at run-time.  The
+purpose of this document is to describe how that is done.
+
+<h2>Adding A New Storage Engine</h2>
+
+Each storage engine implements a "factory function".  The factory function
+creates an object that defines a single connection to a single database
+file.  The signature of the factory function is as follows:
+
+<blockquote><pre>
+int storageEngineFactor(
+  sqlite4_env *pEnv,            /* The run-time environment */
+  sqlite4_kv_store **ppResult,  /* OUT: storage engine object written here */
+  const char *zName,            /* Name of the database file */
+  unsigned flags                /* Flags */
+);
+</pre></blockquote>
+
+SQLite4 will invoke the factory function whenever it needs to open a
+connection to a database file.  The first argument is the
+[./env.wiki | run-time environment] in use by the database connection.
+The third argument is the name of the database file to be opened.
+The fourth argument is zero or more boolean flags that are hints to the
+factory telling it how the database will be used.  The factory should
+create a new sqlite4_kv_storage object describing the connection to the
+database file and return a pointer to that object in the address
+specified by 2nd argument, then return SQLITE_OK.  Or, if something goes
+wrong, the factory should return an appropriate error code.
+
+<font color="blue"><i>
+We need to add some mechanism for the factory to return detailed
+error information back up to the caller.
+</i></font>
+
+To add a new storage engine to SQLite4, use the sqlite4_env_config()
+interface to register the factory function for the storage engine with
+the run-time environment that will be using the storage engine.  
+For example:
+
+<blockquote><pre>
+sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_PUSH_KVSTORE,
+                   "main", &exampleStorageEngine);
+</pre></blockquote>
+
+The example above adds the factory "exampleStorageEngine()" to the 
+run-time environment as the "main" storage engine.  The "main" storage
+engine is used by default for persistent databases.  The "temp" storage
+engine is used by default for transient and "TEMP" databases.  Storage
+engines with other names can be registered and used by specifying the
+storage engine name in the "kv=" query parameter of the URI passed to
+sqlite4_open().
+
+Storage engines stack.  The built-in includes two storage engines for
+"main" and "temp": the LSM and binary-tree storage engines, respectively.
+If you push a new "main" storage engine, the new one will take precedence
+over the built-in storage engine.  Later, you can call sqlite4_env_config()
+with the SQLITE_ENVCONFIG_POP_KVSTORE argument to remove the added storage
+engine and restore the built-in LSM storage engine as the "main" storage
+engine.  The built-in storage engines cannot be popped from the stack.
+
+The SQLITE_ENVCONFIG_GET_KVSTORE operator for sqlite3_env_config() is
+available for querying the current storage engines.
+
+<h2>Storage Engine Implementation</h2>
+
+The sqlite4_kvstore object that the factory function returns has the
+following basis:
+
+<blockquote><pre>
+struct sqlite4_kvstore {
+  const struct sqlite4_kv_methods *pStoreVfunc;  /* Methods */
+  sqlite4_env *pEnv;                      /* Runtime environment for kvstore */
+  int iTransLevel;                        /* Current transaction level */
+  unsigned kvId;                          /* Unique ID used for tracing */
+  unsigned fTrace;                        /* True to enable tracing */
+  char zKVName<nowiki>[12]</nowiki>;                       /* Used for debugging */
+  /* Subclasses will typically append additional fields */
+};
+</pre></blockquote>
+
+Useful subclasses of the sqlite4_kvstore base class will almost
+certainly want to add additional fields at after the basis.
+The most interesting part of the sqlite4_kvstore object is surely
+the virtual method table, which looks like this:
+
+<blockquote><pre>
+struct sqlite4_kv_methods {
+  int iVersion;
+  int szSelf;
+  int (*xReplace)(
+         sqlite4_kvstore*,
+         const unsigned char *pKey, sqlite4_kvsize nKey,
+         const unsigned char *pData, sqlite4_kvsize nData);
+  int (*xOpenCursor)(sqlite4_kvstore*, sqlite4_kvcursor**);
+  int (*xSeek)(sqlite4_kvcursor*,
+               const unsigned char *pKey, sqlite4_kvsize nKey, int dir);
+  int (*xNext)(sqlite4_kvcursor*);
+  int (*xPrev)(sqlite4_kvcursor*);
+  int (*xDelete)(sqlite4_kvcursor*);
+  int (*xKey)(sqlite4_kvcursor*,
+              const unsigned char **ppKey, sqlite4_kvsize *pnKey);
+  int (*xData)(sqlite4_kvcursor*, sqlite4_kvsize ofst, sqlite4_kvsize n,
+               const unsigned char **ppData, sqlite4_kvsize *pnData);
+  int (*xReset)(sqlite4_kvcursor*);
+  int (*xCloseCursor)(sqlite4_kvcursor*);
+  int (*xBegin)(sqlite4_kvstore*, int);
+  int (*xCommitPhaseOne)(sqlite4_kvstore*, int);
+  int (*xCommitPhaseTwo)(sqlite4_kvstore*, int);
+  int (*xRollback)(sqlite4_kvstore*, int);
+  int (*xRevert)(sqlite4_kvstore*, int);
+  int (*xClose)(sqlite4_kvstore*);
+  int (*xControl)(sqlite4_kvstore*, int, void*);
+};
+</pre></blockquote>
+
+The storage engine implementation will need to provide implementations for
+all of the methods in the sqlite4_kv_methods object.  Note that the first
+two fields, iVersion and szSelf, are present to support future extensions.
+The iVersion field should always currently be 1, but might be larger for
+later enhanced versions.  And the szSelf field should be equal to
+sizeof(sqlite4_kv_methods).
+
+Search operations involve a cursor object whose basis is the following:
+
+<blockquote><pre>
+struct sqlite4_kvcursor {
+  sqlite4_kvstore *pStore;                /* The owner of this cursor */
+  const struct sqlite4_kv_methods *pStoreVfunc;  /* Methods */
+  sqlite4_env *pEnv;                      /* Runtime environment  */
+  int iTransLevel;                        /* Current transaction level */
+  unsigned curId;                         /* Unique ID for tracing */
+  unsigned fTrace;                        /* True to enable tracing */
+  /* Subclasses will typically add additional fields */
+};
+</pre></blockquote>
+
+As before, actual implementations will more than likely want to extend
+this object by adding additional fields onto the end.
+
+<h2>Storage Engine Methods</h2>
+
+SQLite invokes the xBegin, xCommit, and xRollback methods change
+the transaction level of the storage engine.  The transaction level
+is a non-negative integer that is initialized to zero.  The transaction
+level must be at least 1 in order for content to be read.  The
+transaction level must be at least 2 for content to be modified.
+
+The xBegin method increases transaction level.  The increase may be no
+more than 1 unless the transaction level is initially 0 in which case
+it can be increased immediately to 2.  Increasing the transaction level
+to 1 or more makes a "snapshot" of the database file such that changes
+made by other connections are not visible.  An xBegin call may fail
+with SQLITE_BUSY if the initial transaction level is 0 or 1.
+
+A read-only database will fail an attempt to increase xBegin above 1.  An
+implementation that does not support nested transactions will fail any
+attempt to increase the transaction level above 2.
+
+The xCommitPhaseOne and xCommitPhaseTwo methods implement a 2-phase
+commit that lowers the transaction level to the value given in the
+second argument, making all the changes made at higher transaction levels
+permanent.  A rollback is still possible following phase one.  If
+possible, errors should be reported during phase one so that a
+multiple-database transaction can still be rolled back if the
+phase one fails on a different database.  Implementations that do not
+support two-phase commit can implement xCommitPhaseOne as a no-op function
+returning SQLITE_OK.
+
+The xRollback method lowers the transaction level to the value given in
+its argument and reverts or undoes all changes made at higher transaction
+levels.  An xRollback to level N causes the database to revert to the state
+it was in on the most recent xBegin to level N+1.
+
+The xRevert(N) method causes the state of the database file to go back
+to what it was immediately after the most recent xCommit(N).  Higher-level
+subtransactions are cancelled.  This call is equivalent to xRollback(N-1)
+followed by xBegin(N) but is atomic and might be more efficient.
+
+The xReplace method replaces the value for an existing entry with the
+given key, or creates a new entry with the given key and value if no
+prior entry exists with the given key.  The key and value pointers passed
+into xReplace belong to the caller and will likely be destroyed when the
+call to xReplace returns so the xReplace routine must make its own
+copy of that information.
+
+A cursor is at all times pointing to ether an entry in the database or
+to EOF.  EOF means "no entry".  Cursor operations other than xCloseCursor 
+will fail if the transaction level is less than 1.
+
+The xSeek method moves a cursor to an entry in the database that matches
+the supplied key as closely as possible.  If the dir argument is 0, then
+the match must be exact or else the seek fails and the cursor is left
+pointing to EOF.  If dir is negative, then an exact match is
+found if it is available, otherwise the cursor is positioned at the largest
+entry that is less than the search key or to EOF if the store contains no
+entry less than the search key.  If dir is positive, then an exist match
+is found if it is available, otherwise the cursor is left pointing the
+the smallest entry that is larger than the search key, or to EOF if there
+are no entries larger than the search key.
+
+The return code from xSeek might be one of the following:
+
+   <b>SQLITE_OK</b> The cursor is left pointing to any entry that
+                    exactly matchings the probe key.
+
+   <b>SQLITE_INEXACT</b> The cursor is left pointing to the nearest entry
+                    to the probe it could find, either before or after
+                    the probe, according to the dir argument.
+
+   <b>SQLITE_NOTFOUND</b> No suitable entry could be found.  Either dir==0 and
+                    there was no exact match, or dir<0 and the probe is
+                    smaller than every entry in the database, or dir>0 and
+                    the probe is larger than every entry in the database.
+
+xSeek might also return some error code like SQLITE_IOERR or
+SQLITE_NOMEM.
+
+The xNext method will only be called following an xSeek with a positive dir,
+or another xNext.  The xPrev method will only be called following an xSeek
+with a negative dir or another xPrev.  Both xNext and xPrev will return
+SQLITE_OK on success and SQLITE_NOTFOUND if they run off the end of the
+database.  Both routines might also return error codes such as
+SQLITE_IOERR, SQLITE_CORRUPT, or SQLITE_NOMEM.
+
+Values returned by xKey and xData must remain stable until
+the next xSeek, xNext, xPrev, xReset, xDelete, or xCloseCursor on the same
+cursor.  This is true even if the transaction level is reduced to zero,
+or if the content of the entry is changed by xInsert, xDelete on a different
+cursor, or xRollback.  The content returned by repeated calls to xKey and
+xData is allowed (but is not required) to change if xInsert, xDelete, or
+xRollback are invoked in between the calls, but the content returned by
+every call must be stable until the cursor moves, or is reset or closed.
+The cursor owns the values returned by xKey and xData and must take
+responsiblity for freeing memory used to hold those values when appropriate.
+If the SQLite core needs to keep a key or value beyond the time when it
+is guaranteed to be stable, it will make its own copy.
+
+The xDelete method deletes the entry that the cursor is currently
+pointing at.  However, subsequent xNext or xPrev calls behave as if the
+entries is not actually deleted until the cursor moves.  In other words
+it is acceptable to xDelete an entry out from under a cursor.  Subsequent
+xNext or xPrev calls on that cursor will work the same as if the entry
+had not been deleted.  Two cursors can be pointing to the same entry and
+one cursor can xDelete and the other cursor is expected to continue
+functioning normally, including responding correctly to subsequent
+xNext and xPrev calls.
+
+<font color="blue"><i>
+To be continued...
+</i></font>

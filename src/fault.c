@@ -27,62 +27,15 @@
 #include "sqliteInt.h"
 
 #ifndef SQLITE_OMIT_BUILTIN_TEST
-
-/*
-** Global variables.
-*/
-typedef struct BenignMallocHooks BenignMallocHooks;
-static SQLITE_WSD struct BenignMallocHooks {
-  void (*xBenignBegin)(void);
-  void (*xBenignEnd)(void);
-} sqlite4Hooks = { 0, 0 };
-
-/* The "wsdHooks" macro will resolve to the appropriate BenignMallocHooks
-** structure.  If writable static data is unsupported on the target,
-** we have to locate the state vector at run-time.  In the more common
-** case where writable static data is supported, wsdHooks can refer directly
-** to the "sqlite4Hooks" state vector declared above.
-*/
-#ifdef SQLITE_OMIT_WSD
-# define wsdHooksInit \
-  BenignMallocHooks *x = sqlite4Hooks;
-# define wsdHooks x[0]
-#else
-# define wsdHooksInit
-# define wsdHooks sqlite4Hooks
-#endif
-
-
-/*
-** Register hooks to call when sqlite4BeginBenignMalloc() and
-** sqlite4EndBenignMalloc() are called, respectively.
-*/
-void sqlite4BenignMallocHooks(
-  sqlite4_env *pEnv,
-  void (*xBenignBegin)(void),
-  void (*xBenignEnd)(void)
-){
-  wsdHooksInit;
-  wsdHooks.xBenignBegin = xBenignBegin;
-  wsdHooks.xBenignEnd = xBenignEnd;
-}
-
 /*
 ** This (sqlite4EndBenignMalloc()) is called by SQLite code to indicate that
 ** subsequent malloc failures are benign. A call to sqlite4EndBenignMalloc()
 ** indicates that subsequent malloc failures are non-benign.
 */
 void sqlite4BeginBenignMalloc(sqlite4_env *pEnv){
-  wsdHooksInit;
-  if( wsdHooks.xBenignBegin ){
-    wsdHooks.xBenignBegin();
-  }
+  if( pEnv->m.xBeginBenign ) pEnv->m.xBeginBenign(pEnv->m.pMemEnv);
 }
 void sqlite4EndBenignMalloc(sqlite4_env *pEnv){
-  wsdHooksInit;
-  if( wsdHooks.xBenignEnd ){
-    wsdHooks.xBenignEnd();
-  }
+  if( pEnv->m.xEndBenign ) pEnv->m.xEndBenign(pEnv->m.pMemEnv);
 }
-
 #endif   /* #ifndef SQLITE_OMIT_BUILTIN_TEST */

@@ -1043,7 +1043,7 @@ void *sqlite4HexToBlob(sqlite4 *db, const char *z, int n){
 ** argument.  The zType is a word like "NULL" or "closed" or "invalid".
 */
 static void logBadConnection(const char *zType){
-  sqlite4_log(SQLITE_MISUSE, 
+  sqlite4_log(0, SQLITE_MISUSE, 
      "API call with %s database connection pointer",
      zType
   );

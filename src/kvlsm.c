@@ -395,23 +395,25 @@ int sqlite4KVStoreOpenLsm(
 
   /* Virtual methods for an LSM data store */
   static const KVStoreMethods kvlsmMethods = {
-    kvlsmReplace,
-    kvlsmOpenCursor,
-    kvlsmSeek,
-    kvlsmNextEntry,
-    kvlsmPrevEntry,
-    kvlsmDelete,
-    kvlsmKey,
-    kvlsmData,
-    kvlsmReset,
-    kvlsmCloseCursor,
-    kvlsmBegin,
-    kvlsmCommitPhaseOne,
-    kvlsmCommitPhaseTwo,
-    kvlsmRollback,
-    kvlsmRevert,
-    kvlsmClose,
-    kvlsmControl
+    1,                          /* iVersion */
+    sizeof(KVStoreMethods),     /* szSelf */
+    kvlsmReplace,               /* xReplace */
+    kvlsmOpenCursor,            /* xOpenCursor */
+    kvlsmSeek,                  /* xSeek */
+    kvlsmNextEntry,             /* xNext */
+    kvlsmPrevEntry,             /* xPrev */
+    kvlsmDelete,                /* xDelete */
+    kvlsmKey,                   /* xKey */
+    kvlsmData,                  /* xData */
+    kvlsmReset,                 /* xReset */
+    kvlsmCloseCursor,           /* xCloseCursor */
+    kvlsmBegin,                 /* xBegin */
+    kvlsmCommitPhaseOne,        /* xCommitPhaseOne */
+    kvlsmCommitPhaseTwo,        /* xCommitPhaseTwo */
+    kvlsmRollback,              /* xRollback */
+    kvlsmRevert,                /* xRevert */
+    kvlsmClose,                 /* xClose */
+    kvlsmControl                /* xControl */
   };
 
   KVLsm *pNew;

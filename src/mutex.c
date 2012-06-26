@@ -15,47 +15,21 @@
 */
 #include "sqliteInt.h"
 
-#if defined(SQLITE_DEBUG) && !defined(SQLITE_MUTEX_OMIT)
-/*
-** For debugging purposes, record when the mutex subsystem is initialized
-** and uninitialized so that we can assert() if there is an attempt to
-** allocate a mutex while the system is uninitialized.
-*/
-static SQLITE_WSD int mutexIsInit = 0;
-#endif /* SQLITE_DEBUG */
-
-
 #ifndef SQLITE_MUTEX_OMIT
 /*
 ** Initialize the mutex system.
 */
-int sqlite4MutexInit(void){ 
+int sqlite4MutexInit(sqlite4_env *pEnv){
   int rc = SQLITE_OK;
-  if( !sqlite4DefaultEnv.mutex.xMutexAlloc ){
-    /* If the xMutexAlloc method has not been set, then the user did not
-    ** install a mutex implementation via sqlite4_config() prior to 
-    ** sqlite4_initialize() being called. This block copies pointers to
-    ** the default implementation into the sqlite4DefaultEnv structure.
-    */
-    sqlite4_mutex_methods const *pFrom;
-    sqlite4_mutex_methods *pTo = &sqlite4DefaultEnv.mutex;
-
-    if( sqlite4DefaultEnv.bCoreMutex ){
-      pFrom = sqlite4DefaultMutex();
+  if( !pEnv->mutex.xMutexAlloc ){
+    if( pEnv->bCoreMutex ){
+      pEnv->mutex = *sqlite4DefaultMutex();
     }else{
-      pFrom = sqlite4NoopMutex();
+      pEnv->mutex = *sqlite4NoopMutex();
     }
-    memcpy(pTo, pFrom, offsetof(sqlite4_mutex_methods, xMutexAlloc));
-    memcpy(&pTo->xMutexFree, &pFrom->xMutexFree,
-           sizeof(*pTo) - offsetof(sqlite4_mutex_methods, xMutexFree));
-    pTo->xMutexAlloc = pFrom->xMutexAlloc;
+    pEnv->mutex.pMutexEnv = pEnv;
   }
-  rc = sqlite4DefaultEnv.mutex.xMutexInit();
-
-#ifdef SQLITE_DEBUG
-  mutexIsInit = 1;
-#endif
-
+  rc = pEnv->mutex.xMutexInit(pEnv->mutex.pMutexEnv);
   return rc;
 }
 
@@ -63,35 +37,30 @@ int sqlite4MutexInit(void){
 ** Shutdown the mutex system. This call frees resources allocated by
 ** sqlite4MutexInit().
 */
-int sqlite4MutexEnd(void){
+int sqlite4MutexEnd(sqlite4_env *pEnv){
   int rc = SQLITE_OK;
-  if( sqlite4DefaultEnv.mutex.xMutexEnd ){
-    rc = sqlite4DefaultEnv.mutex.xMutexEnd();
+  if( pEnv->mutex.xMutexEnd ){
+    rc = pEnv->mutex.xMutexEnd(pEnv->mutex.pMutexEnv);
   }
-
-#ifdef SQLITE_DEBUG
-  mutexIsInit = 0;
-#endif
-
   return rc;
 }
 
 /*
 ** Retrieve a pointer to a static mutex or allocate a new dynamic one.
 */
-sqlite4_mutex *sqlite4_mutex_alloc(int id){
+sqlite4_mutex *sqlite4_mutex_alloc(sqlite4_env *pEnv, int id){
+  if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
 #ifndef SQLITE_OMIT_AUTOINIT
-  if( sqlite4_initialize(0) ) return 0;
+  if( sqlite4_initialize(pEnv) ) return 0;
 #endif
-  return sqlite4DefaultEnv.mutex.xMutexAlloc(id);
+  return pEnv->mutex.xMutexAlloc(pEnv->mutex.pMutexEnv, id);
 }
 
-sqlite4_mutex *sqlite4MutexAlloc(int id){
-  if( !sqlite4DefaultEnv.bCoreMutex ){
+sqlite4_mutex *sqlite4MutexAlloc(sqlite4_env *pEnv, int id){
+  if( !pEnv->bCoreMutex ){
     return 0;
   }
-  assert( mutexIsInit );
-  return sqlite4DefaultEnv.mutex.xMutexAlloc(id);
+  return pEnv->mutex.xMutexAlloc(pEnv->mutex.pMutexEnv, id);
 }
 
 /*
@@ -99,7 +68,7 @@ sqlite4_mutex *sqlite4MutexAlloc(int id){
 */
 void sqlite4_mutex_free(sqlite4_mutex *p){
   if( p ){
-    sqlite4DefaultEnv.mutex.xMutexFree(p);
+    p->pMutexMethods->xMutexFree(p);
   }
 }
 
@@ -109,7 +78,7 @@ void sqlite4_mutex_free(sqlite4_mutex *p){
 */
 void sqlite4_mutex_enter(sqlite4_mutex *p){
   if( p ){
-    sqlite4DefaultEnv.mutex.xMutexEnter(p);
+    p->pMutexMethods->xMutexEnter(p);
   }
 }
 
@@ -120,7 +89,7 @@ void sqlite4_mutex_enter(sqlite4_mutex *p){
 int sqlite4_mutex_try(sqlite4_mutex *p){
   int rc = SQLITE_OK;
   if( p ){
-    return sqlite4DefaultEnv.mutex.xMutexTry(p);
+    return p->pMutexMethods->xMutexTry(p);
   }
   return rc;
 }
@@ -133,7 +102,7 @@ int sqlite4_mutex_try(sqlite4_mutex *p){
 */
 void sqlite4_mutex_leave(sqlite4_mutex *p){
   if( p ){
-    sqlite4DefaultEnv.mutex.xMutexLeave(p);
+    p->pMutexMethods->xMutexLeave(p);
   }
 }
 
@@ -143,10 +112,10 @@ void sqlite4_mutex_leave(sqlite4_mutex *p){
 ** intended for use inside assert() statements.
 */
 int sqlite4_mutex_held(sqlite4_mutex *p){
-  return p==0 || sqlite4DefaultEnv.mutex.xMutexHeld(p);
+  return p==0 || p->pMutexMethods->xMutexHeld(p);
 }
 int sqlite4_mutex_notheld(sqlite4_mutex *p){
-  return p==0 || sqlite4DefaultEnv.mutex.xMutexNotheld(p);
+  return p==0 || p->pMutexMethods->xMutexNotheld(p);
 }
 #endif
 

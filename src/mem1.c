@@ -116,7 +116,7 @@ static void *sqlite4MemMalloc(void *NotUsed, sqlite4_size_t nByte){
   UNUSED_PARAMETER(NotUsed);
   if( p==0 ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
+    sqlite4_log(0,SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
   }
   return p;
 #else
@@ -130,7 +130,7 @@ static void *sqlite4MemMalloc(void *NotUsed, sqlite4_size_t nByte){
     p++;
   }else{
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
+    sqlite4_log(0,SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
   }
   return (void *)p;
 #endif
@@ -191,7 +191,7 @@ static void *sqlite4MemRealloc(void *NotUsed, void *pPrior, int nByte){
   UNUSED_PARAMETER(NotUsed);
   if( p==0 ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(SQLITE_NOMEM,
+    sqlite4_log(0,SQLITE_NOMEM,
       "failed memory resize %u to %u bytes",
       SQLITE_MALLOCSIZE(pPrior), nByte);
   }
@@ -208,7 +208,7 @@ static void *sqlite4MemRealloc(void *NotUsed, void *pPrior, int nByte){
     p++;
   }else{
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(SQLITE_NOMEM,
+    sqlite4_log(0,SQLITE_NOMEM,
       "failed memory resize %u to %u bytes",
       sqlite4MemSize(pPrior), nByte);
   }
@@ -279,6 +279,7 @@ void sqlite4MemSetDefault(sqlite4_env *pEnv){
      0
   };
   pEnv->m = defaultMethods;
+  pEnv->m.pMemEnv = (void*)pEnv;
 }
 
 #endif /* SQLITE_SYSTEM_MALLOC */

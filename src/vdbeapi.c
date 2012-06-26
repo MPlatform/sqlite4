@@ -38,7 +38,7 @@ int sqlite4_expired(sqlite4_stmt *pStmt){
 */
 static int vdbeSafety(Vdbe *p){
   if( p->db==0 ){
-    sqlite4_log(SQLITE_MISUSE, "API called with finalized prepared statement");
+    sqlite4_log(0,SQLITE_MISUSE,"API called with finalized prepared statement");
     return 1;
   }else{
     return 0;
@@ -46,7 +46,7 @@ static int vdbeSafety(Vdbe *p){
 }
 static int vdbeSafetyNotNull(Vdbe *p){
   if( p==0 ){
-    sqlite4_log(SQLITE_MISUSE, "API called with NULL prepared statement");
+    sqlite4_log(0,SQLITE_MISUSE, "API called with NULL prepared statement");
     return 1;
   }else{
     return vdbeSafety(p);
@@ -195,6 +195,11 @@ static void setResultStrOrError(
   u8 enc,                 /* Encoding of z.  0 for BLOBs */
   void (*xDel)(void*)     /* Destructor function */
 ){
+  if( xDel==SQLITE_DYNAMIC ){
+    assert( sqlite4MemdebugHasType(z, MEMTYPE_HEAP) );
+    assert( sqlite4MemdebugNoType(z, ~MEMTYPE_HEAP) );
+    sqlite4MemdebugSetType((char*)z, MEMTYPE_DB | MEMTYPE_HEAP);
+  }
   if( sqlite4VdbeMemSetStr(&pCtx->s, z, n, enc, xDel)==SQLITE_TOOBIG ){
     sqlite4_result_error_toobig(pCtx);
   }
@@ -968,7 +973,7 @@ static int vdbeUnbind(Vdbe *p, int i){
   if( p->magic!=VDBE_MAGIC_RUN || p->pc>=0 ){
     sqlite4Error(p->db, SQLITE_MISUSE, 0);
     sqlite4_mutex_leave(p->db->mutex);
-    sqlite4_log(SQLITE_MISUSE, 
+    sqlite4_log(p->db->pEnv,SQLITE_MISUSE, 
         "bind on a busy prepared statement: [%s]", p->zSql);
     return SQLITE_MISUSE_BKPT;
   }

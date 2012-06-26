@@ -124,65 +124,12 @@
 */
 
 /* Typedefs of datatypes */
-typedef struct KVStore KVStore;
-typedef struct KVStoreMethods KVStoreMethods;
-typedef struct KVCursor KVCursor;
+typedef struct sqlite4_kvstore KVStore;
+typedef struct sqlite4_kv_methods KVStoreMethods;
+typedef struct sqlite4_kvcursor KVCursor;
 typedef unsigned char KVByteArray;
-typedef int KVSize;
+typedef sqlite4_kvsize KVSize;
 
-/*
-** A Key-Value storage engine is defined by an instance of the following
-** structures:
-*/
-struct KVStoreMethods {
-  int (*xReplace)(KVStore*, const KVByteArray *pKey, KVSize nKey,
-                            const KVByteArray *pData, KVSize nData);
-  int (*xOpenCursor)(KVStore*, KVCursor**);
-  int (*xSeek)(KVCursor*, const KVByteArray *pKey, KVSize nKey, int dir);
-  int (*xNext)(KVCursor*);
-  int (*xPrev)(KVCursor*);
-  int (*xDelete)(KVCursor*);
-  int (*xKey)(KVCursor*, const KVByteArray **ppKey, KVSize *pnKey);
-  int (*xData)(KVCursor*, KVSize ofst, KVSize n,
-                          const KVByteArray **ppData, KVSize *pnData);
-  int (*xReset)(KVCursor*);
-  int (*xCloseCursor)(KVCursor*);
-  int (*xBegin)(KVStore*, int);
-  int (*xCommitPhaseOne)(KVStore*, int);
-  int (*xCommitPhaseTwo)(KVStore*, int);
-  int (*xRollback)(KVStore*, int);
-  int (*xRevert)(KVStore*, int);
-  int (*xClose)(KVStore*);
-  int (*xControl)(KVStore*, int, void *);
-};
-struct KVStore {
-  const KVStoreMethods *pStoreVfunc;    /* Virtual method table */
-  sqlite4_env *pEnv;                    /* Runtime environment for this store */
-  int iTransLevel;                      /* Current transaction level */
-  u16 kvId;                             /* Unique ID used for tracing */
-  u8 fTrace;                            /* True to enable tracing */
-  char zKVName[12];                     /* Used for debugging */
-  /* Subclasses will typically append additional fields */
-};
-
-/*
-** Base class for cursors
-*/
-struct KVCursor {
-  KVStore *pStore;                    /* The owner of this cursor */
-  const KVStoreMethods *pStoreVfunc;  /* Methods */
-  sqlite4_env *pEnv;                  /* Runtime environment for this cursor */
-  int iTransLevel;                    /* Current transaction level */
-  u16 curId;                          /* Unique ID for tracing */
-  u8 fTrace;                          /* True to enable tracing */
-  /* Subclasses will typically add additional fields */
-};
-
-/*
-** Valid flags for sqlite4KVStorageOpen()
-*/
-#define SQLITE_KVOPEN_TEMPORARY       0x0001  /* A temporary database */
-#define SQLITE_KVOPEN_NO_TRANSACTIONS 0x0002  /* No transactions will be used */
 
 int sqlite4KVStoreOpenMem(sqlite4_env*, KVStore**, const char *, unsigned);
 int sqlite4KVStoreOpenLsm(sqlite4_env*, KVStore**, const char *, unsigned);

@@ -82,24 +82,10 @@ void (*sqlite4IoTrace)(const char*, ...) = 0;
 ** This routine is a no-op except on its very first call for a given
 ** sqlite4_env object, or for the first call after a call to sqlite4_shutdown.
 **
-** The first thread to call this routine runs the initialization to
-** completion.  If subsequent threads call this routine before the first
-** thread has finished the initialization process, then the subsequent
-** threads must block until the first thread finishes with the initialization.
-**
-** The first thread might call this routine recursively.  Recursive
-** calls to this routine should not block, of course.  Otherwise the
-** initialization process would never complete.
-**
-** Let X be the first thread to enter this routine.  Let Y be some other
-** thread.  Then while the initial invocation of this routine by X is
-** incomplete, it is required that:
-**
-**    *  Calls to this routine from Y must block until the outer-most
-**       call by X completes.
-**
-**    *  Recursive calls to this routine from thread X return immediately
-**       without blocking.
+** This routine is not threadsafe.  It should be called from a single
+** thread to initialized the library in a multi-threaded system.  Other
+** threads should avoid using the sqlite4_env object until after it has
+** completely initialized.
 */
 int sqlite4_initialize(sqlite4_env *pEnv){
   MUTEX_LOGIC( sqlite4_mutex *pMaster; )       /* The main static mutex */
@@ -114,79 +100,43 @@ int sqlite4_initialize(sqlite4_env *pEnv){
   */
   if( pEnv->isInit ) return SQLITE_OK;
 
-  /* Make sure the mutex subsystem is initialized.  If unable to 
-  ** initialize the mutex subsystem, return early with the error.
-  ** If the system is so sick that we are unable to allocate a mutex,
-  ** there is not much SQLite is going to be able to do.
-  **
-  ** The mutex subsystem must take care of serializing its own
-  ** initialization.
+  /* Initialize the mutex subsystem
   */
-  rc = sqlite4MutexInit();
-  if( rc ) return rc;
-
-  /* Initialize the malloc() system and the recursive pInitMutex mutex.
-  ** This operation is protected by the STATIC_MASTER mutex.  Note that
-  ** MutexAlloc() is called for a static mutex prior to initializing the
-  ** malloc subsystem - this implies that the allocation of a static
-  ** mutex must not require support from the malloc subsystem.
-  */
-  MUTEX_LOGIC( pMaster = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MASTER); )
-  sqlite4_mutex_enter(pMaster);
-  pEnv->isMutexInit = 1;
-  if( !pEnv->isMallocInit ){
-    rc = sqlite4MallocInit(pEnv);
-  }
-  if( rc==SQLITE_OK ){
-    pEnv->isMallocInit = 1;
-    if( !pEnv->pInitMutex ){
-      pEnv->pInitMutex =
-           sqlite4MutexAlloc(SQLITE_MUTEX_RECURSIVE);
-      if( pEnv->bCoreMutex && !pEnv->pInitMutex ){
-        rc = SQLITE_NOMEM;
-      }
-    }
-  }
-  if( rc==SQLITE_OK ){
-    pEnv->nRefInitMutex++;
-  }
-  sqlite4_mutex_leave(pMaster);
-
-  /* If rc is not SQLITE_OK at this point, then either the malloc
-  ** subsystem could not be initialized or the system failed to allocate
-  ** the pInitMutex mutex. Return an error in either case.  */
-  if( rc!=SQLITE_OK ){
+  rc = sqlite4MutexInit(pEnv);
+  if( rc ){
+    sqlite4MallocEnd(pEnv);
     return rc;
   }
 
-  /* Do the rest of the initialization under the recursive mutex so
-  ** that we will be able to handle recursive calls into
-  ** sqlite4_initialize().  The recursive calls normally come through
-  ** sqlite4_os_init() when it invokes sqlite4_vfs_register(), but other
-  ** recursive calls might also be possible.
+  /* Initialize the memory allocation subsystem
   */
-  sqlite4_mutex_enter(pEnv->pInitMutex);
-  if( pEnv->isInit==0 && pEnv->inProgress==0 ){
-    FuncDefHash *pHash = &sqlite4GlobalFunctions;
-    pEnv->inProgress = 1;
-    memset(pHash, 0, sizeof(sqlite4GlobalFunctions));
-    sqlite4RegisterGlobalFunctions(pEnv);
-    rc = sqlite4OsInit(0);
-    pEnv->inProgress = 0;
-  }
-  sqlite4_mutex_leave(pEnv->pInitMutex);
+  rc = sqlite4MallocInit(pEnv);
+  if( rc ) return rc;
 
-  /* Go back under the static mutex and clean up the recursive
-  ** mutex to prevent a resource leak.
+  /* Create required mutexes
   */
-  sqlite4_mutex_enter(pMaster);
-  pEnv->nRefInitMutex--;
-  if( pEnv->nRefInitMutex<=0 ){
-    assert( pEnv->nRefInitMutex==0 );
-    sqlite4_mutex_free(pEnv->pInitMutex);
-    pEnv->pInitMutex = 0;
+  if( pEnv->bCoreMutex ){
+    pEnv->pMemMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
+    pEnv->pPrngMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
+    pEnv->pFactoryMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
+    if( pEnv->pMemMutex==0
+     || pEnv->pPrngMutex==0
+     || pEnv->pFactoryMutex==0
+    ){
+      rc = SQLITE_NOMEM;
+    }
+  }else{
+    pEnv->pMemMutex = 0;
+    pEnv->pPrngMutex = 0;
   }
-  sqlite4_mutex_leave(pMaster);
+  pEnv->isInit = 1;
+
+  sqlite4OsInit(pEnv);
+
+  /* Register global functions */
+  if( rc==SQLITE_OK ){
+    sqlite4RegisterGlobalFunctions(pEnv);
+  }
 
   /* The following is just a sanity check to make sure SQLite has
   ** been compiled correctly.  It is important to run this code, but
@@ -207,16 +157,6 @@ int sqlite4_initialize(sqlite4_env *pEnv){
 #endif
 #endif
 
-  /* Do extra initialization steps requested by the SQLITE_EXTRA_INIT
-  ** compile-time option.
-  */
-#ifdef SQLITE_EXTRA_INIT
-  if( rc==SQLITE_OK && pEnv->isInit ){
-    int SQLITE_EXTRA_INIT(const char*);
-    rc = SQLITE_EXTRA_INIT(0);
-  }
-#endif
-
   return rc;
 }
 
@@ -231,58 +171,21 @@ int sqlite4_initialize(sqlite4_env *pEnv){
 int sqlite4_shutdown(sqlite4_env *pEnv){
   if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
   if( pEnv->isInit ){
-#ifdef SQLITE_EXTRA_SHUTDOWN
-    void SQLITE_EXTRA_SHUTDOWN(void);
-    SQLITE_EXTRA_SHUTDOWN();
-#endif
-    /*sqlite4_os_end();*/
-    /* sqlite4_reset_auto_extension(); */
+    KVFactory *pMkr;
+    sqlite4_mutex_free(pEnv->pFactoryMutex);
+    sqlite4_mutex_free(pEnv->pPrngMutex);
+    sqlite4_mutex_free(pEnv->pMemMutex);
+    pEnv->pMemMutex = 0;
+    while( (pMkr = pEnv->pFactory)!=0 && pMkr->isPerm==0 ){
+      KVFactory *pNext = pMkr->pNext;
+      sqlite4_free(pEnv, pMkr);
+      pMkr = pNext;
+    }
+    sqlite4MutexEnd(pEnv);
+    sqlite4MallocEnd(pEnv);
     pEnv->isInit = 0;
   }
-  if( pEnv->isMallocInit ){
-    sqlite4MallocEnd(pEnv);
-    pEnv->isMallocInit = 0;
-  }
-
   return SQLITE_OK;
-}
-
-/*
-** This API allows applications to modify the configuration described by
-** an sqlite4_env object.
-*/
-int sqlite4_config(sqlite4_env *pEnv, int op, ...){
-  va_list ap;
-  int rc = SQLITE_OK;
-
-  if( pEnv==0 ) pEnv = sqlite4_env_default();
-
-  /* sqlite4_config() shall return SQLITE_MISUSE if it is invoked while
-  ** the SQLite library is in use. */
-  if( pEnv->isInit ) return SQLITE_MISUSE_BKPT;
-
-  va_start(ap, op);
-  switch( op ){
-    case SQLITE_CONFIG_SET_KVFACTORY: {
-      pEnv->xKVFile = *va_arg(ap, 
-          int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
-      );
-      break;
-    }
-
-    case SQLITE_CONFIG_GET_KVFACTORY: {
-      *va_arg(ap, int(**)(sqlite4_env*, KVStore**, const char*, unsigned int)) =
-          pEnv->xKVFile;
-      break;
-    }
-
-    default: {
-      rc = SQLITE_ERROR;
-      break;
-    }
-  }
-  va_end(ap);
-  return rc;
 }
 
 /*
@@ -316,6 +219,7 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
       int n = pTemplate->nByte;
       if( n>sizeof(sqlite4_env) ) n = sizeof(sqlite4_env);
       memcpy(pEnv, pTemplate, n);
+      pEnv->pFactory = &sqlite4BuiltinFactory;
       pEnv->isInit = 0;
       break;
     }
@@ -470,20 +374,59 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     ** takes priority over prior factories.
     */
     case SQLITE_ENVCONFIG_KVSTORE_PUSH: {
-      pEnv->xKVFile = *va_arg(ap, 
-          int (*)(sqlite4_env*, KVStore **, const char *, unsigned int)
-      );
+      const char *zName = va_arg(ap, const char*);
+      int nName = sqlite4Strlen30(zName);
+      KVFactory *pMkr = sqlite4_malloc(pEnv, sizeof(*pMkr)+nName+1);
+      char *z;
+      if( pMkr==0 ) return SQLITE_NOMEM;
+      z = (char*)&pMkr[1];
+      memcpy(z, zName, nName+1);
+      memset(pMkr, 0, sizeof(*pMkr));
+      pMkr->zName = z;
+      pMkr->xFactory = va_arg(ap, 
+            int(*)(sqlite4_env*, KVStore **, const char *, unsigned int)
+        );
+      sqlite4_mutex_enter(pEnv->pFactoryMutex);
+      pMkr->pNext = pEnv->pFactory;
+      pEnv->pFactory = pMkr;
+      sqlite4_mutex_leave(pEnv->pFactoryMutex);
       break;
     }
 
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_POP, zName);
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_POP, zName, &pxFact);
     **
     ** Remove a KVStore factory from the stack.
     */
-    case SQLITE_ENVCONFIG_KVSTORE_POP: {
-      *va_arg(ap, int(**)(sqlite4_env*, KVStore**, const char*, unsigned int)) =
-          pEnv->xKVFile;
+    /*
+    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_GET, zName, &pxFact);
+    **
+    ** Get the current factory pointer with the given name but leave the
+    ** factory on the stack.
+    */
+    case SQLITE_ENVCONFIG_KVSTORE_POP:
+    case SQLITE_ENVCONFIG_KVSTORE_GET: {
+      const char *zName = va_arg(ap, const char*);
+      KVFactory *pMkr, **ppPrev;
+      int (**pxFact)(sqlite4_env*,KVStore**,const char*,unsigned);
+
+      pxFact = va_arg(ap,int(**)(sqlite4_env*,KVStore*,const char*,unsigned));
+      *pxFact = 0;
+      sqlite4_mutex_enter(pEnv->pFactoryMutex);
+      ppPrev = &pEnv->pFactory;
+      pMkr = *ppPrev;
+      while( pMkr && strcmp(zName, pMkr->zName)!=0 ){
+        ppPrev = &pMkr->pNext;
+        pMkr = *ppPrev;
+      }
+      if( pMkr ){
+        *pxFact = pMkr->xFactory;
+        if( op==SQLITE_ENVCONFIG_KVSTORE_POP && pMkr->isPerm==0 ){
+          *ppPrev = pMkr->pNext;
+          sqlite4_free(pEnv, pMkr);
+        }
+      }
+      sqlite4_mutex_leave(pEnv->pFactoryMutex);
       break;
     }
 
@@ -835,15 +778,15 @@ int sqlite4_close(sqlite4 *db){
 
   assert( db->nDb<=2 );
   assert( db->aDb==db->aDbStatic );
-  for(j=0; j<ArraySize(db->aFunc.a); j++){
-    FuncDef *pNext, *pHash, *p;
-    for(p=db->aFunc.a[j]; p; p=pHash){
-      pHash = p->pHash;
+  {
+    FuncDef *pNext, *pSame, *p;
+    for(p=db->aFunc.pFirst; p; p=pNext){
+      pNext = p->pNextName;
       while( p ){
         functionDestroy(db, p);
-        pNext = p->pNext;
+        pSame = p->pSameName;
         sqlite4DbFree(db, p);
-        p = pNext;
+        p = pSame;
       }
     }
   }
@@ -1742,10 +1685,6 @@ static int openDatabase(
 
   if( pEnv->bCoreMutex==0 ){
     isThreadsafe = 0;
-  }else if( flags & SQLITE_OPEN_NOMUTEX ){
-    isThreadsafe = 0;
-  }else if( flags & SQLITE_OPEN_FULLMUTEX ){
-    isThreadsafe = 1;
   }else{
     isThreadsafe = pEnv->bFullMutex;
   }
@@ -1755,7 +1694,7 @@ static int openDatabase(
   if( db==0 ) goto opendb_out;
   db->pEnv = pEnv;
   if( isThreadsafe ){
-    db->mutex = sqlite4MutexAlloc(SQLITE_MUTEX_RECURSIVE);
+    db->mutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_RECURSIVE);
     if( db->mutex==0 ){
       sqlite4_free(pEnv, db);
       db = 0;
@@ -1803,7 +1742,6 @@ static int openDatabase(
   );
 
   /* Parse the filename/URI argument. */
-  db->openFlags = flags;
   rc = sqlite4ParseUri(pEnv, zFilename, &flags, &zOpen, &zErrMsg);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_NOMEM ) db->mallocFailed = 1;
@@ -1811,9 +1749,10 @@ static int openDatabase(
     sqlite4_free(pEnv, zErrMsg);
     goto opendb_out;
   }
+  db->openFlags = flags;
 
   /* Open the backend database driver */
-  rc = sqlite4KVStoreOpen(db, "main", zOpen, &db->aDb[0].pKV, 0);
+  rc = sqlite4KVStoreOpen(db, "main", zOpen, &db->aDb[0].pKV, flags);
   if( rc!=SQLITE_OK ){
     if( rc==SQLITE_IOERR_NOMEM ){
       rc = SQLITE_NOMEM;
@@ -2014,21 +1953,21 @@ int sqlite4_get_autocommit(sqlite4 *db){
 */
 int sqlite4CorruptError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(SQLITE_CORRUPT,
+  sqlite4_log(0, SQLITE_CORRUPT,
               "database corruption at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
   return SQLITE_CORRUPT;
 }
 int sqlite4MisuseError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(SQLITE_MISUSE, 
+  sqlite4_log(0, SQLITE_MISUSE, 
               "misuse at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
   return SQLITE_MISUSE;
 }
 int sqlite4CantopenError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(SQLITE_CANTOPEN, 
+  sqlite4_log(0, SQLITE_CANTOPEN, 
               "cannot open file at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
   return SQLITE_CANTOPEN;
@@ -2085,51 +2024,6 @@ int sqlite4_test_control(int op, ...){
   va_list ap;
   va_start(ap, op);
   switch( op ){
-
-    /*
-    ** Save the current state of the PRNG.
-    */
-    case SQLITE_TESTCTRL_PRNG_SAVE: {
-      sqlite4PrngSaveState();
-      break;
-    }
-
-    /*
-    ** Restore the state of the PRNG to the last state saved using
-    ** PRNG_SAVE.  If PRNG_SAVE has never before been called, then
-    ** this verb acts like PRNG_RESET.
-    */
-    case SQLITE_TESTCTRL_PRNG_RESTORE: {
-      sqlite4PrngRestoreState();
-      break;
-    }
-
-    /*
-    ** Reset the PRNG back to its uninitialized state.  The next call
-    ** to sqlite4_randomness() will reseed the PRNG using a single call
-    ** to the xRandomness method of the default VFS.
-    */
-    case SQLITE_TESTCTRL_PRNG_RESET: {
-      sqlite4PrngResetState();
-      break;
-    }
-
-    /*
-    **  sqlite4_test_control(BENIGN_MALLOC_HOOKS, xBegin, xEnd)
-    **
-    ** Register hooks to call to indicate which malloc() failures 
-    ** are benign.
-    */
-    case SQLITE_TESTCTRL_BENIGN_MALLOC_HOOKS: {
-      typedef void (*void_function)(void);
-      void_function xBenignBegin;
-      void_function xBenignEnd;
-      xBenignBegin = va_arg(ap, void_function);
-      xBenignEnd = va_arg(ap, void_function);
-      sqlite4BenignMallocHooks(0, xBenignBegin, xBenignEnd);
-      break;
-    }
-
     /*
     **  sqlite4_test_control(SQLITE_TESTCTRL_ASSERT, int X)
     **

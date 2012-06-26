@@ -16,24 +16,13 @@
 #include <stdarg.h>
 
 /*
-** State information local to the memory allocation subsystem.
-*/
-static SQLITE_WSD struct Mem0Global {
-  sqlite4_mutex *mutex;         /* Mutex to serialize access */
-} mem0 = { 0 };
-
-/*
 ** Initialize the memory allocation subsystem.
 */
 int sqlite4MallocInit(sqlite4_env *pEnv){
   if( pEnv->m.xMalloc==0 ){
     sqlite4MemSetDefault(pEnv);
   }
-  memset(&mem0, 0, sizeof(mem0));
-  if( pEnv->bCoreMutex ){
-    mem0.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
-  }
-  return pEnv->m.xInit(pEnv->m.pAppData);
+  return pEnv->m.xInit(pEnv->m.pMemEnv);
 }
 
 /*
@@ -41,9 +30,8 @@ int sqlite4MallocInit(sqlite4_env *pEnv){
 */
 void sqlite4MallocEnd(sqlite4_env *pEnv){
   if( pEnv->m.xShutdown ){
-    pEnv->m.xShutdown(pEnv->m.pAppData);
+    pEnv->m.xShutdown(pEnv->m.pMemEnv);
   }
-  memset(&mem0, 0, sizeof(mem0));
 }
 
 /*
@@ -87,17 +75,17 @@ void *sqlite4Malloc(sqlite4_env *pEnv, int n){
     p = 0;
   }else if( pEnv->bMemstat ){
     int nFull = (n + 7)&~7;
-    sqlite4_mutex_enter(mem0.mutex);
-    p = pEnv->m.xMalloc(pEnv->m.pAppData, nFull);
+    sqlite4_mutex_enter(pEnv->pMemMutex);
+    p = pEnv->m.xMalloc(pEnv->m.pMemEnv, nFull);
     if( p ){
       nFull = sqlite4MallocSize(pEnv, p);
       sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, nFull);
       sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MALLOC_COUNT, 1);
     }
     sqlite4StatusSet(pEnv, SQLITE_ENVSTATUS_MALLOC_SIZE, n);
-    sqlite4_mutex_leave(mem0.mutex);
+    sqlite4_mutex_leave(pEnv->pMemMutex);
   }else{
-    p = pEnv->m.xMalloc(pEnv->m.pAppData, n);
+    p = pEnv->m.xMalloc(pEnv->m.pMemEnv, n);
   }
   assert( EIGHT_BYTE_ALIGNMENT(p) );  /* IMP: R-04675-44850 */
   return p;
@@ -136,7 +124,7 @@ int sqlite4MallocSize(sqlite4_env *pEnv, void *p){
   assert( sqlite4MemdebugHasType(p, MEMTYPE_HEAP) );
   assert( sqlite4MemdebugNoType(p, MEMTYPE_DB) );
   if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
-  return pEnv->m.xSize(pEnv->m.pAppData, p);
+  return pEnv->m.xSize(pEnv->m.pMemEnv, p);
 }
 int sqlite4DbMallocSize(sqlite4 *db, void *p){
   assert( db==0 || sqlite4_mutex_held(db->mutex) );
@@ -147,7 +135,7 @@ int sqlite4DbMallocSize(sqlite4 *db, void *p){
     assert( sqlite4MemdebugHasType(p, MEMTYPE_DB) );
     assert( sqlite4MemdebugHasType(p, MEMTYPE_LOOKASIDE|MEMTYPE_HEAP) );
     assert( db!=0 || sqlite4MemdebugNoType(p, MEMTYPE_LOOKASIDE) );
-    return pEnv->m.xSize(pEnv->m.pAppData, p);
+    return pEnv->m.xSize(pEnv->m.pMemEnv, p);
   }
 }
 
@@ -160,14 +148,14 @@ void sqlite4_free(sqlite4_env *pEnv, void *p){
   assert( sqlite4MemdebugHasType(p, MEMTYPE_HEAP) );
   if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
   if( pEnv->bMemstat ){
-    sqlite4_mutex_enter(mem0.mutex);
+    sqlite4_mutex_enter(pEnv->pMemMutex);
     sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MEMORY_USED,
                      -sqlite4MallocSize(pEnv, p));
     sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MALLOC_COUNT, -1);
-    pEnv->m.xFree(pEnv->m.pAppData, p);
-    sqlite4_mutex_leave(mem0.mutex);
+    pEnv->m.xFree(pEnv->m.pMemEnv, p);
+    sqlite4_mutex_leave(pEnv->pMemMutex);
   }else{
-    pEnv->m.xFree(pEnv->m.pAppData, p);
+    pEnv->m.xFree(pEnv->m.pMemEnv, p);
   }
 }
 
@@ -219,18 +207,18 @@ void *sqlite4Realloc(sqlite4_env *pEnv, void *pOld, int nBytes){
   nOld = sqlite4MallocSize(pEnv, pOld);
   nNew = (nBytes + 7)&~7;
   if( pEnv->bMemstat ){
-    sqlite4_mutex_enter(mem0.mutex);
+    sqlite4_mutex_enter(pEnv->pMemMutex);
     sqlite4StatusSet(pEnv, SQLITE_ENVSTATUS_MALLOC_SIZE, nBytes);
     assert( sqlite4MemdebugHasType(pOld, MEMTYPE_HEAP) );
     assert( sqlite4MemdebugNoType(pOld, ~MEMTYPE_HEAP) );
-    pNew = pEnv->m.xRealloc(pEnv->m.pAppData, pOld, nNew);
+    pNew = pEnv->m.xRealloc(pEnv->m.pMemEnv, pOld, nNew);
     if( pNew ){
       nNew = sqlite4MallocSize(pEnv, pNew);
       sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, nNew-nOld);
     }
-    sqlite4_mutex_leave(mem0.mutex);
+    sqlite4_mutex_leave(pEnv->pMemMutex);
   }else{
-    pNew = pEnv->m.xRealloc(pEnv->m.pAppData, pOld, nNew);
+    pNew = pEnv->m.xRealloc(pEnv->m.pMemEnv, pOld, nNew);
   }
   assert( EIGHT_BYTE_ALIGNMENT(pNew) ); /* IMP: R-04675-44850 */
   return pNew;

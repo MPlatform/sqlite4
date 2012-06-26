@@ -1099,7 +1099,7 @@ static void currentTimeFunc(
 ** external linkage.
 */
 void sqlite4RegisterDateTimeFunctions(sqlite4_env *pEnv){
-  static SQLITE_WSD FuncDef aDateTimeFuncs[] = {
+  static FuncDef aDateTimeFuncs[] = {
 #ifndef SQLITE_OMIT_DATETIME_FUNCS
     FUNCTION(julianday,        -1, 0, 0, juliandayFunc ),
     FUNCTION(date,             -1, 0, 0, dateFunc      ),
@@ -1116,10 +1116,10 @@ void sqlite4RegisterDateTimeFunctions(sqlite4_env *pEnv){
 #endif
   };
   int i;
-  FuncDefHash *pHash = &sqlite4GlobalFunctions;
+  FuncDefTable *pFuncTab = &pEnv->aGlobalFuncs;
   FuncDef *aFunc = (FuncDef*)aDateTimeFuncs;
 
   for(i=0; i<ArraySize(aDateTimeFuncs); i++){
-    sqlite4FuncDefInsert(pHash, &aFunc[i]);
+    sqlite4FuncDefInsert(pFuncTab, &aFunc[i], 1);
   }
 }

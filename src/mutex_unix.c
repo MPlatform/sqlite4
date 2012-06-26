@@ -38,7 +38,8 @@
 /*
 ** Each recursive mutex is an instance of the following structure.
 */
-struct sqlite4_mutex {
+typedef struct sqlite4UnixMutex {
+  sqlite4_mutex base;        /* Base class.  Must be first */
   pthread_mutex_t mutex;     /* Mutex controlling the lock */
 #if SQLITE_MUTEX_NREF
   int id;                    /* Mutex type */
@@ -46,11 +47,12 @@ struct sqlite4_mutex {
   volatile pthread_t owner;  /* Thread that is within this mutex */
   int trace;                 /* True to trace changes */
 #endif
-};
+} sqlite4UnixMutex;
 #if SQLITE_MUTEX_NREF
-#define SQLITE3_MUTEX_INITIALIZER { PTHREAD_MUTEX_INITIALIZER, 0, 0, (pthread_t)0, 0 }
+#define SQLITE3_MUTEX_INITIALIZER \
+  { 0, PTHREAD_MUTEX_INITIALIZER, 0, 0, (pthread_t)0, 0 }
 #else
-#define SQLITE3_MUTEX_INITIALIZER { PTHREAD_MUTEX_INITIALIZER }
+#define SQLITE3_MUTEX_INITIALIZER { 0, PTHREAD_MUTEX_INITIALIZER }
 #endif
 
 /*
@@ -70,10 +72,12 @@ struct sqlite4_mutex {
 ** routines are never called.
 */
 #if !defined(NDEBUG) || defined(SQLITE_DEBUG)
-static int pthreadMutexHeld(sqlite4_mutex *p){
+static int pthreadMutexHeld(sqlite4_mutex *pMutex){
+  sqlite4UnixMutex *p = (sqlite4UnixMutex*)pMutex;
   return (p->nRef!=0 && pthread_equal(p->owner, pthread_self()));
 }
-static int pthreadMutexNotheld(sqlite4_mutex *p){
+static int pthreadMutexNotheld(sqlite4_mutex *pMutex){
+  sqlite4UnixMutex *p = (sqlite4UnixMutex*)pMutex;
   return p->nRef==0 || pthread_equal(p->owner, pthread_self())==0;
 }
 #endif
@@ -81,8 +85,8 @@ static int pthreadMutexNotheld(sqlite4_mutex *p){
 /*
 ** Initialize and deinitialize the mutex subsystem.
 */
-static int pthreadMutexInit(void){ return SQLITE_OK; }
-static int pthreadMutexEnd(void){ return SQLITE_OK; }
+static int pthreadMutexInit(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
+static int pthreadMutexEnd(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
 
 /*
 ** The sqlite4_mutex_alloc() routine allocates a new
@@ -126,19 +130,12 @@ static int pthreadMutexEnd(void){ return SQLITE_OK; }
 ** mutex types, the same mutex is returned on every call that has
 ** the same type number.
 */
-static sqlite4_mutex *pthreadMutexAlloc(int iType){
-  static sqlite4_mutex staticMutexes[] = {
-    SQLITE3_MUTEX_INITIALIZER,
-    SQLITE3_MUTEX_INITIALIZER,
-    SQLITE3_MUTEX_INITIALIZER,
-    SQLITE3_MUTEX_INITIALIZER,
-    SQLITE3_MUTEX_INITIALIZER,
-    SQLITE3_MUTEX_INITIALIZER
-  };
-  sqlite4_mutex *p;
+static sqlite4_mutex *pthreadMutexAlloc(void *pMutexEnv, int iType){
+  sqlite4_env *pEnv = (sqlite4_env*)pMutexEnv;
+  sqlite4UnixMutex *p;
   switch( iType ){
     case SQLITE_MUTEX_RECURSIVE: {
-      p = sqlite4MallocZero(0, sizeof(*p) );
+      p = sqlite4MallocZero(pEnv, sizeof(*p) );
       if( p ){
 #ifdef SQLITE_HOMEGROWN_RECURSIVE_MUTEX
         /* If recursive mutexes are not available, we will have to
@@ -155,30 +152,28 @@ static sqlite4_mutex *pthreadMutexAlloc(int iType){
 #if SQLITE_MUTEX_NREF
         p->id = iType;
 #endif
+        p->base.pMutexMethods = &pEnv->mutex;
       }
       break;
     }
     case SQLITE_MUTEX_FAST: {
-      p = sqlite4MallocZero(0, sizeof(*p) );
+      p = sqlite4MallocZero(pEnv, sizeof(*p) );
       if( p ){
 #if SQLITE_MUTEX_NREF
         p->id = iType;
 #endif
         pthread_mutex_init(&p->mutex, 0);
+        p->base.pMutexMethods = &pEnv->mutex;
+        assert( p->base.pMutexMethods->pMutexEnv==(void*)pEnv );
       }
       break;
     }
     default: {
-      assert( iType-2 >= 0 );
-      assert( iType-2 < ArraySize(staticMutexes) );
-      p = &staticMutexes[iType-2];
-#if SQLITE_MUTEX_NREF
-      p->id = iType;
-#endif
+      p = 0;
       break;
     }
   }
-  return p;
+  return (sqlite4_mutex*)p;
 }
 
 
@@ -187,11 +182,14 @@ static sqlite4_mutex *pthreadMutexAlloc(int iType){
 ** allocated mutex.  SQLite is careful to deallocate every
 ** mutex that it allocates.
 */
-static void pthreadMutexFree(sqlite4_mutex *p){
+static void pthreadMutexFree(sqlite4_mutex *pMutex){
+  sqlite4UnixMutex *p = (sqlite4UnixMutex*)pMutex;
+  sqlite4_env *pEnv;
   assert( p->nRef==0 );
   assert( p->id==SQLITE_MUTEX_FAST || p->id==SQLITE_MUTEX_RECURSIVE );
   pthread_mutex_destroy(&p->mutex);
-  sqlite4_free(0, p);
+  pEnv = (sqlite4_env*)p->base.pMutexMethods->pMutexEnv;
+  sqlite4_free(pEnv, p);
 }
 
 /*
@@ -205,8 +203,9 @@ static void pthreadMutexFree(sqlite4_mutex *p){
 ** can enter.  If the same thread tries to enter any other kind of mutex
 ** more than once, the behavior is undefined.
 */
-static void pthreadMutexEnter(sqlite4_mutex *p){
-  assert( p->id==SQLITE_MUTEX_RECURSIVE || pthreadMutexNotheld(p) );
+static void pthreadMutexEnter(sqlite4_mutex *pMutex){
+  sqlite4UnixMutex *p = (sqlite4UnixMutex*)pMutex;
+  assert( p->id==SQLITE_MUTEX_RECURSIVE || pthreadMutexNotheld(pMutex) );
 
 #ifdef SQLITE_HOMEGROWN_RECURSIVE_MUTEX
   /* If recursive mutexes are not available, then we have to grow
@@ -247,9 +246,10 @@ static void pthreadMutexEnter(sqlite4_mutex *p){
   }
 #endif
 }
-static int pthreadMutexTry(sqlite4_mutex *p){
+static int pthreadMutexTry(sqlite4_mutex *pMutex){
   int rc;
-  assert( p->id==SQLITE_MUTEX_RECURSIVE || pthreadMutexNotheld(p) );
+  sqlite4UnixMutex *p = (sqlite4UnixMutex*)pMutex;
+  assert( p->id==SQLITE_MUTEX_RECURSIVE || pthreadMutexNotheld(pMutex) );
 
 #ifdef SQLITE_HOMEGROWN_RECURSIVE_MUTEX
   /* If recursive mutexes are not available, then we have to grow
@@ -304,8 +304,9 @@ static int pthreadMutexTry(sqlite4_mutex *p){
 ** is undefined if the mutex is not currently entered or
 ** is not currently allocated.  SQLite will never do either.
 */
-static void pthreadMutexLeave(sqlite4_mutex *p){
-  assert( pthreadMutexHeld(p) );
+static void pthreadMutexLeave(sqlite4_mutex *pMutex){
+  sqlite4UnixMutex *p = (sqlite4UnixMutex*)pMutex;
+  assert( pthreadMutexHeld(pMutex) );
 #if SQLITE_MUTEX_NREF
   p->nRef--;
   if( p->nRef==0 ) p->owner = 0;
@@ -338,11 +339,12 @@ sqlite4_mutex_methods const *sqlite4DefaultMutex(void){
     pthreadMutexLeave,
 #ifdef SQLITE_DEBUG
     pthreadMutexHeld,
-    pthreadMutexNotheld
+    pthreadMutexNotheld,
 #else
     0,
-    0
+    0,
 #endif
+    0
   };
 
   return &sMutex;

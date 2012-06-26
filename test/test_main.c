@@ -3269,19 +3269,6 @@ static int test_open_v2(
       { "SQLITE_OPEN_READONLY", SQLITE_OPEN_READONLY },
       { "SQLITE_OPEN_READWRITE", SQLITE_OPEN_READWRITE },
       { "SQLITE_OPEN_CREATE", SQLITE_OPEN_CREATE },
-      { "SQLITE_OPEN_DELETEONCLOSE", SQLITE_OPEN_DELETEONCLOSE },
-      { "SQLITE_OPEN_EXCLUSIVE", SQLITE_OPEN_EXCLUSIVE },
-      { "SQLITE_OPEN_AUTOPROXY", SQLITE_OPEN_AUTOPROXY },
-      { "SQLITE_OPEN_MAIN_DB", SQLITE_OPEN_MAIN_DB },
-      { "SQLITE_OPEN_TEMP_DB", SQLITE_OPEN_TEMP_DB },
-      { "SQLITE_OPEN_TRANSIENT_DB", SQLITE_OPEN_TRANSIENT_DB },
-      { "SQLITE_OPEN_MAIN_JOURNAL", SQLITE_OPEN_MAIN_JOURNAL },
-      { "SQLITE_OPEN_TEMP_JOURNAL", SQLITE_OPEN_TEMP_JOURNAL },
-      { "SQLITE_OPEN_SUBJOURNAL", SQLITE_OPEN_SUBJOURNAL },
-      { "SQLITE_OPEN_MASTER_JOURNAL", SQLITE_OPEN_MASTER_JOURNAL },
-      { "SQLITE_OPEN_NOMUTEX", SQLITE_OPEN_NOMUTEX },
-      { "SQLITE_OPEN_FULLMUTEX", SQLITE_OPEN_FULLMUTEX },
-      { "SQLITE_OPEN_WAL", SQLITE_OPEN_WAL },
       { 0, 0 }
     };
     rc = Tcl_GetIndexFromObjStruct(interp, apFlag[i], aFlag, sizeof(aFlag[0]), 
@@ -3973,51 +3960,6 @@ static int test_limit(
   return TCL_OK;  
 }
 
-/*
-** tclcmd:  save_prng_state
-**
-** Save the state of the pseudo-random number generator.
-** At the same time, verify that sqlite4_test_control works even when
-** called with an out-of-range opcode.
-*/
-static int save_prng_state(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  int rc = sqlite4_test_control(9999);
-  assert( rc==0 );
-  rc = sqlite4_test_control(-1);
-  assert( rc==0 );
-  sqlite4_test_control(SQLITE_TESTCTRL_PRNG_SAVE);
-  return TCL_OK;
-}
-/*
-** tclcmd:  restore_prng_state
-*/
-static int restore_prng_state(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4_test_control(SQLITE_TESTCTRL_PRNG_RESTORE);
-  return TCL_OK;
-}
-/*
-** tclcmd:  reset_prng_state
-*/
-static int reset_prng_state(
-  ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int objc,              /* Number of arguments */
-  Tcl_Obj *CONST objv[]  /* Command arguments */
-){
-  sqlite4_test_control(SQLITE_TESTCTRL_PRNG_RESET);
-  return TCL_OK;
-}
-
 
 #ifdef SQLITE_ENABLE_UNLOCK_NOTIFY
 static void test_unlock_notify_cb(void **aArg, int nArg){
@@ -4507,9 +4449,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 
      { "sqlite4_limit",                 test_limit,                 0},
 
-     { "save_prng_state",               save_prng_state,    0 },
-     { "restore_prng_state",            restore_prng_state, 0 },
-     { "reset_prng_state",              reset_prng_state,   0 },
      { "optimization_control",          optimization_control,0},
 #if SQLITE_OS_WIN
      { "lock_win32_file",               win32_file_lock,    0 },
