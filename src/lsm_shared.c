@@ -754,9 +754,8 @@ int lsmDbUpdateClient(lsm_db *pDb, int nHdrLevel){
     p->pClient = pNew;
     assertSnapshotListOk(p);
     if( pDb->pClient ){
-      assert( pDb->pClient==pOld );
-      pDb->pClient = p->pClient;
-      p->pClient->nRef++;
+      pDb->pClient = pNew;
+      pNew->nRef++;
     }
     lsmMutexLeave(pDb->pEnv, p->pClientMutex);
 

@@ -901,20 +901,26 @@ int test_lsm_mt3(const char *zFilename, int bClear, TestDb **ppDb){
   return test_lsm_mt(zFilename, 2, bClear, ppDb);
 }
 
-int test_lsm_config_str(lsm_db *pDb, const char *zStr){
+int test_lsm_config_str(
+  lsm_db *pDb, 
+  int bWorker,
+  const char *zStr
+){
   
   struct CfgParam {
     const char *zParam;
+    int bWorker;
     int eParam;
   } aParam[] = {
-    { "write_buffer",   LSM_CONFIG_WRITE_BUFFER },
-    { "page_size",      LSM_CONFIG_PAGE_SIZE },
-    { "safety",         LSM_CONFIG_SAFETY },
-    { "autowork",       LSM_CONFIG_AUTOWORK },
-    { "log_size",       LSM_CONFIG_LOG_SIZE },
-    { "mmap",           LSM_CONFIG_MMAP },
-    { "use_log",        LSM_CONFIG_USE_LOG },
-    { "nmerge",         LSM_CONFIG_NMERGE },
+    { "write_buffer",   0, LSM_CONFIG_WRITE_BUFFER },
+    { "page_size",      0, LSM_CONFIG_PAGE_SIZE },
+    { "safety",         0, LSM_CONFIG_SAFETY },
+    { "autowork",       0, LSM_CONFIG_AUTOWORK },
+    { "log_size",       0, LSM_CONFIG_LOG_SIZE },
+    { "mmap",           0, LSM_CONFIG_MMAP },
+    { "use_log",        0, LSM_CONFIG_USE_LOG },
+    { "nmerge",         0, LSM_CONFIG_NMERGE },
+    { "worker_nmerge",  1, LSM_CONFIG_NMERGE },
     { 0, 0 }
   };
   char *z = zStr;
@@ -928,7 +934,8 @@ int test_lsm_config_str(lsm_db *pDb, const char *zStr){
 
     while( *z && *z!='=' ) z++;
     if( *z ){
-      int iParam;
+      int eParam;
+      int i;
       int iVal;
       int rc;
       char zParam[32];
@@ -937,9 +944,9 @@ int test_lsm_config_str(lsm_db *pDb, const char *zStr){
 
       memcpy(zParam, zStart, nParam);
       zParam[nParam] = '\0';
-      rc = testArgSelect(aParam, "param", zParam, &iParam);
+      rc = testArgSelect(aParam, "param", zParam, &i);
       if( rc!=0 ) return rc;
-      iParam = aParam[iParam].eParam;
+      eParam = aParam[i].eParam;
 
       z++;
       zStart = z;
@@ -950,7 +957,9 @@ int test_lsm_config_str(lsm_db *pDb, const char *zStr){
       zParam[nParam] = '\0';
       iVal = atoi(zParam);
 
-      lsm_config(pDb, iParam, &iVal);
+      if( bWorker || aParam[i].bWorker==0 ){
+        lsm_config(pDb, eParam, &iVal);
+      }
     }else if( z!=zStart ){
       goto syntax_error;
     }
@@ -968,9 +977,9 @@ int tdb_lsm_config_str(TestDb *pDb, const char *zStr){
     int i;
     LsmDb *pLsm = (LsmDb *)pDb;
 
-    rc = test_lsm_config_str(pLsm->db, zStr);
+    rc = test_lsm_config_str(pLsm->db, 0, zStr);
     for(i=0; rc==0 && i<pLsm->nWorker; i++){
-      rc = test_lsm_config_str(pLsm->aWorker[i].pWorker, zStr);
+      rc = test_lsm_config_str(pLsm->aWorker[i].pWorker, 1, zStr);
     }
   }
   return rc;
