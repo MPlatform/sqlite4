@@ -539,7 +539,7 @@ static int sqlite4Prepare(
   }
 #endif
 
-  if( db->init.busy==0 ){
+  if( /*db->init.busy==0*/ 1 ){
     Vdbe *pVdbe = pParse->pVdbe;
     sqlite4VdbeSetSql(pVdbe, zSql, (int)(pParse->zTail-zSql));
   }
