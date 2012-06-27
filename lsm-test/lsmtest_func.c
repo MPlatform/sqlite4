@@ -61,7 +61,7 @@ int do_work(int nArg, char **azArg){
 
 
 /*
-**   lsmtest show DATABASE ?array|page PGNO?
+**   lsmtest show DATABASE ?array|page-ascii|page-hex PGNO?
 */
 int do_show(int nArg, char **azArg){
   lsm_db *pDb;
@@ -84,7 +84,7 @@ int do_show(int nArg, char **azArg){
   char *z = 0;
 
   if( nArg!=1 && nArg!=3 ){
-    testPrintUsage("DATABASE ?array|page PGNO?");
+    testPrintUsage("DATABASE ?array|page-ascii|page-hex PGNO?");
     return -1;
   }
   if( nArg==3 ){
@@ -129,6 +129,3 @@ int do_show(int nArg, char **azArg){
   lsm_close(pDb);
   return rc;
 }
-
-
-
