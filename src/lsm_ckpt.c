@@ -66,12 +66,10 @@
 **
 ** In the above, a segment record is:
 **
-**     1. First page of main array,
-**     2. Last page of main array,
-**     3. Size of main array in pages,
-**     4. First page of separators array (or 0),
-**     5. Last page of separators array (or 0),
-**     6. Root page of separators array (or 0).
+**     1. First page of array,
+**     2. Last page of array,
+**     3. Root page of array (or 0),
+**     4. Size of array in pages,
 */
 
 /*
@@ -223,21 +221,10 @@ static void ckptExportSegment(
 ){
   int iOut = *piOut;
 
-  ckptSetValue(p, iOut++, pSeg->run.iFirst, pRc);
-  ckptSetValue(p, iOut++, pSeg->run.iLast, pRc);
-  ckptSetValue(p, iOut++, pSeg->run.iRoot, pRc);
-  ckptSetValue(p, iOut++, pSeg->run.nSize, pRc);
-  if( segmentHasSeparators(pSeg) ){
-    ckptSetValue(p, iOut++, pSeg->sep.iFirst, pRc);
-    ckptSetValue(p, iOut++, pSeg->sep.iLast, pRc);
-    ckptSetValue(p, iOut++, pSeg->sep.iRoot, pRc);
-    ckptSetValue(p, iOut++, pSeg->sep.nSize, pRc);
-  }else{
-    ckptSetValue(p, iOut++, 0, pRc);
-    ckptSetValue(p, iOut++, 0, pRc);
-    ckptSetValue(p, iOut++, 0, pRc);
-    ckptSetValue(p, iOut++, 0, pRc);
-  }
+  ckptSetValue(p, iOut++, pSeg->iFirst, pRc);
+  ckptSetValue(p, iOut++, pSeg->iLast, pRc);
+  ckptSetValue(p, iOut++, pSeg->iRoot, pRc);
+  ckptSetValue(p, iOut++, pSeg->nSize, pRc);
 
   *piOut = iOut;
 }
@@ -390,20 +377,12 @@ static void ckptNewSegment(
 ){
   int iIn = *piIn;
 
-  assert( pSegment->run.iFirst==0 && pSegment->run.iLast==0 );
-  assert( pSegment->run.nSize==0 && pSegment->run.iRoot==0 );
-  assert( pSegment->sep.iFirst==0 && pSegment->sep.iLast==0 );
-  assert( pSegment->sep.nSize==0 && pSegment->sep.iRoot==0 );
-
-  pSegment->run.iFirst = aIn[iIn++];
-  pSegment->run.iLast = aIn[iIn++];
-  pSegment->run.iRoot = aIn[iIn++];
-  pSegment->run.nSize = aIn[iIn++];
-  pSegment->sep.iFirst = aIn[iIn++];
-  pSegment->sep.iLast = aIn[iIn++];
-  pSegment->sep.iRoot = aIn[iIn++];
-  pSegment->sep.nSize = aIn[iIn++];
-  if( pSegment->sep.iFirst && pSegment->sep.nSize==0 ) pSegment->sep.nSize = 1;
+  assert( pSegment->iFirst==0 && pSegment->iLast==0 );
+  assert( pSegment->nSize==0 && pSegment->iRoot==0 );
+  pSegment->iFirst = aIn[iIn++];
+  pSegment->iLast = aIn[iIn++];
+  pSegment->iRoot = aIn[iIn++];
+  pSegment->nSize = aIn[iIn++];
 
   *piIn = iIn;
 }
@@ -425,11 +404,9 @@ static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
   /* Populate the Merge object. */
   pMerge->aInput = (MergeInput *)&pMerge[1];
   pMerge->nInput = nInput;
-  pMerge->aiOutputOff[0] = -1;
-  pMerge->aiOutputOff[1] = -1;
+  pMerge->iOutputOff = -1;
+  pMerge->bHierReadonly = 1;
   pMerge->nSkip = (int)aInt[iIn++];
-  pMerge->abHierReadonly[0] = 1;
-  pMerge->abHierReadonly[1] = 1;
   for(i=0; i<nInput; i++){
     pMerge->aInput[i].iPg = (Pgno)aInt[iIn++];
     pMerge->aInput[i].iCell = (int)aInt[iIn++];
@@ -504,7 +481,6 @@ static int ckptImport(lsm_db *pDb, void *pCkpt, int nInt, int *pRc){
   int ret = 0;
   if( *pRc==LSM_OK ){
     Snapshot *pSnap = pDb->pWorker;
-    FileSystem *pFS = pDb->pFS;
     u32 cksum[2] = {0, 0};
     u32 *aInt = (u32 *)pCkpt;
 
@@ -691,7 +667,7 @@ int lsmCheckpointLevels(
   int *pnVal                      /* OUT: Size of LEVELS blob in bytes */
 ){
   int rc = LSM_OK;                /* Return code */
-  const int SEGMENT_SIZE = 8;     /* Size of a checkpoint segment record */
+  const int SEGMENT_SIZE = 4;     /* Size of a checkpoint segment record */
   Level *p;                       /* Used to iterate through levels */
   int nFree;                      /* Free integers remaining in db header */
   int nHdr = 0;                   /* Number of levels stored in db header */
