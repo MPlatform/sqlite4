@@ -409,6 +409,25 @@ proc static_toggle_pagemode {C} {
   $myText yview moveto $y
 }
 
+# Display the content of text widget $t in the editor identified by
+# the $env(VISUAL) environment variable.
+#
+proc show_text_in_editor {t} {
+  if {![info exists ::env(VISUAL)]} {
+    tk_messageBox -type ok -title {No VISUAL} -message \
+       "The VISUAL environment variable is not set"
+    return
+  }
+  set fn [format temp-%08x%08x [expr {int(rand()*0xffffffff)}] \
+                               [expr {int(rand()*0xffffffff)}]]
+  set fd [open $fn w]
+  puts $fd [$t get 1.0 end]
+  flush $fd
+  close $fd
+  exec $::env(VISUAL) $fn &
+  after 1000 [subst {catch {file delete -force $fn}}]
+}
+
 proc static_setup {zDb} {
 
   panedwindow .pan -orient horizontal
@@ -426,7 +445,9 @@ proc static_setup {zDb} {
   set myMode page-ascii
 
   set myText [scrollable text .pan.t.text -background white -width 80]
-  pack .pan.t.f.pagemode -side right
+  button .pan.t.f.view -command [list show_text_in_editor $myText] \
+                       -text Export
+  pack .pan.t.f.pagemode .pan.t.f.view -side right
   pack .pan.t.f -fill x
   pack .pan.t.text -expand 1 -fill both
 
@@ -458,4 +479,3 @@ if {[llength $argv]==1} {
   dynamic_setup
   fileevent stdin readable [list dynamic_input $C $S]
 }
-

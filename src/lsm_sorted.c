@@ -4186,6 +4186,8 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
   Snapshot *pWorker;              /* Worker snapshot */
   Snapshot *pRelease = 0;         /* Snapshot to release */
   Page *pPg = 0;                  /* Handle for page iPg */
+  int i, j;                       /* Loop counters */
+  const int perLine = 16;         /* Bytes per line in the raw hex dump */
 
   *pzOut = 0;
   if( iPg==0 ) return LSM_ERROR;
@@ -4213,7 +4215,7 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
     flags = pageGetFlags(aData, nData);
 
     lsmStringInit(&str, pDb->pEnv);
-    lsmStringAppendf(&str, "Page : %d\n", iPg);
+    lsmStringAppendf(&str, "Page : %d  (%d bytes)\n", iPg, nData);
     lsmStringAppendf(&str, "nRec : %d\n", nRec);
     lsmStringAppendf(&str, "iPtr : %d\n", iPtr);
     lsmStringAppendf(&str, "flags: %04x\n", flags);
@@ -4246,14 +4248,37 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
           cType, iAbsPtr, (rtTopic(eType) ? "sys" : "usr")
       );
       infoAppendBlob(&str, bHex, aKey, nKey); 
-      lsmStringAppendf(&str, "%*s", nKeyWidth - (nKey*(1+bHex)), "");
       if( nVal>0 ){
+        lsmStringAppendf(&str, "%*s", nKeyWidth - (nKey*(1+bHex)), "");
         lsmStringAppendf(&str, " ");
         infoAppendBlob(&str, bHex, aVal, nVal); 
       }
       lsmStringAppendf(&str, "\n");
     }
 
+    lsmStringAppendf(&str, "\n-------------------" 
+       "-------------------------------------------------------------\n");
+    lsmStringAppendf(&str, "Page %d\n",
+                     iPg, (iPg-1)*nData, iPg*nData - 1);
+    for(i=0; i<nData; i += perLine){
+      lsmStringAppendf(&str, "%04x: ", i);
+      for(j=0; j<perLine; j++){
+        if( i+j>nData ){
+          lsmStringAppendf(&str, "   ");
+        }else{
+          lsmStringAppendf(&str, "%02x ", aData[i+j]);
+        }
+      }
+      lsmStringAppendf(&str, "  ");
+      for(j=0; j<perLine; j++){
+        if( i+j>nData ){
+          lsmStringAppendf(&str, " ");
+        }else{
+          lsmStringAppendf(&str,"%c", isprint(aData[i+j]) ? aData[i+j] : '.');
+        }
+      }
+      lsmStringAppendf(&str,"\n");
+    }
 
     *pzOut = str.z;
     sortedBlobFree(&blob);
