@@ -468,7 +468,6 @@ int do_crash(int nArg, char **azArg){
   return rc;
 }
 
-
 static lsm_db *configure_lsm_db(TestDb *pDb){
   lsm_db *pLsm;
   pLsm = tdb_lsm(pDb);

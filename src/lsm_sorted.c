@@ -327,11 +327,8 @@ struct MergeWorker {
 };
 
 #ifdef LSM_DEBUG_EXPENSIVE
-static void assertAllPointersOk(int rc, lsm_db *pDb);
-static void assertAllBtreesOk(int rc, lsm_db *);
-#else
-# define assertAllPointersOk(y, z)
-# define assertAllBtreesOk(y, z)
+static int assertPointersOk(lsm_db *, SortedRun *, SortedRun *, int);
+static int assertBtreeOk(lsm_db *, SortedRun *);
 #endif
 
 struct FilePage { u8 *aData; int nData; };
@@ -343,8 +340,6 @@ static u8 *fsPageDataPtr(Page *pPg){
   return ((struct FilePage *)(pPg))->aData;
 }
 
-
-static int assertPointersOk(lsm_db *, SortedRun *, SortedRun *, int, char **);
 /*
 ** Write nVal as a 16-bit unsigned big-endian integer into buffer aOut.
 */
@@ -923,63 +918,6 @@ static int btreeCursorNew(
   *ppCsr = pCsr;
   return rc;
 }
-
-#ifndef NDEBUG
-static int assertBtreeOk(
-  lsm_db *pDb,
-  SortedRun *pRun
-){
-  int rc = LSM_OK;                /* Return code */
-  if( pRun->iRoot ){
-    Blob blob = {0, 0, 0};        /* Buffer used to cache overflow keys */
-    FileSystem *pFS = pDb->pFS;   /* File system to read from */
-    Page *pPg = 0;                /* Main run page */
-    BtreeCursor *pCsr = 0;        /* Btree cursor */
-
-    rc = btreeCursorNew(pDb, pRun, &pCsr);
-    if( rc==LSM_OK ){
-      rc = btreeCursorFirst(pCsr);
-    }
-    if( rc==LSM_OK ){
-      rc = lsmFsDbPageGet(pFS, pRun->iFirst, &pPg);
-    }
-
-    while( rc==LSM_OK ){
-      Page *pNext;
-      u8 *aData;
-      int nData;
-      int flags;
-
-      rc = lsmFsDbPageNext(pRun, pPg, 1, &pNext);
-      lsmFsPageRelease(pPg);
-      pPg = pNext;
-      if( pPg==0 ) break;
-      aData = fsPageData(pPg, &nData);
-      flags = pageGetFlags(aData, nData);
-      if( rc==LSM_OK 
-       && 0==((SEGMENT_BTREE_FLAG|PGFTR_SKIP_THIS_FLAG) & flags)
-       && 0!=pageGetNRec(aData, nData)
-      ){
-        u8 *pKey;
-        int nKey;
-        int iTopic;
-        pKey = pageGetKey(pPg, 0, &iTopic, &nKey, &blob);
-        assert( nKey==pCsr->nKey && 0==memcmp(pKey, pCsr->pKey, nKey) );
-        assert( lsmFsPageNumber(pPg)==pCsr->iPtr );
-        rc = btreeCursorNext(pCsr);
-      }
-    }
-    assert( rc!=LSM_OK || pCsr->pKey==0 );
-
-    if( pPg ) lsmFsPageRelease(pPg);
-
-    btreeCursorFree(pCsr);
-    sortedBlobFree(&blob);
-  }
-
-  return rc;
-}
-#endif
 
 static void segmentPtrSetPage(SegmentPtr *pPtr, Page *pNext){
   lsmFsPageRelease(pPtr->pPg);
@@ -3565,13 +3503,13 @@ static int mergeWorkerStep(MergeWorker *pMW){
       rc = lsmFsSortedFinish(pDb->pFS, &pSeg->sep);
     }
 
-#if 1
-    assert( LSM_OK==assertBtreeOk(pDb, &pSeg->run) );
-    if( pMW->pCsr->pBtCsr ){
-      assert( LSM_OK==assertBtreeOk(pDb, &pMW->pLevel->pNext->lhs.run) );
-      assertPointersOk(
-          pDb, &pMW->pLevel->lhs.run, &pMW->pLevel->pNext->lhs.run, 0, 0
-      );
+#ifdef LSM_DEBUG_EXPENSIVE
+    if( rc==LSM_OK ){
+      rc = assertBtreeOk(pDb, &pSeg->run);
+      if( pMW->pCsr->pBtCsr ){
+        SortedRun *pNext = &pMW->pLevel->pNext->lhs.run;
+        rc = assertPointersOk(pDb, &pSeg->run, pNext, 0);
+      }
     }
 #endif
 
@@ -3751,8 +3689,6 @@ int lsmSortedFlushTree(
   lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "tree flush");
 #endif
 
-  assertAllBtreesOk(rc, pDb);
-  assertAllPointersOk(rc, pDb);
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
 
   lsmFinishFlush(pDb, rc==LSM_OK);
@@ -3953,7 +3889,6 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
 
   assert( lsmFsIntegrityCheck(pDb) );
   assert( pWorker );
-  assertAllPointersOk(rc, pDb);
 
   if( lsmDbSnapshotLevel(pWorker)==0 ) return LSM_OK;
   lsmDatabaseDirty(pDb);
@@ -4113,8 +4048,6 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
     *pnWrite = (nWork - nRemaining);
   }
 
-  assertAllBtreesOk(rc, pDb);
-  assertAllPointersOk(rc, pDb);
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   return rc;
 }
@@ -4681,22 +4614,22 @@ void lsmSortedSaveTreeCursors(lsm_db *pDb){
   }
 }
 
+#ifdef LSM_DEBUG_EXPENSIVE */
 /*
-** Check that the array pOne contains the required pointers to pTwo.
-** Array pTwo must be a main array. pOne may be either a separators array
-** or another main array. 
+** This function is only included in the build if LSM_DEBUG_EXPENSIVE is 
+** defined. Its only purpose is to evaluate various assert() statements to 
+** verify that the database is well formed in certain respects.
 **
-** If an error is encountered, *pzErr is set to point to a buffer containing
-** a nul-terminated error message and this function returns immediately. The
-** caller should eventually call lsmFree(*pzErr) to free the allocated
-** error message buffer.
+** More specifically, it checks that the array pOne contains the required 
+** pointers to pTwo. Array pTwo must be a main array. pOne may be either a 
+** separators array or another main array. If pOne does not contain the 
+** correct set of pointers, an assert() statement fails.
 */
 static int assertPointersOk(
   lsm_db *pDb,                    /* Database handle */
   SortedRun *pOne,                /* Run containing pointers */
   SortedRun *pTwo,                /* Run containing pointer targets */
-  int bRhs,                       /* True if pTwo may have been Gobble()d */
-  char **pzErr
+  int bRhs                        /* True if pTwo may have been Gobble()d */
 ){
   int rc = LSM_OK;                /* Error code */
   SegmentPtr ptr1;                /* Iterates through pOne */
@@ -4772,192 +4705,66 @@ static int assertPointersOk(
   return LSM_OK;
 }
 
-
-#ifdef LSM_DEBUG_EXPENSIVE
-
 /*
-** Argument iPg is a page number within a separators run. Assert() that for
-** each key K on on the page, (pKey1 >= K > pKey2) is true. 
+** This function is only included in the build if LSM_DEBUG_EXPENSIVE is 
+** defined. Its only purpose is to evaluate various assert() statements to 
+** verify that the database is well formed in certain respects.
 **
-** Also, if page iPg is a BTREE page, call this function recursively to
-** check that the keys on each child page fall into the expected range.
+** More specifically, it checks that the b-tree embedded in array pRun
+** contains the correct keys. If not, an assert() fails.
 */
-static void assertBtreeRanges(
-  lsm_db *pDb, 
-  SortedRun *pRun, 
-  Pgno iPg,                       /* Database page to load */
-  void *pKey1, int nKey1,         /* All keys must be >= than this */
-  void *pKey2, int nKey2          /* And < than this */
+static int assertBtreeOk(
+  lsm_db *pDb,
+  SortedRun *pRun
 ){
-  Blob blob = {0, 0, 0};
-  u8 *aData;
-  int nData;
-  Page *pPg;
-  int rc;
-  int i;
-  int nRec;
-  int flags;
+  int rc = LSM_OK;                /* Return code */
+  if( pRun->iRoot ){
+    Blob blob = {0, 0, 0};        /* Buffer used to cache overflow keys */
+    FileSystem *pFS = pDb->pFS;   /* File system to read from */
+    Page *pPg = 0;                /* Main run page */
+    BtreeCursor *pCsr = 0;        /* Btree cursor */
 
-  int iPrevTopic = 0;             /* Previous topic value */
-  u8 *aPrev = 0;                  /* Buffer pointing to previous key */
-  int nPrev = 0;                  /* Size of aPrev[] in bytes */
-
-  rc = lsmFsDbPageGet(pDb->pFS, iPg, &pPg);
-  assert( rc==LSM_OK );
-  aData = fsPageData(pPg, &nData);
-
-  nRec = pageGetNRec(aData, nData);
-  flags = pageGetFlags(aData, nData);
-
-  for(i=0; i<nRec; i++){
-    u8 *aKey;
-    int nKey;
-    int iTopic;
-    int iPtr;
-
-    if( flags & SEGMENT_BTREE_FLAG ){
-      aKey = pageGetCell(aData, nData, i);
-      aKey += lsmVarintGet32(aKey, &iPtr);
-      aKey += lsmVarintGet32(aKey, &nKey);
-    }else{
-      aKey = pageGetKey(pPg, i, &iTopic, &nKey, &blob);
+    rc = btreeCursorNew(pDb, pRun, &pCsr);
+    if( rc==LSM_OK ){
+      rc = btreeCursorFirst(pCsr);
+    }
+    if( rc==LSM_OK ){
+      rc = lsmFsDbPageGet(pFS, pRun->iFirst, &pPg);
     }
 
-    assert( pKey1==0 || pDb->xCmp(aKey, nKey, pKey1, nKey1)>=0 );
-    assert( pKey2==0 || pDb->xCmp(aKey, nKey, pKey2, nKey2)<0 );
+    while( rc==LSM_OK ){
+      Page *pNext;
+      u8 *aData;
+      int nData;
+      int flags;
 
-    if( flags&SEGMENT_BTREE_FLAG ){
-      assertBtreeRanges(pDb, pRun, iPtr, aPrev, nPrev, aKey, nKey);
-    }
-    aPrev = aKey;
-    nPrev = nKey;
-  }
-
-  if( flags&SEGMENT_BTREE_FLAG ){
-    int iRight = pageGetPtr(aData, nData);
-    assertBtreeRanges(pDb, pRun, iRight, aPrev, nPrev, 0, 0);
-  }
-
-  lsmFsPageRelease(pPg);
-  sortedBlobFree(&blob);
-}
-
-static int countBtreeKeys(FileSystem *pFS, SortedRun *pRun, Pgno iPg){
-#if 0
-  int rc;
-  Page *pPg;
-  u8 *aData;
-  int nData;
-  int flags;
-  int nRet;
-
-  rc = lsmFsDbPageGet(pFs, iPg, &pPg);
-  assert( rc==LSM_OK );
-  aData = lsmFsPageData(pPg, &nData);
-  flags = pageGetFlags(aData, nData);
-
-  if( flags & SEGMENT_BTREE_FLAG ){
-    Pgno iRight;
-    int nRec;
-    int i;
-
-    iRight = pageGetPtr(aData, nData);
-    nRec = pageGetNRec(aData, nData);
-
-    nRet = nRec;
-    nRet += countBtreeKeys(pFS, pRun, iRight);
-    for(i=0; i<nRec; i++){
-      Pgno iPtr;
-      u8 *aCell = pageGetCell(aData, nData, i);
-      aCell += lsmVarintGet32(aCell, &iPtr);
-      if( iPtr==0 ){
-        lsmVarintGet32(aCell, &iPtr);
-      }
-      nRet += countBtreeKeys(pFS, pRun, iPtr);
-    }
-  }else{
-    nRet = 0;
-  }
-
-  lsmFsPageRelease(pPg);
-  return nRet;
-#endif
-  return 0;
-}
-
-static void assertBtreeSize(FileSystem *pFS, SortedRun *pRun, Pgno iRoot){
-#if 0
-  int nRun = 0;
-  int nKey = 0;
-  int rc;
-
-  Page *pPg;
-
-  rc = lsmFsDbPageGet(pFS, pRun->iFirst, &pPg);
-  assert( rc==LSM_OK );
-  while( pPg ){
-    Page *pNext = 0;
-    u8 *aData;
-    int nData;
-    int flags;
-    int nRec;
-
-    aData = lsmFsPageData(pPg, &nData);
-    flags = pageGetFlags(aData, nData);
-    nRec = pageGetNRec(aData, nData);
-
-    if( (flags & SEGMENT_BTREE_FLAG)==0 && nRec ){
-      nRun++;
-    }
-
-    rc = lsmFsDbPageNext(pPg, 1, &pNext);
-    assert( rc==LSM_OK );
-    lsmFsPageRelease(pPg);
-    pPg = pNext;
-  }
-
-  nKey = countBtreeKeys(pFS, pRun, iRoot);
-  assert( nRun==1+nKey );
-#endif
-}
-
-static void assertAllBtreesOk(int rc, lsm_db *pDb){
-#if 0
-  if( rc==LSM_OK ){
-    Level *p;
-    for(p=pDb->pLevel; p; p=p->pNext){
-      SortedRun *pSep = p->lhs.pSep;
-      Pgno iRoot = pSep->iRoot;
-      if( pSep && iRoot ){
-        assertBtreeRanges(pDb, pSep, iRoot, 0, 0, 0, 0);
-        assertBtreeSize(pDb->pFS, pSep, iRoot);
+      rc = lsmFsDbPageNext(pRun, pPg, 1, &pNext);
+      lsmFsPageRelease(pPg);
+      pPg = pNext;
+      if( pPg==0 ) break;
+      aData = fsPageData(pPg, &nData);
+      flags = pageGetFlags(aData, nData);
+      if( rc==LSM_OK 
+       && 0==((SEGMENT_BTREE_FLAG|PGFTR_SKIP_THIS_FLAG) & flags)
+       && 0!=pageGetNRec(aData, nData)
+      ){
+        u8 *pKey;
+        int nKey;
+        int iTopic;
+        pKey = pageGetKey(pPg, 0, &iTopic, &nKey, &blob);
+        assert( nKey==pCsr->nKey && 0==memcmp(pKey, pCsr->pKey, nKey) );
+        assert( lsmFsPageNumber(pPg)==pCsr->iPtr );
+        rc = btreeCursorNext(pCsr);
       }
     }
+    assert( rc!=LSM_OK || pCsr->pKey==0 );
+
+    if( pPg ) lsmFsPageRelease(pPg);
+
+    btreeCursorFree(pCsr);
+    sortedBlobFree(&blob);
   }
-#endif
+
+  return rc;
 }
-
-/*
-** This function is only useful for debugging. 
-*/
-static void assertAllPointersOk(int rc, lsm_db *pDb){
-  assert( rc!=LSM_OK || pDb->pWorker );
-  if( rc==LSM_OK ){
-    Level *p;
-    for(p=lsmDbSnapshotLevel(pDb->pWorker); p; p=p->pNext){
-      int i;
-
-      if( segmentHasSeparators(&p->lhs) ){
-        assertPointersOk(pDb, &p->lhs.sep, &p->lhs.run, 0, 0);
-      }
-      for(i=0; i<p->nRight; i++){
-        if( segmentHasSeparators(&p->aRhs[i]) ){
-          assertPointersOk(pDb, &p->aRhs[i].sep, &p->aRhs[i].run, 1, 0);
-        }
-      }
-
-    }
-  }
-}
-
 #endif /* ifdef LSM_DEBUG_EXPENSIVE */
