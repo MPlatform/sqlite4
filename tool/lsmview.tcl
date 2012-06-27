@@ -43,6 +43,7 @@ namespace import ::autoscroll::*
 #############################################################################
 
 proc exec_lsmtest_show {args} {
+  puts $args
   set fd [open [list |lsmtest show {*}$args]]
   set res ""
   while {![eof $fd]} { 
@@ -96,11 +97,7 @@ proc link_varset {C args} {
 }
 
 proc draw_segment {C segment tags} {
-  set nSize [lindex $segment 5]
-  set bSep  [expr [lindex $segment 2]!=0]
-
-  set iRunFirst [lindex $segment 3]
-  set iSepFirst [lindex $segment 0]
+  foreach {iFirst iLast iRoot nSize} $segment {}
 
   set w [expr {$::G(scale) * [log2 [expr max($nSize, 2)]]}]
   set h $::G(segment_height)
@@ -109,7 +106,7 @@ proc draw_segment {C segment tags} {
   set w [expr max( $w,  [font measure default "1 pages"] )]
 
   # Draw the separators stack if required.
-  if {$bSep} {
+  if {$iRoot} {
     set septag "[lindex $tags end].sep"
     set st [concat $tags $septag]
     set w2 $w
@@ -125,7 +122,7 @@ proc draw_segment {C segment tags} {
       incr y $h2
     }
 
-    $C bind $septag <1> [list segment_callback $C $septag $iSepFirst]
+    $C bind $septag <1> [list segment_callback $C $septag $segment]
   }
 
   set maintag "[lindex $tags end].main"
@@ -136,18 +133,18 @@ proc draw_segment {C segment tags} {
   $C itemconfigure $tid -text "$nSize pages" -anchor center
   $C itemconfigure $tid -tags [concat $tags "[lindex $tags 0].text"]
 
-  $C bind $maintag <1> [list segment_callback $C $maintag $iRunFirst]
-  $C bind $tid <1>     [list segment_callback $C $maintag $iRunFirst]
+  $C bind $maintag <1> [list segment_callback $C $maintag $segment]
+  $C bind $tid <1>     [list segment_callback $C $maintag $segment]
 }
 
-proc segment_callback {C tag pgno} {
+proc segment_callback {C tag segment} {
   link_varset $C mySelected myScript
 
   if {[info exists mySelected]} { $C itemconfigure $mySelected -fill white }
   set mySelected $tag
   $C itemconfigure $mySelected -fill grey
 
-  eval $myScript $pgno
+  eval $myScript [list $segment]
 }
 
 proc draw_level {C level tags} {
@@ -182,10 +179,10 @@ proc draw_structure {canvas structure} {
   foreach level $structure {
     set nRight 0
     foreach seg [lrange $level 1 end] {
-      set sz [lindex $seg 5]
+      set sz [lindex $seg 3]
       if {$sz > $nRight} { set nRight $sz }
     }
-    set nLeft [lindex $level 0 5]
+    set nLeft [lindex $level 0 3]
     set nTotal [log2 [expr max($nLeft, 2)]]
     if {$nRight} {set nTotal [expr $nTotal + [log2 [expr max($nRight, 2)]]]}
     if {$nTotal > $nMaxWidth} { set nMaxWidth $nTotal }
@@ -349,9 +346,11 @@ proc static_redraw {C} {
   draw_canvas_content $C $myData [list static_select_callback $C]
 }
 
-proc static_select_callback {C pgno} {
+proc static_select_callback {C segment} {
   link_varset $C myText myDb myData myTree
-  set data [string trim [exec_lsmtest_show $myDb array $pgno]]
+  foreach {iFirst iLast iRoot nSize $segment} $segment {}
+
+  set data [string trim [exec_lsmtest_show $myDb array $iFirst]]
   $myText delete 0.0 end
 
   $myTree delete [$myTree children {}]
@@ -361,12 +360,21 @@ proc static_select_callback {C pgno} {
     set caption "${first}..${last} ($nPg pages)"
     set id [$myTree insert {} end -text $caption]
     for {set i $first} {$i <= $last} {incr i} {
-      $myTree insert $id end -text $i
+      set item [$myTree insert $id end -text $i]
+      if {$i == $iRoot} { 
+        set rootitem $item 
+        set rootparent $id 
+      }
     }
   }
 
-  $myTree item $id -open 1
-  $myTree selection set [lindex [$myTree children $id] 0]
+  if {[info exists rootitem]} {
+    $myTree item $rootparent -open 1
+    $myTree selection set $rootitem
+  } else {
+    $myTree item $id -open 1
+    $myTree selection set [lindex [$myTree children $id] 0]
+  }
 }
 
 proc static_page_callback {C pgno} {
@@ -436,7 +444,8 @@ proc static_setup {zDb} {
   static_redraw $C
   bind $C <Configure>  [list static_redraw $C]
   bind $myTree <<TreeviewSelect>> [list static_treeview_select $C]
-  static_select_callback $C [lindex $myData 0 0 3]
+
+  static_select_callback $C [lindex $myData 0 0]
 }
 
 if {[llength $argv] > 1} {

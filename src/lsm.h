@@ -238,12 +238,10 @@ int lsm_info(lsm_db *, int, ...);
 **
 **     Each segment element is itself a list of 6 integer values, as follows:
 **
-**        1. First page of separators array, or 0 if n/a.
-**        2. Last page of separators array, or 0 if n/a.
-**        3. Root page of separators array, or 0 if n/a.
-**        4. First page of main array.
-**        5. Last page of main array.
-**        6. Total number of pages in main array.
+**        1. First page of segment
+**        2. Last page of segment
+**        3. Root page of segment (if applicable).
+**        4. Total number of pages in segment.
 **
 **   LSM_INFO_ARRAY_STRUCTURE
 **     There should be two arguments passed following this option (i.e. a 
