@@ -82,6 +82,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nLogSz = LSM_DEFAULT_LOG_SIZE;
   pDb->nDfltPgsz = LSM_PAGE_SIZE;
   pDb->nDfltBlksz = LSM_BLOCK_SIZE;
+  pDb->nMerge = LSM_DEFAULT_NMERGE;
   pDb->bUseLog = 1;
 
   return LSM_OK;
@@ -398,6 +399,13 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
       break;
     }
 
+    case LSM_CONFIG_NMERGE: {
+      int *piVal = va_arg(ap, int *);
+      if( *piVal>1 ) pDb->nMerge = *piVal;
+      *piVal = pDb->nMerge;
+      break;
+    }
+
     default:
       rc = LSM_MISUSE;
       break;
@@ -409,8 +417,8 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
 void lsmAppendSegmentList(LsmString *pStr, char *zPre, Segment *pSeg){
   lsmStringAppendf(pStr, "%s{%d %d %d %d %d %d}", zPre, 
-        pSeg->sep.iFirst, pSeg->sep.iLast, pSeg->sep.iRoot,
-        pSeg->run.iFirst, pSeg->run.iLast, pSeg->run.nSize
+        0, 0, 0, 
+        pSeg->iFirst, pSeg->iLast, pSeg->nSize
   );
 }
 

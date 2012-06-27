@@ -10,12 +10,6 @@
 **
 *************************************************************************
 **
-** SORTED FILE FORMAT:
-**
-**   A sorted file is divided into pages. The page-size is not stored anywhere
-**   within the sorted file itself - it must be known in advance in order to
-**   read the file. The maximum allowed page-size is 64KB.
-**
 ** PAGE FORMAT:
 **
 **   The maximum page size is 65536 bytes.
@@ -152,8 +146,7 @@ struct Blob {
 **   * To iterate through the separators array of a segment.
 */
 struct SegmentPtr {
-  Segment *pSeg;                  /* Segment to access */
-  SortedRun *pRun;                /* Points to either pSeg->run or pSeg->sep */
+  Segment *pSeg;                /* Segment to access */
 
   /* Current page. See segmentPtrLoadPage(). */
   Page *pPg;                    /* Current page */
@@ -203,6 +196,41 @@ struct LevelCursor {
 };
 
 /*
+** Used to iterate through the keys stored in a b-tree hierarchy from start
+** to finish. Only First() and Next() operations are required.
+**
+**   btreeCursorNew()
+**   btreeCursorFirst()
+**   btreeCursorNext()
+**   btreeCursorFree()
+**   btreeCursorPosition()
+**   btreeCursorRestore()
+*/
+typedef struct BtreePg BtreePg;
+typedef struct BtreeCursor BtreeCursor;
+struct BtreePg {
+  Page *pPage;
+  int iCell;
+};
+struct BtreeCursor {
+  Segment *pSeg;                  /* Iterate through this segments btree */
+  FileSystem *pFS;                /* File system to read pages from */
+  int nDepth;                     /* Allocated size of aPg[] */
+  int iPg;                        /* Current entry in aPg[]. -1 -> EOF. */
+  BtreePg *aPg;                   /* Pages from root to current location */
+
+  /* Cache of current entry. pKey==0 for EOF. */
+  void *pKey;
+  int nKey;
+  int eType;
+  Pgno iPtr;
+
+  /* Storage for key, if not local */
+  Blob blob;
+};
+
+
+/*
 ** A cursor used for merged searches or iterations through up to one
 ** Tree structure and any number of sorted files.
 **
@@ -224,17 +252,24 @@ struct MultiCursor {
   int (*xCmp)(void *, int, void *, int);         /* Compare function */
   int eType;                      /* Cache of current key type */
   Blob key;                       /* Cache of current key (or NULL) */
+  Blob val;                       /* Cache of current value */
 
   TreeCursor *pTreeCsr;           /* Single tree cursor */
   int nSegCsr;                    /* Size of aSegCsr[] array */
   LevelCursor *aSegCsr;           /* Array of cursors open on sorted files */
   int nTree;
   int *aTree;
+  BtreeCursor *pBtCsr;
 
   int *pnHdrLevel;
   void *pSystemVal;
   Snapshot *pSnap;
 };
+
+#define CURSOR_DATA_TREE      0
+#define CURSOR_DATA_SYSTEM    1
+#define CURSOR_DATA_SEGMENT   2
+
 
 /*
 ** CURSOR_IGNORE_DELETE
@@ -273,24 +308,36 @@ struct MultiCursor {
 #define CURSOR_PREV_OK          0x00000040
 
 typedef struct MergeWorker MergeWorker;
+typedef struct Hierarchy Hierarchy;
+
+struct Hierarchy {
+  Page **apHier;
+  int nHier;
+};
+
 struct MergeWorker {
   lsm_db *pDb;                    /* Database handle */
   Level *pLevel;                  /* Worker snapshot Level being merged */
   MultiCursor *pCsr;              /* Cursor to read new segment contents from */
   int bFlush;                     /* True if this is an in-memory tree flush */
-  Page **apHier;                  /* Separators array b-tree internal nodes */
-  int nHier;                      /* Number of entries in apHier[] */
-  Page *apPage[2];                /* Current output pages (0 is main run) */
+  Hierarchy hier;                 /* B-tree hierarchy under construction */
+  Page *pPage;                    /* Current output page */
   int nWork;                      /* Number of calls to mergeWorkerNextPage() */
 };
 
 #ifdef LSM_DEBUG_EXPENSIVE
-static void assertAllPointersOk(int rc, lsm_db *pDb);
-static void assertAllBtreesOk(int rc, lsm_db *);
-#else
-# define assertAllPointersOk(y, z)
-# define assertAllBtreesOk(y, z)
+static int assertPointersOk(lsm_db *, Segment *, Segment *, int);
+static int assertBtreeOk(lsm_db *, Segment *);
 #endif
+
+struct FilePage { u8 *aData; int nData; };
+static u8 *fsPageData(Page *pPg, int *pnData){
+  *pnData = ((struct FilePage *)(pPg))->nData;
+  return ((struct FilePage *)(pPg))->aData;
+}
+static u8 *fsPageDataPtr(Page *pPg){
+  return ((struct FilePage *)(pPg))->aData;
+}
 
 /*
 ** Write nVal as a 16-bit unsigned big-endian integer into buffer aOut.
@@ -348,89 +395,6 @@ static void sortedBlobFree(Blob *pBlob){
   memset(pBlob, 0, sizeof(Blob));
 }
 
-
-static int pageGetNRec(u8 *aData, int nData){
-  return (int)lsmGetU16(&aData[SEGMENT_NRECORD_OFFSET(nData)]);
-}
-
-static int pageGetPtr(u8 *aData, int nData){
-  return (int)lsmGetU32(&aData[SEGMENT_POINTER_OFFSET(nData)]);
-}
-
-static int pageGetFlags(u8 *aData, int nData){
-  return (int)lsmGetU16(&aData[SEGMENT_FLAGS_OFFSET(nData)]);
-}
-
-static u8 *pageGetCell(u8 *aData, int nData, int iCell){
-  return &aData[lsmGetU16(&aData[SEGMENT_CELLPTR_OFFSET(nData, iCell)])];
-}
-
-/*
-** Return the decoded (possibly relative) pointer value stored in cell 
-** iCell from page aData/nData.
-*/
-static int pageGetRecordPtr(u8 *aData, int nData, int iCell){
-  int iRet;                       /* Return value */
-  u8 *aCell;                      /* Pointer to cell iCell */
-  aCell = pageGetCell(aData, nData, iCell);
-  lsmVarintGet32(&aCell[1], &iRet);
-  return iRet;
-}
-
-static void segmentPtrSetPage(SegmentPtr *pPtr, Page *pNext){
-  lsmFsPageRelease(pPtr->pPg);
-  if( pNext ){
-    int nData;
-    u8 *aData = lsmFsPageData(pNext, &nData);
-    pPtr->nCell = pageGetNRec(aData, nData);
-    pPtr->flags = pageGetFlags(aData, nData);
-    pPtr->iPtr = pageGetPtr(aData, nData);
-  }
-  pPtr->pPg = pNext;
-}
-
-/*
-** Load a new page into the SegmentPtr object pPtr.
-*/
-static int segmentPtrLoadPage(
-  FileSystem *pFS,
-  SegmentPtr *pPtr,              /* Load page into this SegmentPtr object */
-  int iNew                       /* Page number of new page */
-){
-  Page *pPg = 0;                 /* The new page */
-  int rc;                        /* Return Code */
-
-  assert( pPtr->pSeg==0 
-       || pPtr->pRun==&pPtr->pSeg->run 
-       || pPtr->pRun==&pPtr->pSeg->sep 
-  );
-  rc = lsmFsDbPageGet(pFS, iNew, &pPg);
-  assert( rc==LSM_OK || pPg==0 );
-  segmentPtrSetPage(pPtr, pPg);
-
-  return rc;
-}
-
-static int segmentPtrNextPage(
-  SegmentPtr *pPtr,              /* Load page into this SegmentPtr object */
-  int eDir                       /* +1 for next(), -1 for prev() */
-){
-  Page *pNext;                   /* New page to load */
-  int rc;                        /* Return code */
-
-  assert( eDir==1 || eDir==-1 );
-  assert( pPtr->pPg );
-  assert( (pPtr->pSeg==0 && eDir>0)
-       || pPtr->pRun==&pPtr->pSeg->run 
-       || pPtr->pRun==&pPtr->pSeg->sep 
-  );
-
-  rc = lsmFsDbPageNext(pPtr->pRun, pPtr->pPg, eDir, &pNext);
-  assert( rc==LSM_OK || pNext==0 );
-  segmentPtrSetPage(pPtr, pNext);
-  return rc;
-}
-
 static int sortedReadData(
   Page *pPg,
   int iOff,
@@ -444,7 +408,7 @@ static int sortedReadData(
   int nCell;
   u8 *aData;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
   nCell = lsmGetU16(&aData[SEGMENT_NRECORD_OFFSET(nData)]);
   iEnd = SEGMENT_EOF(nData, nCell);
   assert( iEnd>0 && iEnd<nData );
@@ -492,7 +456,7 @@ static int sortedReadData(
         if( rc ) break;
         lsmFsPageRelease(pPg);
         pPg = pNext;
-        aData = lsmFsPageData(pPg, &nData);
+        aData = fsPageData(pPg, &nData);
         flags = lsmGetU16(&aData[SEGMENT_FLAGS_OFFSET(nData)]);
       }while( flags&SEGMENT_BTREE_FLAG );
 
@@ -506,14 +470,34 @@ static int sortedReadData(
   return rc;
 }
 
-static int segmentPtrReadData(
-  SegmentPtr *pPtr,
-  int iOff,
-  int nByte,
-  void **ppData,
-  Blob *pBlob
-){
-  return sortedReadData(pPtr->pPg, iOff, nByte, ppData, pBlob);
+static int pageGetNRec(u8 *aData, int nData){
+  return (int)lsmGetU16(&aData[SEGMENT_NRECORD_OFFSET(nData)]);
+}
+
+static int pageGetPtr(u8 *aData, int nData){
+  return (int)lsmGetU32(&aData[SEGMENT_POINTER_OFFSET(nData)]);
+}
+
+static int pageGetFlags(u8 *aData, int nData){
+  return (int)lsmGetU16(&aData[SEGMENT_FLAGS_OFFSET(nData)]);
+}
+
+static u8 *pageGetCell(u8 *aData, int nData, int iCell){
+  return &aData[lsmGetU16(&aData[SEGMENT_CELLPTR_OFFSET(nData, iCell)])];
+}
+
+/*
+** Return the decoded (possibly relative) pointer value stored in cell 
+** iCell from page aData/nData.
+*/
+static int pageGetRecordPtr(u8 *aData, int nData, int iCell){
+  int iRet;                       /* Return value */
+  u8 *aCell;                      /* Pointer to cell iCell */
+
+  assert( iCell<pageGetNRec(aData, nData) && iCell>=0 );
+  aCell = pageGetCell(aData, nData, iCell);
+  lsmVarintGet32(&aCell[1], &iRet);
+  return iRet;
 }
 
 static u8 *pageGetKey(
@@ -529,8 +513,10 @@ static u8 *pageGetKey(
   u8 *aData;
   int nData;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
+
   assert( !(pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG) );
+  assert( iCell<pageGetNRec(aData, nData) );
 
   pKey = pageGetCell(aData, nData, iCell);
   eType = *pKey++;
@@ -565,6 +551,429 @@ static int pageGetKeyCopy(
   return rc;
 }
 
+static int pageGetBtreeKey(
+  Page *pPg,
+  int iKey, 
+  int *piPtr, 
+  int *piTopic, 
+  void **ppKey,
+  int *pnKey,
+  Blob *pBlob
+){
+  u8 *aData;
+  int nData;
+  u8 *aCell;
+  int eType;
+
+  aData = fsPageData(pPg, &nData);
+  assert( SEGMENT_BTREE_FLAG & pageGetFlags(aData, nData) );
+
+  aCell = pageGetCell(aData, nData, iKey);
+  eType = *aCell++;
+  aCell += lsmVarintGet32(aCell, piPtr);
+
+  if( eType==0 ){
+    int rc;
+    Pgno iRef;                  /* Page number of referenced page */
+    Page *pRef;
+    aCell += lsmVarintGet32(aCell, &iRef);
+    rc = lsmFsDbPageGet(lsmPageFS(pPg), iRef, &pRef);
+    if( rc!=LSM_OK ) return rc;
+    pageGetKeyCopy(lsmPageEnv(pPg), pRef, 0, &eType, pBlob);
+    lsmFsPageRelease(pRef);
+    *ppKey = pBlob->pData;
+    *pnKey = pBlob->nData;
+  }else{
+    aCell += lsmVarintGet32(aCell, pnKey);
+    *ppKey = aCell;
+  }
+  if( piTopic ) *piTopic = rtTopic(eType);
+
+  return LSM_OK;
+}
+
+static int btreeCursorLoadKey(BtreeCursor *pCsr){
+  int rc = LSM_OK;
+  if( pCsr->iPg<0 ){
+    pCsr->pKey = 0;
+    pCsr->nKey = 0;
+    pCsr->eType = 0;
+  }else{
+    int dummy;
+    rc = pageGetBtreeKey(
+        pCsr->aPg[pCsr->iPg].pPage, pCsr->aPg[pCsr->iPg].iCell,
+        &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
+    );
+    pCsr->eType |= SORTED_SEPARATOR;
+  }
+
+  return rc;
+}
+
+static int btreeCursorPtr(u8 *aData, int nData, int iCell){
+  int nCell;
+
+  nCell = pageGetNRec(aData, nData);
+  if( iCell>=nCell ){
+    return pageGetPtr(aData, nData);
+  }
+  return pageGetRecordPtr(aData, nData, iCell);
+}
+
+static int btreeCursorNext(BtreeCursor *pCsr){
+  int rc = LSM_OK;
+
+  BtreePg *pPg = &pCsr->aPg[pCsr->iPg];
+  int nCell; 
+  u8 *aData;
+  int nData;
+
+  assert( pCsr->iPg>=0 );
+  assert( pCsr->iPg==pCsr->nDepth-1 );
+
+  aData = fsPageData(pPg->pPage, &nData);
+  nCell = pageGetNRec(aData, nData);
+
+  assert( pPg->iCell<=nCell );
+
+  pPg->iCell++;
+  if( pPg->iCell==nCell ){
+    Pgno iLoad;
+
+    /* Up to parent. */
+    lsmFsPageRelease(pPg->pPage);
+    pPg->pPage = 0;
+    pCsr->iPg--;
+    while( pCsr->iPg>=0 ){
+      pPg = &pCsr->aPg[pCsr->iPg];
+      aData = fsPageData(pPg->pPage, &nData);
+      if( pPg->iCell<pageGetNRec(aData, nData) ) break;
+      lsmFsPageRelease(pPg->pPage);
+      pCsr->iPg--;
+    }
+
+    /* Read the key */
+    rc = btreeCursorLoadKey(pCsr);
+
+    /* Unless the cursor is at EOF, descend to cell -1 (yes, negative one) of 
+    ** the left-most most descendent. */
+    if( pCsr->iPg>=0 ){
+      pCsr->aPg[pCsr->iPg].iCell++;
+
+      iLoad = btreeCursorPtr(aData, nData, pPg->iCell);
+      do {
+        Page *pLoad;
+        pCsr->iPg++;
+        rc = lsmFsDbPageGet(pCsr->pFS, iLoad, &pLoad);
+        pCsr->aPg[pCsr->iPg].pPage = pLoad;
+        pCsr->aPg[pCsr->iPg].iCell = 0;
+        if( rc==LSM_OK ){
+          if( pCsr->iPg==(pCsr->nDepth-1) ) break;
+          aData = fsPageData(pLoad, &nData);
+          iLoad = btreeCursorPtr(aData, nData, 0);
+        }
+      }while( rc==LSM_OK && pCsr->iPg<(pCsr->nDepth-1) );
+      pCsr->aPg[pCsr->iPg].iCell = -1;
+    }
+
+  }else{
+    rc = btreeCursorLoadKey(pCsr);
+  }
+
+  if( rc==LSM_OK && pCsr->iPg>=0 ){
+    aData = fsPageData(pCsr->aPg[pCsr->iPg].pPage, &nData);
+    pCsr->iPtr = btreeCursorPtr(aData, nData, pCsr->aPg[pCsr->iPg].iCell+1);
+  }
+
+  return rc;
+}
+
+static void btreeCursorFree(BtreeCursor *pCsr){
+  if( pCsr ){
+    int i;
+    lsm_env *pEnv = lsmFsEnv(pCsr->pFS);
+    for(i=0; i<=pCsr->iPg; i++){
+      lsmFsPageRelease(pCsr->aPg[i].pPage);
+    }
+    sortedBlobFree(&pCsr->blob);
+    lsmFree(pEnv, pCsr->aPg);
+    lsmFree(pEnv, pCsr);
+  }
+}
+
+static int btreeCursorFirst(BtreeCursor *pCsr){
+  int rc;
+
+  Page *pPg = 0;
+  FileSystem *pFS = pCsr->pFS;
+  int iPg = pCsr->pSeg->iRoot;
+
+  do {
+    rc = lsmFsDbPageGet(pFS, iPg, &pPg);
+    assert( (rc==LSM_OK)==(pPg!=0) );
+    if( rc==LSM_OK ){
+      u8 *aData;
+      int nData;
+      int flags;
+
+      aData = fsPageData(pPg, &nData);
+      flags = pageGetFlags(aData, nData);
+      if( (flags & SEGMENT_BTREE_FLAG)==0 ) break;
+
+      if( (pCsr->nDepth % 8)==0 ){
+        int nNew = pCsr->nDepth + 8;
+        pCsr->aPg = (BtreePg *)lsmReallocOrFreeRc(
+            lsmFsEnv(pFS), pCsr->aPg, sizeof(BtreePg) * nNew, &rc
+        );
+        if( rc==LSM_OK ){
+          memset(&pCsr->aPg[pCsr->nDepth], 0, sizeof(BtreePg) * 8);
+        }
+      }
+
+      if( rc==LSM_OK ){
+        assert( pCsr->aPg[pCsr->nDepth].iCell==0 );
+        pCsr->aPg[pCsr->nDepth].pPage = pPg;
+        pCsr->nDepth++;
+        iPg = pageGetRecordPtr(aData, nData, 0);
+      }
+    }
+  }while( rc==LSM_OK );
+  lsmFsPageRelease(pPg);
+  pCsr->iPg = pCsr->nDepth-1;
+
+  if( rc==LSM_OK && pCsr->nDepth ){
+    pCsr->aPg[pCsr->iPg].iCell = -1;
+    rc = btreeCursorNext(pCsr);
+  }
+
+  return rc;
+}
+
+static void btreeCursorPosition(BtreeCursor *pCsr, MergeInput *p){
+  if( pCsr->iPg>=0 ){
+    p->iPg = lsmFsPageNumber(pCsr->aPg[pCsr->iPg].pPage);
+    p->iCell = ((pCsr->aPg[pCsr->iPg].iCell + 1) << 8) + pCsr->nDepth;
+  }else{
+    p->iPg = 0;
+    p->iCell = 0;
+  }
+}
+
+static int sortedKeyCompare(
+  int (*xCmp)(void *, int, void *, int),
+  int iLhsTopic, void *pLhsKey, int nLhsKey,
+  int iRhsTopic, void *pRhsKey, int nRhsKey
+){
+  int res = iLhsTopic - iRhsTopic;
+  if( res==0 ){
+    res = xCmp(pLhsKey, nLhsKey, pRhsKey, nRhsKey);
+  }
+  return res;
+}
+
+static int btreeCursorRestore(
+  BtreeCursor *pCsr, 
+  int (*xCmp)(void *, int, void *, int),
+  MergeInput *p
+){
+  int rc = LSM_OK;
+
+  if( p->iPg ){
+    lsm_env *pEnv = lsmFsEnv(pCsr->pFS);
+    int iCell;                    /* Current cell number on leaf page */
+    Pgno iLeaf;                   /* Page number of current leaf page */
+    int nDepth;                   /* Depth of b-tree structure */
+
+    /* Decode the MergeInput structure */
+    iLeaf = p->iPg;
+    nDepth = (p->iCell & 0x00FF);
+    iCell = (p->iCell >> 8) - 1;
+
+    /* Allocate the BtreeCursor.aPg[] array */
+    assert( pCsr->aPg==0 );
+    pCsr->aPg = (BtreePg *)lsmMallocZeroRc(pEnv, sizeof(BtreePg) * nDepth, &rc);
+
+    /* Populate the last entry of the aPg[] array */
+    if( rc==LSM_OK ){
+      pCsr->iPg = nDepth-1;
+      pCsr->nDepth = nDepth;
+      pCsr->aPg[pCsr->iPg].iCell = iCell;
+      rc = lsmFsDbPageGet(pCsr->pFS, iLeaf, &pCsr->aPg[nDepth-1].pPage);
+    }
+
+    /* Populate any other aPg[] array entries */
+    if( rc==LSM_OK && nDepth>1 ){
+      Blob blob = {0,0,0};
+      void *pSeek;
+      int nSeek;
+      int iTopicSeek;
+      int dummy;
+
+      int iPg = 0;
+      int iLoad = pCsr->pSeg->iRoot;
+
+      rc = pageGetBtreeKey(pCsr->aPg[nDepth-1].pPage, 
+          0, &dummy, &iTopicSeek, &pSeek, &nSeek, &pCsr->blob
+      );
+
+      do {
+        Page *pPg;
+        rc = lsmFsDbPageGet(pCsr->pFS, iLoad, &pPg);
+        assert( rc==LSM_OK || pPg==0 );
+        if( rc==LSM_OK ){
+          u8 *aData;                  /* Buffer containing page data */
+          int nData;                  /* Size of aData[] in bytes */
+          int iMin;
+          int iMax;
+          int iCell;
+
+          aData = fsPageData(pPg, &nData);
+          assert( (pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG) );
+
+          iLoad = pageGetPtr(aData, nData);
+          iCell = pageGetNRec(aData, nData); 
+          iMax = iCell-1;
+          iMin = 0;
+
+          while( iMax>=iMin ){
+            int iTry = (iMin+iMax)/2;
+            void *pKey; int nKey;         /* Key for cell iTry */
+            int iTopic;                   /* Topic for key pKeyT/nKeyT */
+            int iPtr;                     /* Pointer for cell iTry */
+            int res;                      /* (pSeek - pKeyT) */
+
+            rc = pageGetBtreeKey(pPg, iTry, &iPtr, &iTopic, &pKey, &nKey,&blob);
+            if( rc!=LSM_OK ) break;
+
+            res = sortedKeyCompare(
+                xCmp, iTopicSeek, pSeek, nSeek, iTopic, pKey, nKey
+            );
+            assert( res!=0 );
+
+            if( res<0 ){
+              iLoad = iPtr;
+              iCell = iTry;
+              iMax = iTry-1;
+            }else{
+              iMin = iTry+1;
+            }
+          }
+
+          pCsr->aPg[iPg].pPage = pPg;
+          pCsr->aPg[iPg].iCell = iCell;
+          iPg++;
+          assert( iPg!=nDepth-1 || iLoad==iLeaf );
+        }
+      }while( rc==LSM_OK && iPg<(nDepth-1) );
+      sortedBlobFree(&blob);
+    }
+
+    /* Load the current key and pointer */
+    if( rc==LSM_OK ){
+      BtreePg *pBtreePg;
+      u8 *aData;
+      int nData;
+
+      pBtreePg = &pCsr->aPg[pCsr->iPg];
+      aData = fsPageData(pBtreePg->pPage, &nData);
+      pCsr->iPtr = btreeCursorPtr(aData, nData, pBtreePg->iCell+1);
+      if( pBtreePg->iCell<0 ){
+        int dummy;
+        int i;
+        for(i=pCsr->iPg-1; i>=0; i--){
+          if( pCsr->aPg[i].iCell>0 ) break;
+        }
+        assert( i>=0 );
+        rc = pageGetBtreeKey(
+            pCsr->aPg[i].pPage, pCsr->aPg[i].iCell-1,
+            &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
+        );
+        pCsr->eType |= SORTED_SEPARATOR;
+
+      }else{
+        rc = btreeCursorLoadKey(pCsr);
+      }
+    }
+  }
+  return rc;
+}
+
+static int btreeCursorNew(
+  lsm_db *pDb,
+  Segment *pSeg,
+  BtreeCursor **ppCsr
+){
+  int rc = LSM_OK;
+  BtreeCursor *pCsr;
+  
+  assert( pSeg->iRoot );
+  pCsr = lsmMallocZeroRc(pDb->pEnv, sizeof(BtreeCursor), &rc);
+  if( pCsr ){
+    pCsr->pFS = pDb->pFS;
+    pCsr->pSeg = pSeg;
+    pCsr->iPg = -1;
+  }
+
+  *ppCsr = pCsr;
+  return rc;
+}
+
+static void segmentPtrSetPage(SegmentPtr *pPtr, Page *pNext){
+  lsmFsPageRelease(pPtr->pPg);
+  if( pNext ){
+    int nData;
+    u8 *aData = fsPageData(pNext, &nData);
+    pPtr->nCell = pageGetNRec(aData, nData);
+    pPtr->flags = pageGetFlags(aData, nData);
+    pPtr->iPtr = pageGetPtr(aData, nData);
+  }
+  pPtr->pPg = pNext;
+}
+
+/*
+** Load a new page into the SegmentPtr object pPtr.
+*/
+static int segmentPtrLoadPage(
+  FileSystem *pFS,
+  SegmentPtr *pPtr,              /* Load page into this SegmentPtr object */
+  int iNew                       /* Page number of new page */
+){
+  Page *pPg = 0;                 /* The new page */
+  int rc;                        /* Return Code */
+
+  rc = lsmFsDbPageGet(pFS, iNew, &pPg);
+  assert( rc==LSM_OK || pPg==0 );
+  segmentPtrSetPage(pPtr, pPg);
+
+  return rc;
+}
+
+static int segmentPtrReadData(
+  SegmentPtr *pPtr,
+  int iOff,
+  int nByte,
+  void **ppData,
+  Blob *pBlob
+){
+  return sortedReadData(pPtr->pPg, iOff, nByte, ppData, pBlob);
+}
+
+static int segmentPtrNextPage(
+  SegmentPtr *pPtr,              /* Load page into this SegmentPtr object */
+  int eDir                       /* +1 for next(), -1 for prev() */
+){
+  Page *pNext;                   /* New page to load */
+  int rc;                        /* Return code */
+
+  assert( eDir==1 || eDir==-1 );
+  assert( pPtr->pPg );
+  assert( pPtr->pSeg || eDir>0 );
+
+  rc = lsmFsDbPageNext(pPtr->pSeg, pPtr->pPg, eDir, &pNext);
+  assert( rc==LSM_OK || pNext==0 );
+  segmentPtrSetPage(pPtr, pNext);
+  return rc;
+}
 
 static int segmentPtrLoadCell(
   SegmentPtr *pPtr,              /* Load page into this SegmentPtr object */
@@ -578,7 +987,7 @@ static int segmentPtrLoadCell(
 
     assert( iNew<pPtr->nCell );
     pPtr->iCell = iNew;
-    aData = lsmFsPageData(pPtr->pPg, &nPgsz);
+    aData = fsPageData(pPtr->pPg, &nPgsz);
     iOff = lsmGetU16(&aData[SEGMENT_CELLPTR_OFFSET(nPgsz, pPtr->iCell)]);
     pPtr->eType = aData[iOff];
     iOff++;
@@ -595,22 +1004,13 @@ static int segmentPtrLoadCell(
       rc = segmentPtrReadData(
           pPtr, iOff+pPtr->nKey, pPtr->nVal, &pPtr->pVal, &pPtr->blob2
       );
+    }else{
+      pPtr->nVal = 0;
+      pPtr->pVal = 0;
     }
   }
 
   return rc;
-}
-
-static int sortedKeyCompare(
-  int (*xCmp)(void *, int, void *, int),
-  int iLhsTopic, void *pLhsKey, int nLhsKey,
-  int iRhsTopic, void *pRhsKey, int nRhsKey
-){
-  int res = iLhsTopic - iRhsTopic;
-  if( res==0 ){
-    res = xCmp(pLhsKey, nLhsKey, pRhsKey, nRhsKey);
-  }
-  return res;
 }
 
 void lsmSortedSplitkey(lsm_db *pDb, Level *pLevel, int *pRc){
@@ -623,10 +1023,8 @@ void lsmSortedSplitkey(lsm_db *pDb, Level *pLevel, int *pRc){
     Page *pPg = 0;
     int iTopic;
     Blob blob = {0, 0, 0, 0};
-    SortedRun *pRun = &pLevel->aRhs[i].run;
 
-    assert( pRun->iFirst!=0 );
-
+    assert( pLevel->aRhs[i].iFirst!=0 );
     rc = lsmFsDbPageGet(pDb->pFS, pMerge->aInput[i].iPg, &pPg);
     if( rc==LSM_OK ){
       rc = pageGetKeyCopy(pEnv, pPg, pMerge->aInput[i].iCell, &iTopic, &blob);
@@ -684,9 +1082,6 @@ static int levelCursorInit(
     for(i=0; i<pLevel->nRight; i++){
       pCsr->aPtr[i+1].pSeg = &pLevel->aRhs[i];
     }
-    for(i=0; i<pCsr->nPtr; i++){
-      pCsr->aPtr[i].pRun = &pCsr->aPtr[i].pSeg->run;
-    }
   }
 
   return rc;
@@ -694,7 +1089,7 @@ static int levelCursorInit(
 
 static int levelCursorInitRun(
   lsm_db *pDb,
-  SortedRun *pRun, 
+  Segment *pSeg, 
   int (*xCmp)(void *, int, void *, int),
   LevelCursor *pCsr              /* Cursor structure to initialize */
 ){
@@ -710,7 +1105,7 @@ static int levelCursorInitRun(
   );
 
   if( rc==LSM_OK ){
-    pCsr->aPtr[0].pRun = pRun;
+    pCsr->aPtr[0].pSeg = pSeg;
   }
 
   return rc;
@@ -791,7 +1186,7 @@ static void segmentPtrEndPage(
 ){
   if( *pRc==LSM_OK ){
     Page *pNew = 0;
-    Pgno iPg = (bLast ? pPtr->pRun->iLast : pPtr->pRun->iFirst);
+    Pgno iPg = (bLast ? pPtr->pSeg->iLast : pPtr->pSeg->iFirst);
     *pRc = lsmFsDbPageGet(pFS, iPg, &pNew);
     segmentPtrSetPage(pPtr, pNew);
   }
@@ -815,7 +1210,10 @@ static void segmentPtrEnd(
     int rc = LSM_OK;
 
     segmentPtrEndPage(pCsr->pFS, pPtr, bLast, &rc);
-    while( rc==LSM_OK && pPtr->pPg && pPtr->nCell==0 ){
+    while( rc==LSM_OK 
+        && pPtr->pPg 
+        && (pPtr->nCell==0 || (pPtr->flags & SEGMENT_BTREE_FLAG))
+    ){
       rc = segmentPtrNextPage(pPtr, (bLast ? -1 : 1));
     }
     if( rc==LSM_OK && pPtr->pPg ){
@@ -896,14 +1294,14 @@ static int assertKeyLocation(
     while( pTest ){
       Page *pNext;
 
-      int rc = lsmFsDbPageNext(pPtr->pRun, pTest, eDir, &pNext);
+      int rc = lsmFsDbPageNext(pPtr->pSeg, pTest, eDir, &pNext);
       lsmFsPageRelease(pTest);
       pTest = pNext;
       assert( rc==LSM_OK );
 
       if( pTest ){
         int nData;
-        u8 *aData = lsmFsPageData(pTest, &nData);
+        u8 *aData = fsPageData(pTest, &nData);
         int nCell = pageGetNRec(aData, nData);
         int flags = pageGetFlags(aData, nData);
         if( nCell && 0==(flags&SEGMENT_BTREE_FLAG) ){
@@ -979,7 +1377,7 @@ int segmentPtrSeek(
 
     /* Advance to the next page that contains at least one key. */
     do {
-      rc = lsmFsDbPageNext(pPtr->pRun, pPtr->pPg, 1, &pNext);
+      rc = lsmFsDbPageNext(pPtr->pSeg, pPtr->pPg, 1, &pNext);
       if( pNext==0 ) break;
       assert( rc==LSM_OK );
       segmentPtrSetPage(pPtr, pNext);
@@ -997,13 +1395,13 @@ int segmentPtrSeek(
   ** that pKey/nKey is greater than all keys on that page, and then by 
   ** loading (iPg+1) and testing that pKey/nKey is smaller than all
   ** the keys it houses.  */
-#if 0
+#if 1
   assert( assertKeyLocation(pCsr, pPtr, pKey, nKey) );
 #endif
 
   assert( pPtr->nCell>0 
-       || pPtr->pRun->nSize==1 
-       || lsmFsPageNumber(pPtr->pPg)==pPtr->pRun->iLast
+       || pPtr->pSeg->nSize==1 
+       || lsmFsPageNumber(pPtr->pPg)==pPtr->pSeg->iLast
   );
   if( pPtr->nCell==0 ){
     segmentPtrReset(pPtr);
@@ -1114,22 +1512,22 @@ static void segmentCursorSetCurrent(LevelCursor *pCsr, int bLargest){
   pCsr->iCurrentPtr = iBest;
 }
 
-static int seekInSeparators(
+static int seekInBtree(
   LevelCursor *pCsr,
-  SegmentPtr *pPtr,               /* Segment to seek within */
+  Segment *pSeg,
   void *pKey, int nKey,           /* Key to seek to */
-  int *piPtr                      /* OUT: FC pointer */
+  Page **ppPg                     /* OUT: Leaf (sorted-run) page reference */
 ){
   int rc;
   int iPg;
+  Page *pPg = 0;
   Blob blob = {0, 0, 0};
   int iTopic = 0;                 /* TODO: Fix me */
-  SortedRun *pSep = &pPtr->pSeg->sep;
 
-  iPg = pSep->iRoot;
+  iPg = pSeg->iRoot;
   do {
-    Page *pPg;
     rc = lsmFsDbPageGet(pCsr->pFS, iPg, &pPg);
+    assert( rc==LSM_OK || pPg==0 );
     if( rc==LSM_OK ){
       u8 *aData;                  /* Buffer containing page data */
       int nData;                  /* Size of aData[] in bytes */
@@ -1138,12 +1536,9 @@ static int seekInSeparators(
       int nRec;
       int flags;
 
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       flags = pageGetFlags(aData, nData);
-      if( (flags & SEGMENT_BTREE_FLAG)==0 ){
-        lsmFsPageRelease(pPg);
-        break;
-      }
+      if( (flags & SEGMENT_BTREE_FLAG)==0 ) break;
 
       iPg = pageGetPtr(aData, nData);
       nRec = pageGetNRec(aData, nData);
@@ -1151,32 +1546,14 @@ static int seekInSeparators(
       iMin = 0;
       iMax = nRec-1;
       while( iMax>=iMin ){
-        Page *pRef = 0;
         int iTry = (iMin+iMax)/2;
         void *pKeyT; int nKeyT;       /* Key for cell iTry */
         int iTopicT;                  /* Topic for key pKeyT/nKeyT */
         int iPtr;                     /* Pointer associated with cell iTry */
-        u8 *aCell;                    /* Pointer to cell iTry */
         int res;                      /* (pKey - pKeyT) */
-        int eType;
 
-        aCell = pageGetCell(aData, nData, iTry);
-        eType = *aCell++;
-        aCell += lsmVarintGet32(aCell, &iPtr);
-        if( eType==0 ){
-          /* If eType==0, then this b-tree cell does not contain a key. 
-          ** Instead, it is a reference to another cell in the same separators
-          ** array that does contain a key. */
-          Pgno iRef;
-          aCell += lsmVarintGet32(aCell, &iRef);
-          rc = lsmFsDbPageGet(pCsr->pFS, iRef, &pRef);
-          if( rc!=LSM_OK ) break;
-          pKeyT = pageGetKey(pRef, 0, &iTopicT, &nKeyT, &blob);
-        }else{
-          aCell += lsmVarintGet32(aCell, &nKeyT);
-          pKeyT = (void *)aCell;
-          iTopicT = rtTopic(eType);
-        }
+        rc = pageGetBtreeKey(pPg, iTry, &iPtr, &iTopicT, &pKeyT, &nKeyT, &blob);
+        if( rc!=LSM_OK ) break;
 
         res = iTopic - iTopicT;
         if( res==0 ) res = pCsr->xCmp(pKey, nKey, pKeyT, nKeyT);
@@ -1187,23 +1564,15 @@ static int seekInSeparators(
         }else{
           iMin = iTry+1;
         }
-        lsmFsPageRelease(pRef);
       }
       lsmFsPageRelease(pPg);
+      pPg = 0;
     }
   }while( rc==LSM_OK );
 
-  if( rc==LSM_OK ){
-    assert( pPtr->pRun==&pPtr->pSeg->run );
-    pPtr->pRun = pSep;
-    rc = segmentPtrLoadPage(pCsr->pFS, pPtr, iPg);
-    if( rc==LSM_OK ){
-      rc = segmentPtrSeek(pCsr, pPtr, pKey, nKey, 0, piPtr);
-    }
-    pPtr->pRun = &pPtr->pSeg->run;
-  }
-
   sortedBlobFree(&blob);
+  assert( (rc==LSM_OK)==(pPg!=0) );
+  *ppPg = pPg;
   return rc;
 }
 
@@ -1218,17 +1587,20 @@ static int seekInSegment(
   int iPtr = iPg;
   int rc = LSM_OK;
 
-  assert( pPtr->pRun==&pPtr->pSeg->run );
-
-  if( segmentHasSeparators(pPtr->pSeg) ){
-    rc = seekInSeparators(pCsr, pPtr, pKey, nKey, &iPtr);
-  }else if( iPtr==0 ){
-    iPtr = pPtr->pSeg->run.iFirst;
+  if( pPtr->pSeg->iRoot ){
+    Page *pPg;
+    assert( pPtr->pSeg->iRoot!=0 );
+    rc = seekInBtree(pCsr, pPtr->pSeg, pKey, nKey, &pPg);
+    if( rc==LSM_OK ) segmentPtrSetPage(pPtr, pPg);
+  }else{
+    if( iPtr==0 ){
+      iPtr = pPtr->pSeg->iFirst;
+    }
+    if( rc==LSM_OK ){
+      rc = segmentPtrLoadPage(pCsr->pFS, pPtr, iPtr);
+    }
   }
 
-  if( rc==LSM_OK ){
-    rc = segmentPtrLoadPage(pCsr->pFS, pPtr, iPtr);
-  }
   if( rc==LSM_OK ){
     rc = segmentPtrSeek(pCsr, pPtr, pKey, nKey, eSeek, piPtr);
   }
@@ -1393,6 +1765,9 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
     segmentCursorClose(pEnv, &pCsr->aSegCsr[i]);
   }
 
+  /* And the b-tree cursor, if any */
+  btreeCursorFree(pCsr->pBtCsr);
+
   /* Free allocations */
   lsmFree(pEnv, pCsr->aSegCsr);
   lsmFree(pEnv, pCsr->aTree);
@@ -1406,6 +1781,7 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
   pCsr->pSystemVal = 0;
   pCsr->pSnap = 0;
   pCsr->pTreeCsr = 0;
+  pCsr->pBtCsr = 0;
 }
 
 void lsmMCursorClose(MultiCursor *pCsr){
@@ -1424,6 +1800,7 @@ void lsmMCursorClose(MultiCursor *pCsr){
 
     /* Free the allocation used to cache the current key, if any. */
     sortedBlobFree(&pCsr->key);
+    sortedBlobFree(&pCsr->val);
 
     /* Free the component cursors */
     mcursorFreeComponents(pCsr);
@@ -1436,7 +1813,6 @@ void lsmMCursorClose(MultiCursor *pCsr){
 #define MULTICURSOR_ADDLEVEL_ALL 1
 #define MULTICURSOR_ADDLEVEL_RHS 2
 #define MULTICURSOR_ADDLEVEL_LHS_SEP 3
-#define MULTICURSOR_ADDLEVEL_RHS_SEP 4
 
 /*
 ** Add segments belonging to level pLevel to the multi-cursor pCsr. The
@@ -1452,10 +1828,6 @@ void lsmMCursorClose(MultiCursor *pCsr){
 **     Add only the lhs segment. And iterate through its separators array,
 **     not the main run array.
 **
-**   MULTICURSOR_ADDLEVEL_RHS_SEP
-**     Add only the first segment from the rhs. And iterate through its 
-**     separators array, not the main run array.
-**
 ** RHS and SEP are only used by cursors created to use as data sources when
 ** creating new segments (either when flushing the in-memory tree to disk or
 ** when merging existing runs).
@@ -1466,47 +1838,51 @@ int multiCursorAddLevel(
   int eMode                       /* A MULTICURSOR_ADDLEVEL_*** constant */
 ){
   int rc = LSM_OK;
-  int i;
-  int nAdd = (eMode==MULTICURSOR_ADDLEVEL_RHS ? pLevel->nRight : 1);
 
   assert( eMode==MULTICURSOR_ADDLEVEL_ALL
        || eMode==MULTICURSOR_ADDLEVEL_RHS
        || eMode==MULTICURSOR_ADDLEVEL_LHS_SEP
   );
 
-  for(i=0; i<nAdd; i++){
-    LevelCursor *pNew;
-    lsm_db *pDb = pCsr->pDb;
+  if( eMode==MULTICURSOR_ADDLEVEL_LHS_SEP ){
+    assert( pLevel->lhs.iRoot );
+    assert( pCsr->pBtCsr==0 );
+    rc = btreeCursorNew(pCsr->pDb, &pLevel->lhs, &pCsr->pBtCsr);
+    assert( (rc==LSM_OK)==(pCsr->pBtCsr!=0) );
+  }else{
+    int i;
+    int nAdd = (eMode==MULTICURSOR_ADDLEVEL_RHS ? pLevel->nRight : 1);
 
-    /* Grow the pCsr->aSegCsr array if required */
-    if( 0==(pCsr->nSegCsr % 16) ){
-      int nByte;
-      LevelCursor *aNew;
-      nByte = sizeof(LevelCursor) * (pCsr->nSegCsr+16);
-      aNew = (LevelCursor *)lsmRealloc(pDb->pEnv, pCsr->aSegCsr, nByte);
-      if( aNew==0 ) return LSM_NOMEM_BKPT;
-      memset(&aNew[pCsr->nSegCsr], 0, sizeof(LevelCursor)*16);
-      pCsr->aSegCsr = aNew;
+    for(i=0; i<nAdd; i++){
+      LevelCursor *pNew;
+      lsm_db *pDb = pCsr->pDb;
+
+      /* Grow the pCsr->aSegCsr array if required */
+      if( 0==(pCsr->nSegCsr % 16) ){
+        int nByte;
+        LevelCursor *aNew;
+        nByte = sizeof(LevelCursor) * (pCsr->nSegCsr+16);
+        aNew = (LevelCursor *)lsmRealloc(pDb->pEnv, pCsr->aSegCsr, nByte);
+        if( aNew==0 ) return LSM_NOMEM_BKPT;
+        memset(&aNew[pCsr->nSegCsr], 0, sizeof(LevelCursor)*16);
+        pCsr->aSegCsr = aNew;
+      }
+      pNew = &pCsr->aSegCsr[pCsr->nSegCsr];
+
+      switch( eMode ){
+        case MULTICURSOR_ADDLEVEL_ALL:
+          rc = levelCursorInit(pDb, pLevel, pCsr->xCmp, pNew);
+          break;
+
+        case MULTICURSOR_ADDLEVEL_RHS:
+          rc = levelCursorInitRun(pDb, &pLevel->aRhs[i], pCsr->xCmp, pNew);
+          break;
+      }
+      if( pCsr->flags & CURSOR_IGNORE_SYSTEM ){
+        pNew->bIgnoreSystem = 1;
+      }
+      if( rc==LSM_OK ) pCsr->nSegCsr++;
     }
-    pNew = &pCsr->aSegCsr[pCsr->nSegCsr];
-
-    switch( eMode ){
-      case MULTICURSOR_ADDLEVEL_ALL:
-        rc = levelCursorInit(pDb, pLevel, pCsr->xCmp, pNew);
-        break;
-
-      case MULTICURSOR_ADDLEVEL_RHS:
-        rc = levelCursorInitRun(pDb, &pLevel->aRhs[i].run, pCsr->xCmp, pNew);
-        break;
-
-      case MULTICURSOR_ADDLEVEL_LHS_SEP:
-        rc = levelCursorInitRun(pDb, &pLevel->lhs.sep, pCsr->xCmp, pNew);
-        break;
-    }
-    if( pCsr->flags & CURSOR_IGNORE_SYSTEM ){
-      pNew->bIgnoreSystem = 1;
-    }
-    if( rc==LSM_OK ) pCsr->nSegCsr++;
   }
 
   return rc;
@@ -1525,6 +1901,10 @@ static int multiCursorNew(
 
   if( pCsr==0 ){
     pCsr = (MultiCursor *)lsmMallocZeroRc(pDb->pEnv, sizeof(MultiCursor), &rc);
+    if( pCsr ){
+      pCsr->pNext = pDb->pCsr;
+      pDb->pCsr = pCsr;
+    }
   }
 
   if( rc==LSM_OK ){
@@ -1545,6 +1925,23 @@ static int multiCursorNew(
   }
   *ppCsr = pCsr;
   return rc;
+}
+
+void lsmSortedRemap(lsm_db *pDb){
+  MultiCursor *pCsr;
+  for(pCsr=pDb->pCsr; pCsr; pCsr=pCsr->pNext){
+    int i;
+    if( pCsr->pBtCsr ){
+      btreeCursorLoadKey(pCsr->pBtCsr);
+    }
+    for(i=0; i<pCsr->nSegCsr; i++){
+      int iPtr;
+      LevelCursor *p = &pCsr->aSegCsr[i];
+      for(iPtr=0; iPtr<p->nPtr; iPtr++){
+        segmentPtrLoadCell(&p->aPtr[iPtr], p->aPtr[iPtr].iCell);
+      }
+    }
+  }
 }
 
 static void multiCursorReadSeparators(MultiCursor *pCsr){
@@ -1620,19 +2017,11 @@ int lsmMCursorNew(
   int rc;
 
   rc = multiCursorAllocate(pDb, 0, &pCsr);
-  if( rc==LSM_OK ){
-    pCsr->pNext = pDb->pCsr;
-    pDb->pCsr = pCsr;
-  }
 
   assert( (rc==LSM_OK)==(pCsr!=0) );
   *ppCsr = pCsr;
   return rc;
 }
-
-#define CURSOR_DATA_TREE      0
-#define CURSOR_DATA_SYSTEM    1
-#define CURSOR_DATA_SEGMENT   2
 
 static void multiCursorGetKey(
   MultiCursor *pCsr, 
@@ -1672,7 +2061,11 @@ static void multiCursorGetKey(
 
     default: {
       int iSeg = iKey - CURSOR_DATA_SEGMENT;
-      if( iSeg<pCsr->nSegCsr && segmentCursorValid(&pCsr->aSegCsr[iSeg]) ){
+      if( iSeg==pCsr->nSegCsr && pCsr->pBtCsr ){
+        pKey = pCsr->pBtCsr->pKey;
+        nKey = pCsr->pBtCsr->nKey;
+        eType = pCsr->pBtCsr->eType;
+      }if( iSeg<pCsr->nSegCsr && segmentCursorValid(&pCsr->aSegCsr[iSeg]) ){
         segmentCursorKey(&pCsr->aSegCsr[iSeg], &pKey, &nKey);
         segmentCursorType(&pCsr->aSegCsr[iSeg], &eType);
       }
@@ -1724,6 +2117,7 @@ static int multiCursorGetVal(
     *ppVal = 0;
     *pnVal = 0;
   }
+  assert( rc==LSM_OK || (*ppVal==0 && *pnVal==0) );
   return rc;
 }
 
@@ -1818,8 +2212,11 @@ static int multiCursorAllocTree(MultiCursor *pCsr){
   int rc = LSM_OK;
   if( pCsr->aTree==0 ){
     int nByte;                    /* Bytes of space to allocate */
+    int bBtree;                   /* True if b-tree cursor is present */
+
+    bBtree = (pCsr->pBtCsr!=0);
     pCsr->nTree = 2;
-    while( pCsr->nTree<(CURSOR_DATA_SEGMENT+pCsr->nSegCsr) ){
+    while( pCsr->nTree<(CURSOR_DATA_SEGMENT+pCsr->nSegCsr+bBtree) ){
       pCsr->nTree = pCsr->nTree*2;
     }
 
@@ -1852,6 +2249,11 @@ static int multiCursorEnd(MultiCursor *pCsr, int bLast){
   }
   for(i=0; rc==LSM_OK && i<pCsr->nSegCsr; i++){
     rc = segmentCursorEnd(&pCsr->aSegCsr[i], bLast);
+  }
+
+  if( rc==LSM_OK && pCsr->pBtCsr ){
+    assert( bLast==0 );
+    rc = btreeCursorFirst(pCsr->pBtCsr);
   }
 
   if( rc==LSM_OK ){
@@ -2098,6 +2500,9 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
         }else{
           pCsr->flags &= ~CURSOR_AT_LEVELS;
         }
+      }else if( iKey==(CURSOR_DATA_SEGMENT+pCsr->nSegCsr) ){
+        assert( bReverse==0 && pCsr->pBtCsr );
+        rc = btreeCursorNext(pCsr->pBtCsr);
       }else{
         LevelCursor *pLevel = &pCsr->aSegCsr[iKey-CURSOR_DATA_SEGMENT];
         rc = segmentCursorAdvance(pLevel, bReverse);
@@ -2151,9 +2556,26 @@ int lsmMCursorKey(MultiCursor *pCsr, void **ppKey, int *pnKey){
 }
 
 int lsmMCursorValue(MultiCursor *pCsr, void **ppVal, int *pnVal){
+  void *pVal;
+  int nVal;
+  int rc;
+
   assert( pCsr->aTree );
   assert( rtIsDelete(pCsr->eType)==0 || !(pCsr->flags & CURSOR_IGNORE_DELETE) );
-  return multiCursorGetVal(pCsr, pCsr->aTree[1], ppVal, pnVal);
+
+  rc = multiCursorGetVal(pCsr, pCsr->aTree[1], &pVal, &nVal);
+  if( pVal && rc==LSM_OK ){
+    rc = sortedBlobSet(pCsr->pDb->pEnv, &pCsr->val, pVal, nVal);
+    pVal = pCsr->val.pData;
+  }
+
+  if( rc!=LSM_OK ){
+    pVal = 0;
+    nVal = 0;
+  }
+  *ppVal = pVal;
+  *pnVal = nVal;
+  return rc;
 }
 
 int lsmMCursorType(MultiCursor *pCsr, int *peType){
@@ -2203,30 +2625,32 @@ static int mergeWorkerPageOffset(u8 *aData, int nData){
 ** to the way the file.c module works some (the first and last in each block)
 ** are 4 bytes smaller than the others.
 */
-static int mergeWorkerMoveHierarchy(MergeWorker *pMW){
-  SortedRun *pSep;                /* Separators run being modified */
+static int mergeWorkerMoveHierarchy(
+  MergeWorker *pMW,               /* Merge worker */
+  int bSep                        /* True for separators run */
+){
+  Segment *pSeg;                  /* Segment being written */
   lsm_db *pDb = pMW->pDb;         /* Database handle */
   int rc = LSM_OK;                /* Return code */
   int i;
   int iRight = 0;
-  int nHier = pMW->nHier;
-  Page **apHier = pMW->apHier;
+  Page **apHier = pMW->hier.apHier;
+  int nHier = pMW->hier.nHier;
 
   assert( nHier>0 && pMW->pLevel->pMerge->bHierReadonly );
-
-  pSep = &pMW->pLevel->lhs.sep;
+  pSeg = &pMW->pLevel->lhs;
 
   for(i=0; rc==LSM_OK && i<nHier; i++){
     Page *pNew = 0;
-    rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSep, &pNew);
+    rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, &pNew);
     assert( rc==LSM_OK );
 
     if( rc==LSM_OK ){
       u8 *a1; int n1;
       u8 *a2; int n2;
 
-      a1 = lsmFsPageData(pNew, &n1);
-      a2 = lsmFsPageData(apHier[i], &n2);
+      a1 = fsPageData(pNew, &n1);
+      a2 = fsPageData(apHier[i], &n2);
       assert( n1==n2 || n1+4==n2 || n2+4==n1 );
 
       if( n1>=n2 ){
@@ -2256,7 +2680,7 @@ static int mergeWorkerMoveHierarchy(MergeWorker *pMW){
 
 #ifdef LSM_DEBUG
   if( rc==LSM_OK ){
-    for(i=0; i<nHier; i++) assert( lsmFsPageWritable(pMW->apHier[i]) );
+    for(i=0; i<nHier; i++) assert( lsmFsPageWritable(apHier[i]) );
   }
 #endif
 
@@ -2271,15 +2695,19 @@ static int mergeWorkerMoveHierarchy(MergeWorker *pMW){
 */
 static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
   int rc = LSM_OK;
-  SortedRun *pSep = &pMW->pLevel->lhs.sep;
+  Segment *pSeg;
+  Hierarchy *p;
+ 
+  pSeg = &pMW->pLevel->lhs;
+  p = &pMW->hier;
 
-  if( pMW->apHier==0 && pSep->iRoot!=0 ){
+  if( p->apHier==0 && pSeg->iRoot!=0 ){
     int bHierReadonly = pMW->pLevel->pMerge->bHierReadonly;
     FileSystem *pFS = pMW->pDb->pFS;
     lsm_env *pEnv = pMW->pDb->pEnv;
     Page **apHier = 0;
     int nHier = 0;
-    int iPg = pSep->iRoot;
+    int iPg = pSeg->iRoot;
 
     do {
       Page *pPg = 0;
@@ -2290,7 +2718,7 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
       rc = lsmFsDbPageGet(pFS, iPg, &pPg);
       if( rc!=LSM_OK ) break;
 
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       flags = pageGetFlags(aData, nData);
       if( flags&SEGMENT_BTREE_FLAG ){
         Page **apNew = (Page **)lsmRealloc(
@@ -2314,8 +2742,8 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
     }while( 1 );
 
     if( rc==LSM_OK ){
-      pMW->nHier = nHier;
-      pMW->apHier = apHier;
+      p->nHier = nHier;
+      p->apHier = apHier;
     }else{
       int i;
       for(i=0; i<nHier; i++){
@@ -2360,7 +2788,7 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
 ** page footer, not varints in page records).
 **
 ** Records may not span b-tree pages. If this function is called to add a
-** record larger than (page-size / 4) bytes, then a pointer to the separators
+** record larger than (page-size / 4) bytes, then a pointer to the indexed
 ** array page that contains the main record is added to the b-tree instead.
 ** In this case the record format is:
 **
@@ -2368,10 +2796,11 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
 **         + Absolute pointer value (varint),
 **         + Absolute page number of page containing key (varint).
 **
-** See function seekInSeparators() for the code that traverses b-tree pages.
+** See function seekInBtree() for the code that traverses b-tree pages.
 */
 static int mergeWorkerPushHierarchy(
   MergeWorker *pMW,               /* Merge worker object */
+  int bSep,                       /* True for separators, false otherwise */
   Pgno iKeyPg,                    /* Page that will contain pKey/nKey */
   int iTopic,                     /* Topic value for this key */
   void *pKey,                     /* Pointer to key buffer */
@@ -2387,20 +2816,27 @@ static int mergeWorkerPushHierarchy(
   Pgno iPtr;                      /* Pointer value to accompany pKey/nKey */
   int bIndirect;                  /* True to use an indirect record */
 
+  Hierarchy *p;
+  Segment *pSeg;
+
   /* If there exists a b-tree hierarchy and it is not loaded into 
   ** memory, load it now.  */
+  pSeg = &pMW->pLevel->lhs;
+  p = &pMW->hier;
   rc = mergeWorkerLoadHierarchy(pMW);
 
-  /* TODO: What the heck does this do? */
-  if( pMW->nHier ){
-    aData = lsmFsPageData(pMW->apHier[0], &nData);
+  /* Obtain the absolute pointer value to store along with the key in the
+  ** page body. This pointer points to a page that contains keys that are
+  ** smaller than pKey/nKey.  */
+  if( p->nHier ){
+    aData = fsPageData(p->apHier[0], &nData);
     iPtr = lsmGetU32(&aData[SEGMENT_POINTER_OFFSET(nData)]);
   }else{
-    iPtr = pMW->pLevel->lhs.sep.iFirst;
+    iPtr = pSeg->iFirst;
   }
 
-  if( pMW->nHier && pMW->pLevel->pMerge->bHierReadonly ){
-    rc = mergeWorkerMoveHierarchy(pMW);
+  if( p->nHier && pMW->pLevel->pMerge->bHierReadonly ){
+    rc = mergeWorkerMoveHierarchy(pMW, bSep);
     if( rc!=LSM_OK ) goto push_hierarchy_out;
   }
 
@@ -2416,27 +2852,27 @@ static int mergeWorkerPushHierarchy(
   ** starting with the leaf and iterating up towards the root. When the loop
   ** exits, the key may be written to apHier[iLevel].
   */
-  for(iLevel=0; iLevel<=pMW->nHier; iLevel++){
+  for(iLevel=0; iLevel<=p->nHier; iLevel++){
     int nByte;                    /* Number of free bytes required */
     int iRight;                   /* Right hand pointer from aData[]/nData */
 
-    if( iLevel==pMW->nHier ){
+    if( iLevel==p->nHier ){
       /* Extend the array and allocate a new root page. */
       Page **aNew;
       aNew = (Page **)lsmRealloc(
-          pMW->pDb->pEnv, pMW->apHier, sizeof(Page *)*(pMW->nHier+1)
+          pMW->pDb->pEnv, p->apHier, sizeof(Page *)*(p->nHier+1)
       );
       if( !aNew ){
         rc = LSM_NOMEM_BKPT;
         goto push_hierarchy_out;
       }
-      pMW->apHier = aNew;
+      p->apHier = aNew;
     }else{
       int nFree;
 
       /* If the key will fit on this page, break out of the loop. */
-      assert( lsmFsPageWritable(pMW->apHier[iLevel]) );
-      aData = lsmFsPageData(pMW->apHier[iLevel], &nData);
+      assert( lsmFsPageWritable(p->apHier[iLevel]) );
+      aData = fsPageData(p->apHier[iLevel], &nData);
       iRight = lsmGetU32(&aData[SEGMENT_POINTER_OFFSET(nData)]);
       if( bIndirect ){
         nByte = 2 + 1 + lsmVarintLen32(iRight) + lsmVarintLen32(iKeyPg);
@@ -2448,36 +2884,36 @@ static int mergeWorkerPushHierarchy(
       if( nByte<=nFree ) break;
 
       /* Otherwise, it is full. Release it. */
-      iPtr = lsmFsPageNumber(pMW->apHier[iLevel]);
-      rc = lsmFsPageRelease(pMW->apHier[iLevel]);
+      iPtr = lsmFsPageNumber(p->apHier[iLevel]);
+      rc = lsmFsPageRelease(p->apHier[iLevel]);
     }
 
     /* Allocate a new page for apHier[iLevel]. */
-    pMW->apHier[iLevel] = 0;
+    p->apHier[iLevel] = 0;
     if( rc==LSM_OK ){
       rc = lsmFsSortedAppend(
-          pDb->pFS, pDb->pWorker, &pMW->pLevel->lhs.sep, &pMW->apHier[iLevel]
+          pDb->pFS, pDb->pWorker, pSeg, &p->apHier[iLevel]
       );
     }
     if( rc!=LSM_OK ) goto push_hierarchy_out;
 
-    aData = lsmFsPageData(pMW->apHier[iLevel], &nData);
+    aData = fsPageData(p->apHier[iLevel], &nData);
     memset(aData, 0, nData);
     lsmPutU16(&aData[SEGMENT_FLAGS_OFFSET(nData)], SEGMENT_BTREE_FLAG);
     lsmPutU16(&aData[SEGMENT_NRECORD_OFFSET(nData)], 0);
     if( iLevel>0 ){
-      iRight = lsmFsPageNumber(pMW->apHier[iLevel-1]);
+      iRight = lsmFsPageNumber(p->apHier[iLevel-1]);
       lsmPutU32(&aData[SEGMENT_POINTER_OFFSET(nData)], iRight);
     }
 
-    if( iLevel==pMW->nHier ){
-      pMW->nHier++;
+    if( iLevel==p->nHier ){
+      p->nHier++;
       break;
     }
   }
 
   /* Write the key into page apHier[iLevel]. */
-  aData = lsmFsPageData(pMW->apHier[iLevel], &nData);
+  aData = fsPageData(p->apHier[iLevel], &nData);
 
   iOff = mergeWorkerPageOffset(aData, nData);
 
@@ -2497,86 +2933,19 @@ static int mergeWorkerPushHierarchy(
   }
 
   if( iLevel>0 ){
-    int iRight = lsmFsPageNumber(pMW->apHier[iLevel-1]);
+    int iRight = lsmFsPageNumber(p->apHier[iLevel-1]);
     lsmPutU32(&aData[SEGMENT_POINTER_OFFSET(nData)], iRight);
   }
 
   /* Write the right-hand pointer of the right-most leaf page of the 
   ** b-tree heirarchy. */
-  aData = lsmFsPageData(pMW->apHier[0], &nData);
+  aData = fsPageData(p->apHier[0], &nData);
   lsmPutU32(&aData[SEGMENT_POINTER_OFFSET(nData)], iKeyPg);
 
   /* Ensure that the SortedRun.iRoot field is correct. */
-  pMW->pLevel->lhs.sep.iRoot = lsmFsPageNumber(pMW->apHier[pMW->nHier-1]);
+  pSeg->iRoot = lsmFsPageNumber(p->apHier[p->nHier-1]);
 
 push_hierarchy_out:
-  return rc;
-}
-
-/*
-** The merge-worker object passed as the first argument to this function
-** was used for an in-memory tree flush. If one was required, the separators 
-** array has been assembled in-memory (as a "phantom"). In this case it
-** consists of leaf nodes only, there are no b-tree nodes. This function 
-** materializes the phantom run (writes it into the db file) and appends
-** any required b-tree nodes.
-*/
-static int mergeWorkerBuildHierarchy(MergeWorker *pMW){
-  int rc = LSM_OK;
-
-  assert( pMW->bFlush );
-  assert( pMW->pLevel->lhs.sep.iRoot==0 );
-
-  if( pMW->apPage[1] ){
-    SortedRun *pRun;              /* Separators run to materialize */
-    lsm_db *db = pMW->pDb;
-    Blob blob = {0, 0, 0};
-    Page *pPg;
-    int iLast;
-
-    /* Write the leaf pages into the file. They now have page numbers,
-    ** which can be used as pointers in the b-tree hierarchy.  */
-    pRun = &pMW->pLevel->lhs.sep;
-    rc = lsmFsPhantomMaterialize(db->pFS, db->pWorker, pRun);
-
-    if( rc==LSM_OK ){
-      rc = lsmFsDbPageGet(db->pFS, pRun->iFirst, &pPg);
-    }
-
-    iLast = pRun->iLast;
-    while( rc==LSM_OK && lsmFsPageNumber(pPg)!=iLast ){
-      Page *pNext = 0;
-
-      rc = lsmFsDbPageNext(pRun, pPg, 1, &pNext);
-      lsmFsPageRelease(pPg);
-      pPg = pNext;
-
-      if( rc==LSM_OK ){
-        u8 *aData;
-        int nData;
-        aData = lsmFsPageData(pPg, &nData);
-        if( pageGetNRec(aData, nData)>0 ){
-          u8 *pKey;
-          int nKey;
-          int iTopic;
-          Pgno iPg = lsmFsPageNumber(pPg);
-
-          pKey = pageGetKey(pPg, 0, &iTopic, &nKey, &blob);
-          rc = mergeWorkerPushHierarchy(pMW, iPg, iTopic, pKey, nKey);
-        }
-      }
-    }
-
-    if( pMW->nHier>0 ){
-      Page *pRoot = pMW->apHier[pMW->nHier-1];
-      pRun->iRoot = lsmFsPageNumber(pRoot);
-    }else{
-      pRun->iRoot = pRun->iFirst;
-    }
-
-    lsmFsPageRelease(pPg);
-    sortedBlobFree(&blob);
-  }
   return rc;
 }
 
@@ -2588,10 +2957,7 @@ static int keyszToSkip(FileSystem *pFS, int nKey){
 
 /*
 ** Advance to the next page of an output run being populated by merge-worker
-** pMW. If bSep is true, the separators run output is advanced by one page.
-** Otherwise, the main run.
-**
-** The footer of the new page is initialized to indicate that it contains
+** pMW. The footer of the new page is initialized to indicate that it contains
 ** zero records. The flags field is cleared. The page footer pointer field
 ** is set to iFPtr.
 **
@@ -2599,34 +2965,31 @@ static int keyszToSkip(FileSystem *pFS, int nKey){
 */
 static int mergeWorkerNextPage(
   MergeWorker *pMW,               /* Merge worker object to append page to */
-  int bSep,                       /* True to append to the separators array */
   int iFPtr                       /* Pointer value for footer of new page */
 ){
   int rc = LSM_OK;                /* Return code */
   Page *pNext = 0;                /* New page appended to run */
   lsm_db *pDb = pMW->pDb;         /* Database handle */
-  SortedRun *pRun;                /* Run to append to */
+  Segment *pSeg;                  /* Run to append to */
 
-  assert( bSep==0 || bSep==1 );
-
-  pRun = (bSep ? &pMW->pLevel->lhs.sep : &pMW->pLevel->lhs.run);
-  rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pRun, &pNext);
-  assert( rc!=LSM_OK || bSep || pRun->iFirst>0 );
+  pSeg = &pMW->pLevel->lhs;
+  rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, &pNext);
+  assert( rc!=LSM_OK || pSeg->iFirst>0 );
 
   if( rc==LSM_OK ){
     u8 *aData;                    /* Data buffer belonging to page pNext */
     int nData;                    /* Size of aData[] in bytes */
 
-    lsmFsPageRelease(pMW->apPage[bSep]);
-    pMW->apPage[bSep] = pNext;
-    pMW->pLevel->pMerge->aiOutputOff[bSep] = 0;
+    lsmFsPageRelease(pMW->pPage);
+    pMW->pPage = pNext;
+    pMW->pLevel->pMerge->iOutputOff = 0;
 
-    aData = lsmFsPageData(pNext, &nData);
+    aData = fsPageData(pNext, &nData);
     lsmPutU16(&aData[SEGMENT_NRECORD_OFFSET(nData)], 0);
     lsmPutU16(&aData[SEGMENT_FLAGS_OFFSET(nData)], 0);
     lsmPutU32(&aData[SEGMENT_POINTER_OFFSET(nData)], iFPtr);
 
-    if( bSep==0 ) pMW->nWork++;
+    pMW->nWork++;
   }
 
   return rc;
@@ -2657,20 +3020,20 @@ static int mergeWorkerData(
     int nRec;                     /* Number of records on current output page */
     int iOff;                     /* Offset in aData[] to write to */
 
-    assert( lsmFsPageWritable(pMW->apPage[bSep]) );
+    assert( lsmFsPageWritable(pMW->pPage) );
    
-    aData = lsmFsPageData(pMW->apPage[bSep], &nData);
+    aData = fsPageData(pMW->pPage, &nData);
     nRec = pageGetNRec(aData, nData);
-    iOff = pMerge->aiOutputOff[bSep];
+    iOff = pMerge->iOutputOff;
     nCopy = LSM_MIN(nRem, SEGMENT_EOF(nData, nRec) - iOff);
 
     memcpy(&aData[iOff], &aWrite[nWrite-nRem], nCopy);
     nRem -= nCopy;
 
     if( nRem>0 ){
-      rc = mergeWorkerNextPage(pMW, bSep, iFPtr);
+      rc = mergeWorkerNextPage(pMW, iFPtr);
     }else{
-      pMerge->aiOutputOff[bSep] = iOff + nCopy;
+      pMerge->iOutputOff = iOff + nCopy;
     }
   }
 
@@ -2680,10 +3043,9 @@ static int mergeWorkerData(
 
 static int mergeWorkerWrite(
   MergeWorker *pMW,               /* Merge worker object to write into */
-  int bSep,                       /* True to write to separators array */
   int eType,                      /* One of SORTED_SEPARATOR, WRITE or DELETE */
   void *pKey, int nKey,           /* Key value */
-  void *pVal, int nVal,           /* Accompanying value, if any */
+  MultiCursor *pCsr,              /* Read value (if any) from here */
   int iPtr,                       /* Absolute value of page pointer, or 0 */
   int *piPtrOut                   /* OUT: Pointer to write to separators */
 ){
@@ -2697,17 +3059,16 @@ static int mergeWorkerWrite(
   int iFPtr;                      /* Value of pointer in footer of pPg */
   int iRPtr;                      /* Value of pointer written into record */
   int iOff;                       /* Current write offset within page pPg */
-  SortedRun *pRun;                /* Run being written to */
+  Segment *pSeg;                  /* Segment being written */
   int flags = 0;                  /* If != 0, flags value for page footer */
-
-  assert( bSep==0 || bSep==1 );
-  assert( bSep==0 || rtIsSeparator(eType) );
+  void *pVal;
+  int nVal;
 
   pMerge = pMW->pLevel->pMerge;    
-  pRun = (bSep ? &pMW->pLevel->lhs.sep : &pMW->pLevel->lhs.run);
+  pSeg = &pMW->pLevel->lhs;
 
-  pPg = pMW->apPage[bSep];
-  aData = lsmFsPageData(pPg, &nData);
+  pPg = pMW->pPage;
+  aData = fsPageData(pPg, &nData);
   nRec = pageGetNRec(aData, nData);
   iFPtr = pageGetPtr(aData, nData);
 
@@ -2736,20 +3097,22 @@ static int mergeWorkerWrite(
   **     3) Key size - 1 varint
   **     4) Value size - 1 varint (SORTED_WRITE only)
   */
-  nHdr = 1 + lsmVarintLen32(iRPtr) + lsmVarintLen32(nKey);
-  if( rtIsWrite(eType) ) nHdr += lsmVarintLen32(nVal);
+  rc = lsmMCursorValue(pCsr, &pVal, &nVal);
+  if( rc==LSM_OK ){
+    nHdr = 1 + lsmVarintLen32(iRPtr) + lsmVarintLen32(nKey);
+    if( rtIsWrite(eType) ) nHdr += lsmVarintLen32(nVal);
 
-  /* If the entire header will not fit on page pPg, or if page pPg is 
-  ** marked read-only, advance to the next page of the output run. */
-  iOff = pMerge->aiOutputOff[bSep];
-  if( iOff<0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
-    iFPtr = iFPtr + (nRec ? pageGetRecordPtr(aData, nData, nRec-1) : 0);
-    iRPtr = iPtr - iFPtr;
-    iOff = 0;
-    nRec = 0;
-    rc = mergeWorkerNextPage(pMW, bSep, iFPtr);
-    pPg = pMW->apPage[bSep];
-    aData = lsmFsPageData(pPg, &nData);
+    /* If the entire header will not fit on page pPg, or if page pPg is 
+     ** marked read-only, advance to the next page of the output run. */
+    iOff = pMerge->iOutputOff;
+    if( iOff<0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
+      iFPtr = iFPtr + (nRec ? pageGetRecordPtr(aData, nData, nRec-1) : 0);
+      iRPtr = iPtr - iFPtr;
+      iOff = 0;
+      nRec = 0;
+      rc = mergeWorkerNextPage(pMW, iFPtr);
+      pPg = pMW->pPage;
+    }
   }
 
   /* If this record header will be the first on the page, and the page is 
@@ -2763,28 +3126,27 @@ static int mergeWorkerWrite(
   **   * If currently writing the separators array, push a copy of the key
   **     into the b-tree hierarchy.
   */
-  if( rc==LSM_OK && nRec==0 && pRun->iFirst!=pRun->iLast ){
+  if( rc==LSM_OK && nRec==0 && pSeg->iFirst!=pSeg->iLast ){
     assert( pMerge->nSkip>=0 );
 
-    if( bSep ){
-      if( pMW->bFlush==0 ){
-        Pgno iPg = lsmFsPageNumber(pPg);
-        rc = mergeWorkerPushHierarchy(pMW, iPg, rtTopic(eType), pKey, nKey);
-      }
-    }else{
-      if( pMerge->nSkip ){
-        pMerge->nSkip--;
-        flags = PGFTR_SKIP_THIS_FLAG;
-      }else{
-        *piPtrOut = lsmFsPageNumber(pPg);
-        pMerge->nSkip = keyszToSkip(pMW->pDb->pFS, nKey);
-      }
-      if( pMerge->nSkip ) flags |= PGFTR_SKIP_NEXT_FLAG;
+    if( pMerge->nSkip==0 ){
+      Pgno iPg = lsmFsPageNumber(pPg);
+      rc = mergeWorkerPushHierarchy(pMW, 0, iPg, rtTopic(eType), pKey, nKey);
     }
+    if( pMerge->nSkip ){
+      pMerge->nSkip--;
+      flags = PGFTR_SKIP_THIS_FLAG;
+    }else{
+      *piPtrOut = lsmFsPageNumber(pPg);
+      pMerge->nSkip = keyszToSkip(pMW->pDb->pFS, nKey);
+    }
+    if( pMerge->nSkip ) flags |= PGFTR_SKIP_NEXT_FLAG;
   }
 
   /* Update the output segment */
   if( rc==LSM_OK ){
+    aData = fsPageData(pPg, &nData);
+
     /* Update the page footer. */
     lsmPutU16(&aData[SEGMENT_NRECORD_OFFSET(nData)], nRec+1);
     lsmPutU16(&aData[SEGMENT_CELLPTR_OFFSET(nData, nRec)], iOff);
@@ -2795,13 +3157,16 @@ static int mergeWorkerWrite(
     iOff += lsmVarintPut32(&aData[iOff], iRPtr);                         /* 2 */
     iOff += lsmVarintPut32(&aData[iOff], nKey);                          /* 3 */
     if( rtIsWrite(eType) ) iOff += lsmVarintPut32(&aData[iOff], nVal);   /* 4 */
-    pMerge->aiOutputOff[bSep] = iOff;
+    pMerge->iOutputOff = iOff;
 
     /* Write the key and data into the segment. */
     assert( iFPtr==pageGetPtr(aData, nData) );
-    rc = mergeWorkerData(pMW, bSep, iFPtr+iRPtr, pKey, nKey);
+    rc = mergeWorkerData(pMW, 0, iFPtr+iRPtr, pKey, nKey);
     if( rc==LSM_OK && rtIsWrite(eType) ){
-      rc = mergeWorkerData(pMW, bSep, iFPtr+iRPtr, pVal, nVal);
+      if( rtTopic(eType)==0 ) rc = lsmMCursorValue(pCsr, &pVal, &nVal);
+      if( rc==LSM_OK ){
+        rc = mergeWorkerData(pMW, 0, iFPtr+iRPtr, pVal, nVal);
+      }
     }
   }
 
@@ -2838,12 +3203,13 @@ static void mergeWorkerShutdown(MergeWorker *pMW){
   ** code to restore a cursor position based on aInput[].  */
   if( pCsr ){
     Merge *pMerge = pMW->pLevel->pMerge;
+    int bBtree = (pCsr->pBtCsr!=0);
 
     /* pMerge->nInput==0 indicates that this is a FlushTree() operation. */
     assert( pMerge->nInput==0 || pMW->pLevel->nRight>0 );
-    assert( pMerge->nInput==0 || pMerge->nInput==pCsr->nSegCsr );
+    assert( pMerge->nInput==0 || pMerge->nInput==(pCsr->nSegCsr+bBtree) );
 
-    for(i=0; i<pMerge->nInput; i++){
+    for(i=0; i<(pMerge->nInput-bBtree); i++){
       SegmentPtr *pPtr = &pCsr->aSegCsr[i].aPtr[0];
       if( pPtr->pPg ){
         pMerge->aInput[i].iPg = lsmFsPageNumber(pPtr->pPg);
@@ -2853,40 +3219,57 @@ static void mergeWorkerShutdown(MergeWorker *pMW){
         pMerge->aInput[i].iCell = 0;
       }
     }
+    if( bBtree && pMerge->nInput ){
+      assert( i==pCsr->nSegCsr );
+      btreeCursorPosition(pCsr->pBtCsr, &pMerge->aInput[i]);
+    }
   }
 
   lsmMCursorClose(pCsr);
-  lsmFsPageRelease(pMW->apPage[0]);
-  lsmFsPageRelease(pMW->apPage[1]);
-  for(i=0; i<pMW->nHier; i++){
-    lsmFsPageRelease(pMW->apHier[i]);
+  lsmFsPageRelease(pMW->pPage);
+
+  for(i=0; i<2; i++){
+    Hierarchy *p = &pMW->hier;
+    int iPg;
+    for(iPg=0; iPg<p->nHier; iPg++){
+      lsmFsPageRelease(p->apHier[iPg]);
+    }
+    lsmFree(pMW->pDb->pEnv, p->apHier);
+    p->apHier = 0;
+    p->nHier = 0;
   }
-  lsmFree(pMW->pDb->pEnv, pMW->apHier);
 
   pMW->pCsr = 0;
-  pMW->apHier = 0;
-  pMW->nHier = 0;
-  pMW->apPage[0] = 0;
-  pMW->apPage[1] = 0;
+  pMW->pPage = 0;
+  pMW->pPage = 0;
 }
 
 static int mergeWorkerFirstPage(MergeWorker *pMW){
   int rc;                         /* Return code */
-  SortedRun *pRun;                /* Run containing sep. keys to merge in */
-  Page *pPg = 0;                  /* First page of run pRun */
+  Page *pPg = 0;                  /* First page of run pSeg */
+  int iFPtr;                      /* Pointer value read from footer of pPg */
+  MultiCursor *pCsr = pMW->pCsr;
 
-  assert( pMW->apPage[0]==0 );
+  assert( pMW->pPage==0 );
 
-  pRun = pMW->pCsr->aSegCsr[pMW->pCsr->nSegCsr-1].aPtr[0].pRun;
-  rc = lsmFsDbPageGet(pMW->pDb->pFS, pRun->iFirst, &pPg);
+  if( pCsr->pBtCsr ){
+    rc = LSM_OK;
+    iFPtr = pMW->pLevel->pNext->lhs.iFirst;
+  }else{
+    Segment *pSeg;
+    pSeg = pMW->pCsr->aSegCsr[pMW->pCsr->nSegCsr-1].aPtr[0].pSeg;
+    rc = lsmFsDbPageGet(pMW->pDb->pFS, pSeg->iFirst, &pPg);
+    if( rc==LSM_OK ){
+      u8 *aData;                    /* Buffer for page pPg */
+      int nData;                    /* Size of aData[] in bytes */
+      aData = fsPageData(pPg, &nData);
+      iFPtr = pageGetPtr(aData, nData);
+      lsmFsPageRelease(pPg);
+    }
+  }
+
   if( rc==LSM_OK ){
-    u8 *aData;                    /* Buffer for page pPg */
-    int nData;                    /* Size of aData[] in bytes */
-    int iFPtr;                    /* Pointer value read from footer of pPg */
-    aData = lsmFsPageData(pPg, &nData);
-    iFPtr = pageGetPtr(aData, nData);
-    lsmFsPageRelease(pPg);
-    rc = mergeWorkerNextPage(pMW, 0, iFPtr);
+    rc = mergeWorkerNextPage(pMW, iFPtr);
   }
 
   return rc;
@@ -2895,10 +3278,9 @@ static int mergeWorkerFirstPage(MergeWorker *pMW){
 static int mergeWorkerStep(MergeWorker *pMW){
   lsm_db *pDb = pMW->pDb;       /* Database handle */
   MultiCursor *pCsr;            /* Cursor to read input data from */
-  int rc;                       /* Return code */
+  int rc = LSM_OK;              /* Return code */
   int eType;                    /* SORTED_SEPARATOR, WRITE or DELETE */
   void *pKey; int nKey;         /* Key */
-  void *pVal; int nVal;         /* Value */
   Segment *pSeg;                /* Output segment */
   int iPtr = 0;
 
@@ -2907,9 +3289,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
 
   /* Pull the next record out of the source cursor. */
   lsmMCursorKey(pCsr, &pKey, &nKey);
-  rc = lsmMCursorValue(pCsr, &pVal, &nVal);
   eType = pCsr->eType;
-  if( rc!=LSM_OK ) return rc;
 
   /* Figure out if the output record may have a different pointer value
   ** than the previous. This is the case if the current key is identical to
@@ -2917,7 +3297,16 @@ static int mergeWorkerStep(MergeWorker *pMW){
   ** iPtr to the absolute pointer value. If not, leave iPtr set to zero, 
   ** indicating that the output pointer value should be a copy of the pointer 
   ** value written with the previous key.  */
-  if( pCsr->nSegCsr ){
+  if( pCsr->pBtCsr ){
+    BtreeCursor *pBtCsr = pCsr->pBtCsr;
+    if( pBtCsr->pKey ){
+      int res = rtTopic(pBtCsr->eType) - rtTopic(eType);
+      if( res==0 ) res = pDb->xCmp(pBtCsr->pKey, pBtCsr->nKey, pKey, nKey);
+      if( 0==res ) iPtr = pBtCsr->iPtr;
+
+      assert( res>=0 );
+    }
+  }else if( pCsr->nSegCsr ){
     LevelCursor *pPtrs = &pCsr->aSegCsr[pCsr->nSegCsr-1];
     if( segmentCursorValid(pPtrs)
      && 0==pDb->xCmp(pPtrs->aPtr[0].pKey, pPtrs->aPtr[0].nKey, pKey, nKey)
@@ -2932,37 +3321,13 @@ static int mergeWorkerStep(MergeWorker *pMW){
   if( rtIsSeparator(eType)==0 || iPtr!=0 ){
     int iSPtr = 0;                /* Separators require a pointer here */
 
-    if( pMW->apPage[0]==0 ){
+    if( pMW->pPage==0 ){
       rc = mergeWorkerFirstPage(pMW);
     }
 
     /* Write the record into the main run. */
     if( rc==LSM_OK ){
-      rc = mergeWorkerWrite(pMW, 0, eType, pKey, nKey, pVal, nVal, iPtr,&iSPtr);
-    }
-
-    /* If the call to mergeWorkerWrite() above started a new page, then
-    ** add a SORTED_SEPARATOR key to the separators run.  */
-    if( rc==LSM_OK && iSPtr ){
-
-      /* If the separators array has not been started, start it now. */
-      if( pMW->apPage[1]==0 ){
-        assert( pSeg->run.iFirst!=0 );
-        rc = mergeWorkerNextPage(pMW, 1, pSeg->run.iFirst);
-        if( !pMW->bFlush ) pSeg->sep.iRoot = pSeg->sep.iFirst;
-      }
-
-      if( rc==LSM_OK ){
-        int eSType;                 /* Type of record for separators array */
-
-        /* Figure out how many (if any) keys to skip from this point. */
-        assert( pMW->apPage[1] && (pSeg->sep.iFirst || pMW->bFlush) );
-        pMW->pLevel->pMerge->nSkip = keyszToSkip(pDb->pFS, nKey);
-
-        /* Write the key into the separators array. */
-        eSType = rtTopic(eType) | SORTED_SEPARATOR;
-        rc = mergeWorkerWrite(pMW, 1, eSType, pKey, nKey, 0, 0, iSPtr, 0);
-      }
+      rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pCsr, iPtr, &iSPtr);
     }
   }
 
@@ -2976,15 +3341,20 @@ static int mergeWorkerStep(MergeWorker *pMW){
   ** the main or separators array. 
   */
   if( rc==LSM_OK && !lsmMCursorValid(pMW->pCsr) ){
-    if( pSeg->run.iFirst ){
-      rc = lsmFsSortedFinish(pDb->pFS, &pSeg->run);
+    if( pSeg->iFirst ){
+      rc = lsmFsSortedFinish(pDb->pFS, pSeg);
     }
-    if( rc==LSM_OK && pMW->bFlush ){
-      rc = mergeWorkerBuildHierarchy(pMW);
+
+#ifdef LSM_DEBUG_EXPENSIVE
+    if( rc==LSM_OK ){
+      rc = assertBtreeOk(pDb, pSeg);
+      if( pMW->pCsr->pBtCsr ){
+        Segment *pNext = &pMW->pLevel->pNext->lhs;
+        rc = assertPointersOk(pDb, pSeg, pNext, 0);
+      }
     }
-    if( rc==LSM_OK && pSeg->sep.iFirst ){
-      rc = lsmFsSortedFinish(pDb->pFS, &pSeg->sep);
-    }
+#endif
+
     mergeWorkerShutdown(pMW);
   }
   return rc;
@@ -3016,7 +3386,7 @@ int lsmSortedNewToplevel(
   MultiCursor *pCsr = 0;
   Level *pNext = 0;               /* The current top level */
   Level *pNew;                    /* The new level itself */
-  SortedRun *pDel = 0;
+  Segment *pDel = 0;              /* Delete separators from this segment */
   int iLeftPtr = 0;
 
   /* Allocate the new level structure to write to. */
@@ -3036,20 +3406,13 @@ int lsmSortedNewToplevel(
       if( pNext ){
         assert( pNext->pMerge==0 || pNext->nRight>0 );
         if( pNext->pMerge==0 ){
-          if( segmentHasSeparators(&pNext->lhs) ){
+          if( pNext->lhs.iRoot ){
             rc = multiCursorAddLevel(pCsr, pNext, MULTICURSOR_ADDLEVEL_LHS_SEP);
-
-            /* This call moves any blocks occupied by separators array pDel 
-            ** to the pending list. We do this here, even though pDel will be 
-            ** read while building the new level, so that the blocks will be 
-            ** included in the "FREELIST" entry visited by the cursor (and 
-            ** written into the new top level).  */
             if( rc==LSM_OK ){
-              pDel = &pNext->lhs.sep;
-              rc = lsmFsSortedDelete(pDb->pFS, pDb->pWorker, 0, pDel);
+              pDel = &pNext->lhs;
             }
           }
-          iLeftPtr = pNext->lhs.run.iFirst;
+          iLeftPtr = pNext->lhs.iFirst;
         }
       }else{
         /* The new level will be the only level in the LSM. There is no reason
@@ -3081,10 +3444,9 @@ int lsmSortedNewToplevel(
 
     /* Mark the separators array for the new level as a "phantom". */
     mergeworker.bFlush = 1;
-    lsmFsPhantom(pDb->pFS, &pNew->lhs.sep);
 
     /* Allocate the first page of the output segment. */
-    rc = mergeWorkerNextPage(&mergeworker, 0, iLeftPtr);
+    rc = mergeWorkerNextPage(&mergeworker, iLeftPtr);
 
     /* Do the work to create the new merged segment on disk */
     if( rc==LSM_OK ) rc = lsmMCursorFirst(pCsr);
@@ -3092,20 +3454,15 @@ int lsmSortedNewToplevel(
       rc = mergeWorkerStep(&mergeworker);
     }
 
-    lsmFsPhantomFree(pDb->pFS);
     mergeWorkerShutdown(&mergeworker);
     pNew->pMerge = 0;
   }
   lsmFreelistDeltaEnd(pDb);
 
-  /* Link the new level into the top of the tree. Delete the separators
-  ** array (if any) that was merged into the new level. */
+  /* Link the new level into the top of the tree. */
   if( rc==LSM_OK ){
     if( pDel ){
-      /* lsmFsSortedDelete() has already been called on pDel. So all
-      ** that is required here is to zero it (so that it is not used by
-      ** future LSM searches). */
-      memset(pDel, 0, sizeof(SortedRun));
+      pDel->iRoot = 0;
     }
   }else{
     lsmDbSnapshotSetLevel(pDb->pWorker, pNext);
@@ -3160,8 +3517,6 @@ int lsmSortedFlushTree(
   lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "tree flush");
 #endif
 
-  assertAllBtreesOk(rc, pDb);
-  assertAllPointersOk(rc, pDb);
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
 
   lsmFinishFlush(pDb, rc==LSM_OK);
@@ -3220,7 +3575,7 @@ static int sortedMergeSetup(
     lsmDbSnapshotSetLevel(pDb->pWorker, pTopLevel);
 
     /* Determine whether or not the next separators will be linked in */
-    if( pNext && pNext->pMerge==0 && segmentHasSeparators(&pNext->lhs) ){
+    if( pNext && pNext->pMerge==0 && pNext->lhs.iRoot ){
       bUseNext = 1;
     }
   }
@@ -3238,31 +3593,31 @@ static int sortedMergeSetup(
   return rc;
 }
 
-static int mergeWorkerLoadOutputPage(MergeWorker *pMW, int bSep){
+static int mergeWorkerLoadOutputPage(MergeWorker *pMW){
   int rc = LSM_OK;                /* Return code */
-  SortedRun *pRun;                /* Run to load page from */
+  Segment *pSeg;                  /* Run to load page from */
   Level *pLevel;
 
   pLevel = pMW->pLevel;
-  pRun = (bSep ? &pLevel->lhs.sep : &pLevel->lhs.run);
-  if( pRun->iLast ){
+  pSeg = &pLevel->lhs;
+  if( pSeg->iLast ){
     Page *pPg;
-    rc = lsmFsDbPageGet(pMW->pDb->pFS, pRun->iLast, &pPg);
+    rc = lsmFsDbPageGet(pMW->pDb->pFS, pSeg->iLast, &pPg);
 
     while( rc==LSM_OK ){
       Page *pNext;
       u8 *aData;
       int nData;
-      aData = lsmFsPageData(pPg, &nData);
+      aData = fsPageData(pPg, &nData);
       if( (pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG)==0 ) break;
-      rc = lsmFsDbPageNext(pRun, pPg, -1, &pNext);
+      rc = lsmFsDbPageNext(pSeg, pPg, -1, &pNext);
       lsmFsPageRelease(pPg);
       pPg = pNext;
     }
 
     if( rc==LSM_OK ){
-      pMW->apPage[bSep] = pPg;
-      if( pLevel->pMerge->aiOutputOff[bSep]>=0 ) rc = lsmFsPageWrite(pPg);
+      pMW->pPage = pPg;
+      if( pLevel->pMerge->iOutputOff>=0 ) rc = lsmFsPageWrite(pPg);
     }
   }
   return rc;
@@ -3308,16 +3663,15 @@ static int mergeWorkerInit(
   }else{
     multiCursorIgnoreDelete(pCsr);
   }
-  assert( pMerge->nInput==pCsr->nSegCsr );
+  assert( rc!=LSM_OK || pMerge->nInput==(pCsr->nSegCsr+(pCsr->pBtCsr!=0)) );
   pMW->pCsr = pCsr;
 
-  /* Load each of the output pages into memory. */
-  if( rc==LSM_OK ) rc = mergeWorkerLoadOutputPage(pMW, 0);
-  if( rc==LSM_OK ) rc = mergeWorkerLoadOutputPage(pMW, 1);
+  /* Load the current output page into memory. */
+  if( rc==LSM_OK ) rc = mergeWorkerLoadOutputPage(pMW);
 
   /* Position the cursor. */
   if( rc==LSM_OK ){
-    if( pMW->apPage[0]==0 ){
+    if( pMW->pPage==0 ){
       /* The output array is still empty. So position the cursor at the very 
       ** start of the input.  */
       rc = multiCursorEnd(pCsr, 0);
@@ -3339,6 +3693,11 @@ static int mergeWorkerInit(
         }
       }
 
+      if( rc==LSM_OK && pCsr->pBtCsr ){
+        assert( i==pCsr->nSegCsr );
+        rc = btreeCursorRestore(pCsr->pBtCsr, pCsr->xCmp, &pMerge->aInput[i]);
+      }
+
       if( rc==LSM_OK ){
         rc = multiCursorSetupTree(pCsr, 0);
       }
@@ -3357,7 +3716,6 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
 
   assert( lsmFsIntegrityCheck(pDb) );
   assert( pWorker );
-  assertAllPointersOk(rc, pDb);
 
   if( lsmDbSnapshotLevel(pWorker)==0 ) return LSM_OK;
   lsmDatabaseDirty(pDb);
@@ -3370,7 +3728,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
     ** merge with the same age in the structure. Or the level being merged
     ** with the largest number of right-hand segments. Work on it.  */
     Level *pBest = 0;
-    int nBest = 4;
+    int nBest = pDb->nMerge;
 
     Level *pThis = 0;
     int nThis = 0;
@@ -3444,12 +3802,14 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
           int iGobble = mergeworker.pCsr->aTree[1] - CURSOR_DATA_SEGMENT;
           if( iGobble<pLevel->nRight ){
             SegmentPtr *pGobble = &mergeworker.pCsr->aSegCsr[iGobble].aPtr[0];
-            if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 ){
-              lsmFsGobble(pWorker, pGobble->pRun, pGobble->pPg);
+            if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 
+             && pGobble->pSeg->iRoot==0
+            ){
+              lsmFsGobble(pWorker, pGobble->pSeg, pGobble->pPg);
             }
           }
 
-        }else if( pLevel->lhs.run.iFirst==0 ){
+        }else if( pLevel->lhs.iFirst==0 ){
           /* If the new level is completely empty, remove it from the 
           ** database snapshot. This can only happen if all input keys were
           ** annihilated. Since keys are only annihilated if the new level
@@ -3459,7 +3819,6 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
           Level *pTop;          /* Top level of worker snapshot */
           Level **pp;           /* Read/write iterator for Level.pNext list */
           assert( pLevel->pNext==0 );
-          assert( segmentHasSeparators(&pLevel->lhs)==0 );
 
           /* Remove the level from the worker snapshot. */
           pTop = lsmDbSnapshotLevel(pWorker);
@@ -3468,22 +3827,20 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
           lsmDbSnapshotSetLevel(pWorker, pTop);
 
           /* Free the Level structure. */
-          lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->lhs.run);
+          lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->lhs);
           sortedFreeLevel(pDb->pEnv, pLevel);
         }else{
           int i;
 
           /* Free the separators of the next level, if required. */
           if( pLevel->pMerge->nInput > pLevel->nRight ){
-            assert( pLevel->pNext );
-            assert( segmentHasSeparators(&pLevel->pNext->lhs) );
-            lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->pNext->lhs.sep);
+            assert( pLevel->pNext->lhs.iRoot );
+            pLevel->pNext->lhs.iRoot = 0;
           }
 
           /* Free the right-hand-side of pLevel */
           for(i=0; i<pLevel->nRight; i++){
-            lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->aRhs[i].run);
-            lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->aRhs[i].sep);
+            lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->aRhs[i]);
           }
           lsmFree(pDb->pEnv, pLevel->aRhs);
           pLevel->nRight = 0;
@@ -3512,8 +3869,6 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
     *pnWrite = (nWork - nRemaining);
   }
 
-  assertAllBtreesOk(rc, pDb);
-  assertAllPointersOk(rc, pDb);
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   return rc;
 }
@@ -3646,11 +4001,11 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
 ** Space for the returned string is allocated using lsmMalloc(), and should
 ** be freed by the caller using lsmFree().
 */
-static char *segToString(lsm_env *pEnv, SortedRun *pRun, int nMin){
-  int nSize = pRun->nSize;
-  Pgno iRoot = pRun->iRoot;
-  Pgno iFirst = pRun->iFirst;
-  Pgno iLast = pRun->iLast;
+static char *segToString(lsm_env *pEnv, Segment *pSeg, int nMin){
+  int nSize = pSeg->nSize;
+  Pgno iRoot = pSeg->iRoot;
+  Pgno iFirst = pSeg->iFirst;
+  Pgno iLast = pSeg->iLast;
   char *z;
 
   char *z1;
@@ -3683,19 +4038,19 @@ static int fileToString(
   char *aBuf, 
   int nBuf, 
   int nMin,
-  SortedRun *pRun
+  Segment *pSeg
 ){
   int i = 0;
   char *zSeg;
 
-  zSeg = segToString(pEnv, pRun, nMin);
+  zSeg = segToString(pEnv, pSeg, nMin);
   i += sqlite4_snprintf(&aBuf[i], nBuf-i, "%s", zSeg);
   lsmFree(pEnv, zSeg);
 
   return i;
 }
 
-void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg, int bVals){
+void sortedDumpPage(lsm_db *pDb, Segment *pRun, Page *pPg, int bVals){
   Blob blob = {0, 0, 0};         /* Blob used for keys */
   LsmString s;
   int i;
@@ -3706,7 +4061,7 @@ void sortedDumpPage(lsm_db *pDb, SortedRun *pRun, Page *pPg, int bVals){
   u8 *aData;
   int nData;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
 
   nRec = pageGetNRec(aData, nData);
   iPtr = pageGetPtr(aData, nData);
@@ -3784,7 +4139,7 @@ static void infoCellDump(
   Page *pRef = 0;                 /* Pointer to page iRef */
   u8 *aCell;
 
-  aData = lsmFsPageData(pPg, &nData);
+  aData = fsPageData(pPg, &nData);
 
   aCell = pageGetCell(aData, nData, iCell);
   eType = *aCell++;
@@ -3852,7 +4207,7 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
     int iCell;
     u8 *aData; int nData;         /* Page data and size thereof */
 
-    aData = lsmFsPageData(pPg, &nData);
+    aData = fsPageData(pPg, &nData);
     nRec = pageGetNRec(aData, nData);
     iPtr = pageGetPtr(aData, nData);
     flags = pageGetFlags(aData, nData);
@@ -3909,9 +4264,9 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
   return rc;
 }
 
-void sortedDumpSegment(lsm_db *pDb, SortedRun *pRun, int bVals){
+void sortedDumpSegment(lsm_db *pDb, Segment *pRun, int bVals){
   assert( pDb->xLog );
-  if( pRun ){
+  if( pRun && pRun->iFirst ){
     char *zSeg;
     Page *pPg;
 
@@ -3961,23 +4316,17 @@ void lsmSortedDumpStructure(
       char zRight[1024];
       int i = 0;
 
-      SortedRun *aLeft[24];  
-      SortedRun *aRight[24];
+      Segment *aLeft[24];  
+      Segment *aRight[24];
 
       int nLeft = 0;
       int nRight = 0;
 
       Segment *pSeg = &pLevel->lhs;
-      if( segmentHasSeparators(pSeg) ){
-        aLeft[nLeft++] = &pSeg->sep;
-      }
-      aLeft[nLeft++] = &pSeg->run;
+      aLeft[nLeft++] = pSeg;
 
       for(i=0; i<pLevel->nRight; i++){
-        if( segmentHasSeparators(&pLevel->aRhs[i]) ){
-          aRight[nRight++] = &pLevel->aRhs[i].sep;
-        }
-        aRight[nRight++] = &pLevel->aRhs[i].run;
+        aRight[nRight++] = &pLevel->aRhs[i];
       }
 
       for(i=0; i<nLeft || i<nRight; i++){
@@ -4011,30 +4360,12 @@ void lsmSortedDumpStructure(
       iLevel++;
     }
 
-#if 0
-    lsmLogMessage(pDb, LSM_OK, "Block map", zWhy);
-    for(pLevel=pDb->pLevel; pLevel; pLevel=pLevel->pNext){
-      int iRhs;
-      lsmFsDumpBlockmap(pDb, pLevel->lhs.pSep);
-      lsmFsDumpBlockmap(pDb, pLevel->lhs.pRun);
-      for(iRhs=0; iRhs<pLevel->nRight; iRhs++){
-        lsmFsDumpBlockmap(pDb, pLevel->aRhs[iRhs].pSep);
-        lsmFsDumpBlockmap(pDb, pLevel->aRhs[iRhs].pRun);
-      }
-    }
-    lsmFsDumpBlocklists(pDb);
-#endif
-
     if( bKeys ){
       for(pLevel=pTopLevel; pLevel; pLevel=pLevel->pNext){
         int i;
-        sortedDumpSegment(pDb, &pLevel->lhs.sep, 0);
-        sortedDumpSegment(pDb, &pLevel->lhs.run, bVals);
+        sortedDumpSegment(pDb, &pLevel->lhs, bVals);
         for(i=0; i<pLevel->nRight; i++){
-          if( pLevel->aRhs[i].sep.iFirst>0 ){
-            sortedDumpSegment(pDb, &pLevel->aRhs[i].sep, 0);
-          }
-          sortedDumpSegment(pDb, &pLevel->aRhs[i].run, bVals);
+          sortedDumpSegment(pDb, &pLevel->aRhs[i], bVals);
         }
       }
     }
@@ -4063,8 +4394,7 @@ int lsmSortedFlushDb(lsm_db *pDb){
   for(p=lsmDbSnapshotLevel(pDb->pWorker); p && rc==LSM_OK; p=p->pNext){
     Merge *pMerge = p->pMerge;
     if( pMerge ){
-      pMerge->aiOutputOff[0] = -1;
-      pMerge->aiOutputOff[1] = -1;
+      pMerge->iOutputOff = -1;
       pMerge->bHierReadonly = 1;
     }
   }
@@ -4079,92 +4409,22 @@ void lsmSortedSaveTreeCursors(lsm_db *pDb){
   }
 }
 
-
 #ifdef LSM_DEBUG_EXPENSIVE
-
 /*
-** Argument iPg is a page number within a separators run. Assert() that for
-** each key K on on the page, (pKey1 >= K > pKey2) is true. 
+** This function is only included in the build if LSM_DEBUG_EXPENSIVE is 
+** defined. Its only purpose is to evaluate various assert() statements to 
+** verify that the database is well formed in certain respects.
 **
-** Also, if page iPg is a BTREE page, call this function recursively to
-** check that the keys on each child page fall into the expected range.
+** More specifically, it checks that the array pOne contains the required 
+** pointers to pTwo. Array pTwo must be a main array. pOne may be either a 
+** separators array or another main array. If pOne does not contain the 
+** correct set of pointers, an assert() statement fails.
 */
-static void assertBtreeRanges(
-  lsm_db *pDb, 
-  SortedRun *pRun, 
-  Pgno iPg,                       /* Database page to load */
-  void *pKey1, int nKey1,         /* All keys must be >= than this */
-  void *pKey2, int nKey2          /* And < than this */
-){
-  Blob blob = {0, 0, 0};
-  u8 *aData;
-  int nData;
-  Page *pPg;
-  int rc;
-  int i;
-  int nRec;
-  int flags;
-
-  int iPrevTopic = 0;             /* Previous topic value */
-  u8 *aPrev = 0;                  /* Buffer pointing to previous key */
-  int nPrev = 0;                  /* Size of aPrev[] in bytes */
-
-  rc = lsmFsDbPageGet(pDb->pFS, iPg, &pPg);
-  assert( rc==LSM_OK );
-  aData = lsmFsPageData(pPg, &nData);
-
-  nRec = pageGetNRec(aData, nData);
-  flags = pageGetFlags(aData, nData);
-
-  for(i=0; i<nRec; i++){
-    u8 *aKey;
-    int nKey;
-    int iTopic;
-    int iPtr;
-
-    if( flags & SEGMENT_BTREE_FLAG ){
-      aKey = pageGetCell(aData, nData, i);
-      aKey += lsmVarintGet32(aKey, &iPtr);
-      aKey += lsmVarintGet32(aKey, &nKey);
-    }else{
-      aKey = pageGetKey(pPg, i, &iTopic, &nKey, &blob);
-    }
-
-    assert( pKey1==0 || pDb->xCmp(aKey, nKey, pKey1, nKey1)>=0 );
-    assert( pKey2==0 || pDb->xCmp(aKey, nKey, pKey2, nKey2)<0 );
-
-    if( flags&SEGMENT_BTREE_FLAG ){
-      assertBtreeRanges(pDb, pRun, iPtr, aPrev, nPrev, aKey, nKey);
-    }
-    aPrev = aKey;
-    nPrev = nKey;
-  }
-
-  if( flags&SEGMENT_BTREE_FLAG ){
-    int iRight = pageGetPtr(aData, nData);
-    assertBtreeRanges(pDb, pRun, iRight, aPrev, nPrev, 0, 0);
-  }
-
-  lsmFsPageRelease(pPg);
-  sortedBlobFree(&blob);
-}
-
-/*
-** Check that the array pOne contains the required pointers to pTwo.
-** Array pTwo must be a main array. pOne may be either a separators array
-** or another main array. 
-**
-** If an error is encountered, *pzErr is set to point to a buffer containing
-** a nul-terminated error message and this function returns immediately. The
-** caller should eventually call lsmFree(*pzErr) to free the allocated
-** error message buffer.
-*/
-static void assertPointersOk(
+static int assertPointersOk(
   lsm_db *pDb,                    /* Database handle */
-  SortedRun *pOne,                /* Run containing pointers */
-  SortedRun *pTwo,                /* Run containing pointer targets */
-  int bRhs,                       /* True if pTwo may have been Gobble()d */
-  char **pzErr
+  Segment *pOne,                  /* Segment containing pointers */
+  Segment *pTwo,                  /* Segment containing pointer targets */
+  int bRhs                        /* True if pTwo may have been Gobble()d */
 ){
   int rc = LSM_OK;                /* Error code */
   SegmentPtr ptr1;                /* Iterates through pOne */
@@ -4175,8 +4435,8 @@ static void assertPointersOk(
 
   memset(&ptr1, 0, sizeof(ptr1));
   memset(&ptr2, 0, sizeof(ptr1));
-  ptr1.pRun = pOne;
-  ptr2.pRun = pTwo;
+  ptr1.pSeg = pOne;
+  ptr2.pSeg = pTwo;
   segmentPtrEndPage(pDb->pFS, &ptr1, 0, &rc);
   segmentPtrEndPage(pDb->pFS, &ptr2, 0, &rc);
 
@@ -4203,7 +4463,7 @@ static void assertPointersOk(
     if( rc!=LSM_OK || ptr2.pPg==0 ) break;
     iThis = lsmFsPageNumber(ptr2.pPg);
 
-    if( (ptr2.flags & PGFTR_SKIP_THIS_FLAG)==0 ){
+    if( (ptr2.flags & (PGFTR_SKIP_THIS_FLAG|SEGMENT_BTREE_FLAG))==0 ){
 
       /* Load the first cell in the array pTwo page. */
       rc = segmentPtrLoadCell(&ptr2, 0);
@@ -4223,7 +4483,7 @@ static void assertPointersOk(
           assert( 0 );
         }else{
           assert( ptr1.iPtr+ptr1.iPgPtr==iThis );
-          iPrev = lsmFsPageNumber(ptr2.pPg);
+          iPrev = iThis;
           break;
         }
 
@@ -4237,124 +4497,69 @@ static void assertPointersOk(
 
   segmentPtrReset(&ptr1);
   segmentPtrReset(&ptr2);
-}
-
-static int countBtreeKeys(FileSystem *pFS, SortedRun *pRun, Pgno iPg){
-#if 0
-  int rc;
-  Page *pPg;
-  u8 *aData;
-  int nData;
-  int flags;
-  int nRet;
-
-  rc = lsmFsDbPageGet(pFs, iPg, &pPg);
-  assert( rc==LSM_OK );
-  aData = lsmFsPageData(pPg, &nData);
-  flags = pageGetFlags(aData, nData);
-
-  if( flags & SEGMENT_BTREE_FLAG ){
-    Pgno iRight;
-    int nRec;
-    int i;
-
-    iRight = pageGetPtr(aData, nData);
-    nRec = pageGetNRec(aData, nData);
-
-    nRet = nRec;
-    nRet += countBtreeKeys(pFS, pRun, iRight);
-    for(i=0; i<nRec; i++){
-      Pgno iPtr;
-      u8 *aCell = pageGetCell(aData, nData, i);
-      aCell += lsmVarintGet32(aCell, &iPtr);
-      if( iPtr==0 ){
-        lsmVarintGet32(aCell, &iPtr);
-      }
-      nRet += countBtreeKeys(pFS, pRun, iPtr);
-    }
-  }else{
-    nRet = 0;
-  }
-
-  lsmFsPageRelease(pPg);
-  return nRet;
-#endif
-  return 0;
-}
-
-static void assertBtreeSize(FileSystem *pFS, SortedRun *pRun, Pgno iRoot){
-#if 0
-  int nRun = 0;
-  int nKey = 0;
-  int rc;
-
-  Page *pPg;
-
-  rc = lsmFsDbPageGet(pFS, pRun->iFirst, &pPg);
-  assert( rc==LSM_OK );
-  while( pPg ){
-    Page *pNext = 0;
-    u8 *aData;
-    int nData;
-    int flags;
-    int nRec;
-
-    aData = lsmFsPageData(pPg, &nData);
-    flags = pageGetFlags(aData, nData);
-    nRec = pageGetNRec(aData, nData);
-
-    if( (flags & SEGMENT_BTREE_FLAG)==0 && nRec ){
-      nRun++;
-    }
-
-    rc = lsmFsDbPageNext(pPg, 1, &pNext);
-    assert( rc==LSM_OK );
-    lsmFsPageRelease(pPg);
-    pPg = pNext;
-  }
-
-  nKey = countBtreeKeys(pFS, pRun, iRoot);
-  assert( nRun==1+nKey );
-#endif
-}
-
-static void assertAllBtreesOk(int rc, lsm_db *pDb){
-#if 0
-  if( rc==LSM_OK ){
-    Level *p;
-    for(p=pDb->pLevel; p; p=p->pNext){
-      SortedRun *pSep = p->lhs.pSep;
-      Pgno iRoot = pSep->iRoot;
-      if( pSep && iRoot ){
-        assertBtreeRanges(pDb, pSep, iRoot, 0, 0, 0, 0);
-        assertBtreeSize(pDb->pFS, pSep, iRoot);
-      }
-    }
-  }
-#endif
+  return LSM_OK;
 }
 
 /*
-** This function is only useful for debugging. 
+** This function is only included in the build if LSM_DEBUG_EXPENSIVE is 
+** defined. Its only purpose is to evaluate various assert() statements to 
+** verify that the database is well formed in certain respects.
+**
+** More specifically, it checks that the b-tree embedded in array pRun
+** contains the correct keys. If not, an assert() fails.
 */
-static void assertAllPointersOk(int rc, lsm_db *pDb){
-  assert( rc!=LSM_OK || pDb->pWorker );
-  if( rc==LSM_OK ){
-    Level *p;
-    for(p=lsmDbSnapshotLevel(pDb->pWorker); p; p=p->pNext){
-      int i;
+static int assertBtreeOk(
+  lsm_db *pDb,
+  Segment *pSeg
+){
+  int rc = LSM_OK;                /* Return code */
+  if( pSeg->iRoot ){
+    Blob blob = {0, 0, 0};        /* Buffer used to cache overflow keys */
+    FileSystem *pFS = pDb->pFS;   /* File system to read from */
+    Page *pPg = 0;                /* Main run page */
+    BtreeCursor *pCsr = 0;        /* Btree cursor */
 
-      if( segmentHasSeparators(&p->lhs) ){
-        assertPointersOk(pDb, &p->lhs.sep, &p->lhs.run, 0, 0);
-      }
-      for(i=0; i<p->nRight; i++){
-        if( segmentHasSeparators(&p->aRhs[i]) ){
-          assertPointersOk(pDb, &p->aRhs[i].sep, &p->aRhs[i].run, 1, 0);
-        }
-      }
-
+    rc = btreeCursorNew(pDb, pSeg, &pCsr);
+    if( rc==LSM_OK ){
+      rc = btreeCursorFirst(pCsr);
     }
-  }
-}
+    if( rc==LSM_OK ){
+      rc = lsmFsDbPageGet(pFS, pSeg->iFirst, &pPg);
+    }
 
+    while( rc==LSM_OK ){
+      Page *pNext;
+      u8 *aData;
+      int nData;
+      int flags;
+
+      rc = lsmFsDbPageNext(pSeg, pPg, 1, &pNext);
+      lsmFsPageRelease(pPg);
+      pPg = pNext;
+      if( pPg==0 ) break;
+      aData = fsPageData(pPg, &nData);
+      flags = pageGetFlags(aData, nData);
+      if( rc==LSM_OK 
+       && 0==((SEGMENT_BTREE_FLAG|PGFTR_SKIP_THIS_FLAG) & flags)
+       && 0!=pageGetNRec(aData, nData)
+      ){
+        u8 *pKey;
+        int nKey;
+        int iTopic;
+        pKey = pageGetKey(pPg, 0, &iTopic, &nKey, &blob);
+        assert( nKey==pCsr->nKey && 0==memcmp(pKey, pCsr->pKey, nKey) );
+        assert( lsmFsPageNumber(pPg)==pCsr->iPtr );
+        rc = btreeCursorNext(pCsr);
+      }
+    }
+    assert( rc!=LSM_OK || pCsr->pKey==0 );
+
+    if( pPg ) lsmFsPageRelease(pPg);
+
+    btreeCursorFree(pCsr);
+    sortedBlobFree(&blob);
+  }
+
+  return rc;
+}
 #endif /* ifdef LSM_DEBUG_EXPENSIVE */

@@ -185,7 +185,7 @@ static void scanCompareCb(
   u8 *aVal = (u8 *)pVal;
   int i;
 
-  if( test_scan_debug ) printf("%s ", (char *)pKey);
+  if( test_scan_debug ) printf("%.20s\n", (char *)pKey);
 
 #if 0
   /* Check tdb_fetch() matches */
@@ -266,9 +266,9 @@ void testScanCompare(
     res2.bReverse = bReverse;
 
     tdb_scan(pDb1, pRes1, bReverse, pKey1, nKey1, pKey2, nKey2, scanCompareCb);
-if( test_scan_debug ) printf("\n");
+if( test_scan_debug ) printf("\n\n\n");
     tdb_scan(pDb2, pRes2, bReverse, pKey1, nKey1, pKey2, nKey2, scanCompareCb);
-if( test_scan_debug ) printf("\n");
+if( test_scan_debug ) printf("\n\n\n");
 
     if( res1.nRow!=res2.nRow 
      || res1.cksum1!=res2.cksum1 
@@ -468,6 +468,15 @@ int do_crash(int nArg, char **azArg){
   return rc;
 }
 
+static lsm_db *configure_lsm_db(TestDb *pDb){
+  lsm_db *pLsm;
+  pLsm = tdb_lsm(pDb);
+  if( pLsm ){
+    tdb_lsm_config_str(pDb, "mmap=1 autowork=1 nmerge=4 worker_nmerge=4");
+  }
+  return pLsm;
+}
+
 int do_speed_tests(int nArg, char **azArg){
 
   struct DbSystem {
@@ -594,19 +603,8 @@ int do_speed_tests(int nArg, char **azArg){
 
       rc = tdb_open(aSys[j].zLibrary, 0, 1, &pDb);
       if( rc ) return rc;
-      pLsm = tdb_lsm(pDb);
 
-      if( pLsm ){
-        int bMmap = 0;
-        int nLimit = 2 * 1024 * 1024;
-        int eSafety = 1;
-        int bUseLog = 1;
-
-        lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nLimit);
-        lsm_config(pLsm, LSM_CONFIG_SAFETY, &eSafety);
-        lsm_config(pLsm, LSM_CONFIG_MMAP, &bMmap);
-        lsm_config(pLsm, LSM_CONFIG_USE_LOG, &bUseLog);
-      }
+      pLsm = configure_lsm_db(pDb);
   
       testTimeInit();
       for(i=0; i<nRow; i+=nStep){
@@ -646,6 +644,7 @@ int do_speed_tests(int nArg, char **azArg){
       if( doWriteTest ){
         rc = tdb_open(aSys[j].zLibrary, 0, 1, &pDb);
         if( rc ) return rc;
+        configure_lsm_db(pDb);
 
         for(i=0; i<nRow; i+=nSelStep){
           int iStep;
@@ -676,10 +675,9 @@ int do_speed_tests(int nArg, char **azArg){
       }else{
         int t;
         int iSel;
-        int bMmap = 0;
 
         rc = tdb_open(aSys[j].zLibrary, 0, 0, &pDb);
-        if( tdb_lsm(pDb) ) lsm_config(tdb_lsm(pDb), LSM_CONFIG_MMAP, &bMmap);
+        configure_lsm_db(pDb);
 
         testTimeInit();
         for(iSel=0; rc==LSM_OK && iSel<nSelTest; iSel++){
@@ -1087,6 +1085,7 @@ static int do_replay(int nArg, char **azArg){
 }
 
 static int do_insert(int nArg, char **azArg){
+  const char *zConfig = 0;
   const char *zDb = "lsm";
   TestDb *pDb = 0;
   int i;
@@ -1096,20 +1095,18 @@ static int do_insert(int nArg, char **azArg){
   DatasourceDefn defn = { TEST_DATASOURCE_RANDOM, 8, 15, 80, 150 };
   Datasource *pData = 0;
 
-  if( nArg>1 ){
-    testPrintError("Usage: insert ?DATABASE?\n");
+  if( nArg>2 ){
+    testPrintError("Usage: insert ?DATABASE? ?LSM-CONFIG?\n");
     return 1;
   }
-  if( nArg==1 ){
-    zDb = azArg[0];
-  }
+  if( nArg==1 ){ zDb = azArg[0]; }
+  if( nArg==2 ){ zConfig = azArg[1]; }
 
   testMallocUninstall(tdb_lsm_env());
   rc = tdb_open(zDb, 0, 1, &pDb);
   if( rc!=0 ){
     testPrintError("Error opening db \"%s\": %d\n", zDb, rc);
   }else{
-
     InsertWriteHook hook;
     memset(&hook, 0, sizeof(hook));
     hook.pOut = fopen("writelog.txt", "w");
@@ -1117,13 +1114,17 @@ static int do_insert(int nArg, char **azArg){
     pData = testDatasourceNew(&defn);
     tdb_lsm_config_work_hook(pDb, do_insert_work_hook, 0);
     tdb_lsm_write_hook(pDb, do_insert_write_hook, (void *)&hook);
+    if( zConfig ){
+      rc = test_lsm_config_str(tdb_lsm(pDb), zConfig);
+    }
 
-    for(i=0; i<nRow; i++){
-      void *pKey; int nKey;         /* Database key to insert */
-      void *pVal; int nVal;         /* Database value to insert */
-
-      testDatasourceEntry(pData, i, &pKey, &nKey, &pVal, &nVal);
-      tdb_write(pDb, pKey, nKey, pVal, nVal);
+    if( rc==0 ){
+      for(i=0; i<nRow; i++){
+        void *pKey; int nKey;     /* Database key to insert */
+        void *pVal; int nVal;     /* Database value to insert */
+        testDatasourceEntry(pData, i, &pKey, &nKey, &pVal, &nVal);
+        tdb_write(pDb, pKey, nKey, pVal, nVal);
+      }
     }
 
     testDatasourceFree(pData);

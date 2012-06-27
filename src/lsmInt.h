@@ -46,6 +46,7 @@
 #define LSM_ECOLA       4
 
 #define LSM_DEFAULT_LOG_SIZE (128*1024)
+#define LSM_DEFAULT_NMERGE   4
 
 /* Places where a NULL needs to be changed to a real lsm_env pointer
 ** are marked with NEED_ENV */
@@ -71,7 +72,6 @@ typedef struct Page Page;
 typedef struct Segment Segment;
 typedef struct SegmentMerger SegmentMerger;
 typedef struct Snapshot Snapshot;
-typedef struct SortedRun SortedRun;
 typedef struct TransMark TransMark;
 typedef struct Tree Tree;
 typedef struct TreeMark TreeMark;
@@ -172,6 +172,7 @@ struct lsm_db {
   int bAutowork;                  /* True to do auto-work after writing */
   int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
 
+  int nMerge;                     /* Configured by LSM_CONFIG_NMERGE */
   int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
@@ -202,16 +203,11 @@ struct lsm_db {
   void *pWorkCtx;
 };
 
-struct SortedRun {
+struct Segment {
   int iFirst;                     /* First page of this run */
   int iLast;                      /* Last page of this run */
   Pgno iRoot;                     /* Root page number (if any) */
   int nSize;                      /* Size of this run in pages */
-};
-
-struct Segment {
-  SortedRun run;                  /* Main array */
-  SortedRun sep;                  /* If sep.iFirst!=0, the separators array */
 };
 
 /*
@@ -242,18 +238,16 @@ struct Level {
 ** bHierReadonly:
 **   True if the b-tree hierarchy is currently read-only.
 **
-** aiOutputOff:
-**   The byte offset to write to next within the last page of the output
-**   segments main run (aiOutputOff[0]) or separators run (aiOutputOff[1]).
-**   If either page is read-only, then the associated aiOutputOff[] entry
-**   is set to a negative value.
+** iOutputOff:
+**   The byte offset to write to next within the last page of the 
+**   output segment.
 */
 struct Merge {
   int nInput;                     /* Number of input runs being merged */
   MergeInput *aInput;             /* Array nInput entries in size */
   int nSkip;                      /* Number of separators entries to skip */
-  int aiOutputOff[2];             /* Write offsets on run output pages */
-  int bHierReadonly;              /* True if b-tree heirarchy is read-only */
+  int iOutputOff;                 /* Write offset on output page */
+  int bHierReadonly;              /* True if b-tree heirarchies are read-only */
 };
 struct MergeInput {
   Pgno iPg;                       /* Page on which next input is stored */
@@ -371,17 +365,16 @@ void lsmFsSetPageSize(FileSystem *, int);
 int lsmFsFileid(lsm_db *pDb, void **ppId, int *pnId);
 
 /* Creating, populating, gobbling and deleting sorted runs. */
-int lsmFsPhantom(FileSystem *, SortedRun *);
-void lsmFsPhantomFree(FileSystem *pFS);
-void lsmFsGobble(Snapshot *, SortedRun *, Page *);
-int lsmFsSortedDelete(FileSystem *, Snapshot *, int, SortedRun *);
-int lsmFsSortedFinish(FileSystem *, SortedRun *);
-int lsmFsSortedAppend(FileSystem *, Snapshot *, SortedRun *, Page **);
-int lsmFsPhantomMaterialize(FileSystem *, Snapshot *, SortedRun *);
+void lsmFsGobble(Snapshot *, Segment *, Page *);
+int lsmFsSortedDelete(FileSystem *, Snapshot *, int, Segment *);
+int lsmFsSortedFinish(FileSystem *, Segment *);
+int lsmFsSortedAppend(FileSystem *, Snapshot *, Segment *, Page **);
+int lsmFsPhantomMaterialize(FileSystem *, Snapshot *, Segment *);
 
 /* Functions to retrieve the lsm_env pointer from a FileSystem or Page object */
 lsm_env *lsmFsEnv(FileSystem *);
 lsm_env *lsmPageEnv(Page *);
+FileSystem *lsmPageFS(Page *);
 
 int lsmFsSectorSize(FileSystem *);
 
@@ -390,7 +383,7 @@ int lsmFsSetupAppendList(lsm_db *db);
 
 /* Reading sorted run content. */
 int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
-int lsmFsDbPageNext(SortedRun *, Page *, int eDir, Page **);
+int lsmFsDbPageNext(Segment *, Page *, int eDir, Page **);
 
 int lsmFsPageWrite(Page *);
 u8 *lsmFsPageData(Page *, int *);
@@ -440,6 +433,8 @@ int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
 
+void lsmSortedRemap(lsm_db *pDb);
+
 void lsmSortedFreeLevel(lsm_env *pEnv, Level *);
 
 int lsmSortedFlushDb(lsm_db *);
@@ -470,7 +465,6 @@ int lsmSaveCursors(lsm_db *pDb);
 int lsmRestoreCursors(lsm_db *pDb);
 
 void lsmSortedDumpStructure(lsm_db *pDb, Snapshot *, int, int, const char *);
-void lsmFsDumpBlockmap(lsm_db *, SortedRun *);
 void lsmFsDumpBlocklists(lsm_db *);
 
 

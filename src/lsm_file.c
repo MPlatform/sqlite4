@@ -90,42 +90,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-/* 
-** A "phantom" run under construction.
-**
-** Phantom runs are constructed entirely in memory, then written out to 
-** disk. This is distinct from normal runs, for which each page is written
-** to disk as soon as it is completely populated. 
-**
-** They are used when the in-memory tree is flushed to disk. In this case, 
-** the main run is written directly to disk and the separators run 
-** accumulated in memory as a phantom run and flushed to disk after the main
-** run is completed. This allows the separators run to immediately follow
-** the main run in the file - making the entire flush operation a single
-** contiguous write.
-**
-** Before they are flushed to disk, the pages of phantom runs do not have
-** page numbers. This means it is not possible to obtain pointers to them.
-** In practice, this means that when creating a separators run, a phantom
-** run is used to accumulate and write all leaf pages to disk, then a
-** second pass is made to populate and append the b-tree hierarchy pages.
-*/
-typedef struct PhantomRun PhantomRun;
-struct PhantomRun {
-  SortedRun *pRun;                /* Accompanying SortedRun object */
-  int nPhantom;                   /* Number of pages in run */
-  int bRunFinished;               /* True if the associated run is finished */
-  Page *pFirst;                   /* First page in phantom run */
-  Page *pLast;                    /* Current last page in phantom run */
-};
-
-/*
-** Maximum number of pages allowed to accumulate in memory when constructing
-** a phantom run. If this limit is exceeded, the phantom run is flushed to
-** disk even if it is not finished.
-*/
-#define FS_MAX_PHANTOM_PAGES 32
-
 
 /*
 ** File-system object. Each database connection allocates a single instance
@@ -152,7 +116,6 @@ struct FileSystem {
   int nMetasize;                  /* Size of meta pages in bytes */
   int nPagesize;                  /* Database page-size in bytes */
   int nBlocksize;                 /* Database block-size in bytes */
-  PhantomRun phantom;             /* Phantom run currently under construction */
 
   /* r/w file descriptors for both files. */
   lsm_file *fdDb;                 /* Database file */
@@ -182,6 +145,7 @@ struct FileSystem {
 */
 struct Page {
   u8 *aData;                      /* Buffer containing page data */
+  int nData;                      /* Bytes of usable data at aData[] */
   int iPg;                        /* Page number */
   int nRef;                       /* Number of outstanding references */
   int flags;                      /* Combination of PAGE_XXX flags */
@@ -215,11 +179,6 @@ struct MetaPage {
 */
 #define BLOCK1_HDR_SIZE(pgsz)  LSM_MAX(1, 8192/(pgsz))
 
-/*
-** Return true if the SortedRun passed as the second argument is a phantom
-** run currently being constructed by FileSystem object pFS.
-*/
-#define isPhantom(pFS, pSorted) ((pSorted) && (pFS)->phantom.pRun==(pSorted))
 
 /*
 ** Wrappers around the VFS methods of the lsm_env object:
@@ -417,7 +376,6 @@ void lsmFsClose(FileSystem *pFS){
     lsm_env *pEnv = pFS->pEnv;
 
     assert( pFS->nOut==0 );
-
     pPg = pFS->pLruFirst;
     while( pPg ){
       Page *pNext = pPg->pLruNext;
@@ -600,6 +558,9 @@ static void fsPageAddToLru(FileSystem *pFS, Page *pPg){
   pFS->pLruLast = pPg;
 }
 
+/*
+** Remove page pPg from the hash table.
+*/
 static void fsPageRemoveFromHash(FileSystem *pFS, Page *pPg){
   int iHash;
   Page **pp;
@@ -672,6 +633,8 @@ static void fsGrowMapping(
       for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
         pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
       }
+
+      lsmSortedRemap(pFS->pDb);
     }
     *pRc = rc;
   }
@@ -742,6 +705,7 @@ int fsPageGet(
       ** free the buffer. */
       if( rc==LSM_OK ){
         p->pHashNext = pFS->apHash[iHash];
+        p->nData =  pFS->nPagesize - (p->flags & PAGE_SHORT);
         pFS->apHash[iHash] = p;
       }else{
         fsPageBufferFree(p);
@@ -779,8 +743,8 @@ static int fsBlockNext(
 }
 
 static int fsRunEndsBetween(
-  SortedRun *pRun, 
-  SortedRun *pIgnore, 
+  Segment *pRun, 
+  Segment *pIgnore, 
   int iFirst, 
   int iLast
 ){
@@ -792,21 +756,17 @@ static int fsRunEndsBetween(
 
 static int fsLevelEndsBetween(
   Level *pLevel, 
-  SortedRun *pIgnore, 
+  Segment *pIgnore, 
   int iFirst, 
   int iLast
 ){
   int i;
 
-  if( fsRunEndsBetween(&pLevel->lhs.run, pIgnore, iFirst, iLast)
-   || fsRunEndsBetween(&pLevel->lhs.sep, pIgnore, iFirst, iLast)
-  ){
+  if( fsRunEndsBetween(&pLevel->lhs, pIgnore, iFirst, iLast) ){
     return 1;
   }
   for(i=0; i<pLevel->nRight; i++){
-    if( fsRunEndsBetween(&pLevel->aRhs[i].run, pIgnore, iFirst, iLast)
-     || fsRunEndsBetween(&pLevel->aRhs[i].sep, pIgnore, iFirst, iLast)
-    ){
+    if( fsRunEndsBetween(&pLevel->aRhs[i], pIgnore, iFirst, iLast) ){
       return 1;
     }
   }
@@ -817,7 +777,7 @@ static int fsLevelEndsBetween(
 static int fsFreeBlock(
   FileSystem *pFS, 
   Snapshot *pSnapshot, 
-  SortedRun *pIgnore,             /* Ignore this run when searching */
+  Segment *pIgnore,             /* Ignore this run when searching */
   int iBlk
 ){
   int rc = LSM_OK;                /* Return code */
@@ -860,8 +820,8 @@ static int fsFreeBlock(
 int lsmFsSortedDelete(
   FileSystem *pFS, 
   Snapshot *pSnapshot,
-  int bZero,                      /* True to zero the SortedRun structure */
-  SortedRun *pDel
+  int bZero,                      /* True to zero the Segment structure */
+  Segment *pDel
 ){
   if( pDel->iFirst ){
     int rc = LSM_OK;
@@ -884,7 +844,7 @@ int lsmFsSortedDelete(
       iBlk = iNext;
     }
 
-    if( bZero ) memset(pDel, 0, sizeof(SortedRun));
+    if( bZero ) memset(pDel, 0, sizeof(Segment));
   }
   return LSM_OK;
 }
@@ -897,7 +857,7 @@ int lsmFsSortedDelete(
 */
 void lsmFsGobble(
   Snapshot *pSnapshot,
-  SortedRun *pRun, 
+  Segment *pRun, 
   Page *pPg
 ){
   FileSystem *pFS = pPg->pFS;
@@ -946,7 +906,7 @@ void lsmFsGobble(
 ** Page references returned by this function should be released by the 
 ** caller using lsmFsPageRelease().
 */
-int lsmFsDbPageNext(SortedRun *pRun, Page *pPg, int eDir, Page **ppNext){
+int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
   FileSystem *pFS = pPg->pFS;
   int iPg = pPg->iPg;
 
@@ -1059,99 +1019,23 @@ int lsmFsSetupAppendList(lsm_db *db){
       pLvl=pLvl->pNext
   ){
     if( pLvl->nRight==0 ){
-      addAppendPoint(db, pLvl->lhs.sep.iLast, &rc);
-      addAppendPoint(db, pLvl->lhs.run.iLast, &rc);
+      addAppendPoint(db, pLvl->lhs.iLast, &rc);
     }else{
       int i;
       for(i=0; i<pLvl->nRight; i++){
-        addAppendPoint(db, pLvl->aRhs[i].sep.iLast, &rc);
-        addAppendPoint(db, pLvl->aRhs[i].run.iLast, &rc);
+        addAppendPoint(db, pLvl->aRhs[i].iLast, &rc);
       }
     }
   }
 
   for(pLvl=lsmDbSnapshotLevel(db->pWorker); pLvl; pLvl=pLvl->pNext){
     int i;
-    subAppendPoint(db, pLvl->lhs.sep.iFirst);
-    subAppendPoint(db, pLvl->lhs.run.iFirst);
+    subAppendPoint(db, pLvl->lhs.iFirst);
     for(i=0; i<pLvl->nRight; i++){
-      subAppendPoint(db, pLvl->aRhs[i].sep.iFirst);
-      subAppendPoint(db, pLvl->aRhs[i].run.iFirst);
+      subAppendPoint(db, pLvl->aRhs[i].iFirst);
     }
   }
 
-  return rc;
-}
-
-int lsmFsPhantom(FileSystem *pFS, SortedRun *pRun){
-  assert( pFS->phantom.pRun==0 );
-  pFS->phantom.pRun = pRun;
-  return LSM_OK;
-}
-
-void lsmFsPhantomFree(FileSystem *pFS){
-  if( pFS->phantom.pRun ){
-    Page *pPg;
-    Page *pNext;
-    for(pPg=pFS->phantom.pFirst; pPg; pPg=pNext){
-      pNext = pPg->pHashNext;
-      fsPageBufferFree(pPg);
-    }
-    memset(&pFS->phantom, 0, sizeof(PhantomRun));
-  }
-}
-
-int lsmFsPhantomMaterialize(
-  FileSystem *pFS, 
-  Snapshot *pSnapshot, 
-  SortedRun *p
-){
-  int rc = LSM_OK;
-  if( isPhantom(pFS, p) ){
-    PhantomRun *pPhantom = &pFS->phantom;
-    Page *pPg;
-    Page *pNext;
-    int i;
-    Pgno iFirst = 0;
-
-    /* Search for an existing run in the database that this run can be
-    ** appended to. See comments surrounding findAppendPoint() for details. */
-    iFirst = findAppendPoint(pFS, pPhantom->nPhantom);
-
-    /* If the array can not be written into any partially used block, 
-    ** allocate a new block. The first page of the materialized run will
-    ** be the second page of the new block (since the first is undersized
-    ** and can not be used).  */
-    if( iFirst==0 ){
-      int iNew;                   /* New block */
-      lsmBlockAllocate(pFS->pDb, &iNew);
-      iFirst = fsFirstPageOnBlock(pFS, iNew) + 1;
-    }
-
-    p->iFirst = iFirst;
-    p->iLast = iFirst + pPhantom->nPhantom - 1;
-    assert( 0==fsIsFirst(pFS, p->iFirst) && 0==fsIsLast(pFS, p->iFirst) );
-    assert( 0==fsIsFirst(pFS, p->iLast) && 0==fsIsLast(pFS, p->iLast) );
-    assert( fsPageToBlock(pFS, p->iFirst)==fsPageToBlock(pFS, p->iLast) );
-
-    i = iFirst;
-    for(pPg=pPhantom->pFirst; pPg; pPg=pNext){
-      int iHash;
-      pNext = pPg->pHashNext;
-      pPg->iPg = i++;
-      pPg->nRef++;
-
-      iHash = fsHashKey(pFS->nHash, pPg->iPg);
-      pPg->pHashNext = pFS->apHash[iHash];
-      pFS->apHash[iHash] = pPg;
-      pFS->nOut++;
-      lsmFsPageRelease(pPg);
-    }
-    assert( i==p->iLast+1 );
-
-    p->nSize = pPhantom->nPhantom;
-    memset(&pFS->phantom, 0, sizeof(PhantomRun));
-  }
   return rc;
 }
 
@@ -1162,93 +1046,60 @@ int lsmFsPhantomMaterialize(
 int lsmFsSortedAppend(
   FileSystem *pFS, 
   Snapshot *pSnapshot,
-  SortedRun *p, 
+  Segment *p, 
   Page **ppOut
 ){
   int rc = LSM_OK;
   Page *pPg = 0;
   *ppOut = 0;
+  int iApp = 0;
+  int iNext = 0;
+  int iPrev = p->iLast;
 
-  if( isPhantom(pFS, p) ){
-    const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
-    int nLimit = (nPagePerBlock - 2 - (fsFirstPageOnBlock(pFS, 1)-1) );
+  if( iPrev==0 ){
+    iApp = findAppendPoint(pFS, 0);
+  }else if( fsIsLast(pFS, iPrev) ){
+    Page *pLast = 0;
+    rc = fsPageGet(pFS, iPrev, 0, &pLast);
+    if( rc!=LSM_OK ) return rc;
+    iApp = lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
+    lsmFsPageRelease(pLast);
+  }else{
+    iApp = iPrev + 1;
+  }
 
-    if( pFS->phantom.nPhantom>=nLimit ){ 
-      rc = lsmFsPhantomMaterialize(pFS, pSnapshot, p);
-      if( rc!=LSM_OK ) return rc;
+  /* If this is the first page allocated, or if the page allocated is the
+   ** last in the block, allocate a new block here.  */
+  if( iApp==0 || fsIsLast(pFS, iApp) ){
+    int iNew;                     /* New block number */
+
+    lsmBlockAllocate(pFS->pDb, &iNew);
+    if( iApp==0 ){
+      iApp = fsFirstPageOnBlock(pFS, iNew);
+    }else{
+      iNext = fsFirstPageOnBlock(pFS, iNew);
     }
   }
 
-  if( isPhantom(pFS, p) ){
-    rc = fsPageBuffer(pFS, 1, &pPg);
-    if( rc==LSM_OK ){
-      PhantomRun *pPhantom = &pFS->phantom;
-      pPg->iPg = 0;
-      pPg->nRef = 1;
-      pPg->flags |= PAGE_DIRTY;
-      pPg->pHashNext = 0;
-      pPg->pLruNext = 0;
-      pPg->pLruPrev = 0;
-      pPg->pFS = pFS;
-      if( pPhantom->pFirst ){
-        assert( pPhantom->pLast );
-        pPhantom->pLast->pHashNext = pPg;
-      }else{
-        pPhantom->pFirst = pPg;
+  /* Grab the new page. */
+  pPg = 0;
+  rc = fsPageGet(pFS, iApp, 1, &pPg);
+  assert( rc==LSM_OK || pPg==0 );
+
+  /* If this is the first or last page of a block, fill in the pointer 
+   ** value at the end of the new page. */
+  if( rc==LSM_OK ){
+    p->nSize++;
+    p->iLast = iApp;
+    if( p->iFirst==0 ) p->iFirst = iApp;
+    pPg->flags |= PAGE_DIRTY;
+
+    if( fsIsLast(pFS, iApp) ){
+      lsmPutU32(&pPg->aData[pFS->nPagesize-4], iNext);
+    }else 
+      if( fsIsFirst(pFS, iApp) ){
+        lsmPutU32(&pPg->aData[pFS->nPagesize-4], iPrev);
       }
-      pPhantom->pLast = pPg;
-      pPhantom->nPhantom++;
-    }
-  }else{
-    int iApp = 0;
-    int iNext = 0;
-    int iPrev = p->iLast;
-
-    if( iPrev==0 ){
-      iApp = findAppendPoint(pFS, 0);
-    }else if( fsIsLast(pFS, iPrev) ){
-      Page *pLast = 0;
-      rc = fsPageGet(pFS, iPrev, 0, &pLast);
-      if( rc!=LSM_OK ) return rc;
-      iApp = lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
-      lsmFsPageRelease(pLast);
-    }else{
-      iApp = iPrev + 1;
-    }
-
-    /* If this is the first page allocated, or if the page allocated is the
-     ** last in the block, allocate a new block here.  */
-    if( iApp==0 || fsIsLast(pFS, iApp) ){
-      int iNew;                     /* New block number */
-
-      lsmBlockAllocate(pFS->pDb, &iNew);
-      if( iApp==0 ){
-        iApp = fsFirstPageOnBlock(pFS, iNew);
-      }else{
-        iNext = fsFirstPageOnBlock(pFS, iNew);
-      }
-    }
-
-    /* Grab the new page. */
-    pPg = 0;
-    rc = fsPageGet(pFS, iApp, 1, &pPg);
-    assert( rc==LSM_OK || pPg==0 );
-
-    /* If this is the first or last page of a block, fill in the pointer 
-     ** value at the end of the new page. */
-    if( rc==LSM_OK ){
-      p->nSize++;
-      p->iLast = iApp;
-      if( p->iFirst==0 ) p->iFirst = iApp;
-      pPg->flags |= PAGE_DIRTY;
-
-      if( fsIsLast(pFS, iApp) ){
-        lsmPutU32(&pPg->aData[pFS->nPagesize-4], iNext);
-      }else 
-        if( fsIsFirst(pFS, iApp) ){
-          lsmPutU32(&pPg->aData[pFS->nPagesize-4], iPrev);
-        }
-    }
   }
 
   *ppOut = pPg;
@@ -1258,12 +1109,10 @@ int lsmFsSortedAppend(
 /*
 ** Mark the sorted run passed as the second argument as finished. 
 */
-int lsmFsSortedFinish(FileSystem *pFS, SortedRun *p){
+int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
   int rc = LSM_OK;
   if( p ){
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
-
-    if( pFS->phantom.pRun ) pFS->phantom.bRunFinished = 1;
 
     /* Check if the last page of this run happens to be the last of a block.
     ** If it is, then an extra block has already been allocated for this run.
@@ -1496,6 +1345,10 @@ lsm_env *lsmPageEnv(Page *pPg) {
   return pPg->pFS->pEnv; 
 }
 
+FileSystem *lsmPageFS(Page *pPg){
+  return pPg->pFS;
+}
+
 /*
 ** Return the sector-size as reported by the log file handle.
 */
@@ -1521,7 +1374,7 @@ int lsmConfigMmap(lsm_db *pDb, int *piParam){
 /*
 ** Helper function for lsmInfoArrayStructure().
 */
-static SortedRun *startsWith(SortedRun *pRun, Pgno iFirst){
+static Segment *startsWith(Segment *pRun, Pgno iFirst){
   return (iFirst==pRun->iFirst) ? pRun : 0;
 }
 
@@ -1537,7 +1390,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   int rc = LSM_OK;
   Snapshot *pWorker;              /* Worker snapshot */
   Snapshot *pRelease = 0;         /* Snapshot to release */
-  SortedRun *pArray = 0;          /* Array to report on */
+  Segment *pArray = 0;            /* Array to report on */
   Level *pLvl;                    /* Used to iterate through db levels */
 
   *pzOut = 0;
@@ -1551,13 +1404,10 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
 
   /* Search for the array that starts on page iFirst */
   for(pLvl=lsmDbSnapshotLevel(pWorker); pLvl && pArray==0; pLvl=pLvl->pNext){
-    if( 0==(pArray = startsWith(&pLvl->lhs.sep, iFirst))
-     && 0==(pArray = startsWith(&pLvl->lhs.run, iFirst))
-    ){
+    if( 0==(pArray = startsWith(&pLvl->lhs, iFirst)) ){
       int i;
       for(i=0; i<pLvl->nRight; i++){
-        if( (pArray = startsWith(&pLvl->aRhs[i].sep, iFirst)) ) break;
-        if( (pArray = startsWith(&pLvl->aRhs[i].run, iFirst)) ) break;
+        if( (pArray = startsWith(&pLvl->aRhs[i], iFirst)) ) break;
       }
     }
   }
@@ -1591,34 +1441,6 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   return rc;
 }
 
-void lsmFsDumpBlockmap(lsm_db *pDb, SortedRun *p){
-  if( p ){
-    FileSystem *pFS = pDb->pFS;
-    int iBlk;
-    int iLastBlk;
-    char *zMsg = 0;
-    LsmString zBlk;
-
-    lsmStringInit(&zBlk, pDb->pEnv);
-    iBlk = fsPageToBlock(pFS, p->iFirst);
-    iLastBlk = fsPageToBlock(pFS, p->iLast);
-
-    while( iBlk ){
-      lsmStringAppendf(&zBlk, " %d", iBlk);
-      if( iBlk!=iLastBlk ){
-        fsBlockNext(pFS, iBlk, &iBlk);
-      }else{
-        iBlk = 0;
-      }
-    }
-
-    zMsg = lsmMallocPrintf(pDb->pEnv, "%d..%d: ", p->iFirst, p->iLast);
-    lsmLogMessage(pDb, LSM_OK, "    % -15s %s", zMsg, zBlk.z);
-    lsmFree(pDb->pEnv, zMsg);
-    lsmStringClear(&zBlk);
-  }
-} 
-
 #ifdef LSM_EXPENSIVE_DEBUG
 /*
 ** Helper function for lsmFsIntegrityCheck()
@@ -1632,7 +1454,7 @@ static void checkBlocks(
   if( pSeg ){
     int i;
     for(i=0; i<2; i++){
-      SortedRun *p = (i ? pSeg->pRun : pSeg->pSep);
+      Segment *p = (i ? pSeg->pRun : pSeg->pSep);
 
       if( p && p->nSize>0 ){
         const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
