@@ -3335,7 +3335,6 @@ static int mergeWorkerStep(MergeWorker *pMW){
   /* Advance the cursor to the next input record (assuming one exists). */
   assert( lsmMCursorValid(pMW->pCsr) );
   if( rc==LSM_OK ) rc = lsmMCursorNext(pMW->pCsr);
-  assert( pMW->pPage==0 );
 
   /* If the cursor is at EOF, the merge is finished. Release all page
   ** references currently held by the merge worker and inform the 
