@@ -99,6 +99,7 @@ foreach hdr {
    mutex.h
    opcodes.h
    os.h
+   parse.h
    sqlite4.h
    sqliteInt.h
    sqliteLimit.h

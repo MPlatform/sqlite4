@@ -210,7 +210,7 @@ static void *sqlite4MemRealloc(void *NotUsed, void *pPrior, int nByte){
     testcase( sqlite4DefaultEnv.xLog!=0 );
     sqlite4_log(0,SQLITE_NOMEM,
       "failed memory resize %u to %u bytes",
-      sqlite4MemSize(pPrior), nByte);
+      sqlite4MemSize(0, pPrior), nByte);
   }
   return (void*)p;
 #endif
