@@ -283,19 +283,40 @@ int main(int argc,char **argv){
 /*
 ** Compile this one file with -DVARINT_TOOL to generate a command-line
 ** program that converts the integers it finds as arguments into varints
-** and then displays the hexadecimal representation of the varint.
+** and hex varints preceded by "=" into integers and then displays the
+** results on standard output.
 */
 #ifdef VARINT_TOOL
+static int hexToInt(char c){
+  if( c>='0' && c<='9' ) return c - '0';
+  if( c>='a' && c<='f' ) return c - 'a' + 10;
+  if( c>='A' && c<='F' ) return c - 'A' + 10;
+  return 0;
+}
 int main(int argc, char **argv){
   int i, j, n;
   sqlite4_uint64 x;
   char out[20];
+  if( argc<=1 ){
+    printf("Usage: %s N =X ...\n"
+           "Convert integer values into varints.\n"
+           "Convert hex varint values preceded by '=' into integers.\n", 
+           argv[0]);
+    return 1;
+  }
   for(i=1; i<argc; i++){
     const char *z = argv[i];
     x = 0;
-    while( z[0]>='0' && z[0]<='9' ){
-      x = x*10 + z[0] - '0';
-      z++;
+    if( z[0]=='=' ){
+      for(j=1; j<sizeof(out)/2 && z[j] && z[j+1]; j+=2 ){
+        out[j-1] = hexToInt(z[j])*16 + hexToInt(z[j+1]);
+      }
+      sqlite4GetVarint64(out, j-1, &x);
+    }else{
+      while( z[0]>='0' && z[0]<='9' ){
+        x = x*10 + z[0] - '0';
+        z++;
+      }
     }
     n = sqlite4PutVarint64(out, x);
     printf("%llu = ", (long long unsigned)x);

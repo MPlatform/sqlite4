@@ -498,6 +498,10 @@ test:	testfixture$(EXE) sqlite4$(EXE)
 lsmtest$(EXE): libsqlite4.a $(LSMTESTSRC) $(LSMTESTHDR)
 	$(TCCX) $(LSMTESTSRC) libsqlite4.a -o lsmtest$(EXE) $(THREADLIB) -lsqlite3
 
+
+varint$(EXE):	$(TOP)/src/varint.c
+	$(TCCX) -DVARINT_TOOL -o varint$(EXE) $(TOP)/src/varint.c
+
 # The next two rules are used to support the "threadtest" target. Building
 # threadtest runs a few thread-safety tests that are implemented in C. This
 # target is invoked by the releasetest.tcl script.
