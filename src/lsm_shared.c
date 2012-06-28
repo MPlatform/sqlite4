@@ -674,7 +674,7 @@ void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *pSnap){
 ** Create a new client snapshot based on the current contents of the worker 
 ** snapshot. The connection must be the worker to call this function.
 */
-int lsmDbUpdateClient(lsm_db *pDb, int nHdrLevel){
+int lsmDbUpdateClient(lsm_db *pDb, int nLsmLevel, int bOvfl){
   Database *p = pDb->pDatabase;   /* Database handle */
   Snapshot *pOld;                 /* Old client snapshot object */
   Snapshot *pNew;                 /* New client snapshot object */
@@ -711,32 +711,32 @@ int lsmDbUpdateClient(lsm_db *pDb, int nHdrLevel){
   pAvail = (u8 *)&pNew[1];
   ppLink = &pNew->pLevel;
   for(pLevel=p->worker.pLevel; pLevel && rc==LSM_OK; pLevel=pLevel->pNext){
-    Level *p;
+    Level *pNew;
 
-    p = (Level *)pAvail;
-    memcpy(p, pLevel, sizeof(Level));
+    pNew = (Level *)pAvail;
+    memcpy(pNew, pLevel, sizeof(Level));
     pAvail += sizeof(Level);
 
-    if( p->nRight ){
-      p->aRhs = (Segment *)pAvail;
-      memcpy(p->aRhs, pLevel->aRhs, sizeof(Segment) * p->nRight);
-      pAvail += (sizeof(Segment) * p->nRight);
-      lsmSortedSplitkey(pDb, p, &rc);
+    if( pNew->nRight ){
+      pNew->aRhs = (Segment *)pAvail;
+      memcpy(pNew->aRhs, pLevel->aRhs, sizeof(Segment) * pNew->nRight);
+      pAvail += (sizeof(Segment) * pNew->nRight);
+      lsmSortedSplitkey(pDb, pNew, &rc);
     }
 
     /* This needs to come after any call to lsmSortedSplitkey(). Splitkey()
-    ** uses data within the Merge object to set p->pSplitKey and co.  */
-    p->pMerge = 0;
+    ** uses data within the Merge object to set pNew->pSplitKey and co.  */
+    pNew->pMerge = 0;
 
-    *ppLink = p;
-    ppLink = &p->pNext;
+    *ppLink = pNew;
+    ppLink = &pNew->pNext;
   }
 
   /* Create the serialized version of the new client snapshot. */
   if( p->bDirty && rc==LSM_OK ){
-    assert( nHdrLevel>0 || p->worker.pLevel==0 );
+    assert( nLevel>nLsmLevel || p->worker.pLevel==0 );
     rc = lsmCheckpointExport(
-        pDb, nHdrLevel, pNew->iId, 1, &pNew->pExport, &pNew->nExport
+        pDb, nLsmLevel, bOvfl, pNew->iId, 1, &pNew->pExport, &pNew->nExport
     );
   }
 
@@ -924,7 +924,7 @@ int lsmSnapshotFreelist(lsm_db *pDb, int **paFree, int *pnFree){
   }
 
   *pnFree = nFree;
-  *paFree = aFree;
+  if( paFree ) *paFree = aFree;
   return rc;
 }
 

@@ -246,16 +246,17 @@ struct Level {
 **   The byte offset to write to next within the last page of the 
 **   output segment.
 */
-struct Merge {
-  int nInput;                     /* Number of input runs being merged */
-  MergeInput *aInput;             /* Array nInput entries in size */
-  int nSkip;                      /* Number of separators entries to skip */
-  int iOutputOff;                 /* Write offset on output page */
-  int bHierReadonly;              /* True if b-tree heirarchies are read-only */
-};
 struct MergeInput {
   Pgno iPg;                       /* Page on which next input is stored */
   int iCell;                      /* Cell containing next input to merge */
+};
+struct Merge {
+  int nInput;                     /* Number of input runs being merged */
+  MergeInput *aInput;             /* Array nInput entries in size */
+  MergeInput splitkey;            /* Location in file of current splitkey */
+  int nSkip;                      /* Number of separators entries to skip */
+  int iOutputOff;                 /* Write offset on output page */
+  int bHierReadonly;              /* True if b-tree heirarchies are read-only */
 };
 
 /* 
@@ -273,14 +274,13 @@ struct MergeInput {
 /* 
 ** Functions from file "lsm_ckpt.c".
 */
-int lsmCheckpointRead(lsm_db *);
+int lsmCheckpointRead(lsm_db *, int *);
 int lsmCheckpointWrite(lsm_db *);
-int lsmCheckpointExport(lsm_db *, int, i64, int, void **, int *);
+int lsmCheckpointExport(lsm_db *, int, int, i64, int, void **, int *);
 void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
 lsm_i64 lsmCheckpointLogOffset(void *pExport);
-int lsmCheckpointLevels(lsm_db *, int *, void **, int *);
+int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
-
 
 /* 
 ** Functions from file "lsm_tree.c".
@@ -433,7 +433,7 @@ int lsmConfigMmap(lsm_db *pDb, int *piParam);
 ** Functions from file "lsm_sorted.c".
 */
 int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
-int lsmSortedFlushTree(lsm_db *, int *);
+int lsmSortedFlushTree(lsm_db *, int, int);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
 
@@ -523,7 +523,7 @@ void lsmFinishReadTrans(lsm_db *);
 int lsmFinishWriteTrans(lsm_db *, int);
 int lsmFinishFlush(lsm_db *, int);
 
-int lsmDbUpdateClient(lsm_db *, int);
+int lsmDbUpdateClient(lsm_db *, int, int);
 
 int lsmSnapshotFreelist(lsm_db *, int **, int *);
 int lsmSnapshotSetFreelist(lsm_db *, int *, int);

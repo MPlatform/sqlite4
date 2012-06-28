@@ -43,7 +43,6 @@ namespace import ::autoscroll::*
 #############################################################################
 
 proc exec_lsmtest_show {args} {
-  puts $args
   set fd [open [list |lsmtest show {*}$args]]
   set res ""
   while {![eof $fd]} { 

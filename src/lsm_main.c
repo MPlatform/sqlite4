@@ -153,12 +153,13 @@ static int dbRecoverIfRequired(lsm_db *pDb){
   /* The following call returns NULL if recovery is not required. */
   pDb->pWorker = lsmDbSnapshotRecover(pDb);
   if( pDb->pWorker ){
+    int bOvfl;
 
     /* Read the database structure */
-    rc = lsmCheckpointRead(pDb);
+    rc = lsmCheckpointRead(pDb, &bOvfl);
 
     /* Read the free block list and any level records stored in the LSM. */
-    if( rc==LSM_OK ){
+    if( rc==LSM_OK && bOvfl ){
       rc = lsmSortedLoadSystem(pDb);
     }
 
@@ -179,7 +180,7 @@ static int dbRecoverIfRequired(lsm_db *pDb){
 
     /* Set up the initial client snapshot. */
     if( rc==LSM_OK ){
-      rc = lsmDbUpdateClient(pDb, 0);
+      rc = lsmDbUpdateClient(pDb, 0, 0);
     }
 
     dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
@@ -261,7 +262,8 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
 */
 int lsmFlushToDisk(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
-  int nHdrLevel;
+  int nLsmLevel;
+  int bOvfl;
 
   /* Must not hold the worker snapshot when this is called. */
   assert( pDb->pWorker==0 );
@@ -270,15 +272,17 @@ int lsmFlushToDisk(lsm_db *pDb){
   /* Save the position of each open cursor belonging to pDb. */
   rc = lsmSaveCursors(pDb);
 
+  bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
+
   /* Write the contents of the in-memory tree into the database file and 
   ** update the worker snapshot accordingly. Then flush the contents of 
   ** the db file to disk too. No calls to fsync() are made here - just 
   ** write().  */
-  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, &nHdrLevel);
+  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
   if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
 
   /* Create a new client snapshot - one that uses the new runs created above. */
-  if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nHdrLevel);
+  if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nLsmLevel, bOvfl);
 
   /* Restore the position of any open cursors */
   rc = lsmRestoreCursors(pDb);

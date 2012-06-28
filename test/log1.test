@@ -343,7 +343,7 @@ do_execsql_test 10.1 {
 }
 do_test 10.2 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 223}
 do_test 10.3 { db close ; sqlite4 db test.db } {}
-do_test 10.4 { sqlite4_lsm_info db main db-structure } {{{0 0 0 3 3 1}}}
+do_test 10.4 { sqlite4_lsm_info db main db-structure } {{{3 3 0 1}}}
 do_test 10.5 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 0}
 
 do_execsql_test 10.6 {
@@ -462,7 +462,7 @@ for {set iTest 1} {$iTest<=150} {incr iTest} {
   expr srand(0)
   do_test 12.3.$iTest {
     for {set i 0} {$i < 10} {incr i} {
-      execsql { INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100)) }
+      execsql { INSERT INTO t1 VALUES(randstr(20,20), randstr(100,100)) }
       if { int(rand()*10.0)==0 } { sqlite4_lsm_work db main -flush }
       if { int(rand()*10.0)==0 } { sqlite4_lsm_work db main -checkpoint }
     }
