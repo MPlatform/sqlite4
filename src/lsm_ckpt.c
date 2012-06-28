@@ -376,6 +376,7 @@ int lsmCheckpointExport(
     for(i=0; i<nVal; i++){
       ckptSetValue(&ckpt, iOut++, aVal[i], &rc);
     }
+    lsmFree(pDb->pEnv, aVal);
   }
 
   /* Write the checkpoint header */

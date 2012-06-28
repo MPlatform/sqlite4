@@ -109,7 +109,6 @@ struct Snapshot {
   /* The following are populated and used by worker snapshots only */
   int nBlock;                     /* Number of blocks tracked by this ss */
   Freelist freelist;              /* Database free-list */
-
   int bRecordDelta;               /* True when recording freelist delta */
 };
 #define LSM_INITIAL_LOGPG       1
@@ -179,9 +178,6 @@ struct Snapshot {
 **   TODO - this description.
 */
 struct Database {
-#if 0
-  lsm_env *pEnv;                  /* Environment handle */
-#endif
   char *zName;                    /* Canonical path to database file */
   void *pId;                      /* Database id (file inode) */
   int nId;                        /* Size of pId in bytes */

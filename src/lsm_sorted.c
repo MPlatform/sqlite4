@@ -1418,13 +1418,27 @@ int segmentPtrSeek(
     if( res>=0 ) break;
 
     /* Advance to the next page that contains at least one key. */
-    do {
-      rc = lsmFsDbPageNext(pPtr->pSeg, pPtr->pPg, 1, &pNext);
+    pNext = pPtr->pPg;
+    lsmFsPageRef(pNext);
+    while( 1 ){
+      Page *pLoad;
+      u8 *aData; int nData;
+
+      rc = lsmFsDbPageNext(pPtr->pSeg, pNext, 1, &pLoad);
+      lsmFsPageRelease(pNext);
+      pNext = pLoad;
       if( pNext==0 ) break;
+
       assert( rc==LSM_OK );
-      segmentPtrSetPage(pPtr, pNext);
-    }while( (pPtr->nCell==0 || (pPtr->flags & SEGMENT_BTREE_FLAG)) );
+      aData = lsmFsPageData(pNext, &nData);
+      if( (pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG)==0
+       && pageGetNRec(aData, nData)>0
+      ){
+        break;
+      }
+    }
     if( pNext==0 ) break;
+    segmentPtrSetPage(pPtr, pNext);
 
     /* This should probably be an LSM_CORRUPT error. */
     assert( rc!=LSM_OK || (pPtr->flags & PGFTR_SKIP_THIS_FLAG) );

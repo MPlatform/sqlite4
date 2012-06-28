@@ -522,8 +522,8 @@ int do_speed_tests(int nArg, char **azArg){
       int isSwitch;
     } aOpt[] = {
       { "sqlite3" , 0},
-      { "lsm" , 0},
       { "leveldb" , 0},
+      { "lsm" , 0},
       { "lsm_mt2" , 0},
       { "lsm_mt3" , 0},
       { "kyotocabinet" , 0},
