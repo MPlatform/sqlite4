@@ -41,6 +41,9 @@ int main(int argc, char **argv){
   unsigned sz, nLevel, nRight, nMerge;
   unsigned iLevel, iRight, iMerge;
   unsigned base;
+  unsigned nFree;
+  unsigned ovflFlag;
+  char z[100];
   unsigned char aPage[4200];
 
   if( argc!=3 ) usage(argv[0]);
@@ -60,7 +63,8 @@ int main(int argc, char **argv){
   nLevel = getInt(aPage,5);
   prline("Number of levels", nLevel);
   prline("Database page size", getInt(aPage,6));
-  prline("Flag to indicate overflow records", getInt(aPage,7));
+  ovflFlag = getInt(aPage, 7);
+  prline("LEVELS and FREELIST records in L0?", ovflFlag);
   base = 8;
 
   prline("Log pointer #1", getInt(aPage,base));
@@ -70,7 +74,6 @@ int main(int argc, char **argv){
 
   base += 4;
   for(iLevel=0; iLevel<nLevel && base<1024; iLevel++){
-    char z[100];
     printf("Level[%d]:\n", iLevel);
     prline("  Age of this level", getInt(aPage, base));
     nRight = getInt(aPage, base+1);
@@ -86,29 +89,40 @@ int main(int argc, char **argv){
     if( nRight>0 ){
       nMerge = getInt(aPage, base); base++;
       prline("  Number of segments involved in the merge", nMerge);
-    }else{
-      nMerge = 0;
-    }
-    if( nRight>0 ){
       prline("  Current nSkip value", getInt(aPage, base)); base++;
-    }
-    for(iMerge=0; iMerge<nMerge && base<1024; iMerge++){
-      snprintf(z, 80, "  Right segment %d next page", iMerge);
-      prline(z, getInt(aPage, base));
-      snprintf(z, 80, "  Right segment %d next cell", iMerge);
-      prline(z, getInt(aPage, base+1));
+      for(iMerge=0; iMerge<nMerge && base<1024; iMerge++){
+        snprintf(z, 80, "  Right segment %d next page", iMerge);
+        prline(z, getInt(aPage, base));
+        snprintf(z, 80, "  Right segment %d next cell", iMerge);
+        prline(z, getInt(aPage, base+1));
+        base += 2;
+      }
+      prline("  Split-key page", getInt(aPage, base));
+      prline("  Split-key cell", getInt(aPage, base));
       base += 2;
     }
   }
   if( base>=1020 ) return 0;
-  
-  prline("Size to truncate free list to after loading", getInt(aPage, base));
-  prline("First refree block", getInt(aPage, base+1));
-  prline("Second refree block", getInt(aPage, base+2));
-  prline("Checksum value 1", getInt(aPage, base+3));
-  prline("Checksum value 2", getInt(aPage, base+4));
 
-  base += 5;
+  if( ovflFlag==0 ){
+    unsigned nFree = getInt(aPage, base);
+    unsigned i;
+    prline("Number of on-checkpoint freelist blocks", nFree);
+    for(i=0; i<nFree; i++){
+      snprintf(z, 80, "Freelist block %d", i);
+      prline(z, getInt(aPage, base+i+1));
+    }
+    base += nFree+1;
+  }else{
+    prline("Size to truncate free list to after loading", getInt(aPage, base));
+    prline("First refree block", getInt(aPage, base+1));
+    prline("Second refree block", getInt(aPage, base+2));
+    base += 3;
+  }
+  prline("Checksum value 1", getInt(aPage, base));
+  prline("Checksum value 2", getInt(aPage, base+1));
+
+  base += 2;
   printf("****************************************"
          "***************************************\n");
   printf("Used %d out 1024 integers available in the header (%d%%)\n",
