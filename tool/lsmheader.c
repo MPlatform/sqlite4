@@ -60,13 +60,15 @@ int main(int argc, char **argv){
   nLevel = getInt(aPage,5);
   prline("Number of levels", nLevel);
   prline("Database page size", getInt(aPage,6));
+  prline("Flag to indicate overflow records", getInt(aPage,7));
+  base = 8;
 
-  prline("Log pointer #1", getInt(aPage,7));
-  prline("Log pointer #2", getInt(aPage,8));
-  prline("Log pointer #3", getInt(aPage,9));
-  prline("Log pointer #4", getInt(aPage,10));
+  prline("Log pointer #1", getInt(aPage,base));
+  prline("Log pointer #2", getInt(aPage,base+1));
+  prline("Log pointer #3", getInt(aPage,base+2));
+  prline("Log pointer #4", getInt(aPage,base+3));
 
-  base = 11;
+  base += 4;
   for(iLevel=0; iLevel<nLevel && base<1024; iLevel++){
     char z[100];
     printf("Level[%d]:\n", iLevel);
