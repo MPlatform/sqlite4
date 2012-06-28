@@ -224,6 +224,23 @@ void sqlite4Pragma(
   }else
 #endif /* SQLITE_OMIT_FLAG_PRAGMAS */
 
+  if( sqlite4StrICmp(zLeft, "lsm_flush")==0 ){
+    sqlite4_kvstore_control(db, zDb, SQLITE_KVCTRL_LSM_FLUSH, 0);
+  }else
+
+  if( sqlite4StrICmp(zLeft, "lsm_checkpoint")==0 ){
+    sqlite4_kvstore_control(db, zDb, SQLITE_KVCTRL_LSM_CHECKPOINT, 0);
+  }else
+
+  if( sqlite4StrICmp(zLeft, "lsm_merge")==0 ){
+    int nPage = zRight ? sqlite4Atoi(zRight) : 1000;
+    sqlite4_kvstore_control(db, zDb, SQLITE_KVCTRL_LSM_MERGE, &nPage);
+    returnSingleInt(pParse, "nWrite", (sqlite4_int64)nPage);
+  }else
+
+
+
+
 #ifndef SQLITE_OMIT_SCHEMA_PRAGMAS
   /*
   **   PRAGMA table_info(<table>)

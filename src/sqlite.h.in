@@ -3706,8 +3706,11 @@ int sqlite4_kvstore_control(sqlite4*, const char *zDbName, int op, void*);
 ** the current (possibly updated) synchronous level before returning (
 ** 0, 1 or 2).
 */
-#define SQLITE_KVCTRL_LSM_HANDLE   1
-#define SQLITE_KVCTRL_SYNCHRONOUS  2
+#define SQLITE_KVCTRL_LSM_HANDLE       1
+#define SQLITE_KVCTRL_SYNCHRONOUS      2
+#define SQLITE_KVCTRL_LSM_FLUSH        3
+#define SQLITE_KVCTRL_LSM_MERGE        4
+#define SQLITE_KVCTRL_LSM_CHECKPOINT   5
 
 /*
 ** CAPIREF: Testing Interface

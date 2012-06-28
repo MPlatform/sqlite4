@@ -375,6 +375,25 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
       break;
     }
 
+    case SQLITE_KVCTRL_LSM_FLUSH: {
+      lsm_work(p->pDb, LSM_WORK_FLUSH, 0, 0);
+      break;
+    }
+
+    case SQLITE_KVCTRL_LSM_MERGE: {
+      int nPage = *(int*)pArg;
+      int nWrite = 0;
+      lsm_work(p->pDb, LSM_WORK_OPTIMIZE, nPage, &nWrite);
+      *(int*)pArg = nWrite;
+      break;
+    }
+
+    case SQLITE_KVCTRL_LSM_CHECKPOINT: {
+      lsm_work(p->pDb, LSM_WORK_CHECKPOINT, 0, 0);
+      break;
+    }
+
+
     default:
       rc = SQLITE_NOTFOUND;
       break;
