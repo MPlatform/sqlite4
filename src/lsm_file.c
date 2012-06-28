@@ -1364,7 +1364,7 @@ int lsmFsSectorSize(FileSystem *pFS){
 int lsmConfigMmap(lsm_db *pDb, int *piParam){
   int iNew = *piParam;
   FileSystem *pFS = pDb->pFS;
-  if( pFS->nOut==0 && (iNew==0 || iNew==1) ){
+  if( LSM_IS_64_BIT && (pFS->nOut==0 && (iNew==0 || iNew==1)) ){
     pFS->bUseMmap = iNew;
   }
   *piParam = pFS->bUseMmap;

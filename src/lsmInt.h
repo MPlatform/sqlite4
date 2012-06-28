@@ -57,6 +57,10 @@
 #define LSM_CKSUM0_INIT 42
 #define LSM_CKSUM1_INIT 42
 
+/* "mmap" mode is currently only used in environments with 64-bit address 
+** spaces. The following macro is used to test for this.  */
+#define LSM_IS_64_BIT (sizeof(void*)==8)
+
 typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
