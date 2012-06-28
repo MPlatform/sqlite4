@@ -123,6 +123,8 @@ proc draw_segment {C segment tags} {
     }
 
     $C bind $septag <1> [list segment_callback $C $septag $segment]
+    $C bind $septag <Enter> [list segment_info $C $segment]
+    $C bind $septag <Leave> [list segment_info $C {}]
   }
 
   set maintag "[lindex $tags end].main"
@@ -134,7 +136,23 @@ proc draw_segment {C segment tags} {
   $C itemconfigure $tid -tags [concat $tags "[lindex $tags 0].text"]
 
   $C bind $maintag <1> [list segment_callback $C $maintag $segment]
+  $C bind $maintag <Enter> [list segment_info $C $segment]
+  $C bind $maintag <Leave> [list segment_info $C {}]
   $C bind $tid <1>     [list segment_callback $C $maintag $segment]
+  $C bind $tid <Enter> [list segment_info $C $segment]
+  $C bind $tid <Leave> [list segment_info $C {}]
+}
+
+proc segment_info {C segment} {
+  set w $C
+  while {[winfo class $w]!="Frame"} {set w [winfo parent $w]}
+  set w $w.info
+  if {$segment==""} {
+    $w config -text ""
+  } else {
+    foreach {iFirst iLast iRoot nSize} $segment break
+    $w config -text "first: $iFirst   last: $iLast\nroot: $iRoot   size: $nSize"
+  }
 }
 
 proc segment_callback {C tag segment} {
@@ -431,7 +449,11 @@ proc show_text_in_editor {t} {
 proc static_setup {zDb} {
 
   panedwindow .pan -orient horizontal
-  set C [scrollable canvas .pan.c -background white -width 400 -height 600]
+  frame .pan.c
+  set C [scrollable canvas .pan.c.c -background white -width 400 -height 600]
+  pack .pan.c.c -side top -fill both -expand 1
+  label .pan.c.info -border 2 -relief sunken -height 2
+  pack .pan.c.info -side top -fill x -expand 1
 
   link_varset $C myText myDb myData myTree mySelected myMode myModeButton
   set myDb $zDb

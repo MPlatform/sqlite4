@@ -19,7 +19,7 @@ static unsigned int getInt(const unsigned char *a, int n){
 static void prline(const char *zTitle, unsigned v){
   int n = (int)strlen(zTitle);
   printf("%s%.*s %10u %08x\n", zTitle,
-    60-n, "............................................................",
+    55-n, "............................................................",
     v, v);
 }
 
@@ -67,7 +67,7 @@ int main(int argc, char **argv){
   prline("Log pointer #4", getInt(aPage,10));
 
   base = 11;
-  for(iLevel=0; iLevel<nLevel && base<1020; iLevel++){
+  for(iLevel=0; iLevel<nLevel && base<1024; iLevel++){
     char z[100];
     printf("Level[%d]:\n", iLevel);
     prline("  Age of this level", getInt(aPage, base));
@@ -98,11 +98,18 @@ int main(int argc, char **argv){
       base += 2;
     }
   }
+  if( base>=1020 ) return 0;
   
   prline("Size to truncate free list to after loading", getInt(aPage, base));
   prline("First refree block", getInt(aPage, base+1));
   prline("Second refree block", getInt(aPage, base+2));
   prline("Checksum value 1", getInt(aPage, base+3));
   prline("Checksum value 2", getInt(aPage, base+4));
+
+  base += 5;
+  printf("****************************************"
+         "***************************************\n");
+  printf("Used %d out 1024 integers available in the header (%d%%)\n",
+    base, base*100/1024);
    
 }
