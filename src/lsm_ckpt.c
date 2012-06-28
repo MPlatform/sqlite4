@@ -44,11 +44,11 @@
 **   For each level in the database, a level record. Formatted as follows:
 **
 **     0. Age of the level.
-**     1. The number of right-hand segments (possibly 0),
-**     2. Segment record for left-hand segment (6 integers),
-**     3. Segment record for each right-hand segment (6 integers),
-**     4. If nRight>0, The number of segments involved in the merge,
-**     5. Current nSkip value (see Merge structure defn.),
+**     1. The number of right-hand segments (nRight, possibly 0),
+**     2. Segment record for left-hand segment (4 integers defined below),
+**     3. Segment record for each right-hand segment (4 integers defined below),
+**     4. If nRight>0, The number of segments involved in the merge
+**     5. if nRight>0, Current nSkip value (see Merge structure defn.),
 **     6. For each segment in the merge:
 **        5a. Page number of next cell to read during merge
 **        5b. Cell number of next cell to read during merge
