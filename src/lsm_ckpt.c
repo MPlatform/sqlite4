@@ -57,17 +57,24 @@
 **     7. Page containing current split-key.
 **     8. Cell within page containing current split-key.
 **
-**   The freelist delta. Currently consists of (this will change):
+**   The freelist. If the checkpoint header indicates that the top level
+**   segment contains LEVELS and FREELIST records, then three integers are
+**   stored here:
 **
-**     1. If the free-list is small enough to fit in the checkpoint,
-**        the number of free list elements plus one. Otherwise, zero.
+**     1. The size to truncate the free list to after it is loaded.
+**     2. First refree block (or 0),
+**     3. Second refree block (or 0),
 **
-**     Then, if the free-list fits in the checkpoint, each free-list
-**     block number. Or:
+**   In this case, the free list is loaded from the top level segment, 
+**   then truncated so that it contains the nTruncate newest entries only, 
+**   where nTruncate is the first integer in the block of three above. If 
+**   either or both of the "refree block" integers are non-zero, then they 
+**   are appended to the free-list.
 **
-**     2. The size to truncate the free list to after it is loaded.
-**     3. First refree block (or 0),
-**     4. Second refree block (or 0),
+**   Or, if the checkpoint header flag is clear, then the entire free-list
+**   is stored in the checkpoint. The format is the number of entries in
+**   the free-list, followed by the entries themselves (i.e. N+1 integers
+**   for an N entry free-list).
 **
 **   The checksum:
 **
