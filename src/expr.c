@@ -1953,7 +1953,7 @@ static void codeInteger(Parse *pParse, Expr *pExpr, int negFlag, int iMem){
 /*
 ** Clear a cache entry.
 */
-static void cacheEntryClear(Parse *pParse, struct yColCache *p){
+static void cacheEntryClear(Parse *pParse, ParseYColCache *p){
   if( p->tempReg ){
     if( pParse->nTempReg<ArraySize(pParse->aTempReg) ){
       pParse->aTempReg[pParse->nTempReg++] = p->iReg;
@@ -1971,7 +1971,7 @@ void sqlite4ExprCacheStore(Parse *pParse, int iTab, int iCol, int iReg){
   int i;
   int minLru;
   int idxLru;
-  struct yColCache *p;
+  ParseYColCache *p;
 
   assert( iReg>0 );  /* Register numbers are always positive */
   assert( iCol>=-1 && iCol<32768 );  /* Finite column numbers */
@@ -2043,7 +2043,7 @@ void sqlite4ExprCacheStore(Parse *pParse, int iTab, int iCol, int iReg){
 void sqlite4ExprCacheRemove(Parse *pParse, int iReg, int nReg){
   int i;
   int iLast = iReg + nReg - 1;
-  struct yColCache *p;
+  ParseYColCache *p;
   for(i=0, p=pParse->aColCache; i<SQLITE4_N_COLCACHE; i++, p++){
     int r = p->iReg;
     if( r>=iReg && r<=iLast ){
@@ -2069,7 +2069,7 @@ void sqlite4ExprCachePush(Parse *pParse){
 */
 void sqlite4ExprCachePop(Parse *pParse, int N){
   int i;
-  struct yColCache *p;
+  ParseYColCache *p;
   assert( N>0 );
   assert( pParse->iCacheLevel>=N );
   pParse->iCacheLevel -= N;
@@ -2089,7 +2089,7 @@ void sqlite4ExprCachePop(Parse *pParse, int N){
 */
 static void sqlite4ExprCachePinRegister(Parse *pParse, int iReg){
   int i;
-  struct yColCache *p;
+  ParseYColCache *p;
   for(i=0, p=pParse->aColCache; i<SQLITE4_N_COLCACHE; i++, p++){
     if( p->iReg==iReg ){
       p->tempReg = 0;
@@ -2136,7 +2136,7 @@ int sqlite4ExprCodeGetColumn(
 ){
   Vdbe *v = pParse->pVdbe;
   int i;
-  struct yColCache *p;
+  ParseYColCache *p;
 
   for(i=0, p=pParse->aColCache; i<SQLITE4_N_COLCACHE; i++, p++){
     if( p->iReg>0 && p->iTable==iTable && p->iColumn==iColumn ){
@@ -2156,7 +2156,7 @@ int sqlite4ExprCodeGetColumn(
 */
 void sqlite4ExprCacheClear(Parse *pParse){
   int i;
-  struct yColCache *p;
+  ParseYColCache *p;
 
   for(i=0, p=pParse->aColCache; i<SQLITE4_N_COLCACHE; i++, p++){
     if( p->iReg ){
@@ -2180,7 +2180,7 @@ void sqlite4ExprCacheAffinityChange(Parse *pParse, int iStart, int iCount){
 */
 void sqlite4ExprCodeMove(Parse *pParse, int iFrom, int iTo, int nReg){
   int i;
-  struct yColCache *p;
+  ParseYColCache *p;
   if( NEVER(iFrom==iTo) ) return;
   sqlite4VdbeAddOp3(pParse->pVdbe, OP_Move, iFrom, iTo, nReg);
   for(i=0, p=pParse->aColCache; i<SQLITE4_N_COLCACHE; i++, p++){
@@ -2213,7 +2213,7 @@ void sqlite4ExprCodeCopy(Parse *pParse, int iFrom, int iTo, int nReg){
 */
 static int usedAsColumnCache(Parse *pParse, int iFrom, int iTo){
   int i;
-  struct yColCache *p;
+  ParseYColCache *p;
   for(i=0, p=pParse->aColCache; i<SQLITE4_N_COLCACHE; i++, p++){
     int r = p->iReg;
     if( r>=iFrom && r<=iTo ) return 1;    /*NO_TEST*/
@@ -3952,7 +3952,7 @@ int sqlite4GetTempReg(Parse *pParse){
 void sqlite4ReleaseTempReg(Parse *pParse, int iReg){
   if( iReg && pParse->nTempReg<ArraySize(pParse->aTempReg) ){
     int i;
-    struct yColCache *p;
+    ParseYColCache *p;
     for(i=0, p=pParse->aColCache; i<SQLITE4_N_COLCACHE; i++, p++){
       if( p->iReg==iReg ){
         p->tempReg = 1;

@@ -606,6 +606,7 @@ typedef struct LookasideSlot LookasideSlot;
 typedef struct Module Module;
 typedef struct NameContext NameContext;
 typedef struct Parse Parse;
+typedef struct ParseYColCache ParseYColCache;
 typedef struct RowSet RowSet;
 typedef struct Savepoint Savepoint;
 typedef struct Select Select;
@@ -2143,6 +2144,20 @@ struct TriggerPrg {
 #endif
 
 /*
+** Internal column cache for Parse objects. One of these is used
+** for each column cache entry.
+*/
+struct ParseYColCache {
+  int iTable;           /* Table cursor number */
+  int iColumn;          /* Table column number */
+  u8 tempReg;           /* iReg is a temp register that needs to be freed */
+  int iLevel;           /* Nesting level */
+  int iReg;             /* Reg with value of this column. 0 means none. */
+  int lru;              /* Least recently used entry has the smallest value */
+};
+
+
+/*
 ** An SQL parser context.  A copy of this structure is passed through
 ** the parser and down into all the parser action routine in order to
 ** carry around information that is global to the entire parse.
@@ -2176,14 +2191,7 @@ struct Parse {
   int iNewidxReg;      /* First argument to OP_NewIdxid */
   u8 nColCache;        /* Number of entries in aColCache[] */
   u8 iColCache;        /* Next entry in aColCache[] to replace */
-  struct yColCache {
-    int iTable;           /* Table cursor number */
-    int iColumn;          /* Table column number */
-    u8 tempReg;           /* iReg is a temp register that needs to be freed */
-    int iLevel;           /* Nesting level */
-    int iReg;             /* Reg with value of this column. 0 means none. */
-    int lru;              /* Least recently used entry has the smallest value */
-  } aColCache[SQLITE4_N_COLCACHE];  /* One for each column cache entry */
+  ParseYColCache aColCache[SQLITE4_N_COLCACHE]; /* One for each column cache entry */
   yDbMask writeMask;   /* Start a write transaction on these databases */
   yDbMask cookieMask;  /* Bitmask of schema verified databases */
   u8 isMultiWrite;     /* True if statement may affect/insert multiple rows */
