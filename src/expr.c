@@ -2256,7 +2256,7 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
   switch( op ){
     case TK_AGG_COLUMN: {
       AggInfo *pAggInfo = pExpr->pAggInfo;
-      struct AggInfo_col *pCol = &pAggInfo->aCol[pExpr->iAgg];
+      AggInfoCol *pCol = &pAggInfo->aCol[pExpr->iAgg];
       if( !pAggInfo->directMode ){
         assert( pCol->iMem>0 );
         inReg = pCol->iMem;
@@ -3780,7 +3780,7 @@ static int analyzeAggregate(Walker *pWalker, Expr *pExpr){
       if( ALWAYS(pSrcList!=0) ){
         struct SrcList_item *pItem = pSrcList->a;
         for(i=0; i<pSrcList->nSrc; i++, pItem++){
-          struct AggInfo_col *pCol;
+          AggInfoCol *pCol;
           assert( !ExprHasAnyProperty(pExpr, EP_TokenOnly|EP_Reduced) );
           if( pExpr->iTable==pItem->iCursor ){
             /* If we reach this point, it means that pExpr refers to a table
@@ -3847,7 +3847,7 @@ static int analyzeAggregate(Walker *pWalker, Expr *pExpr){
         /* Check to see if pExpr is a duplicate of another aggregate 
         ** function that is already in the pAggInfo structure
         */
-        struct AggInfo_func *pItem = pAggInfo->aFunc;
+        AggInfoFunc *pItem = pAggInfo->aFunc;
         for(i=0; i<pAggInfo->nFunc; i++, pItem++){
           if( sqlite4ExprCompare(pItem->pExpr, pExpr)==0 ){
             break;

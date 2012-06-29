@@ -3520,7 +3520,7 @@ void sqlite4SelectPrep(
 static void resetAccumulator(Parse *pParse, AggInfo *pAggInfo){
   Vdbe *v = pParse->pVdbe;
   int i;
-  struct AggInfo_func *pFunc;
+  AggInfoFunc *pFunc;
   if( pAggInfo->nFunc+pAggInfo->nColumn==0 ){
     return;
   }
@@ -3552,7 +3552,7 @@ static void resetAccumulator(Parse *pParse, AggInfo *pAggInfo){
 static void finalizeAggFunctions(Parse *pParse, AggInfo *pAggInfo){
   Vdbe *v = pParse->pVdbe;
   int i;
-  struct AggInfo_func *pF;
+  AggInfoFunc *pF;
   for(i=0, pF=pAggInfo->aFunc; i<pAggInfo->nFunc; i++, pF++){
     ExprList *pList = pF->pExpr->x.pList;
     assert( !ExprHasProperty(pF->pExpr, EP_xIsSelect) );
@@ -3568,8 +3568,8 @@ static void finalizeAggFunctions(Parse *pParse, AggInfo *pAggInfo){
 static void updateAccumulator(Parse *pParse, AggInfo *pAggInfo){
   Vdbe *v = pParse->pVdbe;
   int i;
-  struct AggInfo_func *pF;
-  struct AggInfo_col *pC;
+  AggInfoFunc *pF;
+  AggInfoCol *pC;
 
   pAggInfo->directMode = 1;
   sqlite4ExprCacheClear(pParse);
@@ -4181,7 +4181,7 @@ int sqlite4Select(
           regRecord = ++pParse->nMem;
           regBase = sqlite4GetTempRange(pParse, nCol);
           for(i=0; i<nCol; i++){
-            struct AggInfo_col *pCol = &sAggInfo.aCol[i];
+            AggInfoCol *pCol = &sAggInfo.aCol[i];
             int regDest = i + regBase;
             int regValue = sqlite4ExprCodeGetColumn(
                 pParse, pCol->pTab, pCol->iColumn, pCol->iTable, regDest

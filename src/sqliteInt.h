@@ -583,6 +583,8 @@ extern const int sqlite4one;
 ** Forward references to structures
 */
 typedef struct AggInfo AggInfo;
+typedef struct AggInfoCol AggInfoCol;
+typedef struct AggInfoFunc AggInfoFunc;
 typedef struct AuthContext AuthContext;
 typedef struct AutoincInfo AutoincInfo;
 typedef struct CollSeq CollSeq;
@@ -1499,6 +1501,28 @@ struct Token {
 };
 
 /*
+** One for each column used in source tables.
+*/
+struct AggInfoCol {
+  Table *pTab;             /* Source table */
+  int iTable;              /* Cursor number of the source table */
+  int iColumn;             /* Column number within the source table */
+  int iSorterColumn;       /* Column number in the sorting index */
+  int iMem;                /* Memory location that acts as accumulator */
+  Expr *pExpr;             /* The original expression */
+};
+
+/*
+** One for each aggregate function.
+*/
+struct AggInfoFunc {
+  Expr *pExpr;             /* Expression encoding the function */
+  FuncDef *pFunc;          /* The aggregate function implementation */
+  int iMem;                /* Memory location that acts as accumulator */
+  int iDistinct;           /* Ephemeral table used to enforce DISTINCT */
+};
+
+/*
 ** An instance of this structure contains information needed to generate
 ** code for a SELECT that contains aggregate functions.
 **
@@ -1519,25 +1543,13 @@ struct AggInfo {
   int sortingIdx;         /* Cursor number of the sorting index */
   ExprList *pGroupBy;     /* The group by clause */
   int nSortingColumn;     /* Number of columns in the sorting index */
-  struct AggInfo_col {    /* For each column used in source tables */
-    Table *pTab;             /* Source table */
-    int iTable;              /* Cursor number of the source table */
-    int iColumn;             /* Column number within the source table */
-    int iSorterColumn;       /* Column number in the sorting index */
-    int iMem;                /* Memory location that acts as accumulator */
-    Expr *pExpr;             /* The original expression */
-  } *aCol;
+  AggInfoCol *aCol;
   int nColumn;            /* Number of used entries in aCol[] */
   int nColumnAlloc;       /* Number of slots allocated for aCol[] */
   int nAccumulator;       /* Number of columns that show through to the output.
                           ** Additional columns are used only as parameters to
                           ** aggregate functions */
-  struct AggInfo_func {   /* For each aggregate function */
-    Expr *pExpr;             /* Expression encoding the function */
-    FuncDef *pFunc;          /* The aggregate function implementation */
-    int iMem;                /* Memory location that acts as accumulator */
-    int iDistinct;           /* Ephemeral table used to enforce DISTINCT */
-  } *aFunc;
+  AggInfoFunc *aFunc; /* For each aggregate function */
   int nFunc;              /* Number of entries in aFunc[] */
   int nFuncAlloc;         /* Number of slots allocated for aFunc[] */
 };
