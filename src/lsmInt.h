@@ -33,7 +33,9 @@
 #  undef LSM_DEBUG
 # endif
 #else
-# define LSM_DEBUG
+# ifndef LSM_DEBUG
+#  define LSM_DEBUG
+# endif
 #endif
 
 /*
