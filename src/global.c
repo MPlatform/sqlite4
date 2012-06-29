@@ -152,9 +152,9 @@ KVFactory sqlite4BuiltinFactory = {
 struct sqlite4_env sqlite4DefaultEnv = {
    sizeof(sqlite4_env),       /* nByte */
    1,                         /* iVersion */
-   SQLITE4_DEFAULT_MEMSTATUS,  /* bMemstat */
+   SQLITE4_DEFAULT_MEMSTATUS, /* bMemstat */
    1,                         /* bCoreMutex */
-   SQLITE4_THREADSAFE==1,      /* bFullMutex */
+   SQLITE4_THREADSAFE==1,     /* bFullMutex */
    0x7ffffffe,                /* mxStrlen */
    128,                       /* szLookaside */
    500,                       /* nLookaside */
@@ -169,6 +169,7 @@ struct sqlite4_env sqlite4DefaultEnv = {
    sqlite4OsCurrentTime,      /* xCurrentTime */
    /* All the rest should always be initialized to zero */
    0,                         /* isInit */
+   0,                         /* pFactoryMutex */
    0,                         /* pPrngMutex */
    0, 0,                      /* prngX, prngY */
    0,                         /* xLog */

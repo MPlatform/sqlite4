@@ -3436,9 +3436,6 @@ int sqlite4_declare_vtab(sqlite4*, const char *zSQL);
 int sqlite4_overload_function(sqlite4*, const char *zFuncName, int nArg);
 
 /*
-** 
-
-/*
 ** CAPIREF: Mutexes
 **
 ** The SQLite core uses these routines for thread
