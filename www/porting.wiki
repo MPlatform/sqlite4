@@ -7,6 +7,8 @@ to use SQLite4:
 <ul>
 <li><p>Global change "sqlite3" to "sqlite4"
 
+<li><p>Global change "SQLITE_" to "SQLITE4_"
+
 <li><p>Add the sqlite4_env* parameter (probably NULL) as the first
     argument to the following interfaces:
 <ul>
@@ -19,6 +21,11 @@ to use SQLite4:
 <li> sqlite4_log()
 <li> sqlite4_randomness()
 </ul>
+
+<li><p>Convert uses of sqlite3_prepare_v2() to sqlite4_prepare().
+
+<li><p>Convert all uses of sqlite4_open_v2() to sqlite4_open() (with
+       corresponding parameter changes.)
 
 <li><p>Check all uses of sqlite4_snprintf() and sqlite4_vnsprintf() for
     the new function signature:
