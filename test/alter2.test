@@ -256,13 +256,13 @@ do_test alter2-4.1 {
 do_test alter2-4.2 {
   # We have to run two queries here because the Tcl interface uses
   # sqlite4_prepare_v2(). In this case, the first query encounters an 
-  # SQLITE_SCHEMA error. Then, when trying to recompile the statement, the
+  # SQLITE4_SCHEMA error. Then, when trying to recompile the statement, the
   # "unsupported file format" error is encountered. So the error code
-  # returned is SQLITE_SCHEMA, not SQLITE_ERROR as required by the following
+  # returned is SQLITE4_SCHEMA, not SQLITE4_ERROR as required by the following
   # test case.
   #
   # When the query is attempted a second time, the same error message is
-  # returned but the error code is SQLITE_ERROR, because the unsupported
+  # returned but the error code is SQLITE4_ERROR, because the unsupported
   # file format was detected during a call to sqlite4_prepare(), not
   # sqlite4_step().
   #
@@ -271,7 +271,7 @@ do_test alter2-4.2 {
 } {1 {unsupported file format}}
 do_test alter2-4.3 {
   sqlite4_errcode db
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test alter2-4.4 {
   set ::DB [sqlite4_connection_pointer db]
   catchsql {
@@ -280,13 +280,13 @@ do_test alter2-4.4 {
 } {1 {unsupported file format}}
 do_test alter2-4.5 {
   sqlite4_errcode db
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 
 #---------------------------------------------------------------------
 # Check that executing VACUUM on a file with file-format version 2
 # resets the file format to 1.
 #
-set default_file_format [expr $SQLITE_DEFAULT_FILE_FORMAT==4 ? 4 : 1]
+set default_file_format [expr $SQLITE4_DEFAULT_FILE_FORMAT==4 ? 4 : 1]
 ifcapable vacuum {
   do_test alter2-5.1 {
     set_file_format 2

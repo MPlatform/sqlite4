@@ -20,7 +20,7 @@
 #ifndef _FTS3_TOKENIZER_H_
 #define _FTS3_TOKENIZER_H_
 
-/* TODO(shess) Only used for SQLITE_OK and SQLITE_DONE at this time.
+/* TODO(shess) Only used for SQLITE4_OK and SQLITE4_DONE at this time.
 ** If tokenizers are to be allowed to call sqlite4_*() functions, then
 ** we will need a way to register the API consistently.
 */
@@ -67,8 +67,8 @@ struct sqlite4_tokenizer_module {
   ** then argc is set to 2, and the argv[] array contains pointers
   ** to the strings "arg1" and "arg2".
   **
-  ** This method should return either SQLITE_OK (0), or an SQLite error 
-  ** code. If SQLITE_OK is returned, then *ppTokenizer should be set
+  ** This method should return either SQLITE4_OK (0), or an SQLite error 
+  ** code. If SQLITE4_OK is returned, then *ppTokenizer should be set
   ** to point at the newly created tokenizer structure. The generic
   ** sqlite4_tokenizer.pModule variable should not be initialised by
   ** this callback. The caller will do so.
@@ -104,8 +104,8 @@ struct sqlite4_tokenizer_module {
 
   /*
   ** Retrieve the next token from the tokenizer cursor pCursor. This
-  ** method should either return SQLITE_OK and set the values of the
-  ** "OUT" variables identified below, or SQLITE_DONE to indicate that
+  ** method should either return SQLITE4_OK and set the values of the
+  ** "OUT" variables identified below, or SQLITE4_DONE to indicate that
   ** the end of the buffer has been reached, or an SQLite error code.
   **
   ** *ppToken should be set to point at a buffer containing the 

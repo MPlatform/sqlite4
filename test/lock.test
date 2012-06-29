@@ -388,7 +388,7 @@ do_test lock-6.4 {
 
 do_test lock-6.5 {
   sqlite4_finalize $STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # At one point the following set of conditions would cause SQLite to 
 # retain a RESERVED or EXCLUSIVE lock after the transaction was committed:
@@ -402,7 +402,7 @@ if {$TEMP_STORE>=2} {set temp_status unknown}
 do_test lock-7.1 {
   set STMT [sqlite4_prepare $DB "SELECT * FROM sqlite_master" -1 TAIL]
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test lock-7.2 {
   execsql { PRAGMA lock_status }
 } [list main shared temp $temp_status]
@@ -417,7 +417,7 @@ do_test lock-7.3 {
 } [list main shared temp $temp_status]
 do_test lock-7.4 {
   sqlite4_finalize $STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test lock-999.1 {
   rename db2 {}

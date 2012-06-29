@@ -91,4 +91,3 @@ Datasource *testDatasourceNew(const DatasourceDefn *pDefn){
   p->aVal = &p->aKey[nMaxKey];
   return p;
 };
-

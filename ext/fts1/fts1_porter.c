@@ -17,12 +17,12 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS1 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS1 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS1 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS1 is defined).
 */
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS1)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS1)
 
 
 #include <assert.h>
@@ -67,10 +67,10 @@ static int porterCreate(
 ){
   porter_tokenizer *t;
   t = (porter_tokenizer *) calloc(sizeof(*t), 1);
-  if( t==NULL ) return SQLITE_NOMEM;
+  if( t==NULL ) return SQLITE4_NOMEM;
 
   *ppTokenizer = &t->base;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -78,7 +78,7 @@ static int porterCreate(
 */
 static int porterDestroy(sqlite4_tokenizer *pTokenizer){
   free(pTokenizer);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -95,7 +95,7 @@ static int porterOpen(
   porter_tokenizer_cursor *c;
 
   c = (porter_tokenizer_cursor *) malloc(sizeof(*c));
-  if( c==NULL ) return SQLITE_NOMEM;
+  if( c==NULL ) return SQLITE4_NOMEM;
 
   c->zInput = zInput;
   if( zInput==0 ){
@@ -111,7 +111,7 @@ static int porterOpen(
   c->nAllocated = 0;
 
   *ppCursor = &c->base;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -122,7 +122,7 @@ static int porterClose(sqlite4_tokenizer_cursor *pCursor){
   porter_tokenizer_cursor *c = (porter_tokenizer_cursor *) pCursor;
   free(c->zToken);
   free(c);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 /*
 ** Vowel or consonant
@@ -605,17 +605,17 @@ static int porterNext(
       if( n>c->nAllocated ){
         c->nAllocated = n+20;
         c->zToken = realloc(c->zToken, c->nAllocated);
-        if( c->zToken==NULL ) return SQLITE_NOMEM;
+        if( c->zToken==NULL ) return SQLITE4_NOMEM;
       }
       porter_stemmer(&z[iStartOffset], n, c->zToken, pnBytes);
       *pzToken = c->zToken;
       *piStartOffset = iStartOffset;
       *piEndOffset = c->iOffset;
       *piPosition = c->iToken++;
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
   }
-  return SQLITE_DONE;
+  return SQLITE4_DONE;
 }
 
 /*
@@ -640,4 +640,4 @@ void sqlite4Fts1PorterTokenizerModule(
   *ppModule = &porterTokenizerModule;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS1) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS1) */

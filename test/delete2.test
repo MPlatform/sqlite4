@@ -62,11 +62,11 @@ integrity_check delete2-1.3
 do_test delete2-1.4 {
   set STMT [sqlite4_prepare $DB {SELECT * FROM q} -1 TAIL]
   sqlite4_step $STMT
-} SQLITE_ROW
+} SQLITE4_ROW
 integrity_check delete2-1.5
 
 # Try to delete a row from the table while a read is in process.
-# As of 2006-08-16, this is allowed.  (It used to fail with SQLITE_LOCKED.)
+# As of 2006-08-16, this is allowed.  (It used to fail with SQLITE4_LOCKED.)
 #
 do_test delete2-1.6 {
   catchsql {

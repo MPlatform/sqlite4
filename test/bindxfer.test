@@ -58,13 +58,13 @@ ifcapable deprecated {
     sqlite_bind $VM1 3 {} null
     sqlite4_transfer_bindings $VM1 $VM2
     sqlite_step $VM1 VALUES COLNAMES
-  } SQLITE_ROW
+  } SQLITE4_ROW
   do_test bindxfer-1.6 {
     set VALUES
   } {{} {} {}}
   do_test bindxfer-1.7 {
     sqlite_step $VM2 VALUES COLNAMES
-  } SQLITE_ROW
+  } SQLITE4_ROW
   do_test bindxfer-1.8 {
     set VALUES
   } {one two {}}

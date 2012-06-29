@@ -139,10 +139,10 @@ ifcapable {subquery && compound} {
 # compound select statement.
 #
 ifcapable compound {
-  if {$SQLITE_MAX_COMPOUND_SELECT>0} {
+  if {$SQLITE4_MAX_COMPOUND_SELECT>0} {
     set sql {SELECT 0}
     set result 0
-    for {set i 1} {$i<$SQLITE_MAX_COMPOUND_SELECT} {incr i} {
+    for {set i 1} {$i<$SQLITE4_MAX_COMPOUND_SELECT} {incr i} {
       append sql " UNION ALL SELECT $i"
       lappend result $i
     }

@@ -47,11 +47,11 @@ proc journal_op_catcher {method filename args} {
 
   # If global variable ::tvfs_error_on_write is defined, then return an
   # IO error to every attempt to modify the file-system. Otherwise, return
-  # SQLITE_OK.
+  # SQLITE4_OK.
   #
   if {[info exists ::tvfs_error_on_write]} {
     if {[lsearch {xDelete xWrite xTruncate} $method]>=0} {
-      return SQLITE_IOERR 
+      return SQLITE4_IOERR 
     }
   }
 
@@ -75,7 +75,7 @@ proc journal_op_catcher {method filename args} {
   switch -- $method {
     xOpen   { incr ::open_journals($f) +1 }
     xClose  { incr ::open_journals($f) -1 }
-    xDelete { if {$::open_journals($f)>0} { return SQLITE_IOERR } }
+    xDelete { if {$::open_journals($f)>0} { return SQLITE4_IOERR } }
   }
 
   return ""

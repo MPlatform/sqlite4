@@ -9,12 +9,12 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS1 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS1 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS1 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS1 is defined).
 */
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS1)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS1)
 
 
 #include <assert.h>
@@ -58,7 +58,7 @@ static int simpleCreate(
   simple_tokenizer *t;
 
   t = (simple_tokenizer *) calloc(sizeof(*t), 1);
-  if( t==NULL ) return SQLITE_NOMEM;
+  if( t==NULL ) return SQLITE4_NOMEM;
 
   /* TODO(shess) Delimiters need to remain the same from run to run,
   ** else we need to reindex.  One solution would be a meta-table to
@@ -72,7 +72,7 @@ static int simpleCreate(
       /* We explicitly don't support UTF-8 delimiters for now. */
       if( ch>=0x80 ){
         free(t);
-        return SQLITE_ERROR;
+        return SQLITE4_ERROR;
       }
       t->delim[ch] = 1;
     }
@@ -85,7 +85,7 @@ static int simpleCreate(
   }
 
   *ppTokenizer = &t->base;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -93,7 +93,7 @@ static int simpleCreate(
 */
 static int simpleDestroy(sqlite4_tokenizer *pTokenizer){
   free(pTokenizer);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -110,7 +110,7 @@ static int simpleOpen(
   simple_tokenizer_cursor *c;
 
   c = (simple_tokenizer_cursor *) malloc(sizeof(*c));
-  if( c==NULL ) return SQLITE_NOMEM;
+  if( c==NULL ) return SQLITE4_NOMEM;
 
   c->pInput = pInput;
   if( pInput==0 ){
@@ -126,7 +126,7 @@ static int simpleOpen(
   c->nTokenAllocated = 0;
 
   *ppCursor = &c->base;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -137,7 +137,7 @@ static int simpleClose(sqlite4_tokenizer_cursor *pCursor){
   simple_tokenizer_cursor *c = (simple_tokenizer_cursor *) pCursor;
   free(c->pToken);
   free(c);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -175,7 +175,7 @@ static int simpleNext(
       if( n>c->nTokenAllocated ){
         c->nTokenAllocated = n+20;
         c->pToken = realloc(c->pToken, c->nTokenAllocated);
-        if( c->pToken==NULL ) return SQLITE_NOMEM;
+        if( c->pToken==NULL ) return SQLITE4_NOMEM;
       }
       for(i=0; i<n; i++){
         /* TODO(shess) This needs expansion to handle UTF-8
@@ -190,10 +190,10 @@ static int simpleNext(
       *piEndOffset = c->iOffset;
       *piPosition = c->iToken++;
 
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
   }
-  return SQLITE_DONE;
+  return SQLITE4_DONE;
 }
 
 /*
@@ -218,4 +218,4 @@ void sqlite4Fts1SimpleTokenizerModule(
   *ppModule = &simpleTokenizerModule;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS1) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS1) */

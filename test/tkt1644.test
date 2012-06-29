@@ -79,7 +79,7 @@ ifcapable view {
       DROP TABLE temp_t1;
     }
     list [sqlite4_step $::STMT] [sqlite4_finalize $::STMT]
-  } {SQLITE_ERROR SQLITE_SCHEMA}
+  } {SQLITE4_ERROR SQLITE4_SCHEMA}
   
   do_test tkt1644-2.2 {
     execsql {
@@ -92,7 +92,7 @@ ifcapable view {
       DROP VIEW temp_v1;
     }
     list [sqlite4_step $::STMT] [sqlite4_finalize $::STMT]
-  } {SQLITE_ERROR SQLITE_SCHEMA}
+  } {SQLITE4_ERROR SQLITE4_SCHEMA}
 
   do_test tkt1644-2.3 {
     execsql {
@@ -104,7 +104,7 @@ ifcapable view {
       DROP VIEW temp_v1;
     }
     list [sqlite4_step $::STMT] [sqlite4_finalize $::STMT]
-  } {SQLITE_ERROR SQLITE_SCHEMA}
+  } {SQLITE4_ERROR SQLITE4_SCHEMA}
 }
 
 

@@ -1002,4 +1002,3 @@ int test_lsm_mt(const char *zFilename, int bClear, TestDb **ppDb){
   return 1;
 }
 #endif
-

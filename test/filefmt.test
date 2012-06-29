@@ -59,8 +59,8 @@ do_test filefmt-1.4 {
 #
 ifcapable pager_pragmas {
   foreach pagesize {512 1024 2048 4096 8192 16384 32768} {
-     if {[info exists SQLITE_MAX_PAGE_SIZE]
-          && $pagesize>$SQLITE_MAX_PAGE_SIZE} continue
+     if {[info exists SQLITE4_MAX_PAGE_SIZE]
+          && $pagesize>$SQLITE4_MAX_PAGE_SIZE} continue
      do_test filefmt-1.5.$pagesize.1 {
        db close
        forcedelete test.db
@@ -195,7 +195,7 @@ integrity_check filefmt-2.2.7
 
 #--------------------------------------------------------------------------
 # Check that ticket 89b8c9ac54 is fixed. Before the fix, the SELECT 
-# statement would return SQLITE_CORRUPT. The database file was not actually
+# statement would return SQLITE4_CORRUPT. The database file was not actually
 # corrupted, but SQLite was reporting that it was.
 #
 db close

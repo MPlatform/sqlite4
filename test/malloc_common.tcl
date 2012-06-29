@@ -49,7 +49,7 @@ set FAULTSIM(ioerr-persistent) [list       \
   -injecterrlist {{1 {disk I/O error}}}    \
 ]
 
-# SQLITE_FULL errors (always persistent):
+# SQLITE4_FULL errors (always persistent):
 #
 set FAULTSIM(full) [list                   \
   -injectinstall   fullerr_injectinstall   \
@@ -218,7 +218,7 @@ proc shmerr_injectstop {} {
 }
 
 # The following procs are used as [do_one_faultsim_test] callbacks when 
-# injecting SQLITE_FULL error faults into test cases.
+# injecting SQLITE4_FULL error faults into test cases.
 #
 proc fullerr_injectinstall {} {
   testvfs shmfault -default true
@@ -236,7 +236,7 @@ proc fullerr_injectstop {} {
 }
 
 # The following procs are used as [do_one_faultsim_test] callbacks when 
-# injecting SQLITE_CANTOPEN error faults into test cases.
+# injecting SQLITE4_CANTOPEN error faults into test cases.
 #
 proc cantopen_injectinstall {} {
   testvfs shmfault -default true

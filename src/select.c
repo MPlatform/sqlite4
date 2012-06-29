@@ -517,7 +517,7 @@ static void codeDistinct(
   sqlite4ReleaseTempReg(pParse, r2);
 }
 
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
 /*
 ** Generate an error message when a SELECT is used within a subexpression
 ** (example:  "a IN (SELECT * FROM table)") but it has more than 1 result
@@ -623,7 +623,7 @@ static void selectInnerLoop(
     /* In this mode, write each query result to the key of the temporary
     ** table iParm.
     */
-#ifndef SQLITE_OMIT_COMPOUND_SELECT
+#ifndef SQLITE4_OMIT_COMPOUND_SELECT
     case SRT_Union: {
       int r1, r2;
       r1 = sqlite4GetTempReg(pParse);
@@ -673,7 +673,7 @@ static void selectInnerLoop(
       break;
     }
 
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
     /* If we are creating a set for an "expr IN (SELECT ...)" construct,
     ** then there should be a single item on the stack.  Write this
     ** item into the set table with bogus data.
@@ -726,7 +726,7 @@ static void selectInnerLoop(
       }
       break;
     }
-#endif /* #ifndef SQLITE_OMIT_SUBQUERY */
+#endif /* #ifndef SQLITE4_OMIT_SUBQUERY */
 
     /* Send the data to the callback function or to a subroutine.  In the
     ** case of a subroutine, the subroutine itself is responsible for
@@ -750,7 +750,7 @@ static void selectInnerLoop(
       break;
     }
 
-#if !defined(SQLITE_OMIT_TRIGGER)
+#if !defined(SQLITE4_OMIT_TRIGGER)
     /* Discard the results.  This is used for SELECT statements inside
     ** the body of a TRIGGER.  The purpose of such selects is to call
     ** user-defined functions that have side effects.  We do not care
@@ -822,7 +822,7 @@ static KeyInfo *keyInfoFromExprList(
   return pInfo;
 }
 
-#ifndef SQLITE_OMIT_COMPOUND_SELECT
+#ifndef SQLITE4_OMIT_COMPOUND_SELECT
 /*
 ** Name of the connection operator, used for error messages.
 */
@@ -836,9 +836,9 @@ static const char *selectOpName(int id){
   }
   return z;
 }
-#endif /* SQLITE_OMIT_COMPOUND_SELECT */
+#endif /* SQLITE4_OMIT_COMPOUND_SELECT */
 
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
 /*
 ** Unless an "EXPLAIN QUERY PLAN" command is being processed, this function
 ** is a no-op. Otherwise, it adds a single row of output to the EQP result,
@@ -859,9 +859,9 @@ static void explainTempTable(Parse *pParse, const char *zUsage){
 
 /*
 ** Assign expression b to lvalue a. A second, no-op, version of this macro
-** is provided when SQLITE_OMIT_EXPLAIN is defined. This allows the code
+** is provided when SQLITE4_OMIT_EXPLAIN is defined. This allows the code
 ** in sqlite4Select() to assign values to structure member variables that
-** only exist if SQLITE_OMIT_EXPLAIN is not defined without polluting the
+** only exist if SQLITE4_OMIT_EXPLAIN is not defined without polluting the
 ** code with #ifndef directives.
 */
 # define explainSetInteger(a, b) a = b
@@ -872,7 +872,7 @@ static void explainTempTable(Parse *pParse, const char *zUsage){
 # define explainSetInteger(y,z)
 #endif
 
-#if !defined(SQLITE_OMIT_EXPLAIN) && !defined(SQLITE_OMIT_COMPOUND_SELECT)
+#if !defined(SQLITE4_OMIT_EXPLAIN) && !defined(SQLITE4_OMIT_COMPOUND_SELECT)
 /*
 ** Unless an "EXPLAIN QUERY PLAN" command is being processed, this function
 ** is a no-op. Otherwise, it adds a single row of output to the EQP result,
@@ -965,7 +965,7 @@ static void generateSortTail(
       sqlite4VdbeChangeP5(v, OPFLAG_APPEND);
       break;
     }
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
     case SRT_Set: {
       assert( nColumn==1 );
       int regKey = sqlite4GetTempReg(pParse);
@@ -1131,7 +1131,7 @@ static const char *columnType(
       }
       break;
     }
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
     case TK_SELECT: {
       /* The expression is a sub-select. Return the declaration type and
       ** origin info for the single column in the result set of the SELECT
@@ -1168,7 +1168,7 @@ static void generateColumnTypes(
   SrcList *pTabList,  /* List of tables */
   ExprList *pEList    /* Expressions defining the result set */
 ){
-#ifndef SQLITE_OMIT_DECLTYPE
+#ifndef SQLITE4_OMIT_DECLTYPE
   Vdbe *v = pParse->pVdbe;
   int i;
   NameContext sNC;
@@ -1177,7 +1177,7 @@ static void generateColumnTypes(
   for(i=0; i<pEList->nExpr; i++){
     Expr *p = pEList->a[i].pExpr;
     const char *zType;
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
+#ifdef SQLITE4_ENABLE_COLUMN_METADATA
     const char *zOrigDb = 0;
     const char *zOrigTab = 0;
     const char *zOrigCol = 0;
@@ -1187,15 +1187,15 @@ static void generateColumnTypes(
     ** column specific strings, in case the schema is reset before this
     ** virtual machine is deleted.
     */
-    sqlite4VdbeSetColName(v, i, COLNAME_DATABASE, zOrigDb, SQLITE_TRANSIENT);
-    sqlite4VdbeSetColName(v, i, COLNAME_TABLE, zOrigTab, SQLITE_TRANSIENT);
-    sqlite4VdbeSetColName(v, i, COLNAME_COLUMN, zOrigCol, SQLITE_TRANSIENT);
+    sqlite4VdbeSetColName(v, i, COLNAME_DATABASE, zOrigDb, SQLITE4_TRANSIENT);
+    sqlite4VdbeSetColName(v, i, COLNAME_TABLE, zOrigTab, SQLITE4_TRANSIENT);
+    sqlite4VdbeSetColName(v, i, COLNAME_COLUMN, zOrigCol, SQLITE4_TRANSIENT);
 #else
     zType = columnType(&sNC, p, 0, 0, 0);
 #endif
-    sqlite4VdbeSetColName(v, i, COLNAME_DECLTYPE, zType, SQLITE_TRANSIENT);
+    sqlite4VdbeSetColName(v, i, COLNAME_DECLTYPE, zType, SQLITE4_TRANSIENT);
   }
-#endif /* SQLITE_OMIT_DECLTYPE */
+#endif /* SQLITE4_OMIT_DECLTYPE */
 }
 
 /*
@@ -1212,7 +1212,7 @@ static void generateColumnNames(
   int i, j;
   sqlite4 *db = pParse->db;
 
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
   /* If this is an EXPLAIN, skip this step */
   if( pParse->explain ){
     return;
@@ -1228,7 +1228,7 @@ static void generateColumnNames(
     if( NEVER(p==0) ) continue;
     if( pEList->a[i].zName ){
       char *zName = pEList->a[i].zName;
-      sqlite4VdbeSetColName(v, i, COLNAME_NAME, zName, SQLITE_TRANSIENT);
+      sqlite4VdbeSetColName(v, i, COLNAME_NAME, zName, SQLITE4_TRANSIENT);
     }else if( (p->op==TK_COLUMN || p->op==TK_AGG_COLUMN) && pTabList ){
       Table *pTab;
       char *zCol;
@@ -1244,10 +1244,10 @@ static void generateColumnNames(
       }else{
         zCol = pTab->aCol[iCol].zName;
       }
-      sqlite4VdbeSetColName(v, i, COLNAME_NAME, zCol, SQLITE_TRANSIENT);
+      sqlite4VdbeSetColName(v, i, COLNAME_NAME, zCol, SQLITE4_TRANSIENT);
     }else{
       sqlite4VdbeSetColName(v, i, COLNAME_NAME, 
-          sqlite4DbStrDup(db, pEList->a[i].zSpan), SQLITE_DYNAMIC);
+          sqlite4DbStrDup(db, pEList->a[i].zSpan), SQLITE4_DYNAMIC);
     }
   }
   generateColumnTypes(pParse, pTabList, pEList);
@@ -1263,8 +1263,8 @@ static void generateColumnNames(
 ** Only the column names are computed.  Column.zType, Column.zColl,
 ** and other fields of Column are zeroed.
 **
-** Return SQLITE_OK on success.  If a memory allocation error occurs,
-** store NULL in *paCol and 0 in *pnCol and return SQLITE_NOMEM.
+** Return SQLITE4_OK on success.  If a memory allocation error occurs,
+** store NULL in *paCol and 0 in *pnCol and return SQLITE4_NOMEM.
 */
 static int selectColumnsFromExprList(
   Parse *pParse,          /* Parsing context */
@@ -1283,7 +1283,7 @@ static int selectColumnsFromExprList(
 
   *pnCol = nCol = pEList->nExpr;
   aCol = *paCol = sqlite4DbMallocZero(db, sizeof(aCol[0])*nCol);
-  if( aCol==0 ) return SQLITE_NOMEM;
+  if( aCol==0 ) return SQLITE4_NOMEM;
   for(i=0, pCol=aCol; i<nCol; i++, pCol++){
     /* Get an appropriate name for the column
     */
@@ -1343,9 +1343,9 @@ static int selectColumnsFromExprList(
     sqlite4DbFree(db, aCol);
     *paCol = 0;
     *pnCol = 0;
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -1384,7 +1384,7 @@ static void selectAddColumnTypeAndCollation(
     p = a[i].pExpr;
     pCol->zType = sqlite4DbStrDup(db, columnType(&sNC, p, 0, 0, 0));
     pCol->affinity = sqlite4ExprAffinity(p);
-    if( pCol->affinity==0 ) pCol->affinity = SQLITE_AFF_NONE;
+    if( pCol->affinity==0 ) pCol->affinity = SQLITE4_AFF_NONE;
     pColl = sqlite4ExprCollSeq(pParse, p);
     if( pColl ){
       pCol->zColl = sqlite4DbStrDup(db, pColl->zName);
@@ -1430,7 +1430,7 @@ Vdbe *sqlite4GetVdbe(Parse *pParse){
   Vdbe *v = pParse->pVdbe;
   if( v==0 ){
     v = pParse->pVdbe = sqlite4VdbeCreate(pParse->db);
-#ifndef SQLITE_OMIT_TRACE
+#ifndef SQLITE4_OMIT_TRACE
     if( v ){
       sqlite4VdbeAddOp0(v, OP_Trace);
     }
@@ -1509,7 +1509,7 @@ static void computeLimitRegisters(Parse *pParse, Select *p, int iBreak){
   }
 }
 
-#ifndef SQLITE_OMIT_COMPOUND_SELECT
+#ifndef SQLITE4_OMIT_COMPOUND_SELECT
 /*
 ** Return the appropriate collating sequence for the iCol-th column of
 ** the result set for the compound-select statement "p".  Return NULL if
@@ -1531,7 +1531,7 @@ static CollSeq *multiSelectCollSeq(Parse *pParse, Select *p, int iCol){
   }
   return pRet;
 }
-#endif /* SQLITE_OMIT_COMPOUND_SELECT */
+#endif /* SQLITE4_OMIT_COMPOUND_SELECT */
 
 /* Forward reference */
 static int multiSelectOrderBy(
@@ -1541,7 +1541,7 @@ static int multiSelectOrderBy(
 );
 
 
-#ifndef SQLITE_OMIT_COMPOUND_SELECT
+#ifndef SQLITE4_OMIT_COMPOUND_SELECT
 /*
 ** This routine is called to process a compound query form from
 ** two or more separate queries using UNION, UNION ALL, EXCEPT, or
@@ -1578,13 +1578,13 @@ static int multiSelect(
   Select *p,            /* The right-most of SELECTs to be coded */
   SelectDest *pDest     /* What to do with query results */
 ){
-  int rc = SQLITE_OK;   /* Success code from a subroutine */
+  int rc = SQLITE4_OK;   /* Success code from a subroutine */
   Select *pPrior;       /* Another SELECT immediately to our left */
   Vdbe *v;              /* Generate code to this VDBE */
   SelectDest dest;      /* Alternative data destination */
   Select *pDelete = 0;  /* Chain of simple selects to delete */
   sqlite4 *db;          /* Database connection */
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
   int iSub1;            /* EQP id of left-hand query */
   int iSub2;            /* EQP id of right-hand query */
 #endif
@@ -1664,7 +1664,7 @@ static int multiSelect(
       }
       explainSetInteger(iSub2, pParse->iNextSelectId);
       rc = sqlite4Select(pParse, p, &dest);
-      testcase( rc!=SQLITE_OK );
+      testcase( rc!=SQLITE4_OK );
       pDelete = p->pPrior;
       p->pPrior = pPrior;
       p->nSelectRow += pPrior->nSelectRow;
@@ -1739,7 +1739,7 @@ static int multiSelect(
       uniondest.eDest = op;
       explainSetInteger(iSub2, pParse->iNextSelectId);
       rc = sqlite4Select(pParse, p, &uniondest);
-      testcase( rc!=SQLITE_OK );
+      testcase( rc!=SQLITE4_OK );
       /* Query flattening in sqlite4Select() might refill p->pOrderBy.
       ** Be sure to delete p->pOrderBy, therefore, to avoid a memory leak. */
       sqlite4ExprListDelete(db, p->pOrderBy);
@@ -1823,7 +1823,7 @@ static int multiSelect(
       intersectdest.iParm = tab2;
       explainSetInteger(iSub2, pParse->iNextSelectId);
       rc = sqlite4Select(pParse, p, &intersectdest);
-      testcase( rc!=SQLITE_OK );
+      testcase( rc!=SQLITE4_OK );
       pDelete = p->pPrior;
       p->pPrior = pPrior;
       if( p->nSelectRow>pPrior->nSelectRow ) p->nSelectRow = pPrior->nSelectRow;
@@ -1882,7 +1882,7 @@ static int multiSelect(
     pKeyInfo = sqlite4DbMallocZero(db,
                        sizeof(*pKeyInfo)+nCol*(sizeof(CollSeq*) + 1));
     if( !pKeyInfo ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
       goto multi_select_end;
     }
 
@@ -1919,7 +1919,7 @@ multi_select_end:
   sqlite4SelectDelete(db, pDelete);
   return rc;
 }
-#endif /* SQLITE_OMIT_COMPOUND_SELECT */
+#endif /* SQLITE4_OMIT_COMPOUND_SELECT */
 
 /*
 ** Code an output subroutine for a coroutine implementation of a
@@ -1995,7 +1995,7 @@ static int generateOutputSubroutine(
       break;
     }
 
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
     /* If we are creating a set for an "expr IN (SELECT ...)" construct,
     ** then there should be a single item on the stack.  Write this
     ** item into the set table with bogus data.
@@ -2036,7 +2036,7 @@ static int generateOutputSubroutine(
       /* The LIMIT clause will jump out of the loop for us */
       break;
     }
-#endif /* #ifndef SQLITE_OMIT_SUBQUERY */
+#endif /* #ifndef SQLITE4_OMIT_SUBQUERY */
 
     /* The results are stored in a sequence of registers
     ** starting at pDest->iMem.  Then the co-routine yields.
@@ -2166,7 +2166,7 @@ static int generateOutputSubroutine(
 ** until all data is exhausted then jump to the "end" labe.  AltB, AeqB,
 ** and AgtB jump to either L2 or to one of EofA or EofB.
 */
-#ifndef SQLITE_OMIT_COMPOUND_SELECT
+#ifndef SQLITE4_OMIT_COMPOUND_SELECT
 static int multiSelectOrderBy(
   Parse *pParse,        /* Parsing context */
   Select *p,            /* The right-most of SELECTs to be coded */
@@ -2207,7 +2207,7 @@ static int multiSelectOrderBy(
   ExprList *pOrderBy;   /* The ORDER BY clause */
   int nOrderBy;         /* Number of terms in the ORDER BY clause */
   int *aPermute;        /* Mapping from ORDER BY terms to result set columns */
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
   int iSub1;            /* EQP id of left-hand query */
   int iSub2;            /* EQP id of right-hand query */
 #endif
@@ -2243,7 +2243,7 @@ static int multiSelectOrderBy(
       }
       if( j==nOrderBy ){
         Expr *pNew = sqlite4Expr(db, TK_INTEGER, 0);
-        if( pNew==0 ) return SQLITE_NOMEM;
+        if( pNew==0 ) return SQLITE4_NOMEM;
         pNew->flags |= EP_IntValue;
         pNew->u.iValue = i;
         pOrderBy = sqlite4ExprListAppend(pParse, pOrderBy, pNew);
@@ -2513,11 +2513,11 @@ static int multiSelectOrderBy(
   /*** TBD:  Insert subroutine calls to close cursors on incomplete
   **** subqueries ****/
   explainComposite(pParse, p->op, iSub1, iSub2, 0);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 #endif
 
-#if !defined(SQLITE_OMIT_SUBQUERY) || !defined(SQLITE_OMIT_VIEW)
+#if !defined(SQLITE4_OMIT_SUBQUERY) || !defined(SQLITE4_OMIT_VIEW)
 /* Forward Declarations */
 static void substExprList(sqlite4*, ExprList*, int, ExprList*);
 static void substSelect(sqlite4*, Select *, int, ExprList *);
@@ -2603,9 +2603,9 @@ static void substSelect(
     }
   }
 }
-#endif /* !defined(SQLITE_OMIT_SUBQUERY) || !defined(SQLITE_OMIT_VIEW) */
+#endif /* !defined(SQLITE4_OMIT_SUBQUERY) || !defined(SQLITE4_OMIT_VIEW) */
 
-#if !defined(SQLITE_OMIT_SUBQUERY) || !defined(SQLITE_OMIT_VIEW)
+#if !defined(SQLITE4_OMIT_SUBQUERY) || !defined(SQLITE4_OMIT_VIEW)
 /*
 ** This routine attempts to flatten subqueries as a performance optimization.
 ** This routine returns 1 if it makes changes and 0 if no flattening occurs.
@@ -2745,7 +2745,7 @@ static int flattenSubquery(
   */
   assert( p!=0 );
   assert( p->pPrior==0 );  /* Unable to flatten compound queries */
-  if( db->flags & SQLITE_QueryFlattener ) return 0;
+  if( db->flags & SQLITE4_QueryFlattener ) return 0;
   pSrc = p->pSrc;
   assert( pSrc && iFrom>=0 && iFrom<pSrc->nSrc );
   pSubitem = &pSrc->a[iFrom];
@@ -2857,7 +2857,7 @@ static int flattenSubquery(
 
   /* Authorize the subquery */
   pParse->zAuthContext = pSubitem->zName;
-  sqlite4AuthCheck(pParse, SQLITE_SELECT, 0, 0, 0);
+  sqlite4AuthCheck(pParse, SQLITE4_SELECT, 0, 0, 0);
   pParse->zAuthContext = zSavedAuthContext;
 
   /* If the sub-query is a compound SELECT statement, then (by restrictions
@@ -3093,7 +3093,7 @@ static int flattenSubquery(
 
   return 1;
 }
-#endif /* !defined(SQLITE_OMIT_SUBQUERY) || !defined(SQLITE_OMIT_VIEW) */
+#endif /* !defined(SQLITE4_OMIT_SUBQUERY) || !defined(SQLITE4_OMIT_VIEW) */
 
 /*
 ** Analyze the SELECT statement passed as an argument to see if it
@@ -3130,8 +3130,8 @@ static u8 minMaxQuery(Select *p){
 ** If the source-list item passed as an argument was augmented with an
 ** INDEXED BY clause, then try to locate the specified index. If there
 ** was such a clause and the named index cannot be found, return 
-** SQLITE_ERROR and leave an error in pParse. Otherwise, populate 
-** pFrom->pIndex and return SQLITE_OK.
+** SQLITE4_ERROR and leave an error in pParse. Otherwise, populate 
+** pFrom->pIndex and return SQLITE4_OK.
 */
 int sqlite4IndexedByLookup(Parse *pParse, struct SrcList_item *pFrom){
   if( pFrom->pTab && pFrom->zIndex ){
@@ -3145,11 +3145,11 @@ int sqlite4IndexedByLookup(Parse *pParse, struct SrcList_item *pFrom){
     if( !pIdx ){
       sqlite4ErrorMsg(pParse, "no such index: %s", zIndex, 0);
       pParse->checkSchema = 1;
-      return SQLITE_ERROR;
+      return SQLITE4_ERROR;
     }
     pFrom->pIndex = pIdx;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -3212,7 +3212,7 @@ static int selectExpander(Walker *pWalker, Select *p){
       return WRC_Prune;
     }
     if( pFrom->zName==0 ){
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
       Select *pSel = pFrom->pSelect;
       /* A sub-query in the FROM clause of a SELECT */
       assert( pSel!=0 );
@@ -3234,7 +3234,7 @@ static int selectExpander(Walker *pWalker, Select *p){
         sqlite4LocateTable(pParse,0,pFrom->zName,pFrom->zDatabase);
       if( pTab==0 ) return WRC_Abort;
       pTab->nRef++;
-#if !defined(SQLITE_OMIT_VIEW) || !defined (SQLITE_OMIT_VIRTUALTABLE)
+#if !defined(SQLITE4_OMIT_VIEW) || !defined (SQLITE4_OMIT_VIRTUALTABLE)
       if( pTab->pSelect || IsVirtual(pTab) ){
         /* We reach here if the named table is a really a view */
         if( sqlite4ViewGetColumnNames(pParse, pTab) ) return WRC_Abort;
@@ -3379,8 +3379,8 @@ static int selectExpander(Walker *pWalker, Select *p){
     sqlite4ExprListDelete(db, pEList);
     p->pEList = pNew;
   }
-#if SQLITE_MAX_COLUMN
-  if( p->pEList && p->pEList->nExpr>db->aLimit[SQLITE_LIMIT_COLUMN] ){
+#if SQLITE4_MAX_COLUMN
+  if( p->pEList && p->pEList->nExpr>db->aLimit[SQLITE4_LIMIT_COLUMN] ){
     sqlite4ErrorMsg(pParse, "too many columns in result set");
   }
 #endif
@@ -3423,7 +3423,7 @@ static void sqlite4SelectExpand(Parse *pParse, Select *pSelect){
 }
 
 
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
 /*
 ** This is a Walker.xSelectCallback callback for the sqlite4SelectTypeInfo()
 ** interface.
@@ -3472,7 +3472,7 @@ static int selectAddSubqueryTypeInfo(Walker *pWalker, Select *p){
 ** Use this routine after name resolution.
 */
 static void sqlite4SelectAddTypeInfo(Parse *pParse, Select *pSelect){
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
   Walker w;
   w.xSelectCallback = selectAddSubqueryTypeInfo;
   w.xExprCallback = exprWalkNoop;
@@ -3592,7 +3592,7 @@ static void updateAccumulator(Parse *pParse, AggInfo *pAggInfo){
       assert( nArg==1 );
       codeDistinct(pParse, pF->iDistinct, addrNext, 1, regAgg);
     }
-    if( pF->pFunc->flags & SQLITE_FUNC_NEEDCOLL ){
+    if( pF->pFunc->flags & SQLITE4_FUNC_NEEDCOLL ){
       CollSeq *pColl = 0;
       struct ExprList_item *pItem;
       int j;
@@ -3712,7 +3712,7 @@ int sqlite4Select(
   int iEnd;              /* Address of the end of the query */
   sqlite4 *db;           /* The database connection */
 
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
   int iRestoreSelectId = pParse->iSelectId;
   pParse->iSelectId = pParse->iNextSelectId++;
 #endif
@@ -3723,7 +3723,7 @@ int sqlite4Select(
   if( p==0 || db->mallocFailed || pParse->nErr ){
     return 1;
   }
-  if( sqlite4AuthCheck(pParse, SQLITE_SELECT, 0, 0, 0) ) return 1;
+  if( sqlite4AuthCheck(pParse, SQLITE4_SELECT, 0, 0, 0) ) return 1;
 
   if( IgnorableOrderby(pDest) ){
     assert(pDest->eDest==SRT_Exists || pDest->eDest==SRT_Union || 
@@ -3752,7 +3752,7 @@ int sqlite4Select(
   /* If writing to memory or generating a set
   ** only a single column may be output.
   */
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
   if( checkForMultiColumnSelectError(pParse, pDest, pEList->nExpr) ){
     goto select_end;
   }
@@ -3760,7 +3760,7 @@ int sqlite4Select(
 
   /* Generate code for all sub-queries in the FROM clause
   */
-#if !defined(SQLITE_OMIT_SUBQUERY) || !defined(SQLITE_OMIT_VIEW)
+#if !defined(SQLITE4_OMIT_SUBQUERY) || !defined(SQLITE4_OMIT_VIEW)
   for(i=0; !p->pPrior && i<pTabList->nSrc; i++){
     struct SrcList_item *pItem = &pTabList->a[i];
     SelectDest dest;
@@ -3776,7 +3776,7 @@ int sqlite4Select(
     /* Increment Parse.nHeight by the height of the largest expression
     ** tree refered to by this, the parent select. The child select
     ** may contain expression trees of at most
-    ** (SQLITE_MAX_EXPR_DEPTH-Parse.nHeight) height. This is a bit
+    ** (SQLITE4_MAX_EXPR_DEPTH-Parse.nHeight) height. This is a bit
     ** more conservative than necessary, but much easier than enforcing
     ** an exact limit.
     */
@@ -3836,7 +3836,7 @@ int sqlite4Select(
   pHaving = p->pHaving;
   isDistinct = (p->selFlags & SF_Distinct)!=0;
 
-#ifndef SQLITE_OMIT_COMPOUND_SELECT
+#ifndef SQLITE4_OMIT_COMPOUND_SELECT
   /* If there is are a sequence of queries, do the earlier ones first.
   */
   if( p->pPrior ){
@@ -3849,7 +3849,7 @@ int sqlite4Select(
         pLoop->pNext = pRight;
         pRight = pLoop;
       }
-      mxSelect = db->aLimit[SQLITE_LIMIT_COMPOUND_SELECT];
+      mxSelect = db->aLimit[SQLITE4_LIMIT_COMPOUND_SELECT];
       if( mxSelect && cnt>mxSelect ){
         sqlite4ErrorMsg(pParse, "too many terms in compound SELECT");
         goto select_end;
@@ -3865,11 +3865,11 @@ int sqlite4Select(
   ** identical, then disable the ORDER BY clause since the GROUP BY
   ** will cause elements to come out in the correct order.  This is
   ** an optimization - the correct answer should result regardless.
-  ** Use the SQLITE_GroupByOrder flag with SQLITE_TESTCTRL_OPTIMIZER
+  ** Use the SQLITE4_GroupByOrder flag with SQLITE4_TESTCTRL_OPTIMIZER
   ** to disable this optimization for testing purposes.
   */
   if( sqlite4ExprListCompare(p->pGroupBy, pOrderBy)==0
-         && (db->flags & SQLITE_GroupByOrder)==0 ){
+         && (db->flags & SQLITE4_GroupByOrder)==0 ){
     pOrderBy = 0;
   }
 
@@ -3996,7 +3996,7 @@ int sqlite4Select(
           CollSeq *pColl = sqlite4ExprCollSeq(pParse, pEList->a[iExpr].pExpr);
           sqlite4VdbeAddOp3(v, OP_Ne, iBase+iExpr, iJump, iBase2+iExpr);
           sqlite4VdbeChangeP4(v, -1, (const char *)pColl, P4_COLLSEQ);
-          sqlite4VdbeChangeP5(v, SQLITE_NULLEQ);
+          sqlite4VdbeChangeP5(v, SQLITE4_NULLEQ);
         }
         sqlite4VdbeAddOp2(v, OP_Goto, 0, pWInfo->iContinue);
 
@@ -4273,7 +4273,7 @@ int sqlite4Select(
       VdbeComment((v, "Groupby result generator entry point"));
       sqlite4VdbeAddOp1(v, OP_Return, regOutputRow);
       finalizeAggFunctions(pParse, &sAggInfo);
-      sqlite4ExprIfFalse(pParse, pHaving, addrOutputRow+1, SQLITE_JUMPIFNULL);
+      sqlite4ExprIfFalse(pParse, pHaving, addrOutputRow+1, SQLITE4_JUMPIFNULL);
       selectInnerLoop(pParse, p, p->pEList, 0, 0, pOrderBy,
                       distinct, pDest,
                       addrOutputRow+1, addrSetAbort);
@@ -4348,7 +4348,7 @@ int sqlite4Select(
       }
 
       pOrderBy = 0;
-      sqlite4ExprIfFalse(pParse, pHaving, addrEnd, SQLITE_JUMPIFNULL);
+      sqlite4ExprIfFalse(pParse, pHaving, addrEnd, SQLITE4_JUMPIFNULL);
       selectInnerLoop(pParse, p, p->pEList, 0, 0, 0, -1, 
                       pDest, addrEnd, addrEnd);
       sqlite4ExprListDelete(db, pDel);
@@ -4386,7 +4386,7 @@ select_end:
 
   /* Identify column names if results of the SELECT are to be output.
   */
-  if( rc==SQLITE_OK && pDest->eDest==SRT_Output ){
+  if( rc==SQLITE4_OK && pDest->eDest==SRT_Output ){
     generateColumnNames(pParse, pTabList, pEList);
   }
 
@@ -4395,7 +4395,7 @@ select_end:
   return rc;
 }
 
-#if defined(SQLITE_ENABLE_TREE_EXPLAIN)
+#if defined(SQLITE4_ENABLE_TREE_EXPLAIN)
 /*
 ** Generate a human-readable description of a the Select object.
 */
@@ -4489,4 +4489,4 @@ void sqlite4ExplainSelect(Vdbe *pVdbe, Select *p){
 
 /* End of the structure debug printing code
 *****************************************************************************/
-#endif /* defined(SQLITE_ENABLE_TREE_EXPLAIN) */
+#endif /* defined(SQLITE4_ENABLE_TREE_EXPLAIN) */

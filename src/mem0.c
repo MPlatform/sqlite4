@@ -11,7 +11,7 @@
 *************************************************************************
 **
 ** This file contains a no-op memory allocation drivers for use when
-** SQLITE_ZERO_MALLOC is defined.  The allocation drivers implemented
+** SQLITE4_ZERO_MALLOC is defined.  The allocation drivers implemented
 ** here always fail.  SQLite will not operate with these drivers.  These
 ** are merely placeholders.  Real drivers must be substituted using
 ** sqlite4_config() before SQLite will operate.
@@ -23,7 +23,7 @@
 ** used when no other memory allocator is specified using compile-time
 ** macros.
 */
-#ifdef SQLITE_ZERO_MALLOC
+#ifdef SQLITE4_ZERO_MALLOC
 
 /*
 ** No-op versions of all memory allocation routines
@@ -34,7 +34,7 @@ static void *sqlite4MemRealloc(void *p, void *pPrior, sqlite4_size_t nByte){
   return 0;
 }
 static int sqlite4MemSize(void*p, void *pPrior){ return 0; }
-static int sqlite4MemInit(void *NotUsed){ return SQLITE_OK; }
+static int sqlite4MemInit(void *NotUsed){ return SQLITE4_OK; }
 static void sqlite4MemShutdown(void *NotUsed){ return; }
 
 /*
@@ -59,4 +59,4 @@ void sqlite4MemSetDefault(sqlite4_env *pEnv){
   pEnv->m.pMemEnv = (void*)pEnv;
 }
 
-#endif /* SQLITE_ZERO_MALLOC */
+#endif /* SQLITE4_ZERO_MALLOC */

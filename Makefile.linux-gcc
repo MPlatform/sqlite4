@@ -46,16 +46,16 @@ THREADLIB =
 #TLIBS = -lrt    # fdatasync on Solaris 8
 TLIBS = 
 
-#### Leave SQLITE_DEBUG undefined for maximum speed.  Use SQLITE_DEBUG=1
-#    to check for memory leaks.  Use SQLITE_DEBUG=2 to print a log of all
+#### Leave SQLITE4_DEBUG undefined for maximum speed.  Use SQLITE4_DEBUG=1
+#    to check for memory leaks.  Use SQLITE4_DEBUG=2 to print a log of all
 #    malloc()s and free()s in order to track down memory leaks.
 #    
 #    SQLite uses some expensive assert() statements in the inner loop.
 #    You can make the library go almost twice as fast if you compile
 #    with -DNDEBUG=1
 #
-#OPTS = -DSQLITE_DEBUG=2
-#OPTS = -DSQLITE_DEBUG=1
+#OPTS = -DSQLITE4_DEBUG=2
+#OPTS = -DSQLITE4_DEBUG=1
 #OPTS = 
 OPTS = -DNDEBUG=1
 OPTS += -DHAVE_FDATASYNC=1

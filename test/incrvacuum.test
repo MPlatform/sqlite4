@@ -459,7 +459,7 @@ while 1 {
 # with an incremental-vacuum if it is the first statement executed
 # after an existing database is opened.
 #
-# At one point, this would always return SQLITE_SCHEMA (which 
+# At one point, this would always return SQLITE4_SCHEMA (which 
 # causes an infinite loop in tclsqlite.c if using the Tcl interface).
 #
 do_test incrvacuum-8.1 {
@@ -716,7 +716,7 @@ do_test incrvacuum-13.3 {
 do_test incrvacuum-13.4 {
   set rc [sqlite4_step $::STMT]
   list $rc [sqlite4_finalize $::STMT]
-} {SQLITE_DONE SQLITE_OK}
+} {SQLITE4_DONE SQLITE4_OK}
 do_test incrvacuum-13.5 {
   execsql {
     PRAGMA auto_vacuum;

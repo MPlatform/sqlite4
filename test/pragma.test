@@ -190,7 +190,7 @@ do_test pragma-1.14 {
 # Test turning "flag" pragmas on and off.
 #
 ifcapable debug {
-  # Pragma "vdbe_listing" is only available if compiled with SQLITE_DEBUG
+  # Pragma "vdbe_listing" is only available if compiled with SQLITE4_DEBUG
   #
   do_test pragma-1.15 {
     execsql {
@@ -738,10 +738,10 @@ do_test pragma-8.1.8 {
 do_test pragma-8.1.9 {
   set ::STMT [sqlite4_prepare $::DB2 "SELECT * FROM t4" -1 DUMMY]
   sqlite4_step $::STMT
-} SQLITE_ERROR
+} SQLITE4_ERROR
 do_test pragma-8.1.10 {
   sqlite4_finalize $::STMT
-} SQLITE_SCHEMA
+} SQLITE4_SCHEMA
 
 # Make sure the schema-version can be manipulated in an attached database.
 forcedelete test2.db
@@ -784,10 +784,10 @@ ifcapable attach {
   do_test pragma-8.1.16 {
     set ::STMT [sqlite4_prepare $::DB2 "SELECT * FROM aux.t1" -1 DUMMY]
     sqlite4_step $::STMT
-  } SQLITE_ERROR
+  } SQLITE4_ERROR
   do_test pragma-8.1.17 {
     sqlite4_finalize $::STMT
-  } SQLITE_SCHEMA
+  } SQLITE4_SCHEMA
   do_test pragma-8.1.18 {
     db2 close
   } {}
@@ -1308,14 +1308,14 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
   set sqlite_hostid_num 1
 
   set using_proxy 0
-  foreach {name value} [array get env SQLITE_FORCE_PROXY_LOCKING] {
+  foreach {name value} [array get env SQLITE4_FORCE_PROXY_LOCKING] {
     set using_proxy $value
   }
 
   # Test the lock_proxy_file pragmas.
   #
   db close
-  set env(SQLITE_FORCE_PROXY_LOCKING) "0"
+  set env(SQLITE4_FORCE_PROXY_LOCKING) "0"
 
   sqlite4 db test.db
   do_test pragma-16.1 {
@@ -1370,7 +1370,7 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
   } {myotherproxy}
 
   db2 close
-  set env(SQLITE_FORCE_PROXY_LOCKING) "1"
+  set env(SQLITE4_FORCE_PROXY_LOCKING) "1"
   do_test pragma-16.5 {
     sqlite4 db2 test.db
     execsql {
@@ -1431,7 +1431,7 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
     string match "*proxytest.db:auto:" $lockpath2
   } {1}
 
-  set env(SQLITE_FORCE_PROXY_LOCKING) $using_proxy
+  set env(SQLITE4_FORCE_PROXY_LOCKING) $using_proxy
   set sqlite_hostid_num 0
 }
 

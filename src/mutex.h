@@ -24,47 +24,47 @@
 /*
 ** Figure out what version of the code to use.  The choices are
 **
-**   SQLITE_MUTEX_OMIT         No mutex logic.  Not even stubs.  The
+**   SQLITE4_MUTEX_OMIT         No mutex logic.  Not even stubs.  The
 **                             mutexes implemention cannot be overridden
 **                             at start-time.
 **
-**   SQLITE_MUTEX_NOOP         For single-threaded applications.  No
+**   SQLITE4_MUTEX_NOOP         For single-threaded applications.  No
 **                             mutual exclusion is provided.  But this
 **                             implementation can be overridden at
 **                             start-time.
 **
-**   SQLITE_MUTEX_PTHREADS     For multi-threaded applications on Unix.
+**   SQLITE4_MUTEX_PTHREADS     For multi-threaded applications on Unix.
 **
-**   SQLITE_MUTEX_W32          For multi-threaded applications on Win32.
+**   SQLITE4_MUTEX_W32          For multi-threaded applications on Win32.
 */
-#if !SQLITE_THREADSAFE
-# define SQLITE_MUTEX_OMIT
+#if !SQLITE4_THREADSAFE
+# define SQLITE4_MUTEX_OMIT
 #endif
-#if SQLITE_THREADSAFE && !defined(SQLITE_MUTEX_NOOP)
-#  if SQLITE_OS_UNIX
-#    define SQLITE_MUTEX_PTHREADS
-#  elif SQLITE_OS_WIN
-#    define SQLITE_MUTEX_W32
+#if SQLITE4_THREADSAFE && !defined(SQLITE4_MUTEX_NOOP)
+#  if SQLITE4_OS_UNIX
+#    define SQLITE4_MUTEX_PTHREADS
+#  elif SQLITE4_OS_WIN
+#    define SQLITE4_MUTEX_W32
 #  else
-#    define SQLITE_MUTEX_NOOP
+#    define SQLITE4_MUTEX_NOOP
 #  endif
 #endif
 
-#ifdef SQLITE_MUTEX_OMIT
+#ifdef SQLITE4_MUTEX_OMIT
 /*
 ** If this is a no-op implementation, implement everything as macros.
 */
 #define sqlite4_mutex_alloc(X,Y)  ((sqlite4_mutex*)8)
 #define sqlite4_mutex_free(X)
 #define sqlite4_mutex_enter(X)    
-#define sqlite4_mutex_try(X)      SQLITE_OK
+#define sqlite4_mutex_try(X)      SQLITE4_OK
 #define sqlite4_mutex_leave(X)    
 #define sqlite4_mutex_held(X)     ((void)(X),1)
 #define sqlite4_mutex_notheld(X)  ((void)(X),1)
 #define sqlite4MutexAlloc(X,Y)    ((sqlite4_mutex*)8)
-#define sqlite4MutexInit(E)       SQLITE_OK
+#define sqlite4MutexInit(E)       SQLITE4_OK
 #define sqlite4MutexEnd(E)
 #define MUTEX_LOGIC(X)
 #else
 #define MUTEX_LOGIC(X)            X
-#endif /* defined(SQLITE_MUTEX_OMIT) */
+#endif /* defined(SQLITE4_MUTEX_OMIT) */

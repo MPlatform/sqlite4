@@ -18,7 +18,7 @@
 ** The code in this file only exists if we are not omitting the
 ** ALTER TABLE logic from the build.
 */
-#ifndef SQLITE_OMIT_ALTERTABLE
+#ifndef SQLITE4_OMIT_ALTERTABLE
 
 
 /*
@@ -79,7 +79,7 @@ static void renameTableFunc(
 
     zRet = sqlite4MPrintf(db, "%.*s\"%w\"%s", ((u8*)tname.z) - zSql, zSql, 
        zTableName, tname.z+tname.n);
-    sqlite4_result_text(context, zRet, -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, zRet, -1, SQLITE4_TRANSIENT);
     sqlite4DbFree(db, zRet);
   }
 }
@@ -99,7 +99,7 @@ static void renameTableFunc(
 **   sqlite_rename_parent('CREATE TABLE t1(a REFERENCES t2)', 't2', 't3')
 **       -> 'CREATE TABLE t1(a REFERENCES t3)'
 */
-#ifndef SQLITE_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
 static void renameParentFunc(
   sqlite4_context *context,
   int NotUsed,
@@ -142,13 +142,13 @@ static void renameParentFunc(
   }
 
   zResult = sqlite4MPrintf(db, "%s%s", (zOutput?zOutput:""), zInput), 
-  sqlite4_result_text(context, zResult, -1, SQLITE_TRANSIENT);
+  sqlite4_result_text(context, zResult, -1, SQLITE4_TRANSIENT);
   sqlite4DbFree(db, zOutput);
   sqlite4DbFree(db, zResult);
 }
 #endif
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
 /* This function is used by SQL generated to implement the
 ** ALTER TABLE command. The first argument is the text of a CREATE TRIGGER 
 ** statement. The second is a table name. The table name in the CREATE 
@@ -220,11 +220,11 @@ static void renameTriggerFunc(
     */
     zRet = sqlite4MPrintf(db, "%.*s\"%w\"%s", ((u8*)tname.z) - zSql, zSql, 
        zTableName, tname.z+tname.n);
-    sqlite4_result_text(context, zRet, -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, zRet, -1, SQLITE4_TRANSIENT);
     sqlite4DbFree(db, zRet);
   }
 }
-#endif   /* !SQLITE_OMIT_TRIGGER */
+#endif   /* !SQLITE4_OMIT_TRIGGER */
 
 /*
 ** Register built-in functions used to help implement ALTER TABLE
@@ -232,10 +232,10 @@ static void renameTriggerFunc(
 void sqlite4AlterFunctions(sqlite4_env *pEnv){
   static FuncDef aAlterTableFuncs[] = {
     FUNCTION(sqlite_rename_table,   2, 0, 0, renameTableFunc),
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
     FUNCTION(sqlite_rename_trigger, 2, 0, 0, renameTriggerFunc),
 #endif
-#ifndef SQLITE_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
     FUNCTION(sqlite_rename_parent,  3, 0, 0, renameParentFunc),
 #endif
   };
@@ -275,7 +275,7 @@ static char *whereOrName(sqlite4 *db, char *zWhere, char *zConstant){
   return zNew;
 }
 
-#if !defined(SQLITE_OMIT_FOREIGN_KEY) && !defined(SQLITE_OMIT_TRIGGER)
+#if !defined(SQLITE4_OMIT_FOREIGN_KEY) && !defined(SQLITE4_OMIT_TRIGGER)
 /*
 ** Generate the text of a WHERE expression which can be used to select all
 ** tables that have foreign key constraints that refer to table pTab (i.e.
@@ -336,7 +336,7 @@ static void reloadTableSchema(Parse *pParse, Table *pTab, const char *zName){
   Vdbe *v;
   char *zWhere;
   int iDb;                   /* Index of database containing pTab */
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   Trigger *pTrig;
 #endif
 
@@ -345,7 +345,7 @@ static void reloadTableSchema(Parse *pParse, Table *pTab, const char *zName){
   iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
   assert( iDb>=0 );
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   /* Drop any table triggers from the internal schema. */
   for(pTrig=sqlite4TriggerList(pParse, pTab); pTrig; pTrig=pTrig->pNext){
     int iTrigDb = sqlite4SchemaToIndex(pParse->db, pTrig->pSchema);
@@ -362,9 +362,9 @@ static void reloadTableSchema(Parse *pParse, Table *pTab, const char *zName){
   if( !zWhere ) return;
   sqlite4VdbeAddParseSchemaOp(v, iDb, zWhere);
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   /* Now, if the table is not stored in the temp database, reload any temp 
-  ** triggers. Don't use IN(...) in case SQLITE_OMIT_SUBQUERY is defined. 
+  ** triggers. Don't use IN(...) in case SQLITE4_OMIT_SUBQUERY is defined. 
   */
   if( (zWhere=whereTempTriggers(pParse, pTab))!=0 ){
     sqlite4VdbeAddParseSchemaOp(v, 1, zWhere);
@@ -405,7 +405,7 @@ void sqlite4AlterRenameTable(
   int nTabName;             /* Number of UTF-8 characters in zTabName */
   const char *zTabName;     /* Original name of the table */
   Vdbe *v;
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   char *zWhere = 0;         /* Where clause to locate temp triggers */
 #endif
   VTable *pVTab = 0;        /* Non-zero if this is a v-tab with an xRename() */
@@ -419,7 +419,7 @@ void sqlite4AlterRenameTable(
   if( !pTab ) goto exit_rename_table;
   iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
   zDb = db->aDb[iDb].zName;
-  db->flags |= SQLITE_PreferBuiltin;
+  db->flags |= SQLITE4_PreferBuiltin;
 
   /* Get a NULL terminated version of the new table name. */
   zName = sqlite4NameFromToken(db, pName);
@@ -437,28 +437,28 @@ void sqlite4AlterRenameTable(
   /* Make sure it is not a system table being altered, or a reserved name
   ** that the table is being renamed to.
   */
-  if( SQLITE_OK!=isSystemTable(pParse, pTab->zName) ){
+  if( SQLITE4_OK!=isSystemTable(pParse, pTab->zName) ){
     goto exit_rename_table;
   }
-  if( SQLITE_OK!=sqlite4CheckObjectName(pParse, zName) ){ goto
+  if( SQLITE4_OK!=sqlite4CheckObjectName(pParse, zName) ){ goto
     exit_rename_table;
   }
 
-#ifndef SQLITE_OMIT_VIEW
+#ifndef SQLITE4_OMIT_VIEW
   if( pTab->pSelect ){
     sqlite4ErrorMsg(pParse, "view %s may not be altered", pTab->zName);
     goto exit_rename_table;
   }
 #endif
 
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   /* Invoke the authorization callback. */
-  if( sqlite4AuthCheck(pParse, SQLITE_ALTER_TABLE, zDb, pTab->zName, 0) ){
+  if( sqlite4AuthCheck(pParse, SQLITE4_ALTER_TABLE, zDb, pTab->zName, 0) ){
     goto exit_rename_table;
   }
 #endif
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( sqlite4ViewGetColumnNames(pParse, pTab) ){
     goto exit_rename_table;
   }
@@ -487,7 +487,7 @@ void sqlite4AlterRenameTable(
   ** of any resources used by the v-table implementation (including other
   ** SQLite tables) that are identified by the name of the virtual table.
   */
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( pVTab ){
     int i = ++pParse->nMem;
     sqlite4VdbeAddOp4(v, OP_String8, 0, i, 0, zName, 0);
@@ -500,8 +500,8 @@ void sqlite4AlterRenameTable(
   zTabName = pTab->zName;
   nTabName = sqlite4Utf8CharLen(zTabName, -1);
 
-#if !defined(SQLITE_OMIT_FOREIGN_KEY) && !defined(SQLITE_OMIT_TRIGGER)
-  if( db->flags&SQLITE_ForeignKeys ){
+#if !defined(SQLITE4_OMIT_FOREIGN_KEY) && !defined(SQLITE4_OMIT_TRIGGER)
+  if( db->flags&SQLITE4_ForeignKeys ){
     /* If foreign-key support is enabled, rewrite the CREATE TABLE 
     ** statements corresponding to all child tables of foreign key constraints
     ** for which the renamed table is the parent table.  */
@@ -518,7 +518,7 @@ void sqlite4AlterRenameTable(
   /* Modify the sqlite_master table to use the new table name. */
   sqlite4NestedParse(pParse,
       "UPDATE %Q.%s SET "
-#ifdef SQLITE_OMIT_TRIGGER
+#ifdef SQLITE4_OMIT_TRIGGER
           "sql = sqlite_rename_table(sql, %Q), "
 #else
           "sql = CASE "
@@ -534,13 +534,13 @@ void sqlite4AlterRenameTable(
       "WHERE tbl_name=%Q AND "
           "(type='table' OR type='index' OR type='trigger');", 
       zDb, SCHEMA_TABLE(iDb), zName, zName, zName, 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
       zName,
 #endif
       zName, nTabName, zTabName
   );
 
-#ifndef SQLITE_OMIT_AUTOINCREMENT
+#ifndef SQLITE4_OMIT_AUTOINCREMENT
   /* If the sqlite_sequence table exists in this database, then update 
   ** it with the new table name.
   */
@@ -551,7 +551,7 @@ void sqlite4AlterRenameTable(
   }
 #endif
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   /* If there are TEMP triggers on this table, modify the sqlite_temp_master
   ** table. Don't do this if the table being ALTERed is itself located in
   ** the temp database.
@@ -566,8 +566,8 @@ void sqlite4AlterRenameTable(
   }
 #endif
 
-#if !defined(SQLITE_OMIT_FOREIGN_KEY) && !defined(SQLITE_OMIT_TRIGGER)
-  if( db->flags&SQLITE_ForeignKeys ){
+#if !defined(SQLITE4_OMIT_FOREIGN_KEY) && !defined(SQLITE4_OMIT_TRIGGER)
+  if( db->flags&SQLITE4_ForeignKeys ){
     FKey *p;
     for(p=sqlite4FkReferences(pTab); p; p=p->pNextTo){
       Table *pFrom = p->pFrom;
@@ -620,9 +620,9 @@ void sqlite4AlterFinishAddColumn(Parse *pParse, Token *pColDef){
   pTab = sqlite4FindTable(db, zTab, zDb);
   assert( pTab );
 
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   /* Invoke the authorization callback. */
-  if( sqlite4AuthCheck(pParse, SQLITE_ALTER_TABLE, zDb, pTab->zName, 0) ){
+  if( sqlite4AuthCheck(pParse, SQLITE4_ALTER_TABLE, zDb, pTab->zName, 0) ){
     return;
   }
 #endif
@@ -647,7 +647,7 @@ void sqlite4AlterFinishAddColumn(Parse *pParse, Token *pColDef){
     sqlite4ErrorMsg(pParse, "Cannot add a UNIQUE column");
     return;
   }
-  if( (db->flags&SQLITE_ForeignKeys) && pNew->pFKey && pDflt ){
+  if( (db->flags&SQLITE4_ForeignKeys) && pNew->pFKey && pDflt ){
     sqlite4ErrorMsg(pParse, 
         "Cannot add a REFERENCES column with non-NULL default value");
     return;
@@ -663,7 +663,7 @@ void sqlite4AlterFinishAddColumn(Parse *pParse, Token *pColDef){
   */
   if( pDflt ){
     sqlite4_value *pVal;
-    if( sqlite4ValueFromExpr(db, pDflt, SQLITE_UTF8, SQLITE_AFF_NONE, &pVal) ){
+    if( sqlite4ValueFromExpr(db, pDflt, SQLITE4_UTF8, SQLITE4_AFF_NONE, &pVal) ){
       db->mallocFailed = 1;
       return;
     }
@@ -682,7 +682,7 @@ void sqlite4AlterFinishAddColumn(Parse *pParse, Token *pColDef){
     while( zEnd>zCol && (*zEnd==';' || sqlite4Isspace(*zEnd)) ){
       *zEnd-- = '\0';
     }
-    db->flags |= SQLITE_PreferBuiltin;
+    db->flags |= SQLITE4_PreferBuiltin;
     sqlite4NestedParse(pParse, 
         "UPDATE \"%w\".%s SET "
           "sql = substr(sql,1,%d) || ', ' || %Q || substr(sql,%d) "
@@ -728,7 +728,7 @@ void sqlite4AlterBeginAddColumn(Parse *pParse, SrcList *pSrc){
   pTab = sqlite4LocateTable(pParse, 0, pSrc->a[0].zName, pSrc->a[0].zDatabase);
   if( !pTab ) goto exit_begin_add_column;
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( IsVirtual(pTab) ){
     sqlite4ErrorMsg(pParse, "virtual tables may not be altered");
     goto exit_begin_add_column;
@@ -740,7 +740,7 @@ void sqlite4AlterBeginAddColumn(Parse *pParse, SrcList *pSrc){
     sqlite4ErrorMsg(pParse, "Cannot add a column to a view");
     goto exit_begin_add_column;
   }
-  if( SQLITE_OK!=isSystemTable(pParse, pTab->zName) ){
+  if( SQLITE4_OK!=isSystemTable(pParse, pTab->zName) ){
     goto exit_begin_add_column;
   }
 
@@ -791,4 +791,4 @@ exit_begin_add_column:
   sqlite4SrcListDelete(db, pSrc);
   return;
 }
-#endif  /* SQLITE_ALTER_TABLE */
+#endif  /* SQLITE4_ALTER_TABLE */

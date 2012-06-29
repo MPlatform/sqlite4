@@ -12,7 +12,7 @@
 **
 */
 #include "fts3Int.h"
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
 
 #include <string.h>
 #include <assert.h>
@@ -75,7 +75,7 @@ static int fts3auxConnectMethod(
     *pzErr = sqlite4_mprintf(
         "wrong number of arguments to fts4aux constructor"
     );
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
 
   zDb = argv[1]; 
@@ -84,11 +84,11 @@ static int fts3auxConnectMethod(
   nFts3 = strlen(zFts3);
 
   rc = sqlite4_declare_vtab(db, FTS3_TERMS_SCHEMA);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   nByte = sizeof(Fts3auxTable) + sizeof(Fts3Table) + nDb + nFts3 + 2;
   p = (Fts3auxTable *)sqlite4_malloc(nByte);
-  if( !p ) return SQLITE_NOMEM;
+  if( !p ) return SQLITE4_NOMEM;
   memset(p, 0, nByte);
 
   p->pFts3Tab = (Fts3Table *)&p[1];
@@ -102,7 +102,7 @@ static int fts3auxConnectMethod(
   sqlite4Fts3Dequote((char *)p->pFts3Tab->zName);
 
   *ppVtab = (sqlite4_vtab *)p;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -121,7 +121,7 @@ static int fts3auxDisconnectMethod(sqlite4_vtab *pVtab){
   }
   sqlite4_free(pFts3->zSegmentsTbl);
   sqlite4_free(p);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 #define FTS4AUX_EQ_CONSTRAINT 1
@@ -154,11 +154,11 @@ static int fts3auxBestIndexMethod(
   for(i=0; i<pInfo->nConstraint; i++){
     if( pInfo->aConstraint[i].usable && pInfo->aConstraint[i].iColumn==0 ){
       int op = pInfo->aConstraint[i].op;
-      if( op==SQLITE_INDEX_CONSTRAINT_EQ ) iEq = i;
-      if( op==SQLITE_INDEX_CONSTRAINT_LT ) iLe = i;
-      if( op==SQLITE_INDEX_CONSTRAINT_LE ) iLe = i;
-      if( op==SQLITE_INDEX_CONSTRAINT_GT ) iGe = i;
-      if( op==SQLITE_INDEX_CONSTRAINT_GE ) iGe = i;
+      if( op==SQLITE4_INDEX_CONSTRAINT_EQ ) iEq = i;
+      if( op==SQLITE4_INDEX_CONSTRAINT_LT ) iLe = i;
+      if( op==SQLITE4_INDEX_CONSTRAINT_LE ) iLe = i;
+      if( op==SQLITE4_INDEX_CONSTRAINT_GT ) iGe = i;
+      if( op==SQLITE4_INDEX_CONSTRAINT_GE ) iGe = i;
     }
   }
 
@@ -181,7 +181,7 @@ static int fts3auxBestIndexMethod(
     }
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -193,11 +193,11 @@ static int fts3auxOpenMethod(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCsr){
   UNUSED_PARAMETER(pVTab);
 
   pCsr = (Fts3auxCursor *)sqlite4_malloc(sizeof(Fts3auxCursor));
-  if( !pCsr ) return SQLITE_NOMEM;
+  if( !pCsr ) return SQLITE4_NOMEM;
   memset(pCsr, 0, sizeof(Fts3auxCursor));
 
   *ppCsr = (sqlite4_vtab_cursor *)pCsr;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -213,7 +213,7 @@ static int fts3auxCloseMethod(sqlite4_vtab_cursor *pCursor){
   sqlite4_free(pCsr->zStop);
   sqlite4_free(pCsr->aStat);
   sqlite4_free(pCsr);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int fts3auxGrowStatArray(Fts3auxCursor *pCsr, int nSize){
@@ -222,14 +222,14 @@ static int fts3auxGrowStatArray(Fts3auxCursor *pCsr, int nSize){
     aNew = (struct Fts3auxColstats *)sqlite4_realloc(pCsr->aStat, 
         sizeof(struct Fts3auxColstats) * nSize
     );
-    if( aNew==0 ) return SQLITE_NOMEM;
+    if( aNew==0 ) return SQLITE4_NOMEM;
     memset(&aNew[pCsr->nStat], 0, 
         sizeof(struct Fts3auxColstats) * (nSize - pCsr->nStat)
     );
     pCsr->aStat = aNew;
     pCsr->nStat = nSize;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -244,11 +244,11 @@ static int fts3auxNextMethod(sqlite4_vtab_cursor *pCursor){
   pCsr->iRowid++;
 
   for(pCsr->iCol++; pCsr->iCol<pCsr->nStat; pCsr->iCol++){
-    if( pCsr->aStat[pCsr->iCol].nDoc>0 ) return SQLITE_OK;
+    if( pCsr->aStat[pCsr->iCol].nDoc>0 ) return SQLITE4_OK;
   }
 
   rc = sqlite4Fts3SegReaderStep(pFts3, &pCsr->csr);
-  if( rc==SQLITE_ROW ){
+  if( rc==SQLITE4_ROW ){
     int i = 0;
     int nDoclist = pCsr->csr.nDoclist;
     char *aDoclist = pCsr->csr.aDoclist;
@@ -261,11 +261,11 @@ static int fts3auxNextMethod(sqlite4_vtab_cursor *pCursor){
       int mc = memcmp(pCsr->zStop, pCsr->csr.zTerm, n);
       if( mc<0 || (mc==0 && pCsr->csr.nTerm>pCsr->nStop) ){
         pCsr->isEof = 1;
-        return SQLITE_OK;
+        return SQLITE4_OK;
       }
     }
 
-    if( fts3auxGrowStatArray(pCsr, 2) ) return SQLITE_NOMEM;
+    if( fts3auxGrowStatArray(pCsr, 2) ) return SQLITE4_NOMEM;
     memset(pCsr->aStat, 0, sizeof(struct Fts3auxColstats) * pCsr->nStat);
     iCol = 0;
 
@@ -311,7 +311,7 @@ static int fts3auxNextMethod(sqlite4_vtab_cursor *pCursor){
         /* State 3. The integer just read is a column number. */
         default: assert( eState==3 );
           iCol = (int)v;
-          if( fts3auxGrowStatArray(pCsr, iCol+2) ) return SQLITE_NOMEM;
+          if( fts3auxGrowStatArray(pCsr, iCol+2) ) return SQLITE4_NOMEM;
           pCsr->aStat[iCol+1].nDoc++;
           eState = 2;
           break;
@@ -319,7 +319,7 @@ static int fts3auxNextMethod(sqlite4_vtab_cursor *pCursor){
     }
 
     pCsr->iCol = 0;
-    rc = SQLITE_OK;
+    rc = SQLITE4_OK;
   }else{
     pCsr->isEof = 1;
   }
@@ -366,24 +366,24 @@ static int fts3auxFilterMethod(
     if( zStr ){
       pCsr->filter.zTerm = sqlite4_mprintf("%s", zStr);
       pCsr->filter.nTerm = sqlite4_value_bytes(apVal[0]);
-      if( pCsr->filter.zTerm==0 ) return SQLITE_NOMEM;
+      if( pCsr->filter.zTerm==0 ) return SQLITE4_NOMEM;
     }
   }
   if( idxNum&FTS4AUX_LE_CONSTRAINT ){
     int iIdx = (idxNum&FTS4AUX_GE_CONSTRAINT) ? 1 : 0;
     pCsr->zStop = sqlite4_mprintf("%s", sqlite4_value_text(apVal[iIdx]));
     pCsr->nStop = sqlite4_value_bytes(apVal[iIdx]);
-    if( pCsr->zStop==0 ) return SQLITE_NOMEM;
+    if( pCsr->zStop==0 ) return SQLITE4_NOMEM;
   }
 
   rc = sqlite4Fts3SegReaderCursor(pFts3, 0, FTS3_SEGCURSOR_ALL,
       pCsr->filter.zTerm, pCsr->filter.nTerm, 0, isScan, &pCsr->csr
   );
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = sqlite4Fts3SegReaderStart(pFts3, &pCsr->csr, &pCsr->filter);
   }
 
-  if( rc==SQLITE_OK ) rc = fts3auxNextMethod(pCursor);
+  if( rc==SQLITE4_OK ) rc = fts3auxNextMethod(pCursor);
   return rc;
 }
 
@@ -407,12 +407,12 @@ static int fts3auxColumnMethod(
 
   assert( p->isEof==0 );
   if( iCol==0 ){        /* Column "term" */
-    sqlite4_result_text(pContext, p->csr.zTerm, p->csr.nTerm, SQLITE_TRANSIENT);
+    sqlite4_result_text(pContext, p->csr.zTerm, p->csr.nTerm, SQLITE4_TRANSIENT);
   }else if( iCol==1 ){  /* Column "col" */
     if( p->iCol ){
       sqlite4_result_int(pContext, p->iCol-1);
     }else{
-      sqlite4_result_text(pContext, "*", -1, SQLITE_STATIC);
+      sqlite4_result_text(pContext, "*", -1, SQLITE4_STATIC);
     }
   }else if( iCol==2 ){  /* Column "documents" */
     sqlite4_result_int64(pContext, p->aStat[p->iCol].nDoc);
@@ -420,7 +420,7 @@ static int fts3auxColumnMethod(
     sqlite4_result_int64(pContext, p->aStat[p->iCol].nOcc);
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -432,11 +432,11 @@ static int fts3auxRowidMethod(
 ){
   Fts3auxCursor *pCsr = (Fts3auxCursor *)pCursor;
   *pRowid = pCsr->iRowid;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
-** Register the fts3aux module with database connection db. Return SQLITE_OK
+** Register the fts3aux module with database connection db. Return SQLITE4_OK
 ** if successful or an error code if sqlite4_create_module() fails.
 */
 int sqlite4Fts3InitAux(sqlite4 *db){
@@ -471,4 +471,4 @@ int sqlite4Fts3InitAux(sqlite4 *db){
   return rc;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3) */

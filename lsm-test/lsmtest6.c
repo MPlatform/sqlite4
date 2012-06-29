@@ -544,5 +544,3 @@ void test_oom(
 ){
   do_test_oom1(zPattern, pRc);
 }
-
-

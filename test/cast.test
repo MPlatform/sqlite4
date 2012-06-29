@@ -311,13 +311,13 @@ do_test cast-3.32.1 {
   set ::STMT [sqlite4_prepare $DB {SELECT CAST(? AS real)} -1 TAIL]
   sqlite4_bind_blob -static $::STMT 1 $blob 5
   sqlite4_step $::STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test cast-3.32.2 {
   sqlite4_column_int $::STMT 0
 } {12345}
 do_test cast-3.32.3 {
   sqlite4_finalize $::STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 
 do_test cast-4.1 {

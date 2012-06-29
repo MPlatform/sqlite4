@@ -381,10 +381,10 @@ test_suite "nolookaside" -description {
   autoinstall_test_functions
 } -files $::allquicktests
 
-# Run some tests in SQLITE_CONFIG_SINGLETHREAD mode.
+# Run some tests in SQLITE4_CONFIG_SINGLETHREAD mode.
 #
 test_suite "singlethread" -description {
-  Tests run in SQLITE_CONFIG_SINGLETHREAD mode
+  Tests run in SQLITE4_CONFIG_SINGLETHREAD mode
 } -initialize {
   catch {db close}
   sqlite4_shutdown
@@ -404,7 +404,7 @@ test_suite "singlethread" -description {
 }
 
 test_suite "nomutex" -description {
-  Tests run with the SQLITE_OPEN_MULTITHREADED flag passed to sqlite4_open().
+  Tests run with the SQLITE4_OPEN_MULTITHREADED flag passed to sqlite4_open().
 } -initialize {
   rename sqlite4 sqlite4_nomutex
   proc sqlite4 {args} {
@@ -422,10 +422,10 @@ test_suite "nomutex" -description {
   rename sqlite4_nomutex sqlite4
 }
 
-# Run some tests in SQLITE_CONFIG_MULTITHREAD mode.
+# Run some tests in SQLITE4_CONFIG_MULTITHREAD mode.
 #
 test_suite "multithread" -description {
-  Tests run in SQLITE_CONFIG_MULTITHREAD mode
+  Tests run in SQLITE4_CONFIG_MULTITHREAD mode
 } -initialize {
   catch {db close}
   sqlite4_shutdown
@@ -444,10 +444,10 @@ test_suite "multithread" -description {
   autoinstall_test_functions
 }
 
-# Run some tests in SQLITE_OPEN_FULLMUTEX mode.
+# Run some tests in SQLITE4_OPEN_FULLMUTEX mode.
 #
 test_suite "fullmutex" -description {
-  Tests run in SQLITE_OPEN_FULLMUTEX mode
+  Tests run in SQLITE4_OPEN_FULLMUTEX mode
 } -initialize {
   rename sqlite4 sqlite4_fullmutex
   proc sqlite4 {args} {
@@ -853,7 +853,7 @@ test_suite "rtree" -description {
 
 test_suite "no_optimization" -description {
   Run test scripts with optimizations disabled using the
-  sqlite4_test_control(SQLITE_TESTCTRL_OPTIMIZATIONS) interface.
+  sqlite4_test_control(SQLITE4_TESTCTRL_OPTIMIZATIONS) interface.
 } -files {
   where.test where2.test where3.test where4.test where5.test
   where6.test where7.test where8.test where9.test

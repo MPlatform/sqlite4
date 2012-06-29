@@ -68,10 +68,10 @@ foreach name $names {
   do_test capi3e-1.1.$i {
     set db2 [sqlite4_open $name {}]
     sqlite4_errcode $db2
-  } {SQLITE_OK}
+  } {SQLITE4_OK}
   do_test capi3e-1.2.$i {
     sqlite4_close $db2
-  } {SQLITE_OK}
+  } {SQLITE4_OK}
   do_test capi3e-1.3.$i {
     file isfile $name
   } {1}
@@ -84,10 +84,10 @@ ifcapable {utf16} {
     do_test capi3e-2.1.$i {
       set db2 [sqlite4_open16 [utf16 $name] {}]
       sqlite4_errcode $db2
-    } {SQLITE_OK}
+    } {SQLITE4_OK}
     do_test capi3e-2.2.$i {
       sqlite4_close $db2
-    } {SQLITE_OK}
+    } {SQLITE4_OK}
     do_test capi3e-2.3.$i {
       file isfile $name
     } {1}

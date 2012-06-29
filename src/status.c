@@ -55,14 +55,14 @@ int sqlite4_env_status(
 ){
   if( pEnv==0 ) pEnv = sqlite4_env_default();
   if( op<0 || op>=ArraySize(pEnv->nowValue) ){
-    return SQLITE_MISUSE_BKPT;
+    return SQLITE4_MISUSE_BKPT;
   }
   *pCurrent = pEnv->nowValue[op];
   *pHighwater = pEnv->mxValue[op];
   if( resetFlag ){
     pEnv->mxValue[op] = pEnv->nowValue[op];
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -75,12 +75,12 @@ int sqlite4_db_status(
   int *pHighwater,      /* Write high-water mark here */
   int resetFlag         /* Reset high-water mark if true */
 ){
-  int rc = SQLITE_OK;   /* Return code */
+  int rc = SQLITE4_OK;   /* Return code */
   sqlite4_env *pEnv;
   sqlite4_mutex_enter(db->mutex);
   pEnv = db->pEnv;
   switch( op ){
-    case SQLITE_DBSTATUS_LOOKASIDE_USED: {
+    case SQLITE4_DBSTATUS_LOOKASIDE_USED: {
       *pCurrent = db->lookaside.nOut;
       *pHighwater = db->lookaside.mxOut;
       if( resetFlag ){
@@ -89,18 +89,18 @@ int sqlite4_db_status(
       break;
     }
 
-    case SQLITE_DBSTATUS_LOOKASIDE_HIT:
-    case SQLITE_DBSTATUS_LOOKASIDE_MISS_SIZE:
-    case SQLITE_DBSTATUS_LOOKASIDE_MISS_FULL: {
-      testcase( op==SQLITE_DBSTATUS_LOOKASIDE_HIT );
-      testcase( op==SQLITE_DBSTATUS_LOOKASIDE_MISS_SIZE );
-      testcase( op==SQLITE_DBSTATUS_LOOKASIDE_MISS_FULL );
-      assert( (op-SQLITE_DBSTATUS_LOOKASIDE_HIT)>=0 );
-      assert( (op-SQLITE_DBSTATUS_LOOKASIDE_HIT)<3 );
+    case SQLITE4_DBSTATUS_LOOKASIDE_HIT:
+    case SQLITE4_DBSTATUS_LOOKASIDE_MISS_SIZE:
+    case SQLITE4_DBSTATUS_LOOKASIDE_MISS_FULL: {
+      testcase( op==SQLITE4_DBSTATUS_LOOKASIDE_HIT );
+      testcase( op==SQLITE4_DBSTATUS_LOOKASIDE_MISS_SIZE );
+      testcase( op==SQLITE4_DBSTATUS_LOOKASIDE_MISS_FULL );
+      assert( (op-SQLITE4_DBSTATUS_LOOKASIDE_HIT)>=0 );
+      assert( (op-SQLITE4_DBSTATUS_LOOKASIDE_HIT)<3 );
       *pCurrent = 0;
-      *pHighwater = db->lookaside.anStat[op - SQLITE_DBSTATUS_LOOKASIDE_HIT];
+      *pHighwater = db->lookaside.anStat[op - SQLITE4_DBSTATUS_LOOKASIDE_HIT];
       if( resetFlag ){
-        db->lookaside.anStat[op - SQLITE_DBSTATUS_LOOKASIDE_HIT] = 0;
+        db->lookaside.anStat[op - SQLITE4_DBSTATUS_LOOKASIDE_HIT] = 0;
       }
       break;
     }
@@ -110,7 +110,7 @@ int sqlite4_db_status(
     ** by all pagers associated with the given database connection.  The
     ** highwater mark is meaningless and is returned as zero.
     */
-    case SQLITE_DBSTATUS_CACHE_USED: {
+    case SQLITE4_DBSTATUS_CACHE_USED: {
       int totalUsed = 0;
       *pCurrent = totalUsed;
       *pHighwater = 0;
@@ -122,7 +122,7 @@ int sqlite4_db_status(
     ** to store the schema for all databases (main, temp, and any ATTACHed
     ** databases.  *pHighwater is set to zero.
     */
-    case SQLITE_DBSTATUS_SCHEMA_USED: {
+    case SQLITE4_DBSTATUS_SCHEMA_USED: {
       int i;                      /* Used to iterate through schemas */
       int nByte = 0;              /* Used to accumulate return value */
 
@@ -163,7 +163,7 @@ int sqlite4_db_status(
     ** to store all prepared statements.
     ** *pHighwater is set to zero.
     */
-    case SQLITE_DBSTATUS_STMT_USED: {
+    case SQLITE4_DBSTATUS_STMT_USED: {
       struct Vdbe *pVdbe;         /* Used to iterate through VMs */
       int nByte = 0;              /* Used to accumulate return value */
 
@@ -184,8 +184,8 @@ int sqlite4_db_status(
     ** pagers the database handle is connected to. *pHighwater is always set 
     ** to zero.
     */
-    case SQLITE_DBSTATUS_CACHE_HIT:
-    case SQLITE_DBSTATUS_CACHE_MISS: {
+    case SQLITE4_DBSTATUS_CACHE_HIT:
+    case SQLITE4_DBSTATUS_CACHE_MISS: {
       int nRet = 0;
       *pHighwater = 0;
       *pCurrent = nRet;
@@ -193,7 +193,7 @@ int sqlite4_db_status(
     }
 
     default: {
-      rc = SQLITE_ERROR;
+      rc = SQLITE4_ERROR;
     }
   }
   sqlite4_mutex_leave(db->mutex);

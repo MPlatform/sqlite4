@@ -83,8 +83,8 @@ do_test tkt35xx-1.2.4 {
   execsql { SELECT count(*) FROM t3 }
 } {4}
 do_test tkt35xx-1.2.5 {
-  # Before the bug was fixed, if SQLITE_DEBUG was defined an assert()
-  # would fail during the following INSERT statement. If SQLITE_DEBUG
+  # Before the bug was fixed, if SQLITE4_DEBUG was defined an assert()
+  # would fail during the following INSERT statement. If SQLITE4_DEBUG
   # was not defined, then the statement would pass and the transaction
   # would be committed. But, the "SELECT count(*)" in tkt35xx-1.2.6 would
   # return 1, not 5. Data magically disappeared!

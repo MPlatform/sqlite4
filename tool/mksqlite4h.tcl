@@ -13,8 +13,8 @@
 # 
 # This script performs processing on src/sqlite.h.in. It:
 #
-#   1) Adds SQLITE_EXTERN in front of the declaration of global variables,
-#   2) Adds SQLITE_API in front of the declaration of API functions,
+#   1) Adds SQLITE4_EXTERN in front of the declaration of global variables,
+#   2) Adds SQLITE4_API in front of the declaration of API functions,
 #   3) Replaces the string --VERS-- with the current library version, 
 #      formatted as a string (e.g. "3.6.17"), and
 #   4) Replaces the string --VERSION-NUMBER-- with current library version,
@@ -85,12 +85,12 @@ foreach file [list $TOP/src/sqlite.h.in $TOP/ext/rtree/sqlite4rtree.h] {
     regsub -- --VERSION-NUMBER-- $line $nVersion line
     regsub -- --SOURCE-ID--      $line "$zDate $zUuid" line
   
-    if {[regexp {define SQLITE_EXTERN extern} $line]} {
+    if {[regexp {define SQLITE4_EXTERN extern} $line]} {
       puts $line
       puts [gets $in]
       puts ""
-      puts "#ifndef SQLITE_API"
-      puts "# define SQLITE_API"
+      puts "#ifndef SQLITE4_API"
+      puts "# define SQLITE4_API"
       puts "#endif"
       set line ""
     }
@@ -98,7 +98,7 @@ foreach file [list $TOP/src/sqlite.h.in $TOP/ext/rtree/sqlite4rtree.h] {
     if {([regexp $varpattern $line] && ![regexp {^ *typedef} $line])
      || ([regexp $declpattern $line])
     } {
-      set line "SQLITE_API $line"
+      set line "SQLITE4_API $line"
     }
     puts $line
   }

@@ -51,83 +51,83 @@ struct Keyword {
 /*
 ** Define masks used to determine which keywords are allowed
 */
-#ifdef SQLITE_OMIT_ALTERTABLE
+#ifdef SQLITE4_OMIT_ALTERTABLE
 #  define ALTER      0
 #else
 #  define ALTER      0x00000001
 #endif
 #define ALWAYS       0x00000002
-#ifdef SQLITE_OMIT_ANALYZE
+#ifdef SQLITE4_OMIT_ANALYZE
 #  define ANALYZE    0
 #else
 #  define ANALYZE    0x00000004
 #endif
-#ifdef SQLITE_OMIT_ATTACH
+#ifdef SQLITE4_OMIT_ATTACH
 #  define ATTACH     0
 #else
 #  define ATTACH     0x00000008
 #endif
-#ifdef SQLITE_OMIT_AUTOINCREMENT
+#ifdef SQLITE4_OMIT_AUTOINCREMENT
 #  define AUTOINCR   0
 #else
 #  define AUTOINCR   0x00000010
 #endif
-#ifdef SQLITE_OMIT_CAST
+#ifdef SQLITE4_OMIT_CAST
 #  define CAST       0
 #else
 #  define CAST       0x00000020
 #endif
-#ifdef SQLITE_OMIT_COMPOUND_SELECT
+#ifdef SQLITE4_OMIT_COMPOUND_SELECT
 #  define COMPOUND   0
 #else
 #  define COMPOUND   0x00000040
 #endif
-#ifdef SQLITE_OMIT_CONFLICT_CLAUSE
+#ifdef SQLITE4_OMIT_CONFLICT_CLAUSE
 #  define CONFLICT   0
 #else
 #  define CONFLICT   0x00000080
 #endif
-#ifdef SQLITE_OMIT_EXPLAIN
+#ifdef SQLITE4_OMIT_EXPLAIN
 #  define EXPLAIN    0
 #else
 #  define EXPLAIN    0x00000100
 #endif
-#ifdef SQLITE_OMIT_FOREIGN_KEY
+#ifdef SQLITE4_OMIT_FOREIGN_KEY
 #  define FKEY       0
 #else
 #  define FKEY       0x00000200
 #endif
-#ifdef SQLITE_OMIT_PRAGMA
+#ifdef SQLITE4_OMIT_PRAGMA
 #  define PRAGMA     0
 #else
 #  define PRAGMA     0x00000400
 #endif
-#ifdef SQLITE_OMIT_REINDEX
+#ifdef SQLITE4_OMIT_REINDEX
 #  define REINDEX    0
 #else
 #  define REINDEX    0x00000800
 #endif
-#ifdef SQLITE_OMIT_SUBQUERY
+#ifdef SQLITE4_OMIT_SUBQUERY
 #  define SUBQUERY   0
 #else
 #  define SUBQUERY   0x00001000
 #endif
-#ifdef SQLITE_OMIT_TRIGGER
+#ifdef SQLITE4_OMIT_TRIGGER
 #  define TRIGGER    0
 #else
 #  define TRIGGER    0x00002000
 #endif
-#ifdef SQLITE_OMIT_VIEW
+#ifdef SQLITE4_OMIT_VIEW
 #  define VIEW       0
 #else
 #  define VIEW       0x00008000
 #endif
-#ifdef SQLITE_OMIT_VIRTUALTABLE
+#ifdef SQLITE4_OMIT_VIRTUALTABLE
 #  define VTAB       0
 #else
 #  define VTAB       0x00010000
 #endif
-#ifdef SQLITE_OMIT_AUTOVACUUM
+#ifdef SQLITE4_OMIT_AUTOVACUUM
 #  define AUTOVACUUM 0
 #else
 #  define AUTOVACUUM 0x00020000
@@ -589,7 +589,7 @@ int main(int argc, char **argv){
   printf("int sqlite4KeywordCode(const unsigned char *z, int n){\n");
   printf("  return keywordCode((char*)z, n);\n");
   printf("}\n");
-  printf("#define SQLITE_N_KEYWORD %d\n", nKeyword);
+  printf("#define SQLITE4_N_KEYWORD %d\n", nKeyword);
 
   return 0;
 }

@@ -53,21 +53,21 @@ do_test capi3b-1.3 {
 } {1 2}
 
 # Second database connection tries to write.  The sqlite4_step()
-# function returns SQLITE_BUSY because it cannot commit.
+# function returns SQLITE4_BUSY because it cannot commit.
 #
 do_test capi3b-1.4 {
   set VM [sqlite4_prepare $DB2 {INSERT INTO t1 VALUES(3)} -1 TAIL]
   sqlite4_step $VM
-} SQLITE_BUSY
+} SQLITE4_BUSY
 
 # The sqlite4_step call can be repeated multiple times.
 #
 do_test capi3b-1.5.1 {
   sqlite4_step $VM
-} SQLITE_BUSY
+} SQLITE4_BUSY
 do_test capi3b-1.5.2 {
   sqlite4_step $VM
-} SQLITE_BUSY
+} SQLITE4_BUSY
 
 # The first connection closes its transaction.  This allows the second
 # connections sqlite4_step to succeed.
@@ -75,10 +75,10 @@ do_test capi3b-1.5.2 {
 do_test capi3b-1.6 {
   execsql COMMIT
   sqlite4_step $VM
-} SQLITE_DONE
+} SQLITE4_DONE
 do_test capi3b-1.7 {
   sqlite4_finalize $VM
-} SQLITE_OK
+} SQLITE4_OK
 do_test capi3b-1.8 {
   execsql {SELECT * FROM t1} db2
 } {1 2 3}
@@ -93,38 +93,38 @@ do_test capi3b-1.9 {
 do_test capi3b-2.1 {
   set VM1 [sqlite4_prepare $DB {SELECT * FROM t1} -1 TAIL]
   sqlite4_step $VM1
-} SQLITE_ROW
+} SQLITE4_ROW
 do_test capi3b-2.2 {
   sqlite4_column_text $VM1 0
 } 1
 do_test capi3b-2.3 {
   set VM2 [sqlite4_prepare $DB2 {INSERT INTO t1 VALUES(4)} -1 TAIL]
   sqlite4_step $VM2
-} SQLITE_BUSY
+} SQLITE4_BUSY
 do_test capi3b-2.4 {
   sqlite4_step $VM1
-} SQLITE_ROW
+} SQLITE4_ROW
 do_test capi3b-2.5 {
   sqlite4_column_text $VM1 0
 } 2
 do_test capi3b-2.6 {
   sqlite4_step $VM2
-} SQLITE_BUSY
+} SQLITE4_BUSY
 do_test capi3b-2.7 {
   sqlite4_step $VM1
-} SQLITE_ROW
+} SQLITE4_ROW
 do_test capi3b-2.8 {
   sqlite4_column_text $VM1 0
 } 3
 do_test capi3b-2.9 {
   sqlite4_step $VM2
-} SQLITE_BUSY
+} SQLITE4_BUSY
 do_test capi3b-2.10 {
   sqlite4_step $VM1
-} SQLITE_DONE
+} SQLITE4_DONE
 do_test capi3b-2.11 {
   sqlite4_step $VM2
-} SQLITE_DONE
+} SQLITE4_DONE
 do_test capi3b-2.12 {
   sqlite4_finalize $VM1
   sqlite4_finalize $VM2

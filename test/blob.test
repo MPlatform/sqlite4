@@ -132,7 +132,7 @@ do_test blob-3.0 {
   set STMT [sqlite4_prepare $DB "DELETE FROM t1 WHERE a = ?" -1 DUMMY]
   sqlite4_bind_blob $STMT 1 "\x12\x34\x56" 3
   sqlite4_step $STMT
-} {SQLITE_DONE}
+} {SQLITE4_DONE}
 do_test blob-3.1 {
   sqlite4_finalize $STMT
   db2 close

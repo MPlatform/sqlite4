@@ -25,7 +25,7 @@ static void corruptSchema(
   const char *zExtra   /* Error information */
 ){
   sqlite4 *db = pData->db;
-  if( !db->mallocFailed && (db->flags & SQLITE_RecoveryMode)==0 ){
+  if( !db->mallocFailed && (db->flags & SQLITE4_RecoveryMode)==0 ){
     if( zObj==0 ) zObj = "?";
     sqlite4SetString(pData->pzErrMsg, db,
       "malformed database schema (%s)", zObj);
@@ -34,7 +34,7 @@ static void corruptSchema(
                                  "%s - %s", *pData->pzErrMsg, zExtra);
     }
   }
-  pData->rc = db->mallocFailed ? SQLITE_NOMEM : SQLITE_CORRUPT_BKPT;
+  pData->rc = db->mallocFailed ? SQLITE4_NOMEM : SQLITE4_CORRUPT_BKPT;
 }
 
 /*
@@ -85,14 +85,14 @@ int sqlite4InitCallback(void *pInit, int argc, char **argv, char **NotUsed){
     rc = db->errCode;
     assert( (rc&0xFF)==(rcp&0xFF) );
     db->init.iDb = 0;
-    if( SQLITE_OK!=rc ){
+    if( SQLITE4_OK!=rc ){
       if( db->init.orphanTrigger ){
         assert( iDb==1 );
       }else{
         pData->rc = rc;
-        if( rc==SQLITE_NOMEM ){
+        if( rc==SQLITE4_NOMEM ){
           db->mallocFailed = 1;
-        }else if( rc!=SQLITE_INTERRUPT && (rc&0xFF)!=SQLITE_LOCKED ){
+        }else if( rc!=SQLITE4_INTERRUPT && (rc&0xFF)!=SQLITE4_LOCKED ){
           corruptSchema(pData, argv[0], sqlite4_errmsg(db));
         }
       }
@@ -128,7 +128,7 @@ int sqlite4InitCallback(void *pInit, int argc, char **argv, char **NotUsed){
 ** data structures for a single database file.  The index of the
 ** database file is given by iDb.  iDb==0 is used for the main
 ** database.  iDb==1 should never be used.  iDb>=2 is used for
-** auxiliary databases.  Return one of the SQLITE_ error codes to
+** auxiliary databases.  Return one of the SQLITE4_ error codes to
 ** indicate success or failure.
 */
 static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
@@ -154,7 +154,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
      "  sql text\n"
      ")"
   ;
-#ifndef SQLITE_OMIT_TEMPDB
+#ifndef SQLITE4_OMIT_TEMPDB
   static const char temp_master_schema[] = 
      "CREATE TEMP TABLE sqlite_temp_master(\n"
      "  type text,\n"
@@ -190,7 +190,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   azArg[3] = 0;
   initData.db = db;
   initData.iDb = iDb;
-  initData.rc = SQLITE_OK;
+  initData.rc = SQLITE4_OK;
   initData.pzErrMsg = pzErrMsg;
   sqlite4InitCallback(&initData, 3, (char **)azArg, 0);
   if( initData.rc ){
@@ -209,7 +209,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
     if( !OMIT_TEMPDB && ALWAYS(iDb==1) ){
       DbSetProperty(db, 1, DB_SchemaLoaded);
     }
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   /* If there is not already a read-only (or read-write) transaction opened
@@ -217,7 +217,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   ** will be closed before this function returns.  */
   if( pDb->pKV->iTransLevel==0 ){
     rc = sqlite4KVStoreBegin(pDb->pKV, 1);
-    if( rc!=SQLITE_OK ){
+    if( rc!=SQLITE4_OK ){
       sqlite4SetString(pzErrMsg, db, "%s", sqlite4ErrStr(rc));
       goto initone_error_out;
     }
@@ -238,7 +238,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
   **    meta[8]   unused
   **    meta[9]   unused
   **
-  ** Note: The #defined SQLITE_UTF* symbols in sqliteInt.h correspond to
+  ** Note: The #defined SQLITE4_UTF* symbols in sqliteInt.h correspond to
   ** the possible values of meta[4].
   */
   sqlite4KVStoreGetMeta(pDb->pKV, 0, ArraySize(meta), meta);
@@ -252,31 +252,31 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
     zSql = sqlite4MPrintf(db, 
         "SELECT name, rootpage, sql FROM '%q'.%s ORDER BY rowid",
         db->aDb[iDb].zName, zMasterName);
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
     {
       int (*xAuth)(void*,int,const char*,const char*,const char*,const char*);
       xAuth = db->xAuth;
       db->xAuth = 0;
 #endif
       rc = sqlite4_exec(db, zSql, sqlite4InitCallback, &initData, 0);
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
       db->xAuth = xAuth;
     }
 #endif
-    if( rc==SQLITE_OK ) rc = initData.rc;
+    if( rc==SQLITE4_OK ) rc = initData.rc;
     sqlite4DbFree(db, zSql);
-#ifndef SQLITE_OMIT_ANALYZE
-    if( rc==SQLITE_OK ){
+#ifndef SQLITE4_OMIT_ANALYZE
+    if( rc==SQLITE4_OK ){
       sqlite4AnalysisLoad(db, iDb);
     }
 #endif
   }
   if( db->mallocFailed ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
     sqlite4ResetInternalSchema(db, -1);
   }
-  if( rc==SQLITE_OK || (db->flags&SQLITE_RecoveryMode)){
-    /* Black magic: If the SQLITE_RecoveryMode flag is set, then consider
+  if( rc==SQLITE4_OK || (db->flags&SQLITE4_RecoveryMode)){
+    /* Black magic: If the SQLITE4_RecoveryMode flag is set, then consider
     ** the schema loaded, even if errors occurred. In this situation the 
     ** current sqlite4_prepare() operation will fail, but the following one
     ** will attempt to compile the supplied statement against whatever subset
@@ -285,7 +285,7 @@ static int sqlite4InitOne(sqlite4 *db, int iDb, char **pzErrMsg){
     ** even when its contents have been corrupted.
     */
     DbSetProperty(db, iDb, DB_SchemaLoaded);
-    rc = SQLITE_OK;
+    rc = SQLITE4_OK;
   }
 
   /* Jump here for an error that occurs after successfully allocating
@@ -297,7 +297,7 @@ initone_error_out:
   }
 
 error_out:
-  if( rc==SQLITE_NOMEM || rc==SQLITE_IOERR_NOMEM ){
+  if( rc==SQLITE4_NOMEM || rc==SQLITE4_IOERR_NOMEM ){
     db->mallocFailed = 1;
   }
   return rc;
@@ -315,12 +315,12 @@ error_out:
 */
 int sqlite4Init(sqlite4 *db, char **pzErrMsg){
   int i, rc;
-  int commit_internal = !(db->flags&SQLITE_InternChanges);
+  int commit_internal = !(db->flags&SQLITE4_InternChanges);
   
   assert( sqlite4_mutex_held(db->mutex) );
-  rc = SQLITE_OK;
+  rc = SQLITE4_OK;
   db->init.busy = 1;
-  for(i=0; rc==SQLITE_OK && i<db->nDb; i++){
+  for(i=0; rc==SQLITE4_OK && i<db->nDb; i++){
     if( DbHasProperty(db, i, DB_SchemaLoaded) || i==1 ) continue;
     rc = sqlite4InitOne(db, i, pzErrMsg);
     if( rc ){
@@ -332,8 +332,8 @@ int sqlite4Init(sqlite4 *db, char **pzErrMsg){
   ** for the TEMP database. This is loaded last, as the TEMP database
   ** schema may contain references to objects in other databases.
   */
-#ifndef SQLITE_OMIT_TEMPDB
-  if( rc==SQLITE_OK && ALWAYS(db->nDb>1)
+#ifndef SQLITE4_OMIT_TEMPDB
+  if( rc==SQLITE4_OK && ALWAYS(db->nDb>1)
                     && !DbHasProperty(db, 1, DB_SchemaLoaded) ){
     rc = sqlite4InitOne(db, 1, pzErrMsg);
     if( rc ){
@@ -343,7 +343,7 @@ int sqlite4Init(sqlite4 *db, char **pzErrMsg){
 #endif
 
   db->init.busy = 0;
-  if( rc==SQLITE_OK && commit_internal ){
+  if( rc==SQLITE4_OK && commit_internal ){
     sqlite4CommitInternalChanges(db);
   }
 
@@ -355,13 +355,13 @@ int sqlite4Init(sqlite4 *db, char **pzErrMsg){
 ** Otherwise, the schema is loaded. An error code is returned.
 */
 int sqlite4ReadSchema(Parse *pParse){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   sqlite4 *db = pParse->db;
   assert( sqlite4_mutex_held(db->mutex) );
   if( !db->init.busy ){
     rc = sqlite4Init(db, &pParse->zErrMsg);
   }
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     pParse->rc = rc;
     pParse->nErr++;
   }
@@ -371,7 +371,7 @@ int sqlite4ReadSchema(Parse *pParse){
 
 /*
 ** Check schema cookies in all databases.  If any cookie is out
-** of date set pParse->rc to SQLITE_SCHEMA.  If all schema cookies
+** of date set pParse->rc to SQLITE4_SCHEMA.  If all schema cookies
 ** make no changes to pParse->rc.
 */
 static void schemaIsValid(Parse *pParse){
@@ -392,20 +392,20 @@ static void schemaIsValid(Parse *pParse){
     ** will be closed immediately after reading the meta-value. */
     if( pKV->iTransLevel==0 ){
       rc = sqlite4KVStoreBegin(pKV, 1);
-      if( rc==SQLITE_NOMEM || rc==SQLITE_IOERR_NOMEM ){
+      if( rc==SQLITE4_NOMEM || rc==SQLITE4_IOERR_NOMEM ){
         db->mallocFailed = 1;
       }
-      if( rc!=SQLITE_OK ) return;
+      if( rc!=SQLITE4_OK ) return;
       openedTransaction = 1;
     }
 
     /* Read the schema cookie from the database. If it does not match the 
     ** value stored as part of the in-memory schema representation,
-    ** set Parse.rc to SQLITE_SCHEMA. */
+    ** set Parse.rc to SQLITE4_SCHEMA. */
     sqlite4KVStoreGetMeta(pKV, 0, 1, (u32 *)&cookie);
     if( cookie!=db->aDb[iDb].pSchema->schema_cookie ){
       sqlite4ResetInternalSchema(db, iDb);
-      pParse->rc = SQLITE_SCHEMA;
+      pParse->rc = SQLITE4_SCHEMA;
     }
 
     /* Close the transaction, if one was opened. */
@@ -460,13 +460,13 @@ static int sqlite4Prepare(
 ){
   Parse *pParse;            /* Parsing context */
   char *zErrMsg = 0;        /* Error message */
-  int rc = SQLITE_OK;       /* Result code */
+  int rc = SQLITE4_OK;       /* Result code */
   int i;                    /* Loop counter */
 
   /* Allocate the parsing context */
   pParse = sqlite4StackAllocZero(db, sizeof(*pParse));
   if( pParse==0 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
     goto end_prepare;
   }
   pParse->pReprepare = pReprepare;
@@ -480,12 +480,12 @@ static int sqlite4Prepare(
   pParse->nQueryLoop = (double)1;
   if( nBytes>=0 && (nBytes==0 || zSql[nBytes-1]!=0) ){
     char *zSqlCopy;
-    int mxLen = db->aLimit[SQLITE_LIMIT_SQL_LENGTH];
+    int mxLen = db->aLimit[SQLITE4_LIMIT_SQL_LENGTH];
     testcase( nBytes==mxLen );
     testcase( nBytes==mxLen+1 );
     if( nBytes>mxLen ){
-      sqlite4Error(db, SQLITE_TOOBIG, "statement too long");
-      rc = sqlite4ApiExit(db, SQLITE_TOOBIG);
+      sqlite4Error(db, SQLITE4_TOOBIG, "statement too long");
+      rc = sqlite4ApiExit(db, SQLITE4_TOOBIG);
       goto end_prepare;
     }
     zSqlCopy = sqlite4DbStrNDup(db, zSql, nBytes);
@@ -502,22 +502,22 @@ static int sqlite4Prepare(
   assert( 1==(int)pParse->nQueryLoop );
 
   if( db->mallocFailed ){
-    pParse->rc = SQLITE_NOMEM;
+    pParse->rc = SQLITE4_NOMEM;
   }
-  if( pParse->rc==SQLITE_DONE ) pParse->rc = SQLITE_OK;
+  if( pParse->rc==SQLITE4_DONE ) pParse->rc = SQLITE4_OK;
   if( pParse->checkSchema ){
     schemaIsValid(pParse);
   }
   if( db->mallocFailed ){
-    pParse->rc = SQLITE_NOMEM;
+    pParse->rc = SQLITE4_NOMEM;
   }
   if( pzTail ){
     *pzTail = pParse->zTail;
   }
   rc = pParse->rc;
 
-#ifndef SQLITE_OMIT_EXPLAIN
-  if( rc==SQLITE_OK && pParse->pVdbe && pParse->explain ){
+#ifndef SQLITE4_OMIT_EXPLAIN
+  if( rc==SQLITE4_OK && pParse->pVdbe && pParse->explain ){
     static const char * const azColName[] = {
        "addr", "opcode", "p1", "p2", "p3", "p4", "p5", "comment",
        "selectid", "order", "from", "detail"
@@ -534,7 +534,7 @@ static int sqlite4Prepare(
     }
     for(i=iFirst; i<mx; i++){
       sqlite4VdbeSetColName(pParse->pVdbe, i-iFirst, COLNAME_NAME,
-                            azColName[i], SQLITE_STATIC);
+                            azColName[i], SQLITE4_STATIC);
     }
   }
 #endif
@@ -543,7 +543,7 @@ static int sqlite4Prepare(
     Vdbe *pVdbe = pParse->pVdbe;
     sqlite4VdbeSetSql(pVdbe, zSql, (int)(pParse->zTail-zSql));
   }
-  if( pParse->pVdbe && (rc!=SQLITE_OK || db->mallocFailed) ){
+  if( pParse->pVdbe && (rc!=SQLITE4_OK || db->mallocFailed) ){
     sqlite4VdbeFinalize(pParse->pVdbe);
     assert(!(*ppStmt));
   }else{
@@ -582,11 +582,11 @@ static int sqlite4LockAndPrepare(
   assert( ppStmt!=0 );
   *ppStmt = 0;
   if( !sqlite4SafetyCheckOk(db) ){
-    return SQLITE_MISUSE_BKPT;
+    return SQLITE4_MISUSE_BKPT;
   }
   sqlite4_mutex_enter(db->mutex);
   rc = sqlite4Prepare(db, zSql, nBytes, pOld, ppStmt, pzTail);
-  if( rc==SQLITE_SCHEMA ){
+  if( rc==SQLITE4_SCHEMA ){
     sqlite4_finalize(*ppStmt);
     rc = sqlite4Prepare(db, zSql, nBytes, pOld, ppStmt, pzTail);
   }
@@ -597,10 +597,10 @@ static int sqlite4LockAndPrepare(
 /*
 ** Rerun the compilation of a statement after a schema change.
 **
-** If the statement is successfully recompiled, return SQLITE_OK. Otherwise,
+** If the statement is successfully recompiled, return SQLITE4_OK. Otherwise,
 ** if the statement cannot be recompiled because another connection has
-** locked the sqlite4_master table, return SQLITE_LOCKED. If any other error
-** occurs, return SQLITE_SCHEMA.
+** locked the sqlite4_master table, return SQLITE4_LOCKED. If any other error
+** occurs, return SQLITE4_SCHEMA.
 */
 int sqlite4Reprepare(Vdbe *p){
   int rc;
@@ -614,7 +614,7 @@ int sqlite4Reprepare(Vdbe *p){
   assert( sqlite4_mutex_held(db->mutex) );
   rc = sqlite4LockAndPrepare(db, zSql, -1, p, &pNew, 0);
   if( rc ){
-    if( rc==SQLITE_NOMEM ){
+    if( rc==SQLITE4_NOMEM ){
       db->mallocFailed = 1;
     }
     assert( pNew==0 );
@@ -626,14 +626,14 @@ int sqlite4Reprepare(Vdbe *p){
   sqlite4TransferBindings(pNew, (sqlite4_stmt*)p);
   sqlite4VdbeResetStepResult((Vdbe*)pNew);
   sqlite4VdbeFinalize((Vdbe*)pNew);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 
 /*
 ** Two versions of the official API.  Legacy and new use.  In the legacy
 ** version, the original SQL text is not saved in the prepared statement
-** and so if a schema change occurs, SQLITE_SCHEMA is returned by
+** and so if a schema change occurs, SQLITE4_SCHEMA is returned by
 ** sqlite4_step().  In the new version, the original SQL text is retained
 ** and the statement is automatically recompiled if an schema change
 ** occurs.
@@ -647,6 +647,6 @@ int sqlite4_prepare(
 ){
   int rc;
   rc = sqlite4LockAndPrepare(db,zSql,nBytes,0,ppStmt,pzTail);
-  assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
+  assert( rc==SQLITE4_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
   return rc;
 }

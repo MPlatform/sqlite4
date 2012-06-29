@@ -25,10 +25,10 @@ SYMBOLS = 1
 #
 # 0 == NDEBUG: Disables assert() and other runtime diagnostics.
 # 1 == Disables NDEBUG and all optimizations and then enables PDBs.
-# 2 == SQLITE_DEBUG: Enables various diagnostics messages and code.
-# 3 == SQLITE_WIN32_MALLOC_VALIDATE: Validate the Win32 native heap per call.
-# 4 == SQLITE_DEBUG_OS_TRACE: Enables output from the OSTRACE() macros.
-# 5 == SQLITE_ENABLE_IOTRACE: Enables output from the IOTRACE() macros.
+# 2 == SQLITE4_DEBUG: Enables various diagnostics messages and code.
+# 3 == SQLITE4_WIN32_MALLOC_VALIDATE: Validate the Win32 native heap per call.
+# 4 == SQLITE4_DEBUG_OS_TRACE: Enables output from the OSTRACE() macros.
+# 5 == SQLITE4_ENABLE_IOTRACE: Enables output from the IOTRACE() macros.
 #
 DEBUG = 0
 
@@ -47,7 +47,7 @@ BCC = cl.exe
 # will run on the target platform.  (BCC and TCC are usually the
 # same unless your are cross-compiling.)
 #
-TCC = cl.exe -W3 -DSQLITE_OS_WIN=1 -I. -I$(TOP)\src -fp:precise
+TCC = cl.exe -W3 -DSQLITE4_OS_WIN=1 -I. -I$(TOP)\src -fp:precise
 
 # The mksqlite4c.tcl and mksqlite4h.tcl scripts will pull in 
 # any extension header files by default.  For non-amalgamation
@@ -67,15 +67,15 @@ TCC = $(TCC) -DNDEBUG
 !ENDIF
 
 !IF $(DEBUG)>1
-TCC = $(TCC) -DSQLITE_DEBUG
+TCC = $(TCC) -DSQLITE4_DEBUG
 !ENDIF
 
 !IF $(DEBUG)>3
-TCC = $(TCC) -DSQLITE_DEBUG_OS_TRACE=1
+TCC = $(TCC) -DSQLITE4_DEBUG_OS_TRACE=1
 !ENDIF
 
 !IF $(DEBUG)>4
-TCC = $(TCC) -DSQLITE_ENABLE_IOTRACE
+TCC = $(TCC) -DSQLITE4_ENABLE_IOTRACE
 !ENDIF
 
 #
@@ -86,13 +86,13 @@ TCC = $(TCC) -D_CRT_SECURE_NO_DEPRECATE -D_CRT_SECURE_NO_WARNINGS
 #
 # Use native Win32 heap instead of malloc/free?
 #
-# TCC = $(TCC) -DSQLITE_WIN32_MALLOC=1
+# TCC = $(TCC) -DSQLITE4_WIN32_MALLOC=1
 
 #
 # Validate the heap on every call into the native Win32 heap subsystem?
 #
 !IF $(DEBUG)>2
-TCC = $(TCC) -DSQLITE_WIN32_MALLOC_VALIDATE=1
+TCC = $(TCC) -DSQLITE4_WIN32_MALLOC_VALIDATE=1
 !ENDIF
 
 # The locations of the Tcl header and library files.  Also, the library that
@@ -149,11 +149,11 @@ LIBREADLINE =
 
 # Should the database engine be compiled threadsafe
 #
-TCC = $(TCC) -DSQLITE_THREADSAFE=1
+TCC = $(TCC) -DSQLITE4_THREADSAFE=1
 
 # Do threads override each others locks by default (1), or do we test (-1)
 #
-TCC = $(TCC) -DSQLITE_THREAD_OVERRIDE_LOCK=-1
+TCC = $(TCC) -DSQLITE4_THREAD_OVERRIDE_LOCK=-1
 
 # Any target libraries which libsqlite must be linked against
 #
@@ -163,31 +163,31 @@ TLIBS =
 
 # Flags controlling use of the in memory btree implementation
 #
-# SQLITE_TEMP_STORE is 0 to force temporary tables to be in a file, 1 to
+# SQLITE4_TEMP_STORE is 0 to force temporary tables to be in a file, 1 to
 # default to file, 2 to default to memory, and 3 to force temporary
 # tables to always be in memory.
 #
-TCC = $(TCC) -DSQLITE_TEMP_STORE=1
+TCC = $(TCC) -DSQLITE4_TEMP_STORE=1
 
 # Enable/disable loadable extensions, and other optional features
-# based on configuration. (-DSQLITE_OMIT*, -DSQLITE_ENABLE*).
+# based on configuration. (-DSQLITE4_OMIT*, -DSQLITE4_ENABLE*).
 # The same set of OMIT and ENABLE flags should be passed to the
 # LEMON parser generator and the mkkeywordhash tool as well.
 
 # BEGIN standard options
-OPT_FEATURE_FLAGS = $(OPT_FEATURE_FLAGS) -DSQLITE_ENABLE_FTS3=1
-OPT_FEATURE_FLAGS = $(OPT_FEATURE_FLAGS) -DSQLITE_ENABLE_RTREE=1
-OPT_FEATURE_FLAGS = $(OPT_FEATURE_FLAGS) -DSQLITE_ENABLE_COLUMN_METADATA=1
+OPT_FEATURE_FLAGS = $(OPT_FEATURE_FLAGS) -DSQLITE4_ENABLE_FTS3=1
+OPT_FEATURE_FLAGS = $(OPT_FEATURE_FLAGS) -DSQLITE4_ENABLE_RTREE=1
+OPT_FEATURE_FLAGS = $(OPT_FEATURE_FLAGS) -DSQLITE4_ENABLE_COLUMN_METADATA=1
 # END standard options
 
 # BEGIN required Windows option
-OPT_FEATURE_FLAGS = $(OPT_FEATURE_FLAGS) -DSQLITE_MAX_TRIGGER_DEPTH=100
+OPT_FEATURE_FLAGS = $(OPT_FEATURE_FLAGS) -DSQLITE4_MAX_TRIGGER_DEPTH=100
 # END required Windows option
 
 TCC = $(TCC) $(OPT_FEATURE_FLAGS)
 
 # Add in any optional parameters specified on the make commane line
-# ie.  make "OPTS=-DSQLITE_ENABLE_FOO=1 -DSQLITE_OMIT_FOO=1".
+# ie.  make "OPTS=-DSQLITE4_ENABLE_FOO=1 -DSQLITE4_OMIT_FOO=1".
 TCC = $(TCC) $(OPTS)
 
 # If symbols are enabled, enable PDBs.
@@ -204,7 +204,7 @@ TCC = $(TCC) -Zi
 
 # If ICU support is enabled, add the compiler options for it.
 !IF $(USE_ICU)!=0
-TCC = $(TCC) -DSQLITE_ENABLE_ICU=1
+TCC = $(TCC) -DSQLITE4_ENABLE_ICU=1
 TCC = $(TCC) -I$(TOP)\ext\icu
 TCC = $(TCC) -I$(ICUINCDIR)
 !ENDIF
@@ -865,58 +865,58 @@ keywordhash.h:	$(TOP)\tool\mkkeywordhash.c mkkeywordhash.exe
 # Rules to build the extension objects.
 #
 icu.lo:	$(TOP)\ext\icu\icu.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\icu\icu.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\icu\icu.c
 
 fts2.lo:	$(TOP)\ext\fts2\fts2.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts2\fts2.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts2\fts2.c
 
 fts2_hash.lo:	$(TOP)\ext\fts2\fts2_hash.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts2\fts2_hash.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts2\fts2_hash.c
 
 fts2_icu.lo:	$(TOP)\ext\fts2\fts2_icu.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts2\fts2_icu.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts2\fts2_icu.c
 
 fts2_porter.lo:	$(TOP)\ext\fts2\fts2_porter.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts2\fts2_porter.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts2\fts2_porter.c
 
 fts2_tokenizer.lo:	$(TOP)\ext\fts2\fts2_tokenizer.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts2\fts2_tokenizer.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts2\fts2_tokenizer.c
 
 fts2_tokenizer1.lo:	$(TOP)\ext\fts2\fts2_tokenizer1.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts2\fts2_tokenizer1.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts2\fts2_tokenizer1.c
 
 fts3.lo:	$(TOP)\ext\fts3\fts3.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3.c
 
 fts3_aux.lo:	$(TOP)\ext\fts3\fts3_aux.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_aux.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_aux.c
 
 fts3_expr.lo:	$(TOP)\ext\fts3\fts3_expr.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_expr.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_expr.c
 
 fts3_hash.lo:	$(TOP)\ext\fts3\fts3_hash.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_hash.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_hash.c
 
 fts3_icu.lo:	$(TOP)\ext\fts3\fts3_icu.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_icu.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_icu.c
 
 fts3_snippet.lo:	$(TOP)\ext\fts3\fts3_snippet.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_snippet.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_snippet.c
 
 fts3_porter.lo:	$(TOP)\ext\fts3\fts3_porter.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_porter.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_porter.c
 
 fts3_tokenizer.lo:	$(TOP)\ext\fts3\fts3_tokenizer.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_tokenizer.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_tokenizer.c
 
 fts3_tokenizer1.lo:	$(TOP)\ext\fts3\fts3_tokenizer1.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_tokenizer1.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_tokenizer1.c
 
 fts3_write.lo:	$(TOP)\ext\fts3\fts3_write.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\fts3\fts3_write.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\fts3\fts3_write.c
 
 rtree.lo:	$(TOP)\ext\rtree\rtree.c $(HDR) $(EXTHDR)
-	$(LTCOMPILE) -DSQLITE_CORE -c $(TOP)\ext\rtree\rtree.c
+	$(LTCOMPILE) -DSQLITE4_CORE -c $(TOP)\ext\rtree\rtree.c
 
 
 # Rules to build the 'testfixture' application.
@@ -926,8 +926,8 @@ rtree.lo:	$(TOP)\ext\rtree\rtree.c $(HDR) $(EXTHDR)
 # necessary because the test fixture requires non-API symbols which are
 # hidden when the library is built via the amalgamation).
 #
-TESTFIXTURE_FLAGS = -DTCLSH=1 -DSQLITE_TEST=1 -DSQLITE_CRASH_TEST=1
-TESTFIXTURE_FLAGS = $(TESTFIXTURE_FLAGS) -DSQLITE_SERVER=1 -DSQLITE_PRIVATE="" -DSQLITE_CORE
+TESTFIXTURE_FLAGS = -DTCLSH=1 -DSQLITE4_TEST=1 -DSQLITE4_CRASH_TEST=1
+TESTFIXTURE_FLAGS = $(TESTFIXTURE_FLAGS) -DSQLITE4_SERVER=1 -DSQLITE4_PRIVATE="" -DSQLITE4_CORE
 
 TESTFIXTURE_SRC0 = $(TESTSRC2) libsqlite4.lib
 TESTFIXTURE_SRC1 = sqlite4.c
@@ -938,7 +938,7 @@ TESTFIXTURE_SRC = $(TESTSRC) $(TOP)\src\tclsqlite.c $(TESTFIXTURE_SRC1)
 !ENDIF
 
 testfixture.exe:	$(TESTFIXTURE_SRC) $(HDR)
-	$(LTLINK) -DSQLITE_NO_SYNC=1 $(TESTFIXTURE_FLAGS) \
+	$(LTLINK) -DSQLITE4_NO_SYNC=1 $(TESTFIXTURE_FLAGS) \
 		-DBUILD_sqlite -I$(TCLINCDIR) \
 		$(TESTFIXTURE_SRC) \
 		/link $(LTLINKOPTS) $(LTLIBPATHS) $(LTLIBS) $(TLIBS)

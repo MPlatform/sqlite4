@@ -39,7 +39,7 @@ do_test openv2-1.4 {
 } {1 {attempt to write a readonly database}}
 
 # Ticket #3908
-# Honor SQLITE_OPEN_READONLY even on an in-memory database, even though
+# Honor SQLITE4_OPEN_READONLY even on an in-memory database, even though
 # this is pointless.
 #
 do_test openv2-2.1 {

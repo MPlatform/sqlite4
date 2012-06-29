@@ -33,11 +33,11 @@ install_mutex_counters 1
 do_test mutex2-1.1 {
   set ::disable_mutex_init 10
   sqlite4_initialize
-} {SQLITE_IOERR}
+} {SQLITE4_IOERR}
 do_test mutex2-1.1 {
   set ::disable_mutex_init 7
   sqlite4_initialize
-} {SQLITE_NOMEM}
+} {SQLITE4_NOMEM}
 
 proc utf16 {str} {
   set r [encoding convertto unicode $str]

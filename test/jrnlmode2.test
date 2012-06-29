@@ -33,11 +33,11 @@ ifcapable {!pager_pragmas} {
 #     The reason is because while determining that the persistent-journal is
 #     not a hot-journal, SQLite currently grabs an exclusive lock on the
 #     database file. If this fails because another connection has a shared
-#     lock, then SQLITE_BUSY is returned to the user.  
+#     lock, then SQLITE4_BUSY is returned to the user.  
 #
 # jrnlmode2-2.*: Demonstrate bug #3751:
 #
-#     If a connection is opened in SQLITE_OPEN_READONLY mode, the underlying
+#     If a connection is opened in SQLITE4_OPEN_READONLY mode, the underlying
 #     unix file descriptor on the database file is opened in O_RDONLY mode.
 #
 #     When SQLite queries the database file for the schema in order to compile

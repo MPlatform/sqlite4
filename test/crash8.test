@@ -139,7 +139,7 @@ proc write_file {zFile zData} {
 # 
 #    a) Not a power of 2, or
 #    b) Less than 512, or
-#    c) Greater than SQLITE_MAX_PAGE_SIZE
+#    c) Greater than SQLITE4_MAX_PAGE_SIZE
 #
 do_test crash8-3.1 {
   list [file exists test.db-joural] [file exists test.db]
@@ -200,7 +200,7 @@ do_test crash8-3.8 {
   }
 } {0 ok}
 do_test crash8-3.9 {
-  set big [expr $SQLITE_MAX_PAGE_SIZE * 2]
+  set big [expr $SQLITE4_MAX_PAGE_SIZE * 2]
   set zJournal2 [string replace $zJournal 24 27 [binary format I $big]]
   write_file test.db-journal $zJournal2
   execsql { 

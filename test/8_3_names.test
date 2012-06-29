@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 #
-# Test cases for the SQLITE_ENABLE_8_3_NAMES feature that forces all
+# Test cases for the SQLITE4_ENABLE_8_3_NAMES feature that forces all
 # filename extensions to be limited to 3 characters.  Some embedded
 # systems need this to work around microsoft FAT patents, but this
 # feature should be disabled on most deployments.

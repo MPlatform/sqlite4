@@ -117,57 +117,57 @@ int getDbPointer(Tcl_Interp *interp, const char *zA, sqlite4 **ppDb){
 const char *sqlite4TestErrorName(int rc){
   const char *zName = 0;
   switch( rc ){
-    case SQLITE_OK:                  zName = "SQLITE_OK";                break;
-    case SQLITE_ERROR:               zName = "SQLITE_ERROR";             break;
-    case SQLITE_INTERNAL:            zName = "SQLITE_INTERNAL";          break;
-    case SQLITE_PERM:                zName = "SQLITE_PERM";              break;
-    case SQLITE_ABORT:               zName = "SQLITE_ABORT";             break;
-    case SQLITE_BUSY:                zName = "SQLITE_BUSY";              break;
-    case SQLITE_LOCKED:              zName = "SQLITE_LOCKED";            break;
-    case SQLITE_LOCKED_SHAREDCACHE:  zName = "SQLITE_LOCKED_SHAREDCACHE";break;
-    case SQLITE_NOMEM:               zName = "SQLITE_NOMEM";             break;
-    case SQLITE_READONLY:            zName = "SQLITE_READONLY";          break;
-    case SQLITE_INTERRUPT:           zName = "SQLITE_INTERRUPT";         break;
-    case SQLITE_IOERR:               zName = "SQLITE_IOERR";             break;
-    case SQLITE_CORRUPT:             zName = "SQLITE_CORRUPT";           break;
-    case SQLITE_NOTFOUND:            zName = "SQLITE_NOTFOUND";          break;
-    case SQLITE_FULL:                zName = "SQLITE_FULL";              break;
-    case SQLITE_CANTOPEN:            zName = "SQLITE_CANTOPEN";          break;
-    case SQLITE_PROTOCOL:            zName = "SQLITE_PROTOCOL";          break;
-    case SQLITE_EMPTY:               zName = "SQLITE_EMPTY";             break;
-    case SQLITE_SCHEMA:              zName = "SQLITE_SCHEMA";            break;
-    case SQLITE_TOOBIG:              zName = "SQLITE_TOOBIG";            break;
-    case SQLITE_CONSTRAINT:          zName = "SQLITE_CONSTRAINT";        break;
-    case SQLITE_MISMATCH:            zName = "SQLITE_MISMATCH";          break;
-    case SQLITE_MISUSE:              zName = "SQLITE_MISUSE";            break;
-    case SQLITE_NOLFS:               zName = "SQLITE_NOLFS";             break;
-    case SQLITE_AUTH:                zName = "SQLITE_AUTH";              break;
-    case SQLITE_FORMAT:              zName = "SQLITE_FORMAT";            break;
-    case SQLITE_RANGE:               zName = "SQLITE_RANGE";             break;
-    case SQLITE_NOTADB:              zName = "SQLITE_NOTADB";            break;
-    case SQLITE_ROW:                 zName = "SQLITE_ROW";               break;
-    case SQLITE_DONE:                zName = "SQLITE_DONE";              break;
-    case SQLITE_INEXACT:             zName = "SQLITE_INEXACT";           break;
-    case SQLITE_IOERR_READ:          zName = "SQLITE_IOERR_READ";        break;
-    case SQLITE_IOERR_SHORT_READ:    zName = "SQLITE_IOERR_SHORT_READ";  break;
-    case SQLITE_IOERR_WRITE:         zName = "SQLITE_IOERR_WRITE";       break;
-    case SQLITE_IOERR_FSYNC:         zName = "SQLITE_IOERR_FSYNC";       break;
-    case SQLITE_IOERR_DIR_FSYNC:     zName = "SQLITE_IOERR_DIR_FSYNC";   break;
-    case SQLITE_IOERR_TRUNCATE:      zName = "SQLITE_IOERR_TRUNCATE";    break;
-    case SQLITE_IOERR_FSTAT:         zName = "SQLITE_IOERR_FSTAT";       break;
-    case SQLITE_IOERR_UNLOCK:        zName = "SQLITE_IOERR_UNLOCK";      break;
-    case SQLITE_IOERR_RDLOCK:        zName = "SQLITE_IOERR_RDLOCK";      break;
-    case SQLITE_IOERR_DELETE:        zName = "SQLITE_IOERR_DELETE";      break;
-    case SQLITE_IOERR_BLOCKED:       zName = "SQLITE_IOERR_BLOCKED";     break;
-    case SQLITE_IOERR_NOMEM:         zName = "SQLITE_IOERR_NOMEM";       break;
-    case SQLITE_IOERR_ACCESS:        zName = "SQLITE_IOERR_ACCESS";      break;
-    case SQLITE_IOERR_CHECKRESERVEDLOCK:
-                               zName = "SQLITE_IOERR_CHECKRESERVEDLOCK"; break;
-    case SQLITE_IOERR_LOCK:          zName = "SQLITE_IOERR_LOCK";        break;
-    case SQLITE_CORRUPT_VTAB:        zName = "SQLITE_CORRUPT_VTAB";      break;
-    case SQLITE_READONLY_RECOVERY:   zName = "SQLITE_READONLY_RECOVERY"; break;
-    case SQLITE_READONLY_CANTLOCK:   zName = "SQLITE_READONLY_CANTLOCK"; break;
-    default:                         zName = "SQLITE_Unknown";           break;
+    case SQLITE4_OK:                  zName = "SQLITE4_OK";                break;
+    case SQLITE4_ERROR:               zName = "SQLITE4_ERROR";             break;
+    case SQLITE4_INTERNAL:            zName = "SQLITE4_INTERNAL";          break;
+    case SQLITE4_PERM:                zName = "SQLITE4_PERM";              break;
+    case SQLITE4_ABORT:               zName = "SQLITE4_ABORT";             break;
+    case SQLITE4_BUSY:                zName = "SQLITE4_BUSY";              break;
+    case SQLITE4_LOCKED:              zName = "SQLITE4_LOCKED";            break;
+    case SQLITE4_LOCKED_SHAREDCACHE:  zName = "SQLITE4_LOCKED_SHAREDCACHE";break;
+    case SQLITE4_NOMEM:               zName = "SQLITE4_NOMEM";             break;
+    case SQLITE4_READONLY:            zName = "SQLITE4_READONLY";          break;
+    case SQLITE4_INTERRUPT:           zName = "SQLITE4_INTERRUPT";         break;
+    case SQLITE4_IOERR:               zName = "SQLITE4_IOERR";             break;
+    case SQLITE4_CORRUPT:             zName = "SQLITE4_CORRUPT";           break;
+    case SQLITE4_NOTFOUND:            zName = "SQLITE4_NOTFOUND";          break;
+    case SQLITE4_FULL:                zName = "SQLITE4_FULL";              break;
+    case SQLITE4_CANTOPEN:            zName = "SQLITE4_CANTOPEN";          break;
+    case SQLITE4_PROTOCOL:            zName = "SQLITE4_PROTOCOL";          break;
+    case SQLITE4_EMPTY:               zName = "SQLITE4_EMPTY";             break;
+    case SQLITE4_SCHEMA:              zName = "SQLITE4_SCHEMA";            break;
+    case SQLITE4_TOOBIG:              zName = "SQLITE4_TOOBIG";            break;
+    case SQLITE4_CONSTRAINT:          zName = "SQLITE4_CONSTRAINT";        break;
+    case SQLITE4_MISMATCH:            zName = "SQLITE4_MISMATCH";          break;
+    case SQLITE4_MISUSE:              zName = "SQLITE4_MISUSE";            break;
+    case SQLITE4_NOLFS:               zName = "SQLITE4_NOLFS";             break;
+    case SQLITE4_AUTH:                zName = "SQLITE4_AUTH";              break;
+    case SQLITE4_FORMAT:              zName = "SQLITE4_FORMAT";            break;
+    case SQLITE4_RANGE:               zName = "SQLITE4_RANGE";             break;
+    case SQLITE4_NOTADB:              zName = "SQLITE4_NOTADB";            break;
+    case SQLITE4_ROW:                 zName = "SQLITE4_ROW";               break;
+    case SQLITE4_DONE:                zName = "SQLITE4_DONE";              break;
+    case SQLITE4_INEXACT:             zName = "SQLITE4_INEXACT";           break;
+    case SQLITE4_IOERR_READ:          zName = "SQLITE4_IOERR_READ";        break;
+    case SQLITE4_IOERR_SHORT_READ:    zName = "SQLITE4_IOERR_SHORT_READ";  break;
+    case SQLITE4_IOERR_WRITE:         zName = "SQLITE4_IOERR_WRITE";       break;
+    case SQLITE4_IOERR_FSYNC:         zName = "SQLITE4_IOERR_FSYNC";       break;
+    case SQLITE4_IOERR_DIR_FSYNC:     zName = "SQLITE4_IOERR_DIR_FSYNC";   break;
+    case SQLITE4_IOERR_TRUNCATE:      zName = "SQLITE4_IOERR_TRUNCATE";    break;
+    case SQLITE4_IOERR_FSTAT:         zName = "SQLITE4_IOERR_FSTAT";       break;
+    case SQLITE4_IOERR_UNLOCK:        zName = "SQLITE4_IOERR_UNLOCK";      break;
+    case SQLITE4_IOERR_RDLOCK:        zName = "SQLITE4_IOERR_RDLOCK";      break;
+    case SQLITE4_IOERR_DELETE:        zName = "SQLITE4_IOERR_DELETE";      break;
+    case SQLITE4_IOERR_BLOCKED:       zName = "SQLITE4_IOERR_BLOCKED";     break;
+    case SQLITE4_IOERR_NOMEM:         zName = "SQLITE4_IOERR_NOMEM";       break;
+    case SQLITE4_IOERR_ACCESS:        zName = "SQLITE4_IOERR_ACCESS";      break;
+    case SQLITE4_IOERR_CHECKRESERVEDLOCK:
+                               zName = "SQLITE4_IOERR_CHECKRESERVEDLOCK"; break;
+    case SQLITE4_IOERR_LOCK:          zName = "SQLITE4_IOERR_LOCK";        break;
+    case SQLITE4_CORRUPT_VTAB:        zName = "SQLITE4_CORRUPT_VTAB";      break;
+    case SQLITE4_READONLY_RECOVERY:   zName = "SQLITE4_READONLY_RECOVERY"; break;
+    case SQLITE4_READONLY_CANTLOCK:   zName = "SQLITE4_READONLY_CANTLOCK"; break;
+    default:                         zName = "SQLITE4_Unknown";           break;
   }
   return zName;
 }
@@ -185,7 +185,7 @@ const char *sqlite4TestErrorName(int rc){
 */
 int sqlite4TestErrCode(Tcl_Interp *interp, sqlite4 *db, int rc){
   sqlite4_env *pEnv = sqlite4_db_env(db);
-  if( rc!=SQLITE_MISUSE && rc!=SQLITE_OK && sqlite4_errcode(db)!=rc ){
+  if( rc!=SQLITE4_MISUSE && rc!=SQLITE4_OK && sqlite4_errcode(db)!=rc ){
     char zBuf[200];
     int r2 = sqlite4_errcode(db);
     sprintf(zBuf, "error code %s (%d) does not match sqlite4_errcode %s (%d)",
@@ -248,7 +248,7 @@ static int exec_printf_cb(void *pArg, int argc, char **argv, char **name){
 /*
 ** The I/O tracing callback.
 */
-#if !defined(SQLITE_OMIT_TRACE) && defined(SQLITE_ENABLE_IOTRACE)
+#if !defined(SQLITE4_OMIT_TRACE) && defined(SQLITE4_ENABLE_IOTRACE)
 static FILE *iotrace_file = 0;
 static void io_trace_callback(const char *zFormat, ...){
   va_list ap;
@@ -272,7 +272,7 @@ static int test_io_trace(
   int argc,              /* Number of arguments */
   char **argv            /* Text of each argument */
 ){
-#if !defined(SQLITE_OMIT_TRACE) && defined(SQLITE_ENABLE_IOTRACE)
+#if !defined(SQLITE4_OMIT_TRACE) && defined(SQLITE4_ENABLE_IOTRACE)
   if( argc!=2 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
           " FILENAME\"", 0);
@@ -331,7 +331,7 @@ static int test_exec_printf(
   sqlite4_free(0, zSql);
   sprintf(zBuf, "%d", rc);
   Tcl_AppendElement(interp, zBuf);
-  Tcl_AppendElement(interp, rc==SQLITE_OK ? Tcl_DStringValue(&str) : zErr);
+  Tcl_AppendElement(interp, rc==SQLITE4_OK ? Tcl_DStringValue(&str) : zErr);
   Tcl_DStringFree(&str);
   if( zErr ) sqlite4_free(0, zErr);
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
@@ -378,7 +378,7 @@ static int test_exec_hex(
   rc = sqlite4_exec(db, zSql, exec_printf_cb, &str, &zErr);
   sprintf(zBuf, "%d", rc);
   Tcl_AppendElement(interp, zBuf);
-  Tcl_AppendElement(interp, rc==SQLITE_OK ? Tcl_DStringValue(&str) : zErr);
+  Tcl_AppendElement(interp, rc==SQLITE4_OK ? Tcl_DStringValue(&str) : zErr);
   Tcl_DStringFree(&str);
   if( zErr ) sqlite4_free(0, zErr);
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
@@ -463,7 +463,7 @@ static int test_exec(
   sqlite4_free(0, zSql);
   sprintf(zBuf, "%d", rc);
   Tcl_AppendElement(interp, zBuf);
-  Tcl_AppendElement(interp, rc==SQLITE_OK ? Tcl_DStringValue(&str) : zErr);
+  Tcl_AppendElement(interp, rc==SQLITE4_OK ? Tcl_DStringValue(&str) : zErr);
   Tcl_DStringFree(&str);
   if( zErr ) sqlite4_free(0, zErr);
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
@@ -590,7 +590,7 @@ static int test_last_rowid(
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
   sprintf(zBuf, "%lld", sqlite4_last_insert_rowid(db));
   Tcl_AppendResult(interp, zBuf, 0);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -615,7 +615,7 @@ static int test_key(
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
   zKey = argv[2];
   nKey = strlen(zKey);
-#ifdef SQLITE_HAS_CODEC
+#ifdef SQLITE4_HAS_CODEC
   sqlite4_key(db, zKey, nKey);
 #endif
   return TCL_OK;
@@ -643,7 +643,7 @@ static int test_rekey(
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
   zKey = argv[2];
   nKey = strlen(zKey);
-#ifdef SQLITE_HAS_CODEC
+#ifdef SQLITE4_HAS_CODEC
   sqlite4_rekey(db, zKey, nKey);
 #endif
   return TCL_OK;
@@ -684,10 +684,10 @@ static void t1_ifnullFunc(
 ){
   int i;
   for(i=0; i<argc; i++){
-    if( SQLITE_NULL!=sqlite4_value_type(argv[i]) ){
+    if( SQLITE4_NULL!=sqlite4_value_type(argv[i]) ){
       int n = sqlite4_value_bytes(argv[i]);
       sqlite4_result_text(context, (char*)sqlite4_value_text(argv[i]),
-          n, SQLITE_TRANSIENT);
+          n, SQLITE4_TRANSIENT);
       break;
     }
   }
@@ -707,9 +707,9 @@ static void hex8Func(sqlite4_context *p, int argc, sqlite4_value **argv){
     sprintf(&zBuf[i*2], "%02x", z[i]&0xff);
   }
   zBuf[i*2] = 0;
-  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE_TRANSIENT);
+  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT);
 }
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 static void hex16Func(sqlite4_context *p, int argc, sqlite4_value **argv){
   const unsigned short int *z;
   int i;
@@ -719,7 +719,7 @@ static void hex16Func(sqlite4_context *p, int argc, sqlite4_value **argv){
     sprintf(&zBuf[i*4], "%04x", z[i]&0xff);
   }
   zBuf[i*4] = 0;
-  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE_TRANSIENT);
+  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT);
 }
 #endif
 
@@ -774,7 +774,7 @@ static int execFuncCallback(void *pData, int argc, char **argv, char **NotUsed){
 /*
 ** Implementation of the x_sqlite_exec() function.  This function takes
 ** a single argument and attempts to execute that argument as SQL code.
-** This is illegal and should set the SQLITE_MISUSE flag on the database.
+** This is illegal and should set the SQLITE4_MISUSE flag on the database.
 **
 ** 2004-Jan-07:  We have changed this to make it legal to call sqlite4_exec()
 ** from within a function call.  
@@ -792,7 +792,7 @@ static void sqlite4ExecFunc(
   (void)sqlite4_exec((sqlite4*)sqlite4_user_data(context),
       (char*)sqlite4_value_text(argv[0]),
       execFuncCallback, &x, 0);
-  sqlite4_result_text(context, x.z, x.nUsed, SQLITE_TRANSIENT);
+  sqlite4_result_text(context, x.z, x.nUsed, SQLITE4_TRANSIENT);
   sqlite4_free(0, x.z);
 }
 
@@ -832,7 +832,7 @@ static void tkt2213Function(
   }else{
     char *zCopy = (char *)sqlite4_malloc(sqlite4_context_env(context),nText);
     memcpy(zCopy, zText1, nText);
-    sqlite4_result_text(context, zCopy, nText, SQLITE_DYNAMIC);
+    sqlite4_result_text(context, zCopy, nText, SQLITE4_DYNAMIC);
   }
 }
 
@@ -872,7 +872,7 @@ static void ptrChngFunction(
   if( zCmd==0 ) return;
   if( strcmp(zCmd,"text")==0 ){
     p1 = (const void*)sqlite4_value_text(argv[0]);
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   }else if( strcmp(zCmd, "text16")==0 ){
     p1 = (const void*)sqlite4_value_text16(argv[0]);
 #endif
@@ -885,7 +885,7 @@ static void ptrChngFunction(
   if( zCmd==0 ) return;
   if( strcmp(zCmd,"bytes")==0 ){
     sqlite4_value_bytes(argv[0]);
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   }else if( strcmp(zCmd, "bytes16")==0 ){
     sqlite4_value_bytes16(argv[0]);
 #endif
@@ -898,7 +898,7 @@ static void ptrChngFunction(
   if( zCmd==0 ) return;
   if( strcmp(zCmd,"text")==0 ){
     p2 = (const void*)sqlite4_value_text(argv[0]);
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   }else if( strcmp(zCmd, "text16")==0 ){
     p2 = (const void*)sqlite4_value_text16(argv[0]);
 #endif
@@ -918,13 +918,13 @@ static void ptrChngFunction(
 ** to create a function named "x_coalesce".  This function does the same thing
 ** as the "coalesce" function.  This function also registers an SQL function
 ** named "x_sqlite_exec" that invokes sqlite4_exec().  Invoking sqlite4_exec()
-** in this way is illegal recursion and should raise an SQLITE_MISUSE error.
+** in this way is illegal recursion and should raise an SQLITE4_MISUSE error.
 ** The effect is similar to trying to use the same database connection from
 ** two threads at the same time.
 **
 ** The original motivation for this routine was to be able to call the
 ** sqlite4_create_function function while a query is in progress in order
-** to test the SQLITE_MISUSE detection logic.
+** to test the SQLITE4_MISUSE detection logic.
 */
 static int test_create_function(
   void *NotUsed,
@@ -941,42 +941,42 @@ static int test_create_function(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  rc = sqlite4_create_function(db, "x_coalesce", -1, SQLITE_ANY, 0, 
+  rc = sqlite4_create_function(db, "x_coalesce", -1, SQLITE4_ANY, 0, 
         t1_ifnullFunc, 0, 0);
-  if( rc==SQLITE_OK ){
-    rc = sqlite4_create_function(db, "hex8", 1, SQLITE_ANY, 0, 
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4_create_function(db, "hex8", 1, SQLITE4_ANY, 0, 
           hex8Func, 0, 0);
   }
-#ifndef SQLITE_OMIT_UTF16
-  if( rc==SQLITE_OK ){
-    rc = sqlite4_create_function(db, "hex16", 1, SQLITE_ANY, 0, 
+#ifndef SQLITE4_OMIT_UTF16
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4_create_function(db, "hex16", 1, SQLITE4_ANY, 0, 
           hex16Func, 0, 0);
   }
 #endif
-  if( rc==SQLITE_OK ){
-    rc = sqlite4_create_function(db, "tkt2213func", 1, SQLITE_ANY, 0, 
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4_create_function(db, "tkt2213func", 1, SQLITE4_ANY, 0, 
           tkt2213Function, 0, 0);
   }
-  if( rc==SQLITE_OK ){
-    rc = sqlite4_create_function(db, "pointer_change", 4, SQLITE_ANY, 0, 
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4_create_function(db, "pointer_change", 4, SQLITE4_ANY, 0, 
           ptrChngFunction, 0, 0);
   }
 
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   /* Use the sqlite4_create_function16() API here. Mainly for fun, but also 
   ** because it is not tested anywhere else. */
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     const void *zUtf16;
     sqlite4_value *pVal;
     sqlite4_mutex_enter(db->mutex);
     pVal = sqlite4ValueNew(db);
-    sqlite4ValueSetStr(pVal, -1, "x_sqlite_exec", SQLITE_UTF8, SQLITE_STATIC);
-    zUtf16 = sqlite4ValueText(pVal, SQLITE_UTF16NATIVE);
+    sqlite4ValueSetStr(pVal, -1, "x_sqlite_exec", SQLITE4_UTF8, SQLITE4_STATIC);
+    zUtf16 = sqlite4ValueText(pVal, SQLITE4_UTF16NATIVE);
     if( db->mallocFailed ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }else{
       rc = sqlite4_create_function16(db, zUtf16, 
-                1, SQLITE_UTF16, db, sqlite4ExecFunc, 0, 0);
+                1, SQLITE4_UTF16, db, sqlite4ExecFunc, 0, 0);
     }
     sqlite4ValueFree(pVal);
     sqlite4_mutex_leave(db->mutex);
@@ -1010,17 +1010,17 @@ static void t1CountStep(
 ){
   t1CountCtx *p;
   p = sqlite4_aggregate_context(context, sizeof(*p));
-  if( (argc==0 || SQLITE_NULL!=sqlite4_value_type(argv[0]) ) && p ){
+  if( (argc==0 || SQLITE4_NULL!=sqlite4_value_type(argv[0]) ) && p ){
     p->n++;
   }
   if( argc>0 ){
     int v = sqlite4_value_int(argv[0]);
     if( v==40 ){
       sqlite4_result_error(context, "value of 40 handed to x_count", -1);
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
     }else if( v==41 ){
       const char zUtf16ErrMsg[] = { 0, 0x61, 0, 0x62, 0, 0x63, 0, 0, 0};
-      sqlite4_result_error16(context, &zUtf16ErrMsg[1-SQLITE_BIGENDIAN], -1);
+      sqlite4_result_error16(context, &zUtf16ErrMsg[1-SQLITE4_BIGENDIAN], -1);
 #endif
     }
   }
@@ -1037,7 +1037,7 @@ static void t1CountFinalize(sqlite4_context *context){
   }
 }
 
-#ifndef SQLITE_OMIT_DEPRECATED
+#ifndef SQLITE4_OMIT_DEPRECATED
 static void legacyCountStep(
   sqlite4_context *context,
   int argc,
@@ -1061,7 +1061,7 @@ static void legacyCountFinalize(sqlite4_context *context){
 **
 ** The original motivation for this routine was to be able to call the
 ** sqlite4_create_aggregate function while a query is in progress in order
-** to test the SQLITE_MISUSE detection logic.  See misuse.test.
+** to test the SQLITE4_MISUSE detection logic.  See misuse.test.
 **
 ** This routine was later extended to test the use of sqlite4_result_error()
 ** within aggregate functions.
@@ -1084,15 +1084,15 @@ static int test_create_aggregate(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  rc = sqlite4_create_function(db, "x_count", 0, SQLITE_UTF8, 0, 0,
+  rc = sqlite4_create_function(db, "x_count", 0, SQLITE4_UTF8, 0, 0,
       t1CountStep,t1CountFinalize);
-  if( rc==SQLITE_OK ){
-    rc = sqlite4_create_function(db, "x_count", 1, SQLITE_UTF8, 0, 0,
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4_create_function(db, "x_count", 1, SQLITE4_UTF8, 0, 0,
         t1CountStep,t1CountFinalize);
   }
-#ifndef SQLITE_OMIT_DEPRECATED
-  if( rc==SQLITE_OK ){
-    rc = sqlite4_create_function(db, "legacy_count", 0, SQLITE_ANY, 0, 0,
+#ifndef SQLITE4_OMIT_DEPRECATED
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4_create_function(db, "legacy_count", 0, SQLITE4_ANY, 0, 0,
         legacyCountStep, legacyCountFinalize
     );
   }
@@ -1175,7 +1175,7 @@ static int sqlite4_mprintf_int64(
     return TCL_ERROR;
   }
   for(i=2; i<5; i++){
-    if( sqlite4Atoi64(argv[i], &a[i-2], 1000000, SQLITE_UTF8) ){
+    if( sqlite4Atoi64(argv[i], &a[i-2], 1000000, SQLITE4_UTF8) ){
       Tcl_AppendResult(interp, "argument is not a valid 64-bit integer", 0);
       return TCL_ERROR;
     }
@@ -1416,7 +1416,7 @@ static int test_libversion_number(
 ** Usage: sqlite4_table_column_metadata DB dbname tblname colname
 **
 */
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
+#ifdef SQLITE4_ENABLE_COLUMN_METADATA
 static int test_table_column_metadata(
   ClientData clientData, /* Pointer to sqlite4_enable_XXX function */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
@@ -1450,7 +1450,7 @@ static int test_table_column_metadata(
   rc = sqlite4_table_column_metadata(db, zDb, zTbl, zCol, 
       &zDatatype, &zCollseq, &notnull, &primarykey, &autoincrement);
 
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     Tcl_AppendResult(interp, sqlite4_errmsg(db), 0);
     return TCL_ERROR;
   }
@@ -1542,12 +1542,12 @@ static int test_create_collation(
   rc = sqlite4_create_collation(db, Tcl_GetString(objv[2]), 16, 
       (void *)p, testCreateCollationCmp, 0, testCreateCollationDel
   );
-  if( rc!=SQLITE_MISUSE ){
+  if( rc!=SQLITE4_MISUSE ){
     Tcl_AppendResult(interp, "sqlite4_create_collate() failed to detect "
       "an invalid encoding", (char*)0);
     return TCL_ERROR;
   }
-  rc = sqlite4_create_collation(db, Tcl_GetString(objv[2]), SQLITE_UTF8, 
+  rc = sqlite4_create_collation(db, Tcl_GetString(objv[2]), SQLITE4_UTF8, 
       (void *)p, testCreateCollationCmp, 0, testCreateCollationDel
   );
   return TCL_OK;
@@ -1609,11 +1609,11 @@ static int test_create_function_v2(
     const char *zEnc;
     int enc;
   } aEnc[] = {
-    {"utf8",    SQLITE_UTF8 },
-    {"utf16",   SQLITE_UTF16 },
-    {"utf16le", SQLITE_UTF16LE },
-    {"utf16be", SQLITE_UTF16BE },
-    {"any",     SQLITE_ANY },
+    {"utf8",    SQLITE4_UTF8 },
+    {"utf16",   SQLITE4_UTF16 },
+    {"utf16le", SQLITE4_UTF16LE },
+    {"utf16be", SQLITE4_UTF16BE },
+    {"any",     SQLITE4_ANY },
     {"0", 0 }
   };
 
@@ -1668,7 +1668,7 @@ static int test_create_function_v2(
       (p->pFinal ? cf2Final : 0),
       cf2Destroy
   );
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     Tcl_ResetResult(interp);
     Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
     return TCL_ERROR;
@@ -1715,7 +1715,7 @@ static void testFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         sqlite4_result_int64(context, sqlite4_value_int64(argv[1]));
       }else if( sqlite4StrICmp(zArg0,"string")==0 ){
         sqlite4_result_text(context, (char*)sqlite4_value_text(argv[1]), -1,
-            SQLITE_TRANSIENT);
+            SQLITE4_TRANSIENT);
       }else if( sqlite4StrICmp(zArg0,"double")==0 ){
         sqlite4_result_double(context, sqlite4_value_double(argv[1]));
       }else if( sqlite4StrICmp(zArg0,"null")==0 ){
@@ -1757,7 +1757,7 @@ static int test_register_func(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  rc = sqlite4_create_function(db, argv[2], -1, SQLITE_UTF8, 0, 
+  rc = sqlite4_create_function(db, argv[2], -1, SQLITE4_UTF8, 0, 
       testFunc, 0, 0);
   if( rc!=0 ){
     Tcl_AppendResult(interp, sqlite4ErrStr(rc), 0);
@@ -1819,9 +1819,9 @@ static int test_stmt_status(
     const char *zName;
     int op;
   } aOp[] = {
-    { "SQLITE_STMTSTATUS_FULLSCAN_STEP",   SQLITE_STMTSTATUS_FULLSCAN_STEP   },
-    { "SQLITE_STMTSTATUS_SORT",            SQLITE_STMTSTATUS_SORT            },
-    { "SQLITE_STMTSTATUS_AUTOINDEX",       SQLITE_STMTSTATUS_AUTOINDEX       },
+    { "SQLITE4_STMTSTATUS_FULLSCAN_STEP",   SQLITE4_STMTSTATUS_FULLSCAN_STEP   },
+    { "SQLITE4_STMTSTATUS_SORT",            SQLITE4_STMTSTATUS_SORT            },
+    { "SQLITE4_STMTSTATUS_AUTOINDEX",       SQLITE4_STMTSTATUS_AUTOINDEX       },
   };
   if( objc!=4 ){
     Tcl_WrongNumArgs(interp, 1, objv, "STMT PARAMETER RESETFLAG");
@@ -2002,7 +2002,7 @@ static int test_expired(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifndef SQLITE_OMIT_DEPRECATED
+#ifndef SQLITE4_OMIT_DEPRECATED
   sqlite4_stmt *pStmt;
   if( objc!=2 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"",
@@ -2026,7 +2026,7 @@ static int test_transfer_bind(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifndef SQLITE_OMIT_DEPRECATED
+#ifndef SQLITE4_OMIT_DEPRECATED
   sqlite4_stmt *pStmt1, *pStmt2;
   if( objc!=3 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"",
@@ -2106,9 +2106,9 @@ static int test_bind(
     rc = sqlite4_bind_text(pStmt, idx, sqlite_static_bind_value,
                                        sqlite_static_bind_nbyte, 0);
   }else if( strcmp(argv[4],"normal")==0 ){
-    rc = sqlite4_bind_text(pStmt, idx, argv[3], -1, SQLITE_TRANSIENT);
+    rc = sqlite4_bind_text(pStmt, idx, argv[3], -1, SQLITE4_TRANSIENT);
   }else if( strcmp(argv[4],"blob10")==0 ){
-    rc = sqlite4_bind_text(pStmt, idx, "abc\000xyz\000pq", 10, SQLITE_STATIC);
+    rc = sqlite4_bind_text(pStmt, idx, "abc\000xyz\000pq", 10, SQLITE4_STATIC);
   }else{
     Tcl_AppendResult(interp, "4th argument should be "
         "\"null\" or \"static\" or \"normal\"", 0);
@@ -2124,7 +2124,7 @@ static int test_bind(
   return TCL_OK;
 }
 
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 /*
 ** Usage: add_test_collate <db ptr> <utf8> <utf16le> <utf16be>
 **
@@ -2160,7 +2160,7 @@ static int test_collate_func(
   int nB, const void *zB
 ){
   Tcl_Interp *i = pTestCollateInterp;
-  int encin = SQLITE_PTR_TO_INT(pCtx);
+  int encin = SQLITE4_PTR_TO_INT(pCtx);
   int res;
   int n;
   sqlite4_env *pEnv = sqlite4_context_env(pCtx);
@@ -2172,13 +2172,13 @@ static int test_collate_func(
   Tcl_IncrRefCount(pX);
 
   switch( encin ){
-    case SQLITE_UTF8:
+    case SQLITE4_UTF8:
       Tcl_ListObjAppendElement(i,pX,Tcl_NewStringObj("UTF-8",-1));
       break;
-    case SQLITE_UTF16LE:
+    case SQLITE4_UTF16LE:
       Tcl_ListObjAppendElement(i,pX,Tcl_NewStringObj("UTF-16LE",-1));
       break;
-    case SQLITE_UTF16BE:
+    case SQLITE4_UTF16BE:
       Tcl_ListObjAppendElement(i,pX,Tcl_NewStringObj("UTF-16BE",-1));
       break;
     default:
@@ -2188,11 +2188,11 @@ static int test_collate_func(
   sqlite4BeginBenignMalloc(pEnv);
   pVal = sqlite4ValueNew(0);
   if( pVal ){
-    sqlite4ValueSetStr(pVal, nA, zA, encin, SQLITE_STATIC);
+    sqlite4ValueSetStr(pVal, nA, zA, encin, SQLITE4_STATIC);
     n = sqlite4_value_bytes(pVal);
     Tcl_ListObjAppendElement(i,pX,
         Tcl_NewStringObj((char*)sqlite4_value_text(pVal),n));
-    sqlite4ValueSetStr(pVal, nB, zB, encin, SQLITE_STATIC);
+    sqlite4ValueSetStr(pVal, nB, zB, encin, SQLITE4_STATIC);
     n = sqlite4_value_bytes(pVal);
     Tcl_ListObjAppendElement(i,pX,
         Tcl_NewStringObj((char*)sqlite4_value_text(pVal),n));
@@ -2220,19 +2220,19 @@ static int test_collate(
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
 
   if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[2], &val) ) return TCL_ERROR;
-  rc = sqlite4_create_collation(db, "test_collate", SQLITE_UTF8, 
-          (void *)SQLITE_UTF8, val?test_collate_func:0, 0, 0);
-  if( rc==SQLITE_OK ){
+  rc = sqlite4_create_collation(db, "test_collate", SQLITE4_UTF8, 
+          (void *)SQLITE4_UTF8, val?test_collate_func:0, 0, 0);
+  if( rc==SQLITE4_OK ){
     if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[3], &val) ) return TCL_ERROR;
-    rc = sqlite4_create_collation(db, "test_collate", SQLITE_UTF16LE, 
-            (void *)SQLITE_UTF16LE, val?test_collate_func:0, 0, 0);
+    rc = sqlite4_create_collation(db, "test_collate", SQLITE4_UTF16LE, 
+            (void *)SQLITE4_UTF16LE, val?test_collate_func:0, 0, 0);
     if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[4], &val) ) return TCL_ERROR;
-    rc = sqlite4_create_collation(db, "test_collate", SQLITE_UTF16BE,
-            (void *)SQLITE_UTF16BE, val?test_collate_func:0, 0, 0); 
+    rc = sqlite4_create_collation(db, "test_collate", SQLITE4_UTF16BE,
+            (void *)SQLITE4_UTF16BE, val?test_collate_func:0, 0, 0); 
   }
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
   
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
     return TCL_ERROR;
   }
@@ -2272,7 +2272,7 @@ static void test_collate_needed_cb(
   }
   zNeededCollation[i] = 0;
   sqlite4_create_collation(
-      db, "test_collate", ENC(db), SQLITE_INT_TO_PTR(enc), test_collate_func,
+      db, "test_collate", ENC(db), SQLITE4_INT_TO_PTR(enc), test_collate_func,
       0, 0);
 }
 
@@ -2310,7 +2310,7 @@ bad_args:
 **
 ** Both collating sequences use the same sort order as BINARY.
 ** The only difference is that the utf16_aligned collating
-** sequence is declared with the SQLITE_UTF16_ALIGNED flag.
+** sequence is declared with the SQLITE4_UTF16_ALIGNED flag.
 ** Both collating functions increment the unaligned utf16 counter
 ** whenever they see a string that begins on an odd byte boundary.
 */
@@ -2322,8 +2322,8 @@ static int alignmentCollFunc(
 ){
   int rc, n;
   n = nKey1<nKey2 ? nKey1 : nKey2;
-  if( nKey1>0 && 1==(1&(SQLITE_PTR_TO_INT(pKey1))) ) unaligned_string_counter++;
-  if( nKey2>0 && 1==(1&(SQLITE_PTR_TO_INT(pKey2))) ) unaligned_string_counter++;
+  if( nKey1>0 && 1==(1&(SQLITE4_PTR_TO_INT(pKey1))) ) unaligned_string_counter++;
+  if( nKey2>0 && 1==(1&(SQLITE4_PTR_TO_INT(pKey2))) ) unaligned_string_counter++;
   rc = memcmp(pKey1, pKey2, n);
   if( rc==0 ){
     rc = nKey1 - nKey2;
@@ -2339,14 +2339,14 @@ static int add_alignment_test_collations(
   sqlite4 *db;
   if( objc>=2 ){
     if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-    sqlite4_create_collation(db, "utf16_unaligned", SQLITE_UTF16, 
+    sqlite4_create_collation(db, "utf16_unaligned", SQLITE4_UTF16, 
         0, alignmentCollFunc, 0, 0);
-    sqlite4_create_collation(db, "utf16_aligned", SQLITE_UTF16_ALIGNED, 
+    sqlite4_create_collation(db, "utf16_aligned", SQLITE4_UTF16_ALIGNED, 
         0, alignmentCollFunc, 0, 0);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
-#endif /* !defined(SQLITE_OMIT_UTF16) */
+#endif /* !defined(SQLITE4_OMIT_UTF16) */
 
 /*
 ** Usage: add_test_function <db ptr> <utf8> <utf16le> <utf16be>
@@ -2373,7 +2373,7 @@ static int add_alignment_test_collations(
 ** for a UTF-16LE test_function(), and UTF-16LE for an implementation that
 ** prefers UTF-16BE.
 */
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 static void test_function_utf8(
   sqlite4_context *pCtx, 
   int nArg,
@@ -2390,12 +2390,12 @@ static void test_function_utf8(
       Tcl_NewStringObj((char*)sqlite4_value_text(argv[0]), -1));
   Tcl_EvalObjEx(interp, pX, 0);
   Tcl_DecrRefCount(pX);
-  sqlite4_result_text(pCtx, Tcl_GetStringResult(interp), -1, SQLITE_TRANSIENT);
+  sqlite4_result_text(pCtx, Tcl_GetStringResult(interp), -1, SQLITE4_TRANSIENT);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE_UTF8, SQLITE_STATIC);
+      SQLITE4_UTF8, SQLITE4_STATIC);
   sqlite4_result_text16be(pCtx, sqlite4_value_text16be(pVal),
-      -1, SQLITE_TRANSIENT);
+      -1, SQLITE4_TRANSIENT);
   sqlite4ValueFree(pVal);
 }
 static void test_function_utf16le(
@@ -2416,8 +2416,8 @@ static void test_function_utf16le(
   Tcl_DecrRefCount(pX);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE_UTF8, SQLITE_STATIC);
-  sqlite4_result_text(pCtx,(char*)sqlite4_value_text(pVal),-1,SQLITE_TRANSIENT);
+      SQLITE4_UTF8, SQLITE4_STATIC);
+  sqlite4_result_text(pCtx,(char*)sqlite4_value_text(pVal),-1,SQLITE4_TRANSIENT);
   sqlite4ValueFree(pVal);
 }
 static void test_function_utf16be(
@@ -2438,23 +2438,23 @@ static void test_function_utf16be(
   Tcl_DecrRefCount(pX);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE_UTF8, SQLITE_STATIC);
+      SQLITE4_UTF8, SQLITE4_STATIC);
   sqlite4_result_text16(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE_TRANSIENT);
+      -1, SQLITE4_TRANSIENT);
   sqlite4_result_text16be(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE_TRANSIENT);
+      -1, SQLITE4_TRANSIENT);
   sqlite4_result_text16le(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE_TRANSIENT);
+      -1, SQLITE4_TRANSIENT);
   sqlite4ValueFree(pVal);
 }
-#endif /* SQLITE_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_UTF16 */
 static int test_function(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   sqlite4 *db;
   int val;
 
@@ -2463,17 +2463,17 @@ static int test_function(
 
   if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[2], &val) ) return TCL_ERROR;
   if( val ){
-    sqlite4_create_function(db, "test_function", 1, SQLITE_UTF8, 
+    sqlite4_create_function(db, "test_function", 1, SQLITE4_UTF8, 
         interp, test_function_utf8, 0, 0);
   }
   if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[3], &val) ) return TCL_ERROR;
   if( val ){
-    sqlite4_create_function(db, "test_function", 1, SQLITE_UTF16LE, 
+    sqlite4_create_function(db, "test_function", 1, SQLITE4_UTF16LE, 
         interp, test_function_utf16le, 0, 0);
   }
   if( TCL_OK!=Tcl_GetBooleanFromObj(interp, objv[4], &val) ) return TCL_ERROR;
   if( val ){
-    sqlite4_create_function(db, "test_function", 1, SQLITE_UTF16BE, 
+    sqlite4_create_function(db, "test_function", 1, SQLITE4_UTF16BE, 
         interp, test_function_utf16be, 0, 0);
   }
 
@@ -2481,7 +2481,7 @@ static int test_function(
 bad_args:
   Tcl_AppendResult(interp, "wrong # args: should be \"",
       Tcl_GetStringFromObj(objv[0], 0), " <DB> <utf8> <utf16le> <utf16be>", 0);
-#endif /* SQLITE_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_UTF16 */
   return TCL_ERROR;
 }
 
@@ -2564,7 +2564,7 @@ static int test_bind_zeroblob(
 
   rc = sqlite4_bind_zeroblob(pStmt, idx, n);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return TCL_ERROR;
   }
 
@@ -2601,7 +2601,7 @@ static int test_bind_int(
 
   rc = sqlite4_bind_int(pStmt, idx, value);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return TCL_ERROR;
   }
 
@@ -2639,7 +2639,7 @@ static int test_bind_int64(
 
   rc = sqlite4_bind_int64(pStmt, idx, value);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return TCL_ERROR;
   }
 
@@ -2716,7 +2716,7 @@ static int test_bind_double(
   }
   rc = sqlite4_bind_double(pStmt, idx, value);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return TCL_ERROR;
   }
 
@@ -2751,7 +2751,7 @@ static int test_bind_null(
 
   rc = sqlite4_bind_null(pStmt, idx);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return TCL_ERROR;
   }
 
@@ -2789,9 +2789,9 @@ static int test_bind_text(
   value = (char*)Tcl_GetByteArrayFromObj(objv[3], &bytes);
   if( Tcl_GetIntFromObj(interp, objv[4], &bytes) ) return TCL_ERROR;
 
-  rc = sqlite4_bind_text(pStmt, idx, value, bytes, SQLITE_TRANSIENT);
+  rc = sqlite4_bind_text(pStmt, idx, value, bytes, SQLITE4_TRANSIENT);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
     return TCL_ERROR;
   }
@@ -2813,14 +2813,14 @@ static int test_bind_text16(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   sqlite4_stmt *pStmt;
   int idx;
   int bytes;
   char *value;
   int rc;
 
-  void (*xDel)() = (objc==6?SQLITE_STATIC:SQLITE_TRANSIENT);
+  void (*xDel)() = (objc==6?SQLITE4_STATIC:SQLITE4_TRANSIENT);
   Tcl_Obj *oStmt    = objv[objc-4];
   Tcl_Obj *oN       = objv[objc-3];
   Tcl_Obj *oString  = objv[objc-2];
@@ -2839,12 +2839,12 @@ static int test_bind_text16(
 
   rc = sqlite4_bind_text16(pStmt, idx, (void *)value, bytes, xDel);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
     return TCL_ERROR;
   }
 
-#endif /* SQLITE_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_UTF16 */
   return TCL_OK;
 }
 
@@ -2866,7 +2866,7 @@ static int test_bind_blob(
   int bytes;
   char *value;
   int rc;
-  sqlite4_destructor_type xDestructor = SQLITE_TRANSIENT;
+  sqlite4_destructor_type xDestructor = SQLITE4_TRANSIENT;
 
   if( objc!=5 && objc!=6 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"",
@@ -2875,7 +2875,7 @@ static int test_bind_blob(
   }
 
   if( objc==6 ){
-    xDestructor = SQLITE_STATIC;
+    xDestructor = SQLITE4_STATIC;
     objv++;
   }
 
@@ -2886,7 +2886,7 @@ static int test_bind_blob(
 
   rc = sqlite4_bind_blob(pStmt, idx, value, bytes, xDestructor);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return TCL_ERROR;
   }
 
@@ -3018,7 +3018,7 @@ static int test_sleep(
 ** Usage: sqlite4_errcode DB
 **
 ** Return the string representation of the most recent sqlite4_* API
-** error code. e.g. "SQLITE_ERROR".
+** error code. e.g. "SQLITE4_ERROR".
 */
 static int test_errcode(
   void * clientData,
@@ -3081,7 +3081,7 @@ static int test_errmsg16(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   sqlite4 *db;
   const void *zErr;
   const char *z;
@@ -3100,7 +3100,7 @@ static int test_errmsg16(
     for(bytes=0; z[bytes] || z[bytes+1]; bytes+=2){}
   }
   Tcl_SetObjResult(interp, Tcl_NewByteArrayObj(zErr, bytes));
-#endif /* SQLITE_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_UTF16 */
   return TCL_OK;
 }
 
@@ -3147,7 +3147,7 @@ static int test_prepare(
     }
     Tcl_ObjSetVar2(interp, objv[4], 0, Tcl_NewStringObj(zTail, bytes), 0);
   }
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     assert( pStmt==0 );
     sprintf(zBuf, "(%d) ", rc);
     Tcl_AppendResult(interp, zBuf, sqlite4_errmsg(db), 0);
@@ -3186,9 +3186,9 @@ static int test_prepare_tkt3134(
   }
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
   rc = sqlite4_prepare(db, &zSql[1], 0, &pStmt, 0);
-  assert(rc==SQLITE_OK || pStmt==0);
+  assert(rc==SQLITE4_OK || pStmt==0);
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     assert( pStmt==0 );
     sprintf(zBuf, "(%d) ", rc);
     Tcl_AppendResult(interp, zBuf, sqlite4_errmsg(db), 0);
@@ -3266,9 +3266,9 @@ static int test_open_v2(
       const char *zFlag;
       int flag;
     } aFlag[] = {
-      { "SQLITE_OPEN_READONLY", SQLITE_OPEN_READONLY },
-      { "SQLITE_OPEN_READWRITE", SQLITE_OPEN_READWRITE },
-      { "SQLITE_OPEN_CREATE", SQLITE_OPEN_CREATE },
+      { "SQLITE4_OPEN_READONLY", SQLITE4_OPEN_READONLY },
+      { "SQLITE4_OPEN_READWRITE", SQLITE4_OPEN_READWRITE },
+      { "SQLITE4_OPEN_CREATE", SQLITE4_OPEN_CREATE },
       { 0, 0 }
     };
     rc = Tcl_GetIndexFromObjStruct(interp, apFlag[i], aFlag, sizeof(aFlag[0]), 
@@ -3307,7 +3307,7 @@ static int test_step(
   if( getStmtPointer(interp, Tcl_GetString(objv[1]), &pStmt) ) return TCL_ERROR;
   rc = sqlite4_step(pStmt);
 
-  /* if( rc!=SQLITE_DONE && rc!=SQLITE_ROW ) return TCL_ERROR; */
+  /* if( rc!=SQLITE4_DONE && rc!=SQLITE4_ROW ) return TCL_ERROR; */
   Tcl_SetResult(interp, (char *)t1ErrorName(rc), 0);
   return TCL_OK;
 }
@@ -3381,19 +3381,19 @@ static int test_column_type(
 
   tp = sqlite4_column_type(pStmt, col);
   switch( tp ){
-    case SQLITE_INTEGER: 
+    case SQLITE4_INTEGER: 
       Tcl_SetResult(interp, "INTEGER", TCL_STATIC); 
       break;
-    case SQLITE_NULL:
+    case SQLITE4_NULL:
       Tcl_SetResult(interp, "NULL", TCL_STATIC); 
       break;
-    case SQLITE_FLOAT:
+    case SQLITE4_FLOAT:
       Tcl_SetResult(interp, "FLOAT", TCL_STATIC); 
       break;
-    case SQLITE_TEXT:
+    case SQLITE4_TEXT:
       Tcl_SetResult(interp, "TEXT", TCL_STATIC); 
       break;
-    case SQLITE_BLOB:
+    case SQLITE4_BLOB:
       Tcl_SetResult(interp, "BLOB", TCL_STATIC); 
       break;
     default:
@@ -3557,7 +3557,7 @@ static int test_global_recover(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifndef SQLITE_OMIT_DEPRECATED
+#ifndef SQLITE4_OMIT_DEPRECATED
   int rc;
   if( objc!=1 ){
     Tcl_WrongNumArgs(interp, 1, objv, "");
@@ -3582,7 +3582,7 @@ static int test_stmt_utf16(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   sqlite4_stmt *pStmt;
   int col;
   Tcl_Obj *pRet;
@@ -3607,7 +3607,7 @@ static int test_stmt_utf16(
     pRet = Tcl_NewByteArrayObj(zName16, n+2);
     Tcl_SetObjResult(interp, pRet);
   }
-#endif /* SQLITE_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_UTF16 */
 
   return TCL_OK;
 }
@@ -3662,14 +3662,14 @@ static int sqlite_set_magic(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  if( strcmp(argv[2], "SQLITE_MAGIC_OPEN")==0 ){
-    db->magic = SQLITE_MAGIC_OPEN;
-  }else if( strcmp(argv[2], "SQLITE_MAGIC_CLOSED")==0 ){
-    db->magic = SQLITE_MAGIC_CLOSED;
-  }else if( strcmp(argv[2], "SQLITE_MAGIC_BUSY")==0 ){
-    db->magic = SQLITE_MAGIC_BUSY;
-  }else if( strcmp(argv[2], "SQLITE_MAGIC_ERROR")==0 ){
-    db->magic = SQLITE_MAGIC_ERROR;
+  if( strcmp(argv[2], "SQLITE4_MAGIC_OPEN")==0 ){
+    db->magic = SQLITE4_MAGIC_OPEN;
+  }else if( strcmp(argv[2], "SQLITE4_MAGIC_CLOSED")==0 ){
+    db->magic = SQLITE4_MAGIC_CLOSED;
+  }else if( strcmp(argv[2], "SQLITE4_MAGIC_BUSY")==0 ){
+    db->magic = SQLITE4_MAGIC_BUSY;
+  }else if( strcmp(argv[2], "SQLITE4_MAGIC_ERROR")==0 ){
+    db->magic = SQLITE4_MAGIC_ERROR;
   }else if( Tcl_GetInt(interp, argv[2], (int*)&db->magic) ){
     return TCL_ERROR;
   }
@@ -3764,7 +3764,7 @@ static int delete_function(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  rc = sqlite4_create_function(db, argv[2], -1, SQLITE_UTF8, 0, 0, 0, 0);
+  rc = sqlite4_create_function(db, argv[2], -1, SQLITE4_UTF8, 0, 0, 0, 0);
   Tcl_SetResult(interp, (char *)t1ErrorName(rc), TCL_STATIC);
   return TCL_OK;
 }
@@ -3790,7 +3790,7 @@ static int delete_collation(
     return TCL_ERROR;
   }
   if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  rc = sqlite4_create_collation(db, argv[2], SQLITE_UTF8, 0, 0, 0, 0);
+  rc = sqlite4_create_collation(db, argv[2], SQLITE4_UTF8, 0, 0, 0, 0);
   Tcl_SetResult(interp, (char *)t1ErrorName(rc), TCL_STATIC);
   return TCL_OK;
 }
@@ -3917,21 +3917,21 @@ static int test_limit(
      char *zName;
      int id;
   } aId[] = {
-    { "SQLITE_LIMIT_LENGTH",              SQLITE_LIMIT_LENGTH               },
-    { "SQLITE_LIMIT_SQL_LENGTH",          SQLITE_LIMIT_SQL_LENGTH           },
-    { "SQLITE_LIMIT_COLUMN",              SQLITE_LIMIT_COLUMN               },
-    { "SQLITE_LIMIT_EXPR_DEPTH",          SQLITE_LIMIT_EXPR_DEPTH           },
-    { "SQLITE_LIMIT_COMPOUND_SELECT",     SQLITE_LIMIT_COMPOUND_SELECT      },
-    { "SQLITE_LIMIT_VDBE_OP",             SQLITE_LIMIT_VDBE_OP              },
-    { "SQLITE_LIMIT_FUNCTION_ARG",        SQLITE_LIMIT_FUNCTION_ARG         },
-    { "SQLITE_LIMIT_ATTACHED",            SQLITE_LIMIT_ATTACHED             },
-    { "SQLITE_LIMIT_LIKE_PATTERN_LENGTH", SQLITE_LIMIT_LIKE_PATTERN_LENGTH  },
-    { "SQLITE_LIMIT_VARIABLE_NUMBER",     SQLITE_LIMIT_VARIABLE_NUMBER      },
-    { "SQLITE_LIMIT_TRIGGER_DEPTH",       SQLITE_LIMIT_TRIGGER_DEPTH        },
+    { "SQLITE4_LIMIT_LENGTH",              SQLITE4_LIMIT_LENGTH               },
+    { "SQLITE4_LIMIT_SQL_LENGTH",          SQLITE4_LIMIT_SQL_LENGTH           },
+    { "SQLITE4_LIMIT_COLUMN",              SQLITE4_LIMIT_COLUMN               },
+    { "SQLITE4_LIMIT_EXPR_DEPTH",          SQLITE4_LIMIT_EXPR_DEPTH           },
+    { "SQLITE4_LIMIT_COMPOUND_SELECT",     SQLITE4_LIMIT_COMPOUND_SELECT      },
+    { "SQLITE4_LIMIT_VDBE_OP",             SQLITE4_LIMIT_VDBE_OP              },
+    { "SQLITE4_LIMIT_FUNCTION_ARG",        SQLITE4_LIMIT_FUNCTION_ARG         },
+    { "SQLITE4_LIMIT_ATTACHED",            SQLITE4_LIMIT_ATTACHED             },
+    { "SQLITE4_LIMIT_LIKE_PATTERN_LENGTH", SQLITE4_LIMIT_LIKE_PATTERN_LENGTH  },
+    { "SQLITE4_LIMIT_VARIABLE_NUMBER",     SQLITE4_LIMIT_VARIABLE_NUMBER      },
+    { "SQLITE4_LIMIT_TRIGGER_DEPTH",       SQLITE4_LIMIT_TRIGGER_DEPTH        },
     
     /* Out of range test cases */
-    { "SQLITE_LIMIT_TOOSMALL",            -1,                               },
-    { "SQLITE_LIMIT_TOOBIG",              SQLITE_LIMIT_TRIGGER_DEPTH+1      },
+    { "SQLITE4_LIMIT_TOOSMALL",            -1,                               },
+    { "SQLITE4_LIMIT_TOOBIG",              SQLITE4_LIMIT_TRIGGER_DEPTH+1      },
   };
   int i, id;
   int val;
@@ -3961,19 +3961,19 @@ static int test_limit(
 }
 
 
-#ifdef SQLITE_ENABLE_UNLOCK_NOTIFY
+#ifdef SQLITE4_ENABLE_UNLOCK_NOTIFY
 static void test_unlock_notify_cb(void **aArg, int nArg){
   int ii;
   for(ii=0; ii<nArg; ii++){
     Tcl_EvalEx((Tcl_Interp *)aArg[ii], "unlock_notify", -1, TCL_EVAL_GLOBAL);
   }
 }
-#endif /* SQLITE_ENABLE_UNLOCK_NOTIFY */
+#endif /* SQLITE4_ENABLE_UNLOCK_NOTIFY */
 
 /*
 ** tclcmd:  sqlite4_unlock_notify db
 */
-#ifdef SQLITE_ENABLE_UNLOCK_NOTIFY
+#ifdef SQLITE4_ENABLE_UNLOCK_NOTIFY
 static int test_unlock_notify(
   ClientData clientData, /* Unused */
   Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
@@ -4029,13 +4029,13 @@ static int test_sqlite4_log(
     Tcl_DecrRefCount(logcallback.pObj);
     logcallback.pObj = 0;
     logcallback.pInterp = 0;
-    sqlite4_env_config(0, SQLITE_ENVCONFIG_LOG, 0, 0);
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_LOG, 0, 0);
   }
   if( objc>1 ){
     logcallback.pObj = objv[1];
     Tcl_IncrRefCount(logcallback.pObj);
     logcallback.pInterp = interp;
-    sqlite4_env_config(0, SQLITE_ENVCONFIG_LOG, xLogcallback, 0);
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_LOG, xLogcallback, 0);
   }
   return TCL_OK;
 }
@@ -4070,7 +4070,7 @@ static int runAsObjProc(
   return cmdInfo.objProc(cmdInfo.objClientData, interp, objc-1, objv+1);
 }
 
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
 /*
 ** WARNING: The following function, printExplainQueryPlan() is an exact
 ** copy of example code from eqp.in (eqp.html). If this code is modified,
@@ -4088,16 +4088,16 @@ int printExplainQueryPlan(sqlite4_stmt *pStmt){
   int rc;                         /* Return code from sqlite4_prepare() */
 
   zSql = sqlite4_sql(pStmt);
-  if( zSql==0 ) return SQLITE_ERROR;
+  if( zSql==0 ) return SQLITE4_ERROR;
 
   zExplain = sqlite4_mprintf(0, "EXPLAIN QUERY PLAN %s", zSql);
-  if( zExplain==0 ) return SQLITE_NOMEM;
+  if( zExplain==0 ) return SQLITE4_NOMEM;
 
   rc = sqlite4_prepare(sqlite4_db_handle(pStmt), zExplain, -1, &pExplain, 0);
   sqlite4_free(0, zExplain);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
-  while( SQLITE_ROW==sqlite4_step(pExplain) ){
+  while( SQLITE4_ROW==sqlite4_step(pExplain) ){
     int iSelectid = sqlite4_column_int(pExplain, 0);
     int iOrder = sqlite4_column_int(pExplain, 1);
     int iFrom = sqlite4_column_int(pExplain, 2);
@@ -4132,7 +4132,7 @@ static int test_print_eqp(
   Tcl_SetResult(interp, (char *)t1ErrorName(rc), 0);
   return TCL_OK;
 }
-#endif /* SQLITE_OMIT_EXPLAIN */
+#endif /* SQLITE4_OMIT_EXPLAIN */
 
 /*
 ** sqlite4_test_control VERB ARGS...
@@ -4147,7 +4147,7 @@ static int test_test_control(
     const char *zName;
     int i;
   } aVerb[] = {
-    { "SQLITE_TESTCTRL_LOCALTIME_FAULT", SQLITE_TESTCTRL_LOCALTIME_FAULT }, 
+    { "SQLITE4_TESTCTRL_LOCALTIME_FAULT", SQLITE4_TESTCTRL_LOCALTIME_FAULT }, 
   };
   int iVerb;
   int iFlag;
@@ -4165,14 +4165,14 @@ static int test_test_control(
 
   iFlag = aVerb[iVerb].i;
   switch( iFlag ){
-    case SQLITE_TESTCTRL_LOCALTIME_FAULT: {
+    case SQLITE4_TESTCTRL_LOCALTIME_FAULT: {
       int val;
       if( objc!=3 ){
         Tcl_WrongNumArgs(interp, 2, objv, "ONOFF");
         return TCL_ERROR;
       }
       if( Tcl_GetBooleanFromObj(interp, objv[2], &val) ) return TCL_ERROR;
-      sqlite4_test_control(SQLITE_TESTCTRL_LOCALTIME_FAULT, val);
+      sqlite4_test_control(SQLITE4_TESTCTRL_LOCALTIME_FAULT, val);
       break;
     }
   }
@@ -4181,7 +4181,7 @@ static int test_test_control(
   return TCL_OK;
 }
 
-#if SQLITE_OS_WIN
+#if SQLITE4_OS_WIN
 /*
 ** Information passed from the main thread into the windows file locker
 ** background thread.
@@ -4197,7 +4197,7 @@ struct win32FileLocker {
 #endif
 
 
-#if SQLITE_OS_WIN
+#if SQLITE4_OS_WIN
 /*
 ** The background thread that does file locking.
 */
@@ -4225,7 +4225,7 @@ static void win32_file_locker(void *pAppData){
 }
 #endif
 
-#if SQLITE_OS_WIN
+#if SQLITE4_OS_WIN
 /*
 **      lock_win32_file FILENAME DELAY1 DELAY2
 **
@@ -4314,15 +4314,15 @@ static int optimization_control(
     const char *zOptName;
     int mask;
   } aOpt[] = {
-    { "all",              SQLITE_OptMask        },
-    { "query-flattener",  SQLITE_QueryFlattener },
-    { "column-cache",     SQLITE_ColumnCache    },
-    { "index-sort",       SQLITE_IndexSort      },
-    { "index-search",     SQLITE_IndexSearch    },
-    { "index-cover",      SQLITE_IndexCover     },
-    { "groupby-order",    SQLITE_GroupByOrder   },
-    { "factor-constants", SQLITE_FactorOutConst },
-    { "real-as-int",      SQLITE_IdxRealAsInt   },
+    { "all",              SQLITE4_OptMask        },
+    { "query-flattener",  SQLITE4_QueryFlattener },
+    { "column-cache",     SQLITE4_ColumnCache    },
+    { "index-sort",       SQLITE4_IndexSort      },
+    { "index-search",     SQLITE4_IndexSearch    },
+    { "index-cover",      SQLITE4_IndexCover     },
+    { "groupby-order",    SQLITE4_GroupByOrder   },
+    { "factor-constants", SQLITE4_FactorOutConst },
+    { "real-as-int",      SQLITE4_IdxRealAsInt   },
   };
 
   if( objc!=4 ){
@@ -4347,7 +4347,7 @@ static int optimization_control(
     }
     return TCL_ERROR;
   }
-  sqlite4_test_control(SQLITE_TESTCTRL_OPTIMIZATIONS, db, mask);
+  sqlite4_test_control(SQLITE4_TESTCTRL_OPTIMIZATIONS, db, mask);
   return TCL_OK;
 }
 
@@ -4360,7 +4360,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
   extern int sqlite4_interrupt_count;
   extern int sqlite4_sort_count;
   extern int sqlite4_current_time;
-#if SQLITE_OS_UNIX && defined(__APPLE__) && SQLITE_ENABLE_LOCKING_STYLE
+#if SQLITE4_OS_UNIX && defined(__APPLE__) && SQLITE4_ENABLE_LOCKING_STYLE
   extern int sqlite4_hostid_num;
 #endif
   extern int sqlite4_max_blobsize;
@@ -4450,7 +4450,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_limit",                 test_limit,                 0},
 
      { "optimization_control",          optimization_control,0},
-#if SQLITE_OS_WIN
+#if SQLITE4_OS_WIN
      { "lock_win32_file",               win32_file_lock,    0 },
 #endif
      { "tcl_objproc",                   runAsObjProc,       0 },
@@ -4466,24 +4466,24 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_column_name",   test_stmt_utf8,  (void*)sqlite4_column_name },
      { "sqlite4_column_int",    test_stmt_int,   (void*)sqlite4_column_int  },
      { "sqlite4_column_bytes",  test_stmt_int,   (void*)sqlite4_column_bytes},
-#ifndef SQLITE_OMIT_DECLTYPE
+#ifndef SQLITE4_OMIT_DECLTYPE
      { "sqlite4_column_decltype",test_stmt_utf8,(void*)sqlite4_column_decltype},
 #endif
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
+#ifdef SQLITE4_ENABLE_COLUMN_METADATA
 { "sqlite4_column_database_name",test_stmt_utf8,(void*)sqlite4_column_database_name},
 { "sqlite4_column_table_name",test_stmt_utf8,(void*)sqlite4_column_table_name},
 { "sqlite4_column_origin_name",test_stmt_utf8,(void*)sqlite4_column_origin_name},
 #endif
 
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
      { "sqlite4_column_bytes16", test_stmt_int, (void*)sqlite4_column_bytes16 },
      { "sqlite4_column_text16",  test_stmt_utf16, (void*)sqlite4_column_text16},
      { "sqlite4_column_name16",  test_stmt_utf16, (void*)sqlite4_column_name16},
      { "add_alignment_test_collations", add_alignment_test_collations, 0      },
-#ifndef SQLITE_OMIT_DECLTYPE
+#ifndef SQLITE4_OMIT_DECLTYPE
      { "sqlite4_column_decltype16",test_stmt_utf16,(void*)sqlite4_column_decltype16},
 #endif
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
+#ifdef SQLITE4_ENABLE_COLUMN_METADATA
 {"sqlite4_column_database_name16",
   test_stmt_utf16, sqlite4_column_database_name16},
 {"sqlite4_column_table_name16", test_stmt_utf16, (void*)sqlite4_column_table_name16},
@@ -4496,7 +4496,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_create_function_v2", test_create_function_v2, 0 },
 
      /* Functions from os.h */
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
      { "add_test_collate",        test_collate, 0            },
      { "add_test_collate_needed", test_collate_needed, 0     },
      { "add_test_function",       test_function, 0           },
@@ -4505,7 +4505,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "tcl_variable_type",       tcl_variable_type, 0       },
      { "sqlite4_libversion_number", test_libversion_number, 0  },
      { "test_sqlite4_log",         test_sqlite4_log, 0  },
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
      { "print_explain_query_plan", test_print_eqp, 0  },
 #endif
      { "sqlite4_test_control", test_test_control },
@@ -4518,18 +4518,18 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
   extern int sqlite4_pager_readdb_count;
   extern int sqlite4_pager_writedb_count;
   extern int sqlite4_pager_writej_count;
-#if SQLITE_OS_WIN
+#if SQLITE4_OS_WIN
   extern int sqlite4_os_type;
 #endif
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   extern int sqlite4WhereTrace;
   extern int sqlite4OSTrace;
   extern int sqlite4VdbeAddopTrace;
 #endif
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
   extern char sqlite4_query_plan[];
   static char *query_plan = sqlite4_query_plan;
-#ifdef SQLITE_ENABLE_FTS3
+#ifdef SQLITE4_ENABLE_FTS3
   extern int sqlite4_fts3_enable_parentheses;
 #endif
 #endif
@@ -4556,29 +4556,29 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 
   Tcl_LinkVar(interp, "sqlite_current_time", 
       (char*)&sqlite4_current_time, TCL_LINK_INT);
-#if SQLITE_OS_UNIX && defined(__APPLE__) && SQLITE_ENABLE_LOCKING_STYLE
+#if SQLITE4_OS_UNIX && defined(__APPLE__) && SQLITE4_ENABLE_LOCKING_STYLE
   Tcl_LinkVar(interp, "sqlite_hostid_num", 
       (char*)&sqlite4_hostid_num, TCL_LINK_INT);
 #endif
   Tcl_LinkVar(interp, "sqlite4_xferopt_count",
       (char*)&sqlite4_xferopt_count, TCL_LINK_INT);
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   Tcl_LinkVar(interp, "unaligned_string_counter",
       (char*)&unaligned_string_counter, TCL_LINK_INT);
 #endif
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   Tcl_LinkVar(interp, "sqlite_last_needed_collation",
       (char*)&pzNeededCollation, TCL_LINK_STRING|TCL_LINK_READ_ONLY);
 #endif
-#if SQLITE_OS_WIN
+#if SQLITE4_OS_WIN
   Tcl_LinkVar(interp, "sqlite_os_type",
       (char*)&sqlite4_os_type, TCL_LINK_INT);
 #endif
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
   Tcl_LinkVar(interp, "sqlite_query_plan",
       (char*)&query_plan, TCL_LINK_STRING|TCL_LINK_READ_ONLY);
 #endif
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   Tcl_LinkVar(interp, "sqlite_addop_trace",
       (char*)&sqlite4VdbeAddopTrace, TCL_LINK_INT);
   Tcl_LinkVar(interp, "sqlite_where_trace",
@@ -4590,7 +4590,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
       (char*)&sqlite_static_bind_nbyte, TCL_LINK_INT);
   Tcl_LinkVar(interp, "bitmask_size",
       (char*)&bitmask_size, TCL_LINK_INT|TCL_LINK_READ_ONLY);
-#if defined(SQLITE_ENABLE_FTS3) && defined(SQLITE_TEST)
+#if defined(SQLITE4_ENABLE_FTS3) && defined(SQLITE4_TEST)
   Tcl_LinkVar(interp, "sqlite_fts3_enable_parentheses",
       (char*)&sqlite4_fts3_enable_parentheses, TCL_LINK_INT);
 #endif

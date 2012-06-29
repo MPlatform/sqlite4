@@ -13,7 +13,7 @@
 */
 #include "sqliteInt.h"
 
-#ifndef SQLITE_OMIT_ATTACH
+#ifndef SQLITE4_OMIT_ATTACH
 /*
 ** Resolve an expression that was part of an ATTACH or DETACH statement. This
 ** is slightly different from resolving a normal SQL expression, because simple
@@ -34,13 +34,13 @@
 */
 static int resolveAttachExpr(NameContext *pName, Expr *pExpr)
 {
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( pExpr ){
     if( pExpr->op!=TK_ID ){
       rc = sqlite4ResolveExprNames(pName, pExpr);
-      if( rc==SQLITE_OK && !sqlite4ExprIsConstant(pExpr) ){
+      if( rc==SQLITE4_OK && !sqlite4ExprIsConstant(pExpr) ){
         sqlite4ErrorMsg(pName->pParse, "invalid name: \"%s\"", pExpr->u.zToken);
-        return SQLITE_ERROR;
+        return SQLITE4_ERROR;
       }
     }else{
       pExpr->op = TK_STRING;
@@ -89,9 +89,9 @@ static void attachFunc(
   **     * Transaction currently open
   **     * Specified database name already being used.
   */
-  if( db->nDb>=db->aLimit[SQLITE_LIMIT_ATTACHED]+2 ){
+  if( db->nDb>=db->aLimit[SQLITE4_LIMIT_ATTACHED]+2 ){
     zErrDyn = sqlite4MPrintf(db, "too many attached databases - max %d", 
-      db->aLimit[SQLITE_LIMIT_ATTACHED]
+      db->aLimit[SQLITE4_LIMIT_ATTACHED]
     );
     goto attach_error;
   }
@@ -129,8 +129,8 @@ static void attachFunc(
   */
   flags = db->openFlags;
   rc = sqlite4ParseUri(db->pEnv, zFile, &flags, &zPath, &zErr);
-  if( rc!=SQLITE_OK ){
-    if( rc==SQLITE_NOMEM ) db->mallocFailed = 1;
+  if( rc!=SQLITE4_OK ){
+    if( rc==SQLITE4_NOMEM ) db->mallocFailed = 1;
     sqlite4_result_error(context, zErr, -1);
     sqlite4_free(db->pEnv, zErr);
     return;
@@ -138,22 +138,22 @@ static void attachFunc(
   rc = sqlite4KVStoreOpen(db, zName, zPath, &aNew->pKV, flags);
   sqlite4_free(db->pEnv, zPath);
   db->nDb++;
-  if( rc==SQLITE_CONSTRAINT ){
-    rc = SQLITE_ERROR;
+  if( rc==SQLITE4_CONSTRAINT ){
+    rc = SQLITE4_ERROR;
     zErrDyn = sqlite4MPrintf(db, "database is already attached");
-  }else if( rc==SQLITE_OK ){
+  }else if( rc==SQLITE4_OK ){
     aNew->pSchema = sqlite4SchemaGet(db);
     if( !aNew->pSchema ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }else if( aNew->pSchema->file_format && aNew->pSchema->enc!=ENC(db) ){
       zErrDyn = sqlite4MPrintf(db, 
         "attached databases must use the same text encoding as main database");
-      rc = SQLITE_ERROR;
+      rc = SQLITE4_ERROR;
     }
   }
   aNew->zName = sqlite4DbStrDup(db, zName);
-  if( rc==SQLITE_OK && aNew->zName==0 ){
-    rc = SQLITE_NOMEM;
+  if( rc==SQLITE4_OK && aNew->zName==0 ){
+    rc = SQLITE4_NOMEM;
   }
 
   /* If the file was opened successfully, read the schema for the new database.
@@ -161,7 +161,7 @@ static void attachFunc(
   ** remove the entry from the db->aDb[] array. i.e. put everything back the way
   ** we found it.
   */
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = sqlite4Init(db, &zErrDyn);
   }
   if( rc ){
@@ -174,7 +174,7 @@ static void attachFunc(
     }
     sqlite4ResetInternalSchema(db, -1);
     db->nDb = iDb;
-    if( rc==SQLITE_NOMEM || rc==SQLITE_IOERR_NOMEM ){
+    if( rc==SQLITE4_NOMEM || rc==SQLITE4_IOERR_NOMEM ){
       db->mallocFailed = 1;
       sqlite4DbFree(db, zErrDyn);
       zErrDyn = sqlite4MPrintf(db, "out of memory");
@@ -257,7 +257,7 @@ detach_error:
 */
 static void codeAttach(
   Parse *pParse,       /* The parser context */
-  int type,            /* Either SQLITE_ATTACH or SQLITE_DETACH */
+  int type,            /* Either SQLITE4_ATTACH or SQLITE4_DETACH */
   FuncDef const *pFunc,/* FuncDef wrapper for detachFunc() or attachFunc() */
   Expr *pAuthArg,      /* Expression to pass to authorization callback */
   Expr *pFilename,     /* Name of database file */
@@ -274,15 +274,15 @@ static void codeAttach(
   sName.pParse = pParse;
 
   if( 
-      SQLITE_OK!=(rc = resolveAttachExpr(&sName, pFilename)) ||
-      SQLITE_OK!=(rc = resolveAttachExpr(&sName, pDbname)) ||
-      SQLITE_OK!=(rc = resolveAttachExpr(&sName, pKey))
+      SQLITE4_OK!=(rc = resolveAttachExpr(&sName, pFilename)) ||
+      SQLITE4_OK!=(rc = resolveAttachExpr(&sName, pDbname)) ||
+      SQLITE4_OK!=(rc = resolveAttachExpr(&sName, pKey))
   ){
     pParse->nErr++;
     goto attach_end;
   }
 
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   if( pAuthArg ){
     char *zAuthArg;
     if( pAuthArg->op==TK_STRING ){
@@ -291,11 +291,11 @@ static void codeAttach(
       zAuthArg = 0;
     }
     rc = sqlite4AuthCheck(pParse, type, zAuthArg, 0, 0);
-    if(rc!=SQLITE_OK ){
+    if(rc!=SQLITE4_OK ){
       goto attach_end;
     }
   }
-#endif /* SQLITE_OMIT_AUTHORIZATION */
+#endif /* SQLITE4_OMIT_AUTHORIZATION */
 
 
   v = sqlite4GetVdbe(pParse);
@@ -315,7 +315,7 @@ static void codeAttach(
     ** statement only). For DETACH, set it to false (expire all existing
     ** statements).
     */
-    sqlite4VdbeAddOp1(v, OP_Expire, (type==SQLITE_ATTACH));
+    sqlite4VdbeAddOp1(v, OP_Expire, (type==SQLITE4_ATTACH));
   }
   
 attach_end:
@@ -332,7 +332,7 @@ attach_end:
 void sqlite4Detach(Parse *pParse, Expr *pDbname){
   static const FuncDef detach_func = {
     1,                /* nArg */
-    SQLITE_UTF8,      /* iPrefEnc */
+    SQLITE4_UTF8,      /* iPrefEnc */
     0,                /* flags */
     0,                /* pUserData */
     0,                /* pNext */
@@ -343,7 +343,7 @@ void sqlite4Detach(Parse *pParse, Expr *pDbname){
     0,                /* pHash */
     0                 /* pDestructor */
   };
-  codeAttach(pParse, SQLITE_DETACH, &detach_func, pDbname, 0, 0, pDbname);
+  codeAttach(pParse, SQLITE4_DETACH, &detach_func, pDbname, 0, 0, pDbname);
 }
 
 /*
@@ -354,7 +354,7 @@ void sqlite4Detach(Parse *pParse, Expr *pDbname){
 void sqlite4Attach(Parse *pParse, Expr *p, Expr *pDbname, Expr *pKey){
   static const FuncDef attach_func = {
     3,                /* nArg */
-    SQLITE_UTF8,      /* iPrefEnc */
+    SQLITE4_UTF8,      /* iPrefEnc */
     0,                /* flags */
     0,                /* pUserData */
     0,                /* pNext */
@@ -365,9 +365,9 @@ void sqlite4Attach(Parse *pParse, Expr *p, Expr *pDbname, Expr *pKey){
     0,                /* pHash */
     0                 /* pDestructor */
   };
-  codeAttach(pParse, SQLITE_ATTACH, &attach_func, p, p, pDbname, pKey);
+  codeAttach(pParse, SQLITE4_ATTACH, &attach_func, p, p, pDbname, pKey);
 }
-#endif /* SQLITE_OMIT_ATTACH */
+#endif /* SQLITE4_OMIT_ATTACH */
 
 /*
 ** Initialize a DbFixer structure.  This routine must be called prior
@@ -428,14 +428,14 @@ int sqlite4FixSrcList(
          pFix->zType, pFix->pName, pItem->zDatabase);
       return 1;
     }
-#if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_TRIGGER)
+#if !defined(SQLITE4_OMIT_VIEW) || !defined(SQLITE4_OMIT_TRIGGER)
     if( sqlite4FixSelect(pFix, pItem->pSelect) ) return 1;
     if( sqlite4FixExpr(pFix, pItem->pOn) ) return 1;
 #endif
   }
   return 0;
 }
-#if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_TRIGGER)
+#if !defined(SQLITE4_OMIT_VIEW) || !defined(SQLITE4_OMIT_TRIGGER)
 int sqlite4FixSelect(
   DbFixer *pFix,       /* Context of the fixation */
   Select *pSelect      /* The SELECT statement to be fixed to one database */
@@ -491,7 +491,7 @@ int sqlite4FixExprList(
 }
 #endif
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
 int sqlite4FixTriggerStep(
   DbFixer *pFix,     /* Context of the fixation */
   TriggerStep *pStep /* The trigger step be fixed to one database */

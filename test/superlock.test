@@ -33,7 +33,7 @@ set testprefix superlock
 #
 #   5.*: Test that a call to sqlite4demo_superlock() uses the busy handler
 #        correctly to wait for existing clients to clear on a WAL database.
-#        And returns SQLITE_BUSY if no busy handler is defined or the busy
+#        And returns SQLITE4_BUSY if no busy handler is defined or the busy
 #        handler returns 0 before said clients relinquish their locks.
 #
 #   6.*: Test that if a superlocked WAL database is overwritten, existing

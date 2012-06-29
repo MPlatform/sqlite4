@@ -21,7 +21,7 @@
 ** be changed.
 **
 ** This version of the memory allocation subsystem is included
-** in the build only if SQLITE_ENABLE_MEMSYS5 is defined.
+** in the build only if SQLITE4_ENABLE_MEMSYS5 is defined.
 **
 ** This memory allocator uses the following algorithm:
 **
@@ -52,9 +52,9 @@
 
 /*
 ** This version of the memory allocator is used only when 
-** SQLITE_ENABLE_MEMSYS5 is defined.
+** SQLITE4_ENABLE_MEMSYS5 is defined.
 */
-#ifdef SQLITE_ENABLE_MEMSYS5
+#ifdef SQLITE4_ENABLE_MEMSYS5
 
 /*
 ** A minimum allocation is an instance of the following structure.
@@ -89,7 +89,7 @@ struct Mem5Link {
 ** static variables organized and to reduce namespace pollution
 ** when this module is combined with other in the amalgamation.
 */
-static SQLITE_WSD struct Mem5Global {
+static SQLITE4_WSD struct Mem5Global {
   /*
   ** Memory available for allocation
   */
@@ -265,7 +265,7 @@ static void *memsys5MallocUnsafe(int nByte){
   for(iBin=iLogsize; mem5.aiFreelist[iBin]<0 && iBin<=LOGMAX; iBin++){}
   if( iBin>LOGMAX ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(0,SQLITE_NOMEM, "failed to allocate %u bytes", nByte);
+    sqlite4_log(0,SQLITE4_NOMEM, "failed to allocate %u bytes", nByte);
     return 0;
   }
   i = memsys5UnlinkFirst(iBin);
@@ -496,10 +496,10 @@ static int memsys5Init(void *NotUsed){
 
   /* If a mutex is required for normal operation, allocate one */
   if( sqlite4DefaultEnv.bMemstat==0 ){
-    mem5.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
+    mem5.mutex = sqlite4MutexAlloc(SQLITE4_MUTEX_STATIC_MEM);
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -511,7 +511,7 @@ static void memsys5Shutdown(void *NotUsed){
   return;
 }
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 /*
 ** Open the file indicated and write a log of all unfreed memory 
 ** allocations into that log.
@@ -573,4 +573,4 @@ const sqlite4_mem_methods *sqlite4MemGetMemsys5(void){
   return &memsys5Methods;
 }
 
-#endif /* SQLITE_ENABLE_MEMSYS5 */
+#endif /* SQLITE4_ENABLE_MEMSYS5 */

@@ -23,36 +23,36 @@
 static const char *kvErrName(int e){
   const char *zName;
   switch( e ){
-    case SQLITE_OK:                  zName = "OK";                break;
-    case SQLITE_ERROR:               zName = "ERROR";             break;
-    case SQLITE_INTERNAL:            zName = "INTERNAL";          break;
-    case SQLITE_PERM:                zName = "PERM";              break;
-    case SQLITE_ABORT:               zName = "ABORT";             break;
-    case SQLITE_BUSY:                zName = "BUSY";              break;
-    case SQLITE_LOCKED:              zName = "LOCKED";            break;
-    case SQLITE_NOMEM:               zName = "NOMEM";             break;
-    case SQLITE_READONLY:            zName = "READONLY";          break;
-    case SQLITE_INTERRUPT:           zName = "INTERRUPT";         break;
-    case SQLITE_IOERR:               zName = "IOERR";             break;
-    case SQLITE_CORRUPT:             zName = "CORRUPT";           break;
-    case SQLITE_NOTFOUND:            zName = "NOTFOUND";          break;
-    case SQLITE_FULL:                zName = "FULL";              break;
-    case SQLITE_CANTOPEN:            zName = "CANTOPEN";          break;
-    case SQLITE_PROTOCOL:            zName = "PROTOCOL";          break;
-    case SQLITE_EMPTY:               zName = "EMPTY";             break;
-    case SQLITE_SCHEMA:              zName = "SCHEMA";            break;
-    case SQLITE_TOOBIG:              zName = "TOOBIG";            break;
-    case SQLITE_CONSTRAINT:          zName = "CONSTRAINT";        break;
-    case SQLITE_MISMATCH:            zName = "MISMATCH";          break;
-    case SQLITE_MISUSE:              zName = "MISUSE";            break;
-    case SQLITE_NOLFS:               zName = "NOLFS";             break;
-    case SQLITE_AUTH:                zName = "AUTH";              break;
-    case SQLITE_FORMAT:              zName = "FORMAT";            break;
-    case SQLITE_RANGE:               zName = "RANGE";             break;
-    case SQLITE_NOTADB:              zName = "NOTADB";            break;
-    case SQLITE_ROW:                 zName = "ROW";               break;
-    case SQLITE_DONE:                zName = "DONE";              break;
-    case SQLITE_INEXACT:             zName = "INEXACT";           break;
+    case SQLITE4_OK:                  zName = "OK";                break;
+    case SQLITE4_ERROR:               zName = "ERROR";             break;
+    case SQLITE4_INTERNAL:            zName = "INTERNAL";          break;
+    case SQLITE4_PERM:                zName = "PERM";              break;
+    case SQLITE4_ABORT:               zName = "ABORT";             break;
+    case SQLITE4_BUSY:                zName = "BUSY";              break;
+    case SQLITE4_LOCKED:              zName = "LOCKED";            break;
+    case SQLITE4_NOMEM:               zName = "NOMEM";             break;
+    case SQLITE4_READONLY:            zName = "READONLY";          break;
+    case SQLITE4_INTERRUPT:           zName = "INTERRUPT";         break;
+    case SQLITE4_IOERR:               zName = "IOERR";             break;
+    case SQLITE4_CORRUPT:             zName = "CORRUPT";           break;
+    case SQLITE4_NOTFOUND:            zName = "NOTFOUND";          break;
+    case SQLITE4_FULL:                zName = "FULL";              break;
+    case SQLITE4_CANTOPEN:            zName = "CANTOPEN";          break;
+    case SQLITE4_PROTOCOL:            zName = "PROTOCOL";          break;
+    case SQLITE4_EMPTY:               zName = "EMPTY";             break;
+    case SQLITE4_SCHEMA:              zName = "SCHEMA";            break;
+    case SQLITE4_TOOBIG:              zName = "TOOBIG";            break;
+    case SQLITE4_CONSTRAINT:          zName = "CONSTRAINT";        break;
+    case SQLITE4_MISMATCH:            zName = "MISMATCH";          break;
+    case SQLITE4_MISUSE:              zName = "MISUSE";            break;
+    case SQLITE4_NOLFS:               zName = "NOLFS";             break;
+    case SQLITE4_AUTH:                zName = "AUTH";              break;
+    case SQLITE4_FORMAT:              zName = "FORMAT";            break;
+    case SQLITE4_RANGE:               zName = "RANGE";             break;
+    case SQLITE4_NOTADB:              zName = "NOTADB";            break;
+    case SQLITE4_ROW:                 zName = "ROW";               break;
+    case SQLITE4_DONE:                zName = "DONE";              break;
+    case SQLITE4_INEXACT:             zName = "INEXACT";           break;
     default:                         zName = "???";               break;
   }
   return zName;
@@ -92,7 +92,7 @@ int sqlite4KVStoreOpen(
   KVFactory *pMkr;
   int (*xFactory)(sqlite4_env*,sqlite4_kvstore**,const char*,unsigned);
 
-  if( (flags & SQLITE_KVOPEN_TEMPORARY)!=0 || zUri==0 || zUri[0]==0 ){
+  if( (flags & SQLITE4_KVOPEN_TEMPORARY)!=0 || zUri==0 || zUri[0]==0 ){
     zStorageName = "temp";
   }else{
     zStorageName = sqlite4_uri_parameter(zName, "kv");
@@ -111,7 +111,7 @@ int sqlite4KVStoreOpen(
   xFactory = pMkr ? pMkr->xFactory : 0;
   sqlite4_mutex_leave(pEnv->pFactoryMutex);
   if( xFactory==0 ){
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
   rc = xFactory(pEnv, &pNew, zUri, flags);
   *ppKVStore = pNew;
@@ -119,7 +119,7 @@ int sqlite4KVStoreOpen(
     sqlite4_randomness(pEnv, sizeof(pNew->kvId), &pNew->kvId);
     sqlite4_snprintf(pNew->zKVName, sizeof(pNew->zKVName),
                      "%s", zName);
-    pNew->fTrace = (db->flags & SQLITE_KvTrace)!=0;
+    pNew->fTrace = (db->flags & SQLITE4_KvTrace)!=0;
     kvTrace(pNew, "open(%s,%d,0x%04x)", zUri, pNew->kvId, flags);
   }
   return rc;
@@ -213,7 +213,7 @@ int sqlite4KVCursorKey(KVCursor *p, const KVByteArray **ppKey, KVSize *pnKey){
   int rc;
   rc = p->pStoreVfunc->xKey(p, ppKey, pnKey);
   if( p->fTrace ){
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       char zKey[52];
       binToHex(zKey, sizeof(zKey), *ppKey, *pnKey);
       kvTrace(p->pStore, "xKey(%d,%s,%d)", p->curId, zKey, (int)*pnKey);
@@ -233,7 +233,7 @@ int sqlite4KVCursorData(
   int rc;
   rc = p->pStoreVfunc->xData(p, ofst, n, ppData, pnData);
   if( p->fTrace ){
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       char zData[52];
       binToHex(zData, sizeof(zData), *ppData, *pnData);
       kvTrace(p->pStore, "xData(%d,%d,%d,%s,%d)",
@@ -246,7 +246,7 @@ int sqlite4KVCursorData(
   return rc;
 }
 int sqlite4KVCursorClose(KVCursor *p){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( p ){
     KVStore *pStore = p->pStore;
     int curId = p->curId;
@@ -259,18 +259,18 @@ int sqlite4KVStoreBegin(KVStore *p, int iLevel){
   int rc;
   rc = p->pStoreVfunc->xBegin(p, iLevel);
   kvTrace(p, "xBegin(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
-  assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
+  assert( p->iTransLevel==iLevel || rc!=SQLITE4_OK );
   return rc;
 }
 int sqlite4KVStoreCommitPhaseOne(KVStore *p, int iLevel){
   int rc;
   assert( iLevel>=0 );
   assert( iLevel<=p->iTransLevel );
-  if( p->iTransLevel==iLevel ) return SQLITE_OK;
+  if( p->iTransLevel==iLevel ) return SQLITE4_OK;
   if( p->pStoreVfunc->xCommitPhaseOne ){
     rc = p->pStoreVfunc->xCommitPhaseOne(p, iLevel);
   }else{
-    rc = SQLITE_OK;
+    rc = SQLITE4_OK;
   }
   kvTrace(p, "xCommitPhaseOne(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
   assert( p->iTransLevel>iLevel );
@@ -280,16 +280,16 @@ int sqlite4KVStoreCommitPhaseTwo(KVStore *p, int iLevel){
   int rc;
   assert( iLevel>=0 );
   assert( iLevel<=p->iTransLevel );
-  if( p->iTransLevel==iLevel ) return SQLITE_OK;
+  if( p->iTransLevel==iLevel ) return SQLITE4_OK;
   rc = p->pStoreVfunc->xCommitPhaseTwo(p, iLevel);
   kvTrace(p, "xCommitPhaseTwo(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
-  assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
+  assert( p->iTransLevel==iLevel || rc!=SQLITE4_OK );
   return rc;
 }
 int sqlite4KVStoreCommit(KVStore *p, int iLevel){
   int rc;
   rc = sqlite4KVStoreCommitPhaseOne(p, iLevel);
-  if( rc==SQLITE_OK ) rc = sqlite4KVStoreCommitPhaseTwo(p, iLevel);
+  if( rc==SQLITE4_OK ) rc = sqlite4KVStoreCommitPhaseTwo(p, iLevel);
   return rc;
 }
 int sqlite4KVStoreRollback(KVStore *p, int iLevel){
@@ -298,7 +298,7 @@ int sqlite4KVStoreRollback(KVStore *p, int iLevel){
   assert( iLevel<=p->iTransLevel );
   rc = p->pStoreVfunc->xRollback(p, iLevel);
   kvTrace(p, "xRollback(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
-  assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
+  assert( p->iTransLevel==iLevel || rc!=SQLITE4_OK );
   return rc;
 }
 int sqlite4KVStoreRevert(KVStore *p, int iLevel){
@@ -310,11 +310,11 @@ int sqlite4KVStoreRevert(KVStore *p, int iLevel){
     kvTrace(p, "xRevert(%d,%d) -> %s", p->kvId, iLevel, kvErrName(rc));
   }else{
     rc = sqlite4KVStoreRollback(p, iLevel-1);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       rc = sqlite4KVStoreBegin(p, iLevel);
     }
   }
-  assert( p->iTransLevel==iLevel || rc!=SQLITE_OK );
+  assert( p->iTransLevel==iLevel || rc!=SQLITE4_OK );
   return rc;
 }
 int sqlite4KVStoreClose(KVStore *p){
@@ -350,15 +350,15 @@ int sqlite4KVStoreGetMeta(KVStore *p, int iStart, int nMeta, unsigned int *a){
   const KVByteArray *aData;
 
   rc = sqlite4KVStoreOpenCursor(p, &pCur);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = sqlite4KVCursorSeek(pCur, metadataKey, sizeof(metadataKey), 0);
-    if( rc==SQLITE_NOTFOUND ){
-      rc = SQLITE_OK;
+    if( rc==SQLITE4_NOTFOUND ){
+      rc = SQLITE4_OK;
       nData = 0;
-    }else if( rc==SQLITE_OK ){
+    }else if( rc==SQLITE4_OK ){
       rc = sqlite4KVCursorData(pCur, 0, -1, &aData, &nData);
     }
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       i = 0;
       j = iStart*4;
       while( i<nMeta && j+3<nData ){
@@ -389,7 +389,7 @@ int sqlite4KVStorePutMeta(
 
 
   rc = sqlite4KVStoreOpenCursor(p, &pCur);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     const KVByteArray *aData;     /* Original database meta-array value */
     KVSize nData;                 /* Size of aData[] in bytes */
     KVByteArray *aNew;            /* New database meta-array value */
@@ -397,21 +397,21 @@ int sqlite4KVStorePutMeta(
 
     /* Read the current meta-array value from the database */
     rc = sqlite4KVCursorSeek(pCur, metadataKey, sizeof(metadataKey), 0);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       rc = sqlite4KVCursorData(pCur, 0, -1, &aData, &nData);
-    }else if( rc==SQLITE_NOTFOUND ){
+    }else if( rc==SQLITE4_NOTFOUND ){
       nData = 0;
       aData = 0;
-      rc = SQLITE_OK;
+      rc = SQLITE4_OK;
     }
 
     /* Encode and write the new meta-array value to the database */
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       nNew = sizeof(a[0]) * (iStart+nMeta);
       if( nNew<nData ) nNew = nData;
       aNew = sqlite4DbMallocRaw(db, nNew);
       if( aNew==0 ){
-        rc = SQLITE_NOMEM;
+        rc = SQLITE4_NOMEM;
       }else{
         int i;
         memcpy(aNew, aData, nData);
@@ -429,7 +429,7 @@ int sqlite4KVStorePutMeta(
   return rc;
 }
 
-#if defined(SQLITE_DEBUG)
+#if defined(SQLITE4_DEBUG)
 /*
 ** Output binary data for debugging display purposes.
 */
@@ -477,9 +477,9 @@ void sqlite4KVStoreDump(KVStore *pStore){
   static const KVByteArray aProbe[] = { 0x00 };
 
   rc = sqlite4KVStoreOpenCursor(pStore, &pCur);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = sqlite4KVCursorSeek(pCur, aProbe, 1, +1);
-    while( rc!=SQLITE_NOTFOUND ){
+    while( rc!=SQLITE4_NOTFOUND ){
       rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
       if( rc ) break;
       if( nRow>0 ) sqlite4DebugPrintf("\n");
@@ -493,4 +493,4 @@ void sqlite4KVStoreDump(KVStore *pStore){
     sqlite4KVCursorClose(pCur);
   }
 }
-#endif /* SQLITE_DEBUG */
+#endif /* SQLITE4_DEBUG */

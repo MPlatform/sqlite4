@@ -183,9 +183,9 @@ proc xCustom {args} {
   incr ::custom_ifail -1
   if {$::custom_ifail==0} {
     incr ::custom_nfail
-    return "SQLITE_IOERR"
+    return "SQLITE4_IOERR"
   }
-  return "SQLITE_OK"
+  return "SQLITE4_OK"
 }
 do_faultsim_test 3.1 -faults custom -prep {
   faultsim_restore_and_reopen
@@ -201,16 +201,16 @@ proc xCustom {method args} {
       incr ::nTmpOpen 1
       if {$::nTmpOpen == 3} { return "failme" }
     }
-    return "SQLITE_OK"
+    return "SQLITE4_OK"
   }
   if {$::custom_ifail<200 && [lindex $args 1] == "failme"} {
     incr ::custom_ifail -1
     if {$::custom_ifail==0} {
       incr ::custom_nfail
-      return "SQLITE_IOERR"
+      return "SQLITE4_IOERR"
     }
   }
-  return "SQLITE_OK"
+  return "SQLITE4_OK"
 }
 
 do_faultsim_test 3.3 -faults custom -prep {
@@ -276,11 +276,11 @@ proc xCustom {method file args} {
       incr ::custom_ifail -1
       if {$::custom_ifail==0} {
         incr ::custom_nfail
-        return "SQLITE_IOERR"
+        return "SQLITE4_IOERR"
       }
     }
   }
-  return "SQLITE_OK"
+  return "SQLITE4_OK"
 }
 
 do_faultsim_test 4.2 -faults custom -prep {

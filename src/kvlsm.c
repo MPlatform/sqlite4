@@ -44,19 +44,19 @@ struct KVLsmCsr {
 ** must be at least 1 to read and at least 2 to write.
 */
 static int kvlsmBegin(KVStore *pKVStore, int iLevel){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   KVLsm *p = (KVLsm *)pKVStore;
 
   assert( iLevel>0 );
   if( p->pCsr==0 ){
     rc = lsm_csr_open(p->pDb, &p->pCsr);
   }
-  if( rc==SQLITE_OK && iLevel>=2 && iLevel>=pKVStore->iTransLevel ){
+  if( rc==SQLITE4_OK && iLevel>=2 && iLevel>=pKVStore->iTransLevel ){
     rc = lsm_begin(p->pDb, iLevel-1);
   }
 
-  if( rc==SQLITE_OK ){
-    pKVStore->iTransLevel = SQLITE_MAX(iLevel, pKVStore->iTransLevel);
+  if( rc==SQLITE4_OK ){
+    pKVStore->iTransLevel = SQLITE4_MAX(iLevel, pKVStore->iTransLevel);
   }else if( pKVStore->iTransLevel==0 ){
     lsm_csr_close(p->pCsr);
     p->pCsr = 0;
@@ -81,21 +81,21 @@ static int kvlsmBegin(KVStore *pKVStore, int iLevel){
 ** equal to iLevel.
 */
 static int kvlsmCommitPhaseOne(KVStore *pKVStore, int iLevel){
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 static int kvlsmCommitPhaseTwo(KVStore *pKVStore, int iLevel){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   KVLsm *p = (KVLsm *)pKVStore;
 
   if( pKVStore->iTransLevel>iLevel ){
     if( pKVStore->iTransLevel>=2 ){
-      rc = lsm_commit(p->pDb, SQLITE_MAX(0, iLevel-1));
+      rc = lsm_commit(p->pDb, SQLITE4_MAX(0, iLevel-1));
     }
     if( iLevel==0 ){
       lsm_csr_close(p->pCsr);
       p->pCsr = 0;
     }
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       pKVStore->iTransLevel = iLevel;
     }
   }
@@ -113,18 +113,18 @@ static int kvlsmCommitPhaseTwo(KVStore *pKVStore, int iLevel){
 ** equal to iLevel.
 */
 static int kvlsmRollback(KVStore *pKVStore, int iLevel){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   KVLsm *p = (KVLsm *)pKVStore;
 
   if( pKVStore->iTransLevel>=iLevel ){
     if( pKVStore->iTransLevel>=2 ){
-      rc = lsm_rollback(p->pDb, SQLITE_MAX(0, iLevel-1));
+      rc = lsm_rollback(p->pDb, SQLITE4_MAX(0, iLevel-1));
     }
     if( iLevel==0 ){
       lsm_csr_close(p->pCsr);
       p->pCsr = 0;
     }
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       pKVStore->iTransLevel = iLevel;
     }
   }
@@ -135,14 +135,14 @@ static int kvlsmRollback(KVStore *pKVStore, int iLevel){
 ** Revert a transaction back to what it was when it started.
 */
 static int kvlsmRevert(KVStore *pKVStore, int iLevel){
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
 ** Implementation of the xReplace(X, aKey, nKey, aData, nData) method.
 **
 ** Insert or replace the entry with the key aKey[0..nKey-1].  The data for
-** the new entry is aData[0..nData-1].  Return SQLITE_OK on success or an
+** the new entry is aData[0..nData-1].  Return SQLITE4_OK on success or an
 ** error code if the insert fails.
 **
 ** The inputs aKey[] and aData[] are only valid until this routine
@@ -164,18 +164,18 @@ static int kvlsmReplace(
 ** Create a new cursor object.
 */
 static int kvlsmOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   KVLsm *p = (KVLsm *)pKVStore;
   KVLsmCsr *pCsr;
 
   pCsr = (KVLsmCsr *)sqlite4_malloc(pKVStore->pEnv, sizeof(KVLsmCsr));
   if( pCsr==0 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }else{
     memset(pCsr, 0, sizeof(KVLsmCsr));
     rc = lsm_csr_open(p->pDb, &pCsr->pCsr);
 
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       pCsr->base.pStore = pKVStore;
       pCsr->base.pStoreVfunc = pKVStore->pStoreVfunc;
     }else{
@@ -192,7 +192,7 @@ static int kvlsmOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
 ** Reset a cursor
 */
 static int kvlsmReset(KVCursor *pKVCursor){
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -202,7 +202,7 @@ static int kvlsmCloseCursor(KVCursor *pKVCursor){
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
   lsm_csr_close(pCsr->pCsr);
   sqlite4_free(pCsr->base.pEnv, pCsr);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -212,10 +212,10 @@ static int kvlsmNextEntry(KVCursor *pKVCursor){
   int rc;
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
 
-  if( lsm_csr_valid(pCsr->pCsr)==0 ) return SQLITE_NOTFOUND;
+  if( lsm_csr_valid(pCsr->pCsr)==0 ) return SQLITE4_NOTFOUND;
   rc = lsm_csr_next(pCsr->pCsr);
   if( rc==LSM_OK && lsm_csr_valid(pCsr->pCsr)==0 ){
-    rc = SQLITE_NOTFOUND;
+    rc = SQLITE4_NOTFOUND;
   }
   return rc;
 }
@@ -227,10 +227,10 @@ static int kvlsmPrevEntry(KVCursor *pKVCursor){
   int rc;
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
 
-  if( lsm_csr_valid(pCsr->pCsr)==0 ) return SQLITE_NOTFOUND;
+  if( lsm_csr_valid(pCsr->pCsr)==0 ) return SQLITE4_NOTFOUND;
   rc = lsm_csr_prev(pCsr->pCsr);
   if( rc==LSM_OK && lsm_csr_valid(pCsr->pCsr)==0 ){
-    rc = SQLITE_NOTFOUND;
+    rc = SQLITE4_NOTFOUND;
   }
   return rc;
 }
@@ -252,16 +252,16 @@ static int kvlsmSeek(
   assert( LSM_SEEK_LEFAST==-2 );
 
   rc = lsm_csr_seek(pCsr->pCsr, (void *)aKey, nKey, dir);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     if( lsm_csr_valid(pCsr->pCsr)==0 ){
-      rc = SQLITE_NOTFOUND;
+      rc = SQLITE4_NOTFOUND;
     }else{
       void *pDbKey;
       int nDbKey;
 
       rc = lsm_csr_key(pCsr->pCsr, &pDbKey, &nDbKey);
-      if( rc==SQLITE_OK && (nDbKey!=nKey || memcmp(pDbKey, aKey, nKey)) ){
-        rc = SQLITE_INEXACT;
+      if( rc==SQLITE4_OK && (nDbKey!=nKey || memcmp(pDbKey, aKey, nKey)) ){
+        rc = SQLITE4_INEXACT;
       }
     }
   }
@@ -285,11 +285,11 @@ static int kvlsmDelete(KVCursor *pKVCursor){
 
   assert( lsm_csr_valid(pCsr->pCsr) );
   rc = lsm_csr_key(pCsr->pCsr, &pKey, &nKey);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = lsm_delete(((KVLsm *)(pKVCursor->pStore))->pDb, pKey, nKey);
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -322,7 +322,7 @@ static int kvlsmData(
   int nData;
 
   rc = lsm_csr_value(pCsr->pCsr, &pData, &nData);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     if( n<0 ){
       *paData = pData;
       *pNData = nData;
@@ -353,21 +353,21 @@ static int kvlsmClose(KVStore *pKVStore){
 
   lsm_close(p->pDb);
   sqlite4_free(p->base.pEnv, p);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   KVLsm *p = (KVLsm *)pKVStore;
 
   switch( op ){
-    case SQLITE_KVCTRL_LSM_HANDLE: {
+    case SQLITE4_KVCTRL_LSM_HANDLE: {
       lsm_db **ppOut = (lsm_db **)pArg;
       *ppOut = p->pDb;
       break;
     }
 
-    case SQLITE_KVCTRL_SYNCHRONOUS: {
+    case SQLITE4_KVCTRL_SYNCHRONOUS: {
       int *peSafety = (int *)pArg;
       int eParam = *peSafety + 1;
       lsm_config(p->pDb, LSM_CONFIG_SAFETY, &eParam);
@@ -375,12 +375,12 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
       break;
     }
 
-    case SQLITE_KVCTRL_LSM_FLUSH: {
+    case SQLITE4_KVCTRL_LSM_FLUSH: {
       lsm_work(p->pDb, LSM_WORK_FLUSH, 0, 0);
       break;
     }
 
-    case SQLITE_KVCTRL_LSM_MERGE: {
+    case SQLITE4_KVCTRL_LSM_MERGE: {
       int nPage = *(int*)pArg;
       int nWrite = 0;
       lsm_work(p->pDb, LSM_WORK_OPTIMIZE, nPage, &nWrite);
@@ -388,14 +388,14 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
       break;
     }
 
-    case SQLITE_KVCTRL_LSM_CHECKPOINT: {
+    case SQLITE4_KVCTRL_LSM_CHECKPOINT: {
       lsm_work(p->pDb, LSM_WORK_CHECKPOINT, 0, 0);
       break;
     }
 
 
     default:
-      rc = SQLITE_NOTFOUND;
+      rc = SQLITE4_NOTFOUND;
       break;
   }
 
@@ -436,22 +436,22 @@ int sqlite4KVStoreOpenLsm(
   };
 
   KVLsm *pNew;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
 
   pNew = (KVLsm *)sqlite4_malloc(pEnv, sizeof(KVLsm));
   if( pNew==0 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }else{
     memset(pNew, 0, sizeof(KVLsm));
     pNew->base.pStoreVfunc = &kvlsmMethods;
     pNew->base.pEnv = pEnv;
 
     rc = lsm_new(0, &pNew->pDb);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       rc = lsm_open(pNew->pDb, zName);
     }
 
-    if( rc!=SQLITE_OK ){
+    if( rc!=SQLITE4_OK ){
       lsm_close(pNew->pDb);
       sqlite4_free(pEnv, pNew);
       pNew = 0;

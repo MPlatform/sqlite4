@@ -21,18 +21,18 @@
 ** be changed.
 **
 ** This version of the memory allocation subsystem is included
-** in the build only if SQLITE_ENABLE_MEMSYS3 is defined.
+** in the build only if SQLITE4_ENABLE_MEMSYS3 is defined.
 */
 #include "sqliteInt.h"
 
 /*
 ** This version of the memory allocator is only built into the library
-** SQLITE_ENABLE_MEMSYS3 is defined. Defining this symbol does not
+** SQLITE4_ENABLE_MEMSYS3 is defined. Defining this symbol does not
 ** mean that the library will use a memory-pool by default, just that
 ** it is available. The mempool allocator is activated by calling
 ** sqlite4_config().
 */
-#ifdef SQLITE_ENABLE_MEMSYS3
+#ifdef SQLITE4_ENABLE_MEMSYS3
 
 /*
 ** Maximum size (in Mem3Blocks) of a "small" chunk.
@@ -97,7 +97,7 @@ struct Mem3Block {
 ** static variables organized and to reduce namespace pollution
 ** when this module is combined with other in the amalgamation.
 */
-static SQLITE_WSD struct Mem3Global {
+static SQLITE4_WSD struct Mem3Global {
   /*
   ** Memory available for allocation. nPool is the size of the array
   ** (in Mem3Blocks) pointed to by aPool less 2.
@@ -219,7 +219,7 @@ static void memsys3Link(u32 i){
 */
 static void memsys3Enter(void){
   if( sqlite4DefaultEnv.bMemstat==0 && mem3.mutex==0 ){
-    mem3.mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MEM);
+    mem3.mutex = sqlite4MutexAlloc(SQLITE4_MUTEX_STATIC_MEM);
   }
   sqlite4_mutex_enter(mem3.mutex);
 }
@@ -550,7 +550,7 @@ static void *memsys3Realloc(sqlite4_env*pEnv, void *pPrior, int nBytes){
 static int memsys3Init(void *NotUsed){
   UNUSED_PARAMETER(NotUsed);
   if( !sqlite4DefaultEnv.pHeap ){
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
 
   /* Store a pointer to the memory block in global structure mem3. */
@@ -566,7 +566,7 @@ static int memsys3Init(void *NotUsed){
   mem3.aPool[mem3.nPool].u.hdr.prevSize = mem3.nPool;
   mem3.aPool[mem3.nPool].u.hdr.size4x = 1;
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -585,7 +585,7 @@ static void memsys3Shutdown(void *NotUsed){
 ** allocations into that log.
 */
 void sqlite4Memsys3Dump(const char *zFilename){
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   FILE *out;
   u32 i, j;
   u32 size;
@@ -682,4 +682,4 @@ const sqlite4_mem_methods *sqlite4MemGetMemsys3(void){
   return &mempoolMethods;
 }
 
-#endif /* SQLITE_ENABLE_MEMSYS3 */
+#endif /* SQLITE4_ENABLE_MEMSYS3 */

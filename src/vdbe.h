@@ -15,8 +15,8 @@
 ** or VDBE.  The VDBE implements an abstract machine that runs a
 ** simple program to access and modify the underlying database.
 */
-#ifndef _SQLITE_VDBE_H_
-#define _SQLITE_VDBE_H_
+#ifndef _SQLITE4_VDBE_H_
+#define _SQLITE4_VDBE_H_
 #include <stdio.h>
 
 /*
@@ -64,7 +64,7 @@ struct VdbeOp {
     SubProgram *pProgram;  /* Used when p4type is P4_SUBPROGRAM */
     int (*xAdvance)(VdbeCursor*);
   } p4;
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   char *zComment;          /* Comment to improve readability */
 #endif
 #ifdef VDBE_PROFILE
@@ -140,10 +140,10 @@ typedef struct VdbeOpList VdbeOpList;
 #define COLNAME_DATABASE 2
 #define COLNAME_TABLE    3
 #define COLNAME_COLUMN   4
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
+#ifdef SQLITE4_ENABLE_COLUMN_METADATA
 # define COLNAME_N        5      /* Number of COLNAME_xxx symbols */
 #else
-# ifdef SQLITE_OMIT_DECLTYPE
+# ifdef SQLITE4_OMIT_DECLTYPE
 #   define COLNAME_N      1      /* Store only the name */
 # else
 #   define COLNAME_N      2      /* Store the name and decltype */
@@ -194,7 +194,7 @@ void sqlite4VdbeMakeReady(Vdbe*,Parse*);
 int sqlite4VdbeFinalize(Vdbe*);
 void sqlite4VdbeResolveLabel(Vdbe*, int);
 int sqlite4VdbeCurrentAddr(Vdbe*);
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   int sqlite4VdbeAssertMayAbort(Vdbe *, int);
   void sqlite4VdbeTrace(Vdbe*,FILE*);
 #endif
@@ -210,7 +210,7 @@ void sqlite4VdbeSwap(Vdbe*,Vdbe*);
 VdbeOp *sqlite4VdbeTakeOpArray(Vdbe*, int*, int*);
 sqlite4_value *sqlite4VdbeGetValue(Vdbe*, int, u8);
 void sqlite4VdbeSetVarmask(Vdbe*, int);
-#ifndef SQLITE_OMIT_TRACE
+#ifndef SQLITE4_OMIT_TRACE
   char *sqlite4VdbeExpandSql(Vdbe*, const char*);
 #endif
 
@@ -218,7 +218,7 @@ void sqlite4VdbeRecordUnpack(KeyInfo*,int,const void*,UnpackedRecord*);
 int sqlite4VdbeRecordCompare(int,const void*,UnpackedRecord*);
 UnpackedRecord *sqlite4VdbeAllocUnpackedRecord(KeyInfo *, char *, int, char **);
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
 void sqlite4VdbeLinkSubProgram(Vdbe *, SubProgram *);
 #endif
 

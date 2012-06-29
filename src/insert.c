@@ -70,7 +70,7 @@ void sqlite4OpenPrimaryKey(
 
     pIdx = sqlite4FindPrimaryKey(pTab, 0);
     sqlite4OpenIndex(p, iCur, iDb, pIdx, opcode);
-    assert( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY );
+    assert( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY );
   }
 }
 
@@ -136,7 +136,7 @@ const char *sqlite4IndexAffinityStr(Vdbe *v, Index *pIdx){
       int i;
       for(i=0; i<p->nColumn; i++){
         int iCol = p->aiColumn[i];
-        zAff[n++] = (iCol<0) ? SQLITE_AFF_INTEGER : pTab->aCol[iCol].affinity;
+        zAff[n++] = (iCol<0) ? SQLITE4_AFF_INTEGER : pTab->aCol[iCol].affinity;
       }
     }
     zAff[n] = 0;
@@ -200,7 +200,7 @@ static int readsTable(Parse *p, int iStartAddr, int iDb, Table *pTab){
   Vdbe *v = sqlite4GetVdbe(p);
   int i;
   int iEnd = sqlite4VdbeCurrentAddr(v);
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   VTable *pVTab = IsVirtual(pTab) ? sqlite4GetVTable(p->db, pTab) : 0;
 #endif
 
@@ -216,7 +216,7 @@ static int readsTable(Parse *p, int iStartAddr, int iDb, Table *pTab){
         }
       }
     }
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
     if( pOp->opcode==OP_VOpen && pOp->p4.pVtab==pVTab ){
       assert( pOp->p4.pVtab!=0 );
       assert( pOp->p4type==P4_VTAB );
@@ -227,7 +227,7 @@ static int readsTable(Parse *p, int iStartAddr, int iDb, Table *pTab){
   return 0;
 }
 
-#ifndef SQLITE_OMIT_AUTOINCREMENT
+#ifndef SQLITE4_OMIT_AUTOINCREMENT
 /*
 ** Locate or create an AutoincInfo structure associated with table pTab
 ** which is in database iDb.  Return the register number for the register
@@ -304,7 +304,7 @@ void sqlite4AutoincrementBegin(Parse *pParse){
     sqlite4VdbeAddOp2(v, OP_Rewind, 0, addr+9);
     sqlite4VdbeAddOp3(v, OP_Column, 0, 0, memId);
     sqlite4VdbeAddOp3(v, OP_Ne, memId-1, addr+7, memId);
-    sqlite4VdbeChangeP5(v, SQLITE_JUMPIFNULL);
+    sqlite4VdbeChangeP5(v, SQLITE4_JUMPIFNULL);
     sqlite4VdbeAddOp2(v, OP_Rowid, 0, memId+1);
     sqlite4VdbeAddOp3(v, OP_Column, 0, 1, memId);
     sqlite4VdbeAddOp2(v, OP_Goto, 0, addr+9);
@@ -370,12 +370,12 @@ void sqlite4AutoincrementEnd(Parse *pParse){
 }
 #else
 /*
-** If SQLITE_OMIT_AUTOINCREMENT is defined, then the three routines
+** If SQLITE4_OMIT_AUTOINCREMENT is defined, then the three routines
 ** above are all no-ops
 */
 # define autoIncBegin(A,B,C) (0)
 # define autoIncStep(A,B,C)
-#endif /* SQLITE_OMIT_AUTOINCREMENT */
+#endif /* SQLITE4_OMIT_AUTOINCREMENT */
 
 
 /* Forward declaration */
@@ -530,7 +530,7 @@ void sqlite4Insert(
   int regRowid;                   /* If bImplicitPK, register holding IPK */
 
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   int isView;                 /* True if attempting to insert into a view */
   Trigger *pTrigger;          /* List of triggers on pTab, if required */
   int tmask;                  /* Mask of trigger times */
@@ -554,7 +554,7 @@ void sqlite4Insert(
   assert( iDb<db->nDb );
   pDb = &db->aDb[iDb];
   zDb = pDb->zName;
-  if( sqlite4AuthCheck(pParse, SQLITE_INSERT, pTab->zName, 0, zDb) ){
+  if( sqlite4AuthCheck(pParse, SQLITE4_INSERT, pTab->zName, 0, zDb) ){
     goto insert_cleanup;
   }
 
@@ -568,7 +568,7 @@ void sqlite4Insert(
 
   /* Figure out if we have any triggers and if the table being
   ** inserted into is a view. */
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   pTrigger = sqlite4TriggersExist(pParse, pTab, TK_INSERT, 0, &tmask);
   isView = pTab->pSelect!=0;
 #else
@@ -576,7 +576,7 @@ void sqlite4Insert(
 # define tmask 0
 # define isView 0
 #endif
-#ifdef SQLITE_OMIT_VIEW
+#ifdef SQLITE4_OMIT_VIEW
 # undef isView
 # define isView 0
 #endif
@@ -603,7 +603,7 @@ void sqlite4Insert(
   if( pParse->nested==0 ) sqlite4VdbeCountChanges(v);
   sqlite4BeginWriteOperation(pParse, pSelect || pTrigger, iDb);
 
-#ifndef SQLITE_OMIT_XFER_OPT
+#ifndef SQLITE4_OMIT_XFER_OPT
   /* If the statement is of the form
   **
   **       INSERT INTO <table1> SELECT * FROM <table2>;
@@ -618,7 +618,7 @@ void sqlite4Insert(
     assert( pList==0 );
     goto insert_end;
   }
-#endif /* SQLITE_OMIT_XFER_OPT */
+#endif /* SQLITE4_OMIT_XFER_OPT */
 
   /* Figure out how many columns of data are supplied.  If the data
   ** is coming from a SELECT statement, then generate a co-routine that
@@ -667,7 +667,7 @@ void sqlite4Insert(
     }
     sqlite4VdbeAddOp2(v, OP_Integer, 1, regEof);         /* EOF <- 1 */
     sqlite4VdbeAddOp1(v, OP_Yield, dest.iParm);   /* yield X */
-    sqlite4VdbeAddOp2(v, OP_Halt, SQLITE_INTERNAL, OE_Abort);
+    sqlite4VdbeAddOp2(v, OP_Halt, SQLITE4_INTERNAL, OE_Abort);
     VdbeComment((v, "End of SELECT coroutine"));
     sqlite4VdbeJumpHere(v, j1);                          /* label B: */
 
@@ -890,7 +890,7 @@ void sqlite4Insert(
   }
 
   if( !isView ){
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
     if( IsVirtual(pTab) ){
       const char *pVTab = (const char *)sqlite4GetVTable(db, pTab);
       sqlite4VtabMakeWritable(pParse, pTab);
@@ -976,7 +976,7 @@ const char *indexColumnName(Index *pIdx, int iCol){
   int iTbl = pIdx->aiColumn[iCol];
   assert( iTbl>=-1 && iTbl<pIdx->pTable->nCol );
   if( iTbl<0 ){
-    assert( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY && pIdx->nColumn==1 );
+    assert( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY && pIdx->nColumn==1 );
     return "rowid";
   }
   return pIdx->pTable->aCol[iTbl].zName;
@@ -1013,7 +1013,7 @@ static void generateNotNullChecks(
               pTab->zName, pTab->aCol[i].zName
           );
           sqlite4VdbeAddOp4(v, OP_HaltIfNull, 
-              SQLITE_CONSTRAINT, onError, regContent+i, zMsg, P4_DYNAMIC
+              SQLITE4_CONSTRAINT, onError, regContent+i, zMsg, P4_DYNAMIC
           );
           break;
         }
@@ -1034,7 +1034,7 @@ static void generateNotNullChecks(
   }
 }
 
-#ifndef SQLITE_OMIT_CHECK
+#ifndef SQLITE4_OMIT_CHECK
 static void generateCheckChecks(
   Parse *pParse,                  /* Parse context */
   Table *pTab,                    /* Table to generate checks for */
@@ -1044,11 +1044,11 @@ static void generateCheckChecks(
 ){
   Vdbe *v = pParse->pVdbe;
 
-  if( pTab->pCheck && (pParse->db->flags & SQLITE_IgnoreChecks)==0 ){
+  if( pTab->pCheck && (pParse->db->flags & SQLITE4_IgnoreChecks)==0 ){
     int onError;
     int allOk = sqlite4VdbeMakeLabel(v);
     pParse->ckBase = regContent;
-    sqlite4ExprIfTrue(pParse, pTab->pCheck, allOk, SQLITE_JUMPIFNULL);
+    sqlite4ExprIfTrue(pParse, pTab->pCheck, allOk, SQLITE4_JUMPIFNULL);
     onError = overrideError!=OE_Default ? overrideError : OE_Abort;
     if( onError==OE_Ignore ){
       sqlite4VdbeAddOp2(v, OP_Goto, 0, ignoreDest);
@@ -1059,7 +1059,7 @@ static void generateCheckChecks(
     sqlite4VdbeResolveLabel(v, allOk);
   }
 }
-#else /* !defined(SQLITE_OMIT_CHECK) */
+#else /* !defined(SQLITE4_OMIT_CHECK) */
 # define generateCheckChecks(a,b,c,d,e)
 #endif
 
@@ -1069,7 +1069,7 @@ Index *sqlite4FindPrimaryKey(
 ){
   Index *p;
   int iPk = 0;
-  for(p=pTab->pIndex; p && p->eIndexType!=SQLITE_INDEX_PRIMARYKEY; p=p->pNext){
+  for(p=pTab->pIndex; p && p->eIndexType!=SQLITE4_INDEX_PRIMARYKEY; p=p->pNext){
     iPk++;
   }
   if( piPk ) *piPk = iPk;
@@ -1094,7 +1094,7 @@ static char *notUniqueMessage(
   sqlite4StrAccumInit(&errMsg, 0, 0, 200);
   errMsg.db = pParse->db;
   errMsg.pEnv = errMsg.db->pEnv;
-  if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+  if( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){
     sqlite4StrAccumAppend(&errMsg, "PRIMARY KEY must be unique", -1);
   }else{
     sqlite4StrAccumAppend(&errMsg, (nCol>1 ? "columns " : "column "), -1);
@@ -1188,15 +1188,15 @@ static char *notUniqueMessage(
 **  ---------------  ----------   ----------------------------------------
 **  any              ROLLBACK     The current transaction is rolled back and
 **                                sqlite4_exec() returns immediately with a
-**                                return code of SQLITE_CONSTRAINT.
+**                                return code of SQLITE4_CONSTRAINT.
 **
 **  any              ABORT        Back out changes from the current command
 **                                only (do not do a complete rollback) then
 **                                cause sqlite4_exec() to return immediately
-**                                with SQLITE_CONSTRAINT.
+**                                with SQLITE4_CONSTRAINT.
 **
 **  any              FAIL         Sqlite3_exec() returns immediately with a
-**                                return code of SQLITE_CONSTRAINT.  The
+**                                return code of SQLITE4_CONSTRAINT.  The
 **                                transaction is not rolled back and any
 **                                prior changes are retained.
 **
@@ -1254,7 +1254,7 @@ void sqlite4GenerateConstraintChecks(
   pPk = sqlite4FindPrimaryKey(pTab, 0);
   nPkRoot = sqlite4PutVarint64(aPkRoot, pPk->tnum);
 
-  assert( pPk->eIndexType==SQLITE_INDEX_PRIMARYKEY );
+  assert( pPk->eIndexType==SQLITE4_INDEX_PRIMARYKEY );
 
   /* Test all NOT NULL constraints. */
   generateNotNullChecks(pParse, pTab, regContent, overrideError, ignoreDest);
@@ -1421,11 +1421,11 @@ void sqlite4CompleteInsertion(
 
   /* Write the entry to each index. */
   for(i=0, pIdx=pTab->pIndex; pIdx; i++, pIdx=pIdx->pNext){
-    assert( pIdx->eIndexType!=SQLITE_INDEX_PRIMARYKEY || aRegIdx[i] );
+    assert( pIdx->eIndexType!=SQLITE4_INDEX_PRIMARYKEY || aRegIdx[i] );
     if( aRegIdx[i] ){
       int regData = 0;
       int flags = 0;
-      if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+      if( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){
         regData = regRec;
         flags = pik_flags;
       }
@@ -1484,7 +1484,7 @@ void sqlite4CloseAllIndexes(
 }
 
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 /*
 ** The following global variable is incremented whenever the
 ** transfer optimization is used.  This is used for testing
@@ -1492,10 +1492,10 @@ void sqlite4CloseAllIndexes(
 ** is happening when it is suppose to.
 */
 int sqlite4_xferopt_count;
-#endif /* SQLITE_TEST */
+#endif /* SQLITE4_TEST */
 
 
-#ifndef SQLITE_OMIT_XFER_OPT
+#ifndef SQLITE4_OMIT_XFER_OPT
 /*
 ** Check to collation names to see if they are compatible.
 */
@@ -1600,7 +1600,7 @@ static int xferOptimization(
   if( sqlite4TriggerList(pParse, pDest) ){
     return 0;   /* tab1 must not have triggers */
   }
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( pDest->tabFlags & TF_Virtual ){
     return 0;   /* tab1 must not be a virtual table */
   }
@@ -1659,7 +1659,7 @@ static int xferOptimization(
   if( pSrc==pDest ){
     return 0;   /* tab1 and tab2 may not be the same table */
   }
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( pSrc->tabFlags & TF_Virtual ){
     return 0;   /* tab2 must not be a virtual table */
   }
@@ -1695,12 +1695,12 @@ static int xferOptimization(
       return 0;    /* pDestIdx has no corresponding index in pSrc */
     }
   }
-#ifndef SQLITE_OMIT_CHECK
+#ifndef SQLITE4_OMIT_CHECK
   if( pDest->pCheck && sqlite4ExprCompare(pSrc->pCheck, pDest->pCheck) ){
     return 0;   /* Tables have different CHECK constraints.  Ticket #2252 */
   }
 #endif
-#ifndef SQLITE_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
   /* Disallow the transfer optimization if the destination table constains
   ** any foreign key constraints.  This is more restrictive than necessary.
   ** But the main beneficiary of the transfer optimization is the VACUUM 
@@ -1708,7 +1708,7 @@ static int xferOptimization(
   ** the extra complication to make this rule less restrictive is probably
   ** not worth the effort.  Ticket [6284df89debdfa61db8073e062908af0c9b6118e]
   */
-  if( (pParse->db->flags & SQLITE_ForeignKeys)!=0 && pDest->pFKey!=0 ){
+  if( (pParse->db->flags & SQLITE4_ForeignKeys)!=0 && pDest->pFKey!=0 ){
     return 0;
   }
 #endif
@@ -1717,7 +1717,7 @@ static int xferOptimization(
   ** least a possibility, though it might only work if the destination
   ** table (tab1) is initially empty.
   */
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
   sqlite4_xferopt_count++;
 #endif
   iDbSrc = sqlite4SchemaToIndex(pParse->db, pSrc->pSchema);
@@ -1804,7 +1804,7 @@ static int xferOptimization(
   sqlite4VdbeAddOp2(v, OP_Close, iSrc, 0);
   sqlite4VdbeAddOp2(v, OP_Close, iDest, 0);
   if( emptyDestTest ){
-    sqlite4VdbeAddOp2(v, OP_Halt, SQLITE_OK, 0);
+    sqlite4VdbeAddOp2(v, OP_Halt, SQLITE4_OK, 0);
     sqlite4VdbeJumpHere(v, emptyDestTest);
     sqlite4VdbeAddOp2(v, OP_Close, iDest, 0);
     return 0;
@@ -1812,4 +1812,4 @@ static int xferOptimization(
     return 1;
   }
 }
-#endif /* SQLITE_OMIT_XFER_OPT */
+#endif /* SQLITE4_OMIT_XFER_OPT */

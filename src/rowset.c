@@ -165,7 +165,7 @@ static u8 *rowsetAllocateChunk(RowSet *p, int nByte){
 }
 
 static int rowsetEntryKeyCmp(RowSetEntry *pLeft, const u8 *aKey, int nKey){
-  int nCmp = SQLITE_MIN(pLeft->nKey, nKey);
+  int nCmp = SQLITE4_MIN(pLeft->nKey, nKey);
   int res;
   res = memcmp(pLeft->aKey, aKey, nCmp);
   return (res ? res : (pLeft->nKey - nKey));

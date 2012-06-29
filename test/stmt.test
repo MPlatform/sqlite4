@@ -24,7 +24,7 @@ do_test stmt-1.1 {
 # that if a statement journal is required by a statement it is opened and
 # remains open until the current transaction is committed or rolled back.
 #
-# This only work if SQLITE_TEMP_STORE!=3
+# This only work if SQLITE4_TEMP_STORE!=3
 #
 if {$::TEMP_STORE==3} {
   finish_test

@@ -23,9 +23,9 @@
 
 /*
 ** This version of the memory allocator is used only if the
-** SQLITE_MEMDEBUG macro is defined
+** SQLITE4_MEMDEBUG macro is defined
 */
-#ifdef SQLITE_MEMDEBUG
+#ifdef SQLITE4_MEMDEBUG
 
 /*
 ** The backtrace functionality is only available with GLIBC
@@ -188,11 +188,11 @@ static int sqlite4MemSize(void *pMem, void *p){
 */
 static int sqlite4MemInit(void *pMallocEnv){
   sqlite4_env *pEnv = (sqlite4_env*)pMallocEnv;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   assert( (sizeof(struct MemBlockHdr)&7) == 0 );
   if( !pEnv->bMemstat ){
-    mem2.mutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
-    if( mem2.mutex==0 && pEnv->bCoreMutex ) rc = SQLITE_NOMEM;
+    mem2.mutex = sqlite4MutexAlloc(pEnv, SQLITE4_MUTEX_FAST);
+    if( mem2.mutex==0 && pEnv->bCoreMutex ) rc = SQLITE4_NOMEM;
   }
   return rc;
 }
@@ -213,7 +213,7 @@ static void sqlite4MemShutdown(void *NotUsed){
 */
 static void randomFill(char *pBuf, int nByte){
   unsigned int x, y, r;
-  x = SQLITE_PTR_TO_INT(pBuf);
+  x = SQLITE4_PTR_TO_INT(pBuf);
   y = nByte | 1;
   while( nByte >= 4 ){
     x = (x>>1) ^ (-(x&1) & 0xd0000001);
@@ -524,4 +524,4 @@ int sqlite4MemdebugMallocCount(){
 }
 
 
-#endif /* SQLITE_MEMDEBUG */
+#endif /* SQLITE4_MEMDEBUG */

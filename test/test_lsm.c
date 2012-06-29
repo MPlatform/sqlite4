@@ -68,13 +68,13 @@ static int test_lsm_config(
   }
   if( rc!=TCL_OK ) return rc;
 
-  rc = sqlite4_kvstore_control(db, zName, SQLITE_KVCTRL_LSM_HANDLE, &pLsm);
-  if( rc==SQLITE_OK ){
+  rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
+  if( rc==SQLITE4_OK ){
     rc = lsm_config(pLsm, iParam, &iConfig);
     Tcl_SetObjResult(interp, Tcl_NewIntObj(iConfig));
   }
 
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
     return TCL_ERROR;
   }
@@ -124,15 +124,15 @@ static int test_lsm_info(
   }
   if( rc!=TCL_OK ) return rc;
 
-  rc = sqlite4_kvstore_control(db, zName, SQLITE_KVCTRL_LSM_HANDLE, &pLsm);
-  if( rc==SQLITE_OK ){
+  rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
+  if( rc==SQLITE4_OK ){
     char *zList;
     lsm_info(pLsm, iParam, &zList);
     Tcl_SetResult(interp, zList, TCL_VOLATILE);
     lsm_free(lsm_get_env(pLsm), zList);
   }
 
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
     return TCL_ERROR;
   }
@@ -194,11 +194,11 @@ static int test_lsm_work(
   rc = getDbPointer(interp, zDb, &db);
   if( rc!=TCL_OK ) return rc;
 
-  rc = sqlite4_kvstore_control(db, zName, SQLITE_KVCTRL_LSM_HANDLE, &pLsm);
-  if( rc==SQLITE_OK ){
+  rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
+  if( rc==SQLITE4_OK ){
     rc = lsm_work(pLsm, flags, nPage, &nWork);
   }
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
     return TCL_ERROR;
   }

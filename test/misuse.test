@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.
 #
-# This file implements tests for the SQLITE_MISUSE detection logic.
+# This file implements tests for the SQLITE4_MISUSE detection logic.
 # This test file leaks memory and file descriptors.
 #
 # $Id: misuse.test,v 1.11 2006/01/03 00:33:50 drh Exp $
@@ -152,7 +152,7 @@ do_test misuse-3.5 {
 # Attempt to close the database from an sqlite_exec callback.
 #
 # Update for v3: The db cannot be closed because there are active
-# VMs. The sqlite4_close call would return SQLITE_BUSY.
+# VMs. The sqlite4_close call would return SQLITE4_BUSY.
 do_test misuse-4.1 {
   db close
   sqlite4 db test2.db; set ::DB [sqlite4_connection_pointer db]
@@ -170,7 +170,7 @@ do_test misuse-4.3 {
     }
   } msg]
   lappend v $msg $r
-} {0 {} SQLITE_BUSY}
+} {0 {} SQLITE4_BUSY}
 do_test misuse-4.4 {
   # Flush the TCL statement cache here, otherwise the sqlite4_close() will
   # fail because there are still un-finalized() VDBEs.

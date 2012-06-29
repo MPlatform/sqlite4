@@ -1373,7 +1373,7 @@ ifcapable auth {
     }
   } {}
 
-  proc auth {args} {eval lappend ::authargs $args ; return SQLITE_OK}
+  proc auth {args} {eval lappend ::authargs $args ; return SQLITE4_OK}
   db auth auth
 
   # An insert on the parent table must read the child key of any deferred
@@ -1382,7 +1382,7 @@ ifcapable auth {
   do_test fkey2-18.2 {
     execsql { INSERT INTO long VALUES(1, 2, 3) }
     set authargs
-  } {SQLITE_INSERT long {} main {} SQLITE_READ mid i main {}}
+  } {SQLITE4_INSERT long {} main {} SQLITE4_READ mid i main {}}
 
   # An insert on the child table of an immediate constraint must read the
   # parent key columns (to see if it is a violation or not).
@@ -1390,14 +1390,14 @@ ifcapable auth {
   do_test fkey2-18.3 {
     execsql { INSERT INTO short VALUES(1, 3, 2) }
     set authargs
-  } {SQLITE_INSERT short {} main {} SQLITE_READ long b main {}}
+  } {SQLITE4_INSERT short {} main {} SQLITE4_READ long b main {}}
   
   # As must an insert on the child table of a deferred constraint.
   set authargs {}
   do_test fkey2-18.4 {
     execsql { INSERT INTO mid VALUES(1, 3, 2) }
     set authargs
-  } {SQLITE_INSERT mid {} main {} SQLITE_READ long b main {}}
+  } {SQLITE4_INSERT mid {} main {} SQLITE4_READ long b main {}}
 
   do_test fkey2-18.5 {
     execsql {
@@ -1411,7 +1411,7 @@ ifcapable auth {
     set authargs [list]
     execsql { UPDATE nought SET b = 5 }
     set authargs
-  } {SQLITE_UPDATE nought b main {} SQLITE_READ cross e main {} SQLITE_READ cross e main {} SQLITE_READ nought b main {} SQLITE_READ nought b main {} SQLITE_READ nought b main {} SQLITE_UPDATE cross e main {} SQLITE_READ nought b main {} SQLITE_READ cross e main {} SQLITE_READ nought b main {} SQLITE_READ nought b main {}}
+  } {SQLITE4_UPDATE nought b main {} SQLITE4_READ cross e main {} SQLITE4_READ cross e main {} SQLITE4_READ nought b main {} SQLITE4_READ nought b main {} SQLITE4_READ nought b main {} SQLITE4_UPDATE cross e main {} SQLITE4_READ nought b main {} SQLITE4_READ cross e main {} SQLITE4_READ nought b main {} SQLITE4_READ nought b main {}}
 
   do_test fkey2-18.6 {
     execsql {SELECT * FROM cross}
@@ -1426,15 +1426,15 @@ ifcapable auth {
     set authargs [list]
     execsql { INSERT INTO two VALUES(100, 101); }
     set authargs
-  } {SQLITE_INSERT two {} main {} SQLITE_READ one a main {}}
+  } {SQLITE4_INSERT two {} main {} SQLITE4_READ one a main {}}
 
-  # Return SQLITE_IGNORE to requests to read from the parent table. This
+  # Return SQLITE4_IGNORE to requests to read from the parent table. This
   # causes inserts of non-NULL keys into the child table to fail.
   #
   rename auth {}
   proc auth {args} {
-    if {[lindex $args 1] == "long"} {return SQLITE_IGNORE}
-    return SQLITE_OK
+    if {[lindex $args 1] == "long"} {return SQLITE4_IGNORE}
+    return SQLITE4_OK
   }
   do_test fkey2-18.8 {
     catchsql { INSERT INTO short VALUES(1, 3, 2) }
@@ -1467,17 +1467,17 @@ do_test fkey2-19.2 {
   set S [sqlite4_prepare db "DELETE FROM main WHERE id = ?" -1 dummy]
   sqlite4_bind_int $S 1 2
   sqlite4_step $S
-} {SQLITE_CONSTRAINT}
+} {SQLITE4_CONSTRAINT}
 do_test fkey2-19.3 {
   sqlite4_reset $S
-} {SQLITE_CONSTRAINT}
+} {SQLITE4_CONSTRAINT}
 do_test fkey2-19.4 {
   sqlite4_bind_int $S 1 1
   sqlite4_step $S
-} {SQLITE_DONE}
+} {SQLITE4_DONE}
 do_test fkey2-19.4 {
   sqlite4_finalize $S
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 drop_all_tables
 do_test fkey2-20.1 {

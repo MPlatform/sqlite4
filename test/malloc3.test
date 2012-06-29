@@ -22,7 +22,7 @@ source $testdir/malloc_common.tcl
 # Only run these tests if memory debugging is turned on.
 #
 if {!$MEMDEBUG} {
-   puts "Skipping malloc3 tests: not compiled with -DSQLITE_MEMDEBUG..."
+   puts "Skipping malloc3 tests: not compiled with -DSQLITE4_MEMDEBUG..."
    finish_test
    return
 }
@@ -63,7 +63,7 @@ if {!$MEMDEBUG} {
 # in the same way as a failure within _finalize(). The statement handle
 # is not deleted and must be passed to _finalize() for resource deallocation.
 # Attempting to _step() or _reset() the statement after a failed _reset() will
-# always return SQLITE_NOMEM.
+# always return SQLITE4_NOMEM.
 #
 #
 # Other active SQL statements:
@@ -495,7 +495,7 @@ TEST 32 {
     set ::STMT32 [sqlite4_prepare $::DB $sql -1 DUMMY]
     do_test $testid {
       sqlite4_step $::STMT32
-    } {SQLITE_ROW}
+    } {SQLITE4_ROW}
   }
 }
 SQL BEGIN
@@ -513,7 +513,7 @@ TEST 34 {
   if {[info exists ::STMT32]} {
     do_test $testid {
       sqlite4_finalize $::STMT32
-    } {SQLITE_OK}
+    } {SQLITE4_OK}
     unset ::STMT32
   }
 }

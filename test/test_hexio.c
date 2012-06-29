@@ -295,7 +295,7 @@ static int utf8_to_utf8(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   int n;
   int nOut;
   const unsigned char *zOrig;
@@ -315,7 +315,7 @@ static int utf8_to_utf8(
   return TCL_OK;
 #else
   Tcl_AppendResult(interp, 
-      "[utf8_to_utf8] unavailable - SQLITE_DEBUG not defined", 0
+      "[utf8_to_utf8] unavailable - SQLITE4_DEBUG not defined", 0
   );
   return TCL_ERROR;
 #endif

@@ -18,17 +18,17 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS2 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS2 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS2 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS2 is defined).
 */
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS2)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS2)
 
 
 #include "sqlite4.h"
 #include "sqlite4ext.h"
-SQLITE_EXTENSION_INIT1
+SQLITE4_EXTENSION_INIT1
 
 #include "fts2_hash.h"
 #include "fts2_tokenizer.h"
@@ -94,10 +94,10 @@ static void scalarFunc(
     }
   }
 
-  sqlite4_result_blob(context, (void *)&pPtr, sizeof(pPtr), SQLITE_TRANSIENT);
+  sqlite4_result_blob(context, (void *)&pPtr, sizeof(pPtr), SQLITE4_TRANSIENT);
 }
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 
 #include <tcl.h>
 #include <string.h>
@@ -179,18 +179,18 @@ static void testFunc(
   pRet = Tcl_NewObj();
   Tcl_IncrRefCount(pRet);
 
-  if( SQLITE_OK!=p->xCreate(zArg ? 1 : 0, &zArg, &pTokenizer) ){
+  if( SQLITE4_OK!=p->xCreate(zArg ? 1 : 0, &zArg, &pTokenizer) ){
     zErr = "error in xCreate()";
     goto finish;
   }
   pTokenizer->pModule = p;
-  if( SQLITE_OK!=p->xOpen(pTokenizer, zInput, nInput, &pCsr) ){
+  if( SQLITE4_OK!=p->xOpen(pTokenizer, zInput, nInput, &pCsr) ){
     zErr = "error in xOpen()";
     goto finish;
   }
   pCsr->pTokenizer = pTokenizer;
 
-  while( SQLITE_OK==p->xNext(pCsr, &zToken, &nToken, &iStart, &iEnd, &iPos) ){
+  while( SQLITE4_OK==p->xNext(pCsr, &zToken, &nToken, &iStart, &iEnd, &iPos) ){
     Tcl_ListObjAppendElement(0, pRet, Tcl_NewIntObj(iPos));
     Tcl_ListObjAppendElement(0, pRet, Tcl_NewStringObj(zToken, nToken));
     zToken = &zInput[iStart];
@@ -198,11 +198,11 @@ static void testFunc(
     Tcl_ListObjAppendElement(0, pRet, Tcl_NewStringObj(zToken, nToken));
   }
 
-  if( SQLITE_OK!=p->xClose(pCsr) ){
+  if( SQLITE4_OK!=p->xClose(pCsr) ){
     zErr = "error in xClose()";
     goto finish;
   }
-  if( SQLITE_OK!=p->xDestroy(pTokenizer) ){
+  if( SQLITE4_OK!=p->xDestroy(pTokenizer) ){
     zErr = "error in xDestroy()";
     goto finish;
   }
@@ -211,7 +211,7 @@ finish:
   if( zErr ){
     sqlite4_result_error(context, zErr, -1);
   }else{
-    sqlite4_result_text(context, Tcl_GetString(pRet), -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, Tcl_GetString(pRet), -1, SQLITE4_TRANSIENT);
   }
   Tcl_DecrRefCount(pRet);
 }
@@ -227,12 +227,12 @@ int registerTokenizer(
   const char zSql[] = "SELECT fts2_tokenizer(?, ?)";
 
   rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return rc;
   }
 
-  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE_STATIC);
-  sqlite4_bind_blob(pStmt, 2, &p, sizeof(p), SQLITE_STATIC);
+  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE4_STATIC);
+  sqlite4_bind_blob(pStmt, 2, &p, sizeof(p), SQLITE4_STATIC);
   sqlite4_step(pStmt);
 
   return sqlite4_finalize(pStmt);
@@ -250,13 +250,13 @@ int queryFts2Tokenizer(
 
   *pp = 0;
   rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return rc;
   }
 
-  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE_STATIC);
-  if( SQLITE_ROW==sqlite4_step(pStmt) ){
-    if( sqlite4_column_type(pStmt, 0)==SQLITE_BLOB ){
+  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE4_STATIC);
+  if( SQLITE4_ROW==sqlite4_step(pStmt) ){
+    if( sqlite4_column_type(pStmt, 0)==SQLITE4_BLOB ){
       memcpy(pp, sqlite4_column_blob(pStmt, 0), sizeof(*pp));
     }
   }
@@ -269,7 +269,7 @@ void sqlite4Fts2SimpleTokenizerModule(sqlite4_tokenizer_module const**ppModule);
 /*
 ** Implementation of the scalar function fts2_tokenizer_internal_test().
 ** This function is used for testing only, it is not included in the
-** build unless SQLITE_TEST is defined.
+** build unless SQLITE4_TEST is defined.
 **
 ** The purpose of this is to test that the fts2_tokenizer() function
 ** can be used as designed by the C-code in the queryFts2Tokenizer and
@@ -297,21 +297,21 @@ static void intTestFunc(
   /* Test the query function */
   sqlite4Fts2SimpleTokenizerModule(&p1);
   rc = queryFts2Tokenizer(db, "simple", &p2);
-  assert( rc==SQLITE_OK );
+  assert( rc==SQLITE4_OK );
   assert( p1==p2 );
   rc = queryFts2Tokenizer(db, "nosuchtokenizer", &p2);
-  assert( rc==SQLITE_ERROR );
+  assert( rc==SQLITE4_ERROR );
   assert( p2==0 );
   assert( 0==strcmp(sqlite4_errmsg(db), "unknown tokenizer: nosuchtokenizer") );
 
   /* Test the storage function */
   rc = registerTokenizer(db, "nosuchtokenizer", p1);
-  assert( rc==SQLITE_OK );
+  assert( rc==SQLITE4_OK );
   rc = queryFts2Tokenizer(db, "nosuchtokenizer", &p2);
-  assert( rc==SQLITE_OK );
+  assert( rc==SQLITE4_OK );
   assert( p2==p1 );
 
-  sqlite4_result_text(context, "ok", -1, SQLITE_STATIC);
+  sqlite4_result_text(context, "ok", -1, SQLITE4_STATIC);
 }
 
 #endif
@@ -338,25 +338,25 @@ int sqlite4Fts2InitHashTable(
   fts2Hash *pHash, 
   const char *zName
 ){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   void *p = (void *)pHash;
-  const int any = SQLITE_ANY;
+  const int any = SQLITE4_ANY;
   char *zTest = 0;
   char *zTest2 = 0;
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
   void *pdb = (void *)db;
   zTest = sqlite4_mprintf("%s_test", zName);
   zTest2 = sqlite4_mprintf("%s_internal_test", zName);
   if( !zTest || !zTest2 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }
 #endif
 
-  if( rc!=SQLITE_OK
+  if( rc!=SQLITE4_OK
    || (rc = sqlite4_create_function(db, zName, 1, any, p, scalarFunc, 0, 0))
    || (rc = sqlite4_create_function(db, zName, 2, any, p, scalarFunc, 0, 0))
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
    || (rc = sqlite4_create_function(db, zTest, 2, any, p, testFunc, 0, 0))
    || (rc = sqlite4_create_function(db, zTest, 3, any, p, testFunc, 0, 0))
    || (rc = sqlite4_create_function(db, zTest2, 0, any, pdb, intTestFunc, 0, 0))
@@ -368,4 +368,4 @@ int sqlite4Fts2InitHashTable(
   return rc;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS2) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS2) */

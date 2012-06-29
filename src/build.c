@@ -81,7 +81,7 @@ void sqlite4FinishCoding(Parse *pParse){
                             db->aDb[iDb].pSchema->iGeneration);
         }
       }
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
       {
         int i;
         for(i=0; i<pParse->nVtabLock; i++){
@@ -105,8 +105,8 @@ void sqlite4FinishCoding(Parse *pParse){
   /* Get the VDBE program ready for execution
   */
   if( v && ALWAYS(pParse->nErr==0) && !db->mallocFailed ){
-#ifdef SQLITE_DEBUG
-    FILE *trace = (db->flags & SQLITE_VdbeTrace)!=0 ? stdout : 0;
+#ifdef SQLITE4_DEBUG
+    FILE *trace = (db->flags & SQLITE4_VdbeTrace)!=0 ? stdout : 0;
     sqlite4VdbeTrace(v, trace);
 #endif
     assert( pParse->iCacheLevel==0 );  /* Disables and re-enables match */
@@ -114,10 +114,10 @@ void sqlite4FinishCoding(Parse *pParse){
     *  See ticket [a696379c1f08866] */
     if( pParse->pAinc!=0 && pParse->nTab==0 ) pParse->nTab = 1;
     sqlite4VdbeMakeReady(v, pParse);
-    pParse->rc = SQLITE_DONE;
+    pParse->rc = SQLITE4_DONE;
     pParse->colNamesSet = 0;
   }else{
-    pParse->rc = SQLITE_ERROR;
+    pParse->rc = SQLITE4_ERROR;
   }
   pParse->nTab = 0;
   pParse->nMem = 0;
@@ -167,7 +167,7 @@ static void allocateTableNumber(
 ** outermost parser.
 **
 ** Not everything is nestable.  This facility is designed to permit
-** INSERT, UPDATE, and DELETE operations against SQLITE_MASTER.  Use
+** INSERT, UPDATE, and DELETE operations against SQLITE4_MASTER.  Use
 ** care if you decide to try to use this routine for some other purposes.
 */
 void sqlite4NestedParse(Parse *pParse, const char *zFormat, ...){
@@ -244,7 +244,7 @@ Table *sqlite4LocateTable(
 
   /* Read the database schema. If an error occurs, leave an error message
   ** and code in pParse and return NULL. */
-  if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
+  if( SQLITE4_OK!=sqlite4ReadSchema(pParse) ){
     return 0;
   }
 
@@ -293,7 +293,7 @@ Index *sqlite4FindIndex(sqlite4 *db, const char *zName, const char *zDb){
 ** Reclaim the memory used by an index
 */
 static void freeIndex(sqlite4 *db, Index *p){
-#ifndef SQLITE_OMIT_ANALYZE
+#ifndef SQLITE4_OMIT_ANALYZE
   sqlite4DeleteIndexSamples(db, p);
 #endif
   sqlite4DbFree(db, p->zColAff);
@@ -329,7 +329,7 @@ void sqlite4UnlinkAndDeleteIndex(sqlite4 *db, int iDb, const char *zIdxName){
     }
     freeIndex(db, pIndex);
   }
-  db->flags |= SQLITE_InternChanges;
+  db->flags |= SQLITE4_InternChanges;
 }
 
 /*
@@ -373,7 +373,7 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
       sqlite4SchemaClear(db->pEnv, pDb->pSchema);
     }
   }
-  db->flags &= ~SQLITE_InternChanges;
+  db->flags &= ~SQLITE4_InternChanges;
   sqlite4VtabUnlockList(db);
 
   /* If one or more of the auxiliary database files has been closed,
@@ -407,7 +407,7 @@ void sqlite4ResetInternalSchema(sqlite4 *db, int iDb){
 ** This routine is called when a commit occurs.
 */
 void sqlite4CommitInternalChanges(sqlite4 *db){
-  db->flags &= ~SQLITE_InternChanges;
+  db->flags &= ~SQLITE4_InternChanges;
 }
 
 /*
@@ -471,10 +471,10 @@ void sqlite4DeleteTable(sqlite4 *db, Table *pTable){
   sqlite4DbFree(db, pTable->zName);
   sqlite4DbFree(db, pTable->zColAff);
   sqlite4SelectDelete(db, pTable->pSelect);
-#ifndef SQLITE_OMIT_CHECK
+#ifndef SQLITE4_OMIT_CHECK
   sqlite4ExprDelete(db, pTable->pCheck);
 #endif
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   sqlite4VtabClear(db, pTable);
 #endif
   sqlite4DbFree(db, pTable);
@@ -496,7 +496,7 @@ void sqlite4UnlinkAndDeleteTable(sqlite4 *db, int iDb, const char *zTabName){
   p = sqlite4HashInsert(&pDb->pSchema->tblHash, zTabName,
                         sqlite4Strlen30(zTabName),0);
   sqlite4DeleteTable(db, p);
-  db->flags |= SQLITE_InternChanges;
+  db->flags |= SQLITE4_InternChanges;
 }
 
 /*
@@ -627,12 +627,12 @@ int sqlite4TwoPartName(
 */
 int sqlite4CheckObjectName(Parse *pParse, const char *zName){
   if( !pParse->db->init.busy && pParse->nested==0 
-          && (pParse->db->flags & SQLITE_WriteSchema)==0
+          && (pParse->db->flags & SQLITE4_WriteSchema)==0
           && 0==sqlite4StrNICmp(zName, "sqlite_", 7) ){
     sqlite4ErrorMsg(pParse, "object name reserved for internal use: %s", zName);
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -697,29 +697,29 @@ void sqlite4StartTable(
   pParse->sNameToken = *pName;
   zName = sqlite4NameFromToken(db, pName);
   if( zName==0 ) return;
-  if( SQLITE_OK!=sqlite4CheckObjectName(pParse, zName) ){
+  if( SQLITE4_OK!=sqlite4CheckObjectName(pParse, zName) ){
     goto begin_table_error;
   }
   if( db->init.iDb==1 ) isTemp = 1;
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   assert( (isTemp & 1)==isTemp );
   {
     int code;
     char *zDb = db->aDb[iDb].zName;
-    if( sqlite4AuthCheck(pParse, SQLITE_INSERT, SCHEMA_TABLE(isTemp), 0, zDb) ){
+    if( sqlite4AuthCheck(pParse, SQLITE4_INSERT, SCHEMA_TABLE(isTemp), 0, zDb) ){
       goto begin_table_error;
     }
     if( isView ){
       if( !OMIT_TEMPDB && isTemp ){
-        code = SQLITE_CREATE_TEMP_VIEW;
+        code = SQLITE4_CREATE_TEMP_VIEW;
       }else{
-        code = SQLITE_CREATE_VIEW;
+        code = SQLITE4_CREATE_VIEW;
       }
     }else{
       if( !OMIT_TEMPDB && isTemp ){
-        code = SQLITE_CREATE_TEMP_TABLE;
+        code = SQLITE4_CREATE_TEMP_TABLE;
       }else{
-        code = SQLITE_CREATE_TABLE;
+        code = SQLITE4_CREATE_TABLE;
       }
     }
     if( !isVirtual && sqlite4AuthCheck(pParse, code, zName, 0, zDb) ){
@@ -737,7 +737,7 @@ void sqlite4StartTable(
   */
   if( !IN_DECLARE_VTAB ){
     char *zDb = db->aDb[iDb].zName;
-    if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
+    if( SQLITE4_OK!=sqlite4ReadSchema(pParse) ){
       goto begin_table_error;
     }
     pTable = sqlite4FindTable(db, zName, zDb);
@@ -759,7 +759,7 @@ void sqlite4StartTable(
   pTable = sqlite4DbMallocZero(db, sizeof(Table));
   if( pTable==0 ){
     db->mallocFailed = 1;
-    pParse->rc = SQLITE_NOMEM;
+    pParse->rc = SQLITE4_NOMEM;
     pParse->nErr++;
     goto begin_table_error;
   }
@@ -774,14 +774,14 @@ void sqlite4StartTable(
   ** then record a pointer to this table in the main database structure
   ** so that INSERT can find the table easily.
   */
-#ifndef SQLITE_OMIT_AUTOINCREMENT
+#ifndef SQLITE4_OMIT_AUTOINCREMENT
   if( !pParse->nested && strcmp(zName, "sqlite_sequence")==0 ){
     pTable->pSchema->pSeqTab = pTable;
   }
 #endif
 
   /* Begin generating the code that will insert the table record into
-  ** the SQLITE_MASTER table.  Note in particular that we must go ahead
+  ** the SQLITE4_MASTER table.  Note in particular that we must go ahead
   ** and allocate the record number for the table entry now.  Before any
   ** PRIMARY KEY or UNIQUE keywords are parsed.  Those keywords will cause
   ** indices to be created and the table record must come before the 
@@ -792,7 +792,7 @@ void sqlite4StartTable(
     int reg1, reg3;
     sqlite4BeginWriteOperation(pParse, 0, iDb);
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
     if( isVirtual ){
       sqlite4VdbeAddOp0(v, OP_VBegin);
     }
@@ -810,7 +810,7 @@ void sqlite4StartTable(
     reg1 = pParse->regRowid = ++pParse->nMem;
     reg3 = ++pParse->nMem;
 #if 0
-#if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_VIRTUALTABLE)
+#if !defined(SQLITE4_OMIT_VIEW) || !defined(SQLITE4_OMIT_VIRTUALTABLE)
     if( isView || isVirtual ){
       sqlite4VdbeAddOp2(v, OP_Integer, 0, reg2);
     }else
@@ -865,8 +865,8 @@ void sqlite4AddColumn(Parse *pParse, Token *pName){
   Column *pCol;
   sqlite4 *db = pParse->db;
   if( (p = pParse->pNewTable)==0 ) return;
-#if SQLITE_MAX_COLUMN
-  if( p->nCol+1>db->aLimit[SQLITE_LIMIT_COLUMN] ){
+#if SQLITE4_MAX_COLUMN
+  if( p->nCol+1>db->aLimit[SQLITE4_LIMIT_COLUMN] ){
     sqlite4ErrorMsg(pParse, "too many columns on %s", p->zName);
     return;
   }
@@ -897,7 +897,7 @@ void sqlite4AddColumn(Parse *pParse, Token *pName){
   ** 'NONE'. If there is a type specified, then sqlite4AddColumnType() will
   ** be called next to set pCol->affinity correctly.
   */
-  pCol->affinity = SQLITE_AFF_NONE;
+  pCol->affinity = SQLITE4_AFF_NONE;
   p->nCol++;
 }
 
@@ -923,51 +923,51 @@ void sqlite4AddNotNull(Parse *pParse, int onError){
 ** found, the corresponding affinity is returned. If zType contains
 ** more than one of the substrings, entries toward the top of 
 ** the table take priority. For example, if zType is 'BLOBINT', 
-** SQLITE_AFF_INTEGER is returned.
+** SQLITE4_AFF_INTEGER is returned.
 **
 ** Substring     | Affinity
 ** --------------------------------
-** 'INT'         | SQLITE_AFF_INTEGER
-** 'CHAR'        | SQLITE_AFF_TEXT
-** 'CLOB'        | SQLITE_AFF_TEXT
-** 'TEXT'        | SQLITE_AFF_TEXT
-** 'BLOB'        | SQLITE_AFF_NONE
-** 'REAL'        | SQLITE_AFF_REAL
-** 'FLOA'        | SQLITE_AFF_REAL
-** 'DOUB'        | SQLITE_AFF_REAL
+** 'INT'         | SQLITE4_AFF_INTEGER
+** 'CHAR'        | SQLITE4_AFF_TEXT
+** 'CLOB'        | SQLITE4_AFF_TEXT
+** 'TEXT'        | SQLITE4_AFF_TEXT
+** 'BLOB'        | SQLITE4_AFF_NONE
+** 'REAL'        | SQLITE4_AFF_REAL
+** 'FLOA'        | SQLITE4_AFF_REAL
+** 'DOUB'        | SQLITE4_AFF_REAL
 **
 ** If none of the substrings in the above table are found,
-** SQLITE_AFF_NUMERIC is returned.
+** SQLITE4_AFF_NUMERIC is returned.
 */
 char sqlite4AffinityType(const char *zIn){
   u32 h = 0;
-  char aff = SQLITE_AFF_NUMERIC;
+  char aff = SQLITE4_AFF_NUMERIC;
 
   if( zIn ) while( zIn[0] ){
     h = (h<<8) + sqlite4UpperToLower[(*zIn)&0xff];
     zIn++;
     if( h==(('c'<<24)+('h'<<16)+('a'<<8)+'r') ){             /* CHAR */
-      aff = SQLITE_AFF_TEXT; 
+      aff = SQLITE4_AFF_TEXT; 
     }else if( h==(('c'<<24)+('l'<<16)+('o'<<8)+'b') ){       /* CLOB */
-      aff = SQLITE_AFF_TEXT;
+      aff = SQLITE4_AFF_TEXT;
     }else if( h==(('t'<<24)+('e'<<16)+('x'<<8)+'t') ){       /* TEXT */
-      aff = SQLITE_AFF_TEXT;
+      aff = SQLITE4_AFF_TEXT;
     }else if( h==(('b'<<24)+('l'<<16)+('o'<<8)+'b')          /* BLOB */
-        && (aff==SQLITE_AFF_NUMERIC || aff==SQLITE_AFF_REAL) ){
-      aff = SQLITE_AFF_NONE;
-#ifndef SQLITE_OMIT_FLOATING_POINT
+        && (aff==SQLITE4_AFF_NUMERIC || aff==SQLITE4_AFF_REAL) ){
+      aff = SQLITE4_AFF_NONE;
+#ifndef SQLITE4_OMIT_FLOATING_POINT
     }else if( h==(('r'<<24)+('e'<<16)+('a'<<8)+'l')          /* REAL */
-        && aff==SQLITE_AFF_NUMERIC ){
-      aff = SQLITE_AFF_REAL;
+        && aff==SQLITE4_AFF_NUMERIC ){
+      aff = SQLITE4_AFF_REAL;
     }else if( h==(('f'<<24)+('l'<<16)+('o'<<8)+'a')          /* FLOA */
-        && aff==SQLITE_AFF_NUMERIC ){
-      aff = SQLITE_AFF_REAL;
+        && aff==SQLITE4_AFF_NUMERIC ){
+      aff = SQLITE4_AFF_REAL;
     }else if( h==(('d'<<24)+('o'<<16)+('u'<<8)+'b')          /* DOUB */
-        && aff==SQLITE_AFF_NUMERIC ){
-      aff = SQLITE_AFF_REAL;
+        && aff==SQLITE4_AFF_NUMERIC ){
+      aff = SQLITE4_AFF_REAL;
 #endif
     }else if( (h&0x00FFFFFF)==(('i'<<16)+('n'<<8)+'t') ){    /* INT */
-      aff = SQLITE_AFF_INTEGER;
+      aff = SQLITE4_AFF_INTEGER;
       break;
     }
   }
@@ -1054,7 +1054,7 @@ void sqlite4AddPrimaryKey(
   ExprList *pList,  /* List of field names to be indexed */
   int onError,      /* What to do with a uniqueness conflict */
   int autoInc,      /* True if the AUTOINCREMENT keyword is present */
-  int sortOrder     /* SQLITE_SO_ASC or SQLITE_SO_DESC */
+  int sortOrder     /* SQLITE4_SO_ASC or SQLITE4_SO_DESC */
 ){
   Table *pTab = pParse->pNewTable;
 #if 0
@@ -1093,13 +1093,13 @@ void sqlite4AddPrimaryKey(
   }
 
   if( zType && sqlite4StrICmp(zType, "INTEGER")==0
-        && sortOrder==SQLITE_SO_ASC ){
+        && sortOrder==SQLITE4_SO_ASC ){
     pTab->iPKey = iCol;
     pTab->keyConf = (u8)onError;
     assert( autoInc==0 || autoInc==1 );
     pTab->tabFlags |= autoInc*TF_Autoincrement;
   }else if( autoInc ){
-#ifndef SQLITE_OMIT_AUTOINCREMENT
+#ifndef SQLITE4_OMIT_AUTOINCREMENT
     sqlite4ErrorMsg(pParse, "AUTOINCREMENT is only allowed on an "
        "INTEGER PRIMARY KEY");
 #endif
@@ -1127,7 +1127,7 @@ void sqlite4AddCheckConstraint(
   Expr *pCheckExpr  /* The check expression */
 ){
   sqlite4 *db = pParse->db;
-#ifndef SQLITE_OMIT_CHECK
+#ifndef SQLITE4_OMIT_CHECK
   Table *pTab = pParse->pNewTable;
   if( pTab && !IN_DECLARE_VTAB ){
     pTab->pCheck = sqlite4ExprAnd(db, pTab->pCheck, pCheckExpr);
@@ -1323,11 +1323,11 @@ static char *createTableStmt(sqlite4 *db, Table *p){
   zStmt[k++] = '(';
   for(pCol=p->aCol, i=0; i<p->nCol; i++, pCol++){
     static const char * const azType[] = {
-        /* SQLITE_AFF_TEXT    */ " TEXT",
-        /* SQLITE_AFF_NONE    */ "",
-        /* SQLITE_AFF_NUMERIC */ " NUM",
-        /* SQLITE_AFF_INTEGER */ " INT",
-        /* SQLITE_AFF_REAL    */ " REAL"
+        /* SQLITE4_AFF_TEXT    */ " TEXT",
+        /* SQLITE4_AFF_NONE    */ "",
+        /* SQLITE4_AFF_NUMERIC */ " NUM",
+        /* SQLITE4_AFF_INTEGER */ " INT",
+        /* SQLITE4_AFF_REAL    */ " REAL"
     };
     int len;
     const char *zType;
@@ -1335,17 +1335,17 @@ static char *createTableStmt(sqlite4 *db, Table *p){
     k += sqlite4_snprintf(&zStmt[k], n-k, zSep);
     zSep = zSep2;
     identPut(zStmt, &k, pCol->zName);
-    assert( pCol->affinity-SQLITE_AFF_TEXT >= 0 );
-    assert( pCol->affinity-SQLITE_AFF_TEXT < ArraySize(azType) );
-    testcase( pCol->affinity==SQLITE_AFF_TEXT );
-    testcase( pCol->affinity==SQLITE_AFF_NONE );
-    testcase( pCol->affinity==SQLITE_AFF_NUMERIC );
-    testcase( pCol->affinity==SQLITE_AFF_INTEGER );
-    testcase( pCol->affinity==SQLITE_AFF_REAL );
+    assert( pCol->affinity-SQLITE4_AFF_TEXT >= 0 );
+    assert( pCol->affinity-SQLITE4_AFF_TEXT < ArraySize(azType) );
+    testcase( pCol->affinity==SQLITE4_AFF_TEXT );
+    testcase( pCol->affinity==SQLITE4_AFF_NONE );
+    testcase( pCol->affinity==SQLITE4_AFF_NUMERIC );
+    testcase( pCol->affinity==SQLITE4_AFF_INTEGER );
+    testcase( pCol->affinity==SQLITE4_AFF_REAL );
     
-    zType = azType[pCol->affinity - SQLITE_AFF_TEXT];
+    zType = azType[pCol->affinity - SQLITE4_AFF_TEXT];
     len = sqlite4Strlen30(zType);
-    assert( pCol->affinity==SQLITE_AFF_NONE 
+    assert( pCol->affinity==SQLITE4_AFF_NONE 
             || pCol->affinity==sqlite4AffinityType(zType) );
     memcpy(&zStmt[k], zType, len);
     k += len;
@@ -1431,7 +1431,7 @@ static void addImplicitPrimaryKey(
   Index *pIndex;                  /* New index */
   char *zExtra;
 
-  assert( !pTab->pIndex || pTab->pIndex->eIndexType!=SQLITE_INDEX_PRIMARYKEY );
+  assert( !pTab->pIndex || pTab->pIndex->eIndexType!=SQLITE4_INDEX_PRIMARYKEY );
   assert( sqlite4Strlen30("binary")==6 );
   pIndex = newIndex(pParse, pTab, pTab->zName, 1, OE_Abort, 1+6, &zExtra);
   if( pIndex ){
@@ -1440,7 +1440,7 @@ static void addImplicitPrimaryKey(
     pIndex->aiColumn[0] = -1;
     pIndex->azColl[0] = zExtra;
     memcpy(zExtra, "binary", 7);
-    pIndex->eIndexType = SQLITE_INDEX_PRIMARYKEY;
+    pIndex->eIndexType = SQLITE4_INDEX_PRIMARYKEY;
     pIndex->pNext = pTab->pIndex;
     pTab->pIndex = pIndex;
     sqlite4DefaultRowEst(pIndex);
@@ -1508,7 +1508,7 @@ void sqlite4EndTable(
     if( pPk ) iPkRoot = pPk->tnum;
   }
 
-#ifndef SQLITE_OMIT_CHECK
+#ifndef SQLITE4_OMIT_CHECK
   /* Resolve names in all CHECK constraint expressions.
   */
   if( p->pCheck ){
@@ -1528,10 +1528,10 @@ void sqlite4EndTable(
       return;
     }
   }
-#endif /* !defined(SQLITE_OMIT_CHECK) */
+#endif /* !defined(SQLITE4_OMIT_CHECK) */
 
   /* If not initializing, then create a record for the new table
-  ** in the SQLITE_MASTER table of the database.
+  ** in the SQLITE4_MASTER table of the database.
   **
   ** If this is a TEMPORARY table, write the entry into the auxiliary
   ** file instead of into the main database file.
@@ -1555,7 +1555,7 @@ void sqlite4EndTable(
       /* A regular table */
       zType = "table";
       zType2 = "TABLE";
-#ifndef SQLITE_OMIT_VIEW
+#ifndef SQLITE4_OMIT_VIEW
     }else{
       /* A view */
       zType = "view";
@@ -1605,7 +1605,7 @@ void sqlite4EndTable(
     }
 
     /* A slot for the record has already been allocated in the 
-    ** SQLITE_MASTER table.  We just need to update that slot with all
+    ** SQLITE4_MASTER table.  We just need to update that slot with all
     ** the information we've collected.
     */
     sqlite4NestedParse(pParse,
@@ -1623,7 +1623,7 @@ void sqlite4EndTable(
     sqlite4DbFree(db, zStmt);
     sqlite4ChangeCookie(pParse, iDb);
 
-#ifndef SQLITE_OMIT_AUTOINCREMENT
+#ifndef SQLITE4_OMIT_AUTOINCREMENT
     /* Check to see if we need to create an sqlite_sequence table for
     ** keeping track of autoincrement keys.
     */
@@ -1658,9 +1658,9 @@ void sqlite4EndTable(
     }
     pParse->pNewTable = 0;
     db->nTable++;
-    db->flags |= SQLITE_InternChanges;
+    db->flags |= SQLITE4_InternChanges;
 
-#ifndef SQLITE_OMIT_ALTERTABLE
+#ifndef SQLITE4_OMIT_ALTERTABLE
     if( !p->pSelect ){
       const char *zName = (const char *)pParse->sNameToken.z;
       int nName;
@@ -1675,7 +1675,7 @@ void sqlite4EndTable(
   }
 }
 
-#ifndef SQLITE_OMIT_VIEW
+#ifndef SQLITE4_OMIT_VIEW
 /*
 ** The parser calls this routine in order to create a new VIEW
 */
@@ -1745,13 +1745,13 @@ void sqlite4CreateView(
   sEnd.z = &z[n-1];
   sEnd.n = 1;
 
-  /* Use sqlite4EndTable() to add the view to the SQLITE_MASTER table */
+  /* Use sqlite4EndTable() to add the view to the SQLITE4_MASTER table */
   sqlite4EndTable(pParse, 0, &sEnd, 0);
   return;
 }
-#endif /* SQLITE_OMIT_VIEW */
+#endif /* SQLITE4_OMIT_VIEW */
 
-#if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_VIRTUALTABLE)
+#if !defined(SQLITE4_OMIT_VIEW) || !defined(SQLITE4_OMIT_VIRTUALTABLE)
 /*
 ** The Table structure pTable is really a VIEW.  Fill in the names of
 ** the columns of the view in the pTable structure.  Return the number
@@ -1767,14 +1767,14 @@ int sqlite4ViewGetColumnNames(Parse *pParse, Table *pTable){
 
   assert( pTable );
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( sqlite4VtabCallConnect(pParse, pTable) ){
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
   if( IsVirtual(pTable) ) return 0;
 #endif
 
-#ifndef SQLITE_OMIT_VIEW
+#ifndef SQLITE4_OMIT_VIEW
   /* A positive nCol means the columns names for this view are
   ** already known.
   */
@@ -1816,7 +1816,7 @@ int sqlite4ViewGetColumnNames(Parse *pParse, Table *pTable){
     sqlite4SrcListAssignCursors(pParse, pSel->pSrc);
     pTable->nCol = -1;
     db->lookaside.bEnabled = 0;
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
     xAuth = db->xAuth;
     db->xAuth = 0;
     pSelTab = sqlite4ResultSetOfSelect(pParse, pSel);
@@ -1842,12 +1842,12 @@ int sqlite4ViewGetColumnNames(Parse *pParse, Table *pTable){
   } else {
     nErr++;
   }
-#endif /* SQLITE_OMIT_VIEW */
+#endif /* SQLITE4_OMIT_VIEW */
   return nErr;  
 }
-#endif /* !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_VIRTUALTABLE) */
+#endif /* !defined(SQLITE4_OMIT_VIEW) || !defined(SQLITE4_OMIT_VIRTUALTABLE) */
 
-#ifndef SQLITE_OMIT_VIEW
+#ifndef SQLITE4_OMIT_VIEW
 /*
 ** Clear the column names from every VIEW in database idx.
 */
@@ -1866,7 +1866,7 @@ static void sqliteViewResetAll(sqlite4 *db, int idx){
 }
 #else
 # define sqliteViewResetAll(A,B)
-#endif /* SQLITE_OMIT_VIEW */
+#endif /* SQLITE4_OMIT_VIEW */
 
 
 /*
@@ -1934,7 +1934,7 @@ void sqlite4CodeDropTable(Parse *pParse, Table *pTab, int iDb, int isView){
   assert( v!=0 );
   sqlite4BeginWriteOperation(pParse, 1, iDb);
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( IsVirtual(pTab) ){
     sqlite4VdbeAddOp0(v, OP_VBegin);
   }
@@ -1952,7 +1952,7 @@ void sqlite4CodeDropTable(Parse *pParse, Table *pTab, int iDb, int isView){
     pTrigger = pTrigger->pNext;
   }
 
-#ifndef SQLITE_OMIT_AUTOINCREMENT
+#ifndef SQLITE4_OMIT_AUTOINCREMENT
   /* Remove any entries of the sqlite_sequence table associated with
   ** the table being dropped. This is done before the table is dropped
   ** at the btree level, in case the sqlite_sequence table needs to
@@ -1966,7 +1966,7 @@ void sqlite4CodeDropTable(Parse *pParse, Table *pTab, int iDb, int isView){
   }
 #endif
 
-  /* Drop all SQLITE_MASTER table and index entries that refer to the
+  /* Drop all SQLITE4_MASTER table and index entries that refer to the
   ** table. The program name loops through the master table and deletes
   ** every row that refers to a table of the same name as the one being
   ** dropped. Triggers are handled seperately because a trigger can be
@@ -2024,37 +2024,37 @@ void sqlite4DropTable(Parse *pParse, SrcList *pName, int isView, int noErr){
   if( IsVirtual(pTab) && sqlite4ViewGetColumnNames(pParse, pTab) ){
     goto exit_drop_table;
   }
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   {
     int code;
     const char *zTab = SCHEMA_TABLE(iDb);
     const char *zDb = db->aDb[iDb].zName;
     const char *zArg2 = 0;
-    if( sqlite4AuthCheck(pParse, SQLITE_DELETE, zTab, 0, zDb)){
+    if( sqlite4AuthCheck(pParse, SQLITE4_DELETE, zTab, 0, zDb)){
       goto exit_drop_table;
     }
     if( isView ){
       if( !OMIT_TEMPDB && iDb==1 ){
-        code = SQLITE_DROP_TEMP_VIEW;
+        code = SQLITE4_DROP_TEMP_VIEW;
       }else{
-        code = SQLITE_DROP_VIEW;
+        code = SQLITE4_DROP_VIEW;
       }
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
     }else if( IsVirtual(pTab) ){
-      code = SQLITE_DROP_VTABLE;
+      code = SQLITE4_DROP_VTABLE;
       zArg2 = sqlite4GetVTable(db, pTab)->pMod->zName;
 #endif
     }else{
       if( !OMIT_TEMPDB && iDb==1 ){
-        code = SQLITE_DROP_TEMP_TABLE;
+        code = SQLITE4_DROP_TEMP_TABLE;
       }else{
-        code = SQLITE_DROP_TABLE;
+        code = SQLITE4_DROP_TABLE;
       }
     }
     if( sqlite4AuthCheck(pParse, code, pTab->zName, zArg2, zDb) ){
       goto exit_drop_table;
     }
-    if( sqlite4AuthCheck(pParse, SQLITE_DELETE, pTab->zName, 0, zDb) ){
+    if( sqlite4AuthCheck(pParse, SQLITE4_DELETE, pTab->zName, 0, zDb) ){
       goto exit_drop_table;
     }
   }
@@ -2065,7 +2065,7 @@ void sqlite4DropTable(Parse *pParse, SrcList *pName, int isView, int noErr){
     goto exit_drop_table;
   }
 
-#ifndef SQLITE_OMIT_VIEW
+#ifndef SQLITE4_OMIT_VIEW
   /* Ensure DROP TABLE is not used on a view, and DROP VIEW is not used
   ** on a table.
   */
@@ -2118,7 +2118,7 @@ void sqlite4CreateForeignKey(
   int flags            /* Conflict resolution algorithms. */
 ){
   sqlite4 *db = pParse->db;
-#ifndef SQLITE_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
   FKey *pFKey = 0;
   FKey *pNextTo;
   Table *p = pParse->pNewTable;
@@ -2218,7 +2218,7 @@ void sqlite4CreateForeignKey(
 
 fk_end:
   sqlite4DbFree(db, pFKey);
-#endif /* !defined(SQLITE_OMIT_FOREIGN_KEY) */
+#endif /* !defined(SQLITE4_OMIT_FOREIGN_KEY) */
   sqlite4ExprListDelete(db, pFromCol);
   sqlite4ExprListDelete(db, pToCol);
 }
@@ -2231,7 +2231,7 @@ fk_end:
 ** accordingly.
 */
 void sqlite4DeferForeignKey(Parse *pParse, int isDeferred){
-#ifndef SQLITE_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
   Table *pTab;
   FKey *pFKey;
   if( (pTab = pParse->pNewTable)==0 || (pFKey = pTab->pFKey)==0 ) return;
@@ -2257,8 +2257,8 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx, int bCreate){
   int iDb = sqlite4SchemaToIndex(db, pIdx->pSchema);
   Index *pPk;
 
-#ifndef SQLITE_OMIT_AUTHORIZATION
-  if( sqlite4AuthCheck(pParse, SQLITE_REINDEX, pIdx->zName, 0,
+#ifndef SQLITE4_OMIT_AUTHORIZATION
+  if( sqlite4AuthCheck(pParse, SQLITE4_REINDEX, pIdx->zName, 0,
       db->aDb[iDb].zName ) ){
     return;
   }
@@ -2353,7 +2353,7 @@ Index *sqlite4CreateIndex(
   if( db->mallocFailed || IN_DECLARE_VTAB ){
     goto exit_create_index;
   }
-  if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
+  if( SQLITE4_OK!=sqlite4ReadSchema(pParse) ){
     goto exit_create_index;
   }
 
@@ -2372,7 +2372,7 @@ Index *sqlite4CreateIndex(
     if( iDb<0 ) goto exit_create_index;
     assert( pName && pName->z );
 
-#ifndef SQLITE_OMIT_TEMPDB
+#ifndef SQLITE4_OMIT_TEMPDB
     /* If the index name was unqualified, check if the the table
     ** is a temp table. If so, set the database to 1. Do not do this
     ** if initialising a database schema.
@@ -2418,14 +2418,14 @@ Index *sqlite4CreateIndex(
   }
 #endif
 
-#ifndef SQLITE_OMIT_VIEW
+#ifndef SQLITE4_OMIT_VIEW
   if( pTab->pSelect ){
     assert( !bPrimaryKey );
     sqlite4ErrorMsg(pParse, "views may not be indexed");
     goto exit_create_index;
   }
 #endif
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( IsVirtual(pTab) ){
     assert( !bPrimaryKey );
     sqlite4ErrorMsg(pParse, "virtual tables may not be indexed");
@@ -2451,7 +2451,7 @@ Index *sqlite4CreateIndex(
     zName = sqlite4NameFromToken(db, pName);
     if( zName==0 ) goto exit_create_index;
     assert( pName->z!=0 );
-    if( SQLITE_OK!=sqlite4CheckObjectName(pParse, zName) ){
+    if( SQLITE4_OK!=sqlite4CheckObjectName(pParse, zName) ){
       goto exit_create_index;
     }
     if( !db->init.busy ){
@@ -2483,14 +2483,14 @@ Index *sqlite4CreateIndex(
 
   /* Check for authorization to create an index.
   */
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   if( bPrimaryKey==0 ){
     const char *zDb = pDb->zName;
-    if( sqlite4AuthCheck(pParse, SQLITE_INSERT, SCHEMA_TABLE(iDb), 0, zDb) ){
+    if( sqlite4AuthCheck(pParse, SQLITE4_INSERT, SCHEMA_TABLE(iDb), 0, zDb) ){
       goto exit_create_index;
     }
-    i = SQLITE_CREATE_INDEX;
-    if( !OMIT_TEMPDB && iDb==1 ) i = SQLITE_CREATE_TEMP_INDEX;
+    i = SQLITE4_CREATE_INDEX;
+    if( !OMIT_TEMPDB && iDb==1 ) i = SQLITE4_CREATE_TEMP_INDEX;
     if( sqlite4AuthCheck(pParse, i, zName, pTab->zName, zDb) ){
       goto exit_create_index;
     }
@@ -2532,12 +2532,12 @@ Index *sqlite4CreateIndex(
   pIndex = newIndex(pParse, pTab, zName, pList->nExpr, onError, nExtra,&zExtra);
   if( !pIndex ) goto exit_create_index;
 
-  assert( pIndex->eIndexType==SQLITE_INDEX_USER );
+  assert( pIndex->eIndexType==SQLITE4_INDEX_USER );
   if( pName==0 ){
     if( bPrimaryKey ){
-      pIndex->eIndexType = SQLITE_INDEX_PRIMARYKEY;
+      pIndex->eIndexType = SQLITE4_INDEX_PRIMARYKEY;
     }else{
-      pIndex->eIndexType = SQLITE_INDEX_UNIQUE;
+      pIndex->eIndexType = SQLITE4_INDEX_UNIQUE;
     }
   }
 
@@ -2620,7 +2620,7 @@ Index *sqlite4CreateIndex(
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
       int k;
       assert( pIdx->onError!=OE_None );
-      assert( pIdx->eIndexType!=SQLITE_INDEX_USER );
+      assert( pIdx->eIndexType!=SQLITE4_INDEX_USER );
       assert( pIndex->onError!=OE_None );
 
       if( pIdx->nColumn!=pIndex->nColumn ) continue;
@@ -2653,8 +2653,8 @@ Index *sqlite4CreateIndex(
         /* If this index was to be the PRIMARY KEY, mark the UNIQUE index
         ** that makes it redundant as the PRIMARY KEY instead.  */
         if( bPrimaryKey ){
-          assert( pIdx->eIndexType==SQLITE_INDEX_UNIQUE );
-          pIdx->eIndexType = SQLITE_INDEX_PRIMARYKEY;
+          assert( pIdx->eIndexType==SQLITE4_INDEX_UNIQUE );
+          pIdx->eIndexType = SQLITE4_INDEX_PRIMARYKEY;
         }
         goto exit_create_index;
       }
@@ -2665,7 +2665,7 @@ Index *sqlite4CreateIndex(
   ** in-memory database structures. 
   */
   if( db->init.busy ){
-    db->flags |= SQLITE_InternChanges;
+    db->flags |= SQLITE4_InternChanges;
     if( pTblName!=0 || bPrimaryKey ){
       pIndex->tnum = db->init.newTnum;
     }
@@ -2826,7 +2826,7 @@ void sqlite4DropIndex(Parse *pParse, SrcList *pName, int ifExists){
     goto exit_drop_index;
   }
   assert( pName->nSrc==1 );
-  if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
+  if( SQLITE4_OK!=sqlite4ReadSchema(pParse) ){
     goto exit_drop_index;
   }
   pIndex = sqlite4FindIndex(db, pName->a[0].zName, pName->a[0].zDatabase);
@@ -2839,22 +2839,22 @@ void sqlite4DropIndex(Parse *pParse, SrcList *pName, int ifExists){
     pParse->checkSchema = 1;
     goto exit_drop_index;
   }
-  if( pIndex->eIndexType!=SQLITE_INDEX_USER ){
+  if( pIndex->eIndexType!=SQLITE4_INDEX_USER ){
     sqlite4ErrorMsg(pParse, "index associated with UNIQUE "
       "or PRIMARY KEY constraint cannot be dropped", 0);
     goto exit_drop_index;
   }
   iDb = sqlite4SchemaToIndex(db, pIndex->pSchema);
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   {
-    int code = SQLITE_DROP_INDEX;
+    int code = SQLITE4_DROP_INDEX;
     Table *pTab = pIndex->pTable;
     const char *zDb = db->aDb[iDb].zName;
     const char *zTab = SCHEMA_TABLE(iDb);
-    if( sqlite4AuthCheck(pParse, SQLITE_DELETE, zTab, 0, zDb) ){
+    if( sqlite4AuthCheck(pParse, SQLITE4_DELETE, zTab, 0, zDb) ){
       goto exit_drop_index;
     }
-    if( !OMIT_TEMPDB && iDb ) code = SQLITE_DROP_TEMP_INDEX;
+    if( !OMIT_TEMPDB && iDb ) code = SQLITE4_DROP_TEMP_INDEX;
     if( sqlite4AuthCheck(pParse, code, pIndex->zName, pTab->zName, zDb) ){
       goto exit_drop_index;
     }
@@ -3262,7 +3262,7 @@ void sqlite4BeginTransaction(Parse *pParse, int type){
   assert( pParse!=0 );
   db = pParse->db;
   assert( db!=0 );
-  if( sqlite4AuthCheck(pParse, SQLITE_TRANSACTION, "BEGIN", 0, 0) ){
+  if( sqlite4AuthCheck(pParse, SQLITE4_TRANSACTION, "BEGIN", 0, 0) ){
     return;
   }
   v = sqlite4GetVdbe(pParse);
@@ -3287,11 +3287,11 @@ void sqlite4EndTransaction(Parse *pParse, int op){
   Vdbe *v;
 
   /* Invoke the authorization callback */
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   const char *azCmd[] = { "COMMIT", "ROLLBACK" };
   assert( op==SAVEPOINT_RELEASE || op==SAVEPOINT_ROLLBACK );
   assert( SAVEPOINT_RELEASE==1 && SAVEPOINT_ROLLBACK==2 );
-  if( sqlite4AuthCheck(pParse, SQLITE_TRANSACTION, azCmd[op-1], 0, 0) ) return;
+  if( sqlite4AuthCheck(pParse, SQLITE4_TRANSACTION, azCmd[op-1], 0, 0) ) return;
 #endif
 
   /* Code the OP_Savepoint instruction. */
@@ -3307,11 +3307,11 @@ void sqlite4Savepoint(Parse *pParse, int op, Token *pName){
   char *zName = sqlite4NameFromToken(pParse->db, pName);
   if( zName ){
     Vdbe *v = sqlite4GetVdbe(pParse);
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
     static const char * const az[] = { "BEGIN", "RELEASE", "ROLLBACK" };
     assert( !SAVEPOINT_BEGIN && SAVEPOINT_RELEASE==1 && SAVEPOINT_ROLLBACK==2 );
 #endif
-    if( !v || sqlite4AuthCheck(pParse, SQLITE_SAVEPOINT, az[op], zName, 0) ){
+    if( !v || sqlite4AuthCheck(pParse, SQLITE4_SAVEPOINT, az[op], zName, 0) ){
       sqlite4DbFree(pParse->db, zName);
       return;
     }
@@ -3328,8 +3328,8 @@ int sqlite4OpenTempDatabase(Parse *pParse){
   if( db->aDb[1].pKV==0 && !pParse->explain ){
     int rc;
     rc = sqlite4KVStoreOpen(db, "temp", ":memory:", &db->aDb[1].pKV,
-                            SQLITE_KVOPEN_TEMPORARY);
-    if( rc!=SQLITE_OK ){
+                            SQLITE4_KVOPEN_TEMPORARY);
+    if( rc!=SQLITE4_OK ){
       sqlite4ErrorMsg(pParse, "unable to open a temporary database "
         "file for storing temporary tables");
       pParse->rc = rc;
@@ -3376,7 +3376,7 @@ void sqlite4CodeVerifySchema(Parse *pParse, int iDb){
 
     assert( iDb<db->nDb );
     assert( db->aDb[iDb].pKV!=0 || iDb==1 );
-    assert( iDb<SQLITE_MAX_ATTACHED+2 );
+    assert( iDb<SQLITE4_MAX_ATTACHED+2 );
     mask = ((yDbMask)1)<<iDb;
     if( (pToplevel->cookieMask & mask)==0 ){
       pToplevel->cookieMask |= mask;
@@ -3457,7 +3457,7 @@ void sqlite4MayAbort(Parse *pParse){
 }
 
 /*
-** Code an OP_Halt that causes the vdbe to return an SQLITE_CONSTRAINT
+** Code an OP_Halt that causes the vdbe to return an SQLITE4_CONSTRAINT
 ** error. The onError parameter determines which (if any) of the statement
 ** and/or current transaction is rolled back.
 */
@@ -3466,14 +3466,14 @@ void sqlite4HaltConstraint(Parse *pParse, int onError, char *p4, int p4type){
   if( onError==OE_Abort ){
     sqlite4MayAbort(pParse);
   }
-  sqlite4VdbeAddOp4(v, OP_Halt, SQLITE_CONSTRAINT, onError, 0, p4, p4type);
+  sqlite4VdbeAddOp4(v, OP_Halt, SQLITE4_CONSTRAINT, onError, 0, p4, p4type);
 }
 
 /*
 ** Check to see if pIndex uses the collating sequence pColl.  Return
 ** true if it does and false if it does not.
 */
-#ifndef SQLITE_OMIT_REINDEX
+#ifndef SQLITE4_OMIT_REINDEX
 static int collationMatch(const char *zColl, Index *pIndex){
   int i;
   assert( zColl!=0 );
@@ -3492,12 +3492,12 @@ static int collationMatch(const char *zColl, Index *pIndex){
 ** Recompute all indices of pTab that use the collating sequence pColl.
 ** If pColl==0 then recompute all indices of pTab.
 */
-#ifndef SQLITE_OMIT_REINDEX
+#ifndef SQLITE4_OMIT_REINDEX
 static void reindexTable(Parse *pParse, Table *pTab, char const *zColl){
   Index *pIndex;              /* An index associated with pTab */
 
   for(pIndex=pTab->pIndex; pIndex; pIndex=pIndex->pNext){
-    if( pIndex->eIndexType==SQLITE_INDEX_PRIMARYKEY ) continue;
+    if( pIndex->eIndexType==SQLITE4_INDEX_PRIMARYKEY ) continue;
     if( zColl==0 || collationMatch(zColl, pIndex) ){
       int iDb = sqlite4SchemaToIndex(pParse->db, pTab->pSchema);
       sqlite4BeginWriteOperation(pParse, 0, iDb);
@@ -3512,7 +3512,7 @@ static void reindexTable(Parse *pParse, Table *pTab, char const *zColl){
 ** indices use the collating sequence pColl.  If pColl==0 then recompute
 ** all indices everywhere.
 */
-#ifndef SQLITE_OMIT_REINDEX
+#ifndef SQLITE4_OMIT_REINDEX
 static void reindexDatabases(Parse *pParse, char const *zColl){
   Db *pDb;                    /* A single database */
   int iDb;                    /* The database index number */
@@ -3543,7 +3543,7 @@ static void reindexDatabases(Parse *pParse, char const *zColl){
 ** collating function.  Forms 3 and 4 rebuild the named index or all
 ** indices associated with the named table.
 */
-#ifndef SQLITE_OMIT_REINDEX
+#ifndef SQLITE4_OMIT_REINDEX
 void sqlite4Reindex(Parse *pParse, Token *pName1, Token *pName2){
   CollSeq *pColl;             /* Collating sequence to be reindexed, or NULL */
   char *z;                    /* Name of a table or index */
@@ -3556,7 +3556,7 @@ void sqlite4Reindex(Parse *pParse, Token *pName1, Token *pName2){
 
   /* Read the database schema. If an error occurs, leave an error message
   ** and code in pParse and return NULL. */
-  if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
+  if( SQLITE4_OK!=sqlite4ReadSchema(pParse) ){
     return;
   }
 
@@ -3589,7 +3589,7 @@ void sqlite4Reindex(Parse *pParse, Token *pName1, Token *pName2){
   }
   pIndex = sqlite4FindIndex(db, z, zDb);
   sqlite4DbFree(db, z);
-  if( pIndex && pIndex->eIndexType!=SQLITE_INDEX_PRIMARYKEY ){
+  if( pIndex && pIndex->eIndexType!=SQLITE4_INDEX_PRIMARYKEY ){
     sqlite4BeginWriteOperation(pParse, 0, iDb);
     sqlite4RefillIndex(pParse, pIndex, 0);
     return;
@@ -3616,8 +3616,8 @@ KeyInfo *sqlite4IndexKeyinfo(Parse *pParse, Index *pIdx){
   sqlite4 *db = pParse->db;
   KeyInfo *pKey;
 
-  if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY
-   || pIdx->eIndexType==SQLITE_INDEX_TEMP
+  if( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY
+   || pIdx->eIndexType==SQLITE4_INDEX_TEMP
   ){
     pPk = 0;
   }else{

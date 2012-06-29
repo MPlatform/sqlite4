@@ -289,7 +289,7 @@ ifcapable tempdb {
 # Ticket #334:  REPLACE statement corrupting indices.
 #
 ifcapable conflict {
-  # The REPLACE command is not available if SQLITE_OMIT_CONFLICT is 
+  # The REPLACE command is not available if SQLITE4_OMIT_CONFLICT is 
   # defined at compilation time.
   do_test insert-6.1 {
     execsql {

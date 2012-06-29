@@ -328,7 +328,7 @@ forcedelete test.db test.db-journal
 # where an index B-Tree is being scanned, the rowid column being read
 # from each index entry and another statement deletes some rows from
 # the index B-Tree. At one point this (obscure) scenario was causing 
-# SQLite to return spurious SQLITE_CORRUPT errors and arguably incorrect
+# SQLite to return spurious SQLITE4_CORRUPT errors and arguably incorrect
 # query results. 
 #
 do_test delete-9.1 {

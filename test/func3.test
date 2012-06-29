@@ -67,7 +67,7 @@ do_test func3-4.1 {
     sqlite4_create_function_v2 db f3 -1 any -func f3 -step f3 -destroy destroy
   } msg]
   list $rc $msg
-} {1 SQLITE_MISUSE}
+} {1 SQLITE4_MISUSE}
 do_test func3-4.2 { set destroyed } 1
 
 finish_test

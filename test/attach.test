@@ -171,7 +171,7 @@ do_test attach-1.18 {
     ATTACH 'test.db' as db11;
   }
 } {0 {}}
-if {$SQLITE_MAX_ATTACHED==10} {
+if {$SQLITE4_MAX_ATTACHED==10} {
   do_test attach-1.19 {
     catchsql {
       ATTACH 'test.db' as db12;
@@ -200,7 +200,7 @@ do_test attach-1.21 {
     ATTACH 'test.db' as db12;
   }
 } {0 {}}
-if {$SQLITE_MAX_ATTACHED==10} {
+if {$SQLITE4_MAX_ATTACHED==10} {
   do_test attach-1.22 {
     catchsql {
       ATTACH 'test.db' as db13;

@@ -14,7 +14,7 @@
 # fixed. More specifically, they verify that if SQLite cannot
 # obtain an EXCLUSIVE lock while trying to spill the cache during
 # any statement other than a COMMIT, an I/O error is returned instead
-# of SQLITE_BUSY.
+# of SQLITE4_BUSY.
 #
 # $Id: tkt2409.test,v 1.6 2008/08/28 17:46:19 drh Exp $
 
@@ -23,7 +23,7 @@
 #   tkt-2409-1.*: Cause a cache-spill during an INSERT that is within
 #       a db transaction but does not start a statement transaction.
 #       Verify that the transaction is automatically rolled back
-#       and SQLITE_IOERR_BLOCKED is returned
+#       and SQLITE4_IOERR_BLOCKED is returned
 #
 #       UPDATE: As of the pcache modifications, failing to upgrade to
 #       an exclusive lock when attempting a cache-spill is no longer an
@@ -32,7 +32,7 @@
 #
 #   tkt-2409-2.*: Cause a cache-spill while updating the change-counter
 #       during a database COMMIT. Verify that the transaction is not
-#       rolled back and SQLITE_BUSY is returned.
+#       rolled back and SQLITE4_BUSY is returned.
 #
 #   tkt-2409-3.*: Similar to 2409-1.*, but using many INSERT statements
 #       within a transaction instead of just one.
@@ -41,9 +41,9 @@
 #
 #   tkt-2409-4.*: Similar to 2409-1.*, but rig it so that the
 #       INSERT statement starts a statement transaction. Verify that
-#       SQLITE_BUSY is returned and the transaction is not rolled back.
+#       SQLITE4_BUSY is returned and the transaction is not rolled back.
 #
-#       UPDATE: This time, SQLITE_BUSY is not returned. pcache just uses
+#       UPDATE: This time, SQLITE4_BUSY is not returned. pcache just uses
 #       more malloc()'d memory.
 #
 
@@ -63,7 +63,7 @@ proc read_lock_db {} {
   if {$::STMT eq ""} {
     set ::STMT [sqlite4_prepare db2 {SELECT rowid FROM sqlite_master} -1 TAIL]
     set rc [sqlite4_step $::STMT]
-    if {$rc eq "SQLITE_ERROR"} {
+    if {$rc eq "SQLITE4_ERROR"} {
       unread_lock_db
       read_lock_db
     }
@@ -100,7 +100,7 @@ do_test tkt2409-1.1 {
 
 do_test tkt2409-1.2 {
   sqlite4_errcode $::DB
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # Check the integrity of the cache.
 #
@@ -168,7 +168,7 @@ do_test tkt2409-3.1 {
 
 do_test tkt2409-3.2 {
   sqlite4_errcode $::DB
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # Check the integrity of the cache.
 #
@@ -212,7 +212,7 @@ do_test tkt2409-4.1 {
 
 do_test tkt2409-4.2 {
   sqlite4_errcode $::DB
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # Check the integrity of the cache.
 #

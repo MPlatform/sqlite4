@@ -237,7 +237,7 @@ ifcapable schema_pragmas {
 # up to here before the do_malloc_test.
 do_test tableapi-99.0 {
   sqlite4_close $::dbx
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 ifcapable memdebug {
   do_malloc_test tableapi-7 -sqlprep {

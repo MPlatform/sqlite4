@@ -80,10 +80,10 @@ do_test tkt3718-1.2 {
 } {1 2 3 4 5 6 7 8 9 10}
 
 # This test turns on the count_changes pragma (causing DML statements to
-# return SQLITE_ROW once, with a single integer result value reporting the
+# return SQLITE4_ROW once, with a single integer result value reporting the
 # number of rows affected by the statement). It then executes an INSERT
 # statement that requires a statement journal. After stepping the statement
-# once, so that it returns SQLITE_ROW, a second SQL statement that throws an
+# once, so that it returns SQLITE4_ROW, a second SQL statement that throws an
 # exception is run. At one point, before #3718 was fixed, this caused the
 # statement transaction belonging to the INSERT statement to be rolled back.
 # The result was that none of the rows were actually inserted.

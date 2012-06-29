@@ -203,13 +203,13 @@ do_test zeroblob-7.1 {
   set ::sqlite4_max_blobsize 0
   sqlite4_bind_zeroblob $::STMT 1 450000
   sqlite4_step $::STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test zeroblob-7.2 {
   sqlite4_column_int $::STMT 0
 } {450000}
 do_test zeroblob-7.3 {
   sqlite4_finalize $::STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test zeroblob-7.4 {
   set ::sqlite4_max_blobsize
 } {0}

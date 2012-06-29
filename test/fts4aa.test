@@ -16,7 +16,7 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-# If SQLITE_ENABLE_FTS3 is defined, omit this file.
+# If SQLITE4_ENABLE_FTS3 is defined, omit this file.
 ifcapable !fts3 {
   finish_test
   return
@@ -1707,8 +1707,8 @@ foreach {q r} [array get fts4aa_res] {
 # all PRAGMA statements.
 #
 proc no_pragma_auth {code arg1 arg2 arg3 arg4} {
-  if {$code=="SQLITE_PRAGMA"} {return SQLITE_DENY}
-  return SQLITE_OK;
+  if {$code=="SQLITE4_PRAGMA"} {return SQLITE4_DENY}
+  return SQLITE4_OK;
 }
 do_test fts4aa-4.0 {
   db auth ::no_pragma_auth

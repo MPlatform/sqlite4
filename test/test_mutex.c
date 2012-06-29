@@ -97,7 +97,7 @@ static void counterMutexFree(sqlite4_mutex *pMutex){
   sqlite4CounterMutex *p = (sqlite4CounterMutex*)pMutex;
   assert( g.isInit );
   g.m.xMutexFree(p->pReal);
-  if( p->eType==SQLITE_MUTEX_FAST || p->eType==SQLITE_MUTEX_RECURSIVE ){
+  if( p->eType==SQLITE4_MUTEX_FAST || p->eType==SQLITE4_MUTEX_RECURSIVE ){
     free(p);
   }
 }
@@ -119,7 +119,7 @@ static int counterMutexTry(sqlite4_mutex *pMutex){
   sqlite4CounterMutex *p = (sqlite4CounterMutex*)pMutex;
   assert( g.isInit );
   g.aCounter[p->eType]++;
-  if( g.disableTry ) return SQLITE_BUSY;
+  if( g.disableTry ) return SQLITE4_BUSY;
   return g.m.xMutexTry(p->pReal);
 }
 
@@ -182,7 +182,7 @@ static int test_install_mutex_counters(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int isInstall;
 
   sqlite4_mutex_methods counter_methods = {
@@ -216,18 +216,18 @@ static int test_install_mutex_counters(
 
   if( isInstall ){
     assert( g.m.xMutexAlloc==0 );
-    rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_GETMUTEX, &g.m);
-    if( rc==SQLITE_OK ){
-      sqlite4_env_config(0, SQLITE_ENVCONFIG_MUTEX, &counter_methods);
+    rc = sqlite4_env_config(0, SQLITE4_ENVCONFIG_GETMUTEX, &g.m);
+    if( rc==SQLITE4_OK ){
+      sqlite4_env_config(0, SQLITE4_ENVCONFIG_MUTEX, &counter_methods);
     }
     g.disableTry = 0;
   }else{
     assert( g.m.xMutexAlloc );
-    rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MUTEX, &g.m);
+    rc = sqlite4_env_config(0, SQLITE4_ENVCONFIG_MUTEX, &g.m);
     memset(&g.m, 0, sizeof(sqlite4_mutex_methods));
   }
 
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     g.isInstalled = isInstall;
   }
 
@@ -301,8 +301,8 @@ static int test_alloc_mutex(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#if SQLITE_THREADSAFE
-  sqlite4_mutex *p = sqlite4_mutex_alloc(0, SQLITE_MUTEX_FAST);
+#if SQLITE4_THREADSAFE
+  sqlite4_mutex *p = sqlite4_mutex_alloc(0, SQLITE4_MUTEX_FAST);
   char zBuf[100];
   sqlite4_mutex_free(p);
   sqlite4_snprintf(zBuf, sizeof(zBuf), "%p", p);
@@ -316,9 +316,9 @@ static int test_alloc_mutex(
 **
 ** OPTION can be either one of the keywords:
 **
-**            SQLITE_CONFIG_SINGLETHREAD
-**            SQLITE_CONFIG_MULTITHREAD
-**            SQLITE_CONFIG_SERIALIZED
+**            SQLITE4_CONFIG_SINGLETHREAD
+**            SQLITE4_CONFIG_MULTITHREAD
+**            SQLITE4_CONFIG_SERIALIZED
 **
 ** Or OPTION can be an raw integer.
 */
@@ -332,9 +332,9 @@ static int test_config(
     const char *zName;
     int iValue;
   } aOpt[] = {
-    {"singlethread", SQLITE_ENVCONFIG_SINGLETHREAD},
-    {"multithread",  SQLITE_ENVCONFIG_MULTITHREAD},
-    {"serialized",   SQLITE_ENVCONFIG_SERIALIZED},
+    {"singlethread", SQLITE4_ENVCONFIG_SINGLETHREAD},
+    {"multithread",  SQLITE4_ENVCONFIG_MULTITHREAD},
+    {"serialized",   SQLITE4_ENVCONFIG_SERIALIZED},
     {0, 0}
   };
   int s = sizeof(struct ConfigOption);
@@ -436,5 +436,5 @@ int Sqlitetest_mutex_Init(Tcl_Interp *interp){
               (char*)&g.disableInit, TCL_LINK_INT);
   Tcl_LinkVar(interp, "disable_mutex_try", 
               (char*)&g.disableTry, TCL_LINK_INT);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }

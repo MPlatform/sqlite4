@@ -16,8 +16,8 @@
 */
 
 #include "fts3Int.h"
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
-#ifdef SQLITE_TEST
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
+#ifdef SQLITE4_TEST
 
 #include <string.h>
 #include <assert.h>
@@ -83,7 +83,7 @@ static int fts3termConnectMethod(
     *pzErr = sqlite4_mprintf(
         "wrong number of arguments to fts4term constructor"
     );
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
 
   zDb = argv[1]; 
@@ -92,11 +92,11 @@ static int fts3termConnectMethod(
   nFts3 = strlen(zFts3);
 
   rc = sqlite4_declare_vtab(db, FTS3_TERMS_SCHEMA);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   nByte = sizeof(Fts3termTable) + sizeof(Fts3Table) + nDb + nFts3 + 2;
   p = (Fts3termTable *)sqlite4_malloc(nByte);
-  if( !p ) return SQLITE_NOMEM;
+  if( !p ) return SQLITE4_NOMEM;
   memset(p, 0, nByte);
 
   p->pFts3Tab = (Fts3Table *)&p[1];
@@ -111,7 +111,7 @@ static int fts3termConnectMethod(
   sqlite4Fts3Dequote((char *)p->pFts3Tab->zName);
 
   *ppVtab = (sqlite4_vtab *)p;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -130,7 +130,7 @@ static int fts3termDisconnectMethod(sqlite4_vtab *pVtab){
   }
   sqlite4_free(pFts3->zSegmentsTbl);
   sqlite4_free(p);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 #define FTS4AUX_EQ_CONSTRAINT 1
@@ -157,7 +157,7 @@ static int fts3termBestIndexMethod(
     }
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -169,11 +169,11 @@ static int fts3termOpenMethod(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCsr){
   UNUSED_PARAMETER(pVTab);
 
   pCsr = (Fts3termCursor *)sqlite4_malloc(sizeof(Fts3termCursor));
-  if( !pCsr ) return SQLITE_NOMEM;
+  if( !pCsr ) return SQLITE4_NOMEM;
   memset(pCsr, 0, sizeof(Fts3termCursor));
 
   *ppCsr = (sqlite4_vtab_cursor *)pCsr;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -186,7 +186,7 @@ static int fts3termCloseMethod(sqlite4_vtab_cursor *pCursor){
   sqlite4Fts3SegmentsClose(pFts3);
   sqlite4Fts3SegReaderFinish(&pCsr->csr);
   sqlite4_free(pCsr);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -206,7 +206,7 @@ static int fts3termNextMethod(sqlite4_vtab_cursor *pCursor){
    || pCsr->pNext>=&pCsr->csr.aDoclist[pCsr->csr.nDoclist-1]
   ){
     rc = sqlite4Fts3SegReaderStep(pFts3, &pCsr->csr);
-    if( rc!=SQLITE_ROW ){
+    if( rc!=SQLITE4_ROW ){
       pCsr->isEof = 1;
       return rc;
     }
@@ -238,7 +238,7 @@ static int fts3termNextMethod(sqlite4_vtab_cursor *pCursor){
 
   pCsr->iPos += (v - 2);
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -274,10 +274,10 @@ static int fts3termFilterMethod(
   rc = sqlite4Fts3SegReaderCursor(pFts3, p->iIndex, FTS3_SEGCURSOR_ALL,
       pCsr->filter.zTerm, pCsr->filter.nTerm, 0, 1, &pCsr->csr
   );
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = sqlite4Fts3SegReaderStart(pFts3, &pCsr->csr, &pCsr->filter);
   }
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = fts3termNextMethod(pCursor);
   }
   return rc;
@@ -304,7 +304,7 @@ static int fts3termColumnMethod(
   assert( iCol>=0 && iCol<=3 );
   switch( iCol ){
     case 0:
-      sqlite4_result_text(pCtx, p->csr.zTerm, p->csr.nTerm, SQLITE_TRANSIENT);
+      sqlite4_result_text(pCtx, p->csr.zTerm, p->csr.nTerm, SQLITE4_TRANSIENT);
       break;
     case 1:
       sqlite4_result_int64(pCtx, p->iDocid);
@@ -317,7 +317,7 @@ static int fts3termColumnMethod(
       break;
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -329,11 +329,11 @@ static int fts3termRowidMethod(
 ){
   Fts3termCursor *pCsr = (Fts3termCursor *)pCursor;
   *pRowid = pCsr->iRowid;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
-** Register the fts3term module with database connection db. Return SQLITE_OK
+** Register the fts3term module with database connection db. Return SQLITE4_OK
 ** if successful or an error code if sqlite4_create_module() fails.
 */
 int sqlite4Fts3InitTerm(sqlite4 *db){
@@ -366,4 +366,4 @@ int sqlite4Fts3InitTerm(sqlite4 *db){
 }
 
 #endif
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3) */

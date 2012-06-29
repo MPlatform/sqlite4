@@ -23,7 +23,7 @@ set N 300
 # that is open and in the middle of writing changes, normally
 # sqlite uses 3 (proxy locking adds the conch and the local lock)
 set using_proxy 0
-foreach {name value} [array get env SQLITE_FORCE_PROXY_LOCKING] {
+foreach {name value} [array get env SQLITE4_FORCE_PROXY_LOCKING] {
   set using_proxy value
 }
 set num_fd_per_openwrite_db 3

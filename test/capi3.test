@@ -68,10 +68,10 @@ do_test capi3-1.1 {
 } {}
 do_test capi3-1.2.1 {
   sqlite4_errcode $DB
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-1.2.2 {
   sqlite4_extended_errcode $DB
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-1.3 {
   sqlite4_errmsg $DB
 } {not an error}
@@ -102,10 +102,10 @@ do_test capi3-1.7 {
 } {1}
 do_test capi3-1.8.1 {
   sqlite4_errcode $DB
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test capi3-1.8.2 {
   sqlite4_extended_errcode $DB
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test capi3-1.9 {
   sqlite4_errmsg $DB
 } {no such column: namex}
@@ -131,10 +131,10 @@ ifcapable {utf16} {
   } {1}
   do_test capi3-2.4.1 {
     sqlite4_errcode $DB
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test capi3-2.4.2 {
     sqlite4_extended_errcode $DB
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test capi3-2.5 {
     sqlite4_errmsg $DB
   } {no such column: namex}
@@ -145,13 +145,13 @@ ifcapable {utf16} {
       set sql16 [utf16 {PRAGMA table_info("TableName"); --excess text}]
       set STMT [sqlite4_prepare16 $DB $sql16 -1]
       sqlite4_step $STMT
-    } SQLITE_ROW
+    } SQLITE4_ROW
     do_test capi3-2.7 {
       sqlite4_step $STMT
-    } SQLITE_DONE
+    } SQLITE4_DONE
     do_test capi3-2.8 {
       sqlite4_finalize $STMT
-    } SQLITE_OK
+    } SQLITE4_OK
   }
 
 } ;# endif utf16
@@ -162,26 +162,26 @@ ifcapable {utf16} {
 do_test capi3-3.1 {
   set db2 [sqlite4_open test.db {}]
   sqlite4_errcode $db2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 # FIX ME: Should test the db handle works.
 do_test capi3-3.2 {
   sqlite4_close $db2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-3.3 {
   catch {
     set db2 [sqlite4_open /bogus/path/test.db {}]
   }
   sqlite4_extended_errcode $db2
-} {SQLITE_CANTOPEN}
+} {SQLITE4_CANTOPEN}
 do_test capi3-3.4 {
   sqlite4_errmsg $db2
 } {unable to open database file}
 do_test capi3-3.5 {
   sqlite4_close $db2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-3.6.1-misuse {
   sqlite4_close $db2
-} {SQLITE_MISUSE}
+} {SQLITE4_MISUSE}
 do_test capi3-3.6.2-misuse {
   sqlite4_errmsg $db2
 } {library routine called out of sequence}
@@ -194,10 +194,10 @@ ifcapable {utf16} {
 do_test capi3-3.7 {
   set db2 [sqlite4_open]
   sqlite4_errcode $db2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-3.8 {
   sqlite4_close $db2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # rename sqlite4_open ""
 # rename sqlite4_open_old sqlite4_open
@@ -206,23 +206,23 @@ ifcapable {utf16} {
 do_test capi3-4.1 {
   set db2 [sqlite4_open16 [utf16 test.db] {}]
   sqlite4_errcode $db2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 # FIX ME: Should test the db handle works.
 do_test capi3-4.2 {
   sqlite4_close $db2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-4.3 {
   catch {
     set db2 [sqlite4_open16 [utf16 /bogus/path/test.db] {}]
   }
   sqlite4_errcode $db2
-} {SQLITE_CANTOPEN}
+} {SQLITE4_CANTOPEN}
 do_test capi3-4.4 {
   utf8 [sqlite4_errmsg16 $db2]
 } {unable to open database file}
 do_test capi3-4.5 {
   sqlite4_close $db2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 } ;# utf16
 
 # This proc is used to test the following API calls:
@@ -425,7 +425,7 @@ proc check_origin_header {STMT test dbs tables cols} {
 # sqlite4_column_double
 #
 # $STMT is a compiled SQL statement for which the previous call 
-# to sqlite4_step returned SQLITE_ROW. $test is a prefix to use 
+# to sqlite4_step returned SQLITE4_ROW. $test is a prefix to use 
 # for test names within this proc. $types is a list of the 
 # manifest types for the current row. $ints, $doubles and $strings
 # are lists of the integer, real and string representations of
@@ -579,7 +579,7 @@ check_header $STMT capi3-5.1 {a b c} {VARINT BLOB VARCHAR(16)}
 check_origin_header $STMT capi3-5.1 {main main main} {t1 t1 t1} {a b c}
 do_test capi3-5.2 {
   sqlite4_step $STMT
-} SQLITE_ROW
+} SQLITE4_ROW
 
 check_header $STMT capi3-5.3 {a b c} {VARINT BLOB VARCHAR(16)}
 check_origin_header $STMT capi3-5.3 {main main main} {t1 t1 t1} {a b c}
@@ -587,7 +587,7 @@ check_data $STMT capi3-5.4 {INTEGER INTEGER TEXT} {1 2 3} {1.0 2.0 3.0} {1 2 3}
 
 do_test capi3-5.5 {
   sqlite4_step $STMT
-} SQLITE_ROW
+} SQLITE4_ROW
 
 check_header $STMT capi3-5.6 {a b c} {VARINT BLOB VARCHAR(16)}
 check_origin_header $STMT capi3-5.6 {main main main} {t1 t1 t1} {a b c}
@@ -595,7 +595,7 @@ check_data $STMT capi3-5.7 {TEXT TEXT NULL} {0 0 0} {0.0 0.0 0.0} {one two {}}
 
 do_test capi3-5.8 {
   sqlite4_step $STMT
-} SQLITE_ROW
+} SQLITE4_ROW
 
 check_header $STMT capi3-5.9 {a b c} {VARINT BLOB VARCHAR(16)}
 check_origin_header $STMT capi3-5.9 {main main main} {t1 t1 t1} {a b c}
@@ -603,11 +603,11 @@ check_data $STMT capi3-5.10 {FLOAT FLOAT TEXT} {1 1 1} {1.2 1.3 1.4} {1.2 1.3 1.
 
 do_test capi3-5.11 {
   sqlite4_step $STMT
-} SQLITE_DONE
+} SQLITE4_DONE
 
 do_test capi3-5.12 {
   sqlite4_finalize $STMT
-} SQLITE_OK
+} SQLITE4_OK
 
 do_test capi3-5.20 {
   set sql "SELECT a, sum(b), max(c) FROM t1 GROUP BY a"
@@ -619,7 +619,7 @@ check_header $STMT capi3-5.21 {a sum(b) max(c)} {VARINT {} {}}
 check_origin_header $STMT capi3-5.22 {main {} {}} {t1 {} {}} {a {} {}}
 do_test capi3-5.23 {
   sqlite4_finalize $STMT
-} SQLITE_OK
+} SQLITE4_OK
 
 do_test capi3-5.30 {
   set sql "SELECT a AS x, sum(b) AS y, max(c) AS z FROM t1 AS m GROUP BY x"
@@ -631,7 +631,7 @@ check_header $STMT capi3-5.31 {x y z} {VARINT {} {}}
 check_origin_header $STMT capi3-5.32 {main {} {}} {t1 {} {}} {a {} {}}
 do_test capi3-5.33 {
   sqlite4_finalize $STMT
-} SQLITE_OK
+} SQLITE4_OK
 
 
 set ::ENC [execsql {pragma encoding}]
@@ -648,18 +648,18 @@ do_test capi3-6.0 {
 do_test capi3-6.1 {
   db cache flush
   sqlite4_close $DB
-} {SQLITE_BUSY}
+} {SQLITE4_BUSY}
 do_test capi3-6.2 {
   sqlite4_step $STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 #check_data $STMT capi3-6.3 {INTEGER} {1} {1.0} {1}
 do_test capi3-6.3 {
   sqlite4_finalize $STMT
-} {SQLITE_SCHEMA}
+} {SQLITE4_SCHEMA}
 do_test capi3-6.4-misuse {
   db cache flush
   sqlite4_close $DB
-} {SQLITE_OK}
+} {SQLITE4_OK}
 db close
 
 # This procedure sets the value of the file-format in file 'test.db'
@@ -745,29 +745,29 @@ forcedelete test.db-journal
 
 # Test the english language string equivalents for sqlite error codes
 set code2english [list \
-SQLITE_OK         {not an error} \
-SQLITE_ERROR      {SQL logic error or missing database} \
-SQLITE_PERM       {access permission denied} \
-SQLITE_ABORT      {callback requested query abort} \
-SQLITE_BUSY       {database is locked} \
-SQLITE_LOCKED     {database table is locked} \
-SQLITE_NOMEM      {out of memory} \
-SQLITE_READONLY   {attempt to write a readonly database} \
-SQLITE_INTERRUPT  {interrupted} \
-SQLITE_IOERR      {disk I/O error} \
-SQLITE_CORRUPT    {database disk image is malformed} \
-SQLITE_FULL       {database or disk is full} \
-SQLITE_CANTOPEN   {unable to open database file} \
-SQLITE_EMPTY      {table contains no data} \
-SQLITE_SCHEMA     {database schema has changed} \
-SQLITE_CONSTRAINT {constraint failed} \
-SQLITE_MISMATCH   {datatype mismatch} \
-SQLITE_MISUSE     {library routine called out of sequence} \
-SQLITE_NOLFS      {large file support is disabled} \
-SQLITE_AUTH       {authorization denied} \
-SQLITE_FORMAT     {auxiliary database format error} \
-SQLITE_RANGE      {bind or column index out of range} \
-SQLITE_NOTADB     {file is encrypted or is not a database} \
+SQLITE4_OK         {not an error} \
+SQLITE4_ERROR      {SQL logic error or missing database} \
+SQLITE4_PERM       {access permission denied} \
+SQLITE4_ABORT      {callback requested query abort} \
+SQLITE4_BUSY       {database is locked} \
+SQLITE4_LOCKED     {database table is locked} \
+SQLITE4_NOMEM      {out of memory} \
+SQLITE4_READONLY   {attempt to write a readonly database} \
+SQLITE4_INTERRUPT  {interrupted} \
+SQLITE4_IOERR      {disk I/O error} \
+SQLITE4_CORRUPT    {database disk image is malformed} \
+SQLITE4_FULL       {database or disk is full} \
+SQLITE4_CANTOPEN   {unable to open database file} \
+SQLITE4_EMPTY      {table contains no data} \
+SQLITE4_SCHEMA     {database schema has changed} \
+SQLITE4_CONSTRAINT {constraint failed} \
+SQLITE4_MISMATCH   {datatype mismatch} \
+SQLITE4_MISUSE     {library routine called out of sequence} \
+SQLITE4_NOLFS      {large file support is disabled} \
+SQLITE4_AUTH       {authorization denied} \
+SQLITE4_FORMAT     {auxiliary database format error} \
+SQLITE4_RANGE      {bind or column index out of range} \
+SQLITE4_NOTADB     {file is encrypted or is not a database} \
 unknownerror      {unknown error} \
 ]
 
@@ -837,7 +837,7 @@ do_test capi3-11.1.1 {
 do_test capi3-11.2 {
   set STMT [sqlite4_prepare $DB "SELECT func(b, a) FROM t1" -1 TAIL]
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 
 # As of 3.6.5 a COMMIT is OK during while a query is still running -
 # as long as it is a read-only query and not an incremental BLOB write.
@@ -849,7 +849,7 @@ do_test capi3-11.3.1 {
 } {0 {}}
 do_test capi3-11.3.2 {
   sqlite4_extended_errcode $DB
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-11.3.3 {
   sqlite4_get_autocommit $DB
 } 1
@@ -859,10 +859,10 @@ do_test capi3-11.3.4 {
 
 do_test capi3-11.4 {
   sqlite4_step $STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test capi3-11.5 {
   sqlite4_finalize $STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test capi3-11.6 {
   catchsql {
     SELECT * FROM t1;
@@ -886,7 +886,7 @@ do_test capi3-11.8.1 {
 do_test capi3-11.9 {
   set STMT [sqlite4_prepare $DB "SELECT a FROM t2" -1 TAIL]
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test capi3-11.9.1 {
   sqlite4_get_autocommit $DB
 } 0
@@ -900,16 +900,16 @@ do_test capi3-11.9.3 {
 } 0
 do_test capi3-11.10 {
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test capi3-11.11 {
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test capi3-11.12 {
   sqlite4_step $STMT
-} {SQLITE_DONE}
+} {SQLITE4_DONE}
 do_test capi3-11.13 {
   sqlite4_finalize $STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-11.14 {
   execsql {
     SELECT a FROM t2;
@@ -949,7 +949,7 @@ do_test capi3-11.18 {
 } {0 {}}
 do_test capi3-11.19 {
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test capi3-11.20 {
   catchsql {
     BEGIN;
@@ -964,7 +964,7 @@ do_test capi3-11.20 {
 } {1 {cannot commit - no transaction is active}}
 do_test capi3-11.21 {
   sqlite4_finalize $STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # The following tests - capi3-12.* - check that its Ok to start a
 # transaction while other VMs are active, and that its Ok to execute
@@ -973,7 +973,7 @@ do_test capi3-11.21 {
 do_test capi3-12.1 {
   set STMT [sqlite4_prepare $DB "SELECT a FROM t2" -1 TAIL]
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test capi3-12.2 {
   catchsql {
     INSERT INTO t1 VALUES(3, NULL);
@@ -992,16 +992,16 @@ do_test capi3-12.4 {
 } {0 {}}
 do_test capi3-12.5 {
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test capi3-12.5.1 {
   sqlite4_step $STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test capi3-12.6 {
   sqlite4_step $STMT
-} {SQLITE_DONE}
+} {SQLITE4_DONE}
 do_test capi3-12.7 {
   sqlite4_finalize $STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-12.8 {
   execsql {
     COMMIT;
@@ -1019,18 +1019,18 @@ if {[llength [info commands sqlite4_clear_bindings]]>0} {
     }
     set STMT [sqlite4_prepare $DB "INSERT INTO t1 VALUES(?, ?)" -1 TAIL]
     sqlite4_step $STMT
-  } {SQLITE_DONE}
+  } {SQLITE4_DONE}
   do_test capi3-13.2 {
     sqlite4_reset $STMT
     sqlite4_bind_text $STMT 1 hello 5
     sqlite4_bind_text $STMT 2 world 5
     sqlite4_step $STMT
-  } {SQLITE_DONE}
+  } {SQLITE4_DONE}
   do_test capi3-13.3 {
     sqlite4_reset $STMT
     sqlite4_clear_bindings $STMT
     sqlite4_step $STMT
-  } {SQLITE_DONE}
+  } {SQLITE4_DONE}
   do_test capi3-13-4 {
     sqlite4_finalize $STMT
     execsql {
@@ -1050,7 +1050,7 @@ if {[llength [info commands sqlite4_sleep]]>0} {
 do_test capi3-14.1-misuse {
   set rc [catch {sqlite4_bind_text 0 1 hello 5} msg]
   lappend rc $msg
-} {1 SQLITE_MISUSE}
+} {1 SQLITE4_MISUSE}
 
 # Ticket #1650:  Honor the nBytes parameter to sqlite4_prepare.
 #
@@ -1068,7 +1068,7 @@ do_test capi3-15.2 {
 } {2}
 do_test capi3-15.3 {
   sqlite4_finalize $STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi3-15.4 {
   #        123456789 1234567
   set sql {SELECT 1234567890}
@@ -1160,9 +1160,9 @@ do_test capi3-17.2 {
 } {0}
 do_test capi3-17.3 {
   sqlite4_finalize $STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
-# Verify that sqlite4_step() fails with an SQLITE_SCHEMA error
+# Verify that sqlite4_step() fails with an SQLITE4_SCHEMA error
 # when the statement is prepared with sqlite4_prepare() (not
 # sqlite4_prepare_v2()) and the schema has changed.
 #
@@ -1172,22 +1172,22 @@ do_test capi3-18.1 {
   db2 eval {CREATE TABLE t3(x)}
   db2 close
   sqlite4_step $STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test capi3-18.2 {
   sqlite4_reset $STMT
   sqlite4_errcode db
-} {SQLITE_SCHEMA}
+} {SQLITE4_SCHEMA}
 do_test capi3-18.3 {
   sqlite4_errmsg db
 } {database schema has changed}
 # The error persist on retry when sqlite4_prepare() has been used.
 do_test capi3-18.4 {
   sqlite4_step $STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test capi3-18.5 {
   sqlite4_reset $STMT
   sqlite4_errcode db
-} {SQLITE_SCHEMA}
+} {SQLITE4_SCHEMA}
 do_test capi3-18.6 {
   sqlite4_errmsg db
 } {database schema has changed}

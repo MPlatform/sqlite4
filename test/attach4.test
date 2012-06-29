@@ -23,16 +23,16 @@ ifcapable !attach {
   return
 }
 
-puts "Testing with SQLITE_MAX_ATTACHED=$SQLITE_MAX_ATTACHED"
+puts "Testing with SQLITE4_MAX_ATTACHED=$SQLITE4_MAX_ATTACHED"
 
 set files {main test.db}
-for {set ii 0} {$ii < $SQLITE_MAX_ATTACHED} {incr ii} {
+for {set ii 0} {$ii < $SQLITE4_MAX_ATTACHED} {incr ii} {
   lappend files aux$ii "test.db$ii"
 }
 
 do_test 1.1 {
-  sqlite4_limit db SQLITE_LIMIT_ATTACHED -1
-} $SQLITE_MAX_ATTACHED
+  sqlite4_limit db SQLITE4_LIMIT_ATTACHED -1
+} $SQLITE4_MAX_ATTACHED
 
 do_test 1.2.1 {
   db close
@@ -52,7 +52,7 @@ do_test 1.2.1 {
 
 do_catchsql_test 1.2.2 {
   ATTACH 'x.db' AS next;
-} [list 1 "too many attached databases - max $SQLITE_MAX_ATTACHED"]
+} [list 1 "too many attached databases - max $SQLITE4_MAX_ATTACHED"]
 
 do_test 1.3 {
   execsql BEGIN;

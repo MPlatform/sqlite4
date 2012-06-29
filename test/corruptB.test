@@ -16,7 +16,7 @@
 # when there exists a page that is both an a descendent or ancestor of
 # itself.
 #
-# Also test that an SQLITE_CORRUPT error is returned if a B-Tree page
+# Also test that an SQLITE4_CORRUPT error is returned if a B-Tree page
 # contains a (corrupt) reference to a page greater than the configured
 # maximum page number.
 #

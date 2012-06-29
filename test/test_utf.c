@@ -77,8 +77,8 @@ static int test_value_overhead(
 
   val.flags = MEM_Str|MEM_Term|MEM_Static;
   val.z = "hello world";
-  val.type = SQLITE_TEXT;
-  val.enc = SQLITE_UTF8;
+  val.type = SQLITE4_TEXT;
+  val.enc = SQLITE4_UTF8;
 
   for(i=0; i<repeat_count; i++){
     if( do_calls ){
@@ -94,10 +94,10 @@ static u8 name_to_enc(Tcl_Interp *interp, Tcl_Obj *pObj){
     char *zName;
     u8 enc;
   } encnames[] = {
-    { "UTF8", SQLITE_UTF8 },
-    { "UTF16LE", SQLITE_UTF16LE },
-    { "UTF16BE", SQLITE_UTF16BE },
-    { "UTF16", SQLITE_UTF16 },
+    { "UTF8", SQLITE4_UTF8 },
+    { "UTF16LE", SQLITE4_UTF16LE },
+    { "UTF16BE", SQLITE4_UTF16BE },
+    { "UTF16", SQLITE4_UTF16 },
     { 0, 0 }
   };
   struct EncName *pEnc;
@@ -110,8 +110,8 @@ static u8 name_to_enc(Tcl_Interp *interp, Tcl_Obj *pObj){
   if( !pEnc->enc ){
     Tcl_AppendResult(interp, "No such encoding: ", z, 0);
   }
-  if( pEnc->enc==SQLITE_UTF16 ){
-    return SQLITE_UTF16NATIVE;
+  if( pEnc->enc==SQLITE4_UTF16 ){
+    return SQLITE4_UTF16NATIVE;
   }
   return pEnc->enc;
 }
@@ -134,7 +134,7 @@ static int test_translate(
 
   char *z;
   int len;
-  void (*xDel)(void *p) = SQLITE_STATIC;
+  void (*xDel)(void *p) = SQLITE4_STATIC;
 
   if( objc!=4 && objc!=5 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"",
@@ -154,7 +154,7 @@ static int test_translate(
 
   pVal = sqlite4ValueNew(0);
 
-  if( enc_from==SQLITE_UTF8 ){
+  if( enc_from==SQLITE4_UTF8 ){
     z = Tcl_GetString(objv[1]);
     if( objc==5 ){
       z = sqlite4_mprintf(0, "%s", z);
@@ -171,7 +171,7 @@ static int test_translate(
   }
 
   z = (char *)sqlite4ValueText(pVal, enc_to);
-  len = sqlite4ValueBytes(pVal, enc_to) + (enc_to==SQLITE_UTF8?1:2);
+  len = sqlite4ValueBytes(pVal, enc_to) + (enc_to==SQLITE4_UTF8?1:2);
   Tcl_SetObjResult(interp, Tcl_NewByteArrayObj((u8*)z, len));
 
   sqlite4ValueFree(pVal);
@@ -192,10 +192,10 @@ static int test_translate_selftest(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   sqlite4UtfSelfTest();
 #endif
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 
@@ -216,5 +216,5 @@ int Sqlitetest5_Init(Tcl_Interp *interp){
   for(i=0; i<sizeof(aCmd)/sizeof(aCmd[0]); i++){
     Tcl_CreateObjCommand(interp, aCmd[i].zName, aCmd[i].xProc, 0, 0);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }

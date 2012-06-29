@@ -29,7 +29,7 @@ source $testdir/malloc_common.tcl
 
 # Only run these tests if memory debugging is turned on.
 if {!$MEMDEBUG} {
-   puts "Skipping malloc4 tests: not compiled with -DSQLITE_MEMDEBUG..."
+   puts "Skipping malloc4 tests: not compiled with -DSQLITE4_MEMDEBUG..."
    finish_test
    return
 }
@@ -107,7 +107,7 @@ proc do_stmt_test {id sql} {
     sqlite4_memdebug_fail -1
     do_test ${testid}.3 {
       sqlite4_step $::STMT
-    } {SQLITE_ROW}
+    } {SQLITE4_ROW}
     sqlite4_memdebug_fail $mf
 
     # Test for malloc() failures within _text() and _text16().
@@ -162,15 +162,15 @@ proc do_stmt_test {id sql} {
 
     sqlite4_memdebug_fail -1
     # Test that if a malloc() failed the next call to sqlite4_step() returns
-    # SQLITE_ERROR. If malloc() did not fail, it should return SQLITE_DONE.
+    # SQLITE4_ERROR. If malloc() did not fail, it should return SQLITE4_DONE.
     #
     do_test ${testid}.5 {
       sqlite4_step $::STMT
-    } [expr {$mallocFailedAfterStep ? "SQLITE_ERROR" : "SQLITE_DONE"}]
+    } [expr {$mallocFailedAfterStep ? "SQLITE4_ERROR" : "SQLITE4_DONE"}]
 
     do_test ${testid}.6 {
       sqlite4_finalize $::STMT
-    } [expr {$mallocFailedAfterStep ? "SQLITE_NOMEM" : "SQLITE_OK"}]
+    } [expr {$mallocFailedAfterStep ? "SQLITE4_NOMEM" : "SQLITE4_OK"}]
 
     if {$::mallocFailed == 0 && $mallocFailedAfterStep == 0} {
       sqlite4_memdebug_fail -1

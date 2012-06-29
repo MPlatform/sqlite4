@@ -481,24 +481,24 @@ proc parameter_test {tn sql params result} {
   }
 
   set rc [sqlite4_finalize $stmt]
-  do_test $tn.rc [list set {} $rc] SQLITE_OK
+  do_test $tn.rc [list set {} $rc] SQLITE4_OK
   do_test $tn.res [list set {} $res] $result
 }
 
 # EVIDENCE-OF: R-33509-39458 A question mark followed by a number NNN
 # holds a spot for the NNN-th parameter. NNN must be between 1 and
-# SQLITE_MAX_VARIABLE_NUMBER.
+# SQLITE4_MAX_VARIABLE_NUMBER.
 #
-set mvn $SQLITE_MAX_VARIABLE_NUMBER
+set mvn $SQLITE4_MAX_VARIABLE_NUMBER
 parameter_test e_expr-11.1 "
-  SELECT ?1, ?123, ?$SQLITE_MAX_VARIABLE_NUMBER, ?123, ?4
+  SELECT ?1, ?123, ?$SQLITE4_MAX_VARIABLE_NUMBER, ?123, ?4
 "   "1 ?1  123 ?123 $mvn ?$mvn 4 ?4"   "-1 -123 -$mvn -123 -4"
 
-set errmsg "variable number must be between ?1 and ?$SQLITE_MAX_VARIABLE_NUMBER"
+set errmsg "variable number must be between ?1 and ?$SQLITE4_MAX_VARIABLE_NUMBER"
 foreach {tn param_number} [list \
   2  0                                    \
-  3  [expr $SQLITE_MAX_VARIABLE_NUMBER+1] \
-  4  [expr $SQLITE_MAX_VARIABLE_NUMBER+2] \
+  3  [expr $SQLITE4_MAX_VARIABLE_NUMBER+1] \
+  4  [expr $SQLITE4_MAX_VARIABLE_NUMBER+2] \
   5  12345678903456789034567890234567890  \
   6  2147483648                           \
   7  2147483649                           \
@@ -517,7 +517,7 @@ foreach {tn param_number} [list \
 # parameter number already assigned.
 #
 # EVIDENCE-OF: R-42938-07030 If this means the parameter number is
-# greater than SQLITE_MAX_VARIABLE_NUMBER, it is an error.
+# greater than SQLITE4_MAX_VARIABLE_NUMBER, it is an error.
 #
 parameter_test e_expr-11.2.1 "SELECT ?"          {1 {}}       -1
 parameter_test e_expr-11.2.2 "SELECT ?, ?"       {1 {} 2 {}}  {-1 -2}
@@ -594,7 +594,7 @@ parameter_test e_expr-11.5.3 {SELECT $::1(::#$)} {1 $::1(::#$)} -1
 # already assigned.
 #
 # EVIDENCE-OF: R-42620-22184 If this means the parameter would be
-# assigned a number greater than SQLITE_MAX_VARIABLE_NUMBER, it is an
+# assigned a number greater than SQLITE4_MAX_VARIABLE_NUMBER, it is an
 # error.
 #
 parameter_test e_expr-11.6.1 "SELECT ?, @abc"    {1 {} 2 @abc} {-1 -2}
@@ -622,7 +622,7 @@ do_test e_expr-11.7.1 {
        [sqlite4_column_type $stmt 2] \
        [sqlite4_column_type $stmt 3] 
 } {NULL NULL NULL NULL}
-do_test e_expr-11.7.1 { sqlite4_finalize $stmt } SQLITE_OK
+do_test e_expr-11.7.1 { sqlite4_finalize $stmt } SQLITE4_OK
 
 #-------------------------------------------------------------------------
 # "Test" the syntax diagrams in lang_expr.html.

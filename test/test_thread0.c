@@ -13,7 +13,7 @@
 */
 #include "sqliteInt.h"
 #include "tcl.h"
-#if SQLITE_OS_UNIX && SQLITE_THREADSAFE
+#if SQLITE4_OS_UNIX && SQLITE4_THREADSAFE
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
@@ -64,7 +64,7 @@ static void *thread_main(void *pArg){
     sqlite4_close(p->db);
   }
   sqlite4_open(0, p->zFilename, &p->db, 0);
-  if( SQLITE_OK!=sqlite4_errcode(p->db) ){
+  if( SQLITE4_OK!=sqlite4_errcode(p->db) ){
     p->zErr = strdup(sqlite4_errmsg(p->db));
     sqlite4_close(p->db);
     p->db = 0;
@@ -370,32 +370,32 @@ static int tcl_thread_result(
   }
   thread_wait(&threadset[i]);
   switch( threadset[i].rc ){
-    case SQLITE_OK:         zName = "SQLITE_OK";          break;
-    case SQLITE_ERROR:      zName = "SQLITE_ERROR";       break;
-    case SQLITE_PERM:       zName = "SQLITE_PERM";        break;
-    case SQLITE_ABORT:      zName = "SQLITE_ABORT";       break;
-    case SQLITE_BUSY:       zName = "SQLITE_BUSY";        break;
-    case SQLITE_LOCKED:     zName = "SQLITE_LOCKED";      break;
-    case SQLITE_NOMEM:      zName = "SQLITE_NOMEM";       break;
-    case SQLITE_READONLY:   zName = "SQLITE_READONLY";    break;
-    case SQLITE_INTERRUPT:  zName = "SQLITE_INTERRUPT";   break;
-    case SQLITE_IOERR:      zName = "SQLITE_IOERR";       break;
-    case SQLITE_CORRUPT:    zName = "SQLITE_CORRUPT";     break;
-    case SQLITE_FULL:       zName = "SQLITE_FULL";        break;
-    case SQLITE_CANTOPEN:   zName = "SQLITE_CANTOPEN";    break;
-    case SQLITE_PROTOCOL:   zName = "SQLITE_PROTOCOL";    break;
-    case SQLITE_EMPTY:      zName = "SQLITE_EMPTY";       break;
-    case SQLITE_SCHEMA:     zName = "SQLITE_SCHEMA";      break;
-    case SQLITE_CONSTRAINT: zName = "SQLITE_CONSTRAINT";  break;
-    case SQLITE_MISMATCH:   zName = "SQLITE_MISMATCH";    break;
-    case SQLITE_MISUSE:     zName = "SQLITE_MISUSE";      break;
-    case SQLITE_NOLFS:      zName = "SQLITE_NOLFS";       break;
-    case SQLITE_AUTH:       zName = "SQLITE_AUTH";        break;
-    case SQLITE_FORMAT:     zName = "SQLITE_FORMAT";      break;
-    case SQLITE_RANGE:      zName = "SQLITE_RANGE";       break;
-    case SQLITE_ROW:        zName = "SQLITE_ROW";         break;
-    case SQLITE_DONE:       zName = "SQLITE_DONE";        break;
-    default:                zName = "SQLITE_Unknown";     break;
+    case SQLITE4_OK:         zName = "SQLITE4_OK";          break;
+    case SQLITE4_ERROR:      zName = "SQLITE4_ERROR";       break;
+    case SQLITE4_PERM:       zName = "SQLITE4_PERM";        break;
+    case SQLITE4_ABORT:      zName = "SQLITE4_ABORT";       break;
+    case SQLITE4_BUSY:       zName = "SQLITE4_BUSY";        break;
+    case SQLITE4_LOCKED:     zName = "SQLITE4_LOCKED";      break;
+    case SQLITE4_NOMEM:      zName = "SQLITE4_NOMEM";       break;
+    case SQLITE4_READONLY:   zName = "SQLITE4_READONLY";    break;
+    case SQLITE4_INTERRUPT:  zName = "SQLITE4_INTERRUPT";   break;
+    case SQLITE4_IOERR:      zName = "SQLITE4_IOERR";       break;
+    case SQLITE4_CORRUPT:    zName = "SQLITE4_CORRUPT";     break;
+    case SQLITE4_FULL:       zName = "SQLITE4_FULL";        break;
+    case SQLITE4_CANTOPEN:   zName = "SQLITE4_CANTOPEN";    break;
+    case SQLITE4_PROTOCOL:   zName = "SQLITE4_PROTOCOL";    break;
+    case SQLITE4_EMPTY:      zName = "SQLITE4_EMPTY";       break;
+    case SQLITE4_SCHEMA:     zName = "SQLITE4_SCHEMA";      break;
+    case SQLITE4_CONSTRAINT: zName = "SQLITE4_CONSTRAINT";  break;
+    case SQLITE4_MISMATCH:   zName = "SQLITE4_MISMATCH";    break;
+    case SQLITE4_MISUSE:     zName = "SQLITE4_MISUSE";      break;
+    case SQLITE4_NOLFS:      zName = "SQLITE4_NOLFS";       break;
+    case SQLITE4_AUTH:       zName = "SQLITE4_AUTH";        break;
+    case SQLITE4_FORMAT:     zName = "SQLITE4_FORMAT";      break;
+    case SQLITE4_RANGE:      zName = "SQLITE4_RANGE";       break;
+    case SQLITE4_ROW:        zName = "SQLITE4_ROW";         break;
+    case SQLITE4_DONE:       zName = "SQLITE4_DONE";        break;
+    default:                zName = "SQLITE4_Unknown";     break;
   }
   Tcl_AppendResult(interp, zName, 0);
   return TCL_OK;
@@ -437,7 +437,7 @@ static int tcl_thread_error(
 static void do_compile(Thread *p){
   if( p->db==0 ){
     p->zErr = p->zStaticErr = "no database is open";
-    p->rc = SQLITE_ERROR;
+    p->rc = SQLITE4_ERROR;
     return;
   }
   if( p->pStmt ){
@@ -485,11 +485,11 @@ static void do_step(Thread *p){
   int i;
   if( p->pStmt==0 ){
     p->zErr = p->zStaticErr = "no virtual machine available";
-    p->rc = SQLITE_ERROR;
+    p->rc = SQLITE4_ERROR;
     return;
   }
   p->rc = sqlite4_step(p->pStmt);
-  if( p->rc==SQLITE_ROW ){
+  if( p->rc==SQLITE4_ROW ){
     p->argc = sqlite4_column_count(p->pStmt);
     for(i=0; i<sqlite4_data_count(p->pStmt); i++){
       p->argv[i] = (char*)sqlite4_column_text(p->pStmt, i);
@@ -535,7 +535,7 @@ static int tcl_thread_step(
 static void do_finalize(Thread *p){
   if( p->pStmt==0 ){
     p->zErr = p->zStaticErr = "no virtual machine available";
-    p->rc = SQLITE_ERROR;
+    p->rc = SQLITE4_ERROR;
     return;
   }
   p->rc = sqlite4_finalize(p->pStmt);
@@ -741,4 +741,4 @@ int Sqlitetest4_Init(Tcl_Interp *interp){
 }
 #else
 int Sqlitetest4_Init(Tcl_Interp *interp){ return TCL_OK; }
-#endif /* SQLITE_OS_UNIX */
+#endif /* SQLITE4_OS_UNIX */

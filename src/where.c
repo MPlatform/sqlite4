@@ -22,10 +22,10 @@
 /*
 ** Trace output macros
 */
-#if defined(SQLITE_TEST) || defined(SQLITE_DEBUG)
+#if defined(SQLITE4_TEST) || defined(SQLITE4_DEBUG)
 int sqlite4WhereTrace = 0;
 #endif
-#if defined(SQLITE_TEST) && defined(SQLITE_DEBUG)
+#if defined(SQLITE4_TEST) && defined(SQLITE4_DEBUG)
 # define WHERETRACE(X)  if(sqlite4WhereTrace) sqlite4DebugPrintf X
 #else
 # define WHERETRACE(X)
@@ -118,7 +118,7 @@ struct WhereTerm {
 #define TERM_ORINFO     0x10   /* Need to free the WhereTerm.u.pOrInfo object */
 #define TERM_ANDINFO    0x20   /* Need to free the WhereTerm.u.pAndInfo obj */
 #define TERM_OR_OK      0x40   /* Used during OR-clause processing */
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
 #  define TERM_VNULL    0x80   /* Manufactured x>NULL or x<=NULL term */
 #else
 #  define TERM_VNULL    0x00   /* Disabled if not using stat3 */
@@ -146,7 +146,7 @@ struct WhereClause {
   int nTerm;               /* Number of terms */
   int nSlot;               /* Number of entries in a[] */
   WhereTerm *a;            /* Each a[] describes a term of the WHERE cluase */
-#if defined(SQLITE_SMALL_STACK)
+#if defined(SQLITE4_SMALL_STACK)
   WhereTerm aStatic[1];    /* Initial static space for a[] */
 #else
   WhereTerm aStatic[8];    /* Initial static space for a[] */
@@ -660,7 +660,7 @@ static void exprAnalyzeAll(
   }
 }
 
-#ifndef SQLITE_OMIT_LIKE_OPTIMIZATION
+#ifndef SQLITE4_OMIT_LIKE_OPTIMIZATION
 /*
 ** Check to see if the given expression is a LIKE or GLOB operator that
 ** can be optimized using inequality constraints.  Return TRUE if it is
@@ -689,12 +689,12 @@ static int isLikeOrGlob(
   if( !sqlite4IsLikeFunction(db, pExpr, pnoCase, wc) ){
     return 0;
   }
-#ifdef SQLITE_EBCDIC
+#ifdef SQLITE4_EBCDIC
   if( *pnoCase ) return 0;
 #endif
   pList = pExpr->x.pList;
   pLeft = pList->a[1].pExpr;
-  if( pLeft->op!=TK_COLUMN || sqlite4ExprAffinity(pLeft)!=SQLITE_AFF_TEXT ){
+  if( pLeft->op!=TK_COLUMN || sqlite4ExprAffinity(pLeft)!=SQLITE4_AFF_TEXT ){
     /* IMP: R-02065-49465 The left-hand side of the LIKE or GLOB operator must
     ** be the name of an indexed column with TEXT affinity. */
     return 0;
@@ -709,8 +709,8 @@ static int isLikeOrGlob(
   if( op==TK_VARIABLE ){
     Vdbe *pReprepare = pParse->pReprepare;
     int iCol = pRight->iColumn;
-    pVal = sqlite4VdbeGetValue(pReprepare, iCol, SQLITE_AFF_NONE);
-    if( pVal && sqlite4_value_type(pVal)==SQLITE_TEXT ){
+    pVal = sqlite4VdbeGetValue(pReprepare, iCol, SQLITE4_AFF_NONE);
+    if( pVal && sqlite4_value_type(pVal)==SQLITE4_TEXT ){
       z = (char *)sqlite4_value_text(pVal);
     }
     sqlite4VdbeSetVarmask(pParse->pVdbe, iCol);
@@ -753,10 +753,10 @@ static int isLikeOrGlob(
   sqlite4ValueFree(pVal);
   return (z!=0);
 }
-#endif /* SQLITE_OMIT_LIKE_OPTIMIZATION */
+#endif /* SQLITE4_OMIT_LIKE_OPTIMIZATION */
 
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
 /*
 ** Check to see if the given expression is of the form
 **
@@ -784,7 +784,7 @@ static int isMatchOfColumn(
   }
   return 1;
 }
-#endif /* SQLITE_OMIT_VIRTUALTABLE */
+#endif /* SQLITE4_OMIT_VIRTUALTABLE */
 
 /*
 ** If the pBase expression originated in the ON or USING clause of
@@ -795,7 +795,7 @@ static void transferJoinMarkings(Expr *pDerived, Expr *pBase){
   pDerived->iRightJoinTable = pBase->iRightJoinTable;
 }
 
-#if !defined(SQLITE_OMIT_OR_OPTIMIZATION) && !defined(SQLITE_OMIT_SUBQUERY)
+#if !defined(SQLITE4_OMIT_OR_OPTIMIZATION) && !defined(SQLITE4_OMIT_SUBQUERY)
 /*
 ** Analyze a term that consists of two or more OR-connected
 ** subterms.  So in:
@@ -1104,7 +1104,7 @@ static void exprAnalyzeOrTerm(
     }
   }
 }
-#endif /* !SQLITE_OMIT_OR_OPTIMIZATION && !SQLITE_OMIT_SUBQUERY */
+#endif /* !SQLITE4_OMIT_OR_OPTIMIZATION && !SQLITE4_OMIT_SUBQUERY */
 
 
 /*
@@ -1214,7 +1214,7 @@ static void exprAnalyze(
     }
   }
 
-#ifndef SQLITE_OMIT_BETWEEN_OPTIMIZATION
+#ifndef SQLITE4_OMIT_BETWEEN_OPTIMIZATION
   /* If a term is the BETWEEN operator, create two new virtual terms
   ** that define the range that the BETWEEN implements.  For example:
   **
@@ -1250,9 +1250,9 @@ static void exprAnalyze(
     }
     pTerm->nChild = 2;
   }
-#endif /* SQLITE_OMIT_BETWEEN_OPTIMIZATION */
+#endif /* SQLITE4_OMIT_BETWEEN_OPTIMIZATION */
 
-#if !defined(SQLITE_OMIT_OR_OPTIMIZATION) && !defined(SQLITE_OMIT_SUBQUERY)
+#if !defined(SQLITE4_OMIT_OR_OPTIMIZATION) && !defined(SQLITE4_OMIT_SUBQUERY)
   /* Analyze a term that is composed of two or more subterms connected by
   ** an OR operator.
   */
@@ -1261,9 +1261,9 @@ static void exprAnalyze(
     exprAnalyzeOrTerm(pSrc, pWC, idxTerm);
     pTerm = &pWC->a[idxTerm];
   }
-#endif /* SQLITE_OMIT_OR_OPTIMIZATION */
+#endif /* SQLITE4_OMIT_OR_OPTIMIZATION */
 
-#ifndef SQLITE_OMIT_LIKE_OPTIMIZATION
+#ifndef SQLITE4_OMIT_LIKE_OPTIMIZATION
   /* Add constraints to reduce the search space on a LIKE or GLOB
   ** operator.
   **
@@ -1305,7 +1305,7 @@ static void exprAnalyze(
       }
       *pC = c + 1;
     }
-    pColl = sqlite4FindCollSeq(db, SQLITE_UTF8, noCase ? "NOCASE" : "BINARY",0);
+    pColl = sqlite4FindCollSeq(db, SQLITE4_UTF8, noCase ? "NOCASE" : "BINARY",0);
     pNewExpr1 = sqlite4PExpr(pParse, TK_GE, 
                      sqlite4ExprSetColl(sqlite4ExprDup(db,pLeft,0), pColl),
                      pStr1, 0);
@@ -1325,9 +1325,9 @@ static void exprAnalyze(
       pTerm->nChild = 2;
     }
   }
-#endif /* SQLITE_OMIT_LIKE_OPTIMIZATION */
+#endif /* SQLITE4_OMIT_LIKE_OPTIMIZATION */
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   /* Add a WO_MATCH auxiliary term to the constraint set if the
   ** current expression is of the form:  column MATCH expr.
   ** This information is used by the xBestIndex methods of
@@ -1362,9 +1362,9 @@ static void exprAnalyze(
       pNewTerm->prereqAll = pTerm->prereqAll;
     }
   }
-#endif /* SQLITE_OMIT_VIRTUALTABLE */
+#endif /* SQLITE4_OMIT_VIRTUALTABLE */
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
   /* When sqlite_stat3 histogram data is available an operator of the
   ** form "x IS NOT NULL" can sometimes be evaluated more efficiently
   ** as "x>NULL" if x is not an INTEGER PRIMARY KEY.  So construct a
@@ -1403,7 +1403,7 @@ static void exprAnalyze(
       pNewTerm->prereqAll = pTerm->prereqAll;
     }
   }
-#endif /* SQLITE_ENABLE_STAT */
+#endif /* SQLITE4_ENABLE_STAT */
 
   /* Prevent ON clause terms of a LEFT JOIN from being used to drive
   ** an index for tables to the left of the join.
@@ -1715,9 +1715,9 @@ static int isSortingIndex(
 
     if( iIdxCol==iNext ){
       u8 reqSortOrder;
-      u8 idxSortOrder = SQLITE_SO_ASC;
+      u8 idxSortOrder = SQLITE4_SO_ASC;
       if( iIdxCol<pIdx->nColumn ) idxSortOrder = pIdx->aSortOrder[iIdxCol];
-      assert( idxSortOrder==SQLITE_SO_ASC || idxSortOrder==SQLITE_SO_DESC );
+      assert( idxSortOrder==SQLITE4_SO_ASC || idxSortOrder==SQLITE4_SO_DESC );
 
       reqSortOrder = (idxSortOrder ^ pTerm->sortOrder);
       if( iNext==nEqCol ){
@@ -1802,10 +1802,10 @@ static double estLog(double N){
 /*
 ** Two routines for printing the content of an sqlite4_index_info
 ** structure.  Used for testing and debugging only.  If neither
-** SQLITE_TEST or SQLITE_DEBUG are defined, then these routines
+** SQLITE4_TEST or SQLITE4_DEBUG are defined, then these routines
 ** are no-ops.
 */
-#if !defined(SQLITE_OMIT_VIRTUALTABLE) && defined(SQLITE_DEBUG)
+#if !defined(SQLITE4_OMIT_VIRTUALTABLE) && defined(SQLITE4_DEBUG)
 static void TRACE_IDX_INPUTS(sqlite4_index_info *p){
   int i;
   if( !sqlite4WhereTrace ) return;
@@ -1866,7 +1866,7 @@ static void bestOrClauseIndex(
   ExprList *pOrderBy,         /* The ORDER BY clause */
   WhereCost *pCost            /* Lowest cost query plan */
 ){
-#ifndef SQLITE_OMIT_OR_OPTIMIZATION
+#ifndef SQLITE4_OMIT_OR_OPTIMIZATION
   const int iCur = pSrc->iCursor;   /* The cursor of the table to be accessed */
   const Bitmask maskSrc = getMask(pWC->pMaskSet, iCur);  /* Bitmask for pSrc */
   WhereTerm * const pWCEnd = &pWC->a[pWC->nTerm];        /* End of pWC->a[] */
@@ -1943,10 +1943,10 @@ static void bestOrClauseIndex(
       }
     }
   }
-#endif /* SQLITE_OMIT_OR_OPTIMIZATION */
+#endif /* SQLITE4_OMIT_OR_OPTIMIZATION */
 }
 
-#ifndef SQLITE_OMIT_AUTOMATIC_INDEX
+#ifndef SQLITE4_OMIT_AUTOMATIC_INDEX
 /*
 ** Return TRUE if the WHERE clause term pTerm is of a form where it
 ** could be used with an index to access pSrc, assuming an appropriate
@@ -1967,7 +1967,7 @@ static int termCanDriveIndex(
 }
 #endif
 
-#ifndef SQLITE_OMIT_AUTOMATIC_INDEX
+#ifndef SQLITE4_OMIT_AUTOMATIC_INDEX
 /*
 ** If the query plan for pSrc specified in pCost is a full table scan
 ** and indexing is allows (if there is no NOT INDEXED clause) and it
@@ -1994,7 +1994,7 @@ static void bestAutomaticIndex(
     /* There is no point in building an automatic index for a single scan */
     return;
   }
-  if( (pParse->db->flags & SQLITE_AutoIndex)==0 ){
+  if( (pParse->db->flags & SQLITE4_AutoIndex)==0 ){
     /* Automatic indices are disabled at run-time */
     return;
   }
@@ -2042,10 +2042,10 @@ static void bestAutomaticIndex(
 }
 #else
 # define bestAutomaticIndex(A,B,C,D,E)  /* no-op */
-#endif /* SQLITE_OMIT_AUTOMATIC_INDEX */
+#endif /* SQLITE4_OMIT_AUTOMATIC_INDEX */
 
 
-#ifndef SQLITE_OMIT_AUTOMATIC_INDEX
+#ifndef SQLITE4_OMIT_AUTOMATIC_INDEX
 /*
 ** Generate code to construct the Index object for an automatic index
 ** and to set up the WhereLevel object pLevel so that the code generator
@@ -2111,7 +2111,7 @@ static void constructAutomaticIndex(
   pIdx = sqlite4DbMallocZero(pParse->db, nByte);
   if( pIdx==0 ) return;
   pLevel->plan.u.pIdx = pIdx;
-  pIdx->eIndexType = SQLITE_INDEX_TEMP;
+  pIdx->eIndexType = SQLITE4_INDEX_TEMP;
   pIdx->azColl = (char**)&pIdx[1];
   pIdx->aiColumn = (int*)&pIdx->azColl[nCol];
   pIdx->aSortOrder = (u8*)&pIdx->aiColumn[nCol];
@@ -2151,16 +2151,16 @@ static void constructAutomaticIndex(
   sqlite4VdbeAddOp2(v, OP_RowData, iPkCur, regRecord);
   sqlite4VdbeAddOp3(v, OP_IdxInsert, pLevel->iIdxCur, regRecord, regKey);
   sqlite4VdbeAddOp2(v, OP_Next, iPkCur, addrRewind+1);
-  sqlite4VdbeChangeP5(v, SQLITE_STMTSTATUS_AUTOINDEX);
+  sqlite4VdbeChangeP5(v, SQLITE4_STMTSTATUS_AUTOINDEX);
   sqlite4VdbeJumpHere(v, addrRewind);
   sqlite4ReleaseTempRange(pParse, regRecord, 2);
   
   /* Jump here when skipping the initialization */
   sqlite4VdbeJumpHere(v, addrOnce);
 }
-#endif /* SQLITE_OMIT_AUTOMATIC_INDEX */
+#endif /* SQLITE4_OMIT_AUTOMATIC_INDEX */
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
 /*
 ** Allocate and populate an sqlite4_index_info structure. It is the 
 ** responsibility of the caller to eventually release the structure
@@ -2217,7 +2217,7 @@ static sqlite4_index_info *allocateIndexInfo(
                            + sizeof(*pIdxOrderBy)*nOrderBy );
   if( pIdxInfo==0 ){
     sqlite4ErrorMsg(pParse, "out of memory");
-    /* (double)0 In case of SQLITE_OMIT_FLOATING_POINT... */
+    /* (double)0 In case of SQLITE4_OMIT_FLOATING_POINT... */
     return 0;
   }
 
@@ -2247,14 +2247,14 @@ static sqlite4_index_info *allocateIndexInfo(
     pIdxCons[j].iTermOffset = i;
     pIdxCons[j].op = (u8)pTerm->eOperator;
     /* The direct assignment in the previous line is possible only because
-    ** the WO_ and SQLITE_INDEX_CONSTRAINT_ codes are identical.  The
+    ** the WO_ and SQLITE4_INDEX_CONSTRAINT_ codes are identical.  The
     ** following asserts verify this fact. */
-    assert( WO_EQ==SQLITE_INDEX_CONSTRAINT_EQ );
-    assert( WO_LT==SQLITE_INDEX_CONSTRAINT_LT );
-    assert( WO_LE==SQLITE_INDEX_CONSTRAINT_LE );
-    assert( WO_GT==SQLITE_INDEX_CONSTRAINT_GT );
-    assert( WO_GE==SQLITE_INDEX_CONSTRAINT_GE );
-    assert( WO_MATCH==SQLITE_INDEX_CONSTRAINT_MATCH );
+    assert( WO_EQ==SQLITE4_INDEX_CONSTRAINT_EQ );
+    assert( WO_LT==SQLITE4_INDEX_CONSTRAINT_LT );
+    assert( WO_LE==SQLITE4_INDEX_CONSTRAINT_LE );
+    assert( WO_GT==SQLITE4_INDEX_CONSTRAINT_GT );
+    assert( WO_GE==SQLITE4_INDEX_CONSTRAINT_GE );
+    assert( WO_MATCH==SQLITE4_INDEX_CONSTRAINT_MATCH );
     assert( pTerm->eOperator & (WO_EQ|WO_LT|WO_LE|WO_GT|WO_GE|WO_MATCH) );
     j++;
   }
@@ -2291,8 +2291,8 @@ static int vtabBestIndex(Parse *pParse, Table *pTab, sqlite4_index_info *p){
   rc = pVtab->pModule->xBestIndex(pVtab, p);
   TRACE_IDX_OUTPUTS(p);
 
-  if( rc!=SQLITE_OK ){
-    if( rc==SQLITE_NOMEM ){
+  if( rc!=SQLITE4_OK ){
+    if( rc==SQLITE4_NOMEM ){
       pParse->db->mallocFailed = 1;
     }else if( !pVtab->zErrMsg ){
       sqlite4ErrorMsg(pParse, "%s", sqlite4ErrStr(rc));
@@ -2416,8 +2416,8 @@ static void bestVirtualIndex(
   pIdxInfo->idxNum = 0;
   pIdxInfo->needToFreeIdxStr = 0;
   pIdxInfo->orderByConsumed = 0;
-  /* ((double)2) In case of SQLITE_OMIT_FLOATING_POINT... */
-  pIdxInfo->estimatedCost = SQLITE_BIG_DBL / ((double)2);
+  /* ((double)2) In case of SQLITE4_OMIT_FLOATING_POINT... */
+  pIdxInfo->estimatedCost = SQLITE4_BIG_DBL / ((double)2);
   nOrderBy = pIdxInfo->nOrderBy;
   if( !pOrderBy ){
     pIdxInfo->nOrderBy = 0;
@@ -2443,15 +2443,15 @@ static void bestVirtualIndex(
     rCost += estLog(rCost)*rCost;
   }
 
-  /* The cost is not allowed to be larger than SQLITE_BIG_DBL (the
+  /* The cost is not allowed to be larger than SQLITE4_BIG_DBL (the
   ** inital value of lowestCost in this loop. If it is, then the
   ** (cost<lowestCost) test below will never be true.
   ** 
   ** Use "(double)2" instead of "2.0" in case OMIT_FLOATING_POINT 
   ** is defined.
   */
-  if( (SQLITE_BIG_DBL/((double)2))<rCost ){
-    pCost->rCost = (SQLITE_BIG_DBL/((double)2));
+  if( (SQLITE4_BIG_DBL/((double)2))<rCost ){
+    pCost->rCost = (SQLITE4_BIG_DBL/((double)2));
   }else{
     pCost->rCost = rCost;
   }
@@ -2467,9 +2467,9 @@ static void bestVirtualIndex(
   */
   bestOrClauseIndex(pParse, pWC, pSrc, notReady, notValid, pOrderBy, pCost);
 }
-#endif /* SQLITE_OMIT_VIRTUALTABLE */
+#endif /* SQLITE4_OMIT_VIRTUALTABLE */
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
 /*
 ** Estimate the location of a particular key among all keys in an
 ** index.  Store the results in aStat as follows:
@@ -2477,7 +2477,7 @@ static void bestVirtualIndex(
 **    aStat[0]      Est. number of rows less than pVal
 **    aStat[1]      Est. number of rows equal to pVal
 **
-** Return SQLITE_OK on success.
+** Return SQLITE4_OK on success.
 */
 static int whereKeyStats(
   Parse *pParse,              /* Database connection */
@@ -2495,36 +2495,36 @@ static int whereKeyStats(
 
   assert( roundUp==0 || roundUp==1 );
   assert( pIdx->nSample>0 );
-  if( pVal==0 ) return SQLITE_ERROR;
+  if( pVal==0 ) return SQLITE4_ERROR;
   n = pIdx->aiRowEst[0];
   aSample = pIdx->aSample;
   eType = sqlite4_value_type(pVal);
 
-  if( eType==SQLITE_INTEGER ){
+  if( eType==SQLITE4_INTEGER ){
     v = sqlite4_value_int64(pVal);
     r = (i64)v;
     for(i=0; i<pIdx->nSample; i++){
-      if( aSample[i].eType==SQLITE_NULL ) continue;
-      if( aSample[i].eType>=SQLITE_TEXT ) break;
-      if( aSample[i].eType==SQLITE_INTEGER ){
+      if( aSample[i].eType==SQLITE4_NULL ) continue;
+      if( aSample[i].eType>=SQLITE4_TEXT ) break;
+      if( aSample[i].eType==SQLITE4_INTEGER ){
         if( aSample[i].u.i>=v ){
           isEq = aSample[i].u.i==v;
           break;
         }
       }else{
-        assert( aSample[i].eType==SQLITE_FLOAT );
+        assert( aSample[i].eType==SQLITE4_FLOAT );
         if( aSample[i].u.r>=r ){
           isEq = aSample[i].u.r==r;
           break;
         }
       }
     }
-  }else if( eType==SQLITE_FLOAT ){
+  }else if( eType==SQLITE4_FLOAT ){
     r = sqlite4_value_double(pVal);
     for(i=0; i<pIdx->nSample; i++){
-      if( aSample[i].eType==SQLITE_NULL ) continue;
-      if( aSample[i].eType>=SQLITE_TEXT ) break;
-      if( aSample[i].eType==SQLITE_FLOAT ){
+      if( aSample[i].eType==SQLITE4_NULL ) continue;
+      if( aSample[i].eType>=SQLITE4_TEXT ) break;
+      if( aSample[i].eType==SQLITE4_FLOAT ){
         rS = aSample[i].u.r;
       }else{
         rS = aSample[i].u.i;
@@ -2534,13 +2534,13 @@ static int whereKeyStats(
         break;
       }
     }
-  }else if( eType==SQLITE_NULL ){
+  }else if( eType==SQLITE4_NULL ){
     i = 0;
-    if( aSample[0].eType==SQLITE_NULL ) isEq = 1;
+    if( aSample[0].eType==SQLITE4_NULL ) isEq = 1;
   }else{
-    assert( eType==SQLITE_TEXT || eType==SQLITE_BLOB );
+    assert( eType==SQLITE4_TEXT || eType==SQLITE4_BLOB );
     for(i=0; i<pIdx->nSample; i++){
-      if( aSample[i].eType==SQLITE_TEXT || aSample[i].eType==SQLITE_BLOB ){
+      if( aSample[i].eType==SQLITE4_TEXT || aSample[i].eType==SQLITE4_BLOB ){
         break;
       }
     }
@@ -2548,20 +2548,20 @@ static int whereKeyStats(
       sqlite4 *db = pParse->db;
       CollSeq *pColl;
       const u8 *z;
-      if( eType==SQLITE_BLOB ){
+      if( eType==SQLITE4_BLOB ){
         z = (const u8 *)sqlite4_value_blob(pVal);
         pColl = db->pDfltColl;
-        assert( pColl->enc==SQLITE_UTF8 );
+        assert( pColl->enc==SQLITE4_UTF8 );
       }else{
-        pColl = sqlite4GetCollSeq(db, SQLITE_UTF8, 0, *pIdx->azColl);
+        pColl = sqlite4GetCollSeq(db, SQLITE4_UTF8, 0, *pIdx->azColl);
         if( pColl==0 ){
           sqlite4ErrorMsg(pParse, "no such collation sequence: %s",
                           *pIdx->azColl);
-          return SQLITE_ERROR;
+          return SQLITE4_ERROR;
         }
         z = (const u8 *)sqlite4ValueText(pVal, pColl->enc);
         if( !z ){
-          return SQLITE_NOMEM;
+          return SQLITE4_NOMEM;
         }
         assert( z && pColl && pColl->xCmp );
       }
@@ -2572,15 +2572,15 @@ static int whereKeyStats(
         int eSampletype = aSample[i].eType;
         if( eSampletype<eType ) continue;
         if( eSampletype!=eType ) break;
-#ifndef SQLITE_OMIT_UTF16
-        if( pColl->enc!=SQLITE_UTF8 ){
+#ifndef SQLITE4_OMIT_UTF16
+        if( pColl->enc!=SQLITE4_UTF8 ){
           int nSample;
           char *zSample = sqlite4Utf8to16(
               db, pColl->enc, aSample[i].u.z, aSample[i].nByte, &nSample
           );
           if( !zSample ){
             assert( db->mallocFailed );
-            return SQLITE_NOMEM;
+            return SQLITE4_NOMEM;
           }
           c = pColl->xCmp(pColl->pUser, nSample, zSample, n, z);
           sqlite4DbFree(db, zSample);
@@ -2627,9 +2627,9 @@ static int whereKeyStats(
     }
     aStat[0] = iLower + iGap;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
-#endif /* SQLITE_ENABLE_STAT3 */
+#endif /* SQLITE4_ENABLE_STAT3 */
 
 /*
 ** If expression pExpr represents a literal value, set *pp to point to
@@ -2645,9 +2645,9 @@ static int whereKeyStats(
 **
 ** If neither of the above apply, set *pp to NULL.
 **
-** If an error occurs, return an error code. Otherwise, SQLITE_OK.
+** If an error occurs, return an error code. Otherwise, SQLITE4_OK.
 */
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
 static int valueFromExpr(
   Parse *pParse, 
   Expr *pExpr, 
@@ -2660,9 +2660,9 @@ static int valueFromExpr(
     int iVar = pExpr->iColumn;
     sqlite4VdbeSetVarmask(pParse->pVdbe, iVar);
     *pp = sqlite4VdbeGetValue(pParse->pReprepare, iVar, aff);
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
-  return sqlite4ValueFromExpr(pParse->db, pExpr, SQLITE_UTF8, aff, pp);
+  return sqlite4ValueFromExpr(pParse->db, pExpr, SQLITE4_UTF8, aff, pp);
 }
 #endif
 
@@ -2713,9 +2713,9 @@ static int whereRangeScanEst(
   WhereTerm *pUpper,   /* Upper bound on the range. ex: "x<455" Might be NULL */
   double *pRangeDiv   /* OUT: Reduce search space by this divisor */
 ){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
 
   if( nEq==0 && p->nSample ){
     sqlite4_value *pRangeVal;
@@ -2728,27 +2728,27 @@ static int whereRangeScanEst(
       Expr *pExpr = pLower->pExpr->pRight;
       rc = valueFromExpr(pParse, pExpr, aff, &pRangeVal);
       assert( pLower->eOperator==WO_GT || pLower->eOperator==WO_GE );
-      if( rc==SQLITE_OK
-       && whereKeyStats(pParse, p, pRangeVal, 0, a)==SQLITE_OK
+      if( rc==SQLITE4_OK
+       && whereKeyStats(pParse, p, pRangeVal, 0, a)==SQLITE4_OK
       ){
         iLower = a[0];
         if( pLower->eOperator==WO_GT ) iLower += a[1];
       }
       sqlite4ValueFree(pRangeVal);
     }
-    if( rc==SQLITE_OK && pUpper ){
+    if( rc==SQLITE4_OK && pUpper ){
       Expr *pExpr = pUpper->pExpr->pRight;
       rc = valueFromExpr(pParse, pExpr, aff, &pRangeVal);
       assert( pUpper->eOperator==WO_LT || pUpper->eOperator==WO_LE );
-      if( rc==SQLITE_OK
-       && whereKeyStats(pParse, p, pRangeVal, 1, a)==SQLITE_OK
+      if( rc==SQLITE4_OK
+       && whereKeyStats(pParse, p, pRangeVal, 1, a)==SQLITE4_OK
       ){
         iUpper = a[0];
         if( pUpper->eOperator==WO_LE ) iUpper += a[1];
       }
       sqlite4ValueFree(pRangeVal);
     }
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       if( iUpper<=iLower ){
         *pRangeDiv = (double)p->aiRowEst[0];
       }else{
@@ -2756,7 +2756,7 @@ static int whereRangeScanEst(
       }
       WHERETRACE(("range scan regions: %u..%u  div=%g\n",
                   (u32)iLower, (u32)iUpper, *pRangeDiv));
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
   }
 #else
@@ -2771,7 +2771,7 @@ static int whereRangeScanEst(
   return rc;
 }
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
 /*
 ** Estimate the number of rows that will be returned based on
 ** an equality constraint x=VALUE and where that VALUE occurs in
@@ -2780,7 +2780,7 @@ static int whereRangeScanEst(
 ** for that index.  When pExpr==NULL that means the constraint is
 ** "x IS NULL" instead of "x=VALUE".
 **
-** Write the estimated row count into *pnRow and return SQLITE_OK. 
+** Write the estimated row count into *pnRow and return SQLITE4_OK. 
 ** If unable to make an estimate, leave *pnRow unchanged and return
 ** non-zero.
 **
@@ -2809,9 +2809,9 @@ static int whereEqualScanEst(
   }else{
     pRhs = sqlite4ValueNew(pParse->db);
   }
-  if( pRhs==0 ) return SQLITE_NOTFOUND;
+  if( pRhs==0 ) return SQLITE4_NOTFOUND;
   rc = whereKeyStats(pParse, p, pRhs, 0, a);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     WHERETRACE(("equality scan regions: %d\n", (int)a[1]));
     *pnRow = a[1];
   }
@@ -2819,9 +2819,9 @@ whereEqualScanEst_cancel:
   sqlite4ValueFree(pRhs);
   return rc;
 }
-#endif /* defined(SQLITE_ENABLE_STAT3) */
+#endif /* defined(SQLITE4_ENABLE_STAT3) */
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
 /*
 ** Estimate the number of rows that will be returned based on
 ** an IN constraint where the right-hand side of the IN operator
@@ -2829,7 +2829,7 @@ whereEqualScanEst_cancel:
 **
 **        WHERE x IN (1,2,3,4)
 **
-** Write the estimated row count into *pnRow and return SQLITE_OK. 
+** Write the estimated row count into *pnRow and return SQLITE4_OK. 
 ** If unable to make an estimate, leave *pnRow unchanged and return
 ** non-zero.
 **
@@ -2844,25 +2844,25 @@ static int whereInScanEst(
   ExprList *pList,     /* The value list on the RHS of "x IN (v1,v2,v3,...)" */
   double *pnRow        /* Write the revised row estimate here */
 ){
-  int rc = SQLITE_OK;         /* Subfunction return code */
+  int rc = SQLITE4_OK;         /* Subfunction return code */
   double nEst;                /* Number of rows for a single term */
   double nRowEst = (double)0; /* New estimate of the number of rows */
   int i;                      /* Loop counter */
 
   assert( p->aSample!=0 );
-  for(i=0; rc==SQLITE_OK && i<pList->nExpr; i++){
+  for(i=0; rc==SQLITE4_OK && i<pList->nExpr; i++){
     nEst = p->aiRowEst[0];
     rc = whereEqualScanEst(pParse, p, pList->a[i].pExpr, &nEst);
     nRowEst += nEst;
   }
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     if( nRowEst > p->aiRowEst[0] ) nRowEst = p->aiRowEst[0];
     *pnRow = nRowEst;
     WHERETRACE(("IN row estimate: est=%g\n", nRowEst));
   }
   return rc;
 }
-#endif /* defined(SQLITE_ENABLE_STAT3) */
+#endif /* defined(SQLITE4_ENABLE_STAT3) */
 
 /*
 ** Find the best query plan for accessing a particular table.  Write the
@@ -2884,7 +2884,7 @@ static int whereInScanEst(
 ** If there was an INDEXED BY clause (pSrc->pIndex) attached to the table in
 ** the SQL statement, then this function only considers plans using the 
 ** named index. If no such plan is found, then the returned cost is
-** SQLITE_BIG_DBL. If a plan is found that uses the named index, 
+** SQLITE4_BIG_DBL. If a plan is found that uses the named index, 
 ** then the cost is calculated in the usual way.
 **
 ** If a NOT INDEXED clause (pSrc->notIndexed!=0) was attached to the table 
@@ -2911,7 +2911,7 @@ static void bestKVIndex(
 
   /* Initialize the cost to a worst-case value */
   memset(pCost, 0, sizeof(*pCost));
-  pCost->rCost = SQLITE_BIG_DBL;
+  pCost->rCost = SQLITE4_BIG_DBL;
   pPk = sqlite4FindPrimaryKey(pSrc->pTab, 0);
 
   /* If the pSrc table is the right table of a LEFT JOIN then we may not
@@ -3020,7 +3020,7 @@ static void bestKVIndex(
     int bDist = !!pDistinct;      /* True if index cannot help with DISTINCT */
     int bLookup = 0;              /* True if not the PK index */
     WhereTerm *pTerm;             /* A single term of the WHERE clause */
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
     WhereTerm *pFirstTerm = 0;    /* First term matching the index */
 #endif
     int nCol = pProbe->nColumn;   /* Total columns in index record */
@@ -3053,7 +3053,7 @@ static void bestKVIndex(
       }else if( pTerm->eOperator & WO_ISNULL ){
         wsFlags |= WHERE_COLUMN_NULL;
       }
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
       if( nEq==0 && pProbe->aSample ) pFirstTerm = pTerm;
 #endif
       used |= pTerm->prereqRight;
@@ -3142,7 +3142,7 @@ static void bestKVIndex(
       }
     }
 #endif
-    bLookup = (pProbe->eIndexType!=SQLITE_INDEX_PRIMARYKEY);
+    bLookup = (pProbe->eIndexType!=SQLITE4_INDEX_PRIMARYKEY);
 
     /*
     ** Estimate the number of rows of output.  For an "x IN (SELECT...)"
@@ -3154,7 +3154,7 @@ static void bestKVIndex(
       nInMul = (int)(nRow / aiRowEst[nEq]);
     }
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
     /* If the constraint is of the form x=VALUE or x IN (E1,E2,...)
     ** and we do not think that values of x are unique and if histogram
     ** data is available for column x, then it might be possible
@@ -3172,7 +3172,7 @@ static void bestKVIndex(
         whereInScanEst(pParse, pProbe, pFirstTerm->pExpr->x.pList, &nRow);
       }
     }
-#endif /* SQLITE_ENABLE_STAT3 */
+#endif /* SQLITE4_ENABLE_STAT3 */
 
     /* Adjust the number of output rows and downward to reflect rows
     ** that are excluded by range constraints.
@@ -3324,12 +3324,12 @@ static void bestKVIndex(
     if( pSrc->pIndex || pSrc->notIndexed ) break;
   }
 
-  /* If there is no ORDER BY clause and the SQLITE_ReverseOrder flag
+  /* If there is no ORDER BY clause and the SQLITE4_ReverseOrder flag
   ** is set, then reverse the order that the index will be scanned
   ** in. This is used for application testing, to help find cases
   ** where application behaviour depends on the (undefined) order that
   ** SQLite outputs rows in in the absence of an ORDER BY clause.  */
-  if( !pOrderBy && pParse->db->flags & SQLITE_ReverseOrder ){
+  if( !pOrderBy && pParse->db->flags & SQLITE4_ReverseOrder ){
     pCost->plan.wsFlags |= WHERE_REVERSE;
   }
 
@@ -3364,7 +3364,7 @@ static void bestIndex(
   ExprList *pOrderBy,         /* The ORDER BY clause */
   WhereCost *pCost            /* Lowest cost query plan */
 ){
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if( IsVirtual(pSrc->pTab) ){
     sqlite4_index_info *p = 0;
     bestVirtualIndex(pParse, pWC, pSrc, notReady, notValid, pOrderBy, pCost,&p);
@@ -3424,9 +3424,9 @@ static void disableTerm(WhereLevel *pLevel, WhereTerm *pTerm){
 ** Code an OP_Affinity opcode to apply the column affinity string zAff
 ** to the n registers starting at base. 
 **
-** As an optimization, SQLITE_AFF_NONE entries (which are no-ops) at the
+** As an optimization, SQLITE4_AFF_NONE entries (which are no-ops) at the
 ** beginning and end of zAff are ignored.  If all entries in zAff are
-** SQLITE_AFF_NONE, then no code gets generated.
+** SQLITE4_AFF_NONE, then no code gets generated.
 **
 ** This routine makes its own copy of zAff so that the caller is free
 ** to modify zAff after this routine returns.
@@ -3439,15 +3439,15 @@ static void codeApplyAffinity(Parse *pParse, int base, int n, char *zAff){
   }
   assert( v!=0 );
 
-  /* Adjust base and n to skip over SQLITE_AFF_NONE entries at the beginning
+  /* Adjust base and n to skip over SQLITE4_AFF_NONE entries at the beginning
   ** and end of the affinity string.
   */
-  while( n>0 && zAff[0]==SQLITE_AFF_NONE ){
+  while( n>0 && zAff[0]==SQLITE4_AFF_NONE ){
     n--;
     base++;
     zAff++;
   }
-  while( n>1 && zAff[n-1]==SQLITE_AFF_NONE ){
+  while( n>1 && zAff[n-1]==SQLITE4_AFF_NONE ){
     n--;
   }
 
@@ -3487,7 +3487,7 @@ static int codeEqualityTerm(
   }else if( pX->op==TK_ISNULL ){
     iReg = iTarget;
     sqlite4VdbeAddOp2(v, OP_Null, 0, iReg);
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
   }else{
     /* Code a loop that iterates through the set of distinct, non-null 
     ** values in the set on the right-hand-side of the IN(...) operator.
@@ -3587,7 +3587,7 @@ static int codeEqualityTerm(
 ** copy of the column affinity string of the index allocated using
 ** sqlite4DbMalloc(). Except, entries in the copy of the string associated
 ** with equality constraints that use NONE affinity are set to
-** SQLITE_AFF_NONE. This is to deal with SQL such as the following:
+** SQLITE4_AFF_NONE. This is to deal with SQL such as the following:
 **
 **   CREATE TABLE t1(a TEXT PRIMARY KEY, b);
 **   SELECT ... FROM t1 AS t2, t1 WHERE t1.a = t2.b;
@@ -3596,7 +3596,7 @@ static int codeEqualityTerm(
 ** the right hand side of the equality constraint (t2.b) has NONE affinity,
 ** no conversion should be attempted before using a t2.b value as part of
 ** a key to search the index. Hence the first byte in the returned affinity
-** string in this example would be set to SQLITE_AFF_NONE.
+** string in this example would be set to SQLITE4_AFF_NONE.
 */
 static int codeAllEqualityTerms(
   Parse *pParse,        /* Parsing context */
@@ -3658,11 +3658,11 @@ static int codeAllEqualityTerms(
       Expr *pRight = pTerm->pExpr->pRight;
       sqlite4ExprCodeIsNullJump(v, pRight, regBase+j, pLevel->addrBrk);
       if( zAff ){
-        if( sqlite4CompareAffinity(pRight, zAff[j])==SQLITE_AFF_NONE ){
-          zAff[j] = SQLITE_AFF_NONE;
+        if( sqlite4CompareAffinity(pRight, zAff[j])==SQLITE4_AFF_NONE ){
+          zAff[j] = SQLITE4_AFF_NONE;
         }
         if( sqlite4ExprNeedsNoAffinityChange(pRight, zAff[j]) ){
-          zAff[j] = SQLITE_AFF_NONE;
+          zAff[j] = SQLITE4_AFF_NONE;
         }
       }
     }
@@ -3671,7 +3671,7 @@ static int codeAllEqualityTerms(
   return regBase;
 }
 
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
 /*
 ** This routine is a helper for explainIndexRange() below
 **
@@ -3725,7 +3725,7 @@ static char *explainIndexRange(sqlite4 *db, WhereLevel *pLevel, Table *pTab){
   if( nEq==0 && (pPlan->wsFlags & (WHERE_BTM_LIMIT|WHERE_TOP_LIMIT))==0 ){
     return 0;
   }
-  sqlite4StrAccumInit(&txt, 0, 0, SQLITE_MAX_LENGTH);
+  sqlite4StrAccumInit(&txt, 0, 0, SQLITE4_MAX_LENGTH);
   txt.db = db;
   txt.pEnv = db->pEnv;
 
@@ -3792,7 +3792,7 @@ static void explainOneScan(
       const char *zName = "";
       const char *zType = "INDEX";
 
-      if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+      if( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){
         zType = "PRIMARY KEY";
       }else if( 0==(flags & WHERE_TEMP_INDEX) ){
         zName = pIdx->zName;
@@ -3803,7 +3803,7 @@ static void explainOneScan(
       );
       sqlite4DbFree(db, zWhere);
     }
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
     else if( (flags & WHERE_VIRTUALTABLE)!=0 ){
       sqlite4_index_info *pVtabIdx = pLevel->plan.u.pVtabIdx;
       zMsg = sqlite4MAppendf(db, zMsg, "%s VIRTUAL TABLE INDEX %d:%s", zMsg,
@@ -3822,7 +3822,7 @@ static void explainOneScan(
 }
 #else
 # define explainOneScan(u,v,w,x,y,z)
-#endif /* SQLITE_OMIT_EXPLAIN */
+#endif /* SQLITE4_OMIT_EXPLAIN */
 
 /*
 ** Generate code for the start of the iLevel-th loop in the WHERE clause
@@ -3880,7 +3880,7 @@ static Bitmask codeOneLoopStart(
     VdbeComment((v, "init LEFT JOIN no-match flag"));
   }
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   if(  (pLevel->plan.wsFlags & WHERE_VIRTUALTABLE)!=0 ){
     /* Case 0:  The table is a virtual-table.  Use the VFilter and VNext
     **          to access the data.
@@ -3922,7 +3922,7 @@ static Bitmask codeOneLoopStart(
     sqlite4ReleaseTempRange(pParse, iReg, nConstraint+2);
     sqlite4ExprCachePop(pParse, 1);
   }else
-#endif /* SQLITE_OMIT_VIRTUALTABLE */
+#endif /* SQLITE4_OMIT_VIRTUALTABLE */
 
   if( pLevel->plan.wsFlags & (WHERE_COLUMN_RANGE|WHERE_COLUMN_EQ) ){
     /* Case 3: A scan using an index.
@@ -4045,7 +4045,7 @@ static Bitmask codeOneLoopStart(
     /* If we are doing a reverse order scan on an ascending index, or
     ** a forward order scan on a descending index, interchange the 
     ** start and end terms (pRangeStart and pRangeEnd).  */
-    if( (nEq<pIdx->nColumn && bRev==(pIdx->aSortOrder[nEq]==SQLITE_SO_ASC))
+    if( (nEq<pIdx->nColumn && bRev==(pIdx->aSortOrder[nEq]==SQLITE4_SO_ASC))
      || (bRev && pIdx->nColumn==nEq)
     ){
       SWAP(WhereTerm *, pRangeEnd, pRangeStart);
@@ -4068,14 +4068,14 @@ static Bitmask codeOneLoopStart(
         sqlite4ExprCodeIsNullJump(v, pRight, regBase+nEq, addrNxt);
       }
       if( zStartAff ){
-        if( sqlite4CompareAffinity(pRight, zStartAff[nEq])==SQLITE_AFF_NONE){
+        if( sqlite4CompareAffinity(pRight, zStartAff[nEq])==SQLITE4_AFF_NONE){
           /* Since the comparison is to be performed with no conversions
           ** applied to the operands, set the affinity to apply to pRight to 
-          ** SQLITE_AFF_NONE.  */
-          zStartAff[nEq] = SQLITE_AFF_NONE;
+          ** SQLITE4_AFF_NONE.  */
+          zStartAff[nEq] = SQLITE4_AFF_NONE;
         }
         if( sqlite4ExprNeedsNoAffinityChange(pRight, zStartAff[nEq]) ){
-          zStartAff[nEq] = SQLITE_AFF_NONE;
+          zStartAff[nEq] = SQLITE4_AFF_NONE;
         }
       }  
       nConstraint++;
@@ -4120,14 +4120,14 @@ static Bitmask codeOneLoopStart(
           sqlite4ExprCodeIsNullJump(v, pRight, regBase+nEq, addrNxt);
         }
         if( zEndAff ){
-          if( sqlite4CompareAffinity(pRight, zEndAff[nEq])==SQLITE_AFF_NONE){
+          if( sqlite4CompareAffinity(pRight, zEndAff[nEq])==SQLITE4_AFF_NONE){
             /* Since the comparison is to be performed with no conversions
              ** applied to the operands, set the affinity to apply to pRight to 
-             ** SQLITE_AFF_NONE.  */
-            zEndAff[nEq] = SQLITE_AFF_NONE;
+             ** SQLITE4_AFF_NONE.  */
+            zEndAff[nEq] = SQLITE4_AFF_NONE;
           }
           if( sqlite4ExprNeedsNoAffinityChange(pRight, zEndAff[nEq]) ){
-            zEndAff[nEq] = SQLITE_AFF_NONE;
+            zEndAff[nEq] = SQLITE4_AFF_NONE;
           }
         }  
         codeApplyAffinity(pParse, regBase, nEq+1, zEndAff);
@@ -4155,8 +4155,8 @@ static Bitmask codeOneLoopStart(
     /* Seek the PK cursor, if required */
     disableTerm(pLevel, pRangeStart);
     disableTerm(pLevel, pRangeEnd);
-    if( pIdx->eIndexType!=SQLITE_INDEX_PRIMARYKEY
-     && pIdx->eIndexType!=SQLITE_INDEX_TEMP
+    if( pIdx->eIndexType!=SQLITE4_INDEX_PRIMARYKEY
+     && pIdx->eIndexType!=SQLITE4_INDEX_TEMP
     ){
       sqlite4VdbeAddOp3(v, OP_SeekPk, iCur, 0, iIdxCur);
     }
@@ -4187,7 +4187,7 @@ static Bitmask codeOneLoopStart(
 
   }else
 
-#ifndef SQLITE_OMIT_OR_OPTIMIZATION
+#ifndef SQLITE4_OMIT_OR_OPTIMIZATION
   if( pLevel->plan.wsFlags & WHERE_MULTI_OR ){
     /* Case 4:  Two or more separately indexed terms connected by OR
     **
@@ -4345,7 +4345,7 @@ static Bitmask codeOneLoopStart(
     if( pWInfo->nLevel>1 ) sqlite4StackFree(pParse->db, pOrTab);
     if( !untestedTerms ) disableTerm(pLevel, pTerm);
   }else
-#endif /* SQLITE_OMIT_OR_OPTIMIZATION */
+#endif /* SQLITE4_OMIT_OR_OPTIMIZATION */
 
   {
     /* Case 5:  There is no usable index.  We must do a complete
@@ -4357,7 +4357,7 @@ static Bitmask codeOneLoopStart(
     pLevel->op = aStep[bRev];
     pLevel->p1 = iCur;
     pLevel->p2 = 1 + sqlite4VdbeAddOp2(v, aStart[bRev], iCur, addrBrk);
-    pLevel->p5 = SQLITE_STMTSTATUS_FULLSCAN_STEP;
+    pLevel->p5 = SQLITE4_STMTSTATUS_FULLSCAN_STEP;
   }
   notReady &= ~getMask(pWC->pMaskSet, iCur);
 
@@ -4384,7 +4384,7 @@ static Bitmask codeOneLoopStart(
     if( pLevel->iLeftJoin && !ExprHasProperty(pE, EP_FromJoin) ){
       continue;
     }
-    sqlite4ExprIfFalse(pParse, pE, addrCont, SQLITE_JUMPIFNULL);
+    sqlite4ExprIfFalse(pParse, pE, addrCont, SQLITE4_JUMPIFNULL);
     pTerm->wtFlags |= TERM_CODED;
   }
 
@@ -4405,7 +4405,7 @@ static Bitmask codeOneLoopStart(
         continue;
       }
       assert( pTerm->pExpr );
-      sqlite4ExprIfFalse(pParse, pTerm->pExpr, addrCont, SQLITE_JUMPIFNULL);
+      sqlite4ExprIfFalse(pParse, pTerm->pExpr, addrCont, SQLITE4_JUMPIFNULL);
       pTerm->wtFlags |= TERM_CODED;
     }
   }
@@ -4414,7 +4414,7 @@ static Bitmask codeOneLoopStart(
   return notReady;
 }
 
-#if defined(SQLITE_TEST)
+#if defined(SQLITE4_TEST)
 /*
 ** The following variable holds a text description of query plan generated
 ** by the most recent call to sqlite4WhereBegin().  Each call to WhereBegin
@@ -4424,7 +4424,7 @@ static Bitmask codeOneLoopStart(
 char sqlite4_query_plan[BMS*2*40];  /* Text of the join */
 static int nQPlan = 0;              /* Next free slow in _query_plan[] */
 
-#endif /* SQLITE_TEST */
+#endif /* SQLITE4_TEST */
 
 
 /*
@@ -4445,7 +4445,7 @@ static void whereInfoFree(sqlite4 *db, WhereInfo *pWInfo){
       if( pWInfo->a[i].plan.wsFlags & WHERE_TEMP_INDEX ){
         Index *pIdx = pWInfo->a[i].plan.u.pIdx;
         if( pIdx ){
-          assert( pIdx->eIndexType==SQLITE_INDEX_TEMP );
+          assert( pIdx->eIndexType==SQLITE4_INDEX_TEMP );
           sqlite4DbFree(db, pIdx->zColAff);
           sqlite4DbFree(db, pIdx);
         }
@@ -4611,9 +4611,9 @@ WhereInfo *sqlite4WhereBegin(
   pWInfo->savedNQueryLoop = pParse->nQueryLoop;
   pMaskSet = (WhereMaskSet*)&pWC[1];
 
-  /* Disable the DISTINCT optimization if SQLITE_DistinctOpt is set via
-  ** sqlite4_test_ctrl(SQLITE_TESTCTRL_OPTIMIZATIONS,...) */
-  if( db->flags & SQLITE_DistinctOpt ) pDistinct = 0;
+  /* Disable the DISTINCT optimization if SQLITE4_DistinctOpt is set via
+  ** sqlite4_test_ctrl(SQLITE4_TESTCTRL_OPTIMIZATIONS,...) */
+  if( db->flags & SQLITE4_DistinctOpt ) pDistinct = 0;
 
   /* Split the WHERE clause into separate subexpressions where each
   ** subexpression is separated by an AND operator.
@@ -4627,7 +4627,7 @@ WhereInfo *sqlite4WhereBegin(
   ** expression and either jump over all of the code or fall thru.
   */
   if( pWhere && (nTabList==0 || sqlite4ExprIsConstantNotJoin(pWhere)) ){
-    sqlite4ExprIfFalse(pParse, pWhere, pWInfo->iBreak, SQLITE_JUMPIFNULL);
+    sqlite4ExprIfFalse(pParse, pWhere, pWInfo->iBreak, SQLITE4_JUMPIFNULL);
     pWhere = 0;
   }
 
@@ -4655,7 +4655,7 @@ WhereInfo *sqlite4WhereBegin(
   assert( pWC->vmask==0 && pMaskSet->n==0 );
   for(i=0; i<pTabList->nSrc; i++){
     createMask(pMaskSet, pTabList->a[i].iCursor);
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
     if( ALWAYS(pTabList->a[i].pTab) && IsVirtual(pTabList->a[i].pTab) ){
       pWC->vmask |= ((Bitmask)1 << i);
     }
@@ -4716,7 +4716,7 @@ WhereInfo *sqlite4WhereBegin(
     Bitmask notIndexed;         /* Mask of tables that cannot use an index */
 
     memset(&bestPlan, 0, sizeof(bestPlan));
-    bestPlan.rCost = SQLITE_BIG_DBL;
+    bestPlan.rCost = SQLITE4_BIG_DBL;
     WHERETRACE(("*** Begin search for loop %d ***\n", i));
 
     /* Loop through the remaining entries in the FROM clause to find the
@@ -4787,7 +4787,7 @@ WhereInfo *sqlite4WhereBegin(
         WHERETRACE(("=== trying table %d with isOptimal=%d ===\n",
                     j, isOptimal));
         assert( pTabItem->pTab );
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
         if( IsVirtual(pTabItem->pTab) ){
           sqlite4_index_info **pp = &pWInfo->a[j].pIdxInfo;
           bestVirtualIndex(pParse, pWC, pTabItem, mask, notReady, pOrderBy,
@@ -4936,7 +4936,7 @@ WhereInfo *sqlite4WhereBegin(
     if( (pTab->tabFlags & TF_Ephemeral)!=0 || pTab->pSelect ){
       /* Do nothing */
     }else
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
     if( (pLevel->plan.wsFlags & WHERE_VIRTUALTABLE)!=0 ){
       const char *pVTab = (const char *)sqlite4GetVTable(db, pTab);
       int iCur = pTabItem->iCursor;
@@ -4950,14 +4950,14 @@ WhereInfo *sqlite4WhereBegin(
       testcase( pTab->nCol==BMS-1 );
       testcase( pTab->nCol==BMS );
     }
-#ifndef SQLITE_OMIT_AUTOMATIC_INDEX
+#ifndef SQLITE4_OMIT_AUTOMATIC_INDEX
     if( (pLevel->plan.wsFlags & WHERE_TEMP_INDEX)!=0 ){
       constructAutomaticIndex(pParse, pWC, pTabItem, notReady, pLevel);
     }else
 #endif
     if( (pLevel->plan.wsFlags & WHERE_INDEXED)!=0 ){
       Index *pIx = pLevel->plan.u.pIdx;
-      if( pIx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+      if( pIx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){
         pLevel->iIdxCur = pTabItem->iCursor;
       }else{
         KeyInfo *pKey = sqlite4IndexKeyinfo(pParse, pIx);
@@ -4987,7 +4987,7 @@ WhereInfo *sqlite4WhereBegin(
     pWInfo->iContinue = pLevel->addrCont;
   }
 
-#ifdef SQLITE_TEST  /* For testing and debugging use only */
+#ifdef SQLITE4_TEST  /* For testing and debugging use only */
   /* Record in the query plan information about the current table
   ** and the index used to access it (if any).  If the table itself
   ** is not used, its name is just '{}'.  If no index is used
@@ -5029,7 +5029,7 @@ WhereInfo *sqlite4WhereBegin(
   }
   sqlite4_query_plan[nQPlan] = 0;
   nQPlan = 0;
-#endif /* SQLITE_TEST // Testing and debugging use only */
+#endif /* SQLITE4_TEST // Testing and debugging use only */
 
   /* Record the continuation address in the WhereInfo structure. Then
   ** clean up and return.

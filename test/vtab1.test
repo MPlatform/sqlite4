@@ -109,16 +109,16 @@ do_test vtab1-1.2152.1 {
   set sql {CREATE VIRTUAL TABLE t2152a USING echo(t2152b)}
   set STMT [sqlite4_prepare_v2 $DB $sql -1 TAIL]
   sqlite4_step $STMT
-} SQLITE_ERROR
+} SQLITE4_ERROR
 do_test vtab-1.2152.2 {
   sqlite4_reset $STMT
   sqlite4_step $STMT
-} SQLITE_ERROR
+} SQLITE4_ERROR
 do_test vtab-1.2152.3 {
   sqlite4_reset $STMT
   db eval {CREATE TABLE t2152b(x,y)}
   sqlite4_step $STMT
-} SQLITE_DONE
+} SQLITE4_DONE
 do_test vtab-1.2152.4 {
   sqlite4_finalize $STMT
   db eval {DROP TABLE t2152a; DROP TABLE t2152b}

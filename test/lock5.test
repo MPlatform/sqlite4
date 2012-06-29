@@ -17,7 +17,7 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
 # This file is only run if using the unix backend compiled with the
-# SQLITE_ENABLE_LOCKING_STYLE macro.
+# SQLITE4_ENABLE_LOCKING_STYLE macro.
 db close
 if {[catch {sqlite4 db test.db -vfs unix-none} msg]} {
   finish_test
@@ -28,11 +28,11 @@ forcedelete test.db.lock
 
 ifcapable lock_proxy_pragmas {
   set ::using_proxy 0
-  foreach {name value} [array get env SQLITE_FORCE_PROXY_LOCKING] {
+  foreach {name value} [array get env SQLITE4_FORCE_PROXY_LOCKING] {
     set ::using_proxy $value
   }
   # Disable the proxy locking for these tests
-  set env(SQLITE_FORCE_PROXY_LOCKING) "0"
+  set env(SQLITE4_FORCE_PROXY_LOCKING) "0"
 }
 
 
@@ -189,7 +189,7 @@ do_test lock5-flock.X {
 } {}
 
 ifcapable lock_proxy_pragmas {
-  set env(SQLITE_FORCE_PROXY_LOCKING) $::using_proxy
+  set env(SQLITE4_FORCE_PROXY_LOCKING) $::using_proxy
 }
 
 finish_test

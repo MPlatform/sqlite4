@@ -25,7 +25,7 @@ source $testdir/tester.tcl
 #
 #   e_update-3.*: Test the special LIMIT/OFFSET and ORDER BY clauses that can
 #                 be used with UPDATE when SQLite is compiled with
-#                 SQLITE_ENABLE_UPDATE_DELETE_LIMIT.
+#                 SQLITE4_ENABLE_UPDATE_DELETE_LIMIT.
 #
 
 forcedelete test.db2
@@ -491,7 +491,7 @@ do_update_tests e_update-2.5 -error {
 }
 
 # EVIDENCE-OF: R-59581-44104 If SQLite is built with the
-# SQLITE_ENABLE_UPDATE_DELETE_LIMIT compile-time option then the syntax
+# SQLITE4_ENABLE_UPDATE_DELETE_LIMIT compile-time option then the syntax
 # of the UPDATE statement is extended with optional ORDER BY and LIMIT
 # clauses
 #

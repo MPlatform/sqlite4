@@ -212,5 +212,3 @@ int testTimeGet(void){
     (((int)now.tv_sec - (int)zero_time.tv_sec)*1000) +
     (((int)now.tv_usec - (int)zero_time.tv_usec)/1000);
 }
-
-

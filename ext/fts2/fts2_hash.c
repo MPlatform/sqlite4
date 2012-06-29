@@ -18,12 +18,12 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS2 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS2 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS2 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS2 is defined).
 */
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS2)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS2)
 
 #include <assert.h>
 #include <stdlib.h>
@@ -371,4 +371,4 @@ void *sqlite4Fts2HashInsert(
   return 0;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS2) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS2) */

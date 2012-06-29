@@ -12,10 +12,10 @@
 **
 ** The code in this file contains sample implementations of the 
 ** sqlite4_wsd_init() and sqlite4_wsd_find() functions required if the
-** SQLITE_OMIT_WSD symbol is defined at build time.
+** SQLITE4_OMIT_WSD symbol is defined at build time.
 */
 
-#if defined(SQLITE_OMIT_WSD) && defined(SQLITE_TEST)
+#if defined(SQLITE4_OMIT_WSD) && defined(SQLITE4_TEST)
 
 #include "sqliteInt.h"
 
@@ -48,7 +48,7 @@ int sqlite4_wsd_init(int N, int J){
     }
   }
 
-  return pGlobal ? SQLITE_OK : SQLITE_NOMEM;
+  return pGlobal ? SQLITE4_OK : SQLITE4_NOMEM;
 }
 
 void *sqlite4_wsd_find(void *K, int L){

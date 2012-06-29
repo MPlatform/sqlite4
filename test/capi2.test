@@ -55,7 +55,7 @@ do_test capi2-1.1 {
 } {}
 do_test capi2-1.2 {
   sqlite4_step $VM
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test capi2-1.3 {
   sqlite4_data_count $VM
 } {2}
@@ -67,27 +67,27 @@ do_test capi2-1.5 {
 } {name rowid text INTEGER}
 do_test capi2-1.6 {
   sqlite4_step $VM 
-} {SQLITE_DONE}
+} {SQLITE4_DONE}
 do_test capi2-1.7 {
   list [sqlite4_column_count $VM] [get_row_values $VM] [get_column_names $VM]
 } {2 {} {name rowid text INTEGER}}
 
-# This used to be SQLITE_MISUSE.  But now we automatically reset prepared
+# This used to be SQLITE4_MISUSE.  But now we automatically reset prepared
 # statements.
 ifcapable autoreset {
   do_test capi2-1.8 {
     sqlite4_step $VM
-  } {SQLITE_ROW}
+  } {SQLITE4_ROW}
 } else {
   do_test capi2-1.8 {
     sqlite4_step $VM
-  } {SQLITE_MISUSE}
+  } {SQLITE4_MISUSE}
 }
 
-# Update: In v2, once SQLITE_MISUSE is returned the statement handle cannot
+# Update: In v2, once SQLITE4_MISUSE is returned the statement handle cannot
 # be interrogated for more information. However in v3, since the column
 # count, names and types are determined at compile time, these are still
-# accessible after an SQLITE_MISUSE error.
+# accessible after an SQLITE4_MISUSE error.
 do_test capi2-1.9 {
   sqlite4_reset $VM
   list [sqlite4_column_count $VM] [get_row_values $VM] [get_column_names $VM]
@@ -98,7 +98,7 @@ do_test capi2-1.10 {
 
 do_test capi2-1.11 {
   sqlite4_finalize $VM
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # Check to make sure that the "tail" of a multi-statement SQL script
 # is returned by sqlite4_prepare.
@@ -120,16 +120,16 @@ do_test capi2-2.2 {
   lappend r [sqlite4_column_count $VM] \
             [get_row_values $VM] \
             [get_column_names $VM]
-} {SQLITE_ROW 2 {t1 1} {name rowid text INTEGER}}
+} {SQLITE4_ROW 2 {t1 1} {name rowid text INTEGER}}
 do_test capi2-2.3 {
   set r [sqlite4_step $VM]
   lappend r [sqlite4_column_count $VM] \
             [get_row_values $VM] \
             [get_column_names $VM]
-} {SQLITE_DONE 2 {} {name rowid text INTEGER}}
+} {SQLITE4_DONE 2 {} {name rowid text INTEGER}}
 do_test capi2-2.4 {
   sqlite4_finalize $VM
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-2.5 {
   set VM [sqlite4_prepare $DB $SQL -1 SQL]
   set SQL
@@ -141,10 +141,10 @@ do_test capi2-2.6 {
   lappend r [sqlite4_column_count $VM] \
             [get_row_values $VM] \
             [get_column_names $VM]
-} {SQLITE_DONE 2 {} {name rowid text INTEGER}}
+} {SQLITE4_DONE 2 {} {name rowid text INTEGER}}
 do_test capi2-2.7 {
   sqlite4_finalize $VM
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-2.8 {
   set VM [sqlite4_prepare $DB $SQL -1 SQL]
   list $SQL $VM
@@ -193,10 +193,10 @@ do_test capi2-3.7 {
        [sqlite4_column_count $VM] \
        [get_row_values $VM] \
        [get_column_names $VM]
-} {SQLITE_ROW 1 {{}} {5/0 {}}}
+} {SQLITE4_ROW 1 {{}} {5/0 {}}}
 do_test capi2-3.8 {
   sqlite4_finalize $VM
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-3.9 {
   execsql {CREATE UNIQUE INDEX i1 ON t1(a)}
   set VM [sqlite4_prepare $DB {INSERT INTO t1 VALUES(1,2,3)} -1 TAIL]
@@ -208,26 +208,26 @@ do_test capi2-3.10 {
        [sqlite4_column_count $VM] \
        [get_row_values $VM] \
        [get_column_names $VM]
-} {SQLITE_DONE 0 {} {}}
+} {SQLITE4_DONE 0 {} {}}
 
 # Update for v3 - the change has not actually happened until the query is
 # finalized. Is this going to cause trouble for anyone? Lee Nelson maybe?
-# (Later:) The change now happens just before SQLITE_DONE is returned.
+# (Later:) The change now happens just before SQLITE4_DONE is returned.
 do_test capi2-3.10b {db changes} {1}
 do_test capi2-3.11 {
   sqlite4_finalize $VM
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-3.11b {db changes} {1}
 #do_test capi2-3.12-misuse {
 #  sqlite4_finalize $VM
-#} {SQLITE_MISUSE}
+#} {SQLITE4_MISUSE}
 do_test capi2-3.13 {
   set VM [sqlite4_prepare $DB {INSERT INTO t1 VALUES(1,3,4)} -1 TAIL]
   list [sqlite4_step $VM] \
        [sqlite4_column_count $VM] \
        [get_row_values $VM] \
        [get_column_names $VM]
-} {SQLITE_ERROR 0 {} {}}
+} {SQLITE4_ERROR 0 {} {}}
 
 # Update for v3: Preparing a statement does not affect the change counter.
 # (Test result changes from 0 to 1).  (Later:) change counter updates occur
@@ -236,7 +236,7 @@ do_test capi2-3.13b {db changes} {0}
 
 do_test capi2-3.14 {
   list [sqlite4_finalize $VM] [sqlite4_errmsg $DB]
-} {SQLITE_CONSTRAINT {column a is not unique}}
+} {SQLITE4_CONSTRAINT {column a is not unique}}
 do_test capi2-3.15 {
   set VM [sqlite4_prepare $DB {CREATE TABLE t2(a NOT NULL, b)} -1 TAIL]
   set TAIL
@@ -246,20 +246,20 @@ do_test capi2-3.16 {
        [sqlite4_column_count $VM] \
        [get_row_values $VM] \
        [get_column_names $VM]
-} {SQLITE_DONE 0 {} {}}
+} {SQLITE4_DONE 0 {} {}}
 do_test capi2-3.17 {
   list [sqlite4_finalize $VM] [sqlite4_errmsg $DB]
-} {SQLITE_OK {not an error}}
+} {SQLITE4_OK {not an error}}
 do_test capi2-3.18 {
   set VM [sqlite4_prepare $DB {INSERT INTO t2 VALUES(NULL,2)} -1 TAIL]
   list [sqlite4_step $VM] \
        [sqlite4_column_count $VM] \
        [get_row_values $VM] \
        [get_column_names $VM]
-} {SQLITE_ERROR 0 {} {}}
+} {SQLITE4_ERROR 0 {} {}}
 do_test capi2-3.19 {
   list [sqlite4_finalize $VM] [sqlite4_errmsg $DB]
-} {SQLITE_CONSTRAINT {t2.a may not be NULL}}
+} {SQLITE4_CONSTRAINT {t2.a may not be NULL}}
 
 do_test capi2-3.20 {
   execsql {
@@ -270,16 +270,16 @@ do_test capi2-3.20 {
 do_test capi2-3.21 {
   set VM [sqlite4_prepare $DB {INSERT INTO a1 VALUES(1, 1)} -1 TAIL]
   sqlite4_step $VM
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test capi2-3.22 {
   sqlite4_errcode $DB
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test capi2-3.23 {
   sqlite4_finalize $VM
-} {SQLITE_CONSTRAINT}
+} {SQLITE4_CONSTRAINT}
 do_test capi2-3.24 {
   sqlite4_errcode $DB
-} {SQLITE_CONSTRAINT}
+} {SQLITE4_CONSTRAINT}
 
 # Two or more virtual machines exists at the same time.
 #
@@ -300,37 +300,37 @@ do_test capi2-4.4 {
        [sqlite4_column_count $VM2] \
        [get_row_values $VM2] \
        [get_column_names $VM2]
-} {SQLITE_DONE 0 {} {}}
+} {SQLITE4_DONE 0 {} {}}
 do_test capi2-4.5 {
   execsql {SELECT * FROM t2 ORDER BY a}
 } {2 3}
 do_test capi2-4.6 {
   sqlite4_finalize $VM2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-4.7 {
   list [sqlite4_step $VM3] \
        [sqlite4_column_count $VM3] \
        [get_row_values $VM3] \
        [get_column_names $VM3]
-} {SQLITE_DONE 0 {} {}}
+} {SQLITE4_DONE 0 {} {}}
 do_test capi2-4.8 {
   execsql {SELECT * FROM t2 ORDER BY a}
 } {2 3 3 4}
 do_test capi2-4.9 {
   sqlite4_finalize $VM3
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-4.10 {
   list [sqlite4_step $VM1] \
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_DONE 0 {} {}}
+} {SQLITE4_DONE 0 {} {}}
 do_test capi2-4.11 {
   execsql {SELECT * FROM t2 ORDER BY a}
 } {1 2 2 3 3 4}
 do_test capi2-4.12 {
   sqlite4_finalize $VM1
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # Interleaved SELECTs
 #
@@ -342,72 +342,72 @@ do_test capi2-5.1 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 2 {2 3} {a b {} {}}}
+} {SQLITE4_ROW 2 {2 3} {a b {} {}}}
 do_test capi2-5.2 {
   list [sqlite4_step $VM2] \
        [sqlite4_column_count $VM2] \
        [get_row_values $VM2] \
        [get_column_names $VM2]
-} {SQLITE_ROW 2 {2 3} {a b {} {}}}
+} {SQLITE4_ROW 2 {2 3} {a b {} {}}}
 do_test capi2-5.3 {
   list [sqlite4_step $VM1] \
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 2 {3 4} {a b {} {}}}
+} {SQLITE4_ROW 2 {3 4} {a b {} {}}}
 do_test capi2-5.4 {
   list [sqlite4_step $VM3] \
        [sqlite4_column_count $VM3] \
        [get_row_values $VM3] \
        [get_column_names $VM3]
-} {SQLITE_ROW 2 {2 3} {a b {} {}}}
+} {SQLITE4_ROW 2 {2 3} {a b {} {}}}
 do_test capi2-5.5 {
   list [sqlite4_step $VM3] \
        [sqlite4_column_count $VM3] \
        [get_row_values $VM3] \
        [get_column_names $VM3]
-} {SQLITE_ROW 2 {3 4} {a b {} {}}}
+} {SQLITE4_ROW 2 {3 4} {a b {} {}}}
 do_test capi2-5.6 {
   list [sqlite4_step $VM3] \
        [sqlite4_column_count $VM3] \
        [get_row_values $VM3] \
        [get_column_names $VM3]
-} {SQLITE_ROW 2 {1 2} {a b {} {}}}
+} {SQLITE4_ROW 2 {1 2} {a b {} {}}}
 do_test capi2-5.7 {
   list [sqlite4_step $VM3] \
        [sqlite4_column_count $VM3] \
        [get_row_values $VM3] \
        [get_column_names $VM3]
-} {SQLITE_DONE 2 {} {a b {} {}}}
+} {SQLITE4_DONE 2 {} {a b {} {}}}
 do_test capi2-5.8 {
   sqlite4_finalize $VM3
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-5.9 {
   list [sqlite4_step $VM1] \
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 2 {1 2} {a b {} {}}}
+} {SQLITE4_ROW 2 {1 2} {a b {} {}}}
 do_test capi2-5.10 {
   sqlite4_finalize $VM1
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-5.11 {
   list [sqlite4_step $VM2] \
        [sqlite4_column_count $VM2] \
        [get_row_values $VM2] \
        [get_column_names $VM2]
-} {SQLITE_ROW 2 {3 4} {a b {} {}}}
+} {SQLITE4_ROW 2 {3 4} {a b {} {}}}
 do_test capi2-5.12 {
   list [sqlite4_step $VM2] \
        [sqlite4_column_count $VM2] \
        [get_row_values $VM2] \
        [get_column_names $VM2]
-} {SQLITE_ROW 2 {1 2} {a b {} {}}}
+} {SQLITE4_ROW 2 {1 2} {a b {} {}}}
 do_test capi2-5.11 {
   sqlite4_finalize $VM2
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
-# Check for proper SQLITE_BUSY returns.
+# Check for proper SQLITE4_BUSY returns.
 #
 do_test capi2-6.1 {
   execsql {
@@ -433,7 +433,7 @@ do_test capi2-6.1 {
 #        [sqlite4_column_count $VM1] \
 #        [get_row_values $VM1] \
 #        [get_column_names $VM1]
-# } {SQLITE_BUSY 0 {} {}}
+# } {SQLITE4_BUSY 0 {} {}}
 do_test capi2-6.3 {
   execsql {COMMIT} db2
 } {}
@@ -442,7 +442,7 @@ do_test capi2-6.4 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 1 {x counter}}
+} {SQLITE4_ROW 1 1 {x counter}}
 do_test capi2-6.5 {
   catchsql {INSERT INTO t3 VALUES(10);} db2
 } {1 {database is locked}}
@@ -451,7 +451,7 @@ do_test capi2-6.6 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 2 {x counter}}
+} {SQLITE4_ROW 1 2 {x counter}}
 do_test capi2-6.7 {
   execsql {SELECT * FROM t2} db2
 } {2 3 3 4 1 2}
@@ -460,7 +460,7 @@ do_test capi2-6.8 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 3 {x counter}}
+} {SQLITE4_ROW 1 3 {x counter}}
 do_test capi2-6.9 {
   execsql {SELECT * FROM t2} 
 } {2 3 3 4 1 2}
@@ -469,7 +469,7 @@ do_test capi2-6.10 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 4 {x counter}}
+} {SQLITE4_ROW 1 4 {x counter}}
 do_test capi2-6.11 {
   execsql {BEGIN}
 } {}
@@ -478,7 +478,7 @@ do_test capi2-6.12 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 5 {x counter}}
+} {SQLITE4_ROW 1 5 {x counter}}
 
 # A read no longer blocks a write in the same connection.
 #do_test capi2-6.13 {
@@ -490,7 +490,7 @@ do_test capi2-6.14 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 6 {x counter}}
+} {SQLITE4_ROW 1 6 {x counter}}
 do_test capi2-6.15 {
   execsql {SELECT * FROM t1}
 } {1 2 3}
@@ -499,7 +499,7 @@ do_test capi2-6.16 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 7 {x counter}}
+} {SQLITE4_ROW 1 7 {x counter}}
 do_test capi2-6.17 {
   catchsql {UPDATE t1 SET b=b+1}
 } {0 {}}
@@ -508,7 +508,7 @@ do_test capi2-6.18 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 8 {x counter}}
+} {SQLITE4_ROW 1 8 {x counter}}
 do_test capi2-6.19 {
   execsql {SELECT * FROM t1}
 } {1 3 3}
@@ -517,7 +517,7 @@ do_test capi2-6.20 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 9 {x counter}}
+} {SQLITE4_ROW 1 9 {x counter}}
 #do_test capi2-6.21 {
 #  execsql {ROLLBACK; SELECT * FROM t1}
 #} {1 2 3}
@@ -526,7 +526,7 @@ do_test capi2-6.22 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 10 {x counter}}
+} {SQLITE4_ROW 1 10 {x counter}}
 #do_test capi2-6.23 {
 #  execsql {BEGIN TRANSACTION;}
 #} {}
@@ -535,7 +535,7 @@ do_test capi2-6.24 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 11 {x counter}}
+} {SQLITE4_ROW 1 11 {x counter}}
 do_test capi2-6.25 {
   execsql {
     INSERT INTO t1 VALUES(2,3,4);
@@ -547,7 +547,7 @@ do_test capi2-6.26 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 12 {x counter}}
+} {SQLITE4_ROW 1 12 {x counter}}
 do_test capi2-6.27 {
   catchsql {
     INSERT INTO t1 VALUES(2,4,5);
@@ -559,10 +559,10 @@ do_test capi2-6.28 {
        [sqlite4_column_count $VM1] \
        [get_row_values $VM1] \
        [get_column_names $VM1]
-} {SQLITE_ROW 1 13 {x counter}}
+} {SQLITE4_ROW 1 13 {x counter}}
 do_test capi2-6.99 {
   sqlite4_finalize $VM1
-} {SQLITE_OK}
+} {SQLITE4_OK}
 catchsql {ROLLBACK}
 
 do_test capi2-7.1 {
@@ -638,7 +638,7 @@ ifcapable {explain} {
 do_test capi2-8.1 {
   set VM1 [sqlite4_prepare $DB {SELECT * FROM t2} -1 TAIL]
   sqlite4_finalize $VM1
-} {SQLITE_OK}
+} {SQLITE4_OK}
   
 # Tickets #384 and #385 - make sure the TAIL argument to sqlite4_prepare
 # and all of the return pointers in sqlite_step can be null.
@@ -647,16 +647,16 @@ do_test capi2-9.1 {
   set VM1 [sqlite4_prepare $DB {SELECT * FROM t2} -1 DUMMY]
   sqlite4_step $VM1
   sqlite4_finalize $VM1
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # Test that passing a NULL pointer to sqlite4_finalize() or sqlite4_reset
 # does not cause an error.
 do_test capi2-10.1 {
   sqlite4_finalize 0
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test capi2-10.2 {
   sqlite4_reset 0
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 #---------------------------------------------------------------------------
 # The following tests - capi2-11.* - test the "column origin" APIs.

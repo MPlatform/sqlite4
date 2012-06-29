@@ -17,20 +17,20 @@
 ** static links that do not use it.
 */
 #include "sqliteInt.h"
-#ifndef SQLITE_OMIT_COMPLETE
+#ifndef SQLITE4_OMIT_COMPLETE
 
 /*
 ** This is defined in tokenize.c.  We just have to import the definition.
 */
-#ifndef SQLITE_AMALGAMATION
-#ifdef SQLITE_ASCII
+#ifndef SQLITE4_AMALGAMATION
+#ifdef SQLITE4_ASCII
 #define IdChar(C)  ((sqlite4CtypeMap[(unsigned char)C]&0x46)!=0)
 #endif
-#ifdef SQLITE_EBCDIC
+#ifdef SQLITE4_EBCDIC
 extern const char sqlite4IsEbcdicIdChar[];
 #define IdChar(C)  (((c=C)>=0x42 && sqlite4IsEbcdicIdChar[c-0x40]))
 #endif
-#endif /* SQLITE_AMALGAMATION */
+#endif /* SQLITE4_AMALGAMATION */
 
 
 /*
@@ -40,7 +40,7 @@ extern const char sqlite4IsEbcdicIdChar[];
 #define tkSEMI    0
 #define tkWS      1
 #define tkOTHER   2
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
 #define tkEXPLAIN 3
 #define tkCREATE  4
 #define tkTEMP    5
@@ -97,7 +97,7 @@ extern const char sqlite4IsEbcdicIdChar[];
 ** Whitespace never causes a state transition and is always ignored.
 ** This means that a SQL string of all whitespace is invalid.
 **
-** If we compile with SQLITE_OMIT_TRIGGER, all of the computation needed
+** If we compile with SQLITE4_OMIT_TRIGGER, all of the computation needed
 ** to recognize the end of a trigger can be omitted.  All we have to do
 ** is look for a semicolon that is not part of an string or comment.
 */
@@ -105,7 +105,7 @@ int sqlite4_complete(const char *zSql){
   u8 state = 0;   /* Current state, using numbers defined in header comment */
   u8 token;       /* Value of the next token */
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   /* A complex statement machine used to detect the end of a CREATE TRIGGER
   ** statement.  This is the normal case.
   */
@@ -132,7 +132,7 @@ int sqlite4_complete(const char *zSql){
      /* 1   START: */ {    1,  1,     2, },
      /* 2  NORMAL: */ {    1,  2,     2, },
   };
-#endif /* SQLITE_OMIT_TRIGGER */
+#endif /* SQLITE4_OMIT_TRIGGER */
 
   while( *zSql ){
     switch( *zSql ){
@@ -188,14 +188,14 @@ int sqlite4_complete(const char *zSql){
         break;
       }
       default: {
-#ifdef SQLITE_EBCDIC
+#ifdef SQLITE4_EBCDIC
         unsigned char c;
 #endif
         if( IdChar((u8)*zSql) ){
           /* Keywords and unquoted identifiers */
           int nId;
           for(nId=1; IdChar(zSql[nId]); nId++){}
-#ifdef SQLITE_OMIT_TRIGGER
+#ifdef SQLITE4_OMIT_TRIGGER
           token = tkOTHER;
 #else
           switch( *zSql ){
@@ -223,7 +223,7 @@ int sqlite4_complete(const char *zSql){
               if( nId==3 && sqlite4StrNICmp(zSql, "end", 3)==0 ){
                 token = tkEND;
               }else
-#ifndef SQLITE_OMIT_EXPLAIN
+#ifndef SQLITE4_OMIT_EXPLAIN
               if( nId==7 && sqlite4StrNICmp(zSql, "explain", 7)==0 ){
                 token = tkEXPLAIN;
               }else
@@ -238,7 +238,7 @@ int sqlite4_complete(const char *zSql){
               break;
             }
           }
-#endif /* SQLITE_OMIT_TRIGGER */
+#endif /* SQLITE4_OMIT_TRIGGER */
           zSql += nId-1;
         }else{
           /* Operators and special symbols */
@@ -253,7 +253,7 @@ int sqlite4_complete(const char *zSql){
   return state==1;
 }
 
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 /*
 ** This routine is the same as the sqlite4_complete() routine described
 ** above, except that the parameter is required to be UTF-16 encoded, not
@@ -262,22 +262,22 @@ int sqlite4_complete(const char *zSql){
 int sqlite4_complete16(const void *zSql){
   sqlite4_value *pVal;
   char const *zSql8;
-  int rc = SQLITE_NOMEM;
+  int rc = SQLITE4_NOMEM;
 
-#ifndef SQLITE_OMIT_AUTOINIT
+#ifndef SQLITE4_OMIT_AUTOINIT
   rc = sqlite4_initialize(0);
   if( rc ) return rc;
 #endif
   pVal = sqlite4ValueNew(0);
-  sqlite4ValueSetStr(pVal, -1, zSql, SQLITE_UTF16NATIVE, SQLITE_STATIC);
-  zSql8 = sqlite4ValueText(pVal, SQLITE_UTF8);
+  sqlite4ValueSetStr(pVal, -1, zSql, SQLITE4_UTF16NATIVE, SQLITE4_STATIC);
+  zSql8 = sqlite4ValueText(pVal, SQLITE4_UTF8);
   if( zSql8 ){
     rc = sqlite4_complete(zSql8);
   }else{
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }
   sqlite4ValueFree(pVal);
   return sqlite4ApiExit(0, rc);
 }
-#endif /* SQLITE_OMIT_UTF16 */
-#endif /* SQLITE_OMIT_COMPLETE */
+#endif /* SQLITE4_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_COMPLETE */

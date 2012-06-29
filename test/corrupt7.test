@@ -63,7 +63,7 @@ integrity_check corrupt7-1.4
 # on page 2 of the database.
 #
 # The error message is different depending on whether or not the
-# SQLITE_ENABLE_OVERSIZE_CELL_CHECK compile-time option is engaged.
+# SQLITE4_ENABLE_OVERSIZE_CELL_CHECK compile-time option is engaged.
 #
 ifcapable oversize_cell_check {
   do_test corrupt7-2.1 {

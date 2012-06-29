@@ -45,7 +45,7 @@ if {$true_file_size<512} {
 }
 
 # Compute the total file size assuming test_multiplexor is being used.
-# Assume that SQLITE_ENABLE_8_3_NAMES might be enabled
+# Assume that SQLITE4_ENABLE_8_3_NAMES might be enabled
 #
 set extension [file extension $file_to_analyze]
 set pattern $file_to_analyze
@@ -596,7 +596,7 @@ Pages of auto-vacuum overhead
 
 Number of tables in the database
 
-    The number of tables in the database, including the SQLITE_MASTER table
+    The number of tables in the database, including the SQLITE4_MASTER table
     used to store schema information.
 
 Number of indices
@@ -619,7 +619,7 @@ Size of the file in bytes
 Bytes of user payload stored
 
     The total number of bytes of user payload stored in the database. The
-    schema information in the SQLITE_MASTER table is not counted when
+    schema information in the SQLITE4_MASTER table is not counted when
     computing this number.  The percentage at the right shows the payload
     divided by the total file size.
 

@@ -20,7 +20,7 @@ set DB [sqlite4_connection_pointer db]
 
 # This routine attempts to execute the sql in $sql.  It triggers an
 # interrupt at progressively later and later points during the processing
-# and checks to make sure SQLITE_INTERRUPT is returned.  Eventually,
+# and checks to make sure SQLITE4_INTERRUPT is returned.  Eventually,
 # the routine completes successfully.
 #
 proc interrupt_test {testid sql result {initcnt 0}} {
@@ -172,7 +172,7 @@ do_test interrupt-5.1 {
   proc fake_interrupt {args} {
     db collate fake_collation no-op
     sqlite4_interrupt db
-    return SQLITE_OK
+    return SQLITE4_OK
   }
   db collation_needed fake_interrupt
   catchsql {

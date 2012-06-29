@@ -971,12 +971,12 @@ foreach {tn select} {
   # Set $nRow to the number of rows returned by $select:
   set ::stmt [sqlite4_prepare db $select -1 DUMMY]
   set nRow 0
-  while {"SQLITE_ROW" == [sqlite4_step $::stmt]} { incr nRow }
+  while {"SQLITE4_ROW" == [sqlite4_step $::stmt]} { incr nRow }
   set rc [sqlite4_finalize $::stmt]
 
   # Test that $nRow==1 and that statement execution was successful 
-  # (rc==SQLITE_OK).
-  do_test e_select-4.$tn [list list $rc $nRow] {SQLITE_OK 1}
+  # (rc==SQLITE4_OK).
+  do_test e_select-4.$tn [list list $rc $nRow] {SQLITE4_OK 1}
 }
 
 drop_all_tables

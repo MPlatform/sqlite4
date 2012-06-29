@@ -283,7 +283,7 @@ do_delete_tests e_delete-2.5 -error { near "%s": syntax error } {
 }
 
 # EVIDENCE-OF: R-40026-10531 If SQLite is compiled with the
-# SQLITE_ENABLE_UPDATE_DELETE_LIMIT compile-time option, then the syntax
+# SQLITE4_ENABLE_UPDATE_DELETE_LIMIT compile-time option, then the syntax
 # of the DELETE statement is extended by the addition of optional ORDER
 # BY and LIMIT clauses:
 #

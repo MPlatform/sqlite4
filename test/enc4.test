@@ -84,7 +84,7 @@ foreach enc $encodings {
 
     do_test enc4-$i.$j.5 {
       sqlite4_finalize $S
-    } {SQLITE_OK}
+    } {SQLITE4_OK}
 
     incr j
   }
@@ -108,7 +108,7 @@ do_test enc4-4.2.1 {
 
 do_test enc4-4.2.2 {
   sqlite4_finalize $S
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test enc4-4.3.1 {
   set S [sqlite4_prepare db "SELECT 1+?" -1 dummy]
@@ -119,7 +119,7 @@ do_test enc4-4.3.1 {
 
 do_test enc4-4.3.2 {
   sqlite4_finalize $S
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test enc4-4.4.1 {
   set S [sqlite4_prepare db "SELECT 1+?" -1 dummy]
@@ -130,7 +130,7 @@ do_test enc4-4.4.1 {
 
 do_test enc4-4.4.2 {
   sqlite4_finalize $S
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 db close
 

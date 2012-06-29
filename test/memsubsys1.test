@@ -57,15 +57,15 @@ proc build_test_db {testname pragmas} {
 # Reset all of the highwater marks.
 #
 proc reset_highwater_marks {} {
-  sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 1
-  sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_SIZE 1
-  sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 1
-  sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_OVERFLOW 1
-  sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_SIZE 1
-  sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 1
-  sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_OVERFLOW 1
-  sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_SIZE 1
-  sqlite4_env_status SQLITE_ENVSTATUS_PARSER_STACK 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_MEMORY_USED 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_SIZE 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_OVERFLOW 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_SIZE 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_OVERFLOW 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_SIZE 1
+  sqlite4_env_status SQLITE4_ENVSTATUS_PARSER_STACK 1
 }
 
 set xtra_size 290
@@ -79,12 +79,12 @@ sqlite4_initialize
 reset_highwater_marks
 build_test_db memsubsys1-1 {PRAGMA page_size=1024}
 do_test memsubsys1-1.3 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 0] 2]
 } 0
 do_test memsubsys1-1.4 {
-  set s_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set s_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 0
-set max_pagecache [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
+set max_pagecache [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
 #show_memstats
 
 # Test 2:  Activate PAGECACHE with 20 pages
@@ -99,14 +99,14 @@ build_test_db memsubsys1-2 {PRAGMA page_size=1024}
 set MEMORY_MANAGEMENT $sqlite_options(memorymanage)
 ifcapable !malloc_usable_size {
  do_test memsubsys1-2.3 {
-    set pg_ovfl [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
+    set pg_ovfl [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
   } [expr ($TEMP_STORE>1 || $MEMORY_MANAGEMENT==0)*1024]
 }
 do_test memsubsys1-2.4 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 0] 2]
 } 20
 do_test memsubsys1-2.5 {
-  set s_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set s_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 0
 
 # Test 3:  Activate PAGECACHE with 20 pages but use the wrong page size
@@ -120,13 +120,13 @@ reset_highwater_marks
 build_test_db memsubsys1-3.1 {PRAGMA page_size=1024}
 #show_memstats
 do_test memsubsys1-3.1.3 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 0] 2]
 } 0
 do_test memsubsys1-3.1.4 {
-  set overflow [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
+  set overflow [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
 } $max_pagecache
 do_test memsubsys1-3.1.5 {
-  set s_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set s_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 0
 db close
 sqlite4_shutdown
@@ -139,10 +139,10 @@ do_test memsubsys1-3.2.3 {
   db eval {PRAGMA page_size}
 } 2048
 do_test memsubsys1-3.2.4 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 0] 2]
 } 20
 do_test memsubsys1-3.2.5 {
-  set s_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set s_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 0
 
 # Test 4:  Activate both PAGECACHE and SCRATCH.
@@ -156,18 +156,18 @@ reset_highwater_marks
 build_test_db memsubsys1-4 {PRAGMA page_size=1024}
 #show_memstats
 do_test memsubsys1-4.3 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 0] 2]
   expr {$pg_used>=45 && $pg_used<=50}
 } 1
 do_test memsubsys1-4.4 {
-  set pg_ovfl [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
+  set pg_ovfl [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
 } 0
 do_test memsubsys1-4.5 {
-  set maxreq [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_SIZE 0] 2]
+  set maxreq [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_SIZE 0] 2]
   expr {$maxreq<7000}
 } 1
 do_test memsubsys1-4.6 {
-  set s_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set s_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 1
 
 # Test 5:  Activate both PAGECACHE and SCRATCH.  But make the page size
@@ -182,17 +182,17 @@ reset_highwater_marks
 build_test_db memsubsys1-5 {PRAGMA page_size=4096}
 #show_memstats
 do_test memsubsys1-5.3 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 0] 2]
 } 24
 do_test memsubsys1-5.4 {
-  set maxreq [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_SIZE 0] 2]
+  set maxreq [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_SIZE 0] 2]
   expr {$maxreq>4096}
 } 1
 do_test memsubsys1-5.5 {
-  set s_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set s_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 0
 do_test memsubsys1-5.6 {
-  set s_ovfl [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]
+  set s_ovfl [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]
   expr {$s_ovfl>6000}
 } 1
 
@@ -208,17 +208,17 @@ reset_highwater_marks
 build_test_db memsubsys1-6 {PRAGMA page_size=4096}
 #show_memstats
 do_test memsubsys1-6.3 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 0] 2]
 } 24
 #do_test memsubsys1-6.4 {
-#  set maxreq [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_SIZE 0] 2]
+#  set maxreq [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_SIZE 0] 2]
 #  expr {$maxreq>4096 && $maxreq<=(4096+$xtra_size)}
 #} 1
 do_test memsubsys1-6.5 {
-  set s_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set s_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 1
 do_test memsubsys1-6.6 {
-  set s_ovfl [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]
+  set s_ovfl [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]
 } 0
 
 # Test 7:  Activate both PAGECACHE and SCRATCH with a 4k page size.
@@ -238,21 +238,21 @@ build_test_db memsubsys1-7 {
 }
 #show_memstats
 do_test memsubsys1-7.3 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_USED 0] 2]
   expr {$pg_used<24}
 } 1
 do_test memsubsys1-7.4 {
-  set pg_ovfl [lindex [sqlite4_env_status SQLITE_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
+  set pg_ovfl [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_PAGECACHE_OVERFLOW 0] 2]
 } 0
 do_test memsubsys1-7.5 {
-  set maxreq [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_SIZE 0] 2]
+  set maxreq [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_SIZE 0] 2]
   expr {$maxreq<4100}
 } 1
 do_test memsubsys1-7.6 {
-  set s_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set s_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 1
 do_test memsubsys1-7.7 {
-  set s_ovfl [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]
+  set s_ovfl [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]
 } 0
 
 # Test 8:  Disable PAGECACHE.  Make available SCRATCH zero.  Verify that
@@ -265,10 +265,10 @@ sqlite4_config_scratch 25000 0
 sqlite4_initialize
 reset_highwater_marks
 do_test memsubsys1-8.1 {
-  set pg_used [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_USED 0] 2]
+  set pg_used [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_USED 0] 2]
 } 0
 do_test memsubsys1-8.2 {
-  set s_ovfl [lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]
+  set s_ovfl [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]
 } 0
 do_test memsubsys1-8.3 {
   sqlite4 db :memory:
@@ -280,7 +280,7 @@ do_test memsubsys1-8.3 {
     INSERT INTO t1 SELECT * FROM t1;
     INSERT INTO t1 SELECT * FROM t1;
   }
-  expr {[lindex [sqlite4_env_status SQLITE_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]>0}
+  expr {[lindex [sqlite4_env_status SQLITE4_ENVSTATUS_SCRATCH_OVERFLOW 0] 2]>0}
 } 1
 db close
 sqlite4_shutdown

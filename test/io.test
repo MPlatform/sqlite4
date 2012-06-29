@@ -138,7 +138,7 @@ do_test io-2.2 {
   list [nWrite db] [nSync]
 } {2 4}
 
-# Set the device-characteristic mask to include the SQLITE_IOCAP_ATOMIC,
+# Set the device-characteristic mask to include the SQLITE4_IOCAP_ATOMIC,
 # then do another INSERT similar to the one in io-2.2. This should
 # only write 1 page and require a single fsync().
 # 
@@ -216,7 +216,7 @@ do_test io-2.6.1 {
 do_test io-2.6.2 {
   # Create a file at "test.db-journal". This will prevent SQLite from
   # opening the journal for exclusive access. As a result, the COMMIT
-  # should fail with SQLITE_CANTOPEN and the transaction rolled back.
+  # should fail with SQLITE4_CANTOPEN and the transaction rolled back.
   #
   file mkdir test.db-journal
   catchsql {
@@ -542,7 +542,7 @@ foreach {char                 sectorsize pgsize} {
          {atomic64K}            512      1024
 } {
   incr tn
-  if {$pgsize>$::SQLITE_MAX_PAGE_SIZE} continue
+  if {$pgsize>$::SQLITE4_MAX_PAGE_SIZE} continue
   db close
   forcedelete test.db test.db-journal
   sqlite4_simulate_device -char $char -sectorsize $sectorsize

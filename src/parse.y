@@ -103,10 +103,10 @@ cmdlist ::= ecmd.
 ecmd ::= SEMI.
 ecmd ::= explain cmdx SEMI.
 explain ::= .           { sqlite4BeginParse(pParse, 0); }
-%ifndef SQLITE_OMIT_EXPLAIN
+%ifndef SQLITE4_OMIT_EXPLAIN
 explain ::= EXPLAIN.              { sqlite4BeginParse(pParse, 1); }
 explain ::= EXPLAIN QUERY PLAN.   { sqlite4BeginParse(pParse, 2); }
-%endif  SQLITE_OMIT_EXPLAIN
+%endif  SQLITE4_OMIT_EXPLAIN
 cmdx ::= cmd.           { sqlite4FinishCoding(pParse); }
 
 ///////////////////// Begin and end transactions. ////////////////////////////
@@ -151,9 +151,9 @@ createkw(A) ::= CREATE(X).  {
 ifnotexists(A) ::= .              {A = 0;}
 ifnotexists(A) ::= IF NOT EXISTS. {A = 1;}
 %type temp {int}
-%ifndef SQLITE_OMIT_TEMPDB
+%ifndef SQLITE4_OMIT_TEMPDB
 temp(A) ::= TEMP.  {A = 1;}
-%endif  SQLITE_OMIT_TEMPDB
+%endif  SQLITE4_OMIT_TEMPDB
 temp(A) ::= .      {A = 0;}
 create_table_args ::= LP columnlist conslist_opt(X) RP(Y). {
   sqlite4EndTable(pParse,&X,&Y,0);
@@ -197,9 +197,9 @@ id(A) ::= INDEXED(X).    {A = X;}
   IGNORE IMMEDIATE INITIALLY INSTEAD LIKE_KW MATCH NO PLAN
   QUERY KEY OF OFFSET PRAGMA RAISE RELEASE REPLACE RESTRICT ROW ROLLBACK
   SAVEPOINT TEMP TRIGGER VIEW VIRTUAL
-%ifdef SQLITE_OMIT_COMPOUND_SELECT
+%ifdef SQLITE4_OMIT_COMPOUND_SELECT
   EXCEPT INTERSECT UNION
-%endif SQLITE_OMIT_COMPOUND_SELECT
+%endif SQLITE4_OMIT_COMPOUND_SELECT
   REINDEX RENAME CTIME_KW IF
   .
 %wildcard ANY.
@@ -380,14 +380,14 @@ ifexists(A) ::= .            {A = 0;}
 
 ///////////////////// The CREATE VIEW statement /////////////////////////////
 //
-%ifndef SQLITE_OMIT_VIEW
+%ifndef SQLITE4_OMIT_VIEW
 cmd ::= createkw(X) temp(T) VIEW ifnotexists(E) nm(Y) dbnm(Z) AS select(S). {
   sqlite4CreateView(pParse, &X, &Y, &Z, S, T, E);
 }
 cmd ::= DROP VIEW ifexists(E) fullname(X). {
   sqlite4DropTable(pParse, X, 1, E);
 }
-%endif  SQLITE_OMIT_VIEW
+%endif  SQLITE4_OMIT_VIEW
 
 //////////////////////// The SELECT statement /////////////////////////////////
 //
@@ -406,7 +406,7 @@ cmd ::= select(X).  {
 %destructor oneselect {sqlite4SelectDelete(pParse->db, $$);}
 
 select(A) ::= oneselect(X).                      {A = X;}
-%ifndef SQLITE_OMIT_COMPOUND_SELECT
+%ifndef SQLITE4_OMIT_COMPOUND_SELECT
 select(A) ::= select(X) multiselect_op(Y) oneselect(Z).  {
   if( Z ){
     Z->op = (u8)Y;
@@ -420,7 +420,7 @@ select(A) ::= select(X) multiselect_op(Y) oneselect(Z).  {
 multiselect_op(A) ::= UNION(OP).             {A = @OP;}
 multiselect_op(A) ::= UNION ALL.             {A = TK_ALL;}
 multiselect_op(A) ::= EXCEPT|INTERSECT(OP).  {A = @OP;}
-%endif SQLITE_OMIT_COMPOUND_SELECT
+%endif SQLITE4_OMIT_COMPOUND_SELECT
 oneselect(A) ::= SELECT distinct(D) selcollist(W) from(X) where_opt(Y)
                  groupby_opt(P) having_opt(Q) orderby_opt(Z) limit_opt(L). {
   A = sqlite4SelectNew(pParse,W,X,Y,P,Q,Z,D,L.pLimit,L.pOffset);
@@ -497,7 +497,7 @@ seltablist(A) ::= stl_prefix(X) nm(Y) dbnm(D) as(Z) indexed_opt(I) on_opt(N) usi
   A = sqlite4SrcListAppendFromTerm(pParse,X,&Y,&D,&Z,0,N,U);
   sqlite4SrcListIndexedBy(pParse, A, &I);
 }
-%ifndef SQLITE_OMIT_SUBQUERY
+%ifndef SQLITE4_OMIT_SUBQUERY
   seltablist(A) ::= stl_prefix(X) LP select(S) RP
                     as(Z) on_opt(N) using_opt(U). {
     A = sqlite4SrcListAppendFromTerm(pParse,X,0,0,&Z,S,N,U);
@@ -525,7 +525,7 @@ seltablist(A) ::= stl_prefix(X) nm(Y) dbnm(D) as(Z) indexed_opt(I) on_opt(N) usi
 //     sqlite4SrcListShiftJoinType(F);
 //     A = sqlite4SelectNew(pParse,0,F,0,0,0,0,0,0,0);
 //  }
-%endif  SQLITE_OMIT_SUBQUERY
+%endif  SQLITE4_OMIT_SUBQUERY
 
 %type dbnm {Token}
 dbnm(A) ::= .          {A.z=0; A.n=0;}
@@ -590,9 +590,9 @@ sortitem(A) ::= expr(X).   {A = X.pExpr;}
 
 %type sortorder {int}
 
-sortorder(A) ::= ASC.           {A = SQLITE_SO_ASC;}
-sortorder(A) ::= DESC.          {A = SQLITE_SO_DESC;}
-sortorder(A) ::= .              {A = SQLITE_SO_ASC;}
+sortorder(A) ::= ASC.           {A = SQLITE4_SO_ASC;}
+sortorder(A) ::= DESC.          {A = SQLITE4_SO_DESC;}
+sortorder(A) ::= .              {A = SQLITE4_SO_ASC;}
 
 %type groupby_opt {ExprList*}
 %destructor groupby_opt {sqlite4ExprListDelete(pParse->db, $$);}
@@ -626,7 +626,7 @@ limit_opt(A) ::= LIMIT expr(X) COMMA expr(Y).
 
 /////////////////////////// The DELETE statement /////////////////////////////
 //
-%ifdef SQLITE_ENABLE_UPDATE_DELETE_LIMIT
+%ifdef SQLITE4_ENABLE_UPDATE_DELETE_LIMIT
 cmd ::= DELETE FROM fullname(X) indexed_opt(I) where_opt(W) 
         orderby_opt(O) limit_opt(L). {
   sqlite4SrcListIndexedBy(pParse, X, &I);
@@ -634,7 +634,7 @@ cmd ::= DELETE FROM fullname(X) indexed_opt(I) where_opt(W)
   sqlite4DeleteFrom(pParse,X,W);
 }
 %endif
-%ifndef SQLITE_ENABLE_UPDATE_DELETE_LIMIT
+%ifndef SQLITE4_ENABLE_UPDATE_DELETE_LIMIT
 cmd ::= DELETE FROM fullname(X) indexed_opt(I) where_opt(W). {
   sqlite4SrcListIndexedBy(pParse, X, &I);
   sqlite4DeleteFrom(pParse,X,W);
@@ -649,7 +649,7 @@ where_opt(A) ::= WHERE expr(X).       {A = X.pExpr;}
 
 ////////////////////////// The UPDATE command ////////////////////////////////
 //
-%ifdef SQLITE_ENABLE_UPDATE_DELETE_LIMIT
+%ifdef SQLITE4_ENABLE_UPDATE_DELETE_LIMIT
 cmd ::= UPDATE orconf(R) fullname(X) indexed_opt(I) SET setlist(Y) where_opt(W) orderby_opt(O) limit_opt(L).  {
   sqlite4SrcListIndexedBy(pParse, X, &I);
   sqlite4ExprListCheckLength(pParse,Y,"set list"); 
@@ -657,7 +657,7 @@ cmd ::= UPDATE orconf(R) fullname(X) indexed_opt(I) SET setlist(Y) where_opt(W) 
   sqlite4Update(pParse,X,Y,W,R);
 }
 %endif
-%ifndef SQLITE_ENABLE_UPDATE_DELETE_LIMIT
+%ifndef SQLITE4_ENABLE_UPDATE_DELETE_LIMIT
 cmd ::= UPDATE orconf(R) fullname(X) indexed_opt(I) SET setlist(Y) where_opt(W).  {
   sqlite4SrcListIndexedBy(pParse, X, &I);
   sqlite4ExprListCheckLength(pParse,Y,"set list"); 
@@ -785,14 +785,14 @@ expr(A) ::= expr(E) COLLATE ids(C). {
   A.zStart = E.zStart;
   A.zEnd = &C.z[C.n];
 }
-%ifndef SQLITE_OMIT_CAST
+%ifndef SQLITE4_OMIT_CAST
 expr(A) ::= CAST(X) LP expr(E) AS typetoken(T) RP(Y). {
   A.pExpr = sqlite4PExpr(pParse, TK_CAST, E.pExpr, 0, &T);
   spanSet(&A,&X,&Y);
 }
-%endif  SQLITE_OMIT_CAST
+%endif  SQLITE4_OMIT_CAST
 expr(A) ::= ID(X) LP distinct(D) exprlist(Y) RP(E). {
-  if( Y && Y->nExpr>pParse->db->aLimit[SQLITE_LIMIT_FUNCTION_ARG] ){
+  if( Y && Y->nExpr>pParse->db->aLimit[SQLITE4_LIMIT_FUNCTION_ARG] ){
     sqlite4ErrorMsg(pParse, "too many arguments on function %T", &X);
   }
   A.pExpr = sqlite4ExprFunction(pParse, Y, &X);
@@ -959,7 +959,7 @@ expr(A) ::= expr(W) between_op(N) expr(X) AND expr(Y). [BETWEEN] {
   A.zStart = W.zStart;
   A.zEnd = Y.zEnd;
 }
-%ifndef SQLITE_OMIT_SUBQUERY
+%ifndef SQLITE4_OMIT_SUBQUERY
   %type in_op {int}
   in_op(A) ::= IN.      {A = 0;}
   in_op(A) ::= NOT IN.  {A = 1;}
@@ -1039,7 +1039,7 @@ expr(A) ::= expr(W) between_op(N) expr(X) AND expr(Y). [BETWEEN] {
     A.zStart = B.z;
     A.zEnd = &E.z[E.n];
   }
-%endif SQLITE_OMIT_SUBQUERY
+%endif SQLITE4_OMIT_SUBQUERY
 
 /* CASE expressions */
 expr(A) ::= CASE(C) case_operand(X) case_exprlist(Y) case_else(Z) END(E). {
@@ -1091,7 +1091,7 @@ cmd ::= createkw(S) uniqueflag(U) INDEX ifnotexists(NE) nm(X) dbnm(D)
         ON nm(Y) LP idxlist(Z) RP(E). {
   sqlite4CreateIndex(pParse, &X, &D, 
                      sqlite4SrcListAppend(pParse->db,0,&Y,0), Z, U,
-                      &S, &E, SQLITE_SO_ASC, NE, 0);
+                      &S, &E, SQLITE4_SO_ASC, NE, 0);
 }
 
 %type uniqueflag {int}
@@ -1139,7 +1139,7 @@ cmd ::= DROP INDEX ifexists(E) fullname(X).   {sqlite4DropIndex(pParse, X, E);}
 
 ///////////////////////////// The PRAGMA command /////////////////////////////
 //
-%ifndef SQLITE_OMIT_PRAGMA
+%ifndef SQLITE4_OMIT_PRAGMA
 cmd ::= PRAGMA nm(X) dbnm(Z).                {sqlite4Pragma(pParse,&X,&Z,0,0);}
 cmd ::= PRAGMA nm(X) dbnm(Z) EQ nmnum(Y).    {sqlite4Pragma(pParse,&X,&Z,&Y,0);}
 cmd ::= PRAGMA nm(X) dbnm(Z) LP nmnum(Y) RP. {sqlite4Pragma(pParse,&X,&Z,&Y,0);}
@@ -1153,7 +1153,7 @@ nmnum(A) ::= nm(X).                   {A = X;}
 nmnum(A) ::= ON(X).                   {A = X;}
 nmnum(A) ::= DELETE(X).               {A = X;}
 nmnum(A) ::= DEFAULT(X).              {A = X;}
-%endif SQLITE_OMIT_PRAGMA
+%endif SQLITE4_OMIT_PRAGMA
 plus_num(A) ::= plus_opt number(X).   {A = X;}
 minus_num(A) ::= MINUS number(X).     {A = X;}
 number(A) ::= INTEGER|FLOAT(X).       {A = X;}
@@ -1162,7 +1162,7 @@ plus_opt ::= .
 
 //////////////////////////// The CREATE TRIGGER command /////////////////////
 
-%ifndef SQLITE_OMIT_TRIGGER
+%ifndef SQLITE4_OMIT_TRIGGER
 
 cmd ::= createkw trigger_decl(A) BEGIN trigger_cmd_list(S) END(Z). {
   Token all;
@@ -1282,7 +1282,7 @@ expr(A) ::= RAISE(X) LP raisetype(T) COMMA nm(Z) RP(Y).  {
   A.zStart = X.z;
   A.zEnd = &Y.z[Y.n];
 }
-%endif  !SQLITE_OMIT_TRIGGER
+%endif  !SQLITE4_OMIT_TRIGGER
 
 %type raisetype {int}
 raisetype(A) ::= ROLLBACK.  {A = OE_Rollback;}
@@ -1291,14 +1291,14 @@ raisetype(A) ::= FAIL.      {A = OE_Fail;}
 
 
 ////////////////////////  DROP TRIGGER statement //////////////////////////////
-%ifndef SQLITE_OMIT_TRIGGER
+%ifndef SQLITE4_OMIT_TRIGGER
 cmd ::= DROP TRIGGER ifexists(NOERR) fullname(X). {
   sqlite4DropTrigger(pParse,X,NOERR);
 }
-%endif  !SQLITE_OMIT_TRIGGER
+%endif  !SQLITE4_OMIT_TRIGGER
 
 //////////////////////// ATTACH DATABASE file AS name /////////////////////////
-%ifndef SQLITE_OMIT_ATTACH
+%ifndef SQLITE4_OMIT_ATTACH
 cmd ::= ATTACH database_kw_opt expr(F) AS expr(D) key_opt(K). {
   sqlite4Attach(pParse, F.pExpr, D.pExpr, K);
 }
@@ -1313,22 +1313,22 @@ key_opt(A) ::= KEY expr(X).          { A = X.pExpr; }
 
 database_kw_opt ::= DATABASE.
 database_kw_opt ::= .
-%endif SQLITE_OMIT_ATTACH
+%endif SQLITE4_OMIT_ATTACH
 
 ////////////////////////// REINDEX collation //////////////////////////////////
-%ifndef SQLITE_OMIT_REINDEX
+%ifndef SQLITE4_OMIT_REINDEX
 cmd ::= REINDEX.                {sqlite4Reindex(pParse, 0, 0);}
 cmd ::= REINDEX nm(X) dbnm(Y).  {sqlite4Reindex(pParse, &X, &Y);}
-%endif  SQLITE_OMIT_REINDEX
+%endif  SQLITE4_OMIT_REINDEX
 
 /////////////////////////////////// ANALYZE ///////////////////////////////////
-%ifndef SQLITE_OMIT_ANALYZE
+%ifndef SQLITE4_OMIT_ANALYZE
 cmd ::= ANALYZE.                {sqlite4Analyze(pParse, 0, 0);}
 cmd ::= ANALYZE nm(X) dbnm(Y).  {sqlite4Analyze(pParse, &X, &Y);}
 %endif
 
 //////////////////////// ALTER TABLE table ... ////////////////////////////////
-%ifndef SQLITE_OMIT_ALTERTABLE
+%ifndef SQLITE4_OMIT_ALTERTABLE
 cmd ::= ALTER TABLE fullname(X) RENAME TO nm(Z). {
   sqlite4AlterRenameTable(pParse,X,&Z);
 }
@@ -1341,10 +1341,10 @@ add_column_fullname ::= fullname(X). {
 }
 kwcolumn_opt ::= .
 kwcolumn_opt ::= COLUMNKW.
-%endif  SQLITE_OMIT_ALTERTABLE
+%endif  SQLITE4_OMIT_ALTERTABLE
 
 //////////////////////// CREATE VIRTUAL TABLE ... /////////////////////////////
-%ifndef SQLITE_OMIT_VIRTUALTABLE
+%ifndef SQLITE4_OMIT_VIRTUALTABLE
 cmd ::= create_vtab.                       {sqlite4VtabFinishParse(pParse,0);}
 cmd ::= create_vtab LP vtabarglist RP(X).  {sqlite4VtabFinishParse(pParse,&X);}
 create_vtab ::= createkw VIRTUAL TABLE nm(X) dbnm(Y) USING nm(Z). {
@@ -1360,4 +1360,4 @@ lp ::= LP(X).                       {sqlite4VtabArgExtend(pParse,&X);}
 anylist ::= .
 anylist ::= anylist LP anylist RP.
 anylist ::= anylist ANY.
-%endif  SQLITE_OMIT_VIRTUALTABLE
+%endif  SQLITE4_OMIT_VIRTUALTABLE

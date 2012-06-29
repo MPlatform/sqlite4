@@ -13,15 +13,15 @@
 */
 #include "sqliteInt.h"
 
-#ifndef SQLITE_OMIT_FOREIGN_KEY
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_TRIGGER
 
 /*
 ** Deferred and Immediate FKs
 ** --------------------------
 **
 ** Foreign keys in SQLite come in two flavours: deferred and immediate.
-** If an immediate foreign key constraint is violated, SQLITE_CONSTRAINT
+** If an immediate foreign key constraint is violated, SQLITE4_CONSTRAINT
 ** is returned and the current statement transaction rolled back. If a 
 ** deferred foreign key constraint is violated, no action is taken 
 ** immediately. However if the application attempts to commit the 
@@ -86,7 +86,7 @@
 ** Immediate constraints are usually handled similarly. The only difference 
 ** is that the counter used is stored as part of each individual statement
 ** object (struct Vdbe). If, after the statement has run, its immediate
-** constraint counter is greater than zero, it returns SQLITE_CONSTRAINT
+** constraint counter is greater than zero, it returns SQLITE4_CONSTRAINT
 ** and the statement transaction is rolled back. An exception is an INSERT
 ** statement that inserts a single row only (no triggers). In this case,
 ** instead of using a counter, an exception is thrown immediately if the
@@ -216,7 +216,7 @@ static int locateFkeyIndex(
       ** column of pFKey, then this index is a winner.  */
 
       if( bImplicit ){
-        if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+        if( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){
           if( aiCol ){
             int i;
             for(i=0; i<nCol; i++) aiCol[i] = pFKey->aCol[i].iFrom;
@@ -359,7 +359,7 @@ static void fkLookupParent(
         int iChild = regTemp+i;
         int iParent = pIdx->aiColumn[i]+regContent;
         sqlite4VdbeAddOp3(v, OP_Ne, iChild, iJump, iParent);
-        sqlite4VdbeChangeP5(v, SQLITE_JUMPIFNULL);
+        sqlite4VdbeChangeP5(v, SQLITE4_JUMPIFNULL);
         assert( iChild<=pParse->nMem && iParent<=pParse->nMem );
       }
       sqlite4VdbeAddOp2(v, OP_Goto, 0, iOk);
@@ -496,7 +496,7 @@ static void fkScanChildren(
     pRight = sqlite4Expr(db, TK_COLUMN, 0);
     if( pLeft && pRight ){
       pLeft->iTable = regData;
-      pLeft->affinity = SQLITE_AFF_INTEGER;
+      pLeft->affinity = SQLITE4_AFF_INTEGER;
       pRight->iTable = pSrc->a[0].iCursor;
       pRight->iColumn = -1;
     }
@@ -586,7 +586,7 @@ static void fkTriggerDelete(sqlite4 *dbMem, Trigger *p){
 */
 void sqlite4FkDropTable(Parse *pParse, SrcList *pName, Table *pTab){
   sqlite4 *db = pParse->db;
-  if( (db->flags&SQLITE_ForeignKeys) && !IsVirtual(pTab) && !pTab->pSelect ){
+  if( (db->flags&SQLITE4_ForeignKeys) && !IsVirtual(pTab) && !pTab->pSelect ){
     int iSkip = 0;
     Vdbe *v = sqlite4GetVdbe(pParse);
 
@@ -661,7 +661,7 @@ void sqlite4FkCheck(
   assert( (regOld==0)!=(regNew==0) );
 
   /* If foreign-keys are disabled, this function is a no-op. */
-  if( (db->flags&SQLITE_ForeignKeys)==0 ) return;
+  if( (db->flags&SQLITE4_ForeignKeys)==0 ) return;
 
   iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
   zDb = db->aDb[iDb].zName;
@@ -715,16 +715,16 @@ void sqlite4FkCheck(
       iCol = pFKey->aCol[0].iFrom;
       aiCol = &iCol;
     }
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
     for(i=0; i<pFKey->nCol; i++){
       /* Request permission to read the parent key columns. If the 
-      ** authorization callback returns SQLITE_IGNORE, behave as if any
+      ** authorization callback returns SQLITE4_IGNORE, behave as if any
       ** values read from the parent table are NULL. */
       if( db->xAuth ){
         int rcauth;
         char *zCol = pTo->aCol[pIdx->aiColumn[i]].zName;
         rcauth = sqlite4AuthReadCol(pParse, pTo->zName, zCol, iDb);
-        isIgnore = (rcauth==SQLITE_IGNORE);
+        isIgnore = (rcauth==SQLITE4_IGNORE);
       }
     }
 #endif
@@ -805,7 +805,7 @@ u32 sqlite4FkOldmask(
   Table *pTab                     /* Table being modified */
 ){
   u32 mask = 0;
-  if( pParse->db->flags&SQLITE_ForeignKeys ){
+  if( pParse->db->flags&SQLITE4_ForeignKeys ){
     FKey *p;
     int i;
     for(p=pTab->pFKey; p; p=p->pNextFrom){
@@ -841,7 +841,7 @@ int sqlite4FkRequired(
   Table *pTab,                    /* Table being modified */
   int *aChange                    /* Non-NULL for UPDATE operations */
 ){
-  if( pParse->db->flags&SQLITE_ForeignKeys ){
+  if( pParse->db->flags&SQLITE4_ForeignKeys ){
     if( !aChange ){
       /* A DELETE operation. Foreign key processing is required if the 
       ** table in question is either the child or parent table for any 
@@ -1104,7 +1104,7 @@ void sqlite4FkActions(
   ** refer to table pTab. If there is an action associated with the FK 
   ** for this operation (either update or delete), invoke the associated 
   ** trigger sub-program.  */
-  if( pParse->db->flags&SQLITE_ForeignKeys ){
+  if( pParse->db->flags&SQLITE4_ForeignKeys ){
     FKey *pFKey;                  /* Iterator variable */
     for(pFKey = sqlite4FkReferences(pTab); pFKey; pFKey=pFKey->pNextTo){
       Trigger *pAction = fkActionTrigger(pParse, pTab, pFKey, pChanges);
@@ -1115,7 +1115,7 @@ void sqlite4FkActions(
   }
 }
 
-#endif /* ifndef SQLITE_OMIT_TRIGGER */
+#endif /* ifndef SQLITE4_OMIT_TRIGGER */
 
 /*
 ** Free all memory associated with foreign key definitions attached to
@@ -1148,7 +1148,7 @@ void sqlite4FkDelete(sqlite4 *db, Table *pTab){
     assert( pFKey->isDeferred==0 || pFKey->isDeferred==1 );
 
     /* Delete any triggers created to implement actions for this FK. */
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
     fkTriggerDelete(db, pFKey->apTrigger[0]);
     fkTriggerDelete(db, pFKey->apTrigger[1]);
 #endif
@@ -1157,4 +1157,4 @@ void sqlite4FkDelete(sqlite4 *db, Table *pTab){
     sqlite4DbFree(db, pFKey);
   }
 }
-#endif /* ifndef SQLITE_OMIT_FOREIGN_KEY */
+#endif /* ifndef SQLITE4_OMIT_FOREIGN_KEY */

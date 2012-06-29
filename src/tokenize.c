@@ -25,10 +25,10 @@
 ** to adjust the encoding.  Only alphabetic characters and underscores
 ** need to be translated.
 */
-#ifdef SQLITE_ASCII
+#ifdef SQLITE4_ASCII
 # define charMap(X) sqlite4UpperToLower[(unsigned char)X]
 #endif
-#ifdef SQLITE_EBCDIC
+#ifdef SQLITE4_EBCDIC
 # define charMap(X) ebcdicToAscii[(unsigned char)X]
 const unsigned char ebcdicToAscii[] = {
 /* 0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F */
@@ -81,10 +81,10 @@ const unsigned char ebcdicToAscii[] = {
 ** SQLite will allow '$' in identifiers for compatibility.
 ** But the feature is undocumented.
 */
-#ifdef SQLITE_ASCII
+#ifdef SQLITE4_ASCII
 #define IdChar(C)  ((sqlite4CtypeMap[(unsigned char)C]&0x46)!=0)
 #endif
-#ifdef SQLITE_EBCDIC
+#ifdef SQLITE4_EBCDIC
 const char sqlite4IsEbcdicIdChar[] = {
 /* x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 xA xB xC xD xE xF */
     0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,  /* 4x */
@@ -255,7 +255,7 @@ int sqlite4GetToken(const unsigned char *z, int *tokenType){
       }
     }
     case '.': {
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
       if( !sqlite4Isdigit(z[1]) )
 #endif
       {
@@ -273,7 +273,7 @@ int sqlite4GetToken(const unsigned char *z, int *tokenType){
       testcase( z[0]=='9' );
       *tokenType = TK_INTEGER;
       for(i=0; sqlite4Isdigit(z[i]); i++){}
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
       if( z[i]=='.' ){
         i++;
         while( sqlite4Isdigit(z[i]) ){ i++; }
@@ -316,7 +316,7 @@ int sqlite4GetToken(const unsigned char *z, int *tokenType){
       /* Fall through into the next case if the '#' is not followed by
       ** a digit. Try to match #AAAA where AAAA is a parameter name. */
     }
-#ifndef SQLITE_OMIT_TCL_VARIABLE
+#ifndef SQLITE4_OMIT_TCL_VARIABLE
     case '$':
 #endif
     case '@':  /* For compatibility with MS SQL Server */
@@ -327,7 +327,7 @@ int sqlite4GetToken(const unsigned char *z, int *tokenType){
       for(i=1; (c=z[i])!=0; i++){
         if( IdChar(c) ){
           n++;
-#ifndef SQLITE_OMIT_TCL_VARIABLE
+#ifndef SQLITE4_OMIT_TCL_VARIABLE
         }else if( c=='(' && n>0 ){
           do{
             i++;
@@ -348,7 +348,7 @@ int sqlite4GetToken(const unsigned char *z, int *tokenType){
       if( n==0 ) *tokenType = TK_ILLEGAL;
       return i;
     }
-#ifndef SQLITE_OMIT_BLOB_LITERAL
+#ifndef SQLITE4_OMIT_BLOB_LITERAL
     case 'x': case 'X': {
       testcase( z[0]=='x' ); testcase( z[0]=='X' );
       if( z[1]=='\'' ){
@@ -379,7 +379,7 @@ int sqlite4GetToken(const unsigned char *z, int *tokenType){
 
 /*
 ** Run the parser on the given SQL string.  The parser structure is
-** passed in.  An SQLITE_ status code is returned.  If an error occurs
+** passed in.  An SQLITE4_ status code is returned.  If an error occurs
 ** then an and attempt is made to write an error message into 
 ** memory obtained from sqlite4_malloc() and to make *pzErrMsg point to that
 ** error message.
@@ -395,18 +395,18 @@ int sqlite4RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
   int mxSqlLen;                   /* Max length of an SQL string */
 
 
-  mxSqlLen = db->aLimit[SQLITE_LIMIT_SQL_LENGTH];
+  mxSqlLen = db->aLimit[SQLITE4_LIMIT_SQL_LENGTH];
   if( db->activeVdbeCnt==0 ){
     db->u1.isInterrupted = 0;
   }
-  pParse->rc = SQLITE_OK;
+  pParse->rc = SQLITE4_OK;
   pParse->zTail = zSql;
   i = 0;
   assert( pzErrMsg!=0 );
   pEngine = sqlite4ParserAlloc((void*(*)(void*,size_t))sqlite4_malloc,db->pEnv);
   if( pEngine==0 ){
     db->mallocFailed = 1;
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   assert( pParse->pNewTable==0 );
   assert( pParse->pNewTrigger==0 );
@@ -421,14 +421,14 @@ int sqlite4RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
     pParse->sLastToken.n = sqlite4GetToken((unsigned char*)&zSql[i],&tokenType);
     i += pParse->sLastToken.n;
     if( i>mxSqlLen ){
-      pParse->rc = SQLITE_TOOBIG;
+      pParse->rc = SQLITE4_TOOBIG;
       break;
     }
     switch( tokenType ){
       case TK_SPACE: {
         if( db->u1.isInterrupted ){
           sqlite4ErrorMsg(pParse, "interrupt");
-          pParse->rc = SQLITE_INTERRUPT;
+          pParse->rc = SQLITE4_INTERRUPT;
           goto abort_parse;
         }
         break;
@@ -447,7 +447,7 @@ int sqlite4RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
       default: {
         sqlite4Parser(pEngine, tokenType, pParse->sLastToken, pParse);
         lastTokenParsed = tokenType;
-        if( pParse->rc!=SQLITE_OK ){
+        if( pParse->rc!=SQLITE4_OK ){
           goto abort_parse;
         }
         break;
@@ -455,7 +455,7 @@ int sqlite4RunParser(Parse *pParse, const char *zSql, char **pzErrMsg){
     }
   }
 abort_parse:
-  if( zSql[i]==0 && nErr==0 && pParse->rc==SQLITE_OK ){
+  if( zSql[i]==0 && nErr==0 && pParse->rc==SQLITE4_OK ){
     if( lastTokenParsed!=TK_SEMI ){
       sqlite4Parser(pEngine, TK_SEMI, pParse->sLastToken, pParse);
       pParse->zTail = &zSql[i];
@@ -463,16 +463,16 @@ abort_parse:
     sqlite4Parser(pEngine, 0, pParse->sLastToken, pParse);
   }
 #if YYTRACKMAXSTACKDEPTH
-  sqlite4StatusSet(SQLITE_STATUS_PARSER_STACK,
+  sqlite4StatusSet(SQLITE4_STATUS_PARSER_STACK,
       sqlite4ParserStackPeak(pEngine)
   );
 #endif
   sqlite4ParserFree(pEngine, (void(*)(void*,void*))sqlite4_free);
   db->lookaside.bEnabled = enableLookaside;
   if( db->mallocFailed ){
-    pParse->rc = SQLITE_NOMEM;
+    pParse->rc = SQLITE4_NOMEM;
   }
-  if( pParse->rc!=SQLITE_OK && pParse->rc!=SQLITE_DONE && pParse->zErrMsg==0 ){
+  if( pParse->rc!=SQLITE4_OK && pParse->rc!=SQLITE4_DONE && pParse->zErrMsg==0 ){
     sqlite4SetString(&pParse->zErrMsg, db, "%s", sqlite4ErrStr(pParse->rc));
   }
   assert( pzErrMsg!=0 );
@@ -486,7 +486,7 @@ abort_parse:
     sqlite4VdbeDelete(pParse->pVdbe);
     pParse->pVdbe = 0;
   }
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   sqlite4_free(0, pParse->apVtabLock);
 #endif
 
@@ -512,8 +512,8 @@ abort_parse:
     pParse->pZombieTab = p->pNextZombie;
     sqlite4DeleteTable(db, p);
   }
-  if( nErr>0 && pParse->rc==SQLITE_OK ){
-    pParse->rc = SQLITE_ERROR;
+  if( nErr>0 && pParse->rc==SQLITE4_OK ){
+    pParse->rc = SQLITE4_ERROR;
   }
   return nErr;
 }

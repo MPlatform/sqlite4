@@ -47,9 +47,9 @@ static void minmaxFunc(
   assert( pColl );
   assert( mask==-1 || mask==0 );
   iBest = 0;
-  if( sqlite4_value_type(argv[0])==SQLITE_NULL ) return;
+  if( sqlite4_value_type(argv[0])==SQLITE4_NULL ) return;
   for(i=1; i<argc; i++){
-    if( sqlite4_value_type(argv[i])==SQLITE_NULL ) return;
+    if( sqlite4_value_type(argv[i])==SQLITE4_NULL ) return;
     if( (sqlite4MemCompare(argv[iBest], argv[i], pColl)^mask)>=0 ){
       testcase( mask==0 );
       iBest = i;
@@ -69,13 +69,13 @@ static void typeofFunc(
   const char *z = 0;
   UNUSED_PARAMETER(NotUsed);
   switch( sqlite4_value_type(argv[0]) ){
-    case SQLITE_INTEGER: z = "integer"; break;
-    case SQLITE_TEXT:    z = "text";    break;
-    case SQLITE_FLOAT:   z = "real";    break;
-    case SQLITE_BLOB:    z = "blob";    break;
+    case SQLITE4_INTEGER: z = "integer"; break;
+    case SQLITE4_TEXT:    z = "text";    break;
+    case SQLITE4_FLOAT:   z = "real";    break;
+    case SQLITE4_BLOB:    z = "blob";    break;
     default:             z = "null";    break;
   }
-  sqlite4_result_text(context, z, -1, SQLITE_STATIC);
+  sqlite4_result_text(context, z, -1, SQLITE4_STATIC);
 }
 
 
@@ -92,19 +92,19 @@ static void lengthFunc(
   assert( argc==1 );
   UNUSED_PARAMETER(argc);
   switch( sqlite4_value_type(argv[0]) ){
-    case SQLITE_BLOB:
-    case SQLITE_INTEGER:
-    case SQLITE_FLOAT: {
+    case SQLITE4_BLOB:
+    case SQLITE4_INTEGER:
+    case SQLITE4_FLOAT: {
       sqlite4_result_int(context, sqlite4_value_bytes(argv[0]));
       break;
     }
-    case SQLITE_TEXT: {
+    case SQLITE4_TEXT: {
       const unsigned char *z = sqlite4_value_text(argv[0]);
       if( z==0 ) return;
       len = 0;
       while( *z ){
         len++;
-        SQLITE_SKIP_UTF8(z);
+        SQLITE4_SKIP_UTF8(z);
       }
       sqlite4_result_int(context, len);
       break;
@@ -126,7 +126,7 @@ static void absFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
   assert( argc==1 );
   UNUSED_PARAMETER(argc);
   switch( sqlite4_value_type(argv[0]) ){
-    case SQLITE_INTEGER: {
+    case SQLITE4_INTEGER: {
       i64 iVal = sqlite4_value_int64(argv[0]);
       if( iVal<0 ){
         if( (iVal<<1)==0 ){
@@ -141,7 +141,7 @@ static void absFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
       sqlite4_result_int64(context, iVal);
       break;
     }
-    case SQLITE_NULL: {
+    case SQLITE4_NULL: {
       /* IMP: R-37434-19929 Abs(X) returns NULL if X is NULL. */
       sqlite4_result_null(context);
       break;
@@ -185,14 +185,14 @@ static void substrFunc(
   int negP2 = 0;
 
   assert( argc==3 || argc==2 );
-  if( sqlite4_value_type(argv[1])==SQLITE_NULL
-   || (argc==3 && sqlite4_value_type(argv[2])==SQLITE_NULL)
+  if( sqlite4_value_type(argv[1])==SQLITE4_NULL
+   || (argc==3 && sqlite4_value_type(argv[2])==SQLITE4_NULL)
   ){
     return;
   }
   p0type = sqlite4_value_type(argv[0]);
   p1 = sqlite4_value_int(argv[1]);
-  if( p0type==SQLITE_BLOB ){
+  if( p0type==SQLITE4_BLOB ){
     len = sqlite4_value_bytes(argv[0]);
     z = sqlite4_value_blob(argv[0]);
     if( z==0 ) return;
@@ -203,7 +203,7 @@ static void substrFunc(
     len = 0;
     if( p1<0 ){
       for(z2=z; *z2; len++){
-        SQLITE_SKIP_UTF8(z2);
+        SQLITE4_SKIP_UTF8(z2);
       }
     }
   }
@@ -214,7 +214,7 @@ static void substrFunc(
       negP2 = 1;
     }
   }else{
-    p2 = sqlite4_context_db_handle(context)->aLimit[SQLITE_LIMIT_LENGTH];
+    p2 = sqlite4_context_db_handle(context)->aLimit[SQLITE4_LIMIT_LENGTH];
   }
   if( p1<0 ){
     p1 += len;
@@ -236,28 +236,28 @@ static void substrFunc(
     }
   }
   assert( p1>=0 && p2>=0 );
-  if( p0type!=SQLITE_BLOB ){
+  if( p0type!=SQLITE4_BLOB ){
     while( *z && p1 ){
-      SQLITE_SKIP_UTF8(z);
+      SQLITE4_SKIP_UTF8(z);
       p1--;
     }
     for(z2=z; *z2 && p2; p2--){
-      SQLITE_SKIP_UTF8(z2);
+      SQLITE4_SKIP_UTF8(z2);
     }
-    sqlite4_result_text(context, (char*)z, (int)(z2-z), SQLITE_TRANSIENT);
+    sqlite4_result_text(context, (char*)z, (int)(z2-z), SQLITE4_TRANSIENT);
   }else{
     if( p1+p2>len ){
       p2 = len-p1;
       if( p2<0 ) p2 = 0;
     }
-    sqlite4_result_blob(context, (char*)&z[p1], (int)p2, SQLITE_TRANSIENT);
+    sqlite4_result_blob(context, (char*)&z[p1], (int)p2, SQLITE4_TRANSIENT);
   }
 }
 
 /*
 ** Implementation of the round() function
 */
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
 static void roundFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
   int n = 0;
   double r;
@@ -265,12 +265,12 @@ static void roundFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
   sqlite4_env *pEnv = sqlite4_context_env(context);
   assert( argc==1 || argc==2 );
   if( argc==2 ){
-    if( SQLITE_NULL==sqlite4_value_type(argv[1]) ) return;
+    if( SQLITE4_NULL==sqlite4_value_type(argv[1]) ) return;
     n = sqlite4_value_int(argv[1]);
     if( n>30 ) n = 30;
     if( n<0 ) n = 0;
   }
-  if( sqlite4_value_type(argv[0])==SQLITE_NULL ) return;
+  if( sqlite4_value_type(argv[0])==SQLITE4_NULL ) return;
   r = sqlite4_value_double(argv[0]);
   /* If Y==0 and X will fit in a 64-bit int,
   ** handle the rounding directly,
@@ -286,7 +286,7 @@ static void roundFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
       sqlite4_result_error_nomem(context);
       return;
     }
-    sqlite4AtoF(zBuf, &r, sqlite4Strlen30(zBuf), SQLITE_UTF8);
+    sqlite4AtoF(zBuf, &r, sqlite4Strlen30(zBuf), SQLITE4_UTF8);
     sqlite4_free(pEnv, zBuf);
   }
   sqlite4_result_double(context, r);
@@ -298,15 +298,15 @@ static void roundFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
 ** allocation fails, call sqlite4_result_error_nomem() to notify
 ** the database handle that malloc() has failed and return NULL.
 ** If nByte is larger than the maximum string or blob length, then
-** raise an SQLITE_TOOBIG exception and return NULL.
+** raise an SQLITE4_TOOBIG exception and return NULL.
 */
 static void *contextMalloc(sqlite4_context *context, i64 nByte){
   char *z;
   sqlite4 *db = sqlite4_context_db_handle(context);
   assert( nByte>0 );
-  testcase( nByte==db->aLimit[SQLITE_LIMIT_LENGTH] );
-  testcase( nByte==db->aLimit[SQLITE_LIMIT_LENGTH]+1 );
-  if( nByte>db->aLimit[SQLITE_LIMIT_LENGTH] ){
+  testcase( nByte==db->aLimit[SQLITE4_LIMIT_LENGTH] );
+  testcase( nByte==db->aLimit[SQLITE4_LIMIT_LENGTH]+1 );
+  if( nByte>db->aLimit[SQLITE4_LIMIT_LENGTH] ){
     sqlite4_result_error_toobig(context);
     z = 0;
   }else{
@@ -336,7 +336,7 @@ static void upperFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
       for(i=0; i<n; i++){
         z1[i] = (char)sqlite4Toupper(z2[i]);
       }
-      sqlite4_result_text(context, z1, n, SQLITE_DYNAMIC);
+      sqlite4_result_text(context, z1, n, SQLITE4_DYNAMIC);
     }
   }
 }
@@ -355,7 +355,7 @@ static void lowerFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
       for(i=0; i<n; i++){
         z1[i] = sqlite4Tolower(z2[i]);
       }
-      sqlite4_result_text(context, z1, n, SQLITE_DYNAMIC);
+      sqlite4_result_text(context, z1, n, SQLITE4_DYNAMIC);
     }
   }
 }
@@ -380,7 +380,7 @@ static void ifnullFunc(
 ){
   int i;
   for(i=0; i<argc; i++){
-    if( SQLITE_NULL!=sqlite4_value_type(argv[i]) ){
+    if( SQLITE4_NULL!=sqlite4_value_type(argv[i]) ){
       sqlite4_result_value(context, argv[i]);
       break;
     }
@@ -434,7 +434,7 @@ static void randomBlob(
   p = contextMalloc(context, n);
   if( p ){
     sqlite4_randomness(sqlite4_context_env(context), n, p);
-    sqlite4_result_blob(context, (char*)p, n, SQLITE_DYNAMIC);
+    sqlite4_result_blob(context, (char*)p, n, SQLITE4_DYNAMIC);
   }
 }
 
@@ -504,7 +504,7 @@ struct compareInfo {
 ** able to participate in upper-case-to-lower-case mappings in EBCDIC
 ** whereas only characters less than 0x80 do in ASCII.
 */
-#if defined(SQLITE_EBCDIC)
+#if defined(SQLITE4_EBCDIC)
 # define sqlite4Utf8Read(A,C)  (*(A++))
 # define GlogUpperToLower(A)   A = sqlite4UpperToLower[A]
 #else
@@ -515,7 +515,7 @@ static const struct compareInfo globInfo = { '*', '?', '[', 0 };
 /* The correct SQL-92 behavior is for the LIKE operator to ignore
 ** case.  Thus  'a' LIKE 'A' would be true. */
 static const struct compareInfo likeInfoNorm = { '%', '_',   0, 1 };
-/* If SQLITE_CASE_SENSITIVE_LIKE is defined, then the LIKE operator
+/* If SQLITE4_CASE_SENSITIVE_LIKE is defined, then the LIKE operator
 ** is case sensitive causing 'a' LIKE 'A' to be false */
 static const struct compareInfo likeInfoAlt = { '%', '_',   0, 0 };
 
@@ -581,7 +581,7 @@ static int patternCompare(
         assert( esc==0 );         /* This is GLOB, not LIKE */
         assert( matchSet<0x80 );  /* '[' is a single-byte character */
         while( *zString && patternCompare(&zPattern[-1],zString,pInfo,esc)==0 ){
-          SQLITE_SKIP_UTF8(zString);
+          SQLITE4_SKIP_UTF8(zString);
         }
         return *zString!=0;
       }
@@ -660,7 +660,7 @@ static int patternCompare(
 ** just a variation of LIKE) gets called.  This is used for testing
 ** only.
 */
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 int sqlite4_like_count = 0;
 #endif
 
@@ -694,9 +694,9 @@ static void likeFunc(
   ** of deep recursion and N*N behavior in patternCompare().
   */
   nPat = sqlite4_value_bytes(argv[0]);
-  testcase( nPat==db->aLimit[SQLITE_LIMIT_LIKE_PATTERN_LENGTH] );
-  testcase( nPat==db->aLimit[SQLITE_LIMIT_LIKE_PATTERN_LENGTH]+1 );
-  if( nPat > db->aLimit[SQLITE_LIMIT_LIKE_PATTERN_LENGTH] ){
+  testcase( nPat==db->aLimit[SQLITE4_LIMIT_LIKE_PATTERN_LENGTH] );
+  testcase( nPat==db->aLimit[SQLITE4_LIMIT_LIKE_PATTERN_LENGTH]+1 );
+  if( nPat > db->aLimit[SQLITE4_LIMIT_LIKE_PATTERN_LENGTH] ){
     sqlite4_result_error(context, "LIKE or GLOB pattern too complex", -1);
     return;
   }
@@ -717,7 +717,7 @@ static void likeFunc(
   }
   if( zA && zB ){
     struct compareInfo *pInfo = sqlite4_user_data(context);
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
     sqlite4_like_count++;
 #endif
     
@@ -754,7 +754,7 @@ static void versionFunc(
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
   /* IMP: R-48699-48617 This function is an SQL wrapper around the
   ** sqlite4_libversion() C-interface. */
-  sqlite4_result_text(context, sqlite4_libversion(), -1, SQLITE_STATIC);
+  sqlite4_result_text(context, sqlite4_libversion(), -1, SQLITE4_STATIC);
 }
 
 /*
@@ -770,7 +770,7 @@ static void sourceidFunc(
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
   /* IMP: R-24470-31136 This function is an SQL wrapper around the
   ** sqlite4_sourceid() C interface. */
-  sqlite4_result_text(context, sqlite4_sourceid(), -1, SQLITE_STATIC);
+  sqlite4_result_text(context, sqlite4_sourceid(), -1, SQLITE4_STATIC);
 }
 
 /*
@@ -793,7 +793,7 @@ static void errlogFunc(
 ** The result is an integer that identifies if the compiler option
 ** was used to build SQLite.
 */
-#ifndef SQLITE_OMIT_COMPILEOPTION_DIAGS
+#ifndef SQLITE4_OMIT_COMPILEOPTION_DIAGS
 static void compileoptionusedFunc(
   sqlite4_context *context,
   int argc,
@@ -810,14 +810,14 @@ static void compileoptionusedFunc(
     sqlite4_result_int(context, sqlite4_compileoption_used(zOptName));
   }
 }
-#endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
+#endif /* SQLITE4_OMIT_COMPILEOPTION_DIAGS */
 
 /*
 ** Implementation of the sqlite_compileoption_get() function. 
 ** The result is a string that identifies the compiler options 
 ** used to build SQLite.
 */
-#ifndef SQLITE_OMIT_COMPILEOPTION_DIAGS
+#ifndef SQLITE4_OMIT_COMPILEOPTION_DIAGS
 static void compileoptiongetFunc(
   sqlite4_context *context,
   int argc,
@@ -830,9 +830,9 @@ static void compileoptiongetFunc(
   ** is a wrapper around the sqlite4_compileoption_get() C/C++ function.
   */
   n = sqlite4_value_int(argv[0]);
-  sqlite4_result_text(context, sqlite4_compileoption_get(n), -1, SQLITE_STATIC);
+  sqlite4_result_text(context, sqlite4_compileoption_get(n), -1, SQLITE4_STATIC);
 }
-#endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
+#endif /* SQLITE4_OMIT_COMPILEOPTION_DIAGS */
 
 /* Array for converting from half-bytes (nybbles) into ASCII hex
 ** digits. */
@@ -856,12 +856,12 @@ static void quoteFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
   assert( argc==1 );
   UNUSED_PARAMETER(argc);
   switch( sqlite4_value_type(argv[0]) ){
-    case SQLITE_INTEGER:
-    case SQLITE_FLOAT: {
+    case SQLITE4_INTEGER:
+    case SQLITE4_FLOAT: {
       sqlite4_result_value(context, argv[0]);
       break;
     }
-    case SQLITE_BLOB: {
+    case SQLITE4_BLOB: {
       char *zText = 0;
       char const *zBlob = sqlite4_value_blob(argv[0]);
       int nBlob = sqlite4_value_bytes(argv[0]);
@@ -877,12 +877,12 @@ static void quoteFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         zText[(nBlob*2)+3] = '\0';
         zText[0] = 'X';
         zText[1] = '\'';
-        sqlite4_result_text(context, zText, -1, SQLITE_TRANSIENT);
+        sqlite4_result_text(context, zText, -1, SQLITE4_TRANSIENT);
         sqlite4_free(sqlite4_context_env(context), zText);
       }
       break;
     }
-    case SQLITE_TEXT: {
+    case SQLITE4_TEXT: {
       int i,j;
       u64 n;
       const unsigned char *zArg = sqlite4_value_text(argv[0]);
@@ -901,13 +901,13 @@ static void quoteFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         }
         z[j++] = '\'';
         z[j] = 0;
-        sqlite4_result_text(context, z, j, SQLITE_DYNAMIC);
+        sqlite4_result_text(context, z, j, SQLITE4_DYNAMIC);
       }
       break;
     }
     default: {
-      assert( sqlite4_value_type(argv[0])==SQLITE_NULL );
-      sqlite4_result_text(context, "NULL", 4, SQLITE_STATIC);
+      assert( sqlite4_value_type(argv[0])==SQLITE4_NULL );
+      sqlite4_result_text(context, "NULL", 4, SQLITE4_STATIC);
       break;
     }
   }
@@ -938,7 +938,7 @@ static void hexFunc(
       *(z++) = hexdigits[c&0xf];
     }
     *z = 0;
-    sqlite4_result_text(context, zHex, n*2, SQLITE_DYNAMIC);
+    sqlite4_result_text(context, zHex, n*2, SQLITE4_DYNAMIC);
   }
 }
 
@@ -955,9 +955,9 @@ static void zeroblobFunc(
   assert( argc==1 );
   UNUSED_PARAMETER(argc);
   n = sqlite4_value_int64(argv[0]);
-  testcase( n==db->aLimit[SQLITE_LIMIT_LENGTH] );
-  testcase( n==db->aLimit[SQLITE_LIMIT_LENGTH]+1 );
-  if( n>db->aLimit[SQLITE_LIMIT_LENGTH] ){
+  testcase( n==db->aLimit[SQLITE4_LIMIT_LENGTH] );
+  testcase( n==db->aLimit[SQLITE4_LIMIT_LENGTH]+1 );
+  if( n>db->aLimit[SQLITE4_LIMIT_LENGTH] ){
     sqlite4_result_error_toobig(context);
   }else{
     sqlite4_result_zeroblob(context, (int)n); /* IMP: R-00293-64994 */
@@ -994,12 +994,12 @@ static void replaceFunc(
   assert( zStr==sqlite4_value_text(argv[0]) );  /* No encoding change */
   zPattern = sqlite4_value_text(argv[1]);
   if( zPattern==0 ){
-    assert( sqlite4_value_type(argv[1])==SQLITE_NULL
+    assert( sqlite4_value_type(argv[1])==SQLITE4_NULL
             || sqlite4_context_db_handle(context)->mallocFailed );
     return;
   }
   if( zPattern[0]==0 ){
-    assert( sqlite4_value_type(argv[1])!=SQLITE_NULL );
+    assert( sqlite4_value_type(argv[1])!=SQLITE4_NULL );
     sqlite4_result_value(context, argv[0]);
     return;
   }
@@ -1010,7 +1010,7 @@ static void replaceFunc(
   nRep = sqlite4_value_bytes(argv[2]);
   assert( zRep==sqlite4_value_text(argv[2]) );
   nOut = nStr + 1;
-  assert( nOut<SQLITE_MAX_LENGTH );
+  assert( nOut<SQLITE4_MAX_LENGTH );
   zOut = contextMalloc(context, (i64)nOut);
   if( zOut==0 ){
     return;
@@ -1023,9 +1023,9 @@ static void replaceFunc(
       u8 *zOld;
       sqlite4 *db = sqlite4_context_db_handle(context);
       nOut += nRep - nPattern;
-      testcase( nOut-1==db->aLimit[SQLITE_LIMIT_LENGTH] );
-      testcase( nOut-2==db->aLimit[SQLITE_LIMIT_LENGTH] );
-      if( nOut-1>db->aLimit[SQLITE_LIMIT_LENGTH] ){
+      testcase( nOut-1==db->aLimit[SQLITE4_LIMIT_LENGTH] );
+      testcase( nOut-2==db->aLimit[SQLITE4_LIMIT_LENGTH] );
+      if( nOut-1>db->aLimit[SQLITE4_LIMIT_LENGTH] ){
         sqlite4_result_error_toobig(context);
         sqlite4_free(db->pEnv, zOut);
         return;
@@ -1047,7 +1047,7 @@ static void replaceFunc(
   j += nStr - i;
   assert( j<=nOut );
   zOut[j] = 0;
-  sqlite4_result_text(context, (char*)zOut, j, SQLITE_DYNAMIC);
+  sqlite4_result_text(context, (char*)zOut, j, SQLITE4_DYNAMIC);
 }
 
 /*
@@ -1068,7 +1068,7 @@ static void trimFunc(
   unsigned char **azChar = 0;       /* Individual characters in zCharSet */
   int nChar;                        /* Number of characters in zCharSet */
 
-  if( sqlite4_value_type(argv[0])==SQLITE_NULL ){
+  if( sqlite4_value_type(argv[0])==SQLITE4_NULL ){
     return;
   }
   zIn = sqlite4_value_text(argv[0]);
@@ -1087,7 +1087,7 @@ static void trimFunc(
   }else{
     const unsigned char *z;
     for(z=zCharSet, nChar=0; *z; nChar++){
-      SQLITE_SKIP_UTF8(z);
+      SQLITE4_SKIP_UTF8(z);
     }
     if( nChar>0 ){
       azChar = contextMalloc(context, ((i64)nChar)*(sizeof(char*)+1));
@@ -1097,13 +1097,13 @@ static void trimFunc(
       aLen = (unsigned char*)&azChar[nChar];
       for(z=zCharSet, nChar=0; *z; nChar++){
         azChar[nChar] = (unsigned char *)z;
-        SQLITE_SKIP_UTF8(z);
+        SQLITE4_SKIP_UTF8(z);
         aLen[nChar] = (u8)(z - azChar[nChar]);
       }
     }
   }
   if( nChar>0 ){
-    flags = SQLITE_PTR_TO_INT(sqlite4_user_data(context));
+    flags = SQLITE4_PTR_TO_INT(sqlite4_user_data(context));
     if( flags & 1 ){
       while( nIn>0 ){
         int len = 0;
@@ -1131,15 +1131,15 @@ static void trimFunc(
       sqlite4_free(sqlite4_context_env(context), azChar);
     }
   }
-  sqlite4_result_text(context, (char*)zIn, nIn, SQLITE_TRANSIENT);
+  sqlite4_result_text(context, (char*)zIn, nIn, SQLITE4_TRANSIENT);
 }
 
 
 /* IMP: R-25361-16150 This function is omitted from SQLite by default. It
-** is only available if the SQLITE_SOUNDEX compile-time option is used
+** is only available if the SQLITE4_SOUNDEX compile-time option is used
 ** when SQLite is built.
 */
-#ifdef SQLITE_SOUNDEX
+#ifdef SQLITE4_SOUNDEX
 /*
 ** Compute the soundex encoding of a word.
 **
@@ -1186,16 +1186,16 @@ static void soundexFunc(
       zResult[j++] = '0';
     }
     zResult[j] = 0;
-    sqlite4_result_text(context, zResult, 4, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, zResult, 4, SQLITE4_TRANSIENT);
   }else{
     /* IMP: R-64894-50321 The string "?000" is returned if the argument
     ** is NULL or contains no ASCII alphabetic characters. */
-    sqlite4_result_text(context, "?000", 4, SQLITE_STATIC);
+    sqlite4_result_text(context, "?000", 4, SQLITE4_STATIC);
   }
 }
-#endif /* SQLITE_SOUNDEX */
+#endif /* SQLITE4_SOUNDEX */
 
-#if 0 /*ndef SQLITE_OMIT_LOAD_EXTENSION*/
+#if 0 /*ndef SQLITE4_OMIT_LOAD_EXTENSION*/
 /*
 ** A function that loads a shared-library extension then returns NULL.
 */
@@ -1248,9 +1248,9 @@ static void sumStep(sqlite4_context *context, int argc, sqlite4_value **argv){
   UNUSED_PARAMETER(argc);
   p = sqlite4_aggregate_context(context, sizeof(*p));
   type = sqlite4_value_numeric_type(argv[0]);
-  if( p && type!=SQLITE_NULL ){
+  if( p && type!=SQLITE4_NULL ){
     p->cnt++;
-    if( type==SQLITE_INTEGER ){
+    if( type==SQLITE4_INTEGER ){
       i64 v = sqlite4_value_int64(argv[0]);
       p->rSum += v;
       if( (p->approx|p->overflow)==0 && sqlite4AddInt64(&p->iSum, v) ){
@@ -1285,7 +1285,7 @@ static void avgFinalize(sqlite4_context *context){
 static void totalFinalize(sqlite4_context *context){
   SumCtx *p;
   p = sqlite4_aggregate_context(context, 0);
-  /* (double)0 In case of SQLITE_OMIT_FLOATING_POINT... */
+  /* (double)0 In case of SQLITE4_OMIT_FLOATING_POINT... */
   sqlite4_result_double(context, p ? p->rSum : (double)0);
 }
 
@@ -1304,11 +1304,11 @@ struct CountCtx {
 static void countStep(sqlite4_context *context, int argc, sqlite4_value **argv){
   CountCtx *p;
   p = sqlite4_aggregate_context(context, sizeof(*p));
-  if( (argc==0 || SQLITE_NULL!=sqlite4_value_type(argv[0])) && p ){
+  if( (argc==0 || SQLITE4_NULL!=sqlite4_value_type(argv[0])) && p ){
     p->n++;
   }
 
-#ifndef SQLITE_OMIT_DEPRECATED
+#ifndef SQLITE4_OMIT_DEPRECATED
   /* The sqlite4_aggregate_count() function is deprecated.  But just to make
   ** sure it still operates correctly, verify that its count agrees with our 
   ** internal count when using count(*) and when the total count can be
@@ -1335,7 +1335,7 @@ static void minmaxStep(
   Mem *pBest;
   UNUSED_PARAMETER(NotUsed);
 
-  if( sqlite4_value_type(argv[0])==SQLITE_NULL ) return;
+  if( sqlite4_value_type(argv[0])==SQLITE4_NULL ) return;
   pBest = (Mem *)sqlite4_aggregate_context(context, sizeof(*pBest));
   if( !pBest ) return;
 
@@ -1384,7 +1384,7 @@ static void groupConcatStep(
   const char *zSep;
   int nVal, nSep;
   assert( argc==1 || argc==2 );
-  if( sqlite4_value_type(argv[0])==SQLITE_NULL ) return;
+  if( sqlite4_value_type(argv[0])==SQLITE4_NULL ) return;
   pAccum = (StrAccum*)sqlite4_aggregate_context(context, sizeof(*pAccum));
 
   if( pAccum ){
@@ -1392,7 +1392,7 @@ static void groupConcatStep(
     int firstTerm = pAccum->useMalloc==0;
     pAccum->useMalloc = 2;
     pAccum->pEnv = db->pEnv;
-    pAccum->mxAlloc = db->aLimit[SQLITE_LIMIT_LENGTH];
+    pAccum->mxAlloc = db->aLimit[SQLITE4_LIMIT_LENGTH];
     if( !firstTerm ){
       if( argc==2 ){
         zSep = (char*)sqlite4_value_text(argv[1]);
@@ -1418,7 +1418,7 @@ static void groupConcatFinalize(sqlite4_context *context){
       sqlite4_result_error_nomem(context);
     }else{    
       sqlite4_result_text(context, sqlite4StrAccumFinish(pAccum), -1, 
-                          SQLITE_DYNAMIC);
+                          SQLITE4_DYNAMIC);
     }
   }
 }
@@ -1430,8 +1430,8 @@ static void groupConcatFinalize(sqlite4_context *context){
 */
 void sqlite4RegisterBuiltinFunctions(sqlite4 *db){
   int rc = sqlite4_overload_function(db, "MATCH", 2);
-  assert( rc==SQLITE_NOMEM || rc==SQLITE_OK );
-  if( rc==SQLITE_NOMEM ){
+  assert( rc==SQLITE4_NOMEM || rc==SQLITE4_OK );
+  if( rc==SQLITE4_NOMEM ){
     db->mallocFailed = 1;
   }
 }
@@ -1442,7 +1442,7 @@ void sqlite4RegisterBuiltinFunctions(sqlite4 *db){
 static void setLikeOptFlag(sqlite4 *db, const char *zName, u8 flagVal){
   FuncDef *pDef;
   pDef = sqlite4FindFunction(db, zName, sqlite4Strlen30(zName),
-                             2, SQLITE_UTF8, 0);
+                             2, SQLITE4_UTF8, 0);
   if( ALWAYS(pDef) ){
     pDef->flags = flagVal;
   }
@@ -1460,13 +1460,13 @@ void sqlite4RegisterLikeFunctions(sqlite4 *db, int caseSensitive){
   }else{
     pInfo = (struct compareInfo*)&likeInfoNorm;
   }
-  sqlite4CreateFunc(db, "like", 2, SQLITE_UTF8, pInfo, likeFunc, 0, 0, 0);
-  sqlite4CreateFunc(db, "like", 3, SQLITE_UTF8, pInfo, likeFunc, 0, 0, 0);
-  sqlite4CreateFunc(db, "glob", 2, SQLITE_UTF8, 
+  sqlite4CreateFunc(db, "like", 2, SQLITE4_UTF8, pInfo, likeFunc, 0, 0, 0);
+  sqlite4CreateFunc(db, "like", 3, SQLITE4_UTF8, pInfo, likeFunc, 0, 0, 0);
+  sqlite4CreateFunc(db, "glob", 2, SQLITE4_UTF8, 
       (struct compareInfo*)&globInfo, likeFunc, 0, 0, 0);
-  setLikeOptFlag(db, "glob", SQLITE_FUNC_LIKE | SQLITE_FUNC_CASE);
+  setLikeOptFlag(db, "glob", SQLITE4_FUNC_LIKE | SQLITE4_FUNC_CASE);
   setLikeOptFlag(db, "like", 
-      caseSensitive ? (SQLITE_FUNC_LIKE | SQLITE_FUNC_CASE) : SQLITE_FUNC_LIKE);
+      caseSensitive ? (SQLITE4_FUNC_LIKE | SQLITE4_FUNC_CASE) : SQLITE4_FUNC_LIKE);
 }
 
 /*
@@ -1487,8 +1487,8 @@ int sqlite4IsLikeFunction(sqlite4 *db, Expr *pExpr, int *pIsNocase, char *aWc){
   assert( !ExprHasProperty(pExpr, EP_xIsSelect) );
   pDef = sqlite4FindFunction(db, pExpr->u.zToken, 
                              sqlite4Strlen30(pExpr->u.zToken),
-                             2, SQLITE_UTF8, 0);
-  if( NEVER(pDef==0) || (pDef->flags & SQLITE_FUNC_LIKE)==0 ){
+                             2, SQLITE4_UTF8, 0);
+  if( NEVER(pDef==0) || (pDef->flags & SQLITE4_FUNC_LIKE)==0 ){
     return 0;
   }
 
@@ -1500,7 +1500,7 @@ int sqlite4IsLikeFunction(sqlite4 *db, Expr *pExpr, int *pIsNocase, char *aWc){
   assert( (char*)&likeInfoAlt == (char*)&likeInfoAlt.matchAll );
   assert( &((char*)&likeInfoAlt)[1] == (char*)&likeInfoAlt.matchOne );
   assert( &((char*)&likeInfoAlt)[2] == (char*)&likeInfoAlt.matchSet );
-  *pIsNocase = (pDef->flags & SQLITE_FUNC_CASE)==0;
+  *pIsNocase = (pDef->flags & SQLITE4_FUNC_CASE)==0;
   return 1;
 }
 
@@ -1537,7 +1537,7 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
     FUNCTION(substr,             2, 0, 0, substrFunc       ),
     FUNCTION(substr,             3, 0, 0, substrFunc       ),
     FUNCTION(abs,                1, 0, 0, absFunc          ),
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
     FUNCTION(round,              1, 0, 0, roundFunc        ),
     FUNCTION(round,              2, 0, 0, roundFunc        ),
 #endif
@@ -1546,30 +1546,30 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
     FUNCTION(coalesce,           1, 0, 0, 0                ),
     FUNCTION(coalesce,           0, 0, 0, 0                ),
 /*  FUNCTION(coalesce,          -1, 0, 0, ifnullFunc       ), */
-    {-1,SQLITE_UTF8,SQLITE_FUNC_COALESCE,0,0,ifnullFunc,0,0,"coalesce",0,0},
+    {-1,SQLITE4_UTF8,SQLITE4_FUNC_COALESCE,0,0,ifnullFunc,0,0,"coalesce",0,0},
     FUNCTION(hex,                1, 0, 0, hexFunc          ),
 /*  FUNCTION(ifnull,             2, 0, 0, ifnullFunc       ), */
-    {2,SQLITE_UTF8,SQLITE_FUNC_COALESCE,0,0,ifnullFunc,0,0,"ifnull",0,0},
+    {2,SQLITE4_UTF8,SQLITE4_FUNC_COALESCE,0,0,ifnullFunc,0,0,"ifnull",0,0},
     FUNCTION(random,             0, 0, 0, randomFunc       ),
     FUNCTION(randomblob,         1, 0, 0, randomBlob       ),
     FUNCTION(nullif,             2, 0, 1, nullifFunc       ),
     FUNCTION(sqlite_version,     0, 0, 0, versionFunc      ),
     FUNCTION(sqlite_source_id,   0, 0, 0, sourceidFunc     ),
     FUNCTION(sqlite_log,         2, 0, 0, errlogFunc       ),
-#ifndef SQLITE_OMIT_COMPILEOPTION_DIAGS
+#ifndef SQLITE4_OMIT_COMPILEOPTION_DIAGS
     FUNCTION(sqlite_compileoption_used,1, 0, 0, compileoptionusedFunc  ),
     FUNCTION(sqlite_compileoption_get, 1, 0, 0, compileoptiongetFunc  ),
-#endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
+#endif /* SQLITE4_OMIT_COMPILEOPTION_DIAGS */
     FUNCTION(quote,              1, 0, 0, quoteFunc        ),
     FUNCTION(last_insert_rowid,  0, 0, 0, last_insert_rowid),
     FUNCTION(changes,            0, 0, 0, changes          ),
     FUNCTION(total_changes,      0, 0, 0, total_changes    ),
     FUNCTION(replace,            3, 0, 0, replaceFunc      ),
     FUNCTION(zeroblob,           1, 0, 0, zeroblobFunc     ),
-  #ifdef SQLITE_SOUNDEX
+  #ifdef SQLITE4_SOUNDEX
     FUNCTION(soundex,            1, 0, 0, soundexFunc      ),
   #endif
-  #if 0 /*ndef SQLITE_OMIT_LOAD_EXTENSION*/
+  #if 0 /*ndef SQLITE4_OMIT_LOAD_EXTENSION*/
     FUNCTION(load_extension,     1, 0, 0, loadExt          ),
     FUNCTION(load_extension,     2, 0, 0, loadExt          ),
   #endif
@@ -1577,18 +1577,18 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
     AGGREGATE(total,             1, 0, 0, sumStep,         totalFinalize    ),
     AGGREGATE(avg,               1, 0, 0, sumStep,         avgFinalize    ),
  /* AGGREGATE(count,             0, 0, 0, countStep,       countFinalize  ), */
-    {0,SQLITE_UTF8,SQLITE_FUNC_COUNT,0,0,0,countStep,countFinalize,"count",0,0},
+    {0,SQLITE4_UTF8,SQLITE4_FUNC_COUNT,0,0,0,countStep,countFinalize,"count",0,0},
     AGGREGATE(count,             1, 0, 0, countStep,       countFinalize  ),
     AGGREGATE(group_concat,      1, 0, 0, groupConcatStep, groupConcatFinalize),
     AGGREGATE(group_concat,      2, 0, 0, groupConcatStep, groupConcatFinalize),
   
-    LIKEFUNC(glob, 2, &globInfo, SQLITE_FUNC_LIKE|SQLITE_FUNC_CASE),
-  #ifdef SQLITE_CASE_SENSITIVE_LIKE
-    LIKEFUNC(like, 2, &likeInfoAlt, SQLITE_FUNC_LIKE|SQLITE_FUNC_CASE),
-    LIKEFUNC(like, 3, &likeInfoAlt, SQLITE_FUNC_LIKE|SQLITE_FUNC_CASE),
+    LIKEFUNC(glob, 2, &globInfo, SQLITE4_FUNC_LIKE|SQLITE4_FUNC_CASE),
+  #ifdef SQLITE4_CASE_SENSITIVE_LIKE
+    LIKEFUNC(like, 2, &likeInfoAlt, SQLITE4_FUNC_LIKE|SQLITE4_FUNC_CASE),
+    LIKEFUNC(like, 3, &likeInfoAlt, SQLITE4_FUNC_LIKE|SQLITE4_FUNC_CASE),
   #else
-    LIKEFUNC(like, 2, &likeInfoNorm, SQLITE_FUNC_LIKE),
-    LIKEFUNC(like, 3, &likeInfoNorm, SQLITE_FUNC_LIKE),
+    LIKEFUNC(like, 2, &likeInfoNorm, SQLITE4_FUNC_LIKE),
+    LIKEFUNC(like, 3, &likeInfoNorm, SQLITE4_FUNC_LIKE),
   #endif
   };
 
@@ -1600,7 +1600,7 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
     sqlite4FuncDefInsert(pFuncTab, &aFunc[i], 1);
   }
   sqlite4RegisterDateTimeFunctions(pEnv);
-#ifndef SQLITE_OMIT_ALTERTABLE
+#ifndef SQLITE4_OMIT_ALTERTABLE
   sqlite4AlterFunctions(pEnv);
 #endif
 }

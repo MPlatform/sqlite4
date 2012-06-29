@@ -69,7 +69,7 @@ static void randStr(sqlite4_context *context, int argc, sqlite4_value **argv){
     zBuf[i] = zSrc[zBuf[i]%(sizeof(zSrc)-1)];
   }
   zBuf[n] = 0;
-  sqlite4_result_text(context, (char*)zBuf, n, SQLITE_TRANSIENT);
+  sqlite4_result_text(context, (char*)zBuf, n, SQLITE4_TRANSIENT);
 }
 
 /*
@@ -101,7 +101,7 @@ static void test_destructor(
   
   test_destructor_count_var++;
   assert( nArg==1 );
-  if( sqlite4_value_type(argv[0])==SQLITE_NULL ) return;
+  if( sqlite4_value_type(argv[0])==SQLITE4_NULL ) return;
   len = sqlite4_value_bytes(argv[0]); 
   zVal = testContextMalloc(pCtx, len+3);
   if( !zVal ){
@@ -113,7 +113,7 @@ static void test_destructor(
   memcpy(zVal, sqlite4_value_text(argv[0]), len);
   sqlite4_result_text(pCtx, zVal, -1, destructor);
 }
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 static void test_destructor16(
   sqlite4_context *pCtx, 
   int nArg,
@@ -124,7 +124,7 @@ static void test_destructor16(
   
   test_destructor_count_var++;
   assert( nArg==1 );
-  if( sqlite4_value_type(argv[0])==SQLITE_NULL ) return;
+  if( sqlite4_value_type(argv[0])==SQLITE4_NULL ) return;
   len = sqlite4_value_bytes16(argv[0]); 
   zVal = testContextMalloc(pCtx, len+3);
   if( !zVal ){
@@ -150,7 +150,7 @@ static void test_destructor_count(
 ** arguments. It returns the text value returned by the sqlite4_errmsg16()
 ** API function.
 */
-#ifndef SQLITE_OMIT_BUILTIN_TEST
+#ifndef SQLITE4_OMIT_BUILTIN_TEST
 void sqlite4BeginBenignMalloc(void);
 void sqlite4EndBenignMalloc(void);
 #else
@@ -160,14 +160,14 @@ void sqlite4EndBenignMalloc(void);
 static void test_agg_errmsg16_step(sqlite4_context *a, int b,sqlite4_value **c){
 }
 static void test_agg_errmsg16_final(sqlite4_context *ctx){
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   const void *z;
   sqlite4 * db = sqlite4_context_db_handle(ctx);
   sqlite4_aggregate_context(ctx, 2048);
   sqlite4BeginBenignMalloc();
   z = sqlite4_errmsg16(db);
   sqlite4EndBenignMalloc();
-  sqlite4_result_text16(ctx, z, -1, SQLITE_TRANSIENT);
+  sqlite4_result_text16(ctx, z, -1, SQLITE4_TRANSIENT);
 #endif
 }
 
@@ -285,7 +285,7 @@ static void test_isolation(
   int nArg,
   sqlite4_value **argv
 ){
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   sqlite4_value_text16(argv[0]);
   sqlite4_value_text(argv[0]);
   sqlite4_value_text16(argv[0]);
@@ -310,9 +310,9 @@ static void test_eval(
 
   zSql = (char*)sqlite4_value_text(argv[0]);
   rc = sqlite4_prepare(db, zSql, -1, &pStmt, 0);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = sqlite4_step(pStmt);
-    if( rc==SQLITE_ROW ){
+    if( rc==SQLITE4_ROW ){
       sqlite4_result_value(pCtx, sqlite4_column_value(pStmt, 0));
     }
     rc = sqlite4_finalize(pStmt);
@@ -323,7 +323,7 @@ static void test_eval(
     assert( pStmt==0 );
     zErr = sqlite4_mprintf(pEnv, "sqlite4_prepare() error: %s",
                            sqlite4_errmsg(db));
-    sqlite4_result_text(pCtx, zErr, -1, SQLITE_DYNAMIC);
+    sqlite4_result_text(pCtx, zErr, -1, SQLITE4_DYNAMIC);
     sqlite4_result_error_code(pCtx, rc);
   }
 }
@@ -359,7 +359,7 @@ static void testHexToBin(const char *zIn, char *zOut){
 ** Convert the input string from HEX into binary.  Then return the
 ** result using sqlite4_result_text16le().
 */
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 static void testHexToUtf16be(
   sqlite4_context *pCtx, 
   int nArg,
@@ -376,7 +376,7 @@ static void testHexToUtf16be(
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text16be(pCtx, zOut, n/2, SQLITE_DYNAMIC);
+    sqlite4_result_text16be(pCtx, zOut, n/2, SQLITE4_DYNAMIC);
   }
 }
 #endif
@@ -403,7 +403,7 @@ static void testHexToUtf8(
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text(pCtx, zOut, n/2, SQLITE_DYNAMIC);
+    sqlite4_result_text(pCtx, zOut, n/2, SQLITE4_DYNAMIC);
   }
 }
 
@@ -413,7 +413,7 @@ static void testHexToUtf8(
 ** Convert the input string from HEX into binary.  Then return the
 ** result using sqlite4_result_text16le().
 */
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 static void testHexToUtf16le(
   sqlite4_context *pCtx, 
   int nArg,
@@ -430,7 +430,7 @@ static void testHexToUtf16le(
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text16le(pCtx, zOut, n/2, SQLITE_DYNAMIC);
+    sqlite4_result_text16le(pCtx, zOut, n/2, SQLITE4_DYNAMIC);
   }
 }
 #endif
@@ -442,21 +442,21 @@ static int registerTestFunctions(sqlite4 *db){
      unsigned char eTextRep; /* 1: UTF-16.  0: UTF-8 */
      void (*xFunc)(sqlite4_context*,int,sqlite4_value **);
   } aFuncs[] = {
-    { "randstr",               2, SQLITE_UTF8, randStr    },
-    { "test_destructor",       1, SQLITE_UTF8, test_destructor},
-#ifndef SQLITE_OMIT_UTF16
-    { "test_destructor16",     1, SQLITE_UTF8, test_destructor16},
-    { "hex_to_utf16be",        1, SQLITE_UTF8, testHexToUtf16be},
-    { "hex_to_utf16le",        1, SQLITE_UTF8, testHexToUtf16le},
+    { "randstr",               2, SQLITE4_UTF8, randStr    },
+    { "test_destructor",       1, SQLITE4_UTF8, test_destructor},
+#ifndef SQLITE4_OMIT_UTF16
+    { "test_destructor16",     1, SQLITE4_UTF8, test_destructor16},
+    { "hex_to_utf16be",        1, SQLITE4_UTF8, testHexToUtf16be},
+    { "hex_to_utf16le",        1, SQLITE4_UTF8, testHexToUtf16le},
 #endif
-    { "hex_to_utf8",           1, SQLITE_UTF8, testHexToUtf8},
-    { "test_destructor_count", 0, SQLITE_UTF8, test_destructor_count},
-    { "test_auxdata",         -1, SQLITE_UTF8, test_auxdata},
-    { "test_error",            1, SQLITE_UTF8, test_error},
-    { "test_error",            2, SQLITE_UTF8, test_error},
-    { "test_eval",             1, SQLITE_UTF8, test_eval},
-    { "test_isolation",        2, SQLITE_UTF8, test_isolation},
-    { "test_counter",          1, SQLITE_UTF8, counterFunc},
+    { "hex_to_utf8",           1, SQLITE4_UTF8, testHexToUtf8},
+    { "test_destructor_count", 0, SQLITE4_UTF8, test_destructor_count},
+    { "test_auxdata",         -1, SQLITE4_UTF8, test_auxdata},
+    { "test_error",            1, SQLITE4_UTF8, test_error},
+    { "test_error",            2, SQLITE4_UTF8, test_error},
+    { "test_eval",             1, SQLITE4_UTF8, test_eval},
+    { "test_isolation",        2, SQLITE4_UTF8, test_isolation},
+    { "test_counter",          1, SQLITE4_UTF8, counterFunc},
   };
   int i;
 
@@ -465,10 +465,10 @@ static int registerTestFunctions(sqlite4 *db){
         aFuncs[i].eTextRep, 0, aFuncs[i].xFunc, 0, 0);
   }
 
-  sqlite4_create_function(db, "test_agg_errmsg16", 0, SQLITE_ANY, 0, 0, 
+  sqlite4_create_function(db, "test_agg_errmsg16", 0, SQLITE4_ANY, 0, 0, 
       test_agg_errmsg16_step, test_agg_errmsg16_final);
       
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -497,26 +497,26 @@ static int abuse_create_function(
 
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
 
-  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep,tStep,tFinal);
-  if( rc!=SQLITE_MISUSE ) goto abuse_err;
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE4_UTF8, 0, tStep,tStep,tFinal);
+  if( rc!=SQLITE4_MISUSE ) goto abuse_err;
 
-  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep, tStep, 0);
-  if( rc!=SQLITE_MISUSE ) goto abuse_err;
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE4_UTF8, 0, tStep, tStep, 0);
+  if( rc!=SQLITE4_MISUSE ) goto abuse_err;
 
-  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, tStep, 0, tFinal);
-  if( rc!=SQLITE_MISUSE) goto abuse_err;
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE4_UTF8, 0, tStep, 0, tFinal);
+  if( rc!=SQLITE4_MISUSE) goto abuse_err;
 
-  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, 0, 0, tFinal);
-  if( rc!=SQLITE_MISUSE ) goto abuse_err;
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE4_UTF8, 0, 0, 0, tFinal);
+  if( rc!=SQLITE4_MISUSE ) goto abuse_err;
 
-  rc = sqlite4_create_function(db, "tx", 1, SQLITE_UTF8, 0, 0, tStep, 0);
-  if( rc!=SQLITE_MISUSE ) goto abuse_err;
+  rc = sqlite4_create_function(db, "tx", 1, SQLITE4_UTF8, 0, 0, tStep, 0);
+  if( rc!=SQLITE4_MISUSE ) goto abuse_err;
 
-  rc = sqlite4_create_function(db, "tx", -2, SQLITE_UTF8, 0, tStep, 0, 0);
-  if( rc!=SQLITE_MISUSE ) goto abuse_err;
+  rc = sqlite4_create_function(db, "tx", -2, SQLITE4_UTF8, 0, tStep, 0, 0);
+  if( rc!=SQLITE4_MISUSE ) goto abuse_err;
 
-  rc = sqlite4_create_function(db, "tx", 128, SQLITE_UTF8, 0, tStep, 0, 0);
-  if( rc!=SQLITE_MISUSE ) goto abuse_err;
+  rc = sqlite4_create_function(db, "tx", 128, SQLITE4_UTF8, 0, tStep, 0, 0);
+  if( rc!=SQLITE4_MISUSE ) goto abuse_err;
 
   rc = sqlite4_create_function(db, "funcxx"
        "_123456789_123456789_123456789_123456789_123456789"
@@ -524,23 +524,23 @@ static int abuse_create_function(
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789",
-       1, SQLITE_UTF8, 0, tStep, 0, 0);
-  if( rc!=SQLITE_MISUSE ) goto abuse_err;
+       1, SQLITE4_UTF8, 0, tStep, 0, 0);
+  if( rc!=SQLITE4_MISUSE ) goto abuse_err;
 
   /* This last function registration should actually work.  Generate
   ** a no-op function (that always returns NULL) and which has the
   ** maximum-length function name and the maximum number of parameters.
   */
-  sqlite4_limit(db, SQLITE_LIMIT_FUNCTION_ARG, 10000);
-  mxArg = sqlite4_limit(db, SQLITE_LIMIT_FUNCTION_ARG, -1);
+  sqlite4_limit(db, SQLITE4_LIMIT_FUNCTION_ARG, 10000);
+  mxArg = sqlite4_limit(db, SQLITE4_LIMIT_FUNCTION_ARG, -1);
   rc = sqlite4_create_function(db, "nullx"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789"
        "_123456789_123456789_123456789_123456789_123456789",
-       mxArg, SQLITE_UTF8, 0, tStep, 0, 0);
-  if( rc!=SQLITE_OK ) goto abuse_err;
+       mxArg, SQLITE4_UTF8, 0, tStep, 0, 0);
+  if( rc!=SQLITE4_OK ) goto abuse_err;
                                 
   return TCL_OK;
 
@@ -573,7 +573,7 @@ int sqlite4test_install_test_functions(sqlite4 *db){
   extern int Md5_Register(sqlite4*);
 
   rc = registerTestFunctions(db);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = Md5_Register(db);
   }
   return rc;

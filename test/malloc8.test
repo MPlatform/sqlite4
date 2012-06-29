@@ -20,7 +20,7 @@ source $testdir/malloc_common.tcl
 # Only run these tests if memory debugging is turned on.
 #
 if {!$MEMDEBUG} {
-   puts "Skipping malloc8 tests: not compiled with -DSQLITE_MEMDEBUG..."
+   puts "Skipping malloc8 tests: not compiled with -DSQLITE4_MEMDEBUG..."
    finish_test
    return
 }
@@ -31,7 +31,7 @@ if {!$MEMDEBUG} {
 # database.  Because we will be extracting the string as UTF-8, there
 # is a type conversion that occurs and thus an opportunity for malloc()
 # to fail and for sqlite4_value_text() to return 0 even though
-# sqlite4_value_type() returns SQLITE_TEXT.
+# sqlite4_value_type() returns SQLITE4_TEXT.
 #
 
 do_malloc_test malloc8-1 -sqlprep {

@@ -2028,7 +2028,7 @@ static void multiCursorVisitFreelist(MultiCursor *pCsr){
 /*
 ** Allocate a new cursor to read the database (the in-memory tree and all
 ** levels). If successful, set *ppCsr to point to the new cursor object
-** and return SQLITE_OK. Otherwise, set *ppCsr to NULL and return an
+** and return SQLITE4_OK. Otherwise, set *ppCsr to NULL and return an
 ** lsm error code.
 **
 ** If parameter bSystem is true, this is a system cursor. In that case

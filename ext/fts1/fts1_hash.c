@@ -21,12 +21,12 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS1 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS1 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS1 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS1 is defined).
 */
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS1)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS1)
 
 
 #include "fts1_hash.h"
@@ -366,4 +366,4 @@ void *sqlite4Fts1HashInsert(
   return 0;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS1) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS1) */

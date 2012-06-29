@@ -9,7 +9,7 @@
 ** To compile this program, first compile the SQLite library separately
 ** will full optimizations.  For example:
 **
-**     gcc -c -O6 -DSQLITE_THREADSAFE=0 sqlite4.c
+**     gcc -c -O6 -DSQLITE4_THREADSAFE=0 sqlite4.c
 **
 ** Then link against this program.  But to do optimize this program
 ** because that defeats the hi-res timer.
@@ -51,13 +51,13 @@ static void prepareAndRun(sqlite4_vfs *pInstVfs, sqlite4 *db, const char *zSql){
   iTime = sqlite4Hwtime() - iTime;
   sqlite4_instvfs_binarylog_call(pInstVfs,BINARYLOG_PREPARE_V2,iTime,rc,zSql);
 
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     int nRow = 0;
 
     sqlite4_snprintf(1023, zMessage, "sqlite4_step loop: %s", zSql);
     sqlite4_instvfs_binarylog_marker(pInstVfs, zMessage);
     iTime = sqlite4Hwtime();
-    while( (rc=sqlite4_step(pStmt))==SQLITE_ROW ){ nRow++; }
+    while( (rc=sqlite4_step(pStmt))==SQLITE4_ROW ){ nRow++; }
     iTime = sqlite4Hwtime() - iTime;
     sqlite4_instvfs_binarylog_call(pInstVfs, BINARYLOG_STEP, iTime, rc, zSql);
 
@@ -84,22 +84,22 @@ static char *readScriptFile(const char *zFile, int *pnScript){
   int rc;
   sqlite4_int64 nByte;
   char *zData = 0;
-  int flags = SQLITE_OPEN_READONLY|SQLITE_OPEN_MAIN_DB;
+  int flags = SQLITE4_OPEN_READONLY|SQLITE4_OPEN_MAIN_DB;
 
   p = (sqlite4_file *)malloc(pVfs->szOsFile);
   rc = pVfs->xOpen(pVfs, zFile, p, flags, &flags);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     goto error_out;
   }
 
   rc = p->pMethods->xFileSize(p, &nByte);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     goto close_out;
   }
 
   zData = (char *)malloc(nByte+1);
   rc = p->pMethods->xRead(p, zData, nByte, 0);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     goto close_out;
   }
   zData[nByte] = '\0';
@@ -181,9 +181,9 @@ int main(int argc, char **argv){
   pInstVfs = sqlite4_instvfs_binarylog("logging", 0, zLog, logdata);
 
   rc = sqlite4_open_v2(
-     zDb, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, "logging"
+     zDb, &db, SQLITE4_OPEN_READWRITE | SQLITE4_OPEN_CREATE, "logging"
   );
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     fprintf(stderr, "Failed to open db: %s\n", sqlite4_errmsg(db));
     return -2;
   }

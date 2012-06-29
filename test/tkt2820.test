@@ -31,7 +31,7 @@ proc test_schema_change {testid init ddl res} {
   do_test tkt2820-$testid.1 {
     set STMT [sqlite4_prepare db {SELECT * FROM sqlite_master} -1 DUMMY]
     sqlite4_step $STMT
-  } {SQLITE_ROW}
+  } {SQLITE4_ROW}
 #if {$testid==3} {execsql {PRAGMA vdbe_trace=ON}}
   do_test tkt2820-$testid.2 "catchsql [list $ddl]" \
        {1 {database table is locked}}

@@ -18,7 +18,7 @@
 #include "sqliteInt.h"
 #include "vdbeInt.h"
 
-#ifndef SQLITE_OMIT_TRACE
+#ifndef SQLITE4_OMIT_TRACE
 
 /*
 ** zSql is a zero-terminated string of UTF-8 SQL text.  Return the number of
@@ -80,7 +80,7 @@ char *sqlite4VdbeExpandSql(
 
   db = p->db;
   sqlite4StrAccumInit(&out, zBase, sizeof(zBase), 
-                      db->aLimit[SQLITE_LIMIT_LENGTH]);
+                      db->aLimit[SQLITE4_LIMIT_LENGTH]);
   out.db = db;
   out.pEnv = db->pEnv;
   if( db->vdbeExecCnt>1 ){
@@ -124,14 +124,14 @@ char *sqlite4VdbeExpandSql(
       }else if( pVar->flags & MEM_Real ){
         sqlite4XPrintf(&out, "%!.16g", pVar->r);
       }else if( pVar->flags & MEM_Str ){
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
         u8 enc = ENC(db);
-        if( enc!=SQLITE_UTF8 ){
+        if( enc!=SQLITE4_UTF8 ){
           Mem utf8;
           memset(&utf8, 0, sizeof(utf8));
           utf8.db = db;
-          sqlite4VdbeMemSetStr(&utf8, pVar->z, pVar->n, enc, SQLITE_STATIC);
-          sqlite4VdbeChangeEncoding(&utf8, SQLITE_UTF8);
+          sqlite4VdbeMemSetStr(&utf8, pVar->z, pVar->n, enc, SQLITE4_STATIC);
+          sqlite4VdbeChangeEncoding(&utf8, SQLITE4_UTF8);
           sqlite4XPrintf(&out, "'%.*q'", utf8.n, utf8.z);
           sqlite4VdbeMemRelease(&utf8);
         }else
@@ -154,14 +154,14 @@ char *sqlite4VdbeExpandSql(
   return sqlite4StrAccumFinish(&out);
 }
 
-#endif /* #ifndef SQLITE_OMIT_TRACE */
+#endif /* #ifndef SQLITE4_OMIT_TRACE */
 
 /*****************************************************************************
 ** The following code implements the data-structure explaining logic
 ** for the Vdbe.
 */
 
-#if defined(SQLITE_ENABLE_TREE_EXPLAIN)
+#if defined(SQLITE4_ENABLE_TREE_EXPLAIN)
 
 /*
 ** Allocate a new Explain object
@@ -179,7 +179,7 @@ void sqlite4ExplainBegin(Vdbe *pVdbe){
       sqlite4_free(pEnv, pVdbe->pExplain);
       pVdbe->pExplain = p;
       sqlite4StrAccumInit(&p->str, p->zBase, sizeof(p->zBase),
-                          SQLITE_MAX_LENGTH);
+                          SQLITE4_MAX_LENGTH);
       p->str.useMalloc = 2;
       p->str.pEnv = pEnv;
     }else{
@@ -274,4 +274,4 @@ void sqlite4ExplainFinish(Vdbe *pVdbe){
 const char *sqlite4VdbeExplanation(Vdbe *pVdbe){
   return (pVdbe && pVdbe->zExplain) ? pVdbe->zExplain : 0;
 }
-#endif /* defined(SQLITE_DEBUG) */
+#endif /* defined(SQLITE4_DEBUG) */

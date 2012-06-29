@@ -10,7 +10,7 @@
 ** To compile this program, first compile the SQLite library separately
 ** will full optimizations.  For example:
 **
-**     gcc -c -O6 -DSQLITE_THREADSAFE=0 sqlite4.c
+**     gcc -c -O6 -DSQLITE4_THREADSAFE=0 sqlite4.c
 **
 ** Then link against this program.  But to do optimize this program
 ** because that defeats the hi-res timer.
@@ -78,10 +78,10 @@ static void prepareAndRun(sqlite4 *db, const char *zSql){
   iElapse = sqlite4Hwtime() - iStart;
   prepTime += iElapse;
   printf("sqlite4_prepare16_v2() returns %d in %llu cycles\n", rc, iElapse);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     int nRow = 0;
     iStart = sqlite4Hwtime();
-    while( (rc=sqlite4_step(pStmt))==SQLITE_ROW ){ nRow++; }
+    while( (rc=sqlite4_step(pStmt))==SQLITE4_ROW ){ nRow++; }
     iElapse = sqlite4Hwtime() - iStart;
     runTime += iElapse;
     printf("sqlite4_step() returns %d after %d rows in %llu cycles\n",

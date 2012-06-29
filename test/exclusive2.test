@@ -123,7 +123,7 @@ do_test exclusive2-1.2.1 {
   # Make sure the pager cache is large enough to store the 
   # entire database.
   set nPage [expr [file size test.db]/1024]
-  if {$::SQLITE_DEFAULT_CACHE_SIZE < $nPage} {
+  if {$::SQLITE4_DEFAULT_CACHE_SIZE < $nPage} {
     execsql "PRAGMA cache_size = $nPage"
   }
   expr {[execsql {PRAGMA cache_size}] >= $nPage}
@@ -207,7 +207,7 @@ do_test exclusive2-2.2.1 {
   # Make sure the pager cache is large enough to store the 
   # entire database.
   set nPage [expr [file size test.db]/1024]
-  if {$::SQLITE_DEFAULT_CACHE_SIZE < $nPage} {
+  if {$::SQLITE4_DEFAULT_CACHE_SIZE < $nPage} {
     execsql "PRAGMA cache_size = $nPage"
   }
   expr {[execsql {PRAGMA cache_size}] >= $nPage}

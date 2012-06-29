@@ -18,13 +18,13 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS3 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS3 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS3 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS3 is defined).
 */
 #include "fts3Int.h"
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
 
 #include <assert.h>
 #include <stdlib.h>
@@ -380,4 +380,4 @@ void *sqlite4Fts3HashInsert(
   return 0;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3) */

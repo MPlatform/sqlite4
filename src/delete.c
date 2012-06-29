@@ -62,14 +62,14 @@ int sqlite4IsReadOnly(Parse *pParse, Table *pTab, int viewOk){
   if( ( IsVirtual(pTab) 
      && sqlite4GetVTable(pParse->db, pTab)->pMod->pModule->xUpdate==0 )
    || ( (pTab->tabFlags & TF_Readonly)!=0
-     && (pParse->db->flags & SQLITE_WriteSchema)==0
+     && (pParse->db->flags & SQLITE4_WriteSchema)==0
      && pParse->nested==0 )
   ){
     sqlite4ErrorMsg(pParse, "table %s may not be modified", pTab->zName);
     return 1;
   }
 
-#ifndef SQLITE_OMIT_VIEW
+#ifndef SQLITE4_OMIT_VIEW
   if( !viewOk && pTab->pSelect ){
     sqlite4ErrorMsg(pParse,"cannot modify %s because it is a view",pTab->zName);
     return 1;
@@ -79,7 +79,7 @@ int sqlite4IsReadOnly(Parse *pParse, Table *pTab, int viewOk){
 }
 
 
-#if !defined(SQLITE_OMIT_VIEW) && !defined(SQLITE_OMIT_TRIGGER)
+#if !defined(SQLITE4_OMIT_VIEW) && !defined(SQLITE4_OMIT_TRIGGER)
 /*
 ** Evaluate a view and store its result in an ephemeral table.  The
 ** pWhere argument is an optional WHERE clause that restricts the
@@ -116,9 +116,9 @@ void sqlite4MaterializeView(
   sqlite4Select(pParse, pDup, &dest);
   sqlite4SelectDelete(db, pDup);
 }
-#endif /* !defined(SQLITE_OMIT_VIEW) && !defined(SQLITE_OMIT_TRIGGER) */
+#endif /* !defined(SQLITE4_OMIT_VIEW) && !defined(SQLITE4_OMIT_TRIGGER) */
 
-#if defined(SQLITE_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE_OMIT_SUBQUERY)
+#if defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE4_OMIT_SUBQUERY)
 /*
 ** Generate an expression tree to implement the WHERE, ORDER BY,
 ** and LIMIT/OFFSET portion of DELETE and UPDATE statements.
@@ -209,7 +209,7 @@ limit_where_cleanup_2:
   sqlite4ExprDelete(pParse->db, pOffset);
   return 0;
 }
-#endif /* defined(SQLITE_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE_OMIT_SUBQUERY) */
+#endif /* defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE4_OMIT_SUBQUERY) */
 
 /*
 ** Generate code for a DELETE FROM statement.
@@ -264,9 +264,9 @@ void sqlite4DeleteFrom(
   assert( !IsView(pTab) || pTab->pIndex==0 );
 
   /* Invoke the authorization callback */
-  rcauth = sqlite4AuthCheck(pParse, SQLITE_DELETE, pTab->zName, 0, zDb);
-  assert( rcauth==SQLITE_OK || rcauth==SQLITE_DENY || rcauth==SQLITE_IGNORE );
-  if( rcauth==SQLITE_DENY ){
+  rcauth = sqlite4AuthCheck(pParse, SQLITE4_DELETE, pTab->zName, 0, zDb);
+  assert( rcauth==SQLITE4_OK || rcauth==SQLITE4_DENY || rcauth==SQLITE4_IGNORE );
+  if( rcauth==SQLITE4_DENY ){
     goto delete_from_cleanup;
   }
 
@@ -302,24 +302,24 @@ void sqlite4DeleteFrom(
     goto delete_from_cleanup;
   }
 
-#ifndef SQLITE_OMIT_TRUNCATE_OPTIMIZATION
+#ifndef SQLITE4_OMIT_TRUNCATE_OPTIMIZATION
   /* Special case: A DELETE without a WHERE clause deletes everything.
   ** It is easier just to erase the whole table. Prior to version 3.6.5,
   ** this optimization caused the row change count (the value returned by 
   ** API function sqlite4_count_changes) to be set incorrectly.  */
-  if( rcauth==SQLITE_OK && pWhere==0 && !pTrigger && !IsVirtual(pTab) 
+  if( rcauth==SQLITE4_OK && pWhere==0 && !pTrigger && !IsVirtual(pTab) 
    && 0==sqlite4FkRequired(pParse, pTab, 0)
   ){
     Index *pIdx;                  /* For looping over indices of the table */
     for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
       assert( pIdx->pSchema==pTab->pSchema );
       sqlite4VdbeAddOp2(v, OP_Clear, pIdx->tnum, iDb);
-      if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+      if( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){
         sqlite4VdbeChangeP5(v, OPFLAG_NCHANGE);
       }
     }
   }else
-#endif /* SQLITE_OMIT_TRUNCATE_OPTIMIZATION */
+#endif /* SQLITE4_OMIT_TRUNCATE_OPTIMIZATION */
   /* The usual case: There is a WHERE clause so we have to scan through
   ** the table and pick which records to delete.
   */
@@ -356,7 +356,7 @@ void sqlite4DeleteFrom(
     addrTop = sqlite4VdbeAddOp3(v, OP_RowSetRead, regSet, 0, regKey);
 
     /* Delete the row */
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
     if( IsVirtual(pTab) ){
       const char *pVTab = (const char *)sqlite4GetVTable(db, pTab);
       sqlite4VtabMakeWritable(pParse, pTab);

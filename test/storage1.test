@@ -51,7 +51,7 @@ do_test storage1-1.4 {
   storage_close_cursor $c1
   storage_close $x
   set res
-} {SQLITE_INEXACT 0123456789ABCDEF FEDCBA9876543210}
+} {SQLITE4_INEXACT 0123456789ABCDEF FEDCBA9876543210}
 do_test storage1-1.5 {
   set x [storage_open :memory:]
   storage_begin $x 2
@@ -69,7 +69,7 @@ do_test storage1-1.5 {
   storage_close_cursor $c1
   storage_close $x
   set res
-} {SQLITE_INEXACT 014557 EF01 SQLITE_OK 012345 ABCD SQLITE_NOTFOUND}
+} {SQLITE4_INEXACT 014557 EF01 SQLITE4_OK 012345 ABCD SQLITE4_NOTFOUND}
 do_test storage1-1.6 {
   set x [storage_open :memory:]
   storage_begin $x 2
@@ -97,6 +97,6 @@ do_test storage1-1.6 {
   storage_close_cursor $c2
   storage_close $x
   set res
-} {SQLITE_INEXACT 012345 EEAA SQLITE_OK 013456 DEAF SQLITE_OK 014567 EF01 SQLITE_OK 012345 EEAA}
+} {SQLITE4_INEXACT 012345 EEAA SQLITE4_OK 013456 DEAF SQLITE4_OK 014567 EF01 SQLITE4_OK 012345 EEAA}
 
 finish_test

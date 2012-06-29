@@ -17,13 +17,13 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS3 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS3 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS3 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS3 is defined).
 */
 #include "fts3Int.h"
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
 
 #include <assert.h>
 #include <stdlib.h>
@@ -65,7 +65,7 @@ static int simpleCreate(
   simple_tokenizer *t;
 
   t = (simple_tokenizer *) sqlite4_malloc(sizeof(*t));
-  if( t==NULL ) return SQLITE_NOMEM;
+  if( t==NULL ) return SQLITE4_NOMEM;
   memset(t, 0, sizeof(*t));
 
   /* TODO(shess) Delimiters need to remain the same from run to run,
@@ -80,7 +80,7 @@ static int simpleCreate(
       /* We explicitly don't support UTF-8 delimiters for now. */
       if( ch>=0x80 ){
         sqlite4_free(t);
-        return SQLITE_ERROR;
+        return SQLITE4_ERROR;
       }
       t->delim[ch] = 1;
     }
@@ -93,7 +93,7 @@ static int simpleCreate(
   }
 
   *ppTokenizer = &t->base;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -101,7 +101,7 @@ static int simpleCreate(
 */
 static int simpleDestroy(sqlite4_tokenizer *pTokenizer){
   sqlite4_free(pTokenizer);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -120,7 +120,7 @@ static int simpleOpen(
   UNUSED_PARAMETER(pTokenizer);
 
   c = (simple_tokenizer_cursor *) sqlite4_malloc(sizeof(*c));
-  if( c==NULL ) return SQLITE_NOMEM;
+  if( c==NULL ) return SQLITE4_NOMEM;
 
   c->pInput = pInput;
   if( pInput==0 ){
@@ -136,7 +136,7 @@ static int simpleOpen(
   c->nTokenAllocated = 0;
 
   *ppCursor = &c->base;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -147,7 +147,7 @@ static int simpleClose(sqlite4_tokenizer_cursor *pCursor){
   simple_tokenizer_cursor *c = (simple_tokenizer_cursor *) pCursor;
   sqlite4_free(c->pToken);
   sqlite4_free(c);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -186,7 +186,7 @@ static int simpleNext(
         char *pNew;
         c->nTokenAllocated = n+20;
         pNew = sqlite4_realloc(c->pToken, c->nTokenAllocated);
-        if( !pNew ) return SQLITE_NOMEM;
+        if( !pNew ) return SQLITE4_NOMEM;
         c->pToken = pNew;
       }
       for(i=0; i<n; i++){
@@ -202,10 +202,10 @@ static int simpleNext(
       *piEndOffset = c->iOffset;
       *piPosition = c->iToken++;
 
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
   }
-  return SQLITE_DONE;
+  return SQLITE4_DONE;
 }
 
 /*
@@ -230,4 +230,4 @@ void sqlite4Fts3SimpleTokenizerModule(
   *ppModule = &simpleTokenizerModule;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3) */

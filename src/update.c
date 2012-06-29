@@ -14,7 +14,7 @@
 */
 #include "sqliteInt.h"
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
 /* Forward declaration */
 static void updateVirtualTable(
   Parse *pParse,       /* The parsing context */
@@ -26,7 +26,7 @@ static void updateVirtualTable(
   Expr *pWhere,        /* WHERE clause of the UPDATE statement */
   int onError          /* ON CONFLICT strategy */
 );
-#endif /* SQLITE_OMIT_VIRTUALTABLE */
+#endif /* SQLITE4_OMIT_VIRTUALTABLE */
 
 /*
 ** The most recently coded instruction was an OP_Column to retrieve the
@@ -71,8 +71,8 @@ void sqlite4ColumnDefault(Vdbe *v, Table *pTab, int i, int iReg){
     if( pValue ){
       sqlite4VdbeChangeP4(v, -1, (const char *)pValue, P4_MEM);
     }
-#ifndef SQLITE_OMIT_FLOATING_POINT
-    if( iReg>=0 && pTab->aCol[i].affinity==SQLITE_AFF_REAL ){
+#ifndef SQLITE4_OMIT_FLOATING_POINT
+    if( iReg>=0 && pTab->aCol[i].affinity==SQLITE4_AFF_REAL ){
       sqlite4VdbeAddOp1(v, OP_RealAffinity, iReg);
     }
 #endif
@@ -112,7 +112,7 @@ void sqlite4Update(
   int okOnePass;         /* True for one-pass algorithm without the FIFO */
   int hasFK;             /* True if foreign key processing is required */
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   int isView;            /* True when updating a view (INSTEAD OF trigger) */
   Trigger *pTrigger;     /* List of triggers on pTab, if required */
   int tmask;             /* Mask of TRIGGER_BEFORE|TRIGGER_AFTER */
@@ -156,7 +156,7 @@ void sqlite4Update(
   /* Figure out if we have any triggers and if the table being
   ** updated is a view.
   */
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
   pTrigger = sqlite4TriggersExist(pParse, pTab, TK_UPDATE, pChanges, &tmask);
   isView = pTab->pSelect!=0;
   assert( pTrigger || tmask==0 );
@@ -165,7 +165,7 @@ void sqlite4Update(
 # define isView 0
 # define tmask 0
 #endif
-#ifdef SQLITE_OMIT_VIEW
+#ifdef SQLITE4_OMIT_VIEW
 # undef isView
 # define isView 0
 #endif
@@ -228,14 +228,14 @@ void sqlite4Update(
       }
     }
 
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
     {
       int rc;
-      rc = sqlite4AuthCheck(pParse, SQLITE_UPDATE, pTab->zName,
+      rc = sqlite4AuthCheck(pParse, SQLITE4_UPDATE, pTab->zName,
                            pTab->aCol[j].zName, db->aDb[iDb].zName);
-      if( rc==SQLITE_DENY ){
+      if( rc==SQLITE4_DENY ){
         goto update_cleanup;
-      }else if( rc==SQLITE_IGNORE ){
+      }else if( rc==SQLITE4_IGNORE ){
         aXRef[j] = -1;
       }
     }
@@ -248,7 +248,7 @@ void sqlite4Update(
   if( pParse->nested==0 ) sqlite4VdbeCountChanges(v);
   sqlite4BeginWriteOperation(pParse, 1, iDb);
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   /* TODO: This is currently broken */
   /* Virtual tables must be handled separately */
   if( IsVirtual(pTab) ){
@@ -316,7 +316,7 @@ void sqlite4Update(
   /* If we are trying to update a view, realize that view into
   ** a ephemeral table.
   */
-#if !defined(SQLITE_OMIT_VIEW) && !defined(SQLITE_OMIT_TRIGGER)
+#if !defined(SQLITE4_OMIT_VIEW) && !defined(SQLITE4_OMIT_TRIGGER)
   if( isView ){
     sqlite4MaterializeView(pParse, pTab, pWhere, iCur);
   }
@@ -571,7 +571,7 @@ update_cleanup:
  #undef pTrigger
 #endif
 
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
 /*
 ** Generate code for an UPDATE of a virtual table.
 **
@@ -664,4 +664,4 @@ static void updateVirtualTable(
   /* Cleanup */
   sqlite4SelectDelete(db, pSelect);  
 }
-#endif /* SQLITE_OMIT_VIRTUALTABLE */
+#endif /* SQLITE4_OMIT_VIRTUALTABLE */

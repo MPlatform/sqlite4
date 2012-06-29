@@ -125,4 +125,3 @@ void test_mc(
     }
   }
 }
-

@@ -16,43 +16,43 @@
 */
 #include "sqliteInt.h"
 
-#ifdef SQLITE_ENABLE_FTS3
+#ifdef SQLITE4_ENABLE_FTS3
 # include "fts3.h"
 #endif
-#ifdef SQLITE_ENABLE_RTREE
+#ifdef SQLITE4_ENABLE_RTREE
 # include "rtree.h"
 #endif
-#ifdef SQLITE_ENABLE_ICU
+#ifdef SQLITE4_ENABLE_ICU
 # include "sqliteicu.h"
 #endif
 
 /*
-** Dummy function used as a unique symbol for SQLITE_DYNAMIC
+** Dummy function used as a unique symbol for SQLITE4_DYNAMIC
 */
 void sqlite4_dynamic(void *p){ (void)p; }
 
-#ifndef SQLITE_AMALGAMATION
+#ifndef SQLITE4_AMALGAMATION
 /* IMPLEMENTATION-OF: R-46656-45156 The sqlite4_version[] string constant
-** contains the text of SQLITE_VERSION macro. 
+** contains the text of SQLITE4_VERSION macro. 
 */
-const char sqlite4_version[] = SQLITE_VERSION;
+const char sqlite4_version[] = SQLITE4_VERSION;
 #endif
 
 /* IMPLEMENTATION-OF: R-53536-42575 The sqlite4_libversion() function returns
 ** a pointer to the to the sqlite4_version[] string constant. 
 */
-const char *sqlite4_libversion(void){ return SQLITE_VERSION; }
+const char *sqlite4_libversion(void){ return SQLITE4_VERSION; }
 
 /* IMPLEMENTATION-OF: R-63124-39300 The sqlite4_sourceid() function returns a
 ** pointer to a string constant whose value is the same as the
-** SQLITE_SOURCE_ID C preprocessor macro. 
+** SQLITE4_SOURCE_ID C preprocessor macro. 
 */
-const char *sqlite4_sourceid(void){ return SQLITE_SOURCE_ID; }
+const char *sqlite4_sourceid(void){ return SQLITE4_SOURCE_ID; }
 
 /* IMPLEMENTATION-OF: R-35210-63508 The sqlite4_libversion_number() function
-** returns an integer equal to SQLITE_VERSION_NUMBER.
+** returns an integer equal to SQLITE4_VERSION_NUMBER.
 */
-int sqlite4_libversion_number(void){ return SQLITE_VERSION_NUMBER; }
+int sqlite4_libversion_number(void){ return SQLITE4_VERSION_NUMBER; }
 
 /* Return the thread-safety setting.
 */
@@ -61,10 +61,10 @@ int sqlite4_threadsafe(sqlite4_env *pEnv){
   return pEnv->bCoreMutex + pEnv->bFullMutex;
 }
 
-#if !defined(SQLITE_OMIT_TRACE) && defined(SQLITE_ENABLE_IOTRACE)
+#if !defined(SQLITE4_OMIT_TRACE) && defined(SQLITE4_ENABLE_IOTRACE)
 /*
 ** If the following function pointer is not NULL and if
-** SQLITE_ENABLE_IOTRACE is enabled, then messages describing
+** SQLITE4_ENABLE_IOTRACE is enabled, then messages describing
 ** I/O active are written using this function.  These messages
 ** are intended for debugging activity only.
 */
@@ -75,7 +75,7 @@ void (*sqlite4IoTrace)(const char*, ...) = 0;
 ** Initialize SQLite.  
 **
 ** This routine must be called to initialize the run-time environment
-** As long as you do not compile with SQLITE_OMIT_AUTOINIT
+** As long as you do not compile with SQLITE4_OMIT_AUTOINIT
 ** this routine will be called automatically by key routines such as
 ** sqlite4_open().  
 **
@@ -98,7 +98,7 @@ int sqlite4_initialize(sqlite4_env *pEnv){
   ** must be complete.  So isInit must not be set until the very end
   ** of this routine.
   */
-  if( pEnv->isInit ) return SQLITE_OK;
+  if( pEnv->isInit ) return SQLITE4_OK;
 
   /* Initialize the mutex subsystem
   */
@@ -116,14 +116,14 @@ int sqlite4_initialize(sqlite4_env *pEnv){
   /* Create required mutexes
   */
   if( pEnv->bCoreMutex ){
-    pEnv->pMemMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
-    pEnv->pPrngMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
-    pEnv->pFactoryMutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_FAST);
+    pEnv->pMemMutex = sqlite4MutexAlloc(pEnv, SQLITE4_MUTEX_FAST);
+    pEnv->pPrngMutex = sqlite4MutexAlloc(pEnv, SQLITE4_MUTEX_FAST);
+    pEnv->pFactoryMutex = sqlite4MutexAlloc(pEnv, SQLITE4_MUTEX_FAST);
     if( pEnv->pMemMutex==0
      || pEnv->pPrngMutex==0
      || pEnv->pFactoryMutex==0
     ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }
   }else{
     pEnv->pMemMutex = 0;
@@ -134,7 +134,7 @@ int sqlite4_initialize(sqlite4_env *pEnv){
   sqlite4OsInit(pEnv);
 
   /* Register global functions */
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     sqlite4RegisterGlobalFunctions(pEnv);
   }
 
@@ -144,9 +144,9 @@ int sqlite4_initialize(sqlite4_env *pEnv){
   ** reason.  So we run it once during initialization.
   */
 #ifndef NDEBUG
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
   /* This section of code's only "output" is via assert() statements. */
-  if ( rc==SQLITE_OK ){
+  if ( rc==SQLITE4_OK ){
     u64 x = (((u64)1)<<63)-1;
     double y;
     assert(sizeof(x)==8);
@@ -185,7 +185,7 @@ int sqlite4_shutdown(sqlite4_env *pEnv){
     sqlite4MallocEnd(pEnv);
     pEnv->isInit = 0;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -199,21 +199,21 @@ int sqlite4_env_size(void){ return sizeof(sqlite4_env); }
 */
 int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
   va_list ap;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
 
   if( pEnv==0 ) pEnv = sqlite4_env_default();
 
   va_start(ap, op);
   switch( op ){
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_INIT, template);
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_INIT, template);
     **
     ** Turn bulk memory into a new sqlite4_env object.  The template is
     ** a prior sqlite4_env that is used as a template in initializing the
     ** new sqlite4_env object.  The size of the bulk memory must be at
     ** least as many bytes as returned from sqlite4_env_size().
     */
-    case SQLITE_ENVCONFIG_INIT: {
+    case SQLITE4_ENVCONFIG_INIT: {
       /* Disable all mutexing */
       sqlite4_env *pTemplate = va_arg(ap, sqlite4_env*);
       int n = pTemplate->nByte;
@@ -227,71 +227,71 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     /* Mutex configuration options are only available in a threadsafe
     ** compile. 
     */
-#if defined(SQLITE_THREADSAFE) && SQLITE_THREADSAFE>0
+#if defined(SQLITE4_THREADSAFE) && SQLITE4_THREADSAFE>0
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_SINGLETHREAD);
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_SINGLETHREAD);
     **
     ** Configure this environment for a single-threaded application.
     */
-    case SQLITE_ENVCONFIG_SINGLETHREAD: {
+    case SQLITE4_ENVCONFIG_SINGLETHREAD: {
       /* Disable all mutexing */
-      if( pEnv->isInit ){ rc = SQLITE_MISUSE; break; }
+      if( pEnv->isInit ){ rc = SQLITE4_MISUSE; break; }
       pEnv->bCoreMutex = 0;
       pEnv->bFullMutex = 0;
       break;
     }
 
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MULTITHREAD);
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_MULTITHREAD);
     **
     ** Configure this environment for a multi-threaded application where
     ** the same database connection is never used by more than a single
     ** thread at a time.
     */
-    case SQLITE_ENVCONFIG_MULTITHREAD: {
+    case SQLITE4_ENVCONFIG_MULTITHREAD: {
       /* Disable mutexing of database connections */
       /* Enable mutexing of core data structures */
-      if( pEnv->isInit ){ rc = SQLITE_MISUSE; break; }
+      if( pEnv->isInit ){ rc = SQLITE4_MISUSE; break; }
       pEnv->bCoreMutex = 1;
       pEnv->bFullMutex = 0;
       break;
     }
 
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MULTITHREAD);
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_MULTITHREAD);
     **
     ** Configure this environment for an unrestricted multi-threaded
     ** application where any thread can do whatever it wants with any
     ** database connection at any time.
     */
-    case SQLITE_ENVCONFIG_SERIALIZED: {
+    case SQLITE4_ENVCONFIG_SERIALIZED: {
       /* Enable all mutexing */
-      if( pEnv->isInit ){ rc = SQLITE_MISUSE; break; }
+      if( pEnv->isInit ){ rc = SQLITE4_MISUSE; break; }
       pEnv->bCoreMutex = 1;
       pEnv->bFullMutex = 1;
       break;
     }
 
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_MUTEXT, sqlite4_mutex_methods*)
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_MUTEXT, sqlite4_mutex_methods*)
     **
     ** Configure this environment to use the mutex routines specified by the
     ** argument.
     */
-    case SQLITE_ENVCONFIG_MUTEX: {
+    case SQLITE4_ENVCONFIG_MUTEX: {
       /* Specify an alternative mutex implementation */
-      if( pEnv->isInit ){ rc = SQLITE_MISUSE; break; }
+      if( pEnv->isInit ){ rc = SQLITE4_MISUSE; break; }
       pEnv->mutex = *va_arg(ap, sqlite4_mutex_methods*);
       break;
     }
 
     /*
-    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_GETMUTEX, sqlite4_mutex_methods*)
+    ** sqlite4_env_config(p, SQLITE4_ENVCONFIG_GETMUTEX, sqlite4_mutex_methods*)
     **
     ** Copy the mutex routines in use by this environment into the structure
     ** given in the argument.
     */
-    case SQLITE_ENVCONFIG_GETMUTEX: {
+    case SQLITE4_ENVCONFIG_GETMUTEX: {
       /* Retrieve the current mutex implementation */
       *va_arg(ap, sqlite4_mutex_methods*) = pEnv->mutex;
       break;
@@ -300,43 +300,43 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
 
 
     /*
-    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_MALLOC, sqlite4_mem_methods*)
+    ** sqlite4_env_config(p, SQLITE4_ENVCONFIG_MALLOC, sqlite4_mem_methods*)
     **
     ** Set the memory allocation routines to be used by this environment.
     */
-    case SQLITE_ENVCONFIG_MALLOC: {
+    case SQLITE4_ENVCONFIG_MALLOC: {
       /* Specify an alternative malloc implementation */
-      if( pEnv->isInit ) return SQLITE_MISUSE;
+      if( pEnv->isInit ) return SQLITE4_MISUSE;
       pEnv->m = *va_arg(ap, sqlite4_mem_methods*);
       break;
     }
 
     /*
-    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_GETMALLOC, sqlite4_mem_methods*)
+    ** sqlite4_env_config(p, SQLITE4_ENVCONFIG_GETMALLOC, sqlite4_mem_methods*)
     **
     ** Copy the memory allocation routines in use by this environment
     ** into the structure given in the argument.
     */
-    case SQLITE_ENVCONFIG_GETMALLOC: {
+    case SQLITE4_ENVCONFIG_GETMALLOC: {
       /* Retrieve the current malloc() implementation */
       if( pEnv->m.xMalloc==0 ) sqlite4MemSetDefault(pEnv);
       *va_arg(ap, sqlite4_mem_methods*) = pEnv->m;
       break;
     }
 
-    /* sqlite4_env_config(p, SQLITE_ENVCONFIG_MEMSTAT, int onoff);
+    /* sqlite4_env_config(p, SQLITE4_ENVCONFIG_MEMSTAT, int onoff);
     **
     ** Enable or disable collection of memory usage statistics according to
     ** the onoff parameter.  
     */
-    case SQLITE_ENVCONFIG_MEMSTATUS: {
+    case SQLITE4_ENVCONFIG_MEMSTATUS: {
       /* Enable or disable the malloc status collection */
       pEnv->bMemstat = va_arg(ap, int);
       break;
     }
 
     /*
-    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_LOOKASIDE, size, count);
+    ** sqlite4_env_config(p, SQLITE4_ENVCONFIG_LOOKASIDE, size, count);
     **
     ** Set the default lookaside memory settings for all subsequent
     ** database connections constructed in this environment.  The size
@@ -344,19 +344,19 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     ** count parameter is the number of lookaside buffers.  Set both
     ** to zero to disable lookaside memory.
     */
-    case SQLITE_ENVCONFIG_LOOKASIDE: {
+    case SQLITE4_ENVCONFIG_LOOKASIDE: {
       pEnv->szLookaside = va_arg(ap, int);
       pEnv->nLookaside = va_arg(ap, int);
       break;
     }
     
     /*
-    ** sqlite4_env_config(p, SQLITE_ENVCONFIG_LOG, xOutput, pArg);
+    ** sqlite4_env_config(p, SQLITE4_ENVCONFIG_LOG, xOutput, pArg);
     **
     ** Set the log function that is called in response to sqlite4_log()
     ** calls.
     */
-    case SQLITE_ENVCONFIG_LOG: {
+    case SQLITE4_ENVCONFIG_LOG: {
       /* MSVC is picky about pulling func ptrs from va lists.
       ** http://support.microsoft.com/kb/47961
       ** pEnv->xLog = va_arg(ap, void(*)(void*,int,const char*));
@@ -368,17 +368,17 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     }
 
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_PUSH, zName, xFactory);
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_KVSTORE_PUSH, zName, xFactory);
     **
     ** Push a new KVStore factory onto the factory stack.  The new factory
     ** takes priority over prior factories.
     */
-    case SQLITE_ENVCONFIG_KVSTORE_PUSH: {
+    case SQLITE4_ENVCONFIG_KVSTORE_PUSH: {
       const char *zName = va_arg(ap, const char*);
       int nName = sqlite4Strlen30(zName);
       KVFactory *pMkr = sqlite4_malloc(pEnv, sizeof(*pMkr)+nName+1);
       char *z;
-      if( pMkr==0 ) return SQLITE_NOMEM;
+      if( pMkr==0 ) return SQLITE4_NOMEM;
       z = (char*)&pMkr[1];
       memcpy(z, zName, nName+1);
       memset(pMkr, 0, sizeof(*pMkr));
@@ -394,18 +394,18 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     }
 
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_POP, zName, &pxFact);
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_KVSTORE_POP, zName, &pxFact);
     **
     ** Remove a KVStore factory from the stack.
     */
     /*
-    ** sqlite4_env_config(pEnv, SQLITE_ENVCONFIG_KVSTORE_GET, zName, &pxFact);
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_KVSTORE_GET, zName, &pxFact);
     **
     ** Get the current factory pointer with the given name but leave the
     ** factory on the stack.
     */
-    case SQLITE_ENVCONFIG_KVSTORE_POP:
-    case SQLITE_ENVCONFIG_KVSTORE_GET: {
+    case SQLITE4_ENVCONFIG_KVSTORE_POP:
+    case SQLITE4_ENVCONFIG_KVSTORE_GET: {
       const char *zName = va_arg(ap, const char*);
       KVFactory *pMkr, **ppPrev;
       int (**pxFact)(sqlite4_env*,KVStore**,const char*,unsigned);
@@ -421,7 +421,7 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
       }
       if( pMkr ){
         *pxFact = pMkr->xFactory;
-        if( op==SQLITE_ENVCONFIG_KVSTORE_POP && pMkr->isPerm==0 ){
+        if( op==SQLITE4_ENVCONFIG_KVSTORE_POP && pMkr->isPerm==0 ){
           *ppPrev = pMkr->pNext;
           sqlite4_free(pEnv, pMkr);
         }
@@ -432,7 +432,7 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
 
 
     default: {
-      rc = SQLITE_ERROR;
+      rc = SQLITE4_ERROR;
       break;
     }
   }
@@ -442,8 +442,8 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
 
 /*
 ** Set up the lookaside buffers for a database connection.
-** Return SQLITE_OK on success.  
-** If lookaside is already active, return SQLITE_BUSY.
+** Return SQLITE4_OK on success.  
+** If lookaside is already active, return SQLITE4_BUSY.
 **
 ** The sz parameter is the number of bytes in each lookaside slot.
 ** The cnt parameter is the number of slots.  If pStart is NULL the
@@ -454,7 +454,7 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
 static int setupLookaside(sqlite4 *db, void *pBuf, int sz, int cnt){
   void *pStart;
   if( db->lookaside.nOut ){
-    return SQLITE_BUSY;
+    return SQLITE4_BUSY;
   }
   /* Free any existing lookaside buffer for this handle before
   ** allocating a new one so we don't have to have space for 
@@ -501,7 +501,7 @@ static int setupLookaside(sqlite4 *db, void *pBuf, int sz, int cnt){
     db->lookaside.bEnabled = 0;
     db->lookaside.bMalloced = 0;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -518,7 +518,7 @@ sqlite4_mutex *sqlite4_db_mutex(sqlite4 *db){
 int sqlite4_db_release_memory(sqlite4 *db){
   sqlite4_mutex_enter(db->mutex);
   sqlite4_mutex_leave(db->mutex);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -529,7 +529,7 @@ int sqlite4_db_config(sqlite4 *db, int op, ...){
   int rc;
   va_start(ap, op);
   switch( op ){
-    case SQLITE_DBCONFIG_LOOKASIDE: {
+    case SQLITE4_DBCONFIG_LOOKASIDE: {
       void *pBuf = va_arg(ap, void*); /* IMP: R-26835-10964 */
       int sz = va_arg(ap, int);       /* IMP: R-47871-25994 */
       int cnt = va_arg(ap, int);      /* IMP: R-04460-53386 */
@@ -541,11 +541,11 @@ int sqlite4_db_config(sqlite4 *db, int op, ...){
         int op;      /* The opcode */
         u32 mask;    /* Mask of the bit in sqlite4.flags to set/clear */
       } aFlagOp[] = {
-        { SQLITE_DBCONFIG_ENABLE_FKEY,    SQLITE_ForeignKeys    },
-        { SQLITE_DBCONFIG_ENABLE_TRIGGER, SQLITE_EnableTrigger  },
+        { SQLITE4_DBCONFIG_ENABLE_FKEY,    SQLITE4_ForeignKeys    },
+        { SQLITE4_DBCONFIG_ENABLE_TRIGGER, SQLITE4_EnableTrigger  },
       };
       unsigned int i;
-      rc = SQLITE_ERROR; /* IMP: R-42790-23372 */
+      rc = SQLITE4_ERROR; /* IMP: R-42790-23372 */
       for(i=0; i<ArraySize(aFlagOp); i++){
         if( aFlagOp[i].op==op ){
           int onoff = va_arg(ap, int);
@@ -562,7 +562,7 @@ int sqlite4_db_config(sqlite4 *db, int op, ...){
           if( pRes ){
             *pRes = (db->flags & aFlagOp[i].mask)!=0;
           }
-          rc = SQLITE_OK;
+          rc = SQLITE4_OK;
           break;
         }
       }
@@ -707,7 +707,7 @@ void sqlite4CloseSavepoints(sqlite4 *db){
 ** Invoke the destructor function associated with FuncDef p, if any. Except,
 ** if this is not the last copy of the function, do not invoke it. Multiple
 ** copies of a single function are created when create_function() is called
-** with SQLITE_ANY as the encoding.
+** with SQLITE4_ANY as the encoding.
 */
 static void functionDestroy(sqlite4 *db, FuncDef *p){
   FuncDestructor *pDestructor = p->pDestructor;
@@ -728,10 +728,10 @@ int sqlite4_close(sqlite4 *db){
   int j;
 
   if( !db ){
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
   if( !sqlite4SafetyCheckSickOrOk(db) ){
-    return SQLITE_MISUSE_BKPT;
+    return SQLITE4_MISUSE_BKPT;
   }
   sqlite4_mutex_enter(db->mutex);
 
@@ -747,12 +747,12 @@ int sqlite4_close(sqlite4 *db){
   */
   sqlite4VtabRollback(db);
 
-  /* If there are any outstanding VMs, return SQLITE_BUSY. */
+  /* If there are any outstanding VMs, return SQLITE4_BUSY. */
   if( db->pVdbe ){
-    sqlite4Error(db, SQLITE_BUSY, 
+    sqlite4Error(db, SQLITE4_BUSY, 
         "unable to close due to unfinalised statements");
     sqlite4_mutex_leave(db->mutex);
-    return SQLITE_BUSY;
+    return SQLITE4_BUSY;
   }
   assert( sqlite4SafetyCheckSickOrOk(db) );
 
@@ -801,7 +801,7 @@ int sqlite4_close(sqlite4 *db){
     sqlite4DbFree(db, pColl);
   }
   sqlite4HashClear(&db->aCollSeq);
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   for(i=sqliteHashFirst(&db->aModule); i; i=sqliteHashNext(i)){
     Module *pMod = (Module *)sqliteHashData(i);
     if( pMod->xDestroy ){
@@ -812,12 +812,12 @@ int sqlite4_close(sqlite4 *db){
   sqlite4HashClear(&db->aModule);
 #endif
 
-  sqlite4Error(db, SQLITE_OK, 0); /* Deallocates any cached error strings. */
+  sqlite4Error(db, SQLITE4_OK, 0); /* Deallocates any cached error strings. */
   if( db->pErr ){
     sqlite4ValueFree(db->pErr);
   }
 
-  db->magic = SQLITE_MAGIC_ERROR;
+  db->magic = SQLITE4_MAGIC_ERROR;
 
   /* The temp-database schema is allocated differently from the other schema
   ** objects (using sqliteMalloc() directly, instead of sqlite4BTreeSchema()).
@@ -827,14 +827,14 @@ int sqlite4_close(sqlite4 *db){
   */
   sqlite4DbFree(db, db->aDb[1].pSchema);
   sqlite4_mutex_leave(db->mutex);
-  db->magic = SQLITE_MAGIC_CLOSED;
+  db->magic = SQLITE4_MAGIC_CLOSED;
   sqlite4_mutex_free(db->mutex);
   assert( db->lookaside.nOut==0 );  /* Fails on a lookaside memory leak */
   if( db->lookaside.bMalloced ){
     sqlite4_free(db->pEnv, db->lookaside.pStart);
   }
   sqlite4_free(db->pEnv, db);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -843,33 +843,33 @@ int sqlite4_close(sqlite4 *db){
 */
 const char *sqlite4ErrStr(int rc){
   static const char* const aMsg[] = {
-    /* SQLITE_OK          */ "not an error",
-    /* SQLITE_ERROR       */ "SQL logic error or missing database",
-    /* SQLITE_INTERNAL    */ 0,
-    /* SQLITE_PERM        */ "access permission denied",
-    /* SQLITE_ABORT       */ "callback requested query abort",
-    /* SQLITE_BUSY        */ "database is locked",
-    /* SQLITE_LOCKED      */ "database table is locked",
-    /* SQLITE_NOMEM       */ "out of memory",
-    /* SQLITE_READONLY    */ "attempt to write a readonly database",
-    /* SQLITE_INTERRUPT   */ "interrupted",
-    /* SQLITE_IOERR       */ "disk I/O error",
-    /* SQLITE_CORRUPT     */ "database disk image is malformed",
-    /* SQLITE_NOTFOUND    */ "unknown operation",
-    /* SQLITE_FULL        */ "database or disk is full",
-    /* SQLITE_CANTOPEN    */ "unable to open database file",
-    /* SQLITE_PROTOCOL    */ "locking protocol",
-    /* SQLITE_EMPTY       */ "table contains no data",
-    /* SQLITE_SCHEMA      */ "database schema has changed",
-    /* SQLITE_TOOBIG      */ "string or blob too big",
-    /* SQLITE_CONSTRAINT  */ "constraint failed",
-    /* SQLITE_MISMATCH    */ "datatype mismatch",
-    /* SQLITE_MISUSE      */ "library routine called out of sequence",
-    /* SQLITE_NOLFS       */ "large file support is disabled",
-    /* SQLITE_AUTH        */ "authorization denied",
-    /* SQLITE_FORMAT      */ "auxiliary database format error",
-    /* SQLITE_RANGE       */ "bind or column index out of range",
-    /* SQLITE_NOTADB      */ "file is encrypted or is not a database",
+    /* SQLITE4_OK          */ "not an error",
+    /* SQLITE4_ERROR       */ "SQL logic error or missing database",
+    /* SQLITE4_INTERNAL    */ 0,
+    /* SQLITE4_PERM        */ "access permission denied",
+    /* SQLITE4_ABORT       */ "callback requested query abort",
+    /* SQLITE4_BUSY        */ "database is locked",
+    /* SQLITE4_LOCKED      */ "database table is locked",
+    /* SQLITE4_NOMEM       */ "out of memory",
+    /* SQLITE4_READONLY    */ "attempt to write a readonly database",
+    /* SQLITE4_INTERRUPT   */ "interrupted",
+    /* SQLITE4_IOERR       */ "disk I/O error",
+    /* SQLITE4_CORRUPT     */ "database disk image is malformed",
+    /* SQLITE4_NOTFOUND    */ "unknown operation",
+    /* SQLITE4_FULL        */ "database or disk is full",
+    /* SQLITE4_CANTOPEN    */ "unable to open database file",
+    /* SQLITE4_PROTOCOL    */ "locking protocol",
+    /* SQLITE4_EMPTY       */ "table contains no data",
+    /* SQLITE4_SCHEMA      */ "database schema has changed",
+    /* SQLITE4_TOOBIG      */ "string or blob too big",
+    /* SQLITE4_CONSTRAINT  */ "constraint failed",
+    /* SQLITE4_MISMATCH    */ "datatype mismatch",
+    /* SQLITE4_MISUSE      */ "library routine called out of sequence",
+    /* SQLITE4_NOLFS       */ "large file support is disabled",
+    /* SQLITE4_AUTH        */ "authorization denied",
+    /* SQLITE4_FORMAT      */ "auxiliary database format error",
+    /* SQLITE4_RANGE       */ "bind or column index out of range",
+    /* SQLITE4_NOTADB      */ "file is encrypted or is not a database",
   };
   rc &= 0xff;
   if( ALWAYS(rc>=0) && rc<(int)(sizeof(aMsg)/sizeof(aMsg[0])) && aMsg[rc]!=0 ){
@@ -879,7 +879,7 @@ const char *sqlite4ErrStr(int rc){
   }
 }
 
-#ifndef SQLITE_OMIT_PROGRESS_CALLBACK
+#ifndef SQLITE4_OMIT_PROGRESS_CALLBACK
 /*
 ** This routine sets the progress callback for an Sqlite database to the
 ** given callback function with the given argument. The progress callback will
@@ -938,50 +938,50 @@ int sqlite4CreateFunc(
       (xFunc && (xFinal || xStep)) || 
       (!xFunc && (xFinal && !xStep)) ||
       (!xFunc && (!xFinal && xStep)) ||
-      (nArg<-1 || nArg>SQLITE_MAX_FUNCTION_ARG) ||
+      (nArg<-1 || nArg>SQLITE4_MAX_FUNCTION_ARG) ||
       (255<(nName = sqlite4Strlen30( zFunctionName))) ){
-    return SQLITE_MISUSE_BKPT;
+    return SQLITE4_MISUSE_BKPT;
   }
   
-#ifndef SQLITE_OMIT_UTF16
-  /* If SQLITE_UTF16 is specified as the encoding type, transform this
-  ** to one of SQLITE_UTF16LE or SQLITE_UTF16BE using the
-  ** SQLITE_UTF16NATIVE macro. SQLITE_UTF16 is not used internally.
+#ifndef SQLITE4_OMIT_UTF16
+  /* If SQLITE4_UTF16 is specified as the encoding type, transform this
+  ** to one of SQLITE4_UTF16LE or SQLITE4_UTF16BE using the
+  ** SQLITE4_UTF16NATIVE macro. SQLITE4_UTF16 is not used internally.
   **
-  ** If SQLITE_ANY is specified, add three versions of the function
+  ** If SQLITE4_ANY is specified, add three versions of the function
   ** to the hash table.
   */
-  if( enc==SQLITE_UTF16 ){
-    enc = SQLITE_UTF16NATIVE;
-  }else if( enc==SQLITE_ANY ){
+  if( enc==SQLITE4_UTF16 ){
+    enc = SQLITE4_UTF16NATIVE;
+  }else if( enc==SQLITE4_ANY ){
     int rc;
-    rc = sqlite4CreateFunc(db, zFunctionName, nArg, SQLITE_UTF8,
+    rc = sqlite4CreateFunc(db, zFunctionName, nArg, SQLITE4_UTF8,
          pUserData, xFunc, xStep, xFinal, pDestructor);
-    if( rc==SQLITE_OK ){
-      rc = sqlite4CreateFunc(db, zFunctionName, nArg, SQLITE_UTF16LE,
+    if( rc==SQLITE4_OK ){
+      rc = sqlite4CreateFunc(db, zFunctionName, nArg, SQLITE4_UTF16LE,
           pUserData, xFunc, xStep, xFinal, pDestructor);
     }
-    if( rc!=SQLITE_OK ){
+    if( rc!=SQLITE4_OK ){
       return rc;
     }
-    enc = SQLITE_UTF16BE;
+    enc = SQLITE4_UTF16BE;
   }
 #else
-  enc = SQLITE_UTF8;
+  enc = SQLITE4_UTF8;
 #endif
   
   /* Check if an existing function is being overridden or deleted. If so,
-  ** and there are active VMs, then return SQLITE_BUSY. If a function
+  ** and there are active VMs, then return SQLITE4_BUSY. If a function
   ** is being overridden/deleted but there are no active VMs, allow the
   ** operation to continue but invalidate all precompiled statements.
   */
   p = sqlite4FindFunction(db, zFunctionName, nName, nArg, (u8)enc, 0);
   if( p && p->iPrefEnc==enc && p->nArg==nArg ){
     if( db->activeVdbeCnt ){
-      sqlite4Error(db, SQLITE_BUSY, 
+      sqlite4Error(db, SQLITE4_BUSY, 
         "unable to delete/modify user-function due to active statements");
       assert( !db->mallocFailed );
-      return SQLITE_BUSY;
+      return SQLITE4_BUSY;
     }else{
       sqlite4ExpirePreparedStatements(db);
     }
@@ -990,7 +990,7 @@ int sqlite4CreateFunc(
   p = sqlite4FindFunction(db, zFunctionName, nName, nArg, (u8)enc, 1);
   assert(p || db->mallocFailed);
   if( !p ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
 
   /* If an older version of the function with a configured destructor is
@@ -1007,7 +1007,7 @@ int sqlite4CreateFunc(
   p->xFinalize = xFinal;
   p->pUserData = pUserData;
   p->nArg = (u16)nArg;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -1038,7 +1038,7 @@ int sqlite4_create_function_v2(
   void (*xFinal)(sqlite4_context*),
   void (*xDestroy)(void *)
 ){
-  int rc = SQLITE_ERROR;
+  int rc = SQLITE4_ERROR;
   FuncDestructor *pArg = 0;
   sqlite4_mutex_enter(db->mutex);
   if( xDestroy ){
@@ -1052,7 +1052,7 @@ int sqlite4_create_function_v2(
   }
   rc = sqlite4CreateFunc(db, zFunc, nArg, enc, p, xFunc, xStep, xFinal, pArg);
   if( pArg && pArg->nRef==0 ){
-    assert( rc!=SQLITE_OK );
+    assert( rc!=SQLITE4_OK );
     xDestroy(p);
     sqlite4DbFree(db, pArg);
   }
@@ -1063,7 +1063,7 @@ int sqlite4_create_function_v2(
   return rc;
 }
 
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 int sqlite4_create_function16(
   sqlite4 *db,
   const void *zFunctionName,
@@ -1078,7 +1078,7 @@ int sqlite4_create_function16(
   char *zFunc8;
   sqlite4_mutex_enter(db->mutex);
   assert( !db->mallocFailed );
-  zFunc8 = sqlite4Utf16to8(db, zFunctionName, -1, SQLITE_UTF16NATIVE);
+  zFunc8 = sqlite4Utf16to8(db, zFunctionName, -1, SQLITE4_UTF16NATIVE);
   rc = sqlite4CreateFunc(db, zFunc8, nArg, eTextRep, p, xFunc, xStep, xFinal,0);
   sqlite4DbFree(db, zFunc8);
   rc = sqlite4ApiExit(db, rc);
@@ -1106,10 +1106,10 @@ int sqlite4_overload_function(
   int nArg
 ){
   int nName = sqlite4Strlen30(zName);
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   sqlite4_mutex_enter(db->mutex);
-  if( sqlite4FindFunction(db, zName, nName, nArg, SQLITE_UTF8, 0)==0 ){
-    rc = sqlite4CreateFunc(db, zName, nArg, SQLITE_UTF8,
+  if( sqlite4FindFunction(db, zName, nName, nArg, SQLITE4_UTF8, 0)==0 ){
+    rc = sqlite4CreateFunc(db, zName, nArg, SQLITE4_UTF8,
                            0, sqlite4InvalidFunction, 0, 0, 0);
   }
   rc = sqlite4ApiExit(db, rc);
@@ -1117,7 +1117,7 @@ int sqlite4_overload_function(
   return rc;
 }
 
-#ifndef SQLITE_OMIT_TRACE
+#ifndef SQLITE4_OMIT_TRACE
 /*
 ** Register a trace function.  The pArg from the previously registered trace
 ** is returned.  
@@ -1156,17 +1156,17 @@ void *sqlite4_profile(
   sqlite4_mutex_leave(db->mutex);
   return pOld;
 }
-#endif /* SQLITE_OMIT_TRACE */
+#endif /* SQLITE4_OMIT_TRACE */
 
 /*
 ** This function returns true if main-memory should be used instead of
 ** a temporary file for transient pager files and statement journals.
 ** The value returned depends on the value of db->temp_store (runtime
-** parameter) and the compile time value of SQLITE_TEMP_STORE. The
+** parameter) and the compile time value of SQLITE4_TEMP_STORE. The
 ** following table describes the relationship between these two values
 ** and this functions return value.
 **
-**   SQLITE_TEMP_STORE     db->temp_store     Location of temporary database
+**   SQLITE4_TEMP_STORE     db->temp_store     Location of temporary database
 **   -----------------     --------------     ------------------------------
 **   0                     any                file      (return 0)
 **   1                     1                  file      (return 0)
@@ -1178,16 +1178,16 @@ void *sqlite4_profile(
 **   3                     any                memory    (return 1)
 */
 int sqlite4TempInMemory(const sqlite4 *db){
-#if SQLITE_TEMP_STORE==1
+#if SQLITE4_TEMP_STORE==1
   return ( db->temp_store==2 );
 #endif
-#if SQLITE_TEMP_STORE==2
+#if SQLITE4_TEMP_STORE==2
   return ( db->temp_store!=1 );
 #endif
-#if SQLITE_TEMP_STORE==3
+#if SQLITE4_TEMP_STORE==3
   return 1;
 #endif
-#if SQLITE_TEMP_STORE<1 || SQLITE_TEMP_STORE>3
+#if SQLITE4_TEMP_STORE<1 || SQLITE4_TEMP_STORE>3
   return 0;
 #endif
 }
@@ -1199,14 +1199,14 @@ int sqlite4TempInMemory(const sqlite4 *db){
 const char *sqlite4_errmsg(sqlite4 *db){
   const char *z;
   if( !db ){
-    return sqlite4ErrStr(SQLITE_NOMEM);
+    return sqlite4ErrStr(SQLITE4_NOMEM);
   }
   if( !sqlite4SafetyCheckSickOrOk(db) ){
-    return sqlite4ErrStr(SQLITE_MISUSE_BKPT);
+    return sqlite4ErrStr(SQLITE4_MISUSE_BKPT);
   }
   sqlite4_mutex_enter(db->mutex);
   if( db->mallocFailed ){
-    z = sqlite4ErrStr(SQLITE_NOMEM);
+    z = sqlite4ErrStr(SQLITE4_NOMEM);
   }else{
     z = (char*)sqlite4_value_text(db->pErr);
     assert( !db->mallocFailed );
@@ -1218,7 +1218,7 @@ const char *sqlite4_errmsg(sqlite4 *db){
   return z;
 }
 
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 /*
 ** Return UTF-16 encoded English language explanation of the most recent
 ** error.
@@ -1250,7 +1250,7 @@ const void *sqlite4_errmsg16(sqlite4 *db){
     z = sqlite4_value_text16(db->pErr);
     if( z==0 ){
       sqlite4ValueSetStr(db->pErr, -1, sqlite4ErrStr(db->errCode),
-           SQLITE_UTF8, SQLITE_STATIC);
+           SQLITE4_UTF8, SQLITE4_STATIC);
       z = sqlite4_value_text16(db->pErr);
     }
     /* A malloc() may have failed within the call to sqlite4_value_text16()
@@ -1263,7 +1263,7 @@ const void *sqlite4_errmsg16(sqlite4 *db){
   sqlite4_mutex_leave(db->mutex);
   return z;
 }
-#endif /* SQLITE_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_UTF16 */
 
 /*
 ** Return the most recent error code generated by an SQLite routine. If NULL is
@@ -1271,10 +1271,10 @@ const void *sqlite4_errmsg16(sqlite4 *db){
 */
 int sqlite4_errcode(sqlite4 *db){
   if( db && !sqlite4SafetyCheckSickOrOk(db) ){
-    return SQLITE_MISUSE_BKPT;
+    return SQLITE4_MISUSE_BKPT;
   }
   if( !db || db->mallocFailed ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   return db->errCode;
 }
@@ -1298,18 +1298,18 @@ static int createCollation(
   
   assert( sqlite4_mutex_held(db->mutex) );
 
-  /* If SQLITE_UTF16 is specified as the encoding type, transform this
-  ** to one of SQLITE_UTF16LE or SQLITE_UTF16BE using the
-  ** SQLITE_UTF16NATIVE macro. SQLITE_UTF16 is not used internally.
+  /* If SQLITE4_UTF16 is specified as the encoding type, transform this
+  ** to one of SQLITE4_UTF16LE or SQLITE4_UTF16BE using the
+  ** SQLITE4_UTF16NATIVE macro. SQLITE4_UTF16 is not used internally.
   */
   enc2 = enc;
-  testcase( enc2==SQLITE_UTF16 );
-  testcase( enc2==SQLITE_UTF16_ALIGNED );
-  if( enc2==SQLITE_UTF16 || enc2==SQLITE_UTF16_ALIGNED ){
-    enc2 = SQLITE_UTF16NATIVE;
+  testcase( enc2==SQLITE4_UTF16 );
+  testcase( enc2==SQLITE4_UTF16_ALIGNED );
+  if( enc2==SQLITE4_UTF16 || enc2==SQLITE4_UTF16_ALIGNED ){
+    enc2 = SQLITE4_UTF16NATIVE;
   }
-  if( enc2<SQLITE_UTF8 || enc2>SQLITE_UTF16BE ){
-    return SQLITE_MISUSE_BKPT;
+  if( enc2<SQLITE4_UTF8 || enc2>SQLITE4_UTF16BE ){
+    return SQLITE4_MISUSE_BKPT;
   }
 
   /* Check if this call is removing or replacing an existing collation 
@@ -1319,9 +1319,9 @@ static int createCollation(
   pColl = sqlite4FindCollSeq(db, (u8)enc2, zName, 0);
   if( pColl && pColl->xCmp ){
     if( db->activeVdbeCnt ){
-      sqlite4Error(db, SQLITE_BUSY, 
+      sqlite4Error(db, SQLITE4_BUSY, 
         "unable to delete/modify collation sequence due to active statements");
-      return SQLITE_BUSY;
+      return SQLITE4_BUSY;
     }
     sqlite4ExpirePreparedStatements(db);
 
@@ -1331,7 +1331,7 @@ static int createCollation(
     ** Also, collation destructor - CollSeq.xDel() - function may need
     ** to be called.
     */ 
-    if( (pColl->enc & ~SQLITE_UTF16_ALIGNED)==enc2 ){
+    if( (pColl->enc & ~SQLITE4_UTF16_ALIGNED)==enc2 ){
       CollSeq *aColl = sqlite4HashFind(&db->aCollSeq, zName, nName);
       int j;
       for(j=0; j<3; j++){
@@ -1347,68 +1347,68 @@ static int createCollation(
   }
 
   pColl = sqlite4FindCollSeq(db, (u8)enc2, zName, 1);
-  if( pColl==0 ) return SQLITE_NOMEM;
+  if( pColl==0 ) return SQLITE4_NOMEM;
   pColl->xCmp = xCompare;
   pColl->xMkKey = xMakeKey;
   pColl->pUser = pCtx;
   pColl->xDel = xDel;
-  pColl->enc = (u8)(enc2 | (enc & SQLITE_UTF16_ALIGNED));
-  sqlite4Error(db, SQLITE_OK, 0);
-  return SQLITE_OK;
+  pColl->enc = (u8)(enc2 | (enc & SQLITE4_UTF16_ALIGNED));
+  sqlite4Error(db, SQLITE4_OK, 0);
+  return SQLITE4_OK;
 }
 
 
 /*
 ** This array defines hard upper bounds on limit values.  The
-** initializer must be kept in sync with the SQLITE_LIMIT_*
+** initializer must be kept in sync with the SQLITE4_LIMIT_*
 ** #defines in sqlite4.h.
 */
 static const int aHardLimit[] = {
-  SQLITE_MAX_LENGTH,
-  SQLITE_MAX_SQL_LENGTH,
-  SQLITE_MAX_COLUMN,
-  SQLITE_MAX_EXPR_DEPTH,
-  SQLITE_MAX_COMPOUND_SELECT,
-  SQLITE_MAX_VDBE_OP,
-  SQLITE_MAX_FUNCTION_ARG,
-  SQLITE_MAX_ATTACHED,
-  SQLITE_MAX_LIKE_PATTERN_LENGTH,
-  SQLITE_MAX_VARIABLE_NUMBER,
-  SQLITE_MAX_TRIGGER_DEPTH,
+  SQLITE4_MAX_LENGTH,
+  SQLITE4_MAX_SQL_LENGTH,
+  SQLITE4_MAX_COLUMN,
+  SQLITE4_MAX_EXPR_DEPTH,
+  SQLITE4_MAX_COMPOUND_SELECT,
+  SQLITE4_MAX_VDBE_OP,
+  SQLITE4_MAX_FUNCTION_ARG,
+  SQLITE4_MAX_ATTACHED,
+  SQLITE4_MAX_LIKE_PATTERN_LENGTH,
+  SQLITE4_MAX_VARIABLE_NUMBER,
+  SQLITE4_MAX_TRIGGER_DEPTH,
 };
 
 /*
 ** Make sure the hard limits are set to reasonable values
 */
-#if SQLITE_MAX_LENGTH<100
-# error SQLITE_MAX_LENGTH must be at least 100
+#if SQLITE4_MAX_LENGTH<100
+# error SQLITE4_MAX_LENGTH must be at least 100
 #endif
-#if SQLITE_MAX_SQL_LENGTH<100
-# error SQLITE_MAX_SQL_LENGTH must be at least 100
+#if SQLITE4_MAX_SQL_LENGTH<100
+# error SQLITE4_MAX_SQL_LENGTH must be at least 100
 #endif
-#if SQLITE_MAX_SQL_LENGTH>SQLITE_MAX_LENGTH
-# error SQLITE_MAX_SQL_LENGTH must not be greater than SQLITE_MAX_LENGTH
+#if SQLITE4_MAX_SQL_LENGTH>SQLITE4_MAX_LENGTH
+# error SQLITE4_MAX_SQL_LENGTH must not be greater than SQLITE4_MAX_LENGTH
 #endif
-#if SQLITE_MAX_COMPOUND_SELECT<2
-# error SQLITE_MAX_COMPOUND_SELECT must be at least 2
+#if SQLITE4_MAX_COMPOUND_SELECT<2
+# error SQLITE4_MAX_COMPOUND_SELECT must be at least 2
 #endif
-#if SQLITE_MAX_VDBE_OP<40
-# error SQLITE_MAX_VDBE_OP must be at least 40
+#if SQLITE4_MAX_VDBE_OP<40
+# error SQLITE4_MAX_VDBE_OP must be at least 40
 #endif
-#if SQLITE_MAX_FUNCTION_ARG<0 || SQLITE_MAX_FUNCTION_ARG>1000
-# error SQLITE_MAX_FUNCTION_ARG must be between 0 and 1000
+#if SQLITE4_MAX_FUNCTION_ARG<0 || SQLITE4_MAX_FUNCTION_ARG>1000
+# error SQLITE4_MAX_FUNCTION_ARG must be between 0 and 1000
 #endif
-#if SQLITE_MAX_ATTACHED<0 || SQLITE_MAX_ATTACHED>62
-# error SQLITE_MAX_ATTACHED must be between 0 and 62
+#if SQLITE4_MAX_ATTACHED<0 || SQLITE4_MAX_ATTACHED>62
+# error SQLITE4_MAX_ATTACHED must be between 0 and 62
 #endif
-#if SQLITE_MAX_LIKE_PATTERN_LENGTH<1
-# error SQLITE_MAX_LIKE_PATTERN_LENGTH must be at least 1
+#if SQLITE4_MAX_LIKE_PATTERN_LENGTH<1
+# error SQLITE4_MAX_LIKE_PATTERN_LENGTH must be at least 1
 #endif
-#if SQLITE_MAX_COLUMN>32767
-# error SQLITE_MAX_COLUMN must not exceed 32767
+#if SQLITE4_MAX_COLUMN>32767
+# error SQLITE4_MAX_COLUMN must not exceed 32767
 #endif
-#if SQLITE_MAX_TRIGGER_DEPTH<1
-# error SQLITE_MAX_TRIGGER_DEPTH must be at least 1
+#if SQLITE4_MAX_TRIGGER_DEPTH<1
+# error SQLITE4_MAX_TRIGGER_DEPTH must be at least 1
 #endif
 
 
@@ -1426,27 +1426,27 @@ int sqlite4_limit(sqlite4 *db, int limitId, int newLimit){
   int oldLimit;
 
 
-  /* EVIDENCE-OF: R-30189-54097 For each limit category SQLITE_LIMIT_NAME
+  /* EVIDENCE-OF: R-30189-54097 For each limit category SQLITE4_LIMIT_NAME
   ** there is a hard upper bound set at compile-time by a C preprocessor
-  ** macro called SQLITE_MAX_NAME. (The "_LIMIT_" in the name is changed to
+  ** macro called SQLITE4_MAX_NAME. (The "_LIMIT_" in the name is changed to
   ** "_MAX_".)
   */
-  assert( aHardLimit[SQLITE_LIMIT_LENGTH]==SQLITE_MAX_LENGTH );
-  assert( aHardLimit[SQLITE_LIMIT_SQL_LENGTH]==SQLITE_MAX_SQL_LENGTH );
-  assert( aHardLimit[SQLITE_LIMIT_COLUMN]==SQLITE_MAX_COLUMN );
-  assert( aHardLimit[SQLITE_LIMIT_EXPR_DEPTH]==SQLITE_MAX_EXPR_DEPTH );
-  assert( aHardLimit[SQLITE_LIMIT_COMPOUND_SELECT]==SQLITE_MAX_COMPOUND_SELECT);
-  assert( aHardLimit[SQLITE_LIMIT_VDBE_OP]==SQLITE_MAX_VDBE_OP );
-  assert( aHardLimit[SQLITE_LIMIT_FUNCTION_ARG]==SQLITE_MAX_FUNCTION_ARG );
-  assert( aHardLimit[SQLITE_LIMIT_ATTACHED]==SQLITE_MAX_ATTACHED );
-  assert( aHardLimit[SQLITE_LIMIT_LIKE_PATTERN_LENGTH]==
-                                               SQLITE_MAX_LIKE_PATTERN_LENGTH );
-  assert( aHardLimit[SQLITE_LIMIT_VARIABLE_NUMBER]==SQLITE_MAX_VARIABLE_NUMBER);
-  assert( aHardLimit[SQLITE_LIMIT_TRIGGER_DEPTH]==SQLITE_MAX_TRIGGER_DEPTH );
-  assert( SQLITE_LIMIT_TRIGGER_DEPTH==(SQLITE_N_LIMIT-1) );
+  assert( aHardLimit[SQLITE4_LIMIT_LENGTH]==SQLITE4_MAX_LENGTH );
+  assert( aHardLimit[SQLITE4_LIMIT_SQL_LENGTH]==SQLITE4_MAX_SQL_LENGTH );
+  assert( aHardLimit[SQLITE4_LIMIT_COLUMN]==SQLITE4_MAX_COLUMN );
+  assert( aHardLimit[SQLITE4_LIMIT_EXPR_DEPTH]==SQLITE4_MAX_EXPR_DEPTH );
+  assert( aHardLimit[SQLITE4_LIMIT_COMPOUND_SELECT]==SQLITE4_MAX_COMPOUND_SELECT);
+  assert( aHardLimit[SQLITE4_LIMIT_VDBE_OP]==SQLITE4_MAX_VDBE_OP );
+  assert( aHardLimit[SQLITE4_LIMIT_FUNCTION_ARG]==SQLITE4_MAX_FUNCTION_ARG );
+  assert( aHardLimit[SQLITE4_LIMIT_ATTACHED]==SQLITE4_MAX_ATTACHED );
+  assert( aHardLimit[SQLITE4_LIMIT_LIKE_PATTERN_LENGTH]==
+                                               SQLITE4_MAX_LIKE_PATTERN_LENGTH );
+  assert( aHardLimit[SQLITE4_LIMIT_VARIABLE_NUMBER]==SQLITE4_MAX_VARIABLE_NUMBER);
+  assert( aHardLimit[SQLITE4_LIMIT_TRIGGER_DEPTH]==SQLITE4_MAX_TRIGGER_DEPTH );
+  assert( SQLITE4_LIMIT_TRIGGER_DEPTH==(SQLITE4_N_LIMIT-1) );
 
 
-  if( limitId<0 || limitId>=SQLITE_N_LIMIT ){
+  if( limitId<0 || limitId>=SQLITE4_N_LIMIT ){
     return -1;
   }
   oldLimit = db->aLimit[limitId];
@@ -1472,7 +1472,7 @@ int sqlite4_limit(sqlite4 *db, int limitId, int newLimit){
 ** *pFlags may be updated before returning if the URI filename contains 
 ** "cache=xxx" or "mode=xxx" query parameters.
 **
-** If successful, SQLITE_OK is returned. In this case *ppVfs is set to point to
+** If successful, SQLITE4_OK is returned. In this case *ppVfs is set to point to
 ** the VFS that should be used to open the database file. *pzFile is set to
 ** point to a buffer containing the name of the file to open. It is the 
 ** responsibility of the caller to eventually call sqlite4_free() to release
@@ -1486,11 +1486,11 @@ int sqlite4_limit(sqlite4 *db, int limitId, int newLimit){
 int sqlite4ParseUri(
   sqlite4_env *pEnv,              /* Run-time environment */
   const char *zUri,               /* Nul-terminated URI to parse */
-  unsigned int *pFlags,           /* IN/OUT: SQLITE_OPEN_XXX flags */
+  unsigned int *pFlags,           /* IN/OUT: SQLITE4_OPEN_XXX flags */
   char **pzFile,                  /* OUT: Filename component of URI */
-  char **pzErrMsg                 /* OUT: Error message (if rc!=SQLITE_OK) */
+  char **pzErrMsg                 /* OUT: Error message (if rc!=SQLITE4_OK) */
 ){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   unsigned int flags = *pFlags;
   char *zFile;
   char c;
@@ -1507,7 +1507,7 @@ int sqlite4ParseUri(
 
     for(iIn=0; iIn<nUri; iIn++) nByte += (zUri[iIn]=='&');
     zFile = sqlite4_malloc(pEnv, nByte);
-    if( !zFile ) return SQLITE_NOMEM;
+    if( !zFile ) return SQLITE4_NOMEM;
 
     /* Discard the scheme and authority segments of the URI. */
     if( zUri[5]=='/' && zUri[6]=='/' ){
@@ -1517,7 +1517,7 @@ int sqlite4ParseUri(
       if( iIn!=7 && (iIn!=16 || memcmp("localhost", &zUri[7], 9)) ){
         *pzErrMsg = sqlite4_mprintf(pEnv,"invalid uri authority: %.*s", 
             iIn-7, &zUri[7]);
-        rc = SQLITE_ERROR;
+        rc = SQLITE4_ERROR;
         goto parse_uri_out;
       }
     }else{
@@ -1601,13 +1601,13 @@ int sqlite4ParseUri(
 
       if( nOpt==4 && memcmp("mode", zOpt, 4)==0 ){
         static struct OpenMode aOpenMode[] = {
-          { "ro",  SQLITE_OPEN_READONLY },
-          { "rw",  SQLITE_OPEN_READWRITE }, 
-          { "rwc", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE },
+          { "ro",  SQLITE4_OPEN_READONLY },
+          { "rw",  SQLITE4_OPEN_READWRITE }, 
+          { "rwc", SQLITE4_OPEN_READWRITE | SQLITE4_OPEN_CREATE },
           { 0, 0 }
         };
 
-        mask = SQLITE_OPEN_READONLY|SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE;
+        mask = SQLITE4_OPEN_READONLY|SQLITE4_OPEN_READWRITE|SQLITE4_OPEN_CREATE;
         aMode = aOpenMode;
         limit = mask & flags;
         zModeType = "access";
@@ -1626,13 +1626,13 @@ int sqlite4ParseUri(
         if( mode==0 ){
           *pzErrMsg = sqlite4_mprintf(pEnv, "no such %s mode: %s",
                                       zModeType, zVal);
-          rc = SQLITE_ERROR;
+          rc = SQLITE4_ERROR;
           goto parse_uri_out;
         }
         if( mode>limit ){
           *pzErrMsg = sqlite4_mprintf(pEnv, "%s mode not allowed: %s",
                                       zModeType, zVal);
-          rc = SQLITE_PERM;
+          rc = SQLITE4_PERM;
           goto parse_uri_out;
         }
         flags = (flags & ~mask) | mode;
@@ -1643,14 +1643,14 @@ int sqlite4ParseUri(
 
   }else{
     zFile = sqlite4_malloc(pEnv, nUri+2);
-    if( !zFile ) return SQLITE_NOMEM;
+    if( !zFile ) return SQLITE4_NOMEM;
     memcpy(zFile, zUri, nUri);
     zFile[nUri] = '\0';
     zFile[nUri+1] = '\0';
   }
 
  parse_uri_out:
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     sqlite4_free(pEnv, zFile);
     zFile = 0;
   }
@@ -1678,7 +1678,7 @@ static int openDatabase(
   char *zErrMsg = 0;              /* Error message from sqlite4ParseUri() */
 
   *ppDb = 0;
-#ifndef SQLITE_OMIT_AUTOINIT
+#ifndef SQLITE4_OMIT_AUTOINIT
   rc = sqlite4_initialize(pEnv);
   if( rc ) return rc;
 #endif
@@ -1694,7 +1694,7 @@ static int openDatabase(
   if( db==0 ) goto opendb_out;
   db->pEnv = pEnv;
   if( isThreadsafe ){
-    db->mutex = sqlite4MutexAlloc(pEnv, SQLITE_MUTEX_RECURSIVE);
+    db->mutex = sqlite4MutexAlloc(pEnv, SQLITE4_MUTEX_RECURSIVE);
     if( db->mutex==0 ){
       sqlite4_free(pEnv, db);
       db = 0;
@@ -1703,20 +1703,20 @@ static int openDatabase(
   }
   sqlite4_mutex_enter(db->mutex);
   db->nDb = 2;
-  db->magic = SQLITE_MAGIC_BUSY;
+  db->magic = SQLITE4_MAGIC_BUSY;
   db->aDb = db->aDbStatic;
 
   assert( sizeof(db->aLimit)==sizeof(aHardLimit) );
   memcpy(db->aLimit, aHardLimit, sizeof(db->aLimit));
   db->nextAutovac = -1;
   db->nextPagesize = 0;
-  db->flags |=  SQLITE_AutoIndex
-                 | SQLITE_EnableTrigger
-                 | SQLITE_ForeignKeys
+  db->flags |=  SQLITE4_AutoIndex
+                 | SQLITE4_EnableTrigger
+                 | SQLITE4_ForeignKeys
             ;
 
   sqlite4HashInit(pEnv, &db->aCollSeq);
-#ifndef SQLITE_OMIT_VIRTUALTABLE
+#ifndef SQLITE4_OMIT_VIRTUALTABLE
   sqlite4HashInit(pEnv, &db->aModule);
 #endif
 
@@ -1724,27 +1724,27 @@ static int openDatabase(
   ** and UTF-16, so add a version for each to avoid any unnecessary
   ** conversions. The only error that can occur here is a malloc() failure.
   */
-  createCollation(db, "BINARY", SQLITE_UTF8, 0, binCollFunc, 0, 0);
-  createCollation(db, "BINARY", SQLITE_UTF16BE, 0, binCollFunc, 0, 0);
-  createCollation(db, "BINARY", SQLITE_UTF16LE, 0, binCollFunc, 0, 0);
+  createCollation(db, "BINARY", SQLITE4_UTF8, 0, binCollFunc, 0, 0);
+  createCollation(db, "BINARY", SQLITE4_UTF16BE, 0, binCollFunc, 0, 0);
+  createCollation(db, "BINARY", SQLITE4_UTF16LE, 0, binCollFunc, 0, 0);
   createCollation(
-      db, "RTRIM", SQLITE_UTF8, (void*)1, binCollFunc, collRtrimMkKey, 0
+      db, "RTRIM", SQLITE4_UTF8, (void*)1, binCollFunc, collRtrimMkKey, 0
   );
   if( db->mallocFailed ){
     goto opendb_out;
   }
-  db->pDfltColl = sqlite4FindCollSeq(db, SQLITE_UTF8, "BINARY", 0);
+  db->pDfltColl = sqlite4FindCollSeq(db, SQLITE4_UTF8, "BINARY", 0);
   assert( db->pDfltColl!=0 );
 
   /* Also add a UTF-8 case-insensitive collation sequence. */
   createCollation(db, 
-      "NOCASE", SQLITE_UTF8, 0, collNocaseCmp, collNocaseMkKey, 0
+      "NOCASE", SQLITE4_UTF8, 0, collNocaseCmp, collNocaseMkKey, 0
   );
 
   /* Parse the filename/URI argument. */
   rc = sqlite4ParseUri(pEnv, zFilename, &flags, &zOpen, &zErrMsg);
-  if( rc!=SQLITE_OK ){
-    if( rc==SQLITE_NOMEM ) db->mallocFailed = 1;
+  if( rc!=SQLITE4_OK ){
+    if( rc==SQLITE4_NOMEM ) db->mallocFailed = 1;
     sqlite4Error(db, rc, zErrMsg ? "%s" : 0, zErrMsg);
     sqlite4_free(pEnv, zErrMsg);
     goto opendb_out;
@@ -1753,9 +1753,9 @@ static int openDatabase(
 
   /* Open the backend database driver */
   rc = sqlite4KVStoreOpen(db, "main", zOpen, &db->aDb[0].pKV, flags);
-  if( rc!=SQLITE_OK ){
-    if( rc==SQLITE_IOERR_NOMEM ){
-      rc = SQLITE_NOMEM;
+  if( rc!=SQLITE4_OK ){
+    if( rc==SQLITE4_IOERR_NOMEM ){
+      rc = SQLITE4_NOMEM;
     }
     sqlite4Error(db, rc, 0);
     goto opendb_out;
@@ -1769,7 +1769,7 @@ static int openDatabase(
   db->aDb[0].zName = "main";
   db->aDb[1].zName = "temp";
 
-  db->magic = SQLITE_MAGIC_OPEN;
+  db->magic = SQLITE4_MAGIC_OPEN;
   if( db->mallocFailed ){
     goto opendb_out;
   }
@@ -1778,35 +1778,35 @@ static int openDatabase(
   ** database schema yet. This is delayed until the first time the database
   ** is accessed.
   */
-  sqlite4Error(db, SQLITE_OK, 0);
+  sqlite4Error(db, SQLITE4_OK, 0);
   sqlite4RegisterBuiltinFunctions(db);
 
   /* Load automatic extensions - extensions that have been registered
   ** using the sqlite4_automatic_extension() API.
   */
   rc = sqlite4_errcode(db);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     /* sqlite4AutoLoadExtensions(db); */
     rc = sqlite4_errcode(db);
-    if( rc!=SQLITE_OK ){
+    if( rc!=SQLITE4_OK ){
       goto opendb_out;
     }
   }
 
-#ifdef SQLITE_ENABLE_FTS3
-  if( !db->mallocFailed && rc==SQLITE_OK ){
+#ifdef SQLITE4_ENABLE_FTS3
+  if( !db->mallocFailed && rc==SQLITE4_OK ){
     rc = sqlite4Fts3Init(db);
   }
 #endif
 
-#ifdef SQLITE_ENABLE_ICU
-  if( !db->mallocFailed && rc==SQLITE_OK ){
+#ifdef SQLITE4_ENABLE_ICU
+  if( !db->mallocFailed && rc==SQLITE4_OK ){
     rc = sqlite4IcuInit(db);
   }
 #endif
 
-#ifdef SQLITE_ENABLE_RTREE
-  if( !db->mallocFailed && rc==SQLITE_OK){
+#ifdef SQLITE4_ENABLE_RTREE
+  if( !db->mallocFailed && rc==SQLITE4_OK){
     rc = sqlite4RtreeInit(db);
   }
 #endif
@@ -1824,12 +1824,12 @@ opendb_out:
     sqlite4_mutex_leave(db->mutex);
   }
   rc = sqlite4_errcode(db);
-  assert( db!=0 || rc==SQLITE_NOMEM );
-  if( rc==SQLITE_NOMEM ){
+  assert( db!=0 || rc==SQLITE4_NOMEM );
+  if( rc==SQLITE4_NOMEM ){
     sqlite4_close(db);
     db = 0;
-  }else if( rc!=SQLITE_OK ){
-    db->magic = SQLITE_MAGIC_SICK;
+  }else if( rc!=SQLITE4_OK ){
+    db->magic = SQLITE4_MAGIC_SICK;
   }
   *ppDb = db;
   return sqlite4ApiExit(0, rc);
@@ -1849,7 +1849,7 @@ int sqlite4_open(
   if( pEnv==0 ) pEnv = sqlite4_env_default();
   va_start(ap, ppDb);
   rc = openDatabase(pEnv, zFilename,
-                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, ppDb, ap);
+                      SQLITE4_OPEN_READWRITE | SQLITE4_OPEN_CREATE, ppDb, ap);
   va_end(ap);
   return rc;
 }
@@ -1896,10 +1896,10 @@ int sqlite4_collation_needed(
   db->xCollNeeded16 = 0;
   db->pCollNeededArg = pCollNeededArg;
   sqlite4_mutex_leave(db->mutex);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
 /*
 ** Register a collation sequence factory callback with the database handle
 ** db. Replace any previously installed collation sequence factory.
@@ -1914,17 +1914,17 @@ int sqlite4_collation_needed16(
   db->xCollNeeded16 = xCollNeeded16;
   db->pCollNeededArg = pCollNeededArg;
   sqlite4_mutex_leave(db->mutex);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
-#endif /* SQLITE_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_UTF16 */
 
-#ifndef SQLITE_OMIT_DEPRECATED
+#ifndef SQLITE4_OMIT_DEPRECATED
 /*
 ** This function is now an anachronism. It used to be used to recover from a
 ** malloc() failure, but SQLite now does this automatically.
 */
 int sqlite4_global_recover(void){
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 #endif
 
@@ -1941,8 +1941,8 @@ int sqlite4_get_autocommit(sqlite4 *db){
 }
 
 /*
-** The following routines are subtitutes for constants SQLITE_CORRUPT,
-** SQLITE_MISUSE, SQLITE_CANTOPEN, SQLITE_IOERR and possibly other error
+** The following routines are subtitutes for constants SQLITE4_CORRUPT,
+** SQLITE4_MISUSE, SQLITE4_CANTOPEN, SQLITE4_IOERR and possibly other error
 ** constants.  They server two purposes:
 **
 **   1.  Serve as a convenient place to set a breakpoint in a debugger
@@ -1953,24 +1953,24 @@ int sqlite4_get_autocommit(sqlite4 *db){
 */
 int sqlite4CorruptError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(0, SQLITE_CORRUPT,
+  sqlite4_log(0, SQLITE4_CORRUPT,
               "database corruption at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
-  return SQLITE_CORRUPT;
+  return SQLITE4_CORRUPT;
 }
 int sqlite4MisuseError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(0, SQLITE_MISUSE, 
+  sqlite4_log(0, SQLITE4_MISUSE, 
               "misuse at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
-  return SQLITE_MISUSE;
+  return SQLITE4_MISUSE;
 }
 int sqlite4CantopenError(int lineno){
   testcase( sqlite4DefaultEnv.xLog!=0 );
-  sqlite4_log(0, SQLITE_CANTOPEN, 
+  sqlite4_log(0, SQLITE4_CANTOPEN, 
               "cannot open file at line %d of [%.10s]",
               lineno, 20+sqlite4_sourceid());
-  return SQLITE_CANTOPEN;
+  return SQLITE4_CANTOPEN;
 }
 
 
@@ -1978,7 +1978,7 @@ int sqlite4CantopenError(int lineno){
 ** Sleep for a little while.  Return the amount of time slept.
 */
 int sqlite4_sleep(int ms){
-  return SQLITE_MISUSE;
+  return SQLITE4_MISUSE;
 }
 
 /*
@@ -1990,7 +1990,7 @@ int sqlite4_kvstore_control(
   int op,                         /* First argument to pass to xControl() */
   void *pArg                      /* Second argument to pass to xControl() */
 ){
-  int rc = SQLITE_ERROR;
+  int rc = SQLITE4_ERROR;
   KVStore *pKV = 0;
   int i;
 
@@ -2020,12 +2020,12 @@ int sqlite4_kvstore_control(
 */
 int sqlite4_test_control(int op, ...){
   int rc = 0;
-#ifndef SQLITE_OMIT_BUILTIN_TEST
+#ifndef SQLITE4_OMIT_BUILTIN_TEST
   va_list ap;
   va_start(ap, op);
   switch( op ){
     /*
-    **  sqlite4_test_control(SQLITE_TESTCTRL_ASSERT, int X)
+    **  sqlite4_test_control(SQLITE4_TESTCTRL_ASSERT, int X)
     **
     ** This action provides a run-time test to see whether or not
     ** assert() was enabled at compile-time.  If X is true and assert()
@@ -2035,7 +2035,7 @@ int sqlite4_test_control(int op, ...){
     ** process aborts.  If X is false and assert() is disabled, then the
     ** return value is zero.
     */
-    case SQLITE_TESTCTRL_ASSERT: {
+    case SQLITE4_TESTCTRL_ASSERT: {
       volatile int x = 0;
       assert( (x = va_arg(ap,int))!=0 );
       rc = x;
@@ -2044,7 +2044,7 @@ int sqlite4_test_control(int op, ...){
 
 
     /*
-    **  sqlite4_test_control(SQLITE_TESTCTRL_ALWAYS, int X)
+    **  sqlite4_test_control(SQLITE4_TESTCTRL_ALWAYS, int X)
     **
     ** This action provides a run-time test to see how the ALWAYS and
     ** NEVER macros were defined at compile-time.
@@ -2056,27 +2056,27 @@ int sqlite4_test_control(int op, ...){
     ** default setting.  If the return value is 1, then ALWAYS() is either
     ** hard-coded to true or else it asserts if its argument is false.
     ** The first behavior (hard-coded to true) is the case if
-    ** SQLITE_TESTCTRL_ASSERT shows that assert() is disabled and the second
+    ** SQLITE4_TESTCTRL_ASSERT shows that assert() is disabled and the second
     ** behavior (assert if the argument to ALWAYS() is false) is the case if
-    ** SQLITE_TESTCTRL_ASSERT shows that assert() is enabled.
+    ** SQLITE4_TESTCTRL_ASSERT shows that assert() is enabled.
     **
     ** The run-time test procedure might look something like this:
     **
-    **    if( sqlite4_test_control(SQLITE_TESTCTRL_ALWAYS, 2)==2 ){
+    **    if( sqlite4_test_control(SQLITE4_TESTCTRL_ALWAYS, 2)==2 ){
     **      // ALWAYS() and NEVER() are no-op pass-through macros
-    **    }else if( sqlite4_test_control(SQLITE_TESTCTRL_ASSERT, 1) ){
+    **    }else if( sqlite4_test_control(SQLITE4_TESTCTRL_ASSERT, 1) ){
     **      // ALWAYS(x) asserts that x is true. NEVER(x) asserts x is false.
     **    }else{
     **      // ALWAYS(x) is a constant 1.  NEVER(x) is a constant 0.
     **    }
     */
-    case SQLITE_TESTCTRL_ALWAYS: {
+    case SQLITE4_TESTCTRL_ALWAYS: {
       int x = va_arg(ap,int);
       rc = ALWAYS(x);
       break;
     }
 
-    /*  sqlite4_test_control(SQLITE_TESTCTRL_OPTIMIZATIONS, sqlite4 *db, int N)
+    /*  sqlite4_test_control(SQLITE4_TESTCTRL_OPTIMIZATIONS, sqlite4 *db, int N)
     **
     ** Enable or disable various optimizations for testing purposes.  The 
     ** argument N is a bitmask of optimizations to be disabled.  For normal
@@ -2085,51 +2085,51 @@ int sqlite4_test_control(int op, ...){
     ** with various optimizations disabled to verify that the same answer
     ** is obtained in every case.
     */
-    case SQLITE_TESTCTRL_OPTIMIZATIONS: {
+    case SQLITE4_TESTCTRL_OPTIMIZATIONS: {
       sqlite4 *db = va_arg(ap, sqlite4*);
       int x = va_arg(ap,int);
-      db->flags = (x & SQLITE_OptMask) | (db->flags & ~SQLITE_OptMask);
+      db->flags = (x & SQLITE4_OptMask) | (db->flags & ~SQLITE4_OptMask);
       break;
     }
 
-#ifdef SQLITE_N_KEYWORD
-    /* sqlite4_test_control(SQLITE_TESTCTRL_ISKEYWORD, const char *zWord)
+#ifdef SQLITE4_N_KEYWORD
+    /* sqlite4_test_control(SQLITE4_TESTCTRL_ISKEYWORD, const char *zWord)
     **
     ** If zWord is a keyword recognized by the parser, then return the
     ** number of keywords.  Or if zWord is not a keyword, return 0.
     ** 
     ** This test feature is only available in the amalgamation since
-    ** the SQLITE_N_KEYWORD macro is not defined in this file if SQLite
+    ** the SQLITE4_N_KEYWORD macro is not defined in this file if SQLite
     ** is built using separate source files.
     */
-    case SQLITE_TESTCTRL_ISKEYWORD: {
+    case SQLITE4_TESTCTRL_ISKEYWORD: {
       const char *zWord = va_arg(ap, const char*);
       int n = sqlite4Strlen30(zWord);
-      rc = (sqlite4KeywordCode((u8*)zWord, n)!=TK_ID) ? SQLITE_N_KEYWORD : 0;
+      rc = (sqlite4KeywordCode((u8*)zWord, n)!=TK_ID) ? SQLITE4_N_KEYWORD : 0;
       break;
     }
 #endif 
 
-    /*   sqlite4_test_control(SQLITE_TESTCTRL_LOCALTIME_FAULT, int onoff);
+    /*   sqlite4_test_control(SQLITE4_TESTCTRL_LOCALTIME_FAULT, int onoff);
     **
     ** If parameter onoff is non-zero, configure the wrappers so that all
     ** subsequent calls to localtime() and variants fail. If onoff is zero,
     ** undo this setting.
     */
-    case SQLITE_TESTCTRL_LOCALTIME_FAULT: {
+    case SQLITE4_TESTCTRL_LOCALTIME_FAULT: {
       sqlite4DefaultEnv.bLocaltimeFault = va_arg(ap, int);
       break;
     }
 
-#if defined(SQLITE_ENABLE_TREE_EXPLAIN)
-    /*   sqlite4_test_control(SQLITE_TESTCTRL_EXPLAIN_STMT,
+#if defined(SQLITE4_ENABLE_TREE_EXPLAIN)
+    /*   sqlite4_test_control(SQLITE4_TESTCTRL_EXPLAIN_STMT,
     **                        sqlite4_stmt*,const char**);
     **
-    ** If compiled with SQLITE_ENABLE_TREE_EXPLAIN, each sqlite4_stmt holds
+    ** If compiled with SQLITE4_ENABLE_TREE_EXPLAIN, each sqlite4_stmt holds
     ** a string that describes the optimized parse tree.  This test-control
     ** returns a pointer to that string.
     */
-    case SQLITE_TESTCTRL_EXPLAIN_STMT: {
+    case SQLITE4_TESTCTRL_EXPLAIN_STMT: {
       sqlite4_stmt *pStmt = va_arg(ap, sqlite4_stmt*);
       const char **pzRet = va_arg(ap, const char**);
       *pzRet = sqlite4VdbeExplanation((Vdbe*)pStmt);
@@ -2139,7 +2139,7 @@ int sqlite4_test_control(int op, ...){
 
   }
   va_end(ap);
-#endif /* SQLITE_OMIT_BUILTIN_TEST */
+#endif /* SQLITE4_OMIT_BUILTIN_TEST */
   return rc;
 }
 
@@ -2184,7 +2184,7 @@ sqlite4_int64 sqlite4_uri_int64(
 ){
   const char *z = sqlite4_uri_parameter(zFilename, zParam);
   sqlite4_int64 v;
-  if( z && sqlite4Atoi64(z, &v, sqlite4Strlen30(z), SQLITE_UTF8)==SQLITE_OK ){
+  if( z && sqlite4Atoi64(z, &v, sqlite4Strlen30(z), SQLITE4_UTF8)==SQLITE4_OK ){
     bDflt = v;
   }
   return bDflt;

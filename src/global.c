@@ -22,7 +22,7 @@
 ** involved are nearly as big or bigger than SQLite itself.
 */
 const unsigned char sqlite4UpperToLower[] = {
-#ifdef SQLITE_ASCII
+#ifdef SQLITE4_ASCII
       0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
      18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
      36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
@@ -39,7 +39,7 @@ const unsigned char sqlite4UpperToLower[] = {
     234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,
     252,253,254,255
 #endif
-#ifdef SQLITE_EBCDIC
+#ifdef SQLITE4_EBCDIC
       0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, /* 0x */
      16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, /* 1x */
      32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, /* 2x */
@@ -89,7 +89,7 @@ const unsigned char sqlite4UpperToLower[] = {
 ** SQLite's versions are identical to the standard versions assuming a
 ** locale of "C". They are implemented as macros in sqliteInt.h.
 */
-#ifdef SQLITE_ASCII
+#ifdef SQLITE4_ASCII
 const unsigned char sqlite4CtypeMap[256] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  /* 00..07    ........ */
   0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00,  /* 08..0f    ........ */
@@ -152,9 +152,9 @@ KVFactory sqlite4BuiltinFactory = {
 struct sqlite4_env sqlite4DefaultEnv = {
    sizeof(sqlite4_env),       /* nByte */
    1,                         /* iVersion */
-   SQLITE_DEFAULT_MEMSTATUS,  /* bMemstat */
+   SQLITE4_DEFAULT_MEMSTATUS,  /* bMemstat */
    1,                         /* bCoreMutex */
-   SQLITE_THREADSAFE==1,      /* bFullMutex */
+   SQLITE4_THREADSAFE==1,      /* bFullMutex */
    0x7ffffffe,                /* mxStrlen */
    128,                       /* szLookaside */
    500,                       /* nLookaside */

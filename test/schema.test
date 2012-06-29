@@ -10,7 +10,7 @@
 #***********************************************************************
 # This file implements regression tests for SQLite library.
 #
-# This file tests the various conditions under which an SQLITE_SCHEMA
+# This file tests the various conditions under which an SQLITE4_SCHEMA
 # error should be returned.
 #
 # $Id: schema.test,v 1.9 2009/02/04 17:40:58 drh Exp $
@@ -18,7 +18,7 @@
 #---------------------------------------------------------------------
 # When any of the following types of SQL statements or actions are 
 # executed, all pre-compiled statements are invalidated. An attempt
-# to execute an invalidated statement always returns SQLITE_SCHEMA.
+# to execute an invalidated statement always returns SQLITE4_SCHEMA.
 #
 # CREATE/DROP TABLE...................................schema-1.*
 # CREATE/DROP VIEW....................................schema-2.*
@@ -47,20 +47,20 @@ do_test schema-1.1 {
     CREATE TABLE abc(a, b, c);
   }
   sqlite4_step $::STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test schema-1.2 {
   sqlite4_finalize $::STMT
-} {SQLITE_SCHEMA}
+} {SQLITE4_SCHEMA}
 do_test schema-1.3 {
   set ::STMT [sqlite4_prepare $::DB {SELECT * FROM sqlite_master} -1 TAIL]
   execsql {
     DROP TABLE abc;
   }
   sqlite4_step $::STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test schema-1.4 {
   sqlite4_finalize $::STMT
-} {SQLITE_SCHEMA}
+} {SQLITE4_SCHEMA}
 
 ifcapable view {
   do_test schema-2.1 {
@@ -69,20 +69,20 @@ ifcapable view {
       CREATE VIEW v1 AS SELECT * FROM sqlite_master;
     }
     sqlite4_step $::STMT
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test schema-2.2 {
     sqlite4_finalize $::STMT
-  } {SQLITE_SCHEMA}
+  } {SQLITE4_SCHEMA}
   do_test schema-2.3 {
     set ::STMT [sqlite4_prepare $::DB {SELECT * FROM sqlite_master} -1 TAIL]
     execsql {
       DROP VIEW v1;
     }
     sqlite4_step $::STMT
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test schema-2.4 {
     sqlite4_finalize $::STMT
-  } {SQLITE_SCHEMA}
+  } {SQLITE4_SCHEMA}
 }
 
 ifcapable trigger {
@@ -97,20 +97,20 @@ ifcapable trigger {
       END;
     }
     sqlite4_step $::STMT
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test schema-3.2 {
     sqlite4_finalize $::STMT
-  } {SQLITE_SCHEMA}
+  } {SQLITE4_SCHEMA}
   do_test schema-3.3 {
     set ::STMT [sqlite4_prepare $::DB {SELECT * FROM sqlite_master} -1 TAIL]
     execsql {
       DROP TRIGGER abc_trig;
     }
     sqlite4_step $::STMT
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test schema-3.4 {
     sqlite4_finalize $::STMT
-  } {SQLITE_SCHEMA}
+  } {SQLITE4_SCHEMA}
 }
 
 do_test schema-4.1 {
@@ -122,20 +122,20 @@ do_test schema-4.1 {
     CREATE INDEX abc_index ON abc(a);
   }
   sqlite4_step $::STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test schema-4.2 {
   sqlite4_finalize $::STMT
-} {SQLITE_SCHEMA}
+} {SQLITE4_SCHEMA}
 do_test schema-4.3 {
   set ::STMT [sqlite4_prepare $::DB {SELECT * FROM sqlite_master} -1 TAIL]
   execsql {
     DROP INDEX abc_index;
   }
   sqlite4_step $::STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test schema-4.4 {
   sqlite4_finalize $::STMT
-} {SQLITE_SCHEMA}
+} {SQLITE4_SCHEMA}
 
 #---------------------------------------------------------------------
 # Tests 5.1 to 5.4 check that prepared statements are invalidated when
@@ -149,19 +149,19 @@ ifcapable attach {
       ATTACH 'test2.db' AS aux;
     }
     sqlite4_step $::STMT
-  } {SQLITE_DONE}
+  } {SQLITE4_DONE}
   do_test schema-5.2 {
     sqlite4_reset $::STMT
-  } {SQLITE_OK}
+  } {SQLITE4_OK}
   do_test schema-5.3 {
     execsql {
       DETACH aux;
     }
     sqlite4_step $::STMT
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test schema-5.4 {
     sqlite4_finalize $::STMT
-  } {SQLITE_SCHEMA}
+  } {SQLITE4_SCHEMA}
 }
 
 #---------------------------------------------------------------------
@@ -172,17 +172,17 @@ do_test schema-6.1 {
   set ::STMT [sqlite4_prepare $::DB $sql -1 TAIL]
   db function hello_function {}
   sqlite4_step $::STMT
-} {SQLITE_DONE}
+} {SQLITE4_DONE}
 do_test schema-6.2 {
   sqlite4_reset $::STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test schema-6.3 {
   sqlite_delete_function $::DB hello_function
   sqlite4_step $::STMT
-} {SQLITE_ERROR}
+} {SQLITE4_ERROR}
 do_test schema-6.4 {
   sqlite4_finalize $::STMT
-} {SQLITE_SCHEMA}
+} {SQLITE4_SCHEMA}
 
 #---------------------------------------------------------------------
 # Tests 7.* check that prepared statements are invalidated when
@@ -194,17 +194,17 @@ ifcapable utf16 {
     set ::STMT [sqlite4_prepare $::DB $sql -1 TAIL]
     add_test_collate $::DB 1 1 1
     sqlite4_step $::STMT
-  } {SQLITE_DONE}
+  } {SQLITE4_DONE}
   do_test schema-7.2 {
     sqlite4_reset $::STMT
-  } {SQLITE_OK}
+  } {SQLITE4_OK}
   do_test schema-7.3 {
     add_test_collate $::DB 0 0 0 
     sqlite4_step $::STMT
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test schema-7.4 {
     sqlite4_finalize $::STMT
-  } {SQLITE_SCHEMA}
+  } {SQLITE4_SCHEMA}
 }
 
 #---------------------------------------------------------------------
@@ -216,10 +216,10 @@ ifcapable auth {
     set ::STMT [sqlite4_prepare $::DB {SELECT * FROM sqlite_master} -1 TAIL]
     db auth {}
     sqlite4_step $::STMT
-  } {SQLITE_ERROR}
+  } {SQLITE4_ERROR}
   do_test schema-8.3 {
     sqlite4_finalize $::STMT
-  } {SQLITE_SCHEMA}
+  } {SQLITE4_SCHEMA}
 }
 
 #---------------------------------------------------------------------
@@ -273,7 +273,7 @@ do_test schema-10.1 {
   set sql {SELECT * FROM abc}
   set ::STMT [sqlite4_prepare $::DB $sql -1 TAIL]
   sqlite4_step $::STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test schema-10.2 {
   catchsql {
     CREATE TABLE t2(a, b, c);
@@ -281,7 +281,7 @@ do_test schema-10.2 {
 } {0 {}}
 do_test schema-10.3 {
   sqlite4_finalize $::STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test schema-10.4 {
   sqlite4 db2 test.db
   execsql {
@@ -294,7 +294,7 @@ do_test schema-10.5 {
 
 #---------------------------------------------------------------------
 # Attempting to delete or replace a user-function or collation sequence 
-# while there are active statements returns an SQLITE_BUSY error.
+# while there are active statements returns an SQLITE4_BUSY error.
 #
 # schema-11.1 - 11.4: User function.
 # schema-11.5 - 11.8: Collation sequence.
@@ -304,10 +304,10 @@ do_test schema-11.1 {
   set sql {SELECT * FROM abc}
   set ::STMT [sqlite4_prepare $::DB $sql -1 TAIL]
   sqlite4_step $::STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test schema-11.2 {
   sqlite_delete_function $::DB tstfunc
-} {SQLITE_BUSY}
+} {SQLITE4_BUSY}
 do_test schema-11.3 {
   set rc [catch {
     db function tstfunc {}
@@ -316,16 +316,16 @@ do_test schema-11.3 {
 } {1 {unable to delete/modify user-function due to active statements}}
 do_test schema-11.4 {
   sqlite4_finalize $::STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test schema-11.5 {
   db collate tstcollate {}
   set sql {SELECT * FROM abc}
   set ::STMT [sqlite4_prepare $::DB $sql -1 TAIL]
   sqlite4_step $::STMT
-} {SQLITE_ROW}
+} {SQLITE4_ROW}
 do_test schema-11.6 {
   sqlite_delete_collation $::DB tstcollate
-} {SQLITE_BUSY}
+} {SQLITE4_BUSY}
 do_test schema-11.7 {
   set rc [catch {
     db collate tstcollate {}
@@ -334,7 +334,7 @@ do_test schema-11.7 {
 } {1 {unable to delete/modify collation sequence due to active statements}}
 do_test schema-11.8 {
   sqlite4_finalize $::STMT
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 # The following demonstrates why statements need to be expired whenever
 # there is a rollback (explicit or otherwise).
@@ -362,7 +362,7 @@ do_test schema-12.1 {
   # possible to run the "CREATE TABLE t4" statement and create a
   # duplicate table.
   list [sqlite4_step $::STMT] [sqlite4_finalize $::STMT]
-} {SQLITE_ERROR SQLITE_SCHEMA}
+} {SQLITE4_ERROR SQLITE4_SCHEMA}
 
 ifcapable {auth} {
 
@@ -372,19 +372,19 @@ do_test schema-13.1 {
   db function hello {}
   db auth auth
   proc auth {args} {
-    if {[lindex $args 0] == "SQLITE_READ"} {return SQLITE_DENY}
-    return SQLITE_OK
+    if {[lindex $args 0] == "SQLITE4_READ"} {return SQLITE4_DENY}
+    return SQLITE4_OK
   }
   sqlite4_step $S
-} {SQLITE_AUTH}
+} {SQLITE4_AUTH}
 
 do_test schema-13.2 {
   sqlite4_step $S
-} {SQLITE_AUTH}
+} {SQLITE4_AUTH}
 
 do_test schema-13.3 {
   sqlite4_finalize $S
-} {SQLITE_AUTH}
+} {SQLITE4_AUTH}
 
 }
 

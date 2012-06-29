@@ -400,7 +400,7 @@ sqlite4 db test.db
 # that is open but NOT writing changes, normally
 # sqlite uses 1 (proxy locking adds the conch and the local lock)
 set using_proxy 0
-foreach {name value} [array get env SQLITE_FORCE_PROXY_LOCKING] {
+foreach {name value} [array get env SQLITE4_FORCE_PROXY_LOCKING] {
   set using_proxy $value
 }
 set extrafds 0

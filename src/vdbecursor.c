@@ -15,9 +15,9 @@
 ** A VdbeCursor is an abstraction of the KVCursor that includes knowledge
 ** about different "tables" in the key space.  A VdbeCursor is only active
 ** over a particular table.  Thus, for example, sqlite4VdbeNext() will
-** return SQLITE_NOTFOUND when advancing off the end of a table into the
+** return SQLITE4_NOTFOUND when advancing off the end of a table into the
 ** next table whereas the lower-level sqlite4KVCursorNext() routine will
-** not return SQLITE_NOTFOUND until it is advanced off the end of the very
+** not return SQLITE4_NOTFOUND until it is advanced off the end of the very
 ** last table in the database.
 */
 #include "sqliteInt.h"
@@ -28,7 +28,7 @@
 ** Move a VDBE cursor to the first or to the last element of its table.  The
 ** first element is sought if iEnd==+1 and the last element if iEnd==-1.
 **
-** Return SQLITE_OK on success. Return SQLITE_NOTFOUND if the table is empty.
+** Return SQLITE4_OK on success. Return SQLITE4_NOTFOUND if the table is empty.
 *  Other error codes are also possible for various kinds of errors.
 */
 int sqlite4VdbeSeekEnd(VdbeCursor *pC, int iEnd){
@@ -44,12 +44,12 @@ int sqlite4VdbeSeekEnd(VdbeCursor *pC, int iEnd){
   aProbe[nProbe] = 0xFF;
 
   rc = sqlite4KVCursorSeek(pCur, aProbe, nProbe+(iEnd<0), iEnd);
-  if( rc==SQLITE_OK ){
-    rc = SQLITE_CORRUPT_BKPT;
-  }else if( rc==SQLITE_INEXACT ){
+  if( rc==SQLITE4_OK ){
+    rc = SQLITE4_CORRUPT_BKPT;
+  }else if( rc==SQLITE4_INEXACT ){
     rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
-    if( rc==SQLITE_OK && (nKey<nProbe || memcmp(aKey, aProbe, nProbe)!=0) ){
-      rc = SQLITE_NOTFOUND;
+    if( rc==SQLITE4_OK && (nKey<nProbe || memcmp(aKey, aProbe, nProbe)!=0) ){
+      rc = SQLITE4_NOTFOUND;
     }
   }
 
@@ -58,7 +58,7 @@ int sqlite4VdbeSeekEnd(VdbeCursor *pC, int iEnd){
 
 /*
 ** Move a VDBE cursor to the next element in its table.
-** Return SQLITE_NOTFOUND if the seek falls of the end of the table.
+** Return SQLITE4_NOTFOUND if the seek falls of the end of the table.
 */
 int sqlite4VdbeNext(VdbeCursor *pC){
   KVCursor *pCur = pC->pKVCur;
@@ -68,12 +68,12 @@ int sqlite4VdbeNext(VdbeCursor *pC){
   sqlite4_uint64 iTabno;
 
   rc = sqlite4KVCursorNext(pCur);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       iTabno = 0;
       sqlite4GetVarint64(aKey, nKey, &iTabno);
-      if( iTabno!=pC->iRoot ) rc = SQLITE_NOTFOUND;
+      if( iTabno!=pC->iRoot ) rc = SQLITE4_NOTFOUND;
     }
   }
   return rc;
@@ -81,7 +81,7 @@ int sqlite4VdbeNext(VdbeCursor *pC){
 
 /*
 ** Move a VDBE cursor to the previous element in its table.
-** Return SQLITE_NOTFOUND if the seek falls of the end of the table.
+** Return SQLITE4_NOTFOUND if the seek falls of the end of the table.
 */
 int sqlite4VdbePrevious(VdbeCursor *pC){
   KVCursor *pCur = pC->pKVCur;
@@ -91,12 +91,12 @@ int sqlite4VdbePrevious(VdbeCursor *pC){
   sqlite4_uint64 iTabno;
 
   rc = sqlite4KVCursorPrev(pCur);
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = sqlite4KVCursorKey(pCur, &aKey, &nKey);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       iTabno = 0;
       sqlite4GetVarint64(aKey, nKey, &iTabno);
-      if( iTabno!=pC->iRoot ) rc = SQLITE_NOTFOUND;
+      if( iTabno!=pC->iRoot ) rc = SQLITE4_NOTFOUND;
     }
   }
   return rc;

@@ -20,7 +20,7 @@
 #ifndef _TOKENIZER_H_
 #define _TOKENIZER_H_
 
-/* TODO(shess) Only used for SQLITE_OK and SQLITE_DONE at this time.
+/* TODO(shess) Only used for SQLITE4_OK and SQLITE4_DONE at this time.
 ** If tokenizers are to be allowed to call sqlite4_*() functions, then
 ** we will need a way to register the API consistently.
 */
@@ -46,7 +46,7 @@ struct sqlite4_tokenizer_module {
 
   /*
   ** Tokenize a particular input.  Call xOpen() to prepare to
-  ** tokenize, xNext() repeatedly until it returns SQLITE_DONE, then
+  ** tokenize, xNext() repeatedly until it returns SQLITE4_DONE, then
   ** xClose() to free any internal state.  The pInput passed to
   ** xOpen() must exist until the cursor is closed.  The ppToken
   ** result from xNext() is only valid until the next call to xNext()

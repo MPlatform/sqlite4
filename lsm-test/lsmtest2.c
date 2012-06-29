@@ -424,4 +424,3 @@ void do_crash_test(const char *zPattern, int *pRc){
     *pRc = p->x(zPattern, p->zTest, p->zSystem, p->eSafety);
   }
 }
-

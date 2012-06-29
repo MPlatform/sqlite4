@@ -18,13 +18,13 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS3 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS3 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS3 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS3 is defined).
 */
 #include "fts3Int.h"
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
 
 #include <assert.h>
 #include <string.h>
@@ -89,7 +89,7 @@ static void scalarFunc(
     }
   }
 
-  sqlite4_result_blob(context, (void *)&pPtr, sizeof(pPtr), SQLITE_TRANSIENT);
+  sqlite4_result_blob(context, (void *)&pPtr, sizeof(pPtr), SQLITE4_TRANSIENT);
 }
 
 int sqlite4Fts3IsIdChar(char c){
@@ -157,7 +157,7 @@ int sqlite4Fts3InitTokenizer(
   sqlite4_tokenizer_module *m;
 
   zCopy = sqlite4_mprintf("%s", zArg);
-  if( !zCopy ) return SQLITE_NOMEM;
+  if( !zCopy ) return SQLITE4_NOMEM;
   zEnd = &zCopy[strlen(zCopy)];
 
   z = (char *)sqlite4Fts3NextToken(zCopy, &n);
@@ -167,7 +167,7 @@ int sqlite4Fts3InitTokenizer(
   m = (sqlite4_tokenizer_module *)sqlite4Fts3HashFind(pHash,z,(int)strlen(z)+1);
   if( !m ){
     *pzErr = sqlite4_mprintf("unknown tokenizer: %s", z);
-    rc = SQLITE_ERROR;
+    rc = SQLITE4_ERROR;
   }else{
     char const **aArg = 0;
     int iArg = 0;
@@ -178,7 +178,7 @@ int sqlite4Fts3InitTokenizer(
       if( !aNew ){
         sqlite4_free(zCopy);
         sqlite4_free((void *)aArg);
-        return SQLITE_NOMEM;
+        return SQLITE4_NOMEM;
       }
       aArg = aNew;
       aArg[iArg++] = z;
@@ -187,8 +187,8 @@ int sqlite4Fts3InitTokenizer(
       z = &z[n+1];
     }
     rc = m->xCreate(iArg, aArg, ppTok);
-    assert( rc!=SQLITE_OK || *ppTok );
-    if( rc!=SQLITE_OK ){
+    assert( rc!=SQLITE4_OK || *ppTok );
+    if( rc!=SQLITE4_OK ){
       *pzErr = sqlite4_mprintf("unknown tokenizer");
     }else{
       (*ppTok)->pModule = m; 
@@ -201,7 +201,7 @@ int sqlite4Fts3InitTokenizer(
 }
 
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 
 #include <tcl.h>
 #include <string.h>
@@ -283,18 +283,18 @@ static void testFunc(
   pRet = Tcl_NewObj();
   Tcl_IncrRefCount(pRet);
 
-  if( SQLITE_OK!=p->xCreate(zArg ? 1 : 0, &zArg, &pTokenizer) ){
+  if( SQLITE4_OK!=p->xCreate(zArg ? 1 : 0, &zArg, &pTokenizer) ){
     zErr = "error in xCreate()";
     goto finish;
   }
   pTokenizer->pModule = p;
-  if( SQLITE_OK!=p->xOpen(pTokenizer, zInput, nInput, &pCsr) ){
+  if( SQLITE4_OK!=p->xOpen(pTokenizer, zInput, nInput, &pCsr) ){
     zErr = "error in xOpen()";
     goto finish;
   }
   pCsr->pTokenizer = pTokenizer;
 
-  while( SQLITE_OK==p->xNext(pCsr, &zToken, &nToken, &iStart, &iEnd, &iPos) ){
+  while( SQLITE4_OK==p->xNext(pCsr, &zToken, &nToken, &iStart, &iEnd, &iPos) ){
     Tcl_ListObjAppendElement(0, pRet, Tcl_NewIntObj(iPos));
     Tcl_ListObjAppendElement(0, pRet, Tcl_NewStringObj(zToken, nToken));
     zToken = &zInput[iStart];
@@ -302,11 +302,11 @@ static void testFunc(
     Tcl_ListObjAppendElement(0, pRet, Tcl_NewStringObj(zToken, nToken));
   }
 
-  if( SQLITE_OK!=p->xClose(pCsr) ){
+  if( SQLITE4_OK!=p->xClose(pCsr) ){
     zErr = "error in xClose()";
     goto finish;
   }
-  if( SQLITE_OK!=p->xDestroy(pTokenizer) ){
+  if( SQLITE4_OK!=p->xDestroy(pTokenizer) ){
     zErr = "error in xDestroy()";
     goto finish;
   }
@@ -315,7 +315,7 @@ finish:
   if( zErr ){
     sqlite4_result_error(context, zErr, -1);
   }else{
-    sqlite4_result_text(context, Tcl_GetString(pRet), -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, Tcl_GetString(pRet), -1, SQLITE4_TRANSIENT);
   }
   Tcl_DecrRefCount(pRet);
 }
@@ -331,12 +331,12 @@ int registerTokenizer(
   const char zSql[] = "SELECT fts3_tokenizer(?, ?)";
 
   rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return rc;
   }
 
-  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE_STATIC);
-  sqlite4_bind_blob(pStmt, 2, &p, sizeof(p), SQLITE_STATIC);
+  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE4_STATIC);
+  sqlite4_bind_blob(pStmt, 2, &p, sizeof(p), SQLITE4_STATIC);
   sqlite4_step(pStmt);
 
   return sqlite4_finalize(pStmt);
@@ -354,13 +354,13 @@ int queryTokenizer(
 
   *pp = 0;
   rc = sqlite4_prepare_v2(db, zSql, -1, &pStmt, 0);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return rc;
   }
 
-  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE_STATIC);
-  if( SQLITE_ROW==sqlite4_step(pStmt) ){
-    if( sqlite4_column_type(pStmt, 0)==SQLITE_BLOB ){
+  sqlite4_bind_text(pStmt, 1, zName, -1, SQLITE4_STATIC);
+  if( SQLITE4_ROW==sqlite4_step(pStmt) ){
+    if( sqlite4_column_type(pStmt, 0)==SQLITE4_BLOB ){
       memcpy((void *)pp, sqlite4_column_blob(pStmt, 0), sizeof(*pp));
     }
   }
@@ -373,7 +373,7 @@ void sqlite4Fts3SimpleTokenizerModule(sqlite4_tokenizer_module const**ppModule);
 /*
 ** Implementation of the scalar function fts3_tokenizer_internal_test().
 ** This function is used for testing only, it is not included in the
-** build unless SQLITE_TEST is defined.
+** build unless SQLITE4_TEST is defined.
 **
 ** The purpose of this is to test that the fts3_tokenizer() function
 ** can be used as designed by the C-code in the queryTokenizer and
@@ -404,21 +404,21 @@ static void intTestFunc(
   /* Test the query function */
   sqlite4Fts3SimpleTokenizerModule(&p1);
   rc = queryTokenizer(db, "simple", &p2);
-  assert( rc==SQLITE_OK );
+  assert( rc==SQLITE4_OK );
   assert( p1==p2 );
   rc = queryTokenizer(db, "nosuchtokenizer", &p2);
-  assert( rc==SQLITE_ERROR );
+  assert( rc==SQLITE4_ERROR );
   assert( p2==0 );
   assert( 0==strcmp(sqlite4_errmsg(db), "unknown tokenizer: nosuchtokenizer") );
 
   /* Test the storage function */
   rc = registerTokenizer(db, "nosuchtokenizer", p1);
-  assert( rc==SQLITE_OK );
+  assert( rc==SQLITE4_OK );
   rc = queryTokenizer(db, "nosuchtokenizer", &p2);
-  assert( rc==SQLITE_OK );
+  assert( rc==SQLITE4_OK );
   assert( p2==p1 );
 
-  sqlite4_result_text(context, "ok", -1, SQLITE_STATIC);
+  sqlite4_result_text(context, "ok", -1, SQLITE4_STATIC);
 }
 
 #endif
@@ -445,40 +445,40 @@ int sqlite4Fts3InitHashTable(
   Fts3Hash *pHash, 
   const char *zName
 ){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   void *p = (void *)pHash;
-  const int any = SQLITE_ANY;
+  const int any = SQLITE4_ANY;
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
   char *zTest = 0;
   char *zTest2 = 0;
   void *pdb = (void *)db;
   zTest = sqlite4_mprintf("%s_test", zName);
   zTest2 = sqlite4_mprintf("%s_internal_test", zName);
   if( !zTest || !zTest2 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }
 #endif
 
-  if( SQLITE_OK==rc ){
+  if( SQLITE4_OK==rc ){
     rc = sqlite4_create_function(db, zName, 1, any, p, scalarFunc, 0, 0);
   }
-  if( SQLITE_OK==rc ){
+  if( SQLITE4_OK==rc ){
     rc = sqlite4_create_function(db, zName, 2, any, p, scalarFunc, 0, 0);
   }
-#ifdef SQLITE_TEST
-  if( SQLITE_OK==rc ){
+#ifdef SQLITE4_TEST
+  if( SQLITE4_OK==rc ){
     rc = sqlite4_create_function(db, zTest, 2, any, p, testFunc, 0, 0);
   }
-  if( SQLITE_OK==rc ){
+  if( SQLITE4_OK==rc ){
     rc = sqlite4_create_function(db, zTest, 3, any, p, testFunc, 0, 0);
   }
-  if( SQLITE_OK==rc ){
+  if( SQLITE4_OK==rc ){
     rc = sqlite4_create_function(db, zTest2, 0, any, pdb, intTestFunc, 0, 0);
   }
 #endif
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
   sqlite4_free(zTest);
   sqlite4_free(zTest2);
 #endif
@@ -486,4 +486,4 @@ int sqlite4Fts3InitHashTable(
   return rc;
 }
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3) */

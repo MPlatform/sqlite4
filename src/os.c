@@ -13,11 +13,11 @@
 ** This file contains OS interface code that is common to all
 ** architectures.
 */
-#define _SQLITE_OS_C_ 1
+#define _SQLITE4_OS_C_ 1
 #include "sqliteInt.h"
-#undef _SQLITE_OS_C_
+#undef _SQLITE4_OS_C_
 
-#if SQLITE_OS_UNIX
+#if SQLITE4_OS_UNIX
 #include <sys/time.h>
 #endif
 
@@ -28,22 +28,22 @@
 */
 unsigned int sqlite4_current_time = 0; /* Fake system time */
 int sqlite4OsCurrentTime(sqlite4_env *pEnv, sqlite4_uint64 *pTimeOut){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( sqlite4_current_time ){
     *pTimeOut = (sqlite4_uint64)sqlite4_current_time * 1000;
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
-#if SQLITE_OS_UNIX
+#if SQLITE4_OS_UNIX
   static const sqlite4_int64 unixEpoch = 24405875*(sqlite4_int64)8640000;
   struct timeval sNow;
   if( gettimeofday(&sNow, 0)==0 ){
     *pTimeOut = unixEpoch + 1000*(sqlite4_int64)sNow.tv_sec + sNow.tv_usec/1000;
   }else{
-    rc = SQLITE_ERROR;
+    rc = SQLITE4_ERROR;
   }
   UNUSED_PARAMETER(pEnv);
 #endif
-#if SQLITE_OS_WIN
+#if SQLITE4_OS_WIN
   FILETIME ft;
   static const sqlite4_int64 winFiletimeEpoch =
                                  23058135*(sqlite4_int64)8640000;
@@ -71,7 +71,7 @@ int sqlite4OsRandomness(sqlite4_env *pEnv, int nByte, unsigned char *zBufOut){
   sqlite4_uint64 now;
   sqlite4_uint64 x = 0;
 
-#if 0 && SQLITE_OS_UNIX
+#if 0 && SQLITE4_OS_UNIX
   int fd = open("/dev/urandom", O_RDONLY, 0);
   if( fd>=0 ){
     read(fd, zBufOut, nByte);
@@ -87,7 +87,7 @@ int sqlite4OsRandomness(sqlite4_env *pEnv, int nByte, unsigned char *zBufOut){
   p = (unsigned char*)&x;
   for(i=0; i<8; i++) zBufOut[i%nByte] ^= p[i];
     
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -98,8 +98,8 @@ int sqlite4OsRandomness(sqlite4_env *pEnv, int nByte, unsigned char *zBufOut){
 */
 int sqlite4OsInit(sqlite4_env *pEnv){
   void *p = sqlite4_malloc(pEnv, 10);
-  if( p==0 ) return SQLITE_NOMEM;
+  if( p==0 ) return SQLITE4_NOMEM;
   sqlite4_free(pEnv, p);
   sqlite4OsRandomness(pEnv, 8, (unsigned char*)&pEnv->prngX);
-  return SQLITE_OK; /*sqlite4_os_init();*/
+  return SQLITE4_OK; /*sqlite4_os_init();*/
 }

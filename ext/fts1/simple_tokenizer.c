@@ -75,7 +75,7 @@ static int simpleCreate(
   }
 
   *ppTokenizer = &t->base;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int simpleDestroy(sqlite4_tokenizer *pTokenizer){
@@ -84,7 +84,7 @@ static int simpleDestroy(sqlite4_tokenizer *pTokenizer){
   free((void *) t->zDelim);
   free(t);
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int simpleOpen(
@@ -104,7 +104,7 @@ static int simpleOpen(
   c->nTokenAllocated = 0;
 
   *ppCursor = &c->base;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int simpleClose(sqlite4_tokenizer_cursor *pCursor){
@@ -115,7 +115,7 @@ static int simpleClose(sqlite4_tokenizer_cursor *pCursor){
   }
   free(c);
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int simpleNext(
@@ -148,14 +148,14 @@ static int simpleNext(
       *piPosition = c->iToken++;
       c->pCurrent += n + 1;
 
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
     c->pCurrent += n + 1;
     /* TODO(shess) could strspn() to skip delimiters en masse.  Needs
     ** to happen in two places, though, which is annoying.
     */
   }
-  return SQLITE_DONE;
+  return SQLITE4_DONE;
 }
 
 static sqlite4_tokenizer_module simpleTokenizerModule = {

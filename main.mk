@@ -399,58 +399,58 @@ keywordhash.h:	$(TOP)/tool/mkkeywordhash.c
 # Rules to build the extension objects.
 #
 icu.o:	$(TOP)/ext/icu/icu.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/icu/icu.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/icu/icu.c
 
 fts2.o:	$(TOP)/ext/fts2/fts2.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts2/fts2.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2.c
 
 fts2_hash.o:	$(TOP)/ext/fts2/fts2_hash.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts2/fts2_hash.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_hash.c
 
 fts2_icu.o:	$(TOP)/ext/fts2/fts2_icu.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts2/fts2_icu.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_icu.c
 
 fts2_porter.o:	$(TOP)/ext/fts2/fts2_porter.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts2/fts2_porter.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_porter.c
 
 fts2_tokenizer.o:	$(TOP)/ext/fts2/fts2_tokenizer.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts2/fts2_tokenizer.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_tokenizer.c
 
 fts2_tokenizer1.o:	$(TOP)/ext/fts2/fts2_tokenizer1.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts2/fts2_tokenizer1.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_tokenizer1.c
 
 fts3.o:	$(TOP)/ext/fts3/fts3.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3.c
 
 fts3_aux.o:	$(TOP)/ext/fts3/fts3_aux.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_aux.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_aux.c
 
 fts3_expr.o:	$(TOP)/ext/fts3/fts3_expr.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_expr.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_expr.c
 
 fts3_hash.o:	$(TOP)/ext/fts3/fts3_hash.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_hash.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_hash.c
 
 fts3_icu.o:	$(TOP)/ext/fts3/fts3_icu.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_icu.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_icu.c
 
 fts3_snippet.o:	$(TOP)/ext/fts3/fts3_snippet.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_snippet.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_snippet.c
 
 fts3_porter.o:	$(TOP)/ext/fts3/fts3_porter.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_porter.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_porter.c
 
 fts3_tokenizer.o:	$(TOP)/ext/fts3/fts3_tokenizer.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_tokenizer.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_tokenizer.c
 
 fts3_tokenizer1.o:	$(TOP)/ext/fts3/fts3_tokenizer1.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_tokenizer1.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_tokenizer1.c
 
 fts3_write.o:	$(TOP)/ext/fts3/fts3_write.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/fts3/fts3_write.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_write.c
 
 rtree.o:	$(TOP)/ext/rtree/rtree.c $(HDR) $(EXTHDR)
-	$(TCCX) -DSQLITE_CORE -c $(TOP)/ext/rtree/rtree.c
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/rtree/rtree.c
 
 
 # Rules for building test programs and for running tests
@@ -461,8 +461,8 @@ tclsqlite4:	$(TOP)/src/tclsqlite.c libsqlite4.a
 
 # Rules to build the 'testfixture' application.
 #
-TESTFIXTURE_FLAGS  = -DSQLITE_TEST=1 -DSQLITE_CRASH_TEST=1
-TESTFIXTURE_FLAGS += -DSQLITE_SERVER=1 -DSQLITE_PRIVATE="" -DSQLITE_CORE 
+TESTFIXTURE_FLAGS  = -DSQLITE4_TEST=1 -DSQLITE4_CRASH_TEST=1
+TESTFIXTURE_FLAGS += -DSQLITE4_SERVER=1 -DSQLITE4_PRIVATE="" -DSQLITE4_CORE 
 
 TESTFIXTURE_PREREQ  = $(TESTSRC) $(TESTSRC2) 
 TESTFIXTURE_PREREQ += $(TOP)/src/tclsqlite.c
@@ -480,7 +480,7 @@ amalgamation-testfixture$(EXE): sqlite4.c $(TESTSRC) $(TOP)/src/tclsqlite.c
 
 fts3-testfixture$(EXE): sqlite4.c fts3amal.c $(TESTSRC) $(TOP)/src/tclsqlite.c
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \
-	-DSQLITE_ENABLE_FTS3=1                                               \
+	-DSQLITE4_ENABLE_FTS3=1                                               \
 		$(TESTSRC) $(TOP)/src/tclsqlite.c sqlite4.c fts3amal.c       \
 		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB)
 

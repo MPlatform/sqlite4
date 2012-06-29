@@ -85,7 +85,7 @@ static const et_info fmtinfo[] = {
   {  'u', 10, 0, etRADIX,      0,  0 },
   {  'x', 16, 0, etRADIX,      16, 1 },
   {  'X', 16, 0, etRADIX,      0,  4 },
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
   {  'f',  0, 1, etFLOAT,      0,  0 },
   {  'e',  0, 1, etEXP,        30, 0 },
   {  'E',  0, 1, etEXP,        14, 0 },
@@ -104,10 +104,10 @@ static const et_info fmtinfo[] = {
 };
 
 /*
-** If SQLITE_OMIT_FLOATING_POINT is defined, then none of the floating point
+** If SQLITE4_OMIT_FLOATING_POINT is defined, then none of the floating point
 ** conversions will work.
 */
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
 /*
 ** "*val" is a double such that 0.1 <= *val < 10.0
 ** Return the ascii code for the leading digit of *val, then
@@ -131,7 +131,7 @@ static char et_getdigit(LONGDOUBLE_TYPE *val, int *cnt){
   *val = (*val - d)*10.0;
   return (char)digit;
 }
-#endif /* SQLITE_OMIT_FLOATING_POINT */
+#endif /* SQLITE4_OMIT_FLOATING_POINT */
 
 /*
 ** Append N space characters to the given string buffer.
@@ -149,12 +149,12 @@ void sqlite4AppendSpace(StrAccum *pAccum, int N){
 
 /*
 ** On machines with a small stack size, you can redefine the
-** SQLITE_PRINT_BUF_SIZE to be something smaller, if desired.
+** SQLITE4_PRINT_BUF_SIZE to be something smaller, if desired.
 */
-#ifndef SQLITE_PRINT_BUF_SIZE
-# define SQLITE_PRINT_BUF_SIZE 70
+#ifndef SQLITE4_PRINT_BUF_SIZE
+# define SQLITE4_PRINT_BUF_SIZE 70
 #endif
-#define etBUFSIZE SQLITE_PRINT_BUF_SIZE  /* Size of the output buffer */
+#define etBUFSIZE SQLITE4_PRINT_BUF_SIZE  /* Size of the output buffer */
 
 /*
 ** Render a string given by "fmt" into the StrAccum object.
@@ -188,7 +188,7 @@ void sqlite4VXPrintf(
   char *zOut;                /* Rendering buffer */
   int nOut;                  /* Size of the rendering buffer */
   char *zExtra;              /* Malloced memory used by some conversion */
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
   int  exp, e2;              /* exponent of real numbers */
   int nsd;                   /* Number of significant digits returned */
   double rounder;            /* Used for rounding floating point values */
@@ -399,7 +399,7 @@ void sqlite4VXPrintf(
       case etEXP:
       case etGENERIC:
         realvalue = va_arg(ap,double);
-#ifdef SQLITE_OMIT_FLOATING_POINT
+#ifdef SQLITE4_OMIT_FLOATING_POINT
         length = 0;
 #else
         if( precision<0 ) precision = 6;         /* Set default precision */
@@ -553,7 +553,7 @@ void sqlite4VXPrintf(
           while( nPad-- ) bufpt[i++] = '0';
           length = width;
         }
-#endif /* !defined(SQLITE_OMIT_FLOATING_POINT) */
+#endif /* !defined(SQLITE4_OMIT_FLOATING_POINT) */
         break;
       case etSIZE:
         *(va_arg(ap,int*)) = pAccum->nChar;
@@ -796,11 +796,11 @@ void sqlite4StrAccumInit(StrAccum *p, char *zBase, int n, int mx){
 */
 char *sqlite4VMPrintf(sqlite4 *db, const char *zFormat, va_list ap){
   char *z;
-  char zBase[SQLITE_PRINT_BUF_SIZE];
+  char zBase[SQLITE4_PRINT_BUF_SIZE];
   StrAccum acc;
   assert( db!=0 );
   sqlite4StrAccumInit(&acc, zBase, sizeof(zBase),
-                      db->aLimit[SQLITE_LIMIT_LENGTH]);
+                      db->aLimit[SQLITE4_LIMIT_LENGTH]);
   acc.db = db;
   sqlite4VXPrintf(&acc, 1, zFormat, ap);
   z = sqlite4StrAccumFinish(&acc);
@@ -847,12 +847,12 @@ char *sqlite4MAppendf(sqlite4 *db, char *zStr, const char *zFormat, ...){
 */
 char *sqlite4_vmprintf(sqlite4_env *pEnv, const char *zFormat, va_list ap){
   char *z;
-  char zBase[SQLITE_PRINT_BUF_SIZE];
+  char zBase[SQLITE4_PRINT_BUF_SIZE];
   StrAccum acc;
-#ifndef SQLITE_OMIT_AUTOINIT
+#ifndef SQLITE4_OMIT_AUTOINIT
   if( sqlite4_initialize(pEnv) ) return 0;
 #endif
-  sqlite4StrAccumInit(&acc, zBase, sizeof(zBase), SQLITE_MAX_LENGTH);
+  sqlite4StrAccumInit(&acc, zBase, sizeof(zBase), SQLITE4_MAX_LENGTH);
   acc.useMalloc = 2;
   acc.pEnv = pEnv;
   sqlite4VXPrintf(&acc, 0, zFormat, ap);
@@ -867,7 +867,7 @@ char *sqlite4_vmprintf(sqlite4_env *pEnv, const char *zFormat, va_list ap){
 char *sqlite4_mprintf(sqlite4_env *pEnv, const char *zFormat, ...){
   va_list ap;
   char *z;
-#ifndef SQLITE_OMIT_AUTOINIT
+#ifndef SQLITE4_OMIT_AUTOINIT
   if( sqlite4_initialize(pEnv) ) return 0;
 #endif
   va_start(ap, zFormat);
@@ -932,7 +932,7 @@ static void renderLogMsg(
   va_list ap                             /* Arguments */
 ){
   StrAccum acc;                          /* String accumulator */
-  char zMsg[SQLITE_PRINT_BUF_SIZE*3];    /* Complete log message */
+  char zMsg[SQLITE4_PRINT_BUF_SIZE*3];    /* Complete log message */
 
   sqlite4StrAccumInit(&acc, zMsg, sizeof(zMsg), 0);
   acc.useMalloc = 0;
@@ -953,7 +953,7 @@ void sqlite4_log(sqlite4_env *pEnv, int iErrCode, const char *zFormat, ...){
   }
 }
 
-#if defined(SQLITE_DEBUG)
+#if defined(SQLITE4_DEBUG)
 /*
 ** A version of printf() that understands %lld.  Used for debugging.
 ** The printf() built into some versions of windows does not understand %lld
@@ -974,7 +974,7 @@ void sqlite4DebugPrintf(const char *zFormat, ...){
 }
 #endif
 
-#ifndef SQLITE_OMIT_TRACE
+#ifndef SQLITE4_OMIT_TRACE
 /*
 ** variable-argument wrapper around sqlite4VXPrintf().
 */

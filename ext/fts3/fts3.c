@@ -17,10 +17,10 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS3 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS3 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS3 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS3 is defined).
 */
 
 /* The full-text index is stored in a series of b+tree (-like)
@@ -293,10 +293,10 @@
 */
 
 #include "fts3Int.h"
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
 
-#if defined(SQLITE_ENABLE_FTS3) && !defined(SQLITE_CORE)
-# define SQLITE_CORE 1
+#if defined(SQLITE4_ENABLE_FTS3) && !defined(SQLITE4_CORE)
+# define SQLITE4_CORE 1
 #endif
 
 #include <assert.h>
@@ -470,7 +470,7 @@ static int fts3DisconnectMethod(sqlite4_vtab *pVtab){
   p->pTokenizer->pModule->xDestroy(p->pTokenizer);
 
   sqlite4_free(p);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -493,7 +493,7 @@ static void fts3DbExec(
   zSql = sqlite4_vmprintf(zFormat, ap);
   va_end(ap);
   if( zSql==0 ){
-    *pRc = SQLITE_NOMEM;
+    *pRc = SQLITE4_NOMEM;
   }else{
     *pRc = sqlite4_exec(db, zSql, 0, 0, 0);
     sqlite4_free(zSql);
@@ -505,7 +505,7 @@ static void fts3DbExec(
 */
 static int fts3DestroyMethod(sqlite4_vtab *pVtab){
   Fts3Table *p = (Fts3Table *)pVtab;
-  int rc = SQLITE_OK;              /* Return code */
+  int rc = SQLITE4_OK;              /* Return code */
   const char *zDb = p->zDb;        /* Name of database (e.g. "main", "temp") */
   sqlite4 *db = p->db;             /* Database handle */
 
@@ -519,10 +519,10 @@ static int fts3DestroyMethod(sqlite4_vtab *pVtab){
   fts3DbExec(&rc, db, "DROP TABLE IF EXISTS %Q.'%q_stat'", zDb, p->zName);
 
   /* If everything has worked, invoke fts3DisconnectMethod() to free the
-  ** memory associated with the Fts3Table structure and return SQLITE_OK.
+  ** memory associated with the Fts3Table structure and return SQLITE4_OK.
   ** Otherwise, return an SQLite error code.
   */
-  return (rc==SQLITE_OK ? fts3DisconnectMethod(pVtab) : rc);
+  return (rc==SQLITE4_OK ? fts3DisconnectMethod(pVtab) : rc);
 }
 
 
@@ -536,13 +536,13 @@ static int fts3DestroyMethod(sqlite4_vtab *pVtab){
 ** before returning.
 */
 static void fts3DeclareVtab(int *pRc, Fts3Table *p){
-  if( *pRc==SQLITE_OK ){
+  if( *pRc==SQLITE4_OK ){
     int i;                        /* Iterator variable */
     int rc;                       /* Return code */
     char *zSql;                   /* SQL statement passed to declare_vtab() */
     char *zCols;                  /* List of user defined columns */
 
-    sqlite4_vtab_config(p->db, SQLITE_VTAB_CONSTRAINT_SUPPORT, 1);
+    sqlite4_vtab_config(p->db, SQLITE4_VTAB_CONSTRAINT_SUPPORT, 1);
 
     /* Create a list of user columns for the virtual table */
     zCols = sqlite4_mprintf("%Q, ", p->azColumn[0]);
@@ -555,7 +555,7 @@ static void fts3DeclareVtab(int *pRc, Fts3Table *p){
         "CREATE TABLE x(%s %Q HIDDEN, docid HIDDEN)", zCols, p->zName
     );
     if( !zCols || !zSql ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }else{
       rc = sqlite4_declare_vtab(p->db, zSql);
     }
@@ -576,7 +576,7 @@ static void fts3DeclareVtab(int *pRc, Fts3Table *p){
 ** %_stat tables required by FTS4.
 */
 static int fts3CreateTables(Fts3Table *p){
-  int rc = SQLITE_OK;             /* Return code */
+  int rc = SQLITE4_OK;             /* Return code */
   int i;                          /* Iterator variable */
   sqlite4 *db = p->db;            /* The database connection */
 
@@ -589,7 +589,7 @@ static int fts3CreateTables(Fts3Table *p){
       char *z = p->azColumn[i];
       zContentCols = sqlite4_mprintf("%z, 'c%d%q'", zContentCols, i, z);
     }
-    if( zContentCols==0 ) rc = SQLITE_NOMEM;
+    if( zContentCols==0 ) rc = SQLITE4_NOMEM;
   
     /* Create the content table */
     fts3DbExec(&rc, db, 
@@ -639,26 +639,26 @@ static int fts3CreateTables(Fts3Table *p){
 ** before returning.
 */
 static void fts3DatabasePageSize(int *pRc, Fts3Table *p){
-  if( *pRc==SQLITE_OK ){
+  if( *pRc==SQLITE4_OK ){
     int rc;                       /* Return code */
     char *zSql;                   /* SQL text "PRAGMA %Q.page_size" */
     sqlite4_stmt *pStmt;          /* Compiled "PRAGMA %Q.page_size" statement */
   
     zSql = sqlite4_mprintf("PRAGMA %Q.page_size", p->zDb);
     if( !zSql ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }else{
       rc = sqlite4_prepare(p->db, zSql, -1, &pStmt, 0);
-      if( rc==SQLITE_OK ){
+      if( rc==SQLITE4_OK ){
         sqlite4_step(pStmt);
         p->nPgsz = sqlite4_column_int(pStmt, 0);
         rc = sqlite4_finalize(pStmt);
-      }else if( rc==SQLITE_AUTH ){
+      }else if( rc==SQLITE4_AUTH ){
         p->nPgsz = 1024;
-        rc = SQLITE_OK;
+        rc = SQLITE4_OK;
       }
     }
-    assert( p->nPgsz>0 || rc!=SQLITE_OK );
+    assert( p->nPgsz>0 || rc!=SQLITE4_OK );
     sqlite4_free(zSql);
     *pRc = rc;
   }
@@ -703,7 +703,7 @@ static void fts3Appendf(
   const char *zFormat,            /* Printf format string to append */
   ...                             /* Arguments for printf format string */
 ){
-  if( *pRc==SQLITE_OK ){
+  if( *pRc==SQLITE4_OK ){
     va_list ap;
     char *z;
     va_start(ap, zFormat);
@@ -714,7 +714,7 @@ static void fts3Appendf(
       sqlite4_free(z);
       z = z2;
     }
-    if( z==0 ) *pRc = SQLITE_NOMEM;
+    if( z==0 ) *pRc = SQLITE4_NOMEM;
     sqlite4_free(*pz);
     *pz = z;
   }
@@ -767,9 +767,9 @@ static char *fts3QuoteId(char const *zInput){
 ** The pointer returned points to a buffer allocated by sqlite4_malloc(). It
 ** is the responsibility of the caller to eventually free it.
 **
-** If *pRc is not SQLITE_OK when this function is called, it is a no-op (and
+** If *pRc is not SQLITE4_OK when this function is called, it is a no-op (and
 ** a NULL pointer is returned). Otherwise, if an OOM error is encountered
-** by this function, NULL is returned and *pRc is set to SQLITE_NOMEM. If
+** by this function, NULL is returned and *pRc is set to SQLITE4_NOMEM. If
 ** no error occurs, *pRc is left unmodified.
 */
 static char *fts3ReadExprList(Fts3Table *p, const char *zFunc, int *pRc){
@@ -818,9 +818,9 @@ static char *fts3ReadExprList(Fts3Table *p, const char *zFunc, int *pRc){
 ** The pointer returned points to a buffer allocated by sqlite4_malloc(). It
 ** is the responsibility of the caller to eventually free it.
 **
-** If *pRc is not SQLITE_OK when this function is called, it is a no-op (and
+** If *pRc is not SQLITE4_OK when this function is called, it is a no-op (and
 ** a NULL pointer is returned). Otherwise, if an OOM error is encountered
-** by this function, NULL is returned and *pRc is set to SQLITE_NOMEM. If
+** by this function, NULL is returned and *pRc is set to SQLITE4_NOMEM. If
 ** no error occurs, *pRc is left unmodified.
 */
 static char *fts3WriteExprList(Fts3Table *p, const char *zFunc, int *pRc){
@@ -850,8 +850,8 @@ static char *fts3WriteExprList(Fts3Table *p, const char *zFunc, int *pRc){
 **
 ** Only decimal digits ('0'..'9') may be part of an integer value. 
 **
-** If *pp does not being with a decimal digit SQLITE_ERROR is returned and
-** the output value undefined. Otherwise SQLITE_OK is returned.
+** If *pp does not being with a decimal digit SQLITE4_ERROR is returned and
+** the output value undefined. Otherwise SQLITE4_OK is returned.
 **
 ** This function is used when parsing the "prefix=" FTS4 parameter.
 */
@@ -862,10 +862,10 @@ static int fts3GobbleInt(const char **pp, int *pnOut){
   for(p=*pp; p[0]>='0' && p[0]<='9'; p++){
     nInt = nInt * 10 + (p[0] - '0');
   }
-  if( p==*pp ) return SQLITE_ERROR;
+  if( p==*pp ) return SQLITE4_ERROR;
   *pnOut = nInt;
   *pp = p;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -878,7 +878,7 @@ static int fts3GobbleInt(const char **pp, int *pnOut){
 ** Argument zParam is passed the value of the "prefix=" option if one was
 ** specified, or NULL otherwise.
 **
-** If no error occurs, SQLITE_OK is returned and *apIndex set to point to
+** If no error occurs, SQLITE4_OK is returned and *apIndex set to point to
 ** the allocated array. *pnIndex is set to the number of elements in the
 ** array. If an error does occur, an SQLite error code is returned.
 **
@@ -905,7 +905,7 @@ static int fts3PrefixParameter(
   *apIndex = aIndex;
   *pnIndex = nIndex;
   if( !aIndex ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
 
   memset(aIndex, 0, sizeof(struct Fts3Index) * nIndex);
@@ -914,13 +914,13 @@ static int fts3PrefixParameter(
     int i;
     for(i=1; i<nIndex; i++){
       int nPrefix;
-      if( fts3GobbleInt(&p, &nPrefix) ) return SQLITE_ERROR;
+      if( fts3GobbleInt(&p, &nPrefix) ) return SQLITE4_ERROR;
       aIndex[i].nPrefix = nPrefix;
       p++;
     }
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -945,7 +945,7 @@ static int fts3PrefixParameter(
 **             by eventually passing the *pazCol value to sqlite4_free().
 **
 ** If the table cannot be found, an error code is returned and the output
-** variables are undefined. Or, if an OOM is encountered, SQLITE_NOMEM is
+** variables are undefined. Or, if an OOM is encountered, SQLITE4_NOMEM is
 ** returned (and the output variables are undefined).
 */
 static int fts3ContentColumns(
@@ -956,19 +956,19 @@ static int fts3ContentColumns(
   int *pnCol,                     /* OUT: Size of array *pazCol */
   int *pnStr                      /* OUT: Bytes of string content */
 ){
-  int rc = SQLITE_OK;             /* Return code */
+  int rc = SQLITE4_OK;             /* Return code */
   char *zSql;                     /* "SELECT *" statement on zTbl */  
   sqlite4_stmt *pStmt = 0;        /* Compiled version of zSql */
 
   zSql = sqlite4_mprintf("SELECT * FROM %Q.%Q", zDb, zTbl);
   if( !zSql ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }else{
     rc = sqlite4_prepare(db, zSql, -1, &pStmt, 0);
   }
   sqlite4_free(zSql);
 
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     const char **azCol;           /* Output array */
     int nStr = 0;                 /* Size of all column names (incl. 0x00) */
     int nCol;                     /* Number of table columns */
@@ -986,7 +986,7 @@ static int fts3ContentColumns(
     /* Allocate and populate the array to return. */
     azCol = (const char **)sqlite4_malloc(sizeof(char *) * nCol + nStr);
     if( azCol==0 ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }else{
       char *p = (char *)&azCol[nCol];
       for(i=0; i<nCol; i++){
@@ -1030,7 +1030,7 @@ static int fts3InitVtab(
 ){
   Fts3Hash *pHash = (Fts3Hash *)pAux;
   Fts3Table *p = 0;               /* Pointer to allocated vtab */
-  int rc = SQLITE_OK;             /* Return code */
+  int rc = SQLITE4_OK;             /* Return code */
   int i;                          /* Iterator variable */
   int nByte;                      /* Size of allocation used for *p */
   int iCol;                       /* Column index */
@@ -1063,7 +1063,7 @@ static int fts3InitVtab(
   nName = (int)strlen(argv[2]) + 1;
 
   aCol = (const char **)sqlite4_malloc(sizeof(const char *) * (argc-2) );
-  if( !aCol ) return SQLITE_NOMEM;
+  if( !aCol ) return SQLITE4_NOMEM;
   memset((void *)aCol, 0, sizeof(const char *) * (argc-2));
 
   /* Loop through all of the arguments passed by the user to the FTS3/4
@@ -1077,7 +1077,7 @@ static int fts3InitVtab(
   **   + If there is a tokenizer specification included in the arguments,
   **     initializes the tokenizer pTokenizer.
   */
-  for(i=3; rc==SQLITE_OK && i<argc; i++){
+  for(i=3; rc==SQLITE4_OK && i<argc; i++){
     char const *z = argv[i];
     int nKey;
     char *zVal;
@@ -1107,7 +1107,7 @@ static int fts3InitVtab(
 
       int iOpt;
       if( !zVal ){
-        rc = SQLITE_NOMEM;
+        rc = SQLITE4_NOMEM;
       }else{
         for(iOpt=0; iOpt<SizeofArray(aFts4Opt); iOpt++){
           struct Fts4Option *pOp = &aFts4Opt[iOpt];
@@ -1117,13 +1117,13 @@ static int fts3InitVtab(
         }
         if( iOpt==SizeofArray(aFts4Opt) ){
           *pzErr = sqlite4_mprintf("unrecognized parameter: %s", z);
-          rc = SQLITE_ERROR;
+          rc = SQLITE4_ERROR;
         }else{
           switch( iOpt ){
             case 0:               /* MATCHINFO */
               if( strlen(zVal)!=4 || sqlite4_strnicmp(zVal, "fts3", 4) ){
                 *pzErr = sqlite4_mprintf("unrecognized matchinfo: %s", zVal);
-                rc = SQLITE_ERROR;
+                rc = SQLITE4_ERROR;
               }
               bNoDocsize = 1;
               break;
@@ -1151,7 +1151,7 @@ static int fts3InitVtab(
                && (strlen(zVal)!=4 || sqlite4_strnicmp(zVal, "desc", 4)) 
               ){
                 *pzErr = sqlite4_mprintf("unrecognized order: %s", zVal);
-                rc = SQLITE_ERROR;
+                rc = SQLITE4_ERROR;
               }
               bDescIdx = (zVal[0]=='d' || zVal[0]=='D');
               break;
@@ -1182,7 +1182,7 @@ static int fts3InitVtab(
   **   2. If no column names were specified as part of the CREATE VIRTUAL
   **      TABLE statement, use all columns from the content table.
   */
-  if( rc==SQLITE_OK && zContent ){
+  if( rc==SQLITE4_OK && zContent ){
     sqlite4_free(zCompress); 
     sqlite4_free(zUncompress); 
     zCompress = 0;
@@ -1192,9 +1192,9 @@ static int fts3InitVtab(
       aCol = 0;
       rc = fts3ContentColumns(db, argv[1], zContent, &aCol, &nCol, &nString);
     }
-    assert( rc!=SQLITE_OK || nCol>0 );
+    assert( rc!=SQLITE4_OK || nCol>0 );
   }
-  if( rc!=SQLITE_OK ) goto fts3_init_out;
+  if( rc!=SQLITE4_OK ) goto fts3_init_out;
 
   if( nCol==0 ){
     assert( nString==0 );
@@ -1205,16 +1205,16 @@ static int fts3InitVtab(
 
   if( pTokenizer==0 ){
     rc = sqlite4Fts3InitTokenizer(pHash, "simple", &pTokenizer, pzErr);
-    if( rc!=SQLITE_OK ) goto fts3_init_out;
+    if( rc!=SQLITE4_OK ) goto fts3_init_out;
   }
   assert( pTokenizer );
 
   rc = fts3PrefixParameter(zPrefix, &nIndex, &aIndex);
-  if( rc==SQLITE_ERROR ){
+  if( rc==SQLITE4_ERROR ){
     assert( zPrefix );
     *pzErr = sqlite4_mprintf("error parsing prefix parameter: %s", zPrefix);
   }
-  if( rc!=SQLITE_OK ) goto fts3_init_out;
+  if( rc!=SQLITE4_OK ) goto fts3_init_out;
 
   /* Allocate and populate the Fts3Table structure. */
   nByte = sizeof(Fts3Table) +                  /* Fts3Table */
@@ -1225,7 +1225,7 @@ static int fts3InitVtab(
           nString;                             /* Space for azColumn strings */
   p = (Fts3Table*)sqlite4_malloc(nByte);
   if( p==0 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
     goto fts3_init_out;
   }
   memset(p, 0, nByte);
@@ -1274,12 +1274,12 @@ static int fts3InitVtab(
 
   if( (zCompress==0)!=(zUncompress==0) ){
     char const *zMiss = (zCompress==0 ? "compress" : "uncompress");
-    rc = SQLITE_ERROR;
+    rc = SQLITE4_ERROR;
     *pzErr = sqlite4_mprintf("missing %s parameter in fts4 constructor", zMiss);
   }
   p->zReadExprlist = fts3ReadExprList(p, zUncompress, &rc);
   p->zWriteExprlist = fts3WriteExprList(p, zCompress, &rc);
-  if( rc!=SQLITE_OK ) goto fts3_init_out;
+  if( rc!=SQLITE4_OK ) goto fts3_init_out;
 
   /* If this is an xCreate call, create the underlying tables in the 
   ** database. TODO: For xConnect(), it could verify that said tables exist.
@@ -1303,7 +1303,7 @@ fts3_init_out:
   sqlite4_free(zUncompress);
   sqlite4_free(zContent);
   sqlite4_free((void *)aCol);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     if( p ){
       fts3DisconnectMethod((sqlite4_vtab *)p);
     }else if( pTokenizer ){
@@ -1365,7 +1365,7 @@ static int fts3BestIndexMethod(sqlite4_vtab *pVTab, sqlite4_index_info *pInfo){
     if( pCons->usable==0 ) continue;
 
     /* A direct lookup on the rowid or docid column. Assign a cost of 1.0. */
-    if( pCons->op==SQLITE_INDEX_CONSTRAINT_EQ 
+    if( pCons->op==SQLITE4_INDEX_CONSTRAINT_EQ 
      && (pCons->iColumn<0 || pCons->iColumn==p->nColumn+1 )
     ){
       pInfo->idxNum = FTS3_DOCID_SEARCH;
@@ -1382,7 +1382,7 @@ static int fts3BestIndexMethod(sqlite4_vtab *pVTab, sqlite4_index_info *pInfo){
     ** it would lead to an "unable to use function MATCH in the requested 
     ** context" error.
     */
-    if( pCons->op==SQLITE_INDEX_CONSTRAINT_MATCH 
+    if( pCons->op==SQLITE4_INDEX_CONSTRAINT_MATCH 
      && pCons->iColumn>=0 && pCons->iColumn<=p->nColumn
     ){
       pInfo->idxNum = FTS3_FULLTEXT_SEARCH + pCons->iColumn;
@@ -1413,7 +1413,7 @@ static int fts3BestIndexMethod(sqlite4_vtab *pVTab, sqlite4_index_info *pInfo){
   }
 
   assert( p->pSegments==0 );
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -1425,15 +1425,15 @@ static int fts3OpenMethod(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCsr){
   UNUSED_PARAMETER(pVTab);
 
   /* Allocate a buffer large enough for an Fts3Cursor structure. If the
-  ** allocation succeeds, zero it and return SQLITE_OK. Otherwise, 
-  ** if the allocation fails, return SQLITE_NOMEM.
+  ** allocation succeeds, zero it and return SQLITE4_OK. Otherwise, 
+  ** if the allocation fails, return SQLITE4_NOMEM.
   */
   *ppCsr = pCsr = (sqlite4_vtab_cursor *)sqlite4_malloc(sizeof(Fts3Cursor));
   if( !pCsr ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   memset(pCsr, 0, sizeof(Fts3Cursor));
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -1450,7 +1450,7 @@ static int fts3CloseMethod(sqlite4_vtab_cursor *pCursor){
   sqlite4_free(pCsr->aMatchinfo);
   assert( ((Fts3Table *)pCsr->base.pVtab)->pSegments==0 );
   sqlite4_free(pCsr);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -1462,15 +1462,15 @@ static int fts3CloseMethod(sqlite4_vtab_cursor *pCursor){
 ** (or the equivalent for a content=xxx table) and set pCsr->pStmt to
 ** it. If an error occurs, return an SQLite error code.
 **
-** Otherwise, set *ppStmt to point to pCsr->pStmt and return SQLITE_OK.
+** Otherwise, set *ppStmt to point to pCsr->pStmt and return SQLITE4_OK.
 */
 static int fts3CursorSeekStmt(Fts3Cursor *pCsr, sqlite4_stmt **ppStmt){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( pCsr->pStmt==0 ){
     Fts3Table *p = (Fts3Table *)pCsr->base.pVtab;
     char *zSql;
     zSql = sqlite4_mprintf("SELECT %s WHERE rowid = ?", p->zReadExprlist);
-    if( !zSql ) return SQLITE_NOMEM;
+    if( !zSql ) return SQLITE4_NOMEM;
     rc = sqlite4_prepare_v2(p->db, zSql, -1, &pCsr->pStmt, 0);
     sqlite4_free(zSql);
   }
@@ -1481,22 +1481,22 @@ static int fts3CursorSeekStmt(Fts3Cursor *pCsr, sqlite4_stmt **ppStmt){
 /*
 ** Position the pCsr->pStmt statement so that it is on the row
 ** of the %_content table that contains the last match.  Return
-** SQLITE_OK on success.  
+** SQLITE4_OK on success.  
 */
 static int fts3CursorSeek(sqlite4_context *pContext, Fts3Cursor *pCsr){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( pCsr->isRequireSeek ){
     sqlite4_stmt *pStmt = 0;
 
     rc = fts3CursorSeekStmt(pCsr, &pStmt);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       sqlite4_bind_int64(pCsr->pStmt, 1, pCsr->iPrevId);
       pCsr->isRequireSeek = 0;
-      if( SQLITE_ROW==sqlite4_step(pCsr->pStmt) ){
-        return SQLITE_OK;
+      if( SQLITE4_ROW==sqlite4_step(pCsr->pStmt) ){
+        return SQLITE4_OK;
       }else{
         rc = sqlite4_reset(pCsr->pStmt);
-        if( rc==SQLITE_OK && ((Fts3Table *)pCsr->base.pVtab)->zContentTbl==0 ){
+        if( rc==SQLITE4_OK && ((Fts3Table *)pCsr->base.pVtab)->zContentTbl==0 ){
           /* If no row was found and no error has occured, then the %_content
           ** table is missing a row that is present in the full-text index.
           ** The data structures are corrupt.  */
@@ -1507,7 +1507,7 @@ static int fts3CursorSeek(sqlite4_context *pContext, Fts3Cursor *pCsr){
     }
   }
 
-  if( rc!=SQLITE_OK && pContext ){
+  if( rc!=SQLITE4_OK && pContext ){
     sqlite4_result_error_code(pContext, rc);
   }
   return rc;
@@ -1526,7 +1526,7 @@ static int fts3CursorSeek(sqlite4_context *pContext, Fts3Cursor *pCsr){
 ** that heads a sub-tree that may contain a term for which zTerm/nTerm is
 ** a prefix.
 **
-** If an OOM error occurs, SQLITE_NOMEM is returned. Otherwise, SQLITE_OK.
+** If an OOM error occurs, SQLITE4_NOMEM is returned. Otherwise, SQLITE4_OK.
 */
 static int fts3ScanInteriorNode(
   const char *zTerm,              /* Term to select leaves for */
@@ -1536,7 +1536,7 @@ static int fts3ScanInteriorNode(
   sqlite4_int64 *piFirst,         /* OUT: Selected child node */
   sqlite4_int64 *piLast           /* OUT: Selected child node */
 ){
-  int rc = SQLITE_OK;             /* Return code */
+  int rc = SQLITE4_OK;             /* Return code */
   const char *zCsr = zNode;       /* Cursor to iterate through node */
   const char *zEnd = &zCsr[nNode];/* End of interior node buffer */
   char *zBuffer = 0;              /* Buffer to load terms into */
@@ -1586,7 +1586,7 @@ static int fts3ScanInteriorNode(
       nAlloc = (nPrefix+nSuffix) * 2;
       zNew = (char *)sqlite4_realloc(zBuffer, nAlloc);
       if( !zNew ){
-        rc = SQLITE_NOMEM;
+        rc = SQLITE4_NOMEM;
         goto finish_scan;
       }
       zBuffer = zNew;
@@ -1647,7 +1647,7 @@ static int fts3ScanInteriorNode(
 ** range. Because this function only inspects interior segment nodes (and
 ** never loads leaf nodes into memory), it is not possible to be sure.
 **
-** If an error occurs, an error code other than SQLITE_OK is returned.
+** If an error occurs, an error code other than SQLITE4_OK is returned.
 */ 
 static int fts3SelectLeaf(
   Fts3Table *p,                   /* Virtual table handle */
@@ -1665,15 +1665,15 @@ static int fts3SelectLeaf(
 
   sqlite4Fts3GetVarint32(zNode, &iHeight);
   rc = fts3ScanInteriorNode(zTerm, nTerm, zNode, nNode, piLeaf, piLeaf2);
-  assert( !piLeaf2 || !piLeaf || rc!=SQLITE_OK || (*piLeaf<=*piLeaf2) );
+  assert( !piLeaf2 || !piLeaf || rc!=SQLITE4_OK || (*piLeaf<=*piLeaf2) );
 
-  if( rc==SQLITE_OK && iHeight>1 ){
+  if( rc==SQLITE4_OK && iHeight>1 ){
     char *zBlob = 0;              /* Blob read from %_segments table */
     int nBlob;                    /* Size of zBlob in bytes */
 
     if( piLeaf && piLeaf2 && (*piLeaf!=*piLeaf2) ){
       rc = sqlite4Fts3ReadBlock(p, *piLeaf, &zBlob, &nBlob, 0);
-      if( rc==SQLITE_OK ){
+      if( rc==SQLITE4_OK ){
         rc = fts3SelectLeaf(p, zTerm, nTerm, zBlob, nBlob, piLeaf, 0);
       }
       sqlite4_free(zBlob);
@@ -1681,10 +1681,10 @@ static int fts3SelectLeaf(
       zBlob = 0;
     }
 
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       rc = sqlite4Fts3ReadBlock(p, piLeaf?*piLeaf:*piLeaf2, &zBlob, &nBlob, 0);
     }
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       rc = fts3SelectLeaf(p, zTerm, nTerm, zBlob, nBlob, piLeaf, piLeaf2);
     }
     sqlite4_free(zBlob);
@@ -2198,7 +2198,7 @@ static void fts3PutDeltaVarint3(
 ** passed a non-zero value.
 **
 ** If no error occurs, *paOut is set to point at an sqlite4_malloc'd buffer
-** containing the output doclist and SQLITE_OK is returned. In this case
+** containing the output doclist and SQLITE4_OK is returned. In this case
 ** *pnOut is set to the number of bytes in the output doclist.
 **
 ** If an error occurs, an SQLite error code is returned. The output values
@@ -2254,7 +2254,7 @@ static int fts3DoclistOrMerge(
   ** order.
   */
   aOut = sqlite4_malloc(n1+n2+FTS3_VARINT_MAX-1);
-  if( !aOut ) return SQLITE_NOMEM;
+  if( !aOut ) return SQLITE4_NOMEM;
 
   p = aOut;
   fts3GetDeltaVarint3(&p1, pEnd1, 0, &i1);
@@ -2281,7 +2281,7 @@ static int fts3DoclistOrMerge(
   *paOut = aOut;
   *pnOut = (p-aOut);
   assert( *pnOut<=n1+n2+FTS3_VARINT_MAX-1 );
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -2400,9 +2400,9 @@ int sqlite4Fts3FirstFilter(
 /*
 ** Merge all doclists in the TermSelect.aaOutput[] array into a single
 ** doclist stored in TermSelect.aaOutput[0]. If successful, delete all
-** other doclists (except the aaOutput[0] one) and return SQLITE_OK.
+** other doclists (except the aaOutput[0] one) and return SQLITE4_OK.
 **
-** If an OOM error occurs, return SQLITE_NOMEM. In this case it is
+** If an OOM error occurs, return SQLITE4_NOMEM. In this case it is
 ** the responsibility of the caller to free any doclists left in the
 ** TermSelect.aaOutput[] array.
 */
@@ -2427,7 +2427,7 @@ static int fts3TermSelectFinishMerge(Fts3Table *p, TermSelect *pTS){
         int rc = fts3DoclistOrMerge(p->bDescIdx, 
             pTS->aaOutput[i], pTS->anOutput[i], aOut, nOut, &aNew, &nNew
         );
-        if( rc!=SQLITE_OK ){
+        if( rc!=SQLITE4_OK ){
           sqlite4_free(aOut);
           return rc;
         }
@@ -2443,7 +2443,7 @@ static int fts3TermSelectFinishMerge(Fts3Table *p, TermSelect *pTS){
 
   pTS->aaOutput[0] = aOut;
   pTS->anOutput[0] = nOut;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -2457,8 +2457,8 @@ static int fts3TermSelectFinishMerge(Fts3Table *p, TermSelect *pTS){
 ** doclists to merge, the merging is done pair-wise using the TermSelect
 ** object.
 **
-** This function returns SQLITE_OK if the merge is successful, or an
-** SQLite error code (SQLITE_NOMEM) if an error occurs.
+** This function returns SQLITE4_OK if the merge is successful, or an
+** SQLite error code (SQLITE4_NOMEM) if an error occurs.
 */
 static int fts3TermSelectMerge(
   Fts3Table *p,                   /* FTS table handle */
@@ -2474,7 +2474,7 @@ static int fts3TermSelectMerge(
     if( pTS->aaOutput[0] ){
       memcpy(pTS->aaOutput[0], aDoclist, nDoclist);
     }else{
-      return SQLITE_NOMEM;
+      return SQLITE4_NOMEM;
     }
   }else{
     char *aMerge = aDoclist;
@@ -2494,7 +2494,7 @@ static int fts3TermSelectMerge(
         int rc = fts3DoclistOrMerge(p->bDescIdx, aMerge, nMerge, 
             pTS->aaOutput[iOut], pTS->anOutput[iOut], &aNew, &nNew
         );
-        if( rc!=SQLITE_OK ){
+        if( rc!=SQLITE4_OK ){
           if( aMerge!=aDoclist ) sqlite4_free(aMerge);
           return rc;
         }
@@ -2512,7 +2512,7 @@ static int fts3TermSelectMerge(
       }
     }
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -2528,19 +2528,19 @@ static int fts3SegReaderCursorAppend(
     apNew = (Fts3SegReader **)sqlite4_realloc(pCsr->apSegment, nByte);
     if( !apNew ){
       sqlite4Fts3SegReaderFree(pNew);
-      return SQLITE_NOMEM;
+      return SQLITE4_NOMEM;
     }
     pCsr->apSegment = apNew;
   }
   pCsr->apSegment[pCsr->nSegment++] = pNew;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
 ** Add seg-reader objects to the Fts3MultiSegReader object passed as the
 ** 8th argument.
 **
-** This function returns SQLITE_OK if successful, or an SQLite error code
+** This function returns SQLITE4_OK if successful, or an SQLite error code
 ** otherwise.
 */
 static int fts3SegReaderCursor(
@@ -2553,7 +2553,7 @@ static int fts3SegReaderCursor(
   int isScan,                     /* True to scan from zTerm to EOF */
   Fts3MultiSegReader *pCsr        /* Cursor object to populate */
 ){
-  int rc = SQLITE_OK;             /* Error code */
+  int rc = SQLITE4_OK;             /* Error code */
   sqlite4_stmt *pStmt = 0;        /* Statement to iterate through segments */
   int rc2;                        /* Result of sqlite4_reset() */
 
@@ -2566,17 +2566,17 @@ static int fts3SegReaderCursor(
   if( iLevel<0 && p->aIndex ){
     Fts3SegReader *pSeg = 0;
     rc = sqlite4Fts3SegReaderPending(p, iIndex, zTerm, nTerm, isPrefix, &pSeg);
-    if( rc==SQLITE_OK && pSeg ){
+    if( rc==SQLITE4_OK && pSeg ){
       rc = fts3SegReaderCursorAppend(pCsr, pSeg);
     }
   }
 
   if( iLevel!=FTS3_SEGCURSOR_PENDING ){
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       rc = sqlite4Fts3AllSegdirs(p, iIndex, iLevel, &pStmt);
     }
 
-    while( rc==SQLITE_OK && SQLITE_ROW==(rc = sqlite4_step(pStmt)) ){
+    while( rc==SQLITE4_OK && SQLITE4_ROW==(rc = sqlite4_step(pStmt)) ){
       Fts3SegReader *pSeg = 0;
 
       /* Read the values returned by the SELECT into local variables. */
@@ -2591,21 +2591,21 @@ static int fts3SegReaderCursor(
       if( iStartBlock && zTerm ){
         sqlite4_int64 *pi = (isPrefix ? &iLeavesEndBlock : 0);
         rc = fts3SelectLeaf(p, zTerm, nTerm, zRoot, nRoot, &iStartBlock, pi);
-        if( rc!=SQLITE_OK ) goto finished;
+        if( rc!=SQLITE4_OK ) goto finished;
         if( isPrefix==0 && isScan==0 ) iLeavesEndBlock = iStartBlock;
       }
  
       rc = sqlite4Fts3SegReaderNew(pCsr->nSegment+1, 
           iStartBlock, iLeavesEndBlock, iEndBlock, zRoot, nRoot, &pSeg
       );
-      if( rc!=SQLITE_OK ) goto finished;
+      if( rc!=SQLITE4_OK ) goto finished;
       rc = fts3SegReaderCursorAppend(pCsr, pSeg);
     }
   }
 
  finished:
   rc2 = sqlite4_reset(pStmt);
-  if( rc==SQLITE_DONE ) rc = rc2;
+  if( rc==SQLITE4_DONE ) rc = rc2;
 
   return rc;
 }
@@ -2648,7 +2648,7 @@ int sqlite4Fts3SegReaderCursor(
 ** In addition to its current configuration, have the Fts3MultiSegReader
 ** passed as the 4th argument also scan the doclist for term zTerm/nTerm.
 **
-** SQLITE_OK is returned if no error occurs, otherwise an SQLite error code.
+** SQLITE4_OK is returned if no error occurs, otherwise an SQLite error code.
 */
 static int fts3SegReaderCursorAddZero(
   Fts3Table *p,                   /* FTS virtual table handle */
@@ -2662,14 +2662,14 @@ static int fts3SegReaderCursorAddZero(
 /*
 ** Open an Fts3MultiSegReader to scan the doclist for term zTerm/nTerm. Or,
 ** if isPrefix is true, to scan the doclist for all terms for which 
-** zTerm/nTerm is a prefix. If successful, return SQLITE_OK and write
+** zTerm/nTerm is a prefix. If successful, return SQLITE4_OK and write
 ** a pointer to the new Fts3MultiSegReader to *ppSegcsr. Otherwise, return
 ** an SQLite error code.
 **
 ** It is the responsibility of the caller to free this object by eventually
 ** passing it to fts3SegReaderCursorFree() 
 **
-** SQLITE_OK is returned if no error occurs, otherwise an SQLite error code.
+** SQLITE4_OK is returned if no error occurs, otherwise an SQLite error code.
 ** Output parameter *ppSegcsr is set to 0 if an error occurs.
 */
 static int fts3TermSegReaderCursor(
@@ -2680,7 +2680,7 @@ static int fts3TermSegReaderCursor(
   Fts3MultiSegReader **ppSegcsr   /* OUT: Allocated seg-reader cursor */
 ){
   Fts3MultiSegReader *pSegcsr;    /* Object to allocate and return */
-  int rc = SQLITE_NOMEM;          /* Return code */
+  int rc = SQLITE4_NOMEM;          /* Return code */
 
   pSegcsr = sqlite4_malloc(sizeof(Fts3MultiSegReader));
   if( pSegcsr ){
@@ -2704,7 +2704,7 @@ static int fts3TermSegReaderCursor(
           rc = sqlite4Fts3SegReaderCursor(
               p, i, FTS3_SEGCURSOR_ALL, zTerm, nTerm, 1, 0, pSegcsr
           );
-          if( rc==SQLITE_OK ){
+          if( rc==SQLITE4_OK ){
             rc = fts3SegReaderCursorAddZero(p, zTerm, nTerm, pSegcsr);
           }
         }
@@ -2759,16 +2759,16 @@ static int fts3TermSelect(
   filter.nTerm = pTok->n;
 
   rc = sqlite4Fts3SegReaderStart(p, pSegcsr, &filter);
-  while( SQLITE_OK==rc
-      && SQLITE_ROW==(rc = sqlite4Fts3SegReaderStep(p, pSegcsr)) 
+  while( SQLITE4_OK==rc
+      && SQLITE4_ROW==(rc = sqlite4Fts3SegReaderStep(p, pSegcsr)) 
   ){
     rc = fts3TermSelectMerge(p, &tsc, pSegcsr->aDoclist, pSegcsr->nDoclist);
   }
 
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     rc = fts3TermSelectFinishMerge(p, &tsc);
   }
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     *ppOut = tsc.aaOutput[0];
     *pnOut = tsc.anOutput[0];
   }else{
@@ -2814,7 +2814,7 @@ static int fts3DoclistCountDocids(char *aList, int nList){
 ** simply the next row in the %_content table.  For a docid lookup,
 ** this routine simply sets the EOF flag.
 **
-** Return SQLITE_OK if nothing goes wrong.  SQLITE_OK is returned
+** Return SQLITE4_OK if nothing goes wrong.  SQLITE4_OK is returned
 ** even if we reach end-of-file.  The fts3EofMethod() will be called
 ** subsequently to determine whether or not an EOF was hit.
 */
@@ -2822,12 +2822,12 @@ static int fts3NextMethod(sqlite4_vtab_cursor *pCursor){
   int rc;
   Fts3Cursor *pCsr = (Fts3Cursor *)pCursor;
   if( pCsr->eSearch==FTS3_DOCID_SEARCH || pCsr->eSearch==FTS3_FULLSCAN_SEARCH ){
-    if( SQLITE_ROW!=sqlite4_step(pCsr->pStmt) ){
+    if( SQLITE4_ROW!=sqlite4_step(pCsr->pStmt) ){
       pCsr->isEof = 1;
       rc = sqlite4_reset(pCsr->pStmt);
     }else{
       pCsr->iPrevId = sqlite4_column_int64(pCsr->pStmt, 0);
-      rc = SQLITE_OK;
+      rc = SQLITE4_OK;
     }
   }else{
     rc = fts3EvalNext((Fts3Cursor *)pCursor);
@@ -2889,15 +2889,15 @@ static int fts3FilterMethod(
     int iCol = idxNum-FTS3_FULLTEXT_SEARCH;
     const char *zQuery = (const char *)sqlite4_value_text(apVal[0]);
 
-    if( zQuery==0 && sqlite4_value_type(apVal[0])!=SQLITE_NULL ){
-      return SQLITE_NOMEM;
+    if( zQuery==0 && sqlite4_value_type(apVal[0])!=SQLITE4_NULL ){
+      return SQLITE4_NOMEM;
     }
 
     rc = sqlite4Fts3ExprParse(p->pTokenizer, p->azColumn, p->bHasStat, 
         p->nColumn, iCol, zQuery, -1, &pCsr->pExpr
     );
-    if( rc!=SQLITE_OK ){
-      if( rc==SQLITE_ERROR ){
+    if( rc!=SQLITE4_OK ){
+      if( rc==SQLITE4_ERROR ){
         static const char *zErr = "malformed MATCH expression: [%s]";
         p->base.zErrMsg = sqlite4_mprintf(zErr, zQuery);
       }
@@ -2905,12 +2905,12 @@ static int fts3FilterMethod(
     }
 
     rc = sqlite4Fts3ReadLock(p);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
 
     rc = fts3EvalStart(pCsr);
 
     sqlite4Fts3SegmentsClose(p);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
     pCsr->pNextId = pCsr->aDoclist;
     pCsr->iPrevId = 0;
   }
@@ -2929,15 +2929,15 @@ static int fts3FilterMethod(
       rc = sqlite4_prepare_v2(p->db, zSql, -1, &pCsr->pStmt, 0);
       sqlite4_free(zSql);
     }else{
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }
   }else if( idxNum==FTS3_DOCID_SEARCH ){
     rc = fts3CursorSeekStmt(pCsr, &pCsr->pStmt);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       rc = sqlite4_bind_value(pCsr->pStmt, 1, apVal[0]);
     }
   }
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   return fts3NextMethod(pCursor);
 }
@@ -2959,7 +2959,7 @@ static int fts3EofMethod(sqlite4_vtab_cursor *pCursor){
 static int fts3RowidMethod(sqlite4_vtab_cursor *pCursor, sqlite_int64 *pRowid){
   Fts3Cursor *pCsr = (Fts3Cursor *) pCursor;
   *pRowid = pCsr->iPrevId;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* 
@@ -2971,7 +2971,7 @@ static int fts3ColumnMethod(
   sqlite4_context *pContext,      /* Context for sqlite4_result_xxx() calls */
   int iCol                        /* Index of column to read value from */
 ){
-  int rc = SQLITE_OK;             /* Return Code */
+  int rc = SQLITE4_OK;             /* Return Code */
   Fts3Cursor *pCsr = (Fts3Cursor *) pCursor;
   Fts3Table *p = (Fts3Table *)pCursor->pVtab;
 
@@ -2987,10 +2987,10 @@ static int fts3ColumnMethod(
     /* The extra column whose name is the same as the table.
     ** Return a blob which is a pointer to the cursor.
     */
-    sqlite4_result_blob(pContext, &pCsr, sizeof(pCsr), SQLITE_TRANSIENT);
+    sqlite4_result_blob(pContext, &pCsr, sizeof(pCsr), SQLITE4_TRANSIENT);
   }else{
     rc = fts3CursorSeek(0, pCsr);
-    if( rc==SQLITE_OK && sqlite4_data_count(pCsr->pStmt)>(iCol+1) ){
+    if( rc==SQLITE4_OK && sqlite4_data_count(pCsr->pStmt)>(iCol+1) ){
       sqlite4_result_value(pContext, sqlite4_column_value(pCsr->pStmt, iCol+1));
     }
   }
@@ -3034,7 +3034,7 @@ static int fts3BeginMethod(sqlite4_vtab *pVtab){
   assert( p->inTransaction!=1 );
   TESTONLY( p->inTransaction = 1 );
   TESTONLY( p->mxSavepoint = -1; );
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -3050,7 +3050,7 @@ static int fts3CommitMethod(sqlite4_vtab *pVtab){
   assert( p->pSegments==0 );
   TESTONLY( p->inTransaction = 0 );
   TESTONLY( p->mxSavepoint = -1; );
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -3063,7 +3063,7 @@ static int fts3RollbackMethod(sqlite4_vtab *pVtab){
   assert( p->inTransaction!=0 );
   TESTONLY( p->inTransaction = 0 );
   TESTONLY( p->mxSavepoint = -1; );
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -3091,8 +3091,8 @@ static void fts3ReversePoslist(char *pStart, char **ppPoslist){
 **
 ** If the value passed as the third argument is a blob of size
 ** sizeof(Fts3Cursor*), then the blob contents are copied to the 
-** output variable *ppCsr and SQLITE_OK is returned. Otherwise, an error
-** message is written to context pContext and SQLITE_ERROR returned. The
+** output variable *ppCsr and SQLITE4_OK is returned. Otherwise, an error
+** message is written to context pContext and SQLITE4_ERROR returned. The
 ** string passed via zFunc is used as part of the error message.
 */
 static int fts3FunctionArg(
@@ -3102,17 +3102,17 @@ static int fts3FunctionArg(
   Fts3Cursor **ppCsr              /* OUT: Store cursor handle here */
 ){
   Fts3Cursor *pRet;
-  if( sqlite4_value_type(pVal)!=SQLITE_BLOB 
+  if( sqlite4_value_type(pVal)!=SQLITE4_BLOB 
    || sqlite4_value_bytes(pVal)!=sizeof(Fts3Cursor *)
   ){
     char *zErr = sqlite4_mprintf("illegal first argument to %s", zFunc);
     sqlite4_result_error(pContext, zErr, -1);
     sqlite4_free(zErr);
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
   memcpy(&pRet, sqlite4_value_blob(pVal), sizeof(Fts3Cursor *));
   *ppCsr = pRet;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -3151,7 +3151,7 @@ static void fts3SnippetFunc(
   }
   if( !zEllipsis || !zEnd || !zStart ){
     sqlite4_result_error_nomem(pContext);
-  }else if( SQLITE_OK==fts3CursorSeek(pContext, pCsr) ){
+  }else if( SQLITE4_OK==fts3CursorSeek(pContext, pCsr) ){
     sqlite4Fts3Snippet(pContext, pCsr, zStart, zEnd, zEllipsis, iCol, nToken);
   }
 }
@@ -3171,7 +3171,7 @@ static void fts3OffsetsFunc(
   assert( nVal==1 );
   if( fts3FunctionArg(pContext, "offsets", apVal[0], &pCsr) ) return;
   assert( pCsr );
-  if( SQLITE_OK==fts3CursorSeek(pContext, pCsr) ){
+  if( SQLITE4_OK==fts3CursorSeek(pContext, pCsr) ){
     sqlite4Fts3Offsets(pContext, pCsr);
   }
 }
@@ -3204,11 +3204,11 @@ static void fts3OptimizeFunc(
   rc = sqlite4Fts3Optimize(p);
 
   switch( rc ){
-    case SQLITE_OK:
-      sqlite4_result_text(pContext, "Index optimized", -1, SQLITE_STATIC);
+    case SQLITE4_OK:
+      sqlite4_result_text(pContext, "Index optimized", -1, SQLITE4_STATIC);
       break;
-    case SQLITE_DONE:
-      sqlite4_result_text(pContext, "Index already optimal", -1, SQLITE_STATIC);
+    case SQLITE4_DONE:
+      sqlite4_result_text(pContext, "Index already optimal", -1, SQLITE4_STATIC);
       break;
     default:
       sqlite4_result_error_code(pContext, rc);
@@ -3226,7 +3226,7 @@ static void fts3MatchinfoFunc(
 ){
   Fts3Cursor *pCsr;               /* Cursor handle passed through apVal[0] */
   assert( nVal==1 || nVal==2 );
-  if( SQLITE_OK==fts3FunctionArg(pContext, "matchinfo", apVal[0], &pCsr) ){
+  if( SQLITE4_OK==fts3FunctionArg(pContext, "matchinfo", apVal[0], &pCsr) ){
     const char *zArg = 0;
     if( nVal>1 ){
       zArg = (const char *)sqlite4_value_text(apVal[1]);
@@ -3347,7 +3347,7 @@ static int fts3ReleaseMethod(sqlite4_vtab *pVtab, int iSavepoint){
   assert( p->inTransaction );
   assert( p->mxSavepoint >= iSavepoint );
   TESTONLY( p->mxSavepoint = iSavepoint-1 );
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -3362,7 +3362,7 @@ static int fts3RollbackToMethod(sqlite4_vtab *pVtab, int iSavepoint){
   assert( p->mxSavepoint >= iSavepoint );
   TESTONLY( p->mxSavepoint = iSavepoint );
   sqlite4Fts3PendingTermsClear(p);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static const sqlite4_module fts3Module = {
@@ -3414,7 +3414,7 @@ static void hashDestroy(void *p){
 */
 void sqlite4Fts3SimpleTokenizerModule(sqlite4_tokenizer_module const**ppModule);
 void sqlite4Fts3PorterTokenizerModule(sqlite4_tokenizer_module const**ppModule);
-#ifdef SQLITE_ENABLE_ICU
+#ifdef SQLITE4_ENABLE_ICU
 void sqlite4Fts3IcuTokenizerModule(sqlite4_tokenizer_module const**ppModule);
 #endif
 
@@ -3425,23 +3425,23 @@ void sqlite4Fts3IcuTokenizerModule(sqlite4_tokenizer_module const**ppModule);
 ** function is called by the sqlite4_extension_init() entry point.
 */
 int sqlite4Fts3Init(sqlite4 *db){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   Fts3Hash *pHash = 0;
   const sqlite4_tokenizer_module *pSimple = 0;
   const sqlite4_tokenizer_module *pPorter = 0;
 
-#ifdef SQLITE_ENABLE_ICU
+#ifdef SQLITE4_ENABLE_ICU
   const sqlite4_tokenizer_module *pIcu = 0;
   sqlite4Fts3IcuTokenizerModule(&pIcu);
 #endif
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
   rc = sqlite4Fts3InitTerm(db);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 #endif
 
   rc = sqlite4Fts3InitAux(db);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   sqlite4Fts3SimpleTokenizerModule(&pSimple);
   sqlite4Fts3PorterTokenizerModule(&pPorter);
@@ -3449,25 +3449,25 @@ int sqlite4Fts3Init(sqlite4 *db){
   /* Allocate and initialise the hash-table used to store tokenizers. */
   pHash = sqlite4_malloc(sizeof(Fts3Hash));
   if( !pHash ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }else{
     sqlite4Fts3HashInit(pHash, FTS3_HASH_STRING, 1);
   }
 
   /* Load the built-in tokenizers into the hash table */
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     if( sqlite4Fts3HashInsert(pHash, "simple", 7, (void *)pSimple)
      || sqlite4Fts3HashInsert(pHash, "porter", 7, (void *)pPorter) 
-#ifdef SQLITE_ENABLE_ICU
+#ifdef SQLITE4_ENABLE_ICU
      || (pIcu && sqlite4Fts3HashInsert(pHash, "icu", 4, (void *)pIcu))
 #endif
     ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }
   }
 
-#ifdef SQLITE_TEST
-  if( rc==SQLITE_OK ){
+#ifdef SQLITE4_TEST
+  if( rc==SQLITE4_OK ){
     rc = sqlite4Fts3ExprInitTestInterface(db);
   }
 #endif
@@ -3476,18 +3476,18 @@ int sqlite4Fts3Init(sqlite4 *db){
   ** the two scalar functions. If this is successful, register the
   ** module with sqlite.
   */
-  if( SQLITE_OK==rc 
-   && SQLITE_OK==(rc = sqlite4Fts3InitHashTable(db, pHash, "fts3_tokenizer"))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "snippet", -1))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "offsets", 1))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "matchinfo", 1))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "matchinfo", 2))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "optimize", 1))
+  if( SQLITE4_OK==rc 
+   && SQLITE4_OK==(rc = sqlite4Fts3InitHashTable(db, pHash, "fts3_tokenizer"))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "snippet", -1))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "offsets", 1))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "matchinfo", 1))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "matchinfo", 2))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "optimize", 1))
   ){
     rc = sqlite4_create_module_v2(
         db, "fts3", &fts3Module, (void *)pHash, hashDestroy
     );
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       rc = sqlite4_create_module_v2(
           db, "fts4", &fts3Module, (void *)pHash, 0
       );
@@ -3496,7 +3496,7 @@ int sqlite4Fts3Init(sqlite4 *db){
   }
 
   /* An error has occurred. Delete the hash table and return the error code. */
-  assert( rc!=SQLITE_OK );
+  assert( rc!=SQLITE4_OK );
   if( pHash ){
     sqlite4Fts3HashClear(pHash);
     sqlite4_free(pHash);
@@ -3526,7 +3526,7 @@ static void fts3EvalAllocateReaders(
   int *pnOr,                      /* OUT: Total number of OR nodes in expr. */
   int *pRc                        /* IN/OUT: Error code */
 ){
-  if( pExpr && SQLITE_OK==*pRc ){
+  if( pExpr && SQLITE4_OK==*pRc ){
     if( pExpr->eType==FTSQUERY_PHRASE ){
       int i;
       int nToken = pExpr->pPhrase->nToken;
@@ -3536,7 +3536,7 @@ static void fts3EvalAllocateReaders(
         int rc = fts3TermSegReaderCursor(pCsr, 
             pToken->z, pToken->n, pToken->isPrefix, &pToken->pSegcsr
         );
-        if( rc!=SQLITE_OK ){
+        if( rc!=SQLITE4_OK ){
           *pRc = rc;
           return;
         }
@@ -3617,7 +3617,7 @@ static void fts3EvalPhraseMergeToken(
 ** Load the doclist for phrase p into p->doclist.aAll/nAll. The loaded doclist
 ** does not take deferred tokens into account.
 **
-** SQLITE_OK is returned if no error occurs, otherwise an SQLite error code.
+** SQLITE4_OK is returned if no error occurs, otherwise an SQLite error code.
 */
 static int fts3EvalPhraseLoad(
   Fts3Cursor *pCsr,               /* FTS Cursor handle */
@@ -3625,9 +3625,9 @@ static int fts3EvalPhraseLoad(
 ){
   Fts3Table *pTab = (Fts3Table *)pCsr->base.pVtab;
   int iToken;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
 
-  for(iToken=0; rc==SQLITE_OK && iToken<p->nToken; iToken++){
+  for(iToken=0; rc==SQLITE4_OK && iToken<p->nToken; iToken++){
     Fts3PhraseToken *pToken = &p->aToken[iToken];
     assert( pToken->pDeferred==0 || pToken->pSegcsr==0 );
 
@@ -3635,7 +3635,7 @@ static int fts3EvalPhraseLoad(
       int nThis = 0;
       char *pThis = 0;
       rc = fts3TermSelect(pTab, pToken, p->iColumn, &nThis, &pThis);
-      if( rc==SQLITE_OK ){
+      if( rc==SQLITE4_OK ){
         fts3EvalPhraseMergeToken(pTab, p, iToken, pThis, nThis);
       }
     }
@@ -3653,7 +3653,7 @@ static int fts3EvalPhraseLoad(
 ** means that the phrase does not appear in the current row, doclist.pList
 ** and doclist.nList are both zeroed.
 **
-** SQLITE_OK is returned if no error occurs, otherwise an SQLite error code.
+** SQLITE4_OK is returned if no error occurs, otherwise an SQLite error code.
 */
 static int fts3EvalDeferredPhrase(Fts3Cursor *pCsr, Fts3Phrase *pPhrase){
   int iToken;                     /* Used to iterate through phrase tokens */
@@ -3671,13 +3671,13 @@ static int fts3EvalDeferredPhrase(Fts3Cursor *pCsr, Fts3Phrase *pPhrase){
       char *pList;
       int nList;
       int rc = sqlite4Fts3DeferredTokenList(pDeferred, &pList, &nList);
-      if( rc!=SQLITE_OK ) return rc;
+      if( rc!=SQLITE4_OK ) return rc;
 
       if( pList==0 ){
         sqlite4_free(aPoslist);
         pPhrase->doclist.pList = 0;
         pPhrase->doclist.nList = 0;
-        return SQLITE_OK;
+        return SQLITE4_OK;
 
       }else if( aPoslist==0 ){
         aPoslist = pList;
@@ -3697,7 +3697,7 @@ static int fts3EvalDeferredPhrase(Fts3Cursor *pCsr, Fts3Phrase *pPhrase){
           sqlite4_free(aPoslist);
           pPhrase->doclist.pList = 0;
           pPhrase->doclist.nList = 0;
-          return SQLITE_OK;
+          return SQLITE4_OK;
         }
       }
       iPrev = iToken;
@@ -3730,7 +3730,7 @@ static int fts3EvalDeferredPhrase(Fts3Cursor *pCsr, Fts3Phrase *pPhrase){
       aOut = (char *)sqlite4_malloc(nPoslist+8);
       if( !aOut ){
         sqlite4_free(aPoslist);
-        return SQLITE_NOMEM;
+        return SQLITE4_NOMEM;
       }
       
       pPhrase->doclist.pList = aOut;
@@ -3746,7 +3746,7 @@ static int fts3EvalDeferredPhrase(Fts3Cursor *pCsr, Fts3Phrase *pPhrase){
     }
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -3759,7 +3759,7 @@ static int fts3EvalDeferredPhrase(Fts3Cursor *pCsr, Fts3Phrase *pPhrase){
 ** incremental loading strategy. Otherwise, the entire doclist is loaded into
 ** memory within this call.
 **
-** SQLITE_OK is returned if no error occurs, otherwise an SQLite error code.
+** SQLITE4_OK is returned if no error occurs, otherwise an SQLite error code.
 */
 static int fts3EvalPhraseStart(Fts3Cursor *pCsr, int bOptOk, Fts3Phrase *p){
   int rc;                         /* Error code */
@@ -3785,7 +3785,7 @@ static int fts3EvalPhraseStart(Fts3Cursor *pCsr, int bOptOk, Fts3Phrase *p){
     p->bIncr = 0;
   }
 
-  assert( rc!=SQLITE_OK || p->nToken<1 || p->aToken[0].pSegcsr==0 || p->bIncr );
+  assert( rc!=SQLITE4_OK || p->nToken<1 || p->aToken[0].pSegcsr==0 || p->bIncr );
   return rc;
 }
 
@@ -3855,7 +3855,7 @@ void sqlite4Fts3DoclistPrev(
 /*
 ** Attempt to move the phrase iterator to point to the next matching docid. 
 ** If an error occurs, return an SQLite error code. Otherwise, return 
-** SQLITE_OK.
+** SQLITE4_OK.
 **
 ** If there is no "next" entry and no error occurs, then *pbEof is set to
 ** 1 before returning. Otherwise, if no error occurs and the iterator is
@@ -3866,7 +3866,7 @@ static int fts3EvalPhraseNext(
   Fts3Phrase *p,                  /* Phrase object to advance to next docid */
   u8 *pbEof                       /* OUT: Set to 1 if EOF */
 ){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   Fts3Doclist *pDL = &p->doclist;
   Fts3Table *pTab = (Fts3Table *)pCsr->base.pVtab;
 
@@ -3876,7 +3876,7 @@ static int fts3EvalPhraseNext(
     rc = sqlite4Fts3MsrIncrNext(pTab, p->aToken[0].pSegcsr, 
         &pDL->iDocid, &pDL->pList, &pDL->nList
     );
-    if( rc==SQLITE_OK && !pDL->pList ){
+    if( rc==SQLITE4_OK && !pDL->pList ){
       *pbEof = 1;
     }
   }else if( pCsr->bDesc!=pTab->bDescIdx && pDL->nAll ){
@@ -3927,7 +3927,7 @@ static int fts3EvalPhraseNext(
 
 /*
 **
-** If *pRc is not SQLITE_OK when this function is called, it is a no-op.
+** If *pRc is not SQLITE4_OK when this function is called, it is a no-op.
 ** Otherwise, fts3EvalPhraseStart() is called on all phrases within the
 ** expression. Also the Fts3Expr.bDeferred variable is set to true for any
 ** expressions for which all descendent tokens are deferred.
@@ -3947,7 +3947,7 @@ static void fts3EvalStartReaders(
   int bOptOk,                     /* True to enable incremental loading */
   int *pRc                        /* IN/OUT: Error code */
 ){
-  if( pExpr && SQLITE_OK==*pRc ){
+  if( pExpr && SQLITE4_OK==*pRc ){
     if( pExpr->eType==FTSQUERY_PHRASE ){
       int i;
       int nToken = pExpr->pPhrase->nToken;
@@ -3989,7 +3989,7 @@ struct Fts3TokenAndCost {
 /*
 ** This function is used to populate an allocated Fts3TokenAndCost array.
 **
-** If *pRc is not SQLITE_OK when this function is called, it is a no-op.
+** If *pRc is not SQLITE4_OK when this function is called, it is a no-op.
 ** Otherwise, if an error occurs during execution, *pRc is set to an
 ** SQLite error code.
 */
@@ -4001,11 +4001,11 @@ static void fts3EvalTokenCosts(
   Fts3Expr ***ppOr,               /* Write new OR root to *(*ppOr)++ */
   int *pRc                        /* IN/OUT: Error code */
 ){
-  if( *pRc==SQLITE_OK ){
+  if( *pRc==SQLITE4_OK ){
     if( pExpr->eType==FTSQUERY_PHRASE ){
       Fts3Phrase *pPhrase = pExpr->pPhrase;
       int i;
-      for(i=0; *pRc==SQLITE_OK && i<pPhrase->nToken; i++){
+      for(i=0; *pRc==SQLITE4_OK && i<pPhrase->nToken; i++){
         Fts3TokenAndCost *pTC = (*ppTC)++;
         pTC->pPhrase = pPhrase;
         pTC->iToken = i;
@@ -4038,7 +4038,7 @@ static void fts3EvalTokenCosts(
 
 /*
 ** Determine the average document (row) size in pages. If successful,
-** write this value to *pnPage and return SQLITE_OK. Otherwise, return
+** write this value to *pnPage and return SQLITE4_OK. Otherwise, return
 ** an SQLite error code.
 **
 ** The average document size in pages is calculated by first calculating 
@@ -4069,7 +4069,7 @@ static int fts3EvalAverageDocsize(Fts3Cursor *pCsr, int *pnPage){
     const char *a;
 
     rc = sqlite4Fts3SelectDoctotal(p, &pStmt);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
     a = sqlite4_column_blob(pStmt, 0);
     assert( a );
 
@@ -4087,11 +4087,11 @@ static int fts3EvalAverageDocsize(Fts3Cursor *pCsr, int *pnPage){
     pCsr->nRowAvg = (int)(((nByte / nDoc) + p->nPgsz) / p->nPgsz);
     assert( pCsr->nRowAvg>0 ); 
     rc = sqlite4_reset(pStmt);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
 
   *pnPage = pCsr->nRowAvg;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -4104,7 +4104,7 @@ static int fts3EvalAverageDocsize(Fts3Cursor *pCsr, int *pnPage){
 ** the cluster with root node pRoot. See comments above the definition
 ** of struct Fts3TokenAndCost for more details.
 **
-** If no error occurs, SQLITE_OK is returned and sqlite4Fts3DeferToken()
+** If no error occurs, SQLITE4_OK is returned and sqlite4Fts3DeferToken()
 ** called on each token to defer. Otherwise, an SQLite error code is
 ** returned.
 */
@@ -4116,7 +4116,7 @@ static int fts3EvalSelectDeferred(
 ){
   Fts3Table *pTab = (Fts3Table *)pCsr->base.pVtab;
   int nDocSize = 0;               /* Number of pages per doc loaded */
-  int rc = SQLITE_OK;             /* Return code */
+  int rc = SQLITE4_OK;             /* Return code */
   int ii;                         /* Iterator variable for various purposes */
   int nOvfl = 0;                  /* Total overflow pages used by doclists */
   int nToken = 0;                 /* Total number of tokens in cluster */
@@ -4130,7 +4130,7 @@ static int fts3EvalSelectDeferred(
   ** causing any problems, the deferred token optimization is completely
   ** disabled for content=xxx tables. */
   if( pTab->zContentTbl ){
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   /* Count the tokens in this AND/NEAR cluster. If none of the doclists
@@ -4142,11 +4142,11 @@ static int fts3EvalSelectDeferred(
       nToken++;
     }
   }
-  if( nOvfl==0 || nToken<2 ) return SQLITE_OK;
+  if( nOvfl==0 || nToken<2 ) return SQLITE4_OK;
 
   /* Obtain the average docsize (in pages). */
   rc = fts3EvalAverageDocsize(pCsr, &nDocSize);
-  assert( rc!=SQLITE_OK || nDocSize>0 );
+  assert( rc!=SQLITE4_OK || nDocSize>0 );
 
 
   /* Iterate through all tokens in this AND/NEAR cluster, in ascending order 
@@ -4171,7 +4171,7 @@ static int fts3EvalSelectDeferred(
   **
   **    (nMinEst + 4^nOther - 1) / (4^nOther)
   */
-  for(ii=0; ii<nToken && rc==SQLITE_OK; ii++){
+  for(ii=0; ii<nToken && rc==SQLITE4_OK; ii++){
     int iTC;                      /* Used to iterate through aTC[] array. */
     Fts3TokenAndCost *pTC = 0;    /* Set to cheapest remaining token. */
 
@@ -4208,8 +4208,8 @@ static int fts3EvalSelectDeferred(
         int nList = 0;
         char *pList = 0;
         rc = fts3TermSelect(pTab, pToken, pTC->iCol, &nList, &pList);
-        assert( rc==SQLITE_OK || pList==0 );
-        if( rc==SQLITE_OK ){
+        assert( rc==SQLITE4_OK || pList==0 );
+        if( rc==SQLITE4_OK ){
           int nCount;
           fts3EvalPhraseMergeToken(pTab, pTC->pPhrase, pTC->iToken,pList,nList);
           nCount = fts3DoclistCountDocids(
@@ -4239,7 +4239,7 @@ static int fts3EvalSelectDeferred(
 */
 static int fts3EvalStart(Fts3Cursor *pCsr){
   Fts3Table *pTab = (Fts3Table *)pCsr->base.pVtab;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int nToken = 0;
   int nOr = 0;
 
@@ -4247,7 +4247,7 @@ static int fts3EvalStart(Fts3Cursor *pCsr){
   fts3EvalAllocateReaders(pCsr, pCsr->pExpr, &nToken, &nOr, &rc);
 
   /* Determine which, if any, tokens in the expression should be deferred. */
-  if( rc==SQLITE_OK && nToken>1 && pTab->bHasStat ){
+  if( rc==SQLITE4_OK && nToken>1 && pTab->bHasStat ){
     Fts3TokenAndCost *aTC;
     Fts3Expr **apOr;
     aTC = (Fts3TokenAndCost *)sqlite4_malloc(
@@ -4257,7 +4257,7 @@ static int fts3EvalStart(Fts3Cursor *pCsr){
     apOr = (Fts3Expr **)&aTC[nToken];
 
     if( !aTC ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }else{
       int ii;
       Fts3TokenAndCost *pTC = aTC;
@@ -4267,9 +4267,9 @@ static int fts3EvalStart(Fts3Cursor *pCsr){
       nToken = pTC-aTC;
       nOr = ppOr-apOr;
 
-      if( rc==SQLITE_OK ){
+      if( rc==SQLITE4_OK ){
         rc = fts3EvalSelectDeferred(pCsr, 0, aTC, nToken);
-        for(ii=0; rc==SQLITE_OK && ii<nOr; ii++){
+        for(ii=0; rc==SQLITE4_OK && ii<nOr; ii++){
           rc = fts3EvalSelectDeferred(pCsr, apOr[ii], aTC, nToken);
         }
       }
@@ -4350,7 +4350,7 @@ static int fts3EvalNearTrim(
 }
 
 /*
-** This function is a no-op if *pRc is other than SQLITE_OK when it is called.
+** This function is a no-op if *pRc is other than SQLITE4_OK when it is called.
 ** Otherwise, it advances the expression passed as the second argument to
 ** point to the next matching row in the database. Expressions iterate through
 ** matching rows in docid order. Ascending order if Fts3Cursor.bDesc is zero,
@@ -4395,7 +4395,7 @@ static void fts3EvalNextRow(
   Fts3Expr *pExpr,                /* Expr. to advance to next matching row */
   int *pRc                        /* IN/OUT: Error code */
 ){
-  if( *pRc==SQLITE_OK ){
+  if( *pRc==SQLITE4_OK ){
     int bDescDoclist = pCsr->bDesc;         /* Used by DOCID_CMP() macro */
     assert( pExpr->bEof==0 );
     pExpr->bStart = 1;
@@ -4423,7 +4423,7 @@ static void fts3EvalNextRow(
           /* Neither the RHS or LHS are deferred. */
           fts3EvalNextRow(pCsr, pLeft, pRc);
           fts3EvalNextRow(pCsr, pRight, pRc);
-          while( !pLeft->bEof && !pRight->bEof && *pRc==SQLITE_OK ){
+          while( !pLeft->bEof && !pRight->bEof && *pRc==SQLITE4_OK ){
             sqlite4_int64 iDiff = DOCID_CMP(pLeft->iDocid, pRight->iDocid);
             if( iDiff==0 ) break;
             if( iDiff<0 ){
@@ -4472,7 +4472,7 @@ static void fts3EvalNextRow(
 
         if( pRight->bStart==0 ){
           fts3EvalNextRow(pCsr, pRight, pRc);
-          assert( *pRc!=SQLITE_OK || pRight->bStart );
+          assert( *pRc!=SQLITE4_OK || pRight->bStart );
         }
 
         fts3EvalNextRow(pCsr, pLeft, pRc);
@@ -4501,7 +4501,7 @@ static void fts3EvalNextRow(
 }
 
 /*
-** If *pRc is not SQLITE_OK, or if pExpr is not the root node of a NEAR
+** If *pRc is not SQLITE4_OK, or if pExpr is not the root node of a NEAR
 ** cluster, then this function returns 1 immediately.
 **
 ** Otherwise, it checks if the current row really does match the NEAR 
@@ -4538,7 +4538,7 @@ static int fts3EvalNearTest(Fts3Expr *pExpr, int *pRc){
   ** left-hand child may be either a phrase or a NEAR node. There are
   ** no exceptions to this - it's the way the parser in fts3_expr.c works.
   */
-  if( *pRc==SQLITE_OK 
+  if( *pRc==SQLITE4_OK 
    && pExpr->eType==FTSQUERY_NEAR 
    && pExpr->bEof==0
    && (pExpr->pParent==0 || pExpr->pParent->eType!=FTSQUERY_NEAR)
@@ -4554,7 +4554,7 @@ static int fts3EvalNearTest(Fts3Expr *pExpr, int *pRc){
     nTmp += p->pPhrase->doclist.nList;
     aTmp = sqlite4_malloc(nTmp*2);
     if( !aTmp ){
-      *pRc = SQLITE_NOMEM;
+      *pRc = SQLITE4_NOMEM;
       res = 0;
     }else{
       char *aPoslist = p->pPhrase->doclist.pList;
@@ -4592,7 +4592,7 @@ static int fts3EvalNearTest(Fts3Expr *pExpr, int *pRc){
 ** expression passed as the second argument matches the row that pCsr 
 ** currently points to, or zero if it does not.
 **
-** If *pRc is not SQLITE_OK when this function is called, it is a no-op.
+** If *pRc is not SQLITE4_OK when this function is called, it is a no-op.
 ** If an error occurs during execution of this function, *pRc is set to 
 ** the appropriate SQLite error code. In this case the returned value is 
 ** undefined.
@@ -4603,7 +4603,7 @@ static int fts3EvalTestExpr(
   int *pRc                        /* IN/OUT: Error code */
 ){
   int bHit = 1;                   /* Return value */
-  if( *pRc==SQLITE_OK ){
+  if( *pRc==SQLITE4_OK ){
     switch( pExpr->eType ){
       case FTSQUERY_NEAR:
       case FTSQUERY_AND:
@@ -4692,12 +4692,12 @@ static int fts3EvalTestExpr(
 **
 **   * Deferred tokens have not yet been considered.
 **
-** If *pRc is not SQLITE_OK when this function is called, it immediately
+** If *pRc is not SQLITE4_OK when this function is called, it immediately
 ** returns 0. Otherwise, it tests whether or not after considering NEAR
 ** operators and deferred tokens the current row is still a match for the
 ** expression. It returns 1 if both of the following are true:
 **
-**   1. *pRc is SQLITE_OK when this function returns, and
+**   1. *pRc is SQLITE4_OK when this function returns, and
 **
 **   2. After scanning the current FTS table row for the deferred tokens,
 **      it is determined that the row does *not* match the query.
@@ -4708,7 +4708,7 @@ static int fts3EvalTestExpr(
 static int fts3EvalTestDeferredAndNear(Fts3Cursor *pCsr, int *pRc){
   int rc = *pRc;
   int bMiss = 0;
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
 
     /* If there are one or more deferred tokens, load the current row into
     ** memory and scan it to determine the position list for each deferred
@@ -4718,7 +4718,7 @@ static int fts3EvalTestDeferredAndNear(Fts3Cursor *pCsr, int *pRc){
     */
     if( pCsr->pDeferred ){
       rc = fts3CursorSeek(0, pCsr);
-      if( rc==SQLITE_OK ){
+      if( rc==SQLITE4_OK ){
         rc = sqlite4Fts3CacheDeferredDoclists(pCsr);
       }
     }
@@ -4728,7 +4728,7 @@ static int fts3EvalTestDeferredAndNear(Fts3Cursor *pCsr, int *pRc){
     sqlite4Fts3FreeDeferredDoclists(pCsr);
     *pRc = rc;
   }
-  return (rc==SQLITE_OK && bMiss);
+  return (rc==SQLITE4_OK && bMiss);
 }
 
 /*
@@ -4736,7 +4736,7 @@ static int fts3EvalTestDeferredAndNear(Fts3Cursor *pCsr, int *pRc){
 ** Fts3Cursor.pExpr.
 */
 static int fts3EvalNext(Fts3Cursor *pCsr){
-  int rc = SQLITE_OK;             /* Return Code */
+  int rc = SQLITE4_OK;             /* Return Code */
   Fts3Expr *pExpr = pCsr->pExpr;
   assert( pCsr->isEof==0 );
   if( pExpr==0 ){
@@ -4762,7 +4762,7 @@ static int fts3EvalNext(Fts3Cursor *pCsr){
 ** fts3EvalNext() visits the first row. Do not allow incremental 
 ** loading or merging of phrase doclists for this iteration.
 **
-** If *pRc is other than SQLITE_OK when this function is called, it is
+** If *pRc is other than SQLITE4_OK when this function is called, it is
 ** a no-op. If an error occurs within this function, *pRc is set to an
 ** SQLite error code before returning.
 */
@@ -4771,7 +4771,7 @@ static void fts3EvalRestart(
   Fts3Expr *pExpr,
   int *pRc
 ){
-  if( pExpr && *pRc==SQLITE_OK ){
+  if( pExpr && *pRc==SQLITE4_OK ){
     Fts3Phrase *pPhrase = pExpr->pPhrase;
 
     if( pPhrase ){
@@ -4844,14 +4844,14 @@ static void fts3EvalUpdateCounts(Fts3Expr *pExpr){
 ** of a NEAR expression, then it also allocates and populates the same array
 ** for all other phrases that are part of the NEAR expression.
 **
-** SQLITE_OK is returned if the aMI[] array is successfully allocated and
+** SQLITE4_OK is returned if the aMI[] array is successfully allocated and
 ** populated. Otherwise, if an error occurs, an SQLite error code is returned.
 */
 static int fts3EvalGatherStats(
   Fts3Cursor *pCsr,               /* Cursor object */
   Fts3Expr *pExpr                 /* FTSQUERY_PHRASE expression */
 ){
-  int rc = SQLITE_OK;             /* Return code */
+  int rc = SQLITE4_OK;             /* Return code */
 
   assert( pExpr->eType==FTSQUERY_PHRASE );
   if( pExpr->aMI==0 ){
@@ -4877,13 +4877,13 @@ static int fts3EvalGatherStats(
       Fts3Expr *pE = (p->eType==FTSQUERY_PHRASE?p:p->pRight);
       assert( pE->aMI==0 );
       pE->aMI = (u32 *)sqlite4_malloc(pTab->nColumn * 3 * sizeof(u32));
-      if( !pE->aMI ) return SQLITE_NOMEM;
+      if( !pE->aMI ) return SQLITE4_NOMEM;
       memset(pE->aMI, 0, pTab->nColumn * 3 * sizeof(u32));
     }
 
     fts3EvalRestart(pCsr, pRoot, &rc);
 
-    while( pCsr->isEof==0 && rc==SQLITE_OK ){
+    while( pCsr->isEof==0 && rc==SQLITE4_OK ){
 
       do {
         /* Ensure the %_content statement is reset. */
@@ -4901,7 +4901,7 @@ static int fts3EvalGatherStats(
            && fts3EvalTestDeferredAndNear(pCsr, &rc) 
       );
 
-      if( rc==SQLITE_OK && pCsr->isEof==0 ){
+      if( rc==SQLITE4_OK && pCsr->isEof==0 ){
         fts3EvalUpdateCounts(pRoot);
       }
     }
@@ -4916,13 +4916,13 @@ static int fts3EvalGatherStats(
       ** order. For this reason, even though it seems more defensive, the 
       ** do loop can not be written:
       **
-      **   do {...} while( pRoot->iDocid<iDocid && rc==SQLITE_OK );
+      **   do {...} while( pRoot->iDocid<iDocid && rc==SQLITE4_OK );
       */
       fts3EvalRestart(pCsr, pRoot, &rc);
       do {
         fts3EvalNextRow(pCsr, pRoot, &rc);
         assert( pRoot->bEof==0 );
-      }while( pRoot->iDocid!=iDocid && rc==SQLITE_OK );
+      }while( pRoot->iDocid!=iDocid && rc==SQLITE4_OK );
       fts3EvalTestDeferredAndNear(pCsr, &rc);
     }
   }
@@ -4939,7 +4939,7 @@ static int fts3EvalGatherStats(
 **   2. For each column, the number of rows in the table for which the
 **      column contains at least one instance of the phrase.
 **
-** If no error occurs, SQLITE_OK is returned and the values for each column
+** If no error occurs, SQLITE4_OK is returned and the values for each column
 ** written into the array aiOut as follows:
 **
 **   aiOut[iCol*3 + 1] = Number of occurrences
@@ -4965,7 +4965,7 @@ int sqlite4Fts3EvalPhraseStats(
   u32 *aiOut                      /* Array to write results into (see above) */
 ){
   Fts3Table *pTab = (Fts3Table *)pCsr->base.pVtab;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int iCol;
 
   if( pExpr->bDeferred && pExpr->pParent->eType!=FTSQUERY_NEAR ){
@@ -4976,7 +4976,7 @@ int sqlite4Fts3EvalPhraseStats(
     }
   }else{
     rc = fts3EvalGatherStats(pCsr, pExpr);
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       assert( pExpr->aMI );
       for(iCol=0; iCol<pTab->nColumn; iCol++){
         aiOut[iCol*3 + 1] = pExpr->aMI[iCol*3 + 1];
@@ -5064,15 +5064,15 @@ void sqlite4Fts3EvalPhraseCleanup(Fts3Phrase *pPhrase){
 }
 
 /*
-** Return SQLITE_CORRUPT_VTAB.
+** Return SQLITE4_CORRUPT_VTAB.
 */
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
 int sqlite4Fts3Corrupt(){
-  return SQLITE_CORRUPT_VTAB;
+  return SQLITE4_CORRUPT_VTAB;
 }
 #endif
 
-#if !SQLITE_CORE
+#if !SQLITE4_CORE
 /*
 ** Initialize API pointer table, if required.
 */
@@ -5081,7 +5081,7 @@ int sqlite4_extension_init(
   char **pzErrMsg,
   const sqlite4_api_routines *pApi
 ){
-  SQLITE_EXTENSION_INIT2(pApi)
+  SQLITE4_EXTENSION_INIT2(pApi)
   return sqlite4Fts3Init(db);
 }
 #endif

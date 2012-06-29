@@ -558,7 +558,7 @@ do_test savepoint-8-2 {
 ifcapable auth {
   proc auth {args} {
     eval lappend ::authdata $args
-    return SQLITE_OK
+    return SQLITE4_OK
   }
   db auth auth
 
@@ -566,21 +566,21 @@ ifcapable auth {
     set ::authdata [list]
     execsql { SAVEPOINT sp1 }
     set ::authdata
-  } {SQLITE_SAVEPOINT BEGIN sp1 {} {}}
+  } {SQLITE4_SAVEPOINT BEGIN sp1 {} {}}
   do_test savepoint-9.2 {
     set ::authdata [list]
     execsql { ROLLBACK TO sp1 }
     set ::authdata
-  } {SQLITE_SAVEPOINT ROLLBACK sp1 {} {}}
+  } {SQLITE4_SAVEPOINT ROLLBACK sp1 {} {}}
   do_test savepoint-9.3 {
     set ::authdata [list]
     execsql { RELEASE sp1 }
     set ::authdata
-  } {SQLITE_SAVEPOINT RELEASE sp1 {} {}}
+  } {SQLITE4_SAVEPOINT RELEASE sp1 {} {}}
 
   proc auth {args} {
     eval lappend ::authdata $args
-    return SQLITE_DENY
+    return SQLITE4_DENY
   }
   db auth auth
 
@@ -588,17 +588,17 @@ ifcapable auth {
     set ::authdata [list]
     set res [catchsql { SAVEPOINT sp1 }]
     concat $::authdata $res
-  } {SQLITE_SAVEPOINT BEGIN sp1 {} {} 1 {not authorized}}
+  } {SQLITE4_SAVEPOINT BEGIN sp1 {} {} 1 {not authorized}}
   do_test savepoint-9.5 {
     set ::authdata [list]
     set res [catchsql { ROLLBACK TO sp1 }]
     concat $::authdata $res
-  } {SQLITE_SAVEPOINT ROLLBACK sp1 {} {} 1 {not authorized}}
+  } {SQLITE4_SAVEPOINT ROLLBACK sp1 {} {} 1 {not authorized}}
   do_test savepoint-9.6 {
     set ::authdata [list]
     set res [catchsql { RELEASE sp1 }]
     concat $::authdata $res
-  } {SQLITE_SAVEPOINT RELEASE sp1 {} {} 1 {not authorized}}
+  } {SQLITE4_SAVEPOINT RELEASE sp1 {} {} 1 {not authorized}}
 
   catch { db eval ROLLBACK }
   db auth ""
@@ -635,7 +635,7 @@ do_test savepoint-10.1.3 {
   }
 } {}
 
-# The lock state of the TEMP database can vary if SQLITE_TEMP_STORE=3
+# The lock state of the TEMP database can vary if SQLITE4_TEMP_STORE=3
 # And the following set of tests is only really interested in the status
 # of the aux1 and aux2 locks.  So record the current lock status of
 # TEMP for use in the answers.

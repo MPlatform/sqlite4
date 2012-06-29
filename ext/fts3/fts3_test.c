@@ -19,9 +19,9 @@
 #include <string.h>
 #include <assert.h>
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 
-/* Required so that the "ifdef SQLITE_ENABLE_FTS3" below works */
+/* Required so that the "ifdef SQLITE4_ENABLE_FTS3" below works */
 #include "fts3Int.h"
 
 #define NM_MAX_TOKEN 12
@@ -278,7 +278,7 @@ static int fts3_configure_incr_load_cmd(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-#ifdef SQLITE_ENABLE_FTS3
+#ifdef SQLITE4_ENABLE_FTS3
   extern int test_fts3_node_chunksize;
   extern int test_fts3_node_chunk_threshold;
   Tcl_Obj *pRet;
@@ -321,4 +321,4 @@ int Sqlitetestfts3_Init(Tcl_Interp *interp){
   );
   return TCL_OK;
 }
-#endif                  /* ifdef SQLITE_TEST */
+#endif                  /* ifdef SQLITE4_TEST */

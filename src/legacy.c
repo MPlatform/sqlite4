@@ -18,7 +18,7 @@
 #include "sqliteInt.h"
 
 /*
-** Execute SQL code.  Return one of the SQLITE_ success/failure
+** Execute SQL code.  Return one of the SQLITE4_ success/failure
 ** codes.  Also write an error message into memory obtained from
 ** malloc() and make *pzErrMsg point to that message.
 **
@@ -34,26 +34,26 @@ int sqlite4_exec(
   void *pArg,                 /* First argument to xCallback() */
   char **pzErrMsg             /* Write error messages here */
 ){
-  int rc = SQLITE_OK;         /* Return code */
+  int rc = SQLITE4_OK;         /* Return code */
   const char *zLeftover;      /* Tail of unprocessed SQL */
   sqlite4_stmt *pStmt = 0;    /* The current SQL statement */
   char **azCols = 0;          /* Names of result columns */
   int nRetry = 0;             /* Number of retry attempts */
   int callbackIsInit;         /* True if callback data is initialized */
 
-  if( !sqlite4SafetyCheckOk(db) ) return SQLITE_MISUSE_BKPT;
+  if( !sqlite4SafetyCheckOk(db) ) return SQLITE4_MISUSE_BKPT;
   if( zSql==0 ) zSql = "";
 
   sqlite4_mutex_enter(db->mutex);
-  sqlite4Error(db, SQLITE_OK, 0);
-  while( (rc==SQLITE_OK || (rc==SQLITE_SCHEMA && (++nRetry)<2)) && zSql[0] ){
+  sqlite4Error(db, SQLITE4_OK, 0);
+  while( (rc==SQLITE4_OK || (rc==SQLITE4_SCHEMA && (++nRetry)<2)) && zSql[0] ){
     int nCol;
     char **azVals = 0;
 
     pStmt = 0;
     rc = sqlite4_prepare(db, zSql, -1, &pStmt, &zLeftover);
-    assert( rc==SQLITE_OK || pStmt==0 );
-    if( rc!=SQLITE_OK ){
+    assert( rc==SQLITE4_OK || pStmt==0 );
+    if( rc!=SQLITE4_OK ){
       continue;
     }
     if( !pStmt ){
@@ -70,7 +70,7 @@ int sqlite4_exec(
       rc = sqlite4_step(pStmt);
 
       /* Invoke the callback function if required */
-      if( xCallback && SQLITE_ROW==rc ){
+      if( xCallback && SQLITE4_ROW==rc ){
         if( !callbackIsInit ){
           azCols = sqlite4DbMallocZero(db, 2*nCol*sizeof(const char*) + 1);
           if( azCols==0 ){
@@ -84,29 +84,29 @@ int sqlite4_exec(
           }
           callbackIsInit = 1;
         }
-        if( rc==SQLITE_ROW ){
+        if( rc==SQLITE4_ROW ){
           azVals = &azCols[nCol];
           for(i=0; i<nCol; i++){
             azVals[i] = (char *)sqlite4_column_text(pStmt, i);
-            if( !azVals[i] && sqlite4_column_type(pStmt, i)!=SQLITE_NULL ){
+            if( !azVals[i] && sqlite4_column_type(pStmt, i)!=SQLITE4_NULL ){
               db->mallocFailed = 1;
               goto exec_out;
             }
           }
         }
         if( xCallback(pArg, nCol, azVals, azCols) ){
-          rc = SQLITE_ABORT;
+          rc = SQLITE4_ABORT;
           sqlite4VdbeFinalize((Vdbe *)pStmt);
           pStmt = 0;
-          sqlite4Error(db, SQLITE_ABORT, 0);
+          sqlite4Error(db, SQLITE4_ABORT, 0);
           goto exec_out;
         }
       }
 
-      if( rc!=SQLITE_ROW ){
+      if( rc!=SQLITE4_ROW ){
         rc = sqlite4VdbeFinalize((Vdbe *)pStmt);
         pStmt = 0;
-        if( rc!=SQLITE_SCHEMA ){
+        if( rc!=SQLITE4_SCHEMA ){
           nRetry = 0;
           zSql = zLeftover;
           while( sqlite4Isspace(zSql[0]) ) zSql++;
@@ -124,14 +124,14 @@ exec_out:
   sqlite4DbFree(db, azCols);
 
   rc = sqlite4ApiExit(db, rc);
-  if( rc!=SQLITE_OK && ALWAYS(rc==sqlite4_errcode(db)) && pzErrMsg ){
+  if( rc!=SQLITE4_OK && ALWAYS(rc==sqlite4_errcode(db)) && pzErrMsg ){
     int nErrMsg = 1 + sqlite4Strlen30(sqlite4_errmsg(db));
     *pzErrMsg = sqlite4Malloc(0, nErrMsg);
     if( *pzErrMsg ){
       memcpy(*pzErrMsg, sqlite4_errmsg(db), nErrMsg);
     }else{
-      rc = SQLITE_NOMEM;
-      sqlite4Error(db, SQLITE_NOMEM, 0);
+      rc = SQLITE4_NOMEM;
+      sqlite4Error(db, SQLITE4_NOMEM, 0);
     }
   }else if( pzErrMsg ){
     *pzErrMsg = 0;

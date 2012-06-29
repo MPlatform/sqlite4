@@ -40,7 +40,7 @@ void sqlite4MallocEnd(sqlite4_env *pEnv){
 sqlite4_uint64 sqlite4_memory_used(sqlite4_env *pEnv){
   sqlite4_uint64 n, mx;
   if( pEnv==0 ) pEnv = sqlite4_env_default();
-  sqlite4_env_status(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, &n, &mx, 0);
+  sqlite4_env_status(pEnv, SQLITE4_ENVSTATUS_MEMORY_USED, &n, &mx, 0);
   return n;
 }
 
@@ -52,7 +52,7 @@ sqlite4_uint64 sqlite4_memory_used(sqlite4_env *pEnv){
 sqlite4_uint64 sqlite4_memory_highwater(sqlite4_env *pEnv, int resetFlag){
   sqlite4_uint64 n, mx;
   if( pEnv==0 ) pEnv = sqlite4_env_default();
-  sqlite4_env_status(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, &n, &mx, resetFlag);
+  sqlite4_env_status(pEnv, SQLITE4_ENVSTATUS_MEMORY_USED, &n, &mx, resetFlag);
   return mx;
 }
 
@@ -79,10 +79,10 @@ void *sqlite4Malloc(sqlite4_env *pEnv, int n){
     p = pEnv->m.xMalloc(pEnv->m.pMemEnv, nFull);
     if( p ){
       nFull = sqlite4MallocSize(pEnv, p);
-      sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, nFull);
-      sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MALLOC_COUNT, 1);
+      sqlite4StatusAdd(pEnv, SQLITE4_ENVSTATUS_MEMORY_USED, nFull);
+      sqlite4StatusAdd(pEnv, SQLITE4_ENVSTATUS_MALLOC_COUNT, 1);
     }
-    sqlite4StatusSet(pEnv, SQLITE_ENVSTATUS_MALLOC_SIZE, n);
+    sqlite4StatusSet(pEnv, SQLITE4_ENVSTATUS_MALLOC_SIZE, n);
     sqlite4_mutex_leave(pEnv->pMemMutex);
   }else{
     p = pEnv->m.xMalloc(pEnv->m.pMemEnv, n);
@@ -97,7 +97,7 @@ void *sqlite4Malloc(sqlite4_env *pEnv, int n){
 ** allocation.
 */
 void *sqlite4_malloc(sqlite4_env *pEnv, sqlite4_size_t n){
-#ifndef SQLITE_OMIT_AUTOINIT
+#ifndef SQLITE4_OMIT_AUTOINIT
   if( sqlite4_initialize(pEnv) ) return 0;
 #endif
   if( n>0x7fff0000 ) return 0;
@@ -108,7 +108,7 @@ void *sqlite4_malloc(sqlite4_env *pEnv, sqlite4_size_t n){
 /*
 ** TRUE if p is a lookaside memory allocation from db
 */
-#ifndef SQLITE_OMIT_LOOKASIDE
+#ifndef SQLITE4_OMIT_LOOKASIDE
 static int isLookaside(sqlite4 *db, void *p){
   return p && p>=db->lookaside.pStart && p<db->lookaside.pEnd;
 }
@@ -149,9 +149,9 @@ void sqlite4_free(sqlite4_env *pEnv, void *p){
   if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
   if( pEnv->bMemstat ){
     sqlite4_mutex_enter(pEnv->pMemMutex);
-    sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MEMORY_USED,
+    sqlite4StatusAdd(pEnv,SQLITE4_ENVSTATUS_MEMORY_USED,
                      -sqlite4MallocSize(pEnv, p));
-    sqlite4StatusAdd(pEnv,SQLITE_ENVSTATUS_MALLOC_COUNT, -1);
+    sqlite4StatusAdd(pEnv,SQLITE4_ENVSTATUS_MALLOC_COUNT, -1);
     pEnv->m.xFree(pEnv->m.pMemEnv, p);
     sqlite4_mutex_leave(pEnv->pMemMutex);
   }else{
@@ -208,13 +208,13 @@ void *sqlite4Realloc(sqlite4_env *pEnv, void *pOld, int nBytes){
   nNew = (nBytes + 7)&~7;
   if( pEnv->bMemstat ){
     sqlite4_mutex_enter(pEnv->pMemMutex);
-    sqlite4StatusSet(pEnv, SQLITE_ENVSTATUS_MALLOC_SIZE, nBytes);
+    sqlite4StatusSet(pEnv, SQLITE4_ENVSTATUS_MALLOC_SIZE, nBytes);
     assert( sqlite4MemdebugHasType(pOld, MEMTYPE_HEAP) );
     assert( sqlite4MemdebugNoType(pOld, ~MEMTYPE_HEAP) );
     pNew = pEnv->m.xRealloc(pEnv->m.pMemEnv, pOld, nNew);
     if( pNew ){
       nNew = sqlite4MallocSize(pEnv, pNew);
-      sqlite4StatusAdd(pEnv, SQLITE_ENVSTATUS_MEMORY_USED, nNew-nOld);
+      sqlite4StatusAdd(pEnv, SQLITE4_ENVSTATUS_MEMORY_USED, nNew-nOld);
     }
     sqlite4_mutex_leave(pEnv->pMemMutex);
   }else{
@@ -229,7 +229,7 @@ void *sqlite4Realloc(sqlite4_env *pEnv, void *pOld, int nBytes){
 ** subsystem is initialized prior to invoking sqliteRealloc.
 */
 void *sqlite4_realloc(sqlite4_env *pEnv, void *pOld, sqlite4_size_t n){
-#ifndef SQLITE_OMIT_AUTOINIT
+#ifndef SQLITE4_OMIT_AUTOINIT
   if( sqlite4_initialize(pEnv) ) return 0;
 #endif
   if( n>0x7fff0000 ) return 0;
@@ -282,7 +282,7 @@ void *sqlite4DbMallocRaw(sqlite4 *db, int n){
   void *p;
   assert( db==0 || sqlite4_mutex_held(db->mutex) );
   assert( db==0 || db->pnBytesFreed==0 );
-#ifndef SQLITE_OMIT_LOOKASIDE
+#ifndef SQLITE4_OMIT_LOOKASIDE
   if( db ){
     LookasideSlot *pBuf;
     if( db->mallocFailed ){
@@ -427,11 +427,11 @@ void sqlite4SetString(char **pz, sqlite4 *db, const char *zFormat, ...){
 **
 ** The returned value is normally a copy of the second argument to this
 ** function. However, if a malloc() failure has occurred since the previous
-** invocation SQLITE_NOMEM is returned instead. 
+** invocation SQLITE4_NOMEM is returned instead. 
 **
 ** If the first argument, db, is not NULL and a malloc() error has occurred,
 ** then the connection error-code (the value returned by sqlite4_errcode())
-** is set to SQLITE_NOMEM.
+** is set to SQLITE4_NOMEM.
 */
 int sqlite4ApiExit(sqlite4* db, int rc){
   /* If the db handle is not NULL, then we must hold the connection handle
@@ -439,10 +439,10 @@ int sqlite4ApiExit(sqlite4* db, int rc){
   ** is unsafe, as is the call to sqlite4Error().
   */
   assert( !db || sqlite4_mutex_held(db->mutex) );
-  if( db && (db->mallocFailed || rc==SQLITE_IOERR_NOMEM) ){
-    sqlite4Error(db, SQLITE_NOMEM, 0);
+  if( db && (db->mallocFailed || rc==SQLITE4_IOERR_NOMEM) ){
+    sqlite4Error(db, SQLITE4_NOMEM, 0);
     db->mallocFailed = 0;
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }
   return rc;
 }

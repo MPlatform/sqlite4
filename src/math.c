@@ -15,8 +15,8 @@
 */
 #include "sqliteInt.h"
 
-#define SQLITE_MX_EXP   999    /* Maximum exponent */
-#define SQLITE_NAN_EXP 2000    /* Exponent to use for NaN */
+#define SQLITE4_MX_EXP   999    /* Maximum exponent */
+#define SQLITE4_NAN_EXP 2000    /* Exponent to use for NaN */
 
 /*
 ** 1/10th the maximum value of an unsigned 64-bit integer
@@ -76,11 +76,11 @@ sqlite4_num sqlite4_num_add(sqlite4_num A, sqlite4_num B){
       return sqlite4_num_sub(A,B);
     }
   }
-  if( A.e>SQLITE_MX_EXP ){
-    if( B.e>SQLITE_MX_EXP && B.m==0 ) return B;
+  if( A.e>SQLITE4_MX_EXP ){
+    if( B.e>SQLITE4_MX_EXP && B.m==0 ) return B;
     return A;
   }
-  if( B.e>SQLITE_MX_EXP ){
+  if( B.e>SQLITE4_MX_EXP ){
     return B;
   }
   adjustExponent(&A, &B);
@@ -92,7 +92,7 @@ sqlite4_num sqlite4_num_add(sqlite4_num A, sqlite4_num B){
     if( A.approx==0 && (A.m%10)!=0 ) A.approx = 1;
     A.m /= 10;
     A.e++;
-    if( A.e>SQLITE_MX_EXP ) return A;
+    if( A.e>SQLITE4_MX_EXP ) return A;
     if( A.approx==0 && (B.m%10)!=0 ) A.approx = 1;
     A.m += B.m/10;
   }
@@ -107,8 +107,8 @@ sqlite4_num sqlite4_num_sub(sqlite4_num A, sqlite4_num B){
     B.sign = A.sign;
     return sqlite4_num_add(A,B);
   }
-  if( A.e>SQLITE_MX_EXP || B.e>SQLITE_MX_EXP ){
-    A.e = SQLITE_NAN_EXP;
+  if( A.e>SQLITE4_MX_EXP || B.e>SQLITE4_MX_EXP ){
+    A.e = SQLITE4_NAN_EXP;
     A.m = 0;
     return A;
   }
@@ -143,10 +143,10 @@ static int multWillOverflow(sqlite4_uint64 x, sqlite4_uint64 y){
 */
 sqlite4_num sqlite4_num_mul(sqlite4_num A, sqlite4_num B){
   sqlite4_num r;
-  if( A.e>SQLITE_MX_EXP ){
+  if( A.e>SQLITE4_MX_EXP ){
     A.sign ^= B.sign;
     return A;
-  }else if( B.e>SQLITE_MX_EXP ){
+  }else if( B.e>SQLITE4_MX_EXP ){
     B.sign ^= A.sign;
     return B;
   }
@@ -176,11 +176,11 @@ sqlite4_num sqlite4_num_mul(sqlite4_num A, sqlite4_num B){
 */
 sqlite4_num sqlite4_num_div(sqlite4_num A, sqlite4_num B){
   sqlite4_num r;
-  if( A.e>SQLITE_MX_EXP ){
+  if( A.e>SQLITE4_MX_EXP ){
     A.m = 0;
     return A;
   }
-  if( B.e>SQLITE_MX_EXP ){
+  if( B.e>SQLITE4_MX_EXP ){
     if( B.m!=0 ){
       r.m = 0;
       r.e = 0;
@@ -192,7 +192,7 @@ sqlite4_num sqlite4_num_div(sqlite4_num A, sqlite4_num B){
   }
   if( B.m==0 ){
     r.sign = A.sign ^ B.sign;
-    r.e = SQLITE_NAN_EXP;
+    r.e = SQLITE4_NAN_EXP;
     r.m = 1;
     r.approx = 1;
     return r;
@@ -228,15 +228,15 @@ sqlite4_num sqlite4_num_div(sqlite4_num A, sqlite4_num B){
 ** compared with +inf and -inf returns 0 when compared with -inf.
 */
 int sqlite4_num_compare(sqlite4_num A, sqlite4_num B){
-  if( A.e>SQLITE_MX_EXP ){
+  if( A.e>SQLITE4_MX_EXP ){
     if( A.m==0 ) return 0;
-    if( B.e>SQLITE_MX_EXP ){
+    if( B.e>SQLITE4_MX_EXP ){
       if( B.m==0 ) return 0;
       if( B.sign==A.sign ) return 0;
     }
     return A.sign ? 1 : 3;
   }
-  if( B.e>SQLITE_MX_EXP ){
+  if( B.e>SQLITE4_MX_EXP ){
     if( B.m==0 ) return 0;
     return B.sign ? 3 : 1;
   }
@@ -304,9 +304,9 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
   memset(&r, 0, sizeof(r));
   if( nIn<0 ) nIn = 1000000000;
   c = flags & 0xf;
-  if( c==0 || c==SQLITE_UTF8 ){
+  if( c==0 || c==SQLITE4_UTF8 ){
     incr = 1;
-  }else if( c==SQLITE_UTF16 ){
+  }else if( c==SQLITE4_UTF16 ){
     incr = 2;
     c = *(char*)&one;
     zIn += c;
@@ -328,7 +328,7 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
    && ((c=zIn[i+incr])=='n' || c=='N')
    && ((c=zIn[i+incr*2])=='f' || c=='F')
   ){
-    r.e = SQLITE_MX_EXP+1;
+    r.e = SQLITE4_MX_EXP+1;
     r.m = nIn<=i+incr*3 || zIn[i+incr*3]==0;
     return r;
   }
@@ -336,7 +336,7 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
     i += incr;
     if( c>='0' && c<='9' ){
       if( c==0 && nDigit==0 ){
-        if( seenRadix && r.e > -(SQLITE_MX_EXP+1000) ) r.e--;
+        if( seenRadix && r.e > -(SQLITE4_MX_EXP+1000) ) r.e--;
         continue;
       }
       nDigit++;
@@ -379,7 +379,7 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
   return r;
   
 not_a_valid_number:
-  r.e = SQLITE_MX_EXP+1;
+  r.e = SQLITE4_MX_EXP+1;
   r.m = 0;
   return r;  
 }
@@ -429,7 +429,7 @@ int sqlite4_num_to_text(sqlite4_num x, char *zOut){
     zOut++;
     nOut++;
   }
-  if( x.e>SQLITE_MX_EXP ){
+  if( x.e>SQLITE4_MX_EXP ){
     /* Handle NaN and infinite values */
     if( x.m==0 ){
       memcpy(zOut, "NaN", 4);

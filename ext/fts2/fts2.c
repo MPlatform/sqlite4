@@ -1,10 +1,10 @@
 /* fts2 has a design flaw which can lead to database corruption (see
 ** below).  It is recommended not to use it any longer, instead use
 ** fts3 (or higher).  If you believe that your use of fts2 is safe,
-** add -DSQLITE_ENABLE_BROKEN_FTS2=1 to your CFLAGS.
+** add -DSQLITE4_ENABLE_BROKEN_FTS2=1 to your CFLAGS.
 */
-#if (!defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS2)) \
-        && !defined(SQLITE_ENABLE_BROKEN_FTS2)
+#if (!defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS2)) \
+        && !defined(SQLITE4_ENABLE_BROKEN_FTS2)
 #error fts2 has a design flaw and has been deprecated.
 #endif
 /* The flaw is that fts2 uses the content table's unaliased rowid as
@@ -41,10 +41,10 @@
 ** The code in this file is only compiled if:
 **
 **     * The FTS2 module is being built as an extension
-**       (in which case SQLITE_CORE is not defined), or
+**       (in which case SQLITE4_CORE is not defined), or
 **
 **     * The FTS2 module is being built into the core of
-**       SQLite (in which case SQLITE_ENABLE_FTS2 is defined).
+**       SQLite (in which case SQLITE4_ENABLE_FTS2 is defined).
 */
 
 /* TODO(shess) Consider exporting this comment to an HTML file or the
@@ -296,10 +296,10 @@
 ** into a single segment.
 */
 
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS2)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS2)
 
-#if defined(SQLITE_ENABLE_FTS2) && !defined(SQLITE_CORE)
-# define SQLITE_CORE 1
+#if defined(SQLITE4_ENABLE_FTS2) && !defined(SQLITE4_CORE)
+# define SQLITE4_CORE 1
 #endif
 
 #include <assert.h>
@@ -311,7 +311,7 @@
 #include "fts2_tokenizer.h"
 #include "sqlite4.h"
 #include "sqlite4ext.h"
-SQLITE_EXTENSION_INIT1
+SQLITE4_EXTENSION_INIT1
 
 
 /* TODO(shess) MAN, this thing needs some refactoring.  At minimum, it
@@ -1960,23 +1960,23 @@ static int sql_get_statement(fulltext_vtab *v, fulltext_statement iStmt,
     rc = sql_prepare(v->db, v->zDb, v->zName, &v->pFulltextStatements[iStmt],
                          zStmt);
     if( zStmt != fulltext_zStatement[iStmt]) sqlite4_free((void *) zStmt);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   } else {
     int rc = sqlite4_reset(v->pFulltextStatements[iStmt]);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
 
   *ppStmt = v->pFulltextStatements[iStmt];
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
-/* Like sqlite4_step(), but convert SQLITE_DONE to SQLITE_OK and
-** SQLITE_ROW to SQLITE_ERROR.  Useful for statements like UPDATE,
+/* Like sqlite4_step(), but convert SQLITE4_DONE to SQLITE4_OK and
+** SQLITE4_ROW to SQLITE4_ERROR.  Useful for statements like UPDATE,
 ** where we expect no results.
 */
 static int sql_single_step(sqlite4_stmt *s){
   int rc = sqlite4_step(s);
-  return (rc==SQLITE_DONE) ? SQLITE_OK : rc;
+  return (rc==SQLITE4_DONE) ? SQLITE4_OK : rc;
 }
 
 /* Like sql_get_statement(), but for special replicated LEAF_SELECT
@@ -1994,14 +1994,14 @@ static int sql_get_leaf_statement(fulltext_vtab *v, int idx,
   }else if( v->pLeafSelectStmts[idx]==NULL ){
     int rc = sql_prepare(v->db, v->zDb, v->zName, &v->pLeafSelectStmts[idx],
                          LEAF_SELECT);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }else{
     int rc = sqlite4_reset(v->pLeafSelectStmts[idx]);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
 
   *ppStmt = v->pLeafSelectStmts[idx];
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* insert into %_content (rowid, ...) values ([rowid], [pValues]) */
@@ -2010,14 +2010,14 @@ static int content_insert(fulltext_vtab *v, sqlite4_value *rowid,
   sqlite4_stmt *s;
   int i;
   int rc = sql_get_statement(v, CONTENT_INSERT_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_value(s, 1, rowid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   for(i=0; i<v->nColumn; ++i){
     rc = sqlite4_bind_value(s, 2+i, pValues[i]);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
 
   return sql_single_step(s);
@@ -2030,15 +2030,15 @@ static int content_update(fulltext_vtab *v, sqlite4_value **pValues,
   sqlite4_stmt *s;
   int i;
   int rc = sql_get_statement(v, CONTENT_UPDATE_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   for(i=0; i<v->nColumn; ++i){
     rc = sqlite4_bind_value(s, 1+i, pValues[i]);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
 
   rc = sqlite4_bind_int64(s, 1+v->nColumn, iRowid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   return sql_single_step(s);
 }
@@ -2068,17 +2068,17 @@ static int content_select(fulltext_vtab *v, sqlite_int64 iRow,
   *pValues = NULL;
 
   rc = sql_get_statement(v, CONTENT_SELECT_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 1, iRow);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_step(s);
-  if( rc!=SQLITE_ROW ) return rc;
+  if( rc!=SQLITE4_ROW ) return rc;
 
   values = (const char **) sqlite4_malloc(v->nColumn * sizeof(const char *));
   for(i=0; i<v->nColumn; ++i){
-    if( sqlite4_column_type(s, i)==SQLITE_NULL ){
+    if( sqlite4_column_type(s, i)==SQLITE4_NULL ){
       values[i] = NULL;
     }else{
       values[i] = string_dup((char*)sqlite4_column_text(s, i));
@@ -2088,9 +2088,9 @@ static int content_select(fulltext_vtab *v, sqlite_int64 iRow,
   /* We expect only one row.  We must execute another sqlite4_step()
    * to complete the iteration; otherwise the table will remain locked. */
   rc = sqlite4_step(s);
-  if( rc==SQLITE_DONE ){
+  if( rc==SQLITE4_DONE ){
     *pValues = values;
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   freeStringArray(v->nColumn, values);
@@ -2101,30 +2101,30 @@ static int content_select(fulltext_vtab *v, sqlite_int64 iRow,
 static int content_delete(fulltext_vtab *v, sqlite_int64 iRow){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, CONTENT_DELETE_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 1, iRow);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   return sql_single_step(s);
 }
 
-/* Returns SQLITE_ROW if any rows exist in %_content, SQLITE_DONE if
+/* Returns SQLITE4_ROW if any rows exist in %_content, SQLITE4_DONE if
 ** no rows exist, and any error in case of failure.
 */
 static int content_exists(fulltext_vtab *v){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, CONTENT_EXISTS_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_step(s);
-  if( rc!=SQLITE_ROW ) return rc;
+  if( rc!=SQLITE4_ROW ) return rc;
 
   /* We expect only one row.  We must execute another sqlite4_step()
    * to complete the iteration; otherwise the table will remain locked. */
   rc = sqlite4_step(s);
-  if( rc==SQLITE_DONE ) return SQLITE_ROW;
-  if( rc==SQLITE_ROW ) return SQLITE_ERROR;
+  if( rc==SQLITE4_DONE ) return SQLITE4_ROW;
+  if( rc==SQLITE4_ROW ) return SQLITE4_ERROR;
   return rc;
 }
 
@@ -2135,17 +2135,17 @@ static int block_insert(fulltext_vtab *v, const char *pData, int nData,
                         sqlite_int64 *piBlockid){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, BLOCK_INSERT_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
-  rc = sqlite4_bind_blob(s, 1, pData, nData, SQLITE_STATIC);
-  if( rc!=SQLITE_OK ) return rc;
+  rc = sqlite4_bind_blob(s, 1, pData, nData, SQLITE4_STATIC);
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_step(s);
-  if( rc==SQLITE_ROW ) return SQLITE_ERROR;
-  if( rc!=SQLITE_DONE ) return rc;
+  if( rc==SQLITE4_ROW ) return SQLITE4_ERROR;
+  if( rc!=SQLITE4_DONE ) return rc;
 
   *piBlockid = sqlite4_last_insert_rowid(v->db);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* delete from %_segments
@@ -2158,38 +2158,38 @@ static int block_delete(fulltext_vtab *v,
                         sqlite_int64 iStartBlockid, sqlite_int64 iEndBlockid){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, BLOCK_DELETE_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 1, iStartBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 2, iEndBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   return sql_single_step(s);
 }
 
-/* Returns SQLITE_ROW with *pidx set to the maximum segment idx found
-** at iLevel.  Returns SQLITE_DONE if there are no segments at
+/* Returns SQLITE4_ROW with *pidx set to the maximum segment idx found
+** at iLevel.  Returns SQLITE4_DONE if there are no segments at
 ** iLevel.  Otherwise returns an error.
 */
 static int segdir_max_index(fulltext_vtab *v, int iLevel, int *pidx){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, SEGDIR_MAX_INDEX_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int(s, 1, iLevel);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_step(s);
   /* Should always get at least one row due to how max() works. */
-  if( rc==SQLITE_DONE ) return SQLITE_DONE;
-  if( rc!=SQLITE_ROW ) return rc;
+  if( rc==SQLITE4_DONE ) return SQLITE4_DONE;
+  if( rc!=SQLITE4_ROW ) return rc;
 
   /* NULL means that there were no inputs to max(). */
-  if( SQLITE_NULL==sqlite4_column_type(s, 0) ){
+  if( SQLITE4_NULL==sqlite4_column_type(s, 0) ){
     rc = sqlite4_step(s);
-    if( rc==SQLITE_ROW ) return SQLITE_ERROR;
+    if( rc==SQLITE4_ROW ) return SQLITE4_ERROR;
     return rc;
   }
 
@@ -2198,9 +2198,9 @@ static int segdir_max_index(fulltext_vtab *v, int iLevel, int *pidx){
   /* We expect only one row.  We must execute another sqlite4_step()
    * to complete the iteration; otherwise the table will remain locked. */
   rc = sqlite4_step(s);
-  if( rc==SQLITE_ROW ) return SQLITE_ERROR;
-  if( rc!=SQLITE_DONE ) return rc;
-  return SQLITE_ROW;
+  if( rc==SQLITE4_ROW ) return SQLITE4_ERROR;
+  if( rc!=SQLITE4_DONE ) return rc;
+  return SQLITE4_ROW;
 }
 
 /* insert into %_segdir values (
@@ -2216,53 +2216,53 @@ static int segdir_set(fulltext_vtab *v, int iLevel, int idx,
                       const char *pRootData, int nRootData){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, SEGDIR_SET_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int(s, 1, iLevel);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int(s, 2, idx);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 3, iStartBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 4, iLeavesEndBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 5, iEndBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
-  rc = sqlite4_bind_blob(s, 6, pRootData, nRootData, SQLITE_STATIC);
-  if( rc!=SQLITE_OK ) return rc;
+  rc = sqlite4_bind_blob(s, 6, pRootData, nRootData, SQLITE4_STATIC);
+  if( rc!=SQLITE4_OK ) return rc;
 
   return sql_single_step(s);
 }
 
 /* Queries %_segdir for the block span of the segments in level
-** iLevel.  Returns SQLITE_DONE if there are no blocks for iLevel,
-** SQLITE_ROW if there are blocks, else an error.
+** iLevel.  Returns SQLITE4_DONE if there are no blocks for iLevel,
+** SQLITE4_ROW if there are blocks, else an error.
 */
 static int segdir_span(fulltext_vtab *v, int iLevel,
                        sqlite_int64 *piStartBlockid,
                        sqlite_int64 *piEndBlockid){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, SEGDIR_SPAN_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int(s, 1, iLevel);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_step(s);
-  if( rc==SQLITE_DONE ) return SQLITE_DONE;  /* Should never happen */
-  if( rc!=SQLITE_ROW ) return rc;
+  if( rc==SQLITE4_DONE ) return SQLITE4_DONE;  /* Should never happen */
+  if( rc!=SQLITE4_ROW ) return rc;
 
   /* This happens if all segments at this level are entirely inline. */
-  if( SQLITE_NULL==sqlite4_column_type(s, 0) ){
+  if( SQLITE4_NULL==sqlite4_column_type(s, 0) ){
     /* We expect only one row.  We must execute another sqlite4_step()
      * to complete the iteration; otherwise the table will remain locked. */
     int rc2 = sqlite4_step(s);
-    if( rc2==SQLITE_ROW ) return SQLITE_ERROR;
+    if( rc2==SQLITE4_ROW ) return SQLITE4_ERROR;
     return rc2;
   }
 
@@ -2272,9 +2272,9 @@ static int segdir_span(fulltext_vtab *v, int iLevel,
   /* We expect only one row.  We must execute another sqlite4_step()
    * to complete the iteration; otherwise the table will remain locked. */
   rc = sqlite4_step(s);
-  if( rc==SQLITE_ROW ) return SQLITE_ERROR;
-  if( rc!=SQLITE_DONE ) return rc;
-  return SQLITE_ROW;
+  if( rc==SQLITE4_ROW ) return SQLITE4_ERROR;
+  if( rc!=SQLITE4_DONE ) return rc;
+  return SQLITE4_ROW;
 }
 
 /* Delete the segment blocks and segment directory records for all
@@ -2284,59 +2284,59 @@ static int segdir_delete(fulltext_vtab *v, int iLevel){
   sqlite4_stmt *s;
   sqlite_int64 iStartBlockid, iEndBlockid;
   int rc = segdir_span(v, iLevel, &iStartBlockid, &iEndBlockid);
-  if( rc!=SQLITE_ROW && rc!=SQLITE_DONE ) return rc;
+  if( rc!=SQLITE4_ROW && rc!=SQLITE4_DONE ) return rc;
 
-  if( rc==SQLITE_ROW ){
+  if( rc==SQLITE4_ROW ){
     rc = block_delete(v, iStartBlockid, iEndBlockid);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
 
   /* Delete the segment directory itself. */
   rc = sql_get_statement(v, SEGDIR_DELETE_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 1, iLevel);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   return sql_single_step(s);
 }
 
-/* Delete entire fts index, SQLITE_OK on success, relevant error on
+/* Delete entire fts index, SQLITE4_OK on success, relevant error on
 ** failure.
 */
 static int segdir_delete_all(fulltext_vtab *v){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, SEGDIR_DELETE_ALL_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sql_single_step(s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sql_get_statement(v, BLOCK_DELETE_ALL_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   return sql_single_step(s);
 }
 
-/* Returns SQLITE_OK with *pnSegments set to the number of entries in
+/* Returns SQLITE4_OK with *pnSegments set to the number of entries in
 ** %_segdir and *piMaxLevel set to the highest level which has a
 ** segment.  Otherwise returns the SQLite error which caused failure.
 */
 static int segdir_count(fulltext_vtab *v, int *pnSegments, int *piMaxLevel){
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, SEGDIR_COUNT_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_step(s);
   /* TODO(shess): This case should not be possible?  Should stronger
   ** measures be taken if it happens?
   */
-  if( rc==SQLITE_DONE ){
+  if( rc==SQLITE4_DONE ){
     *pnSegments = 0;
     *piMaxLevel = 0;
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
-  if( rc!=SQLITE_ROW ) return rc;
+  if( rc!=SQLITE4_ROW ) return rc;
 
   *pnSegments = sqlite4_column_int(s, 0);
   *piMaxLevel = sqlite4_column_int(s, 1);
@@ -2344,8 +2344,8 @@ static int segdir_count(fulltext_vtab *v, int *pnSegments, int *piMaxLevel){
   /* We expect only one row.  We must execute another sqlite4_step()
    * to complete the iteration; otherwise the table will remain locked. */
   rc = sqlite4_step(s);
-  if( rc==SQLITE_DONE ) return SQLITE_OK;
-  if( rc==SQLITE_ROW ) return SQLITE_ERROR;
+  if( rc==SQLITE4_DONE ) return SQLITE4_OK;
+  if( rc==SQLITE4_ROW ) return SQLITE4_ERROR;
   return rc;
 }
 
@@ -2705,7 +2705,7 @@ static int parseSpec(TableSpec *pSpec, int argc, const char *const*argv,
   }
   azArg = sqlite4_malloc( sizeof(char*)*argc + n );
   if( azArg==0 ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   z = (char*)&azArg[argc];
   for(i=0; i<argc; i++){
@@ -2751,7 +2751,7 @@ static int parseSpec(TableSpec *pSpec, int argc, const char *const*argv,
   pSpec->azContentColumn = sqlite4_malloc( pSpec->nColumn * sizeof(char *) );
   if( pSpec->azContentColumn==0 ){
     clearTableSpec(pSpec);
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   for(i=0; i<pSpec->nColumn; i++){
     char *p;
@@ -2767,7 +2767,7 @@ static int parseSpec(TableSpec *pSpec, int argc, const char *const*argv,
   pSpec->azTokenizer = tokenizeString(zTokenizer, &n);
   tokenListToIdList(pSpec->azTokenizer);
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -2818,7 +2818,7 @@ static int constructVtab(
   int nTok;                 /* Length of zTok, including nul terminator */
 
   v = (fulltext_vtab *) sqlite4_malloc(sizeof(fulltext_vtab));
-  if( v==0 ) return SQLITE_NOMEM;
+  if( v==0 ) return SQLITE4_NOMEM;
   CLEAR(v);
   /* sqlite will initialize v->base */
   v->db = db;
@@ -2831,7 +2831,7 @@ static int constructVtab(
   spec->azColumn = 0;
 
   if( spec->azTokenizer==0 ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
 
   zTok = spec->azTokenizer[0]; 
@@ -2843,7 +2843,7 @@ static int constructVtab(
   m = (sqlite4_tokenizer_module *)sqlite4Fts2HashFind(pHash, zTok, nTok);
   if( !m ){
     *pzErr = sqlite4_mprintf("unknown tokenizer: %s", spec->azTokenizer[0]);
-    rc = SQLITE_ERROR;
+    rc = SQLITE4_ERROR;
     goto err;
   }
 
@@ -2854,7 +2854,7 @@ static int constructVtab(
   }else{
     rc = m->xCreate(0, 0, &v->pTokenizer);
   }
-  if( rc!=SQLITE_OK ) goto err;
+  if( rc!=SQLITE4_OK ) goto err;
   v->pTokenizer->pModule = m;
 
   /* TODO: verify the existence of backing tables foo_content, foo_term */
@@ -2863,7 +2863,7 @@ static int constructVtab(
                           spec->zName);
   rc = sqlite4_declare_vtab(db, schema);
   sqlite4_free(schema);
-  if( rc!=SQLITE_OK ) goto err;
+  if( rc!=SQLITE4_OK ) goto err;
 
   memset(v->pFulltextStatements, 0, sizeof(v->pFulltextStatements));
 
@@ -2889,7 +2889,7 @@ static int fulltextConnect(
 ){
   TableSpec spec;
   int rc = parseSpec(&spec, argc, argv, pzErr);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = constructVtab(db, (fts2Hash *)pAux, &spec, ppVTab, pzErr);
   clearTableSpec(&spec);
@@ -2911,7 +2911,7 @@ static int fulltextCreate(sqlite4 *db, void *pAux,
   TRACE(("FTS2 Create\n"));
 
   rc = parseSpec(&spec, argc, argv, pzErr);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   initStringBuffer(&schema);
   append(&schema, "CREATE TABLE %_content(");
@@ -2919,11 +2919,11 @@ static int fulltextCreate(sqlite4 *db, void *pAux,
   append(&schema, ")");
   rc = sql_exec(db, spec.zDb, spec.zName, stringBufferData(&schema));
   stringBufferDestroy(&schema);
-  if( rc!=SQLITE_OK ) goto out;
+  if( rc!=SQLITE4_OK ) goto out;
 
   rc = sql_exec(db, spec.zDb, spec.zName,
                 "create table %_segments(block blob);");
-  if( rc!=SQLITE_OK ) goto out;
+  if( rc!=SQLITE4_OK ) goto out;
 
   rc = sql_exec(db, spec.zDb, spec.zName,
                 "create table %_segdir("
@@ -2935,7 +2935,7 @@ static int fulltextCreate(sqlite4 *db, void *pAux,
                 "  root blob,"
                 "  primary key(level, idx)"
                 ");");
-  if( rc!=SQLITE_OK ) goto out;
+  if( rc!=SQLITE4_OK ) goto out;
 
   rc = constructVtab(db, (fts2Hash *)pAux, &spec, ppVTab, pzErr);
 
@@ -2954,11 +2954,11 @@ static int fulltextBestIndex(sqlite4_vtab *pVTab, sqlite4_index_info *pInfo){
     pConstraint = &pInfo->aConstraint[i];
     if( pConstraint->usable ) {
       if( pConstraint->iColumn==-1 &&
-          pConstraint->op==SQLITE_INDEX_CONSTRAINT_EQ ){
+          pConstraint->op==SQLITE4_INDEX_CONSTRAINT_EQ ){
         pInfo->idxNum = QUERY_ROWID;      /* lookup by rowid */
         TRACE(("FTS2 QUERY_ROWID\n"));
       } else if( pConstraint->iColumn>=0 &&
-                 pConstraint->op==SQLITE_INDEX_CONSTRAINT_MATCH ){
+                 pConstraint->op==SQLITE4_INDEX_CONSTRAINT_MATCH ){
         /* full-text search */
         pInfo->idxNum = QUERY_FULLTEXT + pConstraint->iColumn;
         TRACE(("FTS2 QUERY_FULLTEXT %d\n", pConstraint->iColumn));
@@ -2972,17 +2972,17 @@ static int fulltextBestIndex(sqlite4_vtab *pVTab, sqlite4_index_info *pInfo){
        * full-text searches. */
       pInfo->estimatedCost = 1.0;   
 
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
   }
   pInfo->idxNum = QUERY_GENERIC;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int fulltextDisconnect(sqlite4_vtab *pVTab){
   TRACE(("FTS2 Disconnect %p\n", pVTab));
   fulltext_vtab_destroy((fulltext_vtab *)pVTab);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int fulltextDestroy(sqlite4_vtab *pVTab){
@@ -2995,10 +2995,10 @@ static int fulltextDestroy(sqlite4_vtab *pVTab){
                 "drop table if exists %_segments;"
                 "drop table if exists %_segdir;"
                 );
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   fulltext_vtab_destroy((fulltext_vtab *)pVTab);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int fulltextOpen(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCursor){
@@ -3010,9 +3010,9 @@ static int fulltextOpen(sqlite4_vtab *pVTab, sqlite4_vtab_cursor **ppCursor){
     /* sqlite will initialize c->base */
     *ppCursor = &c->base;
     TRACE(("FTS2 Open %p: %p\n", pVTab, c));
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }else{
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
 }
 
@@ -3379,7 +3379,7 @@ static int fulltextClose(sqlite4_vtab_cursor *pCursor){
   if( c->result.nData!=0 ) dlrDestroy(&c->reader);
   dataBufferDestroy(&c->result);
   sqlite4_free(c);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int fulltextNext(sqlite4_vtab_cursor *pCursor){
@@ -3389,38 +3389,38 @@ static int fulltextNext(sqlite4_vtab_cursor *pCursor){
   TRACE(("FTS2 Next %p\n", pCursor));
   snippetClear(&c->snippet);
   if( c->iCursorType < QUERY_FULLTEXT ){
-    /* TODO(shess) Handle SQLITE_SCHEMA AND SQLITE_BUSY. */
+    /* TODO(shess) Handle SQLITE4_SCHEMA AND SQLITE4_BUSY. */
     rc = sqlite4_step(c->pStmt);
     switch( rc ){
-      case SQLITE_ROW:
+      case SQLITE4_ROW:
         c->eof = 0;
-        return SQLITE_OK;
-      case SQLITE_DONE:
+        return SQLITE4_OK;
+      case SQLITE4_DONE:
         c->eof = 1;
-        return SQLITE_OK;
+        return SQLITE4_OK;
       default:
         c->eof = 1;
         return rc;
     }
   } else {  /* full-text query */
     rc = sqlite4_reset(c->pStmt);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
 
     if( c->result.nData==0 || dlrAtEnd(&c->reader) ){
       c->eof = 1;
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
     rc = sqlite4_bind_int64(c->pStmt, 1, dlrDocid(&c->reader));
     dlrStep(&c->reader);
-    if( rc!=SQLITE_OK ) return rc;
-    /* TODO(shess) Handle SQLITE_SCHEMA AND SQLITE_BUSY. */
+    if( rc!=SQLITE4_OK ) return rc;
+    /* TODO(shess) Handle SQLITE4_SCHEMA AND SQLITE4_BUSY. */
     rc = sqlite4_step(c->pStmt);
-    if( rc==SQLITE_ROW ){   /* the case we expect */
+    if( rc==SQLITE4_ROW ){   /* the case we expect */
       c->eof = 0;
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
     /* an error occurred; abort */
-    return rc==SQLITE_DONE ? SQLITE_ERROR : rc;
+    return rc==SQLITE4_DONE ? SQLITE4_ERROR : rc;
   }
 }
 
@@ -3475,7 +3475,7 @@ static int docListOfTerm(
     left = new;
   }
   *pResult = left;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Add a new term pTerm[0..nTerm-1] to the query *q.
@@ -3544,7 +3544,7 @@ static int tokenizeSegment(
   int nTerm = 1;
   
   int rc = pModule->xOpen(pTokenizer, pSegment, nSegment, &pCursor);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
   pCursor->pTokenizer = pTokenizer;
 
   while( 1 ){
@@ -3554,7 +3554,7 @@ static int tokenizeSegment(
     rc = pModule->xNext(pCursor,
                         &pToken, &nToken,
                         &iBegin, &iEnd, &iPos);
-    if( rc!=SQLITE_OK ) break;
+    if( rc!=SQLITE4_OK ) break;
     if( !inPhrase &&
         pSegment[iEnd]==':' &&
          (iCol = checkColumnSpecifier(pQuery->pFts, pToken, nToken))>=0 ){
@@ -3626,9 +3626,9 @@ static int parseQuery(
   if( inPhrase ){
     /* unmatched quote */
     queryClear(pQuery);
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* TODO(shess) Refactor the code to remove this forward decl. */
@@ -3664,18 +3664,18 @@ static int fulltextQuery(
 
   /* Flush any buffered updates before executing the query. */
   rc = flushPendingTerms(v);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* TODO(shess) I think that the queryClear() calls below are not
   ** necessary, because fulltextClose() already clears the query.
   */
   rc = parseQuery(v, zInput, nInput, iColumn, pQuery);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* Empty or NULL queries return no results. */
   if( pQuery->nTerms==0 ){
     dataBufferInit(pResult, 0);
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   /* Merge AND terms. */
@@ -3723,7 +3723,7 @@ static int fulltextQuery(
 
   if( nNot==pQuery->nTerms ){
     /* We do not yet know how to handle a query of only NOT terms */
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
 
   /* Do the EXCEPT terms */
@@ -3800,7 +3800,7 @@ static int fulltextFilter(
                                  idxNum==QUERY_GENERIC ? "" : "where rowid=?");
     rc = sql_prepare(v->db, v->zDb, v->zName, &c->pStmt, zSql);
     sqlite4_free(zSql);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
     c->iCursorType = idxNum;
   }else{
     sqlite4_reset(c->pStmt);
@@ -3813,7 +3813,7 @@ static int fulltextFilter(
 
     case QUERY_ROWID:
       rc = sqlite4_bind_int64(c->pStmt, 1, sqlite4_value_int64(argv[0]));
-      if( rc!=SQLITE_OK ) return rc;
+      if( rc!=SQLITE4_OK ) return rc;
       break;
 
     default:   /* full-text search */
@@ -3830,7 +3830,7 @@ static int fulltextFilter(
         dataBufferInit(&c->result, 0);
       }
       rc = fulltextQuery(v, idxNum-QUERY_FULLTEXT, zQuery, -1, &c->result, &c->q);
-      if( rc!=SQLITE_OK ) return rc;
+      if( rc!=SQLITE4_OK ) return rc;
       if( c->result.nData!=0 ){
         dlrInit(&c->reader, DL_DOCIDS, c->result.pData, c->result.nData);
       }
@@ -3868,9 +3868,9 @@ static int fulltextColumn(sqlite4_vtab_cursor *pCursor,
     /* The extra column whose name is the same as the table.
     ** Return a blob which is a pointer to the cursor
     */
-    sqlite4_result_blob(pContext, &c, sizeof(c), SQLITE_TRANSIENT);
+    sqlite4_result_blob(pContext, &c, sizeof(c), SQLITE4_TRANSIENT);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* This is the xRowid method.  The SQLite core calls this routine to
@@ -3881,7 +3881,7 @@ static int fulltextRowid(sqlite4_vtab_cursor *pCursor, sqlite_int64 *pRowid){
   fulltext_cursor *c = (fulltext_cursor *) pCursor;
 
   *pRowid = sqlite4_column_int64(c->pStmt, 0);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Add all terms in [zText] to pendingTerms table.  If [iColumn] > 0,
@@ -3898,10 +3898,10 @@ static int buildTerms(fulltext_vtab *v, sqlite_int64 iDocid,
   int rc;
 
   rc = pTokenizer->pModule->xOpen(pTokenizer, zText, -1, &pCursor);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   pCursor->pTokenizer = pTokenizer;
-  while( SQLITE_OK==(rc=pTokenizer->pModule->xNext(pCursor,
+  while( SQLITE4_OK==(rc=pTokenizer->pModule->xNext(pCursor,
                                                    &pToken, &nTokenBytes,
                                                    &iStartOffset, &iEndOffset,
                                                    &iPosition)) ){
@@ -3911,7 +3911,7 @@ static int buildTerms(fulltext_vtab *v, sqlite_int64 iDocid,
     /* Positions can't be negative; we use -1 as a terminator
      * internally.  Token can't be NULL or empty. */
     if( iPosition<0 || pToken == NULL || nTokenBytes == 0 ){
-      rc = SQLITE_ERROR;
+      rc = SQLITE4_ERROR;
       break;
     }
 
@@ -3941,7 +3941,7 @@ static int buildTerms(fulltext_vtab *v, sqlite_int64 iDocid,
   ** not durable.  *ponder*
   */
   pTokenizer->pModule->xClose(pCursor);
-  if( SQLITE_DONE == rc ) return SQLITE_OK;
+  if( SQLITE4_DONE == rc ) return SQLITE4_OK;
   return rc;
 }
 
@@ -3952,9 +3952,9 @@ static int insertTerms(fulltext_vtab *v, sqlite_int64 iRowid,
   for(i = 0; i < v->nColumn ; ++i){
     char *zText = (char*)sqlite4_value_text(pValues[i]);
     int rc = buildTerms(v, iRowid, zText, i);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Add empty doclists for all terms in the given row's content to
@@ -3965,18 +3965,18 @@ static int deleteTerms(fulltext_vtab *v, sqlite_int64 iRowid){
   int i, rc;
 
   /* TODO(shess) Should we allow such tables at all? */
-  if( DL_DEFAULT==DL_DOCIDS ) return SQLITE_ERROR;
+  if( DL_DEFAULT==DL_DOCIDS ) return SQLITE4_ERROR;
 
   rc = content_select(v, iRowid, &pValues);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   for(i = 0 ; i < v->nColumn; ++i) {
     rc = buildTerms(v, iRowid, pValues[i], -1);
-    if( rc!=SQLITE_OK ) break;
+    if( rc!=SQLITE4_OK ) break;
   }
 
   freeStringArray(v->nColumn, pValues);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* TODO(shess) Refactor the code to remove this forward decl. */
@@ -3990,11 +3990,11 @@ static int index_insert(fulltext_vtab *v, sqlite4_value *pRequestRowid,
   int rc;
 
   rc = content_insert(v, pRequestRowid, pValues);  /* execute an SQL INSERT */
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   *piRowid = sqlite4_last_insert_rowid(v->db);
   rc = initPendingTerms(v, *piRowid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   return insertTerms(v, *piRowid, pValues);
 }
@@ -4004,10 +4004,10 @@ static int index_insert(fulltext_vtab *v, sqlite4_value *pRequestRowid,
 */
 static int index_delete(fulltext_vtab *v, sqlite_int64 iRow){
   int rc = initPendingTerms(v, iRow);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = deleteTerms(v, iRow);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   return content_delete(v, iRow);  /* execute an SQL DELETE */
 }
@@ -4019,15 +4019,15 @@ static int index_delete(fulltext_vtab *v, sqlite_int64 iRow){
 static int index_update(fulltext_vtab *v, sqlite_int64 iRow,
                         sqlite4_value **pValues){
   int rc = initPendingTerms(v, iRow);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* Generate an empty doclist for each term that previously appeared in this
    * row. */
   rc = deleteTerms(v, iRow);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = content_update(v, pValues, iRow);  /* execute an SQL UPDATE */
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* Now add positions for terms which appear in the updated row. */
   return insertTerms(v, iRow, pValues);
@@ -4262,7 +4262,7 @@ static int interiorWriterDestroy(InteriorWriter *pWriter){
   }
   dataBufferDestroy(&pWriter->term);
   SCRAMBLE(pWriter);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* If pWriter can fit entirely in ROOT_MAX, return it as the root info
@@ -4281,7 +4281,7 @@ static int interiorWriterRootInfo(fulltext_vtab *v, InteriorWriter *pWriter,
   if( block==pWriter->last && block->data.nData<ROOT_MAX ){
     *ppRootInfo = block->data.pData;
     *pnRootInfo = block->data.nData;
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   /* Flush the first block to %_segments, and create a new level of
@@ -4289,7 +4289,7 @@ static int interiorWriterRootInfo(fulltext_vtab *v, InteriorWriter *pWriter,
   */
   ASSERT_VALID_INTERIOR_BLOCK(block);
   rc = block_insert(v, block->data.pData, block->data.nData, &iBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
   *piEndBlockid = iBlockid;
 
   pWriter->parentWriter = sqlite4_malloc(sizeof(*pWriter->parentWriter));
@@ -4303,7 +4303,7 @@ static int interiorWriterRootInfo(fulltext_vtab *v, InteriorWriter *pWriter,
   for(block=block->next; block!=NULL; block=block->next){
     ASSERT_VALID_INTERIOR_BLOCK(block);
     rc = block_insert(v, block->data.pData, block->data.nData, &iBlockid);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
     *piEndBlockid = iBlockid;
 
     interiorWriterAppend(pWriter->parentWriter,
@@ -4442,7 +4442,7 @@ static int interiorReaderTermCmp(InteriorReader *pReader,
 ** while( sorted_terms_left_to_process ){
 **   // data is doclist data for that term.
 **   rc = leafWriterStep(v, &writer, pTerm, nTerm, pData, nData);
-**   if( rc!=SQLITE_OK ) goto err;
+**   if( rc!=SQLITE4_OK ) goto err;
 ** }
 ** rc = leafWriterFinalize(v, &writer);
 **err:
@@ -4579,7 +4579,7 @@ static int leafWriterInternalFlush(fulltext_vtab *v, LeafWriter *pWriter,
   ASSERT_VALID_LEAF_NODE(pWriter->data.pData+iData, nData);
 
   rc = block_insert(v, pWriter->data.pData+iData, nData, &iBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
   assert( iBlockid!=0 );
 
   /* Reconstruct the first term in the leaf for purposes of building
@@ -4609,16 +4609,16 @@ static int leafWriterInternalFlush(fulltext_vtab *v, LeafWriter *pWriter,
     assert( iBlockid==pWriter->iEndBlockid );
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 static int leafWriterFlush(fulltext_vtab *v, LeafWriter *pWriter){
   int rc = leafWriterInternalFlush(v, pWriter, 0, pWriter->data.nData);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* Re-initialize the output buffer. */
   dataBufferReset(&pWriter->data);
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Fetch the root info for the segment.  If the entire leaf fits
@@ -4636,13 +4636,13 @@ static int leafWriterRootInfo(fulltext_vtab *v, LeafWriter *pWriter,
     *ppRootInfo = pWriter->data.pData;
     *pnRootInfo = pWriter->data.nData;
     *piEndBlockid = 0;
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   /* Flush remaining leaf data. */
   if( pWriter->data.nData>0 ){
     int rc = leafWriterFlush(v, pWriter);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
 
   /* We must have flushed a leaf at some point. */
@@ -4669,10 +4669,10 @@ static int leafWriterFinalize(fulltext_vtab *v, LeafWriter *pWriter){
   int rc, nRootInfo;
 
   rc = leafWriterRootInfo(v, pWriter, &pRootInfo, &nRootInfo, &iEndBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* Don't bother storing an entirely empty segment. */
-  if( iEndBlockid==0 && nRootInfo==0 ) return SQLITE_OK;
+  if( iEndBlockid==0 && nRootInfo==0 ) return SQLITE4_OK;
 
   return segdir_set(v, pWriter->iLevel, pWriter->idx,
                     pWriter->iStartBlockid, pWriter->iEndBlockid,
@@ -4808,7 +4808,7 @@ static int leafWriterStepMerge(fulltext_vtab *v, LeafWriter *pWriter,
     /* Push leaf node from before this term. */
     if( iTermData>0 ){
       rc = leafWriterInternalFlush(v, pWriter, 0, iTermData);
-      if( rc!=SQLITE_OK ) return rc;
+      if( rc!=SQLITE4_OK ) return rc;
 
       pWriter->nTermDistinct = nTermDistinct;
     }
@@ -4819,7 +4819,7 @@ static int leafWriterStepMerge(fulltext_vtab *v, LeafWriter *pWriter,
 
     /* Push the standalone leaf node. */
     rc = leafWriterInlineFlush(v, pWriter, pTerm, nTerm, iDoclistData);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
 
     /* Leave the node empty. */
     dataBufferReset(&pWriter->data);
@@ -4849,7 +4849,7 @@ static int leafWriterStepMerge(fulltext_vtab *v, LeafWriter *pWriter,
   if( iTermData+nTerm+nActualData>LEAF_MAX ){
     /* Flush out the leading data as a node */
     rc = leafWriterInternalFlush(v, pWriter, 0, iTermData);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
 
     pWriter->nTermDistinct = nTermDistinct;
 
@@ -4875,7 +4875,7 @@ static int leafWriterStepMerge(fulltext_vtab *v, LeafWriter *pWriter,
   }
   ASSERT_VALID_LEAF_NODE(pWriter->data.pData, pWriter->data.nData);
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Push pTerm[nTerm] along with the doclist data to the leaf layer of
@@ -5012,7 +5012,7 @@ typedef struct LeavesReader {
   int idx;                  /* Index within the segment. */
 
   sqlite4_stmt *pStmt;      /* Statement we're streaming leaves from. */
-  int eof;                  /* we've seen SQLITE_DONE from pStmt. */
+  int eof;                  /* we've seen SQLITE4_DONE from pStmt. */
 
   LeafReader leafReader;    /* reader for the current leaf. */
   DataBuffer rootData;      /* root data for inline. */
@@ -5042,7 +5042,7 @@ static int leavesReaderAtEnd(LeavesReader *pReader){
   return pReader->eof;
 }
 
-/* loadSegmentLeaves() may not read all the way to SQLITE_DONE, thus
+/* loadSegmentLeaves() may not read all the way to SQLITE4_DONE, thus
 ** leaving the statement handle open, which locks the table.
 */
 /* TODO(shess) This "solution" is not satisfactory.  Really, there
@@ -5093,27 +5093,27 @@ static int leavesReaderInit(fulltext_vtab *v,
   }else{
     sqlite4_stmt *s;
     int rc = sql_get_leaf_statement(v, idx, &s);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
 
     rc = sqlite4_bind_int64(s, 1, iStartBlockid);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
 
     rc = sqlite4_bind_int64(s, 2, iEndBlockid);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
 
     rc = sqlite4_step(s);
-    if( rc==SQLITE_DONE ){
+    if( rc==SQLITE4_DONE ){
       pReader->eof = 1;
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
-    if( rc!=SQLITE_ROW ) return rc;
+    if( rc!=SQLITE4_ROW ) return rc;
 
     pReader->pStmt = s;
     leafReaderInit(sqlite4_column_blob(pReader->pStmt, 0),
                    sqlite4_column_bytes(pReader->pStmt, 0),
                    &pReader->leafReader);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Step the current leaf forward to the next term.  If we reach the
@@ -5127,19 +5127,19 @@ static int leavesReaderStep(fulltext_vtab *v, LeavesReader *pReader){
     int rc;
     if( pReader->rootData.pData ){
       pReader->eof = 1;
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
     rc = sqlite4_step(pReader->pStmt);
-    if( rc!=SQLITE_ROW ){
+    if( rc!=SQLITE4_ROW ){
       pReader->eof = 1;
-      return rc==SQLITE_DONE ? SQLITE_OK : rc;
+      return rc==SQLITE4_DONE ? SQLITE4_OK : rc;
     }
     leafReaderDestroy(&pReader->leafReader);
     leafReaderInit(sqlite4_column_blob(pReader->pStmt, 0),
                    sqlite4_column_bytes(pReader->pStmt, 0),
                    &pReader->leafReader);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Order LeavesReaders by their term, ignoring idx.  Readers at eof
@@ -5187,13 +5187,13 @@ static int leavesReadersInit(fulltext_vtab *v, int iLevel,
                              LeavesReader *pReaders, int *piReaders){
   sqlite4_stmt *s;
   int i, rc = sql_get_statement(v, SEGDIR_SELECT_LEVEL_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int(s, 1, iLevel);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   i = 0;
-  while( (rc = sqlite4_step(s))==SQLITE_ROW ){
+  while( (rc = sqlite4_step(s))==SQLITE4_ROW ){
     sqlite_int64 iStart = sqlite4_column_int64(s, 0);
     sqlite_int64 iEnd = sqlite4_column_int64(s, 1);
     const char *pRootData = sqlite4_column_blob(s, 2);
@@ -5202,11 +5202,11 @@ static int leavesReadersInit(fulltext_vtab *v, int iLevel,
     assert( i<MERGE_COUNT );
     rc = leavesReaderInit(v, i, iStart, iEnd, pRootData, nRootData,
                           &pReaders[i]);
-    if( rc!=SQLITE_OK ) break;
+    if( rc!=SQLITE4_OK ) break;
 
     i++;
   }
-  if( rc!=SQLITE_DONE ){
+  if( rc!=SQLITE4_DONE ){
     while( i-->0 ){
       leavesReaderDestroy(&pReaders[i]);
     }
@@ -5219,7 +5219,7 @@ static int leavesReadersInit(fulltext_vtab *v, int iLevel,
   while( i-- ){
     leavesReaderReorder(pReaders+i, *piReaders-i);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Merge doclists from pReaders[nReaders] into a single doclist, which
@@ -5254,12 +5254,12 @@ static int segmentMerge(fulltext_vtab *v, int iLevel);
 */
 static int segdirNextIndex(fulltext_vtab *v, int iLevel, int *pidx){
   int rc = segdir_max_index(v, iLevel, pidx);
-  if( rc==SQLITE_DONE ){              /* No segments at iLevel. */
+  if( rc==SQLITE4_DONE ){              /* No segments at iLevel. */
     *pidx = 0;
-  }else if( rc==SQLITE_ROW ){
+  }else if( rc==SQLITE4_ROW ){
     if( *pidx==(MERGE_COUNT-1) ){
       rc = segmentMerge(v, iLevel);
-      if( rc!=SQLITE_OK ) return rc;
+      if( rc!=SQLITE4_OK ) return rc;
       *pidx = 0;
     }else{
       (*pidx)++;
@@ -5267,7 +5267,7 @@ static int segdirNextIndex(fulltext_vtab *v, int iLevel, int *pidx){
   }else{
     return rc;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Merge MERGE_COUNT segments at iLevel into a new segment at
@@ -5283,7 +5283,7 @@ static int segmentMerge(fulltext_vtab *v, int iLevel){
   ** merging as necessary.
   */
   rc = segdirNextIndex(v, iLevel+1, &idx);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* TODO(shess) This assumes that we'll always see exactly
   ** MERGE_COUNT segments to merge at a given level.  That will be
@@ -5292,7 +5292,7 @@ static int segmentMerge(fulltext_vtab *v, int iLevel){
   */
   memset(&lrs, '\0', sizeof(lrs));
   rc = leavesReadersInit(v, iLevel, lrs, &i);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
   assert( i==MERGE_COUNT );
 
   leafWriterInit(iLevel+1, idx, &writer);
@@ -5307,12 +5307,12 @@ static int segmentMerge(fulltext_vtab *v, int iLevel){
     }
 
     rc = leavesReadersMerge(v, lrs, i, &writer);
-    if( rc!=SQLITE_OK ) goto err;
+    if( rc!=SQLITE4_OK ) goto err;
 
     /* Step forward those that were merged. */
     while( i-->0 ){
       rc = leavesReaderStep(v, lrs+i);
-      if( rc!=SQLITE_OK ) goto err;
+      if( rc!=SQLITE4_OK ) goto err;
 
       /* Reorder by term, then by age. */
       leavesReaderReorder(lrs+i, MERGE_COUNT-i);
@@ -5325,7 +5325,7 @@ static int segmentMerge(fulltext_vtab *v, int iLevel){
 
   rc = leafWriterFinalize(v, &writer);
   leafWriterDestroy(&writer);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* Delete the merged segment data. */
   return segdir_delete(v, iLevel);
@@ -5376,7 +5376,7 @@ static int loadSegmentLeavesInt(fulltext_vtab *v, LeavesReader *pReader,
 
   assert( nTerm>0 );
 
-  for(rc=SQLITE_OK; rc==SQLITE_OK && !leavesReaderAtEnd(pReader);
+  for(rc=SQLITE4_OK; rc==SQLITE4_OK && !leavesReaderAtEnd(pReader);
       rc=leavesReaderStep(v, pReader)){
     /* TODO(shess) Really want leavesReaderTermCmp(), but that name is
     ** already taken to compare the terms of two LeavesReaders.  Think
@@ -5403,7 +5403,7 @@ static int loadSegmentLeavesInt(fulltext_vtab *v, LeavesReader *pReader,
           /* Manual realloc so we can handle NULL appropriately. */
           p = sqlite4_malloc(nMaxBuffers*sizeof(*pBuffers));
           if( p==NULL ){
-            rc = SQLITE_NOMEM;
+            rc = SQLITE4_NOMEM;
             break;
           }
 
@@ -5455,7 +5455,7 @@ static int loadSegmentLeavesInt(fulltext_vtab *v, LeavesReader *pReader,
 
   /* Union all the doclists together into *out. */
   /* TODO(shess) What if *out is big?  Sigh. */
-  if( rc==SQLITE_OK && nBuffers>0 ){
+  if( rc==SQLITE4_OK && nBuffers>0 ){
     int iBuffer;
     for(iBuffer=0; iBuffer<nBuffers; ++iBuffer){
       if( pBuffers[iBuffer].nData>0 ){
@@ -5487,7 +5487,7 @@ static int loadSegmentLeaf(fulltext_vtab *v, const char *pData, int nData,
   assert( nData>1 );
   assert( *pData=='\0' );
   rc = leavesReaderInit(v, 0, 0, 0, pData, nData, &reader);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = loadSegmentLeavesInt(v, &reader, pTerm, nTerm, isPrefix, out);
   leavesReaderReset(&reader);
@@ -5508,7 +5508,7 @@ static int loadSegmentLeaves(fulltext_vtab *v,
 
   assert( iStartLeaf<=iEndLeaf );
   rc = leavesReaderInit(v, 0, iStartLeaf, iEndLeaf, NULL, 0, &reader);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = loadSegmentLeavesInt(v, &reader, pTerm, nTerm, isPrefix, out);
   leavesReaderReset(&reader);
@@ -5580,14 +5580,14 @@ static int loadAndGetChildrenContaining(
   assert( piEndChild!=NULL );
 
   rc = sql_get_statement(v, BLOCK_SELECT_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_bind_int64(s, 1, iBlockid);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_step(s);
-  if( rc==SQLITE_DONE ) return SQLITE_ERROR;
-  if( rc!=SQLITE_ROW ) return rc;
+  if( rc==SQLITE4_DONE ) return SQLITE4_ERROR;
+  if( rc!=SQLITE4_ROW ) return rc;
 
   getChildrenContaining(sqlite4_column_blob(s, 0), sqlite4_column_bytes(s, 0),
                         pTerm, nTerm, isPrefix, piStartChild, piEndChild);
@@ -5596,10 +5596,10 @@ static int loadAndGetChildrenContaining(
    * to complete the iteration; otherwise the table will remain
    * locked. */
   rc = sqlite4_step(s);
-  if( rc==SQLITE_ROW ) return SQLITE_ERROR;
-  if( rc!=SQLITE_DONE ) return rc;
+  if( rc==SQLITE4_ROW ) return SQLITE4_ERROR;
+  if( rc!=SQLITE4_DONE ) return rc;
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Traverse the tree represented by pData[nData] looking for
@@ -5626,14 +5626,14 @@ static int loadSegmentInt(fulltext_vtab *v, const char *pData, int nData,
       sqlite_int64 iNextStart, iNextEnd;
       rc = loadAndGetChildrenContaining(v, iStartChild, pTerm, nTerm, isPrefix,
                                         &iNextStart, &iNextEnd);
-      if( rc!=SQLITE_OK ) return rc;
+      if( rc!=SQLITE4_OK ) return rc;
 
       /* If we've branched, follow the end branch, too. */
       if( iStartChild!=iEndChild ){
         sqlite_int64 iDummy;
         rc = loadAndGetChildrenContaining(v, iEndChild, pTerm, nTerm, isPrefix,
                                           &iDummy, &iNextEnd);
-        if( rc!=SQLITE_OK ) return rc;
+        if( rc!=SQLITE4_OK ) return rc;
       }
 
       assert( iNextStart<=iNextEnd );
@@ -5681,7 +5681,7 @@ static int loadSegment(fulltext_vtab *v, const char *pData, int nData,
   dataBufferInit(&result, 0);
   rc = loadSegmentInt(v, pData, nData, iLeavesEnd,
                       pTerm, nTerm, isPrefix, &result);
-  if( rc==SQLITE_OK && result.nData>0 ){
+  if( rc==SQLITE4_OK && result.nData>0 ){
     if( out->nData==0 ){
       DataBuffer tmp = *out;
       *out = result;
@@ -5713,7 +5713,7 @@ static int termSelect(fulltext_vtab *v, int iColumn,
   DataBuffer doclist;
   sqlite4_stmt *s;
   int rc = sql_get_statement(v, SEGDIR_SELECT_ALL_STMT, &s);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   /* This code should never be called with buffered updates. */
   assert( v->nPendingData<0 );
@@ -5723,15 +5723,15 @@ static int termSelect(fulltext_vtab *v, int iColumn,
   /* Traverse the segments from oldest to newest so that newer doclist
   ** elements for given docids overwrite older elements.
   */
-  while( (rc = sqlite4_step(s))==SQLITE_ROW ){
+  while( (rc = sqlite4_step(s))==SQLITE4_ROW ){
     const char *pData = sqlite4_column_blob(s, 2);
     const int nData = sqlite4_column_bytes(s, 2);
     const sqlite_int64 iLeavesEnd = sqlite4_column_int64(s, 1);
     rc = loadSegment(v, pData, nData, iLeavesEnd, pTerm, nTerm, isPrefix,
                      &doclist);
-    if( rc!=SQLITE_OK ) goto err;
+    if( rc!=SQLITE4_OK ) goto err;
   }
-  if( rc==SQLITE_DONE ){
+  if( rc==SQLITE4_DONE ){
     if( doclist.nData!=0 ){
       /* TODO(shess) The old term_select_all() code applied the column
       ** restrict as we merged segments, leading to smaller buffers.
@@ -5742,7 +5742,7 @@ static int termSelect(fulltext_vtab *v, int iColumn,
       docListTrim(DL_DEFAULT, doclist.pData, doclist.nData,
                   iColumn, iType, out);
     }
-    rc = SQLITE_OK;
+    rc = SQLITE4_OK;
   }
 
  err:
@@ -5782,7 +5782,7 @@ static int writeZeroSegment(fulltext_vtab *v, fts2Hash *pTerms){
 
   /* Determine the next index at level 0, merging as necessary. */
   rc = segdirNextIndex(v, 0, &idx);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
   n = fts2HashCount(pTerms);
   pData = sqlite4_malloc(n*sizeof(TermData));
@@ -5810,7 +5810,7 @@ static int writeZeroSegment(fulltext_vtab *v, fts2Hash *pTerms){
     dlcAddDoclist(pData[i].pCollector, &dl);
     rc = leafWriterStep(v, &writer,
                         pData[i].pTerm, pData[i].nTerm, dl.pData, dl.nData);
-    if( rc!=SQLITE_OK ) goto err;
+    if( rc!=SQLITE4_OK ) goto err;
   }
   rc = leafWriterFinalize(v, &writer);
 
@@ -5831,7 +5831,7 @@ static int clearPendingTerms(fulltext_vtab *v){
     fts2HashClear(&v->pendingTerms);
     v->nPendingData = -1;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* If pendingTerms has data, flush it to a level-zero segment, and
@@ -5840,10 +5840,10 @@ static int clearPendingTerms(fulltext_vtab *v){
 static int flushPendingTerms(fulltext_vtab *v){
   if( v->nPendingData>=0 ){
     int rc = writeZeroSegment(v, &v->pendingTerms);
-    if( rc==SQLITE_OK ) clearPendingTerms(v);
+    if( rc==SQLITE4_OK ) clearPendingTerms(v);
     return rc;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* If pendingTerms is "too big", or docid is out of order, flush it.
@@ -5858,14 +5858,14 @@ static int initPendingTerms(fulltext_vtab *v, sqlite_int64 iDocid){
   */
   if( iDocid<=v->iPrevDocid || v->nPendingData>kPendingThreshold ){
     int rc = flushPendingTerms(v);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
   if( v->nPendingData<0 ){
     fts2HashInit(&v->pendingTerms, FTS2_HASH_STRING, 1);
     v->nPendingData = 0;
   }
   v->iPrevDocid = iDocid;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* This function implements the xUpdate callback; it is the top-level entry
@@ -5879,24 +5879,24 @@ static int fulltextUpdate(sqlite4_vtab *pVtab, int nArg, sqlite4_value **ppArg,
 
   if( nArg<2 ){
     rc = index_delete(v, sqlite4_value_int64(ppArg[0]));
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       /* If we just deleted the last row in the table, clear out the
       ** index data.
       */
       rc = content_exists(v);
-      if( rc==SQLITE_ROW ){
-        rc = SQLITE_OK;
-      }else if( rc==SQLITE_DONE ){
+      if( rc==SQLITE4_ROW ){
+        rc = SQLITE4_OK;
+      }else if( rc==SQLITE4_DONE ){
         /* Clear the pending terms so we don't flush a useless level-0
         ** segment when the transaction closes.
         */
         rc = clearPendingTerms(v);
-        if( rc==SQLITE_OK ){
+        if( rc==SQLITE4_OK ){
           rc = segdir_delete_all(v);
         }
       }
     }
-  } else if( sqlite4_value_type(ppArg[0]) != SQLITE_NULL ){
+  } else if( sqlite4_value_type(ppArg[0]) != SQLITE4_NULL ){
     /* An update:
      * ppArg[0] = old rowid
      * ppArg[1] = new rowid
@@ -5904,9 +5904,9 @@ static int fulltextUpdate(sqlite4_vtab *pVtab, int nArg, sqlite4_value **ppArg,
      * ppArg[2+v->nColumn] = value for magic column (we ignore this)
      */
     sqlite_int64 rowid = sqlite4_value_int64(ppArg[0]);
-    if( sqlite4_value_type(ppArg[1]) != SQLITE_INTEGER ||
+    if( sqlite4_value_type(ppArg[1]) != SQLITE4_INTEGER ||
       sqlite4_value_int64(ppArg[1]) != rowid ){
-      rc = SQLITE_ERROR;  /* we don't allow changing the rowid */
+      rc = SQLITE4_ERROR;  /* we don't allow changing the rowid */
     } else {
       assert( nArg==2+v->nColumn+1);
       rc = index_update(v, rowid, &ppArg[2]);
@@ -5964,7 +5964,7 @@ static void snippetFunc(
 ){
   fulltext_cursor *pCursor;
   if( argc<1 ) return;
-  if( sqlite4_value_type(argv[0])!=SQLITE_BLOB ||
+  if( sqlite4_value_type(argv[0])!=SQLITE4_BLOB ||
       sqlite4_value_bytes(argv[0])!=sizeof(pCursor) ){
     sqlite4_result_error(pContext, "illegal first argument to html_snippet",-1);
   }else{
@@ -5984,7 +5984,7 @@ static void snippetFunc(
     snippetAllOffsets(pCursor);
     snippetText(pCursor, zStart, zEnd, zEllipsis);
     sqlite4_result_text(pContext, pCursor->snippet.zSnippet,
-                        pCursor->snippet.nSnippet, SQLITE_STATIC);
+                        pCursor->snippet.nSnippet, SQLITE4_STATIC);
   }
 }
 
@@ -5998,7 +5998,7 @@ static void snippetOffsetsFunc(
 ){
   fulltext_cursor *pCursor;
   if( argc<1 ) return;
-  if( sqlite4_value_type(argv[0])!=SQLITE_BLOB ||
+  if( sqlite4_value_type(argv[0])!=SQLITE4_BLOB ||
       sqlite4_value_bytes(argv[0])!=sizeof(pCursor) ){
     sqlite4_result_error(pContext, "illegal first argument to offsets",-1);
   }else{
@@ -6007,7 +6007,7 @@ static void snippetOffsetsFunc(
     snippetOffsetText(&pCursor->snippet);
     sqlite4_result_text(pContext,
                         pCursor->snippet.zOffset, pCursor->snippet.nOffset,
-                        SQLITE_STATIC);
+                        SQLITE4_STATIC);
   }
 }
 
@@ -6079,13 +6079,13 @@ static void optLeavesReaderReorder(OptLeavesReader *pLr, int nLr){
 
 /* optimize() helper function.  Put the readers in order and iterate
 ** through them, merging doclists for matching terms into pWriter.
-** Returns SQLITE_OK on success, or the SQLite error code which
+** Returns SQLITE4_OK on success, or the SQLite error code which
 ** prevented success.
 */
 static int optimizeInternal(fulltext_vtab *v,
                             OptLeavesReader *readers, int nReaders,
                             LeafWriter *pWriter){
-  int i, rc = SQLITE_OK;
+  int i, rc = SQLITE4_OK;
   DataBuffer doclist, merged, tmp;
 
   /* Order the readers. */
@@ -6167,13 +6167,13 @@ static int optimizeInternal(fulltext_vtab *v,
                           optLeavesReaderTerm(&readers[0]),
                           optLeavesReaderTermBytes(&readers[0]),
                           merged.pData, merged.nData);
-      if( rc!=SQLITE_OK ) goto err;
+      if( rc!=SQLITE4_OK ) goto err;
     }
 
     /* Step merged readers to next term and reorder. */
     while( i-- > 0 ){
       rc = optLeavesReaderStep(v, &readers[i]);
-      if( rc!=SQLITE_OK ) goto err;
+      if( rc!=SQLITE4_OK ) goto err;
 
       optLeavesReaderReorder(&readers[i], nReaders-i);
     }
@@ -6194,7 +6194,7 @@ static void optimizeFunc(sqlite4_context *pContext,
   fulltext_cursor *pCursor;
   if( argc>1 ){
     sqlite4_result_error(pContext, "excess arguments to optimize()",-1);
-  }else if( sqlite4_value_type(argv[0])!=SQLITE_BLOB ||
+  }else if( sqlite4_value_type(argv[0])!=SQLITE4_BLOB ||
             sqlite4_value_bytes(argv[0])!=sizeof(pCursor) ){
     sqlite4_result_error(pContext, "illegal first argument to optimize",-1);
   }else{
@@ -6210,18 +6210,18 @@ static void optimizeFunc(sqlite4_context *pContext,
 
     /* Flush any buffered updates before optimizing. */
     rc = flushPendingTerms(v);
-    if( rc!=SQLITE_OK ) goto err;
+    if( rc!=SQLITE4_OK ) goto err;
 
     rc = segdir_count(v, &nReaders, &iMaxLevel);
-    if( rc!=SQLITE_OK ) goto err;
+    if( rc!=SQLITE4_OK ) goto err;
     if( nReaders==0 || nReaders==1 ){
       sqlite4_result_text(pContext, "Index already optimal", -1,
-                          SQLITE_STATIC);
+                          SQLITE4_STATIC);
       return;
     }
 
     rc = sql_get_statement(v, SEGDIR_SELECT_ALL_STMT, &s);
-    if( rc!=SQLITE_OK ) goto err;
+    if( rc!=SQLITE4_OK ) goto err;
 
     readers = sqlite4_malloc(nReaders*sizeof(readers[0]));
     if( readers==NULL ) goto err;
@@ -6232,7 +6232,7 @@ static void optimizeFunc(sqlite4_context *pContext,
     leafWriterInit(iMaxLevel, 0, &writer);
 
     i = 0;
-    while( (rc = sqlite4_step(s))==SQLITE_ROW ){
+    while( (rc = sqlite4_step(s))==SQLITE4_ROW ){
       sqlite_int64 iStart = sqlite4_column_int64(s, 0);
       sqlite_int64 iEnd = sqlite4_column_int64(s, 1);
       const char *pRootData = sqlite4_column_blob(s, 2);
@@ -6241,14 +6241,14 @@ static void optimizeFunc(sqlite4_context *pContext,
       assert( i<nReaders );
       rc = leavesReaderInit(v, -1, iStart, iEnd, pRootData, nRootData,
                             &readers[i].reader);
-      if( rc!=SQLITE_OK ) break;
+      if( rc!=SQLITE4_OK ) break;
 
       readers[i].segment = i;
       i++;
     }
 
     /* If we managed to successfully read them all, optimize them. */
-    if( rc==SQLITE_DONE ){
+    if( rc==SQLITE4_DONE ){
       assert( i==nReaders );
       rc = optimizeInternal(v, readers, nReaders, &writer);
     }
@@ -6261,20 +6261,20 @@ static void optimizeFunc(sqlite4_context *pContext,
     /* If we've successfully gotten to here, delete the old segments
     ** and flush the interior structure of the new segment.
     */
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       for( i=0; i<=iMaxLevel; i++ ){
         rc = segdir_delete(v, i);
-        if( rc!=SQLITE_OK ) break;
+        if( rc!=SQLITE4_OK ) break;
       }
 
-      if( rc==SQLITE_OK ) rc = leafWriterFinalize(v, &writer);
+      if( rc==SQLITE4_OK ) rc = leafWriterFinalize(v, &writer);
     }
 
     leafWriterDestroy(&writer);
 
-    if( rc!=SQLITE_OK ) goto err;
+    if( rc!=SQLITE4_OK ) goto err;
 
-    sqlite4_result_text(pContext, "Index optimized", -1, SQLITE_STATIC);
+    sqlite4_result_text(pContext, "Index optimized", -1, SQLITE4_STATIC);
     return;
 
     /* TODO(shess): Error-handling needs to be improved along the
@@ -6290,7 +6290,7 @@ static void optimizeFunc(sqlite4_context *pContext,
   }
 }
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 /* Generate an error of the form "<prefix>: <msg>".  If msg is NULL,
 ** pull the error from the context's db handle.
 */
@@ -6317,9 +6317,9 @@ static int collectSegmentTerms(fulltext_vtab *v, sqlite4_stmt *s,
   LeavesReader reader;
   int rc = leavesReaderInit(v, 0, iStartBlockid, iEndBlockid,
                             pRootData, nRootData, &reader);
-  if( rc!=SQLITE_OK ) return rc;
+  if( rc!=SQLITE4_OK ) return rc;
 
-  while( rc==SQLITE_OK && !leavesReaderAtEnd(&reader) ){
+  while( rc==SQLITE4_OK && !leavesReaderAtEnd(&reader) ){
     const char *pTerm = leavesReaderTerm(&reader);
     const int nTerm = leavesReaderTermBytes(&reader);
     void *oldValue = sqlite4Fts2HashFind(pTerms, pTerm, nTerm);
@@ -6329,7 +6329,7 @@ static int collectSegmentTerms(fulltext_vtab *v, sqlite4_stmt *s,
     ** the data value passed is returned in case of malloc failure.
     */
     if( newValue==sqlite4Fts2HashInsert(pTerms, pTerm, nTerm, newValue) ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }else{
       rc = leavesReaderStep(v, &reader);
     }
@@ -6352,7 +6352,7 @@ static int generateTermsResult(sqlite4_context *pContext, fts2Hash *pTerms){
   nTerms = fts2HashCount(pTerms);
   assert( nTerms>0 );
   pData = sqlite4_malloc(nTerms*sizeof(TermData));
-  if( pData==NULL ) return SQLITE_NOMEM;
+  if( pData==NULL ) return SQLITE4_NOMEM;
 
   nResultBytes = 0;
   for(iTerm = 0, e = fts2HashFirst(pTerms); e; iTerm++, e = fts2HashNext(e)){
@@ -6368,7 +6368,7 @@ static int generateTermsResult(sqlite4_context *pContext, fts2Hash *pTerms){
   result = sqlite4_malloc(nResultBytes);
   if( result==NULL ){
     sqlite4_free(pData);
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
 
   if( nTerms>1 ) qsort(pData, nTerms, sizeof(*pData), termDataCmp);
@@ -6387,7 +6387,7 @@ static int generateTermsResult(sqlite4_context *pContext, fts2Hash *pTerms){
   /* Passes away ownership of result. */
   sqlite4_result_text(pContext, result, nResultBytes-1, sqlite4_free);
   sqlite4_free(pData);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /* Implements dump_terms() for use in inspecting the fts2 index from
@@ -6404,7 +6404,7 @@ static void dumpTermsFunc(
   fulltext_cursor *pCursor;
   if( argc!=3 && argc!=1 ){
     generateError(pContext, "dump_terms", "incorrect arguments");
-  }else if( sqlite4_value_type(argv[0])!=SQLITE_BLOB ||
+  }else if( sqlite4_value_type(argv[0])!=SQLITE4_BLOB ||
             sqlite4_value_bytes(argv[0])!=sizeof(pCursor) ){
     generateError(pContext, "dump_terms", "illegal first argument");
   }else{
@@ -6423,37 +6423,37 @@ static void dumpTermsFunc(
       rc = sql_get_statement(v, SEGDIR_SELECT_ALL_STMT, &s);
     }else{
       rc = sql_get_statement(v, SEGDIR_SELECT_SEGMENT_STMT, &s);
-      if( rc==SQLITE_OK ){
+      if( rc==SQLITE4_OK ){
         rc = sqlite4_bind_int(s, 1, sqlite4_value_int(argv[1]));
-        if( rc==SQLITE_OK ){
+        if( rc==SQLITE4_OK ){
           rc = sqlite4_bind_int(s, 2, sqlite4_value_int(argv[2]));
         }
       }
     }
 
-    if( rc!=SQLITE_OK ){
+    if( rc!=SQLITE4_OK ){
       generateError(pContext, "dump_terms", NULL);
       return;
     }
 
     /* Collect the terms for each segment. */
     sqlite4Fts2HashInit(&terms, FTS2_HASH_STRING, 1);
-    while( (rc = sqlite4_step(s))==SQLITE_ROW ){
+    while( (rc = sqlite4_step(s))==SQLITE4_ROW ){
       rc = collectSegmentTerms(v, s, &terms);
-      if( rc!=SQLITE_OK ) break;
+      if( rc!=SQLITE4_OK ) break;
     }
 
-    if( rc!=SQLITE_DONE ){
+    if( rc!=SQLITE4_DONE ){
       sqlite4_reset(s);
       generateError(pContext, "dump_terms", NULL);
     }else{
       const int nTerms = fts2HashCount(&terms);
       if( nTerms>0 ){
         rc = generateTermsResult(pContext, &terms);
-        if( rc==SQLITE_NOMEM ){
+        if( rc==SQLITE4_NOMEM ){
           generateError(pContext, "dump_terms", "out of memory");
         }else{
-          assert( rc==SQLITE_OK );
+          assert( rc==SQLITE4_OK );
         }
       }else if( argc==3 ){
         /* The specific segment asked for could not be found. */
@@ -6568,7 +6568,7 @@ static void dumpDoclistFunc(
   fulltext_cursor *pCursor;
   if( argc!=2 && argc!=4 ){
     generateError(pContext, "dump_doclist", "incorrect arguments");
-  }else if( sqlite4_value_type(argv[0])!=SQLITE_BLOB ||
+  }else if( sqlite4_value_type(argv[0])!=SQLITE4_BLOB ||
             sqlite4_value_bytes(argv[0])!=sizeof(pCursor) ){
     generateError(pContext, "dump_doclist", "illegal first argument");
   }else if( sqlite4_value_text(argv[1])==NULL ||
@@ -6596,24 +6596,24 @@ static void dumpDoclistFunc(
 
       /* Get our specific segment's information. */
       rc = sql_get_statement(v, SEGDIR_SELECT_SEGMENT_STMT, &s);
-      if( rc==SQLITE_OK ){
+      if( rc==SQLITE4_OK ){
         rc = sqlite4_bind_int(s, 1, sqlite4_value_int(argv[2]));
-        if( rc==SQLITE_OK ){
+        if( rc==SQLITE4_OK ){
           rc = sqlite4_bind_int(s, 2, sqlite4_value_int(argv[3]));
         }
       }
 
-      if( rc==SQLITE_OK ){
+      if( rc==SQLITE4_OK ){
         rc = sqlite4_step(s);
 
-        if( rc==SQLITE_DONE ){
+        if( rc==SQLITE4_DONE ){
           dataBufferDestroy(&doclist);
           generateError(pContext, "dump_doclist", "segment not found");
           return;
         }
 
         /* Found a segment, load it into doclist. */
-        if( rc==SQLITE_ROW ){
+        if( rc==SQLITE4_ROW ){
           const sqlite_int64 iLeavesEnd = sqlite4_column_int64(s, 1);
           const char *pData = sqlite4_column_blob(s, 2);
           const int nData = sqlite4_column_bytes(s, 2);
@@ -6623,17 +6623,17 @@ static void dumpDoclistFunc(
           */
           rc = loadSegment(v, pData, nData, iLeavesEnd, pTerm, nTerm, 0,
                            &doclist);
-          if( rc==SQLITE_OK ){
+          if( rc==SQLITE4_OK ){
             rc = sqlite4_step(s);
 
             /* Should not have more than one matching segment. */
-            if( rc!=SQLITE_DONE ){
+            if( rc!=SQLITE4_DONE ){
               sqlite4_reset(s);
               dataBufferDestroy(&doclist);
               generateError(pContext, "dump_doclist", "invalid segdir");
               return;
             }
-            rc = SQLITE_OK;
+            rc = SQLITE4_OK;
           }
         }
       }
@@ -6641,7 +6641,7 @@ static void dumpDoclistFunc(
       sqlite4_reset(s);
     }
 
-    if( rc==SQLITE_OK ){
+    if( rc==SQLITE4_OK ){
       if( doclist.nData>0 ){
         createDoclistResult(pContext, doclist.pData, doclist.nData);
       }else{
@@ -6650,9 +6650,9 @@ static void dumpDoclistFunc(
         ** an all-index dump.  It may be interesting to distinguish
         ** these cases.
         */
-        sqlite4_result_text(pContext, "", 0, SQLITE_STATIC);
+        sqlite4_result_text(pContext, "", 0, SQLITE4_STATIC);
       }
-    }else if( rc==SQLITE_NOMEM ){
+    }else if( rc==SQLITE4_NOMEM ){
       /* Handle out-of-memory cases specially because if they are
       ** generated in fts2 code they may not be reflected in the db
       ** handle.
@@ -6690,7 +6690,7 @@ static int fulltextFindFunction(
   }else if( strcmp(zName,"optimize")==0 ){
     *pxFunc = optimizeFunc;
     return 1;
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
     /* NOTE(shess): These functions are present only for testing
     ** purposes.  No particular effort is made to optimize their
     ** execution or how they build their results.
@@ -6716,7 +6716,7 @@ static int fulltextRename(
   const char *zName
 ){
   fulltext_vtab *p = (fulltext_vtab *)pVtab;
-  int rc = SQLITE_NOMEM;
+  int rc = SQLITE4_NOMEM;
   char *zSql = sqlite4_mprintf(
     "ALTER TABLE %Q.'%q_content'  RENAME TO '%q_content';"
     "ALTER TABLE %Q.'%q_segments' RENAME TO '%q_segments';"
@@ -6785,7 +6785,7 @@ int sqlite4Fts2InitHashTable(sqlite4 *, fts2Hash *, const char *);
 ** function is called by the sqlite4_extension_init() entry point.
 */
 int sqlite4Fts2Init(sqlite4 *db){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   fts2Hash *pHash = 0;
   const sqlite4_tokenizer_module *pSimple = 0;
   const sqlite4_tokenizer_module *pPorter = 0;
@@ -6793,25 +6793,25 @@ int sqlite4Fts2Init(sqlite4 *db){
 
   sqlite4Fts2SimpleTokenizerModule(&pSimple);
   sqlite4Fts2PorterTokenizerModule(&pPorter);
-#ifdef SQLITE_ENABLE_ICU
+#ifdef SQLITE4_ENABLE_ICU
   sqlite4Fts2IcuTokenizerModule(&pIcu);
 #endif
 
   /* Allocate and initialise the hash-table used to store tokenizers. */
   pHash = sqlite4_malloc(sizeof(fts2Hash));
   if( !pHash ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }else{
     sqlite4Fts2HashInit(pHash, FTS2_HASH_STRING, 1);
   }
 
   /* Load the built-in tokenizers into the hash table */
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     if( sqlite4Fts2HashInsert(pHash, "simple", 7, (void *)pSimple)
      || sqlite4Fts2HashInsert(pHash, "porter", 7, (void *)pPorter) 
      || (pIcu && sqlite4Fts2HashInsert(pHash, "icu", 4, (void *)pIcu))
     ){
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
     }
   }
 
@@ -6819,14 +6819,14 @@ int sqlite4Fts2Init(sqlite4 *db){
   ** the two scalar functions. If this is successful, register the
   ** module with sqlite.
   */
-  if( SQLITE_OK==rc 
-   && SQLITE_OK==(rc = sqlite4Fts2InitHashTable(db, pHash, "fts2_tokenizer"))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "snippet", -1))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "offsets", -1))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "optimize", -1))
-#ifdef SQLITE_TEST
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "dump_terms", -1))
-   && SQLITE_OK==(rc = sqlite4_overload_function(db, "dump_doclist", -1))
+  if( SQLITE4_OK==rc 
+   && SQLITE4_OK==(rc = sqlite4Fts2InitHashTable(db, pHash, "fts2_tokenizer"))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "snippet", -1))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "offsets", -1))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "optimize", -1))
+#ifdef SQLITE4_TEST
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "dump_terms", -1))
+   && SQLITE4_OK==(rc = sqlite4_overload_function(db, "dump_doclist", -1))
 #endif
   ){
     return sqlite4_create_module_v2(
@@ -6835,7 +6835,7 @@ int sqlite4Fts2Init(sqlite4 *db){
   }
 
   /* An error has occurred. Delete the hash table and return the error code. */
-  assert( rc!=SQLITE_OK );
+  assert( rc!=SQLITE4_OK );
   if( pHash ){
     sqlite4Fts2HashClear(pHash);
     sqlite4_free(pHash);
@@ -6843,15 +6843,15 @@ int sqlite4Fts2Init(sqlite4 *db){
   return rc;
 }
 
-#if !SQLITE_CORE
+#if !SQLITE4_CORE
 int sqlite4_extension_init(
   sqlite4 *db, 
   char **pzErrMsg,
   const sqlite4_api_routines *pApi
 ){
-  SQLITE_EXTENSION_INIT2(pApi)
+  SQLITE4_EXTENSION_INIT2(pApi)
   return sqlite4Fts2Init(db);
 }
 #endif
 
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS2) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS2) */

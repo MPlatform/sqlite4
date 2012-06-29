@@ -19,7 +19,7 @@ source $testdir/malloc_common.tcl
 # Only run these tests if memory debugging is turned on.
 #
 if {!$MEMDEBUG} {
-   puts "Skipping mallocA tests: not compiled with -DSQLITE_MEMDEBUG..."
+   puts "Skipping mallocA tests: not compiled with -DSQLITE4_MEMDEBUG..."
    finish_test
    return
 }

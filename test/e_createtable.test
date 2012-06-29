@@ -365,7 +365,7 @@ do_createtable_tests 1.1.1 -error {
   2    "CREATE TABLE temp.sqlite_helloworld(x)"  sqlite_helloworld
   3    {CREATE TABLE auxa."sqlite__"(x, y)}      sqlite__
   4    {CREATE TABLE auxb."sqlite_"(z)}          sqlite_
-  5    {CREATE TABLE "SQLITE_TBL"(z)}            SQLITE_TBL
+  5    {CREATE TABLE "SQLITE4_TBL"(z)}            SQLITE4_TBL
 }
 do_createtable_tests 1.1.2 {
   1    "CREATE TABLE sqlit_abc(a, b, c)"         {}
@@ -1051,7 +1051,7 @@ do_createtable_tests 3.9 {
 }
 
 # EVIDENCE-OF: R-25473-20557 The number of columns in a table is limited
-# by the SQLITE_MAX_COLUMN compile-time parameter.
+# by the SQLITE4_MAX_COLUMN compile-time parameter.
 #
 proc columns {n} {
   set res [list]
@@ -1059,10 +1059,10 @@ proc columns {n} {
   join $res ", "
 }
 do_execsql_test e_createtable-3.10.1 [subst {
-  CREATE TABLE t9([columns $::SQLITE_MAX_COLUMN]);
+  CREATE TABLE t9([columns $::SQLITE4_MAX_COLUMN]);
 }] {}
 do_catchsql_test e_createtable-3.10.2 [subst {
-  CREATE TABLE t10([columns [expr $::SQLITE_MAX_COLUMN+1]]);
+  CREATE TABLE t10([columns [expr $::SQLITE4_MAX_COLUMN+1]]);
 }] {1 {too many columns on t10}}
 
 # EVIDENCE-OF: R-27775-64721 Both of these limits can be lowered at
@@ -1070,10 +1070,10 @@ do_catchsql_test e_createtable-3.10.2 [subst {
 #
 #   A 30,000 byte blob consumes 30,003 bytes of record space. A record 
 #   that contains 3 such blobs consumes (30,000*3)+1 bytes of space. Tests
-#   3.11.4 and 3.11.5, which verify that SQLITE_MAX_LENGTH may be lowered
+#   3.11.4 and 3.11.5, which verify that SQLITE4_MAX_LENGTH may be lowered
 #   at runtime, are based on this calculation.
 #
-sqlite4_limit db SQLITE_LIMIT_COLUMN 500
+sqlite4_limit db SQLITE4_LIMIT_COLUMN 500
 do_execsql_test e_createtable-3.11.1 [subst {
   CREATE TABLE t10([columns 500]);
 }] {}
@@ -1084,12 +1084,12 @@ do_catchsql_test e_createtable-3.11.2 [subst {
 # Check that it is not possible to raise the column limit above its 
 # default compile time value.
 #
-sqlite4_limit db SQLITE_LIMIT_COLUMN [expr $::SQLITE_MAX_COLUMN+2]
+sqlite4_limit db SQLITE4_LIMIT_COLUMN [expr $::SQLITE4_MAX_COLUMN+2]
 do_catchsql_test e_createtable-3.11.3 [subst {
-  CREATE TABLE t11([columns [expr $::SQLITE_MAX_COLUMN+1]]);
+  CREATE TABLE t11([columns [expr $::SQLITE4_MAX_COLUMN+1]]);
 }] {1 {too many columns on t11}}
 
-sqlite4_limit db SQLITE_LIMIT_LENGTH 90010
+sqlite4_limit db SQLITE4_LIMIT_LENGTH 90010
 do_execsql_test e_createtable-3.11.4 {
   CREATE TABLE t12(a, b, c);
   INSERT INTO t12 VALUES(randomblob(30000),randomblob(30000),randomblob(30000));

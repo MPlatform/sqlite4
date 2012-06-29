@@ -72,7 +72,7 @@ if {[permutation]!="inmemory_journal"} {
       faultsim_save
       tvfs filter {}
     }
-    return "SQLITE_OK"
+    return "SQLITE4_OK"
   }
   
   sqlite4 db  test.db

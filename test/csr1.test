@@ -43,10 +43,10 @@ do_execsql_test 1.1 { SELECT * FROM t1 } {
 db eval { SELECT a, b FROM t1 } {
   do_test 1.2.1 { 
     list [catch { sqlite4_lsm_work db main -flush 0 } msg] $msg
-  } {1 SQLITE_MISUSE}
+  } {1 SQLITE4_MISUSE}
   do_test 1.2.2 { 
     list [catch { sqlite4_lsm_work db main 1 } msg] $msg
-  } {1 SQLITE_MISUSE}
+  } {1 SQLITE4_MISUSE}
   break
 }
 
@@ -61,7 +61,7 @@ do_execsql_test 2.1 {
 do_test 2.2 { 
   sqlite4 db2 ./test.db
   list [catch { sqlite4_lsm_work db2 main -flush 0 } msg] $msg
-} {1 SQLITE_BUSY}
+} {1 SQLITE4_BUSY}
 
 do_execsql_test 2.3 { COMMIT }
 do_test 2.4 { sqlite4_lsm_work db2 main -flush 0 } {0}

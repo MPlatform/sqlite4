@@ -43,7 +43,7 @@ while {![eof $in]} {
   set line [gets $in]
   if {$line=="" && [eof $in]} break
   incr cnt
-  regexp {#define\s+SQLITE_VERSION\s+"(.*)"} $line all VERSION
+  regexp {#define\s+SQLITE4_VERSION\s+"(.*)"} $line all VERSION
 }
 close $in
 
@@ -74,15 +74,15 @@ puts $out [subst \
 ** language. The code for the "sqlite4" command-line shell is also in a
 ** separate file. This file contains only code for the core SQLite library.
 */
-#define SQLITE_CORE 1
-#define SQLITE_AMALGAMATION 1}]
+#define SQLITE4_CORE 1
+#define SQLITE4_AMALGAMATION 1}]
 if {$addstatic} {
   puts $out \
-{#ifndef SQLITE_PRIVATE
-# define SQLITE_PRIVATE static
+{#ifndef SQLITE4_PRIVATE
+# define SQLITE4_PRIVATE static
 #endif
-#ifndef SQLITE_API
-# define SQLITE_API
+#ifndef SQLITE4_API
+# define SQLITE4_API
 #endif}
 }
 
@@ -167,33 +167,33 @@ proc copy_file {filename} {
     } elseif {!$linemacros && [regexp {^#line} $line]} {
       # Skip #line directives.
     } elseif {$addstatic && ![regexp {^(static|typedef)} $line]} {
-      regsub {^SQLITE_API } $line {} line
+      regsub {^SQLITE4_API } $line {} line
       if {[regexp $declpattern $line all funcname]} {
-        # Add the SQLITE_PRIVATE or SQLITE_API keyword before functions.
+        # Add the SQLITE4_PRIVATE or SQLITE4_API keyword before functions.
         # so that linkage can be modified at compile-time.
         if {[regexp {^sqlite4_} $funcname]} {
-          puts $out "SQLITE_API $line"
+          puts $out "SQLITE4_API $line"
         } else {
-          puts $out "SQLITE_PRIVATE $line"
+          puts $out "SQLITE4_PRIVATE $line"
         }
       } elseif {[regexp $varpattern $line all varname]} {
-        # Add the SQLITE_PRIVATE before variable declarations or
+        # Add the SQLITE4_PRIVATE before variable declarations or
         # definitions for internal use
         if {![regexp {^sqlite4_} $varname]} {
           regsub {^extern } $line {} line
-          puts $out "SQLITE_PRIVATE $line"
+          puts $out "SQLITE4_PRIVATE $line"
         } else {
           if {[regexp {const char sqlite4_version\[\];} $line]} {
-            set line {const char sqlite4_version[] = SQLITE_VERSION;}
+            set line {const char sqlite4_version[] = SQLITE4_VERSION;}
           }
-          regsub {^SQLITE_EXTERN } $line {} line
-          puts $out "SQLITE_API $line"
+          regsub {^SQLITE4_EXTERN } $line {} line
+          puts $out "SQLITE4_API $line"
         }
-      } elseif {[regexp {^(SQLITE_EXTERN )?void \(\*sqlite4IoTrace\)} $line]} {
-        regsub {^SQLITE_EXTERN } $line {} line
-        puts $out "SQLITE_PRIVATE $line"
+      } elseif {[regexp {^(SQLITE4_EXTERN )?void \(\*sqlite4IoTrace\)} $line]} {
+        regsub {^SQLITE4_EXTERN } $line {} line
+        puts $out "SQLITE4_PRIVATE $line"
       } elseif {[regexp {^void \(\*sqlite4Os} $line]} {
-        puts $out "SQLITE_PRIVATE $line"
+        puts $out "SQLITE4_PRIVATE $line"
       } else {
         puts $out $line
       }

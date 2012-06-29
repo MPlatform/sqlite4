@@ -17,7 +17,7 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-# If SQLITE_OMIT_ALTERTABLE is defined, omit this file.
+# If SQLITE4_OMIT_ALTERTABLE is defined, omit this file.
 ifcapable !altertable {
   finish_test
   return
@@ -685,14 +685,14 @@ do_test alter-8.2 {
 #
 ifcapable trigger {
   do_test alter-9.1 {
-    execsql {SELECT SQLITE_RENAME_TRIGGER(0,0)}
+    execsql {SELECT SQLITE4_RENAME_TRIGGER(0,0)}
   } {{}}
 }
 do_test alter-9.2 {
   execsql {
-    SELECT SQLITE_RENAME_TABLE(0,0);
-    SELECT SQLITE_RENAME_TABLE(10,20);
-    SELECT SQLITE_RENAME_TABLE('foo', 'foo');
+    SELECT SQLITE4_RENAME_TABLE(0,0);
+    SELECT SQLITE4_RENAME_TABLE(10,20);
+    SELECT SQLITE4_RENAME_TABLE('foo', 'foo');
   }
 } {{} {} {}}
 

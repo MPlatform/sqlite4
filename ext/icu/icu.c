@@ -28,7 +28,7 @@
 **     provide case-independent matching.
 */
 
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_ICU)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_ICU)
 
 /* Include ICU headers */
 #include <unicode/utypes.h>
@@ -38,9 +38,9 @@
 
 #include <assert.h>
 
-#ifndef SQLITE_CORE
+#ifndef SQLITE4_CORE
   #include "sqlite4ext.h"
-  SQLITE_EXTENSION_INIT1
+  SQLITE4_EXTENSION_INIT1
 #else
   #include "sqlite4.h"
 #endif
@@ -49,8 +49,8 @@
 ** Maximum length (in bytes) of the pattern in a LIKE or GLOB
 ** operator.
 */
-#ifndef SQLITE_MAX_LIKE_PATTERN_LENGTH
-# define SQLITE_MAX_LIKE_PATTERN_LENGTH 50000
+#ifndef SQLITE4_MAX_LIKE_PATTERN_LENGTH
+# define SQLITE4_MAX_LIKE_PATTERN_LENGTH 50000
 #endif
 
 /*
@@ -168,7 +168,7 @@ static void icuLikeFunc(
   /* Limit the length of the LIKE or GLOB pattern to avoid problems
   ** of deep recursion and N*N behavior in patternCompare().
   */
-  if( sqlite4_value_bytes(argv[0])>SQLITE_MAX_LIKE_PATTERN_LENGTH ){
+  if( sqlite4_value_bytes(argv[0])>SQLITE4_MAX_LIKE_PATTERN_LENGTH ){
     sqlite4_result_error(context, "LIKE or GLOB pattern too complex", -1);
     return;
   }
@@ -436,10 +436,10 @@ static void icuLoadCollation(
   }
   assert(p);
 
-  rc = sqlite4_create_collation_v2(db, zName, SQLITE_UTF16, (void *)pUCollator, 
+  rc = sqlite4_create_collation_v2(db, zName, SQLITE4_UTF16, (void *)pUCollator, 
       icuCollationColl, icuCollationDel
   );
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     ucol_close(pUCollator);
     sqlite4_result_error(p, "Error registering collation function", -1);
   }
@@ -456,28 +456,28 @@ int sqlite4IcuInit(sqlite4 *db){
     void *pContext;                           /* sqlite4_user_data() context */
     void (*xFunc)(sqlite4_context*,int,sqlite4_value**);
   } scalars[] = {
-    {"regexp", 2, SQLITE_ANY,          0, icuRegexpFunc},
+    {"regexp", 2, SQLITE4_ANY,          0, icuRegexpFunc},
 
-    {"lower",  1, SQLITE_UTF16,        0, icuCaseFunc16},
-    {"lower",  2, SQLITE_UTF16,        0, icuCaseFunc16},
-    {"upper",  1, SQLITE_UTF16, (void*)1, icuCaseFunc16},
-    {"upper",  2, SQLITE_UTF16, (void*)1, icuCaseFunc16},
+    {"lower",  1, SQLITE4_UTF16,        0, icuCaseFunc16},
+    {"lower",  2, SQLITE4_UTF16,        0, icuCaseFunc16},
+    {"upper",  1, SQLITE4_UTF16, (void*)1, icuCaseFunc16},
+    {"upper",  2, SQLITE4_UTF16, (void*)1, icuCaseFunc16},
 
-    {"lower",  1, SQLITE_UTF8,         0, icuCaseFunc16},
-    {"lower",  2, SQLITE_UTF8,         0, icuCaseFunc16},
-    {"upper",  1, SQLITE_UTF8,  (void*)1, icuCaseFunc16},
-    {"upper",  2, SQLITE_UTF8,  (void*)1, icuCaseFunc16},
+    {"lower",  1, SQLITE4_UTF8,         0, icuCaseFunc16},
+    {"lower",  2, SQLITE4_UTF8,         0, icuCaseFunc16},
+    {"upper",  1, SQLITE4_UTF8,  (void*)1, icuCaseFunc16},
+    {"upper",  2, SQLITE4_UTF8,  (void*)1, icuCaseFunc16},
 
-    {"like",   2, SQLITE_UTF8,         0, icuLikeFunc},
-    {"like",   3, SQLITE_UTF8,         0, icuLikeFunc},
+    {"like",   2, SQLITE4_UTF8,         0, icuLikeFunc},
+    {"like",   3, SQLITE4_UTF8,         0, icuLikeFunc},
 
-    {"icu_load_collation",  2, SQLITE_UTF8, (void*)db, icuLoadCollation},
+    {"icu_load_collation",  2, SQLITE4_UTF8, (void*)db, icuLoadCollation},
   };
 
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int i;
 
-  for(i=0; rc==SQLITE_OK && i<(int)(sizeof(scalars)/sizeof(scalars[0])); i++){
+  for(i=0; rc==SQLITE4_OK && i<(int)(sizeof(scalars)/sizeof(scalars[0])); i++){
     struct IcuScalar *p = &scalars[i];
     rc = sqlite4_create_function(
         db, p->zName, p->nArg, p->enc, p->pContext, p->xFunc, 0, 0
@@ -487,13 +487,13 @@ int sqlite4IcuInit(sqlite4 *db){
   return rc;
 }
 
-#if !SQLITE_CORE
+#if !SQLITE4_CORE
 int sqlite4_extension_init(
   sqlite4 *db, 
   char **pzErrMsg,
   const sqlite4_api_routines *pApi
 ){
-  SQLITE_EXTENSION_INIT2(pApi)
+  SQLITE4_EXTENSION_INIT2(pApi)
   return sqlite4IcuInit(db);
 }
 #endif

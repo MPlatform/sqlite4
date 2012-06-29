@@ -39,7 +39,7 @@ u8 sqlite4GetBoolean(const char *z){
 ** remainder of this file is specific to PRAGMA processing.  So omit
 ** the rest of the file if PRAGMAs are omitted from the build.
 */
-#if !defined(SQLITE_OMIT_PRAGMA)
+#if !defined(SQLITE4_OMIT_PRAGMA)
 
 /*
 ** Generate code to return a single integer value.
@@ -53,11 +53,11 @@ static void returnSingleInt(Parse *pParse, const char *zLabel, i64 value){
   }
   sqlite4VdbeAddOp4(v, OP_Int64, 0, mem, 0, (char*)pI64, P4_INT64);
   sqlite4VdbeSetNumCols(v, 1);
-  sqlite4VdbeSetColName(v, 0, COLNAME_NAME, zLabel, SQLITE_STATIC);
+  sqlite4VdbeSetColName(v, 0, COLNAME_NAME, zLabel, SQLITE4_STATIC);
   sqlite4VdbeAddOp2(v, OP_ResultRow, mem, 1);
 }
 
-#ifndef SQLITE_OMIT_FLAG_PRAGMAS
+#ifndef SQLITE4_OMIT_FLAG_PRAGMAS
 /*
 ** Check to see if zRight and zLeft refer to a pragma that queries
 ** or changes one of the flags in db->flags.  Return 1 if so and 0 if not.
@@ -68,26 +68,26 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
     const char *zName;  /* Name of the pragma */
     int mask;           /* Mask for the db->flags value */
   } aPragma[] = {
-    { "reverse_unordered_selects", SQLITE_ReverseOrder  },
-    { "automatic_index",           SQLITE_AutoIndex  },
-#ifdef SQLITE_DEBUG
-    { "sql_trace",                SQLITE_SqlTrace      },
-    { "vdbe_listing",             SQLITE_VdbeListing   },
-    { "vdbe_trace",               SQLITE_VdbeTrace     },
-    { "kv_trace",                 SQLITE_KvTrace       },
-    { "trace",                    SQLITE_SqlTrace | SQLITE_VdbeListing |
-                                  SQLITE_VdbeTrace | SQLITE_KvTrace },
+    { "reverse_unordered_selects", SQLITE4_ReverseOrder  },
+    { "automatic_index",           SQLITE4_AutoIndex  },
+#ifdef SQLITE4_DEBUG
+    { "sql_trace",                SQLITE4_SqlTrace      },
+    { "vdbe_listing",             SQLITE4_VdbeListing   },
+    { "vdbe_trace",               SQLITE4_VdbeTrace     },
+    { "kv_trace",                 SQLITE4_KvTrace       },
+    { "trace",                    SQLITE4_SqlTrace | SQLITE4_VdbeListing |
+                                  SQLITE4_VdbeTrace | SQLITE4_KvTrace },
 #endif
-#ifndef SQLITE_OMIT_CHECK
-    { "ignore_check_constraints", SQLITE_IgnoreChecks  },
+#ifndef SQLITE4_OMIT_CHECK
+    { "ignore_check_constraints", SQLITE4_IgnoreChecks  },
 #endif
     /* The following is VERY experimental */
-    { "writable_schema",          SQLITE_WriteSchema|SQLITE_RecoveryMode },
+    { "writable_schema",          SQLITE4_WriteSchema|SQLITE4_RecoveryMode },
 
     /* This flag may only be set if both foreign-key and trigger support
     ** are present in the build.  */
-#if !defined(SQLITE_OMIT_FOREIGN_KEY) && !defined(SQLITE_OMIT_TRIGGER)
-    { "foreign_keys",             SQLITE_ForeignKeys },
+#if !defined(SQLITE4_OMIT_FOREIGN_KEY) && !defined(SQLITE4_OMIT_TRIGGER)
+    { "foreign_keys",             SQLITE4_ForeignKeys },
 #endif
   };
   int i, j;
@@ -106,7 +106,7 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
           if( db->pSavepoint ){
             /* Foreign key support may not be enabled or disabled while not
             ** in auto-commit mode.  */
-            mask &= ~(SQLITE_ForeignKeys);
+            mask &= ~(SQLITE4_ForeignKeys);
           }
 
           if( sqlite4GetBoolean(zRight) ){
@@ -123,7 +123,7 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
         }
         for(j=0; j<db->nDb; j++){
           if( db->aDb[j].pKV ){
-            db->aDb[j].pKV->fTrace = (db->flags & SQLITE_KvTrace)!=0;
+            db->aDb[j].pKV->fTrace = (db->flags & SQLITE4_KvTrace)!=0;
           }
         }
       }
@@ -133,12 +133,12 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
   }
   return 0;
 }
-#endif /* SQLITE_OMIT_FLAG_PRAGMAS */
+#endif /* SQLITE4_OMIT_FLAG_PRAGMAS */
 
 /*
 ** Return a human-readable name for a constraint resolution action.
 */
-#ifndef SQLITE_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
 static const char *actionName(u8 action){
   const char *zName;
   switch( action ){
@@ -211,37 +211,37 @@ void sqlite4Pragma(
 
   assert( pId2 );
   zDb = pId2->n>0 ? pDb->zName : 0;
-  if( sqlite4AuthCheck(pParse, SQLITE_PRAGMA, zLeft, zRight, zDb) ){
+  if( sqlite4AuthCheck(pParse, SQLITE4_PRAGMA, zLeft, zRight, zDb) ){
     goto pragma_out;
   }
  
 
 
-#ifndef SQLITE_OMIT_FLAG_PRAGMAS
+#ifndef SQLITE4_OMIT_FLAG_PRAGMAS
   if( flagPragma(pParse, zLeft, zRight) ){
     /* The flagPragma() subroutine also generates any necessary code
     ** there is nothing more to do here */
   }else
-#endif /* SQLITE_OMIT_FLAG_PRAGMAS */
+#endif /* SQLITE4_OMIT_FLAG_PRAGMAS */
 
   if( sqlite4StrICmp(zLeft, "lsm_flush")==0 ){
-    sqlite4_kvstore_control(db, zDb, SQLITE_KVCTRL_LSM_FLUSH, 0);
+    sqlite4_kvstore_control(db, zDb, SQLITE4_KVCTRL_LSM_FLUSH, 0);
   }else
 
   if( sqlite4StrICmp(zLeft, "lsm_checkpoint")==0 ){
-    sqlite4_kvstore_control(db, zDb, SQLITE_KVCTRL_LSM_CHECKPOINT, 0);
+    sqlite4_kvstore_control(db, zDb, SQLITE4_KVCTRL_LSM_CHECKPOINT, 0);
   }else
 
   if( sqlite4StrICmp(zLeft, "lsm_merge")==0 ){
     int nPage = zRight ? sqlite4Atoi(zRight) : 1000;
-    sqlite4_kvstore_control(db, zDb, SQLITE_KVCTRL_LSM_MERGE, &nPage);
+    sqlite4_kvstore_control(db, zDb, SQLITE4_KVCTRL_LSM_MERGE, &nPage);
     returnSingleInt(pParse, "nWrite", (sqlite4_int64)nPage);
   }else
 
 
 
 
-#ifndef SQLITE_OMIT_SCHEMA_PRAGMAS
+#ifndef SQLITE4_OMIT_SCHEMA_PRAGMAS
   /*
   **   PRAGMA table_info(<table>)
   **
@@ -264,12 +264,12 @@ void sqlite4Pragma(
       Column *pCol;
       sqlite4VdbeSetNumCols(v, 6);
       pParse->nMem = 6;
-      sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "cid", SQLITE_STATIC);
-      sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE_STATIC);
-      sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "type", SQLITE_STATIC);
-      sqlite4VdbeSetColName(v, 3, COLNAME_NAME, "notnull", SQLITE_STATIC);
-      sqlite4VdbeSetColName(v, 4, COLNAME_NAME, "dflt_value", SQLITE_STATIC);
-      sqlite4VdbeSetColName(v, 5, COLNAME_NAME, "pk", SQLITE_STATIC);
+      sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "cid", SQLITE4_STATIC);
+      sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE4_STATIC);
+      sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "type", SQLITE4_STATIC);
+      sqlite4VdbeSetColName(v, 3, COLNAME_NAME, "notnull", SQLITE4_STATIC);
+      sqlite4VdbeSetColName(v, 4, COLNAME_NAME, "dflt_value", SQLITE4_STATIC);
+      sqlite4VdbeSetColName(v, 5, COLNAME_NAME, "pk", SQLITE4_STATIC);
       sqlite4ViewGetColumnNames(pParse, pTab);
       for(i=0, pCol=pTab->aCol; i<pTab->nCol; i++, pCol++){
         if( IsHiddenColumn(pCol) ){
@@ -302,9 +302,9 @@ void sqlite4Pragma(
       pTab = pIdx->pTable;
       sqlite4VdbeSetNumCols(v, 3);
       pParse->nMem = 3;
-      sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "seqno", SQLITE_STATIC);
-      sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "cid", SQLITE_STATIC);
-      sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "name", SQLITE_STATIC);
+      sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "seqno", SQLITE4_STATIC);
+      sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "cid", SQLITE4_STATIC);
+      sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "name", SQLITE4_STATIC);
       for(i=0; i<pIdx->nColumn; i++){
         int cnum = pIdx->aiColumn[i];
         sqlite4VdbeAddOp2(v, OP_Integer, i, 1);
@@ -328,9 +328,9 @@ void sqlite4Pragma(
         int i = 0; 
         sqlite4VdbeSetNumCols(v, 3);
         pParse->nMem = 3;
-        sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "seq", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "unique", SQLITE_STATIC);
+        sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "seq", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "unique", SQLITE4_STATIC);
         while(pIdx){
           sqlite4VdbeAddOp2(v, OP_Integer, i, 1);
           sqlite4VdbeAddOp4(v, OP_String8, 0, 2, 0, pIdx->zName, 0);
@@ -348,9 +348,9 @@ void sqlite4Pragma(
     if( sqlite4ReadSchema(pParse) ) goto pragma_out;
     sqlite4VdbeSetNumCols(v, 3);
     pParse->nMem = 3;
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "seq", SQLITE_STATIC);
-    sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE_STATIC);
-    sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "file", SQLITE_STATIC);
+    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "seq", SQLITE4_STATIC);
+    sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE4_STATIC);
+    sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "file", SQLITE4_STATIC);
     for(i=0; i<db->nDb; i++){
       if( db->aDb[i].pKV==0 ) continue;
       assert( db->aDb[i].zName!=0 );
@@ -367,8 +367,8 @@ void sqlite4Pragma(
     HashElem *p;
     sqlite4VdbeSetNumCols(v, 2);
     pParse->nMem = 2;
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "seq", SQLITE_STATIC);
-    sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE_STATIC);
+    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "seq", SQLITE4_STATIC);
+    sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "name", SQLITE4_STATIC);
     for(p=sqliteHashFirst(&db->aCollSeq); p; p=sqliteHashNext(p)){
       CollSeq *pColl = (CollSeq *)sqliteHashData(p);
       sqlite4VdbeAddOp2(v, OP_Integer, i++, 1);
@@ -376,9 +376,9 @@ void sqlite4Pragma(
       sqlite4VdbeAddOp2(v, OP_ResultRow, 1, 2);
     }
   }else
-#endif /* SQLITE_OMIT_SCHEMA_PRAGMAS */
+#endif /* SQLITE4_OMIT_SCHEMA_PRAGMAS */
 
-#ifndef SQLITE_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
   if( sqlite4StrICmp(zLeft, "foreign_key_list")==0 && zRight ){
     FKey *pFK;
     Table *pTab;
@@ -391,14 +391,14 @@ void sqlite4Pragma(
         int i = 0; 
         sqlite4VdbeSetNumCols(v, 8);
         pParse->nMem = 8;
-        sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "id", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "seq", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "table", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 3, COLNAME_NAME, "from", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 4, COLNAME_NAME, "to", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 5, COLNAME_NAME, "on_update", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 6, COLNAME_NAME, "on_delete", SQLITE_STATIC);
-        sqlite4VdbeSetColName(v, 7, COLNAME_NAME, "match", SQLITE_STATIC);
+        sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "id", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 1, COLNAME_NAME, "seq", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 2, COLNAME_NAME, "table", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 3, COLNAME_NAME, "from", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 4, COLNAME_NAME, "to", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 5, COLNAME_NAME, "on_update", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 6, COLNAME_NAME, "on_delete", SQLITE4_STATIC);
+        sqlite4VdbeSetColName(v, 7, COLNAME_NAME, "match", SQLITE4_STATIC);
         while(pFK){
           int j;
           for(j=0; j<pFK->nCol; j++){
@@ -422,7 +422,7 @@ void sqlite4Pragma(
       }
     }
   }else
-#endif /* !defined(SQLITE_OMIT_FOREIGN_KEY) */
+#endif /* !defined(SQLITE4_OMIT_FOREIGN_KEY) */
 
 #ifndef NDEBUG
   if( sqlite4StrICmp(zLeft, "parser_trace")==0 ){
@@ -445,12 +445,12 @@ void sqlite4Pragma(
     }
   }else
 
-#ifndef SQLITE_INTEGRITY_CHECK_ERROR_MAX
-# define SQLITE_INTEGRITY_CHECK_ERROR_MAX 100
+#ifndef SQLITE4_INTEGRITY_CHECK_ERROR_MAX
+# define SQLITE4_INTEGRITY_CHECK_ERROR_MAX 100
 #endif
 
 
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   /*
   **   PRAGMA encoding
   **   PRAGMA encoding = "utf-8"|"utf-16"|"utf-16le"|"utf-16be"
@@ -478,25 +478,25 @@ void sqlite4Pragma(
       char *zName;
       u8 enc;
     } encnames[] = {
-      { "UTF8",     SQLITE_UTF8        },
-      { "UTF-8",    SQLITE_UTF8        },  /* Must be element [1] */
-      { "UTF-16le", SQLITE_UTF16LE     },  /* Must be element [2] */
-      { "UTF-16be", SQLITE_UTF16BE     },  /* Must be element [3] */
-      { "UTF16le",  SQLITE_UTF16LE     },
-      { "UTF16be",  SQLITE_UTF16BE     },
-      { "UTF-16",   0                  }, /* SQLITE_UTF16NATIVE */
-      { "UTF16",    0                  }, /* SQLITE_UTF16NATIVE */
+      { "UTF8",     SQLITE4_UTF8        },
+      { "UTF-8",    SQLITE4_UTF8        },  /* Must be element [1] */
+      { "UTF-16le", SQLITE4_UTF16LE     },  /* Must be element [2] */
+      { "UTF-16be", SQLITE4_UTF16BE     },  /* Must be element [3] */
+      { "UTF16le",  SQLITE4_UTF16LE     },
+      { "UTF16be",  SQLITE4_UTF16BE     },
+      { "UTF-16",   0                  }, /* SQLITE4_UTF16NATIVE */
+      { "UTF16",    0                  }, /* SQLITE4_UTF16NATIVE */
       { 0, 0 }
     };
     const struct EncName *pEnc;
     if( !zRight ){    /* "PRAGMA encoding" */
       if( sqlite4ReadSchema(pParse) ) goto pragma_out;
       sqlite4VdbeSetNumCols(v, 1);
-      sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "encoding", SQLITE_STATIC);
+      sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "encoding", SQLITE4_STATIC);
       sqlite4VdbeAddOp2(v, OP_String8, 0, 1);
-      assert( encnames[SQLITE_UTF8].enc==SQLITE_UTF8 );
-      assert( encnames[SQLITE_UTF16LE].enc==SQLITE_UTF16LE );
-      assert( encnames[SQLITE_UTF16BE].enc==SQLITE_UTF16BE );
+      assert( encnames[SQLITE4_UTF8].enc==SQLITE4_UTF8 );
+      assert( encnames[SQLITE4_UTF16LE].enc==SQLITE4_UTF16LE );
+      assert( encnames[SQLITE4_UTF16BE].enc==SQLITE4_UTF16BE );
       sqlite4VdbeChangeP4(v, -1, encnames[ENC(pParse->db)].zName, P4_STATIC);
       sqlite4VdbeAddOp2(v, OP_ResultRow, 1, 1);
     }else{                        /* "PRAGMA encoding = XXX" */
@@ -511,7 +511,7 @@ void sqlite4Pragma(
       ){
         for(pEnc=&encnames[0]; pEnc->zName; pEnc++){
           if( 0==sqlite4StrICmp(zRight, pEnc->zName) ){
-            ENC(pParse->db) = pEnc->enc ? pEnc->enc : SQLITE_UTF16NATIVE;
+            ENC(pParse->db) = pEnc->enc ? pEnc->enc : SQLITE4_UTF16NATIVE;
             break;
           }
         }
@@ -521,10 +521,10 @@ void sqlite4Pragma(
       }
     }
   }else
-#endif /* SQLITE_OMIT_UTF16 */
+#endif /* SQLITE4_OMIT_UTF16 */
 
 
-#ifndef SQLITE_OMIT_COMPILEOPTION_DIAGS
+#ifndef SQLITE4_OMIT_COMPILEOPTION_DIAGS
   /*
   **   PRAGMA compile_options
   **
@@ -536,15 +536,15 @@ void sqlite4Pragma(
     const char *zOpt;
     sqlite4VdbeSetNumCols(v, 1);
     pParse->nMem = 1;
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "compile_option", SQLITE_STATIC);
+    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "compile_option", SQLITE4_STATIC);
     while( (zOpt = sqlite4_compileoption_get(i++))!=0 ){
       sqlite4VdbeAddOp4(v, OP_String8, 0, 1, 0, zOpt, 0);
       sqlite4VdbeAddOp2(v, OP_ResultRow, 1, 1);
     }
   }else
-#endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
+#endif /* SQLITE4_OMIT_COMPILEOPTION_DIAGS */
 
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   /*
   **   PRAGMA kvdump
   **
@@ -553,7 +553,7 @@ void sqlite4Pragma(
   if( sqlite4StrICmp(zLeft, "kvdump")==0 ){
     sqlite4KVStoreDump(db->aDb[0].pKV);
   }else
-#endif /* SQLITE_OMIT_COMPILEOPTION_DIAGS */
+#endif /* SQLITE4_OMIT_COMPILEOPTION_DIAGS */
   /*
   **   PRAGMA integrity_check
   **
@@ -609,7 +609,7 @@ void sqlite4Pragma(
 
         /* Open all indexes for table pTab. */
         for(pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext){
-          if( pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY ){
+          if( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){
             pPk = pIdx;
             iPkCsr = nIdx+baseCsr;
           }
@@ -624,7 +624,7 @@ void sqlite4Pragma(
         sqlite4VdbeAddOp2(v, OP_AddImm, regRowcnt1, 1);
 
         for(iCsr=baseCsr, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, iCsr++){
-          assert( (pIdx->eIndexType==SQLITE_INDEX_PRIMARYKEY)==(iCsr==iPkCsr) );
+          assert( (pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY)==(iCsr==iPkCsr) );
           if( iCsr!=iPkCsr ){
             char *zErr;
             int iCol;
@@ -658,7 +658,7 @@ void sqlite4Pragma(
             sqlite4VdbeAddOp3(v, OP_Concat, regTmp, regErrstr, regErrstr);
             sqlite4VdbeAddOp3(v, OP_Function, 0, regKey, regTmp);
             sqlite4VdbeChangeP4(v, -1,
-                (char *)sqlite4FindFunction(db, "hex", 3, 1, SQLITE_UTF8, 0), 
+                (char *)sqlite4FindFunction(db, "hex", 3, 1, SQLITE4_UTF8, 0), 
                 P4_FUNCDEF
             );
             sqlite4VdbeChangeP5(v, 1);
@@ -710,7 +710,7 @@ void sqlite4Pragma(
 
     pParse->nMem = (regArray + nMaxArray);
     sqlite4VdbeSetNumCols(v, 1);
-    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "integrity_check", SQLITE_STATIC);
+    sqlite4VdbeSetColName(v, 0, COLNAME_NAME, "integrity_check", SQLITE4_STATIC);
     sqlite4VdbeAddOp2(v, OP_ResultRow, regResult, 1);
 
   }else
@@ -733,4 +733,4 @@ pragma_out:
   sqlite4DbFree(db, zRight);
 }
 
-#endif /* SQLITE_OMIT_PRAGMA */
+#endif /* SQLITE4_OMIT_PRAGMA */

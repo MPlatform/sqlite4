@@ -722,10 +722,10 @@ proc finalize_testing {} {
   if {$::cmdlinearg(binarylog)} {
     vfslog finalize binarylog
   }
-  if {[lindex [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_COUNT 0] 1]>0 ||
+  if {[lindex [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_COUNT 0] 1]>0 ||
               [sqlite4_memory_used]>0} {
     puts "Unfreed memory: [sqlite4_memory_used] bytes in\
-         [lindex [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_COUNT 0] 1] allocations"
+         [lindex [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_COUNT 0] 1] allocations"
     incr nErr
     ifcapable memdebug||mem5||(mem3&&debug) {
       puts "Writing unfreed memory log to \"./memleak.txt\""
@@ -767,16 +767,16 @@ proc finalize_testing {} {
 # Display memory statistics for analysis and debugging purposes.
 #
 proc show_memstats {} {
-  set x [sqlite4_env_status SQLITE_ENVSTATUS_MEMORY_USED 0]
-  set y [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_SIZE 0]
+  set x [sqlite4_env_status SQLITE4_ENVSTATUS_MEMORY_USED 0]
+  set y [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_SIZE 0]
   set val [format {now %10d  max %10d  max-size %10d} \
               [lindex $x 1] [lindex $x 2] [lindex $y 2]]
   puts "Memory used:          $val"
-  set x [sqlite4_env_status SQLITE_ENVSTATUS_MALLOC_COUNT 0]
+  set x [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_COUNT 0]
   set val [format {now %10d  max %10d} [lindex $x 1] [lindex $x 2]]
   puts "Allocation count:     $val"
   ifcapable yytrackmaxstackdepth {
-    set x [sqlite4_env_status SQLITE_ENVSTATUS_PARSER_STACK 0]
+    set x [sqlite4_env_status SQLITE4_ENVSTATUS_PARSER_STACK 0]
     set val [format {               max %10d} [lindex $x 2]]
     puts "Parser stack depth:    $val"
   }
@@ -843,10 +843,10 @@ proc stepsql {dbptr sql} {
       return [list 1 $vm]
     }
     set sql [string trim $sqltail]
-#    while {[sqlite_step $vm N VAL COL]=="SQLITE_ROW"} {
+#    while {[sqlite_step $vm N VAL COL]=="SQLITE4_ROW"} {
 #      foreach v $VAL {lappend r $v}
 #    }
-    while {[sqlite4_step $vm]=="SQLITE_ROW"} {
+    while {[sqlite4_step $vm]=="SQLITE4_ROW"} {
       for {set i 0} {$i<[sqlite4_data_count $vm]} {incr i} {
         lappend r [sqlite4_column_text $vm $i]
       }
@@ -1107,9 +1107,9 @@ proc do_ioerr_test {testname args} {
         # If we are in extended result code mode, make sure all of the
         # IOERRs we get back really do have their extended code values.
         # If an extended result code is returned, the sqlite4_errcode
-        # TCLcommand will return a string of the form:  SQLITE_IOERR+nnnn
+        # TCLcommand will return a string of the form:  SQLITE4_IOERR+nnnn
         # where nnnn is a number
-        if {[regexp {^SQLITE_IOERR} $rc] && ![regexp {IOERR\+\d} $rc]} {
+        if {[regexp {^SQLITE4_IOERR} $rc] && ![regexp {IOERR\+\d} $rc]} {
           return $rc
         }
       } else {
@@ -1539,7 +1539,7 @@ proc optimize_db {} {
 }
 
 
-# If the library is compiled with the SQLITE_DEFAULT_AUTOVACUUM macro set
+# If the library is compiled with the SQLITE4_DEFAULT_AUTOVACUUM macro set
 # to non-zero, then set the global variable $AUTOVACUUM to 1.
 set AUTOVACUUM $sqlite_options(default_autovacuum)
 

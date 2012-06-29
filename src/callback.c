@@ -28,12 +28,12 @@ static void callCollNeeded(sqlite4 *db, int enc, const char *zName){
     db->xCollNeeded(db->pCollNeededArg, db, enc, zExternal);
     sqlite4DbFree(db, zExternal);
   }
-#ifndef SQLITE_OMIT_UTF16
+#ifndef SQLITE4_OMIT_UTF16
   if( db->xCollNeeded16 ){
     char const *zExternal;
     sqlite4_value *pTmp = sqlite4ValueNew(db);
-    sqlite4ValueSetStr(pTmp, -1, zName, SQLITE_UTF8, SQLITE_STATIC);
-    zExternal = sqlite4ValueText(pTmp, SQLITE_UTF16NATIVE);
+    sqlite4ValueSetStr(pTmp, -1, zName, SQLITE4_UTF8, SQLITE4_STATIC);
+    zExternal = sqlite4ValueText(pTmp, SQLITE4_UTF16NATIVE);
     if( zExternal ){
       db->xCollNeeded16(db->pCollNeededArg, db, (int)ENC(db), zExternal);
     }
@@ -53,16 +53,16 @@ static int synthCollSeq(sqlite4 *db, CollSeq *pColl){
   CollSeq *pColl2;
   char *z = pColl->zName;
   int i;
-  static const u8 aEnc[] = { SQLITE_UTF16BE, SQLITE_UTF16LE, SQLITE_UTF8 };
+  static const u8 aEnc[] = { SQLITE4_UTF16BE, SQLITE4_UTF16LE, SQLITE4_UTF8 };
   for(i=0; i<3; i++){
     pColl2 = sqlite4FindCollSeq(db, aEnc[i], z, 0);
     if( pColl2->xCmp!=0 ){
       memcpy(pColl, pColl2, sizeof(CollSeq));
       pColl->xDel = 0;         /* Do not copy the destructor */
-      return SQLITE_OK;
+      return SQLITE4_OK;
     }
   }
-  return SQLITE_ERROR;
+  return SQLITE4_ERROR;
 }
 
 /*
@@ -124,11 +124,11 @@ int sqlite4CheckCollSeq(Parse *pParse, CollSeq *pColl){
     if( !p ){
       sqlite4ErrorMsg(pParse, "no such collation sequence: %s", zName);
       pParse->nErr++;
-      return SQLITE_ERROR;
+      return SQLITE4_ERROR;
     }
     assert( p==pColl );
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 
@@ -160,11 +160,11 @@ static CollSeq *findCollSeqEntry(
     if( pColl ){
       CollSeq *pDel = 0;
       pColl[0].zName = (char*)&pColl[3];
-      pColl[0].enc = SQLITE_UTF8;
+      pColl[0].enc = SQLITE4_UTF8;
       pColl[1].zName = (char*)&pColl[3];
-      pColl[1].enc = SQLITE_UTF16LE;
+      pColl[1].enc = SQLITE4_UTF16LE;
       pColl[2].zName = (char*)&pColl[3];
-      pColl[2].enc = SQLITE_UTF16BE;
+      pColl[2].enc = SQLITE4_UTF16BE;
       memcpy(pColl[0].zName, zName, nName);
       pColl[0].zName[nName] = 0;
       pDel = sqlite4HashInsert(&db->aCollSeq, pColl[0].zName, nName, pColl);
@@ -211,8 +211,8 @@ CollSeq *sqlite4FindCollSeq(
   }else{
     pColl = db->pDfltColl;
   }
-  assert( SQLITE_UTF8==1 && SQLITE_UTF16LE==2 && SQLITE_UTF16BE==3 );
-  assert( enc>=SQLITE_UTF8 && enc<=SQLITE_UTF16BE );
+  assert( SQLITE4_UTF8==1 && SQLITE4_UTF16LE==2 && SQLITE4_UTF16BE==3 );
+  assert( enc>=SQLITE4_UTF8 && enc<=SQLITE4_UTF16BE );
   if( pColl ) pColl += enc-1;
   return pColl;
 }
@@ -250,8 +250,8 @@ static int matchQuality(FuncDef *p, int nArg, u8 enc){
     if( enc==p->iPrefEnc ){
       match += 2;
     }
-    else if( (enc==SQLITE_UTF16LE && p->iPrefEnc==SQLITE_UTF16BE) ||
-             (enc==SQLITE_UTF16BE && p->iPrefEnc==SQLITE_UTF16LE) ){
+    else if( (enc==SQLITE4_UTF16LE && p->iPrefEnc==SQLITE4_UTF16BE) ||
+             (enc==SQLITE4_UTF16BE && p->iPrefEnc==SQLITE4_UTF16LE) ){
       match += 1;
     }
   }
@@ -349,7 +349,7 @@ FuncDef *sqlite4FindFunction(
   int bestScore = 0;  /* Score of best match */
 
 
-  assert( enc==SQLITE_UTF8 || enc==SQLITE_UTF16LE || enc==SQLITE_UTF16BE );
+  assert( enc==SQLITE4_UTF8 || enc==SQLITE4_UTF16LE || enc==SQLITE4_UTF16BE );
 
   /* First search for a match amongst the application-defined functions.
   */
@@ -365,7 +365,7 @@ FuncDef *sqlite4FindFunction(
 
   /* If no match is found, search the built-in functions.
   **
-  ** If the SQLITE_PreferBuiltin flag is set, then search the built-in
+  ** If the SQLITE4_PreferBuiltin flag is set, then search the built-in
   ** functions even if a prior app-defined function was found.  And give
   ** priority to built-in functions.
   **
@@ -375,7 +375,7 @@ FuncDef *sqlite4FindFunction(
   ** new function.  But the FuncDefs for built-in functions are read-only.
   ** So we must not search for built-ins when creating a new function.
   */ 
-  if( !createFlag && (pBest==0 || (db->flags & SQLITE_PreferBuiltin)!=0) ){
+  if( !createFlag && (pBest==0 || (db->flags & SQLITE4_PreferBuiltin)!=0) ){
     FuncDefTable *pFuncTab = &db->pEnv->aGlobalFuncs;
     bestScore = 0;
     p = functionSearch(pFuncTab, zName, nName);
@@ -458,7 +458,7 @@ Schema *sqlite4SchemaGet(sqlite4 *db){
     sqlite4HashInit(db->pEnv, &p->idxHash);
     sqlite4HashInit(db->pEnv, &p->trigHash);
     sqlite4HashInit(db->pEnv, &p->fkeyHash);
-    p->enc = SQLITE_UTF8;
+    p->enc = SQLITE4_UTF8;
   }
   return p;
 }

@@ -100,17 +100,17 @@ do_test lookaside-2.2 {
 } {1}
 do_test lookaside-2.3 {
   sqlite4_db_config_lookaside db 0 50 50
-} {5}  ;# SQLITE_BUSY
+} {5}  ;# SQLITE4_BUSY
 do_test lookaside-2.4 {
   db cache flush
   sqlite4_db_config_lookaside db 0 50 50
-} {0}  ;# SQLITE_OK
+} {0}  ;# SQLITE4_OK
 do_test lookaside-2.5 {
   sqlite4_db_config_lookaside db 0 -1 50
-} {0}  ;# SQLITE_OK
+} {0}  ;# SQLITE4_OK
 do_test lookaside-2.6 {
   sqlite4_db_config_lookaside db 0 50 -1
-} {0}  ;# SQLITE_OK
+} {0}  ;# SQLITE4_OK
 
 # sqlite4_db_status() with an invalid verb returns an error.
 #

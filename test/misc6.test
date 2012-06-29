@@ -26,7 +26,7 @@ do_test misc6-1.1 {
   set sqlite_static_bind_nbyte 5
   sqlite_bind $STMT 1 {} static-nbytes
   sqlite4_step $STMT
-} SQLITE_ROW
+} SQLITE4_ROW
 do_test misc6-1.2 {
   sqlite4_column_text $STMT 0
 } {3031323334}
@@ -38,7 +38,7 @@ ifcapable utf16 {
     set sqlite_static_bind_nbyte 5
     sqlite_bind $STMT 1 {} static-nbytes
     sqlite4_step $STMT
-  } SQLITE_ROW
+  } SQLITE4_ROW
   do_test misc6-1.4 {
     sqlite4_column_text $STMT 0
   } {00300031003200330034}

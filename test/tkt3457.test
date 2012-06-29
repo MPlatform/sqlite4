@@ -27,16 +27,16 @@ if {$tcl_platform(platform) != "unix"} {
 # the case.
 # 
 #   tkt3457-1.2: Application has neither read, nor write permission on
-#                the hot-journal file. Result: SQLITE_CANTOPEN.
+#                the hot-journal file. Result: SQLITE4_CANTOPEN.
 #                
 #   tkt3457-1.3: Application has write but not read permission on
-#                the hot-journal file. Result: SQLITE_CANTOPEN.
+#                the hot-journal file. Result: SQLITE4_CANTOPEN.
 #
 #   tkt3457-1.4: Application has read but not write permission on
-#                the hot-journal file. Result: SQLITE_CANTOPEN.
+#                the hot-journal file. Result: SQLITE4_CANTOPEN.
 #
 #   tkt3457-1.5: Application has read/write permission on the hot-journal 
-#                file. Result: SQLITE_OK.
+#                file. Result: SQLITE4_OK.
 # 
 do_test tkt3457-1.1 {
   execsql {

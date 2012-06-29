@@ -16,9 +16,9 @@
 **
 ** This file contains implementations of the low-level memory allocation
 ** routines specified in the sqlite4_mem_methods object.  The content of
-** this file is only used if SQLITE_SYSTEM_MALLOC is defined.  The
-** SQLITE_SYSTEM_MALLOC macro is defined automatically if neither the
-** SQLITE_MEMDEBUG nor the SQLITE_WIN32_MALLOC macros are defined.  The
+** this file is only used if SQLITE4_SYSTEM_MALLOC is defined.  The
+** SQLITE4_SYSTEM_MALLOC macro is defined automatically if neither the
+** SQLITE4_MEMDEBUG nor the SQLITE4_WIN32_MALLOC macros are defined.  The
 ** default configuration is to use memory allocation routines in this
 ** file.
 **
@@ -34,13 +34,13 @@
 **                                be enabled automatically on windows
 **                                systems, and malloc_usable_size() will
 **                                be redefined to _msize(), unless the
-**                                SQLITE_WITHOUT_MSIZE macro is defined.
+**                                SQLITE4_WITHOUT_MSIZE macro is defined.
 **    
-**    SQLITE_WITHOUT_ZONEMALLOC   Some older macs lack support for the zone
+**    SQLITE4_WITHOUT_ZONEMALLOC   Some older macs lack support for the zone
 **                                memory allocator.  Set this symbol to enable
 **                                building on older macs.
 **
-**    SQLITE_WITHOUT_MSIZE        Set this symbol to disable the use of
+**    SQLITE4_WITHOUT_MSIZE        Set this symbol to disable the use of
 **                                _msize() on windows systems.  This might
 **                                be necessary when compiling for Delphi,
 **                                for example.
@@ -52,52 +52,52 @@
 ** used when no other memory allocator is specified using compile-time
 ** macros.
 */
-#ifdef SQLITE_SYSTEM_MALLOC
+#ifdef SQLITE4_SYSTEM_MALLOC
 
 /*
 ** Windows systems have malloc_usable_size() but it is called _msize().
 ** The use of _msize() is automatic, but can be disabled by compiling
-** with -DSQLITE_WITHOUT_MSIZE
+** with -DSQLITE4_WITHOUT_MSIZE
 */
-#if !defined(HAVE_MALLOC_USABLE_SIZE) && SQLITE_OS_WIN \
-      && !defined(SQLITE_WITHOUT_MSIZE)
+#if !defined(HAVE_MALLOC_USABLE_SIZE) && SQLITE4_OS_WIN \
+      && !defined(SQLITE4_WITHOUT_MSIZE)
 # define HAVE_MALLOC_USABLE_SIZE 1
-# define SQLITE_MALLOCSIZE _msize
+# define SQLITE4_MALLOCSIZE _msize
 #endif
 
-#if defined(__APPLE__) && !defined(SQLITE_WITHOUT_ZONEMALLOC)
+#if defined(__APPLE__) && !defined(SQLITE4_WITHOUT_ZONEMALLOC)
 
 /*
 ** Use the zone allocator available on apple products unless the
-** SQLITE_WITHOUT_ZONEMALLOC symbol is defined.
+** SQLITE4_WITHOUT_ZONEMALLOC symbol is defined.
 */
 #include <sys/sysctl.h>
 #include <malloc/malloc.h>
 #include <libkern/OSAtomic.h>
 static malloc_zone_t* _sqliteZone_;
-#define SQLITE_MALLOC(x) malloc_zone_malloc(_sqliteZone_, (x))
-#define SQLITE_FREE(x) malloc_zone_free(_sqliteZone_, (x));
-#define SQLITE_REALLOC(x,y) malloc_zone_realloc(_sqliteZone_, (x), (y))
-#define SQLITE_MALLOCSIZE(x) \
+#define SQLITE4_MALLOC(x) malloc_zone_malloc(_sqliteZone_, (x))
+#define SQLITE4_FREE(x) malloc_zone_free(_sqliteZone_, (x));
+#define SQLITE4_REALLOC(x,y) malloc_zone_realloc(_sqliteZone_, (x), (y))
+#define SQLITE4_MALLOCSIZE(x) \
         (_sqliteZone_ ? _sqliteZone_->size(_sqliteZone_,x) : malloc_size(x))
 
 #else /* if not __APPLE__ */
 
 /*
 ** Use standard C library malloc and free on non-Apple systems.  
-** Also used by Apple systems if SQLITE_WITHOUT_ZONEMALLOC is defined.
+** Also used by Apple systems if SQLITE4_WITHOUT_ZONEMALLOC is defined.
 */
-#define SQLITE_MALLOC(x)    malloc(x)
-#define SQLITE_FREE(x)      free(x)
-#define SQLITE_REALLOC(x,y) realloc((x),(y))
+#define SQLITE4_MALLOC(x)    malloc(x)
+#define SQLITE4_FREE(x)      free(x)
+#define SQLITE4_REALLOC(x,y) realloc((x),(y))
 
 #ifdef HAVE_MALLOC_USABLE_SIZE
-# ifndef SQLITE_MALLOCSIZE
+# ifndef SQLITE4_MALLOCSIZE
 #  include <malloc.h>
-#  define SQLITE_MALLOCSIZE(x) malloc_usable_size(x)
+#  define SQLITE4_MALLOCSIZE(x) malloc_usable_size(x)
 # endif
 #else
-# undef SQLITE_MALLOCSIZE
+# undef SQLITE4_MALLOCSIZE
 #endif
 
 #endif /* __APPLE__ or not __APPLE__ */
@@ -111,12 +111,12 @@ static malloc_zone_t* _sqliteZone_;
 ** routines.
 */
 static void *sqlite4MemMalloc(void *NotUsed, sqlite4_size_t nByte){
-#ifdef SQLITE_MALLOCSIZE
-  void *p = SQLITE_MALLOC( nByte );
+#ifdef SQLITE4_MALLOCSIZE
+  void *p = SQLITE4_MALLOC( nByte );
   UNUSED_PARAMETER(NotUsed);
   if( p==0 ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(0,SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
+    sqlite4_log(0,SQLITE4_NOMEM, "failed to allocate %u bytes of memory", nByte);
   }
   return p;
 #else
@@ -124,13 +124,13 @@ static void *sqlite4MemMalloc(void *NotUsed, sqlite4_size_t nByte){
   assert( nByte>0 );
   UNUSED_PARAMETER(NotUsed);
   nByte = ROUND8(nByte);
-  p = SQLITE_MALLOC( nByte+8 );
+  p = SQLITE4_MALLOC( nByte+8 );
   if( p ){
     p[0] = nByte;
     p++;
   }else{
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(0,SQLITE_NOMEM, "failed to allocate %u bytes of memory", nByte);
+    sqlite4_log(0,SQLITE4_NOMEM, "failed to allocate %u bytes of memory", nByte);
   }
   return (void *)p;
 #endif
@@ -145,15 +145,15 @@ static void *sqlite4MemMalloc(void *NotUsed, sqlite4_size_t nByte){
 ** by higher-level routines.
 */
 static void sqlite4MemFree(void *NotUsed, void *pPrior){
-#ifdef SQLITE_MALLOCSIZE
+#ifdef SQLITE4_MALLOCSIZE
   UNUSED_PARAMETER(NotUsed);
-  SQLITE_FREE(pPrior);
+  SQLITE4_FREE(pPrior);
 #else
   sqlite4_int64 *p = (sqlite4_int64*)pPrior;
   UNUSED_PARAMETER(NotUsed);
   assert( pPrior!=0 );
   p--;
-  SQLITE_FREE(p);
+  SQLITE4_FREE(p);
 #endif
 }
 
@@ -162,9 +162,9 @@ static void sqlite4MemFree(void *NotUsed, void *pPrior){
 ** or xRealloc().
 */
 static sqlite4_size_t sqlite4MemSize(void *NotUsed, void *pPrior){
-#ifdef SQLITE_MALLOCSIZE
+#ifdef SQLITE4_MALLOCSIZE
   UNUSED_PARAMETER(NotUsed);
-  return pPrior ? (int)SQLITE_MALLOCSIZE(pPrior) : 0;
+  return pPrior ? (int)SQLITE4_MALLOCSIZE(pPrior) : 0;
 #else
   sqlite4_int64 *p;
   UNUSED_PARAMETER(NotUsed);
@@ -186,14 +186,14 @@ static sqlite4_size_t sqlite4MemSize(void *NotUsed, void *pPrior){
 ** routines and redirected to xFree.
 */
 static void *sqlite4MemRealloc(void *NotUsed, void *pPrior, int nByte){
-#ifdef SQLITE_MALLOCSIZE
-  void *p = SQLITE_REALLOC(pPrior, nByte);
+#ifdef SQLITE4_MALLOCSIZE
+  void *p = SQLITE4_REALLOC(pPrior, nByte);
   UNUSED_PARAMETER(NotUsed);
   if( p==0 ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(0,SQLITE_NOMEM,
+    sqlite4_log(0,SQLITE4_NOMEM,
       "failed memory resize %u to %u bytes",
-      SQLITE_MALLOCSIZE(pPrior), nByte);
+      SQLITE4_MALLOCSIZE(pPrior), nByte);
   }
   return p;
 #else
@@ -202,13 +202,13 @@ static void *sqlite4MemRealloc(void *NotUsed, void *pPrior, int nByte){
   assert( nByte==ROUND8(nByte) ); /* EV: R-46199-30249 */
   UNUSED_PARAMETER(NotUsed);
   p--;
-  p = SQLITE_REALLOC(p, nByte+8 );
+  p = SQLITE4_REALLOC(p, nByte+8 );
   if( p ){
     p[0] = nByte;
     p++;
   }else{
     testcase( sqlite4DefaultEnv.xLog!=0 );
-    sqlite4_log(0,SQLITE_NOMEM,
+    sqlite4_log(0,SQLITE4_NOMEM,
       "failed memory resize %u to %u bytes",
       sqlite4MemSize(0, pPrior), nByte);
   }
@@ -220,11 +220,11 @@ static void *sqlite4MemRealloc(void *NotUsed, void *pPrior, int nByte){
 ** Initialize this module.
 */
 static int sqlite4MemInit(void *NotUsed){
-#if defined(__APPLE__) && !defined(SQLITE_WITHOUT_ZONEMALLOC)
+#if defined(__APPLE__) && !defined(SQLITE4_WITHOUT_ZONEMALLOC)
   int cpuCount;
   size_t len;
   if( _sqliteZone_ ){
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
   len = sizeof(cpuCount);
   /* One usually wants to use hw.acctivecpu for MT decisions, but not here */
@@ -249,7 +249,7 @@ static int sqlite4MemInit(void *NotUsed){
   }
 #endif
   UNUSED_PARAMETER(NotUsed);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -282,4 +282,4 @@ void sqlite4MemSetDefault(sqlite4_env *pEnv){
   pEnv->m.pMemEnv = (void*)pEnv;
 }
 
-#endif /* SQLITE_SYSTEM_MALLOC */
+#endif /* SQLITE4_SYSTEM_MALLOC */

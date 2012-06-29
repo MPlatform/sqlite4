@@ -105,9 +105,9 @@ static int rehash(Hash *pH, unsigned int new_size){
   struct _ht *new_ht;            /* The new hash table */
   HashElem *elem, *next_elem;    /* For looping over existing elements */
 
-#if SQLITE_MALLOC_SOFT_LIMIT>0
-  if( new_size*sizeof(struct _ht)>SQLITE_MALLOC_SOFT_LIMIT ){
-    new_size = SQLITE_MALLOC_SOFT_LIMIT/sizeof(struct _ht);
+#if SQLITE4_MALLOC_SOFT_LIMIT>0
+  if( new_size*sizeof(struct _ht)>SQLITE4_MALLOC_SOFT_LIMIT ){
+    new_size = SQLITE4_MALLOC_SOFT_LIMIT/sizeof(struct _ht);
   }
   if( new_size==pH->htsize ) return 0;
 #endif

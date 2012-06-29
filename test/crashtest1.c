@@ -26,7 +26,7 @@
 
 static void do_some_sql(int parent){
   char *zErr;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   sqlite *db;
   int cnt = 0;
   static char zBig[] = 
@@ -48,15 +48,15 @@ static void do_some_sql(int parent){
     exit(1);
   }
   srand(getpid());
-  while( rc==SQLITE_OK ){
+  while( rc==SQLITE4_OK ){
     cnt++;
     rc = sqlite_exec_printf(db, 
        "INSERT INTO t1 VALUES(%d,'%d%s')", 0, 0, &zErr,
        rand(), rand(), zBig);
   }
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     printf("ERROR #%d: %s\n", rc, zErr);
-    if( rc==SQLITE_CORRUPT ){
+    if( rc==SQLITE4_CORRUPT ){
       kill(parent, SIGKILL);
     }
   }

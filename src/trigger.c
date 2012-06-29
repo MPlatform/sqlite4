@@ -12,7 +12,7 @@
 */
 #include "sqliteInt.h"
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
 /*
 ** Delete a linked list of TriggerStep structures.
 */
@@ -126,7 +126,7 @@ void sqlite4BeginTrigger(
   **                                                 ^^^^^^^^
   **
   ** To maintain backwards compatibility, ignore the database
-  ** name on pTableName if we are reparsing our of SQLITE_MASTER.
+  ** name on pTableName if we are reparsing our of SQLITE4_MASTER.
   */
   if( db->init.busy && iDb!=1 ){
     sqlite4DbFree(db, pTableName->a[0].zDatabase);
@@ -175,7 +175,7 @@ void sqlite4BeginTrigger(
   /* Check that the trigger name is not reserved and that no trigger of the
   ** specified name exists */
   zName = sqlite4NameFromToken(db, pName);
-  if( !zName || SQLITE_OK!=sqlite4CheckObjectName(pParse, zName) ){
+  if( !zName || SQLITE4_OK!=sqlite4CheckObjectName(pParse, zName) ){
     goto trigger_cleanup;
   }
   if( sqlite4HashFind(&(db->aDb[iDb].pSchema->trigHash),
@@ -211,16 +211,16 @@ void sqlite4BeginTrigger(
   }
   iTabDb = sqlite4SchemaToIndex(db, pTab->pSchema);
 
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   {
-    int code = SQLITE_CREATE_TRIGGER;
+    int code = SQLITE4_CREATE_TRIGGER;
     const char *zDb = db->aDb[iTabDb].zName;
     const char *zDbTrig = isTemp ? db->aDb[1].zName : zDb;
-    if( iTabDb==1 || isTemp ) code = SQLITE_CREATE_TEMP_TRIGGER;
+    if( iTabDb==1 || isTemp ) code = SQLITE4_CREATE_TEMP_TRIGGER;
     if( sqlite4AuthCheck(pParse, code, zName, pTab->zName, zDbTrig) ){
       goto trigger_cleanup;
     }
-    if( sqlite4AuthCheck(pParse, SQLITE_INSERT, SCHEMA_TABLE(iTabDb),0,zDb)){
+    if( sqlite4AuthCheck(pParse, SQLITE4_INSERT, SCHEMA_TABLE(iTabDb),0,zDb)){
       goto trigger_cleanup;
     }
   }
@@ -492,7 +492,7 @@ void sqlite4DropTrigger(Parse *pParse, SrcList *pName, int noErr){
   sqlite4 *db = pParse->db;
 
   if( db->mallocFailed ) goto drop_trigger_cleanup;
-  if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
+  if( SQLITE4_OK!=sqlite4ReadSchema(pParse) ){
     goto drop_trigger_cleanup;
   }
 
@@ -545,14 +545,14 @@ void sqlite4DropTriggerPtr(Parse *pParse, Trigger *pTrigger){
   pTable = tableOfTrigger(pTrigger);
   assert( pTable );
   assert( pTable->pSchema==pTrigger->pSchema || iDb==1 );
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
   {
-    int code = SQLITE_DROP_TRIGGER;
+    int code = SQLITE4_DROP_TRIGGER;
     const char *zDb = db->aDb[iDb].zName;
     const char *zTab = SCHEMA_TABLE(iDb);
-    if( iDb==1 ) code = SQLITE_DROP_TEMP_TRIGGER;
+    if( iDb==1 ) code = SQLITE4_DROP_TEMP_TRIGGER;
     if( sqlite4AuthCheck(pParse, code, pTrigger->zName, pTable->zName, zDb) ||
-      sqlite4AuthCheck(pParse, SQLITE_DELETE, zTab, 0, zDb) ){
+      sqlite4AuthCheck(pParse, SQLITE4_DELETE, zTab, 0, zDb) ){
       return;
     }
   }
@@ -606,7 +606,7 @@ void sqlite4UnlinkAndDeleteTrigger(sqlite4 *db, int iDb, const char *zName){
       *pp = (*pp)->pNext;
     }
     sqlite4DeleteTrigger(db, pTrigger);
-    db->flags |= SQLITE_InternChanges;
+    db->flags |= SQLITE4_InternChanges;
   }
 }
 
@@ -645,7 +645,7 @@ Trigger *sqlite4TriggersExist(
   Trigger *pList = 0;
   Trigger *p;
 
-  if( (pParse->db->flags & SQLITE_EnableTrigger)!=0 ){
+  if( (pParse->db->flags & SQLITE4_EnableTrigger)!=0 ){
     pList = sqlite4TriggerList(pParse, pTab);
   }
   assert( pList==0 || IsVirtual(pTab)==0 );
@@ -767,7 +767,7 @@ static int codeTriggerProgram(
   return 0;
 }
 
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
 /*
 ** This function is used to add VdbeComment() annotations to a VDBE
 ** program. It is not used in production code, only for debugging.
@@ -862,7 +862,7 @@ static TriggerPrg *codeRowTrigger(
         (pTrigger->op==TK_DELETE ? "DELETE" : ""),
       pTab->zName
     ));
-#ifndef SQLITE_OMIT_TRACE
+#ifndef SQLITE4_OMIT_TRACE
     sqlite4VdbeChangeP4(v, -1, 
       sqlite4MPrintf(db, "-- TRIGGER %s", pTrigger->zName), P4_DYNAMIC
     );
@@ -873,11 +873,11 @@ static TriggerPrg *codeRowTrigger(
     ** OP_Halt inserted at the end of the program.  */
     if( pTrigger->pWhen ){
       pWhen = sqlite4ExprDup(db, pTrigger->pWhen, 0);
-      if( SQLITE_OK==sqlite4ResolveExprNames(&sNC, pWhen) 
+      if( SQLITE4_OK==sqlite4ResolveExprNames(&sNC, pWhen) 
        && db->mallocFailed==0 
       ){
         iEndTrigger = sqlite4VdbeMakeLabel(v);
-        sqlite4ExprIfFalse(pSubParse, pWhen, iEndTrigger, SQLITE_JUMPIFNULL);
+        sqlite4ExprIfFalse(pSubParse, pWhen, iEndTrigger, SQLITE4_JUMPIFNULL);
       }
       sqlite4ExprDelete(db, pWhen);
     }
@@ -1106,4 +1106,4 @@ u32 sqlite4TriggerColmask(
   return mask;
 }
 
-#endif /* !defined(SQLITE_OMIT_TRIGGER) */
+#endif /* !defined(SQLITE4_OMIT_TRIGGER) */

@@ -21,36 +21,36 @@
 /*
 ** If pMem is an object with a valid string representation, this routine
 ** ensures the internal encoding for the string representation is
-** 'desiredEnc', one of SQLITE_UTF8, SQLITE_UTF16LE or SQLITE_UTF16BE.
+** 'desiredEnc', one of SQLITE4_UTF8, SQLITE4_UTF16LE or SQLITE4_UTF16BE.
 **
 ** If pMem is not a string object, or the encoding of the string
 ** representation is already stored using the requested encoding, then this
 ** routine is a no-op.
 **
-** SQLITE_OK is returned if the conversion is successful (or not required).
-** SQLITE_NOMEM may be returned if a malloc() fails during conversion
+** SQLITE4_OK is returned if the conversion is successful (or not required).
+** SQLITE4_NOMEM may be returned if a malloc() fails during conversion
 ** between formats.
 */
 int sqlite4VdbeChangeEncoding(Mem *pMem, int desiredEnc){
   int rc;
   assert( (pMem->flags&MEM_RowSet)==0 );
-  assert( desiredEnc==SQLITE_UTF8 || desiredEnc==SQLITE_UTF16LE
-           || desiredEnc==SQLITE_UTF16BE );
+  assert( desiredEnc==SQLITE4_UTF8 || desiredEnc==SQLITE4_UTF16LE
+           || desiredEnc==SQLITE4_UTF16BE );
   if( !(pMem->flags&MEM_Str) || pMem->enc==desiredEnc ){
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
-#ifdef SQLITE_OMIT_UTF16
-  return SQLITE_ERROR;
+#ifdef SQLITE4_OMIT_UTF16
+  return SQLITE4_ERROR;
 #else
 
-  /* MemTranslate() may return SQLITE_OK or SQLITE_NOMEM. If NOMEM is returned,
+  /* MemTranslate() may return SQLITE4_OK or SQLITE4_NOMEM. If NOMEM is returned,
   ** then the encoding of the value may not have changed.
   */
   rc = sqlite4VdbeMemTranslate(pMem, (u8)desiredEnc);
-  assert(rc==SQLITE_OK    || rc==SQLITE_NOMEM);
-  assert(rc==SQLITE_OK    || pMem->enc!=desiredEnc);
-  assert(rc==SQLITE_NOMEM || pMem->enc==desiredEnc);
+  assert(rc==SQLITE4_OK    || rc==SQLITE4_NOMEM);
+  assert(rc==SQLITE4_OK    || pMem->enc!=desiredEnc);
+  assert(rc==SQLITE4_NOMEM || pMem->enc==desiredEnc);
   return rc;
 #endif
 }
@@ -92,7 +92,7 @@ int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve){
     memcpy(pMem->zMalloc, pMem->z, pMem->n);
   }
   if( pMem->flags&MEM_Dyn && pMem->xDel ){
-    assert( pMem->xDel!=SQLITE_DYNAMIC );
+    assert( pMem->xDel!=SQLITE4_DYNAMIC );
     pMem->xDel((void *)(pMem->z));
   }
 
@@ -103,7 +103,7 @@ int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve){
     pMem->flags &= ~(MEM_Ephem|MEM_Static);
   }
   pMem->xDel = 0;
-  return (pMem->z ? SQLITE_OK : SQLITE_NOMEM);
+  return (pMem->z ? SQLITE4_OK : SQLITE4_NOMEM);
 }
 
 /*
@@ -112,7 +112,7 @@ int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve){
 ** malloc().  In this way, we know that the memory is safe to be
 ** overwritten or altered.
 **
-** Return SQLITE_OK on success or SQLITE_NOMEM if malloc fails.
+** Return SQLITE4_OK on success or SQLITE4_NOMEM if malloc fails.
 */
 int sqlite4VdbeMemMakeWriteable(Mem *pMem){
   int f;
@@ -122,17 +122,17 @@ int sqlite4VdbeMemMakeWriteable(Mem *pMem){
   f = pMem->flags;
   if( (f&(MEM_Str|MEM_Blob)) && pMem->z!=pMem->zMalloc ){
     if( sqlite4VdbeMemGrow(pMem, pMem->n + 2, 1) ){
-      return SQLITE_NOMEM;
+      return SQLITE4_NOMEM;
     }
     pMem->z[pMem->n] = 0;
     pMem->z[pMem->n+1] = 0;
     pMem->flags |= MEM_Term;
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
     pMem->pScopyFrom = 0;
 #endif
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 
@@ -142,15 +142,15 @@ int sqlite4VdbeMemMakeWriteable(Mem *pMem){
 int sqlite4VdbeMemNulTerminate(Mem *pMem){
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
   if( (pMem->flags & MEM_Term)!=0 || (pMem->flags & MEM_Str)==0 ){
-    return SQLITE_OK;   /* Nothing to do */
+    return SQLITE4_OK;   /* Nothing to do */
   }
   if( sqlite4VdbeMemGrow(pMem, pMem->n+2, 1) ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   pMem->z[pMem->n] = 0;
   pMem->z[pMem->n+1] = 0;
   pMem->flags |= MEM_Term;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -167,7 +167,7 @@ int sqlite4VdbeMemNulTerminate(Mem *pMem){
 ** user and the later is an internal programming error.
 */
 int sqlite4VdbeMemStringify(Mem *pMem, int enc){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int fg = pMem->flags;
   const int nByte = 32;
 
@@ -180,7 +180,7 @@ int sqlite4VdbeMemStringify(Mem *pMem, int enc){
 
 
   if( sqlite4VdbeMemGrow(pMem, nByte, 0) ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
 
   /* For a Real or Integer, use sqlite4_mprintf() to produce the UTF-8
@@ -196,7 +196,7 @@ int sqlite4VdbeMemStringify(Mem *pMem, int enc){
     sqlite4_snprintf(pMem->z, nByte, "%!.15g", pMem->r);
   }
   pMem->n = sqlite4Strlen30(pMem->z);
-  pMem->enc = SQLITE_UTF8;
+  pMem->enc = SQLITE4_UTF8;
   pMem->flags |= MEM_Str|MEM_Term;
   sqlite4VdbeChangeEncoding(pMem, enc);
   return rc;
@@ -207,11 +207,11 @@ int sqlite4VdbeMemStringify(Mem *pMem, int enc){
 ** This routine calls the finalize method for that function.  The
 ** result of the aggregate is stored back into pMem.
 **
-** Return SQLITE_ERROR if the finalizer reports an error.  SQLITE_OK
+** Return SQLITE4_ERROR if the finalizer reports an error.  SQLITE4_OK
 ** otherwise.
 */
 int sqlite4VdbeMemFinalize(Mem *pMem, FuncDef *pFunc){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( ALWAYS(pFunc && pFunc->xFinalize) ){
     sqlite4_context ctx;
     assert( (pMem->flags & MEM_Null)!=0 || pFunc==pMem->u.pDef );
@@ -243,7 +243,7 @@ void sqlite4VdbeMemReleaseExternal(Mem *p){
     sqlite4VdbeMemRelease(p);
   }else if( p->flags&MEM_Dyn && p->xDel ){
     assert( (p->flags&MEM_RowSet)==0 );
-    assert( p->xDel!=SQLITE_DYNAMIC );
+    assert( p->xDel!=SQLITE4_DYNAMIC );
     p->xDel((void *)p->z);
     p->xDel = 0;
   }else if( p->flags&MEM_RowSet ){
@@ -256,7 +256,7 @@ void sqlite4VdbeMemReleaseExternal(Mem *p){
 /*
 ** Release any memory held by the Mem. This may leave the Mem in an
 ** inconsistent state, for example with (Mem.z==0) and
-** (Mem.type==SQLITE_TEXT).
+** (Mem.type==SQLITE4_TEXT).
 */
 void sqlite4VdbeMemRelease(Mem *p){
   VdbeMemRelease(p);
@@ -279,7 +279,7 @@ void sqlite4VdbeMemRelease(Mem *p){
 ** before attempting the conversion.
 */
 static i64 doubleToInt64(double r){
-#ifdef SQLITE_OMIT_FLOATING_POINT
+#ifdef SQLITE4_OMIT_FLOATING_POINT
   /* When floating-point is omitted, double and int64 are the same thing */
   return r;
 #else
@@ -352,12 +352,12 @@ double sqlite4VdbeRealValue(Mem *pMem){
   }else if( pMem->flags & MEM_Int ){
     return (double)pMem->u.i;
   }else if( pMem->flags & (MEM_Str|MEM_Blob) ){
-    /* (double)0 In case of SQLITE_OMIT_FLOATING_POINT... */
+    /* (double)0 In case of SQLITE4_OMIT_FLOATING_POINT... */
     double val = (double)0;
     sqlite4AtoF(pMem->z, &val, pMem->n, pMem->enc);
     return val;
   }else{
-    /* (double)0 In case of SQLITE_OMIT_FLOATING_POINT... */
+    /* (double)0 In case of SQLITE4_OMIT_FLOATING_POINT... */
     return (double)0;
   }
 }
@@ -402,7 +402,7 @@ int sqlite4VdbeMemIntegerify(Mem *pMem){
 
   pMem->u.i = sqlite4VdbeIntValue(pMem);
   MemSetTypeFlag(pMem, MEM_Int);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -415,7 +415,7 @@ int sqlite4VdbeMemRealify(Mem *pMem){
 
   pMem->r = sqlite4VdbeRealValue(pMem);
   MemSetTypeFlag(pMem, MEM_Real);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -440,7 +440,7 @@ int sqlite4VdbeMemNumerify(Mem *pMem){
   }
   assert( (pMem->flags & (MEM_Int|MEM_Real|MEM_Null))!=0 );
   pMem->flags &= ~(MEM_Str|MEM_Blob);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -456,7 +456,7 @@ void sqlite4VdbeMemSetNull(Mem *pMem){
     sqlite4RowSetClear(pMem->u.pRowSet);
   }
   MemSetTypeFlag(pMem, MEM_Null);
-  pMem->type = SQLITE_NULL;
+  pMem->type = SQLITE4_NULL;
 }
 
 /*
@@ -466,11 +466,11 @@ void sqlite4VdbeMemSetNull(Mem *pMem){
 void sqlite4VdbeMemSetZeroBlob(Mem *pMem, int n){
   sqlite4VdbeMemRelease(pMem);
   pMem->flags = MEM_Blob|MEM_Zero;
-  pMem->type = SQLITE_BLOB;
+  pMem->type = SQLITE4_BLOB;
   pMem->n = 0;
   if( n<0 ) n = 0;
   pMem->u.nZero = n;
-  pMem->enc = SQLITE_UTF8;
+  pMem->enc = SQLITE4_UTF8;
 }
 
 /*
@@ -481,10 +481,10 @@ void sqlite4VdbeMemSetInt64(Mem *pMem, i64 val){
   sqlite4VdbeMemRelease(pMem);
   pMem->u.i = val;
   pMem->flags = MEM_Int;
-  pMem->type = SQLITE_INTEGER;
+  pMem->type = SQLITE4_INTEGER;
 }
 
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
 /*
 ** Delete any previous value and set the value stored in *pMem to val,
 ** manifest type REAL.
@@ -496,7 +496,7 @@ void sqlite4VdbeMemSetDouble(Mem *pMem, double val){
     sqlite4VdbeMemRelease(pMem);
     pMem->r = val;
     pMem->flags = MEM_Real;
-    pMem->type = SQLITE_FLOAT;
+    pMem->type = SQLITE4_FLOAT;
   }
 }
 #endif
@@ -522,7 +522,7 @@ void sqlite4VdbeMemSetRowSet(Mem *pMem){
 
 /*
 ** Return true if the Mem object contains a TEXT or BLOB that is
-** too large - whose size exceeds SQLITE_MAX_LENGTH.
+** too large - whose size exceeds SQLITE4_MAX_LENGTH.
 */
 int sqlite4VdbeMemTooBig(Mem *p){
   assert( p->db!=0 );
@@ -531,12 +531,12 @@ int sqlite4VdbeMemTooBig(Mem *p){
     if( p->flags & MEM_Zero ){
       n += p->u.nZero;
     }
-    return n>p->db->aLimit[SQLITE_LIMIT_LENGTH];
+    return n>p->db->aLimit[SQLITE4_LIMIT_LENGTH];
   }
   return 0; 
 }
 
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
 /*
 ** This routine prepares a memory cell for modication by breaking
 ** its link to a shallow copy and by marking any current shallow
@@ -556,7 +556,7 @@ void sqlite4VdbeMemAboutToChange(Vdbe *pVdbe, Mem *pMem){
   }
   pMem->pScopyFrom = 0;
 }
-#endif /* SQLITE_DEBUG */
+#endif /* SQLITE4_DEBUG */
 
 /*
 ** Size of struct Mem not including the Mem.zMalloc member.
@@ -586,7 +586,7 @@ void sqlite4VdbeMemShallowCopy(Mem *pTo, const Mem *pFrom, int srcType){
 ** freed before the copy is made.
 */
 int sqlite4VdbeMemCopy(Mem *pTo, const Mem *pFrom){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
 
   assert( (pFrom->flags & MEM_RowSet)==0 );
   VdbeMemRelease(pTo);
@@ -625,16 +625,16 @@ void sqlite4VdbeMemMove(Mem *pTo, Mem *pFrom){
 ** Change the value of a Mem to be a string or a BLOB.
 **
 ** The memory management strategy depends on the value of the xDel
-** parameter. If the value passed is SQLITE_TRANSIENT, then the 
+** parameter. If the value passed is SQLITE4_TRANSIENT, then the 
 ** string is copied into a (possibly existing) buffer managed by the 
 ** Mem structure. Otherwise, any existing buffer is freed and the
 ** pointer copied.
 **
-** If the string is too large (if it exceeds the SQLITE_LIMIT_LENGTH
+** If the string is too large (if it exceeds the SQLITE4_LIMIT_LENGTH
 ** size limit) then no memory allocation occurs.  If the string can be
 ** stored without allocating memory, then it is.  If a memory allocation
 ** is required to store the string, then value of pMem is unchanged.  In
-** either case, SQLITE_TOOBIG is returned.
+** either case, SQLITE4_TOOBIG is returned.
 */
 int sqlite4VdbeMemSetStr(
   Mem *pMem,          /* Memory cell to set to string value */
@@ -653,18 +653,18 @@ int sqlite4VdbeMemSetStr(
   /* If z is a NULL pointer, set pMem to contain an SQL NULL. */
   if( !z ){
     sqlite4VdbeMemSetNull(pMem);
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   if( pMem->db ){
-    iLimit = pMem->db->aLimit[SQLITE_LIMIT_LENGTH];
+    iLimit = pMem->db->aLimit[SQLITE4_LIMIT_LENGTH];
   }else{
-    iLimit = SQLITE_MAX_LENGTH;
+    iLimit = SQLITE4_MAX_LENGTH;
   }
   flags = (enc==0?MEM_Blob:MEM_Str);
   if( nByte<0 ){
     assert( enc!=0 );
-    if( enc==SQLITE_UTF8 ){
+    if( enc==SQLITE4_UTF8 ){
       for(nByte=0; nByte<=iLimit && z[nByte]; nByte++){}
     }else{
       for(nByte=0; nByte<=iLimit && (z[nByte] | z[nByte+1]); nByte+=2){}
@@ -676,19 +676,19 @@ int sqlite4VdbeMemSetStr(
   ** also sets a flag in local variable "flags" to indicate the memory
   ** management (one of MEM_Dyn or MEM_Static).
   */
-  if( xDel==SQLITE_TRANSIENT ){
+  if( xDel==SQLITE4_TRANSIENT ){
     int nAlloc = nByte;
     if( flags&MEM_Term ){
-      nAlloc += (enc==SQLITE_UTF8?1:2);
+      nAlloc += (enc==SQLITE4_UTF8?1:2);
     }
     if( nByte>iLimit ){
-      return SQLITE_TOOBIG;
+      return SQLITE4_TOOBIG;
     }
     if( sqlite4VdbeMemGrow(pMem, nAlloc, 0) ){
-      return SQLITE_NOMEM;
+      return SQLITE4_NOMEM;
     }
     memcpy(pMem->z, z, nAlloc);
-  }else if( xDel==SQLITE_DYNAMIC ){
+  }else if( xDel==SQLITE4_DYNAMIC ){
     sqlite4VdbeMemRelease(pMem);
     pMem->zMalloc = pMem->z = (char *)z;
     pMem->xDel = 0;
@@ -696,25 +696,25 @@ int sqlite4VdbeMemSetStr(
     sqlite4VdbeMemRelease(pMem);
     pMem->z = (char *)z;
     pMem->xDel = xDel;
-    flags |= ((xDel==SQLITE_STATIC)?MEM_Static:MEM_Dyn);
+    flags |= ((xDel==SQLITE4_STATIC)?MEM_Static:MEM_Dyn);
   }
 
   pMem->n = nByte;
   pMem->flags = flags;
-  pMem->enc = (enc==0 ? SQLITE_UTF8 : enc);
-  pMem->type = (enc==0 ? SQLITE_BLOB : SQLITE_TEXT);
+  pMem->enc = (enc==0 ? SQLITE4_UTF8 : enc);
+  pMem->type = (enc==0 ? SQLITE4_BLOB : SQLITE4_TEXT);
 
-#ifndef SQLITE_OMIT_UTF16
-  if( pMem->enc!=SQLITE_UTF8 && sqlite4VdbeMemHandleBom(pMem) ){
-    return SQLITE_NOMEM;
+#ifndef SQLITE4_OMIT_UTF16
+  if( pMem->enc!=SQLITE4_UTF8 && sqlite4VdbeMemHandleBom(pMem) ){
+    return SQLITE4_NOMEM;
   }
 #endif
 
   if( nByte>iLimit ){
-    return SQLITE_TOOBIG;
+    return SQLITE4_TOOBIG;
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -790,8 +790,8 @@ int sqlite4MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
     }
 
     assert( pMem1->enc==pMem2->enc );
-    assert( pMem1->enc==SQLITE_UTF8 || 
-            pMem1->enc==SQLITE_UTF16LE || pMem1->enc==SQLITE_UTF16BE );
+    assert( pMem1->enc==SQLITE4_UTF8 || 
+            pMem1->enc==SQLITE4_UTF16LE || pMem1->enc==SQLITE4_UTF16BE );
 
     /* The collation sequence must be defined at this point, even if
     ** the user deletes the collation sequence after the vdbe program is
@@ -838,10 +838,10 @@ int sqlite4MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
 /* This function is only available internally, it is not part of the
 ** external API. It works in a similar way to sqlite4_value_text(),
 ** except the data returned is in the encoding specified by the second
-** parameter, which must be one of SQLITE_UTF16BE, SQLITE_UTF16LE or
-** SQLITE_UTF8.
+** parameter, which must be one of SQLITE4_UTF16BE, SQLITE4_UTF16LE or
+** SQLITE4_UTF8.
 **
-** (2006-02-16:)  The enc value can be or-ed with SQLITE_UTF16_ALIGNED.
+** (2006-02-16:)  The enc value can be or-ed with SQLITE4_UTF16_ALIGNED.
 ** If that is the case, then the result must be aligned on an even byte
 ** boundary.
 */
@@ -849,7 +849,7 @@ const void *sqlite4ValueText(sqlite4_value* pVal, u8 enc){
   if( !pVal ) return 0;
 
   assert( pVal->db==0 || sqlite4_mutex_held(pVal->db->mutex) );
-  assert( (enc&3)==(enc&~SQLITE_UTF16_ALIGNED) );
+  assert( (enc&3)==(enc&~SQLITE4_UTF16_ALIGNED) );
   assert( (pVal->flags & MEM_RowSet)==0 );
 
   if( pVal->flags&MEM_Null ){
@@ -859,10 +859,10 @@ const void *sqlite4ValueText(sqlite4_value* pVal, u8 enc){
   pVal->flags |= (pVal->flags & MEM_Blob)>>3;
   ExpandBlob(pVal);
   if( pVal->flags&MEM_Str ){
-    sqlite4VdbeChangeEncoding(pVal, enc & ~SQLITE_UTF16_ALIGNED);
-    if( (enc & SQLITE_UTF16_ALIGNED)!=0 && 1==(1&SQLITE_PTR_TO_INT(pVal->z)) ){
+    sqlite4VdbeChangeEncoding(pVal, enc & ~SQLITE4_UTF16_ALIGNED);
+    if( (enc & SQLITE4_UTF16_ALIGNED)!=0 && 1==(1&SQLITE4_PTR_TO_INT(pVal->z)) ){
       assert( (pVal->flags & (MEM_Ephem|MEM_Static))!=0 );
-      if( sqlite4VdbeMemMakeWriteable(pVal)!=SQLITE_OK ){
+      if( sqlite4VdbeMemMakeWriteable(pVal)!=SQLITE4_OK ){
         return 0;
       }
     }
@@ -870,11 +870,11 @@ const void *sqlite4ValueText(sqlite4_value* pVal, u8 enc){
   }else{
     assert( (pVal->flags&MEM_Blob)==0 );
     sqlite4VdbeMemStringify(pVal, enc);
-    assert( 0==(1&SQLITE_PTR_TO_INT(pVal->z)) );
+    assert( 0==(1&SQLITE4_PTR_TO_INT(pVal->z)) );
   }
-  assert(pVal->enc==(enc & ~SQLITE_UTF16_ALIGNED) || pVal->db==0
+  assert(pVal->enc==(enc & ~SQLITE4_UTF16_ALIGNED) || pVal->db==0
               || pVal->db->mallocFailed );
-  if( pVal->enc==(enc & ~SQLITE_UTF16_ALIGNED) ){
+  if( pVal->enc==(enc & ~SQLITE4_UTF16_ALIGNED) ){
     return pVal->z;
   }else{
     return 0;
@@ -888,7 +888,7 @@ sqlite4_value *sqlite4ValueNew(sqlite4 *db){
   Mem *p = sqlite4DbMallocZero(db, sizeof(*p));
   if( p ){
     p->flags = MEM_Null;
-    p->type = SQLITE_NULL;
+    p->type = SQLITE4_NULL;
     p->db = db;
   }
   return p;
@@ -919,15 +919,15 @@ int sqlite4ValueFromExpr(
 
   if( !pExpr ){
     *ppVal = 0;
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
   op = pExpr->op;
 
-  /* op can only be TK_REGISTER if we have compiled with SQLITE_ENABLE_STAT3.
+  /* op can only be TK_REGISTER if we have compiled with SQLITE4_ENABLE_STAT3.
   ** The ifdef here is to enable us to achieve 100% branch test coverage even
-  ** when SQLITE_ENABLE_STAT3 is omitted.
+  ** when SQLITE4_ENABLE_STAT3 is omitted.
   */
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
   if( op==TK_REGISTER ) op = pExpr->op2;
 #else
   if( NEVER(op==TK_REGISTER) ) op = pExpr->op2;
@@ -952,21 +952,21 @@ int sqlite4ValueFromExpr(
     }else{
       zVal = sqlite4MPrintf(db, "%s%s", zNeg, pExpr->u.zToken);
       if( zVal==0 ) goto no_mem;
-      sqlite4ValueSetStr(pVal, -1, zVal, SQLITE_UTF8, SQLITE_DYNAMIC);
-      if( op==TK_FLOAT ) pVal->type = SQLITE_FLOAT;
+      sqlite4ValueSetStr(pVal, -1, zVal, SQLITE4_UTF8, SQLITE4_DYNAMIC);
+      if( op==TK_FLOAT ) pVal->type = SQLITE4_FLOAT;
     }
-    if( (op==TK_INTEGER || op==TK_FLOAT ) && affinity==SQLITE_AFF_NONE ){
-      sqlite4ValueApplyAffinity(pVal, SQLITE_AFF_NUMERIC, SQLITE_UTF8);
+    if( (op==TK_INTEGER || op==TK_FLOAT ) && affinity==SQLITE4_AFF_NONE ){
+      sqlite4ValueApplyAffinity(pVal, SQLITE4_AFF_NUMERIC, SQLITE4_UTF8);
     }else{
-      sqlite4ValueApplyAffinity(pVal, affinity, SQLITE_UTF8);
+      sqlite4ValueApplyAffinity(pVal, affinity, SQLITE4_UTF8);
     }
     if( pVal->flags & (MEM_Int|MEM_Real) ) pVal->flags &= ~MEM_Str;
-    if( enc!=SQLITE_UTF8 ){
+    if( enc!=SQLITE4_UTF8 ){
       sqlite4VdbeChangeEncoding(pVal, enc);
     }
   }else if( op==TK_UMINUS ) {
     /* This branch happens for multiple negative signs.  Ex: -(-5) */
-    if( SQLITE_OK==sqlite4ValueFromExpr(db,pExpr->pLeft,enc,affinity,&pVal) ){
+    if( SQLITE4_OK==sqlite4ValueFromExpr(db,pExpr->pLeft,enc,affinity,&pVal) ){
       sqlite4VdbeMemNumerify(pVal);
       if( pVal->u.i==SMALLEST_INT64 ){
         pVal->flags &= MEM_Int;
@@ -982,7 +982,7 @@ int sqlite4ValueFromExpr(
     pVal = sqlite4ValueNew(db);
     if( pVal==0 ) goto no_mem;
   }
-#ifndef SQLITE_OMIT_BLOB_LITERAL
+#ifndef SQLITE4_OMIT_BLOB_LITERAL
   else if( op==TK_BLOB ){
     int nVal;
     assert( pExpr->u.zToken[0]=='x' || pExpr->u.zToken[0]=='X' );
@@ -993,7 +993,7 @@ int sqlite4ValueFromExpr(
     nVal = sqlite4Strlen30(zVal)-1;
     assert( zVal[nVal]=='\'' );
     sqlite4VdbeMemSetStr(pVal, sqlite4HexToBlob(db, zVal, nVal), nVal/2,
-                         0, SQLITE_DYNAMIC);
+                         0, SQLITE4_DYNAMIC);
   }
 #endif
 
@@ -1001,14 +1001,14 @@ int sqlite4ValueFromExpr(
     sqlite4VdbeMemStoreType(pVal);
   }
   *ppVal = pVal;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 
 no_mem:
   db->mallocFailed = 1;
   sqlite4DbFree(db, zVal);
   sqlite4ValueFree(pVal);
   *ppVal = 0;
-  return SQLITE_NOMEM;
+  return SQLITE4_NOMEM;
 }
 
 /*

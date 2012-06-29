@@ -12,7 +12,7 @@
 ** This file contains code used to implement the sqlite4_set_authorizer()
 ** API.  This facility is an optional feature of the library.  Embedded
 ** systems that do not need this facility may omit it by recompiling
-** the library with -DSQLITE_OMIT_AUTHORIZATION=1
+** the library with -DSQLITE4_OMIT_AUTHORIZATION=1
 */
 #include "sqliteInt.h"
 
@@ -20,7 +20,7 @@
 ** All of the code in this file may be omitted by defining a single
 ** macro.
 */
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
 
 /*
 ** Set or clear the access authorization function.
@@ -31,36 +31,36 @@
 ** is a copy of the 3rd argument to this routine.  The second argument
 ** to the auth function is one of these constants:
 **
-**       SQLITE_CREATE_INDEX
-**       SQLITE_CREATE_TABLE
-**       SQLITE_CREATE_TEMP_INDEX
-**       SQLITE_CREATE_TEMP_TABLE
-**       SQLITE_CREATE_TEMP_TRIGGER
-**       SQLITE_CREATE_TEMP_VIEW
-**       SQLITE_CREATE_TRIGGER
-**       SQLITE_CREATE_VIEW
-**       SQLITE_DELETE
-**       SQLITE_DROP_INDEX
-**       SQLITE_DROP_TABLE
-**       SQLITE_DROP_TEMP_INDEX
-**       SQLITE_DROP_TEMP_TABLE
-**       SQLITE_DROP_TEMP_TRIGGER
-**       SQLITE_DROP_TEMP_VIEW
-**       SQLITE_DROP_TRIGGER
-**       SQLITE_DROP_VIEW
-**       SQLITE_INSERT
-**       SQLITE_PRAGMA
-**       SQLITE_READ
-**       SQLITE_SELECT
-**       SQLITE_TRANSACTION
-**       SQLITE_UPDATE
+**       SQLITE4_CREATE_INDEX
+**       SQLITE4_CREATE_TABLE
+**       SQLITE4_CREATE_TEMP_INDEX
+**       SQLITE4_CREATE_TEMP_TABLE
+**       SQLITE4_CREATE_TEMP_TRIGGER
+**       SQLITE4_CREATE_TEMP_VIEW
+**       SQLITE4_CREATE_TRIGGER
+**       SQLITE4_CREATE_VIEW
+**       SQLITE4_DELETE
+**       SQLITE4_DROP_INDEX
+**       SQLITE4_DROP_TABLE
+**       SQLITE4_DROP_TEMP_INDEX
+**       SQLITE4_DROP_TEMP_TABLE
+**       SQLITE4_DROP_TEMP_TRIGGER
+**       SQLITE4_DROP_TEMP_VIEW
+**       SQLITE4_DROP_TRIGGER
+**       SQLITE4_DROP_VIEW
+**       SQLITE4_INSERT
+**       SQLITE4_PRAGMA
+**       SQLITE4_READ
+**       SQLITE4_SELECT
+**       SQLITE4_TRANSACTION
+**       SQLITE4_UPDATE
 **
 ** The third and fourth arguments to the auth function are the name of
 ** the table and the column that are being accessed.  The auth function
-** should return either SQLITE_OK, SQLITE_DENY, or SQLITE_IGNORE.  If
-** SQLITE_OK is returned, it means that access is allowed.  SQLITE_DENY
+** should return either SQLITE4_OK, SQLITE4_DENY, or SQLITE4_IGNORE.  If
+** SQLITE4_OK is returned, it means that access is allowed.  SQLITE4_DENY
 ** means that the SQL statement will never-run - the sqlite4_exec() call
-** will return with an error.  SQLITE_IGNORE means that the SQL statement
+** will return with an error.  SQLITE4_IGNORE means that the SQL statement
 ** should run but attempts to read the specified column will return NULL
 ** and attempts to write the column will be ignored.
 **
@@ -77,7 +77,7 @@ int sqlite4_set_authorizer(
   db->pAuthArg = pArg;
   sqlite4ExpirePreparedStatements(db);
   sqlite4_mutex_leave(db->mutex);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -86,7 +86,7 @@ int sqlite4_set_authorizer(
 */
 static void sqliteAuthBadReturnCode(Parse *pParse){
   sqlite4ErrorMsg(pParse, "authorizer malfunction");
-  pParse->rc = SQLITE_ERROR;
+  pParse->rc = SQLITE4_ERROR;
 }
 
 /*
@@ -94,9 +94,9 @@ static void sqliteAuthBadReturnCode(Parse *pParse){
 ** table zTab in database zDb. This function assumes that an authorization
 ** callback has been registered (i.e. that sqlite4.xAuth is not NULL).
 **
-** If SQLITE_IGNORE is returned and pExpr is not NULL, then pExpr is changed
-** to an SQL NULL expression. Otherwise, if pExpr is NULL, then SQLITE_IGNORE
-** is treated as SQLITE_DENY. In this case an error is left in pParse.
+** If SQLITE4_IGNORE is returned and pExpr is not NULL, then pExpr is changed
+** to an SQL NULL expression. Otherwise, if pExpr is NULL, then SQLITE4_IGNORE
+** is treated as SQLITE4_DENY. In this case an error is left in pParse.
 */
 int sqlite4AuthReadCol(
   Parse *pParse,                  /* The parser context */
@@ -108,15 +108,15 @@ int sqlite4AuthReadCol(
   char *zDb = db->aDb[iDb].zName; /* Name of attached database */
   int rc;                         /* Auth callback return code */
 
-  rc = db->xAuth(db->pAuthArg, SQLITE_READ, zTab,zCol,zDb,pParse->zAuthContext);
-  if( rc==SQLITE_DENY ){
+  rc = db->xAuth(db->pAuthArg, SQLITE4_READ, zTab,zCol,zDb,pParse->zAuthContext);
+  if( rc==SQLITE4_DENY ){
     if( db->nDb>2 || iDb!=0 ){
       sqlite4ErrorMsg(pParse, "access to %s.%s.%s is prohibited",zDb,zTab,zCol);
     }else{
       sqlite4ErrorMsg(pParse, "access to %s.%s is prohibited", zTab, zCol);
     }
-    pParse->rc = SQLITE_AUTH;
-  }else if( rc!=SQLITE_IGNORE && rc!=SQLITE_OK ){
+    pParse->rc = SQLITE4_AUTH;
+  }else if( rc!=SQLITE4_IGNORE && rc!=SQLITE4_OK ){
     sqliteAuthBadReturnCode(pParse);
   }
   return rc;
@@ -127,8 +127,8 @@ int sqlite4AuthReadCol(
 ** is in pTabList or else it is the NEW or OLD table of a trigger.  
 ** Check to see if it is OK to read this particular column.
 **
-** If the auth function returns SQLITE_IGNORE, change the TK_COLUMN 
-** instruction into a TK_NULL.  If the auth function returns SQLITE_DENY,
+** If the auth function returns SQLITE4_IGNORE, change the TK_COLUMN 
+** instruction into a TK_NULL.  If the auth function returns SQLITE4_DENY,
 ** then generate an error.
 */
 void sqlite4AuthRead(
@@ -174,14 +174,14 @@ void sqlite4AuthRead(
     zCol = "ROWID";
   }
   assert( iDb>=0 && iDb<db->nDb );
-  if( SQLITE_IGNORE==sqlite4AuthReadCol(pParse, pTab->zName, zCol, iDb) ){
+  if( SQLITE4_IGNORE==sqlite4AuthReadCol(pParse, pTab->zName, zCol, iDb) ){
     pExpr->op = TK_NULL;
   }
 }
 
 /*
 ** Do an authorization check using the code and arguments given.  Return
-** either SQLITE_OK (zero) or SQLITE_IGNORE or SQLITE_DENY.  If SQLITE_DENY
+** either SQLITE4_OK (zero) or SQLITE4_IGNORE or SQLITE4_DENY.  If SQLITE4_DENY
 ** is returned, then the error count and error message in pParse are
 ** modified appropriately.
 */
@@ -199,18 +199,18 @@ int sqlite4AuthCheck(
   ** or if the parser is being invoked from within sqlite4_declare_vtab.
   */
   if( db->init.busy || IN_DECLARE_VTAB ){
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   if( db->xAuth==0 ){
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
   rc = db->xAuth(db->pAuthArg, code, zArg1, zArg2, zArg3, pParse->zAuthContext);
-  if( rc==SQLITE_DENY ){
+  if( rc==SQLITE4_DENY ){
     sqlite4ErrorMsg(pParse, "not authorized");
-    pParse->rc = SQLITE_AUTH;
-  }else if( rc!=SQLITE_OK && rc!=SQLITE_IGNORE ){
-    rc = SQLITE_DENY;
+    pParse->rc = SQLITE4_AUTH;
+  }else if( rc!=SQLITE4_OK && rc!=SQLITE4_IGNORE ){
+    rc = SQLITE4_DENY;
     sqliteAuthBadReturnCode(pParse);
   }
   return rc;
@@ -243,4 +243,4 @@ void sqlite4AuthContextPop(AuthContext *pContext){
   }
 }
 
-#endif /* SQLITE_OMIT_AUTHORIZATION */
+#endif /* SQLITE4_OMIT_AUTHORIZATION */

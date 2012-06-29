@@ -142,9 +142,9 @@ struct Mem {
   } u;
   int n;              /* Number of characters in string value, excluding '\0' */
   u16 flags;          /* Some combination of MEM_Null, MEM_Str, MEM_Dyn, etc. */
-  u8  type;           /* One of SQLITE_NULL, SQLITE_TEXT, SQLITE_INTEGER, etc */
-  u8  enc;            /* SQLITE_UTF8, SQLITE_UTF16BE, SQLITE_UTF16LE */
-#ifdef SQLITE_DEBUG
+  u8  type;           /* One of SQLITE4_NULL, SQLITE4_TEXT, SQLITE4_INTEGER, etc */
+  u8  enc;            /* SQLITE4_UTF8, SQLITE4_UTF16BE, SQLITE4_UTF16LE */
+#ifdef SQLITE4_DEBUG
   Mem *pScopyFrom;    /* This Mem is a shallow copy of pScopyFrom */
   void *pFiller;      /* So that sizeof(Mem) is a multiple of 8 */
 #endif
@@ -197,7 +197,7 @@ struct Mem {
 ** Return true if a memory cell is not marked as invalid.  This macro
 ** is for use inside assert() statements only.
 */
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
 #define memIsValid(M)  ((M)->flags & MEM_Invalid)==0
 #endif
 
@@ -307,17 +307,17 @@ struct Vdbe {
   int nChange;            /* Number of db changes made since last reset */
   yDbMask stmtTransMask;  /* db->aDb[] entries that have a subtransaction */
   int aCounter[3];        /* Counters used by sqlite4_stmt_status() */
-#ifndef SQLITE_OMIT_TRACE
+#ifndef SQLITE4_OMIT_TRACE
   i64 startTime;          /* Time when query started - used for profiling */
 #endif
   i64 nFkConstraint;      /* Number of imm. FK constraints this VM */
   i64 nStmtDefCons;       /* Number of def. constraints when stmt started */
   char *zSql;             /* Text of the SQL statement that generated this */
   void *pFree;            /* Free this when deleting the vdbe */
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   FILE *trace;            /* Write an execution trace here, if not NULL */
 #endif
-#ifdef SQLITE_ENABLE_TREE_EXPLAIN
+#ifdef SQLITE4_ENABLE_TREE_EXPLAIN
   Explain *pExplain;      /* The explainer */
   char *zExplain;         /* Explanation of data structures */
 #endif
@@ -343,7 +343,7 @@ struct Vdbe {
 */
 void sqlite4VdbeFreeCursor(Vdbe *, VdbeCursor*);
 void sqliteVdbePopStack(Vdbe*,int);
-#if defined(SQLITE_DEBUG) || defined(VDBE_PROFILE)
+#if defined(SQLITE4_DEBUG) || defined(VDBE_PROFILE)
 void sqlite4VdbePrintOp(FILE*, int, Op*);
 #endif
 u32 sqlite4VdbeSerialTypeLen(u32);
@@ -398,7 +398,7 @@ void sqlite4VdbeMemMove(Mem*, Mem*);
 int sqlite4VdbeMemNulTerminate(Mem*);
 int sqlite4VdbeMemSetStr(Mem*, const char*, int, u8, void(*)(void*));
 void sqlite4VdbeMemSetInt64(Mem*, i64);
-#ifdef SQLITE_OMIT_FLOATING_POINT
+#ifdef SQLITE4_OMIT_FLOATING_POINT
 # define sqlite4VdbeMemSetDouble sqlite4VdbeMemSetInt64
 #else
   void sqlite4VdbeMemSetDouble(Mem*, double);
@@ -435,25 +435,25 @@ int sqlite4VdbePrevious(VdbeCursor*);
 int sqlite4VdbeRollback(sqlite4 *db, int iLevel);
 int sqlite4VdbeCommit(sqlite4 *db, int iLevel);
 
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
 void sqlite4VdbeMemAboutToChange(Vdbe*,Mem*);
 #endif
 
-#ifndef SQLITE_OMIT_FOREIGN_KEY
+#ifndef SQLITE4_OMIT_FOREIGN_KEY
 int sqlite4VdbeCheckFk(Vdbe *, int);
 #else
 # define sqlite4VdbeCheckFk(p,i) 0
 #endif
 
 int sqlite4VdbeMemTranslate(Mem*, u8);
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   void sqlite4VdbePrintSql(Vdbe*);
   void sqlite4VdbeMemPrettyPrint(Mem *pMem, char *zBuf);
 #endif
 int sqlite4VdbeMemHandleBom(Mem *pMem);
 
 
-#define sqlite4VdbeMemExpandBlob(x) SQLITE_OK
-#define ExpandBlob(P) SQLITE_OK
+#define sqlite4VdbeMemExpandBlob(x) SQLITE4_OK
+#define ExpandBlob(P) SQLITE4_OK
 
 #endif /* !defined(_VDBEINT_H_) */

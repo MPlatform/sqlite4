@@ -48,7 +48,7 @@
 #include <assert.h>
 #include <time.h>
 
-#ifndef SQLITE_OMIT_DATETIME_FUNCS
+#ifndef SQLITE4_OMIT_DATETIME_FUNCS
 
 
 /*
@@ -295,7 +295,7 @@ static int parseYyyyMmDd(const char *zDate, DateTime *p){
 */
 static int setDateTimeToCurrent(sqlite4_context *context, DateTime *p){
   sqlite4 *db = sqlite4_context_db_handle(context);
-  if( sqlite4OsCurrentTime(0, &p->iJD)==SQLITE_OK ){
+  if( sqlite4OsCurrentTime(0, &p->iJD)==SQLITE4_OK ){
     p->validJD = 1;
     return 0;
   }else{
@@ -331,7 +331,7 @@ static int parseDateOrTime(
     return 0;
   }else if( sqlite4StrICmp(zDate,"now")==0){
     return setDateTimeToCurrent(context, p);
-  }else if( sqlite4AtoF(zDate, &r, sqlite4Strlen30(zDate), SQLITE_UTF8) ){
+  }else if( sqlite4AtoF(zDate, &r, sqlite4Strlen30(zDate), SQLITE4_UTF8) ){
     p->iJD = (sqlite4_int64)(r*86400000.0 + 0.5);
     p->validJD = 1;
     return 0;
@@ -417,7 +417,7 @@ static void clearYMD_HMS_TZ(DateTime *p){
 #define HAVE_LOCALTIME_S 1
 #endif
 
-#ifndef SQLITE_OMIT_LOCALTIME
+#ifndef SQLITE4_OMIT_LOCALTIME
 /*
 ** The following routine implements the rough equivalent of localtime_r()
 ** using whatever operating-system specific localtime facility that
@@ -432,19 +432,19 @@ static int osLocaltime(time_t *t, struct tm *pTm){
 #if (!defined(HAVE_LOCALTIME_R) || !HAVE_LOCALTIME_R) \
       && (!defined(HAVE_LOCALTIME_S) || !HAVE_LOCALTIME_S)
   struct tm *pX;
-#if SQLITE_THREADSAFE>0
-  sqlite4_mutex *mutex = sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MASTER);
+#if SQLITE4_THREADSAFE>0
+  sqlite4_mutex *mutex = sqlite4MutexAlloc(SQLITE4_MUTEX_STATIC_MASTER);
 #endif
   sqlite4_mutex_enter(mutex);
   pX = localtime(t);
-#ifndef SQLITE_OMIT_BUILTIN_TEST
+#ifndef SQLITE4_OMIT_BUILTIN_TEST
   if( sqlite4DefaultEnv.bLocaltimeFault ) pX = 0;
 #endif
   if( pX ) *pTm = *pX;
   sqlite4_mutex_leave(mutex);
   rc = pX==0;
 #else
-#ifndef SQLITE_OMIT_BUILTIN_TEST
+#ifndef SQLITE4_OMIT_BUILTIN_TEST
   if( sqlite4DefaultEnv.bLocaltimeFault ) return 1;
 #endif
 #if defined(HAVE_LOCALTIME_R) && HAVE_LOCALTIME_R
@@ -455,22 +455,22 @@ static int osLocaltime(time_t *t, struct tm *pTm){
 #endif /* HAVE_LOCALTIME_R || HAVE_LOCALTIME_S */
   return rc;
 }
-#endif /* SQLITE_OMIT_LOCALTIME */
+#endif /* SQLITE4_OMIT_LOCALTIME */
 
 
-#ifndef SQLITE_OMIT_LOCALTIME
+#ifndef SQLITE4_OMIT_LOCALTIME
 /*
 ** Compute the difference (in milliseconds) between localtime and UTC
 ** (a.k.a. GMT) for the time value p where p is in UTC. If no error occurs,
-** return this value and set *pRc to SQLITE_OK. 
+** return this value and set *pRc to SQLITE4_OK. 
 **
-** Or, if an error does occur, set *pRc to SQLITE_ERROR. The returned value
+** Or, if an error does occur, set *pRc to SQLITE4_ERROR. The returned value
 ** is undefined in this case.
 */
 static sqlite4_int64 localtimeOffset(
   DateTime *p,                    /* Date at which to calculate offset */
   sqlite4_context *pCtx,          /* Write error here if one occurs */
-  int *pRc                        /* OUT: Error code. SQLITE_OK or ERROR */
+  int *pRc                        /* OUT: Error code. SQLITE4_OK or ERROR */
 ){
   DateTime x, y;
   time_t t;
@@ -498,7 +498,7 @@ static sqlite4_int64 localtimeOffset(
   t = (time_t)(x.iJD/1000 - 21086676*(i64)10000);
   if( osLocaltime(&t, &sLocal) ){
     sqlite4_result_error(pCtx, "local time unavailable", -1);
-    *pRc = SQLITE_ERROR;
+    *pRc = SQLITE4_ERROR;
     return 0;
   }
   y.Y = sLocal.tm_year + 1900;
@@ -512,10 +512,10 @@ static sqlite4_int64 localtimeOffset(
   y.validJD = 0;
   y.validTZ = 0;
   computeJD(&y);
-  *pRc = SQLITE_OK;
+  *pRc = SQLITE4_OK;
   return y.iJD - x.iJD;
 }
-#endif /* SQLITE_OMIT_LOCALTIME */
+#endif /* SQLITE4_OMIT_LOCALTIME */
 
 /*
 ** Process a modifier to a date-time stamp.  The modifiers are
@@ -552,7 +552,7 @@ static int parseModifier(sqlite4_context *pCtx, const char *zMod, DateTime *p){
   }
   z[n] = 0;
   switch( z[0] ){
-#ifndef SQLITE_OMIT_LOCALTIME
+#ifndef SQLITE4_OMIT_LOCALTIME
     case 'l': {
       /*    localtime
       **
@@ -579,12 +579,12 @@ static int parseModifier(sqlite4_context *pCtx, const char *zMod, DateTime *p){
         clearYMD_HMS_TZ(p);
         rc = 0;
       }
-#ifndef SQLITE_OMIT_LOCALTIME
+#ifndef SQLITE4_OMIT_LOCALTIME
       else if( strcmp(z, "utc")==0 ){
         sqlite4_int64 c1;
         computeJD(p);
         c1 = localtimeOffset(p, pCtx, &rc);
-        if( rc==SQLITE_OK ){
+        if( rc==SQLITE4_OK ){
           p->iJD -= c1;
           clearYMD_HMS_TZ(p);
           p->iJD += c1 - localtimeOffset(p, pCtx, &rc);
@@ -602,7 +602,7 @@ static int parseModifier(sqlite4_context *pCtx, const char *zMod, DateTime *p){
       ** date is already on the appropriate weekday, this is a no-op.
       */
       if( strncmp(z, "weekday ", 8)==0
-               && sqlite4AtoF(&z[8], &r, sqlite4Strlen30(&z[8]), SQLITE_UTF8)
+               && sqlite4AtoF(&z[8], &r, sqlite4Strlen30(&z[8]), SQLITE4_UTF8)
                && (n=(int)r)==r && n>=0 && r<7 ){
         sqlite4_int64 Z;
         computeYMD_HMS(p);
@@ -659,7 +659,7 @@ static int parseModifier(sqlite4_context *pCtx, const char *zMod, DateTime *p){
     case '9': {
       double rRounder;
       for(n=1; z[n] && z[n]!=':' && !sqlite4Isspace(z[n]); n++){}
-      if( !sqlite4AtoF(z, &r, n, SQLITE_UTF8) ){
+      if( !sqlite4AtoF(z, &r, n, SQLITE4_UTF8) ){
         rc = 1;
         break;
       }
@@ -759,8 +759,8 @@ static int isDate(
   if( argc==0 ){
     return setDateTimeToCurrent(context, p);
   }
-  if( (eType = sqlite4_value_type(argv[0]))==SQLITE_FLOAT
-                   || eType==SQLITE_INTEGER ){
+  if( (eType = sqlite4_value_type(argv[0]))==SQLITE4_FLOAT
+                   || eType==SQLITE4_INTEGER ){
     p->iJD = (sqlite4_int64)(sqlite4_value_double(argv[0])*86400000.0 + 0.5);
     p->validJD = 1;
   }else{
@@ -815,7 +815,7 @@ static void datetimeFunc(
     computeYMD_HMS(&x);
     sqlite4_snprintf(zBuf,sizeof(zBuf), "%04d-%02d-%02d %02d:%02d:%02d",
                      x.Y, x.M, x.D, x.h, x.m, (int)(x.s));
-    sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
   }
 }
 
@@ -834,7 +834,7 @@ static void timeFunc(
     char zBuf[100];
     computeHMS(&x);
     sqlite4_snprintf(zBuf,sizeof(zBuf), "%02d:%02d:%02d", x.h, x.m, (int)x.s);
-    sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
   }
 }
 
@@ -853,7 +853,7 @@ static void dateFunc(
     char zBuf[100];
     computeYMD(&x);
     sqlite4_snprintf(zBuf,sizeof(zBuf), "%04d-%02d-%02d", x.Y, x.M, x.D);
-    sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
   }
 }
 
@@ -925,11 +925,11 @@ static void strftimeFunc(
   }
   testcase( n==sizeof(zBuf)-1 );
   testcase( n==sizeof(zBuf) );
-  testcase( n==(u64)db->aLimit[SQLITE_LIMIT_LENGTH]+1 );
-  testcase( n==(u64)db->aLimit[SQLITE_LIMIT_LENGTH] );
+  testcase( n==(u64)db->aLimit[SQLITE4_LIMIT_LENGTH]+1 );
+  testcase( n==(u64)db->aLimit[SQLITE4_LIMIT_LENGTH] );
   if( n<sizeof(zBuf) ){
     z = zBuf;
-  }else if( n>(u64)db->aLimit[SQLITE_LIMIT_LENGTH] ){
+  }else if( n>(u64)db->aLimit[SQLITE4_LIMIT_LENGTH] ){
     sqlite4_result_error_toobig(context);
     return;
   }else{
@@ -1001,7 +1001,7 @@ static void strftimeFunc(
   }
   z[j] = 0;
   sqlite4_result_text(context, z, -1,
-                      z==zBuf ? SQLITE_TRANSIENT : SQLITE_DYNAMIC);
+                      z==zBuf ? SQLITE4_TRANSIENT : SQLITE4_DYNAMIC);
 }
 
 /*
@@ -1045,9 +1045,9 @@ static void ctimestampFunc(
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
   datetimeFunc(context, 0, 0);
 }
-#endif /* !defined(SQLITE_OMIT_DATETIME_FUNCS) */
+#endif /* !defined(SQLITE4_OMIT_DATETIME_FUNCS) */
 
-#ifdef SQLITE_OMIT_DATETIME_FUNCS
+#ifdef SQLITE4_OMIT_DATETIME_FUNCS
 /*
 ** If the library is compiled to omit the full-scale date and time
 ** handling (to get a smaller binary), the following minimal version
@@ -1081,14 +1081,14 @@ static void currentTimeFunc(
 #ifdef HAVE_GMTIME_R
   pTm = gmtime_r(&t, &sNow);
 #else
-  sqlite4_mutex_enter(sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MASTER));
+  sqlite4_mutex_enter(sqlite4MutexAlloc(SQLITE4_MUTEX_STATIC_MASTER));
   pTm = gmtime(&t);
   if( pTm ) memcpy(&sNow, pTm, sizeof(sNow));
-  sqlite4_mutex_leave(sqlite4MutexAlloc(SQLITE_MUTEX_STATIC_MASTER));
+  sqlite4_mutex_leave(sqlite4MutexAlloc(SQLITE4_MUTEX_STATIC_MASTER));
 #endif
   if( pTm ){
     strftime(zBuf, 20, zFormat, &sNow);
-    sqlite4_result_text(context, zBuf, -1, SQLITE_TRANSIENT);
+    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
   }
 }
 #endif
@@ -1100,7 +1100,7 @@ static void currentTimeFunc(
 */
 void sqlite4RegisterDateTimeFunctions(sqlite4_env *pEnv){
   static FuncDef aDateTimeFuncs[] = {
-#ifndef SQLITE_OMIT_DATETIME_FUNCS
+#ifndef SQLITE4_OMIT_DATETIME_FUNCS
     FUNCTION(julianday,        -1, 0, 0, juliandayFunc ),
     FUNCTION(date,             -1, 0, 0, dateFunc      ),
     FUNCTION(time,             -1, 0, 0, timeFunc      ),

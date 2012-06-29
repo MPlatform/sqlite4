@@ -9,8 +9,8 @@
 #
 #***********************************************************************
 # 
-# This file implements tests of the SQLITE_IOCAP_POWERSAFE_OVERWRITE property
-# and the SQLITE_FCNTL_POWERSAFE_OVERWRITE file-control for manipulating it.
+# This file implements tests of the SQLITE4_IOCAP_POWERSAFE_OVERWRITE property
+# and the SQLITE4_FCNTL_POWERSAFE_OVERWRITE file-control for manipulating it.
 #
 # The name of this file comes from the fact that we used to call the
 # POWERSAFE_OVERWRITE property ZERO_DAMAGE.

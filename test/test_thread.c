@@ -18,7 +18,7 @@
 #include "sqliteInt.h"
 #include <tcl.h>
 
-#if SQLITE_THREADSAFE
+#if SQLITE4_THREADSAFE
 
 #include <errno.h>
 
@@ -53,7 +53,7 @@ struct EvalEvent {
 
 static Tcl_ObjCmdProc sqlthread_proc;
 static Tcl_ObjCmdProc clock_seconds_proc;
-#if SQLITE_OS_UNIX && defined(SQLITE_ENABLE_UNLOCK_NOTIFY)
+#if SQLITE4_OS_UNIX && defined(SQLITE4_ENABLE_UNLOCK_NOTIFY)
 static Tcl_ObjCmdProc blocking_step_proc;
 static Tcl_ObjCmdProc blocking_prepare_proc;
 #endif
@@ -116,7 +116,7 @@ static Tcl_ThreadCreateType tclScriptThread(ClientData pSqlThread){
   interp = Tcl_CreateInterp();
   Tcl_CreateObjCommand(interp, "clock_seconds", clock_seconds_proc, 0, 0);
   Tcl_CreateObjCommand(interp, "sqlthread", sqlthread_proc, pSqlThread, 0);
-#if SQLITE_OS_UNIX && defined(SQLITE_ENABLE_UNLOCK_NOTIFY)
+#if SQLITE4_OS_UNIX && defined(SQLITE4_ENABLE_UNLOCK_NOTIFY)
   Tcl_CreateObjCommand(interp, "sqlite4_blocking_step", blocking_step_proc,0,0);
   Tcl_CreateObjCommand(interp, 
       "sqlite4_blocking_prepare", blocking_prepare_proc, (void *)1, 0);
@@ -297,7 +297,7 @@ static int sqlthread_id(
   Tcl_Obj *CONST objv[]
 ){
   Tcl_ThreadId id = Tcl_GetCurrentThread();
-  Tcl_SetObjResult(interp, Tcl_NewIntObj(SQLITE_PTR_TO_INT(id)));
+  Tcl_SetObjResult(interp, Tcl_NewIntObj(SQLITE4_PTR_TO_INT(id)));
   UNUSED_PARAMETER(clientData);
   UNUSED_PARAMETER(objc);
   UNUSED_PARAMETER(objv);
@@ -384,9 +384,9 @@ static int clock_seconds_proc(
 ** should be considered if these functions are to be extended (i.e. to 
 ** support windows) in the future.
 */ 
-#if SQLITE_OS_UNIX && defined(SQLITE_ENABLE_UNLOCK_NOTIFY)
+#if SQLITE4_OS_UNIX && defined(SQLITE4_ENABLE_UNLOCK_NOTIFY)
 
-/* BEGIN_SQLITE_BLOCKING_STEP */
+/* BEGIN_SQLITE4_BLOCKING_STEP */
 /* This example uses the pthreads API */
 #include <pthread.h>
 
@@ -417,15 +417,15 @@ static void unlock_notify_cb(void **apArg, int nArg){
 
 /*
 ** This function assumes that an SQLite API call (either sqlite4_prepare() 
-** or sqlite4_step()) has just returned SQLITE_LOCKED. The argument is the
+** or sqlite4_step()) has just returned SQLITE4_LOCKED. The argument is the
 ** associated database connection.
 **
 ** This function calls sqlite4_unlock_notify() to register for an 
 ** unlock-notify callback, then blocks until that callback is delivered 
-** and returns SQLITE_OK. The caller should then retry the failed operation.
+** and returns SQLITE4_OK. The caller should then retry the failed operation.
 **
 ** Or, if sqlite4_unlock_notify() indicates that to block would deadlock 
-** the system, then this function returns SQLITE_LOCKED immediately. In 
+** the system, then this function returns SQLITE4_LOCKED immediately. In 
 ** this case the caller should not retry the operation and should roll 
 ** back the current transaction (if any).
 */
@@ -440,17 +440,17 @@ static int wait_for_unlock_notify(sqlite4 *db){
 
   /* Register for an unlock-notify callback. */
   rc = sqlite4_unlock_notify(db, unlock_notify_cb, (void *)&un);
-  assert( rc==SQLITE_LOCKED || rc==SQLITE_OK );
+  assert( rc==SQLITE4_LOCKED || rc==SQLITE4_OK );
 
-  /* The call to sqlite4_unlock_notify() always returns either SQLITE_LOCKED 
-  ** or SQLITE_OK. 
+  /* The call to sqlite4_unlock_notify() always returns either SQLITE4_LOCKED 
+  ** or SQLITE4_OK. 
   **
-  ** If SQLITE_LOCKED was returned, then the system is deadlocked. In this
-  ** case this function needs to return SQLITE_LOCKED to the caller so 
+  ** If SQLITE4_LOCKED was returned, then the system is deadlocked. In this
+  ** case this function needs to return SQLITE4_LOCKED to the caller so 
   ** that the current transaction can be rolled back. Otherwise, block
-  ** until the unlock-notify callback is invoked, then return SQLITE_OK.
+  ** until the unlock-notify callback is invoked, then return SQLITE4_OK.
   */
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     pthread_mutex_lock(&un.mutex);
     if( !un.fired ){
       pthread_cond_wait(&un.cond, &un.mutex);
@@ -470,9 +470,9 @@ static int wait_for_unlock_notify(sqlite4 *db){
 */
 int sqlite4_blocking_step(sqlite4_stmt *pStmt){
   int rc;
-  while( SQLITE_LOCKED==(rc = sqlite4_step(pStmt)) ){
+  while( SQLITE4_LOCKED==(rc = sqlite4_step(pStmt)) ){
     rc = wait_for_unlock_notify(sqlite4_db_handle(pStmt));
-    if( rc!=SQLITE_OK ) break;
+    if( rc!=SQLITE4_OK ) break;
     sqlite4_reset(pStmt);
   }
   return rc;
@@ -483,9 +483,9 @@ int sqlite4_blocking_step(sqlite4_stmt *pStmt){
 ** It functions in the same way as prepare_v2(), except that if a required
 ** shared-cache lock cannot be obtained, this function may block waiting for
 ** the lock to become available. In this scenario the normal API prepare_v2()
-** function always returns SQLITE_LOCKED.
+** function always returns SQLITE4_LOCKED.
 **
-** If this function returns SQLITE_LOCKED, the caller should rollback
+** If this function returns SQLITE4_LOCKED, the caller should rollback
 ** the current transaction (if any) and try again later. Otherwise, the
 ** system may become deadlocked.
 */
@@ -497,13 +497,13 @@ int sqlite4_blocking_prepare(
   const char **pz           /* OUT: End of parsed string */
 ){
   int rc;
-  while( SQLITE_LOCKED==(rc = sqlite4_prepare(db, zSql, nSql, ppStmt, pz)) ){
+  while( SQLITE4_LOCKED==(rc = sqlite4_prepare(db, zSql, nSql, ppStmt, pz)) ){
     rc = wait_for_unlock_notify(db);
-    if( rc!=SQLITE_OK ) break;
+    if( rc!=SQLITE4_OK ) break;
   }
   return rc;
 }
-/* END_SQLITE_BLOCKING_STEP */
+/* END_SQLITE4_BLOCKING_STEP */
 
 /*
 ** Usage: sqlite4_blocking_step STMT
@@ -566,14 +566,14 @@ static int blocking_prepare_proc(
     rc = sqlite4_prepare(db, zSql, bytes, &pStmt, &zTail);
   }
 
-  assert(rc==SQLITE_OK || pStmt==0);
+  assert(rc==SQLITE4_OK || pStmt==0);
   if( zTail && objc>=5 ){
     if( bytes>=0 ){
       bytes = bytes - (zTail-zSql);
     }
     Tcl_ObjSetVar2(interp, objv[4], 0, Tcl_NewStringObj(zTail, bytes), 0);
   }
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     assert( pStmt==0 );
     sprintf(zBuf, "%s ", (char *)sqlite4TestErrorName(rc));
     Tcl_AppendResult(interp, zBuf, sqlite4_errmsg(db), 0);
@@ -587,7 +587,7 @@ static int blocking_prepare_proc(
   return TCL_OK;
 }
 
-#endif /* SQLITE_OS_UNIX && SQLITE_ENABLE_UNLOCK_NOTIFY */
+#endif /* SQLITE4_OS_UNIX && SQLITE4_ENABLE_UNLOCK_NOTIFY */
 /*
 ** End of implementation of [sqlite4_blocking_step].
 ************************************************************************/
@@ -598,7 +598,7 @@ static int blocking_prepare_proc(
 int SqlitetestThread_Init(Tcl_Interp *interp){
   Tcl_CreateObjCommand(interp, "sqlthread", sqlthread_proc, 0, 0);
   Tcl_CreateObjCommand(interp, "clock_seconds", clock_seconds_proc, 0, 0);
-#if SQLITE_OS_UNIX && defined(SQLITE_ENABLE_UNLOCK_NOTIFY)
+#if SQLITE4_OS_UNIX && defined(SQLITE4_ENABLE_UNLOCK_NOTIFY)
   Tcl_CreateObjCommand(interp, "sqlite4_blocking_step", blocking_step_proc,0,0);
   Tcl_CreateObjCommand(interp, 
       "sqlite4_blocking_prepare", blocking_prepare_proc, (void *)1, 0);

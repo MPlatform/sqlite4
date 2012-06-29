@@ -477,7 +477,7 @@ corruption_test -sqlprep {
   } {1 {malformed database schema (t2)}}
   do_test corrupt2-10.2 {
     sqlite4_errcode db
-  } {SQLITE_CORRUPT}
+  } {SQLITE4_CORRUPT}
 }
 
 corruption_test -sqlprep {
@@ -527,7 +527,7 @@ ifcapable autovacuum {
   # It is not possible for the last page in a database file to be the
   # pending-byte page (AKA the locking page). This test verifies that if
   # an attempt is made to commit a transaction to such an auto-vacuum 
-  # database SQLITE_CORRUPT is returned.
+  # database SQLITE4_CORRUPT is returned.
   #
   corruption_test -tclprep {
     db eval { 

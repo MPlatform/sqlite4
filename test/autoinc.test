@@ -36,7 +36,7 @@ do_test autoinc-1.1 {
 } {}
 
 # Add a table with the AUTOINCREMENT feature.  Verify that the
-# SQLITE_SEQUENCE table gets created.
+# SQLITE4_SEQUENCE table gets created.
 #
 do_test autoinc-1.2 {
   execsql {
@@ -45,7 +45,7 @@ do_test autoinc-1.2 {
   }
 } {t1 sqlite_sequence}
 
-# The SQLITE_SEQUENCE table is initially empty
+# The SQLITE4_SEQUENCE table is initially empty
 #
 do_test autoinc-1.3 {
   execsql {
@@ -313,7 +313,7 @@ do_test autoinc-2.74 {
 
 
 # When a table with an AUTOINCREMENT is deleted, the corresponding entry
-# in the SQLITE_SEQUENCE table should also be deleted.  But the SQLITE_SEQUENCE
+# in the SQLITE4_SEQUENCE table should also be deleted.  But the SQLITE4_SEQUENCE
 # table itself should remain behind.
 #
 do_test autoinc-3.1 {
@@ -562,7 +562,7 @@ ifcapable trigger {
   catchsql { pragma recursive_triggers = off } 
   
   # Ticket #3928.  Make sure that triggers to not make extra slots in
-  # the SQLITE_SEQUENCE table.
+  # the SQLITE4_SEQUENCE table.
   #
   do_test autoinc-3928.1 {
     db eval {

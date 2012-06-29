@@ -231,7 +231,7 @@ ifcapable vtab {
   } {1 1}
 
   # The whole point of this is to test an error code other than
-  # SQLITE_NOMEM from the vtab xBestIndex callback.
+  # SQLITE4_NOMEM from the vtab xBestIndex callback.
   #
   do_ioerr_test misc7-12 -tclprep {
     sqlite4 db2 test.db
@@ -248,7 +248,7 @@ ifcapable vtab {
   } 
 
   # The case where the virtual table module returns a very large number
-  # as the cost of a scan (greater than SQLITE_BIG_DOUBLE in the code).
+  # as the cost of a scan (greater than SQLITE4_BIG_DOUBLE in the code).
   #
   do_test misc7-13 {
     sqlite4 db test.db
@@ -372,7 +372,7 @@ do_test misc7-16.X {
 
 #----------------------------------------------------------------------
 # Test the situation where a hot-journal is discovered but write-access
-# to it is denied. This should return SQLITE_BUSY.
+# to it is denied. This should return SQLITE4_BUSY.
 #
 # These tests do not work on windows due to restrictions in the
 # windows file system.

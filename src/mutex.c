@@ -15,12 +15,12 @@
 */
 #include "sqliteInt.h"
 
-#ifndef SQLITE_MUTEX_OMIT
+#ifndef SQLITE4_MUTEX_OMIT
 /*
 ** Initialize the mutex system.
 */
 int sqlite4MutexInit(sqlite4_env *pEnv){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( !pEnv->mutex.xMutexAlloc ){
     if( pEnv->bCoreMutex ){
       pEnv->mutex = *sqlite4DefaultMutex();
@@ -38,7 +38,7 @@ int sqlite4MutexInit(sqlite4_env *pEnv){
 ** sqlite4MutexInit().
 */
 int sqlite4MutexEnd(sqlite4_env *pEnv){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( pEnv->mutex.xMutexEnd ){
     rc = pEnv->mutex.xMutexEnd(pEnv->mutex.pMutexEnv);
   }
@@ -50,7 +50,7 @@ int sqlite4MutexEnd(sqlite4_env *pEnv){
 */
 sqlite4_mutex *sqlite4_mutex_alloc(sqlite4_env *pEnv, int id){
   if( pEnv==0 ) pEnv = &sqlite4DefaultEnv;
-#ifndef SQLITE_OMIT_AUTOINIT
+#ifndef SQLITE4_OMIT_AUTOINIT
   if( sqlite4_initialize(pEnv) ) return 0;
 #endif
   return pEnv->mutex.xMutexAlloc(pEnv->mutex.pMutexEnv, id);
@@ -83,11 +83,11 @@ void sqlite4_mutex_enter(sqlite4_mutex *p){
 }
 
 /*
-** Obtain the mutex p. If successful, return SQLITE_OK. Otherwise, if another
-** thread holds the mutex and it cannot be obtained, return SQLITE_BUSY.
+** Obtain the mutex p. If successful, return SQLITE4_OK. Otherwise, if another
+** thread holds the mutex and it cannot be obtained, return SQLITE4_BUSY.
 */
 int sqlite4_mutex_try(sqlite4_mutex *p){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   if( p ){
     return p->pMutexMethods->xMutexTry(p);
   }
@@ -119,4 +119,4 @@ int sqlite4_mutex_notheld(sqlite4_mutex *p){
 }
 #endif
 
-#endif /* !defined(SQLITE_MUTEX_OMIT) */
+#endif /* !defined(SQLITE4_MUTEX_OMIT) */

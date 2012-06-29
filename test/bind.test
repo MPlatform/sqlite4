@@ -54,7 +54,7 @@ do_test bind-1.1.4 {
 } {:abc}
 do_test bind-1.2 {
   sqlite_step $VM N VALUES COLNAMES
-} {SQLITE_DONE}
+} {SQLITE4_DONE}
 do_test bind-1.3 {
   execsql {SELECT rowid, * FROM t1}
 } {1 {} {} {}}
@@ -62,7 +62,7 @@ do_test bind-1.4 {
   sqlite4_reset $VM
   sqlite_bind $VM 1 {test value 1} normal
   sqlite_step $VM N VALUES COLNAMES
-} SQLITE_DONE
+} SQLITE4_DONE
 do_test bind-1.5 {
   execsql {SELECT rowid, * FROM t1}
 } {1 {} {} {} 2 {test value 1} {} {}}
@@ -70,7 +70,7 @@ do_test bind-1.6 {
   sqlite4_reset $VM
   sqlite_bind $VM 3 {'test value 2'} normal
   sqlite_step $VM N VALUES COLNAMES
-} SQLITE_DONE
+} SQLITE4_DONE
 do_test bind-1.7 {
   execsql {SELECT rowid, * FROM t1}
 } {1 {} {} {} 2 {test value 1} {} {} 3 {test value 1} {} {'test value 2'}}
@@ -107,7 +107,7 @@ do_test bind-1.11 {
 
 do_test bind-1.99 {
   sqlite4_finalize $VM
-} SQLITE_OK
+} SQLITE4_OK
 
 # Prepare the statement in different ways depending on whether or not
 # the $var processing is compiled into the library.
@@ -427,9 +427,9 @@ do_test bind-8.15 {
 
 do_test bind-8.99 {
   sqlite4_finalize $VM
-} SQLITE_OK
+} SQLITE4_OK
 
-set iMaxVar $SQLITE_MAX_VARIABLE_NUMBER
+set iMaxVar $SQLITE4_MAX_VARIABLE_NUMBER
 set zError "(1) variable number must be between ?1 and ?$iMaxVar"
 do_test bind-9.1 {
   execsql {
@@ -480,10 +480,10 @@ do_test bind-9.5 {
   sqlite4_bind_int $VM [expr $iMaxVar - 1] 1000
   sqlite4_bind_int $VM $iMaxVar 1001
   sqlite4_step $VM
-} SQLITE_DONE
+} SQLITE4_DONE
 do_test bind-9.6 {
   sqlite4_finalize $VM
-} SQLITE_OK
+} SQLITE4_OK
 do_test bind-9.7 {
   execsql {SELECT * FROM t2}
 } {1 999 1000 1001 {} {}}
@@ -544,7 +544,7 @@ do_test bind-10.8 {
   sqlite4_bind_int $VM 2 2
   sqlite4_bind_int $VM 3 3
   sqlite4_step $VM
-} SQLITE_DONE
+} SQLITE4_DONE
 do_test bind-10.8.1 {
   # Binding attempts after program start should fail
   set rc [catch {
@@ -554,7 +554,7 @@ do_test bind-10.8.1 {
 } {1 {}}
 do_test bind-10.9 {
   sqlite4_finalize $VM
-} SQLITE_OK
+} SQLITE4_OK
 do_test bind-10.10 {
   execsql {SELECT * FROM t2}
 } {1 999 1000 1001 {} {} 1 2 1 3 2 1}

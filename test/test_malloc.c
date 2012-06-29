@@ -199,15 +199,15 @@ static int faultsimInstall(int install){
   assert(memfault.isInstalled==1 || memfault.isInstalled==0);
 
   if( install==memfault.isInstalled ){
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
 
   if( install ){
     sqlite4_initialize(0);
-    rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_GETMALLOC, &memfault.m);
+    rc = sqlite4_env_config(0, SQLITE4_ENVCONFIG_GETMALLOC, &memfault.m);
     assert(memfault.m.xMalloc);
-    if( rc==SQLITE_OK ){
-      rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, &m);
+    if( rc==SQLITE4_OK ){
+      rc = sqlite4_env_config(0, SQLITE4_ENVCONFIG_MALLOC, &m);
     }
   }else{
     sqlite4_mem_methods m;
@@ -216,20 +216,20 @@ static int faultsimInstall(int install){
     /* One should be able to reset the default memory allocator by storing
     ** a zeroed allocator then calling GETMALLOC. */
     memset(&m, 0, sizeof(m));
-    sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, &m);
-    sqlite4_env_config(0, SQLITE_ENVCONFIG_GETMALLOC, &m);
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_MALLOC, &m);
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_GETMALLOC, &m);
     assert( memcmp(&m, &memfault.m, sizeof(m))==0 );
 
-    rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, &memfault.m);
+    rc = sqlite4_env_config(0, SQLITE4_ENVCONFIG_MALLOC, &memfault.m);
   }
 
-  if( rc==SQLITE_OK ){
+  if( rc==SQLITE4_OK ){
     memfault.isInstalled = 1;
   }
   return rc;
 }
 
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 
 /*
 ** This function is implemented in test1.c. Returns a pointer to a static
@@ -237,7 +237,7 @@ static int faultsimInstall(int install){
 ** the least-significant 8-bits of the integer passed as an argument.
 ** For example:
 **
-**   sqlite4TestErrorName(1) -> "SQLITE_ERROR"
+**   sqlite4TestErrorName(1) -> "SQLITE4_ERROR"
 */
 const char *sqlite4TestErrorName(int);
 
@@ -518,7 +518,7 @@ static int test_memory_highwater(
 /*
 ** Usage:    sqlite4_memdebug_backtrace DEPTH
 **
-** Set the depth of backtracing.  If SQLITE_MEMDEBUG is not defined
+** Set the depth of backtracing.  If SQLITE4_MEMDEBUG is not defined
 ** then this routine is a no-op.
 */
 static int test_memdebug_backtrace(
@@ -533,7 +533,7 @@ static int test_memdebug_backtrace(
     return TCL_ERROR;
   }
   if( Tcl_GetIntFromObj(interp, objv[1], &depth) ) return TCL_ERROR;
-#ifdef SQLITE_MEMDEBUG
+#ifdef SQLITE4_MEMDEBUG
   {
     extern void sqlite4MemdebugBacktrace(int);
     sqlite4MemdebugBacktrace(depth);
@@ -557,8 +557,8 @@ static int test_memdebug_dump(
     Tcl_WrongNumArgs(interp, 1, objv, "FILENAME");
     return TCL_ERROR;
   }
-#if defined(SQLITE_MEMDEBUG) || defined(SQLITE_MEMORY_SIZE) \
-     || defined(SQLITE_POW2_MEMORY_SIZE)
+#if defined(SQLITE4_MEMDEBUG) || defined(SQLITE4_MEMORY_SIZE) \
+     || defined(SQLITE4_POW2_MEMORY_SIZE)
   {
     extern void sqlite4MemdebugDump(const char*);
     sqlite4MemdebugDump(Tcl_GetString(objv[1]));
@@ -583,7 +583,7 @@ static int test_memdebug_malloc_count(
     Tcl_WrongNumArgs(interp, 1, objv, "");
     return TCL_ERROR;
   }
-#if defined(SQLITE_MEMDEBUG)
+#if defined(SQLITE4_MEMDEBUG)
   {
     extern int sqlite4MemdebugMallocCount();
     nMalloc = sqlite4MemdebugMallocCount();
@@ -717,7 +717,7 @@ static int test_memdebug_settitle(
     return TCL_ERROR;
   }
   zTitle = Tcl_GetString(objv[1]);
-#ifdef SQLITE_MEMDEBUG
+#ifdef SQLITE4_MEMDEBUG
   {
     extern int sqlite4MemdebugSettitle(const char*);
     sqlite4MemdebugSettitle(zTitle);
@@ -739,7 +739,7 @@ struct MallocLog {
   int nByte;
 };
 
-#ifdef SQLITE_MEMDEBUG
+#ifdef SQLITE4_MEMDEBUG
 static void test_memdebug_callback(int nByte, int nFrame, void **aFrame){
   if( mallocLogEnabled ){
     MallocLog *pLog;
@@ -768,7 +768,7 @@ static void test_memdebug_callback(int nByte, int nFrame, void **aFrame){
     pLog->nByte += nByte;
   }
 }
-#endif /* SQLITE_MEMDEBUG */
+#endif /* SQLITE4_MEMDEBUG */
 
 static void test_memdebug_log_clear(void){
   Tcl_HashSearch search;
@@ -800,7 +800,7 @@ static int test_memdebug_log(
   };
 
   if( !isInit ){
-#ifdef SQLITE_MEMDEBUG
+#ifdef SQLITE4_MEMDEBUG
     extern void sqlite4MemdebugBacktraceCallback(
         void (*xBacktrace)(int, int, void **));
     sqlite4MemdebugBacktraceCallback(test_memdebug_callback);
@@ -860,7 +860,7 @@ static int test_memdebug_log(
     }
 
     case MB_LOG_SYNC: {
-#ifdef SQLITE_MEMDEBUG
+#ifdef SQLITE4_MEMDEBUG
       extern void sqlite4MemdebugSync();
       test_memdebug_log_clear();
       mallocLogEnabled = 1;
@@ -876,7 +876,7 @@ static int test_memdebug_log(
 /*
 ** Usage:    sqlite4_env_config_memstatus BOOLEAN
 **
-** Enable or disable memory status reporting using SQLITE_CONFIG_MEMSTATUS.
+** Enable or disable memory status reporting using SQLITE4_CONFIG_MEMSTATUS.
 */
 static int test_config_memstatus(
   void * clientData,
@@ -890,7 +890,7 @@ static int test_config_memstatus(
     return TCL_ERROR;
   }
   if( Tcl_GetBooleanFromObj(interp, objv[1], &enable) ) return TCL_ERROR;
-  rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MEMSTATUS, enable);
+  rc = sqlite4_env_config(0, SQLITE4_ENVCONFIG_MEMSTATUS, enable);
   Tcl_SetObjResult(interp, Tcl_NewIntObj(rc));
   return TCL_OK;
 }
@@ -921,7 +921,7 @@ static int test_envconfig_lookaside(
   Tcl_ListObjAppendElement(
       interp, pRet, Tcl_NewIntObj(sqlite4DefaultEnv.nLookaside)
   );
-  rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_LOOKASIDE, sz, cnt);
+  rc = sqlite4_env_config(0, SQLITE4_ENVCONFIG_LOOKASIDE, sz, cnt);
   Tcl_SetObjResult(interp, pRet);
   return TCL_OK;
 }
@@ -955,9 +955,9 @@ static int test_db_config_lookaside(
   if( Tcl_GetIntFromObj(interp, objv[3], &sz) ) return TCL_ERROR;
   if( Tcl_GetIntFromObj(interp, objv[4], &cnt) ) return TCL_ERROR;
   if( bufid==0 ){
-    rc = sqlite4_db_config(db, SQLITE_DBCONFIG_LOOKASIDE, 0, sz, cnt);
+    rc = sqlite4_db_config(db, SQLITE4_DBCONFIG_LOOKASIDE, 0, sz, cnt);
   }else if( bufid>=1 && bufid<=2 && sz*cnt<=sizeof(azBuf[0]) ){
-    rc = sqlite4_db_config(db, SQLITE_DBCONFIG_LOOKASIDE, azBuf[bufid], sz,cnt);
+    rc = sqlite4_db_config(db, SQLITE4_DBCONFIG_LOOKASIDE, azBuf[bufid], sz,cnt);
   }else{
     Tcl_AppendResult(interp, "illegal arguments - see documentation", (char*)0);
     return TCL_ERROR;
@@ -987,16 +987,16 @@ static int test_config_error(
   }
   if( objc==2 ){
     if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
-    if( sqlite4_db_config(db, 99999)!=SQLITE_ERROR ){
+    if( sqlite4_db_config(db, 99999)!=SQLITE4_ERROR ){
       Tcl_AppendResult(interp, 
-            "sqlite4_db_config(db, 99999) does not return SQLITE_ERROR",
+            "sqlite4_db_config(db, 99999) does not return SQLITE4_ERROR",
             (char*)0);
       return TCL_ERROR;
     }
   }else{
-    if( sqlite4_env_config(0, 99999)!=SQLITE_ERROR ){
+    if( sqlite4_env_config(0, 99999)!=SQLITE4_ERROR ){
       Tcl_AppendResult(interp, 
-          "sqlite4_env_config(0, 99999) does not return SQLITE_ERROR",
+          "sqlite4_env_config(0, 99999) does not return SQLITE4_ERROR",
           (char*)0);
       return TCL_ERROR;
     }
@@ -1025,10 +1025,10 @@ static int test_status(
     const char *zName;
     int op;
   } aOp[] = {
-    { "SQLITE_ENVSTATUS_MEMORY_USED",   SQLITE_ENVSTATUS_MEMORY_USED         },
-    { "SQLITE_ENVSTATUS_MALLOC_SIZE",   SQLITE_ENVSTATUS_MALLOC_SIZE         },
-    { "SQLITE_ENVSTATUS_PARSER_STACK",  SQLITE_ENVSTATUS_PARSER_STACK        },
-    { "SQLITE_ENVSTATUS_MALLOC_COUNT",  SQLITE_ENVSTATUS_MALLOC_COUNT        },
+    { "SQLITE4_ENVSTATUS_MEMORY_USED",   SQLITE4_ENVSTATUS_MEMORY_USED         },
+    { "SQLITE4_ENVSTATUS_MALLOC_SIZE",   SQLITE4_ENVSTATUS_MALLOC_SIZE         },
+    { "SQLITE4_ENVSTATUS_PARSER_STACK",  SQLITE4_ENVSTATUS_PARSER_STACK        },
+    { "SQLITE4_ENVSTATUS_MALLOC_COUNT",  SQLITE4_ENVSTATUS_MALLOC_COUNT        },
   };
   Tcl_Obj *pResult;
   if( objc!=3 ){
@@ -1078,15 +1078,15 @@ static int test_db_status(
     const char *zName;
     int op;
   } aOp[] = {
-    { "LOOKASIDE_USED",      SQLITE_DBSTATUS_LOOKASIDE_USED      },
-    { "CACHE_USED",          SQLITE_DBSTATUS_CACHE_USED          },
-    { "SCHEMA_USED",         SQLITE_DBSTATUS_SCHEMA_USED         },
-    { "STMT_USED",           SQLITE_DBSTATUS_STMT_USED           },
-    { "LOOKASIDE_HIT",       SQLITE_DBSTATUS_LOOKASIDE_HIT       },
-    { "LOOKASIDE_MISS_SIZE", SQLITE_DBSTATUS_LOOKASIDE_MISS_SIZE },
-    { "LOOKASIDE_MISS_FULL", SQLITE_DBSTATUS_LOOKASIDE_MISS_FULL },
-    { "CACHE_HIT",           SQLITE_DBSTATUS_CACHE_HIT           },
-    { "CACHE_MISS",          SQLITE_DBSTATUS_CACHE_MISS          }
+    { "LOOKASIDE_USED",      SQLITE4_DBSTATUS_LOOKASIDE_USED      },
+    { "CACHE_USED",          SQLITE4_DBSTATUS_CACHE_USED          },
+    { "SCHEMA_USED",         SQLITE4_DBSTATUS_SCHEMA_USED         },
+    { "STMT_USED",           SQLITE4_DBSTATUS_STMT_USED           },
+    { "LOOKASIDE_HIT",       SQLITE4_DBSTATUS_LOOKASIDE_HIT       },
+    { "LOOKASIDE_MISS_SIZE", SQLITE4_DBSTATUS_LOOKASIDE_MISS_SIZE },
+    { "LOOKASIDE_MISS_FULL", SQLITE4_DBSTATUS_LOOKASIDE_MISS_FULL },
+    { "CACHE_HIT",           SQLITE4_DBSTATUS_CACHE_HIT           },
+    { "CACHE_MISS",          SQLITE4_DBSTATUS_CACHE_MISS          }
   };
   Tcl_Obj *pResult;
   if( objc!=4 ){
@@ -1095,7 +1095,7 @@ static int test_db_status(
   }
   if( getDbPointer(interp, Tcl_GetString(objv[1]), &db) ) return TCL_ERROR;
   zOpName = Tcl_GetString(objv[2]);
-  if( memcmp(zOpName, "SQLITE_", 7)==0 ) zOpName += 7;
+  if( memcmp(zOpName, "SQLITE4_", 7)==0 ) zOpName += 7;
   if( memcmp(zOpName, "DBSTATUS_", 9)==0 ) zOpName += 9;
   for(i=0; i<ArraySize(aOp); i++){
     if( strcmp(aOp[i].zName, zOpName)==0 ){
@@ -1151,10 +1151,10 @@ static int test_install_memsys3(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  int rc = SQLITE_MISUSE;
-#ifdef SQLITE_ENABLE_MEMSYS3
+  int rc = SQLITE4_MISUSE;
+#ifdef SQLITE4_ENABLE_MEMSYS3
   const sqlite4_mem_methods *sqlite4MemGetMemsys3(void);
-  rc = sqlite4_env_config(0, SQLITE_ENVCONFIG_MALLOC, sqlite4MemGetMemsys3());
+  rc = sqlite4_env_config(0, SQLITE4_ENVCONFIG_MALLOC, sqlite4MemGetMemsys3());
 #endif
   Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_VOLATILE);
   return TCL_OK;
@@ -1194,7 +1194,7 @@ int Sqlitetest_malloc_Init(Tcl_Interp *interp){
   };
   int i;
   for(i=0; i<sizeof(aObjCmd)/sizeof(aObjCmd[0]); i++){
-    ClientData c = (ClientData)SQLITE_INT_TO_PTR(aObjCmd[i].clientData);
+    ClientData c = (ClientData)SQLITE4_INT_TO_PTR(aObjCmd[i].clientData);
     Tcl_CreateObjCommand(interp, aObjCmd[i].zName, aObjCmd[i].xProc, c, 0);
   }
   return TCL_OK;

@@ -124,7 +124,7 @@ do_test $t.8 {
 
 do_test $t.9 {
   sqlite4_finalize $STMT
-} SQLITE_OK
+} SQLITE4_OK
 
 ifcapable vacuum {
   execsql VACUUM

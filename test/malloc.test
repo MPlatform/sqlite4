@@ -10,7 +10,7 @@
 #***********************************************************************
 #
 # This file attempts to check the behavior of the SQLite library in 
-# an out-of-memory situation. When compiled with -DSQLITE_DEBUG=1, 
+# an out-of-memory situation. When compiled with -DSQLITE4_DEBUG=1, 
 # the SQLite library accepts a special command (sqlite4_memdebug_fail N C)
 # which causes the N-th malloc to fail.  This special feature is used
 # to see what happens in the library if a malloc were to really fail
@@ -26,7 +26,7 @@ source $testdir/tester.tcl
 #
 source $testdir/malloc_common.tcl
 if {!$MEMDEBUG} {
-   puts "Skipping malloc tests: not compiled with -DSQLITE_MEMDEBUG..."
+   puts "Skipping malloc tests: not compiled with -DSQLITE4_MEMDEBUG..."
    finish_test
    return
 }
@@ -237,7 +237,7 @@ ifcapable utf16 {
     sqlite4_column_text16 $::STMT 1
     sqlite4_column_double $::STMT 1
     set rc [sqlite4_reset $::STMT]
-    if {$rc eq "SQLITE_NOMEM"} {error "out of memory"}
+    if {$rc eq "SQLITE4_NOMEM"} {error "out of memory"}
     sqlite4_bind_text16 $::STMT 1 $::bomstr 60
     #catch {sqlite4_finalize $::STMT}
     #if {[lindex [sqlite_malloc_stat] 2]<=0} {
@@ -286,10 +286,10 @@ do_malloc_test 10 -tclprep {
 # sqlite4_create_function().
 do_malloc_test 11 -tclbody {
   set rc [sqlite4_create_function db]
-  if {[string match $rc SQLITE_OK]} {
+  if {[string match $rc SQLITE4_OK]} {
     set rc [sqlite4_create_aggregate db]
   }
-  if {[string match $rc SQLITE_NOMEM]} {
+  if {[string match $rc SQLITE4_NOMEM]} {
     error "out of memory"
   }
 }
@@ -349,7 +349,7 @@ if {$tcl_platform(platform)!="windows"} {
     sqlite4_extended_result_codes db 1
 
     # If an out-of-memory occurs within a call to a VFS layer function during
-    # hot-journal rollback, sqlite will report SQLITE_CORRUPT. See commit
+    # hot-journal rollback, sqlite will report SQLITE4_CORRUPT. See commit
     # [5668] for details.
     set rc [catch {db eval { SELECT * FROM t1 }} msg]
     if {$msg eq "database disk image is malformed"} { set msg "out of memory" }
@@ -369,7 +369,7 @@ ifcapable utf16 {
   do_malloc_test 15 -start 4 -tclbody {
     db collate string_compare string_compare
     if {[catch {add_test_collate db 1 1 1} msg]} {
-      if {$msg=="SQLITE_NOMEM"} {set msg "out of memory"}
+      if {$msg=="SQLITE4_NOMEM"} {set msg "out of memory"}
       error $msg
     }
   
@@ -413,7 +413,7 @@ ifcapable utf16 {
   
     # Prepare statement
     set rc [catch {sqlite4_prepare $DB2 {SELECT * FROM sqlite_master} -1 X} msg]
-    if {[sqlite4_errcode $DB2] eq "SQLITE_IOERR+12"} {
+    if {[sqlite4_errcode $DB2] eq "SQLITE4_IOERR+12"} {
       error "out of memory"
     }
     if {[regexp ".*automatic extension loading.*" [sqlite4_errmsg $DB2]]} {
@@ -426,14 +426,14 @@ ifcapable utf16 {
   
     # Finalize statement
     set rc [sqlite4_finalize $STMT]
-    if {$rc!="SQLITE_OK"} {
+    if {$rc!="SQLITE4_OK"} {
       error [sqlite4_errmsg $DB2]
     }
     set STMT 0
   
     # Close database
     set rc [sqlite4_close $DB2]
-    if {$rc!="SQLITE_OK"} {
+    if {$rc!="SQLITE4_OK"} {
       error [sqlite4_errmsg $DB2]
     }
     set DB2 0
@@ -493,7 +493,7 @@ do_malloc_test 19 -tclprep {
 }
 unset static_string
 
-# Make sure SQLITE_NOMEM is reported out on an ATTACH failure even
+# Make sure SQLITE4_NOMEM is reported out on an ATTACH failure even
 # when the malloc failure occurs within the nested parse.
 #
 ifcapable attach {
@@ -576,7 +576,7 @@ ifcapable {pager_pragmas} {
 
   } -tclbody {
     # If an out-of-memory occurs within a call to a VFS layer function during
-    # hot-journal rollback, sqlite will report SQLITE_CORRUPT. See commit
+    # hot-journal rollback, sqlite will report SQLITE4_CORRUPT. See commit
     # [5668] for details.
     set rc [catch {db eval { SELECT * FROM abc LIMIT 10 }} msg]
     if {$msg eq "database disk image is malformed"} { set msg "out of memory" }
@@ -657,7 +657,7 @@ do_malloc_test 27 -tclprep {
   sqlite4_shutdown
 } -tclbody {
   set rc [sqlite4_initialize]
-  if {$rc == "SQLITE_NOMEM"} {
+  if {$rc == "SQLITE4_NOMEM"} {
     error "out of memory"
   }
 }
@@ -706,7 +706,7 @@ do_malloc_test 30 -tclprep {
   -- This statement requires the 'no-content' pages loaded by the DELETE
   -- statement above. When requesting the pages, the content is loaded
   -- from the database file. The point of this test case is to test handling
-  -- of malloc errors (including SQLITE_IOERR_NOMEM errors) when loading
+  -- of malloc errors (including SQLITE4_IOERR_NOMEM errors) when loading
   -- the content.
   SELECT * FROM t1 ORDER BY x;
 }
@@ -858,7 +858,7 @@ if {[db eval {PRAGMA locking_mode}]!="exclusive"} {
     # Try to write to the database using connection [db2]. If connection [db]
     # has correctly released the shared lock, this write attempt should 
     # succeed. If [db] has not released the lock, this should hit an 
-    # SQLITE_BUSY error.
+    # SQLITE4_BUSY error.
     do_test malloc-36.$zRepeat.${::n}.unlocked {
       execsql {INSERT INTO t1 VALUES(3, 4)} db2
     } {}

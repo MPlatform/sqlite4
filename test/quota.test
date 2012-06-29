@@ -18,25 +18,25 @@ unset -nocomplain defaultVfs
 set defaultVfs [file_control_vfsname db]
 db close
 
-do_test quota-1.1 { sqlite4_quota_initialize nosuchvfs 1 } {SQLITE_ERROR}
-do_test quota-1.2 { sqlite4_quota_initialize "" 1 }        {SQLITE_OK}
-do_test quota-1.3 { sqlite4_quota_initialize "" 1 }        {SQLITE_MISUSE}
-do_test quota-1.4 { sqlite4_quota_shutdown }               {SQLITE_OK}
+do_test quota-1.1 { sqlite4_quota_initialize nosuchvfs 1 } {SQLITE4_ERROR}
+do_test quota-1.2 { sqlite4_quota_initialize "" 1 }        {SQLITE4_OK}
+do_test quota-1.3 { sqlite4_quota_initialize "" 1 }        {SQLITE4_MISUSE}
+do_test quota-1.4 { sqlite4_quota_shutdown }               {SQLITE4_OK}
 
-do_test quota-1.5 { sqlite4_quota_initialize "" 0 }        {SQLITE_OK}
-do_test quota-1.6 { sqlite4_quota_shutdown }               {SQLITE_OK}
-do_test quota-1.7 { sqlite4_quota_initialize "" 1 }        {SQLITE_OK}
-do_test quota-1.8 { sqlite4_quota_shutdown }               {SQLITE_OK}
+do_test quota-1.5 { sqlite4_quota_initialize "" 0 }        {SQLITE4_OK}
+do_test quota-1.6 { sqlite4_quota_shutdown }               {SQLITE4_OK}
+do_test quota-1.7 { sqlite4_quota_initialize "" 1 }        {SQLITE4_OK}
+do_test quota-1.8 { sqlite4_quota_shutdown }               {SQLITE4_OK}
 
 
 #-------------------------------------------------------------------------
 # Some simple warm-body tests with a single database file in rollback 
 # mode:
 #
-#   quota-2.1.*: Test that SQLITE_FULL is returned if the database would
+#   quota-2.1.*: Test that SQLITE4_FULL is returned if the database would
 #                exceed the configured quota.
 #
-#   quota-2.2.*: Test that SQLITE_FULL is not returned and the database
+#   quota-2.2.*: Test that SQLITE4_FULL is not returned and the database
 #                grows if the callback extends the quota when the database
 #                attempts to grow beyond the configured quota.
 #
@@ -60,7 +60,7 @@ proc quota_check {filename limitvar size} {
 
 do_test quota-2.1.1 {
   sqlite4_quota_set *test.db 4096 quota_check
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test quota-2.1.2 {
   sqlite4 db test.db
   execsql {
@@ -101,7 +101,7 @@ do_test quota-2.3.1 {
 
 do_test quota-2.4.1 {
   sqlite4_quota_shutdown
-} {SQLITE_MISUSE}
+} {SQLITE4_MISUSE}
 set ::quota [list]
 do_test quota-2.4.2 {
   catchsql { INSERT INTO t1 VALUES(3, randomblob(1100)) }
@@ -111,7 +111,7 @@ do_test quota-2.4.4 { file size test.db } {5120}
 do_test quota-2.4.99 {
   db close
   sqlite4_quota_shutdown
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 #-------------------------------------------------------------------------
 # Try some tests with more than one connection to a database file. Still
@@ -132,7 +132,7 @@ do_test quota-3.1.1 {
   forcedelete test.db
   sqlite4_quota_initialize "" 1
   sqlite4_quota_set *test.db 4096 quota_check
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test quota-3.1.2 {
   sqlite4 db test.db
   execsql {
@@ -161,7 +161,7 @@ do_test quota-3.1.6 {
   db close
   db2 close
   sqlite4_quota_set *test.db 0 {}
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test quota-3.2.1 {
   delete_file force test.db test2.db 
@@ -226,7 +226,7 @@ do_test quota-3.3.1 {
 do_test quota-3.2.X {
   foreach db {db1a db2a db2b db1b} { catch { $db close } }
   sqlite4_quota_set * 0 {}
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 #-------------------------------------------------------------------------
 # Quotas are deleted when unused and when their limit is set to zero
@@ -455,7 +455,7 @@ do_test quota-4.9.1 {
   db close
   sqlite4_quota_set A 1000 quota_callback
   sqlite4_quota_shutdown
-} {SQLITE_OK}
+} {SQLITE4_OK}
 do_test quota-4.9.2 {
   quota_list
 } {}

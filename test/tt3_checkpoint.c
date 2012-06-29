@@ -30,7 +30,7 @@
 ** around 50 pages.
 **
 ** In test case checkpoint_starvation_1, the auto-checkpoint uses 
-** SQLITE_CHECKPOINT_PASSIVE. In checkpoint_starvation_2, it uses RESTART.
+** SQLITE4_CHECKPOINT_PASSIVE. In checkpoint_starvation_2, it uses RESTART.
 ** The expectation is that in the first case the WAL file will grow very 
 ** large, and in the second will be limited to the 50 pages or thereabouts.
 ** However, the overall transaction throughput will be lower for 
@@ -63,7 +63,7 @@ static int checkpoint_starvation_walhook(
   if( nFrame>=CHECKPOINT_STARVATION_FRAMELIMIT ){
     sqlite4_wal_checkpoint_v2(db, zDb, p->eMode, 0, 0);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static char *checkpoint_starvation_reader(int iTid, int iArg){
@@ -117,7 +117,7 @@ static void checkpoint_starvation_main(int nMs, CheckpointStarvationCtx *p){
   }
 
   printf(" Checkpoint mode  : %s\n",
-      p->eMode==SQLITE_CHECKPOINT_PASSIVE ? "PASSIVE" : "RESTART"
+      p->eMode==SQLITE4_CHECKPOINT_PASSIVE ? "PASSIVE" : "RESTART"
   );
   printf(" Peak WAL         : %d frames\n", p->nMaxFrame);
   printf(" Transaction count: %d transactions\n", nInsert);
@@ -129,7 +129,7 @@ static void checkpoint_starvation_main(int nMs, CheckpointStarvationCtx *p){
 
 static void checkpoint_starvation_1(int nMs){
   Error err = {0};
-  CheckpointStarvationCtx ctx = { SQLITE_CHECKPOINT_PASSIVE, 0 };
+  CheckpointStarvationCtx ctx = { SQLITE4_CHECKPOINT_PASSIVE, 0 };
   checkpoint_starvation_main(nMs, &ctx);
   if( ctx.nMaxFrame<(CHECKPOINT_STARVATION_FRAMELIMIT*10) ){
     test_error(&err, "WAL failed to grow - %d frames", ctx.nMaxFrame);
@@ -139,7 +139,7 @@ static void checkpoint_starvation_1(int nMs){
 
 static void checkpoint_starvation_2(int nMs){
   Error err = {0};
-  CheckpointStarvationCtx ctx = { SQLITE_CHECKPOINT_RESTART, 0 };
+  CheckpointStarvationCtx ctx = { SQLITE4_CHECKPOINT_RESTART, 0 };
   checkpoint_starvation_main(nMs, &ctx);
   if( ctx.nMaxFrame>CHECKPOINT_STARVATION_FRAMELIMIT+10 ){
     test_error(&err, "WAL grew too large - %d frames", ctx.nMaxFrame);

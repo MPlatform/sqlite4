@@ -18,7 +18,7 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-# disable this test if the SQLITE_OMIT_AUTHORIZATION macro is
+# disable this test if the SQLITE4_OMIT_AUTHORIZATION macro is
 # defined during compilation.
 if {[catch {db auth {}} msg]} {
   finish_test
@@ -32,17 +32,17 @@ do_test auth2-1.1 {
   }
   set ::flist {}
   proc auth {code arg1 arg2 arg3 arg4} {
-    if {$code=="SQLITE_FUNCTION"} {
+    if {$code=="SQLITE4_FUNCTION"} {
       lappend ::flist $arg2
       if {$arg2=="max"} {
-        return SQLITE_DENY
+        return SQLITE4_DENY
       } elseif {$arg2=="min"} {
-        return SQLITE_IGNORE
+        return SQLITE4_IGNORE
       } else {
-        return SQLITE_OK
+        return SQLITE4_OK
       }
     }
-    return SQLITE_OK
+    return SQLITE4_OK
   }
   db authorizer ::auth
   catchsql {SELECT max(a,b,c) FROM t1}
@@ -81,7 +81,7 @@ sqlite4 db2 test.db
 proc auth {args} {
   global authargs
   append authargs $args\n
-  return SQLITE_OK
+  return SQLITE4_OK
 }
 db auth auth
 do_test auth2-2.1 {
@@ -90,19 +90,19 @@ do_test auth2-2.1 {
     CREATE TABLE t2(x,y,z);
   }
   set ::authargs
-} {SQLITE_INSERT sqlite_master {} main {}
-SQLITE_CREATE_TABLE t2 {} main {}
-SQLITE_UPDATE sqlite_master type main {}
-SQLITE_UPDATE sqlite_master name main {}
-SQLITE_UPDATE sqlite_master tbl_name main {}
-SQLITE_UPDATE sqlite_master rootpage main {}
-SQLITE_UPDATE sqlite_master sql main {}
-SQLITE_READ sqlite_master ROWID main {}
-SQLITE_READ sqlite_master name main {}
-SQLITE_READ sqlite_master rootpage main {}
-SQLITE_READ sqlite_master sql main {}
-SQLITE_READ sqlite_master tbl_name main {}
-SQLITE_READ sqlite_master ROWID main {}
+} {SQLITE4_INSERT sqlite_master {} main {}
+SQLITE4_CREATE_TABLE t2 {} main {}
+SQLITE4_UPDATE sqlite_master type main {}
+SQLITE4_UPDATE sqlite_master name main {}
+SQLITE4_UPDATE sqlite_master tbl_name main {}
+SQLITE4_UPDATE sqlite_master rootpage main {}
+SQLITE4_UPDATE sqlite_master sql main {}
+SQLITE4_READ sqlite_master ROWID main {}
+SQLITE4_READ sqlite_master name main {}
+SQLITE4_READ sqlite_master rootpage main {}
+SQLITE4_READ sqlite_master sql main {}
+SQLITE4_READ sqlite_master tbl_name main {}
+SQLITE4_READ sqlite_master ROWID main {}
 }
 do_test auth2-2.2 {
   set ::authargs {}
@@ -110,19 +110,19 @@ do_test auth2-2.2 {
     CREATE VIEW v2 AS SELECT x+y AS a, y+z AS b from t2;
   }
   set ::authargs
-} {SQLITE_INSERT sqlite_master {} main {}
-SQLITE_CREATE_VIEW v2 {} main {}
-SQLITE_UPDATE sqlite_master type main {}
-SQLITE_UPDATE sqlite_master name main {}
-SQLITE_UPDATE sqlite_master tbl_name main {}
-SQLITE_UPDATE sqlite_master rootpage main {}
-SQLITE_UPDATE sqlite_master sql main {}
-SQLITE_READ sqlite_master ROWID main {}
-SQLITE_READ sqlite_master name main {}
-SQLITE_READ sqlite_master rootpage main {}
-SQLITE_READ sqlite_master sql main {}
-SQLITE_READ sqlite_master tbl_name main {}
-SQLITE_READ sqlite_master ROWID main {}
+} {SQLITE4_INSERT sqlite_master {} main {}
+SQLITE4_CREATE_VIEW v2 {} main {}
+SQLITE4_UPDATE sqlite_master type main {}
+SQLITE4_UPDATE sqlite_master name main {}
+SQLITE4_UPDATE sqlite_master tbl_name main {}
+SQLITE4_UPDATE sqlite_master rootpage main {}
+SQLITE4_UPDATE sqlite_master sql main {}
+SQLITE4_READ sqlite_master ROWID main {}
+SQLITE4_READ sqlite_master name main {}
+SQLITE4_READ sqlite_master rootpage main {}
+SQLITE4_READ sqlite_master sql main {}
+SQLITE4_READ sqlite_master tbl_name main {}
+SQLITE4_READ sqlite_master ROWID main {}
 }
 do_test auth2-2.3 {
   set ::authargs {}
@@ -130,14 +130,14 @@ do_test auth2-2.3 {
     SELECT a, b FROM v2;
   }
   set ::authargs
-} {SQLITE_SELECT {} {} {} {}
-SQLITE_READ v2 a main {}
-SQLITE_READ v2 b main {}
-SQLITE_READ t2 x main v2
-SQLITE_READ t2 y main v2
-SQLITE_READ t2 y main v2
-SQLITE_READ t2 z main v2
-SQLITE_SELECT {} {} {} v2
+} {SQLITE4_SELECT {} {} {} {}
+SQLITE4_READ v2 a main {}
+SQLITE4_READ v2 b main {}
+SQLITE4_READ t2 x main v2
+SQLITE4_READ t2 y main v2
+SQLITE4_READ t2 y main v2
+SQLITE4_READ t2 z main v2
+SQLITE4_SELECT {} {} {} v2
 }
 do_test auth2-2.4 {
   db2 eval {
@@ -148,22 +148,22 @@ do_test auth2-2.4 {
     SELECT b, a FROM v2;
   }
   set ::authargs
-} {SQLITE_SELECT {} {} {} {}
-SQLITE_READ v2 b main {}
-SQLITE_READ v2 a main {}
-SQLITE_READ t2 x main v2
-SQLITE_READ t2 y main v2
-SQLITE_READ t2 y main v2
-SQLITE_READ t2 z main v2
-SQLITE_SELECT {} {} {} v2
-SQLITE_SELECT {} {} {} {}
-SQLITE_READ v2 b main {}
-SQLITE_READ v2 a main {}
-SQLITE_READ t2 x main v2
-SQLITE_READ t2 y main v2
-SQLITE_READ t2 y main v2
-SQLITE_READ t2 z main v2
-SQLITE_SELECT {} {} {} v2
+} {SQLITE4_SELECT {} {} {} {}
+SQLITE4_READ v2 b main {}
+SQLITE4_READ v2 a main {}
+SQLITE4_READ t2 x main v2
+SQLITE4_READ t2 y main v2
+SQLITE4_READ t2 y main v2
+SQLITE4_READ t2 z main v2
+SQLITE4_SELECT {} {} {} v2
+SQLITE4_SELECT {} {} {} {}
+SQLITE4_READ v2 b main {}
+SQLITE4_READ v2 a main {}
+SQLITE4_READ t2 x main v2
+SQLITE4_READ t2 y main v2
+SQLITE4_READ t2 y main v2
+SQLITE4_READ t2 z main v2
+SQLITE4_SELECT {} {} {} v2
 }
 db2 close
 

@@ -290,7 +290,7 @@ do_faultsim_test pagerfault-6.1 -prep {
 # file is considered to exist.
 #
 proc xAccess {method filename op args} {
-  if {$op != "SQLITE_ACCESS_EXISTS"} { return "" }
+  if {$op != "SQLITE4_ACCESS_EXISTS"} { return "" }
   return [file exists $filename]
 }
 do_faultsim_test pagerfault-6.2 -faults cantopen-* -prep {
@@ -694,8 +694,8 @@ if {$TEMP_STORE<2} {
     sqlite4_backup B db2 main db main
     B step 200
     set rc [B finish]
-    if {[string match SQLITE_IOERR_* $rc]} {set rc SQLITE_IOERR}
-    if {$rc != "SQLITE_OK"} { error [sqlite4_test_errstr $rc] }
+    if {[string match SQLITE4_IOERR_* $rc]} {set rc SQLITE4_IOERR}
+    if {$rc != "SQLITE4_OK"} { error [sqlite4_test_errstr $rc] }
     set {} {}
   } -test {
     faultsim_test_result {0 {}} {1 {sqlite4_backup_init() failed}}
@@ -715,8 +715,8 @@ do_faultsim_test pagerfault-14c -prep {
   sqlite4_backup B db2 main db main
   B step 200
   set rc [B finish]
-  if {[string match SQLITE_IOERR_* $rc]} {set rc SQLITE_IOERR}
-  if {$rc != "SQLITE_OK"} { error [sqlite4_test_errstr $rc] }
+  if {[string match SQLITE4_IOERR_* $rc]} {set rc SQLITE4_IOERR}
+  if {$rc != "SQLITE4_OK"} { error [sqlite4_test_errstr $rc] }
   set {} {}
 } -test {
   faultsim_test_result {0 {}} {1 {sqlite4_backup_init() failed}}
@@ -1099,8 +1099,8 @@ do_faultsim_test pagerfault-22 -prep {
 # has successfully returned. i.e. the series of calls for the aborted commit 
 # is:
 #
-#   PagerCommitPhaseOne(<in-memory-db>)   ->   SQLITE_OK
-#   PagerCommitPhaseOne(<file-db>)        ->   SQLITE_IOERR
+#   PagerCommitPhaseOne(<in-memory-db>)   ->   SQLITE4_OK
+#   PagerCommitPhaseOne(<file-db>)        ->   SQLITE4_IOERR
 #   PagerRollback(<in-memory-db>)
 #   PagerRollback(<file-db>)
 #

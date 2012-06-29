@@ -33,7 +33,7 @@ while {![eof $in]} {
   set line [gets $in]
   if {$line=="" && [eof $in]} break
   incr cnt
-  regexp {#define\s+SQLITE_VERSION\s+"(.*)"} $line all VERSION
+  regexp {#define\s+SQLITE4_VERSION\s+"(.*)"} $line all VERSION
 }
 close $in
 

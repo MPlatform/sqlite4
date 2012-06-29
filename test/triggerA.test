@@ -196,7 +196,7 @@ do_test triggerA-2.10 {
 # Only run the reamining tests if memory debugging is turned on.
 #
 ifcapable !memdebug {
-   puts "Skipping triggerA malloc tests: not compiled with -DSQLITE_MEMDEBUG..."
+   puts "Skipping triggerA malloc tests: not compiled with -DSQLITE4_MEMDEBUG..."
    finish_test
    return
 }

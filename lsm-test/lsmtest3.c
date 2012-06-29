@@ -227,5 +227,3 @@ void test_rollback(
     }
   }
 }
-
-

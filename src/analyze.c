@@ -24,10 +24,10 @@
 ** Additional tables might be added in future releases of SQLite.
 ** The sqlite_stat2 table is not created or used unless the SQLite version
 ** is between 3.6.18 and 3.7.8, inclusive, and unless SQLite is compiled
-** with SQLITE_ENABLE_STAT2.  The sqlite_stat2 table is deprecated.
+** with SQLITE4_ENABLE_STAT2.  The sqlite_stat2 table is deprecated.
 ** The sqlite_stat2 table is superceded by sqlite_stat3, which is only
 ** created and used by SQLite versions 3.7.9 and later and with
-** SQLITE_ENABLE_STAT3 defined.  The fucntionality of sqlite_stat3
+** SQLITE4_ENABLE_STAT3 defined.  The fucntionality of sqlite_stat3
 ** is a superset of sqlite_stat2.  
 **
 ** Format of sqlite_stat1:
@@ -58,7 +58,7 @@
 ** Format of sqlite_stat2:
 **
 ** The sqlite_stat2 is only created and is only used if SQLite is compiled
-** with SQLITE_ENABLE_STAT2 and if the SQLite version number is between
+** with SQLITE4_ENABLE_STAT2 and if the SQLite version number is between
 ** 3.6.18 and 3.7.8.  The "stat2" table contains additional information
 ** about the distribution of keys within an index.  The index is identified by
 ** the "idx" column and the "tbl" column is the name of the table to which
@@ -113,18 +113,18 @@
 ** the key space, though not uniformly, and which include samples with
 ** largest possible nEq values.
 */
-#ifndef SQLITE_OMIT_ANALYZE
+#ifndef SQLITE4_OMIT_ANALYZE
 #include "sqliteInt.h"
 
 /*
 ** This routine generates code that opens the sqlite_stat1 table for
 ** writing with cursor iStatCur. If the library was built with the
-** SQLITE_ENABLE_STAT3 macro defined, then the sqlite_stat3 table is
+** SQLITE4_ENABLE_STAT3 macro defined, then the sqlite_stat3 table is
 ** opened for writing using cursor (iStatCur+1)
 **
 ** If the sqlite_stat1 tables does not previously exist, it is created.
 ** Similarly, if the sqlite_stat3 table does not exist and the library
-** is compiled with SQLITE_ENABLE_STAT3 defined, it is created. 
+** is compiled with SQLITE4_ENABLE_STAT3 defined, it is created. 
 **
 ** Argument zWhere may be a pointer to a buffer containing a table name,
 ** or it may be a NULL pointer. If it is not NULL, then all entries in
@@ -144,7 +144,7 @@ static void openStatTable(
     const char *zCols;
   } aTable[] = {
     { "sqlite_stat1", "tbl,idx,stat" },
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
     { "sqlite_stat3", "tbl,idx,neq,nlt,ndlt,sample" },
 #endif
   };
@@ -203,8 +203,8 @@ static void openStatTable(
 /*
 ** Recommended number of samples for sqlite_stat3
 */
-#ifndef SQLITE_STAT3_SAMPLES
-# define SQLITE_STAT3_SAMPLES 24
+#ifndef SQLITE4_STAT3_SAMPLES
+# define SQLITE4_STAT3_SAMPLES 24
 #endif
 
 /*
@@ -230,7 +230,7 @@ struct Stat3Accum {
   } *a;                     /* An array of samples */
 };
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
 /*
 ** Implementation of the stat3_init(C,S) SQL function.  The two parameters
 ** are the number of rows in the table or index (C) and the number of samples
@@ -266,11 +266,11 @@ static void stat3Init(
   p->mxSample = mxSample;
   p->nPSample = p->nRow/(mxSample/3+1) + 1;
   sqlite4_randomness(pEnv, sizeof(p->iPrn), &p->iPrn);
-  sqlite4_result_blob(context, p, sizeof(p), SQLITE_DYNAMIC);
+  sqlite4_result_blob(context, p, sizeof(p), SQLITE4_DYNAMIC);
 }
 static const FuncDef stat3InitFuncdef = {
   2,                /* nArg */
-  SQLITE_UTF8,      /* iPrefEnc */
+  SQLITE4_UTF8,      /* iPrefEnc */
   0,                /* flags */
   0,                /* pUserData */
   0,                /* pNext */
@@ -363,7 +363,7 @@ static void stat3Push(
 }
 static const FuncDef stat3PushFuncdef = {
   5,                /* nArg */
-  SQLITE_UTF8,      /* iPrefEnc */
+  SQLITE4_UTF8,      /* iPrefEnc */
   0,                /* flags */
   0,                /* pUserData */
   0,                /* pNext */
@@ -405,7 +405,7 @@ static void stat3Get(
 }
 static const FuncDef stat3GetFuncdef = {
   -1,               /* nArg */
-  SQLITE_UTF8,      /* iPrefEnc */
+  SQLITE4_UTF8,      /* iPrefEnc */
   0,                /* flags */
   0,                /* pUserData */
   0,                /* pNext */
@@ -416,7 +416,7 @@ static const FuncDef stat3GetFuncdef = {
   0,                /* pHash */
   0                 /* pDestructor */
 };
-#endif /* SQLITE_ENABLE_STAT3 */
+#endif /* SQLITE4_ENABLE_STAT3 */
 
 
 
@@ -444,7 +444,7 @@ static void analyzeOneTable(
   int regTabname = iMem++;     /* Register containing table name */
   int regIdxname = iMem++;     /* Register containing index name */
   int regStat1 = iMem++;       /* The stat column of sqlite_stat1 */
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
   int regNumEq = regStat1;     /* Number of instances.  Same as regStat1 */
   int regNumLt = iMem++;       /* Number of keys less than regSample */
   int regNumDLt = iMem++;      /* Number of distinct keys less than regSample */
@@ -479,8 +479,8 @@ static void analyzeOneTable(
   }
   iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
   assert( iDb>=0 );
-#ifndef SQLITE_OMIT_AUTHORIZATION
-  if( sqlite4AuthCheck(pParse, SQLITE_ANALYZE, pTab->zName, 0,
+#ifndef SQLITE4_OMIT_AUTHORIZATION
+  if( sqlite4AuthCheck(pParse, SQLITE4_ANALYZE, pTab->zName, 0,
       db->aDb[iDb].zName ) ){
     return;
   }
@@ -513,13 +513,13 @@ static void analyzeOneTable(
     /* Populate the register containing the index name. */
     sqlite4VdbeAddOp4(v, OP_String8, 0, regIdxname, 0, pIdx->zName, 0);
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
     if( once ){
       once = 0;
       sqlite4OpenTable(pParse, iTabCur, iDb, pTab, OP_OpenRead);
     }
     sqlite4VdbeAddOp2(v, OP_Count, iIdxCur, regCount);
-    sqlite4VdbeAddOp2(v, OP_Integer, SQLITE_STAT3_SAMPLES, regTemp1);
+    sqlite4VdbeAddOp2(v, OP_Integer, SQLITE4_STAT3_SAMPLES, regTemp1);
     sqlite4VdbeAddOp2(v, OP_Integer, 0, regNumEq);
     sqlite4VdbeAddOp2(v, OP_Integer, 0, regNumLt);
     sqlite4VdbeAddOp2(v, OP_Integer, -1, regNumDLt);
@@ -527,7 +527,7 @@ static void analyzeOneTable(
     sqlite4VdbeAddOp4(v, OP_Function, 1, regCount, regAccum,
                       (char*)&stat3InitFuncdef, P4_FUNCDEF);
     sqlite4VdbeChangeP5(v, 2);
-#endif /* SQLITE_ENABLE_STAT3 */
+#endif /* SQLITE4_ENABLE_STAT3 */
 
     /* The block of memory cells initialized here is used as follows.
     **
@@ -571,9 +571,9 @@ static void analyzeOneTable(
       pColl = sqlite4LocateCollSeq(pParse, pIdx->azColl[i]);
       aChngAddr[i] = sqlite4VdbeAddOp4(v, OP_Ne, regCol, 0, iMem+nCol+i+1,
                                       (char*)pColl, P4_COLLSEQ);
-      sqlite4VdbeChangeP5(v, SQLITE_NULLEQ);
+      sqlite4VdbeChangeP5(v, SQLITE4_NULLEQ);
       VdbeComment((v, "jump if column %d changed", i));
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
       if( i==0 ){
         sqlite4VdbeAddOp2(v, OP_AddImm, regNumEq, 1);
         VdbeComment((v, "incr repeat count"));
@@ -585,7 +585,7 @@ static void analyzeOneTable(
       sqlite4VdbeJumpHere(v, aChngAddr[i]);  /* Set jump dest for the OP_Ne */
       if( i==0 ){
         sqlite4VdbeJumpHere(v, addrIfNot);   /* Jump dest for OP_IfNot */
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
         sqlite4VdbeAddOp4(v, OP_Function, 1, regNumEq, regTemp2,
                           (char*)&stat3PushFuncdef, P4_FUNCDEF);
         sqlite4VdbeChangeP5(v, 5);
@@ -605,7 +605,7 @@ static void analyzeOneTable(
 
     sqlite4VdbeAddOp2(v, OP_Next, iIdxCur, topOfLoop);
     sqlite4VdbeAddOp1(v, OP_Close, iIdxCur);
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
     sqlite4VdbeAddOp4(v, OP_Function, 1, regNumEq, regTemp2,
                       (char*)&stat3PushFuncdef, P4_FUNCDEF);
     sqlite4VdbeChangeP5(v, 5);
@@ -774,7 +774,7 @@ void sqlite4Analyze(Parse *pParse, Token *pName1, Token *pName2){
 
   /* Read the database schema. If an error occurs, leave an error message
   ** and code in pParse and return NULL. */
-  if( SQLITE_OK!=sqlite4ReadSchema(pParse) ){
+  if( SQLITE4_OK!=sqlite4ReadSchema(pParse) ){
     return;
   }
 
@@ -888,12 +888,12 @@ static int analysisLoader(void *pData, int argc, char **argv, char **NotUsed){
 ** and its contents.
 */
 void sqlite4DeleteIndexSamples(sqlite4 *db, Index *pIdx){
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
   if( pIdx->aSample ){
     int j;
     for(j=0; j<pIdx->nSample; j++){
       IndexSample *p = &pIdx->aSample[j];
-      if( p->eType==SQLITE_TEXT || p->eType==SQLITE_BLOB ){
+      if( p->eType==SQLITE4_TEXT || p->eType==SQLITE4_BLOB ){
         sqlite4DbFree(db, p->u.z);
       }
     }
@@ -909,7 +909,7 @@ void sqlite4DeleteIndexSamples(sqlite4 *db, Index *pIdx){
 #endif
 }
 
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
 /*
 ** Load content from the sqlite_stat3 table into the Index.aSample[]
 ** arrays of all indices.
@@ -924,20 +924,20 @@ static int loadStat3(sqlite4 *db, const char *zDb){
   IndexSample *pSample;         /* A slot in pIdx->aSample[] */
 
   if( !sqlite4FindTable(db, "sqlite_stat3", zDb) ){
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
 
   zSql = sqlite4MPrintf(db, 
       "SELECT idx,count(*) FROM %Q.sqlite_stat3"
       " GROUP BY idx", zDb);
   if( !zSql ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   rc = sqlite4_prepare(db, zSql, -1, &pStmt, 0);
   sqlite4DbFree(db, zSql);
   if( rc ) return rc;
 
-  while( sqlite4_step(pStmt)==SQLITE_ROW ){
+  while( sqlite4_step(pStmt)==SQLITE4_ROW ){
     char *zIndex;   /* Index name */
     Index *pIdx;    /* Pointer to the index object */
     int nSample;    /* Number of samples */
@@ -954,7 +954,7 @@ static int loadStat3(sqlite4 *db, const char *zDb){
     if( pIdx->aSample==0 ){
       db->mallocFailed = 1;
       sqlite4_finalize(pStmt);
-      return SQLITE_NOMEM;
+      return SQLITE4_NOMEM;
     }
   }
   rc = sqlite4_finalize(pStmt);
@@ -963,13 +963,13 @@ static int loadStat3(sqlite4 *db, const char *zDb){
   zSql = sqlite4MPrintf(db, 
       "SELECT idx,neq,nlt,ndlt,sample FROM %Q.sqlite_stat3", zDb);
   if( !zSql ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   rc = sqlite4_prepare(db, zSql, -1, &pStmt, 0);
   sqlite4DbFree(db, zSql);
   if( rc ) return rc;
 
-  while( sqlite4_step(pStmt)==SQLITE_ROW ){
+  while( sqlite4_step(pStmt)==SQLITE4_ROW ){
     char *zIndex;   /* Index name */
     Index *pIdx;    /* Pointer to the index object */
     int i;          /* Loop counter */
@@ -1000,20 +1000,20 @@ static int loadStat3(sqlite4 *db, const char *zDb){
     eType = sqlite4_column_type(pStmt, 4);
     pSample->eType = (u8)eType;
     switch( eType ){
-      case SQLITE_INTEGER: {
+      case SQLITE4_INTEGER: {
         pSample->u.i = sqlite4_column_int64(pStmt, 4);
         break;
       }
-      case SQLITE_FLOAT: {
+      case SQLITE4_FLOAT: {
         pSample->u.r = sqlite4_column_double(pStmt, 4);
         break;
       }
-      case SQLITE_NULL: {
+      case SQLITE4_NULL: {
         break;
       }
-      default: assert( eType==SQLITE_TEXT || eType==SQLITE_BLOB ); {
+      default: assert( eType==SQLITE4_TEXT || eType==SQLITE4_BLOB ); {
         const char *z = (const char *)(
-              (eType==SQLITE_BLOB) ?
+              (eType==SQLITE4_BLOB) ?
               sqlite4_column_blob(pStmt, 4):
               sqlite4_column_text(pStmt, 4)
            );
@@ -1026,7 +1026,7 @@ static int loadStat3(sqlite4 *db, const char *zDb){
           if( pSample->u.z==0 ){
             db->mallocFailed = 1;
             sqlite4_finalize(pStmt);
-            return SQLITE_NOMEM;
+            return SQLITE4_NOMEM;
           }
           memcpy(pSample->u.z, z, n);
         }
@@ -1035,7 +1035,7 @@ static int loadStat3(sqlite4 *db, const char *zDb){
   }
   return sqlite4_finalize(pStmt);
 }
-#endif /* SQLITE_ENABLE_STAT3 */
+#endif /* SQLITE4_ENABLE_STAT3 */
 
 /*
 ** Load the content of the sqlite_stat1 and sqlite_stat3 tables. The
@@ -1043,13 +1043,13 @@ static int loadStat3(sqlite4 *db, const char *zDb){
 ** arrays. The contents of sqlite_stat3 are used to populate the
 ** Index.aSample[] arrays.
 **
-** If the sqlite_stat1 table is not present in the database, SQLITE_ERROR
-** is returned. In this case, even if SQLITE_ENABLE_STAT3 was defined 
+** If the sqlite_stat1 table is not present in the database, SQLITE4_ERROR
+** is returned. In this case, even if SQLITE4_ENABLE_STAT3 was defined 
 ** during compilation and the sqlite_stat3 table is present, no data is 
 ** read from it.
 **
-** If SQLITE_ENABLE_STAT3 was defined during compilation and the 
-** sqlite_stat3 table is not present in the database, SQLITE_ERROR is
+** If SQLITE4_ENABLE_STAT3 was defined during compilation and the 
+** sqlite_stat3 table is not present in the database, SQLITE4_ERROR is
 ** returned. However, in this case, data is read from the sqlite_stat1
 ** table (if it is present) before returning.
 **
@@ -1070,7 +1070,7 @@ int sqlite4AnalysisLoad(sqlite4 *db, int iDb){
   for(i=sqliteHashFirst(&db->aDb[iDb].pSchema->idxHash);i;i=sqliteHashNext(i)){
     Index *pIdx = sqliteHashData(i);
     sqlite4DefaultRowEst(pIdx);
-#ifdef SQLITE_ENABLE_STAT3
+#ifdef SQLITE4_ENABLE_STAT3
     sqlite4DeleteIndexSamples(db, pIdx);
     pIdx->aSample = 0;
 #endif
@@ -1080,14 +1080,14 @@ int sqlite4AnalysisLoad(sqlite4 *db, int iDb){
   sInfo.db = db;
   sInfo.zDatabase = db->aDb[iDb].zName;
   if( sqlite4FindTable(db, "sqlite_stat1", sInfo.zDatabase)==0 ){
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
 
   /* Load new statistics out of the sqlite_stat1 table */
   zSql = sqlite4MPrintf(db, 
       "SELECT tbl,idx,stat FROM %Q.sqlite_stat1", sInfo.zDatabase);
   if( zSql==0 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }else{
     rc = sqlite4_exec(db, zSql, analysisLoader, &sInfo, 0);
     sqlite4DbFree(db, zSql);
@@ -1095,17 +1095,17 @@ int sqlite4AnalysisLoad(sqlite4 *db, int iDb){
 
 
   /* Load the statistics from the sqlite_stat3 table. */
-#ifdef SQLITE_ENABLE_STAT3
-  if( rc==SQLITE_OK ){
+#ifdef SQLITE4_ENABLE_STAT3
+  if( rc==SQLITE4_OK ){
     rc = loadStat3(db, sInfo.zDatabase);
   }
 #endif
 
-  if( rc==SQLITE_NOMEM ){
+  if( rc==SQLITE4_NOMEM ){
     db->mallocFailed = 1;
   }
   return rc;
 }
 
 
-#endif /* SQLITE_OMIT_ANALYZE */
+#endif /* SQLITE4_OMIT_ANALYZE */

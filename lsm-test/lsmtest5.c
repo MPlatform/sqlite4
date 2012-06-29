@@ -216,7 +216,7 @@ static int dbWriteOperation(
   assert( iKey>=0 && iKey<pParam->nKey );
   dbFormatKey(pParam, 0, iKey, zKey);
 
-  /* Open a write transaction. This may fail - SQLITE_BUSY */
+  /* Open a write transaction. This may fail - SQLITE4_BUSY */
   if( *pRc==0 && tdb_transaction_support(pDb) ){
     rc = tdb_begin(pDb, 2);
     if( rc==5 ) return 0;
@@ -627,4 +627,3 @@ void test_mt(
   if( testThreadSupport()==0 ) return;
   do_test_mt1(zSystem, zPattern, pRc);
 }
-

@@ -13,7 +13,7 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
-# If SQLITE_ENABLE_FTS3 is defined, omit this file.
+# If SQLITE4_ENABLE_FTS3 is defined, omit this file.
 ifcapable !fts3 {
   finish_test
   return
@@ -91,7 +91,7 @@ do_test fts3ak-1.6 {
 } {12}
 
 # This is exactly the same as the previous test, except that older
-# code loses the INSERT due to an SQLITE_SCHEMA error.
+# code loses the INSERT due to an SQLITE4_SCHEMA error.
 do_test fts3ak-1.7 {
   execsql {
     BEGIN;

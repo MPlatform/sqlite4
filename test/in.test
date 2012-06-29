@@ -54,7 +54,7 @@ do_test in-1.7 {
 } {101 102 103 4 5 6 7 8 9 10}
 
 # The rest of this file concentrates on testing the IN operator.
-# Skip this if the library is compiled with SQLITE_OMIT_SUBQUERY 
+# Skip this if the library is compiled with SQLITE4_OMIT_SUBQUERY 
 # (because the IN operator is unavailable).
 #
 ifcapable !subquery {

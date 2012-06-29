@@ -241,7 +241,7 @@ static int lookupName(
       }
     }
 
-#ifndef SQLITE_OMIT_TRIGGER
+#ifndef SQLITE4_OMIT_TRIGGER
     /* If we have not already resolved the name, then maybe 
     ** it is a new.* or old.* trigger argument reference
     */
@@ -273,7 +273,7 @@ static int lookupName(
         if( iCol<pTab->nCol ){
           cnt++;
           if( iCol<0 ){
-            pExpr->affinity = SQLITE_AFF_INTEGER;
+            pExpr->affinity = SQLITE4_AFF_INTEGER;
           }else if( pExpr->iTable==0 ){
             testcase( iCol==31 );
             testcase( iCol==32 );
@@ -289,7 +289,7 @@ static int lookupName(
         pExpr->pTab = pTab;
       }
     }
-#endif /* !defined(SQLITE_OMIT_TRIGGER) */
+#endif /* !defined(SQLITE4_OMIT_TRIGGER) */
 
     /*
     ** Perhaps the name is a reference to the ROWID
@@ -297,7 +297,7 @@ static int lookupName(
     if( cnt==0 && cntTab==1 && isRowidReference(pExpr->pTab, zCol) ){
       cnt = 1;
       pExpr->iColumn = -1;     /* IMP: R-44911-55124 */
-      pExpr->affinity = SQLITE_AFF_INTEGER;
+      pExpr->affinity = SQLITE4_AFF_INTEGER;
     }
 
     /*
@@ -469,7 +469,7 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
 #endif
   switch( pExpr->op ){
 
-#if defined(SQLITE_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE_OMIT_SUBQUERY)
+#if defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE4_OMIT_SUBQUERY)
     /* The special operator TK_ROW means use the rowid for the first
     ** column in the FROM clause.  This is used by the LIMIT and ORDER BY
     ** clause processing on UPDATE and DELETE statements.
@@ -483,10 +483,10 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
       pExpr->pTab = pItem->pTab;
       pExpr->iTable = pItem->iCursor;
       pExpr->iColumn = -1;
-      pExpr->affinity = SQLITE_AFF_INTEGER;
+      pExpr->affinity = SQLITE4_AFF_INTEGER;
       break;
     }
-#endif /* defined(SQLITE_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE_OMIT_SUBQUERY) */
+#endif /* defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE4_OMIT_SUBQUERY) */
 
     /* A lone identifier is the name of a column.
     */
@@ -548,11 +548,11 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
       }else{
         is_agg = pDef->xFunc==0;
       }
-#ifndef SQLITE_OMIT_AUTHORIZATION
+#ifndef SQLITE4_OMIT_AUTHORIZATION
       if( pDef ){
-        auth = sqlite4AuthCheck(pParse, SQLITE_FUNCTION, 0, pDef->zName, 0);
-        if( auth!=SQLITE_OK ){
-          if( auth==SQLITE_DENY ){
+        auth = sqlite4AuthCheck(pParse, SQLITE4_FUNCTION, 0, pDef->zName, 0);
+        if( auth!=SQLITE4_OK ){
+          if( auth==SQLITE4_DENY ){
             sqlite4ErrorMsg(pParse, "not authorized to use function: %s",
                                     pDef->zName);
             pNC->nErr++;
@@ -586,7 +586,7 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
       */
       return WRC_Prune;
     }
-#ifndef SQLITE_OMIT_SUBQUERY
+#ifndef SQLITE4_OMIT_SUBQUERY
     case TK_SELECT:
     case TK_EXISTS:  testcase( pExpr->op==TK_EXISTS );
 #endif
@@ -594,7 +594,7 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
       testcase( pExpr->op==TK_IN );
       if( ExprHasProperty(pExpr, EP_xIsSelect) ){
         int nRef = pNC->nRef;
-#ifndef SQLITE_OMIT_CHECK
+#ifndef SQLITE4_OMIT_CHECK
         if( pNC->isCheck ){
           sqlite4ErrorMsg(pParse,"subqueries prohibited in CHECK constraints");
         }
@@ -607,7 +607,7 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
       }
       break;
     }
-#ifndef SQLITE_OMIT_CHECK
+#ifndef SQLITE4_OMIT_CHECK
     case TK_VARIABLE: {
       if( pNC->isCheck ){
         sqlite4ErrorMsg(pParse,"parameters prohibited in CHECK constraints");
@@ -756,8 +756,8 @@ static int resolveCompoundOrderBy(
   pOrderBy = pSelect->pOrderBy;
   if( pOrderBy==0 ) return 0;
   db = pParse->db;
-#if SQLITE_MAX_COLUMN
-  if( pOrderBy->nExpr>db->aLimit[SQLITE_LIMIT_COLUMN] ){
+#if SQLITE4_MAX_COLUMN
+  if( pOrderBy->nExpr>db->aLimit[SQLITE4_LIMIT_COLUMN] ){
     sqlite4ErrorMsg(pParse, "too many terms in ORDER BY clause");
     return 1;
   }
@@ -845,8 +845,8 @@ int sqlite4ResolveOrderGroupBy(
   struct ExprList_item *pItem;
 
   if( pOrderBy==0 || pParse->db->mallocFailed ) return 0;
-#if SQLITE_MAX_COLUMN
-  if( pOrderBy->nExpr>db->aLimit[SQLITE_LIMIT_COLUMN] ){
+#if SQLITE4_MAX_COLUMN
+  if( pOrderBy->nExpr>db->aLimit[SQLITE4_LIMIT_COLUMN] ){
     sqlite4ErrorMsg(pParse, "too many terms in %s BY clause", zType);
     return 1;
   }
@@ -1170,7 +1170,7 @@ int sqlite4ResolveExprNames(
   Walker w;
 
   if( pExpr==0 ) return 0;
-#if SQLITE_MAX_EXPR_DEPTH>0
+#if SQLITE4_MAX_EXPR_DEPTH>0
   {
     Parse *pParse = pNC->pParse;
     if( sqlite4ExprCheckHeight(pParse, pExpr->nHeight+pNC->pParse->nHeight) ){
@@ -1186,7 +1186,7 @@ int sqlite4ResolveExprNames(
   w.pParse = pNC->pParse;
   w.u.pNC = pNC;
   sqlite4WalkExpr(&w, pExpr);
-#if SQLITE_MAX_EXPR_DEPTH>0
+#if SQLITE4_MAX_EXPR_DEPTH>0
   pNC->pParse->nHeight -= pExpr->nHeight;
 #endif
   if( pNC->nErr>0 || w.pParse->nErr>0 ){

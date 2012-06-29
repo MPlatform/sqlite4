@@ -408,4 +408,3 @@ void testMallocOomEnable(lsm_env *pEnv, int bEnable){
   TmGlobal *pTm = (TmGlobal *)(pEnv->pMemCtx);
   tmMallocOomEnable(pTm, bEnable);
 }
-

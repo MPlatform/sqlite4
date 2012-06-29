@@ -29,7 +29,7 @@
 ** it can be increased immediately to 2.  Increasing the transaction level
 ** to 1 or more makes a "snapshot" of the database file such that changes
 ** made by other connections are not visible.  An xBegin call may fail
-** with SQLITE_BUSY if the initial transaction level is 0 or 1.
+** with SQLITE4_BUSY if the initial transaction level is 0 or 1.
 ** 
 ** A read-only database will fail an attempt to increase xBegin above 1.  An
 ** implementation that does not support nested transactions will fail any
@@ -43,7 +43,7 @@
 ** multiple-database transaction can still be rolled back if the
 ** phase one fails on a different database.  Implementations that do not
 ** support two-phase commit can implement xCommitPhaseOne as a no-op function
-** returning SQLITE_OK.
+** returning SQLITE4_OK.
 ** 
 ** The xRollback method lowers the transaction level to the value given in
 ** its argument and reverts or undoes all changes made at higher transaction
@@ -79,27 +79,27 @@
 **
 ** The return code from xSeek might be one of the following:
 **
-**    SQLITE_OK        The cursor is left pointing to any entry that
+**    SQLITE4_OK        The cursor is left pointing to any entry that
 **                     exactly matchings the probe key.
 **
-**    SQLITE_INEXACT   The cursor is left pointing to the nearest entry
+**    SQLITE4_INEXACT   The cursor is left pointing to the nearest entry
 **                     to the probe it could find, either before or after
 **                     the probe, according to the dir argument.
 **
-**    SQLITE_NOTFOUND  No suitable entry could be found.  Either dir==0 and
+**    SQLITE4_NOTFOUND  No suitable entry could be found.  Either dir==0 and
 **                     there was no exact match, or dir<0 and the probe is
 **                     smaller than every entry in the database, or dir>0 and
 **                     the probe is larger than every entry in the database.
 **
-** xSeek might also return some error code like SQLITE_IOERR or
-** SQLITE_NOMEM.
+** xSeek might also return some error code like SQLITE4_IOERR or
+** SQLITE4_NOMEM.
 ** 
 ** The xNext method will only be called following an xSeek with a positive dir,
 ** or another xNext.  The xPrev method will only be called following an xSeek
 ** with a negative dir or another xPrev.  Both xNext and xPrev will return
-** SQLITE_OK on success and SQLITE_NOTFOUND if they run off the end of the
+** SQLITE4_OK on success and SQLITE4_NOTFOUND if they run off the end of the
 ** database.  Both routines might also return error codes such as
-** SQLITE_IOERR, SQLITE_CORRUPT, or SQLITE_NOMEM.
+** SQLITE4_IOERR, SQLITE4_CORRUPT, or SQLITE4_NOMEM.
 ** 
 ** Values returned by xKey and xData are guaranteed to remain stable until
 ** the next xSeek, xNext, xPrev, xReset, xDelete, or xCloseCursor on the same
@@ -174,6 +174,6 @@ int sqlite4KVStoreClose(KVStore *p);
 
 int sqlite4KVStoreGetMeta(KVStore *p, int, int, unsigned int*);
 int sqlite4KVStorePutMeta(sqlite4*, KVStore *p, int, int, unsigned int*);
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
   void sqlite4KVStoreDump(KVStore *p);
 #endif

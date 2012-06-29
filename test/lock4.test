@@ -46,7 +46,7 @@ do_test lock4-1.1 {
 # Meanwhile, this process will:
 # 
 #     A.  Get an exclusive lock on test.db
-#     B.  Attempt to read from test2.db but get an SQLITE_BUSY error.
+#     B.  Attempt to read from test2.db but get an SQLITE4_BUSY error.
 #     C.  Commit the changes to test.db thus alloing the other process
 #         to continue.
 #

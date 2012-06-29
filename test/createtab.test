@@ -60,7 +60,7 @@ for {set av 0} {$av<=$upperBound} {incr av} {
   do_test createtab-$av.3 {
     set STMT [sqlite4_prepare db {SELECT x FROM t1} -1 TAIL]
     sqlite4_step $STMT
-  } {SQLITE_ROW}
+  } {SQLITE4_ROW}
   do_test createtab-$av.4 {
     sqlite4_column_int $STMT 0
   } {1}
@@ -82,7 +82,7 @@ for {set av 0} {$av<=$upperBound} {incr av} {
   } {1}
   do_test createtab-$av.7 {
     sqlite4_step $STMT
-  } {SQLITE_ROW}
+  } {SQLITE4_ROW}
   do_test createtab-$av.8 {
     sqlite4_column_int $STMT 0
   } {2}
@@ -102,7 +102,7 @@ for {set av 0} {$av<=$upperBound} {incr av} {
   } {2}
   do_test createtab-$av.13 {
     sqlite4_step $STMT
-  } {SQLITE_ROW}
+  } {SQLITE4_ROW}
   do_test createtab-$av.14 {
     sqlite4_column_int $STMT 0
   } {3}
@@ -121,7 +121,7 @@ for {set av 0} {$av<=$upperBound} {incr av} {
   } {3}
   do_test createtab-$av.23 {
     sqlite4_step $STMT
-  } {SQLITE_ROW}
+  } {SQLITE4_ROW}
   do_test createtab-$av.24 {
     sqlite4_column_int $STMT 0
   } {4}
@@ -130,10 +130,10 @@ for {set av 0} {$av<=$upperBound} {incr av} {
   #
   do_test createtab-$av.30 {
     sqlite4_step $STMT
-  } {SQLITE_DONE}
+  } {SQLITE4_DONE}
   do_test createtab-$av.31 {
     sqlite4_finalize $STMT
-  } {SQLITE_OK}
+  } {SQLITE4_OK}
   do_test createtab-$av.32 {
     execsql {
       SELECT name FROM sqlite_master WHERE type='table' ORDER BY 1

@@ -36,7 +36,7 @@ proc mutex_counters {varname} {
 }
 
 #-------------------------------------------------------------------------
-# Tests mutex1-1.* test that sqlite4_config() returns SQLITE_MISUSE if
+# Tests mutex1-1.* test that sqlite4_config() returns SQLITE4_MISUSE if
 # is called at the wrong time. And that the first time sqlite4_initialize 
 # is called it obtains the 'static_master' mutex 3 times and a recursive
 # mutex (sqlite4Config.pInitMutex) twice. Subsequent calls are no-ops 
@@ -44,25 +44,25 @@ proc mutex_counters {varname} {
 #
 do_test mutex1-1.0 {
   install_mutex_counters 1
-} {SQLITE_MISUSE}
+} {SQLITE4_MISUSE}
 
 do_test mutex1-1.1 {
   db close
   install_mutex_counters 1
-} {SQLITE_MISUSE}
+} {SQLITE4_MISUSE}
 
 do_test mutex1-1.2 {
   sqlite4_shutdown
   install_mutex_counters 1
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test mutex1-1.3 {
   install_mutex_counters 0
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test mutex1-1.4 {
   install_mutex_counters 1
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test mutex1-1.5 {
   mutex_counters counters
@@ -71,7 +71,7 @@ do_test mutex1-1.5 {
 
 do_test mutex1-1.6 {
   sqlite4_initialize
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test mutex1-1.7 {
   mutex_counters counters
@@ -82,7 +82,7 @@ do_test mutex1-1.7 {
 do_test mutex1-1.8 {
   clear_mutex_counters
   sqlite4_initialize
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 do_test mutex1-1.9 {
   mutex_counters counters
@@ -119,7 +119,7 @@ do_test mutex1-X {
   clear_mutex_counters
   install_mutex_counters 0
   sqlite4_initialize
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 autoinstall_test_functions
 finish_test

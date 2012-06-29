@@ -42,12 +42,12 @@ int sqlite4VdbeCreateDecoder(
 
   p = sqlite4DbMallocZero(db, sizeof(*p));
   *ppOut = p;
-  if( p==0 ) return SQLITE_NOMEM;
+  if( p==0 ) return SQLITE4_NOMEM;
   p->db = db;
   p->a = aIn;
   p->n = nIn;
   p->mxCol = mxCol;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -58,7 +58,7 @@ int sqlite4VdbeDestroyDecoder(ValueDecoder *p){
   if( p ){
     sqlite4DbFree(p->db, p);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -83,19 +83,19 @@ int sqlite4VdbeDecodeValue(
   sqlite4VdbeMemSetNull(pOut);
   assert( iVal<=p->mxCol );
   n = sqlite4GetVarint64(p->a, p->n, &ofst);
-  if( n==0 ) return SQLITE_CORRUPT;
+  if( n==0 ) return SQLITE4_CORRUPT;
   ofst += n;
   endHdr = ofst;
-  if( endHdr>p->n ) return SQLITE_CORRUPT;
+  if( endHdr>p->n ) return SQLITE4_CORRUPT;
   for(i=0; i<=iVal && n<endHdr; i++){
     sz = sqlite4GetVarint64(p->a+n, p->n-n, &type);
-    if( sz==0 ) return SQLITE_CORRUPT;
+    if( sz==0 ) return SQLITE4_CORRUPT;
     n += sz;
     if( type>=22 ){
       cclass = (type-22)%3;
       if( cclass==2 ){
          sz = sqlite4GetVarint64(p->a+n, p->n-n, &subtype);
-         if( sz==0 ) return SQLITE_CORRUPT;
+         if( sz==0 ) return SQLITE4_CORRUPT;
          n += sz;
       }
       size = (type-22)/3;
@@ -126,7 +126,7 @@ int sqlite4VdbeDecodeValue(
       n = sqlite4GetVarint64(p->a+ofst, p->n-ofst, &x);
       e = (int)x;
       n += sqlite4GetVarint64(p->a+ofst+n, p->n-(ofst+n), &x);
-      if( n!=size ) return SQLITE_CORRUPT;
+      if( n!=size ) return SQLITE4_CORRUPT;
       r = (double)x;
       if( e&1 ) r = -r;
       if( e&2 ){
@@ -141,17 +141,17 @@ int sqlite4VdbeDecodeValue(
       sqlite4VdbeMemSetDouble(pOut, r);
     }else if( cclass==0 ){
       if( size==0 ){
-        sqlite4VdbeMemSetStr(pOut, "", 0, SQLITE_UTF8, SQLITE_TRANSIENT);
+        sqlite4VdbeMemSetStr(pOut, "", 0, SQLITE4_UTF8, SQLITE4_TRANSIENT);
       }else if( p->a[ofst]>0x02 ){
         sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 
-                             SQLITE_UTF8, SQLITE_TRANSIENT);
+                             SQLITE4_UTF8, SQLITE4_TRANSIENT);
       }else{
-        static const u8 enc[] = { SQLITE_UTF8, SQLITE_UTF16LE, SQLITE_UTF16BE };
+        static const u8 enc[] = { SQLITE4_UTF8, SQLITE4_UTF16LE, SQLITE4_UTF16BE };
         sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst+1), size-1, 
-                             enc[p->a[ofst]], SQLITE_TRANSIENT);
+                             enc[p->a[ofst]], SQLITE4_TRANSIENT);
       }
     }else{
-      sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0, SQLITE_TRANSIENT);
+      sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0, SQLITE4_TRANSIENT);
     }
   }
   if( i<iVal ){
@@ -161,7 +161,7 @@ int sqlite4VdbeDecodeValue(
       sqlite4VdbeMemSetNull(pOut);
     }
   }
-  return SQLITE_OK; 
+  return SQLITE4_OK; 
 }
 
 /*
@@ -197,7 +197,7 @@ int sqlite4VdbeEncodeData(
   int *pnOut                  /* Bytes of content in pzOut */
 ){
   int i, j;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int nHdr;
   int n;
   u8 *aOut = 0;               /* The result */
@@ -210,10 +210,10 @@ int sqlite4VdbeEncodeData(
   } *aAux;
 
   aAux = sqlite4StackAllocZero(db, sizeof(*aAux)*nIn);
-  if( aAux==0 ) return SQLITE_NOMEM;
+  if( aAux==0 ) return SQLITE4_NOMEM;
   aOut = sqlite4DbMallocZero(db, (nIn+1)*9);
   if( aOut==0 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
     goto vdbeEncodeData_error;
   }
   nOut = 9;
@@ -261,7 +261,7 @@ int sqlite4VdbeEncodeData(
       nPayload += n;
     }else if( flags & MEM_Str ){
       n = aIn[i].n;
-      if( n && (encoding!=SQLITE_UTF8 || aIn[i].z[0]<2) ) n++;
+      if( n && (encoding!=SQLITE4_UTF8 || aIn[i].z[0]<2) ) n++;
       nPayload += n;
       nOut += sqlite4PutVarint64(aOut+nOut, 22+3*(sqlite4_int64)n);
     }else{
@@ -276,7 +276,7 @@ int sqlite4VdbeEncodeData(
   for(i=n, j=9; j<nOut; j++) aOut[i++] = aOut[j];
   nOut = i;
   aOut = sqlite4DbReallocOrFree(db, aOut, nOut + nPayload);
-  if( aOut==0 ){ rc = SQLITE_NOMEM; goto vdbeEncodeData_error; }
+  if( aOut==0 ){ rc = SQLITE4_NOMEM; goto vdbeEncodeData_error; }
   for(i=0; i<nIn; i++){
     int flags = aIn[i].flags;
     if( flags & MEM_Null ){
@@ -296,8 +296,8 @@ int sqlite4VdbeEncodeData(
     }else if( flags & MEM_Str ){
       n = aIn[i].n;
       if( n ){
-        if( encoding==SQLITE_UTF16LE ) aOut[nOut++] = 1;
-        else if( encoding==SQLITE_UTF16BE ) aOut[nOut++] = 2;
+        if( encoding==SQLITE4_UTF16LE ) aOut[nOut++] = 1;
+        else if( encoding==SQLITE4_UTF16BE ) aOut[nOut++] = 2;
         else if( aIn[i].z[0]<2 ) aOut[nOut++] = 0;
         memcpy(aOut+nOut, aIn[i].z, n);
         nOut += n;
@@ -312,7 +312,7 @@ int sqlite4VdbeEncodeData(
   *pzOut = aOut;
   *pnOut = nOut;
   sqlite4StackFree(db, aAux);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 
 vdbeEncodeData_error:
   sqlite4StackFree(db, aAux);
@@ -342,12 +342,12 @@ static int enlargeEncoderAllocation(KeyEncoder *p, int needed){
     if( aNew==0 ){
       sqlite4DbFree(p->db, p->aOut);
       memset(p, 0, sizeof(*p));
-      return SQLITE_NOMEM;
+      return SQLITE4_NOMEM;
     }
     p->aOut = aNew;
     p->nAlloc = sqlite4DbMallocSize(p->db, p->aOut);
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -512,12 +512,12 @@ static int encodeOneKeyValue(
   int n;
   int iStart = p->nOut;
   if( flags & MEM_Null ){
-    if( enlargeEncoderAllocation(p, 1) ) return SQLITE_NOMEM;
+    if( enlargeEncoderAllocation(p, 1) ) return SQLITE4_NOMEM;
     p->aOut[p->nOut++] = 0x05;   /* NULL */
   }else
   if( flags & MEM_Int ){
     sqlite4_int64 v = pMem->u.i;
-    if( enlargeEncoderAllocation(p, 11) ) return SQLITE_NOMEM;
+    if( enlargeEncoderAllocation(p, 11) ) return SQLITE4_NOMEM;
     if( v==0 ){
       p->aOut[p->nOut++] = 0x15;  /* Numeric zero */
     }else if( v<0 ){
@@ -535,7 +535,7 @@ static int encodeOneKeyValue(
   }else
   if( flags & MEM_Real ){
     double r = pMem->r;
-    if( enlargeEncoderAllocation(p, 16) ) return SQLITE_NOMEM;
+    if( enlargeEncoderAllocation(p, 16) ) return SQLITE4_NOMEM;
     if( r==0.0 ){
       p->aOut[p->nOut++] = 0x15;  /* Numeric zero */
     }else if( sqlite4IsNaN(r) ){
@@ -571,10 +571,10 @@ static int encodeOneKeyValue(
     /* Figure out the current encoding of pMem, and the encoding required
     ** (either the encoding specified by the collation sequence, or utf-8
     ** if there is no collation sequence).  */
-    enc = ((pColl && pColl->xMkKey) ? pColl->enc : SQLITE_UTF8);
-    assert( enc==SQLITE_UTF8 || enc==SQLITE_UTF16LE || enc==SQLITE_UTF16BE );
-    assert( pMem->enc==SQLITE_UTF8 || pMem->enc==SQLITE_UTF16LE 
-         || pMem->enc==SQLITE_UTF16BE 
+    enc = ((pColl && pColl->xMkKey) ? pColl->enc : SQLITE4_UTF8);
+    assert( enc==SQLITE4_UTF8 || enc==SQLITE4_UTF16LE || enc==SQLITE4_UTF16BE );
+    assert( pMem->enc==SQLITE4_UTF8 || pMem->enc==SQLITE4_UTF16LE 
+         || pMem->enc==SQLITE4_UTF16BE 
     );
     
     /* If necessary, convert the encoding of the input text. */
@@ -588,7 +588,7 @@ static int encodeOneKeyValue(
     }
 
     /* Write the encoded key to the output buffer. */
-    if( enlargeEncoderAllocation(p, pMem->n*4 + 2) ) return SQLITE_NOMEM;
+    if( enlargeEncoderAllocation(p, pMem->n*4 + 2) ) return SQLITE4_NOMEM;
     p->aOut[p->nOut++] = 0x24;   /* Text */
     if( pColl==0 || pColl->xMkKey==0 ){
       memcpy(p->aOut+p->nOut, pEnc->z, pEnc->n);
@@ -597,7 +597,7 @@ static int encodeOneKeyValue(
       int nSpc = p->nAlloc-p->nOut;
       n = pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, nSpc, p->aOut+p->nOut);
       if( n>nSpc ){
-        if( enlargeEncoderAllocation(p, n) ) return SQLITE_NOMEM;
+        if( enlargeEncoderAllocation(p, n) ) return SQLITE4_NOMEM;
         n + pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, n, p->aOut+p->nOut);
       }
       p->nOut += n;
@@ -616,7 +616,7 @@ static int encodeOneKeyValue(
     a = (u8*)pMem->z;
     s = 1;
     t = 0;
-    if( enlargeEncoderAllocation(p, (n*8+6)/7 + 2) ) return SQLITE_NOMEM;
+    if( enlargeEncoderAllocation(p, (n*8+6)/7 + 2) ) return SQLITE4_NOMEM;
     p->aOut[p->nOut++] = 0x25;   /* Blob */
      for(i=0; i<n; i++){
       unsigned char x = a[i];
@@ -633,10 +633,10 @@ static int encodeOneKeyValue(
     if( s>1 ) p->aOut[p->nOut++] = 0x80 | t;
     p->aOut[p->nOut++] = 0x00;
   }
-  if( sortOrder==SQLITE_SO_DESC ){
+  if( sortOrder==SQLITE4_SO_DESC ){
     for(i=iStart; i<p->nOut; i++) p->aOut[i] ^= 0xff;
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -730,7 +730,7 @@ int sqlite4VdbeEncodeKey(
   int nExtra                   /* See above */
 ){
   int i;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   KeyEncoder x;
   u8 *so;
   CollSeq **aColl;
@@ -747,15 +747,15 @@ int sqlite4VdbeEncodeKey(
   *paOut = 0;
   *pnOut = 0;
 
-  if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE_NOMEM;
+  if( enlargeEncoderAllocation(&x, (nIn+1)*10) ) return SQLITE4_NOMEM;
   x.nOut = sqlite4PutVarint64(x.aOut, iTabno);
   aColl = pKeyInfo->aColl;
   so = pKeyInfo->aSortOrder;
-  for(i=0; i<nIn && rc==SQLITE_OK; i++){
-    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE_SO_ASC, aColl[i]);
+  for(i=0; i<nIn && rc==SQLITE4_OK; i++){
+    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE4_SO_ASC, aColl[i]);
   }
 
-  if( rc==SQLITE_OK && nExtra ){ rc = enlargeEncoderAllocation(&x, nExtra); }
+  if( rc==SQLITE4_OK && nExtra ){ rc = enlargeEncoderAllocation(&x, nExtra); }
   if( rc ){
     sqlite4DbFree(db, x.aOut);
   }else{

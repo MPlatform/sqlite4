@@ -82,13 +82,13 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
   set sqlite_hostid_num 1
 
   set using_proxy 0
-  foreach {name value} [array get env SQLITE_FORCE_PROXY_LOCKING] {
+  foreach {name value} [array get env SQLITE4_FORCE_PROXY_LOCKING] {
     set using_proxy $value
   }
 
   # Test the lock_proxy_file pragmas.
   #
-  set env(SQLITE_FORCE_PROXY_LOCKING) "1"
+  set env(SQLITE4_FORCE_PROXY_LOCKING) "1"
 
   do_test lock6-1.1 {
     set ::tf1 [launch_testfixture]
@@ -157,7 +157,7 @@ ifcapable lock_proxy_pragmas&&prefer_proxy_locking {
   } {}
   
   catch {close $::tf1}
-  set env(SQLITE_FORCE_PROXY_LOCKING) $using_proxy
+  set env(SQLITE4_FORCE_PROXY_LOCKING) $using_proxy
   set sqlite_hostid_num 0
 }
       

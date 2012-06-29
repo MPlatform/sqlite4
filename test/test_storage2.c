@@ -87,17 +87,17 @@ static int kvwrapReplace(
 ** Create a new cursor object.
 */
 static int kvwrapOpenCursor(KVStore *pKVStore, KVCursor **ppKVCursor){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   KVWrap *p = (KVWrap *)pKVStore;
   KVWrapCsr *pCsr;
 
   pCsr = (KVWrapCsr *)sqlite4_malloc(0, sizeof(KVWrapCsr));
   if( pCsr==0 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }else{
     memset(pCsr, 0, sizeof(KVWrapCsr));
     rc = p->pReal->pStoreVfunc->xOpenCursor(p->pReal, &pCsr->pReal);
-    if( rc!=SQLITE_OK ){
+    if( rc!=SQLITE4_OK ){
       sqlite4_free(0, pCsr);
       pCsr = 0;
     }else{
@@ -265,16 +265,16 @@ static int newFileStorage(
   };
 
   KVWrap *pNew;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
 
   pNew = (KVWrap *)sqlite4_malloc(0, sizeof(KVWrap));
   if( pNew==0 ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
   }else{
     memset(pNew, 0, sizeof(KVWrap));
     pNew->base.pStoreVfunc = &kvwrapMethods;
     rc = kvwg.xFactory(pEnv, &pNew->pReal, zName, openFlags);
-    if( rc!=SQLITE_OK ){
+    if( rc!=SQLITE4_OK ){
       sqlite4_free(0, pNew);
       pNew = 0;
     }
@@ -291,8 +291,8 @@ static int kvwrap_install_cmd(Tcl_Interp *interp, int objc, Tcl_Obj **objv){
   }
 
   if( kvwg.xFactory==0 ){
-    sqlite4_env_config(0, SQLITE_ENVCONFIG_KVSTORE_GET, "main", &kvwg.xFactory);
-    sqlite4_env_config(0, SQLITE_ENVCONFIG_KVSTORE_PUSH, "main",newFileStorage);
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_KVSTORE_GET, "main", &kvwg.xFactory);
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_KVSTORE_PUSH, "main",newFileStorage);
   }
   return TCL_OK;
 }

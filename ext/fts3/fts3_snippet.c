@@ -12,7 +12,7 @@
 */
 
 #include "fts3Int.h"
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
 
 #include <string.h>
 #include <assert.h>
@@ -147,7 +147,7 @@ static int fts3ExprIterate2(
   if( eType!=FTSQUERY_PHRASE ){
     assert( pExpr->pLeft && pExpr->pRight );
     rc = fts3ExprIterate2(pExpr->pLeft, piPhrase, x, pCtx);
-    if( rc==SQLITE_OK && eType!=FTSQUERY_NOT ){
+    if( rc==SQLITE4_OK && eType!=FTSQUERY_NOT ){
       rc = fts3ExprIterate2(pExpr->pRight, piPhrase, x, pCtx);
     }
   }else{
@@ -162,9 +162,9 @@ static int fts3ExprIterate2(
 ** are part of a sub-tree that is the right-hand-side of a NOT operator.
 ** For each phrase node found, the supplied callback function is invoked.
 **
-** If the callback function returns anything other than SQLITE_OK, 
+** If the callback function returns anything other than SQLITE4_OK, 
 ** the iteration is abandoned and the error code returned immediately.
-** Otherwise, SQLITE_OK is returned after a callback has been made for
+** Otherwise, SQLITE4_OK is returned after a callback has been made for
 ** all eligible phrase nodes.
 */
 static int fts3ExprIterate(
@@ -182,7 +182,7 @@ static int fts3ExprIterate(
 ** fts3ExprLoadDoclists().
 */
 static int fts3ExprLoadDoclistsCb(Fts3Expr *pExpr, int iPhrase, void *ctx){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   Fts3Phrase *pPhrase = pExpr->pPhrase;
   LoadDoclistCtx *p = (LoadDoclistCtx *)ctx;
 
@@ -222,7 +222,7 @@ static int fts3ExprPhraseCountCb(Fts3Expr *pExpr, int iPhrase, void *ctx){
   (*(int *)ctx)++;
   UNUSED_PARAMETER(pExpr);
   UNUSED_PARAMETER(iPhrase);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 static int fts3ExprPhraseCount(Fts3Expr *pExpr){
   int nPhrase = 0;
@@ -377,7 +377,7 @@ static int fts3SnippetFindPositions(Fts3Expr *pExpr, int iPhrase, void *ctx){
     assert( pPhrase->pList==0 && pPhrase->pHead==0 && pPhrase->pTail==0 );
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -417,7 +417,7 @@ static int fts3BestSnippet(
   ** callback makes sure the doclists are loaded for each phrase.
   */
   rc = fts3ExprLoadDoclists(pCsr, &nList, 0);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return rc;
   }
 
@@ -427,7 +427,7 @@ static int fts3BestSnippet(
   nByte = sizeof(SnippetPhrase) * nList;
   sIter.aPhrase = (SnippetPhrase *)sqlite4_malloc(nByte);
   if( !sIter.aPhrase ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   memset(sIter.aPhrase, 0, nByte);
 
@@ -469,7 +469,7 @@ static int fts3BestSnippet(
 
   sqlite4_free(sIter.aPhrase);
   *piScore = iBestScore;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 
@@ -496,7 +496,7 @@ static int fts3StringAppend(
     int nAlloc = pStr->nAlloc+nAppend+100;
     char *zNew = sqlite4_realloc(pStr->z, nAlloc);
     if( !zNew ){
-      return SQLITE_NOMEM;
+      return SQLITE4_NOMEM;
     }
     pStr->z = zNew;
     pStr->nAlloc = nAlloc;
@@ -507,7 +507,7 @@ static int fts3StringAppend(
   pStr->n += nAppend;
   pStr->z[pStr->n] = '\0';
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -568,18 +568,18 @@ static int fts3SnippetShift(
       ** or more tokens in zDoc/nDoc.
       */
       rc = pMod->xOpen(pTab->pTokenizer, zDoc, nDoc, &pC);
-      if( rc!=SQLITE_OK ){
+      if( rc!=SQLITE4_OK ){
         return rc;
       }
       pC->pTokenizer = pTab->pTokenizer;
-      while( rc==SQLITE_OK && iCurrent<(nSnippet+nDesired) ){
+      while( rc==SQLITE4_OK && iCurrent<(nSnippet+nDesired) ){
         const char *ZDUMMY; int DUMMY1, DUMMY2, DUMMY3;
         rc = pMod->xNext(pC, &ZDUMMY, &DUMMY1, &DUMMY2, &DUMMY3, &iCurrent);
       }
       pMod->xClose(pC);
-      if( rc!=SQLITE_OK && rc!=SQLITE_DONE ){ return rc; }
+      if( rc!=SQLITE4_OK && rc!=SQLITE4_DONE ){ return rc; }
 
-      nShift = (rc==SQLITE_DONE)+iCurrent-nSnippet;
+      nShift = (rc==SQLITE4_DONE)+iCurrent-nSnippet;
       assert( nShift<=nDesired );
       if( nShift>0 ){
         *piPos += nShift;
@@ -587,7 +587,7 @@ static int fts3SnippetShift(
       }
     }
   }
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -622,29 +622,29 @@ static int fts3SnippetText(
   
   zDoc = (const char *)sqlite4_column_text(pCsr->pStmt, iCol);
   if( zDoc==0 ){
-    if( sqlite4_column_type(pCsr->pStmt, iCol)!=SQLITE_NULL ){
-      return SQLITE_NOMEM;
+    if( sqlite4_column_type(pCsr->pStmt, iCol)!=SQLITE4_NULL ){
+      return SQLITE4_NOMEM;
     }
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
   nDoc = sqlite4_column_bytes(pCsr->pStmt, iCol);
 
   /* Open a token cursor on the document. */
   pMod = (sqlite4_tokenizer_module *)pTab->pTokenizer->pModule;
   rc = pMod->xOpen(pTab->pTokenizer, zDoc, nDoc, &pC);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     return rc;
   }
   pC->pTokenizer = pTab->pTokenizer;
 
-  while( rc==SQLITE_OK ){
+  while( rc==SQLITE4_OK ){
     int iBegin;                   /* Offset in zDoc of start of token */
     int iFin;                     /* Offset in zDoc of end of token */
     int isHighlight;              /* True for highlighted terms */
 
     rc = pMod->xNext(pC, &ZDUMMY, &DUMMY1, &iBegin, &iFin, &iCurrent);
-    if( rc!=SQLITE_OK ){
-      if( rc==SQLITE_DONE ){
+    if( rc!=SQLITE4_OK ){
+      if( rc==SQLITE4_DONE ){
         /* Special case - the last token of the snippet is also the last token
         ** of the column. Append any punctuation that occurred between the end
         ** of the previous token and the end of the document to the output. 
@@ -664,10 +664,10 @@ static int fts3SnippetText(
       ** required. They are required if (a) this is not the first fragment,
       ** or (b) this fragment does not begin at position 0 of its column. 
       */
-      if( rc==SQLITE_OK && (iPos>0 || iFragment>0) ){
+      if( rc==SQLITE4_OK && (iPos>0 || iFragment>0) ){
         rc = fts3StringAppend(pOut, zEllipsis, -1);
       }
-      if( rc!=SQLITE_OK || iCurrent<iPos ) continue;
+      if( rc!=SQLITE4_OK || iCurrent<iPos ) continue;
     }
 
     if( iCurrent>=(iPos+nSnippet) ){
@@ -681,9 +681,9 @@ static int fts3SnippetText(
     isHighlight = (hlmask & ((u64)1 << (iCurrent-iPos)))!=0;
 
     if( iCurrent>iPos ) rc = fts3StringAppend(pOut, &zDoc[iEnd], iBegin-iEnd);
-    if( rc==SQLITE_OK && isHighlight ) rc = fts3StringAppend(pOut, zOpen, -1);
-    if( rc==SQLITE_OK ) rc = fts3StringAppend(pOut, &zDoc[iBegin], iFin-iBegin);
-    if( rc==SQLITE_OK && isHighlight ) rc = fts3StringAppend(pOut, zClose, -1);
+    if( rc==SQLITE4_OK && isHighlight ) rc = fts3StringAppend(pOut, zOpen, -1);
+    if( rc==SQLITE4_OK ) rc = fts3StringAppend(pOut, &zDoc[iBegin], iFin-iBegin);
+    if( rc==SQLITE4_OK && isHighlight ) rc = fts3StringAppend(pOut, zClose, -1);
 
     iEnd = iFin;
   }
@@ -783,7 +783,7 @@ static int fts3ExprLocalHitsCb(
     }
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 static int fts3MatchinfoCheck(
@@ -799,10 +799,10 @@ static int fts3MatchinfoCheck(
    || (cArg==FTS3_MATCHINFO_LCS)
    || (cArg==FTS3_MATCHINFO_HITS)
   ){
-    return SQLITE_OK;
+    return SQLITE4_OK;
   }
   *pzErr = sqlite4_mprintf("unrecognized matchinfo request: %c", cArg);
-  return SQLITE_ERROR;
+  return SQLITE4_ERROR;
 }
 
 static int fts3MatchinfoSize(MatchInfo *pInfo, char cArg){
@@ -842,7 +842,7 @@ static int fts3MatchinfoSelectDoctotal(
 
   if( !*ppStmt ){
     int rc = sqlite4Fts3SelectDoctotal(pTab, ppStmt);
-    if( rc!=SQLITE_OK ) return rc;
+    if( rc!=SQLITE4_OK ) return rc;
   }
   pStmt = *ppStmt;
   assert( sqlite4_data_count(pStmt)==1 );
@@ -853,7 +853,7 @@ static int fts3MatchinfoSelectDoctotal(
   *pnDoc = (u32)nDoc;
 
   if( paLen ) *paLen = a;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -883,7 +883,7 @@ static int fts3MatchinfoLcsCb(
 ){
   LcsIterator *aIter = (LcsIterator *)pCtx;
   aIter[iPhrase].pExpr = pExpr;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -913,7 +913,7 @@ static int fts3LcsIteratorAdvance(LcsIterator *pIter){
 **
 ** If the call is successful, the longest-common-substring lengths for each
 ** column are written into the first nCol elements of the pInfo->aMatchinfo[] 
-** array before returning. SQLITE_OK is returned in this case.
+** array before returning. SQLITE4_OK is returned in this case.
 **
 ** Otherwise, if an error occurs, an SQLite error code is returned and the
 ** data written to the first nCol elements of pInfo->aMatchinfo[] is 
@@ -929,7 +929,7 @@ static int fts3MatchinfoLcs(Fts3Cursor *pCsr, MatchInfo *pInfo){
   ** contains one element for each matchable phrase in the query.
   **/
   aIter = sqlite4_malloc(sizeof(LcsIterator) * pCsr->nPhrase);
-  if( !aIter ) return SQLITE_NOMEM;
+  if( !aIter ) return SQLITE4_NOMEM;
   memset(aIter, 0, sizeof(LcsIterator) * pCsr->nPhrase);
   (void)fts3ExprIterate(pCsr->pExpr, fts3MatchinfoLcsCb, (void*)aIter);
 
@@ -981,7 +981,7 @@ static int fts3MatchinfoLcs(Fts3Cursor *pCsr, MatchInfo *pInfo){
   }
 
   sqlite4_free(aIter);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -997,8 +997,8 @@ static int fts3MatchinfoLcs(Fts3Cursor *pCsr, MatchInfo *pInfo){
 ** rows (i.e. FTS3_MATCHINFO_NPHRASE, NCOL, NDOC, AVGLENGTH and part of HITS)
 ** have already been populated.
 **
-** Return SQLITE_OK if successful, or an SQLite error code if an error 
-** occurs. If a value other than SQLITE_OK is returned, the state the
+** Return SQLITE4_OK if successful, or an SQLite error code if an error 
+** occurs. If a value other than SQLITE4_OK is returned, the state the
 ** pInfo->aMatchinfo[] buffer is left in is undefined.
 */
 static int fts3MatchinfoValues(
@@ -1007,12 +1007,12 @@ static int fts3MatchinfoValues(
   MatchInfo *pInfo,               /* Matchinfo context object */
   const char *zArg                /* Matchinfo format string */
 ){
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int i;
   Fts3Table *pTab = (Fts3Table *)pCsr->base.pVtab;
   sqlite4_stmt *pSelect = 0;
 
-  for(i=0; rc==SQLITE_OK && zArg[i]; i++){
+  for(i=0; rc==SQLITE4_OK && zArg[i]; i++){
 
     switch( zArg[i] ){
       case FTS3_MATCHINFO_NPHRASE:
@@ -1037,7 +1037,7 @@ static int fts3MatchinfoValues(
           const char *a;          /* Aggregate column length array */
 
           rc = fts3MatchinfoSelectDoctotal(pTab, &pSelect, &nDoc, &a);
-          if( rc==SQLITE_OK ){
+          if( rc==SQLITE4_OK ){
             int iCol;
             for(iCol=0; iCol<pInfo->nCol; iCol++){
               u32 iVal;
@@ -1053,7 +1053,7 @@ static int fts3MatchinfoValues(
       case FTS3_MATCHINFO_LENGTH: {
         sqlite4_stmt *pSelectDocsize = 0;
         rc = sqlite4Fts3SelectDocsize(pTab, pCsr->iPrevId, &pSelectDocsize);
-        if( rc==SQLITE_OK ){
+        if( rc==SQLITE4_OK ){
           int iCol;
           const char *a = sqlite4_column_blob(pSelectDocsize, 0);
           for(iCol=0; iCol<pInfo->nCol; iCol++){
@@ -1068,7 +1068,7 @@ static int fts3MatchinfoValues(
 
       case FTS3_MATCHINFO_LCS:
         rc = fts3ExprLoadDoclists(pCsr, 0, 0);
-        if( rc==SQLITE_OK ){
+        if( rc==SQLITE4_OK ){
           rc = fts3MatchinfoLcs(pCsr, pInfo);
         }
         break;
@@ -1078,14 +1078,14 @@ static int fts3MatchinfoValues(
         assert( zArg[i]==FTS3_MATCHINFO_HITS );
         pExpr = pCsr->pExpr;
         rc = fts3ExprLoadDoclists(pCsr, 0, 0);
-        if( rc!=SQLITE_OK ) break;
+        if( rc!=SQLITE4_OK ) break;
         if( bGlobal ){
           if( pCsr->pDeferred ){
             rc = fts3MatchinfoSelectDoctotal(pTab, &pSelect, &pInfo->nDoc, 0);
-            if( rc!=SQLITE_OK ) break;
+            if( rc!=SQLITE4_OK ) break;
           }
           rc = fts3ExprIterate(pExpr, fts3ExprGlobalHitsCb,(void*)pInfo);
-          if( rc!=SQLITE_OK ) break;
+          if( rc!=SQLITE4_OK ) break;
         }
         (void)fts3ExprIterate(pExpr, fts3ExprLocalHitsCb,(void*)pInfo);
         break;
@@ -1110,7 +1110,7 @@ static int fts3GetMatchinfo(
 ){
   MatchInfo sInfo;
   Fts3Table *pTab = (Fts3Table *)pCsr->base.pVtab;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int bGlobal = 0;                /* Collect 'global' stats as well as local */
 
   memset(&sInfo, 0, sizeof(MatchInfo));
@@ -1149,7 +1149,7 @@ static int fts3GetMatchinfo(
     /* Allocate space for Fts3Cursor.aMatchinfo[] and Fts3Cursor.zMatchinfo. */
     nArg = (int)strlen(zArg);
     pCsr->aMatchinfo = (u32 *)sqlite4_malloc(sizeof(u32)*nMatchinfo + nArg + 1);
-    if( !pCsr->aMatchinfo ) return SQLITE_NOMEM;
+    if( !pCsr->aMatchinfo ) return SQLITE4_NOMEM;
 
     pCsr->zMatchinfo = (char *)&pCsr->aMatchinfo[nMatchinfo];
     pCsr->nMatchinfo = nMatchinfo;
@@ -1182,7 +1182,7 @@ void sqlite4Fts3Snippet(
   int nToken                      /* Approximate number of tokens in snippet */
 ){
   Fts3Table *pTab = (Fts3Table *)pCsr->base.pVtab;
-  int rc = SQLITE_OK;
+  int rc = SQLITE4_OK;
   int i;
   StrBuffer res = {0, 0, 0};
 
@@ -1199,7 +1199,7 @@ void sqlite4Fts3Snippet(
   int nFToken = -1;               /* Number of tokens in each fragment */
 
   if( !pCsr->pExpr ){
-    sqlite4_result_text(pCtx, "", 0, SQLITE_STATIC);
+    sqlite4_result_text(pCtx, "", 0, SQLITE4_STATIC);
     return;
   }
 
@@ -1233,7 +1233,7 @@ void sqlite4Fts3Snippet(
 
         /* Find the best snippet of nFToken tokens in column iRead. */
         rc = fts3BestSnippet(nFToken, pCsr, iRead, mCovered, &mSeen, &sF, &iS);
-        if( rc!=SQLITE_OK ){
+        if( rc!=SQLITE4_OK ){
           goto snippet_out;
         }
         if( iS>iBestScore ){
@@ -1254,7 +1254,7 @@ void sqlite4Fts3Snippet(
 
   assert( nFToken>0 );
 
-  for(i=0; i<nSnippet && rc==SQLITE_OK; i++){
+  for(i=0; i<nSnippet && rc==SQLITE4_OK; i++){
     rc = fts3SnippetText(pCsr, &aSnippet[i], 
         i, (i==nSnippet-1), nFToken, zStart, zEnd, zEllipsis, &res
     );
@@ -1262,7 +1262,7 @@ void sqlite4Fts3Snippet(
 
  snippet_out:
   sqlite4Fts3SegmentsClose(pTab);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     sqlite4_result_error_code(pCtx, rc);
     sqlite4_free(res.z);
   }else{
@@ -1313,7 +1313,7 @@ static int fts3ExprTermOffsetInit(Fts3Expr *pExpr, int iPhrase, void *ctx){
     pT->iPos = iPos;
   }
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -1334,7 +1334,7 @@ void sqlite4Fts3Offsets(
   TermOffsetCtx sCtx;             /* Context for fts3ExprTermOffsetInit() */
 
   if( !pCsr->pExpr ){
-    sqlite4_result_text(pCtx, "", 0, SQLITE_STATIC);
+    sqlite4_result_text(pCtx, "", 0, SQLITE4_STATIC);
     return;
   }
 
@@ -1343,12 +1343,12 @@ void sqlite4Fts3Offsets(
 
   /* Count the number of terms in the query */
   rc = fts3ExprLoadDoclists(pCsr, 0, &nToken);
-  if( rc!=SQLITE_OK ) goto offsets_out;
+  if( rc!=SQLITE4_OK ) goto offsets_out;
 
   /* Allocate the array of TermOffset iterators. */
   sCtx.aTerm = (TermOffset *)sqlite4_malloc(sizeof(TermOffset)*nToken);
   if( 0==sCtx.aTerm ){
-    rc = SQLITE_NOMEM;
+    rc = SQLITE4_NOMEM;
     goto offsets_out;
   }
   sCtx.iDocid = pCsr->iPrevId;
@@ -1376,26 +1376,26 @@ void sqlite4Fts3Offsets(
     /* Retreive the text stored in column iCol. If an SQL NULL is stored 
     ** in column iCol, jump immediately to the next iteration of the loop.
     ** If an OOM occurs while retrieving the data (this can happen if SQLite
-    ** needs to transform the data from utf-16 to utf-8), return SQLITE_NOMEM 
+    ** needs to transform the data from utf-16 to utf-8), return SQLITE4_NOMEM 
     ** to the caller. 
     */
     zDoc = (const char *)sqlite4_column_text(pCsr->pStmt, iCol+1);
     nDoc = sqlite4_column_bytes(pCsr->pStmt, iCol+1);
     if( zDoc==0 ){
-      if( sqlite4_column_type(pCsr->pStmt, iCol+1)==SQLITE_NULL ){
+      if( sqlite4_column_type(pCsr->pStmt, iCol+1)==SQLITE4_NULL ){
         continue;
       }
-      rc = SQLITE_NOMEM;
+      rc = SQLITE4_NOMEM;
       goto offsets_out;
     }
 
     /* Initialize a tokenizer iterator to iterate through column iCol. */
     rc = pMod->xOpen(pTab->pTokenizer, zDoc, nDoc, &pC);
-    if( rc!=SQLITE_OK ) goto offsets_out;
+    if( rc!=SQLITE4_OK ) goto offsets_out;
     pC->pTokenizer = pTab->pTokenizer;
 
     rc = pMod->xNext(pC, &ZDUMMY, &NDUMMY, &iStart, &iEnd, &iCurrent);
-    while( rc==SQLITE_OK ){
+    while( rc==SQLITE4_OK ){
       int i;                      /* Used to loop through terms */
       int iMinPos = 0x7FFFFFFF;   /* Position of next token */
       TermOffset *pTerm = 0;      /* TermOffset associated with next token */
@@ -1410,7 +1410,7 @@ void sqlite4Fts3Offsets(
 
       if( !pTerm ){
         /* All offsets for this column have been gathered. */
-        rc = SQLITE_DONE;
+        rc = SQLITE4_DONE;
       }else{
         assert( iCurrent<=iMinPos );
         if( 0==(0xFE&*pTerm->pList) ){
@@ -1418,33 +1418,33 @@ void sqlite4Fts3Offsets(
         }else{
           fts3GetDeltaPosition(&pTerm->pList, &pTerm->iPos);
         }
-        while( rc==SQLITE_OK && iCurrent<iMinPos ){
+        while( rc==SQLITE4_OK && iCurrent<iMinPos ){
           rc = pMod->xNext(pC, &ZDUMMY, &NDUMMY, &iStart, &iEnd, &iCurrent);
         }
-        if( rc==SQLITE_OK ){
+        if( rc==SQLITE4_OK ){
           char aBuffer[64];
           sqlite4_snprintf(sizeof(aBuffer), aBuffer, 
               "%d %d %d %d ", iCol, pTerm-sCtx.aTerm, iStart, iEnd-iStart
           );
           rc = fts3StringAppend(&res, aBuffer, -1);
-        }else if( rc==SQLITE_DONE && pTab->zContentTbl==0 ){
+        }else if( rc==SQLITE4_DONE && pTab->zContentTbl==0 ){
           rc = FTS_CORRUPT_VTAB;
         }
       }
     }
-    if( rc==SQLITE_DONE ){
-      rc = SQLITE_OK;
+    if( rc==SQLITE4_DONE ){
+      rc = SQLITE4_OK;
     }
 
     pMod->xClose(pC);
-    if( rc!=SQLITE_OK ) goto offsets_out;
+    if( rc!=SQLITE4_OK ) goto offsets_out;
   }
 
  offsets_out:
   sqlite4_free(sCtx.aTerm);
-  assert( rc!=SQLITE_DONE );
+  assert( rc!=SQLITE4_DONE );
   sqlite4Fts3SegmentsClose(pTab);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     sqlite4_result_error_code(pCtx,  rc);
     sqlite4_free(res.z);
   }else{
@@ -1481,7 +1481,7 @@ void sqlite4Fts3Matchinfo(
   }
 
   if( !pCsr->pExpr ){
-    sqlite4_result_blob(pContext, "", 0, SQLITE_STATIC);
+    sqlite4_result_blob(pContext, "", 0, SQLITE4_STATIC);
     return;
   }
 
@@ -1489,11 +1489,11 @@ void sqlite4Fts3Matchinfo(
   rc = fts3GetMatchinfo(pCsr, zFormat);
   sqlite4Fts3SegmentsClose(pTab);
 
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     sqlite4_result_error_code(pContext, rc);
   }else{
     int n = pCsr->nMatchinfo * sizeof(u32);
-    sqlite4_result_blob(pContext, pCsr->aMatchinfo, n, SQLITE_TRANSIENT);
+    sqlite4_result_blob(pContext, pCsr->aMatchinfo, n, SQLITE4_TRANSIENT);
   }
 }
 

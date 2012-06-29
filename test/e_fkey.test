@@ -17,7 +17,7 @@
 # deals with enabling/disabling foreign key support, is tested first,
 # before section 1. This is because some statements in section 2 deal
 # with builds that do not include complete foreign key support (because
-# either SQLITE_OMIT_TRIGGER or SQLITE_OMIT_FOREIGN_KEY was defined
+# either SQLITE4_OMIT_TRIGGER or SQLITE4_OMIT_FOREIGN_KEY was defined
 # at build time).
 #
 
@@ -33,7 +33,7 @@ proc eqp {sql {db db}} { uplevel execsql [list "EXPLAIN QUERY PLAN $sql"] $db }
 #-------------------------------------------------------------------------
 # EVIDENCE-OF: R-33710-56344 In order to use foreign key constraints in
 # SQLite, the library must be compiled with neither
-# SQLITE_OMIT_FOREIGN_KEY or SQLITE_OMIT_TRIGGER defined.
+# SQLITE4_OMIT_FOREIGN_KEY or SQLITE4_OMIT_TRIGGER defined.
 #
 ifcapable trigger&&foreignkey {
   do_test e_fkey-1 {
@@ -52,8 +52,8 @@ ifcapable trigger&&foreignkey {
 #-------------------------------------------------------------------------
 # Test the effects of defining OMIT_TRIGGER but not OMIT_FOREIGN_KEY.
 #
-# EVIDENCE-OF: R-44697-61543 If SQLITE_OMIT_TRIGGER is defined but
-# SQLITE_OMIT_FOREIGN_KEY is not, then SQLite behaves as it did prior to
+# EVIDENCE-OF: R-44697-61543 If SQLITE4_OMIT_TRIGGER is defined but
+# SQLITE4_OMIT_FOREIGN_KEY is not, then SQLite behaves as it did prior to
 # version 3.6.19 - foreign key definitions are parsed and may be queried
 # using PRAGMA foreign_key_list, but foreign key constraints are not
 # enforced.
@@ -68,7 +68,7 @@ ifcapable trigger&&foreignkey {
 # returns no data instead of a single row containing "0" or "1", then
 # the version of SQLite you are using does not support foreign keys
 # (either because it is older than 3.6.19 or because it was compiled
-# with SQLITE_OMIT_FOREIGN_KEY or SQLITE_OMIT_TRIGGER defined).
+# with SQLITE4_OMIT_FOREIGN_KEY or SQLITE4_OMIT_TRIGGER defined).
 #
 reset_db
 ifcapable !trigger&&foreignkey {
@@ -2902,11 +2902,11 @@ do_test e_fkey-62.7 {
 
 #-------------------------------------------------------------------------
 # Test that the maximum recursion depth of foreign key action programs is
-# governed by the SQLITE_MAX_TRIGGER_DEPTH and SQLITE_LIMIT_TRIGGER_DEPTH
+# governed by the SQLITE4_MAX_TRIGGER_DEPTH and SQLITE4_LIMIT_TRIGGER_DEPTH
 # settings.
 #
-# EVIDENCE-OF: R-42264-30503 The SQLITE_MAX_TRIGGER_DEPTH and
-# SQLITE_LIMIT_TRIGGER_DEPTH settings determine the maximum allowable
+# EVIDENCE-OF: R-42264-30503 The SQLITE4_MAX_TRIGGER_DEPTH and
+# SQLITE4_LIMIT_TRIGGER_DEPTH settings determine the maximum allowable
 # depth of trigger program recursion. For the purposes of these limits,
 # foreign key actions are considered trigger programs.
 #
@@ -2954,36 +2954,36 @@ proc test_on_update_recursion {limit} {
 }
 
 do_test e_fkey-63.1.1 {
-  test_on_delete_recursion $SQLITE_MAX_TRIGGER_DEPTH
+  test_on_delete_recursion $SQLITE4_MAX_TRIGGER_DEPTH
 } {0 0}
 do_test e_fkey-63.1.2 {
-  test_on_delete_recursion [expr $SQLITE_MAX_TRIGGER_DEPTH+1]
+  test_on_delete_recursion [expr $SQLITE4_MAX_TRIGGER_DEPTH+1]
 } {1 {too many levels of trigger recursion}}
 do_test e_fkey-63.1.3 {
-  sqlite4_limit db SQLITE_LIMIT_TRIGGER_DEPTH 5
+  sqlite4_limit db SQLITE4_LIMIT_TRIGGER_DEPTH 5
   test_on_delete_recursion 5
 } {0 0}
 do_test e_fkey-63.1.4 {
   test_on_delete_recursion 6
 } {1 {too many levels of trigger recursion}}
 do_test e_fkey-63.1.5 {
-  sqlite4_limit db SQLITE_LIMIT_TRIGGER_DEPTH 1000000
+  sqlite4_limit db SQLITE4_LIMIT_TRIGGER_DEPTH 1000000
 } {5}
 do_test e_fkey-63.2.1 {
-  test_on_update_recursion $SQLITE_MAX_TRIGGER_DEPTH
+  test_on_update_recursion $SQLITE4_MAX_TRIGGER_DEPTH
 } {0 0}
 do_test e_fkey-63.2.2 {
-  test_on_update_recursion [expr $SQLITE_MAX_TRIGGER_DEPTH+1]
+  test_on_update_recursion [expr $SQLITE4_MAX_TRIGGER_DEPTH+1]
 } {1 {too many levels of trigger recursion}}
 do_test e_fkey-63.2.3 {
-  sqlite4_limit db SQLITE_LIMIT_TRIGGER_DEPTH 5
+  sqlite4_limit db SQLITE4_LIMIT_TRIGGER_DEPTH 5
   test_on_update_recursion 5
 } {0 0}
 do_test e_fkey-63.2.4 {
   test_on_update_recursion 6
 } {1 {too many levels of trigger recursion}}
 do_test e_fkey-63.2.5 {
-  sqlite4_limit db SQLITE_LIMIT_TRIGGER_DEPTH 1000000
+  sqlite4_limit db SQLITE4_LIMIT_TRIGGER_DEPTH 1000000
 } {5}
 
 #-------------------------------------------------------------------------

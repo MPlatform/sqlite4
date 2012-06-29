@@ -17,26 +17,26 @@
 ** here are place-holders.  Applications can substitute working
 ** mutex routines at start-time using the
 **
-**     sqlite4_config(pEnv, SQLITE_CONFIG_MUTEX,...)
+**     sqlite4_config(pEnv, SQLITE4_CONFIG_MUTEX,...)
 **
 ** interface.
 **
-** If compiled with SQLITE_DEBUG, then additional logic is inserted
+** If compiled with SQLITE4_DEBUG, then additional logic is inserted
 ** that does error checking on mutexes to make sure they are being
 ** called correctly.
 */
 #include "sqliteInt.h"
 
-#ifndef SQLITE_MUTEX_OMIT
+#ifndef SQLITE4_MUTEX_OMIT
 
-#ifndef SQLITE_DEBUG
+#ifndef SQLITE4_DEBUG
 /*
 ** Stub routines for all mutex methods.
 **
 ** This routines provide no mutual exclusion or error checking.
 */
-static int noopMutexInit(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
-static int noopMutexEnd(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
+static int noopMutexInit(void *p){ UNUSED_PARAMETER(p); return SQLITE4_OK; }
+static int noopMutexEnd(void *p){ UNUSED_PARAMETER(p); return SQLITE4_OK; }
 static sqlite4_mutex *noopMutexAlloc(sqlite4_env *pEnv, int id){ 
   UNUSED_PARAMETER(pEnv);
   UNUSED_PARAMETER(id);
@@ -46,7 +46,7 @@ static void noopMutexFree(sqlite4_mutex *p){ UNUSED_PARAMETER(p); return; }
 static void noopMutexEnter(sqlite4_mutex *p){ UNUSED_PARAMETER(p); return; }
 static int noopMutexTry(sqlite4_mutex *p){
   UNUSED_PARAMETER(p);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 static void noopMutexLeave(sqlite4_mutex *p){ UNUSED_PARAMETER(p); return; }
 
@@ -65,9 +65,9 @@ sqlite4_mutex_methods const *sqlite4NoopMutex(void){
   };
   return &sMutex;
 }
-#endif /* !SQLITE_DEBUG */
+#endif /* !SQLITE4_DEBUG */
 
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
 /*
 ** In this implementation, error checking is provided for testing
 ** and debugging purposes.  The mutexes still do not provide any
@@ -100,8 +100,8 @@ static int debugMutexNotheld(sqlite4_mutex *pX){
 /*
 ** Initialize and deinitialize the mutex subsystem.
 */
-static int debugMutexInit(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
-static int debugMutexEnd(void *p){ UNUSED_PARAMETER(p); return SQLITE_OK; }
+static int debugMutexInit(void *p){ UNUSED_PARAMETER(p); return SQLITE4_OK; }
+static int debugMutexEnd(void *p){ UNUSED_PARAMETER(p); return SQLITE4_OK; }
 
 /*
 ** The sqlite4_mutex_alloc() routine allocates a new
@@ -132,8 +132,8 @@ static void debugMutexFree(sqlite4_mutex *pX){
 ** The sqlite4_mutex_enter() and sqlite4_mutex_try() routines attempt
 ** to enter a mutex.  If another thread is already within the mutex,
 ** sqlite4_mutex_enter() will block and sqlite4_mutex_try() will return
-** SQLITE_BUSY.  The sqlite4_mutex_try() interface returns SQLITE_OK
-** upon successful entry.  Mutexes created using SQLITE_MUTEX_RECURSIVE can
+** SQLITE4_BUSY.  The sqlite4_mutex_try() interface returns SQLITE4_OK
+** upon successful entry.  Mutexes created using SQLITE4_MUTEX_RECURSIVE can
 ** be entered multiple times by the same thread.  In such cases the,
 ** mutex must be exited an equal number of times before another thread
 ** can enter.  If the same thread tries to enter any other kind of mutex
@@ -141,14 +141,14 @@ static void debugMutexFree(sqlite4_mutex *pX){
 */
 static void debugMutexEnter(sqlite4_mutex *pX){
   sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
-  assert( p->id==SQLITE_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
+  assert( p->id==SQLITE4_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
   p->cnt++;
 }
 static int debugMutexTry(sqlite4_mutex *pX){
   sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
-  assert( p->id==SQLITE_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
+  assert( p->id==SQLITE4_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
   p->cnt++;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -161,7 +161,7 @@ static void debugMutexLeave(sqlite4_mutex *pX){
   sqlite4DebugMutex *p = (sqlite4DebugMutex*)pX;
   assert( debugMutexHeld(pX) );
   p->cnt--;
-  assert( p->id==SQLITE_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
+  assert( p->id==SQLITE4_MUTEX_RECURSIVE || debugMutexNotheld(pX) );
 }
 
 sqlite4_mutex_methods const *sqlite4NoopMutex(void){
@@ -180,15 +180,15 @@ sqlite4_mutex_methods const *sqlite4NoopMutex(void){
 
   return &sMutex;
 }
-#endif /* SQLITE_DEBUG */
+#endif /* SQLITE4_DEBUG */
 
 /*
-** If compiled with SQLITE_MUTEX_NOOP, then the no-op mutex implementation
+** If compiled with SQLITE4_MUTEX_NOOP, then the no-op mutex implementation
 ** is used regardless of the run-time threadsafety setting.
 */
-#ifdef SQLITE_MUTEX_NOOP
+#ifdef SQLITE4_MUTEX_NOOP
 sqlite4_mutex_methods const *sqlite4DefaultMutex(void){
   return sqlite4NoopMutex();
 }
-#endif /* defined(SQLITE_MUTEX_NOOP) */
-#endif /* !defined(SQLITE_MUTEX_OMIT) */
+#endif /* defined(SQLITE4_MUTEX_NOOP) */
+#endif /* !defined(SQLITE4_MUTEX_OMIT) */

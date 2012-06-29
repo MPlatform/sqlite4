@@ -12,8 +12,8 @@
 ** This file implements a tokenizer for fts3 based on the ICU library.
 */
 #include "fts3Int.h"
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
-#ifdef SQLITE_ENABLE_ICU
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
+#ifdef SQLITE4_ENABLE_ICU
 
 #include <assert.h>
 #include <string.h>
@@ -62,7 +62,7 @@ static int icuCreate(
   }
   p = (IcuTokenizer *)sqlite4_malloc(sizeof(IcuTokenizer)+n);
   if( !p ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   memset(p, 0, sizeof(IcuTokenizer));
 
@@ -73,7 +73,7 @@ static int icuCreate(
 
   *ppTokenizer = (sqlite4_tokenizer *)p;
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -82,7 +82,7 @@ static int icuCreate(
 static int icuDestroy(sqlite4_tokenizer *pTokenizer){
   IcuTokenizer *p = (IcuTokenizer *)pTokenizer;
   sqlite4_free(p);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -120,7 +120,7 @@ static int icuOpen(
       (nChar+1) * sizeof(int)            /* IcuCursor.aOffset[] */
   );
   if( !pCsr ){
-    return SQLITE_NOMEM;
+    return SQLITE4_NOMEM;
   }
   memset(pCsr, 0, sizeof(IcuCursor));
   pCsr->aChar = (UChar *)&pCsr[1];
@@ -134,7 +134,7 @@ static int icuOpen(
     U16_APPEND(pCsr->aChar, iOut, nChar, c, isError);
     if( isError ){
       sqlite4_free(pCsr);
-      return SQLITE_ERROR;
+      return SQLITE4_ERROR;
     }
     pCsr->aOffset[iOut] = iInput;
 
@@ -148,13 +148,13 @@ static int icuOpen(
   pCsr->pIter = ubrk_open(UBRK_WORD, p->zLocale, pCsr->aChar, iOut, &status);
   if( !U_SUCCESS(status) ){
     sqlite4_free(pCsr);
-    return SQLITE_ERROR;
+    return SQLITE4_ERROR;
   }
   pCsr->nChar = iOut;
 
   ubrk_first(pCsr->pIter);
   *ppCursor = (sqlite4_tokenizer_cursor *)pCsr;
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -165,7 +165,7 @@ static int icuClose(sqlite4_tokenizer_cursor *pCursor){
   ubrk_close(pCsr->pIter);
   sqlite4_free(pCsr->zBuffer);
   sqlite4_free(pCsr);
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -191,7 +191,7 @@ static int icuNext(
     iStart = ubrk_current(pCsr->pIter);
     iEnd = ubrk_next(pCsr->pIter);
     if( iEnd==UBRK_DONE ){
-      return SQLITE_DONE;
+      return SQLITE4_DONE;
     }
 
     while( iStart<iEnd ){
@@ -211,7 +211,7 @@ static int icuNext(
     if( nByte ){
       char *zNew = sqlite4_realloc(pCsr->zBuffer, nByte);
       if( !zNew ){
-        return SQLITE_NOMEM;
+        return SQLITE4_NOMEM;
       }
       pCsr->zBuffer = zNew;
       pCsr->nBuffer = nByte;
@@ -230,7 +230,7 @@ static int icuNext(
   *piEndOffset = pCsr->aOffset[iEnd];
   *piPosition = pCsr->iToken++;
 
-  return SQLITE_OK;
+  return SQLITE4_OK;
 }
 
 /*
@@ -254,5 +254,5 @@ void sqlite4Fts3IcuTokenizerModule(
   *ppModule = &icuTokenizerModule;
 }
 
-#endif /* defined(SQLITE_ENABLE_ICU) */
-#endif /* !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3) */
+#endif /* defined(SQLITE4_ENABLE_ICU) */
+#endif /* !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3) */

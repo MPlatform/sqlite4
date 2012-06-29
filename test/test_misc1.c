@@ -39,13 +39,13 @@ static int c_collation_test(
 
   /* Open a database. */
   rc = sqlite4_open(0, ":memory:", &db, 0);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     zErrFunction = "sqlite4_open";
     goto error_out;
   }
 
   rc = sqlite4_create_collation(db, "collate", 456, 0, 0, 0, 0);
-  if( rc!=SQLITE_MISUSE ){
+  if( rc!=SQLITE4_MISUSE ){
     sqlite4_close(db);
     zErrFunction = "sqlite4_create_collation";
     goto error_out;
@@ -124,7 +124,7 @@ static int c_misuse_test(
   ** we have a "closed database handle" to pass to various API functions.
   */
   rc = sqlite4_open(0, ":memory:", &db, 0);
-  if( rc!=SQLITE_OK ){
+  if( rc!=SQLITE4_OK ){
     zErrFunction = "sqlite4_open";
     goto error_out;
   }
@@ -132,14 +132,14 @@ static int c_misuse_test(
 
 
   rc = sqlite4_errcode(db);
-  if( rc!=SQLITE_MISUSE ){
+  if( rc!=SQLITE4_MISUSE ){
     zErrFunction = "sqlite4_errcode";
     goto error_out;
   }
 
   pStmt = (sqlite4_stmt*)1234;
   rc = sqlite4_prepare(db, 0, 0, &pStmt, 0);
-  if( rc!=SQLITE_MISUSE ){
+  if( rc!=SQLITE4_MISUSE ){
     zErrFunction = "sqlite4_prepare";
     goto error_out;
   }

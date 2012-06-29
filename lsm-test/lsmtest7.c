@@ -205,5 +205,3 @@ void test_api(
   do_test_api1(zPattern, pRc);
   do_test_api2(zPattern, pRc);
 }
-
-

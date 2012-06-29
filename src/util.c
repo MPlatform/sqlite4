@@ -17,33 +17,33 @@
 */
 #include "sqliteInt.h"
 #include <stdarg.h>
-#ifdef SQLITE_HAVE_ISNAN
+#ifdef SQLITE4_HAVE_ISNAN
 # include <math.h>
 #endif
 
 /*
 ** Routine needed to support the testcase() macro.
 */
-#ifdef SQLITE_COVERAGE_TEST
+#ifdef SQLITE4_COVERAGE_TEST
 void sqlite4Coverage(int x){
   static unsigned dummy = 0;
   dummy += (unsigned)x;
 }
 #endif
 
-#ifndef SQLITE_OMIT_FLOATING_POINT
+#ifndef SQLITE4_OMIT_FLOATING_POINT
 /*
 ** Return true if the floating point value is Not a Number (NaN).
 **
-** Use the math library isnan() function if compiled with SQLITE_HAVE_ISNAN.
+** Use the math library isnan() function if compiled with SQLITE4_HAVE_ISNAN.
 ** Otherwise, we have our own implementation that works on most systems.
 */
 int sqlite4IsNaN(double x){
   int rc;   /* The value return */
-#if !defined(SQLITE_HAVE_ISNAN)
+#if !defined(SQLITE4_HAVE_ISNAN)
   /*
   ** Systems that support the isnan() library function should probably
-  ** make use of it by compiling with -DSQLITE_HAVE_ISNAN.  But we have
+  ** make use of it by compiling with -DSQLITE4_HAVE_ISNAN.  But we have
   ** found that many systems do not have a working isnan() function so
   ** this implementation is provided as an alternative.
   **
@@ -70,9 +70,9 @@ int sqlite4IsNaN(double x){
   volatile double y = x;
   volatile double z = y;
   rc = (y!=z);
-#else  /* if defined(SQLITE_HAVE_ISNAN) */
+#else  /* if defined(SQLITE4_HAVE_ISNAN) */
   rc = isnan(x);
-#endif /* SQLITE_HAVE_ISNAN */
+#endif /* SQLITE4_HAVE_ISNAN */
   testcase( rc );
   return rc;
 }
@@ -85,7 +85,7 @@ int sqlite4IsInf(double r){
   return isinf(r);
 }
   
-#endif /* SQLITE_OMIT_FLOATING_POINT */
+#endif /* SQLITE4_OMIT_FLOATING_POINT */
 
 /*
 ** Compute a string length that is limited to what can be stored in
@@ -120,7 +120,7 @@ int sqlite4Strlen30(const char *z){
 ** encoded in UTF-8.
 **
 ** To clear the most recent error for sqlite handle "db", sqlite4Error
-** should be called with err_code set to SQLITE_OK and zFormat set
+** should be called with err_code set to SQLITE4_OK and zFormat set
 ** to NULL.
 */
 void sqlite4Error(sqlite4 *db, int err_code, const char *zFormat, ...){
@@ -132,9 +132,9 @@ void sqlite4Error(sqlite4 *db, int err_code, const char *zFormat, ...){
       va_start(ap, zFormat);
       z = sqlite4VMPrintf(db, zFormat, ap);
       va_end(ap);
-      sqlite4ValueSetStr(db->pErr, -1, z, SQLITE_UTF8, SQLITE_DYNAMIC);
+      sqlite4ValueSetStr(db->pErr, -1, z, SQLITE4_UTF8, SQLITE4_DYNAMIC);
     }else{
-      sqlite4ValueSetStr(db->pErr, 0, 0, SQLITE_UTF8, SQLITE_STATIC);
+      sqlite4ValueSetStr(db->pErr, 0, 0, SQLITE4_UTF8, SQLITE4_STATIC);
     }
   }
 }
@@ -169,7 +169,7 @@ void sqlite4ErrorMsg(Parse *pParse, const char *zFormat, ...){
     pParse->nErr++;
     sqlite4DbFree(db, pParse->zErrMsg);
     pParse->zErrMsg = zMsg;
-    pParse->rc = SQLITE_ERROR;
+    pParse->rc = SQLITE4_ERROR;
   }
 }
 
@@ -269,8 +269,8 @@ int sqlite4_strnicmp(const char *zLeft, const char *zRight, int N){
 ** into *pResult.
 */
 int sqlite4AtoF(const char *z, double *pResult, int length, u8 enc){
-#ifndef SQLITE_OMIT_FLOATING_POINT
-  int incr = (enc==SQLITE_UTF8?1:2);
+#ifndef SQLITE4_OMIT_FLOATING_POINT
+  int incr = (enc==SQLITE4_UTF8?1:2);
   const char *zEnd = z + length;
   /* sign * significand * (10 ^ (esign * exponent)) */
   int sign = 1;    /* sign of significand */
@@ -284,7 +284,7 @@ int sqlite4AtoF(const char *z, double *pResult, int length, u8 enc){
 
   *pResult = 0.0;   /* Default return value, in case of an error */
 
-  if( enc==SQLITE_UTF16BE ) z++;
+  if( enc==SQLITE4_UTF16BE ) z++;
 
   /* skip leading spaces */
   while( z<zEnd && sqlite4Isspace(*z) ) z+=incr;
@@ -420,7 +420,7 @@ do_atof_calc:
   return z>=zEnd && nDigits>0 && eValid;
 #else
   return !sqlite4Atoi64(z, pResult, length, enc);
-#endif /* SQLITE_OMIT_FLOATING_POINT */
+#endif /* SQLITE4_OMIT_FLOATING_POINT */
 }
 
 /*
@@ -473,14 +473,14 @@ static int compare2pow63(const char *zNum, int incr){
 ** given by enc.
 */
 int sqlite4Atoi64(const char *zNum, i64 *pNum, int length, u8 enc){
-  int incr = (enc==SQLITE_UTF8?1:2);
+  int incr = (enc==SQLITE4_UTF8?1:2);
   u64 u = 0;
   int neg = 0; /* assume positive */
   int i;
   int c = 0;
   const char *zStart;
   const char *zEnd = zNum + length;
-  if( enc==SQLITE_UTF16BE ) zNum++;
+  if( enc==SQLITE4_UTF16BE ) zNum++;
   while( zNum<zEnd && sqlite4Isspace(*zNum) ) zNum+=incr;
   if( zNum<zEnd ){
     if( *zNum=='-' ){
@@ -911,7 +911,7 @@ u8 sqlite4GetVarint32(const unsigned char *p, u32 *v){
     p -= 2;
     n = sqlite4GetVarint(p, &v64);
     assert( n>3 && n<=9 );
-    if( (v64 & SQLITE_MAX_U32)!=v64 ){
+    if( (v64 & SQLITE4_MAX_U32)!=v64 ){
       *v = 0xffffffff;
     }else{
       *v = (u32)v64;
@@ -1005,16 +1005,16 @@ void sqlite4Put4byte(unsigned char *p, u32 v){
 */
 u8 sqlite4HexToInt(int h){
   assert( (h>='0' && h<='9') ||  (h>='a' && h<='f') ||  (h>='A' && h<='F') );
-#ifdef SQLITE_ASCII
+#ifdef SQLITE4_ASCII
   h += 9*(1&(h>>6));
 #endif
-#ifdef SQLITE_EBCDIC
+#ifdef SQLITE4_EBCDIC
   h += 9*(1&~(h>>4));
 #endif
   return (u8)(h & 0xf);
 }
 
-#if !defined(SQLITE_OMIT_BLOB_LITERAL) || defined(SQLITE_HAS_CODEC)
+#if !defined(SQLITE4_OMIT_BLOB_LITERAL) || defined(SQLITE4_HAS_CODEC)
 /*
 ** Convert a BLOB literal of the form "x'hhhhhh'" into its binary
 ** value.  Return a pointer to its binary value.  Space to hold the
@@ -1035,7 +1035,7 @@ void *sqlite4HexToBlob(sqlite4 *db, const char *z, int n){
   }
   return zBlob;
 }
-#endif /* !SQLITE_OMIT_BLOB_LITERAL || SQLITE_HAS_CODEC */
+#endif /* !SQLITE4_OMIT_BLOB_LITERAL || SQLITE4_HAS_CODEC */
 
 /*
 ** Log an error that is an API call on a connection pointer that should
@@ -1043,7 +1043,7 @@ void *sqlite4HexToBlob(sqlite4 *db, const char *z, int n){
 ** argument.  The zType is a word like "NULL" or "closed" or "invalid".
 */
 static void logBadConnection(const char *zType){
-  sqlite4_log(0, SQLITE_MISUSE, 
+  sqlite4_log(0, SQLITE4_MISUSE, 
      "API call with %s database connection pointer",
      zType
   );
@@ -1056,7 +1056,7 @@ static void logBadConnection(const char *zType){
 ** NULL or which have been previously closed.  If this routine returns
 ** 1 it means that the db pointer is valid and 0 if it should not be
 ** dereferenced for any reason.  The calling function should invoke
-** SQLITE_MISUSE immediately.
+** SQLITE4_MISUSE immediately.
 **
 ** sqlite4SafetyCheckOk() requires that the db pointer be valid for
 ** use.  sqlite4SafetyCheckSickOrOk() allows a db pointer that failed to
@@ -1070,7 +1070,7 @@ int sqlite4SafetyCheckOk(sqlite4 *db){
     return 0;
   }
   magic = db->magic;
-  if( magic!=SQLITE_MAGIC_OPEN ){
+  if( magic!=SQLITE4_MAGIC_OPEN ){
     if( sqlite4SafetyCheckSickOrOk(db) ){
       testcase( sqlite4DefaultEnv.xLog!=0 );
       logBadConnection("unopened");
@@ -1083,9 +1083,9 @@ int sqlite4SafetyCheckOk(sqlite4 *db){
 int sqlite4SafetyCheckSickOrOk(sqlite4 *db){
   u32 magic;
   magic = db->magic;
-  if( magic!=SQLITE_MAGIC_SICK &&
-      magic!=SQLITE_MAGIC_OPEN &&
-      magic!=SQLITE_MAGIC_BUSY ){
+  if( magic!=SQLITE4_MAGIC_SICK &&
+      magic!=SQLITE4_MAGIC_OPEN &&
+      magic!=SQLITE4_MAGIC_BUSY ){
     testcase( sqlite4DefaultEnv.xLog!=0 );
     logBadConnection("invalid");
     return 0;
@@ -1162,15 +1162,15 @@ int sqlite4AbsInt32(int x){
   return -x;
 }
 
-#ifdef SQLITE_ENABLE_8_3_NAMES
+#ifdef SQLITE4_ENABLE_8_3_NAMES
 /*
-** If SQLITE_ENABLE_8_3_NAMES is set at compile-time and if the database
+** If SQLITE4_ENABLE_8_3_NAMES is set at compile-time and if the database
 ** filename in zBaseFilename is a URI with the "8_3_names=1" parameter and
 ** if filename in z[] has a suffix (a.k.a. "extension") that is longer than
 ** three characters, then shorten the suffix on z[] to be the last three
 ** characters of the original suffix.
 **
-** If SQLITE_ENABLE_8_3_NAMES is set to 2 at compile-time, then always
+** If SQLITE4_ENABLE_8_3_NAMES is set to 2 at compile-time, then always
 ** do the suffix shortening regardless of URI parameter.
 **
 ** Examples:
@@ -1181,7 +1181,7 @@ int sqlite4AbsInt32(int x){
 **     test.db-mj7f3319fa =>   test.9fa
 */
 void sqlite4FileSuffix3(const char *zBaseFilename, char *z){
-#if SQLITE_ENABLE_8_3_NAMES<2
+#if SQLITE4_ENABLE_8_3_NAMES<2
   if( sqlite4_uri_boolean(zBaseFilename, "8_3_names", 0) )
 #endif
   {

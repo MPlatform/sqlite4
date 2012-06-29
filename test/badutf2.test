@@ -115,7 +115,7 @@ foreach { i len uval xstr ustr u2u } {
 
 do_test badutf2-4.2 {
   sqlite4_finalize $S
-} {SQLITE_OK}
+} {SQLITE4_OK}
 
 
 finish_test

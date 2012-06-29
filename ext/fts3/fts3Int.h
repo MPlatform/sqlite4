@@ -14,20 +14,20 @@
 #ifndef _FTSINT_H
 #define _FTSINT_H
 
-#if !defined(NDEBUG) && !defined(SQLITE_DEBUG) 
+#if !defined(NDEBUG) && !defined(SQLITE4_DEBUG) 
 # define NDEBUG 1
 #endif
 
 /*
 ** FTS4 is really an extension for FTS3.  It is enabled using the
-** SQLITE_ENABLE_FTS3 macro.  But to avoid confusion we also all
-** the SQLITE_ENABLE_FTS4 macro to serve as an alisse for SQLITE_ENABLE_FTS3.
+** SQLITE4_ENABLE_FTS3 macro.  But to avoid confusion we also all
+** the SQLITE4_ENABLE_FTS4 macro to serve as an alisse for SQLITE4_ENABLE_FTS3.
 */
-#if defined(SQLITE_ENABLE_FTS4) && !defined(SQLITE_ENABLE_FTS3)
-# define SQLITE_ENABLE_FTS3
+#if defined(SQLITE4_ENABLE_FTS4) && !defined(SQLITE4_ENABLE_FTS3)
+# define SQLITE4_ENABLE_FTS3
 #endif
 
-#if !defined(SQLITE_CORE) || defined(SQLITE_ENABLE_FTS3)
+#if !defined(SQLITE4_CORE) || defined(SQLITE4_ENABLE_FTS3)
 
 #include "sqlite4.h"
 #include "fts3_tokenizer.h"
@@ -105,12 +105,12 @@
 ** FTS3 extension to be compiled outside of the 
 ** amalgamation.
 */
-#ifndef SQLITE_AMALGAMATION
+#ifndef SQLITE4_AMALGAMATION
 /*
 ** Macros indicating that conditional expressions are always true or
 ** false.
 */
-#ifdef SQLITE_COVERAGE_TEST
+#ifdef SQLITE4_COVERAGE_TEST
 # define ALWAYS(x) (1)
 # define NEVER(X)  (0)
 #else
@@ -132,9 +132,9 @@ typedef sqlite4_uint64 u64;       /* 8-byte unsigned integer */
 #define UNUSED_PARAMETER(x) (void)(x)
 
 /*
-** Activate assert() only if SQLITE_TEST is enabled.
+** Activate assert() only if SQLITE4_TEST is enabled.
 */
-#if !defined(NDEBUG) && !defined(SQLITE_DEBUG) 
+#if !defined(NDEBUG) && !defined(SQLITE4_DEBUG) 
 # define NDEBUG 1
 #endif
 
@@ -143,19 +143,19 @@ typedef sqlite4_uint64 u64;       /* 8-byte unsigned integer */
 ** other bits of code that are needed to support the arguments
 ** within testcase() and assert() macros.
 */
-#if defined(SQLITE_DEBUG) || defined(SQLITE_COVERAGE_TEST)
+#if defined(SQLITE4_DEBUG) || defined(SQLITE4_COVERAGE_TEST)
 # define TESTONLY(X)  X
 #else
 # define TESTONLY(X)
 #endif
 
-#endif /* SQLITE_AMALGAMATION */
+#endif /* SQLITE4_AMALGAMATION */
 
-#ifdef SQLITE_DEBUG
+#ifdef SQLITE4_DEBUG
 int sqlite4Fts3Corrupt(void);
 # define FTS_CORRUPT_VTAB sqlite4Fts3Corrupt()
 #else
-# define FTS_CORRUPT_VTAB SQLITE_CORRUPT_VTAB
+# define FTS_CORRUPT_VTAB SQLITE4_CORRUPT_VTAB
 #endif
 
 typedef struct Fts3Table Fts3Table;
@@ -226,7 +226,7 @@ struct Fts3Table {
   int nPendingData;               /* Current bytes of pending data */
   sqlite_int64 iPrevDocid;        /* Docid of most recently inserted document */
 
-#if defined(SQLITE_DEBUG) || defined(SQLITE_COVERAGE_TEST)
+#if defined(SQLITE4_DEBUG) || defined(SQLITE4_COVERAGE_TEST)
   /* State variables used for validating that the transaction control
   ** methods of the virtual table are called at appropriate times.  These
   ** values do not contribution to the FTS computation; they are used for
@@ -456,7 +456,7 @@ struct Fts3MultiSegReader {
   int nCost;                      /* Cost of running iterator */
   int bLookup;                    /* True if a lookup of a single entry. */
 
-  /* Output values. Valid only after Fts3SegReaderStep() returns SQLITE_ROW. */
+  /* Output values. Valid only after Fts3SegReaderStep() returns SQLITE4_ROW. */
   char *zTerm;                    /* Pointer to term buffer */
   int nTerm;                      /* Size of zTerm in bytes */
   char *aDoclist;                 /* Pointer to doclist buffer */
@@ -493,7 +493,7 @@ int sqlite4Fts3ExprParse(sqlite4_tokenizer *,
   char **, int, int, int, const char *, int, Fts3Expr **
 );
 void sqlite4Fts3ExprFree(Fts3Expr *);
-#ifdef SQLITE_TEST
+#ifdef SQLITE4_TEST
 int sqlite4Fts3ExprInitTestInterface(sqlite4 *db);
 int sqlite4Fts3InitTerm(sqlite4 *db);
 #endif
@@ -513,5 +513,5 @@ int sqlite4Fts3MsrIncrRestart(Fts3MultiSegReader *pCsr);
 
 int sqlite4Fts3DeferredTokenList(Fts3DeferredToken *, char **, int *);
 
-#endif /* !SQLITE_CORE || SQLITE_ENABLE_FTS3 */
+#endif /* !SQLITE4_CORE || SQLITE4_ENABLE_FTS3 */
 #endif /* _FTSINT_H */

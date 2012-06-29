@@ -118,7 +118,7 @@ proc te_read_sql {db sql} {
   }
 
   set rows [list]
-  while {[sqlite4_step $S] == "SQLITE_ROW"} {
+  while {[sqlite4_step $S] == "SQLITE4_ROW"} {
     set r [list]
     for {set i 0} {$i < [sqlite4_column_count $S]} {incr i} {
       lappend r [list [sqlite4_column_type $S $i] [sqlite4_column_text $S $i]]
