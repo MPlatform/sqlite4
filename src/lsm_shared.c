@@ -1261,6 +1261,18 @@ int lsmBeginFlush(lsm_db *pDb){
   return LSM_OK;
 }
 
+int lsmDbTreeSize(lsm_db *pDb){
+  TreeVersion *pTV = pDb->pTV;
+
+  assert( pDb->pWorker );
+  assert( (pDb->pDatabase->bWriter && lsmTreeIsWriteVersion(pTV))
+       || (pTV==0 && holdingGlobalMutex(pDb->pEnv))
+  );
+  if( pTV==0 ) pTV = lsmTreeRecoverVersion(pDb->pDatabase->pTree);
+
+  return lsmTreeSize(pTV);
+}
+
 /*
 ** This is called to indicate that a "flush-tree" operation has finished.
 ** If the second argument is true, a new in-memory tree is allocated to

@@ -61,6 +61,8 @@
 ** spaces. The following macro is used to test for this.  */
 #define LSM_IS_64_BIT (sizeof(void*)==8)
 
+#define LSM_AUTOWORK_QUANT 32
+
 typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
@@ -561,6 +563,8 @@ DbLog *lsmDatabaseLog(lsm_db *pDb);
 Pgno *lsmSharedAppendList(lsm_db *db, int *pnApp);
 int lsmSharedAppendListAdd(lsm_db *db, Pgno iPg);
 void lsmSharedAppendListRemove(lsm_db *db, int iIdx);
+
+int lsmDbTreeSize(lsm_db *pDb);
 
 #ifdef LSM_DEBUG
   int lsmHoldingClientMutex(lsm_db *pDb);

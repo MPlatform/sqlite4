@@ -14,6 +14,7 @@
 */
 #include "lsmInt.h"
 
+
 #ifdef LSM_DEBUG
 /*
 ** This function returns a copy of its only argument.
@@ -264,6 +265,7 @@ int lsmFlushToDisk(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
   int nLsmLevel;
   int bOvfl;
+  int bAutowork = 0;              /* True to do auto-work after flush */
 
   /* Must not hold the worker snapshot when this is called. */
   assert( pDb->pWorker==0 );
@@ -273,12 +275,26 @@ int lsmFlushToDisk(lsm_db *pDb){
   rc = lsmSaveCursors(pDb);
 
   bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
+  if( rc==LSM_OK && pDb->bAutowork ){
+    if( bOvfl ){
+      rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
+      bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
+    }else if( lsmDbTreeSize(pDb)>0 ){
+      bAutowork = 1;
+    }
+  }
 
   /* Write the contents of the in-memory tree into the database file and 
   ** update the worker snapshot accordingly. Then flush the contents of 
   ** the db file to disk too. No calls to fsync() are made here - just 
   ** write().  */
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
+  if( rc==LSM_OK && bAutowork ){
+    assert( bOvfl==0 && nLsmLevel==0 );
+    rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
+    bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
+    if( bOvfl && rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
+  }
   if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
 
   /* Create a new client snapshot - one that uses the new runs created above. */
@@ -537,7 +553,7 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
 
   if( rc==LSM_OK ){
     int pgsz = lsmFsPageSize(pDb->pFS);
-    int nQuant = 32 * pgsz;
+    int nQuant = LSM_AUTOWORK_QUANT * pgsz;
     int nBefore;
     int nAfter;
     int nDiff;
@@ -552,7 +568,7 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
 
     nDiff = (nAfter/nQuant) - (nBefore/nQuant);
     if( rc==LSM_OK && pDb->bAutowork && nDiff!=0 ){
-      rc = dbAutoWork(pDb, nDiff*nQuant / pgsz);
+      rc = dbAutoWork(pDb, nDiff * LSM_AUTOWORK_QUANT);
     }
   }
 

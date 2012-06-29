@@ -3574,7 +3574,7 @@ int lsmSortedFlushTree(
   rc = lsmBeginFlush(pDb);
 
   /* If there is nothing to do, return early. */
-  if( lsmTreeSize(pDb->pTV)==0 && lsmDatabaseIsDirty(pDb)==0 ){
+  if( lsmTreeSize(pDb->pTV)==0 && bFreelist==0 ){
     lsmFinishFlush(pDb, 0);
     return LSM_OK;
   }
@@ -3990,12 +3990,16 @@ static void sortedMeasureDb(lsm_db *pDb, Metric *p){
 #endif
 
 /*
-** This function is called once for each page worth of data is written to 
-** the in-memory tree. It calls sortedWork() to do roughly enough work
-** to prevent the height of the tree from growing indefinitely, even if
-** there are no other calls to sortedWork().
+** This function is called in auto-work mode to perform merging work on
+** the data structure. It performs enough merging work to prevent the
+** height of the tree from growing indefinitely assuming that roughly
+** nUnit database pages worth of data have been written to the database
+** (i.e. the in-memory tree) since the last call.
 */
-int lsmSortedAutoWork(lsm_db *pDb, int nUnit){
+int lsmSortedAutoWork(
+  lsm_db *pDb,                    /* Database handle */
+  int nUnit                       /* Pages of data written to in-memory tree */
+){
   int rc;                         /* Return code */
   int nRemaining;                 /* Units of work to do before returning */
   int nDepth;                     /* Current height of tree (longest path) */
@@ -4010,7 +4014,6 @@ int lsmSortedAutoWork(lsm_db *pDb, int nUnit){
   for(pLevel=lsmDbSnapshotLevel(pDb->pWorker); pLevel; pLevel=pLevel->pNext){
     /* nDepth += LSM_MAX(1, pLevel->nRight); */
     nDepth += 1;
-    /* nDepth += pLevel->nRight; */
   }
   nRemaining = nUnit * nDepth;
 

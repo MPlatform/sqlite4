@@ -1441,4 +1441,20 @@ sqlite4 db2 test2.db
 do_test 73.5 { catch { db2 eval { SELECT * FROM t1 } } } {1}
 db2 close
 
+#-------------------------------------------------------------------------
+#
+reset_db
+
+do_execsql_test 74.1 { CREATE TABLE t1(a PRIMARY KEY, b) }
+
+do_test 74.2 {
+  for {set i 0} {$i<30} {incr i} {
+    db close
+    sqlite4 db test.db
+    execsql "INSERT INTO t1 VALUES('k$i', randstr(500,500))"
+  }
+} {}
+breakpoint
+db close
+
 finish_test
