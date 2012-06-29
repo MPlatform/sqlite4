@@ -598,7 +598,7 @@ static int encodeOneKeyValue(
       n = pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, nSpc, p->aOut+p->nOut);
       if( n>nSpc ){
         if( enlargeEncoderAllocation(p, n) ) return SQLITE4_NOMEM;
-        n + pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, n, p->aOut+p->nOut);
+        n = pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, n, p->aOut+p->nOut);
       }
       p->nOut += n;
     }
@@ -649,12 +649,11 @@ int sqlite4VdbeShortKey(
   int nKey,                       /* Size of buffer aKey[] in bytes */
   int nField                      /* Number of fields */
 ){
-  u8 *p = aKey;
-  u8 *pEnd = &aKey[nKey];
+  u8 *p = (u8*)aKey;
+  u8 *pEnd = (u8*)&aKey[nKey];
   u64 dummy;
   int i;
 
-  p = aKey;
   p += sqlite4GetVarint64(p, pEnd-p, &dummy);
 
   for(i=0; i<nField; i++){
@@ -734,8 +733,6 @@ int sqlite4VdbeEncodeKey(
   KeyEncoder x;
   u8 *so;
   CollSeq **aColl;
-  CollSeq *xColl;
-  static const CollSeq defaultColl;
 
   assert( pKeyInfo );
   assert( nIn<=pKeyInfo->nField );
@@ -776,7 +773,7 @@ int sqlite4VdbeDecodeIntKey(
 ){
   int isNeg;
   int e, x;
-  int i, n;
+  int i;
   sqlite4_int64 m;
   KVByteArray aBuf[12];
 

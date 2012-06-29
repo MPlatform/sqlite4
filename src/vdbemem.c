@@ -118,7 +118,7 @@ int sqlite4VdbeMemMakeWriteable(Mem *pMem){
   int f;
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
   assert( (pMem->flags&MEM_RowSet)==0 );
-  ExpandBlob(pMem);
+  (void)ExpandBlob(pMem);
   f = pMem->flags;
   if( (f&(MEM_Str|MEM_Blob)) && pMem->z!=pMem->zMalloc ){
     if( sqlite4VdbeMemGrow(pMem, pMem->n + 2, 1) ){
@@ -857,7 +857,7 @@ const void *sqlite4ValueText(sqlite4_value* pVal, u8 enc){
   }
   assert( (MEM_Blob>>3) == MEM_Str );
   pVal->flags |= (pVal->flags & MEM_Blob)>>3;
-  ExpandBlob(pVal);
+  (void)ExpandBlob(pVal);
   if( pVal->flags&MEM_Str ){
     sqlite4VdbeChangeEncoding(pVal, enc & ~SQLITE4_UTF16_ALIGNED);
     if( (enc & SQLITE4_UTF16_ALIGNED)!=0 && 1==(1&SQLITE4_PTR_TO_INT(pVal->z)) ){

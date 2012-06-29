@@ -139,7 +139,7 @@ int sqlite4_clear_bindings(sqlite4_stmt *pStmt){
 const void *sqlite4_value_blob(sqlite4_value *pVal){
   Mem *p = (Mem*)pVal;
   if( p->flags & (MEM_Blob|MEM_Str) ){
-    sqlite4VdbeMemExpandBlob(p);
+   (void)sqlite4VdbeMemExpandBlob(p);
     p->flags &= ~MEM_Str;
     p->flags |= MEM_Blob;
     return p->n ? p->z : 0;
@@ -402,7 +402,7 @@ static int sqlite4Step(Vdbe *p){
   /* Invoke the profile callback if there is one
   */
   if( rc!=SQLITE4_ROW && db->xProfile && !db->init.busy && p->zSql ){
-    sqlite4_int64 iNow;
+    sqlite4_uint64 iNow = 0;
     sqlite4OsCurrentTime(0, &iNow);
     db->xProfile(db->pProfileArg, p->zSql, (iNow - p->startTime)*1000000);
   }

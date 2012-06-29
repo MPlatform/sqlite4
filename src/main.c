@@ -406,11 +406,12 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     */
     case SQLITE4_ENVCONFIG_KVSTORE_POP:
     case SQLITE4_ENVCONFIG_KVSTORE_GET: {
+      typedef int (**PxFact)(sqlite4_env*,KVStore**,const char*,unsigned);
       const char *zName = va_arg(ap, const char*);
       KVFactory *pMkr, **ppPrev;
-      int (**pxFact)(sqlite4_env*,KVStore**,const char*,unsigned);
+      PxFact pxFact;
 
-      pxFact = va_arg(ap,int(**)(sqlite4_env*,KVStore*,const char*,unsigned));
+      pxFact = va_arg(ap,PxFact);
       *pxFact = 0;
       sqlite4_mutex_enter(pEnv->pFactoryMutex);
       ppPrev = &pEnv->pFactory;

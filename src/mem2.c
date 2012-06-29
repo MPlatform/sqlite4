@@ -399,7 +399,7 @@ int sqlite4MemdebugHasType(const void *p, u8 eType){
   int rc = 1;
   if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
-    pHdr = sqlite4MemsysGetHeader(p);
+    pHdr = sqlite4MemsysGetHeader((void*)p);
     assert( pHdr->iForeGuard==FOREGUARD );         /* Allocation is valid */
     if( (pHdr->eType&eType)==0 ){
       rc = 0;
@@ -421,7 +421,7 @@ int sqlite4MemdebugNoType(const void *p, u8 eType){
   int rc = 1;
   if( p && sqlite4DefaultEnv.m.xMalloc==sqlite4MemMalloc ){
     struct MemBlockHdr *pHdr;
-    pHdr = sqlite4MemsysGetHeader(p);
+    pHdr = sqlite4MemsysGetHeader((void*)p);
     assert( pHdr->iForeGuard==FOREGUARD );         /* Allocation is valid */
     if( (pHdr->eType&eType)!=0 ){
       rc = 0;

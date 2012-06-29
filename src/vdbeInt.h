@@ -308,7 +308,7 @@ struct Vdbe {
   yDbMask stmtTransMask;  /* db->aDb[] entries that have a subtransaction */
   int aCounter[3];        /* Counters used by sqlite4_stmt_status() */
 #ifndef SQLITE4_OMIT_TRACE
-  i64 startTime;          /* Time when query started - used for profiling */
+  u64 startTime;          /* Time when query started - used for profiling */
 #endif
   i64 nFkConstraint;      /* Number of imm. FK constraints this VM */
   i64 nStmtDefCons;       /* Number of def. constraints when stmt started */

@@ -456,7 +456,7 @@ static void registerTrace(FILE *out, int iReg, Mem *p){
 ** in memory obtained from sqlite4_malloc) into a Vdbe.zErrMsg (text stored
 ** in memory obtained from sqlite4DbMalloc).
 */
-static void importVtabErrMsg(Vdbe *p, sqlite4_vtab *pVtab){
+/*UNUSED static*/ void importVtabErrMsg(Vdbe *p, sqlite4_vtab *pVtab){
   sqlite4 *db = p->db;
   sqlite4DbFree(db, p->zErrMsg);
   p->zErrMsg = sqlite4DbStrDup(db, pVtab->zErrMsg);
@@ -2300,7 +2300,7 @@ case OP_MakeRecord: {
       applyAffinity(pMem, *(zAffinity++), encoding);
     }
     if( pMem->flags&MEM_Zero ){
-      ExpandBlob(pMem);
+      (void)ExpandBlob(pMem);
     }
   }
 
@@ -3284,7 +3284,6 @@ case OP_NewIdxid: {          /* in1 */
   u64 iMax;
   KVStore *pKV;
   KVCursor *pCsr;
-  int iDb;
  
   pKV = db->aDb[pOp->p2].pKV;
   pIn1 = &aMem[pOp->p1];
@@ -3367,9 +3366,6 @@ case OP_InsertInt: {
   Mem *pKey;        /* MEM cell holding key  for the record */
   i64 iKey;         /* The integer ROWID or key for the record to be inserted */
   VdbeCursor *pC;   /* Cursor to table into which insert is written */
-  const char *zDb;  /* database name - used by the update hook */
-  const char *zTbl; /* Table name - used by the opdate hook */
-  int op;           /* Opcode for update hook: SQLITE4_UPDATE or SQLITE4_INSERT */
   int n;
   KVByteArray aKey[24];
 
@@ -3560,8 +3556,6 @@ case OP_RowData: {
 case OP_Rowid: {                 /* out2-prerelease */
   VdbeCursor *pC;
   i64 v;
-  sqlite4_vtab *pVtab;
-  const sqlite4_module *pModule;
   const KVByteArray *aKey;
   KVSize nKey;
   int n;
@@ -3725,7 +3719,6 @@ case OP_SorterNext:    /* jump */
 case OP_Prev:          /* jump */
 case OP_Next: {        /* jump */
   VdbeCursor *pC;
-  int res;
 
   CHECK_FOR_INTERRUPT;
   assert( pOp->p1>=0 && pOp->p1<p->nCursor );
@@ -3734,7 +3727,6 @@ case OP_Next: {        /* jump */
   if( pC==0 ){
     break;  /* See ticket #2273 */
   }
-  res = 1;
   assert( pOp->opcode!=OP_Next || pOp->p4.xAdvance==sqlite4VdbeNext );
   assert( pOp->opcode!=OP_Prev || pOp->p4.xAdvance==sqlite4VdbePrevious );
   rc = pOp->p4.xAdvance(pC);
@@ -4058,7 +4050,7 @@ case OP_RowSetAdd: {         /* in1, in3 */
 ** instruction P2.
 */
 case OP_RowSetRead: {       /* in1 */
-  const char *aKey;
+  const u8 *aKey;
   int nKey;
 
   CHECK_FOR_INTERRUPT;
@@ -4067,7 +4059,7 @@ case OP_RowSetRead: {       /* in1 */
   if( (pIn1->flags & MEM_RowSet)
    && (aKey = sqlite4RowSetRead(pIn1->u.pRowSet, &nKey))
   ){
-    rc = sqlite4VdbeMemSetStr(pOut, aKey, nKey, 0, SQLITE4_TRANSIENT);
+    rc = sqlite4VdbeMemSetStr(pOut, (char const *)aKey, nKey, 0, SQLITE4_TRANSIENT);
     sqlite4RowSetNext(pIn1->u.pRowSet);
   }else{
     /* The RowSet is empty */

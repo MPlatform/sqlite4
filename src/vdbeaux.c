@@ -1866,7 +1866,6 @@ int sqlite4VdbeCheckFk(Vdbe *p, int deferred){
 ** means the close did not happen and needs to be repeated.
 */
 int sqlite4VdbeHalt(Vdbe *p){
-  int rc;
   sqlite4 *db = p->db;
 
   if( db->mallocFailed ) p->rc = SQLITE4_NOMEM;
@@ -1922,7 +1921,7 @@ int sqlite4VdbeHalt(Vdbe *p){
       ** encountered. So either commit (if eAction==0) or rollback (if 
       ** eAction==1) any statement transactions opened by this VM.  */
       assert( eAction==0 || eAction==1 );
-      rc = vdbeCloseStatement(p, eAction);
+      vdbeCloseStatement(p, eAction);
     }
 
     if( p->changeCntOn ){

@@ -3716,9 +3716,7 @@ static char *explainIndexRange(sqlite4 *db, WhereLevel *pLevel, Table *pTab){
   Index *pPk;
   Index *pIdx = pPlan->u.pIdx;
   int nEq = pPlan->nEq;
-  int i, j;
-  Column *aCol = pTab->aCol;
-  int *aiColumn = pIdx->aiColumn;
+  int i;
   StrAccum txt;
 
   pPk = sqlite4FindPrimaryKey(pTab, 0);
