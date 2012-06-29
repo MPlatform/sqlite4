@@ -12,6 +12,13 @@
 **
 ** Unix-specific run-time environment implementation for LSM.
 */
+#if defined(__GNUC__) || defined(__TINYC__)
+/* workaround for ftruncate() visibility on gcc. */
+# ifndef _XOPEN_SOURCE
+#  define _XOPEN_SOURCE 500
+# endif
+#endif
+
 #include <unistd.h>
 #include <sys/types.h>
 

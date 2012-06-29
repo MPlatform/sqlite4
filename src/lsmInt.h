@@ -285,6 +285,7 @@ void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
 lsm_i64 lsmCheckpointLogOffset(void *pExport);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
+int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);
 
 /* 
 ** Functions from file "lsm_tree.c".

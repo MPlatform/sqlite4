@@ -1107,8 +1107,7 @@ void sqlite4AddPrimaryKey(
 #endif
 
   {
-    Index *p;
-    p = sqlite4CreateIndex(
+    sqlite4CreateIndex(
         pParse, 0, 0, 0, pList, onError, 0, 0, sortOrder, 0, 1
     );
     pList = 0;
@@ -2252,7 +2251,6 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx, int bCreate){
   int addr1;                     /* Address of top of loop */
   Vdbe *v;                       /* Generate code into this virtual machine */
   int regKey;                    /* Registers containing the index key */
-  int regRecord;                 /* Register holding assemblied index record */
   sqlite4 *db = pParse->db;      /* The database connection */
   int iDb = sqlite4SchemaToIndex(db, pIdx->pSchema);
   Index *pPk;
@@ -2284,7 +2282,7 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx, int bCreate){
   /* Loop through the contents of the PK index. At each row, insert the
   ** corresponding entry into the auxiliary index.  */
   addr1 = sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
-  regRecord = sqlite4GetTempRange(pParse,2);
+  sqlite4GetTempRange(pParse,2);
   regKey = sqlite4GetTempReg(pParse);
   sqlite4EncodeIndexKey(pParse, pPk, iTab, pIdx, iIdx, 0, regKey);
   if( pIdx->onError!=OE_None ){

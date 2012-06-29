@@ -56,7 +56,7 @@
 */
 typedef struct DateTime DateTime;
 struct DateTime {
-  sqlite4_int64 iJD; /* The julian day number times 86400000 */
+  sqlite4_uint64 iJD; /* The julian day number times 86400000 */
   int Y, M, D;       /* Year, month, and day */
   int h, m;          /* Hour and minutes */
   int tz;            /* Timezone offset in minutes */
@@ -294,7 +294,6 @@ static int parseYyyyMmDd(const char *zDate, DateTime *p){
 ** Return the number of errors.
 */
 static int setDateTimeToCurrent(sqlite4_context *context, DateTime *p){
-  sqlite4 *db = sqlite4_context_db_handle(context);
   if( sqlite4OsCurrentTime(0, &p->iJD)==SQLITE4_OK ){
     p->validJD = 1;
     return 0;

@@ -17,7 +17,7 @@
 */
 #include "sqliteInt.h"
 #include <stdarg.h>
-#ifdef SQLITE4_HAVE_ISNAN
+#ifndef SQLITE4_OMIT_FLOATING_POINT
 # include <math.h>
 #endif
 

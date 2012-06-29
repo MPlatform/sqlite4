@@ -82,7 +82,7 @@
 #ifndef _LSM_INT_H
 # include "lsmInt.h"
 #endif
-
+#include "sqlite4.h"            /* only for sqlite4_snprintf() */
 /* 
 ** Record types for user data.
 */
@@ -337,9 +337,9 @@ static u8 *fsPageData(Page *pPg, int *pnData){
   *pnData = ((struct FilePage *)(pPg))->nData;
   return ((struct FilePage *)(pPg))->aData;
 }
-static u8 *fsPageDataPtr(Page *pPg){
+/*UNUSED static u8 *fsPageDataPtr(Page *pPg){
   return ((struct FilePage *)(pPg))->aData;
-}
+}*/
 
 /*
 ** Write nVal as a 16-bit unsigned big-endian integer into buffer aOut.

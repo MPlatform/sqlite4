@@ -132,7 +132,7 @@ const char *sqlite4IndexAffinityStr(Vdbe *v, Index *pIdx){
     ** columns indexed by pIdx.  If pIdx is not itself the table's primary 
     ** key, then the second iteration of the loop adds the primary key 
     ** columns to zAff.  */
-    for(n=0, p=pIdx; p; p=(p==pPk ? 0 : pPk)){
+    for(n=0, p=pIdx; p; p=(p==pPk ? (Index*)0 : pPk)){
       int i;
       for(i=0; i<p->nColumn; i++){
         int iCol = p->aiColumn[i];
@@ -248,7 +248,7 @@ static int readsTable(Parse *p, int iStartAddr, int iDb, Table *pTab){
 ** The 2nd register is the one that is returned.  That is all the
 ** insert routine needs to know about.
 */
-static int autoIncBegin(
+/*static FIXME: make static when this function gets used. */ int autoIncBegin(
   Parse *pParse,      /* Parsing context */
   int iDb,            /* Index of the database holding pTab */
   Table *pTab         /* The table we are writing to */
@@ -322,7 +322,7 @@ void sqlite4AutoincrementBegin(Parse *pParse){
 ** larger than the maximum rowid in the memId memory cell, then the
 ** memory cell is updated.  The stack is unchanged.
 */
-static void autoIncStep(Parse *pParse, int memId, int regRowid){
+/*static FIXME: make static when this function gets used. */ void autoIncStep(Parse *pParse, int memId, int regRowid){
   if( memId>0 ){
     sqlite4VdbeAddOp2(pParse->pVdbe, OP_MemMax, memId, regRowid);
   }
@@ -379,7 +379,7 @@ void sqlite4AutoincrementEnd(Parse *pParse){
 
 
 /* Forward declaration */
-static int xferOptimization(
+/*static FIXME: make static when this function gets used. */ int xferOptimization(
   Parse *pParse,        /* Parser context */
   Table *pDest,         /* The table we are inserting into */
   Select *pSelect,      /* A SELECT statement to use as the data source */
@@ -939,7 +939,6 @@ void sqlite4Insert(
     }
   }
 
-insert_end:
   /* Update the sqlite_sequence table by storing the content of the
   ** maximum rowid counter values recorded while inserting into
   ** autoincrement tables.
@@ -1241,7 +1240,6 @@ void sqlite4GenerateConstraintChecks(
   Index *pPk;                     /* Primary key index for table pTab */
   int i;              /* loop counter */
   Vdbe *v;            /* VDBE under constrution */
-  int nCol;           /* Number of columns */
   int onError;        /* Conflict resolution strategy */
   int iCur;           /* Table cursor number */
   Index *pIdx;         /* Pointer to one of the indices */
@@ -1250,7 +1248,6 @@ void sqlite4GenerateConstraintChecks(
   v = sqlite4GetVdbe(pParse);
   assert( v!=0 );
   assert( pTab->pSelect==0 );  /* This table is not a VIEW */
-  nCol = pTab->nCol;
   pPk = sqlite4FindPrimaryKey(pTab, 0);
   nPkRoot = sqlite4PutVarint64(aPkRoot, pPk->tnum);
 
