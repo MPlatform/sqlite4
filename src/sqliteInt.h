@@ -1543,13 +1543,13 @@ struct AggInfo {
   int sortingIdx;         /* Cursor number of the sorting index */
   ExprList *pGroupBy;     /* The group by clause */
   int nSortingColumn;     /* Number of columns in the sorting index */
-  AggInfoCol *aCol;
+  AggInfoCol *aCol;       /* For each column used in source tables. */
   int nColumn;            /* Number of used entries in aCol[] */
   int nColumnAlloc;       /* Number of slots allocated for aCol[] */
   int nAccumulator;       /* Number of columns that show through to the output.
                           ** Additional columns are used only as parameters to
                           ** aggregate functions */
-  AggInfoFunc *aFunc; /* For each aggregate function */
+  AggInfoFunc *aFunc;     /* For each aggregate function */
   int nFunc;              /* Number of entries in aFunc[] */
   int nFuncAlloc;         /* Number of slots allocated for aFunc[] */
 };
