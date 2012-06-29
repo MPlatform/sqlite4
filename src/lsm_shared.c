@@ -973,7 +973,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   */
   lsmMutexEnter(pDb->pEnv, p->pClientMutex);
   pSnap = p->pClient;
-  if( p->bCheckpointer==0 && pSnap->iId>p->iCheckpointId ){
+  if( pSnap->pExport && p->bCheckpointer==0 && pSnap->iId>p->iCheckpointId ){
     p->bCheckpointer = 1;
     pSnap->nRef++;
   }else{
