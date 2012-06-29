@@ -450,9 +450,9 @@ proc static_setup {zDb} {
   panedwindow .pan -orient horizontal
   frame .pan.c
   set C [scrollable canvas .pan.c.c -background white -width 400 -height 600]
-  pack .pan.c.c -side top -fill both -expand 1
   label .pan.c.info -border 2 -relief sunken -height 2
-  pack .pan.c.info -side top -fill x -expand 1
+  pack .pan.c.info -side bottom -fill x 
+  pack .pan.c.c -side top -fill both -expand 1
 
   link_varset $C myText myDb myData myTree mySelected myMode myModeButton
   set myDb $zDb
