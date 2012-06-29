@@ -835,7 +835,7 @@ struct sqlite4 {
   int nTotalChange;             /* Value returned by sqlite4_total_changes() */
   sqlite4_mutex *mutex;         /* Connection mutex */
   int aLimit[SQLITE4_N_LIMIT];   /* Limits */
-  Sqlite4InitInfo init;
+  Sqlite4InitInfo init;         /* Information used during initialization */
   int nExtension;               /* Number of loaded extensions */
   void **aExtension;            /* Array of shared library handles */
   struct Vdbe *pVdbe;           /* List of active virtual machines */
