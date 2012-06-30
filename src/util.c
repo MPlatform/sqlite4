@@ -542,7 +542,7 @@ int sqlite4Atoi64(const char *zNum, i64 *pNum, int length, u8 enc){
 ** input number to be zero-terminated.
 */
 int sqlite4GetInt32(const char *zNum, int *pValue){
-  sqlite_int64 v = 0;
+  sqlite4_int64 v = 0;
   int i, c;
   int neg = 0;
   if( zNum[0]=='-' ){

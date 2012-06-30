@@ -670,7 +670,7 @@ static int collNocaseMkKey(
 /*
 ** Return the ROWID of the most recent insert
 */
-sqlite_int64 sqlite4_last_insert_rowid(sqlite4 *db){
+sqlite4_int64 sqlite4_last_insert_rowid(sqlite4 *db){
   return db->lastRowid;
 }
 
@@ -1136,7 +1136,7 @@ void *sqlite4_trace(sqlite4 *db, void (*xTrace)(void*,const char*), void *pArg){
 */
 void *sqlite4_profile(
   sqlite4 *db,
-  void (*xProfile)(void*,const char*,sqlite_uint64),
+  void (*xProfile)(void*,const char*,sqlite4_uint64),
   void *pArg
 ){
   void *pOld;

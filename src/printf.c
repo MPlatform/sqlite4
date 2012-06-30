@@ -182,7 +182,7 @@ void sqlite4VXPrintf(
   etByte done;               /* Loop termination flag */
   etByte xtype = 0;          /* Conversion paradigm */
   char prefix;               /* Prefix character.  "+" or "-" or " " or '\0'. */
-  sqlite_uint64 longvalue;   /* Value for integer types */
+  sqlite4_uint64 longvalue;   /* Value for integer types */
   LONGDOUBLE_TYPE realvalue; /* Value for real types */
   const et_info *infop;      /* Pointer to the appropriate info structure */
   char *zOut;                /* Rendering buffer */

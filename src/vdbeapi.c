@@ -159,7 +159,7 @@ double sqlite4_value_double(sqlite4_value *pVal){
 int sqlite4_value_int(sqlite4_value *pVal){
   return (int)sqlite4VdbeIntValue((Mem*)pVal);
 }
-sqlite_int64 sqlite4_value_int64(sqlite4_value *pVal){
+sqlite4_int64 sqlite4_value_int64(sqlite4_value *pVal){
   return sqlite4VdbeIntValue((Mem*)pVal);
 }
 const unsigned char *sqlite4_value_text(sqlite4_value *pVal){
@@ -772,8 +772,8 @@ int sqlite4_column_int(sqlite4_stmt *pStmt, int i){
   columnMallocFailure(pStmt);
   return val;
 }
-sqlite_int64 sqlite4_column_int64(sqlite4_stmt *pStmt, int i){
-  sqlite_int64 val = sqlite4_value_int64( columnMem(pStmt,i) );
+sqlite4_int64 sqlite4_column_int64(sqlite4_stmt *pStmt, int i){
+  sqlite4_int64 val = sqlite4_value_int64( columnMem(pStmt,i) );
   columnMallocFailure(pStmt);
   return val;
 }
@@ -1063,7 +1063,7 @@ int sqlite4_bind_double(sqlite4_stmt *pStmt, int i, double rValue){
 int sqlite4_bind_int(sqlite4_stmt *p, int i, int iValue){
   return sqlite4_bind_int64(p, i, (i64)iValue);
 }
-int sqlite4_bind_int64(sqlite4_stmt *pStmt, int i, sqlite_int64 iValue){
+int sqlite4_bind_int64(sqlite4_stmt *pStmt, int i, sqlite4_int64 iValue){
   int rc;
   Vdbe *p = (Vdbe *)pStmt;
   rc = vdbeUnbind(p, i);

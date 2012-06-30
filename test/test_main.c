@@ -1167,7 +1167,7 @@ static int sqlite4_mprintf_int64(
   char **argv            /* Text of each argument */
 ){
   int i;
-  sqlite_int64 a[3];
+  sqlite4_int64 a[3];
   char *z;
   if( argc!=5 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
@@ -1379,7 +1379,7 @@ static int sqlite4_mprintf_hexdouble(
   char *z;
   double r;
   unsigned int x1, x2;
-  sqlite_uint64 d;
+  sqlite4_uint64 d;
   if( argc!=3 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
        " FORMAT STRING\"", 0);

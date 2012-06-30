@@ -300,7 +300,7 @@ static void DbTraceHandler(void *cd, const char *zSql){
 ** This routine is called by the SQLite profile handler after a statement
 ** SQL has executed.  The TCL script in pDb->zProfile is evaluated.
 */
-static void DbProfileHandler(void *cd, const char *zSql, sqlite_uint64 tm){
+static void DbProfileHandler(void *cd, const char *zSql, sqlite4_uint64 tm){
   SqliteDb *pDb = (SqliteDb*)cd;
   Tcl_DString str;
   char zTm[100];
@@ -454,7 +454,7 @@ static void tclSqlFunc(sqlite4_context *context, int argc, sqlite4_value**argv){
           break;
         }
         case SQLITE4_INTEGER: {
-          sqlite_int64 v = sqlite4_value_int64(pIn);
+          sqlite4_int64 v = sqlite4_value_int64(pIn);
           if( v>=-2147483647 && v<=2147483647 ){
             pVal = Tcl_NewIntObj((int)v);
           }else{
@@ -1140,7 +1140,7 @@ static Tcl_Obj *dbEvalColumnValue(DbEvalContext *p, int iCol){
       return Tcl_NewByteArrayObj((u8*)zBlob, bytes);
     }
     case SQLITE4_INTEGER: {
-      sqlite_int64 v = sqlite4_column_int64(pStmt, iCol);
+      sqlite4_int64 v = sqlite4_column_int64(pStmt, iCol);
       if( v>=-2147483647 && v<=2147483647 ){
         return Tcl_NewIntObj((int)v);
       }else{

@@ -277,9 +277,9 @@ static void roundFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
   ** otherwise use printf.
   */
   if( n==0 && r>=0 && r<LARGEST_INT64-1 ){
-    r = (double)((sqlite_int64)(r+0.5));
+    r = (double)((sqlite4_int64)(r+0.5));
   }else if( n==0 && r<0 && (-r)<LARGEST_INT64-1 ){
-    r = -(double)((sqlite_int64)((-r)+0.5));
+    r = -(double)((sqlite4_int64)((-r)+0.5));
   }else{
     zBuf = sqlite4_mprintf(pEnv,"%.*f",n,r);
     if( zBuf==0 ){
@@ -397,7 +397,7 @@ static void randomFunc(
   int NotUsed,
   sqlite4_value **NotUsed2
 ){
-  sqlite_int64 r;
+  sqlite4_int64 r;
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
   sqlite4_randomness(sqlite4_context_env(context), sizeof(r), &r);
   if( r<0 ){

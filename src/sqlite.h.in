@@ -271,17 +271,17 @@ typedef struct sqlite4 sqlite4;
 ** between 0 and +18446744073709551615 inclusive.
 */
 #ifdef SQLITE4_INT64_TYPE
-  typedef SQLITE4_INT64_TYPE sqlite_int64;
-  typedef unsigned SQLITE4_INT64_TYPE sqlite_uint64;
+  typedef SQLITE4_INT64_TYPE sqlite4_int64_t;
+  typedef unsigned SQLITE4_INT64_TYPE sqlite4_uint64_t;
 #elif defined(_MSC_VER) || defined(__BORLANDC__)
-  typedef __int64 sqlite_int64;
-  typedef unsigned __int64 sqlite_uint64;
+  typedef __int64 sqlite4_int64_t;
+  typedef unsigned __int64 sqlite4_uint64_t;
 #else
-  typedef long long int sqlite_int64;
-  typedef unsigned long long int sqlite_uint64;
+  typedef long long int sqlite4_int64_t;
+  typedef unsigned long long int sqlite4_uint64_t;
 #endif
-typedef sqlite_int64 sqlite4_int64;
-typedef sqlite_uint64 sqlite4_uint64;
+typedef sqlite4_int64_t sqlite4_int64;
+typedef sqlite4_uint64_t sqlite4_uint64;
 
 /*
 ** CAPIREF: String length type
