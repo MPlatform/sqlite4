@@ -764,10 +764,9 @@ int sqlite4_close(sqlite4 *db){
     if( pDb->pKV ){
       sqlite4KVStoreClose(pDb->pKV);
       pDb->pKV = 0;
-      if( j!=1 ){
-        pDb->pSchema = 0;
-      }
     }
+    sqlite4DbFree(db, pDb->pSchema);
+    pDb->pSchema = 0;
   }
   sqlite4ResetInternalSchema(db, -1);
 
@@ -818,14 +817,6 @@ int sqlite4_close(sqlite4 *db){
   }
 
   db->magic = SQLITE4_MAGIC_ERROR;
-
-  /* The temp-database schema is allocated differently from the other schema
-  ** objects (using sqliteMalloc() directly, instead of sqlite4BTreeSchema()).
-  ** So it needs to be freed here. Todo: Why not roll the temp schema into
-  ** the same sqliteMalloc() as the one that allocates the database 
-  ** structure?
-  */
-  sqlite4DbFree(db, db->aDb[1].pSchema);
   sqlite4_mutex_leave(db->mutex);
   db->magic = SQLITE4_MAGIC_CLOSED;
   sqlite4_mutex_free(db->mutex);
