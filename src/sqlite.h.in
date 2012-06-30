@@ -534,6 +534,9 @@ struct sqlite4_mutex {
 ** ^The sqlite4_initialize(A) routine initializes an sqlite4_env object A.
 ** ^The sqlite4_shutdown(A) routine
 ** deallocates any resources that were allocated by sqlite4_initialize(A).
+** A parameter value of NULL means to use the default environment.
+** All environment objects are required to be initialized before use
+** (even the default environment).
 **
 ** A call to sqlite4_initialize(A) is an "effective" call if it is
 ** the first time sqlite4_initialize(A) is invoked during the lifetime of
@@ -545,7 +548,9 @@ struct sqlite4_mutex {
 ** A call to sqlite4_shutdown(A) is an "effective" call if it is the first
 ** call to sqlite4_shutdown(A) since the last sqlite4_initialize(A).  ^(Only
 ** an effective call to sqlite4_shutdown(A) does any deinitialization.
-** All other valid calls to sqlite4_shutdown(A) are harmless no-ops.)^
+** All other valid calls to sqlite4_shutdown(A) are harmless no-ops.)^ Like
+** sqlite4_initialize(), sqlite4_shutdown() accepts a NULL parameter to mean
+** the default environment.
 **
 ** The sqlite4_initialize(A) interface is threadsafe, but sqlite4_shutdown(A)
 ** is not.  The sqlite4_shutdown(A) interface must only be called from a
