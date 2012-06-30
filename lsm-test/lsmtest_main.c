@@ -472,9 +472,29 @@ static lsm_db *configure_lsm_db(TestDb *pDb){
   lsm_db *pLsm;
   pLsm = tdb_lsm(pDb);
   if( pLsm ){
-    tdb_lsm_config_str(pDb, "mmap=1 autowork=1 nmerge=4 worker_nmerge=4");
+    tdb_lsm_config_str(pDb, "mmap=0 autowork=1 nmerge=4 worker_nmerge=4");
   }
   return pLsm;
+}
+
+
+static void do_speed_write_hook2(
+  void *pCtx,
+  int bLog,
+  i64 iOff,
+  int nData,
+  int nUs
+){
+  FILE *pOut = (FILE *)pCtx;
+  if( bLog ) return;
+
+  if( nData==0 ){
+    fprintf(pOut, "s %s 0 0 %d\n", (bLog ? "l" : "d"), nUs);
+  }else{
+    fprintf(pOut, "w %s %d %d %d\n", (bLog ? "l" : "d"),
+        (int)iOff, nData, nUs
+    );
+  }
 }
 
 int do_speed_tests(int nArg, char **azArg){
@@ -591,6 +611,7 @@ int do_speed_tests(int nArg, char **azArg){
     printf("Writing output to file \"%s\".\n",  zOut);
 
     for(j=0; aSys[j].zLibrary; j++){
+      FILE *pLog = 0;
       TestDb *pDb;                  /* Database being tested */
       lsm_db *pLsm;
       int iDot = 0;
@@ -605,6 +626,10 @@ int do_speed_tests(int nArg, char **azArg){
       if( rc ) return rc;
 
       pLsm = configure_lsm_db(pDb);
+#if 1
+      pLog = fopen("/tmp/speed.log", "w");
+      tdb_lsm_write_hook(pDb, do_speed_write_hook2, (void *)pLog);
+#endif
   
       testTimeInit();
       for(i=0; i<nRow; i+=nStep){
@@ -625,6 +650,7 @@ int do_speed_tests(int nArg, char **azArg){
       }
 
       tdb_close(pDb);
+      if( pLog ) fclose(pLog);
       testCaseFinish(rc);
     }
   }
@@ -873,13 +899,14 @@ static int do_writer_test(int nArg, char **azArg){
   char aFilesize[32];
   char aBlockSize[32];
 
-  char *aBlock;
+  char *aPage;
   int *aOrder;
   int nSync;
 
   i64 filesize;
   i64 blocksize;
   i64 syncsize;
+  int nPage = 4096;
 
   /* How long to sleep before running a trial (in ms). */
 #if 0
@@ -900,7 +927,7 @@ static int do_writer_test(int nArg, char **azArg){
   nSize = (int)blocksize;
   nSync = (int)(syncsize / blocksize);
 
-  aBlock = (char *)malloc(nSize);
+  aPage = (char *)malloc(4096);
   aOrder = (int *)malloc(nBlock * sizeof(int));
   for(i=0; i<nBlock; i++) aOrder[i] = i;
   for(i=0; i<(nBlock*25); i++){
@@ -934,8 +961,11 @@ static int do_writer_test(int nArg, char **azArg){
   }
   testTimeInit();
   for(i=0; i<nBlock; i++){
-    memset(aBlock, i&0xFF, nSize);
-    write(fd, aBlock, nSize);
+    int iPg;
+    memset(aPage, i&0xFF, nPage);
+    for(iPg=0; iPg<(nSize/nPage); iPg++){
+      write(fd, aPage, nPage);
+    }
   }
   fsync(fd);
   printf("ok (%d ms)\n", testTimeGet());
@@ -950,11 +980,14 @@ static int do_writer_test(int nArg, char **azArg){
     lseek(fd, 0, SEEK_SET);
     testTimeInit();
     for(j=0; j<nBlock; j++){
-      if( ((j+1)%nSync)==0 ) fsync(fd);
-      memset(aBlock, j&0xFF, nSize);
-      write(fd, aBlock, nSize);
+      int iPg;
+      if( ((j+1)%nSync)==0 ) fdatasync(fd);
+      memset(aPage, j&0xFF, nPage);
+      for(iPg=0; iPg<(nSize/nPage); iPg++){
+        write(fd, aPage, nPage);
+      }
     }
-    fsync(fd);
+    fdatasync(fd);
     ms = testTimeGet();
     printf("%d ms\n", ms);
     sqlite3_sleep(nSleep);
@@ -963,18 +996,21 @@ static int do_writer_test(int nArg, char **azArg){
     fflush(stdout);
     testTimeInit();
     for(j=0; j<nBlock; j++){
-      if( ((j+1)%nSync)==0 ) fsync(fd);
-      memset(aBlock, j&0xFF, nSize);
+      int iPg;
+      if( ((j+1)%nSync)==0 ) fdatasync(fd);
       lseek(fd, aOrder[j]*nSize, SEEK_SET);
-      write(fd, aBlock, nSize);
+      memset(aPage, j&0xFF, nPage);
+      for(iPg=0; iPg<(nSize/nPage); iPg++){
+        write(fd, aPage, nPage);
+      }
     }
-    fsync(fd);
+    fdatasync(fd);
     ms = testTimeGet();
     printf("%d ms\n", ms);
   }
 
   close(fd);
-  free(aBlock);
+  free(aPage);
   free(aOrder);
 
   return 0;
@@ -1014,7 +1050,8 @@ static void do_insert_write_hook(
   void *pCtx,
   int bLog,
   i64 iOff,
-  int nData
+  int nData,
+  int nUs
 ){
   InsertWriteHook *pHook = (InsertWriteHook *)pCtx;
   if( bLog ) return;

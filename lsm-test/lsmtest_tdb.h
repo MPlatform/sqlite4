@@ -152,7 +152,7 @@ void tdb_lsm_prepare_sync_crash(TestDb *pDb, int iSync);
 
 void tdb_lsm_config_work_hook(TestDb *pDb, void (*)(lsm_db *, void *), void *);
 
-void tdb_lsm_write_hook(TestDb *pDb, void(*)(void *, int, lsm_i64, int), void*);
+void tdb_lsm_write_hook(TestDb *, void(*)(void*,int,lsm_i64,int,int), void*);
 
 #ifdef __cplusplus
 }  /* End of the 'extern "C"' block */

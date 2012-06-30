@@ -265,7 +265,6 @@ int lsmFlushToDisk(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
   int nLsmLevel;
   int bOvfl;
-  int bAutowork = 0;              /* True to do auto-work after flush */
 
   /* Must not hold the worker snapshot when this is called. */
   assert( pDb->pWorker==0 );
@@ -276,12 +275,8 @@ int lsmFlushToDisk(lsm_db *pDb){
 
   bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   if( rc==LSM_OK && pDb->bAutowork ){
-    if( bOvfl ){
-      rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
-      bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
-    }else if( lsmDbTreeSize(pDb)>0 ){
-      bAutowork = 1;
-    }
+    rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
+    bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   }
 
   /* Write the contents of the in-memory tree into the database file and 
@@ -289,19 +284,21 @@ int lsmFlushToDisk(lsm_db *pDb){
   ** the db file to disk too. No calls to fsync() are made here - just 
   ** write().  */
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
+#if 0
   if( rc==LSM_OK && bAutowork ){
     assert( bOvfl==0 && nLsmLevel==0 );
     rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
     bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
     if( bOvfl && rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
   }
+#endif
   if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
 
   /* Create a new client snapshot - one that uses the new runs created above. */
   if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nLsmLevel, bOvfl);
 
   /* Restore the position of any open cursors */
-  rc = lsmRestoreCursors(pDb);
+  if( rc==LSM_OK ) rc = lsmRestoreCursors(pDb);
 
 #if 0
   if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "flush");

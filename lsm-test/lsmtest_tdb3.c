@@ -99,7 +99,7 @@ struct LsmDb {
   void *pWorkCtx;
 
   /* IO logging hook */
-  void (*xWriteHook)(void *, int, lsm_i64, int);
+  void (*xWriteHook)(void *, int, lsm_i64, int, int);
   void *pWriteCtx;
   
   /* Worker threads (for lsm_mt) */
@@ -199,9 +199,21 @@ static int testEnvWrite(lsm_file *pFile, lsm_i64 iOff, void *pData, int nData){
       }
     }
   }
+
   if( pDb->xWriteHook ){
+    int rc;
+    int nUs;
+    struct timeval t1;
+    struct timeval t2;
+
+    gettimeofday(&t1, 0);
     assert( nData>0 );
-    pDb->xWriteHook(pDb->pWriteCtx, p->bLog, iOff, nData);
+    rc = pRealEnv->xWrite(p->pReal, iOff, pData, nData);
+    gettimeofday(&t2, 0);
+
+    nUs = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+    pDb->xWriteHook(pDb->pWriteCtx, p->bLog, iOff, nData, nUs);
+    return rc;
   }
 
   return pRealEnv->xWrite(p->pReal, iOff, pData, nData);
@@ -222,8 +234,20 @@ static int testEnvSync(lsm_file *pFile){
       pData->aSector[i].aOld = 0;
     }
   }
+
   if( pDb->xWriteHook ){
-    pDb->xWriteHook(pDb->pWriteCtx, p->bLog, 0, 0);
+    int rc;
+    int nUs;
+    struct timeval t1;
+    struct timeval t2;
+
+    gettimeofday(&t1, 0);
+    rc = pRealEnv->xSync(p->pReal);
+    gettimeofday(&t2, 0);
+
+    nUs = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
+    pDb->xWriteHook(pDb->pWriteCtx, p->bLog, 0, 0, nUs);
+    return rc;
   }
 
   return pRealEnv->xSync(p->pReal);
@@ -703,7 +727,7 @@ void tdb_lsm_config_work_hook(
 
 void tdb_lsm_write_hook(
   TestDb *pDb, 
-  void (*xWrite)(void *, int, lsm_i64, int),
+  void (*xWrite)(void *, int, lsm_i64, int, int),
   void *pWriteCtx
 ){
   if( tdb_lsm(pDb) ){

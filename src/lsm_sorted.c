@@ -1315,7 +1315,6 @@ static int assertKeyLocation(
       int rc = lsmFsDbPageNext(pPtr->pSeg, pTest, eDir, &pNext);
       lsmFsPageRelease(pTest);
       pTest = pNext;
-      assert( rc==LSM_OK );
 
       if( pTest ){
         int nData;
@@ -1451,7 +1450,7 @@ int segmentPtrSeek(
   ** that pKey/nKey is greater than all keys on that page, and then by 
   ** loading (iPg+1) and testing that pKey/nKey is smaller than all
   ** the keys it houses.  */
-#if 1
+#if 0
   assert( assertKeyLocation(pCsr, pPtr, pKey, nKey) );
 #endif
 
@@ -3252,14 +3251,15 @@ static int multiCursorSetupTree(MultiCursor *pCsr, int bRev){
 /*
 ** Free all resources allocated by mergeWorkerInit().
 */
-static void mergeWorkerShutdown(MergeWorker *pMW){
+static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
   int i;                          /* Iterator variable */
+  int rc = *pRc;
   MultiCursor *pCsr = pMW->pCsr;
 
   /* Unless the merge has finished, save the cursor position in the
   ** Merge.aInput[] array. See function mergeWorkerInit() for the 
   ** code to restore a cursor position based on aInput[].  */
-  if( pCsr && lsmMCursorValid(pCsr) ){
+  if( rc==LSM_OK && pCsr && lsmMCursorValid(pCsr) ){
     Merge *pMerge = pMW->pLevel->pMerge;
     int bBtree = (pCsr->pBtCsr!=0);
     int iSegCsr;
@@ -3299,7 +3299,8 @@ static void mergeWorkerShutdown(MergeWorker *pMW){
     Hierarchy *p = &pMW->hier;
     int iPg;
     for(iPg=0; iPg<p->nHier; iPg++){
-      lsmFsPageRelease(p->apHier[iPg]);
+      int rc2 = lsmFsPageRelease(p->apHier[iPg]);
+      if( rc==LSM_OK ) rc = rc2;
     }
     lsmFree(pMW->pDb->pEnv, p->apHier);
     p->apHier = 0;
@@ -3422,7 +3423,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
     }
 #endif
 
-    mergeWorkerShutdown(pMW);
+    mergeWorkerShutdown(pMW, &rc);
   }
   return rc;
 }
@@ -3525,7 +3526,7 @@ int lsmSortedNewToplevel(
       rc = mergeWorkerStep(&mergeworker);
     }
 
-    mergeWorkerShutdown(&mergeworker);
+    mergeWorkerShutdown(&mergeworker, &rc);
     pNew->pMerge = 0;
   }
   lsmFreelistDeltaEnd(pDb);
@@ -3582,7 +3583,7 @@ int lsmSortedFlushTree(
   lsmDatabaseDirty(pDb);
 
   if( rc==LSM_OK ){
-    lsmSortedNewToplevel(pDb, nLevel, bFreelist);
+    rc = lsmSortedNewToplevel(pDb, nLevel, bFreelist);
   }
 
 #if 0
@@ -3927,7 +3928,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
       /* Clean up the MergeWorker object initialized above. If no error
       ** has occurred, invoke the work-hook to inform the application that
       ** the database structure has changed. */
-      mergeWorkerShutdown(&mergeworker);
+      mergeWorkerShutdown(&mergeworker, &rc);
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0

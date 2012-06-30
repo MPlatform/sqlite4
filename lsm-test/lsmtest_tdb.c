@@ -337,7 +337,7 @@ static int sql_close(TestDb *pTestDb){
   sqlite3_close(pDb->db);
   free((char *)pDb->aAlloc);
   free((char *)pDb);
-  return SQLITE4_OK;
+  return SQLITE_OK;
 }
 
 static int sql_write(
@@ -348,15 +348,15 @@ static int sql_write(
   int nVal
 ){
   SqlDb *pDb = (SqlDb *)pTestDb;
-  sqlite3_bind_blob(pDb->pInsert, 1, pKey, nKey, SQLITE4_STATIC);
-  sqlite3_bind_blob(pDb->pInsert, 2, pVal, nVal, SQLITE4_STATIC);
+  sqlite3_bind_blob(pDb->pInsert, 1, pKey, nKey, SQLITE_STATIC);
+  sqlite3_bind_blob(pDb->pInsert, 2, pVal, nVal, SQLITE_STATIC);
   sqlite3_step(pDb->pInsert);
   return sqlite3_reset(pDb->pInsert);
 }
 
 static int sql_delete(TestDb *pTestDb, void *pKey, int nKey){
   SqlDb *pDb = (SqlDb *)pTestDb;
-  sqlite3_bind_blob(pDb->pDelete, 1, pKey, nKey, SQLITE4_STATIC);
+  sqlite3_bind_blob(pDb->pDelete, 1, pKey, nKey, SQLITE_STATIC);
   sqlite3_step(pDb->pDelete);
   return sqlite3_reset(pDb->pDelete);
 }
@@ -378,9 +378,9 @@ static int sql_fetch(
     return LSM_OK;
   }
 
-  sqlite3_bind_blob(pDb->pFetch, 1, pKey, nKey, SQLITE4_STATIC);
+  sqlite3_bind_blob(pDb->pFetch, 1, pKey, nKey, SQLITE_STATIC);
   rc = sqlite3_step(pDb->pFetch);
-  if( rc==SQLITE4_ROW ){
+  if( rc==SQLITE_ROW ){
     int nVal = sqlite3_column_bytes(pDb->pFetch, 0);
     u8 *aVal = (void *)sqlite3_column_blob(pDb->pFetch, 0);
 
@@ -415,10 +415,10 @@ static int sql_scan(
   assert( bReverse==1 || bReverse==0 );
   pScan = pDb->apScan[(pFirst==0) + (pLast==0)*2 + bReverse*4];
 
-  if( pFirst ) sqlite3_bind_blob(pScan, 1, pFirst, nFirst, SQLITE4_STATIC);
-  if( pLast ) sqlite3_bind_blob(pScan, 2, pLast, nLast, SQLITE4_STATIC);
+  if( pFirst ) sqlite3_bind_blob(pScan, 1, pFirst, nFirst, SQLITE_STATIC);
+  if( pLast ) sqlite3_bind_blob(pScan, 2, pLast, nLast, SQLITE_STATIC);
 
-  while( SQLITE4_ROW==sqlite3_step(pScan) ){
+  while( SQLITE_ROW==sqlite3_step(pScan) ){
     void *pKey; int nKey;
     void *pVal; int nVal;
 
@@ -453,7 +453,7 @@ static int sql_begin(TestDb *pTestDb, int iLevel){
     char *zSql = sqlite3_mprintf("SAVEPOINT x%d", i);
     int rc = sqlite3_exec(pDb->db, zSql, 0, 0, 0);
     sqlite3_free(zSql);
-    if( rc!=SQLITE4_OK ) return rc;
+    if( rc!=SQLITE_OK ) return rc;
   }
 
   pDb->nOpenTrans = iLevel;

@@ -942,7 +942,11 @@ static Pgno findAppendPoint(FileSystem *pFS, int nMin){
   int i;
 
   aAppend = lsmSharedAppendList(pFS->pDb, &nAppend);
+#if 1
+  for(i=nAppend-1; i>=0; i--){
+#else
   for(i=0; i<nAppend; i++){
+#endif
     Pgno iLastOnBlock;
     iLastOnBlock = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, aAppend[i]));
     if( (iLastOnBlock - aAppend[i])>=nMin ){

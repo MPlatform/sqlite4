@@ -200,6 +200,7 @@ struct CkptBuffer {
 };
 
 static void ckptSetValue(CkptBuffer *p, int iIdx, u32 iVal, int *pRc){
+  if( *pRc ) return;
   if( iIdx>=p->nAlloc ){
     int nNew = LSM_MAX(8, iIdx*2);
     p->aCkpt = (u32 *)lsmReallocOrFree(p->pEnv, p->aCkpt, nNew*sizeof(u32));
@@ -370,20 +371,22 @@ int lsmCheckpointExport(
 
   /* Write the freelist delta (if bOvfl is true) or else the entire free-list
   ** (if bOvfl is false).  */
-  if( bOvfl ){
-    lsmFreelistDelta(pDb, aDelta);
-    for(i=0; i<LSM_FREELIST_DELTA_SIZE; i++){
-      ckptSetValue(&ckpt, iOut++, aDelta[i], &rc);
+  if( rc==LSM_OK ){
+    if( bOvfl ){
+      lsmFreelistDelta(pDb, aDelta);
+      for(i=0; i<LSM_FREELIST_DELTA_SIZE; i++){
+        ckptSetValue(&ckpt, iOut++, aDelta[i], &rc);
+      }
+    }else{
+      int *aVal;
+      int nVal;
+      rc = lsmSnapshotFreelist(pDb, &aVal, &nVal);
+      ckptSetValue(&ckpt, iOut++, nVal, &rc);
+      for(i=0; i<nVal && rc==LSM_OK; i++){
+        ckptSetValue(&ckpt, iOut++, aVal[i], &rc);
+      }
+      lsmFree(pDb->pEnv, aVal);
     }
-  }else{
-    int *aVal;
-    int nVal;
-    rc = lsmSnapshotFreelist(pDb, &aVal, &nVal);
-    ckptSetValue(&ckpt, iOut++, nVal, &rc);
-    for(i=0; i<nVal; i++){
-      ckptSetValue(&ckpt, iOut++, aVal[i], &rc);
-    }
-    lsmFree(pDb->pEnv, aVal);
   }
 
   /* Write the checkpoint header */
@@ -531,8 +534,9 @@ static int ckptImport(
   int *pbOvfl, 
   int *pRc
 ){
+  int rc = *pRc;
   int ret = 0;
-  if( *pRc==LSM_OK ){
+  if( rc==LSM_OK ){
     Snapshot *pSnap = pDb->pWorker;
     u32 cksum[2] = {0, 0};
     u32 *aInt = (u32 *)pCkpt;
@@ -565,25 +569,28 @@ static int ckptImport(
       ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));
 
       /* Import all levels stored in the checkpoint. */
-      *pRc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);
+      rc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);
       lsmDbSnapshotSetLevel(pSnap, pTopLevel);
 
       /* Import the freelist delta */
-      if( bOvfl ){
-        aDelta = lsmFreelistDeltaPtr(pDb);
-        for(i=0; i<LSM_FREELIST_DELTA_SIZE; i++){
-          aDelta[i] = aInt[iIn++];
+      if( rc==LSM_OK ){
+        if( bOvfl ){
+          aDelta = lsmFreelistDeltaPtr(pDb);
+          for(i=0; i<LSM_FREELIST_DELTA_SIZE; i++){
+            aDelta[i] = aInt[iIn++];
+          }
+        }else{
+          int nFree = aInt[iIn++];
+          rc = lsmSnapshotSetFreelist(pDb, (int *)&aInt[iIn], nFree);
+          iIn += nFree;
         }
-      }else{
-        int nFree = aInt[iIn++];
-        *pRc = lsmSnapshotSetFreelist(pDb, (int *)&aInt[iIn], nFree);
-        iIn += nFree;
       }
 
       ret = 1;
     }
 
-    assert( *pRc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
+    assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
+    *pRc = rc;
   }
   return ret;
 }

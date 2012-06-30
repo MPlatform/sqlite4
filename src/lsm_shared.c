@@ -804,6 +804,17 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     iInUse = LSM_MIN(pIter->iId, p->iCheckpointId);
     lsmMutexLeave(pDb->pEnv, p->pClientMutex);
 
+    if( 0 ){
+      int i;
+      printf("choose from freelist: ");
+      for(i=0; i<pFree->nEntry && pFree->aEntry[i].iId<=iInUse; i++){
+        printf("%d ", pFree->aEntry[i].iBlk);
+      }
+      printf("\n");
+      fflush(stdout);
+    }
+
+
     if( iFree<=iInUse ){
       iRet = pFree->aEntry[0].iBlk;
       flRemoveEntry0(pFree);
