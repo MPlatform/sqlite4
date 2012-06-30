@@ -56,13 +56,6 @@ static char *getName(const char *zSystem, Datatest *pTest){
   return zRet;
 }
 
-static void startTestCase(int *pRc, const char *zSystem, Datatest *pTest){
-  char *zName;
-  zName = getName(zSystem, pTest);
-  testCaseStart(pRc, "% -*s", 50, zName);
-  free(zName);
-}
-
 static int testControlDb(TestDb **ppDb){
 #ifdef HAVE_KYOTOCABINET
   return tdb_open("kyotocabinet", "tmp.db", 1, ppDb);
@@ -201,12 +194,14 @@ void testCaseProgress(int i, int n, int nDot, int *piDot){
 
 int testCaseNDot(void){ return 20; }
 
+#if 0
 static void printScanCb(
     void *pCtx, void *pKey, int nKey, void *pVal, int nVal
 ){
   printf("%s\n", (char *)pKey);
   fflush(stdout);
 }
+#endif
 
 static void doDataTest(
   const char *zSystem,            /* Database system to test */

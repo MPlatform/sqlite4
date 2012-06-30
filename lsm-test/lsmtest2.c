@@ -406,6 +406,56 @@ static int crash_test2(
 }
 #endif
 
+/*
+** This test verifies that if a system crash occurs when checkpointing
+** the database, data is not lost (assuming that any writes not synced
+** to the db have been synced into the log file).
+*/
+static void crash_test3(int *pRc){
+  const char *DBNAME = "testdb.lsm";
+  const int nIter = 100;
+  const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 1000, 1000};
+
+  int i;
+  Datasource *pData;
+  CksumDb *pCksumDb;
+  TestDb *pDb;
+
+  /* Allocate datasource. And calculate the expected checksums. */
+  pData = testDatasourceNew(&defn);
+  pCksumDb = testCksumArrayNew(pData, 15, 10);
+
+  /* Setup the initial database. Save it using testSaveLsmdb(). */
+  pDb = testOpen("lsm", 1, pRc);
+  testWriteDatasourceRange(pDb, pData, 0, 100, pRc);
+  testClose(&pDb);
+  testSaveLsmdb(DBNAME);
+
+  for(i=0; i<nIter && *pRc==0; i++){
+    int iOpen;
+    testRestoreLsmdb(DBNAME);
+    for(iOpen=0; iOpen<5; iOpen++){
+      char zCksum[TEST_CKSUM_BYTES];
+
+      /* Open the database. Insert 10 more records. */
+      pDb = testOpen("lsm", 0, pRc);
+      testWriteDatasourceRange(pDb, pData, 100+iOpen*10, 10, pRc);
+
+      /* Schedule a crash simulation then close the db. */
+      tdb_lsm_prepare_sync_crash(pDb, 1 + (i%2));
+      tdb_close(pDb);
+
+      /* Open the database and check that the crash did not cause any
+      ** data loss.  */
+      pDb = testOpen("lsm", 0, pRc);
+      testCksumDatabase(pDb, zCksum);
+      testCompareStr(zCksum, testCksumArrayGet(pCksumDb, 110 + iOpen*10), pRc);
+      testClose(&pDb);
+    }
+  }
+
+  testDatasourceFree(pData);
+}
 
 void do_crash_test(const char *zPattern, int *pRc){
   struct Test {
@@ -419,8 +469,18 @@ void do_crash_test(const char *zPattern, int *pRc){
   };
   int i;
 
+#if 0
   for(i=0; *pRc==LSM_OK && i<ArraySize(aTest); i++){
     struct Test *p = &aTest[i];
     *pRc = p->x(zPattern, p->zTest, p->zSystem, p->eSafety);
   }
+#endif
+
+  if( testCaseBegin(pRc, zPattern, "%s", "crashtest3") ){
+    crash_test3(pRc);
+    testCaseFinish(*pRc);
+  }
 }
+
+
+

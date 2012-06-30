@@ -155,9 +155,10 @@ static int dbRecoverIfRequired(lsm_db *pDb){
   pDb->pWorker = lsmDbSnapshotRecover(pDb);
   if( pDb->pWorker ){
     int bOvfl;
+    int iSlot;
 
     /* Read the database structure */
-    rc = lsmCheckpointRead(pDb, &bOvfl);
+    rc = lsmCheckpointRead(pDb, &iSlot, &bOvfl);
 
     /* Read the free block list and any level records stored in the LSM. */
     if( rc==LSM_OK && bOvfl ){
@@ -176,7 +177,7 @@ static int dbRecoverIfRequired(lsm_db *pDb){
 
     /* Set the "recovery done" flag */
     if( rc==LSM_OK ){
-      lsmDbRecoveryComplete(pDb, 1);
+      lsmDbRecoveryComplete(pDb, iSlot);
     }
 
     /* Set up the initial client snapshot. */

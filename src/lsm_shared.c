@@ -200,6 +200,7 @@ struct Database {
   int bCheckpointer;              /* True if there exists a checkpointer */
   int bWriter;                    /* True if there exists a writer */
   i64 iCheckpointId;              /* Largest snapshot id stored in db file */
+  int iSlot;                      /* Meta page containing iCheckpointId */
 
   /* Protected by the global mutex (enterGlobalMutex/leaveGlobalMutex): */
   int nDbRef;                     /* Number of associated lsm_db handles */
@@ -603,15 +604,16 @@ Snapshot *lsmDbSnapshotRecover(lsm_db *pDb){
 **
 ** TODO: Should this be combined with BeginRecovery()/FinishRecovery()?
 */
-void lsmDbRecoveryComplete(lsm_db *pDb, int bVal){
+void lsmDbRecoveryComplete(lsm_db *pDb, int iSlot){
   Database *p = pDb->pDatabase;
 
-  assert( bVal==1 || bVal==0 );
+  assert( iSlot==0 || iSlot==1 || iSlot==2 );
   assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) );
   assert( p->pTree );
 
-  p->bRecovered = bVal;
+  p->bRecovered = 1;
   p->iCheckpointId = p->worker.iId;
+  p->iSlot = iSlot;
   lsmFsSetPageSize(pDb->pFS, p->nPgsz);
   lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
 }
@@ -997,7 +999,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   ** a checkpoint (or at least checking if one is required).  */
   if( pSnap ){
     FileSystem *pFS = pDb->pFS;   /* File system object */
-    int iPg = 1;                  /* TODO */
+    int iPg = 1+(p->iSlot%2);     /* Meta page to write to */
     MetaPage *pPg = 0;            /* Page to write to */
     int doSync;                   /* True to sync the db */
 
@@ -1048,6 +1050,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
     if( rc==LSM_OK ){
       lsmLogCheckpoint(pDb, &p->log, lsmCheckpointLogOffset(pSnap->pExport));
       p->iCheckpointId = pSnap->iId;
+      p->iSlot = iPg;
     }
     p->bCheckpointer = 0;
     snapshotDecrRefcnt(pDb->pEnv, pSnap);

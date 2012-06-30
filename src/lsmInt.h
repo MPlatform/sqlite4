@@ -278,7 +278,7 @@ struct Merge {
 /* 
 ** Functions from file "lsm_ckpt.c".
 */
-int lsmCheckpointRead(lsm_db *, int *);
+int lsmCheckpointRead(lsm_db *, int *, int *);
 int lsmCheckpointWrite(lsm_db *);
 int lsmCheckpointExport(lsm_db *, int, int, i64, int, void **, int *);
 void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);

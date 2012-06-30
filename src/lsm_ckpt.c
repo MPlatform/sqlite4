@@ -840,14 +840,28 @@ int lsmCheckpointOverflow(
   return (nLevel>0 || nList>nFree);
 }
 
-int lsmCheckpointRead(lsm_db *pDb, int *pbOvfl){
+/*
+** Attempt to read a checkpoint from the database header. If an error
+** occurs, return an error code. Otherwise, return LSM_OK and, if 
+** a checkpoint is successfully loaded, populate the shared database 
+** structure.
+**
+** If a checkpoint is loaded, set *piSlot to the page number of the 
+** meta-page from which it is read (either 1 or 2). Or, if a checkpoint
+** cannot be loaded, set *piSlot to 0. 
+**
+** If a checkpoint is loaded and it indicates that the LEVELS and FREELIST 
+** records are present in the top-level segment *pbOvfl is set to true 
+** before returning. Otherwise, it is set to false.
+*/
+int lsmCheckpointRead(lsm_db *pDb, int *piSlot, int *pbOvfl){
   int rc = LSM_OK;                /* Return Code */
-
   i64 iId1;
   i64 iId2;
   int nInt1;
   int nInt2;
   int bLoaded = 0;
+  int iSlot = 0;
 
   iId1 = ckptReadId(pDb, 1, &nInt1, &rc);
   iId2 = ckptReadId(pDb, 2, &nInt2, &rc);
@@ -855,15 +869,21 @@ int lsmCheckpointRead(lsm_db *pDb, int *pbOvfl){
   *pbOvfl = 0;
   if( iId1>=iId2 ){
     bLoaded = ckptTryRead(pDb, 1, nInt1, pbOvfl, &rc);
+    if( bLoaded ) iSlot = 1;
     if( bLoaded==0 ){
       bLoaded = ckptTryRead(pDb, 2, nInt2, pbOvfl, &rc);
+      if( bLoaded ) iSlot = 2;
     }
   }else{
     bLoaded = ckptTryRead(pDb, 2, nInt2, pbOvfl, &rc);
+    if( bLoaded ) iSlot = 2;
     if( bLoaded==0 ){
       bLoaded = ckptTryRead(pDb, 1, nInt1, pbOvfl, &rc);
+      if( bLoaded ) iSlot = 1;
     }
   }
 
+  *piSlot = iSlot;
   return rc;
 }
+

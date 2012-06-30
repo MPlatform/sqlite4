@@ -243,7 +243,7 @@ static void testOomScan(
 #include <sys/stat.h>
 #include <fcntl.h>
 
-void testDeleteTestdb(const char *zFile){
+void testDeleteLsmdb(const char *zFile){
   char *zLog = testMallocPrintf("%s-log", zFile);
   unlink(zFile);
   unlink(zLog);
@@ -283,7 +283,17 @@ static void copy_file(const char *zFrom, const char *zTo){
 }
 
 
-static void testSaveTestdb(const char *zFile){
+/*
+** File zFile is the path to an LSM database. This function makes backups
+** of the database file and its log as follows:
+**
+**     cp $(zFile)     $(zFile)-save
+**     cp $(zFile)-log $(zFile)-save-log
+**
+** Function testRestoreLsmdb() can be used to copy the files back in the
+** other direction.
+*/
+void testSaveLsmdb(const char *zFile){
   char *zLog = testMallocPrintf("%s-log", zFile);
   char *zFileSave = testMallocPrintf("%s-save", zFile);
   char *zLogSave = testMallocPrintf("%s-log-save", zFile);
@@ -296,7 +306,15 @@ static void testSaveTestdb(const char *zFile){
   testFree(zLog); testFree(zFileSave); testFree(zLogSave);
 }
 
-static void testRestoreTestdb(const char *zFile){
+/*
+** File zFile is the path to an LSM database. This function restores
+** a backup of the database made by a previous call to testSaveLsmdb().
+** Specifically, it does the equivalent of:
+**
+**     cp $(zFile)-save     $(zFile)
+**     cp $(zFile)-save-log $(zFile)-log
+*/
+void testRestoreLsmdb(const char *zFile){
   char *zLog = testMallocPrintf("%s-log", zFile);
   char *zFileSave = testMallocPrintf("%s-save", zFile);
   char *zLogSave = testMallocPrintf("%s-log-save", zFile);
@@ -315,7 +333,7 @@ static int lsmWriteStr(lsm_db *pDb, const char *zKey, const char *zVal){
 }
 
 static void setup_delete_db(){
-  testDeleteTestdb(LSMTEST6_TESTDB);
+  testDeleteLsmdb(LSMTEST6_TESTDB);
 }
 
 static void setup_populate_db(){
@@ -333,7 +351,7 @@ static void setup_populate_db(){
   int ii;
   lsm_db *pDb;
 
-  testDeleteTestdb(LSMTEST6_TESTDB);
+  testDeleteLsmdb(LSMTEST6_TESTDB);
 
   rc = lsm_new(tdb_lsm_env(), &pDb);
   if( rc==LSM_OK ) rc = lsm_open(pDb, LSMTEST6_TESTDB);
@@ -343,7 +361,7 @@ static void setup_populate_db(){
   }
   lsm_close(pDb);
 
-  testSaveTestdb(LSMTEST6_TESTDB);
+  testSaveLsmdb(LSMTEST6_TESTDB);
   assert( rc==LSM_OK );
 }
 
@@ -369,7 +387,7 @@ static void setup_populate_db2(){
   int nWritebuffer = 4*1024;
   lsm_db *pDb;
 
-  testDeleteTestdb(LSMTEST6_TESTDB);
+  testDeleteLsmdb(LSMTEST6_TESTDB);
   rc = lsm_new(tdb_lsm_env(), &pDb);
   if( rc==LSM_OK ) rc = lsm_open(pDb, LSMTEST6_TESTDB);
 
@@ -387,7 +405,7 @@ static void setup_populate_db2(){
   testDatasourceFree(pData);
   lsm_close(pDb);
 
-  testSaveTestdb(LSMTEST6_TESTDB);
+  testSaveLsmdb(LSMTEST6_TESTDB);
   assert( rc==LSM_OK );
 }
 
@@ -432,7 +450,7 @@ static void simple_oom_4(OomTest *pOom){
   int rc = LSM_OK;
   lsm_db *pDb;
 
-  testDeleteTestdb(LSMTEST6_TESTDB);
+  testDeleteLsmdb(LSMTEST6_TESTDB);
   testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
 
   testOomWriteStr(pOom, pDb, "123", "onetwothree", &rc);
@@ -449,7 +467,7 @@ static void simple_oom_5(OomTest *pOom){
   int rc = LSM_OK;
   lsm_db *pDb;
 
-  testRestoreTestdb(LSMTEST6_TESTDB);
+  testRestoreLsmdb(LSMTEST6_TESTDB);
   testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
 
   testOomFetchData(pOom, pDb, pData, 3333, &rc);
@@ -465,7 +483,7 @@ static void simple_oom_6(OomTest *pOom){
   int rc = LSM_OK;
   lsm_db *pDb;
 
-  testRestoreTestdb(LSMTEST6_TESTDB);
+  testRestoreLsmdb(LSMTEST6_TESTDB);
   testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
 
   testOomWriteData(pOom, pDb, pData, 5000, &rc);
@@ -483,7 +501,7 @@ static void simple_oom_7(OomTest *pOom){
   int rc = LSM_OK;
   lsm_db *pDb;
 
-  testRestoreTestdb(LSMTEST6_TESTDB);
+  testRestoreLsmdb(LSMTEST6_TESTDB);
   testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
   testOomScan(pOom, pDb, 0, "abc", 3, 20, &rc);
   lsm_close(pDb);
@@ -495,7 +513,7 @@ static void simple_oom_8(OomTest *pOom){
   int rc = LSM_OK;
   lsm_db *pDb;
 
-  testRestoreTestdb(LSMTEST6_TESTDB);
+  testRestoreLsmdb(LSMTEST6_TESTDB);
   testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
   testOomScan(pOom, pDb, 1, "xyz", 3, 20, &rc);
   lsm_close(pDb);

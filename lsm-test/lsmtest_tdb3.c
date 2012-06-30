@@ -91,7 +91,7 @@ struct LsmDb {
   int bPrepareCrash;              /* True to store writes in memory */
 
   /* Unsynced data (while crash testing) */
-  int szSector;                /* Assumed size of disk sectors (512B) */
+  int szSector;                   /* Assumed size of disk sectors (512B) */
   FileData aFile[2];              /* Database and log file data */
 
   /* Work hook redirection */
@@ -219,6 +219,8 @@ static int testEnvWrite(lsm_file *pFile, lsm_i64 iOff, void *pData, int nData){
   return pRealEnv->xWrite(p->pReal, iOff, pData, nData);
 }
 
+static void doSystemCrash(LsmDb *pDb);
+
 static int testEnvSync(lsm_file *pFile){
   lsm_env *pRealEnv = tdb_lsm_env();
   LsmFile *p = (LsmFile *)pFile;
@@ -227,6 +229,15 @@ static int testEnvSync(lsm_file *pFile){
   int i;
 
   if( pDb->bCrashed ) return LSM_IOERR;
+
+  if( pDb->nAutoCrash ){
+    pDb->nAutoCrash--;
+    if( pDb->nAutoCrash==0 ){
+      doSystemCrash(pDb);
+      pDb->bCrashed = 1;
+      return LSM_IOERR;
+    }
+  }
 
   if( pDb->bPrepareCrash ){
     for(i=0; i<pData->nSector; i++){

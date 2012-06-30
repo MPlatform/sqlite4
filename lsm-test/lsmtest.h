@@ -151,7 +151,10 @@ void test_mt(const char *zSystem, const char *zPattern, int *pRc);
 
 /* lsmtest6.c */
 void test_oom(const char *zPattern, int *pRc);
-void testDeleteTestdb(const char *zFile);
+void testDeleteLsmdb(const char *zFile);
+
+void testSaveLsmdb(const char *zFile);
+void testRestoreLsmdb(const char *zFile);
 
 /*************************************************************************
 ** Interface to functionality in test_datasource.c.
@@ -205,6 +208,7 @@ int testCksumDatabase(TestDb *pDb, char *zOut);
 int testCountDatabase(TestDb *pDb);
 void testCompareInt(int, int, int *);
 void testCompareStr(const char *z1, const char *z2, int *pRc);
+
 
 /*
 ** Similar to the Tcl_GetIndexFromObjStruct() Tcl library function.
