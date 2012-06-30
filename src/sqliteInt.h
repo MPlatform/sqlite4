@@ -593,12 +593,14 @@ typedef struct Db Db;
 typedef struct Schema Schema;
 typedef struct Expr Expr;
 typedef struct ExprList ExprList;
+typedef struct ExprListItem ExprListItem;
 typedef struct ExprSpan ExprSpan;
 typedef struct FKey FKey;
 typedef struct FuncDestructor FuncDestructor;
 typedef struct FuncDef FuncDef;
 typedef struct FuncDefTable FuncDefTable;
 typedef struct IdList IdList;
+typedef struct IdListItem IdListItem;
 typedef struct Index Index;
 typedef struct IndexSample IndexSample;
 typedef struct KeyClass KeyClass;
@@ -614,6 +616,7 @@ typedef struct Savepoint Savepoint;
 typedef struct Select Select;
 typedef struct Sqlite4InitInfo Sqlite4InitInfo;
 typedef struct SrcList SrcList;
+typedef struct SrcListItem SrcListItem;
 typedef struct StrAccum StrAccum;
 typedef struct Table Table;
 typedef struct Token Token;
@@ -1739,6 +1742,19 @@ struct Expr {
 #define EXPRDUP_REDUCE         0x0001  /* Used reduced-size Expr nodes */
 
 /*
+** One entry for each expression.
+*/
+struct ExprListItem {
+  Expr *pExpr;           /* The list of expressions */
+  char *zName;           /* Token associated with this expression */
+  char *zSpan;           /* Original text of the expression */
+  u8 sortOrder;          /* 1 for DESC or 0 for ASC */
+  u8 done;               /* A flag to indicate when processing is finished */
+  u16 iOrderByCol;       /* For ORDER BY, column number in result set */
+  u16 iAlias;            /* Index into Parse.aAlias[] for zName */
+};
+
+/*
 ** A list of expressions.  Each expression may optionally have a
 ** name.  An expr/name combination can be used in several ways, such
 ** as the list of "expr AS ID" fields following a "SELECT" or in the
@@ -1750,15 +1766,7 @@ struct ExprList {
   int nExpr;             /* Number of expressions on the list */
   int nAlloc;            /* Number of entries allocated below */
   int iECursor;          /* VDBE Cursor associated with this ExprList */
-  struct ExprList_item {
-    Expr *pExpr;           /* The list of expressions */
-    char *zName;           /* Token associated with this expression */
-    char *zSpan;           /* Original text of the expression */
-    u8 sortOrder;          /* 1 for DESC or 0 for ASC */
-    u8 done;               /* A flag to indicate when processing is finished */
-    u16 iOrderByCol;       /* For ORDER BY, column number in result set */
-    u16 iAlias;            /* Index into Parse.aAlias[] for zName */
-  } *a;                  /* One entry for each expression */
+  ExprListItem *a;       /* One entry for each expression */
 };
 
 /*
@@ -1771,6 +1779,12 @@ struct ExprSpan {
   const char *zStart;   /* First character of input text */
   const char *zEnd;     /* One character past the end of input text */
 };
+
+struct IdListItem {
+  char *zName;      /* Name of the identifier */
+  int idx;          /* Index in some Table.aCol[] of a column named zName */
+};
+
 
 /*
 ** An instance of this structure can hold a simple list of identifiers,
@@ -1788,10 +1802,7 @@ struct ExprSpan {
 ** If "a" is the k-th column of table "t", then IdList.a[0].idx==k.
 */
 struct IdList {
-  struct IdList_item {
-    char *zName;      /* Name of the identifier */
-    int idx;          /* Index in some Table.aCol[] of a column named zName */
-  } *a;
+  IdListItem *a;
   int nId;         /* Number of identifiers on the list */
   int nAlloc;      /* Number of entries allocated for a[] below */
 };
@@ -1809,6 +1820,31 @@ typedef u64 Bitmask;
 ** The number of bits in a Bitmask.  "BMS" means "BitMask Size".
 */
 #define BMS  ((int)(sizeof(Bitmask)*8))
+
+/*
+** One entry for each identifier on the list.
+*/
+struct SrcListItem {
+  char *zDatabase;  /* Name of database holding this table */
+  char *zName;      /* Name of the table */
+  char *zAlias;     /* The "B" part of a "A AS B" phrase.  zName is the "A" */
+  Table *pTab;      /* An SQL table corresponding to zName */
+  Select *pSelect;  /* A SELECT statement used in place of a table name */
+  int addrFillSub;  /* Address of subroutine to manifest a subquery */
+  int regReturn;    /* Register holding return address of addrFillSub */
+  u8 jointype;      /* Type of join between this able and the previous */
+  u8 notIndexed;    /* True if there is a NOT INDEXED clause */
+  u8 isCorrelated;  /* True if sub-query is correlated */
+#ifndef SQLITE4_OMIT_EXPLAIN
+  u8 iSelectId;     /* If pSelect!=0, the id of the sub-select in EQP */
+#endif
+  int iCursor;      /* The VDBE cursor number used to access this table */
+  Expr *pOn;        /* The ON clause of a join */
+  IdList *pUsing;   /* The USING clause of a join */
+  Bitmask colUsed;  /* Bit N (1<<N) set if column N of pTab is used */
+  char *zIndex;     /* Identifier from "INDEXED BY <zIndex>" clause */
+  Index *pIndex;    /* Index structure corresponding to zIndex, if any */
+};
 
 /*
 ** The following structure describes the FROM clause of a SELECT statement.
@@ -1832,27 +1868,7 @@ typedef u64 Bitmask;
 struct SrcList {
   i16 nSrc;        /* Number of tables or subqueries in the FROM clause */
   i16 nAlloc;      /* Number of entries allocated in a[] below */
-  struct SrcList_item {
-    char *zDatabase;  /* Name of database holding this table */
-    char *zName;      /* Name of the table */
-    char *zAlias;     /* The "B" part of a "A AS B" phrase.  zName is the "A" */
-    Table *pTab;      /* An SQL table corresponding to zName */
-    Select *pSelect;  /* A SELECT statement used in place of a table name */
-    int addrFillSub;  /* Address of subroutine to manifest a subquery */
-    int regReturn;    /* Register holding return address of addrFillSub */
-    u8 jointype;      /* Type of join between this able and the previous */
-    u8 notIndexed;    /* True if there is a NOT INDEXED clause */
-    u8 isCorrelated;  /* True if sub-query is correlated */
-#ifndef SQLITE4_OMIT_EXPLAIN
-    u8 iSelectId;     /* If pSelect!=0, the id of the sub-select in EQP */
-#endif
-    int iCursor;      /* The VDBE cursor number used to access this table */
-    Expr *pOn;        /* The ON clause of a join */
-    IdList *pUsing;   /* The USING clause of a join */
-    Bitmask colUsed;  /* Bit N (1<<N) set if column N of pTab is used */
-    char *zIndex;     /* Identifier from "INDEXED BY <zIndex>" clause */
-    Index *pIndex;    /* Index structure corresponding to zIndex, if any */
-  } a[1];             /* One entry for each identifier on the list */
+  SrcListItem a[1]; /* One entry for each identifier on the list */
 };
 
 /*
@@ -2740,7 +2756,7 @@ SrcList *sqlite4SrcListAppend(sqlite4*, SrcList*, Token*, Token*);
 SrcList *sqlite4SrcListAppendFromTerm(Parse*, SrcList*, Token*, Token*,
                                       Token*, Select*, Expr*, IdList*);
 void sqlite4SrcListIndexedBy(Parse *, SrcList *, Token *);
-int sqlite4IndexedByLookup(Parse *, struct SrcList_item *);
+int sqlite4IndexedByLookup(Parse *, struct SrcListItem *);
 void sqlite4SrcListShiftJoinType(SrcList*);
 void sqlite4SrcListAssignCursors(Parse*, SrcList*);
 void sqlite4IdListDelete(sqlite4*, IdList*);

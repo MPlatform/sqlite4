@@ -61,7 +61,7 @@ int sqlite4WalkExpr(Walker *pWalker, Expr *pExpr){
 */
 int sqlite4WalkExprList(Walker *pWalker, ExprList *p){
   int i;
-  struct ExprList_item *pItem;
+  ExprListItem *pItem;
   if( p ){
     for(i=p->nExpr, pItem=p->a; i>0; i--, pItem++){
       if( sqlite4WalkExpr(pWalker, pItem->pExpr) ) return WRC_Abort;
@@ -97,7 +97,7 @@ int sqlite4WalkSelectExpr(Walker *pWalker, Select *p){
 int sqlite4WalkSelectFrom(Walker *pWalker, Select *p){
   SrcList *pSrc;
   int i;
-  struct SrcList_item *pItem;
+  SrcListItem *pItem;
 
   pSrc = p->pSrc;
   if( ALWAYS(pSrc) ){

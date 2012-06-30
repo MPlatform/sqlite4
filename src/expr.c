@@ -850,7 +850,7 @@ Expr *sqlite4ExprDup(sqlite4 *db, Expr *p, int flags){
 }
 ExprList *sqlite4ExprListDup(sqlite4 *db, ExprList *p, int flags){
   ExprList *pNew;
-  struct ExprList_item *pItem, *pOldItem;
+  ExprListItem *pItem, *pOldItem;
   int i;
   if( p==0 ) return 0;
   pNew = sqlite4DbMallocRaw(db, sizeof(*pNew) );
@@ -894,8 +894,8 @@ SrcList *sqlite4SrcListDup(sqlite4 *db, SrcList *p, int flags){
   if( pNew==0 ) return 0;
   pNew->nSrc = pNew->nAlloc = p->nSrc;
   for(i=0; i<p->nSrc; i++){
-    struct SrcList_item *pNewItem = &pNew->a[i];
-    struct SrcList_item *pOldItem = &p->a[i];
+    SrcListItem *pNewItem = &pNew->a[i];
+    SrcListItem *pOldItem = &p->a[i];
     Table *pTab;
     pNewItem->zDatabase = sqlite4DbStrDup(db, pOldItem->zDatabase);
     pNewItem->zName = sqlite4DbStrDup(db, pOldItem->zName);
@@ -932,8 +932,8 @@ IdList *sqlite4IdListDup(sqlite4 *db, IdList *p){
     return 0;
   }
   for(i=0; i<p->nId; i++){
-    struct IdList_item *pNewItem = &pNew->a[i];
-    struct IdList_item *pOldItem = &p->a[i];
+    IdListItem *pNewItem = &pNew->a[i];
+    IdListItem *pOldItem = &p->a[i];
     pNewItem->zName = sqlite4DbStrDup(db, pOldItem->zName);
     pNewItem->idx = pOldItem->idx;
   }
@@ -995,7 +995,7 @@ ExprList *sqlite4ExprListAppend(
     assert( pList->nAlloc==0 );
   }
   if( pList->nAlloc<=pList->nExpr ){
-    struct ExprList_item *a;
+    ExprListItem *a;
     int n = pList->nAlloc*2 + 4;
     a = sqlite4DbRealloc(db, pList->a, n*sizeof(pList->a[0]));
     if( a==0 ){
@@ -1006,7 +1006,7 @@ ExprList *sqlite4ExprListAppend(
   }
   assert( pList->a!=0 );
   if( 1 ){
-    struct ExprList_item *pItem = &pList->a[pList->nExpr++];
+    ExprListItem *pItem = &pList->a[pList->nExpr++];
     memset(pItem, 0, sizeof(*pItem));
     pItem->pExpr = pExpr;
   }
@@ -1035,7 +1035,7 @@ void sqlite4ExprListSetName(
 ){
   assert( pList!=0 || pParse->db->mallocFailed!=0 );
   if( pList ){
-    struct ExprList_item *pItem;
+    ExprListItem *pItem;
     assert( pList->nExpr>0 );
     pItem = &pList->a[pList->nExpr-1];
     assert( pItem->zName==0 );
@@ -1060,7 +1060,7 @@ void sqlite4ExprListSetSpan(
   sqlite4 *db = pParse->db;
   assert( pList!=0 || db->mallocFailed!=0 );
   if( pList ){
-    struct ExprList_item *pItem = &pList->a[pList->nExpr-1];
+    ExprListItem *pItem = &pList->a[pList->nExpr-1];
     assert( pList->nExpr>0 );
     assert( db->mallocFailed || pItem->pExpr==pSpan->pExpr );
     sqlite4DbFree(db, pItem->zSpan);
@@ -1091,7 +1091,7 @@ void sqlite4ExprListCheckLength(
 */
 void sqlite4ExprListDelete(sqlite4 *db, ExprList *pList){
   int i;
-  struct ExprList_item *pItem;
+  ExprListItem *pItem;
   if( pList==0 ) return;
   assert( pList->a!=0 || (pList->nExpr==0 && pList->nAlloc==0) );
   assert( pList->nExpr<=pList->nAlloc );
@@ -1644,7 +1644,7 @@ int sqlite4CodeSubselect(
         */
         int i;
         ExprList *pList = pExpr->x.pList;
-        struct ExprList_item *pItem;
+        ExprListItem *pItem;
         int r1, r2, r3;
 
         if( !affinity ){
@@ -2632,7 +2632,7 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
     */
     case TK_BETWEEN: {
       Expr *pLeft = pExpr->pLeft;
-      struct ExprList_item *pLItem = pExpr->x.pList->a;
+      ExprListItem *pLItem = pExpr->x.pList->a;
       Expr *pRight = pLItem->pExpr;
 
       r1 = sqlite4ExprCodeTemp(pParse, pLeft, &regFree1);
@@ -2744,7 +2744,7 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
       int nExpr;                        /* 2x number of WHEN terms */
       int i;                            /* Loop counter */
       ExprList *pEList;                 /* List of WHEN terms */
-      struct ExprList_item *aListelem;  /* Array of WHEN terms */
+      ExprListItem *aListelem;  /* Array of WHEN terms */
       Expr opCompare;                   /* The X==Ei expression */
       Expr cacheX;                      /* Cached expression X */
       Expr *pX;                         /* The X expression */
@@ -3247,7 +3247,7 @@ static int evalConstExpr(Walker *pWalker, Expr *pExpr){
       assert( !ExprHasProperty(pExpr, EP_xIsSelect) );
       if( pList ){
         int i = pList->nExpr;
-        struct ExprList_item *pItem = pList->a;
+        ExprListItem *pItem = pList->a;
         for(; i>0; i--, pItem++){
           if( ALWAYS(pItem->pExpr) ) pItem->pExpr->flags |= EP_FixedDest;
         }
@@ -3307,7 +3307,7 @@ int sqlite4ExprCodeExprList(
   int target,        /* Where to write results */
   int doHardCopy     /* Make a hard copy of every element */
 ){
-  struct ExprList_item *pItem;
+  ExprListItem *pItem;
   int i, n;
   assert( pList!=0 );
   assert( target>0 );
@@ -3778,7 +3778,7 @@ static int analyzeAggregate(Walker *pWalker, Expr *pExpr){
       /* Check to see if the column is in one of the tables in the FROM
       ** clause of the aggregate query */
       if( ALWAYS(pSrcList!=0) ){
-        struct SrcList_item *pItem = pSrcList->a;
+        SrcListItem *pItem = pSrcList->a;
         for(i=0; i<pSrcList->nSrc; i++, pItem++){
           AggInfoCol *pCol;
           assert( !ExprHasAnyProperty(pExpr, EP_TokenOnly|EP_Reduced) );
@@ -3810,7 +3810,7 @@ static int analyzeAggregate(Walker *pWalker, Expr *pExpr){
               if( pAggInfo->pGroupBy ){
                 int j, n;
                 ExprList *pGB = pAggInfo->pGroupBy;
-                struct ExprList_item *pTerm = pGB->a;
+                ExprListItem *pTerm = pGB->a;
                 n = pGB->nExpr;
                 for(j=0; j<n; j++, pTerm++){
                   Expr *pE = pTerm->pExpr;
@@ -3922,7 +3922,7 @@ void sqlite4ExprAnalyzeAggregates(NameContext *pNC, Expr *pExpr){
 ** If an error is found, the analysis is cut short.
 */
 void sqlite4ExprAnalyzeAggList(NameContext *pNC, ExprList *pList){
-  struct ExprList_item *pItem;
+  ExprListItem *pItem;
   int i;
   if( pList ){
     for(pItem=pList->a, i=0; i<pList->nExpr; i++, pItem++){

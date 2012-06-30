@@ -324,8 +324,8 @@ static void setJoinExpr(Expr *p, int iTable){
 static int sqliteProcessJoin(Parse *pParse, Select *p){
   SrcList *pSrc;                  /* All tables in the FROM clause */
   int i, j;                       /* Loop counters */
-  struct SrcList_item *pLeft;     /* Left table being joined */
-  struct SrcList_item *pRight;    /* Right table being joined */
+  SrcListItem *pLeft;     /* Left table being joined */
+  SrcListItem *pRight;    /* Right table being joined */
 
   pSrc = p->pSrc;
   pLeft = &pSrc->a[0];
@@ -1371,7 +1371,7 @@ static void selectAddColumnTypeAndCollation(
   CollSeq *pColl;
   int i;
   Expr *p;
-  struct ExprList_item *a;
+  ExprListItem *a;
 
   assert( pSelect!=0 );
   assert( (pSelect->selFlags & SF_Resolved)!=0 );
@@ -2236,7 +2236,7 @@ static int multiSelectOrderBy(
   */
   if( op!=TK_ALL ){
     for(i=1; db->mallocFailed==0 && i<=p->pEList->nExpr; i++){
-      struct ExprList_item *pItem;
+      ExprListItem *pItem;
       for(j=0, pItem=pOrderBy->a; j<nOrderBy; j++, pItem++){
         assert( pItem->iOrderByCol>0 );
         if( pItem->iOrderByCol==i ) break;
@@ -2261,7 +2261,7 @@ static int multiSelectOrderBy(
   */
   aPermute = sqlite4DbMallocRaw(db, sizeof(int)*nOrderBy);
   if( aPermute ){
-    struct ExprList_item *pItem;
+    ExprListItem *pItem;
     for(i=0, pItem=pOrderBy->a; i<nOrderBy; i++, pItem++){
       assert( pItem->iOrderByCol>0  && pItem->iOrderByCol<=p->pEList->nExpr );
       aPermute[i] = pItem->iOrderByCol - 1;
@@ -2586,7 +2586,7 @@ static void substSelect(
   ExprList *pEList     /* Substitute values */
 ){
   SrcList *pSrc;
-  struct SrcList_item *pItem;
+  SrcListItem *pItem;
   int i;
   if( !p ) return;
   substExprList(db, p->pEList, iTable, pEList);
@@ -2738,7 +2738,7 @@ static int flattenSubquery(
   int iParent;        /* VDBE cursor number of the pSub result set temp table */
   int i;              /* Loop counter */
   Expr *pWhere;                    /* The WHERE clause */
-  struct SrcList_item *pSubitem;   /* The subquery */
+  SrcListItem *pSubitem;   /* The subquery */
   sqlite4 *db = pParse->db;
 
   /* Check to see if flattening is permitted.  Return 0 if not.
@@ -3133,7 +3133,7 @@ static u8 minMaxQuery(Select *p){
 ** SQLITE4_ERROR and leave an error in pParse. Otherwise, populate 
 ** pFrom->pIndex and return SQLITE4_OK.
 */
-int sqlite4IndexedByLookup(Parse *pParse, struct SrcList_item *pFrom){
+int sqlite4IndexedByLookup(Parse *pParse, SrcListItem *pFrom){
   if( pFrom->pTab && pFrom->zIndex ){
     Table *pTab = pFrom->pTab;
     char *zIndex = pFrom->zIndex;
@@ -3181,7 +3181,7 @@ static int selectExpander(Walker *pWalker, Select *p){
   int i, j, k;
   SrcList *pTabList;
   ExprList *pEList;
-  struct SrcList_item *pFrom;
+  SrcListItem *pFrom;
   sqlite4 *db = pParse->db;
 
   if( db->mallocFailed  ){
@@ -3280,7 +3280,7 @@ static int selectExpander(Walker *pWalker, Select *p){
     ** operators that need to be expanded.  Loop through each expression
     ** in the result set and expand them one by one.
     */
-    struct ExprList_item *a = pEList->a;
+    ExprListItem *a = pEList->a;
     ExprList *pNew = 0;
 
     for(k=0; k<pEList->nExpr; k++){
@@ -3441,7 +3441,7 @@ static int selectAddSubqueryTypeInfo(Walker *pWalker, Select *p){
   Parse *pParse;
   int i;
   SrcList *pTabList;
-  struct SrcList_item *pFrom;
+  SrcListItem *pFrom;
 
   assert( p->selFlags & SF_Resolved );
   if( (p->selFlags & SF_HasTypeInfo)==0 ){
@@ -3594,7 +3594,7 @@ static void updateAccumulator(Parse *pParse, AggInfo *pAggInfo){
     }
     if( pF->pFunc->flags & SQLITE4_FUNC_NEEDCOLL ){
       CollSeq *pColl = 0;
-      struct ExprList_item *pItem;
+      ExprListItem *pItem;
       int j;
       assert( pList!=0 );  /* pList!=0 if pF->pFunc has NEEDCOLL */
       for(j=0, pItem=pList->a; !pColl && j<nArg; j++, pItem++){
@@ -3762,7 +3762,7 @@ int sqlite4Select(
   */
 #if !defined(SQLITE4_OMIT_SUBQUERY) || !defined(SQLITE4_OMIT_VIEW)
   for(i=0; !p->pPrior && i<pTabList->nSrc; i++){
-    struct SrcList_item *pItem = &pTabList->a[i];
+    SrcListItem *pItem = &pTabList->a[i];
     SelectDest dest;
     Select *pSub = pItem->pSelect;
     int isAggSub;
@@ -4032,7 +4032,7 @@ int sqlite4Select(
     */
     if( pGroupBy ){
       int k;                        /* Loop counter */
-      struct ExprList_item *pItem;  /* For looping over expression in a list */
+      ExprListItem *pItem;  /* For looping over expression in a list */
 
       for(k=p->pEList->nExpr, pItem=p->pEList->a; k>0; k--, pItem++){
         pItem->iAlias = 0;
@@ -4418,7 +4418,7 @@ static void explainOneSelect(Vdbe *pVdbe, Select *p){
     sqlite4ExplainPrintf(pVdbe, "FROM ");
     sqlite4ExplainPush(pVdbe);
     for(i=0; i<p->pSrc->nSrc; i++){
-      struct SrcList_item *pItem = &p->pSrc->a[i];
+      SrcListItem *pItem = &p->pSrc->a[i];
       sqlite4ExplainPrintf(pVdbe, "{%d,*} = ", pItem->iCursor);
       if( pItem->pSelect ){
         sqlite4ExplainSelect(pVdbe, pItem->pSelect);

@@ -1673,7 +1673,7 @@ static int isSortingIndex(
   assert( pIdx && pIdx->zName );
 
   for(iTerm=0; iTerm<nTerm; iTerm++){
-    struct ExprList_item *pTerm;  /* iTerm'th term of ORDER BY clause */
+    ExprListItem *pTerm;  /* iTerm'th term of ORDER BY clause */
     int iIdxCol;                  /* Index of column in index records */
 
     Expr *pExpr;       /* The expression of the ORDER BY pTerm */
@@ -1847,7 +1847,7 @@ static void TRACE_IDX_OUTPUTS(sqlite4_index_info *p){
 ** Required because bestIndex() is called by bestOrClauseIndex() 
 */
 static void bestIndex(
-    Parse*, WhereClause*, struct SrcList_item*,
+    Parse*, WhereClause*, SrcListItem*,
     Bitmask, Bitmask, ExprList*, WhereCost*);
 
 /*
@@ -1860,7 +1860,7 @@ static void bestIndex(
 static void bestOrClauseIndex(
   Parse *pParse,              /* The parsing context */
   WhereClause *pWC,           /* The WHERE clause */
-  struct SrcList_item *pSrc,  /* The FROM clause term to search */
+  SrcListItem *pSrc,  /* The FROM clause term to search */
   Bitmask notReady,           /* Mask of cursors not available for indexing */
   Bitmask notValid,           /* Cursors not available for any purpose */
   ExprList *pOrderBy,         /* The ORDER BY clause */
@@ -1954,7 +1954,7 @@ static void bestOrClauseIndex(
 */
 static int termCanDriveIndex(
   WhereTerm *pTerm,              /* WHERE clause term to check */
-  struct SrcList_item *pSrc,     /* Table we are trying to access */
+  SrcListItem *pSrc,     /* Table we are trying to access */
   Bitmask notReady               /* Tables in outer loops of the join */
 ){
   char aff;
@@ -1979,7 +1979,7 @@ static int termCanDriveIndex(
 static void bestAutomaticIndex(
   Parse *pParse,              /* The parsing context */
   WhereClause *pWC,           /* The WHERE clause */
-  struct SrcList_item *pSrc,  /* The FROM clause term to search */
+  SrcListItem *pSrc,  /* The FROM clause term to search */
   Bitmask notReady,           /* Mask of cursors that are not available */
   WhereCost *pCost            /* Lowest cost query plan */
 ){
@@ -2054,7 +2054,7 @@ static void bestAutomaticIndex(
 static void constructAutomaticIndex(
   Parse *pParse,              /* The parsing context */
   WhereClause *pWC,           /* The WHERE clause */
-  struct SrcList_item *pSrc,  /* The FROM clause term to get the next index */
+  SrcListItem *pSrc,  /* The FROM clause term to get the next index */
   Bitmask notReady,           /* Mask of cursors that are not available */
   WhereLevel *pLevel          /* Write new index here */
 ){
@@ -2169,7 +2169,7 @@ static void constructAutomaticIndex(
 static sqlite4_index_info *allocateIndexInfo(
   Parse *pParse, 
   WhereClause *pWC,
-  struct SrcList_item *pSrc,
+  SrcListItem *pSrc,
   ExprList *pOrderBy
 ){
   int i, j;
@@ -2333,7 +2333,7 @@ static int vtabBestIndex(Parse *pParse, Table *pTab, sqlite4_index_info *p){
 static void bestVirtualIndex(
   Parse *pParse,                  /* The parsing context */
   WhereClause *pWC,               /* The WHERE clause */
-  struct SrcList_item *pSrc,      /* The FROM clause term to search */
+  SrcListItem *pSrc,      /* The FROM clause term to search */
   Bitmask notReady,               /* Mask of cursors not available for index */
   Bitmask notValid,               /* Cursors not valid for any purpose */
   ExprList *pOrderBy,             /* The order by clause */
@@ -2895,7 +2895,7 @@ static int whereInScanEst(
 static void bestKVIndex(
   Parse *pParse,              /* The parsing context */
   WhereClause *pWC,           /* The WHERE clause */
-  struct SrcList_item *pSrc,  /* The FROM clause term to search */
+  SrcListItem *pSrc,  /* The FROM clause term to search */
   Bitmask notReady,           /* Mask of cursors not available for indexing */
   Bitmask notValid,           /* Cursors not available for any purpose */
   ExprList *pOrderBy,         /* The ORDER BY clause */
@@ -3358,7 +3358,7 @@ static void bestKVIndex(
 static void bestIndex(
   Parse *pParse,              /* The parsing context */
   WhereClause *pWC,           /* The WHERE clause */
-  struct SrcList_item *pSrc,  /* The FROM clause term to search */
+  SrcListItem *pSrc,  /* The FROM clause term to search */
   Bitmask notReady,           /* Mask of cursors not available for indexing */
   Bitmask notValid,           /* Cursors not available for any purpose */
   ExprList *pOrderBy,         /* The ORDER BY clause */
@@ -3760,7 +3760,7 @@ static void explainOneScan(
 ){
   if( pParse->explain==2 ){
     u32 flags = pLevel->plan.wsFlags;
-    struct SrcList_item *pItem = &pTabList->a[pLevel->iFrom];
+    SrcListItem *pItem = &pTabList->a[pLevel->iFrom];
     Vdbe *v = pParse->pVdbe;      /* VM being constructed */
     sqlite4 *db = pParse->db;     /* Database handle */
     char *zMsg;                   /* Text to add to EQP output */
@@ -3842,7 +3842,7 @@ static Bitmask codeOneLoopStart(
   WhereTerm *pTerm;               /* A WHERE clause term */
   Parse *pParse;                  /* Parsing context */
   Vdbe *v;                        /* The prepared stmt under constructions */
-  struct SrcList_item *pTabItem;  /* FROM clause term being coded */
+  SrcListItem *pTabItem;  /* FROM clause term being coded */
   int addrBrk;                    /* Jump here to break out of the loop */
   int addrCont;                   /* Jump here to continue with next cycle */
   int iReleaseReg = 0;            /* Temp register to free before returning */
@@ -4252,7 +4252,7 @@ static Bitmask codeOneLoopStart(
     */
     if( pWInfo->nLevel>1 ){
       int nNotReady;                 /* The number of notReady tables */
-      struct SrcList_item *origSrc;     /* Original list of tables */
+      SrcListItem *origSrc;     /* Original list of tables */
       nNotReady = pWInfo->nLevel - iLevel - 1;
       pOrTab = sqlite4StackAllocRaw(pParse->db,
                             sizeof(*pOrTab)+ nNotReady*sizeof(pOrTab->a[0]));
@@ -4559,7 +4559,7 @@ WhereInfo *sqlite4WhereBegin(
   Bitmask notReady;          /* Cursors that are not yet positioned */
   WhereMaskSet *pMaskSet;    /* The expression mask set */
   WhereClause *pWC;               /* Decomposition of the WHERE clause */
-  struct SrcList_item *pTabItem;  /* A single entry from pTabList */
+  SrcListItem *pTabItem;  /* A single entry from pTabList */
   WhereLevel *pLevel;             /* A single level in the pWInfo list */
   int iFrom;                      /* First unused FROM clause element */
   int andFlags;              /* AND-ed combination of all pWC->a[].wtFlags */
@@ -5106,7 +5106,7 @@ void sqlite4WhereEnd(WhereInfo *pWInfo){
   */
   assert( pWInfo->nLevel==1 || pWInfo->nLevel==pTabList->nSrc );
   for(i=0, pLevel=pWInfo->a; i<pWInfo->nLevel; i++, pLevel++){
-    struct SrcList_item *pTabItem = &pTabList->a[pLevel->iFrom];
+    SrcListItem *pTabItem = &pTabList->a[pLevel->iFrom];
     Table *pTab = pTabItem->pTab;
     assert( pTab!=0 );
     if( (pTab->tabFlags & TF_Ephemeral)==0

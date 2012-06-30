@@ -2342,7 +2342,7 @@ Index *sqlite4CreateIndex(
   Db *pDb;             /* The specific table containing the indexed database */
   int iDb;             /* Index of the database that is being written */
   Token *pName = 0;    /* Unqualified name of the index to create */
-  struct ExprList_item *pListItem; /* For looping over pList */
+  ExprListItem *pListItem; /* For looping over pList */
   int nExtra = 0;
   char *zExtra;
 
@@ -3084,7 +3084,7 @@ SrcList *sqlite4SrcListAppend(
   Token *pTable,      /* Table to append */
   Token *pDatabase    /* Database of the table */
 ){
-  struct SrcList_item *pItem;
+  SrcListItem *pItem;
   assert( pDatabase==0 || pTable!=0 );  /* Cannot have C without B */
   if( pList==0 ){
     pList = sqlite4DbMallocZero(db, sizeof(SrcList) );
@@ -3115,7 +3115,7 @@ SrcList *sqlite4SrcListAppend(
 */
 void sqlite4SrcListAssignCursors(Parse *pParse, SrcList *pList){
   int i;
-  struct SrcList_item *pItem;
+  SrcListItem *pItem;
   assert(pList || pParse->db->mallocFailed );
   if( pList ){
     for(i=0, pItem=pList->a; i<pList->nSrc; i++, pItem++){
@@ -3133,7 +3133,7 @@ void sqlite4SrcListAssignCursors(Parse *pParse, SrcList *pList){
 */
 void sqlite4SrcListDelete(sqlite4 *db, SrcList *pList){
   int i;
-  struct SrcList_item *pItem;
+  SrcListItem *pItem;
   if( pList==0 ) return;
   for(pItem=pList->a, i=0; i<pList->nSrc; i++, pItem++){
     sqlite4DbFree(db, pItem->zDatabase);
@@ -3174,7 +3174,7 @@ SrcList *sqlite4SrcListAppendFromTerm(
   Expr *pOn,              /* The ON clause of a join */
   IdList *pUsing          /* The USING clause of a join */
 ){
-  struct SrcList_item *pItem;
+  SrcListItem *pItem;
   sqlite4 *db = pParse->db;
   if( !p && (pOn || pUsing) ){
     sqlite4ErrorMsg(pParse, "a JOIN clause is required before %s", 
@@ -3211,7 +3211,7 @@ SrcList *sqlite4SrcListAppendFromTerm(
 void sqlite4SrcListIndexedBy(Parse *pParse, SrcList *p, Token *pIndexedBy){
   assert( pIndexedBy!=0 );
   if( p && ALWAYS(p->nSrc>0) ){
-    struct SrcList_item *pItem = &p->a[p->nSrc-1];
+    SrcListItem *pItem = &p->a[p->nSrc-1];
     assert( pItem->notIndexed==0 && pItem->zIndex==0 );
     if( pIndexedBy->n==1 && !pIndexedBy->z ){
       /* A "NOT INDEXED" clause was supplied. See parse.y 

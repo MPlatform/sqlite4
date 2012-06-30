@@ -415,7 +415,7 @@ int sqlite4FixSrcList(
 ){
   int i;
   const char *zDb;
-  struct SrcList_item *pItem;
+  SrcListItem *pItem;
 
   if( NEVER(pList==0) ) return 0;
   zDb = pFix->zDb;
@@ -480,7 +480,7 @@ int sqlite4FixExprList(
   ExprList *pList    /* The expression to be fixed to one database */
 ){
   int i;
-  struct ExprList_item *pItem;
+  ExprListItem *pItem;
   if( pList==0 ) return 0;
   for(i=0, pItem=pList->a; i<pList->nExpr; i++, pItem++){
     if( sqlite4FixExpr(pFix, pItem->pExpr) ){

@@ -169,8 +169,8 @@ static int lookupName(
   int cnt = 0;                      /* Number of matching column names */
   int cntTab = 0;                   /* Number of matching table names */
   sqlite4 *db = pParse->db;         /* The database connection */
-  struct SrcList_item *pItem;       /* Use for looping over pSrcList items */
-  struct SrcList_item *pMatch = 0;  /* The matching pSrcList item */
+  SrcListItem *pItem;       /* Use for looping over pSrcList items */
+  SrcListItem *pMatch = 0;  /* The matching pSrcList item */
   NameContext *pTopNC = pNC;        /* First namecontext in the list */
   Schema *pSchema = 0;              /* Schema of the expression */
   int isTrigger = 0;
@@ -424,7 +424,7 @@ lookupname_end:
 Expr *sqlite4CreateColumnExpr(sqlite4 *db, SrcList *pSrc, int iSrc, int iCol){
   Expr *p = sqlite4ExprAlloc(db, TK_COLUMN, 0, 0);
   if( p ){
-    struct SrcList_item *pItem = &pSrc->a[iSrc];
+    SrcListItem *pItem = &pSrc->a[iSrc];
     p->pTab = pItem->pTab;
     p->iTable = pItem->iCursor;
     p->iColumn = (ynVar)iCol;
@@ -476,7 +476,7 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
     */
     case TK_ROW: {
       SrcList *pSrcList = pNC->pSrcList;
-      struct SrcList_item *pItem;
+      SrcListItem *pItem;
       assert( pSrcList && pSrcList->nSrc==1 );
       pItem = pSrcList->a; 
       pExpr->op = TK_COLUMN;
@@ -771,7 +771,7 @@ static int resolveCompoundOrderBy(
     pSelect = pSelect->pPrior;
   }
   while( pSelect && moreToDo ){
-    struct ExprList_item *pItem;
+    ExprListItem *pItem;
     moreToDo = 0;
     pEList = pSelect->pEList;
     assert( pEList!=0 );
@@ -842,7 +842,7 @@ int sqlite4ResolveOrderGroupBy(
   int i;
   sqlite4 *db = pParse->db;
   ExprList *pEList;
-  struct ExprList_item *pItem;
+  ExprListItem *pItem;
 
   if( pOrderBy==0 || pParse->db->mallocFailed ) return 0;
 #if SQLITE4_MAX_COLUMN
@@ -891,7 +891,7 @@ static int resolveOrderGroupBy(
 ){
   int i;                         /* Loop counter */
   int iCol;                      /* Column number */
-  struct ExprList_item *pItem;   /* A term of the ORDER BY clause */
+  ExprListItem *pItem;   /* A term of the ORDER BY clause */
   Parse *pParse;                 /* Parsing context */
   int nResult;                   /* Number of terms in the result set */
 
@@ -1005,7 +1005,7 @@ static int resolveSelectStep(Walker *pWalker, Select *p){
     /* Recursively resolve names in all subqueries
     */
     for(i=0; i<p->pSrc->nSrc; i++){
-      struct SrcList_item *pItem = &p->pSrc->a[i];
+      SrcListItem *pItem = &p->pSrc->a[i];
       if( pItem->pSelect ){
         NameContext *pNC;         /* Used to iterate name contexts */
         int nRef = 0;             /* Refcount for pOuterNC and outer contexts */
@@ -1084,7 +1084,7 @@ static int resolveSelectStep(Walker *pWalker, Select *p){
     ** the GROUP BY clause does not contain aggregate functions.
     */
     if( pGroupBy ){
-      struct ExprList_item *pItem;
+      ExprListItem *pItem;
     
       if( resolveOrderGroupBy(&sNC, p, pGroupBy, "GROUP") || db->mallocFailed ){
         return WRC_Abort;

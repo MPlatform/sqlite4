@@ -28,7 +28,7 @@
 **    pSrc->a[0].pIndex     Pointer to the INDEXED BY index, if there is one
 */
 Table *sqlite4SrcListLookup(Parse *pParse, SrcList *pSrc){
-  struct SrcList_item *pItem = pSrc->a;
+  SrcListItem *pItem = pSrc->a;
   Table *pTab;
   assert( pItem && pSrc->nSrc==1 );
   pTab = sqlite4LocateTable(pParse, 0, pItem->zName, pItem->zDatabase);

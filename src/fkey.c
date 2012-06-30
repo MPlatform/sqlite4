@@ -769,7 +769,7 @@ void sqlite4FkCheck(
     ** is required for the sqlite4WhereXXX() interface.  */
     pSrc = sqlite4SrcListAppend(db, 0, 0, 0);
     if( pSrc ){
-      struct SrcList_item *pItem = pSrc->a;
+      SrcListItem *pItem = pSrc->a;
       pItem->pTab = pFKey->pFrom;
       pItem->zName = pFKey->pFrom->zName;
       pItem->pTab->nRef++;

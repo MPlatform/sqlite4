@@ -640,7 +640,7 @@ void sqlite4VXPrintf(
       case etSRCLIST: {
         SrcList *pSrc = va_arg(ap, SrcList*);
         int k = va_arg(ap, int);
-        struct SrcList_item *pItem = &pSrc->a[k];
+        SrcListItem *pItem = &pSrc->a[k];
         assert( k>=0 && k<pSrc->nSrc );
         if( pItem->zDatabase ){
           sqlite4StrAccumAppend(pAccum, pItem->zDatabase, -1);
