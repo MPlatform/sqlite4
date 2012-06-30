@@ -41,11 +41,29 @@
 # build the SQLite library and testing tools.
 ################################################################################
 
+# FIXME:  Required options for now.
+#
+OPTS += -DLSM_MUTEX_NONE
+OPTS += -DSQLITE4_DEBUG=1 -DLSM_DEBUG=1
+OPTS += -DHAVE_GMTIME_R
+OPTS += -DHAVE_LOCALTIME_R
+OPTS += -DHAVE_MALLOC_USABLE_SIZE
+OPTS += -DHAVE_USLEEP
+OPTS += -DSQLITE4_MEMDEBUG=1
+OPTS += -DSQLITE4_NO_SYNC=1 -DLSM_NO_SYNC=1
+OPTS += -DSQLITE4_OMIT_ANALYZE
+OPTS += -DSQLITE4_OMIT_AUTOMATIC_INDEX
+OPTS += -DSQLITE4_OMIT_BTREECOUNT
+OPTS += -DSQLITE4_OMIT_VIRTUALTABLE=1
+OPTS += -DSQLITE4_OMIT_XFER_OPT
+OPTS += -DSQLITE4_THREADSAFE=0
+
 # This is how we compile
 #
 TCCX =  $(TCC) $(OPTS) -I. -I$(TOP)/src -I$(TOP) 
 TCCX += -I$(TOP)/ext/rtree -I$(TOP)/ext/icu -I$(TOP)/ext/fts3
 TCCX += -I$(TOP)/ext/async
+
 
 # Object files for the SQLite library.
 #
