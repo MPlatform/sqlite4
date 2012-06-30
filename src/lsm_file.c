@@ -1175,6 +1175,16 @@ int lsmFsMetaPageGet(
       if( rc==LSM_OK && bWrite==0 ){
         rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, pFS->nMetasize);
       }
+#ifndef NDEBUG
+      /* pPg->aData causes an uninitialized access via a downstreadm write().
+         After discussion on this list, this memory should not, for performance
+         reasons, be memset. However, tracking down "real" misuse is more
+         difficult with this "false" positive, so it is set when NDEBUG.
+      */
+      else if( rc==LSM_OK ){
+        memset( pPg->aData, 0x77, pFS->nMetasize );
+      }
+#endif
     }
 
     if( rc!=LSM_OK ){
