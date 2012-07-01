@@ -19,7 +19,7 @@ TOP := .
 #### C Compiler and options for use in building executables that
 #    will run on the platform that is doing the build.
 #
-BCC ?= gcc -g -O2
+BCC ?= gcc -g -O2 -fPIC
 #BCC ?= /opt/ancic/bin/c89 -0
 
 #### If the target operating system supports the "usleep()" system
@@ -70,7 +70,7 @@ EXE =
 #    will run on the target platform.  This is usually the same
 #    as BCC, unless you are cross-compiling.
 #
-TCC ?= gcc -O6
+TCC ?= gcc -O6 -fPIC
 #TCC ?= gcc -g -O0 -Wall
 #TCC ?= gcc -g -O0 -Wall -fprofile-arcs -ftest-coverage
 #TCC ?= /opt/mingw/bin/i386-mingw32-gcc -O6
@@ -93,14 +93,15 @@ SHPREFIX = lib
 #
 #TCL_FLAGS =
 #TCL_FLAGS = -DSTATIC_BUILD=1
-TCL_FLAGS = -I/home/drh/tcltk/8.5linux
+#TCL_FLAGS = -I/home/drh/tcltk/8.5linux
+TCL_FLAGS = -I/usr/include/tcl
 #TCL_FLAGS = -I/home/drh/tcltk/8.5win -DSTATIC_BUILD=1
 #TCL_FLAGS = -I/home/drh/tcltk/8.3hpux
 
 #### Linker options needed to link against the TCL library.
 #
-#LIBTCL = -ltcl -lm -ldl
-LIBTCL = /home/drh/tcltk/8.5linux/libtcl8.5g.a -lm -ldl
+LIBTCL = -ltcl -lm -ldl
+#LIBTCL = /home/drh/tcltk/8.5linux/libtcl8.5g.a -lm -ldl
 #LIBTCL = /home/drh/tcltk/8.5win/libtcl85s.a -lmsvcrt
 #LIBTCL = /home/drh/tcltk/8.3hpux/libtcl8.3.a -ldld -lm -lc
 
