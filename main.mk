@@ -67,12 +67,17 @@ TCCX += -I$(TOP)/ext/async
 
 # Object files for the SQLite library.
 #
+FTS3_OBJ = fts3.o fts3_aux.o fts3_expr.o fts3_hash.o fts3_icu.o fts3_porter.o \
+         fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
+         fts3_write.o
+# To remove fts3 (if it won't compile for you), unset FTS3_OBJ:
+# FTS3_OBJ =
+
 LIBOBJ+= alter.o analyze.o attach.o auth.o \
          build.o \
          callback.o complete.o ctime.o date.o delete.o expr.o fault.o fkey.o \
-         fts3.o fts3_aux.o fts3_expr.o fts3_hash.o fts3_icu.o fts3_porter.o \
-         fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
-         fts3_write.o func.o global.o hash.o \
+         $(FTS3_OBJ) \
+         func.o global.o hash.o \
          icu.o insert.o kvlsm.o kvmem.o legacy.o \
          lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o lsm_mem.o lsm_mutex.o \
          lsm_shared.o lsm_str.o lsm_sorted.o lsm_tree.o \
