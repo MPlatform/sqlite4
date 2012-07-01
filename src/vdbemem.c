@@ -451,8 +451,7 @@ void sqlite4VdbeMemSetNull(Mem *pMem){
     VdbeFrame *pFrame = pMem->u.pFrame;
     pFrame->pParent = pFrame->v->pDelFrame;
     pFrame->v->pDelFrame = pFrame;
-  }
-  if( pMem->flags & MEM_RowSet ){
+  }else if( pMem->flags & MEM_RowSet ){
     sqlite4RowSetClear(pMem->u.pRowSet);
   }
   MemSetTypeFlag(pMem, MEM_Null);
