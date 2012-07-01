@@ -1,0 +1,52 @@
+#!/this/is/for/gmake
+########################################################################
+# "For best results" on Linux platforms, symlink this file to
+# GNUmakefile (careful with the small/big letters or GNU Make won't
+# see it).
+#
+# This file (if named GNUmakefile) will be preferred by GNU Make
+# (only) and can be used to override certain flags used by the main
+# Linux makefile.
+all:# magic target - do not move or rename.
+# Put any site-local (not checked in) customizations in
+# GNUmakefile.local:
+-include GNUmakefile.local
+# Customizations go after this.
+########################################################################
+
+########################################################################
+# Pick a compiler...
+compiler ?= gcc
+compiler ?= tcc
+compiler ?= clang
+
+########################################################################
+# LIBTCL compile/link flags
+TCL_FLAGS ?= -I/usr/include/tcl
+LIBTCL ?= -L/usr/lib -ltcl8.5 -lm -ldl
+
+########################################################################
+# TCC=Compiler for target platform binaries.
+# BCC=Compiler for local native binaries.
+ifeq (gcc,$(compiler))
+  BCC ?= gcc -g -fPIC -UNDEBUG -DDEBUG -Wall
+  BCC += -std=c89
+endif
+ifeq (tcc,$(compiler))
+  BCC ?= tcc -g -Wall
+endif
+ifeq (clang,$(compiler))
+  BCC ?= clang -g -Wall
+endif
+
+########################################################################
+# optionally set OPTS to various sqlite4 build options.
+# OPTS = -DHI_WORLD
+
+########################################################################
+# Now include the main rules...
+include Makefile.linux-gcc
+########################################################################
+# Force regeneration of sqlite4.h if any makefiles change...
+parse.h sqlite4.h: $(MAKEFILE_LIST)
+$(MAKEFILE_LIST):
