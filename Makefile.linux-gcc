@@ -54,23 +54,24 @@ TLIBS =
 #    You can make the library go almost twice as fast if you compile
 #    with -DNDEBUG=1
 #
-#OPTS = -DSQLITE4_DEBUG=2
-#OPTS = -DSQLITE4_DEBUG=1
-#OPTS = 
-OPTS = -DNDEBUG=1
+OPTS ?=# leave this blank
+#OPTS += -DSQLITE4_DEBUG=2
+#OPTS += -DSQLITE4_DEBUG=1
+OPTS += -DNDEBUG=1
 OPTS += -DHAVE_FDATASYNC=1
 
 #### The suffix to add to executable files.  ".exe" for windows.
 #    Nothing for unix.
 #
 #EXE = .exe
-EXE =
+EXE ?=
 
 #### C Compile and options for use in building executables that 
 #    will run on the target platform.  This is usually the same
 #    as BCC, unless you are cross-compiling.
 #
-TCC ?= gcc -O6 -fPIC
+TCC ?= $(BCC)
+#TCC ?= gcc -O6 -fPIC
 #TCC ?= gcc -g -O0 -Wall
 #TCC ?= gcc -g -O0 -Wall -fprofile-arcs -ftest-coverage
 #TCC ?= /opt/mingw/bin/i386-mingw32-gcc -O6
