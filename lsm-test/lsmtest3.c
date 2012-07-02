@@ -24,21 +24,33 @@
 #include "lsmtest.h"
 
 struct CksumDb {
-  int nEntry;
+  int nFirst;
+  int nLast;
   int nStep;
   char **azCksum;
 };
 
-CksumDb *testCksumArrayNew(Datasource *pData, int nEntry, int nStep){
+CksumDb *testCksumArrayNew(
+  Datasource *pData, 
+  int nFirst, 
+  int nLast, 
+  int nStep
+){
   TestDb *pDb;
   CksumDb *pRet;
   int i;
   int j;
+  int nEntry;
+  int rc = 0;
+
+  assert( nLast>=nFirst && ((nLast-nFirst)%nStep)==0 );
  
   pRet = malloc(sizeof(CksumDb));
   memset(pRet, 0, sizeof(CksumDb));
-  pRet->nEntry = nEntry;
+  pRet->nFirst = nFirst;
+  pRet->nLast = nLast;
   pRet->nStep = nStep;
+  nEntry = 1 + ((nLast - nFirst) / nStep);
 
   /* Allocate space so that azCksum is an array of nEntry pointers to
   ** buffers each TEST_CKSUM_BYTES in size.  */
@@ -49,17 +61,13 @@ CksumDb *testCksumArrayNew(Datasource *pData, int nEntry, int nStep){
   }
 
   tdb_open("lsm", "tempdb.lsm", 1, &pDb);
+  testWriteDatasourceRange(pDb, pData, 0, nFirst, &rc);
   for(i=0; i<nEntry; i++){
-    for(j=0; j<nStep; j++){
-      int rc = 0;
-      void *pKey; int nKey;
-      void *pVal; int nVal;
-      testDatasourceEntry(pData, (i*nStep)+j, &pKey, &nKey, &pVal, &nVal);
-      testWrite(pDb, pKey, nKey, pVal, nVal, &rc);
-      assert( rc==0 );
-    }
     testCksumDatabase(pDb, pRet->azCksum[i]);
+    if( i==nEntry ) break;
+    testWriteDatasourceRange(pDb, pData, nFirst+i*nStep, nStep, &rc);
   }
+
   tdb_close(pDb);
 
   return pRet;
@@ -67,8 +75,11 @@ CksumDb *testCksumArrayNew(Datasource *pData, int nEntry, int nStep){
 
 char *testCksumArrayGet(CksumDb *p, int nRow){
   int i;
-  assert( nRow>0 && (nRow%p->nStep)==0 );
-  i = (nRow / p->nStep) - 1;
+  assert( nRow>=p->nFirst );
+  assert( nRow<=p->nLast );
+  assert( ((nRow-p->nFirst) % p->nStep)==0 );
+
+  i = (nRow - p->nFirst) / p->nStep;
   return p->azCksum[i];
 }
 
@@ -153,7 +164,7 @@ static int rollback_test_1(
   testCaseStart(&rc, zName);
   free(zName);
 
-  pCksum = testCksumArrayNew(pData, nRepeat, 100);
+  pCksum = testCksumArrayNew(pData, 0, nRepeat*100, 100);
   pDb = 0;
   rc = tdb_open(zSystem, 0, 1, &pDb);
   if( pDb && tdb_transaction_support(pDb)==0 ){

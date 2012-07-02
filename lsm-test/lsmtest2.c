@@ -84,31 +84,6 @@ int testCksumDatabase(
   return cksum.nRow;
 }
 
-static int cksumDatasource(
-  Datasource *pData, 
-  int nEntry,
-  char *zOut
-){
-  TestDb *pDb;
-  int i;
-  int ret;
-  int rc = 0;
-
-  tdb_open("lsm", "tmpdb.lsm", 1, &pDb);
-  for(i=0; i<nEntry; i++){
-    void *pKey; int nKey;
-    void *pVal; int nVal;
-    testDatasourceEntry(pData, i, &pKey, &nKey, &pVal, &nVal);
-    testWrite(pDb, pKey, nKey, pVal, nVal, &rc);
-    assert( rc==0 );
-    tdb_write(pDb, pKey, nKey, pVal, nVal);
-  }
-
-  ret = testCksumDatabase(pDb, zOut);
-  tdb_close(pDb);
-  return ret;
-}
-
 int testCountDatabase(TestDb *pDb){
   Cksum cksum;
   memset(&cksum, 0, sizeof(Cksum));
@@ -201,210 +176,129 @@ void testCaseSkip(){
   printf("Skipped\n");
 }
 
+void testSetupSavedLsmdb(
+  const char *zCfg,
+  const char *zFile,
+  Datasource *pData,
+  int nRow,
+  int *pRc
+){
+  if( *pRc==0 ){
+    int rc;
+    TestDb *pDb;
+    rc = tdb_lsm_open(zCfg, zFile, 1, &pDb);
+    if( rc==0 ){
+      testWriteDatasourceRange(pDb, pData, 0, nRow, &rc);
+      testClose(&pDb);
+      if( rc==0 ) testSaveLsmdb(zFile);
+    }
+    *pRc = rc;
+  }
+}
+
+/*
+** This function is a no-op if *pRc is non-zero when it is called.
+**
+** Open the LSM database identified by zFile and compute its checksum
+** (a string, as returned by testCksumDatabase()). If the checksum is
+** identical to zExpect1 or, if it is not NULL, zExpect2, the test passes.
+** Otherwise, print an error message and set *pRc to 1.
+*/
+void testCompareCksumLsmdb(
+  const char *zFile,              /* Path to LSM database */
+  const char *zExpect1,           /* Expected checksum 1 */
+  const char *zExpect2,           /* Expected checksum 2 (or NULL) */
+  int *pRc                        /* IN/OUT: Test case error code */
+){
+  if( *pRc==0 ){
+    char zCksum[TEST_CKSUM_BYTES];
+    TestDb *pDb;
+
+    pDb = testOpen("lsm", 0, pRc);
+    testCksumDatabase(pDb, zCksum);
+    testClose(&pDb);
+
+    if( *pRc==0 ){
+      int r1 = 0;
+      int r2 = -1;
+
+      r1 = strcmp(zCksum, zExpect1);
+      if( zExpect2 ) r2 = strcmp(zCksum, zExpect2);
+      if( r1 && r2 ){
+        if( zExpect2 ){
+          testPrintError("testCompareCksumLsmdb: \"%s\" != (\"%s\" OR \"%s\")",
+              zCksum, zExpect1, zExpect2
+          );
+        }else{
+          testPrintError("testCompareCksumLsmdb: \"%s\" != \"%s\"",
+              zCksum, zExpect1
+          );
+        }
+        *pRc = 1;
+        test_failed();
+      }
+    }
+  }
+}
 
 /* Above this point are reusable test routines. Not clear that they
 ** should really be in this file.
 *************************************************************************/
 
-/*
-** The database handle passed as the only argument must be an LSM database.
-** This function simulates a system crash by:
-*/
-void testSystemCrash(TestDb *pDb){
-  assert( tdb_lsm(pDb) );
-  tdb_lsm_system_crash(pDb);
-  tdb_close(pDb);
-}
+static void crash_test2(int *pRc){
+  const char *DBNAME = "testdb.lsm";
+  const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 1000, 1000};
 
-static Datasource *getDatasource(int iTest){
-  DatasourceDefn aDefn[2] = {
-    { TEST_DATASOURCE_SEQUENCE, 0, 0, 50, 100 }, 
-    { TEST_DATASOURCE_RANDOM, 10, 15, 50, 100 }, 
-  };
+  const int nIter = 200;
+  const int nInsert = 20;
 
-  if( iTest>=ArraySize(aDefn) ) return 0;
-  return testDatasourceNew(&aDefn[iTest]);
-}
+  int i;
+  int iDot = 0;
+  Datasource *pData;
+  CksumDb *pCksumDb;
+  TestDb *pDb;
 
-static int crash_test1(
-  const char *zPattern,
-  const char *zTitle,
-  const char *zSystem,            /* Database system to test */
-  int eSyncMode                   /* Either LSM_SAFETY_NORMAL or FULL */
-){
-  const int nTrial = 1000;
-  const int nRow = 10;
-  int iDatasource;
-  Datasource *pData = 0;          /* Test data */
-  int bLossy;                     /* True if a crash may cause data loss */
+  /* Allocate datasource. And calculate the expected checksums. */
+  pData = testDatasourceNew(&defn);
+  pCksumDb = testCksumArrayNew(pData, 100, 100+nInsert, 1);
 
-  /* The crash event is "lossy" - implying that data may be lost following
-  ** recovery - if the safety-mode is set to NORMAL.  */
-  assert( eSyncMode==LSM_SAFETY_NORMAL || eSyncMode==LSM_SAFETY_FULL );
-  bLossy = eSyncMode==LSM_SAFETY_NORMAL;
+  /* Setup and save the initial database. */
+  testSetupSavedLsmdb("", DBNAME, pData, 100, pRc);
 
-  /* Function getDatasource() provides a couple of different datasources.
-  ** The following loop runs the test case once with each datasource.  */
-  for(iDatasource=0; (pData = getDatasource(iDatasource)); iDatasource++){
-    int iDot = 0;                 /* testCaseProgress() context */
-    TestDb *pDb;
-    int rc = LSM_OK;
-    int i, j;
+  for(i=0; i<nIter && *pRc==0; i++){
+    int iIns;
+    int testrc = 0;
 
-    char zCksum1[TEST_CKSUM_BYTES];
-    int nCksumRow = -1;
+    testCaseProgress(i, nIter, testCaseNDot(), &iDot);
 
-    if( 0==testCaseBegin(&rc, zPattern, "crash.%s.%d", zTitle, iDatasource) ){
-      continue;
+    /* Restore and open the database. */
+    testRestoreLsmdb(DBNAME);
+    testrc = tdb_lsm_open("safety=2", DBNAME, 0, &pDb);
+    assert( testrc==0 );
+
+    /* Insert nInsert records into the database. Crash midway through. */
+    tdb_lsm_prepare_sync_crash(pDb, 1 + (i%(nInsert+2)));
+    for(iIns=0; iIns<nInsert; iIns++){
+      void *pKey; int nKey;
+      void *pVal; int nVal;
+
+      testDatasourceEntry(pData, 100+iIns, &pKey, &nKey, &pVal, &nVal);
+      testrc = tdb_write(pDb, pKey, nKey, pVal, nVal);
+      if( testrc ) break;
     }
-
-    /* Open and configure the LSM database connection. */
-    pDb = 0;
-    rc = tdb_open(zSystem, 0, 1, &pDb);
-    if( rc==0 ) tdb_lsm_safety(pDb, eSyncMode);
-    if( rc==0 ) tdb_lsm_prepare_system_crash(pDb);
-
-    for(i=0; rc==LSM_OK && i<nTrial; i++){
-      int nCurrent;               /* Current number of rows in db */
-      int nRequired;              /* Desired number of rows */
-     
-      nCurrent = testCountDatabase(pDb);
-      nRequired = (i + 1) * nRow;
-
-      /* Write some more records to the database. */
-      for(j=nCurrent; j<nRequired; j++){
-        void *pKey; int nKey;
-        void *pVal; int nVal;
-        testDatasourceEntry(pData, j, &pKey, &nKey, &pVal, &nVal);
-        testWrite(pDb, pKey, nKey, pVal, nVal, &rc);
-      }
-
-      if( rc==LSM_OK ){
-        int nDbRow;
-        char zCksum2[TEST_CKSUM_BYTES];
-
-        nCksumRow = testCksumDatabase(pDb, zCksum1);
-        
-        /* Do the crash. */
-        testSystemCrash(pDb);
-
-        /* Re-open (and re-configure) the LSM connection. */
-        pDb = 0;
-        rc = tdb_open(zSystem, 0, 0, &pDb);
-        if( rc==0 ) tdb_lsm_safety(pDb, eSyncMode);
-        if( rc==0 ) tdb_lsm_prepare_system_crash(pDb);
-
-        /* Generate a checksum of the database. If the simulated crash is
-        ** not supposed to be lossy, then this checksum should match the
-        ** checksum generated above. 
-        **
-        ** Otherwise, if the crash was lossy, check how many rows are in
-        ** the database following recovery. The new checksum should reflect 
-        ** the fact that the database now contains key-value pairs 
-        ** 0..(nDbRow-1) from datasource pData, inclusive.
-        */
-        nDbRow = testCksumDatabase(pDb, zCksum2);
-        if( bLossy && nDbRow!=nCksumRow ){
-          nCksumRow = cksumDatasource(pData, nDbRow, zCksum1);
-          assert( nCksumRow==nDbRow );
-        }
-
-        /* Check that the checksum matches whatever it is that it is 
-        ** supposed to match (see above).  */
-        testCompareStr(zCksum1, zCksum2, &rc);
-      }
-
-      testCaseProgress(i, nTrial, testCaseNDot(), &iDot);
-    }
-
-    tdb_close(pDb);
-    testCaseFinish(rc);
-    testDatasourceFree(pData);
-  }
-
-  return LSM_OK;
-}
-
-#if 0
-static int crash_test2(
-  const char *zTitle,
-  const char *zSystem,
-  int eSyncMode                   /* Either LSM_SAFETY_NORMAL or FULL */
-){
-  const int nTrial = 100;
-  const int nRow = 10;
-  int iTest;
-
-  /* This test is for system-crashes only in full-sync mode only. */
-  assert( eSyncMode==LSM_SAFETY_FULL );
-
-  for(iTest=0; 1; iTest++){
-    
-    TestDb *pDb;
-    int rc;
-    int i;
-
-    char zCksum1[TEST_CKSUM_BYTES];
-    char zCksum2[TEST_CKSUM_BYTES];
-    int nCksumRow = -1;
-
-    Datasource *pData;            /* Test data */
-    pData = getDatasource(iTest);
-    if( !pData ) break;
-
-    testCaseStart(&rc, "crash.%s.%d", zTitle, iTest);
-    tdb_open(zSystem, 0, 1, &pDb);
     tdb_close(pDb);
 
-    for(i=0; rc==LSM_OK && i<nTrial; i++){
-      int iSync;                  /* fsync() to crash on */
-     
-      tdb_open(zSystem, 0, 0, &pDb);
-      tdb_lsm_safety(pDb, LSM_SAFETY_FULL);
-
-      for(iSync=1; iSync<=(nRow+4); iSync++){
-        int nCurrent;               /* Current number of rows in db */
-        int testrc = 0;
-        int nDbRow;
-        int j;
-
-        tdb_lsm_prepare_sync_crash(pDb, iSync);
-        nCurrent = testCountDatabase(pDb);
-
-        for(j=0; j<nRow && testrc==0; j++){
-          void *pKey; int nKey;
-          void *pVal; int nVal;
-          testDatasourceEntry(pData, nCurrent+j, &pKey, &nKey, &pVal, &nVal);
-          testrc = tdb_write(pDb, pKey, nKey, pVal, nVal);
-        }
-
-        /* Close and reopen the database */
-        tdb_close(pDb);
-        tdb_open(zSystem, 0, 0, &pDb);
-        tdb_lsm_safety(pDb, LSM_SAFETY_FULL);
-
-        /* Check that we have not mysteriously lost synced data. */
-        nDbRow = testCountDatabase(pDb);
-        testCompareInt((nDbRow>=(nCurrent+j-1)), 1, &rc);
-
-        /* Check that the database contents match the size. */
-        if( nDbRow!=nCksumRow ){
-          nCksumRow = cksumDatasource(pData, nDbRow, zCksum1);
-          assert( nCksumRow==nDbRow );
-        }
-        nDbRow = testCksumDatabase(pDb, zCksum2);
-        testCompareStr(zCksum1, zCksum2, &rc);
-      }
-
-      tdb_close(pDb);
-    }
-    testCaseFinish(rc);
-    testDatasourceFree(pData);
+    /* Check that no data was lost when the system crashed. */
+    testCompareCksumLsmdb(DBNAME, 
+      testCksumArrayGet(pCksumDb, 100 + iIns),
+      testCksumArrayGet(pCksumDb, 100 + iIns + 1),
+      pRc
+    );
   }
 
-  return LSM_OK;
+  testDatasourceFree(pData);
+  testCksumArrayFree(pCksumDb);
 }
-#endif
 
 /*
 ** This test verifies that if a system crash occurs when checkpointing
@@ -417,26 +311,24 @@ static void crash_test3(int *pRc){
   const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 1000, 1000};
 
   int i;
+  int iDot = 0;
   Datasource *pData;
   CksumDb *pCksumDb;
   TestDb *pDb;
 
   /* Allocate datasource. And calculate the expected checksums. */
   pData = testDatasourceNew(&defn);
-  pCksumDb = testCksumArrayNew(pData, 15, 10);
+  pCksumDb = testCksumArrayNew(pData, 110, 150, 10);
 
-  /* Setup the initial database. Save it using testSaveLsmdb(). */
-  pDb = testOpen("lsm", 1, pRc);
-  testWriteDatasourceRange(pDb, pData, 0, 100, pRc);
-  testClose(&pDb);
-  testSaveLsmdb(DBNAME);
+  /* Setup and save the initial database. */
+  testSetupSavedLsmdb("", DBNAME, pData, 100, pRc);
 
   for(i=0; i<nIter && *pRc==0; i++){
     int iOpen;
+    testCaseProgress(i, nIter, testCaseNDot(), &iDot);
     testRestoreLsmdb(DBNAME);
-    for(iOpen=0; iOpen<5; iOpen++){
-      char zCksum[TEST_CKSUM_BYTES];
 
+    for(iOpen=0; iOpen<5; iOpen++){
       /* Open the database. Insert 10 more records. */
       pDb = testOpen("lsm", 0, pRc);
       testWriteDatasourceRange(pDb, pData, 100+iOpen*10, 10, pRc);
@@ -447,40 +339,34 @@ static void crash_test3(int *pRc){
 
       /* Open the database and check that the crash did not cause any
       ** data loss.  */
-      pDb = testOpen("lsm", 0, pRc);
-      testCksumDatabase(pDb, zCksum);
-      testCompareStr(zCksum, testCksumArrayGet(pCksumDb, 110 + iOpen*10), pRc);
-      testClose(&pDb);
+      testCompareCksumLsmdb(DBNAME, 
+        testCksumArrayGet(pCksumDb, 110 + iOpen*10), 0,
+        pRc
+      );
     }
   }
 
   testDatasourceFree(pData);
+  testCksumArrayFree(pCksumDb);
 }
 
 void do_crash_test(const char *zPattern, int *pRc){
   struct Test {
     const char *zTest;
-    const char *zSystem;
-    int eSafety;
-    int (*x)(const char *, const char *, const char *, int eSyncMode);
+    void (*x)(int *);
   } aTest [] = {
-    { "sys.full.lomem.1",   "lsm_lomem", LSM_SAFETY_FULL  , crash_test1 },
-    { "sys.normal.lomem.1", "lsm_lomem", LSM_SAFETY_NORMAL, crash_test1 },
+    { "crash.lsm.2", crash_test2 },
+    { "crash.lsm.3", crash_test3 },
   };
   int i;
 
-#if 0
   for(i=0; *pRc==LSM_OK && i<ArraySize(aTest); i++){
     struct Test *p = &aTest[i];
-    *pRc = p->x(zPattern, p->zTest, p->zSystem, p->eSafety);
-  }
-#endif
-
-  if( testCaseBegin(pRc, zPattern, "%s", "crashtest3") ){
-    crash_test3(pRc);
-    testCaseFinish(*pRc);
+    if( testCaseBegin(pRc, zPattern, "%s", p->zTest) ){
+      p->x(pRc);
+      testCaseFinish(*pRc);
+    }
   }
 }
-
 
 

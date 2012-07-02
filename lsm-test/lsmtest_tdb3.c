@@ -556,10 +556,98 @@ static void xWorkHook(lsm_db *db, void *pArg){
   if( p->xWork ) p->xWork(db, p->pWorkCtx);
 }
 
+
+int test_lsm_config_str(
+  lsm_db *pDb, 
+  int bWorker,
+  const char *zStr
+){
+  
+  struct CfgParam {
+    const char *zParam;
+    int bWorker;
+    int eParam;
+  } aParam[] = {
+    { "write_buffer",   0, LSM_CONFIG_WRITE_BUFFER },
+    { "page_size",      0, LSM_CONFIG_PAGE_SIZE },
+    { "block_size",     0, LSM_CONFIG_BLOCK_SIZE },
+    { "safety",         0, LSM_CONFIG_SAFETY },
+    { "autowork",       0, LSM_CONFIG_AUTOWORK },
+    { "log_size",       0, LSM_CONFIG_LOG_SIZE },
+    { "mmap",           0, LSM_CONFIG_MMAP },
+    { "use_log",        0, LSM_CONFIG_USE_LOG },
+    { "nmerge",         0, LSM_CONFIG_NMERGE },
+    { "worker_nmerge",  1, LSM_CONFIG_NMERGE },
+    { 0, 0 }
+  };
+  const char *z = zStr;
+
+  while( z[0] && pDb ){
+    char *zStart;
+
+    /* Skip whitespace */
+    while( *z==' ' ) z++;
+    zStart = z;
+
+    while( *z && *z!='=' ) z++;
+    if( *z ){
+      int eParam;
+      int i;
+      int iVal;
+      int rc;
+      char zParam[32];
+      int nParam = z-zStart;
+      if( nParam==0 || nParam>sizeof(zParam)-1 ) goto syntax_error;
+
+      memcpy(zParam, zStart, nParam);
+      zParam[nParam] = '\0';
+      rc = testArgSelect(aParam, "param", zParam, &i);
+      if( rc!=0 ) return rc;
+      eParam = aParam[i].eParam;
+
+      z++;
+      zStart = z;
+      while( *z>='0' && *z<='9' ) z++;
+      nParam = z-zStart;
+      if( nParam==0 || nParam>sizeof(zParam)-1 ) goto syntax_error;
+      memcpy(zParam, zStart, nParam);
+      zParam[nParam] = '\0';
+      iVal = atoi(zParam);
+
+      if( bWorker || aParam[i].bWorker==0 ){
+        lsm_config(pDb, eParam, &iVal);
+      }
+    }else if( z!=zStart ){
+      goto syntax_error;
+    }
+  }
+
+  return 0;
+ syntax_error:
+  testPrintError("syntax error at: \"%s\"\n", z);
+  return 1;
+}
+
+int tdb_lsm_config_str(TestDb *pDb, const char *zStr){
+  int rc = 0;
+  if( tdb_lsm(pDb) ){
+    int i;
+    LsmDb *pLsm = (LsmDb *)pDb;
+
+    rc = test_lsm_config_str(pLsm->db, 0, zStr);
+#ifdef LSM_MUTEX_PTHREADS
+    for(i=0; rc==0 && i<pLsm->nWorker; i++){
+      rc = test_lsm_config_str(pLsm->aWorker[i].pWorker, 1, zStr);
+    }
+#endif
+  }
+  return rc;
+}
+
 static int testLsmOpen(
+  const char *zCfg,
   const char *zFilename, 
   int bClear, 
-  int bSmall, 
   TestDb **ppDb
 ){
   static const DatabaseMethods LsmMethods = {
@@ -577,16 +665,9 @@ static int testLsmOpen(
   int nFilename;
   LsmDb *pDb;
 
+  /* If the bClear flag is set, delete any existing database. */
   assert( zFilename);
-  if( bClear ){
-    char *zCmd = sqlite3_mprintf("rm -rf %s\n", zFilename);
-    system(zCmd);
-    sqlite3_free(zCmd);
-    zCmd = sqlite3_mprintf("rm -rf %s-log\n", zFilename);
-    system(zCmd);
-    sqlite3_free(zCmd);
-  }
-
+  if( bClear ) testDeleteLsmdb(zFilename);
   nFilename = strlen(zFilename);
 
   pDb = (LsmDb *)testMalloc(sizeof(LsmDb) + nFilename + 1);
@@ -620,14 +701,7 @@ static int testLsmOpen(
   if( rc==LSM_OK ){
     lsm_config_log(pDb->db, xLog, 0);
     lsm_config_work_hook(pDb->db, xWorkHook, (void *)pDb);
-    if( bSmall ){
-      int nPgsz = 256;
-      int nBlocksize = 64 * 1024;
-      lsm_config(pDb->db, LSM_CONFIG_PAGE_SIZE, &nPgsz);
-      lsm_config(pDb->db, LSM_CONFIG_BLOCK_SIZE, &nBlocksize);
-      assert( nPgsz==256 );
-      assert( nBlocksize==64*1024 );
-    }
+    tdb_lsm_config_str((TestDb *)pDb, zCfg);
     rc = lsm_open(pDb->db, zFilename);
     if( rc!=LSM_OK ){
       test_lsm_close((TestDb *)pDb);
@@ -640,15 +714,16 @@ static int testLsmOpen(
 }
 
 int test_lsm_open(const char *zFilename, int bClear, TestDb **ppDb){
-  return testLsmOpen(zFilename, bClear, 0, ppDb);
+  return testLsmOpen("", zFilename, bClear, ppDb);
 }
 
 int test_lsm_small_open(
-  const char *zFilename, 
+  const char *zFile, 
   int bClear, 
   TestDb **ppDb
 ){
-  return testLsmOpen(zFilename, bClear, 1, ppDb);
+  const char *zCfg = "page_size=256 block_size=65536";
+  return testLsmOpen(zCfg, zFile, bClear, ppDb);
 }
 
 int test_lsm_lomem_open(
@@ -656,15 +731,8 @@ int test_lsm_lomem_open(
   int bClear, 
   TestDb **ppDb
 ){
-  int rc;
-  rc = test_lsm_small_open(zFilename, bClear, ppDb);
-  if( rc==0 ){
-    LsmDb *pDb = (LsmDb *)*ppDb;
-    int nMem = 1024 * 16;
-    lsm_config(pDb->db, LSM_CONFIG_WRITE_BUFFER, &nMem);
-    assert( nMem==(1024 * 16) );
-  }
-  return rc;
+  const char *zCfg = "page_size=256 block_size=65536 write_buffer=16384";
+  return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
 
 lsm_db *tdb_lsm(TestDb *pDb){
@@ -748,93 +816,9 @@ void tdb_lsm_write_hook(
   }
 }
 
-
-int test_lsm_config_str(
-  lsm_db *pDb, 
-  int bWorker,
-  const char *zStr
-){
-  
-  struct CfgParam {
-    const char *zParam;
-    int bWorker;
-    int eParam;
-  } aParam[] = {
-    { "write_buffer",   0, LSM_CONFIG_WRITE_BUFFER },
-    { "page_size",      0, LSM_CONFIG_PAGE_SIZE },
-    { "safety",         0, LSM_CONFIG_SAFETY },
-    { "autowork",       0, LSM_CONFIG_AUTOWORK },
-    { "log_size",       0, LSM_CONFIG_LOG_SIZE },
-    { "mmap",           0, LSM_CONFIG_MMAP },
-    { "use_log",        0, LSM_CONFIG_USE_LOG },
-    { "nmerge",         0, LSM_CONFIG_NMERGE },
-    { "worker_nmerge",  1, LSM_CONFIG_NMERGE },
-    { 0, 0 }
-  };
-  char *z = zStr;
-
-  while( z[0] && pDb ){
-    char *zStart;
-
-    /* Skip whitespace */
-    while( *z==' ' ) z++;
-    zStart = z;
-
-    while( *z && *z!='=' ) z++;
-    if( *z ){
-      int eParam;
-      int i;
-      int iVal;
-      int rc;
-      char zParam[32];
-      int nParam = z-zStart;
-      if( nParam==0 || nParam>sizeof(zParam)-1 ) goto syntax_error;
-
-      memcpy(zParam, zStart, nParam);
-      zParam[nParam] = '\0';
-      rc = testArgSelect(aParam, "param", zParam, &i);
-      if( rc!=0 ) return rc;
-      eParam = aParam[i].eParam;
-
-      z++;
-      zStart = z;
-      while( *z>='0' && *z<='9' ) z++;
-      nParam = z-zStart;
-      if( nParam==0 || nParam>sizeof(zParam)-1 ) goto syntax_error;
-      memcpy(zParam, zStart, nParam);
-      zParam[nParam] = '\0';
-      iVal = atoi(zParam);
-
-      if( bWorker || aParam[i].bWorker==0 ){
-        lsm_config(pDb, eParam, &iVal);
-      }
-    }else if( z!=zStart ){
-      goto syntax_error;
-    }
-  }
-
-  return 0;
- syntax_error:
-  testPrintError("syntax error at: \"%s\"\n", z);
-  return 1;
+int tdb_lsm_open(const char *zCfg, const char *zDb, int bClear, TestDb **ppDb){
+  return testLsmOpen(zCfg, zDb, bClear, ppDb);
 }
-
-int tdb_lsm_config_str(TestDb *pDb, const char *zStr){
-  int rc = 0;
-  if( tdb_lsm(pDb) ){
-    int i;
-    LsmDb *pLsm = (LsmDb *)pDb;
-
-    rc = test_lsm_config_str(pLsm->db, 0, zStr);
-#ifdef LSM_MUTEX_PTHREADS
-    for(i=0; rc==0 && i<pLsm->nWorker; i++){
-      rc = test_lsm_config_str(pLsm->aWorker[i].pWorker, 1, zStr);
-    }
-#endif
-  }
-  return rc;
-}
-
 
 #ifdef LSM_MUTEX_PTHREADS
 

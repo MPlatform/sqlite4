@@ -449,23 +449,11 @@ int do_test(int nArg, char **azArg){
   test_api(zPattern, &rc);
   if( rc ) nFail++;
 
-  return (nFail!=0);
-}
-
-int do_crash(int nArg, char **azArg){
-  int rc = LSM_OK;
-  const char *zPattern = 0;
-
-  if( nArg>1 ){
-    testPrintError("Usage: crash ?PATTERN?\n");
-    return 1;
-  }
-  if( nArg==1 ){
-    zPattern = azArg[0];
-  }
-
+  rc = 0;
   do_crash_test(zPattern, &rc);
-  return rc;
+  if( rc ) nFail++;
+
+  return (nFail!=0);
 }
 
 static lsm_db *configure_lsm_db(TestDb *pDb){
@@ -1075,6 +1063,7 @@ static void do_insert_write_hook(
 static int do_replay(int nArg, char **azArg){
   char aBuf[4096];
   FILE *pInput;
+  FILE *pClose = 0;
   const char *zDb;
 
   lsm_env *pEnv;
@@ -1086,7 +1075,11 @@ static int do_replay(int nArg, char **azArg){
     return 1;
   }
 
-  pInput = fopen(azArg[0], "r");
+  if( strcmp(azArg[0], "-")==0 ){
+    pInput = stdin;
+  }else{
+    pClose = pInput = fopen(azArg[0], "r");
+  }
   zDb = azArg[1];
   pEnv = tdb_lsm_env();
   rc = pEnv->xOpen(pEnv, zDb, &pOut);
@@ -1115,7 +1108,7 @@ static int do_replay(int nArg, char **azArg){
       }
     }
   }
-  fclose(pInput);
+  if( pClose ) fclose(pClose);
   pEnv->xClose(pOut);
 
   return rc;
@@ -1216,7 +1209,6 @@ int main(int argc, char **argv){
     {"speed",       do_speed_tests},
     {"show",        st_do_show},
     {"work",        st_do_work},
-    {"crash",       do_crash},
     {"test",        do_test},
     {0, 0}
   };

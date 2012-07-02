@@ -195,7 +195,7 @@ void testCaseProgress(int, int, int, int *);
 int testCaseNDot(void);
 
 typedef struct CksumDb CksumDb;
-CksumDb *testCksumArrayNew(Datasource *, int, int);
+CksumDb *testCksumArrayNew(Datasource *, int, int, int);
 char *testCksumArrayGet(CksumDb *, int);
 void testCksumArrayFree(CksumDb *);
 void testCaseStart(int *pRc, char *zFmt, ...);
