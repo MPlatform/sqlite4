@@ -435,7 +435,7 @@ static void testThreadLeaveMutex(ThreadSet *p){
 }
 #endif
 
-#ifdef LSM_MUTEX_NONE
+#if !defined(LSM_MUTEX_PTHREADS)
 static int testThreadSupport(){ return 0; }
 
 #define testThreadInit(a) 0

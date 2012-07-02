@@ -245,6 +245,69 @@ void testCompareCksumLsmdb(
 ** should really be in this file.
 *************************************************************************/
 
+/*
+** This test verifies that if a system crash occurs while doing merge work
+** on the db, no data is lost.
+*/
+static void crash_test1(int *pRc){
+  const char *DBNAME = "testdb.lsm";
+
+  const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 200, 200};
+
+  const int nRow = 5000;          /* Database size */
+  const int nIter = 200;          /* Number of test iterations */
+  const int nWork = 20;           /* Maximum lsm_work() calls per iteration */
+  const int nPage = 15;           /* Pages per lsm_work call */
+
+  int i;
+  int iDot = 0;
+  Datasource *pData;
+  CksumDb *pCksumDb;
+  TestDb *pDb;
+
+  /* Allocate datasource. And calculate the expected checksums. */
+  pData = testDatasourceNew(&defn);
+  pCksumDb = testCksumArrayNew(pData, nRow, nRow, 1);
+
+  /* Setup and save the initial database. */
+  testSetupSavedLsmdb(
+      "page_size=1024 block_size=65536 write_buffer=16384 nmerge=7", 
+      DBNAME, pData, 5000, pRc
+  );
+
+  for(i=0; i<nIter && *pRc==0; i++){
+    int iWork;
+    int testrc = 0;
+
+    testCaseProgress(i, nIter, testCaseNDot(), &iDot);
+
+    /* Restore and open the database. */
+    testRestoreLsmdb(DBNAME);
+    testrc = tdb_lsm_open("safety=2", DBNAME, 0, &pDb);
+    assert( testrc==0 );
+
+    /* Call lsm_work() on the db */
+    tdb_lsm_prepare_sync_crash(pDb, 1 + (i%(nWork*2)));
+    for(iWork=0; testrc==0 && iWork<nWork; iWork++){
+      int nWrite = 0;
+      lsm_db *db = tdb_lsm(pDb);
+      testrc = lsm_work(db, LSM_WORK_CHECKPOINT, nPage, &nWrite);
+      assert( testrc!=0 || nWrite>0 );
+    }
+    tdb_close(pDb);
+
+    /* Check that the database content is still correct */
+    testCompareCksumLsmdb(DBNAME, testCksumArrayGet(pCksumDb, nRow), 0, pRc);
+  }
+
+  testCksumArrayFree(pCksumDb);
+  testDatasourceFree(pData);
+}
+
+/*
+** This test verifies that if a system crash occurs while committing a
+** transaction to the log file, no earlier transactions are lost or damaged.
+*/
 static void crash_test2(int *pRc){
   const char *DBNAME = "testdb.lsm";
   const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 1000, 1000};
@@ -355,6 +418,7 @@ void do_crash_test(const char *zPattern, int *pRc){
     const char *zTest;
     void (*x)(int *);
   } aTest [] = {
+    { "crash.lsm.1", crash_test1 },
     { "crash.lsm.2", crash_test2 },
     { "crash.lsm.3", crash_test3 },
   };
@@ -368,5 +432,4 @@ void do_crash_test(const char *zPattern, int *pRc){
     }
   }
 }
-
 
