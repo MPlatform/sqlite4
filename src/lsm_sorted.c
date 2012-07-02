@@ -1802,7 +1802,16 @@ static int segmentCursorEnd(LevelCursor *pCsr, int bLast){
   if( bLast || pCsr->aPtr[0].pPg==0 ){
     int i;
     for(i=1; i<pCsr->nPtr; i++){
-      segmentPtrEnd(pCsr, &pCsr->aPtr[i], bLast, &rc);
+      SegmentPtr *pPtr = &pCsr->aPtr[i];
+      segmentPtrEnd(pCsr, pPtr, bLast, &rc);
+      if( rc==LSM_OK && bLast && pPtr->pPg ){
+        Level *p = pCsr->pLevel;
+        int res = sortedKeyCompare(pCsr->xCmp,
+            rtTopic(pPtr->eType), pPtr->pKey, pPtr->nKey,
+            p->iSplitTopic, p->pSplitKey, p->nSplitKey
+        );
+        if( res<0 ) segmentPtrReset(pPtr);
+      }
     }
   }
 
