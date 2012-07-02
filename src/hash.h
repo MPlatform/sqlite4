@@ -41,7 +41,7 @@ typedef struct HashElem HashElem;
 ** the hash table.
 */
 struct Hash {
-  struct sqlite4_env *pEnv; /* Memory allocation environment */
+  sqlite4_env *pEnv;        /* Memory allocation environment */
   unsigned int htsize;      /* Number of buckets in the hash table */
   unsigned int count;       /* Number of entries in this table */
   HashElem *first;          /* The first element of the array */
@@ -66,7 +66,7 @@ struct HashElem {
 /*
 ** Access routines.  To delete, insert a NULL pointer.
 */
-void sqlite4HashInit(struct sqlite4_env *pEnv, Hash*);
+void sqlite4HashInit(sqlite4_env *pEnv, Hash*);
 void *sqlite4HashInsert(Hash*, const char *pKey, int nKey, void *pData);
 void *sqlite4HashFind(const Hash*, const char *pKey, int nKey);
 void sqlite4HashClear(Hash*);

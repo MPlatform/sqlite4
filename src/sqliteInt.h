@@ -2756,7 +2756,7 @@ SrcList *sqlite4SrcListAppend(sqlite4*, SrcList*, Token*, Token*);
 SrcList *sqlite4SrcListAppendFromTerm(Parse*, SrcList*, Token*, Token*,
                                       Token*, Select*, Expr*, IdList*);
 void sqlite4SrcListIndexedBy(Parse *, SrcList *, Token *);
-int sqlite4IndexedByLookup(Parse *, struct SrcListItem *);
+int sqlite4IndexedByLookup(Parse *, SrcListItem *);
 void sqlite4SrcListShiftJoinType(SrcList*);
 void sqlite4SrcListAssignCursors(Parse*, SrcList*);
 void sqlite4IdListDelete(sqlite4*, IdList*);
