@@ -232,7 +232,6 @@ static void tmMallocOom(
   void (*xHook)(void *),
   void *pHookCtx
 ){
-  int nRet = pTm->nCountdown;
   assert( nCountdown>=0 );
   assert( bPersist==0 || bPersist==1 );
   pTm->nCountdown = nCountdown;

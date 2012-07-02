@@ -332,13 +332,22 @@ int lsm_rollback(lsm_db *pDb, int iLevel);
 ** Write a new value into the database. If a value with a duplicate key 
 ** already exists it is replaced.
 */
-int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
+int lsm_write(lsm_db *, const void *pKey, int nKey, const void *pVal, int nVal);
 
 /*
 ** Delete a value from the database. No error is returned if the specified
 ** key value does not exist in the database.
 */
-int lsm_delete(lsm_db *pDb, void *pKey, int nKey);
+int lsm_delete(lsm_db *, const void *pKey, int nKey);
+
+/*
+** Delete all database entries with keys that are greater than or equal to
+** (pKey1/nKey1) and smaller than or equal to (pKey2/nKey2).
+*/
+int lsm_delete_range(lsm_db *, 
+    const void *pKey1, int nKey1, const void *pKey2, int nKey2
+);
+
 
 /*
 ** This function is called by a thread to work on the database structure.
@@ -352,7 +361,10 @@ int lsm_delete(lsm_db *pDb, void *pKey, int nKey);
 **   Write a checkpoint (if one exists in memory) to the database file.
 **
 ** LSM_WORK_OPTIMIZE:
-**   This flag is only regcognized if LSM_WORK_MERGE is also set.
+**   If nMerge suitable arrays cannot be found, where nMerge is as 
+**   configured by LSM_CONFIG_NMERGE, merge together any arrays that
+**   can be found. This is usually used to optimize the database by 
+**   merging the whole thing into one big array.
 */
 int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite);
 
@@ -405,7 +417,7 @@ int lsm_csr_close(lsm_cursor *pCsr);
 ** LSM_SEEK_LEFAST requests are intended to be used to allocate database
 ** keys.
 */
-int lsm_csr_seek(lsm_cursor *pCsr, void *pKey, int nKey, int eSeek);
+int lsm_csr_seek(lsm_cursor *pCsr, const void *pKey, int nKey, int eSeek);
 
 /*
 ** Values that may be passed as the fourth argument to lsm_csr_seek().
@@ -448,8 +460,8 @@ int lsm_csr_prev(lsm_cursor *pCsr);
 ** Retrieve data from a database cursor.
 */
 int lsm_csr_valid(lsm_cursor *pCsr);
-int lsm_csr_key(lsm_cursor *pCsr, void **ppKey, int *pnKey);
-int lsm_csr_value(lsm_cursor *pCsr, void **ppVal, int *pnVal);
+int lsm_csr_key(lsm_cursor *pCsr, const void **ppKey, int *pnKey);
+int lsm_csr_value(lsm_cursor *pCsr, const void **ppVal, int *pnVal);
 
 #ifdef __cplusplus
 }  /* End of the 'extern "C"' block */

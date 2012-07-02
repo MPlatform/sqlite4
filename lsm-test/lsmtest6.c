@@ -29,9 +29,11 @@ static int testOomContinue(OomTest *p){
   return 1;
 }
 
+#if 0
 static void testOomEnable(OomTest *p, int bEnable){
   testMallocOomEnable(p->pEnv, bEnable);
 }
+#endif
 
 static void testOomNext(OomTest *p){
   p->iNext++;
@@ -94,7 +96,7 @@ static void testOomFetch(
     testOomAssertRc(pOom, rc);
 
     if( rc==LSM_OK ){
-      void *p; int n;
+      const void *p; int n;
       testOomAssert(pOom, lsm_csr_valid(pCsr));
 
       rc = lsm_csr_key(pCsr, &p, &n);
@@ -103,7 +105,7 @@ static void testOomFetch(
     }
 
     if( rc==LSM_OK ){
-      void *p; int n;
+      const void *p; int n;
       testOomAssert(pOom, lsm_csr_valid(pCsr));
 
       rc = lsm_csr_value(pCsr, &p, &n);
@@ -215,8 +217,7 @@ static void testOomScan(
     testOomAssertRc(pOom, rc);
 
     while( rc==LSM_OK && lsm_csr_valid(pCsr) && iScan<nScan ){
-      void *p;
-      int n;
+      const void *p; int n;
 
       rc = lsm_csr_key(pCsr, &p, &n);
       testOomAssertRc(pOom, rc);

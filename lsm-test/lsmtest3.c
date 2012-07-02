@@ -39,7 +39,6 @@ CksumDb *testCksumArrayNew(
   TestDb *pDb;
   CksumDb *pRet;
   int i;
-  int j;
   int nEntry;
   int rc = 0;
 
@@ -176,7 +175,6 @@ static int rollback_test_1(
     char zCksum[TEST_CKSUM_BYTES];
     int nCurrent = (((i+1)/2) * 100);
     int nDbRow;
-    int iInsert;
     int iTrans;
 
     /* Check that the database is the expected size. */

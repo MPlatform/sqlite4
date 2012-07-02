@@ -21,7 +21,7 @@ static void do_test_api1_lsm(lsm_db *pDb, int *pRc){
   lsm_cursor *pCsr;
   lsm_cursor *pCsr2;
   int nKey;
-  void *pKey;
+  const void *pKey;
 
   ret = lsm_csr_open(pDb, &pCsr);
   testCompareInt(LSM_OK, ret, pRc);
@@ -133,7 +133,6 @@ static lsm_db *newLsmConnection(
 ){
   lsm_db *db = 0;
   if( *pRc==0 ){
-    int rc;
     int n1 = nPgsz;
     int n2 = nBlksz;
     *pRc = lsm_new(tdb_lsm_env(), &db);

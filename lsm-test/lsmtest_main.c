@@ -1145,7 +1145,7 @@ static int do_insert(int nArg, char **azArg){
     tdb_lsm_config_work_hook(pDb, do_insert_work_hook, 0);
     tdb_lsm_write_hook(pDb, do_insert_write_hook, (void *)&hook);
     if( zConfig ){
-      rc = test_lsm_config_str(tdb_lsm(pDb), zConfig);
+      rc = test_lsm_config_str(tdb_lsm(pDb), 0, zConfig);
     }
 
     if( rc==0 ){

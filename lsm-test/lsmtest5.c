@@ -427,12 +427,14 @@ static int testThreadGetResult(
 /*
 ** Enter and leave the test case mutex.
 */
+#if 0
 static void testThreadEnterMutex(ThreadSet *p){
   pthread_mutex_lock(&p->mutex);
 }
 static void testThreadLeaveMutex(ThreadSet *p){
   pthread_mutex_unlock(&p->mutex);
 }
+#endif
 #endif
 
 #if !defined(LSM_MUTEX_PTHREADS)

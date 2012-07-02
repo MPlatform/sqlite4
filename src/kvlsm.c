@@ -256,7 +256,7 @@ static int kvlsmSeek(
     if( lsm_csr_valid(pCsr->pCsr)==0 ){
       rc = SQLITE4_NOTFOUND;
     }else{
-      void *pDbKey;
+      const void *pDbKey;
       int nDbKey;
 
       rc = lsm_csr_key(pCsr->pCsr, &pDbKey, &nDbKey);
@@ -279,7 +279,7 @@ static int kvlsmSeek(
 */
 static int kvlsmDelete(KVCursor *pKVCursor){
   int rc;
-  void *pKey;
+  const void *pKey;
   int nKey;
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
 
@@ -303,7 +303,7 @@ static int kvlsmKey(
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
 
   assert( lsm_csr_valid(pCsr->pCsr) );
-  return lsm_csr_key(pCsr->pCsr, (void **)paKey, (int *)pN);
+  return lsm_csr_key(pCsr->pCsr, (const void **)paKey, (int *)pN);
 }
 
 /*
@@ -321,7 +321,7 @@ static int kvlsmData(
   void *pData;
   int nData;
 
-  rc = lsm_csr_value(pCsr->pCsr, &pData, &nData);
+  rc = lsm_csr_value(pCsr->pCsr, (const void **)&pData, &nData);
   if( rc==SQLITE4_OK ){
     if( n<0 ){
       *paData = pData;

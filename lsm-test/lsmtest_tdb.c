@@ -484,7 +484,6 @@ static int sql_commit(TestDb *pTestDb, int iLevel){
 }
 
 static int sql_rollback(TestDb *pTestDb, int iLevel){
-  int i;
   SqlDb *pDb = (SqlDb *)pTestDb;
   assert( iLevel>=0 );
 
@@ -494,7 +493,6 @@ static int sql_rollback(TestDb *pTestDb, int iLevel){
     if( rc!=0 ) return rc;
   }else if( pDb->nOpenTrans>1 && iLevel==1 ){
     /* Or, rollback and close the top-level write transaction */
-    char *zSql = sqlite3_mprintf("ROLLBACK TO x1", iLevel-1);
     int rc = sqlite3_exec(pDb->db, "ROLLBACK TO x1; RELEASE x1;", 0, 0, 0);
     if( rc!=0 ) return rc;
   }else{

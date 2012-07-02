@@ -533,7 +533,11 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
 /* 
 ** Write a new value into the database.
 */
-int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
+int lsm_write(
+  lsm_db *pDb,                    /* Database connection */
+  const void *pKey, int nKey,     /* Key to write or delete */
+  const void *pVal, int nVal      /* Value to write. Or nVal==-1 for a delete */
+){
   int rc = LSM_OK;                /* Return code */
   int bCommit = 0;                /* True to commit before returning */
 
@@ -544,7 +548,7 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
 
   if( rc==LSM_OK ){
     assert( pDb->pTV && lsmTreeIsWriteVersion(pDb->pTV) );
-    rc = lsmLogWrite(pDb, pKey, nKey, pVal, nVal);
+    rc = lsmLogWrite(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
   }
 
   lsmSortedSaveTreeCursors(pDb);
@@ -561,7 +565,7 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
     }
 
     nBefore = lsmTreeSize(pDb->pTV);
-    rc = lsmTreeInsert(pDb, pKey, nKey, pVal, nVal);
+    rc = lsmTreeInsert(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
     nAfter = lsmTreeSize(pDb->pTV);
 
     nDiff = (nAfter/nQuant) - (nBefore/nQuant);
@@ -587,7 +591,7 @@ int lsm_write(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal){
 /*
 ** Delete a value from the database. 
 */
-int lsm_delete(lsm_db *pDb, void *pKey, int nKey){
+int lsm_delete(lsm_db *pDb, const void *pKey, int nKey){
   return lsm_write(pDb, pKey, nKey, 0, -1);
 }
 
@@ -640,8 +644,8 @@ int lsm_csr_close(lsm_cursor *p){
 ** If an error occurs (e.g. an OOM or IO error), return an LSM error code.
 ** Otherwise, return LSM_OK.
 */
-int lsm_csr_seek(lsm_cursor *pCsr, void *pKey, int nKey, int eSeek){
-  return lsmMCursorSeek((MultiCursor *)pCsr, pKey, nKey, eSeek);
+int lsm_csr_seek(lsm_cursor *pCsr, const void *pKey, int nKey, int eSeek){
+  return lsmMCursorSeek((MultiCursor *)pCsr, (void *)pKey, nKey, eSeek);
 }
 
 int lsm_csr_next(lsm_cursor *pCsr){
@@ -664,12 +668,12 @@ int lsm_csr_valid(lsm_cursor *pCsr){
   return lsmMCursorValid((MultiCursor *)pCsr);
 }
 
-int lsm_csr_key(lsm_cursor *pCsr, void **ppKey, int *pnKey){
-  return lsmMCursorKey((MultiCursor *)pCsr, ppKey, pnKey);
+int lsm_csr_key(lsm_cursor *pCsr, const void **ppKey, int *pnKey){
+  return lsmMCursorKey((MultiCursor *)pCsr, (void **)ppKey, pnKey);
 }
 
-int lsm_csr_value(lsm_cursor *pCsr, void **ppVal, int *pnVal){
-  return lsmMCursorValue((MultiCursor *)pCsr, ppVal, pnVal);
+int lsm_csr_value(lsm_cursor *pCsr, const void **ppVal, int *pnVal){
+  return lsmMCursorValue((MultiCursor *)pCsr, (void **)ppVal, pnVal);
 }
 
 void lsm_config_log(

@@ -156,6 +156,9 @@ void testDeleteLsmdb(const char *zFile);
 void testSaveLsmdb(const char *zFile);
 void testRestoreLsmdb(const char *zFile);
 
+/* lsmtest7.c */
+void test_api(const char *zPattern, int *pRc);
+
 /*************************************************************************
 ** Interface to functionality in test_datasource.c.
 */

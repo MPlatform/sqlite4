@@ -422,8 +422,7 @@ static int test_lsm_fetch(
   rc = lsm_csr_seek(csr, pKey, nKey, LSM_SEEK_EQ);
   if( rc==LSM_OK ){
     if( lsm_csr_valid(csr) ){
-      void *pVal;
-      int nVal;
+      const void *pVal; int nVal;
       rc = lsm_csr_value(csr, &pVal, &nVal);
       if( nVal>pDb->nBuf ){
         testFree(pDb->pBuf);
@@ -472,8 +471,8 @@ static int test_lsm_scan(
   }
 
   while( rc==LSM_OK && lsm_csr_valid(csr) ){
-    void *pKey; int nKey;
-    void *pVal; int nVal;
+    const void *pKey; int nKey;
+    const void *pVal; int nVal;
     int cmp;
 
     lsm_csr_key(csr, &pKey, &nKey);
@@ -487,7 +486,7 @@ static int test_lsm_scan(
       if( cmp<0 || (cmp==0 && nLast<nKey) ) break;
     }
 
-    xCallback(pCtx, pKey, nKey, pVal, nVal);
+    xCallback(pCtx, (void *)pKey, nKey, (void *)pVal, nVal);
 
     if( bReverse ){
       rc = lsm_csr_prev(csr);
@@ -583,7 +582,7 @@ int test_lsm_config_str(
   const char *z = zStr;
 
   while( z[0] && pDb ){
-    char *zStart;
+    const char *zStart;
 
     /* Skip whitespace */
     while( *z==' ' ) z++;
