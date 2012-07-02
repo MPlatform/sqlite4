@@ -153,9 +153,6 @@ int lsm_config(lsm_db *, int, ...);
 **   LSM_CONFIG_AUTOWORK
 **     A read/write integer parameter.
 **
-**     TODO: This should configure some kind of threshold for turning on 
-**     auto-work. Right now it is Boolean - 1 for on and 0 for off. Default 1.
-**
 **   LSM_CONFIG_MMAP
 **     A read/write integer parameter. True to use mmap() to access the 
 **     database file. False otherwise.

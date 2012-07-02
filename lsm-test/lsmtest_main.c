@@ -460,7 +460,7 @@ static lsm_db *configure_lsm_db(TestDb *pDb){
   lsm_db *pLsm;
   pLsm = tdb_lsm(pDb);
   if( pLsm ){
-    tdb_lsm_config_str(pDb, "mmap=0 autowork=1 nmerge=4 worker_nmerge=4");
+    tdb_lsm_config_str(pDb, "mmap=1 autowork=1 nmerge=4 worker_nmerge=4");
   }
   return pLsm;
 }

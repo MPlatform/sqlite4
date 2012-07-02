@@ -91,30 +91,13 @@ struct Snapshot {
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
 
-  Pgno iLogPg;                    /* Log file page to start recovery from */
-  u32 iSalt1;                     /* Log file salt value 1 */
-  u32 iSalt2;                     /* Log file salt value 2 */
-  u32 aDelta[LSM_FREELIST_DELTA_SIZE];
-
   /* Used by client snapshots only */
-  int nRef;                       /* Number of references to this structure */
   void *pExport;                  /* Serialized snapshot image */
   int nExport;                    /* Size of pExport in bytes */
-
-  /* Used by client snapshots only */
-  Snapshot *pSnapshotNext;
-
-  /* TODO: Below this point should be moved from Snapshot to Database. */
-
-  /* The following are populated and used by worker snapshots only */
-  int nBlock;                     /* Number of blocks tracked by this ss */
-  Freelist freelist;              /* Database free-list */
-  int bRecordDelta;               /* True when recording freelist delta */
+  int nRef;                       /* Number of references to this structure */
+  Snapshot *pSnapshotNext;        /* Next snapshot on this database */
 };
-#define LSM_INITIAL_LOGPG       1
 #define LSM_INITIAL_SNAPSHOT_ID 11
-#define LSM_INITIAL_SALT1       0x6c736d21
-#define LSM_INITIAL_SALT2       0x78743121
 
 /*
 ** Database structure. There is one such structure for each distinct 
@@ -188,9 +171,14 @@ struct Database {
   int nBlksz;                     /* Database block size */
 
   Snapshot *pClient;              /* Client (reader) snapshot */
-
   Snapshot worker;                /* Worker (writer) snapshot */
   AppendList append;              /* List of appendable points */
+
+  int nBlock;                     /* Number of blocks tracked by this ss */
+  Freelist freelist;              /* Database free-list */
+
+  u32 aDelta[LSM_FREELIST_DELTA_SIZE];
+  int bRecordDelta;               /* True when recording freelist delta */
 
   lsm_mutex *pWorkerMutex;        /* Protects the worker snapshot */
   lsm_mutex *pClientMutex;        /* Protects pClient */
@@ -425,10 +413,7 @@ int lsmDbDatabaseFind(
         p->pDbNext = gShared.pDatabase;
         gShared.pDatabase = p;
 
-        p->worker.iLogPg = LSM_INITIAL_LOGPG;
         p->worker.iId = LSM_INITIAL_SNAPSHOT_ID;
-        p->worker.iSalt1 = LSM_INITIAL_SALT1;
-        p->worker.iSalt2 = LSM_INITIAL_SALT2;
         p->nPgsz = pDb->nDfltPgsz;
         p->nBlksz = pDb->nDfltBlksz;
       }else{
@@ -499,7 +484,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
 
       /* Free the contents of the worker snapshot */
       lsmSortedFreeLevel(pDb->pEnv, p->worker.pLevel);
-      lsmFree(pDb->pEnv, p->worker.freelist.aEntry);
+      lsmFree(pDb->pEnv, p->freelist.aEntry);
       lsmFree(pDb->pEnv, p->append.aPoint);
       
       /* Free the client snapshot */
@@ -545,11 +530,11 @@ int lsmDatabaseIsDirty(lsm_db *pDb){
 */
 void lsmSnapshotSetNBlock(Snapshot *pSnap, int nNew){
   assert( isWorker(pSnap) );
-  pSnap->nBlock = nNew;
+  pSnap->pDatabase->nBlock = nNew;
 }
 int lsmSnapshotGetNBlock(Snapshot *pSnap){
   assert( isWorker(pSnap) );
-  return pSnap->nBlock;
+  return pSnap->pDatabase->nBlock;
 }
 
 void lsmSnapshotSetCkptid(Snapshot *pSnap, i64 iNew){
@@ -701,9 +686,6 @@ int lsmDbUpdateClient(lsm_db *pDb, int nLsmLevel, int bOvfl){
   if( !pNew ) return LSM_NOMEM_BKPT;
   pNew->pDatabase = p;
   pNew->iId = p->worker.iId;
-  pNew->iLogPg = p->worker.iLogPg;
-  pNew->iSalt1 = p->worker.iSalt1;
-  pNew->iSalt2 = p->worker.iSalt2;
 
   /* Copy the linked-list of Level structures */
   pAvail = (u8 *)&pNew[1];
@@ -785,7 +767,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   int iRet = 0;                   /* Block number of allocated block */
  
   pWorker = pDb->pWorker;
-  pFree = &pWorker->freelist;
+  pFree = &p->freelist;
 
   if( pFree->nEntry>0 ){
     /* The first block on the free list was freed as part of the work done
@@ -821,8 +803,8 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
       iRet = pFree->aEntry[0].iBlk;
       flRemoveEntry0(pFree);
       assert( iRet!=0 );
-      if( pWorker->bRecordDelta ){
-        pWorker->aDelta[0]++;
+      if( p->bRecordDelta ){
+        p->aDelta[0]++;
       }
     }
   }
@@ -830,8 +812,8 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   /* If no block was allocated from the free-list, allocate one at the
   ** end of the file. */
   if( iRet==0 ){
-    pWorker->nBlock++;
-    iRet = pWorker->nBlock;
+    p->nBlock++;
+    iRet = p->nBlock;
   }
 
   *piBlk = iRet;
@@ -846,14 +828,15 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
 ** LSM_NOMEM).
 */
 int lsmBlockFree(lsm_db *pDb, int iBlk){
+  Database *p = pDb->pDatabase;
   Snapshot *pWorker = pDb->pWorker;
   int rc = LSM_OK;
 
   assertMustbeWorker(pDb);
-  assert( pWorker->bRecordDelta==0 );
+  assert( p->bRecordDelta==0 );
   assert( pDb->pDatabase->bDirty );
 
-  rc = flAppendEntry(pDb->pEnv, &pWorker->freelist, iBlk, pWorker->iId);
+  rc = flAppendEntry(pDb->pEnv, &p->freelist, iBlk, pWorker->iId);
   return rc;
 }
 
@@ -869,43 +852,46 @@ int lsmBlockFree(lsm_db *pDb, int iBlk){
 */
 int lsmBlockRefree(lsm_db *pDb, int iBlk){
   int rc = LSM_OK;                /* Return code */
-  Snapshot *pWorker = pDb->pWorker;
+  Database *p = pDb->pDatabase;
 
-  if( iBlk==pWorker->nBlock ){
-    pWorker->nBlock--;
-  }else if( pWorker->bRecordDelta ){
-    assert( pWorker->aDelta[2]==0 );
-    pWorker->aDelta[1 + (pWorker->aDelta[1]!=0)] = iBlk;
+  if( iBlk==p->nBlock ){
+    p->nBlock--;
+  }else if( p->bRecordDelta ){
+    assert( p->aDelta[2]==0 );
+    p->aDelta[1 + (p->aDelta[1]!=0)] = iBlk;
   }else{
-    rc = flAppendEntry(pDb->pEnv, &pWorker->freelist, iBlk, 0);
+    rc = flAppendEntry(pDb->pEnv, &p->freelist, iBlk, 0);
   }
 
   return rc;
 }
 
 void lsmFreelistDeltaBegin(lsm_db *pDb){
-  Snapshot *pWorker = pDb->pWorker;
-  assert( pWorker->bRecordDelta==0 );
-  memset(pWorker->aDelta, 0, sizeof(pWorker->aDelta));
-  pWorker->bRecordDelta = 1;
+  Database *p = pDb->pDatabase;
+  assertMustbeWorker(pDb);
+  assert( p->bRecordDelta==0 );
+  memset(p->aDelta, 0, sizeof(p->aDelta));
+  p->bRecordDelta = 1;
 }
 
 void lsmFreelistDeltaEnd(lsm_db *pDb){
-  Snapshot *pWorker = pDb->pWorker;
-  pWorker->bRecordDelta = 0;
+  Database *p = pDb->pDatabase;
+  assertMustbeWorker(pDb);
+  p->bRecordDelta = 0;
 }
 
 void lsmFreelistDelta(
   lsm_db *pDb,                    /* Database handle */
   u32 *aDeltaOut                  /* OUT: Copy free-list delta here */
 ){
-  Snapshot *pWorker = pDb->pWorker;
-  assert( sizeof(pWorker->aDelta)==(sizeof(u32)*LSM_FREELIST_DELTA_SIZE) );
-  memcpy(aDeltaOut, pWorker->aDelta, sizeof(pWorker->aDelta));
+  Database *p = pDb->pDatabase;
+  assertMustbeWorker(pDb);
+  assert( sizeof(p->aDelta)==(sizeof(u32)*LSM_FREELIST_DELTA_SIZE) );
+  memcpy(aDeltaOut, p->aDelta, sizeof(p->aDelta));
 }
 
 u32 *lsmFreelistDeltaPtr(lsm_db *pDb){
-  return pDb->pWorker->aDelta;
+  return pDb->pDatabase->aDelta;
 }
 
 /*
@@ -916,11 +902,9 @@ int lsmSnapshotFreelist(lsm_db *pDb, int **paFree, int *pnFree){
   int *aFree = 0;                 /* Integer array to return via *paFree */
   int nFree;                      /* Value to return via *pnFree */
   Freelist *p;                    /* Database free list object */
-  Snapshot *pSnap = pDb->pWorker;
 
-  assert( isWorker(pSnap) );
-
-  p = &pSnap->freelist;
+  assert( pDb->pWorker );
+  p = &pDb->pDatabase->freelist;
   nFree = p->nEntry;
   if( nFree && paFree ){
     aFree = lsmMallocRc(pDb->pEnv, sizeof(int) * nFree, &rc);
@@ -939,6 +923,7 @@ int lsmSnapshotFreelist(lsm_db *pDb, int **paFree, int *pnFree){
 
 
 int lsmSnapshotSetFreelist(lsm_db *pDb, int *aElem, int nElem){
+  Database *p = pDb->pDatabase;
   lsm_env *pEnv = pDb->pEnv;
   int rc = LSM_OK;                /* Return code */
   int i;                          /* Iterator variable */
@@ -946,15 +931,12 @@ int lsmSnapshotSetFreelist(lsm_db *pDb, int *aElem, int nElem){
   int iRefree1;                   /* A refreed block (or 0) */
   int iRefree2;                   /* A refreed block (or 0) */
   Freelist *pFree;                /* Database free-list */
-  Snapshot *pSnap = pDb->pWorker;
 
-  assert( isWorker(pSnap) );
+  nIgnore = p->aDelta[0];
+  iRefree1 = p->aDelta[1];
+  iRefree2 = p->aDelta[2];
 
-  nIgnore = pSnap->aDelta[0];
-  iRefree1 = pSnap->aDelta[1];
-  iRefree2 = pSnap->aDelta[2];
-
-  pFree = &pSnap->freelist;
+  pFree = &p->freelist;
   for(i=nIgnore; rc==LSM_OK && i<nElem; i++){
     rc = flAppendEntry(pEnv, pFree, aElem[i], 0);
   }
