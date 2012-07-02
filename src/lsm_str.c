@@ -93,7 +93,8 @@ void lsmStringVAppendf(
   va_list ap1,
   va_list ap2
 ){
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__<199901L)
+#if (!defined(__STDC_VERSION__) || (__STDC_VERSION__<199901L)) && \
+    !defined(__APPLE__)
   extern int vsnprintf(char *str, size_t size, const char *format, va_list ap)
     /* Compatibility crutch for C89 compilation mode. sqlite4_vsnprintf()
        does not work identically and causes test failures if used here.
