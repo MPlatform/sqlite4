@@ -189,11 +189,10 @@ void *lsmPoolMalloc(lsm_env *pEnv, Mempool *pPool, int nByte){
   nByte = ROUND8(nByte);
   if( nByte > (pLast->nData - pLast->iOff) ){
     Chunk *pNew = poolChunkNew(pEnv, nByte);
-    if( pNew ){
-      pLast->pNext = pNew;
-      pPool->pLast = pNew;
-      pLast = pNew;
-    }
+    if( !pNew ) return 0;
+    pLast->pNext = pNew;
+    pPool->pLast = pNew;
+    pLast = pNew;
   }
 
   if( pLast ){

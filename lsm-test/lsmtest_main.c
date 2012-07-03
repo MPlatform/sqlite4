@@ -460,7 +460,7 @@ static lsm_db *configure_lsm_db(TestDb *pDb){
   lsm_db *pLsm;
   pLsm = tdb_lsm(pDb);
   if( pLsm ){
-    tdb_lsm_config_str(pDb, "mmap=1 autowork=1 nmerge=4 worker_nmerge=4");
+    tdb_lsm_config_str(pDb, "mmap=0 autowork=1 nmerge=4 worker_nmerge=4");
   }
   return pLsm;
 }
@@ -614,7 +614,7 @@ int do_speed_tests(int nArg, char **azArg){
       if( rc ) return rc;
 
       pLsm = configure_lsm_db(pDb);
-#if 1
+#if 0
       pLog = fopen("/tmp/speed.log", "w");
       tdb_lsm_write_hook(pDb, do_speed_write_hook2, (void *)pLog);
 #endif

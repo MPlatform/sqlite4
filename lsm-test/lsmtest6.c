@@ -6,12 +6,14 @@ struct OomTest {
   lsm_env *pEnv;
   int iNext;                      /* Next value to pass to testMallocOom() */
   int nFail;                      /* Number of OOM events injected */
+  int bEnable;
   int rc;                         /* Test case error code */
 };
 
 static void testOomStart(OomTest *p){
   memset(p, 0, sizeof(OomTest));
   p->iNext = 1;
+  p->bEnable = 1;
   p->nFail = 1;
   p->pEnv = tdb_lsm_env();
 }
@@ -29,11 +31,10 @@ static int testOomContinue(OomTest *p){
   return 1;
 }
 
-#if 0
 static void testOomEnable(OomTest *p, int bEnable){
+  p->bEnable = bEnable;
   testMallocOomEnable(p->pEnv, bEnable);
 }
-#endif
 
 static void testOomNext(OomTest *p){
   p->iNext++;
@@ -61,7 +62,7 @@ static void testOomAssert(OomTest *p, int bVal){
 */
 static void testOomAssertRc(OomTest *p, int rc){
   testOomAssert(p, rc==LSM_OK || rc==LSM_NOMEM);
-  testOomAssert(p, testOomHit(p)==(rc==LSM_NOMEM));
+  testOomAssert(p, testOomHit(p)==(rc==LSM_NOMEM) || p->bEnable==0 );
 }
 
 static void testOomOpen(
@@ -337,6 +338,18 @@ static void setup_delete_db(){
   testDeleteLsmdb(LSMTEST6_TESTDB);
 }
 
+/*
+** Create a small database. With the following content:
+**
+**    "one"   -> "one"
+**    "two"   -> "four"
+**    "three" -> "nine"
+**    "four"  -> "sixteen"
+**    "five"  -> "twentyfive"
+**    "six"   -> "thirtysix"
+**    "seven" -> "fourtynine"
+**    "eight" -> "sixtyfour"
+*/
 static void setup_populate_db(){
   const char *azStr[] = {
     "one",   "one",
@@ -410,6 +423,9 @@ static void setup_populate_db2(){
   assert( rc==LSM_OK );
 }
 
+/*
+** Test the results of OOM conditions in lsm_new().
+*/
 static void simple_oom_1(OomTest *pOom){
   int rc;
   lsm_db *pDb;
@@ -420,6 +436,9 @@ static void simple_oom_1(OomTest *pOom){
   lsm_close(pDb);
 }
 
+/*
+** Test the results of OOM conditions in lsm_open().
+*/
 static void simple_oom_2(OomTest *pOom){
   int rc;
   lsm_db *pDb;
@@ -433,6 +452,9 @@ static void simple_oom_2(OomTest *pOom){
   lsm_close(pDb);
 }
 
+/*
+** Test the results of OOM conditions in simple fetch operations.
+*/
 static void simple_oom_3(OomTest *pOom){
   int rc = LSM_OK;
   lsm_db *pDb;
@@ -447,6 +469,9 @@ static void simple_oom_3(OomTest *pOom){
   lsm_close(pDb);
 }
 
+/*
+** Test the results of OOM conditions in simple write operations.
+*/
 static void simple_oom_4(OomTest *pOom){
   int rc = LSM_OK;
   lsm_db *pDb;
@@ -513,13 +538,63 @@ static void simple_oom_8(OomTest *pOom){
   Datasource *pData = getDatasource();
   int rc = LSM_OK;
   lsm_db *pDb;
-
   testRestoreLsmdb(LSMTEST6_TESTDB);
   testOomOpen(pOom, LSMTEST6_TESTDB, &pDb, &rc);
   testOomScan(pOom, pDb, 1, "xyz", 3, 20, &rc);
   lsm_close(pDb);
   testDatasourceFree(pData);
 }
+
+/*
+** This test case has two clients connected to a database. The first client
+** hits an OOM while writing to the database. Check that the second 
+** connection is still able to query the db following the OOM.
+*/
+static void simple_oom2_1(OomTest *pOom){
+  const int nRecord = 100;        /* Number of records initially in db */
+  const int nIns = 10;            /* Number of records inserted with OOM */
+
+  Datasource *pData = getDatasource();
+  int rc = LSM_OK;
+  lsm_db *pDb1;
+  lsm_db *pDb2;
+  int i;
+
+  testDeleteLsmdb(LSMTEST6_TESTDB);
+
+  /* Open the two connections. Initialize the in-memory tree so that it
+  ** contains 100 records. Do all this with OOM injection disabled. */
+  testOomEnable(pOom, 0);
+  testOomOpen(pOom, LSMTEST6_TESTDB, &pDb1, &rc);
+  testOomOpen(pOom, LSMTEST6_TESTDB, &pDb2, &rc);
+  for(i=0; i<nRecord; i++){
+    testOomWriteData(pOom, pDb1, pData, i, &rc);
+  }
+  testOomEnable(pOom, 1);
+  assert( rc==0 );
+
+  /* Insert 10 more records using pDb1. Stop when an OOM is encountered. */
+  for(i=nRecord; i<nRecord+nIns; i++){
+    testOomWriteData(pOom, pDb1, pData, i, &rc);
+    if( rc ) break;
+  }
+  testOomAssertRc(pOom, rc);
+
+  /* Switch off OOM injection. Write a few rows using pDb2. Then check
+  ** that the database may be successfully queried.  */
+  testOomEnable(pOom, 0);
+  rc = 0;
+  for(; i<nRecord+nIns && rc==0; i++){
+    testOomWriteData(pOom, pDb2, pData, i, &rc);
+  }
+  for(i=0; i<nRecord+nIns; i++) testOomFetchData(pOom, pDb2, pData, i, &rc);
+  testOomEnable(pOom, 1);
+
+  lsm_close(pDb1);
+  lsm_close(pDb2);
+  testDatasourceFree(pData);
+}
+
 
 static void do_test_oom1(const char *zPattern, int *pRc){
   struct SimpleOom {
@@ -534,7 +609,9 @@ static void do_test_oom1(const char *zPattern, int *pRc){
     { "oom1.lsm.5", setup_populate_db2, simple_oom_5 },
     { "oom1.lsm.6", setup_populate_db2, simple_oom_6 },
     { "oom1.lsm.7", setup_populate_db2, simple_oom_7 },
-    { "oom1.lsm.7", setup_populate_db2, simple_oom_8 },
+    { "oom1.lsm.8", setup_populate_db2, simple_oom_8 },
+
+    { "oom2.lsm.1", setup_delete_db,    simple_oom2_1 },
   };
   int i;
 
