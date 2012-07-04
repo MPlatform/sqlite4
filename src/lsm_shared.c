@@ -337,9 +337,6 @@ static void freeDatabase(lsm_env *pEnv, Database *p){
     lsmMutexDel(pEnv, p->pClientMutex);
     lsmMutexDel(pEnv, p->pWorkerMutex);
 
-    /* Free the log buffer. */
-    lsmStringClear(&p->log.buf);
-
     /* Free the memory allocated for the Database struct itself */
     lsmFree(pEnv, p);
   }
@@ -391,7 +388,6 @@ int lsmDbDatabaseFind(
       if( rc==LSM_OK ){
         p->log.cksum0 = LSM_CKSUM0_INIT;
         p->log.cksum1 = LSM_CKSUM1_INIT;
-        lsmStringInit(&p->log.buf, pEnv);
       }
 
       /* Allocate the two mutexes */

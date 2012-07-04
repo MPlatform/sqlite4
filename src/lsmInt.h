@@ -165,7 +165,6 @@ struct DbLog {
   u32 cksum0;                     /* Checksum 0 at offset iOff */
   u32 cksum1;                     /* Checksum 1 at offset iOff */
   LogRegion aRegion[3];           /* Log file regions (see docs in lsm_log.c) */
-  LsmString buf;                  /* Buffer containing data not yet written */
 };
 
 /*
@@ -291,6 +290,8 @@ int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);
 ** Functions from file "lsm_tree.c".
 */
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
+void lsmTreeRelease(lsm_env *, Tree *);
+
 int lsmTreeSize(TreeVersion *pTV);
 int lsmTreeIsEmpty(Tree *pTree);
 
@@ -318,7 +319,6 @@ int lsmTreeIsWriteVersion(TreeVersion *);
 int lsmTreeReleaseWriteVersion(lsm_env *, TreeVersion *, int, TreeVersion **);
 void lsmTreeReleaseReadVersion(lsm_env *, TreeVersion *);
 
-void lsmTreeRelease(lsm_env *, Tree *);
 
 /* 
 ** Functions from file "mem.c".
