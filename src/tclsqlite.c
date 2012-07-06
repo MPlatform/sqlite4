@@ -2983,11 +2983,14 @@ static void init_all(Tcl_Interp *interp){
 #endif
 }
 
-static void tcl_atexit(){
-    extern void testMallocUninstall() /* in test_mem.c */;
-    testMallocUninstall();
-    Tcl_Finalize();
+#define TEST_MALLOC_INSTALL 1
 
+static void tcl_atexit(){
+#if TEST_MALLOC_INSTALL
+  extern void testMallocUninstall() /* in test_mem.c */;
+  testMallocUninstall();
+#endif
+  Tcl_Finalize();
 }
 
 #define TCLSH_MAIN main   /* Needed to fake out mktclapp */
@@ -3008,7 +3011,6 @@ int TCLSH_MAIN(int argc, char **argv){
   sqlite4_env_config(0, SQLITE4_ENVCONFIG_SINGLETHREAD);
 #endif
 
-#define TEST_MALLOC_INSTALL 1
 #if TEST_MALLOC_INSTALL
   extern void testMallocInstall() /* in test_mem.c */;
   testMallocInstall();
@@ -3039,10 +3041,6 @@ int TCLSH_MAIN(int argc, char **argv){
     Tcl_GlobalEval(interp, tclsh_main_loop());
   }
   Tcl_DeleteInterp( interp );
-#if TEST_MALLOC_INSTALL
-  extern void testMallocUninstall() /* in test_mem.c */;
-  testMallocUninstall();
-#endif
   return 0;
 }
 #endif /* TCLSH */

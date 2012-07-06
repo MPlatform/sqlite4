@@ -433,20 +433,14 @@ void testMallocInstall(){
   sqlite4_env_config( NULL,
                       SQLITE4_ENVCONFIG_MALLOC,
                       &allocator);
-  /*
-    pEnv->xMalloc = tmLsmEnvMalloc;
-  pEnv->xRealloc = tmLsmEnvRealloc;
-  pEnv->xFree = tmLsmEnvFree;
-  pEnv->xSize = tmLsmEnvSize;
-  */
 }
 
 void testMallocUninstall(){
-  TmGlobal *p = pGlobal;
   if( pGlobal ){
     sqlite4_mem_methods m;
-    /* p->xDelMutex(p); */
-    tmLsmFree(p);
+    /* TODO: mutex: pGlobal->xDelMutex(pGlobal); */
+    tmLsmFree(pGlobal);
+    pGlobal = 0;
     /* One should be able to reset the default memory allocator by storing
     ** a zeroed allocator then calling GETMALLOC. */
     memset(&m, 0, sizeof(m));
