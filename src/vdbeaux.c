@@ -1574,8 +1574,7 @@ static void closeAllCursors(Vdbe *p){
 ** Clean up the VM after execution.
 **
 ** This routine will automatically close any cursors, lists, and/or
-** sorters that were left open.  It also deletes the values of
-** variables in the aVar[] array.
+** sorters that were left open.
 */
 static void Cleanup(Vdbe *p){
   sqlite4 *db = p->db;
