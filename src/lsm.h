@@ -15,7 +15,7 @@
 #ifndef _LSM_H
 #define _LSM_H
 #include <stddef.h>
-
+#include "sqlite4.h" /* for sqlite4_size_t */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -58,6 +58,9 @@ struct lsm_env {
   void *(*xMalloc)(lsm_env*, int);            /* malloc(3) function */
   void *(*xRealloc)(lsm_env*, void *, int);   /* realloc(3) function */
   void (*xFree)(lsm_env*, void *);            /* free(3) function */
+#if 1
+  sqlite4_size_t (*xSize)(lsm_env*, void *);  /* xSize function */
+#endif
   /****** mutexes ****************************************************/
   void *pMutexCtx;
   int (*xMutexStatic)(lsm_env*,int,lsm_mutex**); /* Obtain a static mutex */

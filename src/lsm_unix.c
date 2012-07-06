@@ -281,11 +281,56 @@ static int lsmPosixOsUnlink(lsm_env *pEnv, const char *zFile){
 /****************************************************************************
 ** Memory allocation routines.
 */
-static void *lsmPosixOsMalloc(lsm_env *pEnv, int N){ return malloc(N); }
-static void lsmPosixOsFree(lsm_env *pEnv, void *p){ free(p); }
-static void *lsmPosixOsRealloc(lsm_env *pEnv, void *p, int N){
-  return realloc(p, N);
+#define ROUND8(x) (((x)+7)&~7)
+#define BLOCK_HDR_SIZE ROUND8( sizeof(sqlite4_size_t) )
+
+static void *lsmPosixOsMalloc(lsm_env *pEnv, int N){
+  unsigned char * m;
+  N += BLOCK_HDR_SIZE;
+  m = (unsigned char *)malloc(N);
+  *((sqlite4_size_t*)m) = N;
+  return m + BLOCK_HDR_SIZE;
 }
+
+static void lsmPosixOsFree(lsm_env *pEnv, void *p){
+  if(p){
+    free( ((unsigned char *)p) - BLOCK_HDR_SIZE );
+  }
+}
+
+static void *lsmPosixOsRealloc(lsm_env *pEnv, void *p, int N){
+  unsigned char * m = (unsigned char *)p;
+  if(1>N){
+    lsmPosixOsFree( pEnv, p );
+    return NULL;
+  }else if(NULL==p){
+    return lsmPosixOsMalloc(pEnv, N);
+  }else{
+    void * re = NULL;
+    m -= BLOCK_HDR_SIZE;
+#if 0 /* arguable: don't shrink */
+    sqlite4_size_t * sz = (sqlite4_size_t*)m;
+    if(*sz >= (sqlite4_size_t)N){
+      return p;
+    }
+#endif
+    re = realloc( m, N + BLOCK_HDR_SIZE );
+    if(re){
+      m = (unsigned char *)re;
+      *((sqlite4_size_t*)m) = N;
+      return m + BLOCK_HDR_SIZE;
+    }else{
+      return NULL;
+    }
+  }
+}
+
+static sqlite4_size_t lsmPosixOsMSize(lsm_env *pEnv, void *p){
+  unsigned char * m = (unsigned char *)p;
+  return *((sqlite4_size_t*)(m-BLOCK_HDR_SIZE));
+}
+#undef ROUND8
+#undef BLOCK_HDR_SIZE
 
 
 #ifdef LSM_MUTEX_PTHREADS 
@@ -492,8 +537,9 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsMalloc,        /* xMalloc */
     lsmPosixOsRealloc,       /* xRealloc */
     lsmPosixOsFree,          /* xFree */
-    0,                       /* pMutexCtx */
+    lsmPosixOsMSize,         /* xSize */
     /***** mutexes *********************/
+    0,                       /* pMutexCtx */
     lsmPosixOsMutexStatic,   /* xMutexStatic */
     lsmPosixOsMutexNew,      /* xMutexNew */
     lsmPosixOsMutexDel,      /* xMutexDel */

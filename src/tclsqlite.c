@@ -40,7 +40,7 @@
   typedef unsigned char u8;
 #endif
 #include <ctype.h>
-
+#include <stdlib.h> /* atexit() */
 /*
  * Windows needs to know which symbols to export.  Unix does not.
  * BUILD_sqlite should be undefined for Unix.
@@ -2875,6 +2875,7 @@ static int init_all_cmd(
   return TCL_OK;
 }
 
+
 /*
 ** Tclcmd: db_use_legacy_prepare DB BOOLEAN
 **
@@ -2982,6 +2983,13 @@ static void init_all(Tcl_Interp *interp){
 #endif
 }
 
+static void tcl_atexit(){
+    extern void testMallocUninstall() /* in test_mem.c */;
+    testMallocUninstall();
+    Tcl_Finalize();
+
+}
+
 #define TCLSH_MAIN main   /* Needed to fake out mktclapp */
 int TCLSH_MAIN(int argc, char **argv){
   Tcl_Interp *interp;
@@ -2991,12 +2999,21 @@ int TCLSH_MAIN(int argc, char **argv){
   ** sqlite4_initialize() is. */
   sqlite4_shutdown(0);
 
-  Tcl_FindExecutable(argv[0]);
+  /*Tcl_FindExecutable(argv[0]);*/
   interp = Tcl_CreateInterp();
 
+  /*sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_MALLOC, &allocator);*/
+
 #if TCLSH==2
-  sqlite4_config(0, SQLITE4_CONFIG_SINGLETHREAD);
+  sqlite4_env_config(0, SQLITE4_ENVCONFIG_SINGLETHREAD);
 #endif
+
+#define TEST_MALLOC_INSTALL 1
+#if TEST_MALLOC_INSTALL
+  extern void testMallocInstall() /* in test_mem.c */;
+  testMallocInstall();
+#endif
+  atexit( tcl_atexit );
 
   init_all(interp);
   if( argc>=2 ){
@@ -3014,12 +3031,18 @@ int TCLSH_MAIN(int argc, char **argv){
       const char *zInfo = Tcl_GetVar(interp, "errorInfo", TCL_GLOBAL_ONLY);
       if( zInfo==0 ) zInfo = Tcl_GetStringResult(interp);
       fprintf(stderr,"%s: %s\n", *argv, zInfo);
+      Tcl_DeleteInterp( interp );
       return 1;
     }
   }
   if( TCLSH==2 || argc<=1 ){
     Tcl_GlobalEval(interp, tclsh_main_loop());
   }
+  Tcl_DeleteInterp( interp );
+#if TEST_MALLOC_INSTALL
+  extern void testMallocUninstall() /* in test_mem.c */;
+  testMallocUninstall();
+#endif
   return 0;
 }
 #endif /* TCLSH */

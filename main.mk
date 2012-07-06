@@ -231,6 +231,7 @@ TESTSRC = \
   $(TOP)/test/test_hexio.c \
   $(TOP)/test/test_lsm.c \
   $(TOP)/test/test_malloc.c \
+  $(TOP)/test/test_mem.c \
   $(TOP)/test/test_mutex.c \
   $(TOP)/test/test_storage.c \
   $(TOP)/test/test_storage2.c \
@@ -513,6 +514,7 @@ fulltest:	testfixture$(EXE) sqlite4$(EXE)
 soaktest:	testfixture$(EXE) sqlite4$(EXE)
 	./testfixture$(EXE) $(TOP)/test/all.test -soak=1
 
+.PHONY: test
 test:	testfixture$(EXE) sqlite4$(EXE)
 	./testfixture$(EXE) $(TOP)/test/src4.test
 
@@ -569,6 +571,7 @@ clean:
 	rm -f amalgamation-testfixture amalgamation-testfixture.exe
 	rm -f fts3-testfixture fts3-testfixture.exe
 	rm -f testfixture testfixture.exe
+	rm -f lsmtest
 	rm -f threadtest3 threadtest3.exe
 	rm -f sqlite4.c fts?amal.c tclsqlite4.c
 	rm -f sqlite4_analyzer sqlite4_analyzer.exe sqlite4_analyzer.c
