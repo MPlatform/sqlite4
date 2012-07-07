@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include <stdlib.h> /* for atexit() */
+
+#include "sqlite4.h"
 
 #define ArraySize(x) ((int)(sizeof(x) / sizeof((x)[0])))
 
@@ -13,7 +14,7 @@ typedef unsigned char u8;
 typedef long long int i64;
 typedef unsigned long long int u64;
 
-#if defined(__GLIBC__) && defined(LSM_DEBUG_MEM)
+#if defined(__GLIBC__)
   extern int backtrace(void**,int);
   extern void backtrace_symbols_fd(void*const*,int,int);
 # define TM_BACKTRACE 12
@@ -27,8 +28,6 @@ typedef struct TmBlockHdr TmBlockHdr;
 typedef struct TmAgg TmAgg;
 typedef struct TmGlobal TmGlobal;
 
-typedef int sqlite4_size_t /* KLUDGE */;
-
 struct TmGlobal {
   /* Linked list of all currently outstanding allocations. And a table of
   ** all allocations, past and present, indexed by backtrace() info.  */
@@ -38,33 +37,7 @@ struct TmGlobal {
 #endif
 
   /* Underlying malloc/realloc/free functions */
-  void *(*xMalloc)(int);          /* underlying malloc(3) function */
-  void *(*xRealloc)(void *, int); /* underlying realloc(3) function */
-  void (*xFree)(void *);          /* underlying free(3) function */
-  sqlite4_size_t (*xSize)(void*,void*);   /* Return the size of an allocation */
-
-  /* Mutex to protect pFirst and aHash */
-  void (*xEnterMutex)(TmGlobal*); /* Call this to enter the mutex */
-  void (*xLeaveMutex)(TmGlobal*); /* Call this to leave mutex */
-  void (*xDelMutex)(TmGlobal*);   /* Call this to delete mutex */
-  void *pMutex;                   /* Mutex handle */
-
-  void *xSaveMalloc;
-  void *xSaveRealloc;
-  void *xSaveFree;
-  void *xSaveSize;
-
-  /* OOM injection scheduling. If nCountdown is greater than zero when a 
-  ** malloc attempt is made, it is decremented. If this means nCountdown 
-  ** transitions from 1 to 0, then the allocation fails. If bPersist is true 
-  ** when this happens, nCountdown is then incremented back to 1 (so that the 
-  ** next attempt fails too).  
-  */
-  int nCountdown;
-  int bPersist;
-  int bEnable;
-  void (*xHook)(void *);
-  void *pHookCtx;
+  sqlite4_mem_methods mem;
 };
 
 struct TmBlockHdr {
@@ -93,13 +66,7 @@ struct TmAgg {
 static const u32 rearguard = REARGUARD;
 
 #define ROUND8(x) (((x)+7)&~7)
-
 #define BLOCK_HDR_SIZE (ROUND8( sizeof(TmBlockHdr) ))
-
-static void lsmtest_oom_error(void){
-  static int nErr = 0;
-  nErr++;
-}
 
 static void tmEnterMutex(TmGlobal *pTm){
   /*pTm->xEnterMutex(pTm);*/
@@ -115,68 +82,55 @@ static void *tmMalloc(TmGlobal *pTm, int nByte){
 
   assert( sizeof(rearguard)==4 );
   nReq = BLOCK_HDR_SIZE + nByte + 4;
-  pNew = (TmBlockHdr *)pTm->xMalloc(nReq);
+  pNew = (TmBlockHdr *)pTm->mem.xMalloc(pTm->mem.pMemEnv, nReq);
   memset(pNew, 0, sizeof(TmBlockHdr));
 
   tmEnterMutex(pTm);
-  assert( pTm->nCountdown>=0 );
-  assert( pTm->bPersist==0 || pTm->bPersist==1 );
 
-  if( pTm->bEnable && pTm->nCountdown==1 ){
-    /* Simulate an OOM error. */
-    lsmtest_oom_error();
-    pTm->xFree(pNew);
-    pTm->nCountdown = pTm->bPersist;
-    if( pTm->xHook ) pTm->xHook(pTm->pHookCtx);
-    pUser = 0;
-  }else{
-    if( pTm->bEnable && pTm->nCountdown ) pTm->nCountdown--;
+  pNew->iForeGuard = FOREGUARD;
+  pNew->nByte = nByte;
+  pNew->pNext = pTm->pFirst;
 
-    pNew->iForeGuard = FOREGUARD;
-    pNew->nByte = nByte;
-    pNew->pNext = pTm->pFirst;
+  if( pTm->pFirst ){
+    pTm->pFirst->pPrev = pNew;
+  }
+  pTm->pFirst = pNew;
 
-    if( pTm->pFirst ){
-      pTm->pFirst->pPrev = pNew;
-    }
-    pTm->pFirst = pNew;
-
-    pUser = &((u8 *)pNew)[BLOCK_HDR_SIZE];
-    memset(pUser, 0x56, nByte);
-    memcpy(&pUser[nByte], &rearguard, 4);
+  pUser = &((u8 *)pNew)[BLOCK_HDR_SIZE];
+  memset(pUser, 0x56, nByte);
+  memcpy(&pUser[nByte], &rearguard, 4);
 
 #ifdef TM_BACKTRACE
-    {
-      TmAgg *pAgg;
-      int i;
-      u32 iHash = 0;
-      void *aFrame[TM_BACKTRACE];
-      memset(aFrame, 0, sizeof(aFrame));
-      backtrace(aFrame, TM_BACKTRACE);
+  {
+    TmAgg *pAgg;
+    int i;
+    u32 iHash = 0;
+    void *aFrame[TM_BACKTRACE];
+    memset(aFrame, 0, sizeof(aFrame));
+    backtrace(aFrame, TM_BACKTRACE);
 
-      for(i=0; i<ArraySize(aFrame); i++){
-        iHash += (u64)(aFrame[i]) + (iHash<<3);
-      }
-      iHash = iHash % ArraySize(pTm->aHash);
-
-      for(pAgg=pTm->aHash[iHash]; pAgg; pAgg=pAgg->pNext){
-        if( memcmp(pAgg->aFrame, aFrame, sizeof(aFrame))==0 ) break;
-      }
-      if( !pAgg ){
-        pAgg = (TmAgg *)pTm->xMalloc(sizeof(TmAgg));
-        memset(pAgg, 0, sizeof(TmAgg));
-        memcpy(pAgg->aFrame, aFrame, sizeof(aFrame));
-        pAgg->pNext = pTm->aHash[iHash];
-        pTm->aHash[iHash] = pAgg;
-      }
-      pAgg->nAlloc++;
-      pAgg->nByte += nByte;
-      pAgg->nOutAlloc++;
-      pAgg->nOutByte += nByte;
-      pNew->pAgg = pAgg;
+    for(i=0; i<ArraySize(aFrame); i++){
+      iHash += (u64)(aFrame[i]) + (iHash<<3);
     }
-#endif
+    iHash = iHash % ArraySize(pTm->aHash);
+
+    for(pAgg=pTm->aHash[iHash]; pAgg; pAgg=pAgg->pNext){
+      if( memcmp(pAgg->aFrame, aFrame, sizeof(aFrame))==0 ) break;
+    }
+    if( !pAgg ){
+      pAgg = (TmAgg *)pTm->mem.xMalloc(pTm->mem.pMemEnv, sizeof(TmAgg));
+      memset(pAgg, 0, sizeof(TmAgg));
+      memcpy(pAgg->aFrame, aFrame, sizeof(aFrame));
+      pAgg->pNext = pTm->aHash[iHash];
+      pTm->aHash[iHash] = pAgg;
+    }
+    pAgg->nAlloc++;
+    pAgg->nByte += nByte;
+    pAgg->nOutAlloc++;
+    pAgg->nOutByte += nByte;
+    pNew->pAgg = pAgg;
   }
+#endif
 
   tmLeaveMutex(pTm);
   return pUser;
@@ -212,7 +166,7 @@ static void tmFree(TmGlobal *pTm, void *p){
     tmLeaveMutex(pTm);
     memset(pUser, 0x58, pHdr->nByte);
     memset(pHdr, 0x57, sizeof(TmBlockHdr));
-    pTm->xFree(pHdr);
+    pTm->mem.xFree(pTm->mem.pMemEnv, pHdr);
   }
 }
 
@@ -228,29 +182,6 @@ static void *tmRealloc(TmGlobal *pTm, void *p, int nByte){
     tmFree(pTm, p);
   }
   return pNew;
-}
-
-static void tmMallocOom(
-  TmGlobal *pTm, 
-  int nCountdown, 
-  int bPersist,
-  void (*xHook)(void *),
-  void *pHookCtx
-){
-  assert( nCountdown>=0 );
-  assert( bPersist==0 || bPersist==1 );
-  pTm->nCountdown = nCountdown;
-  pTm->bPersist = bPersist;
-  pTm->xHook = xHook;
-  pTm->pHookCtx = pHookCtx;
-  pTm->bEnable = 1;
-}
-
-static void tmMallocOomEnable(
-  TmGlobal *pTm, 
-  int bEnable
-){
-  pTm->bEnable = bEnable;
 }
 
 static void tmMallocCheck(
@@ -306,69 +237,13 @@ static void tmMallocCheck(
 }
 
 
-#include "lsm.h"
-#include "stdlib.h"
-
-typedef struct LsmMutex LsmMutex;
-struct LsmMutex {
-  lsm_env *pEnv;
-  lsm_mutex *pMutex;
-};
-
-static void tmLsmMutexEnter(TmGlobal *pTm){
-#if 0
-  LsmMutex *p = (LsmMutex *)pTm->pMutex;
-  p->pEnv->xMutexEnter(p->pMutex);
-#endif
-}
-static void tmLsmMutexLeave(TmGlobal *pTm){
-#if 0
-  LsmMutex *p = (LsmMutex *)(pTm->pMutex);
-  p->pEnv->xMutexLeave(p->pMutex);
-#endif
-}
-static void tmLsmMutexDel(TmGlobal *pTm){
-#if 0
-  LsmMutex *p = (LsmMutex *)pTm->pMutex;
-  pTm->xFree(p);
-#endif
-}
-
-static void *tmLsmMalloc(int n){
-  return malloc(n);
-}
-static void tmLsmFree(void *ptr){
-  free(ptr);
-}
-static void *tmLsmRealloc(void * mem, int n){
-  return realloc(mem, (size_t)n);
-}
-
-#if 0
-static void *tmLsmEnvMalloc(TmGlobal *p, int n){ 
-  return tmMalloc(p, n); 
-}
-#endif
-
 static void *tmLsmEnvXMalloc(void *p, sqlite4_size_t n){
   return tmMalloc( (TmGlobal*) p, (int)n );
 }
 
-#if 0
-static void tmLsmEnvFree(TmGlobal *p, void *ptr){ 
-  tmFree(p, ptr); 
-}
-#endif
 static void tmLsmEnvXFree(void *p, void *ptr){ 
   tmFree( (TmGlobal *)p, ptr );
 }
-
-
-#if 0
-static void *tmLsmEnvRealloc(TmGlobal *p, void *ptr, int n){ 
-  return tmRealloc(p, ptr, n);
-}
-#endif
 
 static void *tmLsmEnvXRealloc(void *ptr, void * mem, int n){
   return tmRealloc((TmGlobal*)ptr, mem, n);
@@ -386,30 +261,26 @@ static sqlite4_size_t tmLsmXSize(void *p, void *ptr){
   }
 }
 
-int tmInitStub(void* ignored){
+static int tmInitStub(void* ignored){
   assert("Set breakpoint here.");
   return 0;
 }
-void tmVoidStub(void* ignored){}
+static void tmVoidStub(void* ignored){}
 
-static TmGlobal *pGlobal = NULL;
 
-void testMallocInstall(){
-  /* TODO LsmMutex *pMutex; */
-  static sqlite4_mem_methods allocator;
-  memset( &allocator, 0, sizeof(allocator) );
+int testMallocInstall(sqlite4_env *pEnv){
+  TmGlobal *pGlobal;              /* Object containing allocation hash */
+  sqlite4_mem_methods allocator;  /* This malloc system */
+  sqlite4_mem_methods orig;       /* Underlying malloc system */
 
-  /* Allocate and populate a TmGlobal structure. */
-  pGlobal = (TmGlobal *)tmLsmMalloc(sizeof(TmGlobal));
+  /* Allocate and populate a TmGlobal structure. sqlite4_malloc cannot be
+  ** used to allocate the TmGlobal struct as this would cause the environment
+  ** to move to "initialized" state and the SQLITE4_ENVCONFIG_MALLOC 
+  ** to fail. */
+  sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_GETMALLOC, &orig);
+  pGlobal = (TmGlobal *)orig.xMalloc(orig.pMemEnv, sizeof(TmGlobal));
   memset(pGlobal, 0, sizeof(TmGlobal));
-  pGlobal->xMalloc = tmLsmMalloc;
-  pGlobal->xRealloc = tmLsmRealloc;
-  pGlobal->xFree = tmLsmFree;
-  pGlobal->xSize = tmLsmXSize;
-
-  pGlobal->xEnterMutex = tmLsmMutexEnter;
-  pGlobal->xLeaveMutex = tmLsmMutexLeave;
-  pGlobal->xDelMutex = tmLsmMutexDel;
+  memcpy(&pGlobal->mem, &orig, sizeof(orig));
 
   /* Set up pEnv to the use the new TmGlobal */
   allocator.xRealloc = tmLsmEnvXRealloc;
@@ -421,60 +292,126 @@ void testMallocInstall(){
   allocator.xBeginBenign = tmVoidStub;
   allocator.xEndBenign = tmVoidStub;
   allocator.pMemEnv = pGlobal;
-
-#if 0
-  pMutex = (LsmMutex *)pGlobal->xMalloc(sizeof(LsmMutex));
-  pGlobal->pMutex = (void *)pMutex;
-  pMutex->pEnv = pEnv;
-  pMutex->pMutex = NULL;
-  /*pEnv->xMutexStatic(pEnv, LSM_MUTEX_HEAP, &(pMutex->pMutex));*/
-#endif
-
-  sqlite4_env_config( NULL,
-                      SQLITE4_ENVCONFIG_MALLOC,
-                      &allocator);
+  return sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_MALLOC, &allocator);
 }
 
-void testMallocUninstall(){
-  if( pGlobal ){
-    sqlite4_mem_methods m;
-    /* TODO: mutex: pGlobal->xDelMutex(pGlobal); */
-    tmLsmFree(pGlobal);
-    pGlobal = 0;
-    /* One should be able to reset the default memory allocator by storing
-    ** a zeroed allocator then calling GETMALLOC. */
-    memset(&m, 0, sizeof(m));
-    sqlite4_env_config(0, SQLITE4_ENVCONFIG_MALLOC, &m);
-    sqlite4_env_config(0, SQLITE4_ENVCONFIG_GETMALLOC, &m);
+int testMallocUninstall(sqlite4_env *pEnv){
+  TmGlobal *pGlobal;              /* Object containing allocation hash */
+  sqlite4_mem_methods allocator;  /* This malloc system */
+  int rc;
+
+  sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_GETMALLOC, &allocator);
+  assert( allocator.xMalloc==tmLsmEnvXMalloc );
+  pGlobal = (TmGlobal *)allocator.pMemEnv;
+
+  rc = sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_MALLOC, &pGlobal->mem);
+  if( rc==SQLITE4_OK ){
+    sqlite4_free(pEnv, pGlobal);
   }
+  return rc;
 }
 
 void testMallocCheck(
-  lsm_env *pEnv,
+  sqlite4_env *pEnv,
   int *pnLeakAlloc,
   int *pnLeakByte,
   FILE *pFile
 ){
-  if( pEnv->pMemCtx==0 ){
-    *pnLeakAlloc = 0;
-    *pnLeakByte = 0;
-  }else{
-    tmMallocCheck((TmGlobal *)(pEnv->pMemCtx), pnLeakAlloc, pnLeakByte, pFile);
-  }
+  TmGlobal *pGlobal;
+  sqlite4_mem_methods allocator;  /* This malloc system */
+
+  sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_GETMALLOC, &allocator);
+  assert( allocator.xMalloc==tmLsmEnvXMalloc );
+  pGlobal = (TmGlobal *)allocator.pMemEnv;
+
+  tmMallocCheck(pGlobal, pnLeakAlloc, pnLeakByte, pFile);
 }
 
-void testMallocOom(
-  lsm_env *pEnv, 
-  int nCountdown, 
-  int bPersist,
-  void (*xHook)(void *),
-  void *pHookCtx
+#include <tcl.h>
+
+/*
+** testmem install
+** testmem uninstall
+** testmem report ?FILENAME?
+*/
+static int testmem_cmd(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
 ){
-  TmGlobal *pTm = (TmGlobal *)(pEnv->pMemCtx);
-  tmMallocOom(pTm, nCountdown, bPersist, xHook, pHookCtx);
+  sqlite4_env *pEnv;              /* SQLite 4 environment to work with */
+  int iOpt;
+  const char *azSub[] = {"install", "uninstall", "report", 0};
+
+  if( objc<2 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "sub-command");
+    return TCL_ERROR;
+  }
+  if( Tcl_GetIndexFromObj(interp, objv[1], azSub, "sub-command", 0, &iOpt) ){
+    return TCL_ERROR;
+  }
+
+  pEnv = sqlite4_env_default();
+  switch( iOpt ){
+    case 0: {
+      int rc;
+      if( objc!=2 ){
+        Tcl_WrongNumArgs(interp, 2, objv, "");
+        return TCL_ERROR;
+      }
+      rc = testMallocInstall(pEnv);
+      if( rc!=SQLITE4_OK ){
+        Tcl_AppendResult(interp, "Failed to install testmem wrapper", 0);
+        return TCL_ERROR;
+      }
+      break;
+    }
+
+    case 1:
+      if( objc!=2 ){
+        Tcl_WrongNumArgs(interp, 2, objv, "");
+        return TCL_ERROR;
+      }
+      testMallocUninstall(pEnv);
+      break;
+
+    case 2: {
+      int nLeakAlloc = 0;
+      int nLeakByte = 0;
+      FILE *pReport = 0;
+      Tcl_Obj *pRes;
+
+      if( objc!=2 && objc!=3 ){
+        Tcl_WrongNumArgs(interp, 2, objv, "?filename?");
+        return TCL_ERROR;
+      }
+      if( objc==3 ){
+        const char *zFile = Tcl_GetString(objv[2]);
+        pReport = fopen(zFile, "w");
+        if( !pReport ){
+          Tcl_AppendResult(interp, "Failed to open file: ", zFile, 0);
+          return TCL_ERROR;
+        }
+      }
+
+      testMallocCheck(pEnv, &nLeakAlloc, &nLeakByte, pReport);
+      if( pReport ) fclose(pReport);
+
+      pRes = Tcl_NewObj();
+      Tcl_ListObjAppendElement(interp, pRes, Tcl_NewIntObj(nLeakAlloc));
+      Tcl_ListObjAppendElement(interp, pRes, Tcl_NewIntObj(nLeakByte));
+      Tcl_SetObjResult(interp, pRes);
+      break;
+    }
+  }
+
+  return TCL_OK;
 }
 
-void testMallocOomEnable(lsm_env *pEnv, int bEnable){
-  TmGlobal *pTm = (TmGlobal *)(pEnv->pMemCtx);
-  tmMallocOomEnable(pTm, bEnable);
+int Sqlitetest_mem_Init(Tcl_Interp *interp){
+  Tcl_CreateObjCommand(interp, "testmem", testmem_cmd, 0, 0);
+  return TCL_OK;
 }
+
+

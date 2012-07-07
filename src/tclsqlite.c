@@ -2954,6 +2954,7 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqliteteststorage_Init(Tcl_Interp*);
     extern int Sqliteteststorage2_Init(Tcl_Interp*);
     extern int SqlitetestLsm_Init(Tcl_Interp*);
+    extern int Sqlitetest_mem_Init(Tcl_Interp*);
 
     Sqliteconfig_Init(interp);
     Sqlitetest1_Init(interp);
@@ -2967,6 +2968,7 @@ static void init_all(Tcl_Interp *interp){
     Sqliteteststorage_Init(interp);
     Sqliteteststorage2_Init(interp);
     SqlitetestLsm_Init(interp);
+    Sqlitetest_mem_Init(interp);
 
 
     Tcl_CreateObjCommand(
@@ -2983,16 +2985,6 @@ static void init_all(Tcl_Interp *interp){
 #endif
 }
 
-#define TEST_MALLOC_INSTALL 1
-
-static void tcl_atexit(){
-#if TEST_MALLOC_INSTALL
-  extern void testMallocUninstall() /* in test_mem.c */;
-  testMallocUninstall();
-#endif
-  Tcl_Finalize();
-}
-
 #define TCLSH_MAIN main   /* Needed to fake out mktclapp */
 int TCLSH_MAIN(int argc, char **argv){
   Tcl_Interp *interp;
@@ -3005,17 +2997,9 @@ int TCLSH_MAIN(int argc, char **argv){
   /*Tcl_FindExecutable(argv[0]);*/
   interp = Tcl_CreateInterp();
 
-  /*sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_MALLOC, &allocator);*/
-
 #if TCLSH==2
   sqlite4_env_config(0, SQLITE4_ENVCONFIG_SINGLETHREAD);
 #endif
-
-#if TEST_MALLOC_INSTALL
-  extern void testMallocInstall() /* in test_mem.c */;
-  testMallocInstall();
-#endif
-  atexit( tcl_atexit );
 
   init_all(interp);
   if( argc>=2 ){
