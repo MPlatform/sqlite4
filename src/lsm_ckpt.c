@@ -43,6 +43,10 @@
 **
 **     4 integers. See ckptExportLog() and ckptImportLog().
 **
+**   Append points:
+**
+**     4 integers.
+**
 **   For each level in the database, a level record. Formatted as follows:
 **
 **     0. Age of the level.
@@ -126,11 +130,12 @@
 static const int one = 1;
 #define LSM_LITTLE_ENDIAN (*(u8 *)(&one))
 
-/* Total number of 32-bit integers in the checkpoint header. */
-#define CKPT_HDR_SIZE       8
-#define CKPT_LOGPTR_SIZE    4
-#define CKPT_SEGMENT_SIZE   4
-#define CKPT_CKSUM_SIZE     2
+/* Sizes, in integers, of various parts of the checkpoint. */
+#define CKPT_HDR_SIZE         8
+#define CKPT_LOGPTR_SIZE      4
+#define CKPT_SEGMENT_SIZE     4
+#define CKPT_CKSUM_SIZE       2
+#define CKPT_APPENDLIST_SIZE  4
 
 /* A #define to describe each integer in the checkpoint header. */
 #define CKPT_HDR_ID_MSW   0
@@ -302,6 +307,42 @@ static void ckptExportLog(DbLog *pLog, CkptBuffer *p, int *piOut, int *pRc){
   *piOut = iOut;
 }
 
+static void ckptExportAppendlist(
+  lsm_db *db,                     /* Database connection */
+  CkptBuffer *p,                  /* Checkpoint buffer to write to */
+  int *piOut,                     /* IN/OUT: Offset within checkpoint buffer */
+  int *pRc                        /* IN/OUT: Error code */
+){
+  Pgno *aAppend;
+  int nAppend;
+  int i;
+  int iOut = *piOut;
+
+  aAppend = lsmSharedAppendList(db, &nAppend);
+  for(i=0; i<CKPT_APPENDLIST_SIZE; i++){
+    ckptSetValue(p, iOut++, ((i<nAppend) ? aAppend[i]: 0), pRc);
+  }
+  *piOut = *piOut + CKPT_APPENDLIST_SIZE;
+};
+
+static void ckptImportAppendlist(
+  lsm_db *db,
+  u32 *aIn,
+  int *piIn,
+  int *pRc
+){
+  int rc = *pRc;
+  int iIn = *piIn;
+  int i;
+
+  for(i=0; rc==LSM_OK && i<CKPT_APPENDLIST_SIZE; i++){
+    if( aIn[i+iIn] ) rc = lsmSharedAppendListAdd(db, aIn[i+iIn]);
+  }
+
+  *piIn = iIn + CKPT_APPENDLIST_SIZE;
+  *pRc = rc;
+}
+
 /*
 ** Import a log offset.
 */
@@ -315,6 +356,7 @@ static void ckptImportLog(u32 *aIn, int *piIn, DbLog *pLog){
 
   *piIn = iIn+4;
 }
+
 
 lsm_i64 lsmCheckpointLogOffset(void *pExport){
   u8 *aIn = (u8 *)pExport;
@@ -356,6 +398,9 @@ int lsmCheckpointExport(
 
   /* Write the current log offset */
   ckptExportLog(lsmDatabaseLog(pDb), &ckpt, &iOut, &rc);
+
+  /* Write the append-point list */
+  ckptExportAppendlist(pDb, &ckpt, &iOut, &rc);
 
   /* Figure out how many levels will be written to the checkpoint. */
   for(pLevel=lsmDbSnapshotLevel(pSnap); pLevel; pLevel=pLevel->pNext) nAll++;
@@ -567,6 +612,9 @@ static int ckptImport(
 
       /* Import log offset */
       ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));
+
+      /* Import append-point list */
+      ckptImportAppendlist(pDb, aInt, &iIn, &rc);
 
       /* Import all levels stored in the checkpoint. */
       rc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);

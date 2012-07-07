@@ -388,7 +388,6 @@ FileSystem *lsmPageFS(Page *);
 int lsmFsSectorSize(FileSystem *);
 
 void lsmSortedSplitkey(lsm_db *, Level *, int *);
-int lsmFsSetupAppendList(lsm_db *db);
 
 /* Reading sorted run content. */
 int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
