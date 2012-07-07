@@ -177,7 +177,7 @@ struct Database {
   int nBlock;                     /* Number of blocks tracked by this ss */
   Freelist freelist;              /* Database free-list */
 
-  u32 aDelta[LSM_FREELIST_DELTA_SIZE];
+  int nFreelistDelta;
   int bRecordDelta;               /* True when recording freelist delta */
 
   lsm_mutex *pWorkerMutex;        /* Protects the worker snapshot */
@@ -315,6 +315,18 @@ static int flAppendEntry(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId){
   p->nEntry++;
 
   return LSM_OK;
+}
+
+static int flInsertEntry(lsm_env *pEnv, Freelist *p, int iBlk){
+  int rc;
+
+  rc = flAppendEntry(pEnv, p, iBlk, 1);
+  if( rc==LSM_OK ){
+    memmove(&p->aEntry[1], &p->aEntry[0], sizeof(FreelistEntry)*(p->nEntry-1));
+    p->aEntry[0].iBlk = iBlk;
+    p->aEntry[0].iId = 1;
+  }
+  return rc;
 }
 
 /*
@@ -800,7 +812,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
       flRemoveEntry0(pFree);
       assert( iRet!=0 );
       if( p->bRecordDelta ){
-        p->aDelta[0]++;
+        p->nFreelistDelta++;
       }
     }
   }
@@ -852,11 +864,11 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
 
   if( iBlk==p->nBlock ){
     p->nBlock--;
-  }else if( p->bRecordDelta ){
-    assert( p->aDelta[2]==0 );
-    p->aDelta[1 + (p->aDelta[1]!=0)] = iBlk;
   }else{
-    rc = flAppendEntry(pDb->pEnv, &p->freelist, iBlk, 0);
+    rc = flInsertEntry(pDb->pEnv, &p->freelist, iBlk);
+    if( p->bRecordDelta ){
+      p->nFreelistDelta--;
+    }
   }
 
   return rc;
@@ -866,7 +878,7 @@ void lsmFreelistDeltaBegin(lsm_db *pDb){
   Database *p = pDb->pDatabase;
   assertMustbeWorker(pDb);
   assert( p->bRecordDelta==0 );
-  memset(p->aDelta, 0, sizeof(p->aDelta));
+  p->nFreelistDelta = 0;
   p->bRecordDelta = 1;
 }
 
@@ -876,18 +888,8 @@ void lsmFreelistDeltaEnd(lsm_db *pDb){
   p->bRecordDelta = 0;
 }
 
-void lsmFreelistDelta(
-  lsm_db *pDb,                    /* Database handle */
-  u32 *aDeltaOut                  /* OUT: Copy free-list delta here */
-){
-  Database *p = pDb->pDatabase;
-  assertMustbeWorker(pDb);
-  assert( sizeof(p->aDelta)==(sizeof(u32)*LSM_FREELIST_DELTA_SIZE) );
-  memcpy(aDeltaOut, p->aDelta, sizeof(p->aDelta));
-}
-
-u32 *lsmFreelistDeltaPtr(lsm_db *pDb){
-  return pDb->pDatabase->aDelta;
+int lsmFreelistDelta(lsm_db *pDb){
+  return &pDb->pDatabase->nFreelistDelta;
 }
 
 /*
@@ -917,8 +919,37 @@ int lsmSnapshotFreelist(lsm_db *pDb, int **paFree, int *pnFree){
   return rc;
 }
 
+int lsmGetFreelist(
+  lsm_db *pDb,                    /* Database handle (must be worker) */
+  u32 **paFree,                   /* OUT: malloc'd array */
+  int *pnFree                     /* OUT: Size of array at *paFree */
+){
+  int rc = LSM_OK;                /* Return Code */
+  u32 *aFree = 0;                 /* Integer array to return via *paFree */
+  int nFree;                      /* Value to return via *pnFree */
+  Freelist *p;                    /* Database free list object */
 
-int lsmSnapshotSetFreelist(lsm_db *pDb, int *aElem, int nElem){
+  assert( pDb->pWorker );
+  p = &pDb->pDatabase->freelist;
+  nFree = p->nEntry * 3;
+  if( nFree && paFree ){
+    aFree = lsmMallocRc(pDb->pEnv, sizeof(u32) * nFree, &rc);
+    if( aFree ){
+      int i;
+      for(i=0; i<p->nEntry; i++){
+        aFree[i*3] = p->aEntry[i].iBlk;
+        aFree[i*3+1] = (u32)((p->aEntry[i].iId >> 32) & 0xFFFFFFFF);
+        aFree[i*3+2] = (u32)(p->aEntry[i].iId & 0xFFFFFFFF);
+      }
+    }
+  }
+
+  *pnFree = nFree;
+  if( paFree ) *paFree = aFree;
+  return rc;
+}
+
+int lsmSetFreelist(lsm_db *pDb, u32 *aElem, int nElem){
   Database *p = pDb->pDatabase;
   lsm_env *pEnv = pDb->pEnv;
   int rc = LSM_OK;                /* Return code */
@@ -928,17 +959,13 @@ int lsmSnapshotSetFreelist(lsm_db *pDb, int *aElem, int nElem){
   int iRefree2;                   /* A refreed block (or 0) */
   Freelist *pFree;                /* Database free-list */
 
-  nIgnore = p->aDelta[0];
-  iRefree1 = p->aDelta[1];
-  iRefree2 = p->aDelta[2];
+  assert( (nElem%3)==0 );
 
   pFree = &p->freelist;
-  for(i=nIgnore; rc==LSM_OK && i<nElem; i++){
-    rc = flAppendEntry(pEnv, pFree, aElem[i], 0);
+  for(i=0; i<nElem; i+=3){
+    i64 iId = ((i64)(aElem[i+1]) << 32) + aElem[i+2];
+    rc = flAppendEntry(pEnv, pFree, aElem[i], iId);
   }
-
-  if( rc==LSM_OK && iRefree1!=0 ) rc = flAppendEntry(pEnv, pFree, iRefree1, 0);
-  if( rc==LSM_OK && iRefree2!=0 ) rc = flAppendEntry(pEnv, pFree, iRefree2, 0);
 
   return rc;
 }

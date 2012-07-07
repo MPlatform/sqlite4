@@ -45,7 +45,7 @@
 **
 **   Append points:
 **
-**     4 integers.
+**     4 integers. See ckptExportAppendlist().
 **
 **   For each level in the database, a level record. Formatted as follows:
 **
@@ -61,24 +61,18 @@
 **     7. Page containing current split-key.
 **     8. Cell within page containing current split-key.
 **
-**   The freelist. If the checkpoint header indicates that the top level
-**   segment contains LEVELS and FREELIST records, then three integers are
-**   stored here:
+**   The freelist. 
 **
-**     1. The size to truncate the free list to after it is loaded.
-**     2. First refree block (or 0),
-**     3. Second refree block (or 0),
+**     1. Number of free-list entries stored in checkpoint header.
+**     2. For each entry:
+**        2a. Block number of free block.
+**        2b. MSW of associated checkpoint id.
+**        2c. LSW of associated checkpoint id.
 **
-**   In this case, the free list is loaded from the top level segment, 
-**   then truncated so that it contains the nTruncate newest entries only, 
-**   where nTruncate is the first integer in the block of three above. If 
-**   either or both of the "refree block" integers are non-zero, then they 
-**   are appended to the free-list.
-**
-**   Or, if the checkpoint header flag is clear, then the entire free-list
-**   is stored in the checkpoint. The format is the number of entries in
-**   the free-list, followed by the entries themselves (i.e. N+1 integers
-**   for an N entry free-list).
+**   If the overflow flag is set, then extra free-list entries may be stored
+**   in the FREELIST record. The FREELIST record contains 3 32-bit integers
+**   per entry, in the same format as above (without the "number of entries"
+**   field).
 **
 **   The checksum:
 **
@@ -417,21 +411,30 @@ int lsmCheckpointExport(
   /* Write the freelist delta (if bOvfl is true) or else the entire free-list
   ** (if bOvfl is false).  */
   if( rc==LSM_OK ){
-    if( bOvfl ){
-      lsmFreelistDelta(pDb, aDelta);
-      for(i=0; i<LSM_FREELIST_DELTA_SIZE; i++){
-        ckptSetValue(&ckpt, iOut++, aDelta[i], &rc);
-      }
-    }else{
-      int *aVal;
-      int nVal;
-      rc = lsmSnapshotFreelist(pDb, &aVal, &nVal);
-      ckptSetValue(&ckpt, iOut++, nVal, &rc);
+    u32 *aVal;
+    int nVal;
+    rc = lsmSnapshotFreelist(pDb, &aVal, &nVal);
+
+    if( bOvfl==0 ){
+      ckptSetValue(&ckpt, iOut++, nVal / 3, &rc);
       for(i=0; i<nVal && rc==LSM_OK; i++){
         ckptSetValue(&ckpt, iOut++, aVal[i], &rc);
       }
-      lsmFree(pDb->pEnv, aVal);
+    }else{
+      int nEntry;                 /* Number of entries from aVal/nVal */
+
+      nEntry = (nVal/3);
+      if( nEntry>LSM_CKPT_MIN_NONLSM ) nEntry = LSM_CKPT_MIN_NONLSM;
+      nEntry -= lsmFreelistDelta(pDb);
+      assert( nEntry>=0 && nEntry<=LSM_CKPT_MIN_FREELIST );
+
+      ckptSetValue(&ckpt, iOut++, nEntry, &rc);
+      for(i=0; i<nEntry*3; i++){
+        ckptSetValue(&ckpt, iOut++, aVal[i], &rc);
+      }
     }
+
+    lsmFree(pDb->pEnv, aVal);
   }
 
   /* Write the checkpoint header */
@@ -622,16 +625,9 @@ static int ckptImport(
 
       /* Import the freelist delta */
       if( rc==LSM_OK ){
-        if( bOvfl ){
-          aDelta = lsmFreelistDeltaPtr(pDb);
-          for(i=0; i<LSM_FREELIST_DELTA_SIZE; i++){
-            aDelta[i] = aInt[iIn++];
-          }
-        }else{
-          int nFree = aInt[iIn++];
-          rc = lsmSnapshotSetFreelist(pDb, (int *)&aInt[iIn], nFree);
-          iIn += nFree;
-        }
+        int nFree = aInt[iIn++] * 3;
+        rc = lsmSetFreelist(pDb, (int *)&aInt[iIn], nFree);
+        iIn += nFree;
       }
 
       ret = 1;
@@ -847,9 +843,11 @@ int lsmCheckpointOverflow(
   ** therefore the total number of integers available to store the database 
   ** levels and freelist.  */
   nFree = 1024 - CKPT_HDR_SIZE - CKPT_LOGPTR_SIZE - CKPT_CKSUM_SIZE;
+  nFree -= CKPT_APPENDLIST_SIZE;
 
-  /* Allow space for the free-list delta */
-  nFree -= 3;
+  /* Allow space for the free-list  with LSM_CKPT_MIN_FREELIST entries */
+  nFree--;
+  nFree -= LSM_CKPT_MIN_FREELIST * 3;
 
   /* Allow space for the new level that may be created */
   nFree -= (2 + CKPT_SEGMENT_SIZE);
@@ -881,11 +879,15 @@ int lsmCheckpointOverflow(
   }
   *pnLsmLevel = nLevel;
 
-  /* Set nList to the number of values required to store the free-list */
+  /* Set nList to the number of values required to store the free-list 
+  ** completely in the checkpoint.  */
   lsmSnapshotFreelist(pDb, 0, &nList);
-  nList++;
+  nList -= (LSM_CKPT_MIN_FREELIST - LSM_CKPT_MAX_REFREE);
+  if( nList>0 ){
+    nFree -= 3*nList;
+  }
 
-  return (nLevel>0 || nList>nFree);
+  return (nLevel>0 || nFree<0);
 }
 
 /*

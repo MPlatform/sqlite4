@@ -65,6 +65,14 @@
 
 #define LSM_AUTOWORK_QUANT 32
 
+/* Minimum number of free-list entries to store in the checkpoint, assuming
+** the free-list contains this many entries. i.e. if overflow is required,
+** the first LSM_CKPT_MIN_FREELIST entries are stored in the checkpoint and
+** the remainder in an LSM system entry.  */
+#define LSM_CKPT_MIN_FREELIST     6
+#define LSM_CKPT_MAX_REFREE       2
+#define LSM_CKPT_MIN_NONLSM       (LSM_CKPT_MIN_FREELIST - LSM_CKPT_MAX_REFREE)
+
 typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
@@ -514,6 +522,8 @@ int lsmLogStructure(lsm_db *pDb, char **pzVal);
 /**************************************************************************
 ** Functions from file "lsm_shared.c".
 */
+int lsmGetFreelist(lsm_db *pDb, u32 **paFree, int *pnFree);
+
 int lsmDbDatabaseFind(lsm_db*, const char *);
 void lsmDbDatabaseRelease(lsm_db *);
 
@@ -554,8 +564,7 @@ int lsmBlockRefree(lsm_db *, int);
 
 void lsmFreelistDeltaBegin(lsm_db *);
 void lsmFreelistDeltaEnd(lsm_db *);
-void lsmFreelistDelta(lsm_db *, u32 *);
-u32 *lsmFreelistDeltaPtr(lsm_db *pDb);
+int lsmFreelistDelta(lsm_db *pDb);
 
 void lsmDatabaseDirty(lsm_db *pDb);
 int lsmDatabaseIsDirty(lsm_db *pDb);

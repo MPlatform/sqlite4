@@ -2160,13 +2160,21 @@ static int multiCursorGetVal(
     }
   }else if( iVal==CURSOR_DATA_SYSTEM ){
     if( pCsr->flags & CURSOR_AT_FREELIST ){
-      int *aVal;
+      u32 *aVal;
       int nVal;
+
       assert( pCsr->pSystemVal==0 );
-      rc = lsmSnapshotFreelist(pCsr->pDb, &aVal, &nVal);
-      pCsr->pSystemVal = *ppVal = (void *)aVal;
-      *pnVal = sizeof(int) * nVal;
+      rc = lsmGetFreelist(pCsr->pDb, &aVal, &nVal);
+      pCsr->pSystemVal = (void *)aVal;
+      if( nVal<(3*LSM_CKPT_MIN_NONLSM) ){
+        *pnVal = 0;
+        *ppVal = 0;
+      }else{
+        *ppVal = (void *)&aVal[3*LSM_CKPT_MIN_NONLSM];
+        *pnVal = sizeof(u32) * (nVal - 3*LSM_CKPT_MIN_NONLSM);
+      }
       lsmFreelistDeltaBegin(pCsr->pDb);
+
     }else if( (pCsr->flags & CURSOR_AT_LEVELS) && pCsr->nLsmLevel>0 ){
       lsmFree(pCsr->pDb->pEnv, pCsr->pSystemVal);
       lsmCheckpointLevels(pCsr->pDb, pCsr->nLsmLevel, ppVal, pnVal);
@@ -2219,7 +2227,7 @@ int lsmSortedLoadSystem(lsm_db *pDb){
       rc = lsmMCursorValue(pCsr, &pVal, &nVal);
       if( rc==LSM_OK ){
         int n32 = nVal / sizeof(u32);
-        rc = lsmSnapshotSetFreelist(pDb, (int *)pVal, n32);
+        rc = lsmSetFreelist(pDb, (u32 *)pVal, n32);
       }
     }
 
