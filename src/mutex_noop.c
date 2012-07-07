@@ -17,7 +17,7 @@
 ** here are place-holders.  Applications can substitute working
 ** mutex routines at start-time using the
 **
-**     sqlite4_config(pEnv, SQLITE4_CONFIG_MUTEX,...)
+**     sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_MUTEX,...)
 **
 ** interface.
 **

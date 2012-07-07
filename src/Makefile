@@ -1,4 +1,4 @@
 default:
-	$(MAKE) -C ..
+	$(MAKE) -C .. all testfixture
 $(MAKECMDGOALS):
 	$(MAKE) -C .. $@

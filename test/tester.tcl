@@ -268,7 +268,6 @@ if {[info exists cmdlinearg]==0} {
   #   --soft-heap-limit=NN
   #   --maxerror=NN
   #   --malloctrace=N
-  #   --backtrace=N
   #   --binarylog=N
   #   --soak=N
   #   --file-retries=N
@@ -279,7 +278,6 @@ if {[info exists cmdlinearg]==0} {
   set cmdlinearg(soft-heap-limit)    0
   set cmdlinearg(maxerror)        1000
   set cmdlinearg(malloctrace)        0
-  set cmdlinearg(backtrace)         10
   set cmdlinearg(binarylog)          0
   set cmdlinearg(soak)               0
   set cmdlinearg(file-retries)       0
@@ -305,13 +303,6 @@ if {[info exists cmdlinearg]==0} {
       }
       {^-+malloctrace=.+$} {
         foreach {dummy cmdlinearg(malloctrace)} [split $a =] break
-        if {$cmdlinearg(malloctrace)} {
-          sqlite4_memdebug_log start
-        }
-      }
-      {^-+backtrace=.+$} {
-        foreach {dummy cmdlinearg(backtrace)} [split $a =] break
-        sqlite4_memdebug_backtrace $value
       }
       {^-+binarylog=.+$} {
         foreach {dummy cmdlinearg(binarylog)} [split $a =] break
@@ -355,7 +346,8 @@ if {[info exists cmdlinearg]==0} {
   # extensions. This only needs to be done once for the process.
   #
   sqlite4_shutdown 
-  install_malloc_faultsim 1 
+  # install_malloc_faultsim 1 
+  if {$cmdlinearg(malloctrace)} { testmem install }
   kvwrap install
   sqlite4_initialize
   #autoinstall_test_functions
@@ -365,12 +357,6 @@ if {[info exists cmdlinearg]==0} {
   #
   if {$cmdlinearg(binarylog)} {
     vfslog new binarylog {} vfslog.bin
-  }
-
-  # Set the backtrace depth, if malloc tracing is enabled.
-  #
-  if {$cmdlinearg(malloctrace)} {
-    sqlite4_memdebug_backtrace $cmdlinearg(backtrace)
   }
 }
 
@@ -744,16 +730,8 @@ proc finalize_testing {} {
     puts "Number of malloc()  : [sqlite4_memdebug_malloc_count] calls"
   }
   if {$::cmdlinearg(malloctrace)} {
-    puts "Writing mallocs.sql..."
-    memdebug_log_sql
-    sqlite4_memdebug_log stop
-    sqlite4_memdebug_log clear
-
-    if {[sqlite4_memory_used]>0} {
-      puts "Writing leaks.sql..."
-      sqlite4_memdebug_log sync
-      memdebug_log_sql leaks.sql
-    }
+    puts "Writing malloc() report to malloc.txt..."
+    testmem report malloc.txt
   }
   foreach f [glob -nocomplain test.db-*-journal] {
     forcedelete $f
