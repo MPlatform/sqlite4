@@ -514,7 +514,6 @@ fulltest:	testfixture$(EXE) sqlite4$(EXE)
 soaktest:	testfixture$(EXE) sqlite4$(EXE)
 	./testfixture$(EXE) $(TOP)/test/all.test -soak=1
 
-.PHONY: test
 test:	testfixture$(EXE) sqlite4$(EXE)
 	./testfixture$(EXE) $(TOP)/test/src4.test
 
