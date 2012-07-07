@@ -184,7 +184,6 @@ const char *sqlite4TestErrorName(int rc){
 ** from sqlite4_errcode.
 */
 int sqlite4TestErrCode(Tcl_Interp *interp, sqlite4 *db, int rc){
-  sqlite4_env *pEnv = sqlite4_db_env(db);
   if( rc!=SQLITE4_MISUSE && rc!=SQLITE4_OK && sqlite4_errcode(db)!=rc ){
     char zBuf[200];
     int r2 = sqlite4_errcode(db);

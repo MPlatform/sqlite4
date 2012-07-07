@@ -40,7 +40,7 @@
   typedef unsigned char u8;
 #endif
 #include <ctype.h>
-
+#include <stdlib.h> /* atexit() */
 /*
  * Windows needs to know which symbols to export.  Unix does not.
  * BUILD_sqlite should be undefined for Unix.
@@ -2875,6 +2875,7 @@ static int init_all_cmd(
   return TCL_OK;
 }
 
+
 /*
 ** Tclcmd: db_use_legacy_prepare DB BOOLEAN
 **
@@ -2953,6 +2954,7 @@ static void init_all(Tcl_Interp *interp){
     extern int Sqliteteststorage_Init(Tcl_Interp*);
     extern int Sqliteteststorage2_Init(Tcl_Interp*);
     extern int SqlitetestLsm_Init(Tcl_Interp*);
+    extern int Sqlitetest_mem_Init(Tcl_Interp*);
 
     Sqliteconfig_Init(interp);
     Sqlitetest1_Init(interp);
@@ -2966,6 +2968,7 @@ static void init_all(Tcl_Interp *interp){
     Sqliteteststorage_Init(interp);
     Sqliteteststorage2_Init(interp);
     SqlitetestLsm_Init(interp);
+    Sqlitetest_mem_Init(interp);
 
 
     Tcl_CreateObjCommand(
@@ -2991,11 +2994,11 @@ int TCLSH_MAIN(int argc, char **argv){
   ** sqlite4_initialize() is. */
   sqlite4_shutdown(0);
 
-  Tcl_FindExecutable(argv[0]);
+  /*Tcl_FindExecutable(argv[0]);*/
   interp = Tcl_CreateInterp();
 
 #if TCLSH==2
-  sqlite4_config(0, SQLITE4_CONFIG_SINGLETHREAD);
+  sqlite4_env_config(0, SQLITE4_ENVCONFIG_SINGLETHREAD);
 #endif
 
   init_all(interp);
@@ -3014,12 +3017,14 @@ int TCLSH_MAIN(int argc, char **argv){
       const char *zInfo = Tcl_GetVar(interp, "errorInfo", TCL_GLOBAL_ONLY);
       if( zInfo==0 ) zInfo = Tcl_GetStringResult(interp);
       fprintf(stderr,"%s: %s\n", *argv, zInfo);
+      Tcl_DeleteInterp( interp );
       return 1;
     }
   }
   if( TCLSH==2 || argc<=1 ){
     Tcl_GlobalEval(interp, tclsh_main_loop());
   }
+  Tcl_DeleteInterp( interp );
   return 0;
 }
 #endif /* TCLSH */

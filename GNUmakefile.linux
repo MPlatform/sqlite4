@@ -42,6 +42,7 @@ endif
 ########################################################################
 # optionally set OPTS to various sqlite4 build options.
 # OPTS = -DHI_WORLD
+# OPTS += -DLSM_DEBUG_MEM=1
 
 ########################################################################
 # Now include the main rules...
