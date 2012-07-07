@@ -758,11 +758,9 @@ int lsmDbUpdateClient(lsm_db *pDb, int nLsmLevel, int bOvfl){
 */
 int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   Database *p = pDb->pDatabase;
-  Snapshot *pWorker;              /* Worker snapshot */
   Freelist *pFree;                /* Database free list */
   int iRet = 0;                   /* Block number of allocated block */
  
-  pWorker = pDb->pWorker;
   pFree = &p->freelist;
 
   if( pFree->nEntry>0 ){
