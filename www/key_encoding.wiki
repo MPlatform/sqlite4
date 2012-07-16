@@ -120,12 +120,12 @@ Examples:
 <tr><th> Value <th>       Exponent E <th> Significand M (in hex)
 <tr><td>  1.0                 <td> 1 <td>     02
 <tr><td>    10.0              <td> 1 <td>     14
-<tr><td>    99.0              <td> 1 <td>     b4
-<tr><td>    99.01             <td> 1 <td>     b5 02
-<tr><td>    99.0001           <td> 1 <td>     b5 01 02
+<tr><td>    99.0              <td> 1 <td>     c6
+<tr><td>    99.01             <td> 1 <td>     c7 02
+<tr><td>    99.0001           <td> 1 <td>     c7 01 02
 <tr><td>    100.0             <td> 2 <td>     02
-<tr><td>    100.1             <td> 2 <td>     03 02
 <tr><td>    100.01            <td> 2 <td>     03 01 02
+<tr><td>    100.1             <td> 2 <td>     03 01 14
 <tr><td>    1234              <td> 2 <td>     19 44
 <tr><td>    9999              <td> 2 <td>     c7 c6
 <tr><td>    9999.000001       <td> 2 <td>     c7 c7 01 01 02
