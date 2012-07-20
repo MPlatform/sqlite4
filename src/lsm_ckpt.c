@@ -380,7 +380,6 @@ int lsmCheckpointExport(
   int iOut = 0;                   /* Current offset in aCkpt[] */
   Level *pLevel;                  /* Level iterator */
   int i;                          /* Iterator used while serializing freelist */
-  u32 aDelta[LSM_FREELIST_DELTA_SIZE];
   CkptBuffer ckpt;
 
   assert( bOvfl || nLsmLevel==0 );
@@ -607,6 +606,7 @@ static int ckptImport(
 
       /* Read header fields */
       iId = ((i64)aInt[CKPT_HDR_ID_MSW] << 32) + (i64)aInt[CKPT_HDR_ID_LSW];
+      pDb->treehdr.iCkpt = iId;
       lsmSnapshotSetCkptid(pSnap, iId);
       nLevel = (int)aInt[CKPT_HDR_NLEVEL];
       lsmSnapshotSetNBlock(pSnap, (int)aInt[CKPT_HDR_NBLOCK]);
@@ -614,7 +614,7 @@ static int ckptImport(
       *pbOvfl = bOvfl = aInt[CKPT_HDR_OVFL];
 
       /* Import log offset */
-      ckptImportLog(aInt, &iIn, lsmDatabaseLog(pDb));
+      ckptImportLog(aInt, &iIn, &pDb->treehdr.log);
 
       /* Import append-point list */
       ckptImportAppendlist(pDb, aInt, &iIn, &rc);

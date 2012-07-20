@@ -95,14 +95,19 @@ typedef struct TreeLeaf TreeLeaf;
 typedef struct NodeVersion NodeVersion;
 
 /*
-** Container for a key-value pair.
+** Container for a key-value pair. Within the *-shm file, each key/value
+** pair is stored in a single allocation (which may not actually be 
+** contiguous in memory). Layout is the TreeKey structure, followed by
+** the nKey bytes of key blob, followed by the nValue bytes of value blob
+** (if nValue is non-negative).
 */
 struct TreeKey {
-  void *pKey;                     /* Pointer to key */
-  void *pValue;                   /* Pointer to value. May be NULL. */
   int nKey;                       /* Size of pKey in bytes */
   int nValue;                     /* Size of pValue. Or negative. */
 };
+
+#define TK_KEY(p) ((void *)&(p)[1])
+#define TK_VAL(p) ((void *)(((u8 *)&(p)[1]) + (p)->nValue))
 
 /*
 ** A single tree node. A node structure may contain up to 3 key/value
@@ -112,19 +117,19 @@ struct TreeKey {
 ** first though...
 */
 struct TreeNode {
-  TreeKey *apKey[3];              /* Array of pointers to key-value pairs */
+  u32 aiKeyPtr[3];                /* Array of pointers to TreeKey objects */
 
   /* The following fields are present for interior nodes only, not leaves. */
-  TreeNode *apChild[4];           /* Array of pointers to child nodes */
+  u32 aiChildPtr[4];              /* Array of pointers to child nodes */
 
-  int iV2;                        /* Version number of v2 */
-  u8 iV2Ptr;                      /* apChild[] entry replaced by pV2Ptr */
-  TreeNode *pV2Ptr;               /* Substitute pointer */
-  TreeNode *pNext;                /* Next in interior node rollback list */
+  /* The extra child pointer slot. */
+  u32 iV2;                        /* Transaction number of v2 */
+  u8 iV2Child;                    /* apChild[] entry replaced by pV2Ptr */
+  u32 iV2Ptr;                     /* Substitute pointer */
 };
 
 struct TreeLeaf {
-  TreeKey *apKey[3];              /* Array of pointers to key-value pairs */
+  u32 aiKeyPtr[3];                /* Array of pointers to TreeKey objects */
 };
 
 /*
@@ -182,9 +187,17 @@ struct Tree {
 ** not a leaf. This function returns the value of the iCell'th child
 ** sub-tree of the node.
 */
+#if 0
 static TreeNode *getChildPtr(TreeNode *p, int iVersion, int iCell){
   if( p->iV2 && p->iV2<=iVersion && iCell==p->iV2Ptr ) return p->pV2Ptr;
   return p->apChild[iCell];
+}
+#endif
+
+static u32 getChildPtr(TreeNode *p, int iVersion, int iCell){
+  assert( iCell>=0 && iCell<=array_size(p->aiChildPtr) );
+  if( p->iV2 && p->iV2<=iVersion && iCell==p->iV2Ptr ) return p->iV2Ptr;
+  return p->aiChildPtr[iCell];
 }
 
 /*
@@ -247,6 +260,7 @@ void assert_tree_looks_ok(int rc, Tree *pTree){
 #endif
 
 #ifdef LSM_DEBUG
+#if 0
 static void lsmAppendStrBlob(LsmString *pStr, void *pBlob, int nBlob){
   int i;
   lsmStringExtend(pStr, nBlob);
@@ -279,8 +293,10 @@ static void lsmAppendKeyValue(LsmString *pStr, TreeKey *pKey){
     lsmAppendStrBlob(pStr, pKey->pValue, pKey->nValue);
   }
 }
+#endif
 
 void dump_node(TreeNode *pNode, int nIndent, int isNode){
+#if 0
   if( pNode ){
     LsmString s;
     int i;
@@ -321,9 +337,11 @@ void dump_node(TreeNode *pNode, int nIndent, int isNode){
 
     }
   }
+#endif
 }
 
 void dump_node_contents(TreeNode *pNode, int iVersion, int nIndent, int isNode){
+#if 0
   int i;
   LsmString s;
 
@@ -346,6 +364,7 @@ void dump_node_contents(TreeNode *pNode, int iVersion, int nIndent, int isNode){
       dump_node_contents(pChild, iVersion, nIndent + 2, isNode-1);
     }
   }
+#endif
 }
 
 void dump_tree_contents(Tree *pTree, const char *zCaption){
@@ -423,43 +442,30 @@ static void treeCursorInit(lsm_db *pDb, TreeCursor *pCsr){
   pCsr->iNode = -1;
 }
 
-static TreeNode *newTreeLeaf(lsm_env *pEnv, Tree *pTree){
-  return (TreeNode *)lsmPoolMallocZero(pEnv, pTree->pPool, sizeof(TreeLeaf));
+
+static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
+  assert(!"implement me!");
 }
 
-static TreeNode *newTreeNode(lsm_env *pEnv, Tree *pTree){
-  return (TreeNode *)lsmPoolMallocZero(pEnv, pTree->pPool, sizeof(TreeNode));
-}
-
-static TreeNode *copyTreeNode(lsm_env *pEnv, Tree *pTree, TreeNode *pOld){
-  TreeNode *pNew;
-  pNew = (TreeNode *)lsmPoolMallocZero(pEnv, pTree->pPool, sizeof(TreeNode));
-
-  memcpy(pNew->apKey, pOld->apKey, sizeof(pNew->apKey));
-  memcpy(pNew->apChild, pOld->apChild, sizeof(pNew->apChild));
-  if( pOld->iV2 ) pNew->apChild[pOld->iV2Ptr] = pOld->pV2Ptr;
-
-  return pNew;
-}
-
-static TreeNode *copyTreeLeaf(lsm_env *pEnv, Tree *pTree, TreeNode *pOld){
-  TreeNode *pNew;
-  pNew = newTreeLeaf(pEnv, pTree);
-  memcpy(pNew, pOld, sizeof(TreeLeaf));
-  return pNew;
+static TreeKey *csrGetKey(TreeCursor *pCsr, int *pRc){
+  return (TreeKey *)treeShmptr(pCsr->pDb,
+      pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], pRc
+  );
 }
 
 /*
 ** Save the current position of tree cursor pCsr.
 */
-void lsmTreeCursorSave(TreeCursor *pCsr){
+int lsmTreeCursorSave(TreeCursor *pCsr){
+  int rc = LSM_OK;
   if( pCsr->pSave==0 ){
     int iNode = pCsr->iNode;
     if( iNode>=0 ){
-      pCsr->pSave = pCsr->apTreeNode[iNode]->apKey[pCsr->aiCell[iNode]];
+      pCsr->pSave = csrGetKey(pCsr, &rc);
     }
     pCsr->iNode = -1;
   }
+  return rc;
 }
 
 /*
@@ -471,10 +477,98 @@ static int treeCursorRestore(TreeCursor *pCsr, int *pRes){
     TreeKey *pKey = pCsr->pSave;
     pCsr->pSave = 0;
     if( pRes ){
-      rc = lsmTreeCursorSeek(pCsr, pKey->pKey, pKey->nKey, pRes);
+      rc = lsmTreeCursorSeek(pCsr, TK_KEY(pKey), pKey->nKey, pRes);
     }
   }
   return rc;
+}
+
+/*
+** Allocate nByte bytes of space within the *-shm file. If successful, 
+** return LSM_OK and set *piPtr to the offset within the file at which
+** the allocated space is located.
+*/
+static u32 treeShmalloc(lsm_db *pDb, int nByte, int *pRc){
+  u32 iRet = 0;
+  if( *pRc==LSM_OK ){
+    const static int CHUNK_SIZE = LSM_SHM_CHUNK_SIZE;
+    const static int CHUNK_HDR = LSM_SHM_CHUNK_HDR;
+
+    u32 iEof;                     /* End of current chunk */
+    u32 iWrite = pDb->treehdr.iWrite;
+
+    /* Round all allocations up to a multiple of 4 bytes. So that all
+     ** integer fields in shared memory are 32-bit aligned. */
+    nByte = ((nByte + 3) / 4) * 4;
+
+    /* TODO: Remove this limit by allowing non-contiguous allocations. */
+    assert( nByte <= (CHUNK_SIZE-CHUNK_HDR) );
+
+    iEof = (1 + ((iWrite-1) / CHUNK_SIZE)) * CHUNK_SIZE;
+    assert( iEof>=iWrite && (iEof-iWrite)<CHUNK_SIZE );
+
+    if( (iWrite+nByte)>iEof ){
+      /* Advance to the next chunk */
+      iWrite = iEof + CHUNK_HDR;
+    }
+
+    /* Allocate space at iWrite. */
+    iRet = iWrite;
+    pDb->treehdr.iWrite = iWrite + nByte;
+  }
+  return iRet;
+}
+
+static void *treeShmallocZero(lsm_db *pDb, int nByte, u32 *piPtr, int *pRc){
+  u32 iPtr;
+  void *p;
+  iPtr = treeShmalloc(pDb, nByte, pRc);
+  p = treeShmptr(pDb, iPtr, pRc);
+  if( p ){
+    assert( *pRc==LSM_OK );
+    memset(p, 0, nByte);
+    *piPtr = iPtr;
+  }
+  return p;
+}
+
+TreeNode *newTreeNode(lsm_db *pDb, u32 *piPtr, int *pRc){
+  return treeShmallocZero(pDb, sizeof(TreeNode), piPtr, pRc);
+}
+
+TreeLeaf *newTreeLeaf(lsm_db *pDb, u32 *piPtr, int *pRc){
+  return treeShmallocZero(pDb, sizeof(TreeLeaf), piPtr, pRc);
+}
+
+static TreeNode *copyTreeNode(
+  lsm_db *pDb, 
+  TreeNode *pOld, 
+  u32 *piNew, 
+  int *pRc
+){
+  TreeNode *pNew;
+
+  pNew = newTreeNode(pDb, piNew, pRc);
+  if( pNew ){
+    memcpy(pNew->aiKeyPtr, pOld->aiKeyPtr, sizeof(pNew->aiKeyPtr));
+    memcpy(pNew->aiChildPtr, pOld->aiChildPtr, sizeof(pNew->aiChildPtr));
+    if( pOld->iV2 ) pNew->aiChildPtr[pOld->iV2Child] = pOld->iV2Ptr;
+  }
+  return pNew;
+}
+
+static TreeNode *copyTreeLeaf(
+  lsm_db *pDb, 
+  TreeLeaf *pOld, 
+  u32 *piNew, 
+  int *pRc
+){
+  TreeLeaf *pNew;
+  pNew = newTreeLeaf(pDb, piNew, pRc);
+  if( pNew ){
+    memcpy(pNew, pOld, sizeof(TreeLeaf));
+  }
+  return (TreeNode *)pNew;
 }
 
 /*
@@ -487,11 +581,11 @@ static int treeCursorRestore(TreeCursor *pCsr, int *pRes){
 ** internal node, or by allocating a new TreeNode structure and then 
 ** calling this function on the parent of the internal node.
 */
-static int treeUpdatePtr(Tree *pTree, TreeCursor *pCsr, TreeNode *pNew){
+static int treeUpdatePtr(lsm_db *pDb, TreeCursor *pCsr, u32 iNew){
   int rc = LSM_OK;
   if( pCsr->iNode<0 ){
-    /* pNew is the new root node */
-    pTree->pWorking->pRoot = pNew;
+    /* iNew is the new root node */
+    pDb->treehdr.iRoot = iNew;
   }else{
     /* If this node already has version 2 content, allocate a copy and
     ** update the copy with the new pointer value. Otherwise, store the
@@ -505,26 +599,22 @@ static int treeUpdatePtr(Tree *pTree, TreeCursor *pCsr, TreeNode *pNew){
 
     if( p->iV2 ){
       /* The "allocate new TreeNode" option */
-      TreeNode *pCopy = copyTreeNode(pCsr->pDb->pEnv, pTree, p);
+      u32 iCopy;
+      TreeNode *pCopy;
+      pCopy = copyTreeNode(pDb, p, &iCopy, &rc);
       if( pCopy ){
-        pCopy->apChild[iChildPtr] = pNew;
+        assert( rc==LSM_OK );
+        pCopy->aiChildPtr[iChildPtr] = iNew;
         pCsr->iNode--;
-        rc = treeUpdatePtr(pTree, pCsr, pCopy);
-      }else{
-        rc = LSM_NOMEM_BKPT;
+        rc = treeUpdatePtr(pDb, pCsr, iCopy);
       }
     }else{
       /* The "v2 data" option */
-      p->iV2 = pTree->pWorking->iVersion;
-      p->iV2Ptr = (u8)iChildPtr;
-      p->pV2Ptr = (void *)pNew;
-      if( pTree->pRbLast ){
-        pTree->pRbLast->pNext = p;
-      }else{
-        pTree->pRbFirst = p;
-      }
-      pTree->pRbLast = p;
-      assert( pTree->pRbLast->pNext==0 );
+      p->iV2 = pDb->treehdr.iTransId;
+      p->iV2Child = (u8)iChildPtr;
+      p->iV2Ptr = iNew;
+
+      /* TODO: Add node p to connections rollback list */
     }
   }
 
@@ -544,60 +634,52 @@ static int treeUpdatePtr(Tree *pTree, TreeCursor *pCsr, TreeNode *pNew){
 ** smaller than pTreeKey.
 */
 static int treeInsert(
-  lsm_env *pEnv,
-  Tree *pTree, 
+  lsm_db *pDb,                    /* Database handle */
   TreeCursor *pCsr,               /* Cursor indicating path to insert at */
-  TreeNode *pLeftPtr,             /* New child pointer (or NULL for leaves) */
-  TreeKey *pTreeKey,              /* New key to insert */
-  TreeNode *pRightPtr,            /* New child pointer (or NULL for leaves) */
+  u32 iLeftPtr,                   /* Left child pointer */
+  u32 iTreeKey,                   /* Location of key to insert */
+  u32 iRightPtr,                  /* Right child pointer */
   int iSlot                       /* Position to insert key into */
 ){
   int rc = LSM_OK;
   TreeNode *pNode = pCsr->apTreeNode[pCsr->iNode];
 
-  /* Check if the leaf is currently full. If so, allocate a sibling node. */
-  if( pNode->apKey[0] && pNode->apKey[2] ){
-    TreeNode *pLeft;              /* New sibling node. */
-    TreeNode *pRight;             /* Sibling of pLeft (either new or pNode) */
+  /* Check if the node is currently full. If so, split pNode in two and
+  ** call this function recursively to add a key to the parent. Otherwise, 
+  ** insert the new key directly into pNode.  */
+  assert( pNode->aiKeyPtr[1] );
+  if( pNode->aiKeyPtr[0] && pNode->aiKeyPtr[2] ){
+    u32 iLeft; TreeNode *pLeft;   /* New left-hand sibling node */
+    u32 iRight; TreeNode *pRight; /* New right-hand sibling node */
 
-    pLeft = newTreeNode(pEnv, pTree);
-    pRight = newTreeNode(pEnv, pTree);
+    pLeft = newTreeNode(pDb, &iLeft, &rc);
+    pRight = newTreeNode(pDb, &iRight, &rc);
+    if( rc ) return rc;
+
+    pLeft->aiChildPtr[1] = getChildPtr(pNode, WORKING_VERSION, 0);
+    pLeft->aiKeyPtr[1] = pNode->aiKeyPtr[0];
+    pLeft->aiChildPtr[2] = getChildPtr(pNode, WORKING_VERSION, 1);
+
+    pRight->aiChildPtr[1] = getChildPtr(pNode, WORKING_VERSION, 2);
+    pRight->aiKeyPtr[1] = pNode->aiKeyPtr[2];
+    pRight->aiChildPtr[2] = getChildPtr(pNode, WORKING_VERSION, 3);
 
     if( pCsr->iNode==0 ){
       /* pNode is the root of the tree. Grow the tree by one level. */
-      TreeNode *pRoot;            /* New root node */
+      u32 iRoot; TreeNode *pRoot; /* New root node */
 
-      pRoot = newTreeNode(pEnv, pTree);
+      pRoot = newTreeNode(pDb, &iRoot, &rc);
+      pRoot->aiKeyPtr[1] = pNode->aiKeyPtr[1];
+      pRoot->aiChildPtr[1] = iLeft;
+      pRoot->aiChildPtr[2] = iRight;
 
-      pLeft->apChild[1] = getChildPtr(pNode, WORKING_VERSION, 0);
-      pLeft->apKey[1] = pNode->apKey[0];
-      pLeft->apChild[2] = getChildPtr(pNode, WORKING_VERSION, 1);
-
-      pRight->apChild[1] = getChildPtr(pNode, WORKING_VERSION, 2);
-      pRight->apKey[1] = pNode->apKey[2];
-      pRight->apChild[2] = getChildPtr(pNode, WORKING_VERSION, 3);
-
-      pRoot->apKey[1] = pNode->apKey[1];
-      pRoot->apChild[1] = pLeft;
-      pRoot->apChild[2] = pRight;
-
-      pTree->pWorking->pRoot = pRoot;
-      pTree->pWorking->nHeight++;
+      pDb->treehdr.iRoot = iRoot;
+      pDb->treehdr.nHeight++;
     }else{
-      TreeKey *pParentKey;        /* Key to insert into parent node */
-      pParentKey = pNode->apKey[1];
-
-      pLeft->apChild[1] = getChildPtr(pNode, WORKING_VERSION, 0);
-      pLeft->apKey[1] = pNode->apKey[0];
-      pLeft->apChild[2] = getChildPtr(pNode, WORKING_VERSION, 1);
-
-      pRight->apChild[1] = getChildPtr(pNode, WORKING_VERSION, 2);
-      pRight->apKey[1] = pNode->apKey[2];
-      pRight->apChild[2] = getChildPtr(pNode, WORKING_VERSION, 3);
 
       pCsr->iNode--;
-      treeInsert(pEnv, 
-          pTree, pCsr, pLeft, pParentKey, pRight, pCsr->aiCell[pCsr->iNode]
+      rc = treeInsert(pDb, pCsr, 
+          iLeft, pNode->aiKeyPtr[1], iRight, pCsr->aiCell[pCsr->iNode]
       );
     }
 
@@ -605,120 +687,125 @@ static int treeInsert(
     assert( pRight->iV2==0 );
     switch( iSlot ){
       case 0:
-        pLeft->apKey[0] = pTreeKey;
-        pLeft->apChild[0] = pLeftPtr;
-        if( pRightPtr ) pLeft->apChild[1] = pRightPtr;
+        pLeft->aiKeyPtr[0] = iTreeKey;
+        pLeft->aiChildPtr[0] = iLeftPtr;
+        if( iRightPtr ) pLeft->aiChildPtr[1] = iRightPtr;
         break;
       case 1:
-        pLeft->apChild[3] = (pRightPtr ? pRightPtr : pLeft->apChild[2]);
-        pLeft->apKey[2] = pTreeKey;
-        pLeft->apChild[2] = pLeftPtr;
+        pLeft->aiChildPtr[3] = (iRightPtr ? iRightPtr : pLeft->aiChildPtr[2]);
+        pLeft->aiKeyPtr[2] = iTreeKey;
+        pLeft->aiChildPtr[2] = iLeftPtr;
         break;
       case 2:
-        pRight->apKey[0] = pTreeKey;
-        pRight->apChild[0] = pLeftPtr;
-        if( pRightPtr ) pRight->apChild[1] = pRightPtr;
+        pRight->aiKeyPtr[0] = iTreeKey;
+        pRight->aiChildPtr[0] = iLeftPtr;
+        if( iRightPtr ) pRight->aiChildPtr[1] = iRightPtr;
         break;
       case 3:
-        pRight->apChild[3] = (pRightPtr ? pRightPtr : pRight->apChild[2]);
-        pRight->apKey[2] = pTreeKey;
-        pRight->apChild[2] = pLeftPtr;
+        pRight->aiChildPtr[3] = (iRightPtr ? iRightPtr : pRight->aiChildPtr[2]);
+        pRight->aiKeyPtr[2] = iTreeKey;
+        pRight->aiChildPtr[2] = iLeftPtr;
         break;
     }
 
   }else{
     TreeNode *pNew;
-    TreeKey **pOut;
-    TreeNode **pPtr;
+    u32 *piKey;
+    u32 *piChild;
+    u32 iStore = 0;
+    u32 iNew = 0;
     int i;
 
-    pNew = newTreeNode(pEnv, pTree);
-    if( pNew ){
-      TreeNode *pStore = 0;
-      pOut = pNew->apKey;
-      pPtr = pNew->apChild;
+    /* Allocate a new version of node pNode. */
+    pNew = newTreeNode(pDb, &iNew, &rc);
+    if( rc ) return rc;
 
-      for(i=0; i<iSlot; i++){
-        if( pNode->apKey[i] ){
-          *(pOut++) = pNode->apKey[i];
-          *(pPtr++) = getChildPtr(pNode, WORKING_VERSION, i);
-        }
+    piKey = pNew->aiKeyPtr;
+    piChild = pNew->aiChildPtr;
+
+    for(i=0; i<iSlot; i++){
+      if( pNode->aiKeyPtr[i] ){
+        *(piKey++) = pNode->aiKeyPtr[i];
+        *(piChild++) = getChildPtr(pNode, WORKING_VERSION, i);
       }
-
-      *pOut++ = pTreeKey;
-      *pPtr++ = pLeftPtr;
-
-      pStore = pRightPtr;
-      for(i=iSlot; i<3; i++){
-        if( pNode->apKey[i] ){
-          *(pOut++) = pNode->apKey[i];
-          *(pPtr++) = pStore ? pStore : getChildPtr(pNode, WORKING_VERSION, i);
-          pStore = 0;
-        }
-      }
-      if( pStore ){
-        *pPtr = pStore;
-      }else{
-        *pPtr = getChildPtr(pNode, WORKING_VERSION, (pNode->apKey[2] ? 3 : 2));
-      }
-
-      pCsr->iNode--;
-      rc = treeUpdatePtr(pTree, pCsr, pNew);
-    }else{
-      rc = LSM_NOMEM_BKPT;
     }
+
+    *piKey++ = iTreeKey;
+    *piChild++ = iLeftPtr;
+
+    iStore = iRightPtr;
+    for(i=iSlot; i<3; i++){
+      if( pNode->aiKeyPtr[i] ){
+        *(piKey++) = pNode->aiKeyPtr[i];
+        *(piChild++) = iStore ? iStore : getChildPtr(pNode, WORKING_VERSION, i);
+        iStore = 0;
+      }
+    }
+
+    if( iStore ){
+      *piChild = iStore;
+    }else{
+      *piChild = getChildPtr(pNode, WORKING_VERSION, 
+          (pNode->aiKeyPtr[2] ? 3 : 2)
+      );
+    }
+    pCsr->iNode--;
+    rc = treeUpdatePtr(pDb, pCsr, iNew);
   }
 
   return rc;
 }
 
 static int treeInsertLeaf(
-  lsm_env *pEnv,
-  Tree *pTree,                    /* Tree structure */
+  lsm_db *pDb,                    /* Database handle */
   TreeCursor *pCsr,               /* Cursor structure */
-  TreeKey *pTreeKey,              /* Key to insert */
+  u32 iTreeKey,                   /* Key pointer to insert */
   int iSlot                       /* Insert key to the left of this */
 ){
-  int rc;                         /* Return code */
+  int rc = LSM_OK;                /* Return code */
   TreeNode *pLeaf = pCsr->apTreeNode[pCsr->iNode];
-  TreeNode *pNew;
+  TreeLeaf *pNew;
+  u32 iNew;
 
   assert( iSlot>=0 && iSlot<=4 );
   assert( pCsr->iNode>0 );
-  assert( pLeaf->apKey[1] );
+  assert( pLeaf->aiKeyPtr[1] );
 
   pCsr->iNode--;
 
-  pNew = newTreeLeaf(pEnv, pTree);
-  if( !pNew ){
-    rc = LSM_NOMEM_BKPT;
-  }else if( pLeaf->apKey[0] && pLeaf->apKey[2] ){
-    TreeNode *pRight;
+  pNew = newTreeLeaf(pDb, &iNew, &rc);
+  if( pNew ){
+    if( pLeaf->aiKeyPtr[0] && pLeaf->aiKeyPtr[2] ){
+      /* The leaf is full. Split it in two. */
+      TreeLeaf *pRight;
+      u32 iRight;
+      pRight = newTreeLeaf(pDb, &iRight, &rc);
+      if( pRight ){
+        assert( rc==LSM_OK );
+        pNew->aiKeyPtr[1] = pLeaf->aiKeyPtr[0];
+        pRight->aiKeyPtr[1] = pLeaf->aiKeyPtr[2];
+        switch( iSlot ){
+          case 0: pNew->aiKeyPtr[0] = iTreeKey; break;
+          case 1: pNew->aiKeyPtr[2] = iTreeKey; break;
+          case 2: pRight->aiKeyPtr[0] = iTreeKey; break;
+          case 3: pRight->aiKeyPtr[2] = iTreeKey; break;
+        }
 
-    pRight = newTreeLeaf(pEnv, pTree);
-    if( pRight==0 ){
-      rc = LSM_NOMEM_BKPT;
-    }else{
-      pNew->apKey[1] = pLeaf->apKey[0];
-      pRight->apKey[1] = pLeaf->apKey[2];
-      switch( iSlot ){
-        case 0: pNew->apKey[0] = pTreeKey; break;
-        case 1: pNew->apKey[2] = pTreeKey; break;
-        case 2: pRight->apKey[0] = pTreeKey; break;
-        case 3: pRight->apKey[2] = pTreeKey; break;
+        rc = treeInsert(pDb, pCsr, iNew, pLeaf->aiKeyPtr[1], iRight, 
+            pCsr->aiCell[pCsr->iNode]
+        );
       }
-      rc = treeInsert(pEnv, pTree, pCsr, pNew, pLeaf->apKey[1], pRight, 
-          pCsr->aiCell[pCsr->iNode]
-      );
+    }else{
+      int iOut = 0;
+      int i;
+      for(i=0; i<4; i++){
+        if( i==iSlot ) pNew->aiKeyPtr[iOut++] = iTreeKey;
+        if( i<3 && pLeaf->aiKeyPtr[i] ){
+          pNew->aiKeyPtr[iOut++] = pLeaf->aiKeyPtr[i];
+        }
+      }
+      rc = treeUpdatePtr(pDb, pCsr, iNew);
     }
-  }else{
-    int iOut = 0;
-    int i;
-    for(i=0; i<4; i++){
-      if( i==iSlot ) pNew->apKey[iOut++] = pTreeKey;
-      if( i<3 && pLeaf->apKey[i] ) pNew->apKey[iOut++] = pLeaf->apKey[i];
-    }
-    rc = treeUpdatePtr(pTree, pCsr, pNew);
   }
 
   return rc;
@@ -738,49 +825,42 @@ int lsmTreeInsert(
   void *pVal,                     /* Pointer to value data (or NULL) */
   int nVal                        /* Bytes in value data (or -ve for delete) */
 ){
-  lsm_env *pEnv = pDb->pEnv;
-  TreeVersion *pTV = pDb->pTV;
-  Tree *pTree = pTV->pTree;
   int rc = LSM_OK;                /* Return Code */
   TreeKey *pTreeKey;              /* New key-value being inserted */
   int nTreeKey;                   /* Number of bytes allocated at pTreeKey */
+  u32 iTreeKey;
+  u8 *a;
+  TreeHeader *pHdr = &pDb->treehdr;
 
   assert( nVal>=0 || pVal==0 );
+#if 0
   assert( pTV==pTree->pWorking );
   assert_tree_looks_ok(LSM_OK, pTree);
   /* dump_tree_contents(pTree, "before"); */
+#endif
 
   /* Allocate and populate a new key-value pair structure */
   nTreeKey = sizeof(TreeKey) + nKey + (nVal>0 ? nVal : 0);
-  pTreeKey = (TreeKey *)lsmPoolMalloc(pDb->pEnv, pTree->pPool, nTreeKey);
-  if( !pTreeKey ) return LSM_NOMEM_BKPT;
-  pTreeKey->pKey = (void *)&pTreeKey[1];
-  memcpy(pTreeKey->pKey, pKey, nKey);
-  if( nVal>0 ){
-    pTreeKey->pValue = (void *)&((u8 *)(pTreeKey->pKey))[nKey];
-    memcpy(pTreeKey->pValue, pVal, nVal);
-  }else{
-    pTreeKey->pValue = 0;
-  }
+  iTreeKey = treeShmalloc(pDb, nTreeKey, &rc);
+  pTreeKey = (TreeKey *)treeShmptr(pDb, iTreeKey, &rc);
+  if( rc!=LSM_OK ) return rc;
   pTreeKey->nValue = nVal;
   pTreeKey->nKey = nKey;
+  a = (u8 *)&pTreeKey[1];
+  memcpy(a, pKey, nKey);
+  if( nVal>0 ) memcpy(&a[nKey], pVal, nVal);
 
-  if( pTree->pWorking->pRoot==0 ){
+  if( pHdr->iRoot==0 ){
     /* The tree is completely empty. Add a new root node and install
     ** (pKey/nKey) as the middle entry. Even though it is a leaf at the
     ** moment, use newTreeNode() to allocate the node (i.e. allocate enough
     ** space for the fields used by interior nodes). This is because the
-    ** treeInsert() routine may convert this node to an interior node.  
-    */
-    TreeNode *pRoot;              /* New tree root node */
-    pRoot = newTreeNode(pEnv, pTree);
-    if( !pRoot ){
-      rc = LSM_NOMEM_BKPT;
-    }else{
-      pRoot->apKey[1] = pTreeKey;
-      pTree->pWorking->pRoot = pRoot;
-      assert( pTree->pWorking->nHeight==0 );
-      pTree->pWorking->nHeight = 1;
+    ** treeInsert() routine may convert this node to an interior node. */
+    TreeNode *pRoot = newTreeNode(pDb, &pHdr->iRoot, &rc);
+    if( rc==LSM_OK ){
+      assert( pHdr->nHeight==0 );
+      pRoot->aiKeyPtr[1] = iTreeKey;
+      pHdr->nHeight = 1;
     }
   }else{
     TreeCursor csr;
@@ -793,23 +873,26 @@ int lsmTreeInsert(
     if( res==0 ){
       /* The search found a match within the tree. */
       TreeNode *pNew;
+      u32 iNew;
       TreeNode *pNode = csr.apTreeNode[csr.iNode];
       int iCell = csr.aiCell[csr.iNode];
 
       /* Create a copy of this node */
-      if( (csr.iNode>0 && csr.iNode==(pTree->pWorking->nHeight-1)) ){
-        pNew = copyTreeLeaf(pEnv, pTree, pNode);
+      if( (csr.iNode>0 && csr.iNode==(pHdr->nHeight-1)) ){
+        pNew = copyTreeLeaf(pDb, (TreeLeaf *)pNode, &iNew, &rc);
       }else{
-        pNew = copyTreeNode(pEnv, pTree, pNode);
+        pNew = copyTreeNode(pDb, pNode, &iNew, &rc);
       }
 
-      /* Modify the value in the new version */
-      pNew->apKey[iCell] = pTreeKey;
+      if( rc==LSM_OK ){
+        /* Modify the value in the new version */
+        pNew->aiKeyPtr[iCell] = iTreeKey;
 
-      /* Change the pointer in the parent (if any) to point at the new 
-      ** TreeNode */
-      csr.iNode--;
-      treeUpdatePtr(pTree, &csr, pNew);
+        /* Change the pointer in the parent (if any) to point at the new 
+        ** TreeNode */
+        csr.iNode--;
+        treeUpdatePtr(pDb, &csr, iNew);
+      }
     }else{
       /* The cursor now points to the leaf node into which the new entry should
       ** be inserted. There may or may not be a free slot within the leaf for
@@ -822,9 +905,9 @@ int lsmTreeInsert(
       */
       int iSlot = csr.aiCell[csr.iNode] + (res<0);
       if( csr.iNode==0 ){
-        rc = treeInsert(pEnv, pTree, &csr, 0, pTreeKey, 0, iSlot);
+        rc = treeInsert(pDb, &csr, 0, iTreeKey, 0, iSlot);
       }else{
-        rc = treeInsertLeaf(pEnv, pTree, &csr, pTreeKey, iSlot);
+        rc = treeInsertLeaf(pDb, &csr, iTreeKey, iSlot);
       }
     }
   }
@@ -883,17 +966,16 @@ void lsmTreeCursorReset(TreeCursor *pCsr){
 #ifndef NDEBUG
 static int treeCsrCompare(TreeCursor *pCsr, void *pKey, int nKey){
   TreeKey *p;
-  int cmp;
+  int cmp = 0;
+  int rc = LSM_OK;
   assert( pCsr->iNode>=0 );
-  p = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
-  cmp = memcmp(p->pKey, pKey, LSM_MIN(p->nKey, nKey));
-  if( cmp==0 ){
-    cmp = p->nKey - nKey;
+  p = csrGetKey(pCsr, &rc);
+  if( p ){
+    cmp = pCsr->pDb->xCmp(TK_KEY(p), p->nKey, pKey, nKey);
   }
   return cmp;
 }
 #endif
-
 
 
 /*
@@ -911,32 +993,40 @@ static int treeCsrCompare(TreeCursor *pCsr, void *pKey, int nKey){
 **   * If the tree is empty, leave the cursor at EOF and set *pRes to -1.
 */
 int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
-  TreeVersion *p = pCsr->pDb->pTV;
-  int (*xCmp)(void *, int, void *, int) = p->pTree->xCmp;
-  TreeNode *pNode = p->pRoot;     /* Current node in search */
+  int rc = LSM_OK;                /* Return code */
+  lsm_db *pDb = pCsr->pDb;
+  TreeHeader *pHdr = &pCsr->pDb->treehdr;
+  int (*xCmp)(void *, int, void *, int) = pDb->xCmp;
+
+  u32 iNodePtr;                   /* Location of current node in search */
 
   /* Discard any saved position data */
   treeCursorRestore(pCsr, 0);
 
-  if( pNode==0 ){
-    /* A special case - the tree is completely empty. */
+  iNodePtr = pDb->treehdr.iRoot;
+  if( iNodePtr==0 ){
+    /* Either an error occurred or the tree is completely empty. */
+    assert( rc!=LSM_OK || pDb->treehdr.iRoot==0 );
     *pRes = -1;
     pCsr->iNode = -1;
   }else{
     int res = 0;                  /* Result of comparison function */
     int iNode = -1;
-    while( pNode ){
+    while( iNodePtr ){
+      TreeNode *pNode;            /* Node at location iNodePtr */
       int iTest;                  /* Index of second key to test (0 or 2) */
       TreeKey *pTreeKey;          /* Key to compare against */
 
+      pNode = (TreeNode *)treeShmptr(pDb, iNodePtr, &rc);
       iNode++;
       pCsr->apTreeNode[iNode] = pNode;
 
       /* Compare (pKey/nKey) with the key in the middle slot of B-tree node
       ** pNode. The middle slot is never empty. If the comparison is a match,
       ** then the search is finished. Break out of the loop. */
-      pTreeKey = pNode->apKey[1];
-      res = xCmp(pTreeKey->pKey, pTreeKey->nKey, pKey, nKey);
+      pTreeKey = (TreeKey *)treeShmptr(pDb, pNode->aiKeyPtr[1], &rc);
+      if( rc ) return rc;
+      res = xCmp((void *)&pTreeKey[1], pTreeKey->nKey, pKey, nKey);
       if( res==0 ){
         pCsr->aiCell[iNode] = 1;
         break;
@@ -946,23 +1036,24 @@ int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
       ** to either the left or right key of the B-tree node, if such a key
       ** exists. */
       iTest = (res>0 ? 0 : 2);
-      pTreeKey = pNode->apKey[iTest];
+      pTreeKey = (TreeKey *)treeShmptr(pDb, pNode->aiKeyPtr[iTest], &rc);
+      if( rc ) return rc;
       if( pTreeKey==0 ){
         iTest = 1;
       }else{
-        res = xCmp(pTreeKey->pKey, pTreeKey->nKey, pKey, nKey);
+        res = xCmp((void *)&pTreeKey[1], pTreeKey->nKey, pKey, nKey);
         if( res==0 ){
           pCsr->aiCell[iNode] = iTest;
           break;
         }
       }
 
-      if( iNode<(p->nHeight-1) ){
-        pNode = getChildPtr(pNode, p->iVersion, iTest + (res<0));
+      if( iNode<(pHdr->nHeight-1) ){
+        iNodePtr = getChildPtr(pNode, pDb->treehdr.iTransId, iTest + (res<0));
       }else{
-        pNode = 0;
+        iNodePtr = 0;
       }
-      pCsr->aiCell[iNode] = iTest + (pNode && (res<0));
+      pCsr->aiCell[iNode] = iTest + (iNodePtr && (res<0));
     }
 
     *pRes = res;
@@ -977,17 +1068,17 @@ int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
   }
 #endif
 
-  return LSM_OK;
+  return rc;
 }
 
 int lsmTreeCursorNext(TreeCursor *pCsr){
 #ifndef NDEBUG
   TreeKey *pK1;
 #endif
-
-  TreeVersion *p = pCsr->pDb->pTV;
-  const int iLeaf = p->nHeight-1;
+  lsm_db *pDb = pCsr->pDb;
+  const int iLeaf = pDb->treehdr.nHeight-1;
   int iCell; 
+  int rc = LSM_OK; 
   TreeNode *pNode; 
 
   /* Restore the cursor position, if required */
@@ -999,7 +1090,8 @@ int lsmTreeCursorNext(TreeCursor *pCsr){
   ** end of this function - to check that the 'next' key really is larger
   ** than the current key. */
 #ifndef NDEBUG
-  pK1 = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
+  pK1 = csrGetKey(pCsr, &rc);
+  if( rc!=LSM_OK ) return rc;
 #endif
 
   assert( lsmTreeCursorValid(pCsr) );
@@ -1011,45 +1103,45 @@ int lsmTreeCursorNext(TreeCursor *pCsr){
   /* If the current node is not a leaf, and the current cell has sub-tree
   ** associated with it, descend to the left-most key on the left-most
   ** leaf of the sub-tree.  */
-  if( pCsr->iNode<iLeaf && getChildPtr(pNode, p->iVersion, iCell) ){
+  if( pCsr->iNode<iLeaf && getChildPtr(pNode, pDb->treehdr.iTransId, iCell) ){
     do {
+      u32 iNodePtr;
       pCsr->iNode++;
-      pNode = getChildPtr(pNode, p->iVersion, iCell);
+      iNodePtr = getChildPtr(pNode, pDb->treehdr.iTransId, iCell);
+      pNode = (TreeNode *)treeShmptr(pDb, iNodePtr, &rc);
       pCsr->apTreeNode[pCsr->iNode] = pNode;
-      iCell = pCsr->aiCell[pCsr->iNode] = (pNode->apKey[0]==0);
+      iCell = pCsr->aiCell[pCsr->iNode] = (pNode->aiKeyPtr[0]==0);
     }while( pCsr->iNode < iLeaf );
   }
 
   /* Otherwise, the next key is found by following pointer up the tree 
   ** until there is a key immediately to the right of the pointer followed 
   ** to reach the sub-tree containing the current key. */
-  else if( iCell>=3 || pNode->apKey[iCell]==0 ){
+  else if( iCell>=3 || pNode->aiKeyPtr[iCell]==0 ){
     while( (--pCsr->iNode)>=0 ){
       iCell = pCsr->aiCell[pCsr->iNode];
-      if( iCell<3 && pCsr->apTreeNode[pCsr->iNode]->apKey[iCell] ) break;
+      if( iCell<3 && pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[iCell] ) break;
     }
   }
 
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
-    TreeKey *pK2;
-    int (*xCmp)(void *, int, void *, int) = pCsr->pDb->xCmp;
-    pK2 = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
-    assert( xCmp(pK2->pKey, pK2->nKey, pK1->pKey, pK1->nKey)>0 );
+    TreeKey *pK2 = csrGetKey(pCsr, &rc);
+    assert( rc || pDb->xCmp(TK_KEY(pK2), pK2->nKey, TK_KEY(pK1), pK1->nKey)>0 );
   }
 #endif
 
-  return LSM_OK;
+  return rc;
 }
 
 int lsmTreeCursorPrev(TreeCursor *pCsr){
 #ifndef NDEBUG
   TreeKey *pK1;
 #endif
-
-  TreeVersion *p = pCsr->pDb->pTV;
-  const int iLeaf = p->nHeight-1;
+  lsm_db *pDb = pCsr->pDb;
+  const int iLeaf = pDb->treehdr.nHeight-1;
   int iCell; 
+  int rc = LSM_OK; 
   TreeNode *pNode; 
 
   /* Restore the cursor position, if required */
@@ -1061,7 +1153,8 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
   ** end of this function - to check that the 'next' key really is smaller
   ** than the current key. */
 #ifndef NDEBUG
-  pK1 = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
+  pK1 = csrGetKey(pCsr, &rc);
+  if( rc!=LSM_OK ) return rc;
 #endif
 
   assert( lsmTreeCursorValid(pCsr) );
@@ -1072,12 +1165,15 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
   /* If the current node is not a leaf, and the current cell has sub-tree
   ** associated with it, descend to the right-most key on the right-most
   ** leaf of the sub-tree.  */
-  if( pCsr->iNode<iLeaf && getChildPtr(pNode, p->iVersion, iCell) ){
+  if( pCsr->iNode<iLeaf && getChildPtr(pNode, pDb->treehdr.iTransId, iCell) ){
     do {
+      u32 iNodePtr;
       pCsr->iNode++;
-      pNode = getChildPtr(pNode, p->iVersion, iCell);
+      iNodePtr = getChildPtr(pNode, pDb->treehdr.iTransId, iCell);
+      pNode = (TreeNode *)treeShmptr(pDb, iNodePtr, &rc);
+      if( rc!=LSM_OK ) break;
       pCsr->apTreeNode[pCsr->iNode] = pNode;
-      iCell = 1 + (pNode->apKey[2]!=0) + (pCsr->iNode < iLeaf);
+      iCell = 1 + (pNode->aiKeyPtr[2]!=0) + (pCsr->iNode < iLeaf);
       pCsr->aiCell[pCsr->iNode] = iCell;
     }while( pCsr->iNode < iLeaf );
   }
@@ -1088,21 +1184,19 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
   else{
     do {
       iCell = pCsr->aiCell[pCsr->iNode]-1;
-      if( iCell>=0 && pCsr->apTreeNode[pCsr->iNode]->apKey[iCell] ) break;
+      if( iCell>=0 && pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[iCell] ) break;
     }while( (--pCsr->iNode)>=0 );
     pCsr->aiCell[pCsr->iNode] = iCell;
   }
 
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
-    TreeKey *pK2;
-    int (*xCmp)(void *, int, void *, int) = pCsr->pDb->xCmp;
-    pK2 = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
-    assert( xCmp(pK2->pKey, pK2->nKey, pK1->pKey, pK1->nKey)<0 );
+    TreeKey *pK2 = csrGetKey(pCsr, &rc);
+    assert( rc || pDb->xCmp(TK_KEY(pK2), pK2->nKey, TK_KEY(pK1), pK1->nKey)<0 );
   }
 #endif
 
-  return LSM_OK;
+  return rc;
 }
 
 /*
@@ -1110,63 +1204,83 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
 ** in-memory tree.
 */
 int lsmTreeCursorEnd(TreeCursor *pCsr, int bLast){
-  TreeVersion *p = pCsr->pDb->pTV;
-  TreeNode *pNode = p->pRoot;
+  lsm_db *pDb = pCsr->pDb;
+  TreeHeader *pHdr = &pDb->treehdr;
+  int rc = LSM_OK;
+
+  u32 iNodePtr;
   pCsr->iNode = -1;
 
   /* Discard any saved position data */
   treeCursorRestore(pCsr, 0);
 
-  while( pNode ){
+  iNodePtr = pHdr->iRoot;
+  while( iNodePtr ){
     int iCell;
-    if( bLast ){
-      iCell = ((pNode->apKey[2]==0) ? 2 : 3);
-    }else{
-      iCell = ((pNode->apKey[0]==0) ? 1 : 0);
-    }
+    TreeNode *pNode;
 
+    pNode = (TreeNode *)treeShmptr(pDb, iNodePtr, &rc);
+    if( rc ) break;
+
+    if( bLast ){
+      iCell = ((pNode->aiKeyPtr[2]==0) ? 2 : 3);
+    }else{
+      iCell = ((pNode->aiKeyPtr[0]==0) ? 1 : 0);
+    }
     pCsr->iNode++;
     pCsr->apTreeNode[pCsr->iNode] = pNode;
 
-    if( pCsr->iNode<p->nHeight-1 ){
-      pNode = getChildPtr(pNode, p->iVersion, iCell);
+    if( pCsr->iNode<pHdr->nHeight-1 ){
+      iNodePtr = getChildPtr(pNode, pHdr->iTransId, iCell);
     }else{
-      pNode = 0;
+      iNodePtr = 0;
     }
-    pCsr->aiCell[pCsr->iNode] = iCell - (pNode==0 && bLast);
+    pCsr->aiCell[pCsr->iNode] = iCell - (iNodePtr==0 && bLast);
   }
-  return LSM_OK;
+
+  return rc;
 }
 
 int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey){
   TreeKey *pTreeKey;
+  int rc = LSM_OK;
+
   assert( lsmTreeCursorValid(pCsr) );
 
   pTreeKey = pCsr->pSave;
   if( !pTreeKey ){
-    pTreeKey = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
+    pTreeKey = (TreeKey *)treeShmptr(pCsr->pDb,
+        pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], &rc
+    );
   }
-  *ppKey = pTreeKey->pKey;
-  *pnKey = pTreeKey->nKey;
+  if( rc==LSM_OK ){
+    *pnKey = pTreeKey->nKey;
+    *ppKey = (void *)&pTreeKey[1];
+  }
 
-  return LSM_OK;
+  return rc;
 }
 
 int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal){
-  TreeKey *pTreeKey;
   int res = 0;
+  int rc;
 
-  treeCursorRestore(pCsr, &res);
+  rc = treeCursorRestore(pCsr, &res);
   if( res==0 ){
-    pTreeKey = pCsr->apTreeNode[pCsr->iNode]->apKey[pCsr->aiCell[pCsr->iNode]];
-    *ppVal = pTreeKey->pValue;
-    *pnVal = pTreeKey->nValue;
+    TreeKey *pTreeKey;
+    pTreeKey = (TreeKey *)treeShmptr(pCsr->pDb,
+        pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], &rc
+    );
+    if( rc==LSM_OK ){
+      *pnVal = pTreeKey->nValue;
+      *ppVal = (void *)(((u8 *)&pTreeKey[1]) + pTreeKey->nValue);
+    }
   }else{
     *ppVal = 0;
     *pnVal = 0;
   }
 
-  return LSM_OK;
+  return rc;
 }
 
 /*
@@ -1181,6 +1295,8 @@ int lsmTreeCursorValid(TreeCursor *pCsr){
 ** populated by a call to lsmTreeMark().
 */
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
+  assert( 0 );
+#if 0
   TreeVersion *pWorking = pDb->pTV;
   Tree *pTree = pWorking->pTree;
   TreeNode *p;
@@ -1215,6 +1331,7 @@ void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
   }
 
   lsmPoolRollback(pDb->pEnv, pTree->pPool, pMark->pMpChunk, pMark->iMpOff);
+#endif
 }
 
 /*
@@ -1366,3 +1483,9 @@ void lsmTreeRelease(lsm_env *pEnv, Tree *pTree){
     lsmTreeReleaseReadVersion(pEnv, pTree->pCommit);
   }
 }
+
+
+
+
+
+

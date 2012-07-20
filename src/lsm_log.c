@@ -898,7 +898,7 @@ int lsmLogRecover(lsm_db *pDb){
   rc = lsmBeginRecovery(pDb);
   if( rc!=LSM_OK ) return rc;
 
-  pLog = lsmDatabaseLog(pDb);
+  pLog = &pDb->treehdr.log;
   logReaderInit(pDb, pLog, 1, &reader);
   lsmStringInit(&buf1, pDb->pEnv);
   lsmStringInit(&buf2, pDb->pEnv);

@@ -190,9 +190,15 @@ struct Database {
   i64 iCheckpointId;              /* Largest snapshot id stored in db file */
   int iSlot;                      /* Meta page containing iCheckpointId */
 
+  int nShmChunk;
+  void **apShmChunk;
+
   /* Protected by the global mutex (enterGlobalMutex/leaveGlobalMutex): */
   int nDbRef;                     /* Number of associated lsm_db handles */
   Database *pDbNext;              /* Next Database structure in global list */
+
+  /* List of connections. Protected by client mutex. */
+  lsm_db *pConn;
 };
 
 /*
@@ -432,6 +438,11 @@ int lsmDbDatabaseFind(
 
     if( p ) p->nDbRef++;
     leaveGlobalMutex(pEnv);
+
+    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
+    pDb->pNext = p->pConn;
+    p->pConn = pDb;
+    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   }
 
   lsmFree(pEnv, pId);
@@ -459,6 +470,13 @@ static void freeClientSnapshot(lsm_env *pEnv, Snapshot *p){
 void lsmDbDatabaseRelease(lsm_db *pDb){
   Database *p = pDb->pDatabase;
   if( p ){
+    lsm_db **ppDb;
+
+    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
+    for(ppDb=&p->pConn; *ppDb!=pDb; ppDb=&((*ppDb)->pNext));
+    *ppDb = pDb->pNext;
+    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
+
     enterGlobalMutex(pDb->pEnv);
     p->nDbRef--;
     if( p->nDbRef==0 ){
@@ -887,7 +905,7 @@ void lsmFreelistDeltaEnd(lsm_db *pDb){
 }
 
 int lsmFreelistDelta(lsm_db *pDb){
-  return &pDb->pDatabase->nFreelistDelta;
+  return pDb->pDatabase->nFreelistDelta;
 }
 
 /*
@@ -952,9 +970,6 @@ int lsmSetFreelist(lsm_db *pDb, u32 *aElem, int nElem){
   lsm_env *pEnv = pDb->pEnv;
   int rc = LSM_OK;                /* Return code */
   int i;                          /* Iterator variable */
-  int nIgnore;                    /* Number of entries to ignore */
-  int iRefree1;                   /* A refreed block (or 0) */
-  int iRefree2;                   /* A refreed block (or 0) */
   Freelist *pFree;                /* Database free-list */
 
   assert( (nElem%3)==0 );
@@ -1077,7 +1092,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
 ** this function.
 */
 int lsmBeginRecovery(lsm_db *pDb){
-  int rc;                         /* Return code */
+  int rc = LSM_OK;                /* Return code */
   Database *p = pDb->pDatabase;   /* Shared data handle */
 
   assert( p && p->pTree==0 );
@@ -1086,11 +1101,12 @@ int lsmBeginRecovery(lsm_db *pDb){
   assert( pDb->pTV==0 );
   assert( lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pWorkerMutex) );
 
-  rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
+#if 0
   if( rc==LSM_OK ){
     assert( pDb->pTV==0 );
     rc = lsmTreeWriteVersion(pDb->pEnv, p->pTree, &pDb->pTV);
   }
+#endif
   return rc;
 }
 
@@ -1122,11 +1138,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
-
-    /* If there is no in-memory tree structure, allocate one now */
-    if( p->pTree==0 ){
-      rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
-    }
+    assert( p->pTree );
 
     if( rc==LSM_OK ){
       /* Set the connections client database file snapshot */
@@ -1345,3 +1357,104 @@ int lsmHoldingClientMutex(lsm_db *pDb){
   return lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pClientMutex);
 }
 #endif
+
+
+/*************************************************************************
+**************************************************************************
+**************************************************************************
+**************************************************************************
+**************************************************************************
+*************************************************************************/
+
+/*
+** Retrieve a pointer to shared-memory chunk iChunk. Chunks are numbered
+** starting from 0 (i.e. the header chunk is chunk 0).
+*/
+int lsmShmChunk(lsm_db *db, int iChunk, void **ppData){
+  int rc = LSM_OK;
+  void *pRet = 0;
+  Database *p = db->pDatabase;
+
+  /* Enter the client mutex */
+  assert( iChunk>=0 );
+  lsmMutexEnter(db->pEnv, p->pClientMutex);
+
+  if( iChunk>=p->nShmChunk ){
+    int nNew = iChunk+1;
+    void **apNew;
+    apNew = (void **)lsmRealloc(db->pEnv, p->apShmChunk, sizeof(void*) * nNew);
+    if( apNew==0 ){
+      rc = LSM_NOMEM_BKPT;
+    }else{
+      memset(&apNew[p->nShmChunk], 0, sizeof(void*) * (nNew-p->nShmChunk));
+      p->apShmChunk = apNew;
+      p->nShmChunk = nNew;
+    }
+  }
+
+  if( rc==LSM_OK && p->apShmChunk[iChunk]==0 ){
+    p->apShmChunk[iChunk] = lsmMallocZeroRc(db->pEnv, LSM_SHM_CHUNK_SIZE, &rc);
+  }
+
+  if( rc==LSM_OK ){
+    pRet = p->apShmChunk[iChunk];
+  }
+
+  /* Release the client mutex */
+  lsmMutexLeave(db->pEnv, p->pClientMutex);
+
+  *ppData = pRet; 
+  return rc;
+}
+
+/*
+** Attempt to obtain the lock identified by the iLock and bExcl parameters.
+** If successful, return LSM_OK. If the lock cannot be obtained because 
+** there exists some other conflicting lock, return LSM_BUSY. If some other
+** error occurs, return an LSM error code.
+**
+** Parameter iLock must be one of LSM_LOCK_WRITER, WORKER or CHECKPOINTER,
+** or else a value returned by the LSM_LOCK_READER macro.
+*/
+int lsmShmLock(
+  lsm_db *db, 
+  int iLock,
+  int eOp                         /* One of LSM_LOCK_UNLOCK, SHARED or EXCL */
+){
+  int rc = LSM_OK;
+  Database *p = db->pDatabase;
+
+  assert( iLock>=1 && iLock<=LSM_LOCK_READER(LSM_LOCK_NREADER-1) );
+  assert( iLock<=16 );
+  assert( eOp==LSM_LOCK_UNLOCK || eOp==LSM_LOCK_SHARED || eOp==LSM_LOCK_EXCL );
+
+  lsmMutexEnter(db->pEnv, p->pClientMutex);
+  if( eOp==LSM_LOCK_UNLOCK ){
+    u32 mask = (1 << (iLock-1)) + (1 << (iLock-1+16));
+    db->mLock &= ~mask;
+  }else{
+    lsm_db *pIter;
+    u32 mask = (1 << (iLock-1));
+    if( eOp==LSM_LOCK_EXCL ) mask |= (1 << (iLock-1+16));
+
+    for(pIter=p->pConn; pIter; pIter=pIter->pNext){
+      if( pIter->mLock & mask ){ 
+        rc = LSM_BUSY;
+        break;
+      }
+    }
+
+    if( rc==LSM_OK ){
+      if( eOp==LSM_LOCK_EXCL ){
+        db->mLock |= (1 << (iLock-1));
+      }else{
+        db->mLock |= (1 << (iLock-1+16));
+        db->mLock &= ~(1 << (iLock-1));
+      }
+    }
+  }
+  lsmMutexLeave(db->pEnv, p->pClientMutex);
+
+  return rc;
+}
+

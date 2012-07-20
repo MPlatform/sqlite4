@@ -59,6 +59,8 @@
 #define LSM_CKSUM0_INIT 42
 #define LSM_CKSUM1_INIT 42
 
+#define LSM_META_PAGE_SIZE 4096
+
 /* "mmap" mode is currently only used in environments with 64-bit address 
 ** spaces. The following macro is used to test for this.  */
 #define LSM_IS_64_BIT (sizeof(void*)==8)
@@ -96,6 +98,11 @@ typedef struct TreeCursor TreeCursor;
 typedef struct Merge Merge;
 typedef struct MergeInput MergeInput;
 
+typedef struct TreeHeader TreeHeader;
+typedef struct ShmHeader ShmHeader;
+typedef struct ShmChunk ShmChunk;
+typedef struct ShmReader ShmReader;
+
 typedef unsigned char u8;
 typedef unsigned short int u16;
 typedef unsigned int u32;
@@ -118,6 +125,23 @@ int lsmErrorBkpt(int);
 
 #define unused_parameter(x) (void)(x)
 #define array_size(x) (sizeof(x)/sizeof(x[0]))
+
+
+/* The size of each shared-memory chunk */
+#define LSM_SHM_CHUNK_SIZE (32*1024)
+
+/* The number of bytes reserved at the start of each shm chunk for MM. */
+#define LSM_SHM_CHUNK_HDR  (3 * 4)
+
+/* The number of available read locks. */
+#define LSM_LOCK_NREADER   6
+
+/* Lock definitions */
+#define LSM_LOCK_WRITER       1
+#define LSM_LOCK_WORKER       2
+#define LSM_LOCK_CHECKPOINTER 3
+#define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
+
 
 /*
 ** A string that can grow by appending.
@@ -176,6 +200,21 @@ struct DbLog {
 };
 
 /*
+** Tree header structure. 
+*/
+struct TreeHeader {
+  u32 iTreeId;                    /* Current tree id */
+  u32 iTransId;                   /* Current transaction id */
+  u32 iRoot;                      /* Offset of root node in shm file */
+  u32 nHeight;                    /* Current height of tree structure */
+  u32 iWrite;                     /* Write offset in shm file */
+  DbLog log;                      /* Current layout of log file */ 
+  i64 iCkpt;                      /* Id of ckpt log space is reclaimed for */
+  u32 cksum1;                     /* Checksum 1 */
+  u32 cksum2;                     /* Checksum 2 */
+};
+
+/*
 ** Database handle structure.
 */
 struct lsm_db {
@@ -216,6 +255,13 @@ struct lsm_db {
   /* Work done notification callback */
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
+
+  u32 mLock;                      /* Mask of current locks. See lsmShmLock(). */
+  lsm_db *pNext;                  /* Next connection to same database */
+
+  int nShm;                       /* Size of apShm[] array */
+  void **apShm;                   /* Shared memory chunks */
+  TreeHeader treehdr;             /* Local copy of tree-header */
 };
 
 struct Segment {
@@ -278,11 +324,59 @@ struct Merge {
 #define segmentHasSeparators(pSegment) ((pSegment)->sep.iFirst>0)
 
 /*
-** Number of integers in the free-list delta.
+** The values that accompany the lock held by a database reader.
 */
-#define LSM_FREELIST_DELTA_SIZE 3
+struct ShmReader {
+  i64 iTreeId;
+  i64 iLsmId;
+};
 
-/* 
+/*
+** An instance of this structure is stored in the first shared-memory
+** page. The shared-memory header.
+**
+** bInit:
+**   This value is set to non-zero once the contents of the ShmHeader are
+**   initialized.
+**
+** bWriter:
+**   Immediately after opening a write transaction taking the WRITER lock, 
+**   each writer client sets this flag. It is cleared right before the 
+**   WRITER lock is relinquished. If a subsequent writer finds that this
+**   flag is already set when a write transaction is opened, this indicates
+**   that a previous writer failed mid-transaction.
+**
+** iMetaPage:
+**   If the database file does not contain a valid, synced, checkpoint, this
+**   value is set to 0. Otherwise, it is set to the meta-page number that
+**   contains the most recently written checkpoint (either 1 or 2).
+**
+** hdr1, hdr2:
+**   The two copies of the in-memory tree header. Two copies are required
+**   in case a writer fails while updating one of them.
+*/
+struct ShmHeader {
+  u32 *aClient[LSM_META_PAGE_SIZE / 4];
+  u32 *aWorker[LSM_META_PAGE_SIZE / 4];
+  u32 bInit;
+  u32 bWriter;
+  u32 iMetaPage;
+  TreeHeader hdr1;
+  TreeHeader hdr2;
+  ShmReader aReader[LSM_LOCK_NREADER];
+};
+
+/*
+** An instance of this structure is stored at the start of each shared-memory
+** chunk except the first (which is the header chunk - see above).
+*/
+struct ShmChunk {
+  u32 iFirstTree;
+  u32 iLastTree;
+  u32 iNext;
+};
+
+/*
 ** Functions from file "lsm_ckpt.c".
 */
 int lsmCheckpointRead(lsm_db *, int *, int *);
@@ -318,7 +412,7 @@ void lsmTreeCursorReset(TreeCursor *pCsr);
 int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey);
 int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal);
 int lsmTreeCursorValid(TreeCursor *pCsr);
-void lsmTreeCursorSave(TreeCursor *pCsr);
+int lsmTreeCursorSave(TreeCursor *pCsr);
 
 TreeVersion *lsmTreeReadVersion(Tree *);
 int lsmTreeWriteVersion(lsm_env *pEnv, Tree *, TreeVersion **);
@@ -326,7 +420,6 @@ TreeVersion *lsmTreeRecoverVersion(Tree *);
 int lsmTreeIsWriteVersion(TreeVersion *);
 int lsmTreeReleaseWriteVersion(lsm_env *, TreeVersion *, int, TreeVersion **);
 void lsmTreeReleaseReadVersion(lsm_env *, TreeVersion *);
-
 
 /* 
 ** Functions from file "mem.c".
@@ -580,6 +673,15 @@ int lsmDbTreeSize(lsm_db *pDb);
 #ifdef LSM_DEBUG
   int lsmHoldingClientMutex(lsm_db *pDb);
 #endif
+
+
+/* Candidate values for the 3rd argument to lsmShmLock() */
+#define LSM_LOCK_UNLOCK 0
+#define LSM_LOCK_SHARED 1
+#define LSM_LOCK_EXCL   2
+
+int lsmShmChunk(lsm_db *db, int iChunk, void **ppData);
+int lsmShmLock(lsm_db *db, int iLock, int eOp);
 
 
 /**************************************************************************
