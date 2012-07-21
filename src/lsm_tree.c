@@ -444,7 +444,19 @@ static void treeCursorInit(lsm_db *pDb, TreeCursor *pCsr){
 
 
 static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
-  assert(!"implement me!");
+  /* TODO: This will likely be way too slow. If it is, chunks should be
+  ** cached as part of the db handle.  */
+  if( iPtr && *pRc==0 ){
+    int rc;
+    void *pChunk;
+    assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
+    rc = lsmShmChunk(pDb, (iPtr>>15), &pChunk);
+    if( rc==LSM_OK ){
+      return &((u8 *)pChunk)[iPtr & (LSM_SHM_CHUNK_SIZE-1)];
+    }
+    *pRc = rc;
+  }
+  return 0;
 }
 
 static TreeKey *csrGetKey(TreeCursor *pCsr, int *pRc){
@@ -921,8 +933,9 @@ int lsmTreeInsert(
 ** Return, in bytes, the amount of memory currently used by the tree 
 ** structure.
 */
-int lsmTreeSize(TreeVersion *pTV){
-  return (lsmPoolUsed(pTV->pTree->pPool) - ROUND8(sizeof(Tree)));
+int lsmTreeSize(lsm_db *pDb){
+  return 50;
+  return pDb->treehdr.nByte;
 }
 
 /*
@@ -931,9 +944,9 @@ int lsmTreeSize(TreeVersion *pTV){
 ** The caller is responsible for ensuring that it has exclusive access
 ** to the Tree structure for this call.
 */
-int lsmTreeIsEmpty(Tree *pTree){
-  assert( pTree==0 || pTree->pWorking==0 );
-  return (pTree==0 || pTree->pCommit->pRoot==0);
+int lsmTreeIsEmpty(lsm_db *pDb){
+  /* TODO: This is not right in a true multi-process system... */
+  return (pDb->pShmhdr->hdr1.iRoot==0);
 }
 
 /*
@@ -1273,7 +1286,7 @@ int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal){
     );
     if( rc==LSM_OK ){
       *pnVal = pTreeKey->nValue;
-      *ppVal = (void *)(((u8 *)&pTreeKey[1]) + pTreeKey->nValue);
+      *ppVal = (void *)(((u8 *)&pTreeKey[1]) + pTreeKey->nKey);
     }
   }else{
     *ppVal = 0;
@@ -1339,7 +1352,8 @@ void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
 ** pointer to the same TreeMark structure may be used to roll the tree
 ** contents back to their current state.
 */
-void lsmTreeMark(TreeVersion *pTV, TreeMark *pMark){
+void lsmTreeMark(lsm_db *pDb, TreeMark *pMark){
+#if 0
   Tree *pTree = pTV->pTree;
   memset(pMark, 0, sizeof(TreeMark));
   pMark->pRoot = (void *)pTV->pRoot;
@@ -1349,6 +1363,7 @@ void lsmTreeMark(TreeVersion *pTV, TreeMark *pMark){
 
   assert( lsmTreeIsWriteVersion(pTV) );
   pTV->iVersion++;
+#endif
 }
 
 /*
@@ -1418,6 +1433,8 @@ int lsmTreeReleaseWriteVersion(
   int bCommit,                    /* True for a commit */
   TreeVersion **ppReadVersion     /* OUT: Read-version reference */
 ){
+  assert( 0 );
+#if 0
   Tree *pTree = pWorking->pTree;
 
   assert( lsmTreeIsWriteVersion(pWorking) );
@@ -1435,9 +1452,47 @@ int lsmTreeReleaseWriteVersion(
   if( ppReadVersion ){
     *ppReadVersion = lsmTreeReadVersion(pTree);
   }
+#endif
   return LSM_OK;
 }
 
+static void treeHeaderChecksum(
+  TreeHeader *pHdr, 
+  u32 *aCksum
+){
+  u32 cksum1 = 0x12345678;
+  u32 cksum2 = 0x9ABCDEF0;
+  u32 *a = (u32 *)pHdr;
+  int i;
+
+  assert( (offsetof(TreeHeader, aCksum) + sizeof(u32)*2)==sizeof(TreeHeader) );
+  assert( (sizeof(TreeHeader) % (sizeof(u32)*2))==0 );
+
+  for(i=0; i<(offsetof(TreeHeader, aCksum) / sizeof(u32)); i+=2){
+    cksum1 += a[i];
+    cksum2 += (cksum1 + a[i+1]);
+  }
+  aCksum[0] = cksum1;
+  aCksum[1] = cksum2;
+}
+
+/*
+** This function is called to conclude a transaction. If argument bCommit
+** is true, the transaction is committed. Otherwise it is rolled back.
+*/
+int lsmTreeEndTransaction(lsm_db *pDb, int bCommit){
+  if( bCommit ){
+    ShmHeader *pShm = pDb->pShmhdr;
+
+    treeHeaderChecksum(&pDb->treehdr, pDb->treehdr.aCksum);
+    memcpy(&pShm->hdr2, &pDb->treehdr, sizeof(TreeHeader));
+    lsmShmBarrier(pDb);
+    memcpy(&pShm->hdr1, &pDb->treehdr, sizeof(TreeHeader));
+    pShm->bWriter = 0;
+  }
+
+  return LSM_OK;
+}
 
 TreeVersion *lsmTreeRecoverVersion(Tree *pTree){
   return pTree->pCommit;

@@ -274,7 +274,7 @@ void test_data_3(
   int *pRc                        /* IN/OUT: Error code */
 ){
   Datatest aTest[] = {
-    { {DATA_RANDOM,     20,25,     100,200},       1000,  250, 1000, 1},
+    { {DATA_RANDOM,     20,25,     100,200},       1000,  1, 1000, 1},
     { {DATA_RANDOM,     8,10,      100,200},       1000,  250, 1000, 1},
     { {DATA_RANDOM,     8,10,      10,20},         1000,  250, 1000, 1},
     { {DATA_RANDOM,     8,10,      1000,2000},     1000,  250, 1000, 1},

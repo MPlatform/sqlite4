@@ -1975,7 +1975,6 @@ static int multiCursorNew(
 
   if( rc==LSM_OK ){
     if( useTree ){
-      assert( pDb->pTV );
       rc = lsmTreeCursorNew(pDb, &pCsr->pTreeCsr);
     }
     pCsr->pDb = pDb;
@@ -3487,7 +3486,8 @@ int lsmSortedNewToplevel(
     pNew->pNext = pNext;
     lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
 
-    rc = multiCursorNew(pDb, pDb->pWorker, (pDb->pTV!=0), 0, &pCsr);
+    /* TODO: Fix the third parameter to the following */
+    rc = multiCursorNew(pDb, pDb->pWorker, 1, 0, &pCsr);
     if( rc==LSM_OK ){
       if( pNext ){
         assert( pNext->pMerge==0 || pNext->nRight>0 );
@@ -3587,12 +3587,11 @@ int lsmSortedFlushTree(
   int rc;
 
   assert( pDb->pWorker );
-  assert( pDb->pTV==0 || lsmTreeIsWriteVersion(pDb->pTV) );
 
   rc = lsmBeginFlush(pDb);
 
   /* If there is nothing to do, return early. */
-  if( lsmTreeSize(pDb->pTV)==0 && bFreelist==0 ){
+  if( lsmTreeSize(pDb)==0 && bFreelist==0 ){
     lsmFinishFlush(pDb, 0);
     return LSM_OK;
   }
@@ -4049,7 +4048,6 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   ** transaction. Return LSM_MISUSE if an application attempts this.  
   */
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
-  assert( pDb->pTV==0 );
 
   if( (flags & LSM_WORK_FLUSH) ){
     rc = lsmBeginWriteTrans(pDb);

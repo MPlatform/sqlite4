@@ -41,10 +41,7 @@ static void assert_db_state(lsm_db *pDb){
   ** not be a client snapshot.  */
   assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->pClient!=0) );
 
-  /* If there is a write transaction open according to pDb->nTransOpen, then
-  ** the connection must be holding the read/write TreeVersion.  */
   assert( pDb->nTransOpen>=0 );
-  assert( pDb->nTransOpen==0 || lsmTreeIsWriteVersion(pDb->pTV) );
 }
 #else
 # define assert_db_state(x) 
@@ -243,6 +240,11 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
       rc = lsmDbDatabaseFind(pDb, zFilename);
     }
 
+    /* Obtain a pointer to the shared-memory header */
+    if( rc==LSM_OK ){
+      rc = lsmShmChunk(pDb, 0, (void **)&pDb->pShmhdr);
+    }
+
     if( rc==LSM_OK ){
       rc = dbRecoverIfRequired(pDb);
     }
@@ -311,7 +313,6 @@ int lsm_close(lsm_db *pDb){
     if( pDb->pCsr || pDb->nTransOpen ){
       rc = LSM_MISUSE_BKPT;
     }else{
-      assert( pDb->pWorker==0 && pDb->pTV==0 );
       lsmDbDatabaseRelease(pDb);
       lsmFsClose(pDb->pFS);
       lsmFree(pDb->pEnv, pDb->aTrans);
@@ -542,7 +543,6 @@ int lsm_write(
   }
 
   if( rc==LSM_OK ){
-    assert( pDb->pTV && lsmTreeIsWriteVersion(pDb->pTV) );
     rc = lsmLogWrite(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
   }
 
@@ -559,9 +559,9 @@ int lsm_write(
       nQuant = pDb->nTreeLimit;
     }
 
-    nBefore = lsmTreeSize(pDb->pTV);
+    nBefore = lsmTreeSize(pDb);
     rc = lsmTreeInsert(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
-    nAfter = lsmTreeSize(pDb->pTV);
+    nAfter = lsmTreeSize(pDb);
 
     nDiff = (nAfter/nQuant) - (nBefore/nQuant);
     if( rc==LSM_OK && pDb->bAutowork && nDiff!=0 ){
@@ -736,7 +736,7 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 
     if( rc==LSM_OK ){
       for(i=pDb->nTransOpen; i<iLevel; i++){
-        lsmTreeMark(pDb->pTV, &pDb->aTrans[i].tree);
+        lsmTreeMark(pDb, &pDb->aTrans[i].tree);
         lsmLogTell(pDb, &pDb->aTrans[i].log);
       }
       pDb->nTransOpen = iLevel;
@@ -757,7 +757,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
   if( iLevel<pDb->nTransOpen ){
     if( iLevel==0 ){
       /* Commit the transaction to disk. */
-      if( pDb->pTV && lsmTreeSize(pDb->pTV)>pDb->nTreeLimit ){
+      if( lsmTreeSize(pDb)>pDb->nTreeLimit ){
         rc = lsmFlushToDisk(pDb);
       }
       if( rc==LSM_OK ) rc = lsmLogCommit(pDb);

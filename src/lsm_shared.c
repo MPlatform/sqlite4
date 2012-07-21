@@ -165,7 +165,6 @@ struct Database {
   void *pId;                      /* Database id (file inode) */
   int nId;                        /* Size of pId in bytes */
 
-  Tree *pTree;                    /* Current in-memory tree structure */
   DbLog log;                      /* Database log state object */
   int nPgsz;                      /* Nominal database page size */
   int nBlksz;                     /* Database block size */
@@ -491,7 +490,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       ** this will create a new client snapshot in Database.pClient. The
       ** checkpoint (serialization) of this snapshot may be written to disk
       ** by the following block.  */
-      if( p->bDirty || 0==lsmTreeIsEmpty(p->pTree) ){
+      if( p->bDirty || 0==lsmTreeIsEmpty(pDb) ){
         rc = lsmFlushToDisk(pDb);
       }
 
@@ -504,9 +503,6 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       if( rc==LSM_OK && pDb->pFS ){
         lsmFsCloseAndDeleteLog(pDb->pFS);
       }
-
-      /* Free the in-memory tree object */
-      lsmTreeRelease(pDb->pEnv, p->pTree);
 
       /* Free the contents of the worker snapshot */
       lsmSortedFreeLevel(pDb->pEnv, p->worker.pLevel);
@@ -620,7 +616,6 @@ void lsmDbRecoveryComplete(lsm_db *pDb, int iSlot){
 
   assert( iSlot==0 || iSlot==1 || iSlot==2 );
   assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) );
-  assert( p->pTree );
 
   p->bRecovered = 1;
   p->iCheckpointId = p->worker.iId;
@@ -1095,10 +1090,11 @@ int lsmBeginRecovery(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
   Database *p = pDb->pDatabase;   /* Shared data handle */
 
-  assert( p && p->pTree==0 );
+  assert( 0 );
+
+  assert( p );
   assert( pDb->pWorker );
   assert( pDb->pClient==0 );
-  assert( pDb->pTV==0 );
   assert( lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pWorkerMutex) );
 
 #if 0
@@ -1114,13 +1110,8 @@ int lsmBeginRecovery(lsm_db *pDb){
 ** Called when recovery is finished.
 */
 int lsmFinishRecovery(lsm_db *pDb){
-  int rc;
-  assert( pDb->pWorker );
-  assert( pDb->pClient==0 );
-  assert( lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pWorkerMutex) );
-  rc = lsmTreeReleaseWriteVersion(pDb->pEnv, pDb->pTV, 1, 0);
-  pDb->pTV = 0;
-  return rc;
+  lsmTreeEndTransaction(pDb, 1);
+  return LSM_OK;
 }
 
 /*
@@ -1138,7 +1129,6 @@ int lsmBeginReadTrans(lsm_db *pDb){
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
-    assert( p->pTree );
 
     if( rc==LSM_OK ){
       /* Set the connections client database file snapshot */
@@ -1146,9 +1136,12 @@ int lsmBeginReadTrans(lsm_db *pDb){
       pDb->pClient = p->pClient;
 
       /* Set the connections tree-version handle */
+      /* TODO */
+#if 0
       assert( pDb->pTV==0 );
       pDb->pTV = lsmTreeReadVersion(p->pTree);
       assert( pDb->pTV!=0 );
+#endif
     }
 
     lsmMutexLeave(pDb->pEnv, p->pClientMutex);
@@ -1174,12 +1167,6 @@ void lsmFinishReadTrans(lsm_db *pDb){
 
     lsmDbSnapshotRelease(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
-
-    /* Release the in-memory tree version */
-    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-    lsmTreeReleaseReadVersion(pDb->pEnv, pDb->pTV);
-    pDb->pTV = 0;
-    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   }
 }
 
@@ -1191,8 +1178,6 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   Database *p = pDb->pDatabase;   /* Shared database object */
 
   lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-  assert( p->pTree );
-  assert( (pDb->pTV==0)==(pDb->pClient==0) );
 
   /* There are two reasons the attempt to open a write transaction may fail:
   **
@@ -1206,7 +1191,10 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   if( p->bWriter ){
     rc = LSM_BUSY;
   }else{
+    /* TODO: */
+#if 0
     rc = lsmTreeWriteVersion(pDb->pEnv, p->pTree, &pDb->pTV);
+#endif
   }
 
   if( rc==LSM_OK ){
@@ -1216,10 +1204,12 @@ int lsmBeginWriteTrans(lsm_db *pDb){
       /* If the call to lsmLogBegin() failed, relinquish the read/write
       ** TreeVersion handle obtained above. The attempt to open a transaction
       ** has failed.  */
+#if 0
       TreeVersion *pWrite = pDb->pTV;
       TreeVersion **ppRestore = (pDb->pClient ? &pDb->pTV : 0);
       pDb->pTV = 0;
       lsmTreeReleaseWriteVersion(pDb->pEnv, pWrite, 0, ppRestore);
+#endif
     }else if( pDb->pClient==0 ){
       /* Otherwise, if the lsmLogBegin() attempt was successful and the 
       ** client did not have a read transaction open when this function
@@ -1254,12 +1244,12 @@ int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   Database *p = pDb->pDatabase;
   lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
-  assert( pDb->pTV && lsmTreeIsWriteVersion(pDb->pTV) );
   assert( p->bWriter );
   p->bWriter = 0;
-  lsmTreeReleaseWriteVersion(pDb->pEnv, pDb->pTV, bCommit, &pDb->pTV);
 
+  lsmTreeEndTransaction(pDb, bCommit);
   lsmLogEnd(pDb, &p->log, bCommit);
+
   lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   return LSM_OK;
 }
@@ -1280,26 +1270,15 @@ int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
 int lsmBeginFlush(lsm_db *pDb){
 
   assert( pDb->pWorker );
-  assert( (pDb->pDatabase->bWriter && lsmTreeIsWriteVersion(pDb->pTV))
-       || (pDb->pTV==0 && holdingGlobalMutex(pDb->pEnv))
-  );
+  assert( pDb->pDatabase->bWriter || holdingGlobalMutex(pDb->pEnv) );
 
+  /* TODO */
+#if 0
   if( pDb->pTV==0 ){
     pDb->pTV = lsmTreeRecoverVersion(pDb->pDatabase->pTree);
   }
+#endif
   return LSM_OK;
-}
-
-int lsmDbTreeSize(lsm_db *pDb){
-  TreeVersion *pTV = pDb->pTV;
-
-  assert( pDb->pWorker );
-  assert( (pDb->pDatabase->bWriter && lsmTreeIsWriteVersion(pTV))
-       || (pTV==0 && holdingGlobalMutex(pDb->pEnv))
-  );
-  if( pTV==0 ) pTV = lsmTreeRecoverVersion(pDb->pDatabase->pTree);
-
-  return lsmTreeSize(pTV);
 }
 
 /*
@@ -1310,6 +1289,7 @@ int lsmDbTreeSize(lsm_db *pDb){
 int lsmFinishFlush(lsm_db *pDb, int bEmpty){
   Database *p = pDb->pDatabase;
   int rc = LSM_OK;
+#if 0
 
   assert( pDb->pWorker );
   assert( pDb->pTV && (p->nDbRef==0 || lsmTreeIsWriteVersion(pDb->pTV)) );
@@ -1337,6 +1317,7 @@ int lsmFinishFlush(lsm_db *pDb, int bEmpty){
     pDb->pTV = 0;
   }
   lsmMutexLeave(pDb->pEnv, p->pClientMutex);
+#endif
   return rc;
 }
 
@@ -1457,4 +1438,11 @@ int lsmShmLock(
 
   return rc;
 }
+
+void lsmShmBarrier(lsm_db *db){
+  /* TODO */
+}
+
+
+
 

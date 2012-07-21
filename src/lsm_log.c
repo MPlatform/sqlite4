@@ -889,15 +889,18 @@ int lsmLogRecover(lsm_db *pDb){
   LsmString buf1;                 /* Key buffer */
   LsmString buf2;                 /* Value buffer */
   LogReader reader;               /* Log reader object */
-  int rc;                         /* Return code */
+  int rc = LSM_OK;                /* Return code */
   int nCommit = 0;                /* Number of transactions to recover */
   int iPass;
   int nJump = 0;                  /* Number of LSM_LOG_JUMP records in pass 0 */
   DbLog *pLog;
 
+#if 0
   rc = lsmBeginRecovery(pDb);
   if( rc!=LSM_OK ) return rc;
+#endif
 
+  pDb->treehdr.iWrite = LSM_SHM_CHUNK_SIZE + LSM_SHM_CHUNK_HDR;
   pLog = &pDb->treehdr.log;
   logReaderInit(pDb, pLog, 1, &reader);
   lsmStringInit(&buf1, pDb->pEnv);

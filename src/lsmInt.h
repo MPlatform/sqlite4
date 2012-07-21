@@ -208,10 +208,10 @@ struct TreeHeader {
   u32 iRoot;                      /* Offset of root node in shm file */
   u32 nHeight;                    /* Current height of tree structure */
   u32 iWrite;                     /* Write offset in shm file */
+  u32 nByte;                      /* Size of current tree structure in bytes */
   DbLog log;                      /* Current layout of log file */ 
   i64 iCkpt;                      /* Id of ckpt log space is reclaimed for */
-  u32 cksum1;                     /* Checksum 1 */
-  u32 cksum2;                     /* Checksum 2 */
+  u32 aCksum[2];                  /* Checksums 1 and 2. */
 };
 
 /*
@@ -237,7 +237,6 @@ struct lsm_db {
   Database *pDatabase;            /* Database shared data */
 
   /* Client transaction context */
-  TreeVersion *pTV;               /* In-memory tree snapshot (non-NULL in rt) */
   Snapshot *pClient;              /* Client snapshot (non-NULL in read trans) */
   MultiCursor *pCsr;              /* List of all open cursors */
   LogWriter *pLogWriter;
@@ -262,6 +261,7 @@ struct lsm_db {
   int nShm;                       /* Size of apShm[] array */
   void **apShm;                   /* Shared memory chunks */
   TreeHeader treehdr;             /* Local copy of tree-header */
+  ShmHeader *pShmhdr;             /* Live shared-memory header */
 };
 
 struct Segment {
@@ -394,12 +394,13 @@ int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeRelease(lsm_env *, Tree *);
 
-int lsmTreeSize(TreeVersion *pTV);
-int lsmTreeIsEmpty(Tree *pTree);
+int lsmTreeSize(lsm_db *);
+int lsmTreeIsEmpty(lsm_db *);
+int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
 
 int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);
-void lsmTreeMark(TreeVersion *pTV, TreeMark *pMark);
+void lsmTreeMark(lsm_db *pDb, TreeMark *pMark);
 
 int lsmTreeCursorNew(lsm_db *pDb, TreeCursor **);
 void lsmTreeCursorDestroy(TreeCursor *);
@@ -668,8 +669,6 @@ Pgno *lsmSharedAppendList(lsm_db *db, int *pnApp);
 int lsmSharedAppendListAdd(lsm_db *db, Pgno iPg);
 void lsmSharedAppendListRemove(lsm_db *db, int iIdx);
 
-int lsmDbTreeSize(lsm_db *pDb);
-
 #ifdef LSM_DEBUG
   int lsmHoldingClientMutex(lsm_db *pDb);
 #endif
@@ -682,6 +681,7 @@ int lsmDbTreeSize(lsm_db *pDb);
 
 int lsmShmChunk(lsm_db *db, int iChunk, void **ppData);
 int lsmShmLock(lsm_db *db, int iLock, int eOp);
+void lsmShmBarrier(lsm_db *db);
 
 
 /**************************************************************************

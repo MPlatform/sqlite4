@@ -186,6 +186,7 @@ static void scanCompareCb(
   int i;
 
   if( test_scan_debug ) printf("%.20s\n", (char *)pKey);
+  if( test_scan_debug ) printf("%.20s\n", (char *)pVal);
 
 #if 0
   /* Check tdb_fetch() matches */
