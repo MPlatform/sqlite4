@@ -397,6 +397,8 @@ void lsmTreeRelease(lsm_env *, Tree *);
 int lsmTreeSize(lsm_db *);
 int lsmTreeIsEmpty(lsm_db *);
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
+int lsmTreeBeginTransaction(lsm_db *pDb);
+int lsmTreeBeginRead(lsm_db *pDb);
 
 int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);

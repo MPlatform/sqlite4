@@ -1126,22 +1126,16 @@ int lsmBeginReadTrans(lsm_db *pDb){
 
   if( pDb->pClient==0 ){
     Database *p = pDb->pDatabase;
-    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
+    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
+
+    rc = lsmTreeBeginRead(pDb);
 
     if( rc==LSM_OK ){
       /* Set the connections client database file snapshot */
       p->pClient->nRef++;
       pDb->pClient = p->pClient;
-
-      /* Set the connections tree-version handle */
-      /* TODO */
-#if 0
-      assert( pDb->pTV==0 );
-      pDb->pTV = lsmTreeReadVersion(p->pTree);
-      assert( pDb->pTV!=0 );
-#endif
     }
 
     lsmMutexLeave(pDb->pEnv, p->pClientMutex);
@@ -1191,10 +1185,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   if( p->bWriter ){
     rc = LSM_BUSY;
   }else{
-    /* TODO: */
-#if 0
-    rc = lsmTreeWriteVersion(pDb->pEnv, p->pTree, &pDb->pTV);
-#endif
+    rc = lsmTreeBeginTransaction(pDb);
   }
 
   if( rc==LSM_OK ){
@@ -1283,8 +1274,8 @@ int lsmBeginFlush(lsm_db *pDb){
 
 /*
 ** This is called to indicate that a "flush-tree" operation has finished.
-** If the second argument is true, a new in-memory tree is allocated to
-** hold subsequent writes.
+** If the second argument is true, the contents of the current in-memory
+** tree are discarded and a new tree allocated to hold subsequent writes.
 */
 int lsmFinishFlush(lsm_db *pDb, int bEmpty){
   Database *p = pDb->pDatabase;

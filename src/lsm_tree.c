@@ -107,7 +107,7 @@ struct TreeKey {
 };
 
 #define TK_KEY(p) ((void *)&(p)[1])
-#define TK_VAL(p) ((void *)(((u8 *)&(p)[1]) + (p)->nValue))
+#define TK_VAL(p) ((void *)(((u8 *)&(p)[1]) + (p)->nKey))
 
 /*
 ** A single tree node. A node structure may contain up to 3 key/value
@@ -196,7 +196,7 @@ static TreeNode *getChildPtr(TreeNode *p, int iVersion, int iCell){
 
 static u32 getChildPtr(TreeNode *p, int iVersion, int iCell){
   assert( iCell>=0 && iCell<=array_size(p->aiChildPtr) );
-  if( p->iV2 && p->iV2<=iVersion && iCell==p->iV2Ptr ) return p->iV2Ptr;
+  if( p->iV2 && p->iV2<=iVersion && iCell==p->iV2Child ) return p->iV2Ptr;
   return p->aiChildPtr[iCell];
 }
 
@@ -219,6 +219,26 @@ struct TreeCursor {
   u8 aiCell[MAX_DEPTH];           /* Current position in tree */
   TreeKey *pSave;                 /* Saved key */
 };
+
+
+
+static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
+  /* TODO: This will likely be way too slow. If it is, chunks should be
+  ** cached as part of the db handle.  */
+  if( iPtr && *pRc==0 ){
+    int rc;
+    void *pChunk;
+    assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
+    rc = lsmShmChunk(pDb, (iPtr>>15), &pChunk);
+    if( rc==LSM_OK ){
+      return &((u8 *)pChunk)[iPtr & (LSM_SHM_CHUNK_SIZE-1)];
+    }
+    *pRc = rc;
+  }
+  return 0;
+}
+
+
 
 #if defined(LSM_DEBUG) && defined(LSM_EXPENSIVE_ASSERT)
 
@@ -260,10 +280,9 @@ void assert_tree_looks_ok(int rc, Tree *pTree){
 #endif
 
 #ifdef LSM_DEBUG
-#if 0
 static void lsmAppendStrBlob(LsmString *pStr, void *pBlob, int nBlob){
   int i;
-  lsmStringExtend(pStr, nBlob);
+  lsmStringExtend(pStr, nBlob*2);
   if( pStr->nAlloc==0 ) return;
   for(i=0; i<nBlob; i++){
     u8 c = ((u8*)pBlob)[i];
@@ -279,6 +298,7 @@ static void lsmAppendIndent(LsmString *pStr, int nIndent){
   for(i=0; i<nIndent; i++) lsmStringAppend(pStr, " ", 1);
 }
 
+#if 0
 static void lsmAppendKeyValue(LsmString *pStr, TreeKey *pKey){
   int i;
 
@@ -340,17 +360,29 @@ void dump_node(TreeNode *pNode, int nIndent, int isNode){
 #endif
 }
 
-void dump_node_contents(TreeNode *pNode, int iVersion, int nIndent, int isNode){
-#if 0
+void dump_node_contents(
+  lsm_db *pDb,
+  u32 iNode,                      /* Print out hte contents of this node */
+  int nIndent,                    /* Number of spaces indentation */
+  int nHeight                     /* Height: (0==leaf) (1==parent-of-leaf) */
+){
   int i;
+  int rc = LSM_OK;
   LsmString s;
+  TreeNode *pNode;
 
-  lsmStringInit(&s, NEED_ENV);
-  lsmAppendIndent(&s, nIndent);
+  /* Append the nIndent bytes of space to string s. */
+  lsmStringInit(&s, pDb->pEnv);
+  if( nIndent ) lsmAppendIndent(&s, nIndent);
+
+  pNode = (TreeNode *)treeShmptr(pDb, iNode, &rc);
+
+  /* Append each key to string s. */
   for(i=0; i<3; i++){
-    if( pNode->apKey[i] ){
-      TreeKey *pKey = pNode->apKey[i];
-      lsmAppendStrBlob(&s, pKey->pKey, pKey->nKey);
+    u32 iPtr = pNode->aiKeyPtr[i];
+    if( iPtr ){
+      TreeKey *pKey = (TreeKey *)treeShmptr(pDb, pNode->aiKeyPtr[i], &rc);
+      lsmAppendStrBlob(&s, TK_KEY(pKey), pKey->nKey);
       lsmStringAppend(&s, "     ", -1);
     }
   }
@@ -358,20 +390,18 @@ void dump_node_contents(TreeNode *pNode, int iVersion, int nIndent, int isNode){
   printf("%s\n", s.z);
   lsmStringClear(&s);
 
-  for(i=0; i<4 && isNode>0; i++){
-    TreeNode *pChild = getChildPtr(pNode, iVersion, i);
-    if( pChild ){
-      dump_node_contents(pChild, iVersion, nIndent + 2, isNode-1);
+  for(i=0; i<4 && nHeight>0; i++){
+    u32 iPtr = getChildPtr(pNode, pDb->treehdr.iTransId, i);
+    if( iPtr ){
+      dump_node_contents(pDb, iPtr, nIndent + 2, nHeight-1);
     }
   }
-#endif
 }
 
-void dump_tree_contents(Tree *pTree, const char *zCaption){
-  TreeVersion *p = pTree->pWorking ? pTree->pWorking : pTree->pCommit;
+void dump_tree_contents(lsm_db *pDb, const char *zCaption){
   printf("\n%s\n", zCaption);
-  if( p->pRoot ){
-    dump_node_contents(p->pRoot, WORKING_VERSION, 0, p->nHeight-1);
+  if( pDb->treehdr.iRoot ){
+    dump_node_contents(pDb, pDb->treehdr.iRoot, 0, pDb->treehdr.nHeight-1);
   }
   fflush(stdout);
 }
@@ -440,23 +470,6 @@ static void treeCursorInit(lsm_db *pDb, TreeCursor *pCsr){
   memset(pCsr, 0, sizeof(TreeCursor));
   pCsr->pDb = pDb;
   pCsr->iNode = -1;
-}
-
-
-static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
-  /* TODO: This will likely be way too slow. If it is, chunks should be
-  ** cached as part of the db handle.  */
-  if( iPtr && *pRc==0 ){
-    int rc;
-    void *pChunk;
-    assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
-    rc = lsmShmChunk(pDb, (iPtr>>15), &pChunk);
-    if( rc==LSM_OK ){
-      return &((u8 *)pChunk)[iPtr & (LSM_SHM_CHUNK_SIZE-1)];
-    }
-    *pRc = rc;
-  }
-  return 0;
 }
 
 static TreeKey *csrGetKey(TreeCursor *pCsr, int *pRc){
@@ -848,8 +861,8 @@ int lsmTreeInsert(
 #if 0
   assert( pTV==pTree->pWorking );
   assert_tree_looks_ok(LSM_OK, pTree);
-  /* dump_tree_contents(pTree, "before"); */
 #endif
+  /* dump_tree_contents(pDb, "before"); */
 
   /* Allocate and populate a new key-value pair structure */
   nTreeKey = sizeof(TreeKey) + nKey + (nVal>0 ? nVal : 0);
@@ -924,7 +937,7 @@ int lsmTreeInsert(
     }
   }
 
-  /* dump_tree_contents(pTree, "after"); */
+  /* dump_tree_contents(pDb, "after"); */
   assert_tree_looks_ok(rc, pTree);
   return rc;
 }
@@ -1286,7 +1299,11 @@ int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal){
     );
     if( rc==LSM_OK ){
       *pnVal = pTreeKey->nValue;
-      *ppVal = (void *)(((u8 *)&pTreeKey[1]) + pTreeKey->nKey);
+      if( pTreeKey->nValue>=0 ){
+        *ppVal = TK_VAL(pTreeKey);
+      }else{
+        *ppVal = 0;
+      }
     }
   }else{
     *ppVal = 0;
@@ -1476,6 +1493,18 @@ static void treeHeaderChecksum(
   aCksum[1] = cksum2;
 }
 
+int lsmTreeBeginRead(lsm_db *pDb){
+  u32 aCksum[2];
+
+  memcpy(&pDb->treehdr, &pDb->pShm->hdr1, sizeof(TreeHeader));
+  treeHeaderChecksum(&pDb->treehdr, aCksum);
+
+  if( memcmp(aCksum, pDb->treehdr.aCksum, sizeof(aCksum)) ){
+    return LSM_CORRUPT_BKPT;
+  }
+  return LSM_OK;
+}
+
 /*
 ** This function is called to conclude a transaction. If argument bCommit
 ** is true, the transaction is committed. Otherwise it is rolled back.
@@ -1491,6 +1520,11 @@ int lsmTreeEndTransaction(lsm_db *pDb, int bCommit){
     pShm->bWriter = 0;
   }
 
+  return LSM_OK;
+}
+
+int lsmTreeBeginTransaction(lsm_db *pDb){
+  pDb->treehdr.iTransId++;
   return LSM_OK;
 }
 
