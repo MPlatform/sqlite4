@@ -260,8 +260,9 @@ struct lsm_db {
 
   int nShm;                       /* Size of apShm[] array */
   void **apShm;                   /* Shared memory chunks */
-  TreeHeader treehdr;             /* Local copy of tree-header */
   ShmHeader *pShmhdr;             /* Live shared-memory header */
+  TreeHeader treehdr;             /* Local copy of tree-header */
+  u32 aSnapshot[LSM_META_PAGE_SIZE / sizeof(u32)];
 };
 
 struct Segment {
@@ -337,7 +338,7 @@ struct ShmReader {
 **
 ** bInit:
 **   This value is set to non-zero once the contents of the ShmHeader are
-**   initialized.
+**   initialized. In other words, once recovery has finished.
 **
 ** bWriter:
 **   Immediately after opening a write transaction taking the WRITER lock, 
@@ -356,8 +357,8 @@ struct ShmReader {
 **   in case a writer fails while updating one of them.
 */
 struct ShmHeader {
-  u32 *aClient[LSM_META_PAGE_SIZE / 4];
-  u32 *aWorker[LSM_META_PAGE_SIZE / 4];
+  u32 aClient[LSM_META_PAGE_SIZE / 4];
+  u32 aWorker[LSM_META_PAGE_SIZE / 4];
   u32 bInit;
   u32 bWriter;
   u32 iMetaPage;
@@ -377,6 +378,28 @@ struct ShmChunk {
 };
 
 /*
+** A snapshot of a database. A snapshot contains all the information required
+** to read or write a database file on disk. See the description of struct
+** Database below for futher details.
+**
+** pExport/nExport:
+**   pExport points to a buffer containing the serialized (checkpoint) 
+**   image of the snapshot. The serialized image is nExport bytes in size. 
+*/
+struct Snapshot {
+  Database *pDatabase;            /* Database this snapshot belongs to */
+  Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
+  i64 iId;                        /* Snapshot id */
+
+  /* Used by client snapshots only */
+  void *pExport;                  /* Serialized snapshot image */
+  int nExport;                    /* Size of pExport in bytes */
+  int nRef;                       /* Number of references to this structure */
+  Snapshot *pSnapshotNext;        /* Next snapshot on this database */
+};
+#define LSM_INITIAL_SNAPSHOT_ID 11
+
+/*
 ** Functions from file "lsm_ckpt.c".
 */
 int lsmCheckpointRead(lsm_db *, int *, int *);
@@ -388,6 +411,9 @@ int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
 int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);
 
+int lsmCheckpointRecover(lsm_db *);
+int lsmCheckpointDeserialize(lsm_db *, u32 *, Snapshot **);
+
 /* 
 ** Functions from file "lsm_tree.c".
 */
@@ -398,7 +424,7 @@ int lsmTreeSize(lsm_db *);
 int lsmTreeIsEmpty(lsm_db *);
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
 int lsmTreeBeginTransaction(lsm_db *pDb);
-int lsmTreeBeginRead(lsm_db *pDb);
+int lsmTreeLoadHeader(lsm_db *pDb);
 
 int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);

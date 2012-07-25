@@ -1493,16 +1493,46 @@ static void treeHeaderChecksum(
   aCksum[1] = cksum2;
 }
 
-int lsmTreeBeginRead(lsm_db *pDb){
+/*
+** Return true if the checksum stored in TreeHeader object *pHdr is 
+** consistent with the contents of its other fields.
+*/
+static int treeHeaderChecksumOk(TreeHeader *pHdr){
   u32 aCksum[2];
+  treeHeaderChecksum(pHdr, aCksum);
+  return (0==memcmp(aCksum, pHdr->aCksum, sizeof(aCksum)));
+}
 
-  memcpy(&pDb->treehdr, &pDb->pShm->hdr1, sizeof(TreeHeader));
-  treeHeaderChecksum(&pDb->treehdr, aCksum);
+/*
+** Load the in-memory tree header from shared-memory into pDb->treehdr.
+** If the header cannot be loaded, return LSM_BUSY.
+*/
+int lsmTreeLoadHeader(lsm_db *pDb){
+  while( 1 ){
+    int rc;
+    ShmHeader *pShm = pDb->pShmhdr;
 
-  if( memcmp(aCksum, pDb->treehdr.aCksum, sizeof(aCksum)) ){
-    return LSM_CORRUPT_BKPT;
+    memcpy(&pDb->treehdr, &pShm->hdr1, sizeof(TreeHeader));
+    if( treeHeaderChecksumOk(&pDb->treehdr) ) return LSM_OK;
+
+    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL);
+    if( rc==LSM_BUSY ){
+      usleep(50);
+    }else{
+      if( rc==LSM_OK ){
+        if( treeHeaderChecksumOk(&pShm->hdr1)==0 ){
+          memcpy(&pShm->hdr1, &pShm->hdr2, sizeof(TreeHeader));
+        }
+        memcpy(&pDb->treehdr, &pShm->hdr1, sizeof(TreeHeader));
+        lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
+
+        if( treeHeaderChecksumOk(&pDb->treehdr)==0 ){
+          rc = LSM_CORRUPT_BKPT;
+        }
+      }
+      return rc;
+    }
   }
-  return LSM_OK;
 }
 
 /*

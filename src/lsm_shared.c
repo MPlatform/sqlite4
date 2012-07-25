@@ -22,14 +22,6 @@ typedef struct FreelistEntry FreelistEntry;
 /*
 ** TODO: Find homes for these miscellaneous notes. 
 **
-** FREE-LIST DELTA FORMAT
-**
-**   The free-list delta consists of three integers:
-**
-**     1. The number of elements to remove from the start of the free-list.
-**     2. If non-zero, a refreed block to append to the free-list.
-**     3. Same as (2).
-**
 ** SNAPSHOT ID MANIPULATIONS
 **
 **   When the database is initialized the worker snapshot id is set to the
@@ -77,27 +69,6 @@ struct AppendList {
   int nAlloc;
 };
 
-/*
-** A snapshot of a database. A snapshot contains all the information required
-** to read or write a database file on disk. See the description of struct
-** Database below for futher details.
-**
-** pExport/nExport:
-**   pExport points to a buffer containing the serialized (checkpoint) 
-**   image of the snapshot. The serialized image is nExport bytes in size. 
-*/
-struct Snapshot {
-  Database *pDatabase;            /* Database this snapshot belongs to */
-  Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
-  i64 iId;                        /* Snapshot id */
-
-  /* Used by client snapshots only */
-  void *pExport;                  /* Serialized snapshot image */
-  int nExport;                    /* Size of pExport in bytes */
-  int nRef;                       /* Number of references to this structure */
-  Snapshot *pSnapshotNext;        /* Next snapshot on this database */
-};
-#define LSM_INITIAL_SNAPSHOT_ID 11
 
 /*
 ** Database structure. There is one such structure for each distinct 
@@ -1125,20 +1096,31 @@ int lsmBeginReadTrans(lsm_db *pDb){
   assert( pDb->pWorker==0 );
 
   if( pDb->pClient==0 ){
-    Database *p = pDb->pDatabase;
-
-    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
-    rc = lsmTreeBeginRead(pDb);
+    /* Load the in-memory tree header. */
+    rc = lsmTreeLoadHeader(pDb);
 
+    /* Load the database snapshot */
     if( rc==LSM_OK ){
-      /* Set the connections client database file snapshot */
-      p->pClient->nRef++;
-      pDb->pClient = p->pClient;
+      rc = lsmCheckpointLoad(pDb);
     }
 
-    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
+    /* Take a read-lock on the tree and snapshot just loaded. Then check
+    ** that the shared-memory still contains the same values. If so, proceed.
+    ** Otherwise, relinquish the read-lock and retry the whole procedure
+    ** (starting with loading the in-memory tree header).  */
+    if( rc==LSM_OK ){
+      /* TODO */
+    }
+
+    /* Deserialize the checkpoint just loaded. TODO: This will be removed
+    ** after lsm_sorted.c is changed to work directly from the serialized
+    ** version of the snapshot.  */
+    if( rc==LSM_OK ){
+      rc = lsmCheckpointDeserialize(pDb, pDb->aSnapshot, &pDb->pClient);
+    }
+    assert( (rc==LSM_OK)==(pDb->pClient!=0) );
   }
 
   return rc;

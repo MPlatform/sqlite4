@@ -41,7 +41,8 @@
 **
 **   Log pointer:
 **
-**     4 integers. See ckptExportLog() and ckptImportLog().
+**     4 integers (2 for a 64-bit offset and 2 for a 64-bit checksum). See 
+**     ckptExportLog() and ckptImportLog().
 **
 **   Append points:
 **
@@ -623,7 +624,7 @@ static int ckptImport(
       rc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);
       lsmDbSnapshotSetLevel(pSnap, pTopLevel);
 
-      /* Import the freelist delta */
+      /* Import the freelist */
       if( rc==LSM_OK ){
         int nFree = aInt[iIn++] * 3;
         rc = lsmSetFreelist(pDb, (int *)&aInt[iIn], nFree);
@@ -934,6 +935,196 @@ int lsmCheckpointRead(lsm_db *pDb, int *piSlot, int *pbOvfl){
   }
 
   *piSlot = iSlot;
+  return rc;
+}
+
+/*
+** Read the checkpoint id from meta-page pPg.
+*/
+static i64 ckptLoadId(MetaPage *pPg){
+  i64 iId;
+  int nData;
+  u8 *aData = lsmFsMetaPageData(pPg, &nData);
+
+  iId = (i64)lsmGetU32(&aData[CKPT_HDR_ID_MSW*4]) << 32;
+  iId += (i64)lsmGetU32(&aData[CKPT_HDR_ID_LSW*4]);
+
+  return iId;
+}
+
+/*
+** Calculate the checksum of the checkpoint specified by arguments aCkpt and
+** nCkpt. Store the checksum in *piCksum1 and *piCksum2 before returning.
+*/
+static void ckptChecksum(u32 *aCkpt, u32 nCkpt, u32 *piCksum1, u32 *piCksum2){
+  int i;
+  u32 cksum1 = 1;
+  u32 cksum2 = 2;
+
+  if( nCkpt % 2 ){
+    cksum1 += aCkpt[nCkpt-1] & 0x0000FFFF;
+    cksum2 += aCkpt[nCkpt-1] & 0xFFFF0000;
+  }
+
+  for(i=0; i<nCkpt-2; i+=2){
+    cksum1 += cksum2 + aCkpt[i];
+    cksum2 += cksum1 + aCkpt[i+1];
+  }
+
+  *piCksum1 = cksum1;
+  *piCksum2 = cksum2;
+}
+
+/*
+** Return true if the buffer passed as an argument contains a valid
+** checkpoint.
+*/
+static int ckptChecksumOk(u32 *aCkpt){
+  u32 nCkpt = aCkpt[CKPT_HDR_NCKPT];
+  u32 cksum1;
+  u32 cksum2;
+
+  ckptChecksum(aCkpt, nCkpt, &cksum1, &cksum2);
+  return (cksum1==aCkpt[nCkpt-2] && cksum2==aCkpt[nCkpt-1]);
+}
+
+/*
+** Attempt to load a checkpoint from meta page iMeta.
+**
+** This function is a no-op if *pRc is set to any value other than LSM_OK
+** when it is called. If an error occurs, *pRc is set to an LSM error code
+** before returning.
+**
+** If no error occurs and the checkpoint is successfully loaded, copy it to
+** ShmHeader.aClient[] and ShmHeader.aWorker[], and set ShmHeader.iMetaPage 
+** to indicate its origin. In this case return 1. Or, if the checkpoint 
+** cannot be loaded (because the checksum does not compute), return 0.
+*/
+static int ckptTryLoad(lsm_db *pDb, MetaPage *pPg, u32 iMeta, int *pRc){
+  int bLoaded = 0;                /* Return value */
+  if( *pRc==LSM_OK ){
+    MetaPage *pPg;                /* Meta-page iMeta */
+    int rc;                       /* Error code */
+    u32 *aCkpt = 0;               /* Pointer to buffer containing checkpoint */
+    u32 nCkpt;                    /* Number of elements in aCkpt[] */
+    int nData;                    /* Bytes of data in aData[] */
+    u8 *aData;                    /* Meta page data */
+   
+    aData = lsmFsMetaPageData(pPg, &nData);
+    nCkpt = (u32)lsmGetU32(&aData[CKPT_HDR_NCKPT*sizeof(u32)]);
+    if( nCkpt<=nData/sizeof(u32) ){
+      aCkpt = (u32 *)lsmMallocRc(pDb->pEnv, nCkpt*sizeof(u32), &rc);
+    }
+    if( aCkpt ){
+      u32 cksum1, cksum2;         /* Calculated checkpoint checksum */
+
+      memcpy(aCkpt, aData, nCkpt*sizeof(u32));
+      if( LSM_LITTLE_ENDIAN ){
+        u32 i;
+        for(i=0; i<nCkpt; i++) aCkpt[i] = BYTESWAP32(aCkpt[i]);
+      }
+      ckptChecksum(aCkpt, nCkpt, &cksum1, &cksum2);
+      if( cksum1==aCkpt[nCkpt-2] && cksum2==aCkpt[nCkpt-1] ){
+        ShmHeader *pShm = pDb->pShmhdr;
+        memcpy(pShm->aClient, aCkpt, nCkpt*sizeof(u32));
+        memcpy(pShm->aWorker, aCkpt, nCkpt*sizeof(u32));
+        pShm->iMetaPage = iMeta;
+        bLoaded = 1;
+      }
+    }
+
+    lsmFree(pDb->pEnv, aCkpt);
+    *pRc = rc;
+  }
+  return bLoaded;
+}
+
+/*
+** This function is called as part of database recovery to initialize the
+** ShmHeader.aClient[] and ShmHeader.aWorker[] snapshots.
+*/
+int lsmCheckpointRecover(lsm_db *pDb){
+  int rc = LSM_OK;                /* Return Code */
+  i64 iId1;                       /* Id of checkpoint on meta-page 1 */
+  i64 iId2;                       /* Id of checkpoint on meta-page 2 */
+  int bLoaded = 0;                /* True once checkpoint has been loaded */
+  int cmp;                        /* True if (iId2>iId1) */
+  MetaPage *apPg[2] = {0, 0};     /* Meta-pages 1 and 2 */
+
+  rc = lsmFsMetaPageGet(pDb->pFS, 0, 1, &apPg[0]);
+  if( rc==LSM_OK ) rc = lsmFsMetaPageGet(pDb->pFS, 0, 2, &apPg[1]);
+
+  iId1 = ckptLoadId(apPg[0]);
+  iId2 = ckptLoadId(apPg[1]);
+
+  cmp = (iId2 > iId1);
+  bLoaded = ckptTryLoad(pDb, apPg[cmp?1:0], (cmp?2:1), &rc);
+  if( bLoaded==0 ){
+    bLoaded = ckptTryLoad(pDb, apPg[cmp?0:1], (cmp?1:2), &rc);
+  }
+
+  lsmFsMetaPageRelease(apPg[0]);
+  lsmFsMetaPageRelease(apPg[1]);
+  return rc;
+}
+
+/*
+** Copy the current client snapshot from shared-memory to pDb->aSnapshot[].
+*/
+int lsmCheckpointLoad(lsm_db *pDb){
+  while( 1 ){
+    int rc;
+    int nInt;
+    ShmHeader *pShm = pDb->pShmhdr;
+
+    nInt = pShm->aClient[CKPT_HDR_NCKPT];
+    memcpy(pDb->aSnapshot, pShm->aClient, nInt*sizeof(u32));
+    if( ckptChecksumOk(pDb->aSnapshot) ) return LSM_OK;
+
+    rc = lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL);
+    if( rc==LSM_BUSY ){
+      usleep(50);
+    }else{
+      if( rc==LSM_OK ){
+        if( ckptChecksumOk(pShm->aClient)==0 ){
+          nInt = pShm->aWorker[CKPT_HDR_NCKPT];
+          memcpy(pShm->aClient, pShm->aWorker, nInt*sizeof(u32));
+        }
+        nInt = pShm->aClient[CKPT_HDR_NCKPT];
+        memcpy(pDb->aSnapshot, &pShm->aClient, nInt*sizeof(u32));
+        lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK);
+
+        if( ckptChecksumOk(pDb->aSnapshot)==0 ){
+          rc = LSM_CORRUPT_BKPT;
+        }
+      }
+      return rc;
+    }
+  }
+}
+
+int lsmCheckpointDeserialize(
+  lsm_db *pDb, 
+  u32 *aCkpt, 
+  Snapshot **ppSnap
+){
+  int rc = LSM_OK;
+  Snapshot *pNew;
+
+  pNew = (Snapshot *)lsmMallocZeroRc(pDb->pEnv, sizeof(Snapshot), &rc);
+  if( rc==LSM_OK ){
+    int nLevel = (int)aCkpt[CKPT_HDR_NLEVEL];
+    int iIn = CKPT_HDR_SIZE + CKPT_APPENDLIST_SIZE + CKPT_LOGPTR_SIZE;
+    rc = ckptLoadLevels(pDb, aCkpt, &iIn, nLevel, &pNew->pLevel);
+  }
+
+  if( rc!=LSM_OK ){
+    assert( pNew==0 || pNew->pLevel==0 );
+    lsmFree(pDb->pEnv, pNew);
+    pNew = 0;
+  }
+
+  *ppSnap = pNew;
   return rc;
 }
 

@@ -142,11 +142,43 @@ static int dbAutoWork(lsm_db *pDb, int nUnit){
 /*
 ** If required, run the recovery procedure to initialize the database.
 ** Return LSM_OK if successful or an error code otherwise.
+**
+** As in SQLite 3 WAL mode, "recovery" essentially means make sure the
+** contents of the shared-memory region are consistent with the data
+** stored in the file-system.
 */
 static int dbRecoverIfRequired(lsm_db *pDb){
   int rc = LSM_OK;
+  ShmHeader *pShm = pDb->pShmhdr;
 
   assert( pDb->pWorker==0 && pDb->pClient==0 );
+
+  while( pShm->bInit==0 ){
+    /* The shared-memory "system initialized" flag is clear. Attempt to run
+    ** the recovery procedure.  */
+
+    rc = lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_EXCL);
+    if( rc==LSM_BUSY ){
+      /* Could not obtain the lock. Sleep a while and try again. */
+      usleep(50);
+    }else{
+      if( rc==LSM_OK ){
+        if( pShm->bInit==0 ){
+          memset(pShm, 0, sizeof(ShmHeader));
+          rc = lsmLogRecover(pDb);
+          if( rc==LSM_OK ){
+            rc = lsmCheckpointRecover(pDb);
+          }
+        }
+        lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
+      }
+      return rc;
+    }
+  }
+
+  return rc;
+
+#if 0
 
   /* The following call returns NULL if recovery is not required. */
   pDb->pWorker = lsmDbSnapshotRecover(pDb);
@@ -179,6 +211,7 @@ static int dbRecoverIfRequired(lsm_db *pDb){
 
     dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
   }
+#endif
 
   return rc;
 }
@@ -245,6 +278,7 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
       rc = lsmShmChunk(pDb, 0, (void **)&pDb->pShmhdr);
     }
 
+    /* If required, run recovery */
     if( rc==LSM_OK ){
       rc = dbRecoverIfRequired(pDb);
     }
