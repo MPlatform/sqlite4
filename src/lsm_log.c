@@ -405,9 +405,9 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
 */
 void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
   LogWriter *p;
-  assert( lsmHoldingClientMutex(pDb) );
 
   if( pDb->bUseLog==0 ) return;
+  assert( lsmHoldingClientMutex(pDb) );
   p = pDb->pLogWriter;
 
   if( bCommit ){

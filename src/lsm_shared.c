@@ -207,7 +207,6 @@ static void assertNotInFreelist(Freelist *p, int iBlk){
 }
 static void assertMustbeWorker(lsm_db *pDb){
   assert( pDb->pWorker );
-  assert( lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pWorkerMutex) );
 }
 static void assertSnapshotListOk(Database *p){
   Snapshot *pIter;
@@ -498,23 +497,7 @@ Level *lsmDbSnapshotLevel(Snapshot *pSnapshot){
 }
 
 void lsmDbSnapshotSetLevel(Snapshot *pSnap, Level *pLevel){
-  assert( isWorker(pSnap) );
   pSnap->pLevel = pLevel;
-}
-
-void lsmDatabaseDirty(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
-  assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) );
-  if( p->bDirty==0 ){
-    p->worker.iId++;
-    p->bDirty = 1;
-  }
-}
-
-int lsmDatabaseIsDirty(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
-  assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) );
-  return p->bDirty;
 }
 
 /*
@@ -522,11 +505,9 @@ int lsmDatabaseIsDirty(lsm_db *pDb){
 ** used with worker snapshots.
 */
 void lsmSnapshotSetNBlock(Snapshot *pSnap, int nNew){
-  assert( isWorker(pSnap) );
   pSnap->pDatabase->nBlock = nNew;
 }
 int lsmSnapshotGetNBlock(Snapshot *pSnap){
-  assert( isWorker(pSnap) );
   return pSnap->pDatabase->nBlock;
 }
 
@@ -1077,6 +1058,33 @@ int lsmBeginRecovery(lsm_db *pDb){
   return rc;
 }
 
+int lsmBeginWork(lsm_db *pDb){
+  int rc;
+
+  /* Attempt to take the WORKER lock */
+  rc = lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL);
+
+  /* Deserialize the current worker snapshot */
+  if( rc==LSM_OK ){
+    rc = lsmCheckpointLoadWorker(pDb);
+  }
+  return rc;
+}
+
+void lsmFinishWork(lsm_db *pDb, int *pRc){
+
+  /* If no error has occurred, serialize the worker snapshot and write
+  ** it to shared memory.  */
+  if( *pRc==LSM_OK ){
+    *pRc = lsmCheckpointSaveWorker(pDb);
+  }
+
+  lsmSortedFreeLevel(pDb->pEnv, pDb->pWorker->pLevel);
+  lsmFree(pDb->pEnv, pDb->pWorker);
+  pDb->pWorker = 0;
+}
+
+
 /*
 ** Called when recovery is finished.
 */
@@ -1139,9 +1147,7 @@ void lsmFinishReadTrans(lsm_db *pDb){
   assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
   if( pClient ){
-    Database *p = pDb->pDatabase;
-
-    lsmDbSnapshotRelease(pDb->pEnv, pDb->pClient);
+    freeClientSnapshot(pDb->pEnv, pClient);
     pDb->pClient = 0;
   }
 }
@@ -1150,8 +1156,43 @@ void lsmFinishReadTrans(lsm_db *pDb){
 ** Open a write transaction.
 */
 int lsmBeginWriteTrans(lsm_db *pDb){
-  int rc = LSM_OK;                /* Return code */
+  int rc;                         /* Return code */
+  ShmHeader *pShm = pDb->pShmhdr; /* Shared memory header */
   Database *p = pDb->pDatabase;   /* Shared database object */
+
+  /* If there is no read-transaction open, open one now. */
+  rc = lsmBeginReadTrans(pDb);
+
+  /* Attempt to take the WRITER lock */
+  if( rc==LSM_OK ){
+    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL);
+  }
+
+  /* If the previous writer failed mid-transaction, run emergency rollback. */
+  if( rc==LSM_OK && pShm->bWriter ){
+    /* TODO: This! */
+    assert( 0 );
+    rc = LSM_CORRUPT_BKPT;
+  }
+
+  /* Check that this connection is currently reading from the most recent
+  ** version of the database. If not, return LSM_BUSY.  */
+  if( rc==LSM_OK && memcmp(&pShm->hdr1, &pDb->treehdr, sizeof(TreeHeader)) ){
+    rc = LSM_BUSY;
+  }
+
+  /* If everything was successful, set the "transaction-in-progress" flag
+  ** and return LSM_OK. Otherwise, if some error occurred, relinquish the 
+  ** WRITER lock and return an error code.  */
+  if( rc==LSM_OK ){
+    pShm->bWriter = 1;
+  }else{
+    lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
+  }
+  return rc;
+
+#if 0
+
 
   lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
@@ -1198,6 +1239,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   }
   lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   return rc;
+#endif
 }
 
 /*
@@ -1214,16 +1256,10 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 ** LSM_OK is returned if successful, or an LSM error code otherwise.
 */
 int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
-  Database *p = pDb->pDatabase;
-  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
 
-  assert( p->bWriter );
-  p->bWriter = 0;
-
+  lsmLogEnd(pDb, &pDb->treehdr.log, bCommit);
   lsmTreeEndTransaction(pDb, bCommit);
-  lsmLogEnd(pDb, &p->log, bCommit);
-
-  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
+  lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
   return LSM_OK;
 }
 

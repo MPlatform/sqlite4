@@ -40,12 +40,6 @@ to reuse. The associated log file offset is also required to determine
 when the log file may be wrapped. These quantities are read directly
 from the meta-page in the database itself as required.
 
-<p>
-TODO: The checkpoint format has to change to include the checkpoint id
-associated with each free block. And to include the "append list". Use
-varints to get good compression on the checkpoint ids in the freelist. 
-Limit the size of the append list to six entries or thereabouts. 
-
 <h2>File locks</h2>
 
 <p>
@@ -315,7 +309,8 @@ To work on the database file, a worker performs the following:
        But that would mean an extra flag in shared-memory. Perhaps its
        better to consider all worker snapshots to be read-only. Or,
        change the format slightly to include a "read-write" flag that
-       can be set for those snapshots not copied into the client slot.
+       can be set for those snapshots not copied into the client slot. 
+       UPDATE: Current code already treats all worker snapshots as read-only.
 
   <li> Release the WORKER lock.
 </ol>

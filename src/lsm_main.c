@@ -83,6 +83,8 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nMerge = LSM_DEFAULT_NMERGE;
   pDb->bUseLog = 1;
 
+  /* TODO: Remove */
+  pDb->bUseLog = 0;
   return LSM_OK;
 }
 
@@ -300,10 +302,12 @@ int lsmFlushToDisk(lsm_db *pDb){
 
   /* Must not hold the worker snapshot when this is called. */
   assert( pDb->pWorker==0 );
-  dbWorkerStart(pDb);
+  rc = lsmBeginWork(pDb);
 
   /* Save the position of each open cursor belonging to pDb. */
-  rc = lsmSaveCursors(pDb);
+  if( rc==LSM_OK ){
+    rc = lsmSaveCursors(pDb);
+  }
 
   bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   if( rc==LSM_OK && pDb->bAutowork ){
@@ -329,6 +333,8 @@ int lsmFlushToDisk(lsm_db *pDb){
   /* Create a new client snapshot - one that uses the new runs created above. */
   if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nLsmLevel, bOvfl);
 
+  lsmFinishWork(pDb, &rc);
+
   /* Restore the position of any open cursors */
   if( rc==LSM_OK ) rc = lsmRestoreCursors(pDb);
 
@@ -336,7 +342,6 @@ int lsmFlushToDisk(lsm_db *pDb){
   if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "flush");
 #endif
 
-  dbWorkerDone(pDb);
   return rc;
 }
 
@@ -803,6 +808,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
     }
     pDb->nTransOpen = iLevel;
   }
+
   dbReleaseClientSnapshot(pDb);
   return rc;
 }

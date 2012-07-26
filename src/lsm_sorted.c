@@ -3596,8 +3596,6 @@ int lsmSortedFlushTree(
     return LSM_OK;
   }
 
-  lsmDatabaseDirty(pDb);
-
   if( rc==LSM_OK ){
     rc = lsmSortedNewToplevel(pDb, nLevel, bFreelist);
   }
@@ -3807,7 +3805,6 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
   assert( pWorker );
 
   if( lsmDbSnapshotLevel(pWorker)==0 ) return LSM_OK;
-  lsmDatabaseDirty(pDb);
 
   while( nRemaining>0 ){
     Level *pLevel;

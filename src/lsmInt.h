@@ -414,6 +414,10 @@ int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);
 int lsmCheckpointRecover(lsm_db *);
 int lsmCheckpointDeserialize(lsm_db *, u32 *, Snapshot **);
 
+int lsmCheckpointLoad(lsm_db *pDb);
+int lsmCheckpointLoadWorker(lsm_db *pDb);
+
+
 /* 
 ** Functions from file "lsm_tree.c".
 */
@@ -654,6 +658,9 @@ int lsmBeginReadTrans(lsm_db *);
 int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
 
+int lsmBeginWork(lsm_db *);
+void lsmFinishWork(lsm_db *, int *);
+
 int lsmFinishRecovery(lsm_db *);
 void lsmFinishReadTrans(lsm_db *);
 int lsmFinishWriteTrans(lsm_db *, int);
@@ -687,9 +694,6 @@ int lsmBlockRefree(lsm_db *, int);
 void lsmFreelistDeltaBegin(lsm_db *);
 void lsmFreelistDeltaEnd(lsm_db *);
 int lsmFreelistDelta(lsm_db *pDb);
-
-void lsmDatabaseDirty(lsm_db *pDb);
-int lsmDatabaseIsDirty(lsm_db *pDb);
 
 DbLog *lsmDatabaseLog(lsm_db *pDb);
 

@@ -315,51 +315,6 @@ static void lsmAppendKeyValue(LsmString *pStr, TreeKey *pKey){
 }
 #endif
 
-void dump_node(TreeNode *pNode, int nIndent, int isNode){
-#if 0
-  if( pNode ){
-    LsmString s;
-    int i;
-
-    lsmStringInit(&s, NEED_ENV);
-    lsmAppendIndent(&s, nIndent);
-    lsmStringAppendf(&s, "0x%p", (void*)pNode);
-    printf("%s\n", s.z);
-    lsmStringClear(&s);
-
-    for(i=0; i<4; i++){
-
-      if( isNode ){
-        if( pNode->iV2 && i==pNode->iV2Ptr ){
-          lsmAppendIndent(&s, nIndent+2);
-          lsmStringAppendf(&s, "if( version>=%d )", pNode->iV2);
-          printf("%s\n", s.z);
-          lsmStringClear(&s);
-          dump_node(pNode->pV2Ptr, nIndent + 4, isNode-1);
-          if( pNode->apChild[i] ){
-            lsmAppendIndent(&s, nIndent+2);
-            lsmStringAppendf(&s, "else");
-            printf("%s\n", s.z);
-            lsmStringClear(&s);
-          }
-        }
-
-        dump_node(pNode->apChild[i], nIndent + 4, isNode-1);
-      }
-
-      if( i<3 && pNode->apKey[i] ){
-        lsmAppendIndent(&s, nIndent);
-        lsmStringAppendf(&s, "k%d: ", i);
-        lsmAppendKeyValue(&s, pNode->apKey[i]);
-        printf("%s\n", s.z);
-        lsmStringClear(&s);
-      }
-
-    }
-  }
-#endif
-}
-
 void dump_node_contents(
   lsm_db *pDb,
   u32 iNode,                      /* Print out hte contents of this node */
@@ -402,14 +357,6 @@ void dump_tree_contents(lsm_db *pDb, const char *zCaption){
   printf("\n%s\n", zCaption);
   if( pDb->treehdr.iRoot ){
     dump_node_contents(pDb, pDb->treehdr.iRoot, 0, pDb->treehdr.nHeight-1);
-  }
-  fflush(stdout);
-}
-
-void dump_tv_contents(TreeVersion *pTV, const char *zCaption){
-  printf("\n%s\n", zCaption);
-  if( pTV->pRoot ){
-    dump_node(pTV->pRoot, 2, pTV->nHeight-1);
   }
   fflush(stdout);
 }
@@ -862,7 +809,7 @@ int lsmTreeInsert(
   assert( pTV==pTree->pWorking );
   assert_tree_looks_ok(LSM_OK, pTree);
 #endif
-  /* dump_tree_contents(pDb, "before"); */
+  dump_tree_contents(pDb, "before");
 
   /* Allocate and populate a new key-value pair structure */
   nTreeKey = sizeof(TreeKey) + nKey + (nVal>0 ? nVal : 0);
@@ -937,7 +884,7 @@ int lsmTreeInsert(
     }
   }
 
-  /* dump_tree_contents(pDb, "after"); */
+  dump_tree_contents(pDb, "after");
   assert_tree_looks_ok(rc, pTree);
   return rc;
 }
@@ -958,7 +905,8 @@ int lsmTreeSize(lsm_db *pDb){
 ** to the Tree structure for this call.
 */
 int lsmTreeIsEmpty(lsm_db *pDb){
-  /* TODO: This is not right in a true multi-process system... */
+  /* TODO: This is not right in a true multi-process system (due to
+  ** race conditions)... */
   return (pDb->pShmhdr->hdr1.iRoot==0);
 }
 
