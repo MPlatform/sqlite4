@@ -390,6 +390,7 @@ struct Snapshot {
   Database *pDatabase;            /* Database this snapshot belongs to */
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
+  int nBlock;                     /* Number of blocks in database file */
 
   /* Used by client snapshots only */
   void *pExport;                  /* Serialized snapshot image */
@@ -416,6 +417,9 @@ int lsmCheckpointDeserialize(lsm_db *, u32 *, Snapshot **);
 
 int lsmCheckpointLoad(lsm_db *pDb);
 int lsmCheckpointLoadWorker(lsm_db *pDb);
+int lsmCheckpointStore(lsm_db *pDb, int);
+
+i64 lsmCheckpointId(u32 *, int);
 
 
 /* 
@@ -679,7 +683,6 @@ Snapshot *lsmDbSnapshotRecover(lsm_db *);
 void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *);
 
 void lsmSnapshotSetNBlock(Snapshot *, int);
-int lsmSnapshotGetNBlock(Snapshot *);
 void lsmSnapshotSetCkptid(Snapshot *, i64);
 
 Level *lsmDbSnapshotLevel(Snapshot *);

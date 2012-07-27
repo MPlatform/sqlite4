@@ -465,7 +465,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       }
 
       /* Write a checkpoint, also if required */
-      if( rc==LSM_OK && p->pClient ){
+      if( rc==LSM_OK ){
         rc = lsmCheckpointWrite(pDb);
       }
 
@@ -475,17 +475,10 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       }
 
       /* Free the contents of the worker snapshot */
-      lsmSortedFreeLevel(pDb->pEnv, p->worker.pLevel);
       lsmFree(pDb->pEnv, p->freelist.aEntry);
       lsmFree(pDb->pEnv, p->append.aPoint);
       
-      /* Free the client snapshot */
-      if( p->pClient ){
-        assert( p->pClient->nRef==1 );
-        p->pClient->nRef = 0;
-        freeClientSnapshot(pDb->pEnv, p->pClient);
-      }
-
+      /* Free the Database object */
       freeDatabase(pDb->pEnv, p);
     }
     leaveGlobalMutex(pDb->pEnv);
@@ -506,9 +499,6 @@ void lsmDbSnapshotSetLevel(Snapshot *pSnap, Level *pLevel){
 */
 void lsmSnapshotSetNBlock(Snapshot *pSnap, int nNew){
   pSnap->pDatabase->nBlock = nNew;
-}
-int lsmSnapshotGetNBlock(Snapshot *pSnap){
-  return pSnap->pDatabase->nBlock;
 }
 
 void lsmSnapshotSetCkptid(Snapshot *pSnap, i64 iNew){
@@ -737,9 +727,11 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   Database *p = pDb->pDatabase;
   Freelist *pFree;                /* Database free list */
   int iRet = 0;                   /* Block number of allocated block */
- 
-  pFree = &p->freelist;
 
+  assert( pDb->pWorker );
+ 
+#if 0
+  pFree = &p->freelist;
   if( pFree->nEntry>0 ){
     /* The first block on the free list was freed as part of the work done
     ** to create the snapshot with id iFree. So, we can reuse this block if
@@ -779,12 +771,12 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
       }
     }
   }
+#endif
 
   /* If no block was allocated from the free-list, allocate one at the
   ** end of the file. */
   if( iRet==0 ){
-    p->nBlock++;
-    iRet = p->nBlock;
+    iRet = ++pDb->pWorker->nBlock;
   }
 
   *piBlk = iRet;
@@ -805,7 +797,6 @@ int lsmBlockFree(lsm_db *pDb, int iBlk){
 
   assertMustbeWorker(pDb);
   assert( p->bRecordDelta==0 );
-  assert( pDb->pDatabase->bDirty );
 
   rc = flAppendEntry(pDb->pEnv, &p->freelist, iBlk, pWorker->iId);
   return rc;
@@ -941,87 +932,46 @@ int lsmSetFreelist(lsm_db *pDb, u32 *aElem, int nElem){
 int lsmCheckpointWrite(lsm_db *pDb){
   Snapshot *pSnap;                /* Snapshot to checkpoint */
   Database *p = pDb->pDatabase;
-  int rc = LSM_OK;                /* Return Code */
+  int rc;                         /* Return Code */
 
   assert( pDb->pWorker==0 );
+  assert( pDb->pClient==0 );
+  rc = lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_EXCL);
+  if( rc!=LSM_OK ) return rc;
 
-  /* Try to obtain the checkpointer lock, then check if the a checkpoint
-  ** is actually required. If successful, and one is, set stack variable
-  ** pSnap to point to the client snapshot to checkpoint.  
-  */
-  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-  pSnap = p->pClient;
-  if( pSnap->pExport && p->bCheckpointer==0 && pSnap->iId>p->iCheckpointId ){
-    p->bCheckpointer = 1;
-    pSnap->nRef++;
-  }else{
-    pSnap = 0;
-  }
-  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
+  rc = lsmCheckpointLoad(pDb);
+  if( rc==LSM_OK ){
+    ShmHeader *pShm = pDb->pShmhdr;
+    int bDone = 0;                /* True if checkpoint is already stored */
 
-  /* Attempt to grab the checkpoint mutex. If the attempt fails, this 
-  ** function becomes a no-op. Some other thread is already running
-  ** a checkpoint (or at least checking if one is required).  */
-  if( pSnap ){
-    FileSystem *pFS = pDb->pFS;   /* File system object */
-    int iPg = 1+(p->iSlot%2);     /* Meta page to write to */
-    MetaPage *pPg = 0;            /* Page to write to */
-    int doSync;                   /* True to sync the db */
-
-    /* If the safety mode is "off", omit calls to xSync(). */
-    doSync = (pDb->eSafety!=LSM_SAFETY_OFF);
-
-    /* Sync the db. To make sure all runs referred to by the checkpoint
-    ** are safely on disk. If we do not do this and a power failure occurs 
-    ** just after the checkpoint is written into the db header, the
-    ** database could be corrupted following recovery.  */
-    if( doSync ) rc = lsmFsSyncDb(pFS);
-
-    /* Fetch a reference to the meta-page to write the checkpoint to. */
-    if( rc==LSM_OK ) rc = lsmFsMetaPageGet(pFS, 1, iPg, &pPg);
-
-    /* Unless an error has occurred, copy the checkpoint blob into the
-    ** meta-page, then release the reference to it (which will flush the
-    ** checkpoint into the file).  */
-    if( rc!=LSM_OK ){
-      lsmFsMetaPageRelease(pPg);
-    }else{
-      u8 *aData;                  /* Page buffer */
-      int nData;                  /* Size of buffer aData[] */
-      aData = lsmFsMetaPageData(pPg, &nData);
-      assert( pSnap->nExport<=nData );
-      memcpy(aData, pSnap->pExport, pSnap->nExport);
-      rc = lsmFsMetaPageRelease(pPg);
-      pPg = 0;
+    /* Check if this checkpoint has already been written to the database
+    ** file. If so, set variable bDone to true.  */
+    if( pShm->iMetaPage ){
+      MetaPage *pPg;              /* Meta page */
+      u8 *aData;                  /* Meta-page data buffer */
+      int nData;                  /* Size of aData[] in bytes */
+      i64 iCkpt;                  /* Id of checkpoint just loaded */
+      i64 iDisk;                  /* Id of checkpoint already stored in db */
+      iCkpt = lsmCheckpointId(pDb->aSnapshot, 0);
+      rc = lsmFsMetaPageGet(pDb->pFS, 0, pShm->iMetaPage, &pPg);
+      if( rc==LSM_OK ){
+        aData = lsmFsMetaPageData(pPg, &nData);
+        iDisk = lsmCheckpointId((u32 *)aData, 1);
+        lsmFsMetaPageRelease(pPg);
+      }
+      bDone = (iDisk>=iCkpt);
     }
 
-    /* Sync the db file again. To make sure that the checkpoint just 
-    ** written is on the disk.  */
-    if( rc==LSM_OK && doSync ) rc = lsmFsSyncDb(pFS);
-
-    /* This is where space on disk is reclaimed. Now that the checkpoint 
-    ** has been written to the database and synced, part of the database
-    ** log (the part containing the data just synced to disk) is no longer
-    ** required and so the space that it was taking up on disk can be 
-    ** reused.
-    **
-    ** It is also possible that database file blocks may be made available
-    ** for reuse here. A database file block is free if it is not used by
-    ** the most recently checkpointed snapshot, or by a snapshot that is 
-    ** in use by any existing database client. And "the most recently
-    ** checkpointed snapshot" has just changed.
-    */
-    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-    if( rc==LSM_OK ){
-      lsmLogCheckpoint(pDb, &p->log, lsmCheckpointLogOffset(pSnap->pExport));
-      p->iCheckpointId = pSnap->iId;
-      p->iSlot = iPg;
+    if( rc==LSM_OK && bDone==0 ){
+      int iMeta = (pShm->iMetaPage % 2) + 1;
+      rc = lsmFsSyncDb(pDb->pFS);
+      if( rc==LSM_OK ) rc = lsmCheckpointStore(pDb, iMeta);
+      if( rc==LSM_OK ) rc = lsmFsSyncDb(pDb->pFS);
+      if( rc==LSM_OK ) pShm->iMetaPage = iMeta;
     }
-    p->bCheckpointer = 0;
-    snapshotDecrRefcnt(pDb->pEnv, pSnap);
-    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
   }
 
+  lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
   return rc;
 }
 
@@ -1067,21 +1017,25 @@ int lsmBeginWork(lsm_db *pDb){
   /* Deserialize the current worker snapshot */
   if( rc==LSM_OK ){
     rc = lsmCheckpointLoadWorker(pDb);
+    if( pDb->pWorker ) pDb->pWorker->pDatabase = pDb->pDatabase;
   }
   return rc;
 }
 
 void lsmFinishWork(lsm_db *pDb, int *pRc){
-
   /* If no error has occurred, serialize the worker snapshot and write
   ** it to shared memory.  */
   if( *pRc==LSM_OK ){
     *pRc = lsmCheckpointSaveWorker(pDb);
   }
 
-  lsmSortedFreeLevel(pDb->pEnv, pDb->pWorker->pLevel);
-  lsmFree(pDb->pEnv, pDb->pWorker);
-  pDb->pWorker = 0;
+  if( pDb->pWorker ){
+    lsmSortedFreeLevel(pDb->pEnv, pDb->pWorker->pLevel);
+    lsmFree(pDb->pEnv, pDb->pWorker);
+    pDb->pWorker = 0;
+  }
+
+  lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK);
 }
 
 
@@ -1186,6 +1140,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   ** WRITER lock and return an error code.  */
   if( rc==LSM_OK ){
     pShm->bWriter = 1;
+    pDb->treehdr.iTransId++;
   }else{
     lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
   }
@@ -1279,7 +1234,6 @@ int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
 int lsmBeginFlush(lsm_db *pDb){
 
   assert( pDb->pWorker );
-  assert( pDb->pDatabase->bWriter || holdingGlobalMutex(pDb->pEnv) );
 
   /* TODO */
 #if 0

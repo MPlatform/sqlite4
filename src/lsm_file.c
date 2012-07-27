@@ -1319,9 +1319,9 @@ static Segment *startsWith(Segment *pRun, Pgno iFirst){
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   int rc = LSM_OK;
   Snapshot *pWorker;              /* Worker snapshot */
-  Snapshot *pRelease = 0;         /* Snapshot to release */
   Segment *pArray = 0;            /* Array to report on */
   Level *pLvl;                    /* Used to iterate through db levels */
+  int bUnlock = 0;
 
   *pzOut = 0;
   if( iFirst==0 ) return LSM_ERROR;
@@ -1329,7 +1329,10 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   /* Obtain the worker snapshot */
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
+    rc = lsmBeginWork(pDb);
+    if( rc!=LSM_OK ) return rc;
+    pWorker = pDb->pWorker;
+    bUnlock = 1;
   }
 
   /* Search for the array that starts on page iFirst */
@@ -1367,7 +1370,10 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
     *pzOut = str.z;
   }
 
-  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
+  if( bUnlock ){
+    int rcwork = LSM_BUSY;
+    lsmFinishWork(pDb, &rcwork);
+  }
   return rc;
 }
 

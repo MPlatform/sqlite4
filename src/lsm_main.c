@@ -132,7 +132,9 @@ static int dbAutoWork(lsm_db *pDb, int nUnit){
   assert( nUnit>0 );
 
   /* If one is required, run a checkpoint. */
+#if 0
   rc = lsmCheckpointWrite(pDb);
+#endif
 
   dbWorkerStart(pDb);
   rc = lsmSortedAutoWork(pDb, nUnit);
@@ -309,29 +311,16 @@ int lsmFlushToDisk(lsm_db *pDb){
     rc = lsmSaveCursors(pDb);
   }
 
-  bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   if( rc==LSM_OK && pDb->bAutowork ){
     rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
-    bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   }
 
   /* Write the contents of the in-memory tree into the database file and 
   ** update the worker snapshot accordingly. Then flush the contents of 
   ** the db file to disk too. No calls to fsync() are made here - just 
   ** write().  */
+  if( rc==LSM_OK ) bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
-#if 0
-  if( rc==LSM_OK && bAutowork ){
-    assert( bOvfl==0 && nLsmLevel==0 );
-    rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
-    bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
-    if( bOvfl && rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
-  }
-#endif
-  if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
-
-  /* Create a new client snapshot - one that uses the new runs created above. */
-  if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nLsmLevel, bOvfl);
 
   lsmFinishWork(pDb, &rc);
 
@@ -483,12 +472,15 @@ int lsmStructList(
   Level *p;
   LsmString s;
   Snapshot *pWorker;              /* Worker snapshot */
-  Snapshot *pRelease = 0;         /* Snapshot to release */
+  int bUnlock = 0;
 
   /* Obtain the worker snapshot */
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
+    rc = lsmBeginWork(pDb);
+    if( rc!=LSM_OK ) return rc;
+    pWorker = pDb->pWorker;
+    bUnlock = 1;
   }
 
   /* Format the contents of the snapshot as text */
@@ -506,7 +498,10 @@ int lsmStructList(
   rc = s.n>=0 ? LSM_OK : LSM_NOMEM;
 
   /* Release the snapshot and return */
-  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
+  if( bUnlock ){
+    int rcwork = LSM_BUSY;
+    lsmFinishWork(pDb, &rcwork);
+  }
   *pzOut = s.z;
   return rc;
 }

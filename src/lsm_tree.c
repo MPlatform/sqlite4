@@ -487,6 +487,7 @@ static u32 treeShmalloc(lsm_db *pDb, int nByte, int *pRc){
     /* Allocate space at iWrite. */
     iRet = iWrite;
     pDb->treehdr.iWrite = iWrite + nByte;
+    pDb->treehdr.nByte += nByte;
   }
   return iRet;
 }
@@ -582,6 +583,7 @@ static int treeUpdatePtr(lsm_db *pDb, TreeCursor *pCsr, u32 iNew){
       }
     }else{
       /* The "v2 data" option */
+      assert( pDb->treehdr.iTransId>0 );
       p->iV2 = pDb->treehdr.iTransId;
       p->iV2Child = (u8)iChildPtr;
       p->iV2Ptr = iNew;
@@ -809,7 +811,7 @@ int lsmTreeInsert(
   assert( pTV==pTree->pWorking );
   assert_tree_looks_ok(LSM_OK, pTree);
 #endif
-  dump_tree_contents(pDb, "before");
+  /* dump_tree_contents(pDb, "before"); */
 
   /* Allocate and populate a new key-value pair structure */
   nTreeKey = sizeof(TreeKey) + nKey + (nVal>0 ? nVal : 0);
@@ -884,7 +886,7 @@ int lsmTreeInsert(
     }
   }
 
-  dump_tree_contents(pDb, "after");
+  /* dump_tree_contents(pDb, "after"); */
   assert_tree_looks_ok(rc, pTree);
   return rc;
 }
@@ -894,7 +896,6 @@ int lsmTreeInsert(
 ** structure.
 */
 int lsmTreeSize(lsm_db *pDb){
-  return 50;
   return pDb->treehdr.nByte;
 }
 
