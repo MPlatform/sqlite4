@@ -2158,7 +2158,7 @@ static int multiCursorGetVal(
       *pnVal = 0;
     }
   }else if( iVal==CURSOR_DATA_SYSTEM ){
-    if( pCsr->flags & CURSOR_AT_FREELIST ){
+    if( 0 && (pCsr->flags & CURSOR_AT_FREELIST) ){
       u32 *aVal;
       int nVal;
 
@@ -2173,7 +2173,6 @@ static int multiCursorGetVal(
         *pnVal = sizeof(u32) * (nVal - 3*LSM_CKPT_MIN_NONLSM);
       }
       lsmFreelistDeltaBegin(pCsr->pDb);
-
     }else if( (pCsr->flags & CURSOR_AT_LEVELS) && pCsr->nLsmLevel>0 ){
       lsmFree(pCsr->pDb->pEnv, pCsr->pSystemVal);
       lsmCheckpointLevels(pCsr->pDb, pCsr->nLsmLevel, ppVal, pnVal);

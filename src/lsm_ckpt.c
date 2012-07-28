@@ -418,31 +418,16 @@ int lsmCheckpointExport(
 
   /* Write the freelist delta (if bOvfl is true) or else the entire free-list
   ** (if bOvfl is false).  */
+  assert( bOvfl==0 );             /* TODO: Fix this */
   if( rc==LSM_OK ){
-    u32 *aVal;
-    int nVal;
-    rc = lsmSnapshotFreelist(pDb, &aVal, &nVal);
-
-    if( bOvfl==0 ){
-      ckptSetValue(&ckpt, iOut++, nVal / 3, &rc);
-      for(i=0; i<nVal && rc==LSM_OK; i++){
-        ckptSetValue(&ckpt, iOut++, aVal[i], &rc);
-      }
-    }else{
-      int nEntry;                 /* Number of entries from aVal/nVal */
-
-      nEntry = (nVal/3);
-      if( nEntry>LSM_CKPT_MIN_NONLSM ) nEntry = LSM_CKPT_MIN_NONLSM;
-      nEntry -= lsmFreelistDelta(pDb);
-      assert( nEntry>=0 && nEntry<=LSM_CKPT_MIN_FREELIST );
-
-      ckptSetValue(&ckpt, iOut++, nEntry, &rc);
-      for(i=0; i<nEntry*3; i++){
-        ckptSetValue(&ckpt, iOut++, aVal[i], &rc);
-      }
+    int nFree = pSnap->freelist.nEntry;
+    ckptSetValue(&ckpt, iOut++, nFree, &rc);
+    for(i=0; i<nFree; i++){
+      FreelistEntry *p = &pSnap->freelist.aEntry[i];
+      ckptSetValue(&ckpt, iOut++, p->iBlk, &rc);
+      ckptSetValue(&ckpt, iOut++, (p->iId >> 32) & 0xFFFFFFFF, &rc);
+      ckptSetValue(&ckpt, iOut++, p->iId & 0xFFFFFFFF, &rc);
     }
-
-    lsmFree(pDb->pEnv, aVal);
   }
 
   /* Write the checkpoint header */
@@ -1029,6 +1014,7 @@ static void ckptLoadEmpty(lsm_db *pDb){
     0,                  /* CKPT_HDR_OVFL */
     0, 0, 0, 0,         /* The log pointer */
     0, 0, 0, 0,         /* The append list */
+    0,                  /* The free block list */
     0, 0                /* Space for checksum values */
   };
   u32 nCkpt = array_size(aCkpt);
@@ -1158,6 +1144,7 @@ int lsmCheckpointDeserialize(
 
   pNew = (Snapshot *)lsmMallocZeroRc(pDb->pEnv, sizeof(Snapshot), &rc);
   if( rc==LSM_OK ){
+    int nFree;
     int nCopy;
     int nLevel = (int)aCkpt[CKPT_HDR_NLEVEL];
     int iIn = CKPT_HDR_SIZE + CKPT_APPENDLIST_SIZE + CKPT_LOGPTR_SIZE;
@@ -1169,6 +1156,23 @@ int lsmCheckpointDeserialize(
     /* Make a copy of the append-list */
     nCopy = sizeof(u32) * LSM_APPLIST_SZ;
     memcpy(pNew->aiAppend, &aCkpt[CKPT_HDR_SIZE+CKPT_LOGPTR_SIZE], nCopy);
+
+    /* Copy the free-list */
+    nFree = aCkpt[iIn++];
+    if( nFree ){
+      pNew->freelist.aEntry = (FreelistEntry *)lsmMallocRc(
+          pDb->pEnv, sizeof(FreelistEntry)*nFree, &rc
+      );
+      if( rc==LSM_OK ){
+        int i;
+        for(i=0; i<nFree; i++){
+          pNew->freelist.aEntry[i].iBlk = aCkpt[iIn++];
+          pNew->freelist.aEntry[i].iId = ((i64)(aCkpt[iIn])<<32) + aCkpt[iIn+1];
+          iIn += 2;
+        }
+        pNew->freelist.nEntry = pNew->freelist.nAlloc = nFree;
+      }
+    }
   }
 
   if( rc!=LSM_OK ){
@@ -1202,8 +1206,10 @@ int lsmCheckpointSaveWorker(lsm_db *pDb){
 }
 
 /*
-** Return the checkpoint-id of the checkpoint array passed as the only
-** argument to this function.
+** Return the checkpoint-id of the checkpoint array passed as the first
+** argument to this function. If the second argument is true, then assume
+** that the checkpoint is made up of 32-bit big-endian integers. If it
+** is false, assume that the integers are in machine byte order.
 */
 i64 lsmCheckpointId(u32 *aCkpt, int bDisk){
   i64 iId;
@@ -1216,5 +1222,4 @@ i64 lsmCheckpointId(u32 *aCkpt, int bDisk){
   }
   return iId;
 }
-
 

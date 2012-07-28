@@ -379,29 +379,41 @@ struct ShmChunk {
 
 #define LSM_APPLIST_SZ 4
 
+typedef struct Freelist Freelist;
+typedef struct FreelistEntry FreelistEntry;
+
+/*
+** An instance of the following structure stores the current database free
+** block list. The free list is a list of blocks that are not currently
+** used by the worker snapshot. Assocated with each block in the list is the
+** snapshot id of the most recent snapshot that did actually use the block.
+*/
+struct Freelist {
+  FreelistEntry *aEntry;          /* Free list entries */
+  int nEntry;                     /* Number of valid slots in aEntry[] */
+  int nAlloc;                     /* Allocated size of aEntry[] */
+};
+struct FreelistEntry {
+  u32 iBlk;                       /* Block number */
+  i64 iId;                        /* Largest snapshot id to use this block */
+};
+
 /*
 ** A snapshot of a database. A snapshot contains all the information required
 ** to read or write a database file on disk. See the description of struct
 ** Database below for futher details.
-**
-** pExport/nExport:
-**   pExport points to a buffer containing the serialized (checkpoint) 
-**   image of the snapshot. The serialized image is nExport bytes in size. 
 */
 struct Snapshot {
   Database *pDatabase;            /* Database this snapshot belongs to */
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
-  int nBlock;                     /* Number of blocks in database file */
-  u32 aiAppend[LSM_APPLIST_SZ];
 
-  /* Used by client snapshots only */
-#if 0
-  void *pExport;                  /* Serialized snapshot image */
-  int nExport;                    /* Size of pExport in bytes */
-  int nRef;                       /* Number of references to this structure */
-  Snapshot *pSnapshotNext;        /* Next snapshot on this database */
-#endif
+  /* Used by worker snapshots only */
+  int nBlock;                     /* Number of blocks in database file */
+  u32 aiAppend[LSM_APPLIST_SZ];   /* Append point list */
+  Freelist freelist;              /* Free block list */
+  int nFreelistDelta;
+  int bRecordDelta;
 };
 #define LSM_INITIAL_SNAPSHOT_ID 11
 
