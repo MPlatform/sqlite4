@@ -444,6 +444,7 @@ i64 lsmCheckpointId(u32 *, int);
 */
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeRelease(lsm_env *, Tree *);
+void lsmTreeClear(lsm_db *);
 
 int lsmTreeSize(lsm_db *);
 int lsmTreeIsEmpty(lsm_db *);

@@ -785,6 +785,14 @@ static int treeInsertLeaf(
   return rc;
 }
 
+void lsmTreeClear(lsm_db *pDb){
+  pDb->treehdr.iTreeId++;
+  pDb->treehdr.iTransId = 1;
+  pDb->treehdr.iRoot = 0;
+  pDb->treehdr.nHeight = 0;
+  pDb->treehdr.nByte = 0;
+}
+
 /*
 ** Insert a new entry into the in-memory tree.
 **

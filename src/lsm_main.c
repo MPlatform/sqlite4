@@ -322,6 +322,8 @@ int lsmFlushToDisk(lsm_db *pDb){
   if( rc==LSM_OK ) bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
 
+  if( rc==LSM_OK ) lsmTreeClear(pDb);
+
   lsmFinishWork(pDb, &rc);
 
   /* Restore the position of any open cursors */
