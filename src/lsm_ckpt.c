@@ -130,7 +130,7 @@ static const int one = 1;
 #define CKPT_LOGPTR_SIZE      4
 #define CKPT_SEGMENT_SIZE     4
 #define CKPT_CKSUM_SIZE       2
-#define CKPT_APPENDLIST_SIZE  4
+#define CKPT_APPENDLIST_SIZE  LSM_APPLIST_SZ
 
 /* A #define to describe each integer in the checkpoint header. */
 #define CKPT_HDR_ID_MSW   0
@@ -335,35 +335,15 @@ static void ckptExportAppendlist(
   int *piOut,                     /* IN/OUT: Offset within checkpoint buffer */
   int *pRc                        /* IN/OUT: Error code */
 ){
-  Pgno *aAppend;
-  int nAppend;
   int i;
   int iOut = *piOut;
+  u32 *aiAppend = db->pWorker->aiAppend;
 
-  aAppend = lsmSharedAppendList(db, &nAppend);
   for(i=0; i<CKPT_APPENDLIST_SIZE; i++){
-    ckptSetValue(p, iOut++, ((i<nAppend) ? aAppend[i]: 0), pRc);
+    ckptSetValue(p, iOut++, aiAppend[i], pRc);
   }
-  *piOut = *piOut + CKPT_APPENDLIST_SIZE;
+  *piOut = iOut;
 };
-
-static void ckptImportAppendlist(
-  lsm_db *db,
-  u32 *aIn,
-  int *piIn,
-  int *pRc
-){
-  int rc = *pRc;
-  int iIn = *piIn;
-  int i;
-
-  for(i=0; rc==LSM_OK && i<CKPT_APPENDLIST_SIZE; i++){
-    if( aIn[i+iIn] ) rc = lsmSharedAppendListAdd(db, aIn[i+iIn]);
-  }
-
-  *piIn = iIn + CKPT_APPENDLIST_SIZE;
-  *pRc = rc;
-}
 
 /*
 ** Import a log offset.
@@ -1178,12 +1158,17 @@ int lsmCheckpointDeserialize(
 
   pNew = (Snapshot *)lsmMallocZeroRc(pDb->pEnv, sizeof(Snapshot), &rc);
   if( rc==LSM_OK ){
+    int nCopy;
     int nLevel = (int)aCkpt[CKPT_HDR_NLEVEL];
     int iIn = CKPT_HDR_SIZE + CKPT_APPENDLIST_SIZE + CKPT_LOGPTR_SIZE;
 
     pNew->iId = lsmCheckpointId(aCkpt, 0);
     pNew->nBlock = aCkpt[CKPT_HDR_NBLOCK];
     rc = ckptLoadLevels(pDb, aCkpt, &iIn, nLevel, &pNew->pLevel);
+
+    /* Make a copy of the append-list */
+    nCopy = sizeof(u32) * LSM_APPLIST_SZ;
+    memcpy(pNew->aiAppend, &aCkpt[CKPT_HDR_SIZE+CKPT_LOGPTR_SIZE], nCopy);
   }
 
   if( rc!=LSM_OK ){

@@ -800,6 +800,7 @@ static int fsFreeBlock(
     }
   }
 
+#if 0
   aAppend = lsmSharedAppendList(pFS->pDb, &nAppend);
   for(i=0; i<nAppend; i++){
     if( aAppend[i]>=iFirst && aAppend[i]<=iLast ){
@@ -807,6 +808,7 @@ static int fsFreeBlock(
       break;
     }
   }
+#endif
 
   if( rc==LSM_OK ){
     rc = lsmBlockFree(pFS->pDb, iBlk);
@@ -935,28 +937,15 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
   return fsPageGet(pFS, iPg, 0, ppNext);
 }
 
-static Pgno findAppendPoint(FileSystem *pFS, int nMin){
-  Pgno ret = 0;
-  Pgno *aAppend;
-  int nAppend;
+static Pgno findAppendPoint(FileSystem *pFS){
   int i;
+  u32 *aiAppend = pFS->pDb->pWorker->aiAppend;
+  u32 iRet = 0;
 
-  aAppend = lsmSharedAppendList(pFS->pDb, &nAppend);
-#if 1
-  for(i=nAppend-1; i>=0; i--){
-#else
-  for(i=0; i<nAppend; i++){
-#endif
-    Pgno iLastOnBlock;
-    iLastOnBlock = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, aAppend[i]));
-    if( (iLastOnBlock - aAppend[i])>=nMin ){
-      ret = aAppend[i];
-      lsmSharedAppendListRemove(pFS->pDb, i);
-      break;
-    }
+  for(i=LSM_APPLIST_SZ-1; iRet==0 && i>=0; i--){
+    if( (iRet = aiAppend[i]) ) aiAppend[i] = 0;
   }
-
-  return ret;
+  return iRet;
 }
 
 /*
@@ -977,7 +966,7 @@ int lsmFsSortedAppend(
   int iPrev = p->iLast;
 
   if( iPrev==0 ){
-    iApp = findAppendPoint(pFS, 0);
+    iApp = findAppendPoint(pFS);
   }else if( fsIsLast(pFS, iPrev) ){
     Page *pLast = 0;
     rc = fsPageGet(pFS, iPrev, 0, &pLast);
@@ -1051,7 +1040,14 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
         lsmFsPageRelease(pLast);
       }
     }else{
-      rc = lsmSharedAppendListAdd(pFS->pDb, p->iLast+1);
+      int i;
+      u32 *aiAppend = pFS->pDb->pWorker->aiAppend;
+      for(i=0; i<LSM_APPLIST_SZ; i++){
+        if( aiAppend[i]==0 ){
+          aiAppend[i] = p->iLast+1;
+          break;
+        }
+      }
     }
   }
   return rc;

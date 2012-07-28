@@ -377,6 +377,8 @@ struct ShmChunk {
   u32 iNext;
 };
 
+#define LSM_APPLIST_SZ 4
+
 /*
 ** A snapshot of a database. A snapshot contains all the information required
 ** to read or write a database file on disk. See the description of struct
@@ -391,12 +393,15 @@ struct Snapshot {
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
   int nBlock;                     /* Number of blocks in database file */
+  u32 aiAppend[LSM_APPLIST_SZ];
 
   /* Used by client snapshots only */
+#if 0
   void *pExport;                  /* Serialized snapshot image */
   int nExport;                    /* Size of pExport in bytes */
   int nRef;                       /* Number of references to this structure */
   Snapshot *pSnapshotNext;        /* Next snapshot on this database */
+#endif
 };
 #define LSM_INITIAL_SNAPSHOT_ID 11
 
@@ -699,10 +704,6 @@ void lsmFreelistDeltaEnd(lsm_db *);
 int lsmFreelistDelta(lsm_db *pDb);
 
 DbLog *lsmDatabaseLog(lsm_db *pDb);
-
-Pgno *lsmSharedAppendList(lsm_db *db, int *pnApp);
-int lsmSharedAppendListAdd(lsm_db *db, Pgno iPg);
-void lsmSharedAppendListRemove(lsm_db *db, int iIdx);
 
 #ifdef LSM_DEBUG
   int lsmHoldingClientMutex(lsm_db *pDb);

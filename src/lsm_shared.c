@@ -16,7 +16,6 @@
 #include "lsmInt.h"
 
 typedef struct Freelist Freelist;
-typedef struct AppendList AppendList;
 typedef struct FreelistEntry FreelistEntry;
 
 /*
@@ -142,7 +141,6 @@ struct Database {
 
   Snapshot *pClient;              /* Client (reader) snapshot */
   Snapshot worker;                /* Worker (writer) snapshot */
-  AppendList append;              /* List of appendable points */
 
   int nBlock;                     /* Number of blocks tracked by this ss */
   Freelist freelist;              /* Database free-list */
@@ -208,59 +206,11 @@ static void assertNotInFreelist(Freelist *p, int iBlk){
 static void assertMustbeWorker(lsm_db *pDb){
   assert( pDb->pWorker );
 }
-static void assertSnapshotListOk(Database *p){
-  Snapshot *pIter;
-  i64 iPrev = 0;
-
-  for(pIter=p->pClient; pIter; pIter=pIter->pSnapshotNext){
-    assert( pIter==p->pClient || pIter->iId<iPrev );
-    iPrev = pIter->iId;
-  }
-}
 #else
 # define assertNotInFreelist(x,y)
 # define assertMustbeWorker(x)
-# define assertSnapshotListOk(x)
 #endif
 
-
-Pgno *lsmSharedAppendList(lsm_db *db, int *pnApp){
-  Database *p = db->pDatabase;
-  assert( db->pWorker );
-  *pnApp = p->append.nPoint;
-  return p->append.aPoint;
-}
-
-int lsmSharedAppendListAdd(lsm_db *db, Pgno iPg){
-  AppendList *pList;
-  assert( db->pWorker );
-  pList = &db->pDatabase->append;
-
-  assert( pList->nAlloc>=pList->nPoint );
-  if( pList->nAlloc<=pList->nPoint ){
-    int nNew = pList->nAlloc+8;
-    Pgno *aNew = (Pgno *)lsmRealloc(db->pEnv, pList->aPoint, sizeof(Pgno)*nNew);
-    if( aNew==0 ) return LSM_NOMEM_BKPT;
-    pList->aPoint = aNew;
-    pList->nAlloc = nNew;
-  }
-
-  pList->aPoint[pList->nPoint++] = iPg;
-  return LSM_OK;
-}
-
-void lsmSharedAppendListRemove(lsm_db *db, int iIdx){
-  AppendList *pList;
-  int i;
-  assert( db->pWorker );
-  pList = &db->pDatabase->append;
-
-  assert( pList->nPoint>iIdx );
-  for(i=iIdx+1; i<pList->nPoint;i++){
-    pList->aPoint[i-1] = pList->aPoint[i];
-  }
-  pList->nPoint--;
-}
 
 /*
 ** Append an entry to the free-list.
@@ -420,14 +370,7 @@ int lsmDbDatabaseFind(
 }
 
 static void freeClientSnapshot(lsm_env *pEnv, Snapshot *p){
-  Level *pLevel;
-  
-  assert( p->nRef==0 );
-  for(pLevel=p->pLevel; pLevel; pLevel=pLevel->pNext){
-    lsmFree(pEnv, pLevel->pSplitKey);
-  }
-  lsmFree(pEnv, p->pExport);
-  lsmFree(pEnv, p);
+  assert( 0 );
 }
 
 
@@ -476,7 +419,6 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
 
       /* Free the contents of the worker snapshot */
       lsmFree(pDb->pEnv, p->freelist.aEntry);
-      lsmFree(pDb->pEnv, p->append.aPoint);
       
       /* Free the Database object */
       freeDatabase(pDb->pEnv, p);
@@ -576,9 +518,9 @@ void lsmDbSetPagesize(lsm_db *pDb, int nPgsz, int nBlksz){
 }
 
 static void snapshotDecrRefcnt(lsm_env *pEnv, Snapshot *pSnap){
+#if 0
   Database *p = pSnap->pDatabase;
 
-  assertSnapshotListOk(p);
   pSnap->nRef--;
   assert( pSnap->nRef>=0 );
   if( pSnap->nRef==0 ){
@@ -587,8 +529,8 @@ static void snapshotDecrRefcnt(lsm_env *pEnv, Snapshot *pSnap){
     while( pIter->pSnapshotNext!=pSnap ) pIter = pIter->pSnapshotNext;
     pIter->pSnapshotNext = pSnap->pSnapshotNext;
     freeClientSnapshot(pEnv, pSnap);
-    assertSnapshotListOk(p);
   }
+#endif
 }
 
 /*
@@ -621,6 +563,9 @@ void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *pSnap){
 ** snapshot. The connection must be the worker to call this function.
 */
 int lsmDbUpdateClient(lsm_db *pDb, int nLsmLevel, int bOvfl){
+  assert( 0 );
+  return 0;
+#if 0
   Database *p = pDb->pDatabase;   /* Database handle */
   Snapshot *pOld;                 /* Old client snapshot object */
   Snapshot *pNew;                 /* New client snapshot object */
@@ -691,11 +636,9 @@ int lsmDbUpdateClient(lsm_db *pDb, int nLsmLevel, int bOvfl){
 
     /* Install the new client snapshot and release the old. */
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-    assertSnapshotListOk(p);
     pOld = p->pClient;
     pNew->pSnapshotNext = pOld;
     p->pClient = pNew;
-    assertSnapshotListOk(p);
     if( pDb->pClient ){
       pDb->pClient = pNew;
       pNew->nRef++;
@@ -713,6 +656,7 @@ int lsmDbUpdateClient(lsm_db *pDb, int nLsmLevel, int bOvfl){
   }
 
   return rc;
+#endif
 }
 
 /*
@@ -746,7 +690,6 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     ** protected by the client mutex. So grab it here before determining
     ** the id of the oldest snapshot still potentially in use.  */
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-    assertSnapshotListOk(p);
     for(pIter=p->pClient; pIter->pSnapshotNext; pIter=pIter->pSnapshotNext);
     iInUse = LSM_MIN(pIter->iId, p->iCheckpointId);
     lsmMutexLeave(pDb->pEnv, p->pClientMutex);
@@ -1101,7 +1044,8 @@ void lsmFinishReadTrans(lsm_db *pDb){
   assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
   if( pClient ){
-    freeClientSnapshot(pDb->pEnv, pClient);
+    lsmSortedFreeLevel(pDb->pEnv, pDb->pClient->pLevel);
+    lsmFree(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
   }
 }
