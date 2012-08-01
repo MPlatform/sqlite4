@@ -132,55 +132,7 @@ struct TreeLeaf {
   u32 aiKeyPtr[3];                /* Array of pointers to TreeKey objects */
 };
 
-/*
-** A handle used by a client to access a Tree structure.
-*/
-struct TreeVersion {
-  Tree *pTree;                    /* The tree structure to which this belongs */
-  int nRef;                       /* Number of pointers to this */
-  TreeNode *pRoot;                /* Pointer to root of tree structure */
-  int nHeight;                    /* Current height of tree pRoot */
-  int iVersion;                   /* Current version */
-};
-
 #define WORKING_VERSION (1<<30)
-
-/*
-** A tree structure.
-**
-** iVersion:
-**   When the tree is first created, this is set to 1. Thereafter it is
-**   incremented each time lsmTreeMark() is called. The tree must be 
-**   destroyed (i.e. flushed to disk) before it wraps around (todo!).
-**
-**   When v2 data is written to a tree-node, the iV2 field of the node
-**   is set to the current value of Tree.iVersion.
-**
-** nRef:
-**   Number of references to this tree structure. When it is first created,
-**   (in lsmTreeNew()) nRef is set to 1. There after the ref-count may be
-**   incremented and decremented using treeIncrRefcount() and 
-**   DecrRefcount(). When the ref-count of a tree structure reaches zero
-**   it is freed.
-**
-** xCmp:
-**   Pointer to the compare function. This is a copy of some pDb->xCmp.
-**
-*/
-struct Tree {
-  int nTreeRef;                   /* Current number of pointers to this */
-  Mempool *pPool;                 /* Memory pool to allocate from */
-  int (*xCmp)(void *, int, void *, int);         /* Compare function */
-  TreeVersion *pCommit;           /* Committed version of tree (for readers) */
-
-  TreeVersion *pWorking;          /* Working verson (for writers) */
-#if 0
-  TreeVersion tvWorking;          /* Working verson (for writers) */
-#endif
-
-  TreeNode *pRbFirst;
-  TreeNode *pRbLast;
-};
 
 /*
 ** The pointer passed as the first argument points to an interior node,
@@ -221,6 +173,10 @@ struct TreeCursor {
 };
 
 
+static int treeOffsetToChunk(u32 iOff){
+  assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
+  return (int)(iOff>>15);
+}
 
 static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
   /* TODO: This will likely be way too slow. If it is, chunks should be
@@ -228,8 +184,8 @@ static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
   if( iPtr && *pRc==0 ){
     int rc;
     void *pChunk;
-    assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
-    rc = lsmShmChunk(pDb, (iPtr>>15), &pChunk);
+
+    rc = lsmShmChunk(pDb, treeOffsetToChunk(iPtr), &pChunk);
     if( rc==LSM_OK ){
       return &((u8 *)pChunk)[iPtr & (LSM_SHM_CHUNK_SIZE-1)];
     }
@@ -237,8 +193,6 @@ static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
   }
   return 0;
 }
-
-
 
 #if defined(LSM_DEBUG) && defined(LSM_EXPENSIVE_ASSERT)
 
@@ -364,52 +318,6 @@ void dump_tree_contents(lsm_db *pDb, const char *zCaption){
 #endif
 
 /*
-** Allocate a new tree structure.
-*/
-int lsmTreeNew(
-  lsm_env *pEnv,                            /* Environment handle */
-  int (*xCmp)(void *, int, void *, int),    /* Compare function */
-  Tree **ppTree                             /* OUT: New tree object */
-){
-  int rc;
-  Tree *pTree = 0;
-  Mempool *pPool;                 /* Memory pool used by the new tree */
-  TreeVersion *pClient = 0;       /* Initial client access handle */
-
-  rc = lsmPoolNew(pEnv, &pPool);
-  pClient = (TreeVersion *)lsmMallocZeroRc(pEnv, sizeof(TreeVersion), &rc);
-
-  if( rc==LSM_OK ){
-    pTree = (Tree *)lsmPoolMallocZero(pEnv, pPool, sizeof(Tree));
-    assert( pTree );
-    pTree->pPool = pPool;
-    pTree->xCmp = xCmp;
-    pTree->nTreeRef = 1;
-
-    pClient->iVersion = 1;
-    pClient->pTree = pTree;
-    pClient->nRef = 1;
-    pTree->pCommit = pClient;
-  }else{
-    assert( pClient==0 );
-    lsmPoolDestroy(pEnv, pPool);
-  }
-
-  *ppTree = pTree;
-  return rc;
-}
-
-/*
-** Destroy a tree structure allocated by lsmTreeNew().
-*/
-static void treeDestroy(lsm_env *pEnv, Tree *pTree){
-  if( pTree ){
-    assert( pTree->pWorking==0 );
-    lsmPoolDestroy(pEnv, pTree->pPool);
-  }
-}
-
-/*
 ** Initialize a cursor object, the space for which has already been
 ** allocated.
 */
@@ -455,6 +363,11 @@ static int treeCursorRestore(TreeCursor *pCsr, int *pRes){
   return rc;
 }
 
+static ShmChunk * treeShmChunk(lsm_db *pDb, int iChunk){
+  int rcdummy = LSM_OK;
+  return (ShmChunk *)treeShmptr(pDb, iChunk*LSM_SHM_CHUNK_SIZE, &rcdummy);
+}
+
 /*
 ** Allocate nByte bytes of space within the *-shm file. If successful, 
 ** return LSM_OK and set *piPtr to the offset within the file at which
@@ -466,22 +379,63 @@ static u32 treeShmalloc(lsm_db *pDb, int nByte, int *pRc){
     const static int CHUNK_SIZE = LSM_SHM_CHUNK_SIZE;
     const static int CHUNK_HDR = LSM_SHM_CHUNK_HDR;
 
-    u32 iEof;                     /* End of current chunk */
-    u32 iWrite = pDb->treehdr.iWrite;
+    u32 iWrite;                   /* Current write offset */
 
     /* Round all allocations up to a multiple of 4 bytes. So that all
-     ** integer fields in shared memory are 32-bit aligned. */
+    ** integer fields in shared memory are 32-bit aligned. */
     nByte = ((nByte + 3) / 4) * 4;
 
     /* TODO: Remove this limit by allowing non-contiguous allocations. */
     assert( nByte <= (CHUNK_SIZE-CHUNK_HDR) );
 
-    iEof = (1 + ((iWrite-1) / CHUNK_SIZE)) * CHUNK_SIZE;
-    assert( iEof>=iWrite && (iEof-iWrite)<CHUNK_SIZE );
+    /* Check if there is enough space on the current chunk to fit the
+    ** new allocation. If not, link in a new chunk and put the new
+    ** allocation at the start of it.  */
+    iWrite = pDb->treehdr.iWrite;
+    if( iWrite==0 ){
+      iWrite = CHUNK_SIZE + CHUNK_HDR;
+      pDb->treehdr.iFirst = 1;
+      pDb->treehdr.nChunk = 2;
+    }else{
+      u32 iEof;                   /* End of current chunk */
+      int iChunk = treeOffsetToChunk(iWrite-1);
 
-    if( (iWrite+nByte)>iEof ){
-      /* Advance to the next chunk */
-      iWrite = iEof + CHUNK_HDR;
+      iEof = (iChunk+1) * CHUNK_SIZE;
+      assert( iEof>=iWrite && (iEof-iWrite)<CHUNK_SIZE );
+      if( (iWrite+nByte)>iEof ){
+        ShmChunk *pHdr;           /* Header of chunk just finished (iChunk) */
+        ShmChunk *pFirst;         /* Header of chunk treehdr.iFirst */
+        int iNext = 0;            /* Next chunk */
+        int rc;
+
+        /* Check if the chunk at the start of the linked list is still in
+        ** use. If not, reuse it. If so, allocate a new chunk by appending
+        ** to the *-shm file.  */
+        if( pDb->treehdr.iFirst!=iChunk ){
+          int bInUse;
+          pFirst = treeShmChunk(pDb, pDb->treehdr.iFirst);
+          rc = lsmTreeInUse(pDb, pFirst->iLastTree, &bInUse);
+          if( rc!=LSM_OK ){
+            *pRc = rc;
+            return 0;
+          }
+          if( bInUse==0 ){
+            iNext = pDb->treehdr.iFirst;
+            pDb->treehdr.iFirst = pFirst->iNext;
+            assert( pDb->treehdr.iFirst );
+            assert( pFirst->iLastTree<pDb->treehdr.iTreeId );
+          }
+        }
+        if( iNext==0 ) iNext = pDb->treehdr.nChunk++;
+
+        /* Set the header values for the chunk just finished */
+        pHdr = (ShmChunk *)treeShmptr(pDb, iChunk*CHUNK_SIZE, pRc);
+        pHdr->iLastTree = pDb->treehdr.iTreeId;
+        pHdr->iNext = iNext;
+
+        /* Advance to the next chunk */
+        iWrite = iNext * CHUNK_SIZE + CHUNK_HDR;
+      }
     }
 
     /* Allocate space at iWrite. */
@@ -492,6 +446,9 @@ static u32 treeShmalloc(lsm_db *pDb, int nByte, int *pRc){
   return iRet;
 }
 
+/*
+** Allocate and zero nByte bytes of space within the *-shm file.
+*/
 static void *treeShmallocZero(lsm_db *pDb, int nByte, u32 *piPtr, int *pRc){
   u32 iPtr;
   void *p;
@@ -785,6 +742,9 @@ static int treeInsertLeaf(
   return rc;
 }
 
+/*
+** Empty the contents of the in-memory tree.
+*/
 void lsmTreeClear(lsm_db *pDb){
   pDb->treehdr.iTreeId++;
   pDb->treehdr.iTransId = 1;
@@ -816,7 +776,6 @@ int lsmTreeInsert(
 
   assert( nVal>=0 || pVal==0 );
 #if 0
-  assert( pTV==pTree->pWorking );
   assert_tree_looks_ok(LSM_OK, pTree);
 #endif
   /* dump_tree_contents(pDb, "before"); */
@@ -1340,96 +1299,6 @@ void lsmTreeMark(lsm_db *pDb, TreeMark *pMark){
 #endif
 }
 
-/*
-** This is called when a client wishes to upgrade from a read to a write
-** transaction. If the read-version passed as the second version is the
-** most recent one, decrement its ref-count and return a pointer to
-** the write-version object. Otherwise return null. So we can do:
-**
-**     // Open read-transaction
-**     pReadVersion = lsmTreeReadVersion(pTree);
-**
-**     // Later on, attempt to upgrade to write transaction
-**     if( pWriteVersion = lsmTreeWriteVersion(pTree, pReadVersion) ){
-**       // Have upgraded to a write transaction!
-**     }else{
-**       // Reading an out-of-date snapshot. Upgrade fails.
-**     }
-**
-** The caller must take care of rejecting a clients attempt to upgrade to
-** a write transaction *while* another client has a write transaction 
-** underway. This mechanism merely prevents writing to an out-of-date
-** snapshot.
-*/
-int lsmTreeWriteVersion(
-  lsm_env *pEnv,
-  Tree *pTree, 
-  TreeVersion **ppVersion
-){
-  TreeVersion *pRead = *ppVersion;
-  TreeVersion *pRet;
-
-  /* The caller must ensure that no other write transaction is underway. */
-  assert( pTree->pWorking==0 );
-  
-  if( pRead && pTree->pCommit!=pRead ) return LSM_BUSY;
-  pRet = lsmMallocZero(pEnv, sizeof(TreeVersion));
-  if( pRet==0 ) return LSM_NOMEM_BKPT;
-  pTree->pWorking = pRet;
-
-  memcpy(pRet, pTree->pCommit, sizeof(TreeVersion));
-  pRet->nRef = 1;
-  if( pRead ) pRead->nRef--;
-  *ppVersion = pRet;
-  assert( pRet->pTree==pTree );
-  return LSM_OK;
-}
-
-static void treeIncrRefcount(Tree *pTree){
-  pTree->nTreeRef++;
-}
-
-static void treeDecrRefcount(lsm_env *pEnv, Tree *pTree){
-  assert( pTree->nTreeRef>0 );
-  pTree->nTreeRef--;
-  if( pTree->nTreeRef==0 ){
-    assert( pTree->pWorking==0 );
-    treeDestroy(pEnv, pTree);
-  }
-}
-
-/*
-** Release a reference to the write-version.
-*/
-int lsmTreeReleaseWriteVersion(
-  lsm_env *pEnv,
-  TreeVersion *pWorking,          /* Write-version reference */
-  int bCommit,                    /* True for a commit */
-  TreeVersion **ppReadVersion     /* OUT: Read-version reference */
-){
-  assert( 0 );
-#if 0
-  Tree *pTree = pWorking->pTree;
-
-  assert( lsmTreeIsWriteVersion(pWorking) );
-  assert( pWorking->nRef==1 );
-
-  if( bCommit ){
-    treeIncrRefcount(pTree);
-    lsmTreeReleaseReadVersion(pEnv, pTree->pCommit);
-    pTree->pCommit = pWorking;
-  }else{
-    lsmFree(pEnv, pWorking);
-  }
-
-  pTree->pWorking = 0;
-  if( ppReadVersion ){
-    *ppReadVersion = lsmTreeReadVersion(pTree);
-  }
-#endif
-  return LSM_OK;
-}
-
 static void treeHeaderChecksum(
   TreeHeader *pHdr, 
   u32 *aCksum
@@ -1514,54 +1383,3 @@ int lsmTreeBeginTransaction(lsm_db *pDb){
   pDb->treehdr.iTransId++;
   return LSM_OK;
 }
-
-TreeVersion *lsmTreeRecoverVersion(Tree *pTree){
-  return pTree->pCommit;
-}
-
-/*
-** Return a reference to a TreeVersion structure that may be used to read
-** the database. The reference should be released at some point in the future
-** by calling lsmTreeReleaseReadVersion().
-*/
-TreeVersion *lsmTreeReadVersion(Tree *pTree){
-  TreeVersion *pRet = pTree->pCommit;
-  assert( pRet->nRef>0 );
-  pRet->nRef++;
-  return pRet;
-}
-
-/*
-** Release a reference to a read-version.
-*/
-void lsmTreeReleaseReadVersion(lsm_env *pEnv, TreeVersion *pTreeVersion){
-  if( pTreeVersion ){
-    assert( pTreeVersion->nRef>0 );
-    pTreeVersion->nRef--;
-    if( pTreeVersion->nRef==0 ){
-      Tree *pTree = pTreeVersion->pTree;
-      lsmFree(pEnv, pTreeVersion);
-      treeDecrRefcount(pEnv, pTree);
-    }
-  }
-}
-
-/*
-** Return true if the tree-version passed as the first argument is writable. 
-*/
-int lsmTreeIsWriteVersion(TreeVersion *pTV){
-  return (pTV==pTV->pTree->pWorking);
-}
-
-void lsmTreeRelease(lsm_env *pEnv, Tree *pTree){
-  if( pTree ){
-    assert( pTree->nTreeRef>0 && pTree->pCommit );
-    lsmTreeReleaseReadVersion(pEnv, pTree->pCommit);
-  }
-}
-
-
-
-
-
-

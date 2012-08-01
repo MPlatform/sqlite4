@@ -969,12 +969,14 @@ int lsmFinishRecovery(lsm_db *pDb){
 ** passed as the only argument already has an open read transaction.
 */
 int lsmBeginReadTrans(lsm_db *pDb){
+  const int MAX_READLOCK_ATTEMPTS = 5;
   int rc = LSM_OK;                /* Return code */
+  int iAttempt = 0;
 
-  /* No reason a worker connection should be opening a read-transaction. */
   assert( pDb->pWorker==0 );
+  assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
 
-  if( pDb->pClient==0 ){
+  while( rc==LSM_OK && pDb->pClient==0 && (iAttempt++)<MAX_READLOCK_ATTEMPTS ){
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
     /* Load the in-memory tree header. */
@@ -990,17 +992,28 @@ int lsmBeginReadTrans(lsm_db *pDb){
     ** Otherwise, relinquish the read-lock and retry the whole procedure
     ** (starting with loading the in-memory tree header).  */
     if( rc==LSM_OK ){
-      /* TODO */
+      ShmHeader *pShm = pDb->pShmhdr;
+      i64 iTree = pDb->treehdr.iTreeId;
+      i64 iSnap = lsmCheckpointId(pDb->aSnapshot, 0);
+      rc = lsmReadlock(pDb, iSnap, iTree);
+      if( rc==LSM_OK ){
+        if( (i64)pShm->hdr1.iTreeId==iTree 
+         && lsmCheckpointId(pShm->aClient, 0)==iSnap
+        ){
+          /* Read lock has been successfully obtained. Deserialize the 
+          ** checkpoint just loaded. TODO: This will be removed after 
+          ** lsm_sorted.c is changed to work directly from the serialized
+          ** version of the snapshot.  */
+          rc = lsmCheckpointDeserialize(pDb, pDb->aSnapshot, &pDb->pClient);
+          assert( (rc==LSM_OK)==(pDb->pClient!=0) );
+        }else{
+          rc = lsmReleaseReadlock(pDb);
+        }
+      }
+      if( rc==LSM_BUSY ) rc = LSM_OK;
     }
-
-    /* Deserialize the checkpoint just loaded. TODO: This will be removed
-    ** after lsm_sorted.c is changed to work directly from the serialized
-    ** version of the snapshot.  */
-    if( rc==LSM_OK ){
-      rc = lsmCheckpointDeserialize(pDb, pDb->aSnapshot, &pDb->pClient);
-    }
-    assert( (rc==LSM_OK)==(pDb->pClient!=0) );
   }
+  if( pDb->pClient==0 && rc==LSM_OK ) rc = LSM_BUSY;
 
   return rc;
 }
@@ -1016,8 +1029,10 @@ void lsmFinishReadTrans(lsm_db *pDb){
   ** transactions have been closed.  */
   assert( pDb->pWorker==0 );
   assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
+  assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
 
   if( pClient ){
+    lsmReleaseReadlock(pDb);
     freeSnapshot(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
   }
@@ -1219,6 +1234,106 @@ int lsmHoldingClientMutex(lsm_db *pDb){
 }
 #endif
 
+/*
+** Obtain a read-lock on database version identified by the combination
+** of snapshot iLsm and tree iTree. Return LSM_OK if successful, or
+** an LSM error code otherwise.
+*/
+int lsmReadlock(lsm_db *db, i64 iLsm, i64 iTree){
+  ShmHeader *pShm = db->pShmhdr;
+  int i;
+  int rc = LSM_OK;
+
+  assert( db->iReader<0 );
+
+  /* Search for an exact match. */
+  for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
+    ShmReader *p = &pShm->aReader[i];
+    if( p->iLsmId==iLsm && p->iTreeId==iTree ){
+      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED);
+      if( rc==LSM_OK && p->iLsmId==iLsm && p->iTreeId==iTree ){
+        db->iReader = i;
+      }else if( rc==LSM_BUSY ){
+        rc = LSM_OK;
+      }
+    }
+  }
+
+  /* Try to obtain a write-lock on each slot, in order. If successful, set
+  ** the slot values to iLsm/iTree.  */
+  for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
+    rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL);
+    if( rc==LSM_BUSY ){
+      rc = LSM_OK;
+    }else{
+      ShmReader *p = &pShm->aReader[i];
+      p->iLsmId = iLsm;
+      p->iTreeId = iTree;
+      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED);
+      if( rc==LSM_OK ) db->iReader = i;
+    }
+  }
+
+  /* Search for any usable slot */
+  for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
+    ShmReader *p = &pShm->aReader[i];
+    if( p->iLsmId && p->iTreeId && p->iLsmId<=iLsm && p->iTreeId<=iTree ){
+      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED);
+      if( rc==LSM_OK ){
+        if( p->iLsmId && p->iTreeId && p->iLsmId<=iLsm && p->iTreeId<=iTree ){
+          db->iReader = i;
+        }
+      }else if( rc==LSM_BUSY ){
+        rc = LSM_OK;
+      }
+    }
+  }
+
+  return rc;
+}
+
+/*
+**
+*/
+int lsmTreeInUse(lsm_db *db, u32 iTreeId, int *pbInUse){
+  ShmHeader *pShm = db->pShmhdr;
+  int i;
+  int rc = LSM_OK;
+
+  if( db->treehdr.iTreeId==iTreeId ) rc = LSM_BUSY;
+
+  for(i=0; rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
+    ShmReader *p = &pShm->aReader[i];
+    if( p->iLsmId && p->iTreeId && p->iTreeId<=iTreeId ){
+      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL);
+      if( rc==LSM_OK ){
+        p->iTreeId = p->iLsmId = 0;
+        lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK);
+      }
+    }
+  }
+
+  if( rc==LSM_BUSY ){
+    *pbInUse = 1;
+    return LSM_OK;
+  }
+  *pbInUse = 0;
+  return rc;
+}
+
+/*
+** Release the read-lock currently held by connection db.
+*/
+int lsmReleaseReadlock(lsm_db *db){
+  int rc = LSM_OK;
+  if( db->iReader>=0 ){
+    rc = lsmShmLock(db, LSM_LOCK_READER(db->iReader), LSM_LOCK_UNLOCK);
+    db->iReader = -1;
+  }
+  return rc;
+}
+
+
 
 /*************************************************************************
 **************************************************************************
@@ -1299,7 +1414,7 @@ int lsmShmLock(
     if( eOp==LSM_LOCK_EXCL ) mask |= (1 << (iLock-1+16));
 
     for(pIter=p->pConn; pIter; pIter=pIter->pNext){
-      if( pIter->mLock & mask ){ 
+      if( pIter!=db && pIter->mLock & mask ){ 
         rc = LSM_BUSY;
         break;
       }

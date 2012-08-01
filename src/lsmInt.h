@@ -208,6 +208,8 @@ struct TreeHeader {
   u32 iRoot;                      /* Offset of root node in shm file */
   u32 nHeight;                    /* Current height of tree structure */
   u32 iWrite;                     /* Write offset in shm file */
+  u32 nChunk;                     /* Number of chunks in shared-memory file */
+  u32 iFirst;                     /* First chunk in linked list */
   u32 nByte;                      /* Size of current tree structure in bytes */
   DbLog log;                      /* Current layout of log file */ 
   i64 iCkpt;                      /* Id of ckpt log space is reclaimed for */
@@ -243,6 +245,7 @@ struct lsm_db {
   int nTransOpen;                 /* Number of opened write transactions */
   int nTransAlloc;                /* Allocated size of aTrans[] array */
   TransMark *aTrans;              /* Array of marks for transaction rollback */
+  int iReader;                    /* Read lock held (-1 == unlocked) */
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */

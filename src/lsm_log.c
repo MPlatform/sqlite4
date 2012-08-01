@@ -900,7 +900,6 @@ int lsmLogRecover(lsm_db *pDb){
   if( rc!=LSM_OK ) return rc;
 #endif
 
-  pDb->treehdr.iWrite = LSM_SHM_CHUNK_SIZE + LSM_SHM_CHUNK_HDR;
   pLog = &pDb->treehdr.log;
   logReaderInit(pDb, pLog, 1, &reader);
   lsmStringInit(&buf1, pDb->pEnv);
