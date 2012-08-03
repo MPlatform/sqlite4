@@ -364,6 +364,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
     p->nDbRef--;
     if( p->nDbRef==0 ){
       int rc = LSM_OK;
+      int i;
       Database **pp;
 
       /* Remove the Database structure from the linked list. */
@@ -387,6 +388,11 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       if( rc==LSM_OK && pDb->pFS ){
         lsmFsCloseAndDeleteLog(pDb->pFS);
       }
+
+      for(i=0; i<p->nShmChunk; i++){
+        lsmFree(pDb->pEnv, p->apShmChunk[i]);
+      }
+      lsmFree(pDb->pEnv, p->apShmChunk);
       
       /* Free the Database object */
       freeDatabase(pDb->pEnv, p);

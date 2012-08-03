@@ -134,18 +134,65 @@ struct TreeLeaf {
 
 #define WORKING_VERSION (1<<30)
 
+
+/***********************************************************************
+** Start of IntArray methods.  */
+/*
+** Append value iVal to the contents of IntArray *p. Return LSM_OK if 
+** successful, or LSM_NOMEM if an OOM condition is encountered.
+*/
+static int intArrayAppend(lsm_env *pEnv, IntArray *p, u32 iVal){
+  assert( p->nArray<=p->nAlloc );
+  if( p->nArray>=p->nAlloc ){
+    u32 *aNew;
+    int nNew = p->nArray ? p->nArray*2 : 128;
+    aNew = lsmRealloc(pEnv, p->aArray, nNew*sizeof(u32));
+    if( !aNew ) return LSM_NOMEM_BKPT;
+    p->aArray = aNew;
+    p->nAlloc = nNew;
+  }
+
+  p->aArray[p->nArray++] = iVal;
+  return LSM_OK;
+}
+
+/*
+** Zero the IntArray object.
+*/
+static void intArrayFree(lsm_env *pEnv, IntArray *p){
+  lsmFree(pEnv, p->aArray);
+  memset(p, 0, sizeof(IntArray));
+}
+
+/*
+** Return the number of entries currently in the int-array object.
+*/
+static int intArraySize(IntArray *p){
+  return p->nArray;
+}
+
+/*
+** Return a copy of the iIdx'th entry in the int-array.
+*/
+static u32 intArrayEntry(IntArray *p, int iIdx){
+  return p->aArray[iIdx];
+}
+
+/*
+** Truncate the int-array so that all but the first nVal values are 
+** discarded.
+*/
+static void intArrayTruncate(IntArray *p, int nVal){
+  p->nArray = nVal;
+}
+/* End of IntArray methods.
+***********************************************************************/
+
 /*
 ** The pointer passed as the first argument points to an interior node,
-** not a leaf. This function returns the value of the iCell'th child
+** not a leaf. This function returns the offset of the iCell'th child
 ** sub-tree of the node.
 */
-#if 0
-static TreeNode *getChildPtr(TreeNode *p, int iVersion, int iCell){
-  if( p->iV2 && p->iV2<=iVersion && iCell==p->iV2Ptr ) return p->pV2Ptr;
-  return p->apChild[iCell];
-}
-#endif
-
 static u32 getChildPtr(TreeNode *p, int iVersion, int iCell){
   assert( iCell>=0 && iCell<=array_size(p->aiChildPtr) );
   if( p->iV2 && p->iV2<=iVersion && iCell==p->iV2Child ) return p->iV2Ptr;
@@ -422,6 +469,8 @@ static u32 treeShmalloc(lsm_db *pDb, int nByte, int *pRc){
           if( bInUse==0 ){
             iNext = pDb->treehdr.iFirst;
             pDb->treehdr.iFirst = pFirst->iNext;
+            pFirst->iNext = 0;
+            pFirst->iLastTree = 0;
             assert( pDb->treehdr.iFirst );
             assert( pFirst->iLastTree<pDb->treehdr.iTreeId );
           }
@@ -540,12 +589,24 @@ static int treeUpdatePtr(lsm_db *pDb, TreeCursor *pCsr, u32 iNew){
       }
     }else{
       /* The "v2 data" option */
+      u32 iPtr;
       assert( pDb->treehdr.iTransId>0 );
-      p->iV2 = pDb->treehdr.iTransId;
-      p->iV2Child = (u8)iChildPtr;
-      p->iV2Ptr = iNew;
 
-      /* TODO: Add node p to connections rollback list */
+      if( pCsr->iNode ){
+        iPtr = getChildPtr(
+            pCsr->apTreeNode[pCsr->iNode-1], 
+            pDb->treehdr.iTransId, pCsr->aiCell[pCsr->iNode-1]
+        );
+      }else{
+        iPtr = pDb->treehdr.iRoot;
+      }
+      rc = intArrayAppend(pDb->pEnv, &pDb->rollback, iPtr);
+
+      if( rc==LSM_OK ){
+        p->iV2 = pDb->treehdr.iTransId;
+        p->iV2Child = (u8)iChildPtr;
+        p->iV2Ptr = iNew;
+      }
     }
   }
 
@@ -1237,66 +1298,69 @@ int lsmTreeCursorValid(TreeCursor *pCsr){
 }
 
 /*
-** Roll back to mark pMark. Structure *pMark should have been previously
-** populated by a call to lsmTreeMark().
-*/
-void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
-  assert( 0 );
-#if 0
-  TreeVersion *pWorking = pDb->pTV;
-  Tree *pTree = pWorking->pTree;
-  TreeNode *p;
-
-  assert( lsmTreeIsWriteVersion(pWorking) );
-
-  pWorking->pRoot = (TreeNode *)pMark->pRoot;
-  pWorking->nHeight = pMark->nHeight;
-
-  if( pMark->pRollback ){
-    p = ((TreeNode *)pMark->pRollback)->pNext;
-  }else{
-    p = pTree->pRbFirst;
-  }
-
-  while( p ){
-    TreeNode *pNext = p->pNext;
-    assert( p->iV2!=0 );
-    assert( pNext || p==pTree->pRbLast );
-    p->iV2 = 0;
-    p->iV2Ptr = 0;
-    p->pV2Ptr = 0;
-    p->pNext = 0;
-    p = pNext;
-  }
-
-  pTree->pRbLast = (TreeNode *)pMark->pRollback;
-  if( pTree->pRbLast ){
-    pTree->pRbLast->pNext = 0;
-  }else{
-    pTree->pRbFirst = 0;
-  }
-
-  lsmPoolRollback(pDb->pEnv, pTree->pPool, pMark->pMpChunk, pMark->iMpOff);
-#endif
-}
-
-/*
 ** Store a mark in *pMark. Later on, a call to lsmTreeRollback() with a
 ** pointer to the same TreeMark structure may be used to roll the tree
 ** contents back to their current state.
 */
 void lsmTreeMark(lsm_db *pDb, TreeMark *pMark){
-#if 0
-  Tree *pTree = pTV->pTree;
-  memset(pMark, 0, sizeof(TreeMark));
-  pMark->pRoot = (void *)pTV->pRoot;
-  pMark->nHeight = pTV->nHeight;
-  pMark->pRollback = (void *)pTree->pRbLast;
-  lsmPoolMark(pTree->pPool, &pMark->pMpChunk, &pMark->iMpOff);
+  pMark->iRoot = pDb->treehdr.iRoot;
+  pMark->nHeight = pDb->treehdr.nHeight;
+  pMark->iWrite = pDb->treehdr.iWrite;
+  pMark->nChunk = pDb->treehdr.nChunk;
+  pMark->iFirst = pDb->treehdr.iFirst;
+  pMark->iRollback = intArraySize(&pDb->rollback);
+}
 
-  assert( lsmTreeIsWriteVersion(pTV) );
-  pTV->iVersion++;
-#endif
+/*
+** Roll back to mark pMark. Structure *pMark should have been previously
+** populated by a call to lsmTreeMark().
+*/
+void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
+  int rcdummy = LSM_OK;
+  int iIdx;
+  int nIdx;
+  u32 iNext;
+  ShmChunk *pChunk;
+  u32 iChunk;
+
+  /* Revert all required v2 pointers. */
+  nIdx = intArraySize(&pDb->rollback);
+  for(iIdx = pMark->iRollback; iIdx<nIdx; iIdx++){
+    TreeNode *pNode;
+    pNode = treeShmptr(pDb, intArrayEntry(&pDb->rollback, iIdx), &rcdummy);
+    assert( pNode && rcdummy==LSM_OK );
+    pNode->iV2 = 0;
+    pNode->iV2Child = 0;
+    pNode->iV2Ptr = 0;
+  }
+  intArrayTruncate(&pDb->rollback, pMark->iRollback);
+
+  /* Restore the free-chunk list */
+  assert( pMark->iWrite!=0 );
+  iChunk = treeOffsetToChunk(pMark->iWrite-1);
+  pChunk = treeShmChunk(pDb, iChunk);
+  iNext = pChunk->iNext;
+  pChunk->iNext = 0;
+  assert( iNext==0 
+       || pDb->treehdr.iFirst==pMark->iFirst 
+       || iNext==pMark->iFirst 
+  );
+  pDb->treehdr.iFirst = pMark->iFirst;
+  while( iNext ){
+    iChunk = iNext;
+    pChunk = treeShmChunk(pDb, iChunk);
+    iNext = pChunk->iNext;
+    if( iChunk<pMark->nChunk ){
+      pChunk->iNext = pDb->treehdr.iFirst;
+      pChunk->iLastTree = 0;
+    }
+  }
+
+  /* Restore the tree-header fields */
+  pDb->treehdr.iRoot = pMark->iRoot;
+  pDb->treehdr.nHeight = pMark->nHeight;
+  pDb->treehdr.iWrite = pMark->iWrite;
+  pDb->treehdr.nChunk = pMark->nChunk;
 }
 
 static void treeHeaderChecksum(
@@ -1366,20 +1430,25 @@ int lsmTreeLoadHeader(lsm_db *pDb){
 ** is true, the transaction is committed. Otherwise it is rolled back.
 */
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit){
-  if( bCommit ){
-    ShmHeader *pShm = pDb->pShmhdr;
+  ShmHeader *pShm = pDb->pShmhdr;
 
+  if( bCommit ){
     treeHeaderChecksum(&pDb->treehdr, pDb->treehdr.aCksum);
     memcpy(&pShm->hdr2, &pDb->treehdr, sizeof(TreeHeader));
     lsmShmBarrier(pDb);
     memcpy(&pShm->hdr1, &pDb->treehdr, sizeof(TreeHeader));
-    pShm->bWriter = 0;
   }
+  pShm->bWriter = 0;
+  intArrayFree(pDb->pEnv, &pDb->rollback);
 
   return LSM_OK;
 }
 
+/*
+** Begin a new transaction.
+*/
 int lsmTreeBeginTransaction(lsm_db *pDb){
   pDb->treehdr.iTransId++;
   return LSM_OK;
 }
+

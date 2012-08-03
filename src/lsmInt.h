@@ -154,17 +154,34 @@ struct LsmString {
 };
 
 /*
-** An instance of this structure represents a point in the history of the
-** tree structure to roll back to. Refer to comments in tree.c for details.
+** An instance of the following type is used to store an ordered list of
+** u32 values. 
 **
-** Pointers pRollback and pRoot both point to structures of type TreeNode.
+** Note: This is a place-holder implementation. It should be replaced by
+** a version that avoids making a single large allocation when the array
+** contains a large number of values. For this reason, the internals of 
+** this object should only manipulated by the intArrayXXX() functions in 
+** lsm_tree.c.
+*/
+typedef struct IntArray IntArray;
+struct IntArray {
+  int nAlloc;
+  int nArray;
+  u32 *aArray;
+};
+
+/*
+** An instance of this structure represents a point in the history of the
+** tree structure to roll back to. Refer to comments in lsm_tree.c for 
+** details.
 */
 struct TreeMark {
-  void *pMpChunk;                 /* Mempool chunk to roll back to */
-  int iMpOff;                     /* Mempool chunk offset to roll back to */
-  void *pRollback;                /* Zero v2 information starting here */
-  void *pRoot;                    /* Root node to restore */
-  int nHeight;                    /* Height of tree at pRoot */
+  u32 iRoot;                      /* Offset of root node in shm file */
+  u32 nHeight;                    /* Current height of tree structure */
+  u32 iWrite;                     /* Write offset in shm file */
+  u32 nChunk;                     /* Number of chunks in shared-memory file */
+  u32 iFirst;                     /* First chunk in linked list */
+  int iRollback;                  /* Index in lsm->rollback to revert to */
 };
 
 /*
@@ -240,12 +257,14 @@ struct lsm_db {
 
   /* Client transaction context */
   Snapshot *pClient;              /* Client snapshot (non-NULL in read trans) */
+  int iReader;                    /* Read lock held (-1 == unlocked) */
   MultiCursor *pCsr;              /* List of all open cursors */
-  LogWriter *pLogWriter;
+
+  LogWriter *pLogWriter;          /* Context for writing to the log file */
   int nTransOpen;                 /* Number of opened write transactions */
   int nTransAlloc;                /* Allocated size of aTrans[] array */
   TransMark *aTrans;              /* Array of marks for transaction rollback */
-  int iReader;                    /* Read lock held (-1 == unlocked) */
+  IntArray rollback;              /* List of tree-nodes to roll back */
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
