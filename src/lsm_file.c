@@ -783,11 +783,11 @@ static int fsFreeBlock(
   int rc = LSM_OK;                /* Return code */
   int iFirst;                     /* First page on block iBlk */
   int iLast;                      /* Last page on block iBlk */
-  int i;                          /* Used to iterate through append points */
   Level *pLevel;                  /* Used to iterate through levels */
 
-  Pgno *aAppend;
-  int nAppend;
+  int iIn;                        /* Used to iterate through append points */
+  int iOut = 0;                   /* Used to output append points */
+  u32 *aApp = pSnapshot->aiAppend;
 
   iFirst = fsFirstPageOnBlock(pFS, iBlk);
   iLast = fsLastPageOnBlock(pFS, iBlk);
@@ -800,15 +800,12 @@ static int fsFreeBlock(
     }
   }
 
-#if 0
-  aAppend = lsmSharedAppendList(pFS->pDb, &nAppend);
-  for(i=0; i<nAppend; i++){
-    if( aAppend[i]>=iFirst && aAppend[i]<=iLast ){
-      lsmSharedAppendListRemove(pFS->pDb, i);
-      break;
+  for(iIn=0; iIn<LSM_APPLIST_SZ; iIn++){
+    if( aApp[iIn]<iFirst || aApp[iIn]>iLast ){
+      aApp[iOut++] = aApp[iIn];
     }
   }
-#endif
+  while( iOut<LSM_APPLIST_SZ ) aApp[iOut++] = 0;
 
   if( rc==LSM_OK ){
     rc = lsmBlockFree(pFS->pDb, iBlk);
@@ -1373,44 +1370,41 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   return rc;
 }
 
-#ifdef LSM_EXPENSIVE_DEBUG
 /*
 ** Helper function for lsmFsIntegrityCheck()
 */
 static void checkBlocks(
   FileSystem *pFS, 
-  Segment *pSeg, 
-  int bExtra,
+  Segment *pSeg,
+  int bExtra,                     /* If true, count the "next" block if any */
+  int nUsed,
   u8 *aUsed
 ){
   if( pSeg ){
     int i;
-    for(i=0; i<2; i++){
-      Segment *p = (i ? pSeg->pRun : pSeg->pSep);
 
-      if( p && p->nSize>0 ){
-        const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+    if( pSeg && pSeg->nSize>0 ){
+      const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
 
-        int iBlk;
-        int iLastBlk;
-        iBlk = fsPageToBlock(pFS, p->iFirst);
-        iLastBlk = fsPageToBlock(pFS, p->iLast);
+      int iBlk;
+      int iLastBlk;
+      iBlk = fsPageToBlock(pFS, pSeg->iFirst);
+      iLastBlk = fsPageToBlock(pFS, pSeg->iLast);
 
-        while( iBlk ){
-          assert( iBlk<=pFS->nBlock );
-          /* assert( aUsed[iBlk-1]==0 ); */
-          aUsed[iBlk-1] = 1;
-          if( iBlk!=iLastBlk ){
-            fsBlockNext(pFS, iBlk, &iBlk);
-          }else{
-            iBlk = 0;
-          }
+      while( iBlk ){
+        assert( iBlk<=nUsed );
+        /* assert( aUsed[iBlk-1]==0 ); */
+        aUsed[iBlk-1] = 1;
+        if( iBlk!=iLastBlk ){
+          fsBlockNext(pFS, iBlk, &iBlk);
+        }else{
+          iBlk = 0;
         }
+      }
 
-        if( bExtra && (p->iLast % nPagePerBlock)==0 ){
-          fsBlockNext(pFS, iLastBlk, &iBlk);
-          aUsed[iBlk-1] = 1;
-        }
+      if( bExtra && (pSeg->iLast % nPagePerBlock)==0 ){
+        fsBlockNext(pFS, iLastBlk, &iBlk);
+        aUsed[iBlk-1] = 1;
       }
     }
   }
@@ -1421,8 +1415,7 @@ static void checkBlocks(
 ** for. For each block, exactly one of the following must be true:
 **
 **   + the block is part of a sorted run, or
-**   + the block is on the lPending list, or
-**   + the block is on the lFree list
+**   + the block is on the free-block list
 **
 ** This function also checks that there are no references to blocks with
 ** out-of-range block numbers.
@@ -1431,32 +1424,27 @@ static void checkBlocks(
 ** assert() fails.
 */
 int lsmFsIntegrityCheck(lsm_db *pDb){
-  int nBlock;
   int i;
   FileSystem *pFS = pDb->pFS;
   u8 *aUsed;
   Level *pLevel;
+  Snapshot *pWorker = pDb->pWorker;
+  int nBlock = pWorker->nBlock;
 
-  nBlock = pFS->nBlock;
+
   aUsed = lsmMallocZero(pDb->pEnv, nBlock);
   assert( aUsed );
-
-  for(pLevel=pDb->pLevel; pLevel; pLevel=pLevel->pNext){
+  for(pLevel=pWorker->pLevel; pLevel; pLevel=pLevel->pNext){
     int i;
-    checkBlocks(pFS, &pLevel->lhs, (pLevel->pSMerger!=0), aUsed);
-
+    checkBlocks(pFS, &pLevel->lhs, (pLevel->nRight!=0), nBlock, aUsed);
     for(i=0; i<pLevel->nRight; i++){
-      checkBlocks(pFS, &pLevel->aRhs[i], 0, aUsed);
+      checkBlocks(pFS, &pLevel->aRhs[i], 0, nBlock, aUsed);
     }
   }
 
-  for(i=0; i<pFS->lFree.n; i++){
-    int iBlk = pFS->lFree.a[i];
-    assert( aUsed[iBlk-1]==0 );
-    aUsed[iBlk-1] = 1;
-  }
-  for(i=0; i<pFS->lPending.n; i++){
-    int iBlk = pFS->lPending.a[i];
+  for(i=0; i<pWorker->freelist.nEntry; i++){
+    u32 iBlk = pWorker->freelist.aEntry[i].iBlk;
+    assert( iBlk<=nBlock );
     assert( aUsed[iBlk-1]==0 );
     aUsed[iBlk-1] = 1;
   }
@@ -1466,4 +1454,3 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   lsmFree(pDb->pEnv, aUsed);
   return 1;
 }
-#endif

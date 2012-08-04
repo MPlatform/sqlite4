@@ -588,7 +588,7 @@ u8 *lsmFsMetaPageData(MetaPage *, int *);
 #ifdef LSM_EXPENSIVE_DEBUG
 int lsmFsIntegrityCheck(lsm_db *);
 #else
-# define lsmFsIntegrityCheck(pDb) 1
+/* # define lsmFsIntegrityCheck(pDb) 1 */
 #endif
 
 int lsmFsPageWritable(Page *);
