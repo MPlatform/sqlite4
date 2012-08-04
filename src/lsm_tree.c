@@ -50,7 +50,7 @@
 **   of storing two separate versions of the node at the same time.
 **   When a node is to be edited, if the node structure already contains 
 **   two versions, a copy is made as in the append-only approach. Or, if
-**   it only contains a single version, it may be edited in place.
+**   it only contains a single version, it is edited in place.
 **
 **   This reduces the overhead so that, roughly, one new node structure
 **   must be allocated for each write (on top of those allocations that 
@@ -132,6 +132,30 @@ struct TreeLeaf {
   u32 aiKeyPtr[3];                /* Array of pointers to TreeKey objects */
 };
 
+/*
+** Cursor for searching a tree structure.
+**
+** If a cursor does not point to any element (a.k.a. EOF), then the
+** TreeCursor.iNode variable is set to a negative value. Otherwise, the
+** cursor currently points to key aiCell[iNode] on node apTreeNode[iNode].
+**
+** Entries in the apTreeNode[] and aiCell[] arrays contain the node and
+** index of the TreeNode.apChild[] pointer followed to descend to the 
+** current element. Hence apTreeNode[0] always contains the root node of
+** the tree.
+*/
+struct TreeCursor {
+  lsm_db *pDb;                    /* Database handle for this cursor */
+  int iNode;                      /* Cursor points at apTreeNode[iNode] */
+  TreeNode *apTreeNode[MAX_DEPTH];/* Current position in tree */
+  u8 aiCell[MAX_DEPTH];           /* Current position in tree */
+  TreeKey *pSave;                 /* Saved key */
+};
+
+/*
+** A value guaranteed to be larger than the largest possible transaction
+** id (TreeHeader.iTransId).
+*/
 #define WORKING_VERSION (1<<30)
 
 
@@ -200,31 +224,17 @@ static u32 getChildPtr(TreeNode *p, int iVersion, int iCell){
 }
 
 /*
-** Cursor for searching a tree structure.
-**
-** If a cursor does not point to any element (a.k.a. EOF), then the
-** TreeCursor.iNode variable is set to a negative value. Otherwise, the
-** cursor currently points to key aiCell[iNode] on node apTreeNode[iNode].
-**
-** Entries in the apTreeNode[] and aiCell[] arrays contain the node and
-** index of the TreeNode.apChild[] pointer followed to descend to the 
-** current element. Hence apTreeNode[0] always contains the root node of
-** the tree.
+** Given an offset within the *-shm file, return the associated chunk number.
 */
-struct TreeCursor {
-  lsm_db *pDb;                    /* Database handle for this cursor */
-  int iNode;                      /* Cursor points at apTreeNode[iNode] */
-  TreeNode *apTreeNode[MAX_DEPTH];/* Current position in tree */
-  u8 aiCell[MAX_DEPTH];           /* Current position in tree */
-  TreeKey *pSave;                 /* Saved key */
-};
-
-
 static int treeOffsetToChunk(u32 iOff){
   assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
   return (int)(iOff>>15);
 }
 
+/*
+** Return a pointer to the mapped memory location associated with *-shm 
+** file offset iPtr.
+*/
 static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
   /* TODO: This will likely be way too slow. If it is, chunks should be
   ** cached as part of the db handle.  */
@@ -281,6 +291,14 @@ void assert_tree_looks_ok(int rc, Tree *pTree){
 #endif
 
 #ifdef LSM_DEBUG
+
+/*
+** Pointer pBlob points to a buffer containing a blob of binary data
+** nBlob bytes long. Append the contents of this blob to *pStr, with
+** each octet represented by a 2-digit hexadecimal number. For example,
+** if the input blob is three bytes in size and contains {0x01, 0x44, 0xFF},
+** then "0144ff" is appended to *pStr.
+*/
 static void lsmAppendStrBlob(LsmString *pStr, void *pBlob, int nBlob){
   int i;
   lsmStringExtend(pStr, nBlob*2);
@@ -293,28 +311,14 @@ static void lsmAppendStrBlob(LsmString *pStr, void *pBlob, int nBlob){
   pStr->z[pStr->n] = 0;
 }
 
+/*
+** Append nIndent space (0x20) characters to string *pStr.
+*/
 static void lsmAppendIndent(LsmString *pStr, int nIndent){
   int i;
   lsmStringExtend(pStr, nIndent);
   for(i=0; i<nIndent; i++) lsmStringAppend(pStr, " ", 1);
 }
-
-#if 0
-static void lsmAppendKeyValue(LsmString *pStr, TreeKey *pKey){
-  int i;
-
-  for(i=0; i<pKey->nKey; i++){
-    lsmStringAppendf(pStr, "%2X ", ((u8 *)(pKey->pKey))[i]);
-  }
-  lsmStringAppend(pStr, "      ", -1);
-
-  if( pKey->nValue<0 ){
-    lsmStringAppend(pStr, "<deleted>", -1);
-  }else{
-    lsmAppendStrBlob(pStr, pKey->pValue, pKey->nValue);
-  }
-}
-#endif
 
 void dump_node_contents(
   lsm_db *pDb,
@@ -374,6 +378,10 @@ static void treeCursorInit(lsm_db *pDb, TreeCursor *pCsr){
   pCsr->iNode = -1;
 }
 
+/*
+** Return a pointer to the mapping of the TreeKey object that the cursor
+** is pointing to. 
+*/
 static TreeKey *csrGetKey(TreeCursor *pCsr, int *pRc){
   return (TreeKey *)treeShmptr(pCsr->pDb,
       pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], pRc
@@ -836,9 +844,7 @@ int lsmTreeInsert(
   TreeHeader *pHdr = &pDb->treehdr;
 
   assert( nVal>=0 || pVal==0 );
-#if 0
   assert_tree_looks_ok(LSM_OK, pTree);
-#endif
   /* dump_tree_contents(pDb, "before"); */
 
   /* Allocate and populate a new key-value pair structure */

@@ -1102,6 +1102,10 @@ static int levelCursorInit(
     }
   }
 
+  if( nPtr>1 && pLevel->pSplitKey==0 ){
+    lsmSortedSplitkey(pDb, pLevel, &rc);
+  }
+
   return rc;
 }
 
