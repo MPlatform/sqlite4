@@ -115,16 +115,6 @@ static void dbReleaseClientSnapshot(lsm_db *pDb){
   }
 }
 
-static void dbWorkerStart(lsm_db *pDb){
-  assert( pDb->pWorker==0 );
-  pDb->pWorker = lsmDbSnapshotWorker(pDb);
-}
-
-static void dbWorkerDone(lsm_db *pDb){
-  assert( pDb->pWorker );
-  dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
-}
-
 static int dbAutoWork(lsm_db *pDb, int nUnit){
   int rc = LSM_OK;                /* Return code */
 
@@ -137,10 +127,14 @@ static int dbAutoWork(lsm_db *pDb, int nUnit){
   rc = lsmCheckpointWrite(pDb);
 #endif
 
-  dbWorkerStart(pDb);
-  rc = lsmSortedAutoWork(pDb, nUnit);
-  dbWorkerDone(pDb);
-
+  rc = lsmBeginWork(pDb);
+  if( rc==LSM_OK ) rc = lsmSortedAutoWork(pDb, nUnit);
+  if( pDb->pWorker && pDb->pWorker->pLevel ){
+    lsmFinishWork(pDb, &rc);
+  }else{
+    int rcdummy = LSM_BUSY;
+    lsmFinishWork(pDb, &rcdummy);
+  }
   return rc;
 }
 
@@ -599,7 +593,6 @@ int lsm_write(
     nBefore = lsmTreeSize(pDb);
     rc = lsmTreeInsert(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
     nAfter = lsmTreeSize(pDb);
-
     nDiff = (nAfter/nQuant) - (nBefore/nQuant);
     if( rc==LSM_OK && pDb->bAutowork && nDiff!=0 ){
       rc = dbAutoWork(pDb, nDiff * LSM_AUTOWORK_QUANT);

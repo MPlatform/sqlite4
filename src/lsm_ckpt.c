@@ -399,7 +399,10 @@ int lsmCheckpointExport(
   iOut = CKPT_HDR_SIZE;
 
   /* Write the current log offset */
+#if 0
   ckptExportLog(lsmDatabaseLog(pDb), &ckpt, &iOut, &rc);
+#endif
+  iOut += 4;
 
   /* Write the append-point list */
   ckptExportAppendlist(pDb, &ckpt, &iOut, &rc);
@@ -602,7 +605,6 @@ static int ckptImport(
       lsmSnapshotSetCkptid(pSnap, iId);
       nLevel = (int)aInt[CKPT_HDR_NLEVEL];
       lsmSnapshotSetNBlock(pSnap, (int)aInt[CKPT_HDR_NBLOCK]);
-      lsmDbSetPagesize(pDb,(int)aInt[CKPT_HDR_PGSZ],(int)aInt[CKPT_HDR_BLKSZ]);
       *pbOvfl = bOvfl = aInt[CKPT_HDR_OVFL];
 
       /* Import log offset */
@@ -701,60 +703,6 @@ static i64 ckptReadId(
   return iId;
 }
 
-/*
-** Attempt to load the checkpoint from slot iSlot. Return true if the
-** attempt is successful.
-*/
-static int ckptTryRead(
-  lsm_db *pDb, 
-  int iSlot, 
-  int nCkpt, 
-  int *pbOvfl,
-  int *pRc
-){
-  int ret = 0;
-  assert( iSlot==1 || iSlot==2 );
-  if( *pRc==LSM_OK 
-   && nCkpt>=CKPT_HDR_SIZE
-   && nCkpt<65536 
-  ){
-    u32 *aCkpt;
-    aCkpt = (u32 *)lsmMallocZeroRc(pDb->pEnv, sizeof(u32)*nCkpt, pRc);
-    if( aCkpt ){
-      int rc = LSM_OK;
-      int iPg;
-      int nRem;
-      u8 *aRem;
-
-      /* Read the checkpoint data. */
-      nRem = sizeof(u32) * nCkpt;
-      aRem = (u8 *)aCkpt;
-      iPg = iSlot;
-      while( rc==LSM_OK && nRem ){
-        MetaPage *pPg;
-        rc = lsmFsMetaPageGet(pDb->pFS, 0, iPg, &pPg);
-        if( rc==LSM_OK ){
-          int nCopy;
-          int nData;
-          u8 *aData = lsmFsMetaPageData(pPg, &nData);
-
-          nCopy = LSM_MIN(nRem, nData);
-          memcpy(aRem, aData, nCopy);
-          aRem += nCopy;
-          nRem -= nCopy;
-          lsmFsMetaPageRelease(pPg);
-        }
-        iPg += 2;
-      }
-
-      ret = ckptImport(pDb, aCkpt, nCkpt, pbOvfl, &rc);
-      lsmFree(pDb->pEnv, aCkpt);
-      *pRc = rc;
-    }
-  }
-
-  return ret;
-}
 
 /*
 ** Return the data for the LEVELS record.
@@ -897,6 +845,7 @@ int lsmCheckpointOverflow(
 */
 int lsmCheckpointRead(lsm_db *pDb, int *piSlot, int *pbOvfl){
   int rc = LSM_OK;                /* Return Code */
+#if 0
   i64 iId1;
   i64 iId2;
   int nInt1;
@@ -925,6 +874,7 @@ int lsmCheckpointRead(lsm_db *pDb, int *piSlot, int *pbOvfl){
   }
 
   *piSlot = iSlot;
+#endif
   return rc;
 }
 

@@ -16,21 +16,6 @@
 #include "lsmInt.h"
 
 /*
-** TODO: Find homes for these miscellaneous notes. 
-**
-** SNAPSHOT ID MANIPULATIONS
-**
-**   When the database is initialized the worker snapshot id is set to the
-**   value read from the checkpoint. Or, if there is no valid checkpoint,
-**   to a non-zero default value (e.g. 1).
-**
-**   The client snapshot is then initialized as a copy of the worker. The
-**   client snapshot id is a copy of the worker snapshot id (as read from
-**   the checkpoint). The worker snapshot id is then incremented.
-**
-*/
-
-/*
 ** Global data. All global variables used by code in this file are grouped
 ** into the following structure instance.
 **
@@ -49,106 +34,25 @@ static struct SharedData {
 ** list starting at global variable gShared.pDatabase. Database objects are 
 ** reference counted. Once the number of connections to the associated
 ** database drops to zero, they are removed from the linked list and deleted.
-**
-** The primary purpose of the Database structure is to manage Snapshots. A
-** snapshot contains the information required to read a database - exactly
-** where each array is stored, and where new arrays can be written. A 
-** database has one worker snapshot and any number of client snapshots.
-**
-** WORKER SNAPSHOT
-**
-**   When a connection is first made to a database and the Database object
-**   created, the worker snapshot is initialized to the most recently 
-**   checkpointed database state (based on the values in the db header).
-**   Any time the database file is written to, either to flush the contents
-**   of an in-memory tree or to merge existing segments, the worker snapshot
-**   is updated to reflect the modifications.
-**
-**   The worker snapshot is protected by the worker mutex. The worker mutex
-**   must be obtained before a connection begins to modify the database
-**   file. After the db file is written, the worker snapshot is updated and
-**   the worker mutex released.
-**
-** CLIENT SNAPSHOTS
-**
-**   Client snapshots are used by database clients (readers). When a 
-**   transaction is opened, the client requests a pointer to a read-only 
-**   client snapshot. It is relinquished when the transaction ends. Client 
-**   snapshots are reference counted objects.
-**
-**   When a database is first loaded, the client snapshot is a copy of
-**   the worker snapshot. Each time the worker snapshot is checkpointed,
-**   the client snapshot is updated with the new checkpointed contents.
-**
-** THE FREE-BLOCK LIST
-**
-**   Each Database structure maintains a list of free blocks - the "free-list".
-**   There is an entry in the free-list for each block in the database file 
-**   that is not used in any way by the worker snapshot.
-**
-**   Associated with each free block in the free-list is a snapshot id.
-**   This is the id of the earliest snapshot that does not require the
-**   contents of the block. The block may therefore be reused only after:
-**
-**     (a) a snapshot with an id equal to or greater than the id associated
-**         with the block has been checkpointed into the db header, and
-**
-**     (b) all existing database clients are using a snapshot with an id
-**         equal to or greater than the id stored in the free-list entry.
-**
-** MULTI-THREADING ISSUES
-**
-**   Each Database structure carries with it two mutexes - the client 
-**   mutex and the worker mutex. In a multi-process version of LSM, these 
-**   will be replaced by some other robust locking mechanism. 
-**
-**   TODO - this description.
 */
 struct Database {
+  /* Protected by the global mutex (enterGlobalMutex/leaveGlobalMutex): */
   char *zName;                    /* Canonical path to database file */
   void *pId;                      /* Database id (file inode) */
   int nId;                        /* Size of pId in bytes */
-
-  DbLog log;                      /* Database log state object */
-  int nPgsz;                      /* Nominal database page size */
-  int nBlksz;                     /* Database block size */
-
-  Snapshot *pClient;              /* Client (reader) snapshot */
-  Snapshot worker;                /* Worker (writer) snapshot */
-
-  int nFreelistDelta;
-  int bRecordDelta;               /* True when recording freelist delta */
-
-  lsm_mutex *pWorkerMutex;        /* Protects the worker snapshot */
-  lsm_mutex *pClientMutex;        /* Protects pClient */
-  int bDirty;                     /* True if worker has been modified */
-  int bRecovered;                 /* True if db does not require recovery */
-
-  int bCheckpointer;              /* True if there exists a checkpointer */
-  int bWriter;                    /* True if there exists a writer */
-  i64 iCheckpointId;              /* Largest snapshot id stored in db file */
-  int iSlot;                      /* Meta page containing iCheckpointId */
-
-  int nShmChunk;
-  void **apShmChunk;
-
-  /* Protected by the global mutex (enterGlobalMutex/leaveGlobalMutex): */
   int nDbRef;                     /* Number of associated lsm_db handles */
   Database *pDbNext;              /* Next Database structure in global list */
 
-  /* List of connections. Protected by client mutex. */
-  lsm_db *pConn;
+  /* Protected by the local mutex (pClientMutex) */
+  lsm_mutex *pClientMutex;        /* Protects the apShmChunk[] and pConn */
+  int nShmChunk;                  /* Number of entries in apShmChunk[] array */
+  void **apShmChunk;              /* Array of "shared" memory regions */
+  lsm_db *pConn;                  /* List of connections to this db. */
 };
 
 /*
-** Macro that evaluates to true if the snapshot passed as the only argument
-** is a worker snapshot. 
-*/
-#define isWorker(pSnap) ((pSnap)==(&(pSnap)->pDatabase->worker))
-
-/*
 ** Functions to enter and leave the global mutex. This mutex is used
-** to protect the global linked-list headed at 
+** to protect the global linked-list headed at gShared.pDatabase.
 */
 static int enterGlobalMutex(lsm_env *pEnv){
   lsm_mutex *p;
@@ -181,7 +85,6 @@ static void assertMustbeWorker(lsm_db *pDb){
 # define assertNotInFreelist(x,y)
 # define assertMustbeWorker(x)
 #endif
-
 
 /*
 ** Append an entry to the free-list.
@@ -240,10 +143,10 @@ static void flRemoveEntry0(Freelist *p){
 ** as the only argument.
 */
 static void freeDatabase(lsm_env *pEnv, Database *p){
+  assert( holdingGlobalMutex(pEnv) );
   if( p ){
     /* Free the mutexes */
     lsmMutexDel(pEnv, p->pClientMutex);
-    lsmMutexDel(pEnv, p->pWorkerMutex);
 
     /* Free the memory allocated for the Database struct itself */
     lsmFree(pEnv, p);
@@ -292,14 +195,7 @@ int lsmDbDatabaseFind(
       int nName = strlen(zName);
       p = (Database *)lsmMallocZeroRc(pEnv, sizeof(Database)+nId+nName+1, &rc);
 
-      /* Initialize the log handle */
-      if( rc==LSM_OK ){
-        p->log.cksum0 = LSM_CKSUM0_INIT;
-        p->log.cksum1 = LSM_CKSUM1_INIT;
-      }
-
-      /* Allocate the two mutexes */
-      if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pWorkerMutex);
+      /* Allocate the mutex */
       if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pClientMutex);
 
       /* If no error has occurred, fill in other fields and link the new 
@@ -313,13 +209,8 @@ int lsmDbDatabaseFind(
         p->pId = (void *)&p->zName[nName+1];
         memcpy(p->pId, pId, nId);
         p->nId = nId;
-        p->worker.pDatabase = p;
         p->pDbNext = gShared.pDatabase;
         gShared.pDatabase = p;
-
-        p->worker.iId = LSM_INITIAL_SNAPSHOT_ID;
-        p->nPgsz = pDb->nDfltPgsz;
-        p->nBlksz = pDb->nDfltBlksz;
       }else{
         freeDatabase(pEnv, p);
         p = 0;
@@ -339,11 +230,6 @@ int lsmDbDatabaseFind(
   pDb->pDatabase = p;
   return rc;
 }
-
-static void freeClientSnapshot(lsm_env *pEnv, Snapshot *p){
-  assert( 0 );
-}
-
 
 /*
 ** Release a reference to a Database object obtained from lsmDbDatabaseFind().
@@ -375,7 +261,7 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       ** this will create a new client snapshot in Database.pClient. The
       ** checkpoint (serialization) of this snapshot may be written to disk
       ** by the following block.  */
-      if( p->bDirty || 0==lsmTreeIsEmpty(pDb) ){
+      if( 0==lsmTreeIsEmpty(pDb) ){
         rc = lsmFlushToDisk(pDb);
       }
 
@@ -416,80 +302,6 @@ void lsmDbSnapshotSetLevel(Snapshot *pSnap, Level *pLevel){
 void lsmSnapshotSetNBlock(Snapshot *pSnap, int nNew){
 }
 
-void lsmSnapshotSetCkptid(Snapshot *pSnap, i64 iNew){
-  assert( isWorker(pSnap) );
-  pSnap->iId = iNew;
-}
-
-/*
-** Return a pointer to the client snapshot object. Each successful call 
-** to lsmDbSnapshotClient() must be matched by an lsmDbSnapshotRelease() 
-** call.
-*/
-#if 0
-Snapshot *lsmDbSnapshotClient(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
-  Snapshot *pRet;
-  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-  pRet = p->pClient;
-  pRet->nRef++;
-  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
-  return pRet;
-}
-#endif
-
-/*
-** Return a pointer to the worker snapshot. This call grabs the worker 
-** mutex. It is released when the pointer to the worker snapshot is passed 
-** to lsmDbSnapshotRelease().
-*/
-Snapshot *lsmDbSnapshotWorker(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
-  lsmMutexEnter(pDb->pEnv, p->pWorkerMutex);
-  return &p->worker;
-}
-
-Snapshot *lsmDbSnapshotRecover(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
-  Snapshot *pRet = 0;
-  lsmMutexEnter(pDb->pEnv, p->pWorkerMutex);
-  if( p->bRecovered ){
-    lsmFsSetPageSize(pDb->pFS, p->nPgsz);
-    lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
-    lsmMutexLeave(pDb->pEnv, p->pWorkerMutex);
-  }else{
-    pRet = &p->worker;
-  }
-  return pRet;
-}
-
-/*
-** Set (bVal==1) or clear (bVal==0) the "recovery done" flag.
-**
-** TODO: Should this be combined with BeginRecovery()/FinishRecovery()?
-*/
-void lsmDbRecoveryComplete(lsm_db *pDb, int iSlot){
-  Database *p = pDb->pDatabase;
-
-  assert( iSlot==0 || iSlot==1 || iSlot==2 );
-  assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) );
-
-  p->bRecovered = 1;
-  p->iCheckpointId = p->worker.iId;
-  p->iSlot = iSlot;
-  lsmFsSetPageSize(pDb->pFS, p->nPgsz);
-  lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
-}
-
-void lsmDbSetPagesize(lsm_db *pDb, int nPgsz, int nBlksz){
-  Database *p = pDb->pDatabase;
-  assert( lsmMutexHeld(pDb->pEnv, p->pWorkerMutex) && p->bRecovered==0 );
-  p->nPgsz = nPgsz;
-  p->nBlksz = nBlksz;
-  lsmFsSetPageSize(pDb->pFS, p->nPgsz);
-  lsmFsSetBlockSize(pDb->pFS, p->nBlksz);
-}
-
 static void snapshotDecrRefcnt(lsm_env *pEnv, Snapshot *pSnap){
 #if 0
   Database *p = pSnap->pDatabase;
@@ -521,13 +333,9 @@ void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *pSnap){
     ** reference count reaches zero, free the snapshot object. The decrement
     ** and (nRef==0) test are protected by the database client mutex.
     */
-    if( isWorker(pSnap) ){
-      lsmMutexLeave(pEnv, p->pWorkerMutex);
-    }else{
       lsmMutexEnter(pEnv, p->pClientMutex);
       snapshotDecrRefcnt(pEnv, pSnap);
       lsmMutexLeave(pEnv, p->pClientMutex);
-    }
   }
 }
 
@@ -740,21 +548,19 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
 }
 
 void lsmFreelistDeltaBegin(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
   assertMustbeWorker(pDb);
-  assert( p->bRecordDelta==0 );
-  p->nFreelistDelta = 0;
-  p->bRecordDelta = 1;
+  assert( pDb->pWorker->bRecordDelta==0 );
+  pDb->pWorker->nFreelistDelta = 0;
+  pDb->pWorker->bRecordDelta = 1;
 }
 
 void lsmFreelistDeltaEnd(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
   assertMustbeWorker(pDb);
-  p->bRecordDelta = 0;
+  pDb->pWorker->bRecordDelta = 0;
 }
 
 int lsmFreelistDelta(lsm_db *pDb){
-  return pDb->pDatabase->nFreelistDelta;
+  return pDb->pWorker->nFreelistDelta;
 }
 
 /*
@@ -848,8 +654,6 @@ int lsmSetFreelist(lsm_db *pDb, u32 *aElem, int nElem){
 ** in-memory tree to disk).
 */
 int lsmCheckpointWrite(lsm_db *pDb){
-  Snapshot *pSnap;                /* Snapshot to checkpoint */
-  Database *p = pDb->pDatabase;
   int rc;                         /* Return Code */
 
   assert( pDb->pWorker==0 );
@@ -915,7 +719,6 @@ int lsmBeginRecovery(lsm_db *pDb){
   assert( p );
   assert( pDb->pWorker );
   assert( pDb->pClient==0 );
-  assert( lsmMutexHeld(pDb->pEnv, pDb->pDatabase->pWorkerMutex) );
 
 #if 0
   if( rc==LSM_OK ){
@@ -1032,7 +835,8 @@ void lsmFinishReadTrans(lsm_db *pDb){
 
   /* Worker connections should not be closing read transactions. And
   ** read transactions should only be closed after all cursors and write
-  ** transactions have been closed.  */
+  ** transactions have been closed. Finally pClient should be non-NULL
+  ** only iff pDb->iReader>=0.  */
   assert( pDb->pWorker==0 );
   assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
   assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
@@ -1042,6 +846,7 @@ void lsmFinishReadTrans(lsm_db *pDb){
     freeSnapshot(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
   }
+  assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
 }
 
 /*
@@ -1050,7 +855,6 @@ void lsmFinishReadTrans(lsm_db *pDb){
 int lsmBeginWriteTrans(lsm_db *pDb){
   int rc;                         /* Return code */
   ShmHeader *pShm = pDb->pShmhdr; /* Shared memory header */
-  Database *p = pDb->pDatabase;   /* Shared database object */
 
   /* If there is no read-transaction open, open one now. */
   rc = lsmBeginReadTrans(pDb);
@@ -1083,56 +887,6 @@ int lsmBeginWriteTrans(lsm_db *pDb){
     lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
   }
   return rc;
-
-#if 0
-
-
-  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-
-  /* There are two reasons the attempt to open a write transaction may fail:
-  **
-  **   1. There is already a writer.
-  **   2. Connection pDb already has an open read transaction, and the read
-  **      snapshot is not the most recent version of the database.
-  **
-  ** If condition 1 is true, then the Database.bWriter flag is set. If the
-  ** second is true, then the call to lsmTreeWriteVersion() returns NULL.
-  */
-  if( p->bWriter ){
-    rc = LSM_BUSY;
-  }else{
-    rc = lsmTreeBeginTransaction(pDb);
-  }
-
-  if( rc==LSM_OK ){
-    rc = lsmLogBegin(pDb, &p->log);
-
-    if( rc!=LSM_OK ){
-      /* If the call to lsmLogBegin() failed, relinquish the read/write
-      ** TreeVersion handle obtained above. The attempt to open a transaction
-      ** has failed.  */
-#if 0
-      TreeVersion *pWrite = pDb->pTV;
-      TreeVersion **ppRestore = (pDb->pClient ? &pDb->pTV : 0);
-      pDb->pTV = 0;
-      lsmTreeReleaseWriteVersion(pDb->pEnv, pWrite, 0, ppRestore);
-#endif
-    }else if( pDb->pClient==0 ){
-      /* Otherwise, if the lsmLogBegin() attempt was successful and the 
-      ** client did not have a read transaction open when this function
-      ** was called, lsm_db.pClient will still be NULL. In this case, grab 
-      ** a reference to the lastest checkpointed snapshot now.  */
-      p->pClient->nRef++;
-      pDb->pClient = p->pClient;
-    }
-  }
-
-  if( rc==LSM_OK ){
-    p->bWriter = 1;
-  }
-  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
-  return rc;
-#endif
 }
 
 /*
@@ -1149,87 +903,12 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 ** LSM_OK is returned if successful, or an LSM error code otherwise.
 */
 int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
-
   lsmLogEnd(pDb, &pDb->treehdr.log, bCommit);
   lsmTreeEndTransaction(pDb, bCommit);
   lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
   return LSM_OK;
 }
 
-
-/*
-** This function is called at the beginning of a flush operation (i.e. when
-** flushing the contents of the in-memory tree to a segment on disk).
-**
-** The caller must already be the worker connection.
-**
-** Also, the caller must have an open write transaction or be in the process
-** of shutting down the (shared) database connection. This means we don't
-** have to worry about any other connection modifying the in-memory tree
-** structure while it is being flushed (although some other clients may be
-** reading from it).
-*/
-int lsmBeginFlush(lsm_db *pDb){
-
-  assert( pDb->pWorker );
-
-  /* TODO */
-#if 0
-  if( pDb->pTV==0 ){
-    pDb->pTV = lsmTreeRecoverVersion(pDb->pDatabase->pTree);
-  }
-#endif
-  return LSM_OK;
-}
-
-/*
-** This is called to indicate that a "flush-tree" operation has finished.
-** If the second argument is true, the contents of the current in-memory
-** tree are discarded and a new tree allocated to hold subsequent writes.
-*/
-int lsmFinishFlush(lsm_db *pDb, int bEmpty){
-  Database *p = pDb->pDatabase;
-  int rc = LSM_OK;
-#if 0
-
-  assert( pDb->pWorker );
-  assert( pDb->pTV && (p->nDbRef==0 || lsmTreeIsWriteVersion(pDb->pTV)) );
-  lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-
-  if( bEmpty ){
-    if( p->bWriter ){
-      lsmTreeReleaseWriteVersion(pDb->pEnv, pDb->pTV, 1, 0);
-    }
-    pDb->pTV = 0;
-    lsmTreeRelease(pDb->pEnv, p->pTree);
-
-    if( p->nDbRef>0 ){
-      rc = lsmTreeNew(pDb->pEnv, pDb->xCmp, &p->pTree);
-    }else{
-      /* This is the case if the Database object is being deleted */
-      p->pTree = 0;
-    }
-  }
-
-  if( p->bWriter ){
-    assert( pDb->pClient );
-    if( 0==pDb->pTV ) rc = lsmTreeWriteVersion(pDb->pEnv, p->pTree, &pDb->pTV);
-  }else{
-    pDb->pTV = 0;
-  }
-  lsmMutexLeave(pDb->pEnv, p->pClientMutex);
-#endif
-  return rc;
-}
-
-/*
-** Return a pointer to the DbLog object associated with connection pDb.
-** Allocate and initialize it if necessary.
-*/
-DbLog *lsmDatabaseLog(lsm_db *pDb){
-  Database *p = pDb->pDatabase;
-  return &p->log;
-}
 
 /*
 ** Return non-zero if the caller is holding the client mutex.

@@ -727,7 +727,7 @@ void lsmLogSeek(
 ** TODO: Thread safety of this function?
 */
 int lsmLogStructure(lsm_db *pDb, char **pzVal){
-  DbLog *pLog = lsmDatabaseLog(pDb);
+  DbLog *pLog = &pDb->treehdr.log;
   *pzVal = lsmMallocPrintf(pDb->pEnv, 
       "%d %d %d %d %d %d", 
       (int)pLog->aRegion[0].iStart, (int)pLog->aRegion[0].iEnd,

@@ -3591,25 +3591,15 @@ int lsmSortedFlushTree(
 
   assert( pDb->pWorker );
 
-  rc = lsmBeginFlush(pDb);
-
   /* If there is nothing to do, return early. */
-  if( lsmTreeSize(pDb)==0 && bFreelist==0 ){
-    lsmFinishFlush(pDb, 0);
-    return LSM_OK;
-  }
+  if( lsmTreeSize(pDb)==0 && bFreelist==0 ) return LSM_OK;
 
-  if( rc==LSM_OK ){
-    rc = lsmSortedNewToplevel(pDb, nLevel, bFreelist);
-  }
+  rc = lsmSortedNewToplevel(pDb, nLevel, bFreelist);
+  assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
 
 #if 0
   lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "tree flush");
 #endif
-
-  assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
-
-  lsmFinishFlush(pDb, rc==LSM_OK);
   return rc;
 }
 
@@ -4045,10 +4035,11 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   int rc = LSM_OK;                /* Return code */
 
   /* This function may not be called if pDb has an open read or write
-  ** transaction. Return LSM_MISUSE if an application attempts this.  
-  */
+  ** transaction. Return LSM_MISUSE if an application attempts this.  */
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
 
+  /* If the FLUSH flag is set, try to flush the contents of the in-memory
+  ** tree to disk.  */
   if( (flags & LSM_WORK_FLUSH) ){
     rc = lsmBeginWriteTrans(pDb);
     if( rc==LSM_OK ){
@@ -4061,8 +4052,12 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   if( rc==LSM_OK && nPage>0 ){
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
     int nWrite = 0;
-    pDb->pWorker = lsmDbSnapshotWorker(pDb);
-    rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
+
+    assert( pDb->pWorker==0 );
+    rc = lsmBeginWork(pDb);
+    if( rc==LSM_OK ){
+      rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
+    }
 
     if( rc==LSM_OK && nWrite && (flags & LSM_WORK_CHECKPOINT) ){
       int bOvfl;
@@ -4071,11 +4066,10 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
       bOvfl = lsmCheckpointOverflow(pDb, &nLsm);
       rc = lsmSortedFlushDb(pDb);
       if( rc==LSM_OK && bOvfl ) rc = lsmSortedNewToplevel(pDb, nLsm, bOvfl);
-      if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nLsm, bOvfl);
     }
 
-    lsmDbSnapshotRelease(pDb->pEnv, pDb->pWorker);
-    pDb->pWorker = 0;
+    lsmFinishWork(pDb, &rc);
+    assert( pDb->pWorker==0 );
     if( pnWrite ) *pnWrite = nWrite;
   }else if( pnWrite ){
     *pnWrite = 0;
@@ -4282,15 +4276,21 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
   Page *pPg = 0;                  /* Handle for page iPg */
   int i, j;                       /* Loop counters */
   const int perLine = 16;         /* Bytes per line in the raw hex dump */
+  int bEndWork = 0;
 
   *pzOut = 0;
   if( iPg==0 ) return LSM_ERROR;
 
   /* Obtain the worker snapshot */
+#if 0
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
+    rc = lsmBeginWork(pDb);
+    if( rc!=LSM_OK ) return rc;
+    pWorker = pDb->pWorker;
+    bEndWork = 1;
   }
+#endif
 
   rc = lsmFsDbPageGet(pDb->pFS, iPg, &pPg);
   if( rc==LSM_OK ){
@@ -4379,7 +4379,6 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
     lsmFsPageRelease(pPg);
   }
 
-  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
   return rc;
 }
 
@@ -4418,11 +4417,7 @@ void lsmSortedDumpStructure(
   Snapshot *pDump = pSnap;
   Level *pTopLevel;
 
-  if( pDump==0 ){
-    assert( pDb->pWorker==0 );
-    pDump = lsmDbSnapshotWorker(pDb);
-  }
-
+  assert( pSnap );
   pTopLevel = lsmDbSnapshotLevel(pDump);
   if( pDb->xLog && pTopLevel ){
     Level *pLevel;
@@ -4488,10 +4483,6 @@ void lsmSortedDumpStructure(
         }
       }
     }
-  }
-
-  if( pSnap==0 ){
-    lsmDbSnapshotRelease(pDb->pEnv, pDump);
   }
 }
 

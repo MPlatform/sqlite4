@@ -460,6 +460,8 @@ int lsmCheckpointStore(lsm_db *pDb, int);
 
 i64 lsmCheckpointId(u32 *, int);
 
+int lsmCheckpointSaveWorker(lsm_db *pDb);
+
 
 /* 
 ** Functions from file "lsm_tree.c".
@@ -715,11 +717,8 @@ int lsmDbUpdateClient(lsm_db *, int, int);
 int lsmSnapshotFreelist(lsm_db *, int **, int *);
 int lsmSnapshotSetFreelist(lsm_db *, int *, int);
 
-void lsmDbSetPagesize(lsm_db *pDb, int nPgsz, int nBlksz);
-
 Snapshot *lsmDbSnapshotClient(lsm_db *);
 Snapshot *lsmDbSnapshotWorker(lsm_db *);
-Snapshot *lsmDbSnapshotRecover(lsm_db *);
 void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *);
 
 void lsmSnapshotSetNBlock(Snapshot *, int);
@@ -753,6 +752,9 @@ DbLog *lsmDatabaseLog(lsm_db *pDb);
 int lsmShmChunk(lsm_db *db, int iChunk, void **ppData);
 int lsmShmLock(lsm_db *db, int iLock, int eOp);
 void lsmShmBarrier(lsm_db *db);
+
+int lsmReadlock(lsm_db *, i64 iLsm, i64 iTree);
+int lsmReleaseReadlock(lsm_db *);
 
 
 /**************************************************************************
