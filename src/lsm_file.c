@@ -1433,7 +1433,14 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
 
 
   aUsed = lsmMallocZero(pDb->pEnv, nBlock);
-  assert( aUsed );
+  if( aUsed==0 ){
+    /* Malloc has failed. Since this function is only called within debug
+    ** builds, this probably means the user is running an OOM injection test.
+    ** Regardless, it will not be possible to run the integrity-check at this
+    ** time, so assume the database is Ok and return non-zero. */
+    return 1;
+  }
+
   for(pLevel=pWorker->pLevel; pLevel; pLevel=pLevel->pNext){
     int i;
     checkBlocks(pFS, &pLevel->lhs, (pLevel->nRight!=0), nBlock, aUsed);

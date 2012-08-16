@@ -45,7 +45,6 @@
 #define LSM_PAGE_SIZE   4096
 #define LSM_BLOCK_SIZE  (2 * 1024 * 1024)
 #define LSM_TREE_BYTES  (2 * 1024 * 1024)
-#define LSM_ECOLA       4
 
 #define LSM_DEFAULT_LOG_SIZE (128*1024)
 #define LSM_DEFAULT_NMERGE   4
@@ -241,10 +240,11 @@ struct lsm_db {
   /* Database handle configuration */
   lsm_env *pEnv;                            /* runtime environment */
   int (*xCmp)(void *, int, void *, int);    /* Compare function */
-  int nTreeLimit;                 /* Maximum size of in-memory tree in bytes */
-  int bAutowork;                  /* True to do auto-work after writing */
-  int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
 
+  /* Values configured by calls to lsm_config */
+  int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
+  int bAutowork;                  /* Configured by LSM_CONFIG_AUTOWORK */
+  int nTreeLimit;                 /* Configured by LSM_CONFIG_WRITE_BUFFER */
   int nMerge;                     /* Configured by LSM_CONFIG_NMERGE */
   int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
@@ -259,7 +259,6 @@ struct lsm_db {
   Snapshot *pClient;              /* Client snapshot (non-NULL in read trans) */
   int iReader;                    /* Read lock held (-1 == unlocked) */
   MultiCursor *pCsr;              /* List of all open cursors */
-
   LogWriter *pLogWriter;          /* Context for writing to the log file */
   int nTransOpen;                 /* Number of opened write transactions */
   int nTransAlloc;                /* Allocated size of aTrans[] array */
@@ -304,7 +303,7 @@ struct Level {
   int iAge;                       /* Number of times data has been written */
   int nRight;                     /* Size of apRight[] array */
   Segment *aRhs;                  /* Old segments being merged into this */
-  int iSplitTopic;
+  int iSplitTopic;                /* Split key topic (if nRight>0) */
   void *pSplitKey;                /* Pointer to split-key (if nRight>0) */
   int nSplitKey;                  /* Number of bytes in split-key */
   Merge *pMerge;                  /* Merge operation currently underway */
@@ -459,6 +458,8 @@ int lsmCheckpointLoadWorker(lsm_db *pDb);
 int lsmCheckpointStore(lsm_db *pDb, int);
 
 i64 lsmCheckpointId(u32 *, int);
+int lsmCheckpointPgsz(u32 *);
+int lsmCheckpointBlksz(u32 *);
 
 int lsmCheckpointSaveWorker(lsm_db *pDb);
 
@@ -469,6 +470,7 @@ int lsmCheckpointSaveWorker(lsm_db *pDb);
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeRelease(lsm_env *, Tree *);
 void lsmTreeClear(lsm_db *);
+void lsmTreeInit(lsm_db *);
 
 int lsmTreeSize(lsm_db *);
 int lsmTreeIsEmpty(lsm_db *);
@@ -742,6 +744,8 @@ DbLog *lsmDatabaseLog(lsm_db *pDb);
 #ifdef LSM_DEBUG
   int lsmHoldingClientMutex(lsm_db *pDb);
 #endif
+
+void lsmFreeSnapshot(lsm_env *, Snapshot *);
 
 
 /* Candidate values for the 3rd argument to lsmShmLock() */

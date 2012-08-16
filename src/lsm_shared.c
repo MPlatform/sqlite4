@@ -220,10 +220,12 @@ int lsmDbDatabaseFind(
     if( p ) p->nDbRef++;
     leaveGlobalMutex(pEnv);
 
-    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-    pDb->pNext = p->pConn;
-    p->pConn = pDb;
-    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
+    if( p ){
+      lsmMutexEnter(pDb->pEnv, p->pClientMutex);
+      pDb->pNext = p->pConn;
+      p->pConn = pDb;
+      lsmMutexLeave(pDb->pEnv, p->pClientMutex);
+    }
   }
 
   lsmFree(pEnv, pId);
@@ -257,22 +259,24 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       for(pp=&gShared.pDatabase; *pp!=p; pp=&((*pp)->pDbNext));
       *pp = p->pDbNext;
 
-      /* Flush the in-memory tree, if required. If there is data to flush,
-      ** this will create a new client snapshot in Database.pClient. The
-      ** checkpoint (serialization) of this snapshot may be written to disk
-      ** by the following block.  */
-      if( 0==lsmTreeIsEmpty(pDb) ){
-        rc = lsmFlushToDisk(pDb);
-      }
+      if( pDb->pShmhdr && pDb->pShmhdr->bInit ){
+        /* Flush the in-memory tree, if required. If there is data to flush,
+        ** this will create a new client snapshot in Database.pClient. The
+        ** checkpoint (serialization) of this snapshot may be written to disk
+        ** by the following block.  */
+        if( 0==lsmTreeIsEmpty(pDb) ){
+          rc = lsmFlushToDisk(pDb);
+        }
 
-      /* Write a checkpoint, also if required */
-      if( rc==LSM_OK ){
-        rc = lsmCheckpointWrite(pDb);
-      }
+        /* Write a checkpoint, also if required */
+        if( rc==LSM_OK ){
+          rc = lsmCheckpointWrite(pDb);
+        }
 
-      /* If the checkpoint was written successfully, delete the log file */
-      if( rc==LSM_OK && pDb->pFS ){
-        lsmFsCloseAndDeleteLog(pDb->pFS);
+        /* If the checkpoint was written successfully, delete the log file */
+        if( rc==LSM_OK && pDb->pFS ){
+          lsmFsCloseAndDeleteLog(pDb->pFS);
+        }
       }
 
       for(i=0; i<p->nShmChunk; i++){
@@ -333,9 +337,9 @@ void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *pSnap){
     ** reference count reaches zero, free the snapshot object. The decrement
     ** and (nRef==0) test are protected by the database client mutex.
     */
-      lsmMutexEnter(pEnv, p->pClientMutex);
-      snapshotDecrRefcnt(pEnv, pSnap);
-      lsmMutexLeave(pEnv, p->pClientMutex);
+    lsmMutexEnter(pEnv, p->pClientMutex);
+    snapshotDecrRefcnt(pEnv, pSnap);
+    lsmMutexLeave(pEnv, p->pClientMutex);
   }
 }
 
@@ -743,10 +747,12 @@ int lsmBeginWork(lsm_db *pDb){
   return rc;
 }
 
-static void freeSnapshot(lsm_env *pEnv, Snapshot *p){
-  lsmSortedFreeLevel(pEnv, p->pLevel);
-  lsmFree(pEnv, p->freelist.aEntry);
-  lsmFree(pEnv, p);
+void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
+  if( p ){
+    lsmSortedFreeLevel(pEnv, p->pLevel);
+    lsmFree(pEnv, p->freelist.aEntry);
+    lsmFree(pEnv, p);
+  }
 }
 
 void lsmFinishWork(lsm_db *pDb, int *pRc){
@@ -757,7 +763,7 @@ void lsmFinishWork(lsm_db *pDb, int *pRc){
   }
 
   if( pDb->pWorker ){
-    freeSnapshot(pDb->pEnv, pDb->pWorker);
+    lsmFreeSnapshot(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;
   }
 
@@ -839,13 +845,12 @@ void lsmFinishReadTrans(lsm_db *pDb){
   ** only iff pDb->iReader>=0.  */
   assert( pDb->pWorker==0 );
   assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
-  assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
 
   if( pClient ){
-    lsmReleaseReadlock(pDb);
-    freeSnapshot(pDb->pEnv, pDb->pClient);
+    lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
   }
+  if( pDb->iReader>=0 ) lsmReleaseReadlock(pDb);
   assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
 }
 

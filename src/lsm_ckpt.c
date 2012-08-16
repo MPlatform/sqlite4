@@ -882,12 +882,14 @@ int lsmCheckpointRead(lsm_db *pDb, int *piSlot, int *pbOvfl){
 ** Read the checkpoint id from meta-page pPg.
 */
 static i64 ckptLoadId(MetaPage *pPg){
-  int nData;
-  u8 *aData = lsmFsMetaPageData(pPg, &nData);
-
-  return 
-    (((i64)lsmGetU32(&aData[CKPT_HDR_ID_MSW*4])) << 32) + 
-    ((i64)lsmGetU32(&aData[CKPT_HDR_ID_LSW*4]));
+  i64 ret = 0;
+  if( pPg ){
+    int nData;
+    u8 *aData = lsmFsMetaPageData(pPg, &nData);
+    ret = (((i64)lsmGetU32(&aData[CKPT_HDR_ID_MSW*4])) << 32) + 
+          ((i64)lsmGetU32(&aData[CKPT_HDR_ID_LSW*4]));
+  }
+  return ret;
 }
 
 /*
@@ -996,7 +998,6 @@ int lsmCheckpointRecover(lsm_db *pDb){
 
   iId1 = ckptLoadId(apPg[0]);
   iId2 = ckptLoadId(apPg[1]);
-
   cmp = (iId2 > iId1);
   bLoaded = ckptTryLoad(pDb, apPg[cmp?1:0], (cmp?2:1), &rc);
   if( bLoaded==0 ){
@@ -1011,6 +1012,12 @@ int lsmCheckpointRecover(lsm_db *pDb){
 
   lsmFsMetaPageRelease(apPg[0]);
   lsmFsMetaPageRelease(apPg[1]);
+
+  /* If successful, set the ShmHeader.bInit variable. */
+  if( rc==LSM_OK ){
+    lsmShmBarrier(pDb);
+    pDb->pShmhdr->bInit = 1;
+  }
   return rc;
 }
 
@@ -1126,8 +1133,7 @@ int lsmCheckpointDeserialize(
   }
 
   if( rc!=LSM_OK ){
-    assert( pNew==0 || pNew->pLevel==0 );
-    lsmFree(pDb->pEnv, pNew);
+    lsmFreeSnapshot(pDb->pEnv, pNew);
     pNew = 0;
   }
 
@@ -1135,6 +1141,17 @@ int lsmCheckpointDeserialize(
   return rc;
 }
 
+/*
+** The connection passed as the only argument is currently the worker
+** connection. Some work has been performed on the database by the connection,
+** but no new snapshot has been written into shared memory.
+**
+** This function updates the shared-memory worker and client snapshots with
+** the new snapshot produced by the work performed by pDb.
+**
+** If successful, LSM_OK is returned. Otherwise, if an error occurs, an LSM
+** error code is returned.
+*/
 int lsmCheckpointSaveWorker(lsm_db *pDb){
   Snapshot *pSnap = pDb->pWorker;
   ShmHeader *pShm = pDb->pShmhdr;
@@ -1172,4 +1189,8 @@ i64 lsmCheckpointId(u32 *aCkpt, int bDisk){
   }
   return iId;
 }
+
+int lsmCheckpointPgsz(u32 *aCkpt){ return (int)aCkpt[CKPT_HDR_PGSZ]; }
+int lsmCheckpointBlksz(u32 *aCkpt){ return (int)aCkpt[CKPT_HDR_BLKSZ]; }
+
 

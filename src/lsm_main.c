@@ -152,7 +152,7 @@ static int dbRecoverIfRequired(lsm_db *pDb){
 
   assert( pDb->pWorker==0 && pDb->pClient==0 );
 
-  while( pShm->bInit==0 ){
+  while( rc==LSM_OK && pShm->bInit==0 ){
     /* The shared-memory "system initialized" flag is clear. Attempt to run
     ** the recovery procedure.  */
 
@@ -171,47 +171,10 @@ static int dbRecoverIfRequired(lsm_db *pDb){
         }
         lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
       }
-      return rc;
     }
   }
 
-  return rc;
-
-#if 0
-
-  /* The following call returns NULL if recovery is not required. */
-  pDb->pWorker = lsmDbSnapshotRecover(pDb);
-  if( pDb->pWorker ){
-    int bOvfl;
-    int iSlot;
-
-    /* Read the database structure */
-    rc = lsmCheckpointRead(pDb, &iSlot, &bOvfl);
-
-    /* Read the free block list and any level records stored in the LSM. */
-    if( rc==LSM_OK && bOvfl ){
-      rc = lsmSortedLoadSystem(pDb);
-    }
-
-    /* Populate the in-memory tree by reading the log file. */
-    if( rc==LSM_OK ){
-      rc = lsmLogRecover(pDb);
-    }
-
-    /* Set the "recovery done" flag */
-    if( rc==LSM_OK ){
-      lsmDbRecoveryComplete(pDb, iSlot);
-    }
-
-    /* Set up the initial client snapshot. */
-    if( rc==LSM_OK ){
-      rc = lsmDbUpdateClient(pDb, 0, 0);
-    }
-
-    dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
-  }
-#endif
-
+  assert( pShm->bInit || rc!=LSM_OK );
   return rc;
 }
 
@@ -282,6 +245,15 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
       rc = dbRecoverIfRequired(pDb);
     }
 
+    /* Configure the file-system connection with the page-size and block-size
+    ** of this database. Even if the database file is zero bytes in size
+    ** on disk, these values have been set in shared-memory, and so are
+    ** guaranteed not to change during the lifetime of this connection.  */
+    if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb)) ){
+      lsmFsSetPageSize(pDb->pFS, lsmCheckpointPgsz(pDb->aSnapshot));
+      lsmFsSetBlockSize(pDb->pFS, lsmCheckpointBlksz(pDb->aSnapshot));
+    }
+
     lsmFree(pDb->pEnv, zFull);
   }
 
@@ -316,7 +288,6 @@ int lsmFlushToDisk(lsm_db *pDb){
   ** write().  */
   if( rc==LSM_OK ) bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
-
   if( rc==LSM_OK ) lsmTreeClear(pDb);
 
   lsmFinishWork(pDb, &rc);

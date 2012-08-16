@@ -895,11 +895,7 @@ int lsmLogRecover(lsm_db *pDb){
   int nJump = 0;                  /* Number of LSM_LOG_JUMP records in pass 0 */
   DbLog *pLog;
 
-#if 0
-  rc = lsmBeginRecovery(pDb);
-  if( rc!=LSM_OK ) return rc;
-#endif
-
+  lsmTreeInit(pDb);
   pLog = &pDb->treehdr.log;
   logReaderInit(pDb, pLog, 1, &reader);
   lsmStringInit(&buf1, pDb->pEnv);

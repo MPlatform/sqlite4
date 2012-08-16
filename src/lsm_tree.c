@@ -433,8 +433,9 @@ static u32 treeShmalloc(lsm_db *pDb, int nByte, int *pRc){
   if( *pRc==LSM_OK ){
     const static int CHUNK_SIZE = LSM_SHM_CHUNK_SIZE;
     const static int CHUNK_HDR = LSM_SHM_CHUNK_HDR;
-
     u32 iWrite;                   /* Current write offset */
+    u32 iEof;                     /* End of current chunk */
+    int iChunk;                   /* Current chunk */
 
     /* Round all allocations up to a multiple of 4 bytes. So that all
     ** integer fields in shared memory are 32-bit aligned. */
@@ -447,52 +448,45 @@ static u32 treeShmalloc(lsm_db *pDb, int nByte, int *pRc){
     ** new allocation. If not, link in a new chunk and put the new
     ** allocation at the start of it.  */
     iWrite = pDb->treehdr.iWrite;
-    if( iWrite==0 ){
-      iWrite = CHUNK_SIZE + CHUNK_HDR;
-      pDb->treehdr.iFirst = 1;
-      pDb->treehdr.nChunk = 2;
-    }else{
-      u32 iEof;                   /* End of current chunk */
-      int iChunk = treeOffsetToChunk(iWrite-1);
+    assert( iWrite );
+    iChunk = treeOffsetToChunk(iWrite-1);
+    iEof = (iChunk+1) * CHUNK_SIZE;
+    assert( iEof>=iWrite && (iEof-iWrite)<CHUNK_SIZE );
+    if( (iWrite+nByte)>iEof ){
+      ShmChunk *pHdr;           /* Header of chunk just finished (iChunk) */
+      ShmChunk *pFirst;         /* Header of chunk treehdr.iFirst */
+      int iNext = 0;            /* Next chunk */
+      int rc;
 
-      iEof = (iChunk+1) * CHUNK_SIZE;
-      assert( iEof>=iWrite && (iEof-iWrite)<CHUNK_SIZE );
-      if( (iWrite+nByte)>iEof ){
-        ShmChunk *pHdr;           /* Header of chunk just finished (iChunk) */
-        ShmChunk *pFirst;         /* Header of chunk treehdr.iFirst */
-        int iNext = 0;            /* Next chunk */
-        int rc;
-
-        /* Check if the chunk at the start of the linked list is still in
-        ** use. If not, reuse it. If so, allocate a new chunk by appending
-        ** to the *-shm file.  */
-        if( pDb->treehdr.iFirst!=iChunk ){
-          int bInUse;
-          pFirst = treeShmChunk(pDb, pDb->treehdr.iFirst);
-          rc = lsmTreeInUse(pDb, pFirst->iLastTree, &bInUse);
-          if( rc!=LSM_OK ){
-            *pRc = rc;
-            return 0;
-          }
-          if( bInUse==0 ){
-            iNext = pDb->treehdr.iFirst;
-            pDb->treehdr.iFirst = pFirst->iNext;
-            pFirst->iNext = 0;
-            pFirst->iLastTree = 0;
-            assert( pDb->treehdr.iFirst );
-            assert( pFirst->iLastTree<pDb->treehdr.iTreeId );
-          }
+      /* Check if the chunk at the start of the linked list is still in
+       ** use. If not, reuse it. If so, allocate a new chunk by appending
+       ** to the *-shm file.  */
+      if( pDb->treehdr.iFirst!=iChunk ){
+        int bInUse;
+        pFirst = treeShmChunk(pDb, pDb->treehdr.iFirst);
+        rc = lsmTreeInUse(pDb, pFirst->iLastTree, &bInUse);
+        if( rc!=LSM_OK ){
+          *pRc = rc;
+          return 0;
         }
-        if( iNext==0 ) iNext = pDb->treehdr.nChunk++;
-
-        /* Set the header values for the chunk just finished */
-        pHdr = (ShmChunk *)treeShmptr(pDb, iChunk*CHUNK_SIZE, pRc);
-        pHdr->iLastTree = pDb->treehdr.iTreeId;
-        pHdr->iNext = iNext;
-
-        /* Advance to the next chunk */
-        iWrite = iNext * CHUNK_SIZE + CHUNK_HDR;
+        if( bInUse==0 ){
+          iNext = pDb->treehdr.iFirst;
+          pDb->treehdr.iFirst = pFirst->iNext;
+          pFirst->iNext = 0;
+          pFirst->iLastTree = 0;
+          assert( pDb->treehdr.iFirst );
+          assert( pFirst->iLastTree<pDb->treehdr.iTreeId );
+        }
       }
+      if( iNext==0 ) iNext = pDb->treehdr.nChunk++;
+
+      /* Set the header values for the chunk just finished */
+      pHdr = (ShmChunk *)treeShmptr(pDb, iChunk*CHUNK_SIZE, pRc);
+      pHdr->iLastTree = pDb->treehdr.iTreeId;
+      pHdr->iNext = iNext;
+
+      /* Advance to the next chunk */
+      iWrite = iNext * CHUNK_SIZE + CHUNK_HDR;
     }
 
     /* Allocate space at iWrite. */
@@ -820,6 +814,18 @@ void lsmTreeClear(lsm_db *pDb){
   pDb->treehdr.iRoot = 0;
   pDb->treehdr.nHeight = 0;
   pDb->treehdr.nByte = 0;
+}
+
+/*
+** This function is called during recovery to initialize the 
+** tree header. Only the database connections private copy of the tree-header
+** is initialized here - it will be copied into shared memory if log file
+** recovery is successful.
+*/
+void lsmTreeInit(lsm_db *pDb){
+  pDb->treehdr.iFirst = 1;
+  pDb->treehdr.nChunk = 2;
+  pDb->treehdr.iWrite = LSM_SHM_CHUNK_SIZE + LSM_SHM_CHUNK_HDR;
 }
 
 /*
