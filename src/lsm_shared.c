@@ -861,6 +861,8 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   int rc;                         /* Return code */
   ShmHeader *pShm = pDb->pShmhdr; /* Shared memory header */
 
+  assert( pDb->nTransOpen==0 );
+
   /* If there is no read-transaction open, open one now. */
   rc = lsmBeginReadTrans(pDb);
 
@@ -882,6 +884,10 @@ int lsmBeginWriteTrans(lsm_db *pDb){
     rc = LSM_BUSY;
   }
 
+  if( rc==LSM_OK ){
+    rc = lsmLogBegin(pDb);
+  }
+
   /* If everything was successful, set the "transaction-in-progress" flag
   ** and return LSM_OK. Otherwise, if some error occurred, relinquish the 
   ** WRITER lock and return an error code.  */
@@ -890,6 +896,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
     pDb->treehdr.iTransId++;
   }else{
     lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
+    if( pDb->pCsr==0 ) lsmFinishReadTrans(pDb);
   }
   return rc;
 }
@@ -908,7 +915,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 ** LSM_OK is returned if successful, or an LSM error code otherwise.
 */
 int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
-  lsmLogEnd(pDb, &pDb->treehdr.log, bCommit);
+  lsmLogEnd(pDb, bCommit);
   lsmTreeEndTransaction(pDb, bCommit);
   lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
   return LSM_OK;

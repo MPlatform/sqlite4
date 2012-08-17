@@ -83,9 +83,6 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nMerge = LSM_DEFAULT_NMERGE;
   pDb->bUseLog = 1;
   pDb->iReader = -1;
-
-  /* TODO: Remove */
-  pDb->bUseLog = 0;
   return LSM_OK;
 }
 

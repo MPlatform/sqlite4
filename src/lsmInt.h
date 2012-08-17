@@ -681,10 +681,10 @@ int lsmFlushToDisk(lsm_db *);
 /*
 ** Functions from file "lsm_log.c".
 */
-int lsmLogBegin(lsm_db *pDb, DbLog *pLog);
+int lsmLogBegin(lsm_db *pDb);
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
-void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit);
+void lsmLogEnd(lsm_db *pDb, int bCommit);
 void lsmLogTell(lsm_db *, LogMark *);
 void lsmLogSeek(lsm_db *, LogMark *);
 

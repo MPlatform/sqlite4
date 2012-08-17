@@ -304,14 +304,12 @@ static i64 lastByteOnSector(LogWriter *pLog, i64 iOff){
 ** will be used to write to the log file during the write transaction.
 ** LSM_OK is returned if no error occurs, otherwise an LSM error code.
 */
-int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
+int lsmLogBegin(lsm_db *pDb){
   int rc = LSM_OK;
   LogWriter *pNew;
   LogRegion *aReg;
 
-  assert( lsmHoldingClientMutex(pDb) );
   if( pDb->bUseLog==0 ) return LSM_OK;
-
   pNew = lsmMallocZeroRc(pDb->pEnv, sizeof(LogWriter), &rc);
   if( pNew ){
     lsmStringInit(&pNew->buf, pDb->pEnv);
@@ -346,13 +344,13 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
   **
   **   3) Region 2 is the last in the file. Append to it.
   */
-  aReg = &pLog->aRegion[0];
+  aReg = &pDb->treehdr.log.aRegion[0];
 
   assert( aReg[0].iEnd==0 || aReg[0].iEnd>aReg[0].iStart );
   assert( aReg[1].iEnd==0 || aReg[1].iEnd>aReg[1].iStart );
 
-  pNew->cksum0 = pLog->cksum0;
-  pNew->cksum1 = pLog->cksum1;
+  pNew->cksum0 = pDb->treehdr.log.cksum0;
+  pNew->cksum1 = pDb->treehdr.log.cksum1;
 
   if( aReg[0].iEnd==0 && aReg[1].iEnd==0 && aReg[2].iStart>=pDb->nLogSz ){
     /* Case 1. Wrap around to the start of the file. Write an LSM_LOG_JUMP 
@@ -403,12 +401,13 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
 ** lsmLogBegin(). If the transaction is being committed, the shared state
 ** in *pLog is updated before returning.
 */
-void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
+void lsmLogEnd(lsm_db *pDb, int bCommit){
+  DbLog *pLog;
   LogWriter *p;
 
   if( pDb->bUseLog==0 ) return;
-  assert( lsmHoldingClientMutex(pDb) );
   p = pDb->pLogWriter;
+  pLog = &pDb->treehdr.log;
 
   if( bCommit ){
     pLog->aRegion[2].iEnd = p->iOff;

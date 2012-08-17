@@ -823,6 +823,7 @@ void lsmTreeClear(lsm_db *pDb){
 ** recovery is successful.
 */
 void lsmTreeInit(lsm_db *pDb){
+  pDb->treehdr.iTransId = 1;
   pDb->treehdr.iFirst = 1;
   pDb->treehdr.nChunk = 2;
   pDb->treehdr.iWrite = LSM_SHM_CHUNK_SIZE + LSM_SHM_CHUNK_HDR;
