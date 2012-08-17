@@ -3453,6 +3453,7 @@ static int mergeWorkerDone(MergeWorker *pMW){
 
 static void sortedFreeLevel(lsm_env *pEnv, Level *p){
   if( p ){
+    lsmFree(pEnv, p->pSplitKey);
     lsmFree(pEnv, p->pMerge);
     lsmFree(pEnv, p->aRhs);
     lsmFree(pEnv, p);
