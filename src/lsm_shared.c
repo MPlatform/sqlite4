@@ -697,6 +697,20 @@ int lsmCheckpointWrite(lsm_db *pDb){
     }
   }
 
+  /* If no error has occured, then the snapshot currently in pDb->aSnapshot
+  ** has been synced to disk. This means it may be possible to wrap the
+  ** log file. Obtain the WRITER lock and update the relevent tree-header
+  ** fields to reflect this.  */
+  if( rc==LSM_OK ){
+    int rc2;
+    u64 iLogoff = lsmCheckpointLogOffset(pDb->aSnapshot);
+    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL);
+    if( rc==LSM_OK ) rc = lsmTreeLoadHeader(pDb);
+    if( rc==LSM_OK ) lsmLogCheckpoint(pDb, iLogoff);
+    if( rc==LSM_OK ) lsmTreeEndTransaction(pDb, 1);
+    if( rc==LSM_BUSY ) rc = LSM_OK;
+  }
+
   lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
   return rc;
 }
@@ -755,11 +769,17 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
   }
 }
 
-void lsmFinishWork(lsm_db *pDb, int *pRc){
+/*
+** Argument bFlush is true if the contents of the in-memory tree has just
+** been flushed to disk. The significance of this is that once the snapshot
+** created to hold the updated state of the database is synced to disk, log
+** file space can be recycled.
+*/
+void lsmFinishWork(lsm_db *pDb, int bFlush, int *pRc){
   /* If no error has occurred, serialize the worker snapshot and write
   ** it to shared memory.  */
   if( *pRc==LSM_OK ){
-    *pRc = lsmCheckpointSaveWorker(pDb);
+    *pRc = lsmCheckpointSaveWorker(pDb, bFlush);
   }
 
   if( pDb->pWorker ){
@@ -1130,6 +1150,46 @@ int lsmShmLock(
 
   return rc;
 }
+
+#ifdef LSM_DEBUG
+/*
+** The arguments passed to this function are similar to those passed to
+** the lsmShmLock() function. However, instead of obtaining a new lock 
+** this function returns true if the specified connection already holds 
+** (or does not hold) such a lock, depending on the value of eOp. As
+** follows:
+**
+**   (eOp==LSM_LOCK_UNLOCK) -> true if db has no lock on iLock
+**   (eOp==LSM_LOCK_SHARED) -> true if db has at least a SHARED lock on iLock.
+**   (eOp==LSM_LOCK_EXCL)   -> true if db has an EXCLUSIVE lock on iLock.
+*/
+int lsmShmAssertLock(lsm_db *db, int iLock, int eOp){
+  const u32 me = (1 << (iLock-1+16));
+  const u32 ms = (1 << (iLock-1));
+  int ret;
+
+  assert( iLock>=1 && iLock<=LSM_LOCK_READER(LSM_LOCK_NREADER-1) );
+  assert( iLock<=16 );
+  assert( eOp==LSM_LOCK_UNLOCK || eOp==LSM_LOCK_SHARED || eOp==LSM_LOCK_EXCL );
+
+  switch( eOp ){
+    case LSM_LOCK_UNLOCK:
+      ret = (db->mLock & (me|ms))==0;
+      break;
+    case LSM_LOCK_SHARED:
+      ret = db->mLock & (me|ms);
+      break;
+    case LSM_LOCK_EXCL:
+      ret = (db->mLock & me);
+      break;
+    default:
+      assert( !"bad eOp value passed to lsmShmAssertLock()" );
+      break;
+  }
+
+  return ret;
+}
+#endif
 
 void lsmShmBarrier(lsm_db *db){
   /* TODO */

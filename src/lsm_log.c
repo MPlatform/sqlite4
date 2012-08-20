@@ -435,9 +435,9 @@ void lsmLogEnd(lsm_db *pDb, int bCommit){
 ** in the log file that occurs logically before offset iOff may now
 ** be reused.
 */ 
-void lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
+void lsmLogCheckpoint(lsm_db *pDb, lsm_i64 iOff){
+  DbLog *pLog = &pDb->treehdr.log;
   int iRegion;
-  assert( lsmHoldingClientMutex(pDb) );
 
   for(iRegion=0; iRegion<3; iRegion++){
     LogRegion *p = &pLog->aRegion[iRegion];
@@ -896,6 +896,8 @@ int lsmLogRecover(lsm_db *pDb){
 
   lsmTreeInit(pDb);
   pLog = &pDb->treehdr.log;
+  lsmCheckpointLogoffset(pDb->pShmhdr->aWorker, pLog);
+
   logReaderInit(pDb, pLog, 1, &reader);
   lsmStringInit(&buf1, pDb->pEnv);
   lsmStringInit(&buf2, pDb->pEnv);
@@ -1013,6 +1015,7 @@ int lsmLogRecover(lsm_db *pDb){
         }else{
           pLog->aRegion[2].iStart = 0;
           iPass = -1;
+          lsmCheckpointZeroLogoffset(pDb);
         }
       }
       logReaderInit(pDb, pLog, 0, &reader);

@@ -443,9 +443,8 @@ struct Snapshot {
 */
 int lsmCheckpointRead(lsm_db *, int *, int *);
 int lsmCheckpointWrite(lsm_db *);
-int lsmCheckpointExport(lsm_db *, int, int, i64, int, void **, int *);
+int lsmCheckpointExport(lsm_db *, int, int, int, i64, int, void **, int *);
 void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
-lsm_i64 lsmCheckpointLogOffset(void *pExport);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
 int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);
@@ -458,10 +457,13 @@ int lsmCheckpointLoadWorker(lsm_db *pDb);
 int lsmCheckpointStore(lsm_db *pDb, int);
 
 i64 lsmCheckpointId(u32 *, int);
+i64 lsmCheckpointLogOffset(u32 *);
 int lsmCheckpointPgsz(u32 *);
 int lsmCheckpointBlksz(u32 *);
+void lsmCheckpointLogoffset(u32 *aCkpt, DbLog *pLog);
+void lsmCheckpointZeroLogoffset(lsm_db *);
 
-int lsmCheckpointSaveWorker(lsm_db *pDb);
+int lsmCheckpointSaveWorker(lsm_db *pDb, int);
 
 
 /* 
@@ -689,7 +691,7 @@ void lsmLogTell(lsm_db *, LogMark *);
 void lsmLogSeek(lsm_db *, LogMark *);
 
 int lsmLogRecover(lsm_db *);
-void lsmLogCheckpoint(lsm_db *, DbLog *pLog, lsm_i64);
+void lsmLogCheckpoint(lsm_db *, lsm_i64);
 int lsmLogStructure(lsm_db *pDb, char **pzVal);
 
 
@@ -707,7 +709,7 @@ int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
 
 int lsmBeginWork(lsm_db *);
-void lsmFinishWork(lsm_db *, int *);
+void lsmFinishWork(lsm_db *, int, int *);
 
 int lsmFinishRecovery(lsm_db *);
 void lsmFinishReadTrans(lsm_db *);
@@ -756,6 +758,12 @@ void lsmFreeSnapshot(lsm_env *, Snapshot *);
 int lsmShmChunk(lsm_db *db, int iChunk, void **ppData);
 int lsmShmLock(lsm_db *db, int iLock, int eOp);
 void lsmShmBarrier(lsm_db *db);
+
+#ifdef LSM_DEBUG
+void lsmShmHasLock(lsm_db *db, int iLock, int eOp);
+#else
+# define lsmShmHasLock(x,y,z)
+#endif
 
 int lsmReadlock(lsm_db *, i64 iLsm, i64 iTree);
 int lsmReleaseReadlock(lsm_db *);

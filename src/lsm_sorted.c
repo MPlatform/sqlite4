@@ -4069,7 +4069,7 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
       if( rc==LSM_OK && bOvfl ) rc = lsmSortedNewToplevel(pDb, nLsm, bOvfl);
     }
 
-    lsmFinishWork(pDb, &rc);
+    lsmFinishWork(pDb, 0, &rc);
     assert( pDb->pWorker==0 );
     if( pnWrite ) *pnWrite = nWrite;
   }else if( pnWrite ){

@@ -127,10 +127,10 @@ static int dbAutoWork(lsm_db *pDb, int nUnit){
   rc = lsmBeginWork(pDb);
   if( rc==LSM_OK ) rc = lsmSortedAutoWork(pDb, nUnit);
   if( pDb->pWorker && pDb->pWorker->pLevel ){
-    lsmFinishWork(pDb, &rc);
+    lsmFinishWork(pDb, 0, &rc);
   }else{
     int rcdummy = LSM_BUSY;
-    lsmFinishWork(pDb, &rcdummy);
+    lsmFinishWork(pDb, 0, &rcdummy);
   }
   return rc;
 }
@@ -161,9 +161,9 @@ static int dbRecoverIfRequired(lsm_db *pDb){
       if( rc==LSM_OK ){
         if( pShm->bInit==0 ){
           memset(pShm, 0, sizeof(ShmHeader));
-          rc = lsmLogRecover(pDb);
+          rc = lsmCheckpointRecover(pDb);
           if( rc==LSM_OK ){
-            rc = lsmCheckpointRecover(pDb);
+            rc = lsmLogRecover(pDb);
           }
         }
         lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
@@ -287,7 +287,7 @@ int lsmFlushToDisk(lsm_db *pDb){
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
   if( rc==LSM_OK ) lsmTreeClear(pDb);
 
-  lsmFinishWork(pDb, &rc);
+  lsmFinishWork(pDb, 1, &rc);
 
   /* Restore the position of any open cursors */
   if( rc==LSM_OK ) rc = lsmRestoreCursors(pDb);
@@ -465,7 +465,7 @@ int lsmStructList(
   /* Release the snapshot and return */
   if( bUnlock ){
     int rcwork = LSM_BUSY;
-    lsmFinishWork(pDb, &rcwork);
+    lsmFinishWork(pDb, 0, &rcwork);
   }
   *pzOut = s.z;
   return rc;
