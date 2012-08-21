@@ -456,6 +456,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   Snapshot *p = pDb->pWorker;
   Freelist *pFree;                /* Database free list */
   int iRet = 0;                   /* Block number of allocated block */
+  int rc = LSM_OK;
 
   assert( pDb->pWorker );
  
@@ -468,31 +469,10 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     */
     Snapshot *pIter;
     i64 iFree = pFree->aEntry[0].iId;
-    i64 iInUse;
+    int bInUse = 0;
 
-    /* Both Database.iCheckpointId and the Database.pClient list are 
-    ** protected by the client mutex. So grab it here before determining
-    ** the id of the oldest snapshot still potentially in use.  */
-#if 0
-    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-    for(pIter=p->pClient; pIter->pSnapshotNext; pIter=pIter->pSnapshotNext);
-    iInUse = LSM_MIN(pIter->iId, p->iCheckpointId);
-    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
-
-    if( 0 ){
-      int i;
-      printf("choose from freelist: ");
-      for(i=0; i<pFree->nEntry && pFree->aEntry[i].iId<=iInUse; i++){
-        printf("%d ", pFree->aEntry[i].iBlk);
-      }
-      printf("\n");
-      fflush(stdout);
-    }
-#endif
-    iInUse = p->iId-1;
-    /* TODO: Fix the above */
-
-    if( iFree<=iInUse ){
+    rc = lsmLsmInUse(pDb, iFree, &bInUse);
+    if( rc==LSM_OK && bInUse==0 ){
       iRet = pFree->aEntry[0].iBlk;
       flRemoveEntry0(pFree);
       assert( iRet!=0 );
@@ -504,7 +484,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
 
   /* If no block was allocated from the free-list, allocate one at the
   ** end of the file. */
-  if( iRet==0 ){
+  if( rc==LSM_OK && iRet==0 ){
     iRet = ++pDb->pWorker->nBlock;
   }
 
@@ -1009,19 +989,14 @@ int lsmReadlock(lsm_db *db, i64 iLsm, i64 iTree){
   return rc;
 }
 
-/*
-**
-*/
-int lsmTreeInUse(lsm_db *db, u32 iTreeId, int *pbInUse){
+static int isInUse(lsm_db *db, i64 iLsm, i64 iTree, int *pbInUse){
   ShmHeader *pShm = db->pShmhdr;
   int i;
   int rc = LSM_OK;
 
-  if( db->treehdr.iTreeId==iTreeId ) rc = LSM_BUSY;
-
   for(i=0; rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
-    if( p->iLsmId && p->iTreeId && p->iTreeId<=iTreeId ){
+    if( p->iLsmId && p->iTreeId && (p->iTreeId<=iTree || p->iLsmId<=iLsm) ){
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL);
       if( rc==LSM_OK ){
         p->iTreeId = p->iLsmId = 0;
@@ -1036,6 +1011,22 @@ int lsmTreeInUse(lsm_db *db, u32 iTreeId, int *pbInUse){
   }
   *pbInUse = 0;
   return rc;
+}
+
+int lsmTreeInUse(lsm_db *db, u32 iTreeId, int *pbInUse){
+  if( db->treehdr.iTreeId==iTreeId ){
+    *pbInUse = 1;
+    return LSM_OK;
+  }
+  return isInUse(db, 0, (i64)iTreeId, pbInUse);
+}
+
+int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse){
+  if( db->pClient && db->pClient->iId<=iLsmId ){
+    *pbInUse = 1;
+    return LSM_OK;
+  }
+  return isInUse(db, iLsmId, 0, pbInUse);
 }
 
 /*

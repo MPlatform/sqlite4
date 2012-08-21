@@ -305,8 +305,12 @@ static void lsmAppendStrBlob(LsmString *pStr, void *pBlob, int nBlob){
   if( pStr->nAlloc==0 ) return;
   for(i=0; i<nBlob; i++){
     u8 c = ((u8*)pBlob)[i];
-    pStr->z[pStr->n++] = "0123456789abcdef"[(c>>4)&0xf];
-    pStr->z[pStr->n++] = "0123456789abcdef"[c&0xf];
+    if( c>='a' && c<='z' ){
+      pStr->z[pStr->n++] = c;
+    }else{
+      pStr->z[pStr->n++] = "0123456789abcdef"[(c>>4)&0xf];
+      pStr->z[pStr->n++] = "0123456789abcdef"[c&0xf];
+    }
   }
   pStr->z[pStr->n] = 0;
 }
@@ -459,8 +463,8 @@ static u32 treeShmalloc(lsm_db *pDb, int nByte, int *pRc){
       int rc;
 
       /* Check if the chunk at the start of the linked list is still in
-       ** use. If not, reuse it. If so, allocate a new chunk by appending
-       ** to the *-shm file.  */
+      ** use. If not, reuse it. If so, allocate a new chunk by appending
+      ** to the *-shm file.  */
       if( pDb->treehdr.iFirst!=iChunk ){
         int bInUse;
         pFirst = treeShmChunk(pDb, pDb->treehdr.iFirst);

@@ -165,6 +165,12 @@ static int dbRecoverIfRequired(lsm_db *pDb){
           if( rc==LSM_OK ){
             rc = lsmLogRecover(pDb);
           }
+
+          /* If successful, set the ShmHeader.bInit variable. */
+          if( rc==LSM_OK ){
+            lsmShmBarrier(pDb);
+            pDb->pShmhdr->bInit = 1;
+          }
         }
         lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
       }

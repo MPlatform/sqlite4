@@ -366,24 +366,6 @@ static void ckptExportAppendlist(
   *piOut = iOut;
 };
 
-/*
-** Import a log offset.
-*/
-static void ckptImportLog(u32 *aIn, int *piIn, DbLog *pLog){
-#if 0
-  int iIn = *piIn;
-
-  /* TODO: Look at this again after updating lsmLogRecover() */
-  pLog->aRegion[2].iStart = (((i64)aIn[iIn]) << 32) + (i64)aIn[iIn+1];
-  pLog->cksum0 = aIn[iIn+2];
-  pLog->cksum1 = aIn[iIn+3];
-
-  *piIn = iIn+4;
-#endif
-}
-
-
-
 int lsmCheckpointExport( 
   lsm_db *pDb,                    /* Connection handle */
   int nLsmLevel,                  /* Number of levels to store in LSM */
@@ -580,68 +562,6 @@ static int ckptLoadLevels(
   *ppLevel = pRet;
   *piIn = iIn;
   return rc;
-}
-
-static int ckptImport(
-  lsm_db *pDb, 
-  void *pCkpt, 
-  int nInt, 
-  int *pbOvfl, 
-  int *pRc
-){
-  int rc = *pRc;
-  int ret = 0;
-  assert( 0 );
-  if( rc==LSM_OK ){
-    Snapshot *pSnap = pDb->pWorker;
-    u32 cksum[2] = {0, 0};
-    u32 *aInt = (u32 *)pCkpt;
-
-    lsmChecksumBytes((u8 *)aInt, sizeof(u32)*(nInt-2), 0, cksum);
-    ckptChangeEndianness(aInt, nInt);
-
-    if( aInt[nInt-2]==cksum[0] && aInt[nInt-1]==cksum[1] ){
-      int i;
-      int nLevel;
-      int iIn = CKPT_HDR_SIZE;
-      int bOvfl;
-      i64 iId;
-      u32 *aDelta;
-
-      Level *pTopLevel = 0;
-
-      /* Read header fields */
-      iId = lsmCheckpointId(aInt, 0);
-      pDb->treehdr.iCkpt = iId;
-      lsmSnapshotSetCkptid(pSnap, iId);
-      nLevel = (int)aInt[CKPT_HDR_NLEVEL];
-      lsmSnapshotSetNBlock(pSnap, (int)aInt[CKPT_HDR_NBLOCK]);
-      *pbOvfl = bOvfl = aInt[CKPT_HDR_OVFL];
-
-      /* Import log offset */
-      ckptImportLog(aInt, &iIn, &pDb->treehdr.log);
-
-      /* Import append-point list */
-      ckptImportAppendlist(pDb, aInt, &iIn, &rc);
-
-      /* Import all levels stored in the checkpoint. */
-      rc = ckptLoadLevels(pDb, aInt, &iIn, nLevel, &pTopLevel);
-      lsmDbSnapshotSetLevel(pSnap, pTopLevel);
-
-      /* Import the freelist */
-      if( rc==LSM_OK ){
-        int nFree = aInt[iIn++] * 3;
-        rc = lsmSetFreelist(pDb, (int *)&aInt[iIn], nFree);
-        iIn += nFree;
-      }
-
-      ret = 1;
-    }
-
-    assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
-    *pRc = rc;
-  }
-  return ret;
 }
 
 
@@ -1026,12 +946,6 @@ int lsmCheckpointRecover(lsm_db *pDb){
   lsmFsMetaPageRelease(apPg[0]);
   lsmFsMetaPageRelease(apPg[1]);
 
-  /* If successful, set the ShmHeader.bInit variable. */
-  if( rc==LSM_OK ){
-    assert( ckptChecksumOk(pDb->aSnapshot) );
-    lsmShmBarrier(pDb);
-    pDb->pShmhdr->bInit = 1;
-  }
   return rc;
 }
 

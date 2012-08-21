@@ -768,6 +768,9 @@ void lsmShmHasLock(lsm_db *db, int iLock, int eOp);
 int lsmReadlock(lsm_db *, i64 iLsm, i64 iTree);
 int lsmReleaseReadlock(lsm_db *);
 
+int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);
+int lsmTreeInUse(lsm_db *db, u32 iLsmId, int *pbInUse);
+
 
 /**************************************************************************
 ** functions in lsm_str.c

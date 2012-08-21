@@ -3619,7 +3619,7 @@ int lsmSortedFlushTree(
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
 
 #if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "tree flush");
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "tree flush");
 #endif
   return rc;
 }
@@ -3959,7 +3959,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
 #endif
 
     }
