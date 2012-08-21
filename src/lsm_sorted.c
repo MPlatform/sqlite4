@@ -489,6 +489,15 @@ static u8 *pageGetCell(u8 *aData, int nData, int iCell){
 }
 
 /*
+** Return the number of cells on page pPg.
+*/
+static int pageObjGetNRec(Page *pPg){
+  int nData;
+  u8 *aData = lsmFsPageData(pPg, &nData);
+  return pageGetNRec(aData, nData);
+}
+
+/*
 ** Return the decoded (possibly relative) pointer value stored in cell 
 ** iCell from page aData/nData.
 */
@@ -569,6 +578,7 @@ static int pageGetBtreeKey(
 
   aData = fsPageData(pPg, &nData);
   assert( SEGMENT_BTREE_FLAG & pageGetFlags(aData, nData) );
+  assert( iKey>=0 && iKey<pageGetNRec(aData, nData) );
 
   aCell = pageGetCell(aData, nData, iKey);
   eType = *aCell++;
@@ -826,13 +836,23 @@ static int btreeCursorRestore(
       int nSeek;
       int iTopicSeek;
       int dummy;
-
       int iPg = 0;
       int iLoad = pCsr->pSeg->iRoot;
-
-      rc = pageGetBtreeKey(pCsr->aPg[nDepth-1].pPage, 
-          0, &dummy, &iTopicSeek, &pSeek, &nSeek, &pCsr->blob
-      );
+      Page *pPg = pCsr->aPg[nDepth-1].pPage;
+ 
+      if( pageObjGetNRec(pPg)==0 ){
+        /* This can happen when pPg is the right-most leaf in the b-tree.
+        ** In this case, set the iTopicSeek/pSeek/nSeek key to a value
+        ** greater than any real key.  */
+        assert( iCell==-1 );
+        iTopicSeek = 1000;
+        pSeek = 0;
+        nSeek = 0;
+      }else{
+        rc = pageGetBtreeKey(pPg,
+            0, &dummy, &iTopicSeek, &pSeek, &nSeek, &pCsr->blob
+        );
+      }
 
       do {
         Page *pPg;
