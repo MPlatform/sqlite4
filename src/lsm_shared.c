@@ -465,11 +465,11 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     /* The first block on the free list was freed as part of the work done
     ** to create the snapshot with id iFree. So, we can reuse this block if
     ** snapshot iFree or later has been checkpointed and all currently 
-    ** active clients are reading from snapshot iFree or later.
-    */
-    Snapshot *pIter;
+    ** active clients are reading from snapshot iFree or later.  */
     i64 iFree = pFree->aEntry[0].iId;
     int bInUse = 0;
+
+    /* TODO: The "has been checkpointed" bit */
 
     rc = lsmLsmInUse(pDb, iFree, &bInUse);
     if( rc==LSM_OK && bInUse==0 ){
@@ -630,10 +630,11 @@ int lsmSetFreelist(lsm_db *pDb, u32 *aElem, int nElem){
 }
 
 /*
-** If required, store a new database checkpoint.
+** If required, copy a database checkpoint from shared memory into the
+** database itself.
 **
-** The worker mutex must not be held when this is called. This is because
-** this function may indirectly call fsync(). And the worker mutex should
+** The WORKER lock must not be held when this is called. This is because
+** this function may indirectly call fsync(). And the WORKER lock should
 ** not be held that long (in case it is required by a client flushing an
 ** in-memory tree to disk).
 */
@@ -642,6 +643,8 @@ int lsmCheckpointWrite(lsm_db *pDb){
 
   assert( pDb->pWorker==0 );
   assert( pDb->pClient==0 );
+  assert( lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK) );
+
   rc = lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_EXCL);
   if( rc!=LSM_OK ) return rc;
 

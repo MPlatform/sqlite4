@@ -441,10 +441,8 @@ struct Snapshot {
 /*
 ** Functions from file "lsm_ckpt.c".
 */
-int lsmCheckpointRead(lsm_db *, int *, int *);
 int lsmCheckpointWrite(lsm_db *);
 int lsmCheckpointExport(lsm_db *, int, int, int, i64, int, void **, int *);
-void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
 int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);

@@ -147,57 +147,16 @@ static const int one = 1;
 #define CKPT_HDR_LO_CKSUM1 10
 #define CKPT_HDR_LO_CKSUM2 11
 
+typedef struct CkptBuffer CkptBuffer;
 
 /*
-** Generate or extend an 8 byte checksum based on the data in array aByte[]
-** and the initial values of aIn[0] and aIn[1] (or initial values of 0 and 
-** 0 if aIn==NULL).
-**
-** The checksum is written back into aOut[] before returning.
+** Dynamic buffer used to accumulate data for a checkpoint.
 */
-void lsmChecksumBytes(
-  const u8 *a,     /* Content to be checksummed */
-  int nByte,       /* Bytes of content in a[] */
-  const u32 *aIn,  /* Initial checksum value input */
-  u32 *aOut        /* OUT: Final checksum value output */
-){
-  u32 s1, s2;
-  u32 *aData = (u32 *)a;
-  u32 *aEnd = (u32 *)&a[nByte & ~0x00000007];
-
-  u32 aExtra[2] = {0, 0};
-  memcpy(aExtra, &a[nByte & ~0x00000007], nByte & 0x00000007);
-
-  if( aIn ){
-    s1 = aIn[0];
-    s2 = aIn[1];
-  }else{
-    s1 = s2 = 0;
-  }
-
-  if( LSM_LITTLE_ENDIAN ){
-    /* little-endian */
-    s1 += aExtra[0] + s2;
-    s2 += aExtra[1] + s1;
-    while( aData<aEnd ){
-      s1 += *aData++ + s2;
-      s2 += *aData++ + s1;
-    }
-  }else{
-    /* big-endian */
-    s1 += BYTESWAP32(aExtra[0]) + s2;
-    s2 += BYTESWAP32(aExtra[1]) + s1;
-    while( aData<aEnd ){
-      s1 += BYTESWAP32(aData[0]) + s2;
-      s2 += BYTESWAP32(aData[1]) + s1;
-      aData += 2;
-    }
-  }
-
-  aOut[0] = s1;
-  aOut[1] = s2;
-}
-
+struct CkptBuffer {
+  lsm_env *pEnv;
+  int nAlloc;
+  u32 *aCkpt;
+};
 
 /*
 ** Calculate the checksum of the checkpoint specified by arguments aCkpt and
@@ -227,13 +186,9 @@ static void ckptChecksum(u32 *aCkpt, u32 nCkpt, u32 *piCksum1, u32 *piCksum2){
   *piCksum2 = cksum2;
 }
 
-typedef struct CkptBuffer CkptBuffer;
-struct CkptBuffer {
-  lsm_env *pEnv;
-  int nAlloc;
-  u32 *aCkpt;
-};
-
+/*
+** Set integer iIdx of the checkpoint accumulating in buffer *p to iVal.
+*/
 static void ckptSetValue(CkptBuffer *p, int iIdx, u32 iVal, int *pRc){
   if( *pRc ) return;
   if( iIdx>=p->nAlloc ){
@@ -248,13 +203,22 @@ static void ckptSetValue(CkptBuffer *p, int iIdx, u32 iVal, int *pRc){
   p->aCkpt[iIdx] = iVal;
 }
 
-static void ckptChangeEndianness(u32 *a, int n){
+/*
+** Argument aInt points to an array nInt elements in size. Switch the 
+** endian-ness of each element of the array.
+*/
+static void ckptChangeEndianness(u32 *aInt, int nInt){
   if( LSM_LITTLE_ENDIAN ){
     int i;
-    for(i=0; i<n; i++) a[i] = BYTESWAP32(a[i]);
+    for(i=0; i<nInt; i++) aInt[i] = BYTESWAP32(aInt[i]);
   }
 }
 
+/*
+** Object *p contains a checkpoint in native byte-order. The checkpoint is
+** nCkpt integers in size, not including any checksum. This function sets
+** the two checksum elements of the checkpoint accordingly.
+*/
 static void ckptAddChecksum(CkptBuffer *p, int nCkpt, int *pRc){
   if( *pRc==LSM_OK ){
     u32 aCksum[2] = {0, 0};
@@ -285,10 +249,10 @@ static void ckptExportSegment(
 }
 
 static void ckptExportLevel(
-  Level *pLevel,
-  CkptBuffer *p,
-  int *piOut,
-  int *pRc
+  Level *pLevel,                  /* Level object to serialize */
+  CkptBuffer *p,                  /* Append new level record to this ckpt */
+  int *piOut,                     /* IN/OUT: Size of checkpoint so far */
+  int *pRc                        /* IN/OUT: Error code */
 ){
   int iOut = *piOut;
   Merge *pMerge;
@@ -598,43 +562,6 @@ int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal){
   return rc;
 }
 
-
-/*
-** If *pRc is not LSM_OK when this function is called, it is a no-op. 
-** 
-** Otherwise, it attempts to read the id and size of the checkpoint stored in
-** slot iSlot of the database header. If an error occurs during processing, 
-** *pRc is set to an error code before returning. The returned value is 
-** always zero in this case.
-**
-** Or, if no error occurs, set *pnInt to the total number of integer values
-** in the checkpoint and return the checkpoint id.
-*/
-static i64 ckptReadId(
-  lsm_db *pDb,                    /* Connection handle */
-  int iSlot,                      /* Slot to read from (1 or 2) */
-  int *pnInt,                     /* OUT: Size of slot checkpoint in ints */
-  int *pRc                        /* IN/OUT: Error code */
-){
-  i64 iId = 0;                    /* Checkpoint id (return value) */
-
-  assert( iSlot==1 || iSlot==2 );
-  if( *pRc==LSM_OK ){
-    MetaPage *pPg;                    /* Meta page for slot iSlot */
-    *pRc = lsmFsMetaPageGet(pDb->pFS, 0, iSlot, &pPg);
-    if( *pRc==LSM_OK ){
-      u8 *aData = lsmFsMetaPageData(pPg, 0);
-
-      iId = lsmCheckpointId((u32 *)aData, 1);
-      *pnInt = (int)lsmGetU32(&aData[CKPT_HDR_NCKPT*4]);
-
-      lsmFsMetaPageRelease(pPg);
-    }
-  }
-  return iId;
-}
-
-
 /*
 ** Return the data for the LEVELS record.
 **
@@ -758,55 +685,6 @@ int lsmCheckpointOverflow(
   }
 
   return (nLevel>0 || nFree<0);
-}
-
-/*
-** Attempt to read a checkpoint from the database header. If an error
-** occurs, return an error code. Otherwise, return LSM_OK and, if 
-** a checkpoint is successfully loaded, populate the shared database 
-** structure.
-**
-** If a checkpoint is loaded, set *piSlot to the page number of the 
-** meta-page from which it is read (either 1 or 2). Or, if a checkpoint
-** cannot be loaded, set *piSlot to 0. 
-**
-** If a checkpoint is loaded and it indicates that the LEVELS and FREELIST 
-** records are present in the top-level segment *pbOvfl is set to true 
-** before returning. Otherwise, it is set to false.
-*/
-int lsmCheckpointRead(lsm_db *pDb, int *piSlot, int *pbOvfl){
-  int rc = LSM_OK;                /* Return Code */
-#if 0
-  i64 iId1;
-  i64 iId2;
-  int nInt1;
-  int nInt2;
-  int bLoaded = 0;
-  int iSlot = 0;
-
-  iId1 = ckptReadId(pDb, 1, &nInt1, &rc);
-  iId2 = ckptReadId(pDb, 2, &nInt2, &rc);
-
-  *pbOvfl = 0;
-  if( iId1>=iId2 ){
-    bLoaded = ckptTryRead(pDb, 1, nInt1, pbOvfl, &rc);
-    if( bLoaded ) iSlot = 1;
-    if( bLoaded==0 ){
-      bLoaded = ckptTryRead(pDb, 2, nInt2, pbOvfl, &rc);
-      if( bLoaded ) iSlot = 2;
-    }
-  }else{
-    bLoaded = ckptTryRead(pDb, 2, nInt2, pbOvfl, &rc);
-    if( bLoaded ) iSlot = 2;
-    if( bLoaded==0 ){
-      bLoaded = ckptTryRead(pDb, 1, nInt1, pbOvfl, &rc);
-      if( bLoaded ) iSlot = 1;
-    }
-  }
-
-  *piSlot = iSlot;
-#endif
-  return rc;
 }
 
 /*
@@ -1011,12 +889,14 @@ int lsmCheckpointLoad(lsm_db *pDb){
 int lsmCheckpointLoadWorker(lsm_db *pDb){
   ShmHeader *pShm = pDb->pShmhdr;
 
+  /* Must be holding the WORKER lock to do this */
+  assert( lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL) );
+
   if( ckptChecksumOk(pShm->aWorker)==0 ){
     int nInt = (int)pShm->aClient[CKPT_HDR_NCKPT];
     memcpy(pShm->aWorker, pShm->aClient, nInt*sizeof(u32));
     if( ckptChecksumOk(pShm->aWorker)==0 ) return LSM_CORRUPT_BKPT;
   }
-
   return lsmCheckpointDeserialize(pDb, pShm->aWorker, &pDb->pWorker);
 }
 

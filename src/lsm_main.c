@@ -751,6 +751,7 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 }
 
 int lsm_commit(lsm_db *pDb, int iLevel){
+  int bFlush = 0;
   int rc = LSM_OK;
 
   assert_db_state( pDb );
@@ -760,8 +761,10 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
   if( iLevel<pDb->nTransOpen ){
     if( iLevel==0 ){
+
       /* Commit the transaction to disk. */
       if( lsmTreeSize(pDb)>pDb->nTreeLimit ){
+        bFlush = 1;
         rc = lsmFlushToDisk(pDb);
       }
       if( rc==LSM_OK ) rc = lsmLogCommit(pDb);
@@ -775,6 +778,9 @@ int lsm_commit(lsm_db *pDb, int iLevel){
   }
 
   dbReleaseClientSnapshot(pDb);
+  if( pDb->bAutowork && bFlush && rc==LSM_OK ){
+    rc = lsmCheckpointWrite(pDb);
+  }
   return rc;
 }
 
