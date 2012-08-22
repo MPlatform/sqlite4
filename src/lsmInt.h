@@ -234,6 +234,22 @@ struct TreeHeader {
 
 /*
 ** Database handle structure.
+**
+** mLock:
+**   A bitmask representing the locks currently held by the connection.
+**   An LSM database supports N distinct locks, where N is some number less
+**   than or equal to 16. Locks are numbered starting from 1 (see the 
+**   definitions for LSM_LOCK_WRITER and co.).
+**
+**   The least significant 16-bits in mLock represent EXCLUSIVE locks. The
+**   most significant are SHARED locks. So, if a connection holds a SHARED
+**   lock on lock region iLock, then the following is true:
+**
+**       (mLock & ((iLock+16-1) << 1))
+**
+**   Or for an EXCLUSIVE lock:
+**
+**       (mLock & ((iLock-1) << 1))
 */
 struct lsm_db {
 

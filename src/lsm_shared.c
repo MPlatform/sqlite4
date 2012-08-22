@@ -1158,8 +1158,8 @@ int lsmShmLock(
 **   (eOp==LSM_LOCK_EXCL)   -> true if db has an EXCLUSIVE lock on iLock.
 */
 int lsmShmAssertLock(lsm_db *db, int iLock, int eOp){
-  const u32 me = (1 << (iLock-1+16));
-  const u32 ms = (1 << (iLock-1));
+  const u32 me = (1 << (iLock-1));
+  const u32 ms = (1 << (iLock+16-1));
   int ret;
 
   assert( iLock>=1 && iLock<=LSM_LOCK_READER(LSM_LOCK_NREADER-1) );
