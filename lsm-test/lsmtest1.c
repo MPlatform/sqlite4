@@ -64,6 +64,19 @@ static int testControlDb(TestDb **ppDb){
 #endif
 }
 
+void testDatasourceFetch(
+  TestDb *pDb,                    /* Database handle */
+  Datasource *pData,
+  int iKey,
+  int *pRc                        /* IN/OUT: Error code */
+){
+  void *pKey; int nKey;           /* Database key to query for */
+  void *pVal; int nVal;           /* Expected result of query */
+
+  testDatasourceEntry(pData, iKey, &pKey, &nKey, &pVal, &nVal);
+  testFetch(pDb, pKey, nKey, pVal, nVal, pRc);
+}
+
 /*
 ** This function is called to test that the contents of database pDb
 ** are as expected. In this case, expected is defined as containing
