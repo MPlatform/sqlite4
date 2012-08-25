@@ -1060,6 +1060,7 @@ int lsmTreeInsert(
         rc = treeInsertLeaf(pDb, &csr, iTreeKey, iSlot);
       }
     }
+    tblobFree(pDb, &csr.blob);
   }
 
 #if 0
