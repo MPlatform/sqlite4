@@ -576,16 +576,6 @@ static u32 treeShmalloc(lsm_db *pDb, int bAlign, int nByte, int *pRc){
 }
 
 /*
-** A wrapper around treeShmalloc that returns a pointer into shared memory
-** instead of an offset value.
-*/
-static void *treeShmallocPtr(lsm_db *pDb, int bAlign, int nByte, int *pRc){
-  u32 iPtr;
-  iPtr = treeShmalloc(pDb, bAlign, nByte, pRc);
-  return treeShmptr(pDb, iPtr, pRc);
-}
-
-/*
 ** Allocate and zero nByte bytes of space within the *-shm file.
 */
 static void *treeShmallocZero(lsm_db *pDb, int nByte, u32 *piPtr, int *pRc){
@@ -656,13 +646,14 @@ static TreeKey *newTreeKey(
       assert( ((iWrite+nAvail) % LSM_SHM_CHUNK_SIZE)==0 );
       nAlloc = LSM_MIN(nAvail, nRem);
 
-      aAlloc = treeShmallocPtr(pDb, 0, nAlloc, pRc);
+      aAlloc = treeShmptr(pDb, treeShmalloc(pDb, 0, nAlloc, pRc), pRc);
       if( aAlloc==0 ) break;
       memcpy(aAlloc, &a[n-nRem], nAlloc);
       nRem -= nAlloc;
     }
-    a = (a==pKey ? pVal : 0);
+    a = pVal;
     n = nRem = nVal;
+    pVal = 0;
   }
 
   if( *pRc ) return 0;
