@@ -296,7 +296,17 @@ int lsmFlushToDisk(lsm_db *pDb){
   lsmFinishWork(pDb, 1, &rc);
 
   /* Restore the position of any open cursors */
-  if( rc==LSM_OK ) rc = lsmRestoreCursors(pDb);
+  if( rc==LSM_OK && pDb->pCsr ){
+    lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
+    pDb->pClient = 0;
+    rc = lsmCheckpointLoad(pDb);
+    if( rc==LSM_OK ){
+      rc = lsmCheckpointDeserialize(pDb, pDb->aSnapshot, &pDb->pClient);
+    }
+    if( rc==LSM_OK ){
+      rc = lsmRestoreCursors(pDb);
+    }
+  }
 
 #if 0
   if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "flush");
