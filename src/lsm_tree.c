@@ -639,12 +639,10 @@ static TreeKey *newTreeKey(
       u8 *aAlloc;
       int nAlloc;
       u32 iWrite;
-      int nAvail;
 
-      iWrite = pDb->treehdr.iWrite;
-      nAvail = LSM_SHM_CHUNK_SIZE - (iWrite & (LSM_SHM_CHUNK_SIZE-1));
-      assert( ((iWrite+nAvail) % LSM_SHM_CHUNK_SIZE)==0 );
-      nAlloc = LSM_MIN(nAvail, nRem);
+      iWrite = (pDb->treehdr.iWrite & (LSM_SHM_CHUNK_SIZE-1));
+      iWrite = LSM_MAX(iWrite, LSM_SHM_CHUNK_HDR);
+      nAlloc = LSM_MIN((LSM_SHM_CHUNK_SIZE-iWrite), nRem);
 
       aAlloc = treeShmptr(pDb, treeShmalloc(pDb, 0, nAlloc, pRc), pRc);
       if( aAlloc==0 ) break;

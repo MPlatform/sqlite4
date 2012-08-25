@@ -642,7 +642,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   int rc;                         /* Return Code */
 
   assert( pDb->pWorker==0 );
-  assert( pDb->pClient==0 );
+  assert( 1 || pDb->pClient==0 );
   assert( lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK) );
 
   rc = lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_EXCL);
