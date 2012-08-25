@@ -173,7 +173,7 @@ static int keyCompare(void *pKey1, int nKey1, void *pKey2, int nKey2){
   return res;
 }
 
-static int test_scan_debug = 0;
+int test_scan_debug = 0;
 
 static void scanCompareCb(
   void *pCtx, 
@@ -185,8 +185,10 @@ static void scanCompareCb(
   u8 *aVal = (u8 *)pVal;
   int i;
 
-  if( test_scan_debug ) printf("%.20s\n", (char *)pKey);
+  if( test_scan_debug ) printf("%.*s\n", nKey, (char *)pKey);
+#if 0
   if( test_scan_debug ) printf("%.20s\n", (char *)pVal);
+#endif
 
 #if 0
   /* Check tdb_fetch() matches */

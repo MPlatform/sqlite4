@@ -288,16 +288,16 @@ static TreeKey *treeShmkey(
 ){
   TreeKey *pRet;
 
-  assert( eLoad==0 || eLoad==TK_LOADKEY || eLoad==TK_LOADVAL );
+  assert( eLoad==TK_LOADKEY || eLoad==TK_LOADVAL );
   pRet = (TreeKey *)treeShmptr(pDb, iPtr, pRc);
   if( pRet ){
-    int nReq = sizeof(TreeKey);   /* Bytes of space required at pRet */
+    int nReq;                     /* Bytes of space required at pRet */
     int nAvail;                   /* Bytes of space available at pRet */
-    switch( eLoad ){
-      case TK_LOADKEY: nReq += pRet->nKey; break;
-      case TK_LOADVAL: nReq += pRet->nKey + pRet->nValue; break;
-    }
 
+    nReq = sizeof(TreeKey) + pRet->nKey;
+    if( eLoad==TK_LOADVAL && pRet->nValue>0 ){
+      nReq += pRet->nValue;
+    }
     assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
     nAvail = LSM_SHM_CHUNK_SIZE - (iPtr & (LSM_SHM_CHUNK_SIZE-1));
 

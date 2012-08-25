@@ -678,11 +678,8 @@ int lsmCheckpointOverflow(
 
   /* Set nList to the number of values required to store the free-list 
   ** completely in the checkpoint.  */
-  lsmSnapshotFreelist(pDb, 0, &nList);
-  nList -= (LSM_CKPT_MIN_FREELIST - LSM_CKPT_MAX_REFREE);
-  if( nList>0 ){
-    nFree -= 3*nList;
-  }
+  nList = 1 + 3*pDb->pWorker->freelist.nEntry;
+  nFree -= nList;
 
   return (nLevel>0 || nFree<0);
 }
