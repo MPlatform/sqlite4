@@ -1398,22 +1398,25 @@ static Index *newIndex(
     pIndex->onError = (u8)onError;
     pIndex->pSchema = pTab->pSchema;
 
-    if( db->init.busy ){
-      Hash *pIdxHash = &pIndex->pSchema->idxHash;
-      Index *p;
-
-      p = sqlite4HashInsert(pIdxHash, pIndex->zName, nName, pIndex);
-      if( p ){
-        assert( p==pIndex );
-        db->mallocFailed = 1;
-        sqlite4DbFree(db, pIndex);
-        pIndex = 0;
-      }
-    }
   }
 
   *pzExtra = zExtra;
   return pIndex;
+}
+
+static int addIndexToHash(sqlite4 *db, Index *pIdx){
+  if( db->init.busy ){
+    Hash *pIdxHash = &pIdx->pSchema->idxHash;
+    int nName = sqlite4Strlen30(pIdx->zName);
+    Index *p;
+    p = sqlite4HashInsert(pIdxHash, pIdx->zName, nName, pIdx);
+    if( p ){
+      assert( p==pIdx );
+      db->mallocFailed = 1;
+      return SQLITE4_NOMEM;
+    }
+  }
+  return SQLITE4_OK;
 }
 
 
@@ -1427,15 +1430,18 @@ static void addImplicitPrimaryKey(
   Table *pTab,                    /* Table to add implicit PRIMARY KEY to */
   int iDb
 ){
+  sqlite4 *db = pParse->db;
   Index *pIndex;                  /* New index */
   char *zExtra;
 
   assert( !pTab->pIndex || pTab->pIndex->eIndexType!=SQLITE4_INDEX_PRIMARYKEY );
   assert( sqlite4Strlen30("binary")==6 );
   pIndex = newIndex(pParse, pTab, pTab->zName, 1, OE_Abort, 1+6, &zExtra);
+  if( addIndexToHash(db, pIndex) ){
+    sqlite4DbFree(db, pIndex);
+    pIndex = 0;
+  }
   if( pIndex ){
-    sqlite4 *db = pParse->db;
-
     pIndex->aiColumn[0] = -1;
     pIndex->azColl[0] = zExtra;
     memcpy(zExtra, "binary", 7);
@@ -2667,6 +2673,7 @@ Index *sqlite4CreateIndex(
     if( pTblName!=0 || bPrimaryKey ){
       pIndex->tnum = db->init.newTnum;
     }
+    if( addIndexToHash(db, pIndex) ) goto exit_create_index;
   }
 
   /* If the db->init.busy is 0 then create the index on disk.  This
