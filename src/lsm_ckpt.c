@@ -89,6 +89,13 @@
 */
 
 /*
+** A limit on the number of rhs segments that may be present in the database
+** file. Defining this limit ensures that all level records fit within
+** the 4096 byte limit for checkpoint blobs.
+*/
+#define LSM_CKPT_MAX_LEVELS 40
+
+/*
 ** OVERSIZED CHECKPOINT BLOBS:
 **
 ** There are two slots allocated for checkpoints at the start of each
@@ -945,6 +952,31 @@ int lsmCheckpointDeserialize(
 
   *ppSnap = pNew;
   return rc;
+}
+
+/*
+** Connection pDb must be the worker connection in order to call this
+** function. It returns true if the database already contains the maximum
+** number of levels or false otherwise.
+**
+** This is used when flushing the in-memory tree to disk. If the database
+** is already full, then the caller should invoke lsm_work() or similar
+** until it is not full before creating a new level by flushing the in-memory
+** tree to disk. Limiting the number of levels in the database ensures that
+** the records describing them always fit within the checkpoint blob.
+*/
+int lsmDatabaseFull(lsm_db *pDb){
+  Level *p;
+  int nRhs = 0;
+
+  assert( lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL) );
+  assert( pDb->pWorker );
+
+  for(p=pDb->pWorker->pLevel; p; p=p->pNext){
+    nRhs += (p->nRight ? p->nRight : 1);
+  }
+
+  return (nRhs >= LSM_CKPT_MAX_LEVELS);
 }
 
 /*

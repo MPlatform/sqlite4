@@ -284,6 +284,9 @@ int lsmFlushToDisk(lsm_db *pDb){
   if( rc==LSM_OK && pDb->bAutowork ){
     rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
   }
+  while( rc==LSM_OK && lsmDatabaseFull(pDb) ){
+    rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
+  }
 
   /* Write the contents of the in-memory tree into the database file and 
   ** update the worker snapshot accordingly. Then flush the contents of 

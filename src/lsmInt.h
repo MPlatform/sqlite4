@@ -478,6 +478,7 @@ void lsmCheckpointLogoffset(u32 *aCkpt, DbLog *pLog);
 void lsmCheckpointZeroLogoffset(lsm_db *);
 
 int lsmCheckpointSaveWorker(lsm_db *pDb, int);
+int lsmDatabaseFull(lsm_db *pDb);
 
 
 /* 
