@@ -1365,7 +1365,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
 
   if( bUnlock ){
     int rcwork = LSM_BUSY;
-    lsmFinishWork(pDb, 0, &rcwork);
+    lsmFinishWork(pDb, 0, 0, &rcwork);
   }
   return rc;
 }
@@ -1425,12 +1425,13 @@ static void checkBlocks(
 */
 int lsmFsIntegrityCheck(lsm_db *pDb){
   int i;
+  int j;
+  Freelist freelist = {0, 0, 0};
   FileSystem *pFS = pDb->pFS;
   u8 *aUsed;
   Level *pLevel;
   Snapshot *pWorker = pDb->pWorker;
   int nBlock = pWorker->nBlock;
-
 
   aUsed = lsmMallocZero(pDb->pEnv, nBlock);
   if( aUsed==0 ){
@@ -1449,15 +1450,28 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
     }
   }
 
-  for(i=0; i<pWorker->freelist.nEntry; i++){
-    u32 iBlk = pWorker->freelist.aEntry[i].iBlk;
-    assert( iBlk<=nBlock );
-    assert( aUsed[iBlk-1]==0 );
-    aUsed[iBlk-1] = 1;
+  if( pWorker->nFreelistOvfl ){
+    int rc = lsmCheckpointLoadOverflow(pDb, &freelist);
+    assert( rc==LSM_OK || rc==LSM_NOMEM );
+    if( rc!=LSM_OK ) return 1;
+  }
+
+  for(j=0; j<2; j++){
+    Freelist *pFreelist;
+    if( j==0 ) pFreelist = &pWorker->freelist;
+    if( j==1 ) pFreelist = &freelist;
+
+    for(i=0; i<pFreelist->nEntry; i++){
+      u32 iBlk = pFreelist->aEntry[i].iBlk;
+      assert( iBlk<=nBlock );
+      assert( aUsed[iBlk-1]==0 );
+      aUsed[iBlk-1] = 1;
+    }
   }
 
   for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
 
   lsmFree(pDb->pEnv, aUsed);
+  lsmFree(pDb->pEnv, freelist.aEntry);
   return 1;
 }

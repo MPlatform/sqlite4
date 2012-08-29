@@ -442,12 +442,27 @@ int sqlite4KVStoreOpenLsm(
   if( pNew==0 ){
     rc = SQLITE4_NOMEM;
   }else{
+    struct Config {
+      const char *zParam;
+      int eParam;
+    } aConfig[] = {
+      { "lsm_block_size", LSM_CONFIG_BLOCK_SIZE }
+    };
+
     memset(pNew, 0, sizeof(KVLsm));
     pNew->base.pStoreVfunc = &kvlsmMethods;
     pNew->base.pEnv = pEnv;
-
     rc = lsm_new(0, &pNew->pDb);
     if( rc==SQLITE4_OK ){
+      int i;
+      for(i=0; i<ArraySize(aConfig); i++){
+        const char *zVal = sqlite4_uri_parameter(zName, aConfig[i].zParam);
+        if( zVal ){
+          int nVal = sqlite4Atoi(zVal);
+          lsm_config(pNew->pDb, aConfig[i].eParam, &nVal);
+        }
+      }
+
       rc = lsm_open(pNew->pDb, zName);
     }
 

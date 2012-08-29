@@ -127,10 +127,10 @@ static int dbAutoWork(lsm_db *pDb, int nUnit){
   rc = lsmBeginWork(pDb);
   if( rc==LSM_OK ) rc = lsmSortedAutoWork(pDb, nUnit);
   if( pDb->pWorker && pDb->pWorker->pLevel ){
-    lsmFinishWork(pDb, 0, &rc);
+    lsmFinishWork(pDb, 0, -1, &rc);
   }else{
     int rcdummy = LSM_BUSY;
-    lsmFinishWork(pDb, 0, &rcdummy);
+    lsmFinishWork(pDb, 0, 0, &rcdummy);
   }
   return rc;
 }
@@ -269,8 +269,7 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
 */
 int lsmFlushToDisk(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
-  int nLsmLevel;
-  int bOvfl;
+  int nOvfl = 0;                  /* Number of free-list entries in LSM */
 
   /* Must not hold the worker snapshot when this is called. */
   assert( pDb->pWorker==0 );
@@ -292,11 +291,10 @@ int lsmFlushToDisk(lsm_db *pDb){
   ** update the worker snapshot accordingly. Then flush the contents of 
   ** the db file to disk too. No calls to fsync() are made here - just 
   ** write().  */
-  if( rc==LSM_OK ) bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
-  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
+  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, &nOvfl);
   if( rc==LSM_OK ) lsmTreeClear(pDb);
 
-  lsmFinishWork(pDb, 1, &rc);
+  lsmFinishWork(pDb, 1, nOvfl, &rc);
 
   /* Restore the position of any open cursors */
   if( rc==LSM_OK && pDb->pCsr ){
@@ -304,7 +302,7 @@ int lsmFlushToDisk(lsm_db *pDb){
     pDb->pClient = 0;
     rc = lsmCheckpointLoad(pDb);
     if( rc==LSM_OK ){
-      rc = lsmCheckpointDeserialize(pDb, pDb->aSnapshot, &pDb->pClient);
+      rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot, &pDb->pClient);
     }
     if( rc==LSM_OK ){
       rc = lsmRestoreCursors(pDb);
@@ -483,8 +481,8 @@ int lsmStructList(
 
   /* Release the snapshot and return */
   if( bUnlock ){
-    int rcwork = LSM_BUSY;
-    lsmFinishWork(pDb, 0, &rcwork);
+    int rcdummy = LSM_BUSY;
+    lsmFinishWork(pDb, 0, 0, &rcdummy);
   }
   *pzOut = s.z;
   return rc;

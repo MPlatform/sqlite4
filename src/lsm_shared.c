@@ -89,7 +89,7 @@ static void assertMustbeWorker(lsm_db *pDb){
 /*
 ** Append an entry to the free-list.
 */
-static int flAppendEntry(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId){
+int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId){
 
   /* Assert that this is not an attempt to insert a duplicate block number */
   assertNotInFreelist(p, iBlk);
@@ -119,7 +119,7 @@ static int flAppendEntry(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId){
 static int flInsertEntry(lsm_env *pEnv, Freelist *p, int iBlk){
   int rc;
 
-  rc = flAppendEntry(pEnv, p, iBlk, 1);
+  rc = lsmFreelistAppend(pEnv, p, iBlk, 1);
   if( rc==LSM_OK ){
     memmove(&p->aEntry[1], &p->aEntry[0], sizeof(FreelistEntry)*(p->nEntry-1));
     p->aEntry[0].iBlk = iBlk;
@@ -344,107 +344,6 @@ void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *pSnap){
 }
 
 /*
-** Create a new client snapshot based on the current contents of the worker 
-** snapshot. The connection must be the worker to call this function.
-*/
-int lsmDbUpdateClient(lsm_db *pDb, int nLsmLevel, int bOvfl){
-  assert( 0 );
-  return 0;
-#if 0
-  Database *p = pDb->pDatabase;   /* Database handle */
-  Snapshot *pOld;                 /* Old client snapshot object */
-  Snapshot *pNew;                 /* New client snapshot object */
-  int nByte;                      /* Memory required for new client snapshot */
-  int rc = LSM_OK;                /* Memory required for new client snapshot */
-  int nLevel = 0;                 /* Number of levels in worker snapshot */
-  int nRight = 0;                 /* Total number of rhs in worker */
-  int nKeySpace = 0;              /* Total size of split keys */
-  Level *pLevel;                  /* Used to iterate through worker levels */
-  Level **ppLink;                 /* Used to link levels together */
-  u8 *pAvail;                     /* Used to divide up allocation */
-
-  /* Must be the worker to call this. */
-  assertMustbeWorker(pDb);
-
-  /* Allocate space for the client snapshot and all levels. */
-  for(pLevel=p->worker.pLevel; pLevel; pLevel=pLevel->pNext){
-    nLevel++;
-    nRight += pLevel->nRight;
-  }
-  nByte = sizeof(Snapshot) 
-        + nLevel * sizeof(Level)
-        + nRight * sizeof(Segment)
-        + nKeySpace;
-  pNew = (Snapshot *)lsmMallocZero(pDb->pEnv, nByte);
-  if( !pNew ) return LSM_NOMEM_BKPT;
-  pNew->pDatabase = p;
-  pNew->iId = p->worker.iId;
-
-  /* Copy the linked-list of Level structures */
-  pAvail = (u8 *)&pNew[1];
-  ppLink = &pNew->pLevel;
-  for(pLevel=p->worker.pLevel; pLevel && rc==LSM_OK; pLevel=pLevel->pNext){
-    Level *pNew;
-
-    pNew = (Level *)pAvail;
-    memcpy(pNew, pLevel, sizeof(Level));
-    pAvail += sizeof(Level);
-
-    if( pNew->nRight ){
-      pNew->aRhs = (Segment *)pAvail;
-      memcpy(pNew->aRhs, pLevel->aRhs, sizeof(Segment) * pNew->nRight);
-      pAvail += (sizeof(Segment) * pNew->nRight);
-      lsmSortedSplitkey(pDb, pNew, &rc);
-    }
-
-    /* This needs to come after any call to lsmSortedSplitkey(). Splitkey()
-    ** uses data within the Merge object to set pNew->pSplitKey and co.  */
-    pNew->pMerge = 0;
-
-    *ppLink = pNew;
-    ppLink = &pNew->pNext;
-  }
-
-  /* Create the serialized version of the new client snapshot. */
-  if( p->bDirty && rc==LSM_OK ){
-    assert( nLevel>nLsmLevel || p->worker.pLevel==0 );
-    rc = lsmCheckpointExport(
-        pDb, nLsmLevel, bOvfl, pNew->iId, 1, &pNew->pExport, &pNew->nExport
-    );
-  }
-
-  if( rc==LSM_OK ){
-    /* Initialize the new snapshot ref-count to 1 */
-    pNew->nRef = 1;
-
-    lsmDbSnapshotRelease(pDb->pEnv, pDb->pClient);
-
-    /* Install the new client snapshot and release the old. */
-    lsmMutexEnter(pDb->pEnv, p->pClientMutex);
-    pOld = p->pClient;
-    pNew->pSnapshotNext = pOld;
-    p->pClient = pNew;
-    if( pDb->pClient ){
-      pDb->pClient = pNew;
-      pNew->nRef++;
-    }
-    lsmMutexLeave(pDb->pEnv, p->pClientMutex);
-
-    lsmDbSnapshotRelease(pDb->pEnv, pOld);
-    p->bDirty = 0;
-
-    /* Upgrade the user connection to the new client snapshot */
-
-  }else{
-    /* An error has occurred. Delete the allocated object. */
-    freeClientSnapshot(pDb->pEnv, pNew);
-  }
-
-  return rc;
-#endif
-}
-
-/*
 ** Allocate a new database file block to write data to, either by extending
 ** the database file or by recycling a free-list entry. The worker snapshot 
 ** must be held in order to call this function.
@@ -504,7 +403,7 @@ int lsmBlockFree(lsm_db *pDb, int iBlk){
 
   assertMustbeWorker(pDb);
   assert( p->bRecordDelta==0 );
-  return flAppendEntry(pDb->pEnv, &p->freelist, iBlk, p->iId);
+  return lsmFreelistAppend(pDb->pEnv, &p->freelist, iBlk, p->iId);
 }
 
 /*
@@ -621,7 +520,7 @@ int lsmSetFreelist(lsm_db *pDb, u32 *aElem, int nElem){
   pFree = &p->freelist;
   for(i=0; i<nElem; i+=3){
     i64 iId = ((i64)(aElem[i+1]) << 32) + aElem[i+2];
-    rc = flAppendEntry(pEnv, pFree, aElem[i], iId);
+    rc = lsmFreelistAppend(pEnv, pFree, aElem[i], iId);
   }
 
   return rc;
@@ -758,11 +657,11 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
 ** created to hold the updated state of the database is synced to disk, log
 ** file space can be recycled.
 */
-void lsmFinishWork(lsm_db *pDb, int bFlush, int *pRc){
+void lsmFinishWork(lsm_db *pDb, int bFlush, int nOvfl, int *pRc){
   /* If no error has occurred, serialize the worker snapshot and write
   ** it to shared memory.  */
   if( *pRc==LSM_OK ){
-    *pRc = lsmCheckpointSaveWorker(pDb, bFlush);
+    *pRc = lsmCheckpointSaveWorker(pDb, bFlush, nOvfl);
   }
 
   if( pDb->pWorker ){
@@ -822,7 +721,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
           ** checkpoint just loaded. TODO: This will be removed after 
           ** lsm_sorted.c is changed to work directly from the serialized
           ** version of the snapshot.  */
-          rc = lsmCheckpointDeserialize(pDb, pDb->aSnapshot, &pDb->pClient);
+          rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot, &pDb->pClient);
           assert( (rc==LSM_OK)==(pDb->pClient!=0) );
         }else{
           rc = lsmReleaseReadlock(pDb);
@@ -1182,6 +1081,10 @@ int lsmShmAssertLock(lsm_db *db, int iLock, int eOp){
   }
 
   return ret;
+}
+
+int lsmShmAssertWorker(lsm_db *db){
+  return lsmShmAssertLock(db, LSM_LOCK_WORKER, LSM_LOCK_EXCL) && db->pWorker;
 }
 #endif
 

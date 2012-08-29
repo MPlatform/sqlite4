@@ -449,6 +449,8 @@ struct Snapshot {
   int nBlock;                     /* Number of blocks in database file */
   u32 aiAppend[LSM_APPLIST_SZ];   /* Append point list */
   Freelist freelist;              /* Free block list */
+  int nFreelistOvfl;              /* Number of extra free-list entries in LSM */
+
   int nFreelistDelta;
   int bRecordDelta;
 };
@@ -458,13 +460,13 @@ struct Snapshot {
 ** Functions from file "lsm_ckpt.c".
 */
 int lsmCheckpointWrite(lsm_db *);
-int lsmCheckpointExport(lsm_db *, int, int, int, i64, int, void **, int *);
+int lsmCheckpointExport(lsm_db *, int, int, i64, int, void **, int *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
-int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);
+int lsmCheckpointOverflow(lsm_db *pDb, void **, int *, int *);
 
 int lsmCheckpointRecover(lsm_db *);
-int lsmCheckpointDeserialize(lsm_db *, u32 *, Snapshot **);
+int lsmCheckpointDeserialize(lsm_db *, int, u32 *, Snapshot **);
 
 int lsmCheckpointLoad(lsm_db *pDb);
 int lsmCheckpointLoadWorker(lsm_db *pDb);
@@ -477,7 +479,7 @@ int lsmCheckpointBlksz(u32 *);
 void lsmCheckpointLogoffset(u32 *aCkpt, DbLog *pLog);
 void lsmCheckpointZeroLogoffset(lsm_db *);
 
-int lsmCheckpointSaveWorker(lsm_db *pDb, int);
+int lsmCheckpointSaveWorker(lsm_db *pDb, int, int);
 int lsmDatabaseFull(lsm_db *pDb);
 
 
@@ -606,10 +608,8 @@ int lsmFsMetaPageGet(FileSystem *, int, int, MetaPage **);
 int lsmFsMetaPageRelease(MetaPage *);
 u8 *lsmFsMetaPageData(MetaPage *, int *);
 
-#ifdef LSM_EXPENSIVE_DEBUG
+#ifdef LSM_DEBUG
 int lsmFsIntegrityCheck(lsm_db *);
-#else
-/* # define lsmFsIntegrityCheck(pDb) 1 */
 #endif
 
 int lsmFsPageWritable(Page *);
@@ -636,7 +636,7 @@ int lsmConfigMmap(lsm_db *pDb, int *piParam);
 ** Functions from file "lsm_sorted.c".
 */
 int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
-int lsmSortedFlushTree(lsm_db *, int, int);
+int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
 
@@ -648,8 +648,7 @@ int lsmSortedFlushDb(lsm_db *);
 int lsmSortedAdvanceAll(lsm_db *pDb);
 
 int lsmSortedLoadMerge(lsm_db *, Level *, u32 *, int *);
-
-int lsmSortedLoadSystem(lsm_db *pDb);
+int lsmSortedLoadFreelist(lsm_db *pDb, void **, int *);
 
 void *lsmSortedSplitKey(Level *pLevel, int *pnByte);
 
@@ -724,14 +723,12 @@ int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
 
 int lsmBeginWork(lsm_db *);
-void lsmFinishWork(lsm_db *, int, int *);
+void lsmFinishWork(lsm_db *, int, int, int *);
 
 int lsmFinishRecovery(lsm_db *);
 void lsmFinishReadTrans(lsm_db *);
 int lsmFinishWriteTrans(lsm_db *, int);
 int lsmFinishFlush(lsm_db *, int);
-
-int lsmDbUpdateClient(lsm_db *, int, int);
 
 int lsmSnapshotFreelist(lsm_db *, int **, int *);
 int lsmSnapshotSetFreelist(lsm_db *, int *, int);
@@ -760,6 +757,8 @@ DbLog *lsmDatabaseLog(lsm_db *pDb);
 
 #ifdef LSM_DEBUG
   int lsmHoldingClientMutex(lsm_db *pDb);
+  int lsmShmAssertLock(lsm_db *db, int iLock, int eOp);
+  int lsmShmAssertWorker(lsm_db *db);
 #endif
 
 void lsmFreeSnapshot(lsm_env *, Snapshot *);
@@ -785,6 +784,7 @@ int lsmReleaseReadlock(lsm_db *);
 
 int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);
 int lsmTreeInUse(lsm_db *db, u32 iLsmId, int *pbInUse);
+int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId);
 
 
 /**************************************************************************

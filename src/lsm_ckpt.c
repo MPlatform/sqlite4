@@ -36,8 +36,7 @@
 **     5. The block size.
 **     6. The number of levels.
 **     7. The nominal database page size.
-**     8. Flag indicating if overflow records are used. If true, the top-level
-**        segment contains LEVELS and FREELIST entries. 
+**     8. Flag indicating if there exists a FREELIST record in the database.
 **
 **   Log pointer:
 **
@@ -89,33 +88,52 @@
 */
 
 /*
+** LARGE NUMBERS OF LEVEL RECORDS:
+**
 ** A limit on the number of rhs segments that may be present in the database
 ** file. Defining this limit ensures that all level records fit within
 ** the 4096 byte limit for checkpoint blobs.
+**
+** The number of right-hand-side segments in a database is counted as 
+** follows:
+**
+**   * For each level in the database not undergoing a merge, add 1.
+**
+**   * For each level in the database that is undergoing a merge, add 
+**     the number of segments on the rhs of the level.
+**
+** A level record not undergoing a merge is 6 integers. A level record 
+** with nRhs rhs segments and (nRhs+1) input segments (i.e. including the 
+** separators from the next level) is (6*nRhs+12) integers. The maximum
+** per right-hand-side level is therefore 12 integers. So the maximum
+** size of all level records in a checkpoint is 12*40=480 integers.
 */
-#define LSM_CKPT_MAX_LEVELS 40
+#define LSM_MAX_RHS_SEGMENTS 40
 
 /*
-** OVERSIZED CHECKPOINT BLOBS:
+** LARGE NUMBERS OF FREELIST ENTRIES:
 **
-** There are two slots allocated for checkpoints at the start of each
-** database file. Each are 4096 bytes in size, so may accommodate
-** checkpoints that consist of up to 1024 32-bit integers. Normally,
-** this is enough.
+** A limit on the number of free-list entries stored in a checkpoint. Since
+** each free-list entry consists of 3 integers, the maximum free-list size
+** is 3*100=300 integers. Combined with the limit on rhs segments defined
+** above, this ensures that a checkpoint always fits within a 4096 byte
+** meta page.
 **
-** However, if a database contains a sufficiently large number of levels,
-** a checkpoint may exceed 1024 integers in size. In most circumstances this 
-** is an undesirable scenario, as a database with so many levels will be 
-** slow to query. If this does happen, then only the uppermost (more recent)
-** levels are stored in the checkpoint blob itself. The remainder are stored
-** in an LSM record with the system key "LEVELS". The payload of the entry
-** is a series of 32-bit big-endian integers, as follows:
+** If the database contains more than 100 free blocks, the "overflow" flag
+** in the checkpoint header is set and the remainder are stored in the
+** system FREELIST entry in the LSM (along with user data). The value
+** accompanying the FREELIST key in the LSM is, like a checkpoint, an array
+** of 32-bit big-endian integers. As follows:
 **
-**    1. Number of levels (store in the LEVELS record, not total).
-**    2. For each level, a "level record" (as desribed above).
+**     For each entry:
+**       a. Block number of free block.
+**       b. MSW of associated checkpoint id.
+**       c. LSW of associated checkpoint id.
 **
-** There is no checksum in the LEVELS record.
+** The number of entries is not required - it is implied by the size of the
+** value blob containing the integer array.
 */
+#define LSM_MAX_FREELIST_ENTRIES 100
 
 /*
 ** The argument to this macro must be of type u32. On a little-endian
@@ -339,8 +357,7 @@ static void ckptExportAppendlist(
 
 int lsmCheckpointExport( 
   lsm_db *pDb,                    /* Connection handle */
-  int nLsmLevel,                  /* Number of levels to store in LSM */
-  int bOvfl,                      /* True if free list is stored in LSM */
+  int nOvfl,                      /* Number of free-list entries in LSM */
   int bLog,                       /* True to update log-offset fields */
   i64 iId,                        /* Checkpoint id */
   int bCksum,                     /* If true, include checksums */
@@ -358,12 +375,15 @@ int lsmCheckpointExport(
   int i;                          /* Iterator used while serializing freelist */
   CkptBuffer ckpt;
 
-  assert( bOvfl || nLsmLevel==0 );
-  
   /* Initialize the output buffer */
   memset(&ckpt, 0, sizeof(CkptBuffer));
   ckpt.pEnv = pDb->pEnv;
   iOut = CKPT_HDR_SIZE;
+
+  /* If nOvfl is negative, copy the value from the previous worker snaphsot. */
+  if( nOvfl<0 ){
+    nOvfl = (int)(pDb->pShmhdr->aWorker[CKPT_HDR_OVFL]);
+  }
 
   /* Write the log offset into the checkpoint. */
   ckptExportLog(pDb, bLog, &ckpt, &iOut, &rc);
@@ -373,7 +393,7 @@ int lsmCheckpointExport(
 
   /* Figure out how many levels will be written to the checkpoint. */
   for(pLevel=lsmDbSnapshotLevel(pSnap); pLevel; pLevel=pLevel->pNext) nAll++;
-  nHdrLevel = nAll - nLsmLevel;
+  nHdrLevel = nAll;
   assert( nHdrLevel>0 );
 
   /* Serialize nHdrLevel levels. */
@@ -383,11 +403,9 @@ int lsmCheckpointExport(
     iLevel++;
   }
 
-  /* Write the freelist delta (if bOvfl is true) or else the entire free-list
-  ** (if bOvfl is false).  */
-  assert( bOvfl==0 );             /* TODO: Fix this */
+  /* Write the freelist */
   if( rc==LSM_OK ){
-    int nFree = pSnap->freelist.nEntry;
+    int nFree = (pSnap->freelist.nEntry - nOvfl);
     ckptSetValue(&ckpt, iOut++, nFree, &rc);
     for(i=0; i<nFree; i++){
       FreelistEntry *p = &pSnap->freelist.aEntry[i];
@@ -406,7 +424,7 @@ int lsmCheckpointExport(
   ckptSetValue(&ckpt, CKPT_HDR_BLKSZ, lsmFsBlockSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nHdrLevel, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_PGSZ, lsmFsPageSize(pFS), &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_OVFL, bOvfl, &rc);
+  ckptSetValue(&ckpt, CKPT_HDR_OVFL, nOvfl, &rc);
 
   if( bCksum ){
     ckptAddChecksum(&ckpt, iOut, &rc);
@@ -621,74 +639,95 @@ int lsmCheckpointLevels(
 }
 
 /*
-** The function is used to determine if the FREELIST and LEVELS overflow
-** records may be required if a new top level segment is written and a
-** serialized checkpoint blob created. 
+** The worker lock must be held to call this function.
 **
-** If the checkpoint will definitely fit in a single meta page, 0 is 
-** returned and *pnLsmLevel is set to 0. In this case the caller need not
-** bother creating FREELIST and LEVELS records. 
-**
-** Or, if it is likely that the overflow records will be required, non-zero
-** is returned.
+** The function is used to determine if the FREELIST record is required
+** to store the free-block list. If not, zero is returned. Otherwise,
+** the value returned is the number of free-list elements that should be
+** saved in the LSM structure.
 */
 int lsmCheckpointOverflow(
   lsm_db *pDb,                    /* Database handle (must hold worker lock) */
-  int *pnLsmLevel                 /* OUT: Number of levels to store in LSM */
+  void **ppVal,                   /* OUT: lsmMalloc'd buffer */
+  int *pnVal,                     /* OUT: Size of *ppVal in bytes */
+  int *pnOvfl                     /* OUT: Number of freelist entries in buf */
 ){
-  Level *p;                       /* Used to iterate through levels */
-  int nFree;                      /* Free integers remaining in db header */
-  int nList;                      /* Size of freelist in integers */
-  int nLevel = 0;                 /* Number of levels stored in LEVELS */
- 
-  /* Number of free integers - 1024 less those used by the checkpoint header,
-  ** less the 4 used for the log-pointer, less the 3 used for the free-list 
-  ** delta and the 2 used for the checkpoint checksum. Value nFree is 
-  ** therefore the total number of integers available to store the database 
-  ** levels and freelist.  */
-  nFree = 1024 - CKPT_HDR_SIZE - CKPT_LOGPTR_SIZE - CKPT_CKSUM_SIZE;
-  nFree -= CKPT_APPENDLIST_SIZE;
+  int rc = LSM_OK;
+  int nRet;
+  Snapshot *p = pDb->pWorker;
 
-  /* Allow space for the free-list  with LSM_CKPT_MIN_FREELIST entries */
-  nFree--;
-  nFree -= LSM_CKPT_MIN_FREELIST * 3;
+  assert( lsmShmAssertWorker(pDb) );
+  assert( (pnVal==0)==(ppVal==0) );
+  assert( pnOvfl );
 
-  /* Allow space for the new level that may be created */
-  nFree -= (2 + CKPT_SEGMENT_SIZE);
-
-  /* Each level record not currently undergoing a merge consumes 2 + 4
-  ** integers. Each level that is undergoing a merge consumes 2 + 4 +
-  ** (nRhs * 4) + 1 + 1 + (nMerge * 2) + 2, where nRhs is the number of levels
-  ** used as input to the merge and nMerge is the total number of segments
-  ** (same as the number of levels, possibly plus 1 separators array). 
-  **
-  ** The calculation in the following block may overestimate the number
-  ** of integers required by a single level by 2 (as it assumes 
-  ** that nMerge==nRhs+1).  */
-  for(p=lsmDbSnapshotLevel(pDb->pWorker); p; p=p->pNext){
-    int nThis;                    /* Number of integers required by level p */
-    if( p->pMerge ){
-      nThis = 2 + (1 + p->nRight) * (2 + CKPT_SEGMENT_SIZE) + 1 + 1 + 2;
-    }else{
-      nThis = 2 + CKPT_SEGMENT_SIZE;
+  nRet = p->freelist.nEntry - LSM_MAX_FREELIST_ENTRIES;
+  if( nRet<=0 ){
+    nRet = 0;
+    if( ppVal ){
+      *pnVal = 0;
+      *ppVal = 0;
     }
-    if( nFree<nThis ) break;
-    nFree -= nThis;
+  }else if( ppVal ){
+    int i;                        /* Iterator variable */
+    int iOut = 0;                 /* Current size of blob in ckpt */
+    CkptBuffer ckpt;              /* Used to build FREELIST blob */
+
+    memset(&ckpt, 0, sizeof(CkptBuffer));
+    ckpt.pEnv = pDb->pEnv;
+    for(i=p->freelist.nEntry-nRet; rc==LSM_OK && i<p->freelist.nEntry; i++){
+      FreelistEntry *pEntry = &p->freelist.aEntry[i];
+      ckptSetValue(&ckpt, iOut++, pEntry->iBlk, &rc);
+      ckptSetValue(&ckpt, iOut++, (pEntry->iId >> 32) & 0xFFFFFFFF, &rc);
+      ckptSetValue(&ckpt, iOut++, pEntry->iId & 0xFFFFFFFF, &rc);
+    }
+
+    ckptChangeEndianness(ckpt.aCkpt, iOut);
+    *ppVal = ckpt.aCkpt;
+    *pnVal = iOut*sizeof(u32);
   }
 
-  /* Count the levels that will not fit in the checkpoint record. */
-  while( p ){
-    nLevel++;
-    p = p->pNext;
+  *pnOvfl = nRet;
+  return rc;
+}
+
+/*
+** Connection pDb must be the worker to call this function.
+**
+** Load the FREELIST record from the database. Decode it and append the
+** results to list pFreelist.
+*/
+int lsmCheckpointLoadOverflow(
+  lsm_db *pDb,
+  Freelist *pFreelist
+){
+  int rc;
+  int nVal = 0;
+  void *pVal = 0;
+  assert( lsmShmAssertWorker(pDb) );
+  
+  rc = lsmSortedLoadFreelist(pDb, &pVal, &nVal);
+  if( pVal ){
+    u32 *aFree = (u32 *)pVal;
+    int nFree = nVal / sizeof(int);
+
+    ckptChangeEndianness(aFree, nFree);
+    if( (nFree % 3) ){
+      rc = LSM_CORRUPT_BKPT;
+    }else{
+      int i;
+      int nLoad = nFree/3;
+
+      for(i=0; rc==LSM_OK && i<nFree; i+=3){
+        int iBlk = aFree[i];
+        i64 iId = ((i64)(aFree[i+1])<<32) + (i64)aFree[i+2];
+        rc = lsmFreelistAppend(pDb->pEnv, pFreelist, iBlk, iId);
+      }
+    }
+
+    lsmFree(pDb->pEnv, pVal);
   }
-  *pnLsmLevel = nLevel;
 
-  /* Set nList to the number of values required to store the free-list 
-  ** completely in the checkpoint.  */
-  nList = 1 + 3*pDb->pWorker->freelist.nEntry;
-  nFree -= nList;
-
-  return (nLevel>0 || nFree<0);
+  return rc;
 }
 
 /*
@@ -891,6 +930,7 @@ int lsmCheckpointLoad(lsm_db *pDb){
 }
 
 int lsmCheckpointLoadWorker(lsm_db *pDb){
+  int rc;
   ShmHeader *pShm = pDb->pShmhdr;
 
   /* Must be holding the WORKER lock to do this */
@@ -901,11 +941,20 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
     memcpy(pShm->aWorker, pShm->aClient, nInt*sizeof(u32));
     if( ckptChecksumOk(pShm->aWorker)==0 ) return LSM_CORRUPT_BKPT;
   }
-  return lsmCheckpointDeserialize(pDb, pShm->aWorker, &pDb->pWorker);
+
+  rc = lsmCheckpointDeserialize(pDb, 1, pShm->aWorker, &pDb->pWorker);
+  if( rc==LSM_OK && pDb->pWorker->nFreelistOvfl ){
+    rc = lsmCheckpointLoadOverflow(pDb, &pDb->pWorker->freelist);
+    pDb->pWorker->nFreelistOvfl = 0;
+  }
+
+  assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
+  return rc;
 }
 
 int lsmCheckpointDeserialize(
   lsm_db *pDb, 
+  int bInclFreelist,              /* If true, deserialize free-list */
   u32 *aCkpt, 
   Snapshot **ppSnap
 ){
@@ -928,19 +977,23 @@ int lsmCheckpointDeserialize(
     memcpy(pNew->aiAppend, &aCkpt[CKPT_HDR_SIZE+CKPT_LOGPTR_SIZE], nCopy);
 
     /* Copy the free-list */
-    nFree = aCkpt[iIn++];
-    if( nFree ){
-      pNew->freelist.aEntry = (FreelistEntry *)lsmMallocRc(
-          pDb->pEnv, sizeof(FreelistEntry)*nFree, &rc
-      );
-      if( rc==LSM_OK ){
-        int i;
-        for(i=0; i<nFree; i++){
-          pNew->freelist.aEntry[i].iBlk = aCkpt[iIn++];
-          pNew->freelist.aEntry[i].iId = ((i64)(aCkpt[iIn])<<32) + aCkpt[iIn+1];
-          iIn += 2;
+    if( bInclFreelist ){
+      pNew->nFreelistOvfl = aCkpt[CKPT_HDR_OVFL];
+      nFree = aCkpt[iIn++];
+      if( nFree ){
+        pNew->freelist.aEntry = (FreelistEntry *)lsmMallocZeroRc(
+            pDb->pEnv, sizeof(FreelistEntry)*nFree, &rc
+        );
+        if( rc==LSM_OK ){
+          int i;
+          for(i=0; i<nFree; i++){
+            FreelistEntry *p = &pNew->freelist.aEntry[i];
+            p->iBlk = aCkpt[iIn++];
+            p->iId = ((i64)(aCkpt[iIn])<<32) + aCkpt[iIn+1];
+            iIn += 2;
+          }
+          pNew->freelist.nEntry = pNew->freelist.nAlloc = nFree;
         }
-        pNew->freelist.nEntry = pNew->freelist.nAlloc = nFree;
       }
     }
   }
@@ -976,7 +1029,7 @@ int lsmDatabaseFull(lsm_db *pDb){
     nRhs += (p->nRight ? p->nRight : 1);
   }
 
-  return (nRhs >= LSM_CKPT_MAX_LEVELS);
+  return (nRhs >= LSM_MAX_RHS_SEGMENTS);
 }
 
 /*
@@ -990,14 +1043,14 @@ int lsmDatabaseFull(lsm_db *pDb){
 ** If successful, LSM_OK is returned. Otherwise, if an error occurs, an LSM
 ** error code is returned.
 */
-int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush){
+int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
   Snapshot *pSnap = pDb->pWorker;
   ShmHeader *pShm = pDb->pShmhdr;
   void *p = 0;
   int n = 0;
   int rc;
 
-  rc = lsmCheckpointExport(pDb, 0, 0, bFlush, pSnap->iId+1, 1, &p, &n);
+  rc = lsmCheckpointExport(pDb, nOvfl, bFlush, pSnap->iId+1, 1, &p, &n);
   if( rc!=LSM_OK ) return rc;
   assert( ckptChecksumOk((u32 *)p) );
 

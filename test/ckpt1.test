@@ -42,6 +42,53 @@ do_test 2.1 {
 } [list $nLevel ok]
 
 
-
+#-------------------------------------------------------------------------
+# The point of this test is to add a large number of blocks to the 
+# free-block list and check that this doesn't seem to cause any
+# obvious problems.
+#
+do_test 3.0 {
+  db close
+  forcedelete test.db
+  sqlite4 db file:test.db?lsm_block_size=65536
+  execsql { 
+    CREATE TABLE t1(a PRIMARY KEY, b);
+    CREATE INDEX i1 ON t1(b);
+  }
+} {}
+do_execsql_test 3.1 {
+  INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100));
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --   2
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --   4
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --   8
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  16
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  32
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  64
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 128
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 256
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 512
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  1K
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  2K
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  4K
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   --  8K
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 16K
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 32K
+  INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 64K
+}
+do_test 3.2 {
+  sqlite4_lsm_work db main -optimize 1000000
+  execsql { SELECT count(*) FROM t1 }
+} {65536}
+do_test 3.3 {
+  db close
+  sqlite4 db test.db
+  execsql { SELECT count(*) FROM t1 }
+} {65536}
+do_test 3.4 {
+  execsql { INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100)) }
+  sqlite4_lsm_work db main -optimize 1000000
+  execsql { SELECT count(*) FROM t1 }
+} {65537}
 
 finish_test
+
