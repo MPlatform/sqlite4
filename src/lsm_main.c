@@ -81,6 +81,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nDfltPgsz = LSM_PAGE_SIZE;
   pDb->nDfltBlksz = LSM_BLOCK_SIZE;
   pDb->nMerge = LSM_DEFAULT_NMERGE;
+  pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
   pDb->bUseLog = 1;
   pDb->iReader = -1;
   return LSM_OK;
@@ -427,6 +428,15 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
       int *piVal = va_arg(ap, int *);
       if( *piVal>1 ) pDb->nMerge = *piVal;
       *piVal = pDb->nMerge;
+      break;
+    }
+
+    case LSM_CONFIG_MAX_FREELIST: {
+      int *piVal = va_arg(ap, int *);
+      if( *piVal>=2 && *piVal<=LSM_MAX_FREELIST_ENTRIES ){
+        pDb->nMaxFreelist = *piVal;
+      }
+      *piVal = pDb->nMaxFreelist;
       break;
     }
 

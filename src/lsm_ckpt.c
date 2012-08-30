@@ -113,9 +113,10 @@
 /*
 ** LARGE NUMBERS OF FREELIST ENTRIES:
 **
-** A limit on the number of free-list entries stored in a checkpoint. Since
-** each free-list entry consists of 3 integers, the maximum free-list size
-** is 3*100=300 integers. Combined with the limit on rhs segments defined
+** There is also a limit (LSM_MAX_FREELIST_ENTRIES - defined in lsmInt.h)
+** on the number of free-list entries stored in a checkpoint. Since each 
+** free-list entry consists of 3 integers, the maximum free-list size is 
+** 3*100=300 integers. Combined with the limit on rhs segments defined
 ** above, this ensures that a checkpoint always fits within a 4096 byte
 ** meta page.
 **
@@ -132,8 +133,10 @@
 **
 ** The number of entries is not required - it is implied by the size of the
 ** value blob containing the integer array.
+**
+** Note that the limit defined by LSM_MAX_FREELIST_ENTRIES is a hard limit.
+** The actual value used may be configured using LSM_CONFIG_MAX_FREELIST.
 */
-#define LSM_MAX_FREELIST_ENTRIES 100
 
 /*
 ** The argument to this macro must be of type u32. On a little-endian
@@ -355,7 +358,7 @@ static void ckptExportAppendlist(
   *piOut = iOut;
 };
 
-int lsmCheckpointExport( 
+static int ckptExportSnapshot( 
   lsm_db *pDb,                    /* Connection handle */
   int nOvfl,                      /* Number of free-list entries in LSM */
   int bLog,                       /* True to update log-offset fields */
@@ -374,16 +377,19 @@ int lsmCheckpointExport(
   Level *pLevel;                  /* Level iterator */
   int i;                          /* Iterator used while serializing freelist */
   CkptBuffer ckpt;
+  int nFree;
+ 
+  nFree = pSnap->freelist.nEntry;
+  if( nOvfl>=0 ){
+    nFree -=  nOvfl;
+  }else{
+    nOvfl = pDb->pShmhdr->aWorker[CKPT_HDR_OVFL];
+  }
 
   /* Initialize the output buffer */
   memset(&ckpt, 0, sizeof(CkptBuffer));
   ckpt.pEnv = pDb->pEnv;
   iOut = CKPT_HDR_SIZE;
-
-  /* If nOvfl is negative, copy the value from the previous worker snaphsot. */
-  if( nOvfl<0 ){
-    nOvfl = (int)(pDb->pShmhdr->aWorker[CKPT_HDR_OVFL]);
-  }
 
   /* Write the log offset into the checkpoint. */
   ckptExportLog(pDb, bLog, &ckpt, &iOut, &rc);
@@ -405,7 +411,6 @@ int lsmCheckpointExport(
 
   /* Write the freelist */
   if( rc==LSM_OK ){
-    int nFree = (pSnap->freelist.nEntry - nOvfl);
     ckptSetValue(&ckpt, iOut++, nFree, &rc);
     for(i=0; i<nFree; i++){
       FreelistEntry *p = &pSnap->freelist.aEntry[i];
@@ -434,6 +439,12 @@ int lsmCheckpointExport(
   }
   iOut += 2;
   assert( iOut<=1024 );
+
+#if 0
+  lsmLogMessage(pDb, rc, 
+      "ckptExportSnapshot(): id=%d freelist: %d/%d", (int)iId, nFree, nOvfl
+  );
+#endif
 
   *ppCkpt = (void *)ckpt.aCkpt;
   if( pnCkpt ) *pnCkpt = sizeof(u32)*iOut;
@@ -660,7 +671,13 @@ int lsmCheckpointOverflow(
   assert( (pnVal==0)==(ppVal==0) );
   assert( pnOvfl );
 
-  nRet = p->freelist.nEntry - LSM_MAX_FREELIST_ENTRIES;
+  if( ppVal && p->nFreelistOvfl ){
+    rc = lsmCheckpointLoadOverflow(pDb, &p->freelist);
+    if( rc!=LSM_OK ) return rc;
+    p->nFreelistOvfl = 0;
+  }
+
+  nRet = p->freelist.nEntry - pDb->nMaxFreelist;
   if( nRet<=0 ){
     nRet = 0;
     if( ppVal ){
@@ -943,11 +960,6 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   }
 
   rc = lsmCheckpointDeserialize(pDb, 1, pShm->aWorker, &pDb->pWorker);
-  if( rc==LSM_OK && pDb->pWorker->nFreelistOvfl ){
-    rc = lsmCheckpointLoadOverflow(pDb, &pDb->pWorker->freelist);
-    pDb->pWorker->nFreelistOvfl = 0;
-  }
-
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   return rc;
 }
@@ -1050,7 +1062,7 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
   int n = 0;
   int rc;
 
-  rc = lsmCheckpointExport(pDb, nOvfl, bFlush, pSnap->iId+1, 1, &p, &n);
+  rc = ckptExportSnapshot(pDb, nOvfl, bFlush, pSnap->iId+1, 1, &p, &n);
   if( rc!=LSM_OK ) return rc;
   assert( ckptChecksumOk((u32 *)p) );
 

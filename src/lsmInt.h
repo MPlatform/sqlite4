@@ -141,6 +141,12 @@ int lsmErrorBkpt(int);
 #define LSM_LOCK_CHECKPOINTER 3
 #define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
 
+/*
+** Hard limit on the number of free-list entries that may be stored in 
+** a checkpoint (the remainder are stored as a system record in the LSM).
+** See also LSM_CONFIG_MAX_FREELIST.
+*/
+#define LSM_MAX_FREELIST_ENTRIES 100
 
 /*
 ** A string that can grow by appending.
@@ -266,6 +272,7 @@ struct lsm_db {
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
   int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
+  int nMaxFreelist;               /* Configured by LSM_CONFIG_MAX_FREELIST */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
@@ -460,7 +467,6 @@ struct Snapshot {
 ** Functions from file "lsm_ckpt.c".
 */
 int lsmCheckpointWrite(lsm_db *);
-int lsmCheckpointExport(lsm_db *, int, int, i64, int, void **, int *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
 int lsmCheckpointOverflow(lsm_db *pDb, void **, int *, int *);

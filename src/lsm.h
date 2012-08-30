@@ -167,6 +167,15 @@ int lsm_config(lsm_db *, int, ...);
 **   LSM_CONFIG_NMERGE
 **     A read/write integer parameter. The minimum number of segments to
 **     merge together at a time. Default value 4.
+**
+**   LSM_CONFIG_MAX_FREELIST
+**     A read/write integer parameter. The maximum number of free-list 
+**     entries that are stored in a database checkpoint (the others are
+**     stored elsewhere in the database).
+**
+**     There is no reason for an application to configure or query this
+**     parameter. It is only present because configuring a small value
+**     makes certain parts of the lsm code easier to test.
 */
 #define LSM_CONFIG_WRITE_BUFFER  1
 #define LSM_CONFIG_PAGE_SIZE     2
@@ -177,6 +186,7 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_MMAP          7
 #define LSM_CONFIG_USE_LOG       8
 #define LSM_CONFIG_NMERGE        9
+#define LSM_CONFIG_MAX_FREELIST 10
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1

@@ -576,6 +576,7 @@ int test_lsm_config_str(
     { "mmap",           0, LSM_CONFIG_MMAP },
     { "use_log",        0, LSM_CONFIG_USE_LOG },
     { "nmerge",         0, LSM_CONFIG_NMERGE },
+    { "max_freelist",   0, LSM_CONFIG_MAX_FREELIST },
     { "worker_nmerge",  1, LSM_CONFIG_NMERGE },
     { 0, 0 }
   };
@@ -730,7 +731,8 @@ int test_lsm_lomem_open(
   int bClear, 
   TestDb **ppDb
 ){
-  const char *zCfg = "page_size=256 block_size=65536 write_buffer=16384";
+  const char *zCfg = 
+    "page_size=256 block_size=65536 write_buffer=16384 max_freelist=4";
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
 

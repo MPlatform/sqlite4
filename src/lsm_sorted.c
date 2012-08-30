@@ -1562,8 +1562,10 @@ static int segmentCursorPtrCmp(
   }else if( pRight->pPg==0 ){
     iRet = 0;
   }else{
-    int res = pCsr->xCmp(pLeft->pKey, pLeft->nKey, pRight->pKey, pRight->nKey);
-
+    int res = rtTopic(pLeft->eType) - rtTopic(pRight->eType);
+    if( res==0 ){
+      res = pCsr->xCmp(pLeft->pKey, pLeft->nKey, pRight->pKey, pRight->nKey);
+    }
     if( res==0 || (res<0 && bLargest==0) || (res>0 && bLargest) ){
       iRet = 0;
     }else{
@@ -3636,7 +3638,7 @@ static int sortedMergeSetup(
     for(i=0; i<nMerge; i++){
       pNext = p->pNext;
       pNew->aRhs[i] = p->lhs;
-      lsmFree(pDb->pEnv, p);
+      sortedFreeLevel(pDb->pEnv, p);
       p = pNext;
     }
 
@@ -4054,9 +4056,12 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
     }
 
     if( rc==LSM_OK && nWrite ){
-      lsmCheckpointOverflow(pDb, 0, 0, &nOvfl);
+      int nExpectOvfl = 0;
+      lsmCheckpointOverflow(pDb, 0, 0, &nExpectOvfl);
       rc = lsmSortedFlushDb(pDb);
-      if( rc==LSM_OK && nOvfl ) rc = sortedNewToplevel(pDb, 0, &nOvfl);
+      if( rc==LSM_OK && nExpectOvfl ){
+        rc = sortedNewToplevel(pDb, 0, &nOvfl);
+      }
     }
 
     if( nWrite ){
