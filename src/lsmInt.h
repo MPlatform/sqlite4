@@ -457,9 +457,6 @@ struct Snapshot {
   u32 aiAppend[LSM_APPLIST_SZ];   /* Append point list */
   Freelist freelist;              /* Free block list */
   int nFreelistOvfl;              /* Number of extra free-list entries in LSM */
-
-  int nFreelistDelta;
-  int bRecordDelta;
 };
 #define LSM_INITIAL_SNAPSHOT_ID 11
 
@@ -469,7 +466,10 @@ struct Snapshot {
 int lsmCheckpointWrite(lsm_db *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
+
 int lsmCheckpointOverflow(lsm_db *pDb, void **, int *, int *);
+int lsmCheckpointOverflowRequired(lsm_db *pDb);
+int lsmCheckpointOverflowLoad(lsm_db *pDb, Freelist *);
 
 int lsmCheckpointRecover(lsm_db *);
 int lsmCheckpointDeserialize(lsm_db *, int, u32 *, Snapshot **);
@@ -718,12 +718,10 @@ int lsmLogStructure(lsm_db *pDb, char **pzVal);
 /**************************************************************************
 ** Functions from file "lsm_shared.c".
 */
-int lsmGetFreelist(lsm_db *pDb, u32 **paFree, int *pnFree);
 
 int lsmDbDatabaseFind(lsm_db*, const char *);
 void lsmDbDatabaseRelease(lsm_db *);
 
-int lsmBeginRecovery(lsm_db *);
 int lsmBeginReadTrans(lsm_db *);
 int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
@@ -736,14 +734,11 @@ void lsmFinishReadTrans(lsm_db *);
 int lsmFinishWriteTrans(lsm_db *, int);
 int lsmFinishFlush(lsm_db *, int);
 
-int lsmSnapshotFreelist(lsm_db *, int **, int *);
 int lsmSnapshotSetFreelist(lsm_db *, int *, int);
 
 Snapshot *lsmDbSnapshotClient(lsm_db *);
 Snapshot *lsmDbSnapshotWorker(lsm_db *);
-void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *);
 
-void lsmSnapshotSetNBlock(Snapshot *, int);
 void lsmSnapshotSetCkptid(Snapshot *, i64);
 
 Level *lsmDbSnapshotLevel(Snapshot *);

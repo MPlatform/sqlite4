@@ -1381,8 +1381,6 @@ static void checkBlocks(
   u8 *aUsed
 ){
   if( pSeg ){
-    int i;
-
     if( pSeg && pSeg->nSize>0 ){
       const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
 
@@ -1451,7 +1449,7 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   }
 
   if( pWorker->nFreelistOvfl ){
-    int rc = lsmCheckpointLoadOverflow(pDb, &freelist);
+    int rc = lsmCheckpointOverflowLoad(pDb, &freelist);
     assert( rc==LSM_OK || rc==LSM_NOMEM );
     if( rc!=LSM_OK ) return 1;
   }

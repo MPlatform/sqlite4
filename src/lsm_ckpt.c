@@ -652,10 +652,8 @@ int lsmCheckpointLevels(
 /*
 ** The worker lock must be held to call this function.
 **
-** The function is used to determine if the FREELIST record is required
-** to store the free-block list. If not, zero is returned. Otherwise,
-** the value returned is the number of free-list elements that should be
-** saved in the LSM structure.
+** The function serializes and returns the data that should be stored as
+** the FREELIST system record.
 */
 int lsmCheckpointOverflow(
   lsm_db *pDb,                    /* Database handle (must hold worker lock) */
@@ -668,26 +666,25 @@ int lsmCheckpointOverflow(
   Snapshot *p = pDb->pWorker;
 
   assert( lsmShmAssertWorker(pDb) );
-  assert( (pnVal==0)==(ppVal==0) );
-  assert( pnOvfl );
+  assert( pnOvfl && ppVal && pnVal );
+  assert( pDb->nMaxFreelist>=2 && pDb->nMaxFreelist<=LSM_MAX_FREELIST_ENTRIES );
 
-  if( ppVal && p->nFreelistOvfl ){
-    rc = lsmCheckpointLoadOverflow(pDb, &p->freelist);
+  if( p->nFreelistOvfl ){
+    rc = lsmCheckpointOverflowLoad(pDb, &p->freelist);
     if( rc!=LSM_OK ) return rc;
     p->nFreelistOvfl = 0;
   }
 
-  nRet = p->freelist.nEntry - pDb->nMaxFreelist;
-  if( nRet<=0 ){
+  if( p->freelist.nEntry<=pDb->nMaxFreelist ){
     nRet = 0;
-    if( ppVal ){
-      *pnVal = 0;
-      *ppVal = 0;
-    }
-  }else if( ppVal ){
+    *pnVal = 0;
+    *ppVal = 0;
+  }else{
     int i;                        /* Iterator variable */
     int iOut = 0;                 /* Current size of blob in ckpt */
     CkptBuffer ckpt;              /* Used to build FREELIST blob */
+
+    nRet = (p->freelist.nEntry - pDb->nMaxFreelist);
 
     memset(&ckpt, 0, sizeof(CkptBuffer));
     ckpt.pEnv = pDb->pEnv;
@@ -697,8 +694,8 @@ int lsmCheckpointOverflow(
       ckptSetValue(&ckpt, iOut++, (pEntry->iId >> 32) & 0xFFFFFFFF, &rc);
       ckptSetValue(&ckpt, iOut++, pEntry->iId & 0xFFFFFFFF, &rc);
     }
-
     ckptChangeEndianness(ckpt.aCkpt, iOut);
+
     *ppVal = ckpt.aCkpt;
     *pnVal = iOut*sizeof(u32);
   }
@@ -708,12 +705,25 @@ int lsmCheckpointOverflow(
 }
 
 /*
+** The connection must be the worker in order to call this function.
+**
+** True is returned if there are currently too many free-list entries
+** in-memory to store in a checkpoint. Before calling lsmCheckpointSaveWorker()
+** to save the current worker snapshot, a new top-level LSM segment must
+** be created so that some of them can be written to the LSM. 
+*/
+int lsmCheckpointOverflowRequired(lsm_db *pDb){
+  assert( lsmShmAssertWorker(pDb) );
+  return (pDb->pWorker->freelist.nEntry > pDb->nMaxFreelist);
+}
+
+/*
 ** Connection pDb must be the worker to call this function.
 **
 ** Load the FREELIST record from the database. Decode it and append the
 ** results to list pFreelist.
 */
-int lsmCheckpointLoadOverflow(
+int lsmCheckpointOverflowLoad(
   lsm_db *pDb,
   Freelist *pFreelist
 ){
@@ -732,8 +742,6 @@ int lsmCheckpointLoadOverflow(
       rc = LSM_CORRUPT_BKPT;
     }else{
       int i;
-      int nLoad = nFree/3;
-
       for(i=0; rc==LSM_OK && i<nFree; i+=3){
         int iBlk = aFree[i];
         i64 iId = ((i64)(aFree[i+1])<<32) + (i64)aFree[i+2];

@@ -93,17 +93,6 @@ lsm_env *lsm_get_env(lsm_db *pDb){
 }
 
 /*
-** Release snapshot handle *ppSnap. Then set *ppSnap to zero. This
-** is useful for doing (say):
-**
-**   dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
-*/
-static void dbReleaseSnapshot(lsm_env *pEnv, Snapshot **ppSnap){
-  lsmDbSnapshotRelease(pEnv, *ppSnap);
-  *ppSnap = 0;
-}
-
-/*
 ** If database handle pDb is currently holding a client snapshot, but does
 ** not have any open cursors or write transactions, release it.
 */

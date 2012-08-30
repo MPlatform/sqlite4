@@ -2183,7 +2183,6 @@ static int multiCursorGetVal(
       rc = lsmCheckpointOverflow(pCsr->pDb, &aVal, &nVal, pCsr->pnOvfl);
       *ppVal = pCsr->pSystemVal = aVal;
       *pnVal = nVal;
-      lsmFreelistDeltaBegin(pCsr->pDb);
     }else{
       *ppVal = 0;
       *pnVal = 0;
@@ -3538,7 +3537,6 @@ static int sortedNewToplevel(
     mergeWorkerShutdown(&mergeworker, &rc);
     pNew->pMerge = 0;
   }
-  lsmFreelistDeltaEnd(pDb);
 
   /* Link the new level into the top of the tree. */
   if( rc==LSM_OK ){
@@ -3580,13 +3578,9 @@ int lsmSortedFlushTree(
   assert( pDb->pWorker );
 
   /* If there is nothing to do, return early. */
-  if( lsmTreeSize(pDb)==0 ){
-    int nOvfl = 0;
-    lsmCheckpointOverflow(pDb, 0, 0, &nOvfl);
-    if( nOvfl==0 ){
-      *pnOvfl = 0;
-      return LSM_OK;
-    }
+  if( lsmTreeSize(pDb)==0 && lsmCheckpointOverflowRequired(pDb)==0 ){
+    *pnOvfl = 0;
+    return LSM_OK;
   }
 
   rc = sortedNewToplevel(pDb, 1, pnOvfl);
@@ -4056,10 +4050,8 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
     }
 
     if( rc==LSM_OK && nWrite ){
-      int nExpectOvfl = 0;
-      lsmCheckpointOverflow(pDb, 0, 0, &nExpectOvfl);
       rc = lsmSortedFlushDb(pDb);
-      if( rc==LSM_OK && nExpectOvfl ){
+      if( rc==LSM_OK && lsmCheckpointOverflowRequired(pDb) ){
         rc = sortedNewToplevel(pDb, 0, &nOvfl);
       }
     }

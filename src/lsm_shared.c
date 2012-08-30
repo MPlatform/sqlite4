@@ -78,12 +78,8 @@ static void assertNotInFreelist(Freelist *p, int iBlk){
     assert( p->aEntry[i].iBlk!=iBlk );
   }
 }
-static void assertMustbeWorker(lsm_db *pDb){
-  assert( pDb->pWorker );
-}
 #else
 # define assertNotInFreelist(x,y)
-# define assertMustbeWorker(x)
 #endif
 
 /*
@@ -139,7 +135,7 @@ static void flRemoveEntry0(Freelist *p){
 }
 
 /*
-** This function frees all resources held by the Database structure passed
+** tHIS Function frees all resources held by the Database structure passed
 ** as the only argument.
 */
 static void freeDatabase(lsm_env *pEnv, Database *p){
@@ -299,49 +295,6 @@ void lsmDbSnapshotSetLevel(Snapshot *pSnap, Level *pLevel){
   pSnap->pLevel = pLevel;
 }
 
-/*
-** Get/set methods for the snapshot block-count. These should only be
-** used with worker snapshots.
-*/
-void lsmSnapshotSetNBlock(Snapshot *pSnap, int nNew){
-}
-
-static void snapshotDecrRefcnt(lsm_env *pEnv, Snapshot *pSnap){
-#if 0
-  Database *p = pSnap->pDatabase;
-
-  pSnap->nRef--;
-  assert( pSnap->nRef>=0 );
-  if( pSnap->nRef==0 ){
-    Snapshot *pIter = p->pClient;
-    assert( pSnap!=pIter );
-    while( pIter->pSnapshotNext!=pSnap ) pIter = pIter->pSnapshotNext;
-    pIter->pSnapshotNext = pSnap->pSnapshotNext;
-    freeClientSnapshot(pEnv, pSnap);
-  }
-#endif
-}
-
-/*
-** Release a snapshot reference obtained by calling lsmDbSnapshotWorker()
-** or lsmDbSnapshotClient().
-*/
-void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *pSnap){
-  if( pSnap ){
-    Database *p = pSnap->pDatabase;
-
-    /* If this call is to release a pointer to the worker snapshot, relinquish
-    ** the worker mutex.  
-    **
-    ** If pSnap is a client snapshot, decrement the reference count. When the
-    ** reference count reaches zero, free the snapshot object. The decrement
-    ** and (nRef==0) test are protected by the database client mutex.
-    */
-    lsmMutexEnter(pEnv, p->pClientMutex);
-    snapshotDecrRefcnt(pEnv, pSnap);
-    lsmMutexLeave(pEnv, p->pClientMutex);
-  }
-}
 
 /*
 ** Allocate a new database file block to write data to, either by extending
@@ -375,9 +328,6 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
       iRet = pFree->aEntry[0].iBlk;
       flRemoveEntry0(pFree);
       assert( iRet!=0 );
-      if( p->bRecordDelta ){
-        p->nFreelistDelta++;
-      }
     }
   }
 
@@ -401,8 +351,9 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
 int lsmBlockFree(lsm_db *pDb, int iBlk){
   Snapshot *p = pDb->pWorker;
 
-  assertMustbeWorker(pDb);
-  assert( p->bRecordDelta==0 );
+  assert( lsmShmAssertWorker(pDb) );
+  /* TODO: Should assert() that lsmCheckpointOverflow() has not been called */
+
   return lsmFreelistAppend(pDb->pEnv, &p->freelist, iBlk, p->iId);
 }
 
@@ -424,108 +375,9 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
     p->nBlock--;
   }else{
     rc = flInsertEntry(pDb->pEnv, &p->freelist, iBlk);
-    if( p->bRecordDelta ){ p->nFreelistDelta--; }
   }
 
   return rc;
-}
-
-void lsmFreelistDeltaBegin(lsm_db *pDb){
-  assertMustbeWorker(pDb);
-  assert( pDb->pWorker->bRecordDelta==0 );
-  pDb->pWorker->nFreelistDelta = 0;
-  pDb->pWorker->bRecordDelta = 1;
-}
-
-void lsmFreelistDeltaEnd(lsm_db *pDb){
-  assertMustbeWorker(pDb);
-  pDb->pWorker->bRecordDelta = 0;
-}
-
-int lsmFreelistDelta(lsm_db *pDb){
-  return pDb->pWorker->nFreelistDelta;
-}
-
-/*
-** Return the current contents of the free-list as a list of integers.
-*/
-int lsmSnapshotFreelist(lsm_db *pDb, int **paFree, int *pnFree){
-  int rc = LSM_OK;                /* Return Code */
-#if 0
-  int *aFree = 0;                 /* Integer array to return via *paFree */
-  int nFree;                      /* Value to return via *pnFree */
-  Freelist *p;                    /* Database free list object */
-
-  assert( pDb->pWorker );
-  p = &pDb->pDatabase->freelist;
-  nFree = p->nEntry;
-  if( nFree && paFree ){
-    aFree = lsmMallocRc(pDb->pEnv, sizeof(int) * nFree, &rc);
-    if( aFree ){
-      int i;
-      for(i=0; i<nFree; i++){
-        aFree[i] = p->aEntry[i].iBlk;
-      }
-    }
-  }
-
-  *pnFree = nFree;
-  if( paFree ) *paFree = aFree;
-#endif
-  return rc;
-}
-
-int lsmGetFreelist(
-  lsm_db *pDb,                    /* Database handle (must be worker) */
-  u32 **paFree,                   /* OUT: malloc'd array */
-  int *pnFree                     /* OUT: Size of array at *paFree */
-){
-  int rc = LSM_OK;                /* Return Code */
-#if 0
-  u32 *aFree = 0;                 /* Integer array to return via *paFree */
-  int nFree;                      /* Value to return via *pnFree */
-  Freelist *p;                    /* Database free list object */
-
-  assert( pDb->pWorker );
-  p = &pDb->pDatabase->freelist;
-  nFree = p->nEntry * 3;
-  if( nFree && paFree ){
-    aFree = lsmMallocRc(pDb->pEnv, sizeof(u32) * nFree, &rc);
-    if( aFree ){
-      int i;
-      for(i=0; i<p->nEntry; i++){
-        aFree[i*3] = p->aEntry[i].iBlk;
-        aFree[i*3+1] = (u32)((p->aEntry[i].iId >> 32) & 0xFFFFFFFF);
-        aFree[i*3+2] = (u32)(p->aEntry[i].iId & 0xFFFFFFFF);
-      }
-    }
-  }
-
-  *pnFree = nFree;
-  if( paFree ) *paFree = aFree;
-#endif
-  return rc;
-}
-
-int lsmSetFreelist(lsm_db *pDb, u32 *aElem, int nElem){
-#if 0
-  Database *p = pDb->pDatabase;
-  lsm_env *pEnv = pDb->pEnv;
-  int rc = LSM_OK;                /* Return code */
-  int i;                          /* Iterator variable */
-  Freelist *pFree;                /* Database free-list */
-
-  assert( (nElem%3)==0 );
-
-  pFree = &p->freelist;
-  for(i=0; i<nElem; i+=3){
-    i64 iId = ((i64)(aElem[i+1]) << 32) + aElem[i+2];
-    rc = lsmFreelistAppend(pEnv, pFree, aElem[i], iId);
-  }
-
-  return rc;
-#endif
-  return LSM_OK;
 }
 
 /*
@@ -594,38 +446,6 @@ int lsmCheckpointWrite(lsm_db *pDb){
   }
 
   lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
-  return rc;
-}
-
-/*
-** This function is called when a connection is about to run log file
-** recovery (read the contents of the log file from disk and create a new
-** in memory tree from it). This happens when the very first connection
-** starts up and connects to the database.
-**
-** This sets the connections tree-version handle to one suitable to insert
-** the read data into.
-**
-** Once recovery is complete (regardless of whether or not it is successful),
-** lsmFinishRecovery() must be called to release resources locked by
-** this function.
-*/
-int lsmBeginRecovery(lsm_db *pDb){
-  int rc = LSM_OK;                /* Return code */
-  Database *p = pDb->pDatabase;   /* Shared data handle */
-
-  assert( 0 );
-
-  assert( p );
-  assert( pDb->pWorker );
-  assert( pDb->pClient==0 );
-
-#if 0
-  if( rc==LSM_OK ){
-    assert( pDb->pTV==0 );
-    rc = lsmTreeWriteVersion(pDb->pEnv, p->pTree, &pDb->pTV);
-  }
-#endif
   return rc;
 }
 
