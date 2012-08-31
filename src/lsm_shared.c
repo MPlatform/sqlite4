@@ -394,9 +394,17 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     i64 iFree = pFree->aEntry[0].iId;
     int bInUse = 0;
 
-    /* TODO: The "has been checkpointed" bit */
-
+    /* The "is in use" bit */
     rc = lsmLsmInUse(pDb, iFree, &bInUse);
+
+    /* The "has been checkpointed" bit */
+    if( rc==LSM_OK && bInUse==0 ){
+      i64 iId = 0;
+      rc = lsmCheckpointSynced(pDb, &iId);
+      if( rc==LSM_OK && iId<iFree ) bInUse = 1;
+      if( rc==LSM_BUSY ) rc = LSM_OK;
+    }
+
     if( rc==LSM_OK && bInUse==0 ){
       iRet = pFree->aEntry[0].iBlk;
       flRemoveEntry0(pFree);

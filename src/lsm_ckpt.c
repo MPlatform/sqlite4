@@ -778,7 +778,7 @@ static int ckptChecksumOk(u32 *aCkpt){
   u32 cksum1;
   u32 cksum2;
 
-  if( nCkpt<CKPT_HDR_NCKPT ) return 0;
+  if( nCkpt<CKPT_HDR_NCKPT || nCkpt>(LSM_META_PAGE_SIZE)/sizeof(u32) ) return 0;
   ckptChecksum(aCkpt, nCkpt, &cksum1, &cksum2);
   return (cksum1==aCkpt[nCkpt-2] && cksum2==aCkpt[nCkpt-1]);
 }
@@ -1081,6 +1081,44 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
   lsmFree(pDb->pEnv, p);
 
   return LSM_OK;
+}
+
+int lsmCheckpointSynced(lsm_db *pDb, i64 *piId){
+  int rc = LSM_OK;
+  const int nAttempt = 3;
+  int i;
+  for(i=0; i<nAttempt; i++){
+    MetaPage *pPg;
+    u32 iMeta;
+
+    iMeta = pDb->pShmhdr->iMetaPage;
+    rc = lsmFsMetaPageGet(pDb->pFS, 0, iMeta, &pPg);
+    if( rc==LSM_OK ){
+      int nCkpt;
+      int nData;
+      u8 *aData; 
+
+      aData = lsmFsMetaPageData(pPg, &nData);
+      assert( nData==LSM_META_PAGE_SIZE );
+      nCkpt = lsmGetU32(&aData[CKPT_HDR_NCKPT*sizeof(u32)]);
+
+      if( nCkpt<(LSM_META_PAGE_SIZE/sizeof(u32)) ){
+        u32 *aCopy = lsmMallocRc(pDb->pEnv, sizeof(u32) * nCkpt, &rc);
+        if( aCopy ){
+          memcpy(aCopy, aData, nCkpt*sizeof(u32));
+          ckptChangeEndianness(aCopy, nCkpt);
+          if( ckptChecksumOk(aCopy) ){
+            *piId = lsmCheckpointId(aCopy, 0);
+          }
+          lsmFree(pDb->pEnv, aCopy);
+        }
+      }
+      lsmFsMetaPageRelease(pPg);
+    }
+    if( rc!=LSM_OK || pDb->pShmhdr->iMetaPage==iMeta ) break;
+  }
+
+  return (rc==LSM_OK && i==3) ? LSM_BUSY : LSM_OK;
 }
 
 /*
