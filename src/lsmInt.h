@@ -136,9 +136,11 @@ int lsmErrorBkpt(int);
 #define LSM_LOCK_NREADER   6
 
 /* Lock definitions */
-#define LSM_LOCK_WRITER       1
-#define LSM_LOCK_WORKER       2
-#define LSM_LOCK_CHECKPOINTER 3
+#define LSM_LOCK_DMS1         1
+#define LSM_LOCK_DMS2         2
+#define LSM_LOCK_WRITER       3
+#define LSM_LOCK_WORKER       4
+#define LSM_LOCK_CHECKPOINTER 5
 #define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
 
 /*
@@ -380,10 +382,6 @@ struct ShmReader {
 ** An instance of this structure is stored in the first shared-memory
 ** page. The shared-memory header.
 **
-** bInit:
-**   This value is set to non-zero once the contents of the ShmHeader are
-**   initialized. In other words, once recovery has finished.
-**
 ** bWriter:
 **   Immediately after opening a write transaction taking the WRITER lock, 
 **   each writer client sets this flag. It is cleared right before the 
@@ -403,7 +401,6 @@ struct ShmReader {
 struct ShmHeader {
   u32 aClient[LSM_META_PAGE_SIZE / 4];
   u32 aWorker[LSM_META_PAGE_SIZE / 4];
-  u32 bInit;
   u32 bWriter;
   u32 iMetaPage;
   TreeHeader hdr1;
@@ -519,13 +516,6 @@ int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey);
 int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal);
 int lsmTreeCursorValid(TreeCursor *pCsr);
 int lsmTreeCursorSave(TreeCursor *pCsr);
-
-TreeVersion *lsmTreeReadVersion(Tree *);
-int lsmTreeWriteVersion(lsm_env *pEnv, Tree *, TreeVersion **);
-TreeVersion *lsmTreeRecoverVersion(Tree *);
-int lsmTreeIsWriteVersion(TreeVersion *);
-int lsmTreeReleaseWriteVersion(lsm_env *, TreeVersion *, int, TreeVersion **);
-void lsmTreeReleaseReadVersion(lsm_env *, TreeVersion *);
 
 /* 
 ** Functions from file "mem.c".
@@ -719,7 +709,7 @@ int lsmLogStructure(lsm_db *pDb, char **pzVal);
 ** Functions from file "lsm_shared.c".
 */
 
-int lsmDbDatabaseFind(lsm_db*, const char *);
+int lsmDbDatabaseConnect(lsm_db*, const char *);
 void lsmDbDatabaseRelease(lsm_db *);
 
 int lsmBeginReadTrans(lsm_db *);
@@ -771,7 +761,7 @@ void lsmFreeSnapshot(lsm_env *, Snapshot *);
 #define LSM_LOCK_EXCL   2
 
 int lsmShmChunk(lsm_db *db, int iChunk, void **ppData);
-int lsmShmLock(lsm_db *db, int iLock, int eOp);
+int lsmShmLock(lsm_db *db, int iLock, int eOp, int bBlock);
 void lsmShmBarrier(lsm_db *db);
 
 #ifdef LSM_DEBUG

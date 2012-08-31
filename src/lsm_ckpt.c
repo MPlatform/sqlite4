@@ -932,7 +932,7 @@ int lsmCheckpointLoad(lsm_db *pDb){
     memcpy(pDb->aSnapshot, pShm->aClient, nInt*sizeof(u32));
     if( ckptChecksumOk(pDb->aSnapshot) ) return LSM_OK;
 
-    rc = lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL);
+    rc = lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL, 0);
     if( rc==LSM_BUSY ){
       usleep(50);
     }else{
@@ -943,7 +943,7 @@ int lsmCheckpointLoad(lsm_db *pDb){
         }
         nInt = pShm->aClient[CKPT_HDR_NCKPT];
         memcpy(pDb->aSnapshot, &pShm->aClient, nInt*sizeof(u32));
-        lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK);
+        lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK, 0);
 
         if( ckptChecksumOk(pDb->aSnapshot)==0 ){
           rc = LSM_CORRUPT_BKPT;

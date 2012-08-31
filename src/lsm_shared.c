@@ -149,6 +149,91 @@ static void freeDatabase(lsm_env *pEnv, Database *p){
   }
 }
 
+static int doDbDisconnect(lsm_db *pDb){
+  int rc;
+
+  /* Block for an exclusive lock on DMS1. This lock serializes all calls
+  ** to doDbConnect() and doDbDisconnect() across all processes.  */
+  rc = lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL, 1);
+  if( rc==LSM_OK ){
+
+    /* Try an exclusive lock on DMS2. If successful, this is the first and 
+    ** only connection to the database. In this case initialize the 
+    ** shared-memory and run log file recovery.  */
+    rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL, 0);
+    if( rc==LSM_OK ){
+      /* Flush the in-memory tree, if required. If there is data to flush,
+      ** this will create a new client snapshot in Database.pClient. The
+      ** checkpoint (serialization) of this snapshot may be written to disk
+      ** by the following block.  */
+      if( 0==lsmTreeIsEmpty(pDb) ){
+        rc = lsmFlushToDisk(pDb);
+      }
+
+      /* Write a checkpoint to disk. */
+      if( rc==LSM_OK ){
+        rc = lsmCheckpointWrite(pDb);
+      }
+
+      /* If the checkpoint was written successfully, delete the log file */
+      if( rc==LSM_OK && pDb->pFS ){
+        lsmFsCloseAndDeleteLog(pDb->pFS);
+      }
+    }
+  }
+
+  lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_UNLOCK, 0);
+  lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
+  pDb->pShmhdr = 0;
+}
+
+static int doDbConnect(lsm_db *pDb){
+  int rc;
+
+  /* Obtain a pointer to the shared-memory header */
+  assert( pDb->pShmhdr==0 );
+  rc = lsmShmChunk(pDb, 0, (void **)&pDb->pShmhdr);
+  if( rc!=LSM_OK ) return rc;
+
+  /* Block for an exclusive lock on DMS1. This lock serializes all calls
+  ** to doDbConnect() and doDbDisconnect() across all processes.  */
+  rc = lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL, 1);
+  if( rc!=LSM_OK ){
+    pDb->pShmhdr = 0;
+    return rc;
+  }
+
+  /* Try an exclusive lock on DMS2. If successful, this is the first and 
+  ** only connection to the database. In this case initialize the 
+  ** shared-memory and run log file recovery.  */
+  rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL, 0);
+  if( rc==LSM_OK ){
+    memset(pDb->pShmhdr, 0, sizeof(ShmHeader));
+    rc = lsmCheckpointRecover(pDb);
+    if( rc==LSM_OK ){
+      rc = lsmLogRecover(pDb);
+    }
+  }else if( rc==LSM_BUSY ){
+    rc = LSM_OK;
+  }
+
+  /* Take a shared lock on DMS2. This lock "cannot" fail, as connections 
+  ** may only hold an exclusive lock on DMS2 if they first hold an exclusive
+  ** lock on DMS1. And this connection is currently holding the exclusive
+  ** lock on DSM1.  */
+  if( rc==LSM_OK ){
+    rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_SHARED, 0);
+  }
+
+  /* If anything went wrong, unlock DMS2. Unlock DMS1 in any case. */
+  if( rc!=LSM_OK ){
+    lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_UNLOCK, 0);
+    pDb->pShmhdr = 0;
+  }
+  lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
+  return rc;
+}
+
 /*
 ** Return a reference to the shared Database handle for the database 
 ** identified by canonical path zName. If this is the first connection to
@@ -162,7 +247,7 @@ static void freeDatabase(lsm_env *pEnv, Database *p){
 ** Each successful call to this function should be (eventually) matched
 ** by a call to lsmDbDatabaseRelease().
 */
-int lsmDbDatabaseFind(
+int lsmDbDatabaseConnect(
   lsm_db *pDb,                    /* Database handle */
   const char *zName               /* Path to db file */
 ){
@@ -226,18 +311,27 @@ int lsmDbDatabaseFind(
 
   lsmFree(pEnv, pId);
   pDb->pDatabase = p;
+
+  if( rc==LSM_OK ){
+    rc = doDbConnect(pDb);
+  }
+
   return rc;
 }
 
 /*
-** Release a reference to a Database object obtained from lsmDbDatabaseFind().
-** There should be exactly one call to this function for each successful
-** call to Find().
+** Release a reference to a Database object obtained from 
+** lsmDbDatabaseConnect(). There should be exactly one call to this function 
+** for each successful call to Find().
 */
 void lsmDbDatabaseRelease(lsm_db *pDb){
   Database *p = pDb->pDatabase;
   if( p ){
     lsm_db **ppDb;
+
+    if( pDb->pShmhdr ){
+      doDbDisconnect(pDb);
+    }
 
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
     for(ppDb=&p->pConn; *ppDb!=pDb; ppDb=&((*ppDb)->pNext));
@@ -255,32 +349,11 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       for(pp=&gShared.pDatabase; *pp!=p; pp=&((*pp)->pDbNext));
       *pp = p->pDbNext;
 
-      if( pDb->pShmhdr && pDb->pShmhdr->bInit ){
-        /* Flush the in-memory tree, if required. If there is data to flush,
-        ** this will create a new client snapshot in Database.pClient. The
-        ** checkpoint (serialization) of this snapshot may be written to disk
-        ** by the following block.  */
-        if( 0==lsmTreeIsEmpty(pDb) ){
-          rc = lsmFlushToDisk(pDb);
-        }
-
-        /* Write a checkpoint, also if required */
-        if( rc==LSM_OK ){
-          rc = lsmCheckpointWrite(pDb);
-        }
-
-        /* If the checkpoint was written successfully, delete the log file */
-        if( rc==LSM_OK && pDb->pFS ){
-          lsmFsCloseAndDeleteLog(pDb->pFS);
-        }
-      }
-
+      /* Free the Database object and shared memory buffers. */
       for(i=0; i<p->nShmChunk; i++){
         lsmFree(pDb->pEnv, p->apShmChunk[i]);
       }
       lsmFree(pDb->pEnv, p->apShmChunk);
-      
-      /* Free the Database object */
       freeDatabase(pDb->pEnv, p);
     }
     leaveGlobalMutex(pDb->pEnv);
@@ -396,7 +469,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   assert( 1 || pDb->pClient==0 );
   assert( lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK) );
 
-  rc = lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_EXCL);
+  rc = lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_EXCL, 0);
   if( rc!=LSM_OK ) return rc;
 
   rc = lsmCheckpointLoad(pDb);
@@ -438,14 +511,14 @@ int lsmCheckpointWrite(lsm_db *pDb){
   if( rc==LSM_OK ){
     int rc2;
     u64 iLogoff = lsmCheckpointLogOffset(pDb->aSnapshot);
-    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL);
+    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
     if( rc==LSM_OK ) rc = lsmTreeLoadHeader(pDb);
     if( rc==LSM_OK ) lsmLogCheckpoint(pDb, iLogoff);
     if( rc==LSM_OK ) lsmTreeEndTransaction(pDb, 1);
     if( rc==LSM_BUSY ) rc = LSM_OK;
   }
 
-  lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
+  lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);
   return rc;
 }
 
@@ -453,7 +526,7 @@ int lsmBeginWork(lsm_db *pDb){
   int rc;
 
   /* Attempt to take the WORKER lock */
-  rc = lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL);
+  rc = lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL, 0);
 
   /* Deserialize the current worker snapshot */
   if( rc==LSM_OK ){
@@ -489,7 +562,7 @@ void lsmFinishWork(lsm_db *pDb, int bFlush, int nOvfl, int *pRc){
     pDb->pWorker = 0;
   }
 
-  lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK);
+  lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK, 0);
 }
 
 
@@ -590,7 +663,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 
   /* Attempt to take the WRITER lock */
   if( rc==LSM_OK ){
-    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL);
+    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
   }
 
   /* If the previous writer failed mid-transaction, run emergency rollback. */
@@ -617,7 +690,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
     pShm->bWriter = 1;
     pDb->treehdr.iTransId++;
   }else{
-    lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
+    lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
     if( pDb->pCsr==0 ) lsmFinishReadTrans(pDb);
   }
   return rc;
@@ -639,7 +712,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   lsmLogEnd(pDb, bCommit);
   lsmTreeEndTransaction(pDb, bCommit);
-  lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
+  lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
   return LSM_OK;
 }
 
@@ -669,7 +742,7 @@ int lsmReadlock(lsm_db *db, i64 iLsm, i64 iTree){
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
     if( p->iLsmId==iLsm && p->iTreeId==iTree ){
-      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED);
+      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
       if( rc==LSM_OK && p->iLsmId==iLsm && p->iTreeId==iTree ){
         db->iReader = i;
       }else if( rc==LSM_BUSY ){
@@ -681,14 +754,14 @@ int lsmReadlock(lsm_db *db, i64 iLsm, i64 iTree){
   /* Try to obtain a write-lock on each slot, in order. If successful, set
   ** the slot values to iLsm/iTree.  */
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
-    rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL);
+    rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
     if( rc==LSM_BUSY ){
       rc = LSM_OK;
     }else{
       ShmReader *p = &pShm->aReader[i];
       p->iLsmId = iLsm;
       p->iTreeId = iTree;
-      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED);
+      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
       if( rc==LSM_OK ) db->iReader = i;
     }
   }
@@ -697,7 +770,7 @@ int lsmReadlock(lsm_db *db, i64 iLsm, i64 iTree){
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
     if( p->iLsmId && p->iTreeId && p->iLsmId<=iLsm && p->iTreeId<=iTree ){
-      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED);
+      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
       if( rc==LSM_OK ){
         if( p->iLsmId && p->iTreeId && p->iLsmId<=iLsm && p->iTreeId<=iTree ){
           db->iReader = i;
@@ -719,10 +792,10 @@ static int isInUse(lsm_db *db, i64 iLsm, i64 iTree, int *pbInUse){
   for(i=0; rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
     if( p->iLsmId && p->iTreeId && (p->iTreeId<=iTree || p->iLsmId<=iLsm) ){
-      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL);
+      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
       if( rc==LSM_OK ){
         p->iTreeId = p->iLsmId = 0;
-        lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK);
+        lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK, 0);
       }
     }
   }
@@ -757,7 +830,7 @@ int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse){
 int lsmReleaseReadlock(lsm_db *db){
   int rc = LSM_OK;
   if( db->iReader>=0 ){
-    rc = lsmShmLock(db, LSM_LOCK_READER(db->iReader), LSM_LOCK_UNLOCK);
+    rc = lsmShmLock(db, LSM_LOCK_READER(db->iReader), LSM_LOCK_UNLOCK, 0);
     db->iReader = -1;
   }
   return rc;
@@ -825,7 +898,8 @@ int lsmShmChunk(lsm_db *db, int iChunk, void **ppData){
 int lsmShmLock(
   lsm_db *db, 
   int iLock,
-  int eOp                         /* One of LSM_LOCK_UNLOCK, SHARED or EXCL */
+  int eOp,                        /* One of LSM_LOCK_UNLOCK, SHARED or EXCL */
+  int bBlock                      /* True for a blocking lock */
 ){
   int rc = LSM_OK;
   Database *p = db->pDatabase;

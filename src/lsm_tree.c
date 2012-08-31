@@ -1558,7 +1558,7 @@ int lsmTreeLoadHeader(lsm_db *pDb){
     memcpy(&pDb->treehdr, &pShm->hdr1, sizeof(TreeHeader));
     if( treeHeaderChecksumOk(&pDb->treehdr) ) return LSM_OK;
 
-    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL);
+    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
     if( rc==LSM_BUSY ){
       usleep(50);
     }else{
@@ -1567,7 +1567,7 @@ int lsmTreeLoadHeader(lsm_db *pDb){
           memcpy(&pShm->hdr1, &pShm->hdr2, sizeof(TreeHeader));
         }
         memcpy(&pDb->treehdr, &pShm->hdr1, sizeof(TreeHeader));
-        lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK);
+        lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
 
         if( treeHeaderChecksumOk(&pDb->treehdr)==0 ){
           rc = LSM_CORRUPT_BKPT;

@@ -125,52 +125,6 @@ static int dbAutoWork(lsm_db *pDb, int nUnit){
   return rc;
 }
 
-/*
-** If required, run the recovery procedure to initialize the database.
-** Return LSM_OK if successful or an error code otherwise.
-**
-** As in SQLite 3 WAL mode, "recovery" essentially means make sure the
-** contents of the shared-memory region are consistent with the data
-** stored in the file-system.
-*/
-static int dbRecoverIfRequired(lsm_db *pDb){
-  int rc = LSM_OK;
-  ShmHeader *pShm = pDb->pShmhdr;
-
-  assert( pDb->pWorker==0 && pDb->pClient==0 );
-
-  while( rc==LSM_OK && pShm->bInit==0 ){
-    /* The shared-memory "system initialized" flag is clear. Attempt to run
-    ** the recovery procedure.  */
-
-    rc = lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_EXCL);
-    if( rc==LSM_BUSY ){
-      /* Could not obtain the lock. Sleep a while and try again. */
-      usleep(50);
-    }else{
-      if( rc==LSM_OK ){
-        if( pShm->bInit==0 ){
-          memset(pShm, 0, sizeof(ShmHeader));
-          rc = lsmCheckpointRecover(pDb);
-          if( rc==LSM_OK ){
-            rc = lsmLogRecover(pDb);
-          }
-
-          /* If successful, set the ShmHeader.bInit variable. */
-          if( rc==LSM_OK ){
-            lsmShmBarrier(pDb);
-            pDb->pShmhdr->bInit = 1;
-          }
-        }
-        lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK);
-      }
-    }
-  }
-
-  assert( pShm->bInit || rc!=LSM_OK );
-  return rc;
-}
-
 static int getFullpathname(
   lsm_env *pEnv, 
   const char *zRel,
@@ -218,29 +172,24 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     rc = getFullpathname(pDb->pEnv, zFilename, &zFull);
     assert( rc==LSM_OK || zFull==0 );
 
-    /* Open the database file */
+    /* Open the database and log files. 
+    **
+    ** TODO: Opening the log file before calling DbDatabaseConnect() is 
+    ** incorrect. Some other connection could unlink() it. Should change
+    ** the FileSystem object to open the log file lazily.
+    */
     if( rc==LSM_OK ){
       rc = lsmFsOpen(pDb, zFull);
     }
 
-    /* Open the shared data handle. */
+    /* Connect to the database */
     if( rc==LSM_OK ){
-      rc = lsmDbDatabaseFind(pDb, zFilename);
-    }
-
-    /* Obtain a pointer to the shared-memory header */
-    if( rc==LSM_OK ){
-      rc = lsmShmChunk(pDb, 0, (void **)&pDb->pShmhdr);
-    }
-
-    /* If required, run recovery */
-    if( rc==LSM_OK ){
-      rc = dbRecoverIfRequired(pDb);
+      rc = lsmDbDatabaseConnect(pDb, zFilename);
     }
 
     /* Configure the file-system connection with the page-size and block-size
     ** of this database. Even if the database file is zero bytes in size
-    ** on disk, these values have been set in shared-memory, and so are
+    ** on disk, these values have been set in shared-memory by now, and so are
     ** guaranteed not to change during the lifetime of this connection.  */
     if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb)) ){
       lsmFsSetPageSize(pDb->pFS, lsmCheckpointPgsz(pDb->aSnapshot));
