@@ -731,7 +731,7 @@ int lsmCheckpointOverflowLoad(
   int nVal = 0;
   void *pVal = 0;
   assert( lsmShmAssertWorker(pDb) );
-  
+
   /* Load the blob of data from the LSM. If that is successful (and the
   ** blob is greater than zero bytes in size), decode the contents and
   ** merge them into the current contents of *pFreelist.  */

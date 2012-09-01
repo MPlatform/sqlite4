@@ -172,12 +172,7 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     rc = getFullpathname(pDb->pEnv, zFilename, &zFull);
     assert( rc==LSM_OK || zFull==0 );
 
-    /* Open the database and log files. 
-    **
-    ** TODO: Opening the log file before calling DbDatabaseConnect() is 
-    ** incorrect. Some other connection could unlink() it. Should change
-    ** the FileSystem object to open the log file lazily.
-    */
+    /* Open the database file. */
     if( rc==LSM_OK ){
       rc = lsmFsOpen(pDb, zFull);
     }

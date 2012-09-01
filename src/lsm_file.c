@@ -33,7 +33,8 @@
 **   It is assumed that the first two meta pages and the data that follows
 **   them are located on different disk sectors. So that if a power failure 
 **   while writing to a meta page there is no risk of damage to the other
-**   meta page or any other part of the database file.
+**   meta page or any other part of the database file. TODO: This may need
+**   to be revisited.
 **
 ** Blocks:
 **
@@ -43,7 +44,7 @@
 **
 **   The first and last page on each block are special in that they are 4 
 **   bytes smaller than all other pages. This is because the last four bytes 
-**   of space on the first and last pages of each block are reserved for a 
+**   of space on the first and last pages of each block are reserved for
 **   pointers to other blocks (i.e. a 32-bit block number).
 **
 ** Runs:
@@ -77,6 +78,7 @@
 ** functions that are used by the code in lsm_log.c to read and write the
 ** log file:
 **
+**     lsmFsOpenLog
 **     lsmFsWriteLog
 **     lsmFsSyncLog
 **     lsmFsReadLog
@@ -244,6 +246,7 @@ static int lsmEnvRemap(
 ** offset iOff.
 */
 int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr){
+  assert( pFS->fdLog );
   return lsmEnvWrite(pFS->pEnv, pFS->fdLog, iOff, pStr->z, pStr->n);
 }
 
@@ -251,15 +254,17 @@ int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr){
 ** fsync() the log file.
 */
 int lsmFsSyncLog(FileSystem *pFS){
+  assert( pFS->fdLog );
   return lsmEnvSync(pFS->pEnv, pFS->fdLog);
 }
 
 /*
-** Read nRead bytes of data starting at offset iOff of the log file. Store
-** the results in string buffer pStr.
+** Read nRead bytes of data starting at offset iOff of the log file. Append
+** the results to string buffer pStr.
 */
 int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr){
   int rc;                         /* Return code */
+  assert( pFS->fdLog );
   rc = lsmStringExtend(pStr, nRead);
   if( rc==LSM_OK ){
     rc = lsmEnvRead(pFS->pEnv, pFS->fdLog, iOff, &pStr->z[pStr->n], nRead);
@@ -325,6 +330,23 @@ static lsm_file *fsOpenFile(
 }
 
 /*
+** If it is not already open, this function opens the log file. It returns
+** LSM_OK if successful (or if the log file was already open) or an LSM
+** error code otherwise.
+**
+** The log file must be opened before any of the following may be called:
+**
+**     lsmFsWriteLog
+**     lsmFsSyncLog
+**     lsmFsReadLog
+*/
+int lsmFsOpenLog(FileSystem *pFS){
+  int rc = LSM_OK;
+  if( 0==pFS->fdLog ){ pFS->fdLog = fsOpenFile(pFS, 1, &rc); }
+  return rc;
+}
+
+/*
 ** Open a connection to a database stored within the file-system (the
 ** "system of files").
 */
@@ -353,9 +375,8 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     pFS->nHash = 4096;
     pFS->apHash = lsmMallocZeroRc(pDb->pEnv, sizeof(Page *) * pFS->nHash, &rc);
 
-    /* Open the files */
+    /* Open the database file */
     pFS->fdDb = fsOpenFile(pFS, 0, &rc);
-    pFS->fdLog = fsOpenFile(pFS, 1, &rc);
 
     if( rc!=LSM_OK ){
       lsmFsClose(pFS);

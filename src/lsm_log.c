@@ -310,6 +310,7 @@ int lsmLogBegin(lsm_db *pDb){
   LogRegion *aReg;
 
   if( pDb->bUseLog==0 ) return LSM_OK;
+  rc = lsmFsOpenLog(pDb->pFS);
   pNew = lsmMallocZeroRc(pDb->pEnv, sizeof(LogWriter), &rc);
   if( pNew ){
     lsmStringInit(&pNew->buf, pDb->pEnv);
@@ -893,6 +894,9 @@ int lsmLogRecover(lsm_db *pDb){
   int iPass;
   int nJump = 0;                  /* Number of LSM_LOG_JUMP records in pass 0 */
   DbLog *pLog;
+
+  rc = lsmFsOpenLog(pDb->pFS);
+  if( rc!=LSM_OK ) return rc;
 
   lsmTreeInit(pDb);
   pLog = &pDb->treehdr.log;
