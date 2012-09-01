@@ -484,6 +484,7 @@ void lsmCheckpointZeroLogoffset(lsm_db *);
 
 int lsmCheckpointSaveWorker(lsm_db *pDb, int, int);
 int lsmDatabaseFull(lsm_db *pDb);
+int lsmCheckpointSynced(lsm_db *pDb, i64 *piId);
 
 
 /* 

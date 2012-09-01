@@ -149,7 +149,7 @@ static void freeDatabase(lsm_env *pEnv, Database *p){
   }
 }
 
-static int doDbDisconnect(lsm_db *pDb){
+static void doDbDisconnect(lsm_db *pDb){
   int rc;
 
   /* Block for an exclusive lock on DMS1. This lock serializes all calls
@@ -341,7 +341,6 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
     enterGlobalMutex(pDb->pEnv);
     p->nDbRef--;
     if( p->nDbRef==0 ){
-      int rc = LSM_OK;
       int i;
       Database **pp;
 
@@ -401,7 +400,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     if( rc==LSM_OK && bInUse==0 ){
       i64 iId = 0;
       rc = lsmCheckpointSynced(pDb, &iId);
-      if( rc==LSM_OK && iId<iFree ) bInUse = 1;
+      if( rc!=LSM_OK || iId<iFree ) bInUse = 1;
       if( rc==LSM_BUSY ) rc = LSM_OK;
     }
 
@@ -517,7 +516,6 @@ int lsmCheckpointWrite(lsm_db *pDb){
   ** log file. Obtain the WRITER lock and update the relevent tree-header
   ** fields to reflect this.  */
   if( rc==LSM_OK ){
-    int rc2;
     u64 iLogoff = lsmCheckpointLogOffset(pDb->aSnapshot);
     rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
     if( rc==LSM_OK ) rc = lsmTreeLoadHeader(pDb);
