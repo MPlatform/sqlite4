@@ -967,6 +967,7 @@ void lsmTreeInit(lsm_db *pDb){
   pDb->treehdr.iFirst = 1;
   pDb->treehdr.nChunk = 2;
   pDb->treehdr.iWrite = LSM_SHM_CHUNK_SIZE + LSM_SHM_CHUNK_HDR;
+  pDb->treehdr.iTreeId = 1;
 }
 
 /*
