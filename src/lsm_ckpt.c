@@ -732,21 +732,59 @@ int lsmCheckpointOverflowLoad(
   void *pVal = 0;
   assert( lsmShmAssertWorker(pDb) );
   
+  /* Load the blob of data from the LSM. If that is successful (and the
+  ** blob is greater than zero bytes in size), decode the contents and
+  ** merge them into the current contents of *pFreelist.  */
   rc = lsmSortedLoadFreelist(pDb, &pVal, &nVal);
   if( pVal ){
     u32 *aFree = (u32 *)pVal;
     int nFree = nVal / sizeof(int);
-
     ckptChangeEndianness(aFree, nFree);
     if( (nFree % 3) ){
       rc = LSM_CORRUPT_BKPT;
     }else{
-      int i;
-      for(i=0; rc==LSM_OK && i<nFree; i+=3){
-        int iBlk = aFree[i];
-        i64 iId = ((i64)(aFree[i+1])<<32) + (i64)aFree[i+2];
+      int iNew = 0;               /* Offset of next element in aFree[] */
+      int iOld = 0;               /* Next element in freelist fl */
+      Freelist fl = *pFreelist;   /* Original contents of *pFreelist */
+
+      memset(pFreelist, 0, sizeof(Freelist));
+      while( rc==LSM_OK && (iNew<nFree || iOld<fl.nEntry) ){
+        int iBlk;
+        i64 iId;
+
+        if( iOld>=fl.nEntry ){
+          iBlk = aFree[iNew];
+          iId = ((i64)(aFree[iNew+1])<<32) + (i64)aFree[iNew+2];
+          iNew += 3;
+        }else if( iNew>=nFree ){
+          iBlk = fl.aEntry[iOld].iBlk;
+          iId = fl.aEntry[iOld].iId;
+          iOld += 1;
+        }else{
+          iId = ((i64)(aFree[iNew+1])<<32) + (i64)aFree[iNew+2];
+          if( iId<fl.aEntry[iOld].iId ){
+            iBlk = aFree[iNew];
+            iNew += 3;
+          }else{
+            iBlk = fl.aEntry[iOld].iBlk;
+            iId = fl.aEntry[iOld].iId;
+            iOld += 1;
+          }
+        }
+
         rc = lsmFreelistAppend(pDb->pEnv, pFreelist, iBlk, iId);
       }
+      lsmFree(pDb->pEnv, fl.aEntry);
+
+#ifdef LSM_DEBUG
+      if( rc==LSM_OK ){
+        int i;
+        for(i=1; rc==LSM_OK && i<pFreelist->nEntry; i++){
+          assert( pFreelist->aEntry[i].iId >= pFreelist->aEntry[i-1].iId );
+        }
+        assert( pFreelist->nEntry==(fl.nEntry + nFree/3) );
+      }
+#endif
     }
 
     lsmFree(pDb->pEnv, pVal);
