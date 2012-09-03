@@ -606,12 +606,21 @@ static int btreeCursorLoadKey(BtreeCursor *pCsr){
     pCsr->nKey = 0;
     pCsr->eType = 0;
   }else{
-    int dummy;
-    rc = pageGetBtreeKey(
-        pCsr->aPg[pCsr->iPg].pPage, pCsr->aPg[pCsr->iPg].iCell,
-        &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
-    );
-    pCsr->eType |= SORTED_SEPARATOR;
+    int iPg;
+    for(iPg=pCsr->iPg; iPg>=0; iPg--){
+      int iCell = pCsr->aPg[pCsr->iPg].iCell;
+      if( iCell>=0 ){
+        int dummy;
+        rc = pageGetBtreeKey(
+            pCsr->aPg[pCsr->iPg].pPage, pCsr->aPg[pCsr->iPg].iCell,
+            &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
+        );
+        pCsr->eType |= SORTED_SEPARATOR;
+        break;
+      }
+    }
+
+    if( iPg<0 ) rc = LSM_CORRUPT_BKPT;
   }
 
   return rc;

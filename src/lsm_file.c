@@ -648,13 +648,13 @@ static void fsGrowMapping(
   if( *pRc==LSM_OK && iSz>pFS->nMap ){
     Page *pFix;
     int rc;
+    u8 *aOld = pFS->pMap;
     rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iSz, &pFS->pMap, &pFS->nMap);
     if( rc==LSM_OK ){
       u8 *aData = (u8 *)pFS->pMap;
       for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
         pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
       }
-
       lsmSortedRemap(pFS->pDb);
     }
     *pRc = rc;
