@@ -614,6 +614,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
       rc = lsmReadlock(pDb, iSnap, iTree);
       if( rc==LSM_OK ){
         if( (i64)pShm->hdr1.iTreeId==iTree 
+         && pShm->hdr1.iTransId==pDb->treehdr.iTransId
          && lsmCheckpointId(pShm->aClient, 0)==iSnap
         ){
           /* Read lock has been successfully obtained. Deserialize the 

@@ -718,6 +718,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
       /* Commit the transaction to disk. */
       if( lsmTreeSize(pDb)>pDb->nTreeLimit ){
+        lsmTreeEndTransaction(pDb, 1);
         bFlush = 1;
         rc = lsmFlushToDisk(pDb);
       }
