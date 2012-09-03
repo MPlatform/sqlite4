@@ -370,9 +370,8 @@ static int ckptExportSnapshot(
   int rc = LSM_OK;                /* Return Code */
   FileSystem *pFS = pDb->pFS;     /* File system object */
   Snapshot *pSnap = pDb->pWorker; /* Worker snapshot */
-  int nAll = 0;                   /* Number of levels in db */
-  int nHdrLevel = 0;              /* Number of levels in checkpoint */
-  int iLevel;                     /* Used to count out nHdrLevel levels */
+  int nLevel = 0;                 /* Number of levels in checkpoint */
+  int iLevel;                     /* Used to count out nLevel levels */
   int iOut = 0;                   /* Current offset in aCkpt[] */
   Level *pLevel;                  /* Level iterator */
   int i;                          /* Iterator used while serializing freelist */
@@ -398,13 +397,11 @@ static int ckptExportSnapshot(
   ckptExportAppendlist(pDb, &ckpt, &iOut, &rc);
 
   /* Figure out how many levels will be written to the checkpoint. */
-  for(pLevel=lsmDbSnapshotLevel(pSnap); pLevel; pLevel=pLevel->pNext) nAll++;
-  nHdrLevel = nAll;
-  assert( nHdrLevel>0 );
+  for(pLevel=lsmDbSnapshotLevel(pSnap); pLevel; pLevel=pLevel->pNext) nLevel++;
 
-  /* Serialize nHdrLevel levels. */
+  /* Serialize nLevel levels. */
   iLevel = 0;
-  for(pLevel=lsmDbSnapshotLevel(pSnap); iLevel<nHdrLevel; pLevel=pLevel->pNext){
+  for(pLevel=lsmDbSnapshotLevel(pSnap); iLevel<nLevel; pLevel=pLevel->pNext){
     ckptExportLevel(pLevel, &ckpt, &iOut, &rc);
     iLevel++;
   }
@@ -427,7 +424,7 @@ static int ckptExportSnapshot(
   ckptSetValue(&ckpt, CKPT_HDR_NCKPT, iOut+2, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NBLOCK, pSnap->nBlock, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_BLKSZ, lsmFsBlockSize(pFS), &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nHdrLevel, &rc);
+  ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nLevel, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_PGSZ, lsmFsPageSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_OVFL, nOvfl, &rc);
 

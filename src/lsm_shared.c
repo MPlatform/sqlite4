@@ -514,14 +514,22 @@ int lsmCheckpointWrite(lsm_db *pDb){
   /* If no error has occured, then the snapshot currently in pDb->aSnapshot
   ** has been synced to disk. This means it may be possible to wrap the
   ** log file. Obtain the WRITER lock and update the relevent tree-header
-  ** fields to reflect this.  */
+  ** fields to reflect this. 
+  */
   if( rc==LSM_OK ){
     u64 iLogoff = lsmCheckpointLogOffset(pDb->aSnapshot);
-    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
-    if( rc==LSM_OK ) rc = lsmTreeLoadHeader(pDb);
-    if( rc==LSM_OK ) lsmLogCheckpoint(pDb, iLogoff);
-    if( rc==LSM_OK ) lsmTreeEndTransaction(pDb, 1);
-    if( rc==LSM_BUSY ) rc = LSM_OK;
+    if( pDb->nTransOpen==0 ){
+      rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
+    }
+    if( rc==LSM_OK ){
+      rc = lsmTreeLoadHeader(pDb);
+      if( rc==LSM_OK ) lsmLogCheckpoint(pDb, iLogoff);
+      if( rc==LSM_OK ) lsmTreeEndTransaction(pDb, 1);
+      if( rc==LSM_BUSY ) rc = LSM_OK;
+      if( pDb->nTransOpen==0 ){
+        rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
+      }
+    }
   }
 
   lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);
@@ -671,6 +679,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   /* Attempt to take the WRITER lock */
   if( rc==LSM_OK ){
     rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
+  assert( rc!=LSM_BUSY );
   }
 
   /* If the previous writer failed mid-transaction, run emergency rollback. */
@@ -946,6 +955,16 @@ int lsmShmLock(
 }
 
 #ifdef LSM_DEBUG
+
+int shmLockType(lsm_db *db, int iLock){
+  const u32 me = (1 << (iLock-1));
+  const u32 ms = (1 << (iLock+16-1));
+
+  if( db->mLock & me ) return LSM_LOCK_EXCL;
+  if( db->mLock & ms ) return LSM_LOCK_SHARED;
+  return LSM_LOCK_UNLOCK;
+}
+
 /*
 ** The arguments passed to this function are similar to those passed to
 ** the lsmShmLock() function. However, instead of obtaining a new lock 
@@ -961,20 +980,23 @@ int lsmShmAssertLock(lsm_db *db, int iLock, int eOp){
   const u32 me = (1 << (iLock-1));
   const u32 ms = (1 << (iLock+16-1));
   int ret;
+  int eHave;
 
   assert( iLock>=1 && iLock<=LSM_LOCK_READER(LSM_LOCK_NREADER-1) );
   assert( iLock<=16 );
   assert( eOp==LSM_LOCK_UNLOCK || eOp==LSM_LOCK_SHARED || eOp==LSM_LOCK_EXCL );
 
+  eHave = shmLockType(db, iLock);
+
   switch( eOp ){
     case LSM_LOCK_UNLOCK:
-      ret = (db->mLock & (me|ms))==0;
+      ret = (eHave==LSM_LOCK_UNLOCK);
       break;
     case LSM_LOCK_SHARED:
-      ret = db->mLock & (me|ms);
+      ret = (eHave!=LSM_LOCK_UNLOCK);
       break;
     case LSM_LOCK_EXCL:
-      ret = (db->mLock & me);
+      ret = (eHave==LSM_LOCK_EXCL);
       break;
     default:
       assert( !"bad eOp value passed to lsmShmAssertLock()" );
@@ -986,6 +1008,36 @@ int lsmShmAssertLock(lsm_db *db, int iLock, int eOp){
 
 int lsmShmAssertWorker(lsm_db *db){
   return lsmShmAssertLock(db, LSM_LOCK_WORKER, LSM_LOCK_EXCL) && db->pWorker;
+}
+
+/*
+** This function does not contribute to library functionality, and is not
+** included in release builds. It is intended to be called from within
+** an interactive debugger.
+**
+** When called, this function prints a single line of human readable output
+** to stdout describing the locks currently held by the connection. For 
+** example:
+**
+**     (gdb) call print_db_locks(pDb)
+**     (shared on dms2) (exclusive on writer) 
+*/
+void print_db_locks(lsm_db *db){
+  int iLock;
+  for(iLock=0; iLock<16; iLock++){
+    int bOne = 0;
+    const char *azLock[] = {0, "shared", "exclusive"};
+    const char *azName[] = {
+      0, "dms1", "dms2", "writer", "worker", "checkpointer",
+      "reader0", "reader1", "reader2", "reader3", "reader4", "reader5"
+    };
+    int eHave = shmLockType(db, iLock);
+    if( azLock[eHave] ){
+      printf("%s(%s on %s)", (bOne?" ":""), azLock[eHave], azName[iLock]);
+      bOne = 1;
+    }
+  }
+  printf("\n");
 }
 #endif
 
