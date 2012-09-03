@@ -496,7 +496,6 @@ void lsmTreeClear(lsm_db *);
 void lsmTreeInit(lsm_db *);
 
 int lsmTreeSize(lsm_db *);
-int lsmTreeIsEmpty(lsm_db *);
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
 int lsmTreeBeginTransaction(lsm_db *pDb);
 int lsmTreeLoadHeader(lsm_db *pDb);

@@ -157,16 +157,17 @@ static void doDbDisconnect(lsm_db *pDb){
   rc = lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL, 1);
   if( rc==LSM_OK ){
 
-    /* Try an exclusive lock on DMS2. If successful, this is the first and 
-    ** only connection to the database. In this case initialize the 
-    ** shared-memory and run log file recovery.  */
+    /* Try an exclusive lock on DMS2. If successful, this is the last
+    ** connection to the database. In this case flush the contents of the
+    ** in-memory tree to disk and write a checkpoint.  */
     rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL, 0);
     if( rc==LSM_OK ){
       /* Flush the in-memory tree, if required. If there is data to flush,
       ** this will create a new client snapshot in Database.pClient. The
       ** checkpoint (serialization) of this snapshot may be written to disk
       ** by the following block.  */
-      if( 0==lsmTreeIsEmpty(pDb) ){
+      rc = lsmTreeLoadHeader(pDb);
+      if( rc==LSM_OK && lsmTreeSize(pDb)>0 ){
         rc = lsmFlushToDisk(pDb);
       }
 
@@ -679,7 +680,6 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   /* Attempt to take the WRITER lock */
   if( rc==LSM_OK ){
     rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
-  assert( rc!=LSM_BUSY );
   }
 
   /* If the previous writer failed mid-transaction, run emergency rollback. */

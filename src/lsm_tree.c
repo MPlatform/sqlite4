@@ -1080,18 +1080,6 @@ int lsmTreeSize(lsm_db *pDb){
 }
 
 /*
-** Return true if the tree is empty. Otherwise false.
-**
-** The caller is responsible for ensuring that it has exclusive access
-** to the Tree structure for this call.
-*/
-int lsmTreeIsEmpty(lsm_db *pDb){
-  /* TODO: This is not right in a true multi-process system (due to
-  ** race conditions)... */
-  return (pDb->pShmhdr->hdr1.iRoot==0);
-}
-
-/*
 ** Open a cursor on the in-memory tree pTree.
 */
 int lsmTreeCursorNew(lsm_db *pDb, TreeCursor **ppCsr){
