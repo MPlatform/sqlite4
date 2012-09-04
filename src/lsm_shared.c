@@ -45,6 +45,7 @@ struct Database {
 
   /* Protected by the local mutex (pClientMutex) */
   lsm_file *pFile;                /* Used for locks/shm in multi-proc mode */
+  LsmFile *pLsmFile;              /* List of deferred closes */
   lsm_mutex *pClientMutex;        /* Protects the apShmChunk[] and pConn */
   int nShmChunk;                  /* Number of entries in apShmChunk[] array */
   void **apShmChunk;              /* Array of "shared" memory regions */
@@ -358,7 +359,6 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
     enterGlobalMutex(pDb->pEnv);
     p->nDbRef--;
     if( p->nDbRef==0 ){
-      int i;
       Database **pp;
 
       /* Remove the Database structure from the linked list. */
@@ -367,8 +367,17 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
 
       /* Free the Database object and shared memory buffers. */
       if( p->pFile==0 ){
+        int i;
         for(i=0; i<p->nShmChunk; i++){
           lsmFree(pDb->pEnv, p->apShmChunk[i]);
+        }
+      }else{
+        LsmFile *pIter;
+        LsmFile *pNext;
+        for(pIter=p->pLsmFile; pIter; pIter=pNext){
+          pNext = pIter->pNext;
+          lsmEnvClose(pDb->pEnv, pIter->pFile);
+          lsmFree(pDb->pEnv, pIter);
         }
       }
       lsmFree(pDb->pEnv, p->apShmChunk);
@@ -877,7 +886,18 @@ int lsmReleaseReadlock(lsm_db *db){
 ** multi-process mode, or false otherwise.
 */
 int lsmDbMultiProc(lsm_db *pDb){
-  return (pDb->pDatabase->pFile!=0);
+  return pDb->pDatabase && (pDb->pDatabase->pFile!=0);
+}
+
+void lsmDbDeferredClose(lsm_db *pDb, lsm_file *pFile, LsmFile *pLsmFile){
+  Database *p = pDb->pDatabase;
+  lsm_env *pEnv = pDb->pEnv;
+
+  lsmMutexEnter(pEnv, p->pClientMutex);
+  pLsmFile->pFile = pFile;
+  pLsmFile->pNext = p->pLsmFile;
+  p->pLsmFile = pLsmFile;
+  lsmMutexLeave(pEnv, p->pClientMutex);
 }
 
 

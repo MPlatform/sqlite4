@@ -160,6 +160,12 @@ struct LsmString {
   char *z;                    /* The string content */
 };
 
+typedef struct LsmFile LsmFile;
+struct LsmFile {
+  lsm_file *pFile;
+  LsmFile *pNext;
+};
+
 /*
 ** An instance of the following type is used to store an ordered list of
 ** u32 values. 
@@ -787,6 +793,7 @@ int lsmTreeInUse(lsm_db *db, u32 iLsmId, int *pbInUse);
 int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId);
 
 int lsmDbMultiProc(lsm_db *);
+void lsmDbDeferredClose(lsm_db *, lsm_file *, LsmFile *);
 
 
 /**************************************************************************

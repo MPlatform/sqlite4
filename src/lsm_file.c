@@ -121,6 +121,7 @@ struct FileSystem {
   int nBlocksize;                 /* Database block-size in bytes */
 
   /* r/w file descriptors for both files. */
+  LsmFile *pLsmFile;
   lsm_file *fdDb;                 /* Database file */
   lsm_file *fdLog;                /* Log file */
 
@@ -398,6 +399,7 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     pFS->nCacheMax = 2048;
     pFS->nHash = 4096;
     pFS->apHash = lsmMallocZeroRc(pDb->pEnv, sizeof(Page *) * pFS->nHash, &rc);
+    pFS->pLsmFile = lsmMallocZeroRc(pDb->pEnv, sizeof(LsmFile), &rc);
 
     /* Open the database file */
     pFS->fdDb = fsOpenFile(pFS, 0, &rc);
@@ -430,7 +432,15 @@ void lsmFsClose(FileSystem *pFS){
     }
 
     if( pFS->fdDb ) lsmEnvClose(pFS->pEnv, pFS->fdDb );
-    if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
+    if( pFS->fdLog ){
+      if( lsmDbMultiProc(pFS->pDb) ){
+        lsmDbDeferredClose(pFS->pDb, pFS->fdLog, pFS->pLsmFile);
+        pFS->pLsmFile = 0;
+      }else{
+        lsmEnvClose(pFS->pEnv, pFS->fdLog );
+      }
+    }
+    lsmFree(pEnv, pFS->pLsmFile);
 
     lsmFree(pEnv, pFS->apHash);
     lsmFree(pEnv, pFS);
