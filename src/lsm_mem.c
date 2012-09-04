@@ -110,7 +110,6 @@ void *lsmReallocOrFreeRc(lsm_env *pEnv, void *p, size_t N, int *pRc){
   return pRet;
 }
 
-
 char *lsmMallocStrdup(lsm_env *pEnv, const char *zIn){
   int nByte;
   char *zRet;

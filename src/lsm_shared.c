@@ -44,6 +44,7 @@ struct Database {
   Database *pDbNext;              /* Next Database structure in global list */
 
   /* Protected by the local mutex (pClientMutex) */
+  lsm_file *pFile;                /* Used for locks/shm in multi-proc mode */
   lsm_mutex *pClientMutex;        /* Protects the apShmChunk[] and pConn */
   int nShmChunk;                  /* Number of entries in apShmChunk[] array */
   void **apShmChunk;              /* Array of "shared" memory regions */
@@ -144,6 +145,10 @@ static void freeDatabase(lsm_env *pEnv, Database *p){
     /* Free the mutexes */
     lsmMutexDel(pEnv, p->pClientMutex);
 
+    if( p->pFile ){
+      lsmEnvClose(pEnv, p->pFile);
+    }
+
     /* Free the memory allocated for the Database struct itself */
     lsmFree(pEnv, p);
   }
@@ -178,7 +183,9 @@ static void doDbDisconnect(lsm_db *pDb){
 
       /* If the checkpoint was written successfully, delete the log file */
       if( rc==LSM_OK && pDb->pFS ){
+        Database *p = pDb->pDatabase;
         lsmFsCloseAndDeleteLog(pDb->pFS);
+        if( p->pFile ) lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
       }
     }
   }
@@ -280,6 +287,7 @@ int lsmDbDatabaseConnect(
       /* Allocate the mutex */
       if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pClientMutex);
 
+
       /* If no error has occurred, fill in other fields and link the new 
       ** Database structure into the global list starting at 
       ** gShared.pDatabase. Otherwise, if an error has occurred, free any
@@ -293,7 +301,15 @@ int lsmDbDatabaseConnect(
         p->nId = nId;
         p->pDbNext = gShared.pDatabase;
         gShared.pDatabase = p;
-      }else{
+
+      }
+
+      /* If running in multi-process mode, open the shared fd */
+      if( rc==LSM_OK && pDb->bMultiProc ){
+        rc = lsmEnvOpen(pDb->pEnv, p->zName, &p->pFile);
+      }
+
+      if( rc!=LSM_OK ){
         freeDatabase(pEnv, p);
         p = 0;
       }
@@ -350,8 +366,10 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
       *pp = p->pDbNext;
 
       /* Free the Database object and shared memory buffers. */
-      for(i=0; i<p->nShmChunk; i++){
-        lsmFree(pDb->pEnv, p->apShmChunk[i]);
+      if( p->pFile==0 ){
+        for(i=0; i<p->nShmChunk; i++){
+          lsmFree(pDb->pEnv, p->apShmChunk[i]);
+        }
       }
       lsmFree(pDb->pEnv, p->apShmChunk);
       freeDatabase(pDb->pEnv, p);
@@ -531,6 +549,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
         rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
       }
     }
+    if( rc==LSM_BUSY ) rc = LSM_OK;
   }
 
   lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);
@@ -852,6 +871,14 @@ int lsmReleaseReadlock(lsm_db *db){
   return rc;
 }
 
+/*
+** This function may only be called after a successful call to
+** lsmDbDatabaseConnect(). It returns true if the connection is in
+** multi-process mode, or false otherwise.
+*/
+int lsmDbMultiProc(lsm_db *pDb){
+  return (pDb->pDatabase->pFile!=0);
+}
 
 
 /*************************************************************************
@@ -869,15 +896,16 @@ int lsmShmChunk(lsm_db *db, int iChunk, void **ppData){
   int rc = LSM_OK;
   void *pRet = 0;
   Database *p = db->pDatabase;
+  lsm_env *pEnv = db->pEnv;
 
   /* Enter the client mutex */
   assert( iChunk>=0 );
-  lsmMutexEnter(db->pEnv, p->pClientMutex);
+  lsmMutexEnter(pEnv, p->pClientMutex);
 
   if( iChunk>=p->nShmChunk ){
     int nNew = iChunk+1;
     void **apNew;
-    apNew = (void **)lsmRealloc(db->pEnv, p->apShmChunk, sizeof(void*) * nNew);
+    apNew = (void **)lsmRealloc(pEnv, p->apShmChunk, sizeof(void*) * nNew);
     if( apNew==0 ){
       rc = LSM_NOMEM_BKPT;
     }else{
@@ -888,7 +916,15 @@ int lsmShmChunk(lsm_db *db, int iChunk, void **ppData){
   }
 
   if( rc==LSM_OK && p->apShmChunk[iChunk]==0 ){
-    p->apShmChunk[iChunk] = lsmMallocZeroRc(db->pEnv, LSM_SHM_CHUNK_SIZE, &rc);
+    void *pChunk = 0;
+    if( p->pFile==0 ){
+      /* Single process mode */
+      pChunk = lsmMallocZeroRc(pEnv, LSM_SHM_CHUNK_SIZE, &rc);
+    }else{
+      /* Multi-process mode */
+      rc = lsmEnvShmMap(pEnv, p->pFile, iChunk, LSM_SHM_CHUNK_SIZE, &pChunk);
+    }
+    p->apShmChunk[iChunk] = pChunk;
   }
 
   if( rc==LSM_OK ){
@@ -896,7 +932,7 @@ int lsmShmChunk(lsm_db *db, int iChunk, void **ppData){
   }
 
   /* Release the client mutex */
-  lsmMutexLeave(db->pEnv, p->pClientMutex);
+  lsmMutexLeave(pEnv, p->pClientMutex);
 
   *ppData = pRet; 
   return rc;
@@ -917,6 +953,9 @@ int lsmShmLock(
   int eOp,                        /* One of LSM_LOCK_UNLOCK, SHARED or EXCL */
   int bBlock                      /* True for a blocking lock */
 ){
+  lsm_db *pIter;
+  const u32 me = (1 << (iLock-1));
+  const u32 ms = (1 << (iLock+16-1));
   int rc = LSM_OK;
   Database *p = db->pDatabase;
 
@@ -924,32 +963,62 @@ int lsmShmLock(
   assert( iLock<=16 );
   assert( eOp==LSM_LOCK_UNLOCK || eOp==LSM_LOCK_SHARED || eOp==LSM_LOCK_EXCL );
 
-  lsmMutexEnter(db->pEnv, p->pClientMutex);
-  if( eOp==LSM_LOCK_UNLOCK ){
-    u32 mask = (1 << (iLock-1)) + (1 << (iLock-1+16));
-    db->mLock &= ~mask;
-  }else{
-    lsm_db *pIter;
-    u32 mask = (1 << (iLock-1));
-    if( eOp==LSM_LOCK_EXCL ) mask |= (1 << (iLock-1+16));
+  /* Check for a no-op. Proceed only if this is not one of those. */
+  if( (eOp==LSM_LOCK_UNLOCK && (db->mLock & (me|ms))!=0)
+   || (eOp==LSM_LOCK_SHARED && (db->mLock & (me|ms))!=ms)
+   || (eOp==LSM_LOCK_EXCL   && (db->mLock & me)==0)
+  ){
+    int nExcl = 0;                /* Number of connections holding EXCLUSIVE */
+    int nShared = 0;              /* Number of connections holding SHARED */
+    lsmMutexEnter(db->pEnv, p->pClientMutex);
 
+    /* Figure out the locks currently held by this process on iLock. */
     for(pIter=p->pConn; pIter; pIter=pIter->pNext){
-      if( pIter!=db && pIter->mLock & mask ){ 
-        rc = LSM_BUSY;
-        break;
+      if( pIter!=db ){
+        if( pIter->mLock & me ){
+          nExcl++;
+        }else if( pIter->mLock & ms ){
+          nShared++;
+        }
       }
+    }
+    assert( nExcl==0 || nExcl==1 );
+    assert( nExcl==0 || nShared==0 );
+    assert( (db->mLock & me)==0 || (db->mLock & ms)!=0 );
+
+    switch( eOp ){
+      case LSM_LOCK_UNLOCK:
+        if( nShared<=1 ){
+          lsmEnvLock(db->pEnv, p->pFile, iLock, LSM_LOCK_UNLOCK);
+        }
+        db->mLock &= ~(me|ms);
+        break;
+
+      case LSM_LOCK_SHARED:
+        if( nExcl && (db->mLock & me)==0 ){
+          rc = LSM_BUSY;
+        }else{
+          if( nShared==0 ){
+            rc = lsmEnvLock(db->pEnv, p->pFile, iLock, LSM_LOCK_SHARED);
+          }
+          db->mLock |= ms;
+          db->mLock &= ~me;
+        }
+        break;
+
+      default:
+        assert( eOp==LSM_LOCK_EXCL );
+        if( nExcl || nShared>1 || (nShared==1 && (db->mLock & ms)==0) ){
+          rc = LSM_BUSY;
+        }else{
+          rc = lsmEnvLock(db->pEnv, p->pFile, iLock, LSM_LOCK_EXCL);
+          db->mLock |= (me|ms);
+        }
+        break;
     }
 
-    if( rc==LSM_OK ){
-      if( eOp==LSM_LOCK_EXCL ){
-        db->mLock |= (1 << (iLock-1));
-      }else{
-        db->mLock |= (1 << (iLock-1+16));
-        db->mLock &= ~(1 << (iLock-1));
-      }
-    }
+    lsmMutexLeave(db->pEnv, p->pClientMutex);
   }
-  lsmMutexLeave(db->pEnv, p->pClientMutex);
 
   return rc;
 }
@@ -977,8 +1046,6 @@ int shmLockType(lsm_db *db, int iLock){
 **   (eOp==LSM_LOCK_EXCL)   -> true if db has an EXCLUSIVE lock on iLock.
 */
 int lsmShmAssertLock(lsm_db *db, int iLock, int eOp){
-  const u32 me = (1 << (iLock-1));
-  const u32 ms = (1 << (iLock+16-1));
   int ret;
   int eHave;
 
@@ -1039,12 +1106,18 @@ void print_db_locks(lsm_db *db){
   }
   printf("\n");
 }
+void print_all_db_locks(lsm_db *db){
+  lsm_db *p;
+  for(p=db->pDatabase->pConn; p; p=p->pNext){
+    printf("%s connection %p ", ((p==db)?"*":""), p);
+    print_db_locks(p);
+  }
+}
 #endif
 
 void lsmShmBarrier(lsm_db *db){
-  /* TODO */
+  lsmEnvShmBarrier(db->pEnv);
 }
-
 
 
 

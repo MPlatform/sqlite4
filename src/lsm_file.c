@@ -115,6 +115,7 @@ struct FileSystem {
   lsm_db *pDb;                    /* Database handle that owns this object */
   lsm_env *pEnv;                  /* Environment pointer */
   char *zDb;                      /* Database file name */
+  char *zLog;                     /* Database file name */
   int nMetasize;                  /* Size of meta pages in bytes */
   int nPagesize;                  /* Database page-size in bytes */
   int nBlocksize;                 /* Database block-size in bytes */
@@ -195,7 +196,7 @@ struct MetaPage {
 **     lsmEnvUnlink()
 **     lsmEnvRemap()
 */
-static int lsmEnvOpen(lsm_env *pEnv, const char *zFile, lsm_file **ppNew){
+int lsmEnvOpen(lsm_env *pEnv, const char *zFile, lsm_file **ppNew){
   return pEnv->xOpen(pEnv, zFile, ppNew);
 }
 static int lsmEnvRead(
@@ -222,7 +223,7 @@ static int lsmEnvSync(lsm_env *pEnv, lsm_file *pFile){
 static int lsmEnvSectorSize(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xSectorSize(pFile);
 }
-static int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
+int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xClose(pFile);
 }
 static int lsmEnvTruncate(lsm_env *pEnv, lsm_file *pFile, lsm_i64 nByte){
@@ -240,6 +241,30 @@ static int lsmEnvRemap(
 ){
   return pEnv->xRemap(pFile, szMin, ppMap, pszMap);
 }
+
+int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock){
+  if( pFile==0 ) return LSM_OK;
+  return pEnv->xLock(pFile, iLock, eLock);
+}
+
+int lsmEnvShmMap(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  int iChunk, 
+  int sz, 
+  void **ppOut
+){
+  return pEnv->xShmMap(pFile, iChunk, sz, ppOut);
+}
+
+void lsmEnvShmBarrier(lsm_env *pEnv){
+  return pEnv->xShmBarrier();
+}
+
+void lsmEnvShmUnmap(lsm_env *pEnv, lsm_file *pFile, int bDel){
+  return pEnv->xShmUnmap(pFile, bDel);
+}
+
 
 /*
 ** Write the contents of string buffer pStr into the log file, starting at
@@ -317,14 +342,7 @@ static lsm_file *fsOpenFile(
 ){
   lsm_file *pFile = 0;
   if( *pRc==LSM_OK ){
-    char *zName;
-    zName = lsmMallocPrintf(pFS->pEnv, "%s%s", pFS->zDb, (bLog ? "-log" : ""));
-    if( !zName ){
-      *pRc = LSM_NOMEM;
-    }else{
-      *pRc = lsmEnvOpen(pFS->pEnv, zName, &pFile);
-    }
-    lsmFree(pFS->pEnv, zName);
+    *pRc = lsmEnvOpen(pFS->pEnv, (bLog ? pFS->zLog : pFS->zDb), &pFile);
   }
   return pFile;
 }
@@ -353,21 +371,27 @@ int lsmFsOpenLog(FileSystem *pFS){
 int lsmFsOpen(lsm_db *pDb, const char *zDb){
   FileSystem *pFS;
   int rc = LSM_OK;
+  int nDb = strlen(zDb);
+  int nByte;
 
   assert( pDb->pFS==0 );
   assert( pDb->pWorker==0 && pDb->pClient==0 );
 
-  pFS = (FileSystem *)lsmMallocZeroRc(pDb->pEnv, sizeof(FileSystem), &rc);
+  nByte = sizeof(FileSystem) + nDb+1 + nDb+4+1;
+  pFS = (FileSystem *)lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
   if( pFS ){
+    pFS->zDb = (char *)&pFS[1];
+    pFS->zLog = &pFS->zDb[nDb+1];
     pFS->nPagesize = LSM_PAGE_SIZE;
     pFS->nBlocksize = LSM_BLOCK_SIZE;
     pFS->nMetasize = 4 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
 
-    /* Make a copy of the database name. */
-    pFS->zDb = lsmMallocStrdup(pDb->pEnv, zDb);
-    if( pFS->zDb==0 ) rc = LSM_NOMEM;
+    /* Make a copy of the database and log file names. */
+    memcpy(pFS->zDb, zDb, nDb+1);
+    memcpy(pFS->zLog, zDb, nDb);
+    memcpy(&pFS->zLog[nDb], "-log", 5);
 
     /* Allocate the hash-table here. At some point, it should be changed
     ** so that it can grow dynamicly. */
@@ -408,7 +432,6 @@ void lsmFsClose(FileSystem *pFS){
     if( pFS->fdDb ) lsmEnvClose(pFS->pEnv, pFS->fdDb );
     if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
 
-    lsmFree(pEnv, pFS->zDb);
     lsmFree(pEnv, pFS->apHash);
     lsmFree(pEnv, pFS);
   }

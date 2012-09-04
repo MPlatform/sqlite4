@@ -84,6 +84,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
   pDb->bUseLog = 1;
   pDb->iReader = -1;
+  pDb->bMultiProc = 0;
   return LSM_OK;
 }
 
@@ -370,6 +371,19 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
         pDb->nMaxFreelist = *piVal;
       }
       *piVal = pDb->nMaxFreelist;
+      break;
+    }
+
+    case LSM_CONFIG_MULTIPLE_PROCESSES: {
+      int *piVal = va_arg(ap, int *);
+      if( pDb->pDatabase ){
+        /* If lsm_open() has been called, this is a read-only parameter. 
+        ** Set the output variable to true if this connection is currently
+        ** in multi-process mode.  */
+        *piVal = lsmDbMultiProc(pDb);
+      }else{
+        pDb->bMultiProc = *piVal = (*piVal!=0);
+      }
       break;
     }
 

@@ -275,6 +275,7 @@ struct lsm_db {
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
   int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
   int nMaxFreelist;               /* Configured by LSM_CONFIG_MAX_FREELIST */
+  int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
@@ -624,6 +625,14 @@ int lsmFsSyncDb(FileSystem *);
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmConfigMmap(lsm_db *pDb, int *piParam);
 
+int lsmEnvOpen(lsm_env *, const char *, lsm_file **);
+int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile);
+int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock);
+
+int lsmEnvShmMap(lsm_env *, lsm_file *, int, int, void **); 
+void lsmEnvShmBarrier(lsm_env *);
+void lsmEnvShmUnmap(lsm_env *, lsm_file *, int);
+
 /*
 ** End of functions from "lsm_file.c".
 **************************************************************************/
@@ -776,6 +785,8 @@ int lsmReleaseReadlock(lsm_db *);
 int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);
 int lsmTreeInUse(lsm_db *db, u32 iLsmId, int *pbInUse);
 int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId);
+
+int lsmDbMultiProc(lsm_db *);
 
 
 /**************************************************************************
