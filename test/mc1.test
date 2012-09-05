@@ -1,0 +1,44 @@
+# 2012 September 05
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# The tests in this file were used while developing the SQLite 4 code. 
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+source $testdir/lock_common.tcl
+set testprefix mc1
+
+
+do_multiclient_test tn {
+
+  do_test 1.$tn.1 { 
+    sql1 { CREATE TABLE t1(a PRIMARY KEY, b) } 
+    sql1 { INSERT INTO t1 VALUES(1, 2) }
+    sql2 { SELECT * FROM t1 }
+  } {1 2}
+
+  do_test 1.$tn.2 { file size test.db } 0
+
+  do_test 1.$tn.3 {
+    sql2 { BEGIN; INSERT INTO t1 VALUES(2, 4); }
+    sql1 { SELECT * FROM t1 }
+  } {1 2}
+
+  do_test 1.$tn.4 {
+breakpoint
+    csql1 { INSERT INTO t1 VALUES(3, 6) }
+  } {1 {database is locked}}
+
+}
+
+finish_test
+
+

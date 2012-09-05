@@ -312,7 +312,7 @@ int lsmPosixOsLock(lsm_file *pFile, int iLock, int eType){
     }
   }
 
-  return LSM_OK;
+  return rc;
 }
 
 int lsmPosixOsShmMap(lsm_file *pFile, int iChunk, int sz, void **ppShm){

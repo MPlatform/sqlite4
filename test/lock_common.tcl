@@ -16,8 +16,6 @@
 proc do_multiclient_test {varname script} {
 
   foreach code [list {
-    puts "Skipping multi-process tests..."
-    continue
     if {[info exists ::G(valgrind)]} { db close ; continue }
     set ::code2_chan [launch_testfixture]
     set ::code3_chan [launch_testfixture]
@@ -76,12 +74,6 @@ proc launch_testfixture {{prg ""}} {
   if {[file tail $prg]==$prg} { set prg [file join . $prg] }
   set chan [open "|$prg tf_main.tcl" r+]
   fconfigure $chan -buffering line
-  set rc [catch { 
-    testfixture $chan "sqlite4_test_control_pending_byte $::sqlite_pending_byte"
-  }]
-  if {$rc} {
-    testfixture $chan "set ::sqlite_pending_byte $::sqlite_pending_byte"
-  }
   return $chan
 }
 
