@@ -482,19 +482,6 @@ do_test fkey2-4.3 {
   }
 } {}
 
-drop_all_tables
-ifcapable vacuum {
-  do_test fkey2-6.1 {
-    execsql {
-      CREATE TABLE t1(a REFERENCES t2(c), b);
-      CREATE TABLE t2(c UNIQUE, b);
-      INSERT INTO t2 VALUES(1, 2);
-      INSERT INTO t1 VALUES(1, 2);
-      VACUUM;
-    }
-  } {}
-}
-
 #-------------------------------------------------------------------------
 # Test that it is possible to use an INTEGER PRIMARY KEY as the child key
 # of a foreign constraint.
