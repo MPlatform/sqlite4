@@ -19,6 +19,7 @@ set testprefix mc1
 
 do_multiclient_test tn {
 
+  # Test that connection 2 can see changes made by connection 1.
   do_test 1.$tn.1 { 
     sql1 { CREATE TABLE t1(a PRIMARY KEY, b) } 
     sql1 { INSERT INTO t1 VALUES(1, 2) }
@@ -27,18 +28,55 @@ do_multiclient_test tn {
 
   do_test 1.$tn.2 { file size test.db } 0
 
+  # Connection 1 does not see uncommitted changes made by connection 2.
   do_test 1.$tn.3 {
     sql2 { BEGIN; INSERT INTO t1 VALUES(2, 4); }
     sql1 { SELECT * FROM t1 }
   } {1 2}
 
+  # Connection 1 cannot write the database while connection 2 has an open
+  # write transaction.
   do_test 1.$tn.4 {
-breakpoint
     csql1 { INSERT INTO t1 VALUES(3, 6) }
   } {1 {database is locked}}
 
+  # After connection 2 has committed, connection 1 can write again.
+  do_test 1.$tn.5 {
+    sql2  { COMMIT }
+    csql1 { INSERT INTO t1 VALUES(3, 6) }
+    sql1  { SELECT * FROM t1 }
+  } {1 2 2 4 3 6}
+
+  # Connection 1 does not see changes commited by connection 2 after its
+  # read transaction is opened.
+  do_test 1.$tn.6 {
+    sql1 { BEGIN; SELECT * FROM t1 }
+    sql2 { INSERT INTO t1 VALUES(4, 8) }
+    sql1  { SELECT * FROM t1 }
+  } {1 2 2 4 3 6}
+
+  # Once the read transaction is closed, connection 1's next read transaction
+  # does see changes made during the previous one.
+  do_test 1.$tn.7 {
+    sql1 { COMMIT; SELECT * FROM t1 }
+  } {1 2 2 4 3 6 4 8}
+
+  # Connection 1 cannot write from an out-of-date snapshot.
+  do_test 1.$tn.8 {
+    sql1  { BEGIN; SELECT * FROM t1 }
+    sql2  { INSERT INTO t1 VALUES(5, 10) }
+    csql1 { INSERT INTO t1 VALUES(6, 12) }
+  } {1 {database is locked}}
+
+  # But it can from a new snapshot.
+  do_test 1.$tn.9 {
+    sql1  { COMMIT; BEGIN }
+    sql1  { INSERT INTO t1 VALUES(6, 12) }
+    sql1  { SELECT * FROM t1 }
+  } {1 2 2 4 3 6 4 8 5 10 6 12}
+
+  do_test 1.$tn.10 { file size test.db } 0
 }
 
 finish_test
-
 
