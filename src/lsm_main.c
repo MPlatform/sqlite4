@@ -173,14 +173,9 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     rc = getFullpathname(pDb->pEnv, zFilename, &zFull);
     assert( rc==LSM_OK || zFull==0 );
 
-    /* Open the database file. */
-    if( rc==LSM_OK ){
-      rc = lsmFsOpen(pDb, zFull);
-    }
-
     /* Connect to the database */
     if( rc==LSM_OK ){
-      rc = lsmDbDatabaseConnect(pDb, zFilename);
+      rc = lsmDbDatabaseConnect(pDb, zFull);
     }
 
     /* Configure the file-system connection with the page-size and block-size

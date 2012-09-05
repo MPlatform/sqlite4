@@ -1,0 +1,70 @@
+# 2012 September 05
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# The tests in this file were used while developing the SQLite 4 code. 
+#
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix simple2
+
+
+db_delete test2.db
+do_execsql_test 1.1 {
+  CREATE TABLE t1(a, b);
+  INSERT INTO t1 VALUES('abc', 'def');
+  ATTACH 'test2.db' AS aux;
+  CREATE TABLE aux.t1 AS SELECT * FROM main.t1;
+  DETACH aux;
+}
+
+do_test 1.2 {
+  set nIncorrect 0
+  for {set i 0} {$i < 2000} {incr i} {
+    sqlite4 db2 test2.db
+    set res [execsql {SELECT * FROM t1} db2]
+    incr nIncorrect [string compare "abc def" $res]
+    db2 close
+  }
+  set nIncorrect
+} {0}
+
+do_test 1.3 {
+  set nIncorrect 0
+  for {set i 0} {$i < 2000} {incr i} {
+    sqlite4 db2 test.db
+    set res [execsql {SELECT * FROM t1} db2]
+    incr nIncorrect [string compare "abc def" $res]
+    db2 close
+  }
+  set nIncorrect
+} {0}
+
+do_test 1.4 {
+  set nIncorrect 0
+  set res [list [catch {
+    for {set i 2} {$i < 2000} {incr i} {
+      sqlite4 db$i test.db
+      set res [execsql {SELECT * FROM t1} db$i]
+      incr nIncorrect [string compare "abc def" $res]
+    }
+  } msg] $msg]
+  set res
+} {1 {disk I/O error}}
+
+do_test 1.5 {
+  for {set i 2} {$i < 2000} {incr i} {
+    catch {db$i close}
+  }
+  set res {}
+} {}
+
+
+finish_test
+

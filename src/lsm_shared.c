@@ -38,8 +38,7 @@ static struct SharedData {
 struct Database {
   /* Protected by the global mutex (enterGlobalMutex/leaveGlobalMutex): */
   char *zName;                    /* Canonical path to database file */
-  void *pId;                      /* Database id (file inode) */
-  int nId;                        /* Size of pId in bytes */
+  int nName;                      /* strlen(zName) */
   int nDbRef;                     /* Number of associated lsm_db handles */
   Database *pDbNext;              /* Next Database structure in global list */
 
@@ -258,18 +257,14 @@ static int doDbConnect(lsm_db *pDb){
 */
 int lsmDbDatabaseConnect(
   lsm_db *pDb,                    /* Database handle */
-  const char *zName               /* Path to db file */
+  const char *zName               /* Full-path to db file */
 ){
   lsm_env *pEnv = pDb->pEnv;
   int rc;                         /* Return code */
   Database *p = 0;                /* Pointer returned via *ppDatabase */
-  int nId = 0;
-  void *pId = 0;
+  int nName = lsmStrlen(zName);
 
   assert( pDb->pDatabase==0 );
-  rc = lsmFsFileid(pDb, &pId, &nId);
-  if( rc!=LSM_OK ) return rc;
-
   rc = enterGlobalMutex(pEnv);
   if( rc==LSM_OK ){
 
@@ -277,46 +272,40 @@ int lsmDbDatabaseConnect(
     ** better than the strcmp() below to figure out if a given Database
     ** object represents the requested file.  */
     for(p=gShared.pDatabase; p; p=p->pDbNext){
-      if( nId==p->nId && 0==memcmp(pId, p->pId, nId) ) break;
+      if( nName==p->nName && 0==memcmp(zName, p->zName, nName) ) break;
     }
 
     /* If no suitable Database object was found, allocate a new one. */
     if( p==0 ){
-      int nName = strlen(zName);
-      p = (Database *)lsmMallocZeroRc(pEnv, sizeof(Database)+nId+nName+1, &rc);
+      p = (Database *)lsmMallocZeroRc(pEnv, sizeof(Database)+nName+1, &rc);
 
-      /* Allocate the mutex */
-      if( rc==LSM_OK ) rc = lsmMutexNew(pEnv, &p->pClientMutex);
-
-
-      /* If no error has occurred, fill in other fields and link the new 
-      ** Database structure into the global list starting at 
-      ** gShared.pDatabase. Otherwise, if an error has occurred, free any
-      ** resources allocated and return without linking anything new into
-      ** the gShared.pDatabase list.  */
+      /* If the allocation was successful, fill in other fields and
+      ** allocate the client mutex. */ 
       if( rc==LSM_OK ){
         p->zName = (char *)&p[1];
+        p->nName = nName;
         memcpy((void *)p->zName, zName, nName+1);
-        p->pId = (void *)&p->zName[nName+1];
-        memcpy(p->pId, pId, nId);
-        p->nId = nId;
-        p->pDbNext = gShared.pDatabase;
-        gShared.pDatabase = p;
-
+        rc = lsmMutexNew(pEnv, &p->pClientMutex);
       }
 
-      /* If running in multi-process mode, open the shared fd */
+      /* If running in multi-process mode and nothing has gone wrong so far,
+      ** open the shared fd */
       if( rc==LSM_OK && pDb->bMultiProc ){
         rc = lsmEnvOpen(pDb->pEnv, p->zName, &p->pFile);
       }
 
-      if( rc!=LSM_OK ){
+      if( rc==LSM_OK ){
+        p->pDbNext = gShared.pDatabase;
+        gShared.pDatabase = p;
+      }else{
         freeDatabase(pEnv, p);
         p = 0;
       }
     }
 
-    if( p ) p->nDbRef++;
+    if( p ){
+      p->nDbRef++;
+    }
     leaveGlobalMutex(pEnv);
 
     if( p ){
@@ -327,14 +316,37 @@ int lsmDbDatabaseConnect(
     }
   }
 
-  lsmFree(pEnv, pId);
   pDb->pDatabase = p;
-
+  if( rc==LSM_OK ){
+    assert( p );
+    rc = lsmFsOpen(pDb, zName);
+  }
   if( rc==LSM_OK ){
     rc = doDbConnect(pDb);
   }
 
   return rc;
+}
+
+static void dbDeferClose(lsm_db *pDb){
+  if( pDb->pFS ){
+    LsmFile *pLsmFile = 0;
+    Database *p = pDb->pDatabase;
+    lsmFsDeferClose(pDb->pFS, &pLsmFile);
+    pLsmFile->pNext = p->pLsmFile;
+    p->pLsmFile = pLsmFile;
+  }
+}
+
+LsmFile *lsmDbRecycleFd(lsm_db *db){
+  LsmFile *pRet;
+  Database *p = db->pDatabase;
+  lsmMutexEnter(db->pEnv, p->pClientMutex);
+  if( pRet = p->pLsmFile ){
+    p->pLsmFile = pRet->pNext;
+  }
+  lsmMutexLeave(db->pEnv, p->pClientMutex);
+  return pRet;
 }
 
 /*
@@ -354,6 +366,9 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
     for(ppDb=&p->pConn; *ppDb!=pDb; ppDb=&((*ppDb)->pNext));
     *ppDb = pDb->pNext;
+    if( lsmDbMultiProc(pDb) ){
+      dbDeferClose(pDb);
+    }
     lsmMutexLeave(pDb->pEnv, p->pClientMutex);
 
     enterGlobalMutex(pDb->pEnv);
@@ -887,17 +902,6 @@ int lsmReleaseReadlock(lsm_db *db){
 */
 int lsmDbMultiProc(lsm_db *pDb){
   return pDb->pDatabase && (pDb->pDatabase->pFile!=0);
-}
-
-void lsmDbDeferredClose(lsm_db *pDb, lsm_file *pFile, LsmFile *pLsmFile){
-  Database *p = pDb->pDatabase;
-  lsm_env *pEnv = pDb->pEnv;
-
-  lsmMutexEnter(pEnv, p->pClientMutex);
-  pLsmFile->pFile = pFile;
-  pLsmFile->pNext = p->pLsmFile;
-  p->pLsmFile = pLsmFile;
-  lsmMutexLeave(pEnv, p->pClientMutex);
 }
 
 

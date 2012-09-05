@@ -624,6 +624,8 @@ int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr);
 int lsmFsTruncateLog(FileSystem *pFS, i64 nByte);
 int lsmFsCloseAndDeleteLog(FileSystem *pFS);
 
+void lsmFsDeferClose(FileSystem *pFS, LsmFile **pp);
+
 /* And to sync the db file */
 int lsmFsSyncDb(FileSystem *);
 
@@ -794,6 +796,7 @@ int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId);
 
 int lsmDbMultiProc(lsm_db *);
 void lsmDbDeferredClose(lsm_db *, lsm_file *, LsmFile *);
+LsmFile *lsmDbRecycleFd(lsm_db *);
 
 
 /**************************************************************************
@@ -807,6 +810,8 @@ void lsmStringAppendf(LsmString*, const char *zFormat, ...);
 void lsmStringClear(LsmString*);
 char *lsmMallocPrintf(lsm_env*, const char*, ...);
 int lsmStringBinAppend(LsmString *pStr, const u8 *a, int n);
+
+int lsmStrlen(const char *zName);
 
 
 

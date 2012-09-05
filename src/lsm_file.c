@@ -381,6 +381,7 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
   nByte = sizeof(FileSystem) + nDb+1 + nDb+4+1;
   pFS = (FileSystem *)lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
   if( pFS ){
+    LsmFile *pLsmFile;
     pFS->zDb = (char *)&pFS[1];
     pFS->zLog = &pFS->zDb[nDb+1];
     pFS->nPagesize = LSM_PAGE_SIZE;
@@ -399,10 +400,19 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     pFS->nCacheMax = 2048;
     pFS->nHash = 4096;
     pFS->apHash = lsmMallocZeroRc(pDb->pEnv, sizeof(Page *) * pFS->nHash, &rc);
-    pFS->pLsmFile = lsmMallocZeroRc(pDb->pEnv, sizeof(LsmFile), &rc);
 
     /* Open the database file */
-    pFS->fdDb = fsOpenFile(pFS, 0, &rc);
+    pLsmFile = lsmDbRecycleFd(pDb);
+    if( pLsmFile ){
+      pFS->pLsmFile = pLsmFile;
+      pFS->fdDb = pLsmFile->pFile;
+      memset(pLsmFile, 0, sizeof(LsmFile));
+    }else{
+      pFS->pLsmFile = lsmMallocZeroRc(pDb->pEnv, sizeof(LsmFile), &rc);
+      if( rc==LSM_OK ){
+        pFS->fdDb = fsOpenFile(pFS, 0, &rc);
+      }
+    }
 
     if( rc!=LSM_OK ){
       lsmFsClose(pFS);
@@ -432,19 +442,20 @@ void lsmFsClose(FileSystem *pFS){
     }
 
     if( pFS->fdDb ) lsmEnvClose(pFS->pEnv, pFS->fdDb );
-    if( pFS->fdLog ){
-      if( lsmDbMultiProc(pFS->pDb) ){
-        lsmDbDeferredClose(pFS->pDb, pFS->fdLog, pFS->pLsmFile);
-        pFS->pLsmFile = 0;
-      }else{
-        lsmEnvClose(pFS->pEnv, pFS->fdLog );
-      }
-    }
+    if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
     lsmFree(pEnv, pFS->pLsmFile);
-
     lsmFree(pEnv, pFS->apHash);
     lsmFree(pEnv, pFS);
   }
+}
+
+void lsmFsDeferClose(FileSystem *pFS, LsmFile **pp){
+  LsmFile *p = pFS->pLsmFile;
+  assert( p->pNext==0 );
+  p->pFile = pFS->fdDb;
+  pFS->fdDb = 0;
+  pFS->pLsmFile = 0;
+  *pp = p;
 }
 
 /*

@@ -127,6 +127,12 @@ void lsmStringAppendf(LsmString *pStr, const char *zFormat, ...){
   va_end(ap2);
 }
 
+int lsmStrlen(const char *zName){
+  int nRet = 0;
+  while( zName[nRet] ) nRet++;
+  return nRet;
+}
+
 /*
 ** Write into memory obtained from lsm_malloc().
 */
