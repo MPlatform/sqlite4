@@ -36,7 +36,6 @@
 #include <errno.h>
 
 #include <sys/mman.h>
-
 #include "lsmInt.h"
 
 /*
@@ -44,13 +43,28 @@
 */
 typedef struct PosixFile PosixFile;
 struct PosixFile {
-  lsm_env *pEnv;     /* The run-time environment */
-  int fd;            /* The open file descriptor */
-  void *pMap;
-  off_t nMap;
+  lsm_env *pEnv;                  /* The run-time environment */
+  const char *zName;              /* Full path to file */
+  int fd;                         /* The open file descriptor */
+  int shmfd;                      /* Shared memory file-descriptor */
+  void *pMap;                     /* Pointer to mapping of file fd */
+  off_t nMap;                     /* Size of mapping at pMap in bytes */
+  int nShm;                       /* Number of entries in array apShm[] */
+  void **apShm;                   /* Array of 32K shared memory segments */
 };
 
 static int lsm_ioerr(void){ return LSM_IOERR; }
+
+static char *posixShmFile(PosixFile *p){
+  char *zShm;
+  int nName = strlen(p->zName);
+  zShm = (char *)lsmMalloc(p->pEnv, nName+4+1);
+  if( zShm ){
+    memcpy(zShm, p->zName, nName);
+    memcpy(&zShm[nName], "-shm", 5);
+  }
+  return zShm;
+}
 
 static int lsmPosixOsOpen(
   lsm_env *pEnv,
@@ -65,6 +79,7 @@ static int lsmPosixOsOpen(
     rc = LSM_NOMEM;
   }else{
     memset(p, 0, sizeof(PosixFile));
+    p->zName = zFile;
     p->pEnv = pEnv;
     p->fd = open(zFile, O_RDWR|O_CREAT, 0644);
     if( p->fd<0 ){
@@ -265,17 +280,126 @@ static int lsmPosixOsFileid(
   return LSM_OK;
 }
 
+static int lsmPosixOsUnlink(lsm_env *pEnv, const char *zFile){
+  int prc = unlink(zFile);
+  return prc ? LSM_IOERR_BKPT : LSM_OK;
+}
+
+int lsmPosixOsLock(lsm_file *pFile, int iLock, int eType){
+  int rc = LSM_OK;
+  PosixFile *p = (PosixFile *)pFile;
+  static const short aType[3] = { F_UNLCK, F_RDLCK, F_WRLCK };
+  struct flock lock;
+
+  assert( aType[LSM_LOCK_UNLOCK]==F_UNLCK );
+  assert( aType[LSM_LOCK_SHARED]==F_RDLCK );
+  assert( aType[LSM_LOCK_EXCL]==F_WRLCK );
+  assert( eType>=0 && eType<array_size(aType) );
+  assert( iLock>0 && iLock<=16 );
+
+  memset(&lock, 0, sizeof(lock));
+  lock.l_whence = SEEK_SET;
+  lock.l_len = 1;
+  lock.l_type = aType[eType];
+  lock.l_start = (4096-iLock);
+
+  if( fcntl(p->fd, F_SETLK, &lock) ){
+    int e = errno;
+    if( e==EACCES || e==EAGAIN ){
+      rc = LSM_BUSY;
+    }else{
+      rc = LSM_IOERR;
+    }
+  }
+
+  return LSM_OK;
+}
+
+int lsmPosixOsShmMap(lsm_file *pFile, int iChunk, int sz, void **ppShm){
+  PosixFile *p = (PosixFile *)pFile;
+
+  *ppShm = 0;
+  assert( sz==LSM_SHM_CHUNK_SIZE );
+  if( iChunk>=p->nShm ){
+    int i;
+    void **apNew;
+    int nNew = iChunk+1;
+    off_t nReq = nNew * LSM_SHM_CHUNK_SIZE;
+    struct stat sStat;
+
+    /* If the shared-memory file has not been opened, open it now. */
+    if( p->shmfd<=0 ){
+      char *zShm = posixShmFile(p);
+      if( !zShm ) return LSM_NOMEM_BKPT;
+      p->shmfd = open(zShm, O_RDWR|O_CREAT, 0644);
+      lsmFree(p->pEnv, zShm);
+      if( p->shmfd<0 ){ 
+        return LSM_IOERR_BKPT;
+      }
+    }
+
+    /* If the shared-memory file is not large enough to contain the 
+    ** requested chunk, cause it to grow.  */
+    if( fstat(p->shmfd, &sStat) ){
+      return LSM_IOERR_BKPT;
+    }
+    if( sStat.st_size<nReq ){
+      if( ftruncate(p->shmfd, nReq) ){
+        return LSM_IOERR_BKPT;
+      }
+    }
+
+    apNew = (void **)lsmRealloc(p->pEnv, p->apShm, sizeof(void *) * nNew);
+    if( !apNew ) return LSM_NOMEM_BKPT;
+    for(i=p->nShm; i<nNew; i++){
+      apNew[i] = 0;
+    }
+    p->apShm = apNew;
+    p->nShm = nNew;
+  }
+
+  if( p->apShm[iChunk]==0 ){
+    p->apShm[iChunk] = mmap(0, LSM_SHM_CHUNK_SIZE, 
+        PROT_READ|PROT_WRITE, MAP_SHARED, p->shmfd, iChunk*LSM_SHM_CHUNK_SIZE
+    );
+    if( p->apShm[iChunk]==0 ) return LSM_IOERR;
+  }
+
+  *ppShm = p->apShm[iChunk];
+  return LSM_OK;
+}
+
+void lsmPosixOsShmBarrier(void){
+}
+
+int lsmPosixOsShmUnmap(lsm_file *pFile, int bDelete){
+  PosixFile *p = (PosixFile *)pFile;
+  if( p->shmfd>0 ){
+    int i;
+    for(i=0; i<p->nShm; i++){
+      if( p->apShm[i] ){
+        munmap(p->apShm[i], LSM_SHM_CHUNK_SIZE);
+        p->apShm[i] = 0;
+      }
+    }
+    close(p->shmfd);
+    p->shmfd = 0;
+    if( bDelete ){
+      char *zShm = posixShmFile(p);
+      if( zShm ) unlink(zShm);
+    }
+  }
+  return LSM_OK;
+}
+
+
 static int lsmPosixOsClose(lsm_file *pFile){
    PosixFile *p = (PosixFile *)pFile;
+   lsmPosixOsShmUnmap(pFile, 0);
    if( p->pMap ) munmap(p->pMap, p->nMap);
    close(p->fd);
    lsm_free(p->pEnv, p);
    return LSM_OK;
-}
-
-static int lsmPosixOsUnlink(lsm_env *pEnv, const char *zFile){
-  int prc = unlink(zFile);
-  return prc ? LSM_IOERR_BKPT : LSM_OK;
 }
 
 /****************************************************************************
@@ -532,6 +656,10 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsFileid,        /* xFileid */
     lsmPosixOsClose,         /* xClose */
     lsmPosixOsUnlink,        /* xUnlink */
+    lsmPosixOsLock,          /* xLock */
+    lsmPosixOsShmMap,        /* xShmMap */
+    lsmPosixOsShmBarrier,    /* xShmBarrier */
+    lsmPosixOsShmUnmap,      /* xShmUnmap */
     /***** memory allocation *********/
     0,                       /* pMemCtx */
     lsmPosixOsMalloc,        /* xMalloc */

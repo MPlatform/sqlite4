@@ -264,7 +264,7 @@ struct MultiCursor {
   Snapshot *pSnap;
 
   /* Used by cursors flushing the in-memory tree only */
-  int nLsmLevel;                  /* Number of levels to store in LSM */
+  int *pnOvfl;                    /* Number of free-list entries to store */
   void *pSystemVal;               /* Pointer to buffer to free */
 };
 
@@ -288,10 +288,6 @@ struct MultiCursor {
 **   This flag is set when sub-cursor CURSOR_DATA_SYSTEM is actually
 **   pointing at a free list.
 **
-** CURSOR_AT_LEVELS
-**   This flag is set when sub-cursor CURSOR_DATA_SYSTEM is actually
-**   pointing at a free list.
-**
 ** CURSOR_IGNORE_SYSTEM
 **   If set, this cursor ignores system keys.
 **
@@ -304,7 +300,6 @@ struct MultiCursor {
 #define CURSOR_IGNORE_DELETE    0x00000001
 #define CURSOR_NEW_SYSTEM       0x00000002
 #define CURSOR_AT_FREELIST      0x00000004
-#define CURSOR_AT_LEVELS        0x00000008
 #define CURSOR_IGNORE_SYSTEM    0x00000010
 #define CURSOR_NEXT_OK          0x00000020
 #define CURSOR_PREV_OK          0x00000040
@@ -489,6 +484,15 @@ static u8 *pageGetCell(u8 *aData, int nData, int iCell){
 }
 
 /*
+** Return the number of cells on page pPg.
+*/
+static int pageObjGetNRec(Page *pPg){
+  int nData;
+  u8 *aData = lsmFsPageData(pPg, &nData);
+  return pageGetNRec(aData, nData);
+}
+
+/*
 ** Return the decoded (possibly relative) pointer value stored in cell 
 ** iCell from page aData/nData.
 */
@@ -569,6 +573,7 @@ static int pageGetBtreeKey(
 
   aData = fsPageData(pPg, &nData);
   assert( SEGMENT_BTREE_FLAG & pageGetFlags(aData, nData) );
+  assert( iKey>=0 && iKey<pageGetNRec(aData, nData) );
 
   aCell = pageGetCell(aData, nData, iKey);
   eType = *aCell++;
@@ -601,12 +606,21 @@ static int btreeCursorLoadKey(BtreeCursor *pCsr){
     pCsr->nKey = 0;
     pCsr->eType = 0;
   }else{
-    int dummy;
-    rc = pageGetBtreeKey(
-        pCsr->aPg[pCsr->iPg].pPage, pCsr->aPg[pCsr->iPg].iCell,
-        &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
-    );
-    pCsr->eType |= SORTED_SEPARATOR;
+    int iPg;
+    for(iPg=pCsr->iPg; iPg>=0; iPg--){
+      int iCell = pCsr->aPg[pCsr->iPg].iCell;
+      if( iCell>=0 ){
+        int dummy;
+        rc = pageGetBtreeKey(
+            pCsr->aPg[pCsr->iPg].pPage, pCsr->aPg[pCsr->iPg].iCell,
+            &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
+        );
+        pCsr->eType |= SORTED_SEPARATOR;
+        break;
+      }
+    }
+
+    if( iPg<0 ) rc = LSM_CORRUPT_BKPT;
   }
 
   return rc;
@@ -826,13 +840,23 @@ static int btreeCursorRestore(
       int nSeek;
       int iTopicSeek;
       int dummy;
-
       int iPg = 0;
       int iLoad = pCsr->pSeg->iRoot;
-
-      rc = pageGetBtreeKey(pCsr->aPg[nDepth-1].pPage, 
-          0, &dummy, &iTopicSeek, &pSeek, &nSeek, &pCsr->blob
-      );
+      Page *pPg = pCsr->aPg[nDepth-1].pPage;
+ 
+      if( pageObjGetNRec(pPg)==0 ){
+        /* This can happen when pPg is the right-most leaf in the b-tree.
+        ** In this case, set the iTopicSeek/pSeek/nSeek key to a value
+        ** greater than any real key.  */
+        assert( iCell==-1 );
+        iTopicSeek = 1000;
+        pSeek = 0;
+        nSeek = 0;
+      }else{
+        rc = pageGetBtreeKey(pPg,
+            0, &dummy, &iTopicSeek, &pSeek, &nSeek, &pCsr->blob
+        );
+      }
 
       do {
         Page *pPg;
@@ -1100,6 +1124,10 @@ static int levelCursorInit(
     for(i=0; i<pLevel->nRight; i++){
       pCsr->aPtr[i+1].pSeg = &pLevel->aRhs[i];
     }
+  }
+
+  if( nPtr>1 && pLevel->pSplitKey==0 ){
+    lsmSortedSplitkey(pDb, pLevel, &rc);
   }
 
   return rc;
@@ -1543,8 +1571,10 @@ static int segmentCursorPtrCmp(
   }else if( pRight->pPg==0 ){
     iRet = 0;
   }else{
-    int res = pCsr->xCmp(pLeft->pKey, pLeft->nKey, pRight->pKey, pRight->nKey);
-
+    int res = rtTopic(pLeft->eType) - rtTopic(pRight->eType);
+    if( res==0 ){
+      res = pCsr->xCmp(pLeft->pKey, pLeft->nKey, pRight->pKey, pRight->nKey);
+    }
     if( res==0 || (res<0 && bLargest==0) || (res>0 && bLargest) ){
       iRet = 0;
     }else{
@@ -1975,7 +2005,6 @@ static int multiCursorNew(
 
   if( rc==LSM_OK ){
     if( useTree ){
-      assert( pDb->pTV );
       rc = lsmTreeCursorNew(pDb, &pCsr->pTreeCsr);
     }
     pCsr->pDb = pDb;
@@ -2028,8 +2057,9 @@ static void multiCursorIgnoreDelete(MultiCursor *pCsr){
 ** with (a) the system bit set, and (b) the key "F" and (c) a value blob
 ** containing the entire serialized free-block list.
 */
-static void multiCursorVisitFreelist(MultiCursor *pCsr){
+static void multiCursorVisitFreelist(MultiCursor *pCsr, int *pnOvfl){
   assert( pCsr );
+  pCsr->pnOvfl = pnOvfl;
   pCsr->flags |= CURSOR_NEW_SYSTEM;
 }
 
@@ -2118,11 +2148,6 @@ static void multiCursorGetKey(
         nKey = 8;
         eType = SORTED_SYSTEM_WRITE;
       }
-      else if( pCsr->flags & CURSOR_AT_LEVELS ){
-        pKey = (void *)"LEVELS";
-        nKey = 6;
-        eType = SORTED_SYSTEM_WRITE;
-      }
       break;
 
     default: {
@@ -2160,17 +2185,13 @@ static int multiCursorGetVal(
     }
   }else if( iVal==CURSOR_DATA_SYSTEM ){
     if( pCsr->flags & CURSOR_AT_FREELIST ){
-      int *aVal;
+      void *aVal;
       int nVal;
+
       assert( pCsr->pSystemVal==0 );
-      rc = lsmSnapshotFreelist(pCsr->pDb, &aVal, &nVal);
-      pCsr->pSystemVal = *ppVal = (void *)aVal;
-      *pnVal = sizeof(int) * nVal;
-      lsmFreelistDeltaBegin(pCsr->pDb);
-    }else if( (pCsr->flags & CURSOR_AT_LEVELS) && pCsr->nLsmLevel>0 ){
-      lsmFree(pCsr->pDb->pEnv, pCsr->pSystemVal);
-      lsmCheckpointLevels(pCsr->pDb, pCsr->nLsmLevel, ppVal, pnVal);
-      pCsr->pSystemVal = *ppVal;
+      rc = lsmCheckpointOverflow(pCsr->pDb, &aVal, &nVal, pCsr->pnOvfl);
+      *ppVal = pCsr->pSystemVal = aVal;
+      *pnVal = nVal;
     }else{
       *ppVal = 0;
       *pnVal = 0;
@@ -2187,44 +2208,39 @@ static int multiCursorGetVal(
   return rc;
 }
 
-int lsmSortedLoadSystem(lsm_db *pDb){
+int lsmSortedLoadFreelist(
+  lsm_db *pDb,                    /* Database handle (must be worker) */
+  void **ppVal,                   /* OUT: Blob containing LSM free-list */
+  int *pnVal                      /* OUT: Size of *ppVal blob in bytes */
+){
   MultiCursor *pCsr = 0;          /* Cursor used to retreive free-list */
   int rc;                         /* Return Code */
 
   assert( pDb->pWorker );
+  assert( *ppVal==0 && *pnVal==0 );
+
   rc = multiCursorAllocate(pDb, 1, &pCsr);
   if( rc==LSM_OK ){
-    void *pVal; int nVal;         /* Value read from database */
-
     rc = lsmMCursorLast(pCsr);
-    if( rc==LSM_OK 
-     && pCsr->eType==SORTED_SYSTEM_WRITE 
-     && pCsr->key.nData==6 
-     && 0==memcmp(pCsr->key.pData, "LEVELS", 6)
-    ){
-      rc = lsmMCursorValue(pCsr, &pVal, &nVal);
-      if( rc==LSM_OK ){
-        rc = lsmCheckpointLoadLevels(pDb, pVal, nVal);
-      }
-      if( rc==LSM_OK ){
-        rc = lsmMCursorPrev(pCsr);
-      }
-    }
-
     if( rc==LSM_OK 
      && pCsr->eType==SORTED_SYSTEM_WRITE 
      && pCsr->key.nData==8 
      && 0==memcmp(pCsr->key.pData, "FREELIST", 8)
     ){
+      void *pVal; int nVal;         /* Value read from database */
       rc = lsmMCursorValue(pCsr, &pVal, &nVal);
       if( rc==LSM_OK ){
-        int n32 = nVal / sizeof(u32);
-        rc = lsmSnapshotSetFreelist(pDb, (int *)pVal, n32);
+        *ppVal = lsmMallocRc(pDb->pEnv, nVal, &rc);
+        if( *ppVal ){
+          memcpy(*ppVal, pVal, nVal);
+          *pnVal = nVal;
+        }
       }
     }
 
     lsmMCursorClose(pCsr);
   }
+
   return rc;
 }
 
@@ -2427,7 +2443,6 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
 
   assert( (pCsr->flags & CURSOR_NEW_SYSTEM)==0 );
   assert( (pCsr->flags & CURSOR_AT_FREELIST)==0 );
-  assert( (pCsr->flags & CURSOR_AT_LEVELS)==0 );
 
   pCsr->flags &= ~(CURSOR_NEXT_OK | CURSOR_PREV_OK);
   lsmTreeCursorSeek(pCsr->pTreeCsr, pKey, nKey, &res);
@@ -2556,16 +2571,10 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
           rc = lsmTreeCursorNext(pCsr->pTreeCsr);
         }
       }else if( iKey==CURSOR_DATA_SYSTEM ){
-        assert( pCsr->flags & (CURSOR_AT_FREELIST | CURSOR_AT_LEVELS) );
+        assert( pCsr->flags & CURSOR_AT_FREELIST );
         assert( pCsr->flags & CURSOR_NEW_SYSTEM );
         assert( bReverse==0 );
-
-        if( pCsr->flags & CURSOR_AT_FREELIST ){
-          pCsr->flags &= ~CURSOR_AT_FREELIST;
-          pCsr->flags |= CURSOR_AT_LEVELS;
-        }else{
-          pCsr->flags &= ~CURSOR_AT_LEVELS;
-        }
+        pCsr->flags &= ~CURSOR_AT_FREELIST;
       }else if( iKey==(CURSOR_DATA_SEGMENT+pCsr->nSegCsr) ){
         assert( bReverse==0 && pCsr->pBtCsr );
         rc = btreeCursorNext(pCsr->pBtCsr);
@@ -3443,6 +3452,7 @@ static int mergeWorkerDone(MergeWorker *pMW){
 
 static void sortedFreeLevel(lsm_env *pEnv, Level *p){
   if( p ){
+    lsmFree(pEnv, p->pSplitKey);
     lsmFree(pEnv, p->pMerge);
     lsmFree(pEnv, p->aRhs);
     lsmFree(pEnv, p);
@@ -3455,10 +3465,10 @@ static void sortedInvokeWorkHook(lsm_db *pDb){
   }
 }
 
-int lsmSortedNewToplevel(
+static int sortedNewToplevel(
   lsm_db *pDb,                    /* Connection handle */
-  int nLevel,                     /* Number of levels store in LSM (often 0) */
-  int bFreelist                   /* True to store the freelist in the LSM */
+  int bTree,                      /* True to store contents of in-memory tree */
+  int *pnOvfl                     /* OUT: Number of free-list entries stored */
 ){
   int rc = LSM_OK;                /* Return Code */
   MultiCursor *pCsr = 0;
@@ -3466,6 +3476,8 @@ int lsmSortedNewToplevel(
   Level *pNew;                    /* The new level itself */
   Segment *pDel = 0;              /* Delete separators from this segment */
   int iLeftPtr = 0;
+
+  assert( pnOvfl );
 
   /* Allocate the new level structure to write to. */
   pNext = lsmDbSnapshotLevel(pDb->pWorker);
@@ -3475,11 +3487,11 @@ int lsmSortedNewToplevel(
   ** segment contains everything in the tree and pointers to the next segment
   ** in the database (if any).  */
   if( rc==LSM_OK ){
-
-    pNew->pNext = pNext;
-    lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
-
-    rc = multiCursorNew(pDb, pDb->pWorker, (pDb->pTV!=0), 0, &pCsr);
+    rc = multiCursorNew(pDb, pDb->pWorker, bTree, 0, &pCsr);
+    if( rc==LSM_OK ){
+      pNew->pNext = pNext;
+      lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
+    }
     if( rc==LSM_OK ){
       if( pNext ){
         assert( pNext->pMerge==0 || pNext->nRight>0 );
@@ -3500,12 +3512,8 @@ int lsmSortedNewToplevel(
     }
 
     if( rc==LSM_OK ){
-      assert( bFreelist || nLevel==0 );
-      if( bFreelist ){
-        multiCursorVisitFreelist(pCsr);
-      }
+      multiCursorVisitFreelist(pCsr, pnOvfl);
       multiCursorReadSeparators(pCsr);
-      pCsr->nLsmLevel = nLevel;
     }
   }
 
@@ -3538,7 +3546,6 @@ int lsmSortedNewToplevel(
     mergeWorkerShutdown(&mergeworker, &rc);
     pNew->pMerge = 0;
   }
-  lsmFreelistDeltaEnd(pDb);
 
   /* Link the new level into the top of the tree. */
   if( rc==LSM_OK ){
@@ -3573,35 +3580,24 @@ int lsmSortedNewToplevel(
 */
 int lsmSortedFlushTree(
   lsm_db *pDb,                    /* Connection handle */
-  int nLevel,
-  int bFreelist
+  int *pnOvfl                     /* OUT: Number of free-list entries written */
 ){
   int rc;
 
   assert( pDb->pWorker );
-  assert( pDb->pTV==0 || lsmTreeIsWriteVersion(pDb->pTV) );
-
-  rc = lsmBeginFlush(pDb);
 
   /* If there is nothing to do, return early. */
-  if( lsmTreeSize(pDb->pTV)==0 && bFreelist==0 ){
-    lsmFinishFlush(pDb, 0);
+  if( lsmTreeSize(pDb)==0 && lsmCheckpointOverflowRequired(pDb)==0 ){
+    *pnOvfl = 0;
     return LSM_OK;
   }
 
-  lsmDatabaseDirty(pDb);
-
-  if( rc==LSM_OK ){
-    rc = lsmSortedNewToplevel(pDb, nLevel, bFreelist);
-  }
-
-#if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "tree flush");
-#endif
-
+  rc = sortedNewToplevel(pDb, 1, pnOvfl);
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
 
-  lsmFinishFlush(pDb, rc==LSM_OK);
+#if 0
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "tree flush");
+#endif
   return rc;
 }
 
@@ -3645,7 +3641,7 @@ static int sortedMergeSetup(
     for(i=0; i<nMerge; i++){
       pNext = p->pNext;
       pNew->aRhs[i] = p->lhs;
-      lsmFree(pDb->pEnv, p);
+      sortedFreeLevel(pDb->pEnv, p);
       p = pNext;
     }
 
@@ -3800,7 +3796,6 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
   assert( pWorker );
 
   if( lsmDbSnapshotLevel(pWorker)==0 ) return LSM_OK;
-  lsmDatabaseDirty(pDb);
 
   while( nRemaining>0 ){
     Level *pLevel;
@@ -3941,7 +3936,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
 #endif
 
     }
@@ -4038,16 +4033,16 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   int rc = LSM_OK;                /* Return code */
 
   /* This function may not be called if pDb has an open read or write
-  ** transaction. Return LSM_MISUSE if an application attempts this.  
-  */
+  ** transaction. Return LSM_MISUSE if an application attempts this.  */
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
-  assert( pDb->pTV==0 );
 
+  /* If the FLUSH flag is set, try to flush the contents of the in-memory
+  ** tree to disk.  */
   if( (flags & LSM_WORK_FLUSH) ){
     rc = lsmBeginWriteTrans(pDb);
     if( rc==LSM_OK ){
       rc = lsmFlushToDisk(pDb);
-      lsmFinishWriteTrans(pDb, 0);
+      lsmFinishWriteTrans(pDb, 1);
       lsmFinishReadTrans(pDb);
     }
   }
@@ -4055,21 +4050,29 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   if( rc==LSM_OK && nPage>0 ){
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
     int nWrite = 0;
-    pDb->pWorker = lsmDbSnapshotWorker(pDb);
-    rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
+    int nOvfl = -1;
 
-    if( rc==LSM_OK && nWrite && (flags & LSM_WORK_CHECKPOINT) ){
-      int bOvfl;
-      int nLsm;
-
-      bOvfl = lsmCheckpointOverflow(pDb, &nLsm);
-      rc = lsmSortedFlushDb(pDb);
-      if( rc==LSM_OK && bOvfl ) rc = lsmSortedNewToplevel(pDb, nLsm, bOvfl);
-      if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nLsm, bOvfl);
+    assert( pDb->pWorker==0 );
+    rc = lsmBeginWork(pDb);
+    if( rc==LSM_OK ){
+      rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
     }
 
-    lsmDbSnapshotRelease(pDb->pEnv, pDb->pWorker);
-    pDb->pWorker = 0;
+    if( rc==LSM_OK && nWrite ){
+      rc = lsmSortedFlushDb(pDb);
+      if( rc==LSM_OK && lsmCheckpointOverflowRequired(pDb) ){
+        rc = sortedNewToplevel(pDb, 0, &nOvfl);
+      }
+    }
+
+    if( nWrite ){
+      lsmFinishWork(pDb, 0, nOvfl, &rc);
+    }else{
+      int rcdummy = LSM_BUSY;
+      lsmFinishWork(pDb, 0, 0, &rcdummy);
+    }
+
+    assert( pDb->pWorker==0 );
     if( pnWrite ) *pnWrite = nWrite;
   }else if( pnWrite ){
     *pnWrite = 0;
@@ -4276,15 +4279,21 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
   Page *pPg = 0;                  /* Handle for page iPg */
   int i, j;                       /* Loop counters */
   const int perLine = 16;         /* Bytes per line in the raw hex dump */
+  int bEndWork = 0;
 
   *pzOut = 0;
   if( iPg==0 ) return LSM_ERROR;
 
   /* Obtain the worker snapshot */
+#if 0
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
+    rc = lsmBeginWork(pDb);
+    if( rc!=LSM_OK ) return rc;
+    pWorker = pDb->pWorker;
+    bEndWork = 1;
   }
+#endif
 
   rc = lsmFsDbPageGet(pDb->pFS, iPg, &pPg);
   if( rc==LSM_OK ){
@@ -4373,7 +4382,6 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
     lsmFsPageRelease(pPg);
   }
 
-  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
   return rc;
 }
 
@@ -4412,11 +4420,7 @@ void lsmSortedDumpStructure(
   Snapshot *pDump = pSnap;
   Level *pTopLevel;
 
-  if( pDump==0 ){
-    assert( pDb->pWorker==0 );
-    pDump = lsmDbSnapshotWorker(pDb);
-  }
-
+  assert( pSnap );
   pTopLevel = lsmDbSnapshotLevel(pDump);
   if( pDb->xLog && pTopLevel ){
     Level *pLevel;
@@ -4482,10 +4486,6 @@ void lsmSortedDumpStructure(
         }
       }
     }
-  }
-
-  if( pSnap==0 ){
-    lsmDbSnapshotRelease(pDb->pEnv, pDump);
   }
 }
 

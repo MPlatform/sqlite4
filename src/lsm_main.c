@@ -41,10 +41,7 @@ static void assert_db_state(lsm_db *pDb){
   ** not be a client snapshot.  */
   assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->pClient!=0) );
 
-  /* If there is a write transaction open according to pDb->nTransOpen, then
-  ** the connection must be holding the read/write TreeVersion.  */
   assert( pDb->nTransOpen>=0 );
-  assert( pDb->nTransOpen==0 || lsmTreeIsWriteVersion(pDb->pTV) );
 }
 #else
 # define assert_db_state(x) 
@@ -84,25 +81,16 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nDfltPgsz = LSM_PAGE_SIZE;
   pDb->nDfltBlksz = LSM_BLOCK_SIZE;
   pDb->nMerge = LSM_DEFAULT_NMERGE;
+  pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
   pDb->bUseLog = 1;
-
+  pDb->iReader = -1;
+  pDb->bMultiProc = 1;
   return LSM_OK;
 }
 
 lsm_env *lsm_get_env(lsm_db *pDb){
   assert( pDb->pEnv );
   return pDb->pEnv;
-}
-
-/*
-** Release snapshot handle *ppSnap. Then set *ppSnap to zero. This
-** is useful for doing (say):
-**
-**   dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
-*/
-static void dbReleaseSnapshot(lsm_env *pEnv, Snapshot **ppSnap){
-  lsmDbSnapshotRelease(pEnv, *ppSnap);
-  *ppSnap = 0;
 }
 
 /*
@@ -115,16 +103,6 @@ static void dbReleaseClientSnapshot(lsm_db *pDb){
   }
 }
 
-static void dbWorkerStart(lsm_db *pDb){
-  assert( pDb->pWorker==0 );
-  pDb->pWorker = lsmDbSnapshotWorker(pDb);
-}
-
-static void dbWorkerDone(lsm_db *pDb){
-  assert( pDb->pWorker );
-  dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
-}
-
 static int dbAutoWork(lsm_db *pDb, int nUnit){
   int rc = LSM_OK;                /* Return code */
 
@@ -133,61 +111,18 @@ static int dbAutoWork(lsm_db *pDb, int nUnit){
   assert( nUnit>0 );
 
   /* If one is required, run a checkpoint. */
+#if 0
   rc = lsmCheckpointWrite(pDb);
+#endif
 
-  dbWorkerStart(pDb);
-  rc = lsmSortedAutoWork(pDb, nUnit);
-  dbWorkerDone(pDb);
-
-  return rc;
-}
-
-/*
-** If required, run the recovery procedure to initialize the database.
-** Return LSM_OK if successful or an error code otherwise.
-*/
-static int dbRecoverIfRequired(lsm_db *pDb){
-  int rc = LSM_OK;
-
-  assert( pDb->pWorker==0 && pDb->pClient==0 );
-
-  /* The following call returns NULL if recovery is not required. */
-  pDb->pWorker = lsmDbSnapshotRecover(pDb);
-  if( pDb->pWorker ){
-    int bOvfl;
-    int iSlot;
-
-    /* Read the database structure */
-    rc = lsmCheckpointRead(pDb, &iSlot, &bOvfl);
-
-    /* Read the free block list and any level records stored in the LSM. */
-    if( rc==LSM_OK && bOvfl ){
-      rc = lsmSortedLoadSystem(pDb);
-    }
-
-    /* Set up the initial append list */
-    if( rc==LSM_OK ){
-      rc = lsmFsSetupAppendList(pDb);
-    }
-
-    /* Populate the in-memory tree by reading the log file. */
-    if( rc==LSM_OK ){
-      rc = lsmLogRecover(pDb);
-    }
-
-    /* Set the "recovery done" flag */
-    if( rc==LSM_OK ){
-      lsmDbRecoveryComplete(pDb, iSlot);
-    }
-
-    /* Set up the initial client snapshot. */
-    if( rc==LSM_OK ){
-      rc = lsmDbUpdateClient(pDb, 0, 0);
-    }
-
-    dbReleaseSnapshot(pDb->pEnv, &pDb->pWorker);
+  rc = lsmBeginWork(pDb);
+  if( rc==LSM_OK ) rc = lsmSortedAutoWork(pDb, nUnit);
+  if( pDb->pWorker && pDb->pWorker->pLevel ){
+    lsmFinishWork(pDb, 0, -1, &rc);
+  }else{
+    int rcdummy = LSM_BUSY;
+    lsmFinishWork(pDb, 0, 0, &rcdummy);
   }
-
   return rc;
 }
 
@@ -238,18 +173,23 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     rc = getFullpathname(pDb->pEnv, zFilename, &zFull);
     assert( rc==LSM_OK || zFull==0 );
 
-    /* Open the database file */
+    /* Open the database file. */
     if( rc==LSM_OK ){
       rc = lsmFsOpen(pDb, zFull);
     }
 
-    /* Open the shared data handle. */
+    /* Connect to the database */
     if( rc==LSM_OK ){
-      rc = lsmDbDatabaseFind(pDb, zFilename);
+      rc = lsmDbDatabaseConnect(pDb, zFilename);
     }
 
-    if( rc==LSM_OK ){
-      rc = dbRecoverIfRequired(pDb);
+    /* Configure the file-system connection with the page-size and block-size
+    ** of this database. Even if the database file is zero bytes in size
+    ** on disk, these values have been set in shared-memory by now, and so are
+    ** guaranteed not to change during the lifetime of this connection.  */
+    if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb)) ){
+      lsmFsSetPageSize(pDb->pFS, lsmCheckpointPgsz(pDb->aSnapshot));
+      lsmFsSetBlockSize(pDb->pFS, lsmCheckpointBlksz(pDb->aSnapshot));
     }
 
     lsmFree(pDb->pEnv, zFull);
@@ -264,48 +204,50 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
 */
 int lsmFlushToDisk(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
-  int nLsmLevel;
-  int bOvfl;
+  int nOvfl = 0;                  /* Number of free-list entries in LSM */
 
   /* Must not hold the worker snapshot when this is called. */
   assert( pDb->pWorker==0 );
-  dbWorkerStart(pDb);
+  rc = lsmBeginWork(pDb);
 
   /* Save the position of each open cursor belonging to pDb. */
-  rc = lsmSaveCursors(pDb);
+  if( rc==LSM_OK ){
+    rc = lsmSaveCursors(pDb);
+  }
 
-  bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
   if( rc==LSM_OK && pDb->bAutowork ){
     rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
-    bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
+  }
+  while( rc==LSM_OK && lsmDatabaseFull(pDb) ){
+    rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
   }
 
   /* Write the contents of the in-memory tree into the database file and 
   ** update the worker snapshot accordingly. Then flush the contents of 
   ** the db file to disk too. No calls to fsync() are made here - just 
   ** write().  */
-  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
-#if 0
-  if( rc==LSM_OK && bAutowork ){
-    assert( bOvfl==0 && nLsmLevel==0 );
-    rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
-    bOvfl = lsmCheckpointOverflow(pDb, &nLsmLevel);
-    if( bOvfl && rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, nLsmLevel, bOvfl);
-  }
-#endif
-  if( rc==LSM_OK ) rc = lsmSortedFlushDb(pDb);
+  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, &nOvfl);
+  if( rc==LSM_OK ) lsmTreeClear(pDb);
 
-  /* Create a new client snapshot - one that uses the new runs created above. */
-  if( rc==LSM_OK ) rc = lsmDbUpdateClient(pDb, nLsmLevel, bOvfl);
+  lsmFinishWork(pDb, 1, nOvfl, &rc);
 
   /* Restore the position of any open cursors */
-  if( rc==LSM_OK ) rc = lsmRestoreCursors(pDb);
+  if( rc==LSM_OK && pDb->pCsr ){
+    lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
+    pDb->pClient = 0;
+    rc = lsmCheckpointLoad(pDb);
+    if( rc==LSM_OK ){
+      rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot, &pDb->pClient);
+    }
+    if( rc==LSM_OK ){
+      rc = lsmRestoreCursors(pDb);
+    }
+  }
 
 #if 0
   if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "flush");
 #endif
 
-  dbWorkerDone(pDb);
   return rc;
 }
 
@@ -316,7 +258,6 @@ int lsm_close(lsm_db *pDb){
     if( pDb->pCsr || pDb->nTransOpen ){
       rc = LSM_MISUSE_BKPT;
     }else{
-      assert( pDb->pWorker==0 && pDb->pTV==0 );
       lsmDbDatabaseRelease(pDb);
       lsmFsClose(pDb->pFS);
       lsmFree(pDb->pEnv, pDb->aTrans);
@@ -424,6 +365,28 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
       break;
     }
 
+    case LSM_CONFIG_MAX_FREELIST: {
+      int *piVal = va_arg(ap, int *);
+      if( *piVal>=2 && *piVal<=LSM_MAX_FREELIST_ENTRIES ){
+        pDb->nMaxFreelist = *piVal;
+      }
+      *piVal = pDb->nMaxFreelist;
+      break;
+    }
+
+    case LSM_CONFIG_MULTIPLE_PROCESSES: {
+      int *piVal = va_arg(ap, int *);
+      if( pDb->pDatabase ){
+        /* If lsm_open() has been called, this is a read-only parameter. 
+        ** Set the output variable to true if this connection is currently
+        ** in multi-process mode.  */
+        *piVal = lsmDbMultiProc(pDb);
+      }else{
+        pDb->bMultiProc = *piVal = (*piVal!=0);
+      }
+      break;
+    }
+
     default:
       rc = LSM_MISUSE;
       break;
@@ -448,12 +411,15 @@ int lsmStructList(
   Level *p;
   LsmString s;
   Snapshot *pWorker;              /* Worker snapshot */
-  Snapshot *pRelease = 0;         /* Snapshot to release */
+  int bUnlock = 0;
 
   /* Obtain the worker snapshot */
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
+    rc = lsmBeginWork(pDb);
+    if( rc!=LSM_OK ) return rc;
+    pWorker = pDb->pWorker;
+    bUnlock = 1;
   }
 
   /* Format the contents of the snapshot as text */
@@ -471,7 +437,10 @@ int lsmStructList(
   rc = s.n>=0 ? LSM_OK : LSM_NOMEM;
 
   /* Release the snapshot and return */
-  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
+  if( bUnlock ){
+    int rcdummy = LSM_BUSY;
+    lsmFinishWork(pDb, 0, 0, &rcdummy);
+  }
   *pzOut = s.z;
   return rc;
 }
@@ -547,7 +516,6 @@ int lsm_write(
   }
 
   if( rc==LSM_OK ){
-    assert( pDb->pTV && lsmTreeIsWriteVersion(pDb->pTV) );
     rc = lsmLogWrite(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
   }
 
@@ -564,10 +532,9 @@ int lsm_write(
       nQuant = pDb->nTreeLimit;
     }
 
-    nBefore = lsmTreeSize(pDb->pTV);
+    nBefore = lsmTreeSize(pDb);
     rc = lsmTreeInsert(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
-    nAfter = lsmTreeSize(pDb->pTV);
-
+    nAfter = lsmTreeSize(pDb);
     nDiff = (nAfter/nQuant) - (nBefore/nQuant);
     if( rc==LSM_OK && pDb->bAutowork && nDiff!=0 ){
       rc = dbAutoWork(pDb, nDiff * LSM_AUTOWORK_QUANT);
@@ -741,7 +708,7 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 
     if( rc==LSM_OK ){
       for(i=pDb->nTransOpen; i<iLevel; i++){
-        lsmTreeMark(pDb->pTV, &pDb->aTrans[i].tree);
+        lsmTreeMark(pDb, &pDb->aTrans[i].tree);
         lsmLogTell(pDb, &pDb->aTrans[i].log);
       }
       pDb->nTransOpen = iLevel;
@@ -752,6 +719,7 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 }
 
 int lsm_commit(lsm_db *pDb, int iLevel){
+  int bFlush = 0;
   int rc = LSM_OK;
 
   assert_db_state( pDb );
@@ -761,8 +729,11 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
   if( iLevel<pDb->nTransOpen ){
     if( iLevel==0 ){
+
       /* Commit the transaction to disk. */
-      if( pDb->pTV && lsmTreeSize(pDb->pTV)>pDb->nTreeLimit ){
+      if( lsmTreeSize(pDb)>pDb->nTreeLimit ){
+        lsmTreeEndTransaction(pDb, 1);
+        bFlush = 1;
         rc = lsmFlushToDisk(pDb);
       }
       if( rc==LSM_OK ) rc = lsmLogCommit(pDb);
@@ -774,7 +745,11 @@ int lsm_commit(lsm_db *pDb, int iLevel){
     }
     pDb->nTransOpen = iLevel;
   }
+
   dbReleaseClientSnapshot(pDb);
+  if( pDb->bAutowork && bFlush && rc==LSM_OK ){
+    rc = lsmCheckpointWrite(pDb);
+  }
   return rc;
 }
 

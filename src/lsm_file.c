@@ -33,7 +33,8 @@
 **   It is assumed that the first two meta pages and the data that follows
 **   them are located on different disk sectors. So that if a power failure 
 **   while writing to a meta page there is no risk of damage to the other
-**   meta page or any other part of the database file.
+**   meta page or any other part of the database file. TODO: This may need
+**   to be revisited.
 **
 ** Blocks:
 **
@@ -43,7 +44,7 @@
 **
 **   The first and last page on each block are special in that they are 4 
 **   bytes smaller than all other pages. This is because the last four bytes 
-**   of space on the first and last pages of each block are reserved for a 
+**   of space on the first and last pages of each block are reserved for
 **   pointers to other blocks (i.e. a 32-bit block number).
 **
 ** Runs:
@@ -77,6 +78,7 @@
 ** functions that are used by the code in lsm_log.c to read and write the
 ** log file:
 **
+**     lsmFsOpenLog
 **     lsmFsWriteLog
 **     lsmFsSyncLog
 **     lsmFsReadLog
@@ -113,11 +115,13 @@ struct FileSystem {
   lsm_db *pDb;                    /* Database handle that owns this object */
   lsm_env *pEnv;                  /* Environment pointer */
   char *zDb;                      /* Database file name */
+  char *zLog;                     /* Database file name */
   int nMetasize;                  /* Size of meta pages in bytes */
   int nPagesize;                  /* Database page-size in bytes */
   int nBlocksize;                 /* Database block-size in bytes */
 
   /* r/w file descriptors for both files. */
+  LsmFile *pLsmFile;
   lsm_file *fdDb;                 /* Database file */
   lsm_file *fdLog;                /* Log file */
 
@@ -193,7 +197,7 @@ struct MetaPage {
 **     lsmEnvUnlink()
 **     lsmEnvRemap()
 */
-static int lsmEnvOpen(lsm_env *pEnv, const char *zFile, lsm_file **ppNew){
+int lsmEnvOpen(lsm_env *pEnv, const char *zFile, lsm_file **ppNew){
   return pEnv->xOpen(pEnv, zFile, ppNew);
 }
 static int lsmEnvRead(
@@ -220,7 +224,7 @@ static int lsmEnvSync(lsm_env *pEnv, lsm_file *pFile){
 static int lsmEnvSectorSize(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xSectorSize(pFile);
 }
-static int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
+int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xClose(pFile);
 }
 static int lsmEnvTruncate(lsm_env *pEnv, lsm_file *pFile, lsm_i64 nByte){
@@ -239,11 +243,36 @@ static int lsmEnvRemap(
   return pEnv->xRemap(pFile, szMin, ppMap, pszMap);
 }
 
+int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock){
+  if( pFile==0 ) return LSM_OK;
+  return pEnv->xLock(pFile, iLock, eLock);
+}
+
+int lsmEnvShmMap(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  int iChunk, 
+  int sz, 
+  void **ppOut
+){
+  return pEnv->xShmMap(pFile, iChunk, sz, ppOut);
+}
+
+void lsmEnvShmBarrier(lsm_env *pEnv){
+  return pEnv->xShmBarrier();
+}
+
+void lsmEnvShmUnmap(lsm_env *pEnv, lsm_file *pFile, int bDel){
+  return pEnv->xShmUnmap(pFile, bDel);
+}
+
+
 /*
 ** Write the contents of string buffer pStr into the log file, starting at
 ** offset iOff.
 */
 int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr){
+  assert( pFS->fdLog );
   return lsmEnvWrite(pFS->pEnv, pFS->fdLog, iOff, pStr->z, pStr->n);
 }
 
@@ -251,15 +280,17 @@ int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr){
 ** fsync() the log file.
 */
 int lsmFsSyncLog(FileSystem *pFS){
+  assert( pFS->fdLog );
   return lsmEnvSync(pFS->pEnv, pFS->fdLog);
 }
 
 /*
-** Read nRead bytes of data starting at offset iOff of the log file. Store
-** the results in string buffer pStr.
+** Read nRead bytes of data starting at offset iOff of the log file. Append
+** the results to string buffer pStr.
 */
 int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr){
   int rc;                         /* Return code */
+  assert( pFS->fdLog );
   rc = lsmStringExtend(pStr, nRead);
   if( rc==LSM_OK ){
     rc = lsmEnvRead(pFS->pEnv, pFS->fdLog, iOff, &pStr->z[pStr->n], nRead);
@@ -312,16 +343,26 @@ static lsm_file *fsOpenFile(
 ){
   lsm_file *pFile = 0;
   if( *pRc==LSM_OK ){
-    char *zName;
-    zName = lsmMallocPrintf(pFS->pEnv, "%s%s", pFS->zDb, (bLog ? "-log" : ""));
-    if( !zName ){
-      *pRc = LSM_NOMEM;
-    }else{
-      *pRc = lsmEnvOpen(pFS->pEnv, zName, &pFile);
-    }
-    lsmFree(pFS->pEnv, zName);
+    *pRc = lsmEnvOpen(pFS->pEnv, (bLog ? pFS->zLog : pFS->zDb), &pFile);
   }
   return pFile;
+}
+
+/*
+** If it is not already open, this function opens the log file. It returns
+** LSM_OK if successful (or if the log file was already open) or an LSM
+** error code otherwise.
+**
+** The log file must be opened before any of the following may be called:
+**
+**     lsmFsWriteLog
+**     lsmFsSyncLog
+**     lsmFsReadLog
+*/
+int lsmFsOpenLog(FileSystem *pFS){
+  int rc = LSM_OK;
+  if( 0==pFS->fdLog ){ pFS->fdLog = fsOpenFile(pFS, 1, &rc); }
+  return rc;
 }
 
 /*
@@ -331,31 +372,37 @@ static lsm_file *fsOpenFile(
 int lsmFsOpen(lsm_db *pDb, const char *zDb){
   FileSystem *pFS;
   int rc = LSM_OK;
+  int nDb = strlen(zDb);
+  int nByte;
 
   assert( pDb->pFS==0 );
   assert( pDb->pWorker==0 && pDb->pClient==0 );
 
-  pFS = (FileSystem *)lsmMallocZeroRc(pDb->pEnv, sizeof(FileSystem), &rc);
+  nByte = sizeof(FileSystem) + nDb+1 + nDb+4+1;
+  pFS = (FileSystem *)lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
   if( pFS ){
+    pFS->zDb = (char *)&pFS[1];
+    pFS->zLog = &pFS->zDb[nDb+1];
     pFS->nPagesize = LSM_PAGE_SIZE;
     pFS->nBlocksize = LSM_BLOCK_SIZE;
     pFS->nMetasize = 4 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
 
-    /* Make a copy of the database name. */
-    pFS->zDb = lsmMallocStrdup(pDb->pEnv, zDb);
-    if( pFS->zDb==0 ) rc = LSM_NOMEM;
+    /* Make a copy of the database and log file names. */
+    memcpy(pFS->zDb, zDb, nDb+1);
+    memcpy(pFS->zLog, zDb, nDb);
+    memcpy(&pFS->zLog[nDb], "-log", 5);
 
     /* Allocate the hash-table here. At some point, it should be changed
     ** so that it can grow dynamicly. */
     pFS->nCacheMax = 2048;
     pFS->nHash = 4096;
     pFS->apHash = lsmMallocZeroRc(pDb->pEnv, sizeof(Page *) * pFS->nHash, &rc);
+    pFS->pLsmFile = lsmMallocZeroRc(pDb->pEnv, sizeof(LsmFile), &rc);
 
-    /* Open the files */
+    /* Open the database file */
     pFS->fdDb = fsOpenFile(pFS, 0, &rc);
-    pFS->fdLog = fsOpenFile(pFS, 1, &rc);
 
     if( rc!=LSM_OK ){
       lsmFsClose(pFS);
@@ -385,9 +432,16 @@ void lsmFsClose(FileSystem *pFS){
     }
 
     if( pFS->fdDb ) lsmEnvClose(pFS->pEnv, pFS->fdDb );
-    if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
+    if( pFS->fdLog ){
+      if( lsmDbMultiProc(pFS->pDb) ){
+        lsmDbDeferredClose(pFS->pDb, pFS->fdLog, pFS->pLsmFile);
+        pFS->pLsmFile = 0;
+      }else{
+        lsmEnvClose(pFS->pEnv, pFS->fdLog );
+      }
+    }
+    lsmFree(pEnv, pFS->pLsmFile);
 
-    lsmFree(pEnv, pFS->zDb);
     lsmFree(pEnv, pFS->apHash);
     lsmFree(pEnv, pFS);
   }
@@ -627,13 +681,13 @@ static void fsGrowMapping(
   if( *pRc==LSM_OK && iSz>pFS->nMap ){
     Page *pFix;
     int rc;
+    u8 *aOld = pFS->pMap;
     rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iSz, &pFS->pMap, &pFS->nMap);
     if( rc==LSM_OK ){
       u8 *aData = (u8 *)pFS->pMap;
       for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
         pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
       }
-
       lsmSortedRemap(pFS->pDb);
     }
     *pRc = rc;
@@ -783,11 +837,11 @@ static int fsFreeBlock(
   int rc = LSM_OK;                /* Return code */
   int iFirst;                     /* First page on block iBlk */
   int iLast;                      /* Last page on block iBlk */
-  int i;                          /* Used to iterate through append points */
   Level *pLevel;                  /* Used to iterate through levels */
 
-  Pgno *aAppend;
-  int nAppend;
+  int iIn;                        /* Used to iterate through append points */
+  int iOut = 0;                   /* Used to output append points */
+  u32 *aApp = pSnapshot->aiAppend;
 
   iFirst = fsFirstPageOnBlock(pFS, iBlk);
   iLast = fsLastPageOnBlock(pFS, iBlk);
@@ -800,13 +854,12 @@ static int fsFreeBlock(
     }
   }
 
-  aAppend = lsmSharedAppendList(pFS->pDb, &nAppend);
-  for(i=0; i<nAppend; i++){
-    if( aAppend[i]>=iFirst && aAppend[i]<=iLast ){
-      lsmSharedAppendListRemove(pFS->pDb, i);
-      break;
+  for(iIn=0; iIn<LSM_APPLIST_SZ; iIn++){
+    if( aApp[iIn]<iFirst || aApp[iIn]>iLast ){
+      aApp[iOut++] = aApp[iIn];
     }
   }
+  while( iOut<LSM_APPLIST_SZ ) aApp[iOut++] = 0;
 
   if( rc==LSM_OK ){
     rc = lsmBlockFree(pFS->pDb, iBlk);
@@ -935,112 +988,15 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
   return fsPageGet(pFS, iPg, 0, ppNext);
 }
 
-static Pgno findAppendPoint(FileSystem *pFS, int nMin){
-  Pgno ret = 0;
-  Pgno *aAppend;
-  int nAppend;
+static Pgno findAppendPoint(FileSystem *pFS){
   int i;
+  u32 *aiAppend = pFS->pDb->pWorker->aiAppend;
+  u32 iRet = 0;
 
-  aAppend = lsmSharedAppendList(pFS->pDb, &nAppend);
-#if 1
-  for(i=nAppend-1; i>=0; i--){
-#else
-  for(i=0; i<nAppend; i++){
-#endif
-    Pgno iLastOnBlock;
-    iLastOnBlock = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, aAppend[i]));
-    if( (iLastOnBlock - aAppend[i])>=nMin ){
-      ret = aAppend[i];
-      lsmSharedAppendListRemove(pFS->pDb, i);
-      break;
-    }
+  for(i=LSM_APPLIST_SZ-1; iRet==0 && i>=0; i--){
+    if( (iRet = aiAppend[i]) ) aiAppend[i] = 0;
   }
-
-  return ret;
-}
-
-static void addAppendPoint(
-  lsm_db *db, 
-  Pgno iLast,
-  int *pRc                        /* IN/OUT: Error code */
-){
-  if( *pRc==LSM_OK && iLast>0 ){
-    FileSystem *pFS = db->pFS;
-
-    Pgno *aPoint;
-    int nPoint;
-    int i;
-    int iBlk;
-    int bLast;
-
-    iBlk = fsPageToBlock(pFS, iLast);
-    bLast = (iLast==fsLastPageOnBlock(pFS, iBlk));
-
-    aPoint = lsmSharedAppendList(db, &nPoint);
-    for(i=0; i<nPoint; i++){
-      if( iBlk==fsPageToBlock(pFS, aPoint[i]) ){
-        if( bLast ){
-          lsmSharedAppendListRemove(db, i);
-        }else if( iLast>=aPoint[i] ){
-          aPoint[i] = iLast+1;
-        }
-        return;
-      }
-    }
-
-    if( bLast==0 ){
-      *pRc = lsmSharedAppendListAdd(db, iLast+1);
-    }
-  }
-}
-
-static void subAppendPoint(lsm_db *db, Pgno iFirst){
-  if( iFirst>0 ){
-    FileSystem *pFS = db->pFS;
-    Pgno *aPoint;
-    int nPoint;
-    int i;
-    int iBlk;
-
-    iBlk = fsPageToBlock(pFS, iFirst);
-    aPoint = lsmSharedAppendList(db, &nPoint);
-    for(i=0; i<nPoint; i++){
-      if( iBlk==fsPageToBlock(pFS, aPoint[i]) ){
-        if( iFirst>=aPoint[i] ) lsmSharedAppendListRemove(db, i);
-        return;
-      }
-    }
-  }
-}
-
-int lsmFsSetupAppendList(lsm_db *db){
-  int rc = LSM_OK;
-  Level *pLvl;
-
-  assert( db->pWorker );
-  for(pLvl=lsmDbSnapshotLevel(db->pWorker); 
-      rc==LSM_OK && pLvl; 
-      pLvl=pLvl->pNext
-  ){
-    if( pLvl->nRight==0 ){
-      addAppendPoint(db, pLvl->lhs.iLast, &rc);
-    }else{
-      int i;
-      for(i=0; i<pLvl->nRight; i++){
-        addAppendPoint(db, pLvl->aRhs[i].iLast, &rc);
-      }
-    }
-  }
-
-  for(pLvl=lsmDbSnapshotLevel(db->pWorker); pLvl; pLvl=pLvl->pNext){
-    int i;
-    subAppendPoint(db, pLvl->lhs.iFirst);
-    for(i=0; i<pLvl->nRight; i++){
-      subAppendPoint(db, pLvl->aRhs[i].iFirst);
-    }
-  }
-
-  return rc;
+  return iRet;
 }
 
 /*
@@ -1061,7 +1017,7 @@ int lsmFsSortedAppend(
   int iPrev = p->iLast;
 
   if( iPrev==0 ){
-    iApp = findAppendPoint(pFS, 0);
+    iApp = findAppendPoint(pFS);
   }else if( fsIsLast(pFS, iPrev) ){
     Page *pLast = 0;
     rc = fsPageGet(pFS, iPrev, 0, &pLast);
@@ -1135,7 +1091,14 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
         lsmFsPageRelease(pLast);
       }
     }else{
-      rc = lsmSharedAppendListAdd(pFS->pDb, p->iLast+1);
+      int i;
+      u32 *aiAppend = pFS->pDb->pWorker->aiAppend;
+      for(i=0; i<LSM_APPLIST_SZ; i++){
+        if( aiAppend[i]==0 ){
+          aiAppend[i] = p->iLast+1;
+          break;
+        }
+      }
     }
   }
   return rc;
@@ -1403,9 +1366,9 @@ static Segment *startsWith(Segment *pRun, Pgno iFirst){
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   int rc = LSM_OK;
   Snapshot *pWorker;              /* Worker snapshot */
-  Snapshot *pRelease = 0;         /* Snapshot to release */
   Segment *pArray = 0;            /* Array to report on */
   Level *pLvl;                    /* Used to iterate through db levels */
+  int bUnlock = 0;
 
   *pzOut = 0;
   if( iFirst==0 ) return LSM_ERROR;
@@ -1413,7 +1376,10 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   /* Obtain the worker snapshot */
   pWorker = pDb->pWorker;
   if( !pWorker ){
-    pRelease = pWorker = lsmDbSnapshotWorker(pDb);
+    rc = lsmBeginWork(pDb);
+    if( rc!=LSM_OK ) return rc;
+    pWorker = pDb->pWorker;
+    bUnlock = 1;
   }
 
   /* Search for the array that starts on page iFirst */
@@ -1451,48 +1417,46 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
     *pzOut = str.z;
   }
 
-  lsmDbSnapshotRelease(pDb->pEnv, pRelease);
+  if( bUnlock ){
+    int rcwork = LSM_BUSY;
+    lsmFinishWork(pDb, 0, 0, &rcwork);
+  }
   return rc;
 }
 
-#ifdef LSM_EXPENSIVE_DEBUG
 /*
 ** Helper function for lsmFsIntegrityCheck()
 */
 static void checkBlocks(
   FileSystem *pFS, 
-  Segment *pSeg, 
-  int bExtra,
+  Segment *pSeg,
+  int bExtra,                     /* If true, count the "next" block if any */
+  int nUsed,
   u8 *aUsed
 ){
   if( pSeg ){
-    int i;
-    for(i=0; i<2; i++){
-      Segment *p = (i ? pSeg->pRun : pSeg->pSep);
+    if( pSeg && pSeg->nSize>0 ){
+      const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
 
-      if( p && p->nSize>0 ){
-        const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+      int iBlk;
+      int iLastBlk;
+      iBlk = fsPageToBlock(pFS, pSeg->iFirst);
+      iLastBlk = fsPageToBlock(pFS, pSeg->iLast);
 
-        int iBlk;
-        int iLastBlk;
-        iBlk = fsPageToBlock(pFS, p->iFirst);
-        iLastBlk = fsPageToBlock(pFS, p->iLast);
-
-        while( iBlk ){
-          assert( iBlk<=pFS->nBlock );
-          /* assert( aUsed[iBlk-1]==0 ); */
-          aUsed[iBlk-1] = 1;
-          if( iBlk!=iLastBlk ){
-            fsBlockNext(pFS, iBlk, &iBlk);
-          }else{
-            iBlk = 0;
-          }
+      while( iBlk ){
+        assert( iBlk<=nUsed );
+        /* assert( aUsed[iBlk-1]==0 ); */
+        aUsed[iBlk-1] = 1;
+        if( iBlk!=iLastBlk ){
+          fsBlockNext(pFS, iBlk, &iBlk);
+        }else{
+          iBlk = 0;
         }
+      }
 
-        if( bExtra && (p->iLast % nPagePerBlock)==0 ){
-          fsBlockNext(pFS, iLastBlk, &iBlk);
-          aUsed[iBlk-1] = 1;
-        }
+      if( bExtra && (pSeg->iLast % nPagePerBlock)==0 ){
+        fsBlockNext(pFS, iLastBlk, &iBlk);
+        aUsed[iBlk-1] = 1;
       }
     }
   }
@@ -1503,8 +1467,7 @@ static void checkBlocks(
 ** for. For each block, exactly one of the following must be true:
 **
 **   + the block is part of a sorted run, or
-**   + the block is on the lPending list, or
-**   + the block is on the lFree list
+**   + the block is on the free-block list
 **
 ** This function also checks that there are no references to blocks with
 ** out-of-range block numbers.
@@ -1513,39 +1476,54 @@ static void checkBlocks(
 ** assert() fails.
 */
 int lsmFsIntegrityCheck(lsm_db *pDb){
-  int nBlock;
   int i;
+  int j;
+  Freelist freelist = {0, 0, 0};
   FileSystem *pFS = pDb->pFS;
   u8 *aUsed;
   Level *pLevel;
+  Snapshot *pWorker = pDb->pWorker;
+  int nBlock = pWorker->nBlock;
 
-  nBlock = pFS->nBlock;
   aUsed = lsmMallocZero(pDb->pEnv, nBlock);
-  assert( aUsed );
+  if( aUsed==0 ){
+    /* Malloc has failed. Since this function is only called within debug
+    ** builds, this probably means the user is running an OOM injection test.
+    ** Regardless, it will not be possible to run the integrity-check at this
+    ** time, so assume the database is Ok and return non-zero. */
+    return 1;
+  }
 
-  for(pLevel=pDb->pLevel; pLevel; pLevel=pLevel->pNext){
+  for(pLevel=pWorker->pLevel; pLevel; pLevel=pLevel->pNext){
     int i;
-    checkBlocks(pFS, &pLevel->lhs, (pLevel->pSMerger!=0), aUsed);
-
+    checkBlocks(pFS, &pLevel->lhs, (pLevel->nRight!=0), nBlock, aUsed);
     for(i=0; i<pLevel->nRight; i++){
-      checkBlocks(pFS, &pLevel->aRhs[i], 0, aUsed);
+      checkBlocks(pFS, &pLevel->aRhs[i], 0, nBlock, aUsed);
     }
   }
 
-  for(i=0; i<pFS->lFree.n; i++){
-    int iBlk = pFS->lFree.a[i];
-    assert( aUsed[iBlk-1]==0 );
-    aUsed[iBlk-1] = 1;
+  if( pWorker->nFreelistOvfl ){
+    int rc = lsmCheckpointOverflowLoad(pDb, &freelist);
+    assert( rc==LSM_OK || rc==LSM_NOMEM );
+    if( rc!=LSM_OK ) return 1;
   }
-  for(i=0; i<pFS->lPending.n; i++){
-    int iBlk = pFS->lPending.a[i];
-    assert( aUsed[iBlk-1]==0 );
-    aUsed[iBlk-1] = 1;
+
+  for(j=0; j<2; j++){
+    Freelist *pFreelist;
+    if( j==0 ) pFreelist = &pWorker->freelist;
+    if( j==1 ) pFreelist = &freelist;
+
+    for(i=0; i<pFreelist->nEntry; i++){
+      u32 iBlk = pFreelist->aEntry[i].iBlk;
+      assert( iBlk<=nBlock );
+      assert( aUsed[iBlk-1]==0 );
+      aUsed[iBlk-1] = 1;
+    }
   }
 
   for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
 
   lsmFree(pDb->pEnv, aUsed);
+  lsmFree(pDb->pEnv, freelist.aEntry);
   return 1;
 }
-#endif

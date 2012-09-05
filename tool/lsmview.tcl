@@ -144,7 +144,10 @@ proc draw_segment {C segment tags} {
 
 proc segment_info {C segment} {
   set w $C
-  while {[winfo class $w]!="Frame"} {set w [winfo parent $w]}
+  while {[winfo class $w]!="Frame"} {
+    set w [winfo parent $w]
+    if {$w==""} return
+  }
   set w $w.info
   if {$segment==""} {
     $w config -text ""

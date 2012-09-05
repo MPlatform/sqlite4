@@ -313,6 +313,27 @@ static int testEnvUnlink(lsm_env *pEnv, const char *zFile){
   return pRealEnv->xUnlink(pRealEnv, zFile);
 }
 
+static int testEnvLock(lsm_file *pFile, int iLock, int eType){
+  LsmFile *p = (LsmFile *)pFile;
+  lsm_env *pRealEnv = tdb_lsm_env();
+  return pRealEnv->xLock(p->pReal, iLock, eType);
+}
+
+static int testEnvShmMap(lsm_file *pFile, int iRegion, int sz, void **pp){
+  LsmFile *p = (LsmFile *)pFile;
+  lsm_env *pRealEnv = tdb_lsm_env();
+  return pRealEnv->xShmMap(p->pReal, iRegion, sz, pp);
+}
+
+static void testEnvShmBarrier(void){
+}
+
+static int testEnvShmUnmap(lsm_file *pFile, int bDel){
+  LsmFile *p = (LsmFile *)pFile;
+  lsm_env *pRealEnv = tdb_lsm_env();
+  return pRealEnv->xShmUnmap(p->pReal, bDel);
+}
+
 static void doSystemCrash(LsmDb *pDb){
   lsm_env *pEnv = tdb_lsm_env();
   int iFile;
@@ -576,6 +597,8 @@ int test_lsm_config_str(
     { "mmap",           0, LSM_CONFIG_MMAP },
     { "use_log",        0, LSM_CONFIG_USE_LOG },
     { "nmerge",         0, LSM_CONFIG_NMERGE },
+    { "max_freelist",   0, LSM_CONFIG_MAX_FREELIST },
+    { "multi_proc",     0, LSM_CONFIG_MULTIPLE_PROCESSES },
     { "worker_nmerge",  1, LSM_CONFIG_NMERGE },
     { 0, 0 }
   };
@@ -695,6 +718,10 @@ static int testLsmOpen(
   pDb->env.xFileid = testEnvFileid;
   pDb->env.xClose = testEnvClose;
   pDb->env.xUnlink = testEnvUnlink;
+  pDb->env.xLock = testEnvLock;
+  pDb->env.xShmBarrier = testEnvShmBarrier;
+  pDb->env.xShmMap = testEnvShmMap;
+  pDb->env.xShmUnmap = testEnvShmUnmap;
 
   rc = lsm_new(&pDb->env, &pDb->db);
   if( rc==LSM_OK ){
@@ -730,7 +757,8 @@ int test_lsm_lomem_open(
   int bClear, 
   TestDb **ppDb
 ){
-  const char *zCfg = "page_size=256 block_size=65536 write_buffer=16384";
+  const char *zCfg = 
+    "page_size=256 block_size=65536 write_buffer=16384 max_freelist=4";
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
 

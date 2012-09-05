@@ -34,6 +34,11 @@ typedef long long int lsm_i64;              /* 64-bit signed integer type */
 /* Forward reference */
 typedef struct lsm_env lsm_env;             /* Runtime environment */
 
+/* Candidate values for the 3rd argument to lsm_env.xLock() */
+#define LSM_LOCK_UNLOCK 0
+#define LSM_LOCK_SHARED 1
+#define LSM_LOCK_EXCL   2
+
 /*
 ** Run-time environment used by LSM
 */
@@ -53,14 +58,16 @@ struct lsm_env {
   int (*xFileid)(lsm_file *, void *pBuf, int *pnBuf);
   int (*xClose)(lsm_file *);
   int (*xUnlink)(lsm_env*, const char *);
+  int (*xLock)(lsm_file*, int, int);
+  int (*xShmMap)(lsm_file*, int, int, void **);
+  void (*xShmBarrier)(void);
+  int (*xShmUnmap)(lsm_file*, int);
   /****** memory allocation ****************************************/
   void *pMemCtx;
   void *(*xMalloc)(lsm_env*, int);            /* malloc(3) function */
   void *(*xRealloc)(lsm_env*, void *, int);   /* realloc(3) function */
   void (*xFree)(lsm_env*, void *);            /* free(3) function */
-#if 1
   sqlite4_size_t (*xSize)(lsm_env*, void *);  /* xSize function */
-#endif
   /****** mutexes ****************************************************/
   void *pMutexCtx;
   int (*xMutexStatic)(lsm_env*,int,lsm_mutex**); /* Obtain a static mutex */
@@ -167,16 +174,29 @@ int lsm_config(lsm_db *, int, ...);
 **   LSM_CONFIG_NMERGE
 **     A read/write integer parameter. The minimum number of segments to
 **     merge together at a time. Default value 4.
+**
+**   LSM_CONFIG_MAX_FREELIST
+**     A read/write integer parameter. The maximum number of free-list 
+**     entries that are stored in a database checkpoint (the others are
+**     stored elsewhere in the database).
+**
+**     There is no reason for an application to configure or query this
+**     parameter. It is only present because configuring a small value
+**     makes certain parts of the lsm code easier to test.
+**
+**   LSM_CONFIG_MULTIPLE_PROCESSES
 */
-#define LSM_CONFIG_WRITE_BUFFER  1
-#define LSM_CONFIG_PAGE_SIZE     2
-#define LSM_CONFIG_SAFETY        3
-#define LSM_CONFIG_BLOCK_SIZE    4
-#define LSM_CONFIG_AUTOWORK      5
-#define LSM_CONFIG_LOG_SIZE      6
-#define LSM_CONFIG_MMAP          7
-#define LSM_CONFIG_USE_LOG       8
-#define LSM_CONFIG_NMERGE        9
+#define LSM_CONFIG_WRITE_BUFFER        1
+#define LSM_CONFIG_PAGE_SIZE           2
+#define LSM_CONFIG_SAFETY              3
+#define LSM_CONFIG_BLOCK_SIZE          4
+#define LSM_CONFIG_AUTOWORK            5
+#define LSM_CONFIG_LOG_SIZE            6
+#define LSM_CONFIG_MMAP                7
+#define LSM_CONFIG_USE_LOG             8
+#define LSM_CONFIG_NMERGE              9
+#define LSM_CONFIG_MAX_FREELIST       10
+#define LSM_CONFIG_MULTIPLE_PROCESSES 11
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1

@@ -19,24 +19,14 @@ set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
 set N 300
-# if we're using proxy locks, we use 5 filedescriptors for a db
-# that is open and in the middle of writing changes, normally
-# sqlite uses 3 (proxy locking adds the conch and the local lock)
-set using_proxy 0
-foreach {name value} [array get env SQLITE4_FORCE_PROXY_LOCKING] {
-  set using_proxy value
-}
-set num_fd_per_openwrite_db 3
-if {$using_proxy>0} {
-  set num_fd_per_openwrite_db 5
-} 
+set num_fd_per_openwrite_db 4
 
 # First test how many file descriptors are available for use. To open a
 # database for writing SQLite requires 3 file descriptors (the database, the
 # journal and the directory).
 set filehandles {}
 catch {
-  for {set i 0} {$i<($N * 3)} {incr i} {
+  for {set i 0} {$i<($N * $num_fd_per_openwrite_db)} {incr i} {
     lappend filehandles [open testfile.1 w]
   }
 }

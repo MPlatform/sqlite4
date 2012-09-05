@@ -304,14 +304,13 @@ static i64 lastByteOnSector(LogWriter *pLog, i64 iOff){
 ** will be used to write to the log file during the write transaction.
 ** LSM_OK is returned if no error occurs, otherwise an LSM error code.
 */
-int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
+int lsmLogBegin(lsm_db *pDb){
   int rc = LSM_OK;
   LogWriter *pNew;
   LogRegion *aReg;
 
-  assert( lsmHoldingClientMutex(pDb) );
   if( pDb->bUseLog==0 ) return LSM_OK;
-
+  rc = lsmFsOpenLog(pDb->pFS);
   pNew = lsmMallocZeroRc(pDb->pEnv, sizeof(LogWriter), &rc);
   if( pNew ){
     lsmStringInit(&pNew->buf, pDb->pEnv);
@@ -346,13 +345,13 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
   **
   **   3) Region 2 is the last in the file. Append to it.
   */
-  aReg = &pLog->aRegion[0];
+  aReg = &pDb->treehdr.log.aRegion[0];
 
   assert( aReg[0].iEnd==0 || aReg[0].iEnd>aReg[0].iStart );
   assert( aReg[1].iEnd==0 || aReg[1].iEnd>aReg[1].iStart );
 
-  pNew->cksum0 = pLog->cksum0;
-  pNew->cksum1 = pLog->cksum1;
+  pNew->cksum0 = pDb->treehdr.log.cksum0;
+  pNew->cksum1 = pDb->treehdr.log.cksum1;
 
   if( aReg[0].iEnd==0 && aReg[1].iEnd==0 && aReg[2].iStart>=pDb->nLogSz ){
     /* Case 1. Wrap around to the start of the file. Write an LSM_LOG_JUMP 
@@ -403,12 +402,13 @@ int lsmLogBegin(lsm_db *pDb, DbLog *pLog){
 ** lsmLogBegin(). If the transaction is being committed, the shared state
 ** in *pLog is updated before returning.
 */
-void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
+void lsmLogEnd(lsm_db *pDb, int bCommit){
+  DbLog *pLog;
   LogWriter *p;
-  assert( lsmHoldingClientMutex(pDb) );
 
   if( pDb->bUseLog==0 ) return;
   p = pDb->pLogWriter;
+  pLog = &pDb->treehdr.log;
 
   if( bCommit ){
     pLog->aRegion[2].iEnd = p->iOff;
@@ -436,9 +436,9 @@ void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit){
 ** in the log file that occurs logically before offset iOff may now
 ** be reused.
 */ 
-void lsmLogCheckpoint(lsm_db *pDb, DbLog *pLog, lsm_i64 iOff){
+void lsmLogCheckpoint(lsm_db *pDb, lsm_i64 iOff){
+  DbLog *pLog = &pDb->treehdr.log;
   int iRegion;
-  assert( lsmHoldingClientMutex(pDb) );
 
   for(iRegion=0; iRegion<3; iRegion++){
     LogRegion *p = &pLog->aRegion[iRegion];
@@ -727,7 +727,7 @@ void lsmLogSeek(
 ** TODO: Thread safety of this function?
 */
 int lsmLogStructure(lsm_db *pDb, char **pzVal){
-  DbLog *pLog = lsmDatabaseLog(pDb);
+  DbLog *pLog = &pDb->treehdr.log;
   *pzVal = lsmMallocPrintf(pDb->pEnv, 
       "%d %d %d %d %d %d", 
       (int)pLog->aRegion[0].iStart, (int)pLog->aRegion[0].iEnd,
@@ -889,16 +889,19 @@ int lsmLogRecover(lsm_db *pDb){
   LsmString buf1;                 /* Key buffer */
   LsmString buf2;                 /* Value buffer */
   LogReader reader;               /* Log reader object */
-  int rc;                         /* Return code */
+  int rc = LSM_OK;                /* Return code */
   int nCommit = 0;                /* Number of transactions to recover */
   int iPass;
   int nJump = 0;                  /* Number of LSM_LOG_JUMP records in pass 0 */
   DbLog *pLog;
 
-  rc = lsmBeginRecovery(pDb);
+  rc = lsmFsOpenLog(pDb->pFS);
   if( rc!=LSM_OK ) return rc;
 
-  pLog = lsmDatabaseLog(pDb);
+  lsmTreeInit(pDb);
+  pLog = &pDb->treehdr.log;
+  lsmCheckpointLogoffset(pDb->pShmhdr->aWorker, pLog);
+
   logReaderInit(pDb, pLog, 1, &reader);
   lsmStringInit(&buf1, pDb->pEnv);
   lsmStringInit(&buf2, pDb->pEnv);
@@ -1016,6 +1019,7 @@ int lsmLogRecover(lsm_db *pDb){
         }else{
           pLog->aRegion[2].iStart = 0;
           iPass = -1;
+          lsmCheckpointZeroLogoffset(pDb);
         }
       }
       logReaderInit(pDb, pLog, 0, &reader);

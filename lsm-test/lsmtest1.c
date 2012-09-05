@@ -60,8 +60,21 @@ static int testControlDb(TestDb **ppDb){
 #ifdef HAVE_KYOTOCABINET
   return tdb_open("kyotocabinet", "tmp.db", 1, ppDb);
 #else
-  return tdb_open("sqlite3", "tmp.db", 1, ppDb);
+  return tdb_open("sqlite3", ":memory:", 1, ppDb);
 #endif
+}
+
+void testDatasourceFetch(
+  TestDb *pDb,                    /* Database handle */
+  Datasource *pData,
+  int iKey,
+  int *pRc                        /* IN/OUT: Error code */
+){
+  void *pKey; int nKey;           /* Database key to query for */
+  void *pVal; int nVal;           /* Expected result of query */
+
+  testDatasourceEntry(pData, iKey, &pKey, &nKey, &pVal, &nVal);
+  testFetch(pDb, pKey, nKey, pVal, nVal, pRc);
 }
 
 /*

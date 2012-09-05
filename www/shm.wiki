@@ -1,0 +1,329 @@
+
+<title>Multi-process LSM Notes</title>
+<nowiki>
+
+<p>
+Notes on the changes required for LSM to allow connections from 
+multiple processes. In other words, notes to do with the contents
+of the *-shm file and the way they are accessed and manipulated.
+
+
+<h2>Contents of shared memory</h2>
+
+<p>
+Like SQLite 3 WAL mode, LSM uses a *-shm file. It uses the same
+"dead man switch" mechanism to ensure it is always initialized to 
+zero when the first client connects.
+
+<p>
+The *-shm file contains:
+
+<ol>
+  <li> A flag indicating whether or not the *-shm has been initialized
+       (log file recovered into in-memory tree, header fields loaded etc.)
+  <li> The meta-page number to which a checkpoint was last successfully
+       written.
+  <li> The client snapshot.
+  <li> The worker snapshot.
+  <li> The in-memory tree. This takes up most of the space in the file.
+</ol>
+
+<p>
+The client and worker snapshots are in the same format as those stored
+in the header of the database file itself.
+
+<p>
+Sometimes data from the meta-page identified by the header field is
+required. For example it is necessary to know the id of the last
+checkpointed snapshot in order to determine which free blocks are safe
+to reuse. The associated log file offset is also required to determine
+when the log file may be wrapped. These quantities are read directly
+from the meta-page in the database itself as required.
+
+<h2>File locks</h2>
+
+<p>
+Lsm uses the same ideas as SQLite in WAL mode. Both SHARED and EXCLUSIVE 
+locks are required. There are three exclusive locks:
+
+<ul>
+  <li> WRITER: Required to write to in-memory tree and its log file.
+  <li> WORKER: Required to write to body of database file.
+  <li> CHECKPOINTER: Required to write to database file header.
+</ul>
+
+<p>
+Only one client may hold each of these locks at one time. In other words,
+each of the above is implemented by represents a range of bytes in the file
+
+<p>
+There are also N separate locks held by readers. These locks also 
+work like WAL locks in that they are a combination of a lock and a
+value. In WAL mode the value is a 32-bit integer. For LSM, it will
+be two 64-bit integers - an in-memory tree id and a snapshot id.
+
+<h2>Memory allocation</h2>
+
+<p>
+Within the *-shm file, memory is allocated in 32KB chunks.
+
+<p>
+The first chunk of the file is the header chunk. It contains:
+
+<ol>
+  <li> The client snapshot (4KB)
+  <li> The worker snapshot (4KB)
+  <li> The "initialized" flag (4 bytes)
+  <li> The meta-page number containing the last checkpoint written (4
+       bytes)
+  <li> The in-memory tree headers (see below).
+</ol>
+
+<p>
+The second and subsequent chunks are used to store the in-memory tree
+data.
+
+<p>
+The in-memory tree structure is essentially an append-only rb-tree
+with some modifications to reduce the amount of data written.
+Multiple trees will sometimes be present in the file. To cope with
+circumstances like the following:
+
+<ul>
+  <li> Writer builds tree A.
+  <li> Reader takes a read lock on tree A.
+  <li> Tree A is flushed to the db.
+  <li> Writer begins building tree B.
+  <li> Reader continues reading from tree A.
+</ul>
+
+<p>
+In this case, the chunks used by tree A may not be reused until after
+the active read transaction has concluded.
+
+<p>
+Each chunk begins with three 32-bit integer fields:
+<ul>
+  <li> Id of first tree for which data is stored on the chunk,
+  <li> Id of last tree for which data is stored on the chunk,
+  <li> Chunk number of chunk written after this one (or zero, if this
+       is the most recently written chunk).
+</ul>
+
+<p>
+The third field described above links all tree chunks in the file,
+in-use or otherwise, into a single list. To allocate a new chunk,
+a writer first checks if the chunk at the head of the list can be
+recycled. If so, it moves it to the end of the list and begins
+writing to it. Otherwise, it allocates a new chunk at the end of
+the file, appends that to the list and continues writing.
+
+<p><b>Crash recovery: But, what happens if a writer crashes while
+writing a transaction to the database?</b>
+
+<p>If a writer crashes during a write transaction, readers can 
+often continue as normal. However, the next writer must roll 
+back any changes made to the db before it can commence a new
+transaction. Or, if a writer fails when updating the in-memory 
+tree header, it may not be possible for readers to continue. 
+This is resolved by having one reader become a writer, restore 
+the db, then "commit" the empty transaction.
+
+<p>
+The pattern used by a writer is:
+<ol>
+  <li> Obtain WRITER lock. This is a barrier operation (on Linux, an
+  fcntl(F_SETLK)).  
+  <li> Update shared memory region.
+  <li> Release WRITER lock. Another barrier (on Linux, another F_SETLK).
+</ol>
+
+<p> Or, if a failure occurs during step 2, the unlock operation is done
+automatically by the OS. Either way, assume that the unlock is also a
+barrier (see Documentation/memory-barrier.txt in kernel source tree). It
+can therefore be assumed that from the point of view of the subsequent
+writer, all writes to the shared memory region completed by the failed
+writer appear to have been performed in order - there is no need to
+worry that the hardware has reordered the writes made by the failed
+writer. The compiler may reorder them, of course, but this should be
+easy enough to avoid.
+
+<p>
+Also assumed is that 32-bit writes are atomic, in the sense that it
+is not possible for a failure in a writer process to result in some
+bits of a 32-bit word being updated and some remaining in their 
+original state.
+
+<p>
+Crashes are then managed by the following:
+
+<ul>
+  <li>When a write transaction is opened, a flag is set in the in-memory
+  tree header. This indicates that a transaction is underway. The same
+  flag is cleared right before the WRITER lock is released to commit or
+  roll back the transaction. 
+
+  <li>When a recyclable chunk is moved from the start of the linked list
+  to the end, the first thing done is that the "first tree" field is
+  updated. Then the "last tree". Then the header pointer is set to point
+  to the next element in the list.
+
+  <li>If the header flag is already set when the writer grabs the WRITER
+  lock, then a crash must have occurred. In this case the free-list must
+  be recovered.
+
+  <li>Recovering the free list involves two steps: First a linear scan
+  of the current tree to identify those chunks in use (and also for
+  another reason, see below). Second, a scan of the remainder of the
+  file checking the "first tree" field of all chunks that either belong
+  to an earlier tree or appear to belong to the current tree but are not
+  linked in anywhere. Based on this, the new writer can rebuild the
+  free-list.
+
+</ul>
+
+
+<h2>In-memory tree format</h2>
+
+<p>
+Header fields:
+
+<ul>
+  <li> 32-bits: Tree id (incremented for each new tree).
+  <li> 32-bits: Transaction id (incremented for each new transaction).
+  <li> 32-bits: Pointer to head of tree (an offset within the *-shm
+       file).
+  <li> 32-bits: Height of tree.
+  <li> 64-bits: Last checkpoint id for which log file space has already
+                been reclaimed.
+  <li> DbLog structure (see lsmInt.h).
+  <li> 32-bits: Header checksum 1.
+  <li> 32-bits: Header checksum 2.
+</ul>
+
+<p>
+There are two copies of the in-memory tree header. Both stored on
+the *-shm header chunk. Copy 1 and copy 2.
+
+<p>
+To commit a transaction, a writer does the following:
+
+<ol>
+  <li> Updates copy 2 of the header,
+  <li> Invokes a memory barrier,
+  <li> Updates copy 1 of the header,
+  <li> Clears the "transaction in progress flag",
+  <li> Drops the WRITER lock.
+</ol>
+
+<p>
+To open a read transaction, the reader:
+
+<ol>
+  <li> Reads copy 1 of the header.
+
+  <li> If the checksum fails, attempt to obtain the WRITER lock. If
+       successful, do the equivalent of opening and committing an
+       empty transaction (see below). Either way, return to 1 and
+       attempt to reread the in-memory tree header. If copy 1 cannot be
+       read within some reasonable amount of time...?
+
+  <li> Read the client shapshot from shared memory. If the checksum
+       fails, attempt to obtain the WORKER lock. If successful, copy
+       the worker snapshot over the client snapshot and drop the WORKER
+       lock. Successful or otherwise, attempt to reread the snapshot.
+       If this cannot be completed within some reasonable amount of
+       time...?
+
+  <li> Grab a read-lock corresponding to the tree id and snapshot ids
+       just read (note: assume that this is a memory barrier).
+
+  <li> Check that the shared memory tree header and client snapshot
+       still contain the ids for which the lock was obtained. If not, 
+       drop the lock and go back to step 1.
+</ol>
+
+<p>To open a write transaction, the writer:
+
+<ol>
+  <li> Opens a read transaction, if one is not already open.
+
+  <li> Obtain the WRITER lock.
+
+  <li> Check the "transaction in progress" flag. If it is set,
+       perform the emergency rollback and freelist recovery, then
+       clear the flag.
+
+  <li> Check that copy 1 of the header still matches the copy read
+       when the read transaction was opened. If not, drop the lock
+       and return LSM_BUSY.
+
+  <li> Set the "transaction in progress" flag.
+</ol>
+
+<p>
+Emergency rollback and recovery:
+<ol>
+  <li> If the checksum of copy 1 of the header fails, replace it with
+       the contents of copy 2.
+
+  <li> Iterate through the entire tree, rolling back any nodes with
+       transaction ids that indicate they require it. Record the blocks
+       occupied by the current tree.
+
+  <li> Scan through the entire *-shm memory file, inspecting the "first
+       tree" fields of each chunk.
+</ol>
+
+<p>
+    Large values or keys may overflow chunks.
+
+<h2>Client and worker snapshots</h2>
+
+<p>
+The client and worker snapshots stored in the *-shm file use the
+same format as the checkpoint written to the database file. Except,
+they are always in native byte order. Each is stored in a dedicated
+4KB slot, as in the database file. A client must hold the WORKER
+lock to modify either of the two snapshots.
+
+<p>
+To work on the database file, a worker performs the following:
+<ol>
+  <li> Obtain the WORKER lock.
+
+  <li> Copies the worker snapshot from the shared-memory region into
+       heap memory and verifies that the checksum computes.
+
+  <li> If the checksum of the worker snapshot does not compute, copy
+       the client snapshot over the top of the worker and reload it.
+       If the checksum still does not compute, return LSM_CORRUPT.
+
+  <li> Perform some merging work on the database. Generate a new
+       worker snapshot. Write it over the top of the old.
+
+  <li> Optionally, copy the new worker snapshot over the top of the
+       client snapshot. TODO: Copying the worker snapshot into the
+       client slot makes the worker read-only.... Currently, LSM
+       distinguishes between read-only and read-write worker snapshots.
+       But that would mean an extra flag in shared-memory. Perhaps its
+       better to consider all worker snapshots to be read-only. Or,
+       change the format slightly to include a "read-write" flag that
+       can be set for those snapshots not copied into the client slot. 
+       UPDATE: Current code already treats all worker snapshots as read-only.
+
+  <li> Release the WORKER lock.
+</ol>
+
+<p>
+To checkpoint a snapshot.
+<ol>
+    <li> Obtain the CHECKPOINTER lock.
+    <li> Read the client snapshot.
+    <li> Sync the database file.
+    <li> Write the client snapshot into the appropriate meta-page (based
+         on the "last checkpoint slot" field in the *-shm header).
+    <li> Sync the database file.
+    <li> Update the "last checkpoint slot" field.
+    <li> Drop the CHECKPOINTER lock.
+</ol>

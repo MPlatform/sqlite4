@@ -526,7 +526,9 @@ static void mt1Main(ThreadSet *pThreadSet, int iThread, void *pCtx){
   iPrng = testPrngValue(iThread);
   pDb = testOpen(p->zSystem, 0, &rc);
 
-  tdb_lsm_config_work_hook(pDb, xMt1Work, 0);
+  if( rc==0 ){
+    tdb_lsm_config_work_hook(pDb, xMt1Work, 0);
+  }
 
   /* Loop until either an error occurs or some other thread sets the
   ** halt flag.  */

@@ -45,7 +45,6 @@
 #define LSM_PAGE_SIZE   4096
 #define LSM_BLOCK_SIZE  (2 * 1024 * 1024)
 #define LSM_TREE_BYTES  (2 * 1024 * 1024)
-#define LSM_ECOLA       4
 
 #define LSM_DEFAULT_LOG_SIZE (128*1024)
 #define LSM_DEFAULT_NMERGE   4
@@ -59,11 +58,21 @@
 #define LSM_CKSUM0_INIT 42
 #define LSM_CKSUM1_INIT 42
 
+#define LSM_META_PAGE_SIZE 4096
+
 /* "mmap" mode is currently only used in environments with 64-bit address 
 ** spaces. The following macro is used to test for this.  */
 #define LSM_IS_64_BIT (sizeof(void*)==8)
 
 #define LSM_AUTOWORK_QUANT 32
+
+/* Minimum number of free-list entries to store in the checkpoint, assuming
+** the free-list contains this many entries. i.e. if overflow is required,
+** the first LSM_CKPT_MIN_FREELIST entries are stored in the checkpoint and
+** the remainder in an LSM system entry.  */
+#define LSM_CKPT_MIN_FREELIST     6
+#define LSM_CKPT_MAX_REFREE       2
+#define LSM_CKPT_MIN_NONLSM       (LSM_CKPT_MIN_FREELIST - LSM_CKPT_MAX_REFREE)
 
 typedef struct Database Database;
 typedef struct DbLog DbLog;
@@ -88,6 +97,11 @@ typedef struct TreeCursor TreeCursor;
 typedef struct Merge Merge;
 typedef struct MergeInput MergeInput;
 
+typedef struct TreeHeader TreeHeader;
+typedef struct ShmHeader ShmHeader;
+typedef struct ShmChunk ShmChunk;
+typedef struct ShmReader ShmReader;
+
 typedef unsigned char u8;
 typedef unsigned short int u16;
 typedef unsigned int u32;
@@ -111,6 +125,31 @@ int lsmErrorBkpt(int);
 #define unused_parameter(x) (void)(x)
 #define array_size(x) (sizeof(x)/sizeof(x[0]))
 
+
+/* The size of each shared-memory chunk */
+#define LSM_SHM_CHUNK_SIZE (32*1024)
+
+/* The number of bytes reserved at the start of each shm chunk for MM. */
+#define LSM_SHM_CHUNK_HDR  (3 * 4)
+
+/* The number of available read locks. */
+#define LSM_LOCK_NREADER   6
+
+/* Lock definitions */
+#define LSM_LOCK_DMS1         1
+#define LSM_LOCK_DMS2         2
+#define LSM_LOCK_WRITER       3
+#define LSM_LOCK_WORKER       4
+#define LSM_LOCK_CHECKPOINTER 5
+#define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
+
+/*
+** Hard limit on the number of free-list entries that may be stored in 
+** a checkpoint (the remainder are stored as a system record in the LSM).
+** See also LSM_CONFIG_MAX_FREELIST.
+*/
+#define LSM_MAX_FREELIST_ENTRIES 100
+
 /*
 ** A string that can grow by appending.
 */
@@ -121,18 +160,41 @@ struct LsmString {
   char *z;                    /* The string content */
 };
 
+typedef struct LsmFile LsmFile;
+struct LsmFile {
+  lsm_file *pFile;
+  LsmFile *pNext;
+};
+
+/*
+** An instance of the following type is used to store an ordered list of
+** u32 values. 
+**
+** Note: This is a place-holder implementation. It should be replaced by
+** a version that avoids making a single large allocation when the array
+** contains a large number of values. For this reason, the internals of 
+** this object should only manipulated by the intArrayXXX() functions in 
+** lsm_tree.c.
+*/
+typedef struct IntArray IntArray;
+struct IntArray {
+  int nAlloc;
+  int nArray;
+  u32 *aArray;
+};
+
 /*
 ** An instance of this structure represents a point in the history of the
-** tree structure to roll back to. Refer to comments in tree.c for details.
-**
-** Pointers pRollback and pRoot both point to structures of type TreeNode.
+** tree structure to roll back to. Refer to comments in lsm_tree.c for 
+** details.
 */
 struct TreeMark {
-  void *pMpChunk;                 /* Mempool chunk to roll back to */
-  int iMpOff;                     /* Mempool chunk offset to roll back to */
-  void *pRollback;                /* Zero v2 information starting here */
-  void *pRoot;                    /* Root node to restore */
-  int nHeight;                    /* Height of tree at pRoot */
+  u32 iRoot;                      /* Offset of root node in shm file */
+  u32 nHeight;                    /* Current height of tree structure */
+  u32 iWrite;                     /* Write offset in shm file */
+  u32 nChunk;                     /* Number of chunks in shared-memory file */
+  u32 iFirst;                     /* First chunk in linked list */
+  int iRollback;                  /* Index in lsm->rollback to revert to */
 };
 
 /*
@@ -168,35 +230,72 @@ struct DbLog {
 };
 
 /*
+** Tree header structure. 
+*/
+struct TreeHeader {
+  u32 iTreeId;                    /* Current tree id */
+  u32 iTransId;                   /* Current transaction id */
+  u32 iRoot;                      /* Offset of root node in shm file */
+  u32 nHeight;                    /* Current height of tree structure */
+  u32 iWrite;                     /* Write offset in shm file */
+  u32 nChunk;                     /* Number of chunks in shared-memory file */
+  u32 iFirst;                     /* First chunk in linked list */
+  u32 nByte;                      /* Size of current tree structure in bytes */
+  DbLog log;                      /* Current layout of log file */ 
+  i64 iCkpt;                      /* Id of ckpt log space is reclaimed for */
+  u32 aCksum[2];                  /* Checksums 1 and 2. */
+};
+
+/*
 ** Database handle structure.
+**
+** mLock:
+**   A bitmask representing the locks currently held by the connection.
+**   An LSM database supports N distinct locks, where N is some number less
+**   than or equal to 16. Locks are numbered starting from 1 (see the 
+**   definitions for LSM_LOCK_WRITER and co.).
+**
+**   The least significant 16-bits in mLock represent EXCLUSIVE locks. The
+**   most significant are SHARED locks. So, if a connection holds a SHARED
+**   lock on lock region iLock, then the following is true:
+**
+**       (mLock & ((iLock+16-1) << 1))
+**
+**   Or for an EXCLUSIVE lock:
+**
+**       (mLock & ((iLock-1) << 1))
 */
 struct lsm_db {
 
   /* Database handle configuration */
   lsm_env *pEnv;                            /* runtime environment */
   int (*xCmp)(void *, int, void *, int);    /* Compare function */
-  int nTreeLimit;                 /* Maximum size of in-memory tree in bytes */
-  int bAutowork;                  /* True to do auto-work after writing */
-  int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
 
+  /* Values configured by calls to lsm_config */
+  int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
+  int bAutowork;                  /* Configured by LSM_CONFIG_AUTOWORK */
+  int nTreeLimit;                 /* Configured by LSM_CONFIG_WRITE_BUFFER */
   int nMerge;                     /* Configured by LSM_CONFIG_NMERGE */
   int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
   int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
+  int nMaxFreelist;               /* Configured by LSM_CONFIG_MAX_FREELIST */
+  int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
   Database *pDatabase;            /* Database shared data */
 
   /* Client transaction context */
-  TreeVersion *pTV;               /* In-memory tree snapshot (non-NULL in rt) */
   Snapshot *pClient;              /* Client snapshot (non-NULL in read trans) */
+  int iReader;                    /* Read lock held (-1 == unlocked) */
   MultiCursor *pCsr;              /* List of all open cursors */
-  LogWriter *pLogWriter;
+  LogWriter *pLogWriter;          /* Context for writing to the log file */
   int nTransOpen;                 /* Number of opened write transactions */
   int nTransAlloc;                /* Allocated size of aTrans[] array */
   TransMark *aTrans;              /* Array of marks for transaction rollback */
+  IntArray rollback;              /* List of tree-nodes to roll back */
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
@@ -208,6 +307,15 @@ struct lsm_db {
   /* Work done notification callback */
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
+
+  u32 mLock;                      /* Mask of current locks. See lsmShmLock(). */
+  lsm_db *pNext;                  /* Next connection to same database */
+
+  int nShm;                       /* Size of apShm[] array */
+  void **apShm;                   /* Shared memory chunks */
+  ShmHeader *pShmhdr;             /* Live shared-memory header */
+  TreeHeader treehdr;             /* Local copy of tree-header */
+  u32 aSnapshot[LSM_META_PAGE_SIZE / sizeof(u32)];
 };
 
 struct Segment {
@@ -227,7 +335,7 @@ struct Level {
   int iAge;                       /* Number of times data has been written */
   int nRight;                     /* Size of apRight[] array */
   Segment *aRhs;                  /* Old segments being merged into this */
-  int iSplitTopic;
+  int iSplitTopic;                /* Split key topic (if nRight>0) */
   void *pSplitKey;                /* Pointer to split-key (if nRight>0) */
   int nSplitKey;                  /* Number of bytes in split-key */
   Merge *pMerge;                  /* Merge operation currently underway */
@@ -270,34 +378,138 @@ struct Merge {
 #define segmentHasSeparators(pSegment) ((pSegment)->sep.iFirst>0)
 
 /*
-** Number of integers in the free-list delta.
+** The values that accompany the lock held by a database reader.
 */
-#define LSM_FREELIST_DELTA_SIZE 3
+struct ShmReader {
+  i64 iTreeId;
+  i64 iLsmId;
+};
 
-/* 
+/*
+** An instance of this structure is stored in the first shared-memory
+** page. The shared-memory header.
+**
+** bWriter:
+**   Immediately after opening a write transaction taking the WRITER lock, 
+**   each writer client sets this flag. It is cleared right before the 
+**   WRITER lock is relinquished. If a subsequent writer finds that this
+**   flag is already set when a write transaction is opened, this indicates
+**   that a previous writer failed mid-transaction.
+**
+** iMetaPage:
+**   If the database file does not contain a valid, synced, checkpoint, this
+**   value is set to 0. Otherwise, it is set to the meta-page number that
+**   contains the most recently written checkpoint (either 1 or 2).
+**
+** hdr1, hdr2:
+**   The two copies of the in-memory tree header. Two copies are required
+**   in case a writer fails while updating one of them.
+*/
+struct ShmHeader {
+  u32 aClient[LSM_META_PAGE_SIZE / 4];
+  u32 aWorker[LSM_META_PAGE_SIZE / 4];
+  u32 bWriter;
+  u32 iMetaPage;
+  TreeHeader hdr1;
+  TreeHeader hdr2;
+  ShmReader aReader[LSM_LOCK_NREADER];
+};
+
+/*
+** An instance of this structure is stored at the start of each shared-memory
+** chunk except the first (which is the header chunk - see above).
+*/
+struct ShmChunk {
+  u32 iFirstTree;
+  u32 iLastTree;
+  u32 iNext;
+};
+
+#define LSM_APPLIST_SZ 4
+
+typedef struct Freelist Freelist;
+typedef struct FreelistEntry FreelistEntry;
+
+/*
+** An instance of the following structure stores the current database free
+** block list. The free list is a list of blocks that are not currently
+** used by the worker snapshot. Assocated with each block in the list is the
+** snapshot id of the most recent snapshot that did actually use the block.
+*/
+struct Freelist {
+  FreelistEntry *aEntry;          /* Free list entries */
+  int nEntry;                     /* Number of valid slots in aEntry[] */
+  int nAlloc;                     /* Allocated size of aEntry[] */
+};
+struct FreelistEntry {
+  u32 iBlk;                       /* Block number */
+  i64 iId;                        /* Largest snapshot id to use this block */
+};
+
+/*
+** A snapshot of a database. A snapshot contains all the information required
+** to read or write a database file on disk. See the description of struct
+** Database below for futher details.
+*/
+struct Snapshot {
+  Database *pDatabase;            /* Database this snapshot belongs to */
+  Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
+  i64 iId;                        /* Snapshot id */
+
+  /* Used by worker snapshots only */
+  int nBlock;                     /* Number of blocks in database file */
+  u32 aiAppend[LSM_APPLIST_SZ];   /* Append point list */
+  Freelist freelist;              /* Free block list */
+  int nFreelistOvfl;              /* Number of extra free-list entries in LSM */
+};
+#define LSM_INITIAL_SNAPSHOT_ID 11
+
+/*
 ** Functions from file "lsm_ckpt.c".
 */
-int lsmCheckpointRead(lsm_db *, int *, int *);
 int lsmCheckpointWrite(lsm_db *);
-int lsmCheckpointExport(lsm_db *, int, int, i64, int, void **, int *);
-void lsmChecksumBytes(const u8 *, int, const u32 *, u32 *);
-lsm_i64 lsmCheckpointLogOffset(void *pExport);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
-int lsmCheckpointOverflow(lsm_db *pDb, int *pnLsmLevel);
+
+int lsmCheckpointOverflow(lsm_db *pDb, void **, int *, int *);
+int lsmCheckpointOverflowRequired(lsm_db *pDb);
+int lsmCheckpointOverflowLoad(lsm_db *pDb, Freelist *);
+
+int lsmCheckpointRecover(lsm_db *);
+int lsmCheckpointDeserialize(lsm_db *, int, u32 *, Snapshot **);
+
+int lsmCheckpointLoad(lsm_db *pDb);
+int lsmCheckpointLoadWorker(lsm_db *pDb);
+int lsmCheckpointStore(lsm_db *pDb, int);
+
+i64 lsmCheckpointId(u32 *, int);
+i64 lsmCheckpointLogOffset(u32 *);
+int lsmCheckpointPgsz(u32 *);
+int lsmCheckpointBlksz(u32 *);
+void lsmCheckpointLogoffset(u32 *aCkpt, DbLog *pLog);
+void lsmCheckpointZeroLogoffset(lsm_db *);
+
+int lsmCheckpointSaveWorker(lsm_db *pDb, int, int);
+int lsmDatabaseFull(lsm_db *pDb);
+int lsmCheckpointSynced(lsm_db *pDb, i64 *piId);
+
 
 /* 
 ** Functions from file "lsm_tree.c".
 */
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeRelease(lsm_env *, Tree *);
+void lsmTreeClear(lsm_db *);
+void lsmTreeInit(lsm_db *);
 
-int lsmTreeSize(TreeVersion *pTV);
-int lsmTreeIsEmpty(Tree *pTree);
+int lsmTreeSize(lsm_db *);
+int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
+int lsmTreeBeginTransaction(lsm_db *pDb);
+int lsmTreeLoadHeader(lsm_db *pDb);
 
 int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);
-void lsmTreeMark(TreeVersion *pTV, TreeMark *pMark);
+void lsmTreeMark(lsm_db *pDb, TreeMark *pMark);
 
 int lsmTreeCursorNew(lsm_db *pDb, TreeCursor **);
 void lsmTreeCursorDestroy(TreeCursor *);
@@ -310,15 +522,7 @@ void lsmTreeCursorReset(TreeCursor *pCsr);
 int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey);
 int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal);
 int lsmTreeCursorValid(TreeCursor *pCsr);
-void lsmTreeCursorSave(TreeCursor *pCsr);
-
-TreeVersion *lsmTreeReadVersion(Tree *);
-int lsmTreeWriteVersion(lsm_env *pEnv, Tree *, TreeVersion **);
-TreeVersion *lsmTreeRecoverVersion(Tree *);
-int lsmTreeIsWriteVersion(TreeVersion *);
-int lsmTreeReleaseWriteVersion(lsm_env *, TreeVersion *, int, TreeVersion **);
-void lsmTreeReleaseReadVersion(lsm_env *, TreeVersion *);
-
+int lsmTreeCursorSave(TreeCursor *pCsr);
 
 /* 
 ** Functions from file "mem.c".
@@ -388,7 +592,6 @@ FileSystem *lsmPageFS(Page *);
 int lsmFsSectorSize(FileSystem *);
 
 void lsmSortedSplitkey(lsm_db *, Level *, int *);
-int lsmFsSetupAppendList(lsm_db *db);
 
 /* Reading sorted run content. */
 int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
@@ -408,10 +611,8 @@ int lsmFsMetaPageGet(FileSystem *, int, int, MetaPage **);
 int lsmFsMetaPageRelease(MetaPage *);
 u8 *lsmFsMetaPageData(MetaPage *, int *);
 
-#ifdef LSM_EXPENSIVE_DEBUG
+#ifdef LSM_DEBUG
 int lsmFsIntegrityCheck(lsm_db *);
-#else
-# define lsmFsIntegrityCheck(pDb) 1
 #endif
 
 int lsmFsPageWritable(Page *);
@@ -430,6 +631,14 @@ int lsmFsSyncDb(FileSystem *);
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmConfigMmap(lsm_db *pDb, int *piParam);
 
+int lsmEnvOpen(lsm_env *, const char *, lsm_file **);
+int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile);
+int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock);
+
+int lsmEnvShmMap(lsm_env *, lsm_file *, int, int, void **); 
+void lsmEnvShmBarrier(lsm_env *);
+void lsmEnvShmUnmap(lsm_env *, lsm_file *, int);
+
 /*
 ** End of functions from "lsm_file.c".
 **************************************************************************/
@@ -438,7 +647,7 @@ int lsmConfigMmap(lsm_db *pDb, int *piParam);
 ** Functions from file "lsm_sorted.c".
 */
 int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
-int lsmSortedFlushTree(lsm_db *, int, int);
+int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
 
@@ -450,8 +659,7 @@ int lsmSortedFlushDb(lsm_db *);
 int lsmSortedAdvanceAll(lsm_db *pDb);
 
 int lsmSortedLoadMerge(lsm_db *, Level *, u32 *, int *);
-
-int lsmSortedLoadSystem(lsm_db *pDb);
+int lsmSortedLoadFreelist(lsm_db *pDb, void **, int *);
 
 void *lsmSortedSplitKey(Level *pLevel, int *pnByte);
 
@@ -500,48 +708,42 @@ int lsmFlushToDisk(lsm_db *);
 /*
 ** Functions from file "lsm_log.c".
 */
-int lsmLogBegin(lsm_db *pDb, DbLog *pLog);
+int lsmLogBegin(lsm_db *pDb);
 int lsmLogWrite(lsm_db *, void *, int, void *, int);
 int lsmLogCommit(lsm_db *);
-void lsmLogEnd(lsm_db *pDb, DbLog *pLog, int bCommit);
+void lsmLogEnd(lsm_db *pDb, int bCommit);
 void lsmLogTell(lsm_db *, LogMark *);
 void lsmLogSeek(lsm_db *, LogMark *);
 
 int lsmLogRecover(lsm_db *);
-void lsmLogCheckpoint(lsm_db *, DbLog *pLog, lsm_i64);
+void lsmLogCheckpoint(lsm_db *, lsm_i64);
 int lsmLogStructure(lsm_db *pDb, char **pzVal);
 
 
 /**************************************************************************
 ** Functions from file "lsm_shared.c".
 */
-int lsmDbDatabaseFind(lsm_db*, const char *);
+
+int lsmDbDatabaseConnect(lsm_db*, const char *);
 void lsmDbDatabaseRelease(lsm_db *);
 
-int lsmBeginRecovery(lsm_db *);
 int lsmBeginReadTrans(lsm_db *);
 int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
+
+int lsmBeginWork(lsm_db *);
+void lsmFinishWork(lsm_db *, int, int, int *);
 
 int lsmFinishRecovery(lsm_db *);
 void lsmFinishReadTrans(lsm_db *);
 int lsmFinishWriteTrans(lsm_db *, int);
 int lsmFinishFlush(lsm_db *, int);
 
-int lsmDbUpdateClient(lsm_db *, int, int);
-
-int lsmSnapshotFreelist(lsm_db *, int **, int *);
 int lsmSnapshotSetFreelist(lsm_db *, int *, int);
-
-void lsmDbSetPagesize(lsm_db *pDb, int nPgsz, int nBlksz);
 
 Snapshot *lsmDbSnapshotClient(lsm_db *);
 Snapshot *lsmDbSnapshotWorker(lsm_db *);
-Snapshot *lsmDbSnapshotRecover(lsm_db *);
-void lsmDbSnapshotRelease(lsm_env *pEnv, Snapshot *);
 
-void lsmSnapshotSetNBlock(Snapshot *, int);
-int lsmSnapshotGetNBlock(Snapshot *);
 void lsmSnapshotSetCkptid(Snapshot *, i64);
 
 Level *lsmDbSnapshotLevel(Snapshot *);
@@ -555,23 +757,43 @@ int lsmBlockRefree(lsm_db *, int);
 
 void lsmFreelistDeltaBegin(lsm_db *);
 void lsmFreelistDeltaEnd(lsm_db *);
-void lsmFreelistDelta(lsm_db *, u32 *);
-u32 *lsmFreelistDeltaPtr(lsm_db *pDb);
-
-void lsmDatabaseDirty(lsm_db *pDb);
-int lsmDatabaseIsDirty(lsm_db *pDb);
+int lsmFreelistDelta(lsm_db *pDb);
 
 DbLog *lsmDatabaseLog(lsm_db *pDb);
 
-Pgno *lsmSharedAppendList(lsm_db *db, int *pnApp);
-int lsmSharedAppendListAdd(lsm_db *db, Pgno iPg);
-void lsmSharedAppendListRemove(lsm_db *db, int iIdx);
-
-int lsmDbTreeSize(lsm_db *pDb);
-
 #ifdef LSM_DEBUG
   int lsmHoldingClientMutex(lsm_db *pDb);
+  int lsmShmAssertLock(lsm_db *db, int iLock, int eOp);
+  int lsmShmAssertWorker(lsm_db *db);
 #endif
+
+void lsmFreeSnapshot(lsm_env *, Snapshot *);
+
+
+/* Candidate values for the 3rd argument to lsmShmLock() */
+#define LSM_LOCK_UNLOCK 0
+#define LSM_LOCK_SHARED 1
+#define LSM_LOCK_EXCL   2
+
+int lsmShmChunk(lsm_db *db, int iChunk, void **ppData);
+int lsmShmLock(lsm_db *db, int iLock, int eOp, int bBlock);
+void lsmShmBarrier(lsm_db *db);
+
+#ifdef LSM_DEBUG
+void lsmShmHasLock(lsm_db *db, int iLock, int eOp);
+#else
+# define lsmShmHasLock(x,y,z)
+#endif
+
+int lsmReadlock(lsm_db *, i64 iLsm, i64 iTree);
+int lsmReleaseReadlock(lsm_db *);
+
+int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);
+int lsmTreeInUse(lsm_db *db, u32 iLsmId, int *pbInUse);
+int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId);
+
+int lsmDbMultiProc(lsm_db *);
+void lsmDbDeferredClose(lsm_db *, lsm_file *, LsmFile *);
 
 
 /**************************************************************************
