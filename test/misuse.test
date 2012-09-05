@@ -39,8 +39,7 @@ proc catchsql2 {sql} {
 #
 do_test misuse-1.1 {
   db close
-  catch {forcedelete test2.db}
-  catch {forcedelete test2.db-journal}
+  db_delete test2.db
   sqlite4 db test2.db; set ::DB [sqlite4_connection_pointer db]
   execsql {
     CREATE TABLE t1(a,b);
