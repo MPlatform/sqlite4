@@ -21,6 +21,7 @@
 #
 #      copy_file              FROM TO
 #      delete_file            FILENAME
+#      db_delete              DBNAME
 #      drop_all_tables        ?DB?
 #      forcecopy              FROM TO
 #      forcedelete            FILENAME
@@ -360,12 +361,21 @@ if {[info exists cmdlinearg]==0} {
   }
 }
 
+# Delete all files associated with LSM database $file. That is:
+#
+#     ${file}
+#     ${file}-log
+#     ${file}-shm
+#
+proc db_delete {file} {
+  forcedelete $file $file-shm $file-log
+}
+
 # Create a test database
 #
 proc reset_db {} {
   catch {db close}
-  forcedelete test.db
-  forcedelete test.db-log
+  db_delete test.db
   sqlite4 db ./test.db
   set ::DB [sqlite4_connection_pointer db]
   if {[info exists ::SETUP_SQL]} {
@@ -1036,10 +1046,8 @@ proc do_ioerr_test {testname args} {
       set ::sqlite_io_error_pending 0
       catch {db close}
       catch {db2 close}
-      catch {forcedelete test.db}
-      catch {forcedelete test.db-journal}
-      catch {forcedelete test2.db}
-      catch {forcedelete test2.db-journal}
+      catch {db_delete test.db}
+      catch {db_delete test2.db}
       set ::DB [sqlite4 db test.db; sqlite4_connection_pointer db]
       sqlite4_extended_result_codes $::DB $::ioerropts(-erc)
       if {[info exists ::ioerropts(-tclprep)]} {
@@ -1468,7 +1476,7 @@ proc sql36231 {sql} {
 }
 
 proc db_save {} {
-  foreach f [glob -nocomplain sv_test.db*] { forcedelete $f }
+  db_delete sv_test.db
   foreach f [glob -nocomplain test.db*] {
     set f2 "sv_$f"
     forcecopy $f $f2
@@ -1480,7 +1488,7 @@ proc db_save_and_close {} {
   return ""
 }
 proc db_restore {} {
-  foreach f [glob -nocomplain test.db*] { forcedelete $f }
+  db_delete test.db
   foreach f2 [glob -nocomplain sv_test.db*] {
     set f [string range $f2 3 end]
     forcecopy $f2 $f
@@ -1493,7 +1501,7 @@ proc db_restore_and_reopen {{dbfile test.db}} {
 }
 proc db_delete_and_reopen {{file test.db}} {
   catch { db close }
-  foreach f [glob -nocomplain test.db*] { forcedelete $f }
+  db_delete $file
   sqlite4 db $file
 }
 

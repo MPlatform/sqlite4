@@ -24,8 +24,7 @@ ifcapable !attach {
 }
 
 for {set i 2} {$i<=15} {incr i} {
-  forcedelete test$i.db
-  forcedelete test$i.db-journal
+  db_delete test$i.db
 }
 
 do_test attach-1.1 {

@@ -992,8 +992,10 @@ int lsmShmLock(
     int nShared = 0;              /* Number of connections holding SHARED */
     lsmMutexEnter(db->pEnv, p->pClientMutex);
 
-    /* Figure out the locks currently held by this process on iLock. */
+    /* Figure out the locks currently held by this process on iLock, not
+    ** including any held by connection db.  */
     for(pIter=p->pConn; pIter; pIter=pIter->pNext){
+      assert( (pIter->mLock & me)==0 || (pIter->mLock & ms)!=0 );
       if( pIter!=db ){
         if( pIter->mLock & me ){
           nExcl++;
@@ -1004,18 +1006,18 @@ int lsmShmLock(
     }
     assert( nExcl==0 || nExcl==1 );
     assert( nExcl==0 || nShared==0 );
-    assert( (db->mLock & me)==0 || (db->mLock & ms)!=0 );
+    assert( nExcl==0 || (db->mLock & (me|ms))==0 );
 
     switch( eOp ){
       case LSM_LOCK_UNLOCK:
-        if( nShared<=1 ){
+        if( nShared==0 ){
           lsmEnvLock(db->pEnv, p->pFile, iLock, LSM_LOCK_UNLOCK);
         }
         db->mLock &= ~(me|ms);
         break;
 
       case LSM_LOCK_SHARED:
-        if( nExcl && (db->mLock & me)==0 ){
+        if( nExcl ){
           rc = LSM_BUSY;
         }else{
           if( nShared==0 ){
@@ -1028,7 +1030,7 @@ int lsmShmLock(
 
       default:
         assert( eOp==LSM_LOCK_EXCL );
-        if( nExcl || nShared>1 || (nShared==1 && (db->mLock & ms)==0) ){
+        if( nExcl || nShared ){
           rc = LSM_BUSY;
         }else{
           rc = lsmEnvLock(db->pEnv, p->pFile, iLock, LSM_LOCK_EXCL);

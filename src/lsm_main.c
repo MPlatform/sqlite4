@@ -84,7 +84,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
   pDb->bUseLog = 1;
   pDb->iReader = -1;
-  pDb->bMultiProc = 0;
+  pDb->bMultiProc = 1;
   return LSM_OK;
 }
 
