@@ -242,7 +242,6 @@ struct TreeHeader {
   u32 iFirst;                     /* First chunk in linked list */
   u32 nByte;                      /* Size of current tree structure in bytes */
   DbLog log;                      /* Current layout of log file */ 
-  i64 iCkpt;                      /* Id of ckpt log space is reclaimed for */
   u32 aCksum[2];                  /* Checksums 1 and 2. */
 };
 

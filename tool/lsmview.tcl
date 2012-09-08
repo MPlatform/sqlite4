@@ -105,26 +105,26 @@ proc draw_segment {C segment tags} {
   set w [expr max( $w,  [font measure default "1 pages"] )]
 
   # Draw the separators stack if required.
-  if {$iRoot} {
-    set septag "[lindex $tags end].sep"
-    set st [concat $tags $septag]
-    set w2 $w
-    for {set i 3} {$i > 0} {incr i -1} {
-      set w2 [expr $w/pow(2,$i)]
-      set h2 [expr $h/2]
-
-      set x1 [expr ($w-$w2)/2]
-      set x2 [expr $x1+$w2]
-
-      set id [$C create rect $x1 $y $x2 [expr $y+$h2]]
-      $C itemconfigure $id -outline black -fill white -tags $st
-      incr y $h2
-    }
-
-    $C bind $septag <1> [list segment_callback $C $septag $segment]
-    $C bind $septag <Enter> [list segment_info $C $segment]
-    $C bind $septag <Leave> [list segment_info $C {}]
-  }
+#   if {$iRoot} {
+#     set septag "[lindex $tags end].sep"
+#     set st [concat $tags $septag]
+#     set w2 $w
+#     for {set i 3} {$i > 0} {incr i -1} {
+#       set w2 [expr $w/pow(2,$i)]
+#       set h2 [expr $h/2]
+# 
+#       set x1 [expr ($w-$w2)/2]
+#       set x2 [expr $x1+$w2]
+# 
+#       set id [$C create rect $x1 $y $x2 [expr $y+$h2]]
+#       $C itemconfigure $id -outline black -fill white -tags $st
+#       incr y $h2
+#     }
+# 
+#     $C bind $septag <1> [list segment_callback $C $septag $segment]
+#     $C bind $septag <Enter> [list segment_info $C $segment]
+#     $C bind $septag <Leave> [list segment_info $C {}]
+#   }
 
   set maintag "[lindex $tags end].main"
   set rt [concat $tags $maintag]
