@@ -63,7 +63,14 @@ access. LSM uses the following file-locks:
        hold a SHARED lock one of the READER locking regions while reading the
        database. As in SQLite WAL mode, each reader lock is paired with a 
        value indicating the version of the database that the client process 
-       is using.
+       is using. The value consists of two fields:
+
+  <ul>
+    <li> A 64-bit snapshot id. This identifies the version of the database file
+         that the reader is accessing.
+    <li> A 32-bit shared-memory chunk id. This identifies the version of the
+         in-memory tree the reader is reading.
+  </ul>
 
   <li> <p>The <b>WRITER</b> locking region. A database client holds an 
        EXCLUSIVE lock on this locking region while writing data to the 
@@ -545,9 +552,143 @@ To commit a write transaction:
 </ol>
 
 <p>
-To repair the in-memory tree.
+Starting a new in-memory tree is similar executing a write transaction, 
+except that as well as initializing the tree-header to reflect an empty
+tree, the snapshot id stored in the tree-header must be updated to correspond
+to the snapshot created by flushing the contents of the previous tree.
+
+<p>
+If the writer flag is set after the WRITER lock is obtained, the new 
+writer assumes that the previous must have failed mid-transaction. In this
+case it performs the following:
+
+<ol>
+
+  <li> If the two tree-headers are not identical, copy one over the other.
+       Prefer the data from a tree-header for which the checksum computes.
+       Or, if they both compute, prefer tree-header-1.
+
+  <li> Sweep the shared-memory area to rebuild the linked list of chunks so
+       that it is consistent with the current tree-header.
+
+  <li> Clear the writer flag.
+</ol>
+
+<h3>Shared-memory management</h3>
+
+<p>
+A writer client may have to allocate new shared-memory chunks. This can be
+done either by extending the shared-memory region or by recycling the first
+chunk in the linked-list. To check if the first chunk in the linked-list may
+be reused, the writer must check that:
+
+<ul>
+  <li> The chunk is not part of the current in-memory tree (the one being
+       appended to by the writer). A writer can check this by examining its
+       private copy of the tree-header.
+
+  <li> The chunk is not part of an in-memory tree being used by an existing
+       reader. A writer checks this by scanning (and possibly updating) the
+       values associated with the READER locks - similar to the way SQLite 
+       does in WAL mode.
+</ul>
+
+<h3>Log file management</h3>
+
+<p>
+A writer client also writes to the log file. All information required to write
+to the log file  (the offset to write to and the initial checksum values) is
+embedded in the tree-header. Except, in order to reuse log file space (wrap
+around to the start of the log file), a writer needs to know that the space
+being recycled will not be required by any recovery process in the future.
+In other words, that the information contained in the transactions being
+overwritten has been written into the database file and is part of the
+snapshot written into the database file by a checkpointer (see "Checkpoint
+Operations" below).
+
+<p>
+To determine whether or not the log file can be wrapped, the writer requires
+access to information stored in the newest snapshot written into the database
+header. Their exists a shared-memory variable indicating which of the two
+meta-pages contain this snapshot, but the writer process still has to read the
+snapshot data and verify its checksum from disk.
 
 <h2>Working</h2>
 
+<p>
+Working is similar to writing. The difference is that a "writer" modifies
+the in-memory tree. A "worker" modifies the contents of the database file.
+
+<ol>
+  <li> <p>Take the WORKER lock.
+
+  <li> <p>Check that the two snapshots in shared memory are identical. If not,
+       and snapshot-1 has a valid checksum, copy snapshot-1 over the top of
+       snapshot-2. Otherwise, copy snapshot-2 over the top of snapshot-1.
+
+  <li> <p>Modify the contents of the database file.
+
+  <li> <p>Update snapshot-2 in shared-memory.
+
+  <li> <p>Invoke xShmBarrier().
+
+  <li> <p>Update snapshot-1 in shared-memory.
+
+  <li> <p>Release the WORKER lock.
+</ol>
+
+<h3>Free-block list management</h3>
+
+<p>
+Worker clients occasionally need to allocate new database blocks or move
+existing blocks to the free-block list. Along with the block number of each
+free block, the free-block list contains the snapshot-id of the first 
+snapshot created after the block was moved to the free list. The free-block
+list is always stored in order of snapshot-id, so that the first block in
+the free list is the one that has been free for the longest.
+
+<p>
+There are two ways to allocate a new block - by extending the database file 
+or by reusing a currently unused block from the head of the free-block list. 
+There are two conditions for reusing a free-block:
+
+<ul>
+  <li> All existing database readers must be reading from snapshots with ids
+       greater than or equal to the id stored in the free list. A worker
+       process can check this by scanning the values associated with the 
+       READER locks - similar to the way SQLite does in WAL mode.
+
+  <li> The snapshot identified by the free-block list entry, or one with a
+       more recent snapshot-id, must have been copied into the database file
+       header. This is done by reading (and verifying the checksum) of the
+       snapshot currently stored in the database meta-page indicated by the
+       shared-memory variable.
+</ul>
+
+
+
 <h2>Checkpoint Operations</h2>
+
+<ol>
+  <li> Take CHECKPOINTER lock.
+
+  <li> Load snapshot-1 from shared-memory. (if the checksum fails here?)
+
+  <li> The shared-memory region contains a variable indicating the database
+       meta-page that a snapshot was last read from or written to. Check if
+       this page contains the same snapshot as just read from shared-memory.
+
+  <li> Sync the database file.
+
+  <li> Write the snapshot into a meta-page other than that (if any) currently
+       identified by the shared-memory variable.
+
+  <li> Sync the database file again.
+
+  <li> Update the shared-memory variable to indicate the meta-page written in
+       step 5.
+
+  <li> Drop the CHECKPOINTER lock.
+</ol>
+
 
