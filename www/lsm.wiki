@@ -474,37 +474,13 @@ for reader/writer collision detection.
 
 
 
-  <li> <p>Check that the tree-header and snapshot are compatible.
-
-       <p>Say a reader loads the tree-header for in-memory tree A, 
-          version 49 in step 1. Then, a writer writes a transaction to the
-          in-memory tree A (creating version 50) and flushes the whole tree
-          to disk, updating the current snapshot in shared-memory. All before
-          the reader gets to step 2 above and loads the current snapshot.
-          If allowed to proceed, the reader may return bad data or otherwise
-          malfunction.
-
-       <p>To prevent this, when a new in-memory tree is created, the current
-          snapshot-id (the one that contains all data from the previous
-          in-memory tree) is stored as part of the tree-header. The new
-          snapshot-id is stored twice inside the snapshot as well - the second
-          time as the "data-id" field. Snapshots created by flushing an 
-          in-memory tree to disk have the data-id field set to a copy of 
-          their snapshot-id. Other snapshots (those created by workers merging
-          two or more existing sorted runs together) have the data-id field
-          set to a copy of the data-id field of the previous snapshot.
-          A snapshot and tree-header are only compatible if the data-id field
-          of the snapshot matches the snapshot-id stored in the tree-header.
-
-
   <li> <p>Take a READER lock. The snapshot-id field of the reader-lock field
           must be less than or equal to the snapshot-id of the snapshot read in
           step 2. The shm-sequence-id of the reader lock must be less than or
           equal to the sequence-id of the first shared-memory chunk used by the
           in-memory tree according to the tree-header read in step 1.
 
-  <li> <p>Check that the tree-header still contains the same
-          first-shm-sequence-id field as that that read in step 1. 
+  <li> <p>Check that the tree-header read in step 1 is still current.
 
   <li> <p>Check that the snapshot read in step 2 is still current.
 
@@ -516,6 +492,18 @@ for reader/writer collision detection.
           occupied by the sorted runs in the snapshot read in step 2 may have
           already been reused by new content. In either case, if the check
           fails, return to step 1 and start over.
+
+       <p>Say a reader loads the tree-header for in-memory tree A, 
+          version 49 in step 1. Then, a writer writes a transaction to the
+          in-memory tree A (creating version 50) and flushes the whole tree
+          to disk, updating the current snapshot in shared-memory. All before
+          the reader gets to step 2 above and loads the current snapshot.
+          If allowed to proceed, the reader may return bad data or otherwise
+          malfunction.
+
+       <p>Step 4 should prevent this. If the above occurs, step 4 should 
+          detect that the tree-header loaded in step 1 is no longer current.
+
 </ol>
 
 <p>
@@ -564,7 +552,6 @@ writer assumes that the previous must have failed mid-transaction. In this
 case it performs the following:
 
 <ol>
-
   <li> If the two tree-headers are not identical, copy one over the other.
        Prefer the data from a tree-header for which the checksum computes.
        Or, if they both compute, prefer tree-header-1.
@@ -573,6 +560,28 @@ case it performs the following:
        that it is consistent with the current tree-header.
 
   <li> Clear the writer flag.
+</ol>
+
+<h3>Flushing the in-memory tree to disk</h3>
+
+<p>
+For the purposes of writing, the database file and the in-memory tree are
+largely independent. Processes holding the WRITER lock write to the in-memory
+tree, and processes holding the WORKER lock write to the database file.
+
+<ol>
+  <li> If a write transaction is open, write the new tree-header to
+       shared-memory (as described above). Otherwise, if no write-transaction
+       is open, open one - repairing the tree headers if required.
+
+  <li> Execute a WORKER transaction (see "Working" below) to add a new level
+       to the LSM. The new level contains the current contents of the 
+       in-memory tree.
+
+  <li> Update the private copy of the tree-header to reflect a new, empty tree.
+
+  <li> Commit the write transaction, writing the new, empty tree to
+       shared-memory.
 </ol>
 
 <h3>Shared-memory management</h3>
