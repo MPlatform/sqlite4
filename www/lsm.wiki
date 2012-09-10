@@ -360,7 +360,8 @@ ever written to by clients holding the WRITER lock.
 <ul>
   <li> Snapshot 1.
   <li> Snapshot 2.
-  <li> The meta-page pointer.
+  <li> The meta-page pointer. This value is either 1 or 2. It indicates which
+       of the two meta-pages contains the most recent database snapshot.
   <li> READER lock values.
 </ul>
 
