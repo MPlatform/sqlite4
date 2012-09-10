@@ -275,6 +275,10 @@ static ShmChunk * treeShmChunk(lsm_db *pDb, int iChunk){
   return (ShmChunk *)treeShmptr(pDb, iChunk*LSM_SHM_CHUNK_SIZE, &rcdummy);
 }
 
+static ShmChunk * treeShmChunkRc(lsm_db *pDb, int iChunk, int *pRc){
+  return (ShmChunk *)treeShmptr(pDb, iChunk*LSM_SHM_CHUNK_SIZE, pRc);
+}
+
 /* Values for the third argument to treeShmkey(). */
 #define TK_LOADKEY  1
 #define TK_LOADVAL  2
@@ -533,16 +537,19 @@ static u32 treeShmalloc(lsm_db *pDb, int bAlign, int nByte, int *pRc){
     if( (iWrite+nByte)>iEof ){
       ShmChunk *pHdr;           /* Header of chunk just finished (iChunk) */
       ShmChunk *pFirst;         /* Header of chunk treehdr.iFirst */
+      ShmChunk *pNext;          /* Header of new chunk */
       int iNext = 0;            /* Next chunk */
-      int rc;
+      int rc = LSM_OK;
+
+      pFirst = treeShmChunk(pDb, pDb->treehdr.iFirst);
 
       /* Check if the chunk at the start of the linked list is still in
       ** use. If not, reuse it. If so, allocate a new chunk by appending
       ** to the *-shm file.  */
-      if( pDb->treehdr.iFirst!=iChunk ){
+      assert( shm_sequence_ge(pDb->treehdr.iUsedShmid, pFirst->iShmid) );
+      if( pDb->treehdr.iUsedShmid!=pFirst->iShmid ){
         int bInUse;
-        pFirst = treeShmChunk(pDb, pDb->treehdr.iFirst);
-        rc = lsmTreeInUse(pDb, pFirst->iLastTree, &bInUse);
+        rc = lsmTreeInUse(pDb, pFirst->iShmid, &bInUse);
         if( rc!=LSM_OK ){
           *pRc = rc;
           return 0;
@@ -550,17 +557,23 @@ static u32 treeShmalloc(lsm_db *pDb, int bAlign, int nByte, int *pRc){
         if( bInUse==0 ){
           iNext = pDb->treehdr.iFirst;
           pDb->treehdr.iFirst = pFirst->iNext;
-          pFirst->iNext = 0;
-          pFirst->iLastTree = 0;
           assert( pDb->treehdr.iFirst );
-          assert( pFirst->iLastTree<pDb->treehdr.iTreeId );
         }
       }
       if( iNext==0 ) iNext = pDb->treehdr.nChunk++;
 
+      /* Set the header values for the new chunk */
+      pNext = treeShmChunkRc(pDb, iNext, &rc);
+      if( pNext ){
+        pNext->iNext = 0;
+        pNext->iShmid = (pDb->treehdr.iNextShmid++);
+      }else{
+        *pRc = rc;
+        return 0;
+      }
+
       /* Set the header values for the chunk just finished */
       pHdr = (ShmChunk *)treeShmptr(pDb, iChunk*CHUNK_SIZE, pRc);
-      pHdr->iLastTree = pDb->treehdr.iTreeId;
       pHdr->iNext = iNext;
 
       /* Advance to the next chunk */
@@ -949,7 +962,6 @@ static int treeInsertLeaf(
 ** Empty the contents of the in-memory tree.
 */
 void lsmTreeClear(lsm_db *pDb){
-  pDb->treehdr.iTreeId++;
   pDb->treehdr.iTransId = 1;
   pDb->treehdr.iRoot = 0;
   pDb->treehdr.nHeight = 0;
@@ -962,12 +974,23 @@ void lsmTreeClear(lsm_db *pDb){
 ** is initialized here - it will be copied into shared memory if log file
 ** recovery is successful.
 */
-void lsmTreeInit(lsm_db *pDb){
+int lsmTreeInit(lsm_db *pDb){
+  ShmChunk *pOne;
+  int rc = LSM_OK;
+
   pDb->treehdr.iTransId = 1;
   pDb->treehdr.iFirst = 1;
   pDb->treehdr.nChunk = 2;
   pDb->treehdr.iWrite = LSM_SHM_CHUNK_SIZE + LSM_SHM_CHUNK_HDR;
-  pDb->treehdr.iTreeId = 1;
+  pDb->treehdr.iNextShmid = 2;
+  pDb->treehdr.iUsedShmid = 1;
+
+  pOne = treeShmChunkRc(pDb, 1, &rc);
+  if( pOne ){
+    pOne->iNext = 0;
+    pOne->iShmid = 1;
+  }
+  return rc;
 }
 
 /*
@@ -986,9 +1009,7 @@ int lsmTreeInsert(
 ){
   int rc = LSM_OK;                /* Return Code */
   TreeKey *pTreeKey;              /* New key-value being inserted */
-  int nTreeKey;                   /* Number of bytes allocated at pTreeKey */
   u32 iTreeKey;
-  u8 *a;
   TreeHeader *pHdr = &pDb->treehdr;
 
   assert( nVal>=0 || pVal==0 );
@@ -1449,7 +1470,6 @@ void lsmTreeMark(lsm_db *pDb, TreeMark *pMark){
   pMark->nHeight = pDb->treehdr.nHeight;
   pMark->iWrite = pDb->treehdr.iWrite;
   pMark->nChunk = pDb->treehdr.nChunk;
-  pMark->iFirst = pDb->treehdr.iFirst;
   pMark->iRollback = intArraySize(&pDb->rollback);
 }
 
@@ -1464,6 +1484,7 @@ void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
   u32 iNext;
   ShmChunk *pChunk;
   u32 iChunk;
+  u32 iShmid;
 
   /* Revert all required v2 pointers. */
   nIdx = intArraySize(&pDb->rollback);
@@ -1477,24 +1498,27 @@ void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
   }
   intArrayTruncate(&pDb->rollback, pMark->iRollback);
 
-  /* Restore the free-chunk list */
+  /* Restore the free-chunk list. */
   assert( pMark->iWrite!=0 );
   iChunk = treeOffsetToChunk(pMark->iWrite-1);
   pChunk = treeShmChunk(pDb, iChunk);
   iNext = pChunk->iNext;
   pChunk->iNext = 0;
-  assert( iNext==0 
-       || pDb->treehdr.iFirst==pMark->iFirst 
-       || iNext==pMark->iFirst 
-  );
-  pDb->treehdr.iFirst = pMark->iFirst;
+
+  pChunk = treeShmChunk(pDb, pDb->treehdr.iFirst);
+  iShmid = pChunk->iShmid-1;
+
   while( iNext ){
-    iChunk = iNext;
-    pChunk = treeShmChunk(pDb, iChunk);
-    iNext = pChunk->iNext;
-    if( iChunk<pMark->nChunk ){
-      pChunk->iNext = pDb->treehdr.iFirst;
-      pChunk->iLastTree = 0;
+    u32 iFree = iNext;            /* Current chunk being rollback-freed */
+    ShmChunk *pFree;              /* Pointer to chunk iFree */
+
+    pFree = treeShmChunk(pDb, iFree);
+    iNext = pFree->iNext;
+
+    if( iFree<pMark->nChunk ){
+      pFree->iNext = pDb->treehdr.iFirst;
+      pFree->iShmid = iShmid--;
+      pDb->treehdr.iFirst = iFree;
     }
   }
 

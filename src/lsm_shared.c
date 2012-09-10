@@ -342,7 +342,7 @@ LsmFile *lsmDbRecycleFd(lsm_db *db){
   LsmFile *pRet;
   Database *p = db->pDatabase;
   lsmMutexEnter(db->pEnv, p->pClientMutex);
-  if( pRet = p->pLsmFile ){
+  if( (pRet = p->pLsmFile)!=0 ){
     p->pLsmFile = pRet->pNext;
   }
   lsmMutexLeave(db->pEnv, p->pClientMutex);
@@ -661,13 +661,12 @@ int lsmBeginReadTrans(lsm_db *pDb){
     ** (starting with loading the in-memory tree header).  */
     if( rc==LSM_OK ){
       ShmHeader *pShm = pDb->pShmhdr;
-      i64 iTree = pDb->treehdr.iTreeId;
+      u32 iShmchunk = pDb->treehdr.iUsedShmid;
       i64 iSnap = lsmCheckpointId(pDb->aSnapshot, 0);
-      rc = lsmReadlock(pDb, iSnap, iTree);
+      rc = lsmReadlock(pDb, iSnap, iShmchunk);
       if( rc==LSM_OK ){
-        if( (i64)pShm->hdr1.iTreeId==iTree 
-         && pShm->hdr1.iTransId==pDb->treehdr.iTransId
-         && lsmCheckpointId(pShm->aClient, 0)==iSnap
+        if( 0==memcmp(pShm->hdr1.aCksum, pDb->treehdr.aCksum, sizeof(u32)*2)
+         && iSnap==lsmCheckpointId(pShm->aClient, 0)
         ){
           /* Read lock has been successfully obtained. Deserialize the 
           ** checkpoint just loaded. TODO: This will be removed after 
@@ -790,7 +789,7 @@ int lsmHoldingClientMutex(lsm_db *pDb){
 ** of snapshot iLsm and tree iTree. Return LSM_OK if successful, or
 ** an LSM error code otherwise.
 */
-int lsmReadlock(lsm_db *db, i64 iLsm, i64 iTree){
+int lsmReadlock(lsm_db *db, i64 iLsm, u32 iTree){
   ShmHeader *pShm = db->pShmhdr;
   int i;
   int rc = LSM_OK;
@@ -828,10 +827,10 @@ int lsmReadlock(lsm_db *db, i64 iLsm, i64 iTree){
   /* Search for any usable slot */
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
-    if( p->iLsmId && p->iTreeId && p->iLsmId<=iLsm && p->iTreeId<=iTree ){
+    if( p->iLsmId && p->iLsmId<=iLsm && shm_sequence_ge(iTree, p->iTreeId) ){
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
       if( rc==LSM_OK ){
-        if( p->iLsmId && p->iTreeId && p->iLsmId<=iLsm && p->iTreeId<=iTree ){
+        if( p->iLsmId && p->iLsmId<=iLsm && shm_sequence_ge(iTree,p->iTreeId) ){
           db->iReader = i;
         }
       }else if( rc==LSM_BUSY ){
@@ -843,18 +842,33 @@ int lsmReadlock(lsm_db *db, i64 iLsm, i64 iTree){
   return rc;
 }
 
-static int isInUse(lsm_db *db, i64 iLsm, i64 iTree, int *pbInUse){
+/*
+** This is used to check if there exists a read-lock locking a particular
+** version of either the in-memory tree or database file. 
+**
+** If iLsmId is non-zero, then it is a snapshot id. If there exists a 
+** read-lock using this snapshot or newer, set *pbInUse to true. Or,
+** if there is no such read-lock, set it to false.
+**
+** Or, if iLsmId is zero, then iShmid is a shared-memory sequence id.
+** Search for a read-lock using this sequence id or newer. etc.
+*/
+static int isInUse(lsm_db *db, i64 iLsmId, u32 iShmid, int *pbInUse){
   ShmHeader *pShm = db->pShmhdr;
   int i;
   int rc = LSM_OK;
 
   for(i=0; rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
-    if( p->iLsmId && p->iTreeId && (p->iTreeId<=iTree || p->iLsmId<=iLsm) ){
-      rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
-      if( rc==LSM_OK ){
-        p->iTreeId = p->iLsmId = 0;
-        lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK, 0);
+    if( p->iLsmId ){
+      if( (iLsmId!=0 && iLsmId>=p->iLsmId) 
+       || (iLsmId==0 && shm_sequence_ge(p->iTreeId, iShmid))
+      ){
+        rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
+        if( rc==LSM_OK ){
+          p->iLsmId = 0;
+          lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK, 0);
+        }
       }
     }
   }
@@ -867,12 +881,12 @@ static int isInUse(lsm_db *db, i64 iLsm, i64 iTree, int *pbInUse){
   return rc;
 }
 
-int lsmTreeInUse(lsm_db *db, u32 iTreeId, int *pbInUse){
-  if( db->treehdr.iTreeId==iTreeId ){
+int lsmTreeInUse(lsm_db *db, u32 iShmid, int *pbInUse){
+  if( db->treehdr.iUsedShmid==iShmid ){
     *pbInUse = 1;
     return LSM_OK;
   }
-  return isInUse(db, 0, (i64)iTreeId, pbInUse);
+  return isInUse(db, 0, iShmid, pbInUse);
 }
 
 int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse){

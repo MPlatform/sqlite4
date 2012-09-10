@@ -898,7 +898,9 @@ int lsmLogRecover(lsm_db *pDb){
   rc = lsmFsOpenLog(pDb->pFS);
   if( rc!=LSM_OK ) return rc;
 
-  lsmTreeInit(pDb);
+  rc = lsmTreeInit(pDb);
+  if( rc!=LSM_OK ) return rc;
+
   pLog = &pDb->treehdr.log;
   lsmCheckpointLogoffset(pDb->pShmhdr->aWorker, pLog);
 

@@ -130,7 +130,7 @@ int lsmErrorBkpt(int);
 #define LSM_SHM_CHUNK_SIZE (32*1024)
 
 /* The number of bytes reserved at the start of each shm chunk for MM. */
-#define LSM_SHM_CHUNK_HDR  (3 * 4)
+#define LSM_SHM_CHUNK_HDR  (sizeof(ShmChunk))
 
 /* The number of available read locks. */
 #define LSM_LOCK_NREADER   6
@@ -233,13 +233,14 @@ struct DbLog {
 ** Tree header structure. 
 */
 struct TreeHeader {
-  u32 iTreeId;                    /* Current tree id */
+  u32 iUsedShmid;                 /* Id of first shm chunk used by this tree */
+  u32 iNextShmid;                 /* Shm-id of next chunk allocated */
+  u32 iFirst;                     /* Chunk number of smallest shm-id */
   u32 iTransId;                   /* Current transaction id */
+  u32 nChunk;                     /* Number of chunks in shared-memory file */
   u32 iRoot;                      /* Offset of root node in shm file */
   u32 nHeight;                    /* Current height of tree structure */
   u32 iWrite;                     /* Write offset in shm file */
-  u32 nChunk;                     /* Number of chunks in shared-memory file */
-  u32 iFirst;                     /* First chunk in linked list */
   u32 nByte;                      /* Size of current tree structure in bytes */
   DbLog log;                      /* Current layout of log file */ 
   u32 aCksum[2];                  /* Checksums 1 and 2. */
@@ -380,7 +381,7 @@ struct Merge {
 ** The values that accompany the lock held by a database reader.
 */
 struct ShmReader {
-  i64 iTreeId;
+  u32 iTreeId;
   i64 iLsmId;
 };
 
@@ -419,10 +420,12 @@ struct ShmHeader {
 ** chunk except the first (which is the header chunk - see above).
 */
 struct ShmChunk {
-  u32 iFirstTree;
-  u32 iLastTree;
+  u32 iShmid;
   u32 iNext;
 };
+
+/* Return true if shm-sequence "a" is larger than or equal to "b" */
+#define shm_sequence_ge(a, b) (((u32)a-(u32)b) < (1<<30))
 
 #define LSM_APPLIST_SZ 4
 
@@ -499,7 +502,7 @@ int lsmCheckpointSynced(lsm_db *pDb, i64 *piId);
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeRelease(lsm_env *, Tree *);
 void lsmTreeClear(lsm_db *);
-void lsmTreeInit(lsm_db *);
+int lsmTreeInit(lsm_db *);
 
 int lsmTreeSize(lsm_db *);
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
@@ -786,7 +789,7 @@ void lsmShmHasLock(lsm_db *db, int iLock, int eOp);
 # define lsmShmHasLock(x,y,z)
 #endif
 
-int lsmReadlock(lsm_db *, i64 iLsm, i64 iTree);
+int lsmReadlock(lsm_db *, i64 iLsm, u32 iTree);
 int lsmReleaseReadlock(lsm_db *);
 
 int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);
