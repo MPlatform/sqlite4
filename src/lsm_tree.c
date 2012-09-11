@@ -967,6 +967,7 @@ void lsmTreeClear(lsm_db *pDb){
   pDb->treehdr.iRoot = 0;
   pDb->treehdr.nHeight = 0;
   pDb->treehdr.nByte = 0;
+  pDb->treehdr.iUsedShmid = pDb->treehdr.iNextShmid-1;
 }
 
 /*
