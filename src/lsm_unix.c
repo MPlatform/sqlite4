@@ -387,6 +387,7 @@ int lsmPosixOsShmUnmap(lsm_file *pFile, int bDelete){
     if( bDelete ){
       char *zShm = posixShmFile(p);
       if( zShm ) unlink(zShm);
+      lsmFree(p->pEnv, zShm);
     }
   }
   return LSM_OK;
@@ -398,6 +399,7 @@ static int lsmPosixOsClose(lsm_file *pFile){
    lsmPosixOsShmUnmap(pFile, 0);
    if( p->pMap ) munmap(p->pMap, p->nMap);
    close(p->fd);
+   lsm_free(p->pEnv, p->apShm);
    lsm_free(p->pEnv, p);
    return LSM_OK;
 }

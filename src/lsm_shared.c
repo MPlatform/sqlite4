@@ -149,6 +149,9 @@ static void freeDatabase(lsm_env *pEnv, Database *p){
       lsmEnvClose(pEnv, p->pFile);
     }
 
+    /* Free the array of shm pointers */
+    lsmFree(pEnv, p->apShmChunk);
+
     /* Free the memory allocated for the Database struct itself */
     lsmFree(pEnv, p);
   }
@@ -395,7 +398,6 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
           lsmFree(pDb->pEnv, pIter);
         }
       }
-      lsmFree(pDb->pEnv, p->apShmChunk);
       freeDatabase(pDb->pEnv, p);
     }
     leaveGlobalMutex(pDb->pEnv);
