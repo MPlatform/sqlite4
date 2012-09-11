@@ -296,6 +296,34 @@ static i64 lastByteOnSector(LogWriter *pLog, i64 iOff){
 }
 
 /*
+** If possible, reclaim log file space. Log file space is reclaimed after
+** a snapshot that points to the same data in the database file is synced
+** into the db header.
+*/
+static int logReclaimSpace(lsm_db *pDb){
+  int rc = LSM_OK;
+  if( pDb->pShmhdr->iMetaPage ){
+    DbLog *pLog = &pDb->treehdr.log;
+    i64 iSnapshotId = 0;
+    i64 iOff = 0;
+    rc = lsmCheckpointSynced(pDb, &iSnapshotId, &iOff);
+    if( rc==LSM_OK && pLog->iSnapshotId<iSnapshotId ){
+      int iRegion;
+      for(iRegion=0; iRegion<3; iRegion++){
+        LogRegion *p = &pLog->aRegion[iRegion];
+        if( iOff>=p->iStart && iOff<=p->iEnd ) break;
+        p->iStart = 0;
+        p->iEnd = 0;
+      }
+      assert( iRegion<3 );
+      pLog->aRegion[iRegion].iStart = iOff;
+      pLog->iSnapshotId = iSnapshotId;
+    }
+  }
+  return rc;
+}
+
+/*
 ** This function is called when a write-transaction is first opened. It
 ** is assumed that the caller is holding the client-mutex when it is 
 ** called.
@@ -315,6 +343,20 @@ int lsmLogBegin(lsm_db *pDb){
   if( pNew ){
     lsmStringInit(&pNew->buf, pDb->pEnv);
     rc = lsmStringExtend(&pNew->buf, 2);
+  }
+  if( rc==LSM_OK ){
+    /* The following call detects whether or not a new snapshot has been 
+    ** synced into the database file. If so, it updates the contents of
+    ** the pDb->treehdr.log structure to reclaim any space in the log
+    ** file that is no longer required. 
+    **
+    ** TODO: Calling this every transaction is overkill. And since the 
+    ** call has to read and checksum a snapshot from the database file,
+    ** it is expensive. It would be better to figure out a way so that
+    ** this is only called occasionally - say for every 32KB written to 
+    ** the log file.
+    */
+    rc = logReclaimSpace(pDb);
   }
   if( rc!=LSM_OK ){
     assert( pNew==0 || pNew->buf.z==0 );
@@ -427,28 +469,6 @@ void lsmLogEnd(lsm_db *pDb, int bCommit){
   lsmStringClear(&p->buf);
   lsmFree(pDb->pEnv, p);
   pDb->pLogWriter = 0;
-}
-
-/*
-** This function is called after a checkpoint is synced into the database
-** file. The checkpoint specifies that the log starts at offset iOff.
-** The shared state in *pLog is updated to reflect the fact that space
-** in the log file that occurs logically before offset iOff may now
-** be reused.
-*/ 
-void lsmLogCheckpoint(lsm_db *pDb, lsm_i64 iOff){
-  DbLog *pLog = &pDb->treehdr.log;
-  int iRegion;
-
-  for(iRegion=0; iRegion<3; iRegion++){
-    LogRegion *p = &pLog->aRegion[iRegion];
-    if( iOff>=p->iStart && iOff<=p->iEnd ) break;
-    p->iStart = 0;
-    p->iEnd = 0;
-  }
-  assert( iRegion<3 );
-
-  pLog->aRegion[iRegion].iStart = iOff;
 }
 
 static int jumpIfRequired(

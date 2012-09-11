@@ -453,7 +453,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     /* The "has been checkpointed" bit */
     if( rc==LSM_OK && bInUse==0 ){
       i64 iId = 0;
-      rc = lsmCheckpointSynced(pDb, &iId);
+      rc = lsmCheckpointSynced(pDb, &iId, 0);
       if( rc!=LSM_OK || iId<iFree ) bInUse = 1;
     }
 
@@ -562,28 +562,6 @@ int lsmCheckpointWrite(lsm_db *pDb){
       if( rc==LSM_OK ) rc = lsmFsSyncDb(pDb->pFS);
       if( rc==LSM_OK ) pShm->iMetaPage = iMeta;
     }
-  }
-
-  /* If no error has occured, then the snapshot currently in pDb->aSnapshot
-  ** has been synced to disk. This means it may be possible to wrap the
-  ** log file. Obtain the WRITER lock and update the relevent tree-header
-  ** fields to reflect this. 
-  */
-  if( rc==LSM_OK ){
-    u64 iLogoff = lsmCheckpointLogOffset(pDb->aSnapshot);
-    if( pDb->nTransOpen==0 ){
-      rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
-    }
-    if( rc==LSM_OK ){
-      rc = lsmTreeLoadHeader(pDb);
-      if( rc==LSM_OK ) lsmLogCheckpoint(pDb, iLogoff);
-      if( rc==LSM_OK ) lsmTreeEndTransaction(pDb, 1);
-      if( rc==LSM_BUSY ) rc = LSM_OK;
-      if( pDb->nTransOpen==0 ){
-        rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
-      }
-    }
-    if( rc==LSM_BUSY ) rc = LSM_OK;
   }
 
   lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);

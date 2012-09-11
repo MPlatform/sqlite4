@@ -1129,7 +1129,7 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
 ** LSM_OK returned. If an error occurs, an LSM error code is returned and
 ** the final value of *piId is undefined.
 */
-int lsmCheckpointSynced(lsm_db *pDb, i64 *piId){
+int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog){
   int rc = LSM_OK;
   MetaPage *pPg;
   u32 iMeta;
@@ -1151,6 +1151,7 @@ int lsmCheckpointSynced(lsm_db *pDb, i64 *piId){
         ckptChangeEndianness(aCopy, nCkpt);
         if( ckptChecksumOk(aCopy) ){
           *piId = lsmCheckpointId(aCopy, 0);
+          if( piLog ) *piLog = lsmCheckpointLogOffset(aCopy);
         }
         lsmFree(pDb->pEnv, aCopy);
       }
@@ -1199,6 +1200,7 @@ void lsmCheckpointLogoffset(
   pLog->aRegion[2].iStart = (((i64)iOffMSB) << 32) + ((i64)iOffLSB);
   pLog->cksum0 = aCkpt[CKPT_HDR_LO_CKSUM1];
   pLog->cksum1 = aCkpt[CKPT_HDR_LO_CKSUM2];
+  pLog->iSnapshotId = lsmCheckpointId(aCkpt, 0);
 }
 
 void lsmCheckpointZeroLogoffset(lsm_db *pDb){

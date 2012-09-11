@@ -227,6 +227,7 @@ struct LogRegion {
 struct DbLog {
   u32 cksum0;                     /* Checksum 0 at offset iOff */
   u32 cksum1;                     /* Checksum 1 at offset iOff */
+  i64 iSnapshotId;                /* Log space has been reclaimed to this ss */
   LogRegion aRegion[3];           /* Log file regions (see docs in lsm_log.c) */
 };
 
@@ -494,7 +495,7 @@ void lsmCheckpointZeroLogoffset(lsm_db *);
 
 int lsmCheckpointSaveWorker(lsm_db *pDb, int, int);
 int lsmDatabaseFull(lsm_db *pDb);
-int lsmCheckpointSynced(lsm_db *pDb, i64 *piId);
+int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog);
 
 
 /* 
@@ -721,7 +722,6 @@ void lsmLogTell(lsm_db *, LogMark *);
 void lsmLogSeek(lsm_db *, LogMark *);
 
 int lsmLogRecover(lsm_db *);
-void lsmLogCheckpoint(lsm_db *, lsm_i64);
 int lsmLogStructure(lsm_db *pDb, char **pzVal);
 
 
