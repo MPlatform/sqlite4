@@ -78,6 +78,9 @@ struct lsm_env {
   void (*xMutexLeave)(lsm_mutex *);         /* Leave a mutex */
   int (*xMutexHeld)(lsm_mutex *);           /* Return true if mutex is held */
   int (*xMutexNotHeld)(lsm_mutex *);        /* Return true if mutex not held */
+  /****** other ****************************************************/
+  int (*xSleep)(lsm_env*, int microseconds);
+
   /* New fields may be added in future releases, in which case the
   ** iVersion value will increase. */
 };

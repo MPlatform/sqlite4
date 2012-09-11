@@ -334,6 +334,11 @@ static int testEnvShmUnmap(lsm_file *pFile, int bDel){
   return pRealEnv->xShmUnmap(p->pReal, bDel);
 }
 
+static int testEnvSleep(lsm_env *pEnv, int us){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  return pRealEnv->xSleep(pRealEnv, us);
+}
+
 static void doSystemCrash(LsmDb *pDb){
   lsm_env *pEnv = tdb_lsm_env();
   int iFile;
@@ -722,6 +727,7 @@ static int testLsmOpen(
   pDb->env.xShmBarrier = testEnvShmBarrier;
   pDb->env.xShmMap = testEnvShmMap;
   pDb->env.xShmUnmap = testEnvShmUnmap;
+  pDb->env.xSleep = testEnvSleep;
 
   rc = lsm_new(&pDb->env, &pDb->db);
   if( rc==LSM_OK ){

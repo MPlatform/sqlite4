@@ -194,6 +194,7 @@ struct TreeMark {
   u32 iWrite;                     /* Write offset in shm file */
   u32 nChunk;                     /* Number of chunks in shared-memory file */
   u32 iFirst;                     /* First chunk in linked list */
+  u32 iNextShmid;                 /* Next id to allocate */
   int iRollback;                  /* Index in lsm->rollback to revert to */
 };
 
@@ -789,7 +790,7 @@ void lsmShmHasLock(lsm_db *db, int iLock, int eOp);
 # define lsmShmHasLock(x,y,z)
 #endif
 
-int lsmReadlock(lsm_db *, i64 iLsm, u32 iTree);
+int lsmReadlock(lsm_db *, i64 iLsm, u32 iShmMin, u32 iShmMax);
 int lsmReleaseReadlock(lsm_db *);
 
 int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);

@@ -404,6 +404,13 @@ static int lsmPosixOsClose(lsm_file *pFile){
    return LSM_OK;
 }
 
+static int lsmPosixOsSleep(lsm_env *pEnv, int us){
+  if( usleep(us) ){
+    return LSM_IOERR;
+  }
+  return LSM_OK;
+}
+
 /****************************************************************************
 ** Memory allocation routines.
 */
@@ -678,6 +685,8 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsMutexLeave,    /* xMutexLeave */
     lsmPosixOsMutexHeld,     /* xMutexHeld */
     lsmPosixOsMutexNotHeld,  /* xMutexNotHeld */
+    /***** other *********************/
+    lsmPosixOsSleep,         /* xSleep */
   };
   return &posix_env;
 }

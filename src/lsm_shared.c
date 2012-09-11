@@ -199,6 +199,8 @@ static void doDbDisconnect(lsm_db *pDb){
 }
 
 static int doDbConnect(lsm_db *pDb){
+  const int nUsMax = 100000;      /* Max value for nUs */
+  int nUs = 1000;                 /* us to wait between DMS1 attempts */
   int rc;
 
   /* Obtain a pointer to the shared-memory header */
@@ -208,7 +210,13 @@ static int doDbConnect(lsm_db *pDb){
 
   /* Block for an exclusive lock on DMS1. This lock serializes all calls
   ** to doDbConnect() and doDbDisconnect() across all processes.  */
-  rc = lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL, 1);
+  while( 1 ){
+    rc = lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL, 1);
+    if( rc!=LSM_BUSY ) break;
+    lsmEnvSleep(pDb->pEnv, nUs);
+    nUs = nUs * 2;
+    if( nUs>nUsMax ) nUs = nUsMax;
+  }
   if( rc!=LSM_OK ){
     pDb->pShmhdr = 0;
     return rc;
@@ -234,6 +242,7 @@ static int doDbConnect(lsm_db *pDb){
   ** lock on DSM1.  */
   if( rc==LSM_OK ){
     rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_SHARED, 0);
+    assert( rc!=LSM_BUSY );
   }
 
   /* If anything went wrong, unlock DMS2. Unlock DMS1 in any case. */
@@ -446,7 +455,6 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
       i64 iId = 0;
       rc = lsmCheckpointSynced(pDb, &iId);
       if( rc!=LSM_OK || iId<iFree ) bInUse = 1;
-      if( rc==LSM_BUSY ) rc = LSM_OK;
     }
 
     if( rc==LSM_OK && bInUse==0 ){
@@ -663,9 +671,10 @@ int lsmBeginReadTrans(lsm_db *pDb){
     ** (starting with loading the in-memory tree header).  */
     if( rc==LSM_OK ){
       ShmHeader *pShm = pDb->pShmhdr;
-      u32 iShmchunk = pDb->treehdr.iUsedShmid;
+      u32 iShmMax = pDb->treehdr.iUsedShmid;
+      u32 iShmMin = pDb->treehdr.iNextShmid+1-pDb->treehdr.nChunk;
       i64 iSnap = lsmCheckpointId(pDb->aSnapshot, 0);
-      rc = lsmReadlock(pDb, iSnap, iShmchunk);
+      rc = lsmReadlock(pDb, iSnap, iShmMin, iShmMax);
       if( rc==LSM_OK ){
         if( 0==memcmp(pShm->hdr1.aCksum, pDb->treehdr.aCksum, sizeof(u32)*2)
          && iSnap==lsmCheckpointId(pShm->aClient, 0)
@@ -786,24 +795,33 @@ int lsmHoldingClientMutex(lsm_db *pDb){
 }
 #endif
 
+static int slotIsUsable(ShmReader *p, i64 iLsm, u32 iShmMin, u32 iShmMax){
+  return( 
+      p->iLsmId && p->iLsmId<=iLsm 
+      && shm_sequence_ge(iShmMax, p->iTreeId)
+      && shm_sequence_ge(p->iTreeId, iShmMin)
+  );
+}
+
 /*
 ** Obtain a read-lock on database version identified by the combination
 ** of snapshot iLsm and tree iTree. Return LSM_OK if successful, or
 ** an LSM error code otherwise.
 */
-int lsmReadlock(lsm_db *db, i64 iLsm, u32 iTree){
+int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
   ShmHeader *pShm = db->pShmhdr;
   int i;
   int rc = LSM_OK;
 
   assert( db->iReader<0 );
+  assert( shm_sequence_ge(iShmMax, iShmMin) );
 
   /* Search for an exact match. */
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
-    if( p->iLsmId==iLsm && p->iTreeId==iTree ){
+    if( p->iLsmId==iLsm && p->iTreeId==iShmMax ){
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
-      if( rc==LSM_OK && p->iLsmId==iLsm && p->iTreeId==iTree ){
+      if( rc==LSM_OK && p->iLsmId==iLsm && p->iTreeId==iShmMax ){
         db->iReader = i;
       }else if( rc==LSM_BUSY ){
         rc = LSM_OK;
@@ -820,7 +838,7 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iTree){
     }else{
       ShmReader *p = &pShm->aReader[i];
       p->iLsmId = iLsm;
-      p->iTreeId = iTree;
+      p->iTreeId = iShmMax;
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
       if( rc==LSM_OK ) db->iReader = i;
     }
@@ -829,12 +847,10 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iTree){
   /* Search for any usable slot */
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
-    if( p->iLsmId && p->iLsmId<=iLsm && shm_sequence_ge(iTree, p->iTreeId) ){
+    if( slotIsUsable(p, iLsm, iShmMax, iShmMax) ){
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
-      if( rc==LSM_OK ){
-        if( p->iLsmId && p->iLsmId<=iLsm && shm_sequence_ge(iTree,p->iTreeId) ){
-          db->iReader = i;
-        }
+      if( rc==LSM_OK && slotIsUsable(p, iLsm, iShmMax, iShmMax) ){
+        db->iReader = i;
       }else if( rc==LSM_BUSY ){
         rc = LSM_OK;
       }

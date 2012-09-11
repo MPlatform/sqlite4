@@ -1118,42 +1118,50 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
   return LSM_OK;
 }
 
+/*
+** This function is used to determine the snapshot-id of the most recently
+** checkpointed snapshot. Variable ShmHeader.iMetaPage indicates which of
+** the two meta-pages said snapshot resides on (if any). 
+**
+** If successful, this function loads the snapshot from the meta-page, 
+** verifies its checksum and sets *piId to the snapshot-id before returning
+** LSM_OK. Or, if the checksum attempt fails, *piId is set to zero and
+** LSM_OK returned. If an error occurs, an LSM error code is returned and
+** the final value of *piId is undefined.
+*/
 int lsmCheckpointSynced(lsm_db *pDb, i64 *piId){
   int rc = LSM_OK;
-  const int nAttempt = 3;
-  int i;
-  for(i=0; i<nAttempt; i++){
-    MetaPage *pPg;
-    u32 iMeta;
+  MetaPage *pPg;
+  u32 iMeta;
 
-    iMeta = pDb->pShmhdr->iMetaPage;
-    rc = lsmFsMetaPageGet(pDb->pFS, 0, iMeta, &pPg);
-    if( rc==LSM_OK ){
-      int nCkpt;
-      int nData;
-      u8 *aData; 
+  iMeta = pDb->pShmhdr->iMetaPage;
+  rc = lsmFsMetaPageGet(pDb->pFS, 0, iMeta, &pPg);
+  if( rc==LSM_OK ){
+    int nCkpt;
+    int nData;
+    u8 *aData; 
 
-      aData = lsmFsMetaPageData(pPg, &nData);
-      assert( nData==LSM_META_PAGE_SIZE );
-      nCkpt = lsmGetU32(&aData[CKPT_HDR_NCKPT*sizeof(u32)]);
-
-      if( nCkpt<(LSM_META_PAGE_SIZE/sizeof(u32)) ){
-        u32 *aCopy = lsmMallocRc(pDb->pEnv, sizeof(u32) * nCkpt, &rc);
-        if( aCopy ){
-          memcpy(aCopy, aData, nCkpt*sizeof(u32));
-          ckptChangeEndianness(aCopy, nCkpt);
-          if( ckptChecksumOk(aCopy) ){
-            *piId = lsmCheckpointId(aCopy, 0);
-          }
-          lsmFree(pDb->pEnv, aCopy);
+    aData = lsmFsMetaPageData(pPg, &nData);
+    assert( nData==LSM_META_PAGE_SIZE );
+    nCkpt = lsmGetU32(&aData[CKPT_HDR_NCKPT*sizeof(u32)]);
+    if( nCkpt<(LSM_META_PAGE_SIZE/sizeof(u32)) ){
+      u32 *aCopy = lsmMallocRc(pDb->pEnv, sizeof(u32) * nCkpt, &rc);
+      if( aCopy ){
+        memcpy(aCopy, aData, nCkpt*sizeof(u32));
+        ckptChangeEndianness(aCopy, nCkpt);
+        if( ckptChecksumOk(aCopy) ){
+          *piId = lsmCheckpointId(aCopy, 0);
         }
+        lsmFree(pDb->pEnv, aCopy);
       }
-      lsmFsMetaPageRelease(pPg);
     }
-    if( rc!=LSM_OK || pDb->pShmhdr->iMetaPage==iMeta ) break;
+    lsmFsMetaPageRelease(pPg);
   }
 
-  return (rc==LSM_OK && i==3) ? LSM_BUSY : LSM_OK;
+  if( rc!=LSM_OK || pDb->pShmhdr->iMetaPage!=iMeta ){
+    *piId = 0;
+  }
+  return rc;
 }
 
 /*

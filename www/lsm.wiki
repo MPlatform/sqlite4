@@ -682,7 +682,9 @@ There are two conditions for reusing a free-block:
 <ol>
   <li> Take CHECKPOINTER lock.
 
-  <li> Load snapshot-1 from shared-memory. (if the checksum fails here?)
+  <li> Load snapshot-1 from shared-memory. If the checksum does not match
+       the content here, release the CHECKPOINTER lock and abandon the 
+       attempt to checkpoint the database.
 
   <li> The shared-memory region contains a variable indicating the database
        meta-page that a snapshot was last read from or written to. Check if

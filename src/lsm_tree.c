@@ -331,7 +331,6 @@ static TreeKey *treeShmkey(
 }
 
 #if defined(LSM_DEBUG) && defined(LSM_EXPENSIVE_ASSERT)
-
 void assert_leaf_looks_ok(TreeNode *pNode){
   assert( pNode->apKey[1] );
 }
@@ -543,10 +542,12 @@ static u32 treeShmalloc(lsm_db *pDb, int bAlign, int nByte, int *pRc){
 
       pFirst = treeShmChunk(pDb, pDb->treehdr.iFirst);
 
+      assert( shm_sequence_ge(pDb->treehdr.iUsedShmid, pFirst->iShmid) );
+      assert( (pDb->treehdr.iNextShmid+1-pDb->treehdr.nChunk)==pFirst->iShmid );
+
       /* Check if the chunk at the start of the linked list is still in
       ** use. If not, reuse it. If so, allocate a new chunk by appending
       ** to the *-shm file.  */
-      assert( shm_sequence_ge(pDb->treehdr.iUsedShmid, pFirst->iShmid) );
       if( pDb->treehdr.iUsedShmid!=pFirst->iShmid ){
         int bInUse;
         rc = lsmTreeInUse(pDb, pFirst->iShmid, &bInUse);
@@ -1470,6 +1471,7 @@ void lsmTreeMark(lsm_db *pDb, TreeMark *pMark){
   pMark->nHeight = pDb->treehdr.nHeight;
   pMark->iWrite = pDb->treehdr.iWrite;
   pMark->nChunk = pDb->treehdr.nChunk;
+  pMark->iNextShmid = pDb->treehdr.iNextShmid;
   pMark->iRollback = intArraySize(&pDb->rollback);
 }
 
@@ -1527,6 +1529,7 @@ void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
   pDb->treehdr.nHeight = pMark->nHeight;
   pDb->treehdr.iWrite = pMark->iWrite;
   pDb->treehdr.nChunk = pMark->nChunk;
+  pDb->treehdr.iNextShmid = pMark->iNextShmid;
 }
 
 static void treeHeaderChecksum(

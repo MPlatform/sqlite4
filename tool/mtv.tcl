@@ -240,7 +240,7 @@ proc lsmtest_report_read {zReport} {
   }
 
   foreach k [array names aFrame] {
-    set res [exec addr2line -f -e ./testfixture $k]
+    set res [exec addr2line -f -e $::zExec $k]
 
     set function [lindex $res 0] 
     set addr     [lindex $res 1]
@@ -260,14 +260,10 @@ proc lsmtest_report_read {zReport} {
 }
 
 proc open_database {} {
-  set zFilename [lindex $::argv 0]
-  if {$zFilename eq ""} {
-    set zFilename malloc.txt
-  }
 
-  lsmtest_report_read $zFilename
+  lsmtest_report_read $::zFilename
 
-  wm title . $zFilename
+  wm title . $::zFilename
 
   mddb function lrange -argcount 3 lrange
   mddb function llength -argcount 1 llength
@@ -285,8 +281,27 @@ proc open_database {} {
   }
 }
 
+proc usage {} {
+  puts stderr "Usage: $::argv0 \[-file textfile\] \[-exec executable\]"
+  exit -1
+}
+
+set ::zFilename malloc.txt
+set ::zExec testfixture
+if {[llength $argv] % 2} usage
+for {set i 0} {$i < [llength $argv]} {incr i 2} {
+  set switch [lindex $argv $i]*
+  set arg    [lindex $argv [expr $i+1]]
+  if {[string match $switch -file]} {
+    set ::zFilename [lindex $argv [expr $i+1]]
+  } elseif {[string match $switch -exec]} {
+    set ::zExec [lindex $argv [expr $i+1]]
+  } else {
+    usage
+  }
+}
+
 open_database
 bind $O(tree) <<TreeviewSelect>> [list populate_text_widget mddb]
-
 populate_tree_widget mddb [mddb one {SELECT zTest FROM malloc LIMIT 1}]
 

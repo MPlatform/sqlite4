@@ -266,6 +266,10 @@ void lsmEnvShmUnmap(lsm_env *pEnv, lsm_file *pFile, int bDel){
   return pEnv->xShmUnmap(pFile, bDel);
 }
 
+void lsmEnvSleep(lsm_env *pEnv, int nUs){
+  return pEnv->xSleep(pEnv, nUs);
+}
+
 
 /*
 ** Write the contents of string buffer pStr into the log file, starting at
