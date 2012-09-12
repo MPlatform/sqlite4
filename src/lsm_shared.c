@@ -663,6 +663,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
           ** version of the snapshot.  */
           rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot, &pDb->pClient);
           assert( (rc==LSM_OK)==(pDb->pClient!=0) );
+          assert( pDb->iReader>=0 );
         }else{
           rc = lsmReleaseReadlock(pDb);
         }
@@ -715,9 +716,8 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 
   /* If the previous writer failed mid-transaction, run emergency rollback. */
   if( rc==LSM_OK && pShm->bWriter ){
-    /* TODO: This! */
-    assert( 0 );
-    rc = LSM_CORRUPT_BKPT;
+    rc = lsmTreeRepair(pDb);
+    if( rc==LSM_OK ) pShm->bWriter = 0;
   }
 
   /* Check that this connection is currently reading from the most recent
@@ -899,6 +899,7 @@ int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse){
 int lsmReleaseReadlock(lsm_db *db){
   int rc = LSM_OK;
   if( db->iReader>=0 ){
+    assert( db->pClient==0 );
     rc = lsmShmLock(db, LSM_LOCK_READER(db->iReader), LSM_LOCK_UNLOCK, 0);
     db->iReader = -1;
   }

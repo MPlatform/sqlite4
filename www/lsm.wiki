@@ -367,6 +367,8 @@ ever written to by clients holding the WRITER lock.
 
 <h2>Log file</h2>
 
+<a href=../src/lsm_log.c>lsm_log.c</a>.
+
 <h1>3. Database Recovery and Shutdown</h1>
 
 <p>

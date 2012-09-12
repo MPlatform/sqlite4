@@ -995,6 +995,265 @@ int lsmTreeInit(lsm_db *pDb){
   return rc;
 }
 
+static void treeHeaderChecksum(
+  TreeHeader *pHdr, 
+  u32 *aCksum
+){
+  u32 cksum1 = 0x12345678;
+  u32 cksum2 = 0x9ABCDEF0;
+  u32 *a = (u32 *)pHdr;
+  int i;
+
+  assert( (offsetof(TreeHeader, aCksum) + sizeof(u32)*2)==sizeof(TreeHeader) );
+  assert( (sizeof(TreeHeader) % (sizeof(u32)*2))==0 );
+
+  for(i=0; i<(offsetof(TreeHeader, aCksum) / sizeof(u32)); i+=2){
+    cksum1 += a[i];
+    cksum2 += (cksum1 + a[i+1]);
+  }
+  aCksum[0] = cksum1;
+  aCksum[1] = cksum2;
+}
+
+/*
+** Return true if the checksum stored in TreeHeader object *pHdr is 
+** consistent with the contents of its other fields.
+*/
+static int treeHeaderChecksumOk(TreeHeader *pHdr){
+  u32 aCksum[2];
+  treeHeaderChecksum(pHdr, aCksum);
+  return (0==memcmp(aCksum, pHdr->aCksum, sizeof(aCksum)));
+}
+
+/*
+** This type is used by functions lsmTreeRepair() and treeSortByShmid() to
+** make relinking the linked list of shared-memory chunks easier.
+*/
+typedef struct ShmChunkLoc ShmChunkLoc;
+struct ShmChunkLoc {
+  ShmChunk *pShm;
+  u32 iLoc;
+};
+
+/*
+** The array aShm[] is of size (nSz*2) elements. The first and second nSz 
+** elements are both sorted in order of iShmid. This function merges the two
+** arrays and writes the sorted results over the top of aShm[].
+**
+** Argument aSpace[] points to an array of at least (nSz*2) elements that
+** can be used as temporary storage space while sorting.
+*/
+static void treeSortByShmid(ShmChunkLoc *aShm1, int nSz, ShmChunkLoc *aSpace){
+  ShmChunkLoc *aShm2 = &aShm1[nSz];
+  int i1 = 0;
+  int i2 = 0;
+  int iOut = 0;
+
+  while( i1<nSz || i2<nSz ){
+    if( i1==nSz || (i2!=nSz && aShm1[i1].pShm==0) ){
+      aSpace[iOut] = aShm2[i2++];
+    }else if( i2==nSz || aShm2[i2].pShm==0 ){
+      aSpace[iOut] = aShm1[i1++];
+    }else{
+      assert( aShm1[i1].pShm && aShm2[i2].pShm );
+      if( shm_sequence_ge(aShm1[i1].pShm->iShmid, aShm2[i2].pShm->iShmid) ){
+        aSpace[iOut] = aShm2[i2++];
+      }else{
+        aSpace[iOut] = aShm1[i1++];
+      }
+    }
+    iOut++;
+  }
+
+  memcpy(aShm1, aSpace, sizeof(ShmChunk *) * nSz*2);
+}
+
+/*
+** This function checks that the linked list of shared memory chunks 
+** that starts at chunk db->treehdr.iFirst:
+**
+**   1) Includes all chunks in the shared-memory region, and
+**   2) Links them together in order of ascending shm-id.
+**
+** If no error occurs and the conditions above are met, LSM_OK is returned.
+**
+** If either of the conditions are untrue, LSM_CORRUPT is returned. Or, if
+** an error is encountered before the checks are completed, another LSM error
+** code (i.e. LSM_IOERR or LSM_NOMEM) may be returned.
+*/
+static int treeCheckLinkedList(lsm_db *db){
+  int rc = LSM_OK;
+  int nVisit = 0;
+  u32 iShmid;
+  ShmChunk *p;
+
+  p = treeShmChunkRc(db, db->treehdr.iFirst, &rc);
+  iShmid = p->iShmid;
+  while( rc==LSM_OK && p ){
+    if( p->iNext ){
+      ShmChunk *pNext = treeShmChunkRc(db, p->iNext, &rc);
+      if( rc==LSM_OK ){
+        if( pNext->iShmid!=p->iShmid+1 ){
+          rc = LSM_CORRUPT_BKPT;
+        }
+        p = pNext;
+      }
+    }else{
+      p = 0;
+    }
+    nVisit++;
+  }
+
+  if( rc==LSM_OK && nVisit!=db->treehdr.nChunk-1 ){
+    rc = LSM_CORRUPT_BKPT;
+  }
+  return rc;
+}
+
+/*
+** Iterate through the current in-memory tree. If there are any v2-pointers
+** with transaction ids larger than db->treehdr.iTransId, zero them.
+*/
+static int treeRepairPtrs(lsm_db *db){
+  int rc = LSM_OK;
+
+  if( db->treehdr.nHeight>1 ){
+    TreeCursor csr;               /* Cursor used to iterate through tree */
+    u32 iTransId = db->treehdr.iTransId;
+
+    /* Initialize the cursor structure. Also decrement the nHeight variable
+    ** in the tree-header. This will prevent the cursor from visiting any
+    ** leaf nodes.  */
+    db->treehdr.nHeight--;
+    treeCursorInit(db, &csr);
+
+    rc = lsmTreeCursorEnd(&csr, 0);
+    while( rc==LSM_OK && lsmTreeCursorValid(&csr) ){
+      TreeNode *pNode = csr.apTreeNode[csr.iNode];
+      if( pNode->iV2>iTransId ){
+        pNode->iV2Child = 0;
+        pNode->iV2Ptr = 0;
+        pNode->iV2 = 0;
+      }
+      rc = lsmTreeCursorNext(&csr);
+    }
+
+    db->treehdr.nHeight++;
+  }
+
+  return rc;
+}
+
+static int treeRepairList(lsm_db *db){
+  int rc = LSM_OK;
+  int i;
+  ShmChunk *p;
+  ShmChunk *pMin = 0;
+  u32 iMin = 0;
+
+  /* Iterate through all shm chunks. Find the smallest shm-id present in
+  ** the shared-memory region. */
+  for(i=1; rc==LSM_OK && i<db->treehdr.nChunk; i++){
+    p = treeShmChunkRc(db, i, &rc);
+    if( p && (pMin==0 || shm_sequence_ge(pMin->iShmid, p->iShmid)) ){
+      pMin = p;
+      iMin = i;
+    }
+  }
+
+  /* Fix the shm-id values on any chunks with a shm-id greater than or 
+  ** equal to treehdr.iNextShmid. Then do a merge-sort of all chunks to 
+  ** fix the ShmChunk.iNext pointers.
+  */
+  if( rc==LSM_OK ){
+    int nSort;
+    int nByte;
+    ShmChunkLoc *aSort;
+
+    /* Allocate space for a merge sort. */
+    nSort = 1;
+    while( nSort < (db->treehdr.nChunk-1) ) nSort = nSort * 2;
+    nByte = sizeof(ShmChunkLoc) * nSort * 2;
+    aSort = lsmMallocZeroRc(db->pEnv, nByte, &rc);
+
+    /* Fix all shm-ids, if required. */
+    if( rc==LSM_OK && iMin!=db->treehdr.iFirst ){
+      u32 iPrevShmid = pMin->iShmid-1;
+      for(i=1; i<db->treehdr.nChunk; i++){
+        p = treeShmChunk(db, i);
+        aSort[i-1].pShm = p;
+        aSort[i-1].iLoc = i;
+        if( i!=db->treehdr.iFirst ){
+          if( shm_sequence_ge(p->iShmid, db->treehdr.iNextShmid) ){
+            p->iShmid = iPrevShmid--;
+          }
+        }
+      }
+      p = treeShmChunk(db, db->treehdr.iFirst);
+      p->iShmid = iPrevShmid;
+    }
+
+    if( rc==LSM_OK ){
+      ShmChunkLoc *aSpace = &aSort[nSort];
+      for(i=2; i<=nSort; i+=2){
+        int nSz;
+        for(nSz=1; (i & (1 << (nSz-1)))==0; nSz++){
+          treeSortByShmid(&aSort[i - nSz*2], nSz, aSpace);
+        }
+      }
+
+      for(i=0; i<nSort-1; i++){
+        if( aSort[i].pShm ){
+          aSort[i].pShm->iNext = aSort[i+1].iLoc;
+        }
+      }
+      assert( aSort[nSort-1].iLoc==0 );
+
+      rc = treeCheckLinkedList(db);
+    }
+  }
+
+  return rc;
+}
+
+/*
+** This function is called as part of opening a write-transaction if the
+** writer-flag is already set - indicating that the previous writer 
+** failed before ending its transaction.
+*/
+int lsmTreeRepair(lsm_db *db){
+  int rc = LSM_OK;
+  TreeHeader hdr;
+  ShmHeader *pHdr = db->pShmhdr;
+
+  /* Ensure that the two tree-headers are consistent. Copy one over the other
+  ** if necessary. Prefer the data from a tree-header for which the checksum
+  ** computes. Or, if they both compute, prefer tree-header-1.  */
+  if( memcmp(&pHdr->hdr1, &pHdr->hdr2, sizeof(TreeHeader)) ){
+    if( treeHeaderChecksumOk(&pHdr->hdr1) ){
+      memcpy(&pHdr->hdr2, &pHdr->hdr1, sizeof(TreeHeader));
+    }else{
+      memcpy(&pHdr->hdr1, &pHdr->hdr2, sizeof(TreeHeader));
+    }
+  }
+
+  /* Save the connections current copy of the tree-header. It will be 
+  ** restored before returning.  */
+  memcpy(&hdr, &db->treehdr, sizeof(TreeHeader));
+
+  /* Walk the tree. Zero any v2 pointers with a transaction-id greater than
+  ** the transaction-id currently in the tree-headers.  */
+  rc = treeRepairPtrs(db);
+
+  /* Repair the linked list of shared-memory chunks. */
+  if( rc==LSM_OK ){
+    rc = treeRepairList(db);
+  }
+
+  memcpy(&db->treehdr, &hdr, sizeof(TreeHeader));
+  return rc;
+}
+
 /*
 ** Insert a new entry into the in-memory tree.
 **
@@ -1531,36 +1790,6 @@ void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
   pDb->treehdr.iWrite = pMark->iWrite;
   pDb->treehdr.nChunk = pMark->nChunk;
   pDb->treehdr.iNextShmid = pMark->iNextShmid;
-}
-
-static void treeHeaderChecksum(
-  TreeHeader *pHdr, 
-  u32 *aCksum
-){
-  u32 cksum1 = 0x12345678;
-  u32 cksum2 = 0x9ABCDEF0;
-  u32 *a = (u32 *)pHdr;
-  int i;
-
-  assert( (offsetof(TreeHeader, aCksum) + sizeof(u32)*2)==sizeof(TreeHeader) );
-  assert( (sizeof(TreeHeader) % (sizeof(u32)*2))==0 );
-
-  for(i=0; i<(offsetof(TreeHeader, aCksum) / sizeof(u32)); i+=2){
-    cksum1 += a[i];
-    cksum2 += (cksum1 + a[i+1]);
-  }
-  aCksum[0] = cksum1;
-  aCksum[1] = cksum2;
-}
-
-/*
-** Return true if the checksum stored in TreeHeader object *pHdr is 
-** consistent with the contents of its other fields.
-*/
-static int treeHeaderChecksumOk(TreeHeader *pHdr){
-  u32 aCksum[2];
-  treeHeaderChecksum(pHdr, aCksum);
-  return (0==memcmp(aCksum, pHdr->aCksum, sizeof(aCksum)));
 }
 
 /*

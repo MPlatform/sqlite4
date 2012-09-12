@@ -505,6 +505,7 @@ int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeRelease(lsm_env *, Tree *);
 void lsmTreeClear(lsm_db *);
 int lsmTreeInit(lsm_db *);
+int lsmTreeRepair(lsm_db *);
 
 int lsmTreeSize(lsm_db *);
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
@@ -527,6 +528,7 @@ int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey);
 int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal);
 int lsmTreeCursorValid(TreeCursor *pCsr);
 int lsmTreeCursorSave(TreeCursor *pCsr);
+
 
 /* 
 ** Functions from file "mem.c".
