@@ -481,7 +481,7 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
 
     case LSM_INFO_LOG_STRUCTURE: {
       char **pzVal = va_arg(ap, char **);
-      rc = lsmLogStructure(pDb, pzVal);
+      rc = lsmInfoLogStructure(pDb, pzVal);
       break;
     }
 

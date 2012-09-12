@@ -731,7 +731,7 @@ void lsmLogTell(lsm_db *, LogMark *);
 void lsmLogSeek(lsm_db *, LogMark *);
 
 int lsmLogRecover(lsm_db *);
-int lsmLogStructure(lsm_db *pDb, char **pzVal);
+int lsmInfoLogStructure(lsm_db *pDb, char **pzVal);
 
 
 /**************************************************************************

@@ -744,17 +744,36 @@ void lsmLogSeek(
 }
 
 /*
-** TODO: Thread safety of this function?
+** This function does the work for an lsm_info(LOG_STRUCTURE) request.
 */
-int lsmLogStructure(lsm_db *pDb, char **pzVal){
-  DbLog *pLog = &pDb->treehdr.log;
-  *pzVal = lsmMallocPrintf(pDb->pEnv, 
-      "%d %d %d %d %d %d", 
-      (int)pLog->aRegion[0].iStart, (int)pLog->aRegion[0].iEnd,
-      (int)pLog->aRegion[1].iStart, (int)pLog->aRegion[1].iEnd,
-      (int)pLog->aRegion[2].iStart, (int)pLog->aRegion[2].iEnd
-  );
-  return (*pzVal ? LSM_OK : LSM_NOMEM_BKPT);
+int lsmInfoLogStructure(lsm_db *pDb, char **pzVal){
+  int rc = LSM_OK;
+  char *zVal = 0;
+
+  /* If there is no read or write transaction open, read the latest 
+  ** tree-header from shared-memory to report on. If necessary, update
+  ** it based on the contents of the database header.  
+  **
+  ** No locks are taken here - these are passive read operations only.
+  */
+  if( pDb->pCsr==0 && pDb->nTransOpen==0 ){
+    rc = lsmTreeLoadHeader(pDb, 0);
+    if( rc==LSM_OK ) rc = logReclaimSpace(pDb);
+  }
+
+  if( rc==LSM_OK ){
+    DbLog *pLog = &pDb->treehdr.log;
+    zVal = lsmMallocPrintf(pDb->pEnv, 
+        "%d %d %d %d %d %d", 
+        (int)pLog->aRegion[0].iStart, (int)pLog->aRegion[0].iEnd,
+        (int)pLog->aRegion[1].iStart, (int)pLog->aRegion[1].iEnd,
+        (int)pLog->aRegion[2].iStart, (int)pLog->aRegion[2].iEnd
+    );
+    if( !zVal ) rc = LSM_NOMEM_BKPT;
+  }
+
+  *pzVal = zVal;
+  return rc;
 }
 
 /*************************************************************************

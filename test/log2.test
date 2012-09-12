@@ -104,7 +104,7 @@ do_test         3.10 {
 } {}
 do_test         3.11 { 
   sqlite4_lsm_info db main log-structure 
-} {1124 1271 0 1062 1272 1809}
+} {0 0 139 1062 1272 1809}
 do_recover_test 3.12 { SELECT * FROM t1 } [execsql {SELECT * FROM t1}]
 
 #-------------------------------------------------------------------------
