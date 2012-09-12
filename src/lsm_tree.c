@@ -1794,34 +1794,38 @@ void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
 
 /*
 ** Load the in-memory tree header from shared-memory into pDb->treehdr.
-** If the header cannot be loaded, return LSM_BUSY.
+** If the header cannot be loaded, return LSM_PROTOCOL.
+**
+** If the header is successfully loaded and parameter piRead is not NULL,
+** is is set to 1 if the header was loaded from ShmHeader.hdr1, or 2 if
+** the header was loaded from ShmHeader.hdr2.
 */
-int lsmTreeLoadHeader(lsm_db *pDb){
-  while( 1 ){
+int lsmTreeLoadHeader(lsm_db *pDb, int *piRead){
+  int nRem = LSM_ATTEMPTS_BEFORE_PROTOCOL;
+  while( (nRem--)>0 ){
     int rc;
     ShmHeader *pShm = pDb->pShmhdr;
 
     memcpy(&pDb->treehdr, &pShm->hdr1, sizeof(TreeHeader));
-    if( treeHeaderChecksumOk(&pDb->treehdr) ) return LSM_OK;
-
-    rc = lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_EXCL, 0);
-    if( rc==LSM_BUSY ){
-      usleep(50);
-    }else{
-      if( rc==LSM_OK ){
-        if( treeHeaderChecksumOk(&pShm->hdr1)==0 ){
-          memcpy(&pShm->hdr1, &pShm->hdr2, sizeof(TreeHeader));
-        }
-        memcpy(&pDb->treehdr, &pShm->hdr1, sizeof(TreeHeader));
-        lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
-
-        if( treeHeaderChecksumOk(&pDb->treehdr)==0 ){
-          rc = LSM_CORRUPT_BKPT;
-        }
-      }
-      return rc;
+    if( treeHeaderChecksumOk(&pDb->treehdr) ){
+      if( piRead ) *piRead = 1;
+      return LSM_OK;
     }
+    memcpy(&pDb->treehdr, &pShm->hdr2, sizeof(TreeHeader));
+    if( treeHeaderChecksumOk(&pDb->treehdr) ){
+      if( piRead ) *piRead = 2;
+      return LSM_OK;
+    }
+
+    lsmShmBarrier(pDb);
   }
+  return LSM_PROTOCOL;
+}
+
+int lsmTreeLoadHeaderOk(lsm_db *pDb, int iRead){
+  TreeHeader *p = (iRead==1) ? &pDb->pShmhdr->hdr1 : &pDb->pShmhdr->hdr2;
+  assert( iRead==1 || iRead==2 );
+  return (0==memcmp(pDb->treehdr.aCksum, p->aCksum, sizeof(u32)*2));
 }
 
 /*

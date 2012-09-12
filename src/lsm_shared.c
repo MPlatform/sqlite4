@@ -174,7 +174,7 @@ static void doDbDisconnect(lsm_db *pDb){
       ** this will create a new client snapshot in Database.pClient. The
       ** checkpoint (serialization) of this snapshot may be written to disk
       ** by the following block.  */
-      rc = lsmTreeLoadHeader(pDb);
+      rc = lsmTreeLoadHeader(pDb, 0);
       if( rc==LSM_OK && lsmTreeSize(pDb)>0 ){
         rc = lsmFlushToDisk(pDb);
       }
@@ -532,7 +532,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   rc = lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_EXCL, 0);
   if( rc!=LSM_OK ) return rc;
 
-  rc = lsmCheckpointLoad(pDb);
+  rc = lsmCheckpointLoad(pDb, 0);
   if( rc==LSM_OK ){
     ShmHeader *pShm = pDb->pShmhdr;
     int bDone = 0;                /* True if checkpoint is already stored */
@@ -633,14 +633,16 @@ int lsmBeginReadTrans(lsm_db *pDb){
   assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
 
   while( rc==LSM_OK && pDb->pClient==0 && (iAttempt++)<MAX_READLOCK_ATTEMPTS ){
+    int iTreehdr = 0;
+    int iSnap = 0;
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
     /* Load the in-memory tree header. */
-    rc = lsmTreeLoadHeader(pDb);
+    rc = lsmTreeLoadHeader(pDb, &iTreehdr);
 
     /* Load the database snapshot */
     if( rc==LSM_OK ){
-      rc = lsmCheckpointLoad(pDb);
+      rc = lsmCheckpointLoad(pDb, &iSnap);
     }
 
     /* Take a read-lock on the tree and snapshot just loaded. Then check
@@ -651,11 +653,10 @@ int lsmBeginReadTrans(lsm_db *pDb){
       ShmHeader *pShm = pDb->pShmhdr;
       u32 iShmMax = pDb->treehdr.iUsedShmid;
       u32 iShmMin = pDb->treehdr.iNextShmid+1-pDb->treehdr.nChunk;
-      i64 iSnap = lsmCheckpointId(pDb->aSnapshot, 0);
       rc = lsmReadlock(pDb, iSnap, iShmMin, iShmMax);
       if( rc==LSM_OK ){
-        if( 0==memcmp(pShm->hdr1.aCksum, pDb->treehdr.aCksum, sizeof(u32)*2)
-         && iSnap==lsmCheckpointId(pShm->aClient, 0)
+        if( lsmTreeLoadHeaderOk(pDb, iTreehdr)
+         && lsmCheckpointLoadOk(pDb, iSnap)
         ){
           /* Read lock has been successfully obtained. Deserialize the 
           ** checkpoint just loaded. TODO: This will be removed after 

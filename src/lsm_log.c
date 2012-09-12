@@ -922,7 +922,7 @@ int lsmLogRecover(lsm_db *pDb){
   if( rc!=LSM_OK ) return rc;
 
   pLog = &pDb->treehdr.log;
-  lsmCheckpointLogoffset(pDb->pShmhdr->aWorker, pLog);
+  lsmCheckpointLogoffset(pDb->pShmhdr->aSnap2, pLog);
 
   logReaderInit(pDb, pLog, 1, &reader);
   lsmStringInit(&buf1, pDb->pEnv);

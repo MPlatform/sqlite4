@@ -335,7 +335,7 @@ static void ckptExportLog(
     ckptSetValue(p, iOut++, pLog->cksum1, pRc);
   }else{
     for(; iOut<=CKPT_HDR_LO_CKSUM2; iOut++){
-      ckptSetValue(p, iOut, pDb->pShmhdr->aWorker[iOut], pRc);
+      ckptSetValue(p, iOut, pDb->pShmhdr->aSnap2[iOut], pRc);
     }
   }
 
@@ -382,7 +382,7 @@ static int ckptExportSnapshot(
   if( nOvfl>=0 ){
     nFree -=  nOvfl;
   }else{
-    nOvfl = pDb->pShmhdr->aWorker[CKPT_HDR_OVFL];
+    nOvfl = pDb->pShmhdr->aSnap2[CKPT_HDR_OVFL];
   }
 
   /* Initialize the output buffer */
@@ -826,7 +826,7 @@ static int ckptChecksumOk(u32 *aCkpt){
 ** before returning.
 **
 ** If no error occurs and the checkpoint is successfully loaded, copy it to
-** ShmHeader.aClient[] and ShmHeader.aWorker[], and set ShmHeader.iMetaPage 
+** ShmHeader.aSnap1[] and ShmHeader.aSnap2[], and set ShmHeader.iMetaPage 
 ** to indicate its origin. In this case return 1. Or, if the checkpoint 
 ** cannot be loaded (because the checksum does not compute), return 0.
 */
@@ -849,8 +849,8 @@ static int ckptTryLoad(lsm_db *pDb, MetaPage *pPg, u32 iMeta, int *pRc){
       ckptChangeEndianness(aCkpt, nCkpt);
       if( ckptChecksumOk(aCkpt) ){
         ShmHeader *pShm = pDb->pShmhdr;
-        memcpy(pShm->aClient, aCkpt, nCkpt*sizeof(u32));
-        memcpy(pShm->aWorker, aCkpt, nCkpt*sizeof(u32));
+        memcpy(pShm->aSnap1, aCkpt, nCkpt*sizeof(u32));
+        memcpy(pShm->aSnap2, aCkpt, nCkpt*sizeof(u32));
         memcpy(pDb->aSnapshot, aCkpt, nCkpt*sizeof(u32));
         pShm->iMetaPage = iMeta;
         bLoaded = 1;
@@ -890,14 +890,14 @@ static void ckptLoadEmpty(lsm_db *pDb){
   aCkpt[CKPT_HDR_PGSZ] = pDb->nDfltPgsz;
   ckptChecksum(aCkpt, array_size(aCkpt), &aCkpt[nCkpt-2], &aCkpt[nCkpt-1]);
 
-  memcpy(pShm->aClient, aCkpt, nCkpt*sizeof(u32));
-  memcpy(pShm->aWorker, aCkpt, nCkpt*sizeof(u32));
+  memcpy(pShm->aSnap1, aCkpt, nCkpt*sizeof(u32));
+  memcpy(pShm->aSnap2, aCkpt, nCkpt*sizeof(u32));
   memcpy(pDb->aSnapshot, aCkpt, nCkpt*sizeof(u32));
 }
 
 /*
 ** This function is called as part of database recovery to initialize the
-** ShmHeader.aClient[] and ShmHeader.aWorker[] snapshots.
+** ShmHeader.aSnap1[] and ShmHeader.aSnap2[] snapshots.
 */
 int lsmCheckpointRecover(lsm_db *pDb){
   int rc = LSM_OK;                /* Return Code */
@@ -957,52 +957,65 @@ int lsmCheckpointStore(lsm_db *pDb, int iMeta){
 /*
 ** Copy the current client snapshot from shared-memory to pDb->aSnapshot[].
 */
-int lsmCheckpointLoad(lsm_db *pDb){
-  while( 1 ){
-    int rc;
+int lsmCheckpointLoad(lsm_db *pDb, int *piRead){
+  int nRem = LSM_ATTEMPTS_BEFORE_PROTOCOL;
+  ShmHeader *pShm = pDb->pShmhdr;
+  while( (nRem--)>0 ){
     int nInt;
-    ShmHeader *pShm = pDb->pShmhdr;
 
-    nInt = pShm->aClient[CKPT_HDR_NCKPT];
-    memcpy(pDb->aSnapshot, pShm->aClient, nInt*sizeof(u32));
-    if( ckptChecksumOk(pDb->aSnapshot) ) return LSM_OK;
-
-    rc = lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL, 0);
-    if( rc==LSM_BUSY ){
-      usleep(50);
-    }else{
-      if( rc==LSM_OK ){
-        if( ckptChecksumOk(pShm->aClient)==0 ){
-          nInt = pShm->aWorker[CKPT_HDR_NCKPT];
-          memcpy(pShm->aClient, pShm->aWorker, nInt*sizeof(u32));
-        }
-        nInt = pShm->aClient[CKPT_HDR_NCKPT];
-        memcpy(pDb->aSnapshot, &pShm->aClient, nInt*sizeof(u32));
-        lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK, 0);
-
-        if( ckptChecksumOk(pDb->aSnapshot)==0 ){
-          rc = LSM_CORRUPT_BKPT;
-        }
+    nInt = pShm->aSnap1[CKPT_HDR_NCKPT];
+    if( nInt<=(LSM_META_PAGE_SIZE / sizeof(u32)) ){
+      memcpy(pDb->aSnapshot, pShm->aSnap1, nInt*sizeof(u32));
+      if( ckptChecksumOk(pDb->aSnapshot) ){
+        if( piRead ) *piRead = 1;
+        return LSM_OK;
       }
-      return rc;
     }
+
+    nInt = pShm->aSnap2[CKPT_HDR_NCKPT];
+    if( nInt<=(LSM_META_PAGE_SIZE / sizeof(u32)) ){
+      memcpy(pDb->aSnapshot, pShm->aSnap2, nInt*sizeof(u32));
+      if( ckptChecksumOk(pDb->aSnapshot) ){
+        if( piRead ) *piRead = 2;
+        return LSM_OK;
+      }
+    }
+
+    lsmShmBarrier(pDb);
   }
+  return LSM_PROTOCOL;
+}
+
+int lsmCheckpointLoadOk(lsm_db *pDb, int iSnap){
+  u32 *aShm;
+  assert( iSnap==1 || iSnap==2 );
+  aShm = (iSnap==1) ? pDb->pShmhdr->aSnap1 : pDb->pShmhdr->aSnap2;
+  return (lsmCheckpointId(pDb->aSnapshot, 0)==lsmCheckpointId(aShm, 0) );
 }
 
 int lsmCheckpointLoadWorker(lsm_db *pDb){
   int rc;
   ShmHeader *pShm = pDb->pShmhdr;
+  int nInt1;
+  int nInt2;
 
   /* Must be holding the WORKER lock to do this */
   assert( lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL) );
 
-  if( ckptChecksumOk(pShm->aWorker)==0 ){
-    int nInt = (int)pShm->aClient[CKPT_HDR_NCKPT];
-    memcpy(pShm->aWorker, pShm->aClient, nInt*sizeof(u32));
-    if( ckptChecksumOk(pShm->aWorker)==0 ) return LSM_CORRUPT_BKPT;
+  /* Check that the two snapshots match. If not, repair them. */
+  nInt1 = pShm->aSnap1[CKPT_HDR_NCKPT];
+  nInt2 = pShm->aSnap2[CKPT_HDR_NCKPT];
+  if( nInt1!=nInt2 || memcmp(pShm->aSnap1, pShm->aSnap2, nInt2*sizeof(u32)) ){
+    if( ckptChecksumOk(pShm->aSnap1) ){
+      memcpy(pShm->aSnap2, pShm->aSnap1, sizeof(u32)*nInt1);
+    }else if( ckptChecksumOk(pShm->aSnap2) ){
+      memcpy(pShm->aSnap1, pShm->aSnap2, sizeof(u32)*nInt2);
+    }else{
+      return LSM_PROTOCOL;
+    }
   }
 
-  rc = lsmCheckpointDeserialize(pDb, 1, pShm->aWorker, &pDb->pWorker);
+  rc = lsmCheckpointDeserialize(pDb, 1, pShm->aSnap1, &pDb->pWorker);
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   return rc;
 }
@@ -1110,9 +1123,9 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
   assert( ckptChecksumOk((u32 *)p) );
 
   assert( n<=LSM_META_PAGE_SIZE );
-  memcpy(pShm->aWorker, p, n);
+  memcpy(pShm->aSnap2, p, n);
   lsmShmBarrier(pDb);
-  memcpy(pShm->aClient, p, n);
+  memcpy(pShm->aSnap1, p, n);
   lsmFree(pDb->pEnv, p);
 
   return LSM_OK;
@@ -1208,9 +1221,9 @@ void lsmCheckpointZeroLogoffset(lsm_db *pDb){
 
   nCkpt = pDb->aSnapshot[CKPT_HDR_NCKPT];
   assert( nCkpt>CKPT_HDR_NCKPT );
-  assert( nCkpt==pDb->pShmhdr->aClient[CKPT_HDR_NCKPT] );
-  assert( 0==memcmp(pDb->aSnapshot, pDb->pShmhdr->aClient, nCkpt*sizeof(u32)) );
-  assert( 0==memcmp(pDb->aSnapshot, pDb->pShmhdr->aWorker, nCkpt*sizeof(u32)) );
+  assert( nCkpt==pDb->pShmhdr->aSnap1[CKPT_HDR_NCKPT] );
+  assert( 0==memcmp(pDb->aSnapshot, pDb->pShmhdr->aSnap1, nCkpt*sizeof(u32)) );
+  assert( 0==memcmp(pDb->aSnapshot, pDb->pShmhdr->aSnap2, nCkpt*sizeof(u32)) );
 
   pDb->aSnapshot[CKPT_HDR_LO_MSW] = 0;
   pDb->aSnapshot[CKPT_HDR_LO_LSW] = 0;
@@ -1218,7 +1231,7 @@ void lsmCheckpointZeroLogoffset(lsm_db *pDb){
       &pDb->aSnapshot[nCkpt-2], &pDb->aSnapshot[nCkpt-1]
   );
 
-  memcpy(pDb->pShmhdr->aClient, pDb->aSnapshot, nCkpt*sizeof(u32));
-  memcpy(pDb->pShmhdr->aWorker, pDb->aSnapshot, nCkpt*sizeof(u32));
+  memcpy(pDb->pShmhdr->aSnap1, pDb->aSnapshot, nCkpt*sizeof(u32));
+  memcpy(pDb->pShmhdr->aSnap2, pDb->aSnapshot, nCkpt*sizeof(u32));
 }
 

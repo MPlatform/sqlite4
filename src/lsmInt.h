@@ -150,6 +150,8 @@ int lsmErrorBkpt(int);
 */
 #define LSM_MAX_FREELIST_ENTRIES 100
 
+#define LSM_ATTEMPTS_BEFORE_PROTOCOL 10000
+
 /*
 ** A string that can grow by appending.
 */
@@ -408,8 +410,8 @@ struct ShmReader {
 **   in case a writer fails while updating one of them.
 */
 struct ShmHeader {
-  u32 aClient[LSM_META_PAGE_SIZE / 4];
-  u32 aWorker[LSM_META_PAGE_SIZE / 4];
+  u32 aSnap1[LSM_META_PAGE_SIZE / 4];
+  u32 aSnap2[LSM_META_PAGE_SIZE / 4];
   u32 bWriter;
   u32 iMetaPage;
   TreeHeader hdr1;
@@ -482,9 +484,11 @@ int lsmCheckpointOverflowLoad(lsm_db *pDb, Freelist *);
 int lsmCheckpointRecover(lsm_db *);
 int lsmCheckpointDeserialize(lsm_db *, int, u32 *, Snapshot **);
 
-int lsmCheckpointLoad(lsm_db *pDb);
 int lsmCheckpointLoadWorker(lsm_db *pDb);
 int lsmCheckpointStore(lsm_db *pDb, int);
+
+int lsmCheckpointLoad(lsm_db *pDb, int *);
+int lsmCheckpointLoadOk(lsm_db *pDb, int);
 
 i64 lsmCheckpointId(u32 *, int);
 i64 lsmCheckpointLogOffset(u32 *);
@@ -510,7 +514,8 @@ int lsmTreeRepair(lsm_db *);
 int lsmTreeSize(lsm_db *);
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
 int lsmTreeBeginTransaction(lsm_db *pDb);
-int lsmTreeLoadHeader(lsm_db *pDb);
+int lsmTreeLoadHeader(lsm_db *pDb, int *);
+int lsmTreeLoadHeaderOk(lsm_db *, int);
 
 int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);
@@ -646,6 +651,8 @@ int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock);
 int lsmEnvShmMap(lsm_env *, lsm_file *, int, int, void **); 
 void lsmEnvShmBarrier(lsm_env *);
 void lsmEnvShmUnmap(lsm_env *, lsm_file *, int);
+
+void lsmEnvSleep(lsm_env *, int);
 
 /*
 ** End of functions from "lsm_file.c".

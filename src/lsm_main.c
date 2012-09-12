@@ -182,7 +182,7 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     ** of this database. Even if the database file is zero bytes in size
     ** on disk, these values have been set in shared-memory by now, and so are
     ** guaranteed not to change during the lifetime of this connection.  */
-    if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb)) ){
+    if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb, 0)) ){
       lsmFsSetPageSize(pDb->pFS, lsmCheckpointPgsz(pDb->aSnapshot));
       lsmFsSetBlockSize(pDb->pFS, lsmCheckpointBlksz(pDb->aSnapshot));
     }
@@ -230,7 +230,7 @@ int lsmFlushToDisk(lsm_db *pDb){
   if( rc==LSM_OK && pDb->pCsr ){
     lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
-    rc = lsmCheckpointLoad(pDb);
+    rc = lsmCheckpointLoad(pDb, 0);
     if( rc==LSM_OK ){
       rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot, &pDb->pClient);
     }

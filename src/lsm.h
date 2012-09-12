@@ -107,6 +107,7 @@ lsm_env *lsm_default_env(void);
 #define LSM_CORRUPT   11
 #define LSM_FULL      13
 #define LSM_CANTOPEN  14
+#define LSM_PROTOCOL  15
 #define LSM_MISUSE    21
 
 /* 
