@@ -359,7 +359,7 @@ int lsmLogBegin(lsm_db *pDb){
     rc = logReclaimSpace(pDb);
   }
   if( rc!=LSM_OK ){
-    assert( pNew==0 || pNew->buf.z==0 );
+    if( pNew ) lsmFree(pDb->pEnv, pNew->buf.z);
     lsmFree(pDb->pEnv, pNew);
     return rc;
   }
