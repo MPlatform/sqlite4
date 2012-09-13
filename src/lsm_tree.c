@@ -1036,39 +1036,6 @@ struct ShmChunkLoc {
 };
 
 /*
-** The array aShm[] is of size (nSz*2) elements. The first and second nSz 
-** elements are both sorted in order of iShmid. This function merges the two
-** arrays and writes the sorted results over the top of aShm[].
-**
-** Argument aSpace[] points to an array of at least (nSz*2) elements that
-** can be used as temporary storage space while sorting.
-*/
-static void treeSortByShmid(ShmChunkLoc *aShm1, int nSz, ShmChunkLoc *aSpace){
-  ShmChunkLoc *aShm2 = &aShm1[nSz];
-  int i1 = 0;
-  int i2 = 0;
-  int iOut = 0;
-
-  while( i1<nSz || i2<nSz ){
-    if( i1==nSz || (i2!=nSz && aShm1[i1].pShm==0) ){
-      aSpace[iOut] = aShm2[i2++];
-    }else if( i2==nSz || aShm2[i2].pShm==0 ){
-      aSpace[iOut] = aShm1[i1++];
-    }else{
-      assert( aShm1[i1].pShm && aShm2[i2].pShm );
-      if( shm_sequence_ge(aShm1[i1].pShm->iShmid, aShm2[i2].pShm->iShmid) ){
-        aSpace[iOut] = aShm2[i2++];
-      }else{
-        aSpace[iOut] = aShm1[i1++];
-      }
-    }
-    iOut++;
-  }
-
-  memcpy(aShm1, aSpace, sizeof(ShmChunk *) * nSz*2);
-}
-
-/*
 ** This function checks that the linked list of shared memory chunks 
 ** that starts at chunk db->treehdr.iFirst:
 **
@@ -1137,6 +1104,7 @@ static int treeRepairPtrs(lsm_db *db){
       }
       rc = lsmTreeCursorNext(&csr);
     }
+    tblobFree(csr.pDb, &csr.blob);
 
     db->treehdr.nHeight++;
   }
@@ -1168,6 +1136,7 @@ static int treeRepairList(lsm_db *db){
   if( rc==LSM_OK ){
     int nSort;
     int nByte;
+    u32 iPrevShmid;
     ShmChunkLoc *aSort;
 
     /* Allocate space for a merge sort. */
@@ -1175,10 +1144,11 @@ static int treeRepairList(lsm_db *db){
     while( nSort < (db->treehdr.nChunk-1) ) nSort = nSort * 2;
     nByte = sizeof(ShmChunkLoc) * nSort * 2;
     aSort = lsmMallocZeroRc(db->pEnv, nByte, &rc);
+    iPrevShmid = pMin->iShmid;
 
     /* Fix all shm-ids, if required. */
     if( rc==LSM_OK && iMin!=db->treehdr.iFirst ){
-      u32 iPrevShmid = pMin->iShmid-1;
+      iPrevShmid = pMin->iShmid-1;
       for(i=1; i<db->treehdr.nChunk; i++){
         p = treeShmChunk(db, i);
         aSort[i-1].pShm = p;
@@ -1195,21 +1165,23 @@ static int treeRepairList(lsm_db *db){
 
     if( rc==LSM_OK ){
       ShmChunkLoc *aSpace = &aSort[nSort];
-      for(i=2; i<=nSort; i+=2){
-        int nSz;
-        for(nSz=1; (i & (1 << (nSz-1)))==0; nSz++){
-          treeSortByShmid(&aSort[i - nSz*2], nSz, aSpace);
+      for(i=0; i<nSort; i++){
+        if( aSort[i].pShm ){
+          assert( shm_sequence_ge(aSort[i].pShm->iShmid, iPrevShmid) );
+          assert( aSpace[aSort[i].pShm->iShmid - iPrevShmid].pShm==0 );
+          aSpace[aSort[i].pShm->iShmid - iPrevShmid] = aSort[i];
         }
       }
 
+      if( aSpace[nSort-1].pShm ) aSpace[nSort-1].pShm->iNext = 0;
       for(i=0; i<nSort-1; i++){
-        if( aSort[i].pShm ){
-          aSort[i].pShm->iNext = aSort[i+1].iLoc;
+        if( aSpace[i].pShm ){
+          aSpace[i].pShm->iNext = aSpace[i+1].iLoc;
         }
       }
-      assert( aSort[nSort-1].iLoc==0 );
 
       rc = treeCheckLinkedList(db);
+      lsmFree(db->pEnv, aSort);
     }
   }
 
@@ -1803,7 +1775,6 @@ void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark){
 int lsmTreeLoadHeader(lsm_db *pDb, int *piRead){
   int nRem = LSM_ATTEMPTS_BEFORE_PROTOCOL;
   while( (nRem--)>0 ){
-    int rc;
     ShmHeader *pShm = pDb->pShmhdr;
 
     memcpy(&pDb->treehdr, &pShm->hdr1, sizeof(TreeHeader));

@@ -20,6 +20,15 @@ Organization of test case files:
 
   lsmtest7.c: API tests.
 
+  lsmtest8.c: Writer crash tests. Tests in this file attempt to verify that
+              the system recovers and other clients proceed unaffected if
+              a process fails in the middle of a write transaction.
+
+              The difference from lsmtest2.c is that this file tests
+              live-recovery (recovery from a failure that occurs while other
+              clients are still running) whereas lsmtest2.c tests recovery
+              from a system or power failure.
+
 
 
 

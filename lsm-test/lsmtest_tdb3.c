@@ -94,6 +94,9 @@ struct LsmDb {
   int szSector;                   /* Assumed size of disk sectors (512B) */
   FileData aFile[2];              /* Database and log file data */
 
+  /* Other test instrumentation */
+  int bNoRecovery;                /* If true, assume DMS2 is locked */
+
   /* Work hook redirection */
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
@@ -316,6 +319,10 @@ static int testEnvUnlink(lsm_env *pEnv, const char *zFile){
 static int testEnvLock(lsm_file *pFile, int iLock, int eType){
   LsmFile *p = (LsmFile *)pFile;
   lsm_env *pRealEnv = tdb_lsm_env();
+
+  if( iLock==2 && eType==LSM_LOCK_EXCL && p->pDb->bNoRecovery ){
+    return LSM_BUSY;
+  }
   return pRealEnv->xLock(p->pReal, iLock, eType);
 }
 
@@ -581,35 +588,38 @@ static void xWorkHook(lsm_db *db, void *pArg){
   if( p->xWork ) p->xWork(db, p->pWorkCtx);
 }
 
+#define TEST_NO_RECOVERY -1
 
 int test_lsm_config_str(
-  lsm_db *pDb, 
+  LsmDb *pLsm,
+  lsm_db *db, 
   int bWorker,
   const char *zStr
 ){
-  
   struct CfgParam {
     const char *zParam;
     int bWorker;
     int eParam;
   } aParam[] = {
-    { "write_buffer",   0, LSM_CONFIG_WRITE_BUFFER },
-    { "page_size",      0, LSM_CONFIG_PAGE_SIZE },
-    { "block_size",     0, LSM_CONFIG_BLOCK_SIZE },
-    { "safety",         0, LSM_CONFIG_SAFETY },
-    { "autowork",       0, LSM_CONFIG_AUTOWORK },
-    { "log_size",       0, LSM_CONFIG_LOG_SIZE },
-    { "mmap",           0, LSM_CONFIG_MMAP },
-    { "use_log",        0, LSM_CONFIG_USE_LOG },
-    { "nmerge",         0, LSM_CONFIG_NMERGE },
-    { "max_freelist",   0, LSM_CONFIG_MAX_FREELIST },
-    { "multi_proc",     0, LSM_CONFIG_MULTIPLE_PROCESSES },
-    { "worker_nmerge",  1, LSM_CONFIG_NMERGE },
+    { "write_buffer",     0, LSM_CONFIG_WRITE_BUFFER },
+    { "page_size",        0, LSM_CONFIG_PAGE_SIZE },
+    { "block_size",       0, LSM_CONFIG_BLOCK_SIZE },
+    { "safety",           0, LSM_CONFIG_SAFETY },
+    { "autowork",         0, LSM_CONFIG_AUTOWORK },
+    { "log_size",         0, LSM_CONFIG_LOG_SIZE },
+    { "mmap",             0, LSM_CONFIG_MMAP },
+    { "use_log",          0, LSM_CONFIG_USE_LOG },
+    { "nmerge",           0, LSM_CONFIG_NMERGE },
+    { "max_freelist",     0, LSM_CONFIG_MAX_FREELIST },
+    { "multi_proc",       0, LSM_CONFIG_MULTIPLE_PROCESSES },
+    { "worker_nmerge",    1, LSM_CONFIG_NMERGE },
+    { "test_no_recovery", 0, TEST_NO_RECOVERY },
     { 0, 0 }
   };
   const char *z = zStr;
 
-  while( z[0] && pDb ){
+  assert( db );
+  while( z[0] ){
     const char *zStart;
 
     /* Skip whitespace */
@@ -641,8 +651,18 @@ int test_lsm_config_str(
       zParam[nParam] = '\0';
       iVal = atoi(zParam);
 
-      if( bWorker || aParam[i].bWorker==0 ){
-        lsm_config(pDb, eParam, &iVal);
+      if( eParam>0 ){
+        if( bWorker || aParam[i].bWorker==0 ){
+          lsm_config(db, eParam, &iVal);
+        }
+      }else{
+        if( pLsm ){
+          switch( eParam ){
+            case TEST_NO_RECOVERY:
+              pLsm->bNoRecovery = iVal;
+              break;
+          }
+        }
       }
     }else if( z!=zStart ){
       goto syntax_error;
@@ -661,10 +681,10 @@ int tdb_lsm_config_str(TestDb *pDb, const char *zStr){
     int i;
     LsmDb *pLsm = (LsmDb *)pDb;
 
-    rc = test_lsm_config_str(pLsm->db, 0, zStr);
+    rc = test_lsm_config_str(pLsm, pLsm->db, 0, zStr);
 #ifdef LSM_MUTEX_PTHREADS
     for(i=0; rc==0 && i<pLsm->nWorker; i++){
-      rc = test_lsm_config_str(pLsm->aWorker[i].pWorker, 1, zStr);
+      rc = test_lsm_config_str(0, pLsm->aWorker[i].pWorker, 1, zStr);
     }
 #endif
   }

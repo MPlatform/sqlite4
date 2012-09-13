@@ -284,6 +284,21 @@ static void copy_file(const char *zFrom, const char *zTo){
   }
 }
 
+void testCopyLsmdb(const char *zFrom, const char *zTo){
+  char *zLog1 = testMallocPrintf("%s-log", zFrom);
+  char *zLog2 = testMallocPrintf("%s-log", zTo);
+  char *zShm1 = testMallocPrintf("%s-shm", zFrom);
+  char *zShm2 = testMallocPrintf("%s-shm", zTo);
+
+  unlink(zShm2);
+  unlink(zLog2);
+  unlink(zTo);
+  copy_file(zFrom, zTo);
+  copy_file(zLog1, zLog2);
+  copy_file(zShm1, zShm2);
+
+  testFree(zLog1); testFree(zLog2); testFree(zShm1); testFree(zShm2);
+}
 
 /*
 ** File zFile is the path to an LSM database. This function makes backups

@@ -456,6 +456,10 @@ int do_test(int nArg, char **azArg){
   do_crash_test(zPattern, &rc);
   if( rc ) nFail++;
 
+  rc = 0;
+  do_writer_crash_test(zPattern, &rc);
+  if( rc ) nFail++;
+
   return (nFail!=0);
 }
 
@@ -1148,7 +1152,7 @@ static int do_insert(int nArg, char **azArg){
     tdb_lsm_config_work_hook(pDb, do_insert_work_hook, 0);
     tdb_lsm_write_hook(pDb, do_insert_write_hook, (void *)&hook);
     if( zConfig ){
-      rc = test_lsm_config_str(tdb_lsm(pDb), 0, zConfig);
+      rc = tdb_lsm_config_str(pDb, zConfig);
     }
 
     if( rc==0 ){
