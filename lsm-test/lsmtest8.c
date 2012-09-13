@@ -4,6 +4,14 @@
 ** a mid-transaction failure of a writer process.
 */
 
+
+/* 
+** This test file includes lsmInt.h to get access to the definition of the
+** ShmHeader structure. This is required to cause strategic damage to the
+** shared memory header as part of recovery testing.
+*/
+#include "lsmInt.h"
+
 #include "lsmtest.h"
 
 typedef struct SetupStep SetupStep;
@@ -61,6 +69,63 @@ static void setupDatabase1(TestDb *pDb, Datasource **ppData){
   }
 }
 
+#include <stdio.h>
+void testReadFile(const char *zFile, int iOff, void *pOut, int nByte, int *pRc){
+  if( *pRc==0 ){
+    FILE *fd;
+    fd = fopen(zFile, "r");
+    if( fd==0 ){
+      *pRc = 1;
+    }else{
+      if( 0!=fseek(fd, iOff, SEEK_SET) ){
+        *pRc = 1;
+      }else{
+        if( nByte!=fread(pOut, 1, nByte, fd) ){
+          *pRc = 1;
+        }
+      }
+      fclose(fd);
+    }
+  }
+}
+
+void testWriteFile(
+  const char *zFile, 
+  int iOff, 
+  void *pOut, 
+  int nByte, 
+  int *pRc
+){
+  if( *pRc==0 ){
+    FILE *fd;
+    fd = fopen(zFile, "r+");
+    if( fd==0 ){
+      *pRc = 1;
+    }else{
+      if( 0!=fseek(fd, iOff, SEEK_SET) ){
+        *pRc = 1;
+      }else{
+        if( nByte!=fwrite(pOut, 1, nByte, fd) ){
+          *pRc = 1;
+        }
+      }
+      fclose(fd);
+    }
+  }
+}
+
+static ShmHeader *getShmHeader(const char *zDb){
+  int rc = 0;
+  char *zShm = testMallocPrintf("%s-shm", zDb);
+  ShmHeader *pHdr;
+
+  pHdr = testMalloc(sizeof(ShmHeader));
+  testReadFile(zShm, 0, (void *)pHdr, sizeof(ShmHeader), &rc);
+  assert( rc==0 );
+
+  return pHdr;
+}
+
 /*
 ** This function makes a copy of the three files associated with LSM 
 ** database zDb (i.e. if zDb is "test.db", it makes copies of "test.db",
@@ -90,12 +155,20 @@ static void doLiveRecovery(const char *zDb, const char *zCksum, int *pRc){
   testCopyLsmdb(zDb, zCopy);
   rc = tdb_lsm_open("test_no_recovery=1", zCopy, 0, &pDb);
   if( rc==0 ){
+    ShmHeader *pHdr;
     lsm_db *db;
     testCksumDatabase(pDb, zCksum2);
     testCompareStr(zCksum, zCksum2, &rc);
 
     testWriteDatasourceRange(pDb, pData, 1, 10, &rc);
     testDeleteDatasourceRange(pDb, pData, 1, 10, &rc);
+
+    /* Test that the two tree-headers are now consistent. */
+    pHdr = getShmHeader(zCopy);
+    if( rc==0 && memcmp(&pHdr->hdr1, &pHdr->hdr2, sizeof(pHdr->hdr1)) ){
+      rc = 1;
+    }
+    testFree(pHdr);
 
     if( rc==0 ){
       db = tdb_lsm(pDb);
@@ -108,17 +181,19 @@ static void doLiveRecovery(const char *zDb, const char *zCksum, int *pRc){
 
   testDatasourceFree(pData);
   testClose(&pDb);
+  testDeleteLsmdb(zCopy);
   *pRc = rc;
 }
 
 static void doWriterCrash1(int *pRc){
   const int nWrite = 2000;
+  const int nStep = 10;
   const int iWriteStart = 20000;
   int rc = 0;
   TestDb *pDb = 0;
   Datasource *pData = 0;
 
-  pDb = testOpen("lsm", 1, &rc);
+  rc = tdb_lsm_open("autowork=0", "testdb.lsm", 1, &pDb);
   if( rc==0 ){
     int iDot = 0;
     char zCksum[TEST_CKSUM_BYTES];
@@ -126,9 +201,9 @@ static void doWriterCrash1(int *pRc){
     setupDatabase1(pDb, &pData);
     testCksumDatabase(pDb, zCksum);
     testBegin(pDb, 2, &rc);
-    for(i=0; rc==0 && i<nWrite; i++){
+    for(i=0; rc==0 && i<nWrite; i+=nStep){
       testCaseProgress(i, nWrite, testCaseNDot(), &iDot);
-      testWriteDatasourceRange(pDb, pData, iWriteStart+i, 1, &rc);
+      testWriteDatasourceRange(pDb, pData, iWriteStart+i, nStep, &rc);
       doLiveRecovery("testdb.lsm", zCksum, &rc);
     }
   }
@@ -138,11 +213,94 @@ static void doWriterCrash1(int *pRc){
   *pRc = rc;
 }
 
-void do_writer_crash_test(const char *zPattern, int *pRc){
-  if( testCaseBegin(pRc, zPattern, "writercrash1.lsm") ){
-    doWriterCrash1(pRc);
-    testCaseFinish(*pRc);
+/*
+** This test case verifies that inconsistent tree-headers in shared-memory
+** are resolved correctly. 
+*/
+static void doWriterCrash2(int *pRc){
+  int rc = 0;
+  TestDb *pDb = 0;
+  Datasource *pData = 0;
+
+  rc = tdb_lsm_open("autowork=0", "testdb.lsm", 1, &pDb);
+  if( rc==0 ){
+    ShmHeader *pHdr1;
+    ShmHeader *pHdr2;
+    char zCksum1[TEST_CKSUM_BYTES];
+    char zCksum2[TEST_CKSUM_BYTES];
+
+    pHdr1 = testMalloc(sizeof(ShmHeader));
+    pHdr2 = testMalloc(sizeof(ShmHeader));
+    setupDatabase1(pDb, &pData);
+
+    /* Grab a copy of the shared-memory header. And the db checksum */
+    testReadFile("testdb.lsm-shm", 0, (void *)pHdr1, sizeof(ShmHeader), &rc);
+    testCksumDatabase(pDb, zCksum1);
+
+    /* Modify the database */
+    testBegin(pDb, 2, &rc);
+    testWriteDatasourceRange(pDb, pData, 30000, 200, &rc);
+    testCommit(pDb, 0, &rc);
+
+    /* Grab a second copy of the shared-memory header. And the db checksum */
+    testReadFile("testdb.lsm-shm", 0, (void *)pHdr2, sizeof(ShmHeader), &rc);
+    testCksumDatabase(pDb, zCksum2);
+    doLiveRecovery("testdb.lsm", zCksum2, &rc);
+
+    /* If both tree-headers are valid, tree-header-1 is used. */
+    memcpy(&pHdr2->hdr1, &pHdr1->hdr1, sizeof(pHdr1->hdr1));
+    pHdr2->bWriter = 1;
+    testWriteFile("testdb.lsm-shm", 0, (void *)pHdr2, sizeof(ShmHeader), &rc);
+    doLiveRecovery("testdb.lsm", zCksum1, &rc);
+
+    /* If both tree-headers are valid, tree-header-1 is used. */
+    memcpy(&pHdr2->hdr1, &pHdr2->hdr2, sizeof(pHdr1->hdr1));
+    memcpy(&pHdr2->hdr2, &pHdr1->hdr1, sizeof(pHdr1->hdr1));
+    pHdr2->bWriter = 1;
+    testWriteFile("testdb.lsm-shm", 0, (void *)pHdr2, sizeof(ShmHeader), &rc);
+    doLiveRecovery("testdb.lsm", zCksum2, &rc);
+
+    /* If tree-header 1 is invalid, tree-header-2 is used */
+    memcpy(&pHdr2->hdr2, &pHdr2->hdr1, sizeof(pHdr1->hdr1));
+    pHdr2->hdr1.aCksum[0] = 5;
+    pHdr2->hdr1.aCksum[0] = 6;
+    pHdr2->bWriter = 1;
+    testWriteFile("testdb.lsm-shm", 0, (void *)pHdr2, sizeof(ShmHeader), &rc);
+    doLiveRecovery("testdb.lsm", zCksum2, &rc);
+
+    /* If tree-header 2 is invalid, tree-header-1 is used */
+    memcpy(&pHdr2->hdr1, &pHdr2->hdr2, sizeof(pHdr1->hdr1));
+    pHdr2->hdr2.aCksum[0] = 5;
+    pHdr2->hdr2.aCksum[0] = 6;
+    pHdr2->bWriter = 1;
+    testWriteFile("testdb.lsm-shm", 0, (void *)pHdr2, sizeof(ShmHeader), &rc);
+    doLiveRecovery("testdb.lsm", zCksum2, &rc);
+
+    testFree(pHdr1);
+    testFree(pHdr2);
+    testClose(&pDb);
   }
+
+  *pRc = rc;
+}
+
+void do_writer_crash_test(const char *zPattern, int *pRc){
+  struct Test {
+    const char *zName;
+    void (*xFunc)(int *);
+  } aTest[] = {
+    { "writercrash2.lsm", doWriterCrash2 },
+    { "writercrash1.lsm", doWriterCrash1 },
+  };
+  int i;
+  for(i=0; i<ArraySize(aTest); i++){
+    struct Test *p = &aTest[i];
+    if( testCaseBegin(pRc, zPattern, p->zName) ){
+      p->xFunc(pRc);
+      testCaseFinish(*pRc);
+    }
+  }
+
 }
 
 

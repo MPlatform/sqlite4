@@ -6,8 +6,6 @@
 #include "sqlite3.h"
 #include "lsm.h"
 
-void lsmSortedDumpStructure(lsm_db *pDb, void *, int, const char *);
-
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,10 +15,12 @@ void lsmSortedDumpStructure(lsm_db *pDb, void *, int, const char *);
 extern "C" {
 #endif
 
+#ifndef _LSM_INT_H
 typedef unsigned int  u32;
 typedef unsigned char u8;
 typedef long long int i64;
 typedef unsigned long long int u64;
+#endif
 
 
 #define ArraySize(x) ((int)(sizeof(x) / sizeof((x)[0])))

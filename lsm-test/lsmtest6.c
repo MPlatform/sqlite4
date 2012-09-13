@@ -247,9 +247,12 @@ static void testOomScan(
 
 void testDeleteLsmdb(const char *zFile){
   char *zLog = testMallocPrintf("%s-log", zFile);
+  char *zShm = testMallocPrintf("%s-shm", zFile);
   unlink(zFile);
   unlink(zLog);
+  unlink(zShm);
   testFree(zLog);
+  testFree(zShm);
 }
 
 static void copy_file(const char *zFrom, const char *zTo){
