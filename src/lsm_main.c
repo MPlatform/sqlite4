@@ -340,7 +340,10 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
     case LSM_CONFIG_MMAP: {
       int *piVal = va_arg(ap, int *);
-      rc = lsmConfigMmap(pDb, piVal);
+      if( pDb->pDatabase==0 ){
+        pDb->bMmap = (LSM_IS_64_BIT && *piVal);
+      }
+      *piVal = pDb->bMmap;
       break;
     }
 

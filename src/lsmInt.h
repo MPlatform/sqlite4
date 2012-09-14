@@ -285,6 +285,7 @@ struct lsm_db {
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
   int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
   int nMaxFreelist;               /* Configured by LSM_CONFIG_MAX_FREELIST */
+  int bMmap;                      /* Configured by LSM_CONFIG_MMAP */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
 
   /* Sub-system handles */

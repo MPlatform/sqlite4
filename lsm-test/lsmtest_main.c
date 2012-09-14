@@ -472,6 +472,131 @@ static lsm_db *configure_lsm_db(TestDb *pDb){
   return pLsm;
 }
 
+#define ST_REPEAT  0
+#define ST_WRITE   1
+#define ST_PAUSE   2
+#define ST_FETCH   3
+#define ST_SCAN    4
+#define ST_NSCAN   5
+#define ST_KEYSIZE 6
+#define ST_VALSIZE 7
+
+int do_speed_test2(int nArg, char **azArg){
+  struct Option {
+    const char *zOpt;
+    int eVal;
+    int iDefault;
+  } aOpt[] = {
+    { "-repeat",  ST_REPEAT,    10},
+    { "-write",   ST_WRITE,  10000},
+    { "-pause",   ST_PAUSE,      0},
+    { "-fetch",   ST_FETCH,      0},
+    { "-scan",    ST_SCAN,       0},
+    { "-nscan",   ST_NSCAN,      0},
+    { "-keysize", ST_KEYSIZE,   12},
+    { "-valsize", ST_VALSIZE,  100},
+    { "-system",  -1,            0},
+    {0, 0, 0}
+  };
+  int i;
+  int aParam[8];
+  int rc = 0;
+
+  TestDb *pDb;
+  Datasource *pData;
+  DatasourceDefn defn = { TEST_DATASOURCE_RANDOM, 0, 0, 0, 0 };
+  char *zSystem = "";
+  int bLsm = 1;
+
+  /* Initialize aParam[] with default values. */
+  for(i=0; i<ArraySize(aOpt); i++){
+    if( aOpt[i].zOpt ) aParam[aOpt[i].eVal] = aOpt[i].iDefault;
+  }
+
+  /* Process the command line switches. */
+  for(i=0; i<nArg; i+=2){
+    int iSel;
+    rc = testArgSelect(aOpt, "switch", azArg[i], &iSel);
+    if( rc ) return rc;
+    if( i+1==nArg ){
+      testPrintError("option %s requires an argument\n", aOpt[iSel].zOpt);
+      return 1;
+    }
+    if( aOpt[iSel].eVal>=0 ){
+      aParam[aOpt[iSel].eVal] = atoi(azArg[i+1]);
+    }else{
+      int j;
+      zSystem = azArg[i+1];
+      bLsm = 0;
+      for(j=0; zSystem[j]; j++){
+        if( zSystem[j]=='=' ) bLsm = 1;
+      }
+    }
+  }
+  
+  printf("#");
+  for(i=0; i<ArraySize(aOpt); i++){
+    if( aOpt[i].zOpt ){
+      if( aOpt[i].eVal>=0 ){
+        printf(" %s=%d", &aOpt[i].zOpt[1], aParam[aOpt[i].eVal]);
+      }else{
+        printf(" %s=\"%s\"", &aOpt[i].zOpt[1], zSystem);
+      }
+    }
+  }
+  printf("\n");
+
+  defn.nMinKey = defn.nMaxKey = aParam[ST_KEYSIZE];
+  defn.nMinVal = defn.nMaxVal = aParam[ST_VALSIZE];
+  pData = testDatasourceNew(&defn);
+
+  if( bLsm ){
+    rc = tdb_lsm_open(zSystem, "testdb.lsm", 1, &pDb);
+  }else{
+    pDb = testOpen(zSystem, 1, &rc);
+  }
+  if( rc!=0 ) return rc;
+
+  for(i=0; i<aParam[ST_REPEAT] && rc==0; i++){
+    int msWrite, msFetch, msScan;
+    int iFetch;
+    int nWrite = aParam[ST_WRITE];
+
+    testTimeInit();
+    testWriteDatasourceRange(pDb, pData, i*nWrite, nWrite, &rc);
+    msWrite = testTimeGet();
+
+    if( aParam[ST_PAUSE] ){
+      if( aParam[ST_PAUSE]/1000 ) sleep(aParam[ST_PAUSE]/1000);
+      if( aParam[ST_PAUSE]%1000 ) usleep(1000 * (aParam[ST_PAUSE]%1000));
+    }
+
+    if( aParam[ST_FETCH] ){
+      testTimeInit();
+      for(iFetch=0; iFetch<aParam[ST_FETCH]; iFetch++){
+        int iKey = testPrngValue(i*nWrite+iFetch) % ((i+1)*nWrite);
+        testDatasourceFetch(pDb, pData, iKey, &rc);
+      }
+      msFetch = testTimeGet();
+    }else{
+      msFetch = 0;
+    }
+
+    if( i==(aParam[ST_REPEAT]-1) ){
+      testTimeInit();
+      testClose(&pDb);
+      msWrite += testTimeGet();
+    }
+
+    printf("%d %d %d\n", i, msWrite, msFetch);
+    fflush(stdout);
+  }
+
+  testClose(&pDb);
+  testDatasourceFree(pData);
+
+  return rc;
+}
 
 static void do_speed_write_hook2(
   void *pCtx,
@@ -1178,7 +1303,6 @@ static int st_do_show(int a, char **b)      { return do_show(a, b); }
 static int st_do_work(int a, char **b)      { return do_work(a, b); }
 static int st_do_io(int a, char **b)        { return do_io(a, b); }
 
-
 #ifdef __linux__
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -1191,7 +1315,7 @@ static void lsmtest_rusage_report(void){
   res = getrusage(RUSAGE_SELF, &r);
   assert( res==0 );
 
-  printf("getrusage: { ru_maxrss %d ru_oublock %d ru_inblock %d }\n", 
+  printf("# getrusage: { ru_maxrss %d ru_oublock %d ru_inblock %d }\n", 
       (int)r.ru_maxrss, (int)r.ru_oublock, (int)r.ru_inblock
   );
 }
@@ -1214,6 +1338,7 @@ int main(int argc, char **argv){
     {"replay",      do_replay},
 
     {"speed",       do_speed_tests},
+    {"speed2",       do_speed_test2},
     {"show",        st_do_show},
     {"work",        st_do_work},
     {"test",        do_test},

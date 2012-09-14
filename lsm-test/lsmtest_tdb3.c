@@ -753,8 +753,8 @@ static int testLsmOpen(
   if( rc==LSM_OK ){
     lsm_config_log(pDb->db, xLog, 0);
     lsm_config_work_hook(pDb->db, xWorkHook, (void *)pDb);
-    tdb_lsm_config_str((TestDb *)pDb, zCfg);
-    rc = lsm_open(pDb->db, zFilename);
+    rc = tdb_lsm_config_str((TestDb *)pDb, zCfg);
+    if( rc==LSM_OK ) rc = lsm_open(pDb->db, zFilename);
     if( rc!=LSM_OK ){
       test_lsm_close((TestDb *)pDb);
       pDb = 0;

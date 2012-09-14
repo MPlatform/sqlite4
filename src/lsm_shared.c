@@ -557,9 +557,13 @@ int lsmCheckpointWrite(lsm_db *pDb){
 
     if( rc==LSM_OK && bDone==0 ){
       int iMeta = (pShm->iMetaPage % 2) + 1;
-      rc = lsmFsSyncDb(pDb->pFS);
+      if( pDb->eSafety!=LSM_SAFETY_OFF ){
+        rc = lsmFsSyncDb(pDb->pFS);
+      }
       if( rc==LSM_OK ) rc = lsmCheckpointStore(pDb, iMeta);
-      if( rc==LSM_OK ) rc = lsmFsSyncDb(pDb->pFS);
+      if( rc==LSM_OK && pDb->eSafety!=LSM_SAFETY_OFF){
+        rc = lsmFsSyncDb(pDb->pFS);
+      }
       if( rc==LSM_OK ) pShm->iMetaPage = iMeta;
     }
   }

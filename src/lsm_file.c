@@ -393,6 +393,7 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     pFS->nMetasize = 4 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
+    pFS->bUseMmap = pDb->bMmap;
 
     /* Make a copy of the database and log file names. */
     memcpy(pFS->zDb, zDb, nDb+1);
@@ -1346,21 +1347,6 @@ FileSystem *lsmPageFS(Page *pPg){
 */
 int lsmFsSectorSize(FileSystem *pFS){
   return lsmEnvSectorSize(pFS->pEnv, pFS->fdLog);
-}
-
-/*
-** This function implements the lsm_config(LSM_CONFIG_MMAP) request. This
-** setting may only be modified if there are currently no outstanding page
-** references.
-*/
-int lsmConfigMmap(lsm_db *pDb, int *piParam){
-  int iNew = *piParam;
-  FileSystem *pFS = pDb->pFS;
-  if( LSM_IS_64_BIT && (pFS->nOut==0 && (iNew==0 || iNew==1)) ){
-    pFS->bUseMmap = iNew;
-  }
-  *piParam = pFS->bUseMmap;
-  return LSM_OK;
 }
 
 /*
