@@ -83,24 +83,23 @@ typedef struct LogRegion LogRegion;
 typedef struct LogWriter LogWriter;
 typedef struct LsmString LsmString;
 typedef struct Mempool Mempool;
+typedef struct Merge Merge;
+typedef struct MergeInput MergeInput;
 typedef struct MetaPage MetaPage;
 typedef struct MultiCursor MultiCursor;
 typedef struct Page Page;
 typedef struct Segment Segment;
 typedef struct SegmentMerger SegmentMerger;
+typedef struct ShmChunk ShmChunk;
+typedef struct ShmHeader ShmHeader;
+typedef struct ShmReader ShmReader;
 typedef struct Snapshot Snapshot;
 typedef struct TransMark TransMark;
 typedef struct Tree Tree;
-typedef struct TreeMark TreeMark;
-typedef struct TreeVersion TreeVersion;
 typedef struct TreeCursor TreeCursor;
-typedef struct Merge Merge;
-typedef struct MergeInput MergeInput;
-
 typedef struct TreeHeader TreeHeader;
-typedef struct ShmHeader ShmHeader;
-typedef struct ShmChunk ShmChunk;
-typedef struct ShmReader ShmReader;
+typedef struct TreeMark TreeMark;
+typedef struct TreeRoot TreeRoot;
 
 typedef unsigned char u8;
 typedef unsigned short int u16;
@@ -233,6 +232,12 @@ struct DbLog {
   LogRegion aRegion[3];           /* Log file regions (see docs in lsm_log.c) */
 };
 
+struct TreeRoot {
+  u32 iRoot;
+  u32 nHeight;
+  u32 iTransId;
+};
+
 /*
 ** Tree header structure. 
 */
@@ -240,12 +245,15 @@ struct TreeHeader {
   u32 iUsedShmid;                 /* Id of first shm chunk used by this tree */
   u32 iNextShmid;                 /* Shm-id of next chunk allocated */
   u32 iFirst;                     /* Chunk number of smallest shm-id */
-  u32 iTransId;                   /* Current transaction id */
   u32 nChunk;                     /* Number of chunks in shared-memory file */
-  u32 iRoot;                      /* Offset of root node in shm file */
-  u32 nHeight;                    /* Current height of tree structure */
+  TreeRoot root;                  /* Root and height of current tree */
   u32 iWrite;                     /* Write offset in shm file */
   u32 nByte;                      /* Size of current tree structure in bytes */
+  TreeRoot oldroot;               /* Root and height of the previous tree */
+  u32 iOldShmid;                  /* Last shm-id used by previous tree */
+  i64 iOldLog;                    /* Log offset associated with old tree */
+  u32 oldcksum0;
+  u32 oldcksum1;
   DbLog log;                      /* Current layout of log file */ 
   u32 aCksum[2];                  /* Checksums 1 and 2. */
 };
@@ -462,6 +470,7 @@ struct Snapshot {
   Database *pDatabase;            /* Database this snapshot belongs to */
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
+  i64 iLogOff;                    /* Log file offset */
 
   /* Used by worker snapshots only */
   int nBlock;                     /* Number of blocks in database file */
@@ -512,9 +521,12 @@ void lsmTreeClear(lsm_db *);
 int lsmTreeInit(lsm_db *);
 int lsmTreeRepair(lsm_db *);
 
+void lsmTreeMakeOld(lsm_db *pDb, int *pnFlush);
+void lsmTreeDiscardOld(lsm_db *pDb);
+int lsmTreeHasOld(lsm_db *pDb);
+
 int lsmTreeSize(lsm_db *);
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit);
-int lsmTreeBeginTransaction(lsm_db *pDb);
 int lsmTreeLoadHeader(lsm_db *pDb, int *);
 int lsmTreeLoadHeaderOk(lsm_db *, int);
 
@@ -522,7 +534,7 @@ int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);
 void lsmTreeMark(lsm_db *pDb, TreeMark *pMark);
 
-int lsmTreeCursorNew(lsm_db *pDb, TreeCursor **);
+int lsmTreeCursorNew(lsm_db *pDb, int, TreeCursor **);
 void lsmTreeCursorDestroy(TreeCursor *);
 
 int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes);

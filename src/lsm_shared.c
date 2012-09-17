@@ -176,7 +176,9 @@ static void doDbDisconnect(lsm_db *pDb){
       ** by the following block.  */
       rc = lsmTreeLoadHeader(pDb, 0);
       if( rc==LSM_OK && lsmTreeSize(pDb)>0 ){
-        rc = lsmFlushToDisk(pDb);
+        int nFlush = 0;
+        lsmTreeMakeOld(pDb, &nFlush);
+        if( nFlush ) rc = lsmFlushToDisk(pDb);
       }
 
       /* Write a checkpoint to disk. */
@@ -739,8 +741,12 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   ** and return LSM_OK. Otherwise, if some error occurred, relinquish the 
   ** WRITER lock and return an error code.  */
   if( rc==LSM_OK ){
+    TreeHeader *p = &pDb->treehdr;
     pShm->bWriter = 1;
-    pDb->treehdr.iTransId++;
+    p->root.iTransId++;
+    if( lsmTreeHasOld(pDb) && p->iOldLog==pDb->pClient->iLogOff ){
+      lsmTreeDiscardOld(pDb);
+    }
   }else{
     lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
     if( pDb->pCsr==0 ) lsmFinishReadTrans(pDb);

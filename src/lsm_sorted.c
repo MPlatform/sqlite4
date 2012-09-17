@@ -254,7 +254,7 @@ struct MultiCursor {
   Blob key;                       /* Cache of current key (or NULL) */
   Blob val;                       /* Cache of current value */
 
-  TreeCursor *pTreeCsr;           /* Single tree cursor */
+  TreeCursor *apTreeCsr[2];       /* One or two tree cursors */
   int nSegCsr;                    /* Size of aSegCsr[] array */
   LevelCursor *aSegCsr;           /* Array of cursors open on sorted files */
   int nTree;
@@ -268,9 +268,10 @@ struct MultiCursor {
   void *pSystemVal;               /* Pointer to buffer to free */
 };
 
-#define CURSOR_DATA_TREE      0
-#define CURSOR_DATA_SYSTEM    1
-#define CURSOR_DATA_SEGMENT   2
+#define CURSOR_DATA_TREE0     0   /* Current tree cursor */
+#define CURSOR_DATA_TREE1     1   /* The "old" tree, if any */
+#define CURSOR_DATA_SYSTEM    2
+#define CURSOR_DATA_SEGMENT   3
 
 
 /*
@@ -1342,6 +1343,7 @@ static int assertKeyLocation(
 
       int rc = lsmFsDbPageNext(pPtr->pSeg, pTest, eDir, &pNext);
       lsmFsPageRelease(pTest);
+      if( rc ) return 1;
       pTest = pNext;
 
       if( pTest ){
@@ -1854,7 +1856,8 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
   lsm_env *pEnv = pCsr->pDb->pEnv;
 
   /* Close the tree cursor, if any. */
-  lsmTreeCursorDestroy(pCsr->pTreeCsr);
+  lsmTreeCursorDestroy(pCsr->apTreeCsr[0]);
+  lsmTreeCursorDestroy(pCsr->apTreeCsr[1]);
 
   /* Close the sorted file cursors */
   for(i=0; i<pCsr->nSegCsr; i++){
@@ -1876,7 +1879,8 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
   pCsr->aTree = 0;
   pCsr->pSystemVal = 0;
   pCsr->pSnap = 0;
-  pCsr->pTreeCsr = 0;
+  pCsr->apTreeCsr[0] = 0;
+  pCsr->apTreeCsr[1] = 0;
   pCsr->pBtCsr = 0;
 }
 
@@ -1985,15 +1989,23 @@ int multiCursorAddLevel(
 }
 
 
+/*
+** Parameter iUseTree must be set to 0, 1 or 2. If it is not zero, then a 
+** tree cursor is added to the multi-cursor before it is returned. If 
+** iUseTree is 1, then the cursor accesses the entire tree. Otherwise, if
+** iUseTree is 2, it iterates through the "old" tree only.
+*/
 static int multiCursorNew(
   lsm_db *pDb,                    /* Database handle */
   Snapshot *pSnap,                /* Snapshot to use for this cursor */
-  int useTree,                    /* If true, search the in-memory tree */
+  int iUseTree,                   /* If true, search the in-memory tree */
   int bUserOnly,                  /* If true, ignore all system data */
   MultiCursor **ppCsr             /* OUT: Allocated cursor */
 ){
   int rc = LSM_OK;                /* Return Code */
   MultiCursor *pCsr = *ppCsr;     /* Allocated multi-cursor */
+
+  assert( iUseTree==0 || iUseTree==1 || iUseTree==2 );
 
   if( pCsr==0 ){
     pCsr = (MultiCursor *)lsmMallocZeroRc(pDb->pEnv, sizeof(MultiCursor), &rc);
@@ -2004,8 +2016,14 @@ static int multiCursorNew(
   }
 
   if( rc==LSM_OK ){
-    if( useTree ){
-      rc = lsmTreeCursorNew(pDb, &pCsr->pTreeCsr);
+    if( iUseTree ){
+      rc = lsmTreeCursorNew(pDb, iUseTree-1, &pCsr->apTreeCsr[0]);
+      if( rc==LSM_OK && lsmTreeHasOld(pDb) 
+       && iUseTree==1
+       && pDb->treehdr.iOldLog!=pSnap->iLogOff
+      ){
+        rc = lsmTreeCursorNew(pDb, 1, &pCsr->apTreeCsr[1]);
+      }
     }
     pCsr->pDb = pDb;
     pCsr->pSnap = pSnap;
@@ -2131,16 +2149,19 @@ static void multiCursorGetKey(
   int eType = 0;
 
   switch( iKey ){
-    case CURSOR_DATA_TREE:
-      if( lsmTreeCursorValid(pCsr->pTreeCsr) ){
+    case CURSOR_DATA_TREE0:
+    case CURSOR_DATA_TREE1: {
+      TreeCursor *pTreeCsr = pCsr->apTreeCsr[iKey-CURSOR_DATA_TREE0];
+      if( lsmTreeCursorValid(pTreeCsr) ){
         int nVal;
         void *pVal;
 
-        lsmTreeCursorKey(pCsr->pTreeCsr, &pKey, &nKey);
-        lsmTreeCursorValue(pCsr->pTreeCsr, &pVal, &nVal);
+        lsmTreeCursorKey(pTreeCsr, &pKey, &nKey);
+        lsmTreeCursorValue(pTreeCsr, &pVal, &nVal);
         eType = (nVal<0) ? SORTED_DELETE : SORTED_WRITE;
       }
       break;
+    }
 
     case CURSOR_DATA_SYSTEM:
       if( pCsr->flags & CURSOR_AT_FREELIST ){
@@ -2176,9 +2197,10 @@ static int multiCursorGetVal(
   int *pnVal
 ){
   int rc = LSM_OK;
-  if( iVal==CURSOR_DATA_TREE ){
-    if( lsmTreeCursorValid(pCsr->pTreeCsr) ){
-      lsmTreeCursorValue(pCsr->pTreeCsr, ppVal, pnVal);
+  if( iVal==CURSOR_DATA_TREE0 || iVal==CURSOR_DATA_TREE1 ){
+    TreeCursor *pTreeCsr = pCsr->apTreeCsr[iVal-CURSOR_DATA_TREE0];
+    if( lsmTreeCursorValid(pTreeCsr) ){
+      lsmTreeCursorValue(pTreeCsr, ppVal, pnVal);
     }else{
       *ppVal = 0;
       *pnVal = 0;
@@ -2322,9 +2344,14 @@ static int multiCursorEnd(MultiCursor *pCsr, int bLast){
   int i;
 
   pCsr->flags &= ~(CURSOR_NEXT_OK | CURSOR_PREV_OK);
-  if( pCsr->pTreeCsr ){
-    rc = lsmTreeCursorEnd(pCsr->pTreeCsr, bLast);
+  if( pCsr->apTreeCsr[0] ){
+    rc = lsmTreeCursorEnd(pCsr->apTreeCsr[0], bLast);
   }
+  if( rc==LSM_OK && pCsr->apTreeCsr[1] ){
+    rc = lsmTreeCursorEnd(pCsr->apTreeCsr[1], bLast);
+  }
+
+
   if( pCsr->flags & CURSOR_NEW_SYSTEM ){
     assert( bLast==0 );
     pCsr->flags |= CURSOR_AT_FREELIST;
@@ -2368,7 +2395,8 @@ static int multiCursorEnd(MultiCursor *pCsr, int bLast){
 int mcursorSave(MultiCursor *pCsr){
   int rc = LSM_OK;
   if( pCsr->aTree ){
-    if( pCsr->aTree[1]==CURSOR_DATA_TREE ){
+    int iTree = pCsr->aTree[1];
+    if( iTree==CURSOR_DATA_TREE0 || iTree==CURSOR_DATA_TREE1 ){
       multiCursorCacheKey(pCsr, &rc);
     }
     mcursorFreeComponents(pCsr);
@@ -2421,11 +2449,41 @@ lsm_db *lsmMCursorDb(MultiCursor *pCsr){
 
 void lsmMCursorReset(MultiCursor *pCsr){
   int i;
-  lsmTreeCursorReset(pCsr->pTreeCsr);
+  lsmTreeCursorReset(pCsr->apTreeCsr[0]);
+  lsmTreeCursorReset(pCsr->apTreeCsr[1]);
   for(i=0; i<pCsr->nSegCsr; i++){
     segmentCursorReset(&pCsr->aSegCsr[i]);
   }
   pCsr->key.nData = 0;
+}
+
+static void treeCursorSeek(
+  TreeCursor *pTreeCsr, 
+  void *pKey, int nKey, 
+  int eSeek
+){
+  if( pTreeCsr ){
+    int res = 0;
+    lsmTreeCursorSeek(pTreeCsr, pKey, nKey, &res);
+    switch( eSeek ){
+      case LSM_SEEK_EQ:
+        if( res!=0 ){
+          lsmTreeCursorReset(pTreeCsr);
+        }
+        break;
+      case LSM_SEEK_GE:
+        if( res<0 && lsmTreeCursorValid(pTreeCsr) ){
+          lsmTreeCursorNext(pTreeCsr);
+        }
+        break;
+      default:
+        if( res>0 ){
+          assert( lsmTreeCursorValid(pTreeCsr) );
+          lsmTreeCursorPrev(pTreeCsr);
+        }
+        break;
+    }
+  }
 }
 
 /*
@@ -2435,7 +2493,6 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
   int eESeek = eSeek;             /* Effective eSeek parameter */
   int rc = LSM_OK;
   int i;
-  int res; 
   int iPtr = 0; 
 
   if( eESeek==LSM_SEEK_LEFAST ) eESeek = LSM_SEEK_LE;
@@ -2445,25 +2502,8 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
   assert( (pCsr->flags & CURSOR_AT_FREELIST)==0 );
 
   pCsr->flags &= ~(CURSOR_NEXT_OK | CURSOR_PREV_OK);
-  lsmTreeCursorSeek(pCsr->pTreeCsr, pKey, nKey, &res);
-  switch( eESeek ){
-    case LSM_SEEK_EQ:
-      if( res!=0 ){
-        lsmTreeCursorReset(pCsr->pTreeCsr);
-      }
-      break;
-    case LSM_SEEK_GE:
-      if( res<0 && lsmTreeCursorValid(pCsr->pTreeCsr) ){
-        lsmTreeCursorNext(pCsr->pTreeCsr);
-      }
-      break;
-    default:
-      if( res>0 ){
-        assert( lsmTreeCursorValid(pCsr->pTreeCsr) );
-        lsmTreeCursorPrev(pCsr->pTreeCsr);
-      }
-      break;
-  }
+  treeCursorSeek(pCsr->apTreeCsr[0], pKey, nKey, eESeek);
+  treeCursorSeek(pCsr->apTreeCsr[1], pKey, nKey, eESeek);
 
   for(i=0; rc==LSM_OK && i<pCsr->nSegCsr; i++){
     rc = segmentCursorSeek(&pCsr->aSegCsr[i], pKey, nKey, iPtr, eESeek, &iPtr);
@@ -2506,8 +2546,8 @@ int lsmMCursorValid(MultiCursor *pCsr){
   int res = 0;
   if( pCsr->aTree ){
     int iKey = pCsr->aTree[1];
-    if( iKey==CURSOR_DATA_TREE ){
-      res = lsmTreeCursorValid(pCsr->pTreeCsr);
+    if( iKey==CURSOR_DATA_TREE0 || iKey==CURSOR_DATA_TREE1 ){
+      res = lsmTreeCursorValid(pCsr->apTreeCsr[iKey-CURSOR_DATA_TREE0]);
     }else{
       void *pKey; 
       multiCursorGetKey(pCsr, iKey, 0, &pKey, 0);
@@ -2564,11 +2604,12 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
   if( lsmMCursorValid(pCsr) ){
     do {
       int iKey = pCsr->aTree[1];
-      if( iKey==CURSOR_DATA_TREE ){
+      if( iKey==CURSOR_DATA_TREE0 || iKey==CURSOR_DATA_TREE1 ){
+        TreeCursor *pTreeCsr = pCsr->apTreeCsr[iKey-CURSOR_DATA_TREE0];
         if( bReverse ){
-          rc = lsmTreeCursorPrev(pCsr->pTreeCsr);
+          rc = lsmTreeCursorPrev(pTreeCsr);
         }else{
-          rc = lsmTreeCursorNext(pCsr->pTreeCsr);
+          rc = lsmTreeCursorNext(pTreeCsr);
         }
       }else if( iKey==CURSOR_DATA_SYSTEM ){
         assert( pCsr->flags & CURSOR_AT_FREELIST );
@@ -2604,16 +2645,18 @@ int lsmMCursorPrev(MultiCursor *pCsr){
 }
 
 int lsmMCursorKey(MultiCursor *pCsr, void **ppKey, int *pnKey){
+  int iKey = pCsr->aTree[1];
 
-  if( pCsr->aTree[1]==CURSOR_DATA_TREE ){
-    lsmTreeCursorKey(pCsr->pTreeCsr, ppKey, pnKey);
+  if( iKey==CURSOR_DATA_TREE0 || iKey==CURSOR_DATA_TREE1 ){
+    TreeCursor *pTreeCsr = pCsr->apTreeCsr[iKey-CURSOR_DATA_TREE0];
+    lsmTreeCursorKey(pTreeCsr, ppKey, pnKey);
   }else{
     int nKey;
 
 #ifndef NDEBUG
     void *pKey;
     int eType;
-    multiCursorGetKey(pCsr, pCsr->aTree[1], &eType, &pKey, &nKey);
+    multiCursorGetKey(pCsr, iKey, &eType, &pKey, &nKey);
     assert( eType==pCsr->eType );
     assert( nKey==pCsr->key.nData );
     assert( memcmp(pKey, pCsr->key.pData, nKey)==0 );
@@ -3487,7 +3530,7 @@ static int sortedNewToplevel(
   ** segment contains everything in the tree and pointers to the next segment
   ** in the database (if any).  */
   if( rc==LSM_OK ){
-    rc = multiCursorNew(pDb, pDb->pWorker, bTree, 0, &pCsr);
+    rc = multiCursorNew(pDb, pDb->pWorker, (bTree ? 2 : 0), 0, &pCsr);
     if( rc==LSM_OK ){
       pNew->pNext = pNext;
       lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
@@ -3587,7 +3630,7 @@ int lsmSortedFlushTree(
   assert( pDb->pWorker );
 
   /* If there is nothing to do, return early. */
-  if( lsmTreeSize(pDb)==0 && lsmCheckpointOverflowRequired(pDb)==0 ){
+  if( lsmTreeHasOld(pDb)==0 && lsmCheckpointOverflowRequired(pDb)==0 ){
     *pnOvfl = 0;
     return LSM_OK;
   }
@@ -4031,52 +4074,65 @@ int lsmSortedAutoWork(
 */
 int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   int rc = LSM_OK;                /* Return code */
+  int nOvfl = 0;
+  int bFlush = 0;
+  int bFinishWork = 0;
+  int nWrite = 0;
 
   /* This function may not be called if pDb has an open read or write
   ** transaction. Return LSM_MISUSE if an application attempts this.  */
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
 
-  /* If the FLUSH flag is set, try to flush the contents of the in-memory
-  ** tree to disk.  */
-  if( (flags & LSM_WORK_FLUSH) ){
+  if( (flags & LSM_WORK_FLUSH) && (flags & LSM_WORK_OPTIMIZE) ){
     rc = lsmBeginWriteTrans(pDb);
     if( rc==LSM_OK ){
-      rc = lsmFlushToDisk(pDb);
+      int nDummy;
+      lsmTreeMakeOld(pDb, &nDummy);
       lsmFinishWriteTrans(pDb, 1);
       lsmFinishReadTrans(pDb);
     }
+    if( rc==LSM_BUSY ) rc = LSM_OK;
   }
 
+  assert( pDb->pWorker==0 );
+  if( (flags & LSM_WORK_FLUSH) || nPage>0 ){
+    rc = lsmBeginWork(pDb);
+    bFinishWork = 1;
+  }
+
+  /* If the FLUSH flag is set, try to flush the contents of the in-memory
+  ** tree to disk.  */
+  if( rc==LSM_OK && ((flags & LSM_WORK_FLUSH)) ){
+    rc = lsmTreeLoadHeader(pDb, 0);
+    if( rc==LSM_OK && pDb->treehdr.iOldShmid ){
+      rc = lsmSortedFlushTree(pDb, &nOvfl);
+      bFlush = 1;
+    }
+  }
+
+  /* If nPage is greater than zero, do some merging. */
   if( rc==LSM_OK && nPage>0 ){
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
-    int nWrite = 0;
-    int nOvfl = -1;
-
-    assert( pDb->pWorker==0 );
-    rc = lsmBeginWork(pDb);
-    if( rc==LSM_OK ){
-      rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
-    }
-
+    rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
     if( rc==LSM_OK && nWrite ){
       rc = lsmSortedFlushDb(pDb);
       if( rc==LSM_OK && lsmCheckpointOverflowRequired(pDb) ){
+        nOvfl = -1;
         rc = sortedNewToplevel(pDb, 0, &nOvfl);
       }
     }
+  }
 
-    if( nWrite ){
-      lsmFinishWork(pDb, 0, nOvfl, &rc);
+  if( pnWrite ) *pnWrite = nWrite;
+  if( bFinishWork ){
+    if( nWrite || bFlush ){
+      lsmFinishWork(pDb, bFlush, nOvfl, &rc);
     }else{
       int rcdummy = LSM_BUSY;
       lsmFinishWork(pDb, 0, 0, &rcdummy);
     }
-
-    assert( pDb->pWorker==0 );
-    if( pnWrite ) *pnWrite = nWrite;
-  }else if( pnWrite ){
-    *pnWrite = 0;
   }
+  assert( pDb->pWorker==0 );
 
   /* If the LSM_WORK_CHECKPOINT flag is specified and one is available,
   ** write a checkpoint out to disk.  */
@@ -4518,7 +4574,8 @@ int lsmSortedFlushDb(lsm_db *pDb){
 void lsmSortedSaveTreeCursors(lsm_db *pDb){
   MultiCursor *pCsr;
   for(pCsr=pDb->pCsr; pCsr; pCsr=pCsr->pNext){
-    lsmTreeCursorSave(pCsr->pTreeCsr);
+    lsmTreeCursorSave(pCsr->apTreeCsr[0]);
+    lsmTreeCursorSave(pCsr->apTreeCsr[1]);
   }
 }
 

@@ -40,8 +40,12 @@
 **
 **   Log pointer:
 **
-**     4 integers (2 for a 64-bit offset and 2 for a 64-bit checksum). See 
-**     ckptExportLog() and ckptImportLog().
+**     1. The log offset MSW.
+**     2. The log offset LSW.
+**     3. Log checksum 0.
+**     4. Log checksum 1.
+**
+**     See ckptExportLog() and ckptImportLog().
 **
 **   Append points:
 **
@@ -326,13 +330,12 @@ static void ckptExportLog(
 
   assert( iOut==CKPT_HDR_LO_MSW );
 
-  if( bFlush ){
-    DbLog *pLog = &pDb->treehdr.log;
-    i64 iOff = pLog->aRegion[2].iEnd;
+  if( bFlush && pDb->treehdr.iOldShmid ){
+    i64 iOff = pDb->treehdr.iOldLog;
     ckptSetValue(p, iOut++, (iOff >> 32) & 0xFFFFFFFF, pRc);
     ckptSetValue(p, iOut++, (iOff & 0xFFFFFFFF), pRc);
-    ckptSetValue(p, iOut++, pLog->cksum0, pRc);
-    ckptSetValue(p, iOut++, pLog->cksum1, pRc);
+    ckptSetValue(p, iOut++, pDb->treehdr.oldcksum0, pRc);
+    ckptSetValue(p, iOut++, pDb->treehdr.oldcksum1, pRc);
   }else{
     for(; iOut<=CKPT_HDR_LO_CKSUM2; iOut++){
       ckptSetValue(p, iOut, pDb->pShmhdr->aSnap2[iOut], pRc);
@@ -1039,6 +1042,7 @@ int lsmCheckpointDeserialize(
     pNew->iId = lsmCheckpointId(aCkpt, 0);
     pNew->nBlock = aCkpt[CKPT_HDR_NBLOCK];
     rc = ckptLoadLevels(pDb, aCkpt, &iIn, nLevel, &pNew->pLevel);
+    pNew->iLogOff = lsmCheckpointLogOffset(aCkpt);
 
     /* Make a copy of the append-list */
     nCopy = sizeof(u32) * LSM_APPLIST_SZ;

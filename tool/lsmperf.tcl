@@ -152,14 +152,12 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   append script $data2
   append script $data3
 
-
   append script "pause -1\n"
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 100 100000 100000 1000 {
-  LSM   "mmap=1 multi_proc=0 safety=1" 
-  LevelDB leveldb
+do_write_test x.png 180 10000 10000 1000 {
+  LSM   "mmap=1 multi_proc=0 safety=1 threads=2 autowork=0" 
 }
 
 

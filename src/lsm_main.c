@@ -222,8 +222,6 @@ int lsmFlushToDisk(lsm_db *pDb){
   ** the db file to disk too. No calls to fsync() are made here - just 
   ** write().  */
   if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, &nOvfl);
-  if( rc==LSM_OK ) lsmTreeClear(pDb);
-
   lsmFinishWork(pDb, 1, nOvfl, &rc);
 
   /* Restore the position of any open cursors */
@@ -536,6 +534,7 @@ int lsm_write(
     nDiff = (nAfter/nQuant) - (nBefore/nQuant);
     if( rc==LSM_OK && pDb->bAutowork && nDiff!=0 ){
       rc = dbAutoWork(pDb, nDiff * LSM_AUTOWORK_QUANT);
+      if( rc==LSM_BUSY ) rc = LSM_OK;
     }
   }
 
@@ -717,7 +716,7 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 }
 
 int lsm_commit(lsm_db *pDb, int iLevel){
-  int bFlush = 0;
+  int nFlush = 0;                 /* Number of flushable trees in memory */
   int rc = LSM_OK;
 
   assert_db_state( pDb );
@@ -729,25 +728,43 @@ int lsm_commit(lsm_db *pDb, int iLevel){
     if( iLevel==0 ){
 
       /* Commit the transaction to disk. */
-      if( lsmTreeSize(pDb)>pDb->nTreeLimit ){
-        lsmTreeEndTransaction(pDb, 1);
-        bFlush = 1;
-        rc = lsmFlushToDisk(pDb);
-      }
       if( rc==LSM_OK ) rc = lsmLogCommit(pDb);
       if( rc==LSM_OK && pDb->eSafety==LSM_SAFETY_FULL ){
         rc = lsmFsSyncLog(pDb->pFS);
       }
 
+      if( lsmTreeSize(pDb)>pDb->nTreeLimit ){
+        lsmTreeMakeOld(pDb, &nFlush);
+      }
       lsmFinishWriteTrans(pDb, (rc==LSM_OK));
     }
     pDb->nTransOpen = iLevel;
-  }
 
-  dbReleaseClientSnapshot(pDb);
-  if( pDb->bAutowork && bFlush && rc==LSM_OK ){
-    rc = lsmCheckpointWrite(pDb);
   }
+  dbReleaseClientSnapshot(pDb);
+
+  /* If nFlush==0, then do not flush any data from the in-memory tree to 
+  ** disk. If nFlush==1, then there exists an "old" tree that should be 
+  ** flushed to disk if auto-work is enabled. Or if nFlush==2, then both
+  ** the old and current trees are large enough to flush to disk. In this
+  ** case do so regardless of the auto-work setting.  
+  **
+  ** If auto-work is enabled and data was written to disk, also sync the 
+  ** db and checkpoint the latest snapshot.
+  **
+  ** Ignore any LSM_BUSY errors that occur during these operations. If
+  ** LSM_BUSY does occur, it means some other connection is already working
+  ** on flushing the in-memory tree or checkpointing the database. 
+  */
+  assert( rc!=LSM_BUSY);
+  if( rc==LSM_OK && (nFlush>1 || (nFlush && pDb->bAutowork)) ){
+    rc = lsmFlushToDisk(pDb);
+    if( rc==LSM_OK && pDb->bAutowork ){
+      rc = lsmCheckpointWrite(pDb);
+    }
+  }
+  if( rc==LSM_BUSY ) rc = LSM_OK;
+
   return rc;
 }
 

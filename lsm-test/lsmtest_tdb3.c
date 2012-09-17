@@ -589,12 +589,14 @@ static void xWorkHook(lsm_db *db, void *pArg){
 }
 
 #define TEST_NO_RECOVERY -1
+#define TEST_THREADS     -2
 
-int test_lsm_config_str(
+static int test_lsm_config_str(
   LsmDb *pLsm,
   lsm_db *db, 
   int bWorker,
-  const char *zStr
+  const char *zStr,
+  int *pnThread
 ){
   struct CfgParam {
     const char *zParam;
@@ -614,9 +616,11 @@ int test_lsm_config_str(
     { "multi_proc",       0, LSM_CONFIG_MULTIPLE_PROCESSES },
     { "worker_nmerge",    1, LSM_CONFIG_NMERGE },
     { "test_no_recovery", 0, TEST_NO_RECOVERY },
+    { "threads",          0, TEST_THREADS },
     { 0, 0 }
   };
   const char *z = zStr;
+  int nThread = 1;
 
   assert( db );
   while( z[0] ){
@@ -661,6 +665,9 @@ int test_lsm_config_str(
             case TEST_NO_RECOVERY:
               pLsm->bNoRecovery = iVal;
               break;
+            case TEST_THREADS:
+              nThread = iVal;
+              break;
           }
         }
       }
@@ -669,6 +676,7 @@ int test_lsm_config_str(
     }
   }
 
+  if( pnThread ) *pnThread = nThread;
   return 0;
  syntax_error:
   testPrintError("syntax error at: \"%s\"\n", z);
@@ -681,15 +689,17 @@ int tdb_lsm_config_str(TestDb *pDb, const char *zStr){
     int i;
     LsmDb *pLsm = (LsmDb *)pDb;
 
-    rc = test_lsm_config_str(pLsm, pLsm->db, 0, zStr);
+    rc = test_lsm_config_str(pLsm, pLsm->db, 0, zStr, 0);
 #ifdef LSM_MUTEX_PTHREADS
     for(i=0; rc==0 && i<pLsm->nWorker; i++){
-      rc = test_lsm_config_str(0, pLsm->aWorker[i].pWorker, 1, zStr);
+      rc = test_lsm_config_str(0, pLsm->aWorker[i].pWorker, 1, zStr, 0);
     }
 #endif
   }
   return rc;
 }
+
+static int testLsmStartWorkers(LsmDb *, int, const char *, const char *);
 
 static int testLsmOpen(
   const char *zCfg,
@@ -751,10 +761,19 @@ static int testLsmOpen(
 
   rc = lsm_new(&pDb->env, &pDb->db);
   if( rc==LSM_OK ){
+    int nThread = 1;
     lsm_config_log(pDb->db, xLog, 0);
     lsm_config_work_hook(pDb->db, xWorkHook, (void *)pDb);
-    rc = tdb_lsm_config_str((TestDb *)pDb, zCfg);
+
+    rc = test_lsm_config_str(pDb, pDb->db, 0, zCfg, &nThread);
     if( rc==LSM_OK ) rc = lsm_open(pDb->db, zFilename);
+
+#ifdef LSM_MUTEX_PTHREADS
+    if( rc==LSM_OK && (nThread==2 || nThread==3) ){
+      testLsmStartWorkers(pDb, nThread-1, zFilename, zCfg);
+    }
+#endif
+
     if( rc!=LSM_OK ){
       test_lsm_close((TestDb *)pDb);
       pDb = 0;
@@ -887,8 +906,9 @@ static void *worker_main(void *pArg){
     /* Do some work. If an error occurs, exit. */
     pthread_mutex_unlock(&p->worker_mutex);
     rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
+    printf("# worked %d units\n", nWrite);
     pthread_mutex_lock(&p->worker_mutex);
-    if( rc!=LSM_OK ){
+    if( rc!=LSM_OK && rc!=LSM_BUSY ){
       p->worker_rc = rc;
       break;
     }
@@ -906,6 +926,7 @@ static void *worker_main(void *pArg){
     }
   }
   pthread_mutex_unlock(&p->worker_mutex);
+  printf("# worker EXIT\n");
   
   return 0;
 }
@@ -966,6 +987,7 @@ static void mt_client_work_hook(lsm_db *db, void *pArg){
   /* Invoke the user level work-hook, if any. */
   if( pDb->xWork ) pDb->xWork(db, pDb->pWorkCtx);
 
+  printf("# signalling worker threads\n");
   /* Signal each worker thread */
   for(i=0; i<pDb->nWorker; i++){
     mt_signal_worker(pDb, i);
@@ -1014,6 +1036,41 @@ static int mt_start_worker(
 
   return rc;
 }
+
+
+static int testLsmStartWorkers(
+  LsmDb *pDb, int nWorker, const char *zFilename, const char *zCfg
+){
+  int rc;
+  int bAutowork = 0;
+  assert( nWorker==1 || nWorker==2 );
+
+#if 0
+  /* Turn off auto-work and configure a work-hook on the client connection. */
+  lsm_config(pDb->db, LSM_CONFIG_AUTOWORK, &bAutowork);
+#endif
+  lsm_config_work_hook(pDb->db, mt_client_work_hook, (void *)pDb);
+
+  pDb->aWorker = (LsmWorker *)testMalloc(sizeof(LsmWorker) * nWorker);
+  memset(pDb->aWorker, 0, sizeof(LsmWorker) * nWorker);
+  pDb->nWorker = nWorker;
+
+  rc = mt_start_worker(
+      pDb, 0, zFilename, LSM_WORK_CHECKPOINT|LSM_WORK_FLUSH, 512
+  );
+#if 0
+  rc = mt_start_worker(pDb, 0, zFilename, LSM_WORK_CHECKPOINT, 
+      nWorker==1 ? 512 : 0
+  );
+#endif
+
+  if( rc==0 && nWorker==2 ){
+    rc = mt_start_worker(pDb, 1, zFilename, 0, 512);
+  }
+
+  return rc;
+}
+
 
 static int test_lsm_mt(
   const char *zFilename,          /* File to open */

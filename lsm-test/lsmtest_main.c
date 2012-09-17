@@ -481,6 +481,30 @@ static lsm_db *configure_lsm_db(TestDb *pDb){
 #define ST_KEYSIZE 6
 #define ST_VALSIZE 7
 
+
+static void print_speed_test_help(){
+  printf(
+"\n"
+"Repeat the following $repeat times:\n"
+"  1. Insert $write key-value pairs. One transaction for each write op.\n"
+"  2. Pause for $pause ms.\n"
+"  3. Perform $fetch queries on the database.\n"
+"\n"
+"  Keys are $keysize bytes in size. Values are $valsize bytes in size\n"
+"  Both keys and values are pseudo-randomly generated\n"
+"\n"
+"Options are:\n"
+"  -repeat  $repeat                 (default value 10)\n"
+"  -write   $write                  (default value 10000)\n"
+"  -pause   $pause                  (default value 0)\n"
+"  -fetch   $fetch                  (default value 0)\n"
+"  -keysize $keysize                (default value 12)\n"
+"  -valsize $valsize                (default value 100)\n"
+"  -system  $system                 (default value \"lsm\"\n"
+"\n"
+);
+}
+
 int do_speed_test2(int nArg, char **azArg){
   struct Option {
     const char *zOpt;
@@ -496,6 +520,7 @@ int do_speed_test2(int nArg, char **azArg){
     { "-keysize", ST_KEYSIZE,   12},
     { "-valsize", ST_VALSIZE,  100},
     { "-system",  -1,            0},
+    { "help",     -2,            0},
     {0, 0, 0}
   };
   int i;
@@ -517,7 +542,13 @@ int do_speed_test2(int nArg, char **azArg){
   for(i=0; i<nArg; i+=2){
     int iSel;
     rc = testArgSelect(aOpt, "switch", azArg[i], &iSel);
-    if( rc ) return rc;
+    if( rc ){
+      return rc;
+    }
+    if( aOpt[iSel].eVal==-2 ){
+      print_speed_test_help();
+      return 0;
+    }
     if( i+1==nArg ){
       testPrintError("option %s requires an argument\n", aOpt[iSel].zOpt);
       return 1;
