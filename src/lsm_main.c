@@ -398,6 +398,26 @@ void lsmAppendSegmentList(LsmString *pStr, char *zPre, Segment *pSeg){
   );
 }
 
+static int infoGetWorker(lsm_db *pDb, Snapshot **pp, int *pbUnlock){
+  int rc = LSM_OK;
+
+  assert( *pbUnlock==0 );
+  if( !pDb->pWorker ){
+    rc = lsmBeginWork(pDb);
+    if( rc!=LSM_OK ) return rc;
+    *pbUnlock = 1;
+  }
+  *pp = pDb->pWorker;
+  return rc;
+}
+
+static void infoFreeWorker(lsm_db *pDb, int bUnlock){
+  if( bUnlock ){
+    int rcdummy = LSM_BUSY;
+    lsmFinishWork(pDb, 0, 0, &rcdummy);
+  }
+}
+
 int lsmStructList(
   lsm_db *pDb,                    /* Database handle */
   char **pzOut                    /* OUT: Nul-terminated string (tcl list) */
@@ -410,13 +430,8 @@ int lsmStructList(
   int bUnlock = 0;
 
   /* Obtain the worker snapshot */
-  pWorker = pDb->pWorker;
-  if( !pWorker ){
-    rc = lsmBeginWork(pDb);
-    if( rc!=LSM_OK ) return rc;
-    pWorker = pDb->pWorker;
-    bUnlock = 1;
-  }
+  rc = infoGetWorker(pDb, &pWorker, &bUnlock);
+  if( rc!=LSM_OK ) return rc;
 
   /* Format the contents of the snapshot as text */
   pTopLevel = lsmDbSnapshotLevel(pWorker);
@@ -433,10 +448,32 @@ int lsmStructList(
   rc = s.n>=0 ? LSM_OK : LSM_NOMEM;
 
   /* Release the snapshot and return */
-  if( bUnlock ){
-    int rcdummy = LSM_BUSY;
-    lsmFinishWork(pDb, 0, 0, &rcdummy);
+  infoFreeWorker(pDb, bUnlock);
+  *pzOut = s.z;
+  return rc;
+}
+
+int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
+  Snapshot *pWorker;              /* Worker snapshot */
+  int bUnlock = 0;
+  LsmString s;
+  int i;
+  int rc;
+
+  /* Obtain the worker snapshot */
+  rc = infoGetWorker(pDb, &pWorker, &bUnlock);
+  if( rc!=LSM_OK ) return rc;
+
+  lsmStringInit(&s, pDb->pEnv);
+  lsmStringAppendf(&s, "%d+%d",pWorker->freelist.nEntry,pWorker->nFreelistOvfl);
+  for(i=0; i<pWorker->freelist.nEntry; i++){
+    FreelistEntry *p = &pWorker->freelist.aEntry[i];
+    lsmStringAppendf(&s, " {%d %d}", p->iBlk, (int)p->iId);
   }
+  rc = s.n>=0 ? LSM_OK : LSM_NOMEM;
+
+  /* Release the snapshot and return */
+  infoFreeWorker(pDb, bUnlock);
   *pzOut = s.z;
   return rc;
 }
@@ -483,6 +520,12 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
     case LSM_INFO_LOG_STRUCTURE: {
       char **pzVal = va_arg(ap, char **);
       rc = lsmInfoLogStructure(pDb, pzVal);
+      break;
+    }
+
+    case LSM_INFO_FREELIST: {
+      char **pzVal = va_arg(ap, char **);
+      rc = lsmInfoFreelist(pDb, pzVal);
       break;
     }
 
@@ -757,10 +800,14 @@ int lsm_commit(lsm_db *pDb, int iLevel){
   ** on flushing the in-memory tree or checkpointing the database. 
   */
   assert( rc!=LSM_BUSY);
-  if( rc==LSM_OK && (nFlush>1 || (nFlush && pDb->bAutowork)) ){
-    rc = lsmFlushToDisk(pDb);
-    if( rc==LSM_OK && pDb->bAutowork ){
-      rc = lsmCheckpointWrite(pDb);
+  if( rc==LSM_OK ){
+    if( nFlush>1 || (nFlush && pDb->bAutowork) ){
+      rc = lsmFlushToDisk(pDb);
+      if( rc==LSM_OK && pDb->bAutowork ){
+        rc = lsmCheckpointWrite(pDb);
+      }
+    }else if( nFlush && pDb->xWork ){
+      pDb->xWork(pDb, pDb->pWorkCtx);
     }
   }
   if( rc==LSM_BUSY ) rc = LSM_OK;

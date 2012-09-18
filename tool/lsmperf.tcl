@@ -7,6 +7,8 @@ proc exec_lsmtest_speed {nSec spec} {
   set fd [open [list |lsmtest speed2 {*}$spec]]
   set res [list]
 
+  puts "lsmtest speed2 $spec"
+
   set initial [clock seconds]
 
   while {![eof $fd] && ($nSec==0 || ([clock second]-$initial)<$nSec)} { 
@@ -53,13 +55,13 @@ proc make_totalset {res nWrite} {
   set ret
 }
 
-proc make_dataset {res iRes nWrite nShift} {
+proc make_dataset {res iRes nWrite nShift nOp} {
   set ret ""
   foreach row $res {
     set i [lindex $row 0]
     set j [lindex $row [expr $iRes+1]]
     set x [expr $i*$nWrite + $nShift]
-    append ret "$x [expr int($nWrite * 1000.0 / $j)]\n"
+    append ret "$x [expr int($nOp * 1000.0 / $j)]\n"
   }
   append ret "end\n"
   set ret
@@ -134,7 +136,7 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
 
     if {$plot1 != ""} { set plot1 ", $plot1" }
     set plot1 "\"-\" ti \"$name writes/sec\" with boxes fs solid lc rgb \"$c1\"$plot1"
-    set data1 "[make_dataset $res 0 $nWrite $nShift] $data1"
+    set data1 "[make_dataset $res 0 $nWrite $nShift $nWrite] $data1"
 
     set plot3 ",\"-\" ti \"$name cumulative writes/sec\" with lines lc rgb \"$c2\" lw 2 $plot3"
     set data3 "[make_totalset $res $nWrite] $data3"
@@ -142,7 +144,7 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
     if {$nFetch>0} {
       set new ", \"-\" ti \"$name fetches/sec\" axis x1y2 with points lw 3 lc rgb \"$c2\""
       set plot2 "$new $plot2"
-      set data2 "[make_dataset $res 1 $nWrite $nWrite] $data2"
+      set data2 "[make_dataset $res 1 $nWrite $nWrite $nFetch] $data2"
     }
 
     incr nShift [expr $nWrite/4]
@@ -156,8 +158,8 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 180 10000 10000 1000 {
-  LSM   "mmap=1 multi_proc=0 safety=1 threads=2 autowork=0" 
+do_write_test x.png 60 10000 20000 1000 {
+  LSM   "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0 worker_nmerge=2" 
 }
 
 

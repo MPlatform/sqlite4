@@ -575,9 +575,9 @@ static int test_lsm_rollback(TestDb *pTestDb, int iLevel){
 ** messages to stderr.
 */
 static void xLog(void *pCtx, int rc, const char *z){
-  unused_parameter(pCtx);
   unused_parameter(rc);
   /* fprintf(stderr, "lsm: rc=%d \"%s\"\n", rc, z); */
+  if( pCtx ) fprintf(stderr, "%s: ", (char *)pCtx);
   fprintf(stderr, "%s\n", z);
   fflush(stderr);
 
@@ -817,7 +817,9 @@ lsm_db *tdb_lsm(TestDb *pDb){
 void tdb_lsm_enable_log(TestDb *pDb, int bEnable){
   lsm_db *db = tdb_lsm(pDb);
   if( db ){
-    lsm_config_log(db, (bEnable ? xLog : 0), 0);
+    LsmDb *p = (LsmDb *)pDb;
+    int i;
+    lsm_config_log(db, (bEnable ? xLog : 0), (void *)"client");
   }
 }
 
@@ -894,6 +896,17 @@ int tdb_lsm_open(const char *zCfg, const char *zDb, int bClear, TestDb **ppDb){
 
 #ifdef LSM_MUTEX_PTHREADS
 
+/*
+** Signal worker thread iWorker that there may be work to do.
+*/
+static void mt_signal_worker(LsmDb *pDb, int iWorker){
+  LsmWorker *p = &pDb->aWorker[iWorker];
+  pthread_mutex_lock(&p->worker_mutex);
+  p->bDoWork = 1;
+  pthread_cond_signal(&p->worker_cond);
+  pthread_mutex_unlock(&p->worker_mutex);
+}
+
 static void *worker_main(void *pArg){
   LsmWorker *p = (LsmWorker *)pArg;
   lsm_db *pWorker;                /* Connection to access db through */
@@ -906,11 +919,15 @@ static void *worker_main(void *pArg){
     /* Do some work. If an error occurs, exit. */
     pthread_mutex_unlock(&p->worker_mutex);
     rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
-    printf("# worked %d units\n", nWrite);
+/*    printf("# worked %d units\n", nWrite); */
     pthread_mutex_lock(&p->worker_mutex);
     if( rc!=LSM_OK && rc!=LSM_BUSY ){
       p->worker_rc = rc;
       break;
+    }
+
+    if( nWrite && (p->lsm_work_flags & LSM_WORK_CHECKPOINT)==0 ){
+      mt_signal_worker(p->pDb, 1);
     }
 
     /* If the call to lsm_work() indicates that there is nothing more
@@ -926,21 +943,9 @@ static void *worker_main(void *pArg){
     }
   }
   pthread_mutex_unlock(&p->worker_mutex);
-  printf("# worker EXIT\n");
+  /* printf("# worker EXIT\n"); */
   
   return 0;
-}
-
-
-/*
-** Signal worker thread iWorker that there may be work to do.
-*/
-static void mt_signal_worker(LsmDb *pDb, int iWorker){
-  LsmWorker *p = &pDb->aWorker[iWorker];
-  pthread_mutex_lock(&p->worker_mutex);
-  p->bDoWork = 1;
-  pthread_cond_signal(&p->worker_cond);
-  pthread_mutex_unlock(&p->worker_mutex);
 }
 
 
@@ -987,7 +992,7 @@ static void mt_client_work_hook(lsm_db *db, void *pArg){
   /* Invoke the user level work-hook, if any. */
   if( pDb->xWork ) pDb->xWork(db, pDb->pWorkCtx);
 
-  printf("# signalling worker threads\n");
+  /* printf("# signalling worker threads\n"); */
   /* Signal each worker thread */
   for(i=0; i<pDb->nWorker; i++){
     mt_signal_worker(pDb, i);
@@ -1019,10 +1024,12 @@ static int mt_start_worker(
   p = &pDb->aWorker[iWorker];
   p->lsm_work_flags = flags;
   p->lsm_work_npage = nPage;
+  p->pDb = pDb;
 
   /* Open the worker connection */
   if( rc==0 ) rc = lsm_new(&pDb->env, &p->pWorker);
   if( rc==0 ) rc = lsm_open(p->pWorker, zFilename);
+lsm_config_log(p->pWorker, xLog, (void *)"worker");
 
   /* Configure the work-hook */
   if( rc==0 ){
@@ -1045,27 +1052,21 @@ static int testLsmStartWorkers(
   int bAutowork = 0;
   assert( nWorker==1 || nWorker==2 );
 
-#if 0
-  /* Turn off auto-work and configure a work-hook on the client connection. */
-  lsm_config(pDb->db, LSM_CONFIG_AUTOWORK, &bAutowork);
-#endif
+  /* Configure a work-hook for the client connection. */
   lsm_config_work_hook(pDb->db, mt_client_work_hook, (void *)pDb);
 
   pDb->aWorker = (LsmWorker *)testMalloc(sizeof(LsmWorker) * nWorker);
   memset(pDb->aWorker, 0, sizeof(LsmWorker) * nWorker);
   pDb->nWorker = nWorker;
 
-  rc = mt_start_worker(
-      pDb, 0, zFilename, LSM_WORK_CHECKPOINT|LSM_WORK_FLUSH, 512
-  );
-#if 0
-  rc = mt_start_worker(pDb, 0, zFilename, LSM_WORK_CHECKPOINT, 
-      nWorker==1 ? 512 : 0
-  );
-#endif
-
-  if( rc==0 && nWorker==2 ){
-    rc = mt_start_worker(pDb, 1, zFilename, 0, 512);
+  if( nWorker==1 ){
+    int flags = LSM_WORK_CHECKPOINT|LSM_WORK_FLUSH;
+    rc = mt_start_worker(pDb, 0, zFilename, flags, 2048);
+  }else{
+    rc = mt_start_worker(pDb, 0, zFilename, LSM_WORK_FLUSH, 1024);
+    if( rc==LSM_OK ){
+      rc = mt_start_worker(pDb, 1, zFilename, LSM_WORK_CHECKPOINT, 0);
+    }
   }
 
   return rc;

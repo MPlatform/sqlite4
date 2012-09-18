@@ -309,6 +309,16 @@ int lsm_info(lsm_db *, int, ...);
 **
 **     The Tcl structure returned is a list of six integers that describe
 **     the current structure of the log file.
+**
+**   LSM_INFO_FREELIST
+**     The third argument should be of type (char **). The location pointed
+**     to is populated with a pointer to a nul-terminated string containing
+**     the string representation of a Tcl data-structure. The returned 
+**     string should be eventually freed by the caller using lsm_free().
+**
+**     The Tcl structure returned is a list containing one element for each
+**     free block in the database. The element itself consists of two 
+**     integers - the block number and the id of the snapshot that freed it.
 */
 #define LSM_INFO_NWRITE           1
 #define LSM_INFO_NREAD            2
@@ -317,6 +327,7 @@ int lsm_info(lsm_db *, int, ...);
 #define LSM_INFO_ARRAY_STRUCTURE  5
 #define LSM_INFO_PAGE_ASCII_DUMP  6
 #define LSM_INFO_PAGE_HEX_DUMP    7
+#define LSM_INFO_FREELIST         8
 
 
 /* 

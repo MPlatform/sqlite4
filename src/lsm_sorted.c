@@ -3641,6 +3641,9 @@ int lsmSortedFlushTree(
 #if 0
   lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "tree flush");
 #endif
+#if 0
+  lsmLogMessage(pDb, rc, "flushed tree to disk");
+#endif
   return rc;
 }
 
@@ -4051,6 +4054,7 @@ int lsmSortedAutoWork(
   int rc;                         /* Return code */
   int nRemaining;                 /* Units of work to do before returning */
   int nDepth;                     /* Current height of tree (longest path) */
+  int nWrite;                     /* Pages written */
   Level *pLevel;                  /* Used to iterate through levels */
 
   assert( lsmFsIntegrityCheck(pDb) );
@@ -4065,7 +4069,10 @@ int lsmSortedAutoWork(
   }
   nRemaining = nUnit * nDepth;
 
-  rc = sortedWork(pDb, nRemaining, 0, 0);
+  rc = sortedWork(pDb, nRemaining, 0, &nWrite);
+#if 0
+  lsmLogMessage(pDb, 0, "auto-work: %d pages", nWrite);
+#endif
   return rc;
 }
 
@@ -4104,7 +4111,10 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   ** tree to disk.  */
   if( rc==LSM_OK && ((flags & LSM_WORK_FLUSH)) ){
     rc = lsmTreeLoadHeader(pDb, 0);
-    if( rc==LSM_OK && pDb->treehdr.iOldShmid ){
+    if( rc==LSM_OK 
+     && pDb->treehdr.iOldShmid 
+     && pDb->treehdr.iOldLog!=pDb->pWorker->iLogOff 
+    ){
       rc = lsmSortedFlushTree(pDb, &nOvfl);
       bFlush = 1;
     }
@@ -4115,6 +4125,15 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
     rc = sortedWork(pDb, nPage, bOptimize, &nWrite);
     if( rc==LSM_OK && nWrite ){
+#if 0
+  {
+    char *z = 0;
+    lsmInfoFreelist(pDb, &z);
+    lsmLogMessage(pDb, 0, "work: %d pages", nWrite);
+    lsmLogMessage(pDb, 0, "freelist: %s", z);
+    lsm_free(lsm_get_env(pDb), z);
+  }
+#endif
       rc = lsmSortedFlushDb(pDb);
       if( rc==LSM_OK && lsmCheckpointOverflowRequired(pDb) ){
         nOvfl = -1;

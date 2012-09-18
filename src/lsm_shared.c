@@ -456,7 +456,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     if( rc==LSM_OK && bInUse==0 ){
       i64 iId = 0;
       rc = lsmCheckpointSynced(pDb, &iId, 0);
-      if( rc!=LSM_OK || iId<iFree ) bInUse = 1;
+      if( rc!=LSM_OK || iId<iFree ) bInUse = 2;
     }
 
     if( rc==LSM_OK && bInUse==0 ){
@@ -464,6 +464,13 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
       flRemoveEntry0(pFree);
       assert( iRet!=0 );
     }
+#if 0
+    lsmLogMessage(
+        pDb, 0, "%d reusing block %d%s", (iRet==0 ? "not " : "")
+        pFree->aEntry[0].iBlk, 
+        bInUse==0 ? "" : bInUse==1 ? " (client)" : " (unsynced)"
+    );
+#endif
   }
 
   /* If no block was allocated from the free-list, allocate one at the
@@ -559,6 +566,9 @@ int lsmCheckpointWrite(lsm_db *pDb){
 
     if( rc==LSM_OK && bDone==0 ){
       int iMeta = (pShm->iMetaPage % 2) + 1;
+#if 0
+  lsmLogMessage(pDb, 0, "starting checkpoint");
+#endif
       if( pDb->eSafety!=LSM_SAFETY_OFF ){
         rc = lsmFsSyncDb(pDb->pFS);
       }
@@ -567,6 +577,11 @@ int lsmCheckpointWrite(lsm_db *pDb){
         rc = lsmFsSyncDb(pDb->pFS);
       }
       if( rc==LSM_OK ) pShm->iMetaPage = iMeta;
+#if 0
+  lsmLogMessage(pDb, 0, "finish checkpoint %d", 
+      (int)lsmCheckpointId(pDb->aSnapshot, 0)
+  );
+#endif
     }
   }
 
@@ -659,7 +674,9 @@ int lsmBeginReadTrans(lsm_db *pDb){
       ShmHeader *pShm = pDb->pShmhdr;
       u32 iShmMax = pDb->treehdr.iUsedShmid;
       u32 iShmMin = pDb->treehdr.iNextShmid+1-pDb->treehdr.nChunk;
-      rc = lsmReadlock(pDb, iSnap, iShmMin, iShmMax);
+      rc = lsmReadlock(
+          pDb, lsmCheckpointId(pDb->aSnapshot, 0), iShmMin, iShmMax
+      );
       if( rc==LSM_OK ){
         if( lsmTreeLoadHeaderOk(pDb, iTreehdr)
          && lsmCheckpointLoadOk(pDb, iSnap)
@@ -868,7 +885,7 @@ static int isInUse(lsm_db *db, i64 iLsmId, u32 iShmid, int *pbInUse){
   for(i=0; rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
     if( p->iLsmId ){
-      if( (iLsmId!=0 && iLsmId>=p->iLsmId) 
+      if( (iLsmId!=0 && p->iLsmId!=0 && iLsmId>=p->iLsmId) 
        || (iLsmId==0 && shm_sequence_ge(p->iTreeId, iShmid))
       ){
         rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
