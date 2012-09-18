@@ -129,6 +129,7 @@ struct FileSystem {
   int bUseMmap;                   /* True to use mmap() to access db file */
   void *pMap;                     /* Current mapping of database file */
   i64 nMap;                       /* Bytes mapped at pMap */
+  Page *pFree;
 
   /* Statistics */
   int nWrite;                     /* Total number of pages written */
@@ -725,37 +726,46 @@ int fsPageGet(
 
   assert( iPg>=fsFirstPageOnBlock(pFS, 1) );
 
-  /* Search the hash-table for the page */
-  iHash = fsHashKey(pFS->nHash, iPg);
-  for(p=pFS->apHash[iHash]; p; p=p->pHashNext){
-    if( p->iPg==iPg) break;
-  }
+  if( pFS->bUseMmap ){
+    i64 iEnd = (i64)iPg * pFS->nPagesize;
+    fsGrowMapping(pFS, iEnd, &rc);
+    if( rc!=LSM_OK ) return rc;
 
-  if( p==0 ){
-    /* Set bRequireData to true if a buffer allocated by malloc() is required
-    ** to store the page data (the alternative is to have the Page object
-    ** carry a pointer into the mapped region at FileSystem.pMap). In 
-    ** non-mmap mode, this should always be true. In mmap mode, it should
-    ** always be false for readable pages (noContent==0), but may be set
-    ** to either true or false for appended pages (noContent==1). Setting
-    ** it to true in this case causes LSM to do "double-buffered" writes. */
-    int bRequireData = (pFS->bUseMmap==0);
-
-    rc = fsPageBuffer(pFS, bRequireData, &p);
-    if( rc==LSM_OK ){
-      p->iPg = iPg;
-      p->nRef = 0;
+    if( pFS->pFree ){
+      p = pFS->pFree;
+      pFS->pFree = p->pHashNext;
+      assert( p->nRef==0 );
+    }else{
+      p = lsmMallocZeroRc(pFS->pEnv, sizeof(Page), &rc);
+      if( rc ) return rc;
+      fsPageAddToLru(pFS, p);
       p->pFS = pFS;
-      assert( p->flags==0 || p->flags==PAGE_FREE );
-      if( fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg) ) p->flags |= PAGE_SHORT;
+    }
+    p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (i64)(iPg-1)];
+    p->iPg = iPg;
+    if( fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg) ){
+      p->flags = PAGE_SHORT;
+    }else{
+      p->flags = 0;
+    }
+    p->nData = pFS->nPagesize - (p->flags & PAGE_SHORT);
+  }else{
 
-      if( pFS->bUseMmap && bRequireData==0 ){
-        i64 iEnd = (i64)iPg * pFS->nPagesize;
-        fsGrowMapping(pFS, iEnd, &rc);
-        if( rc==LSM_OK ){
-          p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (i64)(iPg-1)];
-        }
-      }else{
+    /* Search the hash-table for the page */
+    iHash = fsHashKey(pFS->nHash, iPg);
+    for(p=pFS->apHash[iHash]; p; p=p->pHashNext){
+      if( p->iPg==iPg) break;
+    }
+
+    if( p==0 ){
+      rc = fsPageBuffer(pFS, 1, &p);
+      if( rc==LSM_OK ){
+        p->iPg = iPg;
+        p->nRef = 0;
+        p->pFS = pFS;
+        assert( p->flags==0 || p->flags==PAGE_FREE );
+        if( fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg) ) p->flags |= PAGE_SHORT;
+
 #ifdef LSM_DEBUG
         memset(p->aData, 0x56, pFS->nPagesize);
 #endif
@@ -768,25 +778,25 @@ int fsPageGet(
           rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, p->aData, nByte);
           pFS->nRead++;
         }
-      }
 
-      /* If the xRead() call was successful (or not attempted), link the
-      ** page into the page-cache hash-table. Otherwise, if it failed,
-      ** free the buffer. */
-      if( rc==LSM_OK ){
-        p->pHashNext = pFS->apHash[iHash];
-        p->nData =  pFS->nPagesize - (p->flags & PAGE_SHORT);
-        pFS->apHash[iHash] = p;
-      }else{
-        fsPageBufferFree(p);
-        p = 0;
+        /* If the xRead() call was successful (or not attempted), link the
+         ** page into the page-cache hash-table. Otherwise, if it failed,
+         ** free the buffer. */
+        if( rc==LSM_OK ){
+          p->pHashNext = pFS->apHash[iHash];
+          p->nData =  pFS->nPagesize - (p->flags & PAGE_SHORT);
+          pFS->apHash[iHash] = p;
+        }else{
+          fsPageBufferFree(p);
+          p = 0;
+        }
       }
+    }else if( p->nRef==0 ){
+      fsPageRemoveFromLru(pFS, p);
     }
-  }else if( p->nRef==0 && pFS->bUseMmap==0 ){
-    fsPageRemoveFromLru(pFS, p);
-  }
 
-  assert( (rc==LSM_OK && p) || (rc!=LSM_OK && p==0) );
+    assert( (rc==LSM_OK && p) || (rc!=LSM_OK && p==0) );
+  }
   if( rc==LSM_OK ){
     pFS->nOut += (p->nRef==0);
     p->nRef++;
@@ -1290,16 +1300,17 @@ int lsmFsPageRelease(Page *pPg){
     if( pPg->nRef==0 && pPg->iPg!=0 ){
       FileSystem *pFS = pPg->pFS;
       rc = lsmFsPagePersist(pPg);
-
       pFS->nOut--;
-      assert( pFS->bUseMmap || pPg->pLruNext==0 );
-      assert( pFS->bUseMmap || pPg->pLruPrev==0 );
-#if 0
-      fsPageAddToLru(pFS, pPg);
-#else
-      fsPageRemoveFromHash(pFS, pPg);
-      fsPageBufferFree(pPg);
-#endif
+
+      if( pFS->bUseMmap ){
+        pPg->pHashNext = pFS->pFree;
+        pFS->pFree = pPg;
+      }else{
+        assert( pPg->pLruNext==0 );
+        assert( pPg->pLruPrev==0 );
+        fsPageRemoveFromHash(pFS, pPg);
+        fsPageBufferFree(pPg);
+      }
     }
   }
 

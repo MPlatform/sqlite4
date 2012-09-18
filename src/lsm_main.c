@@ -85,6 +85,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->bUseLog = 1;
   pDb->iReader = -1;
   pDb->bMultiProc = 1;
+  pDb->bMmap = LSM_IS_64_BIT;
   return LSM_OK;
 }
 
@@ -254,6 +255,7 @@ int lsm_close(lsm_db *pDb){
       lsmDbDatabaseRelease(pDb);
       lsmFsClose(pDb->pFS);
       lsmFree(pDb->pEnv, pDb->aTrans);
+      lsmFree(pDb->pEnv, pDb->apShm);
       lsmFree(pDb->pEnv, pDb);
     }
   }

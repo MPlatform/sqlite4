@@ -961,6 +961,19 @@ int lsmShmChunk(lsm_db *db, int iChunk, void **ppData){
   Database *p = db->pDatabase;
   lsm_env *pEnv = db->pEnv;
 
+  while( iChunk>=db->nShm ){
+    void **apShm;
+    apShm = lsmRealloc(pEnv, db->apShm, sizeof(void*)*(db->nShm+16));
+    if( !apShm ) return LSM_NOMEM_BKPT;
+    memset(&apShm[db->nShm], 0, sizeof(void*)*16);
+    db->apShm = apShm;
+    db->nShm += 16;
+  }
+  if( db->apShm[iChunk] ){
+    *ppData = db->apShm[iChunk];
+    return rc;
+  }
+
   /* Enter the client mutex */
   assert( iChunk>=0 );
   lsmMutexEnter(pEnv, p->pClientMutex);
@@ -997,7 +1010,7 @@ int lsmShmChunk(lsm_db *db, int iChunk, void **ppData){
   /* Release the client mutex */
   lsmMutexLeave(pEnv, p->pClientMutex);
 
-  *ppData = pRet; 
+  *ppData = db->apShm[iChunk] = pRet; 
   return rc;
 }
 
