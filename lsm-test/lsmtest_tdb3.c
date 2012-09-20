@@ -428,6 +428,24 @@ static int test_lsm_write(
   int nVal
 ){
   LsmDb *pDb = (LsmDb *)pTestDb;
+
+  if( pDb->aWorker ){
+    int nLimit = -1;
+    int nSleep = 0;
+    lsm_config(pDb->db, LSM_CONFIG_WRITE_BUFFER, &nLimit);
+    do {
+      int bOld, nNew, rc;
+      rc = lsm_tree_size(pDb->db, &bOld, &nNew);
+      if( rc!=LSM_OK ) return rc;
+      if( bOld==0 || nNew<nLimit ) break;
+      usleep(1000);
+      nSleep += 1;
+    }while( 1 );
+#if 0
+    if( nSleep ) printf("nSleep=%d\n", nSleep);
+#endif
+  }
+
   return lsm_write(pDb->db, pKey, nKey, pVal, nVal);
 }
 
@@ -918,6 +936,20 @@ static void *worker_main(void *pArg){
 
     /* Do some work. If an error occurs, exit. */
     pthread_mutex_unlock(&p->worker_mutex);
+    if( (p->lsm_work_flags & LSM_WORK_CHECKPOINT)==0 ){
+      int nSleep = 0;
+      while( 1 ){
+        int nByte = 0;
+        lsm_ckpt_size(pWorker, &nByte);
+        if( nByte<(32*1024*1024) ) break;
+        mt_signal_worker(p->pDb, 1);
+        usleep(1000);
+        nSleep++;
+      }
+#if 0
+      if( nSleep ) printf("nSleep=%d (worker)\n", nSleep);
+#endif
+    }
     rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
 /*    printf("# worked %d units\n", nWrite); */
     pthread_mutex_lock(&p->worker_mutex);

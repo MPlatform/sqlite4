@@ -455,7 +455,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     /* The "has been checkpointed" bit */
     if( rc==LSM_OK && bInUse==0 ){
       i64 iId = 0;
-      rc = lsmCheckpointSynced(pDb, &iId, 0);
+      rc = lsmCheckpointSynced(pDb, &iId, 0, 0);
       if( rc!=LSM_OK || iId<iFree ) bInUse = 2;
     }
 

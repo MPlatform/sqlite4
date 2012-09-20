@@ -306,7 +306,7 @@ static int logReclaimSpace(lsm_db *pDb){
     DbLog *pLog = &pDb->treehdr.log;
     i64 iSnapshotId = 0;
     i64 iOff = 0;
-    rc = lsmCheckpointSynced(pDb, &iSnapshotId, &iOff);
+    rc = lsmCheckpointSynced(pDb, &iSnapshotId, &iOff, 0);
     if( rc==LSM_OK && pLog->iSnapshotId<iSnapshotId ){
       int iRegion;
       for(iRegion=0; iRegion<3; iRegion++){

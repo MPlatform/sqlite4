@@ -477,6 +477,7 @@ struct Snapshot {
   u32 aiAppend[LSM_APPLIST_SZ];   /* Append point list */
   Freelist freelist;              /* Free block list */
   int nFreelistOvfl;              /* Number of extra free-list entries in LSM */
+  u32 nWrite;                     /* Total number of pages written to disk */
 };
 #define LSM_INITIAL_SNAPSHOT_ID 11
 
@@ -509,7 +510,7 @@ void lsmCheckpointZeroLogoffset(lsm_db *);
 
 int lsmCheckpointSaveWorker(lsm_db *pDb, int, int);
 int lsmDatabaseFull(lsm_db *pDb);
-int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog);
+int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite);
 
 
 /* 

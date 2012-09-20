@@ -383,6 +383,43 @@ int lsm_delete_range(lsm_db *,
     const void *pKey1, int nKey1, const void *pKey2, int nKey2
 );
 
+/*
+** The lsm_tree_size() function reports on the current state of the 
+** in-memory tree data structure. 
+**
+** At any time, there are either one or two tree structures held in shared
+** memory that new database clients will access (there may also be additional 
+** tree structures being used by older clients - this API does not provide
+** information on them). One tree structure - the current tree - is used to
+** accumulate new data written to the database. The other tree structure - the 
+** old tree - is a read-only tree holding older data and may be flushed to disk
+** at any time.
+**
+** If successful, this function sets *pnNew to the number of bytes of shared
+** memory space used by the current tree. *pbOld is set to true if the old 
+** tree exists, or false if it does not. 
+**
+** If no error occurs, LSM_OK is returned. Otherwise an LSM error code.
+**
+** RACE CONDITION:
+**   Describe the race condition this function is subject to. 
+*/
+int lsm_tree_size(lsm_db *, int *pbOld, int *pnNew);
+
+/*
+** This function is used to query the amount of data that has been written
+** to the database file but not checkpointed (synced). If successful, *pnByte
+** is set to the number of bytes before returning.
+**
+** LSM_OK is returned if successful. Or if an error occurs, an LSM error
+** code is returned.
+**
+** RACE CONDITION:
+**   Describe the race condition this function is subject to. Or remove
+**   it somehow.
+*/
+int lsm_ckpt_size(lsm_db *, int *pnByte);
+
 
 /*
 ** This function is called by a thread to work on the database structure.

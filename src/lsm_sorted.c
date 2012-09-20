@@ -3832,8 +3832,7 @@ static int mergeWorkerInit(
   return rc;
 }
 
-
-int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
+static int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
   int rc = LSM_OK;                /* Return Code */
   int nRemaining = nWork;         /* Units of work to do before returning */
   Snapshot *pWorker = pDb->pWorker;
@@ -3991,6 +3990,7 @@ int sortedWork(lsm_db *pDb, int nWork, int bOptimize, int *pnWrite){
   if( pnWrite ){
     *pnWrite = (nWork - nRemaining);
   }
+  pWorker->nWrite += (nWork - nRemaining);
 
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   return rc;

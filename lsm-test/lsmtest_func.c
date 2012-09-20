@@ -78,20 +78,24 @@ int do_show(int nArg, char **azArg){
     { "array",      LSM_INFO_ARRAY_STRUCTURE },
     { "page-ascii", LSM_INFO_PAGE_ASCII_DUMP },
     { "page-hex",   LSM_INFO_PAGE_HEX_DUMP },
+    { "freelist",   LSM_INFO_FREELIST },
     { 0, 0 } 
   };
 
   char *z = 0;
 
-  if( nArg!=1 && nArg!=3 ){
-    testPrintUsage("DATABASE ?array|page-ascii|page-hex PGNO?");
-    return -1;
-  }
-  if( nArg==3 ){
+  if( nArg<1 || nArg>3 ) goto usage;
+
+  if( nArg>1 ){
     rc = testArgSelect(aOpt, "option", azArg[1], &eOpt);
     if( rc!=0 ) return rc;
     eOpt = aOpt[eOpt].eOpt;
-    iPg = atoi(azArg[2]);
+    if( eOpt==LSM_INFO_FREELIST ){
+      if( nArg!=2 ) goto usage;
+    }else{
+      if( nArg!=3 ) goto usage;
+      iPg = atoi(azArg[2]);
+    }
   }
   zDb = azArg[0];
 
@@ -108,7 +112,8 @@ int do_show(int nArg, char **azArg){
   if( rc==LSM_OK ){
     switch( eOpt ){
       case LSM_INFO_DB_STRUCTURE:
-        rc = lsm_info(pDb, LSM_INFO_DB_STRUCTURE, &z);
+      case LSM_INFO_FREELIST:
+        rc = lsm_info(pDb, eOpt, &z);
         break;
       case LSM_INFO_ARRAY_STRUCTURE:
       case LSM_INFO_PAGE_ASCII_DUMP:
@@ -128,4 +133,8 @@ int do_show(int nArg, char **azArg){
 
   lsm_close(pDb);
   return rc;
+
+ usage:
+  testPrintUsage("DATABASE ?array|page-ascii|page-hex PGNO?");
+  return -1;
 }

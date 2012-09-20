@@ -788,11 +788,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
   }
   dbReleaseClientSnapshot(pDb);
 
-  /* If nFlush==0, then do not flush any data from the in-memory tree to 
-  ** disk. If nFlush==1, then there exists an "old" tree that should be 
-  ** flushed to disk if auto-work is enabled. Or if nFlush==2, then both
-  ** the old and current trees are large enough to flush to disk. In this
-  ** case do so regardless of the auto-work setting.  
+  /* If nFlush is not zero and auto-work is enabled, flush the tree to disk.
   **
   ** If auto-work is enabled and data was written to disk, also sync the 
   ** db and checkpoint the latest snapshot.
@@ -803,7 +799,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
   */
   assert( rc!=LSM_BUSY);
   if( rc==LSM_OK ){
-    if( nFlush>1 || (nFlush && pDb->bAutowork) ){
+    if( nFlush && pDb->bAutowork ){
       rc = lsmFlushToDisk(pDb);
       if( rc==LSM_OK && pDb->bAutowork ){
         rc = lsmCheckpointWrite(pDb);
@@ -840,3 +836,20 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
 
   return rc;
 }
+
+int lsm_tree_size(lsm_db *db, int *pnOld, int *pnNew){
+  ShmHeader *pShm = db->pShmhdr;
+
+  *pnNew = (int)pShm->hdr1.nByte;
+  *pnOld = 0;
+  if( pShm->hdr1.iOldShmid ){
+    i64 iOff = pShm->hdr1.iOldLog;
+    if( iOff!=lsmCheckpointLogOffset(pShm->aSnap1) ){
+      *pnOld = 1;
+    }
+  }
+
+  return LSM_OK;
+}
+
+

@@ -264,17 +264,16 @@ static int treeOffsetToChunk(u32 iOff){
 static void *treeShmptr(lsm_db *pDb, u32 iPtr, int *pRc){
   /* TODO: This will likely be way too slow. If it is, chunks should be
   ** cached as part of the db handle.  */
-  if( iPtr && *pRc==0 ){
-    int rc;
-    void *pChunk;
+  void *pChunk;
+  int iChunk = (iPtr>>15);
+  assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
 
-    rc = lsmShmChunk(pDb, treeOffsetToChunk(iPtr), &pChunk);
-    if( rc==LSM_OK ){
-      return &((u8 *)pChunk)[iPtr & (LSM_SHM_CHUNK_SIZE-1)];
-    }
-    *pRc = rc;
+  if( (pDb->nShm<=iChunk || 0==(pChunk = pDb->apShm[iChunk])) ){
+    *pRc = lsmShmChunk(pDb, iChunk, &pChunk);
   }
-  return 0;
+
+  if( iPtr==0 || *pRc ) return 0;
+  return &((u8 *)pChunk)[iPtr & (LSM_SHM_CHUNK_SIZE-1)];
 }
 
 static ShmChunk * treeShmChunk(lsm_db *pDb, int iChunk){

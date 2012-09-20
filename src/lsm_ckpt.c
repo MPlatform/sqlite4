@@ -158,7 +158,7 @@ static const int one = 1;
 #define LSM_LITTLE_ENDIAN (*(u8 *)(&one))
 
 /* Sizes, in integers, of various parts of the checkpoint. */
-#define CKPT_HDR_SIZE         8
+#define CKPT_HDR_SIZE         9
 #define CKPT_LOGPTR_SIZE      4
 #define CKPT_SEGMENT_SIZE     4
 #define CKPT_CKSUM_SIZE       2
@@ -173,11 +173,12 @@ static const int one = 1;
 #define CKPT_HDR_NLEVEL   5
 #define CKPT_HDR_PGSZ     6
 #define CKPT_HDR_OVFL     7
+#define CKPT_HDR_NWRITE   8
 
-#define CKPT_HDR_LO_MSW     8
-#define CKPT_HDR_LO_LSW     9
-#define CKPT_HDR_LO_CKSUM1 10
-#define CKPT_HDR_LO_CKSUM2 11
+#define CKPT_HDR_LO_MSW     9
+#define CKPT_HDR_LO_LSW    10
+#define CKPT_HDR_LO_CKSUM1 11
+#define CKPT_HDR_LO_CKSUM2 12
 
 typedef struct CkptBuffer CkptBuffer;
 
@@ -430,6 +431,7 @@ static int ckptExportSnapshot(
   ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nLevel, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_PGSZ, lsmFsPageSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_OVFL, nOvfl, &rc);
+  ckptSetValue(&ckpt, CKPT_HDR_NWRITE, pSnap->nWrite, &rc);
 
   if( bCksum ){
     ckptAddChecksum(&ckpt, iOut, &rc);
@@ -880,6 +882,7 @@ static void ckptLoadEmpty(lsm_db *pDb){
     0,                  /* CKPT_HDR_NLEVEL */
     0,                  /* CKPT_HDR_PGSZ */
     0,                  /* CKPT_HDR_OVFL */
+    0,                  /* CKPT_HDR_NWRITE */
     0, 0, 1234, 5678,   /* The log pointer and initial checksum */
     0, 0, 0, 0,         /* The append list */
     0,                  /* The free block list */
@@ -1041,6 +1044,7 @@ int lsmCheckpointDeserialize(
 
     pNew->iId = lsmCheckpointId(aCkpt, 0);
     pNew->nBlock = aCkpt[CKPT_HDR_NBLOCK];
+    pNew->nWrite = aCkpt[CKPT_HDR_NWRITE];
     rc = ckptLoadLevels(pDb, aCkpt, &iIn, nLevel, &pNew->pLevel);
     pNew->iLogOff = lsmCheckpointLogOffset(aCkpt);
 
@@ -1146,38 +1150,43 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
 ** LSM_OK returned. If an error occurs, an LSM error code is returned and
 ** the final value of *piId is undefined.
 */
-int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog){
+int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite){
   int rc = LSM_OK;
   MetaPage *pPg;
   u32 iMeta;
 
   iMeta = pDb->pShmhdr->iMetaPage;
-  rc = lsmFsMetaPageGet(pDb->pFS, 0, iMeta, &pPg);
-  if( rc==LSM_OK ){
-    int nCkpt;
-    int nData;
-    u8 *aData; 
+  if( iMeta==1 || iMeta==2 ){
+    rc = lsmFsMetaPageGet(pDb->pFS, 0, iMeta, &pPg);
+    if( rc==LSM_OK ){
+      int nCkpt;
+      int nData;
+      u8 *aData; 
 
-    aData = lsmFsMetaPageData(pPg, &nData);
-    assert( nData==LSM_META_PAGE_SIZE );
-    nCkpt = lsmGetU32(&aData[CKPT_HDR_NCKPT*sizeof(u32)]);
-    if( nCkpt<(LSM_META_PAGE_SIZE/sizeof(u32)) ){
-      u32 *aCopy = lsmMallocRc(pDb->pEnv, sizeof(u32) * nCkpt, &rc);
-      if( aCopy ){
-        memcpy(aCopy, aData, nCkpt*sizeof(u32));
-        ckptChangeEndianness(aCopy, nCkpt);
-        if( ckptChecksumOk(aCopy) ){
-          *piId = lsmCheckpointId(aCopy, 0);
-          if( piLog ) *piLog = lsmCheckpointLogOffset(aCopy);
+      aData = lsmFsMetaPageData(pPg, &nData);
+      assert( nData==LSM_META_PAGE_SIZE );
+      nCkpt = lsmGetU32(&aData[CKPT_HDR_NCKPT*sizeof(u32)]);
+      if( nCkpt<(LSM_META_PAGE_SIZE/sizeof(u32)) ){
+        u32 *aCopy = lsmMallocRc(pDb->pEnv, sizeof(u32) * nCkpt, &rc);
+        if( aCopy ){
+          memcpy(aCopy, aData, nCkpt*sizeof(u32));
+          ckptChangeEndianness(aCopy, nCkpt);
+          if( ckptChecksumOk(aCopy) ){
+            if( piId ) *piId = lsmCheckpointId(aCopy, 0);
+            if( piLog ) *piLog = lsmCheckpointLogOffset(aCopy);
+            if( pnWrite ) *pnWrite = aCopy[CKPT_HDR_NWRITE];
+          }
+          lsmFree(pDb->pEnv, aCopy);
         }
-        lsmFree(pDb->pEnv, aCopy);
       }
+      lsmFsMetaPageRelease(pPg);
     }
-    lsmFsMetaPageRelease(pPg);
   }
 
-  if( rc!=LSM_OK || pDb->pShmhdr->iMetaPage!=iMeta ){
-    *piId = 0;
+  if( (iMeta!=1 && iMeta!=2) || rc!=LSM_OK || pDb->pShmhdr->iMetaPage!=iMeta ){
+    if( piId ) *piId = 0;
+    if( piLog ) *piLog = 0;
+    if( pnWrite ) *pnWrite = 0;
   }
   return rc;
 }
@@ -1237,5 +1246,20 @@ void lsmCheckpointZeroLogoffset(lsm_db *pDb){
 
   memcpy(pDb->pShmhdr->aSnap1, pDb->aSnapshot, nCkpt*sizeof(u32));
   memcpy(pDb->pShmhdr->aSnap2, pDb->aSnapshot, nCkpt*sizeof(u32));
+}
+
+int lsm_ckpt_size(lsm_db *db, int *pnByte){
+  ShmHeader *pShm = db->pShmhdr;
+  int rc = LSM_OK;
+  u32 nSynced;
+
+  rc = lsmCheckpointSynced(db, 0, 0, &nSynced);
+  if( rc==LSM_OK ){
+    u32 nPgsz = db->pShmhdr->aSnap1[CKPT_HDR_PGSZ];
+    u32 nWrite = db->pShmhdr->aSnap1[CKPT_HDR_NWRITE];
+    *pnByte = (int)((nWrite - nSynced) * nPgsz);
+  }
+
+  return rc;
 }
 
