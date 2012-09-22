@@ -175,19 +175,25 @@ static void doDbDisconnect(lsm_db *pDb){
       ** checkpoint (serialization) of this snapshot may be written to disk
       ** by the following block.  */
       rc = lsmTreeLoadHeader(pDb, 0);
-      if( rc==LSM_OK && lsmTreeSize(pDb)>0 ){
-        int nFlush = 0;
-        lsmTreeMakeOld(pDb, &nFlush);
-        if( nFlush ) rc = lsmFlushToDisk(pDb);
+      if( rc==LSM_OK && (lsmTreeHasOld(pDb) || lsmTreeSize(pDb)>0) ){
+        assert( pDb->nTransOpen==0 );
+        pDb->nTransOpen = 1;
+        lsmTreeMakeOld(pDb);
+        if( pDb->treehdr.iOldShmid ){
+          rc = lsmFlushTreeToDisk(pDb);
+        }
+        pDb->nTransOpen = 0;
       }
 
       /* Write a checkpoint to disk. */
       if( rc==LSM_OK ){
-        rc = lsmCheckpointWrite(pDb);
+        rc = lsmCheckpointWrite(pDb, 0);
       }
 
       /* If the checkpoint was written successfully, delete the log file */
-      if( rc==LSM_OK && pDb->pFS ){
+      if( rc==LSM_OK && pDb->pFS 
+       && pDb->treehdr.iOldShmid==0 && pDb->treehdr.nByte==0 
+      ){
         Database *p = pDb->pDatabase;
         lsmFsCloseAndDeleteLog(pDb->pFS);
         if( p->pFile ) lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
@@ -531,8 +537,9 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
 ** not be held that long (in case it is required by a client flushing an
 ** in-memory tree to disk).
 */
-int lsmCheckpointWrite(lsm_db *pDb){
+int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
   int rc;                         /* Return Code */
+  u32 nWrite = 0;
 
   assert( pDb->pWorker==0 );
   assert( 1 || pDb->pClient==0 );
@@ -559,6 +566,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
       if( rc==LSM_OK ){
         aData = lsmFsMetaPageData(pPg, &nData);
         iDisk = lsmCheckpointId((u32 *)aData, 1);
+        nWrite = lsmCheckpointNWrite((u32 *)aData, 1);
         lsmFsMetaPageRelease(pPg);
       }
       bDone = (iDisk>=iCkpt);
@@ -576,7 +584,10 @@ int lsmCheckpointWrite(lsm_db *pDb){
       if( rc==LSM_OK && pDb->eSafety!=LSM_SAFETY_OFF){
         rc = lsmFsSyncDb(pDb->pFS);
       }
-      if( rc==LSM_OK ) pShm->iMetaPage = iMeta;
+      if( rc==LSM_OK ){
+        pShm->iMetaPage = iMeta;
+        nWrite = lsmCheckpointNWrite(pDb->aSnapshot, 0) - nWrite;
+      }
 #if 0
   lsmLogMessage(pDb, 0, "finish checkpoint %d", 
       (int)lsmCheckpointId(pDb->aSnapshot, 0)
@@ -586,6 +597,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   }
 
   lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);
+  if( pnWrite && rc==LSM_OK ) *pnWrite = nWrite;
   return rc;
 }
 
@@ -1197,5 +1209,24 @@ void lsmShmBarrier(lsm_db *db){
   lsmEnvShmBarrier(db->pEnv);
 }
 
+int lsm_checkpoint(lsm_db *pDb, int *pnByte){
+  int rc;                         /* Return code */
+  u32 nWrite = 0;                 /* Number of pages checkpointed */
 
+  /* Attempt the checkpoint. If successful, nWrite is set to the number of
+  ** pages written between this and the previous checkpoint.  */
+  rc = lsmCheckpointWrite(pDb, &nWrite);
+
+  /* If required, calculate the output variable (bytes of data checkpointed). 
+  ** Set it to zero if an error occured.  */
+  if( pnByte ){
+    int nByte = 0;
+    if( rc==LSM_OK && nWrite ){
+      nByte = (int)nWrite * lsmFsPageSize(pDb->pFS);
+    }
+    *pnByte = nByte;
+  }
+
+  return rc;
+}
 

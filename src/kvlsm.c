@@ -389,7 +389,7 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
     }
 
     case SQLITE4_KVCTRL_LSM_CHECKPOINT: {
-      lsm_work(p->pDb, LSM_WORK_CHECKPOINT, 0, 0);
+      lsm_checkpoint(p->pDb, 0);
       break;
     }
 

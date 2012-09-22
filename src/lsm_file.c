@@ -389,8 +389,8 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     LsmFile *pLsmFile;
     pFS->zDb = (char *)&pFS[1];
     pFS->zLog = &pFS->zDb[nDb+1];
-    pFS->nPagesize = LSM_PAGE_SIZE;
-    pFS->nBlocksize = LSM_BLOCK_SIZE;
+    pFS->nPagesize = LSM_DFLT_PAGE_SIZE;
+    pFS->nBlocksize = LSM_DFLT_BLOCK_SIZE;
     pFS->nMetasize = 4 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;

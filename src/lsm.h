@@ -167,6 +167,9 @@ int lsm_config(lsm_db *, int, ...);
 **   LSM_CONFIG_AUTOWORK
 **     A read/write integer parameter.
 **
+**   LSM_CONFIG_AUTOCHECKPOINT
+**     A read/write integer parameter.
+**
 **   LSM_CONFIG_MMAP
 **     A read/write integer parameter. True to use mmap() to access the 
 **     database file. False otherwise.
@@ -201,6 +204,7 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_NMERGE              9
 #define LSM_CONFIG_MAX_FREELIST       10
 #define LSM_CONFIG_MULTIPLE_PROCESSES 11
+#define LSM_CONFIG_AUTOCHECKPOINT     12
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1
@@ -420,7 +424,6 @@ int lsm_tree_size(lsm_db *, int *pbOld, int *pnNew);
 */
 int lsm_ckpt_size(lsm_db *, int *pnByte);
 
-
 /*
 ** This function is called by a thread to work on the database structure.
 ** The actual operations performed by this function depend on the value 
@@ -428,9 +431,6 @@ int lsm_ckpt_size(lsm_db *, int *pnByte);
 **
 ** LSM_WORK_FLUSH:
 **   Attempt to flush the contents of the in-memory tree to disk.
-**
-** LSM_WORK_CHECKPOINT:
-**   Write a checkpoint (if one exists in memory) to the database file.
 **
 ** LSM_WORK_OPTIMIZE:
 **   If nMerge suitable arrays cannot be found, where nMerge is as 
@@ -441,10 +441,22 @@ int lsm_ckpt_size(lsm_db *, int *pnByte);
 int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite);
 
 #define LSM_WORK_FLUSH           0x00000001
-#define LSM_WORK_CHECKPOINT      0x00000002
-#define LSM_WORK_OPTIMIZE        0x00000004
+#define LSM_WORK_OPTIMIZE        0x00000002
 
-/* 
+/*
+** Attempt to checkpoint the current database snapshot. Return an LSM
+** error code if an error occurs or LSM_OK otherwise.
+**
+** If the current snapshot has already been checkpointed, calling this 
+** function is a no-op. In this case if pnByte is not NULL, *pnByte is
+** set to 0. Or, if the current snapshot is successfully checkpointed
+** by this function and pbCkpt is not NULL, *pnByte is set to the number
+** of bytes written to the database file since the previous checkpoint
+** (the same measure as returned by lsm_ckpt_size()).
+*/
+int lsm_checkpoint(lsm_db *pDb, int *pnByte);
+
+/*
 ** Open and close a database cursor.
 */
 int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr);

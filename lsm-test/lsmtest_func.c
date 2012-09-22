@@ -15,7 +15,7 @@ int do_work(int nArg, char **azArg){
   int rc;
   int i;
   const char *zDb;
-  int flags = LSM_WORK_CHECKPOINT;
+  int flags = LSM_WORK_FLUSH;
   int nWork = (1<<30);
 
   if( nArg==0 ) goto usage;
@@ -49,6 +49,9 @@ int do_work(int nArg, char **azArg){
         testPrintError("lsm_work(): rc=%d\n", rc);
       }
     }
+  }
+  if( rc==LSM_OK ){
+    rc = lsm_checkpoint(pDb, 0);
   }
 
   lsm_close(pDb);

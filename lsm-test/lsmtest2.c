@@ -291,8 +291,9 @@ static void crash_test1(int *pRc){
     for(iWork=0; testrc==0 && iWork<nWork; iWork++){
       int nWrite = 0;
       lsm_db *db = tdb_lsm(pDb);
-      testrc = lsm_work(db, LSM_WORK_CHECKPOINT, nPage, &nWrite);
+      testrc = lsm_work(db, 0, nPage, &nWrite);
       assert( testrc!=0 || nWrite>0 );
+      if( testrc==0 ) testrc = lsm_checkpoint(db, 0);
     }
     tdb_close(pDb);
 

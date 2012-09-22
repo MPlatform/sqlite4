@@ -73,14 +73,15 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
 
   /* Initialize the new object */
   pDb->pEnv = pEnv;
-  pDb->nTreeLimit = LSM_TREE_BYTES;
+  pDb->nTreeLimit = LSM_DFLT_WRITE_BUFFER;
+  pDb->nAutockpt = LSM_DFLT_AUTOCHECKPOINT;
   pDb->bAutowork = 1;
   pDb->eSafety = LSM_SAFETY_NORMAL;
   pDb->xCmp = xCmp;
-  pDb->nLogSz = LSM_DEFAULT_LOG_SIZE;
-  pDb->nDfltPgsz = LSM_PAGE_SIZE;
-  pDb->nDfltBlksz = LSM_BLOCK_SIZE;
-  pDb->nMerge = LSM_DEFAULT_NMERGE;
+  pDb->nLogSz = LSM_DFLT_LOG_SIZE;
+  pDb->nDfltPgsz = LSM_DFLT_PAGE_SIZE;
+  pDb->nDfltBlksz = LSM_DFLT_BLOCK_SIZE;
+  pDb->nMerge = LSM_DFLT_NMERGE;
   pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
   pDb->bUseLog = 1;
   pDb->iReader = -1;
@@ -194,56 +195,6 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
   return rc;
 }
 
-/*
-** This function flushes the contents of the in-memory tree to disk. It
-** returns LSM_OK if successful, or an error code otherwise.
-*/
-int lsmFlushToDisk(lsm_db *pDb){
-  int rc = LSM_OK;                /* Return code */
-  int nOvfl = 0;                  /* Number of free-list entries in LSM */
-
-  /* Must not hold the worker snapshot when this is called. */
-  assert( pDb->pWorker==0 );
-  rc = lsmBeginWork(pDb);
-
-  /* Save the position of each open cursor belonging to pDb. */
-  if( rc==LSM_OK ){
-    rc = lsmSaveCursors(pDb);
-  }
-
-  if( rc==LSM_OK && pDb->bAutowork ){
-    rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
-  }
-  while( rc==LSM_OK && lsmDatabaseFull(pDb) ){
-    rc = lsmSortedAutoWork(pDb, LSM_AUTOWORK_QUANT);
-  }
-
-  /* Write the contents of the in-memory tree into the database file and 
-  ** update the worker snapshot accordingly. Then flush the contents of 
-  ** the db file to disk too. No calls to fsync() are made here - just 
-  ** write().  */
-  if( rc==LSM_OK ) rc = lsmSortedFlushTree(pDb, &nOvfl);
-  lsmFinishWork(pDb, 1, nOvfl, &rc);
-
-  /* Restore the position of any open cursors */
-  if( rc==LSM_OK && pDb->pCsr ){
-    lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
-    pDb->pClient = 0;
-    rc = lsmCheckpointLoad(pDb, 0);
-    if( rc==LSM_OK ){
-      rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot, &pDb->pClient);
-    }
-    if( rc==LSM_OK ){
-      rc = lsmRestoreCursors(pDb);
-    }
-  }
-
-#if 0
-  if( rc==LSM_OK ) lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "flush");
-#endif
-
-  return rc;
-}
 
 int lsm_close(lsm_db *pDb){
   int rc = LSM_OK;
@@ -270,7 +221,7 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
   switch( eParam ){
     case LSM_CONFIG_WRITE_BUFFER: {
       int *piVal = va_arg(ap, int *);
-      if( *piVal>0 ){
+      if( *piVal>=0 ){
         pDb->nTreeLimit = *piVal;
       }
       *piVal = pDb->nTreeLimit;
@@ -283,6 +234,15 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
         pDb->bAutowork = *piVal;
       }
       *piVal = pDb->bAutowork;
+      break;
+    }
+
+    case LSM_CONFIG_AUTOCHECKPOINT: {
+      int *piVal = va_arg(ap, int *);
+      if( *piVal>=0 ){
+        pDb->nAutockpt = *piVal;
+      }
+      *piVal = pDb->nAutockpt;
       break;
     }
 
@@ -578,14 +538,12 @@ int lsm_write(
     nAfter = lsmTreeSize(pDb);
     nDiff = (nAfter/nQuant) - (nBefore/nQuant);
     if( rc==LSM_OK && pDb->bAutowork && nDiff!=0 ){
-      rc = dbAutoWork(pDb, nDiff * LSM_AUTOWORK_QUANT);
-      if( rc==LSM_BUSY ) rc = LSM_OK;
+      rc = lsmSortedAutoWork(pDb, nDiff * LSM_AUTOWORK_QUANT);
     }
   }
 
   /* If a transaction was opened at the start of this function, commit it. 
-  ** Or, if an error has occurred, roll it back.
-  */
+  ** Or, if an error has occurred, roll it back.  */
   if( bCommit ){
     if( rc==LSM_OK ){
       rc = lsm_commit(pDb, 0);
@@ -761,7 +719,6 @@ int lsm_begin(lsm_db *pDb, int iLevel){
 }
 
 int lsm_commit(lsm_db *pDb, int iLevel){
-  int nFlush = 0;                 /* Number of flushable trees in memory */
   int rc = LSM_OK;
 
   assert_db_state( pDb );
@@ -777,9 +734,9 @@ int lsm_commit(lsm_db *pDb, int iLevel){
       if( rc==LSM_OK && pDb->eSafety==LSM_SAFETY_FULL ){
         rc = lsmFsSyncLog(pDb->pFS);
       }
-
-      if( lsmTreeSize(pDb)>pDb->nTreeLimit ){
-        lsmTreeMakeOld(pDb, &nFlush);
+      if( rc==LSM_OK && lsmTreeSize(pDb)>pDb->nTreeLimit ){
+        lsmTreeMakeOld(pDb);
+        rc = lsmSortedAutoWork(pDb, 1);
       }
       lsmFinishWriteTrans(pDb, (rc==LSM_OK));
     }
@@ -787,29 +744,6 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
   }
   dbReleaseClientSnapshot(pDb);
-
-  /* If nFlush is not zero and auto-work is enabled, flush the tree to disk.
-  **
-  ** If auto-work is enabled and data was written to disk, also sync the 
-  ** db and checkpoint the latest snapshot.
-  **
-  ** Ignore any LSM_BUSY errors that occur during these operations. If
-  ** LSM_BUSY does occur, it means some other connection is already working
-  ** on flushing the in-memory tree or checkpointing the database. 
-  */
-  assert( rc!=LSM_BUSY);
-  if( rc==LSM_OK ){
-    if( nFlush && pDb->bAutowork ){
-      rc = lsmFlushToDisk(pDb);
-      if( rc==LSM_OK && pDb->bAutowork ){
-        rc = lsmCheckpointWrite(pDb);
-      }
-    }else if( nFlush && pDb->xWork ){
-      pDb->xWork(pDb, pDb->pWorkCtx);
-    }
-  }
-  if( rc==LSM_BUSY ) rc = LSM_OK;
-
   return rc;
 }
 

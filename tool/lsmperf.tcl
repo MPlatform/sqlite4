@@ -158,10 +158,14 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 40 20000 40000 1000 {
-  LSM     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
+do_write_test x.png 60 25000 0 40 {
+  lsm-st "mmap=1 multi_proc=0 safety=1"
   LevelDB leveldb
 }
+# lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
+# lsm-st     "mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
+# LevelDB leveldb
+# SQLite sqlite3
 
 
 

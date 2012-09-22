@@ -16,7 +16,7 @@
 
 typedef struct SetupStep SetupStep;
 struct SetupStep {
-  int workflags;                  /* Flags to pass to lsm_work() */
+  int bFlush;                     /* Flush to disk and checkpoint */
   int iInsStart;                  /* First key-value from ds to insert */
   int nIns;                       /* Number of rows to insert */
   int iDelStart;                  /* First key from ds to delete */
@@ -32,8 +32,20 @@ static void doSetupStep(
   testWriteDatasourceRange(pDb, pData, pStep->iInsStart, pStep->nIns, pRc);
   testDeleteDatasourceRange(pDb, pData, pStep->iDelStart, pStep->nDel, pRc);
   if( *pRc==0 ){
+    int nSave = -1;
+    int nBuf = 64;
     lsm_db *db = tdb_lsm(pDb);
-    *pRc = lsm_work(db, pStep->workflags, 0, 0);
+
+    lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nSave);
+    lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nBuf);
+    lsm_begin(db, 1);
+    lsm_commit(db, 0);
+    lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nSave);
+
+    *pRc = lsm_work(db, LSM_WORK_FLUSH, 0, 0);
+    if( *pRc==0 ){
+      *pRc = lsm_checkpoint(db, 0);
+    }
   }
 }
 
@@ -54,7 +66,7 @@ static void doSetupStepArray(
 static void setupDatabase1(TestDb *pDb, Datasource **ppData){
   const SetupStep aStep[] = {
     { 0,                                  1,     2000, 0, 0 },
-    { LSM_WORK_CHECKPOINT|LSM_WORK_FLUSH, 0,     0, 0, 0 },
+    { 1,                                  0,     0, 0, 0 },
     { 0,                                  10001, 1000, 0, 0 },
   };
   const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 100, 500};
@@ -171,8 +183,12 @@ static void doLiveRecovery(const char *zDb, const char *zCksum, int *pRc){
     testFree(pHdr);
 
     if( rc==0 ){
+      int nBuf = 64;
       db = tdb_lsm(pDb);
-      rc = lsm_work(db, LSM_WORK_FLUSH|LSM_WORK_CHECKPOINT, 0, 0);
+      lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nBuf);
+      lsm_begin(db, 1);
+      lsm_commit(db, 0);
+      rc = lsm_work(db, LSM_WORK_FLUSH, 0, 0);
     }
 
     testCksumDatabase(pDb, zCksum2);
