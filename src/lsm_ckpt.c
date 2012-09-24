@@ -331,7 +331,7 @@ static void ckptExportLog(
 
   assert( iOut==CKPT_HDR_LO_MSW );
 
-  if( bFlush && pDb->treehdr.iOldShmid ){
+  if( bFlush ){
     i64 iOff = pDb->treehdr.iOldLog;
     ckptSetValue(p, iOut++, (iOff >> 32) & 0xFFFFFFFF, pRc);
     ckptSetValue(p, iOut++, (iOff & 0xFFFFFFFF), pRc);
@@ -710,7 +710,7 @@ int lsmCheckpointOverflow(
 ** The connection must be the worker in order to call this function.
 **
 ** True is returned if there are currently too many free-list entries
-** in-memory to store in a checkpoint. Before calling lsmCheckpointSaveWorker()
+** in-memory to store in a checkpoint. Before calling CheckpointSaveWorker()
 ** to save the current worker snapshot, a new top-level LSM segment must
 ** be created so that some of them can be written to the LSM. 
 */

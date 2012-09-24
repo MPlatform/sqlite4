@@ -105,29 +105,6 @@ static void dbReleaseClientSnapshot(lsm_db *pDb){
   }
 }
 
-static int dbAutoWork(lsm_db *pDb, int nUnit){
-  int rc = LSM_OK;                /* Return code */
-
-  assert( pDb->pWorker==0 );
-  assert( pDb->bAutowork );
-  assert( nUnit>0 );
-
-  /* If one is required, run a checkpoint. */
-#if 0
-  rc = lsmCheckpointWrite(pDb);
-#endif
-
-  rc = lsmBeginWork(pDb);
-  if( rc==LSM_OK ) rc = lsmSortedAutoWork(pDb, nUnit);
-  if( pDb->pWorker && pDb->pWorker->pLevel ){
-    lsmFinishWork(pDb, 0, -1, &rc);
-  }else{
-    int rcdummy = LSM_BUSY;
-    lsmFinishWork(pDb, 0, 0, &rcdummy);
-  }
-  return rc;
-}
-
 static int getFullpathname(
   lsm_env *pEnv, 
   const char *zRel,
