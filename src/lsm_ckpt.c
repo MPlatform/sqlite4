@@ -430,7 +430,7 @@ static int ckptExportSnapshot(
   ckptSetValue(&ckpt, CKPT_HDR_BLKSZ, lsmFsBlockSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nLevel, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_PGSZ, lsmFsPageSize(pFS), &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_OVFL, nOvfl, &rc);
+  ckptSetValue(&ckpt, CKPT_HDR_OVFL, (nOvfl?nOvfl:pSnap->nFreelistOvfl), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NWRITE, pSnap->nWrite, &rc);
 
   if( bCksum ){

@@ -4148,6 +4148,7 @@ static int doLsmSingleWork(
         }
         bFlush = 1;
         bToplevel = 0;
+        nOvfl = 0;
       }
     }
   }
@@ -4194,7 +4195,7 @@ static int doLsmWork(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   do {
     int nThis = 0;
     bCkpt = 0;
-    rc = doLsmSingleWork(pDb, 0, flags, nPage, &nThis, &bCkpt);
+    rc = doLsmSingleWork(pDb, 0, flags, nPage-nWrite, &nThis, &bCkpt);
     nWrite += nThis;
     if( rc==LSM_OK && bCkpt ){
       rc = lsm_checkpoint(pDb, 0);
@@ -4236,7 +4237,7 @@ int lsmSortedAutoWork(
 ){
   int rc;                         /* Return code */
   int nRemaining;                 /* Units of work to do before returning */
-  int nDepth;                     /* Current height of tree (longest path) */
+  int nDepth = 0;                 /* Current height of tree (longest path) */
   int nWrite;                     /* Pages written */
   Level *pLevel;                  /* Used to iterate through levels */
   int bRestore = 0;
@@ -4246,19 +4247,23 @@ int lsmSortedAutoWork(
 
   /* Determine how many units of work to do before returning. One unit of
   ** work is achieved by writing one page (~4KB) of merged data.  */
-  nRemaining = nDepth = 0;
+  nRemaining = 0;
   for(pLevel=lsmDbSnapshotLevel(pDb->pClient); pLevel; pLevel=pLevel->pNext){
     /* nDepth += LSM_MAX(1, pLevel->nRight); */
     nDepth += 1;
   }
-  nRemaining = nUnit * nDepth;
-
   if( lsmTreeHasOld(pDb) ){
+    nDepth += 1;
     bRestore = 1;
     rc = lsmSaveCursors(pDb);
     if( rc!=LSM_OK ) return rc;
   }
 
+  nRemaining = nUnit * nDepth;
+#ifdef LSM_LOG_WORK
+  lsmLogMessage(pDb, rc, "lsmSortedAutoWork(): %d*%d = %d pages", 
+      nUnit, nDepth, nRemaining);
+#endif
   rc = doLsmWork(pDb, LSM_WORK_FLUSH, nRemaining, 0);
   if( rc==LSM_BUSY ) rc = LSM_OK;
 
@@ -4277,6 +4282,7 @@ int lsmSortedAutoWork(
 #if 0
   lsmLogMessage(pDb, 0, "auto-work: %d pages", nWrite);
 #endif
+
   return rc;
 }
 

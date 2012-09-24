@@ -626,6 +626,7 @@ static int test_lsm_config_str(
     { "block_size",       0, LSM_CONFIG_BLOCK_SIZE },
     { "safety",           0, LSM_CONFIG_SAFETY },
     { "autowork",         0, LSM_CONFIG_AUTOWORK },
+    { "autocheckpoint",   0, LSM_CONFIG_AUTOCHECKPOINT },
     { "log_size",         0, LSM_CONFIG_LOG_SIZE },
     { "mmap",             0, LSM_CONFIG_MMAP },
     { "use_log",          0, LSM_CONFIG_USE_LOG },
@@ -821,7 +822,7 @@ int test_lsm_lomem_open(
   TestDb **ppDb
 ){
   const char *zCfg = 
-    "page_size=256 block_size=65536 write_buffer=16384 max_freelist=4";
+    "page_size=256 block_size=65536 write_buffer=16384 max_freelist=4 autocheckpoint=32768";
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
 

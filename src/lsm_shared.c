@@ -632,6 +632,9 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
 void lsmFinishWork(lsm_db *pDb, int bFlush, int nOvfl, int *pRc){
   /* If no error has occurred, serialize the worker snapshot and write
   ** it to shared memory.  */
+
+  assert( pDb->pWorker );
+  assert( pDb->pWorker->nFreelistOvfl==0 || nOvfl==0 );
   if( *pRc==LSM_OK ){
     *pRc = lsmCheckpointSaveWorker(pDb, bFlush, nOvfl);
   }
