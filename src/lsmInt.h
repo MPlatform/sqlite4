@@ -674,7 +674,6 @@ void lsmEnvSleep(lsm_env *, int);
 ** Functions from file "lsm_sorted.c".
 */
 int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
-int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
 

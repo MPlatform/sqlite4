@@ -735,6 +735,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
         rc = lsmFsSyncLog(pDb->pFS);
       }
       if( rc==LSM_OK && lsmTreeSize(pDb)>pDb->nTreeLimit ){
+        lsmLogEnd(pDb, 1);
         lsmTreeMakeOld(pDb);
         rc = lsmSortedAutoWork(pDb, 1);
       }

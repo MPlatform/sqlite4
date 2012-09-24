@@ -715,8 +715,9 @@ int lsmCheckpointOverflow(
 ** be created so that some of them can be written to the LSM. 
 */
 int lsmCheckpointOverflowRequired(lsm_db *pDb){
+  Snapshot *p = pDb->pWorker;
   assert( lsmShmAssertWorker(pDb) );
-  return (pDb->pWorker->freelist.nEntry > pDb->nMaxFreelist);
+  return (p->freelist.nEntry > pDb->nMaxFreelist || p->nFreelistOvfl>0);
 }
 
 /*

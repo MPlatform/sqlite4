@@ -3610,45 +3610,8 @@ static int sortedNewToplevel(
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   if( pnWrite ) *pnWrite = nWrite;
   pDb->pWorker->nWrite += nWrite;
-  return rc;
-}
-
-/*
-** Flush the contents of the in-memory tree to a new segment on disk.
-** At present, this may occur in two scenarios:
-**
-**   1. When a transaction has just been committed (by connection pDb), 
-**      and the in-memory tree has exceeded the size threshold, or
-**
-**   2. If the in-memory tree is not empty and the last connection to
-**      the database (pDb) is being closed.
-**
-** In both cases, the connection hold a worker snapshot reference. In
-** the first, the connection also holds the in-memory tree write-version.
-** In the second, no in-memory tree version reference is held at all.
-*/
-int lsmSortedFlushTree(
-  lsm_db *pDb,                    /* Connection handle */
-  int *pnOvfl                     /* OUT: Number of free-list entries written */
-){
-  int rc;
-
-  assert( pDb->pWorker );
-
-  /* If there is nothing to do, return early. */
-  if( lsmTreeHasOld(pDb)==0 && lsmCheckpointOverflowRequired(pDb)==0 ){
-    *pnOvfl = 0;
-    return LSM_OK;
-  }
-
-  rc = sortedNewToplevel(pDb, 1, pnOvfl, 0);
-  assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
-
 #if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "tree flush");
-#endif
-#if 0
-  lsmLogMessage(pDb, rc, "flushed tree to disk");
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
 #endif
   return rc;
 }
@@ -3911,6 +3874,16 @@ static int sortedSelectLevel(lsm_db *pDb, int bOpt, Level **ppOut){
   return rc;
 }
 
+static int sortedDbIsFull(lsm_db *pDb){
+  Level *pTop = lsmDbSnapshotLevel(pDb->pWorker);
+  if( pTop && pTop->iAge==0
+   && (pTop->nRight || sortedCountLevels(pTop)>=pDb->nMerge)
+  ){
+    return 1;
+  }
+  return 0;
+}
+
 static int sortedWork(
   lsm_db *pDb,                    /* Database handle. Must be worker. */
   int nWork,                      /* Number of pages of work to do */
@@ -4018,13 +3991,13 @@ static int sortedWork(
       mergeWorkerShutdown(&mergeworker, &rc);
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
-      /* If bFlush is true and the code above was working on an age=1 level
-      ** break out of the loop now, even if nRemaining is still greater than
+      /* If bFlush is true and the database is no longer considered "full",
+      ** break out of the loop even if nRemaining is still greater than
       ** zero. The caller has an in-memory tree to flush to disk.  */
-      if( bFlush && pLevel->iAge==1 ) break;
+      if( bFlush && sortedDbIsFull(pDb)==0 ) break;
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
 #endif
     }
   }
@@ -4032,6 +4005,10 @@ static int sortedWork(
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   if( pnWrite ) *pnWrite = (nWork - nRemaining);
   pWorker->nWrite += (nWork - nRemaining);
+
+#ifdef LSM_LOG_WORK
+  lsmLogMessage(pDb, rc, "sortedWork(): %d pages", (nWork-nRemaining));
+#endif
   return rc;
 }
 
@@ -4106,17 +4083,6 @@ static int sortedTreeHasOld(lsm_db *pDb, int *pbOut){
   return rc;
 }
 
-static int sortedDbIsFull(lsm_db *pDb){
-  Level *pTop = lsmDbSnapshotLevel(pDb->pWorker);
-  if( pTop && pTop->iAge==0
-   && (pTop->nRight || sortedCountLevels(pTop)>=pDb->nMerge)
-  ){
-    return 1;
-  }
-  return 0;
-}
-
-
 static int doLsmSingleWork(
   lsm_db *pDb, 
   int bShutdown,
@@ -4131,6 +4097,7 @@ static int doLsmSingleWork(
   int nMax = nPage;               /* Maximum pages to write to disk */
   int nRem = nPage;
   int bCkpt = 0;
+  int bToplevel = 0;
 
   /* Open the worker 'transaction'. It will be closed before this function
   ** returns.  */
@@ -4169,6 +4136,7 @@ static int doLsmSingleWork(
         rc = sortedWork(pDb, nRem, 0, 1, &nPg);
         nRem -= nPg;
         assert( rc!=LSM_OK || nRem<=0 || !sortedDbIsFull(pDb) );
+        bToplevel = 1;
       }
 
       if( rc==LSM_OK && nRem>0 ){
@@ -4179,6 +4147,7 @@ static int doLsmSingleWork(
           lsmTreeDiscardOld(pDb);
         }
         bFlush = 1;
+        bToplevel = 0;
       }
     }
   }
@@ -4189,9 +4158,11 @@ static int doLsmSingleWork(
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
     rc = sortedWork(pDb, nRem, bOptimize, 0, &nPg);
     nRem -= nPg;
-    if( rc==LSM_OK && nPg && lsmCheckpointOverflowRequired(pDb) ){
-      rc = sortedNewToplevel(pDb, 0, &nOvfl, 0);
-    }
+    if( nPg ) bToplevel = 1;
+  }
+
+  if( rc==LSM_OK && bToplevel && lsmCheckpointOverflowRequired(pDb) ){
+    rc = sortedNewToplevel(pDb, 0, &nOvfl, 0);
   }
 
   if( rc==LSM_OK && (nRem!=nMax) ){
@@ -4692,7 +4663,9 @@ void lsmSortedDumpStructure(
         }
 
         if( i==0 ){
-          sqlite4_snprintf(zLevel, sizeof(zLevel), "L%d:", iLevel);
+          sqlite4_snprintf(zLevel, sizeof(zLevel), "L%d: (age=%d)", 
+              iLevel, pLevel->iAge
+          );
         }else{
           zLevel[0] = '\0';
         }

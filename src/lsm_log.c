@@ -447,9 +447,9 @@ int lsmLogBegin(lsm_db *pDb){
 void lsmLogEnd(lsm_db *pDb, int bCommit){
   DbLog *pLog;
   LogWriter *p;
-
-  if( pDb->bUseLog==0 ) return;
   p = pDb->pLogWriter;
+
+  if( p==0 ) return;
   pLog = &pDb->treehdr.log;
 
   if( bCommit ){

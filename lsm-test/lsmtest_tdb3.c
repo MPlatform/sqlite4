@@ -599,7 +599,6 @@ static void xLog(void *pCtx, int rc, const char *z){
   if( pCtx ) fprintf(stderr, "%s: ", (char *)pCtx);
   fprintf(stderr, "%s\n", z);
   fflush(stderr);
-
 }
 
 static void xWorkHook(lsm_db *db, void *pArg){

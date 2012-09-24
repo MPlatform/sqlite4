@@ -588,7 +588,7 @@ int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
         pShm->iMetaPage = iMeta;
         nWrite = lsmCheckpointNWrite(pDb->aSnapshot, 0) - nWrite;
       }
-#if 0
+#ifdef LSM_LOG_WORK
   lsmLogMessage(pDb, 0, "finish checkpoint %d", 
       (int)lsmCheckpointId(pDb->aSnapshot, 0)
   );
