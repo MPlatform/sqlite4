@@ -159,7 +159,7 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
 }
 
 do_write_test x.png 60 25000 0 40 {
-  lsm-st "mmap=1 multi_proc=0 safety=1"
+  lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
   LevelDB leveldb
 }
 # lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"

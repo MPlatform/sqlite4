@@ -326,7 +326,11 @@ struct MergeWorker {
 #ifdef LSM_DEBUG_EXPENSIVE
 static int assertPointersOk(lsm_db *, Segment *, Segment *, int);
 static int assertBtreeOk(lsm_db *, Segment *);
+static void assertRunInOrder(lsm_db *pDb, Segment *pSeg);
+#else
+#define assertRunInOrder(x,y)
 #endif
+
 
 struct FilePage { u8 *aData; int nData; };
 static u8 *fsPageData(Page *pPg, int *pnData){
@@ -607,21 +611,19 @@ static int btreeCursorLoadKey(BtreeCursor *pCsr){
     pCsr->nKey = 0;
     pCsr->eType = 0;
   }else{
-    int iPg;
-    for(iPg=pCsr->iPg; iPg>=0; iPg--){
-      int iCell = pCsr->aPg[pCsr->iPg].iCell;
-      if( iCell>=0 ){
-        int dummy;
-        rc = pageGetBtreeKey(
-            pCsr->aPg[pCsr->iPg].pPage, pCsr->aPg[pCsr->iPg].iCell,
-            &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
-        );
-        pCsr->eType |= SORTED_SEPARATOR;
-        break;
-      }
+    int dummy;
+    int iPg = pCsr->iPg;
+    int iCell = pCsr->aPg[iPg].iCell;
+    while( iCell<0 && (--iPg)>=0 ){
+      iCell = pCsr->aPg[iPg].iCell-1;
     }
+    if( iPg<0 || iCell<0 ) return LSM_CORRUPT_BKPT;
 
-    if( iPg<0 ) rc = LSM_CORRUPT_BKPT;
+    rc = pageGetBtreeKey(
+        pCsr->aPg[iPg].pPage, iCell,
+        &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
+    );
+    pCsr->eType |= SORTED_SEPARATOR;
   }
 
   return rc;
@@ -650,9 +652,7 @@ static int btreeCursorNext(BtreeCursor *pCsr){
 
   aData = fsPageData(pPg->pPage, &nData);
   nCell = pageGetNRec(aData, nData);
-
   assert( pPg->iCell<=nCell );
-
   pPg->iCell++;
   if( pPg->iCell==nCell ){
     Pgno iLoad;
@@ -3996,6 +3996,8 @@ static int sortedWork(
       ** zero. The caller has an in-memory tree to flush to disk.  */
       if( bFlush && sortedDbIsFull(pDb)==0 ) break;
 
+      assertRunInOrder(pDb, &pLevel->lhs);
+
 #if 0
       lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
 #endif
@@ -4733,6 +4735,52 @@ void lsmSortedSaveTreeCursors(lsm_db *pDb){
     lsmTreeCursorSave(pCsr->apTreeCsr[1]);
   }
 }
+
+#ifdef LSM_DEBUG_EXPENSIVE
+static void assertRunInOrder(lsm_db *pDb, Segment *pSeg){
+  Page *pPg = 0;
+  Blob blob1 = {0, 0, 0, 0};
+  Blob blob2 = {0, 0, 0, 0};
+
+  lsmFsDbPageGet(pDb->pFS, pSeg->iFirst, &pPg);
+  while( pPg ){
+    u8 *aData; int nData;
+    Page *pNext;
+
+    aData = lsmFsPageData(pPg, &nData);
+    if( 0==(pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG) ){
+      int i;
+      int nRec = pageGetNRec(aData, nData);
+      for(i=0; i<nRec; i++){
+        int iTopic1, iTopic2;
+        pageGetKeyCopy(pDb->pEnv, pPg, i, &iTopic1, &blob1);
+
+        if( i==0 && blob2.nData ){
+          assert( sortedKeyCompare(
+                pDb->xCmp, iTopic2, blob2.pData, blob2.nData,
+                iTopic1, blob1.pData, blob1.nData
+          )<0 );
+        }
+
+        if( i<(nRec-1) ){
+          pageGetKeyCopy(pDb->pEnv, pPg, i+1, &iTopic2, &blob2);
+          assert( sortedKeyCompare(
+                pDb->xCmp, iTopic1, blob1.pData, blob1.nData,
+                iTopic2, blob2.pData, blob2.nData
+          )<0 );
+        }
+      }
+    }
+
+    lsmFsDbPageNext(pSeg, pPg, 1, &pNext);
+    lsmFsPageRelease(pPg);
+    pPg = pNext;
+  }
+
+  sortedBlobFree(&blob1);
+  sortedBlobFree(&blob2);
+}
+#endif
 
 #ifdef LSM_DEBUG_EXPENSIVE
 /*

@@ -700,9 +700,10 @@ static void fsGrowMapping(
     int rc;
     u8 *aOld = pFS->pMap;
     rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iSz, &pFS->pMap, &pFS->nMap);
-    if( rc==LSM_OK ){
+    if( rc==LSM_OK && pFS->pMap!=aOld ){
       u8 *aData = (u8 *)pFS->pMap;
       for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
+        assert( &aOld[pFS->nPagesize * (i64)(pFix->iPg-1)]==pFix->aData );
         pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
       }
       lsmSortedRemap(pFS->pDb);
