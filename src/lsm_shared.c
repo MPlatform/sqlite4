@@ -661,7 +661,7 @@ int lsmFinishRecovery(lsm_db *pDb){
 ** passed as the only argument already has an open read transaction.
 */
 int lsmBeginReadTrans(lsm_db *pDb){
-  const int MAX_READLOCK_ATTEMPTS = 5;
+  const int MAX_READLOCK_ATTEMPTS = 10;
   int rc = LSM_OK;                /* Return code */
   int iAttempt = 0;
 
@@ -688,7 +688,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
     if( rc==LSM_OK ){
       ShmHeader *pShm = pDb->pShmhdr;
       u32 iShmMax = pDb->treehdr.iUsedShmid;
-      u32 iShmMin = pDb->treehdr.iNextShmid+1-pDb->treehdr.nChunk;
+      u32 iShmMin = pDb->treehdr.iNextShmid+1-(1<<10);
       rc = lsmReadlock(
           pDb, lsmCheckpointId(pDb->aSnapshot, 0), iShmMin, iShmMax
       );
@@ -707,7 +707,9 @@ int lsmBeginReadTrans(lsm_db *pDb){
           rc = lsmReleaseReadlock(pDb);
         }
       }
-      if( rc==LSM_BUSY ) rc = LSM_OK;
+      if( rc==LSM_BUSY ){
+        rc = LSM_OK;
+      }
     }
 #if 0
 if( rc==LSM_OK && pDb->pClient ){
@@ -845,9 +847,9 @@ static int slotIsUsable(ShmReader *p, i64 iLsm, u32 iShmMin, u32 iShmMax){
 ** an LSM error code otherwise.
 */
 int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
+  int rc = LSM_OK;
   ShmHeader *pShm = db->pShmhdr;
   int i;
-  int rc = LSM_OK;
 
   assert( db->iReader<0 );
   assert( shm_sequence_ge(iShmMax, iShmMin) );
@@ -876,6 +878,7 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
       p->iLsmId = iLsm;
       p->iTreeId = iShmMax;
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
+      assert( rc!=LSM_BUSY );
       if( rc==LSM_OK ) db->iReader = i;
     }
   }
@@ -883,9 +886,9 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
   /* Search for any usable slot */
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
-    if( slotIsUsable(p, iLsm, iShmMax, iShmMax) ){
+    if( slotIsUsable(p, iLsm, iShmMin, iShmMax) ){
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
-      if( rc==LSM_OK && slotIsUsable(p, iLsm, iShmMax, iShmMax) ){
+      if( rc==LSM_OK && slotIsUsable(p, iLsm, iShmMin, iShmMax) ){
         db->iReader = i;
       }else if( rc==LSM_BUSY ){
         rc = LSM_OK;
