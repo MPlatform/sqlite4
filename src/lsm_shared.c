@@ -709,6 +709,17 @@ int lsmBeginReadTrans(lsm_db *pDb){
       }
       if( rc==LSM_BUSY ) rc = LSM_OK;
     }
+#if 0
+if( rc==LSM_OK && pDb->pClient ){
+  printf("reading %p: snapshot:%d used-shmid:%d trans-id:%d iOldShmid=%d\n",
+      (void *)pDb,
+      (int)pDb->pClient->iId, (int)pDb->treehdr.iUsedShmid, 
+      (int)pDb->treehdr.root.iTransId,
+      (int)pDb->treehdr.iOldShmid
+  );
+  fflush(stdout);
+}
+#endif
   }
   if( pDb->pClient==0 && rc==LSM_OK ) rc = LSM_BUSY;
 
@@ -799,11 +810,15 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 **
 ** LSM_OK is returned if successful, or an LSM error code otherwise.
 */
-int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
+int lsmFinishWriteTrans(lsm_db *pDb, int bCommit, int nAutowork){
+  int rc = LSM_OK;
   lsmLogEnd(pDb, bCommit);
   lsmTreeEndTransaction(pDb, bCommit);
+  if( nAutowork ){
+    rc = lsmSortedAutoWork(pDb, nAutowork);
+  }
   lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
-  return LSM_OK;
+  return rc;
 }
 
 
@@ -878,6 +893,9 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
     }
   }
 
+  if( rc==LSM_OK && db->iReader<0 ){
+    rc = LSM_BUSY;
+  }
   return rc;
 }
 

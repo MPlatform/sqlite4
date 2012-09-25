@@ -705,6 +705,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
   if( iLevel<pDb->nTransOpen ){
     if( iLevel==0 ){
+      int bAutowork = 0;
 
       /* Commit the transaction to disk. */
       if( rc==LSM_OK ) rc = lsmLogCommit(pDb);
@@ -712,14 +713,12 @@ int lsm_commit(lsm_db *pDb, int iLevel){
         rc = lsmFsSyncLog(pDb->pFS);
       }
       if( rc==LSM_OK && lsmTreeSize(pDb)>pDb->nTreeLimit ){
-        lsmLogEnd(pDb, 1);
         lsmTreeMakeOld(pDb);
-        rc = lsmSortedAutoWork(pDb, 1);
+        bAutowork = pDb->bAutowork;
       }
-      lsmFinishWriteTrans(pDb, (rc==LSM_OK));
+      lsmFinishWriteTrans(pDb, (rc==LSM_OK), bAutowork);
     }
     pDb->nTransOpen = iLevel;
-
   }
   dbReleaseClientSnapshot(pDb);
   return rc;
@@ -741,7 +740,7 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
     }
 
     if( pDb->nTransOpen==0 ){
-      lsmFinishWriteTrans(pDb, 0);
+      lsmFinishWriteTrans(pDb, 0, 0);
     }
     dbReleaseClientSnapshot(pDb);
   }

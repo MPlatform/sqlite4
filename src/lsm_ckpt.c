@@ -1127,6 +1127,12 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
   int n = 0;
   int rc;
 
+#if 0
+if( bFlush ){
+  printf("pushing %p tree to %d\n", (void *)pDb, pSnap->iId+1);
+  fflush(stdout);
+}
+#endif
   rc = ckptExportSnapshot(pDb, nOvfl, bFlush, pSnap->iId+1, 1, &p, &n);
   if( rc!=LSM_OK ) return rc;
   assert( ckptChecksumOk((u32 *)p) );

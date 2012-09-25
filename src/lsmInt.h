@@ -763,7 +763,7 @@ void lsmFinishWork(lsm_db *, int, int, int *);
 
 int lsmFinishRecovery(lsm_db *);
 void lsmFinishReadTrans(lsm_db *);
-int lsmFinishWriteTrans(lsm_db *, int);
+int lsmFinishWriteTrans(lsm_db *, int, int);
 int lsmFinishFlush(lsm_db *, int);
 
 int lsmSnapshotSetFreelist(lsm_db *, int *, int);

@@ -1081,9 +1081,13 @@ static int mt_start_worker(
 
   /* Open the worker connection */
   if( rc==0 ) rc = lsm_new(&pDb->env, &p->pWorker);
-  test_lsm_config_str(pDb, p->pWorker, 1, zCfg, 0);
+  if( zCfg ){
+    test_lsm_config_str(pDb, p->pWorker, 1, zCfg, 0);
+  }
   if( rc==0 ) rc = lsm_open(p->pWorker, zFilename);
+#if 0
 lsm_config_log(p->pWorker, xLog, (void *)"worker");
+#endif
 
   /* Configure the work-hook */
   if( rc==0 ){
