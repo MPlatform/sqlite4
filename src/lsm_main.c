@@ -712,11 +712,7 @@ int lsm_commit(lsm_db *pDb, int iLevel){
       if( rc==LSM_OK && pDb->eSafety==LSM_SAFETY_FULL ){
         rc = lsmFsSyncLog(pDb->pFS);
       }
-      if( rc==LSM_OK && lsmTreeSize(pDb)>pDb->nTreeLimit ){
-        lsmTreeMakeOld(pDb);
-        bAutowork = pDb->bAutowork;
-      }
-      lsmFinishWriteTrans(pDb, (rc==LSM_OK), bAutowork);
+      lsmFinishWriteTrans(pDb, (rc==LSM_OK));
     }
     pDb->nTransOpen = iLevel;
   }
@@ -740,7 +736,7 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
     }
 
     if( pDb->nTransOpen==0 ){
-      lsmFinishWriteTrans(pDb, 0, 0);
+      lsmFinishWriteTrans(pDb, 0);
     }
     dbReleaseClientSnapshot(pDb);
   }

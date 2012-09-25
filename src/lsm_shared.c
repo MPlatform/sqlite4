@@ -812,12 +812,15 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 **
 ** LSM_OK is returned if successful, or an LSM error code otherwise.
 */
-int lsmFinishWriteTrans(lsm_db *pDb, int bCommit, int nAutowork){
+int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   int rc = LSM_OK;
   lsmLogEnd(pDb, bCommit);
   lsmTreeEndTransaction(pDb, bCommit);
-  if( nAutowork ){
-    rc = lsmSortedAutoWork(pDb, nAutowork);
+  if( rc==LSM_OK && bCommit && lsmTreeSize(pDb)>pDb->nTreeLimit ){
+    lsmTreeMakeOld(pDb);
+    if( pDb->bAutowork ){
+      rc = lsmSortedAutoWork(pDb, 1);
+    }
   }
   lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
   return rc;
