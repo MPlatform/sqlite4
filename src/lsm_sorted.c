@@ -3931,8 +3931,7 @@ static int sortedWork(
       ){
         rc = mergeWorkerStep(&mergeworker);
       }
-      assert( mergeworker.nWork>0 );
-      nRemaining -= mergeworker.nWork;
+      nRemaining -= LSM_MAX(mergeworker.nWork, 1);
 
       /* Check if the merge operation is completely finished. If so, the
       ** Merge object and the right-hand-side of the level can be deleted. 
