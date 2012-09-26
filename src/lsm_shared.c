@@ -819,19 +819,22 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 */
 int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   int rc = LSM_OK;
-  int bAutowork = 0;
+  int bFlush = 0;
 
   lsmLogEnd(pDb, bCommit);
   if( rc==LSM_OK && bCommit && lsmTreeSize(pDb)>pDb->nTreeLimit ){
-    bAutowork = pDb->bAutowork;
+    bFlush = 1;
     lsmTreeMakeOld(pDb);
   }
   lsmTreeEndTransaction(pDb, bCommit);
 
-  if( rc==LSM_OK && bAutowork ){
+  if( rc==LSM_OK && bFlush && pDb->bAutowork ){
     rc = lsmSortedAutoWork(pDb, 1);
   }
   lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
+  if( bFlush && pDb->bAutowork==0 && pDb->xWork ){
+    pDb->xWork(pDb, pDb->pWorkCtx);
+  }
   return rc;
 }
 
