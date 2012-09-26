@@ -993,7 +993,6 @@ static void *worker_main(void *pArg){
     }
   }
   pthread_mutex_unlock(&p->worker_mutex);
-  printf("# worker EXIT %d\n", p->worker_rc);
   
   return 0;
 }

@@ -89,7 +89,9 @@ static void assertNotInFreelist(Freelist *p, int iBlk){
 int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId){
 
   /* Assert that this is not an attempt to insert a duplicate block number */
+#if 0
   assertNotInFreelist(p, iBlk);
+#endif
 
   /* Extend the space allocated for the freelist, if required */
   assert( p->nAlloc>=p->nEntry );
@@ -501,6 +503,9 @@ int lsmBlockFree(lsm_db *pDb, int iBlk){
 
   assert( lsmShmAssertWorker(pDb) );
   /* TODO: Should assert() that lsmCheckpointOverflow() has not been called */
+#ifdef LSM_LOG_FREELIST
+  lsmLogMessage(pDb, LSM_OK, "lsmBlockFree(): Free block %d", iBlk);
+#endif
 
   return lsmFreelistAppend(pDb->pEnv, &p->freelist, iBlk, p->iId);
 }
@@ -814,13 +819,17 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 */
 int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   int rc = LSM_OK;
+  int bAutowork = 0;
+
   lsmLogEnd(pDb, bCommit);
-  lsmTreeEndTransaction(pDb, bCommit);
   if( rc==LSM_OK && bCommit && lsmTreeSize(pDb)>pDb->nTreeLimit ){
+    bAutowork = pDb->bAutowork;
     lsmTreeMakeOld(pDb);
-    if( pDb->bAutowork ){
-      rc = lsmSortedAutoWork(pDb, 1);
-    }
+  }
+  lsmTreeEndTransaction(pDb, bCommit);
+
+  if( rc==LSM_OK && bAutowork ){
+    rc = lsmSortedAutoWork(pDb, 1);
   }
   lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
   return rc;

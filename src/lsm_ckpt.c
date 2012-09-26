@@ -386,6 +386,7 @@ static int ckptExportSnapshot(
   if( nOvfl>=0 ){
     nFree -=  nOvfl;
   }else{
+    assert( 0 );
     nOvfl = pDb->pShmhdr->aSnap2[CKPT_HDR_OVFL];
   }
 
@@ -442,7 +443,7 @@ static int ckptExportSnapshot(
   iOut += 2;
   assert( iOut<=1024 );
 
-#if 0
+#ifdef LSM_LOG_FREELIST
   lsmLogMessage(pDb, rc, 
       "ckptExportSnapshot(): id=%d freelist: %d/%d", (int)iId, nFree, nOvfl
   );
@@ -1133,6 +1134,7 @@ if( bFlush ){
   fflush(stdout);
 }
 #endif
+  assert( lsmFsIntegrityCheck(pDb) );
   rc = ckptExportSnapshot(pDb, nOvfl, bFlush, pSnap->iId+1, 1, &p, &n);
   if( rc!=LSM_OK ) return rc;
   assert( ckptChecksumOk((u32 *)p) );

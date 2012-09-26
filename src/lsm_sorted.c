@@ -3607,7 +3607,6 @@ static int sortedNewToplevel(
     sortedInvokeWorkHook(pDb);
   }
 
-  assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   if( pnWrite ) *pnWrite = nWrite;
   pDb->pWorker->nWrite += nWrite;
 #if 0
@@ -3637,12 +3636,22 @@ static int sortedMergeSetup(
   Merge *pMerge;                  /* New Merge object */
   int nByte;                      /* Bytes of space allocated at pMerge */
 
+#ifdef LSM_DEBUG
+  int iLevel;
+  Level *pX = pLevel;
+  for(iLevel=0; iLevel<nMerge; iLevel++){
+    assert( pX->nRight==0 );
+    pX = pX->pNext;
+  }
+#endif
+
   /* Allocate the new Level object */
   pNew = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
   if( pNew ){
     pNew->aRhs = (Segment *)lsmMallocZeroRc(pDb->pEnv, 
                                         nMerge * sizeof(Segment), &rc);
   }
+
 
   /* Populate the new Level object */
   if( rc==LSM_OK ){
@@ -3654,6 +3663,7 @@ static int sortedMergeSetup(
     pNew->nRight = nMerge;
     pNew->iAge = pLevel->iAge+1;
     for(i=0; i<nMerge; i++){
+      assert( p->nRight==0 );
       pNext = p->pNext;
       pNew->aRhs[i] = p->lhs;
       sortedFreeLevel(pDb->pEnv, p);
@@ -3843,9 +3853,9 @@ static int sortedSelectLevel(lsm_db *pDb, int bOpt, Level **ppOut){
         if( pLevel->nRight>nBest ){
           nBest = pLevel->nRight;
           pBest = pLevel;
-          nThis = 0;
-          pThis = 0;
         }
+        nThis = 0;
+        pThis = 0;
       }else{
         pThis = pLevel;
         nThis = 1;
@@ -3876,6 +3886,8 @@ static int sortedSelectLevel(lsm_db *pDb, int bOpt, Level **ppOut){
 
 static int sortedDbIsFull(lsm_db *pDb){
   Level *pTop = lsmDbSnapshotLevel(pDb->pWorker);
+
+  if( lsmDatabaseFull(pDb) ) return 1;
   if( pTop && pTop->iAge==0
    && (pTop->nRight || sortedCountLevels(pTop)>=pDb->nMerge)
   ){
@@ -3895,9 +3907,7 @@ static int sortedWork(
   int nRemaining = nWork;         /* Units of work to do before returning */
   Snapshot *pWorker = pDb->pWorker;
 
-  assert( lsmFsIntegrityCheck(pDb) );
   assert( pWorker );
-
   if( lsmDbSnapshotLevel(pWorker)==0 ) return LSM_OK;
 
   while( nRemaining>0 ){
@@ -3921,6 +3931,7 @@ static int sortedWork(
       ){
         rc = mergeWorkerStep(&mergeworker);
       }
+      assert( mergeworker.nWork>0 );
       nRemaining -= mergeworker.nWork;
 
       /* Check if the merge operation is completely finished. If so, the
@@ -4004,7 +4015,6 @@ static int sortedWork(
     }
   }
 
-  assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   if( pnWrite ) *pnWrite = (nWork - nRemaining);
   pWorker->nWrite += (nWork - nRemaining);
 
@@ -4150,7 +4160,6 @@ static int doLsmSingleWork(
         }
         bFlush = 1;
         bToplevel = 0;
-        nOvfl = 0;
       }
     }
   }
@@ -4161,11 +4170,20 @@ static int doLsmSingleWork(
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
     rc = sortedWork(pDb, nRem, bOptimize, 0, &nPg);
     nRem -= nPg;
-    if( nPg ) bToplevel = 1;
+    if( nPg ){
+      bToplevel = 1;
+      nOvfl = 0;
+    }
   }
 
   if( rc==LSM_OK && bToplevel && lsmCheckpointOverflowRequired(pDb) ){
-    rc = sortedNewToplevel(pDb, 0, &nOvfl, 0);
+    while( rc==LSM_OK && sortedDbIsFull(pDb) ){
+      int nPg = 0;
+      rc = sortedWork(pDb, 16, 0, 1, &nPg);
+    }
+    if( rc==LSM_OK && lsmCheckpointOverflowRequired(pDb) ){
+      rc = sortedNewToplevel(pDb, 0, &nOvfl, 0);
+    }
   }
 
   if( rc==LSM_OK && (nRem!=nMax) ){
