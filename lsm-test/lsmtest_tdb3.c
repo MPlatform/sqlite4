@@ -29,6 +29,7 @@ struct LsmWorker {
 
   int lsm_work_flags;             /* Flags to pass to lsm_work() */
   int lsm_work_npage;             /* nPage parameter to pass to lsm_work() */
+  int bCkpt;                      /* True to call lsm_checkpoint() */
 };
 #else
 struct LsmWorker { int worker_rc; };
@@ -598,7 +599,6 @@ static void xLog(void *pCtx, int rc, const char *z){
   if( pCtx ) fprintf(stderr, "%s: ", (char *)pCtx);
   fprintf(stderr, "%s\n", z);
   fflush(stderr);
-
 }
 
 static void xWorkHook(lsm_db *db, void *pArg){
@@ -626,6 +626,7 @@ static int test_lsm_config_str(
     { "block_size",       0, LSM_CONFIG_BLOCK_SIZE },
     { "safety",           0, LSM_CONFIG_SAFETY },
     { "autowork",         0, LSM_CONFIG_AUTOWORK },
+    { "autocheckpoint",   0, LSM_CONFIG_AUTOCHECKPOINT },
     { "log_size",         0, LSM_CONFIG_LOG_SIZE },
     { "mmap",             0, LSM_CONFIG_MMAP },
     { "use_log",          0, LSM_CONFIG_USE_LOG },
@@ -821,7 +822,7 @@ int test_lsm_lomem_open(
   TestDb **ppDb
 ){
   const char *zCfg = 
-    "page_size=256 block_size=65536 write_buffer=16384 max_freelist=4";
+    "page_size=256 block_size=65536 write_buffer=16384 max_freelist=4 autocheckpoint=32768";
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
 
@@ -932,33 +933,50 @@ static void *worker_main(void *pArg){
   pthread_mutex_lock(&p->worker_mutex);
   while( (pWorker = p->pWorker) ){
     int nWrite = 0;
-    int rc;
+    int rc = LSM_OK;
 
     /* Do some work. If an error occurs, exit. */
     pthread_mutex_unlock(&p->worker_mutex);
-    if( (p->lsm_work_flags & LSM_WORK_CHECKPOINT)==0 ){
-      int nSleep = 0;
-      while( 1 ){
-        int nByte = 0;
-        lsm_ckpt_size(pWorker, &nByte);
-        if( nByte<(32*1024*1024) ) break;
-        mt_signal_worker(p->pDb, 1);
-        usleep(1000);
-        nSleep++;
-      }
+    if( p->bCkpt==0 ){
+      static const int nLimit = 16*1024*1024;
+      static const int nIncr = 4*1024*1024;
+      int nMax = 100;
+      int nByte = 0;
+
+      lsm_ckpt_size(pWorker, &nByte);
+      if( nByte>nLimit ){
+        int nSleep = 0;
+        while( nByte>nLimit ){
+          nMax = nMax<<1;
+          nByte -= nIncr;
+        }
+        while( nSleep<nMax ){
+          lsm_ckpt_size(pWorker, &nByte);
+          if( nByte<nLimit ) break;
+          mt_signal_worker(p->pDb, 1);
+          usleep(1000);
+          nSleep++;
+        }
 #if 0
-      if( nSleep ) printf("nSleep=%d (worker)\n", nSleep);
+      if( nSleep ) printf("nSleep=%d/%d (worker)\n", nSleep, nMax);
 #endif
+      }
     }
-    rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
+    if( p->lsm_work_npage ){
+      rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
 /*    printf("# worked %d units\n", nWrite); */
+    }
+    if( rc==LSM_OK && p->bCkpt ){
+      rc = lsm_checkpoint(pWorker, 0);
+    }
     pthread_mutex_lock(&p->worker_mutex);
+
     if( rc!=LSM_OK && rc!=LSM_BUSY ){
       p->worker_rc = rc;
       break;
     }
 
-    if( nWrite && (p->lsm_work_flags & LSM_WORK_CHECKPOINT)==0 ){
+    if( nWrite && p->bCkpt==0 ){
       mt_signal_worker(p->pDb, 1);
     }
 
@@ -975,7 +993,6 @@ static void *worker_main(void *pArg){
     }
   }
   pthread_mutex_unlock(&p->worker_mutex);
-  /* printf("# worker EXIT\n"); */
   
   return 0;
 }
@@ -1045,8 +1062,10 @@ static int mt_start_worker(
   LsmDb *pDb,                     /* Main database structure */
   int iWorker,                    /* Worker number to start */
   const char *zFilename,          /* File name of database to open */
+  const char *zCfg,
   int flags,                      /* flags parameter to lsm_work() */
-  int nPage                       /* nPage parameter to lsm_work() */
+  int nPage,                      /* nPage parameter to lsm_work() */
+  int bCkpt                       /* True to call lsm_checkpoint() */
 ){
   int rc = 0;                     /* Return code */
   LsmWorker *p;                   /* Object to initialize */
@@ -1056,12 +1075,18 @@ static int mt_start_worker(
   p = &pDb->aWorker[iWorker];
   p->lsm_work_flags = flags;
   p->lsm_work_npage = nPage;
+  p->bCkpt = bCkpt;
   p->pDb = pDb;
 
   /* Open the worker connection */
   if( rc==0 ) rc = lsm_new(&pDb->env, &p->pWorker);
+  if( zCfg ){
+    test_lsm_config_str(pDb, p->pWorker, 1, zCfg, 0);
+  }
   if( rc==0 ) rc = lsm_open(p->pWorker, zFilename);
+#if 0
 lsm_config_log(p->pWorker, xLog, (void *)"worker");
+#endif
 
   /* Configure the work-hook */
   if( rc==0 ){
@@ -1092,12 +1117,13 @@ static int testLsmStartWorkers(
   pDb->nWorker = nWorker;
 
   if( nWorker==1 ){
-    int flags = LSM_WORK_CHECKPOINT|LSM_WORK_FLUSH;
-    rc = mt_start_worker(pDb, 0, zFilename, flags, 2048);
+    int flags = LSM_WORK_FLUSH;
+    rc = mt_start_worker(pDb, 0, zFilename, zCfg, flags, 2048, 1);
   }else{
-    rc = mt_start_worker(pDb, 0, zFilename, LSM_WORK_FLUSH, 1024);
+    int flags = LSM_WORK_FLUSH;
+    rc = mt_start_worker(pDb, 0, zFilename, zCfg, flags, 1024, 0);
     if( rc==LSM_OK ){
-      rc = mt_start_worker(pDb, 1, zFilename, LSM_WORK_CHECKPOINT, 0);
+      rc = mt_start_worker(pDb, 1, zFilename, zCfg, 0, 0, 1);
     }
   }
 
@@ -1131,13 +1157,13 @@ static int test_lsm_mt(
     memset(pDb->aWorker, 0, sizeof(LsmWorker) * nWorker);
     pDb->nWorker = nWorker;
 
-    rc = mt_start_worker(pDb, 0, zFilename, LSM_WORK_CHECKPOINT, 
-        nWorker==1 ? 512 : 0
+    rc = mt_start_worker(pDb, 0, zFilename, 0, LSM_WORK_FLUSH, 
+        nWorker==1 ? 512 : 0, 1
     );
   }
 
   if( rc==0 && nWorker==2 ){
-    rc = mt_start_worker(pDb, 1, zFilename, 0, 512);
+    rc = mt_start_worker(pDb, 1, zFilename, 0, 0, 512, 0);
   }
 
   return rc;

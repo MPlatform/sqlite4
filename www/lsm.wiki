@@ -705,4 +705,50 @@ There are two conditions for reusing a free-block:
   <li> Drop the CHECKPOINTER lock.
 </ol>
 
+<h1>5. Scheduling Policies</h1>
+
+<p>
+When a client writes to a database, the in-memory tree and log file are
+updated by the client itself before the lsm_write() call returns. Eventually, 
+once sufficient writes have accumulated in memory, the client marks the 
+current tree as "old", and subsequent writes are accumulated in a new tree.
+
+<p>
+In order to prevent the in-memory tree and log file from growing indefinitely,
+at some point in the future the following must occur:
+
+<ul>
+  <li>The contents of the old tree must be written into the database file
+      (a WORKER lock operation). Once this is done the memory used to store the
+      old tree is available for reuse.
+
+  <li>A checkpoint operation must take place to sync the data into the 
+      database file and update the database header (a CHECKPOINT lock 
+      operation). Once this has been done the log file space that was used 
+      to store the data may be reclaimed.
+</ul>
+
+<p>
+In addition to the above, it is necessary to perform a certain amount of 
+work on the database to merge existing levels together. This is not just
+to speed up queries - there is a hard limit of roughly 40 levels to stop
+database snapshots from growing overly large.
+
+<p><b> Explicit Calls to lsm_work() and lsm_checkpoint() </b>
+
+<p><b> Compulsory work </b>
+
+<ul>
+  <li><p> If a writer tries to mark a tree as "old", but there is already an
+       old tree in-memory, the writer attempts to grab the WORKER lock and
+       write both the old and new tree to a new database level.
+
+      <p> If the WORKER lock cannot be obtained immediately, block until it
+       can be
+</ul>
+
+<p><b> Auto work </b>
+
+
+
 

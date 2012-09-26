@@ -331,7 +331,7 @@ static void ckptExportLog(
 
   assert( iOut==CKPT_HDR_LO_MSW );
 
-  if( bFlush && pDb->treehdr.iOldShmid ){
+  if( bFlush ){
     i64 iOff = pDb->treehdr.iOldLog;
     ckptSetValue(p, iOut++, (iOff >> 32) & 0xFFFFFFFF, pRc);
     ckptSetValue(p, iOut++, (iOff & 0xFFFFFFFF), pRc);
@@ -386,6 +386,7 @@ static int ckptExportSnapshot(
   if( nOvfl>=0 ){
     nFree -=  nOvfl;
   }else{
+    assert( 0 );
     nOvfl = pDb->pShmhdr->aSnap2[CKPT_HDR_OVFL];
   }
 
@@ -430,7 +431,7 @@ static int ckptExportSnapshot(
   ckptSetValue(&ckpt, CKPT_HDR_BLKSZ, lsmFsBlockSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nLevel, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_PGSZ, lsmFsPageSize(pFS), &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_OVFL, nOvfl, &rc);
+  ckptSetValue(&ckpt, CKPT_HDR_OVFL, (nOvfl?nOvfl:pSnap->nFreelistOvfl), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NWRITE, pSnap->nWrite, &rc);
 
   if( bCksum ){
@@ -442,7 +443,7 @@ static int ckptExportSnapshot(
   iOut += 2;
   assert( iOut<=1024 );
 
-#if 0
+#ifdef LSM_LOG_FREELIST
   lsmLogMessage(pDb, rc, 
       "ckptExportSnapshot(): id=%d freelist: %d/%d", (int)iId, nFree, nOvfl
   );
@@ -710,13 +711,14 @@ int lsmCheckpointOverflow(
 ** The connection must be the worker in order to call this function.
 **
 ** True is returned if there are currently too many free-list entries
-** in-memory to store in a checkpoint. Before calling lsmCheckpointSaveWorker()
+** in-memory to store in a checkpoint. Before calling CheckpointSaveWorker()
 ** to save the current worker snapshot, a new top-level LSM segment must
 ** be created so that some of them can be written to the LSM. 
 */
 int lsmCheckpointOverflowRequired(lsm_db *pDb){
+  Snapshot *p = pDb->pWorker;
   assert( lsmShmAssertWorker(pDb) );
-  return (pDb->pWorker->freelist.nEntry > pDb->nMaxFreelist);
+  return (p->freelist.nEntry > pDb->nMaxFreelist || p->nFreelistOvfl>0);
 }
 
 /*
@@ -1126,6 +1128,13 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
   int n = 0;
   int rc;
 
+#if 0
+if( bFlush ){
+  printf("pushing %p tree to %d\n", (void *)pDb, pSnap->iId+1);
+  fflush(stdout);
+}
+#endif
+  assert( lsmFsIntegrityCheck(pDb) );
   rc = ckptExportSnapshot(pDb, nOvfl, bFlush, pSnap->iId+1, 1, &p, &n);
   if( rc!=LSM_OK ) return rc;
   assert( ckptChecksumOk((u32 *)p) );
@@ -1207,6 +1216,14 @@ i64 lsmCheckpointId(u32 *aCkpt, int bDisk){
     iId = ((i64)aCkpt[CKPT_HDR_ID_MSW] << 32) + (i64)aCkpt[CKPT_HDR_ID_LSW];
   }
   return iId;
+}
+
+u32 lsmCheckpointNWrite(u32 *aCkpt, int bDisk){
+  if( bDisk ){
+    return lsmGetU32((u8 *)&aCkpt[CKPT_HDR_NWRITE]);
+  }else{
+    return aCkpt[CKPT_HDR_NWRITE];
+  }
 }
 
 i64 lsmCheckpointLogOffset(u32 *aCkpt){

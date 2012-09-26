@@ -389,8 +389,8 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     LsmFile *pLsmFile;
     pFS->zDb = (char *)&pFS[1];
     pFS->zLog = &pFS->zDb[nDb+1];
-    pFS->nPagesize = LSM_PAGE_SIZE;
-    pFS->nBlocksize = LSM_BLOCK_SIZE;
+    pFS->nPagesize = LSM_DFLT_PAGE_SIZE;
+    pFS->nBlocksize = LSM_DFLT_BLOCK_SIZE;
     pFS->nMetasize = 4 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
@@ -700,9 +700,10 @@ static void fsGrowMapping(
     int rc;
     u8 *aOld = pFS->pMap;
     rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iSz, &pFS->pMap, &pFS->nMap);
-    if( rc==LSM_OK ){
+    if( rc==LSM_OK && pFS->pMap!=aOld ){
       u8 *aData = (u8 *)pFS->pMap;
       for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
+        assert( &aOld[pFS->nPagesize * (i64)(pFix->iPg-1)]==pFix->aData );
         pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
       }
       lsmSortedRemap(pFS->pDb);

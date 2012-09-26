@@ -89,7 +89,9 @@ static void assertNotInFreelist(Freelist *p, int iBlk){
 int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId){
 
   /* Assert that this is not an attempt to insert a duplicate block number */
+#if 0
   assertNotInFreelist(p, iBlk);
+#endif
 
   /* Extend the space allocated for the freelist, if required */
   assert( p->nAlloc>=p->nEntry );
@@ -175,19 +177,25 @@ static void doDbDisconnect(lsm_db *pDb){
       ** checkpoint (serialization) of this snapshot may be written to disk
       ** by the following block.  */
       rc = lsmTreeLoadHeader(pDb, 0);
-      if( rc==LSM_OK && lsmTreeSize(pDb)>0 ){
-        int nFlush = 0;
-        lsmTreeMakeOld(pDb, &nFlush);
-        if( nFlush ) rc = lsmFlushToDisk(pDb);
+      if( rc==LSM_OK && (lsmTreeHasOld(pDb) || lsmTreeSize(pDb)>0) ){
+        assert( pDb->nTransOpen==0 );
+        pDb->nTransOpen = 1;
+        lsmTreeMakeOld(pDb);
+        if( pDb->treehdr.iOldShmid ){
+          rc = lsmFlushTreeToDisk(pDb);
+        }
+        pDb->nTransOpen = 0;
       }
 
       /* Write a checkpoint to disk. */
       if( rc==LSM_OK ){
-        rc = lsmCheckpointWrite(pDb);
+        rc = lsmCheckpointWrite(pDb, 0);
       }
 
       /* If the checkpoint was written successfully, delete the log file */
-      if( rc==LSM_OK && pDb->pFS ){
+      if( rc==LSM_OK && pDb->pFS 
+       && pDb->treehdr.iOldShmid==0 && pDb->treehdr.nByte==0 
+      ){
         Database *p = pDb->pDatabase;
         lsmFsCloseAndDeleteLog(pDb->pFS);
         if( p->pFile ) lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
@@ -495,6 +503,9 @@ int lsmBlockFree(lsm_db *pDb, int iBlk){
 
   assert( lsmShmAssertWorker(pDb) );
   /* TODO: Should assert() that lsmCheckpointOverflow() has not been called */
+#ifdef LSM_LOG_FREELIST
+  lsmLogMessage(pDb, LSM_OK, "lsmBlockFree(): Free block %d", iBlk);
+#endif
 
   return lsmFreelistAppend(pDb->pEnv, &p->freelist, iBlk, p->iId);
 }
@@ -531,8 +542,9 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
 ** not be held that long (in case it is required by a client flushing an
 ** in-memory tree to disk).
 */
-int lsmCheckpointWrite(lsm_db *pDb){
+int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
   int rc;                         /* Return Code */
+  u32 nWrite = 0;
 
   assert( pDb->pWorker==0 );
   assert( 1 || pDb->pClient==0 );
@@ -559,6 +571,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
       if( rc==LSM_OK ){
         aData = lsmFsMetaPageData(pPg, &nData);
         iDisk = lsmCheckpointId((u32 *)aData, 1);
+        nWrite = lsmCheckpointNWrite((u32 *)aData, 1);
         lsmFsMetaPageRelease(pPg);
       }
       bDone = (iDisk>=iCkpt);
@@ -576,8 +589,11 @@ int lsmCheckpointWrite(lsm_db *pDb){
       if( rc==LSM_OK && pDb->eSafety!=LSM_SAFETY_OFF){
         rc = lsmFsSyncDb(pDb->pFS);
       }
-      if( rc==LSM_OK ) pShm->iMetaPage = iMeta;
-#if 0
+      if( rc==LSM_OK ){
+        pShm->iMetaPage = iMeta;
+        nWrite = lsmCheckpointNWrite(pDb->aSnapshot, 0) - nWrite;
+      }
+#ifdef LSM_LOG_WORK
   lsmLogMessage(pDb, 0, "finish checkpoint %d", 
       (int)lsmCheckpointId(pDb->aSnapshot, 0)
   );
@@ -586,6 +602,7 @@ int lsmCheckpointWrite(lsm_db *pDb){
   }
 
   lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);
+  if( pnWrite && rc==LSM_OK ) *pnWrite = nWrite;
   return rc;
 }
 
@@ -620,6 +637,9 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
 void lsmFinishWork(lsm_db *pDb, int bFlush, int nOvfl, int *pRc){
   /* If no error has occurred, serialize the worker snapshot and write
   ** it to shared memory.  */
+
+  assert( pDb->pWorker );
+  assert( pDb->pWorker->nFreelistOvfl==0 || nOvfl==0 );
   if( *pRc==LSM_OK ){
     *pRc = lsmCheckpointSaveWorker(pDb, bFlush, nOvfl);
   }
@@ -646,7 +666,7 @@ int lsmFinishRecovery(lsm_db *pDb){
 ** passed as the only argument already has an open read transaction.
 */
 int lsmBeginReadTrans(lsm_db *pDb){
-  const int MAX_READLOCK_ATTEMPTS = 5;
+  const int MAX_READLOCK_ATTEMPTS = 10;
   int rc = LSM_OK;                /* Return code */
   int iAttempt = 0;
 
@@ -673,7 +693,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
     if( rc==LSM_OK ){
       ShmHeader *pShm = pDb->pShmhdr;
       u32 iShmMax = pDb->treehdr.iUsedShmid;
-      u32 iShmMin = pDb->treehdr.iNextShmid+1-pDb->treehdr.nChunk;
+      u32 iShmMin = pDb->treehdr.iNextShmid+1-(1<<10);
       rc = lsmReadlock(
           pDb, lsmCheckpointId(pDb->aSnapshot, 0), iShmMin, iShmMax
       );
@@ -692,8 +712,21 @@ int lsmBeginReadTrans(lsm_db *pDb){
           rc = lsmReleaseReadlock(pDb);
         }
       }
-      if( rc==LSM_BUSY ) rc = LSM_OK;
+      if( rc==LSM_BUSY ){
+        rc = LSM_OK;
+      }
     }
+#if 0
+if( rc==LSM_OK && pDb->pClient ){
+  printf("reading %p: snapshot:%d used-shmid:%d trans-id:%d iOldShmid=%d\n",
+      (void *)pDb,
+      (int)pDb->pClient->iId, (int)pDb->treehdr.iUsedShmid, 
+      (int)pDb->treehdr.root.iTransId,
+      (int)pDb->treehdr.iOldShmid
+  );
+  fflush(stdout);
+}
+#endif
   }
   if( pDb->pClient==0 && rc==LSM_OK ) rc = LSM_BUSY;
 
@@ -785,10 +818,24 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 ** LSM_OK is returned if successful, or an LSM error code otherwise.
 */
 int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
+  int rc = LSM_OK;
+  int bFlush = 0;
+
   lsmLogEnd(pDb, bCommit);
+  if( rc==LSM_OK && bCommit && lsmTreeSize(pDb)>pDb->nTreeLimit ){
+    bFlush = 1;
+    lsmTreeMakeOld(pDb);
+  }
   lsmTreeEndTransaction(pDb, bCommit);
+
+  if( rc==LSM_OK && bFlush && pDb->bAutowork ){
+    rc = lsmSortedAutoWork(pDb, 1);
+  }
   lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
-  return LSM_OK;
+  if( bFlush && pDb->bAutowork==0 && pDb->xWork ){
+    pDb->xWork(pDb, pDb->pWorkCtx);
+  }
+  return rc;
 }
 
 
@@ -815,9 +862,9 @@ static int slotIsUsable(ShmReader *p, i64 iLsm, u32 iShmMin, u32 iShmMax){
 ** an LSM error code otherwise.
 */
 int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
+  int rc = LSM_OK;
   ShmHeader *pShm = db->pShmhdr;
   int i;
-  int rc = LSM_OK;
 
   assert( db->iReader<0 );
   assert( shm_sequence_ge(iShmMax, iShmMin) );
@@ -846,6 +893,7 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
       p->iLsmId = iLsm;
       p->iTreeId = iShmMax;
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
+      assert( rc!=LSM_BUSY );
       if( rc==LSM_OK ) db->iReader = i;
     }
   }
@@ -853,9 +901,9 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
   /* Search for any usable slot */
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
     ShmReader *p = &pShm->aReader[i];
-    if( slotIsUsable(p, iLsm, iShmMax, iShmMax) ){
+    if( slotIsUsable(p, iLsm, iShmMin, iShmMax) ){
       rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_SHARED, 0);
-      if( rc==LSM_OK && slotIsUsable(p, iLsm, iShmMax, iShmMax) ){
+      if( rc==LSM_OK && slotIsUsable(p, iLsm, iShmMin, iShmMax) ){
         db->iReader = i;
       }else if( rc==LSM_BUSY ){
         rc = LSM_OK;
@@ -863,6 +911,9 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
     }
   }
 
+  if( rc==LSM_OK && db->iReader<0 ){
+    rc = LSM_BUSY;
+  }
   return rc;
 }
 
@@ -1197,5 +1248,24 @@ void lsmShmBarrier(lsm_db *db){
   lsmEnvShmBarrier(db->pEnv);
 }
 
+int lsm_checkpoint(lsm_db *pDb, int *pnByte){
+  int rc;                         /* Return code */
+  u32 nWrite = 0;                 /* Number of pages checkpointed */
 
+  /* Attempt the checkpoint. If successful, nWrite is set to the number of
+  ** pages written between this and the previous checkpoint.  */
+  rc = lsmCheckpointWrite(pDb, &nWrite);
+
+  /* If required, calculate the output variable (bytes of data checkpointed). 
+  ** Set it to zero if an error occured.  */
+  if( pnByte ){
+    int nByte = 0;
+    if( rc==LSM_OK && nWrite ){
+      nByte = (int)nWrite * lsmFsPageSize(pDb->pFS);
+    }
+    *pnByte = nByte;
+  }
+
+  return rc;
+}
 

@@ -42,16 +42,12 @@
 ** Default values for various data structure parameters. These may be
 ** overridden by calls to lsm_config().
 */
-#define LSM_PAGE_SIZE   4096
-#define LSM_BLOCK_SIZE  (2 * 1024 * 1024)
-#define LSM_TREE_BYTES  (2 * 1024 * 1024)
-
-#define LSM_DEFAULT_LOG_SIZE (128*1024)
-#define LSM_DEFAULT_NMERGE   4
-
-/* Places where a NULL needs to be changed to a real lsm_env pointer
-** are marked with NEED_ENV */
-#define NEED_ENV ((lsm_env*)0)
+#define LSM_DFLT_PAGE_SIZE       (4 * 1024)
+#define LSM_DFLT_BLOCK_SIZE      (2 * 1024 * 1024)
+#define LSM_DFLT_WRITE_BUFFER    (2 * 1024 * 1024)
+#define LSM_DFLT_AUTOCHECKPOINT  (4 * 1024 * 1024)
+#define LSM_DFLT_LOG_SIZE        (128*1024)
+#define LSM_DFLT_NMERGE          4
 
 /* Initial values for log file checksums. These are only used if the 
 ** database file does not contain a valid checkpoint.  */
@@ -294,6 +290,7 @@ struct lsm_db {
   int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
   int nMaxFreelist;               /* Configured by LSM_CONFIG_MAX_FREELIST */
   int bMmap;                      /* Configured by LSM_CONFIG_MMAP */
+  int nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
 
   /* Sub-system handles */
@@ -484,7 +481,7 @@ struct Snapshot {
 /*
 ** Functions from file "lsm_ckpt.c".
 */
-int lsmCheckpointWrite(lsm_db *);
+int lsmCheckpointWrite(lsm_db *, u32 *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
 
@@ -502,6 +499,7 @@ int lsmCheckpointLoad(lsm_db *pDb, int *);
 int lsmCheckpointLoadOk(lsm_db *pDb, int);
 
 i64 lsmCheckpointId(u32 *, int);
+u32 lsmCheckpointNWrite(u32 *, int);
 i64 lsmCheckpointLogOffset(u32 *);
 int lsmCheckpointPgsz(u32 *);
 int lsmCheckpointBlksz(u32 *);
@@ -522,7 +520,7 @@ void lsmTreeClear(lsm_db *);
 int lsmTreeInit(lsm_db *);
 int lsmTreeRepair(lsm_db *);
 
-void lsmTreeMakeOld(lsm_db *pDb, int *pnFlush);
+void lsmTreeMakeOld(lsm_db *pDb);
 void lsmTreeDiscardOld(lsm_db *pDb);
 int lsmTreeHasOld(lsm_db *pDb);
 
@@ -676,9 +674,10 @@ void lsmEnvSleep(lsm_env *, int);
 ** Functions from file "lsm_sorted.c".
 */
 int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
-int lsmSortedFlushTree(lsm_db *, int *);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
+
+int lsmFlushTreeToDisk(lsm_db *pDb);
 
 void lsmSortedRemap(lsm_db *pDb);
 
@@ -732,7 +731,6 @@ int lsmVarintSize(u8 c);
 ** Functions from file "main.c".
 */
 void lsmLogMessage(lsm_db *, int, const char *, ...);
-int lsmFlushToDisk(lsm_db *);
 
 /*
 ** Functions from file "lsm_log.c".

@@ -963,11 +963,8 @@ void lsmTreeClear(lsm_db *pDb){
   pDb->treehdr.iUsedShmid = pDb->treehdr.iNextShmid-1;
 }
 
-void lsmTreeMakeOld(lsm_db *pDb, int *pnFlush){
-  if( pDb->treehdr.iOldShmid ){
-    *pnFlush = 2;
-  }else{
-    *pnFlush = 1;
+void lsmTreeMakeOld(lsm_db *pDb){
+  if( pDb->treehdr.iOldShmid==0 ){
     pDb->treehdr.iOldLog = pDb->treehdr.log.aRegion[2].iEnd;
     pDb->treehdr.oldcksum0 = pDb->treehdr.log.cksum0;
     pDb->treehdr.oldcksum1 = pDb->treehdr.log.cksum1;
