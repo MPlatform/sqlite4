@@ -4,16 +4,26 @@ exec tclsh "$0" "$@"
 
 
 proc exec_lsmtest_speed {nSec spec} {
-  set fd [open [list |lsmtest speed2 {*}$spec]]
+  set fd [open [list |./lsmtest speed2 {*}$spec]]
   set res [list]
 
-  puts "lsmtest speed2 $spec"
+  puts -nonewline "./lsmtest speed2"
+  foreach s $spec {
+    if {[llength $s]==1} {
+      puts -nonewline " $s"
+    } else {
+      puts -nonewline " \"$s\""
+    }
+  }
+  puts ""
 
   set initial [clock seconds]
 
   while {![eof $fd] && ($nSec==0 || ([clock second]-$initial)<$nSec)} { 
     set line [gets $fd]
-    puts $line
+    set sz 0
+    catch { set sz [file size testdb.lsm] }
+    puts "$line ([expr $sz/1024])"
     if {[string range $line 0 0]=="#"} continue
     if {[llength $line]==0} continue
     lappend res $line
@@ -158,11 +168,16 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 60 25000 0 40 {
-  lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
-  LevelDB leveldb
+do_write_test x.png 120 50000 50000 30 {
+  lsm-mt    "mmap=1 multi_proc=0 threads=3 autowork=0 autocheckpoint=0"
+  leveldb   leveldb
 }
+#  lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=8192000"
 # lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
+# lsm-st     "mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
+# lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
+# lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
+# LevelDB leveldb
 # lsm-st     "mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
 # LevelDB leveldb
 # SQLite sqlite3

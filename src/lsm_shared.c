@@ -472,9 +472,9 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
       flRemoveEntry0(pFree);
       assert( iRet!=0 );
     }
-#if 0
+#ifdef LSM_LOG_BLOCKS
     lsmLogMessage(
-        pDb, 0, "%d reusing block %d%s", (iRet==0 ? "not " : "")
+        pDb, 0, "%s reusing block %d%s", (iRet==0 ? "not " : ""),
         pFree->aEntry[0].iBlk, 
         bInUse==0 ? "" : bInUse==1 ? " (client)" : " (unsynced)"
     );
@@ -485,6 +485,9 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   ** end of the file. */
   if( rc==LSM_OK && iRet==0 ){
     iRet = ++pDb->pWorker->nBlock;
+#ifdef LSM_LOG_BLOCKS
+    lsmLogMessage(pDb, 0, "extending file to %d blocks", iRet);
+#endif
   }
 
   *piBlk = iRet;

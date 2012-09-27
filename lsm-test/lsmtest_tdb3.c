@@ -932,42 +932,39 @@ static void *worker_main(void *pArg){
 
   pthread_mutex_lock(&p->worker_mutex);
   while( (pWorker = p->pWorker) ){
-    int nWrite = 0;
     int rc = LSM_OK;
+    int nLimit = -1;
+    int nCkpt = -1;
 
     /* Do some work. If an error occurs, exit. */
     pthread_mutex_unlock(&p->worker_mutex);
-    if( p->bCkpt==0 ){
-      static const int nLimit = 16*1024*1024;
-      static const int nIncr = 4*1024*1024;
-      int nMax = 100;
-      int nByte = 0;
+    lsm_config(pWorker, LSM_CONFIG_WRITE_BUFFER, &nLimit);
 
-      lsm_ckpt_size(pWorker, &nByte);
-      if( nByte>nLimit ){
+    if( p->bCkpt ){
+      lsm_ckpt_size(pWorker, &nCkpt);
+      if( nCkpt>(nLimit*2) ){
+        rc = lsm_checkpoint(pWorker, 0);
+      }
+    }else{
+      int nWrite = 0;
+      int nAuto = -1;
+      lsm_config(pWorker, LSM_CONFIG_AUTOCHECKPOINT, &nAuto);
+      do {
         int nSleep = 0;
-        while( nByte>nLimit ){
-          nMax = nMax<<1;
-          nByte -= nIncr;
-        }
-        while( nSleep<nMax ){
-          lsm_ckpt_size(pWorker, &nByte);
-          if( nByte<nLimit ) break;
-          mt_signal_worker(p->pDb, 1);
+        lsm_ckpt_size(pWorker, &nCkpt);
+        while( nAuto==0 && nCkpt>(nLimit*4) ){
           usleep(1000);
+          mt_signal_worker(p->pDb, 1);
           nSleep++;
+          lsm_ckpt_size(pWorker, &nCkpt);
         }
 #if 0
-      if( nSleep ) printf("nSleep=%d/%d (worker)\n", nSleep, nMax);
+          if( nSleep ) printf("nLimit=%d nSleep=%d (worker)\n", nLimit, nSleep);
 #endif
-      }
-    }
-    if( p->lsm_work_npage ){
-      rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
-/*    printf("# worked %d units\n", nWrite); */
-    }
-    if( rc==LSM_OK && p->bCkpt ){
-      rc = lsm_checkpoint(pWorker, 0);
+
+        rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
+        if( nAuto==0 && nWrite && rc==LSM_OK ) mt_signal_worker(p->pDb, 1);
+      }while( nWrite );
     }
     pthread_mutex_lock(&p->worker_mutex);
 
@@ -976,21 +973,15 @@ static void *worker_main(void *pArg){
       break;
     }
 
-    if( nWrite && p->bCkpt==0 ){
-      mt_signal_worker(p->pDb, 1);
-    }
-
     /* If the call to lsm_work() indicates that there is nothing more
     ** to do at this point, wait on the condition variable. The thread will
     ** wake up when it is signaled either because the client thread has
     ** flushed an in-memory tree into the db file or when the connection
     ** is being closed.  */
-    if( nWrite==0 ){
-      if( p->pWorker && p->bDoWork==0 ){
-        pthread_cond_wait(&p->worker_cond, &p->worker_mutex);
-      }
-      p->bDoWork = 0;
+    if( p->pWorker && p->bDoWork==0 ){
+      pthread_cond_wait(&p->worker_cond, &p->worker_mutex);
     }
+    p->bDoWork = 0;
   }
   pthread_mutex_unlock(&p->worker_mutex);
   
@@ -1041,11 +1032,8 @@ static void mt_client_work_hook(lsm_db *db, void *pArg){
   /* Invoke the user level work-hook, if any. */
   if( pDb->xWork ) pDb->xWork(db, pDb->pWorkCtx);
 
-  /* printf("# signalling worker threads\n"); */
-  /* Signal each worker thread */
-  for(i=0; i<pDb->nWorker; i++){
-    mt_signal_worker(pDb, i);
-  }
+  /* Signal the lsm_work() thread */
+  mt_signal_worker(pDb, 0);
 }
 
 static void mt_worker_work_hook(lsm_db *db, void *pArg){
@@ -1084,9 +1072,7 @@ static int mt_start_worker(
     test_lsm_config_str(pDb, p->pWorker, 1, zCfg, 0);
   }
   if( rc==0 ) rc = lsm_open(p->pWorker, zFilename);
-#if 0
-lsm_config_log(p->pWorker, xLog, (void *)"worker");
-#endif
+  lsm_config_log(p->pWorker, xLog, (void *)"worker");
 
   /* Configure the work-hook */
   if( rc==0 ){
@@ -1118,10 +1104,10 @@ static int testLsmStartWorkers(
 
   if( nWorker==1 ){
     int flags = LSM_WORK_FLUSH;
-    rc = mt_start_worker(pDb, 0, zFilename, zCfg, flags, 2048, 1);
+    rc = mt_start_worker(pDb, 0, zFilename, zCfg, flags, 256, 0);
   }else{
     int flags = LSM_WORK_FLUSH;
-    rc = mt_start_worker(pDb, 0, zFilename, zCfg, flags, 1024, 0);
+    rc = mt_start_worker(pDb, 0, zFilename, zCfg, flags, 256, 0);
     if( rc==LSM_OK ){
       rc = mt_start_worker(pDb, 1, zFilename, zCfg, 0, 0, 1);
     }
