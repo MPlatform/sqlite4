@@ -264,11 +264,11 @@ void lsmEnvShmBarrier(lsm_env *pEnv){
 }
 
 void lsmEnvShmUnmap(lsm_env *pEnv, lsm_file *pFile, int bDel){
-  return pEnv->xShmUnmap(pFile, bDel);
+  pEnv->xShmUnmap(pFile, bDel);
 }
 
 void lsmEnvSleep(lsm_env *pEnv, int nUs){
-  return pEnv->xSleep(pEnv, nUs);
+  pEnv->xSleep(pEnv, nUs);
 }
 
 
@@ -932,39 +932,86 @@ int lsmFsSortedDelete(
   return LSM_OK;
 }
 
-/*
-** The pager reference passed as the only argument must refer to a sorted
-** file page (not a log or meta page). This call indicates that the argument
-** page is now the first page in its sorted file - all previous pages may
-** be considered free.
-*/
-void lsmFsGobble(
+static Pgno firstOnBlock(FileSystem *pFS, int iBlk, Pgno *aPgno, int nPgno){
+  Pgno iRet = 0;
+  int i;
+  for(i=0; i<nPgno; i++){
+    Pgno iPg = aPgno[i];
+    if( fsPageToBlock(pFS, iPg)==iBlk && (iRet==0 || iPg<iRet) ){
+      iRet = iPg;
+    }
+  }
+  return iRet;
+}
+
+#if 0
+void fsOldGobble(
+  FileSystem *pFS,
   Snapshot *pSnapshot,
   Segment *pRun, 
-  Page *pPg
+  Pgno iPg
 ){
-  FileSystem *pFS = pPg->pFS;
-
-  if( pPg->iPg!=pRun->iFirst ){
+  if( iPg!=pRun->iFirst ){
     int rc = LSM_OK;
     int iBlk = fsPageToBlock(pFS, pRun->iFirst);
-    int iFirstBlk = fsPageToBlock(pFS, pPg->iPg);
+    int iFirstBlk = fsPageToBlock(pFS, iPg);
 
     pRun->nSize += (pRun->iFirst - fsFirstPageOnBlock(pFS, iBlk));
-    pRun->iFirst = pPg->iPg;
+    pRun->iFirst = iPg;
     while( rc==LSM_OK && iBlk!=iFirstBlk ){
       int iNext = 0;
       rc = fsBlockNext(pFS, iBlk, &iNext);
       if( rc==LSM_OK ) rc = fsFreeBlock(pFS, pSnapshot, 0, iBlk);
       pRun->nSize -= (
           1 + fsLastPageOnBlock(pFS, iBlk) - fsFirstPageOnBlock(pFS, iBlk)
-      );
+          );
       iBlk = iNext;
     }
 
     pRun->nSize -= (pRun->iFirst - fsFirstPageOnBlock(pFS, iBlk));
     assert( pRun->nSize>0 );
   }
+}
+#endif
+
+/*
+** Argument aPgno is an array of nPgno page numbers. All pages belong to
+** the segment pRun. This function gobbles from the start of the run to the
+** first page that appears in aPgno[] (i.e. so that the aPgno[] entry is
+** the new first page of the run).
+*/
+void lsmFsGobble(
+  lsm_db *pDb,
+  Segment *pRun, 
+  Pgno *aPgno,
+  int nPgno
+){
+  int rc = LSM_OK;
+  FileSystem *pFS = pDb->pFS;
+  Snapshot *pSnapshot = pDb->pWorker;
+  int iBlk;
+
+  assert( pRun->nSize>0 );
+  iBlk = fsPageToBlock(pFS, pRun->iFirst);
+  pRun->nSize += (pRun->iFirst - fsFirstPageOnBlock(pFS, iBlk));
+
+  while( rc==LSM_OK ){
+    int iNext = 0;
+    Pgno iFirst = firstOnBlock(pFS, iBlk, aPgno, nPgno);
+    if( iFirst ){
+      pRun->iFirst = iFirst;
+      break;
+    }
+    rc = fsBlockNext(pFS, iBlk, &iNext);
+    if( rc==LSM_OK ) rc = fsFreeBlock(pFS, pSnapshot, pRun, iBlk);
+    pRun->nSize -= (
+        1 + fsLastPageOnBlock(pFS, iBlk) - fsFirstPageOnBlock(pFS, iBlk)
+    );
+    iBlk = iNext;
+  }
+
+  pRun->nSize -= (pRun->iFirst - fsFirstPageOnBlock(pFS, iBlk));
+  assert( pRun->nSize>0 );
 }
 
 

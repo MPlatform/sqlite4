@@ -321,6 +321,7 @@ struct MergeWorker {
   Hierarchy hier;                 /* B-tree hierarchy under construction */
   Page *pPage;                    /* Current output page */
   int nWork;                      /* Number of calls to mergeWorkerNextPage() */
+  Pgno *aGobble;                  /* Gobble point for each input segment */
 };
 
 #ifdef LSM_DEBUG_EXPENSIVE
@@ -560,6 +561,22 @@ static int pageGetKeyCopy(
   }
 
   return rc;
+}
+
+static Pgno pageGetBtreeRef(Page *pPg, int iKey){
+  Pgno iRef;
+  u8 *aData;
+  int nData;
+  u8 *aCell;
+
+  aData = fsPageData(pPg, &nData);
+  aCell = pageGetCell(aData, nData, iKey);
+  assert( aCell[0]==0 );
+  aCell++;
+  aCell += lsmVarintGet32(aCell, &iRef);
+  lsmVarintGet32(aCell, &iRef);
+  assert( iRef>0 );
+  return iRef;
 }
 
 static int pageGetBtreeKey(
@@ -1605,8 +1622,10 @@ static int seekInBtree(
   LevelCursor *pCsr,
   Segment *pSeg,
   void *pKey, int nKey,           /* Key to seek to */
+  Pgno *aPg,                      /* OUT: Page numbers */
   Page **ppPg                     /* OUT: Leaf (sorted-run) page reference */
 ){
+  int i = 0;
   int rc;
   int iPg;
   Page *pPg = 0;
@@ -1615,6 +1634,12 @@ static int seekInBtree(
 
   iPg = pSeg->iRoot;
   do {
+    Pgno *piFirst = 0;
+    if( aPg ){
+      aPg[i++] = iPg;
+      piFirst = &aPg[i];
+    }
+
     rc = lsmFsDbPageGet(pCsr->pFS, iPg, &pPg);
     assert( rc==LSM_OK || pPg==0 );
     if( rc==LSM_OK ){
@@ -1643,6 +1668,11 @@ static int seekInBtree(
 
         rc = pageGetBtreeKey(pPg, iTry, &iPtr, &iTopicT, &pKeyT, &nKeyT, &blob);
         if( rc!=LSM_OK ) break;
+        if( piFirst && pKeyT==blob.pData ){
+          *piFirst = pageGetBtreeRef(pPg, iTry);
+          piFirst = 0;
+          i++;
+        }
 
         res = iTopic - iTopicT;
         if( res==0 ) res = pCsr->xCmp(pKey, nKey, pKeyT, nKeyT);
@@ -1661,7 +1691,11 @@ static int seekInBtree(
 
   sortedBlobFree(&blob);
   assert( (rc==LSM_OK)==(pPg!=0) );
-  *ppPg = pPg;
+  if( ppPg ){
+    *ppPg = pPg;
+  }else{
+    lsmFsPageRelease(pPg);
+  }
   return rc;
 }
 
@@ -1679,7 +1713,7 @@ static int seekInSegment(
   if( pPtr->pSeg->iRoot ){
     Page *pPg;
     assert( pPtr->pSeg->iRoot!=0 );
-    rc = seekInBtree(pCsr, pPtr->pSeg, pKey, nKey, &pPg);
+    rc = seekInBtree(pCsr, pPtr->pSeg, pKey, nKey, 0, &pPg);
     if( rc==LSM_OK ) segmentPtrSetPage(pPtr, pPg);
   }else{
     if( iPtr==0 ){
@@ -3448,6 +3482,16 @@ static int mergeWorkerStep(MergeWorker *pMW){
     }
   }
 
+  if( pMW->aGobble ){
+    int iGobble = pCsr->aTree[1] - CURSOR_DATA_SEGMENT;
+    if( iGobble<pMW->pLevel->nRight ){
+      SegmentPtr *pGobble = &pCsr->aSegCsr[iGobble].aPtr[0];
+      if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 ){
+        pMW->aGobble[iGobble] = lsmFsPageNumber(pGobble->pPg);
+      }
+    }
+  }
+
   /* If this is a separator key and we know that the output pointer has not
   ** changed, there is no point in writing an output record. Otherwise,
   ** proceed. */
@@ -3735,7 +3779,7 @@ static int mergeWorkerInit(
   Level *pLevel,                  /* Level to work on merging */
   MergeWorker *pMW                /* Object to initialize */
 ){
-  int rc;                         /* Return code */
+  int rc = LSM_OK;                /* Return code */
   Merge *pMerge = pLevel->pMerge; /* Persistent part of merge state */
   MultiCursor *pCsr = 0;          /* Cursor opened for pMW */
 
@@ -3746,6 +3790,7 @@ static int mergeWorkerInit(
   memset(pMW, 0, sizeof(MergeWorker));
   pMW->pDb = pDb;
   pMW->pLevel = pLevel;
+  pMW->aGobble = lsmMallocZeroRc(pDb->pEnv, sizeof(Pgno) * pLevel->nRight, &rc);
 
   /* Create a multi-cursor to read the data to write to the new
   ** segment. The new segment contains:
@@ -3757,7 +3802,9 @@ static int mergeWorkerInit(
   ** If the new level is the lowest (oldest) in the db, discard any
   ** delete keys. Key annihilation.
   */
-  rc = multiCursorNew(pDb, pDb->pWorker, TREE_NONE, 0, &pCsr);
+  if( rc==LSM_OK ){
+    rc = multiCursorNew(pDb, pDb->pWorker, TREE_NONE, 0, &pCsr);
+  }
   if( rc==LSM_OK ){
     rc = multiCursorAddLevel(pCsr, pLevel, MULTICURSOR_ADDLEVEL_RHS);
   }
@@ -3812,6 +3859,37 @@ static int mergeWorkerInit(
     pCsr->flags |= CURSOR_NEXT_OK;
   }
 
+  return rc;
+}
+
+static int sortedBtreeGobble(
+  lsm_db *pDb, 
+  MultiCursor *pCsr, 
+  int iGobble
+){
+  int rc = LSM_OK;
+  if( rtTopic(pCsr->eType)==0 ){
+    LevelCursor *pLvlcsr = &pCsr->aSegCsr[iGobble];
+    Segment *pSeg = pLvlcsr->aPtr[0].pSeg;
+    Blob *p = &pCsr->key;
+    Pgno *aPg;
+    int nPg;
+
+    assert( pLvlcsr->nPtr==1 );
+    assert( pSeg->iRoot>0 );
+
+    aPg = lsmMallocZeroRc(pDb->pEnv, sizeof(Pgno)*32, &rc);
+    if( rc==LSM_OK ){
+      rc = seekInBtree(pLvlcsr, pSeg, p->pData, p->nData, aPg, 0); 
+    }
+
+    for(nPg=0; aPg[nPg]; nPg++);
+#if 1
+    lsmFsGobble(pDb, pSeg, aPg, nPg);
+#endif
+
+    lsmFree(pDb->pEnv, aPg);
+  }
   return rc;
 }
 
@@ -3946,15 +4024,27 @@ static int sortedWork(
       */
       if( rc==LSM_OK ){
         if( mergeWorkerDone(&mergeworker)==0 ){
+          int i;
+          for(i=0; i<pLevel->nRight; i++){
+            SegmentPtr *pGobble = &mergeworker.pCsr->aSegCsr[i].aPtr[0];
+            if( pGobble->pSeg->iRoot ){
+              rc = sortedBtreeGobble(pDb, mergeworker.pCsr, i);
+            }else if( mergeworker.aGobble[i] ){
+              lsmFsGobble(pDb, pGobble->pSeg, &mergeworker.aGobble[i], 1);
+            }
+          }
+#if 0
           int iGobble = mergeworker.pCsr->aTree[1] - CURSOR_DATA_SEGMENT;
           if( iGobble<pLevel->nRight ){
             SegmentPtr *pGobble = &mergeworker.pCsr->aSegCsr[iGobble].aPtr[0];
-            if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 
-             && pGobble->pSeg->iRoot==0
-            ){
-              lsmFsGobble(pWorker, pGobble->pSeg, pGobble->pPg);
+            if( pGobble->pSeg->iRoot ){
+              rc = sortedBtreeGobble(pDb, mergeworker.pCsr, iGobble);
+            }else if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 ){
+              Pgno iPg = lsmFsPageNumber(pGobble->pPg);
+              lsmFsGobble(pDb, pGobble->pSeg, &iPg, 1);
             }
           }
+#endif
 
         }else if( pLevel->lhs.iFirst==0 ){
           /* If the new level is completely empty, remove it from the 
@@ -4261,7 +4351,6 @@ int lsmSortedAutoWork(
   int rc;                         /* Return code */
   int nRemaining;                 /* Units of work to do before returning */
   int nDepth = 0;                 /* Current height of tree (longest path) */
-  int nWrite;                     /* Pages written */
   Level *pLevel;                  /* Used to iterate through levels */
   int bRestore = 0;
 
@@ -4301,10 +4390,6 @@ int lsmSortedAutoWork(
       rc = lsmRestoreCursors(pDb);
     }
   }
-
-#if 0
-  lsmLogMessage(pDb, 0, "auto-work: %d pages", nWrite);
-#endif
 
   return rc;
 }

@@ -601,7 +601,7 @@ void lsmFsSetPageSize(FileSystem *, int);
 int lsmFsFileid(lsm_db *pDb, void **ppId, int *pnId);
 
 /* Creating, populating, gobbling and deleting sorted runs. */
-void lsmFsGobble(Snapshot *, Segment *, Page *);
+void lsmFsGobble(lsm_db *, Segment *, Pgno *, int);
 int lsmFsSortedDelete(FileSystem *, Snapshot *, int, Segment *);
 int lsmFsSortedFinish(FileSystem *, Segment *);
 int lsmFsSortedAppend(FileSystem *, Snapshot *, Segment *, Page **);
