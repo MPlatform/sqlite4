@@ -168,10 +168,11 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 120 50000 50000 30 {
+do_write_test x.png 120 50000 0 30 {
   lsm-mt    "mmap=1 multi_proc=0 threads=3 autowork=0 autocheckpoint=0"
   leveldb   leveldb
 }
+
 #  lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=8192000"
 # lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
 # lsm-st     "mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"

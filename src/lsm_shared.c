@@ -175,16 +175,15 @@ static void doDbDisconnect(lsm_db *pDb){
       /* Flush the in-memory tree, if required. If there is data to flush,
       ** this will create a new client snapshot in Database.pClient. The
       ** checkpoint (serialization) of this snapshot may be written to disk
-      ** by the following block.  */
+      ** by the following block.  
+      **
+      ** There is no need to mess around with WRITER locks or anything at
+      ** this point. The lock on DMS2 guarantees that pDb has exclusive
+      ** access to the db at this point.
+      */
       rc = lsmTreeLoadHeader(pDb, 0);
       if( rc==LSM_OK && (lsmTreeHasOld(pDb) || lsmTreeSize(pDb)>0) ){
-        assert( pDb->nTransOpen==0 );
-        pDb->nTransOpen = 1;
-        lsmTreeMakeOld(pDb);
-        if( pDb->treehdr.iOldShmid ){
-          rc = lsmFlushTreeToDisk(pDb);
-        }
-        pDb->nTransOpen = 0;
+        rc = lsmFlushTreeToDisk(pDb);
       }
 
       /* Write a checkpoint to disk. */
@@ -193,9 +192,7 @@ static void doDbDisconnect(lsm_db *pDb){
       }
 
       /* If the checkpoint was written successfully, delete the log file */
-      if( rc==LSM_OK && pDb->pFS 
-       && pDb->treehdr.iOldShmid==0 && pDb->treehdr.nByte==0 
-      ){
+      if( rc==LSM_OK ){
         Database *p = pDb->pDatabase;
         lsmFsCloseAndDeleteLog(pDb->pFS);
         if( p->pFile ) lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);

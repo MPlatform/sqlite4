@@ -933,21 +933,19 @@ static void *worker_main(void *pArg){
   pthread_mutex_lock(&p->worker_mutex);
   while( (pWorker = p->pWorker) ){
     int rc = LSM_OK;
-    int nLimit = -1;
     int nCkpt = -1;
 
     /* Do some work. If an error occurs, exit. */
     pthread_mutex_unlock(&p->worker_mutex);
-    lsm_config(pWorker, LSM_CONFIG_WRITE_BUFFER, &nLimit);
 
     if( p->bCkpt ){
-      lsm_ckpt_size(pWorker, &nCkpt);
-      if( nCkpt>(nLimit*2) ){
-        rc = lsm_checkpoint(pWorker, 0);
-      }
+      rc = lsm_checkpoint(pWorker, 0);
     }else{
-      int nWrite = 0;
-      int nAuto = -1;
+      int nWrite = 0;             /* Pages written by lsm_work() call */
+      int nAuto = -1;             /* Configured AUTOCHECKPOINT value */
+      int nLimit = -1;            /* Configured WRITE_BUFFER value */
+
+      lsm_config(pWorker, LSM_CONFIG_WRITE_BUFFER, &nLimit);
       lsm_config(pWorker, LSM_CONFIG_AUTOCHECKPOINT, &nAuto);
       do {
         int nSleep = 0;

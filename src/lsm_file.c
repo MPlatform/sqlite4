@@ -317,14 +317,17 @@ int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
 ** is called during database shutdown only.
 */
 int lsmFsCloseAndDeleteLog(FileSystem *pFS){
+  char *zDel;
+
   if( pFS->fdLog ){
-    char *zDel = lsmMallocPrintf(pFS->pEnv, "%s-log", pFS->zDb);
-    if( zDel ){
-      lsmEnvClose(pFS->pEnv, pFS->fdLog );
-      lsmEnvUnlink(pFS->pEnv, zDel);
-      lsmFree(pFS->pEnv, zDel);
-      pFS->fdLog = 0;
-    }
+    lsmEnvClose(pFS->pEnv, pFS->fdLog );
+    pFS->fdLog = 0;
+  }
+
+  zDel = lsmMallocPrintf(pFS->pEnv, "%s-log", pFS->zDb);
+  if( zDel ){
+    lsmEnvUnlink(pFS->pEnv, zDel);
+    lsmFree(pFS->pEnv, zDel);
   }
   return LSM_OK;
 }

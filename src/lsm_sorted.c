@@ -1988,50 +1988,51 @@ int multiCursorAddLevel(
   return rc;
 }
 
+#define TREE_NONE 0
+#define TREE_OLD  1
+#define TREE_BOTH 2
 
 /*
-** Parameter iUseTree must be set to 0, 1 or 2. If it is not zero, then a 
-** tree cursor is added to the multi-cursor before it is returned. If 
-** iUseTree is 1, then the cursor accesses the entire tree. Otherwise, if
-** iUseTree is 2, it iterates through the "old" tree only.
+** Parameter eTree must be set to TREE_NONE, OLD or BOTH.
 */
 static int multiCursorNew(
   lsm_db *pDb,                    /* Database handle */
   Snapshot *pSnap,                /* Snapshot to use for this cursor */
-  int iUseTree,                   /* If true, search the in-memory tree */
+  int eTree,                      /* One of the TREE_XXX values above */
   int bUserOnly,                  /* If true, ignore all system data */
   MultiCursor **ppCsr             /* OUT: Allocated cursor */
 ){
   int rc = LSM_OK;                /* Return Code */
   MultiCursor *pCsr = *ppCsr;     /* Allocated multi-cursor */
 
-  assert( iUseTree==0 || iUseTree==1 || iUseTree==2 );
+  assert( eTree==TREE_NONE || eTree==TREE_OLD || eTree==TREE_BOTH );
 
   if( pCsr==0 ){
     pCsr = (MultiCursor *)lsmMallocZeroRc(pDb->pEnv, sizeof(MultiCursor), &rc);
     if( pCsr ){
       pCsr->pNext = pDb->pCsr;
       pDb->pCsr = pCsr;
+      if( bUserOnly ) pCsr->flags |= CURSOR_IGNORE_SYSTEM;
+      pCsr->pDb = pDb;
+      pCsr->pSnap = pSnap;
+      pCsr->xCmp = pDb->xCmp;
     }
   }
 
-  if( rc==LSM_OK ){
-    if( iUseTree ){
-      rc = lsmTreeCursorNew(pDb, iUseTree-1, &pCsr->apTreeCsr[0]);
-      if( rc==LSM_OK && lsmTreeHasOld(pDb) 
-       && iUseTree==1
-       && pDb->treehdr.iOldLog!=pSnap->iLogOff
-      ){
-        rc = lsmTreeCursorNew(pDb, 1, &pCsr->apTreeCsr[1]);
-      }
-    }
-    pCsr->pDb = pDb;
-    pCsr->pSnap = pSnap;
-    pCsr->xCmp = pDb->xCmp;
-    if( bUserOnly ){
-      pCsr->flags |= CURSOR_IGNORE_SYSTEM;
-    }
+  /* Add a tree cursor on the 'old' tree, if required. */
+  if( rc==LSM_OK 
+   && eTree!=TREE_NONE 
+   && lsmTreeHasOld(pDb)
+   && pDb->treehdr.iOldLog!=pSnap->iLogOff
+  ){
+    rc = lsmTreeCursorNew(pDb, 1, &pCsr->apTreeCsr[1]);
   }
+
+  /* Add a tree cursor on the 'current' tree, if required. */
+  if( rc==LSM_OK && eTree==TREE_BOTH ){
+    rc = lsmTreeCursorNew(pDb, 0, &pCsr->apTreeCsr[0]);
+  }
+
   if( rc!=LSM_OK ){
     lsmMCursorClose(pCsr);
     pCsr = 0;
@@ -2106,7 +2107,10 @@ static int multiCursorAllocate(
   pSnap = (bSystem ? pDb->pWorker : pDb->pClient);
   assert( pSnap );
 
-  rc = multiCursorNew(pDb, pSnap, !bSystem, !bSystem, &pCsr);
+  rc = multiCursorNew(pDb, pSnap, 
+      (bSystem ? TREE_NONE : TREE_BOTH), !bSystem, &pCsr
+  );
+
   multiCursorIgnoreDelete(pCsr);
   for(p=lsmDbSnapshotLevel(pSnap); p && rc==LSM_OK; p=p->pNext){
     rc = multiCursorAddLevel(pCsr, p, MULTICURSOR_ADDLEVEL_ALL);
@@ -3510,7 +3514,7 @@ static void sortedInvokeWorkHook(lsm_db *pDb){
 
 static int sortedNewToplevel(
   lsm_db *pDb,                    /* Connection handle */
-  int bTree,                      /* True to store contents of in-memory tree */
+  int eTree,                      /* One of the TREE_XXX constants */
   int *pnOvfl,                    /* OUT: Number of free-list entries stored */
   int *pnWrite                    /* OUT: Number of database pages written */
 ){
@@ -3532,7 +3536,7 @@ static int sortedNewToplevel(
   ** segment contains everything in the tree and pointers to the next segment
   ** in the database (if any).  */
   if( rc==LSM_OK ){
-    rc = multiCursorNew(pDb, pDb->pWorker, (bTree ? 2 : 0), 0, &pCsr);
+    rc = multiCursorNew(pDb, pDb->pWorker, eTree, 0, &pCsr);
     if( rc==LSM_OK ){
       pNew->pNext = pNext;
       lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
@@ -3753,7 +3757,7 @@ static int mergeWorkerInit(
   ** If the new level is the lowest (oldest) in the db, discard any
   ** delete keys. Key annihilation.
   */
-  rc = multiCursorNew(pDb, pDb->pWorker, 0, 0, &pCsr);
+  rc = multiCursorNew(pDb, pDb->pWorker, TREE_NONE, 0, &pCsr);
   if( rc==LSM_OK ){
     rc = multiCursorAddLevel(pCsr, pLevel, MULTICURSOR_ADDLEVEL_RHS);
   }
@@ -4152,7 +4156,7 @@ static int doLsmSingleWork(
 
       if( rc==LSM_OK && nRem>0 ){
         int nPg = 0;
-        rc = sortedNewToplevel(pDb, 1, &nOvfl, &nPg);
+        rc = sortedNewToplevel(pDb, TREE_OLD, &nOvfl, &nPg);
         nRem -= nPg;
         if( rc==LSM_OK && pDb->nTransOpen>0 ){
           lsmTreeDiscardOld(pDb);
@@ -4181,7 +4185,7 @@ static int doLsmSingleWork(
       rc = sortedWork(pDb, 16, 0, 1, &nPg);
     }
     if( rc==LSM_OK && lsmCheckpointOverflowRequired(pDb) ){
-      rc = sortedNewToplevel(pDb, 0, &nOvfl, 0);
+      rc = sortedNewToplevel(pDb, TREE_NONE, &nOvfl, 0);
     }
   }
 
@@ -4305,13 +4309,23 @@ int lsmSortedAutoWork(
   return rc;
 }
 
+/*
+** This function is only called during system shutdown. The contents of
+** any in-memory trees present (old or current) are written out to disk.
+*/
 int lsmFlushTreeToDisk(lsm_db *pDb){
   int rc;
-  rc = doLsmSingleWork(pDb, 1, LSM_WORK_FLUSH, (1<<30), 0, 0);
-  if( rc==LSM_OK ){
-    lsmTreeMakeOld(pDb);
-    rc = doLsmSingleWork(pDb, 1, LSM_WORK_FLUSH, (1<<30), 0, 0);
+  int nOvfl = 0;
+
+  rc = lsmBeginWork(pDb);
+  while( rc==LSM_OK && sortedDbIsFull(pDb) ){
+    rc = sortedWork(pDb, 256, 0, 1, 0);
   }
+
+  if( rc==LSM_OK ){
+    rc = sortedNewToplevel(pDb, TREE_BOTH, &nOvfl, 0);
+  }
+  lsmFinishWork(pDb, 1, nOvfl, &rc);
   return rc;
 }
 
