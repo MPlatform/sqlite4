@@ -20,28 +20,31 @@ void testDatasourceEntry(
   void **ppKey, int *pnKey,
   void **ppVal, int *pnVal
 ){
-  int nKey;
-  int nVal;
+  assert( (ppKey==0)==(pnKey==0) );
+  assert( (ppVal==0)==(pnVal==0) );
 
-  switch( p->eType ){
-    case TEST_DATASOURCE_RANDOM: {
-      int nRange = (1 + p->nMaxKey - p->nMinKey);
-      nKey = (int)( testPrngValue((u32)iData) % nRange ) + p->nMinKey; 
-      testPrngString((u32)iData, p->aKey, nKey);
-      break;
+  if( ppKey ){
+    int nKey;
+    switch( p->eType ){
+      case TEST_DATASOURCE_RANDOM: {
+        int nRange = (1 + p->nMaxKey - p->nMinKey);
+        nKey = (int)( testPrngValue((u32)iData) % nRange ) + p->nMinKey; 
+        testPrngString((u32)iData, p->aKey, nKey);
+        break;
+      }
+      case TEST_DATASOURCE_SEQUENCE:
+        nKey = sprintf(p->aKey, "%012d", iData);
+        break;
     }
-    case TEST_DATASOURCE_SEQUENCE:
-      nKey = sprintf(p->aKey, "%012d", iData);
-      break;
+    *ppKey = p->aKey;
+    *pnKey = nKey;
   }
-
-  nVal = (int)(testPrngValue((u32)iData)%(1+p->nMaxVal-p->nMinVal)+p->nMinVal);
-  testPrngString((u32)~iData, p->aVal, nVal);
-
-  if( ppKey ) *ppKey = p->aKey;
-  if( ppVal ) *ppVal = p->aVal;
-  if( pnKey ) *pnKey = nKey;
-  if( pnVal ) *pnVal = nVal;
+  if( ppVal ){
+    u32 nVal = testPrngValue((u32)iData)%(1+p->nMaxVal-p->nMinVal)+p->nMinVal;
+    testPrngString((u32)~iData, p->aVal, (int)nVal);
+    *ppVal = p->aVal;
+    *pnVal = (int)nVal;
+  }
 }
 
 void testDatasourceFree(Datasource *p){

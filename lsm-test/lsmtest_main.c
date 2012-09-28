@@ -526,12 +526,20 @@ int do_speed_test2(int nArg, char **azArg){
   int i;
   int aParam[8];
   int rc = 0;
+  int bReadonly = 0;
+  int nContent = 0;
 
   TestDb *pDb;
   Datasource *pData;
   DatasourceDefn defn = { TEST_DATASOURCE_RANDOM, 0, 0, 0, 0 };
   char *zSystem = "";
   int bLsm = 1;
+
+#ifdef NDEBUG
+  /* If NDEBUG is defined, disable the dynamic memory related checks in
+  ** lsmtest_mem.c. They slow things down.  */
+  testMallocUninstall(tdb_lsm_env());
+#endif
 
   /* Initialize aParam[] with default values. */
   for(i=0; i<ArraySize(aOpt); i++){
@@ -581,21 +589,33 @@ int do_speed_test2(int nArg, char **azArg){
   defn.nMinVal = defn.nMaxVal = aParam[ST_VALSIZE];
   pData = testDatasourceNew(&defn);
 
+  if( aParam[ST_WRITE]==0 ){
+    bReadonly = 1;
+  }
+
   if( bLsm ){
-    rc = tdb_lsm_open(zSystem, "testdb.lsm", 1, &pDb);
+    rc = tdb_lsm_open(zSystem, "testdb.lsm", !bReadonly, &pDb);
   }else{
-    pDb = testOpen(zSystem, 1, &rc);
+    pDb = testOpen(zSystem, !bReadonly, &rc);
   }
   if( rc!=0 ) return rc;
+  if( bReadonly ){
+    nContent = testCountDatabase(pDb);
+  }
 
   for(i=0; i<aParam[ST_REPEAT] && rc==0; i++){
     int msWrite, msFetch, msScan;
     int iFetch;
     int nWrite = aParam[ST_WRITE];
 
-    testTimeInit();
-    testWriteDatasourceRange(pDb, pData, i*nWrite, nWrite, &rc);
-    msWrite = testTimeGet();
+    if( bReadonly ){
+      msWrite = 0;
+    }else{
+      testTimeInit();
+      testWriteDatasourceRange(pDb, pData, i*nWrite, nWrite, &rc);
+      msWrite = testTimeGet();
+      nContent += nWrite;
+    }
 
     if( aParam[ST_PAUSE] ){
       if( aParam[ST_PAUSE]/1000 ) sleep(aParam[ST_PAUSE]/1000);
@@ -605,8 +625,18 @@ int do_speed_test2(int nArg, char **azArg){
     if( aParam[ST_FETCH] ){
       testTimeInit();
       for(iFetch=0; iFetch<aParam[ST_FETCH]; iFetch++){
-        int iKey = testPrngValue(i*nWrite+iFetch) % ((i+1)*nWrite);
+        int iKey = testPrngValue(i*nWrite+iFetch) % nContent;
+#ifndef NDEBUG
         testDatasourceFetch(pDb, pData, iKey, &rc);
+#else
+        void *pKey; int nKey;           /* Database key to query for */
+        void *pVal; int nVal;           /* Result of query */
+
+        testDatasourceEntry(pData, iKey, &pKey, &nKey, 0, 0);
+        rc = tdb_fetch(pDb, pKey, nKey, &pVal, &nVal);
+        if( rc==0 && nVal<0 ) rc = 1;
+        if( rc ) break;
+#endif
       }
       msFetch = testTimeGet();
     }else{
