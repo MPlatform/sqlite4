@@ -329,8 +329,8 @@ struct lsm_db {
 };
 
 struct Segment {
-  int iFirst;                     /* First page of this run */
-  int iLast;                      /* Last page of this run */
+  Pgno iFirst;                     /* First page of this run */
+  Pgno iLast;                      /* Last page of this run */
   Pgno iRoot;                     /* Root page number (if any) */
   int nSize;                      /* Size of this run in pages */
 };
@@ -342,12 +342,13 @@ struct Segment {
 */
 struct Level {
   Segment lhs;                    /* Left-hand (main) segment */
-  int iAge;                       /* Number of times data has been written */
   int nRight;                     /* Size of apRight[] array */
   Segment *aRhs;                  /* Old segments being merged into this */
   int iSplitTopic;                /* Split key topic (if nRight>0) */
   void *pSplitKey;                /* Pointer to split-key (if nRight>0) */
   int nSplitKey;                  /* Number of bytes in split-key */
+
+  int iAge;                       /* Number of times data has been written */
   Merge *pMerge;                  /* Merge operation currently underway */
   Level *pNext;                   /* Next level in tree */
 };
@@ -497,6 +498,7 @@ int lsmCheckpointStore(lsm_db *pDb, int);
 
 int lsmCheckpointLoad(lsm_db *pDb, int *);
 int lsmCheckpointLoadOk(lsm_db *pDb, int);
+int lsmCheckpointClientCacheOk(lsm_db *);
 
 i64 lsmCheckpointId(u32 *, int);
 u32 lsmCheckpointNWrite(u32 *, int);

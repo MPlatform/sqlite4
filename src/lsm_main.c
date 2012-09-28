@@ -39,7 +39,7 @@ static void assert_db_state(lsm_db *pDb){
   ** handle must be holding a pointer to a client snapshot. And the reverse 
   ** - if there are no open cursors and no write transactions then there must 
   ** not be a client snapshot.  */
-  assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->pClient!=0) );
+  assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->iReader>=0) );
 
   assert( pDb->nTransOpen>=0 );
 }
@@ -180,6 +180,8 @@ int lsm_close(lsm_db *pDb){
     if( pDb->pCsr || pDb->nTransOpen ){
       rc = LSM_MISUSE_BKPT;
     }else{
+      lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
+      pDb->pClient = 0;
       lsmDbDatabaseRelease(pDb);
       lsmFsClose(pDb->pFS);
       lsmFree(pDb->pEnv, pDb->aTrans);

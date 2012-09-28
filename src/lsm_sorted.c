@@ -254,6 +254,7 @@ struct MultiCursor {
   Blob key;                       /* Cache of current key (or NULL) */
   Blob val;                       /* Cache of current value */
 
+  /* All the component cursors: */
   TreeCursor *apTreeCsr[2];       /* One or two tree cursors */
   int nSegCsr;                    /* Size of aSegCsr[] array */
   LevelCursor *aSegCsr;           /* Array of cursors open on sorted files */

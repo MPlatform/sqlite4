@@ -88,7 +88,7 @@
 **     1. First page of array,
 **     2. Last page of array,
 **     3. Root page of array (or 0),
-**     4. Size of array in pages,
+**     4. Size of array in pages.
 */
 
 /*
@@ -999,6 +999,14 @@ int lsmCheckpointLoadOk(lsm_db *pDb, int iSnap){
   assert( iSnap==1 || iSnap==2 );
   aShm = (iSnap==1) ? pDb->pShmhdr->aSnap1 : pDb->pShmhdr->aSnap2;
   return (lsmCheckpointId(pDb->aSnapshot, 0)==lsmCheckpointId(aShm, 0) );
+}
+
+int lsmCheckpointClientCacheOk(lsm_db *pDb){
+  return ( pDb->pClient 
+        && pDb->pClient->iId==lsmCheckpointId(pDb->aSnapshot, 0)
+        && pDb->pClient->iId==lsmCheckpointId(pDb->pShmhdr->aSnap1, 0)
+        && pDb->pClient->iId==lsmCheckpointId(pDb->pShmhdr->aSnap2, 0)
+  );
 }
 
 int lsmCheckpointLoadWorker(lsm_db *pDb){

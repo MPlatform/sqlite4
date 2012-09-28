@@ -671,9 +671,8 @@ int lsmBeginReadTrans(lsm_db *pDb){
   int iAttempt = 0;
 
   assert( pDb->pWorker==0 );
-  assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
 
-  while( rc==LSM_OK && pDb->pClient==0 && (iAttempt++)<MAX_READLOCK_ATTEMPTS ){
+  while( rc==LSM_OK && pDb->iReader<0 && (iAttempt++)<MAX_READLOCK_ATTEMPTS ){
     int iTreehdr = 0;
     int iSnap = 0;
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
@@ -683,7 +682,13 @@ int lsmBeginReadTrans(lsm_db *pDb){
 
     /* Load the database snapshot */
     if( rc==LSM_OK ){
-      rc = lsmCheckpointLoad(pDb, &iSnap);
+      if( lsmCheckpointClientCacheOk(pDb)==0 ){
+        lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
+        pDb->pClient = 0;
+        rc = lsmCheckpointLoad(pDb, &iSnap);
+      }else{
+        iSnap = 1;
+      }
     }
 
     /* Take a read-lock on the tree and snapshot just loaded. Then check
@@ -705,7 +710,9 @@ int lsmBeginReadTrans(lsm_db *pDb){
           ** checkpoint just loaded. TODO: This will be removed after 
           ** lsm_sorted.c is changed to work directly from the serialized
           ** version of the snapshot.  */
-          rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot, &pDb->pClient);
+          if( pDb->pClient==0 ){
+            rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot,&pDb->pClient);
+          }
           assert( (rc==LSM_OK)==(pDb->pClient!=0) );
           assert( pDb->iReader>=0 );
         }else{
@@ -728,8 +735,11 @@ if( rc==LSM_OK && pDb->pClient ){
 }
 #endif
   }
-  if( pDb->pClient==0 && rc==LSM_OK ) rc = LSM_BUSY;
 
+  if( rc!=LSM_OK ){
+    lsmReleaseReadlock(pDb);
+  }
+  if( pDb->pClient==0 && rc==LSM_OK ) rc = LSM_BUSY;
   return rc;
 }
 
@@ -746,12 +756,13 @@ void lsmFinishReadTrans(lsm_db *pDb){
   assert( pDb->pWorker==0 );
   assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
+#if 0
   if( pClient ){
     lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
   }
+#endif
   if( pDb->iReader>=0 ) lsmReleaseReadlock(pDb);
-  assert( (pDb->pClient!=0)==(pDb->iReader>=0) );
 }
 
 /*
@@ -978,7 +989,6 @@ int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse){
 int lsmReleaseReadlock(lsm_db *db){
   int rc = LSM_OK;
   if( db->iReader>=0 ){
-    assert( db->pClient==0 );
     rc = lsmShmLock(db, LSM_LOCK_READER(db->iReader), LSM_LOCK_UNLOCK, 0);
     db->iReader = -1;
   }
