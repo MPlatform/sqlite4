@@ -51,14 +51,18 @@ proc exec_gnuplot_script {script png} {
   exec gnuplot << $script > $png 2>/dev/null
 }
 
-proc make_totalset {res nWrite} {
+proc make_totalset {res nOp bFetch} {
   set ret ""
   set nMs 0
   set nIns 0
   foreach row $res {
     foreach {i msInsert msFetch} $row {}
-    incr nIns $nWrite
-    incr nMs $msInsert
+    incr nIns $nOp
+    if {$bFetch==0} {
+      incr nMs $msInsert
+    } else {
+      incr nMs $msFetch
+    }
     append ret "$nIns [expr $nIns*1000.0/$nMs]\n"
   }
   append ret "end\n"
@@ -130,47 +134,60 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   }]
 
 
-  set cols [list {#B0C4DE #00008B} {#F08080 #8B0000}]
+  set cols [list {#B0C4DE #00008B #000000} {#F08080 #8B0000 #FFA500}]
   set cols [lrange $cols 0 [expr ([llength $lSys]/2)-1]]
 
   set nShift [expr ($nWrite/2)]
   set plot1 ""
   set plot2 ""
   set plot3 ""
+  set plot4 ""
   set data1 ""
   set data2 ""
   set data3 ""
+  set data4 ""
 
   foreach {name sys} $lSys res $lRes col $cols {
-    foreach {c1 c2} $col {}
+    foreach {c1 c2 c3} $col {}
 
+    # First plot. Writes per second (bar chart).
+    #
     if {$plot1 != ""} { set plot1 ", $plot1" }
     set plot1 "\"-\" ti \"$name writes/sec\" with boxes fs solid lc rgb \"$c1\"$plot1"
     set data1 "[make_dataset $res 0 $nWrite $nShift $nWrite] $data1"
 
+    # Third plot. Cumulative writes per second (line chart).
+    #
     set plot3 ",\"-\" ti \"$name cumulative writes/sec\" with lines lc rgb \"$c2\" lw 2 $plot3"
-    set data3 "[make_totalset $res $nWrite] $data3"
+    set data3 "[make_totalset $res $nWrite 0] $data3"
 
     if {$nFetch>0} {
-      set new ", \"-\" ti \"$name fetches/sec\" axis x1y2 with points lw 3 lc rgb \"$c2\""
+      set    new ", \"-\" ti \"$name fetches/sec\" axis x1y2 "
+      append new "with points lw 3 lc rgb \"$c2\""
       set plot2 "$new $plot2"
       set data2 "[make_dataset $res 1 $nWrite $nWrite $nFetch] $data2"
+
+      set    new ",\"-\" ti \"$name cumulative fetches/sec\" "
+      append new "with lines lc rgb \"$c3\" lw 2 "
+      set plot4 "$new $plot4"
+      set data4 "[make_totalset $res $nFetch 1] $data4"
     }
 
     incr nShift [expr $nWrite/4]
   }
-  append script "plot $plot1 $plot2 $plot3\n"
+  append script "plot $plot1 $plot2 $plot3 $plot4\n"
   append script $data1
   append script $data2
   append script $data3
+  append script $data4
 
   append script "pause -1\n"
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 200 50000 0 20 {
-  lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0 nmerge=4"
-  leveldb leveldb
+do_write_test x.png 600 50000 50000 200 {
+  lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
+  LevelDB leveldb
 }
 
 # lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=8192000"
