@@ -1041,7 +1041,6 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
   int iPg = pPg->iPg;
 
   assert( eDir==1 || eDir==-1 );
-
   if( eDir<0 ){
     if( pRun && iPg==pRun->iFirst ){
       *ppNext = 0;

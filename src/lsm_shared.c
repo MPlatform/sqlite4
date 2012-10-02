@@ -696,7 +696,6 @@ int lsmBeginReadTrans(lsm_db *pDb){
     ** Otherwise, relinquish the read-lock and retry the whole procedure
     ** (starting with loading the in-memory tree header).  */
     if( rc==LSM_OK ){
-      ShmHeader *pShm = pDb->pShmhdr;
       u32 iShmMax = pDb->treehdr.iUsedShmid;
       u32 iShmMin = pDb->treehdr.iNextShmid+1-(1<<10);
       rc = lsmReadlock(
@@ -747,7 +746,6 @@ if( rc==LSM_OK && pDb->pClient ){
 ** Close the currently open read transaction.
 */
 void lsmFinishReadTrans(lsm_db *pDb){
-  Snapshot *pClient = pDb->pClient;
 
   /* Worker connections should not be closing read transactions. And
   ** read transactions should only be closed after all cursors and write

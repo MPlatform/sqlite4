@@ -962,7 +962,7 @@ static void *worker_main(void *pArg){
 
         rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
         if( nAuto==0 && nWrite && rc==LSM_OK ) mt_signal_worker(p->pDb, 1);
-      }while( nWrite );
+      }while( nWrite && p->pWorker );
     }
     pthread_mutex_lock(&p->worker_mutex);
 
