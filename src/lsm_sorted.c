@@ -109,9 +109,6 @@
 #define rtIsSeparator(eType) (((eType) & 0x0F)==SORTED_SEPARATOR)
 #define rtIsWrite(eType)     (((eType) & 0x0F)==SORTED_WRITE)
 
-
-
-
 /*
 ** The following macros are used to access a page footer.
 */
@@ -1856,130 +1853,105 @@ void lsmMCursorClose(MultiCursor *pCsr){
   }
 }
 
-#define MULTICURSOR_ADDLEVEL_ALL 1
-#define MULTICURSOR_ADDLEVEL_RHS 2
-#define MULTICURSOR_ADDLEVEL_LHS_SEP 3
-
-/*
-** Add segments belonging to level pLevel to the multi-cursor pCsr. The
-** third argument must be one of the following:
-**
-**   MULTICURSOR_ADDLEVEL_ALL
-**     Add all segments in the level to the cursor.
-**
-**   MULTICURSOR_ADDLEVEL_RHS
-**     Add only the rhs segments in the level to the cursor.
-**
-**   MULTICURSOR_ADDLEVEL_LHS_SEP
-**     Add only the lhs segment. And iterate through its separators array,
-**     not the main run array.
-**
-** RHS and SEP are only used by cursors created to use as data sources when
-** creating new segments (either when flushing the in-memory tree to disk or
-** when merging existing runs).
-*/
-int multiCursorAddLevel(
-  MultiCursor *pCsr,              /* Multi-cursor to add segment to */ 
-  Level *pLevel,                  /* Level to add to multi-cursor merge */
-  int eMode                       /* A MULTICURSOR_ADDLEVEL_*** constant */
-){
-  lsm_db *pDb = pCsr->pDb;
-  int rc = LSM_OK;
-
-  assert( eMode==MULTICURSOR_ADDLEVEL_ALL
-       || eMode==MULTICURSOR_ADDLEVEL_RHS
-       || eMode==MULTICURSOR_ADDLEVEL_LHS_SEP
-  );
-
-  if( eMode==MULTICURSOR_ADDLEVEL_LHS_SEP ){
-    assert( pLevel->lhs.iRoot );
-    assert( pCsr->pBtCsr==0 );
-    rc = btreeCursorNew(pDb, &pLevel->lhs, &pCsr->pBtCsr);
-    assert( (rc==LSM_OK)==(pCsr->pBtCsr!=0) );
-  }else{
-    int i;
-    int nAdd = pLevel->nRight + (eMode==MULTICURSOR_ADDLEVEL_ALL);
-    int nByte;
-    SegmentPtr *aNew;
-
-    /* Grow the pCsr->aPtr array */
-    nByte = sizeof(SegmentPtr) * (pCsr->nPtr + nAdd);
-    aNew = (SegmentPtr *)lsmRealloc(pDb->pEnv, pCsr->aPtr, nByte);
-    if( aNew==0 ) return LSM_NOMEM_BKPT;
-    memset(&aNew[pCsr->nPtr], 0, nAdd * sizeof(SegmentPtr));
-    pCsr->aPtr = aNew;
-
-    /* If this is ALL, add the left-hand-side segment */
-    if( eMode==MULTICURSOR_ADDLEVEL_ALL ){
-      aNew[pCsr->nPtr].pSeg = &pLevel->lhs;
-      aNew[pCsr->nPtr].pLevel = pLevel;
-      if( pLevel->nRight && pLevel->pSplitKey==0 ){
-        lsmSortedSplitkey(pDb, pLevel, &rc);
-      }
-      pCsr->nPtr++;
-    }
-
-    /* Add the right-hand-side segments */
-    for(i=0; i<pLevel->nRight; i++){
-      aNew[pCsr->nPtr].pSeg = &pLevel->aRhs[i];
-      aNew[pCsr->nPtr].pLevel = pLevel;
-      pCsr->nPtr++;
-    }
-  }
-
-  return rc;
-}
-
 #define TREE_NONE 0
 #define TREE_OLD  1
 #define TREE_BOTH 2
 
 /*
-** Parameter eTree must be set to TREE_NONE, OLD or BOTH.
+** Parameter eTree is one of TREE_OLD or TREE_BOTH.
 */
-static int multiCursorNew(
-  lsm_db *pDb,                    /* Database handle */
-  Snapshot *pSnap,                /* Snapshot to use for this cursor */
-  int eTree,                      /* One of the TREE_XXX values above */
-  int bUserOnly,                  /* If true, ignore all system data */
-  MultiCursor **ppCsr             /* OUT: Allocated cursor */
-){
-  int rc = LSM_OK;                /* Return Code */
-  MultiCursor *pCsr = *ppCsr;     /* Allocated multi-cursor */
+static int multiCursorAddTree(MultiCursor *pCsr, Snapshot *pSnap, int eTree){
+  int rc = LSM_OK;
+  lsm_db *db = pCsr->pDb;
 
-  assert( eTree==TREE_NONE || eTree==TREE_OLD || eTree==TREE_BOTH );
-
-  if( pCsr==0 ){
-    pCsr = (MultiCursor *)lsmMallocZeroRc(pDb->pEnv, sizeof(MultiCursor), &rc);
-    if( pCsr ){
-      pCsr->pNext = pDb->pCsr;
-      pDb->pCsr = pCsr;
-      if( bUserOnly ) pCsr->flags |= CURSOR_IGNORE_SYSTEM;
-      pCsr->pDb = pDb;
-    }
-  }
-
-  /* Add a tree cursor on the 'old' tree, if required. */
-  if( rc==LSM_OK 
-   && eTree!=TREE_NONE 
-   && lsmTreeHasOld(pDb)
-   && pDb->treehdr.iOldLog!=pSnap->iLogOff
+  /* Add a tree cursor on the 'old' tree, if it exists. */
+  if( eTree!=TREE_NONE 
+   && lsmTreeHasOld(db) 
+   && db->treehdr.iOldLog!=pSnap->iLogOff 
   ){
-    rc = lsmTreeCursorNew(pDb, 1, &pCsr->apTreeCsr[1]);
+    rc = lsmTreeCursorNew(db, 1, &pCsr->apTreeCsr[1]);
   }
 
   /* Add a tree cursor on the 'current' tree, if required. */
   if( rc==LSM_OK && eTree==TREE_BOTH ){
-    rc = lsmTreeCursorNew(pDb, 0, &pCsr->apTreeCsr[0]);
+    rc = lsmTreeCursorNew(db, 0, &pCsr->apTreeCsr[0]);
   }
 
-  if( rc!=LSM_OK ){
-    lsmMCursorClose(pCsr);
-    pCsr = 0;
-  }
-  *ppCsr = pCsr;
   return rc;
 }
+
+static int multiCursorAddRhs(MultiCursor *pCsr, Level *pLvl){
+  int i;
+  int nRhs = pLvl->nRight;
+
+  assert( pLvl->nRight>0 );
+  assert( pCsr->aPtr==0 );
+  pCsr->aPtr = lsmMallocZero(pCsr->pDb->pEnv, sizeof(SegmentPtr) * nRhs);
+  if( !pCsr->aPtr ) return LSM_NOMEM_BKPT;
+  pCsr->nPtr = nRhs;
+
+  for(i=0; i<nRhs; i++){
+    pCsr->aPtr[i].pSeg = &pLvl->aRhs[i];
+    pCsr->aPtr[i].pLevel = pLvl;
+  }
+
+  return LSM_OK;
+}
+
+static int multiCursorAddAll(MultiCursor *pCsr, Snapshot *pSnap){
+  Level *pLvl;
+  int nPtr = 0;
+  int iPtr = 0;
+  int rc = LSM_OK;
+
+  for(pLvl=pSnap->pLevel; pLvl; pLvl=pLvl->pNext){
+    nPtr += (1 + pLvl->nRight);
+  }
+
+  assert( pCsr->aPtr==0 );
+  pCsr->aPtr = lsmMallocZeroRc(pCsr->pDb->pEnv, sizeof(SegmentPtr) * nPtr, &rc);
+  if( rc==LSM_OK ) pCsr->nPtr = nPtr;
+
+  for(pLvl=pSnap->pLevel; pLvl && rc==LSM_OK; pLvl=pLvl->pNext){
+    int i;
+    pCsr->aPtr[iPtr].pLevel = pLvl;
+    pCsr->aPtr[iPtr].pSeg = &pLvl->lhs;
+    iPtr++;
+    for(i=0; i<pLvl->nRight; i++){
+      pCsr->aPtr[iPtr].pLevel = pLvl;
+      pCsr->aPtr[iPtr].pSeg = &pLvl->aRhs[i];
+      iPtr++;
+    }
+
+    if( pLvl->nRight && pLvl->pSplitKey==0 ){
+      lsmSortedSplitkey(pCsr->pDb, pLvl, &rc);
+    }
+  }
+
+  return rc;
+}
+
+static int multiCursorInit(MultiCursor *pCsr, Snapshot *pSnap){
+  int rc;
+  rc = multiCursorAddAll(pCsr, pSnap);
+  if( rc==LSM_OK ){
+    rc = multiCursorAddTree(pCsr, pSnap, TREE_BOTH);
+  }
+  pCsr->flags |= (CURSOR_IGNORE_SYSTEM | CURSOR_IGNORE_DELETE);
+  return rc;
+}
+
+static MultiCursor *multiCursorNew(lsm_db *db, int *pRc){
+  MultiCursor *pCsr;
+  pCsr = (MultiCursor *)lsmMallocZeroRc(db->pEnv, sizeof(MultiCursor), pRc);
+  if( pCsr ){
+    pCsr->pNext = db->pCsr;
+    db->pCsr = pCsr;
+    pCsr->pDb = db;
+  }
+  return pCsr;
+}
+
 
 void lsmSortedRemap(lsm_db *pDb){
   MultiCursor *pCsr;
@@ -2009,55 +1981,13 @@ static void multiCursorIgnoreDelete(MultiCursor *pCsr){
 
 /*
 ** If the free-block list is not empty, then have this cursor visit a key
-** with (a) the system bit set, and (b) the key "F" and (c) a value blob
-** containing the entire serialized free-block list.
+** with (a) the system bit set, and (b) the key "FREELIST" and (c) a value 
+** blob containing the serialized free-block list.
 */
 static void multiCursorVisitFreelist(MultiCursor *pCsr, int *pnOvfl){
   assert( pCsr );
   pCsr->pnOvfl = pnOvfl;
   pCsr->flags |= CURSOR_NEW_SYSTEM;
-}
-
-/*
-** Allocate a new cursor to read the database (the in-memory tree and all
-** levels). If successful, set *ppCsr to point to the new cursor object
-** and return SQLITE4_OK. Otherwise, set *ppCsr to NULL and return an
-** lsm error code.
-**
-** If parameter bSystem is true, this is a system cursor. In that case
-** the behaviour of this function is modified as follows:
-**
-**   * the worker snapshot is used instead of the client snapshot, and
-**   * the in-memory tree is ignored.
-*/
-static int multiCursorAllocate(
-  lsm_db *pDb,                    /* Database handle */
-  int bSystem,                    /* True for a system cursor */
-  MultiCursor **ppCsr             /* OUT: Allocated cursor */
-){
-  int rc = LSM_OK;                /* Return Code */
-  MultiCursor *pCsr = *ppCsr;     /* Allocated multi-cursor */
-  Level *p;                       /* Level iterator */
-  Snapshot *pSnap;                /* Snapshot to use for cursor */
-
-  pSnap = (bSystem ? pDb->pWorker : pDb->pClient);
-  assert( pSnap );
-
-  rc = multiCursorNew(pDb, pSnap, 
-      (bSystem ? TREE_NONE : TREE_BOTH), !bSystem, &pCsr
-  );
-
-  multiCursorIgnoreDelete(pCsr);
-  for(p=lsmDbSnapshotLevel(pSnap); p && rc==LSM_OK; p=p->pNext){
-    rc = multiCursorAddLevel(pCsr, p, MULTICURSOR_ADDLEVEL_ALL);
-  }
-
-  if( rc!=LSM_OK ){
-    lsmMCursorClose(pCsr);
-    pCsr = 0;
-  }
-  *ppCsr = pCsr;
-  return rc;
 }
 
 /*
@@ -2068,10 +1998,15 @@ int lsmMCursorNew(
   MultiCursor **ppCsr             /* OUT: Allocated cursor */
 ){
   MultiCursor *pCsr = 0;
-  int rc;
+  int rc = LSM_OK;
 
-  rc = multiCursorAllocate(pDb, 0, &pCsr);
+  pCsr = multiCursorNew(pDb, &rc);
+  if( rc==LSM_OK ) rc = multiCursorInit(pCsr, pDb->pClient);
 
+  if( rc!=LSM_OK ){
+    lsmMCursorClose(pCsr);
+    pCsr = 0;
+  }
   assert( (rc==LSM_OK)==(pCsr!=0) );
   *ppCsr = pCsr;
   return rc;
@@ -2131,13 +2066,18 @@ int lsmSortedLoadFreelist(
   void **ppVal,                   /* OUT: Blob containing LSM free-list */
   int *pnVal                      /* OUT: Size of *ppVal blob in bytes */
 ){
-  MultiCursor *pCsr = 0;          /* Cursor used to retreive free-list */
-  int rc;                         /* Return Code */
+  MultiCursor *pCsr;              /* Cursor used to retreive free-list */
+  int rc = LSM_OK;                /* Return Code */
 
   assert( pDb->pWorker );
   assert( *ppVal==0 && *pnVal==0 );
 
-  rc = multiCursorAllocate(pDb, 1, &pCsr);
+  pCsr = multiCursorNew(pDb, &rc);
+  if( pCsr ){
+    rc = multiCursorAddAll(pCsr, pDb->pWorker);
+    pCsr->flags |= CURSOR_IGNORE_DELETE;
+  }
+  
   if( rc==LSM_OK ){
     rc = lsmMCursorLast(pCsr);
     if( rc==LSM_OK 
@@ -2263,14 +2203,14 @@ int mcursorSave(MultiCursor *pCsr){
     if( iTree==CURSOR_DATA_TREE0 || iTree==CURSOR_DATA_TREE1 ){
       multiCursorCacheKey(pCsr, &rc);
     }
-    mcursorFreeComponents(pCsr);
   }
+  mcursorFreeComponents(pCsr);
   return rc;
 }
 
 int mcursorRestore(lsm_db *pDb, MultiCursor *pCsr){
   int rc;
-  rc = multiCursorAllocate(pDb, 0, &pCsr);
+  rc = multiCursorInit(pCsr, pDb->pClient);
   if( rc==LSM_OK && pCsr->key.pData ){
     rc = lsmMCursorSeek(pCsr, pCsr->key.pData, pCsr->key.nData, +1);
   }
@@ -3413,38 +3353,23 @@ static int sortedNewToplevel(
   /* Allocate the new level structure to write to. */
   pNext = lsmDbSnapshotLevel(pDb->pWorker);
   pNew = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
+  if( pNew ){
+    pNew->pNext = pNext;
+    lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
+  }
 
   /* Create a cursor to gather the data required by the new segment. The new
   ** segment contains everything in the tree and pointers to the next segment
   ** in the database (if any).  */
-  if( rc==LSM_OK ){
-    rc = multiCursorNew(pDb, pDb->pWorker, eTree, 0, &pCsr);
-    if( rc==LSM_OK ){
-      pNew->pNext = pNext;
-      lsmDbSnapshotSetLevel(pDb->pWorker, pNew);
-    }
-    if( rc==LSM_OK ){
-      if( pNext ){
-        assert( pNext->pMerge==0 || pNext->nRight>0 );
-        if( pNext->pMerge==0 ){
-          if( pNext->lhs.iRoot ){
-            rc = multiCursorAddLevel(pCsr, pNext, MULTICURSOR_ADDLEVEL_LHS_SEP);
-            if( rc==LSM_OK ){
-              pDel = &pNext->lhs;
-            }
-          }
-          iLeftPtr = pNext->lhs.iFirst;
-        }
-      }else{
-        /* The new level will be the only level in the LSM. There is no reason
-         ** to write out delete keys in this case.  */
-        multiCursorIgnoreDelete(pCsr);
-      }
-    }
-
-    if( rc==LSM_OK ){
-      multiCursorVisitFreelist(pCsr, pnOvfl);
-      multiCursorReadSeparators(pCsr);
+  pCsr = multiCursorNew(pDb, &rc);
+  if( pCsr ){
+    pCsr->pDb = pDb;
+    multiCursorVisitFreelist(pCsr, pnOvfl);
+    rc = multiCursorAddTree(pCsr, pDb->pWorker, eTree);
+    if( rc==LSM_OK && pNext && pNext->pMerge==0 && pNext->lhs.iRoot ){
+      pDel = &pNext->lhs;
+      rc = btreeCursorNew(pDb, pDel, &pCsr->pBtCsr);
+      iLeftPtr = pNext->lhs.iFirst;
     }
   }
 
@@ -3481,9 +3406,7 @@ static int sortedNewToplevel(
 
   /* Link the new level into the top of the tree. */
   if( rc==LSM_OK ){
-    if( pDel ){
-      pDel->iRoot = 0;
-    }
+    if( pDel ) pDel->iRoot = 0;
   }else{
     lsmDbSnapshotSetLevel(pDb->pWorker, pNext);
     sortedFreeLevel(pDb->pEnv, pNew);
@@ -3493,11 +3416,12 @@ static int sortedNewToplevel(
     sortedInvokeWorkHook(pDb);
   }
 
-  if( pnWrite ) *pnWrite = nWrite;
-  pDb->pWorker->nWrite += nWrite;
 #if 0
   lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
 #endif
+
+  if( pnWrite ) *pnWrite = nWrite;
+  pDb->pWorker->nWrite += nWrite;
   return rc;
 }
 
@@ -3620,6 +3544,7 @@ static int mergeWorkerInit(
   int rc = LSM_OK;                /* Return code */
   Merge *pMerge = pLevel->pMerge; /* Persistent part of merge state */
   MultiCursor *pCsr = 0;          /* Cursor opened for pMW */
+  Level *pNext = pLevel->pNext;   /* Next level in LSM */
 
   assert( pDb->pWorker );
   assert( pLevel->pMerge );
@@ -3640,21 +3565,18 @@ static int mergeWorkerInit(
   ** If the new level is the lowest (oldest) in the db, discard any
   ** delete keys. Key annihilation.
   */
-  if( rc==LSM_OK ){
-    rc = multiCursorNew(pDb, pDb->pWorker, TREE_NONE, 0, &pCsr);
+  pCsr = multiCursorNew(pDb, &rc);
+  if( pCsr ){
+    rc = multiCursorAddRhs(pCsr, pLevel);
   }
-  if( rc==LSM_OK ){
-    rc = multiCursorAddLevel(pCsr, pLevel, MULTICURSOR_ADDLEVEL_RHS);
-  }
-  if( rc==LSM_OK && pLevel->pNext ){
-    if( pMerge->nInput > pLevel->nRight ){
-      Level *pNext = pLevel->pNext;
-      rc = multiCursorAddLevel(pCsr, pNext, MULTICURSOR_ADDLEVEL_LHS_SEP);
-    }
+  if( rc==LSM_OK && pMerge->nInput > pLevel->nRight ){
+    rc = btreeCursorNew(pDb, &pNext->lhs, &pCsr->pBtCsr);
+  }else if( pNext ){
     multiCursorReadSeparators(pCsr);
   }else{
     multiCursorIgnoreDelete(pCsr);
   }
+
   assert( rc!=LSM_OK || pMerge->nInput==(pCsr->nPtr+(pCsr->pBtCsr!=0)) );
   pMW->pCsr = pCsr;
 
