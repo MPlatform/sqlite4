@@ -45,7 +45,7 @@ proc exec_gnuplot_script {script png} {
   "
   
   set script "
-    set terminal pngcairo size 1000,400
+    set terminal pngcairo size 1200,400
     $script
   "
   exec gnuplot << $script > $png 2>/dev/null
@@ -93,7 +93,7 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
     lappend lRes [exec_lsmtest_speed $nSec $wt]
     if {$sys != [lindex $lSys end]} {
       puts "Sleeping 20 seconds..."
-      after 20000
+      #after 20000
     }
   }
 
@@ -163,19 +163,24 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
 
     if {$nFetch>0} {
       set    new ", \"-\" ti \"$name fetches/sec\" axis x1y2 "
-      append new "with points lw 3 lc rgb \"$c2\""
+      append new "with points lw 1 lc rgb \"$c2\""
       set plot2 "$new $plot2"
       set data2 "[make_dataset $res 1 $nWrite $nWrite $nFetch] $data2"
 
       set    new ",\"-\" ti \"$name cumulative fetches/sec\" "
-      append new "with lines lc rgb \"$c3\" lw 2 "
+      append new "with lines lc rgb \"$c2\" lw 1 "
       set plot4 "$new $plot4"
       set data4 "[make_totalset $res $nFetch 1] $data4"
     }
 
     incr nShift [expr $nWrite/4]
   }
-  append script "plot $plot1 $plot2 $plot3 $plot4\n"
+  append script "plot "
+  append script $plot1
+  append script $plot2
+  append script $plot3
+  append script $plot4
+  append script "\n"
   append script $data1
   append script $data2
   append script $data3
@@ -185,8 +190,8 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 600 50000 50000 200 {
-  lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
+do_write_test x.png 600 50000 50000 20 {
+  lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0 write_buffer=2097152"
   LevelDB leveldb
 }
 
