@@ -101,6 +101,39 @@ struct TreeOld {
 };
 
 /*
+** Flags for the TreeKey.flags variable.
+*/
+#define LSM_START_DELETE 0x01     /* Start of delete range */
+#define LSM_END_DELETE   0x02     /* End of delete range */
+#define LSM_POINT_DELETE 0x04     /* Delete this key */
+#define LSM_INSERT       0x08     /* Insert this key and value */
+
+#ifndef NDEBUG
+/*
+** assert() that a TreeKey.flags value is sane. Usage:
+**
+**   assert( assertFlagsOk(pTreeKey->flags) );
+*/
+static int assertFlagsOk(u8 keyflags){
+  /* At least one flag must be set. Otherwise, what is this key doing? */
+  assert( keyflags!=0 );
+
+  /* The POINT_DELETE and INSERT flags cannot both be set. */
+  assert( (keyflags & LSM_POINT_DELETE)==0 || (keyflags & LSM_INSERT)==0 );
+
+  /* If both the START_DELETE and END_DELETE flags are set, then the INSERT
+  ** flag must also be set. In other words - the three DELETE flags cannot
+  ** all be set */
+  assert( (keyflags & LSM_END_DELETE)==0 
+       || (keyflags & LSM_START_DELETE)==0 
+       || (keyflags & LSM_POINT_DELETE)==0 
+  );
+
+  return 1;
+}
+#endif
+
+/*
 ** Container for a key-value pair. Within the *-shm file, each key/value
 ** pair is stored in a single allocation (which may not actually be 
 ** contiguous in memory). Layout is the TreeKey structure, followed by
@@ -110,6 +143,7 @@ struct TreeOld {
 struct TreeKey {
   int nKey;                       /* Size of pKey in bytes */
   int nValue;                     /* Size of pValue. Or negative. */
+  int flags;
 };
 
 #define TK_KEY(p) ((void *)&(p)[1])
@@ -1343,6 +1377,255 @@ int lsmTreeInsert(
 #endif
   assert_tree_looks_ok(rc, pTree);
   return rc;
+}
+
+static int treeDeleteEntry(lsm_db *db, TreeCursor *pCsr, u32 iNewptr){
+  TreeRoot *p = &pDb->treehdr.root;
+  TreeNode *pNode = pCsr->apTreeNode[pCsr->iNode];
+  int iSlot = pCsr->aiCell[pCsr->iNode];
+  int bLeaf;
+  int rc = LSM_OK;
+
+  assert( pNode->aiKeyPtr[1] );
+  assert( pNode->aiKeyPtr[iSlot] );
+  assert( iSlot==0 || iSlot==1 || iSlot==2 );
+  assert( (pCsr->iNode==(db->treehdr.root.nHeight-1))==(iPtr==0) );
+
+  bLeaf = (pCsr->iNode==(p->nHeight-1) && p->nHeight>1);
+  
+  if( pNode->aiKeyPtr[0] || pNode->aiKeyPtr[2] ){
+    /* There are currently at least 2 keys on this leaf. So just create
+    ** a new copy of the leaf with one of the keys removed. If the leaf
+    ** happens to be the root node of the tree, allocate an entire 
+    ** TreeNode structure instead of just a TreeLeaf.  */
+    TreeNode *pNew;
+    u32 iNew;
+
+    if( bLeaf ){
+      pNew = (TreeNode *)newTreeLeaf(db, &iNew, &rc);
+    }else{
+      pNew = newTreeNode(db, &iNew, &rc);
+    }
+    if( pNew ){
+      int i;
+      int iOut = 1;
+      for(i=0; i<4; i++){
+        if( i==iSlot ){
+          i++;
+          if( bLeaf==0 ) pNew->aiChildPtr[iOut] = iNewptr;
+          if( i<3 ) pNew->aiKeyPtr[iOut] = pNode->aiKeyPtr[i];
+          iOut++;
+        }else{
+          if( pNode->aiChildPtr[i] ){
+            if( bLeaf==0 ) pNew->aiChildPtr[iOut] = pNode->aiChildPtr[i];
+            if( i<3 && iOut<3 ) pNew->aiKeyPtr[iOut] = pNode->aiKeyPtr[i];
+            iOut++;
+          }
+        }
+      }
+      assert( iOut<=3 );
+      pCsr->iNode--;
+      rc = treeUpdatePtr(pDb, pCsr, iNew);
+    }
+
+  }else if( pCsr->iNode==0 ){
+    /* Removing the only key in the root node. iNewptr is the new root. */
+    assert( iSlot==1 );
+    pDb->treehdr.root.iRoot = iNewptr;
+
+  }else{
+    /* There is only one key on this leaf and the leaf is not the root
+    ** node. Find a peer for this leaf. Then redistribute the contents of
+    ** the peer and the parent cell between the parent and either one or
+    ** two new leaves.  */
+    TreeNode *pParent;            /* Parent tree node */
+    int iPSlot;
+    u32 iPeer;                    /* Pointer to peer leaf node */
+    int iDir;
+    TreeNode *pPeer;              /* The peer leaf node */
+    TreeNode *pNew1; u32 iNew1;   /* First new leaf node */
+
+    assert( iSlot==1 );
+
+    pParent = pCsr->apTreeNode[pCsr->iNode-1];
+    iPSlot = pCsr->aiCell[pCsr->iNode-1];
+
+    if( iPSlot>0 && pParent->aiChildPtr[iPSlot-1] ){
+      iDir = -1;
+    }else{
+      iDir = +1;
+    }
+    iPeer = pParent->aiChildPtr[iPSlot+iDir];
+    pPeer = (TreeLeaf *)treeShmptr(pDb, iPeer, &rc);
+    assert( pLeaf==(TreeLeaf*)treeShmptr(pDb,pParent->aiChildPtr[iPSlot],&rc) );
+
+    /* Allocate the first new leaf node. This is always required. */
+    if( bLeaf ){
+      pNew1 = (TreeNode *)newTreeLeaf(db, &iNew1, &rc);
+    }else{
+      pNew1 = (TreeNode *)newTreeNode(db, &iNew1, &rc);
+    }
+
+    if( pPeer->aiKeyPtr[0] && pPeer->aiKeyPtr[1] ){
+      /* Peer node is completely full. This means that two new leaf nodes
+      ** and a new parent node are required. */
+
+      TreeNew *pNew2; u32 iNew2;  /* Second new leaf node */
+      TreeNew *pNewP; u32 iNewP;  /* New parent node */
+
+      if( bLeaf ){
+        pNew2 = (TreeNode *)newTreeLeaf(db, &iNew2, &rc);
+      }else{
+        pNew2 = (TreeNode *)newTreeNode(db, &iNew2, &rc);
+      }
+      pNewP = copyTreeNode(pDb, pParent, &iNewP, &rc);
+
+      if( iDir==-1 ){
+        pNew1->aiKeyPtr[1] = pPeer->aiKeyPtr[0];
+        if( bLeaf==0 ){
+          pNew1->aiChildPtr[1] = pPeer->aiChildPtr[0];
+          pNew1->aiChildPtr[2] = pPeer->aiChildPtr[1];
+        }
+
+        pNewP->aiChildPtr[iPSlot-1] = iNew1;
+        pNewP->aiKeyPtr[iPSlot-1] = pPeer->aiKeyPtr[1];
+        pNewP->aiChildPtr[iPSlot] = iNew2;
+
+        pNew2->aiKeyPtr[0] = pPeer->aiKeyPtr[2];
+        pNew2->aiKeyPtr[1] = pParent->aiKeyPtr[iPSlot-1];
+        if( bLeaf==0 ){
+          pNew2->aiChildPtr[0] = pPeer->aiChildPtr[2];
+          pNew2->aiChildPtr[1] = pPeer->aiChildPtr[3];
+          pNew2->aiChildPtr[2] = iNewptr;
+        }
+      }else{
+        pNew1->aiKeyPtr[1] = pParent->aiKeyPtr[iPSlot];
+        if( bLeaf==0 ){
+          pNew1->aiChildPtr[1] = iNewptr;
+          pNew1->aiChildPtr[2] = pPeer->aiChildPtr[0];
+        }
+
+        pNewP->aiChildPtr[iPSlot] = iNew1;
+        pNewP->aiKeyPtr[iPSlot] = pPeer->aiKeyPtr[0];
+        pNewP->aiChildPtr[iPSlot+1] = iNew2;
+
+        pNew2->aiKeyPtr[0] = pPeer->aiKeyPtr[1];
+        pNew2->aiKeyPtr[1] = pPeer->aiKeyPtr[2];
+        if( bLeaf==0 ){
+          pNew2->aiChildPtr[0] = pPeer->aiChildPtr[1];
+          pNew2->aiChildPtr[1] = pPeer->aiChildPtr[2];
+          pNew2->aiChildPtr[2] = pPeer->aiChildPtr[3];
+        }
+      }
+      assert( pCsr->iNode>=1 );
+      pCsr->iNode -= 2;
+      if( rc==LSM_OK ){
+        rc = treeUpdatePtr(pDb, pCsr, iNewP);
+      }
+    }else{
+      int iKOut = 0;
+      int iPOut = 0;
+      int i;
+
+      pCsr->iNode--;
+
+      if( iDir==1 ){
+        pNew1->aiKeyPtr[iKOut++] = pParent->aiKeyPtr[iPSlot];
+        if( bLeaf==0 ) pNew->aiChildPtr[iPOut] = iNewptr;
+      }
+      for(i=0; i<3; i++){
+        if( pPeer->aiKeyPtr[i] ){
+          pNew1->aiKeyPtr[iKOut++] = pPeer->aiKeyPtr[i];
+        }
+      }
+      if( bLeaf==0 ){
+        for(i=0; i<4; i++){
+          if( pPeer->aiChildPtr[i] ){
+            pNew1->aiChildPtr[iPOut++] = pPeer->aiChildPtr[i];
+          }
+        }
+      }
+      if( iDir==-1 ){
+        iPSlot--;
+        pNew1->aiKeyPtr[iKOut++] = pParent->aiKeyPtr[iPSlot];
+        if( bLeaf==0 ) pNew1->aiChildPtr[iPOut++] = iNewptr;
+        pCsr->aiCell[pCsr->iNode] = iPSlot;
+      }
+
+      rc = treeDeleteEntry(db, pCsr, iNew1);
+    }
+  }
+
+  return rc;
+}
+
+/*
+** Delete a range of keys from the tree structure.
+**
+** This is a two step process: 
+**
+**     1) Remove all entries currently stored in the tree that have keys
+**        that fall into the deleted range.
+**
+**        TODO: There are surely good ways to optimize this step - removing 
+**        a range of keys from a b-tree. But for now, this function removes
+**        them one at a time using the usual approach.
+**
+**     2) Unless the largest key smaller than or equal to (pKey1/nKey1) is
+**        already marked as START_DELETE, insert a START_DELETE key. 
+**        Similarly, unless the smallest key greater than or equal to
+**        (pKey2/nKey2) is already START_END, insert a START_END key.
+*/
+int lsmTreeDelete(
+  lsm_db *db,
+  void *pKey1, int nKey1,         /* Start of range */
+  void *pKey2, int nKey2          /* End of range */
+){
+  int bDone = 0;
+  TreeRoot *p = &pDb->treehdr.root;
+
+  /* The range must be sensible - that (key1 < key2). */
+  assert( db->xCmp(pKey1, nKey1, pKey2, nKey2)<0 );
+
+  /* Step 1. This loop runs until the tree contains no keys within the
+  ** range being deleted. Or until an error occurs. */
+  while( bDone==0 ){
+    TreeCursor csr;               /* Cursor to seek to first key in range */
+    void *pDel; int nDel;         /* Key to (possibly) delete this iteration */
+
+    /* Seek the cursor to the first entry in the tree greater than pKey1. */
+    treeCursorInit(pDb, 0, &csr);
+    lsmTreeCursorSeek(&csr, pKey1, nKey1, &res);
+    if( res<=0 && lsmTreeCursorValid(&csr) ) lsmTreeCursorNext(&csr);
+
+    /* If there is no such entry, or if it is greater than pKey2, then the
+    ** tree now contains no keys in the range being deleted. In this case
+    ** break out of the loop.  */
+    bDone = 1;
+    if( lsmTreeCursorValid(&csr) ){
+      lsmTreeCursorKey(&csr, &pDel, &nDel);
+      if( db->xCmp(pDel, nDel, pKey2, nKey2)<0 ) bDone = 0;
+    }
+
+    if( bDone==0 ){
+      if( csr.iNode==(p->nHeight-1) ){
+        /* The element to delete already lies on a leaf node */
+        rc = treeDeleteEntry(db, &csr);
+      }else{
+        /* 1. Overwrite the current key with a previous key in the tree (P).
+        **
+        ** 2. Seek to key P (cursor will stop at the internal nodes copy of
+        **    P). Move to the previous key (original copy of P). Delete
+        **    this entry. 
+        */
+
+
+      }
+    }
+
+    /* Clean up any memory allocated by the cursor. */
+    tblobFree(pDb, &csr.blob);
+  }
 }
 
 /*

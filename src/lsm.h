@@ -380,8 +380,11 @@ int lsm_write(lsm_db *, const void *pKey, int nKey, const void *pVal, int nVal);
 int lsm_delete(lsm_db *, const void *pKey, int nKey);
 
 /*
-** Delete all database entries with keys that are greater than or equal to
-** (pKey1/nKey1) and smaller than or equal to (pKey2/nKey2).
+** Delete all database entries with keys that are greater than (pKey1/nKey1) 
+** and smaller than (pKey2/nKey2). Note that keys (pKey1/nKey1) and
+** (pKey2/nKey2) themselves, if they exist in the database, are not deleted.
+**
+** Return LSM_OK if successful, or an LSM error code otherwise.
 */
 int lsm_delete_range(lsm_db *, 
     const void *pKey1, int nKey1, const void *pKey2, int nKey2
