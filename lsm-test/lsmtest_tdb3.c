@@ -455,6 +455,15 @@ static int test_lsm_delete(TestDb *pTestDb, void *pKey, int nKey){
   return lsm_delete(pDb->db, pKey, nKey);
 }
 
+static int test_lsm_delete_range(
+  TestDb *pTestDb, 
+  void *pKey1, int nKey1,
+  void *pKey2, int nKey2
+){
+  LsmDb *pDb = (LsmDb *)pTestDb;
+  return lsm_delete_range(pDb->db, pKey1, nKey1, pKey2, nKey2);
+}
+
 static int test_lsm_fetch(
   TestDb *pTestDb, 
   void *pKey, 
@@ -730,6 +739,7 @@ static int testLsmOpen(
     test_lsm_close,
     test_lsm_write,
     test_lsm_delete,
+    test_lsm_delete_range,
     test_lsm_fetch,
     test_lsm_scan,
     test_lsm_begin,

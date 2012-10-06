@@ -51,6 +51,11 @@ int tdb_write(TestDb *pDb, void *pKey, int nKey, void *pVal, int nVal);
 int tdb_delete(TestDb *pDb, void *pKey, int nKey);
 
 /*
+** Delete a range of keys from the database.
+*/
+int tdb_delete_range(TestDb *, void *pKey1, int nKey1, void *pKey2, int nKey2);
+
+/*
 ** Query the database for key (pKey/nKey). If no entry is found, set *ppVal
 ** to 0 and *pnVal to -1 before returning. Otherwise, set *ppVal and *pnVal
 ** to a pointer to and size of the value associated with (pKey/nKey).

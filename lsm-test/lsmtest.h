@@ -46,6 +46,7 @@ struct DatabaseMethods {
   int (*xClose)(TestDb *);
   int (*xWrite)(TestDb *, void *, int , void *, int);
   int (*xDelete)(TestDb *, void *, int);
+  int (*xDeleteRange)(TestDb *, void *, int, void *, int);
   int (*xFetch)(TestDb *, void *, int, void **, int *);
   int (*xScan)(TestDb *, void *, int, void *, int, void *, int,
     void (*)(void *, void *, int , void *, int)
@@ -123,6 +124,7 @@ int testGlobMatch(const char *zPattern, const char *zStr);
 void testScanCompare(TestDb *, TestDb *, int, void *, int, void *, int, int *);
 
 void *testMalloc(int);
+void *testMallocCopy(void *pCopy, int nByte);
 void *testRealloc(void *, int);
 void testFree(void *);
 
@@ -194,9 +196,8 @@ void testDeleteDatasourceRange(TestDb *, Datasource *, int, int, int *);
 
 
 /* test1.c */
-void test_data_1(TestDb *pDb, int *pRc);
-void test_data_2(TestDb *pDb, int *pRc);
-void test_data_3(const char *, const char *, int *pRc);
+void test_data_1(const char *, const char *, int *pRc);
+void test_data_2(const char *, const char *, int *pRc);
 void testDbContents(TestDb *, Datasource *, int, int, int, int, int, int *);
 void testCaseProgress(int, int, int, int *);
 int testCaseNDot(void);

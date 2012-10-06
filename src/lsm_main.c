@@ -479,11 +479,9 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
   return rc;
 }
 
-/* 
-** Write a new value into the database.
-*/
-int lsm_write(
-  lsm_db *pDb,                    /* Database connection */
+static int doWriteOp(
+  lsm_db *pDb,
+  int bDeleteRange,
   const void *pKey, int nKey,     /* Key to write or delete */
   const void *pVal, int nVal      /* Value to write. Or nVal==-1 for a delete */
 ){
@@ -496,7 +494,11 @@ int lsm_write(
   }
 
   if( rc==LSM_OK ){
-    rc = lsmLogWrite(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
+    if( bDeleteRange==0 ){
+      rc = lsmLogWrite(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
+    }else{
+      /* TODO */
+    }
   }
 
   lsmSortedSaveTreeCursors(pDb);
@@ -513,7 +515,12 @@ int lsm_write(
     }
 
     nBefore = lsmTreeSize(pDb);
-    rc = lsmTreeInsert(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
+    if( bDeleteRange ){
+      rc = lsmTreeDelete(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
+    }else{
+      rc = lsmTreeInsert(pDb, (void *)pKey, nKey, (void *)pVal, nVal);
+    }
+
     nAfter = lsmTreeSize(pDb);
     nDiff = (nAfter/nQuant) - (nBefore/nQuant);
     if( rc==LSM_OK && pDb->bAutowork && nDiff!=0 ){
@@ -534,11 +541,37 @@ int lsm_write(
   return rc;
 }
 
+/* 
+** Write a new value into the database.
+*/
+int lsm_write(
+  lsm_db *db,                     /* Database connection */
+  const void *pKey, int nKey,     /* Key to write or delete */
+  const void *pVal, int nVal      /* Value to write. Or nVal==-1 for a delete */
+){
+  return doWriteOp(db, 0, pKey, nKey, pVal, nVal);
+}
+
 /*
 ** Delete a value from the database. 
 */
-int lsm_delete(lsm_db *pDb, const void *pKey, int nKey){
-  return lsm_write(pDb, pKey, nKey, 0, -1);
+int lsm_delete(lsm_db *db, const void *pKey, int nKey){
+  return doWriteOp(db, 0, pKey, nKey, 0, -1);
+}
+
+/*
+** Delete a range of database keys.
+*/
+int lsm_delete_range(
+  lsm_db *db,                     /* Database handle */
+  const void *pKey1, int nKey1,   /* Lower bound of range to delete */
+  const void *pKey2, int nKey2    /* Upper bound of range to delete */
+){
+  int rc = LSM_OK;
+  if( db->xCmp((void *)pKey1, nKey1, (void *)pKey2, nKey2)<0 ){
+    rc = doWriteOp(db, 1, pKey1, nKey1, pKey2, nKey2);
+  }
+  return rc;
 }
 
 /*
