@@ -147,6 +147,16 @@ int lsmErrorBkpt(int);
 
 #define LSM_ATTEMPTS_BEFORE_PROTOCOL 10000
 
+
+/*
+** Each entry stored in the LSM (or in-memory tree structure) has an
+** associated mask of the following flags.
+*/
+#define LSM_START_DELETE 0x01     /* Start of open-ended delete range */
+#define LSM_END_DELETE   0x02     /* End of open-ended delete range */
+#define LSM_POINT_DELETE 0x04     /* Delete this key */
+#define LSM_INSERT       0x08     /* Insert this key and value */
+
 /*
 ** A string that can grow by appending.
 */
