@@ -42,72 +42,45 @@
 **
 ** RECORD FORMAT:
 ** 
-**   Each record in a sorted file is either a WRITE, a DELETE, or a 
-**   SEPARATOR. 
+**   The first byte of the record is a flags byte. It is a combination
+**   of the following flags (defined in lsmInt.h):
 **
-**   The first byte of the record indicates the type, as follows:
+**       LSM_START_DELETE
+**       LSM_END_DELETE 
+**       LSM_POINT_DELETE
+**       LSM_INSERT    
+**       LSM_SEPARATOR
+**       LSM_SYSTEMKEY
 **
-**     SORTED_SEPARATOR:  0x01
-**     SORTED_WRITE:      0x02
-**     SORTED_DELETE:     0x03
-**
-**   If the sorted file contains pointers, then immediately following the
-**   type byte is a pointer to the smallest key in the next file that is larger
-**   than the key in the current record. The pointer is encoded as a varint.
-**   When added to the 32-bit page number stored in the footer, it is the 
-**   page number of the page that contains the smallest key in the next sorted 
-**   file that is larger than this key. 
+**   Immediately following the type byte is a pointer to the smallest key 
+**   in the next file that is larger than the key in the current record. The 
+**   pointer is encoded as a varint. When added to the 32-bit page number 
+**   stored in the footer, it is the page number of the page that contains the
+**   smallest key in the next sorted file that is larger than this key. 
 **
 **   Next is the number of bytes in the key, encoded as a varint.
 **
-**   If the record is a SORTED_WRITE, the number of bytes in the value, as
+**   If the LSM_INSERT flag is set, the number of bytes in the value, as
 **   a varint, is next.
 **
-**   Finally, the blob of data containing the key, and for SORTED_WRITE
+**   Finally, the blob of data containing the key, and for LSM_INSERT
 **   records, the value as well.
-**
-** SEPARATOR ARRAYS:
-**
-**   Each time a sorted run that spans more than one page is constructed, a
-**   separators array is also constructed. A separators array contains normal
-**   pages and b-tree pages. Both types of pages use the same format (as 
-**   above).
-**
-**   The normal pages in the separators array contain a SORTED_SEPARATOR 
-**   record with a copy of the first key on each page of the main array
-**   except the leftmost. If a main array page contains no keys, then there
-**   is no corresponding entry in the separators array.
 */
 
 #ifndef _LSM_INT_H
 # include "lsmInt.h"
 #endif
 #include "sqlite4.h"            /* only for sqlite4_snprintf() */
-/* 
-** Record types for user data.
-*/
-#define SORTED_SEPARATOR 0x01
-#define SORTED_WRITE     0x02
-#define SORTED_DELETE    0x03
-
-#define SORTED_SYSTEM_DATA 0x10
-
-/* 
-** Record types for system data (e.g. free-block list, secondary storage
-** management entries). These are the same as the user types with the
-** most-significant bit set.
-*/
-#define SORTED_SYSTEM_SEPARATOR (SORTED_SYSTEM_DATA | SORTED_SEPARATOR)
-#define SORTED_SYSTEM_WRITE     (SORTED_SYSTEM_DATA | SORTED_WRITE)
-#define SORTED_SYSTEM_DELETE    (SORTED_SYSTEM_DATA | SORTED_DELETE)
 
 /*
 ** Macros to help decode record types.
 */
-#define rtTopic(eType)       ((eType) & 0xF0)
-#define rtIsDelete(eType)    (((eType) & 0x0F)==SORTED_DELETE)
-#define rtIsSeparator(eType) (((eType) & 0x0F)==SORTED_SEPARATOR)
-#define rtIsWrite(eType)     (((eType) & 0x0F)==SORTED_WRITE)
+#define rtTopic(eType)       ((eType) & LSM_SYSTEMKEY)
+#define rtIsDelete(eType)    (((eType) & 0x0F)==LSM_POINT_DELETE)
+
+#define rtIsSeparator(eType) (((eType) & LSM_SEPARATOR)!=0)
+#define rtIsWrite(eType)     (((eType) & LSM_INSERT)!=0)
+#define rtIsSystem(eType)    (((eType) & LSM_SYSTEMKEY)!=0)
 
 /*
 ** The following macros are used to access a page footer.
@@ -234,6 +207,9 @@ struct MultiCursor {
   /* Used by cursors flushing the in-memory tree only */
   int *pnOvfl;                    /* Number of free-list entries to store */
   void *pSystemVal;               /* Pointer to buffer to free */
+
+  /* Used by worker cursors only */
+  Pgno *pPrevMergePtr;
 };
 
 #define CURSOR_DATA_TREE0     0   /* Current tree cursor */
@@ -614,7 +590,7 @@ static int btreeCursorLoadKey(BtreeCursor *pCsr){
         pCsr->aPg[iPg].pPage, iCell,
         &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
     );
-    pCsr->eType |= SORTED_SEPARATOR;
+    pCsr->eType |= LSM_SEPARATOR;
   }
 
   return rc;
@@ -922,7 +898,7 @@ static int btreeCursorRestore(
             pCsr->aPg[i].pPage, pCsr->aPg[i].iCell-1,
             &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
         );
-        pCsr->eType |= SORTED_SEPARATOR;
+        pCsr->eType |= LSM_SEPARATOR;
 
       }else{
         rc = btreeCursorLoadKey(pCsr);
@@ -1311,6 +1287,13 @@ int segmentPtrSeek(
 
   const int iTopic = 0;
 
+#if 0
+static int nCall = 0;
+nCall++;
+printf("in call %d\n", nCall);
+fflush(stdout);
+#endif
+
   /* If the OVERSIZED flag is set, then there is no pointer in the
   ** upper level to the next page in the segment that contains at least
   ** one key. So compare the largest key on the current page with the
@@ -1635,9 +1618,8 @@ static void multiCursorGetKey(
         int nVal;
         void *pVal;
 
-        lsmTreeCursorKey(pTreeCsr, &pKey, &nKey);
+        lsmTreeCursorKey(pTreeCsr, &eType, &pKey, &nKey);
         lsmTreeCursorValue(pTreeCsr, &pVal, &nVal);
-        eType = (nVal<0) ? SORTED_DELETE : SORTED_WRITE;
       }
       break;
     }
@@ -1646,7 +1628,7 @@ static void multiCursorGetKey(
       if( pCsr->flags & CURSOR_AT_FREELIST ){
         pKey = (void *)"FREELIST";
         nKey = 8;
-        eType = SORTED_SYSTEM_WRITE;
+        eType = LSM_SYSTEMKEY | LSM_INSERT;
       }
       break;
 
@@ -1683,8 +1665,7 @@ static void multiCursorDoCompare(MultiCursor *pCsr, int iOut, int bReverse){
   int iRes;
   void *pKey1; int nKey1; int eType1;
   void *pKey2; int nKey2; int eType2;
-
-  int mul = (bReverse ? -1 : 1);
+  const int mul = (bReverse ? -1 : 1);
 
   assert( pCsr->aTree && iOut<pCsr->nTree );
   if( iOut>=(pCsr->nTree/2) ){
@@ -1705,12 +1686,29 @@ static void multiCursorDoCompare(MultiCursor *pCsr, int iOut, int bReverse){
   }else{
     int res;
 
-    res = (rtTopic(eType1) - rtTopic(eType2));
-    if( res==0 ){
-      res = pCsr->pDb->xCmp(pKey1, nKey1, pKey2, nKey2);
-    }
-    res = res * mul;
+    /* Compare the keys, including the system flag. */
+    res = sortedKeyCompare(pCsr->pDb->xCmp, 
+        rtTopic(eType1), pKey1, nKey1,
+        rtTopic(eType2), pKey2, nKey2
+    );
 
+    /* If a key has the LSM_START_DELETE flag set, but not the LSM_INSERT or
+    ** LSM_POINT_DELETE flags, it is considered a delta larger. This prevents
+    ** the beginning of an open-ended set from masking a database entry or
+    ** delete at a lower level.  */
+    if( res==0 ){
+      const int insdel = LSM_POINT_DELETE|LSM_INSERT;
+      int iDel1 = 0;
+      int iDel2 = 0;
+
+      if( LSM_START_DELETE==(eType1 & (LSM_START_DELETE|insdel)) ) iDel1 = +1;
+      if( LSM_END_DELETE  ==(eType1 & (LSM_END_DELETE  |insdel)) ) iDel1 = -1;
+      if( LSM_START_DELETE==(eType2 & (LSM_START_DELETE|insdel)) ) iDel2 = +1;
+      if( LSM_END_DELETE  ==(eType2 & (LSM_END_DELETE  |insdel)) ) iDel2 = -1;
+      res = (iDel1 - iDel2);
+    }
+
+    res = res * mul;
     if( res==0 ){
       iRes = (rtIsSeparator(eType1) ? i2 : i1);
     }else if( res<0 ){
@@ -2081,7 +2079,7 @@ int lsmSortedLoadFreelist(
   if( rc==LSM_OK ){
     rc = lsmMCursorLast(pCsr);
     if( rc==LSM_OK 
-     && pCsr->eType==SORTED_SYSTEM_WRITE 
+     && rtIsWrite(pCsr->eType) && rtIsSystem(pCsr->eType)
      && pCsr->key.nData==8 
      && 0==memcmp(pCsr->key.pData, "FREELIST", 8)
     ){
@@ -2129,11 +2127,50 @@ static void multiCursorCacheKey(MultiCursor *pCsr, int *pRc){
   }
 }
 
+static int mcursorLocationOk(MultiCursor *pCsr, int bDeleteOk){
+  int eType = pCsr->eType;
+  int iKey;
+  int i;
+  int rdmask = 0;
+  
+  /* assert( pCsr->flags & (CURSOR_NEXT_OK|CURSOR_PREV_OK) ); */
+  if( pCsr->flags & CURSOR_NEXT_OK ){
+    rdmask = LSM_END_DELETE;
+  }else if( pCsr->flags & CURSOR_PREV_OK ){
+    rdmask = LSM_START_DELETE;
+  }
+
+  if( (pCsr->flags & CURSOR_IGNORE_DELETE) && bDeleteOk==0 ){
+    if( (eType & LSM_INSERT)==0 ) return 0;
+  }
+  if( (pCsr->flags & CURSOR_IGNORE_SYSTEM) && rtTopic(eType)!=0 ){
+    return 0;
+  }
+
+  /* Check if this key has already been deleted by a range-delete */
+  iKey = pCsr->aTree[1];
+  if( (iKey>0 && (rdmask & lsmTreeCursorFlags(pCsr->apTreeCsr[0]))) 
+   || (iKey>1 && (rdmask & lsmTreeCursorFlags(pCsr->apTreeCsr[1]))) 
+  ){
+    return 0;
+  }
+  for(i=CURSOR_DATA_SEGMENT; i<iKey; i++){
+    int iPtr = i-CURSOR_DATA_SEGMENT;
+    if( pCsr->aPtr[iPtr].pPg && (pCsr->aPtr[iPtr].eType & rdmask) ){
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
 static int multiCursorEnd(MultiCursor *pCsr, int bLast){
   int rc = LSM_OK;
   int i;
 
   pCsr->flags &= ~(CURSOR_NEXT_OK | CURSOR_PREV_OK);
+  pCsr->flags |= (bLast ? CURSOR_PREV_OK : CURSOR_NEXT_OK);
+
   if( pCsr->apTreeCsr[0] ){
     rc = lsmTreeCursorEnd(pCsr->apTreeCsr[0], bLast);
   }
@@ -2177,14 +2214,10 @@ static int multiCursorEnd(MultiCursor *pCsr, int bLast){
     for(i=pCsr->nTree-1; i>0; i--){
       multiCursorDoCompare(pCsr, i, bLast);
     }
-    pCsr->flags |= (bLast ? CURSOR_PREV_OK : CURSOR_NEXT_OK);
   }
 
   multiCursorCacheKey(pCsr, &rc);
-  if( rc==LSM_OK && (
-        ((pCsr->flags & CURSOR_IGNORE_DELETE) && rtIsDelete(pCsr->eType))
-     || ((pCsr->flags & CURSOR_IGNORE_SYSTEM) && rtTopic(pCsr->eType))
-  )){
+  if( rc==LSM_OK && mcursorLocationOk(pCsr, 0)==0 ){
     if( bLast ){
       rc = lsmMCursorPrev(pCsr);
     }else{
@@ -2289,18 +2322,6 @@ static void treeCursorSeek(
 }
 
 
-static int mcursorLocationOk(MultiCursor *pCsr, int bDeleteOk){
-  int eType = pCsr->eType;
-
-  if( ((pCsr->flags & CURSOR_IGNORE_DELETE) && rtIsDelete(eType) && !bDeleteOk)
-   || ((pCsr->flags & CURSOR_IGNORE_SYSTEM) && rtTopic(pCsr->eType)!=0)
-  ){
-    return 0;
-  }
-
-  return 1;
-}
-
 /*
 ** Seek the cursor.
 */
@@ -2399,19 +2420,19 @@ static int mcursorAdvanceOk(
     if( (bReverse==0 && res<=0) || (bReverse!=0 && res>=0) ){
       return 0;
     }
+
+    multiCursorCacheKey(pCsr, pRc);
+    assert( pCsr->eType==eNewType );
+
+    /* If this cursor is configured to skip deleted keys, and the current
+    ** cursor points to a SORTED_DELETE entry, then the cursor has not been 
+    ** successfully advanced.  
+    **
+    ** Similarly, if the cursor is configured to skip system keys and the
+    ** current cursor points to a system key, it has not yet been advanced.
+     */
+    if( *pRc==LSM_OK && 0==mcursorLocationOk(pCsr, 0) ) return 0;
   }
-
-  multiCursorCacheKey(pCsr, pRc);
-  assert( pCsr->eType==eNewType );
-
-  /* If this cursor is configured to skip deleted keys, and the current
-  ** cursor points to a SORTED_DELETE entry, then the cursor has not been 
-  ** successfully advanced.  
-  **
-  ** Similarly, if the cursor is configured to skip system keys and the
-  ** current cursor points to a system key, it has not yet been advanced.
-  */
-  if( *pRc==LSM_OK && 0==mcursorLocationOk(pCsr, 0) ) return 0;
   return 1;
 }
 
@@ -2420,6 +2441,22 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
   if( lsmMCursorValid(pCsr) ){
     do {
       int iKey = pCsr->aTree[1];
+
+      /* If this multi-cursor is advancing forwards, and the sub-cursor
+      ** being advanced is the one that separator keys may be being read
+      ** from, record the current absolute pointer value.  */
+      if( pCsr->pPrevMergePtr 
+       && iKey>=CURSOR_DATA_SEGMENT
+       && iKey==(CURSOR_DATA_SEGMENT+pCsr->nPtr-(!pCsr->pBtCsr)) 
+      ){
+        if( iKey==(CURSOR_DATA_SEGMENT+pCsr->nPtr) ){
+          *pCsr->pPrevMergePtr = pCsr->pBtCsr->iPtr;
+        }else{
+          SegmentPtr *pPtr = &pCsr->aPtr[iKey-CURSOR_DATA_SEGMENT];
+          *pCsr->pPrevMergePtr = pPtr->iPtr+pPtr->iPgPtr;
+        }
+      }
+
       if( iKey==CURSOR_DATA_TREE0 || iKey==CURSOR_DATA_TREE1 ){
         TreeCursor *pTreeCsr = pCsr->apTreeCsr[iKey-CURSOR_DATA_TREE0];
         if( bReverse ){
@@ -2438,7 +2475,6 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
       }else{
         rc = segmentCursorAdvance(pCsr, iKey-CURSOR_DATA_SEGMENT, bReverse);
       }
-
       if( rc==LSM_OK ){
         int i;
         for(i=(iKey+pCsr->nTree)/2; i>0; i=i/2){
@@ -2465,7 +2501,7 @@ int lsmMCursorKey(MultiCursor *pCsr, void **ppKey, int *pnKey){
 
   if( iKey==CURSOR_DATA_TREE0 || iKey==CURSOR_DATA_TREE1 ){
     TreeCursor *pTreeCsr = pCsr->apTreeCsr[iKey-CURSOR_DATA_TREE0];
-    lsmTreeCursorKey(pTreeCsr, ppKey, pnKey);
+    lsmTreeCursorKey(pTreeCsr, 0, ppKey, pnKey);
   }else{
     int nKey;
 
@@ -2495,7 +2531,7 @@ int lsmMCursorValue(MultiCursor *pCsr, void **ppVal, int *pnVal){
   int rc;
 
   assert( pCsr->aTree );
-  assert( rtIsDelete(pCsr->eType)==0 || !(pCsr->flags & CURSOR_IGNORE_DELETE) );
+  assert( mcursorLocationOk(pCsr, (pCsr->flags & CURSOR_IGNORE_DELETE)) );
 
   rc = multiCursorGetVal(pCsr, pCsr->aTree[1], &pVal, &nVal);
   if( pVal && rc==LSM_OK ){
@@ -2534,8 +2570,8 @@ static int mergeWorkerPageOffset(u8 *aData, int nData){
   iOff = lsmGetU16(&aData[SEGMENT_CELLPTR_OFFSET(nData, nRec-1)]);
   eType = aData[iOff++];
   assert( eType==0 
-       || eType==SORTED_SEPARATOR 
-       || eType==SORTED_SYSTEM_SEPARATOR 
+       || eType==(LSM_SYSTEMKEY|LSM_SEPARATOR) 
+       || eType==(LSM_SEPARATOR)
   );
 
   iOff += lsmVarintGet32(&aData[iOff], &nKey);
@@ -2860,7 +2896,7 @@ static int mergeWorkerPushHierarchy(
     iOff += lsmVarintPut32(&aData[iOff], iPtr);
     iOff += lsmVarintPut32(&aData[iOff], iKeyPg);
   }else{
-    aData[iOff++] = (u8)(iTopic | SORTED_SEPARATOR);
+    aData[iOff++] = (u8)(iTopic | LSM_SEPARATOR);
     iOff += lsmVarintPut32(&aData[iOff], iPtr);
     iOff += lsmVarintPut32(&aData[iOff], nKey);
     memcpy(&aData[iOff], pKey, nKey);
@@ -3008,7 +3044,7 @@ static int mergeWorkerWrite(
 
   /* If iPtr is 0, set it to the same value as the absolute pointer 
   ** stored as part of the previous record.  */
-  if( iPtr==0 ){
+  if( 0 && iPtr==0 ){
     iPtr = iFPtr;
     if( nRec ) iPtr += pageGetRecordPtr(aData, nData, nRec-1);
   }
@@ -3040,8 +3076,13 @@ static int mergeWorkerWrite(
      ** marked read-only, advance to the next page of the output run. */
     iOff = pMerge->iOutputOff;
     if( iOff<0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
+#if 0
       iFPtr = iFPtr + (nRec ? pageGetRecordPtr(aData, nData, nRec-1) : 0);
       iRPtr = iPtr - iFPtr;
+#endif
+      iFPtr = *pCsr->pPrevMergePtr;
+      iRPtr = iPtr - iFPtr;
+
       iOff = 0;
       nRec = 0;
       rc = mergeWorkerNextPage(pMW, iFPtr);
@@ -3215,9 +3256,50 @@ static int mergeWorkerFirstPage(MergeWorker *pMW){
 
   if( rc==LSM_OK ){
     rc = mergeWorkerNextPage(pMW, iFPtr);
+    if( pCsr->pPrevMergePtr ) *pCsr->pPrevMergePtr = iFPtr;
   }
 
   return rc;
+}
+
+/*
+** The cursor passed as the first argument is being used as the input for
+** a merge operation. When this function is called, *piFlags contains the
+** database entry flags for the current entry. The entry about to be written
+** to the output.
+**
+*/
+static void mergeRangeDeletes(MultiCursor *pCsr, int *piFlags){
+  int f = *piFlags;
+  int iKey = pCsr->aTree[1];
+  int i;
+
+  if( pCsr->flags & CURSOR_IGNORE_DELETE ){
+    /* The ignore-delete flag is set when the output of the merge will form
+    ** the oldest level in the database. In this case there is no point in
+    ** retaining any range-delete flags.  */
+    assert( (f & LSM_POINT_DELETE)==0 );
+    f &= ~(LSM_START_DELETE|LSM_END_DELETE);
+  }else{
+    if( iKey==0 ){
+      int btreeflags = lsmTreeCursorFlags(pCsr->apTreeCsr[1]);
+      if( btreeflags & LSM_END_DELETE ){
+        f |= (LSM_START_DELETE|LSM_END_DELETE);
+      }
+    }
+
+    for(i=LSM_MAX(0, iKey+1-CURSOR_DATA_SEGMENT); i<pCsr->nPtr; i++){
+      if( pCsr->aPtr[i].eType & LSM_END_DELETE ){
+        f |= (LSM_START_DELETE|LSM_END_DELETE);
+      }
+    }
+
+    if( (f & LSM_START_DELETE) && (f & LSM_END_DELETE) && (f & LSM_INSERT)==0 ){
+      f = 0;
+    }
+  }
+
+  *piFlags = f;
 }
 
 static int mergeWorkerStep(MergeWorker *pMW){
@@ -3227,7 +3309,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
   int eType;                    /* SORTED_SEPARATOR, WRITE or DELETE */
   void *pKey; int nKey;         /* Key */
   Segment *pSeg;                /* Output segment */
-  int iPtr = 0;
+  Pgno iPtr;
 
   pCsr = pMW->pCsr;
   pSeg = &pMW->pLevel->lhs;
@@ -3242,13 +3324,13 @@ static int mergeWorkerStep(MergeWorker *pMW){
   ** iPtr to the absolute pointer value. If not, leave iPtr set to zero, 
   ** indicating that the output pointer value should be a copy of the pointer 
   ** value written with the previous key.  */
+  iPtr = (pCsr->pPrevMergePtr ? *pCsr->pPrevMergePtr : 0);
   if( pCsr->pBtCsr ){
     BtreeCursor *pBtCsr = pCsr->pBtCsr;
     if( pBtCsr->pKey ){
       int res = rtTopic(pBtCsr->eType) - rtTopic(eType);
       if( res==0 ) res = pDb->xCmp(pBtCsr->pKey, pBtCsr->nKey, pKey, nKey);
       if( 0==res ) iPtr = pBtCsr->iPtr;
-
       assert( res>=0 );
     }
   }else if( pCsr->nPtr ){
@@ -3260,29 +3342,33 @@ static int mergeWorkerStep(MergeWorker *pMW){
     }
   }
 
-  if( pMW->aGobble ){
-    int iGobble = pCsr->aTree[1] - CURSOR_DATA_SEGMENT;
-    if( iGobble<pCsr->nPtr ){
-      SegmentPtr *pGobble = &pCsr->aPtr[iGobble];
-      if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 ){
-        pMW->aGobble[iGobble] = lsmFsPageNumber(pGobble->pPg);
+  mergeRangeDeletes(pCsr, &eType);
+
+  if( eType!=0 ){
+    if( pMW->aGobble ){
+      int iGobble = pCsr->aTree[1] - CURSOR_DATA_SEGMENT;
+      if( iGobble<pCsr->nPtr ){
+        SegmentPtr *pGobble = &pCsr->aPtr[iGobble];
+        if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 ){
+          pMW->aGobble[iGobble] = lsmFsPageNumber(pGobble->pPg);
+        }
       }
     }
-  }
 
-  /* If this is a separator key and we know that the output pointer has not
-  ** changed, there is no point in writing an output record. Otherwise,
-  ** proceed. */
-  if( rtIsSeparator(eType)==0 || iPtr!=0 ){
-    int iSPtr = 0;                /* Separators require a pointer here */
+    /* If this is a separator key and we know that the output pointer has not
+    ** changed, there is no point in writing an output record. Otherwise,
+    ** proceed. */
+    if( rtIsSeparator(eType)==0 || iPtr!=0 ){
+      int iSPtr = 0;                /* Separators require a pointer here */
 
-    if( pMW->pPage==0 ){
-      rc = mergeWorkerFirstPage(pMW);
-    }
+      if( pMW->pPage==0 ){
+        rc = mergeWorkerFirstPage(pMW);
+      }
 
-    /* Write the record into the main run. */
-    if( rc==LSM_OK ){
-      rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pCsr, iPtr, &iSPtr);
+      /* Write the record into the main run. */
+      if( rc==LSM_OK ){
+        rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pCsr, iPtr, &iSPtr);
+      }
     }
   }
 
@@ -3376,6 +3462,7 @@ static int sortedNewToplevel(
   if( rc!=LSM_OK ){
     lsmMCursorClose(pCsr);
   }else{
+    Pgno iCurrentPtr = 0;
     Merge merge;                  /* Merge object used to create new level */
     MergeWorker mergeworker;      /* MergeWorker object for the same purpose */
 
@@ -3386,6 +3473,7 @@ static int sortedNewToplevel(
     mergeworker.pDb = pDb;
     mergeworker.pLevel = pNew;
     mergeworker.pCsr = pCsr;
+    pCsr->pPrevMergePtr = &iCurrentPtr;
 
     /* Mark the separators array for the new level as a "phantom". */
     mergeworker.bFlush = 1;
@@ -3417,7 +3505,7 @@ static int sortedNewToplevel(
   }
 
 #if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
 #endif
 
   if( pnWrite ) *pnWrite = nWrite;
@@ -3585,6 +3673,7 @@ static int mergeWorkerInit(
 
   /* Position the cursor. */
   if( rc==LSM_OK ){
+    pCsr->pPrevMergePtr = &pMerge->iCurrentPtr;
     if( pMW->pPage==0 ){
       /* The output array is still empty. So position the cursor at the very 
       ** start of the input.  */
@@ -3790,19 +3879,6 @@ static int sortedWork(
               lsmFsGobble(pDb, pGobble->pSeg, &mergeworker.aGobble[i], 1);
             }
           }
-#if 0
-          int iGobble = mergeworker.pCsr->aTree[1] - CURSOR_DATA_SEGMENT;
-          if( iGobble<pLevel->nRight ){
-            SegmentPtr *pGobble = &mergeworker.pCsr->aSegCsr[iGobble].aPtr[0];
-            if( pGobble->pSeg->iRoot ){
-              rc = sortedBtreeGobble(pDb, mergeworker.pCsr, iGobble);
-            }else if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 ){
-              Pgno iPg = lsmFsPageNumber(pGobble->pPg);
-              lsmFsGobble(pDb, pGobble->pSeg, &iPg, 1);
-            }
-          }
-#endif
-
         }else if( pLevel->lhs.iFirst==0 ){
           /* If the new level is completely empty, remove it from the 
           ** database snapshot. This can only happen if all input keys were
@@ -3852,16 +3928,15 @@ static int sortedWork(
       mergeWorkerShutdown(&mergeworker, &rc);
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
+#if 0
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
+#endif
+      assertRunInOrder(pDb, &pLevel->lhs);
+
       /* If bFlush is true and the database is no longer considered "full",
       ** break out of the loop even if nRemaining is still greater than
       ** zero. The caller has an in-memory tree to flush to disk.  */
       if( bFlush && sortedDbIsFull(pDb)==0 ) break;
-
-      assertRunInOrder(pDb, &pLevel->lhs);
-
-#if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
-#endif
     }
   }
 
@@ -3873,50 +3948,6 @@ static int sortedWork(
 #endif
   return rc;
 }
-
-typedef struct Metric Metric;
-struct Metric {
-  double fAvgHeight;
-  int nTotalSz;
-  int nMinSz;
-};
-
-#if 0
-static void sortedMeasureDb(lsm_db *pDb, Metric *p){
-  Level *pLevel;                  /* Used to iterate through levels */
-  assert( pDb->pWorker );
-
-  double fHeight = 0.0;
-  int nTotalSz = 0;
-  int nMinSz = 0;
-
-  for(pLevel=lsmDbSnapshotLevel(pDb->pWorker); pLevel; pLevel=pLevel->pNext){
-    const int nLhsSz = pLevel->lhs.run.nSize;
-    int nRhsSz = 0;
-    int nSz;
-    int i;
-
-    for(i=0; i<pLevel->nRight; i++){
-      nRhsSz += pLevel->aRhs[i].run.nSize;
-    }
-
-    nSz = nRhsSz + nLhsSz;
-    fHeight += (double)nLhsSz/nSz + (double)nRhsSz/nSz * pLevel->nRight;
-    nTotalSz += nSz;
-
-    if( nMinSz==0 || nMinSz>nSz ) nMinSz = nSz;
-  }
-
-  if( nMinSz ){
-    printf("avg-height=%.2f log2(min/total)=%.2f totalsz=%d minsz=%d\n", 
-        fHeight, 
-        log((double)nTotalSz / nMinSz) / log(2),
-        nTotalSz,
-        nMinSz
-    );
-  }
-}
-#endif
 
 /*
 ** The database connection passed as the first argument must be a worker
@@ -4358,11 +4389,24 @@ static int infoAppendBlob(LsmString *pStr, int bHex, u8 *z, int n){
   return LSM_OK;
 }
 
-int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
+#define INFO_PAGE_DUMP_DATA   0x01
+#define INFO_PAGE_DUMP_VALUES 0x02
+#define INFO_PAGE_DUMP_HEX    0x04
+
+static int infoPageDump(
+  lsm_db *pDb,                    /* Database handle */
+  Pgno iPg,                       /* Page number of page to dump */
+  int flags,
+  char **pzOut                    /* OUT: lsmMalloc'd string */
+){
   int rc = LSM_OK;                /* Return code */
   Page *pPg = 0;                  /* Handle for page iPg */
   int i, j;                       /* Loop counters */
   const int perLine = 16;         /* Bytes per line in the raw hex dump */
+
+  int bValues = (flags & INFO_PAGE_DUMP_VALUES);
+  int bHex = (flags & INFO_PAGE_DUMP_HEX);
+  int bData = (flags & INFO_PAGE_DUMP_DATA);
 
   *pzOut = 0;
   if( iPg==0 ) return LSM_ERROR;
@@ -4404,20 +4448,19 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
       int eType;
       char cType = '?';
       Pgno iAbsPtr;
+      char zFlags[8];
 
       infoCellDump(pDb, pPg, iCell, &eType, &iPgPtr,
           &aKey, &nKey, &aVal, &nVal, &blob
       );
       iAbsPtr = iPgPtr + ((flags & SEGMENT_BTREE_FLAG) ? 0 : iPtr);
 
-      if( rtIsDelete(eType) ) cType = 'D';
-      if( rtIsWrite(eType) ) cType = 'W';
-      if( rtIsSeparator(eType) ) cType = 'S';
-      lsmStringAppendf(&str, "%c %d (%s) ", 
-          cType, iAbsPtr, (rtTopic(eType) ? "sys" : "usr")
+      lsmFlagsToString(eType, zFlags);
+      lsmStringAppendf(&str, "%s %d (%s) ", 
+          zFlags, iAbsPtr, (rtTopic(eType) ? "sys" : "usr")
       );
       infoAppendBlob(&str, bHex, aKey, nKey); 
-      if( nVal>0 ){
+      if( nVal>0 && bValues ){
         lsmStringAppendf(&str, "%*s", nKeyWidth - (nKey*(1+bHex)), "");
         lsmStringAppendf(&str, " ");
         infoAppendBlob(&str, bHex, aVal, nVal); 
@@ -4425,28 +4468,30 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
       lsmStringAppendf(&str, "\n");
     }
 
-    lsmStringAppendf(&str, "\n-------------------" 
-       "-------------------------------------------------------------\n");
-    lsmStringAppendf(&str, "Page %d\n",
-                     iPg, (iPg-1)*nData, iPg*nData - 1);
-    for(i=0; i<nData; i += perLine){
-      lsmStringAppendf(&str, "%04x: ", i);
-      for(j=0; j<perLine; j++){
-        if( i+j>nData ){
-          lsmStringAppendf(&str, "   ");
-        }else{
-          lsmStringAppendf(&str, "%02x ", aData[i+j]);
+    if( bData ){
+      lsmStringAppendf(&str, "\n-------------------" 
+          "-------------------------------------------------------------\n");
+      lsmStringAppendf(&str, "Page %d\n",
+          iPg, (iPg-1)*nData, iPg*nData - 1);
+      for(i=0; i<nData; i += perLine){
+        lsmStringAppendf(&str, "%04x: ", i);
+        for(j=0; j<perLine; j++){
+          if( i+j>nData ){
+            lsmStringAppendf(&str, "   ");
+          }else{
+            lsmStringAppendf(&str, "%02x ", aData[i+j]);
+          }
         }
-      }
-      lsmStringAppendf(&str, "  ");
-      for(j=0; j<perLine; j++){
-        if( i+j>nData ){
-          lsmStringAppendf(&str, " ");
-        }else{
-          lsmStringAppendf(&str,"%c", isprint(aData[i+j]) ? aData[i+j] : '.');
+        lsmStringAppendf(&str, "  ");
+        for(j=0; j<perLine; j++){
+          if( i+j>nData ){
+            lsmStringAppendf(&str, " ");
+          }else{
+            lsmStringAppendf(&str,"%c", isprint(aData[i+j]) ? aData[i+j] : '.');
+          }
         }
+        lsmStringAppendf(&str,"\n");
       }
-      lsmStringAppendf(&str,"\n");
     }
 
     *pzOut = str.z;
@@ -4457,9 +4502,21 @@ int lsmInfoPageDump(lsm_db *pDb, Pgno iPg, int bHex, char **pzOut){
   return rc;
 }
 
+int lsmInfoPageDump(
+  lsm_db *pDb,                    /* Database handle */
+  Pgno iPg,                       /* Page number of page to dump */
+  int bHex,                       /* True to output key/value in hex form */
+  char **pzOut                    /* OUT: lsmMalloc'd string */
+){
+  int flags = INFO_PAGE_DUMP_DATA | INFO_PAGE_DUMP_VALUES;
+  if( bHex ) flags |= INFO_PAGE_DUMP_HEX;
+  return infoPageDump(pDb, iPg, flags, pzOut);
+}
+
 void sortedDumpSegment(lsm_db *pDb, Segment *pRun, int bVals){
   assert( pDb->xLog );
   if( pRun && pRun->iFirst ){
+    int flags = (bVals ? INFO_PAGE_DUMP_VALUES : 0);
     char *zSeg;
     Page *pPg;
 
@@ -4470,7 +4527,13 @@ void sortedDumpSegment(lsm_db *pDb, Segment *pRun, int bVals){
     lsmFsDbPageGet(pDb->pFS, pRun->iFirst, &pPg);
     while( pPg ){
       Page *pNext;
+      char *z = 0;
+      infoPageDump(pDb, lsmFsPageNumber(pPg), flags, &z);
+      lsmLogMessage(pDb, LSM_OK, "%s", z);
+      lsmFree(pDb->pEnv, z);
+#if 0
       sortedDumpPage(pDb, pRun, pPg, bVals);
+#endif
       lsmFsDbPageNext(pRun, pPg, 1, &pNext);
       lsmFsPageRelease(pPg);
       pPg = pNext;

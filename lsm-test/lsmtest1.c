@@ -348,12 +348,36 @@ void test_data_1(
 }
 
 static void testCompareDb(
+  Datasource *pData,
+  int nData,
+  int iSeed,
   TestDb *pControl,
   TestDb *pDb,
   int *pRc
 ){
-  testScanCompare(pControl, pDb, 0, 0, 0, 0, 0, pRc);
-  testScanCompare(pControl, pDb, 1, 0, 0, 0, 0, pRc);
+  int iKey1;
+  int iKey2;
+  void *pKey1; int nKey1;       /* Start key */
+  void *pKey2; int nKey2;       /* Final key */
+
+  iKey1 = testPrngValue(iSeed) % nData;
+  iKey2 = testPrngValue(iSeed+1) % nData;
+  testDatasourceEntry(pData, iKey1, &pKey2, &nKey1, 0, 0);
+  pKey1 = testMalloc(nKey1+1);
+  memcpy(pKey1, pKey2, nKey1+1);
+  testDatasourceEntry(pData, iKey2, &pKey2, &nKey2, 0, 0);
+
+  testScanCompare(pControl, pDb, 0, 0, 0,         0, 0,         pRc);
+  testScanCompare(pControl, pDb, 1, 0, 0,         0, 0,         pRc);
+
+  testScanCompare(pControl, pDb, 0, 0, 0,         pKey2, nKey2, pRc);
+  testScanCompare(pControl, pDb, 0, pKey1, nKey1, 0, 0,         pRc);
+  testScanCompare(pControl, pDb, 0, pKey1, nKey1, pKey2, nKey2, pRc);
+  testScanCompare(pControl, pDb, 1, 0, 0,         pKey2, nKey2, pRc);
+  testScanCompare(pControl, pDb, 1, pKey1, nKey1, 0, 0,         pRc);
+  testScanCompare(pControl, pDb, 1, pKey1, nKey1, pKey2, nKey2, pRc);
+
+  testFree(pKey1);
 }
 
 static void doDataTest2(
@@ -393,11 +417,13 @@ static void doDataTest2(
     testDeleteRange(pControl, pKey1, nKey1, pKey2, nKey2, &rc);
     testFree(pKey1);
 
-    testCompareDb(pControl, pDb, &rc);
-#if 0
+if( 0 && i==4 ){
+  extern int test_scan_debug;
+  test_scan_debug = 1;
+}
+    testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
     testReopen(&pDb, &rc);
-    testCompareDb(pControl, pDb, &rc);
-#endif
+    testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
 
     /* Update the progress dots... */
     testCaseProgress(i, p->nIter, testCaseNDot(), &iDot);
@@ -428,7 +454,11 @@ void test_data_2(
 ){
   Datatest2 aTest[] = {
       /* defn,                                  nWrite, nIter */
+    { {DATA_RANDOM,     20,25,     100,200},        10, 50 },
+    { {DATA_RANDOM,     20,25,     100,200},       200, 50 },
+#if 0
     { {DATA_RANDOM,     20,25,     100,200},       200, 50 }
+#endif
   };
 
   int i;

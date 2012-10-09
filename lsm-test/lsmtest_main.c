@@ -197,7 +197,10 @@ static void scanCompareCb(
   u8 *aVal = (u8 *)pVal;
   int i;
 
-  if( test_scan_debug ) printf("%.*s\n", nKey, (char *)pKey);
+  if( test_scan_debug ){
+    printf("%.*s\n", nKey, (char *)pKey);
+    fflush(stdout);
+  }
 #if 0
   if( test_scan_debug ) printf("%.20s\n", (char *)pVal);
 #endif
