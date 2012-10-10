@@ -122,6 +122,7 @@ char *testMallocVPrintf(const char *zFormat, va_list ap);
 int testGlobMatch(const char *zPattern, const char *zStr);
 
 void testScanCompare(TestDb *, TestDb *, int, void *, int, void *, int, int *);
+void testFetchCompare(TestDb *, TestDb *, void *, int, int *);
 
 void *testMalloc(int);
 void *testMallocCopy(void *pCopy, int nByte);

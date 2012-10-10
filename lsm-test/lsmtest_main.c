@@ -136,7 +136,7 @@ void testFetchStr(
   testFetch(pDb, (void *)zKey, strlen(zKey), (void *)zVal, nVal, pRc);
 }
 
-static void testFetchCompare(
+void testFetchCompare(
   TestDb *pDb1, 
   TestDb *pDb2, 
   void *pKey, int nKey, 
@@ -147,6 +147,9 @@ static void testFetchCompare(
   void *pDbVal2;
   int nDbVal1;
   int nDbVal2;
+
+  static int nCall = 0;
+  nCall++;
 
   rc = tdb_fetch(pDb1, pKey, nKey, &pDbVal1, &nDbVal1);
   testSetError(rc);

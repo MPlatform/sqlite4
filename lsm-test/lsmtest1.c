@@ -355,29 +355,40 @@ static void testCompareDb(
   TestDb *pDb,
   int *pRc
 ){
-  int iKey1;
-  int iKey2;
-  void *pKey1; int nKey1;       /* Start key */
-  void *pKey2; int nKey2;       /* Final key */
-
-  iKey1 = testPrngValue(iSeed) % nData;
-  iKey2 = testPrngValue(iSeed+1) % nData;
-  testDatasourceEntry(pData, iKey1, &pKey2, &nKey1, 0, 0);
-  pKey1 = testMalloc(nKey1+1);
-  memcpy(pKey1, pKey2, nKey1+1);
-  testDatasourceEntry(pData, iKey2, &pKey2, &nKey2, 0, 0);
+  int i;
 
   testScanCompare(pControl, pDb, 0, 0, 0,         0, 0,         pRc);
   testScanCompare(pControl, pDb, 1, 0, 0,         0, 0,         pRc);
 
-  testScanCompare(pControl, pDb, 0, 0, 0,         pKey2, nKey2, pRc);
-  testScanCompare(pControl, pDb, 0, pKey1, nKey1, 0, 0,         pRc);
-  testScanCompare(pControl, pDb, 0, pKey1, nKey1, pKey2, nKey2, pRc);
-  testScanCompare(pControl, pDb, 1, 0, 0,         pKey2, nKey2, pRc);
-  testScanCompare(pControl, pDb, 1, pKey1, nKey1, 0, 0,         pRc);
-  testScanCompare(pControl, pDb, 1, pKey1, nKey1, pKey2, nKey2, pRc);
+#if 0
+  if( *pRc==0 ){
+    int iKey1;
+    int iKey2;
+    void *pKey1; int nKey1;       /* Start key */
+    void *pKey2; int nKey2;       /* Final key */
 
-  testFree(pKey1);
+    iKey1 = testPrngValue(iSeed) % nData;
+    iKey2 = testPrngValue(iSeed+1) % nData;
+    testDatasourceEntry(pData, iKey1, &pKey2, &nKey1, 0, 0);
+    pKey1 = testMalloc(nKey1+1);
+    memcpy(pKey1, pKey2, nKey1+1);
+    testDatasourceEntry(pData, iKey2, &pKey2, &nKey2, 0, 0);
+
+    testScanCompare(pControl, pDb, 0, 0, 0,         pKey2, nKey2, pRc);
+    testScanCompare(pControl, pDb, 0, pKey1, nKey1, 0, 0,         pRc);
+    testScanCompare(pControl, pDb, 0, pKey1, nKey1, pKey2, nKey2, pRc);
+    testScanCompare(pControl, pDb, 1, 0, 0,         pKey2, nKey2, pRc);
+    testScanCompare(pControl, pDb, 1, pKey1, nKey1, 0, 0,         pRc);
+    testScanCompare(pControl, pDb, 1, pKey1, nKey1, pKey2, nKey2, pRc);
+    testFree(pKey1);
+  }
+#endif
+
+  for(i=0; i<nData && *pRc==0; i++){
+    void *pKey; int nKey;
+    testDatasourceEntry(pData, i, &pKey, &nKey, 0, 0);
+    testFetchCompare(pControl, pDb, pKey, nKey, pRc);
+  }
 }
 
 static void doDataTest2(
@@ -417,10 +428,6 @@ static void doDataTest2(
     testDeleteRange(pControl, pKey1, nKey1, pKey2, nKey2, &rc);
     testFree(pKey1);
 
-if( 0 && i==4 ){
-  extern int test_scan_debug;
-  test_scan_debug = 1;
-}
     testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
     testReopen(&pDb, &rc);
     testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
