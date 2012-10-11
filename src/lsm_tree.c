@@ -126,6 +126,8 @@ static int assertFlagsOk(u8 keyflags){
 
 static int assert_delete_ranges_match(lsm_db *);
 static int treeCountEntries(lsm_db *db);
+#else
+# define assertFlagsOk(x)
 #endif
 
 /*
@@ -414,6 +416,25 @@ void assert_tree_looks_ok(int rc, Tree *pTree){
 # define assert_tree_looks_ok(x,y)
 #endif
 
+void lsmFlagsToString(int flags, char *zFlags){
+
+  zFlags[0] = (flags & LSM_END_DELETE)   ? ']' : '.';
+
+  /* Only one of LSM_POINT_DELETE, LSM_INSERT and LSM_SEPARATOR should ever
+  ** be set. If this is not true, write a '?' to the output.  */
+  switch( flags & (LSM_POINT_DELETE|LSM_INSERT|LSM_SEPARATOR) ){
+    case 0:                zFlags[1] = '.'; break;
+    case LSM_POINT_DELETE: zFlags[1] = '-'; break;
+    case LSM_INSERT:       zFlags[1] = '+'; break;
+    case LSM_SEPARATOR:    zFlags[1] = '^'; break;
+    default:               zFlags[1] = '?'; break;
+  }
+
+  zFlags[2] = (flags & LSM_SYSTEMKEY)    ? '*' : '.';
+  zFlags[3] = (flags & LSM_START_DELETE) ? '[' : '.';
+  zFlags[4] = '\0';
+}
+
 #ifdef LSM_DEBUG
 
 /*
@@ -446,25 +467,6 @@ static void lsmAppendIndent(LsmString *pStr, int nIndent){
   int i;
   lsmStringExtend(pStr, nIndent);
   for(i=0; i<nIndent; i++) lsmStringAppend(pStr, " ", 1);
-}
-
-void lsmFlagsToString(int flags, char *zFlags){
-
-  zFlags[0] = (flags & LSM_END_DELETE)   ? ']' : '.';
-
-  /* Only one of LSM_POINT_DELETE, LSM_INSERT and LSM_SEPARATOR should ever
-  ** be set. If this is not true, write a '?' to the output.  */
-  switch( flags & (LSM_POINT_DELETE|LSM_INSERT|LSM_SEPARATOR) ){
-    case 0:                zFlags[1] = '.'; break;
-    case LSM_POINT_DELETE: zFlags[1] = '-'; break;
-    case LSM_INSERT:       zFlags[1] = '+'; break;
-    case LSM_SEPARATOR:    zFlags[1] = '^'; break;
-    default:               zFlags[1] = '?'; break;
-  }
-
-  zFlags[2] = (flags & LSM_SYSTEMKEY)    ? '*' : '.';
-  zFlags[3] = (flags & LSM_START_DELETE) ? '[' : '.';
-  zFlags[4] = '\0';
 }
 
 static void strAppendFlags(LsmString *pStr, u8 flags){

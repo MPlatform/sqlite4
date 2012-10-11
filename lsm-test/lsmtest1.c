@@ -428,7 +428,9 @@ static void doDataTest2(
     testDeleteRange(pControl, pKey1, nKey1, pKey2, nKey2, &rc);
     testFree(pKey1);
 
+#if 0
     testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
+#endif
     testReopen(&pDb, &rc);
     testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
 

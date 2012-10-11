@@ -201,7 +201,7 @@ static void scanCompareCb(
   int i;
 
   if( test_scan_debug ){
-    printf("%.*s\n", nKey, (char *)pKey);
+    printf("%d: %.*s\n", p->nRow, nKey, (char *)pKey);
     fflush(stdout);
   }
 #if 0

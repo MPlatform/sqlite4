@@ -1094,13 +1094,20 @@ static int segmentPtrAdvance(
   int bReverse
 ){
   int eDir = (bReverse ? -1 : 1);
+  Level *pLvl = pPtr->pLevel;
   do {
     int rc;
     int iCell;                    /* Number of new cell in page */
+    int svFlags = 0;              /* SegmentPtr.eType before advance */
 
     iCell = pPtr->iCell + eDir;
     assert( pPtr->pPg );
     assert( iCell<=pPtr->nCell && iCell>=-1 );
+
+    if( bReverse && pPtr->pSeg!=&pPtr->pLevel->lhs ){
+      svFlags = pPtr->eType;
+      assert( svFlags );
+    }
 
     if( iCell>=pPtr->nCell || iCell<0 ){
       do {
@@ -1114,6 +1121,22 @@ static int segmentPtrAdvance(
     }
     rc = segmentPtrLoadCell(pPtr, iCell);
     if( rc!=LSM_OK ) return rc;
+
+    if( svFlags && pPtr->pPg ){
+      int res = sortedKeyCompare(pCsr->pDb->xCmp,
+          rtTopic(pPtr->eType), pPtr->pKey, pPtr->nKey,
+          pLvl->iSplitTopic, pLvl->pSplitKey, pLvl->nSplitKey
+      );
+      if( res<0 ) segmentPtrReset(pPtr);
+    }
+    if( pPtr->pPg==0 && (svFlags & LSM_END_DELETE) ){
+      rc = lsmFsDbPageGet(pCsr->pDb->pFS, pPtr->pSeg->iFirst, &pPtr->pPg);
+      if( rc!=LSM_OK ) return rc;
+      pPtr->eType = LSM_START_DELETE | (pLvl->iSplitTopic ? LSM_SYSTEMKEY : 0);
+      pPtr->pKey = pLvl->pSplitKey;
+      pPtr->nKey = pLvl->nSplitKey;
+    }
+
   }while( pCsr 
        && pPtr->pPg 
        && segmentPtrIgnoreSeparators(pCsr, pPtr)
@@ -1147,6 +1170,7 @@ static void segmentPtrEndPage(
 ** wrong (IO error, OOM etc.).
 */
 static int segmentPtrEnd(MultiCursor *pCsr, SegmentPtr *pPtr, int bLast){
+  Level *pLvl = pPtr->pLevel;
   int rc = LSM_OK;
   FileSystem *pFS = pCsr->pDb->pFS;
   int bIgnore;
@@ -1157,14 +1181,27 @@ static int segmentPtrEnd(MultiCursor *pCsr, SegmentPtr *pPtr, int bLast){
   ){
     rc = segmentPtrNextPage(pPtr, (bLast ? -1 : 1));
   }
-  
+
   if( rc==LSM_OK && pPtr->pPg ){
     rc = segmentPtrLoadCell(pPtr, bLast ? (pPtr->nCell-1) : 0);
   }
-
+  
   bIgnore = segmentPtrIgnoreSeparators(pCsr, pPtr);
   if( rc==LSM_OK && pPtr->pPg && bIgnore && rtIsSeparator(pPtr->eType) ){
     rc = segmentPtrAdvance(pCsr, pPtr, bLast);
+  }
+
+
+  if( bLast && rc==LSM_OK && pPtr->pPg
+   && pPtr->pSeg==&pLvl->lhs 
+   && pLvl->nRight && (pPtr->eType & LSM_START_DELETE)
+  ){
+    pPtr->iCell++;
+    pPtr->eType = LSM_END_DELETE | (pLvl->iSplitTopic);
+    pPtr->pKey = pLvl->pSplitKey;
+    pPtr->nKey = pLvl->nSplitKey;
+    pPtr->pVal = 0;
+    pPtr->nVal = 0;
   }
 
   return rc;
@@ -1699,6 +1736,36 @@ static void multiCursorGetKey(
   if( ppKey ) *ppKey = pKey;
 }
 
+static int sortedDbKeyCompare(
+  int (*xCmp)(void *, int, void *, int),
+  int iLhsFlags, void *pLhsKey, int nLhsKey,
+  int iRhsFlags, void *pRhsKey, int nRhsKey
+){
+  int res;
+
+  /* Compare the keys, including the system flag. */
+  res = sortedKeyCompare(xCmp, 
+    rtTopic(iLhsFlags), pLhsKey, nLhsKey,
+    rtTopic(iRhsFlags), pRhsKey, nRhsKey
+  );
+
+  /* If a key has the LSM_START_DELETE flag set, but not the LSM_INSERT or
+  ** LSM_POINT_DELETE flags, it is considered a delta larger. This prevents
+  ** the beginning of an open-ended set from masking a database entry or
+  ** delete at a lower level.  */
+  if( res==0 ){
+    const int insdel = LSM_POINT_DELETE|LSM_INSERT;
+    int iDel1 = 0;
+    int iDel2 = 0;
+    if( LSM_START_DELETE==(iLhsFlags & (LSM_START_DELETE|insdel)) ) iDel1 = +1;
+    if( LSM_END_DELETE  ==(iLhsFlags & (LSM_END_DELETE  |insdel)) ) iDel1 = -1;
+    if( LSM_START_DELETE==(iRhsFlags & (LSM_START_DELETE|insdel)) ) iDel2 = +1;
+    if( LSM_END_DELETE  ==(iRhsFlags & (LSM_END_DELETE  |insdel)) ) iDel2 = -1;
+    res = (iDel1 - iDel2);
+  }
+
+  return res;
+}
 
 static void multiCursorDoCompare(MultiCursor *pCsr, int iOut, int bReverse){
   int i1;
@@ -1727,27 +1794,10 @@ static void multiCursorDoCompare(MultiCursor *pCsr, int iOut, int bReverse){
   }else{
     int res;
 
-    /* Compare the keys, including the system flag. */
-    res = sortedKeyCompare(pCsr->pDb->xCmp, 
-        rtTopic(eType1), pKey1, nKey1,
-        rtTopic(eType2), pKey2, nKey2
+    /* Compare the keys */
+    res = sortedDbKeyCompare(pCsr->pDb->xCmp, 
+        eType1, pKey1, nKey1, eType2, pKey2, nKey2
     );
-
-    /* If a key has the LSM_START_DELETE flag set, but not the LSM_INSERT or
-    ** LSM_POINT_DELETE flags, it is considered a delta larger. This prevents
-    ** the beginning of an open-ended set from masking a database entry or
-    ** delete at a lower level.  */
-    if( res==0 ){
-      const int insdel = LSM_POINT_DELETE|LSM_INSERT;
-      int iDel1 = 0;
-      int iDel2 = 0;
-
-      if( LSM_START_DELETE==(eType1 & (LSM_START_DELETE|insdel)) ) iDel1 = +1;
-      if( LSM_END_DELETE  ==(eType1 & (LSM_END_DELETE  |insdel)) ) iDel1 = -1;
-      if( LSM_START_DELETE==(eType2 & (LSM_START_DELETE|insdel)) ) iDel2 = +1;
-      if( LSM_END_DELETE  ==(eType2 & (LSM_END_DELETE  |insdel)) ) iDel2 = -1;
-      res = (iDel1 - iDel2);
-    }
 
     res = res * mul;
     if( res==0 ){
@@ -1821,6 +1871,7 @@ static int segmentCursorAdvance(
     }
   }
 
+#if 0
   else if( pPtr->pPg && bComposite && bReverse && pPtr->pSeg!=&pLvl->lhs ){
     int res = sortedKeyCompare(pCsr->pDb->xCmp,
         rtTopic(pPtr->eType), pPtr->pKey, pPtr->nKey,
@@ -1830,6 +1881,7 @@ static int segmentCursorAdvance(
       segmentPtrReset(pPtr);
     }
   }
+#endif
 
   return rc;
 }
@@ -2478,10 +2530,9 @@ static int mcursorAdvanceOk(
   */
   multiCursorGetKey(pCsr, pCsr->aTree[1], &eNewType, &pNew, &nNew);
   if( pNew ){
-    int res = rtTopic(eNewType) - rtTopic(pCsr->eType);
-    if( res==0 ){
-      res = pCsr->pDb->xCmp(pNew, nNew, pCsr->key.pData, pCsr->key.nData);
-    }
+    int res = sortedDbKeyCompare(pCsr->pDb->xCmp, 
+        eNewType, pNew, nNew, pCsr->eType, pCsr->key.pData, pCsr->key.nData
+    );
     if( (bReverse==0 && res<=0) || (bReverse!=0 && res>=0) ){
       return 0;
     }
