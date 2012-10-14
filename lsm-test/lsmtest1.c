@@ -360,7 +360,6 @@ static void testCompareDb(
   testScanCompare(pControl, pDb, 0, 0, 0,         0, 0,         pRc);
   testScanCompare(pControl, pDb, 1, 0, 0,         0, 0,         pRc);
 
-#if 0
   if( *pRc==0 ){
     int iKey1;
     int iKey2;
@@ -382,7 +381,6 @@ static void testCompareDb(
     testScanCompare(pControl, pDb, 1, pKey1, nKey1, pKey2, nKey2, pRc);
     testFree(pKey1);
   }
-#endif
 
   for(i=0; i<nData && *pRc==0; i++){
     void *pKey; int nKey;
@@ -428,9 +426,7 @@ static void doDataTest2(
     testDeleteRange(pControl, pKey1, nKey1, pKey2, nKey2, &rc);
     testFree(pKey1);
 
-#if 0
     testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
-#endif
     testReopen(&pDb, &rc);
     testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
 
