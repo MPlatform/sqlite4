@@ -574,7 +574,7 @@ static TreeKey *csrGetKey(TreeCursor *pCsr, TreeBlob *pBlob, int *pRc){
       pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], 
       TK_LOADVAL, pBlob, pRc
   );
-  assertFlagsOk(pRet->flags);
+  assert( pRet==0 || assertFlagsOk(pRet->flags) );
   return pRet;
 }
 
