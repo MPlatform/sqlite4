@@ -72,6 +72,7 @@ struct Datatest1 {
 */
 struct Datatest2 {
   DatasourceDefn defn;
+  int nRange;
   int nWrite;                     /* Number of writes per iteration */
   int nIter;                      /* Total number of iterations to run */
 };
@@ -398,7 +399,7 @@ static void doDataTest2(
   TestDb *pControl;
   Datasource *pData;
   int i;
-  int rc;
+  int rc = LSM_OK;
   int iDot = 0;
 
   /* Start the test case, open a database and allocate the datasource. */
@@ -414,9 +415,14 @@ static void doDataTest2(
   for(i=0; rc==0 && i<p->nIter; i++){
     void *pKey1; int nKey1;
     void *pKey2; int nKey2;
+    int ii;
+    int nRange = MIN(p->nIter*p->nWrite, p->nRange);
 
-    testWriteDatasourceRange(pDb, pData, i*p->nWrite, p->nWrite, &rc);
-    testWriteDatasourceRange(pControl, pData, i*p->nWrite, p->nWrite, &rc);
+    for(ii=0; rc==0 && ii<p->nWrite; ii++){
+      int iKey = (i*p->nWrite + ii) % p->nRange;
+      testWriteDatasource(pControl, pData, iKey, &rc);
+      testWriteDatasource(pDb, pData, iKey, &rc);
+    }
 
     testDatasourceEntry(pData, i+1000000, &pKey1, &nKey1, 0, 0);
     pKey1 = testMallocCopy(pKey1, nKey1);
@@ -426,9 +432,9 @@ static void doDataTest2(
     testDeleteRange(pControl, pKey1, nKey1, pKey2, nKey2, &rc);
     testFree(pKey1);
 
-    testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
+    testCompareDb(pData, nRange, i, pControl, pDb, &rc);
     testReopen(&pDb, &rc);
-    testCompareDb(pData, (p->nIter*p->nWrite), i, pControl, pDb, &rc);
+    testCompareDb(pData, nRange, i, pControl, pDb, &rc);
 
     /* Update the progress dots... */
     testCaseProgress(i, p->nIter, testCaseNDot(), &iDot);
@@ -445,8 +451,8 @@ static char *getName2(const char *zSystem, Datatest2 *pTest){
   char *zRet;
   char *zData;
   zData = testDatasourceName(&pTest->defn);
-  zRet = testMallocPrintf("data2.%s.%s.%d.%d", 
-      zSystem, zData, pTest->nWrite, pTest->nIter
+  zRet = testMallocPrintf("data2.%s.%s.%d.%d.%d", 
+      zSystem, zData, pTest->nRange, pTest->nWrite, pTest->nIter
   );
   testFree(zData);
   return zRet;
@@ -458,9 +464,12 @@ void test_data_2(
   int *pRc                        /* IN/OUT: Error code */
 ){
   Datatest2 aTest[] = {
-      /* defn,                                  nWrite, nIter */
-    { {DATA_RANDOM,     20,25,     100,200},        10, 50 },
-    { {DATA_RANDOM,     20,25,     100,200},       200, 50 },
+      /* defn,                                 nRange, nWrite, nIter */
+    { {DATA_RANDOM,     20,25,     100,200},   10000,  10,     50   },
+    { {DATA_RANDOM,     20,25,     100,200},   10000,  200,    50   },
+    { {DATA_RANDOM,     20,25,     100,200},   100,    10,     1000 },
+    { {DATA_RANDOM,     20,25,     100,200},   100,    200,    50   },
+
 #if 0
     { {DATA_RANDOM,     20,25,     100,200},       200, 50 }
 #endif

@@ -1981,16 +1981,12 @@ static void multiCursorDoCompare(MultiCursor *pCsr, int iOut, int bReverse){
 ** pCsr forward (bReverse==0) or backward (bReverse!=0).
 **
 ** If the segment pointer points to a segment that is part of a composite
-** level, then the following special cases are handled.
+** level, then the following special case is handled.
 **
 **   * If iPtr is the lhs of a composite level, and the cursor is being
 **     advanced forwards, and segment iPtr is at EOF, move all pointers
 **     that correspond to rhs segments of the same level to the first
 **     key in their respective data.
-**
-**   * If iPtr is on the rhs of a composite level, and the cursor is being
-**     reversed, and the new key is smaller than the split-key, set the
-**     segment pointer to point to EOF.
 */
 static int segmentCursorAdvance(
   MultiCursor *pCsr, 
@@ -2011,27 +2007,13 @@ static int segmentCursorAdvance(
    && pPtr->pPg==0                               /* segment at EOF */
   ){
     int i;
-
     for(i=0; rc==LSM_OK && i<pLvl->nRight; i++){
       rc = sortedRhsFirst(pCsr, pLvl, &pCsr->aPtr[iPtr+1+i]);
     }
-
     for(i=pCsr->nTree-1; i>0; i--){
       multiCursorDoCompare(pCsr, i, 0);
     }
   }
-
-#if 0
-  else if( pPtr->pPg && bComposite && bReverse && pPtr->pSeg!=&pLvl->lhs ){
-    int res = sortedKeyCompare(pCsr->pDb->xCmp,
-        rtTopic(pPtr->eType), pPtr->pKey, pPtr->nKey,
-        pLvl->iSplitTopic, pLvl->pSplitKey, pLvl->nSplitKey
-    );
-    if( res<0 ){
-      segmentPtrReset(pPtr);
-    }
-  }
-#endif
 
   return rc;
 }
@@ -3346,10 +3328,6 @@ static int mergeWorkerWrite(
      ** marked read-only, advance to the next page of the output run. */
     iOff = pMerge->iOutputOff;
     if( iOff<0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
-#if 0
-      iFPtr = iFPtr + (nRec ? pageGetRecordPtr(aData, nData, nRec-1) : 0);
-      iRPtr = iPtr - iFPtr;
-#endif
       iFPtr = *pCsr->pPrevMergePtr;
       iRPtr = iPtr - iFPtr;
 
