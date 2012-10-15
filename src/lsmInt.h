@@ -147,6 +147,18 @@ int lsmErrorBkpt(int);
 
 #define LSM_ATTEMPTS_BEFORE_PROTOCOL 10000
 
+
+/*
+** Each entry stored in the LSM (or in-memory tree structure) has an
+** associated mask of the following flags.
+*/
+#define LSM_START_DELETE 0x01     /* Start of open-ended delete range */
+#define LSM_END_DELETE   0x02     /* End of open-ended delete range */
+#define LSM_POINT_DELETE 0x04     /* Delete this key */
+#define LSM_INSERT       0x08     /* Insert this key and value */
+#define LSM_SEPARATOR    0x10     /* True if entry is separator key only */
+#define LSM_SYSTEMKEY    0x20     /* True if entry is a system key (FREELIST) */
+
 /*
 ** A string that can grow by appending.
 */
@@ -378,6 +390,7 @@ struct Merge {
   MergeInput splitkey;            /* Location in file of current splitkey */
   int nSkip;                      /* Number of separators entries to skip */
   int iOutputOff;                 /* Write offset on output page */
+  Pgno iCurrentPtr;               /* Current pointer value */
   int bHierReadonly;              /* True if b-tree heirarchies are read-only */
 };
 
@@ -543,11 +556,13 @@ int lsmTreeCursorNext(TreeCursor *pCsr);
 int lsmTreeCursorPrev(TreeCursor *pCsr);
 int lsmTreeCursorEnd(TreeCursor *pCsr, int bLast);
 void lsmTreeCursorReset(TreeCursor *pCsr);
-int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey);
+int lsmTreeCursorKey(TreeCursor *pCsr, int *pFlags, void **ppKey, int *pnKey);
+int lsmTreeCursorFlags(TreeCursor *pCsr);
 int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal);
 int lsmTreeCursorValid(TreeCursor *pCsr);
 int lsmTreeCursorSave(TreeCursor *pCsr);
 
+void lsmFlagsToString(int flags, char *zFlags);
 
 /* 
 ** Functions from file "mem.c".

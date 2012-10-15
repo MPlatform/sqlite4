@@ -73,7 +73,19 @@ void testDelete(
 ){
   if( *pRc==0 ){
     int rc;
-    rc = tdb_delete(pDb, pKey, nKey);
+    *pRc = rc = tdb_delete(pDb, pKey, nKey);
+    testSetError(rc);
+  }
+}
+void testDeleteRange(
+  TestDb *pDb,                    /* Database handle */
+  void *pKey1, int nKey1,
+  void *pKey2, int nKey2,
+  int *pRc                        /* IN/OUT: Error code */
+){
+  if( *pRc==0 ){
+    int rc;
+    *pRc = rc = tdb_delete_range(pDb, pKey1, nKey1, pKey2, nKey2);
     testSetError(rc);
   }
 }
@@ -124,7 +136,7 @@ void testFetchStr(
   testFetch(pDb, (void *)zKey, strlen(zKey), (void *)zVal, nVal, pRc);
 }
 
-static void testFetchCompare(
+void testFetchCompare(
   TestDb *pDb1, 
   TestDb *pDb2, 
   void *pKey, int nKey, 
@@ -135,6 +147,9 @@ static void testFetchCompare(
   void *pDbVal2;
   int nDbVal1;
   int nDbVal2;
+
+  static int nCall = 0;
+  nCall++;
 
   rc = tdb_fetch(pDb1, pKey, nKey, &pDbVal1, &nDbVal1);
   testSetError(rc);
@@ -185,7 +200,10 @@ static void scanCompareCb(
   u8 *aVal = (u8 *)pVal;
   int i;
 
-  if( test_scan_debug ) printf("%.*s\n", nKey, (char *)pKey);
+  if( test_scan_debug ){
+    printf("%d: %.*s\n", p->nRow, nKey, (char *)pKey);
+    fflush(stdout);
+  }
 #if 0
   if( test_scan_debug ) printf("%.20s\n", (char *)pVal);
 #endif
@@ -374,6 +392,12 @@ void *testMalloc(int n){
   return pRet;
 }
 
+void *testMallocCopy(void *pCopy, int nByte){
+  void *pRet = testMalloc(nByte);
+  memcpy(pRet, pCopy, nByte);
+  return pRet;
+}
+
 void *testRealloc(void *p, int n){
   return realloc(p, n);
 }
@@ -436,7 +460,8 @@ int do_test(int nArg, char **azArg){
   for(j=0; tdb_system_name(j); j++){
     rc = 0;
 
-    test_data_3(tdb_system_name(j), zPattern, &rc);
+    test_data_1(tdb_system_name(j), zPattern, &rc);
+    test_data_2(tdb_system_name(j), zPattern, &rc);
     test_rollback(tdb_system_name(j), zPattern, &rc);
     test_mc(tdb_system_name(j), zPattern, &rc);
     test_mt(tdb_system_name(j), zPattern, &rc);

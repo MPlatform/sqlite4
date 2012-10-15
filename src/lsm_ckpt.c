@@ -64,6 +64,7 @@
 **        5b. Cell number of next cell to read during merge
 **     7. Page containing current split-key.
 **     8. Cell within page containing current split-key.
+**     9. Current pointer value.
 **
 **   The freelist. 
 **
@@ -312,6 +313,7 @@ static void ckptExportLevel(
     }
     ckptSetValue(p, iOut++, pMerge->splitkey.iPg, pRc);
     ckptSetValue(p, iOut++, pMerge->splitkey.iCell, pRc);
+    ckptSetValue(p, iOut++, pMerge->iCurrentPtr, pRc);
   }
 
   *piOut = iOut;
@@ -501,6 +503,7 @@ static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
   }
   pMerge->splitkey.iPg = (Pgno)aInt[iIn++];
   pMerge->splitkey.iCell = (int)aInt[iIn++];
+  pMerge->iCurrentPtr = (int)aInt[iIn++];
 
   /* Set *piIn and return LSM_OK. */
   *piIn = iIn;

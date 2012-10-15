@@ -181,6 +181,7 @@ static int test_leveldb_open(const char *zFilename, int bClear, TestDb **ppDb){
     test_leveldb_close,
     test_leveldb_write,
     test_leveldb_delete,
+    0,
     test_leveldb_fetch,
     test_leveldb_scan,
     error_transaction_function,
@@ -311,6 +312,7 @@ struct SqlDb {
   sqlite3 *db;
   sqlite3_stmt *pInsert;
   sqlite3_stmt *pDelete;
+  sqlite3_stmt *pDeleteRange;
   sqlite3_stmt *pFetch;
   sqlite3_stmt *apScan[8];
 
@@ -325,6 +327,7 @@ static int sql_close(TestDb *pTestDb){
   SqlDb *pDb = (SqlDb *)pTestDb;
   sqlite3_finalize(pDb->pInsert);
   sqlite3_finalize(pDb->pDelete);
+  sqlite3_finalize(pDb->pDeleteRange);
   sqlite3_finalize(pDb->pFetch);
   sqlite3_finalize(pDb->apScan[0]);
   sqlite3_finalize(pDb->apScan[1]);
@@ -359,6 +362,18 @@ static int sql_delete(TestDb *pTestDb, void *pKey, int nKey){
   sqlite3_bind_blob(pDb->pDelete, 1, pKey, nKey, SQLITE_STATIC);
   sqlite3_step(pDb->pDelete);
   return sqlite3_reset(pDb->pDelete);
+}
+
+static int sql_delete_range(
+  TestDb *pTestDb, 
+  void *pKey1, int nKey1,
+  void *pKey2, int nKey2
+){
+  SqlDb *pDb = (SqlDb *)pTestDb;
+  sqlite3_bind_blob(pDb->pDeleteRange, 1, pKey1, nKey1, SQLITE_STATIC);
+  sqlite3_bind_blob(pDb->pDeleteRange, 2, pKey2, nKey2, SQLITE_STATIC);
+  sqlite3_step(pDb->pDeleteRange);
+  return sqlite3_reset(pDb->pDeleteRange);
 }
 
 static int sql_fetch(
@@ -512,6 +527,7 @@ static int sql_open(const char *zFilename, int bClear, TestDb **ppDb){
     sql_close,
     sql_write,
     sql_delete,
+    sql_delete_range,
     sql_fetch,
     sql_scan,
     sql_begin,
@@ -521,6 +537,7 @@ static int sql_open(const char *zFilename, int bClear, TestDb **ppDb){
   const char *zCreate = "CREATE TABLE IF NOT EXISTS t1(k PRIMARY KEY, v)";
   const char *zInsert = "REPLACE INTO t1 VALUES(?, ?)";
   const char *zDelete = "DELETE FROM t1 WHERE k = ?";
+  const char *zRange = "DELETE FROM t1 WHERE k>? AND k<?";
   const char *zFetch  = "SELECT v FROM t1 WHERE k = ?";
 
   const char *zScan0  = "SELECT * FROM t1 WHERE k BETWEEN ?1 AND ?2 ORDER BY k";
@@ -550,6 +567,7 @@ static int sql_open(const char *zFilename, int bClear, TestDb **ppDb){
    || 0!=(rc = sqlite3_exec(pDb->db, zCreate, 0, 0, 0))
    || 0!=(rc = sqlite3_prepare_v2(pDb->db, zInsert, -1, &pDb->pInsert, 0))
    || 0!=(rc = sqlite3_prepare_v2(pDb->db, zDelete, -1, &pDb->pDelete, 0))
+   || 0!=(rc = sqlite3_prepare_v2(pDb->db, zRange, -1, &pDb->pDeleteRange, 0))
    || 0!=(rc = sqlite3_prepare_v2(pDb->db, zFetch, -1, &pDb->pFetch, 0))
    || 0!=(rc = sqlite3_prepare_v2(pDb->db, zScan0, -1, &pDb->apScan[0], 0))
    || 0!=(rc = sqlite3_prepare_v2(pDb->db, zScan1, -1, &pDb->apScan[1], 0))
@@ -647,6 +665,12 @@ int tdb_write(TestDb *pDb, void *pKey, int nKey, void *pVal, int nVal){
 
 int tdb_delete(TestDb *pDb, void *pKey, int nKey){
   return pDb->pMethods->xDelete(pDb, pKey, nKey);
+}
+
+int tdb_delete_range(
+    TestDb *pDb, void *pKey1, int nKey1, void *pKey2, int nKey2
+){
+  return pDb->pMethods->xDeleteRange(pDb, pKey1, nKey1, pKey2, nKey2);
 }
 
 int tdb_fetch(TestDb *pDb, void *pKey, int nKey, void **ppVal, int *pnVal){

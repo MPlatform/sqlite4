@@ -455,6 +455,15 @@ static int test_lsm_delete(TestDb *pTestDb, void *pKey, int nKey){
   return lsm_delete(pDb->db, pKey, nKey);
 }
 
+static int test_lsm_delete_range(
+  TestDb *pTestDb, 
+  void *pKey1, int nKey1,
+  void *pKey2, int nKey2
+){
+  LsmDb *pDb = (LsmDb *)pTestDb;
+  return lsm_delete_range(pDb->db, pKey1, nKey1, pKey2, nKey2);
+}
+
 static int test_lsm_fetch(
   TestDb *pTestDb, 
   void *pKey, 
@@ -730,6 +739,7 @@ static int testLsmOpen(
     test_lsm_close,
     test_lsm_write,
     test_lsm_delete,
+    test_lsm_delete_range,
     test_lsm_fetch,
     test_lsm_scan,
     test_lsm_begin,
@@ -1115,52 +1125,15 @@ static int testLsmStartWorkers(
 }
 
 
-static int test_lsm_mt(
-  const char *zFilename,          /* File to open */
-  int nWorker,                    /* Either 1 or 2, for worker threads */
-  int bClear,                     /* True to delete any existing db */
-  TestDb **ppDb                   /* OUT: TestDb database handle */
-){
-  LsmDb *pDb;
-  int rc;
-
-  rc = test_lsm_open(zFilename, bClear, ppDb);
-  pDb = (LsmDb *)*ppDb;
-
-  assert( nWorker==1 || nWorker==2 );
-
-  /* Turn off auto-work and configure a work-hook on the client connection. */
-  if( rc==0 ){
-    int bAutowork = 0;
-    lsm_config(pDb->db, LSM_CONFIG_AUTOWORK, &bAutowork);
-    lsm_config_work_hook(pDb->db, mt_client_work_hook, (void *)pDb);
-  }
-
-  if( rc==0 ){
-    pDb->aWorker = (LsmWorker *)testMalloc(sizeof(LsmWorker) * nWorker);
-    memset(pDb->aWorker, 0, sizeof(LsmWorker) * nWorker);
-    pDb->nWorker = nWorker;
-
-    rc = mt_start_worker(pDb, 0, zFilename, 0, LSM_WORK_FLUSH, 
-        nWorker==1 ? 512 : 0, 1
-    );
-  }
-
-  if( rc==0 && nWorker==2 ){
-    rc = mt_start_worker(pDb, 1, zFilename, 0, 0, 512, 0);
-  }
-
-  return rc;
-}
-
 int test_lsm_mt2(const char *zFilename, int bClear, TestDb **ppDb){
-  return test_lsm_mt(zFilename, 1, bClear, ppDb);
+  const char *zCfg = "threads=2";
+  return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
 
 int test_lsm_mt3(const char *zFilename, int bClear, TestDb **ppDb){
-  return test_lsm_mt(zFilename, 2, bClear, ppDb);
+  const char *zCfg = "threads=3";
+  return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
-
 
 #else
 static void mt_shutdown(LsmDb *pDb) { 

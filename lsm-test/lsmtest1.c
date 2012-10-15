@@ -4,13 +4,8 @@
 #define DATA_SEQUENTIAL TEST_DATASOURCE_SEQUENCE
 #define DATA_RANDOM     TEST_DATASOURCE_RANDOM
 
-typedef struct Datatest Datatest;
-typedef struct MinMax MinMax;
-
-struct MinMax {
-  int nMin;
-  int nMax;
-};
+typedef struct Datatest1 Datatest1;
+typedef struct Datatest2 Datatest2;
 
 /*
 ** An instance of the following structure contains parameters used to
@@ -23,7 +18,7 @@ struct MinMax {
 **   3. Delete all keys from the database. Deletes are done in the same 
 **      order as the inserts.
 **
-** During steps 2 and 3 above, after each Datatest.nVerify inserts or
+** During steps 2 and 3 above, after each Datatest1.nVerify inserts or
 ** deletes, the following:
 **
 **   a. Run Datasource.nTest key lookups and check the results are as expected.
@@ -34,7 +29,7 @@ struct MinMax {
 **
 **   c. Close and reopen the database. Then run (a) and (b) again.
 */
-struct Datatest {
+struct Datatest1 {
   /* Datasource definition */
   DatasourceDefn defn;
 
@@ -45,7 +40,48 @@ struct Datatest {
   int bTestScan;                  /* True to do scan tests */
 };
 
-static char *getName(const char *zSystem, Datatest *pTest){
+/*
+** An instance of the following data structure is used to describe the
+** second type of test case in this file. The chief difference between 
+** these tests and those described by Datatest1 is that these tests also
+** experiment with range-delete operations. Tests proceed as follows:
+**
+**     1. Open the datasource described by Datatest2.defn. 
+**
+**     2. Open a connection on an empty database.
+**
+**     3. Do this Datatest2.nIter times:
+**
+**        a) Insert Datatest2.nWrite key-value pairs from the datasource.
+**
+**        b) Select two pseudo-random keys and use them as the start
+**           and end points of a range-delete operation.
+**
+**        c) Verify that the contents of the database are as expected (see
+**           below for details).
+**
+**        d) Close and then reopen the database handle.
+**
+**        e) Verify that the contents of the database are still as expected.
+**
+** The inserts and range deletes are run twice - once on the database being
+** tested and once using a control system (sqlite3, kc etc. - something that 
+** works). In order to verify that the contents of the db being tested are
+** correct, the test runs a bunch of scans and lookups on both the test and
+** control databases. If the results are the same, the test passes.
+*/
+struct Datatest2 {
+  DatasourceDefn defn;
+  int nRange;
+  int nWrite;                     /* Number of writes per iteration */
+  int nIter;                      /* Total number of iterations to run */
+};
+
+/*
+** Generate a unique name for the test case pTest with database system
+** zSystem.
+*/
+static char *getName(const char *zSystem, Datatest1 *pTest){
   char *zRet;
   char *zData;
   zData = testDatasourceName(&pTest->defn);
@@ -215,9 +251,9 @@ static void printScanCb(
 }
 #endif
 
-static void doDataTest(
+static void doDataTest1(
   const char *zSystem,            /* Database system to test */
-  Datatest *p,                    /* Structure containing test parameters */
+  Datatest1 *p,                   /* Structure containing test parameters */
   int *pRc                        /* OUT: Error code */
 ){
   int i;
@@ -280,12 +316,12 @@ static void doDataTest(
 }
 
 
-void test_data_3(
+void test_data_1(
   const char *zSystem,            /* Database system name */
   const char *zPattern,           /* Run test cases that match this pattern */
   int *pRc                        /* IN/OUT: Error code */
 ){
-  Datatest aTest[] = {
+  Datatest1 aTest[] = {
     { {DATA_RANDOM,     20,25,     100,200},       1000,  250, 1000, 1},
     { {DATA_RANDOM,     8,10,      100,200},       1000,  250, 1000, 1},
     { {DATA_RANDOM,     8,10,      10,20},         1000,  250, 1000, 1},
@@ -306,8 +342,147 @@ void test_data_3(
   for(i=0; *pRc==LSM_OK && i<ArraySize(aTest); i++){
     char *zName = getName(zSystem, &aTest[i]);
     if( testCaseBegin(pRc, zPattern, "%s", zName) ){
-      doDataTest(zSystem, &aTest[i], pRc);
+      doDataTest1(zSystem, &aTest[i], pRc);
     }
     testFree(zName);
   }
 }
+
+static void testCompareDb(
+  Datasource *pData,
+  int nData,
+  int iSeed,
+  TestDb *pControl,
+  TestDb *pDb,
+  int *pRc
+){
+  int i;
+
+  testScanCompare(pControl, pDb, 0, 0, 0,         0, 0,         pRc);
+  testScanCompare(pControl, pDb, 1, 0, 0,         0, 0,         pRc);
+
+  if( *pRc==0 ){
+    int iKey1;
+    int iKey2;
+    void *pKey1; int nKey1;       /* Start key */
+    void *pKey2; int nKey2;       /* Final key */
+
+    iKey1 = testPrngValue(iSeed) % nData;
+    iKey2 = testPrngValue(iSeed+1) % nData;
+    testDatasourceEntry(pData, iKey1, &pKey2, &nKey1, 0, 0);
+    pKey1 = testMalloc(nKey1+1);
+    memcpy(pKey1, pKey2, nKey1+1);
+    testDatasourceEntry(pData, iKey2, &pKey2, &nKey2, 0, 0);
+
+    testScanCompare(pControl, pDb, 0, 0, 0,         pKey2, nKey2, pRc);
+    testScanCompare(pControl, pDb, 0, pKey1, nKey1, 0, 0,         pRc);
+    testScanCompare(pControl, pDb, 0, pKey1, nKey1, pKey2, nKey2, pRc);
+    testScanCompare(pControl, pDb, 1, 0, 0,         pKey2, nKey2, pRc);
+    testScanCompare(pControl, pDb, 1, pKey1, nKey1, 0, 0,         pRc);
+    testScanCompare(pControl, pDb, 1, pKey1, nKey1, pKey2, nKey2, pRc);
+    testFree(pKey1);
+  }
+
+  for(i=0; i<nData && *pRc==0; i++){
+    void *pKey; int nKey;
+    testDatasourceEntry(pData, i, &pKey, &nKey, 0, 0);
+    testFetchCompare(pControl, pDb, pKey, nKey, pRc);
+  }
+}
+
+static void doDataTest2(
+  const char *zSystem,            /* Database system to test */
+  Datatest2 *p,                   /* Structure containing test parameters */
+  int *pRc                        /* OUT: Error code */
+){
+  TestDb *pDb;
+  TestDb *pControl;
+  Datasource *pData;
+  int i;
+  int rc = LSM_OK;
+  int iDot = 0;
+
+  /* Start the test case, open a database and allocate the datasource. */
+  pDb = testOpen(zSystem, 1, &rc);
+  pData = testDatasourceNew(&p->defn);
+  rc = testControlDb(&pControl);
+
+  if( tdb_lsm(pDb) ){
+    int nBuf = 32 * 1024 * 1024;
+    lsm_config(tdb_lsm(pDb), LSM_CONFIG_WRITE_BUFFER, &nBuf);
+  }
+
+  for(i=0; rc==0 && i<p->nIter; i++){
+    void *pKey1; int nKey1;
+    void *pKey2; int nKey2;
+    int ii;
+    int nRange = MIN(p->nIter*p->nWrite, p->nRange);
+
+    for(ii=0; rc==0 && ii<p->nWrite; ii++){
+      int iKey = (i*p->nWrite + ii) % p->nRange;
+      testWriteDatasource(pControl, pData, iKey, &rc);
+      testWriteDatasource(pDb, pData, iKey, &rc);
+    }
+
+    testDatasourceEntry(pData, i+1000000, &pKey1, &nKey1, 0, 0);
+    pKey1 = testMallocCopy(pKey1, nKey1);
+    testDatasourceEntry(pData, i+2000000, &pKey2, &nKey2, 0, 0);
+
+    testDeleteRange(pDb, pKey1, nKey1, pKey2, nKey2, &rc);
+    testDeleteRange(pControl, pKey1, nKey1, pKey2, nKey2, &rc);
+    testFree(pKey1);
+
+    testCompareDb(pData, nRange, i, pControl, pDb, &rc);
+    testReopen(&pDb, &rc);
+    testCompareDb(pData, nRange, i, pControl, pDb, &rc);
+
+    /* Update the progress dots... */
+    testCaseProgress(i, p->nIter, testCaseNDot(), &iDot);
+  }
+
+  testClose(&pDb);
+  testClose(&pControl);
+  testDatasourceFree(pData);
+  testCaseFinish(rc);
+  *pRc = rc;
+}
+
+static char *getName2(const char *zSystem, Datatest2 *pTest){
+  char *zRet;
+  char *zData;
+  zData = testDatasourceName(&pTest->defn);
+  zRet = testMallocPrintf("data2.%s.%s.%d.%d.%d", 
+      zSystem, zData, pTest->nRange, pTest->nWrite, pTest->nIter
+  );
+  testFree(zData);
+  return zRet;
+}
+
+void test_data_2(
+  const char *zSystem,            /* Database system name */
+  const char *zPattern,           /* Run test cases that match this pattern */
+  int *pRc                        /* IN/OUT: Error code */
+){
+  Datatest2 aTest[] = {
+      /* defn,                                 nRange, nWrite, nIter */
+    { {DATA_RANDOM,     20,25,     100,200},   10000,  10,     50   },
+    { {DATA_RANDOM,     20,25,     100,200},   10000,  200,    50   },
+    { {DATA_RANDOM,     20,25,     100,200},   100,    10,     1000 },
+    { {DATA_RANDOM,     20,25,     100,200},   100,    200,    50   },
+
+#if 0
+    { {DATA_RANDOM,     20,25,     100,200},       200, 50 }
+#endif
+  };
+
+  int i;
+
+  for(i=0; *pRc==LSM_OK && i<ArraySize(aTest); i++){
+    char *zName = getName2(zSystem, &aTest[i]);
+    if( testCaseBegin(pRc, zPattern, "%s", zName) ){
+      doDataTest2(zSystem, &aTest[i], pRc);
+    }
+    testFree(zName);
+  }
+}
+

@@ -100,6 +100,36 @@ struct TreeOld {
   u32 nHeight;                    /* Height of tree structure */
 };
 
+#ifndef NDEBUG
+/*
+** assert() that a TreeKey.flags value is sane. Usage:
+**
+**   assert( assertFlagsOk(pTreeKey->flags) );
+*/
+static int assertFlagsOk(u8 keyflags){
+  /* At least one flag must be set. Otherwise, what is this key doing? */
+  assert( keyflags!=0 );
+
+  /* The POINT_DELETE and INSERT flags cannot both be set. */
+  assert( (keyflags & LSM_POINT_DELETE)==0 || (keyflags & LSM_INSERT)==0 );
+
+  /* If both the START_DELETE and END_DELETE flags are set, then the INSERT
+  ** flag must also be set. In other words - the three DELETE flags cannot
+  ** all be set */
+  assert( (keyflags & LSM_END_DELETE)==0 
+       || (keyflags & LSM_START_DELETE)==0 
+       || (keyflags & LSM_POINT_DELETE)==0 
+  );
+
+  return 1;
+}
+
+static int assert_delete_ranges_match(lsm_db *);
+static int treeCountEntries(lsm_db *db);
+#else
+# define assertFlagsOk(x)
+#endif
+
 /*
 ** Container for a key-value pair. Within the *-shm file, each key/value
 ** pair is stored in a single allocation (which may not actually be 
@@ -110,6 +140,7 @@ struct TreeOld {
 struct TreeKey {
   int nKey;                       /* Size of pKey in bytes */
   int nValue;                     /* Size of pValue. Or negative. */
+  u8 flags;                       /* Various LSM_XXX flags */
 };
 
 #define TK_KEY(p) ((void *)&(p)[1])
@@ -285,6 +316,24 @@ static ShmChunk * treeShmChunkRc(lsm_db *pDb, int iChunk, int *pRc){
   return (ShmChunk *)treeShmptr(pDb, iChunk*LSM_SHM_CHUNK_SIZE, pRc);
 }
 
+
+#ifndef NDEBUG
+static void assertIsWorkingChild(
+  lsm_db *db, 
+  TreeNode *pNode, 
+  TreeNode *pParent, 
+  int iCell
+){
+  TreeNode *p;
+  int rc = LSM_OK;
+  u32 iPtr = getChildPtr(pParent, WORKING_VERSION, iCell);
+  p = treeShmptr(db, iPtr, &rc);
+  assert( p==pNode || rc!=LSM_OK );
+}
+#else
+# define assertIsWorkingChild(w,x,y,z)
+#endif
+
 /* Values for the third argument to treeShmkey(). */
 #define TK_LOADKEY  1
 #define TK_LOADVAL  2
@@ -367,6 +416,25 @@ void assert_tree_looks_ok(int rc, Tree *pTree){
 # define assert_tree_looks_ok(x,y)
 #endif
 
+void lsmFlagsToString(int flags, char *zFlags){
+
+  zFlags[0] = (flags & LSM_END_DELETE)   ? ']' : '.';
+
+  /* Only one of LSM_POINT_DELETE, LSM_INSERT and LSM_SEPARATOR should ever
+  ** be set. If this is not true, write a '?' to the output.  */
+  switch( flags & (LSM_POINT_DELETE|LSM_INSERT|LSM_SEPARATOR) ){
+    case 0:                zFlags[1] = '.'; break;
+    case LSM_POINT_DELETE: zFlags[1] = '-'; break;
+    case LSM_INSERT:       zFlags[1] = '+'; break;
+    case LSM_SEPARATOR:    zFlags[1] = '^'; break;
+    default:               zFlags[1] = '?'; break;
+  }
+
+  zFlags[2] = (flags & LSM_SYSTEMKEY)    ? '*' : '.';
+  zFlags[3] = (flags & LSM_START_DELETE) ? '[' : '.';
+  zFlags[4] = '\0';
+}
+
 #ifdef LSM_DEBUG
 
 /*
@@ -384,7 +452,7 @@ static void lsmAppendStrBlob(LsmString *pStr, void *pBlob, int nBlob){
     u8 c = ((u8*)pBlob)[i];
     if( c>='a' && c<='z' ){
       pStr->z[pStr->n++] = c;
-    }else{
+    }else if( c!=0 || nBlob==1 || i!=(nBlob-1) ){
       pStr->z[pStr->n++] = "0123456789abcdef"[(c>>4)&0xf];
       pStr->z[pStr->n++] = "0123456789abcdef"[c&0xf];
     }
@@ -401,41 +469,68 @@ static void lsmAppendIndent(LsmString *pStr, int nIndent){
   for(i=0; i<nIndent; i++) lsmStringAppend(pStr, " ", 1);
 }
 
+static void strAppendFlags(LsmString *pStr, u8 flags){
+  char zFlags[8];
+
+  lsmFlagsToString(flags, zFlags);
+  zFlags[4] = ':';
+
+  lsmStringAppend(pStr, zFlags, 5);
+}
+
 void dump_node_contents(
   lsm_db *pDb,
-  u32 iNode,                      /* Print out hte contents of this node */
-  int nIndent,                    /* Number of spaces indentation */
+  u32 iNode,                      /* Print out the contents of this node */
+  char *zPath,                    /* Path from root to this node */
+  int nPath,                      /* Number of bytes in zPath */
   int nHeight                     /* Height: (0==leaf) (1==parent-of-leaf) */
 ){
+  const char *zSpace = "                                           ";
   int i;
   int rc = LSM_OK;
   LsmString s;
   TreeNode *pNode;
   TreeBlob b = {0, 0};
 
-  /* Append the nIndent bytes of space to string s. */
-  lsmStringInit(&s, pDb->pEnv);
-  if( nIndent ) lsmAppendIndent(&s, nIndent);
-
   pNode = (TreeNode *)treeShmptr(pDb, iNode, &rc);
 
-  /* Append each key to string s. */
-  for(i=0; i<3; i++){
-    u32 iPtr = pNode->aiKeyPtr[i];
-    if( iPtr ){
-      TreeKey *pKey = treeShmkey(pDb, pNode->aiKeyPtr[i], TK_LOADKEY, &b, &rc);
-      lsmAppendStrBlob(&s, TK_KEY(pKey), pKey->nKey);
-      lsmStringAppend(&s, "     ", -1);
+  if( nHeight==0 ){
+    /* Append the nIndent bytes of space to string s. */
+    lsmStringInit(&s, pDb->pEnv);
+
+    /* Append each key to string s. */
+    for(i=0; i<3; i++){
+      u32 iPtr = pNode->aiKeyPtr[i];
+      if( iPtr ){
+        TreeKey *pKey = treeShmkey(pDb, pNode->aiKeyPtr[i], TK_LOADKEY, &b,&rc);
+        strAppendFlags(&s, pKey->flags);
+        lsmAppendStrBlob(&s, TK_KEY(pKey), pKey->nKey);
+        lsmStringAppend(&s, "     ", -1);
+      }
     }
-  }
 
-  printf("%s\n", s.z);
-  lsmStringClear(&s);
+    printf("% 6d %.*sleaf%.*s: %s\n", 
+        iNode, nPath, zPath, 20-nPath-4, zSpace, s.z
+    );
+    lsmStringClear(&s);
+  }else{
+    for(i=0; i<4 && nHeight>0; i++){
+      u32 iPtr = getChildPtr(pNode, pDb->treehdr.root.iTransId, i);
+      zPath[nPath] = i+'0';
+      zPath[nPath+1] = '/';
 
-  for(i=0; i<4 && nHeight>0; i++){
-    u32 iPtr = getChildPtr(pNode, pDb->treehdr.root.iTransId, i);
-    if( iPtr ){
-      dump_node_contents(pDb, iPtr, nIndent + 2, nHeight-1);
+      if( iPtr ){
+        dump_node_contents(pDb, iPtr, zPath, nPath+2, nHeight-1);
+      }
+      if( i!=3 && pNode->aiKeyPtr[i] ){
+        TreeKey *pKey = treeShmkey(pDb, pNode->aiKeyPtr[i], TK_LOADKEY, &b,&rc);
+        lsmStringInit(&s, pDb->pEnv);
+        strAppendFlags(&s, pKey->flags);
+        lsmAppendStrBlob(&s, TK_KEY(pKey), pKey->nKey);
+        printf("% 6d %.*s%.*s: %s\n", 
+            iNode, nPath+1, zPath, 20-nPath-1, zSpace, s.z);
+        lsmStringClear(&s);
+      }
     }
   }
 
@@ -443,10 +538,12 @@ void dump_node_contents(
 }
 
 void dump_tree_contents(lsm_db *pDb, const char *zCaption){
+  char zPath[64];
   TreeRoot *p = &pDb->treehdr.root;
   printf("\n%s\n", zCaption);
+  zPath[0] = '/';
   if( p->iRoot ){
-    dump_node_contents(pDb, p->iRoot, 0, p->nHeight-1);
+    dump_node_contents(pDb, p->iRoot, zPath, 1, p->nHeight-1);
   }
   fflush(stdout);
 }
@@ -473,10 +570,12 @@ static void treeCursorInit(lsm_db *pDb, int bOld, TreeCursor *pCsr){
 ** is pointing to. 
 */
 static TreeKey *csrGetKey(TreeCursor *pCsr, TreeBlob *pBlob, int *pRc){
-  return (TreeKey *)treeShmkey(pCsr->pDb,
+  TreeKey *pRet = (TreeKey *)treeShmkey(pCsr->pDb,
       pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], 
       TK_LOADVAL, pBlob, pRc
   );
+  assert( pRet==0 || assertFlagsOk(pRet->flags) );
+  return pRet;
 }
 
 /*
@@ -1078,12 +1177,16 @@ static int treeCheckLinkedList(lsm_db *db){
   iShmid = p->iShmid;
   while( rc==LSM_OK && p ){
     if( p->iNext ){
-      ShmChunk *pNext = treeShmChunkRc(db, p->iNext, &rc);
-      if( rc==LSM_OK ){
-        if( pNext->iShmid!=p->iShmid+1 ){
-          rc = LSM_CORRUPT_BKPT;
+      if( p->iNext>=db->treehdr.nChunk ){
+        rc = LSM_CORRUPT_BKPT;
+      }else{
+        ShmChunk *pNext = treeShmChunkRc(db, p->iNext, &rc);
+        if( rc==LSM_OK ){
+          if( pNext->iShmid!=p->iShmid+1 ){
+            rc = LSM_CORRUPT_BKPT;
+          }
+          p = pNext;
         }
-        p = pNext;
       }
     }else{
       p = 0;
@@ -1167,7 +1270,7 @@ static int treeRepairList(lsm_db *db){
     iPrevShmid = pMin->iShmid;
 
     /* Fix all shm-ids, if required. */
-    if( rc==LSM_OK && iMin!=db->treehdr.iFirst ){
+    if( rc==LSM_OK ){
       iPrevShmid = pMin->iShmid-1;
       for(i=1; i<db->treehdr.nChunk; i++){
         p = treeShmChunk(db, i);
@@ -1179,8 +1282,10 @@ static int treeRepairList(lsm_db *db){
           }
         }
       }
-      p = treeShmChunk(db, db->treehdr.iFirst);
-      p->iShmid = iPrevShmid;
+      if( iMin!=db->treehdr.iFirst ){
+        p = treeShmChunk(db, db->treehdr.iFirst);
+        p->iShmid = iPrevShmid;
+      }
     }
 
     if( rc==LSM_OK ){
@@ -1246,15 +1351,82 @@ int lsmTreeRepair(lsm_db *db){
   return rc;
 }
 
-/*
-** Insert a new entry into the in-memory tree.
-**
-** If the value of the 5th parameter, nVal, is negative, then a delete-marker
-** is inserted into the tree. In this case the value pointer, pVal, must be
-** NULL.
-*/
-int lsmTreeInsert(
+static void treeOverwriteKey(lsm_db *db, TreeCursor *pCsr, u32 iKey, int *pRc){
+  if( *pRc==LSM_OK ){
+    TreeRoot *p = &db->treehdr.root;
+    TreeNode *pNew;
+    u32 iNew;
+    TreeNode *pNode = pCsr->apTreeNode[pCsr->iNode];
+    int iCell = pCsr->aiCell[pCsr->iNode];
+
+    /* Create a copy of this node */
+    if( (pCsr->iNode>0 && pCsr->iNode==(p->nHeight-1)) ){
+      pNew = copyTreeLeaf(db, (TreeLeaf *)pNode, &iNew, pRc);
+    }else{
+      pNew = copyTreeNode(db, pNode, &iNew, pRc);
+    }
+
+    if( pNew ){
+      /* Modify the value in the new version */
+      pNew->aiKeyPtr[iCell] = iKey;
+
+      /* Change the pointer in the parent (if any) to point at the new 
+       ** TreeNode */
+      pCsr->iNode--;
+      treeUpdatePtr(db, pCsr, iNew);
+    }
+  }
+}
+
+static int treeNextIsEndDelete(lsm_db *db, TreeCursor *pCsr){
+  TreeNode *pNode;
+  int iNode = pCsr->iNode;
+  int iCell = pCsr->aiCell[iNode]+1;
+
+  /* Cursor currently points to a leaf node. */
+  assert( pCsr->iNode==(db->treehdr.root.nHeight-1) );
+
+  while( iNode>=0 ){
+    TreeNode *pNode = pCsr->apTreeNode[iNode];
+    if( iCell<3 && pNode->aiKeyPtr[iCell] ){
+      int rc = LSM_OK;
+      TreeKey *pKey = treeShmptr(db, pNode->aiKeyPtr[iCell], &rc);
+      assert( rc==LSM_OK );
+      return ((pKey->flags & LSM_END_DELETE) ? 1 : 0);
+    }
+    iNode--;
+    iCell = pCsr->aiCell[iNode];
+  }
+
+  return 0;
+}
+
+static int treePrevIsStartDelete(lsm_db *db, TreeCursor *pCsr){
+  TreeNode *pNode;
+  int iNode = pCsr->iNode;
+
+  /* Cursor currently points to a leaf node. */
+  assert( pCsr->iNode==(db->treehdr.root.nHeight-1) );
+
+  while( iNode>=0 ){
+    TreeNode *pNode = pCsr->apTreeNode[iNode];
+    int iCell = pCsr->aiCell[iNode]-1;
+    if( iCell>=0 && pNode->aiKeyPtr[iCell] ){
+      int rc = LSM_OK;
+      TreeKey *pKey = treeShmptr(db, pNode->aiKeyPtr[iCell], &rc);
+      assert( rc==LSM_OK );
+      return ((pKey->flags & LSM_START_DELETE) ? 1 : 0);
+    }
+    iNode--;
+  }
+
+  return 0;
+}
+
+
+static int treeInsertEntry(
   lsm_db *pDb,                    /* Database handle */
+  int flags,                      /* Flags associated with entry */
   void *pKey,                     /* Pointer to key data */
   int nKey,                       /* Size of key data in bytes */
   void *pVal,                     /* Pointer to value data (or NULL) */
@@ -1264,16 +1436,72 @@ int lsmTreeInsert(
   TreeKey *pTreeKey;              /* New key-value being inserted */
   u32 iTreeKey;
   TreeRoot *p = &pDb->treehdr.root;
+  TreeCursor csr;                 /* Cursor to seek to pKey/nKey */
+  int res;                        /* Result of seek operation on csr */
 
   assert( nVal>=0 || pVal==0 );
   assert_tree_looks_ok(LSM_OK, pTree);
+  assert( flags==LSM_INSERT       || flags==LSM_POINT_DELETE 
+       || flags==LSM_START_DELETE || flags==LSM_END_DELETE 
+  );
 #if 0
   dump_tree_contents(pDb, "before");
 #endif
 
+  if( p->iRoot ){
+    TreeKey *pRes;                /* Key at end of seek operation */
+    treeCursorInit(pDb, 0, &csr);
+
+    /* Seek to the leaf (or internal node) that the new key belongs on */
+    rc = lsmTreeCursorSeek(&csr, pKey, nKey, &res);
+    pRes = csrGetKey(&csr, &csr.blob, &rc);
+    if( rc!=LSM_OK ) return rc;
+
+    if( flags==LSM_START_DELETE ){
+      /* When inserting a start-delete-range entry, if the key that
+      ** occurs immediately before the new entry is already a START_DELETE,
+      ** then the new entry is not required.  */
+      if( (res<=0 && (pRes->flags & LSM_START_DELETE))
+       || (res>0  && treePrevIsStartDelete(pDb, &csr))
+      ){ 
+        goto insert_entry_out;
+      }
+    }else if( flags==LSM_END_DELETE ){
+      /* When inserting an start-delete-range entry, if the key that
+      ** occurs immediately after the new entry is already an END_DELETE,
+      ** then the new entry is not required.  */
+      if( (res<0  && treeNextIsEndDelete(pDb, &csr))
+       || (res>=0 && (pRes->flags & LSM_END_DELETE))
+      ){
+        goto insert_entry_out;
+      }
+    }
+
+    if( res==0 && (flags & (LSM_END_DELETE|LSM_START_DELETE)) ){
+      if( pRes->flags & LSM_INSERT ){
+        nVal = pRes->nValue;
+        pVal = TK_VAL(pRes);
+      }
+      flags = flags | pRes->flags;
+    }
+
+    if( flags & (LSM_INSERT|LSM_POINT_DELETE) ){
+      if( (res<0 && (pRes->flags & LSM_START_DELETE))
+       || (res>0 && (pRes->flags & LSM_END_DELETE)) 
+      ){
+        flags = flags | (LSM_END_DELETE|LSM_START_DELETE);
+      }else if( res==0 ){
+        flags = flags | (pRes->flags & (LSM_END_DELETE|LSM_START_DELETE));
+      }
+    }
+  }else{
+    memset(&csr, 0, sizeof(TreeCursor));
+  }
+
   /* Allocate and populate a new key-value pair structure */
   pTreeKey = newTreeKey(pDb, &iTreeKey, pKey, nKey, pVal, nVal, &rc);
   if( rc!=LSM_OK ) return rc;
+  pTreeKey->flags = flags;
 
   if( p->iRoot==0 ){
     /* The tree is completely empty. Add a new root node and install
@@ -1288,36 +1516,9 @@ int lsmTreeInsert(
       p->nHeight = 1;
     }
   }else{
-    TreeCursor csr;
-    int res;
-
-    /* Seek to the leaf (or internal node) that the new key belongs on */
-    treeCursorInit(pDb, 0, &csr);
-    lsmTreeCursorSeek(&csr, pKey, nKey, &res);
-
     if( res==0 ){
       /* The search found a match within the tree. */
-      TreeNode *pNew;
-      u32 iNew;
-      TreeNode *pNode = csr.apTreeNode[csr.iNode];
-      int iCell = csr.aiCell[csr.iNode];
-
-      /* Create a copy of this node */
-      if( (csr.iNode>0 && csr.iNode==(p->nHeight-1)) ){
-        pNew = copyTreeLeaf(pDb, (TreeLeaf *)pNode, &iNew, &rc);
-      }else{
-        pNew = copyTreeNode(pDb, pNode, &iNew, &rc);
-      }
-
-      if( rc==LSM_OK ){
-        /* Modify the value in the new version */
-        pNew->aiKeyPtr[iCell] = iTreeKey;
-
-        /* Change the pointer in the parent (if any) to point at the new 
-        ** TreeNode */
-        csr.iNode--;
-        treeUpdatePtr(pDb, &csr, iNew);
-      }
+      treeOverwriteKey(pDb, &csr, iTreeKey, &rc);
     }else{
       /* The cursor now points to the leaf node into which the new entry should
       ** be inserted. There may or may not be a free slot within the leaf for
@@ -1335,13 +1536,357 @@ int lsmTreeInsert(
         rc = treeInsertLeaf(pDb, &csr, iTreeKey, iSlot);
       }
     }
-    tblobFree(pDb, &csr.blob);
   }
 
 #if 0
   dump_tree_contents(pDb, "after");
 #endif
+ insert_entry_out:
+  tblobFree(pDb, &csr.blob);
   assert_tree_looks_ok(rc, pTree);
+  return rc;
+}
+
+/*
+** Insert a new entry into the in-memory tree.
+**
+** If the value of the 5th parameter, nVal, is negative, then a delete-marker
+** is inserted into the tree. In this case the value pointer, pVal, must be
+** NULL.
+*/
+int lsmTreeInsert(
+  lsm_db *pDb,                    /* Database handle */
+  void *pKey,                     /* Pointer to key data */
+  int nKey,                       /* Size of key data in bytes */
+  void *pVal,                     /* Pointer to value data (or NULL) */
+  int nVal                        /* Bytes in value data (or -ve for delete) */
+){
+  int flags;
+  if( nVal<0 ){
+    flags = LSM_POINT_DELETE;
+  }else{
+    flags = LSM_INSERT;
+  }
+
+  return treeInsertEntry(pDb, flags, pKey, nKey, pVal, nVal);
+}
+
+static int treeDeleteEntry(lsm_db *db, TreeCursor *pCsr, u32 iNewptr){
+  TreeRoot *p = &db->treehdr.root;
+  TreeNode *pNode = pCsr->apTreeNode[pCsr->iNode];
+  int iSlot = pCsr->aiCell[pCsr->iNode];
+  int bLeaf;
+  int rc = LSM_OK;
+
+  assert( pNode->aiKeyPtr[1] );
+  assert( pNode->aiKeyPtr[iSlot] );
+  assert( iSlot==0 || iSlot==1 || iSlot==2 );
+  assert( (pCsr->iNode==(db->treehdr.root.nHeight-1))==(iNewptr==0) );
+
+  bLeaf = (pCsr->iNode==(p->nHeight-1) && p->nHeight>1);
+  
+  if( pNode->aiKeyPtr[0] || pNode->aiKeyPtr[2] ){
+    /* There are currently at least 2 keys on this node. So just create
+    ** a new copy of the node with one of the keys removed. If the node
+    ** happens to be the root node of the tree, allocate an entire 
+    ** TreeNode structure instead of just a TreeLeaf.  */
+    TreeNode *pNew;
+    u32 iNew;
+
+    if( bLeaf ){
+      pNew = (TreeNode *)newTreeLeaf(db, &iNew, &rc);
+    }else{
+      pNew = newTreeNode(db, &iNew, &rc);
+    }
+    if( pNew ){
+      int i;
+      int iOut = 1;
+      for(i=0; i<4; i++){
+        if( i==iSlot ){
+          i++;
+          if( bLeaf==0 ) pNew->aiChildPtr[iOut] = iNewptr;
+          if( i<3 ) pNew->aiKeyPtr[iOut] = pNode->aiKeyPtr[i];
+          iOut++;
+        }else if( bLeaf || p->nHeight==1 ){
+          if( i<3 && pNode->aiKeyPtr[i] ){
+            pNew->aiKeyPtr[iOut++] = pNode->aiKeyPtr[i];
+          }
+        }else{
+          if( getChildPtr(pNode, WORKING_VERSION, i) ){
+            pNew->aiChildPtr[iOut] = getChildPtr(pNode, WORKING_VERSION, i);
+            if( i<3 ) pNew->aiKeyPtr[iOut] = pNode->aiKeyPtr[i];
+            iOut++;
+          }
+        }
+      }
+      assert( iOut<=4 );
+      assert( bLeaf || pNew->aiChildPtr[0]==0 );
+      pCsr->iNode--;
+      rc = treeUpdatePtr(db, pCsr, iNew);
+    }
+
+  }else if( pCsr->iNode==0 ){
+    /* Removing the only key in the root node. iNewptr is the new root. */
+    assert( iSlot==1 );
+    db->treehdr.root.iRoot = iNewptr;
+    db->treehdr.root.nHeight--;
+
+  }else{
+    /* There is only one key on this node and the node is not the root
+    ** node. Find a peer for this node. Then redistribute the contents of
+    ** the peer and the parent cell between the parent and either one or
+    ** two new nodes.  */
+    TreeNode *pParent;            /* Parent tree node */
+    int iPSlot;
+    u32 iPeer;                    /* Pointer to peer leaf node */
+    int iDir;
+    TreeNode *pPeer;              /* The peer leaf node */
+    TreeNode *pNew1; u32 iNew1;   /* First new leaf node */
+
+    assert( iSlot==1 );
+
+    pParent = pCsr->apTreeNode[pCsr->iNode-1];
+    iPSlot = pCsr->aiCell[pCsr->iNode-1];
+
+    if( iPSlot>0 && getChildPtr(pParent, WORKING_VERSION, iPSlot-1) ){
+      iDir = -1;
+    }else{
+      iDir = +1;
+    }
+    iPeer = getChildPtr(pParent, WORKING_VERSION, iPSlot+iDir);
+    pPeer = (TreeNode *)treeShmptr(db, iPeer, &rc);
+    assertIsWorkingChild(db, pNode, pParent, iPSlot);
+
+    /* Allocate the first new leaf node. This is always required. */
+    if( bLeaf ){
+      pNew1 = (TreeNode *)newTreeLeaf(db, &iNew1, &rc);
+    }else{
+      pNew1 = (TreeNode *)newTreeNode(db, &iNew1, &rc);
+    }
+
+    if( pPeer->aiKeyPtr[0] && pPeer->aiKeyPtr[2] ){
+      /* Peer node is completely full. This means that two new leaf nodes
+      ** and a new parent node are required. */
+
+      TreeNode *pNew2; u32 iNew2; /* Second new leaf node */
+      TreeNode *pNewP; u32 iNewP; /* New parent node */
+
+      if( bLeaf ){
+        pNew2 = (TreeNode *)newTreeLeaf(db, &iNew2, &rc);
+      }else{
+        pNew2 = (TreeNode *)newTreeNode(db, &iNew2, &rc);
+      }
+      pNewP = copyTreeNode(db, pParent, &iNewP, &rc);
+
+      if( iDir==-1 ){
+        pNew1->aiKeyPtr[1] = pPeer->aiKeyPtr[0];
+        if( bLeaf==0 ){
+          pNew1->aiChildPtr[1] = getChildPtr(pPeer, WORKING_VERSION, 0);
+          pNew1->aiChildPtr[2] = getChildPtr(pPeer, WORKING_VERSION, 1);
+        }
+
+        pNewP->aiChildPtr[iPSlot-1] = iNew1;
+        pNewP->aiKeyPtr[iPSlot-1] = pPeer->aiKeyPtr[1];
+        pNewP->aiChildPtr[iPSlot] = iNew2;
+
+        pNew2->aiKeyPtr[0] = pPeer->aiKeyPtr[2];
+        pNew2->aiKeyPtr[1] = pParent->aiKeyPtr[iPSlot-1];
+        if( bLeaf==0 ){
+          pNew2->aiChildPtr[0] = getChildPtr(pPeer, WORKING_VERSION, 2);
+          pNew2->aiChildPtr[1] = getChildPtr(pPeer, WORKING_VERSION, 3);
+          pNew2->aiChildPtr[2] = iNewptr;
+        }
+      }else{
+        pNew1->aiKeyPtr[1] = pParent->aiKeyPtr[iPSlot];
+        if( bLeaf==0 ){
+          pNew1->aiChildPtr[1] = iNewptr;
+          pNew1->aiChildPtr[2] = getChildPtr(pPeer, WORKING_VERSION, 0);
+        }
+
+        pNewP->aiChildPtr[iPSlot] = iNew1;
+        pNewP->aiKeyPtr[iPSlot] = pPeer->aiKeyPtr[0];
+        pNewP->aiChildPtr[iPSlot+1] = iNew2;
+
+        pNew2->aiKeyPtr[0] = pPeer->aiKeyPtr[1];
+        pNew2->aiKeyPtr[1] = pPeer->aiKeyPtr[2];
+        if( bLeaf==0 ){
+          pNew2->aiChildPtr[0] = getChildPtr(pPeer, WORKING_VERSION, 1);
+          pNew2->aiChildPtr[1] = getChildPtr(pPeer, WORKING_VERSION, 2);
+          pNew2->aiChildPtr[2] = getChildPtr(pPeer, WORKING_VERSION, 3);
+        }
+      }
+      assert( pCsr->iNode>=1 );
+      pCsr->iNode -= 2;
+      if( rc==LSM_OK ){
+        assert( pNew1->aiKeyPtr[1] && pNew2->aiKeyPtr[1] );
+        rc = treeUpdatePtr(db, pCsr, iNewP);
+      }
+    }else{
+      int iKOut = 0;
+      int iPOut = 0;
+      int i;
+
+      pCsr->iNode--;
+
+      if( iDir==1 ){
+        pNew1->aiKeyPtr[iKOut++] = pParent->aiKeyPtr[iPSlot];
+        if( bLeaf==0 ) pNew1->aiChildPtr[iPOut++] = iNewptr;
+      }
+      for(i=0; i<3; i++){
+        if( pPeer->aiKeyPtr[i] ){
+          pNew1->aiKeyPtr[iKOut++] = pPeer->aiKeyPtr[i];
+        }
+      }
+      if( bLeaf==0 ){
+        for(i=0; i<4; i++){
+          if( getChildPtr(pPeer, WORKING_VERSION, i) ){
+            pNew1->aiChildPtr[iPOut++] = getChildPtr(pPeer, WORKING_VERSION, i);
+          }
+        }
+      }
+      if( iDir==-1 ){
+        iPSlot--;
+        pNew1->aiKeyPtr[iKOut++] = pParent->aiKeyPtr[iPSlot];
+        if( bLeaf==0 ) pNew1->aiChildPtr[iPOut++] = iNewptr;
+        pCsr->aiCell[pCsr->iNode] = iPSlot;
+      }
+
+      rc = treeDeleteEntry(db, pCsr, iNew1);
+    }
+  }
+
+  return rc;
+}
+
+/*
+** Delete a range of keys from the tree structure (i.e. the lsm_delete_range()
+** function, not lsm_delete()).
+**
+** This is a two step process: 
+**
+**     1) Remove all entries currently stored in the tree that have keys
+**        that fall into the deleted range.
+**
+**        TODO: There are surely good ways to optimize this step - removing 
+**        a range of keys from a b-tree. But for now, this function removes
+**        them one at a time using the usual approach.
+**
+**     2) Unless the largest key smaller than or equal to (pKey1/nKey1) is
+**        already marked as START_DELETE, insert a START_DELETE key. 
+**        Similarly, unless the smallest key greater than or equal to
+**        (pKey2/nKey2) is already START_END, insert a START_END key.
+*/
+int lsmTreeDelete(
+  lsm_db *db,
+  void *pKey1, int nKey1,         /* Start of range */
+  void *pKey2, int nKey2          /* End of range */
+){
+  int rc = LSM_OK;
+  int bDone = 0;
+  TreeRoot *p = &db->treehdr.root;
+  TreeBlob blob = {0, 0};
+
+  /* The range must be sensible - that (key1 < key2). */
+  assert( db->xCmp(pKey1, nKey1, pKey2, nKey2)<0 );
+  assert( assert_delete_ranges_match(db) );
+
+#if 0
+  static int nCall = 0;
+  printf("\n");
+  nCall++;
+  printf("%d delete %s .. %s\n", nCall, (char *)pKey1, (char *)pKey2);
+  dump_tree_contents(db, "before delete");
+#endif
+
+  /* Step 1. This loop runs until the tree contains no keys within the
+  ** range being deleted. Or until an error occurs. */
+  while( bDone==0 && rc==LSM_OK ){
+    int res;
+    TreeCursor csr;               /* Cursor to seek to first key in range */
+    void *pDel; int nDel;         /* Key to (possibly) delete this iteration */
+#ifndef NDEBUG
+    int nEntry = treeCountEntries(db);
+#endif
+
+    /* Seek the cursor to the first entry in the tree greater than pKey1. */
+    treeCursorInit(db, 0, &csr);
+    lsmTreeCursorSeek(&csr, pKey1, nKey1, &res);
+    if( res<=0 && lsmTreeCursorValid(&csr) ) lsmTreeCursorNext(&csr);
+
+    /* If there is no such entry, or if it is greater than pKey2, then the
+    ** tree now contains no keys in the range being deleted. In this case
+    ** break out of the loop.  */
+    bDone = 1;
+    if( lsmTreeCursorValid(&csr) ){
+      lsmTreeCursorKey(&csr, 0, &pDel, &nDel);
+      if( db->xCmp(pDel, nDel, pKey2, nKey2)<0 ) bDone = 0;
+    }
+
+    if( bDone==0 ){
+      if( csr.iNode==(p->nHeight-1) ){
+        /* The element to delete already lies on a leaf node */
+        rc = treeDeleteEntry(db, &csr, 0);
+      }else{
+        /* 1. Overwrite the current key with a copy of the next key in the 
+        **    tree (key N).
+        **
+        ** 2. Seek to key N (cursor will stop at the internal node copy of
+        **    N). Move to the next key (original copy of N). Delete
+        **    this entry. 
+        */
+        u32 iKey;
+        TreeKey *pKey;
+        int iNode = csr.iNode;
+        lsmTreeCursorNext(&csr);
+        assert( csr.iNode==(p->nHeight-1) );
+
+        iKey = csr.apTreeNode[csr.iNode]->aiKeyPtr[csr.aiCell[csr.iNode]];
+        lsmTreeCursorPrev(&csr);
+
+        treeOverwriteKey(db, &csr, iKey, &rc);
+        pKey = treeShmkey(db, iKey, TK_LOADKEY, &blob, &rc);
+        if( pKey ){
+          rc = lsmTreeCursorSeek(&csr, TK_KEY(pKey), pKey->nKey, &res);
+        }
+        if( rc==LSM_OK ){
+          assert( res==0 && csr.iNode==iNode );
+          rc = lsmTreeCursorNext(&csr);
+          if( rc==LSM_OK ){
+            rc = treeDeleteEntry(db, &csr, 0);
+          }
+        }
+      }
+    }
+
+    /* Clean up any memory allocated by the cursor. */
+    tblobFree(db, &csr.blob);
+#if 0
+    dump_tree_contents(db, "ddd delete");
+#endif
+    assert( bDone || treeCountEntries(db)==(nEntry-1) );
+  }
+
+#if 0
+  dump_tree_contents(db, "during delete");
+#endif
+
+  /* Now insert the START_DELETE and END_DELETE keys. */
+  if( rc==LSM_OK ){
+    rc = treeInsertEntry(db, LSM_START_DELETE, pKey1, nKey1, 0, -1);
+  }
+#if 0
+  dump_tree_contents(db, "during delete 2");
+#endif
+  if( rc==LSM_OK ){
+    rc = treeInsertEntry(db, LSM_END_DELETE, pKey2, nKey2, 0, -1);
+  }
+
+#if 0
+  dump_tree_contents(db, "after delete");
+#endif
+
+  tblobFree(db, &blob);
+  assert( assert_delete_ranges_match(db) );
   return rc;
 }
 
@@ -1551,7 +2096,7 @@ int lsmTreeCursorNext(TreeCursor *pCsr){
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
     TreeKey *pK2 = csrGetKey(pCsr, &pCsr->blob, &rc);
-    assert( rc || pDb->xCmp(TK_KEY(pK2), pK2->nKey, TK_KEY(pK1), pK1->nKey)>0 );
+    assert( rc || pDb->xCmp(TK_KEY(pK2),pK2->nKey,TK_KEY(pK1),pK1->nKey)>=0 );
   }
   tblobFree(pDb, &key1);
 #endif
@@ -1633,7 +2178,6 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
 */
 int lsmTreeCursorEnd(TreeCursor *pCsr, int bLast){
   lsm_db *pDb = pCsr->pDb;
-  TreeHeader *pHdr = &pDb->treehdr;
   TreeRoot *pRoot = pCsr->pRoot;
   int rc = LSM_OK;
 
@@ -1670,7 +2214,20 @@ int lsmTreeCursorEnd(TreeCursor *pCsr, int bLast){
   return rc;
 }
 
-int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey){
+int lsmTreeCursorFlags(TreeCursor *pCsr){
+  int flags = 0;
+  if( pCsr && pCsr->iNode>=0 ){
+    int rc = LSM_OK;
+    TreeKey *pKey = (TreeKey *)treeShmptr(pCsr->pDb,
+        pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], &rc
+    );
+    assert( rc==LSM_OK );
+    flags = pKey->flags;
+  }
+  return flags;
+}
+
+int lsmTreeCursorKey(TreeCursor *pCsr, int *pFlags, void **ppKey, int *pnKey){
   TreeKey *pTreeKey;
   int rc = LSM_OK;
 
@@ -1682,6 +2239,7 @@ int lsmTreeCursorKey(TreeCursor *pCsr, void **ppKey, int *pnKey){
   }
   if( rc==LSM_OK ){
     *pnKey = pTreeKey->nKey;
+    if( pFlags ) *pFlags = pTreeKey->flags;
     *ppKey = (void *)&pTreeKey[1];
   }
 
@@ -1696,11 +2254,12 @@ int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal){
   if( res==0 ){
     TreeKey *pTreeKey = csrGetKey(pCsr, &pCsr->blob, &rc);
     if( rc==LSM_OK ){
-      *pnVal = pTreeKey->nValue;
-      if( pTreeKey->nValue>=0 ){
+      if( pTreeKey->flags & LSM_INSERT ){
+        *pnVal = pTreeKey->nValue;
         *ppVal = TK_VAL(pTreeKey);
       }else{
         *ppVal = 0;
+        *pnVal = -1;
       }
     }
   }else{
@@ -1842,4 +2401,47 @@ int lsmTreeEndTransaction(lsm_db *pDb, int bCommit){
 
   return LSM_OK;
 }
+
+#ifndef NDEBUG
+static int assert_delete_ranges_match(lsm_db *db){
+  int prev = 0;
+  TreeBlob blob = {0, 0};
+  TreeCursor csr;               /* Cursor used to iterate through tree */
+  int rc;
+
+  treeCursorInit(db, 0, &csr);
+  for( rc = lsmTreeCursorEnd(&csr, 0);
+       rc==LSM_OK && lsmTreeCursorValid(&csr);
+       rc = lsmTreeCursorNext(&csr)
+  ){
+    TreeKey *pKey = csrGetKey(&csr, &blob, &rc);
+    if( rc!=LSM_OK ) break;
+    assert( ((prev&LSM_START_DELETE)==0)==((pKey->flags&LSM_END_DELETE)==0) );
+    prev = pKey->flags;
+  }
+
+  tblobFree(csr.pDb, &csr.blob);
+
+  return 1;
+}
+
+static int treeCountEntries(lsm_db *db){
+  TreeCursor csr;               /* Cursor used to iterate through tree */
+  int rc;
+  int nEntry = 0;
+
+  treeCursorInit(db, 0, &csr);
+  for( rc = lsmTreeCursorEnd(&csr, 0);
+       rc==LSM_OK && lsmTreeCursorValid(&csr);
+       rc = lsmTreeCursorNext(&csr)
+  ){
+    nEntry++;
+  }
+
+  tblobFree(csr.pDb, &csr.blob);
+
+  return nEntry;
+}
+#endif
+
 

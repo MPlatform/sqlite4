@@ -305,8 +305,8 @@ void do_writer_crash_test(const char *zPattern, int *pRc){
     const char *zName;
     void (*xFunc)(int *);
   } aTest[] = {
-    { "writercrash2.lsm", doWriterCrash2 },
     { "writercrash1.lsm", doWriterCrash1 },
+    { "writercrash2.lsm", doWriterCrash2 },
   };
   int i;
   for(i=0; i<ArraySize(aTest); i++){
