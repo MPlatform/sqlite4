@@ -1177,12 +1177,16 @@ static int treeCheckLinkedList(lsm_db *db){
   iShmid = p->iShmid;
   while( rc==LSM_OK && p ){
     if( p->iNext ){
-      ShmChunk *pNext = treeShmChunkRc(db, p->iNext, &rc);
-      if( rc==LSM_OK ){
-        if( pNext->iShmid!=p->iShmid+1 ){
-          rc = LSM_CORRUPT_BKPT;
+      if( p->iNext>=db->treehdr.nChunk ){
+        rc = LSM_CORRUPT_BKPT;
+      }else{
+        ShmChunk *pNext = treeShmChunkRc(db, p->iNext, &rc);
+        if( rc==LSM_OK ){
+          if( pNext->iShmid!=p->iShmid+1 ){
+            rc = LSM_CORRUPT_BKPT;
+          }
+          p = pNext;
         }
-        p = pNext;
       }
     }else{
       p = 0;
@@ -1266,7 +1270,7 @@ static int treeRepairList(lsm_db *db){
     iPrevShmid = pMin->iShmid;
 
     /* Fix all shm-ids, if required. */
-    if( rc==LSM_OK && iMin!=db->treehdr.iFirst ){
+    if( rc==LSM_OK ){
       iPrevShmid = pMin->iShmid-1;
       for(i=1; i<db->treehdr.nChunk; i++){
         p = treeShmChunk(db, i);
@@ -1278,8 +1282,10 @@ static int treeRepairList(lsm_db *db){
           }
         }
       }
-      p = treeShmChunk(db, db->treehdr.iFirst);
-      p->iShmid = iPrevShmid;
+      if( iMin!=db->treehdr.iFirst ){
+        p = treeShmChunk(db, db->treehdr.iFirst);
+        p->iShmid = iPrevShmid;
+      }
     }
 
     if( rc==LSM_OK ){
