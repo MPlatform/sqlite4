@@ -2537,13 +2537,14 @@ static int treeCursorSeek(
         ){
           *pbStop = 1;
         }else if( res==0 && (eType & LSM_INSERT) ){
+          lsm_env *pEnv = pCsr->pDb->pEnv;
           void *p; int n;         /* Key/value from tree-cursor */
           *pbStop = 1;
           pCsr->flags |= CURSOR_SEEK_EQ;
           rc = lsmTreeCursorKey(pTreeCsr, &pCsr->eType, &p, &n);
-          if( rc==LSM_OK ) sortedBlobSet(pCsr->pDb->pEnv, &pCsr->key, p, n);
+          if( rc==LSM_OK ) rc = sortedBlobSet(pEnv, &pCsr->key, p, n);
           if( rc==LSM_OK ) rc = lsmTreeCursorValue(pTreeCsr, &p, &n);
-          if( rc==LSM_OK ) sortedBlobSet(pCsr->pDb->pEnv, &pCsr->val, p, n);
+          if( rc==LSM_OK ) rc = sortedBlobSet(pEnv, &pCsr->val, p, n);
         }
         lsmTreeCursorReset(pTreeCsr);
         break;

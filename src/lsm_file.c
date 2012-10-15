@@ -729,6 +729,7 @@ int fsPageGet(
   int rc = LSM_OK;
 
   assert( iPg>=fsFirstPageOnBlock(pFS, 1) );
+  *ppPg = 0;
 
   if( pFS->bUseMmap ){
     i64 iEnd = (i64)iPg * pFS->nPagesize;
