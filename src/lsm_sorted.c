@@ -2610,7 +2610,7 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
     }
 
     multiCursorCacheKey(pCsr, &rc);
-    if( rc==LSM_OK && 0==mcursorLocationOk(pCsr, eSeek==LSM_SEEK_LEFAST) ){
+    if( rc==LSM_OK && eSeek!=LSM_SEEK_LEFAST && 0==mcursorLocationOk(pCsr, 0) ){
       switch( eESeek ){
         case LSM_SEEK_EQ:
           lsmMCursorReset(pCsr);
