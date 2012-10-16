@@ -1184,7 +1184,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
 /*
 ** Obtain a reference to page number iPg.
 */
-int lsmFsDbPageGet(FileSystem *pFS, int iPg, Page **ppPg){
+int lsmFsDbPageGet(FileSystem *pFS, Pgno iPg, Page **ppPg){
   assert( pFS );
   return fsPageGet(pFS, iPg, 0, ppPg);
 }

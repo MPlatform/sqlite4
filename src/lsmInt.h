@@ -103,8 +103,8 @@ typedef unsigned int u32;
 typedef lsm_i64 i64;
 typedef unsigned long long int u64;
 
-/* A page number is an integer. */
-typedef int Pgno;
+/* A page number is a 64-bit integer. */
+typedef i64 Pgno;
 
 #ifdef LSM_DEBUG
 int lsmErrorBkpt(int);
