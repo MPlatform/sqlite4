@@ -1520,7 +1520,11 @@ proc count {sql} {
 # by SQLite 3 tests.
 #
 proc optimize_db {} { 
-  catch { sqlite4_lsm_work db main -checkpoint -opt -flush 100000 }
+  #catch { 
+    sqlite4_lsm_flush db main 
+    sqlite4_lsm_work db main -opt -flush 100000 
+    sqlite4_lsm_checkpoint db main
+  #}
   return ""
 }
 

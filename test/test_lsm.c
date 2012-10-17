@@ -154,7 +154,6 @@ static int test_lsm_work(
     int flags;
   } aSwitch[] = {
     { "-flush",      LSM_WORK_FLUSH }, 
-    { "-checkpoint", LSM_WORK_CHECKPOINT }, 
     { "-optimize",   LSM_WORK_OPTIMIZE }, 
     { 0, 0 }
   };
@@ -208,14 +207,98 @@ static int test_lsm_work(
   return TCL_OK;
 }
 
+/*
+** TCLCMD:    sqlite4_lsm_checkpoint DB DBNAME 
+*/
+static int test_lsm_checkpoint(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  const char *zDb;
+  const char *zName;
+  int rc;
+  sqlite4 *db;
+  lsm_db *pLsm;
+
+  if( objc!=3 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME");
+    return TCL_ERROR;
+  }
+  zDb = Tcl_GetString(objv[1]);
+  zName = Tcl_GetString(objv[2]);
+
+  rc = getDbPointer(interp, zDb, &db);
+  if( rc!=TCL_OK ) return rc;
+
+  rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
+  if( rc==SQLITE4_OK ){
+    rc = lsm_checkpoint(pLsm, 0);
+  }
+  if( rc!=SQLITE4_OK ){
+    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
+    return TCL_ERROR;
+  }
+
+  Tcl_ResetResult(interp);
+  return TCL_OK;
+}
+
+/*
+** TCLCMD:    sqlite4_lsm_flush DB DBNAME 
+*/
+static int test_lsm_flush(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  const char *zDb;
+  const char *zName;
+  int rc;
+  sqlite4 *db;
+  lsm_db *pLsm;
+
+  if( objc!=3 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME");
+    return TCL_ERROR;
+  }
+  zDb = Tcl_GetString(objv[1]);
+  zName = Tcl_GetString(objv[2]);
+
+  rc = getDbPointer(interp, zDb, &db);
+  if( rc!=TCL_OK ) return rc;
+
+  rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
+  if( rc==SQLITE4_OK ){
+    int nZero = 0;
+    int nOrig = -1;
+    lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nOrig);
+    lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nZero);
+    rc = lsm_begin(pLsm, 1);
+    if( rc==LSM_OK ) rc = lsm_commit(pLsm, 0);
+    lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nOrig);
+  }
+  if( rc!=SQLITE4_OK ){
+    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
+    return TCL_ERROR;
+  }
+
+  Tcl_ResetResult(interp);
+  return TCL_OK;
+}
+
 int SqlitetestLsm_Init(Tcl_Interp *interp){
   struct SyscallCmd {
     const char *zName;
     Tcl_ObjCmdProc *xCmd;
   } aCmd[] = {
-    { "sqlite4_lsm_work",     test_lsm_work                },
-    { "sqlite4_lsm_info",     test_lsm_info                },
-    { "sqlite4_lsm_config",   test_lsm_config              },
+    { "sqlite4_lsm_work",       test_lsm_work                },
+    { "sqlite4_lsm_checkpoint", test_lsm_checkpoint          },
+    { "sqlite4_lsm_flush",      test_lsm_flush               },
+    { "sqlite4_lsm_info",       test_lsm_info                },
+    { "sqlite4_lsm_config",     test_lsm_config              },
   };
   int i;
 

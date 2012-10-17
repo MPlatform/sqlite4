@@ -3706,6 +3706,10 @@ static int sortedNewToplevel(
       rc = btreeCursorNew(pDb, pDel, &pCsr->pBtCsr);
       iLeftPtr = pNext->lhs.iFirst;
     }
+
+    if( pNext==0 ){
+      multiCursorIgnoreDelete(pCsr);
+    }
   }
 
   if( rc!=LSM_OK ){
@@ -4200,28 +4204,32 @@ static int sortedWork(
 /*
 ** The database connection passed as the first argument must be a worker
 ** connection. This function checks if there exists an "old" in-memory tree
-** ready to be flushed to disk. If so, *pbOut is set to true before 
-** returning. Otherwise false.
+** ready to be flushed to disk. If so, true is returned. Otherwise false.
 **
-** Normally, LSM_OK is returned. Or, if an error occurs, an LSM error code.
+** If an error occurs, *pRc is set to an LSM error code before returning.
+** It is assumed that *pRc is set to LSM_OK when this function is called.
 */
-static int sortedTreeHasOld(lsm_db *pDb, int *pbOut){
+static int sortedTreeHasOld(lsm_db *pDb, int *pRc){
   int rc = LSM_OK;
+  int bRet = 0;
 
   assert( pDb->pWorker );
-  if( pDb->nTransOpen==0 ){
-    rc = lsmTreeLoadHeader(pDb, 0);
+  if( *pRc==LSM_OK ){
+    if( pDb->nTransOpen==0 ){
+      rc = lsmTreeLoadHeader(pDb, 0);
+    }
+    if( rc==LSM_OK 
+        && pDb->treehdr.iOldShmid
+        && pDb->treehdr.iOldLog!=pDb->pWorker->iLogOff 
+      ){
+      bRet = 1;
+    }else{
+      bRet = 0;
+    }
+    *pRc = rc;
   }
-
-  if( rc==LSM_OK 
-   && pDb->treehdr.iOldShmid
-   && pDb->treehdr.iOldLog!=pDb->pWorker->iLogOff 
-  ){
-    *pbOut = 1;
-  }else{
-    *pbOut = 0;
-  }
-  return rc;
+  assert( *pRc==LSM_OK || bRet==0 );
+  return bRet;
 }
 
 static int doLsmSingleWork(
@@ -4265,31 +4273,25 @@ static int doLsmSingleWork(
     }
   }
 
-  /* If the FLUSH flag is set, there exists in-memory ready to be flushed
-  ** to disk and there are lsm_db.nMerge or fewer age=0 levels, flush the 
-  ** data to disk now.  */
-  if( (flags & LSM_WORK_FLUSH) ){
-    int bOld;
-    rc = sortedTreeHasOld(pDb, &bOld);
-    if( bOld ){
-      if( sortedDbIsFull(pDb) ){
-        int nPg = 0;
-        rc = sortedWork(pDb, nRem, 0, 1, &nPg);
-        nRem -= nPg;
-        assert( rc!=LSM_OK || nRem<=0 || !sortedDbIsFull(pDb) );
-        bToplevel = 1;
+  /* If there exists in-memory data ready to be flushed to disk, attempt
+  ** to flush it now.  */
+  if( sortedTreeHasOld(pDb, &rc) ){
+    if( sortedDbIsFull(pDb) ){
+      int nPg = 0;
+      rc = sortedWork(pDb, nRem, 0, 1, &nPg);
+      nRem -= nPg;
+      assert( rc!=LSM_OK || nRem<=0 || !sortedDbIsFull(pDb) );
+      bToplevel = 1;
+    }
+    if( rc==LSM_OK && nRem>0 ){
+      int nPg = 0;
+      rc = sortedNewToplevel(pDb, TREE_OLD, &nOvfl, &nPg);
+      nRem -= nPg;
+      if( rc==LSM_OK && pDb->nTransOpen>0 ){
+        lsmTreeDiscardOld(pDb);
       }
-
-      if( rc==LSM_OK && nRem>0 ){
-        int nPg = 0;
-        rc = sortedNewToplevel(pDb, TREE_OLD, &nOvfl, &nPg);
-        nRem -= nPg;
-        if( rc==LSM_OK && pDb->nTransOpen>0 ){
-          lsmTreeDiscardOld(pDb);
-        }
-        bFlush = 1;
-        bToplevel = 0;
-      }
+      bFlush = 1;
+      bToplevel = 0;
     }
   }
 

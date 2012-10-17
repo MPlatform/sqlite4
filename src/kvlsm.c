@@ -455,6 +455,8 @@ int sqlite4KVStoreOpenLsm(
     rc = lsm_new(0, &pNew->pDb);
     if( rc==SQLITE4_OK ){
       int i;
+      int bMmap = 0;
+      lsm_config(pNew->pDb, LSM_CONFIG_MMAP, &bMmap);
       for(i=0; i<ArraySize(aConfig); i++){
         const char *zVal = sqlite4_uri_parameter(zName, aConfig[i].zParam);
         if( zVal ){

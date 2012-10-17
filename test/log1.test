@@ -134,7 +134,7 @@ db2 close
 reset_db
 do_execsql_test 3.5 { CREATE TABLE t1(a, b) }
 do_test 3.6 {
-  sqlite4_lsm_work db main -flush -checkpoint 0
+  sqlite4_lsm_checkpoint db main
   for {set i 0} {$i < 203} {incr i} {
     execsql { INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100)) }
   }
@@ -276,10 +276,11 @@ do_execsql_test 8.1 {
   INSERT INTO x VALUES(randstr(10,10), randstr(100,100));
 }
 do_filesize_test 8.2   0 776
-do_test          8.3 { sqlite4_lsm_work db main -flush } 0
+do_test          8.3.1 { sqlite4_lsm_flush db main } {}
+do_test          8.3.2 { sqlite4_lsm_work db main } 0
 do_execsql_test  8.4 { INSERT INTO x VALUES(randstr(10,10), randstr(100,100)) }
 do_filesize_test 8.5   12288 915
-do_test          8.6 { sqlite4_lsm_work db main -checkpoint } 0
+do_test          8.6 { sqlite4_lsm_checkpoint db main } {}
 
 do_test 8.7 {
   copy_db_files test.db test.db2
@@ -358,7 +359,7 @@ do_execsql_test 10.9 {
   INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
 }
 do_test 10.9  { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 695}
-do_test 10.10 { sqlite4_lsm_work db main -checkpoint } 0
+do_test 10.10 { sqlite4_lsm_checkpoint db main } {}
 do_test 10.11 { sqlite4_lsm_info db main log-structure } {0 0 0 0 556 695}
 
 #-------------------------------------------------------------------------
@@ -385,7 +386,7 @@ do_execsql_test 11.6 {
   INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
 }
 do_test 11.7 { sqlite4_lsm_info db main log-structure } {0 0 0 0 0 1474}
-do_test 11.8 { sqlite4_lsm_work db main -checkpoint } 0
+do_test 11.8 { sqlite4_lsm_checkpoint db main } {}
 do_test 11.9 { sqlite4_lsm_info db main log-structure } {0 0 0 0 1335 1474}
 do_execsql_test 11.10 {
   INSERT INTO t1 VALUES(randstr(10,10), randstr(100,100));
@@ -445,7 +446,7 @@ do_execsql_test 11.22 {
 do_test 11.23 { 
   sqlite4_lsm_info db main log-structure 
 } {1335 1482 0 1259 1483 1908}
-do_test 11.24 { sqlite4_lsm_work db main -checkpoint } {0}
+do_test 11.24 { sqlite4_lsm_checkpoint db main } {}
 do_test 11.25 { 
   sqlite4_lsm_info db main log-structure 
 } {0 0 0 0 1769 1908}
@@ -464,7 +465,7 @@ for {set iTest 1} {$iTest<=150} {incr iTest} {
     for {set i 0} {$i < 10} {incr i} {
       execsql { INSERT INTO t1 VALUES(randstr(20,20), randstr(100,100)) }
       if { int(rand()*10.0)==0 } { sqlite4_lsm_work db main -flush }
-      if { int(rand()*10.0)==0 } { sqlite4_lsm_work db main -checkpoint }
+      if { int(rand()*10.0)==0 } { sqlite4_lsm_checkpoint db main }
     }
     copy_db_files test.db test.db2
     sqlite4 db2 test.db2
