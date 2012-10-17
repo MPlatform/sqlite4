@@ -3474,6 +3474,8 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
     p->nHier = 0;
   }
 
+  lsmFree(pMW->pDb->pEnv, pMW->aGobble);
+  pMW->aGobble = 0;
   pMW->pCsr = 0;
   pMW->pPage = 0;
   pMW->pPage = 0;
