@@ -2955,12 +2955,13 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
   p = &pMW->hier;
 
   if( p->apHier==0 && pSeg->iRoot!=0 ){
-    int bHierReadonly = pMW->pLevel->pMerge->bHierReadonly;
     FileSystem *pFS = pMW->pDb->pFS;
     lsm_env *pEnv = pMW->pDb->pEnv;
     Page **apHier = 0;
     int nHier = 0;
     int iPg = pSeg->iRoot;
+
+    assert( pMW->pLevel->pMerge->bHierReadonly );
 
     do {
       Page *pPg = 0;
@@ -2981,7 +2982,6 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
           rc = LSM_NOMEM_BKPT;
           break;
         }
-        if( bHierReadonly==0 ) lsmFsPageWrite(pPg);
         apHier = apNew;
         memmove(&apHier[1], &apHier[0], sizeof(Page *) * nHier);
         nHier++;
@@ -3036,7 +3036,7 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
 **
 ** The reason for having the page footer pointer point to the right-child
 ** (instead of the left) is that doing things this way makes the 
-** segWriterMoveHierarchy() operation less complicated (since the pointers 
+** mergeWorkerMoveHierarchy() operation less complicated (since the pointers 
 ** that need to be updated are all stored as fixed-size integers within the 
 ** page footer, not varints in page records).
 **
@@ -3233,10 +3233,11 @@ static int mergeWorkerNextPage(
     u8 *aData;                    /* Data buffer belonging to page pNext */
     int nData;                    /* Size of aData[] in bytes */
 
+    /* Release the completed output page. */
     lsmFsPageRelease(pMW->pPage);
+
     pMW->pPage = pNext;
     pMW->pLevel->pMerge->iOutputOff = 0;
-
     aData = fsPageData(pNext, &nData);
     lsmPutU16(&aData[SEGMENT_NRECORD_OFFSET(nData)], 0);
     lsmPutU16(&aData[SEGMENT_FLAGS_OFFSET(nData)], 0);
@@ -3341,7 +3342,7 @@ static int mergeWorkerWrite(
   **     1) record type - 1 byte.
   **     2) Page-pointer-offset - 1 varint
   **     3) Key size - 1 varint
-  **     4) Value size - 1 varint (SORTED_WRITE only)
+  **     4) Value size - 1 varint (only if LSM_INSERT flag is set)
   */
   rc = lsmMCursorValue(pCsr, &pVal, &nVal);
   if( rc==LSM_OK ){
@@ -3354,7 +3355,6 @@ static int mergeWorkerWrite(
     if( iOff<0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
       iFPtr = *pCsr->pPrevMergePtr;
       iRPtr = iPtr - iFPtr;
-
       iOff = 0;
       nRec = 0;
       rc = mergeWorkerNextPage(pMW, iFPtr);
@@ -3480,6 +3480,9 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
     }else{
       btreeCursorSplitkey(pCsr->pBtCsr, &pMerge->splitkey);
     }
+    
+    pMerge->iOutputOff = -1;
+    pMerge->bHierReadonly = 1;
   }
 
   lsmMCursorClose(pCsr);
@@ -3502,6 +3505,11 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
   pMW->pPage = 0;
 }
 
+/*
+** The MergeWorker passed as the only argument is working to merge two or
+** more existing segments together (not to flush an in-memory tree). It
+** has not yet written the first key to the first page of the output.
+*/
 static int mergeWorkerFirstPage(MergeWorker *pMW){
   int rc;                         /* Return code */
   Page *pPg = 0;                  /* First page of run pSeg */
@@ -3889,7 +3897,7 @@ static int mergeWorkerLoadOutputPage(MergeWorker *pMW){
 
     if( rc==LSM_OK ){
       pMW->pPage = pPg;
-      if( pLevel->pMerge->iOutputOff>=0 ) rc = lsmFsPageWrite(pPg);
+      assert( pLevel->pMerge->iOutputOff<0 );
     }
   }
   return rc;
@@ -4339,7 +4347,6 @@ static int doLsmSingleWork(
   }
 
   if( rc==LSM_OK && (nRem!=nMax) ){
-    rc = lsmSortedFlushDb(pDb);
     lsmFinishWork(pDb, bFlush, nOvfl, &rc);
   }else{
     int rcdummy = LSM_BUSY;
@@ -4905,22 +4912,6 @@ void lsmSortedFreeLevel(lsm_env *pEnv, Level *pLevel){
     pNext = p->pNext;
     sortedFreeLevel(pEnv, p);
   }
-}
-
-int lsmSortedFlushDb(lsm_db *pDb){
-  int rc = LSM_OK;
-  Level *p;
-
-  assert( pDb->pWorker );
-  for(p=lsmDbSnapshotLevel(pDb->pWorker); p && rc==LSM_OK; p=p->pNext){
-    Merge *pMerge = p->pMerge;
-    if( pMerge ){
-      pMerge->iOutputOff = -1;
-      pMerge->bHierReadonly = 1;
-    }
-  }
-
-  return LSM_OK;
 }
 
 void lsmSortedSaveTreeCursors(lsm_db *pDb){

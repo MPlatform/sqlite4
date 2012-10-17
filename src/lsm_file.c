@@ -1077,8 +1077,9 @@ static Pgno findAppendPoint(FileSystem *pFS){
 }
 
 /*
-** Append a page to file iFile. Return a reference to it. lsmFsPageWrite()
-** has already been called on the returned reference.
+** Append a page to file iFile. Set the ref-count to 1 and return a pointer
+** to it. The page is writable until either lsmFsPagePersist() is called on 
+** it or the ref-count drops to zero.
 */
 int lsmFsSortedAppend(
   FileSystem *pFS, 
@@ -1276,15 +1277,6 @@ int lsmFsMetaPageRelease(MetaPage *pPg){
 u8 *lsmFsMetaPageData(MetaPage *pPg, int *pnData){
   if( pnData ) *pnData = pPg->pFS->nMetasize;
   return pPg->aData;
-}
-
-/*
-** Notify the file-system that the page needs to be written back to disk
-** when the reference count next drops to zero.
-*/
-int lsmFsPageWrite(Page *pPg){
-  pPg->flags |= PAGE_DIRTY;
-  return LSM_OK;
 }
 
 /*

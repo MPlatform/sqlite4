@@ -343,8 +343,8 @@ struct lsm_db {
 struct Segment {
   Pgno iFirst;                     /* First page of this run */
   Pgno iLast;                      /* Last page of this run */
-  Pgno iRoot;                     /* Root page number (if any) */
-  int nSize;                      /* Size of this run in pages */
+  Pgno iRoot;                      /* Root page number (if any) */
+  int nSize;                       /* Size of this run in pages */
 };
 
 /*
@@ -637,7 +637,6 @@ void lsmSortedSplitkey(lsm_db *, Level *, int *);
 int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
 int lsmFsDbPageNext(Segment *, Page *, int eDir, Page **);
 
-int lsmFsPageWrite(Page *);
 u8 *lsmFsPageData(Page *, int *);
 int lsmFsPageRelease(Page *);
 int lsmFsPagePersist(Page *);
@@ -700,7 +699,6 @@ void lsmSortedRemap(lsm_db *pDb);
 
 void lsmSortedFreeLevel(lsm_env *pEnv, Level *);
 
-int lsmSortedFlushDb(lsm_db *);
 int lsmSortedAdvanceAll(lsm_db *pDb);
 
 int lsmSortedLoadMerge(lsm_db *, Level *, u32 *, int *);
