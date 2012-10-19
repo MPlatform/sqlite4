@@ -60,8 +60,8 @@ do_execsql_test 2.1 {
 }
 do_test 2.2 { 
   sqlite4 db2 ./test.db
-  list [catch { sqlite4_lsm_work db2 main -flush 0 } msg] $msg
-} {1 SQLITE4_BUSY}
+  list [catch { db2 eval { BEGIN ; INSERT INTO t1 VALUES(1, 2) } } msg] $msg
+} {1 {database is locked}}
 
 do_execsql_test 2.3 { COMMIT }
 do_test 2.4 { sqlite4_lsm_work db2 main -flush 0 } {0}

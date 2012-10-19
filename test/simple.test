@@ -1369,6 +1369,9 @@ do_catchsql_test 70.3 {
 
 #-------------------------------------------------------------------------
 # This is testing that the "phantom" runs feature works.
+#
+# UPDATE: Said feature was dropped early in development. But the test 
+# remains valid.
 reset_db
 do_execsql_test 71.1 {
   CREATE TABLE t1(x);
@@ -1390,11 +1393,14 @@ do_test 71.4 {
 
 #-------------------------------------------------------------------------
 # This is testing that the "phantom" runs feature works with mmap.
+#
+# UPDATE: Said feature was dropped early in development. But the test 
+# remains valid.
 reset_db
 
-do_test 72.0.1 { sqlite4_lsm_config db main mmap   } 0
-do_test 72.0.2 { sqlite4_lsm_config db main mmap 1 } 1
-do_test 72.0.3 { sqlite4_lsm_config db main mmap   } 1
+#do_test 72.0.1 { sqlite4_lsm_config db main mmap   } 0
+#do_test 72.0.2 { sqlite4_lsm_config db main mmap 1 } 1
+#do_test 72.0.3 { sqlite4_lsm_config db main mmap   } 1
 
 do_execsql_test 72.1 {
   CREATE TABLE t1(x);

@@ -2421,6 +2421,7 @@ static int assert_delete_ranges_match(lsm_db *db){
   }
 
   tblobFree(csr.pDb, &csr.blob);
+  tblobFree(csr.pDb, &blob);
 
   return 1;
 }

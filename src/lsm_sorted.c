@@ -267,6 +267,18 @@ struct Hierarchy {
   int nHier;
 };
 
+/*
+** aSave:
+**   When mergeWorkerNextPage() is called to advance to the next page in
+**   the output segment, if the bStore flag for an element of aSave[] is
+**   true, it is cleared and the corresponding iPgno value is set to the 
+**   page number of the page just completed.
+**
+**   aSave[0] is used to record the pointer value to be pushed into the
+**   b-tree hierarchy. aSave[1] is used to save the page number of the
+**   page containing the indirect key most recently written to the b-tree.
+**   see mergeWorkerPushHierarchy() for details.
+*/
 struct MergeWorker {
   lsm_db *pDb;                    /* Database handle */
   Level *pLevel;                  /* Worker snapshot Level being merged */
@@ -276,6 +288,12 @@ struct MergeWorker {
   Page *pPage;                    /* Current output page */
   int nWork;                      /* Number of calls to mergeWorkerNextPage() */
   Pgno *aGobble;                  /* Gobble point for each input segment */
+
+  Pgno iIndirect;
+  struct SavedPgno {
+    Pgno iPgno;
+    int bStore;
+  } aSave[2];
 };
 
 #ifdef LSM_DEBUG_EXPENSIVE
@@ -284,6 +302,7 @@ static int assertBtreeOk(lsm_db *, Segment *);
 static void assertRunInOrder(lsm_db *pDb, Segment *pSeg);
 #else
 #define assertRunInOrder(x,y)
+#define assertBtreeOk(x,y)
 #endif
 
 
@@ -2995,8 +3014,13 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
     }while( 1 );
 
     if( rc==LSM_OK ){
+      u8 *aData;
+      int nData;
+      aData = fsPageData(apHier[0], &nData);
+      pMW->aSave[0].iPgno = pageGetPtr(aData, nData);
       p->nHier = nHier;
       p->apHier = apHier;
+      rc = mergeWorkerMoveHierarchy(pMW, 0);
     }else{
       int i;
       for(i=0; i<nHier; i++){
@@ -3010,9 +3034,6 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
 }
 
 /*
-** Push the key passed through the pKey/nKey arguments into the b-tree 
-** hierarchy. The associated pointer value is iPtr.
-**
 ** B-tree pages use almost the same format as regular pages. The 
 ** differences are:
 **
@@ -3051,50 +3072,28 @@ static int mergeWorkerLoadHierarchy(MergeWorker *pMW){
 **
 ** See function seekInBtree() for the code that traverses b-tree pages.
 */
-static int mergeWorkerPushHierarchy(
-  MergeWorker *pMW,               /* Merge worker object */
-  int bSep,                       /* True for separators, false otherwise */
-  Pgno iKeyPg,                    /* Page that will contain pKey/nKey */
-  int iTopic,                     /* Topic value for this key */
-  void *pKey,                     /* Pointer to key buffer */
-  int nKey                        /* Size of pKey buffer in bytes */
+
+static int mergeWorkerBtreeWrite(
+  MergeWorker *pMW,
+  u8 eType, 
+  Pgno iPtr,
+  Pgno iKeyPg,
+  void *pKey,
+  int nKey
 ){
+  Segment *pSeg = &pMW->pLevel->lhs;
+  Hierarchy *p = &pMW->hier;
   lsm_db *pDb = pMW->pDb;         /* Database handle */
-  int rc;                         /* Return Code */
+  int rc = LSM_OK;                /* Return Code */
   int iLevel;                     /* Level of b-tree hierachy to write to */
   int nData;                      /* Size of aData[] in bytes */
   u8 *aData;                      /* Page data for level iLevel */
   int iOff;                       /* Offset on b-tree page to write record to */
   int nRec;                       /* Initial number of records on b-tree page */
-  Pgno iPtr;                      /* Pointer value to accompany pKey/nKey */
-  int bIndirect;                  /* True to use an indirect record */
 
-  Hierarchy *p;
-  Segment *pSeg;
-
-  /* If there exists a b-tree hierarchy and it is not loaded into 
-  ** memory, load it now.  */
-  pSeg = &pMW->pLevel->lhs;
-  p = &pMW->hier;
-  rc = mergeWorkerLoadHierarchy(pMW);
-
-  /* Obtain the absolute pointer value to store along with the key in the
-  ** page body. This pointer points to a page that contains keys that are
-  ** smaller than pKey/nKey.  */
-  if( p->nHier ){
-    aData = fsPageData(p->apHier[0], &nData);
-    iPtr = lsmGetU64(&aData[SEGMENT_POINTER_OFFSET(nData)]);
-  }else{
-    iPtr = pSeg->iFirst;
-  }
-
-  if( p->nHier && pMW->pLevel->pMerge->bHierReadonly ){
-    rc = mergeWorkerMoveHierarchy(pMW, bSep);
-    if( rc!=LSM_OK ) goto push_hierarchy_out;
-  }
-
-  /* Determine if the indirect format should be used. */
-  bIndirect = (nKey*4 > lsmFsPageSize(pMW->pDb->pFS));
+  /* iKeyPg should be zero for an ordinary b-tree key, or non-zero for an
+  ** indirect key. The flags byte for an indirect key is 0x00.  */
+  assert( (eType==0)==(iKeyPg!=0) );
 
   /* The MergeWorker.apHier[] array contains the right-most leaf of the b-tree
   ** hierarchy, the root node, and all nodes that lie on the path between.
@@ -3116,18 +3115,19 @@ static int mergeWorkerPushHierarchy(
           pMW->pDb->pEnv, p->apHier, sizeof(Page *)*(p->nHier+1)
       );
       if( !aNew ){
-        rc = LSM_NOMEM_BKPT;
-        goto push_hierarchy_out;
+        return LSM_NOMEM_BKPT;
       }
       p->apHier = aNew;
     }else{
+      Page *pOld;
       int nFree;
 
       /* If the key will fit on this page, break out of the loop. */
-      assert( lsmFsPageWritable(p->apHier[iLevel]) );
-      aData = fsPageData(p->apHier[iLevel], &nData);
+      pOld = p->apHier[iLevel];
+      assert( lsmFsPageWritable(pOld) );
+      aData = fsPageData(pOld, &nData);
       iRight = lsmGetU64(&aData[SEGMENT_POINTER_OFFSET(nData)]);
-      if( bIndirect ){
+      if( eType==0 ){
         nByte = 2 + 1 + lsmVarintLen32(iRight) + lsmVarintLen32(iKeyPg);
       }else{
         nByte = 2 + 1 + lsmVarintLen32(iRight) + lsmVarintLen32(nKey) + nKey;
@@ -3136,9 +3136,14 @@ static int mergeWorkerPushHierarchy(
       nFree = SEGMENT_EOF(nData, nRec) - mergeWorkerPageOffset(aData, nData);
       if( nByte<=nFree ) break;
 
-      /* Otherwise, it is full. Release it. */
-      iPtr = lsmFsPageNumber(p->apHier[iLevel]);
-      rc = lsmFsPageRelease(p->apHier[iLevel]);
+      /* Otherwise, this page is full. Set the right-hand-child pointer
+      ** to iPtr and release it.  */
+      lsmPutU64(&aData[SEGMENT_POINTER_OFFSET(nData)], iPtr);
+      rc = lsmFsPagePersist(pOld);
+      if( rc==LSM_OK ){
+        iPtr = lsmFsPageNumber(pOld);
+        lsmFsPageRelease(pOld);
+      }
     }
 
     /* Allocate a new page for apHier[iLevel]. */
@@ -3148,7 +3153,7 @@ static int mergeWorkerPushHierarchy(
           pDb->pFS, pDb->pWorker, pSeg, &p->apHier[iLevel]
       );
     }
-    if( rc!=LSM_OK ) goto push_hierarchy_out;
+    if( rc!=LSM_OK ) return rc;
 
     aData = fsPageData(p->apHier[iLevel], &nData);
     memset(aData, 0, nData);
@@ -3167,19 +3172,16 @@ static int mergeWorkerPushHierarchy(
 
   /* Write the key into page apHier[iLevel]. */
   aData = fsPageData(p->apHier[iLevel], &nData);
-
   iOff = mergeWorkerPageOffset(aData, nData);
-
   nRec = pageGetNRec(aData, nData);
   lsmPutU16(&aData[SEGMENT_CELLPTR_OFFSET(nData, nRec)], iOff);
   lsmPutU16(&aData[SEGMENT_NRECORD_OFFSET(nData)], nRec+1);
-
-  if( bIndirect ){
+  if( eType==0 ){
     aData[iOff++] = 0x00;
     iOff += lsmVarintPut32(&aData[iOff], iPtr);
     iOff += lsmVarintPut32(&aData[iOff], iKeyPg);
   }else{
-    aData[iOff++] = (u8)(iTopic | LSM_SEPARATOR);
+    aData[iOff++] = eType;
     iOff += lsmVarintPut32(&aData[iOff], iPtr);
     iOff += lsmVarintPut32(&aData[iOff], nKey);
     memcpy(&aData[iOff], pKey, nKey);
@@ -3190,16 +3192,93 @@ static int mergeWorkerPushHierarchy(
     lsmPutU64(&aData[SEGMENT_POINTER_OFFSET(nData)], iRight);
   }
 
-  /* Write the right-hand pointer of the right-most leaf page of the 
-  ** b-tree heirarchy. */
-  aData = fsPageData(p->apHier[0], &nData);
-  lsmPutU64(&aData[SEGMENT_POINTER_OFFSET(nData)], iKeyPg);
+  return rc;
+}
+
+static int mergeWorkerBtreeIndirect(MergeWorker *pMW){
+  int rc = LSM_OK;
+  if( pMW->iIndirect ){
+    Pgno iKeyPg = pMW->aSave[1].iPgno;
+    rc = mergeWorkerBtreeWrite(pMW, 0, pMW->iIndirect, iKeyPg, 0, 0);
+    pMW->iIndirect = 0;
+  }
+  return rc;
+}
+
+/*
+** Append the database key (iTopic/pKey/nKey) to the b-tree under 
+** construction. This key has not yet been written to a segment page.
+** The pointer that will accompany the new key in the b-tree - that
+** points to the completed segment page that contains keys smaller than
+** (pKey/nKey) is currently stored in pMW->aSave[0].iPgno.
+*/
+static int mergeWorkerPushHierarchy(
+  MergeWorker *pMW,               /* Merge worker object */
+  int iTopic,                     /* Topic value for this key */
+  void *pKey,                     /* Pointer to key buffer */
+  int nKey                        /* Size of pKey buffer in bytes */
+){
+  lsm_db *pDb = pMW->pDb;         /* Database handle */
+  int rc = LSM_OK;                /* Return Code */
+  int iLevel;                     /* Level of b-tree hierachy to write to */
+  int nData;                      /* Size of aData[] in bytes */
+  u8 *aData;                      /* Page data for level iLevel */
+  int iOff;                       /* Offset on b-tree page to write record to */
+  int nRec;                       /* Initial number of records on b-tree page */
+  Pgno iPtr;                      /* Pointer value to accompany pKey/nKey */
+  int bIndirect;                  /* True to use an indirect record */
+
+  Hierarchy *p;
+  Segment *pSeg;
+
+  /* If there exists a b-tree hierarchy and it is not loaded into 
+  ** memory, load it now.  */
+  pSeg = &pMW->pLevel->lhs;
+  p = &pMW->hier;
+
+  assert( pMW->aSave[0].bStore==0 );
+  assert( pMW->aSave[1].bStore==0 );
+  rc = mergeWorkerBtreeIndirect(pMW);
+
+  /* Obtain the absolute pointer value to store along with the key in the
+  ** page body. This pointer points to a page that contains keys that are
+  ** smaller than pKey/nKey.  */
+  iPtr = pMW->aSave[0].iPgno;
+  assert( iPtr!=0 );
+
+  /* Determine if the indirect format should be used. */
+  bIndirect = (nKey*4 > lsmFsPageSize(pMW->pDb->pFS));
+  if( bIndirect ){
+    pMW->iIndirect = iPtr;
+    pMW->aSave[1].bStore = 1;
+  }else{
+    rc = mergeWorkerBtreeWrite(
+        pMW, (u8)(iTopic | LSM_SEPARATOR), iPtr, 0, pKey, nKey
+    );
+  }
 
   /* Ensure that the SortedRun.iRoot field is correct. */
-  pSeg->iRoot = lsmFsPageNumber(p->apHier[p->nHier-1]);
-
-push_hierarchy_out:
   return rc;
+}
+
+static int mergeWorkerFinishHierarchy(
+  MergeWorker *pMW                /* Merge worker object */
+){
+  if( pMW->hier.nHier>0 ){
+    Page *pPg = pMW->hier.apHier[0];
+    int nData;                      /* Size of aData[] in bytes */
+    u8 *aData;                      /* Page data for pLeaf */
+    Pgno iPtr;
+
+    assert( pPg );
+    assert( pMW->aSave[0].bStore==0 );
+    iPtr = pMW->aSave[0].iPgno;
+
+    aData = fsPageData(pPg, &nData);
+    lsmPutU64(&aData[SEGMENT_POINTER_OFFSET(nData)], iPtr);
+  }
+
+  return LSM_OK;
 }
 
 static int keyszToSkip(FileSystem *pFS, int nKey){
@@ -3232,6 +3311,15 @@ static int mergeWorkerNextPage(
   if( rc==LSM_OK ){
     u8 *aData;                    /* Data buffer belonging to page pNext */
     int nData;                    /* Size of aData[] in bytes */
+    int i;
+
+    lsmFsPagePersist(pMW->pPage);
+    for(i=0; i<2; i++){
+      if( pMW->aSave[i].bStore ){
+        pMW->aSave[i].iPgno = lsmFsPageNumber(pMW->pPage);
+        pMW->aSave[i].bStore = 0;
+      }
+    }
 
     /* Release the completed output page. */
     lsmFsPageRelease(pMW->pPage);
@@ -3300,8 +3388,7 @@ static int mergeWorkerWrite(
   int eType,                      /* One of SORTED_SEPARATOR, WRITE or DELETE */
   void *pKey, int nKey,           /* Key value */
   MultiCursor *pCsr,              /* Read value (if any) from here */
-  int iPtr,                       /* Absolute value of page pointer, or 0 */
-  int *piPtrOut                   /* OUT: Pointer to write to separators */
+  int iPtr                        /* Absolute value of page pointer, or 0 */
 ){
   int rc = LSM_OK;                /* Return code */
   Merge *pMerge;                  /* Persistent part of level merge state */
@@ -3377,16 +3464,15 @@ static int mergeWorkerWrite(
     assert( pMerge->nSkip>=0 );
 
     if( pMerge->nSkip==0 ){
-      Pgno iPg = lsmFsPageNumber(pPg);
-      rc = mergeWorkerPushHierarchy(pMW, 0, iPg, rtTopic(eType), pKey, nKey);
-    }
-    if( pMerge->nSkip ){
+      rc = mergeWorkerPushHierarchy(pMW, rtTopic(eType), pKey, nKey);
+      assert( pMW->aSave[0].bStore==0 );
+      pMW->aSave[0].bStore = 1;
+      pMerge->nSkip = keyszToSkip(pMW->pDb->pFS, nKey);
+    }else{
       pMerge->nSkip--;
       flags = PGFTR_SKIP_THIS_FLAG;
-    }else{
-      *piPtrOut = lsmFsPageNumber(pPg);
-      pMerge->nSkip = keyszToSkip(pMW->pDb->pFS, nKey);
     }
+
     if( pMerge->nSkip ) flags |= PGFTR_SKIP_NEXT_FLAG;
   }
 
@@ -3445,6 +3531,7 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
   int i;                          /* Iterator variable */
   int rc = *pRc;
   MultiCursor *pCsr = pMW->pCsr;
+  Hierarchy *p = &pMW->hier;
 
   /* Unless the merge has finished, save the cursor position in the
   ** Merge.aInput[] array. See function mergeWorkerInit() for the 
@@ -3486,7 +3573,22 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
   }
 
   lsmMCursorClose(pCsr);
+
+  /* Persist and release the output page. */
+  rc = lsmFsPagePersist(pMW->pPage);
+  for(i=0; i<2; i++){
+    if( pMW->aSave[i].bStore ){
+      pMW->aSave[i].iPgno = lsmFsPageNumber(pMW->pPage);
+      pMW->aSave[i].bStore = 0;
+    }
+  }
   lsmFsPageRelease(pMW->pPage);
+
+  if( rc==LSM_OK ) rc = mergeWorkerBtreeIndirect(pMW);
+  if( rc==LSM_OK ) rc = mergeWorkerFinishHierarchy(pMW);
+  if( rc==LSM_OK && p->nHier ){
+    pMW->pLevel->lhs.iRoot = lsmFsPageNumber(p->apHier[p->nHier-1]);
+  }
 
   for(i=0; i<2; i++){
     Hierarchy *p = &pMW->hier;
@@ -3500,6 +3602,8 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
     p->nHier = 0;
   }
 
+  lsmFree(pMW->pDb->pEnv, pMW->aGobble);
+  pMW->aGobble = 0;
   pMW->pCsr = 0;
   pMW->pPage = 0;
   pMW->pPage = 0;
@@ -3537,6 +3641,7 @@ static int mergeWorkerFirstPage(MergeWorker *pMW){
   if( rc==LSM_OK ){
     rc = mergeWorkerNextPage(pMW, iFPtr);
     if( pCsr->pPrevMergePtr ) *pCsr->pPrevMergePtr = iFPtr;
+    pMW->aSave[0].bStore = 1;
   }
 
   return rc;
@@ -3639,15 +3744,13 @@ static int mergeWorkerStep(MergeWorker *pMW){
     ** changed, there is no point in writing an output record. Otherwise,
     ** proceed. */
     if( rtIsSeparator(eType)==0 || iPtr!=0 ){
-      int iSPtr = 0;                /* Separators require a pointer here */
-
       if( pMW->pPage==0 ){
         rc = mergeWorkerFirstPage(pMW);
       }
 
       /* Write the record into the main run. */
       if( rc==LSM_OK ){
-        rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pCsr, iPtr, &iSPtr);
+        rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pCsr, iPtr);
       }
     }
   }
@@ -3662,21 +3765,23 @@ static int mergeWorkerStep(MergeWorker *pMW){
   ** the main or separators array. 
   */
   if( rc==LSM_OK && !lsmMCursorValid(pMW->pCsr) ){
+
+    mergeWorkerShutdown(pMW, &rc);
     if( pSeg->iFirst ){
       rc = lsmFsSortedFinish(pDb->pFS, pSeg);
     }
 
 #ifdef LSM_DEBUG_EXPENSIVE
     if( rc==LSM_OK ){
+#if 0
       rc = assertBtreeOk(pDb, pSeg);
       if( pMW->pCsr->pBtCsr ){
         Segment *pNext = &pMW->pLevel->pNext->lhs;
         rc = assertPointersOk(pDb, pSeg, pNext, 0);
       }
+#endif
     }
 #endif
-
-    mergeWorkerShutdown(pMW, &rc);
   }
   return rc;
 }
@@ -3737,6 +3842,10 @@ static int sortedNewToplevel(
       rc = btreeCursorNew(pDb, pDel, &pCsr->pBtCsr);
       iLeftPtr = pNext->lhs.iFirst;
     }
+
+    if( pNext==0 ){
+      multiCursorIgnoreDelete(pCsr);
+    }
   }
 
   if( rc!=LSM_OK ){
@@ -3759,6 +3868,7 @@ static int sortedNewToplevel(
 
     /* Allocate the first page of the output segment. */
     rc = mergeWorkerNextPage(&mergeworker, iLeftPtr);
+    mergeworker.aSave[0].bStore = 1;
 
     /* Do the work to create the new merged segment on disk */
     if( rc==LSM_OK ) rc = lsmMCursorFirst(pCsr);
@@ -3779,13 +3889,14 @@ static int sortedNewToplevel(
     sortedFreeLevel(pDb->pEnv, pNew);
   }
 
-  if( rc==LSM_OK ){
-    sortedInvokeWorkHook(pDb);
-  }
-
 #if 0
   lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
 #endif
+
+  if( rc==LSM_OK ){
+    assertBtreeOk(pDb, &pNew->lhs);
+    sortedInvokeWorkHook(pDb);
+  }
 
   if( pnWrite ) *pnWrite = nWrite;
   pDb->pWorker->nWrite += nWrite;
@@ -3947,8 +4058,16 @@ static int mergeWorkerInit(
   assert( rc!=LSM_OK || pMerge->nInput==(pCsr->nPtr+(pCsr->pBtCsr!=0)) );
   pMW->pCsr = pCsr;
 
-  /* Load the current output page into memory. */
+  /* Load the current output page and b-tree hierarchy into memory. */
   if( rc==LSM_OK ) rc = mergeWorkerLoadOutputPage(pMW);
+  if( rc==LSM_OK ) rc = mergeWorkerLoadHierarchy(pMW);
+  if( rc==LSM_OK && pMW->pPage && pMW->hier.nHier==0 ){
+    pMW->aSave[0].iPgno = pLevel->lhs.iFirst;
+  }
+
+  /* Set MergeWorker.aSave[0].iPgno to contain the */
+  if( rc==LSM_OK ){
+  }
 
   /* Position the cursor. */
   if( rc==LSM_OK ){
@@ -3990,6 +4109,7 @@ static int mergeWorkerInit(
   return rc;
 }
 
+/* TODO: Re-enable this!!! */
 static int sortedBtreeGobble(
   lsm_db *pDb, 
   MultiCursor *pCsr, 
@@ -4009,7 +4129,8 @@ static int sortedBtreeGobble(
     }
 
     for(nPg=0; aPg[nPg]; nPg++);
-#if 1
+
+#if 0
     lsmFsGobble(pDb, pSeg, aPg, nPg);
 #endif
 
@@ -4210,6 +4331,7 @@ static int sortedWork(
 #if 0
       lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
 #endif
+      assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);
 
       /* If bFlush is true and the database is no longer considered "full",
@@ -4231,28 +4353,32 @@ static int sortedWork(
 /*
 ** The database connection passed as the first argument must be a worker
 ** connection. This function checks if there exists an "old" in-memory tree
-** ready to be flushed to disk. If so, *pbOut is set to true before 
-** returning. Otherwise false.
+** ready to be flushed to disk. If so, true is returned. Otherwise false.
 **
-** Normally, LSM_OK is returned. Or, if an error occurs, an LSM error code.
+** If an error occurs, *pRc is set to an LSM error code before returning.
+** It is assumed that *pRc is set to LSM_OK when this function is called.
 */
-static int sortedTreeHasOld(lsm_db *pDb, int *pbOut){
+static int sortedTreeHasOld(lsm_db *pDb, int *pRc){
   int rc = LSM_OK;
+  int bRet = 0;
 
   assert( pDb->pWorker );
-  if( pDb->nTransOpen==0 ){
-    rc = lsmTreeLoadHeader(pDb, 0);
+  if( *pRc==LSM_OK ){
+    if( pDb->nTransOpen==0 ){
+      rc = lsmTreeLoadHeader(pDb, 0);
+    }
+    if( rc==LSM_OK 
+        && pDb->treehdr.iOldShmid
+        && pDb->treehdr.iOldLog!=pDb->pWorker->iLogOff 
+      ){
+      bRet = 1;
+    }else{
+      bRet = 0;
+    }
+    *pRc = rc;
   }
-
-  if( rc==LSM_OK 
-   && pDb->treehdr.iOldShmid
-   && pDb->treehdr.iOldLog!=pDb->pWorker->iLogOff 
-  ){
-    *pbOut = 1;
-  }else{
-    *pbOut = 0;
-  }
-  return rc;
+  assert( *pRc==LSM_OK || bRet==0 );
+  return bRet;
 }
 
 static int doLsmSingleWork(
@@ -4296,31 +4422,25 @@ static int doLsmSingleWork(
     }
   }
 
-  /* If the FLUSH flag is set, there exists in-memory ready to be flushed
-  ** to disk and there are lsm_db.nMerge or fewer age=0 levels, flush the 
-  ** data to disk now.  */
-  if( (flags & LSM_WORK_FLUSH) ){
-    int bOld;
-    rc = sortedTreeHasOld(pDb, &bOld);
-    if( bOld ){
-      if( sortedDbIsFull(pDb) ){
-        int nPg = 0;
-        rc = sortedWork(pDb, nRem, 0, 1, &nPg);
-        nRem -= nPg;
-        assert( rc!=LSM_OK || nRem<=0 || !sortedDbIsFull(pDb) );
-        bToplevel = 1;
+  /* If there exists in-memory data ready to be flushed to disk, attempt
+  ** to flush it now.  */
+  if( sortedTreeHasOld(pDb, &rc) ){
+    if( sortedDbIsFull(pDb) ){
+      int nPg = 0;
+      rc = sortedWork(pDb, nRem, 0, 1, &nPg);
+      nRem -= nPg;
+      assert( rc!=LSM_OK || nRem<=0 || !sortedDbIsFull(pDb) );
+      bToplevel = 1;
+    }
+    if( rc==LSM_OK && nRem>0 ){
+      int nPg = 0;
+      rc = sortedNewToplevel(pDb, TREE_OLD, &nOvfl, &nPg);
+      nRem -= nPg;
+      if( rc==LSM_OK && pDb->nTransOpen>0 ){
+        lsmTreeDiscardOld(pDb);
       }
-
-      if( rc==LSM_OK && nRem>0 ){
-        int nPg = 0;
-        rc = sortedNewToplevel(pDb, TREE_OLD, &nOvfl, &nPg);
-        nRem -= nPg;
-        if( rc==LSM_OK && pDb->nTransOpen>0 ){
-          lsmTreeDiscardOld(pDb);
-        }
-        bFlush = 1;
-        bToplevel = 0;
-      }
+      bFlush = 1;
+      bToplevel = 0;
     }
   }
 
@@ -4609,6 +4729,7 @@ void sortedDumpPage(lsm_db *pDb, Segment *pRun, Page *pPg, int bVals){
 
 static void infoCellDump(
   lsm_db *pDb,
+  int bIndirect,                  /* True to follow indirect refs */
   Page *pPg,
   int iCell,
   int *peType,
@@ -4635,11 +4756,16 @@ static void infoCellDump(
     int dummy;
     Pgno iRef;                  /* Page number of referenced page */
     aCell += lsmVarintGet64(aCell, &iRef);
-    lsmFsDbPageGet(pDb->pFS, iRef, &pRef);
-    pageGetKeyCopy(pDb->pEnv, pRef, 0, &dummy, pBlob);
-    aKey = (u8 *)pBlob->pData;
-    nKey = pBlob->nData;
-    lsmFsPageRelease(pRef);
+    if( bIndirect ){
+      lsmFsDbPageGet(pDb->pFS, iRef, &pRef);
+      pageGetKeyCopy(pDb->pEnv, pRef, 0, &dummy, pBlob);
+      aKey = (u8 *)pBlob->pData;
+      nKey = pBlob->nData;
+      lsmFsPageRelease(pRef);
+    }else{
+      aKey = (u8 *)"<indirect>";
+      nKey = 11;
+    }
   }else{
     aCell += lsmVarintGet32(aCell, &nKey);
     if( rtIsWrite(eType) ) aCell += lsmVarintGet32(aCell, &nVal);
@@ -4667,9 +4793,10 @@ static int infoAppendBlob(LsmString *pStr, int bHex, u8 *z, int n){
   return LSM_OK;
 }
 
-#define INFO_PAGE_DUMP_DATA   0x01
-#define INFO_PAGE_DUMP_VALUES 0x02
-#define INFO_PAGE_DUMP_HEX    0x04
+#define INFO_PAGE_DUMP_DATA     0x01
+#define INFO_PAGE_DUMP_VALUES   0x02
+#define INFO_PAGE_DUMP_HEX      0x04
+#define INFO_PAGE_DUMP_INDIRECT 0x08
 
 static int infoPageDump(
   lsm_db *pDb,                    /* Database handle */
@@ -4685,6 +4812,7 @@ static int infoPageDump(
   int bValues = (flags & INFO_PAGE_DUMP_VALUES);
   int bHex = (flags & INFO_PAGE_DUMP_HEX);
   int bData = (flags & INFO_PAGE_DUMP_DATA);
+  int bIndirect = (flags & INFO_PAGE_DUMP_INDIRECT);
 
   *pzOut = 0;
   if( iPg==0 ) return LSM_ERROR;
@@ -4714,7 +4842,7 @@ static int infoPageDump(
 
     for(iCell=0; iCell<nRec; iCell++){
       int nKey;
-      infoCellDump(pDb, pPg, iCell, 0, 0, 0, &nKey, 0, 0, &blob);
+      infoCellDump(pDb, bIndirect, pPg, iCell, 0, 0, 0, &nKey, 0, 0, &blob);
       if( nKey>nKeyWidth ) nKeyWidth = nKey;
     }
     if( bHex ) nKeyWidth = nKeyWidth * 2;
@@ -4728,7 +4856,7 @@ static int infoPageDump(
       Pgno iAbsPtr;
       char zFlags[8];
 
-      infoCellDump(pDb, pPg, iCell, &eType, &iPgPtr,
+      infoCellDump(pDb, bIndirect, pPg, iCell, &eType, &iPgPtr,
           &aKey, &nKey, &aVal, &nVal, &blob
       );
       iAbsPtr = iPgPtr + ((flags & SEGMENT_BTREE_FLAG) ? 0 : iPtr);
