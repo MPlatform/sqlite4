@@ -48,7 +48,7 @@ static void sqlite4Fault(void){
 ** the fault.  Return false if the fault should not be simulated.
 */
 static int faultsimStep(void){
-  if( likely(!memfault.enable) ){
+  if( !memfault.enable ){
     return 0;
   }
   if( memfault.iCountdown>0 ){

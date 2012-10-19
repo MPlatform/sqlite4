@@ -19,7 +19,6 @@
 #define SQLITE4_OMIT_PROGRESS_CALLBACK 1
 #define SQLITE4_OMIT_VIRTUALTABLE 1
 #define SQLITE4_OMIT_XFER_OPT 1
-/* #define SQLITE4_OMIT_AUTOMATIC_INDEX 1 */
 
 /*
 ** These #defines should enable >2GB file support on POSIX if the
@@ -291,27 +290,6 @@
 # define NEVER(X)       (X)
 #endif
 
-/*
-** Return true (non-zero) if the input is a integer that is too large
-** to fit in 32-bits.  This macro is used inside of various testcase()
-** macros to verify that we have tested SQLite for large-file support.
-*/
-#define IS_BIG_INT(X)  (((X)&~(i64)0xffffffff)!=0)
-
-/*
-** The macro unlikely() is a hint that surrounds a boolean
-** expression that is usually false.  Macro likely() surrounds
-** a boolean expression that is usually true.  GCC is able to
-** use these hints to generate better code, sometimes.
-*/
-#if defined(__GNUC__) && 0
-# define likely(X)    __builtin_expect((X),1)
-# define unlikely(X)  __builtin_expect((X),0)
-#else
-# define likely(X)    !!(X)
-# define unlikely(X)  !!(X)
-#endif
-
 #include "sqlite4.h"
 #include "hash.h"
 #include "parse.h"
@@ -350,25 +328,6 @@
 #define OMIT_TEMPDB 1
 #else
 #define OMIT_TEMPDB 0
-#endif
-
-/*
-** The "file format" number is an integer that is incremented whenever
-** the VDBE-level file format changes.  The following macros define the
-** the default file format for new databases and the maximum file format
-** that the library can read.
-*/
-#define SQLITE4_MAX_FILE_FORMAT 4
-#ifndef SQLITE4_DEFAULT_FILE_FORMAT
-# define SQLITE4_DEFAULT_FILE_FORMAT 4
-#endif
-
-/*
-** Determine whether triggers are recursive by default.  This can be
-** changed at run-time using a pragma.
-*/
-#ifndef SQLITE4_DEFAULT_RECURSIVE_TRIGGERS
-# define SQLITE4_DEFAULT_RECURSIVE_TRIGGERS 0
 #endif
 
 /*
@@ -512,13 +471,16 @@ extern const int sqlite4one;
 */
 #define ROUND8(x)     (((x)+7)&~7)
 
-#define SQLITE4_MIN(a,b) (((a)<(b)) ? (a) : (b))
-#define SQLITE4_MAX(a,b) (((a)>(b)) ? (a) : (b))
-
 /*
 ** Round down to the nearest multiple of 8
 */
 #define ROUNDDOWN8(x) ((x)&~7)
+
+/*
+** Min and max macros.
+*/
+#define SQLITE4_MIN(a,b) (((a)<(b)) ? (a) : (b))
+#define SQLITE4_MAX(a,b) (((a)>(b)) ? (a) : (b))
 
 /*
 ** Assert that the pointer X is aligned to an 8-byte boundary.  This
