@@ -495,7 +495,6 @@ static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
   pMerge->aInput = (MergeInput *)&pMerge[1];
   pMerge->nInput = nInput;
   pMerge->iOutputOff = -1;
-  pMerge->bHierReadonly = 1;
   pMerge->nSkip = (int)aInt[iIn++];
   for(i=0; i<nInput; i++){
     pMerge->aInput[i].iPg = (Pgno)aInt[iIn++];

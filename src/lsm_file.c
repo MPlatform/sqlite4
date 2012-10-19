@@ -593,6 +593,7 @@ u8 *lsmFsPageData(Page *pPage, int *pnData){
 ** Return the page number of a page.
 */
 Pgno lsmFsPageNumber(Page *pPage){
+  assert( (pPage->flags & PAGE_DIRTY)==0 );
   return pPage ? pPage->iPg : 0;
 }
 

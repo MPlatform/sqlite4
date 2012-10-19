@@ -373,9 +373,6 @@ struct Level {
 ** It is assumed that code that uses an instance of this structure has
 ** access to the associated Level struct.
 **
-** bHierReadonly:
-**   True if the b-tree hierarchy is currently read-only.
-**
 ** iOutputOff:
 **   The byte offset to write to next within the last page of the 
 **   output segment.
@@ -391,7 +388,6 @@ struct Merge {
   int nSkip;                      /* Number of separators entries to skip */
   int iOutputOff;                 /* Write offset on output page */
   Pgno iCurrentPtr;               /* Current pointer value */
-  int bHierReadonly;              /* True if b-tree heirarchies are read-only */
 };
 
 /* 
