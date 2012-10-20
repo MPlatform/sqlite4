@@ -143,8 +143,8 @@ struct TreeKey {
   u8 flags;                       /* Various LSM_XXX flags */
 };
 
-#define TK_KEY(p) ((void *)&(p)[1])
-#define TK_VAL(p) ((void *)(((u8 *)&(p)[1]) + (p)->nKey))
+#define TKV_KEY(p) ((void *)&(p)[1])
+#define TKV_VAL(p) ((void *)(((u8 *)&(p)[1]) + (p)->nKey))
 
 /*
 ** A single tree node. A node structure may contain up to 3 key/value
@@ -335,8 +335,8 @@ static void assertIsWorkingChild(
 #endif
 
 /* Values for the third argument to treeShmkey(). */
-#define TK_LOADKEY  1
-#define TK_LOADVAL  2
+#define TKV_LOADKEY  1
+#define TKV_LOADVAL  2
 
 static TreeKey *treeShmkey(
   lsm_db *pDb,                    /* Database handle */
@@ -347,14 +347,14 @@ static TreeKey *treeShmkey(
 ){
   TreeKey *pRet;
 
-  assert( eLoad==TK_LOADKEY || eLoad==TK_LOADVAL );
+  assert( eLoad==TKV_LOADKEY || eLoad==TKV_LOADVAL );
   pRet = (TreeKey *)treeShmptr(pDb, iPtr, pRc);
   if( pRet ){
     int nReq;                     /* Bytes of space required at pRet */
     int nAvail;                   /* Bytes of space available at pRet */
 
     nReq = sizeof(TreeKey) + pRet->nKey;
-    if( eLoad==TK_LOADVAL && pRet->nValue>0 ){
+    if( eLoad==TKV_LOADVAL && pRet->nValue>0 ){
       nReq += pRet->nValue;
     }
     assert( LSM_SHM_CHUNK_SIZE==(1<<15) );
@@ -502,9 +502,9 @@ void dump_node_contents(
     for(i=0; i<3; i++){
       u32 iPtr = pNode->aiKeyPtr[i];
       if( iPtr ){
-        TreeKey *pKey = treeShmkey(pDb, pNode->aiKeyPtr[i], TK_LOADKEY, &b,&rc);
+        TreeKey *pKey = treeShmkey(pDb, pNode->aiKeyPtr[i],TKV_LOADKEY, &b,&rc);
         strAppendFlags(&s, pKey->flags);
-        lsmAppendStrBlob(&s, TK_KEY(pKey), pKey->nKey);
+        lsmAppendStrBlob(&s, TKV_KEY(pKey), pKey->nKey);
         lsmStringAppend(&s, "     ", -1);
       }
     }
@@ -523,10 +523,10 @@ void dump_node_contents(
         dump_node_contents(pDb, iPtr, zPath, nPath+2, nHeight-1);
       }
       if( i!=3 && pNode->aiKeyPtr[i] ){
-        TreeKey *pKey = treeShmkey(pDb, pNode->aiKeyPtr[i], TK_LOADKEY, &b,&rc);
+        TreeKey *pKey = treeShmkey(pDb, pNode->aiKeyPtr[i], TKV_LOADKEY,&b,&rc);
         lsmStringInit(&s, pDb->pEnv);
         strAppendFlags(&s, pKey->flags);
-        lsmAppendStrBlob(&s, TK_KEY(pKey), pKey->nKey);
+        lsmAppendStrBlob(&s, TKV_KEY(pKey), pKey->nKey);
         printf("% 6d %.*s%.*s: %s\n", 
             iNode, nPath+1, zPath, 20-nPath-1, zSpace, s.z);
         lsmStringClear(&s);
@@ -572,7 +572,7 @@ static void treeCursorInit(lsm_db *pDb, int bOld, TreeCursor *pCsr){
 static TreeKey *csrGetKey(TreeCursor *pCsr, TreeBlob *pBlob, int *pRc){
   TreeKey *pRet = (TreeKey *)treeShmkey(pCsr->pDb,
       pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], 
-      TK_LOADVAL, pBlob, pRc
+      TKV_LOADVAL, pBlob, pRc
   );
   assert( pRet==0 || assertFlagsOk(pRet->flags) );
   return pRet;
@@ -602,7 +602,7 @@ static int treeCursorRestore(TreeCursor *pCsr, int *pRes){
     TreeKey *pKey = pCsr->pSave;
     pCsr->pSave = 0;
     if( pRes ){
-      rc = lsmTreeCursorSeek(pCsr, TK_KEY(pKey), pKey->nKey, pRes);
+      rc = lsmTreeCursorSeek(pCsr, TKV_KEY(pKey), pKey->nKey, pRes);
     }
   }
   return rc;
@@ -1480,7 +1480,7 @@ static int treeInsertEntry(
     if( res==0 && (flags & (LSM_END_DELETE|LSM_START_DELETE)) ){
       if( pRes->flags & LSM_INSERT ){
         nVal = pRes->nValue;
-        pVal = TK_VAL(pRes);
+        pVal = TKV_VAL(pRes);
       }
       flags = flags | pRes->flags;
     }
@@ -1844,9 +1844,9 @@ int lsmTreeDelete(
         lsmTreeCursorPrev(&csr);
 
         treeOverwriteKey(db, &csr, iKey, &rc);
-        pKey = treeShmkey(db, iKey, TK_LOADKEY, &blob, &rc);
+        pKey = treeShmkey(db, iKey, TKV_LOADKEY, &blob, &rc);
         if( pKey ){
-          rc = lsmTreeCursorSeek(&csr, TK_KEY(pKey), pKey->nKey, &res);
+          rc = lsmTreeCursorSeek(&csr, TKV_KEY(pKey), pKey->nKey, &res);
         }
         if( rc==LSM_OK ){
           assert( res==0 && csr.iNode==iNode );
@@ -1936,7 +1936,7 @@ static int treeCsrCompare(TreeCursor *pCsr, void *pKey, int nKey){
   assert( pCsr->iNode>=0 );
   p = csrGetKey(pCsr, &pCsr->blob, &rc);
   if( p ){
-    cmp = pCsr->pDb->xCmp(TK_KEY(p), p->nKey, pKey, nKey);
+    cmp = pCsr->pDb->xCmp(TKV_KEY(p), p->nKey, pKey, nKey);
   }
   return cmp;
 }
@@ -1990,7 +1990,7 @@ int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
       /* Compare (pKey/nKey) with the key in the middle slot of B-tree node
       ** pNode. The middle slot is never empty. If the comparison is a match,
       ** then the search is finished. Break out of the loop. */
-      pTreeKey = treeShmkey(pDb, pNode->aiKeyPtr[1], TK_LOADKEY, &b, &rc);
+      pTreeKey = treeShmkey(pDb, pNode->aiKeyPtr[1], TKV_LOADKEY, &b, &rc);
       if( rc!=LSM_OK ) break;
       res = xCmp((void *)&pTreeKey[1], pTreeKey->nKey, pKey, nKey);
       if( res==0 ){
@@ -2002,7 +2002,7 @@ int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
       ** to either the left or right key of the B-tree node, if such a key
       ** exists. */
       iTest = (res>0 ? 0 : 2);
-      pTreeKey = treeShmkey(pDb, pNode->aiKeyPtr[iTest], TK_LOADKEY, &b, &rc);
+      pTreeKey = treeShmkey(pDb, pNode->aiKeyPtr[iTest], TKV_LOADKEY, &b, &rc);
       if( rc ) break;
       if( pTreeKey==0 ){
         iTest = 1;
@@ -2096,7 +2096,7 @@ int lsmTreeCursorNext(TreeCursor *pCsr){
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
     TreeKey *pK2 = csrGetKey(pCsr, &pCsr->blob, &rc);
-    assert( rc || pDb->xCmp(TK_KEY(pK2),pK2->nKey,TK_KEY(pK1),pK1->nKey)>=0 );
+    assert( rc || pDb->xCmp(TKV_KEY(pK2),pK2->nKey,TKV_KEY(pK1),pK1->nKey)>=0 );
   }
   tblobFree(pDb, &key1);
 #endif
@@ -2164,7 +2164,7 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
     TreeKey *pK2 = csrGetKey(pCsr, &pCsr->blob, &rc);
-    assert( rc || pDb->xCmp(TK_KEY(pK2), pK2->nKey, TK_KEY(pK1), pK1->nKey)<0 );
+    assert( rc || pDb->xCmp(TKV_KEY(pK2), pK2->nKey, TKV_KEY(pK1), pK1->nKey)<0 );
   }
   tblobFree(pDb, &key1);
 #endif
@@ -2256,7 +2256,7 @@ int lsmTreeCursorValue(TreeCursor *pCsr, void **ppVal, int *pnVal){
     if( rc==LSM_OK ){
       if( pTreeKey->flags & LSM_INSERT ){
         *pnVal = pTreeKey->nValue;
-        *ppVal = TK_VAL(pTreeKey);
+        *ppVal = TKV_VAL(pTreeKey);
       }else{
         *ppVal = 0;
         *pnVal = -1;
@@ -2444,5 +2444,3 @@ static int treeCountEntries(lsm_db *db){
   return nEntry;
 }
 #endif
-
-
