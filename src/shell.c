@@ -179,8 +179,8 @@ static void beginTimer(void){
 
 /* Return the difference of two FILETIME structs in seconds */
 static double timeDiff(FILETIME *pStart, FILETIME *pEnd){
-  sqlite_int64 i64Start = *((sqlite_int64 *) pStart);
-  sqlite_int64 i64End = *((sqlite_int64 *) pEnd);
+  sqlite4_int64 i64Start = *((sqlite4_int64 *) pStart);
+  sqlite4_int64 i64End = *((sqlite4_int64 *) pEnd);
   return (double) ((i64End - i64Start) / 10000000.0);
 }
 

@@ -115,6 +115,7 @@ SRC = \
   $(TOP)/src/hash.h \
   $(TOP)/src/hwtime.h \
   $(TOP)/src/insert.c \
+  $(TOP)/src/kv.h \
   $(TOP)/src/kvlsm.c \
   $(TOP)/src/kvmem.c \
   $(TOP)/src/legacy.c \
@@ -161,7 +162,6 @@ SRC = \
   $(TOP)/src/sqliteLimit.h \
   $(TOP)/src/status.c \
   $(TOP)/src/storage.c \
-  $(TOP)/src/storage.h \
   $(TOP)/src/tclsqlite.c \
   $(TOP)/src/tokenize.c \
   $(TOP)/src/trigger.c \
@@ -276,6 +276,7 @@ HDR = \
    $(TOP)/src/hash.h \
    $(TOP)/src/hwtime.h \
    keywordhash.h \
+   $(TOP)/src/kv.h \
    $(TOP)/src/lsm.h \
    $(TOP)/src/lsmInt.h \
    $(TOP)/src/mutex.h \
@@ -285,7 +286,6 @@ HDR = \
    sqlite4.h  \
    $(TOP)/src/sqliteInt.h  \
    $(TOP)/src/sqliteLimit.h \
-   $(TOP)/src/storage.h \
    $(TOP)/src/vdbe.h \
    $(TOP)/src/vdbeInt.h
 

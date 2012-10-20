@@ -11,20 +11,28 @@
 *************************************************************************
 **
 ** An in-memory key/value storage subsystem that presents the interfadce
-** defined by storage.h
+** defined by kv.h
 */
 #include "sqliteInt.h"
 #include "lsm.h"
 
+/* Forward declarations of objects */
 typedef struct KVLsm KVLsm;
 typedef struct KVLsmCsr KVLsmCsr;
 
+/*
+** An instance of an open connection to an LSM store.  A subclass of KVStore.
+*/
 struct KVLsm {
   KVStore base;                   /* Base class, must be first */
   lsm_db *pDb;                    /* LSM database handle */
   lsm_cursor *pCsr;               /* LSM cursor holding read-trans open */
 };
 
+/*
+** An instance of an open cursor pointing into an LSM store.  A subclass
+** of KVCursor.
+*/
 struct KVLsmCsr {
   KVCursor base;                  /* Base class. Must be first */
   lsm_cursor *pCsr;               /* LSM cursor handle */

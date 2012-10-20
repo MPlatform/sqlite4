@@ -304,9 +304,9 @@
 ** substitute integer for floating-point
 */
 #ifdef SQLITE4_OMIT_FLOATING_POINT
-# define double sqlite_int64
-# define float sqlite_int64
-# define LONGDOUBLE_TYPE sqlite_int64
+# define double sqlite4_int64
+# define float sqlite4_int64
+# define LONGDOUBLE_TYPE sqlite4_int64
 # ifndef SQLITE4_BIG_DBL
 #   define SQLITE4_BIG_DBL (((sqlite4_int64)1)<<50)
 # endif
@@ -595,7 +595,7 @@ typedef struct WhereLevel WhereLevel;
 
 
 #include "vdbe.h"
-#include "storage.h"
+#include "kv.h"
 
 #include "os.h"
 #include "mutex.h"

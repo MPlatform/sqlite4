@@ -4757,7 +4757,7 @@ case OP_VUpdate: {
   sqlite4_module *pModule;
   int nArg;
   int i;
-  sqlite_int64 rowid;
+  sqlite4_int64 rowid;
   Mem **apArg;
   Mem *pX;
 

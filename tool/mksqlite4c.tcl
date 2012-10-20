@@ -94,6 +94,7 @@ foreach hdr {
    hash.h
    hwtime.h
    keywordhash.h
+   kv.h
    lsm.h
    lsmInt.h
    mutex.h
@@ -103,7 +104,6 @@ foreach hdr {
    sqlite4.h
    sqliteInt.h
    sqliteLimit.h
-   storage.h
    vdbe.h
    vdbeInt.h
 } {

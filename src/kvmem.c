@@ -11,7 +11,7 @@
 *************************************************************************
 **
 ** An in-memory key/value storage subsystem that presents the interfadce
-** defined by storage.h
+** defined by kv.h
 */
 #include "sqliteInt.h"
 

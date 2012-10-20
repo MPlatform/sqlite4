@@ -28,7 +28,7 @@
 ** more than 1 unless the transaction level is initially 0 in which case
 ** it can be increased immediately to 2.  Increasing the transaction level
 ** to 1 or more makes a "snapshot" of the database file such that changes
-** made by other connections are not visible.  An xBegin call may fail
+** made by other connections are not visible.  Calls to xBegin may fail
 ** with SQLITE4_BUSY if the initial transaction level is 0 or 1.
 ** 
 ** A read-only database will fail an attempt to increase xBegin above 1.  An
@@ -58,9 +58,9 @@
 ** The xReplace method replaces the value for an existing entry with the
 ** given key, or creates a new entry with the given key and value if no
 ** prior entry exists with the given key.  The key and value pointers passed
-** into xReplace belong to the caller will likely be destroyed when the
+** into xReplace belong to the caller and will likely be destroyed when the
 ** call to xReplace returns so the xReplace routine must make its own
-** copy of that information.
+** copy of that information if it needs to retain it after returning.
 ** 
 ** A cursor is at all times pointing to ether an entry in the database or
 ** to EOF.  EOF means "no entry".  Cursor operations other than xCloseCursor 
@@ -80,16 +80,16 @@
 ** The return code from xSeek might be one of the following:
 **
 **    SQLITE4_OK        The cursor is left pointing to any entry that
-**                     exactly matchings the probe key.
+**                      exactly matchings the probe key.
 **
 **    SQLITE4_INEXACT   The cursor is left pointing to the nearest entry
-**                     to the probe it could find, either before or after
-**                     the probe, according to the dir argument.
+**                      to the probe it could find, either before or after
+**                      the probe, according to the dir argument.
 **
 **    SQLITE4_NOTFOUND  No suitable entry could be found.  Either dir==0 and
-**                     there was no exact match, or dir<0 and the probe is
-**                     smaller than every entry in the database, or dir>0 and
-**                     the probe is larger than every entry in the database.
+**                      there was no exact match, or dir<0 and the probe is
+**                      smaller than every entry in the database, or dir>0 and
+**                      the probe is larger than every entry in the database.
 **
 ** xSeek might also return some error code like SQLITE4_IOERR or
 ** SQLITE4_NOMEM.
