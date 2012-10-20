@@ -251,7 +251,7 @@ foreach file {
    lsm_unix.c
    lsm_varint.c
 
-   storage.c
+   kv.c
    kvmem.c
    kvlsm.c
    rowset.c

@@ -78,7 +78,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          callback.o complete.o ctime.o date.o delete.o expr.o fault.o fkey.o \
          $(FTS3_OBJ) \
          func.o global.o hash.o \
-         icu.o insert.o kvlsm.o kvmem.o legacy.o \
+         icu.o insert.o kv.o kvlsm.o kvmem.o legacy.o \
          lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o lsm_mem.o lsm_mutex.o \
          lsm_shared.o lsm_str.o lsm_sorted.o lsm_tree.o \
          lsm_unix.o lsm_varint.o \
@@ -86,7 +86,7 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          mutex.o mutex_noop.o mutex_unix.o mutex_w32.o \
          opcodes.o os.o \
          parse.o pragma.o prepare.o printf.o \
-         random.o resolve.o rowset.o rtree.o select.o status.o storage.o \
+         random.o resolve.o rowset.o rtree.o select.o status.o \
          tokenize.o trigger.o \
          update.o util.o varint.o \
          vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
@@ -115,6 +115,7 @@ SRC = \
   $(TOP)/src/hash.h \
   $(TOP)/src/hwtime.h \
   $(TOP)/src/insert.c \
+  $(TOP)/src/kv.c \
   $(TOP)/src/kv.h \
   $(TOP)/src/kvlsm.c \
   $(TOP)/src/kvmem.c \
@@ -161,7 +162,6 @@ SRC = \
   $(TOP)/src/sqliteInt.h \
   $(TOP)/src/sqliteLimit.h \
   $(TOP)/src/status.c \
-  $(TOP)/src/storage.c \
   $(TOP)/src/tclsqlite.c \
   $(TOP)/src/tokenize.c \
   $(TOP)/src/trigger.c \
@@ -230,11 +230,11 @@ TESTSRC = \
   $(TOP)/test/test_func.c \
   $(TOP)/test/test_hexio.c \
   $(TOP)/test/test_lsm.c \
+  $(TOP)/test/test_kv.c \
+  $(TOP)/test/test_kv2.c \
   $(TOP)/test/test_malloc.c \
   $(TOP)/test/test_mem.c \
   $(TOP)/test/test_mutex.c \
-  $(TOP)/test/test_storage.c \
-  $(TOP)/test/test_storage2.c \
   $(TOP)/test/test_thread.c \
   $(TOP)/test/test_wsd.c
 
