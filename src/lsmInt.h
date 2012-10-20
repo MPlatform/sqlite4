@@ -342,7 +342,7 @@ struct lsm_db {
 
 struct Segment {
   Pgno iFirst;                     /* First page of this run */
-  Pgno iLast;                      /* Last page of this run */
+  Pgno iLastPg;                    /* Last page of this run */
   Pgno iRoot;                      /* Root page number (if any) */
   int nSize;                       /* Size of this run in pages */
 };
@@ -630,6 +630,7 @@ int lsmFsSectorSize(FileSystem *);
 void lsmSortedSplitkey(lsm_db *, Level *, int *);
 
 /* Reading sorted run content. */
+int lsmFsDbPageLast(FileSystem *pFS, Segment *pSeg, Page **ppPg);
 int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
 int lsmFsDbPageNext(Segment *, Page *, int eDir, Page **);
 
@@ -647,6 +648,7 @@ int lsmFsMetaPageRelease(MetaPage *);
 u8 *lsmFsMetaPageData(MetaPage *, int *);
 
 #ifdef LSM_DEBUG
+int lsmFsDbPageIsLast(Segment *pSeg, Page *pPg);
 int lsmFsIntegrityCheck(lsm_db *);
 #endif
 

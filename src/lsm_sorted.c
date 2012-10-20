@@ -1196,8 +1196,11 @@ static void segmentPtrEndPage(
 ){
   if( *pRc==LSM_OK ){
     Page *pNew = 0;
-    Pgno iPg = (bLast ? pPtr->pSeg->iLast : pPtr->pSeg->iFirst);
-    *pRc = lsmFsDbPageGet(pFS, iPg, &pNew);
+    if( bLast ){
+      *pRc = lsmFsDbPageLast(pFS, pPtr->pSeg, &pNew);
+    }else{
+      *pRc = lsmFsDbPageGet(pFS, pPtr->pSeg->iFirst, &pNew);
+    }
     segmentPtrSetPage(pPtr, pNew);
   }
 }
@@ -1600,7 +1603,7 @@ static int segmentPtrSeek(
 
   assert( pPtr->nCell>0 
        || pPtr->pSeg->nSize==1 
-       || lsmFsPageNumber(pPtr->pPg)==pPtr->pSeg->iLast
+       || lsmFsDbPageIsLast(pPtr->pPg, pPtr->pSeg)
   );
   if( pPtr->nCell==0 ){
     segmentPtrReset(pPtr);
@@ -3285,6 +3288,8 @@ static int mergeWorkerPersistAndRelease(MergeWorker *pMW){
   int rc;
   int i;
 
+  assert( pMW->pPage || (pMW->aSave[0].bStore==0 && pMW->aSave[1].bStore==0) );
+
   /* Persist the page */
   rc = lsmFsPagePersist(pMW->pPage);
 
@@ -3387,6 +3392,44 @@ static int mergeWorkerData(
 }
 
 
+/*
+** The MergeWorker passed as the only argument is working to merge two or
+** more existing segments together (not to flush an in-memory tree). It
+** has not yet written the first key to the first page of the output.
+*/
+static int mergeWorkerFirstPage(MergeWorker *pMW){
+  int rc = LSM_OK;                /* Return code */
+  Page *pPg = 0;                  /* First page of run pSeg */
+  int iFPtr = 0;                  /* Pointer value read from footer of pPg */
+  MultiCursor *pCsr = pMW->pCsr;
+
+  assert( pMW->pPage==0 );
+
+  if( pCsr->pBtCsr ){
+    rc = LSM_OK;
+    iFPtr = pMW->pLevel->pNext->lhs.iFirst;
+  }else if( pCsr->nPtr>0 ){
+    Segment *pSeg;
+    pSeg = pCsr->aPtr[pCsr->nPtr-1].pSeg;
+    rc = lsmFsDbPageGet(pMW->pDb->pFS, pSeg->iFirst, &pPg);
+    if( rc==LSM_OK ){
+      u8 *aData;                    /* Buffer for page pPg */
+      int nData;                    /* Size of aData[] in bytes */
+      aData = fsPageData(pPg, &nData);
+      iFPtr = pageGetPtr(aData, nData);
+      lsmFsPageRelease(pPg);
+    }
+  }
+
+  if( rc==LSM_OK ){
+    rc = mergeWorkerNextPage(pMW, iFPtr);
+    if( pCsr->pPrevMergePtr ) *pCsr->pPrevMergePtr = iFPtr;
+    pMW->aSave[0].bStore = 1;
+  }
+
+  return rc;
+}
+
 static int mergeWorkerWrite(
   MergeWorker *pMW,               /* Merge worker object to write into */
   int eType,                      /* One of SORTED_SEPARATOR, WRITE or DELETE */
@@ -3406,20 +3449,24 @@ static int mergeWorkerWrite(
   int iOff;                       /* Current write offset within page pPg */
   Segment *pSeg;                  /* Segment being written */
   int flags = 0;                  /* If != 0, flags value for page footer */
+  int bFirst = 0;                 /* True for first key of output run */
   void *pVal;
   int nVal;
 
   pMerge = pMW->pLevel->pMerge;    
   pSeg = &pMW->pLevel->lhs;
 
+  if( pSeg->iFirst==0 && pMW->pPage==0 ){
+    rc = mergeWorkerFirstPage(pMW);
+    bFirst = 1;
+  }
   pPg = pMW->pPage;
-  aData = fsPageData(pPg, &nData);
-  nRec = pageGetNRec(aData, nData);
-  iFPtr = pageGetPtr(aData, nData);
-
-  /* Calculate the relative pointer value to write to this record */
-  iRPtr = iPtr - iFPtr;
-  /* assert( iRPtr>=0 ); */
+  if( pPg ){
+    aData = fsPageData(pPg, &nData);
+    nRec = pageGetNRec(aData, nData);
+    iFPtr = pageGetPtr(aData, nData);
+    iRPtr = iPtr - iFPtr;
+  }
      
   /* Figure out how much space is required by the new record. The space
   ** required is divided into two sections: the header and the body. The
@@ -3441,9 +3488,9 @@ static int mergeWorkerWrite(
     if( rtIsWrite(eType) ) nHdr += lsmVarintLen32(nVal);
 
     /* If the entire header will not fit on page pPg, or if page pPg is 
-     ** marked read-only, advance to the next page of the output run. */
+    ** marked read-only, advance to the next page of the output run. */
     iOff = pMerge->iOutputOff;
-    if( iOff<0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
+    if( iOff<0 || pPg==0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
       iFPtr = *pCsr->pPrevMergePtr;
       iRPtr = iPtr - iFPtr;
       iOff = 0;
@@ -3454,17 +3501,10 @@ static int mergeWorkerWrite(
   }
 
   /* If this record header will be the first on the page, and the page is 
-  ** not the very first in the entire run, special actions may need to be 
-  ** taken:
-  **
-  **   * If currently writing the main run, *piPtrOut should be set to
-  **     the current page number. The caller will add a key to the separators
-  **     array that points to the current page.
-  **
-  **   * If currently writing the separators array, push a copy of the key
-  **     into the b-tree hierarchy.
+  ** not the very first in the entire run, add a copy of the key to the
+  ** b-tree hierarchy.
   */
-  if( rc==LSM_OK && nRec==0 && pSeg->iFirst!=pSeg->iLast ){
+  if( rc==LSM_OK && nRec==0 && bFirst==0 ){
     assert( pMerge->nSkip>=0 );
 
     if( pMerge->nSkip==0 ){
@@ -3592,44 +3632,6 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
 }
 
 /*
-** The MergeWorker passed as the only argument is working to merge two or
-** more existing segments together (not to flush an in-memory tree). It
-** has not yet written the first key to the first page of the output.
-*/
-static int mergeWorkerFirstPage(MergeWorker *pMW){
-  int rc;                         /* Return code */
-  Page *pPg = 0;                  /* First page of run pSeg */
-  int iFPtr;                      /* Pointer value read from footer of pPg */
-  MultiCursor *pCsr = pMW->pCsr;
-
-  assert( pMW->pPage==0 );
-
-  if( pCsr->pBtCsr ){
-    rc = LSM_OK;
-    iFPtr = pMW->pLevel->pNext->lhs.iFirst;
-  }else{
-    Segment *pSeg;
-    pSeg = pMW->pCsr->aPtr[pMW->pCsr->nPtr-1].pSeg;
-    rc = lsmFsDbPageGet(pMW->pDb->pFS, pSeg->iFirst, &pPg);
-    if( rc==LSM_OK ){
-      u8 *aData;                    /* Buffer for page pPg */
-      int nData;                    /* Size of aData[] in bytes */
-      aData = fsPageData(pPg, &nData);
-      iFPtr = pageGetPtr(aData, nData);
-      lsmFsPageRelease(pPg);
-    }
-  }
-
-  if( rc==LSM_OK ){
-    rc = mergeWorkerNextPage(pMW, iFPtr);
-    if( pCsr->pPrevMergePtr ) *pCsr->pPrevMergePtr = iFPtr;
-    pMW->aSave[0].bStore = 1;
-  }
-
-  return rc;
-}
-
-/*
 ** The cursor passed as the first argument is being used as the input for
 ** a merge operation. When this function is called, *piFlags contains the
 ** database entry flags for the current entry. The entry about to be written
@@ -3726,10 +3728,6 @@ static int mergeWorkerStep(MergeWorker *pMW){
     ** changed, there is no point in writing an output record. Otherwise,
     ** proceed. */
     if( rtIsSeparator(eType)==0 || iPtr!=0 ){
-      if( pMW->pPage==0 ){
-        rc = mergeWorkerFirstPage(pMW);
-      }
-
       /* Write the record into the main run. */
       if( rc==LSM_OK ){
         rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pCsr, iPtr);
@@ -3798,7 +3796,6 @@ static int sortedNewToplevel(
   Level *pNext = 0;               /* The current top level */
   Level *pNew;                    /* The new level itself */
   Segment *pDel = 0;              /* Delete separators from this segment */
-  Pgno iLeftPtr = 0;
   int nWrite = 0;                 /* Number of database pages written */
 
   assert( pnOvfl );
@@ -3822,7 +3819,6 @@ static int sortedNewToplevel(
     if( rc==LSM_OK && pNext && pNext->pMerge==0 && pNext->lhs.iRoot ){
       pDel = &pNext->lhs;
       rc = btreeCursorNew(pDb, pDel, &pCsr->pBtCsr);
-      iLeftPtr = pNext->lhs.iFirst;
     }
 
     if( pNext==0 ){
@@ -3833,6 +3829,7 @@ static int sortedNewToplevel(
   if( rc!=LSM_OK ){
     lsmMCursorClose(pCsr);
   }else{
+    Pgno iLeftPtr = 0;
     Merge merge;                  /* Merge object used to create new level */
     MergeWorker mergeworker;      /* MergeWorker object for the same purpose */
 
@@ -3847,10 +3844,6 @@ static int sortedNewToplevel(
 
     /* Mark the separators array for the new level as a "phantom". */
     mergeworker.bFlush = 1;
-
-    /* Allocate the first page of the output segment. */
-    rc = mergeWorkerNextPage(&mergeworker, iLeftPtr);
-    mergeworker.aSave[0].bStore = 1;
 
     /* Do the work to create the new merged segment on disk */
     if( rc==LSM_OK ) rc = lsmMCursorFirst(pCsr);
@@ -3966,36 +3959,6 @@ static int sortedMergeSetup(
   return rc;
 }
 
-static int mergeWorkerLoadOutputPage(MergeWorker *pMW){
-  int rc = LSM_OK;                /* Return code */
-  Segment *pSeg;                  /* Run to load page from */
-  Level *pLevel;
-
-  pLevel = pMW->pLevel;
-  pSeg = &pLevel->lhs;
-  if( pSeg->iLast ){
-    Page *pPg;
-    rc = lsmFsDbPageGet(pMW->pDb->pFS, pSeg->iLast, &pPg);
-
-    while( rc==LSM_OK ){
-      Page *pNext;
-      u8 *aData;
-      int nData;
-      aData = fsPageData(pPg, &nData);
-      if( (pageGetFlags(aData, nData) & SEGMENT_BTREE_FLAG)==0 ) break;
-      rc = lsmFsDbPageNext(pSeg, pPg, -1, &pNext);
-      lsmFsPageRelease(pPg);
-      pPg = pNext;
-    }
-
-    if( rc==LSM_OK ){
-      pMW->pPage = pPg;
-      assert( pLevel->pMerge->iOutputOff<0 );
-    }
-  }
-  return rc;
-}
-
 static int mergeWorkerInit(
   lsm_db *pDb,                    /* Db connection to do merge work */
   Level *pLevel,                  /* Level to work on merging */
@@ -4040,21 +4003,16 @@ static int mergeWorkerInit(
   assert( rc!=LSM_OK || pMerge->nInput==(pCsr->nPtr+(pCsr->pBtCsr!=0)) );
   pMW->pCsr = pCsr;
 
-  /* Load the current output page and b-tree hierarchy into memory. */
-  if( rc==LSM_OK ) rc = mergeWorkerLoadOutputPage(pMW);
+  /* Load the b-tree hierarchy into memory. */
   if( rc==LSM_OK ) rc = mergeWorkerLoadHierarchy(pMW);
-  if( rc==LSM_OK && pMW->pPage && pMW->hier.nHier==0 ){
+  if( rc==LSM_OK && pMW->hier.nHier==0 ){
     pMW->aSave[0].iPgno = pLevel->lhs.iFirst;
-  }
-
-  /* Set MergeWorker.aSave[0].iPgno to contain the */
-  if( rc==LSM_OK ){
   }
 
   /* Position the cursor. */
   if( rc==LSM_OK ){
     pCsr->pPrevMergePtr = &pMerge->iCurrentPtr;
-    if( pMW->pPage==0 ){
+    if( pLevel->lhs.iFirst==0 ){
       /* The output array is still empty. So position the cursor at the very 
       ** start of the input.  */
       rc = multiCursorEnd(pCsr, 0);
@@ -4383,6 +4341,7 @@ static int doLsmSingleWork(
   ** returns.  */
   assert( pDb->pWorker==0 );
   rc = lsmBeginWork(pDb);
+  assert( rc!=8 );
   if( rc!=LSM_OK ) return rc;
 
   /* If this connection is doing auto-checkpoints, set nMax (and nRem) so
@@ -4593,7 +4552,7 @@ static char *segToString(lsm_env *pEnv, Segment *pSeg, int nMin){
   int nSize = pSeg->nSize;
   Pgno iRoot = pSeg->iRoot;
   Pgno iFirst = pSeg->iFirst;
-  Pgno iLast = pSeg->iLast;
+  Pgno iLast = pSeg->iLastPg;
   char *z;
 
   char *z1;

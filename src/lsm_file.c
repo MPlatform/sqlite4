@@ -10,7 +10,7 @@
 **
 *************************************************************************
 ** 
-** DATABASE FILE FORMAT
+** NORMAL DATABASE FILE FORMAT
 **
 ** The following database file format concepts are used by the code in
 ** this file to read and write the database file.
@@ -85,13 +85,43 @@
 **     lsmFsTruncateLog
 **     lsmFsCloseAndDeleteLog
 **
+** COMPRESSED DATABASE FILE FORMAT
+**
+** The compressed database file format is very similar to the normal format.
+** The file still begins with two 4KB meta-pages (which are never compressed).
+** It is still divided into blocks.
+**
+** The first and last four bytes of each block are reserved for 32-bit 
+** pointer values. Similar to the way four bytes are carved from the end of 
+** the first and last page of each block in uncompressed databases. From
+** the point of view of the upper layer, all pages are the same size - this
+** is different from the uncompressed format where the first and last pages
+** on each block are 4 bytes smaller than the others.
+**
+** Pages are stored in variable length compressed form, as follows:
+**
+**     * Number of bytes in compressed page image, as a varint.
+**
+**     * Compressed page image.
+**
+**     * Number of bytes in compressed page image, as a varint. Except,
+**       the first byte of the varint is moved so that it is the last
+**       byte (i.e. for a 4 byte varint: ABCD -> BCDA). This is done
+**       to make it possible to iterate through a packed array of compressed 
+**       pages in reverse order.
+**
+** A page number is a byte offset into the database file. So the smallest
+** possible page number is 8192 (immediately after the two meta-pages).
+** The first and root page of a segment are identified by a page number
+** corresponding to the byte offset of the first byte in the corresponding
+** page record. The last page of a segment is identified by the byte offset
+** of the last byte in its record.
 */
 #include "lsmInt.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
 
 /*
 ** File-system object. Each database connection allocates a single instance
@@ -836,7 +866,7 @@ static int fsRunEndsBetween(
 ){
   return (pRun!=pIgnore && (
         (pRun->iFirst>=iFirst && pRun->iFirst<=iLast)
-     || (pRun->iLast>=iFirst && pRun->iLast<=iLast)
+     || (pRun->iLastPg>=iFirst && pRun->iLastPg<=iLast)
   ));
 }
 
@@ -915,14 +945,14 @@ int lsmFsSortedDelete(
     int iLastBlk;
 
     iBlk = fsPageToBlock(pFS, pDel->iFirst);
-    iLastBlk = fsPageToBlock(pFS, pDel->iLast);
+    iLastBlk = fsPageToBlock(pFS, pDel->iLastPg);
 
     /* Mark all blocks currently used by this sorted run as free */
     while( iBlk && rc==LSM_OK ){
       int iNext = 0;
       if( iBlk!=iLastBlk ){
         rc = fsBlockNext(pFS, iBlk, &iNext);
-      }else if( bZero==0 && pDel->iLast!=fsLastPageOnBlock(pFS, iLastBlk) ){
+      }else if( bZero==0 && pDel->iLastPg!=fsLastPageOnBlock(pFS, iLastBlk) ){
         break;
       }
       rc = fsFreeBlock(pFS, pSnapshot, pDel, iBlk);
@@ -1053,7 +1083,7 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
       iPg--;
     }
   }else{
-    if( pRun && iPg==pRun->iLast ){
+    if( pRun && iPg==pRun->iLastPg ){
       *ppNext = 0;
       return LSM_OK;
     }else if( fsIsLast(pFS, iPg) ){
@@ -1093,7 +1123,7 @@ int lsmFsSortedAppend(
   *ppOut = 0;
   int iApp = 0;
   int iNext = 0;
-  int iPrev = p->iLast;
+  int iPrev = p->iLastPg;
 
   if( iPrev==0 ){
     iApp = findAppendPoint(pFS);
@@ -1129,7 +1159,7 @@ int lsmFsSortedAppend(
    ** value at the end of the new page. */
   if( rc==LSM_OK ){
     p->nSize++;
-    p->iLast = iApp;
+    p->iLastPg = iApp;
     if( p->iFirst==0 ) p->iFirst = iApp;
     pPg->flags |= PAGE_DIRTY;
 
@@ -1160,9 +1190,9 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
     ** Otherwise, add the first free page in the last block used by the run
     ** to the lAppend list.
     */
-    if( (p->iLast % nPagePerBlock)==0 ){
+    if( (p->iLastPg % nPagePerBlock)==0 ){
       Page *pLast;
-      rc = fsPageGet(pFS, p->iLast, 0, &pLast);
+      rc = fsPageGet(pFS, p->iLastPg, 0, &pLast);
       if( rc==LSM_OK ){
         int iPg = (int)lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
         int iBlk = fsPageToBlock(pFS, iPg);
@@ -1174,7 +1204,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
       u32 *aiAppend = pFS->pDb->pWorker->aiAppend;
       for(i=0; i<LSM_APPLIST_SZ; i++){
         if( aiAppend[i]==0 ){
-          aiAppend[i] = p->iLast+1;
+          aiAppend[i] = p->iLastPg+1;
           break;
         }
       }
@@ -1189,6 +1219,14 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
 int lsmFsDbPageGet(FileSystem *pFS, Pgno iPg, Page **ppPg){
   assert( pFS );
   return fsPageGet(pFS, iPg, 0, ppPg);
+}
+
+/*
+** Obtain a reference to the last page in the segment passed as the 
+** second argument.
+*/
+int lsmFsDbPageLast(FileSystem *pFS, Segment *pSeg, Page **ppPg){
+  return fsPageGet(pFS, pSeg->iLastPg, 0, ppPg);
 }
 
 /*
@@ -1459,7 +1497,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
     int iLastBlk;
    
     iBlk = fsPageToBlock(pFS, pArray->iFirst);
-    iLastBlk = fsPageToBlock(pFS, pArray->iLast);
+    iLastBlk = fsPageToBlock(pFS, pArray->iLastPg);
 
     lsmStringInit(&str, pDb->pEnv);
     lsmStringAppendf(&str, "%d", pArray->iFirst);
@@ -1468,7 +1506,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
       fsBlockNext(pFS, iBlk, &iBlk);
       lsmStringAppendf(&str, " %d", fsFirstPageOnBlock(pFS, iBlk));
     }
-    lsmStringAppendf(&str, " %d", pArray->iLast);
+    lsmStringAppendf(&str, " %d", pArray->iLastPg);
 
     *pzOut = str.z;
   }
@@ -1497,7 +1535,7 @@ static void checkBlocks(
       int iBlk;
       int iLastBlk;
       iBlk = fsPageToBlock(pFS, pSeg->iFirst);
-      iLastBlk = fsPageToBlock(pFS, pSeg->iLast);
+      iLastBlk = fsPageToBlock(pFS, pSeg->iLastPg);
 
       while( iBlk ){
         assert( iBlk<=nUsed );
@@ -1510,7 +1548,7 @@ static void checkBlocks(
         }
       }
 
-      if( bExtra && (pSeg->iLast % nPagePerBlock)==0 ){
+      if( bExtra && (pSeg->iLastPg % nPagePerBlock)==0 ){
         fsBlockNext(pFS, iLastBlk, &iBlk);
         aUsed[iBlk-1] = 1;
       }
@@ -1583,3 +1621,13 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   lsmFree(pDb->pEnv, freelist.aEntry);
   return 1;
 }
+
+#ifndef NDEBUG
+/*
+** Return true if pPg happens to be the last page in segment pSeg. Or false
+** otherwise. This function is only invoked as part of assert() conditions.
+*/
+int lsmFsDbPageIsLast(Segment *pSeg, Page *pPg){
+  return (pPg->iPg==pSeg->iLastPg);
+}
+#endif

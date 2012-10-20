@@ -275,7 +275,7 @@ static void ckptExportSegment(
   int iOut = *piOut;
 
   ckptSetValue(p, iOut++, pSeg->iFirst, pRc);
-  ckptSetValue(p, iOut++, pSeg->iLast, pRc);
+  ckptSetValue(p, iOut++, pSeg->iLastPg, pRc);
   ckptSetValue(p, iOut++, pSeg->iRoot, pRc);
   ckptSetValue(p, iOut++, pSeg->nSize, pRc);
 
@@ -467,10 +467,10 @@ static void ckptNewSegment(
 ){
   int iIn = *piIn;
 
-  assert( pSegment->iFirst==0 && pSegment->iLast==0 );
+  assert( pSegment->iFirst==0 && pSegment->iLastPg==0 );
   assert( pSegment->nSize==0 && pSegment->iRoot==0 );
   pSegment->iFirst = aIn[iIn++];
-  pSegment->iLast = aIn[iIn++];
+  pSegment->iLastPg = aIn[iIn++];
   pSegment->iRoot = aIn[iIn++];
   pSegment->nSize = aIn[iIn++];
 
