@@ -832,7 +832,10 @@ int test_lsm_lomem_open(
   TestDb **ppDb
 ){
   const char *zCfg = 
-    "page_size=256 block_size=65536 write_buffer=16384 max_freelist=4 autocheckpoint=32768";
+    "page_size=256 block_size=65536 write_buffer=16384 "
+    "max_freelist=4 autocheckpoint=32768 "
+    "mmap=0 "
+  ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
 
