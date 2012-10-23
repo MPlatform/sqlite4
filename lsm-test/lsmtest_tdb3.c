@@ -392,6 +392,50 @@ static void doSystemCrash(LsmDb *pDb){
 **************************************************************************
 *************************************************************************/
 
+/*************************************************************************
+**************************************************************************
+** Begin test compression hooks.
+*/
+
+static int testZipBound(void *pCtx, int nSrc){
+  assert( 0 );
+  return 0;
+}
+
+static int testZipCompress(
+  void *pCtx,                    /* Context pointer */
+  char *aOut, int *pnOut,        /* OUT: Buffer containing compressed data */
+  const char *aIn, int nIn       /* Buffer containing input data */
+){
+  assert( 0 );
+  return 0;
+}
+
+static int testZipUncompress(
+  void *pCtx,                    /* Context pointer */
+  char *aOut, int *pnOut,        /* OUT: Buffer containing uncompressed data */
+  const char *aIn, int nIn       /* Buffer containing input data */
+){
+  assert( 0 );
+  return 0;
+}
+
+static int testConfigureCompression(lsm_db *pDb){
+  static lsm_compress zip = {
+    1, sizeof(lsm_compress),
+    0,                            /* Context pointer (unused) */
+    testZipBound,                 /* xBound method */
+    testZipCompress,              /* xCompress method */
+    testZipUncompress             /* xUncompress method */
+  };
+  return lsm_config(pDb, LSM_CONFIG_SET_COMPRESSION, &zip);
+}
+
+/*
+** End test compression hooks.
+**************************************************************************
+*************************************************************************/
+
 static int test_lsm_close(TestDb *pTestDb){
   int i;
   int rc = LSM_OK;
@@ -617,6 +661,7 @@ static void xWorkHook(lsm_db *db, void *pArg){
 
 #define TEST_NO_RECOVERY -1
 #define TEST_THREADS     -2
+#define TEST_COMPRESSION -3
 
 static int test_lsm_config_str(
   LsmDb *pLsm,
@@ -645,6 +690,7 @@ static int test_lsm_config_str(
     { "worker_nmerge",    1, LSM_CONFIG_NMERGE },
     { "test_no_recovery", 0, TEST_NO_RECOVERY },
     { "threads",          0, TEST_THREADS },
+    { "compression",      0, TEST_COMPRESSION },
     { 0, 0 }
   };
   const char *z = zStr;
@@ -695,6 +741,9 @@ static int test_lsm_config_str(
               break;
             case TEST_THREADS:
               nThread = iVal;
+              break;
+            case TEST_COMPRESSION:
+              testConfigureCompression(db);
               break;
           }
         }
@@ -834,6 +883,19 @@ int test_lsm_lomem_open(
   const char *zCfg = 
     "page_size=256 block_size=65536 write_buffer=16384 "
     "max_freelist=4 autocheckpoint=32768 "
+    "mmap=0 "
+  ;
+  return testLsmOpen(zCfg, zFilename, bClear, ppDb);
+}
+
+int test_lsm_zip_open(
+  const char *zFilename, 
+  int bClear, 
+  TestDb **ppDb
+){
+  const char *zCfg = 
+    "page_size=256 block_size=65536 write_buffer=16384 "
+    "max_freelist=4 autocheckpoint=32768 compression=1"
     "mmap=0 "
   ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);

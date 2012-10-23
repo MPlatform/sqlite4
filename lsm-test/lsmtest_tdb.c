@@ -613,6 +613,7 @@ static struct Lib {
   { "sqlite3",      "testdb.sqlite",    sql_open },
   { "lsm_small",    "testdb.lsm_small", test_lsm_small_open },
   { "lsm_lomem",    "testdb.lsm_lomem", test_lsm_lomem_open },
+  { "lsm_zip",      "testdb.lsm_zip",   test_lsm_zip_open },
   { "lsm",          "testdb.lsm",       test_lsm_open },
 #ifdef LSM_MUTEX_PTHREADS
   { "lsm_mt2",      "testdb.lsm_mt2",   test_lsm_mt2 },

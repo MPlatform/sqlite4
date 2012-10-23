@@ -215,6 +215,19 @@ int lsm_config(lsm_db *, int, ...);
 **     and posix advisory locks to co-ordinate access by clients from within
 **     multiple processes. Otherwise, if false, all database clients must be 
 **     located in the same process. The default value is true.
+**
+**   LSM_CONFIG_SET_COMPRESSION
+**     Set the compression methods used to compress and decompress database
+**     content. The argument to this option should be a pointer to a structure
+**     of type lsm_compress. The lsm_config() method takes a copy of the 
+**     structures contents.
+**
+**     This option may only be used before lsm_open() is called. Invoking it
+**     after lsm_open() has been called results in an LSM_MISUSE error.
+**
+**   LSM_CONFIG_GET_COMPRESSION
+**     Query the compression methods used to compress and decompress database
+**     content.
 */
 #define LSM_CONFIG_WRITE_BUFFER        1
 #define LSM_CONFIG_PAGE_SIZE           2
@@ -228,6 +241,9 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_MAX_FREELIST       10
 #define LSM_CONFIG_MULTIPLE_PROCESSES 11
 #define LSM_CONFIG_AUTOCHECKPOINT     12
+
+#define LSM_CONFIG_SET_COMPRESSION    13
+#define LSM_CONFIG_GET_COMPRESSION    14
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1

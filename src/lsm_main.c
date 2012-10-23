@@ -324,6 +324,23 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
       break;
     }
 
+    case LSM_CONFIG_SET_COMPRESSION: {
+      int *p = va_arg(ap, lsm_compress *);
+      if( pDb->pDatabase ){
+        /* If lsm_open() has been called, this call is against the rules. */
+        rc = LSM_MISUSE_BKPT;
+      }else{
+        memcpy(&pDb->compress, p, sizeof(lsm_compress));
+      }
+      break;
+    }
+
+    case LSM_CONFIG_GET_COMPRESSION: {
+      int *p = va_arg(ap, lsm_compress *);
+      memcpy(p, &pDb->compress, sizeof(lsm_compress));
+      break;
+    }
+
     default:
       rc = LSM_MISUSE;
       break;

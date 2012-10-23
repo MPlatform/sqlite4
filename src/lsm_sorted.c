@@ -1603,7 +1603,7 @@ static int segmentPtrSeek(
 
   assert( pPtr->nCell>0 
        || pPtr->pSeg->nSize==1 
-       || lsmFsDbPageIsLast(pPtr->pPg, pPtr->pSeg)
+       || lsmFsDbPageIsLast(pPtr->pSeg, pPtr->pPg)
   );
   if( pPtr->nCell==0 ){
     segmentPtrReset(pPtr);
@@ -3326,7 +3326,7 @@ static int mergeWorkerNextPage(
 
   pSeg = &pMW->pLevel->lhs;
   rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, &pNext);
-  assert( rc!=LSM_OK || pSeg->iFirst>0 );
+  assert( rc!=LSM_OK || pSeg->iFirst>0 || pMW->pDb->compress.xCompress );
 
   if( rc==LSM_OK ){
     u8 *aData;                    /* Data buffer belonging to page pNext */
@@ -3864,8 +3864,8 @@ static int sortedNewToplevel(
     sortedFreeLevel(pDb->pEnv, pNew);
   }
 
-#if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
+#if 1
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
 #endif
 
   if( rc==LSM_OK ){
@@ -4268,8 +4268,8 @@ static int sortedWork(
       mergeWorkerShutdown(&mergeworker, &rc);
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
-#if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
+#if 1
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);

@@ -304,6 +304,7 @@ struct lsm_db {
   int bMmap;                      /* Configured by LSM_CONFIG_MMAP */
   int nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
+  lsm_compress compress;          /* Compression callbacks */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */

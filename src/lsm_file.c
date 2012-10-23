@@ -171,6 +171,7 @@ struct FileSystem {
   /* If this is a compressed database, a pointer to the compression methods.
   ** For an uncompressed database, a NULL pointer.  */
   lsm_compress *pCompress;
+  u8 *aBuffer;                    /* Buffer to compress into */
 
   /* mmap() mode things */
   int bUseMmap;                   /* True to use mmap() to access db file */
@@ -243,6 +244,22 @@ struct MetaPage {
 */
 #define BLOCK1_HDR_SIZE(pgsz)  LSM_MAX(1, 8192/(pgsz))
 
+/*
+** If NDEBUG is not defined, set a breakpoint in function lsmIoerrBkpt()
+** to catch IO errors. 
+*/
+#ifndef NDEBUG
+static int lsmIoerrBkpt(){
+  static int nErr = 0;
+  nErr++;
+}
+static int IOERR_WRAPPER(int rc){
+  if( rc!=LSM_OK ) lsmIoerrBkpt();
+  return rc;
+}
+#else
+# define IOERR_WRAPPER(rc) (rc)
+#endif
 
 /*
 ** Wrappers around the VFS methods of the lsm_env object:
@@ -267,31 +284,31 @@ static int lsmEnvRead(
   void *pRead, 
   int nRead
 ){
-  return pEnv->xRead(pFile, iOff, pRead, nRead);
+  return IOERR_WRAPPER( pEnv->xRead(pFile, iOff, pRead, nRead) );
 }
 static int lsmEnvWrite(
   lsm_env *pEnv, 
   lsm_file *pFile, 
   lsm_i64 iOff, 
-  void *pWrite, 
+  const void *pWrite, 
   int nWrite
 ){
-  return pEnv->xWrite(pFile, iOff, pWrite, nWrite);
+  return IOERR_WRAPPER( pEnv->xWrite(pFile, iOff, (void *)pWrite, nWrite) );
 }
 static int lsmEnvSync(lsm_env *pEnv, lsm_file *pFile){
-  return pEnv->xSync(pFile);
+  return IOERR_WRAPPER( pEnv->xSync(pFile) );
 }
 static int lsmEnvSectorSize(lsm_env *pEnv, lsm_file *pFile){
   return pEnv->xSectorSize(pFile);
 }
 int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile){
-  return pEnv->xClose(pFile);
+  return IOERR_WRAPPER( pEnv->xClose(pFile) );
 }
 static int lsmEnvTruncate(lsm_env *pEnv, lsm_file *pFile, lsm_i64 nByte){
-  return pEnv->xTruncate(pFile, nByte);
+  return IOERR_WRAPPER( pEnv->xTruncate(pFile, nByte) );
 }
 static int lsmEnvUnlink(lsm_env *pEnv, const char *zDel){
-  return pEnv->xUnlink(pEnv, zDel);
+  return IOERR_WRAPPER( pEnv->xUnlink(pEnv, zDel) );
 }
 static int lsmEnvRemap(
   lsm_env *pEnv, 
@@ -457,6 +474,9 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
     pFS->bUseMmap = pDb->bMmap;
+    if( pDb->compress.xCompress ){
+      pFS->pCompress = &pDb->compress;
+    }
 
     /* Make a copy of the database and log file names. */
     memcpy(pFS->zDb, zDb, nDb+1);
@@ -589,14 +609,18 @@ void lsmFsSetBlockSize(FileSystem *pFS, int nBlocksize){
 /*
 ** Return the page number of the first page on block iBlock. Blocks are
 ** numbered starting from 1.
+**
+** For a compressed database, page numbers are byte offsets. The first
+** page on each block is the byte offset immediately following the 4-byte
+** "previous block" pointer at the start of each block.
 */
 static Pgno fsFirstPageOnBlock(FileSystem *pFS, int iBlock){
   Pgno iPg;
   if( pFS->pCompress ){
     if( iBlock==1 ){
-      iPg = pFS->nMetasize * 2;
+      iPg = pFS->nMetasize * 2 + 4;
     }else{
-      iPg = pFS->nBlocksize * (Pgno)(iBlock-1);
+      iPg = pFS->nBlocksize * (Pgno)(iBlock-1) + 4;
     }
   }else{
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
@@ -612,16 +636,24 @@ static Pgno fsFirstPageOnBlock(FileSystem *pFS, int iBlock){
 /*
 ** Return the page number of the last page on block iBlock. Blocks are
 ** numbered starting from 1.
+**
+** For a compressed database, page numbers are byte offsets. The first
+** page on each block is the byte offset of the byte immediately before 
+** the 4-byte "next block" pointer at the end of each block.
 */
 static Pgno fsLastPageOnBlock(FileSystem *pFS, int iBlock){
   if( pFS->pCompress ){
-    return pFS->nBlocksize * (Pgno)iBlock - 1;
+    return pFS->nBlocksize * (Pgno)iBlock - 1 - 4;
   }else{
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
     return iBlock * nPagePerBlock;
   }
 }
 
+/*
+** Return the block number of the block that page iPg is located on. 
+** Blocks are numbered starting from 1.
+*/
 static int fsPageToBlock(FileSystem *pFS, Pgno iPg){
   if( pFS->pCompress ){
     return (iPg / pFS->nBlocksize) + 1;
@@ -632,31 +664,27 @@ static int fsPageToBlock(FileSystem *pFS, Pgno iPg){
 
 /*
 ** Return true if page iPg is the last page on its block.
+**
+** This function is only called in non-compressed database mode.
 */
 static int fsIsLast(FileSystem *pFS, Pgno iPg){
-  if( pFS->pCompress ){
-    assert( 0 );
-    return 0;
-  }else{
-    const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
-    return ( iPg && (iPg % nPagePerBlock)==0 );
-  }
+  const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+  assert( !pFS->pCompress );
+  return ( iPg && (iPg % nPagePerBlock)==0 );
 }
 
 /*
 ** Return true if page iPg is the first page on its block.
+**
+** This function is only called in non-compressed database mode.
 */
 static int fsIsFirst(FileSystem *pFS, Pgno iPg){
-  if( pFS->pCompress ){
-    assert( 0 );
-    return 0;
-  }else{
-    const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
-    return (
-        (iPg % nPagePerBlock)==1
+  const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+  assert( !pFS->pCompress );
+
+  return ( (iPg % nPagePerBlock)==1
         || (iPg<nPagePerBlock && iPg==fsFirstPageOnBlock(pFS, 1))
-    );
-  }
+  );
 }
 
 /*
@@ -803,6 +831,43 @@ static void fsGrowMapping(
   }
 }
 
+static int fsPageGet(FileSystem *, Pgno, int, Page **);
+
+/*
+** Parameter iBlock is a database file block. This function reads the value 
+** stored in the blocks "next block" pointer and stores it in *piNext.
+** LSM_OK is returned if everything is successful, or an LSM error code
+** otherwise.
+*/
+static int fsBlockNext(
+  FileSystem *pFS,                /* File-system object handle */
+  int iBlock,                     /* Read field from this block */
+  int *piNext                     /* OUT: Next block in linked list */
+){
+  int rc;
+
+  assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
+  if( pFS->pCompress ){
+    i64 iOff;                     /* File offset to read data from */
+    u8 aNext[4];                  /* 4-byte pointer read from db file */
+
+    iOff = (i64)iBlock * pFS->nBlocksize - sizeof(aNext);
+    rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aNext, sizeof(aNext));
+    if( rc==LSM_OK ){
+      *piNext = (int)lsmGetU32(aNext);
+    }
+  }else{
+    const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+    Page *pLast;
+    rc = fsPageGet(pFS, iBlock*nPagePerBlock, 0, &pLast);
+    if( rc==LSM_OK ){
+      *piNext = fsPageToBlock(pFS, lsmGetU32(&pLast->aData[pFS->nPagesize-4]));
+      lsmFsPageRelease(pLast);
+    }
+  }
+  return rc;
+}
+
 /*
 ** This function is only called in compressed database mode.
 */
@@ -814,11 +879,12 @@ static int fsReadData(
 ){
   i64 iEob;                       /* End of block */
   int nRead;
+  int rc;
 
   assert( pFS->pCompress );
 
   iEob = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iOff)) + 1;
-  nRead = LSM_MAX(iEob - iOff, nData);
+  nRead = LSM_MIN(iEob - iOff, nData);
 
   rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aData, nRead);
   if( rc==LSM_OK && nRead!=nData ){
@@ -827,7 +893,7 @@ static int fsReadData(
     rc = fsBlockNext(pFS, fsPageToBlock(pFS, iOff), &iBlk);
     if( rc==LSM_OK ){
       i64 iOff2 = fsFirstPageOnBlock(pFS, iBlk);
-      rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, &aData[nRead], nData-nRead);
+      rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff2, &aData[nRead], nData-nRead);
     }
   }
 
@@ -847,6 +913,7 @@ static int fsReadPagedata(
 ){
   i64 iOff;
   u8 aVarint[9];
+  int rc;
 
   assert( pFS->pCompress && pPg->nCompress==0 );
 
@@ -913,7 +980,9 @@ static int fsPageGet(
         p->nRef = 0;
         p->pFS = pFS;
         assert( p->flags==0 || p->flags==PAGE_FREE );
-        if( fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg) ) p->flags |= PAGE_SHORT;
+        if( pFS->pCompress==0 && (fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg)) ){
+          p->flags |= PAGE_SHORT;
+        }
 
 #ifdef LSM_DEBUG
         memset(p->aData, 0x56, pFS->nPagesize);
@@ -985,39 +1054,6 @@ static int fsBlockPrev(
   return rc;
 }
 
-
-/*
-** Parameter iBlock is a database file block. This function reads the value 
-** stored in the blocks "next block" pointer and stores it in *piNext.
-** LSM_OK is returned if everything is successful, or an LSM error code
-** otherwise.
-*/
-static int fsBlockNext(
-  FileSystem *pFS,                /* File-system object handle */
-  int iBlock,                     /* Read field from this block */
-  int *piNext                     /* OUT: Next block in linked list */
-){
-  int rc;
-
-  assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
-  if( pFS->pCompress ){
-    i64 iOff = (i64)iBlock * pFS->nBlocksize - sizeof(aNext);
-    u8 aNext[4];                  /* 4-byte pointer read from db file */
-    rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aNext, sizeof(aNext));
-    if( rc==LSM_OK ){
-      *piNext = (int)lsmGetU32(aNext);
-    }
-  }else{
-    const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
-    Page *pLast;
-    rc = fsPageGet(pFS, iBlock*nPagePerBlock, 0, &pLast);
-    if( rc==LSM_OK ){
-      *piNext = fsPageToBlock(pFS, lsmGetU32(&pLast->aData[pFS->nPagesize-4]));
-      lsmFsPageRelease(pLast);
-    }
-  }
-  return rc;
-}
 
 static int fsRunEndsBetween(
   Segment *pRun, 
@@ -1189,7 +1225,7 @@ static int fsNextPageOffset(Segment *pSeg, Page *pPg, Pgno *piNext){
   iEob = 1 + fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iPg));
   nByte = 2 * lsmVarintLen32(pPg->nCompress) + pPg->nCompress;
 
-  if( (iPg + nByte)<=iEob && (iPg + nByte - 1)==pSeg->iLastPg ){
+  if( pSeg && (iPg + nByte)<=iEob && (iPg + nByte - 1)==pSeg->iLastPg ){
     *piNext = 0;
   }else if( (iPg + nByte)>=iEob ){
     int iNext;
@@ -1197,7 +1233,7 @@ static int fsNextPageOffset(Segment *pSeg, Page *pPg, Pgno *piNext){
 
     rc = fsBlockNext(pFS, fsPageToBlock(pFS, iPg), &iNext);
     iNextPg = fsFirstPageOnBlock(pFS, iNext) + (nByte - (iEob-iPg));
-    if( pSeg->iLastPg==(iNextPg-1) ){
+    if( pSeg && pSeg->iLastPg==(iNextPg-1) ){
       iNextPg = 0;
     }
     *piNext = iNextPg;
@@ -1237,7 +1273,11 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
     if( eDir<0 ){
       assert( 0 );
     }else{
-      rc = fsNextPageOffset(pRun, pPg, &iPg);
+      int rc = fsNextPageOffset(pRun, pPg, &iPg);
+      if( rc!=LSM_OK || iPg==0 ){
+        *ppNext = 0;
+        return rc;
+      }
     }
   }else{
     assert( eDir==1 || eDir==-1 );
@@ -1294,49 +1334,67 @@ int lsmFsSortedAppend(
   int iNext = 0;
   int iPrev = p->iLastPg;
 
-  if( iPrev==0 ){
-    iApp = findAppendPoint(pFS);
-  }else if( fsIsLast(pFS, iPrev) ){
-    int iNext;
-    rc = fsBlockNext(pFS, fsPageToBlock(pFS, iPrev), &iNext);
-    if( rc!=LSM_OK ) return rc;
-    iApp = fsFirstPageOnBlock(pFS, iNext);
-  }else{
-    iApp = iPrev + 1;
-  }
+  if( pFS->pCompress ){
+    /* In compressed database mode the page is not assigned a page number
+    ** or location in the database file at this point. This will be done
+    ** by the lsmFsPagePersist() call.  */
+    rc = fsPageBuffer(pFS, 1, &pPg);
+    if( rc==LSM_OK ){
+      pPg->pFS = pFS;
+      pPg->pSeg = p;
+      pPg->iPg = 0;
+      pPg->flags = PAGE_DIRTY;
+      pPg->nData = pFS->nPagesize;
+      assert( pPg->aData );
 
-  /* If this is the first page allocated, or if the page allocated is the
-   ** last in the block, allocate a new block here.  */
-  if( iApp==0 || fsIsLast(pFS, iApp) ){
-    int iNew;                     /* New block number */
-
-    lsmBlockAllocate(pFS->pDb, &iNew);
-    if( iApp==0 ){
-      iApp = fsFirstPageOnBlock(pFS, iNew);
-    }else{
-      iNext = fsFirstPageOnBlock(pFS, iNew);
+      pPg->nRef = 1;
+      pFS->nOut++;
     }
-  }
+  }else{
+    if( iPrev==0 ){
+      iApp = findAppendPoint(pFS);
+    }else if( fsIsLast(pFS, iPrev) ){
+      int iNext;
+      rc = fsBlockNext(pFS, fsPageToBlock(pFS, iPrev), &iNext);
+      if( rc!=LSM_OK ) return rc;
+      iApp = fsFirstPageOnBlock(pFS, iNext);
+    }else{
+      iApp = iPrev + 1;
+    }
 
-  /* Grab the new page. */
-  pPg = 0;
-  rc = fsPageGet(pFS, iApp, 1, &pPg);
-  assert( rc==LSM_OK || pPg==0 );
+    /* If this is the first page allocated, or if the page allocated is the
+     ** last in the block, allocate a new block here.  */
+    if( iApp==0 || fsIsLast(pFS, iApp) ){
+      int iNew;                     /* New block number */
 
-  /* If this is the first or last page of a block, fill in the pointer 
-   ** value at the end of the new page. */
-  if( rc==LSM_OK ){
-    p->nSize++;
-    p->iLastPg = iApp;
-    if( p->iFirst==0 ) p->iFirst = iApp;
-    pPg->flags |= PAGE_DIRTY;
-
-    if( fsIsLast(pFS, iApp) ){
-      lsmPutU32(&pPg->aData[pFS->nPagesize-4], iNext);
-    }else 
-      if( fsIsFirst(pFS, iApp) ){
-        lsmPutU32(&pPg->aData[pFS->nPagesize-4], iPrev);
+      lsmBlockAllocate(pFS->pDb, &iNew);
+      if( iApp==0 ){
+        iApp = fsFirstPageOnBlock(pFS, iNew);
+      }else{
+        iNext = fsFirstPageOnBlock(pFS, iNew);
       }
+    }
+
+    /* Grab the new page. */
+    pPg = 0;
+    rc = fsPageGet(pFS, iApp, 1, &pPg);
+    assert( rc==LSM_OK || pPg==0 );
+
+    /* If this is the first or last page of a block, fill in the pointer 
+     ** value at the end of the new page. */
+    if( rc==LSM_OK ){
+      p->nSize++;
+      p->iLastPg = iApp;
+      if( p->iFirst==0 ) p->iFirst = iApp;
+      pPg->flags |= PAGE_DIRTY;
+
+      if( fsIsLast(pFS, iApp) ){
+        lsmPutU32(&pPg->aData[pFS->nPagesize-4], iNext);
+      }else 
+        if( fsIsFirst(pFS, iApp) ){
+          lsmPutU32(&pPg->aData[pFS->nPagesize-4], iPrev);
+        }
+    }
   }
 
   *ppOut = pPg;
@@ -1389,6 +1447,36 @@ int lsmFsDbPageGet(FileSystem *pFS, Pgno iPg, Page **ppPg){
   return fsPageGet(pFS, iPg, 0, ppPg);
 }
 
+static int fsReadReverseVarint32(FileSystem *pFS, Pgno iPg, int *pnVal){
+  int rc;
+  Pgno iFirst;
+
+  iFirst = fsFirstPageOnBlock(pFS, fsPageToBlock(pFS, iPg));
+  if( (iPg - iFirst)<4 ){
+    int nRead = 4 + (1 + iPg - iFirst);
+    u8 aRead[5 + 4];              /* Space for varint + ptr */
+    rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iFirst-4, aRead, nRead);
+
+  }else{
+    u8 aRead[5];                  /* Space for varint + ptr */
+
+    rc = lsmEnvRead(
+        pFS->pEnv, pFS->fdDb, iPg+1-sizeof(aRead), aRead, sizeof(aRead)
+    );
+
+    if( aRead[4]<=240 ){
+      *pnVal = aRead[4];
+    }else if( aRead[4]<=248 ){
+      *pnVal = 240 + 256 * (aRead[4]-241) + aRead[3];
+    }else{
+      *pnVal = ((int)(aRead[1])<<16) + ((int)(aRead[2])<<8) + (int)(aRead[3]);
+      if( aRead[4]==250 ) *pnVal += (((int)aRead[0]) << 24);
+    }
+
+  }
+  return rc;
+}
+
 /*
 ** Obtain a reference to the last page in the segment passed as the 
 ** second argument.
@@ -1396,7 +1484,8 @@ int lsmFsDbPageGet(FileSystem *pFS, Pgno iPg, Page **ppPg){
 int lsmFsDbPageLast(FileSystem *pFS, Segment *pSeg, Page **ppPg){
   Pgno iLast = pSeg->iLastPg;
   if( pFS->pCompress ){
-    assert( 0 );
+    int nCompress;
+    rc = fsReadReverseVarint32(pFS, iLast, &nCompress);
   }
   return fsPageGet(pFS, iLast, 0, ppPg);
 }
@@ -1518,21 +1607,21 @@ static Pgno fsAppendData(
 
     /* If this is the first data written into the segment, find an append-point
     ** or allocate a new block.  */
-    if( iApp==0 ){
-      iApp = findAppendPoint(pFS);
-    }
-    if( iApp==0 ){
-      int iBlk;
-      rc = lsmBlockAllocate(pFS->pDb, &iBlk);
-      iApp = fsFirstPageOnBlock(pFS, iBlk);
+    if( iApp==1 ){
+      pSeg->iFirst = iApp = findAppendPoint(pFS);
+      if( iApp==0 ){
+        int iBlk;
+        rc = lsmBlockAllocate(pFS->pDb, &iBlk);
+        pSeg->iFirst = iApp = fsFirstPageOnBlock(pFS, iBlk);
+      }
     }
 
     iRet = iApp;
 
     /* Write as much data as is possible at iApp (usually all of it). */
     if( rc==LSM_OK ){
-      int nSpace = fsLastPageOnBlock(pFS, fsPageToBlock(iApp)) - iApp - 1;
-      nWrite = LSM_MAX(nData, nSpace);
+      int nSpace = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iApp)) - iApp + 1;
+      nWrite = LSM_MIN(nData, nSpace);
       nRem = nData - nWrite;
       rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iApp, aData, nWrite);
 
@@ -1614,6 +1703,7 @@ int lsmFsPagePersist(Page *pPg){
     FileSystem *pFS = pPg->pFS;
 
     if( pFS->pCompress ){
+      int iHash;                  /* Hash key of assigned page number */
       u8 aVarint[10];             /* pPg->nCompress as a varint */
       int nVarint;                /* Length of varint stored in aVarint[] */
       assert( pPg->pSeg && pPg->iPg==0 && pPg->nCompress==0 );
@@ -1626,9 +1716,16 @@ int lsmFsPagePersist(Page *pPg){
       aVarint[nVarint] = aVarint[0];
 
       /* Write the serialized page record into the database file. */
-      pPg->iPg = fsAppendData(pSeg, aVarint, nVarint, &rc);
-      fsAppendData(pSeg, pFS->aBuffer, pPg->nCompress, &rc);
-      fsAppendData(pSeg, &aVarint[1], nVarint, &rc);
+      pPg->iPg = fsAppendData(pFS, pPg->pSeg, aVarint, nVarint, &rc);
+      fsAppendData(pFS, pPg->pSeg, pFS->aBuffer, pPg->nCompress, &rc);
+      fsAppendData(pFS, pPg->pSeg, &aVarint[1], nVarint, &rc);
+
+      /* Now that it has a page number, insert the page into the hash table */
+      iHash = fsHashKey(pFS->nHash, pPg->iPg);
+      pPg->pHashNext = pFS->apHash[iHash];
+      pFS->apHash[iHash] = pPg;
+
+      pPg->pSeg->nSize += (nVarint * 2) + pPg->nCompress;
 
     }else{
       i64 iOff;                   /* Offset to write within database file */
@@ -1863,55 +1960,58 @@ static void checkBlocks(
 ** assert() fails.
 */
 int lsmFsIntegrityCheck(lsm_db *pDb){
-  int i;
-  int j;
-  Freelist freelist = {0, 0, 0};
   FileSystem *pFS = pDb->pFS;
-  u8 *aUsed;
-  Level *pLevel;
-  Snapshot *pWorker = pDb->pWorker;
-  int nBlock = pWorker->nBlock;
-
-  aUsed = lsmMallocZero(pDb->pEnv, nBlock);
-  if( aUsed==0 ){
-    /* Malloc has failed. Since this function is only called within debug
-    ** builds, this probably means the user is running an OOM injection test.
-    ** Regardless, it will not be possible to run the integrity-check at this
-    ** time, so assume the database is Ok and return non-zero. */
-    return 1;
-  }
-
-  for(pLevel=pWorker->pLevel; pLevel; pLevel=pLevel->pNext){
+  if( pFS->pCompress==0 ){
     int i;
-    checkBlocks(pFS, &pLevel->lhs, (pLevel->nRight!=0), nBlock, aUsed);
-    for(i=0; i<pLevel->nRight; i++){
-      checkBlocks(pFS, &pLevel->aRhs[i], 0, nBlock, aUsed);
+    int j;
+    Freelist freelist = {0, 0, 0};
+    u8 *aUsed;
+    Level *pLevel;
+    Snapshot *pWorker = pDb->pWorker;
+    int nBlock = pWorker->nBlock;
+
+    aUsed = lsmMallocZero(pDb->pEnv, nBlock);
+    if( aUsed==0 ){
+      /* Malloc has failed. Since this function is only called within debug
+       ** builds, this probably means the user is running an OOM injection test.
+       ** Regardless, it will not be possible to run the integrity-check at this
+       ** time, so assume the database is Ok and return non-zero. */
+      return 1;
     }
-  }
 
-  if( pWorker->nFreelistOvfl ){
-    int rc = lsmCheckpointOverflowLoad(pDb, &freelist);
-    assert( rc==LSM_OK || rc==LSM_NOMEM );
-    if( rc!=LSM_OK ) return 1;
-  }
-
-  for(j=0; j<2; j++){
-    Freelist *pFreelist;
-    if( j==0 ) pFreelist = &pWorker->freelist;
-    if( j==1 ) pFreelist = &freelist;
-
-    for(i=0; i<pFreelist->nEntry; i++){
-      u32 iBlk = pFreelist->aEntry[i].iBlk;
-      assert( iBlk<=nBlock );
-      assert( aUsed[iBlk-1]==0 );
-      aUsed[iBlk-1] = 1;
+    for(pLevel=pWorker->pLevel; pLevel; pLevel=pLevel->pNext){
+      int i;
+      checkBlocks(pFS, &pLevel->lhs, (pLevel->nRight!=0), nBlock, aUsed);
+      for(i=0; i<pLevel->nRight; i++){
+        checkBlocks(pFS, &pLevel->aRhs[i], 0, nBlock, aUsed);
+      }
     }
+
+    if( pWorker->nFreelistOvfl ){
+      int rc = lsmCheckpointOverflowLoad(pDb, &freelist);
+      assert( rc==LSM_OK || rc==LSM_NOMEM );
+      if( rc!=LSM_OK ) return 1;
+    }
+
+    for(j=0; j<2; j++){
+      Freelist *pFreelist;
+      if( j==0 ) pFreelist = &pWorker->freelist;
+      if( j==1 ) pFreelist = &freelist;
+
+      for(i=0; i<pFreelist->nEntry; i++){
+        u32 iBlk = pFreelist->aEntry[i].iBlk;
+        assert( iBlk<=nBlock );
+        assert( aUsed[iBlk-1]==0 );
+        aUsed[iBlk-1] = 1;
+      }
+    }
+
+    for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
+
+    lsmFree(pDb->pEnv, aUsed);
+    lsmFree(pDb->pEnv, freelist.aEntry);
   }
 
-  for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
-
-  lsmFree(pDb->pEnv, aUsed);
-  lsmFree(pDb->pEnv, freelist.aEntry);
   return 1;
 }
 
@@ -1923,7 +2023,7 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
 int lsmFsDbPageIsLast(Segment *pSeg, Page *pPg){
   if( pPg->pFS->pCompress ){
     Pgno iNext = 0;
-    rc = fsNextPageOffset(pSeg, pPg, &iNext);
+    int rc = fsNextPageOffset(pSeg, pPg, &iNext);
     return (rc!=LSM_OK || iNext==0);
   }
   return (pPg->iPg==pSeg->iLastPg);
