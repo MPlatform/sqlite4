@@ -397,27 +397,37 @@ static void doSystemCrash(LsmDb *pDb){
 ** Begin test compression hooks.
 */
 
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+
 static int testZipBound(void *pCtx, int nSrc){
-  assert( 0 );
-  return 0;
+  return compressBound(nSrc);
 }
 
 static int testZipCompress(
-  void *pCtx,                    /* Context pointer */
-  char *aOut, int *pnOut,        /* OUT: Buffer containing compressed data */
-  const char *aIn, int nIn       /* Buffer containing input data */
+  void *pCtx,                     /* Context pointer */
+  char *aOut, int *pnOut,         /* OUT: Buffer containing compressed data */
+  const char *aIn, int nIn        /* Buffer containing input data */
 ){
-  assert( 0 );
-  return 0;
+  uLongf n = *pnOut;              /* In/out buffer size for compress() */
+  int rc;                         /* compress() return code */
+ 
+  rc = compress((Bytef*)aOut, &n, (Bytef*)aIn, nIn);
+  *pnOut = n;
+  return (rc==Z_OK ? 0 : LSM_ERROR);
 }
 
 static int testZipUncompress(
-  void *pCtx,                    /* Context pointer */
-  char *aOut, int *pnOut,        /* OUT: Buffer containing uncompressed data */
-  const char *aIn, int nIn       /* Buffer containing input data */
+  void *pCtx,                     /* Context pointer */
+  char *aOut, int *pnOut,         /* OUT: Buffer containing uncompressed data */
+  const char *aIn, int nIn        /* Buffer containing input data */
 ){
-  assert( 0 );
-  return 0;
+  uLongf n = *pnOut;              /* In/out buffer size for uncompress() */
+  int rc;                         /* uncompress() return code */
+
+  rc = uncompress((Bytef*)aOut, &n, (Bytef*)aIn, nIn);
+  *pnOut = n;
+  return (rc==Z_OK ? 0 : LSM_ERROR);
 }
 
 static int testConfigureCompression(lsm_db *pDb){
@@ -430,6 +440,7 @@ static int testConfigureCompression(lsm_db *pDb){
   };
   return lsm_config(pDb, LSM_CONFIG_SET_COMPRESSION, &zip);
 }
+#endif /* ifdef HAVE_ZLIB */
 
 /*
 ** End test compression hooks.
@@ -690,7 +701,9 @@ static int test_lsm_config_str(
     { "worker_nmerge",    1, LSM_CONFIG_NMERGE },
     { "test_no_recovery", 0, TEST_NO_RECOVERY },
     { "threads",          0, TEST_THREADS },
+#ifdef HAVE_ZLIB
     { "compression",      0, TEST_COMPRESSION },
+#endif
     { 0, 0 }
   };
   const char *z = zStr;
@@ -742,9 +755,11 @@ static int test_lsm_config_str(
             case TEST_THREADS:
               nThread = iVal;
               break;
+#ifdef HAVE_ZLIB
             case TEST_COMPRESSION:
               testConfigureCompression(db);
               break;
+#endif
           }
         }
       }

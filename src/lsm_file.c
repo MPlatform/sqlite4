@@ -172,6 +172,7 @@ struct FileSystem {
   ** For an uncompressed database, a NULL pointer.  */
   lsm_compress *pCompress;
   u8 *aBuffer;                    /* Buffer to compress into */
+  int nBuffer;                    /* Allocated size of aBuffer[] in bytes */
 
   /* mmap() mode things */
   int bUseMmap;                   /* True to use mmap() to access db file */
@@ -981,6 +982,16 @@ static int fsAddOffset(FileSystem *pFS, i64 iOff, int iAdd, i64 *piRes){
   return rc;
 }
 
+static int fsAllocateBuffer(FileSystem *pFS){
+  assert( pFS->pCompress );
+  if( pFS->aBuffer==0 ){
+    pFS->nBuffer = pFS->pCompress->xBound(pFS->pCompress->pCtx, pFS->nPagesize);
+    pFS->aBuffer = lsmMalloc(pFS->pEnv, LSM_MAX(pFS->nBuffer, pFS->nPagesize));
+    if( pFS->aBuffer==0 ) return LSM_NOMEM_BKPT;
+  }
+  return LSM_OK;
+}
+
 /*
 ** This function is only called in compressed database mode. It reads and
 ** uncompresses the compressed data for page pPg from the database and
@@ -992,19 +1003,37 @@ static int fsReadPagedata(
   FileSystem *pFS,                /* File-system handle */
   Page *pPg                       /* Page to read and uncompress data for */
 ){
-  i64 iOff;
+  lsm_compress *p = pFS->pCompress;
+  i64 iOff = pPg->iPg;
   u8 aSz[6];
   int rc;
 
-  assert( pFS->pCompress && pPg->nCompress==0 );
-  iOff = pPg->iPg;
+  assert( p && pPg->nCompress==0 );
+
+  if( fsAllocateBuffer(pFS) ) return LSM_NOMEM;
 
   rc = fsReadData(pFS, iOff, aSz, sizeof(aSz));
 
   if( rc==LSM_OK ){
     pPg->nCompress = (int)lsmGetU24(aSz);
     rc = fsAddOffset(pFS, iOff, 3, &iOff);
-    if( rc==LSM_OK ) rc = fsReadData(pFS, iOff, pPg->aData, pPg->nCompress);
+    if( rc==LSM_OK ){
+      if( pPg->nCompress>pFS->nBuffer ){
+        rc = LSM_CORRUPT_BKPT;
+      }else{
+        rc = fsReadData(pFS, iOff, pFS->aBuffer, pPg->nCompress);
+      }
+      if( rc==LSM_OK ){
+        int n = pFS->nBuffer;
+        rc = p->xUncompress(p->pCtx, 
+            (char *)pPg->aData, &n, 
+            (const char *)pFS->aBuffer, pPg->nCompress
+        );
+        if( rc==LSM_OK && n!=pPg->nData ){
+          rc = LSM_CORRUPT_BKPT;
+        }
+      }
+    }
   }
   return rc;
 }
@@ -1066,6 +1095,7 @@ static int fsPageGet(
         if( pFS->pCompress==0 && (fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg)) ){
           p->flags |= PAGE_SHORT;
         }
+        p->nData =  pFS->nPagesize - (p->flags & PAGE_SHORT);
 
 #ifdef LSM_DEBUG
         memset(p->aData, 0x56, pFS->nPagesize);
@@ -1087,7 +1117,6 @@ static int fsPageGet(
          ** free the buffer. */
         if( rc==LSM_OK ){
           p->pHashNext = pFS->apHash[iHash];
-          p->nData =  pFS->nPagesize - (p->flags & PAGE_SHORT);
           pFS->apHash[iHash] = p;
         }else{
           fsPageBufferFree(p);
@@ -1463,8 +1492,9 @@ int lsmFsSortedAppend(
 */
 int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
   int rc = LSM_OK;
-  if( p ){
+  if( p && p->iLastPg ){
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+    int iBlk;
 
     /* Check if the last page of this run happens to be the last of a block.
     ** If it is, then an extra block has already been allocated for this run.
@@ -1473,16 +1503,8 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
     ** Otherwise, add the first free page in the last block used by the run
     ** to the lAppend list.
     */
-    if( (p->iLastPg % nPagePerBlock)==0 ){
-      Page *pLast;
-      rc = fsPageGet(pFS, p->iLastPg, 0, &pLast);
-      if( rc==LSM_OK ){
-        int iPg = (int)lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
-        int iBlk = fsPageToBlock(pFS, iPg);
-        lsmBlockRefree(pFS->pDb, iBlk);
-        lsmFsPageRelease(pLast);
-      }
-    }else{
+    iBlk = fsPageToBlock(pFS, p->iLastPg);
+    if( fsLastPageOnBlock(pFS, fsPageToBlock(pFS, p->iLastPg) )!=p->iLastPg ){
       int i;
       u32 *aiAppend = pFS->pDb->pWorker->aiAppend;
       for(i=0; i<LSM_APPLIST_SZ; i++){
@@ -1490,6 +1512,14 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
           aiAppend[i] = p->iLastPg+1;
           break;
         }
+      }
+    }else if( pFS->pCompress==0 ){
+      Page *pLast;
+      rc = fsPageGet(pFS, p->iLastPg, 0, &pLast);
+      if( rc==LSM_OK ){
+        int iPg = (int)lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
+        lsmBlockRefree(pFS->pDb, fsPageToBlock(pFS, iPg));
+        lsmFsPageRelease(pLast);
       }
     }
   }
@@ -1651,8 +1681,10 @@ static Pgno fsAppendData(
       int nSpace = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iApp)) - iApp + 1;
       nWrite = LSM_MIN(nData, nSpace);
       nRem = nData - nWrite;
-      rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iApp, aData, nWrite);
-
+      assert( nWrite>=0 );
+      if( nWrite!=0 ){
+        rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iApp, aData, nWrite);
+      }
       iApp += nWrite;
     }
 
@@ -1704,17 +1736,16 @@ static Pgno fsAppendData(
 ** allocates it. If this fails, LSM_NOMEM is returned. Otherwise, LSM_OK.
 */
 static int fsCompressIntoBuffer(FileSystem *pFS, Page *pPg){
-  /* TODO: Fill in a real version of this function */
+  lsm_compress *p = pFS->pCompress;
 
-  if( pFS->aBuffer==0 ){
-    pFS->aBuffer = lsmMalloc(pFS->pEnv, pFS->nPagesize);
-    if( pFS->aBuffer==0 ) return LSM_NOMEM_BKPT;
-  }
-
+  if( fsAllocateBuffer(pFS) ) return LSM_NOMEM;
   assert( pPg->nData==pFS->nPagesize );
-  memcpy(pFS->aBuffer, pPg->aData, pFS->nPagesize);
-  pPg->nCompress = pFS->nPagesize;
-  return LSM_OK;
+
+  pPg->nCompress = pFS->nBuffer;
+  return p->xCompress(p->pCtx, 
+      (char *)pFS->aBuffer, &pPg->nCompress, 
+      (const char *)pPg->aData, pPg->nData
+  );
 }
 
 /*
