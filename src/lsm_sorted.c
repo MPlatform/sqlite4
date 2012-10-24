@@ -2173,6 +2173,7 @@ static int multiCursorAddAll(MultiCursor *pCsr, Snapshot *pSnap){
   int rc = LSM_OK;
 
   for(pLvl=pSnap->pLevel; pLvl; pLvl=pLvl->pNext){
+    if( pLvl->iAge<0 ) continue;
     nPtr += (1 + pLvl->nRight);
   }
 
@@ -2182,6 +2183,7 @@ static int multiCursorAddAll(MultiCursor *pCsr, Snapshot *pSnap){
 
   for(pLvl=pSnap->pLevel; pLvl && rc==LSM_OK; pLvl=pLvl->pNext){
     int i;
+    if( pLvl->iAge<0 ) continue;
     pCsr->aPtr[iPtr].pLevel = pLvl;
     pCsr->aPtr[iPtr].pSeg = &pLvl->lhs;
     iPtr++;
@@ -3837,6 +3839,7 @@ static int sortedNewToplevel(
     memset(&mergeworker, 0, sizeof(MergeWorker));
 
     pNew->pMerge = &merge;
+    pNew->iAge = -1;
     mergeworker.pDb = pDb;
     mergeworker.pLevel = pNew;
     mergeworker.pCsr = pCsr;
@@ -3854,6 +3857,7 @@ static int sortedNewToplevel(
     nWrite = mergeworker.nWork;
     mergeWorkerShutdown(&mergeworker, &rc);
     pNew->pMerge = 0;
+    pNew->iAge = 0;
   }
 
   /* Link the new level into the top of the tree. */
@@ -3864,8 +3868,8 @@ static int sortedNewToplevel(
     sortedFreeLevel(pDb->pEnv, pNew);
   }
 
-#if 1
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
+#if 0
+  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
 #endif
 
   if( rc==LSM_OK ){
@@ -4268,8 +4272,8 @@ static int sortedWork(
       mergeWorkerShutdown(&mergeworker, &rc);
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
-#if 1
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
+#if 0
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);

@@ -193,12 +193,10 @@ void testDbContents(
       testScanCompare(pDb2, pDb, 0, 0, 0,         pKey2, nKey2, &rc);
       testScanCompare(pDb2, pDb, 0, pKey1, nKey1, 0, 0,         &rc);
       testScanCompare(pDb2, pDb, 0, pKey1, nKey1, pKey2, nKey2, &rc);
-#if 0
       testScanCompare(pDb2, pDb, 1, 0, 0,         0, 0,         &rc);
       testScanCompare(pDb2, pDb, 1, 0, 0,         pKey2, nKey2, &rc);
       testScanCompare(pDb2, pDb, 1, pKey1, nKey1, 0, 0,         &rc);
       testScanCompare(pDb2, pDb, 1, pKey1, nKey1, pKey2, nKey2, &rc);
-#endif
       testFree(pKey1);
     }
     tdb_close(pDb2);

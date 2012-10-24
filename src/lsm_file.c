@@ -100,15 +100,13 @@
 **
 ** Pages are stored in variable length compressed form, as follows:
 **
-**     * Number of bytes in compressed page image, as a varint.
+**     * Number of bytes in compressed page image, as a 3-byte big-endian
+**       integer.
 **
 **     * Compressed page image.
 **
-**     * Number of bytes in compressed page image, as a varint. Except,
-**       the first byte of the varint is moved so that it is the last
-**       byte (i.e. for a 4 byte varint: ABCD -> BCDA). This is done
-**       to make it possible to iterate through a packed array of compressed 
-**       pages in reverse order.
+**     * The number of bytes in the compressed page image, again as a 3-byte
+**       big-endian integer.
 **
 ** A page number is a byte offset into the database file. So the smallest
 ** possible page number is 8192 (immediately after the two meta-pages).
@@ -118,6 +116,8 @@
 ** of the last byte in its record.
 **
 ** Unlike uncompressed pages, compressed page records may span blocks.
+**
+** TODO:
 **
 ** Sometimes, in order to avoid touching sectors that contain synced data
 ** when writing, it is necessary to insert unused space between compressed
@@ -212,12 +212,15 @@ struct Page {
   Pgno iPg;                       /* Page number */
   int nRef;                       /* Number of outstanding references */
   int flags;                      /* Combination of PAGE_XXX flags */
-  int nCompress;                  /* Compressed size (or 0 for uncomp. db) */
-  Segment *pSeg;                  /* Segment this page will be written to */
   Page *pHashNext;                /* Next page in hash table slot */
   Page *pLruNext;                 /* Next page in LRU list */
   Page *pLruPrev;                 /* Previous page in LRU list */
   FileSystem *pFS;                /* File system that owns this page */
+
+  /* Only used in compressed database mode: */
+  int nCompress;                  /* Compressed size (or 0 for uncomp. db) */
+  int nCompressPrev;              /* Compressed size of prev page */
+  Segment *pSeg;                  /* Segment this page will be written to */
 };
 
 /*
@@ -249,7 +252,7 @@ struct MetaPage {
 ** to catch IO errors. 
 */
 #ifndef NDEBUG
-static int lsmIoerrBkpt(){
+static void lsmIoerrBkpt(){
   static int nErr = 0;
   nErr++;
 }
@@ -901,6 +904,83 @@ static int fsReadData(
 }
 
 /*
+** Parameter iBlock is a database file block. This function reads the value 
+** stored in the blocks "previous block" pointer and stores it in *piPrev.
+** LSM_OK is returned if everything is successful, or an LSM error code
+** otherwise.
+*/
+static int fsBlockPrev(
+  FileSystem *pFS,                /* File-system object handle */
+  int iBlock,                     /* Read field from this block */
+  int *piPrev                     /* OUT: Previous block in linked list */
+){
+  int rc = LSM_OK;                /* Return code */
+
+  assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
+  assert( iBlock>0 );
+
+  if( pFS->pCompress ){
+    i64 iOff = fsFirstPageOnBlock(pFS, iBlock) - 4;
+    u8 aPrev[4];                  /* 4-byte pointer read from db file */
+    rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aPrev, sizeof(aPrev));
+    if( rc==LSM_OK ){
+      *piPrev = (int)lsmGetU32(aPrev);
+    }
+  }else{
+    assert( 0 );
+  }
+  return rc;
+}
+
+/*
+** Encode and decode routines for 24-bit big-endian integers.
+*/
+static u32 lsmGetU24(u8 *aBuf){
+  return (((u32)aBuf[0]) << 16) + (((u32)aBuf[1]) << 8) + ((u32)aBuf[2]);
+}
+static void lsmPutU24(u8 *aBuf, u32 iVal){
+  aBuf[0] = (u8)(iVal >> 16);
+  aBuf[1] = (u8)(iVal >>  8);
+  aBuf[2] = (u8)(iVal >>  0);
+}
+
+static int fsSubtractOffset(FileSystem *pFS, i64 iOff, int iSub, i64 *piRes){
+  i64 iStart;
+  int iBlk;
+  int rc;
+
+  assert( pFS->pCompress );
+
+  iStart = fsFirstPageOnBlock(pFS, fsPageToBlock(pFS, iOff));
+  if( (iOff-iSub)>=iStart ){
+    *piRes = (iOff-iSub);
+    return LSM_OK;
+  }
+
+  rc = fsBlockPrev(pFS, fsPageToBlock(pFS, iOff), &iBlk);
+  *piRes = fsLastPageOnBlock(pFS, iBlk) - iSub + (iOff - iStart + 1);
+  return rc;
+}
+
+static int fsAddOffset(FileSystem *pFS, i64 iOff, int iAdd, i64 *piRes){
+  i64 iEob;
+  int iBlk;
+  int rc;
+
+  assert( pFS->pCompress );
+
+  iEob = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iOff));
+  if( (iOff+iAdd)<=iEob ){
+    *piRes = (iOff+iAdd);
+    return LSM_OK;
+  }
+
+  rc = fsBlockNext(pFS, fsPageToBlock(pFS, iOff), &iBlk);
+  *piRes = fsFirstPageOnBlock(pFS, iBlk) + iAdd - (iEob - iOff + 1);
+  return rc;
+}
+
+/*
 ** This function is only called in compressed database mode. It reads and
 ** uncompresses the compressed data for page pPg from the database and
 ** populates the pPg->aData[] buffer and pPg->nCompress field.
@@ -912,16 +992,18 @@ static int fsReadPagedata(
   Page *pPg                       /* Page to read and uncompress data for */
 ){
   i64 iOff;
-  u8 aVarint[9];
+  u8 aSz[6];
   int rc;
 
   assert( pFS->pCompress && pPg->nCompress==0 );
-
   iOff = pPg->iPg;
-  rc = fsReadData(pFS, iOff, aVarint, sizeof(aVarint));
+
+  rc = fsReadData(pFS, iOff, aSz, sizeof(aSz));
+
   if( rc==LSM_OK ){
-    iOff += lsmVarintGet32(aVarint, &pPg->nCompress);
-    rc = fsReadData(pFS, iOff, pPg->aData, pPg->nCompress);
+    pPg->nCompress = (int)lsmGetU24(aSz);
+    rc = fsAddOffset(pFS, iOff, 3, &iOff);
+    if( rc==LSM_OK ) rc = fsReadData(pFS, iOff, pPg->aData, pPg->nCompress);
   }
   return rc;
 }
@@ -1022,35 +1104,6 @@ static int fsPageGet(
     p->nRef++;
   }
   *ppPg = p;
-  return rc;
-}
-
-/*
-** Parameter iBlock is a database file block. This function reads the value 
-** stored in the blocks "previous block" pointer and stores it in *piPrev.
-** LSM_OK is returned if everything is successful, or an LSM error code
-** otherwise.
-*/
-static int fsBlockPrev(
-  FileSystem *pFS,                /* File-system object handle */
-  int iBlock,                     /* Read field from this block */
-  int *piPrev                     /* OUT: Previous block in linked list */
-){
-  int rc = LSM_OK;                /* Return code */
-
-  assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
-  assert( iBlock>0 );
-
-  if( pFS->pCompress ){
-    i64 iOff = (i64)(iBlock-1) * pFS->nBlocksize;
-    u8 aPrev[4];                  /* 4-byte pointer read from db file */
-    rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aPrev, sizeof(aPrev));
-    if( rc==LSM_OK ){
-      *piPrev = (int)lsmGetU32(aPrev);
-    }
-  }else{
-    assert( 0 );
-  }
   return rc;
 }
 
@@ -1214,31 +1267,30 @@ void lsmFsGobble(
 }
 
 static int fsNextPageOffset(Segment *pSeg, Page *pPg, Pgno *piNext){
-  int rc = LSM_OK;                /* Return code */
-  FileSystem *pFS = pPg->pFS;
-  Pgno iPg = pPg->iPg;
-  i64 iEob;
-  int nByte;
+  Pgno iNext;
+  int rc;
 
-  assert( pFS->pCompress );
+  assert( pPg->pFS->pCompress );
 
-  iEob = 1 + fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iPg));
-  nByte = 2 * lsmVarintLen32(pPg->nCompress) + pPg->nCompress;
+  rc = fsAddOffset(pPg->pFS, pPg->iPg, 2*3 + pPg->nCompress, &iNext);
+  if( pSeg && pSeg->iLastPg==(iNext-1) ){
+    iNext = 0;
+  }
 
-  if( pSeg && (iPg + nByte)<=iEob && (iPg + nByte - 1)==pSeg->iLastPg ){
-    *piNext = 0;
-  }else if( (iPg + nByte)>=iEob ){
-    int iNext;
-    Pgno iNextPg;
+  *piNext = iNext;
+  return rc;
+}
 
-    rc = fsBlockNext(pFS, fsPageToBlock(pFS, iPg), &iNext);
-    iNextPg = fsFirstPageOnBlock(pFS, iNext) + (nByte - (iEob-iPg));
-    if( pSeg && pSeg->iLastPg==(iNextPg-1) ){
-      iNextPg = 0;
-    }
-    *piNext = iNextPg;
-  }else{
-    *piNext = iPg + nByte;
+static int fsGetPageBefore(FileSystem *pFS, i64 iOff, Pgno *piPrev){
+  u8 aSz[3];
+  int rc;
+  i64 iRead;
+
+  rc = fsSubtractOffset(pFS, iOff, sizeof(aSz), &iRead);
+  if( rc==LSM_OK ) rc = fsReadData(pFS, iRead, aSz, sizeof(aSz));
+  if( rc==LSM_OK ){
+    int nSz = lsmGetU24(aSz) + sizeof(aSz)*2;
+    rc = fsSubtractOffset(pFS, iOff, nSz, piPrev);
   }
 
   return rc;
@@ -1271,7 +1323,11 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
 
   if( pFS->pCompress ){
     if( eDir<0 ){
-      assert( 0 );
+      int rc = LSM_OK;
+      if( iPg==pRun->iFirst || (rc = fsGetPageBefore(pFS, iPg, &iPg)) ){
+        *ppNext = 0;
+        return LSM_OK;
+      }
     }else{
       int rc = fsNextPageOffset(pRun, pPg, &iPg);
       if( rc!=LSM_OK || iPg==0 ){
@@ -1447,36 +1503,6 @@ int lsmFsDbPageGet(FileSystem *pFS, Pgno iPg, Page **ppPg){
   return fsPageGet(pFS, iPg, 0, ppPg);
 }
 
-static int fsReadReverseVarint32(FileSystem *pFS, Pgno iPg, int *pnVal){
-  int rc;
-  Pgno iFirst;
-
-  iFirst = fsFirstPageOnBlock(pFS, fsPageToBlock(pFS, iPg));
-  if( (iPg - iFirst)<4 ){
-    int nRead = 4 + (1 + iPg - iFirst);
-    u8 aRead[5 + 4];              /* Space for varint + ptr */
-    rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iFirst-4, aRead, nRead);
-
-  }else{
-    u8 aRead[5];                  /* Space for varint + ptr */
-
-    rc = lsmEnvRead(
-        pFS->pEnv, pFS->fdDb, iPg+1-sizeof(aRead), aRead, sizeof(aRead)
-    );
-
-    if( aRead[4]<=240 ){
-      *pnVal = aRead[4];
-    }else if( aRead[4]<=248 ){
-      *pnVal = 240 + 256 * (aRead[4]-241) + aRead[3];
-    }else{
-      *pnVal = ((int)(aRead[1])<<16) + ((int)(aRead[2])<<8) + (int)(aRead[3]);
-      if( aRead[4]==250 ) *pnVal += (((int)aRead[0]) << 24);
-    }
-
-  }
-  return rc;
-}
-
 /*
 ** Obtain a reference to the last page in the segment passed as the 
 ** second argument.
@@ -1484,8 +1510,9 @@ static int fsReadReverseVarint32(FileSystem *pFS, Pgno iPg, int *pnVal){
 int lsmFsDbPageLast(FileSystem *pFS, Segment *pSeg, Page **ppPg){
   Pgno iLast = pSeg->iLastPg;
   if( pFS->pCompress ){
-    int nCompress;
-    rc = fsReadReverseVarint32(pFS, iLast, &nCompress);
+    int rc;
+    rc = fsGetPageBefore(pFS, iLast+1, &iLast);
+    if( rc!=LSM_OK ) return rc;
   }
   return fsPageGet(pFS, iLast, 0, ppPg);
 }
@@ -1704,28 +1731,26 @@ int lsmFsPagePersist(Page *pPg){
 
     if( pFS->pCompress ){
       int iHash;                  /* Hash key of assigned page number */
-      u8 aVarint[10];             /* pPg->nCompress as a varint */
-      int nVarint;                /* Length of varint stored in aVarint[] */
+      u8 aSz[3];                  /* pPg->nCompress as a 24-bit big-endian */
       assert( pPg->pSeg && pPg->iPg==0 && pPg->nCompress==0 );
 
       /* Compress the page image. */
       rc = fsCompressIntoBuffer(pFS, pPg);
 
-      /* Serialize the compressed size into buffer aVarint[] */
-      nVarint = lsmVarintPut64(aVarint, pPg->nCompress);
-      aVarint[nVarint] = aVarint[0];
+      /* Serialize the compressed size into buffer aSz[] */
+      lsmPutU24(aSz, pPg->nCompress);
 
       /* Write the serialized page record into the database file. */
-      pPg->iPg = fsAppendData(pFS, pPg->pSeg, aVarint, nVarint, &rc);
+      pPg->iPg = fsAppendData(pFS, pPg->pSeg, aSz, sizeof(aSz), &rc);
       fsAppendData(pFS, pPg->pSeg, pFS->aBuffer, pPg->nCompress, &rc);
-      fsAppendData(pFS, pPg->pSeg, &aVarint[1], nVarint, &rc);
+      fsAppendData(pFS, pPg->pSeg, aSz, sizeof(aSz), &rc);
 
       /* Now that it has a page number, insert the page into the hash table */
       iHash = fsHashKey(pFS->nHash, pPg->iPg);
       pPg->pHashNext = pFS->apHash[iHash];
       pFS->apHash[iHash] = pPg;
 
-      pPg->pSeg->nSize += (nVarint * 2) + pPg->nCompress;
+      pPg->pSeg->nSize += (sizeof(aSz) * 2) + pPg->nCompress;
 
     }else{
       i64 iOff;                   /* Offset to write within database file */
