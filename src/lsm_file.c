@@ -536,6 +536,7 @@ void lsmFsClose(FileSystem *pFS){
     if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
     lsmFree(pEnv, pFS->pLsmFile);
     lsmFree(pEnv, pFS->apHash);
+    lsmFree(pEnv, pFS->aBuffer);
     lsmFree(pEnv, pFS);
   }
 }
@@ -1399,7 +1400,7 @@ int lsmFsSortedAppend(
       pPg->pFS = pFS;
       pPg->pSeg = p;
       pPg->iPg = 0;
-      pPg->flags = PAGE_DIRTY;
+      pPg->flags |= PAGE_DIRTY;
       pPg->nData = pFS->nPagesize;
       assert( pPg->aData );
 
