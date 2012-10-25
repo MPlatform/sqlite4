@@ -1302,9 +1302,11 @@ static int fsNextPageOffset(Segment *pSeg, Page *pPg, Pgno *piNext){
 
   assert( pPg->pFS->pCompress );
 
-  rc = fsAddOffset(pPg->pFS, pPg->iPg, 2*3 + pPg->nCompress, &iNext);
-  if( pSeg && pSeg->iLastPg==(iNext-1) ){
+  rc = fsAddOffset(pPg->pFS, pPg->iPg, 2*3 + pPg->nCompress - 1, &iNext);
+  if( pSeg && iNext==pSeg->iLastPg ){
     iNext = 0;
+  }else if( rc==LSM_OK ){
+    rc = fsAddOffset(pPg->pFS, iNext, 1, &iNext);
   }
 
   *piNext = iNext;
