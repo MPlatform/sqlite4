@@ -1183,7 +1183,7 @@ static int fsFreeBlock(
 
   int iIn;                        /* Used to iterate through append points */
   int iOut = 0;                   /* Used to output append points */
-  u32 *aApp = pSnapshot->aiAppend;
+  Pgno *aApp = pSnapshot->aiAppend;
 
   iFirst = fsFirstPageOnBlock(pFS, iBlk);
   iLast = fsLastPageOnBlock(pFS, iBlk);
@@ -1395,7 +1395,7 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
 
 static Pgno findAppendPoint(FileSystem *pFS){
   int i;
-  u32 *aiAppend = pFS->pDb->pWorker->aiAppend;
+  Pgno *aiAppend = pFS->pDb->pWorker->aiAppend;
   u32 iRet = 0;
 
   for(i=LSM_APPLIST_SZ-1; iRet==0 && i>=0; i--){
@@ -1508,7 +1508,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
     iBlk = fsPageToBlock(pFS, p->iLastPg);
     if( fsLastPageOnBlock(pFS, fsPageToBlock(pFS, p->iLastPg) )!=p->iLastPg ){
       int i;
-      u32 *aiAppend = pFS->pDb->pWorker->aiAppend;
+      Pgno *aiAppend = pFS->pDb->pWorker->aiAppend;
       for(i=0; i<LSM_APPLIST_SZ; i++){
         if( aiAppend[i]==0 ){
           aiAppend[i] = p->iLastPg+1;

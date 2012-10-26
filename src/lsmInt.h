@@ -143,7 +143,7 @@ int lsmErrorBkpt(int);
 ** a checkpoint (the remainder are stored as a system record in the LSM).
 ** See also LSM_CONFIG_MAX_FREELIST.
 */
-#define LSM_MAX_FREELIST_ENTRIES 100
+#define LSM_MAX_FREELIST_ENTRIES 24
 
 #define LSM_ATTEMPTS_BEFORE_PROTOCOL 10000
 
@@ -482,7 +482,7 @@ struct Snapshot {
 
   /* Used by worker snapshots only */
   int nBlock;                     /* Number of blocks in database file */
-  u32 aiAppend[LSM_APPLIST_SZ];   /* Append point list */
+  Pgno aiAppend[LSM_APPLIST_SZ];  /* Append point list */
   Freelist freelist;              /* Free block list */
   int nFreelistOvfl;              /* Number of extra free-list entries in LSM */
   u32 nWrite;                     /* Total number of pages written to disk */
