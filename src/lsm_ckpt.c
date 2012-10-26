@@ -902,7 +902,7 @@ static void ckptLoadEmpty(lsm_db *pDb){
     0,                  /* CKPT_HDR_OVFL */
     0,                  /* CKPT_HDR_NWRITE */
     0, 0, 1234, 5678,   /* The log pointer and initial checksum */
-    0, 0, 0, 0,         /* The append list */
+    0,0,0,0, 0,0,0,0,   /* The append list */
     0,                  /* The free block list */
     0, 0                /* Space for checksum values */
   };
