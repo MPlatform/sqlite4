@@ -1997,7 +1997,7 @@ static void checkBlocks(
         }
       }
 
-      if( bExtra && (pSeg->iLastPg % nPagePerBlock)==0 ){
+      if( pFS->pCompress==0 && bExtra && (pSeg->iLastPg % nPagePerBlock)==0 ){
         fsBlockNext(pFS, iLastBlk, &iBlk);
         aUsed[iBlk-1] = 1;
       }
@@ -2020,56 +2020,54 @@ static void checkBlocks(
 */
 int lsmFsIntegrityCheck(lsm_db *pDb){
   FileSystem *pFS = pDb->pFS;
-  if( pFS->pCompress==0 ){
-    int i;
-    int j;
-    Freelist freelist = {0, 0, 0};
-    u8 *aUsed;
-    Level *pLevel;
-    Snapshot *pWorker = pDb->pWorker;
-    int nBlock = pWorker->nBlock;
+  int i;
+  int j;
+  Freelist freelist = {0, 0, 0};
+  u8 *aUsed;
+  Level *pLevel;
+  Snapshot *pWorker = pDb->pWorker;
+  int nBlock = pWorker->nBlock;
 
-    aUsed = lsmMallocZero(pDb->pEnv, nBlock);
-    if( aUsed==0 ){
-      /* Malloc has failed. Since this function is only called within debug
-       ** builds, this probably means the user is running an OOM injection test.
-       ** Regardless, it will not be possible to run the integrity-check at this
-       ** time, so assume the database is Ok and return non-zero. */
-      return 1;
-    }
-
-    for(pLevel=pWorker->pLevel; pLevel; pLevel=pLevel->pNext){
-      int i;
-      checkBlocks(pFS, &pLevel->lhs, (pLevel->nRight!=0), nBlock, aUsed);
-      for(i=0; i<pLevel->nRight; i++){
-        checkBlocks(pFS, &pLevel->aRhs[i], 0, nBlock, aUsed);
-      }
-    }
-
-    if( pWorker->nFreelistOvfl ){
-      int rc = lsmCheckpointOverflowLoad(pDb, &freelist);
-      assert( rc==LSM_OK || rc==LSM_NOMEM );
-      if( rc!=LSM_OK ) return 1;
-    }
-
-    for(j=0; j<2; j++){
-      Freelist *pFreelist;
-      if( j==0 ) pFreelist = &pWorker->freelist;
-      if( j==1 ) pFreelist = &freelist;
-
-      for(i=0; i<pFreelist->nEntry; i++){
-        u32 iBlk = pFreelist->aEntry[i].iBlk;
-        assert( iBlk<=nBlock );
-        assert( aUsed[iBlk-1]==0 );
-        aUsed[iBlk-1] = 1;
-      }
-    }
-
-    for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
-
-    lsmFree(pDb->pEnv, aUsed);
-    lsmFree(pDb->pEnv, freelist.aEntry);
+  aUsed = lsmMallocZero(pDb->pEnv, nBlock);
+  if( aUsed==0 ){
+    /* Malloc has failed. Since this function is only called within debug
+     ** builds, this probably means the user is running an OOM injection test.
+     ** Regardless, it will not be possible to run the integrity-check at this
+     ** time, so assume the database is Ok and return non-zero. */
+    return 1;
   }
+
+  for(pLevel=pWorker->pLevel; pLevel; pLevel=pLevel->pNext){
+    int i;
+    checkBlocks(pFS, &pLevel->lhs, (pLevel->nRight!=0), nBlock, aUsed);
+    for(i=0; i<pLevel->nRight; i++){
+      checkBlocks(pFS, &pLevel->aRhs[i], 0, nBlock, aUsed);
+    }
+  }
+
+  if( pWorker->nFreelistOvfl ){
+    int rc = lsmCheckpointOverflowLoad(pDb, &freelist);
+    assert( rc==LSM_OK || rc==LSM_NOMEM );
+    if( rc!=LSM_OK ) return 1;
+  }
+
+  for(j=0; j<2; j++){
+    Freelist *pFreelist;
+    if( j==0 ) pFreelist = &pWorker->freelist;
+    if( j==1 ) pFreelist = &freelist;
+
+    for(i=0; i<pFreelist->nEntry; i++){
+      u32 iBlk = pFreelist->aEntry[i].iBlk;
+      assert( iBlk<=nBlock );
+      assert( aUsed[iBlk-1]==0 );
+      aUsed[iBlk-1] = 1;
+    }
+  }
+
+  for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
+
+  lsmFree(pDb->pEnv, aUsed);
+  lsmFree(pDb->pEnv, freelist.aEntry);
 
   return 1;
 }
