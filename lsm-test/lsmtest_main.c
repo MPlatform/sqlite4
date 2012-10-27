@@ -1333,7 +1333,6 @@ static int do_replay(int nArg, char **azArg){
 }
 
 static int do_insert(int nArg, char **azArg){
-  const char *zConfig = 0;
   const char *zDb = "lsm";
   TestDb *pDb = 0;
   int i;
@@ -1343,15 +1342,20 @@ static int do_insert(int nArg, char **azArg){
   DatasourceDefn defn = { TEST_DATASOURCE_RANDOM, 8, 15, 80, 150 };
   Datasource *pData = 0;
 
-  if( nArg>2 ){
-    testPrintError("Usage: insert ?DATABASE? ?LSM-CONFIG?\n");
+  if( nArg>1 ){
+    testPrintError("Usage: insert ?DATABASE?\n");
     return 1;
   }
   if( nArg==1 ){ zDb = azArg[0]; }
-  if( nArg==2 ){ zConfig = azArg[1]; }
 
   testMallocUninstall(tdb_lsm_env());
-  rc = tdb_open(zDb, 0, 1, &pDb);
+  for(i=0; zDb[i] && zDb[i]!='='; i++);
+  if( zDb[i] ){
+    rc = tdb_lsm_open(zDb, "testdb.lsm", 1, &pDb);
+  }else{
+    rc = tdb_open(zDb, 0, 1, &pDb);
+  }
+
   if( rc!=0 ){
     testPrintError("Error opening db \"%s\": %d\n", zDb, rc);
   }else{
@@ -1362,9 +1366,6 @@ static int do_insert(int nArg, char **azArg){
     pData = testDatasourceNew(&defn);
     tdb_lsm_config_work_hook(pDb, do_insert_work_hook, 0);
     tdb_lsm_write_hook(pDb, do_insert_write_hook, (void *)&hook);
-    if( zConfig ){
-      rc = tdb_lsm_config_str(pDb, zConfig);
-    }
 
     if( rc==0 ){
       for(i=0; i<nRow; i++){

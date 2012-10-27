@@ -100,13 +100,25 @@
 **
 ** Pages are stored in variable length compressed form, as follows:
 **
-**     * Number of bytes in compressed page image, as a 3-byte big-endian
-**       integer.
+**     * 3-byte size field containing the size of the compressed page image
+**       in bytes. The most significant bit of each byte of the size field
+**       is always set. The remaining 7 bits are used to store a 21-bit
+**       integer value (in big-endian order - the first byte in the field
+**       contains the most significant 7 bits). Since the maximum allowed 
+**       size of a compressed page image is (2^17 - 1) bytes, there are
+**       actually 4 unused bits in the size field.
+**
+**       In other words, if the size of the compressed page image is nSz,
+**       the header can be serialized as follows:
+**
+**         u8 aHdr[3]
+**         aHdr[0] = 0x80 | (u8)(nSz >> 14);
+**         aHdr[1] = 0x80 | (u8)(nSz >>  7);
+**         aHdr[2] = 0x80 | (u8)(nSz >>  0);
 **
 **     * Compressed page image.
 **
-**     * The number of bytes in the compressed page image, again as a 3-byte
-**       big-endian integer.
+**     * A second copy of the 3-byte record header.
 **
 ** A page number is a byte offset into the database file. So the smallest
 ** possible page number is 8192 (immediately after the two meta-pages).
@@ -117,18 +129,17 @@
 **
 ** Unlike uncompressed pages, compressed page records may span blocks.
 **
-** TODO:
-**
 ** Sometimes, in order to avoid touching sectors that contain synced data
 ** when writing, it is necessary to insert unused space between compressed
 ** page records. This can be done as follows:
 **
-**     * For less than 4 bytes of empty space, a series of 0x00 bytes.
+**     * For less than 6 bytes of empty space, a series of 0x00 bytes.
 **
-**     * For 4 or more bytes, the block of free space begins with an 
-**       0x01 byte, followed by a varint containing the total size of the 
-**       free space. Similarly, it ends with an (ABCD -> BCDA) transformed
-**       varint an a final 0x01 byte.
+**     * For 6 or more bytes of empty space, a record similar to a 
+**       compressed page record is added to the segment. A padding record
+**       is distinguished from a compressed page record by the most 
+**       significant bit of the second byte of the size field, which is
+**       cleared instead of set. 
 */
 #include "lsmInt.h"
 
@@ -935,15 +946,20 @@ static int fsBlockPrev(
 }
 
 /*
-** Encode and decode routines for 24-bit big-endian integers.
+** Encode and decode routines for record size fields.
 */
-static u32 lsmGetU24(u8 *aBuf){
-  return (((u32)aBuf[0]) << 16) + (((u32)aBuf[1]) << 8) + ((u32)aBuf[2]);
+static void putRecordSize(u8 *aBuf, int nByte, int bFree){
+  aBuf[0] = (u8)(nByte >> 14) | 0x80;
+  aBuf[1] = ((u8)(nByte >>  7) & 0x7F) | (bFree ? 0x00 : 0x80);
+  aBuf[2] = (u8)nByte | 0x80;
 }
-static void lsmPutU24(u8 *aBuf, u32 iVal){
-  aBuf[0] = (u8)(iVal >> 16);
-  aBuf[1] = (u8)(iVal >>  8);
-  aBuf[2] = (u8)(iVal >>  0);
+static int getRecordSize(u8 *aBuf, int *pbFree){
+  int nByte;
+  nByte  = (aBuf[0] & 0x7F) << 14;
+  nByte += (aBuf[1] & 0x7F) << 7;
+  nByte += (aBuf[2] & 0x7F);
+  *pbFree = !!(aBuf[1] & 0x80);
+  return nByte;
 }
 
 static int fsSubtractOffset(FileSystem *pFS, i64 iOff, int iSub, i64 *piRes){
@@ -1015,7 +1031,8 @@ static int fsReadPagedata(
   rc = fsReadData(pFS, iOff, aSz, sizeof(aSz));
 
   if( rc==LSM_OK ){
-    pPg->nCompress = (int)lsmGetU24(aSz);
+    int bFree;
+    pPg->nCompress = (int)getRecordSize(aSz, &bFree);
     rc = fsAddOffset(pFS, iOff, 3, &iOff);
     if( rc==LSM_OK ){
       if( pPg->nCompress>pFS->nBuffer ){
@@ -1321,8 +1338,9 @@ static int fsGetPageBefore(FileSystem *pFS, i64 iOff, Pgno *piPrev){
   rc = fsSubtractOffset(pFS, iOff, sizeof(aSz), &iRead);
   if( rc==LSM_OK ) rc = fsReadData(pFS, iRead, aSz, sizeof(aSz));
   if( rc==LSM_OK ){
-    int nSz = lsmGetU24(aSz) + sizeof(aSz)*2;
-    rc = fsSubtractOffset(pFS, iOff, nSz, piPrev);
+    int bFree;
+    int nSz = getRecordSize(aSz, &bFree);
+    rc = fsSubtractOffset(pFS, iOff, nSz + sizeof(aSz)*2, piPrev);
   }
 
   return rc;
@@ -1772,7 +1790,7 @@ int lsmFsPagePersist(Page *pPg){
       rc = fsCompressIntoBuffer(pFS, pPg);
 
       /* Serialize the compressed size into buffer aSz[] */
-      lsmPutU24(aSz, pPg->nCompress);
+      putRecordSize(aSz, pPg->nCompress, 0);
 
       /* Write the serialized page record into the database file. */
       pPg->iPg = fsAppendData(pFS, pPg->pSeg, aSz, sizeof(aSz), &rc);
