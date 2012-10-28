@@ -133,7 +133,13 @@
 ** when writing, it is necessary to insert unused space between compressed
 ** page records. This can be done as follows:
 **
-**     * For less than 6 bytes of empty space, a series of 0x00 bytes.
+**     * For less than 6 bytes of empty space, the first and last byte
+**       of the free space contain the total number of free bytes. For
+**       example:
+**
+**         Block of 4 free bytes: 0x04 0x?? 0x?? 0x04
+**         Block of 2 free bytes: 0x02 0x02
+**         A single free byte:    0x01
 **
 **     * For 6 or more bytes of empty space, a record similar to a 
 **       compressed page record is added to the segment. A padding record
@@ -888,6 +894,13 @@ static int fsBlockNext(
 }
 
 /*
+** Return the page number of the last page on the same block as page iPg.
+*/
+Pgno fsLastPageOnPagesBlock(FileSystem *pFS, Pgno iPg){
+  return fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iPg));
+}
+
+/*
 ** This function is only called in compressed database mode.
 */
 static int fsReadData(
@@ -902,7 +915,7 @@ static int fsReadData(
 
   assert( pFS->pCompress );
 
-  iEob = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iOff)) + 1;
+  iEob = fsLastPageOnPagesBlock(pFS, iOff) + 1;
   nRead = LSM_MIN(iEob - iOff, nData);
 
   rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aData, nRead);
@@ -990,7 +1003,7 @@ static int fsAddOffset(FileSystem *pFS, i64 iOff, int iAdd, i64 *piRes){
 
   assert( pFS->pCompress );
 
-  iEob = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iOff));
+  iEob = fsLastPageOnPagesBlock(pFS, iOff);
   if( (iOff+iAdd)<=iEob ){
     *piRes = (iOff+iAdd);
     return LSM_OK;
@@ -1039,7 +1052,12 @@ static int fsReadPagedata(
 
   if( rc==LSM_OK ){
     int bFree;
-    pPg->nCompress = (int)getRecordSize(aSz, &bFree);
+    if( aSz[0] & 0x80 ){
+      pPg->nCompress = (int)getRecordSize(aSz, &bFree);
+    }else{
+      pPg->nCompress = (int)aSz[0] - sizeof(aSz)*2;
+      bFree = 1;
+    }
     if( bFree ){
       if( pnSpace ){
         *pnSpace = pPg->nCompress + sizeof(aSz)*2;
@@ -1363,10 +1381,17 @@ static int fsGetPageBefore(FileSystem *pFS, i64 iOff, Pgno *piPrev){
 
   rc = fsSubtractOffset(pFS, iOff, sizeof(aSz), &iRead);
   if( rc==LSM_OK ) rc = fsReadData(pFS, iRead, aSz, sizeof(aSz));
+
   if( rc==LSM_OK ){
     int bFree;
-    int nSz = getRecordSize(aSz, &bFree);
-    rc = fsSubtractOffset(pFS, iOff, nSz + sizeof(aSz)*2, piPrev);
+    int nSz;
+    if( aSz[2] & 0x80 ){
+      nSz = getRecordSize(aSz, &bFree) + sizeof(aSz)*2;
+    }else{
+      nSz = (int)(aSz[2] & 0x7F);
+      bFree = 1;
+    }
+    rc = fsSubtractOffset(pFS, iOff, nSz, piPrev);
   }
 
   return rc;
@@ -1560,7 +1585,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
     ** to the lAppend list.
     */
     iBlk = fsPageToBlock(pFS, p->iLastPg);
-    if( fsLastPageOnBlock(pFS, fsPageToBlock(pFS, p->iLastPg) )!=p->iLastPg ){
+    if( fsLastPageOnPagesBlock(pFS, p->iLastPg)!=p->iLastPg ){
       int i;
       Pgno *aiAppend = pFS->pDb->pWorker->aiAppend;
       for(i=0; i<LSM_APPLIST_SZ; i++){
@@ -1749,7 +1774,7 @@ static Pgno fsAppendData(
     iRet = iApp;
 
     /* Write as much data as is possible at iApp (usually all of it). */
-    iLastOnBlock = fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iApp));
+    iLastOnBlock = fsLastPageOnPagesBlock(pFS, iApp);
     if( rc==LSM_OK ){
       int nSpace = iLastOnBlock - iApp + 1;
       nWrite = LSM_MIN(nData, nSpace);
@@ -1892,7 +1917,14 @@ int lsmFsPagePersist(Page *pPg){
 }
 
 /*
-** Add a padding record to the segment passed as the third argument.
+** For non-compressed databases, this function is a no-op. For compressed
+** databases, it adds a padding record to the segment passed as the third
+** argument.
+**
+** The size of the padding records is selected so that the last byte 
+** written is the last byte of a disk sector. This means that if a 
+** snapshot is taken and checkpointed, subsequent worker processes will
+** not write to any sector that contains checkpointed data.
 */
 int lsmFsSortedPadding(
   FileSystem *pFS, 
@@ -1906,42 +1938,33 @@ int lsmFsSortedPadding(
     int nPad;                       /* Bytes of padding required */
     u8 aSz[3];
 
-    nPad = pFS->szSector - 1 - (iLast % pFS->szSector);
-    if( nPad==0 
-     || (nPad==4 && iLast==fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iLast)) )
-    ){
-      return LSM_OK;
-    }
-
-    iLast2 = (1 + (iLast + 6)/pFS->szSector) * pFS->szSector - 1;
+    iLast2 = (1 + iLast/pFS->szSector) * pFS->szSector - 1;
     assert( fsPageToBlock(pFS, iLast)==fsPageToBlock(pFS, iLast2) );
     nPad = iLast2 - iLast;
 
-    if( iLast2>fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iLast)) ){
+    if( iLast2>fsLastPageOnPagesBlock(pFS, iLast) ){
       nPad -= 4;
-      if( nPad<6 ){
-        nPad += (pFS->szSector - 4);
-      }
     }
-    assert( nPad>=6 );
+    assert( nPad>=0 );
 
-#if 0
-    printf("padding segment with %d bytes at %d...\n", nPad, (int)iLast);
-#endif
-
-    pSeg->nSize += nPad;
-    nPad -= 6;
-    putRecordSize(aSz, nPad, 1);
-
-    fsAppendData(pFS, pSeg, aSz, sizeof(aSz), &rc);
-    memset(pFS->aBuffer, 0, nPad);
-    fsAppendData(pFS, pSeg, pFS->aBuffer, nPad, &rc);
-    fsAppendData(pFS, pSeg, aSz, sizeof(aSz), &rc);
-
+    if( nPad>=6 ){
+      pSeg->nSize += nPad;
+      nPad -= 6;
+      putRecordSize(aSz, nPad, 1);
+      fsAppendData(pFS, pSeg, aSz, sizeof(aSz), &rc);
+      memset(pFS->aBuffer, 0, nPad);
+      fsAppendData(pFS, pSeg, pFS->aBuffer, nPad, &rc);
+      fsAppendData(pFS, pSeg, aSz, sizeof(aSz), &rc);
+    }else if( nPad>0 ){
+      u8 aBuf[5] = {0,0,0,0,0};
+      aBuf[0] = (u8)nPad;
+      aBuf[nPad-1] = (u8)nPad;
+      fsAppendData(pFS, pSeg, aBuf, nPad, &rc);
+    }
 
     assert( rc!=LSM_OK 
-     || pSeg->iLastPg==fsLastPageOnBlock(pFS, fsPageToBlock(pFS, pSeg->iLastPg))
-     || ((pSeg->iLastPg + 1) % pFS->szSector)==0
+        || pSeg->iLastPg==fsLastPageOnPagesBlock(pFS, pSeg->iLastPg)
+        || ((pSeg->iLastPg + 1) % pFS->szSector)==0
     );
   }
 
@@ -2135,7 +2158,7 @@ static void checkBlocks(
         }
       }
 
-      if( bExtra && iLast==fsLastPageOnBlock(pFS, fsPageToBlock(pFS, iLast)) ){
+      if( bExtra && iLast==fsLastPageOnPagesBlock(pFS, iLast) ){
         fsBlockNext(pFS, iLastBlk, &iBlk);
         aUsed[iBlk-1] = 1;
       }
