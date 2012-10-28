@@ -370,6 +370,7 @@ static void doSystemCrash(LsmDb *pDb){
 
           case 1:
             testPrngArray(iSeed++, (u32 *)aOld, pDb->szSector/4);
+            /* Fall-through */
 
           case 2:
             pEnv->xWrite(

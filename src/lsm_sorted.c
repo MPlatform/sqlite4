@@ -3275,6 +3275,13 @@ static int mergeWorkerFinishHierarchy(
   return rc;
 }
 
+static int mergeWorkerAddPadding(
+  MergeWorker *pMW                /* Merge worker object */
+){
+  FileSystem *pFS = pMW->pDb->pFS;
+  return lsmFsSortedPadding(pFS, pMW->pDb->pWorker, &pMW->pLevel->lhs);
+}
+
 static int keyszToSkip(FileSystem *pFS, int nKey){
   int nPgsz;                /* Nominal database page size */
   nPgsz = lsmFsPageSize(pFS);
@@ -3447,7 +3454,7 @@ static int mergeWorkerWrite(
   int nData;                      /* Size of buffer aData[] in bytes */
   int nRec;                       /* Number of records on page pPg */
   int iFPtr;                      /* Value of pointer in footer of pPg */
-  int iRPtr;                      /* Value of pointer written into record */
+  int iRPtr = 0;                  /* Value of pointer written into record */
   int iOff;                       /* Current write offset within page pPg */
   Segment *pSeg;                  /* Segment being written */
   int flags = 0;                  /* If != 0, flags value for page footer */
@@ -3623,6 +3630,7 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
   if( rc==LSM_OK ) rc = mergeWorkerPersistAndRelease(pMW);
   if( rc==LSM_OK ) rc = mergeWorkerBtreeIndirect(pMW);
   if( rc==LSM_OK ) rc = mergeWorkerFinishHierarchy(pMW);
+  if( rc==LSM_OK ) rc = mergeWorkerAddPadding(pMW);
 
   lsmFree(pMW->pDb->pEnv, pMW->aGobble);
   pMW->aGobble = 0;
