@@ -204,8 +204,9 @@ void testSetupSavedLsmdb(
 ** identical to zExpect1 or, if it is not NULL, zExpect2, the test passes.
 ** Otherwise, print an error message and set *pRc to 1.
 */
-void testCompareCksumLsmdb(
+static void testCompareCksumLsmdb(
   const char *zFile,              /* Path to LSM database */
+  int bCompress,                  /* True if db is compressed */
   const char *zExpect1,           /* Expected checksum 1 */
   const char *zExpect2,           /* Expected checksum 2 (or NULL) */
   int *pRc                        /* IN/OUT: Test case error code */
@@ -214,7 +215,7 @@ void testCompareCksumLsmdb(
     char zCksum[TEST_CKSUM_BYTES];
     TestDb *pDb;
 
-    pDb = testOpen("lsm", 0, pRc);
+    *pRc = tdb_lsm_open((bCompress?"compression=1 mmap=0":""), zFile, 0, &pDb);
     testCksumDatabase(pDb, zCksum);
     testClose(&pDb);
 
@@ -249,9 +250,8 @@ void testCompareCksumLsmdb(
 ** This test verifies that if a system crash occurs while doing merge work
 ** on the db, no data is lost.
 */
-static void crash_test1(int *pRc){
+static void crash_test1(int bCompress, int *pRc){
   const char *DBNAME = "testdb.lsm";
-
   const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 200, 200};
 
   const int nRow = 5000;          /* Database size */
@@ -264,16 +264,24 @@ static void crash_test1(int *pRc){
   Datasource *pData;
   CksumDb *pCksumDb;
   TestDb *pDb;
+  char *zCfg;
+
+  const char *azConfig[2] = {
+    "page_size=1024 block_size=65536 write_buffer=16384 safety=2 mmap=0", 
+    "page_size=1024 block_size=65536 write_buffer=16384 safety=2 "
+    " compression=1 mmap=0"
+  };
+  assert( bCompress==0 || bCompress==1 );
 
   /* Allocate datasource. And calculate the expected checksums. */
   pData = testDatasourceNew(&defn);
   pCksumDb = testCksumArrayNew(pData, nRow, nRow, 1);
 
   /* Setup and save the initial database. */
-  testSetupSavedLsmdb(
-      "page_size=1024 block_size=65536 write_buffer=16384 nmerge=7", 
-      DBNAME, pData, 5000, pRc
-  );
+
+  zCfg = testMallocPrintf("%s nmerge=7", azConfig[bCompress]);
+  testSetupSavedLsmdb(zCfg, DBNAME, pData, 5000, pRc);
+  testFree(zCfg);
 
   for(i=0; i<nIter && *pRc==0; i++){
     int iWork;
@@ -283,7 +291,7 @@ static void crash_test1(int *pRc){
 
     /* Restore and open the database. */
     testRestoreLsmdb(DBNAME);
-    testrc = tdb_lsm_open("safety=2", DBNAME, 0, &pDb);
+    testrc = tdb_lsm_open(azConfig[bCompress], DBNAME, 0, &pDb);
     assert( testrc==0 );
 
     /* Call lsm_work() on the db */
@@ -298,7 +306,8 @@ static void crash_test1(int *pRc){
     tdb_close(pDb);
 
     /* Check that the database content is still correct */
-    testCompareCksumLsmdb(DBNAME, testCksumArrayGet(pCksumDb, nRow), 0, pRc);
+    testCompareCksumLsmdb(DBNAME, 
+        bCompress, testCksumArrayGet(pCksumDb, nRow), 0, pRc);
   }
 
   testCksumArrayFree(pCksumDb);
@@ -309,7 +318,7 @@ static void crash_test1(int *pRc){
 ** This test verifies that if a system crash occurs while committing a
 ** transaction to the log file, no earlier transactions are lost or damaged.
 */
-static void crash_test2(int *pRc){
+static void crash_test2(int bCompress, int *pRc){
   const char *DBNAME = "testdb.lsm";
   const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 1000, 1000};
 
@@ -353,7 +362,7 @@ static void crash_test2(int *pRc){
     tdb_close(pDb);
 
     /* Check that no data was lost when the system crashed. */
-    testCompareCksumLsmdb(DBNAME, 
+    testCompareCksumLsmdb(DBNAME, bCompress,
       testCksumArrayGet(pCksumDb, 100 + iIns),
       testCksumArrayGet(pCksumDb, 100 + iIns + 1),
       pRc
@@ -369,7 +378,7 @@ static void crash_test2(int *pRc){
 ** the database, data is not lost (assuming that any writes not synced
 ** to the db have been synced into the log file).
 */
-static void crash_test3(int *pRc){
+static void crash_test3(int bCompress, int *pRc){
   const char *DBNAME = "testdb.lsm";
   const int nIter = 100;
   const DatasourceDefn defn = {TEST_DATASOURCE_RANDOM, 12, 16, 1000, 1000};
@@ -403,7 +412,7 @@ static void crash_test3(int *pRc){
 
       /* Open the database and check that the crash did not cause any
       ** data loss.  */
-      testCompareCksumLsmdb(DBNAME, 
+      testCompareCksumLsmdb(DBNAME, bCompress,
         testCksumArrayGet(pCksumDb, 110 + iOpen*10), 0,
         pRc
       );
@@ -417,18 +426,20 @@ static void crash_test3(int *pRc){
 void do_crash_test(const char *zPattern, int *pRc){
   struct Test {
     const char *zTest;
-    void (*x)(int *);
+    void (*x)(int, int *);
+    int bCompress;
   } aTest [] = {
-    { "crash.lsm.1", crash_test1 },
-    { "crash.lsm.2", crash_test2 },
-    { "crash.lsm.3", crash_test3 },
+    { "crash.lsm.1",     crash_test1, 0 },
+    { "crash.lsm_zip.1", crash_test1, 1 },
+    { "crash.lsm.2",     crash_test2, 0 },
+    { "crash.lsm.3",     crash_test3, 0 },
   };
   int i;
 
   for(i=0; *pRc==LSM_OK && i<ArraySize(aTest); i++){
     struct Test *p = &aTest[i];
     if( testCaseBegin(pRc, zPattern, "%s", p->zTest) ){
-      p->x(pRc);
+      p->x(p->bCompress, pRc);
       testCaseFinish(*pRc);
     }
   }

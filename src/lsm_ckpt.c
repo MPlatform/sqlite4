@@ -55,16 +55,17 @@
 **
 **     0. Age of the level.
 **     1. The number of right-hand segments (nRight, possibly 0),
-**     2. Segment record for left-hand segment (4 integers defined below),
-**     3. Segment record for each right-hand segment (4 integers defined below),
+**     2. Segment record for left-hand segment (8 integers defined below),
+**     3. Segment record for each right-hand segment (8 integers defined below),
 **     4. If nRight>0, The number of segments involved in the merge
 **     5. if nRight>0, Current nSkip value (see Merge structure defn.),
 **     6. For each segment in the merge:
-**        5a. Page number of next cell to read during merge
+**        5a. Page number of next cell to read during merge (this field
+**            is 64-bits - 2 integers)
 **        5b. Cell number of next cell to read during merge
-**     7. Page containing current split-key.
+**     7. Page containing current split-key (64-bits - 2 integers).
 **     8. Cell within page containing current split-key.
-**     9. Current pointer value.
+**     9. Current pointer value (64-bits - 2 integers).
 **
 **   The freelist. 
 **
@@ -84,7 +85,8 @@
 **     1. Checksum value 1.
 **     2. Checksum value 2.
 **
-** In the above, a segment record is:
+** In the above, a segment record consists of the following four 64-bit 
+** fields (converted to 2 * u32 by storing the MSW followed by LSW):
 **
 **     1. First page of array,
 **     2. Last page of array,
@@ -107,11 +109,17 @@
 **   * For each level in the database that is undergoing a merge, add 
 **     the number of segments on the rhs of the level.
 **
-** A level record not undergoing a merge is 6 integers. A level record 
+** A level record not undergoing a merge is 10 integers. A level record 
 ** with nRhs rhs segments and (nRhs+1) input segments (i.e. including the 
-** separators from the next level) is (6*nRhs+12) integers. The maximum
-** per right-hand-side level is therefore 12 integers. So the maximum
-** size of all level records in a checkpoint is 12*40=480 integers.
+** separators from the next level) is (11*nRhs+20) integers. The maximum
+** per right-hand-side level is therefore 21 integers. So the maximum
+** size of all level records in a checkpoint is 21*40=820 integers.
+**
+** TODO: Before pointer values were changed from 32 to 64 bits, the above
+** used to come to 420 bytes - leaving significant space for a free-list
+** prefix. No more. To fix this, reduce the size of the level records in
+** a db snapshot, and improve management of the free-list tail in 
+** lsm_sorted.c. 
 */
 #define LSM_MAX_RHS_SEGMENTS 40
 
@@ -161,9 +169,7 @@ static const int one = 1;
 /* Sizes, in integers, of various parts of the checkpoint. */
 #define CKPT_HDR_SIZE         9
 #define CKPT_LOGPTR_SIZE      4
-#define CKPT_SEGMENT_SIZE     4
-#define CKPT_CKSUM_SIZE       2
-#define CKPT_APPENDLIST_SIZE  LSM_APPLIST_SZ
+#define CKPT_APPENDLIST_SIZE  (LSM_APPLIST_SZ * 2)
 
 /* A #define to describe each integer in the checkpoint header. */
 #define CKPT_HDR_ID_MSW   0
@@ -262,6 +268,24 @@ static void ckptAddChecksum(CkptBuffer *p, int nCkpt, int *pRc){
   }
 }
 
+static void ckptAppend64(CkptBuffer *p, int *piOut, i64 iVal, int *pRc){
+  int iOut = *piOut;
+  ckptSetValue(p, iOut++, (iVal >> 32) & 0xFFFFFFFF, pRc);
+  ckptSetValue(p, iOut++, (iVal & 0xFFFFFFFF), pRc);
+  *piOut = iOut;
+}
+
+static i64 ckptRead64(u32 *a){
+  return (((i64)a[0]) << 32) + (i64)a[1];
+}
+
+static i64 ckptGobble64(u32 *a, int *piIn){
+  int iIn = *piIn;
+  *piIn += 2;
+  return ckptRead64(&a[iIn]);
+}
+
+
 /*
 ** Append a 6-value segment record corresponding to pSeg to the checkpoint 
 ** buffer passed as the third argument.
@@ -272,14 +296,10 @@ static void ckptExportSegment(
   int *piOut, 
   int *pRc
 ){
-  int iOut = *piOut;
-
-  ckptSetValue(p, iOut++, pSeg->iFirst, pRc);
-  ckptSetValue(p, iOut++, pSeg->iLast, pRc);
-  ckptSetValue(p, iOut++, pSeg->iRoot, pRc);
-  ckptSetValue(p, iOut++, pSeg->nSize, pRc);
-
-  *piOut = iOut;
+  ckptAppend64(p, piOut, pSeg->iFirst, pRc);
+  ckptAppend64(p, piOut, pSeg->iLastPg, pRc);
+  ckptAppend64(p, piOut, pSeg->iRoot, pRc);
+  ckptAppend64(p, piOut, pSeg->nSize, pRc);
 }
 
 static void ckptExportLevel(
@@ -308,12 +328,12 @@ static void ckptExportLevel(
     ckptSetValue(p, iOut++, pMerge->nInput, pRc);
     ckptSetValue(p, iOut++, pMerge->nSkip, pRc);
     for(i=0; i<pMerge->nInput; i++){
-      ckptSetValue(p, iOut++, pMerge->aInput[i].iPg, pRc);
+      ckptAppend64(p, &iOut, pMerge->aInput[i].iPg, pRc);
       ckptSetValue(p, iOut++, pMerge->aInput[i].iCell, pRc);
     }
-    ckptSetValue(p, iOut++, pMerge->splitkey.iPg, pRc);
+    ckptAppend64(p, &iOut, pMerge->splitkey.iPg, pRc);
     ckptSetValue(p, iOut++, pMerge->splitkey.iCell, pRc);
-    ckptSetValue(p, iOut++, pMerge->iCurrentPtr, pRc);
+    ckptAppend64(p, &iOut, pMerge->iCurrentPtr, pRc);
   }
 
   *piOut = iOut;
@@ -335,8 +355,7 @@ static void ckptExportLog(
 
   if( bFlush ){
     i64 iOff = pDb->treehdr.iOldLog;
-    ckptSetValue(p, iOut++, (iOff >> 32) & 0xFFFFFFFF, pRc);
-    ckptSetValue(p, iOut++, (iOff & 0xFFFFFFFF), pRc);
+    ckptAppend64(p, &iOut, iOff, pRc);
     ckptSetValue(p, iOut++, pDb->treehdr.oldcksum0, pRc);
     ckptSetValue(p, iOut++, pDb->treehdr.oldcksum1, pRc);
   }else{
@@ -355,13 +374,11 @@ static void ckptExportAppendlist(
   int *pRc                        /* IN/OUT: Error code */
 ){
   int i;
-  int iOut = *piOut;
-  u32 *aiAppend = db->pWorker->aiAppend;
+  Pgno *aiAppend = db->pWorker->aiAppend;
 
-  for(i=0; i<CKPT_APPENDLIST_SIZE; i++){
-    ckptSetValue(p, iOut++, aiAppend[i], pRc);
+  for(i=0; i<LSM_APPLIST_SZ; i++){
+    ckptAppend64(p, piOut, aiAppend[i], pRc);
   }
-  *piOut = iOut;
 };
 
 static int ckptExportSnapshot( 
@@ -465,16 +482,13 @@ static void ckptNewSegment(
   int *piIn,
   Segment *pSegment               /* Populate this structure */
 ){
-  int iIn = *piIn;
-
-  assert( pSegment->iFirst==0 && pSegment->iLast==0 );
+  assert( pSegment->iFirst==0 && pSegment->iLastPg==0 );
   assert( pSegment->nSize==0 && pSegment->iRoot==0 );
-  pSegment->iFirst = aIn[iIn++];
-  pSegment->iLast = aIn[iIn++];
-  pSegment->iRoot = aIn[iIn++];
-  pSegment->nSize = aIn[iIn++];
-
-  *piIn = iIn;
+  pSegment->iFirst = ckptGobble64(aIn, piIn);
+  pSegment->iLastPg = ckptGobble64(aIn, piIn);
+  pSegment->iRoot = ckptGobble64(aIn, piIn);
+  pSegment->nSize = ckptGobble64(aIn, piIn);
+  assert( pSegment->iFirst );
 }
 
 static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
@@ -495,15 +509,14 @@ static int ckptSetupMerge(lsm_db *pDb, u32 *aInt, int *piIn, Level *pLevel){
   pMerge->aInput = (MergeInput *)&pMerge[1];
   pMerge->nInput = nInput;
   pMerge->iOutputOff = -1;
-  pMerge->bHierReadonly = 1;
   pMerge->nSkip = (int)aInt[iIn++];
   for(i=0; i<nInput; i++){
-    pMerge->aInput[i].iPg = (Pgno)aInt[iIn++];
+    pMerge->aInput[i].iPg = ckptGobble64(aInt, &iIn);
     pMerge->aInput[i].iCell = (int)aInt[iIn++];
   }
-  pMerge->splitkey.iPg = (Pgno)aInt[iIn++];
+  pMerge->splitkey.iPg = ckptGobble64(aInt, &iIn);
   pMerge->splitkey.iCell = (int)aInt[iIn++];
-  pMerge->iCurrentPtr = (int)aInt[iIn++];
+  pMerge->iCurrentPtr = ckptGobble64(aInt, &iIn);
 
   /* Set *piIn and return LSM_OK. */
   *piIn = iIn;
@@ -889,7 +902,7 @@ static void ckptLoadEmpty(lsm_db *pDb){
     0,                  /* CKPT_HDR_OVFL */
     0,                  /* CKPT_HDR_NWRITE */
     0, 0, 1234, 5678,   /* The log pointer and initial checksum */
-    0, 0, 0, 0,         /* The append list */
+    0,0,0,0, 0,0,0,0,   /* The append list */
     0,                  /* The free block list */
     0, 0                /* Space for checksum values */
   };
@@ -1051,7 +1064,7 @@ int lsmCheckpointDeserialize(
   pNew = (Snapshot *)lsmMallocZeroRc(pDb->pEnv, sizeof(Snapshot), &rc);
   if( rc==LSM_OK ){
     int nFree;
-    int nCopy;
+    int i;
     int nLevel = (int)aCkpt[CKPT_HDR_NLEVEL];
     int iIn = CKPT_HDR_SIZE + CKPT_APPENDLIST_SIZE + CKPT_LOGPTR_SIZE;
 
@@ -1062,8 +1075,10 @@ int lsmCheckpointDeserialize(
     pNew->iLogOff = lsmCheckpointLogOffset(aCkpt);
 
     /* Make a copy of the append-list */
-    nCopy = sizeof(u32) * LSM_APPLIST_SZ;
-    memcpy(pNew->aiAppend, &aCkpt[CKPT_HDR_SIZE+CKPT_LOGPTR_SIZE], nCopy);
+    for(i=0; i<LSM_APPLIST_SZ; i++){
+      u32 *a = &aCkpt[CKPT_HDR_SIZE + CKPT_LOGPTR_SIZE + i*2];
+      pNew->aiAppend[i] = ckptRead64(a);
+    }
 
     /* Copy the free-list */
     if( bInclFreelist ){

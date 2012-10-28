@@ -33,6 +33,7 @@ typedef long long int lsm_i64;              /* 64-bit signed integer type */
 
 /* Forward reference */
 typedef struct lsm_env lsm_env;             /* Runtime environment */
+typedef struct lsm_compress lsm_compress;   /* Compression library functions */
 
 /* Candidate values for the 3rd argument to lsm_env.xLock() */
 #define LSM_LOCK_UNLOCK 0
@@ -44,7 +45,7 @@ typedef struct lsm_env lsm_env;             /* Runtime environment */
 */
 struct lsm_env {
   int nByte;                 /* Size of this structure in bytes */
-  int iVersion;              /* Version number of this structure */
+  int iVersion;              /* Version number of this structure (1) */
   /****** file i/o ***********************************************/
   void *pVfsCtx;
   int (*xFullpath)(lsm_env*, const char *, char *, int *);
@@ -80,6 +81,23 @@ struct lsm_env {
   int (*xMutexNotHeld)(lsm_mutex *);        /* Return true if mutex not held */
   /****** other ****************************************************/
   int (*xSleep)(lsm_env*, int microseconds);
+
+  /* New fields may be added in future releases, in which case the
+  ** iVersion value will increase. */
+};
+
+/*
+** The compression library interface.
+*/
+struct lsm_compress {
+  int nByte;                 /* Size of this structure in bytes */
+  int iVersion;              /* Version number of this structure (1) */
+
+  /* Compression library functions */
+  void *pCtx;
+  int (*xBound)(void *, int nSrc);
+  int (*xCompress)(void *, char *, int *, const char *, int);
+  int (*xUncompress)(void *, char *, int *, const char *, int);
 
   /* New fields may be added in future releases, in which case the
   ** iVersion value will increase. */
@@ -192,6 +210,24 @@ int lsm_config(lsm_db *, int, ...);
 **     makes certain parts of the lsm code easier to test.
 **
 **   LSM_CONFIG_MULTIPLE_PROCESSES
+**     A read/write boolean parameter. This parameter may only be set before
+**     lsm_open() has been called. If true, the library uses shared-memory
+**     and posix advisory locks to co-ordinate access by clients from within
+**     multiple processes. Otherwise, if false, all database clients must be 
+**     located in the same process. The default value is true.
+**
+**   LSM_CONFIG_SET_COMPRESSION
+**     Set the compression methods used to compress and decompress database
+**     content. The argument to this option should be a pointer to a structure
+**     of type lsm_compress. The lsm_config() method takes a copy of the 
+**     structures contents.
+**
+**     This option may only be used before lsm_open() is called. Invoking it
+**     after lsm_open() has been called results in an LSM_MISUSE error.
+**
+**   LSM_CONFIG_GET_COMPRESSION
+**     Query the compression methods used to compress and decompress database
+**     content.
 */
 #define LSM_CONFIG_WRITE_BUFFER        1
 #define LSM_CONFIG_PAGE_SIZE           2
@@ -205,6 +241,9 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_MAX_FREELIST       10
 #define LSM_CONFIG_MULTIPLE_PROCESSES 11
 #define LSM_CONFIG_AUTOCHECKPOINT     12
+
+#define LSM_CONFIG_SET_COMPRESSION    13
+#define LSM_CONFIG_GET_COMPRESSION    14
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1

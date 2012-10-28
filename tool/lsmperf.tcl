@@ -191,8 +191,8 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
 }
 
 do_write_test x.png 600 50000 50000 20 {
-  lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0 write_buffer=2097152"
-  LevelDB leveldb
+ lsm-st     "mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
+ lsm-st2    "page_size=1024 mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
 }
 
 # lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=8192000"

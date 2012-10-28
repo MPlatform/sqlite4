@@ -103,8 +103,8 @@ typedef unsigned int u32;
 typedef lsm_i64 i64;
 typedef unsigned long long int u64;
 
-/* A page number is an integer. */
-typedef int Pgno;
+/* A page number is a 64-bit integer. */
+typedef i64 Pgno;
 
 #ifdef LSM_DEBUG
 int lsmErrorBkpt(int);
@@ -143,7 +143,7 @@ int lsmErrorBkpt(int);
 ** a checkpoint (the remainder are stored as a system record in the LSM).
 ** See also LSM_CONFIG_MAX_FREELIST.
 */
-#define LSM_MAX_FREELIST_ENTRIES 100
+#define LSM_MAX_FREELIST_ENTRIES 24
 
 #define LSM_ATTEMPTS_BEFORE_PROTOCOL 10000
 
@@ -304,6 +304,7 @@ struct lsm_db {
   int bMmap;                      /* Configured by LSM_CONFIG_MMAP */
   int nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
+  lsm_compress compress;          /* Compression callbacks */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
@@ -342,9 +343,9 @@ struct lsm_db {
 
 struct Segment {
   Pgno iFirst;                     /* First page of this run */
-  Pgno iLast;                      /* Last page of this run */
-  Pgno iRoot;                     /* Root page number (if any) */
-  int nSize;                      /* Size of this run in pages */
+  Pgno iLastPg;                    /* Last page of this run */
+  Pgno iRoot;                      /* Root page number (if any) */
+  int nSize;                       /* Size of this run in pages */
 };
 
 /*
@@ -373,9 +374,6 @@ struct Level {
 ** It is assumed that code that uses an instance of this structure has
 ** access to the associated Level struct.
 **
-** bHierReadonly:
-**   True if the b-tree hierarchy is currently read-only.
-**
 ** iOutputOff:
 **   The byte offset to write to next within the last page of the 
 **   output segment.
@@ -391,7 +389,6 @@ struct Merge {
   int nSkip;                      /* Number of separators entries to skip */
   int iOutputOff;                 /* Write offset on output page */
   Pgno iCurrentPtr;               /* Current pointer value */
-  int bHierReadonly;              /* True if b-tree heirarchies are read-only */
 };
 
 /* 
@@ -485,7 +482,7 @@ struct Snapshot {
 
   /* Used by worker snapshots only */
   int nBlock;                     /* Number of blocks in database file */
-  u32 aiAppend[LSM_APPLIST_SZ];   /* Append point list */
+  Pgno aiAppend[LSM_APPLIST_SZ];  /* Append point list */
   Freelist freelist;              /* Free block list */
   int nFreelistOvfl;              /* Number of extra free-list entries in LSM */
   u32 nWrite;                     /* Total number of pages written to disk */
@@ -622,7 +619,7 @@ void lsmFsGobble(lsm_db *, Segment *, Pgno *, int);
 int lsmFsSortedDelete(FileSystem *, Snapshot *, int, Segment *);
 int lsmFsSortedFinish(FileSystem *, Segment *);
 int lsmFsSortedAppend(FileSystem *, Snapshot *, Segment *, Page **);
-int lsmFsPhantomMaterialize(FileSystem *, Snapshot *, Segment *);
+int lsmFsSortedPadding(FileSystem *, Snapshot *, Segment *);
 
 /* Functions to retrieve the lsm_env pointer from a FileSystem or Page object */
 lsm_env *lsmFsEnv(FileSystem *);
@@ -634,10 +631,10 @@ int lsmFsSectorSize(FileSystem *);
 void lsmSortedSplitkey(lsm_db *, Level *, int *);
 
 /* Reading sorted run content. */
+int lsmFsDbPageLast(FileSystem *pFS, Segment *pSeg, Page **ppPg);
 int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
 int lsmFsDbPageNext(Segment *, Page *, int eDir, Page **);
 
-int lsmFsPageWrite(Page *);
 u8 *lsmFsPageData(Page *, int *);
 int lsmFsPageRelease(Page *);
 int lsmFsPagePersist(Page *);
@@ -652,6 +649,7 @@ int lsmFsMetaPageRelease(MetaPage *);
 u8 *lsmFsMetaPageData(MetaPage *, int *);
 
 #ifdef LSM_DEBUG
+int lsmFsDbPageIsLast(Segment *pSeg, Page *pPg);
 int lsmFsIntegrityCheck(lsm_db *);
 #endif
 
@@ -700,7 +698,6 @@ void lsmSortedRemap(lsm_db *pDb);
 
 void lsmSortedFreeLevel(lsm_env *pEnv, Level *);
 
-int lsmSortedFlushDb(lsm_db *);
 int lsmSortedAdvanceAll(lsm_db *pDb);
 
 int lsmSortedLoadMerge(lsm_db *, Level *, u32 *, int *);

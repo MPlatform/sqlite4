@@ -370,6 +370,7 @@ static void doSystemCrash(LsmDb *pDb){
 
           case 1:
             testPrngArray(iSeed++, (u32 *)aOld, pDb->szSector/4);
+            /* Fall-through */
 
           case 2:
             pEnv->xWrite(
@@ -389,6 +390,61 @@ static void doSystemCrash(LsmDb *pDb){
 }
 /*
 ** End test VFS code.
+**************************************************************************
+*************************************************************************/
+
+/*************************************************************************
+**************************************************************************
+** Begin test compression hooks.
+*/
+
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+
+static int testZipBound(void *pCtx, int nSrc){
+  return compressBound(nSrc);
+}
+
+static int testZipCompress(
+  void *pCtx,                     /* Context pointer */
+  char *aOut, int *pnOut,         /* OUT: Buffer containing compressed data */
+  const char *aIn, int nIn        /* Buffer containing input data */
+){
+  uLongf n = *pnOut;              /* In/out buffer size for compress() */
+  int rc;                         /* compress() return code */
+ 
+  rc = compress((Bytef*)aOut, &n, (Bytef*)aIn, nIn);
+  *pnOut = n;
+  return (rc==Z_OK ? 0 : LSM_ERROR);
+}
+
+static int testZipUncompress(
+  void *pCtx,                     /* Context pointer */
+  char *aOut, int *pnOut,         /* OUT: Buffer containing uncompressed data */
+  const char *aIn, int nIn        /* Buffer containing input data */
+){
+  uLongf n = *pnOut;              /* In/out buffer size for uncompress() */
+  int rc;                         /* uncompress() return code */
+
+  rc = uncompress((Bytef*)aOut, &n, (Bytef*)aIn, nIn);
+  *pnOut = n;
+  return (rc==Z_OK ? 0 : LSM_ERROR);
+}
+
+static int testConfigureCompression(lsm_db *pDb){
+  static lsm_compress zip = {
+    1, sizeof(lsm_compress),
+    0,                            /* Context pointer (unused) */
+    testZipBound,                 /* xBound method */
+    testZipCompress,              /* xCompress method */
+    testZipUncompress             /* xUncompress method */
+  };
+  return lsm_config(pDb, LSM_CONFIG_SET_COMPRESSION, &zip);
+}
+#endif /* ifdef HAVE_ZLIB */
+
+/*
+** End test compression hooks.
 **************************************************************************
 *************************************************************************/
 
@@ -617,6 +673,7 @@ static void xWorkHook(lsm_db *db, void *pArg){
 
 #define TEST_NO_RECOVERY -1
 #define TEST_THREADS     -2
+#define TEST_COMPRESSION -3
 
 static int test_lsm_config_str(
   LsmDb *pLsm,
@@ -645,6 +702,9 @@ static int test_lsm_config_str(
     { "worker_nmerge",    1, LSM_CONFIG_NMERGE },
     { "test_no_recovery", 0, TEST_NO_RECOVERY },
     { "threads",          0, TEST_THREADS },
+#ifdef HAVE_ZLIB
+    { "compression",      0, TEST_COMPRESSION },
+#endif
     { 0, 0 }
   };
   const char *z = zStr;
@@ -696,6 +756,11 @@ static int test_lsm_config_str(
             case TEST_THREADS:
               nThread = iVal;
               break;
+#ifdef HAVE_ZLIB
+            case TEST_COMPRESSION:
+              testConfigureCompression(db);
+              break;
+#endif
           }
         }
       }
@@ -832,7 +897,23 @@ int test_lsm_lomem_open(
   TestDb **ppDb
 ){
   const char *zCfg = 
-    "page_size=256 block_size=65536 write_buffer=16384 max_freelist=4 autocheckpoint=32768";
+    "page_size=256 block_size=65536 write_buffer=16384 "
+    "max_freelist=4 autocheckpoint=32768 "
+    "mmap=0 "
+  ;
+  return testLsmOpen(zCfg, zFilename, bClear, ppDb);
+}
+
+int test_lsm_zip_open(
+  const char *zFilename, 
+  int bClear, 
+  TestDb **ppDb
+){
+  const char *zCfg = 
+    "page_size=256 block_size=65536 write_buffer=16384 "
+    "max_freelist=4 autocheckpoint=32768 compression=1"
+    "mmap=0 "
+  ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
 
