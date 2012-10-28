@@ -495,9 +495,10 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     pFS->nMetasize = 4 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
-    pFS->bUseMmap = pDb->bMmap;
     if( pDb->compress.xCompress ){
       pFS->pCompress = &pDb->compress;
+    }else{
+      pFS->bUseMmap = pDb->bMmap;
     }
 
     /* Make a copy of the database and log file names. */
