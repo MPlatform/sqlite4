@@ -1559,10 +1559,9 @@ int lsmFsSortedAppend(
 
       if( fsIsLast(pFS, iApp) ){
         lsmPutU32(&pPg->aData[pFS->nPagesize-4], iNext);
-      }else 
-        if( fsIsFirst(pFS, iApp) ){
-          lsmPutU32(&pPg->aData[pFS->nPagesize-4], iPrev);
-        }
+      }else if( fsIsFirst(pFS, iApp) ){
+        lsmPutU32(&pPg->aData[pFS->nPagesize-4], iPrev);
+      }
     }
   }
 

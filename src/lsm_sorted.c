@@ -367,7 +367,7 @@ static int sortedBlobGrow(lsm_env *pEnv, Blob *pBlob, int nData){
   assert( pBlob->pEnv==pEnv || (pBlob->pEnv==0 && pBlob->pData==0) );
   if( pBlob->nAlloc<nData ){
     pBlob->pData = lsmReallocOrFree(pEnv, pBlob->pData, nData);
-    if( !pBlob->pData ) return LSM_NOMEM;
+    if( !pBlob->pData ) return LSM_NOMEM_BKPT;
     pBlob->nAlloc = nData;
     pBlob->pEnv = pEnv;
   }
@@ -3282,6 +3282,25 @@ static int mergeWorkerAddPadding(
   return lsmFsSortedPadding(pFS, pMW->pDb->pWorker, &pMW->pLevel->lhs);
 }
 
+/*
+** Release all page references currently held by the merge-worker passed
+** as the only argument. Unless an error has occurred, all pages have
+** already been released.
+*/
+static void mergeWorkerReleaseAll(MergeWorker *pMW){
+  int i;
+  lsmFsPageRelease(pMW->pPage);
+  pMW->pPage = 0;
+
+  for(i=0; i<pMW->hier.nHier; i++){
+    lsmFsPageRelease(pMW->hier.apHier[i]);
+    pMW->hier.apHier[i] = 0;
+  }
+  lsmFree(pMW->pDb->pEnv, pMW->hier.apHier);
+  pMW->hier.apHier = 0;
+  pMW->hier.nHier = 0;
+}
+
 static int keyszToSkip(FileSystem *pFS, int nKey){
   int nPgsz;                /* Nominal database page size */
   nPgsz = lsmFsPageSize(pFS);
@@ -3491,7 +3510,9 @@ static int mergeWorkerWrite(
   **     3) Key size - 1 varint
   **     4) Value size - 1 varint (only if LSM_INSERT flag is set)
   */
-  rc = lsmMCursorValue(pCsr, &pVal, &nVal);
+  if( rc==LSM_OK ){
+    rc = lsmMCursorValue(pCsr, &pVal, &nVal);
+  }
   if( rc==LSM_OK ){
     nHdr = 1 + lsmVarintLen32(iRPtr) + lsmVarintLen32(nKey);
     if( rtIsWrite(eType) ) nHdr += lsmVarintLen32(nVal);
@@ -3631,12 +3652,11 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
   if( rc==LSM_OK ) rc = mergeWorkerBtreeIndirect(pMW);
   if( rc==LSM_OK ) rc = mergeWorkerFinishHierarchy(pMW);
   if( rc==LSM_OK ) rc = mergeWorkerAddPadding(pMW);
+  mergeWorkerReleaseAll(pMW);
 
   lsmFree(pMW->pDb->pEnv, pMW->aGobble);
   pMW->aGobble = 0;
   pMW->pCsr = 0;
-  pMW->pPage = 0;
-  pMW->pPage = 0;
 
   *pRc = rc;
 }
