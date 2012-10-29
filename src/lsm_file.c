@@ -2166,6 +2166,22 @@ static void checkBlocks(
   }
 }
 
+typedef struct CheckFreelistCtx CheckFreelistCtx;
+typedef struct CheckFreelistCtx {
+  u8 *aUsed;
+  int nBlock;
+};
+static int checkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
+  CheckFreelistCtx *p = (CheckFreelistCtx *)pCtx;
+
+  assert( iBlk>=1 );
+  assert( iBlk<=p->nBlock );
+  assert( p->aUsed[iBlk-1]==0 );
+  p->aUsed[iBlk-1] = 1;
+
+  return 0;
+}
+
 /*
 ** This function checks that all blocks in the database file are accounted
 ** for. For each block, exactly one of the following must be true:
@@ -2180,6 +2196,7 @@ static void checkBlocks(
 ** assert() fails.
 */
 int lsmFsIntegrityCheck(lsm_db *pDb){
+  CheckFreelistCtx ctx;
   FileSystem *pFS = pDb->pFS;
   int i;
   int j;
@@ -2192,9 +2209,9 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   aUsed = lsmMallocZero(pDb->pEnv, nBlock);
   if( aUsed==0 ){
     /* Malloc has failed. Since this function is only called within debug
-     ** builds, this probably means the user is running an OOM injection test.
-     ** Regardless, it will not be possible to run the integrity-check at this
-     ** time, so assume the database is Ok and return non-zero. */
+    ** builds, this probably means the user is running an OOM injection test.
+    ** Regardless, it will not be possible to run the integrity-check at this
+    ** time, so assume the database is Ok and return non-zero. */
     return 1;
   }
 
@@ -2206,27 +2223,12 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
     }
   }
 
-  if( pWorker->nFreelistOvfl ){
-    int rc = lsmCheckpointOverflowLoad(pDb, &freelist);
-    assert( rc==LSM_OK || rc==LSM_NOMEM );
-    if( rc!=LSM_OK ) return 1;
-  }
-
-  for(j=0; j<2; j++){
-    Freelist *pFreelist;
-    if( j==0 ) pFreelist = &pWorker->freelist;
-    if( j==1 ) pFreelist = &freelist;
-
-    for(i=0; i<pFreelist->nEntry; i++){
-      u32 iBlk = pFreelist->aEntry[i].iBlk;
-      assert( iBlk<=nBlock );
-      assert( aUsed[iBlk-1]==0 );
-      aUsed[iBlk-1] = 1;
-    }
-  }
+  /* Mark all blocks in the free-list as used */
+  ctx.aUsed = aUsed;
+  ctx.nBlock = nBlock;
+  lsmWalkFreelist(pDb, checkFreelistCb, (void *)&ctx);
 
   for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
-
   lsmFree(pDb->pEnv, aUsed);
   lsmFree(pDb->pEnv, freelist.aEntry);
 

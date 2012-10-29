@@ -383,7 +383,6 @@ static void ckptExportAppendlist(
 
 static int ckptExportSnapshot( 
   lsm_db *pDb,                    /* Connection handle */
-  int nOvfl,                      /* Number of free-list entries in LSM */
   int bLog,                       /* True to update log-offset fields */
   i64 iId,                        /* Checkpoint id */
   int bCksum,                     /* If true, include checksums */
@@ -399,15 +398,6 @@ static int ckptExportSnapshot(
   Level *pLevel;                  /* Level iterator */
   int i;                          /* Iterator used while serializing freelist */
   CkptBuffer ckpt;
-  int nFree;
- 
-  nFree = pSnap->freelist.nEntry;
-  if( nOvfl>=0 ){
-    nFree -=  nOvfl;
-  }else{
-    assert( 0 );
-    nOvfl = pDb->pShmhdr->aSnap2[CKPT_HDR_OVFL];
-  }
 
   /* Initialize the output buffer */
   memset(&ckpt, 0, sizeof(CkptBuffer));
@@ -432,6 +422,7 @@ static int ckptExportSnapshot(
 
   /* Write the freelist */
   if( rc==LSM_OK ){
+    int nFree = pSnap->freelist.nEntry;
     ckptSetValue(&ckpt, iOut++, nFree, &rc);
     for(i=0; i<nFree; i++){
       FreelistEntry *p = &pSnap->freelist.aEntry[i];
@@ -450,7 +441,7 @@ static int ckptExportSnapshot(
   ckptSetValue(&ckpt, CKPT_HDR_BLKSZ, lsmFsBlockSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nLevel, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_PGSZ, lsmFsPageSize(pFS), &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_OVFL, (nOvfl?nOvfl:pSnap->nFreelistOvfl), &rc);
+  ckptSetValue(&ckpt, CKPT_HDR_OVFL, 0, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NWRITE, pSnap->nWrite, &rc);
 
   if( bCksum ){
@@ -464,7 +455,7 @@ static int ckptExportSnapshot(
 
 #ifdef LSM_LOG_FREELIST
   lsmLogMessage(pDb, rc, 
-      "ckptExportSnapshot(): id=%d freelist: %d/%d", (int)iId, nFree, nOvfl
+      "ckptExportSnapshot(): id=%lld freelist: %d", iId, pSnap->freelist.nEntry
   );
 #endif
 
@@ -680,6 +671,8 @@ int lsmCheckpointOverflow(
   int *pnVal,                     /* OUT: Size of *ppVal in bytes */
   int *pnOvfl                     /* OUT: Number of freelist entries in buf */
 ){
+  assert( 0 );
+#if 0
   int rc = LSM_OK;
   int nRet;
   Snapshot *p = pDb->pWorker;
@@ -721,6 +714,7 @@ int lsmCheckpointOverflow(
 
   *pnOvfl = nRet;
   return rc;
+#endif
 }
 
 /*
@@ -733,6 +727,7 @@ int lsmCheckpointOverflow(
 */
 int lsmCheckpointOverflowRequired(lsm_db *pDb){
   Snapshot *p = pDb->pWorker;
+  assert( 0 );
   assert( lsmShmAssertWorker(pDb) );
   return (p->freelist.nEntry > pDb->nMaxFreelist || p->nFreelistOvfl>0);
 }
@@ -747,6 +742,8 @@ int lsmCheckpointOverflowLoad(
   lsm_db *pDb,
   Freelist *pFreelist
 ){
+  assert( 0 );
+#if 0
   int rc;
   int nVal = 0;
   void *pVal = 0;
@@ -811,6 +808,7 @@ int lsmCheckpointOverflowLoad(
   }
 
   return rc;
+#endif
 }
 
 /*
@@ -1154,14 +1152,7 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush, int nOvfl){
   int n = 0;
   int rc;
 
-#if 0
-if( bFlush ){
-  printf("pushing %p tree to %d\n", (void *)pDb, pSnap->iId+1);
-  fflush(stdout);
-}
-#endif
-  assert( lsmFsIntegrityCheck(pDb) );
-  rc = ckptExportSnapshot(pDb, nOvfl, bFlush, pSnap->iId+1, 1, &p, &n);
+  rc = ckptExportSnapshot(pDb, bFlush, pSnap->iId+1, 1, &p, &n);
   if( rc!=LSM_OK ) return rc;
   assert( ckptChecksumOk((u32 *)p) );
 
@@ -1171,6 +1162,7 @@ if( bFlush ){
   memcpy(pShm->aSnap1, p, n);
   lsmFree(pDb->pEnv, p);
 
+  assert( lsmFsIntegrityCheck(pDb) );
   return LSM_OK;
 }
 

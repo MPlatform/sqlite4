@@ -73,6 +73,8 @@
 typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
+typedef struct Freelist Freelist;
+typedef struct FreelistEntry FreelistEntry;
 typedef struct Level Level;
 typedef struct LogMark LogMark;
 typedef struct LogRegion LogRegion;
@@ -322,6 +324,8 @@ struct lsm_db {
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
+  Freelist *pFreelist;            /* See sortedNewToplevel() */
+  int bUseFreelist;               /* True to use pFreelist */
 
   /* Debugging message callback */
   void (*xLog)(void *, int, const char *);
@@ -450,14 +454,27 @@ struct ShmChunk {
 
 #define LSM_APPLIST_SZ 4
 
-typedef struct Freelist Freelist;
-typedef struct FreelistEntry FreelistEntry;
-
 /*
-** An instance of the following structure stores the current database free
-** block list. The free list is a list of blocks that are not currently
-** used by the worker snapshot. Assocated with each block in the list is the
-** snapshot id of the most recent snapshot that did actually use the block.
+** An instance of the following structure stores the in-memory part of
+** the current free block list. This structure is to the free block list
+** as the in-memory tree is to the users database content. The contents 
+** of the free block list is found by merging the in-memory components 
+** with those stored in the LSM, just as the contents of the database is
+** found by merging the in-memory tree with the user data entries in the
+** LSM.
+**
+** Each FreelistEntry structure in the array represents either an insert
+** or delete operation on the free-list. For deletes, the FreelistEntry.iId
+** field is set to -1. For inserts, it is set to zero or greater. 
+**
+** The array of FreelistEntry structures is always sorted in order of
+** block number (ascending).
+**
+** When the in-memory free block list is written into the LSM, each insert
+** operation is written separately. The entry key is the bitwise inverse
+** of the block number as a 32-bit big-endian integer. This is done so that
+** the entries in the LSM are sorted in descending order of block id. 
+** The associated value is the snapshot id, formated as a varint.
 */
 struct Freelist {
   FreelistEntry *aEntry;          /* Free list entries */
@@ -691,6 +708,8 @@ void lsmEnvSleep(lsm_env *, int);
 int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
+
+int lsmSortedWalkFreelist(lsm_db *, int (*)(void *, int, i64), void *);
 
 int lsmFlushTreeToDisk(lsm_db *pDb);
 
