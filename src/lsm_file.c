@@ -1536,7 +1536,8 @@ int lsmFsSortedAppend(
     if( iApp==0 || fsIsLast(pFS, iApp) ){
       int iNew;                     /* New block number */
 
-      lsmBlockAllocate(pFS->pDb, &iNew);
+      rc = lsmBlockAllocate(pFS->pDb, &iNew);
+      if( rc!=LSM_OK ) return rc;
       if( iApp==0 ){
         iApp = fsFirstPageOnBlock(pFS, iNew);
       }else{

@@ -503,7 +503,7 @@ int lsmWalkFreelist(
     for(i=p->iFree; p->pFreelist && rc==LSM_OK && i<p->pFreelist->nEntry; i++){
       FreelistEntry *pEntry = &p->pFreelist->aEntry[i];
       if( pEntry->iId>=0 && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) ){
-        return 1;
+        return LSM_OK;
       }
     }
   }
