@@ -577,10 +577,10 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
 #endif
       rc = freelistAppend(pDb, iRet, -1);
     }else{
+      iRet = ++(p->nBlock);
 #ifdef LSM_LOG_FREELIST
       lsmLogMessage(pDb, 0, "extending file to %d blocks", iRet);
 #endif
-      iRet = ++(p->nBlock);
     }
   }
 
@@ -625,12 +625,7 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
   lsmLogMessage(pDb, LSM_OK, "lsmBlockRefree(): Refree block %d", iBlk);
 #endif
 
-  if( iBlk==p->nBlock ){
-    p->nBlock--;
-  }else{
-    rc = freelistAppend(pDb, iBlk, 0);
-  }
-
+  rc = freelistAppend(pDb, iBlk, 0);
   return rc;
 }
 

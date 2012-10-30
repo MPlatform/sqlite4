@@ -3985,6 +3985,7 @@ static int sortedNewToplevel(
 #endif
 
   if( rc==LSM_OK ){
+    assert( pNew->lhs.iFirst || pDb->pWorker->freelist.nEntry==0 );
     if( freelist.nEntry ){
       Freelist *p = &pDb->pWorker->freelist;
       lsmFree(pDb->pEnv, p->aEntry);
@@ -4459,7 +4460,7 @@ static int doLsmSingleWork(
 ){
   int rc = LSM_OK;                /* Return code */
   int nOvfl = 0;
-  int bFlush = 0;
+  int bDirty = 0;
   int nMax = nPage;               /* Maximum pages to write to disk */
   int nRem = nPage;
   int bCkpt = 0;
@@ -4468,11 +4469,11 @@ static int doLsmSingleWork(
   ** returns.  */
   assert( pDb->pWorker==0 );
   rc = lsmBeginWork(pDb);
-  assert( rc!=8 );
   if( rc!=LSM_OK ) return rc;
 
   /* If this connection is doing auto-checkpoints, set nMax (and nRem) so
-  ** that this call stops writing when the auto-checkpoint is due.  */
+  ** that this call stops writing when the auto-checkpoint is due. The
+  ** caller will do the checkpoint, then possibly call this function again. */
   if( bShutdown==0 && pDb->nAutockpt ){
     u32 nSync;
     u32 nUnsync;
@@ -4493,20 +4494,27 @@ static int doLsmSingleWork(
   /* If there exists in-memory data ready to be flushed to disk, attempt
   ** to flush it now.  */
   if( sortedTreeHasOld(pDb, &rc) ){
+    /* sortedDbIsFull() returns non-zero if either (a) there are too many
+    ** levels in total in the db, or (b) there are too many levels with the
+    ** the same age in the db. Either way, call sortedWork() to merge 
+    ** existing segments together until this condition is cleared.  */
     if( sortedDbIsFull(pDb) ){
       int nPg = 0;
       rc = sortedWork(pDb, nRem, 0, 1, &nPg);
       nRem -= nPg;
       assert( rc!=LSM_OK || nRem<=0 || !sortedDbIsFull(pDb) );
     }
+
     if( rc==LSM_OK && nRem>0 ){
       int nPg = 0;
       rc = sortedNewToplevel(pDb, TREE_OLD, &nOvfl, &nPg);
       nRem -= nPg;
-      if( rc==LSM_OK && pDb->nTransOpen>0 ){
-        lsmTreeDiscardOld(pDb);
+      if( rc==LSM_OK ){
+        if( pDb->nTransOpen>0 ){
+          lsmTreeDiscardOld(pDb);
+        }
+        rc = lsmCheckpointSaveWorker(pDb, 1, 0);
       }
-      bFlush = 1;
     }
   }
 
@@ -4516,9 +4524,7 @@ static int doLsmSingleWork(
     int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
     rc = sortedWork(pDb, nRem, bOptimize, 0, &nPg);
     nRem -= nPg;
-    if( nPg ){
-      nOvfl = 0;
-    }
+    if( nPg ) bDirty = 1;
   }
 
   /* If the in-memory part of the free-list is too large, write a new 
@@ -4534,13 +4540,13 @@ static int doLsmSingleWork(
       rc = sortedNewToplevel(pDb, TREE_NONE, &nOvfl, &nPg);
     }
     nRem -= nPg;
+    if( nPg ) bDirty = 1;
   }
 
-  if( rc==LSM_OK && (nRem!=nMax) ){
-    lsmFinishWork(pDb, bFlush, nOvfl, &rc);
+  if( rc==LSM_OK && bDirty ){
+    lsmFinishWork(pDb, 0, 0, &rc);
   }else{
     int rcdummy = LSM_BUSY;
-    assert( rc!=LSM_OK || bFlush==0 );
     lsmFinishWork(pDb, 0, 0, &rcdummy);
   }
   assert( pDb->pWorker==0 );
@@ -4940,6 +4946,15 @@ static int infoPageDump(
         lsmStringAppendf(&str, "%*s", nKeyWidth - (nKey*(1+bHex)), "");
         lsmStringAppendf(&str, " ");
         infoAppendBlob(&str, bHex, aVal, nVal); 
+      }
+      if( rtTopic(eType) ){
+        int iBlk = (int)~lsmGetU32(aKey);
+        lsmStringAppendf(&str, "  (block=%d", iBlk);
+        if( nVal>0 ){
+          i64 iSnap = lsmGetU64(aVal);
+          lsmStringAppendf(&str, " snapshot=%lld", iSnap);
+        }
+        lsmStringAppendf(&str, ")");
       }
       lsmStringAppendf(&str, "\n");
     }
