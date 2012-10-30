@@ -2327,7 +2327,6 @@ static int multiCursorGetVal(
         lsmPutU64(aVal, pWorker->freelist.aEntry[iEntry].iId);
         *ppVal = aVal;
         *pnVal = 8;
-        pCsr->pDb->bUseFreelist = 1;
       }
       break;
     }
@@ -3729,12 +3728,15 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
 ** database entry flags for the current entry. The entry about to be written
 ** to the output.
 **
+** Note that this function only has to work for cursors configured to 
+** iterate forwards (not backwards).
 */
 static void mergeRangeDeletes(MultiCursor *pCsr, int *piFlags){
   int f = *piFlags;
   int iKey = pCsr->aTree[1];
   int i;
 
+  assert( pCsr->flags & CURSOR_NEXT_OK );
   if( pCsr->flags & CURSOR_IGNORE_DELETE ){
     /* The ignore-delete flag is set when the output of the merge will form
     ** the oldest level in the database. In this case there is no point in
@@ -3750,7 +3752,8 @@ static void mergeRangeDeletes(MultiCursor *pCsr, int *piFlags){
     }
 
     for(i=LSM_MAX(0, iKey+1-CURSOR_DATA_SEGMENT); i<pCsr->nPtr; i++){
-      if( pCsr->aPtr[i].eType & LSM_END_DELETE ){
+      SegmentPtr *pPtr = &pCsr->aPtr[i];
+      if( pPtr->pPg && (pPtr->eType & LSM_END_DELETE) ){
         f |= (LSM_START_DELETE|LSM_END_DELETE);
       }
     }
@@ -3778,6 +3781,11 @@ static int mergeWorkerStep(MergeWorker *pMW){
   /* Pull the next record out of the source cursor. */
   lsmMCursorKey(pCsr, &pKey, &nKey);
   eType = pCsr->eType;
+
+  if( eType & LSM_SYSTEMKEY ){
+    int i;
+    i = 1;
+  }
 
   /* Figure out if the output record may have a different pointer value
   ** than the previous. This is the case if the current key is identical to
@@ -3892,8 +3900,9 @@ static int sortedNewToplevel(
   Freelist freelist;
   assert( pnOvfl );
 
-  pDb->pFreelist = &freelist;
   assert( pDb->bUseFreelist==0 );
+  pDb->pFreelist = &freelist;
+  pDb->bUseFreelist = 1;
   memset(&freelist, 0, sizeof(freelist));
 
   /* Allocate the new level structure to write to. */

@@ -442,18 +442,20 @@ static int walkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
   WalkFreelistCtx *p = (WalkFreelistCtx *)pCtx;
   Freelist *pFree = p->pFreelist;
 
-  while( (p->iFree < pFree->nEntry) ){
-    FreelistEntry *pEntry = &pFree->aEntry[p->iFree];
-    if( pEntry->iBlk>iBlk ){
-      break;
-    }else{
-      p->iFree++;
-      if( pEntry->iId>=0 
-       && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) 
-      ){
-        return 1;
+  if( pFree ){
+    while( (p->iFree < pFree->nEntry) ){
+      FreelistEntry *pEntry = &pFree->aEntry[p->iFree];
+      if( pEntry->iBlk>iBlk ){
+        break;
+      }else{
+        p->iFree++;
+        if( pEntry->iId>=0 
+            && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) 
+          ){
+          return 1;
+        }
+        if( pEntry->iBlk==iBlk ) return 0;
       }
-      if( pEntry->iBlk==iBlk ) return 0;
     }
   }
 
@@ -477,19 +479,30 @@ int lsmWalkFreelist(
   void *pCtx                      /* First argument to pass to callback */
 ){
   int rc;
-  WalkFreelistCtx ctx;
-  ctx.pDb = pDb;
-  ctx.pFreelist = &pDb->pWorker->freelist;
-  ctx.iFree = 0;
-  ctx.xUsr = x;
-  ctx.pUsrctx = pCtx;
+  int iCtx;
 
-  rc = lsmSortedWalkFreelist(pDb, walkFreelistCb, (void *)&ctx);
-  if( rc==LSM_OK ){
+  WalkFreelistCtx ctx[2];
+
+  ctx[0].pDb = pDb;
+  ctx[0].pFreelist = &pDb->pWorker->freelist;
+  ctx[0].iFree = 0;
+  ctx[0].xUsr = walkFreelistCb;
+  ctx[0].pUsrctx = (void *)&ctx[1];
+
+  ctx[1].pDb = pDb;
+  ctx[1].pFreelist = pDb->pFreelist;
+  ctx[1].iFree = 0;
+  ctx[1].xUsr = x;
+  ctx[1].pUsrctx = pCtx;
+
+  rc = lsmSortedWalkFreelist(pDb, walkFreelistCb, (void *)&ctx[0]);
+
+  for(iCtx=0; iCtx<2; iCtx++){
     int i;
-    for(i=ctx.iFree; i<ctx.pFreelist->nEntry; i++){
-      FreelistEntry *pEntry = &ctx.pFreelist->aEntry[i];
-      if( pEntry->iId>=0 && ctx.xUsr(ctx.pUsrctx, pEntry->iBlk, pEntry->iId) ){
+    WalkFreelistCtx *p = &ctx[iCtx];
+    for(i=p->iFree; p->pFreelist && rc==LSM_OK && i<p->pFreelist->nEntry; i++){
+      FreelistEntry *pEntry = &p->pFreelist->aEntry[i];
+      if( pEntry->iId>=0 && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) ){
         return 1;
       }
     }
@@ -559,12 +572,12 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   ** the end of the file.  */
   if( rc==LSM_OK ){
     if( iRet>0 ){
-#ifdef LSM_LOG_BLOCKS
+#ifdef LSM_LOG_FREELIST
       lsmLogMessage(pDb, 0, "reusing block %d", iRet);
 #endif
       rc = freelistAppend(pDb, iRet, -1);
     }else{
-#ifdef LSM_LOG_BLOCKS
+#ifdef LSM_LOG_FREELIST
       lsmLogMessage(pDb, 0, "extending file to %d blocks", iRet);
 #endif
       iRet = ++(p->nBlock);
@@ -607,6 +620,10 @@ int lsmBlockFree(lsm_db *pDb, int iBlk){
 int lsmBlockRefree(lsm_db *pDb, int iBlk){
   int rc = LSM_OK;                /* Return code */
   Snapshot *p = pDb->pWorker;
+
+#ifdef LSM_LOG_FREELIST
+  lsmLogMessage(pDb, LSM_OK, "lsmBlockRefree(): Refree block %d", iBlk);
+#endif
 
   if( iBlk==p->nBlock ){
     p->nBlock--;
