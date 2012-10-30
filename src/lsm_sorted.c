@@ -3962,6 +3962,7 @@ static int sortedNewToplevel(
     while( rc==LSM_OK && mergeWorkerDone(&mergeworker)==0 ){
       rc = mergeWorkerStep(&mergeworker);
     }
+    assert( rc!=LSM_OK || mergeworker.nWork==0 || pNew->lhs.iFirst );
 
     nWrite = mergeworker.nWork;
     mergeWorkerShutdown(&mergeworker, &rc);
@@ -3970,7 +3971,7 @@ static int sortedNewToplevel(
   }
 
   /* Link the new level into the top of the tree. */
-  if( rc==LSM_OK ){
+  if( rc==LSM_OK && pNew->lhs.iFirst ){
     if( pDel ) pDel->iRoot = 0;
   }else{
     lsmDbSnapshotSetLevel(pDb->pWorker, pNext);
@@ -3978,7 +3979,9 @@ static int sortedNewToplevel(
   }
 
 #if 0
-  lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
+  if( pNew->lhs.iFirst ){
+    lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
+  }
 #endif
 
   if( rc==LSM_OK ){
@@ -4394,7 +4397,7 @@ static int sortedWork(
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);
