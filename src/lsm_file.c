@@ -2270,6 +2270,7 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   FileSystem *pFS = pDb->pFS;
   int i;
   int j;
+  int rc;
   Freelist freelist = {0, 0, 0};
   u8 *aUsed;
   Level *pLevel;
@@ -2296,9 +2297,12 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   /* Mark all blocks in the free-list as used */
   ctx.aUsed = aUsed;
   ctx.nBlock = nBlock;
-  lsmWalkFreelist(pDb, checkFreelistCb, (void *)&ctx);
+  rc = lsmWalkFreelist(pDb, checkFreelistCb, (void *)&ctx);
 
-  for(i=0; i<nBlock; i++) assert( aUsed[i]!=0 );
+  if( rc==LSM_OK ){
+    for(i=0; i<nBlock; i++) assert( aUsed[i]!=0 );
+  }
+
   lsmFree(pDb->pEnv, aUsed);
   lsmFree(pDb->pEnv, freelist.aEntry);
 
