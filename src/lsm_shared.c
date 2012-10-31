@@ -562,6 +562,8 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   */
   rc = lsmCheckpointSynced(pDb, &iInUse, 0, 0);
   if( rc==LSM_OK && iInUse==0 ) iInUse = p->iId;
+  if( rc==LSM_OK && pDb->pClient ) iInUse = LSM_MIN(iInUse, pDb->pClient->iId);
+
   if( rc==LSM_OK ) rc = firstSnapshotInUse(pDb, &iInUse);
 
   /* Query the free block list for a suitable block */
