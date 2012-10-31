@@ -62,14 +62,6 @@
 
 #define LSM_AUTOWORK_QUANT 32
 
-/* Minimum number of free-list entries to store in the checkpoint, assuming
-** the free-list contains this many entries. i.e. if overflow is required,
-** the first LSM_CKPT_MIN_FREELIST entries are stored in the checkpoint and
-** the remainder in an LSM system entry.  */
-#define LSM_CKPT_MIN_FREELIST     6
-#define LSM_CKPT_MAX_REFREE       2
-#define LSM_CKPT_MIN_NONLSM       (LSM_CKPT_MIN_FREELIST - LSM_CKPT_MAX_REFREE)
-
 typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
@@ -501,7 +493,6 @@ struct Snapshot {
   int nBlock;                     /* Number of blocks in database file */
   Pgno aiAppend[LSM_APPLIST_SZ];  /* Append point list */
   Freelist freelist;              /* Free block list */
-  int nFreelistOvfl;              /* Number of extra free-list entries in LSM */
   u32 nWrite;                     /* Total number of pages written to disk */
 };
 #define LSM_INITIAL_SNAPSHOT_ID 11
@@ -512,10 +503,6 @@ struct Snapshot {
 int lsmCheckpointWrite(lsm_db *, u32 *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
-
-int lsmCheckpointOverflow(lsm_db *pDb, void **, int *, int *);
-int lsmCheckpointOverflowRequired(lsm_db *pDb);
-int lsmCheckpointOverflowLoad(lsm_db *pDb, Freelist *);
 
 int lsmCheckpointRecover(lsm_db *);
 int lsmCheckpointDeserialize(lsm_db *, int, u32 *, Snapshot **);
@@ -535,7 +522,7 @@ int lsmCheckpointBlksz(u32 *);
 void lsmCheckpointLogoffset(u32 *aCkpt, DbLog *pLog);
 void lsmCheckpointZeroLogoffset(lsm_db *);
 
-int lsmCheckpointSaveWorker(lsm_db *pDb, int, int);
+int lsmCheckpointSaveWorker(lsm_db *pDb, int);
 int lsmDatabaseFull(lsm_db *pDb);
 int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite);
 
@@ -792,7 +779,7 @@ int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
 
 int lsmBeginWork(lsm_db *);
-void lsmFinishWork(lsm_db *, int, int, int *);
+void lsmFinishWork(lsm_db *, int, int *);
 
 int lsmFinishRecovery(lsm_db *);
 void lsmFinishReadTrans(lsm_db *);

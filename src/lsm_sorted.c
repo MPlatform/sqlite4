@@ -206,7 +206,6 @@ struct MultiCursor {
   int *aTree;                     /* Array of comparison results */
 
   /* Used by cursors flushing the in-memory tree only */
-  int *pnOvfl;                    /* Number of free-list entries to store */
   void *pSystemVal;               /* Pointer to buffer to free */
 
   /* Used by worker cursors only */
@@ -2263,11 +2262,8 @@ static void multiCursorIgnoreDelete(MultiCursor *pCsr){
 ** with (a) the system bit set, and (b) the key "FREELIST" and (c) a value 
 ** blob containing the serialized free-block list.
 */
-static int multiCursorVisitFreelist(MultiCursor *pCsr, int *pnOvfl){
+static int multiCursorVisitFreelist(MultiCursor *pCsr){
   int rc = LSM_OK;
-
-  assert( pCsr );
-  pCsr->pnOvfl = pnOvfl;
   pCsr->flags |= CURSOR_FLUSH_FREELIST;
   pCsr->pSystemVal = lsmMallocRc(pCsr->pDb->pEnv, 4 + 8, &rc);
   return rc;
@@ -3888,7 +3884,6 @@ static void sortedInvokeWorkHook(lsm_db *pDb){
 static int sortedNewToplevel(
   lsm_db *pDb,                    /* Connection handle */
   int eTree,                      /* One of the TREE_XXX constants */
-  int *pnOvfl,                    /* OUT: Number of free-list entries stored */
   int *pnWrite                    /* OUT: Number of database pages written */
 ){
   int rc = LSM_OK;                /* Return Code */
@@ -3898,7 +3893,6 @@ static int sortedNewToplevel(
   Segment *pDel = 0;              /* Delete separators from this segment */
   int nWrite = 0;                 /* Number of database pages written */
   Freelist freelist;
-  assert( pnOvfl );
 
   assert( pDb->bUseFreelist==0 );
   pDb->pFreelist = &freelist;
@@ -3919,7 +3913,7 @@ static int sortedNewToplevel(
   pCsr = multiCursorNew(pDb, &rc);
   if( pCsr ){
     pCsr->pDb = pDb;
-    rc = multiCursorVisitFreelist(pCsr, pnOvfl);
+    rc = multiCursorVisitFreelist(pCsr);
     if( rc==LSM_OK ){
       rc = multiCursorAddTree(pCsr, pDb->pWorker, eTree);
     }
@@ -3970,22 +3964,17 @@ static int sortedNewToplevel(
     pNew->iAge = 0;
   }
 
-  /* Link the new level into the top of the tree. */
-  if( rc==LSM_OK && pNew->lhs.iFirst ){
-    if( pDel ) pDel->iRoot = 0;
-  }else{
+  if( rc!=LSM_OK || pNew->lhs.iFirst==0 ){
+    assert( rc!=LSM_OK || pDb->pWorker->freelist.nEntry==0 );
     lsmDbSnapshotSetLevel(pDb->pWorker, pNext);
     sortedFreeLevel(pDb->pEnv, pNew);
-  }
+  }else{
+    if( pDel ) pDel->iRoot = 0;
 
 #if 0
-  if( pNew->lhs.iFirst ){
     lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
-  }
 #endif
 
-  if( rc==LSM_OK ){
-    assert( pNew->lhs.iFirst || pDb->pWorker->freelist.nEntry==0 );
     if( freelist.nEntry ){
       Freelist *p = &pDb->pWorker->freelist;
       lsmFree(pDb->pEnv, p->aEntry);
@@ -4459,7 +4448,6 @@ static int doLsmSingleWork(
   int *pbCkpt                     /* OUT: True if an auto-checkpoint is req. */
 ){
   int rc = LSM_OK;                /* Return code */
-  int nOvfl = 0;
   int bDirty = 0;
   int nMax = nPage;               /* Maximum pages to write to disk */
   int nRem = nPage;
@@ -4507,13 +4495,13 @@ static int doLsmSingleWork(
 
     if( rc==LSM_OK && nRem>0 ){
       int nPg = 0;
-      rc = sortedNewToplevel(pDb, TREE_OLD, &nOvfl, &nPg);
+      rc = sortedNewToplevel(pDb, TREE_OLD, &nPg);
       nRem -= nPg;
       if( rc==LSM_OK ){
         if( pDb->nTransOpen>0 ){
           lsmTreeDiscardOld(pDb);
         }
-        rc = lsmCheckpointSaveWorker(pDb, 1, 0);
+        rc = lsmCheckpointSaveWorker(pDb, 1);
       }
     }
   }
@@ -4528,26 +4516,25 @@ static int doLsmSingleWork(
   }
 
   /* If the in-memory part of the free-list is too large, write a new 
-  ** top-level containing just the in-memory free-list entries to disk.
-  */
-  if( rc==LSM_OK && pDb->pWorker->freelist.nEntry > LSM_MAX_FREELIST_ENTRIES ){
+  ** top-level containing just the in-memory free-list entries to disk. */
+  if( rc==LSM_OK && pDb->pWorker->freelist.nEntry > pDb->nMaxFreelist ){
     int nPg = 0;
     while( rc==LSM_OK && sortedDbIsFull(pDb) ){
       rc = sortedWork(pDb, 16, 0, 1, &nPg);
       nRem -= nPg;
     }
     if( rc==LSM_OK ){
-      rc = sortedNewToplevel(pDb, TREE_NONE, &nOvfl, &nPg);
+      rc = sortedNewToplevel(pDb, TREE_NONE, &nPg);
     }
     nRem -= nPg;
     if( nPg ) bDirty = 1;
   }
 
   if( rc==LSM_OK && bDirty ){
-    lsmFinishWork(pDb, 0, 0, &rc);
+    lsmFinishWork(pDb, 0, &rc);
   }else{
     int rcdummy = LSM_BUSY;
-    lsmFinishWork(pDb, 0, 0, &rcdummy);
+    lsmFinishWork(pDb, 0, &rcdummy);
   }
   assert( pDb->pWorker==0 );
 
@@ -4664,7 +4651,6 @@ int lsmSortedAutoWork(
 */
 int lsmFlushTreeToDisk(lsm_db *pDb){
   int rc;
-  int nOvfl = 0;
 
   rc = lsmBeginWork(pDb);
   while( rc==LSM_OK && sortedDbIsFull(pDb) ){
@@ -4672,9 +4658,9 @@ int lsmFlushTreeToDisk(lsm_db *pDb){
   }
 
   if( rc==LSM_OK ){
-    rc = sortedNewToplevel(pDb, TREE_BOTH, &nOvfl, 0);
+    rc = sortedNewToplevel(pDb, TREE_BOTH, 0);
   }
-  lsmFinishWork(pDb, 1, nOvfl, &rc);
+  lsmFinishWork(pDb, 1, &rc);
   return rc;
 }
 

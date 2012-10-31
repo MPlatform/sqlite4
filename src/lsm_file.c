@@ -2138,7 +2138,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
 
   if( bUnlock ){
     int rcwork = LSM_BUSY;
-    lsmFinishWork(pDb, 0, 0, &rcwork);
+    lsmFinishWork(pDb, 0, &rcwork);
   }
   return rc;
 }

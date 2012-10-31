@@ -563,7 +563,6 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   rc = lsmCheckpointSynced(pDb, &iInUse, 0, 0);
   if( rc==LSM_OK && iInUse==0 ) iInUse = p->iId;
   if( rc==LSM_OK && pDb->pClient ) iInUse = LSM_MIN(iInUse, pDb->pClient->iId);
-
   if( rc==LSM_OK ) rc = firstSnapshotInUse(pDb, &iInUse);
 
   /* Query the free block list for a suitable block */
@@ -575,7 +574,8 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   if( rc==LSM_OK ){
     if( iRet>0 ){
 #ifdef LSM_LOG_FREELIST
-      lsmLogMessage(pDb, 0, "reusing block %d", iRet);
+      lsmLogMessage(pDb, 0, 
+          "reusing block %d (snapshot-in-use=%lld)", iRet, iInUse);
 #endif
       rc = freelistAppend(pDb, iRet, -1);
     }else{
@@ -732,14 +732,13 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
 ** created to hold the updated state of the database is synced to disk, log
 ** file space can be recycled.
 */
-void lsmFinishWork(lsm_db *pDb, int bFlush, int nOvfl, int *pRc){
+void lsmFinishWork(lsm_db *pDb, int bFlush, int *pRc){
   assert( *pRc!=0 || pDb->pWorker );
   if( pDb->pWorker ){
     /* If no error has occurred, serialize the worker snapshot and write
     ** it to shared memory.  */
-    assert( pDb->pWorker->nFreelistOvfl==0 || nOvfl==0 );
     if( *pRc==LSM_OK ){
-      *pRc = lsmCheckpointSaveWorker(pDb, bFlush, nOvfl);
+      *pRc = lsmCheckpointSaveWorker(pDb, bFlush);
     }
     lsmFreeSnapshot(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;
@@ -820,13 +819,13 @@ int lsmBeginReadTrans(lsm_db *pDb){
     }
 #if 0
 if( rc==LSM_OK && pDb->pClient ){
-  printf("reading %p: snapshot:%d used-shmid:%d trans-id:%d iOldShmid=%d\n",
+  fprintf(stderr, 
+      "reading %p: snapshot:%d used-shmid:%d trans-id:%d iOldShmid=%d\n",
       (void *)pDb,
       (int)pDb->pClient->iId, (int)pDb->treehdr.iUsedShmid, 
       (int)pDb->treehdr.root.iTransId,
       (int)pDb->treehdr.iOldShmid
   );
-  fflush(stdout);
 }
 #endif
   }
@@ -855,6 +854,14 @@ void lsmFinishReadTrans(lsm_db *pDb){
     lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
   }
+#endif
+
+#if 0
+if( pDb->pClient && pDb->iReader>=0 ){
+  fprintf(stderr, 
+      "finished reading %p: snapshot:%d\n", (void *)pDb, (int)pDb->pClient->iId
+  );
+}
 #endif
   if( pDb->iReader>=0 ) lsmReleaseReadlock(pDb);
 }
@@ -1096,6 +1103,7 @@ static int firstSnapshotInUse(
     }
   }
 
+  *piInUse = iInUse;
   return LSM_OK;
 }
 
