@@ -189,7 +189,8 @@ struct FileSystem {
   /* If this is a compressed database, a pointer to the compression methods.
   ** For an uncompressed database, a NULL pointer.  */
   lsm_compress *pCompress;
-  u8 *aBuffer;                    /* Buffer to compress into */
+  u8 *aIBuffer;                   /* Buffer to compress to */
+  u8 *aOBuffer;                   /* Buffer to uncompress from */
   int nBuffer;                    /* Allocated size of aBuffer[] in bytes */
 
   /* mmap() mode things */
@@ -558,7 +559,8 @@ void lsmFsClose(FileSystem *pFS){
     if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
     lsmFree(pEnv, pFS->pLsmFile);
     lsmFree(pEnv, pFS->apHash);
-    lsmFree(pEnv, pFS->aBuffer);
+    lsmFree(pEnv, pFS->aIBuffer);
+    lsmFree(pEnv, pFS->aOBuffer);
     lsmFree(pEnv, pFS);
   }
 }
@@ -1015,16 +1017,27 @@ static int fsAddOffset(FileSystem *pFS, i64 iOff, int iAdd, i64 *piRes){
   return rc;
 }
 
-static int fsAllocateBuffer(FileSystem *pFS){
+static int fsAllocateBuffer(FileSystem *pFS, int bWrite){
+  u8 **pp;                        /* Pointer to either aIBuffer or aOBuffer */
+
   assert( pFS->pCompress );
-  if( pFS->aBuffer==0 ){
+
+  /* If neither buffer has been allocated, figure out how large they
+  ** should be. Store this value in FileSystem.nBuffer.  */
+  if( pFS->nBuffer==0 ){
+    assert( pFS->aIBuffer==0 && pFS->aOBuffer==0 );
     pFS->nBuffer = pFS->pCompress->xBound(pFS->pCompress->pCtx, pFS->nPagesize);
     if( pFS->nBuffer<(pFS->szSector+6) ){
       pFS->nBuffer = pFS->szSector+6;
     }
-    pFS->aBuffer = lsmMalloc(pFS->pEnv, LSM_MAX(pFS->nBuffer, pFS->nPagesize));
-    if( pFS->aBuffer==0 ) return LSM_NOMEM_BKPT;
   }
+
+  pp = (bWrite ? &pFS->aOBuffer : &pFS->aIBuffer);
+  if( *pp==0 ){
+    *pp = lsmMalloc(pFS->pEnv, LSM_MAX(pFS->nBuffer, pFS->nPagesize));
+    if( *pp==0 ) return LSM_NOMEM_BKPT;
+  }
+
   return LSM_OK;
 }
 
@@ -1047,7 +1060,7 @@ static int fsReadPagedata(
 
   assert( p && pPg->nCompress==0 );
 
-  if( fsAllocateBuffer(pFS) ) return LSM_NOMEM;
+  if( fsAllocateBuffer(pFS, 0) ) return LSM_NOMEM;
 
   rc = fsReadData(pFS, iOff, aSz, sizeof(aSz));
 
@@ -1071,14 +1084,14 @@ static int fsReadPagedata(
         if( pPg->nCompress>pFS->nBuffer ){
           rc = LSM_CORRUPT_BKPT;
         }else{
-          rc = fsReadData(pFS, iOff, pFS->aBuffer, pPg->nCompress);
+          rc = fsReadData(pFS, iOff, pFS->aIBuffer, pPg->nCompress);
         }
         if( rc==LSM_OK ){
           int n = pFS->nPagesize;
           rc = p->xUncompress(p->pCtx, 
               (char *)pPg->aData, &n, 
-              (const char *)pFS->aBuffer, pPg->nCompress
-              );
+              (const char *)pFS->aIBuffer, pPg->nCompress
+          );
           if( rc==LSM_OK && n!=pPg->nData ){
             rc = LSM_CORRUPT_BKPT;
           }
@@ -1536,7 +1549,8 @@ int lsmFsSortedAppend(
     if( iApp==0 || fsIsLast(pFS, iApp) ){
       int iNew;                     /* New block number */
 
-      lsmBlockAllocate(pFS->pDb, &iNew);
+      rc = lsmBlockAllocate(pFS->pDb, &iNew);
+      if( rc!=LSM_OK ) return rc;
       if( iApp==0 ){
         iApp = fsFirstPageOnBlock(pFS, iNew);
       }else{
@@ -1846,12 +1860,12 @@ static Pgno fsAppendData(
 static int fsCompressIntoBuffer(FileSystem *pFS, Page *pPg){
   lsm_compress *p = pFS->pCompress;
 
-  if( fsAllocateBuffer(pFS) ) return LSM_NOMEM;
+  if( fsAllocateBuffer(pFS, 1) ) return LSM_NOMEM;
   assert( pPg->nData==pFS->nPagesize );
 
   pPg->nCompress = pFS->nBuffer;
   return p->xCompress(p->pCtx, 
-      (char *)pFS->aBuffer, &pPg->nCompress, 
+      (char *)pFS->aOBuffer, &pPg->nCompress, 
       (const char *)pPg->aData, pPg->nData
   );
 }
@@ -1882,7 +1896,7 @@ int lsmFsPagePersist(Page *pPg){
 
       /* Write the serialized page record into the database file. */
       pPg->iPg = fsAppendData(pFS, pPg->pSeg, aSz, sizeof(aSz), &rc);
-      fsAppendData(pFS, pPg->pSeg, pFS->aBuffer, pPg->nCompress, &rc);
+      fsAppendData(pFS, pPg->pSeg, pFS->aOBuffer, pPg->nCompress, &rc);
       fsAppendData(pFS, pPg->pSeg, aSz, sizeof(aSz), &rc);
 
       /* Now that it has a page number, insert the page into the hash table */
@@ -1952,8 +1966,8 @@ int lsmFsSortedPadding(
       nPad -= 6;
       putRecordSize(aSz, nPad, 1);
       fsAppendData(pFS, pSeg, aSz, sizeof(aSz), &rc);
-      memset(pFS->aBuffer, 0, nPad);
-      fsAppendData(pFS, pSeg, pFS->aBuffer, nPad, &rc);
+      memset(pFS->aOBuffer, 0, nPad);
+      fsAppendData(pFS, pSeg, pFS->aOBuffer, nPad, &rc);
       fsAppendData(pFS, pSeg, aSz, sizeof(aSz), &rc);
     }else if( nPad>0 ){
       u8 aBuf[5] = {0,0,0,0,0};
@@ -2124,10 +2138,33 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
 
   if( bUnlock ){
     int rcwork = LSM_BUSY;
-    lsmFinishWork(pDb, 0, 0, &rcwork);
+    lsmFinishWork(pDb, 0, &rcwork);
   }
   return rc;
 }
+
+/*
+** The following macros are used by the integrity-check code. Associated with
+** each block in the database is an 8-bit bit mask (the entry in the aUsed[]
+** array). As the integrity-check meanders through the database, it sets the
+** following bits to indicate how each block is used.
+**
+** INTEGRITY_CHECK_FIRST_PG:
+**   First page of block is in use by sorted run.
+**
+** INTEGRITY_CHECK_LAST_PG:
+**   Last page of block is in use by sorted run.
+**
+** INTEGRITY_CHECK_USED:
+**   At least one page of the block is in use by a sorted run.
+**
+** INTEGRITY_CHECK_FREE:
+**   The free block list contains an entry corresponding to this block.
+*/
+#define INTEGRITY_CHECK_FIRST_PG 0x01
+#define INTEGRITY_CHECK_LAST_PG  0x02
+#define INTEGRITY_CHECK_USED     0x04
+#define INTEGRITY_CHECK_FREE     0x08
 
 /*
 ** Helper function for lsmFsIntegrityCheck()
@@ -2141,29 +2178,78 @@ static void checkBlocks(
 ){
   if( pSeg ){
     if( pSeg && pSeg->nSize>0 ){
+      int rc;
       Pgno iLast = pSeg->iLastPg;
       int iBlk;
       int iLastBlk;
+      int bLastIsLastOnBlock;
+
       iBlk = fsPageToBlock(pFS, pSeg->iFirst);
       iLastBlk = fsPageToBlock(pFS, pSeg->iLastPg);
+      bLastIsLastOnBlock = (fsLastPageOnBlock(pFS, iLastBlk)==iLast);
+      assert( iBlk>0 );
 
-      while( iBlk ){
-        assert( iBlk<=nUsed );
-        /* assert( aUsed[iBlk-1]==0 ); */
-        aUsed[iBlk-1] = 1;
-        if( iBlk!=iLastBlk ){
-          fsBlockNext(pFS, iBlk, &iBlk);
-        }else{
-          iBlk = 0;
+      /* If the first page of this run is also the first page of its first
+      ** block, set the flag to indicate that the first page of iBlk is 
+      ** in use.  */
+      if( fsFirstPageOnBlock(pFS, iBlk)==pSeg->iFirst ){
+        assert( (aUsed[iBlk-1] & INTEGRITY_CHECK_FIRST_PG)==0 );
+        aUsed[iBlk-1] |= INTEGRITY_CHECK_FIRST_PG;
+      }
+
+      do {
+        /* iBlk is a part of this sorted run. */
+        aUsed[iBlk-1] |= INTEGRITY_CHECK_USED;
+
+        /* Unless the sorted run finishes before the last page on this block, 
+        ** the last page of this block is also in use.  */
+        if( iBlk!=iLastBlk || bLastIsLastOnBlock ){
+          assert( (aUsed[iBlk-1] & INTEGRITY_CHECK_LAST_PG)==0 );
+          aUsed[iBlk-1] |= INTEGRITY_CHECK_LAST_PG;
         }
-      }
 
-      if( bExtra && iLast==fsLastPageOnPagesBlock(pFS, iLast) ){
-        fsBlockNext(pFS, iLastBlk, &iBlk);
-        aUsed[iBlk-1] = 1;
-      }
+        /* Special case. The sorted run being scanned is the output run of
+        ** a level currently undergoing an incremental merge. The sorted
+        ** run ends on the last page of iBlk, but the next block has already
+        ** been allocated. So mark it as in use as well.  */
+        if( iBlk==iLastBlk && bLastIsLastOnBlock && bExtra ){
+          int iExtra = 0;
+          rc = fsBlockNext(pFS, iBlk, &iExtra);
+          assert( rc==LSM_OK );
+
+          assert( aUsed[iExtra-1]==0 );
+          aUsed[iExtra-1] |= INTEGRITY_CHECK_USED;
+          aUsed[iExtra-1] |= INTEGRITY_CHECK_FIRST_PG;
+          aUsed[iExtra-1] |= INTEGRITY_CHECK_LAST_PG;
+        }
+
+        /* Move on to the next block in the sorted run. Or set iBlk to zero
+        ** in order to break out of the loop if this was the last block in
+        ** the run.  */
+        if( iBlk==iLastBlk ){
+          iBlk = 0;
+        }else{
+          rc = fsBlockNext(pFS, iBlk, &iBlk);
+          assert( rc==LSM_OK );
+        }
+      }while( iBlk );
     }
   }
+}
+
+typedef struct CheckFreelistCtx CheckFreelistCtx;
+typedef struct CheckFreelistCtx {
+  u8 *aUsed;
+  int nBlock;
+};
+static int checkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
+  CheckFreelistCtx *p = (CheckFreelistCtx *)pCtx;
+
+  assert( iBlk>=1 );
+  assert( iBlk<=p->nBlock );
+  assert( p->aUsed[iBlk-1]==0 );
+  p->aUsed[iBlk-1] = INTEGRITY_CHECK_FREE;
+  return 0;
 }
 
 /*
@@ -2180,9 +2266,11 @@ static void checkBlocks(
 ** assert() fails.
 */
 int lsmFsIntegrityCheck(lsm_db *pDb){
+  CheckFreelistCtx ctx;
   FileSystem *pFS = pDb->pFS;
   int i;
   int j;
+  int rc;
   Freelist freelist = {0, 0, 0};
   u8 *aUsed;
   Level *pLevel;
@@ -2192,9 +2280,9 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   aUsed = lsmMallocZero(pDb->pEnv, nBlock);
   if( aUsed==0 ){
     /* Malloc has failed. Since this function is only called within debug
-     ** builds, this probably means the user is running an OOM injection test.
-     ** Regardless, it will not be possible to run the integrity-check at this
-     ** time, so assume the database is Ok and return non-zero. */
+    ** builds, this probably means the user is running an OOM injection test.
+    ** Regardless, it will not be possible to run the integrity-check at this
+    ** time, so assume the database is Ok and return non-zero. */
     return 1;
   }
 
@@ -2206,26 +2294,14 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
     }
   }
 
-  if( pWorker->nFreelistOvfl ){
-    int rc = lsmCheckpointOverflowLoad(pDb, &freelist);
-    assert( rc==LSM_OK || rc==LSM_NOMEM );
-    if( rc!=LSM_OK ) return 1;
+  /* Mark all blocks in the free-list as used */
+  ctx.aUsed = aUsed;
+  ctx.nBlock = nBlock;
+  rc = lsmWalkFreelist(pDb, checkFreelistCb, (void *)&ctx);
+
+  if( rc==LSM_OK ){
+    for(i=0; i<nBlock; i++) assert( aUsed[i]!=0 );
   }
-
-  for(j=0; j<2; j++){
-    Freelist *pFreelist;
-    if( j==0 ) pFreelist = &pWorker->freelist;
-    if( j==1 ) pFreelist = &freelist;
-
-    for(i=0; i<pFreelist->nEntry; i++){
-      u32 iBlk = pFreelist->aEntry[i].iBlk;
-      assert( iBlk<=nBlock );
-      assert( aUsed[iBlk-1]==0 );
-      aUsed[iBlk-1] = 1;
-    }
-  }
-
-  for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
 
   lsmFree(pDb->pEnv, aUsed);
   lsmFree(pDb->pEnv, freelist.aEntry);

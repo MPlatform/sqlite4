@@ -62,17 +62,11 @@
 
 #define LSM_AUTOWORK_QUANT 32
 
-/* Minimum number of free-list entries to store in the checkpoint, assuming
-** the free-list contains this many entries. i.e. if overflow is required,
-** the first LSM_CKPT_MIN_FREELIST entries are stored in the checkpoint and
-** the remainder in an LSM system entry.  */
-#define LSM_CKPT_MIN_FREELIST     6
-#define LSM_CKPT_MAX_REFREE       2
-#define LSM_CKPT_MIN_NONLSM       (LSM_CKPT_MIN_FREELIST - LSM_CKPT_MAX_REFREE)
-
 typedef struct Database Database;
 typedef struct DbLog DbLog;
 typedef struct FileSystem FileSystem;
+typedef struct Freelist Freelist;
+typedef struct FreelistEntry FreelistEntry;
 typedef struct Level Level;
 typedef struct LogMark LogMark;
 typedef struct LogRegion LogRegion;
@@ -322,6 +316,8 @@ struct lsm_db {
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
+  Freelist *pFreelist;            /* See sortedNewToplevel() */
+  int bUseFreelist;               /* True to use pFreelist */
 
   /* Debugging message callback */
   void (*xLog)(void *, int, const char *);
@@ -450,14 +446,27 @@ struct ShmChunk {
 
 #define LSM_APPLIST_SZ 4
 
-typedef struct Freelist Freelist;
-typedef struct FreelistEntry FreelistEntry;
-
 /*
-** An instance of the following structure stores the current database free
-** block list. The free list is a list of blocks that are not currently
-** used by the worker snapshot. Assocated with each block in the list is the
-** snapshot id of the most recent snapshot that did actually use the block.
+** An instance of the following structure stores the in-memory part of
+** the current free block list. This structure is to the free block list
+** as the in-memory tree is to the users database content. The contents 
+** of the free block list is found by merging the in-memory components 
+** with those stored in the LSM, just as the contents of the database is
+** found by merging the in-memory tree with the user data entries in the
+** LSM.
+**
+** Each FreelistEntry structure in the array represents either an insert
+** or delete operation on the free-list. For deletes, the FreelistEntry.iId
+** field is set to -1. For inserts, it is set to zero or greater. 
+**
+** The array of FreelistEntry structures is always sorted in order of
+** block number (ascending).
+**
+** When the in-memory free block list is written into the LSM, each insert
+** operation is written separately. The entry key is the bitwise inverse
+** of the block number as a 32-bit big-endian integer. This is done so that
+** the entries in the LSM are sorted in descending order of block id. 
+** The associated value is the snapshot id, formated as a varint.
 */
 struct Freelist {
   FreelistEntry *aEntry;          /* Free list entries */
@@ -484,7 +493,6 @@ struct Snapshot {
   int nBlock;                     /* Number of blocks in database file */
   Pgno aiAppend[LSM_APPLIST_SZ];  /* Append point list */
   Freelist freelist;              /* Free block list */
-  int nFreelistOvfl;              /* Number of extra free-list entries in LSM */
   u32 nWrite;                     /* Total number of pages written to disk */
 };
 #define LSM_INITIAL_SNAPSHOT_ID 11
@@ -495,10 +503,6 @@ struct Snapshot {
 int lsmCheckpointWrite(lsm_db *, u32 *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
-
-int lsmCheckpointOverflow(lsm_db *pDb, void **, int *, int *);
-int lsmCheckpointOverflowRequired(lsm_db *pDb);
-int lsmCheckpointOverflowLoad(lsm_db *pDb, Freelist *);
 
 int lsmCheckpointRecover(lsm_db *);
 int lsmCheckpointDeserialize(lsm_db *, int, u32 *, Snapshot **);
@@ -518,7 +522,7 @@ int lsmCheckpointBlksz(u32 *);
 void lsmCheckpointLogoffset(u32 *aCkpt, DbLog *pLog);
 void lsmCheckpointZeroLogoffset(lsm_db *);
 
-int lsmCheckpointSaveWorker(lsm_db *pDb, int, int);
+int lsmCheckpointSaveWorker(lsm_db *pDb, int);
 int lsmDatabaseFull(lsm_db *pDb);
 int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite);
 
@@ -692,6 +696,8 @@ int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
 
+int lsmSortedWalkFreelist(lsm_db *, int (*)(void *, int, i64), void *);
+
 int lsmFlushTreeToDisk(lsm_db *pDb);
 
 void lsmSortedRemap(lsm_db *pDb);
@@ -773,7 +779,7 @@ int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
 
 int lsmBeginWork(lsm_db *);
-void lsmFinishWork(lsm_db *, int, int, int *);
+void lsmFinishWork(lsm_db *, int, int *);
 
 int lsmFinishRecovery(lsm_db *);
 void lsmFinishReadTrans(lsm_db *);

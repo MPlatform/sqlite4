@@ -372,7 +372,7 @@ static int infoGetWorker(lsm_db *pDb, Snapshot **pp, int *pbUnlock){
 static void infoFreeWorker(lsm_db *pDb, int bUnlock){
   if( bUnlock ){
     int rcdummy = LSM_BUSY;
-    lsmFinishWork(pDb, 0, 0, &rcdummy);
+    lsmFinishWork(pDb, 0, &rcdummy);
   }
 }
 
@@ -423,7 +423,7 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   if( rc!=LSM_OK ) return rc;
 
   lsmStringInit(&s, pDb->pEnv);
-  lsmStringAppendf(&s, "%d+%d",pWorker->freelist.nEntry,pWorker->nFreelistOvfl);
+  lsmStringAppendf(&s, "%d", pWorker->freelist.nEntry);
   for(i=0; i<pWorker->freelist.nEntry; i++){
     FreelistEntry *p = &pWorker->freelist.aEntry[i];
     lsmStringAppendf(&s, " {%d %d}", p->iBlk, (int)p->iId);

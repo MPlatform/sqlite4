@@ -84,61 +84,53 @@ static void assertNotInFreelist(Freelist *p, int iBlk){
 #endif
 
 /*
-** Append an entry to the free-list.
+** Append an entry to the free-list. If (iId==-1), this is a delete.
 */
-int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId){
+int freelistAppend(lsm_db *db, int iBlk, i64 iId){
+  lsm_env *pEnv = db->pEnv;
+  Freelist *p;
+  int i; 
 
-  /* Assert that this is not an attempt to insert a duplicate block number */
-#if 0
-  assertNotInFreelist(p, iBlk);
-#endif
+  assert( iId==-1 || iId>=0 );
+  p = db->bUseFreelist ? db->pFreelist : &db->pWorker->freelist;
 
   /* Extend the space allocated for the freelist, if required */
   assert( p->nAlloc>=p->nEntry );
   if( p->nAlloc==p->nEntry ){
     int nNew; 
+    int nByte; 
     FreelistEntry *aNew;
 
     nNew = (p->nAlloc==0 ? 4 : p->nAlloc*2);
-    aNew = (FreelistEntry *)lsmRealloc(pEnv, p->aEntry,
-                                       sizeof(FreelistEntry)*nNew);
+    nByte = sizeof(FreelistEntry) * nNew;
+    aNew = (FreelistEntry *)lsmRealloc(pEnv, p->aEntry, nByte);
     if( !aNew ) return LSM_NOMEM_BKPT;
     p->nAlloc = nNew;
     p->aEntry = aNew;
   }
 
-  /* Append the new entry to the freelist */
-  p->aEntry[p->nEntry].iBlk = iBlk;
-  p->aEntry[p->nEntry].iId = iId;
-  p->nEntry++;
+  for(i=0; i<p->nEntry; i++){
+    assert( i==0 || p->aEntry[i].iBlk > p->aEntry[i-1].iBlk );
+    if( p->aEntry[i].iBlk>=iBlk ) break;
+  }
+
+  if( i<p->nEntry && p->aEntry[i].iBlk==iBlk ){
+    /* Clobber an existing entry */
+    p->aEntry[i].iId = iId;
+  }else{
+    /* Insert a new entry into the list */
+    int nByte = sizeof(FreelistEntry)*(p->nEntry-i);
+    memmove(&p->aEntry[i+1], &p->aEntry[i], nByte);
+    p->aEntry[i].iBlk = iBlk;
+    p->aEntry[i].iId = iId;
+    p->nEntry++;
+  }
 
   return LSM_OK;
 }
 
-static int flInsertEntry(lsm_env *pEnv, Freelist *p, int iBlk){
-  int rc;
-
-  rc = lsmFreelistAppend(pEnv, p, iBlk, 1);
-  if( rc==LSM_OK ){
-    memmove(&p->aEntry[1], &p->aEntry[0], sizeof(FreelistEntry)*(p->nEntry-1));
-    p->aEntry[0].iBlk = iBlk;
-    p->aEntry[0].iId = 1;
-  }
-  return rc;
-}
-
 /*
-** Remove the first entry of the free-list.
-*/
-static void flRemoveEntry0(Freelist *p){
-  int nNew = p->nEntry - 1;
-  assert( nNew>=0 );
-  memmove(&p->aEntry[0], &p->aEntry[1], sizeof(FreelistEntry) * nNew);
-  p->nEntry = nNew;
-}
-
-/*
-** tHIS Function frees all resources held by the Database structure passed
+** This function frees all resources held by the Database structure passed
 ** as the only argument.
 */
 static void freeDatabase(lsm_env *pEnv, Database *p){
@@ -428,6 +420,122 @@ void lsmDbSnapshotSetLevel(Snapshot *pSnap, Level *pLevel){
   pSnap->pLevel = pLevel;
 }
 
+/* TODO: Shuffle things around to get rid of this */
+static int firstSnapshotInUse(lsm_db *, i64 *);
+
+/* 
+** Context object used by the lsmWalkFreelist() utility. 
+*/
+typedef struct WalkFreelistCtx WalkFreelistCtx;
+struct WalkFreelistCtx {
+  lsm_db *pDb;
+  Freelist *pFreelist;
+  int iFree;
+  int (*xUsr)(void *, int, i64);  /* User callback function */
+  void *pUsrctx;                  /* User callback context */
+};
+
+/* 
+** Callback used by lsmWalkFreelist().
+*/
+static int walkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
+  WalkFreelistCtx *p = (WalkFreelistCtx *)pCtx;
+  Freelist *pFree = p->pFreelist;
+
+  if( pFree ){
+    while( (p->iFree < pFree->nEntry) ){
+      FreelistEntry *pEntry = &pFree->aEntry[p->iFree];
+      if( pEntry->iBlk>iBlk ){
+        break;
+      }else{
+        p->iFree++;
+        if( pEntry->iId>=0 
+            && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) 
+          ){
+          return 1;
+        }
+        if( pEntry->iBlk==iBlk ) return 0;
+      }
+    }
+  }
+
+  return p->xUsr(p->pUsrctx, iBlk, iSnapshot);
+}
+
+/*
+** The database handle passed as the first argument must be the worker
+** connection. This function iterates through the contents of the current
+** free block list, invoking the supplied callback once for each list
+** element.
+**
+** The difference between this function and lsmSortedWalkFreelist() is
+** that lsmSortedWalkFreelist() only considers those free-list elements
+** stored within the LSM. This function also merges in any in-memory 
+** elements.
+*/
+int lsmWalkFreelist(
+  lsm_db *pDb,                    /* Database handle (must be worker) */
+  int (*x)(void *, int, i64),     /* Callback function */
+  void *pCtx                      /* First argument to pass to callback */
+){
+  int rc;
+  int iCtx;
+
+  WalkFreelistCtx ctx[2];
+
+  ctx[0].pDb = pDb;
+  ctx[0].pFreelist = &pDb->pWorker->freelist;
+  ctx[0].iFree = 0;
+  ctx[0].xUsr = walkFreelistCb;
+  ctx[0].pUsrctx = (void *)&ctx[1];
+
+  ctx[1].pDb = pDb;
+  ctx[1].pFreelist = pDb->pFreelist;
+  ctx[1].iFree = 0;
+  ctx[1].xUsr = x;
+  ctx[1].pUsrctx = pCtx;
+
+  rc = lsmSortedWalkFreelist(pDb, walkFreelistCb, (void *)&ctx[0]);
+
+  for(iCtx=0; iCtx<2; iCtx++){
+    int i;
+    WalkFreelistCtx *p = &ctx[iCtx];
+    for(i=p->iFree; p->pFreelist && rc==LSM_OK && i<p->pFreelist->nEntry; i++){
+      FreelistEntry *pEntry = &p->pFreelist->aEntry[i];
+      if( pEntry->iId>=0 && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) ){
+        return LSM_OK;
+      }
+    }
+  }
+
+  return rc;
+}
+
+typedef struct FindFreeblockCtx FindFreeblockCtx;
+struct FindFreeblockCtx {
+  i64 iInUse;
+  int iRet;
+};
+
+static int findFreeblockCb(void *pCtx, int iBlk, i64 iSnapshot){
+  FindFreeblockCtx *p = (FindFreeblockCtx *)pCtx;
+  if( iSnapshot<p->iInUse ){
+    p->iRet = iBlk;
+    return 1;
+  }
+  return 0;
+}
+
+static int findFreeblock(lsm_db *pDb, i64 iInUse, int *piRet){
+  int rc;                         /* Return code */
+  FindFreeblockCtx ctx;           /* Context object */
+
+  ctx.iInUse = iInUse;
+  ctx.iRet = 0;
+  rc = lsmWalkFreelist(pDb, findFreeblockCb, (void *)&ctx);
+  *piRet = ctx.iRet;
+  return rc;
+}
 
 /*
 ** Allocate a new database file block to write data to, either by extending
@@ -439,56 +547,48 @@ void lsmDbSnapshotSetLevel(Snapshot *pSnap, Level *pLevel){
 */
 int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   Snapshot *p = pDb->pWorker;
-  Freelist *pFree;                /* Database free list */
   int iRet = 0;                   /* Block number of allocated block */
   int rc = LSM_OK;
+  i64 iInUse = 0;                 /* Snapshot id still in use */
 
-  assert( pDb->pWorker );
- 
-  pFree = &p->freelist;
-  if( pFree->nEntry>0 ){
-    /* The first block on the free list was freed as part of the work done
-    ** to create the snapshot with id iFree. So, we can reuse this block if
-    ** snapshot iFree or later has been checkpointed and all currently 
-    ** active clients are reading from snapshot iFree or later.  */
-    i64 iFree = pFree->aEntry[0].iId;
-    int bInUse = 0;
+  assert( p );
 
-    /* The "is in use" bit */
-    rc = lsmLsmInUse(pDb, iFree, &bInUse);
+  /* Set iInUse to the smallest snapshot id that is either:
+  **
+  **   * Currently in use by a database client,
+  **   * May be used by a database client in the future, or
+  **   * Is the most recently checkpointed snapshot (i.e. the one that will
+  **     be used following recovery if a failure occurs at this point).
+  */
+  rc = lsmCheckpointSynced(pDb, &iInUse, 0, 0);
+  if( rc==LSM_OK && iInUse==0 ) iInUse = p->iId;
+  if( rc==LSM_OK && pDb->pClient ) iInUse = LSM_MIN(iInUse, pDb->pClient->iId);
+  if( rc==LSM_OK ) rc = firstSnapshotInUse(pDb, &iInUse);
 
-    /* The "has been checkpointed" bit */
-    if( rc==LSM_OK && bInUse==0 ){
-      i64 iId = 0;
-      rc = lsmCheckpointSynced(pDb, &iId, 0, 0);
-      if( rc!=LSM_OK || iId<iFree ) bInUse = 2;
-    }
+  /* Query the free block list for a suitable block */
+  if( rc==LSM_OK ) rc = findFreeblock(pDb, iInUse, &iRet);
 
-    if( rc==LSM_OK && bInUse==0 ){
-      iRet = pFree->aEntry[0].iBlk;
-      flRemoveEntry0(pFree);
-      assert( iRet!=0 );
-    }
-#ifdef LSM_LOG_BLOCKS
-    lsmLogMessage(
-        pDb, 0, "%s reusing block %d%s", (iRet==0 ? "not " : ""),
-        pFree->aEntry[0].iBlk, 
-        bInUse==0 ? "" : bInUse==1 ? " (client)" : " (unsynced)"
-    );
+  /* If a block was found in the free block list, use it and remove it from 
+  ** the list. Otherwise, if no suitable block was found, allocate one from
+  ** the end of the file.  */
+  if( rc==LSM_OK ){
+    if( iRet>0 ){
+#ifdef LSM_LOG_FREELIST
+      lsmLogMessage(pDb, 0, 
+          "reusing block %d (snapshot-in-use=%lld)", iRet, iInUse);
 #endif
+      rc = freelistAppend(pDb, iRet, -1);
+    }else{
+      iRet = ++(p->nBlock);
+#ifdef LSM_LOG_FREELIST
+      lsmLogMessage(pDb, 0, "extending file to %d blocks", iRet);
+#endif
+    }
   }
 
-  /* If no block was allocated from the free-list, allocate one at the
-  ** end of the file. */
-  if( rc==LSM_OK && iRet==0 ){
-    iRet = ++pDb->pWorker->nBlock;
-#ifdef LSM_LOG_BLOCKS
-    lsmLogMessage(pDb, 0, "extending file to %d blocks", iRet);
-#endif
-  }
-
+  assert( iRet>0 || rc!=LSM_OK );
   *piBlk = iRet;
-  return LSM_OK;
+  return rc;
 }
 
 /*
@@ -500,14 +600,13 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
 */
 int lsmBlockFree(lsm_db *pDb, int iBlk){
   Snapshot *p = pDb->pWorker;
-
   assert( lsmShmAssertWorker(pDb) );
-  /* TODO: Should assert() that lsmCheckpointOverflow() has not been called */
+
 #ifdef LSM_LOG_FREELIST
   lsmLogMessage(pDb, LSM_OK, "lsmBlockFree(): Free block %d", iBlk);
 #endif
 
-  return lsmFreelistAppend(pDb->pEnv, &p->freelist, iBlk, p->iId);
+  return freelistAppend(pDb, iBlk, p->iId);
 }
 
 /*
@@ -524,12 +623,11 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
   int rc = LSM_OK;                /* Return code */
   Snapshot *p = pDb->pWorker;
 
-  if( iBlk==p->nBlock ){
-    p->nBlock--;
-  }else{
-    rc = flInsertEntry(pDb->pEnv, &p->freelist, iBlk);
-  }
+#ifdef LSM_LOG_FREELIST
+  lsmLogMessage(pDb, LSM_OK, "lsmBlockRefree(): Refree block %d", iBlk);
+#endif
 
+  rc = freelistAppend(pDb, iBlk, 0);
   return rc;
 }
 
@@ -634,14 +732,13 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
 ** created to hold the updated state of the database is synced to disk, log
 ** file space can be recycled.
 */
-void lsmFinishWork(lsm_db *pDb, int bFlush, int nOvfl, int *pRc){
+void lsmFinishWork(lsm_db *pDb, int bFlush, int *pRc){
   assert( *pRc!=0 || pDb->pWorker );
   if( pDb->pWorker ){
     /* If no error has occurred, serialize the worker snapshot and write
     ** it to shared memory.  */
-    assert( pDb->pWorker->nFreelistOvfl==0 || nOvfl==0 );
     if( *pRc==LSM_OK ){
-      *pRc = lsmCheckpointSaveWorker(pDb, bFlush, nOvfl);
+      *pRc = lsmCheckpointSaveWorker(pDb, bFlush);
     }
     lsmFreeSnapshot(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;
@@ -722,13 +819,13 @@ int lsmBeginReadTrans(lsm_db *pDb){
     }
 #if 0
 if( rc==LSM_OK && pDb->pClient ){
-  printf("reading %p: snapshot:%d used-shmid:%d trans-id:%d iOldShmid=%d\n",
+  fprintf(stderr, 
+      "reading %p: snapshot:%d used-shmid:%d trans-id:%d iOldShmid=%d\n",
       (void *)pDb,
       (int)pDb->pClient->iId, (int)pDb->treehdr.iUsedShmid, 
       (int)pDb->treehdr.root.iTransId,
       (int)pDb->treehdr.iOldShmid
   );
-  fflush(stdout);
 }
 #endif
   }
@@ -757,6 +854,14 @@ void lsmFinishReadTrans(lsm_db *pDb){
     lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
     pDb->pClient = 0;
   }
+#endif
+
+#if 0
+if( pDb->pClient && pDb->iReader>=0 ){
+  fprintf(stderr, 
+      "finished reading %p: snapshot:%d\n", (void *)pDb, (int)pDb->pClient->iId
+  );
+}
 #endif
   if( pDb->iReader>=0 ) lsmReleaseReadlock(pDb);
 }
@@ -961,6 +1066,45 @@ static int isInUse(lsm_db *db, i64 iLsmId, u32 iShmid, int *pbInUse){
   }
   *pbInUse = 0;
   return rc;
+}
+
+/*
+** This function is called by worker connections to determine the smallest
+** snapshot id that is currently in use by a database client. The worker
+** connection uses this result to determine whether or not it is safe to
+** recycle a database block.
+*/
+static int firstSnapshotInUse(
+  lsm_db *db,                     /* Database handle */
+  i64 *piInUse                    /* IN/OUT: Smallest snapshot id in use */
+){
+  ShmHeader *pShm = db->pShmhdr;
+  i64 iInUse = *piInUse;
+  int i;
+
+  assert( iInUse>0 );
+  for(i=0; i<LSM_LOCK_NREADER; i++){
+    ShmReader *p = &pShm->aReader[i];
+    if( p->iLsmId ){
+      i64 iThis = p->iLsmId;
+      if( iThis!=0 && iInUse>iThis ){
+        int rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
+        if( rc==LSM_OK ){
+          p->iLsmId = 0;
+          lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK, 0);
+        }else if( rc==LSM_BUSY ){
+          iInUse = iThis;
+        }else{
+          /* Some error other than LSM_BUSY. Return the error code to
+          ** the caller in this case.  */
+          return rc;
+        }
+      }
+    }
+  }
+
+  *piInUse = iInUse;
+  return LSM_OK;
 }
 
 int lsmTreeInUse(lsm_db *db, u32 iShmid, int *pbInUse){
