@@ -2131,6 +2131,29 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
 }
 
 /*
+** The following macros are used by the integrity-check code. Associated with
+** each block in the database is an 8-bit bit mask (the entry in the aUsed[]
+** array). As the integrity-check meanders through the database, it sets the
+** following bits to indicate how each block is used.
+**
+** INTEGRITY_CHECK_FIRST_PG:
+**   First page of block is in use by sorted run.
+**
+** INTEGRITY_CHECK_LAST_PG:
+**   Last page of block is in use by sorted run.
+**
+** INTEGRITY_CHECK_USED:
+**   At least one page of the block is in use by a sorted run.
+**
+** INTEGRITY_CHECK_FREE:
+**   The free block list contains an entry corresponding to this block.
+*/
+#define INTEGRITY_CHECK_FIRST_PG 0x01
+#define INTEGRITY_CHECK_LAST_PG  0x02
+#define INTEGRITY_CHECK_USED     0x04
+#define INTEGRITY_CHECK_FREE     0x08
+
+/*
 ** Helper function for lsmFsIntegrityCheck()
 */
 static void checkBlocks(
@@ -2142,27 +2165,61 @@ static void checkBlocks(
 ){
   if( pSeg ){
     if( pSeg && pSeg->nSize>0 ){
+      int rc;
       Pgno iLast = pSeg->iLastPg;
       int iBlk;
       int iLastBlk;
+      int bLastIsLastOnBlock;
+
       iBlk = fsPageToBlock(pFS, pSeg->iFirst);
       iLastBlk = fsPageToBlock(pFS, pSeg->iLastPg);
+      bLastIsLastOnBlock = (fsLastPageOnBlock(pFS, iLastBlk)==iLast);
+      assert( iBlk>0 );
 
-      while( iBlk ){
-        assert( iBlk<=nUsed );
-        /* assert( aUsed[iBlk-1]==0 ); */
-        aUsed[iBlk-1] = 1;
-        if( iBlk!=iLastBlk ){
-          fsBlockNext(pFS, iBlk, &iBlk);
-        }else{
-          iBlk = 0;
+      /* If the first page of this run is also the first page of its first
+      ** block, set the flag to indicate that the first page of iBlk is 
+      ** in use.  */
+      if( fsFirstPageOnBlock(pFS, iBlk)==pSeg->iFirst ){
+        assert( (aUsed[iBlk-1] & INTEGRITY_CHECK_FIRST_PG)==0 );
+        aUsed[iBlk-1] |= INTEGRITY_CHECK_FIRST_PG;
+      }
+
+      do {
+        /* iBlk is a part of this sorted run. */
+        aUsed[iBlk-1] |= INTEGRITY_CHECK_USED;
+
+        /* Unless the sorted run finishes before the last page on this block, 
+        ** the last page of this block is also in use.  */
+        if( iBlk!=iLastBlk || bLastIsLastOnBlock ){
+          assert( (aUsed[iBlk-1] & INTEGRITY_CHECK_LAST_PG)==0 );
+          aUsed[iBlk-1] |= INTEGRITY_CHECK_LAST_PG;
         }
-      }
 
-      if( bExtra && iLast==fsLastPageOnPagesBlock(pFS, iLast) ){
-        fsBlockNext(pFS, iLastBlk, &iBlk);
-        aUsed[iBlk-1] = 1;
-      }
+        /* Special case. The sorted run being scanned is the output run of
+        ** a level currently undergoing an incremental merge. The sorted
+        ** run ends on the last page of iBlk, but the next block has already
+        ** been allocated. So mark it as in use as well.  */
+        if( iBlk==iLastBlk && bLastIsLastOnBlock && bExtra ){
+          int iExtra = 0;
+          rc = fsBlockNext(pFS, iBlk, &iExtra);
+          assert( rc==LSM_OK );
+
+          assert( aUsed[iExtra-1]==0 );
+          aUsed[iExtra-1] |= INTEGRITY_CHECK_USED;
+          aUsed[iExtra-1] |= INTEGRITY_CHECK_FIRST_PG;
+          aUsed[iExtra-1] |= INTEGRITY_CHECK_LAST_PG;
+        }
+
+        /* Move on to the next block in the sorted run. Or set iBlk to zero
+        ** in order to break out of the loop if this was the last block in
+        ** the run.  */
+        if( iBlk==iLastBlk ){
+          iBlk = 0;
+        }else{
+          rc = fsBlockNext(pFS, iBlk, &iBlk);
+          assert( rc==LSM_OK );
+        }
+      }while( iBlk );
     }
   }
 }
@@ -2178,8 +2235,7 @@ static int checkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
   assert( iBlk>=1 );
   assert( iBlk<=p->nBlock );
   assert( p->aUsed[iBlk-1]==0 );
-  p->aUsed[iBlk-1] = 1;
-
+  p->aUsed[iBlk-1] = INTEGRITY_CHECK_FREE;
   return 0;
 }
 
@@ -2229,7 +2285,7 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   ctx.nBlock = nBlock;
   lsmWalkFreelist(pDb, checkFreelistCb, (void *)&ctx);
 
-  for(i=0; i<nBlock; i++) assert( aUsed[i]==1 );
+  for(i=0; i<nBlock; i++) assert( aUsed[i]!=0 );
   lsmFree(pDb->pEnv, aUsed);
   lsmFree(pDb->pEnv, freelist.aEntry);
 
