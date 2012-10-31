@@ -189,7 +189,8 @@ struct FileSystem {
   /* If this is a compressed database, a pointer to the compression methods.
   ** For an uncompressed database, a NULL pointer.  */
   lsm_compress *pCompress;
-  u8 *aBuffer;                    /* Buffer to compress into */
+  u8 *aIBuffer;                   /* Buffer to compress to */
+  u8 *aOBuffer;                   /* Buffer to uncompress from */
   int nBuffer;                    /* Allocated size of aBuffer[] in bytes */
 
   /* mmap() mode things */
@@ -558,7 +559,8 @@ void lsmFsClose(FileSystem *pFS){
     if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
     lsmFree(pEnv, pFS->pLsmFile);
     lsmFree(pEnv, pFS->apHash);
-    lsmFree(pEnv, pFS->aBuffer);
+    lsmFree(pEnv, pFS->aIBuffer);
+    lsmFree(pEnv, pFS->aOBuffer);
     lsmFree(pEnv, pFS);
   }
 }
@@ -1015,16 +1017,27 @@ static int fsAddOffset(FileSystem *pFS, i64 iOff, int iAdd, i64 *piRes){
   return rc;
 }
 
-static int fsAllocateBuffer(FileSystem *pFS){
+static int fsAllocateBuffer(FileSystem *pFS, int bWrite){
+  u8 **pp;                        /* Pointer to either aIBuffer or aOBuffer */
+
   assert( pFS->pCompress );
-  if( pFS->aBuffer==0 ){
+
+  /* If neither buffer has been allocated, figure out how large they
+  ** should be. Store this value in FileSystem.nBuffer.  */
+  if( pFS->nBuffer==0 ){
+    assert( pFS->aIBuffer==0 && pFS->aOBuffer==0 );
     pFS->nBuffer = pFS->pCompress->xBound(pFS->pCompress->pCtx, pFS->nPagesize);
     if( pFS->nBuffer<(pFS->szSector+6) ){
       pFS->nBuffer = pFS->szSector+6;
     }
-    pFS->aBuffer = lsmMalloc(pFS->pEnv, LSM_MAX(pFS->nBuffer, pFS->nPagesize));
-    if( pFS->aBuffer==0 ) return LSM_NOMEM_BKPT;
   }
+
+  pp = (bWrite ? &pFS->aOBuffer : &pFS->aIBuffer);
+  if( *pp==0 ){
+    *pp = lsmMalloc(pFS->pEnv, LSM_MAX(pFS->nBuffer, pFS->nPagesize));
+    if( *pp==0 ) return LSM_NOMEM_BKPT;
+  }
+
   return LSM_OK;
 }
 
@@ -1047,7 +1060,7 @@ static int fsReadPagedata(
 
   assert( p && pPg->nCompress==0 );
 
-  if( fsAllocateBuffer(pFS) ) return LSM_NOMEM;
+  if( fsAllocateBuffer(pFS, 0) ) return LSM_NOMEM;
 
   rc = fsReadData(pFS, iOff, aSz, sizeof(aSz));
 
@@ -1071,14 +1084,14 @@ static int fsReadPagedata(
         if( pPg->nCompress>pFS->nBuffer ){
           rc = LSM_CORRUPT_BKPT;
         }else{
-          rc = fsReadData(pFS, iOff, pFS->aBuffer, pPg->nCompress);
+          rc = fsReadData(pFS, iOff, pFS->aIBuffer, pPg->nCompress);
         }
         if( rc==LSM_OK ){
           int n = pFS->nPagesize;
           rc = p->xUncompress(p->pCtx, 
               (char *)pPg->aData, &n, 
-              (const char *)pFS->aBuffer, pPg->nCompress
-              );
+              (const char *)pFS->aIBuffer, pPg->nCompress
+          );
           if( rc==LSM_OK && n!=pPg->nData ){
             rc = LSM_CORRUPT_BKPT;
           }
@@ -1847,12 +1860,12 @@ static Pgno fsAppendData(
 static int fsCompressIntoBuffer(FileSystem *pFS, Page *pPg){
   lsm_compress *p = pFS->pCompress;
 
-  if( fsAllocateBuffer(pFS) ) return LSM_NOMEM;
+  if( fsAllocateBuffer(pFS, 1) ) return LSM_NOMEM;
   assert( pPg->nData==pFS->nPagesize );
 
   pPg->nCompress = pFS->nBuffer;
   return p->xCompress(p->pCtx, 
-      (char *)pFS->aBuffer, &pPg->nCompress, 
+      (char *)pFS->aOBuffer, &pPg->nCompress, 
       (const char *)pPg->aData, pPg->nData
   );
 }
@@ -1883,7 +1896,7 @@ int lsmFsPagePersist(Page *pPg){
 
       /* Write the serialized page record into the database file. */
       pPg->iPg = fsAppendData(pFS, pPg->pSeg, aSz, sizeof(aSz), &rc);
-      fsAppendData(pFS, pPg->pSeg, pFS->aBuffer, pPg->nCompress, &rc);
+      fsAppendData(pFS, pPg->pSeg, pFS->aOBuffer, pPg->nCompress, &rc);
       fsAppendData(pFS, pPg->pSeg, aSz, sizeof(aSz), &rc);
 
       /* Now that it has a page number, insert the page into the hash table */
@@ -1953,8 +1966,8 @@ int lsmFsSortedPadding(
       nPad -= 6;
       putRecordSize(aSz, nPad, 1);
       fsAppendData(pFS, pSeg, aSz, sizeof(aSz), &rc);
-      memset(pFS->aBuffer, 0, nPad);
-      fsAppendData(pFS, pSeg, pFS->aBuffer, nPad, &rc);
+      memset(pFS->aOBuffer, 0, nPad);
+      fsAppendData(pFS, pSeg, pFS->aOBuffer, nPad, &rc);
       fsAppendData(pFS, pSeg, aSz, sizeof(aSz), &rc);
     }else if( nPad>0 ){
       u8 aBuf[5] = {0,0,0,0,0};
