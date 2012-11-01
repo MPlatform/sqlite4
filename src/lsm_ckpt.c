@@ -36,7 +36,6 @@
 **     5. The block size.
 **     6. The number of levels.
 **     7. The nominal database page size.
-**     8. Flag indicating if there exists a FREELIST record in the database.
 **
 **   Log pointer:
 **
@@ -49,7 +48,7 @@
 **
 **   Append points:
 **
-**     4 integers. See ckptExportAppendlist().
+**     8 integers (4 * 64-bit page numbers). See ckptExportAppendlist().
 **
 **   For each level in the database, a level record. Formatted as follows:
 **
@@ -67,18 +66,15 @@
 **     8. Cell within page containing current split-key.
 **     9. Current pointer value (64-bits - 2 integers).
 **
-**   The freelist. 
+**   The in-memory freelist entries. Each entry is either an insert or a
+**   delete. The in-memory freelist is to the free-block-list as the
+**   in-memory tree is to the users database content.
 **
 **     1. Number of free-list entries stored in checkpoint header.
 **     2. For each entry:
 **        2a. Block number of free block.
-**        2b. MSW of associated checkpoint id.
-**        2c. LSW of associated checkpoint id.
-**
-**   If the overflow flag is set, then extra free-list entries may be stored
-**   in the FREELIST record. The FREELIST record contains 3 32-bit integers
-**   per entry, in the same format as above (without the "number of entries"
-**   field).
+**        2b. A 64-bit integer (MSW followed by LSW). -1 for a delete entry,
+**            or the associated checkpoint id for an insert.
 **
 **   The checksum:
 **

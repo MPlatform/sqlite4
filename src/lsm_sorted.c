@@ -4167,30 +4167,32 @@ static int mergeWorkerInit(
   return rc;
 }
 
-/* TODO: Re-enable this!!! */
 static int sortedBtreeGobble(
-  lsm_db *pDb, 
-  MultiCursor *pCsr, 
-  int iGobble
+  lsm_db *pDb,                    /* Worker connection */
+  MultiCursor *pCsr,              /* Multi-cursor being used for a merge */
+  int iGobble                     /* pCsr->aPtr[] entry to operate on */
 ){
   int rc = LSM_OK;
   if( rtTopic(pCsr->eType)==0 ){
     Segment *pSeg = pCsr->aPtr[iGobble].pSeg;
-    Blob *p = &pCsr->key;
     Pgno *aPg;
     int nPg;
 
+    /* Seek from the root of the b-tree to the segment leaf that may contain
+    ** a key equal to the one multi-cursor currently points to. Record the
+    ** page number of each b-tree page and the leaf. The segment may be
+    ** gobbled up to (but not including) the first of these page numbers.
+    */
     assert( pSeg->iRoot>0 );
     aPg = lsmMallocZeroRc(pDb->pEnv, sizeof(Pgno)*32, &rc);
     if( rc==LSM_OK ){
-      rc = seekInBtree(pCsr, pSeg, p->pData, p->nData, aPg, 0); 
+      rc = seekInBtree(pCsr, pSeg, pCsr->key.pData, pCsr->key.nData, aPg, 0); 
     }
 
-    for(nPg=0; aPg[nPg]; nPg++);
-
-#if 0
-    lsmFsGobble(pDb, pSeg, aPg, nPg);
-#endif
+    if( rc==LSM_OK ){
+      for(nPg=0; aPg[nPg]; nPg++);
+      lsmFsGobble(pDb, pSeg, aPg, nPg);
+    }
 
     lsmFree(pDb->pEnv, aPg);
   }
