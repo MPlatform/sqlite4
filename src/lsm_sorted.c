@@ -4493,6 +4493,7 @@ static int doLsmSingleWork(
       rc = sortedWork(pDb, nRem, 0, 1, &nPg);
       nRem -= nPg;
       assert( rc!=LSM_OK || nRem<=0 || !sortedDbIsFull(pDb) );
+      bDirty = 1;
     }
 
     if( rc==LSM_OK && nRem>0 ){
@@ -4504,6 +4505,7 @@ static int doLsmSingleWork(
           lsmTreeDiscardOld(pDb);
         }
         rc = lsmCheckpointSaveWorker(pDb, 1);
+        bDirty = 0;
       }
     }
   }
