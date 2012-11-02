@@ -93,7 +93,7 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
     lappend lRes [exec_lsmtest_speed $nSec $wt]
     if {$sys != [lindex $lSys end]} {
       puts "Sleeping 20 seconds..."
-      #after 20000
+      after 20000
     }
   }
 
@@ -191,8 +191,7 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
 }
 
 do_write_test x.png 600 50000 50000 20 {
- lsm-st     "mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
- lsm-st2    "page_size=1024 mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
+  lsm-mt-1 "mmap=1 multi_proc=0 safety=0 threads=3 autowork=0 block_size=1M"
 }
 
 # lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=8192000"

@@ -15,6 +15,8 @@
 #include <tcl.h>
 #include "lsm.h"
 #include "sqlite4.h"
+#include <assert.h>
+#include <string.h>
 
 extern int getDbPointer(Tcl_Interp *interp, const char *zA, sqlite4 **ppDb);
 extern const char *sqlite4TestErrorName(int);
@@ -22,7 +24,7 @@ extern const char *sqlite4TestErrorName(int);
 /*
 ** TCLCMD:    sqlite4_lsm_config DB DBNAME PARAM ...
 */
-static int test_lsm_config(
+static int test_sqlite4_lsm_config(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -85,7 +87,7 @@ static int test_lsm_config(
 /*
 ** TCLCMD:    sqlite4_lsm_info DB DBNAME PARAM
 */
-static int test_lsm_info(
+static int test_sqlite4_lsm_info(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -143,7 +145,7 @@ static int test_lsm_info(
 /*
 ** TCLCMD:    sqlite4_lsm_work DB DBNAME ?SWITCHES? ?N?
 */
-static int test_lsm_work(
+static int test_sqlite4_lsm_work(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -210,7 +212,7 @@ static int test_lsm_work(
 /*
 ** TCLCMD:    sqlite4_lsm_checkpoint DB DBNAME 
 */
-static int test_lsm_checkpoint(
+static int test_sqlite4_lsm_checkpoint(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -248,7 +250,7 @@ static int test_lsm_checkpoint(
 /*
 ** TCLCMD:    sqlite4_lsm_flush DB DBNAME 
 */
-static int test_lsm_flush(
+static int test_sqlite4_lsm_flush(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -289,16 +291,433 @@ static int test_lsm_flush(
   return TCL_OK;
 }
 
+typedef struct TclLsmCursor TclLsmCursor;
+typedef struct TclLsm TclLsm;
+
+struct TclLsm {
+  lsm_db *db;
+};
+
+struct TclLsmCursor {
+  lsm_cursor *csr;
+};
+
+static int test_lsm_error(Tcl_Interp *interp, const char *zApi, int rc){
+  char zMsg[64];
+  if( rc==LSM_OK ){
+    return TCL_OK;
+  }
+
+  sprintf(zMsg, "error in %s() - %d", zApi, rc);
+  Tcl_ResetResult(interp);
+  Tcl_AppendResult(interp, zMsg, 0);
+  return TCL_ERROR;
+}
+
+static void test_lsm_cursor_del(void *ctx){
+  TclLsmCursor *pCsr = (TclLsmCursor *)ctx;
+  if( pCsr ){
+    lsm_csr_close(pCsr->csr);
+    ckfree((char *)pCsr);
+  }
+}
+
+static void test_lsm_del(void *ctx){
+  TclLsm *p = (TclLsm *)ctx;
+  if( p ){
+    lsm_close(p->db);
+    ckfree((char *)p);
+  }
+}
+
+/*
+** Usage: CSR sub-command ...
+*/
+static int test_lsm_cursor_cmd(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  struct Subcmd {
+    const char *zCmd;
+    int nArg;
+    const char *zUsage;
+  } aCmd[] = {
+    /* 0 */ {"close",      0, ""},
+    /* 1 */ {"seek",       2, "KEY SEEK-TYPE"},
+    /* 2 */ {"first",      0, ""},
+    /* 3 */ {"last",       0, ""},
+    /* 4 */ {"next",       0, ""},
+    /* 5 */ {"prev",       0, ""},
+    /* 6 */ {"key",        0, ""},
+    /* 7 */ {"value",      0, ""},
+    /* 8 */ {"valid",      0, ""},
+    {0, 0, 0}
+  };
+  int iCmd;
+  int rc;
+  TclLsmCursor *pCsr = (TclLsmCursor *)clientData;
+
+  rc = Tcl_GetIndexFromObjStruct(
+      interp, objv[1], aCmd, sizeof(aCmd[0]), "sub-command", 0, &iCmd
+  );
+  if( rc!=TCL_OK ) return rc;
+  if( aCmd[iCmd].nArg>=0 && objc!=(2 + aCmd[iCmd].nArg) ){
+    Tcl_WrongNumArgs(interp, 2, objv, aCmd[iCmd].zUsage);
+    return TCL_ERROR;
+  }
+
+  switch( iCmd ){
+
+    case 0: assert( 0==strcmp(aCmd[0].zCmd, "close") ); {
+      Tcl_DeleteCommand(interp, Tcl_GetStringFromObj(objv[0], 0));
+      return TCL_OK;
+    }
+
+    case 1: assert( 0==strcmp(aCmd[1].zCmd, "seek") ); {
+      struct Seekbias {
+        const char *zBias;
+        int eBias;
+      } aBias[] = {
+        {"eq",     LSM_SEEK_EQ},
+        {"le",     LSM_SEEK_LE},
+        {"lefast", LSM_SEEK_LEFAST},
+        {"ge",     LSM_SEEK_GE},
+        {0, 0}
+      };
+      int iBias;
+      const char *zKey; int nKey;
+      zKey = Tcl_GetStringFromObj(objv[2], &nKey);
+
+      rc = Tcl_GetIndexFromObjStruct(
+          interp, objv[3], aBias, sizeof(aBias[0]), "bias", 0, &iBias
+      );
+      if( rc!=TCL_OK ) return rc;
+
+      rc = lsm_csr_seek(pCsr->csr, zKey, nKey, aBias[iBias].eBias);
+      return test_lsm_error(interp, "lsm_seek", rc);
+    }
+
+    case 2: 
+    case 3: 
+    case 4: 
+    case 5: {
+      const char *zApi;
+
+      assert( 0==strcmp(aCmd[2].zCmd, "first") );
+      assert( 0==strcmp(aCmd[3].zCmd, "last") );
+      assert( 0==strcmp(aCmd[4].zCmd, "next") );
+      assert( 0==strcmp(aCmd[5].zCmd, "prev") );
+
+      switch( iCmd ){
+        case 2: rc = lsm_csr_first(pCsr->csr); zApi = "lsm_csr_first"; break;
+        case 3: rc = lsm_csr_last(pCsr->csr);  zApi = "lsm_csr_last";  break;
+        case 4: rc = lsm_csr_next(pCsr->csr);  zApi = "lsm_csr_next";  break;
+        case 5: rc = lsm_csr_prev(pCsr->csr);  zApi = "lsm_csr_prev";  break;
+      }
+
+      return test_lsm_error(interp, zApi, rc);
+    }
+
+    case 6: assert( 0==strcmp(aCmd[6].zCmd, "key") ); {
+      const void *pKey; int nKey;
+      rc = lsm_csr_key(pCsr->csr, &pKey, &nKey);
+      if( rc!=LSM_OK ) test_lsm_error(interp, "lsm_csr_key", rc);
+
+      Tcl_SetObjResult(interp, Tcl_NewStringObj((const char *)pKey, nKey));
+      return TCL_OK;
+    }
+
+    case 7: assert( 0==strcmp(aCmd[7].zCmd, "value") ); {
+      const void *pVal; int nVal;
+      rc = lsm_csr_value(pCsr->csr, &pVal, &nVal);
+      if( rc!=LSM_OK ) test_lsm_error(interp, "lsm_csr_value", rc);
+
+      Tcl_SetObjResult(interp, Tcl_NewStringObj((const char *)pVal, nVal));
+      return TCL_OK;
+    }
+
+    case 8: assert( 0==strcmp(aCmd[8].zCmd, "valid") ); {
+      int bValid = lsm_csr_valid(pCsr->csr);
+      Tcl_SetObjResult(interp, Tcl_NewBooleanObj(bValid));
+      return TCL_OK;
+    }
+  }
+
+  Tcl_AppendResult(interp, "internal error", 0);
+  return TCL_ERROR;
+}
+
+/*
+** Usage: DB sub-command ...
+*/
+static int test_lsm_cmd(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  struct Subcmd {
+    const char *zCmd;
+    int nArg;
+    const char *zUsage;
+  } aCmd[] = {
+    /* 0 */ {"close",        0, ""},
+    /* 1 */ {"write",        2, "KEY VALUE"},
+    /* 2 */ {"delete",       1, "KEY"},
+    /* 3 */ {"delete_range", 2, "START-KEY END-KEY"},
+    /* 4 */ {"begin",        1, "LEVEL"},
+    /* 5 */ {"commit",       1, "LEVEL"},
+    /* 6 */ {"rollback",     1, "LEVEL"},
+    /* 7 */ {"csr_open",     1, "CSR"},
+    /* 8 */ {"work",        -1, "NPAGE ?SWITCHES?"},
+    {0, 0, 0}
+  };
+  int iCmd;
+  int rc;
+  TclLsm *p = (TclLsm *)clientData;
+
+  if( objc<2 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "SUB-COMMAND ...");
+    return TCL_ERROR;
+  }
+
+  rc = Tcl_GetIndexFromObjStruct(
+      interp, objv[1], aCmd, sizeof(aCmd[0]), "sub-command", 0, &iCmd
+  );
+  if( rc!=TCL_OK ) return rc;
+  if( aCmd[iCmd].nArg>=0 && objc!=(2 + aCmd[iCmd].nArg) ){
+    Tcl_WrongNumArgs(interp, 2, objv, aCmd[iCmd].zUsage);
+    return TCL_ERROR;
+  }
+
+  switch( iCmd ){
+
+    case 0: assert( 0==strcmp(aCmd[0].zCmd, "close") ); {
+      Tcl_DeleteCommand(interp, Tcl_GetStringFromObj(objv[0], 0));
+      return TCL_OK;
+    }
+
+    case 1: assert( 0==strcmp(aCmd[1].zCmd, "write") ); {
+      const char *zKey; int nKey;
+      const char *zVal; int nVal;
+
+      zKey = Tcl_GetStringFromObj(objv[2], &nKey);
+      zVal = Tcl_GetStringFromObj(objv[3], &nVal);
+
+      rc = lsm_write(p->db, zKey, nKey, zVal, nVal);
+      return test_lsm_error(interp, "lsm_write", rc);
+    }
+
+    case 2: assert( 0==strcmp(aCmd[2].zCmd, "delete") ); {
+      const char *zKey; int nKey;
+
+      zKey = Tcl_GetStringFromObj(objv[2], &nKey);
+
+      rc = lsm_delete(p->db, zKey, nKey);
+      return test_lsm_error(interp, "lsm_delete", rc);
+    }
+
+    case 3: assert( 0==strcmp(aCmd[3].zCmd, "delete_range") ); {
+      const char *zKey1; int nKey1;
+      const char *zKey2; int nKey2;
+
+      zKey1 = Tcl_GetStringFromObj(objv[2], &nKey1);
+      zKey2 = Tcl_GetStringFromObj(objv[3], &nKey2);
+
+      rc = lsm_delete_range(p->db, zKey1, nKey1, zKey2, nKey2);
+      return test_lsm_error(interp, "lsm_delete_range", rc);
+    }
+
+    case 4: 
+    case 5: 
+    case 6: {
+      const char *zApi;
+      int iLevel;
+
+      rc = Tcl_GetIntFromObj(interp, objv[2], &iLevel);
+      if( rc!=TCL_OK ) return rc;
+
+      assert( 0==strcmp(aCmd[4].zCmd, "begin") );
+      assert( 0==strcmp(aCmd[5].zCmd, "commit") );
+      assert( 0==strcmp(aCmd[6].zCmd, "rollback") );
+      switch( iCmd ){
+        case 4: rc = lsm_begin(p->db, iLevel); zApi = "lsm_begin"; break;
+        case 5: rc = lsm_commit(p->db, iLevel); zApi = "lsm_commit"; break;
+        case 6: rc = lsm_rollback(p->db, iLevel); zApi = "lsm_rollback"; break;
+      }
+
+      return test_lsm_error(interp, zApi, rc);
+    }
+
+    case 7: assert( 0==strcmp(aCmd[7].zCmd, "csr_open") ); {
+      const char *zCsr = Tcl_GetString(objv[2]);
+      TclLsmCursor *pCsr;
+
+      pCsr = (TclLsmCursor *)ckalloc(sizeof(TclLsmCursor));
+      rc = lsm_csr_open(p->db, &pCsr->csr);
+      if( rc!=LSM_OK ){
+        test_lsm_cursor_del(pCsr);
+        return test_lsm_error(interp, "lsm_csr_open", rc);
+      }
+
+      Tcl_CreateObjCommand(
+          interp, zCsr, test_lsm_cursor_cmd, 
+          (ClientData)pCsr, test_lsm_cursor_del
+      );
+      Tcl_SetObjResult(interp, objv[2]);
+      return TCL_OK;
+    }
+
+    case 8: assert( 0==strcmp(aCmd[8].zCmd, "work") ); {
+      int nWork;
+      int nWrite = 0;
+      int flags = 0;
+      int i;
+
+      rc = Tcl_GetIntFromObj(interp, objv[2], &nWork);
+      if( rc!=TCL_OK ) return rc;
+
+      for(i=3; i<objc; i++){
+        int iOpt;
+        const char *azOpt[] = { "-optimize", "-flush", 0 };
+
+        rc = Tcl_GetIndexFromObj(interp, objv[i], azOpt, "option", 0, &iOpt);
+        if( rc!=TCL_OK ) return rc;
+
+        if( iOpt==0 ) flags |= LSM_WORK_OPTIMIZE;
+        if( iOpt==1 ) flags |= LSM_WORK_FLUSH;
+      }
+
+      rc = lsm_work(p->db, flags, nWork, &nWrite);
+      if( rc!=LSM_OK ) return test_lsm_error(interp, "lsm_work", rc);
+      Tcl_SetObjResult(interp, Tcl_NewIntObj(nWrite));
+      return TCL_OK;
+    }
+
+
+    default:
+      assert( 0 );
+  }
+
+  Tcl_AppendResult(interp, "internal error", 0);
+  return TCL_ERROR;
+}
+
+static void xLog(void *pCtx, int rc, const char *z){
+  (void)(rc);
+  (void)(pCtx);
+  fprintf(stderr, "%s\n", z);
+  fflush(stderr);
+}
+
+/*
+** Usage: lsm_open DB filename ?config?
+*/
+static int test_lsm_open(
+  void * clientData,
+  Tcl_Interp *interp,
+  int objc,
+  Tcl_Obj *CONST objv[]
+){
+  TclLsm *p;
+  int rc;
+  const char *zDb = 0;
+  const char *zFile = 0;
+
+  if( objc!=3 && objc!=4 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "DB FILENAME ?CONFIG?");
+    return TCL_ERROR;
+  }
+
+  zDb = Tcl_GetString(objv[1]);
+  zFile = Tcl_GetString(objv[2]);
+
+  p = (TclLsm *)ckalloc(sizeof(TclLsm));
+  rc = lsm_new(0, &p->db);
+  if( rc!=LSM_OK ){
+    test_lsm_del((void *)p);
+    test_lsm_error(interp, "lsm_new", rc);
+    return TCL_ERROR;
+  }
+
+  if( objc==4 ){
+    struct Lsmconfig {
+      const char *zOpt;
+      int eOpt;
+    } aConfig[] = {
+      { "write_buffer",     LSM_CONFIG_WRITE_BUFFER },
+      { "page_size",        LSM_CONFIG_PAGE_SIZE },
+      { "block_size",       LSM_CONFIG_BLOCK_SIZE },
+      { "safety",           LSM_CONFIG_SAFETY },
+      { "autowork",         LSM_CONFIG_AUTOWORK },
+      { "autocheckpoint",   LSM_CONFIG_AUTOCHECKPOINT },
+      { "log_size",         LSM_CONFIG_LOG_SIZE },
+      { "mmap",             LSM_CONFIG_MMAP },
+      { "use_log",          LSM_CONFIG_USE_LOG },
+      { "nmerge",           LSM_CONFIG_NMERGE },
+      { "max_freelist",     LSM_CONFIG_MAX_FREELIST },
+      { "multi_proc",       LSM_CONFIG_MULTIPLE_PROCESSES },
+      { 0, 0 }
+    };
+    int nElem;
+    int i;
+    Tcl_Obj **apElem;
+
+    rc = Tcl_ListObjGetElements(interp, objv[3], &nElem, &apElem);
+    for(i=0; rc==TCL_OK && i<nElem; i+=2){
+      int iOpt;
+      rc = Tcl_GetIndexFromObjStruct(
+          interp, apElem[i], aConfig, sizeof(aConfig[0]), "option", 0, &iOpt
+      );
+      if( rc==TCL_OK ){
+        if( i==(nElem-1) ){
+          Tcl_ResetResult(interp);
+          Tcl_AppendResult(interp, "option \"", Tcl_GetString(apElem[i]), 
+              "\" requires an argument", 0
+          );
+          rc = TCL_ERROR;
+        }else{
+          int iVal;
+          rc = Tcl_GetIntFromObj(interp, apElem[i+1], &iVal);
+          if( rc==TCL_OK ){
+            lsm_config(p->db, aConfig[iOpt].eOpt, &iVal);
+          }
+        }
+      }
+    }
+    if( rc!=TCL_OK ){ 
+      test_lsm_del((void *)p);
+      return rc;
+    }
+  }
+
+  lsm_config_log(p->db, xLog, 0);
+
+  rc = lsm_open(p->db, zFile);
+  if( rc!=LSM_OK ){
+    test_lsm_del((void *)p);
+    test_lsm_error(interp, "lsm_open", rc);
+    return TCL_ERROR;
+  }
+
+  Tcl_CreateObjCommand(interp, zDb, test_lsm_cmd, (ClientData)p, test_lsm_del);
+  Tcl_SetObjResult(interp, objv[1]);
+  return TCL_OK;
+}
+
 int SqlitetestLsm_Init(Tcl_Interp *interp){
   struct SyscallCmd {
     const char *zName;
     Tcl_ObjCmdProc *xCmd;
   } aCmd[] = {
-    { "sqlite4_lsm_work",       test_lsm_work                },
-    { "sqlite4_lsm_checkpoint", test_lsm_checkpoint          },
-    { "sqlite4_lsm_flush",      test_lsm_flush               },
-    { "sqlite4_lsm_info",       test_lsm_info                },
-    { "sqlite4_lsm_config",     test_lsm_config              },
+    { "sqlite4_lsm_work",       test_sqlite4_lsm_work                },
+    { "sqlite4_lsm_checkpoint", test_sqlite4_lsm_checkpoint          },
+    { "sqlite4_lsm_flush",      test_sqlite4_lsm_flush               },
+    { "sqlite4_lsm_info",       test_sqlite4_lsm_info                },
+    { "sqlite4_lsm_config",     test_sqlite4_lsm_config              },
+    { "lsm_open",               test_lsm_open                        },
   };
   int i;
 

@@ -723,6 +723,7 @@ static int test_lsm_config_str(
       int eParam;
       int i;
       int iVal;
+      int iMul = 1;
       int rc;
       char zParam[32];
       int nParam = z-zStart;
@@ -737,11 +738,18 @@ static int test_lsm_config_str(
       z++;
       zStart = z;
       while( *z>='0' && *z<='9' ) z++;
+      if( *z=='k' || *z=='K' ){
+        iMul = 1024;
+        z++;
+      }else if( *z=='M' || *z=='M' ){
+        iMul = 1024 * 1024;
+        z++;
+      }
       nParam = z-zStart;
       if( nParam==0 || nParam>sizeof(zParam)-1 ) goto syntax_error;
       memcpy(zParam, zStart, nParam);
       zParam[nParam] = '\0';
-      iVal = atoi(zParam);
+      iVal = atoi(zParam) * iMul;
 
       if( eParam>0 ){
         if( bWorker || aParam[i].bWorker==0 ){
