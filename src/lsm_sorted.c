@@ -1931,26 +1931,20 @@ static void multiCursorGetKey(
             /* If the in-memory entry immediately before this one was a
              ** DELETE, and the block number is one greater than the current
              ** block number, mark this entry as an "end-delete-range". */
-            if( i<(nEntry-1) 
-                && aEntry[i+1].iBlk==aEntry[i].iBlk+1 && aEntry[i+1].iId<0
-              ){
+            if( i<(nEntry-1) && aEntry[i+1].iBlk==iKey+1 && aEntry[i+1].iId<0 ){
               eType |= LSM_END_DELETE;
             }
 
-            /* If the in-memory entry immediately after this one is a
-            ** DELETE, and the block number is one less than the current
-            ** block number, mark this entry as an "start-delete-range". 
-            ** Also increase iFree so that the next entry is not visited
-            ** (since it has already been accounted for by setting this
-            ** flag).  */
-            if( i>0 
-                && aEntry[i-1].iBlk==aEntry[i].iBlk-1 && aEntry[i-1].iId<0
-              ){
-              eType |= LSM_START_DELETE;
-            }
           }else{
             eType = LSM_START_DELETE|LSM_SYSTEMKEY;
             iKey = aEntry[i].iBlk + 1;
+          }
+
+          /* If the in-memory entry immediately after this one is a
+          ** DELETE, and the block number is one less than the current
+          ** key, mark this entry as an "start-delete-range".  */
+          if( i>0 && aEntry[i-1].iBlk==iKey-1 && aEntry[i-1].iId<0 ){
+            eType |= LSM_START_DELETE;
           }
 
           pKey = pCsr->pSystemVal;
