@@ -291,6 +291,56 @@ static int test_sqlite4_lsm_flush(
   return TCL_OK;
 }
 
+static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
+  struct Lsmconfig {
+    const char *zOpt;
+    int eOpt;
+  } aConfig[] = {
+    { "write_buffer",     LSM_CONFIG_WRITE_BUFFER },
+    { "page_size",        LSM_CONFIG_PAGE_SIZE },
+    { "block_size",       LSM_CONFIG_BLOCK_SIZE },
+    { "safety",           LSM_CONFIG_SAFETY },
+    { "autowork",         LSM_CONFIG_AUTOWORK },
+    { "autocheckpoint",   LSM_CONFIG_AUTOCHECKPOINT },
+    { "log_size",         LSM_CONFIG_LOG_SIZE },
+    { "mmap",             LSM_CONFIG_MMAP },
+    { "use_log",          LSM_CONFIG_USE_LOG },
+    { "nmerge",           LSM_CONFIG_NMERGE },
+    { "max_freelist",     LSM_CONFIG_MAX_FREELIST },
+    { "multi_proc",       LSM_CONFIG_MULTIPLE_PROCESSES },
+    { 0, 0 }
+  };
+  int nElem;
+  int i;
+  Tcl_Obj **apElem;
+  int rc;
+
+  rc = Tcl_ListObjGetElements(interp, pObj, &nElem, &apElem);
+  for(i=0; rc==TCL_OK && i<nElem; i+=2){
+    int iOpt;
+    rc = Tcl_GetIndexFromObjStruct(
+        interp, apElem[i], aConfig, sizeof(aConfig[0]), "option", 0, &iOpt
+    );
+    if( rc==TCL_OK ){
+      if( i==(nElem-1) ){
+        Tcl_ResetResult(interp);
+        Tcl_AppendResult(interp, "option \"", Tcl_GetString(apElem[i]), 
+            "\" requires an argument", 0
+            );
+        rc = TCL_ERROR;
+      }else{
+        int iVal;
+        rc = Tcl_GetIntFromObj(interp, apElem[i+1], &iVal);
+        if( rc==TCL_OK ){
+          lsm_config(db, aConfig[iOpt].eOpt, &iVal);
+        }
+      }
+    }
+  }
+
+  return rc;
+}
+
 typedef struct TclLsmCursor TclLsmCursor;
 typedef struct TclLsm TclLsm;
 
@@ -463,15 +513,17 @@ static int test_lsm_cmd(
     int nArg;
     const char *zUsage;
   } aCmd[] = {
-    /* 0 */ {"close",        0, ""},
-    /* 1 */ {"write",        2, "KEY VALUE"},
-    /* 2 */ {"delete",       1, "KEY"},
-    /* 3 */ {"delete_range", 2, "START-KEY END-KEY"},
-    /* 4 */ {"begin",        1, "LEVEL"},
-    /* 5 */ {"commit",       1, "LEVEL"},
-    /* 6 */ {"rollback",     1, "LEVEL"},
-    /* 7 */ {"csr_open",     1, "CSR"},
-    /* 8 */ {"work",        -1, "NPAGE ?SWITCHES?"},
+    /*  0 */ {"close",        0, ""},
+    /*  1 */ {"write",        2, "KEY VALUE"},
+    /*  2 */ {"delete",       1, "KEY"},
+    /*  3 */ {"delete_range", 2, "START-KEY END-KEY"},
+    /*  4 */ {"begin",        1, "LEVEL"},
+    /*  5 */ {"commit",       1, "LEVEL"},
+    /*  6 */ {"rollback",     1, "LEVEL"},
+    /*  7 */ {"csr_open",     1, "CSR"},
+    /*  8 */ {"work",        -1, "NPAGE ?SWITCHES?"},
+    /*  9 */ {"flush",        0, ""},
+    /* 10 */ {"config",       1, "LIST"},
     {0, 0, 0}
   };
   int iCmd;
@@ -596,6 +648,14 @@ static int test_lsm_cmd(
       return TCL_OK;
     }
 
+    case 9: assert( 0==strcmp(aCmd[9].zCmd, "flush") ); {
+      rc = lsm_flush(p->db);
+      return test_lsm_error(interp, "lsm_flush", rc);
+    }
+
+    case 10: assert( 0==strcmp(aCmd[10].zCmd, "config") ); {
+      return testConfigureLsm(interp, p->db, objv[2]);
+    }
 
     default:
       assert( 0 );
@@ -643,50 +703,7 @@ static int test_lsm_open(
   }
 
   if( objc==4 ){
-    struct Lsmconfig {
-      const char *zOpt;
-      int eOpt;
-    } aConfig[] = {
-      { "write_buffer",     LSM_CONFIG_WRITE_BUFFER },
-      { "page_size",        LSM_CONFIG_PAGE_SIZE },
-      { "block_size",       LSM_CONFIG_BLOCK_SIZE },
-      { "safety",           LSM_CONFIG_SAFETY },
-      { "autowork",         LSM_CONFIG_AUTOWORK },
-      { "autocheckpoint",   LSM_CONFIG_AUTOCHECKPOINT },
-      { "log_size",         LSM_CONFIG_LOG_SIZE },
-      { "mmap",             LSM_CONFIG_MMAP },
-      { "use_log",          LSM_CONFIG_USE_LOG },
-      { "nmerge",           LSM_CONFIG_NMERGE },
-      { "max_freelist",     LSM_CONFIG_MAX_FREELIST },
-      { "multi_proc",       LSM_CONFIG_MULTIPLE_PROCESSES },
-      { 0, 0 }
-    };
-    int nElem;
-    int i;
-    Tcl_Obj **apElem;
-
-    rc = Tcl_ListObjGetElements(interp, objv[3], &nElem, &apElem);
-    for(i=0; rc==TCL_OK && i<nElem; i+=2){
-      int iOpt;
-      rc = Tcl_GetIndexFromObjStruct(
-          interp, apElem[i], aConfig, sizeof(aConfig[0]), "option", 0, &iOpt
-      );
-      if( rc==TCL_OK ){
-        if( i==(nElem-1) ){
-          Tcl_ResetResult(interp);
-          Tcl_AppendResult(interp, "option \"", Tcl_GetString(apElem[i]), 
-              "\" requires an argument", 0
-          );
-          rc = TCL_ERROR;
-        }else{
-          int iVal;
-          rc = Tcl_GetIntFromObj(interp, apElem[i+1], &iVal);
-          if( rc==TCL_OK ){
-            lsm_config(p->db, aConfig[iOpt].eOpt, &iVal);
-          }
-        }
-      }
-    }
+    rc = testConfigureLsm(interp, p->db, objv[3]);
     if( rc!=TCL_OK ){ 
       test_lsm_del((void *)p);
       return rc;

@@ -1051,17 +1051,6 @@ static int treeInsertLeaf(
   return rc;
 }
 
-/*
-** Empty the contents of the in-memory tree.
-*/
-void lsmTreeClear(lsm_db *pDb){
-  pDb->treehdr.root.iTransId = 1;
-  pDb->treehdr.root.iRoot = 0;
-  pDb->treehdr.root.nHeight = 0;
-  pDb->treehdr.nByte = 0;
-  pDb->treehdr.iUsedShmid = pDb->treehdr.iNextShmid-1;
-}
-
 void lsmTreeMakeOld(lsm_db *pDb){
   if( pDb->treehdr.iOldShmid==0 ){
     pDb->treehdr.iOldLog = pDb->treehdr.log.aRegion[2].iEnd;

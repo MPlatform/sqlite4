@@ -2005,14 +2005,16 @@ static int sortedDbKeyCompare(
   ** LSM_POINT_DELETE flags, it is considered a delta larger. This prevents
   ** the beginning of an open-ended set from masking a database entry or
   ** delete at a lower level.  */
-  if( res==0 ){
-    const int insdel = LSM_POINT_DELETE|LSM_INSERT;
+  if( res==0 && (pCsr->flags & CURSOR_IGNORE_DELETE) ){
+    const int m = LSM_POINT_DELETE|LSM_INSERT|LSM_END_DELETE |LSM_START_DELETE;
     int iDel1 = 0;
     int iDel2 = 0;
-    if( LSM_START_DELETE==(iLhsFlags & (LSM_START_DELETE|insdel)) ) iDel1 = +1;
-    if( LSM_END_DELETE  ==(iLhsFlags & (LSM_END_DELETE  |insdel)) ) iDel1 = -1;
-    if( LSM_START_DELETE==(iRhsFlags & (LSM_START_DELETE|insdel)) ) iDel2 = +1;
-    if( LSM_END_DELETE  ==(iRhsFlags & (LSM_END_DELETE  |insdel)) ) iDel2 = -1;
+
+    if( LSM_START_DELETE==(iLhsFlags & m) ) iDel1 = +1;
+    if( LSM_END_DELETE  ==(iLhsFlags & m) ) iDel1 = -1;
+    if( LSM_START_DELETE==(iRhsFlags & m) ) iDel2 = +1;
+    if( LSM_END_DELETE  ==(iRhsFlags & m) ) iDel2 = -1;
+
     res = (iDel1 - iDel2);
   }
 
@@ -2053,7 +2055,13 @@ static void multiCursorDoCompare(MultiCursor *pCsr, int iOut, int bReverse){
 
     res = res * mul;
     if( res==0 ){
-      iRes = (rtIsSeparator(eType1) ? i2 : i1);
+      /* The two keys are identical. Normally, this means that the key from
+      ** the newer run clobbers the old. However, if the newer key is a
+      ** separator key, or a range-delete-boundary only, do not allow it
+      ** to clobber an older entry.  */
+      int nc1 = (eType1 & (LSM_INSERT|LSM_POINT_DELETE))==0;
+      int nc2 = (eType2 & (LSM_INSERT|LSM_POINT_DELETE))==0;
+      iRes = (nc1 > nc2) ? i2 : i1;
     }else if( res<0 ){
       iRes = i1;
     }else{
@@ -2521,6 +2529,28 @@ static int mcursorLocationOk(MultiCursor *pCsr, int bDeleteOk){
 
   /* Check if this key has already been deleted by a range-delete */
   iKey = pCsr->aTree[1];
+  for(i=0; i<iKey; i++){
+    int csrflags;
+    multiCursorGetKey(pCsr, i, &csrflags, 0, 0);
+    if( (rdmask & csrflags) ){
+      const int SD_ED = (LSM_START_DELETE|LSM_END_DELETE);
+      if( (csrflags & SD_ED)==SD_ED 
+       || (pCsr->flags & CURSOR_IGNORE_DELETE)==0
+      ){
+        void *pKey; int nKey;
+        multiCursorGetKey(pCsr, i, 0, &pKey, &nKey);
+        if( 0==sortedKeyCompare(pCsr->pDb->xCmp,
+              rtTopic(eType), pCsr->key.pData, pCsr->key.nData,
+              rtTopic(csrflags), pKey, nKey
+        )){
+          continue;
+        }
+      }
+      return 0;
+    }
+  }
+
+#if 0
   if( (iKey>0 && (rdmask & lsmTreeCursorFlags(pCsr->apTreeCsr[0]))) 
    || (iKey>1 && (rdmask & lsmTreeCursorFlags(pCsr->apTreeCsr[1]))) 
   ){
@@ -2538,6 +2568,7 @@ static int mcursorLocationOk(MultiCursor *pCsr, int bDeleteOk){
       return 0;
     }
   }
+#endif
 
   return 1;
 }
@@ -3815,21 +3846,6 @@ static void mergeRangeDeletes(MultiCursor *pCsr, int *piVal, int *piFlags){
     assert( (f & LSM_POINT_DELETE)==0 );
     f &= ~(LSM_START_DELETE|LSM_END_DELETE);
   }else{
-#if 0
-    if( iKey==0 ){
-      int btreeflags = lsmTreeCursorFlags(pCsr->apTreeCsr[1]);
-      if( btreeflags & LSM_END_DELETE ){
-        f |= (LSM_START_DELETE|LSM_END_DELETE);
-      }
-    }
-
-    for(i=LSM_MAX(0, iKey+1-CURSOR_DATA_SEGMENT); i<pCsr->nPtr; i++){
-      SegmentPtr *pPtr = &pCsr->aPtr[i];
-      if( pPtr->pPg && (pPtr->eType & LSM_END_DELETE) ){
-        f |= (LSM_START_DELETE|LSM_END_DELETE);
-      }
-    }
-#endif
     for(i=0; i<(CURSOR_DATA_SEGMENT + pCsr->nPtr); i++){
       if( i!=iKey ){
         int eType;
@@ -3842,7 +3858,7 @@ static void mergeRangeDeletes(MultiCursor *pCsr, int *piVal, int *piFlags){
           res = sortedKeyCompare(pCsr->pDb->xCmp, 
               rtTopic(pCsr->eType), pCsr->key.pData, pCsr->key.nData,
               rtTopic(eType), pKey, nKey
-              );
+          );
           assert( res<=0 );
           if( res==0 ){
             if( (f & (LSM_INSERT|LSM_POINT_DELETE))==0 ){
@@ -3858,7 +3874,12 @@ static void mergeRangeDeletes(MultiCursor *pCsr, int *piVal, int *piFlags){
           }
 
           if( i>iKey && (eType & LSM_END_DELETE) && res<0 ){
-            f |= (LSM_END_DELETE|LSM_START_DELETE);
+            if( f & (LSM_INSERT|LSM_POINT_DELETE) ){
+              f |= (LSM_END_DELETE|LSM_START_DELETE);
+            }else{
+              f = 0;
+            }
+            break;
           }
         }
       }
@@ -4087,7 +4108,7 @@ static int sortedNewToplevel(
   }else{
     if( pDel ) pDel->iRoot = 0;
 
-#if 1
+#if 0
     lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
 #endif
 
@@ -4504,7 +4525,7 @@ static int sortedWork(
       mergeWorkerShutdown(&mergeworker, &rc);
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
-#if 1
+#if 0
       lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
@@ -4704,6 +4725,31 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
 
   return doLsmWork(pDb, flags, nPage, pnWrite);
+}
+
+int lsm_flush(lsm_db *db){
+  int rc;
+
+  if( db->nTransOpen>0 || db->pCsr ){
+    rc = LSM_MISUSE_BKPT;
+  }else{
+    rc = lsmBeginWriteTrans(db);
+    if( rc==LSM_OK ){
+      lsmFlushTreeToDisk(db);
+      lsmTreeDiscardOld(db);
+      lsmTreeMakeOld(db);
+      lsmTreeDiscardOld(db);
+    }
+
+    if( rc==LSM_OK ){
+      rc = lsmFinishWriteTrans(db, 1);
+    }else{
+      lsmFinishWriteTrans(db, 0);
+    }
+    lsmFinishReadTrans(db);
+  }
+
+  return rc;
 }
 
 /*
