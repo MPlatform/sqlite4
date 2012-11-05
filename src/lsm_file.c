@@ -1831,7 +1831,7 @@ static Pgno fsAppendData(
         /* The next block is already allocated. */
         assert( nRem>0 );
         rc = fsBlockNext(pFS, fsPageToBlock(pFS, iApp), &iBlk);
-        iApp = fsFirstPageOnBlock(pFS, iBlk);
+        iRet = iApp = fsFirstPageOnBlock(pFS, iBlk);
       }
 
       /* Write the remaining data into the new block */

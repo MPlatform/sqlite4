@@ -184,6 +184,11 @@ struct BtreeCursor {
 **   lsmMCursorKey()
 **   lsmMCursorValue()
 **   lsmMCursorValid()
+**
+** iFree:
+**   This variable is only used by cursors providing input data for a
+**   new top-level segment. Such cursors only ever iterate forwards, not
+**   backwards.
 */
 struct MultiCursor {
   lsm_db *pDb;                    /* Connection that owns this cursor */
@@ -1909,19 +1914,42 @@ static void multiCursorGetKey(
 
     case CURSOR_DATA_SYSTEM: {
       Snapshot *pWorker = pCsr->pDb->pWorker;
-      if( (pCsr->flags & CURSOR_FLUSH_FREELIST) 
-       && pWorker && pWorker->freelist.nEntry > pCsr->iFree 
-      ){
-        int iEntry = pWorker->freelist.nEntry - pCsr->iFree - 1;
-        FreelistEntry *pEntry = &pWorker->freelist.aEntry[iEntry];
-        u32 i = ~((u32)(pEntry->iBlk));
-        lsmPutU32(pCsr->pSystemVal, i);
-        pKey = pCsr->pSystemVal;
-        nKey = 4;
-        if( pEntry->iId>=0 ){
-          eType = LSM_SYSTEMKEY | LSM_INSERT;
-        }else{
-          eType = LSM_SYSTEMKEY | LSM_POINT_DELETE;
+      if( pWorker && (pCsr->flags & CURSOR_FLUSH_FREELIST) ){
+        int nEntry = pWorker->freelist.nEntry;
+        if( pCsr->iFree < (nEntry*2) ){
+          FreelistEntry *aEntry = pWorker->freelist.aEntry;
+          int i = nEntry - 1 - (pCsr->iFree / 2);
+          u32 iKey = 0;
+
+          if( (pCsr->iFree % 2) ){
+            eType = LSM_END_DELETE|LSM_SYSTEMKEY;
+            iKey = aEntry[i].iBlk-1;
+          }else if( aEntry[i].iId>=0 ){
+            eType = LSM_INSERT|LSM_SYSTEMKEY;
+            iKey = aEntry[i].iBlk;
+
+            /* If the in-memory entry immediately before this one was a
+             ** DELETE, and the block number is one greater than the current
+             ** block number, mark this entry as an "end-delete-range". */
+            if( i<(nEntry-1) && aEntry[i+1].iBlk==iKey+1 && aEntry[i+1].iId<0 ){
+              eType |= LSM_END_DELETE;
+            }
+
+          }else{
+            eType = LSM_START_DELETE|LSM_SYSTEMKEY;
+            iKey = aEntry[i].iBlk + 1;
+          }
+
+          /* If the in-memory entry immediately after this one is a
+          ** DELETE, and the block number is one less than the current
+          ** key, mark this entry as an "start-delete-range".  */
+          if( i>0 && aEntry[i-1].iBlk==iKey-1 && aEntry[i-1].iId<0 ){
+            eType |= LSM_START_DELETE;
+          }
+
+          pKey = pCsr->pSystemVal;
+          nKey = 4;
+          lsmPutU32(pKey, ~iKey);
         }
       }
       break;
@@ -1954,10 +1982,11 @@ static void multiCursorGetKey(
 }
 
 static int sortedDbKeyCompare(
-  int (*xCmp)(void *, int, void *, int),
+  MultiCursor *pCsr,
   int iLhsFlags, void *pLhsKey, int nLhsKey,
   int iRhsFlags, void *pRhsKey, int nRhsKey
 ){
+  int (*xCmp)(void *, int, void *, int) = pCsr->pDb->xCmp;
   int res;
 
   /* Compare the keys, including the system flag. */
@@ -1970,14 +1999,16 @@ static int sortedDbKeyCompare(
   ** LSM_POINT_DELETE flags, it is considered a delta larger. This prevents
   ** the beginning of an open-ended set from masking a database entry or
   ** delete at a lower level.  */
-  if( res==0 ){
-    const int insdel = LSM_POINT_DELETE|LSM_INSERT;
+  if( res==0 && (pCsr->flags & CURSOR_IGNORE_DELETE) ){
+    const int m = LSM_POINT_DELETE|LSM_INSERT|LSM_END_DELETE |LSM_START_DELETE;
     int iDel1 = 0;
     int iDel2 = 0;
-    if( LSM_START_DELETE==(iLhsFlags & (LSM_START_DELETE|insdel)) ) iDel1 = +1;
-    if( LSM_END_DELETE  ==(iLhsFlags & (LSM_END_DELETE  |insdel)) ) iDel1 = -1;
-    if( LSM_START_DELETE==(iRhsFlags & (LSM_START_DELETE|insdel)) ) iDel2 = +1;
-    if( LSM_END_DELETE  ==(iRhsFlags & (LSM_END_DELETE  |insdel)) ) iDel2 = -1;
+
+    if( LSM_START_DELETE==(iLhsFlags & m) ) iDel1 = +1;
+    if( LSM_END_DELETE  ==(iLhsFlags & m) ) iDel1 = -1;
+    if( LSM_START_DELETE==(iRhsFlags & m) ) iDel2 = +1;
+    if( LSM_END_DELETE  ==(iRhsFlags & m) ) iDel2 = -1;
+
     res = (iDel1 - iDel2);
   }
 
@@ -2012,13 +2043,19 @@ static void multiCursorDoCompare(MultiCursor *pCsr, int iOut, int bReverse){
     int res;
 
     /* Compare the keys */
-    res = sortedDbKeyCompare(pCsr->pDb->xCmp, 
+    res = sortedDbKeyCompare(pCsr,
         eType1, pKey1, nKey1, eType2, pKey2, nKey2
     );
 
     res = res * mul;
     if( res==0 ){
-      iRes = (rtIsSeparator(eType1) ? i2 : i1);
+      /* The two keys are identical. Normally, this means that the key from
+      ** the newer run clobbers the old. However, if the newer key is a
+      ** separator key, or a range-delete-boundary only, do not allow it
+      ** to clobber an older entry.  */
+      int nc1 = (eType1 & (LSM_INSERT|LSM_POINT_DELETE))==0;
+      int nc2 = (eType2 & (LSM_INSERT|LSM_POINT_DELETE))==0;
+      iRes = (nc1 > nc2) ? i2 : i1;
     }else if( res<0 ){
       iRes = i1;
     }else{
@@ -2317,8 +2354,11 @@ static int multiCursorGetVal(
 
     case CURSOR_DATA_SYSTEM: {
       Snapshot *pWorker = pCsr->pDb->pWorker;
-      if( pWorker && pWorker->freelist.nEntry > pCsr->iFree ){
-        int iEntry = pWorker->freelist.nEntry - pCsr->iFree - 1;
+      if( pWorker 
+       && (pCsr->iFree % 2)==0
+       && pCsr->iFree < (pWorker->freelist.nEntry*2)
+      ){
+        int iEntry = pWorker->freelist.nEntry - 1 - (pCsr->iFree / 2);
         u8 *aVal = &((u8 *)(pCsr->pSystemVal))[4];
         lsmPutU64(aVal, pWorker->freelist.aEntry[iEntry].iId);
         *ppVal = aVal;
@@ -2483,17 +2523,46 @@ static int mcursorLocationOk(MultiCursor *pCsr, int bDeleteOk){
 
   /* Check if this key has already been deleted by a range-delete */
   iKey = pCsr->aTree[1];
+  for(i=0; i<iKey; i++){
+    int csrflags;
+    multiCursorGetKey(pCsr, i, &csrflags, 0, 0);
+    if( (rdmask & csrflags) ){
+      const int SD_ED = (LSM_START_DELETE|LSM_END_DELETE);
+      if( (csrflags & SD_ED)==SD_ED 
+       || (pCsr->flags & CURSOR_IGNORE_DELETE)==0
+      ){
+        void *pKey; int nKey;
+        multiCursorGetKey(pCsr, i, 0, &pKey, &nKey);
+        if( 0==sortedKeyCompare(pCsr->pDb->xCmp,
+              rtTopic(eType), pCsr->key.pData, pCsr->key.nData,
+              rtTopic(csrflags), pKey, nKey
+        )){
+          continue;
+        }
+      }
+      return 0;
+    }
+  }
+
+#if 0
   if( (iKey>0 && (rdmask & lsmTreeCursorFlags(pCsr->apTreeCsr[0]))) 
    || (iKey>1 && (rdmask & lsmTreeCursorFlags(pCsr->apTreeCsr[1]))) 
   ){
     return 0;
   }
+  if( iKey>CURSOR_DATA_SYSTEM && (pCsr->flags & CURSOR_FLUSH_FREELIST) ){
+    int eType;
+    multiCursorGetKey(pCsr, CURSOR_DATA_SYSTEM, &eType, 0, 0);
+    if( rdmask & eType ) return 0;
+  }
+
   for(i=CURSOR_DATA_SEGMENT; i<iKey; i++){
     int iPtr = i-CURSOR_DATA_SEGMENT;
     if( pCsr->aPtr[iPtr].pPg && (pCsr->aPtr[iPtr].eType & rdmask) ){
       return 0;
     }
   }
+#endif
 
   return 1;
 }
@@ -2768,9 +2837,12 @@ static int mcursorAdvanceOk(
   */
   multiCursorGetKey(pCsr, pCsr->aTree[1], &eNewType, &pNew, &nNew);
   if( pNew ){
-    int res = sortedDbKeyCompare(pCsr->pDb->xCmp, 
-        eNewType, pNew, nNew, pCsr->eType, pCsr->key.pData, pCsr->key.nData
+    int typemask = (pCsr->flags & CURSOR_IGNORE_DELETE) ? ~(0) : LSM_SYSTEMKEY;
+    int res = sortedDbKeyCompare(pCsr,
+      eNewType & typemask, pNew, nNew, 
+      pCsr->eType & typemask, pCsr->key.pData, pCsr->key.nData
     );
+
     if( (bReverse==0 && res<=0) || (bReverse!=0 && res>=0) ){
       return 0;
     }
@@ -2788,6 +2860,33 @@ static int mcursorAdvanceOk(
     if( *pRc==LSM_OK && 0==mcursorLocationOk(pCsr, 0) ) return 0;
   }
   return 1;
+}
+
+static void flCsrAdvance(MultiCursor *pCsr){
+  assert( pCsr->flags & CURSOR_FLUSH_FREELIST );
+  if( pCsr->iFree % 2 ){
+    pCsr->iFree++;
+  }else{
+    int nEntry = pCsr->pDb->pWorker->freelist.nEntry;
+    FreelistEntry *aEntry = pCsr->pDb->pWorker->freelist.aEntry;
+
+    int i = nEntry - 1 - (pCsr->iFree / 2);
+
+    /* If the current entry is a delete and the "end-delete" key will not
+    ** be attached to the next entry, increment iFree by 1 only. */
+    if( aEntry[i].iId<0 ){
+      while( 1 ){
+        if( i==0 || aEntry[i-1].iBlk!=aEntry[i].iBlk-1 ){
+          pCsr->iFree--;
+          break;
+        }
+        if( aEntry[i-1].iId>=0 ) break;
+        pCsr->iFree += 2;
+        i--;
+      }
+    }
+    pCsr->iFree += 2;
+  }
 }
 
 static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
@@ -2821,7 +2920,7 @@ static int multiCursorAdvance(MultiCursor *pCsr, int bReverse){
       }else if( iKey==CURSOR_DATA_SYSTEM ){
         assert( pCsr->flags & CURSOR_FLUSH_FREELIST );
         assert( bReverse==0 );
-        pCsr->iFree++;
+        flCsrAdvance(pCsr);
       }else if( iKey==(CURSOR_DATA_SEGMENT+pCsr->nPtr) ){
         assert( bReverse==0 && pCsr->pBtCsr );
         rc = btreeCursorNext(pCsr->pBtCsr);
@@ -2850,7 +2949,7 @@ int lsmMCursorPrev(MultiCursor *pCsr){
 }
 
 int lsmMCursorKey(MultiCursor *pCsr, void **ppKey, int *pnKey){
-  if( pCsr->flags & CURSOR_SEEK_EQ ){
+  if( (pCsr->flags & CURSOR_SEEK_EQ) || pCsr->aTree==0 ){
     *pnKey = pCsr->key.nData;
     *ppKey = pCsr->key.pData;
   }else{
@@ -2887,7 +2986,7 @@ int lsmMCursorValue(MultiCursor *pCsr, void **ppVal, int *pnVal){
   void *pVal;
   int nVal;
   int rc;
-  if( pCsr->flags & CURSOR_SEEK_EQ ){
+  if( (pCsr->flags & CURSOR_SEEK_EQ) || pCsr->aTree==0 ){
     rc = LSM_OK;
     nVal = pCsr->val.nData;
     pVal = pCsr->val.pData;
@@ -3519,7 +3618,7 @@ static int mergeWorkerWrite(
   MergeWorker *pMW,               /* Merge worker object to write into */
   int eType,                      /* One of SORTED_SEPARATOR, WRITE or DELETE */
   void *pKey, int nKey,           /* Key value */
-  MultiCursor *pCsr,              /* Read value (if any) from here */
+  void *pVal, int nVal,           /* Value value */
   int iPtr                        /* Absolute value of page pointer, or 0 */
 ){
   int rc = LSM_OK;                /* Return code */
@@ -3535,8 +3634,6 @@ static int mergeWorkerWrite(
   Segment *pSeg;                  /* Segment being written */
   int flags = 0;                  /* If != 0, flags value for page footer */
   int bFirst = 0;                 /* True for first key of output run */
-  void *pVal;
-  int nVal;
 
   pMerge = pMW->pLevel->pMerge;    
   pSeg = &pMW->pLevel->lhs;
@@ -3568,9 +3665,6 @@ static int mergeWorkerWrite(
   **     4) Value size - 1 varint (only if LSM_INSERT flag is set)
   */
   if( rc==LSM_OK ){
-    rc = lsmMCursorValue(pCsr, &pVal, &nVal);
-  }
-  if( rc==LSM_OK ){
     nHdr = 1 + lsmVarintLen32(iRPtr) + lsmVarintLen32(nKey);
     if( rtIsWrite(eType) ) nHdr += lsmVarintLen32(nVal);
 
@@ -3578,7 +3672,7 @@ static int mergeWorkerWrite(
     ** marked read-only, advance to the next page of the output run. */
     iOff = pMerge->iOutputOff;
     if( iOff<0 || pPg==0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
-      iFPtr = *pCsr->pPrevMergePtr;
+      iFPtr = *pMW->pCsr->pPrevMergePtr;
       iRPtr = iPtr - iFPtr;
       iOff = 0;
       nRec = 0;
@@ -3627,7 +3721,6 @@ static int mergeWorkerWrite(
     assert( iFPtr==pageGetPtr(aData, nData) );
     rc = mergeWorkerData(pMW, 0, iFPtr+iRPtr, pKey, nKey);
     if( rc==LSM_OK && rtIsWrite(eType) ){
-      if( rtTopic(eType)==0 ) rc = lsmMCursorValue(pCsr, &pVal, &nVal);
       if( rc==LSM_OK ){
         rc = mergeWorkerData(pMW, 0, iFPtr+iRPtr, pVal, nVal);
       }
@@ -3727,7 +3820,7 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
 ** Note that this function only has to work for cursors configured to 
 ** iterate forwards (not backwards).
 */
-static void mergeRangeDeletes(MultiCursor *pCsr, int *piFlags){
+static void mergeRangeDeletes(MultiCursor *pCsr, int *piVal, int *piFlags){
   int f = *piFlags;
   int iKey = pCsr->aTree[1];
   int i;
@@ -3740,21 +3833,50 @@ static void mergeRangeDeletes(MultiCursor *pCsr, int *piFlags){
     assert( (f & LSM_POINT_DELETE)==0 );
     f &= ~(LSM_START_DELETE|LSM_END_DELETE);
   }else{
-    if( iKey==0 ){
-      int btreeflags = lsmTreeCursorFlags(pCsr->apTreeCsr[1]);
-      if( btreeflags & LSM_END_DELETE ){
-        f |= (LSM_START_DELETE|LSM_END_DELETE);
+    for(i=0; i<(CURSOR_DATA_SEGMENT + pCsr->nPtr); i++){
+      if( i!=iKey ){
+        int eType;
+        void *pKey;
+        int nKey;
+        int res;
+        multiCursorGetKey(pCsr, i, &eType, &pKey, &nKey);
+
+        if( pKey ){
+          res = sortedKeyCompare(pCsr->pDb->xCmp, 
+              rtTopic(pCsr->eType), pCsr->key.pData, pCsr->key.nData,
+              rtTopic(eType), pKey, nKey
+          );
+          assert( res<=0 );
+          if( res==0 ){
+            if( (f & (LSM_INSERT|LSM_POINT_DELETE))==0 ){
+              if( eType & LSM_INSERT ){
+                f |= LSM_INSERT;
+                *piVal = i;
+              }
+              else if( eType & LSM_POINT_DELETE ){
+                f |= LSM_POINT_DELETE;
+              }
+            }
+            f |= (eType & (LSM_END_DELETE|LSM_START_DELETE));
+          }
+
+          if( i>iKey && (eType & LSM_END_DELETE) && res<0 ){
+            if( f & (LSM_INSERT|LSM_POINT_DELETE) ){
+              f |= (LSM_END_DELETE|LSM_START_DELETE);
+            }else{
+              f = 0;
+            }
+            break;
+          }
+        }
       }
     }
 
-    for(i=LSM_MAX(0, iKey+1-CURSOR_DATA_SEGMENT); i<pCsr->nPtr; i++){
-      SegmentPtr *pPtr = &pCsr->aPtr[i];
-      if( pPtr->pPg && (pPtr->eType & LSM_END_DELETE) ){
-        f |= (LSM_START_DELETE|LSM_END_DELETE);
-      }
-    }
-
-    if( (f & LSM_START_DELETE) && (f & LSM_END_DELETE) && (f & LSM_INSERT)==0 ){
+    assert( (f & LSM_INSERT)==0 || (f & LSM_POINT_DELETE)==0 );
+    if( (f & LSM_START_DELETE) 
+     && (f & LSM_END_DELETE) 
+     && (f & LSM_POINT_DELETE )
+    ){
       f = 0;
     }
   }
@@ -3770,6 +3892,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
   void *pKey; int nKey;         /* Key */
   Segment *pSeg;                /* Output segment */
   Pgno iPtr;
+  int iVal;
 
   pCsr = pMW->pCsr;
   pSeg = &pMW->pLevel->lhs;
@@ -3807,7 +3930,8 @@ static int mergeWorkerStep(MergeWorker *pMW){
     }
   }
 
-  mergeRangeDeletes(pCsr, &eType);
+  iVal = pCsr->aTree[1];
+  mergeRangeDeletes(pCsr, &iVal, &eType);
 
   if( eType!=0 ){
     if( pMW->aGobble ){
@@ -3823,10 +3947,17 @@ static int mergeWorkerStep(MergeWorker *pMW){
     /* If this is a separator key and we know that the output pointer has not
     ** changed, there is no point in writing an output record. Otherwise,
     ** proceed. */
-    if( rtIsSeparator(eType)==0 || iPtr!=0 ){
+    if( rc==LSM_OK && (rtIsSeparator(eType)==0 || iPtr!=0) ){
       /* Write the record into the main run. */
+      void *pVal; int nVal;
+      rc = multiCursorGetVal(pCsr, iVal, &pVal, &nVal);
+      if( pVal && rc==LSM_OK ){
+        assert( nVal>=0 );
+        rc = sortedBlobSet(pDb->pEnv, &pCsr->val, pVal, nVal);
+        pVal = pCsr->val.pData;
+      }
       if( rc==LSM_OK ){
-        rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pCsr, iPtr);
+        rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pVal, nVal, iPtr);
       }
     }
   }
@@ -3972,7 +4103,7 @@ static int sortedNewToplevel(
     if( pDel ) pDel->iRoot = 0;
 
 #if 0
-    lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
+    lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
 #endif
 
     if( freelist.nEntry ){
@@ -4389,7 +4520,7 @@ static int sortedWork(
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);
@@ -4588,6 +4719,31 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
 
   return doLsmWork(pDb, flags, nPage, pnWrite);
+}
+
+int lsm_flush(lsm_db *db){
+  int rc;
+
+  if( db->nTransOpen>0 || db->pCsr ){
+    rc = LSM_MISUSE_BKPT;
+  }else{
+    rc = lsmBeginWriteTrans(db);
+    if( rc==LSM_OK ){
+      lsmFlushTreeToDisk(db);
+      lsmTreeDiscardOld(db);
+      lsmTreeMakeOld(db);
+      lsmTreeDiscardOld(db);
+    }
+
+    if( rc==LSM_OK ){
+      rc = lsmFinishWriteTrans(db, 1);
+    }else{
+      lsmFinishWriteTrans(db, 0);
+    }
+    lsmFinishReadTrans(db);
+  }
+
+  return rc;
 }
 
 /*

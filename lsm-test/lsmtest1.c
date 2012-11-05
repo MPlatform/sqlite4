@@ -486,3 +486,136 @@ void test_data_2(
   }
 }
 
+/*************************************************************************
+** Test case data3.*
+*/
+
+typedef struct Datatest3 Datatest3;
+struct Datatest3 {
+  int nRange;                     /* Keys are between 1 and this value, incl. */
+  int nIter;                      /* Number of iterations */
+  int nWrite;                     /* Number of writes per iteration */
+  int nDelete;                    /* Number of deletes per iteration */
+
+  int nValMin;                    /* Minimum value size for writes */
+  int nValMax;                    /* Maximum value size for writes */
+};
+
+void testPutU32(u8 *aBuf, u32 iVal){
+  aBuf[0] = (iVal >> 24) & 0xFF;
+  aBuf[1] = (iVal >> 16) & 0xFF;
+  aBuf[2] = (iVal >>  8) & 0xFF;
+  aBuf[3] = (iVal >>  0) & 0xFF;
+}
+
+void dt3PutKey(u8 *aBuf, int iKey){
+  assert( iKey<100000 && iKey>=0 );
+  sprintf((char *)aBuf, "%.5d", iKey);
+}
+
+static void doDataTest3(
+  const char *zSystem,            /* Database system to test */
+  Datatest3 *p,                   /* Structure containing test parameters */
+  int *pRc                        /* OUT: Error code */
+){
+  int iDot = 0;
+  int rc = *pRc;
+  TestDb *pDb;
+  u8 *abPresent;                  /* Array of boolean */
+  char *aVal;                     /* Buffer to hold values */
+  int i;
+  u32 iSeq = 10;                  /* prng counter */
+
+  abPresent = (u8 *)testMalloc(p->nRange+1);
+  aVal = (char *)testMalloc(p->nValMax+1);
+  pDb = testOpen(zSystem, 1, &rc);
+
+  for(i=0; i<p->nIter && rc==0; i++){
+    int ii;
+
+    testCaseProgress(i, p->nIter, testCaseNDot(), &iDot);
+
+    /* Perform nWrite inserts */
+    for(ii=0; ii<p->nWrite; ii++){
+      u8 aKey[6];
+      u32 iKey;
+      int nVal;
+
+      iKey = (testPrngValue(iSeq++) % p->nRange) + 1;
+      nVal = (testPrngValue(iSeq++) % (p->nValMax - p->nValMin)) + p->nValMin;
+      testPrngString(testPrngValue(iSeq++), aVal, nVal);
+      dt3PutKey(aKey, iKey);
+
+      testWrite(pDb, aKey, sizeof(aKey)-1, aVal, nVal, &rc);
+      abPresent[iKey] = 1;
+    }
+
+    /* Perform nDelete deletes */
+    for(ii=0; ii<p->nDelete; ii++){
+      u8 aKey1[6];
+      u8 aKey2[6];
+      u32 iKey;
+
+      iKey = (testPrngValue(iSeq++) % p->nRange) + 1;
+      dt3PutKey(aKey1, iKey-1);
+      dt3PutKey(aKey2, iKey+1);
+
+      testDeleteRange(pDb, aKey1, sizeof(aKey1)-1, aKey2, sizeof(aKey2)-1, &rc);
+      abPresent[iKey] = 0;
+    }
+
+    testReopen(&pDb, &rc);
+
+    for(ii=1; rc==0 && ii<=p->nRange; ii++){
+      int nDbVal;
+      void *pDbVal;
+      u8 aKey[6];
+      int dbrc;
+
+      dt3PutKey(aKey, ii);
+      dbrc = tdb_fetch(pDb, aKey, sizeof(aKey)-1, &pDbVal, &nDbVal);
+      testCompareInt(0, dbrc, &rc);
+
+      if( abPresent[ii] ){
+        testCompareInt(1, (nDbVal>0), &rc);
+      }else{
+        testCompareInt(1, (nDbVal<0), &rc);
+      }
+    }
+  }
+
+  testClose(&pDb);
+  testCaseFinish(rc);
+  *pRc = rc;
+}
+
+static char *getName3(const char *zSystem, Datatest3 *p){
+  return testMallocPrintf("data3.%s.%d.%d.%d.%d.(%d..%d)",
+      zSystem, p->nRange, p->nIter, p->nWrite, p->nDelete, 
+      p->nValMin, p->nValMax
+  );
+}
+
+void test_data_3(
+  const char *zSystem,            /* Database system name */
+  const char *zPattern,           /* Run test cases that match this pattern */
+  int *pRc                        /* IN/OUT: Error code */
+){
+  Datatest3 aTest[] = {
+    /* nRange, nIter, nWrite, nDelete, nValMin, nValMax */
+    {  100,    1000,  5,      5,       50,      100 },
+    {  100,    1000,  2,      2,        5,       10 },
+  };
+
+  int i;
+
+  for(i=0; *pRc==LSM_OK && i<ArraySize(aTest); i++){
+    char *zName = getName3(zSystem, &aTest[i]);
+    if( testCaseBegin(pRc, zPattern, "%s", zName) ){
+      doDataTest3(zSystem, &aTest[i], pRc);
+    }
+    testFree(zName);
+  }
+}
+
+

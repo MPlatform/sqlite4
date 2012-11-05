@@ -110,6 +110,7 @@ void testClose(TestDb **ppDb);
 void testFetch(TestDb *, void *, int, void *, int, int *);
 void testWrite(TestDb *, void *, int, void *, int, int *);
 void testDelete(TestDb *, void *, int, int *);
+void testDeleteRange(TestDb *, void *, int, void *, int, int *);
 void testWriteStr(TestDb *, const char *, const char *zVal, int *pRc);
 void testFetchStr(TestDb *, const char *, const char *, int *pRc);
 
@@ -200,6 +201,7 @@ void testDeleteDatasourceRange(TestDb *, Datasource *, int, int, int *);
 /* test1.c */
 void test_data_1(const char *, const char *, int *pRc);
 void test_data_2(const char *, const char *, int *pRc);
+void test_data_3(const char *, const char *, int *pRc);
 void testDbContents(TestDb *, Datasource *, int, int, int, int, int, int *);
 void testCaseProgress(int, int, int, int *);
 int testCaseNDot(void);

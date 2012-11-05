@@ -1,0 +1,208 @@
+# 2012 November 02
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+#
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix lsm1
+db close
+
+
+proc reopen {{bClear 0}} {
+  catch {db close}
+  if {$bClear} { forcedelete test.db }
+  lsm_open db test.db {mmap 0 nmerge 2 autowork 0}
+}
+
+proc contents {} {
+  db csr_open csr
+  set res [list]
+  for {csr first} {[csr valid]} {csr next} {
+    lappend res [list [csr key] [csr value]]
+  }
+  csr close
+  set res
+}
+
+proc fetch {key} {
+  db csr_open csr
+  csr seek $key eq
+  set val [csr value]
+  csr close
+  set val
+}
+
+proc dbwrite {list} {
+  foreach {k v} $list {
+    db write $k $v
+  }
+}
+
+proc do_contents_test {tn res} {
+  set con [contents]
+  set res2 [list]
+  foreach r $res {lappend res2 $r}
+  uplevel do_test $tn [list [list set {} $con]] [list $res2]
+}
+
+if 1 {
+
+do_test 1.1 {
+  reopen
+  db write abc def
+  db close
+} {}
+
+do_test 1.2 {
+  reopen
+  db csr_open csr
+  csr seek abc eq
+} {}
+
+do_test 1.3 { 
+  list [csr valid] [csr key] [csr value] 
+} {1 abc def}
+
+do_test 1.4 { 
+  db delete abc
+  csr seek abc eq
+  csr valid
+} {0}
+
+do_test 1.5 { csr close } {}
+do_test 1.6 { db close  } {}
+
+
+do_test 2.1 {
+  forcedelete test.db
+  reopen
+  db write aaa one
+  db write bbb two
+  db write ccc three
+  db write ddd four
+  db write eee five
+  db write fff six
+  reopen
+  db delete_range a bbb
+  reopen
+  db work 10 
+} {1}
+
+do_contents_test 2.2 { {bbb two} {ccc three} {ddd four} {eee five} {fff six} }
+
+
+#-------------------------------------------------------------------------
+
+# The following populates the db with a single age=1 segment, containing
+# the six keys inserted below.
+do_test 3.1 {
+  reopen 1
+  db write aaa one
+  db write ddd four
+  db write fff six
+  reopen
+  db write bbb two
+  db write ccc three
+  db write eee five
+  reopen
+  db work 10
+} {1}
+
+do_test 3.2 {
+  db write bx seven
+  reopen
+  db delete_range aaa bx
+  reopen
+  db work 10
+} {2}
+
+do_contents_test 3.3 { 
+  {aaa one} {bx seven} {ccc three} {ddd four} {eee five} {fff six}
+}
+
+do_test 3.4 { fetch ddd } four
+
+#-------------------------------------------------------------------------
+#
+do_test 4.1 {
+  reopen 1
+  dbwrite { 222 helloworld }
+  db flush
+  db delete_range 111 222
+  db delete_range 222 333
+  db flush
+  contents
+} {{222 helloworld}}
+
+do_test 4.2 { fetch 222 } helloworld
+
+#-------------------------------------------------------------------------
+#
+do_test 5.1 {
+  reopen 1
+
+  dbwrite { 10 ten    }  ; db flush
+  dbwrite { 20 twenty }  ; db flush
+  db work 10
+
+  dbwrite { 30 thirty }  ; db flush
+  dbwrite { 40 forty  }  ; db flush
+  db work 10
+
+  db delete_range 11 29  ; db flush
+  db delete_range 20 39  ; db flush
+  db work 10
+
+  contents
+} {{10 ten} {40 forty}}
+
+do_test 5.2 {
+  reopen 1
+  db config {nmerge 4}
+
+  dbwrite { 10 ten    }  ; db flush
+  dbwrite { 20 twenty }  ; db flush
+  dbwrite { 30 thirty }  ; db flush
+  dbwrite { 40 forty  }  ; db flush
+  db work 10
+
+  db delete_range 10 17  ; db flush
+  dbwrite {17 seventeen} ; db flush
+  db delete_range 10 17  ; db flush
+
+  db config {nmerge 3}
+  db work 10
+
+  contents
+} {{10 ten} {17 seventeen} {20 twenty} {30 thirty} {40 forty}}
+
+}
+
+do_test 5.3 {
+  reopen 1
+  db config {nmerge 4}
+
+  dbwrite { 10 ten    }  ; db flush
+  dbwrite { 20 twenty }  ; db flush
+  dbwrite { 30 thirty }  ; db flush
+  dbwrite { 40 forty  }  ; db flush
+  db work 10
+
+  db delete_range 10 17  ; db flush
+  db delete_range 12 19  ; db flush
+  dbwrite {17 seventeen} ; db flush
+
+  db config {nmerge 3}
+  db work 10
+
+  contents
+} {{10 ten} {17 seventeen} {20 twenty} {30 thirty} {40 forty}}
+
+finish_test

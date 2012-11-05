@@ -532,7 +532,6 @@ int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite);
 */
 int lsmTreeNew(lsm_env *, int (*)(void *, int, void *, int), Tree **ppTree);
 void lsmTreeRelease(lsm_env *, Tree *);
-void lsmTreeClear(lsm_db *);
 int lsmTreeInit(lsm_db *);
 int lsmTreeRepair(lsm_db *);
 

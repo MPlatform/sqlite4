@@ -485,6 +485,8 @@ int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite);
 #define LSM_WORK_FLUSH           0x00000001
 #define LSM_WORK_OPTIMIZE        0x00000002
 
+int lsm_flush(lsm_db *pDb);
+
 /*
 ** Attempt to checkpoint the current database snapshot. Return an LSM
 ** error code if an error occurs or LSM_OK otherwise.
