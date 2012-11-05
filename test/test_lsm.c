@@ -155,7 +155,6 @@ static int test_sqlite4_lsm_work(
     const char *zSwitch;
     int flags;
   } aSwitch[] = {
-    { "-flush",      LSM_WORK_FLUSH }, 
     { "-optimize",   LSM_WORK_OPTIMIZE }, 
     { 0, 0 }
   };
@@ -639,7 +638,6 @@ static int test_lsm_cmd(
         if( rc!=TCL_OK ) return rc;
 
         if( iOpt==0 ) flags |= LSM_WORK_OPTIMIZE;
-        if( iOpt==1 ) flags |= LSM_WORK_FLUSH;
       }
 
       rc = lsm_work(p->db, flags, nWork, &nWrite);

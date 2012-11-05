@@ -384,7 +384,7 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
     }
 
     case SQLITE4_KVCTRL_LSM_FLUSH: {
-      lsm_work(p->pDb, LSM_WORK_FLUSH, 0, 0);
+      lsm_flush(p->pDb);
       break;
     }
 

@@ -471,9 +471,6 @@ int lsm_ckpt_size(lsm_db *, int *pnByte);
 ** The actual operations performed by this function depend on the value 
 ** passed as the "flags" parameter:
 **
-** LSM_WORK_FLUSH:
-**   Attempt to flush the contents of the in-memory tree to disk.
-**
 ** LSM_WORK_OPTIMIZE:
 **   If nMerge suitable arrays cannot be found, where nMerge is as 
 **   configured by LSM_CONFIG_NMERGE, merge together any arrays that
@@ -482,7 +479,6 @@ int lsm_ckpt_size(lsm_db *, int *pnByte);
 */
 int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite);
 
-#define LSM_WORK_FLUSH           0x00000001
 #define LSM_WORK_OPTIMIZE        0x00000002
 
 int lsm_flush(lsm_db *pDb);

@@ -4786,7 +4786,7 @@ int lsmSortedAutoWork(
     lsmLogMessage(pDb, rc, "lsmSortedAutoWork(): %d*%d = %d pages", 
         nUnit, nDepth, nRemaining);
 #endif
-    rc = doLsmWork(pDb, LSM_WORK_FLUSH, nRemaining, 0);
+    rc = doLsmWork(pDb, 0, nRemaining, 0);
     if( rc==LSM_BUSY ) rc = LSM_OK;
 
     if( bRestore && pDb->pCsr ){
