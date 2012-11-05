@@ -3618,8 +3618,7 @@ static int mergeWorkerWrite(
   MergeWorker *pMW,               /* Merge worker object to write into */
   int eType,                      /* One of SORTED_SEPARATOR, WRITE or DELETE */
   void *pKey, int nKey,           /* Key value */
-  MultiCursor *pCsr,              /* Read value (if any) from here */
-  int iVal,
+  void *pVal, int nVal,           /* Value value */
   int iPtr                        /* Absolute value of page pointer, or 0 */
 ){
   int rc = LSM_OK;                /* Return code */
@@ -3635,8 +3634,6 @@ static int mergeWorkerWrite(
   Segment *pSeg;                  /* Segment being written */
   int flags = 0;                  /* If != 0, flags value for page footer */
   int bFirst = 0;                 /* True for first key of output run */
-  void *pVal;
-  int nVal;
 
   pMerge = pMW->pLevel->pMerge;    
   pSeg = &pMW->pLevel->lhs;
@@ -3668,9 +3665,6 @@ static int mergeWorkerWrite(
   **     4) Value size - 1 varint (only if LSM_INSERT flag is set)
   */
   if( rc==LSM_OK ){
-    rc = multiCursorGetVal(pCsr, iVal, &pVal, &nVal);
-  }
-  if( rc==LSM_OK ){
     nHdr = 1 + lsmVarintLen32(iRPtr) + lsmVarintLen32(nKey);
     if( rtIsWrite(eType) ) nHdr += lsmVarintLen32(nVal);
 
@@ -3678,7 +3672,7 @@ static int mergeWorkerWrite(
     ** marked read-only, advance to the next page of the output run. */
     iOff = pMerge->iOutputOff;
     if( iOff<0 || pPg==0 || iOff+nHdr > SEGMENT_EOF(nData, nRec+1) ){
-      iFPtr = *pCsr->pPrevMergePtr;
+      iFPtr = *pMW->pCsr->pPrevMergePtr;
       iRPtr = iPtr - iFPtr;
       iOff = 0;
       nRec = 0;
@@ -3727,7 +3721,6 @@ static int mergeWorkerWrite(
     assert( iFPtr==pageGetPtr(aData, nData) );
     rc = mergeWorkerData(pMW, 0, iFPtr+iRPtr, pKey, nKey);
     if( rc==LSM_OK && rtIsWrite(eType) ){
-      if( rtTopic(eType)==0 ) rc = multiCursorGetVal(pCsr, iVal, &pVal, &nVal);
       if( rc==LSM_OK ){
         rc = mergeWorkerData(pMW, 0, iFPtr+iRPtr, pVal, nVal);
       }
@@ -3954,10 +3947,17 @@ static int mergeWorkerStep(MergeWorker *pMW){
     /* If this is a separator key and we know that the output pointer has not
     ** changed, there is no point in writing an output record. Otherwise,
     ** proceed. */
-    if( rtIsSeparator(eType)==0 || iPtr!=0 ){
+    if( rc==LSM_OK && (rtIsSeparator(eType)==0 || iPtr!=0) ){
       /* Write the record into the main run. */
+      void *pVal; int nVal;
+      rc = multiCursorGetVal(pCsr, iVal, &pVal, &nVal);
+      if( pVal && rc==LSM_OK ){
+        assert( nVal>=0 );
+        rc = sortedBlobSet(pDb->pEnv, &pCsr->val, pVal, nVal);
+        pVal = pCsr->val.pData;
+      }
       if( rc==LSM_OK ){
-        rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pCsr, iVal, iPtr);
+        rc = mergeWorkerWrite(pMW, eType, pKey, nKey, pVal, nVal, iPtr);
       }
     }
   }
