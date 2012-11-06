@@ -329,6 +329,19 @@ int lsm_info(lsm_db *, int, ...);
 **     page of any database array, LSM_ERROR is returned and the output
 **     pointer is set to a NULL value.
 **
+**   LSM_INFO_LOG_STRUCTURE
+**     The third argument should be of type (char **). The location pointed
+**     to is populated with a pointer to a nul-terminated string containing
+**     the string representation of a Tcl data-structure. The returned 
+**     string should be eventually freed by the caller using lsm_free().
+**
+**     The Tcl structure returned is a list of six integers that describe
+**     the current structure of the log file.
+**
+**   LSM_INFO_ARRAY_PAGES
+**
+**     
+**
 **   LSM_INFO_PAGE_ASCII_DUMP
 **     As with LSM_INFO_ARRAY_STRUCTURE, there should be two arguments passed
 **     with calls that specify this option - an integer page number and a
@@ -343,15 +356,6 @@ int lsm_info(lsm_db *, int, ...);
 **   LSM_INFO_PAGE_HEX_DUMP
 **     This argument is similar to PAGE_ASCII_DUMP, except that keys and
 **     values are represented using hexadecimal notation instead of ascii.
-**
-**   LSM_INFO_LOG_STRUCTURE
-**     The third argument should be of type (char **). The location pointed
-**     to is populated with a pointer to a nul-terminated string containing
-**     the string representation of a Tcl data-structure. The returned 
-**     string should be eventually freed by the caller using lsm_free().
-**
-**     The Tcl structure returned is a list of six integers that describe
-**     the current structure of the log file.
 **
 **   LSM_INFO_FREELIST
 **     The third argument should be of type (char **). The location pointed
@@ -371,6 +375,7 @@ int lsm_info(lsm_db *, int, ...);
 #define LSM_INFO_PAGE_ASCII_DUMP  6
 #define LSM_INFO_PAGE_HEX_DUMP    7
 #define LSM_INFO_FREELIST         8
+#define LSM_INFO_ARRAY_PAGES      9
 
 
 /* 

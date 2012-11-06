@@ -672,6 +672,7 @@ int lsmFsSyncDb(FileSystem *);
 
 /* Used by lsm_info(ARRAY_STRUCTURE) and lsm_config(MMAP) */
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
+int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmConfigMmap(lsm_db *pDb, int *piParam);
 
 int lsmEnvOpen(lsm_env *, const char *, lsm_file **);

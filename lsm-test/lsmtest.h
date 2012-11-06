@@ -83,6 +83,9 @@ int test_lsm_small_open(const char *zFilename, int bClear, TestDb **ppDb);
 int test_lsm_mt2(const char *zFilename, int bClear, TestDb **ppDb);
 int test_lsm_mt3(const char *zFilename, int bClear, TestDb **ppDb);
 
+int tdb_lsm_configure(lsm_db *, const char *);
+
+
 /* Functions in testutil.c. */
 int  testPrngInit(void);
 u32  testPrngValue(u32 iVal);

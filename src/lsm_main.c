@@ -467,6 +467,13 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       break;
     }
 
+    case LSM_INFO_ARRAY_PAGES: {
+      Pgno pgno = va_arg(ap, Pgno);
+      char **pzVal = va_arg(ap, char **);
+      rc = lsmInfoArrayPages(pDb, pgno, pzVal);
+      break;
+    }
+
     case LSM_INFO_PAGE_HEX_DUMP:
     case LSM_INFO_PAGE_ASCII_DUMP: {
       Pgno pgno = va_arg(ap, Pgno);

@@ -709,7 +709,6 @@ static int fsIsLast(FileSystem *pFS, Pgno iPg){
 static int fsIsFirst(FileSystem *pFS, Pgno iPg){
   const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
   assert( !pFS->pCompress );
-
   return ( (iPg % nPagePerBlock)==1
         || (iPg<nPagePerBlock && iPg==fsFirstPageOnBlock(pFS, 1))
   );
@@ -1085,7 +1084,7 @@ static int fsReadPagedata(
               (char *)pPg->aData, &n, 
               (const char *)pFS->aIBuffer, pPg->nCompress
           );
-          if( rc==LSM_OK && n!=pPg->nData ){
+          if( rc==LSM_OK && n!=pPg->pFS->nPagesize ){
             rc = LSM_CORRUPT_BKPT;
           }
         }
@@ -2005,8 +2004,8 @@ int lsmFsPageRelease(Page *pPg){
       rc = lsmFsPagePersist(pPg);
       pFS->nOut--;
 
-      assert( fsIsFirst(pPg->pFS, pPg->iPg)==0 
-           || pPg->pFS->pCompress 
+      assert( pPg->pFS->pCompress 
+           || fsIsFirst(pPg->pFS, pPg->iPg)==0 
            || (pPg->flags & PAGE_HASPREV)
       );
       pPg->aData -= (pPg->flags & PAGE_HASPREV);
@@ -2077,6 +2076,22 @@ static Segment *startsWith(Segment *pRun, Pgno iFirst){
   return (iFirst==pRun->iFirst) ? pRun : 0;
 }
 
+static Segment *findSegment(Snapshot *pWorker, Pgno iFirst){
+  Level *pLvl;                    /* Used to iterate through db levels */
+  Segment *pSeg = 0;              /* Pointer to segment to return */
+
+  for(pLvl=lsmDbSnapshotLevel(pWorker); pLvl && pSeg==0; pLvl=pLvl->pNext){
+    if( 0==(pSeg = startsWith(&pLvl->lhs, iFirst)) ){
+      int i;
+      for(i=0; i<pLvl->nRight; i++){
+        if( (pSeg = startsWith(&pLvl->aRhs[i], iFirst)) ) break;
+      }
+    }
+  }
+
+  return pSeg;
+}
+
 /*
 ** This function implements the lsm_info(LSM_INFO_ARRAY_STRUCTURE) request.
 ** If successful, *pzOut is set to point to a nul-terminated string 
@@ -2089,7 +2104,6 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   int rc = LSM_OK;
   Snapshot *pWorker;              /* Worker snapshot */
   Segment *pArray = 0;            /* Array to report on */
-  Level *pLvl;                    /* Used to iterate through db levels */
   int bUnlock = 0;
 
   *pzOut = 0;
@@ -2105,18 +2119,10 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
   }
 
   /* Search for the array that starts on page iFirst */
-  for(pLvl=lsmDbSnapshotLevel(pWorker); pLvl && pArray==0; pLvl=pLvl->pNext){
-    if( 0==(pArray = startsWith(&pLvl->lhs, iFirst)) ){
-      int i;
-      for(i=0; i<pLvl->nRight; i++){
-        if( (pArray = startsWith(&pLvl->aRhs[i], iFirst)) ) break;
-      }
-    }
-  }
+  pArray = findSegment(pWorker, iFirst);
 
   if( pArray==0 ){
     /* Could not find the requested array. This is an error. */
-    *pzOut = 0;
     rc = LSM_ERROR;
   }else{
     FileSystem *pFS = pDb->pFS;
@@ -2137,6 +2143,67 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
     lsmStringAppendf(&str, " %d", pArray->iLastPg);
 
     *pzOut = str.z;
+  }
+
+  if( bUnlock ){
+    int rcwork = LSM_BUSY;
+    lsmFinishWork(pDb, 0, &rcwork);
+  }
+  return rc;
+}
+
+/*
+** This function implements the lsm_info(LSM_INFO_ARRAY_PAGES) request.
+** If successful, *pzOut is set to point to a nul-terminated string 
+** containing the array structure and LSM_OK is returned. The caller should
+** eventually free the string using lsmFree().
+**
+** If an error occurs, *pzOut is set to NULL and an LSM error code returned.
+*/
+int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut){
+  int rc = LSM_OK;
+  Snapshot *pWorker;              /* Worker snapshot */
+  Segment *pArray = 0;            /* Array to report on */
+  int bUnlock = 0;
+
+  *pzOut = 0;
+  if( iFirst==0 ) return LSM_ERROR;
+
+  /* Obtain the worker snapshot */
+  pWorker = pDb->pWorker;
+  if( !pWorker ){
+    rc = lsmBeginWork(pDb);
+    if( rc!=LSM_OK ) return rc;
+    pWorker = pDb->pWorker;
+    bUnlock = 1;
+  }
+
+  /* Search for the array that starts on page iFirst */
+  pArray = findSegment(pWorker, iFirst);
+
+  if( pArray==0 ){
+    /* Could not find the requested array. This is an error. */
+    rc = LSM_ERROR;
+  }else{
+    Page *pPg = 0;
+    FileSystem *pFS = pDb->pFS;
+    LsmString str;
+
+    lsmStringInit(&str, pDb->pEnv);
+    rc = lsmFsDbPageGet(pFS, iFirst, &pPg);
+    while( rc==LSM_OK && pPg ){
+      Page *pNext = 0;
+      lsmStringAppendf(&str, " %lld", lsmFsPageNumber(pPg));
+      rc = lsmFsDbPageNext(pArray, pPg, 1, &pNext);
+      lsmFsPageRelease(pPg);
+      pPg = pNext;
+    }
+
+    if( rc!=LSM_OK ){
+      lsmFree(pDb->pEnv, str.z);
+    }else{
+      *pzOut = str.z;
+    }
   }
 
   if( bUnlock ){

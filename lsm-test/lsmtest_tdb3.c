@@ -675,7 +675,7 @@ static void xWorkHook(lsm_db *db, void *pArg){
 #define TEST_THREADS     -2
 #define TEST_COMPRESSION -3
 
-static int test_lsm_config_str(
+int test_lsm_config_str(
   LsmDb *pLsm,
   lsm_db *db, 
   int bWorker,
@@ -756,20 +756,18 @@ static int test_lsm_config_str(
           lsm_config(db, eParam, &iVal);
         }
       }else{
-        if( pLsm ){
-          switch( eParam ){
-            case TEST_NO_RECOVERY:
-              pLsm->bNoRecovery = iVal;
-              break;
-            case TEST_THREADS:
-              nThread = iVal;
-              break;
+        switch( eParam ){
+          case TEST_NO_RECOVERY:
+            if( pLsm ) pLsm->bNoRecovery = iVal;
+            break;
+          case TEST_THREADS:
+            if( pLsm ) nThread = iVal;
+            break;
 #ifdef HAVE_ZLIB
-            case TEST_COMPRESSION:
-              testConfigureCompression(db);
-              break;
+          case TEST_COMPRESSION:
+            testConfigureCompression(db);
+            break;
 #endif
-          }
         }
       }
     }else if( z!=zStart ){
@@ -798,6 +796,10 @@ int tdb_lsm_config_str(TestDb *pDb, const char *zStr){
 #endif
   }
   return rc;
+}
+
+int tdb_lsm_configure(lsm_db *db, const char *zConfig){
+  return test_lsm_config_str(0, db, 0, zConfig, 0);
 }
 
 static int testLsmStartWorkers(LsmDb *, int, const char *, const char *);

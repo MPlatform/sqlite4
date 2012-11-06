@@ -367,24 +367,48 @@ proc static_redraw {C} {
 }
 
 proc static_select_callback {C segment} {
-  link_varset $C myText myDb myData myTree
+  link_varset $C myText myDb myData myTree myCfg
   foreach {iFirst iLast iRoot nSize $segment} $segment {}
 
-  set data [string trim [exec_lsmtest_show $myDb array $iFirst]]
+  set data [string trim [exec_lsmtest_show -c $myCfg $myDb array-pages $iFirst]]
   $myText delete 0.0 end
 
+  # Delete the existing tree entries.
   $myTree delete [$myTree children {}]
 
-  foreach {first last} $data {
-    set nPg [expr {$last - $first + 1}]
-    set caption "${first}..${last} ($nPg pages)"
-    set id [$myTree insert {} end -text $caption]
-    for {set i $first} {$i <= $last} {incr i} {
-      set item [$myTree insert $id end -text $i]
-      if {$i == $iRoot} { 
-        set rootitem $item 
-        set rootparent $id 
-      }
+  set nBlksz [exec_lsmtest_show -c $myCfg $myDb blocksize]
+  set nPgsz  [exec_lsmtest_show -c $myCfg $myDb pagesize]
+
+  if {[regexp {c=1} $myCfg]          || [regexp {co=1} $myCfg]
+   || [regexp {com=1} $myCfg]        || [regexp {comp=1} $myCfg]
+   || [regexp {compr=1} $myCfg]      || [regexp {compres=1} $myCfg]
+   || [regexp {compress=1} $myCfg]   || [regexp {compressi=1} $myCfg]
+   || [regexp {compressio=1} $myCfg] || [regexp {compression=1} $myCfg]
+  } {
+    set nBlkPg $nBlksz
+  } else {
+    set nBlkPg [expr ($nBlksz / $nPgsz)]
+  }
+
+  foreach pg $data {
+    set blk [expr 1 + ($pg / $nBlkPg)]
+    if {[info exists block($blk)]} {
+      incr block($blk) 1
+    } else {
+      set block($blk) 1
+    }
+  }
+  foreach blk [lsort -integer [array names block]] {
+    set nPg $block($blk)
+    set blkid($blk) [$myTree insert {} end -text "block $blk ($nPg pages)"]
+  }
+  foreach pg $data {
+    set blk [expr 1 + ($pg / $nBlkPg)]
+    set id $blkid($blk)
+    set item [$myTree insert $id end -text $pg]
+    if {$pg == $iRoot} {
+      set rootitem $item
+      set rootparent $id
     }
   }
 
@@ -398,9 +422,9 @@ proc static_select_callback {C segment} {
 }
 
 proc static_page_callback {C pgno} {
-  link_varset $C myText myDb myData myPgno myMode
+  link_varset $C myText myDb myData myPgno myMode myCfg
   set myPgno $pgno
-  set data [string trim [exec_lsmtest_show $myDb $myMode $myPgno]]
+  set data [string trim [exec_lsmtest_show -c $myCfg $myDb $myMode $myPgno]]
   $myText delete 0.0 end
   $myText insert 0.0 $data
 }
@@ -448,7 +472,7 @@ proc show_text_in_editor {t} {
   after 1000 [subst {catch {file delete -force $fn}}]
 }
 
-proc static_setup {zDb} {
+proc static_setup {zConfig zDb} {
 
   panedwindow .pan -orient horizontal
   frame .pan.c
@@ -457,7 +481,7 @@ proc static_setup {zDb} {
   pack .pan.c.info -side bottom -fill x 
   pack .pan.c.c -side top -fill both -expand 1
 
-  link_varset $C myText myDb myData myTree mySelected myMode myModeButton
+  link_varset $C myText myDb myData myTree mySelected myMode myModeButton myCfg
   set myDb $zDb
 
   frame .pan.t
@@ -467,6 +491,7 @@ proc static_setup {zDb} {
   $myModeButton configure -width 20
   $myModeButton configure -text "Switch to HEX"
   set myMode page-ascii
+  set myCfg $zConfig
 
   set myText [scrollable text .pan.t.text -background white -width 80]
   button .pan.t.f.view -command [list show_text_in_editor $myText] \
@@ -476,7 +501,7 @@ proc static_setup {zDb} {
   pack .pan.t.text -expand 1 -fill both
 
   set myTree [scrollable ::ttk::treeview .pan.tree]
-  set myData [string trim [exec_lsmtest_show $zDb]]
+  set myData [string trim [exec_lsmtest_show -c $myCfg $zDb]]
 
   $myText configure -wrap none
   bind $C <KeyPress-q> exit
@@ -493,12 +518,15 @@ proc static_setup {zDb} {
   static_select_callback $C [lindex $myData 0 0]
 }
 
-if {[llength $argv] > 1} {
-  puts stderr "Usage: $argv0 ?DATABASE?"
+if {[llength $argv] > 2} {
+  puts stderr "Usage: $argv0 ?CONFIG? ?DATABASE?"
   exit -1
 }
-if {[llength $argv]==1} {
-  static_setup [lindex $argv 0]
+if {[llength $argv]>0} {
+  set zConfig ""
+  set zDb [lindex $argv end]
+  if {[llength $argv]>1} {set zConfig [lindex $argv 0]}
+  static_setup $zConfig $zDb
 } else {
   dynamic_setup
   fileevent stdin readable [list dynamic_input $C $S]
