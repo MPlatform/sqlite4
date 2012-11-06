@@ -42,7 +42,7 @@ static void doSetupStep(
     lsm_commit(db, 0);
     lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nSave);
 
-    *pRc = lsm_work(db, LSM_WORK_FLUSH, 0, 0);
+    *pRc = lsm_work(db, 0, 0, 0);
     if( *pRc==0 ){
       *pRc = lsm_checkpoint(db, 0);
     }
@@ -188,7 +188,7 @@ static void doLiveRecovery(const char *zDb, const char *zCksum, int *pRc){
       lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nBuf);
       lsm_begin(db, 1);
       lsm_commit(db, 0);
-      rc = lsm_work(db, LSM_WORK_FLUSH, 0, 0);
+      rc = lsm_work(db, 0, 0, 0);
     }
 
     testCksumDatabase(pDb, zCksum2);

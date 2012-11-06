@@ -15,7 +15,7 @@ int do_work(int nArg, char **azArg){
   int rc;
   int i;
   const char *zDb;
-  int flags = LSM_WORK_FLUSH;
+  int flags = 0;
   int nWork = (1<<30);
 
   if( nArg==0 ) goto usage;

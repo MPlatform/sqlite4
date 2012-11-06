@@ -257,9 +257,9 @@ struct MetaPage {
 /* 
 ** Values for LsmPage.flags 
 */
-#define PAGE_DIRTY 0x00000001     /* Set if page is dirty */
-#define PAGE_FREE  0x00000002     /* Set if Page.aData requires lsmFree() */
-#define PAGE_SHORT 0x00000004     /* Set if page is 4 bytes short */
+#define PAGE_DIRTY   0x00000001   /* Set if page is dirty */
+#define PAGE_FREE    0x00000002   /* Set if Page.aData requires lsmFree() */
+#define PAGE_HASPREV 0x00000004   /* Set if page is first on uncomp. block */
 
 /*
 ** Number of pgsz byte pages omitted from the start of block 1. The start
@@ -722,14 +722,7 @@ static int fsIsFirst(FileSystem *pFS, Pgno iPg){
 */
 u8 *lsmFsPageData(Page *pPage, int *pnData){
   if( pnData ){
-#ifndef NDEBUG
-    int bShort = (pPage->pFS->pCompress==0 &&
-        (fsIsFirst(pPage->pFS, pPage->iPg) || fsIsLast(pPage->pFS, pPage->iPg))
-    );
-    assert( bShort==!!(pPage->flags & PAGE_SHORT) );
-    assert( PAGE_SHORT==4 );
-#endif
-    *pnData = pPage->pFS->nPagesize - (pPage->flags & PAGE_SHORT);
+    *pnData = pPage->nData;
   }
   return pPage->aData;
 }
@@ -841,17 +834,17 @@ static void fsGrowMapping(
 ){
   /* This function won't work with compressed databases yet. */
   assert( pFS->pCompress==0 );
+  assert( PAGE_HASPREV==4 );
 
   if( *pRc==LSM_OK && iSz>pFS->nMap ){
-    Page *pFix;
     int rc;
     u8 *aOld = pFS->pMap;
     rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iSz, &pFS->pMap, &pFS->nMap);
     if( rc==LSM_OK && pFS->pMap!=aOld ){
-      u8 *aData = (u8 *)pFS->pMap;
+      Page *pFix;
+      i64 iOff = (u8 *)pFS->pMap - aOld;
       for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
-        assert( &aOld[pFS->nPagesize * (i64)(pFix->iPg-1)]==pFix->aData );
-        pFix->aData = &aData[pFS->nPagesize * (i64)(pFix->iPg-1)];
+        pFix->aData += iOff;
       }
       lsmSortedRemap(pFS->pDb);
     }
@@ -889,7 +882,7 @@ static int fsBlockNext(
     Page *pLast;
     rc = fsPageGet(pFS, iBlock*nPagePerBlock, 0, &pLast, 0);
     if( rc==LSM_OK ){
-      *piNext = fsPageToBlock(pFS, lsmGetU32(&pLast->aData[pFS->nPagesize-4]));
+      *piNext = lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
       lsmFsPageRelease(pLast);
     }
   }
@@ -1119,6 +1112,7 @@ static int fsPageGet(
   assert( iPg>=fsFirstPageOnBlock(pFS, 1) );
   *ppPg = 0;
 
+  assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
   if( pFS->bUseMmap ){
     i64 iEnd = (i64)iPg * pFS->nPagesize;
     fsGrowMapping(pFS, iEnd, &rc);
@@ -1136,12 +1130,6 @@ static int fsPageGet(
     }
     p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (i64)(iPg-1)];
     p->iPg = iPg;
-    if( fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg) ){
-      p->flags = PAGE_SHORT;
-    }else{
-      p->flags = 0;
-    }
-    p->nData = pFS->nPagesize - (p->flags & PAGE_SHORT);
   }else{
 
     /* Search the hash-table for the page */
@@ -1158,10 +1146,6 @@ static int fsPageGet(
         p->nRef = 0;
         p->pFS = pFS;
         assert( p->flags==0 || p->flags==PAGE_FREE );
-        if( pFS->pCompress==0 && (fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg)) ){
-          p->flags |= PAGE_SHORT;
-        }
-        p->nData =  pFS->nPagesize - (p->flags & PAGE_SHORT);
 
 #ifdef LSM_DEBUG
         memset(p->aData, 0x56, pFS->nPagesize);
@@ -1198,7 +1182,17 @@ static int fsPageGet(
          || (rc!=LSM_OK && p==0) 
     );
   }
+
   if( rc==LSM_OK && p ){
+    if( pFS->pCompress==0 && (fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg)) ){
+      p->nData = pFS->nPagesize - 4;
+      if( fsIsFirst(pFS, iPg) ){
+        p->aData += 4;
+        p->flags |= PAGE_HASPREV;
+      }
+    }else{
+      p->nData = pFS->nPagesize;
+    }
     pFS->nOut += (p->nRef==0);
     p->nRef++;
   }
@@ -1467,7 +1461,8 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
         *ppNext = 0;
         return LSM_OK;
       }else if( fsIsFirst(pFS, iPg) ){
-        iPg = lsmGetU32(&pPg->aData[pFS->nPagesize-4]);
+        assert( pPg->flags & PAGE_HASPREV );
+        iPg = fsLastPageOnBlock(pFS, lsmGetU32(&pPg->aData[-4]));
       }else{
         iPg--;
       }
@@ -1476,7 +1471,7 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
         *ppNext = 0;
         return LSM_OK;
       }else if( fsIsLast(pFS, iPg) ){
-        iPg = lsmGetU32(&pPg->aData[pFS->nPagesize-4]);
+        iPg = fsFirstPageOnBlock(pFS, lsmGetU32(&pPg->aData[pFS->nPagesize-4]));
       }else{
         iPg++;
       }
@@ -1572,9 +1567,9 @@ int lsmFsSortedAppend(
       pPg->flags |= PAGE_DIRTY;
 
       if( fsIsLast(pFS, iApp) ){
-        lsmPutU32(&pPg->aData[pFS->nPagesize-4], iNext);
+        lsmPutU32(&pPg->aData[pFS->nPagesize-4], fsPageToBlock(pFS, iNext));
       }else if( fsIsFirst(pFS, iApp) ){
-        lsmPutU32(&pPg->aData[pFS->nPagesize-4], iPrev);
+        lsmPutU32(&pPg->aData[-4], fsPageToBlock(pFS, iPrev));
       }
     }
   }
@@ -1612,8 +1607,8 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
       Page *pLast;
       rc = fsPageGet(pFS, p->iLastPg, 0, &pLast, 0);
       if( rc==LSM_OK ){
-        int iPg = (int)lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
-        lsmBlockRefree(pFS->pDb, fsPageToBlock(pFS, iPg));
+        int iBlk = (int)lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
+        lsmBlockRefree(pFS->pDb, iBlk);
         lsmFsPageRelease(pLast);
       }
     }else{
@@ -1910,7 +1905,8 @@ int lsmFsPagePersist(Page *pPg){
       i64 iOff;                   /* Offset to write within database file */
       iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
       if( pFS->bUseMmap==0 ){
-        rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData,pFS->nPagesize);
+        u8 *aData = pPg->aData - (pPg->flags & PAGE_HASPREV);
+        rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, aData, pFS->nPagesize);
       }else if( pPg->flags & PAGE_FREE ){
         fsGrowMapping(pFS, iOff + pFS->nPagesize, &rc);
         if( rc==LSM_OK ){
@@ -2008,6 +2004,13 @@ int lsmFsPageRelease(Page *pPg){
       FileSystem *pFS = pPg->pFS;
       rc = lsmFsPagePersist(pPg);
       pFS->nOut--;
+
+      assert( fsIsFirst(pPg->pFS, pPg->iPg)==0 
+           || pPg->pFS->pCompress 
+           || (pPg->flags & PAGE_HASPREV)
+      );
+      pPg->aData -= (pPg->flags & PAGE_HASPREV);
+      pPg->flags &= ~PAGE_HASPREV;
 
       if( pFS->bUseMmap ){
         pPg->pHashNext = pFS->pFree;
@@ -2238,7 +2241,7 @@ static void checkBlocks(
 }
 
 typedef struct CheckFreelistCtx CheckFreelistCtx;
-typedef struct CheckFreelistCtx {
+struct CheckFreelistCtx {
   u8 *aUsed;
   int nBlock;
 };
@@ -2269,7 +2272,6 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   CheckFreelistCtx ctx;
   FileSystem *pFS = pDb->pFS;
   int i;
-  int j;
   int rc;
   Freelist freelist = {0, 0, 0};
   u8 *aUsed;

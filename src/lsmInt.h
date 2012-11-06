@@ -697,6 +697,7 @@ int lsmSortedAutoWork(lsm_db *, int nUnit);
 
 int lsmSortedWalkFreelist(lsm_db *, int (*)(void *, int, i64), void *);
 
+
 int lsmFlushTreeToDisk(lsm_db *pDb);
 
 void lsmSortedRemap(lsm_db *pDb);
@@ -841,6 +842,8 @@ int lsmFreelistAppend(lsm_env *pEnv, Freelist *p, int iBlk, i64 iId);
 int lsmDbMultiProc(lsm_db *);
 void lsmDbDeferredClose(lsm_db *, lsm_file *, LsmFile *);
 LsmFile *lsmDbRecycleFd(lsm_db *);
+
+int lsmWalkFreelist(lsm_db *, int (*)(void *, int, i64), void *);
 
 
 /**************************************************************************

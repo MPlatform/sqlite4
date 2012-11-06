@@ -1200,11 +1200,9 @@ static int testLsmStartWorkers(
   pDb->nWorker = nWorker;
 
   if( nWorker==1 ){
-    int flags = LSM_WORK_FLUSH;
-    rc = mt_start_worker(pDb, 0, zFilename, zCfg, flags, 256, 0);
+    rc = mt_start_worker(pDb, 0, zFilename, zCfg, 0, 256, 0);
   }else{
-    int flags = LSM_WORK_FLUSH;
-    rc = mt_start_worker(pDb, 0, zFilename, zCfg, flags, 256, 0);
+    rc = mt_start_worker(pDb, 0, zFilename, zCfg, 0, 256, 0);
     if( rc==LSM_OK ){
       rc = mt_start_worker(pDb, 1, zFilename, zCfg, 0, 0, 1);
     }
