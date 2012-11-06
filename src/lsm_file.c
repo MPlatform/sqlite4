@@ -1186,7 +1186,7 @@ static int fsPageGet(
   if( rc==LSM_OK && p ){
     if( pFS->pCompress==0 && (fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg)) ){
       p->nData = pFS->nPagesize - 4;
-      if( fsIsFirst(pFS, iPg) ){
+      if( fsIsFirst(pFS, iPg) && p->nRef==0 ){
         p->aData += 4;
         p->flags |= PAGE_HASPREV;
       }
