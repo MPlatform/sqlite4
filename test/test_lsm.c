@@ -143,7 +143,7 @@ static int test_sqlite4_lsm_info(
 }
 
 /*
-** TCLCMD:    sqlite4_lsm_work DB DBNAME ?SWITCHES? ?N?
+** TCLCMD:    sqlite4_lsm_work DB DBNAME ?-nmerge N? ?-npage N?
 */
 static int test_sqlite4_lsm_work(
   void * clientData,
@@ -153,13 +153,13 @@ static int test_sqlite4_lsm_work(
 ){
   struct Switch {
     const char *zSwitch;
-    int flags;
   } aSwitch[] = {
-    { "-optimize",   LSM_WORK_OPTIMIZE }, 
-    { 0, 0 }
+    { "-nmerge" },
+    { "-npage" },
+    { 0 }
   };
 
-  int flags = 0;
+  int nMerge = 1;
   int nPage = 0;
   const char *zDb;
   const char *zName;
@@ -169,27 +169,24 @@ static int test_sqlite4_lsm_work(
   lsm_db *pLsm;
   int nWork;
 
-  if( objc<3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME ?SWITCHES? ?N?");
+  if( objc!=3 && objc!=5 && objc!=7 ){
+    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME ?-nmerge N? ?-npage N?");
     return TCL_ERROR;
   }
   zDb = Tcl_GetString(objv[1]);
   zName = Tcl_GetString(objv[2]);
 
-  for(i=3; i<objc; i++){
-    const char *z = Tcl_GetString(objv[i]);
-
-    if( z[0]=='-' ){
-      int iIdx;
-      rc = Tcl_GetIndexFromObjStruct(
-          interp, objv[i], aSwitch, sizeof(aSwitch[0]), "switch", 0, &iIdx
-      );
-      if( rc!=TCL_OK ) return rc;
-      flags |= aSwitch[iIdx].flags;
-    }else{
-      rc = Tcl_GetIntFromObj(interp, objv[i], &nPage);
-      if( rc!=TCL_OK ) return rc;
-    }
+  for(i=3; i<objc; i+=2){
+    int iIdx;
+    int iVal;
+    rc = Tcl_GetIndexFromObjStruct(
+        interp, objv[i], aSwitch, sizeof(aSwitch[0]), "switch", 0, &iIdx
+        );
+    if( rc!=TCL_OK ) return rc;
+    rc = Tcl_GetIntFromObj(interp, objv[i+1], &iVal);
+    if( rc!=TCL_OK ) return rc;
+    if( iIdx==0 ) nMerge = iVal;
+    if( iIdx==1 ) nPage = iVal;
   }
 
   rc = getDbPointer(interp, zDb, &db);
@@ -197,7 +194,7 @@ static int test_sqlite4_lsm_work(
 
   rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
   if( rc==SQLITE4_OK ){
-    rc = lsm_work(pLsm, flags, nPage, &nWork);
+    rc = lsm_work(pLsm, nMerge, nPage, &nWork);
   }
   if( rc!=SQLITE4_OK ){
     Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
@@ -520,9 +517,10 @@ static int test_lsm_cmd(
     /*  5 */ {"commit",       1, "LEVEL"},
     /*  6 */ {"rollback",     1, "LEVEL"},
     /*  7 */ {"csr_open",     1, "CSR"},
-    /*  8 */ {"work",        -1, "NPAGE ?SWITCHES?"},
+    /*  8 */ {"work",        -1, "?NMERGE? NPAGE"},
     /*  9 */ {"flush",        0, ""},
     /* 10 */ {"config",       1, "LIST"},
+    /* 11 */ {"checkpoint",   0, ""},
     {0, 0, 0}
   };
   int iCmd;
@@ -622,25 +620,24 @@ static int test_lsm_cmd(
     }
 
     case 8: assert( 0==strcmp(aCmd[8].zCmd, "work") ); {
-      int nWork;
+      int nWork = 0;
+      int nMerge = 1;
       int nWrite = 0;
-      int flags = 0;
       int i;
 
-      rc = Tcl_GetIntFromObj(interp, objv[2], &nWork);
+      if( objc==3 ){
+        rc = Tcl_GetIntFromObj(interp, objv[2], &nWork);
+      }else if( objc==4 ){
+        rc = Tcl_GetIntFromObj(interp, objv[2], &nMerge);
+        if( rc!=TCL_OK ) return rc;
+        rc = Tcl_GetIntFromObj(interp, objv[3], &nWork);
+      }else{
+        Tcl_WrongNumArgs(interp, 2, objv, "?NMERGE? NWRITE");
+        return TCL_ERROR;
+      }
       if( rc!=TCL_OK ) return rc;
 
-      for(i=3; i<objc; i++){
-        int iOpt;
-        const char *azOpt[] = { "-optimize", "-flush", 0 };
-
-        rc = Tcl_GetIndexFromObj(interp, objv[i], azOpt, "option", 0, &iOpt);
-        if( rc!=TCL_OK ) return rc;
-
-        if( iOpt==0 ) flags |= LSM_WORK_OPTIMIZE;
-      }
-
-      rc = lsm_work(p->db, flags, nWork, &nWrite);
+      rc = lsm_work(p->db, nMerge, nWork, &nWrite);
       if( rc!=LSM_OK ) return test_lsm_error(interp, "lsm_work", rc);
       Tcl_SetObjResult(interp, Tcl_NewIntObj(nWrite));
       return TCL_OK;
@@ -653,6 +650,11 @@ static int test_lsm_cmd(
 
     case 10: assert( 0==strcmp(aCmd[10].zCmd, "config") ); {
       return testConfigureLsm(interp, p->db, objv[2]);
+    }
+
+    case 11: assert( 0==strcmp(aCmd[11].zCmd, "checkpoint") ); {
+      rc = lsm_checkpoint(p->db, 0);
+      return test_lsm_error(interp, "lsm_checkpoint", rc);
     }
 
     default:

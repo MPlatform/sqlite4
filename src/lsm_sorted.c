@@ -4048,7 +4048,10 @@ static int sortedNewToplevel(
     if( rc==LSM_OK ){
       rc = multiCursorAddTree(pCsr, pDb->pWorker, eTree);
     }
-    if( rc==LSM_OK && pNext && pNext->pMerge==0 && pNext->lhs.iRoot ){
+    if( rc==LSM_OK 
+        && eTree!=TREE_NONE
+        && pNext && pNext->pMerge==0 && pNext->lhs.iRoot 
+    ){
       pDel = &pNext->lhs;
       rc = btreeCursorNew(pDb, pDel, &pCsr->pBtCsr);
     }
@@ -4344,14 +4347,17 @@ static int sortedCountLevels(Level *p){
   return nRet;
 }
 
-static int sortedSelectLevel(lsm_db *pDb, int bOpt, Level **ppOut){
+static int sortedSelectLevel(lsm_db *pDb, int nMerge, Level **ppOut){
   Level *pTopLevel = lsmDbSnapshotLevel(pDb->pWorker);
   int rc = LSM_OK;
   Level *pLevel = 0;            /* Output value */
   Level *pBest = 0;             /* Best level to work on found so far */
-  int nBest = pDb->nMerge-1;    /* Number of segments merged at pBest */
+  int nBest;                    /* Number of segments merged at pBest */
   Level *pThis = 0;             /* First in run of levels with age=iAge */
   int nThis = 0;                /* Number of levels starting at pThis */
+
+  assert( nMerge>=1 );
+  nBest = LSM_MAX(1, nMerge-1);
 
   /* Find the longest contiguous run of levels not currently undergoing a 
   ** merge with the same age in the structure. Or the level being merged
@@ -4387,7 +4393,7 @@ static int sortedSelectLevel(lsm_db *pDb, int bOpt, Level **ppOut){
     nBest = nThis;
   }
 
-  if( pBest==0 && bOpt && pTopLevel->pNext ){
+  if( pBest==0 && nMerge==1 && pTopLevel && pTopLevel->pNext ){
     pBest = pTopLevel;
     nBest = 2;
   }
@@ -4418,7 +4424,7 @@ static int sortedDbIsFull(lsm_db *pDb){
 static int sortedWork(
   lsm_db *pDb,                    /* Database handle. Must be worker. */
   int nWork,                      /* Number of pages of work to do */
-  int bOptimize,                  /* True to merge less than nMerge levels */
+  int nMerge,                     /* Try to merge this many levels at once */
   int bFlush,                     /* Set if call is to make room for a flush */
   int *pnWrite                    /* OUT: Actual number of pages written */
 ){
@@ -4433,7 +4439,7 @@ static int sortedWork(
     Level *pLevel = 0;
 
     /* Find a level to work on. */
-    rc = sortedSelectLevel(pDb, bOptimize, &pLevel);
+    rc = sortedSelectLevel(pDb, nMerge, &pLevel);
     assert( rc==LSM_OK || pLevel==0 );
 
     if( pLevel==0 ){
@@ -4479,6 +4485,7 @@ static int sortedWork(
 
           Level *pTop;          /* Top level of worker snapshot */
           Level **pp;           /* Read/write iterator for Level.pNext list */
+          int i;
           assert( pLevel->pNext==0 );
 
           /* Remove the level from the worker snapshot. */
@@ -4489,6 +4496,9 @@ static int sortedWork(
 
           /* Free the Level structure. */
           lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->lhs);
+          for(i=0; i<pLevel->nRight; i++){
+            lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->aRhs[i]);
+          }
           sortedFreeLevel(pDb->pEnv, pLevel);
         }else{
           int i;
@@ -4572,10 +4582,19 @@ static int sortedTreeHasOld(lsm_db *pDb, int *pRc){
   return bRet;
 }
 
+int lsmSaveWorker(lsm_db *pDb, int bFlush){
+  Snapshot *p = pDb->pWorker;
+  if( p->freelist.nEntry>pDb->nMaxFreelist ){
+    int rc = sortedNewToplevel(pDb, TREE_NONE, 0);
+    if( rc!=LSM_OK ) return rc;
+  }
+  return lsmCheckpointSaveWorker(pDb, bFlush);
+}
+
 static int doLsmSingleWork(
   lsm_db *pDb, 
   int bShutdown,
-  int flags, 
+  int nMerge,                     /* Minimum segments to merge together */
   int nPage,                      /* Number of pages to write to disk */
   int *pnWrite,                   /* OUT: Pages actually written to disk */
   int *pbCkpt                     /* OUT: True if an auto-checkpoint is req. */
@@ -4599,13 +4618,12 @@ static int doLsmSingleWork(
     u32 nSync;
     u32 nUnsync;
     int nPgsz;
-    int nMax;
 
     lsmCheckpointSynced(pDb, 0, 0, &nSync);
     nUnsync = lsmCheckpointNWrite(pDb->pShmhdr->aSnap1, 0);
     nPgsz = lsmCheckpointPgsz(pDb->pShmhdr->aSnap1);
 
-    nMax = (pDb->nAutockpt/nPgsz) - (nUnsync-nSync);
+    nMax = LSM_MIN(nMax, (pDb->nAutockpt/nPgsz) - (nUnsync-nSync));
     if( nMax<nRem ){
       bCkpt = 1;
       nRem = LSM_MAX(nMax, 0);
@@ -4621,7 +4639,7 @@ static int doLsmSingleWork(
     ** existing segments together until this condition is cleared.  */
     if( sortedDbIsFull(pDb) ){
       int nPg = 0;
-      rc = sortedWork(pDb, nRem, 0, 1, &nPg);
+      rc = sortedWork(pDb, nRem, nMerge, 1, &nPg);
       nRem -= nPg;
       assert( rc!=LSM_OK || nRem<=0 || !sortedDbIsFull(pDb) );
       bDirty = 1;
@@ -4635,7 +4653,7 @@ static int doLsmSingleWork(
         if( pDb->nTransOpen>0 ){
           lsmTreeDiscardOld(pDb);
         }
-        rc = lsmCheckpointSaveWorker(pDb, 1);
+        rc = lsmSaveWorker(pDb, 1);
         bDirty = 0;
       }
     }
@@ -4644,8 +4662,7 @@ static int doLsmSingleWork(
   /* If nPage is still greater than zero, do some merging. */
   if( rc==LSM_OK && nRem>0 && bShutdown==0 ){
     int nPg = 0;
-    int bOptimize = ((flags & LSM_WORK_OPTIMIZE) ? 1 : 0);
-    rc = sortedWork(pDb, nRem, bOptimize, 0, &nPg);
+    rc = sortedWork(pDb, nRem, nMerge, 0, &nPg);
     nRem -= nPg;
     if( nPg ) bDirty = 1;
   }
@@ -4655,7 +4672,7 @@ static int doLsmSingleWork(
   if( rc==LSM_OK && pDb->pWorker->freelist.nEntry > pDb->nMaxFreelist ){
     int nPg = 0;
     while( rc==LSM_OK && sortedDbIsFull(pDb) ){
-      rc = sortedWork(pDb, 16, 0, 1, &nPg);
+      rc = sortedWork(pDb, 16, nMerge, 1, &nPg);
       nRem -= nPg;
     }
     if( rc==LSM_OK ){
@@ -4684,15 +4701,16 @@ static int doLsmSingleWork(
   return rc;
 }
 
-static int doLsmWork(lsm_db *pDb, int flags, int nPage, int *pnWrite){
+static int doLsmWork(lsm_db *pDb, int nMerge, int nPage, int *pnWrite){
   int rc;
   int nWrite = 0;
   int bCkpt = 0;
 
+  assert( nMerge>=1 );
   do {
     int nThis = 0;
     bCkpt = 0;
-    rc = doLsmSingleWork(pDb, 0, flags, nPage-nWrite, &nThis, &bCkpt);
+    rc = doLsmSingleWork(pDb, 0, nMerge, nPage-nWrite, &nThis, &bCkpt);
     nWrite += nThis;
     if( rc==LSM_OK && bCkpt ){
       rc = lsm_checkpoint(pDb, 0);
@@ -4712,13 +4730,14 @@ static int doLsmWork(lsm_db *pDb, int flags, int nPage, int *pnWrite){
 /*
 ** Perform work to merge database segments together.
 */
-int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite){
+int lsm_work(lsm_db *pDb, int nMerge, int nPage, int *pnWrite){
 
   /* This function may not be called if pDb has an open read or write
   ** transaction. Return LSM_MISUSE if an application attempts this.  */
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
 
-  return doLsmWork(pDb, flags, nPage, pnWrite);
+  if( nMerge<=0 ) nMerge = pDb->nMerge;
+  return doLsmWork(pDb, nMerge, nPage, pnWrite);
 }
 
 int lsm_flush(lsm_db *db){
@@ -4786,7 +4805,7 @@ int lsmSortedAutoWork(
     lsmLogMessage(pDb, rc, "lsmSortedAutoWork(): %d*%d = %d pages", 
         nUnit, nDepth, nRemaining);
 #endif
-    rc = doLsmWork(pDb, 0, nRemaining, 0);
+    rc = doLsmWork(pDb, pDb->nMerge, nRemaining, 0);
     if( rc==LSM_BUSY ) rc = LSM_OK;
 
     if( bRestore && pDb->pCsr ){
@@ -4814,7 +4833,7 @@ int lsmFlushTreeToDisk(lsm_db *pDb){
 
   rc = lsmBeginWork(pDb);
   while( rc==LSM_OK && sortedDbIsFull(pDb) ){
-    rc = sortedWork(pDb, 256, 0, 1, 0);
+    rc = sortedWork(pDb, 256, pDb->nMerge, 1, 0);
   }
 
   if( rc==LSM_OK ){

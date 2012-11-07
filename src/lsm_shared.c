@@ -738,7 +738,7 @@ void lsmFinishWork(lsm_db *pDb, int bFlush, int *pRc){
     /* If no error has occurred, serialize the worker snapshot and write
     ** it to shared memory.  */
     if( *pRc==LSM_OK ){
-      *pRc = lsmCheckpointSaveWorker(pDb, bFlush);
+      *pRc = lsmSaveWorker(pDb, bFlush);
     }
     lsmFreeSnapshot(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;

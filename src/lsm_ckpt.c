@@ -359,6 +359,7 @@ static void ckptExportLog(
     }
   }
 
+  assert( *pRc || iOut==CKPT_HDR_LO_CKSUM2+1 );
   *piOut = iOut;
 }
 
@@ -416,6 +417,7 @@ static int ckptExportSnapshot(
   }
 
   /* Write the freelist */
+  assert( pSnap->freelist.nEntry<=pDb->nMaxFreelist );
   if( rc==LSM_OK ){
     int nFree = pSnap->freelist.nEntry;
     ckptSetValue(&ckpt, iOut++, nFree, &rc);
@@ -451,6 +453,13 @@ static int ckptExportSnapshot(
   lsmLogMessage(pDb, rc, 
       "ckptExportSnapshot(): id=%lld freelist: %d", iId, pSnap->freelist.nEntry
   );
+  for(i=0; i<pSnap->freelist.nEntry; i++){
+  lsmLogMessage(pDb, rc, 
+      "ckptExportSnapshot(): iBlk=%d id=%lld", 
+      pSnap->freelist.aEntry[i].iBlk,
+      pSnap->freelist.aEntry[i].iId
+  );
+  }
 #endif
 
   *ppCkpt = (void *)ckpt.aCkpt;

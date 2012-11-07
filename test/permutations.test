@@ -135,7 +135,7 @@ test_suite "src4" -prefix "" -description {
 } -files {
   simple.test simple2.test
   log3.test 
-  lsm1.test
+  lsm1.test lsm2.test
   csr1.test
   ckpt1.test
   mc1.test

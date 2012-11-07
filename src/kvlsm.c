@@ -391,7 +391,7 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
     case SQLITE4_KVCTRL_LSM_MERGE: {
       int nPage = *(int*)pArg;
       int nWrite = 0;
-      lsm_work(p->pDb, LSM_WORK_OPTIMIZE, nPage, &nWrite);
+      lsm_work(p->pDb, 0, nPage, &nWrite);
       *(int*)pArg = nWrite;
       break;
     }

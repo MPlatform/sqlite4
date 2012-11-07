@@ -52,8 +52,6 @@ proc do_contents_test {tn res} {
   uplevel do_test $tn [list [list set {} $con]] [list $res2]
 }
 
-if 1 {
-
 do_test 1.1 {
   reopen
   db write abc def
@@ -92,6 +90,7 @@ do_test 2.1 {
   reopen
   db delete_range a bbb
   reopen
+breakpoint
   db work 10 
 } {1}
 
@@ -182,8 +181,6 @@ do_test 5.2 {
 
   contents
 } {{10 ten} {17 seventeen} {20 twenty} {30 thirty} {40 forty}}
-
-}
 
 do_test 5.3 {
   reopen 1

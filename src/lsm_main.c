@@ -57,6 +57,13 @@ static int xCmp(void *p1, int n1, void *p2, int n2){
   return res;
 }
 
+static void xLog(void *pCtx, int rc, const char *z){
+  (void)(rc);
+  (void)(pCtx);
+  fprintf(stderr, "%s\n", z);
+  fflush(stderr);
+}
+
 /*
 ** Allocate a new db handle.
 */
@@ -87,6 +94,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->iReader = -1;
   pDb->bMultiProc = 1;
   pDb->bMmap = LSM_IS_64_BIT;
+  pDb->xLog = xLog;
   return LSM_OK;
 }
 
@@ -411,6 +419,12 @@ int lsmStructList(
   return rc;
 }
 
+static int infoFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
+  LsmString *pStr = (LsmString *)pCtx;
+  lsmStringAppendf(pStr, "%s{%d %lld}", (pStr->n?" ":""), iBlk, iSnapshot);
+  return 0;
+}
+
 int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   Snapshot *pWorker;              /* Worker snapshot */
   int bUnlock = 0;
@@ -423,16 +437,15 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   if( rc!=LSM_OK ) return rc;
 
   lsmStringInit(&s, pDb->pEnv);
-  lsmStringAppendf(&s, "%d", pWorker->freelist.nEntry);
-  for(i=0; i<pWorker->freelist.nEntry; i++){
-    FreelistEntry *p = &pWorker->freelist.aEntry[i];
-    lsmStringAppendf(&s, " {%d %d}", p->iBlk, (int)p->iId);
+  rc = lsmWalkFreelist(pDb, infoFreelistCb, &s);
+  if( rc!=LSM_OK ){
+    lsmFree(pDb->pEnv, s.z);
+  }else{
+    *pzOut = s.z;
   }
-  rc = s.n>=0 ? LSM_OK : LSM_NOMEM;
 
   /* Release the snapshot and return */
   infoFreeWorker(pDb, bUnlock);
-  *pzOut = s.z;
   return rc;
 }
 

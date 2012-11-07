@@ -6,7 +6,7 @@ int do_work(int nArg, char **azArg){
   struct Option {
     const char *zName;
   } aOpt [] = {
-    { "-optimize" },
+    { "-nmerge" },
     { "-npage" },
     { 0 }
   };
@@ -15,7 +15,7 @@ int do_work(int nArg, char **azArg){
   int rc;
   int i;
   const char *zDb;
-  int flags = 0;
+  int nMerge = 1;
   int nWork = (1<<30);
 
   if( nArg==0 ) goto usage;
@@ -26,7 +26,9 @@ int do_work(int nArg, char **azArg){
     if( rc ) return rc;
     switch( iSel ){
       case 0:
-        flags |= LSM_WORK_OPTIMIZE;
+        i++;
+        if( i==(nArg-1) ) goto usage;
+        nMerge = atoi(azArg[i]);
         break;
       case 1:
         i++;
@@ -44,7 +46,7 @@ int do_work(int nArg, char **azArg){
     if( rc!=LSM_OK ){
       testPrintError("lsm_open(): rc=%d\n", rc);
     }else{
-      rc = lsm_work(pDb, flags, nWork, 0);
+      rc = lsm_work(pDb, nMerge, nWork, 0);
       if( rc!=LSM_OK ){
         testPrintError("lsm_work(): rc=%d\n", rc);
       }

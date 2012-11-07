@@ -698,6 +698,7 @@ int lsmSortedAutoWork(lsm_db *, int nUnit);
 
 int lsmSortedWalkFreelist(lsm_db *, int (*)(void *, int, i64), void *);
 
+int lsmSaveWorker(lsm_db *, int);
 
 int lsmFlushTreeToDisk(lsm_db *pDb);
 

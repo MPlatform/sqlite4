@@ -473,18 +473,8 @@ int lsm_ckpt_size(lsm_db *, int *pnByte);
 
 /*
 ** This function is called by a thread to work on the database structure.
-** The actual operations performed by this function depend on the value 
-** passed as the "flags" parameter:
-**
-** LSM_WORK_OPTIMIZE:
-**   If nMerge suitable arrays cannot be found, where nMerge is as 
-**   configured by LSM_CONFIG_NMERGE, merge together any arrays that
-**   can be found. This is usually used to optimize the database by 
-**   merging the whole thing into one big array.
 */
-int lsm_work(lsm_db *pDb, int flags, int nPage, int *pnWrite);
-
-#define LSM_WORK_OPTIMIZE        0x00000002
+int lsm_work(lsm_db *pDb, int nMerge, int nPage, int *pnWrite);
 
 int lsm_flush(lsm_db *pDb);
 

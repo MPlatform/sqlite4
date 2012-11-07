@@ -1,0 +1,45 @@
+# 2012 November 02
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+#
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix lsm2
+db close
+
+expr srand(0)
+
+proc insert_data {nRow} {
+  for {set i 0} {$i < $nRow} {incr i} {
+    set key [string range [expr rand()] 0 10]
+    set val [string repeat [string range [expr rand()] 0 10] 100]
+    db write $key $val
+  }
+}
+
+do_test 1.1 {
+  forcedelete test.db
+  lsm_open db test.db [list mmap 0 block_size [expr 256*1024]]
+  insert_data 10000
+} {}
+
+do_test 1.2 {
+  db flush
+  db delete_range 0 9
+  db flush
+  db work 1 1000000
+  db checkpoint
+
+  db begin  1
+  insert_data 10000
+  db commit 0
+} {}
+
+finish_test

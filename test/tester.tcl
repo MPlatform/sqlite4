@@ -1522,7 +1522,7 @@ proc count {sql} {
 proc optimize_db {} { 
   #catch { 
     sqlite4_lsm_flush db main 
-    sqlite4_lsm_work db main -opt 100000 
+    sqlite4_lsm_work db main -nmerge 1 -npage 100000 
     sqlite4_lsm_checkpoint db main
   #}
   return ""
