@@ -357,10 +357,25 @@ struct Level {
   void *pSplitKey;                /* Pointer to split-key (if nRight>0) */
   int nSplitKey;                  /* Number of bytes in split-key */
 
-  int iAge;                       /* Number of times data has been written */
+  u16 iAge;                       /* Number of times data has been written */
+  u16 flags;                      /* Mask of LEVEL_XXX bits */
   Merge *pMerge;                  /* Merge operation currently underway */
   Level *pNext;                   /* Next level in tree */
 };
+
+/*
+** The Level.flags field is set to a combination of the following bits.
+**
+** LEVEL_FREELIST_ONLY:
+**   Set if the level consists entirely of free-list entries. 
+**
+** LEVEL_INCOMPLETE:
+**   This is set while a new toplevel level is being constructed. It is
+**   never set for any level other than a new toplevel.
+*/
+#define LEVEL_FREELIST_ONLY      0x0001
+#define LEVEL_INCOMPLETE         0x0002
+
 
 /*
 ** A structure describing an ongoing merge. There is an instance of this

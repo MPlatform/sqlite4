@@ -52,7 +52,8 @@
 **
 **   For each level in the database, a level record. Formatted as follows:
 **
-**     0. Age of the level.
+**     0. Age of the level (least significant 16-bits). And flags mask (most
+**        significant 16-bits).
 **     1. The number of right-hand segments (nRight, possibly 0),
 **     2. Segment record for left-hand segment (8 integers defined below),
 **     3. Segment record for each right-hand segment (8 integers defined below),
@@ -307,7 +308,7 @@ static void ckptExportLevel(
   Merge *pMerge;
 
   pMerge = pLevel->pMerge;
-  ckptSetValue(p, iOut++, pLevel->iAge, pRc);
+  ckptSetValue(p, iOut++, (u32)pLevel->iAge + (u32)(pLevel->flags<<16), pRc);
   ckptSetValue(p, iOut++, pLevel->nRight, pRc);
   ckptExportSegment(&pLevel->lhs, p, &iOut, pRc);
 
@@ -539,7 +540,9 @@ static int ckptLoadLevels(
     /* Allocate space for the Level structure and Level.apRight[] array */
     pLevel = (Level *)lsmMallocZeroRc(pDb->pEnv, sizeof(Level), &rc);
     if( rc==LSM_OK ){
-      pLevel->iAge = aIn[iIn++];
+      pLevel->iAge = (u16)(aIn[iIn] & 0x0000FFFF);
+      pLevel->flags = (u16)((aIn[iIn]>>16) & 0x0000FFFF);
+      iIn++;
       pLevel->nRight = aIn[iIn++];
       if( pLevel->nRight ){
         int nByte = sizeof(Segment) * pLevel->nRight;

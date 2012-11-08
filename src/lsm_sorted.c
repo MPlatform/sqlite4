@@ -2218,7 +2218,12 @@ static int multiCursorAddAll(MultiCursor *pCsr, Snapshot *pSnap){
   int rc = LSM_OK;
 
   for(pLvl=pSnap->pLevel; pLvl; pLvl=pLvl->pNext){
-    if( pLvl->iAge<0 ) continue;
+    /* If the LEVEL_INCOMPLETE flag is set, then this function is being
+    ** called (indirectly) from within a sortedNewToplevel() call to
+    ** construct pLvl. In this case ignore pLvl - this cursor is going to
+    ** be used to retrieve a freelist entry from the LSM, and the partially
+    ** complete level may confuse it.  */
+    if( pLvl->flags & LEVEL_INCOMPLETE ) continue;
     nPtr += (1 + pLvl->nRight);
   }
 
@@ -2228,7 +2233,7 @@ static int multiCursorAddAll(MultiCursor *pCsr, Snapshot *pSnap){
 
   for(pLvl=pSnap->pLevel; pLvl && rc==LSM_OK; pLvl=pLvl->pNext){
     int i;
-    if( pLvl->iAge<0 ) continue;
+    if( pLvl->flags & LEVEL_INCOMPLETE ) continue;
     pCsr->aPtr[iPtr].pLevel = pLvl;
     pCsr->aPtr[iPtr].pSeg = &pLvl->lhs;
     iPtr++;
@@ -4049,8 +4054,8 @@ static int sortedNewToplevel(
       rc = multiCursorAddTree(pCsr, pDb->pWorker, eTree);
     }
     if( rc==LSM_OK 
-        && eTree!=TREE_NONE
         && pNext && pNext->pMerge==0 && pNext->lhs.iRoot 
+        && (eTree!=TREE_NONE || (pNext->flags & LEVEL_FREELIST_ONLY))
     ){
       pDel = &pNext->lhs;
       rc = btreeCursorNew(pDb, pDel, &pCsr->pBtCsr);
@@ -4076,7 +4081,7 @@ static int sortedNewToplevel(
     memset(&mergeworker, 0, sizeof(MergeWorker));
 
     pNew->pMerge = &merge;
-    pNew->iAge = -1;
+    pNew->flags |= LEVEL_INCOMPLETE;
     mergeworker.pDb = pDb;
     mergeworker.pLevel = pNew;
     mergeworker.pCsr = pCsr;
@@ -4094,8 +4099,11 @@ static int sortedNewToplevel(
 
     nWrite = mergeworker.nWork;
     mergeWorkerShutdown(&mergeworker, &rc);
+    pNew->flags &= ~LEVEL_INCOMPLETE;
+    if( eTree==TREE_NONE ){
+      pNew->flags |= LEVEL_FREELIST_ONLY;
+    }
     pNew->pMerge = 0;
-    pNew->iAge = 0;
   }
 
   if( rc!=LSM_OK || pNew->lhs.iFirst==0 ){
@@ -4106,7 +4114,7 @@ static int sortedNewToplevel(
     if( pDel ) pDel->iRoot = 0;
 
 #if 0
-    lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
+    lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
 #endif
 
     if( freelist.nEntry ){
@@ -4167,11 +4175,11 @@ static int sortedMergeSetup(
                                         nMerge * sizeof(Segment), &rc);
   }
 
-
   /* Populate the new Level object */
   if( rc==LSM_OK ){
     Level *pNext = 0;             /* Level following pNew */
     int i;
+    int bFreeOnly = 1;
     Level *pTopLevel;
     Level *p = pLevel;
     Level **pp;
@@ -4181,9 +4189,12 @@ static int sortedMergeSetup(
       assert( p->nRight==0 );
       pNext = p->pNext;
       pNew->aRhs[i] = p->lhs;
+      if( (p->flags & LEVEL_FREELIST_ONLY)==0 ) bFreeOnly = 0;
       sortedFreeLevel(pDb->pEnv, p);
       p = pNext;
     }
+
+    if( bFreeOnly ) pNew->flags |= LEVEL_FREELIST_ONLY;
 
     /* Replace the old levels with the new. */
     pTopLevel = lsmDbSnapshotLevel(pDb->pWorker);
@@ -4393,9 +4404,21 @@ static int sortedSelectLevel(lsm_db *pDb, int nMerge, Level **ppOut){
     nBest = nThis;
   }
 
-  if( pBest==0 && nMerge==1 && pTopLevel && pTopLevel->pNext ){
-    pBest = pTopLevel;
-    nBest = 2;
+  if( pBest==0 && nMerge==1 ){
+    int nFree = 0;
+    int nUsr = 0;
+    for(pLevel=pTopLevel; pLevel; pLevel=pLevel->pNext){
+      assert( !pLevel->nRight );
+      if( pLevel->flags & LEVEL_FREELIST_ONLY ){
+        nFree++;
+      }else{
+        nUsr++;
+      }
+    }
+    if( nUsr>1 ){
+      pBest = pTopLevel;
+      nBest = nFree + nUsr;
+    }
   }
 
   if( pBest ){
@@ -4530,7 +4553,7 @@ static int sortedWork(
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);
@@ -5251,8 +5274,8 @@ void lsmSortedDumpStructure(
         }
 
         if( i==0 ){
-          sqlite4_snprintf(zLevel, sizeof(zLevel), "L%d: (age=%d)", 
-              iLevel, pLevel->iAge
+          sqlite4_snprintf(zLevel, sizeof(zLevel), "L%d: (age=%d) (flags=%.4x)",
+              iLevel, (int)pLevel->iAge, (int)pLevel->flags
           );
         }else{
           zLevel[0] = '\0';
