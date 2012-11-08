@@ -415,7 +415,7 @@ int lsm_rollback(lsm_db *pDb, int iLevel);
 ** Write a new value into the database. If a value with a duplicate key 
 ** already exists it is replaced.
 */
-int lsm_write(lsm_db *, const void *pKey, int nKey, const void *pVal, int nVal);
+int lsm_insert(lsm_db*, const void *pKey, int nKey, const void *pVal, int nVal);
 
 /*
 ** Delete a value from the database. No error is returned if the specified

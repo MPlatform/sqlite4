@@ -130,7 +130,7 @@ static void testOomWrite(
   if( *pRc==LSM_OK ){
     int rc;
 
-    rc = lsm_write(pDb, pKey, nKey, pVal, nVal);
+    rc = lsm_insert(pDb, pKey, nKey, pVal, nVal);
     testOomAssertRc(pOom, rc);
 
     *pRc = rc;
@@ -349,7 +349,7 @@ void testRestoreLsmdb(const char *zFile){
 static int lsmWriteStr(lsm_db *pDb, const char *zKey, const char *zVal){
   int nKey = strlen(zKey);
   int nVal = strlen(zVal);
-  return lsm_write(pDb, (void *)zKey, nKey, (void *)zVal, nVal);
+  return lsm_insert(pDb, (void *)zKey, nKey, (void *)zVal, nVal);
 }
 
 static void setup_delete_db(){
@@ -432,7 +432,7 @@ static void setup_populate_db2(){
     void *pKey; int nKey;
     void *pVal; int nVal;
     testDatasourceEntry(pData, ii, &pKey, &nKey, &pVal, &nVal);
-    lsm_write(pDb, pKey, nKey, pVal, nVal);
+    lsm_insert(pDb, pKey, nKey, pVal, nVal);
   }
   testDatasourceFree(pData);
   lsm_close(pDb);

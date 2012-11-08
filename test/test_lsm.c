@@ -555,8 +555,8 @@ static int test_lsm_cmd(
       zKey = Tcl_GetStringFromObj(objv[2], &nKey);
       zVal = Tcl_GetStringFromObj(objv[3], &nVal);
 
-      rc = lsm_write(p->db, zKey, nKey, zVal, nVal);
-      return test_lsm_error(interp, "lsm_write", rc);
+      rc = lsm_insert(p->db, zKey, nKey, zVal, nVal);
+      return test_lsm_error(interp, "lsm_insert", rc);
     }
 
     case 2: assert( 0==strcmp(aCmd[2].zCmd, "delete") ); {

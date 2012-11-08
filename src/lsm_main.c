@@ -581,7 +581,7 @@ static int doWriteOp(
 /* 
 ** Write a new value into the database.
 */
-int lsm_write(
+int lsm_insert(
   lsm_db *db,                     /* Database connection */
   const void *pKey, int nKey,     /* Key to write or delete */
   const void *pVal, int nVal      /* Value to write. Or nVal==-1 for a delete */

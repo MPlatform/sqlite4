@@ -165,7 +165,7 @@ static int kvlsmReplace(
   const KVByteArray *aData, KVSize nData
 ){
   KVLsm *p = (KVLsm *)pKVStore;
-  return lsm_write(p->pDb, (void *)aKey, nKey, (void *)aData, nData);
+  return lsm_insert(p->pDb, (void *)aKey, nKey, (void *)aData, nData);
 }
 
 /*

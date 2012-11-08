@@ -1,0 +1,471 @@
+
+<title>LSM Users Guide</title>
+<nowiki>
+
+
+<h1>1. Overview</h1>
+
+<p>This page describes the LSM embedded database library and usage thereof. 
+
+<p>LSM is an embedded database library for key-value data, roughly similar
+in scope to
+<a href="http://www.oracle.com/technetwork/products/berkeleydb/overview/index.html">Berkeley DB</a>, 
+<a href="http://code.google.com/p/leveldb/">LevelDB</a> or
+<a href="http://fallabs.com/kyotocabinet/">KyotoCabinet</a>.
+Both keys and
+values are specified and stored as byte arrays. Duplicate keys are not 
+supported. Keys are always sorted in memcmp() order. It is not possible to
+configure LSM to use a custom sort order. LSM supports the following 
+operations for the manipulation and query of database data:
+
+<ul>
+  <li> Writing a specified key and value into the database.
+  <li> Deleting a specified key from the database.
+  <li> Deleting a range of keys from the database.
+  <li> Querying the database for a specific key.
+  <li> Iterating through a range of database keys (either forwards or
+       backwards).
+</ul>
+
+<p>LSM supports a single-writer/multiple-reader MVCC based transactional 
+concurrency model. SQL style nested sub-transactions are supported. 
+Clients may concurrently access a single LSM database from within a single or
+multiple application processes. 
+
+<p>Usually, an entire LSM database is stored in a single file on disk. 
+However, when a database client writes to the database, a log file is
+created in the same directory as the database file. Normally, the log file
+is deleted when the last database client closes the database. However,
+if a crash occurs or database clients exit unexpectedly for some reason,
+the log file is used by subsequent clients to recover the database. So
+it is perhaps more accurate to say that an LSM database is stored on disk
+in a single database file and a single (optional) log file.
+
+<p>If required, it is possible to configure LSM to use external data
+compression and/or encryption functions to transform data before it is
+stored in the database file.
+
+<p><i>Say something about the difference in performance characteristics 
+between a b-tree and whatever it is LSM is. Link the performance graphs page.
+</i>
+
+<h1>2. Basic Usage</h1>
+
+<h2>2.1 Opening and Closing Database Connections </h2>
+
+<verbatim>
+  int rc;
+  lsm_db *db;
+
+  rc = lsm_new(0, &db);
+  if( rc!=LSM_OK ) exit(1);
+
+  rc = lsm_open(db, "test.db");
+  if( rc!=LSM_OK ) exit(1);
+</verbatim>
+
+<verbatim>
+  rc = lsm_close(db);
+</verbatim>
+
+<h2>2.2 Writing to a Database </h2>
+
+<verbatim>
+  rc = lsm_insert(db, "a", 1, "one", 3);
+</verbatim>
+
+<verbatim>
+  rc = lsm_delete(db, "a", 1);
+</verbatim>
+
+<verbatim>
+  rc = lsm_delete_range(db, "c", 1, "f", 1);
+</verbatim>
+
+<verbatim>
+  /* Should be checking return codes! */
+  lsm_delete(db, "c", 1);
+  lsm_delete_range(db, "c", 1, "f", 1);
+  lsm_delete(db, "f", 1);
+</verbatim>
+
+<h2>2.3 Reading from a Database </h2>
+
+<verbatim>
+  lsm_csr *csr;
+
+  rc = lsm_csr_open(db, &csr);
+</verbatim>
+
+<verbatim>
+  rc = lsm_csr_seek(csr, "b", 1, LSM_SEEK_EQ);
+  if( lsm_csr_valid(csr) ){
+    const void *pVal; int nVal;
+
+    rc = lsm_csr_value(csr, &pVal, &nVal);
+    if( rc==LSM_OK ){
+      /* pVal now points to a buffer nVal bytes in size containing the
+      ** value associated with database key "b".  */
+    }
+  }
+</verbatim>
+
+<p> Iterate forwards through all keys in the database:
+<verbatim>
+  for(rc = lsm_csr_first(csr); lsm_csr_valid(csr); rc = lsm_csr_next(csr)){
+    const void *pKey; int nKey;
+    const void *pVal; int nVal;
+
+    rc = lsm_csr_key(csr, &pKey, &nKey);
+    if( rc==LSM_OK ) rc = lsm_csr_value(csr, &pVal, &nVal);
+    if( rc!=LSM_OK ) break;
+
+    /* At this point pKey points to the current key (size nKey bytes) and
+    ** pVal points to the corresponding value (size nVal bytes).  */
+  }
+</verbatim>
+
+<p> Iterate backwards through all keys from "ggg" to "cc", inclusive:
+
+<verbatim>
+  rc = lsm_csr_seek(csr, "ggg", 3, LSM_SEEK_LE); 
+  for( ; lsm_csr_valid(csr); rc = lsm_csr_prev(csr)){
+    const void *pKey; int nKey;
+    const void *pVal; int nVal;
+    int res;
+
+    /* Compare the key that the cursor currently points to with "cc". If
+    ** the cursor key is less than "cc", break out of the loop. */
+    rc = lsm_csr_cmp(csr, "cc", 2, &res);
+    if( rc!=LSM_OK || res<0 ) break;
+
+    rc = lsm_csr_key(csr, &pKey, &nKey);
+    if( rc==LSM_OK ) rc = lsm_csr_value(csr, &pVal, &nVal);
+    if( rc!=LSM_OK ) break;
+
+    /* At this point pKey points to the current key (size nKey bytes) and
+    ** pVal points to the corresponding value (size nVal bytes).  */
+  }
+</verbatim>
+
+<verbatim>
+  lsm_csr_close(csr);
+</verbatim>
+
+<h2 id=robustness>2.4 Database Robustness </h2>
+
+<p>The value of the configuration parameter LSM_CONFIG_SAFETY determines
+how often data is synced to disk by the LSM library. This is an important
+tradeoff - syncing less often can lead to orders of magnitude better
+performance, but also exposes the application to the risk of partial or total
+data loss in the event of a power failure;
+
+<table valign=top>
+<tr> <td valign=top>LSM_SAFETY_OFF 
+     <td valign=top style="padding-left:1ex;padding-right:1ex">(0)
+     <td> Do not sync to disk at all. This is the fastest mode.
+          <p>If a power failure occurs while writing to the database, 
+          following recovery the database may be corrupt. All or some data may
+          be recoverable.
+
+<tr> <td valign=top>LSM_SAFETY_NORMAL 
+     <td valign=top style="padding-left:1ex;padding-right:1ex">(1)
+     <td> Sync only as much as is necessary to prevent database corruption.
+         This is the default setting. Although slower than LSM_SAFETY_OFF, 
+         this mode is still much faster than LSM_SAFETY_FULL.
+     <p> If a power failure occurs while writing to the database, following
+          recovery some recently committed transactions may have been lost.
+          But the database file should not be corrupt and older data intact.
+
+<tr> <td valign=top>LSM_SAFETY_FULL 
+     <td valign=top style="padding-left:1ex;padding-right:1ex">(2)
+     <td> Sync every transaction to disk as part of committing it. This is
+          the slowest mode.
+       <p>If a power failure occurs while writing to the database, all
+          successfully committed transactions should be present.
+          The database file should not be corrupt.
+</table>
+
+<p>The following example code sets the value of the LSM_CONFIG_SAFETY 
+parameter for connection db to LSM_SAFETY_FULL:
+
+<verbatim>
+  int iSafety = LSM_SAFETY_FULL;
+  lsm_config(db, LSM_CONFIG_SAFETY, &iSafety);
+</verbatim>
+
+<p>The current value of the LSM_CONFIG_SAFETY parameter can also be queried
+by setting the initial value of the argument to -1 (or any other negative
+value). For example:
+
+<verbatim>
+  int iSafety = -1;
+  lsm_config(db, LSM_CONFIG_SAFETY, &iSafety);
+  /* At this point, variable iSafety is set to the currently configured value
+  ** of the LSM_CONFIG_SAFETY parameter (either 0, 1 or 2).  */
+</verbatim>
+
+<h2>2.5 Database Transactions and MVCC </h2>
+
+<p>LSM supports a single-writer/multiple-reader 
+<a href=http://en.wikipedia.org/wiki/Multiversion_concurrency_control>MVCC</a>
+based transactional concurrency model. This is the same model that SQLite
+supports in <a href="http://www.sqlite.org/wal.html">WAL mode</a>.
+
+<p>A read-transaction must be opened in order to read from the database. 
+After a read-transaction has been opened, no writes to the database made 
+by other database connections are visible to the database reader. Instead,
+the reader operates on a snapshot of the database as it existed when the
+read transaction was first opened. Any number of clients may simultaneously
+maintain open read-transactions.
+
+<p>If one is not already open, a read-transaction is opened when a database 
+cursor is created (the lsm_csr_open() function). It is closed when the number
+of open cursors drops to zero.
+
+<p>A write-transaction is required to write to the database. At any point,
+at most one database client may hold an open write transaction. If another
+client already has an open write transaction, then attempting to open one
+is an error (LSM_BUSY). If a read-transaction is already open when the
+write-transaction is opened, then the snapshot read by the read-transaction
+must correspond to the most recent version of the database. Otherwise,
+the attempt to open the write-transaction fails (LSM_BUSY). In other words,
+if any other client has written to the database since the current clients
+read-transaction was opened, it will not be possible to upgrade to a
+write-transaction.
+
+<p>Write-transactions may be opened either implicitly or explitly. If any
+of the following functions are called to write to the database when there 
+is no write-transaction open, then an implicit write-transaction is opened and
+close (committed) within the function:
+
+<ul>
+  <li> lsm_insert()
+  <li> lsm_delete()
+  <li> lsm_delete_range()
+</ul>
+
+<p>This means, of course, that all three of the above may return LSM_BUSY.
+Indicating either that another client currently has an open write-transaction,
+or that there is currently an open read-transaction and some other client
+has written to the database since it was opened. 
+
+<p>When an explicitly opened transaction is closed, it may either be 
+committed or rolled back (reverted - so that the state of the database is
+unchanged). Within a write-transaction there may also be a hierarchy of 
+nested sub-transactions that may be rolled back or committed independently.
+A write-transaction is a property of a database connection - all writes
+made by the connection become part of the current transaction (and possibly
+sub-transaction).
+
+<p>The functions used to open, commit and rollback explicity transactions
+and sub-transactions are, respectively:
+
+<verbatim>
+  int lsm_begin(lsm_db *, int);
+  int lsm_commit(lsm_db *, int);
+  int lsm_rollback(lsm_db *, int);
+</verbatim>
+
+<p>In all cases, the second parameter is either the maximum (lsm_commit(),
+lsm_rollback()) or minimum (lsm_begin()) the number of nested
+write-transactions that will exist following the call (assuming it succeeds).
+If the second parameter passed is <i>N</i>,  
+
+<ul>
+  <li> <p>Calling <b>lsm_begin(db, <i>N</i>)</b> attempts opens zero or more
+       nested write-transactions so that the database connection is left with
+       at least <i>N</i> open nested write-transactions. If there are already
+       <i>N</i> or more open nested write-transactions open, then lsm_begin(db,
+       <i>N</i>) is a no-op. lsm_begin(db, 0) is always a no-op. Calling
+       lsm_begin(db, 1) when there is no open write-transaction opens a
+       top-level write-transaction.
+
+  <li> <p>Calling <b>lsm_commit(db, <i>N</i>)</b> commits zero or more nested
+       write-transactions so that the database connection is left with at most
+       <i>N</i> open write-transactions. If the connection has <i>N</i> or
+       fewer open nested write-transactions, then lsm_commit(db, <i>N</i>) is a
+       no-op. Calling lsm_commit(db, 0) commits the outermost transaction
+       (if any).
+
+  <li> <p>Calling <b>lsm_rollback(db, 0)</b> closes and rolls back the 
+       top-level write-transaction. Calling lsm_rollback(db, <i>N</i>)
+       for any value of <i>N</i> greater than zero closes zero or more nested
+       write-transactions so that the database connection is left with at most
+       <i>N</i> open transactions. If, following this, the database connection
+       has exactly <i>N</i> open nested write-transactions, the outermost is
+       rolled back, but not closed. Calling lsm_rollback(db, 1) rolls back
+       (but does not close) the top-level transaction.
+</ul>
+
+<p>Examples follow. With error checking omitted for brevity's sake.
+
+<verbatim>
+  /* Open a write-transaction. Write some data to the database. Then
+  ** commit and close the write transaction. Following this, the database
+  ** contains:
+  **
+  **   "j" -> "ten"
+  **   "k" -> "eleven"
+  */
+  lsm_begin(db, 1);
+  lsm_insert(db, "j", 1, "ten",    3);
+  lsm_insert(db, "k", 1, "eleven", 6);
+  lsm_commit(db, 0);
+
+  /* Open a write-transaction, perform all manner of writes and other
+  ** operations (not shown). Then roll the top-level transaction back.
+  ** Regardless of the write operations performed, the database remains
+  ** unchanged:
+  **
+  **   "j" -> "ten"
+  **   "k" -> "eleven"
+  */
+  lsm_begin(db, 1);
+  /* Do all manner of writes, sub-transactions etc. */
+  lsm_rollback(db, 0);
+
+  /* Open a write-transaction. Write some data to the database. Then
+  ** rollback the top level transaction but do not close it. Write 
+  ** different data to the database and commit. Following this block,
+  ** the database is:
+  **
+  **   "j" -> "ten"
+  **   "k" -> "eleven"
+  **   "m" -> "thirteen"
+  */
+  lsm_begin(db, 1);
+  lsm_insert(db, "l", 1, "twelve",    3);
+  lsm_rollback(db, 1);
+  lsm_insert(db, "m", 1, "thirteen", 6);
+  lsm_commit(db, 0);
+
+  /* Open a write-transaction and 2 nested sub-transactions. Delete a
+  ** database key. Then commit and close the outermost sub-transaction.
+  ** Open another sub-transaction (so that there are again 2 nested
+  ** sub-transactions). Delete a different database key. Then rollback
+  ** and close the outermost sub-transaction. Finally, delete yet another
+  ** db key and commit the outermost transaction. Leaving just:
+  **
+  **   "k" -> "eleven"
+  */
+  lsm_begin(db, 3);
+  lsm_delete(db, "j", 1);
+  lsm_commit(db, 2);
+  lsm_begin(db, 3);
+  lsm_delete(db, "k", 1);
+  lsm_rollback(db, 2);
+  lsm_delete(db, "m", 1);
+  lsm_commit(db, 0);
+  
+</verbatim>
+
+
+<h1>3. Performance Tuning</h1>
+
+<h2>3.1 Architectural Overview </h2>
+
+<p> The LSM library implements two separate data structures that are used 
+together to store user data. When the database is queried, the library 
+actually runs parallel queries on both of these data stores and merges the
+results together to return to the user. The data structures are:
+
+<ul>
+  <li> The <b>in-memory tree</b>. The in-memory tree is an append-only b-tree
+       variant designed to be stored entirely in main-memory (i.e. not 
+       written out to disk). The library strives to limit the total size of 
+       the in-memory tree (by default to 1MB in total).
+
+    <p>At any one time, there may actually be two in-memory tree structures
+       present in memory. One immutable tree marked as "old" waiting to be
+       written into the database file (see below) and one "live" tree to 
+       which new data may be appended.
+
+  <li> <p>The <b>log-structured-merge tree</b> structure for which LSM is 
+       named. This data structure is used to store data within the database 
+       file on disk.  
+
+       <p>The log-structured-merge tree is made up of a series of "segments".
+       Each segment is an immutable tree structure stored (more or less)
+       contiguously within the database file. When the database is queried, the
+       library runs parallel queries on each of the segments in the database
+       and merges the results to return to the user.
+
+       <p>The only way to insert new data to the database is to add a new 
+       segment. In order to prevent the number of segments from growing too
+       large, two or more existing segments may be merged together into a
+       single larger segment at any point. Deleting existing key-value pairs
+       is accomplished by inserting "delete-keys" into the new segment.
+
+       <p>The log-structured-merge tree structure is described in more detail 
+       <i>link to lsm.wiki section here.</i>
+</ul>
+
+<p> When a database client writes a transaction to the database, the new
+data is inserted into the "live" in-memory tree structure. At the same time, 
+the new data is also appended to the log file on disk. The purpose of the log
+file is to provide a persistent backup of any data that the system does not
+consider to have been safely stored (see below) in the database file. If a
+crash or power failure occurs, this data is recovered by reading the log 
+file.
+ 
+<p> Once sufficient data has accumulated within the "live" in-memory tree,
+it is marked as "old" and a new live tree created. At any point thereafter,
+the contents of the old in-memory tree may be used to populate a new segment
+within the database file and then discarded. When this happens, the old
+in-memory tree is said to have been "flushed to disk". If there is already an
+old in-memory tree when the live tree is deemed to have accumulated enough data
+to itself become an old tree, the existing old tree must first be flushed to
+disk.
+
+<p> The set of segments that make up the log-structured-merge tree at any time
+and the order in which they should be queried is termed a "snapshot".  The
+header of the database file contains a snapshot. A snapshot is also stored in
+main memory. When set of segments that make up the log-structured-merge tree 
+is modified, either by flushing an old in-memory tree to disk or by merging 
+two or more existing segments, the in-memory snapshot is updated immediately. 
+This is the snapshot that database clients use when querying or otherwise
+operating on the database.
+
+<p> At any point after the in-memory snapshot has been updated, the in-memory
+snapshot may be written into the database file header. This is known as
+"checkpointing" the database. Depending on the value of the 
+<a href=#robustness>LSM_CONFIG_SAFETY</a> parameter, it may be necessary to
+ensure that all segments referenced by the snapshot have been synced to disk
+(safely stored on the persistent media such that they will not be lost if a
+power failure occurs) before doing so. It is not necessary for every version
+of the in-memory snapshot to be checkpointed. The in-memory snapshot may be
+modified multiple times between checkpoints.
+
+<p> Regular database checkpoints are required to ensure that unused space
+within the log file and database file can be reused in a timely fashion.
+Specifically:
+
+<ul>
+  <li> <p>Space within the log file cannot be recycled until the corresponding
+       data has been written into a database segment and a checkpoint 
+       performed.
+
+  <li> <p>When two or more existing segments are merged within the database
+       file, database clients may start using the new, larger, segment
+       immediately.  However the space occupied by the original segments may
+       not be reused until after a snapshot that refers to the new segment, and
+       not the old ones, has been checkpointed.
+</ul>
+
+In other words, without checkpoints the system will function, but both the
+log and database files will grow indefinitely as the database is modified 
+(even if the size of the dataset remains constant). Additionally, if a crash
+or power failure occurs, the next client to open the database file has to
+process all data written to the log file since the most recent checkpoint. If
+checkpoints are performed infrequently, this can be a time consuming exercise.
+
+
+
+<h2>3.2 Work and Checkpoint Scheduling </h2>
+
+<h2>3.3 Other Parameters </h2>
+
+<h1>4. Compressed and Encrypted Databases </h1>
+
+

@@ -503,7 +503,7 @@ static int test_lsm_write(
 #endif
   }
 
-  return lsm_write(pDb->db, pKey, nKey, pVal, nVal);
+  return lsm_insert(pDb->db, pKey, nKey, pVal, nVal);
 }
 
 static int test_lsm_delete(TestDb *pTestDb, void *pKey, int nKey){
