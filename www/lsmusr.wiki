@@ -205,6 +205,9 @@ value). For example:
   ** of the LSM_CONFIG_SAFETY parameter (either 0, 1 or 2).  */
 </verbatim>
 
+<p>The lsm_config() function may also be used to configure other database
+connection parameters.  
+
 <h2>2.5 Database Transactions and MVCC </h2>
 
 <p>LSM supports a single-writer/multiple-reader 
@@ -437,6 +440,12 @@ power failure occurs) before doing so. It is not necessary for every version
 of the in-memory snapshot to be checkpointed. The in-memory snapshot may be
 modified multiple times between checkpoints.
 
+<p>
+Because a checkpointer process is often required to sync the database file
+before updating the database header, "checkpointing" often appears to be the
+costliest part of transfering data to the database file, at least in terms of
+wall-clock time.
+
 <p> Regular database checkpoints are required to ensure that unused space
 within the log file and database file can be reused in a timely fashion.
 Specifically:
@@ -453,16 +462,66 @@ Specifically:
        not the old ones, has been checkpointed.
 </ul>
 
-In other words, without checkpoints the system will function, but both the
+<p>In other words, without checkpoints the system will function, but both the
 log and database files will grow indefinitely as the database is modified 
 (even if the size of the dataset remains constant). Additionally, if a crash
 or power failure occurs, the next client to open the database file has to
 process all data written to the log file since the most recent checkpoint. If
 checkpoints are performed infrequently, this can be a time consuming exercise.
 
+<p>In order to safely write data into the in-memory tree (by calling 
+lsm_insert, lsm_delete or lsm_delete_range), the database client must hold
+the database WRITER lock. At most one client may concurrently hold the WRITER 
+lock. Holding the WRITER lock is synonymous with having an open write
+transaction - the client obtains the WRITER lock when the transaction is 
+opened and relinquishes it when the transaction is closed.
 
+<p>As well as the WRITER lock, there are two other locks that may be held by
+at most one client at any time - the WORKER and CHECKPOINTER locks. The roles
+of the three locks are roughly as follows:
+
+<table valign=top>
+<tr><td valign=top>WRITER<td style="width:3ex"><td>
+The WRITER lock is required to modify the contents of the in-memory tree.
+Including marking an in-memory tree as "old" and starting a new live tree.
+It is also required to write to the log file.
+
+<tr><td valign=top>WORKER<td><td>
+The WORKER lock is required to write to segments within the database file.
+Either when merging two or more existing segments within the database, or
+when flushing an in-memory tree to disk to create a new segment.
+The WORKER lock is also required to update the database snapshot stored in
+main memory (updated so that new clients will use the new segments the worker
+creates).
+
+<tr><td valign=top>CHECKPOINTER<td><td>
+The CHECKPOINTER lock is required to update the snapshot stored in the 
+database file header (to checkpoint the database). 
+</table>
+
+<p>The tasks associated with each of the locks above may be performed
+concurrently by multiple database connections, located either in the same
+application process or different processes.
 
 <h2>3.2 Work and Checkpoint Scheduling </h2>
+
+<p>The section above describes the three stages of transfering data written
+to the database from the application to persistent storage. A "writer" 
+client writes the data into the in-memory tree and log file. Later on a 
+"worker" client flushes the data from the in-memory tree to a new segment
+in the the database file. Additionally, a worker client must periodically
+merge existing database segments together to prevent them from growing too
+numerous.
+
+<ul>
+<li>lsm_config_work_hook() -> Change to lsm_config() option.
+<li>lsm_tree_size()        -> Change to lsm_info() option.
+<li>lsm_ckpt_size()        -> Change to lsm_info() option.
+
+<li>lsm_work()
+<li>lsm_checkpoint()
+<li>lsm_flush()
+</ul>
 
 <h2>3.3 Other Parameters </h2>
 

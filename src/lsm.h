@@ -23,17 +23,15 @@ extern "C" {
 /*
 ** Opaque handle types.
 */
-typedef struct lsm_db lsm_db;               /* Database connection handle */
+typedef struct lsm_compress lsm_compress;   /* Compression library functions */
 typedef struct lsm_cursor lsm_cursor;       /* Database cursor handle */
-typedef struct lsm_mutex lsm_mutex;         /* Mutex handle */
+typedef struct lsm_db lsm_db;               /* Database connection handle */
+typedef struct lsm_env lsm_env;             /* Runtime environment */
 typedef struct lsm_file lsm_file;           /* OS file handle */
+typedef struct lsm_mutex lsm_mutex;         /* Mutex handle */
 
 /* 64-bit integer type used for file offsets. */
 typedef long long int lsm_i64;              /* 64-bit signed integer type */
-
-/* Forward reference */
-typedef struct lsm_env lsm_env;             /* Runtime environment */
-typedef struct lsm_compress lsm_compress;   /* Compression library functions */
 
 /* Candidate values for the 3rd argument to lsm_env.xLock() */
 #define LSM_LOCK_UNLOCK 0
@@ -381,21 +379,21 @@ int lsm_info(lsm_db *, int, ...);
 /* 
 ** Open and close transactions and nested transactions.
 **
-** lsm_begin():
+** lsm_begin()
 **   Used to open transactions and sub-transactions. A successful call to 
 **   lsm_begin() ensures that there are at least iLevel nested transactions 
 **   open. To open a top-level transaction, pass iLevel==1. To open a 
 **   sub-transaction within the top-level transaction, iLevel==2. Passing 
 **   iLevel==0 is a no-op.
 **
-** lsm_commit():
+** lsm_commit()
 **   Used to commit transactions and sub-transactions. A successful call 
 **   to lsm_commit() ensures that there are at most iLevel nested 
 **   transactions open. To commit a top-level transaction, pass iLevel==0. 
 **   To commit all sub-transactions inside the main transaction, pass
 **   iLevel==1.
 **
-** lsm_rollback():
+** lsm_rollback()
 **   Used to roll back transactions and sub-transactions. A successful call 
 **   to lsm_rollback() restores the database to the state it was in when
 **   the iLevel'th nested sub-transaction (if any) was first opened. And then
@@ -581,6 +579,19 @@ int lsm_csr_prev(lsm_cursor *pCsr);
 int lsm_csr_valid(lsm_cursor *pCsr);
 int lsm_csr_key(lsm_cursor *pCsr, const void **ppKey, int *pnKey);
 int lsm_csr_value(lsm_cursor *pCsr, const void **ppVal, int *pnVal);
+
+/*
+** If no error occurs, this function compares the database key passed via
+** the pKey/nKey arguments with the key that the cursor passed as the first
+** argument currently points to. If the cursors key is less than, equal to
+** or greater than pKey/nKey, *piRes is set to less than, equal to or greater
+** than zero before returning. LSM_OK is returned in this case.
+**
+** Or, if an error occurs, an LSM error code is returned and the final 
+** value of *piRes is undefined. If the cursor does not point to a valid
+** key when this function is called, LSM_MISUSE is returned.
+*/
+int lsm_csr_cmp(lsm_cursor *pCsr, const void *pKey, int nKey, int *piRes);
 
 #ifdef __cplusplus
 }  /* End of the 'extern "C"' block */

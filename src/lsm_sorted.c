@@ -2987,6 +2987,22 @@ int lsmMCursorKey(MultiCursor *pCsr, void **ppKey, int *pnKey){
   return LSM_OK;
 }
 
+/*
+** Compare the current key that cursor csr points to with pKey/nKey. Set
+** *piRes to the result and return LSM_OK.
+*/
+int lsm_csr_cmp(lsm_cursor *csr, const void *pKey, int nKey, int *piRes){
+  MultiCursor *pCsr = (MultiCursor *)csr;
+  void *pCsrkey; int nCsrkey;
+  int rc;
+  rc = lsmMCursorKey(pCsr, &pCsrkey, &nCsrkey);
+  if( rc==LSM_OK ){
+    int (*xCmp)(void *, int, void *, int) = pCsr->pDb->xCmp;
+    *piRes = sortedKeyCompare(xCmp, 0, pCsrkey, nCsrkey, 0, (void *)pKey, nKey);
+  }
+  return rc;
+}
+
 int lsmMCursorValue(MultiCursor *pCsr, void **ppVal, int *pnVal){
   void *pVal;
   int nVal;
