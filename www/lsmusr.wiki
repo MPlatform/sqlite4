@@ -49,9 +49,20 @@ stored in the database file.
 between a b-tree and whatever it is LSM is. Link the performance graphs page.
 </i>
 
-<h1>2. Basic Usage</h1>
+<h1>2. Using the LSM Library </h1>
 
-<h2>2.1 Opening and Closing Database Connections </h2>
+<p>LSM is not currently built or distributed independently. Instead, it
+is part of the SQLite4 library. To use LSM in an application, the application
+links against libsqlite4 and includes the header file "lsm.h" in any files
+that access the LSM API.
+
+<p><i>Pointer to build instructions for sqlite4</i>
+
+<h1>3. Basic Usage</h1>
+
+<h2>3.1 Opening and Closing Database Connections </h2>
+
+<p>Opening a connection to a database is a two-step process.
 
 <verbatim>
   int rc;
@@ -68,19 +79,48 @@ between a b-tree and whatever it is LSM is. Link the performance graphs page.
   rc = lsm_close(db);
 </verbatim>
 
-<h2>2.2 Writing to a Database </h2>
+<h2>3.2 Writing to a Database </h2>
 
+<p>Three API functions are used to write to the database:
+
+<ul>
+  <li> <b>lsm_insert()</b>: insert a new key/value pair into the database,
+       overwriting any existing entry with the same key.
+  <li> <b>lsm_delete()</b>: remove a specific key from the database.
+  <li> <b>lsm_delete_range()</b>: remove an open-ended range (one that does not
+       include its endpoints) of keys from the database. 
+</ul>
+
+<p>Each of these functions returns LSM_OK (0) if successful, or an LSM error
+code otherwise (some non-zero value).
+
+<p>The following example code inserts a key/value pair into the database. The
+key is a 1-byte blob consisting of the value 0x61, and the value is a 3 byte
+blob consisting of 0x6F, 0x6E and 0x65, in that order. An application might
+interpret these as utf-8 or ASCII codepoints, but LSM treats them as opaque
+blobs of data.
 <verbatim>
   rc = lsm_insert(db, "a", 1, "one", 3);
 </verbatim>
+
+<p>Remove the entry with the key "a" (single 0x61 octet) from the database:
 
 <verbatim>
   rc = lsm_delete(db, "a", 1);
 </verbatim>
 
+<p>Remove all entries with keys that are greater than "c" but less than "f".
+In this context key blobs are compared in the normal way - using memcmp(), 
+with longer keys being considered larger than their prefixes.
+
 <verbatim>
   rc = lsm_delete_range(db, "c", 1, "f", 1);
 </verbatim>
+
+<p>The example above removes all keys between "c" and "f", but does not
+remove the endpoints "c" and "f" themselves. To do this, requires three
+separate calls - one to remove the open-ended range of keys and two to 
+remove the two endpoints. As follows:
 
 <verbatim>
   /* Should be checking return codes! */
@@ -89,7 +129,7 @@ between a b-tree and whatever it is LSM is. Link the performance graphs page.
   lsm_delete(db, "f", 1);
 </verbatim>
 
-<h2>2.3 Reading from a Database </h2>
+<h2>3.3 Reading from a Database </h2>
 
 <verbatim>
   lsm_csr *csr;
@@ -152,7 +192,7 @@ between a b-tree and whatever it is LSM is. Link the performance graphs page.
   lsm_csr_close(csr);
 </verbatim>
 
-<h2 id=robustness>2.4 Database Robustness </h2>
+<h2 id=robustness>3.4 Database Robustness </h2>
 
 <p>The value of the configuration parameter LSM_CONFIG_SAFETY determines
 how often data is synced to disk by the LSM library. This is an important
@@ -208,7 +248,7 @@ value). For example:
 <p>The lsm_config() function may also be used to configure other database
 connection parameters.  
 
-<h2>2.5 Database Transactions and MVCC </h2>
+<h2>3.5 Database Transactions and MVCC </h2>
 
 <p>LSM supports a single-writer/multiple-reader 
 <a href=http://en.wikipedia.org/wiki/Multiversion_concurrency_control>MVCC</a>
@@ -363,10 +403,76 @@ If the second parameter passed is <i>N</i>,
   
 </verbatim>
 
+<h1>4. Compressed and Encrypted Databases </h1>
 
-<h1>3. Performance Tuning</h1>
+<p>LSM does not provide built-in methods for creating encrypted or compressed
+databases. Instead, it allows the user to provide hooks to call external
+functions to compress and/or encrypt data before it is written to the database
+file, and to decrypt and/or uncompress data as it is read from the database
+file.
 
-<h2>3.1 Architectural Overview </h2>
+<p>A database connection is configured to call compression functions using a
+call to lsm_config() with the second argument set to
+LSM_CONFIG_SET_COMPRESSION. The third argument should point to an instance
+of type lsm_compress, which is defined as follows:
+
+<verbatim>
+  typedef struct lsm_compress lsm_compress;
+  struct lsm_compress {
+    u32 iId;
+    void *pCtx;
+    int (*xBound)(void *pCtx, int nIn);
+    int (*xCompress)(void *pCtx, void *pOut, int *pnOut, const void *pIn, int nIn);
+    int (*xUncompress)(void *pCtx, void *pOut, int *pnOut, const void *pIn, int nIn);
+    void (*xFree)(void *pCtx);
+  };
+</verbatim>
+
+<p><i> Explain how the hooks work here (same as zipvfs) </i>
+
+<p><i> Example code? Using zlib? Or something simple like an RLE
+implementation?</i>
+
+<p>The database file header of any LSM database contains a 32-bit unsigned
+"compression id" field. If the database is not a compressed database, this
+field is set to 1. Otherwise, it is set to an application supplied value
+identifying the compression and/or encryption scheme in use. Application
+compression scheme ids must be greater than or equal to 10000. Values smaller
+than 10000 are reserved for internal use.
+
+<p>The lsm_compression_id() API may be used to read the compression id from
+a database connection. Because the compression id is stored in the database
+header, it may be read before any required compression or encryption hooks
+are configured.
+
+<verbatim>
+  #define LSM_COMPRESSION_EMPTY    0
+  #define LSM_COMPRESSION_NONE     1
+  int lsm_compression_id(lsm_db *db, u32 *piId);
+</verbatim>
+
+<p>When a database is opened for the first time, before it is first written,
+the compression id field is set to LSM_COMPRESSION_EMPTY (0). The first time
+a transaction is committed, the database compression id is set to a copy of 
+the lsm_compress.iId field of the compression hooks for the database handle
+committing the transaction, or to LSM_COMPRESSION_NONE (1) if no compression
+hooks are configured.
+
+<p>Once the compression id is set to something other than 
+LSM_COMPRESSION_EMPTY, when a database handle opens a read or write 
+transaction on the database, the compression id is compared against the 
+lsm_compress.iId field of the configured compression hooks, or against LSM_COMPRESSION_NONE if no compression hooks are configured. If the compression id
+does not match, then an LSM_MISMATCH error is returned and the operation 
+fails (no transaction or database cursor is opened).
+
+<p><i>Maybe there should be a way to register a mismatch-handler callback.
+Otherwise, applications have to handle LSM_MISMATCH everywhere...
+</i>
+
+
+<h1>5. Performance Tuning</h1>
+
+<h2>5.1 Architectural Overview </h2>
 
 <p> The LSM library implements two separate data structures that are used 
 together to store user data. When the database is queried, the library 
@@ -503,7 +609,7 @@ database file header (to checkpoint the database).
 concurrently by multiple database connections, located either in the same
 application process or different processes.
 
-<h2>3.2 Work and Checkpoint Scheduling </h2>
+<h2>5.2 Work and Checkpoint Scheduling </h2>
 
 <p>The section above describes the three stages of transfering data written
 to the database from the application to persistent storage. A "writer" 
@@ -513,7 +619,7 @@ in the the database file. Additionally, a worker client must periodically
 merge existing database segments together to prevent them from growing too
 numerous.
 
-<h3>3.2.1 Automatic Work and Checkpoint Scheduling</h3>
+<h3>5.2.1 Automatic Work and Checkpoint Scheduling</h3>
 
 <p>By default, database "work" (the flushing and merging of segments, performed
 by clients holding the WORKER lock) and checkpointing are scheduled and
@@ -614,7 +720,7 @@ value is greater than the value of the LSM_CONFIG_AUTOCHECKPOINT parameter,
 a checkpoint is attempted. It is not an error if the attempt fails because the
 CHECKPOINTER lock cannot be obtained.
 
-<h3>3.2.2 Explicit Work and Checkpoint Scheduling</h3>
+<h3>5.2.2 Explicit Work and Checkpoint Scheduling</h3>
 
 <p>The alternative to automatic scheduling of work and checkpoint operations
 is to explicitly schedule them. Possibly in a background thread or dedicated
@@ -735,7 +841,7 @@ can also be using the lsm_info() API function. As follows:
   int lsm_flush(lsm_db *db);
 </verbatim>
 
-<h3>3.2.3 Compulsary Work and Checkpoint Scheduling</h3>
+<h3>5.2.3 Compulsary Work and Checkpoint Scheduling</h3>
 
 <p>Apart from the scenarios described above, there are two there are two 
 scenarios where database work or checkpointing may be performed automatically,
@@ -780,7 +886,7 @@ segments in total. If an attempt is made to flush an in-memory tree to disk
 when the database already contains 64 segments, two or more existing segments
 must be merged together before the new segment can be created.
 
-<h2>3.3 Database Optimization</h2>
+<h2>5.3 Database Optimization</h2>
 
 <p>Database optimization transforms the contents of database file so that
 the following are true:
@@ -812,7 +918,7 @@ after their content has been merged into the new segment. The result - a
 database file that is optimized, except that it is up to twice as large as
 it otherwise would be.
 
-<h2>3.3 Other Parameters </h2>
+<h2>5.4 Other Parameters </h2>
 
 <i>
 <p>Mention other configuration options that can be used to tune performance
@@ -821,74 +927,9 @@ here.
 <ul>
   <li> LSM_CONFIG_MMAP
   <li> LSM_CONFIG_MULTIPLE_PROCESSES
+  <li> LSM_CONFIG_USE_LOG
 </ul>
 
-</i>
-
-<h1>4. Compressed and Encrypted Databases </h1>
-
-<p>LSM does not provide built-in methods for creating encrypted or compressed
-databases. Instead, it allows the user to provide hooks to call external
-functions to compress and/or encrypt data before it is written to the database
-file, and to decrypt and/or uncompress data as it is read from the database
-file.
-
-<p>A database connection is configured to call compression functions using a
-call to lsm_config() with the second argument set to
-LSM_CONFIG_SET_COMPRESSION. The third argument should point to an instance
-of type lsm_compress, which is defined as follows:
-
-<verbatim>
-  typedef struct lsm_compress lsm_compress;
-  struct lsm_compress {
-    u32 iId;
-    void *pCtx;
-    int (*xBound)(void *pCtx, int nIn);
-    int (*xCompress)(void *pCtx, void *pOut, int *pnOut, const void *pIn, int nIn);
-    int (*xUncompress)(void *pCtx, void *pOut, int *pnOut, const void *pIn, int nIn);
-    void (*xFree)(void *pCtx);
-  };
-</verbatim>
-
-<p><i> Explain how the hooks work here (same as zipvfs) </i>
-
-<p><i> Example code? Using zlib? Or something simple like an RLE
-implementation?</i>
-
-<p>The database file header of any LSM database contains a 32-bit unsigned
-"compression id" field. If the database is not a compressed database, this
-field is set to 1. Otherwise, it is set to an application supplied value
-identifying the compression and/or encryption scheme in use. Application
-compression scheme ids must be greater than or equal to 10000. Values smaller
-than 10000 are reserved for internal use.
-
-<p>The lsm_compression_id() API may be used to read the compression id from
-a database connection. Because the compression id is stored in the database
-header, it may be read before any required compression or encryption hooks
-are configured.
-
-<verbatim>
-  #define LSM_COMPRESSION_EMPTY    0
-  #define LSM_COMPRESSION_NONE     1
-  int lsm_compression_id(lsm_db *db, u32 *piId);
-</verbatim>
-
-<p>When a database is opened for the first time, before it is first written,
-the compression id field is set to LSM_COMPRESSION_EMPTY (0). The first time
-a transaction is committed, the database compression id is set to a copy of 
-the lsm_compress.iId field of the compression hooks for the database handle
-committing the transaction, or to LSM_COMPRESSION_NONE (1) if no compression
-hooks are configured.
-
-<p>Once the compression id is set to something other than 
-LSM_COMPRESSION_EMPTY, when a database handle opens a read or write 
-transaction on the database, the compression id is compared against the 
-lsm_compress.iId field of the configured compression hooks, or against LSM_COMPRESSION_NONE if no compression hooks are configured. If the compression id
-does not match, then an LSM_MISMATCH error is returned and the operation 
-fails (no transaction or database cursor is opened).
-
-<p><i>Maybe there should be a way to register a mismatch-handler callback.
-Otherwise, applications have to handle LSM_MISMATCH everywhere...
 </i>
 
 
