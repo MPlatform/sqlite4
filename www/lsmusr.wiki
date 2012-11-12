@@ -237,7 +237,7 @@ if any other client has written to the database since the current clients
 read-transaction was opened, it will not be possible to upgrade to a
 write-transaction.
 
-<p>Write-transactions may be opened either implicitly or explitly. If any
+<p>Write-transactions may be opened either implicitly or explicitly. If any
 of the following functions are called to write to the database when there 
 is no write-transaction open, then an implicit write-transaction is opened and
 close (committed) within the function:
@@ -513,18 +513,384 @@ in the the database file. Additionally, a worker client must periodically
 merge existing database segments together to prevent them from growing too
 numerous.
 
-<ul>
-<li>lsm_config_work_hook() -> Change to lsm_config() option.
-<li>lsm_tree_size()        -> Change to lsm_info() option.
-<li>lsm_ckpt_size()        -> Change to lsm_info() option.
+<h3>3.2.1 Automatic Work and Checkpoint Scheduling</h3>
 
-<li>lsm_work()
-<li>lsm_checkpoint()
-<li>lsm_flush()
+<p>By default, database "work" (the flushing and merging of segments, performed
+by clients holding the WORKER lock) and checkpointing are scheduled and
+performed automatically from within calls to "write" API functions. The 
+"write" functions are:
+
+<ul>
+  <li>lsm_insert()
+  <li>lsm_delete()
+  <li>lsm_delete_range()
+  <li>lsm_commit()
 </ul>
+
+<p>It is expected that automatic work and checkpoint scheduling will be
+suitable for most applications. The advantage of this model is that it is
+simple to use. However, any call to one of the functions listed above may be
+co-opted by the system to perform database work or a checkpoint, causing it to
+return more slowly than it otherwise would. In some situations, for example
+when a writer thread is also responsible for handling user-interface events,
+this may be undesirable.
+
+<p>Automatic work and checkpoint scheduling is controlled by four integer
+parameters set or queried using the lsm_config() interface. The parameters
+are:
+
+<dl>
+  <dt> LSM_CONFIG_AUTOWORK
+  <dd> <p style=margin-top:0>
+       This is a boolean parameter (default 1). If set, auto-work mode is
+       enabled for the database connection. Otherwise, it is not.
+
+  <dt> LSM_CONFIG_AUTOFLUSH
+  <dd> <p style=margin-top:0>
+       An integer parameter (default 1048576). If this parameter is set
+       to a non-zero value, then after each transaction is committed, the
+       library checks the total size of the live in-memory tree. If it is
+       equal to or greater than the configured value of this parameter in
+       bytes and there is no existing old in-memory tree, then the current 
+       live tree is marked as old.
+
+       <p>Additionally, if the LSM_CONFIG_AUTOWORK parameter is set, the 
+       contents of the in-memory tree are immediately flushed to disk.
+
+  <dt> LSM_CONFIG_AUTOMERGE
+  <dd> <p style=margin-top:0>
+       This parameter must be set to an integer value between 2 and 8,
+       inclusive. It controls the number of existing segments that 
+       auto-work attempts to merge together at a time. The default value is 4.
+
+  <dt> LSM_CONFIG_AUTOCHECKPOINT
+  <dd> <p style=margin-top:0>
+       If this parameter is set to an integer value greater than 0, then
+       a checkpoint is automatically attempted after this many bytes are
+       written into the database file. The default value is 2097152.
+</dl>
+
+<p>Each segment in the database file is assigned an "age" - an integer zero
+or greater indicating how many times the data in the segment has been merged.
+A segment created by flushing the in-memory tree to disk is assigned an age
+of 1. When two or more segments with age=1 are merged together to create a
+larger segment, it is assigned an age of 2. And so on.
+
+<p>If auto-work is enabled, the library periodically checks the state of the
+database file to see if there exist N or more segments with the same age
+value A, where N is the value assigned to the LSM_CONFIG_AUTOMERGE parameter.
+If so, work is done to merge all such segments with age=A into a new, larger
+segment assigned age=A+1. At present, "periodically" as used above means 
+roughly once for every 32KB of data (including overhead) written to the
+in-memory tree. The merge operation is not necessarily completed within 
+the same call to a write API in which it is started (this would result in
+blocking the writer thread for too long in many cases - in large databases
+segments may grow to be many GB in size). At present, the amount of data
+written by a single auto-work operation is roughly 32KB multiplied by the
+number of segments in the database file. This formula may change - the point 
+is that the library attempts to limit the amount of data written in order to
+avoid blocking the writer thread for too long within a single API call.
+
+<p>Each time a transaction is committed in auto-work mode, the library checks
+to see if there exists an "old" in-memory tree (see the LSM_CONFIG_AUTOFLUSH
+option above). If so, it attempts to flush it to disk immediately. Unlike
+merges of existing segments, the entire in-memory tree must be flushed to
+disk before control is returned to the user. It is not possible to
+incrementally flush an in-memory tree in the same ways as it is possible to
+incrementally merge existing database segments together.
+
+<p>In order to perform auto-work on the database file, either to flush the
+contents of an old in-memory tree to disk or to merge existing segments within
+the database file together, the client must obtain the WORKER lock. If some
+other client is already holding the WORKER lock, this will not be possible.
+This is not an error. If this occurs, the writer thread simply returns
+immediately, without performing any work on the database file.
+
+<p>Assuming the LSM_CONFIG_AUTOCHECKPOINT parameter is set to a value greater
+than zero, after performing database work, the library automatically checks
+how many bytes of raw data have been written to the database file since the
+last checkpoint (by any client, not just by the current client). If this
+value is greater than the value of the LSM_CONFIG_AUTOCHECKPOINT parameter,
+a checkpoint is attempted. It is not an error if the attempt fails because the
+CHECKPOINTER lock cannot be obtained.
+
+<h3>3.2.2 Explicit Work and Checkpoint Scheduling</h3>
+
+<p>The alternative to automatic scheduling of work and checkpoint operations
+is to explicitly schedule them. Possibly in a background thread or dedicated
+application process. In order to disable automatic work, a client must set
+the LSM_CONFIG_AUTOWORK parameter to zero. This parameter is a property of
+a database connection, not of a database itself, so it must be cleared
+separately by all processes that may write to the database. Otherwise, they
+may attempt automatic database work or checkpoints.
+
+<p>The lsm_work() function is used to explicitly perform work on the database:
+
+<verbatim>
+  int lsm_work(lsm_db *db, int nMerge, int nByte, int *pnWrite);
+</verbatim>
+
+<p>Parameter nByte is passed a limit on the number of bytes of data that 
+should be written to the database file before the call returns. It is a 
+hint only, the library does not honor this limit strictly.
+
+<p>If the database has an old in-memory tree when lsm_work() is called, it is
+flushed to disk. If this means that more than nByte bytes of data is written
+to the database file, no further work is performed. Otherwise, the number
+of bytes written is subtracted from nByte before proceeding.
+
+<p>If parameter nMerge is greater than 1, then the library searches for 
+nMerge or more segments of the same age within the database file and performs
+up to nByte bytes of work to merge them together. If the merge is completed
+before the nByte limit is exceeded, the library searches for another set of
+nMerge or more segments to work on, and so on. If at any point no such set of
+nMerge segments can be found, the call returns without performing any 
+further work.
+
+<p>Calling lsm_work() with the nMerge argument set to 1 is used to "optimize"
+the database (see below). Passing a value of zero or less for the nMerge
+parameter is an error.
+
+<p>In any case, before returning the value of *pnWrite is set to the actual
+number of bytes written to the database file.
+
+<p>The example code below might be executed in a background thread or process
+in order to perform database work and checkpointing. In this case all other
+clients should set the LSM_CONFIG_AUTOWORK parameter to zero.
+
+<verbatim>
+  int rc;
+  lsm_db *db;
+  int nCkpt = 4*1024*1024;
+
+  /* Open a database connection to database "test.db". 
+  **
+  ** Configure the connection to automatically checkpoint the database after
+  ** writing each 4MB of data to it (instead of the default 2MB). As well
+  ** as to auto-work, the LSM_CONFIG_AUTOCHECKPOINT parameter applies to data
+  ** written by explicit calls to lsm_work().
+  */
+  lsm_new(0, &db);
+  lsm_config(db, LSM_CONFIG_AUTOCHECKPOINT, &nCkpt);
+  lsm_open(db, "test.db");
+
+  while( 1 ){
+    int nWrite;
+
+    /* Attempt up to 512KB of work. Set nWrite to the number of bytes
+    ** actually written to disk.  */
+    rc = lsm_work(db, 2, 512*1024, &nWrite);
+    if( rc!=LSM_OK && rc!=LSM_BUSY ){
+      /* Anything other than LSM_OK or LSM_BUSY is a problem. LSM_BUSY
+      ** indicates that some other client has taken the WORKER lock. Any
+      ** other error indicates something has gone quite wrong.  */
+      lsm_close(db);
+      return rc;
+    }
+
+    /* nWrite may be set to zero here in two scenarios. lsm_work()
+    ** may have failed to obtain the WORKER lock and returned LSM_BUSY,
+    ** indicating that some other connection is working on the database.
+    ** Alternatively, it may be that there was no old in-memory tree to
+    ** flush and no two segments of the same age within the database file,
+    ** meaning the function could find no work to do.
+    **
+    ** In either case, there is no point in calling lsm_work() again 
+    ** immediately. Instead, sleep for a second before continuing. By that
+    ** time, things may have changed (the other process may have relinquished
+    ** the WORKER lock, or an in-memory tree may have been marked as old).
+    */
+    if( nWrite==0 ) sleep(1);
+  }
+</verbatim>
+
+<p>Checkpoints can also be requested explicitly, using the lsm_checkpoint()
+API:
+
+<verbatim>
+  int lsm_checkpoint(lsm_db *db, int *pnCkpt);
+</verbatim>
+
+<p>If no work has been performed on the database since the most recent
+checkpoint (implying that the snapshot has not changed and there is no need
+to write it into the database file), lsm_checkpoint() sets *pnCkpt to zero
+and returns immediately. Otherwise, it checkpoints the database and sets
+*pnCkpt to the number of bytes written to the database file since the
+previous checkpoint.
+
+<p>The number of bytes written to the database since the most recent checkpoint
+can also be using the lsm_info() API function. As follows:
+
+<verbatim>
+  int nCkpt;
+  rc = lsm_info(db, LSM_INFO_CHECKPOINT_SIZE, &nCkpt);
+</verbatim>
+
+<verbatim>
+  int nOld, nLive;
+  rc = lsm_info(db, LSM_INFO_TREE_SIZE, &nOld, &nLive);
+</verbatim>
+
+<verbatim>
+  int lsm_flush(lsm_db *db);
+</verbatim>
+
+<h3>3.2.3 Compulsary Work and Checkpoint Scheduling</h3>
+
+<p>Apart from the scenarios described above, there are two there are two 
+scenarios where database work or checkpointing may be performed automatically,
+regardless of the value of the LSM_CONFIG_AUTOWORK parameter.
+
+<ul>
+  <li> When closing a database connection, and 
+  <li> When the number of segments with a common age in the database file grows
+       unacceptably high.
+</ul>
+
+<p>Whenever an lsm_close() call would mean that the total number of 
+connections to a database drops to zero, the connection checks if the 
+in-memory tree is empty. If not, it is flushed to disk. Both the live and 
+old in-memory trees are flushed to disk in this case. It also checks if the
+database file has been modified since the most recent checkpoint was 
+performed. If so, it also performs a checkpoint. And, assuming no error
+has occurred, deletes the log file.
+
+<p>Additionally, whenever a worker wishes to flush an in-memory tree to a new
+age=1 segment, it must first ensure that there are less than N existing age=1
+segments, where N is the value that the LSM_CONFIG_AUTOMERGE parameter is
+set to. If there are already N or more age=1 segments, they must be merged
+into an age=2 segment before a new age=1 segment can be created within the
+database file. Similar rules apply to segments of other ages - it is not
+possible to create a new age=I segment if there are already N segments with
+age=I in the database file. This has two implications:
+
+<ul>
+  <li> The database is prevented from accumulating too many segments,
+       regardless of whether or not auto-work is enabled or how infrequently
+       lsm_work() is called, and
+
+  <li> If auto-work is disabled and lsm_work() is not called frequently enough,
+       it is possible that flushing an in-memory tree may required writing a
+       tremendous amount of data to disk (possibly even rewriting the entire
+       database file).
+</ul>
+
+<p>Finally, regardless of age, a database is limited to a maximum of 64
+segments in total. If an attempt is made to flush an in-memory tree to disk
+when the database already contains 64 segments, two or more existing segments
+must be merged together before the new segment can be created.
+
+<h2>3.3 Database Optimization</h2>
+
+<p>Database optimization transforms the contents of database file so that
+the following are true:
+
+<ul>
+  <li> All database content is stored in a single segment.
+  <li> The database file contains no (or as little as possible) free space.
+       In other words, it is no larger than required to contain the single
+       segment.
+</ul>
+
+<p>In order to optimize the database, lsm_work() should be called repeatedly
+with the nMerge argument set to 1 until it returns without writing any data
+to the database file. For example:
+
+<verbatim>
+  int nWrite;
+  int rc;
+  do {
+    rc = lsm_work(db, 1, 2*1024*1024, &nWrite);
+  }while( rc==LSM_OK && nWrite>0 );
+</verbatim>
+
+<p>When optimizing the database as above, the LSM_CONFIG_AUTOCHECKPOINT
+parameter should be set to a non-zero value, or otherwise lsm_checkpoint()
+should be called periodically. Otherwise, no checkpoints will be performed,
+preventing the library from reusing any space occupied by old segments even
+after their content has been merged into the new segment. The result - a
+database file that is optimized, except that it is up to twice as large as
+it otherwise would be.
 
 <h2>3.3 Other Parameters </h2>
 
+<i>
+<p>Mention other configuration options that can be used to tune performance
+here.
+
+<ul>
+  <li> LSM_CONFIG_MMAP
+  <li> LSM_CONFIG_MULTIPLE_PROCESSES
+</ul>
+
+</i>
+
 <h1>4. Compressed and Encrypted Databases </h1>
+
+<p>LSM does not provide built-in methods for creating encrypted or compressed
+databases. Instead, it allows the user to provide hooks to call external
+functions to compress and/or encrypt data before it is written to the database
+file, and to decrypt and/or uncompress data as it is read from the database
+file.
+
+<p>A database connection is configured to call compression functions using a
+call to lsm_config() with the second argument set to
+LSM_CONFIG_SET_COMPRESSION. The third argument should point to an instance
+of type lsm_compress, which is defined as follows:
+
+<verbatim>
+  typedef struct lsm_compress lsm_compress;
+  struct lsm_compress {
+    u32 iId;
+    void *pCtx;
+    int (*xBound)(void *pCtx, int nIn);
+    int (*xCompress)(void *pCtx, void *pOut, int *pnOut, const void *pIn, int nIn);
+    int (*xUncompress)(void *pCtx, void *pOut, int *pnOut, const void *pIn, int nIn);
+    void (*xFree)(void *pCtx);
+  };
+</verbatim>
+
+<p><i> Explain how the hooks work here (same as zipvfs) </i>
+
+<p><i> Example code? Using zlib? Or something simple like an RLE
+implementation?</i>
+
+<p>The database file header of any LSM database contains a 32-bit unsigned
+"compression id" field. If the database is not a compressed database, this
+field is set to 1. Otherwise, it is set to an application supplied value
+identifying the compression and/or encryption scheme in use. Application
+compression scheme ids must be greater than or equal to 10000. Values smaller
+than 10000 are reserved for internal use.
+
+<p>The lsm_compression_id() API may be used to read the compression id from
+a database connection. Because the compression id is stored in the database
+header, it may be read before any required compression or encryption hooks
+are configured.
+
+<verbatim>
+  #define LSM_COMPRESSION_EMPTY    0
+  #define LSM_COMPRESSION_NONE     1
+  int lsm_compression_id(lsm_db *db, u32 *piId);
+</verbatim>
+
+<p>When a database is opened for the first time, before it is first written,
+the compression id field is set to LSM_COMPRESSION_EMPTY (0). The first time
+a transaction is committed, the database compression id is set to a copy of 
+the lsm_compress.iId field of the compression hooks for the database handle
+committing the transaction, or to LSM_COMPRESSION_NONE (1) if no compression
+hooks are configured.
+
+<p>Once the compression id is set to something other than 
+LSM_COMPRESSION_EMPTY, when a database handle opens a read or write 
+transaction on the database, the compression id is compared against the 
+lsm_compress.iId field of the configured compression hooks, or against LSM_COMPRESSION_NONE if no compression hooks are configured. If the compression id
+does not match, then an LSM_MISMATCH error is returned and the operation 
+fails (no transaction or database cursor is opened).
+
+<p><i>Maybe there should be a way to register a mismatch-handler callback.
+Otherwise, applications have to handle LSM_MISMATCH everywhere...
+</i>
+
+
 
 
