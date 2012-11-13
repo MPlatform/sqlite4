@@ -5,33 +5,35 @@
 <h2>Table of Contents</h2>
 
 
+
 <div id=start_of_toc></div>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#overview_of_lsm style=text-decoration:none>1. Overview of LSM</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#introduction_to_lsm style=text-decoration:none>1. Introduction to LSM</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#using_lsm_in_applications style=text-decoration:none>2. Using LSM in Applications </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#basic_usage style=text-decoration:none>3. Basic Usage</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#opening_and_closing_database_connections style=text-decoration:none>3.1. Opening and Closing Database Connections </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#writing_to_a_database style=text-decoration:none>3.2. Writing to a Database </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#reading_from_a_database style=text-decoration:none>3.3. Reading from a Database </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_robustness style=text-decoration:none>3.4. Database Robustness </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_transactions_and_mvcc style=text-decoration:none>3.5. Database Transactions and MVCC </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compressed_and_encrypted_databases style=text-decoration:none>4. Compressed and Encrypted Databases </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#performance_tuning style=text-decoration:none>5. Performance Tuning</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#architectural_overview style=text-decoration:none>5.1. Architectural Overview </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#work_and_checkpoint_scheduling style=text-decoration:none>5.2. Work and Checkpoint Scheduling </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#automatic_work_and_checkpoint_scheduling style=text-decoration:none>5.2.1. Automatic Work and Checkpoint Scheduling</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#explicit_work_and_checkpoint_scheduling style=text-decoration:none>5.2.2. Explicit Work and Checkpoint Scheduling</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compulsary_work_and_checkpoint_scheduling style=text-decoration:none>5.2.3. Compulsary Work and Checkpoint Scheduling</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_optimization style=text-decoration:none>5.3. Database Optimization</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#other_parameters style=text-decoration:none>5.4. Other Parameters </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_transactions_and_mvcc style=text-decoration:none>3.4. Database Transactions and MVCC </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_robustness style=text-decoration:none>4. Database Robustness </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compressed_and_encrypted_databases style=text-decoration:none>5. Compressed and Encrypted Databases </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#performance_tuning style=text-decoration:none>6. Performance Tuning</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#architectural_overview style=text-decoration:none>6.1. Architectural Overview </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#work_and_checkpoint_scheduling style=text-decoration:none>6.2. Work and Checkpoint Scheduling </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#automatic_work_and_checkpoint_scheduling style=text-decoration:none>6.2.1. Automatic Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#explicit_work_and_checkpoint_scheduling style=text-decoration:none>6.2.2. Explicit Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compulsary_work_and_checkpoint_scheduling style=text-decoration:none>6.2.3. Compulsary Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_optimization style=text-decoration:none>6.3. Database Optimization</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#other_parameters style=text-decoration:none>6.4. Other Parameters </a><br>
 
 <div id=end_of_toc></div>
 
 <h2>Overview</h2>
 
 <p>This page describes the LSM embedded database library and use thereof. 
-It is intended to be part user-manual and part tutorial.
+It is intended to be part user-manual and part tutorial. It is intended to
+to complement the <a href=lsmapi.wiki>LSM API reference manual</a>.
 
-<h1 id=overview_of_lsm>1. Introduction to LSM</h1>
+<h1 id=introduction_to_lsm>1. Introduction to LSM</h1>
 
 <p>LSM is an embedded database library for key-value data, roughly similar
 in scope to
@@ -218,63 +220,7 @@ remove the two endpoints. As follows:
   lsm_csr_close(csr);
 </verbatim>
 
-<h2 id=database_robustness>3.4. Database Robustness </h2>
-
-<p>The value of the configuration parameter LSM_CONFIG_SAFETY determines
-how often data is synced to disk by the LSM library. This is an important
-tradeoff - syncing less often can lead to orders of magnitude better
-performance, but also exposes the application to the risk of partial or total
-data loss in the event of a power failure;
-
-<table valign=top>
-<tr> <td valign=top>LSM_SAFETY_OFF 
-     <td valign=top style="padding-left:1ex;padding-right:1ex">(0)
-     <td> Do not sync to disk at all. This is the fastest mode.
-          <p>If a power failure occurs while writing to the database, 
-          following recovery the database may be corrupt. All or some data may
-          be recoverable.
-
-<tr> <td valign=top>LSM_SAFETY_NORMAL 
-     <td valign=top style="padding-left:1ex;padding-right:1ex">(1)
-     <td> Sync only as much as is necessary to prevent database corruption.
-         This is the default setting. Although slower than LSM_SAFETY_OFF, 
-         this mode is still much faster than LSM_SAFETY_FULL.
-     <p> If a power failure occurs while writing to the database, following
-          recovery some recently committed transactions may have been lost.
-          But the database file should not be corrupt and older data intact.
-
-<tr> <td valign=top>LSM_SAFETY_FULL 
-     <td valign=top style="padding-left:1ex;padding-right:1ex">(2)
-     <td> Sync every transaction to disk as part of committing it. This is
-          the slowest mode.
-       <p>If a power failure occurs while writing to the database, all
-          successfully committed transactions should be present.
-          The database file should not be corrupt.
-</table>
-
-<p>The following example code sets the value of the LSM_CONFIG_SAFETY 
-parameter for connection db to LSM_SAFETY_FULL:
-
-<verbatim>
-  int iSafety = LSM_SAFETY_FULL;
-  lsm_config(db, LSM_CONFIG_SAFETY, &iSafety);
-</verbatim>
-
-<p>The current value of the LSM_CONFIG_SAFETY parameter can also be queried
-by setting the initial value of the argument to -1 (or any other negative
-value). For example:
-
-<verbatim>
-  int iSafety = -1;
-  lsm_config(db, LSM_CONFIG_SAFETY, &iSafety);
-  /* At this point, variable iSafety is set to the currently configured value
-  ** of the LSM_CONFIG_SAFETY parameter (either 0, 1 or 2).  */
-</verbatim>
-
-<p>The lsm_config() function may also be used to configure other database
-connection parameters.  
-
-<h2 id=database_transactions_and_mvcc>3.5. Database Transactions and MVCC </h2>
+<h2 id=database_transactions_and_mvcc>3.4. Database Transactions and MVCC </h2>
 
 <p>LSM supports a single-writer/multiple-reader 
 <a href=http://en.wikipedia.org/wiki/Multiversion_concurrency_control>MVCC</a>
@@ -429,7 +375,64 @@ If the second parameter passed is <i>N</i>,
   
 </verbatim>
 
-<h1 id=compressed_and_encrypted_databases>4. Compressed and Encrypted Databases </h1>
+<h1 id=database_robustness>4. Database Robustness </h1>
+
+<p>The value of the configuration parameter LSM_CONFIG_SAFETY determines
+how often data is synced to disk by the LSM library. This is an important
+tradeoff - syncing less often can lead to orders of magnitude better
+performance, but also exposes the application to the risk of partial or total
+data loss in the event of a power failure;
+
+<table valign=top>
+<tr> <td valign=top>LSM_SAFETY_OFF 
+     <td valign=top style="padding-left:1ex;padding-right:1ex">(0)
+     <td> Do not sync to disk at all. This is the fastest mode.
+          <p>If a power failure occurs while writing to the database, 
+          following recovery the database may be corrupt. All or some data may
+          be recoverable.
+
+<tr> <td valign=top>LSM_SAFETY_NORMAL 
+     <td valign=top style="padding-left:1ex;padding-right:1ex">(1)
+     <td> Sync only as much as is necessary to prevent database corruption.
+         This is the default setting. Although slower than LSM_SAFETY_OFF, 
+         this mode is still much faster than LSM_SAFETY_FULL.
+     <p> If a power failure occurs while writing to the database, following
+          recovery some recently committed transactions may have been lost.
+          But the database file should not be corrupt and older data intact.
+
+<tr> <td valign=top>LSM_SAFETY_FULL 
+     <td valign=top style="padding-left:1ex;padding-right:1ex">(2)
+     <td> Sync every transaction to disk as part of committing it. This is
+          the slowest mode.
+       <p>If a power failure occurs while writing to the database, all
+          successfully committed transactions should be present.
+          The database file should not be corrupt.
+</table>
+
+<p>The following example code sets the value of the LSM_CONFIG_SAFETY 
+parameter for connection db to LSM_SAFETY_FULL:
+
+<verbatim>
+  int iSafety = LSM_SAFETY_FULL;
+  lsm_config(db, LSM_CONFIG_SAFETY, &iSafety);
+</verbatim>
+
+<p>The current value of the LSM_CONFIG_SAFETY parameter can also be queried
+by setting the initial value of the argument to -1 (or any other negative
+value). For example:
+
+<verbatim>
+  int iSafety = -1;
+  lsm_config(db, LSM_CONFIG_SAFETY, &iSafety);
+  /* At this point, variable iSafety is set to the currently configured value
+  ** of the LSM_CONFIG_SAFETY parameter (either 0, 1 or 2).  */
+</verbatim>
+
+<p>The lsm_config() function may also be used to configure other database
+connection parameters.  
+
+
+<h1 id=compressed_and_encrypted_databases>5. Compressed and Encrypted Databases </h1>
 
 <p>LSM does not provide built-in methods for creating encrypted or compressed
 databases. Instead, it allows the user to provide hooks to call external
@@ -496,9 +499,9 @@ Otherwise, applications have to handle LSM_MISMATCH everywhere...
 </i>
 
 
-<h1 id=performance_tuning>5. Performance Tuning</h1>
+<h1 id=performance_tuning>6. Performance Tuning</h1>
 
-<h2 id=architectural_overview>5.1. Architectural Overview </h2>
+<h2 id=architectural_overview>6.1. Architectural Overview </h2>
 
 <p> The LSM library implements two separate data structures that are used 
 together to store user data. When the database is queried, the library 
@@ -635,7 +638,7 @@ database file header (to checkpoint the database).
 concurrently by multiple database connections, located either in the same
 application process or different processes.
 
-<h2 id=work_and_checkpoint_scheduling>5.2. Work and Checkpoint Scheduling </h2>
+<h2 id=work_and_checkpoint_scheduling>6.2. Work and Checkpoint Scheduling </h2>
 
 <p>The section above describes the three stages of transfering data written
 to the database from the application to persistent storage. A "writer" 
@@ -645,7 +648,7 @@ in the the database file. Additionally, a worker client must periodically
 merge existing database segments together to prevent them from growing too
 numerous.
 
-<h3 id=automatic_work_and_checkpoint_scheduling>5.2.1. Automatic Work and Checkpoint Scheduling</h3>
+<h3 id=automatic_work_and_checkpoint_scheduling>6.2.1. Automatic Work and Checkpoint Scheduling</h3>
 
 <p>By default, database "work" (the flushing and merging of segments, performed
 by clients holding the WORKER lock) and checkpointing are scheduled and
@@ -746,7 +749,7 @@ value is greater than the value of the LSM_CONFIG_AUTOCHECKPOINT parameter,
 a checkpoint is attempted. It is not an error if the attempt fails because the
 CHECKPOINTER lock cannot be obtained.
 
-<h3 id=explicit_work_and_checkpoint_scheduling>5.2.2. Explicit Work and Checkpoint Scheduling</h3>
+<h3 id=explicit_work_and_checkpoint_scheduling>6.2.2. Explicit Work and Checkpoint Scheduling</h3>
 
 <p>The alternative to automatic scheduling of work and checkpoint operations
 is to explicitly schedule them. Possibly in a background thread or dedicated
@@ -867,7 +870,7 @@ can also be using the lsm_info() API function. As follows:
   int lsm_flush(lsm_db *db);
 </verbatim>
 
-<h3 id=compulsary_work_and_checkpoint_scheduling>5.2.3. Compulsary Work and Checkpoint Scheduling</h3>
+<h3 id=compulsary_work_and_checkpoint_scheduling>6.2.3. Compulsary Work and Checkpoint Scheduling</h3>
 
 <p>Apart from the scenarios described above, there are two there are two 
 scenarios where database work or checkpointing may be performed automatically,
@@ -912,7 +915,7 @@ segments in total. If an attempt is made to flush an in-memory tree to disk
 when the database already contains 64 segments, two or more existing segments
 must be merged together before the new segment can be created.
 
-<h2 id=database_optimization>5.3. Database Optimization</h2>
+<h2 id=database_optimization>6.3. Database Optimization</h2>
 
 <p>Database optimization transforms the contents of database file so that
 the following are true:
@@ -944,7 +947,7 @@ after their content has been merged into the new segment. The result - a
 database file that is optimized, except that it is up to twice as large as
 it otherwise would be.
 
-<h2 id=other_parameters>5.4. Other Parameters </h2>
+<h2 id=other_parameters>6.4. Other Parameters </h2>
 
 <i>
 <p>Mention other configuration options that can be used to tune performance
@@ -957,9 +960,6 @@ here.
 </ul>
 
 </i>
-
-
-
 
 
 

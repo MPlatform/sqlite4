@@ -84,23 +84,6 @@ struct lsm_env {
   ** iVersion value will increase. */
 };
 
-/*
-** The compression library interface.
-*/
-struct lsm_compress {
-  int nByte;                 /* Size of this structure in bytes */
-  int iVersion;              /* Version number of this structure (1) */
-
-  /* Compression library functions */
-  void *pCtx;
-  int (*xBound)(void *, int nSrc);
-  int (*xCompress)(void *, char *, int *, const char *, int);
-  int (*xUncompress)(void *, char *, int *, const char *, int);
-
-  /* New fields may be added in future releases, in which case the
-  ** iVersion value will increase. */
-};
-
 /* 
 ** Values that may be passed as the second argument to xMutexStatic. 
 */
@@ -108,12 +91,7 @@ struct lsm_compress {
 #define LSM_MUTEX_HEAP   2
 
 /*
-** Return a pointer to the default LSM run-time environment
-*/
-lsm_env *lsm_default_env(void);
-
-/*
-** Error codes.
+** CAPI: LSM Error Codes
 */
 #define LSM_OK         0
 #define LSM_ERROR      1
@@ -127,13 +105,21 @@ lsm_env *lsm_default_env(void);
 #define LSM_MISUSE    21
 
 /* 
-** Open and close a connection to a named database.
+** CAPI: Creating and Destroying Database Connection Handles
+**
+** Open and close a database connection handle.
 */
 int lsm_new(lsm_env*, lsm_db **ppDb);
-int lsm_open(lsm_db *pDb, const char *zFilename);
 int lsm_close(lsm_db *pDb);
 
+/* 
+** CAPI: Connecting to a Database
+*/
+int lsm_open(lsm_db *pDb, const char *zFilename);
+
 /*
+** CAPI: Obtaining pointers to databases environments
+**
 ** Return a pointer to the environment used by the database connection 
 ** passed as the first argument. Assuming the argument is valid, this 
 ** function always returns a valid environment pointer - it cannot fail.
@@ -141,91 +127,100 @@ int lsm_close(lsm_db *pDb);
 lsm_env *lsm_get_env(lsm_db *pDb);
 
 /*
-** Configure a database connection.
+** The lsm_default_env() function returns a pointer to the default LSM
+** environment for the current platform.
+*/
+lsm_env *lsm_default_env(void);
+
+
+/*
+** CAPI: Configuring a database connection.
+**
+** The lsm_config() function is used to configure a database connection.
 */
 int lsm_config(lsm_db *, int, ...);
 
 /*
 ** The following values may be passed as the second argument to lsm_config().
 **
-**   LSM_CONFIG_WRITE_BUFFER
-**     A read/write integer parameter. This value determines the maximum amount
-**     of space (in bytes) used to accumulate writes in main-memory before 
-**     they are flushed to a level 0 segment.
+** LSM_CONFIG_WRITE_BUFFER:
+**   A read/write integer parameter. This value determines the maximum amount
+**   of space (in bytes) used to accumulate writes in main-memory before 
+**   they are flushed to a level 0 segment.
 **
-**   LSM_CONFIG_PAGE_SIZE
-**     A read/write integer parameter. This parameter may only be set before
-**     lsm_open() has been called.
+** LSM_CONFIG_PAGE_SIZE:
+**   A read/write integer parameter. This parameter may only be set before
+**   lsm_open() has been called.
 **
-**   LSM_CONFIG_BLOCK_SIZE
-**     A read/write integer parameter. This parameter may only be set before
-**     lsm_open() has been called.
+** LSM_CONFIG_BLOCK_SIZE:
+**   A read/write integer parameter. This parameter may only be set before
+**   lsm_open() has been called.
 **
-**   LSM_CONFIG_LOG_SIZE
-**     A read/write integer parameter.
+** LSM_CONFIG_LOG_SIZE:
+**   A read/write integer parameter.
 **
-**   LSM_CONFIG_SAFETY
-**     A read/write integer parameter. Valid values are 0, 1 (the default) 
-**     and 2. This parameter determines how robust the database is in the
-**     face of a system crash (e.g. a power failure or operating system 
-**     crash). As follows:
+** LSM_CONFIG_SAFETY:
+**   A read/write integer parameter. Valid values are 0, 1 (the default) 
+**   and 2. This parameter determines how robust the database is in the
+**   face of a system crash (e.g. a power failure or operating system 
+**   crash). As follows:
 **
-**       0 (off):    No robustness. A system crash may corrupt the database.
+**     0 (off):    No robustness. A system crash may corrupt the database.
 **
-**       1 (normal): Some robustness. A system crash may not corrupt the
-**                   database file, but recently committed transactions may
-**                   be lost following recovery.
+**     1 (normal): Some robustness. A system crash may not corrupt the
+**                 database file, but recently committed transactions may
+**                 be lost following recovery.
 **
-**       2 (full):   Full robustness. A system crash may not corrupt the
-**                   database file. Following recovery the database file
-**                   contains all successfully committed transactions.
+**     2 (full):   Full robustness. A system crash may not corrupt the
+**                 database file. Following recovery the database file
+**                 contains all successfully committed transactions.
 **
-**   LSM_CONFIG_AUTOWORK
-**     A read/write integer parameter.
+** LSM_CONFIG_AUTOWORK:
+**   A read/write integer parameter.
 **
-**   LSM_CONFIG_AUTOCHECKPOINT
-**     A read/write integer parameter.
+** LSM_CONFIG_AUTOCHECKPOINT:
+**   A read/write integer parameter.
 **
-**   LSM_CONFIG_MMAP
-**     A read/write integer parameter. True to use mmap() to access the 
-**     database file. False otherwise.
+** LSM_CONFIG_MMAP:
+**   A read/write integer parameter. True to use mmap() to access the 
+**   database file. False otherwise.
 **
-**   LSM_CONFIG_USE_LOG
-**     A read/write boolean parameter. True (the default) to use the log
-**     file normally. False otherwise.
+** LSM_CONFIG_USE_LOG:
+**   A read/write boolean parameter. True (the default) to use the log
+**   file normally. False otherwise.
 **
-**   LSM_CONFIG_NMERGE
-**     A read/write integer parameter. The minimum number of segments to
-**     merge together at a time. Default value 4.
+** LSM_CONFIG_NMERGE:
+**   A read/write integer parameter. The minimum number of segments to
+**   merge together at a time. Default value 4.
 **
-**   LSM_CONFIG_MAX_FREELIST
-**     A read/write integer parameter. The maximum number of free-list 
-**     entries that are stored in a database checkpoint (the others are
-**     stored elsewhere in the database).
+** LSM_CONFIG_MAX_FREELIST:
+**   A read/write integer parameter. The maximum number of free-list 
+**   entries that are stored in a database checkpoint (the others are
+**   stored elsewhere in the database).
 **
-**     There is no reason for an application to configure or query this
-**     parameter. It is only present because configuring a small value
-**     makes certain parts of the lsm code easier to test.
+**   There is no reason for an application to configure or query this
+**   parameter. It is only present because configuring a small value
+**   makes certain parts of the lsm code easier to test.
 **
-**   LSM_CONFIG_MULTIPLE_PROCESSES
-**     A read/write boolean parameter. This parameter may only be set before
-**     lsm_open() has been called. If true, the library uses shared-memory
-**     and posix advisory locks to co-ordinate access by clients from within
-**     multiple processes. Otherwise, if false, all database clients must be 
-**     located in the same process. The default value is true.
+** LSM_CONFIG_MULTIPLE_PROCESSES:
+**   A read/write boolean parameter. This parameter may only be set before
+**   lsm_open() has been called. If true, the library uses shared-memory
+**   and posix advisory locks to co-ordinate access by clients from within
+**   multiple processes. Otherwise, if false, all database clients must be 
+**   located in the same process. The default value is true.
 **
-**   LSM_CONFIG_SET_COMPRESSION
-**     Set the compression methods used to compress and decompress database
-**     content. The argument to this option should be a pointer to a structure
-**     of type lsm_compress. The lsm_config() method takes a copy of the 
-**     structures contents.
+** LSM_CONFIG_SET_COMPRESSION:
+**   Set the compression methods used to compress and decompress database
+**   content. The argument to this option should be a pointer to a structure
+**   of type lsm_compress. The lsm_config() method takes a copy of the 
+**   structures contents.
 **
-**     This option may only be used before lsm_open() is called. Invoking it
-**     after lsm_open() has been called results in an LSM_MISUSE error.
+**   This option may only be used before lsm_open() is called. Invoking it
+**   after lsm_open() has been called results in an LSM_MISUSE error.
 **
-**   LSM_CONFIG_GET_COMPRESSION
-**     Query the compression methods used to compress and decompress database
-**     content.
+** LSM_CONFIG_GET_COMPRESSION:
+**   Query the compression methods used to compress and decompress database
+**   content.
 */
 #define LSM_CONFIG_WRITE_BUFFER        1
 #define LSM_CONFIG_PAGE_SIZE           2
@@ -239,7 +234,6 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_MAX_FREELIST       10
 #define LSM_CONFIG_MULTIPLE_PROCESSES 11
 #define LSM_CONFIG_AUTOCHECKPOINT     12
-
 #define LSM_CONFIG_SET_COMPRESSION    13
 #define LSM_CONFIG_GET_COMPRESSION    14
 
@@ -247,8 +241,21 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_SAFETY_NORMAL 1
 #define LSM_SAFETY_FULL   2
 
+/*
+** CAPI: Compression and/or Encryption Hooks
+*/
+struct lsm_compress {
+  void *pCtx;
+  unsigned int iId;
+  int (*xBound)(void *, int nSrc);
+  int (*xCompress)(void *, char *, int *, const char *, int);
+  int (*xUncompress)(void *, char *, int *, const char *, int);
+};
+
 
 /*
+** CAPI: Allocating and Freeing Memory
+**
 ** Invoke the memory allocation functions that belong to environment
 ** pEnv. Or the system defaults if no memory allocation functions have 
 ** been registered.
@@ -258,18 +265,8 @@ void *lsm_realloc(lsm_env*, void *, size_t);
 void lsm_free(lsm_env*, void *);
 
 /*
-** Configure a callback to which debugging and other messages should 
-** be directed. Only useful for debugging lsm.
-*/
-void lsm_config_log(lsm_db *, void (*)(void *, int, const char *), void *);
-
-/*
-** Configure a callback that is invoked if the database connection ever
-** writes to the database file.
-*/
-void lsm_config_work_hook(lsm_db *, void (*)(lsm_db *, void *), void *);
-
-/*
+** CAPI: Querying a Connection For Operational Data
+**
 ** Query a database connection for operational statistics or data.
 */
 int lsm_info(lsm_db *, int, ...);
@@ -277,93 +274,92 @@ int lsm_info(lsm_db *, int, ...);
 /*
 ** The following values may be passed as the second argument to lsm_info().
 **
-**   LSM_INFO_NWRITE
-**     The third parameter should be of type (int *). The location pointed
-**     to by the third parameter is set to the number of 4KB pages written to
-**     the database file during the lifetime of this connection. 
+** LSM_INFO_NWRITE:
+**   The third parameter should be of type (int *). The location pointed
+**   to by the third parameter is set to the number of 4KB pages written to
+**   the database file during the lifetime of this connection. 
 **
-**   LSM_INFO_NREAD
-**     The third parameter should be of type (int *). The location pointed
-**     to by the third parameter is set to the number of 4KB pages read from
-**     the database file during the lifetime of this connection.
+** LSM_INFO_NREAD:
+**   The third parameter should be of type (int *). The location pointed
+**   to by the third parameter is set to the number of 4KB pages read from
+**   the database file during the lifetime of this connection.
 **
-**   LSM_INFO_DB_STRUCTURE
-**     The third argument should be of type (char **). The location pointed
-**     to is populated with a pointer to a nul-terminated string containing
-**     the string representation of a Tcl data-structure reflecting the 
-**     current structure of the database file. Specifically, the current state
-**     of the worker snapshot. The returned string should be eventually freed 
-**     by the caller using lsm_free().
+** LSM_INFO_DB_STRUCTURE:
+**   The third argument should be of type (char **). The location pointed
+**   to is populated with a pointer to a nul-terminated string containing
+**   the string representation of a Tcl data-structure reflecting the 
+**   current structure of the database file. Specifically, the current state
+**   of the worker snapshot. The returned string should be eventually freed 
+**   by the caller using lsm_free().
 **
-**     The returned list contains one element for each level in the database,
-**     in order from most to least recent. Each element contains a 
-**     single element for each segment comprising the corresponding level,
-**     starting with the lhs segment, then each of the rhs segments (if any)
-**     in order from most to least recent.
+**   The returned list contains one element for each level in the database,
+**   in order from most to least recent. Each element contains a 
+**   single element for each segment comprising the corresponding level,
+**   starting with the lhs segment, then each of the rhs segments (if any)
+**   in order from most to least recent.
 **
-**     Each segment element is itself a list of 6 integer values, as follows:
+**   Each segment element is itself a list of 4 integer values, as follows:
 **
-**        1. First page of segment
-**        2. Last page of segment
-**        3. Root page of segment (if applicable).
-**        4. Total number of pages in segment.
+**   <ol><li> First page of segment
+**       <li> Last page of segment
+**       <li> Root page of segment (if applicable)
+**       <li> Total number of pages in segment
+**   </ol>
 **
-**   LSM_INFO_ARRAY_STRUCTURE
-**     There should be two arguments passed following this option (i.e. a 
-**     total of four arguments passed to lsm_info()). The first argument 
-**     should be the page number of the first page in a database array 
-**     (perhaps obtained from an earlier INFO_DB_STRUCTURE call). The second 
-**     trailing argument should be of type (char **). The location pointed 
-**     to is populated with a pointer to a nul-terminated string that must 
-**     be eventually freed using lsm_free() by the caller.
+** LSM_INFO_ARRAY_STRUCTURE:
+**   There should be two arguments passed following this option (i.e. a 
+**   total of four arguments passed to lsm_info()). The first argument 
+**   should be the page number of the first page in a database array 
+**   (perhaps obtained from an earlier INFO_DB_STRUCTURE call). The second 
+**   trailing argument should be of type (char **). The location pointed 
+**   to is populated with a pointer to a nul-terminated string that must 
+**   be eventually freed using lsm_free() by the caller.
 **
-**     The output string contains the text representation of a Tcl list of
-**     integers. Each pair of integers represent a range of pages used by
-**     the identified array. For example, if the array occupies database
-**     pages 993 to 1024, then pages 2048 to 2777, then the returned string
-**     will be "993 1024 2048 2777".
+**   The output string contains the text representation of a Tcl list of
+**   integers. Each pair of integers represent a range of pages used by
+**   the identified array. For example, if the array occupies database
+**   pages 993 to 1024, then pages 2048 to 2777, then the returned string
+**   will be "993 1024 2048 2777".
 **
-**     If the specified integer argument does not correspond to the first
-**     page of any database array, LSM_ERROR is returned and the output
-**     pointer is set to a NULL value.
+**   If the specified integer argument does not correspond to the first
+**   page of any database array, LSM_ERROR is returned and the output
+**   pointer is set to a NULL value.
 **
-**   LSM_INFO_LOG_STRUCTURE
-**     The third argument should be of type (char **). The location pointed
-**     to is populated with a pointer to a nul-terminated string containing
-**     the string representation of a Tcl data-structure. The returned 
-**     string should be eventually freed by the caller using lsm_free().
+** LSM_INFO_LOG_STRUCTURE:
+**   The third argument should be of type (char **). The location pointed
+**   to is populated with a pointer to a nul-terminated string containing
+**   the string representation of a Tcl data-structure. The returned 
+**   string should be eventually freed by the caller using lsm_free().
 **
-**     The Tcl structure returned is a list of six integers that describe
-**     the current structure of the log file.
+**   The Tcl structure returned is a list of six integers that describe
+**   the current structure of the log file.
 **
-**   LSM_INFO_ARRAY_PAGES
+** LSM_INFO_ARRAY_PAGES:
 **
-**     
+** LSM_INFO_PAGE_ASCII_DUMP:
+**   As with LSM_INFO_ARRAY_STRUCTURE, there should be two arguments passed
+**   with calls that specify this option - an integer page number and a
+**   (char **) used to return a nul-terminated string that must be later
+**   freed using lsm_free(). In this case the output string is populated
+**   with a human-readable description of the page content.
 **
-**   LSM_INFO_PAGE_ASCII_DUMP
-**     As with LSM_INFO_ARRAY_STRUCTURE, there should be two arguments passed
-**     with calls that specify this option - an integer page number and a
-**     (char **) used to return a nul-terminated string that must be later
-**     freed using lsm_free(). In this case the output string is populated
-**     with a human-readable description of the page content.
+**   If the page cannot be decoded, it is not an error. In this case the
+**   human-readable output message will report the systems failure to 
+**   interpret the page data.
 **
-**     If the page cannot be decoded, it is not an error. In this case the
-**     human-readable output message will report the systems failure to 
-**     interpret the page data.
+** LSM_INFO_PAGE_HEX_DUMP:
+**   This argument is similar to PAGE_ASCII_DUMP, except that keys and
+**   values are represented using hexadecimal notation instead of ascii.
 **
-**   LSM_INFO_PAGE_HEX_DUMP
-**     This argument is similar to PAGE_ASCII_DUMP, except that keys and
-**     values are represented using hexadecimal notation instead of ascii.
+** LSM_INFO_FREELIST:
+**   The third argument should be of type (char **). The location pointed
+**   to is populated with a pointer to a nul-terminated string containing
+**   the string representation of a Tcl data-structure. The returned 
+**   string should be eventually freed by the caller using lsm_free().
 **
-**   LSM_INFO_FREELIST
-**     The third argument should be of type (char **). The location pointed
-**     to is populated with a pointer to a nul-terminated string containing
-**     the string representation of a Tcl data-structure. The returned 
-**     string should be eventually freed by the caller using lsm_free().
-**
-**     The Tcl structure returned is a list containing one element for each
-**     free block in the database. The element itself consists of two 
-**     integers - the block number and the id of the snapshot that freed it.
+**   The Tcl structure returned is a list containing one element for each
+**   free block in the database. The element itself consists of two 
+**   integers - the block number and the id of the snapshot that freed it.
 */
 #define LSM_INFO_NWRITE           1
 #define LSM_INFO_NREAD            2
@@ -377,39 +373,38 @@ int lsm_info(lsm_db *, int, ...);
 
 
 /* 
-** Open and close transactions and nested transactions.
+** CAPI: Opening and Closing Write Transactions
 **
-** lsm_begin()
-**   Used to open transactions and sub-transactions. A successful call to 
-**   lsm_begin() ensures that there are at least iLevel nested transactions 
-**   open. To open a top-level transaction, pass iLevel==1. To open a 
-**   sub-transaction within the top-level transaction, iLevel==2. Passing 
-**   iLevel==0 is a no-op.
+** These functions are used to open and close transactions and nested 
+** sub-transactions.
 **
-** lsm_commit()
-**   Used to commit transactions and sub-transactions. A successful call 
-**   to lsm_commit() ensures that there are at most iLevel nested 
-**   transactions open. To commit a top-level transaction, pass iLevel==0. 
-**   To commit all sub-transactions inside the main transaction, pass
-**   iLevel==1.
+** The lsm_begin() function is used to open transactions and sub-transactions. 
+** A successful call to lsm_begin() ensures that there are at least iLevel 
+** nested transactions open. To open a top-level transaction, pass iLevel=1. 
+** To open a sub-transaction within the top-level transaction, iLevel=2. 
+** Passing iLevel=0 is a no-op.
 **
-** lsm_rollback()
-**   Used to roll back transactions and sub-transactions. A successful call 
-**   to lsm_rollback() restores the database to the state it was in when
-**   the iLevel'th nested sub-transaction (if any) was first opened. And then
-**   closes transactions to ensure that there are at most iLevel nested
-**   transactions open.
+** lsm_commit() is used to commit transactions and sub-transactions. A
+** successful call to lsm_commit() ensures that there are at most iLevel 
+** nested transactions open. To commit a top-level transaction, pass iLevel=0. 
+** To commit all sub-transactions inside the main transaction, pass iLevel=1.
 **
-**   Passing iLevel==0 rolls back and closes the top-level transaction.
-**   iLevel==1 also rolls back the top-level transaction, but leaves it
-**   open. iLevel==2 rolls back the sub-transaction nested directly inside
-**   the top-level transaction (and leaves it open).
+** Function lsm_rollback() is used to roll back transactions and
+** sub-transactions. A successful call to lsm_rollback() restores the database 
+** to the state it was in when the iLevel'th nested sub-transaction (if any) 
+** was first opened. And then closes transactions to ensure that there are 
+** at most iLevel nested transactions open. Passing iLevel=0 rolls back and 
+** closes the top-level transaction. iLevel=1 also rolls back the top-level 
+** transaction, but leaves it open. iLevel=2 rolls back the sub-transaction 
+** nested directly inside the top-level transaction (and leaves it open).
 */
 int lsm_begin(lsm_db *pDb, int iLevel);
 int lsm_commit(lsm_db *pDb, int iLevel);
 int lsm_rollback(lsm_db *pDb, int iLevel);
 
 /* 
+** CAPI: Writing to a Database
+**
 ** Write a new value into the database. If a value with a duplicate key 
 ** already exists it is replaced.
 */
@@ -431,6 +426,153 @@ int lsm_delete(lsm_db *, const void *pKey, int nKey);
 int lsm_delete_range(lsm_db *, 
     const void *pKey1, int nKey1, const void *pKey2, int nKey2
 );
+
+/*
+** CAPI: Explicit Database Work and Checkpointing
+**
+** This function is called by a thread to work on the database structure.
+*/
+int lsm_work(lsm_db *pDb, int nMerge, int nPage, int *pnWrite);
+
+int lsm_flush(lsm_db *pDb);
+
+/*
+** Attempt to checkpoint the current database snapshot. Return an LSM
+** error code if an error occurs or LSM_OK otherwise.
+**
+** If the current snapshot has already been checkpointed, calling this 
+** function is a no-op. In this case if pnByte is not NULL, *pnByte is
+** set to 0. Or, if the current snapshot is successfully checkpointed
+** by this function and pbCkpt is not NULL, *pnByte is set to the number
+** of bytes written to the database file since the previous checkpoint
+** (the same measure as returned by lsm_ckpt_size()).
+*/
+int lsm_checkpoint(lsm_db *pDb, int *pnByte);
+
+/*
+** CAPI: Opening and Closing Database Cursors
+**
+** Open and close a database cursor.
+*/
+int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr);
+int lsm_csr_close(lsm_cursor *pCsr);
+
+/* 
+** CAPI: Positioning Database Cursors
+**
+** If the fourth parameter is LSM_SEEK_EQ, LSM_SEEK_GE or LSM_SEEK_LE,
+** this function searches the database for an entry with key (pKey/nKey). 
+** If an error occurs, an LSM error code is returned. Otherwise, LSM_OK.
+**
+** If no error occurs and the requested key is present in the database, the
+** cursor is left pointing to the entry with the specified key. Or, if the 
+** specified key is not present in the database the state of the cursor 
+** depends on the value passed as the final parameter, as follows:
+**
+** LSM_SEEK_EQ:
+**   The cursor is left at EOF (invalidated). A call to lsm_csr_valid()
+**   returns non-zero.
+**
+** LSM_SEEK_LE:
+**   The cursor is left pointing to the largest key in the database that
+**   is smaller than (pKey/nKey). If the database contains no keys smaller
+**   than (pKey/nKey), the cursor is left at EOF.
+**
+** LSM_SEEK_GE:
+**   The cursor is left pointing to the smallest key in the database that
+**   is larger than (pKey/nKey). If the database contains no keys larger
+**   than (pKey/nKey), the cursor is left at EOF.
+**
+** If the fourth parameter is LSM_SEEK_LEFAST, this function searches the
+** database in a similar manner to LSM_SEEK_LE, with two differences:
+**
+** <ol><li>Even if a key can be found (the cursor is not left at EOF), the
+** lsm_csr_value() function may not be used (attempts to do so return
+** LSM_MISUSE).
+**
+** <li>The key that the cursor is left pointing to may be one that has 
+** been recently deleted from the database. In this case it is
+** guaranteed that the returned key is larger than any key currently 
+** in the database that is less than or equal to (pKey/nKey).
+** </ol>
+**
+** LSM_SEEK_LEFAST requests are intended to be used to allocate database
+** keys.
+*/
+int lsm_csr_seek(lsm_cursor *pCsr, const void *pKey, int nKey, int eSeek);
+
+int lsm_csr_first(lsm_cursor *pCsr);
+int lsm_csr_last(lsm_cursor *pCsr);
+
+/*
+** Advance the specified cursor to the next or previous key in the database.
+** Return LSM_OK if successful, or an LSM error code otherwise.
+**
+** Functions lsm_csr_seek(), lsm_csr_first() and lsm_csr_last() are "seek"
+** functions. Whether or not lsm_csr_next and lsm_csr_prev may be called
+** successfully also depends on the most recent seek function called on
+** the cursor. Specifically:
+**
+** <ul>
+** <li> At least one seek function must have been called on the cursor.
+** <li> To call lsm_csr_next(), the most recent call to a seek function must
+** have been either lsm_csr_first() or a call to lsm_csr_seek() specifying
+** LSM_SEEK_GE. 
+** <li> To call lsm_csr_prev(), the most recent call to a seek function must
+** have been either lsm_csr_first() or a call to lsm_csr_seek() specifying
+** LSM_SEEK_GE. 
+** </ul>
+**
+** Otherwise, if the above conditions are not met when lsm_csr_next or 
+** lsm_csr_prev is called, LSM_MISUSE is returned and the cursor position
+** remains unchanged.
+*/
+int lsm_csr_next(lsm_cursor *pCsr);
+int lsm_csr_prev(lsm_cursor *pCsr);
+
+/*
+** Values that may be passed as the fourth argument to lsm_csr_seek().
+*/
+#define LSM_SEEK_LEFAST   -2
+#define LSM_SEEK_LE       -1
+#define LSM_SEEK_EQ        0
+#define LSM_SEEK_GE        1
+
+/* 
+** CAPI: Extracting Data From Database Cursors
+**
+** Retrieve data from a database cursor.
+*/
+int lsm_csr_valid(lsm_cursor *pCsr);
+int lsm_csr_key(lsm_cursor *pCsr, const void **ppKey, int *pnKey);
+int lsm_csr_value(lsm_cursor *pCsr, const void **ppVal, int *pnVal);
+
+/*
+** If no error occurs, this function compares the database key passed via
+** the pKey/nKey arguments with the key that the cursor passed as the first
+** argument currently points to. If the cursors key is less than, equal to
+** or greater than pKey/nKey, *piRes is set to less than, equal to or greater
+** than zero before returning. LSM_OK is returned in this case.
+**
+** Or, if an error occurs, an LSM error code is returned and the final 
+** value of *piRes is undefined. If the cursor does not point to a valid
+** key when this function is called, LSM_MISUSE is returned.
+*/
+int lsm_csr_cmp(lsm_cursor *pCsr, const void *pKey, int nKey, int *piRes);
+
+/*
+** CAPI: Change these!!
+**
+** Configure a callback to which debugging and other messages should 
+** be directed. Only useful for debugging lsm.
+*/
+void lsm_config_log(lsm_db *, void (*)(void *, int, const char *), void *);
+
+/*
+** Configure a callback that is invoked if the database connection ever
+** writes to the database file.
+*/
+void lsm_config_work_hook(lsm_db *, void (*)(lsm_db *, void *), void *);
 
 /*
 ** The lsm_tree_size() function reports on the current state of the 
@@ -469,130 +611,8 @@ int lsm_tree_size(lsm_db *, int *pbOld, int *pnNew);
 */
 int lsm_ckpt_size(lsm_db *, int *pnByte);
 
-/*
-** This function is called by a thread to work on the database structure.
-*/
-int lsm_work(lsm_db *pDb, int nMerge, int nPage, int *pnWrite);
 
-int lsm_flush(lsm_db *pDb);
-
-/*
-** Attempt to checkpoint the current database snapshot. Return an LSM
-** error code if an error occurs or LSM_OK otherwise.
-**
-** If the current snapshot has already been checkpointed, calling this 
-** function is a no-op. In this case if pnByte is not NULL, *pnByte is
-** set to 0. Or, if the current snapshot is successfully checkpointed
-** by this function and pbCkpt is not NULL, *pnByte is set to the number
-** of bytes written to the database file since the previous checkpoint
-** (the same measure as returned by lsm_ckpt_size()).
-*/
-int lsm_checkpoint(lsm_db *pDb, int *pnByte);
-
-/*
-** Open and close a database cursor.
-*/
-int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr);
-int lsm_csr_close(lsm_cursor *pCsr);
-
-/* 
-** If the fourth parameter is LSM_SEEK_EQ, LSM_SEEK_GE or LSM_SEEK_LE,
-** this function searches the database for an entry with key (pKey/nKey). 
-** If an error occurs, an LSM error code is returned. Otherwise, LSM_OK.
-**
-** If no error occurs and the requested key is present in the database, the
-** cursor is left pointing to the entry with the specified key. Or, if the 
-** specified key is not present in the database the state of the cursor 
-** depends on the value passed as the final parameter, as follows:
-**
-**   LSM_SEEK_EQ:
-**     The cursor is left at EOF (invalidated). A call to lsm_csr_valid()
-**     returns non-zero.
-**
-**   LSM_SEEK_LE:
-**     The cursor is left pointing to the largest key in the database that
-**     is smaller than (pKey/nKey). If the database contains no keys smaller
-**     than (pKey/nKey), the cursor is left at EOF.
-**
-**   LSM_SEEK_GE:
-**     The cursor is left pointing to the smallest key in the database that
-**     is larger than (pKey/nKey). If the database contains no keys larger
-**     than (pKey/nKey), the cursor is left at EOF.
-**
-** If the fourth parameter is LSM_SEEK_LEFAST, this function searches the
-** database in a similar manner to LSM_SEEK_LE, with two differences:
-**
-**   1) Even if a key can be found (the cursor is not left at EOF), the
-**      lsm_csr_value() function may not be used (attempts to do so return
-**      LSM_MISUSE).
-**
-**   2) The key that the cursor is left pointing to may be one that has 
-**      been recently deleted from the database. In this case it is guaranteed
-**      that the returned key is larger than any key currently in the database
-**      that is less than or equal to (pKey/nKey).
-**
-** LSM_SEEK_LEFAST requests are intended to be used to allocate database
-** keys.
-*/
-int lsm_csr_seek(lsm_cursor *pCsr, const void *pKey, int nKey, int eSeek);
-
-/*
-** Values that may be passed as the fourth argument to lsm_csr_seek().
-*/
-#define LSM_SEEK_LEFAST   -2
-#define LSM_SEEK_LE       -1
-#define LSM_SEEK_EQ        0
-#define LSM_SEEK_GE        1
-
-int lsm_csr_first(lsm_cursor *pCsr);
-int lsm_csr_last(lsm_cursor *pCsr);
-
-/*
-** Advance the specified cursor to the next or previous key in the database.
-** Return LSM_OK if successful, or an LSM error code otherwise.
-**
-** Functions lsm_csr_seek(), lsm_csr_first() and lsm_csr_last() are "seek"
-** functions. Whether or not lsm_csr_next and lsm_csr_prev may be called
-** successfully also depends on the most recent seek function called on
-** the cursor. Specifically:
-**
-**   * At least one seek function must have been called on the cursor.
-**
-**   * To call lsm_csr_next(), the most recent call to a seek function must
-**     have been either lsm_csr_first() or a call to lsm_csr_seek() specifying
-**     LSM_SEEK_GE. 
-**
-**   * To call lsm_csr_prev(), the most recent call to a seek function must
-**     have been either lsm_csr_first() or a call to lsm_csr_seek() specifying
-**     LSM_SEEK_GE. 
-**
-** Otherwise, if the above conditions are not met when lsm_csr_next or 
-** lsm_csr_prev is called, LSM_MISUSE is returned and the cursor position
-** remains unchanged.
-*/
-int lsm_csr_next(lsm_cursor *pCsr);
-int lsm_csr_prev(lsm_cursor *pCsr);
-
-/* 
-** Retrieve data from a database cursor.
-*/
-int lsm_csr_valid(lsm_cursor *pCsr);
-int lsm_csr_key(lsm_cursor *pCsr, const void **ppKey, int *pnKey);
-int lsm_csr_value(lsm_cursor *pCsr, const void **ppVal, int *pnVal);
-
-/*
-** If no error occurs, this function compares the database key passed via
-** the pKey/nKey arguments with the key that the cursor passed as the first
-** argument currently points to. If the cursors key is less than, equal to
-** or greater than pKey/nKey, *piRes is set to less than, equal to or greater
-** than zero before returning. LSM_OK is returned in this case.
-**
-** Or, if an error occurs, an LSM error code is returned and the final 
-** value of *piRes is undefined. If the cursor does not point to a valid
-** key when this function is called, LSM_MISUSE is returned.
-*/
-int lsm_csr_cmp(lsm_cursor *pCsr, const void *pKey, int nKey, int *piRes);
-
+/* ENDOFAPI */
 #ifdef __cplusplus
 }  /* End of the 'extern "C"' block */
 #endif
