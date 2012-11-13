@@ -184,7 +184,7 @@ puts "<h1>LSM API Topics</h1>"
 puts <ol>
 puts $document_toc
 puts </ol>
-set s "display:block;float:left;width:40ex"
+set s "display:block;float:left;width:35ex"
 puts "<h1 style=clear:both>All LSM API Functions</h1>"
 foreach sym [lsort $document_functions] {
   puts "<span style=$s><a href=#$sym>$sym</a></span>"

@@ -73,9 +73,61 @@ in a single database file and a single (optional) log file.
 compression and/or encryption functions to transform data before it is
 stored in the database file.
 
-<p><i>Say something about the difference in performance characteristics 
-between a b-tree and whatever it is LSM is. Link the performance graphs page.
-</i>
+<p>Many database systems that support range queries, including <a
+href=http://www.sqlite.org>SQLite 3</a>, Berkeley DB and Kyoto Cabinet, are
+based on a <a href="http://en.wikipedia.org/wiki/B-tree">b-tree data
+structure</a> or variant thereof. A b-tree structure minimizes the number of
+disk sectors that must be read from disk when searching the database for a
+specific key. However, b-tree implementations usually suffer from poor write
+localization - updating the contents of a b-tree often involves modifying the
+contents of nodes scattered throughout the database file. If the database is
+stored on a spinning disk (HDD), then the disk heads must be moved before
+writing non-contiguous sector, which is extremely slow. If the database is
+stored on solid state storage (SDD) a similar phenomena is encountered due 
+to the large erase-block sizes. In general, writing to a series of contiguous
+disk sectors is orders of magnitude faster than updating to the same number
+of disk sectors scattered randomly throughout a large file. Additionally,
+b-tree structures are prone to fragmentation, reducing the speed of range
+queries.
+
+<p><i>Todo: Should have references for the claims above.</i>
+
+<p><i>Also, fix the link in the next paragraph to point to something more
+specific.</i>
+
+<p>LSM uses a <a href=lsm.wiki>different data structure</a> that makes the
+following performance tradeoffs relative to a b-tree:
+
+<ul>
+  <li> A very large percentage of the disk sectors modified are contiguous.
+       Additionally, in many cases the total number of sectors written
+       to disk is reduced. This makes writing to an LSM database much
+       faster than the equivalent b-tree.
+
+  <li> LSM databases do not suffer from fragmentation to the same degree
+       as b-trees. This means that the performance of large range queries 
+       does not degrade as the database is updated as it may with a b-tree.
+
+  <li> It is accepted that under some circumstances searching an LSM 
+       database for a given key will involve examining more disk sectors
+       than it would with a b-tree. In this sense both b-trees and LSM
+       provide O(log(N)) efficiency, but the base of the logarithm is 
+       generally larger for a b-tree than for LSM.
+</ul>
+
+<p>In other words, all things considered equal, writing to an LSM database
+should be very fast and scanning through large ranges of keys should also
+perform well, but searching the database for specific keys may be slightly
+slower than when using a b-tree based system. Additionally, avoiding random
+writes in favour of largely contiguous updates can significantly reduce the
+wear on SSD or flash memory devices.
+
+<p>Although it has quite different features to LSM in other respects, 
+LevelDB makes similar performance tradeoffs.
+
+<p>Benchmark test results for LSM are available here. <i>Todo: Link to a page
+with performance graphs here</i>
+
 
 <h1 id=using_lsm_in_applications>2. Using LSM in Applications </h1>
 
