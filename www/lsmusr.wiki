@@ -2,10 +2,36 @@
 <title>LSM Users Guide</title>
 <nowiki>
 
+<h2>Table of Contents</h2>
 
-<h1>1. Overview</h1>
 
-<p>This page describes the LSM embedded database library and usage thereof. 
+<div id=start_of_toc></div>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#overview_of_lsm style=text-decoration:none>1. Overview of LSM</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#using_lsm_in_applications style=text-decoration:none>2. Using LSM in Applications </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#basic_usage style=text-decoration:none>3. Basic Usage</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#opening_and_closing_database_connections style=text-decoration:none>3.1. Opening and Closing Database Connections </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#writing_to_a_database style=text-decoration:none>3.2. Writing to a Database </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#reading_from_a_database style=text-decoration:none>3.3. Reading from a Database </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_robustness style=text-decoration:none>3.4. Database Robustness </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_transactions_and_mvcc style=text-decoration:none>3.5. Database Transactions and MVCC </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compressed_and_encrypted_databases style=text-decoration:none>4. Compressed and Encrypted Databases </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#performance_tuning style=text-decoration:none>5. Performance Tuning</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#architectural_overview style=text-decoration:none>5.1. Architectural Overview </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#work_and_checkpoint_scheduling style=text-decoration:none>5.2. Work and Checkpoint Scheduling </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#automatic_work_and_checkpoint_scheduling style=text-decoration:none>5.2.1. Automatic Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#explicit_work_and_checkpoint_scheduling style=text-decoration:none>5.2.2. Explicit Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compulsary_work_and_checkpoint_scheduling style=text-decoration:none>5.2.3. Compulsary Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_optimization style=text-decoration:none>5.3. Database Optimization</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#other_parameters style=text-decoration:none>5.4. Other Parameters </a><br>
+
+<div id=end_of_toc></div>
+
+<h2>Overview</h2>
+
+<p>This page describes the LSM embedded database library and use thereof. 
+It is intended to be part user-manual and part tutorial.
+
+<h1 id=overview_of_lsm>1. Introduction to LSM</h1>
 
 <p>LSM is an embedded database library for key-value data, roughly similar
 in scope to
@@ -49,7 +75,7 @@ stored in the database file.
 between a b-tree and whatever it is LSM is. Link the performance graphs page.
 </i>
 
-<h1>2. Using the LSM Library </h1>
+<h1 id=using_lsm_in_applications>2. Using LSM in Applications </h1>
 
 <p>LSM is not currently built or distributed independently. Instead, it
 is part of the SQLite4 library. To use LSM in an application, the application
@@ -58,9 +84,9 @@ that access the LSM API.
 
 <p><i>Pointer to build instructions for sqlite4</i>
 
-<h1>3. Basic Usage</h1>
+<h1 id=basic_usage>3. Basic Usage</h1>
 
-<h2>3.1 Opening and Closing Database Connections </h2>
+<h2 id=opening_and_closing_database_connections>3.1. Opening and Closing Database Connections </h2>
 
 <p>Opening a connection to a database is a two-step process.
 
@@ -79,7 +105,7 @@ that access the LSM API.
   rc = lsm_close(db);
 </verbatim>
 
-<h2>3.2 Writing to a Database </h2>
+<h2 id=writing_to_a_database>3.2. Writing to a Database </h2>
 
 <p>Three API functions are used to write to the database:
 
@@ -129,7 +155,7 @@ remove the two endpoints. As follows:
   lsm_delete(db, "f", 1);
 </verbatim>
 
-<h2>3.3 Reading from a Database </h2>
+<h2 id=reading_from_a_database>3.3. Reading from a Database </h2>
 
 <verbatim>
   lsm_csr *csr;
@@ -192,7 +218,7 @@ remove the two endpoints. As follows:
   lsm_csr_close(csr);
 </verbatim>
 
-<h2 id=robustness>3.4 Database Robustness </h2>
+<h2 id=database_robustness>3.4. Database Robustness </h2>
 
 <p>The value of the configuration parameter LSM_CONFIG_SAFETY determines
 how often data is synced to disk by the LSM library. This is an important
@@ -248,7 +274,7 @@ value). For example:
 <p>The lsm_config() function may also be used to configure other database
 connection parameters.  
 
-<h2>3.5 Database Transactions and MVCC </h2>
+<h2 id=database_transactions_and_mvcc>3.5. Database Transactions and MVCC </h2>
 
 <p>LSM supports a single-writer/multiple-reader 
 <a href=http://en.wikipedia.org/wiki/Multiversion_concurrency_control>MVCC</a>
@@ -403,7 +429,7 @@ If the second parameter passed is <i>N</i>,
   
 </verbatim>
 
-<h1>4. Compressed and Encrypted Databases </h1>
+<h1 id=compressed_and_encrypted_databases>4. Compressed and Encrypted Databases </h1>
 
 <p>LSM does not provide built-in methods for creating encrypted or compressed
 databases. Instead, it allows the user to provide hooks to call external
@@ -470,9 +496,9 @@ Otherwise, applications have to handle LSM_MISMATCH everywhere...
 </i>
 
 
-<h1>5. Performance Tuning</h1>
+<h1 id=performance_tuning>5. Performance Tuning</h1>
 
-<h2>5.1 Architectural Overview </h2>
+<h2 id=architectural_overview>5.1. Architectural Overview </h2>
 
 <p> The LSM library implements two separate data structures that are used 
 together to store user data. When the database is queried, the library 
@@ -609,7 +635,7 @@ database file header (to checkpoint the database).
 concurrently by multiple database connections, located either in the same
 application process or different processes.
 
-<h2>5.2 Work and Checkpoint Scheduling </h2>
+<h2 id=work_and_checkpoint_scheduling>5.2. Work and Checkpoint Scheduling </h2>
 
 <p>The section above describes the three stages of transfering data written
 to the database from the application to persistent storage. A "writer" 
@@ -619,7 +645,7 @@ in the the database file. Additionally, a worker client must periodically
 merge existing database segments together to prevent them from growing too
 numerous.
 
-<h3>5.2.1 Automatic Work and Checkpoint Scheduling</h3>
+<h3 id=automatic_work_and_checkpoint_scheduling>5.2.1. Automatic Work and Checkpoint Scheduling</h3>
 
 <p>By default, database "work" (the flushing and merging of segments, performed
 by clients holding the WORKER lock) and checkpointing are scheduled and
@@ -689,13 +715,13 @@ If so, work is done to merge all such segments with age=A into a new, larger
 segment assigned age=A+1. At present, "periodically" as used above means 
 roughly once for every 32KB of data (including overhead) written to the
 in-memory tree. The merge operation is not necessarily completed within 
-the same call to a write API in which it is started (this would result in
-blocking the writer thread for too long in many cases - in large databases
-segments may grow to be many GB in size). At present, the amount of data
-written by a single auto-work operation is roughly 32KB multiplied by the
-number of segments in the database file. This formula may change - the point 
-is that the library attempts to limit the amount of data written in order to
-avoid blocking the writer thread for too long within a single API call.
+a single call to a write API (this would result in blocking the writer thread
+for too long in many cases - in large databases segments may grow to be many GB
+in size). Currently, the amount of data written by a single auto-work
+operation is roughly 32KB multiplied by the number of segments in the database
+file. This formula may change - the point is that the library attempts to limit
+the amount of data written in order to avoid blocking the writer thread for too
+long within a single API call.
 
 <p>Each time a transaction is committed in auto-work mode, the library checks
 to see if there exists an "old" in-memory tree (see the LSM_CONFIG_AUTOFLUSH
@@ -720,7 +746,7 @@ value is greater than the value of the LSM_CONFIG_AUTOCHECKPOINT parameter,
 a checkpoint is attempted. It is not an error if the attempt fails because the
 CHECKPOINTER lock cannot be obtained.
 
-<h3>5.2.2 Explicit Work and Checkpoint Scheduling</h3>
+<h3 id=explicit_work_and_checkpoint_scheduling>5.2.2. Explicit Work and Checkpoint Scheduling</h3>
 
 <p>The alternative to automatic scheduling of work and checkpoint operations
 is to explicitly schedule them. Possibly in a background thread or dedicated
@@ -841,7 +867,7 @@ can also be using the lsm_info() API function. As follows:
   int lsm_flush(lsm_db *db);
 </verbatim>
 
-<h3>5.2.3 Compulsary Work and Checkpoint Scheduling</h3>
+<h3 id=compulsary_work_and_checkpoint_scheduling>5.2.3. Compulsary Work and Checkpoint Scheduling</h3>
 
 <p>Apart from the scenarios described above, there are two there are two 
 scenarios where database work or checkpointing may be performed automatically,
@@ -886,7 +912,7 @@ segments in total. If an attempt is made to flush an in-memory tree to disk
 when the database already contains 64 segments, two or more existing segments
 must be merged together before the new segment can be created.
 
-<h2>5.3 Database Optimization</h2>
+<h2 id=database_optimization>5.3. Database Optimization</h2>
 
 <p>Database optimization transforms the contents of database file so that
 the following are true:
@@ -918,7 +944,7 @@ after their content has been merged into the new segment. The result - a
 database file that is optimized, except that it is up to twice as large as
 it otherwise would be.
 
-<h2>5.4 Other Parameters </h2>
+<h2 id=other_parameters>5.4. Other Parameters </h2>
 
 <i>
 <p>Mention other configuration options that can be used to tune performance
@@ -931,6 +957,8 @@ here.
 </ul>
 
 </i>
+
+
 
 
 
