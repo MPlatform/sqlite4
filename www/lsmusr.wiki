@@ -7,6 +7,7 @@
 
 
 
+
 <div id=start_of_toc></div>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#introduction_to_lsm style=text-decoration:none>1. Introduction to LSM</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#using_lsm_in_applications style=text-decoration:none>2. Using LSM in Applications </a><br>
@@ -18,13 +19,13 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#data_durability style=text-decoration:none>4. Data Durability </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compressed_and_encrypted_databases style=text-decoration:none>5. Compressed and Encrypted Databases </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#performance_tuning style=text-decoration:none>6. Performance Tuning</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#architectural_overview style=text-decoration:none>6.1. Architectural Overview </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#work_and_checkpoint_scheduling style=text-decoration:none>6.2. Work and Checkpoint Scheduling </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#automatic_work_and_checkpoint_scheduling style=text-decoration:none>6.2.1. Automatic Work and Checkpoint Scheduling</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#explicit_work_and_checkpoint_scheduling style=text-decoration:none>6.2.2. Explicit Work and Checkpoint Scheduling</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compulsary_work_and_checkpoint_scheduling style=text-decoration:none>6.2.3. Compulsary Work and Checkpoint Scheduling</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_optimization style=text-decoration:none>6.3. Database Optimization</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#other_parameters style=text-decoration:none>6.4. Other Parameters </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#performance_related_configuration_options style=text-decoration:none>6.1. Performance Related Configuration Options </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#using_worker_threads_or_processes style=text-decoration:none>6.2. Using Worker Threads or Processes </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#architectural_overview style=text-decoration:none>6.2.1. Architectural Overview </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#automatic_work_and_checkpoint_scheduling style=text-decoration:none>6.2.2. Automatic Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#explicit_work_and_checkpoint_scheduling style=text-decoration:none>6.2.3. Explicit Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compulsary_work_and_checkpoint_scheduling style=text-decoration:none>6.2.4. Compulsary Work and Checkpoint Scheduling</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_file_optimization style=text-decoration:none>6.3. Database File Optimization</a><br>
 
 <div id=end_of_toc></div>
 
@@ -32,7 +33,7 @@
 
 <p>This document describes the LSM embedded database library and use thereof. 
 It is intended to be part user-manual and part tutorial. It is intended to
-to complement the <a href=lsmapi.wiki>LSM API reference manual</a>.
+complement the <a href=lsmapi.wiki>LSM API reference manual</a>.
 
 <p>The <a href=#introduction_to_lsm>first section</a> of this document contains
 a description of the LSM library and its features. 
@@ -770,7 +771,113 @@ Otherwise, applications have to handle LSM_MISMATCH everywhere...
 
 <h1 id=performance_tuning>6. Performance Tuning</h1>
 
-<h2 id=architectural_overview>6.1. Architectural Overview </h2>
+<p> This section describes the various measures that can be taken in order to
+fine-tune LSM in order to improve performance in specific circumstances.
+Sub-section 6.1 identifies the 
+<a href=#performance_related_configuration_options> configuration
+parameters</a> that can be used to influence database performance. 
+Sub-section 6.2 discusses methods for shifting the time-consuming processes of
+actually writing and syncing the database file to 
+<a href=#using_worker_threads_or_processes>background threads or processes</a> 
+in order to make writing to the database more responsive. Finally, 6.
+3 introduces "<a href=#database_file_optimization>database optimization</a>"
+- the process of reorganizing a database file internally so that it is as small
+as possible and optimized for search queries.
+
+<h2 id=performance_related_configuration_options>6.1. Performance Related Configuration Options </h2>
+
+<p>The options in this section all take integer values. They may be both
+set and queried using the <a href=lsmapi.wiki#lsm_config>lsm_config()</a>
+function. To set an option to a value, lsm_config() is used as follows:
+
+<verbatim>
+  /* Set the LSM_CONFIG_AUTOFLUSH option to 1MB */
+  int iVal = 1 * 1024 * 1024;
+  rc = lsm_config(db, LSM_CONFIG_AUTOFLUSH, &iVal);
+</verbatim>
+
+<p>In order to query the current value of an option, the initial value of
+the parameter (iVal in the example code above) should be set to a negative
+value. Or any other value that happens to be out of range for the parameter -
+negative values just happen to be out of range for all integer lsm_config()
+parameters.
+
+<verbatim>
+  /* Set iVal to the current value of LSM_CONFIG_AUTOFLUSH */
+  int iVal = -1;
+  rc = lsm_config(db, LSM_CONFIG_AUTOFLUSH, &iVal);
+</verbatim>
+
+<dl>
+  <dt> <a href=lsmapi.wiki#LSM_CONFIG_MMAP>LSM_CONFIG_MMAP</a>
+  <dd> <p style=margin-top:0>
+    This option may be set to either 1 (true) or 0 (false). If it is set to
+    true and LSM is running on a system with a 64-bit address space, the
+    entire database file is memory mapped. Or, if it is false or LSM is 
+    running in a 32-bit address space, data is accessed using ordinary
+    OS file read and write primitives. Memory mapping the database file
+    can significantly improve the performance of read operations, as database 
+    pages do not have to be copied from operating system buffers into user 
+    space buffers before they can be examined. 
+
+    <p>This option can only be set before lsm_open() is called on the database
+    connection.
+
+    <p>The default value is 1 (true).
+
+  <dt> <a href=lsmapi.wiki#LSM_CONFIG_MULTIPLE_PROCESSES>LSM_CONFIG_MULTIPLE_PROCESSES</a>
+  <dd> <p style=margin-top:0>
+    This option may also be set to either 1 (true) or 0 (false). If it is
+    set to 0, then the library assumes that all database clients are located 
+    within the same process (have access to the same memory space). Assuming
+    this means the library can avoid using OS file locking primitives to lock
+    the database file, which speeds up opening and closing read and write
+    transactions. 
+
+    <p>This option can only be set before lsm_open() is called on the database
+    connection.
+
+    <p>The default value is 1 (true).
+
+  <dt> <a href=lsmapi.wiki#LSM_CONFIG_USE_LOG>LSM_CONFIG_USE_LOG</a>
+  <dd> <p style=margin-top:0>
+    This is another option may also be set to either 1 (true) or 0 (false). 
+    If it is set to false, then the library does not write data into the
+    database log file. This makes writing faster, but also means that if
+    an application crash or power failure occurs, it is very likely that
+    any recently committed transactions will be lost.
+
+    <p>If this option is set to true, then an application crash cannot cause
+    data loss. Whether or not data loss may occur in the event of a power
+    failure depends on the value of the <a href=#data_durability>
+    LSM_CONFIG_SAFETY</a> parameter.
+
+    <p>This option can only be set if the connection does not currently have
+    an open write transaction.
+
+    <p>The default value is 1 (true).
+
+  <dt> <a href=lsmapi.wiki#LSM_CONFIG_AUTOFLUSH>LSM_CONFIG_AUTOFLUSH</a>
+  <dd> <p style=margin-top:0>
+
+  <dt> <a href=lsmapi.wiki#LSM_CONFIG_AUTOCHECKPOINT>LSM_CONFIG_AUTOCHECKPOINT</a>
+  <dd> <p style=margin-top:0>
+
+</dl>
+
+<h2 id=using_worker_threads_or_processes>6.2. Using Worker Threads or Processes </h2>
+
+<p><i>Todo: Fix the following </p>
+
+<p>The section above describes the three stages of transfering data written
+to the database from the application to persistent storage. A "writer" 
+client writes the data into the in-memory tree and log file. Later on a 
+"worker" client flushes the data from the in-memory tree to a new segment
+in the the database file. Additionally, a worker client must periodically
+merge existing database segments together to prevent them from growing too
+numerous.
+
+<h3 id=architectural_overview>6.2.1. Architectural Overview </h3>
 
 <p> The LSM library implements two separate data structures that are used 
 together to store user data. When the database is queried, the library 
@@ -907,17 +1014,7 @@ database file header (to checkpoint the database).
 concurrently by multiple database connections, located either in the same
 application process or different processes.
 
-<h2 id=work_and_checkpoint_scheduling>6.2. Work and Checkpoint Scheduling </h2>
-
-<p>The section above describes the three stages of transfering data written
-to the database from the application to persistent storage. A "writer" 
-client writes the data into the in-memory tree and log file. Later on a 
-"worker" client flushes the data from the in-memory tree to a new segment
-in the the database file. Additionally, a worker client must periodically
-merge existing database segments together to prevent them from growing too
-numerous.
-
-<h3 id=automatic_work_and_checkpoint_scheduling>6.2.1. Automatic Work and Checkpoint Scheduling</h3>
+<h3 id=automatic_work_and_checkpoint_scheduling>6.2.2. Automatic Work and Checkpoint Scheduling</h3>
 
 <p>By default, database "work" (the flushing and merging of segments, performed
 by clients holding the WORKER lock) and checkpointing are scheduled and
@@ -1018,7 +1115,7 @@ value is greater than the value of the LSM_CONFIG_AUTOCHECKPOINT parameter,
 a checkpoint is attempted. It is not an error if the attempt fails because the
 CHECKPOINTER lock cannot be obtained.
 
-<h3 id=explicit_work_and_checkpoint_scheduling>6.2.2. Explicit Work and Checkpoint Scheduling</h3>
+<h3 id=explicit_work_and_checkpoint_scheduling>6.2.3. Explicit Work and Checkpoint Scheduling</h3>
 
 <p>The alternative to automatic scheduling of work and checkpoint operations
 is to explicitly schedule them. Possibly in a background thread or dedicated
@@ -1139,7 +1236,7 @@ can also be using the lsm_info() API function. As follows:
   int lsm_flush(lsm_db *db);
 </verbatim>
 
-<h3 id=compulsary_work_and_checkpoint_scheduling>6.2.3. Compulsary Work and Checkpoint Scheduling</h3>
+<h3 id=compulsary_work_and_checkpoint_scheduling>6.2.4. Compulsary Work and Checkpoint Scheduling</h3>
 
 <p>Apart from the scenarios described above, there are two there are two 
 scenarios where database work or checkpointing may be performed automatically,
@@ -1184,17 +1281,31 @@ segments in total. If an attempt is made to flush an in-memory tree to disk
 when the database already contains 64 segments, two or more existing segments
 must be merged together before the new segment can be created.
 
-<h2 id=database_optimization>6.3. Database Optimization</h2>
+<h2 id=database_file_optimization>6.3. Database File Optimization</h2>
 
 <p>Database optimization transforms the contents of database file so that
 the following are true:
 
 <ul>
-  <li> All database content is stored in a single segment.
-  <li> The database file contains no (or as little as possible) free space.
+  <li> <p>All database content is stored in a single 
+       <a href=#architectural_overview>segment</a>. This makes the
+       database effectively equivalent to an optimally packed b-tree stucture
+       for search operations - minimizing the number of disk sectors that need
+       to be visted when searching the database.
+
+  <li> <p>The database file contains no (or as little as possible) free space.
        In other words, it is no larger than required to contain the single
        segment.
 </ul>
+
+<p><i> Should we add a convenience function lsm_optimize() that does not 
+return until the database is completely optimized? One that more or less does
+the same as the example code below and deals with the AUTOCHECKPOINT issue?
+This would help with this user manual if nothing else, as it means a method
+for database optimization can be presented without depending on the previous
+section.
+
+</i>
 
 <p>In order to optimize the database, lsm_work() should be called repeatedly
 with the nMerge argument set to 1 until it returns without writing any data
@@ -1208,29 +1319,11 @@ to the database file. For example:
   }while( rc==LSM_OK && nWrite>0 );
 </verbatim>
 
-<p>When optimizing the database as above, the LSM_CONFIG_AUTOCHECKPOINT
-parameter should be set to a non-zero value, or otherwise lsm_checkpoint()
-should be called periodically. Otherwise, no checkpoints will be performed,
-preventing the library from reusing any space occupied by old segments even
-after their content has been merged into the new segment. The result - a
-database file that is optimized, except that it is up to twice as large as
-it otherwise would be.
-
-<h2 id=other_parameters>6.4. Other Parameters </h2>
-
-<i>
-<p>Mention other configuration options that can be used to tune performance
-here.
-
-<ul>
-  <li> LSM_CONFIG_MMAP
-  <li> LSM_CONFIG_MULTIPLE_PROCESSES
-  <li> LSM_CONFIG_USE_LOG
-</ul>
-
-</i>
-
-
-
+<p>When optimizing the database as above, either the LSM_CONFIG_AUTOCHECKPOINT
+parameter should be set to a non-zero value or lsm_checkpoint() should be
+called periodically. Otherwise, no checkpoints will be performed, preventing
+the library from reusing any space occupied by old segments even after their
+content has been merged into the new segment. The result - a database file that
+is optimized, except that it is up to twice as large as it otherwise would be.
 
 
