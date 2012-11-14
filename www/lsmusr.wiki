@@ -6,6 +6,7 @@
 
 
 
+
 <div id=start_of_toc></div>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#introduction_to_lsm style=text-decoration:none>1. Introduction to LSM</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#using_lsm_in_applications style=text-decoration:none>2. Using LSM in Applications </a><br>
@@ -14,7 +15,7 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#writing_to_a_database style=text-decoration:none>3.2. Writing to a Database </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#reading_from_a_database style=text-decoration:none>3.3. Reading from a Database </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_transactions_and_mvcc style=text-decoration:none>3.4. Database Transactions and MVCC </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_robustness style=text-decoration:none>4. Database Robustness </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#data_durability style=text-decoration:none>4. Data Durability </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#compressed_and_encrypted_databases style=text-decoration:none>5. Compressed and Encrypted Databases </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#performance_tuning style=text-decoration:none>6. Performance Tuning</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#architectural_overview style=text-decoration:none>6.1. Architectural Overview </a><br>
@@ -29,9 +30,27 @@
 
 <h2>Overview</h2>
 
-<p>This page describes the LSM embedded database library and use thereof. 
+<p>This document describes the LSM embedded database library and use thereof. 
 It is intended to be part user-manual and part tutorial. It is intended to
 to complement the <a href=lsmapi.wiki>LSM API reference manual</a>.
+
+<p>The <a href=#introduction_to_lsm>first section</a> of this document contains
+a description of the LSM library and its features. 
+<a href=#using_lsm_in_applications>Section 2</a> describes how to use LSM from
+within a C or C++ application (how to compile and link LSM, what to #include
+etc.). The <a href=#basic_usage>third section</a> describes the essential APIs
+that applications use to open and close database connections, and to read from
+and write to databases. 
+
+<p>The three sections described above contain all the information required to
+create applications that use LSM. The remaining sections discuss more
+specialized topics. <a href=#data_durability>Section 4</a> discusses the
+configuration parameter that influences transaction durability (the guarantees
+offered with respect to recently committed transactions if a power failure 
+occurs). <a href=#compressed_and_encrypted_databases>Section 5</a> explains
+the interface provided by LSM that allow external data compression and/or
+encryption functions to be used to create compressed and/or encrypted
+databases. <i>Todo: Clarify exactly what section 6 is and link it to here</i>.
 
 <h1 id=introduction_to_lsm>1. Introduction to LSM</h1>
 
@@ -42,64 +61,67 @@ in scope to
 <a href="http://fallabs.com/kyotocabinet/">KyotoCabinet</a>.
 Both keys and
 values are specified and stored as byte arrays. Duplicate keys are not 
-supported. Keys are always sorted in memcmp() order. It is not possible to
-configure LSM to use a custom sort order. LSM supports the following 
+supported. Keys are always sorted in memcmp() order. LSM supports the following
 operations for the manipulation and query of database data:
 
 <ul>
-  <li> Writing a specified key and value into the database.
-  <li> Deleting a specified key from the database.
+  <li> Writing a new key and value into the database.
+  <li> Deleting an existing key from the database.
   <li> Deleting a range of keys from the database.
   <li> Querying the database for a specific key.
   <li> Iterating through a range of database keys (either forwards or
        backwards).
 </ul>
 
-<p>LSM supports a single-writer/multiple-reader MVCC based transactional 
-concurrency model. SQL style nested sub-transactions are supported. 
-Clients may concurrently access a single LSM database from within a single or
-multiple application processes. 
+<p>Other salient features are:
 
-<p>Usually, an entire LSM database is stored in a single file on disk. 
-However, when a database client writes to the database, a log file is
-created in the same directory as the database file. Normally, the log file
-is deleted when the last database client closes the database. However,
-if a crash occurs or database clients exit unexpectedly for some reason,
-the log file is used by subsequent clients to recover the database. So
-it is perhaps more accurate to say that an LSM database is stored on disk
-in a single database file and a single (optional) log file.
+<ul>
+  <li><p>LSM supports a <b>single-writer/multiple-reader MVCC</b> based
+      transactional concurrency model. SQL style nested sub-transactions are
+      supported. Clients may concurrently access a single LSM database from
+      within a single or multiple application processes. 
 
-<p>If required, it is possible to configure LSM to use external data
-compression and/or encryption functions to transform data before it is
-stored in the database file.
+  <li><p>An entire LSM database is stored in a <b>single file on disk</b>. 
+
+  <li><p>Data <b>durability in the face of application or power failure</b>.
+      LSM may optionally use a write-ahead log file when writing to the
+      database to ensure committed transactions are not lost if an application
+      or power failure occurs.
+
+  <li>LSM <b>may be configured to use external data compression and/or
+      encryption routines</b> to create and access compressed and/or encrypted
+      databases.
+</ul>
+    
 
 <p>Many database systems that support range queries, including <a
 href=http://www.sqlite.org>SQLite 3</a>, Berkeley DB and Kyoto Cabinet, are
-based on a <a href="http://en.wikipedia.org/wiki/B-tree">b-tree data
-structure</a> or variant thereof. A b-tree structure minimizes the number of
-disk sectors that must be read from disk when searching the database for a
-specific key. However, b-tree implementations usually suffer from poor write
+based on one of many variants of the 
+<a href="http://en.wikipedia.org/wiki/B-tree">b-tree data structure</a>.
+B-trees are attractive because a b-tree structure minimizes the number of disk
+sectors that must be read from disk when searching the database for a specific
+key. However, b-tree implementations usually suffer from poor write
 localization - updating the contents of a b-tree often involves modifying the
 contents of nodes scattered throughout the database file. If the database is
 stored on a spinning disk (HDD), then the disk heads must be moved before
 writing non-contiguous sector, which is extremely slow. If the database is
-stored on solid state storage (SDD) a similar phenomena is encountered due 
-to the large erase-block sizes. In general, writing to a series of contiguous
-disk sectors is orders of magnitude faster than updating to the same number
-of disk sectors scattered randomly throughout a large file. Additionally,
-b-tree structures are prone to fragmentation, reducing the speed of range
-queries.
+stored on solid state storage (SDD) a similar phenomena is encountered due to
+the large erase-block sizes. In general, writing to a series of contiguous disk
+sectors is orders of magnitude faster than updating to the same number of disk
+sectors scattered randomly throughout a large file. Additionally, b-tree
+structures are prone to fragmentation, reducing the speed of range queries.
 
 <p><i>Todo: Should have references for the claims above.</i>
 
-<p><i>Also, fix the link in the next paragraph to point to something more
-specific.</i>
+<p><i>Also, fix the link in the next paragraph to point to a description
+of the log-structured-merge tree within lsm.wiki (or its successor).</i>
 
 <p>LSM uses a <a href=lsm.wiki>different data structure</a> that makes the
 following performance tradeoffs relative to a b-tree:
 
 <ul>
-  <li> A very large percentage of the disk sectors modified are contiguous.
+  <li> A very large percentage of the disk sectors modified when writing to
+       the database are contiguous.
        Additionally, in many cases the total number of sectors written
        to disk is reduced. This makes writing to an LSM database much
        faster than the equivalent b-tree.
@@ -110,23 +132,24 @@ following performance tradeoffs relative to a b-tree:
 
   <li> It is accepted that under some circumstances searching an LSM 
        database for a given key will involve examining more disk sectors
-       than it would with a b-tree. In this sense both b-trees and LSM
-       provide O(log(N)) efficiency, but the base of the logarithm is 
-       generally larger for a b-tree than for LSM.
+       than it would with a b-tree. In terms of disk sectors accessed when
+       searching a database of size N, both b-trees and LSM provide O(log(N))
+       efficiency, but the base of the logarithm is generally larger for a
+       b-tree than for LSM.
 </ul>
 
-<p>In other words, all things considered equal, writing to an LSM database
-should be very fast and scanning through large ranges of keys should also
-perform well, but searching the database for specific keys may be slightly
-slower than when using a b-tree based system. Additionally, avoiding random
-writes in favour of largely contiguous updates can significantly reduce the
-wear on SSD or flash memory devices.
+<p>In other words, writing to an LSM database should be very fast and scanning
+through large ranges of keys should also perform well, but searching the
+database for specific keys may be slightly slower than when using a b-tree
+based system. Additionally, avoiding random writes in favour of largely
+contiguous updates (as LSM does) can significantly reduce the wear on SSD or
+flash memory devices.
 
 <p>Although it has quite different features to LSM in other respects, 
 LevelDB makes similar performance tradeoffs.
 
-<p>Benchmark test results for LSM are available here. <i>Todo: Link to a page
-with performance graphs here</i>
+<p>Benchmark test results for LSM are <a href=#>available here</a>. <i>Todo:
+Fix this link to point to a page with performance graphs.</i>
 
 
 <h1 id=using_lsm_in_applications>2. Using LSM in Applications </h1>
@@ -142,22 +165,83 @@ that access the LSM API.
 
 <h2 id=opening_and_closing_database_connections>3.1. Opening and Closing Database Connections </h2>
 
-<p>Opening a connection to a database is a two-step process.
+<p>Opening a connection to a database is a two-step process. The 
+<a href=lsmapi.wiki#lsm_new>lsm_new()</a> function is used to create a new
+database handle, and the <a href=lsmapi.wiki#lsm_open>lsm_open()</a> function 
+is used to connect an existing database handle to a database on disk. This
+is because some database connection properties may only be configured
+before the database is opened. In that case, one or more calls to the 
+<a href=lsmapi.wiki#lsm_config>lsm_config()</a> method are made between the
+calls to lsm_new() and lsm_open().
 
+<p>The functions are defined as follows:
+
+<verbatim>
+  int lsm_new(lsm_env *env, lsm_db **pDb);
+  int lsm_open(lsm_db *db, const char *zFile);
+</verbatim>
+
+<p>Like most lsm_xxx() functions that return type int (the exception is
+<a href=lsmapi.wiki#lsm_csr_valid>lsm_csr_valid()</a>), both of the above 
+return LSM_OK (0) if successful, or an <a href=lsmapi.wiki#LSM_ERROR>LSM 
+error code</a> otherwise. The first argument to lsm_new() may be passed either
+a pointer to a <a href=lsmapi.wiki#lsm_env>database environment object</a>
+or NULL. Almost all applications should pass NULL. A database environment
+object allows the application to supply custom implementations of the various
+operating system calls that LSM uses to read and write files, allocate heap 
+memory, and coordinate between multiple application threads and processes.
+This is normally only required if LSM is being used on a platform that is not
+supported by default. Passing NULL instructs the library to use the default
+implementations of all these things, which is usually the right thing to do.
+The second argument to lsm_new() is an output variable. Assuming the call
+is successful, *pDb is set to point to the new database handle before 
+returning.
+
+<p>The first argument passed to lsm_open() must be an existing database 
+handle. The second is the name of the database file to connect to. Once
+lsm_open() has been successfully called on a database handle, it can not be
+called again on the same handle. Attempting to do so is an LSM_MISUSE error.
+
+<p>For example, to create a new handle and connect it to database "test.db"
+on disk:
 <verbatim>
   int rc;
   lsm_db *db;
 
+  /* Allocate a new database handle */
   rc = lsm_new(0, &db);
   if( rc!=LSM_OK ) exit(1);
 
+  /* Connect the database handle to database "test.db" */
   rc = lsm_open(db, "test.db");
   if( rc!=LSM_OK ) exit(1);
 </verbatim>
 
+<p>A database connection can be closed using the lsm_close() function. Calling
+lsm_close() disconnects from the database (assuming lsm_open() has been
+successfully called) and deletes the handle itself. Attempting to use a
+database handle after it has been passed to lsm_close() results in undefined
+behaviour (likely a segfault).
+
 <verbatim>
   rc = lsm_close(db);
 </verbatim>
+
+<p>It is important that lsm_close() is called to close all database handles
+created with lsm_new(), particularly if the connection has written to the
+database. If an application that has written to a database exits without
+closing its database connection, then subsequent clients may have to run
+"database recovery" when they open the database, making the lsm_open() call
+less responsive. Additionally, not matching each successful lsm_new() call 
+with a call to lsm_close() is a resource leak.
+
+<p>Counter-intuitively, an lsm_close() call may fail. In this case the database
+handle is not closed, so if the application exits it invites the "database
+recovery" performance problem mentioned above. The usual reason for an
+lsm_close() call failing is that the database handle has been used to create
+<a href=lsmapi.wiki#lsm_csr_open>database cursors</a> that have not been 
+closed. Unless all database cursors are closed before lsm_close() is called,
+it fails with an LSM_BUSY error and the database handle is not closed.
 
 <h2 id=writing_to_a_database>3.2. Writing to a Database </h2>
 
@@ -211,11 +295,58 @@ remove the two endpoints. As follows:
 
 <h2 id=reading_from_a_database>3.3. Reading from a Database </h2>
 
+<p>All data read from an LSM database is read via a cursor handle. Cursor
+handles are opened using the 
+<a href=lsmapi.wiki#lsm_csr_open>lsm_csr_open()</a> API, as follows:
+
 <verbatim>
   lsm_csr *csr;
-
   rc = lsm_csr_open(db, &csr);
 </verbatim>
+
+<p>Once an application has finished using a database cursor, it must be closed
+using the <a href=lsmapi.wiki#lsm_csr_close>lsm_csr_close()</a> API. The
+lsm_csr_close() function does not return any value. It cannot fail.
+
+<verbatim>
+  lsm_csr_close(csr);
+</verbatim>
+
+<p>Database cursors support the following functions for positioning the cursor:
+
+<ul>
+  <li> <b>lsm_csr_seek()</b> - move the cursor to point to a nominated 
+       database key.
+  <li> <b>lsm_csr_first()</b> - move the cursor to point to the first entry in
+       the database (the one with the smallest key).
+  <li> <b>lsm_csr_last()</b> - move the cursor to point to the last entry in
+       the database (the one with the largest key).
+  <li> <b>lsm_csr_next()</b> - move the cursor to point to the next entry in 
+       the the database.
+  <li> <b>lsm_csr_prev()</b> - move the cursor to point to the previous entry
+       in the database.
+</ul>
+
+<p>Once a cursor has been positioned, it supports the following functions
+for retrieving the details of the current entry:
+
+<ul>
+  <li> <b>lsm_csr_valid()</b> - determine whether or not the cursor currently
+       points to a valid entry.
+  <li> <b>lsm_csr_key()</b> - retrieve the key associated with the
+       database entry the cursor points to.
+  <li> <b>lsm_csr_value()</b> - retrieve the value associated with the
+       database entry the cursor points to.
+  <li> <b>lsm_csr_cmp()</b> - compare a key supplied by the application with
+       the key associated with the entry the cursor points to. 
+</ul>
+
+<p>The following example demonstrates using the 
+<a href=lsmapi.wiki#lsm_csr_seek>lsm_csr_seek()</a> function to search the
+database for a specified key, 
+<a href=lsmapi.wiki#lsm_csr_valid>lsm_csr_valid()</a> to check if the search
+was successful, and <a href=lsmapi.wiki#lsm_csr_value>lsm_csr_value()</a> 
+to retrieve the value associated with the key within the database.
 
 <verbatim>
   rc = lsm_csr_seek(csr, "b", 1, LSM_SEEK_EQ);
@@ -230,7 +361,17 @@ remove the two endpoints. As follows:
   }
 </verbatim>
 
-<p> Iterate forwards through all keys in the database:
+<p> The example code below iterates forwards through all entries (in key 
+order, from smallest to largest) in the database. Function 
+<a href=lsmapi.wiki#lsm_csr_first>lsm_csr_first()</a> is used to position
+the cursor to point to the first entry in the database, and 
+<a href=lsmapi.wiki#lsm_csr_next>lsm_csr_next()</a> is used to advance to
+the next entry. After lsm_csr_next() is called to advance past the final
+entry in the database, the cursor is left pointing to no entry at all,
+lsm_csr_valid() returns 0, and the loop is finished. API function 
+<a href=lsmapi.wiki#lsm_csr_key>lsm_csr_key()</a> is used to retrieve the
+key associated with each database entry visited.
+
 <verbatim>
   for(rc = lsm_csr_first(csr); lsm_csr_valid(csr); rc = lsm_csr_next(csr)){
     const void *pKey; int nKey;
@@ -245,11 +386,62 @@ remove the two endpoints. As follows:
   }
 </verbatim>
 
-<p> Iterate backwards through all keys from "ggg" to "cc", inclusive:
+<p> The example code above could be modified to iterate backwards through
+the entries in the database (again in key order, but this time from largest
+to smallest) by replacing the call to lsm_csr_first() with 
+<a href=lsmapi.wiki#lsm_csr_last>lsm_csr_last()</a> and the call to lsm_csr_next() with <a href=lsmapi.wiki#lsm_csr_prev>lsm_csr_prev()</a>.
+
+<p>The signature of lsm_csr_seek() is:
 
 <verbatim>
-  rc = lsm_csr_seek(csr, "ggg", 3, LSM_SEEK_LE); 
-  for( ; lsm_csr_valid(csr); rc = lsm_csr_prev(csr)){
+  int lsm_csr_seek(lsm_cursor *csr, const void *pKey, int nKey, int eSeek);
+</verbatim>
+
+<p>The second and third arguments passed to lsm_csr_seek() define the key
+to search the database for (pKey must point to the buffer containing the
+nKey byte key when this function is called). Assuming no error occurs, if 
+there an entry with the requested key is present in the database, the cursor 
+is left pointing to it. Otherwise, if no such entry is present, the final
+position of the cursor depends on the value passed as the fourth parameter
+to lsm_csr_seek(). Valid values for the fourth parameter to lsm_csr_seek()
+are:
+
+<dl>
+  <dt> LSM_SEEK_EQ
+  <dd> <p style=margin-top:0>
+       In this case, if the specified key is not present in the database, the
+       cursor is not left pointing to any database entry (i.e. calling
+       lsm_csr_valid() returns 0).
+
+  <dt> LSM_SEEK_LE
+  <dd> <p style=margin-top:0>
+       If the specified key is not present in the database and the fourth
+       argument to lsm_csr_seek() is LSM_SEEK_LE (Less than or Equal), the
+       cursor is left pointing to the database entry with the largest key
+       that is less than the specified key. Or, if there are no entries in
+       the database with keys smaller than the specified key, the cursor is
+       left pointing to no entry at all.
+
+  <dt> LSM_SEEK_GE
+  <dd> <p style=margin-top:0>
+       If the specified key is not present in the database and the fourth
+       argument to lsm_csr_seek() is LSM_SEEK_GE (Greater than or Equal), the
+       cursor is left pointing to the database entry with the smallest key
+       that is greater than the specified key. Or, if there are no entries 
+       in the database with keys larger than the specified key, the cursor is
+       left pointing to no entry at all.
+  <dd> <p style=margin-top:0>
+</dl>
+
+<p> Calls made to lsm_csr_seek() with LSM_SEEK_EQ as the final argument are
+slightly more efficient than those made specifying LSM_SEEK_LE or LSM_SEEK_GE.
+So to retrieve a specific entry from a database, LSM_SEEK_EQ should be
+preferred. The other two values are primarily useful for implementing
+range queries. For example, to iterate backwards through all keys from "ggg" 
+to "cc", inclusive:
+
+<verbatim>
+  for(rc = lsm_csr_seek(csr, "ggg", 3, LSM_SEEK_LE); lsm_csr_valid(csr); rc = lsm_csr_prev(csr)){
     const void *pKey; int nKey;
     const void *pVal; int nVal;
     int res;
@@ -268,9 +460,34 @@ remove the two endpoints. As follows:
   }
 </verbatim>
 
+<p>In the example code above, the call to lsm_csr_seek() positions the cursor
+to point to the entry with key "ggg", if it exists, or to the largest entry
+in the database with a key smaller than "ggg" if such a key can be found,
+or to EOF otherwise. The lsm_csr_prev() call advances the cursor to the 
+next entry in the database file (in key order from largest to smallest), and
+the lsm_csr_valid() call returns 0 to break out of the loop once the
+cursor is advance past the entry with the smallest key in the database. So
+on its own, the "for" statement serves to iterate the cursor in reverse order 
+through all keys in the database less than or equal to "ggg".
+
+<p>The call to <a href=lsmapi.wiki#lsm_csr_cmp>lsm_csr_cmp()</a> call in the
+body of the loop is used to enforce the lower bound (keys >= "cc") on the 
+range query by breaking out of the loop if an entry with a key smaller than 
+"cc" is ever visited. lsm_csr_cmp() has the following signature:
+
 <verbatim>
-  lsm_csr_close(csr);
+  int lsm_csr_cmp(lsm_cursor *csr, const void *pKey, int nKey, int *piRes);
 </verbatim>
+
+<p> When lsm_csr_cmp() is called, the key specified by the second and third
+arguments (pKey and nKey) is compared to the database key that the cursor
+currently points to. Assuming no error occurs, depending on whether or not the
+cursors key is less than, equal to, or greater than the specified key, *piRes
+is set to a value less than, equal to, or greater than zero before returning.
+In other words:
+
+<pre><i>  *piRes = (cursors key) - (specified key) </i></pre>
+
 
 <h2 id=database_transactions_and_mvcc>3.4. Database Transactions and MVCC </h2>
 
@@ -427,7 +644,7 @@ If the second parameter passed is <i>N</i>,
   
 </verbatim>
 
-<h1 id=database_robustness>4. Database Robustness </h1>
+<h1 id=data_durability>4. Data Durability </h1>
 
 <p>The value of the configuration parameter LSM_CONFIG_SAFETY determines
 how often data is synced to disk by the LSM library. This is an important
@@ -620,12 +837,12 @@ operating on the database.
 <p> At any point after the in-memory snapshot has been updated, the in-memory
 snapshot may be written into the database file header. This is known as
 "checkpointing" the database. Depending on the value of the 
-<a href=#robustness>LSM_CONFIG_SAFETY</a> parameter, it may be necessary to
-ensure that all segments referenced by the snapshot have been synced to disk
-(safely stored on the persistent media such that they will not be lost if a
-power failure occurs) before doing so. It is not necessary for every version
-of the in-memory snapshot to be checkpointed. The in-memory snapshot may be
-modified multiple times between checkpoints.
+<a href=lsmapi.wiki#LSM_CONFIG_SAFETY>LSM_CONFIG_SAFETY</a> parameter, it may
+be necessary to ensure that all segments referenced by the snapshot have been
+synced to disk (safely stored on the persistent media such that they will not
+be lost if a power failure occurs) before doing so. It is not necessary for
+every version of the in-memory snapshot to be checkpointed. The in-memory
+snapshot may be modified multiple times between checkpoints.
 
 <p>
 Because a checkpointer process is often required to sync the database file
@@ -1012,6 +1229,8 @@ here.
 </ul>
 
 </i>
+
+
 
 
 

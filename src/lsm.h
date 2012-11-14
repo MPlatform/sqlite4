@@ -39,6 +39,8 @@ typedef long long int lsm_i64;              /* 64-bit signed integer type */
 #define LSM_LOCK_EXCL   2
 
 /*
+** CAPI: Database Runtime Environment
+**
 ** Run-time environment used by LSM
 */
 struct lsm_env {
