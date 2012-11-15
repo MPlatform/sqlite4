@@ -859,23 +859,81 @@ parameters.
 
   <dt> <a href=lsmapi.wiki#LSM_CONFIG_AUTOFLUSH>LSM_CONFIG_AUTOFLUSH</a>
   <dd> <p style=margin-top:0>
+    When a client writes to an LSM database, changes are buffered in memory 
+    before being written out to the database file in a batch. This option
+    is set to the size of the buffer in bytes. The default value is 1048576.
+    Increasing this value may improve overall write throughput. Decreasing
+    it reduces memory usage.
+    
 
   <dt> <a href=lsmapi.wiki#LSM_CONFIG_AUTOCHECKPOINT>LSM_CONFIG_AUTOCHECKPOINT</a>
   <dd> <p style=margin-top:0>
+    This option determines how often the database is checkpointed (synced to
+    disk). A checkpoint is performed after each N bytes (approximately) are
+    written to the database file, where N is the value of this option. The
+    default value is 2097152 (2MB).
 
+    <p>
+    Increasing this value (say to 4MB or even 8MB) may improve overall write
+    throughput. However, it is important not to checkpoint too infrequently, 
+    as:
+    <ul>
+      <li> <p>
+           Space in the log file may only be reused following a checkpoint.
+           Once a checkpoint has been completed, all application data written
+           before the checkpoint is safely stored in the database file. This
+           means the contents of the log file are no longer required, and so
+           the next database writer may start writing a new log into the
+           start of the existing file (overwriting the old data). 
+           As well as consuming disk space, large log files are undesirable 
+           as often the entire log file must be read during database recovery
+           following an application or system failure.
+           
+      <li> <p>
+           Similarly, space in the database file freed by the continuous
+           incremental reorganization of the database file that LSM performs
+           cannot be reused until after a checkpoint has been performed. 
+           So increasing the value of this parameter causes the space used
+           by the pre-reorganization versions of data structures within the
+           file to be recycled more slowly. Increasing the overall size of
+           database files under some circumstances.
+    </ul>
 </dl>
+
+<p>The roles of the LSM_CONFIG_AUTOFLUSH and LSM_CONFIG_AUTOCHECKPOINT options 
+are discussed in more detail in the following section.
 
 <h2 id=using_worker_threads_or_processes>6.2. Using Worker Threads or Processes </h2>
 
-<p><i>Todo: Fix the following </p>
+<p>Usually, the database file is updated on disk from within calls to
+write functions - lsm_insert(), lsm_delete(), lsm_delete_range() and
+lsm_commit(). This means that occasionally, a call to one of these four 
+functions may take signicantly longer than usual as it pauses to write or
+sync the database file. <a href=#automatic_work_and_checkpoint_scheduling>See
+below</a> for details.
 
-<p>The section above describes the three stages of transfering data written
-to the database from the application to persistent storage. A "writer" 
-client writes the data into the in-memory tree and log file. Later on a 
-"worker" client flushes the data from the in-memory tree to a new segment
-in the the database file. Additionally, a worker client must periodically
-merge existing database segments together to prevent them from growing too
-numerous.
+<p>The alternative to updating the database file from within calls to write
+functions is to use one or more background threads or processes to perform the
+actual work of writing to the database file. 
+
+<ul>
+  <li> Have all client connections set the LSM_CONFIG_AUTOWORK option to 0.
+       This stops them from writing to the database file.
+
+  <li> Arrange for a background thread or process to connect to the database
+       and call the <a href=lsmapi.wiki#lsm_work>lsm_work()</a> function 
+       periodically.
+       below</a>).
+</ul>
+
+<p>Further explanation of, and example code for, the above is
+<a href=#explicit_work_and_checkpoint_scheduling>available below</a>.
+
+<p>The following sub-sections provide a high-level description of the
+LSM database architecture and descriptions of how various parameters 
+affect the way clients write to the database file. While this may seem
+in some ways an inconvenient amount of detail, it may also be helpful
+when diagnosing performance problems or analyzing benchmark results.
 
 <h3 id=architectural_overview>6.2.1. Architectural Overview </h3>
 
@@ -1125,6 +1183,12 @@ a database connection, not of a database itself, so it must be cleared
 separately by all processes that may write to the database. Otherwise, they
 may attempt automatic database work or checkpoints.
 
+<verbatim>
+  /* Disable auto-work on connection db */
+  int iVal = 0;
+  lsm_config(db, LSM_CONFIG_AUTOWORK, &iVal);
+</verbatim>
+
 <p>The lsm_work() function is used to explicitly perform work on the database:
 
 <verbatim>
@@ -1220,7 +1284,8 @@ and returns immediately. Otherwise, it checkpoints the database and sets
 previous checkpoint.
 
 <p>The number of bytes written to the database since the most recent checkpoint
-can also be using the lsm_info() API function. As follows:
+can also be using the <a href=lsmapi.wiki#lsm_info>lsm_info()</a> API 
+function. As follows:
 
 <verbatim>
   int nCkpt;
@@ -1230,10 +1295,6 @@ can also be using the lsm_info() API function. As follows:
 <verbatim>
   int nOld, nLive;
   rc = lsm_info(db, LSM_INFO_TREE_SIZE, &nOld, &nLive);
-</verbatim>
-
-<verbatim>
-  int lsm_flush(lsm_db *db);
 </verbatim>
 
 <h3 id=compulsary_work_and_checkpoint_scheduling>6.2.4. Compulsary Work and Checkpoint Scheduling</h3>
