@@ -489,10 +489,10 @@ static int test_lsm_write(
   if( pDb->aWorker ){
     int nLimit = -1;
     int nSleep = 0;
-    lsm_config(pDb->db, LSM_CONFIG_WRITE_BUFFER, &nLimit);
+    lsm_config(pDb->db, LSM_CONFIG_AUTOFLUSH, &nLimit);
     do {
       int bOld, nNew, rc;
-      rc = lsm_tree_size(pDb->db, &bOld, &nNew);
+      rc = lsm_info(pDb->db, LSM_INFO_TREE_SIZE, &bOld, &nNew);
       if( rc!=LSM_OK ) return rc;
       if( bOld==0 || nNew<nLimit ) break;
       usleep(1000);
@@ -687,7 +687,7 @@ int test_lsm_config_str(
     int bWorker;
     int eParam;
   } aParam[] = {
-    { "write_buffer",     0, LSM_CONFIG_WRITE_BUFFER },
+    { "autoflush",        0, LSM_CONFIG_AUTOFLUSH },
     { "page_size",        0, LSM_CONFIG_PAGE_SIZE },
     { "block_size",       0, LSM_CONFIG_BLOCK_SIZE },
     { "safety",           0, LSM_CONFIG_SAFETY },
@@ -696,10 +696,10 @@ int test_lsm_config_str(
     { "log_size",         0, LSM_CONFIG_LOG_SIZE },
     { "mmap",             0, LSM_CONFIG_MMAP },
     { "use_log",          0, LSM_CONFIG_USE_LOG },
-    { "nmerge",           0, LSM_CONFIG_NMERGE },
+    { "automerge",        0, LSM_CONFIG_AUTOMERGE },
     { "max_freelist",     0, LSM_CONFIG_MAX_FREELIST },
     { "multi_proc",       0, LSM_CONFIG_MULTIPLE_PROCESSES },
-    { "worker_nmerge",    1, LSM_CONFIG_NMERGE },
+    { "worker_automerge", 1, LSM_CONFIG_AUTOMERGE },
     { "test_no_recovery", 0, TEST_NO_RECOVERY },
     { "threads",          0, TEST_THREADS },
 #ifdef HAVE_ZLIB
@@ -907,7 +907,7 @@ int test_lsm_lomem_open(
   TestDb **ppDb
 ){
   const char *zCfg = 
-    "page_size=256 block_size=65536 write_buffer=16384 "
+    "page_size=256 block_size=65536 autoflush=16384 "
     "max_freelist=2 autocheckpoint=32768 "
     "mmap=0 "
   ;
@@ -920,7 +920,7 @@ int test_lsm_zip_open(
   TestDb **ppDb
 ){
   const char *zCfg = 
-    "page_size=256 block_size=65536 write_buffer=16384 "
+    "page_size=256 block_size=65536 autoflush=16384 "
     "max_freelist=2 autocheckpoint=32768 compression=1"
     "mmap=0 "
   ;
@@ -1044,18 +1044,18 @@ static void *worker_main(void *pArg){
     }else{
       int nWrite = 0;             /* Pages written by lsm_work() call */
       int nAuto = -1;             /* Configured AUTOCHECKPOINT value */
-      int nLimit = -1;            /* Configured WRITE_BUFFER value */
+      int nLimit = -1;            /* Configured AUTOFLUSH value */
 
-      lsm_config(pWorker, LSM_CONFIG_WRITE_BUFFER, &nLimit);
+      lsm_config(pWorker, LSM_CONFIG_AUTOFLUSH, &nLimit);
       lsm_config(pWorker, LSM_CONFIG_AUTOCHECKPOINT, &nAuto);
       do {
         int nSleep = 0;
-        lsm_ckpt_size(pWorker, &nCkpt);
+        lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nCkpt);
         while( nAuto==0 && nCkpt>(nLimit*4) ){
           usleep(1000);
           mt_signal_worker(p->pDb, 1);
           nSleep++;
-          lsm_ckpt_size(pWorker, &nCkpt);
+          lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nCkpt);
         }
 #if 0
           if( nSleep ) printf("nLimit=%d nSleep=%d (worker)\n", nLimit, nSleep);

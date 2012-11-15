@@ -18,7 +18,7 @@ db close
 proc reopen {{bClear 0}} {
   catch {db close}
   if {$bClear} { forcedelete test.db }
-  lsm_open db test.db {mmap 0 nmerge 2 autowork 0}
+  lsm_open db test.db {mmap 0 automerge 2 autowork 0}
 }
 
 proc contents {} {
@@ -164,7 +164,7 @@ do_test 5.1 {
 
 do_test 5.2 {
   reopen 1
-  db config {nmerge 4}
+  db config {automerge 4}
 
   dbwrite { 10 ten    }  ; db flush
   dbwrite { 20 twenty }  ; db flush
@@ -176,7 +176,7 @@ do_test 5.2 {
   dbwrite {17 seventeen} ; db flush
   db delete_range 10 17  ; db flush
 
-  db config {nmerge 3}
+  db config {automerge 3}
   db work 10
 
   contents
@@ -184,7 +184,7 @@ do_test 5.2 {
 
 do_test 5.3 {
   reopen 1
-  db config {nmerge 4}
+  db config {automerge 4}
 
   dbwrite { 10 ten    }  ; db flush
   dbwrite { 20 twenty }  ; db flush
@@ -196,7 +196,7 @@ do_test 5.3 {
   db delete_range 12 19  ; db flush
   dbwrite {17 seventeen} ; db flush
 
-  db config {nmerge 3}
+  db config {automerge 3}
   db work 10
 
   contents

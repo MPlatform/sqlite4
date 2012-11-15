@@ -80,20 +80,20 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
 
   /* Initialize the new object */
   pDb->pEnv = pEnv;
-  pDb->nTreeLimit = LSM_DFLT_WRITE_BUFFER;
+  pDb->nTreeLimit = LSM_DFLT_AUTOFLUSH;
   pDb->nAutockpt = LSM_DFLT_AUTOCHECKPOINT;
-  pDb->bAutowork = 1;
-  pDb->eSafety = LSM_SAFETY_NORMAL;
+  pDb->bAutowork = LSM_DFLT_AUTOWORK;
+  pDb->eSafety = LSM_DFLT_SAFETY;
   pDb->xCmp = xCmp;
   pDb->nLogSz = LSM_DFLT_LOG_SIZE;
   pDb->nDfltPgsz = LSM_DFLT_PAGE_SIZE;
   pDb->nDfltBlksz = LSM_DFLT_BLOCK_SIZE;
-  pDb->nMerge = LSM_DFLT_NMERGE;
+  pDb->nMerge = LSM_DFLT_AUTOMERGE;
   pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
-  pDb->bUseLog = 1;
+  pDb->bUseLog = LSM_DFLT_USE_LOG;
   pDb->iReader = -1;
-  pDb->bMultiProc = 1;
-  pDb->bMmap = LSM_IS_64_BIT;
+  pDb->bMultiProc = LSM_DFLT_MULTIPLE_PROCESSES;
+  pDb->bMmap = LSM_DFLT_MMAP;
   pDb->xLog = xLog;
   return LSM_OK;
 }
@@ -206,7 +206,7 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
   va_start(ap, eParam);
 
   switch( eParam ){
-    case LSM_CONFIG_WRITE_BUFFER: {
+    case LSM_CONFIG_AUTOFLUSH: {
       int *piVal = va_arg(ap, int *);
       if( *piVal>=0 ){
         pDb->nTreeLimit = *piVal;
@@ -303,7 +303,7 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
       break;
     }
 
-    case LSM_CONFIG_NMERGE: {
+    case LSM_CONFIG_AUTOMERGE: {
       int *piVal = va_arg(ap, int *);
       if( *piVal>1 ) pDb->nMerge = *piVal;
       *piVal = pDb->nMerge;
@@ -449,6 +449,43 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   return rc;
 }
 
+static int infoTreeSize(lsm_db *db, int *pnOld, int *pnNew){
+  ShmHeader *pShm = db->pShmhdr;
+  TreeHeader *p = &pShm->hdr1;
+
+  /* The following code suffers from two race conditions, as it accesses and
+  ** trusts the contents of shared memory without verifying checksums:
+  **
+  **   * The two values read - TreeHeader.root.nByte and oldroot.nByte - are 
+  **     32-bit fields. It is assumed that reading from one of these
+  **     is atomic - that it is not possible to read a partially written
+  **     garbage value. However the two values may be mutually inconsistent. 
+  **
+  **   * TreeHeader.iLogOff is a 64-bit value. And lsmCheckpointLogOffset()
+  **     reads a 64-bit value from a snapshot stored in shared memory. It
+  **     is assumed that in each case it is possible to read a partially
+  **     written garbage value. If this occurs, then the value returned
+  **     for the size of the "old" tree may reflect the size of an "old"
+  **     tree that was recently flushed to disk.
+  **
+  ** Given the context in which this function is called (as a result of an
+  ** lsm_info(LSM_INFO_TREE_SIZE) request), neither of these are considered to
+  ** be problems.
+  */
+  *pnNew = (int)p->root.nByte;
+  if( p->iOldShmid ){
+    if( p->iLogOff==lsmCheckpointLogOffset(pShm->aSnap1) ){
+      *pnOld = 0;
+    }else{
+      *pnOld = (int)p->oldroot.nByte;
+    }
+  }else{
+    *pnOld = 0;
+  }
+
+  return LSM_OK;
+}
+
 int lsm_info(lsm_db *pDb, int eParam, ...){
   int rc = LSM_OK;
   va_list ap;
@@ -504,6 +541,19 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
     case LSM_INFO_FREELIST: {
       char **pzVal = va_arg(ap, char **);
       rc = lsmInfoFreelist(pDb, pzVal);
+      break;
+    }
+
+    case LSM_INFO_CHECKPOINT_SIZE: {
+      int *pnByte = va_arg(ap, int *);
+      rc = lsmCheckpointSize(pDb, pnByte);
+      break;
+    }
+
+    case LSM_INFO_TREE_SIZE: {
+      int *pnOld = va_arg(ap, int *);
+      int *pnNew = va_arg(ap, int *);
+      rc = infoTreeSize(pDb, pnOld, pnNew);
       break;
     }
 
@@ -814,21 +864,6 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
   }
 
   return rc;
-}
-
-int lsm_tree_size(lsm_db *db, int *pnOld, int *pnNew){
-  ShmHeader *pShm = db->pShmhdr;
-
-  *pnNew = (int)pShm->hdr1.nByte;
-  *pnOld = 0;
-  if( pShm->hdr1.iOldShmid ){
-    i64 iOff = pShm->hdr1.iOldLog;
-    if( iOff!=lsmCheckpointLogOffset(pShm->aSnap1) ){
-      *pnOld = 1;
-    }
-  }
-
-  return LSM_OK;
 }
 
 

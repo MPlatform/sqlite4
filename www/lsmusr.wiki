@@ -51,7 +51,8 @@ offered with respect to recently committed transactions if a power failure
 occurs). <a href=#compressed_and_encrypted_databases>Section 5</a> explains
 the interface provided by LSM that allow external data compression and/or
 encryption functions to be used to create compressed and/or encrypted
-databases. <i>Todo: Clarify exactly what section 6 is and link it to here</i>.
+databases. <a href=#performance_tuning>Section 6</a> deals with the topic
+of performance tuning.
 
 <h1 id=introduction_to_lsm>1. Introduction to LSM</h1>
 
@@ -811,19 +812,18 @@ parameters.
 <dl>
   <dt> <a href=lsmapi.wiki#LSM_CONFIG_MMAP>LSM_CONFIG_MMAP</a>
   <dd> <p style=margin-top:0>
-    This option may be set to either 1 (true) or 0 (false). If it is set to
-    true and LSM is running on a system with a 64-bit address space, the
-    entire database file is memory mapped. Or, if it is false or LSM is 
-    running in a 32-bit address space, data is accessed using ordinary
-    OS file read and write primitives. Memory mapping the database file
-    can significantly improve the performance of read operations, as database 
-    pages do not have to be copied from operating system buffers into user 
-    space buffers before they can be examined. 
-
+    If LSM is running on a system with a 64-bit address space, this option
+    may be set to either 1 (true) or 0 (false). On a 32-bit platform, it is
+    always set to 0.
+    <p> If it is set to true, the entire database file is memory mapped. Or, if
+    it is false, data is accessed using ordinary OS file read and write
+    primitives. Memory mapping the database file can significantly improve the
+    performance of read operations, as database pages do not have to be copied
+    from operating system buffers into user space buffers before they can be
+    examined. 
     <p>This option can only be set before lsm_open() is called on the database
     connection.
-
-    <p>The default value is 1 (true).
+    <p>The default value is 1 (true) on a 64-bit platform, and 0 otherwise.
 
   <dt> <a href=lsmapi.wiki#LSM_CONFIG_MULTIPLE_PROCESSES>LSM_CONFIG_MULTIPLE_PROCESSES</a>
   <dd> <p style=margin-top:0>

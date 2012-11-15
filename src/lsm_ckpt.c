@@ -1136,7 +1136,7 @@ void lsmCheckpointZeroLogoffset(lsm_db *pDb){
   memcpy(pDb->pShmhdr->aSnap2, pDb->aSnapshot, nCkpt*sizeof(u32));
 }
 
-int lsm_ckpt_size(lsm_db *db, int *pnByte){
+int lsmCheckpointSize(lsm_db *db, int *pnByte){
   ShmHeader *pShm = db->pShmhdr;
   int rc = LSM_OK;
   u32 nSynced;

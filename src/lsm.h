@@ -145,7 +145,7 @@ int lsm_config(lsm_db *, int, ...);
 /*
 ** The following values may be passed as the second argument to lsm_config().
 **
-** LSM_CONFIG_WRITE_BUFFER:
+** LSM_CONFIG_AUTOFLUSH:
 **   A read/write integer parameter. This value determines the maximum amount
 **   of space (in bytes) used to accumulate writes in main-memory before 
 **   they are flushed to a level 0 segment.
@@ -191,7 +191,7 @@ int lsm_config(lsm_db *, int, ...);
 **   A read/write boolean parameter. True (the default) to use the log
 **   file normally. False otherwise.
 **
-** LSM_CONFIG_NMERGE:
+** LSM_CONFIG_AUTOMERGE:
 **   A read/write integer parameter. The minimum number of segments to
 **   merge together at a time. Default value 4.
 **
@@ -224,7 +224,7 @@ int lsm_config(lsm_db *, int, ...);
 **   Query the compression methods used to compress and decompress database
 **   content.
 */
-#define LSM_CONFIG_WRITE_BUFFER        1
+#define LSM_CONFIG_AUTOFLUSH           1
 #define LSM_CONFIG_PAGE_SIZE           2
 #define LSM_CONFIG_SAFETY              3
 #define LSM_CONFIG_BLOCK_SIZE          4
@@ -232,7 +232,7 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_LOG_SIZE            6
 #define LSM_CONFIG_MMAP                7
 #define LSM_CONFIG_USE_LOG             8
-#define LSM_CONFIG_NMERGE              9
+#define LSM_CONFIG_AUTOMERGE           9
 #define LSM_CONFIG_MAX_FREELIST       10
 #define LSM_CONFIG_MULTIPLE_PROCESSES 11
 #define LSM_CONFIG_AUTOCHECKPOINT     12
@@ -362,6 +362,28 @@ int lsm_info(lsm_db *, int, ...);
 **   The Tcl structure returned is a list containing one element for each
 **   free block in the database. The element itself consists of two 
 **   integers - the block number and the id of the snapshot that freed it.
+**
+** LSM_INFO_CHECKPOINT_SIZE:
+**   The third argument should be of type (int *). The location pointed to
+**   by this argument is populated with the number of bytes written to the
+**   database file since the most recent checkpoint.
+**
+** LSM_INFO_TREE_SIZE:
+**   If this value is passed as the second argument to an lsm_info() call, it
+**   should be followed by two arguments of type (int *) (for a total of four
+**   arguments).
+**
+**   At any time, there are either one or two tree structures held in shared
+**   memory that new database clients will access (there may also be additional
+**   tree structures being used by older clients - this API does not provide
+**   information on them). One tree structure - the current tree - is used to
+**   accumulate new data written to the database. The other tree structure -
+**   the old tree - is a read-only tree holding older data and may be flushed 
+**   to disk at any time.
+** 
+**   Assuming no error occurs, the location pointed to by the first of the two
+**   (int *) arguments is set to the size of the old in-memory tree in bytes.
+**   The second is set to the size of the current, or live in-memory tree.
 */
 #define LSM_INFO_NWRITE           1
 #define LSM_INFO_NREAD            2
@@ -372,6 +394,8 @@ int lsm_info(lsm_db *, int, ...);
 #define LSM_INFO_PAGE_HEX_DUMP    7
 #define LSM_INFO_FREELIST         8
 #define LSM_INFO_ARRAY_PAGES      9
+#define LSM_INFO_CHECKPOINT_SIZE 10
+#define LSM_INFO_TREE_SIZE       11
 
 
 /* 
@@ -447,7 +471,7 @@ int lsm_flush(lsm_db *pDb);
 ** set to 0. Or, if the current snapshot is successfully checkpointed
 ** by this function and pbCkpt is not NULL, *pnByte is set to the number
 ** of bytes written to the database file since the previous checkpoint
-** (the same measure as returned by lsm_ckpt_size()).
+** (the same measure as returned by the LSM_INFO_CHECKPOINT_SIZE query).
 */
 int lsm_checkpoint(lsm_db *pDb, int *pnByte);
 
@@ -575,44 +599,6 @@ void lsm_config_log(lsm_db *, void (*)(void *, int, const char *), void *);
 ** writes to the database file.
 */
 void lsm_config_work_hook(lsm_db *, void (*)(lsm_db *, void *), void *);
-
-/*
-** The lsm_tree_size() function reports on the current state of the 
-** in-memory tree data structure. 
-**
-** At any time, there are either one or two tree structures held in shared
-** memory that new database clients will access (there may also be additional 
-** tree structures being used by older clients - this API does not provide
-** information on them). One tree structure - the current tree - is used to
-** accumulate new data written to the database. The other tree structure - the 
-** old tree - is a read-only tree holding older data and may be flushed to disk
-** at any time.
-**
-** If successful, this function sets *pnNew to the number of bytes of shared
-** memory space used by the current tree. *pbOld is set to true if the old 
-** tree exists, or false if it does not. 
-**
-** If no error occurs, LSM_OK is returned. Otherwise an LSM error code.
-**
-** RACE CONDITION:
-**   Describe the race condition this function is subject to. 
-*/
-int lsm_tree_size(lsm_db *, int *pbOld, int *pnNew);
-
-/*
-** This function is used to query the amount of data that has been written
-** to the database file but not checkpointed (synced). If successful, *pnByte
-** is set to the number of bytes before returning.
-**
-** LSM_OK is returned if successful. Or if an error occurs, an LSM error
-** code is returned.
-**
-** RACE CONDITION:
-**   Describe the race condition this function is subject to. Or remove
-**   it somehow.
-*/
-int lsm_ckpt_size(lsm_db *, int *pnByte);
-
 
 /* ENDOFAPI */
 #ifdef __cplusplus

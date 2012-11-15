@@ -409,7 +409,7 @@ static void doDataTest2(
 
   if( tdb_lsm(pDb) ){
     int nBuf = 32 * 1024 * 1024;
-    lsm_config(tdb_lsm(pDb), LSM_CONFIG_WRITE_BUFFER, &nBuf);
+    lsm_config(tdb_lsm(pDb), LSM_CONFIG_AUTOFLUSH, &nBuf);
   }
 
   for(i=0; rc==0 && i<p->nIter; i++){

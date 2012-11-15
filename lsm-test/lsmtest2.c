@@ -267,8 +267,8 @@ static void crash_test1(int bCompress, int *pRc){
   char *zCfg;
 
   const char *azConfig[2] = {
-    "page_size=1024 block_size=65536 write_buffer=16384 safety=2 mmap=0", 
-    "page_size=1024 block_size=65536 write_buffer=16384 safety=2 "
+    "page_size=1024 block_size=65536 autoflush=16384 safety=2 mmap=0", 
+    "page_size=1024 block_size=65536 autoflush=16384 safety=2 "
     " compression=1 mmap=0"
   };
   assert( bCompress==0 || bCompress==1 );
@@ -279,7 +279,7 @@ static void crash_test1(int bCompress, int *pRc){
 
   /* Setup and save the initial database. */
 
-  zCfg = testMallocPrintf("%s nmerge=7", azConfig[bCompress]);
+  zCfg = testMallocPrintf("%s automerge=7", azConfig[bCompress]);
   testSetupSavedLsmdb(zCfg, DBNAME, pData, 5000, pRc);
   testFree(zCfg);
 

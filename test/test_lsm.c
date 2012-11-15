@@ -36,7 +36,7 @@ static int test_sqlite4_lsm_config(
   } aParam[] = {
     { "log-size",       LSM_CONFIG_LOG_SIZE }, 
     { "safety",         LSM_CONFIG_SAFETY }, 
-    { "write-buffer",   LSM_CONFIG_WRITE_BUFFER }, 
+    { "autoflush",      LSM_CONFIG_AUTOFLUSH }, 
     { "mmap",           LSM_CONFIG_MMAP }, 
     { "page-size",      LSM_CONFIG_PAGE_SIZE }, 
     { "autowork",       LSM_CONFIG_AUTOWORK }, 
@@ -272,11 +272,11 @@ static int test_sqlite4_lsm_flush(
   if( rc==SQLITE4_OK ){
     int nZero = 0;
     int nOrig = -1;
-    lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nOrig);
-    lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nZero);
+    lsm_config(pLsm, LSM_CONFIG_AUTOFLUSH, &nOrig);
+    lsm_config(pLsm, LSM_CONFIG_AUTOFLUSH, &nZero);
     rc = lsm_begin(pLsm, 1);
     if( rc==LSM_OK ) rc = lsm_commit(pLsm, 0);
-    lsm_config(pLsm, LSM_CONFIG_WRITE_BUFFER, &nOrig);
+    lsm_config(pLsm, LSM_CONFIG_AUTOFLUSH, &nOrig);
   }
   if( rc!=SQLITE4_OK ){
     Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
@@ -292,7 +292,7 @@ static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
     const char *zOpt;
     int eOpt;
   } aConfig[] = {
-    { "write_buffer",     LSM_CONFIG_WRITE_BUFFER },
+    { "autoflush",        LSM_CONFIG_AUTOFLUSH },
     { "page_size",        LSM_CONFIG_PAGE_SIZE },
     { "block_size",       LSM_CONFIG_BLOCK_SIZE },
     { "safety",           LSM_CONFIG_SAFETY },
@@ -301,7 +301,7 @@ static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
     { "log_size",         LSM_CONFIG_LOG_SIZE },
     { "mmap",             LSM_CONFIG_MMAP },
     { "use_log",          LSM_CONFIG_USE_LOG },
-    { "nmerge",           LSM_CONFIG_NMERGE },
+    { "automerge",        LSM_CONFIG_AUTOMERGE },
     { "max_freelist",     LSM_CONFIG_MAX_FREELIST },
     { "multi_proc",       LSM_CONFIG_MULTIPLE_PROCESSES },
     { 0, 0 }

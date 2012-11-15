@@ -42,12 +42,17 @@
 ** Default values for various data structure parameters. These may be
 ** overridden by calls to lsm_config().
 */
-#define LSM_DFLT_PAGE_SIZE       (4 * 1024)
-#define LSM_DFLT_BLOCK_SIZE      (2 * 1024 * 1024)
-#define LSM_DFLT_WRITE_BUFFER    (2 * 1024 * 1024)
-#define LSM_DFLT_AUTOCHECKPOINT  (4 * 1024 * 1024)
-#define LSM_DFLT_LOG_SIZE        (128*1024)
-#define LSM_DFLT_NMERGE          4
+#define LSM_DFLT_PAGE_SIZE          (4 * 1024)
+#define LSM_DFLT_BLOCK_SIZE         (1 * 1024 * 1024)
+#define LSM_DFLT_AUTOFLUSH          (1 * 1024 * 1024)
+#define LSM_DFLT_AUTOCHECKPOINT     (2 * 1024 * 1024)
+#define LSM_DFLT_AUTOWORK           1
+#define LSM_DFLT_LOG_SIZE           (128*1024)
+#define LSM_DFLT_AUTOMERGE          4
+#define LSM_DFLT_SAFETY             LSM_SAFETY_NORMAL
+#define LSM_DFLT_MMAP               LSM_IS_64_BIT
+#define LSM_DFLT_MULTIPLE_PROCESSES 1
+#define LSM_DFLT_USE_LOG            1
 
 /* Initial values for log file checksums. These are only used if the 
 ** database file does not contain a valid checkpoint.  */
@@ -237,6 +242,7 @@ struct DbLog {
 struct TreeRoot {
   u32 iRoot;
   u32 nHeight;
+  u32 nByte;                      /* Total size of this tree in bytes */
   u32 iTransId;
 };
 
@@ -250,7 +256,6 @@ struct TreeHeader {
   u32 nChunk;                     /* Number of chunks in shared-memory file */
   TreeRoot root;                  /* Root and height of current tree */
   u32 iWrite;                     /* Write offset in shm file */
-  u32 nByte;                      /* Size of current tree structure in bytes */
   TreeRoot oldroot;               /* Root and height of the previous tree */
   u32 iOldShmid;                  /* Last shm-id used by previous tree */
   i64 iOldLog;                    /* Log offset associated with old tree */
@@ -288,8 +293,8 @@ struct lsm_db {
   /* Values configured by calls to lsm_config */
   int eSafety;                    /* LSM_SAFETY_OFF, NORMAL or FULL */
   int bAutowork;                  /* Configured by LSM_CONFIG_AUTOWORK */
-  int nTreeLimit;                 /* Configured by LSM_CONFIG_WRITE_BUFFER */
-  int nMerge;                     /* Configured by LSM_CONFIG_NMERGE */
+  int nTreeLimit;                 /* Configured by LSM_CONFIG_AUTOFLUSH */
+  int nMerge;                     /* Configured by LSM_CONFIG_AUTOMERGE */
   int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
@@ -541,6 +546,7 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int);
 int lsmDatabaseFull(lsm_db *pDb);
 int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite);
 
+int lsmCheckpointSize(lsm_db *db, int *pnByte);
 
 /* 
 ** Functions from file "lsm_tree.c".

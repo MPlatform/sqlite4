@@ -36,11 +36,11 @@ static void doSetupStep(
     int nBuf = 64;
     lsm_db *db = tdb_lsm(pDb);
 
-    lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nSave);
-    lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nBuf);
+    lsm_config(db, LSM_CONFIG_AUTOFLUSH, &nSave);
+    lsm_config(db, LSM_CONFIG_AUTOFLUSH, &nBuf);
     lsm_begin(db, 1);
     lsm_commit(db, 0);
-    lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nSave);
+    lsm_config(db, LSM_CONFIG_AUTOFLUSH, &nSave);
 
     *pRc = lsm_work(db, 0, 0, 0);
     if( *pRc==0 ){
@@ -185,7 +185,7 @@ static void doLiveRecovery(const char *zDb, const char *zCksum, int *pRc){
     if( rc==0 ){
       int nBuf = 64;
       db = tdb_lsm(pDb);
-      lsm_config(db, LSM_CONFIG_WRITE_BUFFER, &nBuf);
+      lsm_config(db, LSM_CONFIG_AUTOFLUSH, &nBuf);
       lsm_begin(db, 1);
       lsm_commit(db, 0);
       rc = lsm_work(db, 0, 0, 0);

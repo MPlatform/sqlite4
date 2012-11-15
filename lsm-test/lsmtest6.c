@@ -425,7 +425,7 @@ static void setup_populate_db2(){
 
   lsm_config(pDb, LSM_CONFIG_BLOCK_SIZE, &nBlocksize); 
   lsm_config(pDb, LSM_CONFIG_PAGE_SIZE, &nPagesize); 
-  lsm_config(pDb, LSM_CONFIG_WRITE_BUFFER, &nWritebuffer); 
+  lsm_config(pDb, LSM_CONFIG_AUTOFLUSH, &nWritebuffer); 
 
   pData = getDatasource();
   for(ii=0; rc==LSM_OK && ii<5000; ii++){

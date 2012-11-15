@@ -688,7 +688,7 @@ static u32 treeShmalloc(lsm_db *pDb, int bAlign, int nByte, int *pRc){
     /* Allocate space at iWrite. */
     iRet = iWrite;
     pDb->treehdr.iWrite = iWrite + nByte;
-    pDb->treehdr.nByte += nByte;
+    pDb->treehdr.root.nByte += nByte;
   }
   return iRet;
 }
@@ -1062,7 +1062,7 @@ void lsmTreeMakeOld(lsm_db *pDb){
     pDb->treehdr.root.iTransId = 1;
     pDb->treehdr.root.iRoot = 0;
     pDb->treehdr.root.nHeight = 0;
-    pDb->treehdr.nByte = 0;
+    pDb->treehdr.root.nByte = 0;
   }
 }
 
@@ -1884,7 +1884,7 @@ int lsmTreeDelete(
 ** structure.
 */
 int lsmTreeSize(lsm_db *pDb){
-  return pDb->treehdr.nByte;
+  return pDb->treehdr.root.nByte;
 }
 
 /*
