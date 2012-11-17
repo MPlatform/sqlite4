@@ -498,6 +498,46 @@ static lsm_db *configure_lsm_db(TestDb *pDb){
   return pLsm;
 }
 
+typedef struct WriteHookEvent WriteHookEvent;
+struct WriteHookEvent {
+  i64 iOff;
+  int nData;
+  int nUs;
+};
+WriteHookEvent prev = {0, 0, 0};
+
+static void flushPrev(FILE *pOut){
+  if( prev.nData ){
+    fprintf(pOut, "w %s %lld %d %d\n", "d", prev.iOff, prev.nData, prev.nUs);
+    prev.nData = 0;
+  }
+}
+
+static void do_speed_write_hook2(
+  void *pCtx,
+  int bLog,
+  i64 iOff,
+  int nData,
+  int nUs
+){
+  FILE *pOut = (FILE *)pCtx;
+  if( bLog ) return;
+
+  if( prev.nData && nData && iOff==prev.iOff+prev.nData ){
+    prev.nData += nData;
+    prev.nUs += nUs;
+  }else{
+    flushPrev(pOut);
+    if( nData==0 ){
+      fprintf(pOut, "s %s 0 0 %d\n", (bLog ? "l" : "d"), nUs);
+    }else{
+      prev.iOff = iOff;
+      prev.nData = nData;
+      prev.nUs = nUs;
+    }
+  }
+}
+
 #define ST_REPEAT  0
 #define ST_WRITE   1
 #define ST_PAUSE   2
@@ -560,6 +600,7 @@ int do_speed_test2(int nArg, char **azArg){
   DatasourceDefn defn = { TEST_DATASOURCE_RANDOM, 0, 0, 0, 0 };
   char *zSystem = "";
   int bLsm = 1;
+  FILE *pLog = 0;
 
 #ifdef NDEBUG
   /* If NDEBUG is defined, disable the dynamic memory related checks in
@@ -629,6 +670,11 @@ int do_speed_test2(int nArg, char **azArg){
     nContent = testCountDatabase(pDb);
   }
 
+#if 0
+  pLog = fopen("/tmp/speed.log", "w");
+  tdb_lsm_write_hook(pDb, do_speed_write_hook2, (void *)pLog);
+#endif
+
   for(i=0; i<aParam[ST_REPEAT] && rc==0; i++){
     int msWrite, msFetch, msScan;
     int iFetch;
@@ -682,26 +728,11 @@ int do_speed_test2(int nArg, char **azArg){
   testClose(&pDb);
   testDatasourceFree(pData);
 
-  return rc;
-}
-
-static void do_speed_write_hook2(
-  void *pCtx,
-  int bLog,
-  i64 iOff,
-  int nData,
-  int nUs
-){
-  FILE *pOut = (FILE *)pCtx;
-  if( bLog ) return;
-
-  if( nData==0 ){
-    fprintf(pOut, "s %s 0 0 %d\n", (bLog ? "l" : "d"), nUs);
-  }else{
-    fprintf(pOut, "w %s %d %d %d\n", (bLog ? "l" : "d"),
-        (int)iOff, nData, nUs
-    );
+  if( pLog ){
+    flushPrev(pLog);
+    fclose(pLog);
   }
+  return rc;
 }
 
 int do_speed_tests(int nArg, char **azArg){

@@ -523,7 +523,7 @@ write-transaction.
 <p>Write-transactions may be opened either implicitly or explicitly. If any
 of the following functions are called to write to the database when there 
 is no write-transaction open, then an implicit write-transaction is opened and
-close (committed) within the function:
+closed (committed) within the call:
 
 <ul>
   <li> lsm_insert()

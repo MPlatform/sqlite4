@@ -474,7 +474,7 @@ static int infoTreeSize(lsm_db *db, int *pnOld, int *pnNew){
   */
   *pnNew = (int)p->root.nByte;
   if( p->iOldShmid ){
-    if( p->iLogOff==lsmCheckpointLogOffset(pShm->aSnap1) ){
+    if( p->iOldLog==lsmCheckpointLogOffset(pShm->aSnap1) ){
       *pnOld = 0;
     }else{
       *pnOld = (int)p->oldroot.nByte;

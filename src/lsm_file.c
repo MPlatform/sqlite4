@@ -730,7 +730,7 @@ u8 *lsmFsPageData(Page *pPage, int *pnData){
 ** Return the page number of a page.
 */
 Pgno lsmFsPageNumber(Page *pPage){
-  assert( (pPage->flags & PAGE_DIRTY)==0 );
+  /* assert( (pPage->flags & PAGE_DIRTY)==0 ); */
   return pPage ? pPage->iPg : 0;
 }
 
@@ -1501,6 +1501,7 @@ int lsmFsSortedAppend(
   FileSystem *pFS, 
   Snapshot *pSnapshot,
   Segment *p, 
+  int bDefer,
   Page **ppOut
 ){
   int rc = LSM_OK;
@@ -1510,7 +1511,7 @@ int lsmFsSortedAppend(
   int iNext = 0;
   int iPrev = p->iLastPg;
 
-  if( pFS->pCompress ){
+  if( pFS->pCompress || bDefer ){
     /* In compressed database mode the page is not assigned a page number
     ** or location in the database file at this point. This will be done
     ** by the lsmFsPagePersist() call.  */
@@ -1522,6 +1523,7 @@ int lsmFsSortedAppend(
       pPg->flags |= PAGE_DIRTY;
       pPg->nData = pFS->nPagesize;
       assert( pPg->aData );
+      if( pFS->pCompress==0 ) pPg->nData -= 4;
 
       pPg->nRef = 1;
       pFS->nOut++;
@@ -1539,7 +1541,7 @@ int lsmFsSortedAppend(
     }
 
     /* If this is the first page allocated, or if the page allocated is the
-     ** last in the block, allocate a new block here.  */
+    ** last in the block, also allocate the next block here.  */
     if( iApp==0 || fsIsLast(pFS, iApp) ){
       int iNew;                     /* New block number */
 
@@ -1864,6 +1866,47 @@ static int fsCompressIntoBuffer(FileSystem *pFS, Page *pPg){
   );
 }
 
+static int fsAppendPage(
+  FileSystem *pFS, 
+  Segment *pSeg,
+  Pgno *piNew,
+  int *piPrev,
+  int *piNext
+){
+  Pgno iPrev = pSeg->iLastPg;
+  int rc;
+  assert( iPrev!=0 );
+
+  *piPrev = 0;
+  *piNext = 0;
+
+  if( fsIsLast(pFS, iPrev) ){
+    /* Grab the first page on the next block (which has already be
+    ** allocated). In this case set *piPrev to tell the caller to set
+    ** the "previous block" pointer in the first 4 bytes of the page.
+    */
+    int iNext;
+    int iBlk = fsPageToBlock(pFS, iPrev);
+    rc = fsBlockNext(pFS, iBlk, &iNext);
+    if( rc!=LSM_OK ) return rc;
+    *piNew = fsFirstPageOnBlock(pFS, iNext);
+    *piPrev = iBlk;
+  }else{
+    *piNew = iPrev+1;
+    if( fsIsLast(pFS, *piNew) ){
+      /* Allocate the next block here. */
+      int iBlk;
+      rc = lsmBlockAllocate(pFS->pDb, &iBlk);
+      if( rc!=LSM_OK ) return rc;
+      *piNext = iBlk;
+    }
+  }
+
+  pSeg->nSize++;
+  pSeg->iLastPg = *piNew;
+  return LSM_OK;
+}
+
 /*
 ** If the page passed as an argument is dirty, update the database file
 ** (or mapping of the database file) with its current contents and mark
@@ -1902,6 +1945,42 @@ int lsmFsPagePersist(Page *pPg){
 
     }else{
       i64 iOff;                   /* Offset to write within database file */
+
+      if( pPg->iPg==0 ){
+        /* No page number has been assigned yet. This occurs with pages used
+        ** in the b-tree hierarchy.  */
+        int iPrev = 0;
+        int iNext = 0;
+        int iHash;
+
+        assert( pPg->pSeg->iFirst );
+        assert( pPg->flags & PAGE_FREE );
+        assert( (pPg->flags & PAGE_HASPREV)==0 );
+        assert( pPg->nData==pFS->nPagesize-4 );
+
+        rc = fsAppendPage(pFS, pPg->pSeg, &pPg->iPg, &iPrev, &iNext);
+        if( rc!=LSM_OK ) return rc;
+
+        iHash = fsHashKey(pFS->nHash, pPg->iPg);
+        pPg->pHashNext = pFS->apHash[iHash];
+        pFS->apHash[iHash] = pPg;
+
+        if( iPrev ){
+          assert( iNext==0 );
+          memmove(&pPg->aData[4], pPg->aData, pPg->nData);
+          lsmPutU32(pPg->aData, iPrev);
+          pPg->flags |= PAGE_HASPREV;
+          pPg->aData += 4;
+        }else if( iNext ){
+          assert( iPrev==0 );
+          lsmPutU32(&pPg->aData[pPg->nData], iNext);
+        }else{
+          int nData = pPg->nData;
+          pPg->nData += 4;
+          lsmSortedExpandBtreePage(pPg, nData);
+        }
+      }
+
       iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
       if( pFS->bUseMmap==0 ){
         u8 *aData = pPg->aData - (pPg->flags & PAGE_HASPREV);
@@ -1910,9 +1989,10 @@ int lsmFsPagePersist(Page *pPg){
         fsGrowMapping(pFS, iOff + pFS->nPagesize, &rc);
         if( rc==LSM_OK ){
           u8 *aTo = &((u8 *)(pFS->pMap))[iOff];
-          memcpy(aTo, pPg->aData, pFS->nPagesize);
-          lsmFree(pFS->pEnv, pPg->aData);
-          pPg->aData = aTo;
+          u8 *aFrom = pPg->aData - (pPg->flags & PAGE_HASPREV);
+          memcpy(aTo, aFrom, pFS->nPagesize);
+          lsmFree(pFS->pEnv, aFrom);
+          pPg->aData = aTo + (pPg->flags & PAGE_HASPREV);
           pPg->flags &= ~PAGE_FREE;
           fsPageAddToLru(pFS, pPg);
         }

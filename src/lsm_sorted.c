@@ -3094,7 +3094,7 @@ static int mergeWorkerMoveHierarchy(
 
   for(i=0; rc==LSM_OK && i<nHier; i++){
     Page *pNew = 0;
-    rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, &pNew);
+    rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, 1, &pNew);
     assert( rc==LSM_OK );
 
     if( rc==LSM_OK ){
@@ -3103,8 +3103,25 @@ static int mergeWorkerMoveHierarchy(
 
       a1 = fsPageData(pNew, &n1);
       a2 = fsPageData(apHier[i], &n2);
-      assert( n1==n2 || n1+4==n2 || n2+4==n1 );
 
+      assert( n1==n2 || n1+4==n2 );
+
+      if( n1==n2 ){
+        memcpy(a1, a2, n2);
+      }else{
+        int nEntry = pageGetNRec(a2, n2);
+        int iEof1 = SEGMENT_EOF(n1, nEntry);
+        int iEof2 = SEGMENT_EOF(n2, nEntry);
+
+        memcpy(a1, a2, iEof2 - 4);
+        memcpy(&a1[iEof1], &a2[iEof2], n2 - iEof2);
+      }
+
+      lsmFsPageRelease(apHier[i]);
+      apHier[i] = pNew;
+
+#if 0
+      assert( n1==n2 || n1+4==n2 || n2+4==n1 );
       if( n1>=n2 ){
         /* If n1 (size of the new page) is equal to or greater than n2 (the
         ** size of the old page), then copy the data into the new page. If
@@ -3125,6 +3142,7 @@ static int mergeWorkerMoveHierarchy(
         i = i - 1;
         lsmFsPageRelease(pNew);
       }
+#endif
     }
   }
 
@@ -3310,6 +3328,7 @@ static int mergeWorkerBtreeWrite(
       /* Otherwise, this page is full. Set the right-hand-child pointer
       ** to iPtr and release it.  */
       lsmPutU64(&aData[SEGMENT_POINTER_OFFSET(nData)], iPtr);
+      assert( lsmFsPageNumber(pOld)==0 );
       rc = lsmFsPagePersist(pOld);
       if( rc==LSM_OK ){
         iPtr = lsmFsPageNumber(pOld);
@@ -3321,7 +3340,7 @@ static int mergeWorkerBtreeWrite(
     p->apHier[iLevel] = 0;
     if( rc==LSM_OK ){
       rc = lsmFsSortedAppend(
-          pDb->pFS, pDb->pWorker, pSeg, &p->apHier[iLevel]
+          pDb->pFS, pDb->pWorker, pSeg, 1, &p->apHier[iLevel]
       );
     }
     if( rc!=LSM_OK ) return rc;
@@ -3530,7 +3549,7 @@ static int mergeWorkerNextPage(
   Segment *pSeg;                  /* Run to append to */
 
   pSeg = &pMW->pLevel->lhs;
-  rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, &pNext);
+  rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, 0, &pNext);
   assert( rc!=LSM_OK || pSeg->iFirst>0 || pMW->pDb->compress.xCompress );
 
   if( rc==LSM_OK ){
@@ -4130,7 +4149,7 @@ static int sortedNewToplevel(
     if( pDel ) pDel->iRoot = 0;
 
 #if 0
-    lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
+    lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
 #endif
 
     if( freelist.nEntry ){
@@ -4569,7 +4588,7 @@ static int sortedWork(
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);
@@ -4662,7 +4681,7 @@ static int doLsmSingleWork(
     nUnsync = lsmCheckpointNWrite(pDb->pShmhdr->aSnap1, 0);
     nPgsz = lsmCheckpointPgsz(pDb->pShmhdr->aSnap1);
 
-    nMax = LSM_MIN(nMax, (pDb->nAutockpt/nPgsz) - (nUnsync-nSync));
+    nMax = LSM_MIN(nMax, (pDb->nAutockpt/nPgsz) - (int)(nUnsync-nSync));
     if( nMax<nRem ){
       bCkpt = 1;
       nRem = LSM_MAX(nMax, 0);
@@ -4730,11 +4749,11 @@ static int doLsmSingleWork(
   assert( pDb->pWorker==0 );
 
   if( rc==LSM_OK ){
-    if( pnWrite ) *pnWrite = (nMax - nRem);
-    if( pbCkpt ) *pbCkpt = (bCkpt && nRem<=0);
+    *pnWrite = (nMax - nRem);
+    *pbCkpt = (bCkpt && nRem<=0);
   }else{
-    if( pnWrite ) *pnWrite = 0;
-    if( pbCkpt ) *pbCkpt = 0;
+    *pnWrite = 0;
+    *pbCkpt = 0;
   }
 
   return rc;
@@ -5337,6 +5356,18 @@ void lsmSortedSaveTreeCursors(lsm_db *pDb){
     lsmTreeCursorSave(pCsr->apTreeCsr[0]);
     lsmTreeCursorSave(pCsr->apTreeCsr[1]);
   }
+}
+
+void lsmSortedExpandBtreePage(Page *pPg, int nOrig){
+  u8 *aData;
+  int nData;
+  int nEntry;
+  int iHdr;
+
+  aData = lsmFsPageData(pPg, &nData);
+  nEntry = pageGetNRec(aData, nOrig);
+  iHdr = SEGMENT_EOF(nOrig, nEntry);
+  memmove(&aData[iHdr + (nData-nOrig)], &aData[iHdr], nOrig-iHdr);
 }
 
 #ifdef LSM_DEBUG_EXPENSIVE

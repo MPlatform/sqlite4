@@ -642,7 +642,7 @@ int lsmFsFileid(lsm_db *pDb, void **ppId, int *pnId);
 void lsmFsGobble(lsm_db *, Segment *, Pgno *, int);
 int lsmFsSortedDelete(FileSystem *, Snapshot *, int, Segment *);
 int lsmFsSortedFinish(FileSystem *, Segment *);
-int lsmFsSortedAppend(FileSystem *, Snapshot *, Segment *, Page **);
+int lsmFsSortedAppend(FileSystem *, Snapshot *, Segment *, int, Page **);
 int lsmFsSortedPadding(FileSystem *, Snapshot *, Segment *);
 
 /* Functions to retrieve the lsm_env pointer from a FileSystem or Page object */
@@ -755,6 +755,7 @@ int lsmRestoreCursors(lsm_db *pDb);
 void lsmSortedDumpStructure(lsm_db *pDb, Snapshot *, int, int, const char *);
 void lsmFsDumpBlocklists(lsm_db *);
 
+void lsmSortedExpandBtreePage(Page *pPg, int nOrig);
 
 void lsmPutU32(u8 *, u32);
 u32 lsmGetU32(u8 *);

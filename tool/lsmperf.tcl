@@ -190,9 +190,15 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 600 50000 50000 20 {
-  lsm-mt-1 "mmap=1 multi_proc=0 safety=0 threads=3 autowork=0 block_size=1M"
+do_write_test x.png 100 50000 50000 20 {
+  lsm safety=0
 }
+
+
+  #lsm "mmap=1 multi_proc=0 page_size=4096 block_size=2097152 autocheckpoint=4194000"
+  #lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=4196000"
+
+# lsm     "safety=1 multi_proc=0"
 
 # lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=8192000"
 # lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
