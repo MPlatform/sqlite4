@@ -3408,14 +3408,6 @@ static int mergeWorkerPushHierarchy(
   int nRec;                       /* Initial number of records on b-tree page */
   Pgno iPtr;                      /* Pointer value to accompany pKey/nKey */
 
-  Hierarchy *p;
-  Segment *pSeg;
-
-  /* If there exists a b-tree hierarchy and it is not loaded into 
-  ** memory, load it now.  */
-  pSeg = &pMW->pLevel->lhs;
-  p = &pMW->hier;
-
   assert( pMW->aSave[0].bStore==0 );
   assert( pMW->aSave[1].bStore==0 );
   rc = mergeWorkerBtreeIndirect(pMW);
@@ -3842,6 +3834,7 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
   if( rc==LSM_OK ) rc = mergeWorkerBtreeIndirect(pMW);
   if( rc==LSM_OK ) rc = mergeWorkerFinishHierarchy(pMW);
   if( rc==LSM_OK ) rc = mergeWorkerAddPadding(pMW);
+  lsmFsFlushWaiting(pMW->pDb->pFS, &rc);
   mergeWorkerReleaseAll(pMW);
 
   lsmFree(pMW->pDb->pEnv, pMW->aGobble);
@@ -4149,7 +4142,7 @@ static int sortedNewToplevel(
     if( pDel ) pDel->iRoot = 0;
 
 #if 0
-    lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "new-toplevel");
+    lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 1, "new-toplevel");
 #endif
 
     if( freelist.nEntry ){
@@ -4588,7 +4581,7 @@ static int sortedWork(
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 0, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 1, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);
@@ -5133,7 +5126,7 @@ static int infoPageDump(
     flags = pageGetFlags(aData, nData);
 
     lsmStringInit(&str, pDb->pEnv);
-    lsmStringAppendf(&str, "Page : %d  (%d bytes)\n", iPg, nData);
+    lsmStringAppendf(&str, "Page : %lld  (%d bytes)\n", iPg, nData);
     lsmStringAppendf(&str, "nRec : %d\n", nRec);
     lsmStringAppendf(&str, "iPtr : %d\n", iPtr);
     lsmStringAppendf(&str, "flags: %04x\n", flags);

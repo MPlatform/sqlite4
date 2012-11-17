@@ -199,6 +199,8 @@ struct FileSystem {
   i64 nMap;                       /* Bytes mapped at pMap */
   Page *pFree;
 
+  Page *pWaiting;                 /* b-tree pages waiting to be written */
+
   /* Statistics */
   int nWrite;                     /* Total number of pages written */
   int nRead;                      /* Total number of pages read */
@@ -241,6 +243,9 @@ struct Page {
   int nCompress;                  /* Compressed size (or 0 for uncomp. db) */
   int nCompressPrev;              /* Compressed size of prev page */
   Segment *pSeg;                  /* Segment this page will be written to */
+
+  /* Fix this up somehow */
+  Page *pNextWaiting;
 };
 
 /*
@@ -1585,7 +1590,6 @@ int lsmFsSortedAppend(
 int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
   int rc = LSM_OK;
   if( p && p->iLastPg ){
-    int iBlk;
 
     /* Check if the last page of this run happens to be the last of a block.
     ** If it is, then an extra block has already been allocated for this run.
@@ -1594,7 +1598,6 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
     ** Otherwise, add the first free page in the last block used by the run
     ** to the lAppend list.
     */
-    iBlk = fsPageToBlock(pFS, p->iLastPg);
     if( fsLastPageOnPagesBlock(pFS, p->iLastPg)!=p->iLastPg ){
       int i;
       Pgno *aiAppend = pFS->pDb->pWorker->aiAppend;
@@ -1907,6 +1910,23 @@ static int fsAppendPage(
   return LSM_OK;
 }
 
+void lsmFsFlushWaiting(FileSystem *pFS, int *pRc){
+  int rc = *pRc;
+  Page *pPg;
+
+  pPg = pFS->pWaiting;
+  pFS->pWaiting = 0;
+
+  while( pPg ){
+    Page *pNext = pPg->pNextWaiting;
+    if( rc==LSM_OK ) rc = lsmFsPagePersist(pPg);
+    assert( pPg->nRef==1 );
+    lsmFsPageRelease(pPg);
+    pPg = pNext;
+  }
+  *pRc = rc;
+}
+
 /*
 ** If the page passed as an argument is dirty, update the database file
 ** (or mapping of the database file) with its current contents and mark
@@ -1944,11 +1964,16 @@ int lsmFsPagePersist(Page *pPg){
       pPg->pSeg->nSize += (sizeof(aSz) * 2) + pPg->nCompress;
 
     }else{
-      i64 iOff;                   /* Offset to write within database file */
 
       if( pPg->iPg==0 ){
         /* No page number has been assigned yet. This occurs with pages used
-        ** in the b-tree hierarchy.  */
+        ** in the b-tree hierarchy. They were not assigned page numbers when
+        ** they were created as doing so would cause this call to
+        ** lsmFsPagePersist() to write an out-of-order page. Instead a page 
+        ** number is assigned here so that the page data will be appended
+        ** to the current segment.
+        */
+        Page **pp;
         int iPrev = 0;
         int iNext = 0;
         int iHash;
@@ -1979,27 +2004,37 @@ int lsmFsPagePersist(Page *pPg){
           pPg->nData += 4;
           lsmSortedExpandBtreePage(pPg, nData);
         }
-      }
 
-      iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
-      if( pFS->bUseMmap==0 ){
-        u8 *aData = pPg->aData - (pPg->flags & PAGE_HASPREV);
-        rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, aData, pFS->nPagesize);
-      }else if( pPg->flags & PAGE_FREE ){
-        fsGrowMapping(pFS, iOff + pFS->nPagesize, &rc);
-        if( rc==LSM_OK ){
-          u8 *aTo = &((u8 *)(pFS->pMap))[iOff];
-          u8 *aFrom = pPg->aData - (pPg->flags & PAGE_HASPREV);
-          memcpy(aTo, aFrom, pFS->nPagesize);
-          lsmFree(pFS->pEnv, aFrom);
-          pPg->aData = aTo + (pPg->flags & PAGE_HASPREV);
-          pPg->flags &= ~PAGE_FREE;
-          fsPageAddToLru(pFS, pPg);
+        pPg->nRef++;
+        for(pp=&pFS->pWaiting; *pp; pp=&(*pp)->pNextWaiting);
+        *pp = pPg;
+        assert( pPg->pNextWaiting==0 );
+
+      }else{
+        i64 iOff;                   /* Offset to write within database file */
+
+        iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
+        if( pFS->bUseMmap==0 ){
+          u8 *aData = pPg->aData - (pPg->flags & PAGE_HASPREV);
+          rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, aData, pFS->nPagesize);
+        }else if( pPg->flags & PAGE_FREE ){
+          fsGrowMapping(pFS, iOff + pFS->nPagesize, &rc);
+          if( rc==LSM_OK ){
+            u8 *aTo = &((u8 *)(pFS->pMap))[iOff];
+            u8 *aFrom = pPg->aData - (pPg->flags & PAGE_HASPREV);
+            memcpy(aTo, aFrom, pFS->nPagesize);
+            lsmFree(pFS->pEnv, aFrom);
+            pPg->aData = aTo + (pPg->flags & PAGE_HASPREV);
+            pPg->flags &= ~PAGE_FREE;
+            fsPageAddToLru(pFS, pPg);
+          }
         }
+
+        lsmFsFlushWaiting(pFS, &rc);
+        pPg->flags &= ~PAGE_DIRTY;
+        pFS->nWrite++;
       }
     }
-    pPg->flags &= ~PAGE_DIRTY;
-    pFS->nWrite++;
   }
 
   return rc;
@@ -2079,7 +2114,7 @@ int lsmFsPageRelease(Page *pPg){
   if( pPg ){
     assert( pPg->nRef>0 );
     pPg->nRef--;
-    if( pPg->nRef==0 && pPg->iPg!=0 ){
+    if( pPg->nRef==0 ){
       FileSystem *pFS = pPg->pFS;
       rc = lsmFsPagePersist(pPg);
       pFS->nOut--;

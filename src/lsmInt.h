@@ -691,6 +691,8 @@ void lsmFsDeferClose(FileSystem *pFS, LsmFile **pp);
 /* And to sync the db file */
 int lsmFsSyncDb(FileSystem *);
 
+void lsmFsFlushWaiting(FileSystem *, int *);
+
 /* Used by lsm_info(ARRAY_STRUCTURE) and lsm_config(MMAP) */
 int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut);
