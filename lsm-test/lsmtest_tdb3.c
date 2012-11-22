@@ -433,8 +433,8 @@ static int testZipUncompress(
 
 static int testConfigureCompression(lsm_db *pDb){
   static lsm_compress zip = {
-    1, sizeof(lsm_compress),
     0,                            /* Context pointer (unused) */
+    1,                            /* Id value */
     testZipBound,                 /* xBound method */
     testZipCompress,              /* xCompress method */
     testZipUncompress             /* xUncompress method */
