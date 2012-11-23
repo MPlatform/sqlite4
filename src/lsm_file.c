@@ -1963,6 +1963,8 @@ int lsmFsPagePersist(Page *pPg){
 
       pPg->pSeg->nSize += (sizeof(aSz) * 2) + pPg->nCompress;
 
+      pPg->flags &= ~PAGE_DIRTY;
+      pFS->nWrite++;
     }else{
 
       if( pPg->iPg==0 ){
