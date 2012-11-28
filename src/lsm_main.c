@@ -425,7 +425,7 @@ static int infoFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
   return 0;
 }
 
-int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
+static int infoFreelist(lsm_db *pDb, char **pzOut){
   Snapshot *pWorker;              /* Worker snapshot */
   int bUnlock = 0;
   LsmString s;
@@ -447,6 +447,9 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   /* Release the snapshot and return */
   infoFreeWorker(pDb, bUnlock);
   return rc;
+}
+
+static int infoFreelistSize(lsm_db *pDb, int *pnFree, int *pnWaiting){
 }
 
 static int infoTreeSize(lsm_db *db, int *pnOld, int *pnNew){
@@ -540,7 +543,7 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
 
     case LSM_INFO_FREELIST: {
       char **pzVal = va_arg(ap, char **);
-      rc = lsmInfoFreelist(pDb, pzVal);
+      rc = infoFreelist(pDb, pzVal);
       break;
     }
 

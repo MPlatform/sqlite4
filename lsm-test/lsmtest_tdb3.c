@@ -1,7 +1,6 @@
 
 #include "lsmtest_tdb.h"
 #include "lsm.h"
-
 #include "lsmtest.h"
 
 #include <stdlib.h>
@@ -18,6 +17,19 @@ typedef struct LsmFile LsmFile;
 
 #ifdef LSM_MUTEX_PTHREADS
 #include <pthread.h>
+
+#define LSMTEST_THREAD_CKPT      1
+#define LSMTEST_THREAD_WORKER    2
+#define LSMTEST_THREAD_WORKER_AC 3
+
+/*
+** There are several different types of worker threads that run in different
+** test configurations, depending on the value of LsmWorker.eType.
+**
+**   1. Checkpointer.
+**   2. Worker with auto-checkpoint.
+**   3. Worker without auto-checkpoint.
+*/
 struct LsmWorker {
   LsmDb *pDb;                     /* Main database structure */
   lsm_db *pWorker;                /* Worker database handle */
@@ -26,13 +38,11 @@ struct LsmWorker {
   pthread_mutex_t worker_mutex;   /* Mutex used with worker_cond */
   int bDoWork;                    /* Set to true by client when there is work */
   int worker_rc;                  /* Store error code here */
-
-  int lsm_work_flags;             /* Flags to pass to lsm_work() */
-  int lsm_work_npage;             /* nPage parameter to pass to lsm_work() */
-  int bCkpt;                      /* True to call lsm_checkpoint() */
+  int eType;                      /* LSMTEST_THREAD_XXX constant */
+  int bBlock;
 };
 #else
-struct LsmWorker { int worker_rc; };
+struct LsmWorker { int worker_rc; int bBlock; };
 #endif
 
 static void mt_shutdown(LsmDb *);
@@ -481,11 +491,18 @@ static int test_lsm_write(
   TestDb *pTestDb, 
   void *pKey, 
   int nKey, 
-  void *pVal, 
+  void *pVal,
   int nVal
 ){
   LsmDb *pDb = (LsmDb *)pTestDb;
 
+  int nSleep = 0;
+  while( pDb->aWorker && pDb->aWorker[0].bBlock ){
+    usleep(1000);
+    nSleep++;
+  }
+#if 0
+  if( nSleep ) printf("nSleep=%d\n", nSleep);
   if( pDb->aWorker ){
     int nLimit = -1;
     int nSleep = 0;
@@ -502,6 +519,7 @@ static int test_lsm_write(
     if( nSleep ) printf("nSleep=%d\n", nSleep);
 #endif
   }
+#endif
 
   return lsm_insert(pDb->db, pKey, nKey, pVal, nVal);
 }
@@ -873,8 +891,8 @@ static int testLsmOpen(
     if( rc==LSM_OK ) rc = lsm_open(pDb->db, zFilename);
 
 #ifdef LSM_MUTEX_PTHREADS
-    if( rc==LSM_OK && (nThread==2 || nThread==3) ){
-      testLsmStartWorkers(pDb, nThread-1, zFilename, zCfg);
+    if( rc==LSM_OK && nThread>1 ){
+      testLsmStartWorkers(pDb, nThread, zFilename, zCfg);
     }
 #endif
 
@@ -937,8 +955,6 @@ lsm_db *tdb_lsm(TestDb *pDb){
 void tdb_lsm_enable_log(TestDb *pDb, int bEnable){
   lsm_db *db = tdb_lsm(pDb);
   if( db ){
-    LsmDb *p = (LsmDb *)pDb;
-    int i;
     lsm_config_log(db, (bEnable ? xLog : 0), (void *)"client");
   }
 }
@@ -1027,6 +1043,9 @@ static void mt_signal_worker(LsmDb *pDb, int iWorker){
   pthread_mutex_unlock(&p->worker_mutex);
 }
 
+/*
+** This routine is used as the main() for all worker threads.
+*/
 static void *worker_main(void *pArg){
   LsmWorker *p = (LsmWorker *)pArg;
   lsm_db *pWorker;                /* Connection to access db through */
@@ -1039,8 +1058,14 @@ static void *worker_main(void *pArg){
     /* Do some work. If an error occurs, exit. */
     pthread_mutex_unlock(&p->worker_mutex);
 
-    if( p->bCkpt ){
-      rc = lsm_checkpoint(pWorker, 0);
+    if( p->eType==LSMTEST_THREAD_CKPT ){
+      int nByte = 0;
+      rc = lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nByte);
+      if( rc==LSM_OK && nByte>=(2*1024*1024) ){
+        if( nByte>(8*1024*1024) ) p->bBlock = 1;
+        rc = lsm_checkpoint(pWorker, 0);
+        p->bBlock = 0;
+      }
     }else{
       int nWrite = 0;             /* Pages written by lsm_work() call */
       int nAuto = -1;             /* Configured AUTOCHECKPOINT value */
@@ -1049,20 +1074,21 @@ static void *worker_main(void *pArg){
       lsm_config(pWorker, LSM_CONFIG_AUTOFLUSH, &nLimit);
       lsm_config(pWorker, LSM_CONFIG_AUTOCHECKPOINT, &nAuto);
       do {
-        int nSleep = 0;
         lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nCkpt);
+#if 0
+        int nSleep = 0;
         while( nAuto==0 && nCkpt>(nLimit*4) ){
           usleep(1000);
           mt_signal_worker(p->pDb, 1);
           nSleep++;
           lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nCkpt);
         }
-#if 0
           if( nSleep ) printf("nLimit=%d nSleep=%d (worker)\n", nLimit, nSleep);
 #endif
-
-        rc = lsm_work(pWorker, p->lsm_work_flags, p->lsm_work_npage, &nWrite);
-        if( nAuto==0 && nWrite && rc==LSM_OK ) mt_signal_worker(p->pDb, 1);
+        rc = lsm_work(pWorker, 0, 256, &nWrite);
+        if( p->eType==LSMTEST_THREAD_WORKER_AC && nWrite && rc==LSM_OK ){
+          mt_signal_worker(p->pDb, 1);
+        }
       }while( nWrite && p->pWorker );
     }
     pthread_mutex_lock(&p->worker_mutex);
@@ -1126,7 +1152,6 @@ static void mt_shutdown(LsmDb *pDb){
 */
 static void mt_client_work_hook(lsm_db *db, void *pArg){
   LsmDb *pDb = (LsmDb *)pArg;     /* LsmDb database handle */
-  int i;                          /* Iterator variable */
 
   /* Invoke the user level work-hook, if any. */
   if( pDb->xWork ) pDb->xWork(db, pDb->pWorkCtx);
@@ -1149,20 +1174,20 @@ static int mt_start_worker(
   LsmDb *pDb,                     /* Main database structure */
   int iWorker,                    /* Worker number to start */
   const char *zFilename,          /* File name of database to open */
-  const char *zCfg,
-  int flags,                      /* flags parameter to lsm_work() */
-  int nPage,                      /* nPage parameter to lsm_work() */
-  int bCkpt                       /* True to call lsm_checkpoint() */
+  const char *zCfg,               /* Connection configuration string */
+  int eType                       /* Type of worker thread */
 ){
   int rc = 0;                     /* Return code */
   LsmWorker *p;                   /* Object to initialize */
 
   assert( iWorker<pDb->nWorker );
+  assert( eType==LSMTEST_THREAD_CKPT 
+       || eType==LSMTEST_THREAD_WORKER 
+       || eType==LSMTEST_THREAD_WORKER_AC 
+  );
 
   p = &pDb->aWorker[iWorker];
-  p->lsm_work_flags = flags;
-  p->lsm_work_npage = nPage;
-  p->bCkpt = bCkpt;
+  p->eType = eType;
   p->pDb = pDb;
 
   /* Open the worker connection */
@@ -1188,26 +1213,38 @@ static int mt_start_worker(
 
 
 static int testLsmStartWorkers(
-  LsmDb *pDb, int nWorker, const char *zFilename, const char *zCfg
+  LsmDb *pDb, int eModel, const char *zFilename, const char *zCfg
 ){
   int rc;
-  int bAutowork = 0;
-  assert( nWorker==1 || nWorker==2 );
 
-  /* Configure a work-hook for the client connection. */
+  if( eModel<1 || eModel>4 ) return 1;
+  if( eModel==1 ) return 0;
+
+  /* Configure a work-hook for the client connection. Worker 0 is signalled
+  ** every time the users connection writes to the database.  */
   lsm_config_work_hook(pDb->db, mt_client_work_hook, (void *)pDb);
 
-  pDb->aWorker = (LsmWorker *)testMalloc(sizeof(LsmWorker) * nWorker);
-  memset(pDb->aWorker, 0, sizeof(LsmWorker) * nWorker);
-  pDb->nWorker = nWorker;
+  /* Allocate space for two worker connections. They may not both be
+  ** used, but both are allocated.  */
+  pDb->aWorker = (LsmWorker *)testMalloc(sizeof(LsmWorker) * 2);
+  memset(pDb->aWorker, 0, sizeof(LsmWorker) * 2);
 
-  if( nWorker==1 ){
-    rc = mt_start_worker(pDb, 0, zFilename, zCfg, 0, 256, 0);
-  }else{
-    rc = mt_start_worker(pDb, 0, zFilename, zCfg, 0, 256, 0);
-    if( rc==LSM_OK ){
-      rc = mt_start_worker(pDb, 1, zFilename, zCfg, 0, 0, 1);
-    }
+  switch( eModel ){
+    case 2:
+      pDb->nWorker = 1;
+      test_lsm_config_str(0, pDb->db, 0, "autocheckpoint=0", 0);
+      rc = mt_start_worker(pDb, 0, zFilename, zCfg, LSMTEST_THREAD_CKPT);
+      break;
+
+    case 3:
+      pDb->nWorker = 2;
+      assert( 0 );
+      break;
+
+    case 4:
+      pDb->nWorker = 2;
+      assert( 0 );
+      break;
   }
 
   return rc;

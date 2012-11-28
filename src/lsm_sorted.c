@@ -4142,7 +4142,7 @@ static int sortedNewToplevel(
     if( pDel ) pDel->iRoot = 0;
 
 #if 0
-    lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 1, "new-toplevel");
+    lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
 #endif
 
     if( freelist.nEntry ){
@@ -4581,7 +4581,7 @@ static int sortedWork(
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
 #if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 1, 1, "work");
+      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);

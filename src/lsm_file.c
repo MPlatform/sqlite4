@@ -1118,10 +1118,20 @@ static int fsPageGet(
 
   assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
   if( pFS->bUseMmap ){
+    Page *pTest;
     i64 iEnd = (i64)iPg * pFS->nPagesize;
     fsGrowMapping(pFS, iEnd, &rc);
     if( rc!=LSM_OK ) return rc;
 
+    p = 0;
+    for(pTest=pFS->pWaiting; pTest; pTest=pTest->pNextWaiting){
+      if( pTest->iPg==iPg ){
+        p = pTest;
+        p->nRef++;
+        *ppPg = p;
+        return LSM_OK;
+      }
+    }
     if( pFS->pFree ){
       p = pFS->pFree;
       pFS->pFree = p->pHashNext;
@@ -1978,7 +1988,6 @@ int lsmFsPagePersist(Page *pPg){
         Page **pp;
         int iPrev = 0;
         int iNext = 0;
-        int iHash;
 
         assert( pPg->pSeg->iFirst );
         assert( pPg->flags & PAGE_FREE );
@@ -1988,9 +1997,12 @@ int lsmFsPagePersist(Page *pPg){
         rc = fsAppendPage(pFS, pPg->pSeg, &pPg->iPg, &iPrev, &iNext);
         if( rc!=LSM_OK ) return rc;
 
-        iHash = fsHashKey(pFS->nHash, pPg->iPg);
-        pPg->pHashNext = pFS->apHash[iHash];
-        pFS->apHash[iHash] = pPg;
+        if( pFS->bUseMmap==0 ){
+          int iHash = fsHashKey(pFS->nHash, pPg->iPg);
+          pPg->pHashNext = pFS->apHash[iHash];
+          pFS->apHash[iHash] = pPg;
+          assert( pPg->pHashNext==0 || pPg->pHashNext->iPg!=pPg->iPg );
+        }
 
         if( iPrev ){
           assert( iNext==0 );
@@ -2462,6 +2474,12 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   Level *pLevel;
   Snapshot *pWorker = pDb->pWorker;
   int nBlock = pWorker->nBlock;
+
+#if 0 
+  static int nCall = 0;
+  nCall++;
+  printf("%d calls\n", nCall);
+#endif
 
   aUsed = lsmMallocZero(pDb->pEnv, nBlock);
   if( aUsed==0 ){

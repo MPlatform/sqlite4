@@ -36,6 +36,7 @@
 **     5. The block size.
 **     6. The number of levels.
 **     7. The nominal database page size.
+**     8. The number of pages (in total) written to the database file.
 **
 **   Log pointer:
 **
@@ -72,7 +73,9 @@
 **   in-memory tree is to the users database content.
 **
 **     1. Number of free-list entries stored in checkpoint header.
-**     2. For each entry:
+**     2. Number of free blocks (in total).
+**     3. Total number of blocks freed during database lifetime.
+**     4. For each entry:
 **        2a. Block number of free block.
 **        2b. A 64-bit integer (MSW followed by LSW). -1 for a delete entry,
 **            or the associated checkpoint id for an insert.

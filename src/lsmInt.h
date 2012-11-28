@@ -790,7 +790,6 @@ void lsmLogSeek(lsm_db *, LogMark *);
 
 int lsmLogRecover(lsm_db *);
 int lsmInfoLogStructure(lsm_db *pDb, char **pzVal);
-int lsmInfoFreelist(lsm_db *, char **pzVal);
 
 
 /**************************************************************************

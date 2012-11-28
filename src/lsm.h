@@ -397,6 +397,8 @@ int lsm_info(lsm_db *, int, ...);
 #define LSM_INFO_CHECKPOINT_SIZE 10
 #define LSM_INFO_TREE_SIZE       11
 
+#define LSM_INFO_FREELIST_SIZE   12
+
 
 /* 
 ** CAPI: Opening and Closing Write Transactions

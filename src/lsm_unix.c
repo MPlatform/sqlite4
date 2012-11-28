@@ -190,8 +190,8 @@ static int lsmPosixOsRemap(
 
   if( p->pMap ){
     munmap(p->pMap, p->nMap);
-    p->pMap = 0;
-    p->nMap = 0;
+    *ppOut = p->pMap = 0;
+    *pnOut = p->nMap = 0;
   }
 
   memset(&buf, 0, sizeof(buf));
