@@ -425,7 +425,7 @@ static int infoFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
   return 0;
 }
 
-static int infoFreelist(lsm_db *pDb, char **pzOut){
+int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   Snapshot *pWorker;              /* Worker snapshot */
   int bUnlock = 0;
   LsmString s;
@@ -543,7 +543,7 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
 
     case LSM_INFO_FREELIST: {
       char **pzVal = va_arg(ap, char **);
-      rc = infoFreelist(pDb, pzVal);
+      rc = lsmInfoFreelist(pDb, pzVal);
       break;
     }
 

@@ -777,6 +777,7 @@ int lsmVarintSize(u8 c);
 ** Functions from file "main.c".
 */
 void lsmLogMessage(lsm_db *, int, const char *, ...);
+int lsmInfoFreelist(lsm_db *pDb, char **pzOut);
 
 /*
 ** Functions from file "lsm_log.c".

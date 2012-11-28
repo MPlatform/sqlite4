@@ -366,6 +366,23 @@ proc static_redraw {C} {
   draw_canvas_content $C $myData [list static_select_callback $C]
 }
 
+# The first parameter is the number of pages stored on each block of the
+# database file (i.e. if the page size is 4K and the block size 1M, 256).
+# The second parameter is a list of pages in a segment.
+#
+# The return value is a list of blocks occupied by the segment.
+#
+proc pagelist_to_blocklist {nBlkPg pglist} {
+  set blklist [list]
+  foreach pg $pglist {
+    set blk [expr 1 + (($pg-1) / $nBlkPg)]
+    if {[lindex $blklist end]!=$blk} {
+      lappend blklist $blk
+    }
+  }
+  set blklist
+}
+
 proc static_select_callback {C segment} {
   link_varset $C myText myDb myData myTree myCfg
   foreach {iFirst iLast iRoot nSize $segment} $segment {}
@@ -391,19 +408,19 @@ proc static_select_callback {C segment} {
   }
 
   foreach pg $data {
-    set blk [expr 1 + ($pg / $nBlkPg)]
+    set blk [expr 1 + (($pg-1) / $nBlkPg)]
     if {[info exists block($blk)]} {
       incr block($blk) 1
     } else {
       set block($blk) 1
     }
   }
-  foreach blk [lsort -integer [array names block]] {
+  foreach blk [pagelist_to_blocklist $nBlkPg $data] {
     set nPg $block($blk)
     set blkid($blk) [$myTree insert {} end -text "block $blk ($nPg pages)"]
   }
   foreach pg $data {
-    set blk [expr 1 + ($pg / $nBlkPg)]
+    set blk [expr 1 + (($pg-1) / $nBlkPg)]
     set id $blkid($blk)
     set item [$myTree insert $id end -text $pg]
     if {$pg == $iRoot} {

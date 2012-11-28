@@ -530,10 +530,22 @@ static int findFreeblock(lsm_db *pDb, i64 iInUse, int *piRet){
   int rc;                         /* Return code */
   FindFreeblockCtx ctx;           /* Context object */
 
+#ifdef LSM_LOG_BLOCKS
+  char *zList = 0;
+  lsmInfoFreelist(pDb, &zList);
+  lsmLogMessage(pDb, 0, 
+      "findFreeblock(): iInUse=%lld freelist=%s", iInUse, zList);
+  lsmFree(pDb->pEnv, zList);
+#endif
+
   ctx.iInUse = iInUse;
   ctx.iRet = 0;
   rc = lsmWalkFreelist(pDb, findFreeblockCb, (void *)&ctx);
   *piRet = ctx.iRet;
+
+#ifdef LSM_LOG_BLOCKS
+  lsmLogMessage(pDb, 0, "findFreeblock(): returning block %d", *piRet);
+#endif
   return rc;
 }
 
@@ -677,9 +689,6 @@ int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
 
     if( rc==LSM_OK && bDone==0 ){
       int iMeta = (pShm->iMetaPage % 2) + 1;
-#if 0
-  lsmLogMessage(pDb, 0, "starting checkpoint");
-#endif
       if( pDb->eSafety!=LSM_SAFETY_OFF ){
         rc = lsmFsSyncDb(pDb->pFS);
       }
