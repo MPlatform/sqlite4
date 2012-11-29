@@ -1228,6 +1228,38 @@ static int fsPageGet(
   return rc;
 }
 
+/*
+** Read the 64-bit checkpoint id of the checkpoint currently stored on meta
+** page iMeta of the database file. If no error occurs, store the id value
+** in *piVal and return LSM_OK. Otherwise, return an LSM error code and leave
+** *piVal unmodified.
+**
+** If a checkpointer connection is currently updating meta-page iMeta, or an
+** earlier checkpointer crashed while doing so, the value read into *piVal
+** may be garbage. It is the callers responsibility to deal with this.
+*/
+int lsmFsReadSyncedId(lsm_db *db, int iMeta, i64 *piVal){
+  FileSystem *pFS = db->pFS;
+  int rc = LSM_OK;
+
+  assert( iMeta==1 || iMeta==2 );
+  if( pFS->bUseMmap ){
+    fsGrowMapping(pFS, iMeta*LSM_META_PAGE_SIZE, &rc);
+    if( rc==LSM_OK ){
+      *piVal = (i64)lsmGetU64(&((u8 *)pFS->pMap)[(iMeta-1)*LSM_META_PAGE_SIZE]);
+    }
+  }else{
+    MetaPage *pMeta = 0;
+    rc = lsmFsMetaPageGet(pFS, 0, iMeta, &pMeta);
+    if( rc==LSM_OK ){
+      *piVal = (i64)lsmGetU64(pMeta->aData);
+      lsmFsMetaPageRelease(pMeta);
+    }
+  }
+
+  return rc;
+}
+
 
 static int fsRunEndsBetween(
   Segment *pRun, 

@@ -342,7 +342,7 @@ u32 lsmGetU32(u8 *aOut){
        + ((u32)aOut[3]);
 }
 
-u32 lsmGetU64(u8 *aOut){
+u64 lsmGetU64(u8 *aOut){
   return ((u64)aOut[0] << 56) 
        + ((u64)aOut[1] << 48) 
        + ((u64)aOut[2] << 40) 

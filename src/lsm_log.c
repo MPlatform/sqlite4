@@ -302,22 +302,38 @@ static i64 lastByteOnSector(LogWriter *pLog, i64 iOff){
 */
 static int logReclaimSpace(lsm_db *pDb){
   int rc = LSM_OK;
-  if( pDb->pShmhdr->iMetaPage ){
+  int iMeta;
+
+  iMeta = (int)pDb->pShmhdr->iMetaPage;
+  if( iMeta==1 || iMeta==2 ){
     DbLog *pLog = &pDb->treehdr.log;
-    i64 iSnapshotId = 0;
-    i64 iOff = 0;
-    rc = lsmCheckpointSynced(pDb, &iSnapshotId, &iOff, 0);
-    if( rc==LSM_OK && pLog->iSnapshotId<iSnapshotId ){
-      int iRegion;
-      for(iRegion=0; iRegion<3; iRegion++){
-        LogRegion *p = &pLog->aRegion[iRegion];
-        if( iOff>=p->iStart && iOff<=p->iEnd ) break;
-        p->iStart = 0;
-        p->iEnd = 0;
+    i64 iSyncedId;
+
+    /* Read the snapshot-id of the snapshot stored on meta-page iMeta. Note
+    ** that in theory, the value read is untrustworthy (due to a race 
+    ** condition - see comments above lsmFsReadSyncedId()). So it is only 
+    ** ever used to conclude that no log space can be reclaimed. If it seems
+    ** to indicate that it may be possible to reclaim log space, a
+    ** second call to lsmCheckpointSynced() (which does return trustworthy
+    ** values) is made below to confirm.  */
+    rc = lsmFsReadSyncedId(pDb, iMeta, &iSyncedId);
+
+    if( rc==LSM_OK && pLog->iSnapshotId!=iSyncedId ){
+      i64 iSnapshotId = 0;
+      i64 iOff = 0;
+      rc = lsmCheckpointSynced(pDb, &iSnapshotId, &iOff, 0);
+      if( rc==LSM_OK && pLog->iSnapshotId<iSnapshotId ){
+        int iRegion;
+        for(iRegion=0; iRegion<3; iRegion++){
+          LogRegion *p = &pLog->aRegion[iRegion];
+          if( iOff>=p->iStart && iOff<=p->iEnd ) break;
+          p->iStart = 0;
+          p->iEnd = 0;
+        }
+        assert( iRegion<3 );
+        pLog->aRegion[iRegion].iStart = iOff;
+        pLog->iSnapshotId = iSnapshotId;
       }
-      assert( iRegion<3 );
-      pLog->aRegion[iRegion].iStart = iOff;
-      pLog->iSnapshotId = iSnapshotId;
     }
   }
   return rc;

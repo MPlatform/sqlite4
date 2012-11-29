@@ -709,6 +709,8 @@ void lsmEnvShmUnmap(lsm_env *, lsm_file *, int);
 
 void lsmEnvSleep(lsm_env *, int);
 
+int lsmFsReadSyncedId(lsm_db *db, int, i64 *piVal);
+
 /*
 ** End of functions from "lsm_file.c".
 **************************************************************************/
