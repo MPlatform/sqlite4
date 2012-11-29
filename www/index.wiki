@@ -8,3 +8,4 @@
   *  [./decimal.wiki | Internal representation of numeric values]
   *  [./porting.wiki | Porting an app from SQLite3 to SQLite4]
   *  [./storage.wiki | How to create a new storage engine]
+  *  [./lsmusr.wiki | LSM User Manual]

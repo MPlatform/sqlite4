@@ -528,7 +528,7 @@ static int waitOnWorker(LsmDb *pDb){
     int bOld, nNew, rc;
     rc = lsm_info(pDb->db, LSM_INFO_TREE_SIZE, &bOld, &nNew);
     if( rc!=LSM_OK ) return rc;
-    if( bOld==0 || nNew<nLimit ) break;
+    if( bOld==0 || nNew<(nLimit/2) ) break;
     usleep(5000);
     nSleep += 5;
   }while( 1 );

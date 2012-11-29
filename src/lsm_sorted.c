@@ -4722,7 +4722,7 @@ static int doLsmSingleWork(
   ** top-level containing just the in-memory free-list entries to disk. */
   if( rc==LSM_OK && pDb->pWorker->freelist.nEntry > pDb->nMaxFreelist ){
     int nPg = 0;
-    while( rc==LSM_OK && sortedDbIsFull(pDb) ){
+    while( rc==LSM_OK && lsmDatabaseFull(pDb) ){
       rc = sortedWork(pDb, 16, nMerge, 1, &nPg);
       nRem -= nPg;
     }
