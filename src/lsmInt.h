@@ -534,6 +534,7 @@ int lsmCheckpointLoad(lsm_db *pDb, int *);
 int lsmCheckpointLoadOk(lsm_db *pDb, int);
 int lsmCheckpointClientCacheOk(lsm_db *);
 
+u32 lsmCheckpointNBlock(u32 *);
 i64 lsmCheckpointId(u32 *, int);
 u32 lsmCheckpointNWrite(u32 *, int);
 i64 lsmCheckpointLogOffset(u32 *);
@@ -689,7 +690,7 @@ int lsmFsCloseAndDeleteLog(FileSystem *pFS);
 void lsmFsDeferClose(FileSystem *pFS, LsmFile **pp);
 
 /* And to sync the db file */
-int lsmFsSyncDb(FileSystem *);
+int lsmFsSyncDb(FileSystem *, int);
 
 void lsmFsFlushWaiting(FileSystem *, int *);
 

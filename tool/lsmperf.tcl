@@ -190,9 +190,8 @@ proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
   exec_gnuplot_script $script $zPng
 }
 
-do_write_test x.png 60 50000 50000 200 {
-  lsm-mt "mt_mode=4 multi_proc=0 autoflush=4M"
-  leveldb leveldb
+do_write_test x.png 400 100000 100000 100 {
+  lsm-4M "mt_mode=4 multi_proc=0 autoflush=4M page_size=1024"
 }
 
 

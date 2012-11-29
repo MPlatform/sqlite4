@@ -1092,6 +1092,10 @@ i64 lsmCheckpointId(u32 *aCkpt, int bDisk){
   return iId;
 }
 
+u32 lsmCheckpointNBlock(u32 *aCkpt){
+  return aCkpt[CKPT_HDR_NBLOCK];
+}
+
 u32 lsmCheckpointNWrite(u32 *aCkpt, int bDisk){
   if( bDisk ){
     return lsmGetU32((u8 *)&aCkpt[CKPT_HDR_NWRITE]);

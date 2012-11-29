@@ -690,11 +690,12 @@ int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
     if( rc==LSM_OK && bDone==0 ){
       int iMeta = (pShm->iMetaPage % 2) + 1;
       if( pDb->eSafety!=LSM_SAFETY_OFF ){
-        rc = lsmFsSyncDb(pDb->pFS);
+        int nBlock = lsmCheckpointNBlock(pDb->aSnapshot);
+        rc = lsmFsSyncDb(pDb->pFS, nBlock);
       }
       if( rc==LSM_OK ) rc = lsmCheckpointStore(pDb, iMeta);
       if( rc==LSM_OK && pDb->eSafety!=LSM_SAFETY_OFF){
-        rc = lsmFsSyncDb(pDb->pFS);
+        rc = lsmFsSyncDb(pDb->pFS, 0);
       }
       if( rc==LSM_OK ){
         pShm->iMetaPage = iMeta;

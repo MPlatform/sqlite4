@@ -15,6 +15,9 @@ typedef struct LsmDb LsmDb;
 typedef struct LsmWorker LsmWorker;
 typedef struct LsmFile LsmFile;
 
+#define LSMTEST_DFLT_MT_MAX_CKPT (8*1024*1024)
+#define LSMTEST_DFLT_MT_MIN_CKPT (2*1024*1024)
+
 #ifdef LSM_MUTEX_PTHREADS
 #include <pthread.h>
 
@@ -509,7 +512,7 @@ static int waitOnCheckpointer(LsmDb *pDb, lsm_db *db){
   }while( 1 );
 
 #if 0
-    if( nSleep ) printf("waitOnCheckpointer(): nSleep=%d\n", nSleep);
+    if( nSleep ) printf("# waitOnCheckpointer(): nSleep=%d\n", nSleep);
 #endif
 
   return rc;
@@ -531,7 +534,7 @@ static int waitOnWorker(LsmDb *pDb){
   }while( 1 );
 
 #if 0
-  if( nSleep ) printf("waitOnWorker(): nSleep=%d\n", nSleep);
+  if( nSleep ) printf("# waitOnWorker(): nSleep=%d\n", nSleep);
 #endif
 
   return rc;
@@ -919,8 +922,8 @@ static int testLsmOpen(
   pDb->szSector = 256;
 
   /* Default values for the mt_min_ckpt and mt_max_ckpt parameters. */
-  pDb->nMtMinCkpt =  2 * (1<<20);
-  pDb->nMtMaxCkpt = 16 * (1<<20);
+  pDb->nMtMinCkpt = LSMTEST_DFLT_MT_MIN_CKPT;
+  pDb->nMtMaxCkpt = LSMTEST_DFLT_MT_MAX_CKPT;
 
   memcpy(&pDb->env, tdb_lsm_env(), sizeof(lsm_env));
   pDb->env.pVfsCtx = (void *)pDb;

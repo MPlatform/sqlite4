@@ -856,6 +856,20 @@ static void fsGrowMapping(
   }
 }
 
+
+/*
+** fsync() the database file.
+*/
+int lsmFsSyncDb(FileSystem *pFS, int nBlock){
+  if( nBlock && pFS->bUseMmap ){
+    int rc = LSM_OK;
+    i64 nMin = (i64)nBlock * (i64)pFS->nBlocksize;
+    fsGrowMapping(pFS, nMin, &rc);
+    if( rc!=LSM_OK ) return rc;
+  }
+  return lsmEnvSync(pFS->pEnv, pFS->fdDb);
+}
+
 static int fsPageGet(FileSystem *, Pgno, int, Page **, int *);
 
 /*
@@ -980,7 +994,7 @@ static int getRecordSize(u8 *aBuf, int *pbFree){
 
 static int fsSubtractOffset(FileSystem *pFS, i64 iOff, int iSub, i64 *piRes){
   i64 iStart;
-  int iBlk;
+  int iBlk = 0;
   int rc;
 
   assert( pFS->pCompress );
@@ -2164,13 +2178,6 @@ int lsmFsNRead(FileSystem *pFS){ return pFS->nRead; }
 ** Return the total number of pages written to the database file.
 */
 int lsmFsNWrite(FileSystem *pFS){ return pFS->nWrite; }
-
-/*
-** fsync() the database file.
-*/
-int lsmFsSyncDb(FileSystem *pFS){
-  return lsmEnvSync(pFS->pEnv, pFS->fdDb);
-}
 
 /*
 ** Return a copy of the environment pointer used by the file-system object.
