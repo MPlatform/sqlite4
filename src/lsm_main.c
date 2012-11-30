@@ -191,7 +191,9 @@ int lsm_close(lsm_db *pDb){
       lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
       pDb->pClient = 0;
       lsmDbDatabaseRelease(pDb);
+      lsmLogClose(pDb);
       lsmFsClose(pDb->pFS);
+      lsmFree(pDb->pEnv, pDb->rollback.aArray);
       lsmFree(pDb->pEnv, pDb->aTrans);
       lsmFree(pDb->pEnv, pDb->apShm);
       lsmFree(pDb->pEnv, pDb);

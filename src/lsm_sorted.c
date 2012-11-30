@@ -224,7 +224,7 @@ struct MultiCursor {
 #define CURSOR_DATA_TREE0     0   /* Current tree cursor (apTreeCsr[0]) */
 #define CURSOR_DATA_TREE1     1   /* The "old" tree, if any (apTreeCsr[1]) */
 #define CURSOR_DATA_SYSTEM    2   /* Free-list entries (new-toplevel only) */
-#define CURSOR_DATA_SEGMENT   3
+#define CURSOR_DATA_SEGMENT   3   /* First segment pointer (aPtr[0]) */
 
 /*
 ** CURSOR_IGNORE_DELETE
@@ -4058,6 +4058,10 @@ static int sortedNewToplevel(
   int nWrite = 0;                 /* Number of database pages written */
   Freelist freelist;
 
+  if( eTree!=TREE_NONE ){
+    rc = lsmShmCacheChunks(pDb, pDb->treehdr.nChunk);
+  }
+
   assert( pDb->bUseFreelist==0 );
   pDb->pFreelist = &freelist;
   pDb->bUseFreelist = 1;
@@ -4089,10 +4093,8 @@ static int sortedNewToplevel(
       rc = btreeCursorNew(pDb, pDel, &pCsr->pBtCsr);
     }
 
-    if( pNext==0 ){
-      multiCursorIgnoreDelete(pCsr);
-    }
-
+    /* If this will be the only segment in the database, discard any delete
+    ** markers present in the in-memory tree.  */
     if( pNext==0 ){
       multiCursorIgnoreDelete(pCsr);
     }
@@ -4616,9 +4618,6 @@ static int sortedTreeHasOld(lsm_db *pDb, int *pRc){
 
   assert( pDb->pWorker );
   if( *pRc==LSM_OK ){
-    if( pDb->nTransOpen==0 ){
-      rc = lsmTreeLoadHeader(pDb, 0);
-    }
     if( rc==LSM_OK 
         && pDb->treehdr.iOldShmid
         && pDb->treehdr.iOldLog!=pDb->pWorker->iLogOff 
@@ -4683,6 +4682,9 @@ static int doLsmSingleWork(
 
   /* If there exists in-memory data ready to be flushed to disk, attempt
   ** to flush it now.  */
+  if( pDb->nTransOpen==0 ){
+    rc = lsmTreeLoadHeader(pDb, 0);
+  }
   if( sortedTreeHasOld(pDb, &rc) ){
     /* sortedDbIsFull() returns non-zero if either (a) there are too many
     ** levels in total in the db, or (b) there are too many levels with the

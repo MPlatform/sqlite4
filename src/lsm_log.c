@@ -217,11 +217,11 @@ struct LogWriter {
   u32 cksum1;                     /* Checksum 1 at offset iOff */
   int iCksumBuf;                  /* Bytes of buf that have been checksummed */
   i64 iOff;                       /* Offset at start of buffer buf */
-  LsmString buf;                  /* Buffer containing data not yet written */
   int szSector;                   /* Sector size for this transaction */
   LogRegion jump;                 /* Avoid writing to this region */
   i64 iRegion1End;                /* End of first region written by trans */
   i64 iRegion2Start;              /* Start of second regions written by trans */
+  LsmString buf;                  /* Buffer containing data not yet written */
 };
 
 /*
@@ -354,12 +354,23 @@ int lsmLogBegin(lsm_db *pDb){
   LogRegion *aReg;
 
   if( pDb->bUseLog==0 ) return LSM_OK;
+
+  /* If the log file has not yet been opened, open it now. Also allocate
+  ** the LogWriter structure, if it has not already been allocated.  */
   rc = lsmFsOpenLog(pDb->pFS);
-  pNew = lsmMallocZeroRc(pDb->pEnv, sizeof(LogWriter), &rc);
-  if( pNew ){
-    lsmStringInit(&pNew->buf, pDb->pEnv);
-    rc = lsmStringExtend(&pNew->buf, 2);
+  if( pDb->pLogWriter==0 ){
+    pNew = lsmMallocZeroRc(pDb->pEnv, sizeof(LogWriter), &rc);
+    if( pNew ){
+      lsmStringInit(&pNew->buf, pDb->pEnv);
+      rc = lsmStringExtend(&pNew->buf, 2);
+    }
+  }else{
+    pNew = pDb->pLogWriter;
+    assert( (u8 *)(&pNew[1])==(u8 *)(&((&pNew->buf)[1])) );
+    memset(pNew, 0, ((u8 *)&pNew->buf) - (u8 *)pNew);
+    pNew->buf.n = 0;
   }
+
   if( rc==LSM_OK ){
     /* The following call detects whether or not a new snapshot has been 
     ** synced into the database file. If so, it updates the contents of
@@ -375,8 +386,7 @@ int lsmLogBegin(lsm_db *pDb){
     rc = logReclaimSpace(pDb);
   }
   if( rc!=LSM_OK ){
-    if( pNew ) lsmFree(pDb->pEnv, pNew->buf.z);
-    lsmFree(pDb->pEnv, pNew);
+    lsmLogClose(pDb);
     return rc;
   }
 
@@ -482,9 +492,6 @@ void lsmLogEnd(lsm_db *pDb, int bCommit){
       pLog->aRegion[2].iStart = p->iRegion2Start;
     }
   }
-  lsmStringClear(&p->buf);
-  lsmFree(pDb->pEnv, p);
-  pDb->pLogWriter = 0;
 }
 
 static int jumpIfRequired(
@@ -1102,3 +1109,13 @@ int lsmLogRecover(lsm_db *pDb){
   lsmStringClear(&reader.buf);
   return rc;
 }
+
+void lsmLogClose(lsm_db *db){
+  if( db->pLogWriter ){
+    lsmFree(db->pEnv, db->pLogWriter->buf.z);
+    lsmFree(db->pEnv, db->pLogWriter);
+    db->pLogWriter = 0;
+  }
+}
+
+

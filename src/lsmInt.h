@@ -791,6 +791,7 @@ int lsmLogCommit(lsm_db *);
 void lsmLogEnd(lsm_db *pDb, int bCommit);
 void lsmLogTell(lsm_db *, LogMark *);
 void lsmLogSeek(lsm_db *, LogMark *);
+void lsmLogClose(lsm_db *);
 
 int lsmLogRecover(lsm_db *);
 int lsmInfoLogStructure(lsm_db *pDb, char **pzVal);
@@ -851,7 +852,7 @@ void lsmFreeSnapshot(lsm_env *, Snapshot *);
 #define LSM_LOCK_SHARED 1
 #define LSM_LOCK_EXCL   2
 
-int lsmShmChunk(lsm_db *db, int iChunk, void **ppData);
+int lsmShmCacheChunks(lsm_db *db, int nChunk);
 int lsmShmLock(lsm_db *db, int iLock, int eOp, int bBlock);
 void lsmShmBarrier(lsm_db *db);
 

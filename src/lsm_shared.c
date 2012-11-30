@@ -204,8 +204,9 @@ static int doDbConnect(lsm_db *pDb){
 
   /* Obtain a pointer to the shared-memory header */
   assert( pDb->pShmhdr==0 );
-  rc = lsmShmChunk(pDb, 0, (void **)&pDb->pShmhdr);
+  rc = lsmShmCacheChunks(pDb, 1);
   if( rc!=LSM_OK ) return rc;
+  pDb->pShmhdr = (ShmHeader *)pDb->apShm[0];
 
   /* Block for an exclusive lock on DMS1. This lock serializes all calls
   ** to doDbConnect() and doDbDisconnect() across all processes.  */
@@ -840,6 +841,9 @@ if( rc==LSM_OK && pDb->pClient ){
 #endif
   }
 
+  if( rc==LSM_OK ){
+    rc = lsmShmCacheChunks(pDb, pDb->treehdr.nChunk);
+  }
   if( rc!=LSM_OK ){
     lsmReleaseReadlock(pDb);
   }
@@ -1163,65 +1167,74 @@ int lsmDbMultiProc(lsm_db *pDb){
 *************************************************************************/
 
 /*
-** Retrieve a pointer to shared-memory chunk iChunk. Chunks are numbered
-** starting from 0 (i.e. the header chunk is chunk 0).
+** Ensure that database connection db has cached pointers to at least the 
+** first nChunk chunks of shared memory.
 */
-int lsmShmChunk(lsm_db *db, int iChunk, void **ppData){
+int lsmShmCacheChunks(lsm_db *db, int nChunk){
   int rc = LSM_OK;
-  void *pRet = 0;
-  Database *p = db->pDatabase;
-  lsm_env *pEnv = db->pEnv;
+  if( nChunk>db->nShm ){
+    static const int NINCR = 16;
+    void *pRet = 0;
+    Database *p = db->pDatabase;
+    lsm_env *pEnv = db->pEnv;
+    int nAlloc;
+    int i;
 
-  while( iChunk>=db->nShm ){
-    void **apShm;
-    apShm = lsmRealloc(pEnv, db->apShm, sizeof(void*)*(db->nShm+16));
-    if( !apShm ) return LSM_NOMEM_BKPT;
-    memset(&apShm[db->nShm], 0, sizeof(void*)*16);
-    db->apShm = apShm;
-    db->nShm += 16;
-  }
-  if( db->apShm[iChunk] ){
-    *ppData = db->apShm[iChunk];
-    return rc;
-  }
-
-  /* Enter the client mutex */
-  assert( iChunk>=0 );
-  lsmMutexEnter(pEnv, p->pClientMutex);
-
-  if( iChunk>=p->nShmChunk ){
-    int nNew = iChunk+1;
-    void **apNew;
-    apNew = (void **)lsmRealloc(pEnv, p->apShmChunk, sizeof(void*) * nNew);
-    if( apNew==0 ){
-      rc = LSM_NOMEM_BKPT;
-    }else{
-      memset(&apNew[p->nShmChunk], 0, sizeof(void*) * (nNew-p->nShmChunk));
-      p->apShmChunk = apNew;
-      p->nShmChunk = nNew;
+    /* Ensure that the db->apShm[] array is large enough. If an attempt to
+    ** allocate memory fails, return LSM_NOMEM immediately. The apShm[] array
+    ** is always extended in multiples of 16 entries - so the actual allocated
+    ** size can be inferred from nShm.  */ 
+    nAlloc = ((db->nShm + NINCR - 1) / NINCR) * NINCR;
+    while( nChunk>=nAlloc ){
+      void **apShm;
+      nAlloc += NINCR;
+      apShm = lsmRealloc(pEnv, db->apShm, sizeof(void*)*nAlloc);
+      if( !apShm ) return LSM_NOMEM_BKPT;
+      db->apShm = apShm;
     }
-  }
 
-  if( rc==LSM_OK && p->apShmChunk[iChunk]==0 ){
-    void *pChunk = 0;
-    if( p->pFile==0 ){
-      /* Single process mode */
-      pChunk = lsmMallocZeroRc(pEnv, LSM_SHM_CHUNK_SIZE, &rc);
-    }else{
-      /* Multi-process mode */
-      rc = lsmEnvShmMap(pEnv, p->pFile, iChunk, LSM_SHM_CHUNK_SIZE, &pChunk);
+    /* Enter the client mutex */
+    lsmMutexEnter(pEnv, p->pClientMutex);
+
+    /* Extend the Database objects apShmChunk[] array if necessary. Using the
+    ** same pattern as for the lsm_db.apShm[] array above.  */
+    nAlloc = ((p->nShmChunk + NINCR - 1) / NINCR) * NINCR;
+    while( nChunk>=nAlloc ){
+      void **apShm;
+      nAlloc +=  NINCR;
+      apShm = lsmRealloc(pEnv, p->apShmChunk, sizeof(void*)*nAlloc);
+      if( !apShm ){
+        rc = LSM_NOMEM_BKPT;
+        break;
+      }
+      p->apShmChunk = apShm;
     }
-    p->apShmChunk[iChunk] = pChunk;
+
+    for(i=db->nShm; rc==LSM_OK && i<nChunk; i++){
+      if( i>=p->nShmChunk ){
+        void *pChunk = 0;
+        if( p->pFile==0 ){
+          /* Single process mode */
+          pChunk = lsmMallocZeroRc(pEnv, LSM_SHM_CHUNK_SIZE, &rc);
+        }else{
+          /* Multi-process mode */
+          rc = lsmEnvShmMap(pEnv, p->pFile, i, LSM_SHM_CHUNK_SIZE, &pChunk);
+        }
+        if( rc==LSM_OK ){
+          p->apShmChunk[i] = pChunk;
+          p->nShmChunk++;
+        }
+      }
+      if( rc==LSM_OK ){
+        db->apShm[i] = p->apShmChunk[i];
+        db->nShm++;
+      }
+    }
+
+    /* Release the client mutex */
+    lsmMutexLeave(pEnv, p->pClientMutex);
   }
 
-  if( rc==LSM_OK ){
-    pRet = p->apShmChunk[iChunk];
-  }
-
-  /* Release the client mutex */
-  lsmMutexLeave(pEnv, p->pClientMutex);
-
-  *ppData = db->apShm[iChunk] = pRet; 
   return rc;
 }
 
