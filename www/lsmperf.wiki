@@ -1,0 +1,106 @@
+
+<title>LSM Benchmarks</title>
+<nowiki>
+
+<p>
+This page contains the results of a benchmark test run on the LSM library
+in several different configurations. 
+
+<p>
+The test uses a single client database connection. It begins with an empty
+database. The test runs for 200 iterations. Each iteration, the client:
+
+  <ul>
+    <li> Inserts 50,000 new key-value pairs into the database. Each key is
+         a pseudo-randomly generated 12-byte blob. Each value is a
+         pseudo-randomly generated 100 byte blob. Each insert operation is
+         run in a separate implicit transaction.
+    <li> Runs 50,000 fetch queries to retrieve arbitrarily selected entries
+         from the database (all searches are hits - the queried keys are
+         selected from the set of keys that are present in the db).
+  </ul>
+
+<p>
+The time taken to insert or retrieve each batch of 50,000 keys is recorded,
+and transformed to an operations-per-second rate (e.g. if it takes 0.5 
+seconds to insert 50,000 keys, this is reported as 100,000 
+operations-per-second). These values are the values reported below.
+The final database size is roughly 1.2GB.
+
+<p>
+All tested configurations set the 
+<a href=lsmusr.wiki#data_durability>LSM_CONFIG_SAFETY parameter</a> to "normal"
+and the <a href=lsmusr.wiki#performance_related_configuration_options>
+LSM_CONFIG_MULTIPLE_PROCESSES parameter</a> to zero (single process mode).
+
+<p>
+Tests were run on a 3.3GHz dual-core PC with 4GB of RAM. The file-system is
+ext4 on a 7200rpm HDD.
+
+<h2> Small Write Buffers Test </h2>
+
+<p>
+The following plot shows the performance of LSM in its default, single-threaded
+configuration against a multi-threaded deployment.
+ 
+<p>
+In the single-threaded mode the in-memory tree is allowed to use up to 1MB of
+memory before it is flushed to disk, and the database is checkpointed after 
+each 2MB of data is written into the database file.
+
+<p>
+The multi-threaded configuration launches two background threads as well as
+the main client thread used to run the test case. One background thread is
+dedicated to calling lsm_work() (writing data into the database file) and
+the other to calling lsm_checkpoint() (writing to the database header and
+syncing the database file). The in-memory tree is declared eligible to
+be flushed to disk when it uses 1MB of memory. If it grows to 1.5MB, then
+the client thread is blocked from continuing until the background thread
+has flushed it to disk. After 2MB of data has been written into the database
+file it is eligible for checkpointing. Once the database file contains 3MB of
+uncheckpointed data, the worker thread is prevented from writing any further
+data to the file until a checkpoint has been completed.
+
+<p>
+More detail regarding lsm_work() and lsm_checkpoint() is 
+<a href=lsmusr.wiki#using_worker_threads_or_processes>available here</a>.
+
+<p>
+<img src=lsmperf1.gif>
+
+<h2> Large Write Buffers Test </h2>
+<p>
+This test is similar to the one above, except with larger write buffers.
+Specifically, in the single-threaded mode:
+  <ul>
+    <li> The in-memory tree is allowed to use up to 4MB of memory before it
+         is flushed to disk, and
+    <li> The database is checkpointed after each 8MB of data is written to 
+         the database file.
+  </ul>
+
+<p>
+And in multi-threaded mode:
+  <ul>
+    <li> The in-memory tree is eligible to be flushed to disk once it uses
+         4MB of memory. The client thread is blocked if it reaches 6MB in
+         size.
+    <li> The database is still eligible for checkpointing after each 2MB of 
+         data is written to it, but up to 8MB of uncheckpointed data is allowed
+         to accumulate in the database file before the worker thread is 
+         blocked.
+  </ul>
+
+<p>
+<img src=lsmperf2.gif>
+
+<h2> Large Write Buffers Test With Pauses</h2>
+
+<p>
+This test is the same as the previous test, except that each iteration the
+client thread pauses (sleeps) for 2.5 seconds after performing the database
+inserts and queries.
+
+<p>
+<img src=lsmperf3.gif>
+

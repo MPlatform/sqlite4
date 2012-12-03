@@ -2,7 +2,11 @@
 # \
 exec tclsh "$0" "$@"
 
+package require sqlite3
 
+##########################################################################
+# Procedures used when running tests (collecting data).
+#
 proc exec_lsmtest_speed {nSec spec} {
   set fd [open [list |./lsmtest speed2 {*}$spec]]
   set res [list]
@@ -32,184 +36,366 @@ proc exec_lsmtest_speed {nSec spec} {
   set res
 }
 
-proc write_to_file {zFile zScript} {
-  set fd [open $zFile w]
-  puts $fd $zScript
-  close $fd
+proc run_speed_test {zDb nTimeout nWrite nFetch nPause nRepeat zSystem zName} {
+
+  set spec [list -w $nWrite -f $nFetch -r $nRepeat -p $nPause -system $zSystem]
+  set res [exec_lsmtest_speed $nTimeout $spec]
+  set cmd "lsmtest speed2 -w $nWrite -f $nFetch -r $nRepeat -p $nPause" 
+  append cmd " -system \"$zSystem\""
+
+  sqlite3 db $zDb
+
+  db eval {
+    PRAGMA synchronous = OFF;
+    CREATE TABLE IF NOT EXISTS run(
+      runid INTEGER PRIMARY KEY, nWrite INT, nFetch INT, nPause INT, 
+      cmd TEXT, name TEXT
+    );
+    CREATE TABLE IF NOT EXISTS sample(
+      runid INT, sample INT, writems INT, fetchms INT, 
+      PRIMARY KEY(runid, sample)
+    );
+    INSERT INTO run VALUES(NULL, $nWrite, $nFetch, $nPause, $cmd, $zName);
+  }
+
+  set id [db last_insert_rowid]
+  foreach sample $res {
+    foreach {a b c} $sample {}
+    db eval { INSERT INTO sample VALUES($id, $a, $b, $c) }
+  }
+
+  db close
+}
+#
+# End of procs used while gathering data.
+##########################################################################
+
+##########################################################################
+
+proc chart_y_to_canvas {y} {
+  foreach v [uplevel {info vars c_*}] { upvar $v $v }
+  set ytotal [expr ($c_height - $c_top_margin - $c_bottom_margin)]
+  expr $c_height - $c_bottom_margin - int($ytotal * $y / $c_ymax)
+}
+proc chart_sample_to_canvas {nSample x} {
+  foreach v [uplevel {info vars c_*}] { upvar $v $v }
+  set xtotal [expr ($c_width - $c_left_margin - $c_right_margin)]
+  expr {$c_left_margin + ($x*$xtotal/$nSample)}
 }
 
-proc exec_gnuplot_script {script png} {
-  write_to_file out "
-    $script
-    pause -1
-  "
+proc draw_line_series {nSample lSeries tag} {
+  foreach v [uplevel {info vars c_*}] { upvar $v $v }
+  set xtotal [expr ($c_width - $c_left_margin - $c_right_margin)]
+  set ytotal [expr ($c_height - $c_top_margin - $c_bottom_margin)]
+
+  set x 0
+  for {set i 1} {$i < $nSample} {incr i} {
+    set x2 [expr $x + int( double($xtotal - $x) / ($nSample-$i) )]
+    if {[lindex $lSeries $i-1] < $c_ymax && [lindex $lSeries $i] < $c_ymax} {
+
+      set y1 [chart_y_to_canvas [lindex $lSeries $i-1]]
+      set y2 [chart_y_to_canvas [lindex $lSeries $i]]
+      .c create line \
+        [expr ($c_left_margin + $x)]  $y1 \
+        [expr ($c_left_margin + $x2)] $y2 \
+        -tag $tag
+    }
+
+    set x $x2
+  }
+}
+
+proc draw_points_series {nSample lSeries tag} {
+  foreach v [uplevel {info vars c_*}] { upvar $v $v }
+  set xtotal [expr ($c_width - $c_left_margin - $c_right_margin)]
+  set ytotal [expr ($c_height - $c_top_margin - $c_bottom_margin)]
+
+  for {set i 0} {$i < $nSample} {incr i} {
+    set x [chart_sample_to_canvas $nSample $i]
+    set y [chart_y_to_canvas [lindex $lSeries $i]]
+    .c create rectangle $x $y [expr $x+2] [expr $y+2] -tag $tag
+  }
+}
+
+proc draw_bars_series {nSample nShift lSeries tag} {
+  foreach v [uplevel {info vars c_*}] { upvar $v $v }
+  set xtotal [expr ($c_width - $c_left_margin - $c_right_margin)]
+  set ytotal [expr ($c_height - $c_top_margin - $c_bottom_margin)]
+
+  set b [expr $c_height - $c_bottom_margin]
+  for {set i 0} {$i < $nSample} {incr i} {
+    set x [expr [chart_sample_to_canvas $nSample $i] + $nShift]
+    set y [chart_y_to_canvas [lindex $lSeries $i]]
+    .c create rectangle $x $y [expr $x+$c_bar_width-1] $b -tag $tag
+  }
+}
+
+proc draw_text {iRun iRun2} {
+  foreach v [uplevel {info vars c_*}] { upvar $v $v }
+
+  set y $c_height
+  if {$iRun2!=""} {
+    array set metrics [font metrics {-size 8}]
+    set cmd [db one {SELECT cmd FROM run WHERE runid=$iRun2}]
+    .c create text 10 $y -anchor sw -text $cmd -fill grey70 -font {-size 8}
+    set y [expr $y-$metrics(-ascent)]
+  }
+  set cmd [db one {SELECT cmd FROM run WHERE runid=$iRun}]
+  .c create text 10 $y -anchor sw -text $cmd -fill grey70 -font {-size 8}
+}
+
+proc format_integer {n} {
+  if { ($n % 1000000)==0 } { return "[expr $n/1000000]M" }
+  if { $n>1000000 && ($n % 100000)==0 } { 
+    return "[expr double($n)/1000000]M" 
+  }
+  if { ($n % 1000)==0 } { return "[expr $n/1000]K" }
+  return $n
+}
+
+proc populate_chart {nSample nShift iRun colors} {
+  foreach v [uplevel {info vars c_*}] { upvar $v $v }
+  upvar nWrite nWrite
+  upvar nFetch nFetch
+  set name [db one "SELECT name FROM run WHERE runid=$iRun"]
+
+  set lWrite [list]
+  set lFetch [list]
+  for {set i 0} {$i < $nSample} {incr i} {
+    set q "SELECT writems, fetchms FROM sample WHERE runid=$iRun AND sample=$i"
+    db eval $q break
+    lappend lWrite [expr {(1000.0*$nWrite) / $writems}]
+    lappend lFetch [expr {(1000.0*$nFetch) / $fetchms}]
+  }
+
+  draw_bars_series   $nSample $nShift $lWrite writes_p_$iRun
+  draw_points_series $nSample $lFetch fetches_p_$iRun
+
+  set lWrite [list]
+  set lFetch [list]
+  for {set i 0} {$i < $nSample} {incr i} {
+    set q    "SELECT 1000.0 * ($i+1) * $nWrite / sum(writems) AS r1, "
+    append q "       1000.0 * ($i+1) * $nFetch / sum(fetchms) AS r2  "
+    append q "FROM sample WHERE runid=$iRun AND sample<=$i"
+
+    db eval $q break
+    lappend lWrite $r1
+    lappend lFetch $r2
+  }
   
-  set script "
-    set terminal pngcairo size 1200,400
-    $script
-  "
-  exec gnuplot << $script > $png 2>/dev/null
-}
+  draw_line_series $nSample $lWrite writes_$iRun
+  draw_line_series $nSample $lFetch fetches_$iRun
 
-proc make_totalset {res nOp bFetch} {
-  set ret ""
-  set nMs 0
-  set nIns 0
-  foreach row $res {
-    foreach {i msInsert msFetch} $row {}
-    incr nIns $nOp
-    if {$bFetch==0} {
-      incr nMs $msInsert
-    } else {
-      incr nMs $msFetch
-    }
-    append ret "$nIns [expr $nIns*1000.0/$nMs]\n"
-  }
-  append ret "end\n"
-  set ret
-}
-
-proc make_dataset {res iRes nWrite nShift nOp} {
-  set ret ""
-  foreach row $res {
-    set i [lindex $row 0]
-    set j [lindex $row [expr $iRes+1]]
-    set x [expr $i*$nWrite + $nShift]
-    append ret "$x [expr int($nOp * 1000.0 / $j)]\n"
-  }
-  append ret "end\n"
-  set ret
-}
-
-proc do_write_test {zPng nSec nWrite nFetch nRepeat lSys} {
-
-  if {[llength $lSys]!=2 && [llength $lSys]!=4} {
-    error "lSys must be a list of 2 or 4 elements"
-  }
-
-  set lRes [list]
-  foreach {name sys} $lSys {
-    set wt [list -w $nWrite -r $nRepeat -f $nFetch -system $sys]
-    lappend lRes [exec_lsmtest_speed $nSec $wt]
-    if {$sys != [lindex $lSys end]} {
-      puts "Sleeping 20 seconds..."
-      after 20000
-    }
-  }
-
-  # Set up the header part of the gnuplot script.
+  # Create the legend for the data drawn above.
   #
-  set xmax 0
-  foreach res $lRes {
-    set xthis [expr [lindex $res end 0]*$nWrite + 5*$nWrite/4]
-    if {$xthis>$xmax} {set xmax $xthis}
-  }
-
-  append labeltext "Test parameters:\\n"
-  append labeltext "   $nWrite writes per iteration\\n"
-  append labeltext "   $nFetch fetches per iteration\\n"
-  append labeltext "   key size is 12 bytes\\n"
-  append labeltext "   value size is 100 bytes\\n"
-  set labelx [expr int($xmax * 1.2)]
-
-  set nWrite2 [expr $nWrite/2]
-  set y2setup ""
-  if {$nFetch>0} {
-    set y2setup {
-      set ytics nomirror
-      set y2tics nomirror
-      set y2range [0:*]
-    }
-  }
-  set script [subst -nocommands {
-    set boxwidth $nWrite2
-    set xlabel "Database Size"
-    set y2label "Queries per second"
-    set ylabel "Writes per second"
-    set yrange [0:*]
-    set xrange [0:$xmax]
-    set key outside bottom
-    $y2setup
-    set label 1 "$labeltext" at screen 0.95,graph 1.0 right
+  array set metrics [font metrics default]
+  set y $c_legend_ypadding
+  set x [expr $c_width - $c_legend_padding]
+  set xsym [expr { $c_width 
+     - [font measure default "$name cumulative fetches/sec"]
   }]
 
+  foreach {t g} {
+    "$name fetches/sec" {
+      rectangle 0 0 -2 2 -tag fetches_p_$iRun
+    }
+    "$name writes/sec" {
+      rectangle 0 0 $c_bar_width $metrics(-ascent) -tag writes_p_$iRun
+    }
+    "$name cumulative fetches/sec" {
+      line 0 0 -30 0 -tag fetches_$iRun
+    }
+    "$name cumulative writes/sec"  {
+      line 0 0 -30 0 -tag writes_$iRun
+    }
+  } {
+    .c create text $x $y -tag legend_$iRun -text [subst $t] -anchor e
 
-  set cols [list {#B0C4DE #00008B #000000} {#F08080 #8B0000 #FFA500}]
-  set cols [lrange $cols 0 [expr ([llength $lSys]/2)-1]]
+    set id [eval [concat {.c create} [subst $g]]]
+    .c addtag legend_$iRun withtag $id
 
-  set nShift [expr ($nWrite/2)]
-  set plot1 ""
-  set plot2 ""
-  set plot3 ""
-  set plot4 ""
-  set data1 ""
-  set data2 ""
-  set data3 ""
-  set data4 ""
+    set box [.c bbox $id]
+    set xmove [expr {$xsym - ([lindex $box 0]/2 + [lindex $box 2]/2)}]
+    set ymove [expr $y - ([lindex $box 1]/2 + [lindex $box 3]/2)]
 
-  foreach {name sys} $lSys res $lRes col $cols {
-    foreach {c1 c2 c3} $col {}
+    .c move $id $xmove $ymove
+    incr y $metrics(-linespace)
+  }
 
-    # First plot. Writes per second (bar chart).
-    #
-    if {$plot1 != ""} { set plot1 ", $plot1" }
-    set plot1 "\"-\" ti \"$name writes/sec\" with boxes fs solid lc rgb \"$c1\"$plot1"
-    set data1 "[make_dataset $res 0 $nWrite $nShift $nWrite] $data1"
+  .c itemconfigure writes_$iRun    -fill [lindex $colors 0] -width 2
+  .c itemconfigure fetches_$iRun   -fill [lindex $colors 2] 
+  .c itemconfigure writes_p_$iRun  -fill [lindex $colors 1] 
+  .c itemconfigure fetches_p_$iRun -fill [lindex $colors 3]
+  catch { .c itemconfigure fetches_p_$iRun -outline [lindex $colors 3] }
+  catch { .c itemconfigure writes_p_$iRun  -outline [lindex $colors 1] }
+}
 
-    # Third plot. Cumulative writes per second (line chart).
-    #
-    set plot3 ",\"-\" ti \"$name cumulative writes/sec\" with lines lc rgb \"$c2\" lw 2 $plot3"
-    set data3 "[make_totalset $res $nWrite 0] $data3"
+proc generate_chart {png db iRun {iRun2 {}}} {
+  sqlite3 db $db
+  db eval { SELECT nWrite, nFetch FROM run WHERE runid=$iRun } {}
+  if {0==[info exists nWrite]} {
+    error "No such run in db $db: $iRun"
+  }
 
-    if {$nFetch>0} {
-      set    new ", \"-\" ti \"$name fetches/sec\" axis x1y2 "
-      append new "with points lw 1 lc rgb \"$c2\""
-      set plot2 "$new $plot2"
-      set data2 "[make_dataset $res 1 $nWrite $nWrite $nFetch] $data2"
+  set c_left_margin    50
+  set c_bottom_margin  60
+  set c_top_margin     20
+  set c_right_margin  400
+  set c_width         1250
+  set c_height        350
 
-      set    new ",\"-\" ti \"$name cumulative fetches/sec\" "
-      append new "with lines lc rgb \"$c2\" lw 1 "
-      set plot4 "$new $plot4"
-      set data4 "[make_totalset $res $nFetch 1] $data4"
+  set c_ymax          300000
+  set c_ytick          50000
+  set c_ticksize        5
+  set c_nxtick          10
+  set c_dbsize_padding  20
+  set c_legend_padding  20
+  set c_legend_ypadding 100
+  set c_bar_width 2
+
+  package require Tk
+  canvas .c
+  .c configure -width $c_width -height $c_height
+  pack .c -fill both -expand 1
+
+  # Make the background white
+  .c configure -background white
+  draw_text $iRun $iRun2
+
+  # Draw the box for the chart
+  #
+  set y [expr $c_height - $c_bottom_margin]
+  set x [expr $c_width - $c_right_margin]
+  .c create rectangle $c_left_margin $c_top_margin $x $y
+
+  # Draw the vertical ticks
+  #
+  set ytotal [expr ($c_height - $c_top_margin - $c_bottom_margin)]
+  for {set y $c_ytick} {$y <= $c_ymax} {incr y $c_ytick} {
+
+    # Calculate the canvas y coord at which to draw the tick
+    set ypix [expr {$c_height - $c_bottom_margin - ($y * $ytotal) / $c_ymax}]
+
+    set left_tick_x  $c_left_margin
+    set right_tick_x [expr $c_width - $c_right_margin - $c_ticksize]
+    foreach x [list $left_tick_x $right_tick_x] {
+      .c create line $x $ypix [expr $x+$c_ticksize] $ypix
     }
 
-    incr nShift [expr $nWrite/4]
+    .c create text $c_left_margin $ypix -anchor e -text "[format_integer $y]  "
+    set x [expr $c_width - $c_right_margin]
+    .c create text $x $ypix -anchor w -text "  [format_integer $y]"
   }
-  append script "plot "
-  append script $plot1
-  append script $plot2
-  append script $plot3
-  append script $plot4
-  append script "\n"
-  append script $data1
-  append script $data2
-  append script $data3
-  append script $data4
 
-  append script "pause -1\n"
-  exec_gnuplot_script $script $zPng
+  # Figure out the total number of samples for this chart
+  #
+  set nSample [db one {SELECT count(*) FROM sample where runid=$iRun}]
+  if {$nSample==0} { error "No such run: $iRun" }
+  #set nSample 100
+  
+  # Draw the horizontal ticks
+  #
+  set w [expr {$c_width - $c_left_margin - $c_right_margin}]
+  set xincr [expr ($nSample * $nWrite) / $c_nxtick]
+  for {set i 1} {$i <= $c_nxtick} {incr i} {
+    set x [expr $i * $xincr]
+    set xpix [expr {$c_left_margin + ($w / $c_nxtick) * $i}]
+
+    set b [expr $c_height-$c_bottom_margin]
+    .c create line $xpix $b $xpix [expr $b-$c_ticksize]
+    .c create text $xpix $b -anchor n -text [format_integer $x]
+  }
+
+  set x [expr (($c_width-$c_right_margin-$c_left_margin) / 2) + $c_left_margin]
+  set y [expr $c_height - $c_bottom_margin + $c_dbsize_padding]
+  .c create text $x $y -anchor n -text "Database Size (number of entries)"
+
+  populate_chart $nSample 0 $iRun {black grey55 black black}
+  if {$iRun2 != ""} {
+    #populate_chart $nSample 3 $iRun2 {royalblue skyblue royalblue royalblue}
+     
+    set s $c_bar_width
+    populate_chart $nSample $s $iRun2 {royalblue lightsteelblue royalblue royalblue}
+    set box [.c bbox legend_$iRun]
+    set shift [expr $c_legend_padding + [lindex $box 3]-[lindex $box 1]]
+    .c move legend_$iRun2 0 $shift
+  }
+
+  .c lower fetches_p_$iRun
+  .c lower fetches_p_$iRun2
+  .c lower writes_p_$iRun
+  .c lower writes_p_$iRun2
+
+  bind .c <q> exit
+  bind . <q> exit
+  db close
 }
 
-do_write_test x.png 400 100000 100000 100 {
-  lsm-4M "mt_mode=4 multi_proc=0 autoflush=4M page_size=1024"
+proc capture_photo {z} {
+  package require Img
+  set img [image create photo -format window -data .c]
+  $img write $z -format GIF
 }
 
+#    "autoflush=1M multi_proc=0"
+#    "autoflush=1M multi_proc=0 mt_mode=4 mt_min_ckpt=2M mt_max_ckpt=3M"
+#    "autoflush=4M multi_proc=0 autocheckpoint=8M"
+#    "autoflush=4M multi_proc=0 mt_mode=4"
+proc run_all_tests {} {
+  set nInsert 50000
+  set nSelect 50000
+  set nSleep  20000
+  set nPause   2500
 
-  #lsm "mmap=1 multi_proc=0 page_size=4096 block_size=2097152 autocheckpoint=4194000"
-  #lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=4196000"
+  #set nInsert 5000
+  #set nSelect 5000
+  #set nSleep  2000
+  #set nPause   250
 
-# lsm     "safety=1 multi_proc=0"
+  set bFirst 0
 
-# lsm-mt    "mmap=1 multi_proc=0 threads=2 autowork=0 autocheckpoint=8192000"
-# lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
-# lsm-st     "mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
-# lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
-# lsm-mt     "mmap=1 multi_proc=0 safety=1 threads=3 autowork=0"
-# LevelDB leveldb
-# lsm-st     "mmap=1 multi_proc=0 safety=1 threads=1 autowork=1"
-# LevelDB leveldb
-# SQLite sqlite3
+  foreach {name config} {
+    single-threaded "autoflush=1M multi_proc=0"
+    multi-threaded  
+        "autoflush=1M multi_proc=0 mt_mode=4 mt_min_ckpt=2M mt_max_ckpt=3M"
+    single-threaded "autoflush=4M multi_proc=0 autocheckpoint=8M"
+    multi-threaded  "autoflush=4M multi_proc=0 mt_mode=4"
+  } {
+    if {$bFirst!=0} {
+      puts "sleeping 20 seconds..." ; after $nSleep
+    }
+    run_speed_test res.db 900 $nInsert $nSelect 0 200 $config $name
+    set bFirst 1
+  }
 
+  # Tests with a 2.5 second delay.
+  #
+  foreach {name config} {
+    single-threaded "autoflush=4M multi_proc=0 autocheckpoint=8M"
+    multi-threaded  "autoflush=4M multi_proc=0 mt_mode=4"
+  } {
+    puts "sleeping 20 seconds..." ; after $nSleep
+    run_speed_test res.db 900 $nInsert $nSelect $nPause 200 $config $name
+  }
+}
 
+#run_all_tests
+
+generate_chart png res.db 1 2
+update
+capture_photo lsmperf1.gif
+destroy .c
+
+generate_chart png res.db 3 4
+update
+capture_photo lsmperf2.gif
+destroy .c
+
+generate_chart png res.db 5 6
+update
+capture_photo lsmperf3.gif
+destroy .c
+
+exit
 
 
