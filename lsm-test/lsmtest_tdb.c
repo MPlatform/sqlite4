@@ -295,6 +295,76 @@ static int kc_open(const char *zFilename, int bClear, TestDb **ppDb){
 ** End wrapper for Kyoto cabinet.
 *************************************************************************/
 
+#ifdef HAVE_MDB
+static int mdb_close(TestDb *pTestDb){
+  return test_mdb_close(pTestDb);
+}
+
+static int mdb_write(
+  TestDb *pTestDb, 
+  void *pKey, 
+  int nKey, 
+  void *pVal, 
+  int nVal
+){
+  return test_mdb_write(pTestDb, pKey, nKey, pVal, nVal);
+}
+
+static int mdb_delete(TestDb *pTestDb, void *pKey, int nKey){
+  return test_mdb_delete(pTestDb, pKey, nKey);
+}
+
+static int mdb_fetch(
+  TestDb *pTestDb, 
+  void *pKey, 
+  int nKey, 
+  void **ppVal, 
+  int *pnVal
+){
+  if( pKey==0 ) return LSM_OK;
+  return test_mdb_fetch(pTestDb, pKey, nKey, ppVal, pnVal);
+}
+
+static int mdb_scan(
+  TestDb *pTestDb,
+  void *pCtx,
+  int bReverse,
+  void *pFirst, int nFirst,
+  void *pLast, int nLast,
+  void (*xCallback)(void *, void *, int , void *, int)
+){
+  return test_mdb_scan(
+      pTestDb, pCtx, bReverse, pFirst, nFirst, pLast, nLast, xCallback
+  );
+}
+
+static int mdb_open(const char *zFilename, int bClear, TestDb **ppDb){
+  static const DatabaseMethods KcdbMethods = {
+    mdb_close,
+    mdb_write,
+    mdb_delete,
+    0,
+    mdb_fetch,
+    mdb_scan,
+    error_transaction_function,
+    error_transaction_function,
+    error_transaction_function
+  };
+
+  int rc;
+  TestDb *pTestDb = 0;
+
+  rc = test_mdb_open(zFilename, bClear, &pTestDb);
+  if( rc!=0 ){
+    *ppDb = 0;
+    return rc;
+  }
+  pTestDb->pMethods = &KcdbMethods;
+  *ppDb = pTestDb;
+  return 0;
+}
+#endif /* HAVE_MDB */
+
 /*************************************************************************
 ** Begin wrapper for SQLite.
 */
@@ -625,7 +695,10 @@ static struct Lib {
   { "leveldb",      "testdb.leveldb",   test_leveldb_open },
 #endif
 #ifdef HAVE_KYOTOCABINET
-  { "kyotocabinet", "testdb.kc",        kc_open }
+  { "kyotocabinet", "testdb.kc",        kc_open },
+#endif
+#ifdef HAVE_MDB
+  { "mdb", "./testdb.mdb",        mdb_open }
 #endif
 };
 

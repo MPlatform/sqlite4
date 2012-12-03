@@ -163,7 +163,7 @@ void testDbContents(
   int j;
   int rc = *pRc;
 
-  if( rc==0 && nScanTest ){
+  if( 0 && rc==0 && nScanTest ){
     TestDb *pDb2 = 0;
 
     /* Open a control db (i.e. one that we assume works) */

@@ -70,6 +70,15 @@ int test_kc_scan(TestDb *, void *, int, void *, int, void *, int,
   void (*)(void *, void *, int , void *, int)
 );
 
+int test_mdb_open(const char *zFilename, int bClear, TestDb **ppDb);
+int test_mdb_close(TestDb *);
+int test_mdb_write(TestDb *, void *, int , void *, int);
+int test_mdb_delete(TestDb *, void *, int);
+int test_mdb_fetch(TestDb *, void *, int, void **, int *);
+int test_mdb_scan(TestDb *, void *, int, void *, int, void *, int,
+  void (*)(void *, void *, int , void *, int)
+);
+
 /* 
 ** Functions in wrapper3.c. This file contains the tdb wrapper for lsm.
 ** The wrapper for lsm is a bit more involved than the others, as it 

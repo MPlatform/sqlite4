@@ -3,152 +3,6 @@
 #include "lsmtest.h"
 #include <stdlib.h>
 
-#ifdef HAVE_LEVELDB
-#include "leveldb/db.h"
-extern "C" {
-  struct LevelDb {
-    TestDb base;
-    leveldb::DB* db;
-    std::string *pRes;
-  };
-}
-
-int test_leveldb_open(const char *zFilename, int bClear, TestDb **ppDb){
-  LevelDb *pLevelDb;
-
-  if( bClear ){
-    char *zCmd = sqlite3_mprintf("rm -rf %s\n", zFilename);
-    system(zCmd);
-    sqlite3_free(zCmd);
-  }
-
-  pLevelDb = (LevelDb *)malloc(sizeof(LevelDb));
-  memset(pLevelDb, 0, sizeof(LevelDb));
-
-  leveldb::Options options;
-  options.create_if_missing = 1;
-  leveldb::Status s = leveldb::DB::Open(options, zFilename, &pLevelDb->db);
-
-  if( s.ok() ){
-    *ppDb = (TestDb *)pLevelDb;
-    pLevelDb->pRes = new std::string("");
-  }else{
-    test_leveldb_close((TestDb *)pLevelDb);
-    *ppDb = 0;
-    return 1;
-  }
-  return 0;
-}
-
-int test_leveldb_close(TestDb *pDb){
-  LevelDb *pLevelDb = (LevelDb *)pDb;
-  if( pDb ){
-    if( pLevelDb->db ) delete pLevelDb->db;
-  }
-  free((void *)pDb);
-  return 0;
-}
-
-int test_leveldb_write(TestDb *pDb, void *pKey, int nKey, void *pVal, int nVal){
-  LevelDb *pLevelDb = (LevelDb *)pDb;
-  leveldb::Status s = pLevelDb->db->Put(leveldb::WriteOptions(), 
-      leveldb::Slice((const char *)pKey, nKey), 
-      leveldb::Slice((const char *)pVal, nVal) 
-  );
-  return !s.ok();
-}
-
-int test_leveldb_delete(TestDb *pDb, void *pKey, int nKey){
-  LevelDb *pLevelDb = (LevelDb *)pDb;
-  leveldb::Status s = pLevelDb->db->Delete(leveldb::WriteOptions(), 
-      leveldb::Slice((const char *)pKey, nKey)
-  );
-  return !s.ok();
-}
-
-int test_leveldb_fetch(
-  TestDb *pDb, 
-  void *pKey, 
-  int nKey, 
-  void **ppVal, 
-  int *pnVal
-){
-  LevelDb *pLevelDb = (LevelDb *)pDb;
-  pLevelDb->pRes->assign("");
-  leveldb::Status s = pLevelDb->db->Get(
-      leveldb::ReadOptions(), 
-      leveldb::Slice((const char *)pKey, nKey), 
-      pLevelDb->pRes
-  );
-  if( s.ok() ){
-    *ppVal = (void *)pLevelDb->pRes->data();
-    *pnVal = (int)pLevelDb->pRes->length();
-  }else{
-    *pnVal = -1;
-    *ppVal = 0;
-  }
-  return 0;
-}
-
-int test_leveldb_scan(
-  TestDb *pDb,                    /* Database handle */
-  void *pCtx,                     /* Context pointer to pass to xCallback */
-  int bReverse,                   /* True to iterate in reverse order */
-  void *pKey1, int nKey1,         /* Start of search */
-  void *pKey2, int nKey2,         /* End of search */
-  void (*xCallback)(void *pCtx, void *pKey, int nKey, void *pVal, int nVal)
-){
-  LevelDb *pLevelDb = (LevelDb *)pDb;
-  leveldb::Iterator *pIter;
-
-  leveldb::Slice sKey1((const char *)pKey1, nKey1);
-  leveldb::Slice sKey2((const char *)pKey2, nKey2);
-
-  pIter = pLevelDb->db->NewIterator(leveldb::ReadOptions());
-  if( bReverse==0 ){
-    if( pKey1 ){
-      pIter->Seek(sKey1);
-    }else{
-      pIter->SeekToFirst();
-    }
-  }else{
-    if( pKey2 ){
-      pIter->Seek(sKey2);
-      if( pIter->Valid()==0 ){
-        pIter->SeekToLast();
-      }else{
-        int res = pIter->key().compare(sKey2);
-        assert( res>=0 );
-        if( res>0 ){
-          pIter->Prev();
-        }
-        assert( pIter->Valid()==0 || pIter->key().compare(sKey2)<=0 );
-      }
-    }else{
-      pIter->SeekToLast();
-    }
-  }
-
-  while( pIter->Valid() ){
-    if( (bReverse==0 && pKey2 && pIter->key().compare(sKey2)>0) ) break;
-    if( (bReverse!=0 && pKey1 && pIter->key().compare(sKey1)<0) ) break;
-
-    leveldb::Slice k = pIter->key();
-    leveldb::Slice v = pIter->value();
-    xCallback(pCtx, (void *)k.data(), k.size(), (void *)v.data(), v.size());
-
-    if( bReverse==0 ){
-      pIter->Next();
-    }else{
-      pIter->Prev();
-    }
-  }
-
-  delete pIter;
-  return LSM_OK;
-}
-#endif
-
 #ifdef HAVE_KYOTOCABINET
 #include "kcpolydb.h"
 extern "C" {
@@ -304,5 +158,164 @@ int test_kc_scan(
   delete pCur;
   return 0;
 }
-#endif
+#endif /* HAVE_KYOTOCABINET */
+
+#ifdef HAVE_MDB 
+#include "lmdb.h"
+
+extern "C" {
+  struct MdbDb {
+    TestDb base;
+    MDB_env *env;
+    MDB_dbi dbi;
+  };
+}
+
+int test_mdb_open(const char *zFilename, int bClear, TestDb **ppDb){
+  MDB_txn *txn;
+  MdbDb *pMdb;
+  int rc;
+
+  if( bClear ){
+    char *zCmd = sqlite3_mprintf("rm -rf %s\n", zFilename);
+    system(zCmd);
+    sqlite3_free(zCmd);
+  }
+
+  pMdb = (MdbDb *)malloc(sizeof(MdbDb));
+  memset(pMdb, 0, sizeof(MdbDb));
+
+  rc = mdb_env_create(&pMdb->env);
+  if( rc==0 ) rc = mdb_env_set_mapsize(pMdb->env, 1*1024*1024*1024);
+  if( rc==0 ) rc = mdb_env_open(pMdb->env, zFilename, MDB_NOSYNC|MDB_NOSUBDIR, 0600);
+  if( rc==0 ) rc = mdb_txn_begin(pMdb->env, NULL, 0, &txn);
+  if( rc==0 ){
+    rc = mdb_open(txn, NULL, 0, &pMdb->dbi);
+    mdb_txn_commit(txn);
+  }
+
+  *ppDb = (TestDb *)pMdb;
+  return rc;
+}
+
+int test_mdb_close(TestDb *pDb){
+  MdbDb *pMdb = (MdbDb *)pDb;
+
+  mdb_close(pMdb->env, pMdb->dbi);
+  mdb_env_close(pMdb->env);
+  free(pMdb);
+  return 0;
+}
+
+int test_mdb_write(TestDb *pDb, void *pKey, int nKey, void *pVal, int nVal){
+  int rc;
+  MdbDb *pMdb = (MdbDb *)pDb;
+  MDB_val val;
+  MDB_val key;
+  MDB_txn *txn;
+
+  val.mv_size = nVal; 
+  val.mv_data = pVal;
+  key.mv_size = nKey; 
+  key.mv_data = pKey;
+
+  rc = mdb_txn_begin(pMdb->env, NULL, 0, &txn);
+  if( rc==0 ){
+    rc = mdb_put(txn, pMdb->dbi, &key, &val, 0);
+    if( rc==0 ){
+      rc = mdb_txn_commit(txn);
+    }else{
+      mdb_txn_abort(txn);
+    }
+  }
+  
+  return rc;
+}
+
+int test_mdb_delete(TestDb *pDb, void *pKey, int nKey){
+  int rc;
+  MdbDb *pMdb = (MdbDb *)pDb;
+  MDB_val key;
+  MDB_txn *txn;
+
+  key.mv_size = nKey; 
+  key.mv_data = pKey;
+  rc = mdb_txn_begin(pMdb->env, NULL, 0, &txn);
+  if( rc==0 ){
+    rc = mdb_del(txn, pMdb->dbi, &key, 0);
+    if( rc==0 ){
+      rc = mdb_txn_commit(txn);
+    }else{
+      mdb_txn_abort(txn);
+    }
+  }
+  
+  return rc;
+}
+
+int test_mdb_fetch(
+  TestDb *pDb, 
+  void *pKey, 
+  int nKey, 
+  void **ppVal,
+  int *pnVal
+){
+  int rc;
+  MdbDb *pMdb = (MdbDb *)pDb;
+  MDB_val key;
+  MDB_txn *txn;
+
+  key.mv_size = nKey;
+  key.mv_data = pKey;
+
+  rc = mdb_txn_begin(pMdb->env, NULL, MDB_RDONLY, &txn);
+  if( rc==0 ){
+    MDB_val val = {0, 0};
+    rc = mdb_get(txn, pMdb->dbi, &key, &val);
+    if( rc==MDB_NOTFOUND ){
+      rc = 0;
+      *ppVal = 0;
+      *pnVal = -1;
+    }else{
+      *ppVal = val.mv_data;
+      *pnVal = val.mv_size;
+    }
+    mdb_txn_commit(txn);
+  }
+
+  return rc;
+}
+
+int test_mdb_scan(
+  TestDb *pDb,                    /* Database handle */
+  void *pCtx,                     /* Context pointer to pass to xCallback */
+  int bReverse,                   /* True for a reverse order scan */
+  void *pKey1, int nKey1,         /* Start of search */
+  void *pKey2, int nKey2,         /* End of search */
+  void (*xCallback)(void *pCtx, void *pKey, int nKey, void *pVal, int nVal)
+){
+  MdbDb *pMdb = (MdbDb *)pDb;
+  int rc;
+  MDB_cursor_op op = bReverse ? MDB_PREV : MDB_NEXT;
+  MDB_txn *txn;
+
+  rc = mdb_txn_begin(pMdb->env, NULL, MDB_RDONLY, &txn);
+  if( rc==0 ){
+    MDB_cursor *csr;
+    MDB_val key = {0, 0};
+    MDB_val val = {0, 0};
+
+    rc = mdb_cursor_open(txn, pMdb->dbi, &csr);
+    if( rc==0 ){
+      while( mdb_cursor_get(csr, &key, &val, op)==0 ){
+        xCallback(pCtx, key.mv_data, key.mv_size, val.mv_data, val.mv_size);
+      }
+      mdb_cursor_close(csr);
+    }
+  }
+
+  return rc;
+}
+
+#endif /* HAVE_MDB */
 
