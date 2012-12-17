@@ -16,8 +16,6 @@ source $testdir/tester.tcl
 set testprefix fts5expr1
 
 foreach {tn expr res} {
-
-
   1 { abc }                  {"abc"}
   2 { abc AND def }          {"abc" AND "def"}
   3 { (abc) }                {"abc"}
@@ -42,10 +40,22 @@ foreach {tn expr res} {
 
 } {
   do_execsql_test 1.$tn { 
-    SELECT fts5_parse_expr('simple', $expr) 
+    SELECT fts5_parse_expr('simple', $expr, '') 
   } [list [string trim $res]]
 }
 
+do_execsql_test 2.0 { 
+  CREATE TABLE t1(a, b, c);
+}
+
+foreach {tn expr res} {
+  1 { a : abc }                  {"a":"abc"}
+  2 { b : abc + def}             {"b":"abc"+"def"}
+} {
+  do_execsql_test 2.$tn { 
+    SELECT fts5_parse_expr('simple', $expr, 't1') 
+  } [list [string trim $res]]
+}
 
 
 finish_test

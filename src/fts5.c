@@ -689,146 +689,6 @@ static Fts5Tokenizer *fts5FindTokenizer(sqlite4 *db, const char *zName){
   return p;
 }
 
-#ifdef SQLITE4_TEST
-static int fts5PrintExprNode(sqlite4 *, Fts5ExprNode *, char **);
-static int fts5PrintExprNodeParen(
-  sqlite4 *db, 
-  Fts5ExprNode *pNode, 
-  char **pzRet
-){
-  int bParen = (pNode->eType!=TOKEN_PRIMITIVE || pNode->pPhrase->nStr>1);
-  sqlite4_env *pEnv = sqlite4_db_env(db);
-  char *zRet = *pzRet;
-
-  if( bParen ) zRet = sqlite4_mprintf(pEnv, "%z(", zRet);
-  fts5PrintExprNode(db, pNode, &zRet);
-  if( bParen ) zRet = sqlite4_mprintf(pEnv, "%z)", zRet);
-
-  *pzRet = zRet;
-  return SQLITE4_OK;
-}
-static int fts5PrintExprNode(sqlite4 *db, Fts5ExprNode *pNode, char **pzRet){
-  sqlite4_env *pEnv = sqlite4_db_env(db);
-  char *zRet = *pzRet;
-
-  assert(
-      pNode->eType==TOKEN_AND || pNode->eType==TOKEN_OR
-   || pNode->eType==TOKEN_NOT || pNode->eType==TOKEN_PRIMITIVE
-  );
-  assert( (pNode->eType==TOKEN_PRIMITIVE)==(pNode->pPhrase!=0) );
-
-  if( pNode->eType==TOKEN_PRIMITIVE ){
-    int iStr;
-    Fts5Phrase *pPhrase = pNode->pPhrase;
-    for(iStr=0; iStr<pPhrase->nStr; iStr++){
-      int iToken;
-      Fts5Str *pStr = &pPhrase->aStr[iStr];
-      if( iStr>0 ){
-        zRet = sqlite4_mprintf(
-            pEnv, "%z NEAR/%d ", zRet, pPhrase->aiNear[iStr-1]
-        );
-      }
-      for(iToken=0; iToken<pStr->nToken; iToken++){
-        int nRet = sqlite4Strlen30(zRet);
-        const char *z = pStr->aToken[iToken].z;
-        int n = pStr->aToken[iToken].n;
-        int i;
-
-        zRet = (char *)sqlite4_realloc(pEnv, zRet, nRet + n*2+4);
-        if( iToken>0 ) zRet[nRet++] = '+';
-        zRet[nRet++] = '"';
-
-        for(i=0; i<n; i++){
-          if( z[i]=='"' ) zRet[nRet++] = '"';
-          zRet[nRet++] = z[i];
-        }
-
-        zRet[nRet++] = '"';
-        zRet[nRet++] = '\0';
-      }
-    }
-  }else{
-    fts5PrintExprNodeParen(db, pNode->pLeft, &zRet);
-    switch( pNode->eType ){
-      case TOKEN_AND:
-        zRet = sqlite4_mprintf(pEnv, "%z AND ", zRet);
-        break;
-      case TOKEN_OR:
-        zRet = sqlite4_mprintf(pEnv, "%z OR ", zRet);
-        break;
-      case TOKEN_NOT:
-        zRet = sqlite4_mprintf(pEnv, "%z NOT ", zRet);
-        break;
-    }
-    fts5PrintExprNodeParen(db, pNode->pRight, &zRet);
-  }
-
-  *pzRet = zRet;
-  return SQLITE4_OK;
-}
-static int fts5PrintExpr(sqlite4 *db, Fts5Expr *pExpr, char **pzRet){
-  return fts5PrintExprNode(db, pExpr->pRoot, pzRet);
-}
-
-/*
-** A user defined function used to test the fts5 expression parser. As follows:
-**
-**   fts5_parse_expr(<tokenizer>, <expr>);
-*/
-static void fts5_parse_expr(
-  sqlite4_context *pCtx, 
-  int nVal, 
-  sqlite4_value **aVal
-){
-  int rc;
-  Fts5Expr *pExpr = 0;
-  Fts5Tokenizer *pTok;
-  sqlite4_tokenizer *p;
-  sqlite4 *db;
-
-  const char *zTokenizer;
-  const char *zExpr;
-  char *zErr = 0;
-  char *zRet = 0;
-
-  db = sqlite4_context_db_handle(pCtx);
-  assert( nVal==2 );
-  zTokenizer = (const char *)sqlite4_value_text(aVal[0]);
-  zExpr = (const char *)sqlite4_value_text(aVal[1]);
-
-  pTok = fts5FindTokenizer(db, zTokenizer);
-  if( pTok==0 ){
-    zErr = sqlite4MPrintf(db, "no such tokenizer: %s", zTokenizer);
-    goto fts5_parse_expr_out;
-  }else{
-    rc = pTok->xCreate(pTok->pCtx, 0, 0, &p);
-    if( rc!=SQLITE4_OK ){
-      zErr = sqlite4MPrintf(db, "error creating tokenizer: %d", rc);
-      goto fts5_parse_expr_out;
-    }
-  }
-
-  rc = fts5ParseExpression(db, pTok, p, 0, 0, zExpr, &pExpr, &zErr);
-  if( rc!=SQLITE4_OK ){
-    if( zErr==0 ){
-      zErr = sqlite4MPrintf(db, "error parsing expression: %d", rc);
-    }
-    goto fts5_parse_expr_out;
-  }
-
-  fts5PrintExpr(db, pExpr, &zRet);
-  sqlite4_result_text(pCtx, zRet, -1, SQLITE4_TRANSIENT);
-  fts5ExpressionFree(db, pExpr);
-  sqlite4_free(sqlite4_db_env(db), zRet);
-
- fts5_parse_expr_out:
-  if( zErr ){
-    sqlite4_result_error(pCtx, zErr, -1);
-    sqlite4DbFree(db, zErr);
-  }
-}
-#endif
-
 void sqlite4ShutdownFts5(sqlite4 *db){
   Fts5Tokenizer *p;
   Fts5Tokenizer *pNext;
@@ -836,20 +696,6 @@ void sqlite4ShutdownFts5(sqlite4 *db){
     pNext = p->pNext;
     sqlite4DbFree(db, p);
   }
-  
-}
-
-/*
-** Register the default FTS5 tokenizer and functions with handle db.
-*/
-int sqlite4InitFts5(sqlite4 *db){
-#ifdef SQLITE4_TEST
-  int rc = sqlite4_create_function(
-      db, "fts5_parse_expr", 2, SQLITE4_UTF8, 0, fts5_parse_expr, 0, 0
-  );
-  if( rc!=SQLITE4_OK ) return rc;
-#endif
-  return sqlite4InitFts5Func(db);
 }
 
 /*
@@ -894,5 +740,200 @@ int sqlite4_create_tokenizer(
   rc = sqlite4ApiExit(db, rc);
   sqlite4_mutex_leave(db->mutex);
   return rc;
+}
+
+/**************************************************************************
+***************************************************************************
+** Below this point is test code.
+*/
+#ifdef SQLITE4_TEST
+static int fts5PrintExprNode(sqlite4 *, const char **, Fts5ExprNode *, char **);
+static int fts5PrintExprNodeParen(
+  sqlite4 *db, 
+  const char **azCol,
+  Fts5ExprNode *pNode, 
+  char **pzRet
+){
+  int bParen = (pNode->eType!=TOKEN_PRIMITIVE || pNode->pPhrase->nStr>1);
+  sqlite4_env *pEnv = sqlite4_db_env(db);
+  char *zRet = *pzRet;
+
+  if( bParen ) zRet = sqlite4_mprintf(pEnv, "%z(", zRet);
+  fts5PrintExprNode(db, azCol, pNode, &zRet);
+  if( bParen ) zRet = sqlite4_mprintf(pEnv, "%z)", zRet);
+
+  *pzRet = zRet;
+  return SQLITE4_OK;
+}
+static int fts5PrintExprNode(
+  sqlite4 *db, 
+  const char **azCol,
+  Fts5ExprNode *pNode, 
+  char **pzRet
+){
+  sqlite4_env *pEnv = sqlite4_db_env(db);
+  char *zRet = *pzRet;
+
+  assert(
+      pNode->eType==TOKEN_AND || pNode->eType==TOKEN_OR
+   || pNode->eType==TOKEN_NOT || pNode->eType==TOKEN_PRIMITIVE
+  );
+  assert( (pNode->eType==TOKEN_PRIMITIVE)==(pNode->pPhrase!=0) );
+
+  if( pNode->eType==TOKEN_PRIMITIVE ){
+    int iStr;
+    Fts5Phrase *pPhrase = pNode->pPhrase;
+    if( pPhrase->iCol>=0 ){
+        zRet = sqlite4_mprintf(pEnv, "%z\"%s\":", zRet, azCol[pPhrase->iCol]);
+    }
+    for(iStr=0; iStr<pPhrase->nStr; iStr++){
+      int iToken;
+      Fts5Str *pStr = &pPhrase->aStr[iStr];
+      if( iStr>0 ){
+        zRet = sqlite4_mprintf(
+            pEnv, "%z NEAR/%d ", zRet, pPhrase->aiNear[iStr-1]
+        );
+      }
+      for(iToken=0; iToken<pStr->nToken; iToken++){
+        int nRet = sqlite4Strlen30(zRet);
+        const char *z = pStr->aToken[iToken].z;
+        int n = pStr->aToken[iToken].n;
+        int i;
+
+        zRet = (char *)sqlite4_realloc(pEnv, zRet, nRet + n*2+4);
+        if( iToken>0 ) zRet[nRet++] = '+';
+        zRet[nRet++] = '"';
+
+        for(i=0; i<n; i++){
+          if( z[i]=='"' ) zRet[nRet++] = '"';
+          zRet[nRet++] = z[i];
+        }
+
+        zRet[nRet++] = '"';
+        zRet[nRet++] = '\0';
+      }
+    }
+  }else{
+    fts5PrintExprNodeParen(db, azCol, pNode->pLeft, &zRet);
+    switch( pNode->eType ){
+      case TOKEN_AND:
+        zRet = sqlite4_mprintf(pEnv, "%z AND ", zRet);
+        break;
+      case TOKEN_OR:
+        zRet = sqlite4_mprintf(pEnv, "%z OR ", zRet);
+        break;
+      case TOKEN_NOT:
+        zRet = sqlite4_mprintf(pEnv, "%z NOT ", zRet);
+        break;
+    }
+    fts5PrintExprNodeParen(db, azCol, pNode->pRight, &zRet);
+  }
+
+  *pzRet = zRet;
+  return SQLITE4_OK;
+}
+static int fts5PrintExpr(
+  sqlite4 *db, 
+  const char **azCol, 
+  Fts5Expr *pExpr, 
+  char **pzRet
+){
+  return fts5PrintExprNode(db, azCol, pExpr->pRoot, pzRet);
+}
+
+/*
+** A user defined function used to test the fts5 expression parser. As follows:
+**
+**   fts5_parse_expr(<tokenizer>, <expr>);
+*/
+static void fts5_parse_expr(
+  sqlite4_context *pCtx, 
+  int nVal, 
+  sqlite4_value **aVal
+){
+  int rc;
+  Fts5Expr *pExpr = 0;
+  Fts5Tokenizer *pTok;
+  sqlite4_tokenizer *p;
+  sqlite4 *db;
+
+  const char *zTokenizer;
+  const char *zExpr;
+  const char *zTbl;
+  char *zErr = 0;
+  char *zRet = 0;
+  const char **azCol = 0;
+  int nCol = 0;
+  sqlite4_stmt *pStmt = 0;
+
+  db = sqlite4_context_db_handle(pCtx);
+  assert( nVal==3 );
+  zTokenizer = (const char *)sqlite4_value_text(aVal[0]);
+  zExpr = (const char *)sqlite4_value_text(aVal[1]);
+  zTbl = (const char *)sqlite4_value_text(aVal[2]);
+
+  if( sqlite4Strlen30(zTbl)>0 ){
+    int i;
+    char *zSql = sqlite4MPrintf(db, "SELECT * FROM '%q'", zTbl);
+    rc = sqlite4_prepare(db, zSql, -1, &pStmt, 0);
+    sqlite4DbFree(db, zSql);
+    if( rc!=SQLITE4_OK ){
+      sqlite4_result_error(pCtx, sqlite4_errmsg(db), -1);
+      sqlite4_result_error_code(pCtx, rc);
+      return;
+    }
+    nCol = sqlite4_column_count(pStmt);
+    azCol = sqlite4DbMallocZero(db, sizeof(char *)*nCol);
+    for(i=0; i<nCol; i++){
+      azCol[i] = sqlite4_column_name(pStmt, i);
+    }
+  }
+
+  pTok = fts5FindTokenizer(db, zTokenizer);
+  if( pTok==0 ){
+    zErr = sqlite4MPrintf(db, "no such tokenizer: %s", zTokenizer);
+    goto fts5_parse_expr_out;
+  }else{
+    rc = pTok->xCreate(pTok->pCtx, 0, 0, &p);
+    if( rc!=SQLITE4_OK ){
+      zErr = sqlite4MPrintf(db, "error creating tokenizer: %d", rc);
+      goto fts5_parse_expr_out;
+    }
+  }
+
+  rc = fts5ParseExpression(db, pTok, p, azCol, nCol, zExpr, &pExpr, &zErr);
+  if( rc!=SQLITE4_OK ){
+    if( zErr==0 ){
+      zErr = sqlite4MPrintf(db, "error parsing expression: %d", rc);
+    }
+    goto fts5_parse_expr_out;
+  }
+
+  fts5PrintExpr(db, azCol, pExpr, &zRet);
+  sqlite4_result_text(pCtx, zRet, -1, SQLITE4_TRANSIENT);
+  fts5ExpressionFree(db, pExpr);
+  sqlite4_free(sqlite4_db_env(db), zRet);
+
+ fts5_parse_expr_out:
+  sqlite4DbFree(db, azCol);
+  sqlite4_finalize(pStmt);
+  if( zErr ){
+    sqlite4_result_error(pCtx, zErr, -1);
+    sqlite4DbFree(db, zErr);
+  }
+}
+#endif
+
+/*
+** Register the default FTS5 tokenizer and functions with handle db.
+*/
+int sqlite4InitFts5(sqlite4 *db){
+#ifdef SQLITE4_TEST
+  int rc = sqlite4_create_function(
+      db, "fts5_parse_expr", 3, SQLITE4_UTF8, 0, fts5_parse_expr, 0, 0
+  );
+  if( rc!=SQLITE4_OK ) return rc;
+#endif
+  return sqlite4InitFts5Func(db);
 }
 
