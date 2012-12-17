@@ -1,0 +1,51 @@
+# 2012 December 17
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#*************************************************************************
+#
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix fts5expr1
+
+foreach {tn expr res} {
+
+
+  1 { abc }                  {"abc"}
+  2 { abc AND def }          {"abc" AND "def"}
+  3 { (abc) }                {"abc"}
+  4 { (((abc))) }            {"abc"}
+  5 { one OR two AND three } {"one" OR ("two" AND "three")}
+  6 { one AND two OR three } {("one" AND "two") OR "three"}
+
+  7 { "abc def" }            {"abc"+"def"}
+  8 {  abc+def  }            {"abc"+"def"}
+  9 { "abc def" + ghi }      {"abc"+"def"+"ghi"}
+
+  10 { one AND two OR three   } {("one" AND "two") OR "three"}
+  11 { one AND (two OR three) } {"one" AND ("two" OR "three")}
+
+  12 { "abc""def" }             {"abc"+"def"}
+  13 { "abc" "def" }            {"abc" AND "def"}
+  14 { "abc" + "def" }          {"abc"+"def"}
+
+  15 { a NOT b AND c OR d }     {(("a" NOT "b") AND "c") OR "d"}
+  16 { a OR b AND c NOT d }     {"a" OR ("b" AND ("c" NOT "d"))}
+  17 { (a OR b) AND c NOT d }   {("a" OR "b") AND ("c" NOT "d")}
+
+} {
+  do_execsql_test 1.$tn { 
+    SELECT fts5_parse_expr('simple', $expr) 
+  } [list [string trim $res]]
+}
+
+
+
+finish_test

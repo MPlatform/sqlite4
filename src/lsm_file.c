@@ -169,7 +169,8 @@
 **   as the file grows), the Page.aData pointers are updated by iterating
 **   through the contents of this list.
 **
-**   In non-mmap() mode, this list is an LRU list of cached pages with nRef==0.
+**   In non-mmap() mode, this list is an LRU list of cached pages with 
+**   nRef==0.
 */
 struct FileSystem {
   lsm_db *pDb;                    /* Database handle that owns this object */
@@ -181,7 +182,7 @@ struct FileSystem {
   int nBlocksize;                 /* Database block-size in bytes */
 
   /* r/w file descriptors for both files. */
-  LsmFile *pLsmFile;
+  LsmFile *pLsmFile;              /* Used after lsm_close() to link into list */
   lsm_file *fdDb;                 /* Database file */
   lsm_file *fdLog;                /* Log file */
   int szSector;                   /* Database file sector size */

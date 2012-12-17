@@ -561,6 +561,7 @@ typedef struct FKey FKey;
 typedef struct FuncDestructor FuncDestructor;
 typedef struct FuncDef FuncDef;
 typedef struct FuncDefTable FuncDefTable;
+typedef struct Fts5Tokenizer Fts5Tokenizer;
 typedef struct IdList IdList;
 typedef struct IdListItem IdListItem;
 typedef struct Index Index;
@@ -870,6 +871,10 @@ struct sqlite4 {
   void *pUnlockArg;                     /* Argument to xUnlockNotify */
   void (*xUnlockNotify)(void **, int);  /* Unlock notify callback */
   sqlite4 *pNextBlocked;        /* Next in list of all blocked connections */
+#endif
+
+#ifndef SQLITE_OMIT_FTS5
+  Fts5Tokenizer *pTokenizer;      /* First in list of tokenizers */
 #endif
 };
 
@@ -3223,5 +3228,9 @@ SQLITE4_EXTERN void (*sqlite4IoTrace)(const char*,...);
 #define MEMTYPE_LOOKASIDE  0x02  /* Might have been lookaside memory */
 #define MEMTYPE_SCRATCH    0x04  /* Scratch allocations */
 #define MEMTYPE_DB         0x10  /* Uses sqlite4DbMalloc, not sqlite_malloc */
+
+int sqlite4InitFts5(sqlite4 *db);
+int sqlite4InitFts5Func(sqlite4 *db);
+void sqlite4ShutdownFts5(sqlite4 *db);
 
 #endif /* _SQLITEINT_H_ */

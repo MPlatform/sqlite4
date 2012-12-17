@@ -774,6 +774,9 @@ int sqlite4_close(sqlite4 *db){
   ** locks and does not require any further unlock-notify callbacks.
   */
   sqlite4ConnectionClosed(db);
+  
+  /* Delete tokenizers */
+  sqlite4ShutdownFts5(db);
 
   assert( db->nDb<=2 );
   assert( db->aDb==db->aDbStatic );
@@ -1784,11 +1787,9 @@ static int openDatabase(
     }
   }
 
-#ifdef SQLITE4_ENABLE_FTS3
   if( !db->mallocFailed && rc==SQLITE4_OK ){
-    rc = sqlite4Fts3Init(db);
+    rc = sqlite4InitFts5(db);
   }
-#endif
 
 #ifdef SQLITE4_ENABLE_ICU
   if( !db->mallocFailed && rc==SQLITE4_OK ){

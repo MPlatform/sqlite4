@@ -231,7 +231,8 @@ const char *sqlite4_compileoption_get(int N);
 **
 ** ^The sqlite4_threadsafe(E) function returns two if the same
 ** [database connection] can be used at the same time from two or more
-** separate threads.  This setting corresponds to [SQLITE4_ENVCONFIG_SERIALIZED].
+** separate threads.  This setting corresponds to 
+** [SQLITE4_ENVCONFIG_SERIALIZED].
 **
 ** Note that SQLite4 is always threadsafe in this sense: Two or more
 ** objects each associated with different [sqlite4_env] objects can
@@ -4368,6 +4369,27 @@ int sqlite4_num_to_text(sqlite4_num, char*);
 */
 #define SQLITE4_PREFIX_ONLY         0x10
 #define SQLITE4_IGNORE_WHITESPACE   0x20
+
+typedef struct sqlite4_tokenizer sqlite4_tokenizer;
+
+/*
+** CAPI4REF: Register an FTS tokenizer implementation
+**
+** xTokenize:
+**   This function does the actual tokenization of an input string. For
+**   each token in the input, the callback function is invoked once.
+*/
+int sqlite4_create_tokenizer(
+  sqlite4 *db,
+  const char *zName,
+  void *pCtx,
+  int (*xCreate)(void*, const char**, int, sqlite4_tokenizer**),
+  int (*xTokenize)(void*, sqlite4_tokenizer*,
+      const char*, int, 
+      int(*x)(void *ctx, int iWeight, const char *zToken, int nToken)
+  ),
+  int (*xDestroy)(void*, sqlite4_tokenizer *)
+);
 
 /*
 ** Undo the hack that converts floating point types to integer for

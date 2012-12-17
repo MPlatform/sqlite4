@@ -64,19 +64,13 @@ TCCX =  $(TCC) $(OPTS) -I. -I$(TOP)/src -I$(TOP)
 TCCX += -I$(TOP)/ext/rtree -I$(TOP)/ext/icu -I$(TOP)/ext/fts3
 TCCX += -I$(TOP)/ext/async
 
+TCPPX = g++ -Wall -g -I. -I$(TOP)/src $(OPTS)
 
-# Object files for the SQLite library.
-#
-FTS3_OBJ = fts3.o fts3_aux.o fts3_expr.o fts3_hash.o fts3_icu.o fts3_porter.o \
-         fts3_snippet.o fts3_tokenizer.o fts3_tokenizer1.o \
-         fts3_write.o
-# To remove fts3 (if it won't compile for you), unset FTS3_OBJ:
-# FTS3_OBJ =
 
 LIBOBJ+= alter.o analyze.o attach.o auth.o \
          build.o \
          callback.o complete.o ctime.o date.o delete.o expr.o fault.o fkey.o \
-         $(FTS3_OBJ) \
+	 fts5.o fts5func.o \
          func.o global.o hash.o \
          icu.o insert.o kv.o kvlsm.o kvmem.o legacy.o \
          lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o lsm_mem.o lsm_mutex.o \
@@ -220,8 +214,6 @@ SRC += \
 # Source code to the test files.
 #
 TESTSRC = \
-  $(TOP)/ext/fts3/fts3_term.c \
-  $(TOP)/ext/fts3/fts3_test.c \
   $(TOP)/test/test_main.c \
   $(TOP)/test/test_thread0.c \
   $(TOP)/test/test_utf.c \
@@ -246,6 +238,8 @@ TESTSRC2 = \
   $(TOP)/src/build.c \
   $(TOP)/src/date.c \
   $(TOP)/src/expr.c \
+  $(TOP)/src/fts5.c \
+  $(TOP)/src/fts5func.c \
   $(TOP)/src/func.c \
   $(TOP)/src/insert.c \
   $(TOP)/src/mem5.c \
@@ -264,11 +258,6 @@ TESTSRC2 = \
   $(TOP)/src/vdbemem.c \
   $(TOP)/src/where.c \
   parse.c \
-  $(TOP)/ext/fts3/fts3.c \
-  $(TOP)/ext/fts3/fts3_aux.c \
-  $(TOP)/ext/fts3/fts3_expr.c \
-  $(TOP)/ext/fts3/fts3_tokenizer.c \
-  $(TOP)/ext/fts3/fts3_write.c
 
 # Header files used by all library source files.
 #
@@ -521,7 +510,8 @@ test:	testfixture$(EXE) sqlite4$(EXE)
 # Rules to build the 'lsmtest' application.
 #
 lsmtest$(EXE): libsqlite4.a $(LSMTESTSRC) $(LSMTESTHDR)
-	$(TCCX) $(LSMTESTSRC) libsqlite4.a -o lsmtest$(EXE) $(THREADLIB) -lsqlite3
+	$(TCPPX) -c $(TOP)/lsm-test/lsmtest_tdb2.cc
+	$(TCCX) $(LSMTESTSRC) lsmtest_tdb2.o libsqlite4.a -o lsmtest$(EXE) $(THREADLIB) -lsqlite3
 
 
 varint$(EXE):	$(TOP)/src/varint.c
