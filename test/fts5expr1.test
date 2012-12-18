@@ -38,6 +38,10 @@ foreach {tn expr res} {
   16 { a OR b AND c NOT d }     {"a" OR ("b" AND ("c" NOT "d"))}
   17 { (a OR b) AND c NOT d }   {("a" OR "b") AND ("c" NOT "d")}
 
+  18 { a NEAR/10 b }                {"a" NEAR/10 "b"}
+  19 { a NEAR b }                   {"a" NEAR/10 "b"}
+  20 { a AND b OR c + d NEAR/52 e } {("a" AND "b") OR ("c"+"d" NEAR/52 "e")}
+
 } {
   do_execsql_test 1.$tn { 
     SELECT fts5_parse_expr('simple', $expr, '') 

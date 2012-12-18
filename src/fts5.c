@@ -13,6 +13,8 @@
 
 #include "sqliteInt.h"
 
+#define FTS5_DEFAULT_NEAR 10
+
 /*
 ** Token types used by expression parser.
 */
@@ -130,13 +132,6 @@ struct Fts5Expr {
 };
 
 /*
-** Return true if argument c is an ASCII whitespace character.
-*/
-static int fts5IsWhite(char c){
-  return (c==' ' || c=='\n' || c=='\r' || c=='\t');
-}
-
-/*
 ** Return true if argument c is one of the special non-whitespace 
 ** characters that ends an unquoted expression token. 
 */
@@ -154,7 +149,7 @@ static int fts5NextToken(
   memset(p, 0, sizeof(Fts5ParserToken));
 
   /* Skip past any whitespace */
-  while( fts5IsWhite(z[pParse->iExpr]) ) pParse->iExpr++;
+  while( sqlite4Isspace(z[pParse->iExpr]) ) pParse->iExpr++;
 
   c = z[pParse->iExpr];
   if( c=='\0' ){
@@ -214,13 +209,29 @@ static int fts5NextToken(
     int n = 0;
     while( zPrimitive[n] 
         && fts5IsSpecial(zPrimitive[n])==0
-        && fts5IsWhite(zPrimitive[n])==0 
+        && sqlite4Isspace(zPrimitive[n])==0 
     ){
       n++;
     }
     pParse->iExpr += n;
 
-    if( n==3 && memcmp(zPrimitive, "NOT", 3)==0 ){
+    if( n>=4 && memcmp(zPrimitive, "NEAR", 4)==0 ){
+      int nNear = FTS5_DEFAULT_NEAR;
+      if( n>4 ){
+        int i;
+        nNear = 0;
+        for(i=5; i<n; i++){
+          if( !sqlite4Isdigit(zPrimitive[i]) ) break;
+          nNear = nNear*10 + zPrimitive[i]-'0';
+        }
+        if( n<6 || zPrimitive[4]!='/' || i<n ){
+          return SQLITE4_ERROR;
+        }
+      }
+      p->eType = TOKEN_NEAR;
+      p->n = nNear;
+      p->z = 0;
+    }else if( n==3 && memcmp(zPrimitive, "NOT", 3)==0 ){
       p->eType = TOKEN_NOT;
     }
     else if( n==2 && memcmp(zPrimitive, "OR", 2)==0 ){
@@ -271,6 +282,17 @@ static int fts5PhraseNewStr(
     if( !aNew ) return SQLITE4_NOMEM;
     memset(&aNew[pPhrase->nStr], 0, nIncr*sizeof(Fts5Str));
     pPhrase->aStr = aNew;
+  }
+  if( pPhrase->nStr>0 ){
+    if( ((pPhrase->nStr-1) % nIncr)==0 ){
+      int *aNew;
+      aNew = (Fts5Str *)sqlite4DbRealloc(pParse->db, 
+        pPhrase->aiNear, (pPhrase->nStr+nIncr-1)*sizeof(int)
+      );
+      if( !aNew ) return SQLITE4_NOMEM;
+      pPhrase->aiNear = aNew;
+    }
+    pPhrase->aiNear[pPhrase->nStr-1] = nNear;
   }
 
   pPhrase->nStr++;
