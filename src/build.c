@@ -2309,6 +2309,251 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx, int bCreate){
 }
 
 /*
+** The CreateIndex structure indicated by the first argument contains the
+** results of parsing the first part of a CREATE INDEX statement. 
+** Specifically, everything up to and including the "ON tblname" clause.
+** The index may be an ordinary index, or it may be a "USING fts5" index.
+** This function performs processing common to both.
+*/
+static Table *createIndexFindTable(
+  Parse *pParse,                  /* Parsing context */
+  CreateIndex *p,                 /* First part of CREATE INDEX statement */
+  Token **ppIdxName,              /* OUT: Pointer to index name token */
+  char **pzIdxName,               /* OUT: DbMalloc'd copy of index name */
+  int *piDb                       /* OUT: Database to create index in */
+){
+  DbFixer sFix;                   /* For assigning database names to pTblName */
+  sqlite4 *db = pParse->db;       /* Database handle */
+  Token *pName = 0;               /* Token containing unqualified index name */
+  char *zName;                    /* Name of index being created */
+  int iDb;                        /* Index of database in db->aDb[] */
+  Table *pTab;                    /* Table object to return */
+
+  /* Use the two-part index name to determine the database 
+  ** to search for the table. 'Fix' the table name to this db
+  ** before looking up the table.  */
+  iDb = sqlite4TwoPartName(pParse, &p->tName1, &p->tName2, &pName);
+  if( iDb<0 ) return 0;
+  assert( pName && pName->z );
+
+#ifndef SQLITE4_OMIT_TEMPDB
+  /* If the index name was unqualified, check if the the table
+  ** is a temp table. If so, set the database to 1. Do not do this
+  ** if initialising a database schema.  */
+  if( !db->init.busy ){
+    pTab = sqlite4SrcListLookup(pParse, p->pTblName);
+    if( p->tName2.n==0 && pTab && pTab->pSchema==db->aDb[1].pSchema ){
+      iDb = 1;
+    }
+  }
+#endif
+
+  if( sqlite4FixInit(&sFix, pParse, iDb, "index", pName) &&
+      sqlite4FixSrcList(&sFix, p->pTblName)
+  ){
+    /* Because the parser constructs pTblName from a single identifier,
+    ** sqlite4FixSrcList can never fail. */
+    assert(0);
+  }
+
+  pTab = sqlite4SrcListLookup(pParse, p->pTblName);
+  if( !pTab || db->mallocFailed ) return 0;
+  assert( db->aDb[iDb].pSchema==pTab->pSchema );
+  assert( pParse->nErr==0 );
+
+  /* TODO: We will need to reinstate this block when sqlite_master is 
+  ** modified to use an implicit primary key.  */
+#if 0
+  if( sqlite4StrNICmp(pTab->zName, "sqlite_", 7)==0 
+       && memcmp(&pTab->zName[7],"altertab_",9)!=0 ){
+    sqlite4ErrorMsg(pParse, "table %s may not be indexed", pTab->zName);
+    goto exit_create_index;
+  }
+#endif
+
+  /* Verify that this is not an attempt to create an index on a view or
+  ** virtual table. */
+  if( IsView(pTab) ){
+    sqlite4ErrorMsg(pParse, "views may not be indexed");
+    return 0;
+  }
+  if( IsVirtual(pTab) ){
+    sqlite4ErrorMsg(pParse, "virtual tables may not be indexed");
+    return 0;
+  }
+
+  /* Ensure that the proposed index name is not reserved. */
+  assert( pName->z!=0 );
+  zName = sqlite4NameFromToken(db, pName);
+  if( zName==0 || sqlite4CheckObjectName(pParse, zName) ) return 0;
+
+  /* Unless SQLite is currently parsing an existing database schema, check
+  ** that there is not already an index or table using the proposed name.  */
+  if( !db->init.busy ){
+    char *zDb = db->aDb[iDb].zName;
+    if( sqlite4FindTable(db, zName, zDb)!=0 ){
+      sqlite4ErrorMsg(pParse, "there is already a table named %s", zName);
+    }
+    else if( sqlite4FindIndex(db, zName, zDb)!=0 ){
+      if( p->bIfnotexist ){
+        assert( !db->init.busy );
+        sqlite4CodeVerifySchema(pParse, iDb);
+        pTab = 0;
+      }else{
+        sqlite4ErrorMsg(pParse, "index %s already exists", zName);
+      }
+    }
+  }
+
+  if( pParse->nErr || pTab==0 ){
+    sqlite4DbFree(db, zName);
+    pTab = 0;
+    zName = 0;
+  }
+  *ppIdxName = pName;
+  *pzIdxName = zName;
+  *piDb = iDb;
+  return pTab;
+}
+
+#ifndef SQLITE4_OMIT_AUTHORIZATION
+static int createIndexAuth(
+  Parse *pParse,                  /* Parser context */
+  Table *pTab,                    /* Table index is being created on */
+  const char *zIdx                /* Name of index being created */
+){
+  sqlite4 *db;
+  int iDb;
+  int iOp;
+  const char *zDb;
+
+  db = pParse->db;
+  iDb = sqlite4SchemaToIndex(db, pTab->pSchema);
+  zDb = db->aDb[iDb].zName;
+
+  if( sqlite4AuthCheck(pParse, SQLITE4_INSERT, SCHEMA_TABLE(iDb), 0, zDb) ){
+    return 1;
+  }
+
+  iOp = (!OMIT_TEMPDB && iDb==1)?SQLITE4_CREATE_TEMP_INDEX:SQLITE4_CREATE_INDEX;
+  if( sqlite4AuthCheck(pParse, iOp, zIdx, pTab->zName, zDb) ){
+    return 1;
+  }
+
+  return 0;
+}
+#else
+# define createIndexAuth(a, b, c) 0
+#endif // SQLITE4_OMIT_AUTHORIZATION
+
+static void createIndexWriteSchema(
+  Parse *pParse,
+  Index *pIdx,
+  Token *pName,
+  Token *pEnd
+){
+  sqlite4 *db = pParse->db;
+  int iDb;
+
+  assert( db->init.busy==0 );
+  iDb = sqlite4SchemaToIndex(db, pIdx->pSchema);
+  pIdx->tnum = ++pParse->nMem;
+  allocateTableNumber(pParse, iDb, pIdx->tnum);
+
+  if( pIdx->eIndexType!=SQLITE4_INDEX_PRIMARYKEY ){
+    Vdbe *v;
+    char *zStmt;
+
+    v = sqlite4GetVdbe(pParse);
+    if( v==0 ) return;
+
+    sqlite4BeginWriteOperation(pParse, 1, iDb);
+
+    /* Unless this index is an automatic index created by a UNIQUE 
+    ** constraint, assemble a CREATE INDEX statement to write into the 
+    ** sqlite_master table.  */
+    if( pIdx->eIndexType!=SQLITE4_INDEX_UNIQUE ){
+      int n = (int)(pEnd->z - pName->z) + pEnd->n;
+      const char *zUnique = (pIdx->onError==OE_None ? "" : " UNIQUE");
+      zStmt = sqlite4MPrintf(db, "CREATE%s INDEX %.*s", zUnique, n, pName->z);
+    }else{
+      /* An automatic index created by a PRIMARY KEY or UNIQUE constraint */
+      zStmt = 0;
+    }
+
+    /* Add an entry in sqlite_master for this index */
+    sqlite4NestedParse(pParse, 
+        "INSERT INTO %Q.%s VALUES('index',%Q,%Q,#%d,%Q);",
+        db->aDb[iDb].zName, SCHEMA_TABLE(iDb),
+        pIdx->zName,
+        pIdx->pTable->zName,
+        pIdx->tnum,
+        zStmt
+    );
+    sqlite4DbFree(db, zStmt);
+
+    /* Fill the index with data and reparse the schema. Code an OP_Expire
+    ** to invalidate all pre-compiled statements.
+    */
+    if( pIdx->eIndexType!=SQLITE4_INDEX_UNIQUE ){
+      sqlite4RefillIndex(pParse, pIdx, 1);
+      sqlite4ChangeCookie(pParse, iDb);
+      sqlite4VdbeAddParseSchemaOp(v, iDb,
+          sqlite4MPrintf(db, "name='%q' AND type='index'", pIdx->zName));
+      sqlite4VdbeAddOp1(v, OP_Expire, 0);
+    }
+  }
+}
+
+void sqlite4CreateUsingIndex(
+  Parse *pParse,                  /* Parsing context */
+  CreateIndex *p,                 /* First part of CREATE INDEX statement */
+  Token *pUsing,                  /* Token following USING keyword */
+  Token *pEnd                     /* Final '(' in CREATE INDEX */
+){
+  sqlite4 *db = pParse->db;
+  if( p->bUnique ){
+    sqlite4ErrorMsg(pParse, "USING %.*s index may not be UNIQUE", 
+        pUsing->n, pUsing->z
+    );
+  }else{
+    Index *pIdx = 0;              /* New index object */
+    Table *pTab;
+    Token *pIdxName = 0;
+    char *zIdx = 0;
+    int iDb = 0;
+
+    pTab = createIndexFindTable(pParse, p, &pIdxName, &zIdx, &iDb);
+    if( pTab && 0==createIndexAuth(pParse, pTab, zIdx) ){
+      char *zExtra = 0;
+      pIdx = newIndex(pParse, pTab, zIdx, 0, 0, 0, &zExtra);
+    }
+    if( pIdx ){
+      pIdx->eIndexType = SQLITE4_INDEX_FTS5;
+      if( db->init.busy ){
+        db->flags |= SQLITE4_InternChanges;
+        pIdx->tnum = db->init.newTnum;
+      }else{
+        createIndexWriteSchema(pParse, pIdx, pIdxName, pEnd);
+      }
+
+      addIndexToHash(db, pIdx);
+
+      if( pParse->nErr==0 ){
+        pIdx->pNext = pTab->pIndex;
+        pTab->pIndex = pIdx;
+      }else{
+        sqlite4DbFree(db, pIdx);
+      }
+    }
+
+    sqlite4DbFree(db, zIdx);
+  }
+
+  sqlite4SrcListDelete(db, p->pTblName);
+}
+
+/*
 ** Create a new index for an SQL table.  pName1.pName2 is the name of the index 
 ** and pTblList is the name of the table that is to be indexed.  Both will 
 ** be NULL for a primary key or an index that is created to satisfy a
@@ -2365,42 +2610,19 @@ Index *sqlite4CreateIndex(
   ** Find the table that is to be indexed.  Return early if not found.
   */
   if( pTblName!=0 ){
+    CreateIndex sCreate;
+    sCreate.bUnique = onError;
+    sCreate.bIfnotexist = ifNotExist;
+    sCreate.tCreate = *pStart;
+    sCreate.tName1 = *pName1;
+    sCreate.tName2 = *pName2;
+    sCreate.pTblName = pTblName;
 
-    /* Use the two-part index name to determine the database 
-    ** to search for the table. 'Fix' the table name to this db
-    ** before looking up the table.
-    */
-    assert( !bPrimaryKey );
-    assert( pName1 && pName2 );
-    iDb = sqlite4TwoPartName(pParse, pName1, pName2, &pName);
-    if( iDb<0 ) goto exit_create_index;
-    assert( pName && pName->z );
+    pTab = createIndexFindTable(pParse, &sCreate, &pName, &zName, &iDb);
+    if( !pTab ) goto exit_create_index;
 
-#ifndef SQLITE4_OMIT_TEMPDB
-    /* If the index name was unqualified, check if the the table
-    ** is a temp table. If so, set the database to 1. Do not do this
-    ** if initialising a database schema.
-    */
-    if( !db->init.busy ){
-      pTab = sqlite4SrcListLookup(pParse, pTblName);
-      if( pName2->n==0 && pTab && pTab->pSchema==db->aDb[1].pSchema ){
-        iDb = 1;
-      }
-    }
-#endif
-
-    if( sqlite4FixInit(&sFix, pParse, iDb, "index", pName) &&
-        sqlite4FixSrcList(&sFix, pTblName)
-    ){
-      /* Because the parser constructs pTblName from a single identifier,
-      ** sqlite4FixSrcList can never fail. */
-      assert(0);
-    }
-    pTab = sqlite4LocateTable(pParse, 0, pTblName->a[0].zName, 
-        pTblName->a[0].zDatabase);
-    if( !pTab || db->mallocFailed ) goto exit_create_index;
-    assert( db->aDb[iDb].pSchema==pTab->pSchema );
   }else{
+
     assert( pName==0 );
     assert( pStart==0 );
     pTab = pParse->pNewTable;
@@ -2411,95 +2633,28 @@ Index *sqlite4CreateIndex(
 
   assert( pTab!=0 );
   assert( pParse->nErr==0 );
+  assert( IsVirtual(pTab)==0 && IsView(pTab)==0 );
 
-  /* TODO: We will need to reinstate this block when sqlite_master is 
-  ** modified to use an implicit primary key.  */
-#if 0
-  if( sqlite4StrNICmp(pTab->zName, "sqlite_", 7)==0 
-       && memcmp(&pTab->zName[7],"altertab_",9)!=0 ){
-    sqlite4ErrorMsg(pParse, "table %s may not be indexed", pTab->zName);
-    goto exit_create_index;
-  }
-#endif
-
-#ifndef SQLITE4_OMIT_VIEW
-  if( pTab->pSelect ){
-    assert( !bPrimaryKey );
-    sqlite4ErrorMsg(pParse, "views may not be indexed");
-    goto exit_create_index;
-  }
-#endif
-#ifndef SQLITE4_OMIT_VIRTUALTABLE
-  if( IsVirtual(pTab) ){
-    assert( !bPrimaryKey );
-    sqlite4ErrorMsg(pParse, "virtual tables may not be indexed");
-    goto exit_create_index;
-  }
-#endif
-
-  /*
-  ** Find the name of the index.  Make sure there is not already another
-  ** index or table with the same name.  
-  **
-  ** Exception:  If we are reading the names of permanent indices from the
-  ** sqlite_master table (because some other process changed the schema) and
-  ** one of the index names collides with the name of a temporary table or
-  ** index, then we will continue to process this index.
-  **
-  ** If pName==0 it means that we are
-  ** dealing with a primary key or UNIQUE constraint.  We have to invent our
-  ** own name.
-  */
-  if( pName ){
-    assert( !bPrimaryKey );
-    zName = sqlite4NameFromToken(db, pName);
-    if( zName==0 ) goto exit_create_index;
-    assert( pName->z!=0 );
-    if( SQLITE4_OK!=sqlite4CheckObjectName(pParse, zName) ){
-      goto exit_create_index;
+  /* If pName==0 it means that we are dealing with a primary key or 
+  ** UNIQUE constraint.  We have to invent our own name.  */
+  if( pName==0 ){
+    if( !bPrimaryKey ){
+      int n;
+      Index *pLoop;
+      for(pLoop=pTab->pIndex, n=1; pLoop; pLoop=pLoop->pNext, n++){}
+      zName = sqlite4MPrintf(db, "sqlite_autoindex_%s_%d", pTab->zName, n);
+    }else{
+      zName = sqlite4MPrintf(db, "%s", pTab->zName);
     }
-    if( !db->init.busy ){
-      if( sqlite4FindTable(db, zName, 0)!=0 ){
-        sqlite4ErrorMsg(pParse, "there is already a table named %s", zName);
-        goto exit_create_index;
-      }
-    }
-    if( sqlite4FindIndex(db, zName, pDb->zName)!=0 ){
-      if( !ifNotExist ){
-        sqlite4ErrorMsg(pParse, "index %s already exists", zName);
-      }else{
-        assert( !db->init.busy );
-        sqlite4CodeVerifySchema(pParse, iDb);
-      }
-      goto exit_create_index;
-    }
-  }else if( !bPrimaryKey ){
-    int n;
-    Index *pLoop;
-    for(pLoop=pTab->pIndex, n=1; pLoop; pLoop=pLoop->pNext, n++){}
-    zName = sqlite4MPrintf(db, "sqlite_autoindex_%s_%d", pTab->zName, n);
-  }else{
-    zName = sqlite4MPrintf(db, "%s", pTab->zName);
-  }
-  if( zName==0 ){
-    goto exit_create_index;
-  }
-
-  /* Check for authorization to create an index.
-  */
-#ifndef SQLITE4_OMIT_AUTHORIZATION
-  if( bPrimaryKey==0 ){
-    const char *zDb = pDb->zName;
-    if( sqlite4AuthCheck(pParse, SQLITE4_INSERT, SCHEMA_TABLE(iDb), 0, zDb) ){
-      goto exit_create_index;
-    }
-    i = SQLITE4_CREATE_INDEX;
-    if( !OMIT_TEMPDB && iDb==1 ) i = SQLITE4_CREATE_TEMP_INDEX;
-    if( sqlite4AuthCheck(pParse, i, zName, pTab->zName, zDb) ){
+    if( zName==0 ){
       goto exit_create_index;
     }
   }
-#endif
+
+  /* Check for authorization to create the index.  */
+  if( bPrimaryKey==0 && createIndexAuth(pParse, pTab, zName) ){
+    goto exit_create_index;
+  }
 
   /* If pList==0, it means this routine was called as a result of a PRIMARY
   ** KEY or UNIQUE constraint attached to the last column added to the table 
@@ -2692,58 +2847,7 @@ Index *sqlite4CreateIndex(
   ** step can be skipped.
   */
   else{
-    pIndex->tnum = ++pParse->nMem;
-    allocateTableNumber(pParse, iDb, pIndex->tnum);
-    if( bPrimaryKey==0 ){
-      Vdbe *v;
-      char *zStmt;
-
-      v = sqlite4GetVdbe(pParse);
-      if( v==0 ) goto exit_create_index;
-
-      /* Create the rootpage for the index
-      */
-      sqlite4BeginWriteOperation(pParse, 1, iDb);
-
-      /* Gather the complete text of the CREATE INDEX statement into
-       ** the zStmt variable
-       */
-      if( pStart ){
-        assert( pEnd!=0 );
-        /* A named index with an explicit CREATE INDEX statement */
-        zStmt = sqlite4MPrintf(db, "CREATE%s INDEX %.*s",
-            onError==OE_None ? "" : " UNIQUE",
-            (int)(pEnd->z - pName->z) + 1,
-            pName->z);
-      }else{
-        /* An automatic index created by a PRIMARY KEY or UNIQUE constraint */
-        /* zStmt = sqlite4MPrintf(""); */
-        zStmt = 0;
-      }
-
-      /* Add an entry in sqlite_master for this index
-      */
-      sqlite4NestedParse(pParse, 
-          "INSERT INTO %Q.%s VALUES('index',%Q,%Q,#%d,%Q);",
-          db->aDb[iDb].zName, SCHEMA_TABLE(iDb),
-          pIndex->zName,
-          pTab->zName,
-          pIndex->tnum,
-          zStmt
-          );
-      sqlite4DbFree(db, zStmt);
-
-      /* Fill the index with data and reparse the schema. Code an OP_Expire
-       ** to invalidate all pre-compiled statements.
-       */
-      if( pTblName ){
-        sqlite4RefillIndex(pParse, pIndex, 1);
-        sqlite4ChangeCookie(pParse, iDb);
-        sqlite4VdbeAddParseSchemaOp(v, iDb,
-            sqlite4MPrintf(db, "name='%q' AND type='index'", pIndex->zName));
-        sqlite4VdbeAddOp1(v, OP_Expire, 0);
-      }
-    }
+    createIndexWriteSchema(pParse, pIndex, pName, pEnd);
   }
 
   /* When adding an index to the list of indices for a table, make
@@ -2844,7 +2948,9 @@ void sqlite4DropIndex(Parse *pParse, SrcList *pName, int ifExists){
     pParse->checkSchema = 1;
     goto exit_drop_index;
   }
-  if( pIndex->eIndexType!=SQLITE4_INDEX_USER ){
+  if( pIndex->eIndexType!=SQLITE4_INDEX_USER 
+   && pIndex->eIndexType!=SQLITE4_INDEX_FTS5 
+  ){
     sqlite4ErrorMsg(pParse, "index associated with UNIQUE "
       "or PRIMARY KEY constraint cannot be dropped", 0);
     goto exit_drop_index;

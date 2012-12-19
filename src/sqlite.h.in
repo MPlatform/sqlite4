@@ -4388,7 +4388,7 @@ int sqlite4_create_tokenizer(
       const char*, int, 
       int(*x)(void *ctx, int iWeight, const char *zToken, int nToken)
   ),
-  int (*xDestroy)(void*, sqlite4_tokenizer *)
+  int (*xDestroy)(sqlite4_tokenizer *)
 );
 
 /*

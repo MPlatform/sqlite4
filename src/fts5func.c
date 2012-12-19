@@ -23,7 +23,7 @@ static int fts5SimpleCreate(
   return SQLITE4_OK;
 }
 
-static int fts5SimpleDestroy(void *pCtx, sqlite4_tokenizer *p){
+static int fts5SimpleDestroy(sqlite4_tokenizer *p){
   return SQLITE4_OK;
 }
 

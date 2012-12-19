@@ -551,6 +551,7 @@ typedef struct AuthContext AuthContext;
 typedef struct AutoincInfo AutoincInfo;
 typedef struct CollSeq CollSeq;
 typedef struct Column Column;
+typedef struct CreateIndex CreateIndex;
 typedef struct Db Db;
 typedef struct Schema Schema;
 typedef struct Expr Expr;
@@ -1437,7 +1438,8 @@ struct Index {
 #define SQLITE4_INDEX_USER       0 /* Index created by CREATE INDEX statement */
 #define SQLITE4_INDEX_UNIQUE     1 /* Index created by UNIQUE constraint */
 #define SQLITE4_INDEX_PRIMARYKEY 2 /* Index is the tables PRIMARY KEY */
-#define SQLITE4_INDEX_TEMP       3 /* Index is an automatic index */
+#define SQLITE4_INDEX_FTS5       3 /* Index is an FTS5 index */
+#define SQLITE4_INDEX_TEMP       4 /* Index is an automatic index */
 
 /*
 ** Each sample stored in the sqlite_stat3 table is represented in memory 
@@ -1468,6 +1470,20 @@ struct IndexSample {
 struct Token {
   const char *z;     /* Text of the token.  Not NULL-terminated! */
   unsigned int n;    /* Number of characters in this token */
+};
+
+/*
+** An instance of this structure holds the results of parsing the first
+** part of a CREATE INDEX statement. Instances exist only transiently 
+** during parsing.
+*/
+struct CreateIndex {
+  int bUnique;                    /* True if the UNIQUE keyword was present */
+  int bIfnotexist;                /* True if IF NOT EXISTS was present */
+  Token tCreate;                  /* CREATE token */
+  Token tName1;                   /* First part of two part name */
+  Token tName2;                   /* Second part of two part name */
+  SrcList *pTblName;              /* Table index is created on */ 
 };
 
 /*

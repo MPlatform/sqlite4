@@ -1087,11 +1087,22 @@ nexprlist(A) ::= expr(Y).
 
 ///////////////////////////// The CREATE INDEX command ///////////////////////
 //
-cmd ::= createkw(S) uniqueflag(U) INDEX ifnotexists(NE) nm(X) dbnm(D)
-        ON nm(Y) LP idxlist(Z) RP(E). {
-  sqlite4CreateIndex(pParse, &X, &D, 
-                     sqlite4SrcListAppend(pParse->db,0,&Y,0), Z, U,
-                      &S, &E, SQLITE4_SO_ASC, NE, 0);
+%type createindex {CreateIndex}
+%destructor createindex {sqlite4SrcListDelete(pParse->db, $$.pTblName);}
+
+createindex(C) ::= createkw(S) uniqueflag(U) INDEX ifnotexists(NE) 
+        nm(X) dbnm(D) ON nm(Y). {
+  C.bUnique = U;
+  C.bIfnotexist = NE;
+  C.tCreate = S;
+  C.tName1 = X;
+  C.tName2 = D;
+  C.pTblName = sqlite4SrcListAppend(pParse->db, 0, &Y, 0);
+}
+
+cmd ::= createindex(C) LP idxlist(Z) RP(E). {
+  sqlite4CreateIndex(pParse, &C.tName1, &C.tName2, C.pTblName, Z, 
+                C.bUnique, &C.tCreate, &E, SQLITE4_SO_ASC, C.bIfnotexist, 0);
 }
 
 %type uniqueflag {int}
@@ -1131,6 +1142,10 @@ idxlist(A) ::= nm(Y) collate(C) sortorder(Z). {
 %type collate {Token}
 collate(C) ::= .                 {C.z = 0; C.n = 0;}
 collate(C) ::= COLLATE ids(X).   {C = X;}
+
+cmd ::= createindex(C) USING nm(F) LP RP(E). {
+  sqlite4CreateUsingIndex(pParse, &C, &F, &E);
+}
 
 
 ///////////////////////////// The DROP INDEX command /////////////////////////
@@ -1361,3 +1376,4 @@ anylist ::= .
 anylist ::= anylist LP anylist RP.
 anylist ::= anylist ANY.
 %endif  SQLITE4_OMIT_VIRTUALTABLE
+

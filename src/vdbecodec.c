@@ -335,6 +335,7 @@ struct KeyEncoder {
 ** Enlarge a memory allocation, if necessary
 */
 static int enlargeEncoderAllocation(KeyEncoder *p, int needed){
+  assert( p->nOut<=p->nAlloc );
   if( p->nOut+needed>p->nAlloc ){
     u8 *aNew;
     p->nAlloc = p->nAlloc + needed + 10;
@@ -596,8 +597,8 @@ static int encodeOneKeyValue(
     }else{
       int nSpc = p->nAlloc-p->nOut;
       n = pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, nSpc, p->aOut+p->nOut);
-      if( n>nSpc ){
-        if( enlargeEncoderAllocation(p, n) ) return SQLITE4_NOMEM;
+      if( n+1>nSpc ){
+        if( enlargeEncoderAllocation(p, n+1) ) return SQLITE4_NOMEM;
         n = pColl->xMkKey(pColl->pUser, pEnc->n, pEnc->z, n, p->aOut+p->nOut);
       }
       p->nOut += n;
@@ -636,6 +637,7 @@ static int encodeOneKeyValue(
   if( sortOrder==SQLITE4_SO_DESC ){
     for(i=iStart; i<p->nOut; i++) p->aOut[i] ^= 0xff;
   }
+  assert( p->nOut<=p->nAlloc );
   return SQLITE4_OK;
 }
 

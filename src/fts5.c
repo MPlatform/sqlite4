@@ -13,6 +13,9 @@
 
 #include "sqliteInt.h"
 
+/*
+** Default distance value for NEAR operators.
+*/
 #define FTS5_DEFAULT_NEAR 10
 
 /*
@@ -43,7 +46,7 @@ struct Fts5Tokenizer {
   int (*xTokenize)(void*, sqlite4_tokenizer*,
       const char*, int, int(*x)(void*, int, const char*, int)
   );
-  int (*xDestroy)(void*, sqlite4_tokenizer *);
+  int (*xDestroy)(sqlite4_tokenizer *);
   Fts5Tokenizer *pNext;
 };
 
@@ -731,7 +734,7 @@ int sqlite4_create_tokenizer(
   int (*xTokenize)(void*, sqlite4_tokenizer*,
       const char*, int, int(*x)(void*, int, const char*, int)
   ),
-  int (*xDestroy)(void*, sqlite4_tokenizer *)
+  int (*xDestroy)(sqlite4_tokenizer *)
 ){
   int rc = SQLITE4_OK;
   sqlite4_mutex_enter(db->mutex);
@@ -876,7 +879,7 @@ static void fts5_parse_expr(
   int rc;
   Fts5Expr *pExpr = 0;
   Fts5Tokenizer *pTok;
-  sqlite4_tokenizer *p;
+  sqlite4_tokenizer *p = 0;
   sqlite4 *db;
 
   const char *zTokenizer;
@@ -937,6 +940,7 @@ static void fts5_parse_expr(
   sqlite4_free(sqlite4_db_env(db), zRet);
 
  fts5_parse_expr_out:
+  if( p ) pTok->xDestroy(p);
   sqlite4DbFree(db, azCol);
   sqlite4_finalize(pStmt);
   if( zErr ){
