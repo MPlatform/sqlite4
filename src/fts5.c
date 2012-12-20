@@ -51,6 +51,17 @@ struct Fts5Tokenizer {
 };
 
 /*
+** FTS5 specific index data.
+**
+** This object is part of a database schema, so it may be shared between
+** multiple connections.
+*/
+struct Fts5Index {
+  int nTokenizer;                 /* Elements in azTokenizer[] array */
+  char **azTokenizer;             /* Name and arguments for tokenizer */
+};
+
+/*
 ** Expression grammar:
 **
 **   phrase := PRIMITIVE
@@ -289,7 +300,7 @@ static int fts5PhraseNewStr(
   if( pPhrase->nStr>0 ){
     if( ((pPhrase->nStr-1) % nIncr)==0 ){
       int *aNew;
-      aNew = (Fts5Str *)sqlite4DbRealloc(pParse->db, 
+      aNew = (int *)sqlite4DbRealloc(pParse->db, 
         pPhrase->aiNear, (pPhrase->nStr+nIncr-1)*sizeof(int)
       );
       if( !aNew ) return SQLITE4_NOMEM;
@@ -714,6 +725,32 @@ static Fts5Tokenizer *fts5FindTokenizer(sqlite4 *db, const char *zName){
   return p;
 }
 
+static void fts5TokenizerCreate(
+  Parse *pParse, 
+  Fts5Index *pFts, 
+  Fts5Tokenizer **ppTokenizer,
+  sqlite4_tokenizer **pp
+){
+  Fts5Tokenizer *pTok;
+  char *zTok = pFts->azTokenizer[0];
+
+  *ppTokenizer = pTok = fts5FindTokenizer(pParse->db, zTok);
+  if( !pTok ){
+    sqlite4ErrorMsg(pParse, "no such tokenizer: \"%s\"", zTok);
+  }else{
+    const char **azArg = (const char **)&pFts->azTokenizer[1];
+    int rc = pTok->xCreate(pTok->pCtx, azArg, pFts->nTokenizer-1, pp);
+    if( rc!=SQLITE4_OK ){
+      assert( *pp==0 );
+      sqlite4ErrorMsg(pParse, "error creating tokenizer");
+    }
+  }
+}
+
+static void fts5TokenizerDestroy(Fts5Tokenizer *pTok, sqlite4_tokenizer *p){
+  if( p ) pTok->xDestroy(p);
+}
+
 void sqlite4ShutdownFts5(sqlite4 *db){
   Fts5Tokenizer *p;
   Fts5Tokenizer *pNext;
@@ -765,6 +802,76 @@ int sqlite4_create_tokenizer(
   rc = sqlite4ApiExit(db, rc);
   sqlite4_mutex_leave(db->mutex);
   return rc;
+}
+
+/*
+** Return the size of an Fts5Index structure, in bytes.
+*/
+int sqlite4Fts5IndexSz(void){ 
+  return sizeof(Fts5Index); 
+}
+
+/*
+** Initialize the fts5 specific part of the index object passed as the
+** second argument.
+*/
+void sqlite4Fts5IndexInit(Parse *pParse, Index *pIdx, ExprList *pArgs){
+  Fts5Index *pFts = pIdx->pFts;
+
+  if( pArgs ){
+    int i;
+    for(i=0; pParse->nErr==0 && i<pArgs->nExpr; i++){
+      char *zArg = pArgs->a[i].zName;
+      char *zVal = pArgs->a[i].pExpr->u.zToken;
+
+      if( zArg && sqlite4StrICmp(zArg, "tokenizer")==0 ){
+        /* zVal is the name of the tokenizer to use. Any subsequent arguments
+         ** that do not contain assignment operators (=) are also passed to
+         ** the tokenizer. Figure out how many bytes of space are required for
+         ** all.  */
+        int j;
+        char *pSpace;
+        int nByte = sqlite4Strlen30(zVal) + 1;
+        for(j=i+1; j<pArgs->nExpr; j++){
+          ExprListItem *pItem = &pArgs->a[j];
+          if( pItem->zName ) break;
+          nByte += sqlite4Strlen30(pItem->pExpr->u.zToken) + 1;
+        }
+        nByte += sizeof(char *) * (j-i);
+        pFts->azTokenizer = (char **)sqlite4DbMallocZero(pParse->db, nByte);
+        if( pFts->azTokenizer==0 ) return;
+
+        pSpace = (char *)&pFts->azTokenizer[j-i];
+        for(j=i; j<pArgs->nExpr; j++){
+          ExprListItem *pItem = &pArgs->a[j];
+          if( pItem->zName && j>i ){
+            break;
+          }else{
+            int nToken = sqlite4Strlen30(pItem->pExpr->u.zToken);
+            memcpy(pSpace, pItem->pExpr->u.zToken, nToken+1);
+            pFts->azTokenizer[j-i] = pSpace;
+            pSpace += nToken+1;
+          }
+        }
+
+        /* If this function is being called as part of a CREATE INDEX statement
+        ** issued by the user (to create a new index) check if the tokenizer
+        ** is valid. If not, return an error. Do not do this if this function
+        ** is being called as part of parsing an existing database schema.
+        */
+        if( pParse->db->init.busy==0 ){
+          Fts5Tokenizer *pTok = 0;
+          sqlite4_tokenizer *t = 0;
+
+          fts5TokenizerCreate(pParse, pFts, &pTok, &t);
+          fts5TokenizerDestroy(pTok, t);
+        }
+      }
+      else{
+        sqlite4ErrorMsg(pParse,"unrecognized argument: \"%s\"", zArg?zArg:zVal);
+      }
+    }
+  }
 }
 
 /**************************************************************************

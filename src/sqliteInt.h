@@ -563,6 +563,7 @@ typedef struct FuncDestructor FuncDestructor;
 typedef struct FuncDef FuncDef;
 typedef struct FuncDefTable FuncDefTable;
 typedef struct Fts5Tokenizer Fts5Tokenizer;
+typedef struct Fts5Index Fts5Index;
 typedef struct IdList IdList;
 typedef struct IdListItem IdListItem;
 typedef struct Index Index;
@@ -1432,6 +1433,7 @@ struct Index {
   tRowcnt avgEq;           /* Average nEq value for key values not in aSample */
   IndexSample *aSample;    /* Samples of the left-most key */
 #endif
+  Fts5Index *pFts; /* Fts5 data (or NULL if this is not an fts index) */
 };
 
 /* Index.eIndexType must be set to one of the following. */
@@ -3248,5 +3250,9 @@ SQLITE4_EXTERN void (*sqlite4IoTrace)(const char*,...);
 int sqlite4InitFts5(sqlite4 *db);
 int sqlite4InitFts5Func(sqlite4 *db);
 void sqlite4ShutdownFts5(sqlite4 *db);
+void sqlite4CreateUsingIndex(Parse*, CreateIndex*, ExprList*, Token*, Token*);
+
+int sqlite4Fts5IndexSz(void);
+void sqlite4Fts5IndexInit(Parse *pParse, Index *pIdx, ExprList *pArgs);
 
 #endif /* _SQLITEINT_H_ */

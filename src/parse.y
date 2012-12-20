@@ -1143,8 +1143,31 @@ idxlist(A) ::= nm(Y) collate(C) sortorder(Z). {
 collate(C) ::= .                 {C.z = 0; C.n = 0;}
 collate(C) ::= COLLATE ids(X).   {C = X;}
 
-cmd ::= createindex(C) USING nm(F) LP RP(E). {
-  sqlite4CreateUsingIndex(pParse, &C, &F, &E);
+%type uidxlist_opt {ExprList*}
+%destructor uidxlist_opt {sqlite4ExprListDelete(pParse->db, $$);}
+%type uidxlist {ExprList*}
+%destructor uidxlist {sqlite4ExprListDelete(pParse->db, $$);}
+
+cmd ::= createindex(C) USING nm(F) LP uidxlist_opt(U) RP(E). {
+  sqlite4CreateUsingIndex(pParse, &C, U, &F, &E);
+}
+
+uidxlist_opt(A) ::= uidxlist(B). { A = B; }
+uidxlist_opt(A) ::= .            { A = 0; }
+
+uidxlist(A) ::= uidxlist(Z) COMMA ids(X) EQ ids(Y). {
+  A = sqlite4ExprListAppend(pParse, Z, sqlite4PExpr(pParse, @Y, 0, 0, &Y));
+  sqlite4ExprListSetName(pParse, A, &X, 1);
+}
+uidxlist(A) ::= uidxlist(Z) COMMA ids(Y). {
+  A = sqlite4ExprListAppend(pParse, Z, sqlite4PExpr(pParse, @Y, 0, 0, &Y));
+}
+uidxlist(A) ::= ids(X) EQ ids(Y). {
+  A = sqlite4ExprListAppend(pParse, 0, sqlite4PExpr(pParse, @Y, 0, 0, &Y));
+  sqlite4ExprListSetName(pParse, A, &X, 1);
+}
+uidxlist(A) ::= ids(Y). {
+  A = sqlite4ExprListAppend(pParse, 0, sqlite4PExpr(pParse, @Y, 0, 0, &Y));
 }
 
 

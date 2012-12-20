@@ -2417,6 +2417,11 @@ static Table *createIndexFindTable(
 }
 
 #ifndef SQLITE4_OMIT_AUTHORIZATION
+/*
+** Check for authorization to create index zIdx on table pTab. If 
+** authorization is granted, return zero. Otherwise, return non-zero
+** and leave an error in pParse.
+*/
 static int createIndexAuth(
   Parse *pParse,                  /* Parser context */
   Table *pTab,                    /* Table index is being created on */
@@ -2446,11 +2451,17 @@ static int createIndexAuth(
 # define createIndexAuth(a, b, c) 0
 #endif // SQLITE4_OMIT_AUTHORIZATION
 
+/*
+** This function is called when parsing a CREATE statement executed by the
+** user (not when parsing the schema of an existing database). It generates
+** the VDBE code to assign a root page number to the new index and, if 
+** required, to write a new entry into the sqlite_master table.
+*/
 static void createIndexWriteSchema(
-  Parse *pParse,
-  Index *pIdx,
-  Token *pName,
-  Token *pEnd
+  Parse *pParse,                  /* Parser context */
+  Index *pIdx,                    /* New index object */
+  Token *pName,                   /* Token containing name of new index */
+  Token *pEnd                     /* Token for final closing paren of CREATE */
 ){
   sqlite4 *db = pParse->db;
   int iDb;
@@ -2508,6 +2519,7 @@ static void createIndexWriteSchema(
 void sqlite4CreateUsingIndex(
   Parse *pParse,                  /* Parsing context */
   CreateIndex *p,                 /* First part of CREATE INDEX statement */
+  ExprList *pList,
   Token *pUsing,                  /* Token following USING keyword */
   Token *pEnd                     /* Final '(' in CREATE INDEX */
 ){
@@ -2525,31 +2537,34 @@ void sqlite4CreateUsingIndex(
 
     pTab = createIndexFindTable(pParse, p, &pIdxName, &zIdx, &iDb);
     if( pTab && 0==createIndexAuth(pParse, pTab, zIdx) ){
+      int nExtra = sqlite4Fts5IndexSz();
       char *zExtra = 0;
-      pIdx = newIndex(pParse, pTab, zIdx, 0, 0, 0, &zExtra);
+      pIdx = newIndex(pParse, pTab, zIdx, 0, 0, nExtra, &zExtra);
+      if( pIdx ){
+        pIdx->pFts = (Fts5Index *)zExtra;
+        sqlite4Fts5IndexInit(pParse, pIdx, pList);
+        pIdx->eIndexType = SQLITE4_INDEX_FTS5;
+      }
     }
+
     if( pIdx ){
-      pIdx->eIndexType = SQLITE4_INDEX_FTS5;
       if( db->init.busy ){
         db->flags |= SQLITE4_InternChanges;
         pIdx->tnum = db->init.newTnum;
+        pIdx->pNext = pTab->pIndex;
+        pTab->pIndex = pIdx;
+        addIndexToHash(db, pIdx);
+        pIdx = 0;
       }else{
         createIndexWriteSchema(pParse, pIdx, pIdxName, pEnd);
       }
-
-      addIndexToHash(db, pIdx);
-
-      if( pParse->nErr==0 ){
-        pIdx->pNext = pTab->pIndex;
-        pTab->pIndex = pIdx;
-      }else{
-        sqlite4DbFree(db, pIdx);
-      }
     }
 
+    sqlite4DbFree(db, pIdx);
     sqlite4DbFree(db, zIdx);
   }
 
+  sqlite4ExprListDelete(db, pList);
   sqlite4SrcListDelete(db, p->pTblName);
 }
 

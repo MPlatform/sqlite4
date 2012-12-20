@@ -33,5 +33,52 @@ do_execsql_test 1.3 {
   table t1 t1  2 "CREATE TABLE t1(a, b, c)"
 }
 
+do_execsql_test 1.4 { 
+  CREATE INDEX ft1 ON t1 USING fts5();
+  SELECT * FROM sqlite_master;
+} {
+  table t1 t1  2 "CREATE TABLE t1(a, b, c)"
+  index ft1 t1 3 "CREATE INDEX ft1 ON t1 USING fts5()"
+}
+
+do_execsql_test 1.5 { 
+  DROP INDEX ft1;
+  SELECT * FROM sqlite_master;
+} {
+  table t1 t1  2 "CREATE TABLE t1(a, b, c)"
+}
+
+do_catchsql_test 1.6 { 
+  CREATE UNIQUE INDEX ft2 ON t1 USING fts5();
+} {1 {USING fts5 index may not be UNIQUE}}
+
+#-------------------------------------------------------------------------
+#
+reset_db
+
+do_execsql_test 2.1 {
+  CREATE TABLE t2(x, y);
+  CREATE INDEX fulltext ON t2 USING fts5(tokenizer=simple);
+  SELECT * FROM sqlite_master;
+} {
+  table t2 t2 2 {CREATE TABLE t2(x, y)}
+  index fulltext t2 3 {CREATE INDEX fulltext ON t2 USING fts5(tokenizer=simple)}
+}
+
+do_catchsql_test 2.2 { 
+  DROP INDEX fulltext; 
+  CREATE INDEX ft ON t2 USING fts5(tukenizer=simple);
+} {1 {unrecognized argument: "tukenizer"}}
+
+do_catchsql_test 2.3 { 
+  CREATE INDEX ft ON t2 USING fts5("a b c");
+} {1 {unrecognized argument: "a b c"}}
+
+do_catchsql_test 2.4 { 
+  CREATE INDEX ft ON t2 USING fts5(tokenizer="nosuch");
+} {1 {no such tokenizer: "nosuch"}}
 
 finish_test
+
+
+
