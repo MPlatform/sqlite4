@@ -62,6 +62,7 @@ struct VdbeOp {
     KeyInfo *pKeyInfo;     /* Used when p4type is P4_KEYINFO */
     int *ai;               /* Used when p4type is P4_INTARRAY */
     SubProgram *pProgram;  /* Used when p4type is P4_SUBPROGRAM */
+    Fts5Info *pFtsInfo;    /* Used when p4type is P4_FTS5INDEXINFO */
     int (*xAdvance)(VdbeCursor*);
   } p4;
 #ifdef SQLITE4_DEBUG
@@ -120,6 +121,7 @@ typedef struct VdbeOpList VdbeOpList;
 #define P4_INTARRAY (-15) /* P4 is a vector of 32-bit integers */
 #define P4_SUBPROGRAM  (-18) /* P4 is a pointer to a SubProgram structure */
 #define P4_ADVANCE  (-19) /* P4 is a pointer to BtreeNext() or BtreePrev() */
+#define P4_FTS5INFO (-20) /* P4 points to an Fts5Info structure */
 
 /* When adding a P4 argument using P4_KEYINFO, a copy of the KeyInfo structure
 ** is made.  That copy is freed when the Vdbe is finalized.  But if the

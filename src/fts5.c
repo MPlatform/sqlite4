@@ -12,6 +12,7 @@
 */
 
 #include "sqliteInt.h"
+#include "vdbeInt.h"
 
 /*
 ** Default distance value for NEAR operators.
@@ -44,7 +45,7 @@ struct Fts5Tokenizer {
   void *pCtx;
   int (*xCreate)(void*, const char**, int, sqlite4_tokenizer**);
   int (*xTokenize)(void*, sqlite4_tokenizer*,
-      const char*, int, int(*x)(void*, int, const char*, int)
+      const char*, int, int(*x)(void*, int, int, const char*, int, int, int)
   );
   int (*xDestroy)(sqlite4_tokenizer *);
   Fts5Tokenizer *pNext;
@@ -316,7 +317,13 @@ static int fts5PhraseNewStr(
 /*
 ** Callback for fts5CountTokens().
 */
-static int fts5CountTokensCb(void *pCtx, int iWeight, const char *z, int n){
+static int fts5CountTokensCb(
+  void *pCtx, 
+  int iWeight, 
+  int iOff, 
+  const char *z, int n,
+  int iSrc, int nSrc
+){
   (*((int *)pCtx))++;
   return 0;
 }
@@ -345,7 +352,13 @@ struct AppendTokensCtx {
   Fts5Str *pStr;
 };
 
-static int fts5AppendTokensCb(void *pCtx, int iWeight, const char *z, int n){
+static int fts5AppendTokensCb(
+  void *pCtx, 
+  int iWeight, 
+  int iOff, 
+  const char *z, int n, 
+  int iSrc, int nSrc
+){
   struct AppendTokensCtx *p = (struct AppendTokensCtx *)pCtx;
   Fts5Token *pToken;
   char *zSpace;
@@ -769,7 +782,7 @@ int sqlite4_create_tokenizer(
   void *pCtx,
   int (*xCreate)(void*, const char**, int, sqlite4_tokenizer**),
   int (*xTokenize)(void*, sqlite4_tokenizer*,
-      const char*, int, int(*x)(void*, int, const char*, int)
+      const char*, int, int(*x)(void*, int, int, const char*, int, int, int)
   ),
   int (*xDestroy)(sqlite4_tokenizer *)
 ){
@@ -874,6 +887,195 @@ void sqlite4Fts5IndexInit(Parse *pParse, Index *pIdx, ExprList *pArgs){
   }
 }
 
+void sqlite4Fts5IndexFree(sqlite4 *db, Index *pIdx){
+  if( pIdx->pFts ){
+    sqlite4DbFree(db, pIdx->pFts->azTokenizer);
+  }
+}
+
+
+/*
+** Context structure passed to tokenizer callback when tokenizing a document.
+**
+** The hash table maps between tokens and TokenizeTerm structures.
+*/
+typedef struct TokenizeCtx TokenizeCtx;
+typedef struct TokenizeTerm TokenizeTerm;
+struct TokenizeCtx {
+  int rc;
+  int iCol;
+  sqlite4 *db;
+  int nMax;
+  Hash hash;
+};
+struct TokenizeTerm {
+  int iWeight;                    /* Weight of previous entry */
+  int iCol;                       /* Column containing previous entry */
+  int iOff;                       /* Token offset of previous entry */
+  int nData;                      /* Bytes of data in value */
+  int nAlloc;                     /* Bytes of data allocated */
+};
+
+TokenizeTerm *fts5TokenizeAppendInt(
+  TokenizeCtx *p, 
+  TokenizeTerm *pTerm, 
+  int iVal
+){
+  unsigned char *a;
+  if( (pTerm->nAlloc - pTerm->nData) < 5 ){
+    int nAlloc = (pTerm->nAlloc<256) ? 256 : pTerm->nAlloc * 2;
+    pTerm = sqlite4DbReallocOrFree(p->db, pTerm, nAlloc);
+    if( !pTerm ) return 0;
+    pTerm->nAlloc = nAlloc - sizeof(TokenizeTerm);
+  }
+
+  a = &(((unsigned char *)&pTerm[1])[pTerm->nData]);
+  pTerm->nData += sqlite4PutVarint32(a, iVal);
+  return pTerm;
+}
+
+
+static int fts5TokenizeCb(
+  void *pCtx, 
+  int iWeight, 
+  int iOff,
+  const char *zToken, 
+  int nToken, 
+  int iSrc, 
+  int nSrc
+){
+  TokenizeCtx *p = (TokenizeCtx *)pCtx;
+  TokenizeTerm *pTerm = 0;
+  TokenizeTerm *pOrig = 0;
+
+  if( nToken>p->nMax ) p->nMax = nToken;
+
+  pTerm = (TokenizeTerm *)sqlite4HashFind(&p->hash, zToken, nToken);
+  if( pTerm==0 ){
+    const int nAlloc = 100-sizeof(TokenizeTerm);
+    pTerm = sqlite4DbMallocZero(p->db, sizeof(TokenizeTerm) + nAlloc);
+    if( pTerm ){
+      void *pFree;
+      pTerm->nAlloc = nAlloc;
+      pFree = sqlite4HashInsert(&p->hash, zToken, nToken, pTerm);
+      if( pFree ){
+        sqlite4DbFree(p->db, pFree);
+        pTerm = 0;
+      }
+      if( pTerm==0 ) goto tokenize_cb_out;
+    }
+  }
+  pOrig = pTerm;
+
+  if( iWeight!=pTerm->iWeight ){
+    pTerm = fts5TokenizeAppendInt(p, pTerm, (iWeight << 2) | 0x00000003);
+    if( !pTerm ) goto tokenize_cb_out;
+    pTerm->iWeight = iWeight;
+  }
+
+  if( pTerm && p->iCol!=pTerm->iCol ){
+    pTerm = fts5TokenizeAppendInt(p, pTerm, (p->iCol << 2) | 0x00000001);
+    if( !pTerm ) goto tokenize_cb_out;
+    pTerm->iCol = p->iCol;
+    pTerm->iOff = 0;
+  }
+
+  pTerm = fts5TokenizeAppendInt(p, pTerm, (iOff-pTerm->iOff) << 1);
+  if( !pTerm ) goto tokenize_cb_out;
+  pTerm->iOff = iOff;
+
+tokenize_cb_out:
+  if( pTerm!=pOrig ){
+    sqlite4HashInsert(&p->hash, zToken, nToken, 0);
+  }
+  if( !pTerm ){
+    p->rc = SQLITE4_NOMEM;
+    return 1;
+  }
+
+  return 0;
+}
+
+/*
+** Update an fts index.
+*/
+int sqlite4Fts5Update(
+  sqlite4 *db,                    /* Database handle */
+  Fts5Info *pInfo,                /* Description of fts index to update */
+  Mem *aArg,                      /* Array of arguments (see above) */
+  int bDel,                       /* True for a delete, false for insert */
+  char **pzErr                    /* OUT: Error message */
+){
+  int i;
+  int rc = SQLITE4_OK;
+  KVStore *pStore;
+  TokenizeCtx sCtx;
+  u8 *aKey = 0;
+  int nKey = 0;
+
+  const void *pPK;
+  int nPK;
+  HashElem *pElem;
+
+  pStore = db->aDb[pInfo->iDb].pKV;
+  sCtx.rc = SQLITE4_OK;
+  sCtx.db = db;
+  sCtx.nMax = 0;
+  sqlite4HashInit(db->pEnv, &sCtx.hash);
+
+  pPK = sqlite4_value_blob(&aArg[0]);
+  nPK = sqlite4_value_bytes(&aArg[0]);
+
+  for(i=0; rc==SQLITE4_OK && i<pInfo->nCol; i++){
+    sqlite4_value *pArg = (sqlite4_value *)(&aArg[i+1]);
+    if( sqlite4_value_type(pArg)==SQLITE4_TEXT ){
+      const char *zText;
+      int nText;
+
+      zText = (const char *)sqlite4_value_text(pArg);
+      nText = sqlite4_value_bytes(pArg);
+      sCtx.iCol = i;
+      rc = pInfo->pTokenizer->xTokenize(
+          &sCtx, pInfo->p, zText, nText, fts5TokenizeCb
+      );
+    }
+  }
+
+  nKey = sqlite4VarintLen(pInfo->iRoot) + 2 + sCtx.nMax + nPK;
+  aKey = sqlite4DbMallocRaw(db, nKey);
+  if( aKey==0 ) rc = SQLITE4_NOMEM;
+
+  for(pElem=sqliteHashFirst(&sCtx.hash); pElem; pElem=sqliteHashNext(pElem)){
+    TokenizeTerm *pTerm = (TokenizeTerm *)sqliteHashData(pElem);
+    if( rc==SQLITE4_OK ){
+      int nToken = sqliteHashKeysize(pElem);
+      char *zToken = (char *)sqliteHashKey(pElem);
+
+      nKey = sqlite4PutVarint32(aKey, pInfo->iRoot);
+      aKey[nKey++] = 0x24;
+      memcpy(&aKey[nKey], zToken, nToken);
+      nKey += nToken;
+      aKey[nKey++] = 0x00;
+      memcpy(&aKey[nKey], pPK, nPK);
+      nKey += nPK;
+
+      if( bDel ){
+        /* delete key aKey/nKey... */
+        assert( 0 );
+      }else{
+        const KVByteArray *aData = (const KVByteArray *)&pTerm[1];
+        rc = sqlite4KVStoreReplace(pStore, aKey, nKey, aData, pTerm->nData);
+      }
+    }
+    sqlite4DbFree(db, pTerm);
+  }
+  
+ fts5_update_out:
+  sqlite4DbFree(db, aKey);
+  sqlite4HashClear(&sCtx.hash);
+  return rc;
+}
+
 /**************************************************************************
 ***************************************************************************
 ** Below this point is test code.
@@ -881,8 +1083,7 @@ void sqlite4Fts5IndexInit(Parse *pParse, Index *pIdx, ExprList *pArgs){
 #ifdef SQLITE4_TEST
 static int fts5PrintExprNode(sqlite4 *, const char **, Fts5ExprNode *, char **);
 static int fts5PrintExprNodeParen(
-  sqlite4 *db, 
-  const char **azCol,
+  sqlite4 *db, const char **azCol,
   Fts5ExprNode *pNode, 
   char **pzRet
 ){

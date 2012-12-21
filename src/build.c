@@ -296,6 +296,7 @@ static void freeIndex(sqlite4 *db, Index *p){
 #ifndef SQLITE4_OMIT_ANALYZE
   sqlite4DeleteIndexSamples(db, p);
 #endif
+  sqlite4Fts5IndexFree(db, p);
   sqlite4DbFree(db, p->zColAff);
   sqlite4DbFree(db, p);
 }

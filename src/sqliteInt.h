@@ -564,6 +564,7 @@ typedef struct FuncDef FuncDef;
 typedef struct FuncDefTable FuncDefTable;
 typedef struct Fts5Tokenizer Fts5Tokenizer;
 typedef struct Fts5Index Fts5Index;
+typedef struct Fts5Info Fts5Info;
 typedef struct IdList IdList;
 typedef struct IdListItem IdListItem;
 typedef struct Index Index;
@@ -2478,7 +2479,19 @@ struct Walker {
   } u;
 };
 
-/* Forward declarations */
+/*
+** An instance of this structure is used as the p4 argument to some fts5
+** related vdbe opcodes.
+*/
+struct Fts5Info {
+  int iDb;                        /* Database containing this index */
+  int iRoot;                      /* Root page number of index */
+  int nCol;                       /* Number of columns in indexed table */
+  char **azCol;                   /* Column names for table */
+  Fts5Tokenizer *pTokenizer;      /* Tokenizer module */
+  sqlite4_tokenizer *p;           /* Tokenizer instance */
+};
+
 int sqlite4WalkExpr(Walker*, Expr*);
 int sqlite4WalkExprList(Walker*, ExprList*);
 int sqlite4WalkSelect(Walker*, Select*);
@@ -3253,6 +3266,9 @@ void sqlite4ShutdownFts5(sqlite4 *db);
 void sqlite4CreateUsingIndex(Parse*, CreateIndex*, ExprList*, Token*, Token*);
 
 int sqlite4Fts5IndexSz(void);
-void sqlite4Fts5IndexInit(Parse *pParse, Index *pIdx, ExprList *pArgs);
+void sqlite4Fts5IndexInit(Parse *, Index *, ExprList *);
+void sqlite4Fts5IndexFree(sqlite4 *, Index *);
+
+int sqlite4Fts5Update(sqlite4 *, Fts5Info *, Mem *aArg, int, char **);
 
 #endif /* _SQLITEINT_H_ */

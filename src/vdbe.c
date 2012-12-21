@@ -2548,7 +2548,7 @@ case OP_SetCookie: {       /* in3 */
 
 /* Opcode: VerifyCookie P1 P2 P3 * *
 **
-** Check the value of global database parameter number 0 (the
+** cHECK THe value of global database parameter number 0 (the
 ** schema version) and make sure it is equal to P2 and that the
 ** generation counter on the local schema parse equals P3.
 **
@@ -4827,6 +4827,35 @@ case OP_Trace: {
 }
 #endif
 
+/* Opcode: FtsUpdate * * P3 P4 P5
+**
+** This opcode is used to write to an FTS index. P4 points to an Fts5Info 
+** object describing the index.
+**
+** If argument P5 is non-zero, then entries are removed from the FTS index.
+** If it is zero, then entries are inserted. In other words, when a row
+** is deleted from a table with an FTS index, this opcode is invoked with
+** P5==1. When a row is inserted, it is invoked with P5==0. If an existing
+** row is updated, this opcode is invoked twice - once with P5==1 and then
+** again with P5==0.
+**
+** P3 is the first in an array of N+1 registers, where N is the number of
+** columns in the indexed table. The first register in the array contains
+** the PK (a blob in key-format) of the affected row. The following N
+** registers contain the column values.
+*/
+case OP_FtsUpdate: {
+  Fts5Info *pInfo;                /* Description of fts5 index to update */
+  Mem *aArg;                      /* Pointer to array of N+1 arguments */
+
+  assert( pOp->p4type==P4_FTS5INFO );
+  pInfo = pOp->p4.pFtsInfo;
+  aArg = &aMem[pOp->p3];
+
+  rc = sqlite4Fts5Update(db, pInfo, aArg, pOp->p5, &p->zErrMsg);
+  break;
+}
+
 
 /* Opcode: Noop * * * * *
 **
@@ -4837,7 +4866,7 @@ case OP_Trace: {
 ** The magic Explain opcode are only inserted when explain==2 (which
 ** is to say when the EXPLAIN QUERY PLAN syntax is used.)
 ** This opcode records information from the optimizer.  It is the
-** the same as a no-op.  This opcodesnever appears in a real VM program.
+** the same as a no-op.  This opcode never appears in a real VM program.
 */
 default: {          /* This is really OP_Noop and OP_Explain */
   assert( pOp->opcode==OP_Noop || pOp->opcode==OP_Explain );

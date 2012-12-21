@@ -37,7 +37,7 @@ static int fts5SimpleTokenize(
   sqlite4_tokenizer *p,
   const char *zDoc,
   int nDoc,
-  int(*x)(void*, int, const char*, int)
+  int(*x)(void*, int, const char*, int, int, int)
 ){
   sqlite4_env *pEnv = (sqlite4_env *)p;
   char *aBuf;
@@ -55,11 +55,11 @@ static int fts5SimpleTokenize(
     if( sqlite4Isalnum(zDoc[i]) ){
       aBuf[iBuf++] = fts5Tolower(zDoc[i]);
     }else if( iBuf>0 ){
-      brk = x(pCtx, 0, aBuf, iBuf);
+      brk = x(pCtx, 0, aBuf, iBuf, i-iBuf, iBuf);
       iBuf = 0;
     }
   }
-  if( iBuf>0 ) x(pCtx, 0, aBuf, iBuf);
+  if( iBuf>0 ) x(pCtx, 0, aBuf, iBuf, i-iBuf, iBuf);
 
   sqlite4_free(pEnv, aBuf);
   return SQLITE4_OK;
