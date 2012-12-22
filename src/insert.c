@@ -1419,7 +1419,12 @@ void sqlite4CompleteInsertion(
   /* Write the entry to each index. */
   for(i=0, pIdx=pTab->pIndex; pIdx; i++, pIdx=pIdx->pNext){
     assert( pIdx->eIndexType!=SQLITE4_INDEX_PRIMARYKEY || aRegIdx[i] );
-    if( aRegIdx[i] ){
+    if( pIdx->eIndexType==SQLITE4_INDEX_FTS5 ){
+      int iPK;
+      sqlite4FindPrimaryKey(pTab, &iPK);
+      sqlite4Fts5CodeUpdate(pParse, pIdx, aRegIdx[iPK], regContent);
+    }
+    else if( aRegIdx[i] ){
       int regData = 0;
       int flags = 0;
       if( pIdx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){

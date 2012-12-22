@@ -745,14 +745,25 @@ static void fts5TokenizerCreate(
   sqlite4_tokenizer **pp
 ){
   Fts5Tokenizer *pTok;
-  char *zTok = pFts->azTokenizer[0];
+  char *zTok;                     /* Tokenizer name */
+  const char **azArg;             /* Tokenizer arguments */
+  int nArg;                       /* Number of elements in azArg */
 
+  if( pFts->nTokenizer ){
+    zTok = pFts->azTokenizer[0];
+    azArg = (const char **)&pFts->azTokenizer[1];
+    nArg = pFts->nTokenizer-1;
+  }else{
+    zTok = "simple";
+    azArg = 0;
+    nArg = 0;
+  }
+ 
   *ppTokenizer = pTok = fts5FindTokenizer(pParse->db, zTok);
   if( !pTok ){
     sqlite4ErrorMsg(pParse, "no such tokenizer: \"%s\"", zTok);
   }else{
-    const char **azArg = (const char **)&pFts->azTokenizer[1];
-    int rc = pTok->xCreate(pTok->pCtx, azArg, pFts->nTokenizer-1, pp);
+    int rc = pTok->xCreate(pTok->pCtx, azArg, nArg, pp);
     if( rc!=SQLITE4_OK ){
       assert( *pp==0 );
       sqlite4ErrorMsg(pParse, "error creating tokenizer");
@@ -898,6 +909,15 @@ void sqlite4Fts5IndexFree(sqlite4 *db, Index *pIdx){
 ** Context structure passed to tokenizer callback when tokenizing a document.
 **
 ** The hash table maps between tokens and TokenizeTerm structures.
+**
+** TokenizeTerm structures are allocated using sqlite4DbMalloc(). Immediately
+** following the structure in memory is the token itself (TokenizeTerm.nToken
+** bytes of data). Following this is the list of token instances in the same
+** format as it is stored in the database. 
+**
+** All of the above is a single allocation, size TokenizeTerm.nAlloc bytes.
+** If the initial allocation is too small, it is extended using
+** sqlite4DbRealloc().
 */
 typedef struct TokenizeCtx TokenizeCtx;
 typedef struct TokenizeTerm TokenizeTerm;
@@ -912,6 +932,7 @@ struct TokenizeTerm {
   int iWeight;                    /* Weight of previous entry */
   int iCol;                       /* Column containing previous entry */
   int iOff;                       /* Token offset of previous entry */
+  int nToken;                     /* Size of token in bytes */
   int nData;                      /* Bytes of data in value */
   int nAlloc;                     /* Bytes of data allocated */
 };
@@ -922,18 +943,19 @@ TokenizeTerm *fts5TokenizeAppendInt(
   int iVal
 ){
   unsigned char *a;
-  if( (pTerm->nAlloc - pTerm->nData) < 5 ){
+  int nSpace = pTerm->nAlloc-pTerm->nData-pTerm->nToken-sizeof(TokenizeTerm);
+
+  if( nSpace < 5 ){
     int nAlloc = (pTerm->nAlloc<256) ? 256 : pTerm->nAlloc * 2;
     pTerm = sqlite4DbReallocOrFree(p->db, pTerm, nAlloc);
     if( !pTerm ) return 0;
-    pTerm->nAlloc = nAlloc - sizeof(TokenizeTerm);
+    pTerm->nAlloc = sqlite4DbMallocSize(p->db, pTerm);
   }
 
-  a = &(((unsigned char *)&pTerm[1])[pTerm->nData]);
-  pTerm->nData += sqlite4PutVarint32(a, iVal);
+  a = &(((unsigned char *)&pTerm[1])[pTerm->nToken+pTerm->nData]);
+  pTerm->nData += putVarint32(a, iVal);
   return pTerm;
 }
-
 
 static int fts5TokenizeCb(
   void *pCtx, 
@@ -952,12 +974,16 @@ static int fts5TokenizeCb(
 
   pTerm = (TokenizeTerm *)sqlite4HashFind(&p->hash, zToken, nToken);
   if( pTerm==0 ){
-    const int nAlloc = 100-sizeof(TokenizeTerm);
-    pTerm = sqlite4DbMallocZero(p->db, sizeof(TokenizeTerm) + nAlloc);
+    /* Size the initial allocation so that it fits in the lookaside buffer */
+    int nAlloc = sizeof(TokenizeTerm) + nToken + 32;
+
+    pTerm = sqlite4DbMallocZero(p->db, nAlloc);
     if( pTerm ){
       void *pFree;
-      pTerm->nAlloc = nAlloc;
-      pFree = sqlite4HashInsert(&p->hash, zToken, nToken, pTerm);
+      pTerm->nAlloc = sqlite4DbMallocSize(p->db, pTerm);
+      pTerm->nToken = nToken;
+      memcpy(&pTerm[1], zToken, nToken);
+      pFree = sqlite4HashInsert(&p->hash, (char *)&pTerm[1], nToken, pTerm);
       if( pFree ){
         sqlite4DbFree(p->db, pFree);
         pTerm = 0;
@@ -986,7 +1012,7 @@ static int fts5TokenizeCb(
 
 tokenize_cb_out:
   if( pTerm!=pOrig ){
-    sqlite4HashInsert(&p->hash, zToken, nToken, 0);
+    sqlite4HashInsert(&p->hash, (char *)&pTerm[1], nToken, pTerm);
   }
   if( !pTerm ){
     p->rc = SQLITE4_NOMEM;
@@ -1002,6 +1028,7 @@ tokenize_cb_out:
 int sqlite4Fts5Update(
   sqlite4 *db,                    /* Database handle */
   Fts5Info *pInfo,                /* Description of fts index to update */
+  Mem *pKey,                      /* Primary key blob */
   Mem *aArg,                      /* Array of arguments (see above) */
   int bDel,                       /* True for a delete, false for insert */
   char **pzErr                    /* OUT: Error message */
@@ -1012,8 +1039,10 @@ int sqlite4Fts5Update(
   TokenizeCtx sCtx;
   u8 *aKey = 0;
   int nKey = 0;
+  int nTnum = 0;
+  u32 dummy = 0;
 
-  const void *pPK;
+  const u8 *pPK;
   int nPK;
   HashElem *pElem;
 
@@ -1023,12 +1052,16 @@ int sqlite4Fts5Update(
   sCtx.nMax = 0;
   sqlite4HashInit(db->pEnv, &sCtx.hash);
 
-  pPK = sqlite4_value_blob(&aArg[0]);
-  nPK = sqlite4_value_bytes(&aArg[0]);
+  pPK = (const u8 *)sqlite4_value_blob(pKey);
+  nPK = sqlite4_value_bytes(pKey);
+  
+  nTnum = getVarint32(pPK, dummy);
+  nPK -= nTnum;
+  pPK += nTnum;
 
   for(i=0; rc==SQLITE4_OK && i<pInfo->nCol; i++){
-    sqlite4_value *pArg = (sqlite4_value *)(&aArg[i+1]);
-    if( sqlite4_value_type(pArg)==SQLITE4_TEXT ){
+    sqlite4_value *pArg = (sqlite4_value *)(&aArg[i]);
+    if( pArg->flags & MEM_Str ){
       const char *zText;
       int nText;
 
@@ -1051,7 +1084,7 @@ int sqlite4Fts5Update(
       int nToken = sqliteHashKeysize(pElem);
       char *zToken = (char *)sqliteHashKey(pElem);
 
-      nKey = sqlite4PutVarint32(aKey, pInfo->iRoot);
+      nKey = putVarint32(aKey, pInfo->iRoot);
       aKey[nKey++] = 0x24;
       memcpy(&aKey[nKey], zToken, nToken);
       nKey += nToken;
@@ -1064,17 +1097,244 @@ int sqlite4Fts5Update(
         assert( 0 );
       }else{
         const KVByteArray *aData = (const KVByteArray *)&pTerm[1];
+        aData += pTerm->nToken;
         rc = sqlite4KVStoreReplace(pStore, aKey, nKey, aData, pTerm->nData);
       }
     }
     sqlite4DbFree(db, pTerm);
   }
   
- fts5_update_out:
   sqlite4DbFree(db, aKey);
   sqlite4HashClear(&sCtx.hash);
   return rc;
 }
+
+static Fts5Info *fts5InfoCreate(Parse *pParse, Index *pIdx){
+  sqlite4 *db = pParse->db;
+  Fts5Info *pInfo;                /* p4 argument for FtsUpdate opcode */
+
+  pInfo = sqlite4DbMallocZero(db, sizeof(Fts5Info));
+  if( pInfo ){
+    pInfo->iDb = sqlite4SchemaToIndex(db, pIdx->pSchema);
+    pInfo->iRoot = pIdx->tnum;
+    pInfo->nCol = pIdx->pTable->nCol;
+    fts5TokenizerCreate(pParse, pIdx->pFts, &pInfo->pTokenizer, &pInfo->p);
+
+    if( pInfo->p==0 ){
+      assert( pParse->nErr );
+      sqlite4DbFree(db, pInfo);
+      pInfo = 0;
+    }
+  }
+
+  return pInfo;
+}
+
+
+void sqlite4Fts5CodeUpdate(
+  Parse *pParse, 
+  Index *pIdx, 
+  int iRegPk, 
+  int iRegData
+){
+  Vdbe *v;
+  Fts5Info *pInfo;                /* p4 argument for FtsUpdate opcode */
+
+  if( 0==(pInfo = fts5InfoCreate(pParse, pIdx)) ) return;
+
+  v = sqlite4GetVdbe(pParse);
+  sqlite4VdbeAddOp3(v, OP_FtsUpdate, iRegPk, 0, iRegData);
+  sqlite4VdbeChangeP4(v, -1, (const char *)pInfo, P4_FTS5INFO);
+}
+
+void sqlite4Fts5FreeInfo(sqlite4 *db, Fts5Info *p){
+  if( db->pnBytesFreed==0 ){
+    if( p->p ) p->pTokenizer->xDestroy(p->p);
+    sqlite4DbFree(db, p);
+  }
+}
+
+void sqlite4Fts5CodeCksum(
+  Parse *pParse, 
+  Index *pIdx, 
+  int iCksum, 
+  int iReg,
+  int bIdx                        /* True for fts index, false for table */
+){
+  Vdbe *v;
+  Fts5Info *pInfo;                /* p4 argument for FtsCksum opcode */
+
+  if( 0==(pInfo = fts5InfoCreate(pParse, pIdx)) ) return;
+
+  v = sqlite4GetVdbe(pParse);
+  sqlite4VdbeAddOp3(v, OP_FtsCksum, iCksum, 0, iReg);
+  sqlite4VdbeChangeP4(v, -1, (const char *)pInfo, P4_FTS5INFO);
+  sqlite4VdbeChangeP5(v, bIdx);
+}
+
+/*
+** Calculate a 64-bit checksum for a term instance. The index checksum is
+** the XOR of the checksum for each term instance in the table. A term
+** instance checksum is calculated based on:
+**
+**   * the term itself,
+**   * the pk of the row the instance appears in,
+**   * the weight assigned to the instance,
+**   * the column number, and
+**   * the term offset.
+*/
+static i64 fts5TermInstanceCksum(
+  const u8 *aTerm, int nTerm,
+  const u8 *aPk, int nPk,
+  int iWeight,
+  int iCol,
+  int iOff
+){
+  int i;
+  i64 cksum = 0;
+
+  /* Add the term to the checksum */
+  for(i=0; i<nTerm; i++){
+    cksum += (cksum << 3) + aTerm[i];
+  }
+
+  /* Add the primary key blob to the checksum */
+  for(i=0; i<nPk; i++){
+    cksum += (cksum << 3) + aPk[i];
+  }
+
+  /* Add the weight, column number and offset (in that order) to the checksum */
+  cksum += (cksum << 3) + iWeight;
+  cksum += (cksum << 3) + iCol;
+  cksum += (cksum << 3) + iOff;
+
+  return cksum;
+}
+
+
+int sqlite4Fts5EntryCksum(
+  sqlite4 *db,                    /* Database handle */
+  Fts5Info *p,                    /* Index description */
+  Mem *pKey,                      /* Database key */
+  Mem *pVal,                      /* Database value */
+  i64 *piCksum                    /* OUT: Checksum value */
+){
+  i64 cksum = 0;
+  u8 const *aKey; int nKey;       /* Key blob */
+  u8 const *aVal; int nVal;       /* List of token instances */
+  u8 const *aToken; int nToken;   /* Token for this entry */
+  u8 const *aPk; int nPk;         /* Entry primary key blob */
+  int nTnum;
+  u32 tnum;
+
+  int iOff = 0;
+  int iCol = 0;
+  int iWeight = 0;
+  int i = 0;
+
+  aKey = (const u8 *)sqlite4_value_blob(pKey);
+  nKey = sqlite4_value_bytes(pKey);
+  aVal = (const u8 *)sqlite4_value_blob(pVal);
+  nVal = sqlite4_value_bytes(pVal);
+
+  /* Find the token and primary key blobs for this entry. */
+  nTnum = getVarint32(aKey, tnum);
+  aToken = &aKey[nTnum+1];
+  nToken = sqlite4Strlen30((const char *)aToken);
+  aPk = &aToken[nToken+1];
+  nPk = (&aKey[nKey] - aPk);
+
+  while( i<nVal ){
+    u32 iVal;
+    i += getVarint32(&aVal[i], iVal);
+
+    if( (iVal & 0x03)==0x01 ){
+      iCol = (iVal>>2);
+      iOff = 0;
+    }
+    else if( (iVal & 0x03)==0x03 ){
+      iWeight = (iVal>>2);
+    }
+    else{
+      i64 v;
+      iOff += (iVal>>1);
+      v = fts5TermInstanceCksum(aPk, nPk, aToken, nToken, iWeight, iCol, iOff);
+      cksum = cksum ^ v;
+    }
+  }
+
+  *piCksum = cksum;
+  return SQLITE4_OK;
+}
+
+typedef struct CksumCtx CksumCtx;
+struct CksumCtx {
+  const u8 *pPK;
+  int nPK;
+  int iCol;
+  i64 cksum;
+};
+
+static int fts5CksumCb(
+  void *pCtx, 
+  int iWeight, 
+  int iOff,
+  const char *zToken, 
+  int nToken, 
+  int iSrc, 
+  int nSrc
+){
+  CksumCtx *p = (CksumCtx *)pCtx;
+  i64 cksum;
+
+  cksum = fts5TermInstanceCksum(p->pPK, p->nPK, 
+      (const u8 *)zToken, nToken, iWeight, p->iCol, iOff
+  );
+
+  p->cksum = (p->cksum ^ cksum);
+  return 0;
+}
+
+int sqlite4Fts5RowCksum(
+  sqlite4 *db,                    /* Database handle */
+  Fts5Info *pInfo,                /* Index description */
+  Mem *pKey,                      /* Primary key blob */
+  Mem *aArg,                      /* Array of column values */
+  i64 *piCksum                    /* OUT: Checksum value */
+){
+  int i;
+  int rc = SQLITE4_OK;
+  CksumCtx sCtx;
+  int nTnum = 0;
+  u32 dummy = 0;
+
+  sCtx.cksum = 0;
+
+  sCtx.pPK = (const u8 *)sqlite4_value_blob(pKey);
+  sCtx.nPK = sqlite4_value_bytes(pKey);
+  nTnum = getVarint32(sCtx.pPK, dummy);
+  sCtx.nPK -= nTnum;
+  sCtx.pPK += nTnum;
+
+  for(i=0; rc==SQLITE4_OK && i<pInfo->nCol; i++){
+    sqlite4_value *pArg = (sqlite4_value *)(&aArg[i]);
+    if( pArg->flags & MEM_Str ){
+      const char *zText;
+      int nText;
+
+      zText = (const char *)sqlite4_value_text(pArg);
+      nText = sqlite4_value_bytes(pArg);
+      sCtx.iCol = i;
+      rc = pInfo->pTokenizer->xTokenize(
+          &sCtx, pInfo->p, zText, nText, fts5CksumCb
+      );
+    }
+  }
+
+  *piCksum = sCtx.cksum;
+  return rc;
+}
+
 
 /**************************************************************************
 ***************************************************************************

@@ -4827,7 +4827,7 @@ case OP_Trace: {
 }
 #endif
 
-/* Opcode: FtsUpdate * * P3 P4 P5
+/* Opcode: FtsUpdate P1 * P3 P4 P5
 **
 ** This opcode is used to write to an FTS index. P4 points to an Fts5Info 
 ** object describing the index.
@@ -4839,20 +4839,49 @@ case OP_Trace: {
 ** row is updated, this opcode is invoked twice - once with P5==1 and then
 ** again with P5==0.
 **
-** P3 is the first in an array of N+1 registers, where N is the number of
-** columns in the indexed table. The first register in the array contains
-** the PK (a blob in key-format) of the affected row. The following N
-** registers contain the column values.
+** Register P1 contains the PK (a blob in key format) of the affected row.
+** P3 is the first in an array of N registers, where N is the number of
+** columns in the indexed table. Each register contains the value for the
+** corresponding table column.
 */
 case OP_FtsUpdate: {
   Fts5Info *pInfo;                /* Description of fts5 index to update */
-  Mem *aArg;                      /* Pointer to array of N+1 arguments */
+  Mem *pKey;                      /* Primary key of indexed row */
+  Mem *aArg;                      /* Pointer to array of N arguments */
 
   assert( pOp->p4type==P4_FTS5INFO );
   pInfo = pOp->p4.pFtsInfo;
   aArg = &aMem[pOp->p3];
+  pKey = &aMem[pOp->p1];
 
-  rc = sqlite4Fts5Update(db, pInfo, aArg, pOp->p5, &p->zErrMsg);
+  rc = sqlite4Fts5Update(db, pInfo, pKey, aArg, pOp->p5, &p->zErrMsg);
+  break;
+}
+
+/*
+** Opcode: FtsCksum P1 * P3 P4 P5
+*/
+case OP_FtsCksum: {
+  Fts5Info *pInfo;                /* Description of fts5 index to update */
+  Mem *pKey;                      /* Primary key of row */
+  Mem *aArg;                      /* Pointer to array of N values */
+  i64 cksum;
+
+  assert( pOp->p4type==P4_FTS5INFO );
+  pInfo = pOp->p4.pFtsInfo;
+
+  pOut = &aMem[pOp->p1];
+  pKey = &aMem[pOp->p3];
+  aArg = &aMem[pOp->p3+1];
+  cksum = 0;
+
+  if( pOp->p5 ){
+    sqlite4Fts5EntryCksum(db, pInfo, pKey, aArg, &cksum);
+    pOut->u.i = pOut->u.i ^ cksum;
+  }else{
+    sqlite4Fts5RowCksum(db, pInfo, pKey, aArg, &cksum);
+    pOut->u.i = pOut->u.i ^ cksum;
+  }
   break;
 }
 

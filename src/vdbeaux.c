@@ -628,6 +628,10 @@ static void freeP4(sqlite4 *db, int p4type, void *p4){
         if( db->pnBytesFreed==0 ) sqlite4VtabUnlock((VTable *)p4);
         break;
       }
+      case P4_FTS5INFO : {
+        sqlite4Fts5FreeInfo(db, (Fts5Info *)p4);
+        break;
+      }
     }
   }
 }

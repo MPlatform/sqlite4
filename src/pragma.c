@@ -238,6 +238,69 @@ void sqlite4Pragma(
     returnSingleInt(pParse, "nWrite", (sqlite4_int64)nPage);
   }else
 
+  /*
+  **   PRAGMA fts_check(<index>)
+  */
+  if( sqlite4StrICmp(zLeft, "fts_check")==0 && zRight ){
+    int iCksum1;
+    int iCksum2;
+    Index *pIdx;
+    Table *pTab;
+    Vdbe *v = sqlite4GetVdbe(pParse);
+    if( v==0 || sqlite4ReadSchema(pParse) ) goto pragma_out;
+
+    iCksum1 = ++pParse->nMem;
+    iCksum2 = ++pParse->nMem;
+    sqlite4VdbeAddOp2(v, OP_Integer, 0, iCksum1);
+    sqlite4VdbeAddOp2(v, OP_Integer, 0, iCksum2);
+
+    pIdx = sqlite4FindIndex(db, zRight, zDb);
+    if( pIdx && pIdx->eIndexType==SQLITE4_INDEX_FTS5 ){
+      int iTab = pParse->nTab++;
+      int iAddr;
+      int iReg;
+      int i;
+
+      pTab = pIdx->pTable;
+      sqlite4OpenPrimaryKey(pParse, iTab, iDb, pTab, OP_OpenRead);
+      iAddr = sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
+
+      iReg = pParse->nMem+1;
+      pParse->nMem += (1 + pTab->nCol);
+
+      sqlite4VdbeAddOp2(v, OP_RowKey, iTab, iReg);
+      for(i=0; i<pTab->nCol; i++){
+        sqlite4VdbeAddOp3(v, OP_Column, iTab, i, iReg+1+i);
+      }
+      sqlite4Fts5CodeCksum(pParse, pIdx, iCksum1, iReg, 0);
+
+      sqlite4VdbeAddOp2(v, OP_Next, iTab, iAddr+1);
+      sqlite4VdbeJumpHere(v, iAddr);
+      sqlite4VdbeAddOp1(v, OP_Close, iTab);
+
+      sqlite4VdbeAddOp3(v, OP_OpenRead, iTab, pIdx->tnum, iDb);
+      iAddr = sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
+
+      iReg = pParse->nMem+1;
+      pParse->nMem += 2;
+      sqlite4VdbeAddOp2(v, OP_RowKey, iTab, iReg);
+      sqlite4VdbeAddOp2(v, OP_RowData, iTab, iReg+1);
+      sqlite4Fts5CodeCksum(pParse, pIdx, iCksum2, iReg, 1);
+
+      sqlite4VdbeAddOp2(v, OP_Next, iTab, iAddr+1);
+      sqlite4VdbeJumpHere(v, iAddr);
+      sqlite4VdbeAddOp1(v, OP_Close, iTab);
+
+      iReg = ++pParse->nMem;
+      sqlite4VdbeAddOp4(v, OP_String8, 0, iReg, 0, "ok", 0);
+      iAddr = sqlite4VdbeAddOp3(v, OP_Eq, iCksum1, 0, iCksum2);
+      sqlite4VdbeAddOp4(v, OP_String8, 0, iReg, 0, "error - cksum mismatch", 0);
+      sqlite4VdbeJumpHere(v, iAddr);
+      sqlite4VdbeAddOp2(v, OP_ResultRow, iReg, 1);
+
+      sqlite4VdbeSetNumCols(v, 1);
+    }
+  }
 
 
 
