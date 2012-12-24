@@ -508,7 +508,7 @@ void sqlite4Update(
   
     /* Delete the old record */
     if( hasFK || bChngPk ){
-      sqlite4VdbeAddOp2(v, OP_Delete, iCur, 0);
+      sqlite4VdbeAddOp2(v, OP_Delete, iCur+iPk, 0);
     }
     sqlite4VdbeJumpHere(v, j1);
 

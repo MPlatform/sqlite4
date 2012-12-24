@@ -1094,7 +1094,7 @@ int sqlite4Fts5Update(
 
       if( bDel ){
         /* delete key aKey/nKey... */
-        assert( 0 );
+        rc = sqlite4KVStoreReplace(pStore, aKey, nKey, 0, -1);
       }else{
         const KVByteArray *aData = (const KVByteArray *)&pTerm[1];
         aData += pTerm->nToken;
@@ -1135,7 +1135,8 @@ void sqlite4Fts5CodeUpdate(
   Parse *pParse, 
   Index *pIdx, 
   int iRegPk, 
-  int iRegData
+  int iRegData,
+  int bDel
 ){
   Vdbe *v;
   Fts5Info *pInfo;                /* p4 argument for FtsUpdate opcode */
@@ -1145,6 +1146,7 @@ void sqlite4Fts5CodeUpdate(
   v = sqlite4GetVdbe(pParse);
   sqlite4VdbeAddOp3(v, OP_FtsUpdate, iRegPk, 0, iRegData);
   sqlite4VdbeChangeP4(v, -1, (const char *)pInfo, P4_FTS5INFO);
+  sqlite4VdbeChangeP5(v, (u8)bDel);
 }
 
 void sqlite4Fts5FreeInfo(sqlite4 *db, Fts5Info *p){

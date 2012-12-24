@@ -3025,6 +3025,8 @@ static void bestKVIndex(
 #endif
     int nCol = pProbe->nColumn;   /* Total columns in index record */
 
+    if( pProbe->eIndexType==SQLITE4_INDEX_FTS5 ) continue;
+
     /* Unless pProbe is the primary key index, then the encoded PK column 
     ** values are at the end of each record. Set variable nCol to the total
     ** number of columns encoded into each index record, including the PK  

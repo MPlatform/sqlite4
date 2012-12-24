@@ -1422,7 +1422,7 @@ void sqlite4CompleteInsertion(
     if( pIdx->eIndexType==SQLITE4_INDEX_FTS5 ){
       int iPK;
       sqlite4FindPrimaryKey(pTab, &iPK);
-      sqlite4Fts5CodeUpdate(pParse, pIdx, aRegIdx[iPK], regContent);
+      sqlite4Fts5CodeUpdate(pParse, pIdx, aRegIdx[iPK], regContent, 0);
     }
     else if( aRegIdx[i] ){
       int regData = 0;

@@ -1,0 +1,38 @@
+# 2012 December 17
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#*************************************************************************
+#
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix fts5query1
+
+do_execsql_test 1.0 {
+  CREATE TABLE t1(a PRIMARY KEY, b, c);
+  CREATE INDEX i1 ON t1 USING fts5();
+}
+
+foreach {tn stmt} {
+  1 "INSERT INTO t1 VALUES(1, 'a b c', 'd e f')"
+  2 "INSERT INTO t1 VALUES(2, 'b c e', 'A A a')"
+  3 "INSERT INTO t1 VALUES(3, 'd A A', 'e c a')"
+  4 "DELETE FROM t1 WHERE a=1"
+  5 "DELETE FROM t1"
+  6 "INSERT INTO t1 VALUES(1, 'May you do', 'good and not evil')"
+  7 "INSERT INTO t1 VALUES(2, 'May you find', 'forgiveness for yourself')"
+  8 "UPDATE t1 SET b = 'and forgive others' WHERE a = 2"
+  9 "UPDATE t1 SET a = 4 AND c = 'a b c d' WHERE a = 2"
+} {
+  do_execsql_test 1.$tn.1 $stmt
+  do_execsql_test 1.$tn.2 {PRAGMA fts_check(i1)} ok
+}
+
+finish_test

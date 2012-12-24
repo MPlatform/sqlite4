@@ -585,17 +585,28 @@ void sqlite4GenerateRowIndexDelete(
   Vdbe *v = pParse->pVdbe;
   Index *pPk;
   int iPk;
+  int iPkCsr;
   int i;
   int regKey;
   Index *pIdx;
 
   regKey = sqlite4GetTempReg(pParse);
   pPk = sqlite4FindPrimaryKey(pTab, &iPk);
+  iPkCsr = baseCur+iPk;
 
   for(i=0, pIdx=pTab->pIndex; pIdx; pIdx=pIdx->pNext, i++){
-    if( pIdx!=pPk && (aRegIdx==0 || aRegIdx[i]>0) ){
+    if( pIdx->eIndexType==SQLITE4_INDEX_FTS5 ){
+      int iCol;
+      int iReg = pParse->nMem+1;
+      pParse->nMem += (1 + pTab->nCol);
+      for(iCol=0; iCol<pTab->nCol; iCol++){
+        sqlite4VdbeAddOp3(v, OP_Column, iPkCsr, iCol, iReg+iCol);
+      }
+      sqlite4VdbeAddOp2(v, OP_RowKey, iPkCsr, iReg+pTab->nCol);
+      sqlite4Fts5CodeUpdate(pParse, pIdx, iReg+pTab->nCol, iReg, 1);
+    }else if( pIdx!=pPk && (aRegIdx==0 || aRegIdx[i]>0) ){
       int addrNotFound;
-      sqlite4EncodeIndexKey(pParse, pPk, baseCur+iPk, pIdx, baseCur+i,0,regKey);
+      sqlite4EncodeIndexKey(pParse, pPk, baseCur+iPk,pIdx,baseCur+i,0,regKey);
       addrNotFound = sqlite4VdbeAddOp4(v,
           OP_NotFound, baseCur+i, 0, regKey, 0, P4_INT32
       );

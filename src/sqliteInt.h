@@ -3271,7 +3271,7 @@ void sqlite4Fts5IndexFree(sqlite4 *, Index *);
 
 int sqlite4Fts5Update(sqlite4 *, Fts5Info *, Mem *pPk, Mem *aArg, int, char **);
 void sqlite4Fts5FreeInfo(sqlite4 *db, Fts5Info *);
-void sqlite4Fts5CodeUpdate(Parse *, Index *pIdx, int iRegPk, int iRegData);
+void sqlite4Fts5CodeUpdate(Parse *, Index *pIdx, int iRegPk, int iRegData, int);
 void sqlite4Fts5CodeCksum(Parse *, Index *, int, int, int);
 
 #endif /* _SQLITEINT_H_ */
