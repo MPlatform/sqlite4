@@ -29,10 +29,30 @@ foreach {tn stmt} {
   6 "INSERT INTO t1 VALUES(1, 'May you do', 'good and not evil')"
   7 "INSERT INTO t1 VALUES(2, 'May you find', 'forgiveness for yourself')"
   8 "UPDATE t1 SET b = 'and forgive others' WHERE a = 2"
-  9 "UPDATE t1 SET a = 4 AND c = 'a b c d' WHERE a = 2"
+  9 "UPDATE t1 SET a = 4, c = 'a b c d' WHERE a = 2"
 } {
   do_execsql_test 1.$tn.1 $stmt
   do_execsql_test 1.$tn.2 {PRAGMA fts_check(i1)} ok
 }
 
+do_execsql_test 2.0 {
+  DROP TABLE t1;
+  CREATE TABLE t1(x PRIMARY KEY, y);
+  CREATE INDEX i1 ON t1 USING fts5();
+
+  INSERT INTO t1 VALUES(1, 'o n e');
+  INSERT INTO t1 VALUES(2, 't w o');
+  INSERT INTO t1 VALUES(3, 't h r e e');
+  INSERT INTO t1 VALUES(4, 'f o u r');
+}
+
+breakpoint
+  explain {SELECT x FROM t1 WHERE t1 MATCH 't'} 
+foreach {tn stmt res} {
+  1 {SELECT x FROM t1 WHERE t1 MATCH 't'} {2 3}
+} {
+  do_execsql_test 2.$tn $stmt $res
+}
+
 finish_test
+

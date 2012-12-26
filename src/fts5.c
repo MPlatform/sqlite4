@@ -146,6 +146,14 @@ struct Fts5Expr {
   Fts5ExprNode *pRoot;
 };
 
+
+/*
+** FTS5 specific cursor data.
+*/
+struct Fts5Cursor {
+  Fts5Expr *pExpr;                /* MATCH expression for this cursor */
+};
+
 /*
 ** Return true if argument c is one of the special non-whitespace 
 ** characters that ends an unquoted expression token. 
@@ -1066,8 +1074,7 @@ int sqlite4Fts5Update(
       int nText;
 
       zText = (const char *)sqlite4_value_text(pArg);
-      nText = sqlite4_value_bytes(pArg);
-      sCtx.iCol = i;
+      nText = sqlite4_value_bytes(pArg); sCtx.iCol = i;
       rc = pInfo->pTokenizer->xTokenize(
           &sCtx, pInfo->p, zText, nText, fts5TokenizeCb
       );
@@ -1093,9 +1100,10 @@ int sqlite4Fts5Update(
       nKey += nPK;
 
       if( bDel ){
-        /* delete key aKey/nKey... */
+        /* delete key aKey/nKey from the index */
         rc = sqlite4KVStoreReplace(pStore, aKey, nKey, 0, -1);
       }else{
+        /* Insert a new entry for aKey/nKey into the fts index */
         const KVByteArray *aData = (const KVByteArray *)&pTerm[1];
         aData += pTerm->nToken;
         rc = sqlite4KVStoreReplace(pStore, aKey, nKey, aData, pTerm->nData);
@@ -1109,11 +1117,23 @@ int sqlite4Fts5Update(
   return rc;
 }
 
-static Fts5Info *fts5InfoCreate(Parse *pParse, Index *pIdx){
+static Fts5Info *fts5InfoCreate(Parse *pParse, Index *pIdx, int bCol){
   sqlite4 *db = pParse->db;
   Fts5Info *pInfo;                /* p4 argument for FtsUpdate opcode */
+  int nByte;
 
-  pInfo = sqlite4DbMallocZero(db, sizeof(Fts5Info));
+  nByte = sizeof(Fts5Info);
+  if( bCol ){
+    int i;
+    int nCol = pIdx->pTable->nCol;
+    for(i=0; i<nCol; i++){
+      const char *zCol = pIdx->pTable->aCol[i].zName;
+      nByte += sqlite4Strlen30(zCol) + 1;
+    }
+    nByte += nCol * sizeof(char *);
+  }
+
+  pInfo = sqlite4DbMallocZero(db, nByte);
   if( pInfo ){
     pInfo->iDb = sqlite4SchemaToIndex(db, pIdx->pSchema);
     pInfo->iRoot = pIdx->tnum;
@@ -1125,11 +1145,25 @@ static Fts5Info *fts5InfoCreate(Parse *pParse, Index *pIdx){
       sqlite4DbFree(db, pInfo);
       pInfo = 0;
     }
+    else if( bCol ){
+      int i;
+      char *p;
+      int nCol = pIdx->pTable->nCol;
+
+      pInfo->azCol = (char **)&pInfo[1];
+      p = (char *)(&pInfo->azCol[nCol]);
+      for(i=0; i<nCol; i++){
+        const char *zCol = pIdx->pTable->aCol[i].zName;
+        int n = sqlite4Strlen30(zCol) + 1;
+        pInfo->azCol[i] = p;
+        memcpy(p, zCol, n);
+        p += n;
+      }
+    }
   }
 
   return pInfo;
 }
-
 
 void sqlite4Fts5CodeUpdate(
   Parse *pParse, 
@@ -1141,12 +1175,29 @@ void sqlite4Fts5CodeUpdate(
   Vdbe *v;
   Fts5Info *pInfo;                /* p4 argument for FtsUpdate opcode */
 
-  if( 0==(pInfo = fts5InfoCreate(pParse, pIdx)) ) return;
+  if( 0==(pInfo = fts5InfoCreate(pParse, pIdx, 0)) ) return;
 
   v = sqlite4GetVdbe(pParse);
   sqlite4VdbeAddOp3(v, OP_FtsUpdate, iRegPk, 0, iRegData);
   sqlite4VdbeChangeP4(v, -1, (const char *)pInfo, P4_FTS5INFO);
   sqlite4VdbeChangeP5(v, (u8)bDel);
+}
+
+void sqlite4Fts5CodeQuery(
+  Parse *pParse,
+  Index *pIdx,
+  int iCsr,
+  int iJump,
+  int iRegMatch
+){
+  Vdbe *v;
+  Fts5Info *pInfo;                /* p4 argument for FtsOpen opcode */
+
+  if( 0==(pInfo = fts5InfoCreate(pParse, pIdx, 1)) ) return;
+
+  v = sqlite4GetVdbe(pParse);
+  sqlite4VdbeAddOp3(v, OP_FtsOpen, iCsr, iJump, iRegMatch);
+  sqlite4VdbeChangeP4(v, -1, (const char *)pInfo, P4_FTS5INFO);
 }
 
 void sqlite4Fts5FreeInfo(sqlite4 *db, Fts5Info *p){
@@ -1166,7 +1217,7 @@ void sqlite4Fts5CodeCksum(
   Vdbe *v;
   Fts5Info *pInfo;                /* p4 argument for FtsCksum opcode */
 
-  if( 0==(pInfo = fts5InfoCreate(pParse, pIdx)) ) return;
+  if( 0==(pInfo = fts5InfoCreate(pParse, pIdx, 0)) ) return;
 
   v = sqlite4GetVdbe(pParse);
   sqlite4VdbeAddOp3(v, OP_FtsCksum, iCksum, 0, iReg);
@@ -1337,6 +1388,50 @@ int sqlite4Fts5RowCksum(
   return rc;
 }
 
+void sqlite4Fts5Close(sqlite4 *db, Fts5Cursor *pCsr){
+  if( pCsr ){
+    fts5ExpressionFree(db, pCsr->pExpr);
+    sqlite4DbFree(db, pCsr);
+  }
+}
+
+int sqlite4Fts5Open(
+  sqlite4 *db,                    /* Database handle */
+  Fts5Info *pInfo,                /* Index description */
+  const char *zMatch,             /* Match expression */
+  int bDesc,                      /* True to iterate in desc. order of PK */
+  Fts5Cursor **ppCsr,             /* OUT: New FTS cursor object */
+  char **pzErr                    /* OUT: Error message */
+){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr;
+
+  pCsr = sqlite4DbMallocZero(db, sizeof(Fts5Cursor));
+  if( !pCsr ){
+    rc = SQLITE4_NOMEM;
+  }else{
+    rc = fts5ParseExpression(db, pInfo->pTokenizer, pInfo->p, 
+        pInfo->azCol, pInfo->nCol, zMatch, &pCsr->pExpr, pzErr
+    );
+  }
+
+  if( rc!=SQLITE4_OK ){
+    sqlite4Fts5Close(db, pCsr);
+  }
+  return rc;
+}
+
+int sqlite4Fts5Next(sqlite4 *db, Fts5Cursor *pCsr){
+  return SQLITE4_OK;
+}
+
+/*
+** Return true if the cursor passed as the second argument currently points
+** to a valid entry, or false otherwise.
+*/
+int sqlite4Fts5Valid(Fts5Cursor *pCsr){
+  return 0;
+}
 
 /**************************************************************************
 ***************************************************************************

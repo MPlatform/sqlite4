@@ -847,7 +847,7 @@ expr(A) ::= expr(X) CONCAT(OP) expr(Y). {spanBinaryExpr(&A,pParse,@OP,&X,&Y);}
 %type likeop {struct LikeOp}
 likeop(A) ::= LIKE_KW(X).     {A.eOperator = X; A.not = 0;}
 likeop(A) ::= NOT LIKE_KW(X). {A.eOperator = X; A.not = 1;}
-likeop(A) ::= MATCH(X).       {A.eOperator = X; A.not = 0;}
+/* likeop(A) ::= MATCH(X).       {A.eOperator = X; A.not = 0;} */
 likeop(A) ::= NOT MATCH(X).   {A.eOperator = X; A.not = 1;}
 expr(A) ::= expr(X) likeop(OP) expr(Y).  [LIKE_KW]  {
   ExprList *pList;
@@ -869,6 +869,10 @@ expr(A) ::= expr(X) likeop(OP) expr(Y) ESCAPE expr(E).  [LIKE_KW]  {
   A.zStart = X.zStart;
   A.zEnd = E.zEnd;
   if( A.pExpr ) A.pExpr->flags |= EP_InfixFunc;
+}
+
+expr(A) ::= expr(L) MATCH expr(R). {
+  spanBinaryExpr(&A, pParse, TK_MATCH, &L, &R);
 }
 
 %include {

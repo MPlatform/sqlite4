@@ -4860,12 +4860,15 @@ case OP_FtsUpdate: {
 
 /*
 ** Opcode: FtsCksum P1 * P3 P4 P5
+**
+** This opcode is used by the integrity-check procedure that verifies that
+** the contents of an fts5 index and its corresponding table match.
 */
 case OP_FtsCksum: {
   Fts5Info *pInfo;                /* Description of fts5 index to update */
   Mem *pKey;                      /* Primary key of row */
   Mem *aArg;                      /* Pointer to array of N values */
-  i64 cksum;
+  i64 cksum;                      /* Checksum for this row or index entry */
 
   assert( pOp->p4type==P4_FTS5INFO );
   pInfo = pOp->p4.pFtsInfo;
@@ -4885,6 +4888,60 @@ case OP_FtsCksum: {
   break;
 }
 
+/* Opcode: FtsOpen P1 P2 P3 P4 P5
+**
+** Open an FTS cursor named P1. P4 points to an Fts5Info object.
+**
+** Register P3 contains the MATCH expression that this cursor will iterate
+** through the matches for. P5 is set to 0 to iterate through the results
+** in ascending PK order, or 1 for descending PK order.
+**
+** If the expression matches zero rows, jump to instruction P2. Otherwise,
+** leave the cursor pointing at the first match and fall through to the
+** next instruction.
+*/
+case OP_FtsOpen: {          /* jump */
+  Fts5Info *pInfo;                /* Description of fts5 index to update */
+  char *zErr;
+  VdbeCursor *pCur;
+  char *zMatch;
+  Mem *pMatch;
+
+  pMatch = &aMem[pOp->p3];
+  Stringify(pMatch, encoding);
+  zMatch = pMatch->z;
+
+  assert( pOp->p4type==P4_FTS5INFO );
+  pInfo = pOp->p4.pFtsInfo;
+  pCur = allocateCursor(p, pOp->p1, 0, pInfo->iDb, 0);
+  if( pCur ){
+    rc = sqlite4Fts5Open(db, pInfo, zMatch, pOp->p5, &pCur->pFts, &p->zErrMsg);
+  }
+
+  pc = pOp->p2-1;
+  break;
+}
+
+/* Opcode: FtsNext P1 P2 * * *
+**
+** Advance FTS cursor P1 to the next entry and jump to instruction P2. Or,
+** if there is no next entry, set the cursor to point to EOF and fall through
+** to the next instruction.
+*/
+case OP_FtsNext: {
+  assert( 0 );
+  break;
+}
+
+/* Opcode: FtsPk P1 P2 * * * 
+**
+** P1 is an FTS cursor that points to a valid entry (not EOF). Copy the PK 
+** blob for the current entry to register P2.
+*/
+case OP_FtsPk: {
+  assert( 0 );
+  break;
+}
 
 /* Opcode: Noop * * * * *
 **

@@ -2865,6 +2865,54 @@ static int whereInScanEst(
 #endif /* defined(SQLITE4_ENABLE_STAT3) */
 
 /*
+** Try to find a MATCH expression that constrains the pTabItem table in the
+** WHERE clause. If one exists, set *piTerm to the index in the pWC->a[] array
+** and return non-zero. If no such expression exists, return 0.
+*/
+static int findMatchExpr(
+  Parse *pParse, 
+  WhereClause *pWC, 
+  SrcListItem *pTabItem, 
+  int *piTerm
+){
+  int i;
+  int iCsr = pTabItem->iCursor;
+
+  for(i=0; i<pWC->nTerm; i++){
+    Expr *pMatch = pWC->a[i].pExpr;
+    if( pMatch->iTable==iCsr && pMatch->op==TK_MATCH ) break;
+  }
+  if( i==pWC->nTerm ) return 0;
+
+  *piTerm = i;
+  return 1;
+}
+
+static int bestMatchIdx(
+  Parse *pParse, 
+  WhereClause *pWC, 
+  SrcListItem *pTabItem, 
+  Bitmask notReady, 
+  WhereCost *pCost
+){
+  int iTerm;
+
+  if( 0==findMatchExpr(pParse, pWC, pTabItem, &iTerm) ) return 0;
+
+  /* Check that the MATCH expression is not composed using values from any
+  ** tables that are not ready. If it does, return 0. */
+  if( notReady & pWC->a[iTerm].prereqAll ) return 0;
+
+  pCost->used = pWC->a[iTerm].prereqAll;
+  pCost->rCost = 1.0;
+  pCost->plan.wsFlags = WHERE_INDEXED;
+  pCost->plan.nEq = 0;
+  pCost->plan.nRow = 10;
+  pCost->plan.u.pIdx = pWC->a[iTerm].pExpr->pIdx;
+  return 1;
+}
+
+/*
 ** Find the best query plan for accessing a particular table.  Write the
 ** best query plan and its cost into the WhereCost object supplied as the
 ** last parameter.
@@ -3880,6 +3928,27 @@ static Bitmask codeOneLoopStart(
     VdbeComment((v, "init LEFT JOIN no-match flag"));
   }
 
+  if( (pLevel->plan.wsFlags & WHERE_INDEXED)
+   && (pLevel->plan.u.pIdx->eIndexType==SQLITE4_INDEX_FTS5)
+  ){
+    /* Case -1:  An FTS query */
+    int iTerm;
+    int rMatch;
+    int rFree;
+    findMatchExpr(pParse, pWC, pTabItem, &iTerm);
+
+    rMatch = sqlite4ExprCodeTemp(pParse, pWC->a[iTerm].pExpr->pRight, &rFree);
+    pWC->a[iTerm].wtFlags |= TERM_CODED;
+    sqlite4Fts5CodeQuery(pParse, 
+        pLevel->plan.u.pIdx, pLevel->iIdxCur, addrBrk, rMatch
+    );
+    sqlite4ReleaseTempReg(pParse, rFree);
+
+    pLevel->p2 = sqlite4VdbeCurrentAddr(v);
+    sqlite4VdbeAddOp3(v, OP_SeekPk, iCur, 0, pLevel->iIdxCur);
+    pLevel->op = OP_FtsNext;
+    pLevel->p1 = pLevel->iIdxCur;
+  }else 
 #ifndef SQLITE4_OMIT_VIRTUALTABLE
   if(  (pLevel->plan.wsFlags & WHERE_VIRTUALTABLE)!=0 ){
     /* Case 0:  The table is a virtual-table.  Use the VFilter and VNext
@@ -4787,6 +4856,10 @@ WhereInfo *sqlite4WhereBegin(
         WHERETRACE(("=== trying table %d with isOptimal=%d ===\n",
                     j, isOptimal));
         assert( pTabItem->pTab );
+
+        if( bestMatchIdx(pParse, pWC, pTabItem, notReady, &sCost) ){
+          /* no-op */
+        }else
 #ifndef SQLITE4_OMIT_VIRTUALTABLE
         if( IsVirtual(pTabItem->pTab) ){
           sqlite4_index_info **pp = &pWInfo->a[j].pIdxInfo;
@@ -4798,6 +4871,7 @@ WhereInfo *sqlite4WhereBegin(
           bestKVIndex(pParse, pWC, pTabItem, mask, notReady, pOrderBy,
               pDist, &sCost);
         }
+
         assert( isOptimal || (sCost.used&notReady)==0 );
 
         /* If an INDEXED BY clause is present, then the plan must use that
@@ -4959,7 +5033,7 @@ WhereInfo *sqlite4WhereBegin(
       Index *pIx = pLevel->plan.u.pIdx;
       if( pIx->eIndexType==SQLITE4_INDEX_PRIMARYKEY ){
         pLevel->iIdxCur = pTabItem->iCursor;
-      }else{
+      }else if( pIx->eIndexType!=SQLITE4_INDEX_FTS5 ){
         KeyInfo *pKey = sqlite4IndexKeyinfo(pParse, pIx);
         int iIdxCur = pLevel->iIdxCur;
         assert( pIx->pSchema==pTab->pSchema );

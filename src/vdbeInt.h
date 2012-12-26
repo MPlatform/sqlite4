@@ -70,6 +70,7 @@ struct VdbeCursor {
   i64 movetoTarget;     /* Argument to the deferred move-to */
   i64 lastRowid;        /* Last rowid from a Next or NextIdx operation */
   VdbeSorter *pSorter;  /* Sorter object for OP_SorterOpen cursors */
+  Fts5Cursor *pFts;     /* Fts5 cursor object (or NULL) */
 
   /* Result of last sqlite4-Moveto() done by an OP_NotExists or 
   ** OP_IsUnique opcode on this cursor. */

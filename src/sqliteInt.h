@@ -565,6 +565,7 @@ typedef struct FuncDefTable FuncDefTable;
 typedef struct Fts5Tokenizer Fts5Tokenizer;
 typedef struct Fts5Index Fts5Index;
 typedef struct Fts5Info Fts5Info;
+typedef struct Fts5Cursor Fts5Cursor;
 typedef struct IdList IdList;
 typedef struct IdListItem IdListItem;
 typedef struct Index Index;
@@ -1660,6 +1661,7 @@ struct Expr {
   u8 op2;                /* If a TK_REGISTER, the original value of Expr.op */
   AggInfo *pAggInfo;     /* Used by TK_AGG_COLUMN and TK_AGG_FUNCTION */
   Table *pTab;           /* Table for TK_COLUMN expressions. */
+  Index *pIdx;           /* Fts index used by MATCH expressions */
 #if SQLITE4_MAX_EXPR_DEPTH>0
   int nHeight;           /* Height of the tree headed by this node */
 #endif
@@ -2487,7 +2489,7 @@ struct Fts5Info {
   int iDb;                        /* Database containing this index */
   int iRoot;                      /* Root page number of index */
   int nCol;                       /* Number of columns in indexed table */
-  char **azCol;                   /* Column names for table */
+  const char **azCol;             /* Column names for table */
   Fts5Tokenizer *pTokenizer;      /* Tokenizer module */
   sqlite4_tokenizer *p;           /* Tokenizer instance */
 };
@@ -3273,5 +3275,6 @@ int sqlite4Fts5Update(sqlite4 *, Fts5Info *, Mem *pPk, Mem *aArg, int, char **);
 void sqlite4Fts5FreeInfo(sqlite4 *db, Fts5Info *);
 void sqlite4Fts5CodeUpdate(Parse *, Index *pIdx, int iRegPk, int iRegData, int);
 void sqlite4Fts5CodeCksum(Parse *, Index *, int, int, int);
+void sqlite4Fts5CodeQuery(Parse *, Index *, int, int, int);
 
 #endif /* _SQLITEINT_H_ */

@@ -1134,6 +1134,7 @@ static int exprNodeIsConstant(Walker *pWalker, Expr *pExpr){
       if( pWalker->u.i==2 ) return 0;
       /* Fall through */
     case TK_ID:
+    case TK_MATCH:
     case TK_COLUMN:
     case TK_AGG_FUNCTION:
     case TK_AGG_COLUMN:
@@ -2716,6 +2717,11 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
       break;
     }
 
+    case TK_MATCH: {
+      sqlite4ErrorMsg(pParse, "no index to process MATCH operator");
+      return 0;
+    }
+
 
     /*
     ** Form A:
@@ -3185,6 +3191,7 @@ static int isAppropriateForFactoring(Expr *p){
   if( !sqlite4ExprIsConstantNotJoin(p) ){
     return 0;  /* Only constant expressions are appropriate for factoring */
   }
+  if( p->op==TK_MATCH || p->op==TK_TABLE ) return 0;
   if( (p->flags & EP_FixedDest)==0 ){
     return 1;  /* Any constant without a fixed destination is appropriate */
   }

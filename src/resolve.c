@@ -436,6 +436,44 @@ Expr *sqlite4CreateColumnExpr(sqlite4 *db, SrcList *pSrc, int iSrc, int iCol){
   return p;
 }
 
+static void resolveMatch(Parse *pParse, NameContext *pNC, Expr *pExpr){
+  Expr *pLeft = pExpr->pLeft;
+  SrcList *pSrc = pNC->pSrcList;
+  SrcListItem *pItem;
+  char *zLhs;
+  int i;
+  Index *pIdx;
+
+  if( pLeft->op!=TK_ID || pSrc==0 ){
+    sqlite4ErrorMsg(pParse, "lhs of MATCH operator must be a table name");
+    return;
+  }
+  zLhs = pLeft->u.zToken;
+
+  for(i=0; i<pSrc->nSrc; i++){
+    pItem = &pSrc->a[i];
+    if( pItem->zAlias && sqlite4StrICmp(zLhs, pItem->zAlias)==0 ) break;
+    if( pItem->zAlias==0 && sqlite4StrICmp(zLhs, pItem->zName)==0 ) break;
+  }
+
+  if( i==pSrc->nSrc ){
+    sqlite4ErrorMsg(pParse, "no such table: %s", zLhs);
+    return;
+  }
+
+  for(pIdx=pItem->pTab->pIndex; pIdx; pIdx=pIdx->pNext){
+    if( pIdx->eIndexType==SQLITE4_INDEX_FTS5 ) break;
+  }
+  if( !pIdx ){
+    sqlite4ErrorMsg(pParse, "no index to process MATCH operator");
+    return;
+  }
+
+  pExpr->pLeft = 0;
+  pExpr->pIdx = pIdx;
+  sqlite4ExprDelete(pParse->db, pLeft);
+}
+
 /*
 ** This routine is callback for sqlite4WalkExpr().
 **
@@ -615,6 +653,10 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
       break;
     }
 #endif
+    case TK_MATCH: {
+      resolveMatch(pParse, pNC, pExpr);
+      break;
+    }
   }
   return (pParse->nErr || pParse->db->mallocFailed) ? WRC_Abort : WRC_Continue;
 }
