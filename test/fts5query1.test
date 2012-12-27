@@ -46,8 +46,6 @@ do_execsql_test 2.0 {
   INSERT INTO t1 VALUES(4, 'f o u r');
 }
 
-breakpoint
-  explain {SELECT x FROM t1 WHERE t1 MATCH 't'} 
 foreach {tn stmt res} {
   1 {SELECT x FROM t1 WHERE t1 MATCH 't'} {2 3}
 } {

@@ -109,18 +109,26 @@ struct Fts5Parser {
   int iExpr;                      /* Current offset in zExpr */
   Fts5ParserToken next;           /* Next token */
 
-  const char **azCol;             /* Column names of indexed table */
+  char **azCol;                   /* Column names of indexed table */
   int nCol;                       /* Size of azCol[] in bytes */
+  int iRoot;                      /* Root page number of FTS index */
 
   /* Space for dequoted copies of strings */
   char *aSpace;
   int iSpace;
+  int nSpace;                     /* Total size of aSpace in bytes */
 };
 
 struct Fts5Token {
+  /* TODO: The first three members are redundant, since they can be encoded
+  ** in the aPrefix[]/nPrefix key.  */
   int bPrefix;                    /* True for a prefix search */
   int n;                          /* Size of z[] in bytes */
-  const char *z;                  /* Token value */
+  char *z;                        /* Token value */
+
+  KVCursor *pCsr;                 /* Cursor to iterate thru entries for token */
+  KVByteArray *aPrefix;           /* KV prefix to iterate through */
+  KVSize nPrefix;                 /* Size of aPrefix in bytes */
 };
 
 struct Fts5Str {
@@ -151,7 +159,12 @@ struct Fts5Expr {
 ** FTS5 specific cursor data.
 */
 struct Fts5Cursor {
+  sqlite4 *db;
+  Fts5Info *pInfo;
   Fts5Expr *pExpr;                /* MATCH expression for this cursor */
+
+  KVByteArray *aKey;              /* Buffer for primary key */
+  int nKeyAlloc;                  /* Bytes allocated at aKey[] */
 };
 
 /*
@@ -368,27 +381,36 @@ static int fts5AppendTokensCb(
   int iSrc, int nSrc
 ){
   struct AppendTokensCtx *p = (struct AppendTokensCtx *)pCtx;
+  Fts5Parser *pParse = p->pParse;
   Fts5Token *pToken;
   char *zSpace;
-
-  zSpace = &p->pParse->aSpace[p->pParse->iSpace];
-  p->pParse->iSpace += (n+1);
-  memcpy(zSpace, z, n);
-  zSpace[n] = '\0';
+  int nUsed;
 
   pToken = &p->pStr->aToken[p->pStr->nToken];
-  p->pStr->nToken++;
-  pToken->bPrefix = 0;
-  pToken->z = zSpace;
-  pToken->n = n;
 
+  zSpace = &pParse->aSpace[pParse->iSpace];
+  nUsed = putVarint32((u8 *)zSpace, pParse->iRoot);
+  zSpace[nUsed++] = 0x24;
+  pToken->bPrefix = 0;
+  pToken->z = &zSpace[nUsed];
+  pToken->n = n;
+  memcpy(pToken->z, z, n);
+  pToken->z[n] = '\0';
+
+  nUsed += (n+1);
+  pToken->aPrefix = (u8 *)zSpace;
+  pToken->nPrefix = nUsed;
+  pToken->pCsr = 0;
+  pParse->iSpace += nUsed;
+  p->pStr->nToken++;
+
+  assert( pParse->iSpace<=pParse->nSpace );
   return 0;
 }
 
-static int fts5AppendTokens(
+static int fts5AppendTokens( 
   Fts5Parser *pParse,
-  Fts5Str *pStr,
-  const char *zPrim,
+  Fts5Str *pStr, const char *zPrim,
   int nPrim
 ){
   struct AppendTokensCtx ctx;
@@ -400,6 +422,9 @@ static int fts5AppendTokens(
   );
 }
 
+/*
+** Append a new token to the current phrase.
+*/
 static int fts5PhraseAppend(
   Fts5Parser *pParse,
   Fts5Phrase *pPhrase,
@@ -432,6 +457,10 @@ static void fts5PhraseFree(sqlite4 *db, Fts5Phrase *p){
   if( p ){
     int i;
     for(i=0; i<p->nStr; i++){
+      int iTok;
+      for(iTok=0; iTok<p->aStr[i].nToken; iTok++){
+        sqlite4KVCursorClose(p->aStr[i].aToken[iTok].pCsr);
+      }
       sqlite4DbFree(db, p->aStr[i].aToken);
     }
     sqlite4DbFree(db, p->aiNear);
@@ -594,7 +623,8 @@ static int fts5ParseExpression(
   sqlite4 *db,                    /* Database handle */
   Fts5Tokenizer *pTokenizer,      /* Tokenizer module */
   sqlite4_tokenizer *p,           /* Tokenizer instance */
-  const char **azCol,             /* Array of column names (nul-term'd) */
+  int iRoot,                      /* Root page number of FTS index */
+  char **azCol,                   /* Array of column names (nul-term'd) */
   int nCol,                       /* Size of array azCol[] */
   const char *zExpr,              /* FTS expression text */
   Fts5Expr **ppExpr,              /* OUT: Expression object */
@@ -618,10 +648,12 @@ static int fts5ParseExpression(
   sParse.pTokenizer = pTokenizer;
   sParse.p = p;
   sParse.db = db;
+  sParse.iRoot = iRoot;
 
-  pExpr = sqlite4DbMallocZero(db, sizeof(Fts5Expr) + nExpr*2);
+  pExpr = sqlite4DbMallocZero(db, sizeof(Fts5Expr) + nExpr*4);
   if( !pExpr ) return SQLITE4_NOMEM;
   sParse.aSpace = (char *)&pExpr[1];
+  sParse.nSpace = nExpr*4;
 
   rc = fts5GrowExprHier(db, &nHierAlloc, &aHier, 1);
   if( rc==SQLITE4_OK ){
@@ -1150,7 +1182,7 @@ static Fts5Info *fts5InfoCreate(Parse *pParse, Index *pIdx, int bCol){
       char *p;
       int nCol = pIdx->pTable->nCol;
 
-      pInfo->azCol = (char **)&pInfo[1];
+      pInfo->azCol = (char **)(&pInfo[1]);
       p = (char *)(&pInfo->azCol[nCol]);
       for(i=0; i<nCol; i++){
         const char *zCol = pIdx->pTable->aCol[i].zName;
@@ -1388,6 +1420,43 @@ int sqlite4Fts5RowCksum(
   return rc;
 }
 
+static int fts5OpenExprCursors(sqlite4 *db, Fts5Info *pInfo, Fts5ExprNode *p){
+  int rc = SQLITE4_OK;
+  if( p ){
+    if( p->eType==TOKEN_PRIMITIVE ){
+      KVStore *pStore = db->aDb[pInfo->iDb].pKV;
+      Fts5Phrase *pPhrase = p->pPhrase;
+      int iStr;
+
+      for(iStr=0; rc==SQLITE4_OK && iStr<pPhrase->nStr; iStr++){
+        Fts5Str *pStr = &pPhrase->aStr[iStr];
+        int i;
+        for(i=0; rc==SQLITE4_OK && i<pStr->nToken; i++){
+          Fts5Token *pToken = &pStr->aToken[i];
+          rc = sqlite4KVStoreOpenCursor(pStore, &pToken->pCsr);
+          if( rc==SQLITE4_OK ){
+            rc = sqlite4KVCursorSeek(
+                pToken->pCsr, pToken->aPrefix, pToken->nPrefix, 1
+            );
+            if( rc==SQLITE4_INEXACT ) rc = SQLITE4_OK;
+          }
+        }
+      }
+    }
+    if( rc==SQLITE4_OK ) rc = fts5OpenExprCursors(db, pInfo, p->pLeft);
+    if( rc==SQLITE4_OK ) rc = fts5OpenExprCursors(db, pInfo, p->pRight);
+  }
+
+  return rc;
+}
+
+/*
+** Open a cursor for each token in the expression.
+*/
+static int fts5OpenCursors(sqlite4 *db, Fts5Info *pInfo, Fts5Cursor *pCsr){
+  return fts5OpenExprCursors(db, pInfo, pCsr->pExpr->pRoot);
+}
+
 void sqlite4Fts5Close(sqlite4 *db, Fts5Cursor *pCsr){
   if( pCsr ){
     fts5ExpressionFree(db, pCsr->pExpr);
@@ -1410,19 +1479,45 @@ int sqlite4Fts5Open(
   if( !pCsr ){
     rc = SQLITE4_NOMEM;
   }else{
+    pCsr->pInfo = pInfo;
+    pCsr->db = db;
     rc = fts5ParseExpression(db, pInfo->pTokenizer, pInfo->p, 
-        pInfo->azCol, pInfo->nCol, zMatch, &pCsr->pExpr, pzErr
+        pInfo->iRoot, pInfo->azCol, pInfo->nCol, zMatch, &pCsr->pExpr, pzErr
     );
   }
 
+  if( rc==SQLITE4_OK ){
+    /* Open a KV cursor for each term in the expression. */
+    rc = fts5OpenCursors(db, pInfo, pCsr);
+  }
   if( rc!=SQLITE4_OK ){
     sqlite4Fts5Close(db, pCsr);
+    pCsr = 0;
   }
+  *ppCsr = pCsr;
   return rc;
 }
 
-int sqlite4Fts5Next(sqlite4 *db, Fts5Cursor *pCsr){
-  return SQLITE4_OK;
+int sqlite4Fts5Next(Fts5Cursor *pCsr){
+  Fts5Token *pToken;
+  KVCursor *pKVCsr;
+  int rc;
+
+  assert( pCsr->pExpr->pRoot->eType==TOKEN_PRIMITIVE );
+  pToken = &pCsr->pExpr->pRoot->pPhrase->aStr[0].aToken[0];
+
+  rc = sqlite4KVCursorNext(pToken->pCsr);
+  if( rc==SQLITE4_OK ){
+    const KVByteArray *aKey;
+    KVSize nKey;
+    rc = sqlite4KVCursorKey(pToken->pCsr, &aKey, &nKey);
+    if( rc==SQLITE4_OK 
+     && (nKey<pToken->nPrefix || memcmp(pToken->aPrefix, aKey, pToken->nPrefix))
+    ){
+      rc = SQLITE4_NOTFOUND;
+    }
+  }
+  return rc;
 }
 
 /*
@@ -1430,7 +1525,55 @@ int sqlite4Fts5Next(sqlite4 *db, Fts5Cursor *pCsr){
 ** to a valid entry, or false otherwise.
 */
 int sqlite4Fts5Valid(Fts5Cursor *pCsr){
-  return 0;
+  const KVByteArray *aKey;
+  KVSize nKey;
+  KVCursor *pKVCsr;
+  int rc;
+
+  assert( pCsr->pExpr->pRoot->eType==TOKEN_PRIMITIVE );
+  pKVCsr = pCsr->pExpr->pRoot->pPhrase->aStr[0].aToken[0].pCsr;
+
+  rc = sqlite4KVCursorKey(pKVCsr, &aKey, &nKey);
+  return (rc==SQLITE4_OK);
+}
+
+int sqlite4Fts5Pk(
+  Fts5Cursor *pCsr, 
+  int iTbl, 
+  KVByteArray **paKey, 
+  KVSize *pnKey
+){
+  const KVByteArray *aKey;
+  KVSize nKey;
+  KVCursor *pKVCsr;
+  int rc;
+  int i;
+  int i2;
+  int nReq;
+
+  assert( pCsr->pExpr->pRoot->eType==TOKEN_PRIMITIVE );
+
+  pKVCsr = pCsr->pExpr->pRoot->pPhrase->aStr[0].aToken[0].pCsr;
+  rc = sqlite4KVCursorKey(pKVCsr, &aKey, &nKey);
+  if( rc!=SQLITE4_OK ) return rc;
+
+  i = sqlite4VarintLen(pCsr->pInfo->iRoot);
+  while( aKey[i] ) i++;
+  i++;
+
+  nReq = sqlite4VarintLen(iTbl) + (nKey-i);
+  if( nReq>pCsr->nKeyAlloc ){
+    pCsr->aKey = sqlite4DbReallocOrFree(pCsr->db, pCsr->aKey, nReq*2);
+    if( !pCsr->aKey ) return SQLITE4_NOMEM;
+    pCsr->nKeyAlloc = nReq*2;
+  }
+
+  i2 = putVarint32(pCsr->aKey, iTbl);
+  memcpy(&pCsr->aKey[i2], &aKey[i], nKey-i);
+
+  *paKey = pCsr->aKey;
+  *pnKey = nReq;
+  return SQLITE4_OK;
 }
 
 /**************************************************************************
@@ -1591,7 +1734,8 @@ static void fts5_parse_expr(
     }
   }
 
-  rc = fts5ParseExpression(db, pTok, p, azCol, nCol, zExpr, &pExpr, &zErr);
+  rc = fts5ParseExpression(
+      db, pTok, p, 0, (char **)azCol, nCol, zExpr, &pExpr, &zErr);
   if( rc!=SQLITE4_OK ){
     if( zErr==0 ){
       zErr = sqlite4MPrintf(db, "error parsing expression: %d", rc);

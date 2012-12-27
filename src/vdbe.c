@@ -2846,27 +2846,36 @@ case OP_SeekPk: {
 
   pPk = p->apCsr[pOp->p1];
   pIdx = p->apCsr[pOp->p3];
-  assert( pIdx->pKeyInfo->nPK>0 );
-  assert( pPk->pKeyInfo->nPK==0 );
 
-  rc = sqlite4KVCursorKey(pIdx->pKVCur, &aKey, &nKey);
-  if( rc==SQLITE4_OK ){
-    nShort = sqlite4VdbeShortKey(aKey, nKey, 
-        pIdx->pKeyInfo->nField - pIdx->pKeyInfo->nPK
-    );
-
-    nPkKey = sqlite4VarintLen(pPk->iRoot) + nKey - nShort;
-    aPkKey = sqlite4DbMallocRaw(db, nPkKey);
-
-    if( aPkKey ){
-      putVarint32(aPkKey, pPk->iRoot);
-      memcpy(&aPkKey[nPkKey - (nKey-nShort)], &aKey[nShort], nKey-nShort);
+  if( pIdx->pFts ){
+    rc = sqlite4Fts5Pk(pIdx->pFts, pPk->iRoot, &aPkKey, &nPkKey);
+    if( rc==SQLITE4_OK ){
       rc = sqlite4KVCursorSeek(pPk->pKVCur, aPkKey, nPkKey, 0);
-      if( rc==SQLITE4_NOTFOUND ){
-        rc = SQLITE4_CORRUPT_BKPT;
-      }
+      if( rc==SQLITE4_NOTFOUND ) rc = SQLITE4_CORRUPT_BKPT;
       pPk->nullRow = 0;
-      sqlite4DbFree(db, aPkKey);
+    }
+  }else{
+    assert( pIdx->pKeyInfo->nPK>0 );
+    assert( pPk->pKeyInfo->nPK==0 );
+    rc = sqlite4KVCursorKey(pIdx->pKVCur, &aKey, &nKey);
+    if( rc==SQLITE4_OK ){
+      nShort = sqlite4VdbeShortKey(aKey, nKey, 
+          pIdx->pKeyInfo->nField - pIdx->pKeyInfo->nPK
+      );
+
+      nPkKey = sqlite4VarintLen(pPk->iRoot) + nKey - nShort;
+      aPkKey = sqlite4DbMallocRaw(db, nPkKey);
+
+      if( aPkKey ){
+        putVarint32(aPkKey, pPk->iRoot);
+        memcpy(&aPkKey[nPkKey - (nKey-nShort)], &aKey[nShort], nKey-nShort);
+        rc = sqlite4KVCursorSeek(pPk->pKVCur, aPkKey, nPkKey, 0);
+        if( rc==SQLITE4_NOTFOUND ){
+          rc = SQLITE4_CORRUPT_BKPT;
+        }
+        pPk->nullRow = 0;
+        sqlite4DbFree(db, aPkKey);
+      }
     }
   }
 
@@ -4918,7 +4927,9 @@ case OP_FtsOpen: {          /* jump */
     rc = sqlite4Fts5Open(db, pInfo, zMatch, pOp->p5, &pCur->pFts, &p->zErrMsg);
   }
 
-  pc = pOp->p2-1;
+  if( rc==SQLITE4_OK && 0==sqlite4Fts5Valid(pCur->pFts) ){
+    pc = pOp->p2-1;
+  }
   break;
 }
 
@@ -4929,7 +4940,13 @@ case OP_FtsOpen: {          /* jump */
 ** to the next instruction.
 */
 case OP_FtsNext: {
-  assert( 0 );
+  VdbeCursor *pCsr;
+
+  pCsr = p->apCsr[pOp->p1];
+  rc = sqlite4Fts5Next(pCsr->pFts);
+  if( rc==SQLITE4_OK ) pc = pOp->p2-1;
+  if( rc==SQLITE4_NOTFOUND ) rc = SQLITE4_OK;
+
   break;
 }
 

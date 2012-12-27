@@ -309,8 +309,7 @@ static int kvlsmKey(
   KVSize *pN                   /* Make this point to the size of the key */
 ){
   KVLsmCsr *pCsr = (KVLsmCsr *)pKVCursor;
-
-  assert( lsm_csr_valid(pCsr->pCsr) );
+  if( 0==lsm_csr_valid(pCsr->pCsr) ) return SQLITE4_DONE;
   return lsm_csr_key(pCsr->pCsr, (const void **)paKey, (int *)pN);
 }
 

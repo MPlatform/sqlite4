@@ -2489,7 +2489,7 @@ struct Fts5Info {
   int iDb;                        /* Database containing this index */
   int iRoot;                      /* Root page number of index */
   int nCol;                       /* Number of columns in indexed table */
-  const char **azCol;             /* Column names for table */
+  char **azCol;                   /* Column names for table */
   Fts5Tokenizer *pTokenizer;      /* Tokenizer module */
   sqlite4_tokenizer *p;           /* Tokenizer instance */
 };
@@ -3276,5 +3276,8 @@ void sqlite4Fts5FreeInfo(sqlite4 *db, Fts5Info *);
 void sqlite4Fts5CodeUpdate(Parse *, Index *pIdx, int iRegPk, int iRegData, int);
 void sqlite4Fts5CodeCksum(Parse *, Index *, int, int, int);
 void sqlite4Fts5CodeQuery(Parse *, Index *, int, int, int);
+
+int sqlite4Fts5Pk(Fts5Cursor *, int, KVByteArray **, KVSize *);
+int sqlite4Fts5Next(Fts5Cursor *pCsr);
 
 #endif /* _SQLITEINT_H_ */
