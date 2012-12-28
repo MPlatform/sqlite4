@@ -47,7 +47,10 @@ do_execsql_test 2.0 {
 }
 
 foreach {tn stmt res} {
-  1 {SELECT x FROM t1 WHERE t1 MATCH 't'} {2 3}
+  1 {SELECT x FROM t1 WHERE t1 MATCH 't'}   {2 3}
+  2 {SELECT x FROM t1 WHERE t1 MATCH 'abc'} {}
+  3 {SELECT x FROM t1 WHERE t1 MATCH 't+h'} {3}
+  4 {SELECT x FROM t1 WHERE t1 MATCH 't+o'} {}
 } {
   do_execsql_test 2.$tn $stmt $res
 }

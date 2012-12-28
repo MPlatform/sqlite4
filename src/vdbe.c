@@ -4927,9 +4927,15 @@ case OP_FtsOpen: {          /* jump */
     rc = sqlite4Fts5Open(db, pInfo, zMatch, pOp->p5, &pCur->pFts, &p->zErrMsg);
   }
 
+  if( rc==SQLITE4_NOTFOUND ){
+    rc = SQLITE4_OK;
+    pc = pOp->p2-1;
+  }
+#if 0
   if( rc==SQLITE4_OK && 0==sqlite4Fts5Valid(pCur->pFts) ){
     pc = pOp->p2-1;
   }
+#endif
   break;
 }
 
