@@ -211,6 +211,10 @@ static int fts5InstanceListNext(InstanceList *p){
   return bRet;
 }
 
+static int fts5InstanceListEof(InstanceList *p){
+  return (p->iList>=p->nList);
+}
+
 static void fts5InstanceListAppend(
   InstanceList *p,                /* Instance list to append to */
   int iCol,                       /* Column of new entry */
@@ -1585,22 +1589,135 @@ static int fts5TokenAdvanceToMatch(
   return (p->iCol==pFirst->iCol && p->iOff==iReq);
 }
 
+static int fts5StringFindInstances(Fts5Cursor *pCsr, Fts5Str *pStr){
+  int i;
+  int rc = SQLITE4_OK;
+  int bEof = 0;
+  int nByte = sizeof(InstanceList) * pStr->nToken;
+  InstanceList *aIn;
+  InstanceList out;
+
+  pStr->nList = 0;
+  memset(&out, 0, sizeof(InstanceList));
+
+  aIn = (InstanceList *)sqlite4DbMallocZero(pCsr->db, nByte);
+  if( !aIn ) rc = SQLITE4_NOMEM;
+  for(i=0; rc==SQLITE4_OK && i<pStr->nToken; i++){
+    const u8 *aData;
+    int nData;
+    rc = sqlite4KVCursorData(pStr->aToken[i].pCsr, 0, -1, &aData, &nData);
+    if( rc==SQLITE4_OK ){
+      fts5InstanceListInit((u8 *)aData, nData, &aIn[i]);
+      fts5InstanceListNext(&aIn[i]);
+    }
+  }
+
+  /* Allocate the output list */
+  if( rc==SQLITE4_OK ){
+    int nReq = aIn[0].nList;
+    if( nReq<=pStr->nListAlloc ){
+      out.aList = pStr->aList;
+      out.nList = pStr->nListAlloc;
+    }else{
+      pStr->aList = out.aList = sqlite4DbMallocZero(pCsr->db, nReq*2);
+      pStr->nListAlloc = out.nList = nReq*2;
+      if( out.aList==0 ) rc = SQLITE4_NOMEM;
+    }
+  }
+
+  while( rc==SQLITE4_OK && bEof==0 ){
+    for(i=1; i<pStr->nToken; i++){
+      int bMatch = fts5TokenAdvanceToMatch(&aIn[i], &aIn[0], i, &bEof);
+      if( bMatch==0 || bEof ) break;
+    }
+    if( i==pStr->nToken ){
+      /* Record a match here */
+      fts5InstanceListAppend(&out, aIn[0].iCol, aIn[0].iWeight, aIn[0].iOff);
+    }
+    bEof = fts5InstanceListNext(&aIn[0]);
+  }
+
+  pStr->nList = out.iList;
+  sqlite4DbFree(pCsr->db, aIn);
+
+  return rc;
+}
+
+static int fts5IsNear(InstanceList *p1, InstanceList *p2, int nNear){
+  if( p1->iCol==p2->iCol && p1->iOff<p2->iOff && (p1->iOff+nNear)>=p2->iOff ){
+    return 1;
+  }
+  return 0;
+}
+
+static int fts5StringNearTrim(
+  Fts5Cursor *pCsr,               /* Cursor object that owns both strings */
+  Fts5Str *pTrim,                 /* Trim this instance list */
+  Fts5Str *pNext,                 /* According to this one */
+  int nNear
+){
+  if( pNext->nList==0 ){
+    pTrim->nList = 0;
+  }else{
+    int bEof = 0;
+    int nTrail = nNear + (pNext->nToken-1) + 1;
+    int nLead = nNear + (pTrim->nToken-1) + 1;
+
+    InstanceList trail;
+    InstanceList lead;
+    InstanceList in;
+    InstanceList out;
+
+    fts5InstanceListInit(pNext->aList, pNext->nList, &trail);
+    fts5InstanceListInit(pNext->aList, pNext->nList, &lead);
+    fts5InstanceListInit(pTrim->aList, pTrim->nList, &in);
+    fts5InstanceListInit(pTrim->aList, pTrim->nList, &out);
+    fts5InstanceListNext(&trail);
+    fts5InstanceListNext(&lead);
+    fts5InstanceListNext(&in);
+
+    while( bEof==0 ){
+      /* Check if the current position is a match */
+      if( fts5IsNear(&trail, &in, nTrail) 
+       || fts5IsNear(&in, &lead, nLead)
+      ){
+        fts5InstanceListAppend(&out, in.iCol, in.iWeight, in.iOff);
+        bEof = fts5InstanceListNext(&in);
+      }else{
+        if( fts5InstanceListEof(&trail)==0
+         && (trail.iCol<in.iCol || trail.iOff>=in.iOff) 
+        ){
+          fts5InstanceListNext(&trail);
+        }
+        else if( (lead.iList<lead.nList)
+         && (lead.iCol<in.iCol || lead.iOff<=in.iOff)
+        ){
+          fts5InstanceListNext(&trail);
+        }else{
+          bEof = fts5InstanceListNext(&in);
+        }
+      }
+    }
+
+    pTrim->nList = out.iList;
+  }
+  return SQLITE4_OK;
+}
+
 /*
-** This function tests if the cursors embedded in the Fts5Str object
-** currently point to a match for the entire string. If so, *pbMatch
+** This function tests if the cursors embedded in the Fts5Phrase object
+** currently point to a match for the entire phrase. If so, *pbMatch
 ** is set to true before returning.
 **
-** If the cursors do not point to a match, then *piAdvance is set to
-** the index of the individual cursor that should be advanced before
-** retrying this function. Or, if one or more of the cursors are at EOF
-** (implying that there will be no further matches), *piAdvance is set
-** to a negative value.
+** If the cursors do not point to a match, then *ppAdvance is set to
+** the token of the individual cursor that should be advanced before
+** retrying this function.
 */
-static int fts5StringIsMatch(
+static int fts5PhraseIsMatch(
   Fts5Cursor *pCsr,               /* Cursor that owns this string */
-  Fts5Str *pStr,                  /* String expression to test */
+  Fts5Phrase *pPhrase,            /* Phrase to test */
   int *pbMatch,                   /* OUT: True for a match, false otherwise */
-  int *piAdvance                  /* OUT: Token to advance before retrying */
+  Fts5Token **ppAdvance           /* OUT: Token to advance before retrying */
 ){
   const u8 *aPk1 = 0;
   int nPk1 = 0;
@@ -1608,108 +1725,68 @@ static int fts5StringIsMatch(
   int i;
 
   *pbMatch = 0;
-  *piAdvance = 0;
-  pStr->nList = 0;
+  *ppAdvance = &pPhrase->aStr[0].aToken[0];
 
-  rc = fts5TokenPk(&pStr->aToken[0], &aPk1, &nPk1);
-  for(i=1; rc==SQLITE4_OK && i<pStr->nToken; i++){
-    const u8 *aPk = 0;
-    int nPk = 0;
-    rc = fts5TokenPk(&pStr->aToken[i], &aPk, &nPk);
-    if( rc==SQLITE4_OK ){
-      int res = fts5KeyCompare(aPk1, nPk1, aPk, nPk);
-      if( res<0 ){
-        return SQLITE4_OK;
-      }
-      if( res>0 ){
-        *piAdvance = i;
-        return SQLITE4_OK;
-      }
-    }
-  }
-
-  if( pStr->nToken>1 ){
-    /* At this point, it is established that all of the token cursors in the
-    ** string point to an entry with the same primary key. Now synthesize a
-    ** position list for the entire string. */
-    int bEof = 0;
-    int nByte = sizeof(InstanceList) * pStr->nToken;
-    InstanceList *aIn;
-    InstanceList out;
-
-    memset(&out, 0, sizeof(InstanceList));
-
-    aIn = (InstanceList *)sqlite4DbMallocZero(pCsr->db, nByte);
-    if( !aIn ) rc = SQLITE4_NOMEM;
-    for(i=0; rc==SQLITE4_OK && i<pStr->nToken; i++){
-      const u8 *aData;
-      int nData;
-      rc = sqlite4KVCursorData(pStr->aToken[i].pCsr, 0, -1, &aData, &nData);
+  rc = fts5TokenPk(*ppAdvance, &aPk1, &nPk1);
+  for(i=0; rc==SQLITE4_OK && i<pPhrase->nStr; i++){
+    int j;
+    for(j=(i==0); j<pPhrase->aStr[i].nToken; j++){
+      const u8 *aPk = 0;
+      int nPk = 0;
+      Fts5Token *pToken = &pPhrase->aStr[i].aToken[j];
+      rc = fts5TokenPk(pToken, &aPk, &nPk);
       if( rc==SQLITE4_OK ){
-        fts5InstanceListInit((u8 *)aData, nData, &aIn[i]);
-        fts5InstanceListNext(&aIn[i]);
+        int res = fts5KeyCompare(aPk1, nPk1, aPk, nPk);
+        if( res<0 ){
+          return SQLITE4_OK;
+        }
+        if( res>0 ){
+          *ppAdvance = pToken;
+          return SQLITE4_OK;
+        }
       }
     }
-
-    /* Allocate the output list */
-    if( rc==SQLITE4_OK ){
-      int nReq = aIn[0].nList;
-      if( nReq<=pStr->nListAlloc ){
-        out.aList = pStr->aList;
-        out.nList = pStr->nListAlloc;
-      }else{
-        pStr->aList = out.aList = sqlite4DbMallocZero(pCsr->db, nReq*2);
-        pStr->nListAlloc = out.nList = nReq*2;
-        if( out.aList==0 ) rc = SQLITE4_NOMEM;
-      }
-    }
-
-    while( rc==SQLITE4_OK && bEof==0 ){
-      for(i=1; i<pStr->nToken; i++){
-        int bMatch = fts5TokenAdvanceToMatch(&aIn[i], &aIn[0], i, &bEof);
-        if( bMatch==0 || bEof ) break;
-      }
-      if( i==pStr->nToken ){
-        /* Record a match here */
-        fts5InstanceListAppend(&out, aIn[0].iCol, aIn[0].iWeight, aIn[0].iOff);
-        *pbMatch = 1;
-      }
-      bEof = fts5InstanceListNext(&aIn[0]);
-    }
-
-    pStr->nList = out.iList;
-    sqlite4DbFree(pCsr->db, aIn);
-  }else{
-    *pbMatch = 1;
   }
 
-  return rc;
-}
+  /* At this point, it is established that all of the token cursors in the
+  ** phrase point to an entry with the same primary key. Now figure out if
+  ** the various string constraints are met. Along the way, synthesize a 
+  ** position list for each Fts5Str object.  */
+  for(i=0; rc==SQLITE4_OK && i<pPhrase->nStr; i++){
+    Fts5Str *pStr = &pPhrase->aStr[i];
+    rc = fts5StringFindInstances(pCsr, pStr);
+  }
 
-static int fts5StringAdvanceToMatch(Fts5Cursor *pCsr, Fts5Str *pStr){
-  int rc;
-  do {
-    int bMatch;
-    int iAdvance;
-    rc = fts5StringIsMatch(pCsr, pStr, &bMatch, &iAdvance);
-    if( rc!=SQLITE4_OK || bMatch ) break;
-    rc = sqlite4KVCursorNext(pStr->aToken[iAdvance].pCsr);
-  }while( rc==SQLITE4_OK );
-  return rc;
-}
+  /* Trim the instance lists according to any NEAR constraints.  */
+  for(i=1; rc==SQLITE4_OK && i<pPhrase->nStr; i++){
+    int n = pPhrase->aiNear[i-1];
+    rc = fts5StringNearTrim(pCsr, &pPhrase->aStr[i], &pPhrase->aStr[i-1], n);
+  }
+  for(i=pPhrase->nStr-1; rc==SQLITE4_OK && i>0; i--){
+    int n = pPhrase->aiNear[i-1];
+    rc = fts5StringNearTrim(pCsr, &pPhrase->aStr[i-1], &pPhrase->aStr[i], n);
+  }
 
-static int fts5StringAdvance(Fts5Cursor *pCsr, Fts5Str *pStr){
-  int rc = sqlite4KVCursorNext(pStr->aToken[0].pCsr);
-  if( rc==SQLITE4_OK ) rc = fts5StringAdvanceToMatch(pCsr, pStr);
+  *pbMatch = (pPhrase->aStr[0].nList>0);
   return rc;
 }
 
 static int fts5PhraseAdvanceToMatch(Fts5Cursor *pCsr, Fts5Phrase *pPhrase){
-  return fts5StringAdvanceToMatch(pCsr, &pPhrase->aStr[0]);
+  int rc;
+  do {
+    int bMatch;
+    Fts5Token *pAdvance = 0;
+    rc = fts5PhraseIsMatch(pCsr, pPhrase, &bMatch, &pAdvance);
+    if( rc!=SQLITE4_OK || bMatch ) break;
+    rc = sqlite4KVCursorNext(pAdvance->pCsr);
+  }while( rc==SQLITE4_OK );
+  return rc;
 }
 
 static int fts5PhraseAdvance(Fts5Cursor *pCsr, Fts5Phrase *pPhrase){
-  return fts5StringAdvance(pCsr, &pPhrase->aStr[0]);
+  int rc = sqlite4KVCursorNext(pPhrase->aStr[0].aToken[0].pCsr);
+  if( rc==SQLITE4_OK ) rc = fts5PhraseAdvanceToMatch(pCsr, pPhrase);
+  return rc;
 }
 
 int sqlite4Fts5Next(Fts5Cursor *pCsr){
