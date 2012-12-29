@@ -67,15 +67,18 @@ do_execsql_test 3.0 {
 }
 
 foreach {tn stmt res} {
-  1 {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/5 i'}     {2 4}
-  2 {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/3 b'}     {1}
-  3 {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/2 d'}     {1}
-  4 {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/2 e'}     {2 4}
-  5 {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/3 e'}     {1 2 4}
-  6 {SELECT x FROM t1 WHERE t1 MATCH 'b+c NEAR/2 g+h'} {2 3}
-  7 {SELECT x FROM t1 WHERE t1 MATCH 'b+c NEAR/3 g+h'} {1 2 3}
-  8 {SELECT x FROM t1 WHERE t1 MATCH 'b+c NEAR/2 g+h+j'} {2 3}
-  9 {SELECT x FROM t1 WHERE t1 MATCH 'b+c+d NEAR/1 g+h'} {2 3}
+  1  {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/5 i'}       {2 4}
+  2  {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/3 b'}       {1}
+  3  {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/2 d'}       {1}
+  4  {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/2 e'}       {2 4}
+  5  {SELECT x FROM t1 WHERE t1 MATCH 'a NEAR/3 e'}       {1 2 4}
+  6  {SELECT x FROM t1 WHERE t1 MATCH 'b+c NEAR/2 g+h'}   {2 3}
+  7  {SELECT x FROM t1 WHERE t1 MATCH 'b+c NEAR/3 g+h'}   {1 2 3}
+  8  {SELECT x FROM t1 WHERE t1 MATCH 'b+c NEAR/2 g+h+j'} {2 3}
+  9  {SELECT x FROM t1 WHERE t1 MATCH 'b+c+d NEAR/1 g+h'} {2 3}
+  10 {SELECT x FROM t1 WHERE t1 MATCH 'a AND d'}          {1 2}
+  11 {SELECT x FROM t1 WHERE t1 MATCH 'a OR d'}           {1 2 3 4}
+  12 {SELECT x FROM t1 WHERE t1 MATCH 'a NOT d'}          {4}
 } {
   do_execsql_test 3.$tn $stmt $res
 }

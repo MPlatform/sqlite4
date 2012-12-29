@@ -151,6 +151,8 @@ struct Fts5ExprNode {
   Fts5Phrase *pPhrase;
   Fts5ExprNode *pLeft;
   Fts5ExprNode *pRight;
+  const u8 *aPk;                  /* Primary key of current entry (or null) */
+  int nPk;                        /* Size of aPk[] in bytes */
 };
 
 struct Fts5Expr {
@@ -1559,14 +1561,23 @@ static int fts5TokenPk(Fts5Token *p, const u8 **paPk, int *pnPk){
   return rc;
 }
 
+/*
+** Compare keys (aLeft/nLeft) and (aRight/nRight) using the ordinary memcmp()
+** method. Except, if either aLeft or aRight are NULL, consider them larger
+** than all other values.
+*/
 static int fts5KeyCompare(
   const u8 *aLeft, int nLeft, 
   const u8 *aRight, int nRight
 ){
-  int nMin = (nLeft > nRight) ? nRight : nLeft;
-
   int res;
-  res = memcmp(aLeft, aRight, nMin);
+  int nMin;
+
+  res = (aLeft==0) - (aRight==0);
+  if( res==0 ){
+    nMin = (nLeft > nRight) ? nRight : nLeft;
+    res = memcmp(aLeft, aRight, nMin);
+  }
   return (res ? res : (nLeft-nRight));
 }
 
@@ -1677,19 +1688,22 @@ static int fts5StringNearTrim(
     fts5InstanceListNext(&in);
 
     while( bEof==0 ){
-      /* Check if the current position is a match */
       if( fts5IsNear(&trail, &in, nTrail) 
        || fts5IsNear(&in, &lead, nLead)
       ){
+        /* The current position is a match. Append an entry to the output
+        ** and advance the input cursor. */
         fts5InstanceListAppend(&out, in.iCol, in.iWeight, in.iOff);
         bEof = fts5InstanceListNext(&in);
       }else{
+        /* The current position is not a match. Advance one of the trailing,
+        ** leading or input cursors. */
         if( fts5InstanceListEof(&trail)==0
          && (trail.iCol<in.iCol || trail.iOff>=in.iOff) 
         ){
           fts5InstanceListNext(&trail);
         }
-        else if( (lead.iList<lead.nList)
+        else if( fts5InstanceListEof(&lead)==0
          && (lead.iCol<in.iCol || lead.iOff<=in.iOff)
         ){
           fts5InstanceListNext(&trail);
@@ -1783,21 +1797,107 @@ static int fts5PhraseAdvanceToMatch(Fts5Cursor *pCsr, Fts5Phrase *pPhrase){
   return rc;
 }
 
-static int fts5PhraseAdvance(Fts5Cursor *pCsr, Fts5Phrase *pPhrase){
-  int rc = sqlite4KVCursorNext(pPhrase->aStr[0].aToken[0].pCsr);
-  if( rc==SQLITE4_OK ) rc = fts5PhraseAdvanceToMatch(pCsr, pPhrase);
+static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
+  int rc = SQLITE4_OK;
+
+  switch( p->eType ){
+    case TOKEN_PRIMITIVE: {
+      Fts5Phrase *pPhrase = p->pPhrase;
+      if( bFirst==0 ) rc = sqlite4KVCursorNext(pPhrase->aStr[0].aToken[0].pCsr);
+      if( rc==SQLITE4_OK ) rc = fts5PhraseAdvanceToMatch(pCsr, pPhrase);
+      if( rc==SQLITE4_OK ){
+        rc = fts5TokenPk(&pPhrase->aStr[0].aToken[0], &p->aPk, &p->nPk);
+      }else{
+        p->aPk = 0;
+        p->nPk = 0;
+        if( rc==SQLITE4_NOTFOUND ) rc = SQLITE4_OK;
+      }
+      break;
+    }
+
+    case TOKEN_AND:
+      p->aPk = 0;
+      p->nPk = 0;
+      rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
+      if( rc==SQLITE4_OK ) rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+      while( rc==SQLITE4_OK && p->pLeft->aPk && p->pRight->aPk ){
+        int res = fts5KeyCompare(
+            p->pLeft->aPk, p->pLeft->nPk, p->pRight->aPk, p->pRight->nPk
+        );
+        if( res<0 ){
+          rc = fts5ExprAdvance(pCsr, p->pLeft, 0);
+        }else if( res>0 ){
+          rc = fts5ExprAdvance(pCsr, p->pRight, 0);
+        }else{
+          p->aPk = p->pLeft->aPk;
+          p->nPk = p->pLeft->nPk;
+          break;
+        }
+      }
+      break;
+
+    case TOKEN_OR: {
+      int res = 0;
+      if( bFirst==0 ){
+        res = fts5KeyCompare(
+            p->pLeft->aPk, p->pLeft->nPk, p->pRight->aPk, p->pRight->nPk
+        );
+      }
+        
+      if( res<=0 ) rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
+      if( rc==SQLITE4_OK && res>=0 ){
+        rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+      }
+
+      res = fts5KeyCompare(
+          p->pLeft->aPk, p->pLeft->nPk, p->pRight->aPk, p->pRight->nPk
+      );
+      if( res>0 ){
+        p->aPk = p->pRight->aPk;
+        p->nPk = p->pRight->nPk;
+      }else{
+        p->aPk = p->pLeft->aPk;
+        p->nPk = p->pLeft->nPk;
+      }
+      assert( p->aPk!=0 || (p->pLeft->aPk==0 && p->pRight->aPk==0) );
+      break;
+    }
+
+
+    default: assert( p->eType==TOKEN_NOT );
+
+      p->aPk = 0;
+      p->nPk = 0;
+
+      rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
+      if( bFirst && rc==SQLITE4_OK ){
+        rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+      }
+
+      while( rc==SQLITE4_OK && p->pLeft->aPk && p->pRight->aPk ){
+        int res = fts5KeyCompare(
+            p->pLeft->aPk, p->pLeft->nPk, p->pRight->aPk, p->pRight->nPk
+        );
+        if( res<0 ){
+          break;
+        }else if( res>0 ){
+          rc = fts5ExprAdvance(pCsr, p->pRight, 0);
+        }else{
+          rc = fts5ExprAdvance(pCsr, p->pLeft, 0);
+        }
+      }
+
+      p->aPk = p->pLeft->aPk;
+      p->nPk = p->pLeft->nPk;
+      break;
+  }
+
+  assert( rc!=SQLITE4_NOTFOUND );
   return rc;
 }
 
 int sqlite4Fts5Next(Fts5Cursor *pCsr){
-  Fts5Phrase *pPhrase;
-  int rc;
-
-  assert( pCsr->pExpr->pRoot->eType==TOKEN_PRIMITIVE );
-  pPhrase = pCsr->pExpr->pRoot->pPhrase;
-
-  rc = fts5PhraseAdvance(pCsr, pPhrase);
-  return rc;
+  return fts5ExprAdvance(pCsr, pCsr->pExpr->pRoot, 0);
 }
 
 int sqlite4Fts5Open(
@@ -1831,7 +1931,7 @@ int sqlite4Fts5Open(
     sqlite4Fts5Close(db, pCsr);
     pCsr = 0;
   }else{
-    rc = fts5PhraseAdvanceToMatch(pCsr, pCsr->pExpr->pRoot->pPhrase);
+    rc = fts5ExprAdvance(pCsr, pCsr->pExpr->pRoot, 1);
   }
   *ppCsr = pCsr;
   return rc;
@@ -1842,16 +1942,7 @@ int sqlite4Fts5Open(
 ** to a valid entry, or false otherwise.
 */
 int sqlite4Fts5Valid(Fts5Cursor *pCsr){
-  const KVByteArray *aKey;
-  KVSize nKey;
-  KVCursor *pKVCsr;
-  int rc;
-
-  assert( pCsr->pExpr->pRoot->eType==TOKEN_PRIMITIVE );
-  pKVCsr = pCsr->pExpr->pRoot->pPhrase->aStr[0].aToken[0].pCsr;
-
-  rc = sqlite4KVCursorKey(pKVCsr, &aKey, &nKey);
-  return (rc==SQLITE4_OK);
+  return( pCsr->pExpr->pRoot->aPk!=0 );
 }
 
 int sqlite4Fts5Pk(
@@ -1860,33 +1951,23 @@ int sqlite4Fts5Pk(
   KVByteArray **paKey, 
   KVSize *pnKey
 ){
-  const KVByteArray *aKey;
-  KVSize nKey;
-  KVCursor *pKVCsr;
-  int rc;
   int i;
-  int i2;
   int nReq;
+  const u8 *aPk;
+  int nPk;
 
-  assert( pCsr->pExpr->pRoot->eType==TOKEN_PRIMITIVE );
+  aPk = pCsr->pExpr->pRoot->aPk;
+  nPk = pCsr->pExpr->pRoot->nPk;
 
-  pKVCsr = pCsr->pExpr->pRoot->pPhrase->aStr[0].aToken[0].pCsr;
-  rc = sqlite4KVCursorKey(pKVCsr, &aKey, &nKey);
-  if( rc!=SQLITE4_OK ) return rc;
-
-  i = sqlite4VarintLen(pCsr->pInfo->iRoot);
-  while( aKey[i] ) i++;
-  i++;
-
-  nReq = sqlite4VarintLen(iTbl) + (nKey-i);
+  nReq = sqlite4VarintLen(iTbl) + nPk;
   if( nReq>pCsr->nKeyAlloc ){
     pCsr->aKey = sqlite4DbReallocOrFree(pCsr->db, pCsr->aKey, nReq*2);
     if( !pCsr->aKey ) return SQLITE4_NOMEM;
     pCsr->nKeyAlloc = nReq*2;
   }
 
-  i2 = putVarint32(pCsr->aKey, iTbl);
-  memcpy(&pCsr->aKey[i2], &aKey[i], nKey-i);
+  i = putVarint32(pCsr->aKey, iTbl);
+  memcpy(&pCsr->aKey[i], aPk, nPk);
 
   *paKey = pCsr->aKey;
   *pnKey = nReq;
