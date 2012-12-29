@@ -83,5 +83,16 @@ foreach {tn stmt res} {
   do_execsql_test 3.$tn $stmt $res
 }
 
+do_execsql_test 4.0 {
+  CREATE TABLE t2(docid PRIMARY KEY, a, b, c);
+  CREATE INDEX i2 ON t2 USING fts5();
+  INSERT INTO t2 VALUES(136895, 'qkfl my qkfl krag gw', NULL, NULL);
+}
+
+breakpoint
+do_execsql_test 4.1 {
+  SELECT docid FROM t2 WHERE t2 MATCH 'qkfl NEAR/2 gw';
+} {136895}
+
 finish_test
 

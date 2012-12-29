@@ -1674,39 +1674,32 @@ static int fts5StringNearTrim(
     int nTrail = nNear + (pNext->nToken-1) + 1;
     int nLead = nNear + (pTrim->nToken-1) + 1;
 
-    InstanceList trail;
-    InstanceList lead;
+    InstanceList near;
     InstanceList in;
     InstanceList out;
 
-    fts5InstanceListInit(pNext->aList, pNext->nList, &trail);
-    fts5InstanceListInit(pNext->aList, pNext->nList, &lead);
+    fts5InstanceListInit(pNext->aList, pNext->nList, &near);
     fts5InstanceListInit(pTrim->aList, pTrim->nList, &in);
     fts5InstanceListInit(pTrim->aList, pTrim->nList, &out);
-    fts5InstanceListNext(&trail);
-    fts5InstanceListNext(&lead);
+    fts5InstanceListNext(&near);
     fts5InstanceListNext(&in);
 
     while( bEof==0 ){
-      if( fts5IsNear(&trail, &in, nTrail) 
-       || fts5IsNear(&in, &lead, nLead)
+      if( fts5IsNear(&near, &in, nTrail) 
+       || fts5IsNear(&in, &near, nLead)
       ){
         /* The current position is a match. Append an entry to the output
         ** and advance the input cursor. */
         fts5InstanceListAppend(&out, in.iCol, in.iWeight, in.iOff);
         bEof = fts5InstanceListNext(&in);
       }else{
-        /* The current position is not a match. Advance one of the trailing,
-        ** leading or input cursors. */
-        if( fts5InstanceListEof(&trail)==0
-         && (trail.iCol<in.iCol || trail.iOff>=in.iOff) 
-        ){
-          fts5InstanceListNext(&trail);
-        }
-        else if( fts5InstanceListEof(&lead)==0
-         && (lead.iCol<in.iCol || lead.iOff<=in.iOff)
-        ){
-          fts5InstanceListNext(&trail);
+        if( near.iCol<in.iCol || (near.iCol==in.iCol && near.iOff<in.iOff) ){
+          bEof = fts5InstanceListNext(&near);
+        }else if( near.iCol==in.iCol && near.iOff==in.iOff ){
+          bEof = fts5InstanceListNext(&in);
+          if( fts5IsNear(&near, &in, nTrail) ){
+            fts5InstanceListAppend(&out, near.iCol, near.iWeight, near.iOff);
+          }
         }else{
           bEof = fts5InstanceListNext(&in);
         }
