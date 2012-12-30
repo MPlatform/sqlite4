@@ -103,20 +103,37 @@ do_execsql_test 5.1 {
 } {123}
 
 do_execsql_test 6.0 {
-
-BEGIN TRANSACTION;
-CREATE TABLE t4(docid PRIMARY KEY, a, b, c);
-CREATE INDEX i4 ON t4 USING fts5();
-
-INSERT INTO "t4" VALUES(34,'ndmv jk qhiv cnz kyev blu qs nxhf etm uen','uh hu as wcvo hw whgu wd zm saus jvg bmbx kyev bnyk wmbz yf uh rb yf ju blu jkb jk qkfl jk gimj uh brsu ptic ka ztc vniq uprt kyev rxcf blu bnyk mu hgjo rxcf rnxr vcy vllx mve nxhf kb iddj qpnv fal iddj ju zidh mu pvjr cu my blu ztc vllx ono ndmv ib mu qpnv ldfi jvg jvg ztc uprt qrwj ptic saus fltt uen cnz ju qrwj gfap jk krag bwsr kb csjq kn krag ono uv krag da cu bil wd sk','ib qrwj iddj cku qdye uv pnz hu wte kyev ka jvg hu mu las bwsr mu uv da szem vllx bwsr wfar blu uv ztc qpnv wwne osok qpnv');
-INSERT INTO "t4" VALUES(50,'ldfi zlc cku cnz sk juhw nxhf iddj las hu qhiv bmbx nq kn uprt las jk pvjr urvy qs bwsr uyn pmh ssc fltt bmbx ldfi rnxr cnz yf rnxr ndmv wmbz fal pmh uyn sk uh szem uv ssc bnyk yle jvg zm hgjo uh blu jvg rxcf whgu ztc kyev xdza cku kyev juhw nq ldfi las uprt wwne uprt qrwj vniq fal szem fteo cnz bwsr jrx jk jpa uv pmh nq qdye gfap ldfi uen sk wgwd zidh cu gfap','wd ndmv saus pnz hgjo gimj ztc jrx krag jrx gimj qhiv saj hgjo jrx xdza gvp cku kn szem my saus bnyk saj pmh gw bnyk saj as zimg ssc kh pvjr fal etm cu jvg krag hbtv kb szem qdye uv bil aayx wmbz xdza zm ib ldfi brsu zm rnxr csjq ldfi kb vllx zidh','gw fteo ka cu ib hu fteo juhw yf pnz blu jk ka bnyk bwsr da pnz pvjr yf pmh csjq my ztc zm hbtv qrwj cnz hu mu za ldfi qpnv saj');
-COMMIT;
+  BEGIN TRANSACTION;
+    CREATE TABLE t4(docid PRIMARY KEY, a);
+    CREATE INDEX i4 ON t4 USING fts5();
+    INSERT INTO "t4" VALUES(34, 'abc mnm xyz');
+    INSERT INTO "t4" VALUES(50, 'abc mnm xyz');
+  COMMIT;
 }
-
-breakpoint
 do_execsql_test 6.1 {
   SELECT docid FROM t4 WHERE t4 MATCH 'm*' 
 } {34 50}
+
+#-------------------------------------------------------------------------
+#
+do_execsql_test 7.0 {
+  BEGIN TRANSACTION;
+    CREATE TABLE t7(docid PRIMARY KEY, a, b, c);
+    CREATE INDEX i7 ON t7 USING fts5();
+    INSERT INTO t7 VALUES(1, 'a b c', 'd e f', 'a b c');
+    INSERT INTO t7 VALUES(2, 'x y z', 'a b c', 'a b c');
+  COMMIT;
+}
+
+foreach {tn expr res} {
+  1 {a}    {1 2}
+  2 {a:a}  {1}
+  3 {b:a}  {2}
+  4 {c:a}  {1 2}
+  5 {a:a*} {1}
+} {
+  do_execsql_test 7.$tn {SELECT docid FROM t7 WHERE t7 MATCH $expr} $res
+}
 
 finish_test
 

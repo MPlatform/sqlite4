@@ -1929,7 +1929,7 @@ static int fts5TokenAdvanceToMatch(
   return (p->iCol==pFirst->iCol && p->iOff==iReq);
 }
 
-static int fts5StringFindInstances(Fts5Cursor *pCsr, Fts5Str *pStr){
+static int fts5StringFindInstances(Fts5Cursor *pCsr, int iCol, Fts5Str *pStr){
   int i;
   int rc = SQLITE4_OK;
   int bEof = 0;
@@ -1970,7 +1970,7 @@ static int fts5StringFindInstances(Fts5Cursor *pCsr, Fts5Str *pStr){
       int bMatch = fts5TokenAdvanceToMatch(&aIn[i], &aIn[0], i, &bEof);
       if( bMatch==0 || bEof ) break;
     }
-    if( i==pStr->nToken ){
+    if( i==pStr->nToken && (iCol<0 || aIn[0].iCol==iCol) ){
       /* Record a match here */
       fts5InstanceListAppend(&out, aIn[0].iCol, aIn[0].iWeight, aIn[0].iOff);
     }
@@ -2090,7 +2090,7 @@ static int fts5PhraseIsMatch(
   ** position list for each Fts5Str object.  */
   for(i=0; rc==SQLITE4_OK && i<pPhrase->nStr; i++){
     Fts5Str *pStr = &pPhrase->aStr[i];
-    rc = fts5StringFindInstances(pCsr, pStr);
+    rc = fts5StringFindInstances(pCsr, pPhrase->iCol, pStr);
   }
 
   /* Trim the instance lists according to any NEAR constraints.  */
