@@ -1709,9 +1709,9 @@ static int openDatabase(
                  | SQLITE4_ForeignKeys
             ;
 
-  sqlite4HashInit(pEnv, &db->aCollSeq);
+  sqlite4HashInit(pEnv, &db->aCollSeq, 0);
 #ifndef SQLITE4_OMIT_VIRTUALTABLE
-  sqlite4HashInit(pEnv, &db->aModule);
+  sqlite4HashInit(pEnv, &db->aModule, 0);
 #endif
 
   /* Add the default collation sequence BINARY. BINARY works for both UTF-8

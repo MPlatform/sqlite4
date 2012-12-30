@@ -15,18 +15,56 @@
 #include "sqliteInt.h"
 #include <assert.h>
 
+/*
+** The hashing function.
+*/
+static unsigned int strHash(const char *z, int nKey){
+  int h = 0;
+  assert( nKey>=0 );
+  while( nKey > 0  ){
+    h = (h<<3) ^ h ^ sqlite4UpperToLower[(unsigned char)*z++];
+    nKey--;
+  }
+  return h;
+}
+
+static int strCmp(const char *z1, const char *z2, int n){
+  return sqlite4StrNICmp(z1, z2, n);
+}
+
+static unsigned int binHash(const char *z, int nKey){
+  int h = 0;
+  assert( nKey>=0 );
+  while( nKey > 0  ){
+    h = (h<<3) ^ h ^ ((unsigned char)*z++);
+    nKey--;
+  }
+  return h;
+}
+
+static int binCmp(const char *z1, const char *z2, int n){
+  return memcmp(z1, z2, n);
+}
+
 /* Turn bulk memory into a hash table object by initializing the
 ** fields of the Hash structure.
 **
 ** "pNew" is a pointer to the hash table that is to be initialized.
 */
-void sqlite4HashInit(sqlite4_env *pEnv, Hash *pNew){
+void sqlite4HashInit(sqlite4_env *pEnv, Hash *pNew, int bBin){
   assert( pNew!=0 );
   pNew->first = 0;
   pNew->count = 0;
   pNew->htsize = 0;
   pNew->ht = 0;
   pNew->pEnv = pEnv;
+  if( bBin ){
+    pNew->xHash = binHash;
+    pNew->xCmp = binCmp;
+  }else{
+    pNew->xHash = strHash;
+    pNew->xCmp = strCmp;
+  }
 }
 
 /* Remove all entries from a hash table.  Reclaim all memory.
@@ -49,20 +87,6 @@ void sqlite4HashClear(Hash *pH){
   }
   pH->count = 0;
 }
-
-/*
-** The hashing function.
-*/
-static unsigned int strHash(const char *z, int nKey){
-  int h = 0;
-  assert( nKey>=0 );
-  while( nKey > 0  ){
-    h = (h<<3) ^ h ^ sqlite4UpperToLower[(unsigned char)*z++];
-    nKey--;
-  }
-  return h;
-}
-
 
 /* Link pNew element into the hash table pH.  If pEntry!=0 then also
 ** insert pNew into the pEntry hash bucket.
@@ -126,7 +150,7 @@ static int rehash(Hash *pH, unsigned int new_size){
   pH->htsize = new_size = sqlite4MallocSize(pH->pEnv, new_ht)/sizeof(struct _ht);
   memset(new_ht, 0, new_size*sizeof(struct _ht));
   for(elem=pH->first, pH->first=0; elem; elem = next_elem){
-    unsigned int h = strHash(elem->pKey, elem->nKey) % new_size;
+    unsigned int h = pH->xHash(elem->pKey, elem->nKey) % new_size;
     next_elem = elem->next;
     insertElement(pH, &new_ht[h], elem);
   }
@@ -155,7 +179,7 @@ static HashElem *findElementGivenHash(
     count = pH->count;
   }
   while( count-- && ALWAYS(elem) ){
-    if( elem->nKey==nKey && sqlite4StrNICmp(elem->pKey,pKey,nKey)==0 ){ 
+    if( elem->nKey==nKey && pH->xCmp(elem->pKey,pKey,nKey)==0 ){ 
       return elem;
     }
     elem = elem->next;
@@ -209,7 +233,7 @@ void *sqlite4HashFind(const Hash *pH, const char *pKey, int nKey){
   assert( pKey!=0 );
   assert( nKey>=0 );
   if( pH->ht ){
-    h = strHash(pKey, nKey) % pH->htsize;
+    h = pH->xHash(pKey, nKey) % pH->htsize;
   }else{
     h = 0;
   }
@@ -240,7 +264,7 @@ void *sqlite4HashInsert(Hash *pH, const char *pKey, int nKey, void *data){
   assert( pKey!=0 );
   assert( nKey>=0 );
   if( pH->htsize ){
-    h = strHash(pKey, nKey) % pH->htsize;
+    h = pH->xHash(pKey, nKey) % pH->htsize;
   }else{
     h = 0;
   }
@@ -266,7 +290,7 @@ void *sqlite4HashInsert(Hash *pH, const char *pKey, int nKey, void *data){
   if( pH->count>=10 && pH->count > 2*pH->htsize ){
     if( rehash(pH, pH->count*2) ){
       assert( pH->htsize>0 );
-      h = strHash(pKey, nKey) % pH->htsize;
+      h = pH->xHash(pKey, nKey) % pH->htsize;
     }
   }
   if( pH->ht ){

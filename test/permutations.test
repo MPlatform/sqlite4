@@ -139,7 +139,7 @@ test_suite "src4" -prefix "" -description {
   csr1.test
   ckpt1.test
   mc1.test
-  fts5expr1.test
+  fts5expr1.test fts5query1.test fts5rnd1.test fts5create.test
 
   aggerror.test
   attach.test

@@ -61,5 +61,14 @@ foreach {tn expr res} {
   } [list [string trim $res]]
 }
 
+breakpoint
+foreach {tn expr res} {
+  1 { abc* }                  {"abc"*}
+} {
+  do_execsql_test 3.$tn { 
+    SELECT fts5_parse_expr('simple', $expr, 't1') 
+  } [list [string trim $res]]
+}
+
 
 finish_test

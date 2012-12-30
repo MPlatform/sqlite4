@@ -344,15 +344,13 @@ for {set iTest 1} {$iTest <= $NUM_TRIALS} {incr iTest} {
   # to query for. Test that querying the Tcl array produces the same results
   # as querying the FTS3 table for the prefix.
   #
-
-puts "todo: prefix query support"
-#  for {set i 0} {$i < $nRep} {incr i} {
-#    set prefix [string range [random_term] 0 end-1]
-#    set match "${prefix}*"
-#    do_orderbydocid_test 2.$i {
-#      SELECT docid FROM t1 WHERE t1 MATCH $match
-#    } [simple_phrase $match]
-#  }
+  for {set i 0} {$i < $nRep} {incr i} {
+    set prefix [string range [random_term] 0 end-1]
+    set match "${prefix}*"
+    do_orderbydocid_test 2.$i {
+      SELECT docid FROM t1 WHERE t1 MATCH $match
+    } [simple_phrase $match]
+  }
 
   # Similar to the above, except for phrase queries.
   #
@@ -376,17 +374,15 @@ puts "todo: prefix query support"
 
   # Three word phrases made up of term-prefixes.
   #
-puts "todo: prefix query support"
-#  for {set i 0} {$i < $nRep} {incr i} {
-#    set    query "[string range [random_term] 0 end-1]* "
-#    append query "[string range [random_term] 0 end-1]* "
-#    append query "[string range [random_term] 0 end-1]*"
-#
-#    set match "\"$query\""
-#    do_orderbydocid_test 5.$i {
-#      SELECT docid FROM t1 WHERE t1 MATCH $match
-#    } [simple_phrase $query]
-#  }
+  for {set i 0} {$i < $nRep} {incr i} {
+    set    query "[string range [random_term] 0 end-1]* + "
+    append query "[string range [random_term] 0 end-1]* + "
+    append query "[string range [random_term] 0 end-1]*"
+
+    do_orderbydocid_test 5.$i {
+      SELECT docid FROM t1 WHERE t1 MATCH $match
+    } [simple_phrase $query]
+  }
 
   # A NEAR query with terms as the arguments:
   #

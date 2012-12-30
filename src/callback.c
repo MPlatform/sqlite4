@@ -424,13 +424,13 @@ void sqlite4SchemaClear(sqlite4_env *pEnv, Schema *pSchema){
 
   temp1 = pSchema->tblHash;
   temp2 = pSchema->trigHash;
-  sqlite4HashInit(pEnv, &pSchema->trigHash);
+  sqlite4HashInit(pEnv, &pSchema->trigHash, 0);
   sqlite4HashClear(&pSchema->idxHash);
   for(pElem=sqliteHashFirst(&temp2); pElem; pElem=sqliteHashNext(pElem)){
     sqlite4DeleteTrigger(0, (Trigger*)sqliteHashData(pElem));
   }
   sqlite4HashClear(&temp2);
-  sqlite4HashInit(pEnv, &pSchema->tblHash);
+  sqlite4HashInit(pEnv, &pSchema->tblHash, 0);
   for(pElem=sqliteHashFirst(&temp1); pElem; pElem=sqliteHashNext(pElem)){
     Table *pTab = sqliteHashData(pElem);
     sqlite4DeleteTable(0, pTab);
@@ -454,10 +454,10 @@ Schema *sqlite4SchemaGet(sqlite4 *db){
   if( !p ){
     db->mallocFailed = 1;
   }else if ( 0==p->file_format ){
-    sqlite4HashInit(db->pEnv, &p->tblHash);
-    sqlite4HashInit(db->pEnv, &p->idxHash);
-    sqlite4HashInit(db->pEnv, &p->trigHash);
-    sqlite4HashInit(db->pEnv, &p->fkeyHash);
+    sqlite4HashInit(db->pEnv, &p->tblHash, 0);
+    sqlite4HashInit(db->pEnv, &p->idxHash, 0);
+    sqlite4HashInit(db->pEnv, &p->trigHash, 0);
+    sqlite4HashInit(db->pEnv, &p->fkeyHash, 0);
     p->enc = SQLITE4_UTF8;
   }
   return p;
