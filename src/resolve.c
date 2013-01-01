@@ -436,6 +436,34 @@ Expr *sqlite4CreateColumnExpr(sqlite4 *db, SrcList *pSrc, int iSrc, int iCol){
   return p;
 }
 
+static void resolveMatchArg(Parse *pParse, NameContext *pNC, Expr *pExpr){
+  SrcList *pSrc = pNC->pSrcList;
+  SrcListItem *pItem;
+  char *zLhs;
+  int i;
+  Index *pIdx;
+
+  if( pExpr->op!=TK_ID || pSrc==0 || pExpr==0 ){
+    sqlite4ErrorMsg(pParse, "first argument xxx must be a table name");
+    return;
+  }
+  zLhs = pExpr->u.zToken;
+
+  for(i=0; i<pSrc->nSrc; i++){
+    pItem = &pSrc->a[i];
+    if( pItem->zAlias && sqlite4StrICmp(zLhs, pItem->zAlias)==0 ) break;
+    if( pItem->zAlias==0 && sqlite4StrICmp(zLhs, pItem->zName)==0 ) break;
+  }
+  if( i==pSrc->nSrc ){
+    sqlite4ErrorMsg(pParse, "no such table: %s", zLhs);
+    return;
+  }
+
+  pExpr->op = TK_NULL;
+  pExpr->iTable = pItem->iCursor;
+  ExprSetProperty(pExpr, EP_Resolved);
+}
+
 static void resolveMatch(Parse *pParse, NameContext *pNC, Expr *pExpr){
   Expr *pLeft = pExpr->pLeft;
   SrcList *pSrc = pNC->pSrcList;
@@ -616,9 +644,16 @@ static int resolveExprStep(Walker *pWalker, Expr *pExpr){
         pExpr->op = TK_AGG_FUNCTION;
         pNC->hasAgg = 1;
       }
-      if( is_agg ) pNC->allowAgg = 0;
-      sqlite4WalkExprList(pWalker, pList);
-      if( is_agg ) pNC->allowAgg = 1;
+
+      if( pParse->nErr==0 ){
+        if( pDef->bMatchinfo ){
+          resolveMatchArg(pParse, pNC, n>0 ? pList->a[0].pExpr : 0);
+        }
+        if( is_agg ) pNC->allowAgg = 0;
+        sqlite4WalkExprList(pWalker, pList);
+        if( is_agg ) pNC->allowAgg = 1;
+      }
+
       /* FIX ME:  Compute pExpr->affinity based on the expected return
       ** type of the function 
       */

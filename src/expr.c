@@ -2590,6 +2590,9 @@ int sqlite4ExprCodeTarget(Parse *pParse, Expr *pExpr, int target){
         if( !pColl ) pColl = db->pDfltColl; 
         sqlite4VdbeAddOp4(v, OP_CollSeq, 0, 0, 0, (char *)pColl, P4_COLLSEQ);
       }
+      if( pDef->bMatchinfo ){
+        sqlite4VdbeAddOp1(v, OP_Mifunction, pFarg->a[0].pExpr->iTable);
+      }
       sqlite4VdbeAddOp4(v, OP_Function, constMask, r1, target,
                         (char*)pDef, P4_FUNCDEF);
       sqlite4VdbeChangeP5(v, (u8)nFarg);

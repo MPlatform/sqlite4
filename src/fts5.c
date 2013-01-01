@@ -80,7 +80,7 @@ struct Fts5Index {
 */
 
 /*
-** Context object used by expression parser.
+** Structure types used by this module.
 */
 typedef struct Fts5Expr Fts5Expr;
 typedef struct Fts5ExprNode Fts5ExprNode;
@@ -173,6 +173,8 @@ struct Fts5ExprNode {
 
 struct Fts5Expr {
   Fts5ExprNode *pRoot;
+  int nPhrase;                    /* Number of Fts5Str objects in query */
+  Fts5Str **apPhrase;
 };
 
 /*
@@ -182,9 +184,11 @@ struct Fts5Cursor {
   sqlite4 *db;
   Fts5Info *pInfo;
   Fts5Expr *pExpr;                /* MATCH expression for this cursor */
-
   KVByteArray *aKey;              /* Buffer for primary key */
   int nKeyAlloc;                  /* Bytes allocated at aKey[] */
+
+  KVCursor *pCsr;                 /* Cursor used to retrive values */
+  Mem *aMem;                      /* Array of column values */
 };
 
 /*
@@ -762,6 +766,7 @@ static int fts5ParseExpression(
 ){
   int rc = SQLITE4_OK;
   Fts5Parser sParse;
+  int nStr = 0;
   int nExpr;
   int i;
   Fts5Expr *pExpr;
@@ -817,6 +822,7 @@ static int fts5ParseExpression(
             *pp = pNode;
           }
         }
+        nStr++;
         break;
       }
 
@@ -890,6 +896,7 @@ static int fts5ParseExpression(
     fts5ExpressionFree(db, pExpr);
     *pzErr = sParse.zErr;
   }else{
+    pExpr->nPhrase = nStr;
     *ppExpr = pExpr;
   }
   sqlite4DbFree(db, aHier);
@@ -2297,6 +2304,86 @@ int sqlite4Fts5Pk(
   *paKey = pCsr->aKey;
   *pnKey = nReq;
   return SQLITE4_OK;
+}
+
+int sqlite4_mi_column_count(sqlite4_context *pCtx, int *pnCol){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+    *pnCol = pCtx->pFts->pInfo->nCol;
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_column_size(sqlite4_context *pCtx, int iCol, int *pnToken){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_column_value(
+  sqlite4_context *pCtx, 
+  int iCol, 
+  sqlite4_value **ppVal
+){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_phrase_count(sqlite4_context *pCtx, int *pnPhrase){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+    *pnPhrase = pCtx->pFts->pExpr->nPhrase;
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_match_count(
+  sqlite4_context *pCtx, 
+  int iCol, 
+  int iPhrase, 
+  int *pnMatch
+){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_match_offset(
+  sqlite4_context *pCtx, 
+  int iCol, 
+  int iPhrase, 
+  int iMatch, 
+  int *piOff
+){
+}
+
+int sqlite4_mi_total_match_count(
+  sqlite4_context *pCtx, 
+  int iCol, 
+  int iPhrase, 
+  int *pnMatch, 
+  int *pnDoc
+){
+}
+
+int sqlite4_mi_total_size(sqlite4_context *pCtx, int iCol, int *pnToken){
+}
+
+int sqlite4_mi_total_count(sqlite4_context *pCtx, int *pnRow){
 }
 
 /**************************************************************************

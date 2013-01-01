@@ -13,6 +13,11 @@
 
 #include "sqliteInt.h"
 
+static char fts5Tolower(char c){
+  if( c>='A' && c<='Z' ) c = c + ('a' - 'A');
+  return c;
+}
+
 static int fts5SimpleCreate(
   void *pCtx, 
   const char **azArg, 
@@ -27,9 +32,10 @@ static int fts5SimpleDestroy(sqlite4_tokenizer *p){
   return SQLITE4_OK;
 }
 
-static char fts5Tolower(char c){
-  if( c>='A' && c<='Z' ) c = c + ('a' - 'A');
-  return c;
+static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
+}
+
+static void fts5Snippet(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
 }
 
 static int fts5SimpleTokenize(
@@ -75,6 +81,12 @@ int sqlite4InitFts5Func(sqlite4 *db){
   );
   if( rc!=SQLITE4_OK ) return rc;
 
+  rc = sqlite4_create_mi_function(db, "rank", 0, SQLITE4_UTF8, 0, fts5Rank, 0);
+  if( rc!=SQLITE4_OK ) return rc;
+
+  rc = sqlite4_create_mi_function(
+      db, "snippet", -1, SQLITE4_UTF8, 0, fts5Snippet, 0
+  );
   return rc;
 }
 

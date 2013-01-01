@@ -639,6 +639,7 @@ struct FuncDef {
   char *zName;         /* SQL name of the function. */
   FuncDef *pNextName;  /* Next function with a different name */
   FuncDestructor *pDestructor;   /* Reference counted destructor function */
+  u8 bMatchinfo;       /* True for matchinfo function */
 };
 
 /*

@@ -135,5 +135,18 @@ foreach {tn expr res} {
   do_execsql_test 7.$tn {SELECT docid FROM t7 WHERE t7 MATCH $expr} $res
 }
 
+#-------------------------------------------------------------------------
+#
+do_execsql_test 8.0 {
+  CREATE TABLE t8(a PRIMARY KEY, b, c);
+  CREATE INDEX i8 ON t8 USING fts5();
+  INSERT INTO t8 VALUES('one', 'a b c', 'a a a');
+  INSERT INTO t8 VALUES('two', 'd e f', 'b b b');
+}
+
+do_execsql_test 8.1 {
+  SELECT rank(t8) FROM t8 WHERE t8 MATCH 'b a'
+}
+
 finish_test
 
