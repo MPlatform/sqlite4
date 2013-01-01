@@ -595,15 +595,6 @@ void lsmFlagsToString(int flags, char *zFlags);
 /* 
 ** Functions from file "mem.c".
 */
-int lsmPoolNew(lsm_env *pEnv, Mempool **ppPool);
-void lsmPoolDestroy(lsm_env *pEnv, Mempool *pPool);
-void *lsmPoolMalloc(lsm_env *pEnv, Mempool *pPool, int nByte);
-void *lsmPoolMallocZero(lsm_env *pEnv, Mempool *pPool, int nByte);
-int lsmPoolUsed(Mempool *pPool);
-
-void lsmPoolMark(Mempool *pPool, void **, int *);
-void lsmPoolRollback(lsm_env *pEnv, Mempool *pPool, void *, int);
-
 void *lsmMalloc(lsm_env*, size_t);
 void lsmFree(lsm_env*, void *);
 void *lsmRealloc(lsm_env*, void *, size_t);
