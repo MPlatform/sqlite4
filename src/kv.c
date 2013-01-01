@@ -90,7 +90,7 @@ int sqlite4KVStoreOpen(
   sqlite4_env *pEnv = &sqlite4DefaultEnv;  /* OR db->pEnv */
   const char *zStorageName;
   KVFactory *pMkr;
-  int (*xFactory)(sqlite4_env*,sqlite4_kvstore**,const char*,unsigned);
+  sqlite4_kvfactory xFactory;
 
   if( (flags & SQLITE4_KVOPEN_TEMPORARY)!=0 || zUri==0 || zUri[0]==0 ){
     zStorageName = "temp";

@@ -16,7 +16,7 @@
 
 
 static struct KVWrapGlobal {
-  int (*xFactory)(sqlite4_env*, KVStore **, const char *, unsigned int);
+  sqlite4_kvfactory xFactory;
   int nStep;                      /* Total number of successful next/prev */
   int nSeek;                      /* Total number of calls to xSeek */
 } kvwg = {0};

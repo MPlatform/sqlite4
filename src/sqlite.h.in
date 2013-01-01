@@ -125,7 +125,6 @@ int sqlite4_env_config(sqlite4_env*, int op, ...);
 #define SQLITE4_ENVCONFIG_KVSTORE_POP  13   /* name */
 #define SQLITE4_ENVCONFIG_KVSTORE_GET  14   /* name, *factor */
 
-
 /*
 ** CAPIREF: Compile-Time Library Version Numbers
 **
@@ -411,7 +410,6 @@ int sqlite4_exec(
 ** [sqlite4_vtab_on_conflict()] [SQLITE4_ROLLBACK | result codes].
 */
 #define SQLITE4_OK           0   /* Successful result */
-/* beginning-of-error-codes */
 #define SQLITE4_ERROR        1   /* SQL error or missing database */
 #define SQLITE4_INTERNAL     2   /* Internal logic error in SQLite */
 #define SQLITE4_PERM         3   /* Access permission denied */
@@ -420,7 +418,7 @@ int sqlite4_exec(
 #define SQLITE4_LOCKED       6   /* A table in the database is locked */
 #define SQLITE4_NOMEM        7   /* A malloc() failed */
 #define SQLITE4_READONLY     8   /* Attempt to write a readonly database */
-#define SQLITE4_INTERRUPT    9   /* Operation terminated by sqlite4_interrupt()*/
+#define SQLITE4_INTERRUPT    9   /* Stopped terminated by sqlite4_interrupt()*/
 #define SQLITE4_IOERR       10   /* Some kind of disk I/O error occurred */
 #define SQLITE4_CORRUPT     11   /* The database disk image is malformed */
 #define SQLITE4_NOTFOUND    12   /* Unknown opcode in sqlite4_file_control() */
@@ -436,12 +434,11 @@ int sqlite4_exec(
 #define SQLITE4_NOLFS       22   /* Uses OS features not supported on host */
 #define SQLITE4_AUTH        23   /* Authorization denied */
 #define SQLITE4_FORMAT      24   /* Auxiliary database format error */
-#define SQLITE4_RANGE       25   /* 2nd parameter to sqlite4_bind out of range */
+#define SQLITE4_RANGE       25   /* 2nd param to sqlite4_bind out of range */
 #define SQLITE4_NOTADB      26   /* File opened that is not a database file */
 #define SQLITE4_ROW         100  /* sqlite4_step() has another row ready */
 #define SQLITE4_DONE        101  /* sqlite4_step() has finished executing */
 #define SQLITE4_INEXACT     102  /* xSeek method of storage finds nearby ans */
-/* end-of-error-codes */
 
 /*
 ** CAPIREF: Extended Result Codes
@@ -526,7 +523,7 @@ struct sqlite4_mutex {
 };
 
 /*
-** CAPIREF: Initialize The SQLite Library
+** CAPIREF: Initialize An SQLite Environment
 **
 ** ^The sqlite4_initialize(A) routine initializes an sqlite4_env object A.
 ** ^The sqlite4_shutdown(A) routine
@@ -4319,10 +4316,9 @@ typedef struct sqlite4_kv_methods sqlite4_kv_methods;
 /*
 ** CAPI4REF: Key-value storage engine open flags
 **
-** Allowed values to the flags parameter of an sqlite4_kvstore object
-** factory.
+** Allowed values to the flags parameter of an [sqlite4_kvfactory] object.
 **
-** The flags parameter to the sqlite4_kvstore factory (the fourth parameter)
+** The flags parameter to the sqlite4_kvfactory fuction (the fourth parameter)
 ** is an OR-ed combination of these values and the
 ** [SQLITE4_OPEN_READONLY | SQLITE4_OPEN_xxxxx] flags that appear as 
 ** arguments to [sqlite4_open()].
@@ -4330,6 +4326,21 @@ typedef struct sqlite4_kv_methods sqlite4_kv_methods;
 #define SQLITE4_KVOPEN_TEMPORARY       0x00010000  /* A temporary database */
 #define SQLITE4_KVOPEN_NO_TRANSACTIONS 0x00020000  /* No transactions needed */
 
+/*
+** CAPIREF: Key-value storage object factory
+**
+** New key/value storage engines can be added to SQLite4 at run-time.
+** In order to create a new KV storage engine, the application must 
+** supply a "factory" function that creates an instance of the
+** sqlite4_kvstore object.  This is typedef defines the signature
+** of that factory function.
+*/
+typedef int (*sqlite4_kvfactory)(
+  sqlite4_env *pEnv,             /* The environment to use */
+  sqlite4_kvstore **ppKVStore,   /* OUT: New KV store returned here */
+  const char *zFilename,         /* Name of database file to open */
+  unsigned flags                 /* Bit flags */
+);
 
 /*
 ** CAPI4REF: Representation Of Numbers

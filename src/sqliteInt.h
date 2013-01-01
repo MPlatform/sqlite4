@@ -2418,18 +2418,13 @@ typedef struct {
 } InitData;
 
 /*
-** FIXME: missing docs
-*/
-typedef int (*KVFactory_factory_f)(sqlite4_env*,sqlite4_kvstore**,const char*,unsigned);
-
-/*
 ** A pluggable storage engine
 */
 typedef struct KVFactory {
-  struct KVFactory *pNext;          /* Next in list of them all */
-  const char *zName;                /* Name of this factory */
-  KVFactory_factory_f xFactory;
-  int isPerm;                       /* True if a built-in.  Cannot be popped */
+  struct KVFactory *pNext;       /* Next in list of all storage engines */
+  const char *zName;             /* Name of this factory */
+  sqlite4_kvfactory xFactory;    /* Function to make an sqlite4_kvstore obj */
+  int isPerm;                    /* True if a built-in.  Cannot be popped */
 } KVFactory;
 
 /*

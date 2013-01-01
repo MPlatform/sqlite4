@@ -368,13 +368,12 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
     }
 
     /*
-    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_KVSTORE_PUSH, zName, xFactory);
+    ** sqlite4_env_config(pEnv, SQLITE4_ENVCONFIG_KVSTORE_PUSH, zName,xFactory);
     **
     ** Push a new KVStore factory onto the factory stack.  The new factory
     ** takes priority over prior factories.
     */
     case SQLITE4_ENVCONFIG_KVSTORE_PUSH: {
-      typedef int(*PFactory)(sqlite4_env*, KVStore **, const char *, unsigned int);
       const char *zName = va_arg(ap, const char*);
       int nName = sqlite4Strlen30(zName);
       KVFactory *pMkr = sqlite4_malloc(pEnv, sizeof(*pMkr)+nName+1);
@@ -384,7 +383,7 @@ int sqlite4_env_config(sqlite4_env *pEnv, int op, ...){
       memcpy(z, zName, nName+1);
       memset(pMkr, 0, sizeof(*pMkr));
       pMkr->zName = z;
-      pMkr->xFactory = va_arg(ap, PFactory);
+      pMkr->xFactory = va_arg(ap, sqlite4_kvfactory);
       sqlite4_mutex_enter(pEnv->pFactoryMutex);
       pMkr->pNext = pEnv->pFactory;
       pEnv->pFactory = pMkr;
