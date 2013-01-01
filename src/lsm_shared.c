@@ -803,7 +803,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
     ** (starting with loading the in-memory tree header).  */
     if( rc==LSM_OK ){
       u32 iShmMax = pDb->treehdr.iUsedShmid;
-      u32 iShmMin = pDb->treehdr.iNextShmid+1-(1<<10);
+      u32 iShmMin = pDb->treehdr.iNextShmid+1-LSM_MAX_SHMCHUNKS;
       rc = lsmReadlock(
           pDb, lsmCheckpointId(pDb->aSnapshot, 0), iShmMin, iShmMax
       );

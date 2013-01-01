@@ -461,8 +461,14 @@ struct ShmChunk {
   u32 iNext;
 };
 
+/*
+** Maximum number of shared-memory chunks allowed in the *-shm file. Since
+** each shared-memory chunk is 32KB in size, this is a theoretical limit only.
+*/
+#define LSM_MAX_SHMCHUNKS  (1<<30)
+
 /* Return true if shm-sequence "a" is larger than or equal to "b" */
-#define shm_sequence_ge(a, b) (((u32)a-(u32)b) < (1<<30))
+#define shm_sequence_ge(a, b) (((u32)a-(u32)b) < LSM_MAX_SHMCHUNKS)
 
 #define LSM_APPLIST_SZ 4
 
