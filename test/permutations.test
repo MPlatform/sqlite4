@@ -214,7 +214,7 @@ test_suite "src4" -prefix "" -description {
   tkt-5e10420e8d.test tkt-752e1646fc.test tkt-80ba201079.test
   tkt-80e031a00f.test tkt-91e2e8ba6f.test tkt-9d68c883.test
   tkt-b1d3a2e531.test tkt-b351d95f9.test  tkt-b72787b1.test
-  tkt-bd484a090c.test tkt-cbd054fa6b.test 
+  tkt-bd484a090c.test tkt-cbd054fa6b.test tkt-d11f09d36e.test
   tkt-d635236375.test tkt-f973c7ac31.test tkt-fa7bf5ec.test
   tkt1443.test tkt1444.test tkt1449.test tkt1473.test tkt1501.test
   tkt1514.test tkt1537.test tkt1873.test
@@ -228,7 +228,6 @@ test_suite "src4" -prefix "" -description {
   tkt3773.test tkt3841.test tkt3871.test tkt3879.test tkt3911.test
   tkt3918.test tkt3922.test tkt3929.test tkt3935.test tkt3997.test
 }
-# tkt-d11f09d36e.test
 
 test_suite "veryquick" -prefix "" -description {
   "Very" quick test suite. Runs in less than 5 minutes on a workstation. 

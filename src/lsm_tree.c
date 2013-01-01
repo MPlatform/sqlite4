@@ -2373,12 +2373,10 @@ int lsmTreeLoadHeaderOk(lsm_db *pDb, int iRead){
 int lsmTreeEndTransaction(lsm_db *pDb, int bCommit){
   ShmHeader *pShm = pDb->pShmhdr;
 
-  if( bCommit ){
-    treeHeaderChecksum(&pDb->treehdr, pDb->treehdr.aCksum);
-    memcpy(&pShm->hdr2, &pDb->treehdr, sizeof(TreeHeader));
-    lsmShmBarrier(pDb);
-    memcpy(&pShm->hdr1, &pDb->treehdr, sizeof(TreeHeader));
-  }
+  treeHeaderChecksum(&pDb->treehdr, pDb->treehdr.aCksum);
+  memcpy(&pShm->hdr2, &pDb->treehdr, sizeof(TreeHeader));
+  lsmShmBarrier(pDb);
+  memcpy(&pShm->hdr1, &pDb->treehdr, sizeof(TreeHeader));
   pShm->bWriter = 0;
   intArrayFree(pDb->pEnv, &pDb->rollback);
 
