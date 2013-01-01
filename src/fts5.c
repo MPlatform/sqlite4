@@ -1930,6 +1930,7 @@ static int fts5TokenAdvanceToMatch(
 }
 
 static int fts5StringFindInstances(Fts5Cursor *pCsr, int iCol, Fts5Str *pStr){
+  sqlite4 *db = pCsr->db;
   int i;
   int rc = SQLITE4_OK;
   int bEof = 0;
@@ -1940,7 +1941,7 @@ static int fts5StringFindInstances(Fts5Cursor *pCsr, int iCol, Fts5Str *pStr){
   pStr->nList = 0;
   memset(&out, 0, sizeof(InstanceList));
 
-  aIn = (InstanceList *)sqlite4DbMallocZero(pCsr->db, nByte);
+  aIn = (InstanceList *)sqlite4DbMallocZero(db, nByte);
   if( !aIn ) rc = SQLITE4_NOMEM;
   for(i=0; rc==SQLITE4_OK && i<pStr->nToken; i++){
     const u8 *aData;
@@ -1959,7 +1960,7 @@ static int fts5StringFindInstances(Fts5Cursor *pCsr, int iCol, Fts5Str *pStr){
       out.aList = pStr->aList;
       out.nList = pStr->nListAlloc;
     }else{
-      pStr->aList = out.aList = sqlite4DbMallocZero(pCsr->db, nReq*2);
+      pStr->aList = out.aList = sqlite4DbReallocOrFree(db, pStr->aList, nReq*2);
       pStr->nListAlloc = out.nList = nReq*2;
       if( out.aList==0 ) rc = SQLITE4_NOMEM;
     }
@@ -1978,7 +1979,7 @@ static int fts5StringFindInstances(Fts5Cursor *pCsr, int iCol, Fts5Str *pStr){
   }
 
   pStr->nList = out.iList;
-  sqlite4DbFree(pCsr->db, aIn);
+  sqlite4DbFree(db, aIn);
 
   return rc;
 }
