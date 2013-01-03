@@ -14,14 +14,52 @@
 #include "sqliteInt.h"
 #include "vdbeInt.h"
 
+/* 
+** Stream numbers must be lower than this.
+*/
+#define SQLITE4_FTS5_NSTREAM 60
+
 /*
-** The global count record is a set of N varints, where N is one greater
-** than the number of columns in the indexed table. The first varint
-** contains the number of records in the table. Each subsequent varint
-** contains the total number of tokens stored in each column.
+** Records stored within the index:
 **
-** The key used for the global record in the KV store is the root page 
-** number of the FTS index followed by a single 0x00 byte.
+** Row size record:
+**   There is one "row size" record in the index for each row in the
+**   indexed table. The "row size" record contains the number of tokens
+**   in the associated row for each combination of a stream and column
+**   number (i.e. contains the data required to find the number of
+**   tokens associated with stream S present in column C of the row for
+**   all S and C).
+**
+**   The key for the row size record is a single 0x00 byte followed by
+**   a copy of the PK blob for the table row. 
+**
+**   The value is a series of varints. Each column of the table is
+**   represented by one or more varints packed into the array.
+**
+**   If a column contains only stream 0 tokens, then it is represented
+**   by a single varint - (nToken << 1), where nToken is the number of
+**   stream 0 tokens stored in the column.
+**
+**   Or, if the column contains tokens from multiple streams, the first
+**   varint contains a bitmask indicating which of the streams are present
+**   (stored as ((bitmask << 1) | 0x01)). Following the bitmask is a
+**   varint containing the number of tokens for each stream present, in
+**   ascending order of stream number.
+**
+** Global size record:
+**   There is a single "global size" record stored in the database. The
+**   database key for this record is a single byte - 0x00.
+**
+**   The data for this record is a series of varint values. The first 
+**   varint is the total number of rows in the table. The subsequent
+**   varints make up a "row size" record containing the total number of
+**   tokens for each S/C combination in all rows of the table.
+**
+** FTS index records:
+**
+**   The FTS index records implement the following mapping:
+**
+**       (token, document-pk) -> (list of instances)
 */
 
 /*
