@@ -205,6 +205,10 @@ struct Fts5Cursor {
   /* Array of nPhrase*nCol integers. See sqlite4_mi_row_count() for details. */
   int *anRow;
   i64 *aGlobal;
+
+  /* Size of each column of current row (in tokens). */
+  int bSzValid;
+  int *aSz;
 };
 
 /*
@@ -1265,6 +1269,48 @@ static int fts5CsrLoadGlobal(Fts5Cursor *pCsr){
   return rc;
 }
 
+static int fts5CsrLoadSz(Fts5Cursor *pCsr){
+  sqlite4 *db = pCsr->db;
+  Fts5Info *pInfo = pCsr->pInfo;
+  int nVal = pInfo->nCol;
+  int rc;
+  u8 *aKey;
+  int nKey = 0;
+  int nPk = pCsr->pExpr->pRoot->nPk;
+  KVCursor *pKVCsr = 0;           /* Cursor used to read global record */
+
+  aKey = (u8 *)sqlite4DbMallocZero(db, 10 + nPk);
+  if( !aKey ) return SQLITE4_NOMEM;
+
+  nKey = putVarint32(aKey, pInfo->iRoot);
+  aKey[nKey++] = 0x00;
+  memcpy(&aKey[nKey], pCsr->pExpr->pRoot->aPk, nPk);
+  nKey += nPk;
+
+  rc = sqlite4KVStoreOpenCursor(db->aDb[pInfo->iDb].pKV, &pKVCsr);
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4KVCursorSeek(pKVCsr, aKey, nKey, 0);
+    if( rc==SQLITE4_NOTFOUND ){
+      rc = SQLITE4_CORRUPT_BKPT;
+    }else if( rc==SQLITE4_OK ){
+      const u8 *aData = 0;
+      int nData = 0;
+      rc = sqlite4KVCursorData(pKVCsr, 0, -1, &aData, &nData);
+      if( rc==SQLITE4_OK ){
+        int i;
+        int iOff = 0;
+        for(i=0; i<nVal; i++){
+          iOff += getVarint32(&aData[iOff], pCsr->aSz[i]);
+        }
+      }
+      pCsr->bSzValid = 1;
+    }
+    sqlite4KVCursorClose(pKVCsr);
+  }
+
+  return rc;
+}
+
 
 /*
 ** Update an fts index.
@@ -2051,8 +2097,7 @@ static int fts5TokenAdvanceToMatch(
   return (p->iCol==pFirst->iCol && p->iOff==iReq);
 }
 
-static int fts5StringFindInstances(Fts5Cursor *pCsr, int iCol, Fts5Str *pStr){
-  sqlite4 *db = pCsr->db;
+static int fts5StringFindInstances(sqlite4 *db, int iCol, Fts5Str *pStr){
   int i;
   int rc = SQLITE4_OK;
   int bEof = 0;
@@ -2114,7 +2159,6 @@ static int fts5IsNear(InstanceList *p1, InstanceList *p2, int nNear){
 }
 
 static int fts5StringNearTrim(
-  Fts5Cursor *pCsr,               /* Cursor object that owns both strings */
   Fts5Str *pTrim,                 /* Trim this instance list */
   Fts5Str *pNext,                 /* According to this one */
   int nNear
@@ -2173,7 +2217,7 @@ static int fts5StringNearTrim(
 ** retrying this function.
 */
 static int fts5PhraseIsMatch(
-  Fts5Cursor *pCsr,               /* Cursor that owns this string */
+  sqlite4 *db,                    /* Database handle */
   Fts5Phrase *pPhrase,            /* Phrase to test */
   int *pbMatch,                   /* OUT: True for a match, false otherwise */
   Fts5Token **ppAdvance           /* OUT: Token to advance before retrying */
@@ -2213,45 +2257,45 @@ static int fts5PhraseIsMatch(
   ** position list for each Fts5Str object.  */
   for(i=0; rc==SQLITE4_OK && i<pPhrase->nStr; i++){
     Fts5Str *pStr = &pPhrase->aStr[i];
-    rc = fts5StringFindInstances(pCsr, pPhrase->iCol, pStr);
+    rc = fts5StringFindInstances(db, pPhrase->iCol, pStr);
   }
 
   /* Trim the instance lists according to any NEAR constraints.  */
   for(i=1; rc==SQLITE4_OK && i<pPhrase->nStr; i++){
     int n = pPhrase->aiNear[i-1];
-    rc = fts5StringNearTrim(pCsr, &pPhrase->aStr[i], &pPhrase->aStr[i-1], n);
+    rc = fts5StringNearTrim(&pPhrase->aStr[i], &pPhrase->aStr[i-1], n);
   }
   for(i=pPhrase->nStr-1; rc==SQLITE4_OK && i>0; i--){
     int n = pPhrase->aiNear[i-1];
-    rc = fts5StringNearTrim(pCsr, &pPhrase->aStr[i-1], &pPhrase->aStr[i], n);
+    rc = fts5StringNearTrim(&pPhrase->aStr[i-1], &pPhrase->aStr[i], n);
   }
 
   *pbMatch = (pPhrase->aStr[0].nList>0);
   return rc;
 }
 
-static int fts5PhraseAdvanceToMatch(Fts5Cursor *pCsr, Fts5Phrase *pPhrase){
+static int fts5PhraseAdvanceToMatch(sqlite4 *db, Fts5Phrase *pPhrase){
   int rc;
   do {
     int bMatch;
     Fts5Token *pAdvance = 0;
-    rc = fts5PhraseIsMatch(pCsr, pPhrase, &bMatch, &pAdvance);
+    rc = fts5PhraseIsMatch(db, pPhrase, &bMatch, &pAdvance);
     if( rc!=SQLITE4_OK || bMatch ) break;
-    rc = fts5TokenAdvance(pCsr->db, pAdvance);
+    rc = fts5TokenAdvance(db, pAdvance);
   }while( rc==SQLITE4_OK );
   return rc;
 }
 
-static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
+static int fts5ExprAdvance(sqlite4 *db, Fts5ExprNode *p, int bFirst){
   int rc = SQLITE4_OK;
 
   switch( p->eType ){
     case TOKEN_PRIMITIVE: {
       Fts5Phrase *pPhrase = p->pPhrase;
       if( bFirst==0 ){
-        rc = fts5TokenAdvance(pCsr->db, &pPhrase->aStr[0].aToken[0]);
+        rc = fts5TokenAdvance(db, &pPhrase->aStr[0].aToken[0]);
       }
-      if( rc==SQLITE4_OK ) rc = fts5PhraseAdvanceToMatch(pCsr, pPhrase);
+      if( rc==SQLITE4_OK ) rc = fts5PhraseAdvanceToMatch(db, pPhrase);
       if( rc==SQLITE4_OK ){
         rc = fts5TokenPk(&pPhrase->aStr[0].aToken[0], &p->aPk, &p->nPk);
       }else{
@@ -2265,16 +2309,16 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
     case TOKEN_AND:
       p->aPk = 0;
       p->nPk = 0;
-      rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
-      if( rc==SQLITE4_OK ) rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+      rc = fts5ExprAdvance(db, p->pLeft, bFirst);
+      if( rc==SQLITE4_OK ) rc = fts5ExprAdvance(db, p->pRight, bFirst);
       while( rc==SQLITE4_OK && p->pLeft->aPk && p->pRight->aPk ){
         int res = fts5KeyCompare(
             p->pLeft->aPk, p->pLeft->nPk, p->pRight->aPk, p->pRight->nPk
         );
         if( res<0 ){
-          rc = fts5ExprAdvance(pCsr, p->pLeft, 0);
+          rc = fts5ExprAdvance(db, p->pLeft, 0);
         }else if( res>0 ){
-          rc = fts5ExprAdvance(pCsr, p->pRight, 0);
+          rc = fts5ExprAdvance(db, p->pRight, 0);
         }else{
           p->aPk = p->pLeft->aPk;
           p->nPk = p->pLeft->nPk;
@@ -2291,9 +2335,9 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
         );
       }
         
-      if( res<=0 ) rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
+      if( res<=0 ) rc = fts5ExprAdvance(db, p->pLeft, bFirst);
       if( rc==SQLITE4_OK && res>=0 ){
-        rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+        rc = fts5ExprAdvance(db, p->pRight, bFirst);
       }
 
       res = fts5KeyCompare(
@@ -2316,9 +2360,9 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
       p->aPk = 0;
       p->nPk = 0;
 
-      rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
+      rc = fts5ExprAdvance(db, p->pLeft, bFirst);
       if( bFirst && rc==SQLITE4_OK ){
-        rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+        rc = fts5ExprAdvance(db, p->pRight, bFirst);
       }
 
       while( rc==SQLITE4_OK && p->pLeft->aPk && p->pRight->aPk ){
@@ -2328,9 +2372,9 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
         if( res<0 ){
           break;
         }else if( res>0 ){
-          rc = fts5ExprAdvance(pCsr, p->pRight, 0);
+          rc = fts5ExprAdvance(db, p->pRight, 0);
         }else{
-          rc = fts5ExprAdvance(pCsr, p->pLeft, 0);
+          rc = fts5ExprAdvance(db, p->pLeft, 0);
         }
       }
 
@@ -2344,7 +2388,8 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
 }
 
 int sqlite4Fts5Next(Fts5Cursor *pCsr){
-  return fts5ExprAdvance(pCsr, pCsr->pExpr->pRoot, 0);
+  pCsr->bSzValid = 0;
+  return fts5ExprAdvance(pCsr->db, pCsr->pExpr->pRoot, 0);
 }
 
 int sqlite4Fts5Open(
@@ -2365,7 +2410,7 @@ int sqlite4Fts5Open(
     rc = SQLITE4_NOMEM;
   }else{
     pCsr->zExpr = (char *)&pCsr[1];
-    memcpy(pCsr->zExpr, nMatch, zMatch);
+    memcpy(pCsr->zExpr, zMatch, nMatch);
     pCsr->pInfo = pInfo;
     pCsr->db = db;
     rc = fts5ParseExpression(db, pInfo->pTokenizer, pInfo->p, 
@@ -2382,7 +2427,7 @@ int sqlite4Fts5Open(
     sqlite4Fts5Close(db, pCsr);
     pCsr = 0;
   }else{
-    rc = fts5ExprAdvance(pCsr, pCsr->pExpr->pRoot, 1);
+    rc = fts5ExprAdvance(db, pCsr->pExpr->pRoot, 1);
   }
   *ppCsr = pCsr;
   return rc;
@@ -2437,9 +2482,35 @@ int sqlite4_mi_column_count(sqlite4_context *pCtx, int *pnCol){
 
 int sqlite4_mi_column_size(sqlite4_context *pCtx, int iCol, int *pnToken){
   int rc = SQLITE4_OK;
-  if( pCtx->pFts ){
-  }else{
+  Fts5Cursor *pCsr = pCtx->pFts;
+
+  if( pCsr==0 ){
     rc = SQLITE4_MISUSE;
+  }else if( iCol>=pCsr->pInfo->nCol ){
+    rc = SQLITE4_ERROR;
+  }else{
+    if( pCsr->aSz==0 ){
+      pCsr->aSz = (int *)sqlite4DbMallocZero(
+          pCsr->db, sizeof(int)*pCsr->pInfo->nCol
+      );
+      if( pCsr->aSz==0 ) rc = SQLITE4_NOMEM;
+    }
+    if( rc==SQLITE4_OK && pCsr->bSzValid==0 ){
+      rc = fts5CsrLoadSz(pCsr);
+    }
+    if( rc==SQLITE4_OK ){
+      assert( pCsr->bSzValid );
+      if( iCol>=0 ){
+        *pnToken = pCsr->aSz[iCol];
+      }else{
+        int i;
+        int nToken = 0;
+        for(i=0; i<pCsr->pInfo->nCol; i++){
+          nToken += pCsr->aSz[i];
+        }
+        *pnToken = nToken;
+      }
+    }
   }
   return rc;
 }
@@ -2467,14 +2538,44 @@ int sqlite4_mi_phrase_count(sqlite4_context *pCtx, int *pnPhrase){
   return rc;
 }
 
+static Fts5Str *fts5FindStr(Fts5ExprNode *p, int *piStr){
+  Fts5Str *pRet = 0;
+  if( p->eType==TOKEN_PRIMITIVE ){
+    int iStr = *piStr;
+    if( iStr<p->pPhrase->nStr ){
+      pRet = &p->pPhrase->aStr[iStr];
+    }else{
+      *piStr = iStr - p->pPhrase->nStr;
+    }
+  }else{
+    pRet = fts5FindStr(p->pLeft, piStr);
+    if( pRet==0 ) pRet = fts5FindStr(p->pRight, piStr);
+  }
+  return pRet;
+}
+
 int sqlite4_mi_match_count(
   sqlite4_context *pCtx, 
-  int iCol, 
-  int iPhrase, 
+  int iCol,
+  int iPhrase,
   int *pnMatch
 ){
   int rc = SQLITE4_OK;
-  if( pCtx->pFts ){
+  Fts5Cursor *pCsr = pCtx->pFts;
+  if( pCsr ){
+    int nMatch = 0;
+    Fts5Str *pStr;
+    int iCopy = iCol;
+    InstanceList sList;
+
+    pStr = fts5FindStr(pCsr->pExpr->pRoot, &iCopy);
+    assert( pStr );
+
+    fts5InstanceListInit(pStr->aList, pStr->nList, &sList);
+    while( 0==fts5InstanceListNext(&sList) ){
+      if( iCol<0 || sList.iCol==iCol ) nMatch++;
+    }
+    *pnMatch = nMatch;
   }else{
     rc = SQLITE4_MISUSE;
   }
@@ -2488,6 +2589,7 @@ int sqlite4_mi_match_offset(
   int iMatch, 
   int *piOff
 ){
+  return SQLITE4_OK;
 }
 
 int sqlite4_mi_total_match_count(
@@ -2498,6 +2600,7 @@ int sqlite4_mi_total_match_count(
   int *pnDoc,
   int *pnRelevant
 ){
+  return SQLITE4_OK;
 }
 
 int sqlite4_mi_total_size(sqlite4_context *pCtx, int iCol, int *pnToken){
@@ -2529,18 +2632,82 @@ int sqlite4_mi_total_size(sqlite4_context *pCtx, int iCol, int *pnToken){
   return rc;
 }
 
+static void fts5StrLoadRowcounts(Fts5Str *pStr, int *anRow){
+  InstanceList sList;
+
+  fts5InstanceListInit(pStr->aList, pStr->nList, &sList);
+  while( 0==fts5InstanceListNext(&sList) ){
+    anRow[sList.iCol]++;
+  }
+}
+
+
+static int fts5ExprLoadRowcounts(
+  sqlite4 *db, 
+  Fts5Info *pInfo,
+  Fts5ExprNode *pNode, 
+  int **panRow
+){
+  int rc = SQLITE4_OK;
+
+  if( pNode ){
+    if( pNode->eType==TOKEN_PRIMITIVE ){
+      int *anRow = *panRow;
+      Fts5Phrase *pPhrase = pNode->pPhrase;
+
+      rc = fts5ExprAdvance(db, pNode, 1);
+      while( rc==SQLITE4_OK ){
+        int i;
+        for(i=0; i<pPhrase->nStr; i++){
+          fts5StrLoadRowcounts(&pPhrase->aStr[i], &anRow[i*pInfo->nCol]);
+        }
+        rc = fts5ExprAdvance(db, pNode, 0);
+      }
+
+      *panRow = &anRow[pInfo->nCol * pPhrase->nStr];
+    }
+
+    if( rc==SQLITE4_OK ){
+      rc = fts5ExprLoadRowcounts(db, pInfo, pNode->pLeft, panRow);
+    }
+    if( rc==SQLITE4_OK ){
+      rc = fts5ExprLoadRowcounts(db, pInfo, pNode->pLeft, panRow);
+    }
+  }
+
+  return rc;
+}
+
 static int fts5CsrLoadRowcounts(Fts5Cursor *pCsr){
+  int rc = SQLITE4_OK;
+
   if( pCsr->anRow==0 ){
+    sqlite4 *db = pCsr->db;
+    Fts5Expr *pCopy;
     Fts5Expr *pExpr = pCsr->pExpr;
     Fts5Info *pInfo = pCsr->pInfo;
     int *anRow;
 
-    pCsr->anRow = anRow = (int *)sqlite4DbMallocZero(pCsr->db, 
+    pCsr->anRow = anRow = (int *)sqlite4DbMallocZero(db, 
         pExpr->nPhrase * pInfo->nCol * sizeof(int)
     );
     if( !anRow ) return SQLITE4_NOMEM;
 
+    rc = fts5ParseExpression(db, pInfo->pTokenizer, pInfo->p, 
+        pInfo->iRoot, pInfo->azCol, pInfo->nCol, pCsr->zExpr, &pCopy, 0
+    );
+    if( rc==SQLITE4_OK ){
+      rc = fts5OpenExprCursors(db, pInfo, pExpr->pRoot);
+    }
+
+    if( rc==SQLITE4_OK ){
+      rc = fts5ExprLoadRowcounts(db, pInfo, pCopy->pRoot, &anRow);
+    }
+
+    fts5ExpressionFree(db, pCopy);
   }
+
+  return rc;
 }
 
 int sqlite4_mi_row_count(

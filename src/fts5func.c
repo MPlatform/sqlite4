@@ -23,6 +23,7 @@
 */
 
 #include "sqliteInt.h"
+#include <math.h>                 /* temporary: For log() */
 
 static char fts5Tolower(char c){
   if( c>='A' && c<='Z' ) c = c + ('a' - 'A');
