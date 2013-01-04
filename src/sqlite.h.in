@@ -4423,67 +4423,71 @@ int sqlite4_create_mi_function(
 ** error code otherwise.
 **
 ** sqlite4_mi_column_count():
-**   Set *pnCol to the number of columns in the queried table.
+**   Set *pn to the number of columns in the queried table.
 **
-** sqlite4_mi_column_size():
-**   Set *pnToken to the number of tokens in the value stored in column iCol 
-**   of the current row.
+** sqlite4_mi_phrase_count():
+**   Set *pn to the number of phrases in the query.
+**
+** sqlite4_mi_stream_count():
+**   Set *pn to the number of streams in the FTS index.
+**
+** sqlite4_mi_size():
+**   Set *pn to the number of tokens belonging to stream iS in the value 
+**   stored in column iC of the current row. 
+**
+**   Either or both of iS and iC may be negative. If iC is negative, then the
+**   output value is the total number of tokens for the specified stream (or
+**   streams) across all table columns. Similarly, if iS is negative, the 
+**   output value is the total number of tokens in the specified column or 
+**   columns, regardless of stream.
+**
+** sqlite4_mi_total_size():
+**   Similar to sqlite4_mi_size(), except the output parameter is set to
+**   the total number of tokens belonging to the specified column(s) 
+**   and stream(s) in all rows of the table, not just the current row.
+**
+** sqlite4_mi_total_rows():
+**   Set *pn to the total number of rows in the indexed table.
+**
+** sqlite4_mi_row_count():
+**   Set the output parameter to the total number of rows in the table that
+**   contain at least one instance of the phrase identified by parameter
+**   iP in the column(s) and stream(s) identified by parameters iC and iS.
+**
+** sqlite4_mi_match_count():
+**   Set the output parameter to the total number of occurences of phrase
+**   iP in the current row that belong to the column(s) and stream(s) 
+**   identified by parameters iC and iS.
+**
+**   Parameter iP may also be negative. In this case, the output value is
+**   set to the total number of occurrences of all query phrases in the
+**   current row, subject to the constraints imposed by iC and iS.
+**
+** sqlite4_mi_match_detail():
+**   This function may be used to iterate through all matches in the
+**   current row in order of occurrence.
 **
 ** sqlite4_mi_column_value():
 **   Set *ppVal to point to an sqlite4_value object containing the value
 **   read from column iCol of the current row. This object is valid until
 **   the function callback returns.
-**
-** sqlite4_mi_phrase_count():
-**   Set *pnPhrase to the number of phrases in the query.
-**
-** sqlite4_mi_match_count():
-**   Set *pn to the number of occurences of phrase iPhrase in column iCol of
-**   the current row.
-**
-** sqlite4_mi_total_match_count():
-**   Set *pnMatch to the total number of occurrences of phrase iPhrase
-**   in column iCol of all rows in the indexed table. Set *pnDoc to the
-**   number of rows that contain at least one match for phrase iPhrase in
-**   column iCol.
-**
-** sqlite4_mi_match_offset():
-**   Set *piOff to the token offset of the iMatch'th instance of phrase
-**   iPhrase in column iCol of the current row. If any parameter is out
-**   of range (i.e. too large) it is not an error. In this case *piOff is 
-**   set to -1 before returning.
-**   
-** sqlite4_mi_total_size():
-**   Set *pnToken to the total number of tokens in column iCol of all rows
-**   in the indexed table.
-**
-** sqlite4_mi_row_count():
-**   If parameter iPhrase is negative, this function sets the output 
-**   parameter to the total number of documents in the collection (rows 
-**   in the indexed table).
-**
-**   Otherwise, if iPhrase is not negative, then the output is set to the
-**   total number of rows that contain at least one instance of phrase iPhrase
-**   in column iCol, or in any column if iCol is negative.
-**
-**   If parameter iPhrase is equal to or greater than the number of phrases
-**   in the current query, or if iCol is equal to or greater than the number
-**   of columns in the indexed table, SQLITE4_MISUSE is returned. The value
-**   of the output parameter is undefined in this case.
 */
+int sqlite4_mi_column_count(sqlite4_context *, int *pn);
+int sqlite4_mi_phrase_count(sqlite4_context *, int *pn);
+int sqlite4_mi_stream_count(sqlite4_context *, int *pn);
 
-int sqlite4_mi_column_count(sqlite4_context *, int *pnCol);
-int sqlite4_mi_phrase_count(sqlite4_context *, int *pnPhrase);
+int sqlite4_mi_total_size(sqlite4_context *, int iC, int iS, int *pn);
+int sqlite4_mi_total_rows(sqlite4_context *, int *pn);
 
-int sqlite4_mi_column_size(sqlite4_context *, int iCol, int *pnToken);
-int sqlite4_mi_match_count(sqlite4_context *, int iCol, int iPhrase, int *pn);
-int sqlite4_mi_total_size(sqlite4_context *, int iCol, int *pnToken);
-int sqlite4_mi_row_count(sqlite4_context *, int iCol, int iPhrase, int *pnRow);
+int sqlite4_mi_row_count(sqlite4_context *, int iC, int iS, int iP, int *pn);
 
-int sqlite4_mi_column_value(sqlite4_context *, int iCol, sqlite4_value **ppVal);
-int sqlite4_mi_match_detail(sqlite4_context *, 
-    int iCol, int iPhrase, int iMatch, int *piOff, int *piWeight
+int sqlite4_mi_size(sqlite4_context *, int iC, int iS, int *pn);
+int sqlite4_mi_match_count(sqlite4_context *, int iC, int iS, int iP, int *pn);
+int sqlite4_mi_match_detail(
+    sqlite4_context *, int iMatch, int *piOff, int *piC, int *piS, int *piP
 );
+int sqlite4_mi_column_value(sqlite4_context *, int iCol, sqlite4_value **ppVal);
+
 
 
 /*

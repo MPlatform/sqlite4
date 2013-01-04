@@ -105,9 +105,9 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
       p->aIdf = (double *)&p[1];
 
       /* Determine the IDF weight for each phrase in the query. */
-      rc = sqlite4_mi_row_count(pCtx, -1, -1, &N);
+      rc = sqlite4_mi_total_rows(pCtx, &N);
       for(i=0; rc==SQLITE4_OK && i<nPhrase; i++){
-        rc = sqlite4_mi_row_count(pCtx, -1, i, &ni);
+        rc = sqlite4_mi_row_count(pCtx, -1, -1, i, &ni);
         if( rc==SQLITE4_OK ){
           p->aIdf[i] = log((0.5 + N - ni) / (0.5 + ni));
         }
@@ -116,7 +116,7 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
       /* Determine the average document length */
       if( rc==SQLITE4_OK ){
         int nTotal;
-        rc = sqlite4_mi_total_size(pCtx, -1, &nTotal);
+        rc = sqlite4_mi_total_size(pCtx, -1, -1, &nTotal);
         if( rc==SQLITE4_OK ){
           p->avgdl = (double)nTotal / (double)N;
         }
@@ -133,8 +133,8 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
     /* Set variable tf to the total number of occurrences of phrase iPhrase
     ** in this row (within any column). And dl to the number of tokens in
     ** the current row (again, in any column).  */
-    rc = sqlite4_mi_match_count(pCtx, -1, i, &tf); 
-    if( rc==SQLITE4_OK ) rc = sqlite4_mi_column_size(pCtx, -1, &dl); 
+    rc = sqlite4_mi_match_count(pCtx, -1, -1, i, &tf); 
+    if( rc==SQLITE4_OK ) rc = sqlite4_mi_size(pCtx, -1, -1, &dl); 
 
     /* Calculate the normalized document length */
     L = (double)dl / p->avgdl;
