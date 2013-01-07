@@ -152,12 +152,212 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
   }
 }
 
+typedef struct SnippetCtx SnippetCtx;
+struct SnippetCtx {
+  sqlite4 *db;                    /* Database handle */
+  int nToken;                     /* Number of tokens in snippet */
+  int iOff;                       /* First token in snippet */
+  u64 mask;                       /* Snippet mask. Highlight these terms */
+
+  char *zOut;                     /* Pointer to snippet text */
+  int nOut;                       /* Size of zOut in bytes */
+  int nAlloc;                     /* Bytes of space allocated at zOut */
+
+  int iFrom;
+  const char *zText;              /* Document to extract snippet from */
+
+  int rc;                         /* Set to NOMEM if OOM is encountered */
+};
+
+static void fts5SnippetAppend(SnippetCtx *p, const char *z, int n){
+  if( p->rc==SQLITE4_OK ){
+    if( (p->nOut + n) > p->nAlloc ){
+      int nNew = (p->nOut+n) * 2;
+
+      p->zOut = sqlite4DbReallocOrFree(p->db, p->zOut, nNew);
+      if( p->zOut==0 ){
+        p->rc = SQLITE4_NOMEM;
+        return;
+      }
+      p->nAlloc = sqlite4DbMallocSize(p->db, p->zOut);
+    }
+
+    memcpy(&p->zOut[p->nOut], z, n);
+    p->nOut += n;
+  }
+}
+
+static int fts5SnippetCb(
+  void *pCtx, 
+  int iStream, 
+  int iOff, 
+  const char *z, int n,
+  int iSrc, int nSrc
+){
+  SnippetCtx *p = (SnippetCtx *)pCtx;
+
+  if( iOff<p->iOff ){
+    return 0;
+  }else if( iOff>(p->iOff + p->nToken) ){
+    fts5SnippetAppend(p, &p->zText[p->iFrom], iSrc - p->iFrom);
+    fts5SnippetAppend(p, "...", 3);
+    p->iFrom = -1;
+    return 1;
+  }else{
+    int bHighlight;               /* True to highlight term */
+
+    bHighlight = (p->mask & (1 << (p->iOff+p->nToken - iOff - 1))) ? 1 : 0;
+
+    if( p->iFrom==0 && p->iOff!=0 ){
+      p->iFrom = iSrc;
+      fts5SnippetAppend(p, "...", 3);
+    }
+
+    if( bHighlight ){
+      fts5SnippetAppend(p, &p->zText[p->iFrom], iSrc - p->iFrom);
+      fts5SnippetAppend(p, "[", 1);
+      fts5SnippetAppend(p, &p->zText[iSrc], nSrc);
+      fts5SnippetAppend(p, "]", 1);
+      p->iFrom = iSrc+nSrc;
+    }
+  }
+
+  return 0;
+}
+
+static int fts5SnippetText(
+  sqlite4_context *pCtx, 
+  int iCol,
+  int iOff,
+  int nToken,
+  u64 mask
+){
+  int rc;
+  sqlite4_value *pVal = 0;
+
+  rc = sqlite4_mi_column_value(pCtx, iCol, &pVal);
+  if( rc==SQLITE4_OK ){
+    SnippetCtx sCtx;
+    int nText;
+
+    nText = sqlite4_value_bytes(pVal);
+    memset(&sCtx, 0, sizeof(sCtx));
+    sCtx.zText = (const char *)sqlite4_value_text(pVal);
+    sCtx.db = sqlite4_context_db_handle(pCtx);
+    sCtx.nToken = nToken;
+    sCtx.iOff = iOff;
+    sCtx.mask = mask;
+
+    sqlite4_mi_tokenize(pCtx, sCtx.zText, nText, &sCtx, fts5SnippetCb);
+    if( sCtx.rc==SQLITE4_OK && sCtx.iFrom>0 ){
+      fts5SnippetAppend(&sCtx, &sCtx.zText[sCtx.iFrom], nText - sCtx.iFrom);
+    }
+    rc = sCtx.rc;
+
+    sqlite4_result_text(pCtx, sCtx.zOut, sCtx.nOut, SQLITE4_TRANSIENT);
+    sqlite4DbFree(sCtx.db, sCtx.zOut);
+  }
+
+  return rc;
+}
+
+static int fts5BestSnippet(
+  sqlite4_context *pCtx, 
+  u64 mask,                       /* Mask of high-priority phrases */
+  int nToken,
+  int *piOff,
+  int *piCol,
+  u64 *pMask
+){
+  sqlite4 *db = sqlite4_context_db_handle(pCtx);
+  int nPhrase;
+  int rc = SQLITE4_OK;
+  int i;
+  int iPrev = 0;
+  int iPrevCol = 0;
+  u64 *aMask;
+  u64 lmask = (((u64)1) << nToken) - 1;
+
+  int iBestOff = 0;
+  int iBestCol = 0;
+  int nBest = 0;
+  u64 bmask = 0;
+
+  sqlite4_mi_phrase_count(pCtx, &nPhrase);
+  aMask = sqlite4DbMallocZero(db, sizeof(u64) * nPhrase);
+  if( !aMask ) return SQLITE4_NOMEM;
+
+  /* Iterate through all matches for all phrases */
+  for(i=0; rc==SQLITE4_OK; i++){
+    int iOff;
+    int iCol;
+    int iStream;
+    int iPhrase;
+    u64 tmask = 0;
+
+    rc = sqlite4_mi_match_detail(pCtx, i, &iOff, &iCol, &iStream, &iPhrase);
+    if( rc==SQLITE4_OK ){
+      int iMask;
+      int nShift; 
+      int nScore = 0;
+
+      nShift = ((iPrevCol==iCol) ? (iOff-iPrev) : 100);
+
+      for(iMask=0; iMask<nPhrase; iMask++){
+        if( nShift<64){
+          aMask[iMask] = aMask[iMask] << nShift;
+        }else{
+          aMask[iMask] = 0;
+        }
+      }
+      aMask[iPhrase] = aMask[iMask] | 0x0001;
+
+      for(iMask=0; iMask<nPhrase; iMask++){
+        if( (aMask[iMask] & lmask) ){
+          nScore += ((aMask[iMask] & mask) ? 100 : 1);
+        }
+        tmask = tmask | aMask[iMask];
+      }
+
+      if( nScore>nBest ){
+        bmask = (tmask & lmask);
+        nBest = nScore;
+        iBestOff = iOff;
+        iBestCol = iCol;
+      }
+
+      iPrev = iOff;
+      iPrevCol = iCol;
+    }
+  }
+
+  *piOff = iBestOff;
+  *piCol = iBestCol;
+  *pMask = bmask;
+
+  sqlite4DbFree(db, aMask);
+  return rc;
+}
+
 static void fts5Snippet(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
+  int nToken = 15;
+  u64 hlmask = 0;
+  u64 mask = 0;
+  int iOff = 0;
+  int iCol = 0;
+  int rc;
+
+  rc = fts5BestSnippet(pCtx, mask, nToken, &iOff, &iCol, &hlmask);
+  if( rc==SQLITE4_OK ){
+    rc = fts5SnippetText(pCtx, iCol, iOff, nToken, hlmask);
+  }
+  if( rc!=SQLITE4_OK ){
+    sqlite4_result_error_code(pCtx, rc);
+  }
 }
 
 static int fts5SimpleTokenize(
-  void *pCtx, 
-  sqlite4_tokenizer *p,
+  void *pCtx, sqlite4_tokenizer *p,
   const char *zDoc,
   int nDoc,
   int(*x)(void*, int, int, const char*, int, int, int)

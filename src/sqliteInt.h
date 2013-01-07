@@ -2489,6 +2489,7 @@ struct Walker {
 struct Fts5Info {
   int iDb;                        /* Database containing this index */
   int iRoot;                      /* Root page number of index */
+  int iTbl;                       /* Root page number of indexed table */
   int nCol;                       /* Number of columns in indexed table */
   char **azCol;                   /* Column names for table */
   Fts5Tokenizer *pTokenizer;      /* Tokenizer module */

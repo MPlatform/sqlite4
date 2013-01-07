@@ -4418,6 +4418,8 @@ int sqlite4_create_mi_function(
 );
 
 /*
+** CAPIREF: Matchinfo APIs.
+**
 ** Special functions that may be called from within matchinfo UDFs. All
 ** return an SQLite error code - SQLITE4_OK if successful, or some other
 ** error code otherwise.
@@ -4464,8 +4466,18 @@ int sqlite4_create_mi_function(
 **   current row, subject to the constraints imposed by iC and iS.
 **
 ** sqlite4_mi_match_detail():
-**   This function may be used to iterate through all matches in the
-**   current row in order of occurrence.
+**   This function is used to access the details of the iMatch'th match
+**   (of any phrase) in the current row. Matches are sorted in order of
+**   occurrence. If parameter iMatch is equal to or greater than the number 
+**   of matches in the current row, SQLITE_NOTFOUND is returned. Otherwise,
+**   unless an error occurs, SQLITE4_OK is returned and the *piOff, *piC, *piS,
+**   and *piP output parameters are set to the token offset, column number,
+**   stream number and phrase number respectively.
+**
+**   It is anticipated that this function be used to iterate through matches 
+**   in order of occurrence. It is optimized so that it is fastest when 
+**   called with the iMatch parameter set to 0, P or P+1, where P is the 
+**   iMatch value passed to the previous call.
 **
 ** sqlite4_mi_column_value():
 **   Set *ppVal to point to an sqlite4_value object containing the value
@@ -4486,7 +4498,11 @@ int sqlite4_mi_match_count(sqlite4_context *, int iC, int iS, int iP, int *pn);
 int sqlite4_mi_match_detail(
     sqlite4_context *, int iMatch, int *piOff, int *piC, int *piS, int *piP
 );
-int sqlite4_mi_column_value(sqlite4_context *, int iCol, sqlite4_value **ppVal);
+int sqlite4_mi_column_value(sqlite4_context *, int iC, sqlite4_value **ppVal);
+
+int sqlite4_mi_tokenize(sqlite4_context *, const char *, int, void *,
+  int(*x)(void *, int, int, const char *, int, int, int)
+);
 
 
 
