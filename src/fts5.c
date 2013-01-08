@@ -932,7 +932,7 @@ static int fts5ParseExpression(
             *pp = pNode;
           }
         }
-        nStr++;
+        nStr += pPhrase->nStr;
         break;
       }
 
@@ -1281,7 +1281,8 @@ static int fts5TokenizeCb(
     while( nNew<=iStream ) nNew = nNew*2;
     p->aSz = (i64*)sqlite4DbReallocOrFree(db, p->aSz, nNew*p->nCol*sizeof(i64));
     if( p->aSz==0 ) goto tokenize_cb_out;
-    memset(&p->aSz[p->nStream * p->nCol], 0, (nNew-nOld)*p->nCol*sizeof(i64));
+    memset(&p->aSz[nOld * p->nCol], 0, (nNew-nOld)*p->nCol*sizeof(i64));
+    p->nStream = nNew;
   }
   p->aSz[iStream*p->nCol + p->iCol]++;
 
@@ -1358,6 +1359,8 @@ static int fts5LoadSizeRecord(
           rc = SQLITE4_NOMEM;
         }else{
           pSz->aSz = (i64 *)&pSz[1];
+          pSz->nStream = nMinStream;
+          pSz->nCol = pInfo->nCol;
           *pnRow = 0;
           rc = SQLITE4_OK;
         }
@@ -1423,10 +1426,11 @@ static int fts5StoreSizeRecord(
     iOff += sqlite4PutVarint(&a[iOff], nRow);
   }
   iOff += sqlite4PutVarint(&a[iOff], pSz->nStream);
+
   for(iCol=0; iCol<pSz->nCol; iCol++){
     int i;
     for(i=0; i<pSz->nStream; i++){
-      iOff += sqlite4PutVarint(&a[iOff], pSz->aSz[iCol*pSz->nCol+i]);
+      iOff += sqlite4PutVarint(&a[iOff], pSz->aSz[i*pSz->nCol+iCol]);
     }
   }
 
@@ -1647,7 +1651,7 @@ static Fts5Info *fts5InfoCreate(Parse *pParse, Index *pIdx, int bCol){
   if( pInfo ){
     pInfo->iDb = sqlite4SchemaToIndex(db, pIdx->pSchema);
     pInfo->iRoot = pIdx->tnum;
-    sqlite4FindPrimaryKey(pIdx->pTable, &pInfo->iTbl);
+    pInfo->iTbl = sqlite4FindPrimaryKey(pIdx->pTable, 0)->tnum;
     pInfo->nCol = pIdx->pTable->nCol;
     fts5TokenizerCreate(pParse, pIdx->pFts, &pInfo->pTokenizer, &pInfo->p);
 
@@ -2254,6 +2258,14 @@ static int fts5OpenCursors(sqlite4 *db, Fts5Info *pInfo, Fts5Cursor *pCsr){
 
 void sqlite4Fts5Close(sqlite4 *db, Fts5Cursor *pCsr){
   if( pCsr ){
+    if( pCsr->aMem ){
+      int i;
+      for(i=0; i<pCsr->pInfo->nCol; i++){
+        sqlite4DbFree(db, pCsr->aMem[i].zMalloc);
+      }
+      sqlite4DbFree(db, pCsr->aMem);
+    }
+
     fts5ExpressionFree(db, pCsr->pExpr);
     sqlite4DbFree(db, pCsr->pIter);
     sqlite4DbFree(db, pCsr->aKey);
@@ -2698,7 +2710,7 @@ static int fts5GetSize(Fts5Size *pSz, int iC, int iS){
   }else if( iC<0 ){
     for(i=0; i<pSz->nCol; i++) nToken += pSz->aSz[i*pSz->nStream + iS];
   }else if( iS<0 ){
-    for(i=0; i<pSz->nStream; i++) nToken += pSz->aSz[pSz->nStream*iC + iS];
+    for(i=0; i<pSz->nStream; i++) nToken += pSz->aSz[pSz->nStream*iC + i];
   }else if( iC<pSz->nCol && iS<pSz->nStream ){
     nToken = pSz->aSz[iC * pSz->nStream + iS];
   }
@@ -3096,6 +3108,7 @@ int sqlite4_mi_match_detail(
       while( pIter->iCurrent>=0 && pIter->iMatch<iMatch ){
         fts5InstanceListNext(&pIter->aList[pIter->iCurrent]);
         fts5IterSetCurrent(pIter, pCsr->pExpr->nPhrase);
+        pIter->iMatch++;
       }
       if( pIter->iCurrent<0 ){
         rc = SQLITE4_NOTFOUND;
