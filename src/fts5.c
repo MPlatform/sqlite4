@@ -52,6 +52,9 @@
 **   varint containing the number of tokens for each stream present, in
 **   ascending order of stream number.
 **
+**   TODO: The format above is not currently implemented! Instead, there
+**   is a simpler place-holder format (which consumes more space).
+**
 ** Global size record:
 **   There is a single "global size" record stored in the database. The
 **   database key for this record is a single byte - 0x00.
@@ -1348,7 +1351,19 @@ static int fts5LoadSizeRecord(
   if( rc==SQLITE4_OK ){
     rc = sqlite4KVCursorSeek(pCsr, aKey, nKey, 0);
     if( rc==SQLITE4_NOTFOUND ){
-      rc = SQLITE4_CORRUPT_BKPT;
+      if( pnRow ){
+        int nByte = sizeof(Fts5Size) + sizeof(i64) * pInfo->nCol * nMinStream;
+        pSz = sqlite4DbMallocZero(db, nByte);
+        if( pSz==0 ){
+          rc = SQLITE4_NOMEM;
+        }else{
+          pSz->aSz = (i64 *)&pSz[1];
+          *pnRow = 0;
+          rc = SQLITE4_OK;
+        }
+      }else{
+        rc = SQLITE4_CORRUPT_BKPT;
+      }
     }else if( rc==SQLITE4_OK ){
       const u8 *aData = 0;
       int nData = 0;
@@ -1373,6 +1388,7 @@ static int fts5LoadSizeRecord(
           rc = SQLITE4_NOMEM;
         }else{
           int iCol = 0;
+          pSz->aSz = (i64 *)&pSz[1];
           pSz->nCol = pInfo->nCol;
           pSz->nStream = nAlloc;
           while( iOff<nData ){
@@ -1776,7 +1792,6 @@ int sqlite4Fts5EntryCksum(
   int nTnum;
   u32 tnum;
 
-
   aKey = (const u8 *)sqlite4_value_blob(pKey);
   nKey = sqlite4_value_bytes(pKey);
   aVal = (const u8 *)sqlite4_value_blob(pVal);
@@ -1784,17 +1799,19 @@ int sqlite4Fts5EntryCksum(
 
   /* Find the token and primary key blobs for this entry. */
   nTnum = getVarint32(aKey, tnum);
-  aToken = &aKey[nTnum+1];
-  nToken = sqlite4Strlen30((const char *)aToken);
-  aPk = &aToken[nToken+1];
-  nPk = (&aKey[nKey] - aPk);
+  if( aKey[nTnum]!=0 ){
+    aToken = &aKey[nTnum+1];
+    nToken = sqlite4Strlen30((const char *)aToken);
+    aPk = &aToken[nToken+1];
+    nPk = (&aKey[nKey] - aPk);
 
-  fts5InstanceListInit((u8 *)aVal, nVal, &sList);
-  while( 0==fts5InstanceListNext(&sList) ){
-    i64 v = fts5TermInstanceCksum(
-        aPk, nPk, aToken, nToken, sList.iStream, sList.iCol, sList.iOff
-    );
-    cksum = cksum ^ v;
+    fts5InstanceListInit((u8 *)aVal, nVal, &sList);
+    while( 0==fts5InstanceListNext(&sList) ){
+      i64 v = fts5TermInstanceCksum(
+          aPk, nPk, aToken, nToken, sList.iStream, sList.iCol, sList.iOff
+          );
+      cksum = cksum ^ v;
+    }
   }
 
   *piCksum = cksum;
