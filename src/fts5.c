@@ -1161,6 +1161,7 @@ void sqlite4Fts5IndexInit(Parse *pParse, Index *pIdx, ExprList *pArgs){
         nByte += sizeof(char *) * (j-i);
         pFts->azTokenizer = (char **)sqlite4DbMallocZero(pParse->db, nByte);
         if( pFts->azTokenizer==0 ) return;
+        pFts->nTokenizer = (j-i);
 
         pSpace = (char *)&pFts->azTokenizer[j-i];
         for(j=i; j<pArgs->nExpr; j++){
@@ -2256,8 +2257,9 @@ static int fts5OpenCursors(sqlite4 *db, Fts5Info *pInfo, Fts5Cursor *pCsr){
   return fts5OpenExprCursors(db, pInfo, pCsr->pExpr->pRoot);
 }
 
-void sqlite4Fts5Close(sqlite4 *db, Fts5Cursor *pCsr){
+void sqlite4Fts5Close(Fts5Cursor *pCsr){
   if( pCsr ){
+    sqlite4 *db = pCsr->db;
     if( pCsr->aMem ){
       int i;
       for(i=0; i<pCsr->pInfo->nCol; i++){
@@ -2623,7 +2625,7 @@ int sqlite4Fts5Open(
     rc = fts5OpenCursors(db, pInfo, pCsr);
   }
   if( rc!=SQLITE4_OK ){
-    sqlite4Fts5Close(db, pCsr);
+    sqlite4Fts5Close(pCsr);
     pCsr = 0;
   }else{
     rc = fts5ExprAdvance(db, pCsr->pExpr->pRoot, 1);

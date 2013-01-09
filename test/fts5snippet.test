@@ -1,4 +1,4 @@
-# 2010 January 07
+# 2013 January 10
 #
 # The author disclaims copyright to this source code.  In place of
 # a legal notice, here is a blessing:
@@ -9,9 +9,7 @@
 #
 #*************************************************************************
 #
-# The tests in this file test the FTS3 auxillary functions offsets(), 
-# snippet() and matchinfo() work. At time of writing, running this file 
-# provides full coverage of fts3_snippet.c.
+# The tests in this file test the FTS5 snippet() function.
 #
 
 set testdir [file dirname $argv0]
@@ -20,7 +18,6 @@ source $testdir/tester.tcl
 # If SQLITE4_ENABLE_FTS3 is not defined, omit this file.
 source $testdir/fts3_common.tcl
 
-set sqlite_fts3_enable_parentheses 1
 set DO_MALLOC_TEST 0
 
 # Transform the list $L to its "normal" form. So that it can be compared to
@@ -128,7 +125,7 @@ if {$DO_MALLOC_TEST || $enc=="utf16"} continue
 
   # Set variable $T to the test name prefix for this iteration of the loop.
   #
-  set T "fts3snippet-$enc"
+  set T "fts5snippet-$enc"
   
   ##########################################################################
   # Test the snippet function.
@@ -292,5 +289,4 @@ if {$DO_MALLOC_TEST || $enc=="utf16"} continue
   
 }
 
-set sqlite_fts3_enable_parentheses 0
 finish_test

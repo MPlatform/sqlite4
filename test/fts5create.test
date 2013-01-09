@@ -74,11 +74,11 @@ do_catchsql_test 2.3 {
   CREATE INDEX ft ON t2 USING fts5("a b c");
 } {1 {unrecognized argument: "a b c"}}
 
+breakpoint
 do_catchsql_test 2.4 {
   CREATE INDEX ft ON t2 USING fts5(tokenizer="nosuch");
 } {1 {no such tokenizer: "nosuch"}}
 
 finish_test
-
 
 

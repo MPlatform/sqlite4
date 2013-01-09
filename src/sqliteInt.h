@@ -3282,4 +3282,10 @@ void sqlite4Fts5CodeQuery(Parse *, Index *, int, int, int);
 int sqlite4Fts5Pk(Fts5Cursor *, int, KVByteArray **, KVSize *);
 int sqlite4Fts5Next(Fts5Cursor *pCsr);
 
+int sqlite4Fts5EntryCksum(sqlite4 *, Fts5Info *, Mem *, Mem *, i64 *);
+int sqlite4Fts5RowCksum(sqlite4 *, Fts5Info *, Mem *, Mem *, i64 *);
+int sqlite4Fts5Open(sqlite4*, Fts5Info*, const char*, int, Fts5Cursor**,char**);
+int sqlite4Fts5Valid(Fts5Cursor *);
+void sqlite4Fts5Close(Fts5Cursor *);
+
 #endif /* _SQLITEINT_H_ */
