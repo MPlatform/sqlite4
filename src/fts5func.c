@@ -327,6 +327,9 @@ static int fts5BestSnippet(
       int nShift; 
       int nScore = 0;
 
+      int nPTok;
+      int iPTok;
+
       if( iColumn>=0 && iColumn!=iCol ) continue;
 
       allmask |= (1 << iPhrase);
@@ -340,7 +343,10 @@ static int fts5BestSnippet(
           aMask[iMask] = 0;
         }
       }
-      aMask[iPhrase] = aMask[iPhrase] | (1<<(nToken-1));
+      sqlite4_mi_phrase_token_count(pCtx, iPhrase, &nPTok);
+      for(iPTok=0; iPTok<nPTok; iPTok++){
+        aMask[iPhrase] = aMask[iPhrase] | (1<<(nToken-1+iPTok));
+      }
 
       for(iMask=0; iMask<nPhrase; iMask++){
         if( aMask[iMask] ){

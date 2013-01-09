@@ -4433,6 +4433,9 @@ int sqlite4_create_mi_function(
 ** sqlite4_mi_stream_count():
 **   Set *pn to the number of streams in the FTS index.
 **
+** sqlite4_mi_phrase_token_count():
+**   Set *pn to the number of tokens in phrase iP of the query.
+**
 ** sqlite4_mi_size():
 **   Set *pn to the number of tokens belonging to stream iS in the value 
 **   stored in column iC of the current row. 
@@ -4487,6 +4490,7 @@ int sqlite4_create_mi_function(
 int sqlite4_mi_column_count(sqlite4_context *, int *pn);
 int sqlite4_mi_phrase_count(sqlite4_context *, int *pn);
 int sqlite4_mi_stream_count(sqlite4_context *, int *pn);
+int sqlite4_mi_phrase_token_count(sqlite4_context *, int iP, int *pn);
 
 int sqlite4_mi_total_size(sqlite4_context *, int iC, int iS, int *pn);
 int sqlite4_mi_total_rows(sqlite4_context *, int *pn);

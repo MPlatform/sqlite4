@@ -118,7 +118,7 @@ foreach {DO_MALLOC_TEST enc} {
   1 utf8
   1 utf16
 } {
-if {$DO_MALLOC_TEST} continue
+if {$DO_MALLOC_TEST || $enc=="utf16"} continue
 
   db close
   forcedelete test.db
@@ -212,7 +212,7 @@ if {$DO_MALLOC_TEST} continue
   do_snippet_test $T.4.10 {four NEAR nineteen} 0 -5 {
      ...seventeen eighteen {nineteen} twenty one...two three {four} five six...
   }
-  do_snippet_test $T.4.11 {four NOT (nineteen twentyone)} 0 5 {
+  do_snippet_test $T.4.11 {four NOT (nineteen+twentyone)} 0 5 {
      ...two three {four} five six...
   } {
      ...two three {four} five six...

@@ -2266,6 +2266,7 @@ void sqlite4Fts5Close(sqlite4 *db, Fts5Cursor *pCsr){
       sqlite4DbFree(db, pCsr->aMem);
     }
 
+    sqlite4KVCursorClose(pCsr->pCsr);
     fts5ExpressionFree(db, pCsr->pExpr);
     sqlite4DbFree(db, pCsr->pIter);
     sqlite4DbFree(db, pCsr->aKey);
@@ -2688,6 +2689,21 @@ int sqlite4_mi_phrase_count(sqlite4_context *pCtx, int *pn){
   return rc;
 }
 
+int sqlite4_mi_phrase_token_count(sqlite4_context *pCtx, int iP, int *pn){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+    Fts5Expr *pExpr = pCtx->pFts->pExpr;
+    if( iP>pExpr->nPhrase || iP<0 ){
+      *pn = 0;
+    }else{
+      *pn = pExpr->apPhrase[iP]->nToken;
+    }
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
 int sqlite4_mi_stream_count(sqlite4_context *pCtx, int *pn){
   int rc = SQLITE4_OK;
   Fts5Cursor *pCsr = pCtx->pFts;
@@ -3065,6 +3081,43 @@ static void fts5IterSetCurrent(Fts5MatchIter *pIter, int nList){
   }
 }
 
+static void fts5InitExprIterator(
+  const u8 *aPk, 
+  int nPk, 
+  Fts5ExprNode *p,
+  Fts5MatchIter *pIter
+){
+  if( p ){
+    if( p->eType==TOKEN_PRIMITIVE ){
+      if( p->nPk==nPk && 0==memcmp(aPk, p->aPk, nPk) ){
+        int i;
+        for(i=0; i<p->pPhrase->nStr; i++){
+          Fts5Str *pStr = &p->pPhrase->aStr[i];
+          InstanceList *pList = &pIter->aList[pIter->iCurrent++];
+          fts5InstanceListInit(pStr->aList, pStr->nList, pList);
+          fts5InstanceListNext(pList);
+        }
+      }else{
+        memset(&pIter->aList[pIter->iCurrent], 0, sizeof(InstanceList));
+        pIter->iCurrent += p->pPhrase->nStr;
+      }
+    }
+    fts5InitExprIterator(aPk, nPk, p->pLeft, pIter);
+    fts5InitExprIterator(aPk, nPk, p->pRight, pIter);
+  }
+}
+
+static void fts5InitIterator(Fts5Cursor *pCsr){
+  Fts5MatchIter *pIter = pCsr->pIter;
+  Fts5ExprNode *pRoot = pCsr->pExpr->pRoot;
+
+  pIter->iCurrent = 0;
+  fts5InitExprIterator(pRoot->aPk, pRoot->nPk, pRoot, pIter);
+  pIter->iMatch = 0;
+  pIter->bValid = 1;
+  fts5IterSetCurrent(pIter, pCsr->pExpr->nPhrase);
+}
+
 int sqlite4_mi_match_detail(
   sqlite4_context *pCtx,          /* Context object passed to mi function */
   int iMatch,                     /* Index of match */
@@ -3092,15 +3145,17 @@ int sqlite4_mi_match_detail(
     }
 
     if( rc==SQLITE4_OK && (pIter->bValid==0 || iMatch<pIter->iMatch) ){
+      fts5InitIterator(pCsr);
+#if 0
       int i;
       for(i=0; i<pCsr->pExpr->nPhrase; i++){
         Fts5Str *pStr = pCsr->pExpr->apPhrase[i];
         fts5InstanceListInit(pStr->aList, pStr->nList, &pIter->aList[i]);
         fts5InstanceListNext(&pIter->aList[i]);
       }
-
       pIter->iMatch = 0;
       fts5IterSetCurrent(pIter, pCsr->pExpr->nPhrase);
+#endif
     }
 
     if( rc==SQLITE4_OK ){
