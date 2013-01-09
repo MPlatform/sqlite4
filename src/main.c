@@ -1056,6 +1056,30 @@ int sqlite4_create_function_v2(
   return rc;
 }
 
+int sqlite4_create_mi_function(
+  sqlite4 *db,
+  const char *zFunc,
+  int nArg,
+  int enc,
+  void *p,
+  void (*xFunc)(sqlite4_context*,int,sqlite4_value **),
+  void (*xDestroy)(void *)
+){
+  int rc;
+  int n;
+
+  n = nArg + (nArg>=0);
+  sqlite4_mutex_enter(db->mutex);
+  rc = sqlite4_create_function_v2(db, zFunc, n, enc, p, xFunc, 0,0,xDestroy);
+  if( rc==SQLITE4_OK ){
+    FuncDef *p = sqlite4FindFunction(db, zFunc, -1, n, enc, 0);
+    p->bMatchinfo = 1;
+  }
+  rc = sqlite4ApiExit(db, rc);
+  sqlite4_mutex_leave(db->mutex);
+  return rc;
+}
+
 #ifndef SQLITE4_OMIT_UTF16
 int sqlite4_create_function16(
   sqlite4 *db,

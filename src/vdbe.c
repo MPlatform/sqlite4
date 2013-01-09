@@ -1290,6 +1290,14 @@ case OP_CollSeq: {
   break;
 }
 
+/* Opcode: Mifunction P1
+*/
+case OP_Mifunction: {
+  pc++;
+  pOp++;
+  /* fall through to OP_Function */
+};
+
 /* Opcode: Function P1 P2 P3 P4 P5
 **
 ** Invoke a user function (P4 is a pointer to a Function structure that
@@ -1344,6 +1352,13 @@ case OP_Function: {
   ctx.s.db = db;
   ctx.s.xDel = 0;
   ctx.s.zMalloc = 0;
+  if( pOp[-1].opcode==OP_Mifunction ){
+    ctx.pFts = p->apCsr[pOp[-1].p1]->pFts;
+    apVal++;
+    n--;
+  }else{
+    ctx.pFts = 0;
+  }
 
   /* The output cell may already have a buffer allocated. Move
   ** the pointer to ctx.s so in case the user-function can use

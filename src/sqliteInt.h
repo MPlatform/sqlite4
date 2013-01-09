@@ -639,6 +639,7 @@ struct FuncDef {
   char *zName;         /* SQL name of the function. */
   FuncDef *pNextName;  /* Next function with a different name */
   FuncDestructor *pDestructor;   /* Reference counted destructor function */
+  u8 bMatchinfo;       /* True for matchinfo function */
 };
 
 /*
@@ -2483,6 +2484,7 @@ struct Walker {
 struct Fts5Info {
   int iDb;                        /* Database containing this index */
   int iRoot;                      /* Root page number of index */
+  int iTbl;                       /* Root page number of indexed table */
   int nCol;                       /* Number of columns in indexed table */
   char **azCol;                   /* Column names for table */
   Fts5Tokenizer *pTokenizer;      /* Tokenizer module */
@@ -3274,5 +3276,11 @@ void sqlite4Fts5CodeQuery(Parse *, Index *, int, int, int);
 
 int sqlite4Fts5Pk(Fts5Cursor *, int, KVByteArray **, KVSize *);
 int sqlite4Fts5Next(Fts5Cursor *pCsr);
+
+int sqlite4Fts5EntryCksum(sqlite4 *, Fts5Info *, Mem *, Mem *, i64 *);
+int sqlite4Fts5RowCksum(sqlite4 *, Fts5Info *, Mem *, Mem *, i64 *);
+int sqlite4Fts5Open(sqlite4*, Fts5Info*, const char*, int, Fts5Cursor**,char**);
+int sqlite4Fts5Valid(Fts5Cursor *);
+void sqlite4Fts5Close(Fts5Cursor *);
 
 #endif /* _SQLITEINT_H_ */

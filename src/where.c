@@ -5229,6 +5229,24 @@ void sqlite4WhereEnd(WhereInfo *pWInfo){
         pOp++;
       }
     }
+
+    if( (pLevel->plan.wsFlags & WHERE_INDEXED)
+     && (pLevel->plan.u.pIdx->eIndexType==SQLITE4_INDEX_FTS5)
+    ){
+      VdbeOp *pOp;
+      VdbeOp *pEnd;
+
+      assert( pLevel->iTabCur!=pLevel->iIdxCur );
+      pOp = sqlite4VdbeGetOp(v, pWInfo->iTop);
+      pEnd = &pOp[sqlite4VdbeCurrentAddr(v) - pWInfo->iTop];
+
+      while( pOp<pEnd ){
+        if( pOp->p1==pLevel->iTabCur && pOp->opcode==OP_Mifunction ){
+          pOp->p1 = pLevel->iIdxCur;
+        }
+        pOp++;
+      }
+    }
   }
 
   /* Final cleanup

@@ -1500,7 +1500,7 @@ void sqlite4VdbeFreeCursor(Vdbe *p, VdbeCursor *pCx){
   if( pCx==0 ){
     return;
   }
-  sqlite4Fts5Close(p->db, pCx->pFts);
+  sqlite4Fts5Close(pCx->pFts);
   if( pCx->pKVCur ){
     sqlite4KVCursorClose(pCx->pKVCur);
   }

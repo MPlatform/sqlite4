@@ -14,6 +14,69 @@
 #include "sqliteInt.h"
 #include "vdbeInt.h"
 
+/* 
+** Stream numbers must be lower than this.
+**
+** For optimization purposes, it is assumed that a given tokenizer uses
+** a set of contiguous stream numbers starting with 0. And that most
+** tokens belong to stream 0.
+**
+** The hard limit is 63 (due to the format of "row size" records).
+*/
+#define SQLITE4_FTS5_NSTREAM 32
+
+/*
+** Records stored within the index:
+**
+** Row size record:
+**   There is one "row size" record in the index for each row in the
+**   indexed table. The "row size" record contains the number of tokens
+**   in the associated row for each combination of a stream and column
+**   number (i.e. contains the data required to find the number of
+**   tokens associated with stream S present in column C of the row for
+**   all S and C).
+**
+**   The key for the row size record is a single 0x00 byte followed by
+**   a copy of the PK blob for the table row. 
+**
+**   The value is a series of varints. Each column of the table is
+**   represented by one or more varints packed into the array.
+**
+**   If a column contains only stream 0 tokens, then it is represented
+**   by a single varint - (nToken << 1), where nToken is the number of
+**   stream 0 tokens stored in the column.
+**
+**   Or, if the column contains tokens from multiple streams, the first
+**   varint contains a bitmask indicating which of the streams are present
+**   (stored as ((bitmask << 1) | 0x01)). Following the bitmask is a
+**   varint containing the number of tokens for each stream present, in
+**   ascending order of stream number.
+**
+**   TODO: The format above is not currently implemented! Instead, there
+**   is a simpler place-holder format (which consumes more space).
+**
+** Global size record:
+**   There is a single "global size" record stored in the database. The
+**   database key for this record is a single byte - 0x00.
+**
+**   The data for this record is a series of varint values. The first 
+**   varint is the total number of rows in the table. The subsequent
+**   varints make up a "row size" record containing the total number of
+**   tokens for each S/C combination in all rows of the table.
+**
+** FTS index records:
+**   The FTS index records implement the following mapping:
+**
+**       (token, document-pk) -> (list of instances)
+**
+**   The key for each index record is in the same format as the keys for
+**   regular text indexes. An 0x24 byte, followed by the utf-8 representation
+**   of the token, followed by 0x00, followed by the PK blob for the table
+**   row.
+**
+**   TODO: Describe value format.
+*/
+
 /*
 ** Default distance value for NEAR operators.
 */
@@ -80,15 +143,17 @@ struct Fts5Index {
 */
 
 /*
-** Context object used by expression parser.
+** Structure types used by this module.
 */
 typedef struct Fts5Expr Fts5Expr;
 typedef struct Fts5ExprNode Fts5ExprNode;
 typedef struct Fts5List Fts5List;
+typedef struct Fts5MatchIter Fts5MatchIter;
 typedef struct Fts5Parser Fts5Parser;
 typedef struct Fts5ParserToken Fts5ParserToken;
 typedef struct Fts5Phrase Fts5Phrase;
 typedef struct Fts5Prefix Fts5Prefix;
+typedef struct Fts5Size Fts5Size;
 typedef struct Fts5Str Fts5Str;
 typedef struct Fts5Token Fts5Token;
 
@@ -172,7 +237,9 @@ struct Fts5ExprNode {
 };
 
 struct Fts5Expr {
-  Fts5ExprNode *pRoot;
+  Fts5ExprNode *pRoot;            /* Root node of expression */
+  int nPhrase;                    /* Number of Fts5Str objects in query */
+  Fts5Str **apPhrase;             /* All Fts5Str objects */
 };
 
 /*
@@ -182,9 +249,29 @@ struct Fts5Cursor {
   sqlite4 *db;
   Fts5Info *pInfo;
   Fts5Expr *pExpr;                /* MATCH expression for this cursor */
-
+  char *zExpr;                    /* Full text of MATCH expression */
   KVByteArray *aKey;              /* Buffer for primary key */
   int nKeyAlloc;                  /* Bytes allocated at aKey[] */
+
+  KVCursor *pCsr;                 /* Cursor used to retrive values */
+  Mem *aMem;                      /* Array of column values */
+  int bMemValid;                  /* True if contents of aMem[] are valid */
+
+  Fts5Size *pSz;                  /* Local size data */
+  Fts5Size *pGlobal;              /* Global size data */
+  i64 nGlobal;                    /* Total number of rows in table */
+  int *anRow;
+
+  Fts5MatchIter *pIter;           /* Used by mi_match_detail() */
+};
+
+/*
+** A deserialized 'size record' (see above).
+*/
+struct Fts5Size {
+  int nCol;                       /* Number of columns in indexed table */
+  int nStream;                    /* Number of streams */
+  i64 *aSz;                       /* Token count for each C/S */
 };
 
 /*
@@ -198,8 +285,19 @@ struct InstanceList {
 
   /* The current entry */
   int iCol;
-  int iWeight;
+  int iStream;
   int iOff;
+};
+
+/*
+** An instance of this structure is used by the sqlite4_mi_match_detail()
+** API to iterate through matches. 
+*/
+struct Fts5MatchIter {
+  int bValid;                     /* True if aList[] is current row */
+  int iCurrent;                   /* Current index in aList[] (or -1) */
+  int iMatch;                     /* Current iMatch value */
+  InstanceList *aList;            /* One iterator for each phrase in expr */
 };
 
 /*
@@ -217,7 +315,7 @@ static int fts5InstanceListNext(InstanceList *p){
       p->iOff = 0;
     }
     else if( (iVal & 0x03)==0x03 ){
-      p->iWeight = (iVal>>2);
+      p->iStream = (iVal>>2);
     }
     else{
       p->iOff += (iVal>>1);
@@ -239,7 +337,7 @@ static int fts5InstanceListEof(InstanceList *p){
 static void fts5InstanceListAppend(
   InstanceList *p,                /* Instance list to append to */
   int iCol,                       /* Column of new entry */
-  int iWeight,                    /* Weight of new entry */
+  int iStream,                    /* Weight of new entry */
   int iOff                        /* Offset of new entry */
 ){
   assert( iCol>=p->iCol );
@@ -251,9 +349,9 @@ static void fts5InstanceListAppend(
     p->iOff = 0;
   }
 
-  if( iWeight!=p->iWeight ){
-    p->iList += putVarint32(&p->aList[p->iList], (iWeight<<2)|0x03);
-    p->iWeight = iWeight;
+  if( iStream!=p->iStream ){
+    p->iList += putVarint32(&p->aList[p->iList], (iStream<<2)|0x03);
+    p->iStream = iStream;
   }
 
   p->iList += putVarint32(&p->aList[p->iList], (iOff-p->iOff)<<1);
@@ -446,7 +544,7 @@ static int fts5PhraseNewStr(
 */
 static int fts5CountTokensCb(
   void *pCtx, 
-  int iWeight, 
+  int iStream, 
   int iOff, 
   const char *z, int n,
   int iSrc, int nSrc
@@ -481,7 +579,7 @@ struct AppendTokensCtx {
 
 static int fts5AppendTokensCb(
   void *pCtx, 
-  int iWeight, 
+  int iStream, 
   int iOff, 
   const char *z, int n, 
   int iSrc, int nSrc
@@ -692,6 +790,7 @@ static void fts5FreeExprNode(sqlite4 *db, Fts5ExprNode *pNode){
 static void fts5ExpressionFree(sqlite4 *db, Fts5Expr *pExpr){
   if( pExpr ){
     fts5FreeExprNode(db, pExpr->pRoot);
+    sqlite4DbFree(db, pExpr->apPhrase);
     sqlite4DbFree(db, pExpr);
   }
 }
@@ -749,6 +848,21 @@ static int fts5AddBinary(
   return SQLITE4_OK;
 }
 
+static void fts5FindStrings(Fts5ExprNode *p, Fts5Str ***papStr){
+  if( p ){
+    if( p->eType==TOKEN_PRIMITIVE ){
+      int i;
+      Fts5Str *aStr = p->pPhrase->aStr;
+      for(i=0; i<p->pPhrase->nStr; i++){
+        **papStr = &aStr[i];
+        (*papStr)++;
+      }
+    }
+    fts5FindStrings(p->pLeft, papStr);
+    fts5FindStrings(p->pRight, papStr);
+  }
+}
+
 static int fts5ParseExpression(
   sqlite4 *db,                    /* Database handle */
   Fts5Tokenizer *pTokenizer,      /* Tokenizer module */
@@ -762,6 +876,7 @@ static int fts5ParseExpression(
 ){
   int rc = SQLITE4_OK;
   Fts5Parser sParse;
+  int nStr = 0;
   int nExpr;
   int i;
   Fts5Expr *pExpr;
@@ -817,6 +932,7 @@ static int fts5ParseExpression(
             *pp = pNode;
           }
         }
+        nStr += pPhrase->nStr;
         break;
       }
 
@@ -886,12 +1002,23 @@ static int fts5ParseExpression(
     if( aHier[i].nOpen>0 ) rc = SQLITE4_ERROR;
   }
 
+  if( rc==SQLITE4_OK ){
+    pExpr->nPhrase = nStr;
+    pExpr->apPhrase = (Fts5Str**)sqlite4DbMallocZero(db, sizeof(Fts5Str*)*nStr);
+    if( pExpr->apPhrase==0 ){
+      rc = SQLITE4_NOMEM;
+    }else{
+      Fts5Str **a = pExpr->apPhrase;
+      fts5FindStrings(pExpr->pRoot, &a);
+    }
+  }
+
   if( rc!=SQLITE4_OK ){
     fts5ExpressionFree(db, pExpr);
     *pzErr = sParse.zErr;
-  }else{
-    *ppExpr = pExpr;
+    pExpr = 0;
   }
+  *ppExpr = pExpr;
   sqlite4DbFree(db, aHier);
   return rc;
 }
@@ -1034,6 +1161,7 @@ void sqlite4Fts5IndexInit(Parse *pParse, Index *pIdx, ExprList *pArgs){
         nByte += sizeof(char *) * (j-i);
         pFts->azTokenizer = (char **)sqlite4DbMallocZero(pParse->db, nByte);
         if( pFts->azTokenizer==0 ) return;
+        pFts->nTokenizer = (j-i);
 
         pSpace = (char *)&pFts->azTokenizer[j-i];
         for(j=i; j<pArgs->nExpr; j++){
@@ -1094,12 +1222,15 @@ typedef struct TokenizeTerm TokenizeTerm;
 struct TokenizeCtx {
   int rc;
   int iCol;
+  int nCol;                       /* Number of columns in table */
   sqlite4 *db;
   int nMax;
+  i64 *aSz;                       /* Number of tokens in each column/stream */
+  int nStream;                    /* Number of streams in document */
   Hash hash;
 };
 struct TokenizeTerm {
-  int iWeight;                    /* Weight of previous entry */
+  int iStream;                    /* Weight of previous entry */
   int iCol;                       /* Column containing previous entry */
   int iOff;                       /* Token offset of previous entry */
   int nToken;                     /* Size of token in bytes */
@@ -1129,7 +1260,7 @@ TokenizeTerm *fts5TokenizeAppendInt(
 
 static int fts5TokenizeCb(
   void *pCtx, 
-  int iWeight, 
+  int iStream, 
   int iOff,
   const char *zToken, 
   int nToken, 
@@ -1137,10 +1268,24 @@ static int fts5TokenizeCb(
   int nSrc
 ){
   TokenizeCtx *p = (TokenizeCtx *)pCtx;
+  sqlite4 *db = p->db;
   TokenizeTerm *pTerm = 0;
   TokenizeTerm *pOrig = 0;
 
+  /* TODO: Error here if iStream is out of range */
+
   if( nToken>p->nMax ) p->nMax = nToken;
+
+  if( iStream>=p->nStream ){
+    int nOld = p->nStream;
+    int nNew = 4;
+    while( nNew<=iStream ) nNew = nNew*2;
+    p->aSz = (i64*)sqlite4DbReallocOrFree(db, p->aSz, nNew*p->nCol*sizeof(i64));
+    if( p->aSz==0 ) goto tokenize_cb_out;
+    memset(&p->aSz[nOld * p->nCol], 0, (nNew-nOld)*p->nCol*sizeof(i64));
+    p->nStream = nNew;
+  }
+  p->aSz[iStream*p->nCol + p->iCol]++;
 
   pTerm = (TokenizeTerm *)sqlite4HashFind(&p->hash, zToken, nToken);
   if( pTerm==0 ){
@@ -1163,10 +1308,10 @@ static int fts5TokenizeCb(
   }
   pOrig = pTerm;
 
-  if( iWeight!=pTerm->iWeight ){
-    pTerm = fts5TokenizeAppendInt(p, pTerm, (iWeight << 2) | 0x00000003);
+  if( iStream!=pTerm->iStream ){
+    pTerm = fts5TokenizeAppendInt(p, pTerm, (iStream << 2) | 0x00000003);
     if( !pTerm ) goto tokenize_cb_out;
-    pTerm->iWeight = iWeight;
+    pTerm->iStream = iStream;
   }
 
   if( pTerm && p->iCol!=pTerm->iCol ){
@@ -1192,6 +1337,146 @@ tokenize_cb_out:
   return 0;
 }
 
+static int fts5LoadSizeRecord(
+  sqlite4 *db,                    /* Database handle */
+  u8 *aKey, int nKey,             /* KVStore key */
+  int nMinStream,                 /* Space for at least this many streams */
+  Fts5Info *pInfo,                /* Info record */
+  i64 *pnRow,                     /* non-NULL when reading global record */
+  Fts5Size **ppSz                 /* OUT: Loaded size record */
+){
+  Fts5Size *pSz = 0;              /* Size object */
+  KVCursor *pCsr = 0;             /* Cursor used to read global record */
+  int rc;
+
+  rc = sqlite4KVStoreOpenCursor(db->aDb[pInfo->iDb].pKV, &pCsr);
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4KVCursorSeek(pCsr, aKey, nKey, 0);
+    if( rc==SQLITE4_NOTFOUND ){
+      if( pnRow ){
+        int nByte = sizeof(Fts5Size) + sizeof(i64) * pInfo->nCol * nMinStream;
+        pSz = sqlite4DbMallocZero(db, nByte);
+        if( pSz==0 ){
+          rc = SQLITE4_NOMEM;
+        }else{
+          pSz->aSz = (i64 *)&pSz[1];
+          pSz->nStream = nMinStream;
+          pSz->nCol = pInfo->nCol;
+          *pnRow = 0;
+          rc = SQLITE4_OK;
+        }
+      }else{
+        rc = SQLITE4_CORRUPT_BKPT;
+      }
+    }else if( rc==SQLITE4_OK ){
+      const u8 *aData = 0;
+      int nData = 0;
+      rc = sqlite4KVCursorData(pCsr, 0, -1, &aData, &nData);
+      if( rc==SQLITE4_OK ){
+        int iOff = 0;
+        int nStream = 0;
+        int nAlloc;
+
+        /* If pnRow is not NULL, then this is the global record. Read the
+        ** number of documents in the table from the start of the record. */
+        if( pnRow ){
+          iOff += sqlite4GetVarint(&aData[iOff], (u64 *)pnRow);
+        }
+        iOff += getVarint32(&aData[iOff], nStream);
+        nAlloc = (nStream < nMinStream ? nMinStream : nStream);
+
+        pSz = sqlite4DbMallocZero(db, 
+            sizeof(Fts5Size) + sizeof(i64) * pInfo->nCol * nAlloc
+        );
+        if( pSz==0 ){
+          rc = SQLITE4_NOMEM;
+        }else{
+          int iCol = 0;
+          pSz->aSz = (i64 *)&pSz[1];
+          pSz->nCol = pInfo->nCol;
+          pSz->nStream = nAlloc;
+          while( iOff<nData ){
+            int i;
+            i64 *aSz = &pSz->aSz[iCol*nAlloc];
+            for(i=0; i<nStream; i++){
+              iOff += sqlite4GetVarint(&aData[iOff], (u64*)&aSz[i]);
+            }
+            iCol++;
+          }
+        }
+      }
+    }
+    sqlite4KVCursorClose(pCsr);
+  }
+
+  *ppSz = pSz;
+  return rc;
+}
+
+static int fts5StoreSizeRecord(
+  KVStore *p,
+  u8 *aKey, int nKey,
+  Fts5Size *pSz, 
+  i64 nRow, 
+  u8 *a                           /* Space to serialize record in */
+){
+  int iOff = 0;
+  int iCol;
+
+  if( nRow>=0 ){
+    iOff += sqlite4PutVarint(&a[iOff], nRow);
+  }
+  iOff += sqlite4PutVarint(&a[iOff], pSz->nStream);
+
+  for(iCol=0; iCol<pSz->nCol; iCol++){
+    int i;
+    for(i=0; i<pSz->nStream; i++){
+      iOff += sqlite4PutVarint(&a[iOff], pSz->aSz[i*pSz->nCol+iCol]);
+    }
+  }
+
+  return sqlite4KVStoreReplace(p, aKey, nKey, a, iOff);
+}
+
+static int fts5CsrLoadGlobal(Fts5Cursor *pCsr){
+  int rc = SQLITE4_OK;
+  if( pCsr->pGlobal==0 ){
+    int nKey;
+    u8 aKey[10];
+    nKey = putVarint32(aKey, pCsr->pInfo->iRoot);
+    aKey[nKey++] = 0x00;
+    rc = fts5LoadSizeRecord(
+        pCsr->db, aKey, nKey, 0, pCsr->pInfo, &pCsr->nGlobal, &pCsr->pGlobal
+    );
+  }
+  return rc;
+}
+
+static int fts5CsrLoadSz(Fts5Cursor *pCsr){
+  int rc = SQLITE4_OK;
+  if( pCsr->pSz==0 ){
+    sqlite4 *db = pCsr->db;
+    Fts5Info *pInfo = pCsr->pInfo;
+    u8 *aKey;
+    int nKey = 0;
+    int nPk = pCsr->pExpr->pRoot->nPk;
+
+    aKey = (u8 *)sqlite4DbMallocZero(db, 10 + nPk);
+    if( !aKey ) return SQLITE4_NOMEM;
+
+    nKey = putVarint32(aKey, pInfo->iRoot);
+    aKey[nKey++] = 0x00;
+    memcpy(&aKey[nKey], pCsr->pExpr->pRoot->aPk, nPk);
+    nKey += nPk;
+
+    rc = fts5LoadSizeRecord(pCsr->db, aKey, nKey, 0, pInfo, 0, &pCsr->pSz);
+    sqlite4DbFree(db, aKey);
+  }
+
+  return rc;
+}
+
+
 /*
 ** Update an fts index.
 */
@@ -1207,19 +1492,21 @@ int sqlite4Fts5Update(
   int rc = SQLITE4_OK;
   KVStore *pStore;
   TokenizeCtx sCtx;
-  u8 *aKey = 0;
-  int nKey = 0;
   int nTnum = 0;
   u32 dummy = 0;
+
+  u8 *aSpace = 0;
+  int nSpace = 0;
 
   const u8 *pPK;
   int nPK;
   HashElem *pElem;
 
   pStore = db->aDb[pInfo->iDb].pKV;
-  sCtx.rc = SQLITE4_OK;
+
+  memset(&sCtx, 0, sizeof(sCtx));
   sCtx.db = db;
-  sCtx.nMax = 0;
+  sCtx.nCol = pInfo->nCol;
   sqlite4HashInit(db->pEnv, &sCtx.hash, 1);
 
   pPK = (const u8 *)sqlite4_value_blob(pKey);
@@ -1236,22 +1523,37 @@ int sqlite4Fts5Update(
       int nText;
 
       zText = (const char *)sqlite4_value_text(pArg);
-      nText = sqlite4_value_bytes(pArg); sCtx.iCol = i;
+      nText = sqlite4_value_bytes(pArg); 
+      sCtx.iCol = i;
       rc = pInfo->pTokenizer->xTokenize(
           &sCtx, pInfo->p, zText, nText, fts5TokenizeCb
       );
     }
   }
 
-  nKey = sqlite4VarintLen(pInfo->iRoot) + 2 + sCtx.nMax + nPK;
-  aKey = sqlite4DbMallocRaw(db, nKey);
-  if( aKey==0 ) rc = SQLITE4_NOMEM;
+  /* Allocate enough space to serialize all the stuff that needs to
+  ** be inserted into the database. Specifically:
+  **
+  **   * Space for index record keys,
+  **   * space for the size record and key for this document, and
+  **   * space for the updated global size record for the document set.
+  **
+  ** To make it easier, the below allocates enough space to simultaneously
+  ** store the largest index record key and the largest possible global
+  ** size record.
+  */
+  nSpace = (sqlite4VarintLen(pInfo->iRoot) + 2 + sCtx.nMax + nPK) + 
+           (9 * (2 + pInfo->nCol * sCtx.nStream));
+  aSpace = sqlite4DbMallocRaw(db, nSpace);
+  if( aSpace==0 ) rc = SQLITE4_NOMEM;
 
   for(pElem=sqliteHashFirst(&sCtx.hash); pElem; pElem=sqliteHashNext(pElem)){
     TokenizeTerm *pTerm = (TokenizeTerm *)sqliteHashData(pElem);
     if( rc==SQLITE4_OK ){
       int nToken = sqliteHashKeysize(pElem);
       char *zToken = (char *)sqliteHashKey(pElem);
+      u8 *aKey = aSpace;
+      int nKey;
 
       nKey = putVarint32(aKey, pInfo->iRoot);
       aKey[nKey++] = 0x24;
@@ -1273,8 +1575,59 @@ int sqlite4Fts5Update(
     }
     sqlite4DbFree(db, pTerm);
   }
+
+  /* Write the size record into the db */
+  if( rc==SQLITE4_OK ){
+    u8 *aKey = aSpace;
+    int nKey;
+
+    nKey = putVarint32(aKey, pInfo->iRoot);
+    aKey[nKey++] = 0x00;
+    memcpy(&aKey[nKey], pPK, nPK);
+    nKey += nPK;
+
+    if( bDel==0 ){
+      Fts5Size sSz;
+      sSz.nCol = pInfo->nCol;
+      sSz.nStream = sCtx.nStream;
+      sSz.aSz = sCtx.aSz;
+      rc = fts5StoreSizeRecord(pStore, aKey, nKey, &sSz, -1, &aKey[nKey]);
+    }else{
+      rc = sqlite4KVStoreReplace(pStore, aKey, nKey, 0, -1);
+    }
+  }
+
+  /* Update the global record */
+  if( rc==SQLITE4_OK ){
+    Fts5Size *pSz;                /* Deserialized global size record */
+    i64 nRow;                     /* Number of rows in indexed table */
+    u8 *aKey = aSpace;            /* Space to format the global record key */
+    int nKey;                     /* Size of global record key in bytes */
+
+    nKey = putVarint32(aKey, pInfo->iRoot);
+    aKey[nKey++] = 0x00;
+    rc = fts5LoadSizeRecord(db, aKey, nKey, sCtx.nStream, pInfo, &nRow, &pSz);
+    assert( rc!=SQLITE4_OK || pSz->nStream>=sCtx.nStream );
+
+    if( rc==SQLITE4_OK ){
+      int iCol;
+      for(iCol=0; iCol<pSz->nCol; iCol++){
+        int iStr;
+        i64 *aIn = &sCtx.aSz[iCol * sCtx.nStream];
+        i64 *aOut = &pSz->aSz[iCol * pSz->nStream];
+        for(iStr=0; iStr<sCtx.nStream; iStr++){
+          aOut[iStr] += (aIn[iStr] * (bDel?-1:1));
+        }
+      }
+      nRow += (bDel?-1:1);
+      rc = fts5StoreSizeRecord(pStore, aKey, nKey, pSz, nRow, &aKey[nKey]);
+    }
+
+    sqlite4DbFree(db, pSz);
+  }
   
-  sqlite4DbFree(db, aKey);
+  sqlite4DbFree(db, aSpace);
+  sqlite4DbFree(db, sCtx.aSz);
   sqlite4HashClear(&sCtx.hash);
   return rc;
 }
@@ -1299,6 +1652,7 @@ static Fts5Info *fts5InfoCreate(Parse *pParse, Index *pIdx, int bCol){
   if( pInfo ){
     pInfo->iDb = sqlite4SchemaToIndex(db, pIdx->pSchema);
     pInfo->iRoot = pIdx->tnum;
+    pInfo->iTbl = sqlite4FindPrimaryKey(pIdx->pTable, 0)->tnum;
     pInfo->nCol = pIdx->pTable->nCol;
     fts5TokenizerCreate(pParse, pIdx->pFts, &pInfo->pTokenizer, &pInfo->p);
 
@@ -1401,7 +1755,7 @@ void sqlite4Fts5CodeCksum(
 static i64 fts5TermInstanceCksum(
   const u8 *aTerm, int nTerm,
   const u8 *aPk, int nPk,
-  int iWeight,
+  int iStream,
   int iCol,
   int iOff
 ){
@@ -1419,7 +1773,7 @@ static i64 fts5TermInstanceCksum(
   }
 
   /* Add the weight, column number and offset (in that order) to the checksum */
-  cksum += (cksum << 3) + iWeight;
+  cksum += (cksum << 3) + iStream;
   cksum += (cksum << 3) + iCol;
   cksum += (cksum << 3) + iOff;
 
@@ -1443,7 +1797,6 @@ int sqlite4Fts5EntryCksum(
   int nTnum;
   u32 tnum;
 
-
   aKey = (const u8 *)sqlite4_value_blob(pKey);
   nKey = sqlite4_value_bytes(pKey);
   aVal = (const u8 *)sqlite4_value_blob(pVal);
@@ -1451,17 +1804,19 @@ int sqlite4Fts5EntryCksum(
 
   /* Find the token and primary key blobs for this entry. */
   nTnum = getVarint32(aKey, tnum);
-  aToken = &aKey[nTnum+1];
-  nToken = sqlite4Strlen30((const char *)aToken);
-  aPk = &aToken[nToken+1];
-  nPk = (&aKey[nKey] - aPk);
+  if( aKey[nTnum]!=0 ){
+    aToken = &aKey[nTnum+1];
+    nToken = sqlite4Strlen30((const char *)aToken);
+    aPk = &aToken[nToken+1];
+    nPk = (&aKey[nKey] - aPk);
 
-  fts5InstanceListInit((u8 *)aVal, nVal, &sList);
-  while( 0==fts5InstanceListNext(&sList) ){
-    i64 v = fts5TermInstanceCksum(
-        aPk, nPk, aToken, nToken, sList.iWeight, sList.iCol, sList.iOff
-    );
-    cksum = cksum ^ v;
+    fts5InstanceListInit((u8 *)aVal, nVal, &sList);
+    while( 0==fts5InstanceListNext(&sList) ){
+      i64 v = fts5TermInstanceCksum(
+          aPk, nPk, aToken, nToken, sList.iStream, sList.iCol, sList.iOff
+          );
+      cksum = cksum ^ v;
+    }
   }
 
   *piCksum = cksum;
@@ -1478,7 +1833,7 @@ struct CksumCtx {
 
 static int fts5CksumCb(
   void *pCtx, 
-  int iWeight, 
+  int iStream, 
   int iOff,
   const char *zToken, 
   int nToken, 
@@ -1489,7 +1844,7 @@ static int fts5CksumCb(
   i64 cksum;
 
   cksum = fts5TermInstanceCksum(p->pPK, p->nPK, 
-      (const u8 *)zToken, nToken, iWeight, p->iCol, iOff
+      (const u8 *)zToken, nToken, iStream, p->iCol, iOff
   );
 
   p->cksum = (p->cksum ^ cksum);
@@ -1662,7 +2017,7 @@ static int fts5ListMerge(sqlite4 *db, Fts5List *p1, Fts5List *p2, int bFree){
       pAdv = &in2;
     }
 
-    fts5InstanceListAppend(&out, pAdv->iCol, pAdv->iWeight, pAdv->iOff);
+    fts5InstanceListAppend(&out, pAdv->iCol, pAdv->iStream, pAdv->iOff);
     fts5InstanceListNext(pAdv);
   }
 
@@ -1902,10 +2257,22 @@ static int fts5OpenCursors(sqlite4 *db, Fts5Info *pInfo, Fts5Cursor *pCsr){
   return fts5OpenExprCursors(db, pInfo, pCsr->pExpr->pRoot);
 }
 
-void sqlite4Fts5Close(sqlite4 *db, Fts5Cursor *pCsr){
+void sqlite4Fts5Close(Fts5Cursor *pCsr){
   if( pCsr ){
+    sqlite4 *db = pCsr->db;
+    if( pCsr->aMem ){
+      int i;
+      for(i=0; i<pCsr->pInfo->nCol; i++){
+        sqlite4DbFree(db, pCsr->aMem[i].zMalloc);
+      }
+      sqlite4DbFree(db, pCsr->aMem);
+    }
+
+    sqlite4KVCursorClose(pCsr->pCsr);
     fts5ExpressionFree(db, pCsr->pExpr);
+    sqlite4DbFree(db, pCsr->pIter);
     sqlite4DbFree(db, pCsr->aKey);
+    sqlite4DbFree(db, pCsr->anRow);
     sqlite4DbFree(db, pCsr);
   }
 }
@@ -1929,8 +2296,7 @@ static int fts5TokenAdvanceToMatch(
   return (p->iCol==pFirst->iCol && p->iOff==iReq);
 }
 
-static int fts5StringFindInstances(Fts5Cursor *pCsr, int iCol, Fts5Str *pStr){
-  sqlite4 *db = pCsr->db;
+static int fts5StringFindInstances(sqlite4 *db, int iCol, Fts5Str *pStr){
   int i;
   int rc = SQLITE4_OK;
   int bEof = 0;
@@ -1973,7 +2339,7 @@ static int fts5StringFindInstances(Fts5Cursor *pCsr, int iCol, Fts5Str *pStr){
     }
     if( i==pStr->nToken && (iCol<0 || aIn[0].iCol==iCol) ){
       /* Record a match here */
-      fts5InstanceListAppend(&out, aIn[0].iCol, aIn[0].iWeight, aIn[0].iOff);
+      fts5InstanceListAppend(&out, aIn[0].iCol, aIn[0].iStream, aIn[0].iOff);
     }
     bEof = fts5InstanceListNext(&aIn[0]);
   }
@@ -1992,7 +2358,6 @@ static int fts5IsNear(InstanceList *p1, InstanceList *p2, int nNear){
 }
 
 static int fts5StringNearTrim(
-  Fts5Cursor *pCsr,               /* Cursor object that owns both strings */
   Fts5Str *pTrim,                 /* Trim this instance list */
   Fts5Str *pNext,                 /* According to this one */
   int nNear
@@ -2020,7 +2385,7 @@ static int fts5StringNearTrim(
       ){
         /* The current position is a match. Append an entry to the output
         ** and advance the input cursor. */
-        fts5InstanceListAppend(&out, in.iCol, in.iWeight, in.iOff);
+        fts5InstanceListAppend(&out, in.iCol, in.iStream, in.iOff);
         bEof = fts5InstanceListNext(&in);
       }else{
         if( near.iCol<in.iCol || (near.iCol==in.iCol && near.iOff<in.iOff) ){
@@ -2028,7 +2393,7 @@ static int fts5StringNearTrim(
         }else if( near.iCol==in.iCol && near.iOff==in.iOff ){
           bEof = fts5InstanceListNext(&in);
           if( fts5IsNear(&near, &in, nTrail) ){
-            fts5InstanceListAppend(&out, near.iCol, near.iWeight, near.iOff);
+            fts5InstanceListAppend(&out, near.iCol, near.iStream, near.iOff);
           }
         }else{
           bEof = fts5InstanceListNext(&in);
@@ -2051,7 +2416,7 @@ static int fts5StringNearTrim(
 ** retrying this function.
 */
 static int fts5PhraseIsMatch(
-  Fts5Cursor *pCsr,               /* Cursor that owns this string */
+  sqlite4 *db,                    /* Database handle */
   Fts5Phrase *pPhrase,            /* Phrase to test */
   int *pbMatch,                   /* OUT: True for a match, false otherwise */
   Fts5Token **ppAdvance           /* OUT: Token to advance before retrying */
@@ -2091,45 +2456,45 @@ static int fts5PhraseIsMatch(
   ** position list for each Fts5Str object.  */
   for(i=0; rc==SQLITE4_OK && i<pPhrase->nStr; i++){
     Fts5Str *pStr = &pPhrase->aStr[i];
-    rc = fts5StringFindInstances(pCsr, pPhrase->iCol, pStr);
+    rc = fts5StringFindInstances(db, pPhrase->iCol, pStr);
   }
 
   /* Trim the instance lists according to any NEAR constraints.  */
   for(i=1; rc==SQLITE4_OK && i<pPhrase->nStr; i++){
     int n = pPhrase->aiNear[i-1];
-    rc = fts5StringNearTrim(pCsr, &pPhrase->aStr[i], &pPhrase->aStr[i-1], n);
+    rc = fts5StringNearTrim(&pPhrase->aStr[i], &pPhrase->aStr[i-1], n);
   }
   for(i=pPhrase->nStr-1; rc==SQLITE4_OK && i>0; i--){
     int n = pPhrase->aiNear[i-1];
-    rc = fts5StringNearTrim(pCsr, &pPhrase->aStr[i-1], &pPhrase->aStr[i], n);
+    rc = fts5StringNearTrim(&pPhrase->aStr[i-1], &pPhrase->aStr[i], n);
   }
 
   *pbMatch = (pPhrase->aStr[0].nList>0);
   return rc;
 }
 
-static int fts5PhraseAdvanceToMatch(Fts5Cursor *pCsr, Fts5Phrase *pPhrase){
+static int fts5PhraseAdvanceToMatch(sqlite4 *db, Fts5Phrase *pPhrase){
   int rc;
   do {
     int bMatch;
     Fts5Token *pAdvance = 0;
-    rc = fts5PhraseIsMatch(pCsr, pPhrase, &bMatch, &pAdvance);
+    rc = fts5PhraseIsMatch(db, pPhrase, &bMatch, &pAdvance);
     if( rc!=SQLITE4_OK || bMatch ) break;
-    rc = fts5TokenAdvance(pCsr->db, pAdvance);
+    rc = fts5TokenAdvance(db, pAdvance);
   }while( rc==SQLITE4_OK );
   return rc;
 }
 
-static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
+static int fts5ExprAdvance(sqlite4 *db, Fts5ExprNode *p, int bFirst){
   int rc = SQLITE4_OK;
 
   switch( p->eType ){
     case TOKEN_PRIMITIVE: {
       Fts5Phrase *pPhrase = p->pPhrase;
       if( bFirst==0 ){
-        rc = fts5TokenAdvance(pCsr->db, &pPhrase->aStr[0].aToken[0]);
+        rc = fts5TokenAdvance(db, &pPhrase->aStr[0].aToken[0]);
       }
-      if( rc==SQLITE4_OK ) rc = fts5PhraseAdvanceToMatch(pCsr, pPhrase);
+      if( rc==SQLITE4_OK ) rc = fts5PhraseAdvanceToMatch(db, pPhrase);
       if( rc==SQLITE4_OK ){
         rc = fts5TokenPk(&pPhrase->aStr[0].aToken[0], &p->aPk, &p->nPk);
       }else{
@@ -2143,16 +2508,16 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
     case TOKEN_AND:
       p->aPk = 0;
       p->nPk = 0;
-      rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
-      if( rc==SQLITE4_OK ) rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+      rc = fts5ExprAdvance(db, p->pLeft, bFirst);
+      if( rc==SQLITE4_OK ) rc = fts5ExprAdvance(db, p->pRight, bFirst);
       while( rc==SQLITE4_OK && p->pLeft->aPk && p->pRight->aPk ){
         int res = fts5KeyCompare(
             p->pLeft->aPk, p->pLeft->nPk, p->pRight->aPk, p->pRight->nPk
         );
         if( res<0 ){
-          rc = fts5ExprAdvance(pCsr, p->pLeft, 0);
+          rc = fts5ExprAdvance(db, p->pLeft, 0);
         }else if( res>0 ){
-          rc = fts5ExprAdvance(pCsr, p->pRight, 0);
+          rc = fts5ExprAdvance(db, p->pRight, 0);
         }else{
           p->aPk = p->pLeft->aPk;
           p->nPk = p->pLeft->nPk;
@@ -2169,9 +2534,9 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
         );
       }
         
-      if( res<=0 ) rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
+      if( res<=0 ) rc = fts5ExprAdvance(db, p->pLeft, bFirst);
       if( rc==SQLITE4_OK && res>=0 ){
-        rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+        rc = fts5ExprAdvance(db, p->pRight, bFirst);
       }
 
       res = fts5KeyCompare(
@@ -2194,9 +2559,9 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
       p->aPk = 0;
       p->nPk = 0;
 
-      rc = fts5ExprAdvance(pCsr, p->pLeft, bFirst);
+      rc = fts5ExprAdvance(db, p->pLeft, bFirst);
       if( bFirst && rc==SQLITE4_OK ){
-        rc = fts5ExprAdvance(pCsr, p->pRight, bFirst);
+        rc = fts5ExprAdvance(db, p->pRight, bFirst);
       }
 
       while( rc==SQLITE4_OK && p->pLeft->aPk && p->pRight->aPk ){
@@ -2206,9 +2571,9 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
         if( res<0 ){
           break;
         }else if( res>0 ){
-          rc = fts5ExprAdvance(pCsr, p->pRight, 0);
+          rc = fts5ExprAdvance(db, p->pRight, 0);
         }else{
-          rc = fts5ExprAdvance(pCsr, p->pLeft, 0);
+          rc = fts5ExprAdvance(db, p->pLeft, 0);
         }
       }
 
@@ -2222,7 +2587,10 @@ static int fts5ExprAdvance(Fts5Cursor *pCsr, Fts5ExprNode *p, int bFirst){
 }
 
 int sqlite4Fts5Next(Fts5Cursor *pCsr){
-  return fts5ExprAdvance(pCsr, pCsr->pExpr->pRoot, 0);
+  sqlite4DbFree(pCsr->db, pCsr->pSz);
+  pCsr->pSz = 0;
+  pCsr->bMemValid = 0;
+  return fts5ExprAdvance(pCsr->db, pCsr->pExpr->pRoot, 0);
 }
 
 int sqlite4Fts5Open(
@@ -2235,11 +2603,15 @@ int sqlite4Fts5Open(
 ){
   int rc = SQLITE4_OK;
   Fts5Cursor *pCsr;
+  int nMatch = sqlite4Strlen30(zMatch);
 
-  pCsr = sqlite4DbMallocZero(db, sizeof(Fts5Cursor));
+  pCsr = sqlite4DbMallocZero(db, sizeof(Fts5Cursor) + nMatch + 1);
+
   if( !pCsr ){
     rc = SQLITE4_NOMEM;
   }else{
+    pCsr->zExpr = (char *)&pCsr[1];
+    memcpy(pCsr->zExpr, zMatch, nMatch);
     pCsr->pInfo = pInfo;
     pCsr->db = db;
     rc = fts5ParseExpression(db, pInfo->pTokenizer, pInfo->p, 
@@ -2253,10 +2625,10 @@ int sqlite4Fts5Open(
     rc = fts5OpenCursors(db, pInfo, pCsr);
   }
   if( rc!=SQLITE4_OK ){
-    sqlite4Fts5Close(db, pCsr);
+    sqlite4Fts5Close(pCsr);
     pCsr = 0;
   }else{
-    rc = fts5ExprAdvance(pCsr, pCsr->pExpr->pRoot, 1);
+    rc = fts5ExprAdvance(db, pCsr->pExpr->pRoot, 1);
   }
   *ppCsr = pCsr;
   return rc;
@@ -2272,8 +2644,8 @@ int sqlite4Fts5Valid(Fts5Cursor *pCsr){
 
 int sqlite4Fts5Pk(
   Fts5Cursor *pCsr, 
-  int iTbl, 
-  KVByteArray **paKey, 
+  int iTbl,
+  KVByteArray **paKey,
   KVSize *pnKey
 ){
   int i;
@@ -2297,6 +2669,516 @@ int sqlite4Fts5Pk(
   *paKey = pCsr->aKey;
   *pnKey = nReq;
   return SQLITE4_OK;
+}
+
+int sqlite4_mi_column_count(sqlite4_context *pCtx, int *pn){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+    *pn = pCtx->pFts->pInfo->nCol;
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_phrase_count(sqlite4_context *pCtx, int *pn){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+    *pn = pCtx->pFts->pExpr->nPhrase;
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_phrase_token_count(sqlite4_context *pCtx, int iP, int *pn){
+  int rc = SQLITE4_OK;
+  if( pCtx->pFts ){
+    Fts5Expr *pExpr = pCtx->pFts->pExpr;
+    if( iP>pExpr->nPhrase || iP<0 ){
+      *pn = 0;
+    }else{
+      *pn = pExpr->apPhrase[iP]->nToken;
+    }
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_stream_count(sqlite4_context *pCtx, int *pn){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+  if( pCsr ){
+    rc = fts5CsrLoadGlobal(pCtx->pFts);
+    if( rc==SQLITE4_OK ) *pn = pCsr->pGlobal->nStream;
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+static int fts5GetSize(Fts5Size *pSz, int iC, int iS){
+  int nToken = 0;
+  int i;
+
+  if( iC<0 && iS<0 ){
+    int nFin = pSz->nCol * pSz->nStream;
+    for(i=0; i<nFin; i++) nToken += pSz->aSz[i];
+  }else if( iC<0 ){
+    for(i=0; i<pSz->nCol; i++) nToken += pSz->aSz[i*pSz->nStream + iS];
+  }else if( iS<0 ){
+    for(i=0; i<pSz->nStream; i++) nToken += pSz->aSz[pSz->nStream*iC + i];
+  }else if( iC<pSz->nCol && iS<pSz->nStream ){
+    nToken = pSz->aSz[iC * pSz->nStream + iS];
+  }
+
+  return nToken;
+}
+
+int sqlite4_mi_size(sqlite4_context *pCtx, int iC, int iS, int *pn){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+
+  if( pCsr==0 ){
+    rc = SQLITE4_MISUSE;
+  }else{
+    rc = fts5CsrLoadSz(pCsr);
+    if( rc==SQLITE4_OK ){
+      *pn = fts5GetSize(pCsr->pSz, iC, iS);
+    }
+  }
+  return rc;
+}
+
+int sqlite4_mi_total_size(sqlite4_context *pCtx, int iC, int iS, int *pn){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+
+  if( pCsr==0 ){
+    rc = SQLITE4_MISUSE;
+  }else{
+    rc = fts5CsrLoadGlobal(pCsr);
+    if( rc==SQLITE4_OK ){
+      *pn = fts5GetSize(pCsr->pGlobal, iC, iS);
+    }
+  }
+  return rc;
+}
+
+int sqlite4_mi_total_rows(sqlite4_context *pCtx, int *pn){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+  if( pCsr==0 ){
+    rc = SQLITE4_MISUSE;
+  }else{
+    rc = fts5CsrLoadGlobal(pCsr);
+    if( rc==SQLITE4_OK ) *pn = pCsr->nGlobal;
+  }
+  return rc;
+}
+
+int sqlite4_mi_column_value(
+  sqlite4_context *pCtx, 
+  int iCol, 
+  sqlite4_value **ppVal
+){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+  if( pCsr==0 ){
+    rc = SQLITE4_MISUSE;
+  }else{
+    if( pCsr->bMemValid==0 ){
+      sqlite4 *db = pCsr->db;
+
+      Fts5Info *pInfo = pCsr->pInfo;
+      if( pCsr->aMem==0 ){
+        int nByte = sizeof(Mem) * pInfo->nCol;
+        pCsr->aMem = (Mem *)sqlite4DbMallocZero(db, nByte);
+        if( pCsr->aMem==0 ){
+          rc = SQLITE4_NOMEM;
+        }else{
+          int i;
+          for(i=0; i<pInfo->nCol; i++){
+            pCsr->aMem[i].db = db;
+          }
+        }
+      }
+
+      if( pCsr->pCsr==0 && rc==SQLITE4_OK ){
+        KVStore *pStore = db->aDb[pInfo->iDb].pKV;
+        rc = sqlite4KVStoreOpenCursor(pStore, &pCsr->pCsr);
+      }
+
+      if( rc==SQLITE4_OK ){
+        u8 *aKey = 0; int nKey;     /* Primary key for current row */
+        const u8 *aData; int nData; /* Data record for current row */
+
+        rc = sqlite4Fts5Pk(pCsr, pInfo->iTbl, &aKey, &nKey);
+        if( rc==SQLITE4_OK ){
+          rc = sqlite4KVCursorSeek(pCsr->pCsr, aKey, nKey, 0);
+          if( rc==SQLITE4_NOTFOUND ){
+            rc = SQLITE4_CORRUPT_BKPT;
+          }
+        }
+
+        if( rc==SQLITE4_OK ){
+          rc = sqlite4KVCursorData(pCsr->pCsr, 0, -1, &aData, &nData);
+        }
+
+        if( rc==SQLITE4_OK ){
+          int i;
+          ValueDecoder *pCodec;   /* The decoder object */
+
+          rc = sqlite4VdbeCreateDecoder(db, aData, nData, pInfo->nCol, &pCodec);
+          for(i=0; rc==SQLITE4_OK && i<pInfo->nCol; i++){
+            rc = sqlite4VdbeDecodeValue(pCodec, i, 0, &pCsr->aMem[i]);
+          }
+          sqlite4VdbeDestroyDecoder(pCodec);
+        }
+
+        if( rc==SQLITE4_OK ) pCsr->bMemValid = 1;
+      }
+    }
+
+    if( rc==SQLITE4_OK ){
+      assert( pCsr->bMemValid );
+      *ppVal = &pCsr->aMem[iCol];
+    }
+  }
+
+  return rc;
+}
+
+int sqlite4_mi_tokenize(
+  sqlite4_context *pCtx,
+  const char *zText,
+  int nText,
+  void *p,
+  int(*x)(void *, int, int, const char *, int, int, int)
+){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+
+  if( pCsr==0 ){
+    rc = SQLITE4_MISUSE;
+  }else{
+    Fts5Info *pInfo = pCsr->pInfo;
+    rc = pInfo->pTokenizer->xTokenize(p, pInfo->p, zText, nText, x);
+  }
+  return rc;
+}
+
+static Fts5Str *fts5FindStr(Fts5ExprNode *p, int *piStr){
+  Fts5Str *pRet = 0;
+  if( p->eType==TOKEN_PRIMITIVE ){
+    int iStr = *piStr;
+    if( iStr<p->pPhrase->nStr ){
+      pRet = &p->pPhrase->aStr[iStr];
+    }else{
+      *piStr = iStr - p->pPhrase->nStr;
+    }
+  }else{
+    pRet = fts5FindStr(p->pLeft, piStr);
+    if( pRet==0 ) pRet = fts5FindStr(p->pRight, piStr);
+  }
+  return pRet;
+}
+
+int sqlite4_mi_match_count(
+  sqlite4_context *pCtx, 
+  int iC,
+  int iS,
+  int iPhrase,
+  int *pnMatch
+){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+  if( pCsr ){
+    int nMatch = 0;
+    Fts5Str *pStr;
+    int iCopy = iPhrase;
+    InstanceList sList;
+
+    pStr = fts5FindStr(pCsr->pExpr->pRoot, &iCopy);
+    assert( pStr );
+
+    fts5InstanceListInit(pStr->aList, pStr->nList, &sList);
+    while( 0==fts5InstanceListNext(&sList) ){
+      if( (iC<0 || sList.iCol==iC) && (iS<0 || sList.iStream==iS) ) nMatch++;
+    }
+    *pnMatch = nMatch;
+  }else{
+    rc = SQLITE4_MISUSE;
+  }
+  return rc;
+}
+
+int sqlite4_mi_match_offset(
+  sqlite4_context *pCtx, 
+  int iCol, 
+  int iPhrase, 
+  int iMatch, 
+  int *piOff
+){
+  return SQLITE4_OK;
+}
+
+int sqlite4_mi_total_match_count(
+  sqlite4_context *pCtx,
+  int iCol,
+  int iPhrase,
+  int *pnMatch,
+  int *pnDoc,
+  int *pnRelevant
+){
+  return SQLITE4_OK;
+}
+
+static void fts5StrLoadRowcounts(Fts5Str *pStr, int nStream, int *anRow){
+  u32 mask = 0;
+  int iPrevCol = 0;
+  InstanceList sList;
+
+  fts5InstanceListInit(pStr->aList, pStr->nList, &sList);
+  while( 0==fts5InstanceListNext(&sList) ){
+    if( sList.iCol!=iPrevCol ) mask = 0;
+    if( (mask & (1<<sList.iStream))==0 ){
+      anRow[sList.iCol * nStream + sList.iStream]++;
+      mask |= (1<<sList.iStream);
+      iPrevCol = sList.iCol;
+    }
+  }
+}
+
+static int fts5ExprLoadRowcounts(
+  sqlite4 *db, 
+  Fts5Info *pInfo,
+  int nStream,
+  Fts5ExprNode *pNode, 
+  int **panRow
+){
+  int rc = SQLITE4_OK;
+
+  if( pNode ){
+    if( pNode->eType==TOKEN_PRIMITIVE ){
+      int *anRow = *panRow;
+      Fts5Phrase *pPhrase = pNode->pPhrase;
+
+      rc = fts5ExprAdvance(db, pNode, 1);
+      while( rc==SQLITE4_OK ){
+        int nIncr =  pInfo->nCol * nStream;      /* Values for each Fts5Str */
+        int i;
+        for(i=0; i<pPhrase->nStr; i++){
+          fts5StrLoadRowcounts(&pPhrase->aStr[i], nStream, &anRow[i*nIncr]);
+        }
+        rc = fts5ExprAdvance(db, pNode, 0);
+      }
+
+      *panRow = &anRow[pInfo->nCol * nStream * pPhrase->nStr];
+    }
+
+    if( rc==SQLITE4_OK ){
+      rc = fts5ExprLoadRowcounts(db, pInfo, nStream, pNode->pLeft, panRow);
+    }
+    if( rc==SQLITE4_OK ){
+      rc = fts5ExprLoadRowcounts(db, pInfo, nStream, pNode->pRight, panRow);
+    }
+  }
+
+  return rc;
+}
+
+static int fts5CsrLoadRowcounts(Fts5Cursor *pCsr){
+  int rc = SQLITE4_OK;
+
+  if( pCsr->anRow==0 ){
+    int nStream = pCsr->pGlobal->nStream;
+    sqlite4 *db = pCsr->db;
+    Fts5Expr *pCopy;
+    Fts5Expr *pExpr = pCsr->pExpr;
+    Fts5Info *pInfo = pCsr->pInfo;
+    int *anRow;
+
+    pCsr->anRow = anRow = (int *)sqlite4DbMallocZero(db, 
+        pExpr->nPhrase * pInfo->nCol * pCsr->pGlobal->nStream * sizeof(int)
+    );
+    if( !anRow ) return SQLITE4_NOMEM;
+
+    rc = fts5ParseExpression(db, pInfo->pTokenizer, pInfo->p, 
+        pInfo->iRoot, pInfo->azCol, pInfo->nCol, pCsr->zExpr, &pCopy, 0
+    );
+    if( rc==SQLITE4_OK ){
+      rc = fts5OpenExprCursors(db, pInfo, pExpr->pRoot);
+    }
+    if( rc==SQLITE4_OK ){
+      rc = fts5ExprLoadRowcounts(db, pInfo, nStream, pCopy->pRoot, &anRow);
+    }
+
+    fts5ExpressionFree(db, pCopy);
+  }
+
+  return rc;
+}
+
+int sqlite4_mi_row_count(
+  sqlite4_context *pCtx,          /* Context object passed to mi function */
+  int iC,                         /* Specific column (or -ve for all columns) */
+  int iS,                         /* Specific stream (or -ve for all streams) */
+  int iP,                         /* Specific phrase */
+  int *pn                         /* Total number of rows containing C/S/P */
+){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+  if( pCsr==0 ){
+    rc = SQLITE4_MISUSE;
+  }else{
+    rc = fts5CsrLoadGlobal(pCsr);
+    if( rc==SQLITE4_OK ) rc = fts5CsrLoadRowcounts(pCsr);
+
+    if( rc==SQLITE4_OK ){
+      int i;
+      int nRow = 0;
+      int nStream = pCsr->pGlobal->nStream;
+      int nCol = pCsr->pInfo->nCol;
+      int *aRow = &pCsr->anRow[iP * nStream * nCol];
+
+      if( iC<0 && iS<0 ){
+        int nFin = nCol * nStream;
+        for(i=0; i<nFin; i++) nRow += aRow[i];
+      }else if( iC<0 ){
+        for(i=0; i<nCol; i++) nRow += aRow[i*nStream + iS];
+      }else if( iS<0 ){
+        for(i=0; i<nStream; i++) nRow += aRow[nStream*iC + iS];
+      }else if( iC<nCol && iS<nStream ){
+        nRow = aRow[iC * nStream + iS];
+      }
+
+      *pn = nRow;
+    }
+  }
+  return rc;
+}
+
+static void fts5IterSetCurrent(Fts5MatchIter *pIter, int nList){
+  InstanceList *pBest = 0;
+  int i;
+
+  for(i=0; i<nList; i++){
+    InstanceList *p = &pIter->aList[i];
+    if( fts5InstanceListEof(p)==0 ){
+      if( (pBest==0)
+       || (p->iCol<pBest->iCol)
+       || (p->iCol==pBest->iCol && p->iOff<pBest->iOff)
+      ){
+        pBest = p;
+      }
+    }
+  }
+
+  if( pBest==0 ){
+    pIter->iCurrent = -1;
+  }else{
+    pIter->iCurrent = pBest - pIter->aList;
+  }
+}
+
+static void fts5InitExprIterator(
+  const u8 *aPk, 
+  int nPk, 
+  Fts5ExprNode *p,
+  Fts5MatchIter *pIter
+){
+  if( p ){
+    if( p->eType==TOKEN_PRIMITIVE ){
+      if( p->nPk==nPk && 0==memcmp(aPk, p->aPk, nPk) ){
+        int i;
+        for(i=0; i<p->pPhrase->nStr; i++){
+          Fts5Str *pStr = &p->pPhrase->aStr[i];
+          InstanceList *pList = &pIter->aList[pIter->iCurrent++];
+          fts5InstanceListInit(pStr->aList, pStr->nList, pList);
+          fts5InstanceListNext(pList);
+        }
+      }else{
+        memset(&pIter->aList[pIter->iCurrent], 0, sizeof(InstanceList));
+        pIter->iCurrent += p->pPhrase->nStr;
+      }
+    }
+    fts5InitExprIterator(aPk, nPk, p->pLeft, pIter);
+    fts5InitExprIterator(aPk, nPk, p->pRight, pIter);
+  }
+}
+
+static void fts5InitIterator(Fts5Cursor *pCsr){
+  Fts5MatchIter *pIter = pCsr->pIter;
+  Fts5ExprNode *pRoot = pCsr->pExpr->pRoot;
+
+  pIter->iCurrent = 0;
+  fts5InitExprIterator(pRoot->aPk, pRoot->nPk, pRoot, pIter);
+  pIter->iMatch = 0;
+  pIter->bValid = 1;
+  fts5IterSetCurrent(pIter, pCsr->pExpr->nPhrase);
+}
+
+int sqlite4_mi_match_detail(
+  sqlite4_context *pCtx,          /* Context object passed to mi function */
+  int iMatch,                     /* Index of match */
+  int *piOff,                     /* OUT: Token offset of match */
+  int *piC,                       /* OUT: Column number of match iMatch */
+  int *piS,                       /* OUT: Stream number of match iMatch */
+  int *piP                        /* OUT: Phrase number of match iMatch */
+){
+  int rc = SQLITE4_OK;
+  Fts5Cursor *pCsr = pCtx->pFts;
+  if( pCsr==0 ){
+    rc = SQLITE4_MISUSE;
+  }else{
+    int nPhrase = pCsr->pExpr->nPhrase;
+    Fts5MatchIter *pIter = pCsr->pIter;
+    if( pIter==0 ){
+      pCsr->pIter = pIter = (Fts5MatchIter *)sqlite4DbMallocZero(
+          pCsr->db, sizeof(Fts5MatchIter) + sizeof(InstanceList)*nPhrase
+      );
+      if( pIter ){
+        pIter->aList = (InstanceList *)&pIter[1];
+      }else{
+        rc = SQLITE4_NOMEM;
+      }
+    }
+
+    if( rc==SQLITE4_OK && (pIter->bValid==0 || iMatch<pIter->iMatch) ){
+      fts5InitIterator(pCsr);
+#if 0
+      int i;
+      for(i=0; i<pCsr->pExpr->nPhrase; i++){
+        Fts5Str *pStr = pCsr->pExpr->apPhrase[i];
+        fts5InstanceListInit(pStr->aList, pStr->nList, &pIter->aList[i]);
+        fts5InstanceListNext(&pIter->aList[i]);
+      }
+      pIter->iMatch = 0;
+      fts5IterSetCurrent(pIter, pCsr->pExpr->nPhrase);
+#endif
+    }
+
+    if( rc==SQLITE4_OK ){
+      assert( pIter->iMatch<=iMatch );
+      while( pIter->iCurrent>=0 && pIter->iMatch<iMatch ){
+        fts5InstanceListNext(&pIter->aList[pIter->iCurrent]);
+        fts5IterSetCurrent(pIter, pCsr->pExpr->nPhrase);
+        pIter->iMatch++;
+      }
+      if( pIter->iCurrent<0 ){
+        rc = SQLITE4_NOTFOUND;
+      }else{
+        InstanceList *p = &pIter->aList[pIter->iCurrent];
+        *piOff = p->iOff;
+        *piC = p->iCol;
+        *piS = p->iStream;
+        *piP = pIter->iCurrent;
+      }
+    }
+  }
+  return rc;
 }
 
 /**************************************************************************

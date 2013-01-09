@@ -241,6 +241,7 @@ struct sqlite4_context {
   Mem *pMem;            /* Memory cell used to store aggregate context */
   int isError;          /* Error code returned by the function. */
   CollSeq *pColl;       /* Collating sequence */
+  Fts5Cursor *pFts;     /* fts5 cursor for matchinfo functions */
 };
 
 /*
