@@ -74,10 +74,25 @@ do_catchsql_test 2.3 {
   CREATE INDEX ft ON t2 USING fts5("a b c");
 } {1 {unrecognized argument: "a b c"}}
 
-breakpoint
 do_catchsql_test 2.4 {
   CREATE INDEX ft ON t2 USING fts5(tokenizer="nosuch");
 } {1 {no such tokenizer: "nosuch"}}
+
+#-------------------------------------------------------------------------
+#
+reset_db
+
+do_execsql_test 3.1 {
+  CREATE TABLE t1(a, b, c, PRIMARY KEY(a));
+  INSERT INTO t1 VALUES(1, 'a b c d', 'e f g h');
+  INSERT INTO t1 VALUES(2, 'e f g h', 'a b c d');
+}
+
+do_execsql_test 3.2 {
+  CREATE INDEX ft ON t1 USING fts5();
+  PRAGMA fts_check(ft);
+} {ok}
+
 
 finish_test
 

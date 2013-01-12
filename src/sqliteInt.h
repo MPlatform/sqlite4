@@ -3269,9 +3269,9 @@ int sqlite4Fts5IndexSz(void);
 void sqlite4Fts5IndexInit(Parse *, Index *, ExprList *);
 void sqlite4Fts5IndexFree(sqlite4 *, Index *);
 
-int sqlite4Fts5Update(sqlite4 *, Fts5Info *, Mem *pPk, Mem *aArg, int, char **);
+int sqlite4Fts5Update(sqlite4 *, Fts5Info *, int, Mem *, Mem *, int, char **);
 void sqlite4Fts5FreeInfo(sqlite4 *db, Fts5Info *);
-void sqlite4Fts5CodeUpdate(Parse *, Index *pIdx, int iRegPk, int iRegData, int);
+void sqlite4Fts5CodeUpdate(Parse *, Index *pIdx, int, int, int, int);
 void sqlite4Fts5CodeCksum(Parse *, Index *, int, int, int);
 void sqlite4Fts5CodeQuery(Parse *, Index *, int, int, int);
 

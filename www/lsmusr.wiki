@@ -150,9 +150,7 @@ flash memory devices.
 <p>Although it has quite different features to LSM in other respects, 
 LevelDB makes similar performance tradeoffs.
 
-<p>Benchmark test results for LSM are <a href=#>available here</a>. <i>Todo:
-Fix this link to point to a page with performance graphs.</i>
-
+<p>Benchmark test results for LSM are <a href=lsmperf.wiki>available here</a>.
 
 <h1 id=using_lsm_in_applications>2. Using LSM in Applications </h1>
 

@@ -260,6 +260,11 @@ struct Fts5Cursor {
   Fts5Size *pSz;                  /* Local size data */
   Fts5Size *pGlobal;              /* Global size data */
   i64 nGlobal;                    /* Total number of rows in table */
+
+  /* Arrays used by sqlite4_mi_row_count(). */
+  int *anRowCS;
+  int *anRowC;
+  int *anRowS;
   int *anRow;
 
   Fts5MatchIter *pIter;           /* Used by mi_match_detail() */
@@ -596,6 +601,7 @@ static int fts5AppendTokensCb(
   nUsed = putVarint32((u8 *)zSpace, pParse->iRoot);
   zSpace[nUsed++] = 0x24;
   pToken->bPrefix = 0;
+  pToken->pPrefix = 0;
   pToken->z = &zSpace[nUsed];
   pToken->n = n;
   memcpy(pToken->z, z, n);
@@ -1270,7 +1276,6 @@ static int fts5TokenizeCb(
   TokenizeCtx *p = (TokenizeCtx *)pCtx;
   sqlite4 *db = p->db;
   TokenizeTerm *pTerm = 0;
-  TokenizeTerm *pOrig = 0;
 
   /* TODO: Error here if iStream is out of range */
 
@@ -1294,19 +1299,14 @@ static int fts5TokenizeCb(
 
     pTerm = sqlite4DbMallocZero(p->db, nAlloc);
     if( pTerm ){
-      void *pFree;
       pTerm->nAlloc = sqlite4DbMallocSize(p->db, pTerm);
       pTerm->nToken = nToken;
       memcpy(&pTerm[1], zToken, nToken);
-      pFree = sqlite4HashInsert(&p->hash, (char *)&pTerm[1], nToken, pTerm);
-      if( pFree ){
-        sqlite4DbFree(p->db, pFree);
-        pTerm = 0;
-      }
-      if( pTerm==0 ) goto tokenize_cb_out;
     }
+    if( pTerm==0 ) goto tokenize_cb_out;
+  }else{
+    sqlite4HashInsert(&p->hash, zToken, nToken, 0);
   }
-  pOrig = pTerm;
 
   if( iStream!=pTerm->iStream ){
     pTerm = fts5TokenizeAppendInt(p, pTerm, (iStream << 2) | 0x00000003);
@@ -1326,9 +1326,7 @@ static int fts5TokenizeCb(
   pTerm->iOff = iOff;
 
 tokenize_cb_out:
-  if( pTerm!=pOrig ){
-    sqlite4HashInsert(&p->hash, (char *)&pTerm[1], nToken, pTerm);
-  }
+  sqlite4HashInsert(&p->hash, (char *)&pTerm[1], nToken, pTerm);
   if( !pTerm ){
     p->rc = SQLITE4_NOMEM;
     return 1;
@@ -1483,6 +1481,7 @@ static int fts5CsrLoadSz(Fts5Cursor *pCsr){
 int sqlite4Fts5Update(
   sqlite4 *db,                    /* Database handle */
   Fts5Info *pInfo,                /* Description of fts index to update */
+  int iRoot,
   Mem *pKey,                      /* Primary key blob */
   Mem *aArg,                      /* Array of arguments (see above) */
   int bDel,                       /* True for a delete, false for insert */
@@ -1502,6 +1501,7 @@ int sqlite4Fts5Update(
   int nPK;
   HashElem *pElem;
 
+  if( iRoot==0 ) iRoot = pInfo->iRoot;
   pStore = db->aDb[pInfo->iDb].pKV;
 
   memset(&sCtx, 0, sizeof(sCtx));
@@ -1542,7 +1542,7 @@ int sqlite4Fts5Update(
   ** store the largest index record key and the largest possible global
   ** size record.
   */
-  nSpace = (sqlite4VarintLen(pInfo->iRoot) + 2 + sCtx.nMax + nPK) + 
+  nSpace = (sqlite4VarintLen(iRoot) + 2 + sCtx.nMax + nPK) + 
            (9 * (2 + pInfo->nCol * sCtx.nStream));
   aSpace = sqlite4DbMallocRaw(db, nSpace);
   if( aSpace==0 ) rc = SQLITE4_NOMEM;
@@ -1555,7 +1555,7 @@ int sqlite4Fts5Update(
       u8 *aKey = aSpace;
       int nKey;
 
-      nKey = putVarint32(aKey, pInfo->iRoot);
+      nKey = putVarint32(aKey, iRoot);
       aKey[nKey++] = 0x24;
       memcpy(&aKey[nKey], zToken, nToken);
       nKey += nToken;
@@ -1581,7 +1581,7 @@ int sqlite4Fts5Update(
     u8 *aKey = aSpace;
     int nKey;
 
-    nKey = putVarint32(aKey, pInfo->iRoot);
+    nKey = putVarint32(aKey, iRoot);
     aKey[nKey++] = 0x00;
     memcpy(&aKey[nKey], pPK, nPK);
     nKey += nPK;
@@ -1604,7 +1604,7 @@ int sqlite4Fts5Update(
     u8 *aKey = aSpace;            /* Space to format the global record key */
     int nKey;                     /* Size of global record key in bytes */
 
-    nKey = putVarint32(aKey, pInfo->iRoot);
+    nKey = putVarint32(aKey, iRoot);
     aKey[nKey++] = 0x00;
     rc = fts5LoadSizeRecord(db, aKey, nKey, sCtx.nStream, pInfo, &nRow, &pSz);
     assert( rc!=SQLITE4_OK || pSz->nStream>=sCtx.nStream );
@@ -1684,6 +1684,7 @@ static Fts5Info *fts5InfoCreate(Parse *pParse, Index *pIdx, int bCol){
 void sqlite4Fts5CodeUpdate(
   Parse *pParse, 
   Index *pIdx, 
+  int iRegRoot,
   int iRegPk, 
   int iRegData,
   int bDel
@@ -1694,7 +1695,7 @@ void sqlite4Fts5CodeUpdate(
   if( 0==(pInfo = fts5InfoCreate(pParse, pIdx, 0)) ) return;
 
   v = sqlite4GetVdbe(pParse);
-  sqlite4VdbeAddOp3(v, OP_FtsUpdate, iRegPk, 0, iRegData);
+  sqlite4VdbeAddOp3(v, OP_FtsUpdate, iRegPk, iRegRoot, iRegData);
   sqlite4VdbeChangeP4(v, -1, (const char *)pInfo, P4_FTS5INFO);
   sqlite4VdbeChangeP5(v, (u8)bDel);
 }
@@ -2935,14 +2936,25 @@ int sqlite4_mi_total_match_count(
   return SQLITE4_OK;
 }
 
-static void fts5StrLoadRowcounts(Fts5Str *pStr, int nStream, int *anRow){
+static void fts5StrLoadRowcounts(
+  Fts5Str *pStr, 
+  int nStream, 
+  int *anRow,
+  int *anRowC,
+  int *anRowS,
+  int *pnRowCS
+){
   u32 mask = 0;
-  int iPrevCol = 0;
+  int iPrevCol = -1;
   InstanceList sList;
 
   fts5InstanceListInit(pStr->aList, pStr->nList, &sList);
   while( 0==fts5InstanceListNext(&sList) ){
-    if( sList.iCol!=iPrevCol ) mask = 0;
+    if( iPrevCol<0 ) (*pnRowCS)++;
+    if( sList.iCol!=iPrevCol ){
+      mask = 0;
+      anRowC[sList.iCol]++;
+    }
     if( (mask & (1<<sList.iStream))==0 ){
       anRow[sList.iCol * nStream + sList.iStream]++;
       mask |= (1<<sList.iStream);
@@ -2953,36 +2965,44 @@ static void fts5StrLoadRowcounts(Fts5Str *pStr, int nStream, int *anRow){
 
 static int fts5ExprLoadRowcounts(
   sqlite4 *db, 
-  Fts5Info *pInfo,
+  Fts5Cursor *pCsr,
   int nStream,
   Fts5ExprNode *pNode, 
-  int **panRow
+  int *piStr
 ){
   int rc = SQLITE4_OK;
 
   if( pNode ){
+    Fts5Info *pInfo = pCsr->pInfo;
+
     if( pNode->eType==TOKEN_PRIMITIVE ){
-      int *anRow = *panRow;
       Fts5Phrase *pPhrase = pNode->pPhrase;
+      int iStr = *piStr;
 
       rc = fts5ExprAdvance(db, pNode, 1);
-      while( rc==SQLITE4_OK ){
+      while( rc==SQLITE4_OK && pNode->aPk ){
         int nIncr =  pInfo->nCol * nStream;      /* Values for each Fts5Str */
         int i;
         for(i=0; i<pPhrase->nStr; i++){
-          fts5StrLoadRowcounts(&pPhrase->aStr[i], nStream, &anRow[i*nIncr]);
+          int *anRow = &pCsr->anRow[(iStr+i) * pInfo->nCol * nStream];
+          int *anRowC = &pCsr->anRowC[(iStr+i) * pInfo->nCol];
+          int *anRowS = &pCsr->anRowS[(iStr+i) * nStream];
+          int *pnRowCS = &pCsr->anRowCS[iStr+i];
+          fts5StrLoadRowcounts(
+              &pPhrase->aStr[i], nStream, anRow, anRowC, anRowS, pnRowCS
+          );
         }
         rc = fts5ExprAdvance(db, pNode, 0);
       }
 
-      *panRow = &anRow[pInfo->nCol * nStream * pPhrase->nStr];
+      *piStr = iStr + pPhrase->nStr;
     }
 
     if( rc==SQLITE4_OK ){
-      rc = fts5ExprLoadRowcounts(db, pInfo, nStream, pNode->pLeft, panRow);
+      rc = fts5ExprLoadRowcounts(db, pCsr, nStream, pNode->pLeft, piStr);
     }
     if( rc==SQLITE4_OK ){
-      rc = fts5ExprLoadRowcounts(db, pInfo, nStream, pNode->pRight, panRow);
+      rc = fts5ExprLoadRowcounts(db, pCsr, nStream, pNode->pRight, piStr);
     }
   }
 
@@ -2999,20 +3019,27 @@ static int fts5CsrLoadRowcounts(Fts5Cursor *pCsr){
     Fts5Expr *pExpr = pCsr->pExpr;
     Fts5Info *pInfo = pCsr->pInfo;
     int *anRow;
+    int iPhrase = 0;
 
-    pCsr->anRow = anRow = (int *)sqlite4DbMallocZero(db, 
-        pExpr->nPhrase * pInfo->nCol * pCsr->pGlobal->nStream * sizeof(int)
-    );
+    pCsr->anRow = anRow = (int *)sqlite4DbMallocZero(db, sizeof(int) * (
+        pExpr->nPhrase * pInfo->nCol * pCsr->pGlobal->nStream
+      + pExpr->nPhrase * pInfo->nCol
+      + pExpr->nPhrase * pCsr->pGlobal->nStream
+      + pExpr->nPhrase 
+    ));
     if( !anRow ) return SQLITE4_NOMEM;
+    pCsr->anRowC = &anRow[pExpr->nPhrase*pInfo->nCol*pCsr->pGlobal->nStream];
+    pCsr->anRowS = &pCsr->anRowC[pExpr->nPhrase * pInfo->nCol];
+    pCsr->anRowCS = &pCsr->anRowS[pExpr->nPhrase * pCsr->pGlobal->nStream];
 
     rc = fts5ParseExpression(db, pInfo->pTokenizer, pInfo->p, 
         pInfo->iRoot, pInfo->azCol, pInfo->nCol, pCsr->zExpr, &pCopy, 0
     );
     if( rc==SQLITE4_OK ){
-      rc = fts5OpenExprCursors(db, pInfo, pExpr->pRoot);
+      rc = fts5OpenExprCursors(db, pInfo, pCopy->pRoot);
     }
     if( rc==SQLITE4_OK ){
-      rc = fts5ExprLoadRowcounts(db, pInfo, nStream, pCopy->pRoot, &anRow);
+      rc = fts5ExprLoadRowcounts(db, pCsr, nStream, pCopy->pRoot, &iPhrase);
     }
 
     fts5ExpressionFree(db, pCopy);
@@ -3044,12 +3071,11 @@ int sqlite4_mi_row_count(
       int *aRow = &pCsr->anRow[iP * nStream * nCol];
 
       if( iC<0 && iS<0 ){
-        int nFin = nCol * nStream;
-        for(i=0; i<nFin; i++) nRow += aRow[i];
+        nRow = pCsr->anRowCS[iP];
       }else if( iC<0 ){
         for(i=0; i<nCol; i++) nRow += aRow[i*nStream + iS];
       }else if( iS<0 ){
-        for(i=0; i<nStream; i++) nRow += aRow[nStream*iC + iS];
+        nRow = pCsr->anRowC[iP*nCol + iC];
       }else if( iC<nCol && iS<nStream ){
         nRow = aRow[iC * nStream + iS];
       }

@@ -603,7 +603,7 @@ void sqlite4GenerateRowIndexDelete(
         sqlite4VdbeAddOp3(v, OP_Column, iPkCsr, iCol, iReg+iCol);
       }
       sqlite4VdbeAddOp2(v, OP_RowKey, iPkCsr, iReg+pTab->nCol);
-      sqlite4Fts5CodeUpdate(pParse, pIdx, iReg+pTab->nCol, iReg, 1);
+      sqlite4Fts5CodeUpdate(pParse, pIdx, 0, iReg+pTab->nCol, iReg, 1);
     }else if( pIdx!=pPk && (aRegIdx==0 || aRegIdx[i]>0) ){
       int addrNotFound;
       sqlite4EncodeIndexKey(pParse, pPk, baseCur+iPk,pIdx,baseCur+i,0,regKey);

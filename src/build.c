@@ -2289,18 +2289,34 @@ static void sqlite4RefillIndex(Parse *pParse, Index *pIdx, int bCreate){
   /* Loop through the contents of the PK index. At each row, insert the
   ** corresponding entry into the auxiliary index.  */
   addr1 = sqlite4VdbeAddOp2(v, OP_Rewind, iTab, 0);
-  sqlite4GetTempRange(pParse,2);
-  regKey = sqlite4GetTempReg(pParse);
-  sqlite4EncodeIndexKey(pParse, pPk, iTab, pIdx, iIdx, 0, regKey);
-  if( pIdx->onError!=OE_None ){
-    const char *zErr = "indexed columns are not unique";
-    int addrTest;
-     
-    addrTest = sqlite4VdbeAddOp4Int(v, OP_IsUnique, iIdx, 0, regKey, 0);
-    sqlite4HaltConstraint(pParse, OE_Abort, (char *)zErr, P4_STATIC);
-    sqlite4VdbeJumpHere(v, addrTest);
+
+  if( pIdx->eIndexType==SQLITE4_INDEX_FTS5 ){
+    int regData;
+    int i;
+
+    regKey = sqlite4GetTempRange(pParse, pTab->nCol+1);
+    regData = regKey+1;
+
+    sqlite4VdbeAddOp2(v, OP_RowKey, iTab, regKey);
+    for(i=0; i<pTab->nCol; i++){
+      sqlite4VdbeAddOp3(v, OP_Column, iTab, i, regData+i);
+    }
+    sqlite4Fts5CodeUpdate(pParse, pIdx, pParse->iNewidxReg, regKey, regData, 0);
+  }else{
+    sqlite4GetTempRange(pParse,2);
+    regKey = sqlite4GetTempReg(pParse);
+    sqlite4EncodeIndexKey(pParse, pPk, iTab, pIdx, iIdx, 0, regKey);
+    if( pIdx->onError!=OE_None ){
+      const char *zErr = "indexed columns are not unique";
+      int addrTest;
+
+      addrTest = sqlite4VdbeAddOp4Int(v, OP_IsUnique, iIdx, 0, regKey, 0);
+      sqlite4HaltConstraint(pParse, OE_Abort, (char *)zErr, P4_STATIC);
+      sqlite4VdbeJumpHere(v, addrTest);
+    }
+    sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, 0, regKey);  
   }
-  sqlite4VdbeAddOp3(v, OP_IdxInsert, iIdx, 0, regKey);  
+
   sqlite4VdbeAddOp2(v, OP_Next, iTab, addr1+1);
   sqlite4VdbeJumpHere(v, addr1);
   sqlite4ReleaseTempReg(pParse, regKey);
@@ -2561,7 +2577,7 @@ void sqlite4CreateUsingIndex(
       }
     }
 
-    sqlite4DbFree(db, pIdx);
+    if( pIdx ) freeIndex(db, pIdx);
     sqlite4DbFree(db, zIdx);
   }
 

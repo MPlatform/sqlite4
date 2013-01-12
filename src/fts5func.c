@@ -74,14 +74,19 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
   const double b = 0.65;
   const double k1 = 1.6;
 
+  sqlite4 *db = sqlite4_context_db_handle(pCtx);
   int rc = SQLITE4_OK;            /* Error code */
   Fts5RankCtx *p;                 /* Structure to store reusable values */
   int i;                          /* Used to iterate through phrases */
   double rank = 0.0;              /* UDF return value */
 
+  int bExplain = 0;
+  char *zExplain = 0;
+
+  if( sqlite4_user_data(pCtx) ) bExplain = 1;
+
   p = sqlite4_get_auxdata(pCtx, 0);
   if( p==0 ){
-    sqlite4 *db = sqlite4_context_db_handle(pCtx);
     int nPhrase;                  /* Number of phrases in query expression */
     int nByte;                    /* Number of bytes of data to allocate */
 
@@ -106,6 +111,7 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
       for(i=0; rc==SQLITE4_OK && i<nPhrase; i++){
         rc = sqlite4_mi_row_count(pCtx, -1, -1, i, &ni);
         if( rc==SQLITE4_OK ){
+          assert( ni<=N );
           p->aIdf[i] = log((0.5 + N - ni) / (0.5 + ni));
         }
       }
@@ -136,14 +142,35 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
     /* Calculate the normalized document length */
     L = (double)dl / p->avgdl;
 
+
     /* Calculate the contribution to the rank made by this phrase. Then
     ** add it to variable rank.  */
     prank = (p->aIdf[i] * tf) / (k1 * ( (1.0 - b) + b * L) + tf);
     rank += prank;
+
+    if( bExplain ){
+      zExplain = sqlite4MAppendf(
+          db, zExplain, "%s(idf=%.2f L=%.2f tf=%d) rank=%.2f", zExplain,
+          p->aIdf[i], L, tf, prank
+      );
+      if( (i+1)<p->nPhrase ){
+        zExplain = sqlite4MAppendf(db, zExplain, "%s<br>", zExplain);
+      }
+    }
   }
 
   if( rc==SQLITE4_OK ){
-    sqlite4_result_double(pCtx, rank);
+    if( bExplain ){
+      if( p->nPhrase>1 ){
+        zExplain = sqlite4MAppendf(
+            db, zExplain, "%s<br>total=%.2f", zExplain, rank
+        );
+      }
+      sqlite4_result_text(pCtx, zExplain, -1, SQLITE4_TRANSIENT);
+      sqlite4DbFree(db, zExplain);
+    }else{
+      sqlite4_result_double(pCtx, rank);
+    }
   }else{
     sqlite4_result_error_code(pCtx, rc);
   }
@@ -215,13 +242,13 @@ static int fts5SnippetCb(
     return 0;
   }else if( iOff>=(p->iOff + p->nToken) ){
     fts5SnippetAppend(p, &p->zText[p->iFrom], p->iTo - p->iFrom);
-    fts5SnippetAppend(p, "...", 3);
+    fts5SnippetAppend(p, p->zEllipses, -1);
     p->iFrom = -1;
     return 1;
   }else{
     int bHighlight;               /* True to highlight term */
 
-    bHighlight = (p->mask & (1 << (iOff-p->iOff)));
+    bHighlight = (p->mask & ((u64)1 << (iOff-p->iOff))) ? 1 : 0;
 
     if( p->iFrom==0 && p->iOff!=0 ){
       p->iFrom = iSrc;
@@ -332,7 +359,7 @@ static int fts5BestSnippet(
 
       if( iColumn>=0 && iColumn!=iCol ) continue;
 
-      allmask |= (1 << iPhrase);
+      allmask |= ((u64)1 << iPhrase);
 
       nShift = ((iPrevCol==iCol) ? (iOff-iPrev) : 100);
 
@@ -345,16 +372,22 @@ static int fts5BestSnippet(
       }
       sqlite4_mi_phrase_token_count(pCtx, iPhrase, &nPTok);
       for(iPTok=0; iPTok<nPTok; iPTok++){
-        aMask[iPhrase] = aMask[iPhrase] | (1<<(nToken-1+iPTok));
+        aMask[iPhrase] = aMask[iPhrase] | ((u64)1 << (nToken-1+iPTok));
       }
 
       for(iMask=0; iMask<nPhrase; iMask++){
+        int iBit;
         if( aMask[iMask] ){
-          nScore += (((1 << iMask) & mask) ? 100 : 1);
+          nScore += ((((u64)1 << iMask) & mask) ? 100 : 1);
         }else{
-          miss |= (1 << iMask);
+          miss |= ((u64)1 << iMask);
         }
         tmask = tmask | aMask[iMask];
+        /* TODO: This is the Hamming Weight. There are much more efficient
+        ** ways to calculate it. */
+        for(iBit=0; iBit<nToken; iBit++){
+          if( tmask & ((u64)1 << iBit) ) nScore++;
+        }
       }
 
       if( nScore>nBest ){
@@ -394,9 +427,9 @@ static void fts5SnippetImprove(
   int iOff = pSnip->iOff;
 
   if( mask==0 ) return;
-  assert( mask & (1 << (nToken-1)) );
+  assert( mask & ((u64)1 << (nToken-1)) );
 
-  for(i=0; (mask & (1<<i))==0; i++);
+  for(i=0; (mask & ((u64)1 << i))==0; i++);
   nLead = i;
 
   nShift = (nLead/2);
@@ -510,6 +543,10 @@ int sqlite4InitFts5Func(sqlite4 *db){
   if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_create_mi_function(db, "rank", 0, SQLITE4_UTF8, 0, fts5Rank, 0);
+  if( rc!=SQLITE4_OK ) return rc;
+  rc = sqlite4_create_mi_function(
+      db, "erank", 0, SQLITE4_UTF8, (void *)1, fts5Rank, 0
+  );
   if( rc!=SQLITE4_OK ) return rc;
 
   rc = sqlite4_create_mi_function(

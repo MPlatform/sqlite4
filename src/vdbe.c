@@ -4851,7 +4851,7 @@ case OP_Trace: {
 }
 #endif
 
-/* Opcode: FtsUpdate P1 * P3 P4 P5
+/* Opcode: FtsUpdate P1 P2 P3 P4 P5
 **
 ** This opcode is used to write to an FTS index. P4 points to an Fts5Info 
 ** object describing the index.
@@ -4867,18 +4867,30 @@ case OP_Trace: {
 ** P3 is the first in an array of N registers, where N is the number of
 ** columns in the indexed table. Each register contains the value for the
 ** corresponding table column.
+**
+** If P2 is non-zero, then it is a register containing the root page number
+** of the fts index to update. If it is zero, then the root page of the 
+** index is available as part of the Fts5Info structure.
 */
 case OP_FtsUpdate: {
   Fts5Info *pInfo;                /* Description of fts5 index to update */
   Mem *pKey;                      /* Primary key of indexed row */
   Mem *aArg;                      /* Pointer to array of N arguments */
+  Mem *pRoot;                     /* Root page number */
+  int iRoot;
 
   assert( pOp->p4type==P4_FTS5INFO );
   pInfo = pOp->p4.pFtsInfo;
   aArg = &aMem[pOp->p3];
   pKey = &aMem[pOp->p1];
 
-  rc = sqlite4Fts5Update(db, pInfo, pKey, aArg, pOp->p5, &p->zErrMsg);
+  if( pOp->p2 ){
+    iRoot = aMem[pOp->p2].u.i;
+  }else{
+    iRoot = 0;
+  }
+
+  rc = sqlite4Fts5Update(db, pInfo, iRoot, pKey, aArg, pOp->p5, &p->zErrMsg);
   break;
 }
 

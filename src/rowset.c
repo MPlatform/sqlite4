@@ -158,11 +158,14 @@ void sqlite4RowSetClear(RowSet *p){
 
 static u8 *rowsetAllocateChunk(RowSet *p, int nByte){
   int rowChunkSize = ROUND8(sizeof(RowSetChunk));
-  u8 *pNew;                       /* New RowSetChunk */
+  RowSetChunk *pNew;              /* New RowSetChunk */
   int nAlloc;                     /* Bytes to request from malloc() */
   nAlloc =  rowChunkSize + nByte;
-  pNew = (u8 *)sqlite4DbMallocRaw(p->db, nAlloc);
-  return (pNew ? (pNew + rowChunkSize) : 0);
+  pNew = (RowSetChunk *)sqlite4DbMallocRaw(p->db, nAlloc);
+  if( !pNew ) return 0;
+  pNew->pNextChunk = p->pChunk;
+  p->pChunk = pNew;
+  return (u8 *)(&pNew[1]);
 }
 
 static int rowsetEntryKeyCmp(RowSetEntry *pLeft, const u8 *aKey, int nKey){
