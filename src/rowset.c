@@ -157,7 +157,7 @@ void sqlite4RowSetClear(RowSet *p){
 
 
 static u8 *rowsetAllocateChunk(RowSet *p, int nByte){
-  enum { rowChunkSize = ROUND8(sizeof(RowSetChunk)) };
+  int rowChunkSize = ROUND8(sizeof(RowSetChunk));
   u8 *pNew;                       /* New RowSetChunk */
   int nAlloc;                     /* Bytes to request from malloc() */
   nAlloc =  rowChunkSize + nByte;

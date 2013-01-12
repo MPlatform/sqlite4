@@ -761,6 +761,7 @@ void lsmSortedExpandBtreePage(Page *pPg, int nOrig);
 
 void lsmPutU32(u8 *, u32);
 u32 lsmGetU32(u8 *);
+u64 lsmGetU64(u8 *);
 
 /*
 ** Functions from "lsm_varint.c".

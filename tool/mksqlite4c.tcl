@@ -160,6 +160,7 @@ proc copy_file {filename} {
         set seen_hdr($hdr) 1
         puts $out $line
       } else {
+        regsub {\*/} $line {} line
         puts $out "/* $line */"
       }
     } elseif {[regexp {^#ifdef __cplusplus} $line]} {
@@ -284,6 +285,9 @@ foreach file {
    trigger.c
    update.c
    where.c
+
+   fts5.c
+   fts5func.c
 
    parse.c
 

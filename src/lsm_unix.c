@@ -414,7 +414,6 @@ static int lsmPosixOsSleep(lsm_env *pEnv, int us){
 /****************************************************************************
 ** Memory allocation routines.
 */
-#define ROUND8(x) (((x)+7)&~7)
 #define BLOCK_HDR_SIZE ROUND8( sizeof(sqlite4_size_t) )
 
 static void *lsmPosixOsMalloc(lsm_env *pEnv, int N){
@@ -462,7 +461,6 @@ static sqlite4_size_t lsmPosixOsMSize(lsm_env *pEnv, void *p){
   unsigned char * m = (unsigned char *)p;
   return *((sqlite4_size_t*)(m-BLOCK_HDR_SIZE));
 }
-#undef ROUND8
 #undef BLOCK_HDR_SIZE
 
 

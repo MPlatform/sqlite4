@@ -19,6 +19,7 @@
 #define SQLITE4_OMIT_PROGRESS_CALLBACK 1
 #define SQLITE4_OMIT_VIRTUALTABLE 1
 #define SQLITE4_OMIT_XFER_OPT 1
+#define SQLITE4_OMIT_LOCALTIME 1
 
 /*
 ** These #defines should enable >2GB file support on POSIX if the

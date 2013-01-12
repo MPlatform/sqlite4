@@ -37,8 +37,8 @@
 */
 static int noopMutexInit(void *p){ UNUSED_PARAMETER(p); return SQLITE4_OK; }
 static int noopMutexEnd(void *p){ UNUSED_PARAMETER(p); return SQLITE4_OK; }
-static sqlite4_mutex *noopMutexAlloc(sqlite4_env *pEnv, int id){ 
-  UNUSED_PARAMETER(pEnv);
+static sqlite4_mutex *noopMutexAlloc(void *p, int id){ 
+  UNUSED_PARAMETER(p);
   UNUSED_PARAMETER(id);
   return (sqlite4_mutex*)8; 
 }

@@ -103,6 +103,8 @@ SRC = \
   $(TOP)/src/expr.c \
   $(TOP)/src/fault.c \
   $(TOP)/src/fkey.c \
+  $(TOP)/src/fts5.c \
+  $(TOP)/src/fts5func.c \
   $(TOP)/src/func.c \
   $(TOP)/src/global.c \
   $(TOP)/src/hash.c \
