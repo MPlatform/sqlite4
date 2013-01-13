@@ -2370,31 +2370,31 @@ static int fts5StringNearTrim(
     int nTrail = nNear + (pNext->nToken-1) + 1;
     int nLead = nNear + (pTrim->nToken-1) + 1;
 
-    InstanceList near;
+    InstanceList lNear;
     InstanceList in;
     InstanceList out;
 
-    fts5InstanceListInit(pNext->aList, pNext->nList, &near);
+    fts5InstanceListInit(pNext->aList, pNext->nList, &lNear);
     fts5InstanceListInit(pTrim->aList, pTrim->nList, &in);
     fts5InstanceListInit(pTrim->aList, pTrim->nList, &out);
-    fts5InstanceListNext(&near);
+    fts5InstanceListNext(&lNear);
     fts5InstanceListNext(&in);
 
     while( bEof==0 ){
-      if( fts5IsNear(&near, &in, nTrail) 
-       || fts5IsNear(&in, &near, nLead)
+      if( fts5IsNear(&lNear, &in, nTrail) 
+       || fts5IsNear(&in, &lNear, nLead)
       ){
         /* The current position is a match. Append an entry to the output
         ** and advance the input cursor. */
         fts5InstanceListAppend(&out, in.iCol, in.iStream, in.iOff);
         bEof = fts5InstanceListNext(&in);
       }else{
-        if( near.iCol<in.iCol || (near.iCol==in.iCol && near.iOff<in.iOff) ){
-          bEof = fts5InstanceListNext(&near);
-        }else if( near.iCol==in.iCol && near.iOff==in.iOff ){
+        if( lNear.iCol<in.iCol || (lNear.iCol==in.iCol && lNear.iOff<in.iOff) ){
+          bEof = fts5InstanceListNext(&lNear);
+        }else if( lNear.iCol==in.iCol && lNear.iOff==in.iOff ){
           bEof = fts5InstanceListNext(&in);
-          if( fts5IsNear(&near, &in, nTrail) ){
-            fts5InstanceListAppend(&out, near.iCol, near.iStream, near.iOff);
+          if( fts5IsNear(&lNear, &in, nTrail) ){
+            fts5InstanceListAppend(&out, lNear.iCol, lNear.iStream, lNear.iOff);
           }
         }else{
           bEof = fts5InstanceListNext(&in);
