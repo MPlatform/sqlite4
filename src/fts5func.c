@@ -44,7 +44,7 @@ static int fts5SimpleDestroy(sqlite4_tokenizer *p){
 typedef struct Fts5RankCtx Fts5RankCtx;
 struct Fts5RankCtx {
   sqlite4 *db;
-  double avgdl;                   /* Average document size in tokens */
+  double *aAvgdl;                 /* Average document size of each field */
   int nPhrase;                    /* Number of phrases in query */
   double *aIdf;                   /* IDF weights for each phrase in query */
 };
@@ -56,13 +56,51 @@ static void fts5RankFreeCtx(void *pCtx){
   }
 }
 
+#define BM25_EXPLAIN  0x01
+#define BM25_FCOLUMNS 0x02
+#define BM25_FSTREAMS 0x04
+
+static int fts5GetSizeFreqScale(
+  sqlite4_context *pCtx,
+  int nArg, sqlite4_value **apArg,/* Function arguments */
+  int bm25mask,                   /* bm25 configuration mask */
+  int iPhrase,                    /* Phrase number */
+  int iField,                     /* Field number */
+  int *pnSize,                    /* OUT: Size of field in tokens */
+  int *pnFreq,                    /* OUT: Occurences of phrase in field */
+  double *pdScale                 /* OUT: Scale to use with this field */
+){
+  int rc;
+  double scale = 1.0;
+  int nSize = 0;
+  int nFreq = 0;
+
+  if( bm25mask & BM25_FCOLUMNS ){
+    rc = sqlite4_mi_match_count(pCtx, iField, -1, iPhrase, &nFreq); 
+    if( rc==SQLITE4_OK ) rc = sqlite4_mi_size(pCtx, iField, -1, &nSize); 
+    if( nArg>iField ) scale = sqlite4_value_double(apArg[iField]);
+  }else if( bm25mask & BM25_FSTREAMS ){
+    rc = sqlite4_mi_match_count(pCtx, -1, iField, iPhrase, &nFreq); 
+    if( rc==SQLITE4_OK ) rc = sqlite4_mi_size(pCtx, -1, iField, &nSize); 
+    if( nArg>iField ) scale = sqlite4_value_double(apArg[iField]);
+  }else{
+    rc = sqlite4_mi_match_count(pCtx, -1, -1, iPhrase, &nFreq); 
+    if( rc==SQLITE4_OK ) rc = sqlite4_mi_size(pCtx, -1, -1, &nSize); 
+  }
+
+  *pnSize = nSize;
+  *pnFreq = nFreq;
+  *pdScale = scale;
+  return rc;
+}
+
 /*
-** A BM25 based ranking function for fts5.
+** A BM25(F) based ranking function for fts5.
 **
 ** This is based on the information in the Robertson/Zaragoza paper 
 ** referenced above. As there is no way to provide relevance feedback 
 ** IDF weights (equation 3.3 in R/Z) are used instead of RSJ for each phrase.
-** The rest of the implementation is as presented in equation 3.15.
+** The rest of the implementation is as presented in equations 3.19-21.
 **
 ** R and Z observe that the experimental evidence suggests that reasonable
 ** values for free parameters "b" and "k1" are often in the ranges 
@@ -80,10 +118,15 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
   int i;                          /* Used to iterate through phrases */
   double rank = 0.0;              /* UDF return value */
 
-  int bExplain = 0;
-  char *zExplain = 0;
+  int bExplain;                   /* True to run in explain mode */
+  char *zExplain = 0;             /* String to return in explain mode */
+  int nField = 1;                 /* Number of fields in collection */
 
-  if( sqlite4_user_data(pCtx) ) bExplain = 1;
+  int bm25mask = SQLITE4_PTR_TO_INT(sqlite4_user_data(pCtx));
+  bExplain = (bm25mask & BM25_EXPLAIN);
+
+  if( bm25mask & BM25_FCOLUMNS ) sqlite4_mi_column_count(pCtx, &nField);
+  if( bm25mask & BM25_FSTREAMS ) sqlite4_mi_stream_count(pCtx, &nField);
 
   p = sqlite4_get_auxdata(pCtx, 0);
   if( p==0 ){
@@ -91,7 +134,7 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
     int nByte;                    /* Number of bytes of data to allocate */
 
     sqlite4_mi_phrase_count(pCtx, &nPhrase);
-    nByte = sizeof(Fts5RankCtx) + nPhrase * sizeof(double);
+    nByte = sizeof(Fts5RankCtx) + (nPhrase+nField) * sizeof(double);
     p = (Fts5RankCtx *)sqlite4DbMallocZero(db, nByte);
     sqlite4_set_auxdata(pCtx, 0, (void *)p, fts5RankFreeCtx);
     p = sqlite4_get_auxdata(pCtx, 0);
@@ -105,6 +148,7 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
       p->db = db;
       p->nPhrase = nPhrase;
       p->aIdf = (double *)&p[1];
+      p->aAvgdl = &p->aIdf[nPhrase];
 
       /* Determine the IDF weight for each phrase in the query. */
       rc = sqlite4_mi_total_rows(pCtx, &N);
@@ -116,64 +160,124 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
         }
       }
 
-      /* Determine the average document length */
+      /* Determine the average document length. For bm25f, determine the
+      ** average length of each field.  */
       if( rc==SQLITE4_OK ){
-        int nTotal;
-        rc = sqlite4_mi_total_size(pCtx, -1, -1, &nTotal);
-        if( rc==SQLITE4_OK ){
-          p->avgdl = (double)nTotal / (double)N;
+        int iField;
+        for(iField=0; iField<nField; iField++){
+          int nTotal;
+          if( bm25mask & BM25_FCOLUMNS ){
+            rc = sqlite4_mi_total_size(pCtx, iField, -1, &nTotal);
+          }else if( bm25mask & BM25_FSTREAMS ){
+            rc = sqlite4_mi_total_size(pCtx, -1, iField, &nTotal);
+          }else{
+            rc = sqlite4_mi_total_size(pCtx, -1, -1, &nTotal);
+          }
+          if( rc==SQLITE4_OK ){
+            p->aAvgdl[iField] = (double)nTotal / (double)N;
+          }
         }
       }
     }
   }
 
+  if( bExplain ){
+    int iField;
+    zExplain = sqlite4MAppendf(
+        db, zExplain, "%s<table><tr><th>Stream<th>Scale<th>avgsl<th>sl", 
+        zExplain
+    );
+    for(i=0; i<p->nPhrase; i++){
+      zExplain = sqlite4MAppendf(
+        db, zExplain, "%s<th>tf</span><sub>%d</sub>", zExplain, i
+      );
+    }
+    for(iField=0; rc==SQLITE4_OK && iField<nField; iField++){
+      int dl, tf;
+      double scale;
+      rc = fts5GetSizeFreqScale(
+          pCtx, nArg, apArg, bm25mask, 0, iField, &dl, &tf, &scale
+      );
+      zExplain = sqlite4MAppendf(
+          db, zExplain, "%s<tr><td>%d<td>%.2f<td>%.2f<td>%d", 
+          zExplain, iField, scale, p->aAvgdl[iField], dl
+      );
+      for(i=0; rc==SQLITE4_OK && i<p->nPhrase; i++){
+        rc = fts5GetSizeFreqScale(
+            pCtx, nArg, apArg, bm25mask, i, iField, &dl, &tf, &scale
+        );
+        zExplain = sqlite4MAppendf(db, zExplain, "%s<td>%d", zExplain, tf);
+      }
+    }
+    zExplain = sqlite4MAppendf(
+        db, zExplain, "%s</table><table><tr><th>Phrase<th>IDF", zExplain
+    );
+    for(i=0; i<nField; i++){
+      zExplain = sqlite4MAppendf(
+        db, zExplain, "%s<th><span style=text-decoration:overline>"
+        "tf</span><sub>s%d</sub>", zExplain, i
+      );
+    }
+    zExplain = sqlite4MAppendf(db, zExplain, "%s<th>rank", zExplain);
+  }
+
   for(i=0; rc==SQLITE4_OK && i<p->nPhrase; i++){
-    int tf;                     /* Occurences of phrase i in row (term freq.) */
-    int dl;                     /* Tokens in this row (document length) */
-    double L;                   /* Normalized document length */
-    double prank;               /* Contribution to rank of this phrase */
-
-    /* Set variable tf to the total number of occurrences of phrase iPhrase
-    ** in this row (within any column). And dl to the number of tokens in
-    ** the current row (again, in any column).  */
-    rc = sqlite4_mi_match_count(pCtx, -1, -1, i, &tf); 
-    if( rc==SQLITE4_OK ) rc = sqlite4_mi_size(pCtx, -1, -1, &dl); 
-
-    /* Calculate the normalized document length */
-    L = (double)dl / p->avgdl;
-
-
-    /* Calculate the contribution to the rank made by this phrase. Then
-    ** add it to variable rank.  */
-    prank = (p->aIdf[i] * tf) / (k1 * ( (1.0 - b) + b * L) + tf);
-    rank += prank;
+    int iField;
+    double tfns = 0.0;            /* Sum of tfn for all fields */
+    double prank;                 /* Contribution to rank of this phrase */
 
     if( bExplain ){
       zExplain = sqlite4MAppendf(
-          db, zExplain, "%s(idf=%.2f L=%.2f tf=%d) rank=%.2f", zExplain,
-          p->aIdf[i], L, tf, prank
+        db, zExplain, "%s<tr><td>%d<td>%.2f", zExplain, i, p->aIdf[i]
       );
-      if( (i+1)<p->nPhrase ){
-        zExplain = sqlite4MAppendf(db, zExplain, "%s<br>", zExplain);
+    }
+
+    for(iField = 0; iField<nField; iField++){
+      double scale = 1.0;
+      int tf;                       /* Count of phrase i in row (term freq.) */
+      double tfn;                   /* Normalized term frequency */
+      int dl;                       /* Tokens in this row (document length) */
+      double B;                     /* B from formula 3.20 */
+
+      /* Set variable tf to the total number of occurrences of phrase iPhrase
+      ** in this row/field. And dl to the number of tokens in the current 
+      ** row/field. */
+      rc = fts5GetSizeFreqScale(
+          pCtx, nArg, apArg, bm25mask, i, iField, &dl, &tf, &scale
+      );
+
+      B = (1.0 - b) + b * (double)dl / p->aAvgdl[iField];    /* 3.20 */
+      tfn = scale * (double)tf / B;
+      tfns += tfn;                                           /* 3.19 */
+
+
+      if( bExplain ){
+        zExplain = sqlite4MAppendf(db, zExplain, "%s<td>%.2f", zExplain, tfn);
       }
     }
+
+    prank = p->aIdf[i] * tfns / (k1 + tfns);                 /* 3.21 */
+    if( bExplain ){
+      zExplain = sqlite4MAppendf(db, zExplain, "%s<td>%.2f", zExplain, prank);
+    }
+
+    /* Add it to the overall rank */
+    rank += prank;
   }
 
   if( rc==SQLITE4_OK ){
     if( bExplain ){
-      if( p->nPhrase>1 ){
-        zExplain = sqlite4MAppendf(
-            db, zExplain, "%s<br>total=%.2f", zExplain, rank
-        );
-      }
+      zExplain = sqlite4MAppendf(
+          db, zExplain, "%s</table><b>overall rank=%.2f</b>", zExplain, rank
+      );
       sqlite4_result_text(pCtx, zExplain, -1, SQLITE4_TRANSIENT);
-      sqlite4DbFree(db, zExplain);
     }else{
       sqlite4_result_double(pCtx, rank);
     }
   }else{
     sqlite4_result_error_code(pCtx, rc);
   }
+  sqlite4DbFree(db, zExplain);
 }
 
 typedef struct Snippet Snippet;
@@ -535,23 +639,35 @@ static int fts5SimpleTokenize(
 
 int sqlite4InitFts5Func(sqlite4 *db){
   int rc;
+  int i;
   sqlite4_env *pEnv = sqlite4_db_env(db);
+
+  struct RankFunction {
+    const char *zName;
+    int mask;
+  } aRank[] = {
+    { "rank",  0 },
+    { "erank",  BM25_EXPLAIN },
+    { "rankc",  BM25_FCOLUMNS },
+    { "erankc", BM25_FCOLUMNS|BM25_EXPLAIN },
+    { "ranks",  BM25_FSTREAMS },
+    { "eranks", BM25_FSTREAMS|BM25_EXPLAIN }
+  };
 
   rc = sqlite4_create_tokenizer(db, "simple", (void *)pEnv, 
       fts5SimpleCreate, fts5SimpleTokenize, fts5SimpleDestroy
   );
-  if( rc!=SQLITE4_OK ) return rc;
+  if( rc==SQLITE4_OK ){
+    rc = sqlite4_create_mi_function(
+        db, "snippet", -1, SQLITE4_UTF8, 0, fts5Snippet, 0);
+  }
 
-  rc = sqlite4_create_mi_function(db, "rank", 0, SQLITE4_UTF8, 0, fts5Rank, 0);
-  if( rc!=SQLITE4_OK ) return rc;
-  rc = sqlite4_create_mi_function(
-      db, "erank", 0, SQLITE4_UTF8, (void *)1, fts5Rank, 0
-  );
-  if( rc!=SQLITE4_OK ) return rc;
+  for(i=0; rc==SQLITE4_OK && i<ArraySize(aRank); i++){
+    void *p = SQLITE4_INT_TO_PTR(aRank[i].mask);
+    const char *z = aRank[i].zName;
+    rc = sqlite4_create_mi_function(db, z, -1, SQLITE4_UTF8, p, fts5Rank, 0);
+  }
 
-  rc = sqlite4_create_mi_function(
-      db, "snippet", -1, SQLITE4_UTF8, 0, fts5Snippet, 0
-  );
   return rc;
 }
 
