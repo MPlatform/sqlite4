@@ -1297,9 +1297,9 @@ function. As follows:
 
 <h3 id=compulsary_work_and_checkpoint_scheduling>6.2.4. Compulsary Work and Checkpoint Scheduling</h3>
 
-<p>Apart from the scenarios described above, there are two there are two 
-scenarios where database work or checkpointing may be performed automatically,
-regardless of the value of the LSM_CONFIG_AUTOWORK parameter.
+<p>Apart from the scenarios described above, there are two scenarios where
+database work or checkpointing may be performed automatically, regardless of
+the value of the LSM_CONFIG_AUTOWORK parameter.
 
 <ul>
   <li> When closing a database connection, and 
