@@ -1570,6 +1570,7 @@ static int segmentPtrFwdPointer(
 static int segmentPtrSeek(
   MultiCursor *pCsr,              /* Cursor context */
   SegmentPtr *pPtr,               /* Pointer to seek */
+  int iTopic,                     /* Key topic to seek to */
   void *pKey, int nKey,           /* Key to seek to */
   int eSeek,                      /* Search bias - see above */
   int *piPtr,                     /* OUT: FC pointer */
@@ -1581,7 +1582,6 @@ static int segmentPtrSeek(
   int iMin;
   int iMax;
   Pgno iPtrOut = 0;
-  const int iTopic = 0;
 
   /* If the current page contains an oversized entry, then there are no
   ** pointers to one or more of the subsequent pages in the sorted run.
@@ -1706,6 +1706,7 @@ static int segmentPtrSeek(
 static int seekInBtree(
   MultiCursor *pCsr,              /* Multi-cursor object */
   Segment *pSeg,                  /* Seek within this segment */
+  int iTopic,
   void *pKey, int nKey,           /* Key to seek to */
   Pgno *aPg,                      /* OUT: Page numbers */
   Page **ppPg                     /* OUT: Leaf (sorted-run) page reference */
@@ -1715,7 +1716,6 @@ static int seekInBtree(
   int iPg;
   Page *pPg = 0;
   Blob blob = {0, 0, 0};
-  int iTopic = 0;                 /* TODO: Fix me */
 
   iPg = pSeg->iRoot;
   do {
@@ -1787,6 +1787,7 @@ static int seekInBtree(
 static int seekInSegment(
   MultiCursor *pCsr, 
   SegmentPtr *pPtr,
+  int iTopic,
   void *pKey, int nKey,
   int iPg,                        /* Page to search */
   int eSeek,                      /* Search bias - see above */
@@ -1799,7 +1800,7 @@ static int seekInSegment(
   if( pPtr->pSeg->iRoot ){
     Page *pPg;
     assert( pPtr->pSeg->iRoot!=0 );
-    rc = seekInBtree(pCsr, pPtr->pSeg, pKey, nKey, 0, &pPg);
+    rc = seekInBtree(pCsr, pPtr->pSeg, iTopic, pKey, nKey, 0, &pPg);
     if( rc==LSM_OK ) segmentPtrSetPage(pPtr, pPg);
   }else{
     if( iPtr==0 ){
@@ -1811,7 +1812,7 @@ static int seekInSegment(
   }
 
   if( rc==LSM_OK ){
-    rc = segmentPtrSeek(pCsr, pPtr, pKey, nKey, eSeek, piPtr, pbStop);
+    rc = segmentPtrSeek(pCsr, pPtr, iTopic, pKey, nKey, eSeek, piPtr, pbStop);
   }
   return rc;
 }
@@ -1834,6 +1835,7 @@ static int seekInLevel(
   MultiCursor *pCsr,              /* Sorted cursor object to seek */
   SegmentPtr *aPtr,               /* Pointer to array of (nRhs+1) SPs */
   int eSeek,                      /* Search bias - see above */
+  int iTopic,                     /* Key topic to search for */
   void *pKey, int nKey,           /* Key to search for */
   Pgno *piPgno,                   /* IN/OUT: fraction cascade pointer (or 0) */
   int *pbStop                     /* OUT: See above */
@@ -1849,7 +1851,7 @@ static int seekInLevel(
   ** merge), figure out if the search key is larger or smaller than the
   ** levels split-key.  */
   if( nRhs ){
-    res = sortedKeyCompare(pCsr->pDb->xCmp, 0, pKey, nKey, 
+    res = sortedKeyCompare(pCsr->pDb->xCmp, iTopic, pKey, nKey, 
         pLvl->iSplitTopic, pLvl->pSplitKey, pLvl->nSplitKey
     );
   }
@@ -1861,7 +1863,9 @@ static int seekInLevel(
     int iPtr = 0;
     if( nRhs==0 ) iPtr = *piPgno;
 
-    rc = seekInSegment(pCsr, &aPtr[0], pKey, nKey, iPtr, eSeek, &iOut, &bStop);
+    rc = seekInSegment(
+        pCsr, &aPtr[0], iTopic, pKey, nKey, iPtr, eSeek, &iOut, &bStop
+    );
     if( rc==LSM_OK && nRhs>0 && eSeek==LSM_SEEK_GE && aPtr[0].pPg==0 ){
       res = 0;
     }
@@ -1872,7 +1876,9 @@ static int seekInLevel(
     int i;
     for(i=1; rc==LSM_OK && i<=nRhs && bStop==0; i++){
       iOut = 0;
-      rc = seekInSegment(pCsr, &aPtr[i], pKey, nKey, iPtr, eSeek, &iOut,&bStop);
+      rc = seekInSegment(
+          pCsr, &aPtr[i], iTopic, pKey, nKey, iPtr, eSeek, &iOut, &bStop
+      );
       iPtr = iOut;
     }
 
@@ -2388,12 +2394,15 @@ static int multiCursorGetVal(
   return rc;
 }
 
+static int multiCursorAdvance(MultiCursor *pCsr, int bReverse);
+
 /*
 ** This function is called by worker connections to walk the part of the
 ** free-list stored within the LSM data structure.
 */
 int lsmSortedWalkFreelist(
   lsm_db *pDb,                    /* Database handle */
+  int bReverse,                   /* True to iterate from largest to smallest */
   int (*x)(void *, int, i64),     /* Callback function */
   void *pCtx                      /* First argument to pass to callback */
 ){
@@ -2412,7 +2421,12 @@ int lsmSortedWalkFreelist(
   }
   
   if( rc==LSM_OK ){
-    rc = lsmMCursorLast(pCsr);
+    if( bReverse==0 ){
+      rc = lsmMCursorLast(pCsr);
+    }else{
+      rc = lsmMCursorSeek(pCsr, 1, "", 0, LSM_SEEK_GE);
+    }
+
     while( rc==LSM_OK && lsmMCursorValid(pCsr) && rtIsSystem(pCsr->eType) ){
       void *pKey; int nKey;
       void *pVal; int nVal;
@@ -2427,7 +2441,7 @@ int lsmSortedWalkFreelist(
         iBlk = (int)(~(lsmGetU32((u8 *)pKey)));
         iSnap = (i64)lsmGetU64((u8 *)pVal);
         if( x(pCtx, iBlk, iSnap) ) break;
-        rc = lsmMCursorPrev(pCsr);
+        rc = multiCursorAdvance(pCsr, !bReverse);
       }
     }
   }
@@ -2650,7 +2664,9 @@ int mcursorRestore(lsm_db *pDb, MultiCursor *pCsr){
   int rc;
   rc = multiCursorInit(pCsr, pDb->pClient);
   if( rc==LSM_OK && pCsr->key.pData ){
-    rc = lsmMCursorSeek(pCsr, pCsr->key.pData, pCsr->key.nData, +1);
+    rc = lsmMCursorSeek(pCsr, 
+         rtTopic(pCsr->eType), pCsr->key.pData, pCsr->key.nData, +1
+    );
   }
   return rc;
 }
@@ -2749,12 +2765,20 @@ static int treeCursorSeek(
 /*
 ** Seek the cursor.
 */
-int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
+int lsmMCursorSeek(
+  MultiCursor *pCsr, 
+  int iTopic, 
+  void *pKey, int nKey, 
+  int eSeek
+){
   int eESeek = eSeek;             /* Effective eSeek parameter */
   int bStop = 0;                  /* Set to true to halt search operation */
   int rc = LSM_OK;                /* Return code */
   int iPtr = 0;                   /* Used to iterate through pCsr->aPtr[] */
   Pgno iPgno = 0;                 /* FC pointer value */
+
+  assert( pCsr->apTreeCsr[0]==0 || iTopic==0 );
+  assert( pCsr->apTreeCsr[1]==0 || iTopic==0 );
 
   if( eESeek==LSM_SEEK_LEFAST ) eESeek = LSM_SEEK_LE;
 
@@ -2772,7 +2796,7 @@ int lsmMCursorSeek(MultiCursor *pCsr, void *pKey, int nKey, int eSeek){
   for(iPtr=0; iPtr<pCsr->nPtr && rc==LSM_OK && bStop==0; iPtr++){
     SegmentPtr *pPtr = &pCsr->aPtr[iPtr];
     assert( pPtr->pSeg==&pPtr->pLevel->lhs );
-    rc = seekInLevel(pCsr, pPtr, eESeek, pKey, nKey, &iPgno, &bStop);
+    rc = seekInLevel(pCsr, pPtr, eESeek, iTopic, pKey, nKey, &iPgno, &bStop);
     iPtr += pPtr->pLevel->nRight;
   }
 
@@ -4361,7 +4385,9 @@ static int sortedBtreeGobble(
     assert( pSeg->iRoot>0 );
     aPg = lsmMallocZeroRc(pDb->pEnv, sizeof(Pgno)*32, &rc);
     if( rc==LSM_OK ){
-      rc = seekInBtree(pCsr, pSeg, pCsr->key.pData, pCsr->key.nData, aPg, 0); 
+      rc = seekInBtree(pCsr, pSeg, 
+          rtTopic(pCsr->eType), pCsr->key.pData, pCsr->key.nData, aPg, 0
+      ); 
     }
 
     if( rc==LSM_OK ){
@@ -4934,18 +4960,28 @@ static char *segToString(lsm_env *pEnv, Segment *pSeg, int nMin){
 }
 
 static int fileToString(
-  lsm_env *pEnv,                  /* For xMalloc() */
+  lsm_db *pDb,                    /* For xMalloc() */
   char *aBuf, 
   int nBuf, 
   int nMin,
   Segment *pSeg
 ){
   int i = 0;
-  char *zSeg;
+  if( pSeg ){
+    char *zSeg;
 
-  zSeg = segToString(pEnv, pSeg, nMin);
-  i += sqlite4_snprintf(&aBuf[i], nBuf-i, "%s", zSeg);
-  lsmFree(pEnv, zSeg);
+    zSeg = segToString(pDb->pEnv, pSeg, nMin);
+    i += sqlite4_snprintf(&aBuf[i], nBuf-i, "%s", zSeg);
+    lsmFree(pDb->pEnv, zSeg);
+
+#ifdef LSM_LOG_FREELIST
+    lsmInfoArrayStructure(pDb, 1, pSeg->iFirst, &zSeg);
+    i += sqlite4_snprintf(&aBuf[i], nBuf-i, "    (%s)", zSeg);
+    lsmFree(pDb->pEnv, zSeg);
+#endif
+  }else{
+    aBuf[0] = '\0';
+  }
 
   return i;
 }
@@ -5290,6 +5326,14 @@ void lsmSortedDumpStructure(
         aRight[nRight++] = &pLevel->aRhs[i];
       }
 
+#ifdef LSM_LOG_FREELIST
+      if( nRight ){
+        memmove(&aRight[1], aRight, sizeof(aRight[0])*nRight);
+        aRight[0] = 0;
+        nRight++;
+      }
+#endif
+
       for(i=0; i<nLeft || i<nRight; i++){
         int iPad = 0;
         char zLevel[32];
@@ -5297,10 +5341,10 @@ void lsmSortedDumpStructure(
         zRight[0] = '\0';
 
         if( i<nLeft ){ 
-          fileToString(pDb->pEnv, zLeft, sizeof(zLeft), 28, aLeft[i]); 
+          fileToString(pDb, zLeft, sizeof(zLeft), 24, aLeft[i]); 
         }
         if( i<nRight ){ 
-          fileToString(pDb->pEnv, zRight, sizeof(zRight), 28, aRight[i]); 
+          fileToString(pDb, zRight, sizeof(zRight), 24, aRight[i]); 
         }
 
         if( i==0 ){
@@ -5312,10 +5356,10 @@ void lsmSortedDumpStructure(
         }
 
         if( nRight==0 ){
-          iPad = 28 - (strlen(zLeft)/2) ;
+          iPad = 10;
         }
 
-        lsmLogMessage(pDb, LSM_OK, "% 7s % *s% -35s %s", 
+        lsmLogMessage(pDb, LSM_OK, "% 25s % *s% -35s %s", 
             zLevel, iPad, "", zLeft, zRight
         );
       }

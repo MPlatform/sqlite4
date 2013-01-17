@@ -418,6 +418,14 @@ int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
 }
 
 /*
+** Truncate the log file to nByte bytes in size.
+*/
+int lsmFsTruncateDb(FileSystem *pFS, i64 nByte){
+  if( pFS->fdDb==0 ) return LSM_OK;
+  return lsmEnvTruncate(pFS->pEnv, pFS->fdDb, nByte);
+}
+
+/*
 ** Close the log file. Then delete it from the file-system. This function
 ** is called during database shutdown only.
 */
@@ -2269,7 +2277,12 @@ static Segment *findSegment(Snapshot *pWorker, Pgno iFirst){
 **
 ** If an error occurs, *pzOut is set to NULL and an LSM error code returned.
 */
-int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
+int lsmInfoArrayStructure(
+  lsm_db *pDb, 
+  int bBlock,                     /* True for block numbers only */
+  Pgno iFirst,
+  char **pzOut
+){
   int rc = LSM_OK;
   Snapshot *pWorker;              /* Worker snapshot */
   Segment *pArray = 0;            /* Array to report on */
@@ -2303,13 +2316,21 @@ int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut){
     iLastBlk = fsPageToBlock(pFS, pArray->iLastPg);
 
     lsmStringInit(&str, pDb->pEnv);
-    lsmStringAppendf(&str, "%d", pArray->iFirst);
-    while( iBlk!=iLastBlk ){
-      lsmStringAppendf(&str, " %d", fsLastPageOnBlock(pFS, iBlk));
-      fsBlockNext(pFS, iBlk, &iBlk);
-      lsmStringAppendf(&str, " %d", fsFirstPageOnBlock(pFS, iBlk));
+    if( bBlock ){
+      lsmStringAppendf(&str, "%d", iBlk);
+      while( iBlk!=iLastBlk ){
+        fsBlockNext(pFS, iBlk, &iBlk);
+        lsmStringAppendf(&str, " %d", iBlk);
+      }
+    }else{
+      lsmStringAppendf(&str, "%d", pArray->iFirst);
+      while( iBlk!=iLastBlk ){
+        lsmStringAppendf(&str, " %d", fsLastPageOnBlock(pFS, iBlk));
+        fsBlockNext(pFS, iBlk, &iBlk);
+        lsmStringAppendf(&str, " %d", fsFirstPageOnBlock(pFS, iBlk));
+      }
+      lsmStringAppendf(&str, " %d", pArray->iLastPg);
     }
-    lsmStringAppendf(&str, " %d", pArray->iLastPg);
 
     *pzOut = str.z;
   }
@@ -2541,7 +2562,7 @@ int lsmFsIntegrityCheck(lsm_db *pDb){
   /* Mark all blocks in the free-list as used */
   ctx.aUsed = aUsed;
   ctx.nBlock = nBlock;
-  rc = lsmWalkFreelist(pDb, checkFreelistCb, (void *)&ctx);
+  rc = lsmWalkFreelist(pDb, 0, checkFreelistCb, (void *)&ctx);
 
   if( rc==LSM_OK ){
     for(i=0; i<nBlock; i++) assert( aUsed[i]!=0 );

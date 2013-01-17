@@ -180,7 +180,7 @@ static void doDbDisconnect(lsm_db *pDb){
 
       /* Write a checkpoint to disk. */
       if( rc==LSM_OK ){
-        rc = lsmCheckpointWrite(pDb, 0);
+        rc = lsmCheckpointWrite(pDb, 1, 0);
       }
 
       /* If the checkpoint was written successfully, delete the log file */
@@ -430,6 +430,7 @@ static int firstSnapshotInUse(lsm_db *, i64 *);
 typedef struct WalkFreelistCtx WalkFreelistCtx;
 struct WalkFreelistCtx {
   lsm_db *pDb;
+  int bReverse;
   Freelist *pFreelist;
   int iFree;
   int (*xUsr)(void *, int, i64);  /* User callback function */
@@ -441,15 +442,18 @@ struct WalkFreelistCtx {
 */
 static int walkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
   WalkFreelistCtx *p = (WalkFreelistCtx *)pCtx;
+  const int iDir = (p->bReverse ? -1 : 1);
   Freelist *pFree = p->pFreelist;
 
   if( pFree ){
-    while( (p->iFree < pFree->nEntry) ){
+    while( (p->iFree < pFree->nEntry) && p->iFree>=0 ){
       FreelistEntry *pEntry = &pFree->aEntry[p->iFree];
-      if( pEntry->iBlk>iBlk ){
+      if( (p->bReverse==0 && pEntry->iBlk>iBlk)
+       || (p->bReverse!=0 && pEntry->iBlk<iBlk)
+      ){
         break;
       }else{
-        p->iFree++;
+        p->iFree += iDir;
         if( pEntry->iId>=0 
             && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) 
           ){
@@ -476,32 +480,47 @@ static int walkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
 */
 int lsmWalkFreelist(
   lsm_db *pDb,                    /* Database handle (must be worker) */
+  int bReverse,                   /* True to iterate from largest to smallest */
   int (*x)(void *, int, i64),     /* Callback function */
   void *pCtx                      /* First argument to pass to callback */
 ){
+  const int iDir = (bReverse ? -1 : 1);
   int rc;
   int iCtx;
 
   WalkFreelistCtx ctx[2];
 
   ctx[0].pDb = pDb;
+  ctx[0].bReverse = bReverse;
   ctx[0].pFreelist = &pDb->pWorker->freelist;
-  ctx[0].iFree = 0;
+  if( ctx[0].pFreelist && bReverse ){
+    ctx[0].iFree = ctx[0].pFreelist->nEntry-1;
+  }else{
+    ctx[0].iFree = 0;
+  }
   ctx[0].xUsr = walkFreelistCb;
   ctx[0].pUsrctx = (void *)&ctx[1];
 
   ctx[1].pDb = pDb;
+  ctx[1].bReverse = bReverse;
   ctx[1].pFreelist = pDb->pFreelist;
-  ctx[1].iFree = 0;
+  if( ctx[1].pFreelist && bReverse ){
+    ctx[1].iFree = ctx[1].pFreelist->nEntry-1;
+  }else{
+    ctx[1].iFree = 0;
+  }
   ctx[1].xUsr = x;
   ctx[1].pUsrctx = pCtx;
 
-  rc = lsmSortedWalkFreelist(pDb, walkFreelistCb, (void *)&ctx[0]);
+  rc = lsmSortedWalkFreelist(pDb, bReverse, walkFreelistCb, (void *)&ctx[0]);
 
   for(iCtx=0; iCtx<2; iCtx++){
     int i;
     WalkFreelistCtx *p = &ctx[iCtx];
-    for(i=p->iFree; p->pFreelist && rc==LSM_OK && i<p->pFreelist->nEntry; i++){
+    for(i=p->iFree; 
+        p->pFreelist && rc==LSM_OK && i<p->pFreelist->nEntry && i>=0;
+        i += iDir
+    ){
       FreelistEntry *pEntry = &p->pFreelist->aEntry[i];
       if( pEntry->iId>=0 && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) ){
         return LSM_OK;
@@ -511,6 +530,47 @@ int lsmWalkFreelist(
 
   return rc;
 }
+
+typedef struct DbTruncateCtx DbTruncateCtx;
+struct DbTruncateCtx {
+  int nBlock;
+  i64 iInUse;
+};
+
+static int dbTruncateCb(void *pCtx, int iBlk, i64 iSnapshot){
+  DbTruncateCtx *p = (DbTruncateCtx *)pCtx;
+  if( iBlk!=p->nBlock || iSnapshot>=p->iInUse ) return 1;
+  p->nBlock--;
+  return 0;
+}
+
+static int dbTruncate(lsm_db *pDb, i64 iInUse){
+  int rc;
+  int i;
+  DbTruncateCtx ctx;
+
+  assert( pDb->pWorker );
+  ctx.nBlock = pDb->pWorker->nBlock;
+  ctx.iInUse = iInUse;
+
+  rc = lsmWalkFreelist(pDb, 1, dbTruncateCb, (void *)&ctx);
+  for(i=ctx.nBlock+1; rc==LSM_OK && i<=pDb->pWorker->nBlock; i++){
+    rc = freelistAppend(pDb, i, -1);
+  }
+
+  if( rc==LSM_OK ){
+#ifdef LSM_LOG_FREELIST
+    if( ctx.nBlock!=pDb->pWorker->nBlock ){
+      lsmLogMessage(pDb, 0, 
+          "dbTruncate(): truncated db to %d blocks",ctx.nBlock
+      );
+    }
+#endif
+    pDb->pWorker->nBlock = ctx.nBlock;
+  }
+  return rc;
+}
+
 
 typedef struct FindFreeblockCtx FindFreeblockCtx;
 struct FindFreeblockCtx {
@@ -541,7 +601,7 @@ static int findFreeblock(lsm_db *pDb, i64 iInUse, int *piRet){
 
   ctx.iInUse = iInUse;
   ctx.iRet = 0;
-  rc = lsmWalkFreelist(pDb, findFreeblockCb, (void *)&ctx);
+  rc = lsmWalkFreelist(pDb, 0, findFreeblockCb, (void *)&ctx);
   *piRet = ctx.iRet;
 
 #ifdef LSM_LOG_BLOCKS
@@ -563,8 +623,19 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   int iRet = 0;                   /* Block number of allocated block */
   int rc = LSM_OK;
   i64 iInUse = 0;                 /* Snapshot id still in use */
+  i64 iSynced = 0;                /* Snapshot id synced to disk */
 
   assert( p );
+
+#ifdef LSM_LOG_FREELIST
+  {
+    char *zFree = 0;
+    rc = lsmInfoFreelist(pDb, &zFree);
+    if( rc!=LSM_OK ) return rc;
+    lsmLogMessage(pDb, 0, "lsmBlockAllocate(): freelist: %s", zFree);
+    lsmFree(pDb->pEnv, zFree);
+  }
+#endif
 
   /* Set iInUse to the smallest snapshot id that is either:
   **
@@ -573,10 +644,20 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
   **   * Is the most recently checkpointed snapshot (i.e. the one that will
   **     be used following recovery if a failure occurs at this point).
   */
-  rc = lsmCheckpointSynced(pDb, &iInUse, 0, 0);
-  if( rc==LSM_OK && iInUse==0 ) iInUse = p->iId;
+  rc = lsmCheckpointSynced(pDb, &iSynced, 0, 0);
+  if( rc==LSM_OK && iSynced==0 ) iSynced = p->iId;
+  iInUse = iSynced;
   if( rc==LSM_OK && pDb->pClient ) iInUse = LSM_MIN(iInUse, pDb->pClient->iId);
   if( rc==LSM_OK ) rc = firstSnapshotInUse(pDb, &iInUse);
+
+#ifdef LSM_LOG_FREELIST
+  {
+    lsmLogMessage(pDb, 0, "lsmBlockAllocate(): "
+        "snapshot-in-use: %lld (iSynced=%lld) (client-id=%lld)", 
+        iInUse, iSynced, (pDb->pClient ? pDb->pClient->iId : 0)
+    );
+  }
+#endif
 
   /* Query the free block list for a suitable block */
   if( rc==LSM_OK ) rc = findFreeblock(pDb, iInUse, &iRet);
@@ -591,6 +672,9 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
           "reusing block %d (snapshot-in-use=%lld)", iRet, iInUse);
 #endif
       rc = freelistAppend(pDb, iRet, -1);
+      if( rc==LSM_OK ){
+        rc = dbTruncate(pDb, iInUse);
+      }
     }else{
       iRet = ++(p->nBlock);
 #ifdef LSM_LOG_FREELIST
@@ -653,7 +737,7 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
 ** not be held that long (in case it is required by a client flushing an
 ** in-memory tree to disk).
 */
-int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
+int lsmCheckpointWrite(lsm_db *pDb, int bTruncate, u32 *pnWrite){
   int rc;                         /* Return Code */
   u32 nWrite = 0;
 
@@ -666,6 +750,7 @@ int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
 
   rc = lsmCheckpointLoad(pDb, 0);
   if( rc==LSM_OK ){
+    int nBlock = lsmCheckpointNBlock(pDb->aSnapshot);
     ShmHeader *pShm = pDb->pShmhdr;
     int bDone = 0;                /* True if checkpoint is already stored */
 
@@ -691,7 +776,6 @@ int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
     if( rc==LSM_OK && bDone==0 ){
       int iMeta = (pShm->iMetaPage % 2) + 1;
       if( pDb->eSafety!=LSM_SAFETY_OFF ){
-        int nBlock = lsmCheckpointNBlock(pDb->aSnapshot);
         rc = lsmFsSyncDb(pDb->pFS, nBlock);
       }
       if( rc==LSM_OK ) rc = lsmCheckpointStore(pDb, iMeta);
@@ -703,10 +787,14 @@ int lsmCheckpointWrite(lsm_db *pDb, u32 *pnWrite){
         nWrite = lsmCheckpointNWrite(pDb->aSnapshot, 0) - nWrite;
       }
 #ifdef LSM_LOG_WORK
-  lsmLogMessage(pDb, 0, "finish checkpoint %d", 
-      (int)lsmCheckpointId(pDb->aSnapshot, 0)
-  );
+      lsmLogMessage(pDb, 0, "finish checkpoint %d", 
+          (int)lsmCheckpointId(pDb->aSnapshot, 0)
+      );
 #endif
+    }
+
+    if( rc==LSM_OK && bTruncate ){
+      rc = lsmFsTruncateDb(pDb->pFS, (i64)nBlock*lsmFsBlockSize(pDb->pFS));
     }
   }
 
@@ -1427,7 +1515,7 @@ int lsm_checkpoint(lsm_db *pDb, int *pnByte){
 
   /* Attempt the checkpoint. If successful, nWrite is set to the number of
   ** pages written between this and the previous checkpoint.  */
-  rc = lsmCheckpointWrite(pDb, &nWrite);
+  rc = lsmCheckpointWrite(pDb, 0, &nWrite);
 
   /* If required, calculate the output variable (bytes of data checkpointed). 
   ** Set it to zero if an error occured.  */

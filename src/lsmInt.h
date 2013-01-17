@@ -526,7 +526,7 @@ struct Snapshot {
 /*
 ** Functions from file "lsm_ckpt.c".
 */
-int lsmCheckpointWrite(lsm_db *, u32 *);
+int lsmCheckpointWrite(lsm_db *, int, u32 *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
 
@@ -682,6 +682,7 @@ int lsmFsWriteLog(FileSystem *pFS, i64 iOff, LsmString *pStr);
 int lsmFsSyncLog(FileSystem *pFS);
 int lsmFsReadLog(FileSystem *pFS, i64 iOff, int nRead, LsmString *pStr);
 int lsmFsTruncateLog(FileSystem *pFS, i64 nByte);
+int lsmFsTruncateDb(FileSystem *pFS, i64 nByte);
 int lsmFsCloseAndDeleteLog(FileSystem *pFS);
 
 void lsmFsDeferClose(FileSystem *pFS, LsmFile **pp);
@@ -692,7 +693,7 @@ int lsmFsSyncDb(FileSystem *, int);
 void lsmFsFlushWaiting(FileSystem *, int *);
 
 /* Used by lsm_info(ARRAY_STRUCTURE) and lsm_config(MMAP) */
-int lsmInfoArrayStructure(lsm_db *pDb, Pgno iFirst, char **pzOut);
+int lsmInfoArrayStructure(lsm_db *pDb, int bBlock, Pgno iFirst, char **pzOut);
 int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmConfigMmap(lsm_db *pDb, int *piParam);
 
@@ -719,7 +720,7 @@ int lsmInfoPageDump(lsm_db *, Pgno, int, char **);
 void lsmSortedCleanup(lsm_db *);
 int lsmSortedAutoWork(lsm_db *, int nUnit);
 
-int lsmSortedWalkFreelist(lsm_db *, int (*)(void *, int, i64), void *);
+int lsmSortedWalkFreelist(lsm_db *, int, int (*)(void *, int, i64), void *);
 
 int lsmSaveWorker(lsm_db *, int);
 
@@ -740,7 +741,7 @@ void lsmSortedSaveTreeCursors(lsm_db *);
 
 int lsmMCursorNew(lsm_db *, MultiCursor **);
 void lsmMCursorClose(MultiCursor *);
-int lsmMCursorSeek(MultiCursor *, void *, int , int);
+int lsmMCursorSeek(MultiCursor *, int, void *, int , int);
 int lsmMCursorFirst(MultiCursor *);
 int lsmMCursorPrev(MultiCursor *);
 int lsmMCursorLast(MultiCursor *);
@@ -871,7 +872,7 @@ int lsmDbMultiProc(lsm_db *);
 void lsmDbDeferredClose(lsm_db *, lsm_file *, LsmFile *);
 LsmFile *lsmDbRecycleFd(lsm_db *);
 
-int lsmWalkFreelist(lsm_db *, int (*)(void *, int, i64), void *);
+int lsmWalkFreelist(lsm_db *, int, int (*)(void *, int, i64), void *);
 
 
 /**************************************************************************

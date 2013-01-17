@@ -439,7 +439,7 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   if( rc!=LSM_OK ) return rc;
 
   lsmStringInit(&s, pDb->pEnv);
-  rc = lsmWalkFreelist(pDb, infoFreelistCb, &s);
+  rc = lsmWalkFreelist(pDb, 1, infoFreelistCb, &s);
   if( rc!=LSM_OK ){
     lsmFree(pDb->pEnv, s.z);
   }else{
@@ -518,7 +518,7 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
     case LSM_INFO_ARRAY_STRUCTURE: {
       Pgno pgno = va_arg(ap, Pgno);
       char **pzVal = va_arg(ap, char **);
-      rc = lsmInfoArrayStructure(pDb, pgno, pzVal);
+      rc = lsmInfoArrayStructure(pDb, 0, pgno, pzVal);
       break;
     }
 
@@ -716,7 +716,7 @@ int lsm_csr_close(lsm_cursor *p){
 ** Otherwise, return LSM_OK.
 */
 int lsm_csr_seek(lsm_cursor *pCsr, const void *pKey, int nKey, int eSeek){
-  return lsmMCursorSeek((MultiCursor *)pCsr, (void *)pKey, nKey, eSeek);
+  return lsmMCursorSeek((MultiCursor *)pCsr, 0, (void *)pKey, nKey, eSeek);
 }
 
 int lsm_csr_next(lsm_cursor *pCsr){
