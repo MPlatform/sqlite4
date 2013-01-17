@@ -439,7 +439,7 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   if( rc!=LSM_OK ) return rc;
 
   lsmStringInit(&s, pDb->pEnv);
-  rc = lsmWalkFreelist(pDb, 1, infoFreelistCb, &s);
+  rc = lsmWalkFreelist(pDb, 0, infoFreelistCb, &s);
   if( rc!=LSM_OK ){
     lsmFree(pDb->pEnv, s.z);
   }else{

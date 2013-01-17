@@ -73,6 +73,50 @@ int test_kc_delete(TestDb *pDb, void *pKey, int nKey){
   return (ok ? 0 : 1);
 }
 
+int test_kc_delete_range(
+  TestDb *pDb, 
+  void *pKey1, int nKey1,
+  void *pKey2, int nKey2
+){
+  int res;
+  KcDb *pKcDb = (KcDb *)pDb;
+  kyotocabinet::DB::Cursor* pCur = pKcDb->db->cursor();
+
+  if( pKey1 ){
+    res = pCur->jump((const char *)pKey1, nKey1);
+  }else{
+    res = pCur->jump();
+  }
+
+  while( 1 ){
+    const char *pKey; size_t nKey;
+    const char *pVal; size_t nVal;
+
+    pKey = pCur->get(&nKey, &pVal, &nVal);
+    if( pKey==0 ) break;
+
+#ifndef NDEBUG
+    if( pKey1 ){
+      res = memcmp(pKey, pKey1, MIN((size_t)nKey1, nKey));
+      assert( res>0 || (res==0 && nKey>nKey1) );
+    }
+#endif
+
+    if( pKey2 ){
+      res = memcmp(pKey, pKey2, MIN((size_t)nKey2, nKey));
+      if( res>0 || (res==0 && (size_t)nKey2<nKey) ){
+        delete [] pKey;
+        break;
+      }
+    }
+    pCur->remove();
+    delete [] pKey;
+  }
+
+  delete pCur;
+  return 0;
+}
+
 int test_kc_fetch(
   TestDb *pDb, 
   void *pKey, 

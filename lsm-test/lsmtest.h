@@ -65,6 +65,7 @@ int test_kc_open(const char *zFilename, int bClear, TestDb **ppDb);
 int test_kc_close(TestDb *);
 int test_kc_write(TestDb *, void *, int , void *, int);
 int test_kc_delete(TestDb *, void *, int);
+int test_kc_delete_range(TestDb *, void *, int, void *, int);
 int test_kc_fetch(TestDb *, void *, int, void **, int *);
 int test_kc_scan(TestDb *, void *, int, void *, int, void *, int,
   void (*)(void *, void *, int , void *, int)

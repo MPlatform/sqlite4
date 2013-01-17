@@ -435,6 +435,7 @@ struct WalkFreelistCtx {
   int iFree;
   int (*xUsr)(void *, int, i64);  /* User callback function */
   void *pUsrctx;                  /* User callback context */
+  int bDone;                      /* Set to true after xUsr() returns true */
 };
 
 /* 
@@ -445,6 +446,7 @@ static int walkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
   const int iDir = (p->bReverse ? -1 : 1);
   Freelist *pFree = p->pFreelist;
 
+  assert( p->bDone==0 );
   if( pFree ){
     while( (p->iFree < pFree->nEntry) && p->iFree>=0 ){
       FreelistEntry *pEntry = &pFree->aEntry[p->iFree];
@@ -457,6 +459,7 @@ static int walkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
         if( pEntry->iId>=0 
             && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) 
           ){
+          p->bDone = 1;
           return 1;
         }
         if( pEntry->iBlk==iBlk ) return 0;
@@ -464,7 +467,11 @@ static int walkFreelistCb(void *pCtx, int iBlk, i64 iSnapshot){
     }
   }
 
-  return p->xUsr(p->pUsrctx, iBlk, iSnapshot);
+  if( p->xUsr(p->pUsrctx, iBlk, iSnapshot) ){
+    p->bDone = 1;
+    return 1;
+  }
+  return 0;
 }
 
 /*
@@ -500,6 +507,7 @@ int lsmWalkFreelist(
   }
   ctx[0].xUsr = walkFreelistCb;
   ctx[0].pUsrctx = (void *)&ctx[1];
+  ctx[0].bDone = 0;
 
   ctx[1].pDb = pDb;
   ctx[1].bReverse = bReverse;
@@ -511,19 +519,22 @@ int lsmWalkFreelist(
   }
   ctx[1].xUsr = x;
   ctx[1].pUsrctx = pCtx;
+  ctx[1].bDone = 0;
 
   rc = lsmSortedWalkFreelist(pDb, bReverse, walkFreelistCb, (void *)&ctx[0]);
 
-  for(iCtx=0; iCtx<2; iCtx++){
-    int i;
-    WalkFreelistCtx *p = &ctx[iCtx];
-    for(i=p->iFree; 
-        p->pFreelist && rc==LSM_OK && i<p->pFreelist->nEntry && i>=0;
-        i += iDir
-    ){
-      FreelistEntry *pEntry = &p->pFreelist->aEntry[i];
-      if( pEntry->iId>=0 && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) ){
-        return LSM_OK;
+  if( ctx[0].bDone==0 ){
+    for(iCtx=0; iCtx<2; iCtx++){
+      int i;
+      WalkFreelistCtx *p = &ctx[iCtx];
+      for(i=p->iFree; 
+          p->pFreelist && rc==LSM_OK && i<p->pFreelist->nEntry && i>=0;
+          i += iDir
+         ){
+        FreelistEntry *pEntry = &p->pFreelist->aEntry[i];
+        if( pEntry->iId>=0 && p->xUsr(p->pUsrctx, pEntry->iBlk, pEntry->iId) ){
+          return LSM_OK;
+        }
       }
     }
   }

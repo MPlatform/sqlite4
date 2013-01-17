@@ -242,6 +242,14 @@ static int kc_delete(TestDb *pTestDb, void *pKey, int nKey){
   return test_kc_delete(pTestDb, pKey, nKey);
 }
 
+static int kc_delete_range(
+  TestDb *pTestDb, 
+  void *pKey1, int nKey1,
+  void *pKey2, int nKey2
+){
+  return test_kc_delete_range(pTestDb, pKey1, nKey1, pKey2, nKey2);
+}
+
 static int kc_fetch(
   TestDb *pTestDb, 
   void *pKey, 
@@ -271,6 +279,7 @@ static int kc_open(const char *zFilename, int bClear, TestDb **ppDb){
     kc_close,
     kc_write,
     kc_delete,
+    kc_delete_range,
     kc_fetch,
     kc_scan,
     error_transaction_function,

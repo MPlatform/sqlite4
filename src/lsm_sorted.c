@@ -1363,6 +1363,7 @@ static int assertSeekResult(
 static int segmentPtrSearchOversized(
   MultiCursor *pCsr,              /* Cursor context */
   SegmentPtr *pPtr,               /* Pointer to seek */
+  int iTopic,                     /* Topic of key to search for */
   void *pKey, int nKey            /* Key to seek to */
 ){
   int (*xCmp)(void *, int, void *, int) = pCsr->pDb->xCmp;
@@ -1390,7 +1391,7 @@ static int segmentPtrSearchOversized(
     ** If (pKey/nKey) is present in this array, it must be on the current 
     ** page.  */
     res = sortedKeyCompare(
-        xCmp, iLastTopic, pLastKey, nLastKey, 0, pKey, nKey
+        xCmp, iLastTopic, pLastKey, nLastKey, iTopic, pKey, nKey
     );
     if( res>=0 ) break;
 
@@ -1587,7 +1588,7 @@ static int segmentPtrSeek(
   ** pointers to one or more of the subsequent pages in the sorted run.
   ** The following call ensures that the segment-ptr points to the correct 
   ** page in this case.  */
-  rc = segmentPtrSearchOversized(pCsr, pPtr, pKey, nKey);
+  rc = segmentPtrSearchOversized(pCsr, pPtr, iTopic, pKey, nKey);
   iPtrOut = pPtr->iPtr;
 
   /* Assert that this page is the right page of this segment for the key
