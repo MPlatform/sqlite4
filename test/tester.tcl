@@ -149,6 +149,24 @@ proc getFileRetryDelay {} {
   return $::G(file-retry-delay)
 }
 
+# Return the string representing the name of the current directory.  On
+# Windows, the result is "normalized" to whatever our parent command shell
+# is using to prevent case-mismatch issues.
+#
+proc get_pwd {} {
+  if {$::tcl_platform(platform) eq "windows"} {
+    #
+    # NOTE: Cannot use [file normalize] here because it would alter the
+    #       case of the result to what Tcl considers canonical, which would
+    #       defeat the purpose of this procedure.
+    #
+    return [string map [list \\ /] \
+        [string trim [exec -- $::env(ComSpec) /c echo %CD%]]]
+  } else {
+    return [pwd]
+  }
+}
+
 # Copy file $from into $to. This is used because some versions of
 # TCL for windows (notably the 8.4.1 binary package shipped with the
 # current mingw release) have a broken "file copy" command.
@@ -476,17 +494,43 @@ proc do_test {name cmd expected} {
     if {[catch {uplevel #0 "$cmd;\n"} result]} {
       puts "\nError: $result"
       fail_test $name
-    } elseif {[string compare $result $expected]} {
-      puts "\nExpected: \[$expected\]\n     Got: \[$result\]"
-      fail_test $name
     } else {
-      puts " Ok"
+      if {[regexp {^~?/.*/$} $expected]} {
+        if {[string index $expected 0]=="~"} {
+          set re [string map {# {[-0-9.]+}} [string range $expected 2 end-1]]
+          set ok [expr {![regexp $re $result]}]
+        } else {
+          set re [string map {# {[-0-9.]+}} [string range $expected 1 end-1]]
+          set ok [regexp $re $result]
+        }
+      } else {
+        set ok [expr {[string compare $result $expected]==0}]
+      }
+      if {!$ok} {
+        # if {![info exists ::testprefix] || $::testprefix eq ""} {
+        #   error "no test prefix"
+        # }
+        puts "\nExpected: \[$expected\]\n     Got: \[$result\]"
+        fail_test $name
+      } else {
+        puts " Ok"
+      }
     }
   } else {
     puts " Omitted"
     omit_test $name "pattern mismatch" 0
   }
   flush stdout
+}
+
+proc catchcmd {db {cmd ""}} {
+  global CLI
+  set out [open cmds.txt w]
+  puts $out $cmd
+  close $out
+  set line "exec $CLI $db < cmds.txt"
+  set rc [catch { eval $line } msg]
+  list $rc $msg
 }
 
 proc filepath_normalize {p} {
