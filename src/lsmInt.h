@@ -640,7 +640,7 @@ int lsmFsFileid(lsm_db *pDb, void **ppId, int *pnId);
 void lsmFsGobble(lsm_db *, Segment *, Pgno *, int);
 int lsmFsSortedDelete(FileSystem *, Snapshot *, int, Segment *);
 int lsmFsSortedFinish(FileSystem *, Segment *);
-int lsmFsSortedAppend(FileSystem *, Snapshot *, Segment *, int, Page **);
+int lsmFsSortedAppend(FileSystem *, Snapshot *, Level *, int, Page **);
 int lsmFsSortedPadding(FileSystem *, Snapshot *, Segment *);
 
 /* Functions to retrieve the lsm_env pointer from a FileSystem or Page object */

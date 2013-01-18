@@ -886,8 +886,11 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   int nInt1;
   int nInt2;
 
-  /* Must be holding the WORKER lock to do this */
-  assert( lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL) );
+  /* Must be holding the WORKER lock to do this. Or DMS2. */
+  assert( 
+      lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL) 
+   || lsmShmAssertLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL) 
+  );
 
   /* Check that the two snapshots match. If not, repair them. */
   nInt1 = pShm->aSnap1[CKPT_HDR_NCKPT];
@@ -903,6 +906,8 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   }
 
   rc = lsmCheckpointDeserialize(pDb, 1, pShm->aSnap1, &pDb->pWorker);
+  if( pDb->pWorker ) pDb->pWorker->pDatabase = pDb->pDatabase;
+
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
   return rc;
 }

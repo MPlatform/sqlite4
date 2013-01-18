@@ -1551,26 +1551,37 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
   return rc;
 }
 
-static Pgno findAppendPoint(FileSystem *pFS){
+static Pgno findAppendPoint(FileSystem *pFS, Level *pLvl){
   int i;
   Pgno *aiAppend = pFS->pDb->pWorker->aiAppend;
   u32 iRet = 0;
 
   for(i=LSM_APPLIST_SZ-1; iRet==0 && i>=0; i--){
-    if( (iRet = aiAppend[i]) ) aiAppend[i] = 0;
+    if( (iRet = aiAppend[i]) ){
+      if( pLvl ){
+        int iBlk = fsPageToBlock(pFS, iRet);
+        int j;
+        for(j=0; iRet && j<pLvl->nRight; j++){
+          if( fsPageToBlock(pFS, pLvl->aRhs[j].iLastPg)==iBlk ){
+            iRet = 0;
+          }
+        }
+      }
+      if( iRet ) aiAppend[i] = 0;
+    }
   }
   return iRet;
 }
 
 /*
-** Append a page to file iFile. Set the ref-count to 1 and return a pointer
-** to it. The page is writable until either lsmFsPagePersist() is called on 
-** it or the ref-count drops to zero.
+** Append a page to the left-hand-side of pLvl. Set the ref-count to 1 and
+** return a pointer to it. The page is writable until either 
+** lsmFsPagePersist() is called on it or the ref-count drops to zero.
 */
 int lsmFsSortedAppend(
   FileSystem *pFS, 
   Snapshot *pSnapshot,
-  Segment *p, 
+  Level *pLvl,
   int bDefer,
   Page **ppOut
 ){
@@ -1579,6 +1590,7 @@ int lsmFsSortedAppend(
   *ppOut = 0;
   int iApp = 0;
   int iNext = 0;
+  Segment *p = &pLvl->lhs;
   int iPrev = p->iLastPg;
 
   if( pFS->pCompress || bDefer ){
@@ -1600,7 +1612,7 @@ int lsmFsSortedAppend(
     }
   }else{
     if( iPrev==0 ){
-      iApp = findAppendPoint(pFS);
+      iApp = findAppendPoint(pFS, pLvl);
     }else if( fsIsLast(pFS, iPrev) ){
       int iNext;
       rc = fsBlockNext(pFS, fsPageToBlock(pFS, iPrev), &iNext);
@@ -1842,7 +1854,7 @@ static Pgno fsAppendData(
     /* If this is the first data written into the segment, find an append-point
     ** or allocate a new block.  */
     if( iApp==1 ){
-      pSeg->iFirst = iApp = findAppendPoint(pFS);
+      pSeg->iFirst = iApp = findAppendPoint(pFS, 0);
       if( iApp==0 ){
         int iBlk;
         rc = lsmBlockAllocate(pFS->pDb, &iBlk);

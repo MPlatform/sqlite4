@@ -151,6 +151,84 @@ static void freeDatabase(lsm_env *pEnv, Database *p){
   }
 }
 
+typedef struct DbTruncateCtx DbTruncateCtx;
+struct DbTruncateCtx {
+  int nBlock;
+  i64 iInUse;
+};
+
+static int dbTruncateCb(void *pCtx, int iBlk, i64 iSnapshot){
+  DbTruncateCtx *p = (DbTruncateCtx *)pCtx;
+  if( iBlk!=p->nBlock || (p->iInUse>=0 && iSnapshot>=p->iInUse) ) return 1;
+  p->nBlock--;
+  return 0;
+}
+
+static int dbTruncate(lsm_db *pDb, i64 iInUse){
+  int rc;
+  int i;
+  DbTruncateCtx ctx;
+
+  assert( pDb->pWorker );
+  ctx.nBlock = pDb->pWorker->nBlock;
+  ctx.iInUse = iInUse;
+
+  rc = lsmWalkFreelist(pDb, 1, dbTruncateCb, (void *)&ctx);
+  for(i=ctx.nBlock+1; rc==LSM_OK && i<=pDb->pWorker->nBlock; i++){
+    rc = freelistAppend(pDb, i, -1);
+  }
+
+  if( rc==LSM_OK ){
+#ifdef LSM_LOG_FREELIST
+    if( ctx.nBlock!=pDb->pWorker->nBlock ){
+      lsmLogMessage(pDb, 0, 
+          "dbTruncate(): truncated db to %d blocks",ctx.nBlock
+      );
+    }
+#endif
+    pDb->pWorker->nBlock = ctx.nBlock;
+  }
+  return rc;
+}
+
+
+/*
+** This function is called during database shutdown (when the number of
+** connections drops from one to zero). It truncates the database file
+** to as small a size as possible without truncating away any blocks that
+** contain data.
+*/
+static int dbTruncateFile(lsm_db *pDb){
+  int rc;
+
+  assert( pDb->pWorker==0 );
+  assert( lsmShmAssertLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL) );
+  rc = lsmCheckpointLoadWorker(pDb);
+
+  if( rc==LSM_OK ){
+    DbTruncateCtx ctx;
+
+    /* Walk the database free-block-list in reverse order. Set ctx.nBlock
+    ** to the block number of the last block in the database that actually
+    ** contains data. */
+    ctx.nBlock = pDb->pWorker->nBlock;
+    ctx.iInUse = -1;
+    rc = lsmWalkFreelist(pDb, 1, dbTruncateCb, (void *)&ctx);
+
+    /* If the last block that contains data is not already the last block in
+    ** the database file, truncate the database file so that it is. */
+    if( rc==LSM_OK && ctx.nBlock!=pDb->pWorker->nBlock ){
+      rc = lsmFsTruncateDb(
+          pDb->pFS, (i64)ctx.nBlock*lsmFsBlockSize(pDb->pFS)
+      );
+    }
+  }
+
+  lsmFreeSnapshot(pDb->pEnv, pDb->pWorker);
+  pDb->pWorker = 0;
+  return rc;
+}
+
 static void doDbDisconnect(lsm_db *pDb){
   int rc;
 
@@ -183,9 +261,11 @@ static void doDbDisconnect(lsm_db *pDb){
         rc = lsmCheckpointWrite(pDb, 1, 0);
       }
 
-      /* If the checkpoint was written successfully, delete the log file */
+      /* If the checkpoint was written successfully, delete the log file
+      ** and, if possible, truncate the database file.  */
       if( rc==LSM_OK ){
         Database *p = pDb->pDatabase;
+        dbTruncateFile(pDb);
         lsmFsCloseAndDeleteLog(pDb->pFS);
         if( p->pFile ) lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
       }
@@ -542,46 +622,6 @@ int lsmWalkFreelist(
   return rc;
 }
 
-typedef struct DbTruncateCtx DbTruncateCtx;
-struct DbTruncateCtx {
-  int nBlock;
-  i64 iInUse;
-};
-
-static int dbTruncateCb(void *pCtx, int iBlk, i64 iSnapshot){
-  DbTruncateCtx *p = (DbTruncateCtx *)pCtx;
-  if( iBlk!=p->nBlock || iSnapshot>=p->iInUse ) return 1;
-  p->nBlock--;
-  return 0;
-}
-
-static int dbTruncate(lsm_db *pDb, i64 iInUse){
-  int rc;
-  int i;
-  DbTruncateCtx ctx;
-
-  assert( pDb->pWorker );
-  ctx.nBlock = pDb->pWorker->nBlock;
-  ctx.iInUse = iInUse;
-
-  rc = lsmWalkFreelist(pDb, 1, dbTruncateCb, (void *)&ctx);
-  for(i=ctx.nBlock+1; rc==LSM_OK && i<=pDb->pWorker->nBlock; i++){
-    rc = freelistAppend(pDb, i, -1);
-  }
-
-  if( rc==LSM_OK ){
-#ifdef LSM_LOG_FREELIST
-    if( ctx.nBlock!=pDb->pWorker->nBlock ){
-      lsmLogMessage(pDb, 0, 
-          "dbTruncate(): truncated db to %d blocks",ctx.nBlock
-      );
-    }
-#endif
-    pDb->pWorker->nBlock = ctx.nBlock;
-  }
-  return rc;
-}
-
 
 typedef struct FindFreeblockCtx FindFreeblockCtx;
 struct FindFreeblockCtx {
@@ -823,7 +863,6 @@ int lsmBeginWork(lsm_db *pDb){
   /* Deserialize the current worker snapshot */
   if( rc==LSM_OK ){
     rc = lsmCheckpointLoadWorker(pDb);
-    if( pDb->pWorker ) pDb->pWorker->pDatabase = pDb->pDatabase;
   }
   return rc;
 }

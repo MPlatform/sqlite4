@@ -3108,18 +3108,15 @@ static int mergeWorkerMoveHierarchy(
   MergeWorker *pMW,               /* Merge worker */
   int bSep                        /* True for separators run */
 ){
-  Segment *pSeg;                  /* Segment being written */
   lsm_db *pDb = pMW->pDb;         /* Database handle */
   int rc = LSM_OK;                /* Return code */
   int i;
   Page **apHier = pMW->hier.apHier;
   int nHier = pMW->hier.nHier;
 
-  pSeg = &pMW->pLevel->lhs;
-
   for(i=0; rc==LSM_OK && i<nHier; i++){
     Page *pNew = 0;
-    rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, 1, &pNew);
+    rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pMW->pLevel, 1, &pNew);
     assert( rc==LSM_OK );
 
     if( rc==LSM_OK ){
@@ -3297,7 +3294,6 @@ static int mergeWorkerBtreeWrite(
   void *pKey,
   int nKey
 ){
-  Segment *pSeg = &pMW->pLevel->lhs;
   Hierarchy *p = &pMW->hier;
   lsm_db *pDb = pMW->pDb;         /* Database handle */
   int rc = LSM_OK;                /* Return Code */
@@ -3365,7 +3361,7 @@ static int mergeWorkerBtreeWrite(
     p->apHier[iLevel] = 0;
     if( rc==LSM_OK ){
       rc = lsmFsSortedAppend(
-          pDb->pFS, pDb->pWorker, pSeg, 1, &p->apHier[iLevel]
+          pDb->pFS, pDb->pWorker, pMW->pLevel, 1, &p->apHier[iLevel]
       );
     }
     if( rc!=LSM_OK ) return rc;
@@ -3565,9 +3561,8 @@ static int mergeWorkerNextPage(
   lsm_db *pDb = pMW->pDb;         /* Database handle */
   Segment *pSeg;                  /* Run to append to */
 
-  pSeg = &pMW->pLevel->lhs;
-  rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pSeg, 0, &pNext);
-  assert( rc!=LSM_OK || pSeg->iFirst>0 || pMW->pDb->compress.xCompress );
+  rc = lsmFsSortedAppend(pDb->pFS, pDb->pWorker, pMW->pLevel, 0, &pNext);
+  assert( rc || pMW->pLevel->lhs.iFirst>0 || pMW->pDb->compress.xCompress );
 
   if( rc==LSM_OK ){
     u8 *aData;                    /* Data buffer belonging to page pNext */
@@ -4919,6 +4914,7 @@ int lsmFlushTreeToDisk(lsm_db *pDb){
   if( rc==LSM_OK ){
     rc = sortedNewToplevel(pDb, TREE_BOTH, 0);
   }
+
   lsmFinishWork(pDb, 1, &rc);
   return rc;
 }
