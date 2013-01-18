@@ -73,6 +73,7 @@ Select *sqlite4SelectNew(
     pEList = sqlite4ExprListAppend(pParse, 0, sqlite4Expr(db,TK_ALL,0));
   }
   pNew->pEList = pEList;
+  if( pSrc==0 ) pSrc = sqlite4DbMallocZero(db, sizeof(*pSrc));
   pNew->pSrc = pSrc;
   pNew->pWhere = pWhere;
   pNew->pGroupBy = pGroupBy;
@@ -1627,8 +1628,12 @@ static int multiSelect(
   */
   assert( p->pEList && pPrior->pEList );
   if( p->pEList->nExpr!=pPrior->pEList->nExpr ){
-    sqlite4ErrorMsg(pParse, "SELECTs to the left and right of %s"
-      " do not have the same number of result columns", selectOpName(p->op));
+    if( p->selFlags & SF_Values ){
+      sqlite4ErrorMsg(pParse, "all VALUES must have the same number of terms");
+    }else{
+      sqlite4ErrorMsg(pParse, "SELECTs to the left and right of %s"
+        " do not have the same number of result columns", selectOpName(p->op));
+    }
     rc = 1;
     goto multi_select_end;
   }
