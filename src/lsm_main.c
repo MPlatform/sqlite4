@@ -406,8 +406,8 @@ int lsmStructList(
   lsmStringInit(&s, pDb->pEnv);
   for(p=pTopLevel; rc==LSM_OK && p; p=p->pNext){
     int i;
-    lsmStringAppendf(&s, "%s{", (s.n ? " " : ""));
-    lsmAppendSegmentList(&s, "", &p->lhs);
+    lsmStringAppendf(&s, "%s{%d", (s.n ? " " : ""), (int)p->iAge);
+    lsmAppendSegmentList(&s, " ", &p->lhs);
     for(i=0; rc==LSM_OK && i<p->nRight; i++){
       lsmAppendSegmentList(&s, " ", &p->aRhs[i]);
     }

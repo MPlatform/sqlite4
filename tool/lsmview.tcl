@@ -168,7 +168,7 @@ proc segment_callback {C tag segment} {
 }
 
 proc draw_level {C level tags} {
-  set lhs [lindex $level 0]
+  set lhs [lindex $level 1]
 
   set l [lindex $tags end]
   draw_segment $C $lhs [concat $tags "$l.s0"]
@@ -177,7 +177,7 @@ proc draw_level {C level tags} {
   set i 0
   set y 0
   set x [expr $x2+10]
-  foreach seg [lrange $level 1 end] {
+  foreach seg [lrange $level 2 end] {
     set tag "$l.s[incr i]"
     draw_segment $C $seg [concat $tags $tag]
 
@@ -198,11 +198,11 @@ proc draw_structure {canvas structure} {
   set nMaxWidth 0.0
   foreach level $structure {
     set nRight 0
-    foreach seg [lrange $level 1 end] {
+    foreach seg [lrange $level 2 end] {
       set sz [lindex $seg 3]
       if {$sz > $nRight} { set nRight $sz }
     }
-    set nLeft [lindex $level 0 3]
+    set nLeft [lindex $level 1 3]
     set nTotal [log2 [expr max($nLeft, 2)]]
     if {$nRight} {set nTotal [expr $nTotal + [log2 [expr max($nRight, 2)]]]}
     if {$nTotal > $nMaxWidth} { set nMaxWidth $nTotal }
@@ -221,8 +221,9 @@ proc draw_structure {canvas structure} {
     $C move $tag [expr ($W-$x2)/2] $y
     incr y [expr $y2 + $::G(vertical_padding)]
 
+    set age [lindex $level 0]
     foreach {x1 y1 x2 y2} [$C bbox $tag.text] {}
-    $C create text 10 $y1 -anchor nw -text [string toupper "${tag}:"]
+    $C create text 5 $y1 -anchor nw -text [string toupper "${tag} ($age):"]
   }
 
   if {[info exists myVertShift]} {
@@ -248,8 +249,11 @@ proc draw_one_pointer {C from to} {
 }
 
 proc draw_internal_pointers {C iLevel level} {
-  for {set j 2} {$j < [llength $level]} {incr j} {
-    if {[lindex $level $j 2]==0} {
+  set iAge [lindex $level 0]      ;# Age of this level
+  set lSeg [lrange $level 1 end]  ;# List of segments that make up this level
+
+  for {set j 2} {$j < [llength $lSeg]} {incr j} {
+    if {[lindex $lSeg $j 2]==0} {
       draw_one_pointer $C "l$iLevel.s[expr $j-1]" "l$iLevel.s$j"
     }
   }
@@ -266,24 +270,28 @@ proc draw_pointers {C structure} {
     set l1 [lindex $structure $i]
     set l2 [lindex $structure $i2]
 
-    set bMerge1 [expr [llength $l1]>1]
-    set bMerge2 [expr [llength $l2]>1]
+    # Set to true if levels $i and $i2 are currently undergoing a merge
+    # (have one or more rhs segments), respectively.
+    #
+    set bMerge1 [expr [llength $l1]>2]
+    set bMerge2 [expr [llength $l2]>2]
 
     if {$bMerge2} {
-      if {[lindex $l2 1 2]==0} {
+      if {[lindex $l2 2 2]==0} {
         draw_one_pointer $C "l$i.s0" "l$i2.s1"
         if {$bMerge1} {
-          draw_one_pointer $C "l$i.s[expr [llength $l1]-1]" "l$i2.s1"
+          draw_one_pointer $C "l$i.s[expr [llength $l1]-2]" "l$i2.s1"
         }
       }
     } else {
-      set bBtree [expr [lindex $l2 0 2]!=0]
+
+      set bBtree [expr [lindex $l2 1 2]!=0]
 
       if {$bBtree==0 || $bMerge1} {
         draw_one_pointer $C "l$i.s0" "l$i2.s0"
       }
       if {$bBtree==0} {
-        draw_one_pointer $C "l$i.s[expr [llength $l1]-1]" "l$i2.s0"
+        draw_one_pointer $C "l$i.s[expr [llength $l1]-2]" "l$i2.s0"
       }
     }
   }
@@ -532,7 +540,7 @@ proc static_setup {zConfig zDb} {
   bind $C <Configure>  [list static_redraw $C]
   bind $myTree <<TreeviewSelect>> [list static_treeview_select $C]
 
-  static_select_callback $C [lindex $myData 0 0]
+  static_select_callback $C [lindex $myData 0 1]
 }
 
 if {[llength $argv] > 2} {
