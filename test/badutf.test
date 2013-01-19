@@ -13,7 +13,6 @@
 # This file checks to make sure SQLite is able to gracefully
 # handle malformed UTF-8.
 #
-# $Id: badutf.test,v 1.2 2007/09/12 17:01:45 danielk1977 Exp $
 
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
@@ -27,19 +26,19 @@ do_test badutf-1.2 {
 } {0 {x 81}}
 do_test badutf-1.3 {
   sqlite4_exec db {SELECT hex('%bf') AS x}
-} {0 {x BF}}
+} {0 {x bf}}
 do_test badutf-1.4 {
   sqlite4_exec db {SELECT hex('%c0') AS x}
-} {0 {x C0}}
+} {0 {x c0}}
 do_test badutf-1.5 {
   sqlite4_exec db {SELECT hex('%e0') AS x}
-} {0 {x E0}}
+} {0 {x e0}}
 do_test badutf-1.6 {
   sqlite4_exec db {SELECT hex('%f0') AS x}
-} {0 {x F0}}
+} {0 {x f0}}
 do_test badutf-1.7 {
   sqlite4_exec db {SELECT hex('%ff') AS x}
-} {0 {x FF}}
+} {0 {x ff}}
 
 sqlite4 db2 {}
 ifcapable utf16 {
@@ -52,31 +51,31 @@ ifcapable utf16 {
   } {0 {x 0081}}
   do_test badutf-1.12 {
     sqlite4_exec db2 {SELECT hex('%bf') AS x}
-  } {0 {x 00BF}}
+  } {0 {x 00bf}}
   do_test badutf-1.13 {
     sqlite4_exec db2 {SELECT hex('%c0') AS x}
-  } {0 {x FFFD}}
+  } {0 {x fffd}}
   do_test badutf-1.14 {
     sqlite4_exec db2 {SELECT hex('%c1') AS x}
-  } {0 {x FFFD}}
+  } {0 {x fffd}}
   do_test badutf-1.15 {
     sqlite4_exec db2 {SELECT hex('%c0%bf') AS x}
-  } {0 {x FFFD}}
+  } {0 {x fffd}}
   do_test badutf-1.16 {
     sqlite4_exec db2 {SELECT hex('%c1%bf') AS x}
-  } {0 {x FFFD}}
+  } {0 {x fffd}}
   do_test badutf-1.17 {
     sqlite4_exec db2 {SELECT hex('%c3%bf') AS x}
-  } {0 {x 00FF}}
+  } {0 {x 00ff}}
   do_test badutf-1.18 {
     sqlite4_exec db2 {SELECT hex('%e0') AS x}
-  } {0 {x FFFD}}
+  } {0 {x fffd}}
   do_test badutf-1.19 {
     sqlite4_exec db2 {SELECT hex('%f0') AS x}
-  } {0 {x FFFD}}
+  } {0 {x fffd}}
   do_test badutf-1.20 {
     sqlite4_exec db2 {SELECT hex('%ff') AS x}
-  } {0 {x FFFD}}
+  } {0 {x fffd}}
 }
 
 
@@ -119,25 +118,25 @@ do_test badutf-3.9 {
 
 do_test badutf-4.1 {
   sqlite4_exec db {SELECT hex(trim('%80%80%80%f0%80%80%80%ff','%80%ff')) AS x}
-} {0 {x F0}}
+} {0 {x f0}}
 do_test badutf-4.2 {
   sqlite4_exec db {SELECT hex(ltrim('%80%80%80%f0%80%80%80%ff','%80%ff')) AS x}
-} {0 {x F0808080FF}}
+} {0 {x f0808080ff}}
 do_test badutf-4.3 {
   sqlite4_exec db {SELECT hex(rtrim('%80%80%80%f0%80%80%80%ff','%80%ff')) AS x}
-} {0 {x 808080F0}}
+} {0 {x 808080f0}}
 do_test badutf-4.4 {
   sqlite4_exec db {SELECT hex(trim('%80%80%80%f0%80%80%80%ff','%ff%80')) AS x}
-} {0 {x 808080F0808080FF}}
+} {0 {x 808080f0808080ff}}
 do_test badutf-4.5 {
   sqlite4_exec db {SELECT hex(trim('%ff%80%80%f0%80%80%80%ff','%ff%80')) AS x}
-} {0 {x 80F0808080FF}}
+} {0 {x 80f0808080ff}}
 do_test badutf-4.6 {
   sqlite4_exec db {SELECT hex(trim('%ff%80%f0%80%80%80%ff','%ff%80')) AS x}
-} {0 {x F0808080FF}}
+} {0 {x f0808080ff}}
 do_test badutf-4.7 {
   sqlite4_exec db {SELECT hex(trim('%ff%80%f0%80%80%80%ff','%ff%80%80')) AS x}
-} {0 {x FF80F0808080FF}}
+} {0 {x ff80f0808080ff}}
 
 db2 close
 finish_test

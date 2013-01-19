@@ -838,7 +838,7 @@ static void compileoptiongetFunc(
 ** digits. */
 static const char hexdigits[] = {
   '0', '1', '2', '3', '4', '5', '6', '7',
-  '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' 
+  '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' 
 };
 
 /*
@@ -875,7 +875,7 @@ static void quoteFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         }
         zText[(nBlob*2)+2] = '\'';
         zText[(nBlob*2)+3] = '\0';
-        zText[0] = 'X';
+        zText[0] = 'x';
         zText[1] = '\'';
         sqlite4_result_text(context, zText, -1, SQLITE4_TRANSIENT);
         sqlite4_free(sqlite4_context_env(context), zText);

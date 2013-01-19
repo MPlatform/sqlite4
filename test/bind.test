@@ -303,15 +303,15 @@ set enc [db eval {PRAGMA encoding}]
 if {$enc=="UTF-8" || $enc==""} {
   do_test bind-6.5 {
     execsql {SELECT  hex(a), hex(b), hex(c) FROM t1}
-  } {68656C6C6F00746865726500 68656C6C6F007468657265 68656C6C6F}
+  } {68656c6c6f00746865726500 68656c6c6f007468657265 68656c6c6f}
 } elseif {$enc=="UTF-16le"} {
   do_test bind-6.5 {
     execsql {SELECT  hex(a), hex(b), hex(c) FROM t1}
-  } {680065006C006C006F000000740068006500720065000000 680065006C006C006F00000074006800650072006500 680065006C006C006F00}
+  } {680065006c006c006f000000740068006500720065000000 680065006c006c006f00000074006800650072006500 680065006c006c006f00}
 } elseif {$enc=="UTF-16be"} {
   do_test bind-6.5 {
     execsql {SELECT  hex(a), hex(b), hex(c) FROM t1}
-  } {00680065006C006C006F0000007400680065007200650000 00680065006C006C006F000000740068006500720065 00680065006C006C006F}
+  } {00680065006c006c006f0000007400680065007200650000 00680065006c006c006f000000740068006500720065 00680065006c006c006f}
 } else {
   do_test bind-6.5 {
     set "Unknown database encoding: $::enc"
@@ -352,15 +352,15 @@ ifcapable {utf16} {
   if {$enc=="UTF-8"} {
     do_test bind-7.4 {
       execsql {SELECT hex(a), hex(b), hex(c) FROM t1}
-    } {68690079616C6C00 68690079616C6C 6869}
+    } {68690079616c6c00 68690079616c6c 6869}
   } elseif {$enc=="UTF-16le"} {
     do_test bind-7.4 {
       execsql {SELECT hex(a), hex(b), hex(c) FROM t1}
-    } {680069000000790061006C006C000000 680069000000790061006C006C00 68006900}
+    } {680069000000790061006c006c000000 680069000000790061006c006c00 68006900}
   } elseif {$enc=="UTF-16be"} {
     do_test bind-7.4 {
       execsql {SELECT hex(a), hex(b), hex(c) FROM t1}
-    } {00680069000000790061006C006C0000 00680069000000790061006C006C 00680069}
+    } {00680069000000790061006c006c0000 00680069000000790061006c006c 00680069}
   }
   do_test bind-7.5 {
     execsql {SELECT typeof(a), typeof(b), typeof(c) FROM t1}
@@ -626,13 +626,13 @@ if {[execsql {pragma encoding}]=="UTF-8"} {
       SELECT typeof(x), length(x), quote(x),
              length(cast(x AS BLOB)), quote(cast(x AS BLOB)) FROM t3
     }
-  } {text 3 'abc' 10 X'6162630078797A007071'}
+  } {text 3 'abc' 10 x'6162630078797a007071'}
   do_test bind-12.2 {
     sqlite4_create_function $DB
     execsql {
       SELECT quote(cast(x_coalesce(x) AS blob)) FROM t3
     }
-  } {X'6162630078797A007071'}
+  } {x'6162630078797a007071'}
 }
 
 # Test the operation of sqlite4_clear_bindings
