@@ -877,7 +877,7 @@ void sqlite4Insert(
       assert( pSelect==0 ); /* Otherwise useTempTable is true */
       sqlite4ExprCodeAndCache(pParse, pList->a[j].pExpr, regContent+i);
     }
-    if( j==iIntPKCol ){
+    if( i==iIntPKCol ){
       int a1;
       a1 = sqlite4VdbeAddOp1(v, OP_NotNull, regContent+i);
       sqlite4VdbeAddOp2(v, OP_NewRowid, baseCur, regContent+i);
