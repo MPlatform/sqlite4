@@ -4237,7 +4237,7 @@ static Bitmask codeOneLoopStart(
     testcase( pLevel->plan.wsFlags & WHERE_BTM_LIMIT );
     testcase( pLevel->plan.wsFlags & WHERE_TOP_LIMIT );
     if( (pLevel->plan.wsFlags & (WHERE_BTM_LIMIT|WHERE_TOP_LIMIT))!=0 ){
-      sqlite4VdbeAddOp3(v, OP_Column, iCur, iIneq, r1);
+      sqlite4ExprCodeGetColumnOfTable(v, pIdx->pTable, iCur, iIneq, r1);
       sqlite4VdbeAddOp2(v, OP_IsNull, r1, addrCont);
     }
     sqlite4ReleaseTempReg(pParse, r1);
