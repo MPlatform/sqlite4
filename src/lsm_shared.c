@@ -871,6 +871,7 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
   if( p ){
     lsmSortedFreeLevel(pEnv, p->pLevel);
     lsmFree(pEnv, p->freelist.aEntry);
+    lsmFree(pEnv, p->redirect.a);
     lsmFree(pEnv, p);
   }
 }

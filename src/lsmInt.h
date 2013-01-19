@@ -83,6 +83,7 @@ typedef struct MergeInput MergeInput;
 typedef struct MetaPage MetaPage;
 typedef struct MultiCursor MultiCursor;
 typedef struct Page Page;
+typedef struct Redirect Redirect;
 typedef struct Segment Segment;
 typedef struct SegmentMerger SegmentMerger;
 typedef struct ShmChunk ShmChunk;
@@ -144,6 +145,8 @@ int lsmErrorBkpt(int);
 */
 #define LSM_MAX_FREELIST_ENTRIES 24
 
+#define LSM_MAX_BLOCK_REDIRECTS 16
+
 #define LSM_ATTEMPTS_BEFORE_PROTOCOL 10000
 
 
@@ -189,6 +192,14 @@ struct IntArray {
   int nAlloc;
   int nArray;
   u32 *aArray;
+};
+
+struct Redirect {
+  int n;                          /* Number of redirects */
+  struct RedirectEntry {
+    int iFrom;
+    int iTo;
+  } *a;
 };
 
 /*
@@ -347,6 +358,8 @@ struct Segment {
   Pgno iLastPg;                    /* Last page of this run */
   Pgno iRoot;                      /* Root page number (if any) */
   int nSize;                       /* Size of this run in pages */
+
+  Redirect *pRedirect;             /* Block redirects (or NULL) */
 };
 
 /*
@@ -514,6 +527,7 @@ struct Snapshot {
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
   i64 iLogOff;                    /* Log file offset */
+  Redirect redirect;              /* Block redirection array */
 
   /* Used by worker snapshots only */
   int nBlock;                     /* Number of blocks in database file */
@@ -654,7 +668,7 @@ void lsmSortedSplitkey(lsm_db *, Level *, int *);
 
 /* Reading sorted run content. */
 int lsmFsDbPageLast(FileSystem *pFS, Segment *pSeg, Page **ppPg);
-int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
+int lsmFsDbPageGet(FileSystem *, Segment *, Pgno, Page **);
 int lsmFsDbPageNext(Segment *, Page *, int eDir, Page **);
 
 u8 *lsmFsPageData(Page *, int *);
