@@ -2185,9 +2185,13 @@ case OP_Affinity: {
 ** the result to register P3. No affinity transformations are applied to 
 ** the input values before they are encoded. 
 **
-** If P5 is non-zero, then a sequence number (unique within the cursor)
-** is appended to the record. The sole purpose of this is to ensure that
-** the key blob is unique within the cursors table.
+** If the OPFLAG_SEQCOUNT bit of P5 is set, then a sequence number 
+** (unique within the cursor) is appended to the record. The sole purpose
+** of this is to ensure that the key blob is unique within the cursors table.
+**
+** If the OPFLAG_LASTROWID bit of P5 is set and the value of the first and
+** only field of the key is an integer, then set the lastRowid field to the
+** value of that integer.
 */
 case OP_MakeIdxKey: {
   VdbeCursor *pC;
@@ -2211,7 +2215,7 @@ case OP_MakeIdxKey: {
   ** the encoded key.
   */
   nSeq = 0;
-  if( pOp->p5 ){
+  if( pOp->p5 & OPFLAG_SEQCOUNT ){
     iSeq = pC->seqCount++;
     do {
       nSeq++;
@@ -2219,6 +2223,9 @@ case OP_MakeIdxKey: {
       iSeq = iSeq >> 7;
     }while( iSeq );
     aSeq[sizeof(aSeq)-nSeq] |= 0x80;
+  }
+  if( (pOp->p5 & OPFLAG_LASTROWID)!=0 && (pData0->flags & MEM_Int)!=0 ){
+    lastRowid = pData0->u.i;
   }
 
   memAboutToChange(p, pOut);
@@ -3234,10 +3241,8 @@ case OP_Sequence: {           /* out2-prerelease */
 
 /* Opcode: NewRowid P1 P2 * * *
 **
-** Get a new integer record number (a.k.a "rowid") used as the key to a table.
-** The record number is not previously used as a key in the database
-** table that cursor P1 points to.  The new record number is written
-** to register P2.
+** Get a new integer primary key (a.k.a "rowid") for table P1.  The integer
+** should not be currently in use as a primary key on that table.
 */
 case OP_NewRowid: {           /* out2-prerelease */
   i64 v;                   /* The new rowid */
@@ -3284,7 +3289,7 @@ case OP_NewRowid: {           /* out2-prerelease */
     }
     if( rc==SQLITE4_OK ){
       n = sqlite4VdbeDecodeIntKey(&aKey[n], nKey-n, &v);
-      if( n==0 ) rc = SQLITE4_CORRUPT_BKPT;
+      if( n==0 || v==LARGEST_INT64 ) rc = SQLITE4_FULL;
     }
   }else{
     break;
@@ -3352,14 +3357,6 @@ case OP_NewIdxid: {          /* in1 */
 ** incremented (otherwise not).  If the OPFLAG_LASTROWID flag of P5 is set,
 ** then rowid is stored for subsequent return by the
 ** sqlite4_last_insert_rowid() function (otherwise it is unmodified).
-**
-** If the OPFLAG_USESEEKRESULT flag of P5 is set and if the result of
-** the last seek operation (OP_NotExists) was a success, then this
-** operation will not attempt to find the appropriate row before doing
-** the insert but will instead overwrite the row that the cursor is
-** currently pointing to.  Presumably, the prior OP_NotExists opcode
-** has already positioned the cursor correctly.  This is an optimization
-** that boosts performance by avoiding redundant seeks.
 **
 ** If the OPFLAG_ISUPDATE flag is set, then this opcode is part of an
 ** UPDATE operation.  Otherwise (if the flag is clear) then this opcode

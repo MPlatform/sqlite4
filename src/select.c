@@ -4174,7 +4174,7 @@ int sqlite4Select(
         regBase = sqlite4GetTempRange(pParse, nGroup);
         sqlite4ExprCodeExprList(pParse, pGroupBy, regBase, 0);
         sqlite4VdbeAddOp3(v, OP_MakeIdxKey, sAggInfo.sortingIdx,regBase,regKey);
-        sqlite4VdbeChangeP5(v, 1);
+        sqlite4VdbeChangeP5(v, OPFLAG_SEQCOUNT);
         sqlite4ReleaseTempRange(pParse, regBase, nGroup);
 
         /* Encode the record for the sorting index. The record contains all

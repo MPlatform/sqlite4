@@ -525,6 +525,7 @@ void sqlite4Insert(
 
   int iPk;                        /* Cursor offset of PK index cursor */
   Index *pPk;                     /* Primary key for table pTab */
+  int iIntPKCol = -1;             /* Column of INTEGER PRIMARY KEY or -1 */
   int bImplicitPK;                /* True if table pTab has an implicit PK */
   int regContent;                 /* First register in column value array */
   int regRowid;                   /* If bImplicitPK, register holding IPK */
@@ -564,7 +565,16 @@ void sqlite4Insert(
   ** key index is VDBE cursor (baseCur+iPk).  */
   pPk = sqlite4FindPrimaryKey(pTab, &iPk);
   assert( (pPk==0)==IsView(pTab) );
-  bImplicitPK = (pPk && pPk->aiColumn[0]==-1);
+  if( pPk ){
+    bImplicitPK = pPk->aiColumn[0]==(-1);
+    if( pPk->fIndex & IDX_IntPK ){
+      assert( pPk->nColumn==1 );
+      iIntPKCol = pPk->aiColumn[0];
+    }
+  }else{
+    bImplicitPK = 0;
+  }
+      
 
   /* Figure out if we have any triggers and if the table being
   ** inserted into is a view. */
@@ -834,7 +844,7 @@ void sqlite4Insert(
 
   /* Allocate an array of registers in which to assemble the values for the
   ** new row. If the table has an explicit primary key, we need one register
-  ** for each table column. If the table uses an implicit primary key, the
+  ** for each table column. If the table uses an implicit primary key, then
   ** nCol+1 registers are required.  */
   regRowid = ++pParse->nMem;
   regContent = pParse->nMem+1;
@@ -866,6 +876,12 @@ void sqlite4Insert(
     }else{
       assert( pSelect==0 ); /* Otherwise useTempTable is true */
       sqlite4ExprCodeAndCache(pParse, pList->a[j].pExpr, regContent+i);
+    }
+    if( j==iIntPKCol ){
+      int a1;
+      a1 = sqlite4VdbeAddOp1(v, OP_NotNull, regContent+i);
+      sqlite4VdbeAddOp2(v, OP_NewRowid, baseCur, regContent+i);
+      sqlite4VdbeJumpHere(v, a1);
     }
   }
 
@@ -1062,6 +1078,9 @@ static void generateCheckChecks(
 # define generateCheckChecks(a,b,c,d,e)
 #endif
 
+/*
+** Locate the primary key index for a table.
+*/
 Index *sqlite4FindPrimaryKey(
   Table *pTab,                    /* Table to locate primary key for */
   int *piPk                       /* OUT: Index of PRIMARY KEY */
@@ -1291,6 +1310,9 @@ void sqlite4GenerateConstraintChecks(
       }
     }
     sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iIdx, regTmp, regKey);
+    if( pIdx==pPk && (pPk->fIndex & IDX_IntPK)!=0 ){
+      sqlite4VdbeChangeP5(v, OPFLAG_LASTROWID);
+    }
     VdbeComment((v, "key for %s", pIdx->zName));
 
     /* If Index.onError==OE_None, then pIdx is not a UNIQUE or PRIMARY KEY 

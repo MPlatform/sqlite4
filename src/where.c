@@ -1662,7 +1662,7 @@ static int isSortingIndex(
 
   if( !pOrderBy ) return 0;
   if( wsFlags & WHERE_COLUMN_IN ) return 0;
-  if( pIdx->bUnordered ) return 0;
+  if( pIdx->fIndex & IDX_Unordered ) return 0;
 
   pTab = pIdx->pTable;
   pPk = sqlite4FindPrimaryKey(pTab, 0);
@@ -3124,7 +3124,7 @@ static void bestKVIndex(
       if( (wsFlags & (WHERE_COLUMN_IN|WHERE_COLUMN_NULL))==0 ){
         wsFlags |= WHERE_UNIQUE;
       }
-    }else if( pProbe->bUnordered==0 ){
+    }else if( (pProbe->fIndex & IDX_Unordered)==0 ){
       int j = idxColumnNumber(pProbe, pPk, nEq);
       if( findTerm(pWC, iCur, j, notReady, WO_LT|WO_LE|WO_GT|WO_GE, pProbe) ){
         WhereTerm *pTop = findTerm(pWC, iCur, j, notReady, WO_LT|WO_LE, pProbe);

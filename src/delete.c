@@ -553,7 +553,7 @@ void sqlite4EncodeIndexKey(
   /* Build the index key. If bAddSeq is true, append a sequence number to 
   ** the end of the key to ensure it is unique.  */
   sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iIdxCsr, regTmp, regOut);
-  if( bAddSeq ) sqlite4VdbeChangeP5(v, 1);
+  if( bAddSeq ) sqlite4VdbeChangeP5(v, OPFLAG_SEQCOUNT);
 
   /* Release temp registers */
   sqlite4ReleaseTempRange(pParse, regTmp, nTmpReg);

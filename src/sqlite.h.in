@@ -744,19 +744,13 @@ struct sqlite4_mem_methods {
 /*
 ** CAPIREF: Last Insert Rowid
 **
-** ^Each entry in an SQLite table has a unique 64-bit signed
-** integer key called the [ROWID | "rowid"]. ^The rowid is always available
-** as an undeclared column named ROWID, OID, or _ROWID_ as long as those
-** names are not also used by explicitly declared columns. ^If
-** the table has a column of type [INTEGER PRIMARY KEY] then that column
-** is another alias for the rowid.
-**
-** ^This routine returns the [rowid] of the most recent
-** successful [INSERT] into the database from the [database connection]
-** in the first argument.  ^As of SQLite version 3.7.7, this routines
-** records the last insert rowid of both ordinary tables and [virtual tables].
-** ^If no successful [INSERT]s
-** have ever occurred on that database connection, zero is returned.
+** ^The sqlite4_last_insert_rowid(D) routine returns the primary key value
+** of the the most recent successful [INSERT] from [database connection] D
+** into a table where the primary key of the inserted row is a single
+** integer.
+** ^If there have been no successful [INSERT]s of rows with a single integer
+** PRIMARY KEY value on database connection D, then this routine returns
+** zero.
 **
 ** ^(If an [INSERT] occurs within a trigger or within a [virtual table]
 ** method, then this routine will return the [rowid] of the inserted

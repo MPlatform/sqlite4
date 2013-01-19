@@ -1040,15 +1040,6 @@ void sqlite4AddDefaultValue(Parse *pParse, ExprSpan *pSpan){
 ** A table can have at most one primary key.  If the table already has
 ** a primary key (and this is the second primary key) then create an
 ** error.
-**
-** If the PRIMARY KEY is on a single column whose datatype is INTEGER,
-** then we will try to use that column as the rowid.  Set the Table.iPKey
-** field of the table under construction to be the index of the
-** INTEGER PRIMARY KEY column.  Table.iPKey is set to -1 if there is
-** no INTEGER PRIMARY KEY.
-**
-** If the key is not an INTEGER PRIMARY KEY, then create a unique
-** index for the key.  No index is created for INTEGER PRIMARY KEYs.
 */
 void sqlite4AddPrimaryKey(
   Parse *pParse,    /* Parsing context */
@@ -1058,9 +1049,8 @@ void sqlite4AddPrimaryKey(
   int sortOrder     /* SQLITE4_SO_ASC or SQLITE4_SO_DESC */
 ){
   Table *pTab = pParse->pNewTable;
-#if 0
-  char *zType = 0;
-#endif
+  Index *pPk;                        /* Primary key index */
+  char *zType = 0;                   /* Primary key column type */
   int iCol = -1, i;
   if( pTab==0 || IN_DECLARE_VTAB ) goto primary_key_exit;
   if( pTab->tabFlags & TF_HasPrimaryKey ){
@@ -1081,38 +1071,29 @@ void sqlite4AddPrimaryKey(
         }
       }
       if( iCol<pTab->nCol ){
-        pTab->aCol[iCol].isPrimKey = 1;
+        pTab->aCol[iCol].isPrimKey = i+1;
         pTab->aCol[iCol].notNull = 1;
       }
     }
     if( pList->nExpr>1 ) iCol = -1;
   }
-
-#if 0
-  if( iCol>=0 && iCol<pTab->nCol ){
-    zType = pTab->aCol[iCol].zType;
+  if( autoInc ){
+    sqlite4ErrorMsg(pParse, "AUTOINCREMENT not yet implemented");
+    goto primary_key_exit;
   }
+  pPk = sqlite4CreateIndex(
+     pParse, 0, 0, 0, pList, onError, 0, 0, sortOrder, 0, 1
+  );
 
-  if( zType && sqlite4StrICmp(zType, "INTEGER")==0
-        && sortOrder==SQLITE4_SO_ASC ){
-    pTab->iPKey = iCol;
-    pTab->keyConf = (u8)onError;
-    assert( autoInc==0 || autoInc==1 );
-    pTab->tabFlags |= autoInc*TF_Autoincrement;
-  }else if( autoInc ){
-#ifndef SQLITE4_OMIT_AUTOINCREMENT
-    sqlite4ErrorMsg(pParse, "AUTOINCREMENT is only allowed on an "
-       "INTEGER PRIMARY KEY");
-#endif
-  }else
-#endif
-
-  {
-    sqlite4CreateIndex(
-        pParse, 0, 0, 0, pList, onError, 0, 0, sortOrder, 0, 1
-    );
-    pList = 0;
+  if( iCol>=0 && iCol<pTab->nCol
+   && (zType = pTab->aCol[iCol].zType)!=0
+   && sqlite4StrICmp(zType, "INTEGER")==0
+   && sortOrder==SQLITE4_SO_ASC
+   && pPk
+  ){
+    pPk->fIndex |= IDX_IntPK;
   }
+  pList = 0;
 
 primary_key_exit:
   sqlite4ExprListDelete(pParse->db, pList);
@@ -2674,7 +2655,7 @@ Index *sqlite4CreateIndex(
       int n;
       Index *pLoop;
       for(pLoop=pTab->pIndex, n=1; pLoop; pLoop=pLoop->pNext, n++){}
-      zName = sqlite4MPrintf(db, "sqlite_autoindex_%s_%d", pTab->zName, n);
+      zName = sqlite4MPrintf(db, "sqlite_%s_unique%d", pTab->zName, n);
     }else{
       zName = sqlite4MPrintf(db, "%s", pTab->zName);
     }
@@ -2738,9 +2719,7 @@ Index *sqlite4CreateIndex(
   **
   ** TODO:  Add a test to make sure that the same column is not named
   ** more than once within the same index.  Only the first instance of
-  ** the column will ever be used by the optimizer.  Note that using the
-  ** same column more than once cannot be an error because that would 
-  ** break backwards compatibility - it needs to be a warning.
+  ** the column will ever be used by the optimizer.
   */
   for(i=0, pListItem=pList->a; i<pList->nExpr; i++, pListItem++){
     const char *zColName = pListItem->zName;
@@ -2757,12 +2736,7 @@ Index *sqlite4CreateIndex(
       goto exit_create_index;
     }
     pIndex->aiColumn[i] = j;
-    /* Justification of the ALWAYS(pListItem->pExpr->pColl):  Because of
-    ** the way the "idxlist" non-terminal is constructed by the parser,
-    ** if pListItem->pExpr is not null then either pListItem->pExpr->pColl
-    ** must exist or else there must have been an OOM error.  But if there
-    ** was an OOM error, we would never reach this point. */
-    if( pListItem->pExpr && ALWAYS(pListItem->pExpr->pColl) ){
+    if( pListItem->pExpr && pListItem->pExpr->pColl ){
       int nColl;
       zColl = pListItem->pExpr->pColl->zName;
       nColl = sqlite4Strlen30(zColl) + 1;

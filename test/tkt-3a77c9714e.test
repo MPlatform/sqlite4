@@ -39,7 +39,7 @@ do_execsql_test 1.2 {
 
 do_execsql_test 2.1 {
   CREATE TABLE [Beginnings] (
-    [Id] INTEGER PRIMARY KEY AUTOINCREMENT,[Title] TEXT, [EndingId] INTEGER
+    [Id] INTEGER PRIMARY KEY /*AUTOINCREMENT*/,[Title] TEXT, [EndingId] INTEGER
   );
   CREATE TABLE [Endings] (Id INT,Title TEXT,EndingId INT);
   INSERT INTO Beginnings (Id, Title, EndingId) VALUES (1, 'FACTOR', 18);
