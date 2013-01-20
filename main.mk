@@ -67,7 +67,8 @@ TCCX += -I$(TOP)/ext/async
 TCPPX = g++ -Wall -g -I. -I$(TOP)/src $(OPTS)
 
 
-LIBOBJ+= alter.o analyze.o attach.o auth.o \
+LIBOBJ+= vdbe.o parse.o \
+         alter.o analyze.o attach.o auth.o \
          build.o \
          callback.o complete.o ctime.o date.o delete.o expr.o fault.o fkey.o \
 	 fts5.o fts5func.o \
@@ -79,11 +80,11 @@ LIBOBJ+= alter.o analyze.o attach.o auth.o \
          main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          mutex.o mutex_noop.o mutex_unix.o mutex_w32.o \
          opcodes.o os.o \
-         parse.o pragma.o prepare.o printf.o \
+         pragma.o prepare.o printf.o \
          random.o resolve.o rowset.o rtree.o select.o status.o \
          tokenize.o trigger.o \
          update.o util.o varint.o \
-         vdbe.o vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
+         vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
          vdbemem.o vdbetrace.o \
          walker.o where.o utf.o
 

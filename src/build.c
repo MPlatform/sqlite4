@@ -1077,10 +1077,6 @@ void sqlite4AddPrimaryKey(
     }
     if( pList->nExpr>1 ) iCol = -1;
   }
-  if( autoInc ){
-    sqlite4ErrorMsg(pParse, "AUTOINCREMENT not yet implemented");
-    goto primary_key_exit;
-  }
   pPk = sqlite4CreateIndex(
      pParse, 0, 0, 0, pList, onError, 0, 0, sortOrder, 0, 1
   );
@@ -1092,6 +1088,11 @@ void sqlite4AddPrimaryKey(
    && pPk
   ){
     pPk->fIndex |= IDX_IntPK;
+    assert( autoInc==0 || autoInc==1 );
+    pTab->tabFlags |= (-autoInc)&TF_Autoincrement;
+  }else if( autoInc ){
+    sqlite4ErrorMsg(pParse, 
+        "AUTOINCREMENT permitted on INTEGER PRIMARY KEY ASC only");
   }
   pList = 0;
 

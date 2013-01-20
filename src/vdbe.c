@@ -464,6 +464,18 @@ static void registerTrace(FILE *out, int iReg, Mem *p){
   pVtab->zErrMsg = 0;
 }
 
+/*
+** Return a pointer to a register in the root frame.
+*/
+static Mem *sqlite4RegisterInRootFrame(Vdbe *p, int i){
+  if( p->pFrame ){
+    VdbeFrame *pFrame;
+    for(pFrame=p->pFrame; pFrame->pParent; pFrame=pFrame->pParent);
+    return &pFrame->aMem[i];
+  }else{
+    return &p->aMem[i];
+  }
+}
 
 /*
 ** Execute as much of a VDBE program as we can then return.
@@ -3239,10 +3251,14 @@ case OP_Sequence: {           /* out2-prerelease */
 }
 
 
-/* Opcode: NewRowid P1 P2 * * *
+/* Opcode: NewRowid P1 P2 P3 * *
 **
 ** Get a new integer primary key (a.k.a "rowid") for table P1.  The integer
 ** should not be currently in use as a primary key on that table.
+**
+** If P3 is not zero, then it is the number of a register in the top-level
+** frame that holds a lower bound for the new rowid.  In other words, the
+** new rowid must be no less than reg[P3]+1.
 */
 case OP_NewRowid: {           /* out2-prerelease */
   i64 v;                   /* The new rowid */
@@ -3294,6 +3310,19 @@ case OP_NewRowid: {           /* out2-prerelease */
   }else{
     break;
   }
+#ifndef SQLITE_OMIT_AUTOINCREMENT
+  if( pOp->p3 && rc==SQLITE4_OK ){
+    pIn3 = sqlite4RegisterInRootFrame(p, pOp->p3);
+    assert( memIsValid(pIn3) );
+    REGISTER_TRACE(pOp->p3, pIn3);
+    sqlite4VdbeMemIntegerify(pIn3);
+    assert( (pIn3->flags & MEM_Int)!=0 );  /* mem(P3) holds an integer */
+    if( pIn3->u.i==MAX_ROWID ){
+      rc = SQLITE4_FULL;
+    }
+    if( v<pIn3->u.i ) v = pIn3->u.i;
+  }
+#endif
   pOut->flags = MEM_Int;
   pOut->u.i = v+1;
   break;
@@ -4270,19 +4299,16 @@ case OP_FkIfZero: {         /* jump */
 case OP_MemMax: {        /* in2 */
   Mem *pIn1;
   VdbeFrame *pFrame;
-  if( p->pFrame ){
-    for(pFrame=p->pFrame; pFrame->pParent; pFrame=pFrame->pParent);
-    pIn1 = &pFrame->aMem[pOp->p1];
-  }else{
-    pIn1 = &aMem[pOp->p1];
-  }
+  pIn1 = sqlite4RegisterInRootFrame(p, pOp->p1);
   assert( memIsValid(pIn1) );
   sqlite4VdbeMemIntegerify(pIn1);
   pIn2 = &aMem[pOp->p2];
+  REGISTER_TRACE(pOp->p1, pIn1);
   sqlite4VdbeMemIntegerify(pIn2);
   if( pIn1->u.i<pIn2->u.i){
     pIn1->u.i = pIn2->u.i;
   }
+  REGISTER_TRACE(pOp->p1, pIn1);
   break;
 }
 #endif /* SQLITE4_OMIT_AUTOINCREMENT */

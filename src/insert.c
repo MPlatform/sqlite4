@@ -24,7 +24,8 @@ void sqlite4OpenTable(
   Table *pTab,    /* The table to be opened */
   int opcode      /* OP_OpenRead or OP_OpenWrite */
 ){
-  assert( 0 );
+  Index *pPk = sqlite4FindPrimaryKey(pTab, 0);
+  sqlite4OpenIndex(p, iCur, iDb, pPk, opcode);
 }
 
 /*
@@ -248,7 +249,7 @@ static int readsTable(Parse *p, int iStartAddr, int iDb, Table *pTab){
 ** The 2nd register is the one that is returned.  That is all the
 ** insert routine needs to know about.
 */
-/*static FIXME: make static when this function gets used. */ int autoIncBegin(
+static int autoIncBegin(
   Parse *pParse,      /* Parsing context */
   int iDb,            /* Index of the database holding pTab */
   Table *pTab         /* The table we are writing to */
@@ -322,7 +323,7 @@ void sqlite4AutoincrementBegin(Parse *pParse){
 ** larger than the maximum rowid in the memId memory cell, then the
 ** memory cell is updated.  The stack is unchanged.
 */
-/*static FIXME: make static when this function gets used. */ void autoIncStep(Parse *pParse, int memId, int regRowid){
+static void autoIncStep(Parse *pParse, int memId, int regRowid){
   if( memId>0 ){
     sqlite4VdbeAddOp2(pParse->pVdbe, OP_MemMax, memId, regRowid);
   }
@@ -517,19 +518,18 @@ void sqlite4Insert(
   int iDb;              /* Index of database holding TABLE */
   Db *pDb;              /* The database containing table being inserted into */
   int appendFlag = 0;   /* True if the insert is likely to be an append */
+  int iPk;              /* Cursor offset of PK index cursor */
+  Index *pPk;           /* Primary key for table pTab */
+  int iIntPKCol = -1;   /* Column of INTEGER PRIMARY KEY or -1 */
+  int bImplicitPK;      /* True if table pTab has an implicit PK */
 
   /* Register allocations */
   int regFromSelect = 0;/* Base register for data coming from SELECT */
   int regEof = 0;       /* Register recording end of SELECT data */
   int *aRegIdx = 0;     /* One register allocated to each index */
-
-  int iPk;                        /* Cursor offset of PK index cursor */
-  Index *pPk;                     /* Primary key for table pTab */
-  int iIntPKCol = -1;             /* Column of INTEGER PRIMARY KEY or -1 */
-  int bImplicitPK;                /* True if table pTab has an implicit PK */
-  int regContent;                 /* First register in column value array */
-  int regRowid;                   /* If bImplicitPK, register holding IPK */
-
+  int regContent;       /* First register in column value array */
+  int regRowid;         /* If bImplicitPK, register holding IPK */
+  int regAutoinc;       /* Register holding the AUTOINCREMENT counter */
 
 #ifndef SQLITE4_OMIT_TRIGGER
   int isView;                 /* True if attempting to insert into a view */
@@ -629,6 +629,11 @@ void sqlite4Insert(
     goto insert_end;
   }
 #endif /* SQLITE4_OMIT_XFER_OPT */
+
+  /* If this is an AUTOINCREMENT table, look up the sequence number in the
+  ** sqlite_sequence table and store it in memory cell regAutoinc.
+  */
+  regAutoinc = autoIncBegin(pParse, iDb, pTab);
 
   /* Figure out how many columns of data are supplied.  If the data
   ** is coming from a SELECT statement, then generate a co-routine that
@@ -860,6 +865,7 @@ void sqlite4Insert(
   endOfLoop = sqlite4VdbeMakeLabel(v);
 
   for(i=0; i<pTab->nCol; i++){
+    int regDest = regContent+i;
     j = i;
     if( pColumn ){
       for(j=0; j<pColumn->nId; j++){
@@ -868,20 +874,14 @@ void sqlite4Insert(
     }
 
     if( nColumn==0 || (pColumn && j>=pColumn->nId) ){
-      sqlite4ExprCode(pParse, pTab->aCol[i].pDflt, regContent+i);
+      sqlite4ExprCode(pParse, pTab->aCol[i].pDflt, regDest);
     }else if( useTempTable ){
-      sqlite4VdbeAddOp3(v, OP_Column, srcTab, j, regContent+i);
+      sqlite4VdbeAddOp3(v, OP_Column, srcTab, j, regDest);
     }else if( pSelect ){
-      sqlite4VdbeAddOp2(v, OP_SCopy, regFromSelect+j, regContent+i);
+      sqlite4VdbeAddOp2(v, OP_SCopy, regFromSelect+j, regDest);
     }else{
       assert( pSelect==0 ); /* Otherwise useTempTable is true */
-      sqlite4ExprCodeAndCache(pParse, pList->a[j].pExpr, regContent+i);
-    }
-    if( i==iIntPKCol ){
-      int a1;
-      a1 = sqlite4VdbeAddOp1(v, OP_NotNull, regContent+i);
-      sqlite4VdbeAddOp2(v, OP_NewRowid, baseCur, regContent+i);
-      sqlite4VdbeJumpHere(v, a1);
+      sqlite4ExprCodeAndCache(pParse, pList->a[j].pExpr, regDest);
     }
   }
 
@@ -898,6 +898,15 @@ void sqlite4Insert(
         pParse, pTrigger, TK_INSERT, 0, TRIGGER_BEFORE, 
         pTab, (regRowid - pTab->nCol - 1), onError, endOfLoop
     );
+  }
+
+  if( iIntPKCol>=0 ){
+    int regDest = regContent+iIntPKCol;
+    int a1;
+    a1 = sqlite4VdbeAddOp1(v, OP_NotNull, regDest);
+    sqlite4VdbeAddOp3(v, OP_NewRowid, baseCur, regDest, regAutoinc);
+    sqlite4VdbeJumpHere(v, a1);
+    autoIncStep(pParse, regAutoinc, regDest);
   }
 
   if( bImplicitPK ){
