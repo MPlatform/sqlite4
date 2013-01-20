@@ -3,7 +3,7 @@
 A variable length integer is an encoding of 64-bit unsigned integers
 into between 1 and 9 bytes.  The encoding has the following properties:
 
-  1.  Smaller (and common) values use fewer bytes and take up less space
+  1.  Smaller (and more common) values use fewer bytes and take up less space
       than larger (and less common) values.
 
   2.  The length of any varint can be determined by looking at just the
@@ -11,7 +11,7 @@ into between 1 and 9 bytes.  The encoding has the following properties:
 
   3.  Lexicographical and numeric ordering for varints are the same.  Hence
       if a group of varints are order lexicographically (that is to say, if
-      they  are order by memcmp() with shorted varints coming first) then
+      they  are order by memcmp() with shorter varints coming first) then
       those varints will also be in numeric order.  This property means
       that varints can be used as keys in the key/value backend storage
       and the records will occur in numerical order of the keys.
