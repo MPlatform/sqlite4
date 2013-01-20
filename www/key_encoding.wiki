@@ -92,7 +92,7 @@ byte, ensuring that positive infinity always sorts last among numeric
 values.  0x0d is also smaller than 0x0e, the initial byte of a text value,
 ensuring that every numeric value sorts before every text value.
 
-If the numeric value is exactly zero then then is encoded is a single
+If the numeric value is exactly zero then it is encoded as a single
 byte of 0x15.  Finite negative values will have initial bytes of 0x08
 through 0x14 and finite positive values will have initial bytes of 0x16
 through 0x22.
