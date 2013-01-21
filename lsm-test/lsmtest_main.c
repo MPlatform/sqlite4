@@ -463,6 +463,7 @@ int do_test(int nArg, char **azArg){
     test_data_1(tdb_system_name(j), zPattern, &rc);
     test_data_2(tdb_system_name(j), zPattern, &rc);
     test_data_3(tdb_system_name(j), zPattern, &rc);
+    test_data_4(tdb_system_name(j), zPattern, &rc);
     test_rollback(tdb_system_name(j), zPattern, &rc);
     test_mc(tdb_system_name(j), zPattern, &rc);
     test_mt(tdb_system_name(j), zPattern, &rc);

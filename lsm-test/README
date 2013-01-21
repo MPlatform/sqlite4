@@ -29,6 +29,11 @@ Organization of test case files:
               clients are still running) whereas lsmtest2.c tests recovery
               from a system or power failure.
 
+  lsmtest9.c: More data tests. These focus on testing that calling
+              lsm_work(nMerge=1) to compact the database does not corrupt it.
+              In other words, that databases containing block-redirects
+              can be read and written.
+
 
 
 

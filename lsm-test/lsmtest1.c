@@ -92,7 +92,7 @@ static char *getName(const char *zSystem, Datatest1 *pTest){
   return zRet;
 }
 
-static int testControlDb(TestDb **ppDb){
+int testControlDb(TestDb **ppDb){
 #ifdef HAVE_KYOTOCABINET
   return tdb_open("kyotocabinet", "tmp.db", 1, ppDb);
 #else
@@ -348,7 +348,7 @@ void test_data_1(
   }
 }
 
-static void testCompareDb(
+void testCompareDb(
   Datasource *pData,
   int nData,
   int iSeed,

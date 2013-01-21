@@ -294,6 +294,7 @@ LSMTESTSRC = $(TOP)/lsm-test/lsmtest1.c $(TOP)/lsm-test/lsmtest2.c           \
              $(TOP)/lsm-test/lsmtest3.c $(TOP)/lsm-test/lsmtest4.c           \
              $(TOP)/lsm-test/lsmtest5.c $(TOP)/lsm-test/lsmtest6.c           \
              $(TOP)/lsm-test/lsmtest7.c $(TOP)/lsm-test/lsmtest8.c           \
+             $(TOP)/lsm-test/lsmtest9.c                                      \
              $(TOP)/lsm-test/lsmtest_datasource.c \
              $(TOP)/lsm-test/lsmtest_func.c $(TOP)/lsm-test/lsmtest_io.c     \
              $(TOP)/lsm-test/lsmtest_main.c $(TOP)/lsm-test/lsmtest_mem.c    \

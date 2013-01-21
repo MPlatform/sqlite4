@@ -837,6 +837,7 @@ static int btreeCursorRestore(
     int iCell;                    /* Current cell number on leaf page */
     Pgno iLeaf;                   /* Page number of current leaf page */
     int nDepth;                   /* Depth of b-tree structure */
+    Segment *pSeg = pCsr->pSeg;
 
     /* Decode the MergeInput structure */
     iLeaf = p->iPg;
@@ -853,7 +854,7 @@ static int btreeCursorRestore(
       pCsr->iPg = nDepth-1;
       pCsr->nDepth = nDepth;
       pCsr->aPg[pCsr->iPg].iCell = iCell;
-      rc = lsmFsDbPageGet(pCsr->pFS, pCsr->pSeg, iLeaf, pp);
+      rc = lsmFsDbPageGet(pCsr->pFS, pSeg, iLeaf, pp);
     }
 
     /* Populate any other aPg[] array entries */
@@ -863,7 +864,7 @@ static int btreeCursorRestore(
       int nSeek;
       int iTopicSeek;
       int iPg = 0;
-      int iLoad = pCsr->pSeg->iRoot;
+      int iLoad = pSeg->iRoot;
       Page *pPg = pCsr->aPg[nDepth-1].pPage;
  
       if( pageObjGetNRec(pPg)==0 ){
@@ -876,14 +877,14 @@ static int btreeCursorRestore(
         nSeek = 0;
       }else{
         Pgno dummy;
-        rc = pageGetBtreeKey(pCsr->pSeg, pPg,
+        rc = pageGetBtreeKey(pSeg, pPg,
             0, &dummy, &iTopicSeek, &pSeek, &nSeek, &pCsr->blob
         );
       }
 
       do {
         Page *pPg;
-        rc = lsmFsDbPageGet(pCsr->pFS, pCsr->pSeg, iLoad, &pPg);
+        rc = lsmFsDbPageGet(pCsr->pFS, pSeg, iLoad, &pPg);
         assert( rc==LSM_OK || pPg==0 );
         if( rc==LSM_OK ){
           u8 *aData;                  /* Buffer containing page data */
@@ -908,7 +909,7 @@ static int btreeCursorRestore(
             int res;                      /* (pSeek - pKeyT) */
 
             rc = pageGetBtreeKey(
-                pCsr->pSeg, pPg, iTry, &iPtr, &iTopic, &pKey, &nKey, &blob
+                pSeg, pPg, iTry, &iPtr, &iTopic, &pKey, &nKey, &blob
             );
             if( rc!=LSM_OK ) break;
 
@@ -929,7 +930,9 @@ static int btreeCursorRestore(
           pCsr->aPg[iPg].pPage = pPg;
           pCsr->aPg[iPg].iCell = iCell;
           iPg++;
-          assert( iPg!=nDepth-1 || iLoad==iLeaf );
+          assert( iPg!=nDepth-1 
+               || lsmFsRedirectPage(pCsr->pFS, pSeg->pRedirect, iLoad)==iLeaf
+          );
         }
       }while( rc==LSM_OK && iPg<(nDepth-1) );
       sortedBlobFree(&blob);
@@ -951,7 +954,7 @@ static int btreeCursorRestore(
           if( pCsr->aPg[i].iCell>0 ) break;
         }
         assert( i>=0 );
-        rc = pageGetBtreeKey(pCsr->pSeg,
+        rc = pageGetBtreeKey(pSeg,
             pCsr->aPg[i].pPage, pCsr->aPg[i].iCell-1,
             &dummy, &pCsr->eType, &pCsr->pKey, &pCsr->nKey, &pCsr->blob
         );
@@ -4946,29 +4949,27 @@ static int doLsmSingleWork(
     if( nPg ) bDirty = 1;
   }
 
-  if( rc==LSM_OK && bDirty ){
-    lsmFinishWork(pDb, 0, &rc);
-  }else{
-    int rcdummy = LSM_BUSY;
-    lsmFinishWork(pDb, 0, &rcdummy);
-  }
-  assert( pDb->pWorker==0 );
-
   if( rc==LSM_OK ){
     *pnWrite = (nMax - nRem);
     *pbCkpt = (bCkpt && nRem<=0);
-    if( nMerge==1 && pDb->nAutockpt>0 && bDirty
+    if( nMerge==1 && pDb->nAutockpt>0 && *pnWrite>0
      && pWorker->pLevel 
      && pWorker->pLevel->nRight==0 
      && pWorker->pLevel->pNext==0 
     ){
       *pbCkpt = 1;
     }
+  }
+
+  if( rc==LSM_OK && bDirty ){
+    lsmFinishWork(pDb, 0, &rc);
   }else{
+    int rcdummy = LSM_BUSY;
+    lsmFinishWork(pDb, 0, &rcdummy);
     *pnWrite = 0;
     *pbCkpt = 0;
   }
-
+  assert( pDb->pWorker==0 );
   return rc;
 }
 

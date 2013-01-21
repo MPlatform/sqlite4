@@ -219,6 +219,9 @@ void testDbContents(TestDb *, Datasource *, int, int, int, int, int, int *);
 void testCaseProgress(int, int, int, int *);
 int testCaseNDot(void);
 
+void testCompareDb(Datasource *, int, int, TestDb *, TestDb *, int *);
+int testControlDb(TestDb **ppDb);
+
 typedef struct CksumDb CksumDb;
 CksumDb *testCksumArrayNew(Datasource *, int, int, int);
 char *testCksumArrayGet(CksumDb *, int);
@@ -233,6 +236,9 @@ int testCksumDatabase(TestDb *pDb, char *zOut);
 int testCountDatabase(TestDb *pDb);
 void testCompareInt(int, int, int *);
 void testCompareStr(const char *z1, const char *z2, int *pRc);
+
+/* lsmtest9.c */
+void test_data_4(const char *, const char *, int *pRc);
 
 
 /*

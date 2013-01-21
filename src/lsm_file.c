@@ -891,7 +891,7 @@ static int fsRedirectBlock(Redirect *p, int iBlk){
   return iBlk;
 }
 
-static Pgno fsRedirectPage(FileSystem *pFS, Redirect *pRedir, Pgno iPg){
+Pgno lsmFsRedirectPage(FileSystem *pFS, Redirect *pRedir, Pgno iPg){
   Pgno iReal = iPg;
 
   if( pRedir ){
@@ -1445,6 +1445,11 @@ int lsmFsSortedDelete(
       iBlk = iNext;
     }
 
+    if( pDel->pRedirect ){
+      assert( pDel->pRedirect==&pSnapshot->redirect );
+      pSnapshot->redirect.n = 0;
+    }
+
     if( bZero ) memset(pDel, 0, sizeof(Segment));
   }
   return LSM_OK;
@@ -1615,7 +1620,7 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
       }
     }else{
       if( pRun ){
-        Pgno iLast = fsRedirectPage(pFS, pRedir, pRun->iLastPg);
+        Pgno iLast = lsmFsRedirectPage(pFS, pRedir, pRun->iLastPg);
         if( iPg==iLast ){
           *ppNext = 0;
           return LSM_OK;
@@ -2614,8 +2619,8 @@ static void checkBlocks(
 
       iBlk = fsRedirectBlock(pRedir, fsPageToBlock(pFS, pSeg->iFirst));
       iLastBlk = fsRedirectBlock(pRedir, fsPageToBlock(pFS, pSeg->iLastPg));
-      iLast = fsRedirectPage(pFS, pRedir, pSeg->iLastPg);
-      iFirst = fsRedirectPage(pFS, pRedir, pSeg->iFirst);
+      iLast = lsmFsRedirectPage(pFS, pRedir, pSeg->iLastPg);
+      iFirst = lsmFsRedirectPage(pFS, pRedir, pSeg->iFirst);
 
       bLastIsLastOnBlock = (fsLastPageOnBlock(pFS, iLastBlk)==iLast);
       assert( iBlk>0 );
