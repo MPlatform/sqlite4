@@ -627,37 +627,28 @@ typedef struct FindFreeblockCtx FindFreeblockCtx;
 struct FindFreeblockCtx {
   i64 iInUse;
   int iRet;
+  int bNotOne;
 };
 
 static int findFreeblockCb(void *pCtx, int iBlk, i64 iSnapshot){
   FindFreeblockCtx *p = (FindFreeblockCtx *)pCtx;
-  if( iSnapshot<p->iInUse ){
+  if( iSnapshot<p->iInUse && (iBlk!=1 || p->bNotOne==0) ){
     p->iRet = iBlk;
     return 1;
   }
   return 0;
 }
 
-static int findFreeblock(lsm_db *pDb, i64 iInUse, int *piRet){
+static int findFreeblock(lsm_db *pDb, i64 iInUse, int bNotOne, int *piRet){
   int rc;                         /* Return code */
   FindFreeblockCtx ctx;           /* Context object */
 
-#ifdef LSM_LOG_BLOCKS
-  char *zList = 0;
-  lsmInfoFreelist(pDb, &zList);
-  lsmLogMessage(pDb, 0, 
-      "findFreeblock(): iInUse=%lld freelist=%s", iInUse, zList);
-  lsmFree(pDb->pEnv, zList);
-#endif
-
   ctx.iInUse = iInUse;
   ctx.iRet = 0;
+  ctx.bNotOne = bNotOne;
   rc = lsmWalkFreelist(pDb, 0, findFreeblockCb, (void *)&ctx);
   *piRet = ctx.iRet;
 
-#ifdef LSM_LOG_BLOCKS
-  lsmLogMessage(pDb, 0, "findFreeblock(): returning block %d", *piRet);
-#endif
   return rc;
 }
 
@@ -669,7 +660,7 @@ static int findFreeblock(lsm_db *pDb, i64 iInUse, int *piRet){
 ** If successful, *piBlk is set to the block number allocated and LSM_OK is
 ** returned. Otherwise, *piBlk is zeroed and an lsm error code returned.
 */
-int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
+int lsmBlockAllocate(lsm_db *pDb, int iBefore, int *piBlk){
   Snapshot *p = pDb->pWorker;
   int iRet = 0;                   /* Block number of allocated block */
   int rc = LSM_OK;
@@ -711,12 +702,15 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
 #endif
 
   /* Query the free block list for a suitable block */
-  if( rc==LSM_OK ) rc = findFreeblock(pDb, iInUse, &iRet);
+  if( rc==LSM_OK ) rc = findFreeblock(pDb, iInUse, (iBefore>0), &iRet);
 
-  /* If a block was found in the free block list, use it and remove it from 
-  ** the list. Otherwise, if no suitable block was found, allocate one from
-  ** the end of the file.  */
-  if( rc==LSM_OK ){
+  if( iBefore>0 && (iRet<=0 || iRet>=iBefore) ){
+    iRet = 0;
+
+  }else if( rc==LSM_OK ){
+    /* If a block was found in the free block list, use it and remove it from 
+    ** the list. Otherwise, if no suitable block was found, allocate one from
+    ** the end of the file.  */
     if( iRet>0 ){
 #ifdef LSM_LOG_FREELIST
       lsmLogMessage(pDb, 0, 
@@ -734,7 +728,7 @@ int lsmBlockAllocate(lsm_db *pDb, int *piBlk){
     }
   }
 
-  assert( iRet>0 || rc!=LSM_OK );
+  assert( iBefore>0 || iRet>0 || rc!=LSM_OK );
   *piBlk = iRet;
   return rc;
 }

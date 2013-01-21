@@ -841,7 +841,7 @@ void lsmDbSnapshotSetLevel(Snapshot *, Level *);
 
 void lsmDbRecoveryComplete(lsm_db *, int);
 
-int lsmBlockAllocate(lsm_db *, int *);
+int lsmBlockAllocate(lsm_db *, int, int *);
 int lsmBlockFree(lsm_db *, int);
 int lsmBlockRefree(lsm_db *, int);
 

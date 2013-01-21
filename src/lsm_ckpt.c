@@ -429,7 +429,7 @@ static int ckptExportSnapshot(
 
   /* Write the block-redirect list */
   ckptSetValue(&ckpt, iOut++, pSnap->redirect.n, &rc);
-  for(i=0; i<pSnap->redirect.n; &rc){
+  for(i=0; i<pSnap->redirect.n; i++){
     ckptSetValue(&ckpt, iOut++, pSnap->redirect.a[i].iFrom, &rc);
     ckptSetValue(&ckpt, iOut++, pSnap->redirect.a[i].iTo, &rc);
   }
@@ -958,8 +958,8 @@ int lsmCheckpointDeserialize(
     /* Read the block-redirect list */
     pNew->redirect.n = aCkpt[iIn++];
     if( pNew->redirect.n ){
-      pNew->redirect.a = lsmMallocZeroRc(
-          pDb->pEnv, (sizeof(struct RedirectEntry) * pNew->redirect.n), &rc
+      pNew->redirect.a = lsmMallocZeroRc(pDb->pEnv, 
+          (sizeof(struct RedirectEntry) * LSM_MAX_BLOCK_REDIRECTS), &rc
       );
       if( rc==LSM_OK ){
         for(i=0; i<pNew->redirect.n; i++){

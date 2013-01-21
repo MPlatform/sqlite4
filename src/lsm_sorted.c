@@ -4532,12 +4532,87 @@ static int sortedDbIsFull(lsm_db *pDb){
   return 0;
 }
 
-static int sortedMoveBlocks(lsm_db *pDb, int *pnWrite){
-  Level *pLvl = lsmDbSnapshotLevel(pDb->pWorker);
+typedef struct MoveBlockCtx MoveBlockCtx;
+struct MoveBlockCtx {
+  int iSeen;                      /* Previous free block on list */
+  int iFrom;                      /* Total number of blocks in file */
+};
+
+static int moveBlockCb(void *pCtx, int iBlk, i64 iSnapshot){
+  MoveBlockCtx *p = (MoveBlockCtx *)pCtx;
+  assert( p->iFrom==0 );
+  if( iBlk==(p->iSeen-1) ){
+    p->iSeen = iBlk;
+    return 0;
+  }
+  p->iFrom = p->iSeen-1;
+  return 1;
+}
+
+/*
+** This function is called to further compact a database for which all 
+** of the content has already been merged into a single segment. If 
+** possible, it moves the contents of a single block from the end of the
+** file to a free-block that lies closer to the start of the file (allowing
+** the file to be eventually truncated).
+*/
+static int sortedMoveBlock(lsm_db *pDb, int *pnWrite){
+  Snapshot *p = pDb->pWorker;
+  Level *pLvl = lsmDbSnapshotLevel(p);
+  int iFrom;                      /* Block to move */
+  int iTo;                        /* Destination to move block to */
+  int rc;                         /* Return code */
+
+  MoveBlockCtx sCtx;
+
   assert( pLvl->pNext==0 && pLvl->nRight==0 );
+  assert( p->redirect.n<=LSM_MAX_BLOCK_REDIRECTS );
 
   *pnWrite = 0;
-  return LSM_OK;
+
+  /* Check that the redirect array is not already full. If it is, return
+  ** without moving any database content.  */
+  if( p->redirect.n>=LSM_MAX_BLOCK_REDIRECTS ) return LSM_OK;
+
+  /* Find the last block of content in the database file. Do this by 
+  ** traversing the free-list in reverse (descending block number) order.
+  ** The first block not on the free list is the one that will be moved.
+  ** Since the db consists of a single segment, there is no ambiguity as
+  ** to which segment the block belongs to.  */
+  sCtx.iSeen = p->nBlock+1;
+  sCtx.iFrom = 0;
+  rc = lsmWalkFreelist(pDb, 1, moveBlockCb, &sCtx);
+  if( rc!=LSM_OK || sCtx.iFrom==0 ) return rc;
+  iFrom = sCtx.iFrom;
+
+  /* Find the first free block in the database, ignoring block 1. Block
+  ** 1 is tricky as it is smaller than the other blocks.  */
+  rc = lsmBlockAllocate(pDb, iFrom, &iTo);
+  if( rc!=LSM_OK || iTo==0 ) return rc;
+  assert( iTo!=1 && iTo<iFrom );
+
+  rc = lsmFsMoveBlock(pDb->pFS, iTo, iFrom);
+  if( rc==LSM_OK ){
+    if( p->redirect.a==0 ){
+      int nByte = sizeof(struct RedirectEntry) * LSM_MAX_BLOCK_REDIRECTS;
+      p->redirect.a = lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
+    }
+    if( rc==LSM_OK ){
+      memmove(&p->redirect.a[1], &p->redirect.a[0], 
+          sizeof(struct RedirectEntry) * p->redirect.n
+      );
+      p->redirect.a[0].iFrom = iFrom;
+      p->redirect.a[0].iTo = iTo;
+      p->redirect.n++;
+
+      rc = lsmBlockFree(pDb, iFrom);
+
+      *pnWrite = lsmFsBlockSize(pDb->pFS) / lsmFsPageSize(pDb->pFS);
+      pLvl->lhs.pRedirect = &p->redirect;
+    }
+  }
+
+  return rc;
 }
 
 static int sortedWork(
@@ -4565,7 +4640,7 @@ static int sortedWork(
       int nDone = 0;
       Level *pTopLevel = lsmDbSnapshotLevel(pDb->pWorker);
       if( bFlush==0 && nMerge==1 && pTopLevel && pTopLevel->pNext==0 ){
-        rc = sortedMoveBlocks(pDb, &nDone);
+        rc = sortedMoveBlock(pDb, &nDone);
       }
       nRemaining -= nDone;
 
