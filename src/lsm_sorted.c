@@ -5181,7 +5181,8 @@ void sortedDumpPage(lsm_db *pDb, Segment *pRun, Page *pPg, int bVals){
 }
 
 static void infoCellDump(
-  lsm_db *pDb,
+  lsm_db *pDb,                    /* Database handle */
+  Segment *pSeg,                  /* Segment page belongs to */
   int bIndirect,                  /* True to follow indirect refs */
   Page *pPg,
   int iCell,
@@ -5191,7 +5192,6 @@ static void infoCellDump(
   u8 **paVal, int *pnVal,
   Blob *pBlob
 ){
-#if 0
   u8 *aData; int nData;           /* Page data */
   u8 *aKey; int nKey = 0;         /* Key */
   u8 *aVal; int nVal = 0;         /* Value */
@@ -5211,8 +5211,8 @@ static void infoCellDump(
     Pgno iRef;                  /* Page number of referenced page */
     aCell += lsmVarintGet64(aCell, &iRef);
     if( bIndirect ){
-      lsmFsDbPageGet(pDb->pFS, TODO, iRef, &pRef);
-      pageGetKeyCopy(pDb->pEnv, pRef, 0, &dummy, pBlob);
+      lsmFsDbPageGet(pDb->pFS, pSeg, iRef, &pRef);
+      pageGetKeyCopy(pDb->pEnv, pSeg, pRef, 0, &dummy, pBlob);
       aKey = (u8 *)pBlob->pData;
       nKey = pBlob->nData;
       lsmFsPageRelease(pRef);
@@ -5223,7 +5223,7 @@ static void infoCellDump(
   }else{
     aCell += lsmVarintGet32(aCell, &nKey);
     if( rtIsWrite(eType) ) aCell += lsmVarintGet32(aCell, &nVal);
-    sortedReadData(pPg, (aCell-aData), nKey+nVal, (void **)&aKey, pBlob);
+    sortedReadData(pSeg, pPg, (aCell-aData), nKey+nVal, (void **)&aKey, pBlob);
     aVal = &aKey[nKey];
   }
 
@@ -5233,7 +5233,6 @@ static void infoCellDump(
   if( paVal ) *paVal = aVal;
   if( pnKey ) *pnKey = nKey;
   if( pnVal ) *pnVal = nVal;
-#endif
 }
 
 static int infoAppendBlob(LsmString *pStr, int bHex, u8 *z, int n){
@@ -5260,10 +5259,11 @@ static int infoPageDump(
   char **pzOut                    /* OUT: lsmMalloc'd string */
 ){
   int rc = LSM_OK;                /* Return code */
-#if 0
   Page *pPg = 0;                  /* Handle for page iPg */
   int i, j;                       /* Loop counters */
   const int perLine = 16;         /* Bytes per line in the raw hex dump */
+  Segment *pSeg = 0;
+  Snapshot *pSnap;
 
   int bValues = (flags & INFO_PAGE_DUMP_VALUES);
   int bHex = (flags & INFO_PAGE_DUMP_HEX);
@@ -5273,7 +5273,27 @@ static int infoPageDump(
   *pzOut = 0;
   if( iPg==0 ) return LSM_ERROR;
 
-  rc = lsmFsDbPageGet(pDb->pFS, TODO, iPg, &pPg);
+  assert( pDb->pClient || pDb->pWorker );
+  pSnap = pDb->pClient;
+  if( pSnap==0 ) pSnap = pDb->pWorker;
+  if( pSnap->redirect.n>0 ){
+    Level *pLvl;
+    int bUse = 0;
+    for(pLvl=pSnap->pLevel; pLvl->pNext; pLvl=pLvl->pNext);
+    pSeg = (pLvl->nRight==0 ? &pLvl->lhs : &pLvl->aRhs[pLvl->nRight-1]);
+    rc = lsmFsSegmentContainsPg(pDb->pFS, pSeg, iPg, &bUse);
+    if( bUse==0 ){
+      pSeg = 0;
+    }
+  }
+
+  /* iPg is a real page number (not subject to redirection). So it is safe 
+  ** to pass a NULL in place of the segment pointer as the second argument
+  ** to lsmFsDbPageGet() here.  */
+  if( rc==LSM_OK ){
+    rc = lsmFsDbPageGet(pDb->pFS, 0, iPg, &pPg);
+  }
+
   if( rc==LSM_OK ){
     Blob blob = {0, 0, 0, 0};
     int nKeyWidth = 0;
@@ -5298,7 +5318,9 @@ static int infoPageDump(
 
     for(iCell=0; iCell<nRec; iCell++){
       int nKey;
-      infoCellDump(pDb, bIndirect, pPg, iCell, 0, 0, 0, &nKey, 0, 0, &blob);
+      infoCellDump(
+          pDb, pSeg, bIndirect, pPg, iCell, 0, 0, 0, &nKey, 0, 0, &blob
+      );
       if( nKey>nKeyWidth ) nKeyWidth = nKey;
     }
     if( bHex ) nKeyWidth = nKeyWidth * 2;
@@ -5308,11 +5330,10 @@ static int infoPageDump(
       u8 *aVal; int nVal = 0;       /* Value */
       int iPgPtr;
       int eType;
-      char cType = '?';
       Pgno iAbsPtr;
       char zFlags[8];
 
-      infoCellDump(pDb, bIndirect, pPg, iCell, &eType, &iPgPtr,
+      infoCellDump(pDb, pSeg, bIndirect, pPg, iCell, &eType, &iPgPtr,
           &aKey, &nKey, &aVal, &nVal, &blob
       );
       iAbsPtr = iPgPtr + ((flags & SEGMENT_BTREE_FLAG) ? 0 : iPtr);
@@ -5370,7 +5391,6 @@ static int infoPageDump(
     lsmFsPageRelease(pPg);
   }
 
-#endif
   return rc;
 }
 

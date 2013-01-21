@@ -723,6 +723,8 @@ void lsmEnvSleep(lsm_env *, int);
 
 int lsmFsReadSyncedId(lsm_db *db, int, i64 *piVal);
 
+int lsmFsSegmentContainsPg(FileSystem *pFS, Segment *, Pgno, int *);
+
 /*
 ** End of functions from "lsm_file.c".
 **************************************************************************/

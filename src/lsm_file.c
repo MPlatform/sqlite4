@@ -1601,6 +1601,7 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
     }while( nSpace>0 && rc==LSM_OK );
 
   }else{
+    Redirect *pRedir = pRun ? pRun->pRedirect : 0;
     assert( eDir==1 || eDir==-1 );
     if( eDir<0 ){
       if( pRun && iPg==pRun->iFirst ){
@@ -1613,20 +1614,24 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
         iPg--;
       }
     }else{
-      Pgno iLast = fsRedirectPage(pFS, pRun->pRedirect, pRun->iLastPg);
-      if( pRun && iPg==iLast ){
-        *ppNext = 0;
-        return LSM_OK;
-      }else if( fsIsLast(pFS, iPg) ){
+      if( pRun ){
+        Pgno iLast = fsRedirectPage(pFS, pRedir, pRun->iLastPg);
+        if( iPg==iLast ){
+          *ppNext = 0;
+          return LSM_OK;
+        }
+      }
+
+      if( fsIsLast(pFS, iPg) ){
         int iBlk = fsRedirectBlock(
-            pRun->pRedirect, lsmGetU32(&pPg->aData[pFS->nPagesize-4])
+            pRedir, lsmGetU32(&pPg->aData[pFS->nPagesize-4])
         );
         iPg = fsFirstPageOnBlock(pFS, iBlk);
       }else{
         iPg++;
       }
     }
-    rc = fsPageGet(pFS, pRun->pRedirect, iPg, 0, ppNext, 0);
+    rc = fsPageGet(pFS, pRedir, iPg, 0, ppNext, 0);
   }
 
   return rc;
@@ -1792,8 +1797,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
 */
 int lsmFsDbPageGet(FileSystem *pFS, Segment *pSeg, Pgno iPg, Page **ppPg){
   assert( pFS );
-  assert( pSeg );
-  return fsPageGet(pFS, pSeg->pRedirect, iPg, 0, ppPg, 0);
+  return fsPageGet(pFS, (pSeg ? pSeg->pRedirect : 0), iPg, 0, ppPg, 0);
 }
 
 /*
@@ -2477,6 +2481,30 @@ int lsmInfoArrayStructure(
     int rcwork = LSM_BUSY;
     lsmFinishWork(pDb, 0, &rcwork);
   }
+  return rc;
+}
+
+int lsmFsSegmentContainsPg(
+  FileSystem *pFS, 
+  Segment *pSeg, 
+  Pgno iPg, 
+  int *pbRes
+){
+  Redirect *pRedir = pSeg->pRedirect;
+  int rc = LSM_OK;
+  int iBlk;
+  int iLastBlk;
+  int iPgBlock;                   /* Block containing page iPg */
+
+  iPgBlock = fsPageToBlock(pFS, pSeg->iFirst);
+  iBlk = fsRedirectBlock(pRedir, fsPageToBlock(pFS, pSeg->iFirst));
+  iLastBlk = fsRedirectBlock(pRedir, fsPageToBlock(pFS, pSeg->iLastPg));
+
+  while( iBlk!=iLastBlk && iBlk!=iPgBlock && rc==LSM_OK ){
+    rc = fsBlockNext(pFS, pSeg, iBlk, &iBlk);
+  }
+
+  *pbRes = (iBlk==iPgBlock);
   return rc;
 }
 
