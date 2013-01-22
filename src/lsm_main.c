@@ -41,6 +41,8 @@ static void assert_db_state(lsm_db *pDb){
   ** not be a client snapshot.  */
   assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->iReader>=0) );
 
+  assert( pDb->iReader<0 || pDb->pClient!=0 );
+
   assert( pDb->nTransOpen>=0 );
 }
 #else

@@ -64,10 +64,12 @@ static void doDataTest4(
 
     if( db ){
       int nDone;
+      fprintf(stderr, "lsm_work() start...\n");
       do {
         nDone = 0;
-        rc = lsm_work(db, 1, 100000, &nDone);
+        rc = lsm_work(db, 1, (1<<30), &nDone);
       }while( rc==0 && nDone>0 );
+      fprintf(stderr, "lsm_work() done...\n");
     }
 
     iData += (nRecOn3*2);
@@ -111,8 +113,8 @@ void test_data_4(
 ){
   Datatest4 aTest[] = {
       /* defn,                                 nRec, nRepeat, bReopen */
-    { {DATA_RANDOM,     20,25,     100,200}, 10000,      10,       0   },
-    { {DATA_RANDOM,     20,25,     100,200}, 10000,      10,       1   },
+    { {DATA_RANDOM,     20,25,     500,600}, 10000,      10,       0   },
+    { {DATA_RANDOM,     20,25,     500,600}, 10000,      10,       1   },
   };
 
   int i;

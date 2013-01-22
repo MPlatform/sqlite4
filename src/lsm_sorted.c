@@ -2451,8 +2451,12 @@ int lsmSortedWalkFreelist(
   Snapshot *pSnap = 0;
 
   assert( pDb->pWorker );
-  rc = lsmCheckpointDeserialize(pDb, 0, pDb->pShmhdr->aSnap1, &pSnap);
-  if( rc!=LSM_OK ) return rc;
+  if( pDb->bIncrMerge ){
+    rc = lsmCheckpointDeserialize(pDb, 0, pDb->pShmhdr->aSnap1, &pSnap);
+    if( rc!=LSM_OK ) return rc;
+  }else{
+    pSnap = pDb->pWorker;
+  }
 
   pCsr = multiCursorNew(pDb, &rc);
   if( pCsr ){
@@ -2487,7 +2491,9 @@ int lsmSortedWalkFreelist(
   }
 
   lsmMCursorClose(pCsr);
-  lsmFreeSnapshot(pDb->pEnv, pSnap);
+  if( pSnap!=pDb->pWorker ){
+    lsmFreeSnapshot(pDb->pEnv, pSnap);
+  }
 
   return rc;
 }
@@ -4293,7 +4299,9 @@ static int sortedMergeSetup(
     lsmDbSnapshotSetLevel(pDb->pWorker, pTopLevel);
 
     /* Determine whether or not the next separators will be linked in */
-    if( pNext && pNext->pMerge==0 && pNext->lhs.iRoot ){
+    if( pNext && pNext->pMerge==0 && pNext->lhs.iRoot && pNext 
+     && (bFreeOnly==0 || (pNext->flags & LEVEL_FREELIST_ONLY))
+    ){
       bUseNext = 1;
     }
   }
@@ -4615,6 +4623,11 @@ static int sortedMoveBlock(lsm_db *pDb, int *pnWrite){
     }
   }
 
+#if 0
+  if( rc==LSM_OK ){
+    lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "move-block");
+  }
+#endif
   return rc;
 }
 
@@ -4652,6 +4665,8 @@ static int sortedWork(
     }else{
       MergeWorker mergeworker;    /* State used to work on the level merge */
 
+      assert( pDb->bIncrMerge==0 );
+      pDb->bIncrMerge = 1;
       rc = mergeWorkerInit(pDb, pLevel, &mergeworker);
       assert( mergeworker.nWork==0 );
       while( rc==LSM_OK 
@@ -4661,6 +4676,7 @@ static int sortedWork(
         rc = mergeWorkerStep(&mergeworker);
       }
       nRemaining -= LSM_MAX(mergeworker.nWork, 1);
+      pDb->bIncrMerge = 0;
 
       /* Check if the merge operation is completely finished. If so, the
       ** Merge object and the right-hand-side of the level can be deleted. 
@@ -4827,7 +4843,7 @@ static int sortedNewFreelistOnly(lsm_db *pDb){
         memcpy(pMerge, pLvl->pMerge, sizeof(Merge));
         pMerge->aInput = (MergeInput *)&pMerge[1];
         memcpy(&pMerge->aInput[1], pLvl->pMerge->aInput, 
-            sizeof(MergeInput)*(pLvl->pMerge->nInput+1)
+            sizeof(MergeInput)*(pLvl->pMerge->nInput)
         );
         pMerge->aInput[0].iPg = aRhs[0].iFirst;
         pMerge->aInput[0].iCell = 0;
@@ -5521,10 +5537,14 @@ void lsmSortedDumpStructure(
   assert( pSnap );
   pTopLevel = lsmDbSnapshotLevel(pDump);
   if( pDb->xLog && pTopLevel ){
+    static int nCall = 0;
     Level *pLevel;
     int iLevel = 0;
 
-    lsmLogMessage(pDb, LSM_OK, "Database structure (%s)", zWhy);
+    nCall++;
+    lsmLogMessage(pDb, LSM_OK, "Database structure %d (%s)", nCall, zWhy);
+
+    /* if( nCall>639 ) bKeys = 1; */
 
     for(pLevel=pTopLevel; pLevel; pLevel=pLevel->pNext){
       char zLeft[1024];

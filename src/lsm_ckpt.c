@@ -922,7 +922,9 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   rc = lsmCheckpointDeserialize(pDb, 1, pShm->aSnap1, &pDb->pWorker);
   if( pDb->pWorker ) pDb->pWorker->pDatabase = pDb->pDatabase;
 
+#if 0
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
+#endif
   return rc;
 }
 
@@ -1048,7 +1050,8 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush){
   int n = 0;
   int rc;
 
-  rc = ckptExportSnapshot(pDb, bFlush, pSnap->iId+1, 1, &p, &n);
+  pSnap->iId++;
+  rc = ckptExportSnapshot(pDb, bFlush, pSnap->iId, 1, &p, &n);
   if( rc!=LSM_OK ) return rc;
   assert( ckptChecksumOk((u32 *)p) );
 

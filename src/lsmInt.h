@@ -321,7 +321,7 @@ struct lsm_db {
   Database *pDatabase;            /* Database shared data */
 
   /* Client transaction context */
-  Snapshot *pClient;              /* Client snapshot (non-NULL in read trans) */
+  Snapshot *pClient;              /* Client snapshot */
   int iReader;                    /* Read lock held (-1 == unlocked) */
   MultiCursor *pCsr;              /* List of all open cursors */
   LogWriter *pLogWriter;          /* Context for writing to the log file */
@@ -334,6 +334,7 @@ struct lsm_db {
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
   Freelist *pFreelist;            /* See sortedNewToplevel() */
   int bUseFreelist;               /* True to use pFreelist */
+  int bIncrMerge;                 /* True if currently doing a merge */
 
   /* Debugging message callback */
   void (*xLog)(void *, int, const char *);

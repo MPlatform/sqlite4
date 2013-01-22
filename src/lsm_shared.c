@@ -671,10 +671,12 @@ int lsmBlockAllocate(lsm_db *pDb, int iBefore, int *piBlk){
 
 #ifdef LSM_LOG_FREELIST
   {
+    static int nCall = 0;
     char *zFree = 0;
+    nCall++;
     rc = lsmInfoFreelist(pDb, &zFree);
     if( rc!=LSM_OK ) return rc;
-    lsmLogMessage(pDb, 0, "lsmBlockAllocate(): freelist: %s", zFree);
+    lsmLogMessage(pDb, 0, "lsmBlockAllocate(): %d freelist: %s", nCall, zFree);
     lsmFree(pDb->pEnv, zFree);
   }
 #endif
@@ -689,14 +691,17 @@ int lsmBlockAllocate(lsm_db *pDb, int iBefore, int *piBlk){
   rc = lsmCheckpointSynced(pDb, &iSynced, 0, 0);
   if( rc==LSM_OK && iSynced==0 ) iSynced = p->iId;
   iInUse = iSynced;
-  if( rc==LSM_OK && pDb->pClient ) iInUse = LSM_MIN(iInUse, pDb->pClient->iId);
+  if( rc==LSM_OK && pDb->iReader>=0 ){
+    assert( pDb->pClient );
+    iInUse = LSM_MIN(iInUse, pDb->pClient->iId);
+  }
   if( rc==LSM_OK ) rc = firstSnapshotInUse(pDb, &iInUse);
 
 #ifdef LSM_LOG_FREELIST
   {
     lsmLogMessage(pDb, 0, "lsmBlockAllocate(): "
         "snapshot-in-use: %lld (iSynced=%lld) (client-id=%lld)", 
-        iInUse, iSynced, (pDb->pClient ? pDb->pClient->iId : 0)
+        iInUse, iSynced, (pDb->iReader>=0 ? pDb->pClient->iId : 0)
     );
   }
 #endif
