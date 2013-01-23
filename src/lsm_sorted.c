@@ -2257,6 +2257,26 @@ static int multiCursorAddRhs(MultiCursor *pCsr, Level *pLvl){
   return LSM_OK;
 }
 
+static void multiCursorAddOne(MultiCursor *pCsr, Level *pLvl, int *pRc){
+  if( *pRc==LSM_OK ){
+    int iPtr = pCsr->nPtr;
+    int i;
+    pCsr->aPtr[iPtr].pLevel = pLvl;
+    pCsr->aPtr[iPtr].pSeg = &pLvl->lhs;
+    iPtr++;
+    for(i=0; i<pLvl->nRight; i++){
+      pCsr->aPtr[iPtr].pLevel = pLvl;
+      pCsr->aPtr[iPtr].pSeg = &pLvl->aRhs[i];
+      iPtr++;
+    }
+
+    if( pLvl->nRight && pLvl->pSplitKey==0 ){
+      sortedSplitkey(pCsr->pDb, pLvl, pRc);
+    }
+    pCsr->nPtr = iPtr;
+  }
+}
+
 static int multiCursorAddAll(MultiCursor *pCsr, Snapshot *pSnap){
   Level *pLvl;
   int nPtr = 0;
@@ -2275,22 +2295,10 @@ static int multiCursorAddAll(MultiCursor *pCsr, Snapshot *pSnap){
 
   assert( pCsr->aPtr==0 );
   pCsr->aPtr = lsmMallocZeroRc(pCsr->pDb->pEnv, sizeof(SegmentPtr) * nPtr, &rc);
-  if( rc==LSM_OK ) pCsr->nPtr = nPtr;
 
-  for(pLvl=pSnap->pLevel; pLvl && rc==LSM_OK; pLvl=pLvl->pNext){
-    int i;
-    if( pLvl->flags & LEVEL_INCOMPLETE ) continue;
-    pCsr->aPtr[iPtr].pLevel = pLvl;
-    pCsr->aPtr[iPtr].pSeg = &pLvl->lhs;
-    iPtr++;
-    for(i=0; i<pLvl->nRight; i++){
-      pCsr->aPtr[iPtr].pLevel = pLvl;
-      pCsr->aPtr[iPtr].pSeg = &pLvl->aRhs[i];
-      iPtr++;
-    }
-
-    if( pLvl->nRight && pLvl->pSplitKey==0 ){
-      sortedSplitkey(pCsr->pDb, pLvl, &rc);
+  for(pLvl=pSnap->pLevel; pLvl; pLvl=pLvl->pNext){
+    if( (pLvl->flags & LEVEL_INCOMPLETE)==0 ){
+      multiCursorAddOne(pCsr, pLvl, &rc);
     }
   }
 
@@ -4119,7 +4127,8 @@ static int sortedNewToplevel(
   MultiCursor *pCsr = 0;
   Level *pNext = 0;               /* The current top level */
   Level *pNew;                    /* The new level itself */
-  Segment *pDel = 0;              /* Delete separators from this segment */
+  Segment *pLinked = 0;           /* Delete separators from this segment */
+  Level *pDel = 0;                /* Delete this entire level */
   int nWrite = 0;                 /* Number of database pages written */
   Freelist freelist;
 
@@ -4150,12 +4159,15 @@ static int sortedNewToplevel(
     if( rc==LSM_OK ){
       rc = multiCursorAddTree(pCsr, pDb->pWorker, eTree);
     }
-    if( rc==LSM_OK 
-        && pNext && pNext->pMerge==0 && pNext->lhs.iRoot 
-        && (eTree!=TREE_NONE || (pNext->flags & LEVEL_FREELIST_ONLY))
-    ){
-      pDel = &pNext->lhs;
-      rc = btreeCursorNew(pDb, pDel, &pCsr->pBtCsr);
+    if( rc==LSM_OK && pNext && pNext->pMerge==0 ){
+      if( (pNext->flags & LEVEL_FREELIST_ONLY) ){
+        pDel = pNext;
+        pCsr->aPtr = lsmMallocZeroRc(pDb->pEnv, sizeof(SegmentPtr), &rc);
+        multiCursorAddOne(pCsr, pNext, &rc);
+      }else if( eTree!=TREE_NONE && pNext->lhs.iRoot ){
+        pLinked = &pNext->lhs;
+        rc = btreeCursorNew(pDb, pLinked, &pCsr->pBtCsr);
+      }
     }
 
     /* If this will be the only segment in the database, discard any delete
@@ -4206,7 +4218,14 @@ static int sortedNewToplevel(
     lsmDbSnapshotSetLevel(pDb->pWorker, pNext);
     sortedFreeLevel(pDb->pEnv, pNew);
   }else{
-    if( pDel ) pDel->iRoot = 0;
+    if( pLinked ){
+      pLinked->iRoot = 0;
+    }else if( pDel ){
+      assert( pNew->pNext==pDel );
+      pNew->pNext = pDel->pNext;
+      lsmFsSortedDelete(pDb->pFS, pDb->pWorker, 1, &pDel->lhs);
+      sortedFreeLevel(pDb->pEnv, pDel);
+    }
 
 #if 0
     lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
@@ -4478,8 +4497,8 @@ static int sortedSelectLevel(lsm_db *pDb, int nMerge, Level **ppOut){
     }else{
       if( nThis>nBest ){
         if( (pLevel->iAge!=pThis->iAge+1)
-            || (pLevel->nRight==0 && sortedCountLevels(pLevel)<=pDb->nMerge)
-          ){
+         || (pLevel->nRight==0 && sortedCountLevels(pLevel)<=pDb->nMerge)
+        ){
           pBest = pThis;
           nBest = nThis;
         }
@@ -4602,7 +4621,7 @@ static int sortedMoveBlock(lsm_db *pDb, int *pnWrite){
   if( rc!=LSM_OK || iTo==0 ) return rc;
   assert( iTo!=1 && iTo<iFrom );
 
-  rc = lsmFsMoveBlock(pDb->pFS, iTo, iFrom);
+  rc = lsmFsMoveBlock(pDb->pFS, &pLvl->lhs, iTo, iFrom);
   if( rc==LSM_OK ){
     if( p->redirect.a==0 ){
       int nByte = sizeof(struct RedirectEntry) * LSM_MAX_BLOCK_REDIRECTS;
@@ -4884,6 +4903,8 @@ static int doLsmSingleWork(
   int nRem = nPage;
   int bCkpt = 0;
 
+  assert( nPage>0 );
+
   /* Open the worker 'transaction'. It will be closed before this function
   ** returns.  */
   assert( pDb->pWorker==0 );
@@ -4983,7 +5004,6 @@ static int doLsmSingleWork(
     int rcdummy = LSM_BUSY;
     lsmFinishWork(pDb, 0, &rcdummy);
     *pnWrite = 0;
-    *pbCkpt = 0;
   }
   assert( pDb->pWorker==0 );
   return rc;

@@ -46,6 +46,11 @@ int do_work(int nArg, char **azArg){
     if( rc!=LSM_OK ){
       testPrintError("lsm_open(): rc=%d\n", rc);
     }else{
+      int n = -1;
+      lsm_config(pDb, LSM_CONFIG_BLOCK_SIZE, &n);
+      n = n*2;
+      lsm_config(pDb, LSM_CONFIG_AUTOCHECKPOINT, &n);
+
       rc = lsm_work(pDb, nMerge, nWork, 0);
       if( rc!=LSM_OK ){
         testPrintError("lsm_work(): rc=%d\n", rc);
