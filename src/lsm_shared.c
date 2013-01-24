@@ -165,7 +165,8 @@ static int dbTruncateCb(void *pCtx, int iBlk, i64 iSnapshot){
 }
 
 static int dbTruncate(lsm_db *pDb, i64 iInUse){
-  int rc;
+  int rc = LSM_OK;
+#if 0
   int i;
   DbTruncateCtx ctx;
 
@@ -188,6 +189,7 @@ static int dbTruncate(lsm_db *pDb, i64 iInUse){
 #endif
     pDb->pWorker->nBlock = ctx.nBlock;
   }
+#endif
   return rc;
 }
 

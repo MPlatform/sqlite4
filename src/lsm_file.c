@@ -1451,15 +1451,24 @@ static Pgno firstOnBlock(FileSystem *pFS, int iBlk, Pgno *aPgno, int nPgno){
 }
 
 #ifndef NDEBUG
+/*
+** Return true if page iPg, which is a part of segment p, lies on
+** a redirected block. 
+*/
 static int fsPageRedirects(FileSystem *pFS, Segment *p, Pgno iPg){
   return (iPg!=0 && iPg!=lsmFsRedirectPage(pFS, p->pRedirect, iPg));
 }
+
+/*
+** Return true if the second argument is not NULL and any of the first
+** last or root pages lie on a redirected block. 
+*/
 static int fsSegmentRedirects(FileSystem *pFS, Segment *p){
-  return (
+  return (p && (
       fsPageRedirects(pFS, p, p->iFirst)
    || fsPageRedirects(pFS, p, p->iRoot)
    || fsPageRedirects(pFS, p, p->iLastPg)
-  );
+  ));
 }
 #endif
 
@@ -2645,27 +2654,29 @@ static void checkBlocks(
       Redirect *pRedir = pSeg->pRedirect;
       int rc;
       int iBlk;                   /* Current block (during iteration) */
-      int iLastBlk;               /* Last real block of segment */
+      int iLastBlk;               /* Last block of segment */
+      int iFirstBlk;              /* First block of segment */
       int bLastIsLastOnBlock;     /* True iLast is the last on its block */
 
       assert( 0==fsSegmentRedirects(pFS, pSeg) );
-      iBlk = fsPageToBlock(pFS, pSeg->iFirst);
+      iBlk = iFirstBlk = fsPageToBlock(pFS, pSeg->iFirst);
       iLastBlk = fsPageToBlock(pFS, pSeg->iLastPg);
 
       bLastIsLastOnBlock = (fsLastPageOnBlock(pFS, iLastBlk)==pSeg->iLastPg);
       assert( iBlk>0 );
 
-      /* If the first page of this run is also the first page of its first
-      ** block, set the flag to indicate that the first page of iBlk is 
-      ** in use.  */
-      if( fsFirstPageOnBlock(pFS, iBlk)==pSeg->iFirst ){
-        assert( (aUsed[iBlk-1] & INTEGRITY_CHECK_FIRST_PG)==0 );
-        aUsed[iBlk-1] |= INTEGRITY_CHECK_FIRST_PG;
-      }
 
       do {
         /* iBlk is a part of this sorted run. */
         aUsed[iBlk-1] |= INTEGRITY_CHECK_USED;
+
+        /* If the first page of this block is also part of the segment,
+        ** set the flag to indicate that the first page of iBlk is in use.  
+        */
+        if( fsFirstPageOnBlock(pFS, iBlk)==pSeg->iFirst || iBlk!=iFirstBlk ){
+          assert( (aUsed[iBlk-1] & INTEGRITY_CHECK_FIRST_PG)==0 );
+          aUsed[iBlk-1] |= INTEGRITY_CHECK_FIRST_PG;
+        }
 
         /* Unless the sorted run finishes before the last page on this block, 
         ** the last page of this block is also in use.  */

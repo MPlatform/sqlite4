@@ -65,13 +65,16 @@ static void doDataTest4(
     if( db ){
       int nDone;
       fprintf(stderr, "lsm_work() start...\n");
+      fflush(stderr);
       do {
         nDone = 0;
         rc = lsm_work(db, 1, (1<<30), &nDone);
       }while( rc==0 && nDone>0 );
       fprintf(stderr, "lsm_work() done...\n");
+      fflush(stderr);
     }
 
+if( i+1<p->nRepeat ){
     iData += (nRecOn3*2);
     testWriteDatasourceRange(pControl, pData, iData+nRecOn3, nRecOn3*2, &rc);
     testWriteDatasourceRange(pDb,      pData, iData+nRecOn3, nRecOn3*2, &rc);
@@ -83,6 +86,7 @@ static void doDataTest4(
       testReopen(&pDb, &rc);
       if( rc==0 ) db = tdb_lsm(pDb);
     }
+}
 
     /* Update the progress dots... */
     testCaseProgress(i, p->nRepeat, testCaseNDot(), &iDot);

@@ -3839,8 +3839,6 @@ static int mergeWorkerWrite(
 static int multiCursorSetupTree(MultiCursor *pCsr, int bRev){
   int rc;
 
-  assert( pCsr->aTree==0 );
-
   rc = multiCursorAllocTree(pCsr);
   if( rc==LSM_OK ){
     int i;
@@ -4042,7 +4040,7 @@ static int mergeWorkerStep(MergeWorker *pMW){
   if( eType!=0 ){
     if( pMW->aGobble ){
       int iGobble = pCsr->aTree[1] - CURSOR_DATA_SEGMENT;
-      if( iGobble<pCsr->nPtr ){
+      if( iGobble<pCsr->nPtr && iGobble>=0 ){
         SegmentPtr *pGobble = &pCsr->aPtr[iGobble];
         if( (pGobble->flags & PGFTR_SKIP_THIS_FLAG)==0 ){
           pMW->aGobble[iGobble] = lsmFsPageNumber(pGobble->pPg);
@@ -4072,30 +4070,6 @@ static int mergeWorkerStep(MergeWorker *pMW){
   assert( lsmMCursorValid(pMW->pCsr) );
   if( rc==LSM_OK ) rc = lsmMCursorNext(pMW->pCsr);
 
-  /* If the cursor is at EOF, the merge is finished. Release all page
-  ** references currently held by the merge worker and inform the 
-  ** FileSystem object that no further pages will be appended to either 
-  ** the main or separators array. 
-  */
-  if( rc==LSM_OK && !lsmMCursorValid(pMW->pCsr) ){
-
-    mergeWorkerShutdown(pMW, &rc);
-    if( pSeg->iFirst ){
-      rc = lsmFsSortedFinish(pDb->pFS, pSeg);
-    }
-
-#ifdef LSM_DEBUG_EXPENSIVE
-    if( rc==LSM_OK ){
-#if 0
-      rc = assertBtreeOk(pDb, pSeg);
-      if( pMW->pCsr->pBtCsr ){
-        Segment *pNext = &pMW->pLevel->pNext->lhs;
-        rc = assertPointersOk(pDb, pSeg, pNext, 0);
-      }
-#endif
-    }
-#endif
-  }
   return rc;
 }
 
@@ -4203,9 +4177,11 @@ static int sortedNewToplevel(
       rc = mergeWorkerStep(&mergeworker);
     }
     assert( rc!=LSM_OK || mergeworker.nWork==0 || pNew->lhs.iFirst );
-
-    nWrite = mergeworker.nWork;
     mergeWorkerShutdown(&mergeworker, &rc);
+    if( rc==LSM_OK && pNew->lhs.iFirst ){
+      rc = lsmFsSortedFinish(pDb->pFS, &pNew->lhs);
+    }
+    nWrite = mergeworker.nWork;
     pNew->flags &= ~LEVEL_INCOMPLETE;
     if( eTree==TREE_NONE ){
       pNew->flags |= LEVEL_FREELIST_ONLY;
@@ -4227,7 +4203,7 @@ static int sortedNewToplevel(
       sortedFreeLevel(pDb->pEnv, pDel);
     }
 
-#if 0
+#if 1
     lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
 #endif
 
@@ -4642,7 +4618,7 @@ static int sortedMoveBlock(lsm_db *pDb, int *pnWrite){
     }
   }
 
-#if 0
+#if 1
   if( rc==LSM_OK ){
     lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "move-block");
   }
@@ -4682,29 +4658,46 @@ static int sortedWork(
       /* Could not find any work to do. Finished. */
       if( nDone==0 ) break;
     }else{
+      int bSave = 0;
+      Freelist freelist = {0, 0, 0};
       MergeWorker mergeworker;    /* State used to work on the level merge */
 
       assert( pDb->bIncrMerge==0 );
+      assert( pDb->pFreelist==0 && pDb->bUseFreelist==0 );
+
       pDb->bIncrMerge = 1;
       rc = mergeWorkerInit(pDb, pLevel, &mergeworker);
       assert( mergeworker.nWork==0 );
+      
       while( rc==LSM_OK 
           && 0==mergeWorkerDone(&mergeworker) 
-          && mergeworker.nWork<nRemaining 
+          && (mergeworker.nWork<nRemaining || pDb->bUseFreelist)
       ){
+        int eType = rtTopic(mergeworker.pCsr->eType);
         rc = mergeWorkerStep(&mergeworker);
+
+        if( rc==LSM_OK 
+         && nMerge==1 
+         && mergeworker.pLevel==pWorker->pLevel
+         && eType==0
+         && (rtTopic(mergeworker.pCsr->eType) || mergeWorkerDone(&mergeworker))
+        ){
+          assert( pDb->pFreelist==0 && pDb->bUseFreelist==0 );
+          rc = multiCursorVisitFreelist(mergeworker.pCsr);
+          if( rc==LSM_OK ){
+            rc = multiCursorSetupTree(mergeworker.pCsr, 0);
+            pDb->pFreelist = &freelist;
+            pDb->bUseFreelist = 1;
+          }
+        }
       }
       nRemaining -= LSM_MAX(mergeworker.nWork, 1);
-      pDb->bIncrMerge = 0;
 
-      /* Check if the merge operation is completely finished. If so, the
-      ** Merge object and the right-hand-side of the level can be deleted. 
-      **
-      ** Otherwise, gobble up (declare eligible for recycling) any pages
-      ** from rhs segments for which the content has been completely merged
-      ** into the lhs of the level.
-      */
       if( rc==LSM_OK ){
+        /* Check if the merge operation is completely finished. If not,
+        ** gobble up (declare eligible for recycling) any pages from rhs
+        ** segments for which the content has been completely merged into 
+        ** the lhs of the level.  */
         if( mergeWorkerDone(&mergeworker)==0 ){
           int i;
           for(i=0; i<pLevel->nRight; i++){
@@ -4715,50 +4708,70 @@ static int sortedWork(
               lsmFsGobble(pDb, pGobble->pSeg, &mergeworker.aGobble[i], 1);
             }
           }
-        }else if( pLevel->lhs.iFirst==0 ){
-          /* If the new level is completely empty, remove it from the 
-          ** database snapshot. This can only happen if all input keys were
-          ** annihilated. Since keys are only annihilated if the new level
-          ** is the last in the linked list (contains the most ancient of
-          ** database content), this guarantees that pLevel->pNext==0.  */ 
-
-          Level *pTop;          /* Top level of worker snapshot */
-          Level **pp;           /* Read/write iterator for Level.pNext list */
-          int i;
-          assert( pLevel->pNext==0 );
-
-          /* Remove the level from the worker snapshot. */
-          pTop = lsmDbSnapshotLevel(pWorker);
-          for(pp=&pTop; *pp!=pLevel; pp=&((*pp)->pNext));
-          *pp = pLevel->pNext;
-          lsmDbSnapshotSetLevel(pWorker, pTop);
-
-          /* Free the Level structure. */
-          lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->lhs);
-          for(i=0; i<pLevel->nRight; i++){
-            lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->aRhs[i]);
-          }
-          sortedFreeLevel(pDb->pEnv, pLevel);
         }else{
           int i;
+          int bEmpty;
+          mergeWorkerShutdown(&mergeworker, &rc);
+          bEmpty = (pLevel->lhs.iFirst==0);
 
-          /* Free the separators of the next level, if required. */
-          if( pLevel->pMerge->nInput > pLevel->nRight ){
-            assert( pLevel->pNext->lhs.iRoot );
-            pLevel->pNext->lhs.iRoot = 0;
+          if( bEmpty==0 && rc==LSM_OK ){
+            rc = lsmFsSortedFinish(pDb->pFS, &pLevel->lhs);
           }
 
-          /* Free the right-hand-side of pLevel */
+          if( pDb->bUseFreelist ){
+            Freelist *p = &pDb->pWorker->freelist;
+            lsmFree(pDb->pEnv, p->aEntry);
+            memcpy(p, &freelist, sizeof(freelist));
+            pDb->bUseFreelist = 0;
+            pDb->pFreelist = 0;
+            bSave = 1;
+          }
+
           for(i=0; i<pLevel->nRight; i++){
             lsmFsSortedDelete(pDb->pFS, pWorker, 1, &pLevel->aRhs[i]);
           }
-          lsmFree(pDb->pEnv, pLevel->aRhs);
-          pLevel->nRight = 0;
-          pLevel->aRhs = 0;
 
-          /* Free the Merge object */
-          lsmFree(pDb->pEnv, pLevel->pMerge);
-          pLevel->pMerge = 0;
+          if( bEmpty ){
+            /* If the new level is completely empty, remove it from the 
+            ** database snapshot. This can only happen if all input keys were
+            ** annihilated. Since keys are only annihilated if the new level
+            ** is the last in the linked list (contains the most ancient of
+            ** database content), this guarantees that pLevel->pNext==0.  */ 
+            Level *pTop;          /* Top level of worker snapshot */
+            Level **pp;           /* Read/write iterator for Level.pNext list */
+
+            assert( pLevel->pNext==0 );
+
+            /* Remove the level from the worker snapshot. */
+            pTop = lsmDbSnapshotLevel(pWorker);
+            for(pp=&pTop; *pp!=pLevel; pp=&((*pp)->pNext));
+            *pp = pLevel->pNext;
+            lsmDbSnapshotSetLevel(pWorker, pTop);
+
+            /* Free the Level structure. */
+            sortedFreeLevel(pDb->pEnv, pLevel);
+          }else{
+
+            /* Free the separators of the next level, if required. */
+            if( pLevel->pMerge->nInput > pLevel->nRight ){
+              assert( pLevel->pNext->lhs.iRoot );
+              pLevel->pNext->lhs.iRoot = 0;
+            }
+
+            /* Zero the right-hand-side of pLevel */
+            lsmFree(pDb->pEnv, pLevel->aRhs);
+            pLevel->nRight = 0;
+            pLevel->aRhs = 0;
+
+            /* Free the Merge object */
+            lsmFree(pDb->pEnv, pLevel->pMerge);
+            pLevel->pMerge = 0;
+          }
+
+          if( bSave && rc==LSM_OK ){
+            pDb->bIncrMerge = 0;
+            rc = lsmSaveWorker(pDb, 0);
+          }
         }
       }
 
@@ -4766,9 +4779,10 @@ static int sortedWork(
       ** has occurred, invoke the work-hook to inform the application that
       ** the database structure has changed. */
       mergeWorkerShutdown(&mergeworker, &rc);
+      pDb->bIncrMerge = 0;
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
-#if 0
+#if 1
       lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
@@ -5564,7 +5578,7 @@ void lsmSortedDumpStructure(
     nCall++;
     lsmLogMessage(pDb, LSM_OK, "Database structure %d (%s)", nCall, zWhy);
 
-    /* if( nCall>639 ) bKeys = 1; */
+    if( nCall==275 || nCall==276 ) bKeys = 1;
 
     for(pLevel=pTopLevel; pLevel; pLevel=pLevel->pNext){
       char zLeft[1024];
@@ -5635,6 +5649,8 @@ void lsmSortedDumpStructure(
       }
     }
   }
+
+  assert( lsmFsIntegrityCheck(pDb) );
 }
 
 void lsmSortedFreeLevel(lsm_env *pEnv, Level *pLevel){
