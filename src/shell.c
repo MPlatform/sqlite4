@@ -983,7 +983,7 @@ static int run_table_dump_query(
       fprintf(p->out, "%s", zFirstRow);
       zFirstRow = 0;
     }
-    z = sqlite4_column_text(pSelect, 0);
+    z = (char const *)sqlite4_column_text(pSelect, 0);
     fprintf(p->out, "%s", z);
     for(i=1; i<nResult; i++){ 
       fprintf(p->out, ",%s", sqlite4_column_text(pSelect, i));
