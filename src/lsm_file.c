@@ -2665,7 +2665,6 @@ static void checkBlocks(
       bLastIsLastOnBlock = (fsLastPageOnBlock(pFS, iLastBlk)==pSeg->iLastPg);
       assert( iBlk>0 );
 
-
       do {
         /* iBlk is a part of this sorted run. */
         aUsed[iBlk-1] |= INTEGRITY_CHECK_USED;
