@@ -146,15 +146,17 @@ int sqlite4VdbeDecodeValue(
         sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 
                              SQLITE4_UTF8, SQLITE4_TRANSIENT);
       }else{
-        static const u8 enc[] = { SQLITE4_UTF8, SQLITE4_UTF16LE, SQLITE4_UTF16BE };
+        static const u8 enc[] = {SQLITE4_UTF8,SQLITE4_UTF16LE,SQLITE4_UTF16BE };
         sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst+1), size-1, 
                              enc[p->a[ofst]], SQLITE4_TRANSIENT);
       }
     }else{
-      sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0, SQLITE4_TRANSIENT);
+      sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0,SQLITE4_TRANSIENT);
     }
   }
-  if( i<iVal ){
+  testcase( i==iVal );
+  testcase( i==iVal+1 );
+  if( i<=iVal ){
     if( pDefault ){
       sqlite4VdbeMemShallowCopy(pOut, pDefault, MEM_Static);
     }else{
