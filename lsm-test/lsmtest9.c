@@ -64,14 +64,16 @@ static void doDataTest4(
 
     if( db ){
       int nDone;
-      fprintf(stderr, "lsm_work() start...\n");
-      fflush(stderr);
+#if 0
+      fprintf(stderr, "lsm_work() start...\n"); fflush(stderr);
+#endif
       do {
         nDone = 0;
         rc = lsm_work(db, 1, (1<<30), &nDone);
       }while( rc==0 && nDone>0 );
-      fprintf(stderr, "lsm_work() done...\n");
-      fflush(stderr);
+#if 0 
+      fprintf(stderr, "lsm_work() done...\n"); fflush(stderr);
+#endif
     }
 
 if( i+1<p->nRepeat ){

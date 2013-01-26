@@ -1920,7 +1920,6 @@ static int seekInLevel(
         pCsr, &aPtr[0], iTopic, pKey, nKey, iPtr, eSeek, &iOut, &bStop
     );
     if( rc==LSM_OK && nRhs>0 && eSeek==LSM_SEEK_GE && aPtr[0].pPg==0 ){
-      assert( aPtr[0].pKey==0 );
       res = 0;
     }
   }
