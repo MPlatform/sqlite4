@@ -72,6 +72,9 @@
 #endif
 #include "sqlite4.h"            /* only for sqlite4_snprintf() */
 
+#define LSM_LOG_STRUCTURE 0
+#define LSM_LOG_DATA      0
+
 /*
 ** Macros to help decode record types.
 */
@@ -1927,11 +1930,23 @@ static int seekInLevel(
     int iPtr = *piPgno;
     int i;
     for(i=1; rc==LSM_OK && i<=nRhs && bStop==0; i++){
+      SegmentPtr *pPtr = &aPtr[i];
       iOut = 0;
       rc = seekInSegment(
-          pCsr, &aPtr[i], iTopic, pKey, nKey, iPtr, eSeek, &iOut, &bStop
+          pCsr, pPtr, iTopic, pKey, nKey, iPtr, eSeek, &iOut, &bStop
       );
       iPtr = iOut;
+
+      /* If the segment-pointer has settled on a key that is smaller than
+      ** the splitkey, invalidate the segment-pointer.  */
+      if( pPtr->pPg ){
+        res = sortedKeyCompare(pCsr->pDb->xCmp, 
+            rtTopic(pPtr->eType), pPtr->pKey, pPtr->nKey, 
+            pLvl->iSplitTopic, pLvl->pSplitKey, pLvl->nSplitKey
+        );
+        if( res<0 ) segmentPtrReset(pPtr);
+      }
+
       if( aPtr[i].pKey ) bHit = 1;
     }
 
@@ -2676,13 +2691,24 @@ static int mcursorLocationOk(MultiCursor *pCsr, int bDeleteOk){
 #ifndef NDEBUG
   /* This block fires assert() statements to check one of the assumptions
   ** in the comment below - that if the lhs sub-cursor of a level undergoing
-  ** a merge is valid, then all the rhs sub-cursors must be at EOF.  */
+  ** a merge is valid, then all the rhs sub-cursors must be at EOF. 
+  **
+  ** Also assert that all rhs sub-cursors are either at EOF or point to
+  ** a key that is not less than the level split-key.  */
   for(i=0; i<pCsr->nPtr; i++){
     SegmentPtr *pPtr = &pCsr->aPtr[i];
     Level *pLvl = pPtr->pLevel;
-    if( pLvl->nRight && pPtr->pSeg==&pLvl->lhs && pPtr->pPg ){
-      int j;
-      for(j=0; j<pLvl->nRight; j++) assert( pPtr[j+1].pPg==0 );
+    if( pLvl->nRight && pPtr->pPg ){
+      if( pPtr->pSeg==&pLvl->lhs ){
+        int j;
+        for(j=0; j<pLvl->nRight; j++) assert( pPtr[j+1].pPg==0 );
+      }else{
+        int res = sortedKeyCompare(pCsr->pDb->xCmp, 
+            rtTopic(pPtr->eType), pPtr->pKey, pPtr->nKey,
+            pLvl->iSplitTopic, pLvl->pSplitKey, pLvl->nSplitKey
+        );
+        assert( res>=0 );
+      }
     }
   }
 #endif
@@ -4315,8 +4341,8 @@ static int sortedNewToplevel(
       sortedFreeLevel(pDb->pEnv, pDel);
     }
 
-#if 0
-    lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "new-toplevel");
+#if LSM_LOG_STRUCTURE
+    lsmSortedDumpStructure(pDb, pDb->pWorker, LSM_LOG_DATA, 0, "new-toplevel");
 #endif
 
     if( freelist.nEntry ){
@@ -4731,11 +4757,11 @@ static int sortedMoveBlock(lsm_db *pDb, int *pnWrite){
     }
   }
 
-#if 0
+#if LSM_LOG_STRUCTURE
   if( rc==LSM_OK ){
     char aBuf[64];
     sprintf(aBuf, "move-block %d/%d", p->redirect.n-1, LSM_MAX_BLOCK_REDIRECTS);
-    lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, aBuf);
+    lsmSortedDumpStructure(pDb, pDb->pWorker, LSM_LOG_DATA, 0, aBuf);
   }
 #endif
   return rc;
@@ -4981,8 +5007,8 @@ static int sortedWork(
       pDb->bIncrMerge = 0;
       if( rc==LSM_OK ) sortedInvokeWorkHook(pDb);
 
-#if 0
-      lsmSortedDumpStructure(pDb, pDb->pWorker, 0, 0, "work");
+#if LSM_LOG_STRUCTURE
+      lsmSortedDumpStructure(pDb, pDb->pWorker, LSM_LOG_DATA, 0, "work");
 #endif
       assertBtreeOk(pDb, &pLevel->lhs);
       assertRunInOrder(pDb, &pLevel->lhs);
