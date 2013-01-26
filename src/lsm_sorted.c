@@ -5061,60 +5061,7 @@ static int sortedTreeHasOld(lsm_db *pDb, int *pRc){
 ** or an LSM error code if some error occurs.
 */
 static int sortedNewFreelistOnly(lsm_db *pDb){
-  int rc;
-  Level *pLvl;
-
-  pLvl = pDb->pWorker->pLevel;
-  if( pLvl->pNext!=0 || pLvl->nRight==0 ){
-    pLvl = 0;
-  }
-
-  rc = sortedNewToplevel(pDb, TREE_NONE, 0);
-  if( 0 && rc==LSM_OK && pLvl ){
-    Level *pNew = pDb->pWorker->pLevel;
-    assert( pNew->pNext==pLvl );
-
-    if( pLvl->pSplitKey==0 ){
-      sortedSplitkey(pDb, pLvl, &rc);
-    }
-    if( rc==LSM_OK && pLvl->iSplitTopic==0 ){
-      /* Add the new top-level to the rhs of pLvl. */
-      Merge *pMerge;
-
-      Segment *aRhs = (Segment *)lsmMallocZeroRc(pDb->pEnv, 
-          sizeof(Segment) * (pLvl->nRight + 1), &rc
-      );
-      if( rc==LSM_OK ){
-        memcpy(&aRhs[1], pLvl->aRhs, sizeof(Segment) * pLvl->nRight);
-        aRhs[0] = pNew->lhs;
-        lsmFree(pDb->pEnv, pLvl->aRhs);
-        pLvl->aRhs = aRhs;
-        pLvl->nRight++;
-      }
-
-      /* Also add an entry to the Merge object */
-      pMerge = (Merge *)lsmMallocZeroRc(pDb->pEnv, 
-          sizeof(Merge) + sizeof(MergeInput)*(pLvl->pMerge->nInput+1), &rc
-      );
-      if( rc==LSM_OK ){
-        memcpy(pMerge, pLvl->pMerge, sizeof(Merge));
-        pMerge->aInput = (MergeInput *)&pMerge[1];
-        memcpy(&pMerge->aInput[1], pLvl->pMerge->aInput, 
-            sizeof(MergeInput)*(pLvl->pMerge->nInput)
-        );
-        pMerge->aInput[0].iPg = aRhs[0].iFirst;
-        pMerge->aInput[0].iCell = 0;
-        pMerge->nInput++;
-        lsmFree(pDb->pEnv, pLvl->pMerge);
-        pLvl->pMerge = pMerge;
-
-        sortedFreeLevel(pDb->pEnv, pNew);
-        pDb->pWorker->pLevel = pLvl;
-      }
-    }
-  }
-
-  return rc;
+  return sortedNewToplevel(pDb, TREE_NONE, 0);
 }
 
 int lsmSaveWorker(lsm_db *pDb, int bFlush){
@@ -5248,20 +5195,23 @@ static int doLsmSingleWork(
 }
 
 static int doLsmWork(lsm_db *pDb, int nMerge, int nPage, int *pnWrite){
-  int rc;
-  int nWrite = 0;
-  int bCkpt = 0;
+  int rc = LSM_OK;                /* Return code */
+  int nWrite = 0;                 /* Number of pages written */
 
   assert( nMerge>=1 );
-  do {
-    int nThis = 0;
-    bCkpt = 0;
-    rc = doLsmSingleWork(pDb, 0, nMerge, nPage-nWrite, &nThis, &bCkpt);
-    nWrite += nThis;
-    if( rc==LSM_OK && bCkpt ){
-      rc = lsm_checkpoint(pDb, 0);
-    }
-  }while( rc==LSM_OK && (nWrite<nPage && bCkpt) );
+
+  if( nPage>0 ){
+    int bCkpt = 0;
+    do {
+      int nThis = 0;
+      bCkpt = 0;
+      rc = doLsmSingleWork(pDb, 0, nMerge, nPage-nWrite, &nThis, &bCkpt);
+      nWrite += nThis;
+      if( rc==LSM_OK && bCkpt ){
+        rc = lsm_checkpoint(pDb, 0);
+      }
+    }while( rc==LSM_OK && (nWrite<nPage && bCkpt) );
+  }
 
   if( pnWrite ){
     if( rc==LSM_OK ){
