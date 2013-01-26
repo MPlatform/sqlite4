@@ -4313,8 +4313,8 @@ static int sortedNewToplevel(
     while( rc==LSM_OK && mergeWorkerDone(&mergeworker)==0 ){
       rc = mergeWorkerStep(&mergeworker);
     }
-    assert( rc!=LSM_OK || mergeworker.nWork==0 || pNew->lhs.iFirst );
     mergeWorkerShutdown(&mergeworker, &rc);
+    assert( rc!=LSM_OK || mergeworker.nWork==0 || pNew->lhs.iFirst );
     if( rc==LSM_OK && pNew->lhs.iFirst ){
       rc = lsmFsSortedFinish(pDb->pFS, &pNew->lhs);
     }
