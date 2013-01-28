@@ -41,6 +41,8 @@ static void assert_db_state(lsm_db *pDb){
   ** not be a client snapshot.  */
   assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->iReader>=0) );
 
+  assert( pDb->iReader<0 || pDb->pClient!=0 );
+
   assert( pDb->nTransOpen>=0 );
 }
 #else
@@ -375,7 +377,7 @@ static int infoGetWorker(lsm_db *pDb, Snapshot **pp, int *pbUnlock){
     if( rc!=LSM_OK ) return rc;
     *pbUnlock = 1;
   }
-  *pp = pDb->pWorker;
+  if( pp ) *pp = pDb->pWorker;
   return rc;
 }
 
@@ -533,7 +535,13 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
     case LSM_INFO_PAGE_ASCII_DUMP: {
       Pgno pgno = va_arg(ap, Pgno);
       char **pzVal = va_arg(ap, char **);
-      rc = lsmInfoPageDump(pDb, pgno, (eParam==LSM_INFO_PAGE_HEX_DUMP), pzVal);
+      int bUnlock = 0;
+      rc = infoGetWorker(pDb, 0, &bUnlock);
+      if( rc==LSM_OK ){
+        int bHex = (eParam==LSM_INFO_PAGE_HEX_DUMP);
+        rc = lsmInfoPageDump(pDb, pgno, bHex, pzVal);
+      }
+      infoFreeWorker(pDb, bUnlock);
       break;
     }
 

@@ -879,7 +879,45 @@ int lsmFsSyncDb(FileSystem *pFS, int nBlock){
   return lsmEnvSync(pFS->pEnv, pFS->fdDb);
 }
 
-static int fsPageGet(FileSystem *, Pgno, int, Page **, int *);
+static int fsPageGet(FileSystem *, Segment *, Pgno, int, Page **, int *);
+
+static int fsRedirectBlock(Redirect *p, int iBlk){
+  if( p ){
+    int i;
+    for(i=0; i<p->n; i++){
+      if( iBlk==p->a[i].iFrom ) return p->a[i].iTo;
+    }
+  }
+  assert( iBlk!=0 );
+  return iBlk;
+}
+
+Pgno lsmFsRedirectPage(FileSystem *pFS, Redirect *pRedir, Pgno iPg){
+  Pgno iReal = iPg;
+
+  if( pRedir ){
+    const int nPagePerBlock = (
+        pFS->pCompress ? pFS->nBlocksize : (pFS->nBlocksize / pFS->nPagesize)
+    );
+    int iBlk = fsPageToBlock(pFS, iPg);
+    int i;
+    for(i=0; i<pRedir->n; i++){
+      int iFrom = pRedir->a[i].iFrom;
+      if( iFrom>iBlk ) break;
+      if( iFrom==iBlk ){
+        int iTo = pRedir->a[i].iTo;
+        iReal = iPg - (Pgno)(iFrom - iTo) * nPagePerBlock;
+        if( iTo==1 ){
+          iReal += (fsFirstPageOnBlock(pFS, 1)-1);
+        }
+        break;
+      }
+    }
+  }
+
+  assert( iReal!=0 );
+  return iReal;
+}
 
 /*
 ** Parameter iBlock is a database file block. This function reads the value 
@@ -889,17 +927,25 @@ static int fsPageGet(FileSystem *, Pgno, int, Page **, int *);
 */
 static int fsBlockNext(
   FileSystem *pFS,                /* File-system object handle */
+  Segment *pSeg,                  /* Use this segment for block redirects */
   int iBlock,                     /* Read field from this block */
   int *piNext                     /* OUT: Next block in linked list */
 ){
   int rc;
+  int iRead;                      /* Read block from here */
+  
+  if( pSeg ){
+    iRead = fsRedirectBlock(pSeg->pRedirect, iBlock);
+  }else{
+    iRead = iBlock;
+  }
 
   assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
   if( pFS->pCompress ){
     i64 iOff;                     /* File offset to read data from */
     u8 aNext[4];                  /* 4-byte pointer read from db file */
 
-    iOff = (i64)iBlock * pFS->nBlocksize - sizeof(aNext);
+    iOff = (i64)iRead * pFS->nBlocksize - sizeof(aNext);
     rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aNext, sizeof(aNext));
     if( rc==LSM_OK ){
       *piNext = (int)lsmGetU32(aNext);
@@ -907,11 +953,15 @@ static int fsBlockNext(
   }else{
     const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
     Page *pLast;
-    rc = fsPageGet(pFS, iBlock*nPagePerBlock, 0, &pLast, 0);
+    rc = fsPageGet(pFS, 0, iRead*nPagePerBlock, 0, &pLast, 0);
     if( rc==LSM_OK ){
       *piNext = lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
       lsmFsPageRelease(pLast);
     }
+  }
+
+  if( pSeg ){
+    *piNext = fsRedirectBlock(pSeg->pRedirect, *piNext);
   }
   return rc;
 }
@@ -928,6 +978,7 @@ Pgno fsLastPageOnPagesBlock(FileSystem *pFS, Pgno iPg){
 */
 static int fsReadData(
   FileSystem *pFS,                /* File-system handle */
+  Segment *pSeg,                  /* Block redirection */
   i64 iOff,                       /* Read data from this offset */
   u8 *aData,                      /* Buffer to read data into */
   int nData                       /* Number of bytes to read */
@@ -945,7 +996,7 @@ static int fsReadData(
   if( rc==LSM_OK && nRead!=nData ){
     int iBlk;
 
-    rc = fsBlockNext(pFS, fsPageToBlock(pFS, iOff), &iBlk);
+    rc = fsBlockNext(pFS, pSeg, fsPageToBlock(pFS, iOff), &iBlk);
     if( rc==LSM_OK ){
       i64 iOff2 = fsFirstPageOnBlock(pFS, iBlk);
       rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff2, &aData[nRead], nData-nRead);
@@ -963,6 +1014,7 @@ static int fsReadData(
 */
 static int fsBlockPrev(
   FileSystem *pFS,                /* File-system object handle */
+  Segment *pSeg,                  /* Use this segment for block redirects */
   int iBlock,                     /* Read field from this block */
   int *piPrev                     /* OUT: Previous block in linked list */
 ){
@@ -976,7 +1028,8 @@ static int fsBlockPrev(
     u8 aPrev[4];                  /* 4-byte pointer read from db file */
     rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aPrev, sizeof(aPrev));
     if( rc==LSM_OK ){
-      *piPrev = (int)lsmGetU32(aPrev);
+      Redirect *pRedir = (pSeg ? pSeg->pRedirect : 0);
+      *piPrev = fsRedirectBlock(pRedir, (int)lsmGetU32(aPrev));
     }
   }else{
     assert( 0 );
@@ -1001,7 +1054,13 @@ static int getRecordSize(u8 *aBuf, int *pbFree){
   return nByte;
 }
 
-static int fsSubtractOffset(FileSystem *pFS, i64 iOff, int iSub, i64 *piRes){
+static int fsSubtractOffset(
+  FileSystem *pFS, 
+  Segment *pSeg,
+  i64 iOff, 
+  int iSub, 
+  i64 *piRes
+){
   i64 iStart;
   int iBlk = 0;
   int rc;
@@ -1014,12 +1073,18 @@ static int fsSubtractOffset(FileSystem *pFS, i64 iOff, int iSub, i64 *piRes){
     return LSM_OK;
   }
 
-  rc = fsBlockPrev(pFS, fsPageToBlock(pFS, iOff), &iBlk);
+  rc = fsBlockPrev(pFS, pSeg, fsPageToBlock(pFS, iOff), &iBlk);
   *piRes = fsLastPageOnBlock(pFS, iBlk) - iSub + (iOff - iStart + 1);
   return rc;
 }
 
-static int fsAddOffset(FileSystem *pFS, i64 iOff, int iAdd, i64 *piRes){
+static int fsAddOffset(
+  FileSystem *pFS, 
+  Segment *pSeg,
+  i64 iOff, 
+  int iAdd, 
+  i64 *piRes
+){
   i64 iEob;
   int iBlk;
   int rc;
@@ -1032,7 +1097,7 @@ static int fsAddOffset(FileSystem *pFS, i64 iOff, int iAdd, i64 *piRes){
     return LSM_OK;
   }
 
-  rc = fsBlockNext(pFS, fsPageToBlock(pFS, iOff), &iBlk);
+  rc = fsBlockNext(pFS, pSeg, fsPageToBlock(pFS, iOff), &iBlk);
   *piRes = fsFirstPageOnBlock(pFS, iBlk) + iAdd - (iEob - iOff + 1);
   return rc;
 }
@@ -1070,6 +1135,7 @@ static int fsAllocateBuffer(FileSystem *pFS, int bWrite){
 */
 static int fsReadPagedata(
   FileSystem *pFS,                /* File-system handle */
+  Segment *pSeg,                  /* pPg is part of this segment */
   Page *pPg,                      /* Page to read and uncompress data for */
   int *pnSpace                    /* OUT: Total bytes of free space */
 ){
@@ -1082,7 +1148,7 @@ static int fsReadPagedata(
 
   if( fsAllocateBuffer(pFS, 0) ) return LSM_NOMEM;
 
-  rc = fsReadData(pFS, iOff, aSz, sizeof(aSz));
+  rc = fsReadData(pFS, pSeg, iOff, aSz, sizeof(aSz));
 
   if( rc==LSM_OK ){
     int bFree;
@@ -1099,12 +1165,12 @@ static int fsReadPagedata(
         rc = LSM_CORRUPT_BKPT;
       }
     }else{
-      rc = fsAddOffset(pFS, iOff, 3, &iOff);
+      rc = fsAddOffset(pFS, pSeg, iOff, 3, &iOff);
       if( rc==LSM_OK ){
         if( pPg->nCompress>pFS->nBuffer ){
           rc = LSM_CORRUPT_BKPT;
         }else{
-          rc = fsReadData(pFS, iOff, pFS->aIBuffer, pPg->nCompress);
+          rc = fsReadData(pFS, pSeg, iOff, pFS->aIBuffer, pPg->nCompress);
         }
         if( rc==LSM_OK ){
           int n = pFS->nPagesize;
@@ -1127,6 +1193,7 @@ static int fsReadPagedata(
 */
 static int fsPageGet(
   FileSystem *pFS,                /* File-system handle */
+  Segment *pSeg,                  /* Block redirection to use (or NULL) */
   Pgno iPg,                       /* Page id */
   int noContent,                  /* True to not load content from disk */
   Page **ppPg,                    /* OUT: New page handle */
@@ -1136,19 +1203,26 @@ static int fsPageGet(
   int iHash;
   int rc = LSM_OK;
 
+  /* In most cases iReal is the same as iPg. Except, if pSeg->pRedirect is 
+  ** not NULL, and the block containing iPg has been redirected, then iReal
+  ** is the page number after redirection.  */
+  Pgno iReal = lsmFsRedirectPage(pFS, (pSeg ? pSeg->pRedirect : 0), iPg);
+
   assert( iPg>=fsFirstPageOnBlock(pFS, 1) );
+  assert( iReal>=fsFirstPageOnBlock(pFS, 1) );
   *ppPg = 0;
 
   assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
   if( pFS->bUseMmap ){
     Page *pTest;
-    i64 iEnd = (i64)iPg * pFS->nPagesize;
+    i64 iEnd = (i64)iReal * pFS->nPagesize;
     fsGrowMapping(pFS, iEnd, &rc);
     if( rc!=LSM_OK ) return rc;
 
     p = 0;
     for(pTest=pFS->pWaiting; pTest; pTest=pTest->pNextWaiting){
-      if( pTest->iPg==iPg ){
+      if( pTest->iPg==iReal ){
+        assert( iReal==iPg );
         p = pTest;
         p->nRef++;
         *ppPg = p;
@@ -1165,21 +1239,21 @@ static int fsPageGet(
       fsPageAddToLru(pFS, p);
       p->pFS = pFS;
     }
-    p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (i64)(iPg-1)];
-    p->iPg = iPg;
+    p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (iReal-1)];
+    p->iPg = iReal;
   }else{
 
     /* Search the hash-table for the page */
-    iHash = fsHashKey(pFS->nHash, iPg);
+    iHash = fsHashKey(pFS->nHash, iReal);
     for(p=pFS->apHash[iHash]; p; p=p->pHashNext){
-      if( p->iPg==iPg) break;
+      if( p->iPg==iReal) break;
     }
 
     if( p==0 ){
       rc = fsPageBuffer(pFS, 1, &p);
       if( rc==LSM_OK ){
         int nSpace = 0;
-        p->iPg = iPg;
+        p->iPg = iReal;
         p->nRef = 0;
         p->pFS = pFS;
         assert( p->flags==0 || p->flags==PAGE_FREE );
@@ -1190,10 +1264,10 @@ static int fsPageGet(
         assert( p->pLruNext==0 && p->pLruPrev==0 );
         if( noContent==0 ){
           if( pFS->pCompress ){
-            rc = fsReadPagedata(pFS, p, &nSpace);
+            rc = fsReadPagedata(pFS, pSeg, p, &nSpace);
           }else{
             int nByte = pFS->nPagesize;
-            i64 iOff = (i64)(iPg-1) * pFS->nPagesize;
+            i64 iOff = (i64)(iReal-1) * pFS->nPagesize;
             rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, p->aData, nByte);
           }
           pFS->nRead++;
@@ -1221,9 +1295,9 @@ static int fsPageGet(
   }
 
   if( rc==LSM_OK && p ){
-    if( pFS->pCompress==0 && (fsIsLast(pFS, iPg) || fsIsFirst(pFS, iPg)) ){
+    if( pFS->pCompress==0 && (fsIsLast(pFS, iReal) || fsIsFirst(pFS, iReal)) ){
       p->nData = pFS->nPagesize - 4;
-      if( fsIsFirst(pFS, iPg) && p->nRef==0 ){
+      if( fsIsFirst(pFS, iReal) && p->nRef==0 ){
         p->aData += 4;
         p->flags |= PAGE_HASPREV;
       }
@@ -1363,12 +1437,17 @@ int lsmFsSortedDelete(
     while( iBlk && rc==LSM_OK ){
       int iNext = 0;
       if( iBlk!=iLastBlk ){
-        rc = fsBlockNext(pFS, iBlk, &iNext);
+        rc = fsBlockNext(pFS, pDel, iBlk, &iNext);
       }else if( bZero==0 && pDel->iLastPg!=fsLastPageOnBlock(pFS, iLastBlk) ){
         break;
       }
       rc = fsFreeBlock(pFS, pSnapshot, pDel, iBlk);
       iBlk = iNext;
+    }
+
+    if( pDel->pRedirect ){
+      assert( pDel->pRedirect==&pSnapshot->redirect );
+      pSnapshot->redirect.n = 0;
     }
 
     if( bZero ) memset(pDel, 0, sizeof(Segment));
@@ -1388,6 +1467,28 @@ static Pgno firstOnBlock(FileSystem *pFS, int iBlk, Pgno *aPgno, int nPgno){
   return iRet;
 }
 
+#ifndef NDEBUG
+/*
+** Return true if page iPg, which is a part of segment p, lies on
+** a redirected block. 
+*/
+static int fsPageRedirects(FileSystem *pFS, Segment *p, Pgno iPg){
+  return (iPg!=0 && iPg!=lsmFsRedirectPage(pFS, p->pRedirect, iPg));
+}
+
+/*
+** Return true if the second argument is not NULL and any of the first
+** last or root pages lie on a redirected block. 
+*/
+static int fsSegmentRedirects(FileSystem *pFS, Segment *p){
+  return (p && (
+      fsPageRedirects(pFS, p, p->iFirst)
+   || fsPageRedirects(pFS, p, p->iRoot)
+   || fsPageRedirects(pFS, p, p->iLastPg)
+  ));
+}
+#endif
+
 /*
 ** Argument aPgno is an array of nPgno page numbers. All pages belong to
 ** the segment pRun. This function gobbles from the start of the run to the
@@ -1406,6 +1507,9 @@ void lsmFsGobble(
   int iBlk;
 
   assert( pRun->nSize>0 );
+  assert( 0==fsSegmentRedirects(pFS, pRun) );
+  assert( nPgno>0 && 0==fsPageRedirects(pFS, pRun, aPgno[0]) );
+
   iBlk = fsPageToBlock(pFS, pRun->iFirst);
   pRun->nSize += (pRun->iFirst - fsFirstPageOnBlock(pFS, iBlk));
 
@@ -1416,7 +1520,7 @@ void lsmFsGobble(
       pRun->iFirst = iFirst;
       break;
     }
-    rc = fsBlockNext(pFS, iBlk, &iNext);
+    rc = fsBlockNext(pFS, pRun, iBlk, &iNext);
     if( rc==LSM_OK ) rc = fsFreeBlock(pFS, pSnapshot, pRun, iBlk);
     pRun->nSize -= (
         1 + fsLastPageOnBlock(pFS, iBlk) - fsFirstPageOnBlock(pFS, iBlk)
@@ -1428,6 +1532,20 @@ void lsmFsGobble(
   assert( pRun->nSize>0 );
 }
 
+/*
+** This function is only used in compressed database mode.
+**
+** Argument iPg is the page number (byte offset) of a page within segment
+** pSeg. The page record, including all headers, is nByte bytes in size.
+** Before returning, set *piNext to the page number of the next page in
+** the segment, or to zero if iPg is the last.
+**
+** In other words, do:
+**
+**   *piNext = iPg + nByte;
+**
+** But take block overflow and redirection into account.
+*/
 static int fsNextPageOffset(
   FileSystem *pFS,                /* File system object */
   Segment *pSeg,                  /* Segment to move within */
@@ -1440,24 +1558,29 @@ static int fsNextPageOffset(
 
   assert( pFS->pCompress );
 
-  rc = fsAddOffset(pFS, iPg, nByte-1, &iNext);
+  rc = fsAddOffset(pFS, pSeg, iPg, nByte-1, &iNext);
   if( pSeg && iNext==pSeg->iLastPg ){
     iNext = 0;
   }else if( rc==LSM_OK ){
-    rc = fsAddOffset(pFS, iNext, 1, &iNext);
+    rc = fsAddOffset(pFS, pSeg, iNext, 1, &iNext);
   }
 
   *piNext = iNext;
   return rc;
 }
 
-static int fsGetPageBefore(FileSystem *pFS, i64 iOff, Pgno *piPrev){
+static int fsGetPageBefore(
+  FileSystem *pFS, 
+  Segment *pSeg, 
+  i64 iOff, 
+  Pgno *piPrev
+){
   u8 aSz[3];
   int rc;
   i64 iRead;
 
-  rc = fsSubtractOffset(pFS, iOff, sizeof(aSz), &iRead);
-  if( rc==LSM_OK ) rc = fsReadData(pFS, iRead, aSz, sizeof(aSz));
+  rc = fsSubtractOffset(pFS, pSeg, iOff, sizeof(aSz), &iRead);
+  if( rc==LSM_OK ) rc = fsReadData(pFS, pSeg, iRead, aSz, sizeof(aSz));
 
   if( rc==LSM_OK ){
     int bFree;
@@ -1468,7 +1591,7 @@ static int fsGetPageBefore(FileSystem *pFS, i64 iOff, Pgno *piPrev){
       nSz = (int)(aSz[2] & 0x7F);
       bFree = 1;
     }
-    rc = fsSubtractOffset(pFS, iOff, nSz, piPrev);
+    rc = fsSubtractOffset(pFS, pSeg, iOff, nSz, piPrev);
   }
 
   return rc;
@@ -1500,6 +1623,7 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
   FileSystem *pFS = pPg->pFS;
   Pgno iPg = pPg->iPg;
 
+  assert( 0==fsSegmentRedirects(pFS, pRun) );
   if( pFS->pCompress ){
     int nSpace = pPg->nCompress + 2*3;
 
@@ -1510,13 +1634,13 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
         if( iPg==pRun->iFirst ){
           iPg = 0;
         }else{
-          rc = fsGetPageBefore(pFS, iPg, &iPg);
+          rc = fsGetPageBefore(pFS, pRun, iPg, &iPg);
         }
       }
 
       nSpace = 0;
       if( iPg!=0 ){
-        rc = fsPageGet(pFS, iPg, 0, ppNext, &nSpace);
+        rc = fsPageGet(pFS, pRun, iPg, 0, ppNext, &nSpace);
         assert( (*ppNext==0)==(rc!=LSM_OK || nSpace>0) );
       }else{
         *ppNext = 0;
@@ -1524,6 +1648,7 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
     }while( nSpace>0 && rc==LSM_OK );
 
   }else{
+    Redirect *pRedir = pRun ? pRun->pRedirect : 0;
     assert( eDir==1 || eDir==-1 );
     if( eDir<0 ){
       if( pRun && iPg==pRun->iFirst ){
@@ -1536,16 +1661,23 @@ int lsmFsDbPageNext(Segment *pRun, Page *pPg, int eDir, Page **ppNext){
         iPg--;
       }
     }else{
-      if( pRun && iPg==pRun->iLastPg ){
-        *ppNext = 0;
-        return LSM_OK;
-      }else if( fsIsLast(pFS, iPg) ){
-        iPg = fsFirstPageOnBlock(pFS, lsmGetU32(&pPg->aData[pFS->nPagesize-4]));
+      if( pRun ){
+        if( iPg==pRun->iLastPg ){
+          *ppNext = 0;
+          return LSM_OK;
+        }
+      }
+
+      if( fsIsLast(pFS, iPg) ){
+        int iBlk = fsRedirectBlock(
+            pRedir, lsmGetU32(&pPg->aData[pFS->nPagesize-4])
+        );
+        iPg = fsFirstPageOnBlock(pFS, iBlk);
       }else{
         iPg++;
       }
     }
-    rc = fsPageGet(pFS, iPg, 0, ppNext, 0);
+    rc = fsPageGet(pFS, pRun, iPg, 0, ppNext, 0);
   }
 
   return rc;
@@ -1593,6 +1725,8 @@ int lsmFsSortedAppend(
   Segment *p = &pLvl->lhs;
   int iPrev = p->iLastPg;
 
+  assert( p->pRedirect==0 );
+
   if( pFS->pCompress || bDefer ){
     /* In compressed database mode the page is not assigned a page number
     ** or location in the database file at this point. This will be done
@@ -1615,7 +1749,7 @@ int lsmFsSortedAppend(
       iApp = findAppendPoint(pFS, pLvl);
     }else if( fsIsLast(pFS, iPrev) ){
       int iNext;
-      rc = fsBlockNext(pFS, fsPageToBlock(pFS, iPrev), &iNext);
+      rc = fsBlockNext(pFS, 0, fsPageToBlock(pFS, iPrev), &iNext);
       if( rc!=LSM_OK ) return rc;
       iApp = fsFirstPageOnBlock(pFS, iNext);
     }else{
@@ -1627,7 +1761,7 @@ int lsmFsSortedAppend(
     if( iApp==0 || fsIsLast(pFS, iApp) ){
       int iNew;                     /* New block number */
 
-      rc = lsmBlockAllocate(pFS->pDb, &iNew);
+      rc = lsmBlockAllocate(pFS->pDb, 0, &iNew);
       if( rc!=LSM_OK ) return rc;
       if( iApp==0 ){
         iApp = fsFirstPageOnBlock(pFS, iNew);
@@ -1638,7 +1772,7 @@ int lsmFsSortedAppend(
 
     /* Grab the new page. */
     pPg = 0;
-    rc = fsPageGet(pFS, iApp, 1, &pPg, 0);
+    rc = fsPageGet(pFS, 0, iApp, 1, &pPg, 0);
     assert( rc==LSM_OK || pPg==0 );
 
     /* If this is the first or last page of a block, fill in the pointer 
@@ -1667,6 +1801,7 @@ int lsmFsSortedAppend(
 int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
   int rc = LSM_OK;
   if( p && p->iLastPg ){
+    assert( p->pRedirect==0 );
 
     /* Check if the last page of this run happens to be the last of a block.
     ** If it is, then an extra block has already been allocated for this run.
@@ -1686,7 +1821,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
       }
     }else if( pFS->pCompress==0 ){
       Page *pLast;
-      rc = fsPageGet(pFS, p->iLastPg, 0, &pLast, 0);
+      rc = fsPageGet(pFS, 0, p->iLastPg, 0, &pLast, 0);
       if( rc==LSM_OK ){
         int iBlk = (int)lsmGetU32(&pLast->aData[pFS->nPagesize-4]);
         lsmBlockRefree(pFS->pDb, iBlk);
@@ -1694,7 +1829,7 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
       }
     }else{
       int iBlk = 0;
-      rc = fsBlockNext(pFS, fsPageToBlock(pFS, p->iLastPg), &iBlk);
+      rc = fsBlockNext(pFS, p, fsPageToBlock(pFS, p->iLastPg), &iBlk);
       if( rc==LSM_OK ){
         lsmBlockRefree(pFS->pDb, iBlk);
       }
@@ -1706,9 +1841,9 @@ int lsmFsSortedFinish(FileSystem *pFS, Segment *p){
 /*
 ** Obtain a reference to page number iPg.
 */
-int lsmFsDbPageGet(FileSystem *pFS, Pgno iPg, Page **ppPg){
+int lsmFsDbPageGet(FileSystem *pFS, Segment *pSeg, Pgno iPg, Page **ppPg){
   assert( pFS );
-  return fsPageGet(pFS, iPg, 0, ppPg, 0);
+  return fsPageGet(pFS, pSeg, iPg, 0, ppPg, 0);
 }
 
 /*
@@ -1723,14 +1858,14 @@ int lsmFsDbPageLast(FileSystem *pFS, Segment *pSeg, Page **ppPg){
     iPg++;
     do {
       nSpace = 0;
-      rc = fsGetPageBefore(pFS, iPg, &iPg);
+      rc = fsGetPageBefore(pFS, pSeg, iPg, &iPg);
       if( rc==LSM_OK ){
-        rc = fsPageGet(pFS, iPg, 0, ppPg, &nSpace);
+        rc = fsPageGet(pFS, pSeg, iPg, 0, ppPg, &nSpace);
       }
     }while( rc==LSM_OK && nSpace>0 );
 
   }else{
-    rc = fsPageGet(pFS, iPg, 0, ppPg, 0);
+    rc = fsPageGet(pFS, pSeg, iPg, 0, ppPg, 0);
   }
   return rc;
 }
@@ -1831,6 +1966,81 @@ int lsmFsPageWritable(Page *pPg){
   return (pPg->flags & PAGE_DIRTY) ? 1 : 0;
 }
 
+static void fsMovePage(
+  FileSystem *pFS, 
+  Segment *pSeg, 
+  int iTo, 
+  int iFrom, 
+  Pgno *piPg
+){
+  Pgno iPg = *piPg;
+  if( iFrom==fsPageToBlock(pFS, iPg) ){
+    const int nPagePerBlock = (
+        pFS->pCompress ? pFS ->nBlocksize : (pFS->nBlocksize / pFS->nPagesize)
+    );
+    *piPg = iPg - (Pgno)(iFrom - iTo) * nPagePerBlock;
+  }
+}
+
+/*
+** Copy the contents of block iFrom to block iTo. 
+**
+** It is safe to assume that there are no outstanding references to pages 
+** on block iTo. And that block iFrom is not currently being written. In
+** other words, the data can be read and written directly.
+*/
+int lsmFsMoveBlock(FileSystem *pFS, Segment *pSeg, int iTo, int iFrom){
+  Snapshot *p = pFS->pDb->pWorker;
+  int rc = LSM_OK;
+
+  i64 iFromOff = (i64)(iFrom-1) * pFS->nBlocksize;
+  i64 iToOff = (i64)(iTo-1) * pFS->nBlocksize;
+  
+  assert( iTo!=1 );
+  assert( iFrom>iTo );
+
+  if( pFS->bUseMmap ){
+    fsGrowMapping(pFS, (i64)iFrom * pFS->nBlocksize, &rc);
+    if( rc==LSM_OK ){
+      u8 *aMap = (u8 *)(pFS->pMap);
+      memcpy(&aMap[iToOff], &aMap[iFromOff], pFS->nBlocksize);
+    }
+  }else{
+    int nSz = pFS->nPagesize;
+    u8 *aData = (u8 *)lsmMallocRc(pFS->pEnv, nSz, &rc);
+    if( rc==LSM_OK ){
+      const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+      int i;
+      for(i=0; rc==LSM_OK && i<nPagePerBlock; i++){
+        i64 iOff = iFromOff + i*nSz;
+        rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, aData, nSz);
+        if( rc==LSM_OK ){
+          iOff = iToOff + i*nSz;
+          rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, aData, nSz);
+        }
+      }
+    }
+  }
+
+  /* Update append-point list if necessary */
+  if( rc==LSM_OK ){
+    int i;
+    for(i=0; i<LSM_APPLIST_SZ; i++){
+      if( fsPageToBlock(pFS, p->aiAppend[i])==iFrom ){
+        const int nPagePerBlock = (pFS->nBlocksize / pFS->nPagesize);
+        p->aiAppend[i] -= (i64)(iFrom-iTo) * nPagePerBlock;
+      }
+    }
+  }
+
+  /* Update the Segment structure itself */
+  fsMovePage(pFS, pSeg, iTo, iFrom, &pSeg->iFirst);
+  fsMovePage(pFS, pSeg, iTo, iFrom, &pSeg->iLastPg);
+  fsMovePage(pFS, pSeg, iTo, iFrom, &pSeg->iRoot);
+
+  return rc;
+}
+
 /*
 ** Append raw data to a segment. This function is only used in compressed
 ** database mode.
@@ -1857,7 +2067,7 @@ static Pgno fsAppendData(
       pSeg->iFirst = iApp = findAppendPoint(pFS, 0);
       if( iApp==0 ){
         int iBlk;
-        rc = lsmBlockAllocate(pFS->pDb, &iBlk);
+        rc = lsmBlockAllocate(pFS->pDb, 0, &iBlk);
         pSeg->iFirst = iApp = fsFirstPageOnBlock(pFS, iBlk);
       }
     }
@@ -1886,7 +2096,7 @@ static Pgno fsAppendData(
 
       if( nWrite>0 ){
         /* Allocate a new block. */
-        rc = lsmBlockAllocate(pFS->pDb, &iBlk);
+        rc = lsmBlockAllocate(pFS->pDb, 0, &iBlk);
 
         /* Set the "next" pointer on the old block */
         if( rc==LSM_OK ){
@@ -1906,7 +2116,8 @@ static Pgno fsAppendData(
       }else{
         /* The next block is already allocated. */
         assert( nRem>0 );
-        rc = fsBlockNext(pFS, fsPageToBlock(pFS, iApp), &iBlk);
+        assert( pSeg->pRedirect==0 );
+        rc = fsBlockNext(pFS, 0, fsPageToBlock(pFS, iApp), &iBlk);
         iRet = iApp = fsFirstPageOnBlock(pFS, iBlk);
       }
 
@@ -1967,7 +2178,8 @@ static int fsAppendPage(
     */
     int iNext;
     int iBlk = fsPageToBlock(pFS, iPrev);
-    rc = fsBlockNext(pFS, iBlk, &iNext);
+    assert( pSeg->pRedirect==0 );
+    rc = fsBlockNext(pFS, 0, iBlk, &iNext);
     if( rc!=LSM_OK ) return rc;
     *piNew = fsFirstPageOnBlock(pFS, iNext);
     *piPrev = iBlk;
@@ -1976,7 +2188,7 @@ static int fsAppendPage(
     if( fsIsLast(pFS, *piNew) ){
       /* Allocate the next block here. */
       int iBlk;
-      rc = lsmBlockAllocate(pFS->pDb, &iBlk);
+      rc = lsmBlockAllocate(pFS->pDb, 0, &iBlk);
       if( rc!=LSM_OK ) return rc;
       *piNext = iBlk;
     }
@@ -2331,14 +2543,14 @@ int lsmInfoArrayStructure(
     if( bBlock ){
       lsmStringAppendf(&str, "%d", iBlk);
       while( iBlk!=iLastBlk ){
-        fsBlockNext(pFS, iBlk, &iBlk);
+        fsBlockNext(pFS, pArray, iBlk, &iBlk);
         lsmStringAppendf(&str, " %d", iBlk);
       }
     }else{
       lsmStringAppendf(&str, "%d", pArray->iFirst);
       while( iBlk!=iLastBlk ){
         lsmStringAppendf(&str, " %d", fsLastPageOnBlock(pFS, iBlk));
-        fsBlockNext(pFS, iBlk, &iBlk);
+        fsBlockNext(pFS, pArray, iBlk, &iBlk);
         lsmStringAppendf(&str, " %d", fsFirstPageOnBlock(pFS, iBlk));
       }
       lsmStringAppendf(&str, " %d", pArray->iLastPg);
@@ -2354,6 +2566,30 @@ int lsmInfoArrayStructure(
   return rc;
 }
 
+int lsmFsSegmentContainsPg(
+  FileSystem *pFS, 
+  Segment *pSeg, 
+  Pgno iPg, 
+  int *pbRes
+){
+  Redirect *pRedir = pSeg->pRedirect;
+  int rc = LSM_OK;
+  int iBlk;
+  int iLastBlk;
+  int iPgBlock;                   /* Block containing page iPg */
+
+  iPgBlock = fsPageToBlock(pFS, pSeg->iFirst);
+  iBlk = fsRedirectBlock(pRedir, fsPageToBlock(pFS, pSeg->iFirst));
+  iLastBlk = fsRedirectBlock(pRedir, fsPageToBlock(pFS, pSeg->iLastPg));
+
+  while( iBlk!=iLastBlk && iBlk!=iPgBlock && rc==LSM_OK ){
+    rc = fsBlockNext(pFS, pSeg, iBlk, &iBlk);
+  }
+
+  *pbRes = (iBlk==iPgBlock);
+  return rc;
+}
+
 /*
 ** This function implements the lsm_info(LSM_INFO_ARRAY_PAGES) request.
 ** If successful, *pzOut is set to point to a nul-terminated string 
@@ -2365,7 +2601,7 @@ int lsmInfoArrayStructure(
 int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut){
   int rc = LSM_OK;
   Snapshot *pWorker;              /* Worker snapshot */
-  Segment *pArray = 0;            /* Array to report on */
+  Segment *pSeg = 0;              /* Array to report on */
   int bUnlock = 0;
 
   *pzOut = 0;
@@ -2381,9 +2617,9 @@ int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut){
   }
 
   /* Search for the array that starts on page iFirst */
-  pArray = findSegment(pWorker, iFirst);
+  pSeg = findSegment(pWorker, iFirst);
 
-  if( pArray==0 ){
+  if( pSeg==0 ){
     /* Could not find the requested array. This is an error. */
     rc = LSM_ERROR;
   }else{
@@ -2392,11 +2628,11 @@ int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut){
     LsmString str;
 
     lsmStringInit(&str, pDb->pEnv);
-    rc = lsmFsDbPageGet(pFS, iFirst, &pPg);
+    rc = lsmFsDbPageGet(pFS, pSeg, iFirst, &pPg);
     while( rc==LSM_OK && pPg ){
       Page *pNext = 0;
       lsmStringAppendf(&str, " %lld", lsmFsPageNumber(pPg));
-      rc = lsmFsDbPageNext(pArray, pPg, 1, &pNext);
+      rc = lsmFsDbPageNext(pSeg, pPg, 1, &pNext);
       lsmFsPageRelease(pPg);
       pPg = pNext;
     }
@@ -2451,27 +2687,29 @@ static void checkBlocks(
   if( pSeg ){
     if( pSeg && pSeg->nSize>0 ){
       int rc;
-      Pgno iLast = pSeg->iLastPg;
-      int iBlk;
-      int iLastBlk;
-      int bLastIsLastOnBlock;
+      int iBlk;                   /* Current block (during iteration) */
+      int iLastBlk;               /* Last block of segment */
+      int iFirstBlk;              /* First block of segment */
+      int bLastIsLastOnBlock;     /* True iLast is the last on its block */
 
-      iBlk = fsPageToBlock(pFS, pSeg->iFirst);
+      assert( 0==fsSegmentRedirects(pFS, pSeg) );
+      iBlk = iFirstBlk = fsPageToBlock(pFS, pSeg->iFirst);
       iLastBlk = fsPageToBlock(pFS, pSeg->iLastPg);
-      bLastIsLastOnBlock = (fsLastPageOnBlock(pFS, iLastBlk)==iLast);
-      assert( iBlk>0 );
 
-      /* If the first page of this run is also the first page of its first
-      ** block, set the flag to indicate that the first page of iBlk is 
-      ** in use.  */
-      if( fsFirstPageOnBlock(pFS, iBlk)==pSeg->iFirst ){
-        assert( (aUsed[iBlk-1] & INTEGRITY_CHECK_FIRST_PG)==0 );
-        aUsed[iBlk-1] |= INTEGRITY_CHECK_FIRST_PG;
-      }
+      bLastIsLastOnBlock = (fsLastPageOnBlock(pFS, iLastBlk)==pSeg->iLastPg);
+      assert( iBlk>0 );
 
       do {
         /* iBlk is a part of this sorted run. */
         aUsed[iBlk-1] |= INTEGRITY_CHECK_USED;
+
+        /* If the first page of this block is also part of the segment,
+        ** set the flag to indicate that the first page of iBlk is in use.  
+        */
+        if( fsFirstPageOnBlock(pFS, iBlk)==pSeg->iFirst || iBlk!=iFirstBlk ){
+          assert( (aUsed[iBlk-1] & INTEGRITY_CHECK_FIRST_PG)==0 );
+          aUsed[iBlk-1] |= INTEGRITY_CHECK_FIRST_PG;
+        }
 
         /* Unless the sorted run finishes before the last page on this block, 
         ** the last page of this block is also in use.  */
@@ -2486,7 +2724,7 @@ static void checkBlocks(
         ** been allocated. So mark it as in use as well.  */
         if( iBlk==iLastBlk && bLastIsLastOnBlock && bExtra ){
           int iExtra = 0;
-          rc = fsBlockNext(pFS, iBlk, &iExtra);
+          rc = fsBlockNext(pFS, pSeg, iBlk, &iExtra);
           assert( rc==LSM_OK );
 
           assert( aUsed[iExtra-1]==0 );
@@ -2501,7 +2739,7 @@ static void checkBlocks(
         if( iBlk==iLastBlk ){
           iBlk = 0;
         }else{
-          rc = fsBlockNext(pFS, iBlk, &iBlk);
+          rc = fsBlockNext(pFS, pSeg, iBlk, &iBlk);
           assert( rc==LSM_OK );
         }
       }while( iBlk );

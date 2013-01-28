@@ -83,6 +83,7 @@ typedef struct MergeInput MergeInput;
 typedef struct MetaPage MetaPage;
 typedef struct MultiCursor MultiCursor;
 typedef struct Page Page;
+typedef struct Redirect Redirect;
 typedef struct Segment Segment;
 typedef struct SegmentMerger SegmentMerger;
 typedef struct ShmChunk ShmChunk;
@@ -144,6 +145,8 @@ int lsmErrorBkpt(int);
 */
 #define LSM_MAX_FREELIST_ENTRIES 24
 
+#define LSM_MAX_BLOCK_REDIRECTS 16
+
 #define LSM_ATTEMPTS_BEFORE_PROTOCOL 10000
 
 
@@ -189,6 +192,14 @@ struct IntArray {
   int nAlloc;
   int nArray;
   u32 *aArray;
+};
+
+struct Redirect {
+  int n;                          /* Number of redirects */
+  struct RedirectEntry {
+    int iFrom;
+    int iTo;
+  } *a;
 };
 
 /*
@@ -310,7 +321,7 @@ struct lsm_db {
   Database *pDatabase;            /* Database shared data */
 
   /* Client transaction context */
-  Snapshot *pClient;              /* Client snapshot (non-NULL in read trans) */
+  Snapshot *pClient;              /* Client snapshot */
   int iReader;                    /* Read lock held (-1 == unlocked) */
   MultiCursor *pCsr;              /* List of all open cursors */
   LogWriter *pLogWriter;          /* Context for writing to the log file */
@@ -323,6 +334,7 @@ struct lsm_db {
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
   Freelist *pFreelist;            /* See sortedNewToplevel() */
   int bUseFreelist;               /* True to use pFreelist */
+  int bIncrMerge;                 /* True if currently doing a merge */
 
   /* Debugging message callback */
   void (*xLog)(void *, int, const char *);
@@ -347,6 +359,8 @@ struct Segment {
   Pgno iLastPg;                    /* Last page of this run */
   Pgno iRoot;                      /* Root page number (if any) */
   int nSize;                       /* Size of this run in pages */
+
+  Redirect *pRedirect;             /* Block redirects (or NULL) */
 };
 
 /*
@@ -514,6 +528,7 @@ struct Snapshot {
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
   i64 iLogOff;                    /* Log file offset */
+  Redirect redirect;              /* Block redirection array */
 
   /* Used by worker snapshots only */
   int nBlock;                     /* Number of blocks in database file */
@@ -654,7 +669,7 @@ void lsmSortedSplitkey(lsm_db *, Level *, int *);
 
 /* Reading sorted run content. */
 int lsmFsDbPageLast(FileSystem *pFS, Segment *pSeg, Page **ppPg);
-int lsmFsDbPageGet(FileSystem *, Pgno, Page **);
+int lsmFsDbPageGet(FileSystem *, Segment *, Pgno, Page **);
 int lsmFsDbPageNext(Segment *, Page *, int eDir, Page **);
 
 u8 *lsmFsPageData(Page *, int *);
@@ -708,6 +723,9 @@ void lsmEnvShmUnmap(lsm_env *, lsm_file *, int);
 void lsmEnvSleep(lsm_env *, int);
 
 int lsmFsReadSyncedId(lsm_db *db, int, i64 *piVal);
+
+int lsmFsSegmentContainsPg(FileSystem *pFS, Segment *, Pgno, int *);
+Pgno lsmFsRedirectPage(FileSystem *, Redirect *, Pgno);
 
 /*
 ** End of functions from "lsm_file.c".
@@ -827,7 +845,7 @@ void lsmDbSnapshotSetLevel(Snapshot *, Level *);
 
 void lsmDbRecoveryComplete(lsm_db *, int);
 
-int lsmBlockAllocate(lsm_db *, int *);
+int lsmBlockAllocate(lsm_db *, int, int *);
 int lsmBlockFree(lsm_db *, int);
 int lsmBlockRefree(lsm_db *, int);
 

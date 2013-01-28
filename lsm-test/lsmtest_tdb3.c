@@ -988,9 +988,10 @@ int test_lsm_lomem_open(
   int bClear, 
   TestDb **ppDb
 ){
+    /* "max_freelist=4 autocheckpoint=32768 " */
   const char *zCfg = 
     "page_size=256 block_size=65536 autoflush=16384 "
-    "max_freelist=2 autocheckpoint=32768 "
+    "autocheckpoint=32768 "
     "mmap=0 "
   ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
@@ -1003,8 +1004,7 @@ int test_lsm_zip_open(
 ){
   const char *zCfg = 
     "page_size=256 block_size=65536 autoflush=16384 "
-    "max_freelist=2 autocheckpoint=32768 compression=1"
-    "mmap=0 "
+    "autocheckpoint=32768 compression=1 mmap=0 "
   ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }

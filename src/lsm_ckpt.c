@@ -68,6 +68,13 @@
 **     8. Cell within page containing current split-key.
 **     9. Current pointer value (64-bits - 2 integers).
 **
+**   The block redirect array:
+**
+**     1. Number of redirections (maximum LSM_MAX_BLOCK_REDIRECTS).
+**     2. For each redirection:
+**        a. "from" block number
+**        b. "to" block number
+**
 **   The in-memory freelist entries. Each entry is either an insert or a
 **   delete. The in-memory freelist is to the free-block-list as the
 **   in-memory tree is to the users database content.
@@ -418,6 +425,13 @@ static int ckptExportSnapshot(
   for(pLevel=lsmDbSnapshotLevel(pSnap); iLevel<nLevel; pLevel=pLevel->pNext){
     ckptExportLevel(pLevel, &ckpt, &iOut, &rc);
     iLevel++;
+  }
+
+  /* Write the block-redirect list */
+  ckptSetValue(&ckpt, iOut++, pSnap->redirect.n, &rc);
+  for(i=0; i<pSnap->redirect.n; i++){
+    ckptSetValue(&ckpt, iOut++, pSnap->redirect.a[i].iFrom, &rc);
+    ckptSetValue(&ckpt, iOut++, pSnap->redirect.a[i].iTo, &rc);
   }
 
   /* Write the freelist */
@@ -908,7 +922,9 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   rc = lsmCheckpointDeserialize(pDb, 1, pShm->aSnap1, &pDb->pWorker);
   if( pDb->pWorker ) pDb->pWorker->pDatabase = pDb->pDatabase;
 
+#if 0
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
+#endif
   return rc;
 }
 
@@ -923,6 +939,7 @@ int lsmCheckpointDeserialize(
 
   pNew = (Snapshot *)lsmMallocZeroRc(pDb->pEnv, sizeof(Snapshot), &rc);
   if( rc==LSM_OK ){
+    Level *pLvl;
     int nFree;
     int i;
     int nLevel = (int)aCkpt[CKPT_HDR_NLEVEL];
@@ -940,8 +957,28 @@ int lsmCheckpointDeserialize(
       pNew->aiAppend[i] = ckptRead64(a);
     }
 
+    /* Read the block-redirect list */
+    pNew->redirect.n = aCkpt[iIn++];
+    if( pNew->redirect.n ){
+      pNew->redirect.a = lsmMallocZeroRc(pDb->pEnv, 
+          (sizeof(struct RedirectEntry) * LSM_MAX_BLOCK_REDIRECTS), &rc
+      );
+      if( rc==LSM_OK ){
+        for(i=0; i<pNew->redirect.n; i++){
+          pNew->redirect.a[i].iFrom = aCkpt[iIn++];
+          pNew->redirect.a[i].iTo = aCkpt[iIn++];
+        }
+      }
+      for(pLvl=pNew->pLevel; pLvl->pNext; pLvl=pLvl->pNext);
+      if( pLvl->nRight ){
+        pLvl->aRhs[pLvl->nRight-1].pRedirect = &pNew->redirect;
+      }else{
+        pLvl->lhs.pRedirect = &pNew->redirect;
+      }
+    }
+
     /* Copy the free-list */
-    if( bInclFreelist ){
+    if( rc==LSM_OK && bInclFreelist ){
       nFree = aCkpt[iIn++];
       if( nFree ){
         pNew->freelist.aEntry = (FreelistEntry *)lsmMallocZeroRc(
@@ -1013,7 +1050,8 @@ int lsmCheckpointSaveWorker(lsm_db *pDb, int bFlush){
   int n = 0;
   int rc;
 
-  rc = ckptExportSnapshot(pDb, bFlush, pSnap->iId+1, 1, &p, &n);
+  pSnap->iId++;
+  rc = ckptExportSnapshot(pDb, bFlush, pSnap->iId, 1, &p, &n);
   if( rc!=LSM_OK ) return rc;
   assert( ckptChecksumOk((u32 *)p) );
 
