@@ -641,7 +641,7 @@ static int collNocaseCmp(
   int nKey1, const void *pKey1,
   int nKey2, const void *pKey2
 ){
-  int r = sqlite4StrNICmp(
+  int r = sqlite4_strnicmp(
       (const char *)pKey1, (const char *)pKey2, (nKey1<nKey2)?nKey1:nKey2);
   UNUSED_PARAMETER(NotUsed);
   if( 0==r ){
@@ -660,7 +660,7 @@ static int collNocaseMkKey(
     u8 *aIn = (u8 *)pKey1;
     u8 *aOut = (u8 *)pKey2;
     for(i=0; i<nIn; i++){
-      aOut[i] = sqlite4UpperToLower[aIn[i]];
+      aOut[i] = sqlite4_tolower(aIn[i]);
     }
   }
   return nIn;

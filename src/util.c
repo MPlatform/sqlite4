@@ -218,34 +218,6 @@ int sqlite4Dequote(char *z){
   return j;
 }
 
-/* Convenient short-hand */
-#define UpperToLower sqlite4UpperToLower
-
-/*
-** Some systems have stricmp().  Others have strcasecmp().  Because
-** there is no consistency, we will define our own.
-**
-** IMPLEMENTATION-OF: R-20522-24639 The sqlite4_strnicmp() API allows
-** applications and extensions to compare the contents of two buffers
-** containing UTF-8 strings in a case-independent fashion, using the same
-** definition of case independence that SQLite uses internally when
-** comparing identifiers.
-*/
-int sqlite4StrICmp(const char *zLeft, const char *zRight){
-  register unsigned char *a, *b;
-  a = (unsigned char *)zLeft;
-  b = (unsigned char *)zRight;
-  while( *a!=0 && UpperToLower[*a]==UpperToLower[*b]){ a++; b++; }
-  return UpperToLower[*a] - UpperToLower[*b];
-}
-int sqlite4_strnicmp(const char *zLeft, const char *zRight, int N){
-  register unsigned char *a, *b;
-  a = (unsigned char *)zLeft;
-  b = (unsigned char *)zRight;
-  while( N-- > 0 && *a!=0 && UpperToLower[*a]==UpperToLower[*b]){ a++; b++; }
-  return N<0 ? 0 : UpperToLower[*a] - UpperToLower[*b];
-}
-
 /*
 ** The string z[] is an text representation of a real number.
 ** Convert this string to a double and write it into *pResult.

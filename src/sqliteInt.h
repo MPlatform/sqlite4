@@ -2554,8 +2554,8 @@ int sqlite4CantopenError(int);
 /*
 ** Internal function prototypes
 */
-int sqlite4StrICmp(const char *, const char *);
 int sqlite4Strlen30(const char*);
+#define sqlite4StrICmp sqlite4_stricmp
 #define sqlite4StrNICmp sqlite4_strnicmp
 
 int sqlite4MallocInit(sqlite4_env*);
