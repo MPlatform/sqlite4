@@ -212,7 +212,7 @@ void sqlite4Update(
 
     /* Resolve the column name on the left of the assignment */
     for(j=0; j<pTab->nCol; j++){
-      if( sqlite4StrICmp(pTab->aCol[j].zName, pChanges->a[i].zName)==0 ) break;
+      if( sqlite4_stricmp(pTab->aCol[j].zName, pChanges->a[i].zName)==0 ) break;
     }
     if( j==pTab->nCol ){
       sqlite4ErrorMsg(pParse, "no such column: %s", pChanges->a[i].zName);

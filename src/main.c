@@ -2014,7 +2014,7 @@ int sqlite4_kvstore_control(
   /* Find the named key-value store */
   for(i=0; i<db->nDb; i++){
     Db *pDb = &db->aDb[i];
-    if( pDb->pKV && (0==zDbName || 0==sqlite4StrICmp(zDbName, pDb->zName)) ){
+    if( pDb->pKV && (0==zDbName || 0==sqlite4_stricmp(zDbName, pDb->zName)) ){
       pKV = pDb->pKV;
       break;
     }

@@ -28,7 +28,7 @@ u8 sqlite4GetBoolean(const char *z){
   }
   n = sqlite4Strlen30(z);
   for(i=0; i<ArraySize(iLength); i++){
-    if( iLength[i]==n && sqlite4StrNICmp(&zText[iOffset[i]],z,n)==0 ){
+    if( iLength[i]==n && sqlite4_strnicmp(&zText[iOffset[i]],z,n)==0 ){
       return iValue[i];
     }
   }
@@ -93,7 +93,7 @@ static int flagPragma(Parse *pParse, const char *zLeft, const char *zRight){
   int i, j;
   const struct sPragmaType *p;
   for(i=0, p=aPragma; i<ArraySize(aPragma); i++, p++){
-    if( sqlite4StrICmp(zLeft, p->zName)==0 ){
+    if( sqlite4_stricmp(zLeft, p->zName)==0 ){
       sqlite4 *db = pParse->db;
       Vdbe *v;
       v = sqlite4GetVdbe(pParse);
@@ -224,15 +224,15 @@ void sqlite4Pragma(
   }else
 #endif /* SQLITE4_OMIT_FLAG_PRAGMAS */
 
-  if( sqlite4StrICmp(zLeft, "lsm_flush")==0 ){
+  if( sqlite4_stricmp(zLeft, "lsm_flush")==0 ){
     sqlite4_kvstore_control(db, zDb, SQLITE4_KVCTRL_LSM_FLUSH, 0);
   }else
 
-  if( sqlite4StrICmp(zLeft, "lsm_checkpoint")==0 ){
+  if( sqlite4_stricmp(zLeft, "lsm_checkpoint")==0 ){
     sqlite4_kvstore_control(db, zDb, SQLITE4_KVCTRL_LSM_CHECKPOINT, 0);
   }else
 
-  if( sqlite4StrICmp(zLeft, "lsm_merge")==0 ){
+  if( sqlite4_stricmp(zLeft, "lsm_merge")==0 ){
     int nPage = zRight ? sqlite4Atoi(zRight) : 1000;
     sqlite4_kvstore_control(db, zDb, SQLITE4_KVCTRL_LSM_MERGE, &nPage);
     returnSingleInt(pParse, "nWrite", (sqlite4_int64)nPage);
@@ -241,7 +241,7 @@ void sqlite4Pragma(
   /*
   **   PRAGMA fts_check(<index>)
   */
-  if( sqlite4StrICmp(zLeft, "fts_check")==0 && zRight ){
+  if( sqlite4_stricmp(zLeft, "fts_check")==0 && zRight ){
     int iCksum1;
     int iCksum2;
     Index *pIdx;
@@ -317,7 +317,7 @@ void sqlite4Pragma(
   ** notnull:    True if 'NOT NULL' is part of column declaration
   ** dflt_value: The default value for the column, if any.
   */
-  if( sqlite4StrICmp(zLeft, "table_info")==0 && zRight ){
+  if( sqlite4_stricmp(zLeft, "table_info")==0 && zRight ){
     Table *pTab;
     if( sqlite4ReadSchema(pParse) ) goto pragma_out;
     pTab = sqlite4FindTable(db, zRight, zDb);
@@ -355,7 +355,7 @@ void sqlite4Pragma(
     }
   }else
 
-  if( sqlite4StrICmp(zLeft, "index_info")==0 && zRight ){
+  if( sqlite4_stricmp(zLeft, "index_info")==0 && zRight ){
     Index *pIdx;
     Table *pTab;
     if( sqlite4ReadSchema(pParse) ) goto pragma_out;
@@ -379,7 +379,7 @@ void sqlite4Pragma(
     }
   }else
 
-  if( sqlite4StrICmp(zLeft, "index_list")==0 && zRight ){
+  if( sqlite4_stricmp(zLeft, "index_list")==0 && zRight ){
     Index *pIdx;
     Table *pTab;
     if( sqlite4ReadSchema(pParse) ) goto pragma_out;
@@ -406,7 +406,7 @@ void sqlite4Pragma(
     }
   }else
 
-  if( sqlite4StrICmp(zLeft, "database_list")==0 ){
+  if( sqlite4_stricmp(zLeft, "database_list")==0 ){
     int i;
     if( sqlite4ReadSchema(pParse) ) goto pragma_out;
     sqlite4VdbeSetNumCols(v, 3);
@@ -425,7 +425,7 @@ void sqlite4Pragma(
     }
   }else
 
-  if( sqlite4StrICmp(zLeft, "collation_list")==0 ){
+  if( sqlite4_stricmp(zLeft, "collation_list")==0 ){
     int i = 0;
     HashElem *p;
     sqlite4VdbeSetNumCols(v, 2);
@@ -442,7 +442,7 @@ void sqlite4Pragma(
 #endif /* SQLITE4_OMIT_SCHEMA_PRAGMAS */
 
 #ifndef SQLITE4_OMIT_FOREIGN_KEY
-  if( sqlite4StrICmp(zLeft, "foreign_key_list")==0 && zRight ){
+  if( sqlite4_stricmp(zLeft, "foreign_key_list")==0 && zRight ){
     FKey *pFK;
     Table *pTab;
     if( sqlite4ReadSchema(pParse) ) goto pragma_out;
@@ -488,7 +488,7 @@ void sqlite4Pragma(
 #endif /* !defined(SQLITE4_OMIT_FOREIGN_KEY) */
 
 #ifndef NDEBUG
-  if( sqlite4StrICmp(zLeft, "parser_trace")==0 ){
+  if( sqlite4_stricmp(zLeft, "parser_trace")==0 ){
     if( zRight ){
       if( sqlite4GetBoolean(zRight) ){
         sqlite4ParserTrace(stderr, "parser: ");
@@ -502,7 +502,7 @@ void sqlite4Pragma(
   /* Reinstall the LIKE and GLOB functions.  The variant of LIKE
   ** used will be case sensitive or not depending on the RHS.
   */
-  if( sqlite4StrICmp(zLeft, "case_sensitive_like")==0 ){
+  if( sqlite4_stricmp(zLeft, "case_sensitive_like")==0 ){
     if( zRight ){
       sqlite4RegisterLikeFunctions(db, sqlite4GetBoolean(zRight));
     }
@@ -536,7 +536,7 @@ void sqlite4Pragma(
   ** new database files created using this database handle. It is only
   ** useful if invoked immediately after the main database i
   */
-  if( sqlite4StrICmp(zLeft, "encoding")==0 ){
+  if( sqlite4_stricmp(zLeft, "encoding")==0 ){
     static const struct EncName {
       char *zName;
       u8 enc;
@@ -573,7 +573,7 @@ void sqlite4Pragma(
         DbHasProperty(db, 0, DB_Empty) 
       ){
         for(pEnc=&encnames[0]; pEnc->zName; pEnc++){
-          if( 0==sqlite4StrICmp(zRight, pEnc->zName) ){
+          if( 0==sqlite4_stricmp(zRight, pEnc->zName) ){
             ENC(pParse->db) = pEnc->enc ? pEnc->enc : SQLITE4_UTF16NATIVE;
             break;
           }
@@ -594,7 +594,7 @@ void sqlite4Pragma(
   ** Return the names of all compile-time options used in this build,
   ** one option per row.
   */
-  if( sqlite4StrICmp(zLeft, "compile_options")==0 ){
+  if( sqlite4_stricmp(zLeft, "compile_options")==0 ){
     int i = 0;
     const char *zOpt;
     sqlite4VdbeSetNumCols(v, 1);
@@ -613,7 +613,7 @@ void sqlite4Pragma(
   **
   ** Print an ascii rendering of the complete content of the database file.
   */
-  if( sqlite4StrICmp(zLeft, "kvdump")==0 ){
+  if( sqlite4_stricmp(zLeft, "kvdump")==0 ){
     sqlite4KVStoreDump(db->aDb[0].pKV);
   }else
 #endif /* SQLITE4_OMIT_COMPILEOPTION_DIAGS */
@@ -623,7 +623,7 @@ void sqlite4Pragma(
   ** Check that for each table, the content of any auxilliary indexes are 
   ** consistent with the primary key index.
   */
-  if( sqlite4StrICmp(zLeft, "integrity_check")==0 ){
+  if( sqlite4_stricmp(zLeft, "integrity_check")==0 ){
     const int baseCsr = 1;        /* Base cursor for OpenAllIndexes() call */
 
     const int regErrcnt = 1;      /* Register containing error count */
@@ -785,7 +785,7 @@ void sqlite4Pragma(
   ** This pragma attempts to free as much memory as possible from the
   ** current database connection.
   */
-  if( sqlite4StrICmp(zLeft, "shrink_memory")==0 ){
+  if( sqlite4_stricmp(zLeft, "shrink_memory")==0 ){
     sqlite4_db_release_memory(db);
   }else
 

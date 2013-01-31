@@ -200,7 +200,7 @@ int sqlite4_complete(const char *zSql){
 #else
           switch( *zSql ){
             case 'c': case 'C': {
-              if( nId==6 && sqlite4StrNICmp(zSql, "create", 6)==0 ){
+              if( nId==6 && sqlite4_strnicmp(zSql, "create", 6)==0 ){
                 token = tkCREATE;
               }else{
                 token = tkOTHER;
@@ -208,11 +208,11 @@ int sqlite4_complete(const char *zSql){
               break;
             }
             case 't': case 'T': {
-              if( nId==7 && sqlite4StrNICmp(zSql, "trigger", 7)==0 ){
+              if( nId==7 && sqlite4_strnicmp(zSql, "trigger", 7)==0 ){
                 token = tkTRIGGER;
-              }else if( nId==4 && sqlite4StrNICmp(zSql, "temp", 4)==0 ){
+              }else if( nId==4 && sqlite4_strnicmp(zSql, "temp", 4)==0 ){
                 token = tkTEMP;
-              }else if( nId==9 && sqlite4StrNICmp(zSql, "temporary", 9)==0 ){
+              }else if( nId==9 && sqlite4_strnicmp(zSql, "temporary", 9)==0 ){
                 token = tkTEMP;
               }else{
                 token = tkOTHER;
@@ -220,11 +220,11 @@ int sqlite4_complete(const char *zSql){
               break;
             }
             case 'e':  case 'E': {
-              if( nId==3 && sqlite4StrNICmp(zSql, "end", 3)==0 ){
+              if( nId==3 && sqlite4_strnicmp(zSql, "end", 3)==0 ){
                 token = tkEND;
               }else
 #ifndef SQLITE4_OMIT_EXPLAIN
-              if( nId==7 && sqlite4StrNICmp(zSql, "explain", 7)==0 ){
+              if( nId==7 && sqlite4_strnicmp(zSql, "explain", 7)==0 ){
                 token = tkEXPLAIN;
               }else
 #endif

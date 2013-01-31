@@ -772,7 +772,7 @@ static int isMatchOfColumn(
   if( pExpr->op!=TK_FUNCTION ){
     return 0;
   }
-  if( sqlite4StrICmp(pExpr->u.zToken,"match")!=0 ){
+  if( sqlite4_stricmp(pExpr->u.zToken,"match")!=0 ){
     return 0;
   }
   pList = pExpr->x.pList;
@@ -1458,7 +1458,7 @@ static int findIndexCol(
     ){
       CollSeq *pColl = sqlite4ExprCollSeq(pParse, p);
       assert( pColl || p->iColumn==-1 );
-      if( 0==pColl || 0==sqlite4StrICmp(pColl->zName, zColl) ){
+      if( 0==pColl || 0==sqlite4_stricmp(pColl->zName, zColl) ){
         return i;
       }
     }

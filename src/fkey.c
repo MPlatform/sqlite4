@@ -241,11 +241,11 @@ static int locateFkeyIndex(
           if( !zDfltColl ){
             zDfltColl = "BINARY";
           }
-          if( sqlite4StrICmp(pIdx->azColl[i], zDfltColl) ) break;
+          if( sqlite4_stricmp(pIdx->azColl[i], zDfltColl) ) break;
 
           zIdxCol = pParent->aCol[iCol].zName;
           for(j=0; j<nCol; j++){
-            if( sqlite4StrICmp(pFKey->aCol[j].zCol, zIdxCol)==0 ){
+            if( sqlite4_stricmp(pFKey->aCol[j].zCol, zIdxCol)==0 ){
               if( aiCol ) aiCol[i] = pFKey->aCol[j].iFrom;
               break;
             }
@@ -868,7 +868,7 @@ int sqlite4FkRequired(
           int iKey;
           for(iKey=0; iKey<pTab->nCol; iKey++){
             Column *pCol = &pTab->aCol[iKey];
-            if( (zKey ? !sqlite4StrICmp(pCol->zName, zKey) : pCol->isPrimKey) ){
+            if( (zKey ? !sqlite4_stricmp(pCol->zName, zKey) : pCol->isPrimKey) ){
               if( aChange[iKey]>=0 ) return 1;
             }
           }

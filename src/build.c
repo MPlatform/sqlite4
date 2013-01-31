@@ -217,7 +217,7 @@ Table *sqlite4FindTable(sqlite4 *db, const char *zName, const char *zDatabase){
   /* All mutexes are required for schema access.  Make sure we hold them. */
   for(i=OMIT_TEMPDB; i<db->nDb; i++){
     int j = (i<2) ? i^1 : i;   /* Search TEMP before MAIN */
-    if( zDatabase!=0 && sqlite4StrICmp(zDatabase, db->aDb[j].zName) ) continue;
+    if( zDatabase!=0 && sqlite4_stricmp(zDatabase, db->aDb[j].zName) ) continue;
     p = sqlite4HashFind(&db->aDb[j].pSchema->tblHash, zName, nName);
     if( p ) break;
   }
@@ -282,7 +282,7 @@ Index *sqlite4FindIndex(sqlite4 *db, const char *zName, const char *zDb){
     int j = (i<2) ? i^1 : i;  /* Search TEMP before MAIN */
     Schema *pSchema = db->aDb[j].pSchema;
     assert( pSchema );
-    if( zDb && sqlite4StrICmp(zDb, db->aDb[j].zName) ) continue;
+    if( zDb && sqlite4_stricmp(zDb, db->aDb[j].zName) ) continue;
     p = sqlite4HashFind(&pSchema->idxHash, zName, nName);
     if( p ) break;
   }
@@ -550,7 +550,7 @@ int sqlite4FindDbName(sqlite4 *db, const char *zName){
     int n = sqlite4Strlen30(zName);
     for(i=(db->nDb-1), pDb=&db->aDb[i]; i>=0; i--, pDb--){
       if( (!OMIT_TEMPDB || i!=1 ) && n==sqlite4Strlen30(pDb->zName) && 
-          0==sqlite4StrICmp(pDb->zName, zName) ){
+          0==sqlite4_stricmp(pDb->zName, zName) ){
         break;
       }
     }
@@ -629,7 +629,7 @@ int sqlite4TwoPartName(
 int sqlite4CheckObjectName(Parse *pParse, const char *zName){
   if( !pParse->db->init.busy && pParse->nested==0 
           && (pParse->db->flags & SQLITE4_WriteSchema)==0
-          && 0==sqlite4StrNICmp(zName, "sqlite_", 7) ){
+          && 0==sqlite4_strnicmp(zName, "sqlite_", 7) ){
     sqlite4ErrorMsg(pParse, "object name reserved for internal use: %s", zName);
     return SQLITE4_ERROR;
   }
@@ -840,7 +840,7 @@ begin_table_error:
 
 /*
 ** This macro is used to compare two strings in a case-insensitive manner.
-** It is slightly faster than calling sqlite4StrICmp() directly, but
+** It is slightly faster than calling sqlite4_stricmp() directly, but
 ** produces larger code.
 **
 ** WARNING: This macro is not compatible with the strcmp() family. It
@@ -849,7 +849,7 @@ begin_table_error:
 #define STRICMP(x, y) (\
 sqlite4UpperToLower[*(unsigned char *)(x)]==   \
 sqlite4UpperToLower[*(unsigned char *)(y)]     \
-&& sqlite4StrICmp((x)+1,(y)+1)==0 )
+&& sqlite4_stricmp((x)+1,(y)+1)==0 )
 
 /*
 ** Add a new column to the table currently being constructed.
@@ -1066,7 +1066,7 @@ void sqlite4AddPrimaryKey(
   }else{
     for(i=0; i<pList->nExpr; i++){
       for(iCol=0; iCol<pTab->nCol; iCol++){
-        if( sqlite4StrICmp(pList->a[i].zName, pTab->aCol[iCol].zName)==0 ){
+        if( sqlite4_stricmp(pList->a[i].zName, pTab->aCol[iCol].zName)==0 ){
           break;
         }
       }
@@ -1083,7 +1083,7 @@ void sqlite4AddPrimaryKey(
 
   if( iCol>=0 && iCol<pTab->nCol
    && (zType = pTab->aCol[iCol].zType)!=0
-   && sqlite4StrICmp(zType, "INTEGER")==0
+   && sqlite4_stricmp(zType, "INTEGER")==0
    && sortOrder==SQLITE4_SO_ASC
    && pPk
   ){
@@ -2047,8 +2047,8 @@ void sqlite4DropTable(Parse *pParse, SrcList *pName, int isView, int noErr){
     }
   }
 #endif
-  if( sqlite4StrNICmp(pTab->zName, "sqlite_", 7)==0 
-    && sqlite4StrNICmp(pTab->zName, "sqlite_stat", 11)!=0 ){
+  if( sqlite4_strnicmp(pTab->zName, "sqlite_", 7)==0 
+    && sqlite4_strnicmp(pTab->zName, "sqlite_stat", 11)!=0 ){
     sqlite4ErrorMsg(pParse, "table %s may not be dropped", pTab->zName);
     goto exit_drop_table;
   }
@@ -2160,7 +2160,7 @@ void sqlite4CreateForeignKey(
     for(i=0; i<nCol; i++){
       int j;
       for(j=0; j<p->nCol; j++){
-        if( sqlite4StrICmp(p->aCol[j].zName, pFromCol->a[i].zName)==0 ){
+        if( sqlite4_stricmp(p->aCol[j].zName, pFromCol->a[i].zName)==0 ){
           pFKey->aCol[i].iFrom = j;
           break;
         }
@@ -2363,7 +2363,7 @@ static Table *createIndexFindTable(
   /* TODO: We will need to reinstate this block when sqlite_master is 
   ** modified to use an implicit primary key.  */
 #if 0
-  if( sqlite4StrNICmp(pTab->zName, "sqlite_", 7)==0 
+  if( sqlite4_strnicmp(pTab->zName, "sqlite_", 7)==0 
        && memcmp(&pTab->zName[7],"altertab_",9)!=0 ){
     sqlite4ErrorMsg(pParse, "table %s may not be indexed", pTab->zName);
     goto exit_create_index;
@@ -2728,7 +2728,7 @@ Index *sqlite4CreateIndex(
     char *zColl;                   /* Collation sequence name */
 
     for(j=0, pTabCol=pTab->aCol; j<pTab->nCol; j++, pTabCol++){
-      if( sqlite4StrICmp(zColName, pTabCol->zName)==0 ) break;
+      if( sqlite4_stricmp(zColName, pTabCol->zName)==0 ) break;
     }
     if( j>=pTab->nCol ){
       sqlite4ErrorMsg(pParse, "table %s has no column named %s",
@@ -2796,7 +2796,7 @@ Index *sqlite4CreateIndex(
         if( pIdx->aiColumn[k]!=pIndex->aiColumn[k] ) break;
         z1 = pIdx->azColl[k];
         z2 = pIndex->azColl[k];
-        if( z1!=z2 && sqlite4StrICmp(z1, z2) ) break;
+        if( z1!=z2 && sqlite4_stricmp(z1, z2) ) break;
       }
       if( k==pIdx->nColumn ){
         if( pIdx->onError!=pIndex->onError ){
@@ -3092,7 +3092,7 @@ int sqlite4IdListIndex(IdList *pList, const char *zName){
   int i;
   if( pList==0 ) return -1;
   for(i=0; i<pList->nId; i++){
-    if( sqlite4StrICmp(pList->a[i].zName, zName)==0 ) return i;
+    if( sqlite4_stricmp(pList->a[i].zName, zName)==0 ) return i;
   }
   return -1;
 }
@@ -3515,7 +3515,7 @@ void sqlite4CodeVerifyNamedSchema(Parse *pParse, const char *zDb){
   int i;
   for(i=0; i<db->nDb; i++){
     Db *pDb = &db->aDb[i];
-    if( pDb->pKV && (!zDb || 0==sqlite4StrICmp(zDb, pDb->zName)) ){
+    if( pDb->pKV && (!zDb || 0==sqlite4_stricmp(zDb, pDb->zName)) ){
       sqlite4CodeVerifySchema(pParse, i);
     }
   }
@@ -3598,7 +3598,7 @@ static int collationMatch(const char *zColl, Index *pIndex){
   for(i=0; i<pIndex->nColumn; i++){
     const char *z = pIndex->azColl[i];
     assert( z!=0 );
-    if( 0==sqlite4StrICmp(z, zColl) ){
+    if( 0==sqlite4_stricmp(z, zColl) ){
       return 1;
     }
   }

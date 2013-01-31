@@ -346,13 +346,13 @@ static const char * const azCompileOpt[] = {
 */
 int sqlite4_compileoption_used(const char *zOptName){
   int i, n;
-  if( sqlite4StrNICmp(zOptName, "SQLITE4_", 8)==0 ) zOptName += 8;
+  if( sqlite4_strnicmp(zOptName, "SQLITE4_", 8)==0 ) zOptName += 8;
   n = sqlite4Strlen30(zOptName);
 
   /* Since ArraySize(azCompileOpt) is normally in single digits, a
   ** linear search is adequate.  No need for a binary search. */
   for(i=0; i<ArraySize(azCompileOpt); i++){
-    if(   (sqlite4StrNICmp(zOptName, azCompileOpt[i], n)==0)
+    if(   (sqlite4_strnicmp(zOptName, azCompileOpt[i], n)==0)
        && ( (azCompileOpt[i][n]==0) || (azCompileOpt[i][n]=='=') ) ) return 1;
   }
   return 0;

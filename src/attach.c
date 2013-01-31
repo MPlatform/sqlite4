@@ -102,7 +102,7 @@ static void attachFunc(
   for(i=0; i<db->nDb; i++){
     char *z = db->aDb[i].zName;
     assert( z && zName );
-    if( sqlite4StrICmp(z, zName)==0 ){
+    if( sqlite4_stricmp(z, zName)==0 ){
       zErrDyn = sqlite4MPrintf(db, "database %s is already in use", zName);
       goto attach_error;
     }
@@ -220,7 +220,7 @@ static void detachFunc(
   for(i=0; i<db->nDb; i++){
     pDb = &db->aDb[i];
     if( pDb->pKV==0 ) continue;
-    if( sqlite4StrICmp(pDb->zName, zName)==0 ) break;
+    if( sqlite4_stricmp(pDb->zName, zName)==0 ) break;
   }
 
   if( i>=db->nDb ){
@@ -422,7 +422,7 @@ int sqlite4FixSrcList(
   for(i=0, pItem=pList->a; i<pList->nSrc; i++, pItem++){
     if( pItem->zDatabase==0 ){
       pItem->zDatabase = sqlite4DbStrDup(pFix->pParse->db, zDb);
-    }else if( sqlite4StrICmp(pItem->zDatabase,zDb)!=0 ){
+    }else if( sqlite4_stricmp(pItem->zDatabase,zDb)!=0 ){
       sqlite4ErrorMsg(pFix->pParse,
          "%s %T cannot reference objects in database %s",
          pFix->zType, pFix->pName, pItem->zDatabase);

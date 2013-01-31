@@ -29,7 +29,7 @@ static unsigned int strHash(const char *z, int nKey){
 }
 
 static int strCmp(const char *z1, const char *z2, int n){
-  return sqlite4StrNICmp(z1, z2, n);
+  return sqlite4_strnicmp(z1, z2, n);
 }
 
 static unsigned int binHash(const char *z, int nKey){

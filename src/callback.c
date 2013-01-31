@@ -270,7 +270,7 @@ static FuncDef *functionSearch(
   FuncDef *p;
   if( nFunc<0 ) nFunc = sqlite4Strlen30(zFunc);
   for(p=pFuncTab->pFirst; p; p=p->pNextName){
-    if( sqlite4StrNICmp(p->zName, zFunc, nFunc)==0 && p->zName[nFunc]==0 ){
+    if( sqlite4_strnicmp(p->zName, zFunc, nFunc)==0 && p->zName[nFunc]==0 ){
       return p;
     }
   }
@@ -299,7 +299,7 @@ void sqlite4FuncDefInsert(
     pFuncTab->pLast = pDef;
     pFuncTab->pSame = pDef;
   }else if( isBuiltIn
-            && sqlite4StrICmp(pDef->zName, pFuncTab->pLast->zName)==0 ){
+            && sqlite4_stricmp(pDef->zName, pFuncTab->pLast->zName)==0 ){
     assert( pFuncTab->pSame->pSameName==0 || pFuncTab->pSame->pSameName==pDef );
     pFuncTab->pSame->pSameName = pDef;
     pFuncTab->pSame = pDef;

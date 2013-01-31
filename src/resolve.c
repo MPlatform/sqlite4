@@ -109,7 +109,7 @@ static int nameInUsingClause(IdList *pUsing, const char *zCol){
   if( pUsing ){
     int k;
     for(k=0; k<pUsing->nId; k++){
-      if( sqlite4StrICmp(pUsing->a[k].zName, zCol)==0 ) return 1;
+      if( sqlite4_stricmp(pUsing->a[k].zName, zCol)==0 ) return 1;
     }
   }
   return 0;
@@ -121,7 +121,7 @@ static int nameInUsingClause(IdList *pUsing, const char *zCol){
 */
 int isRowidReference(Table *pTab, const char *zCol){
   int ret = 0;
-  if( 0==sqlite4StrICmp(zCol, "ROWID") ){
+  if( 0==sqlite4_stricmp(zCol, "ROWID") ){
     /* If the call to FindPrimaryKey() returns NULL, then pTab must be a
     ** sub-select or a view. Neither of these have an IPK.  */
     Index *pPk = sqlite4FindPrimaryKey(pTab, 0);
@@ -202,13 +202,13 @@ static int lookupName(
         if( zTab ){
           if( pItem->zAlias ){
             char *zTabName = pItem->zAlias;
-            if( sqlite4StrICmp(zTabName, zTab)!=0 ) continue;
+            if( sqlite4_stricmp(zTabName, zTab)!=0 ) continue;
           }else{
             char *zTabName = pTab->zName;
-            if( NEVER(zTabName==0) || sqlite4StrICmp(zTabName, zTab)!=0 ){
+            if( NEVER(zTabName==0) || sqlite4_stricmp(zTabName, zTab)!=0 ){
               continue;
             }
-            if( zDb!=0 && sqlite4StrICmp(db->aDb[iDb].zName, zDb)!=0 ){
+            if( zDb!=0 && sqlite4_stricmp(db->aDb[iDb].zName, zDb)!=0 ){
               continue;
             }
           }
@@ -220,7 +220,7 @@ static int lookupName(
           pMatch = pItem;
         }
         for(j=0, pCol=pTab->aCol; j<pTab->nCol; j++, pCol++){
-          if( sqlite4StrICmp(pCol->zName, zCol)==0 ){
+          if( sqlite4_stricmp(pCol->zName, zCol)==0 ){
             /* If there has been exactly one prior match and this match
             ** is for the right-hand table of a NATURAL JOIN or is in a 
             ** USING clause, then skip this match.
@@ -249,10 +249,10 @@ static int lookupName(
       int op = pParse->eTriggerOp;
       Table *pTab = 0;
       assert( op==TK_DELETE || op==TK_UPDATE || op==TK_INSERT );
-      if( op!=TK_DELETE && sqlite4StrICmp("new",zTab) == 0 ){
+      if( op!=TK_DELETE && sqlite4_stricmp("new",zTab) == 0 ){
         pExpr->iTable = 1;
         pTab = pParse->pTriggerTab;
-      }else if( op!=TK_INSERT && sqlite4StrICmp("old",zTab)==0 ){
+      }else if( op!=TK_INSERT && sqlite4_stricmp("old",zTab)==0 ){
         pExpr->iTable = 0;
         pTab = pParse->pTriggerTab;
       }
@@ -263,7 +263,7 @@ static int lookupName(
         cntTab++;
         for(iCol=0; iCol<pTab->nCol; iCol++){
           Column *pCol = &pTab->aCol[iCol];
-          if( sqlite4StrICmp(pCol->zName, zCol)==0 ){
+          if( sqlite4_stricmp(pCol->zName, zCol)==0 ){
             break;
           }
         }
@@ -315,7 +315,7 @@ static int lookupName(
     if( cnt==0 && (pEList = pNC->pEList)!=0 && zTab==0 ){
       for(j=0; j<pEList->nExpr; j++){
         char *zAs = pEList->a[j].zName;
-        if( zAs!=0 && sqlite4StrICmp(zAs, zCol)==0 ){
+        if( zAs!=0 && sqlite4_stricmp(zAs, zCol)==0 ){
           Expr *pOrig;
           assert( pExpr->pLeft==0 && pExpr->pRight==0 );
           assert( pExpr->x.pList==0 );
@@ -451,8 +451,8 @@ static void resolveMatchArg(Parse *pParse, NameContext *pNC, Expr *pExpr){
 
   for(i=0; i<pSrc->nSrc; i++){
     pItem = &pSrc->a[i];
-    if( pItem->zAlias && sqlite4StrICmp(zLhs, pItem->zAlias)==0 ) break;
-    if( pItem->zAlias==0 && sqlite4StrICmp(zLhs, pItem->zName)==0 ) break;
+    if( pItem->zAlias && sqlite4_stricmp(zLhs, pItem->zAlias)==0 ) break;
+    if( pItem->zAlias==0 && sqlite4_stricmp(zLhs, pItem->zName)==0 ) break;
   }
   if( i==pSrc->nSrc ){
     sqlite4ErrorMsg(pParse, "no such table: %s", zLhs);
@@ -480,8 +480,8 @@ static void resolveMatch(Parse *pParse, NameContext *pNC, Expr *pExpr){
 
   for(i=0; i<pSrc->nSrc; i++){
     pItem = &pSrc->a[i];
-    if( pItem->zAlias && sqlite4StrICmp(zLhs, pItem->zAlias)==0 ) break;
-    if( pItem->zAlias==0 && sqlite4StrICmp(zLhs, pItem->zName)==0 ) break;
+    if( pItem->zAlias && sqlite4_stricmp(zLhs, pItem->zAlias)==0 ) break;
+    if( pItem->zAlias==0 && sqlite4_stricmp(zLhs, pItem->zName)==0 ) break;
   }
 
   if( i==pSrc->nSrc ){
@@ -721,7 +721,7 @@ static int resolveAsName(
     char *zCol = pE->u.zToken;
     for(i=0; i<pEList->nExpr; i++){
       char *zAs = pEList->a[i].zName;
-      if( zAs!=0 && sqlite4StrICmp(zAs, zCol)==0 ){
+      if( zAs!=0 && sqlite4_stricmp(zAs, zCol)==0 ){
         return i+1;
       }
     }

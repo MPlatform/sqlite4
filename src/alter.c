@@ -129,7 +129,7 @@ static void renameParentFunc(
       zParent = sqlite4DbStrNDup(db, (const char *)z, n);
       if( zParent==0 ) break;
       sqlite4Dequote(zParent);
-      if( 0==sqlite4StrICmp((const char *)zOld, zParent) ){
+      if( 0==sqlite4_stricmp((const char *)zOld, zParent) ){
         char *zOut = sqlite4MPrintf(db, "%s%.*s\"%w\"", 
             (zOutput?zOutput:""), z-zInput, zInput, (const char *)zNew
         );
@@ -381,7 +381,7 @@ static void reloadTableSchema(Parse *pParse, Table *pTab, const char *zName){
 ** Or, if zName is not a system table, zero is returned.
 */
 static int isSystemTable(Parse *pParse, const char *zName){
-  if( sqlite4Strlen30(zName)>6 && 0==sqlite4StrNICmp(zName, "sqlite_", 7) ){
+  if( sqlite4Strlen30(zName)>6 && 0==sqlite4_strnicmp(zName, "sqlite_", 7) ){
     sqlite4ErrorMsg(pParse, "table %s may not be altered", zName);
     return 1;
   }

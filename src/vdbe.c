@@ -2450,7 +2450,7 @@ case OP_Savepoint: {
     iSave = db->nSavepoint+1;
     for(pSave=db->pSavepoint; pSave; pSave=pSave->pNext){
       if( zSave ){
-        if( pSave->zName && 0==sqlite4StrICmp(zSave, pSave->zName) ) break;
+        if( pSave->zName && 0==sqlite4_stricmp(zSave, pSave->zName) ) break;
       }else{
         if( pSave->pNext==0 ) break;
       }

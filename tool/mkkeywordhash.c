@@ -576,7 +576,7 @@ int main(int argc, char **argv){
          "      n) %% %d;\n", bestSize);
   printf("  for(i=((int)aHash[h])-1; i>=0; i=((int)aNext[i])-1){\n");
   printf("    if( aLen[i]==n &&"
-                   " sqlite4StrNICmp(&zText[aOffset[i]],z,n)==0 ){\n");
+                   " sqlite4_strnicmp(&zText[aOffset[i]],z,n)==0 ){\n");
   for(i=0; i<nKeyword; i++){
     printf("      testcase( i==%d ); /* %s */\n",
            i, aKeywordTable[i].zOrigName);

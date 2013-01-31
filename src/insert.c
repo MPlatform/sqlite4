@@ -783,7 +783,7 @@ void sqlite4Insert(
     for(i=0; i<pColumn->nId; i++){
       char *zTest = pColumn->a[i].zName;
       for(j=0; j<pTab->nCol; j++){
-        if( sqlite4StrICmp(zTest, pTab->aCol[j].zName)==0 ){
+        if( sqlite4_stricmp(zTest, pTab->aCol[j].zName)==0 ){
           pColumn->a[i].idx = j;
           break;
         }
@@ -1539,7 +1539,7 @@ static int xferCompatibleCollation(const char *z1, const char *z2){
   if( z2==0 ){
     return 0;
   }
-  return sqlite4StrICmp(z1, z2)==0;
+  return sqlite4_stricmp(z1, z2)==0;
 }
 
 

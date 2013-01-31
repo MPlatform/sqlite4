@@ -152,7 +152,7 @@ int sqlite4JoinType(Parse *pParse, Token *pA, Token *pB, Token *pC){
     p = apAll[i];
     for(j=0; j<ArraySize(aKeyword); j++){
       if( p->n==aKeyword[j].nChar 
-          && sqlite4StrNICmp((char*)p->z, &zKeyText[aKeyword[j].i], p->n)==0 ){
+          && sqlite4_strnicmp((char*)p->z, &zKeyText[aKeyword[j].i], p->n)==0 ){
         jointype |= aKeyword[j].code;
         break;
       }
@@ -189,7 +189,7 @@ int sqlite4JoinType(Parse *pParse, Token *pA, Token *pB, Token *pC){
 static int columnIndex(Table *pTab, const char *zCol){
   int i;
   for(i=0; i<pTab->nCol; i++){
-    if( sqlite4StrICmp(pTab->aCol[i].zName, zCol)==0 ) return i;
+    if( sqlite4_stricmp(pTab->aCol[i].zName, zCol)==0 ) return i;
   }
   return -1;
 }
@@ -1325,7 +1325,7 @@ static int selectColumnsFromExprList(
     */
     nName = sqlite4Strlen30(zName);
     for(j=cnt=0; j<i; j++){
-      if( sqlite4StrICmp(aCol[j].zName, zName)==0 ){
+      if( sqlite4_stricmp(aCol[j].zName, zName)==0 ){
         char *zNewName;
         zName[nName] = 0;
         zNewName = sqlite4MPrintf(db, "%s:%d", zName, ++cnt);
@@ -3123,9 +3123,9 @@ static u8 minMaxQuery(Select *p){
   if( pEList==0 || pEList->nExpr!=1 ) return 0;
   if( pEList->a[0].pExpr->op!=TK_AGG_COLUMN ) return WHERE_ORDERBY_NORMAL;
   assert( !ExprHasProperty(pExpr, EP_IntValue) );
-  if( sqlite4StrICmp(pExpr->u.zToken,"min")==0 ){
+  if( sqlite4_stricmp(pExpr->u.zToken,"min")==0 ){
     return WHERE_ORDERBY_MIN;
-  }else if( sqlite4StrICmp(pExpr->u.zToken,"max")==0 ){
+  }else if( sqlite4_stricmp(pExpr->u.zToken,"max")==0 ){
     return WHERE_ORDERBY_MAX;
   }
   return WHERE_ORDERBY_NORMAL;
@@ -3144,7 +3144,7 @@ int sqlite4IndexedByLookup(Parse *pParse, SrcListItem *pFrom){
     char *zIndex = pFrom->zIndex;
     Index *pIdx;
     for(pIdx=pTab->pIndex; 
-        pIdx && sqlite4StrICmp(pIdx->zName, zIndex); 
+        pIdx && sqlite4_stricmp(pIdx->zName, zIndex); 
         pIdx=pIdx->pNext
     );
     if( !pIdx ){
@@ -3321,7 +3321,7 @@ static int selectExpander(Walker *pWalker, Select *p){
             zTabName = pTab->zName;
           }
           if( db->mallocFailed ) break;
-          if( zTName && sqlite4StrICmp(zTName, zTabName)!=0 ){
+          if( zTName && sqlite4_stricmp(zTName, zTabName)!=0 ){
             continue;
           }
           tableSeen = 1;

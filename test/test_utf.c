@@ -103,7 +103,7 @@ static u8 name_to_enc(Tcl_Interp *interp, Tcl_Obj *pObj){
   struct EncName *pEnc;
   char *z = Tcl_GetString(pObj);
   for(pEnc=&encnames[0]; pEnc->zName; pEnc++){
-    if( 0==sqlite4StrICmp(z, pEnc->zName) ){
+    if( 0==sqlite4_stricmp(z, pEnc->zName) ){
       break;
     }
   }

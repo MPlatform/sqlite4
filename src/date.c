@@ -328,7 +328,7 @@ static int parseDateOrTime(
     return 0;
   }else if( parseHhMmSs(zDate, p)==0 ){
     return 0;
-  }else if( sqlite4StrICmp(zDate,"now")==0){
+  }else if( sqlite4_stricmp(zDate,"now")==0){
     return setDateTimeToCurrent(context, p);
   }else if( sqlite4AtoF(zDate, &r, sqlite4Strlen30(zDate), SQLITE4_UTF8) ){
     p->iJD = (sqlite4_int64)(r*86400000.0 + 0.5);

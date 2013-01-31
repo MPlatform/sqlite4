@@ -57,7 +57,7 @@ Trigger *sqlite4TriggerList(Parse *pParse, Table *pTab){
     for(p=sqliteHashFirst(&pTmpSchema->trigHash); p; p=sqliteHashNext(p)){
       Trigger *pTrig = (Trigger *)sqliteHashData(p);
       if( pTrig->pTabSchema==pTab->pSchema
-       && 0==sqlite4StrICmp(pTrig->table, pTab->zName) 
+       && 0==sqlite4_stricmp(pTrig->table, pTab->zName) 
       ){
         pTrig->pNext = (pList ? pList : pTab->pTrigger);
         pList = pTrig;
@@ -190,7 +190,7 @@ void sqlite4BeginTrigger(
   }
 
   /* Do not create a trigger on a system table */
-  if( sqlite4StrNICmp(pTab->zName, "sqlite_", 7)==0 ){
+  if( sqlite4_strnicmp(pTab->zName, "sqlite_", 7)==0 ){
     sqlite4ErrorMsg(pParse, "cannot create trigger on system table");
     pParse->nErr++;
     goto trigger_cleanup;
@@ -502,7 +502,7 @@ void sqlite4DropTrigger(Parse *pParse, SrcList *pName, int noErr){
   nName = sqlite4Strlen30(zName);
   for(i=OMIT_TEMPDB; i<db->nDb; i++){
     int j = (i<2) ? i^1 : i;  /* Search TEMP before MAIN */
-    if( zDb && sqlite4StrICmp(db->aDb[j].zName, zDb) ) continue;
+    if( zDb && sqlite4_stricmp(db->aDb[j].zName, zDb) ) continue;
     pTrigger = sqlite4HashFind(&(db->aDb[j].pSchema->trigHash), zName, nName);
     if( pTrigger ) break;
   }

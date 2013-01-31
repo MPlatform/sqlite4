@@ -720,7 +720,7 @@ static int fts5NextTokenOrPhrase(
     if( pParse->next.eType==TOKEN_COLON ){
       int iCol;
       for(iCol=0; iCol<pParse->nCol; iCol++){
-        if( sqlite4StrNICmp(pParse->azCol[iCol], t.z, t.n)==0 ) break;
+        if( sqlite4_strnicmp(pParse->azCol[iCol], t.z, t.n)==0 ) break;
       }
       if( iCol==pParse->nCol ){
         pParse->zErr = sqlite4MPrintf(pParse->db, 
@@ -1036,7 +1036,7 @@ static int fts5ParseExpression(
 static Fts5Tokenizer *fts5FindTokenizer(sqlite4 *db, const char *zName){
   Fts5Tokenizer *p;
   for(p=db->pTokenizer; p; p=p->pNext){
-    if( 0==sqlite4StrICmp(zName, p->zName) ) break;
+    if( 0==sqlite4_stricmp(zName, p->zName) ) break;
   }
   return p;
 }
@@ -1151,7 +1151,7 @@ void sqlite4Fts5IndexInit(Parse *pParse, Index *pIdx, ExprList *pArgs){
       char *zArg = pArgs->a[i].zName;
       char *zVal = pArgs->a[i].pExpr->u.zToken;
 
-      if( zArg && sqlite4StrICmp(zArg, "tokenizer")==0 ){
+      if( zArg && sqlite4_stricmp(zArg, "tokenizer")==0 ){
         /* zVal is the name of the tokenizer to use. Any subsequent arguments
          ** that do not contain assignment operators (=) are also passed to
          ** the tokenizer. Figure out how many bytes of space are required for

@@ -1708,18 +1708,18 @@ static void testFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
   while( argc>=2 ){
     const char *zArg0 = (char*)sqlite4_value_text(argv[0]);
     if( zArg0 ){
-      if( 0==sqlite4StrICmp(zArg0, "int") ){
+      if( 0==sqlite4_stricmp(zArg0, "int") ){
         sqlite4_result_int(context, sqlite4_value_int(argv[1]));
-      }else if( sqlite4StrICmp(zArg0,"int64")==0 ){
+      }else if( sqlite4_stricmp(zArg0,"int64")==0 ){
         sqlite4_result_int64(context, sqlite4_value_int64(argv[1]));
-      }else if( sqlite4StrICmp(zArg0,"string")==0 ){
+      }else if( sqlite4_stricmp(zArg0,"string")==0 ){
         sqlite4_result_text(context, (char*)sqlite4_value_text(argv[1]), -1,
             SQLITE4_TRANSIENT);
-      }else if( sqlite4StrICmp(zArg0,"double")==0 ){
+      }else if( sqlite4_stricmp(zArg0,"double")==0 ){
         sqlite4_result_double(context, sqlite4_value_double(argv[1]));
-      }else if( sqlite4StrICmp(zArg0,"null")==0 ){
+      }else if( sqlite4_stricmp(zArg0,"null")==0 ){
         sqlite4_result_null(context);
-      }else if( sqlite4StrICmp(zArg0,"value")==0 ){
+      }else if( sqlite4_stricmp(zArg0,"value")==0 ){
         sqlite4_result_value(context, argv[sqlite4_value_int(argv[1])]);
       }else{
         goto error_out;
