@@ -97,11 +97,13 @@ typedef struct TreeHeader TreeHeader;
 typedef struct TreeMark TreeMark;
 typedef struct TreeRoot TreeRoot;
 
+#ifndef _SQLITEINT_H_
 typedef unsigned char u8;
 typedef unsigned short int u16;
 typedef unsigned int u32;
 typedef lsm_i64 i64;
 typedef unsigned long long int u64;
+#endif
 
 /* A page number is a 64-bit integer. */
 typedef i64 Pgno;
