@@ -806,7 +806,7 @@ as possible and optimized for search queries.
        overhead), it is marked as "old" and a new "live" in-memory tree 
        created. An old in-memory tree is immutable - new data is always
        inserted into the live tree. There may be at most one old tree
-       in memory at any time.
+       in memory at a time.
 
   <li> <p>
        The contents of an old in-memory tree may be written into the 
@@ -818,8 +818,8 @@ as possible and optimized for search queries.
        segments.
 
   <li> <p>
-       At any point, two or more existing segments within the database may
-       be merged together into a single segment. Once their contents has
+       At any point, two or more existing segments within the database file
+       may be merged together into a single segment. Once their contents has
        been merged into the new segment, the original segments may be 
        discarded.
 
@@ -827,8 +827,8 @@ as possible and optimized for search queries.
        After the set of segments in a database file has been modified (either
        by flushing an in-memory tree to disk or by merging existing segments
        together), the changes may be made persistent by "checkpointing" the 
-       database. Checkpointing involves syncing the contents of the database
-       file to disk and updating the database file header.
+       database. Checkpointing involves updating the database file header and
+       and (usually) syncing the contents of the database file to disk.
 </ol>
 
 <p>Steps 3 and 4 above are known as "working" on the database. Step 5 is
@@ -998,8 +998,7 @@ parameters.
 
     <p>If this option is set to false and there is already a connection to the
     database from another process when lsm_open() is called, the lsm_open()
-    call fails with error code LSM_BUSY. <span style=color:red>todo: It 
-    doesn't actually do this yet. But it should...</span>
+    call fails with error code LSM_BUSY.
 
   <dt> <a href=lsmapi.wiki#LSM_CONFIG_SAFETY>LSM_CONFIG_SAFETY</a>
   <dd> <p style=margin-top:0>
@@ -1303,6 +1302,9 @@ example:
 <verbatim>
   rc = lsm_work(db, 1, -1, 0);
 </verbatim>
+
+<p><span style=color:red>todo: the -1 as the 3rd argument above is currently
+not supported</span>
 
 <p>When optimizing the database as above, either the LSM_CONFIG_AUTOCHECKPOINT
 parameter should be set to a non-zero value or lsm_checkpoint() should be

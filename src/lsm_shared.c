@@ -34,6 +34,12 @@ static struct SharedData {
 ** list starting at global variable gShared.pDatabase. Database objects are 
 ** reference counted. Once the number of connections to the associated
 ** database drops to zero, they are removed from the linked list and deleted.
+**
+** pFile:
+**   In multi-process mode, this file descriptor is used to obtain locks 
+**   and to access shared-memory. In single process mode, its only job is
+**   to hold the exclusive lock on the file.
+**   
 */
 struct Database {
   /* Protected by the global mutex (enterGlobalMutex/leaveGlobalMutex): */
@@ -43,6 +49,7 @@ struct Database {
   Database *pDbNext;              /* Next Database structure in global list */
 
   /* Protected by the local mutex (pClientMutex) */
+  int bMultiProc;                 /* True if running in multi-process mode */
   lsm_file *pFile;                /* Used for locks/shm in multi-proc mode */
   LsmFile *pLsmFile;              /* List of deferred closes */
   lsm_mutex *pClientMutex;        /* Protects the apShmChunk[] and pConn */
@@ -269,7 +276,7 @@ static void doDbDisconnect(lsm_db *pDb){
         Database *p = pDb->pDatabase;
         dbTruncateFile(pDb);
         lsmFsCloseAndDeleteLog(pDb->pFS);
-        if( p->pFile ) lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
+        if( p->pFile && p->bMultiProc ) lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
       }
     }
   }
@@ -318,13 +325,17 @@ static int doDbConnect(lsm_db *pDb){
     rc = LSM_OK;
   }
 
-  /* Take a shared lock on DMS2. This lock "cannot" fail, as connections 
-  ** may only hold an exclusive lock on DMS2 if they first hold an exclusive
-  ** lock on DMS1. And this connection is currently holding the exclusive
-  ** lock on DSM1.  */
+  /* Take a shared lock on DMS2. In multi-process mode this lock "cannot" 
+  ** fail, as connections may only hold an exclusive lock on DMS2 if they 
+  ** first hold an exclusive lock on DMS1. And this connection is currently 
+  ** holding the exclusive lock on DSM1. 
+  **
+  ** However, if some other connection has the database open in single-process
+  ** mode, this operation will fail. In this case, return the error to the
+  ** caller - the attempt to connect to the db has failed.
+  */
   if( rc==LSM_OK ){
     rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_SHARED, 0);
-    assert( rc!=LSM_BUSY );
   }
 
   /* If anything went wrong, unlock DMS2. Unlock DMS1 in any case. */
@@ -363,7 +374,7 @@ int lsmDbDatabaseConnect(
   if( rc==LSM_OK ){
 
     /* Search the global list for an existing object. TODO: Need something
-    ** better than the strcmp() below to figure out if a given Database
+    ** better than the memcmp() below to figure out if a given Database
     ** object represents the requested file.  */
     for(p=gShared.pDatabase; p; p=p->pDbNext){
       if( nName==p->nName && 0==memcmp(zName, p->zName, nName) ) break;
@@ -376,16 +387,21 @@ int lsmDbDatabaseConnect(
       /* If the allocation was successful, fill in other fields and
       ** allocate the client mutex. */ 
       if( rc==LSM_OK ){
+        p->bMultiProc = pDb->bMultiProc;
         p->zName = (char *)&p[1];
         p->nName = nName;
         memcpy((void *)p->zName, zName, nName+1);
         rc = lsmMutexNew(pEnv, &p->pClientMutex);
       }
 
-      /* If running in multi-process mode and nothing has gone wrong so far,
-      ** open the shared fd */
-      if( rc==LSM_OK && pDb->bMultiProc ){
+      /* If nothing has gone wrong so far, open the shared fd. And if that
+      ** succeeds and this connection requested single-process mode, 
+      ** attempt to take the exclusive lock on DMS2.  */
+      if( rc==LSM_OK ){
         rc = lsmEnvOpen(pDb->pEnv, p->zName, &p->pFile);
+      }
+      if( rc==LSM_OK && p->bMultiProc==0 ){
+        rc = lsmEnvLock(pDb->pEnv, p->pFile, LSM_LOCK_DMS2, LSM_LOCK_EXCL);
       }
 
       if( rc==LSM_OK ){
@@ -460,34 +476,33 @@ void lsmDbDatabaseRelease(lsm_db *pDb){
     lsmMutexEnter(pDb->pEnv, p->pClientMutex);
     for(ppDb=&p->pConn; *ppDb!=pDb; ppDb=&((*ppDb)->pNext));
     *ppDb = pDb->pNext;
-    if( lsmDbMultiProc(pDb) ){
-      dbDeferClose(pDb);
-    }
+    dbDeferClose(pDb);
     lsmMutexLeave(pDb->pEnv, p->pClientMutex);
 
     enterGlobalMutex(pDb->pEnv);
     p->nDbRef--;
     if( p->nDbRef==0 ){
+      LsmFile *pIter;
+      LsmFile *pNext;
       Database **pp;
 
       /* Remove the Database structure from the linked list. */
       for(pp=&gShared.pDatabase; *pp!=p; pp=&((*pp)->pDbNext));
       *pp = p->pDbNext;
 
-      /* Free the Database object and shared memory buffers. */
-      if( p->pFile==0 ){
+      /* If they were allocated from the heap, free the shared memory chunks */
+      if( p->bMultiProc==0 ){
         int i;
         for(i=0; i<p->nShmChunk; i++){
           lsmFree(pDb->pEnv, p->apShmChunk[i]);
         }
-      }else{
-        LsmFile *pIter;
-        LsmFile *pNext;
-        for(pIter=p->pLsmFile; pIter; pIter=pNext){
-          pNext = pIter->pNext;
-          lsmEnvClose(pDb->pEnv, pIter->pFile);
-          lsmFree(pDb->pEnv, pIter);
-        }
+      }
+
+      /* Close any outstanding file descriptors */
+      for(pIter=p->pLsmFile; pIter; pIter=pNext){
+        pNext = pIter->pNext;
+        lsmEnvClose(pDb->pEnv, pIter->pFile);
+        lsmFree(pDb->pEnv, pIter);
       }
       freeDatabase(pDb->pEnv, p);
     }
@@ -1295,7 +1310,7 @@ int lsmReleaseReadlock(lsm_db *db){
 ** multi-process mode, or false otherwise.
 */
 int lsmDbMultiProc(lsm_db *pDb){
-  return pDb->pDatabase && (pDb->pDatabase->pFile!=0);
+  return pDb->pDatabase && pDb->pDatabase->bMultiProc;
 }
 
 
@@ -1353,7 +1368,7 @@ int lsmShmCacheChunks(lsm_db *db, int nChunk){
     for(i=db->nShm; rc==LSM_OK && i<nChunk; i++){
       if( i>=p->nShmChunk ){
         void *pChunk = 0;
-        if( p->pFile==0 ){
+        if( p->bMultiProc==0 ){
           /* Single process mode */
           pChunk = lsmMallocZeroRc(pEnv, LSM_SHM_CHUNK_SIZE, &rc);
         }else{
@@ -1375,6 +1390,14 @@ int lsmShmCacheChunks(lsm_db *db, int nChunk){
     lsmMutexLeave(pEnv, p->pClientMutex);
   }
 
+  return rc;
+}
+
+static int lockSharedFile(lsm_env *pEnv, Database *p, int iLock, int eOp){
+  int rc = LSM_OK;
+  if( p->bMultiProc ){
+    rc = lsmEnvLock(pEnv, p->pFile, iLock, eOp);
+  }
   return rc;
 }
 
@@ -1431,7 +1454,7 @@ int lsmShmLock(
     switch( eOp ){
       case LSM_LOCK_UNLOCK:
         if( nShared==0 ){
-          lsmEnvLock(db->pEnv, p->pFile, iLock, LSM_LOCK_UNLOCK);
+          lockSharedFile(db->pEnv, p, iLock, LSM_LOCK_UNLOCK);
         }
         db->mLock &= ~(me|ms);
         break;
@@ -1441,7 +1464,7 @@ int lsmShmLock(
           rc = LSM_BUSY;
         }else{
           if( nShared==0 ){
-            rc = lsmEnvLock(db->pEnv, p->pFile, iLock, LSM_LOCK_SHARED);
+            rc = lockSharedFile(db->pEnv, p, iLock, LSM_LOCK_SHARED);
           }
           db->mLock |= ms;
           db->mLock &= ~me;
@@ -1453,7 +1476,7 @@ int lsmShmLock(
         if( nExcl || nShared ){
           rc = LSM_BUSY;
         }else{
-          rc = lsmEnvLock(db->pEnv, p->pFile, iLock, LSM_LOCK_EXCL);
+          rc = lockSharedFile(db->pEnv, p, iLock, LSM_LOCK_EXCL);
           db->mLock |= (me|ms);
         }
         break;

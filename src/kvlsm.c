@@ -453,7 +453,8 @@ int sqlite4KVStoreOpenLsm(
       const char *zParam;
       int eParam;
     } aConfig[] = {
-      { "lsm_block_size", LSM_CONFIG_BLOCK_SIZE }
+      { "lsm_block_size", LSM_CONFIG_BLOCK_SIZE },
+      { "lsm_multiple_processes", LSM_CONFIG_MULTIPLE_PROCESSES }
     };
 
     memset(pNew, 0, sizeof(KVLsm));
