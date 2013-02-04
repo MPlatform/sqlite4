@@ -154,9 +154,59 @@
 #include <fcntl.h>
 
 /*
+** An object of this type provides an abstraction supporting the two 
+** different mmap() strategies. See the fsMmapXXX() methods below for
+** details.
+*/
+typedef struct MmapMgr MmapMgr;
+typedef struct MmapMgrRef MmapMgrRef;
+
+struct MmapMgr {
+  int eUseMmap;                   /* LSM_MMAP_XXX mode */
+  int nRef;                       /* Number of outstanding fsMmapRef() calls */
+
+  /* Used when eUseMmap==LSM_MMAP_FULL */
+  void *pMap;                     /* Current mapping of database file */
+  i64 nMap;                       /* Bytes mapped at pMap */
+
+  /* Used when eUseMmap==LSM_MMAP_LIMITED */
+  int nEntry;                     /* Total number of currently mapped blocks */
+  int nMapsz;                     /* Size of each mapping (default 1MB) */
+  int nMaphash;                   /* Size of apHash[] in entries */
+  MmapMgrRef **apHash;            /* Hash table of existing mappings */
+  MmapMgrRef *pAll;               /* Linked list of all mappings */
+  MmapMgrRef *pLast;              /* Last element in pAll list */
+};
+
+struct MmapMgrRef {
+  void *pMap;                     /* Pointer to mapped memory */
+  int nRef;                       /* Number of refs to this mapping */
+  int iMap;                       /* Mapping number */
+  MmapMgrRef *pNextHash;          /* Next mapped block with same hash key */
+  MmapMgrRef *pNextAll;           /* Next mapped block in pAll list */
+  MmapMgrRef *pPrevAll;           /* Previous mapped block in pAll list */
+};
+
+#define LSM_MAPPED_BLOCKS 16
+
+/*
 ** File-system object. Each database connection allocates a single instance
 ** of the following structure. It is used for all access to the database and
 ** log files.
+**
+** eUseMmap:
+**   This variable determines whether or not, and how, the lsm_env.xMap() is 
+**   used to access the database file. It may be set to 0, 1 or 2. As follows:
+**
+**     0 - xMap() is not used at all.
+**
+**     1 - xMap() is used to map the entire database file.
+**
+**     2 - xMap() is used map 1MB blocks of the database file as required.
+**         The library attempts to limit the number of mapped blocks to
+**         LSM_MAPPED_BLOCKS at a time. This mode is intended for use on
+**         32-bit platforms where mapping the entire database file may
+**         not be possible due to the limited address space available.
 **
 ** pLruFirst, pLruLast:
 **   The first and last entries in a doubly-linked list of pages. The 
@@ -194,10 +244,8 @@ struct FileSystem {
   u8 *aOBuffer;                   /* Buffer to uncompress from */
   int nBuffer;                    /* Allocated size of aBuffer[] in bytes */
 
-  /* mmap() mode things */
-  int bUseMmap;                   /* True to use mmap() to access db file */
-  void *pMap;                     /* Current mapping of database file */
-  i64 nMap;                       /* Bytes mapped at pMap */
+  /* State variables used in mmap() mode. */
+  MmapMgr mmapmgr;
   Page *pFree;
 
   Page *pWaiting;                 /* b-tree pages waiting to be written */
@@ -232,6 +280,7 @@ struct FileSystem {
 struct Page {
   u8 *aData;                      /* Buffer containing page data */
   int nData;                      /* Bytes of usable data at aData[] */
+  MmapMgrRef *pRef;               /* Mapping manager reference token */
   Pgno iPg;                       /* Page number */
   int nRef;                       /* Number of outstanding references */
   int flags;                      /* Combination of PAGE_XXX flags */
@@ -257,6 +306,7 @@ struct MetaPage {
   int iPg;                        /* Either 1 or 2 */
   int bWrite;                     /* Write back to db file on release */
   u8 *aData;                      /* Pointer to buffer */
+  MmapMgrRef *pRef;               /* Mmap manager reference token */
   FileSystem *pFS;                /* FileSystem that owns this page */
 };
 
@@ -339,6 +389,7 @@ static int lsmEnvTruncate(lsm_env *pEnv, lsm_file *pFile, lsm_i64 nByte){
 static int lsmEnvUnlink(lsm_env *pEnv, const char *zDel){
   return IOERR_WRAPPER( pEnv->xUnlink(pEnv, zDel) );
 }
+#if 0
 static int lsmEnvRemap(
   lsm_env *pEnv, 
   lsm_file *pFile, 
@@ -347,6 +398,25 @@ static int lsmEnvRemap(
   i64 *pszMap
 ){
   return pEnv->xRemap(pFile, szMin, ppMap, pszMap);
+}
+#endif
+static void lsmEnvUnmap(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  void *pMap, 
+  lsm_i64 nMap
+){
+  pEnv->xUnmap(pFile, pMap, nMap);
+}
+static int lsmEnvMap(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  i64 iOff,
+  i64 szMin,
+  void **ppMap,
+  i64 *pszMap
+){
+  return pEnv->xMap(pFile, iOff, szMin, ppMap, pszMap);
 }
 
 int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock){
@@ -433,7 +503,7 @@ int lsmFsCloseAndDeleteLog(FileSystem *pFS){
   char *zDel;
 
   if( pFS->fdLog ){
-    lsmEnvClose(pFS->pEnv, pFS->fdLog );
+    lsmEnvClose(pFS->pEnv, pFS->fdLog);
     pFS->fdLog = 0;
   }
 
@@ -467,6 +537,249 @@ static lsm_file *fsOpenFile(
     *pRc = lsmEnvOpen(pFS->pEnv, (bLog ? pFS->zLog : pFS->zDb), &pFile);
   }
   return pFile;
+}
+
+
+static void fsGrowMapping(
+  FileSystem *pFS,
+  i64 iSz,
+  int *pRc
+){
+  MmapMgr *p = &pFS->mmapmgr;
+
+  /* This function won't work with compressed databases yet. */
+  assert( pFS->pCompress==0 );
+  assert( PAGE_HASPREV==4 );
+  assert( p->eUseMmap==LSM_MMAP_FULL );
+
+  if( *pRc==LSM_OK && iSz>p->nMap ){
+    int rc;
+    u8 *aOld = p->pMap;
+    if( aOld ){
+      lsmEnvUnmap(pFS->pEnv, pFS->fdDb, aOld, p->nMap);
+      p->pMap = 0;
+    }
+    rc = lsmEnvMap(pFS->pEnv, pFS->fdDb, 0, iSz, &p->pMap, &p->nMap);
+
+    if( rc==LSM_OK && p->pMap!=aOld ){
+      Page *pFix;
+      i64 iOff = (u8 *)p->pMap - aOld;
+      for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
+        pFix->aData += iOff;
+      }
+      lsmSortedRemap(pFS->pDb);
+    }
+    *pRc = rc;
+  }
+}
+
+/* 
+** Remove this block from the pAll list 
+*/
+static void fsMmapRemoveFromAll(MmapMgr *p, MmapMgrRef *pRef){
+  if( pRef->pPrevAll ){
+    pRef->pPrevAll->pNextAll = pRef->pNextAll;
+  }else{
+    assert( pRef==p->pAll );
+    p->pAll = pRef->pNextAll;
+  }
+
+  if( pRef->pNextAll ){
+    pRef->pNextAll->pPrevAll = pRef->pPrevAll;
+  }else{
+    assert( pRef==p->pLast );
+    p->pLast = pRef->pPrevAll;
+  }
+
+  pRef->pNextAll = 0;
+  pRef->pPrevAll = 0;
+}
+
+/* 
+** Add this block to the pAll list. To the start if bLast==0, or the end
+** if bLast==1.
+*/
+static void fsMmapAddToAll(MmapMgr *p, MmapMgrRef *pRef, int bLast){
+  if( bLast ){
+    assert( p->pLast==0 || p->pLast->pNextAll==0 );
+    if( p->pLast ){
+      p->pLast->pNextAll = pRef;
+    }else{
+      p->pAll = pRef;
+    }
+    pRef->pPrevAll = p->pLast;
+    p->pLast = pRef;
+  }else{
+    assert( p->pAll==0 || p->pAll->pPrevAll==0 );
+    if( p->pAll ){
+      p->pAll->pPrevAll = pRef;
+    }else{
+      p->pLast = pRef;
+    }
+    pRef->pNextAll = p->pAll;
+    p->pAll = pRef;
+  }
+}
+
+/*
+** Obtain a reference to a mapping of the database file.
+*/
+static void *fsMmapRef(
+  FileSystem *pFS,                /* Memory map manager object */
+  i64 iOff,                       /* File offset to return reference to */
+  int nByte,                      /* Size of referenced block */
+  MmapMgrRef **ppRef,             /* OUT: Reference used to free memory */
+  int *pRc                        /* IN/OUT: Error code */
+){
+  lsm_env *pEnv = pFS->pEnv;
+  MmapMgr *p = &pFS->mmapmgr;
+  void *pRet = 0;
+  int rc = *pRc;
+
+  assert( iOff>=0 && nByte>0 );
+  assert( p->eUseMmap!=LSM_MMAP_OFF );
+  assert( *ppRef==0 );
+
+  if( p->eUseMmap==LSM_MMAP_FULL ){
+    fsGrowMapping(pFS, iOff+nByte, &rc);
+    if( rc==LSM_OK ){
+      pRet = (void *)&((u8 *)p->pMap)[iOff];
+      *ppRef = (MmapMgrRef *)pRet;
+    }
+  }else{
+    MmapMgrRef *pRef = 0;         /* Mapping reference */
+
+    /* If the hash table has not been allocated, allocate it now. */
+    if( p->apHash==0 ){
+      int nSz = sizeof(MmapMgrRef *) * LSM_MAPPED_BLOCKS * 2;
+      p->apHash = (MmapMgrRef **)lsmMallocZeroRc(pEnv, nSz, &rc);
+      p->nMaphash = LSM_MAPPED_BLOCKS * 2;
+    }
+
+    if( rc==LSM_OK ){
+      int iMap = (iOff / p->nMapsz);
+
+      /* Search the hash table for the required mapping */
+      int iHash = fsHashKey(p->nMaphash, iMap);
+      for(pRef=p->apHash[iHash]; pRef; pRef=pRef->pNextHash){
+        if( pRef->iMap==iMap ) break;
+      }
+
+      if( pRef ){
+        /* Mapping was found. */
+        fsMmapRemoveFromAll(p, pRef);
+      }else{
+        /* We have no existing mapping for mapping block iMap. */
+        if( p->nEntry>=LSM_MAPPED_BLOCKS && p->pAll->nRef==0 ){
+          MmapMgrRef **pp;
+          int iHash2;
+          pRef = p->pAll;
+
+          /* Unmap this blocks mapping */ 
+          lsmEnvUnmap(pFS->pEnv, pFS->fdDb, pRef->pMap, p->nMapsz); 
+          pRef->pMap = 0;
+
+          /* Remove this mapped block from the hash table */
+          iHash2 = fsHashKey(p->nMaphash, pRef->iMap);
+          for(pp=&p->apHash[iHash2]; *pp!=pRef; pp = &((*pp)->pNextHash));
+          *pp = (*pp)->pNextHash;
+          pRef->pNextHash = 0;
+
+          /* Remove this mapped block from the pAll list */
+          fsMmapRemoveFromAll(p, pRef);
+#if 0
+          printf("recycling mapping %d -> %d\n", pRef->iMap, iMap);
+#endif
+
+        }else{
+          pRef = (MmapMgrRef *)lsmMallocZeroRc(pEnv, sizeof(MmapMgrRef), &rc);
+          if( pRef ) p->nEntry++;
+          assert( p->nEntry<20 );
+        }
+
+        if( rc==LSM_OK ){
+          i64 dummy;
+          rc = lsmEnvMap(pEnv, 
+              pFS->fdDb, (i64)iMap*p->nMapsz, p->nMapsz, &pRef->pMap, &dummy
+          );
+          if( rc==LSM_OK ){
+            /* Link the mapped block into the hash table */
+            pRef->pNextHash = p->apHash[iHash];
+            pRef->iMap = iMap;
+            p->apHash[iHash] = pRef;
+          }
+        }
+      }
+
+      if( rc==LSM_OK ){
+        pRef->nRef++;
+        pRet = (void *)&((u8 *)(pRef->pMap))[iOff % p->nMapsz];
+        fsMmapAddToAll(p, pRef, 1);
+        *ppRef = pRef;
+      }else{
+        lsmFree(pEnv, pRef);
+      } 
+    }
+  }
+
+  *pRc = rc;
+  if( rc==LSM_OK ) p->nRef++;
+  return pRet;
+}
+
+/*
+** Release a reference returned by an earlier call to fsMmapRef().
+*/
+static void fsMmapUnref(FileSystem *pFS, MmapMgrRef **ppRef){
+  MmapMgr *p = &pFS->mmapmgr;
+  MmapMgrRef *pRef = *ppRef;
+
+  assert( p->eUseMmap!=LSM_MMAP_OFF );
+  if( pRef ){
+    p->nRef--;
+
+    if( p->eUseMmap==LSM_MMAP_LIMITED ){
+      pRef->nRef--;
+      assert( pRef->nRef>=0 );
+      if( pRef->nRef==0 ){
+        fsMmapRemoveFromAll(p, pRef);
+        fsMmapAddToAll(p, pRef, 0);
+      }
+    }
+  }
+
+  *ppRef = 0;
+  assert( p->nRef>=0 );
+}
+
+/*
+** Unmap all currently mapped blocks. Release all allocated memory.
+*/
+static void fsMmapClose(FileSystem *pFS){
+  MmapMgr *p = &pFS->mmapmgr;
+  assert( p->nRef==0 );
+  if( p->eUseMmap==LSM_MMAP_FULL ){
+    if( p->pMap ){
+      lsmEnvUnmap(pFS->pEnv, pFS->fdDb, p->pMap, p->nMap); 
+      p->pMap = 0;
+      p->nMap = 0;
+    }
+  }
+  else if( p->eUseMmap==LSM_MMAP_LIMITED ){
+    MmapMgrRef *pRef;
+    MmapMgrRef *pNext;
+    for(pRef=p->pAll; pRef; pRef=pNext){
+      pNext = pRef->pNextAll;
+      lsmEnvUnmap(pFS->pEnv, pFS->fdDb, pRef->pMap, p->nMapsz);
+      lsmFree(pFS->pEnv, pRef);
+    }
+    lsmFree(pFS->pEnv, p->apHash);
+    p->nEntry = 0;
+    p->nMaphash = 0;
+    p->apHash = 0;
+    p->pAll = 0;
+    p->pLast = 0;
+  }
 }
 
 /*
@@ -513,7 +826,8 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     if( pDb->compress.xCompress ){
       pFS->pCompress = &pDb->compress;
     }else{
-      pFS->bUseMmap = pDb->bMmap;
+      pFS->mmapmgr.eUseMmap = pDb->eMmap;
+      pFS->mmapmgr.nMapsz = 1*1024*1024;
     }
 
     /* Make a copy of the database and log file names. */
@@ -569,6 +883,7 @@ void lsmFsClose(FileSystem *pFS){
       pPg = pNext;
     }
 
+    fsMmapClose(pFS);
     if( pFS->fdDb ) lsmEnvClose(pFS->pEnv, pFS->fdDb );
     if( pFS->fdLog ) lsmEnvClose(pFS->pEnv, pFS->fdLog );
     lsmFree(pEnv, pFS->pLsmFile);
@@ -582,6 +897,7 @@ void lsmFsClose(FileSystem *pFS){
 void lsmFsDeferClose(FileSystem *pFS, LsmFile **pp){
   LsmFile *p = pFS->pLsmFile;
   assert( p->pNext==0 );
+  fsMmapClose(pFS);
   p->pFile = pFS->fdDb;
   pFS->fdDb = 0;
   pFS->pLsmFile = 0;
@@ -796,18 +1112,25 @@ static void fsPageRemoveFromHash(FileSystem *pFS, Page *pPg){
   *pp = pPg->pHashNext;
 }
 
+/*
+** This function is only called if FileSystem.eUseMmap==0 (i.e. in non-mmap
+** mode).
+*/
 static int fsPageBuffer(
   FileSystem *pFS, 
-  int bRequireData,               /* True to allocate buffer as well */
   Page **ppOut
 ){
   int rc = LSM_OK;
   Page *pPage = 0;
-  if( pFS->bUseMmap || pFS->pLruFirst==0 || pFS->nCacheAlloc<pFS->nCacheMax ){
+
+  if( pFS->mmapmgr.eUseMmap!=LSM_MMAP_OFF
+   || pFS->pLruFirst==0 
+   || pFS->nCacheAlloc<pFS->nCacheMax 
+  ){
     pPage = lsmMallocZero(pFS->pEnv, sizeof(Page));
     if( !pPage ){
       rc = LSM_NOMEM_BKPT;
-    }else if( bRequireData ){
+    }else{
       pPage->aData = (u8 *)lsmMalloc(pFS->pEnv, pFS->nPagesize);
       pPage->flags = PAGE_FREE;
       if( !pPage->aData ){
@@ -816,8 +1139,6 @@ static int fsPageBuffer(
         pPage = 0;
       }
       pFS->nCacheAlloc++;
-    }else{
-      fsPageAddToLru(pFS, pPage);
     }
   }else{
     pPage = pFS->pLruFirst;
@@ -831,38 +1152,13 @@ static int fsPageBuffer(
 }
 
 static void fsPageBufferFree(Page *pPg){
+  FileSystem *pFS = pPg->pFS;
+  assert( pFS->mmapmgr.eUseMmap==LSM_MMAP_OFF );
+
   if( pPg->flags & PAGE_FREE ){
     lsmFree(pPg->pFS->pEnv, pPg->aData);
   }
-  else if( pPg->pFS->bUseMmap ){
-    fsPageRemoveFromLru(pPg->pFS, pPg);
-  }
   lsmFree(pPg->pFS->pEnv, pPg);
-}
-
-static void fsGrowMapping(
-  FileSystem *pFS,
-  i64 iSz,
-  int *pRc
-){
-  /* This function won't work with compressed databases yet. */
-  assert( pFS->pCompress==0 );
-  assert( PAGE_HASPREV==4 );
-
-  if( *pRc==LSM_OK && iSz>pFS->nMap ){
-    int rc;
-    u8 *aOld = pFS->pMap;
-    rc = lsmEnvRemap(pFS->pEnv, pFS->fdDb, iSz, &pFS->pMap, &pFS->nMap);
-    if( rc==LSM_OK && pFS->pMap!=aOld ){
-      Page *pFix;
-      i64 iOff = (u8 *)pFS->pMap - aOld;
-      for(pFix=pFS->pLruFirst; pFix; pFix=pFix->pLruNext){
-        pFix->aData += iOff;
-      }
-      lsmSortedRemap(pFS->pDb);
-    }
-    *pRc = rc;
-  }
 }
 
 
@@ -870,12 +1166,14 @@ static void fsGrowMapping(
 ** fsync() the database file.
 */
 int lsmFsSyncDb(FileSystem *pFS, int nBlock){
+#if 0
   if( nBlock && pFS->bUseMmap ){
     int rc = LSM_OK;
     i64 nMin = (i64)nBlock * (i64)pFS->nBlocksize;
     fsGrowMapping(pFS, nMin, &rc);
     if( rc!=LSM_OK ) return rc;
   }
+#endif
   return lsmEnvSync(pFS->pEnv, pFS->fdDb);
 }
 
@@ -940,7 +1238,7 @@ static int fsBlockNext(
     iRead = iBlock;
   }
 
-  assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
+  assert( pFS->mmapmgr.eUseMmap==LSM_MMAP_OFF || pFS->pCompress==0 );
   if( pFS->pCompress ){
     i64 iOff;                     /* File offset to read data from */
     u8 aNext[4];                  /* 4-byte pointer read from db file */
@@ -1020,7 +1318,7 @@ static int fsBlockPrev(
 ){
   int rc = LSM_OK;                /* Return code */
 
-  assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
+  assert( pFS->mmapmgr.eUseMmap==LSM_MMAP_OFF || pFS->pCompress==0 );
   assert( iBlock>0 );
 
   if( pFS->pCompress ){
@@ -1207,18 +1505,18 @@ static int fsPageGet(
   ** not NULL, and the block containing iPg has been redirected, then iReal
   ** is the page number after redirection.  */
   Pgno iReal = lsmFsRedirectPage(pFS, (pSeg ? pSeg->pRedirect : 0), iPg);
+  i64 iOff = (i64)(iReal-1) * pFS->nPagesize;
 
   assert( iPg>=fsFirstPageOnBlock(pFS, 1) );
   assert( iReal>=fsFirstPageOnBlock(pFS, 1) );
   *ppPg = 0;
 
-  assert( pFS->bUseMmap==0 || pFS->pCompress==0 );
-  if( pFS->bUseMmap ){
+  assert( pFS->mmapmgr.eUseMmap==LSM_MMAP_OFF || pFS->pCompress==0 );
+  if( pFS->mmapmgr.eUseMmap!=LSM_MMAP_OFF ){
     Page *pTest;
-    i64 iEnd = (i64)iReal * pFS->nPagesize;
-    fsGrowMapping(pFS, iEnd, &rc);
-    if( rc!=LSM_OK ) return rc;
 
+    /* Check if the page is currently in the waiting list. If so, increment
+    ** the refcount and return a pointer to it. No more to do in this case. */
     p = 0;
     for(pTest=pFS->pWaiting; pTest; pTest=pTest->pNextWaiting){
       if( pTest->iPg==iReal ){
@@ -1229,6 +1527,8 @@ static int fsPageGet(
         return LSM_OK;
       }
     }
+
+    /* Allocate or recycle a Page structure */
     if( pFS->pFree ){
       p = pFS->pFree;
       pFS->pFree = p->pHashNext;
@@ -1239,8 +1539,13 @@ static int fsPageGet(
       fsPageAddToLru(pFS, p);
       p->pFS = pFS;
     }
-    p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (iReal-1)];
     p->iPg = iReal;
+
+    p->aData = fsMmapRef(pFS, iOff, pFS->nPagesize, &p->pRef, &rc);
+    if( rc!=LSM_OK ){
+      lsmFsPageRelease(p);
+      p = 0;
+    }
   }else{
 
     /* Search the hash-table for the page */
@@ -1250,7 +1555,7 @@ static int fsPageGet(
     }
 
     if( p==0 ){
-      rc = fsPageBuffer(pFS, 1, &p);
+      rc = fsPageBuffer(pFS, &p);
       if( rc==LSM_OK ){
         int nSpace = 0;
         p->iPg = iReal;
@@ -1267,7 +1572,6 @@ static int fsPageGet(
             rc = fsReadPagedata(pFS, pSeg, p, &nSpace);
           }else{
             int nByte = pFS->nPagesize;
-            i64 iOff = (i64)(iReal-1) * pFS->nPagesize;
             rc = lsmEnvRead(pFS->pEnv, pFS->fdDb, iOff, p->aData, nByte);
           }
           pFS->nRead++;
@@ -1326,10 +1630,14 @@ int lsmFsReadSyncedId(lsm_db *db, int iMeta, i64 *piVal){
   int rc = LSM_OK;
 
   assert( iMeta==1 || iMeta==2 );
-  if( pFS->bUseMmap ){
-    fsGrowMapping(pFS, iMeta*LSM_META_PAGE_SIZE, &rc);
+  if( pFS->mmapmgr.eUseMmap!=LSM_MMAP_OFF ){
+    MmapMgrRef *pRef = 0;
+    u8 *pMap;                     /* Mapping of two meta pages */
+
+    pMap = (u8 *)fsMmapRef(pFS, 0, LSM_META_PAGE_SIZE*2, &pRef, &rc);
     if( rc==LSM_OK ){
-      *piVal = (i64)lsmGetU64(&((u8 *)pFS->pMap)[(iMeta-1)*LSM_META_PAGE_SIZE]);
+      *piVal = (i64)lsmGetU64(&pMap[(iMeta-1)*LSM_META_PAGE_SIZE]);
+      fsMmapUnref(pFS, &pRef);
     }
   }else{
     MetaPage *pMeta = 0;
@@ -1731,7 +2039,7 @@ int lsmFsSortedAppend(
     /* In compressed database mode the page is not assigned a page number
     ** or location in the database file at this point. This will be done
     ** by the lsmFsPagePersist() call.  */
-    rc = fsPageBuffer(pFS, 1, &pPg);
+    rc = fsPageBuffer(pFS, &pPg);
     if( rc==LSM_OK ){
       pPg->pFS = pFS;
       pPg->pSeg = p;
@@ -1892,9 +2200,8 @@ int lsmFsMetaPageGet(
 
   if( pPg ){
     i64 iOff = (iPg-1) * pFS->nMetasize;
-    if( pFS->bUseMmap ){
-      fsGrowMapping(pFS, 2*pFS->nMetasize, &rc);
-      pPg->aData = (u8 *)(pFS->pMap) + iOff;
+    if( pFS->mmapmgr.eUseMmap!=LSM_MMAP_OFF ){
+      pPg->aData = fsMmapRef(pFS, iOff, LSM_META_PAGE_SIZE, &pPg->pRef, &rc);
     }else{
       pPg->aData = lsmMallocRc(pFS->pEnv, pFS->nMetasize, &rc);
       if( rc==LSM_OK && bWrite==0 ){
@@ -1913,7 +2220,11 @@ int lsmFsMetaPageGet(
     }
 
     if( rc!=LSM_OK ){
-      if( pFS->bUseMmap==0 ) lsmFree(pFS->pEnv, pPg->aData);
+      if( pFS->mmapmgr.eUseMmap==LSM_MMAP_OFF ){
+        lsmFree(pFS->pEnv, pPg->aData);
+      }else{
+        fsMmapUnref(pFS, &pPg->pRef);
+      }
       lsmFree(pFS->pEnv, pPg);
       pPg = 0;
     }else{
@@ -1935,13 +2246,15 @@ int lsmFsMetaPageRelease(MetaPage *pPg){
   if( pPg ){
     FileSystem *pFS = pPg->pFS;
 
-    if( pFS->bUseMmap==0 ){
+    if( pFS->mmapmgr.eUseMmap==LSM_MMAP_OFF ){
       if( pPg->bWrite ){
         i64 iOff = (pPg->iPg==2 ? pFS->nMetasize : 0);
         int nWrite = pFS->nMetasize;
         rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, pPg->aData, nWrite);
       }
       lsmFree(pFS->pEnv, pPg->aData);
+    }else{
+      fsMmapUnref(pFS, &pPg->pRef);
     }
 
     lsmFree(pFS->pEnv, pPg);
@@ -1999,12 +2312,19 @@ int lsmFsMoveBlock(FileSystem *pFS, Segment *pSeg, int iTo, int iFrom){
   assert( iTo!=1 );
   assert( iFrom>iTo );
 
-  if( pFS->bUseMmap ){
-    fsGrowMapping(pFS, (i64)iFrom * pFS->nBlocksize, &rc);
+  if( pFS->mmapmgr.eUseMmap!=LSM_MMAP_OFF ){
+    MmapMgrRef *pRef1 = 0;
+    MmapMgrRef *pRef2 = 0;
+    void *pTo, *pFrom;
+
+    pTo = fsMmapRef(pFS, iToOff, pFS->nBlocksize, &pRef1, &rc);
+    pFrom = fsMmapRef(pFS, iFromOff, pFS->nBlocksize, &pRef2, &rc);
     if( rc==LSM_OK ){
-      u8 *aMap = (u8 *)(pFS->pMap);
-      memcpy(&aMap[iToOff], &aMap[iFromOff], pFS->nBlocksize);
+      memcpy(pTo, pFrom, pFS->nBlocksize);
     }
+    fsMmapUnref(pFS, &pRef1);
+    fsMmapUnref(pFS, &pRef2);
+
   }else{
     int nSz = pFS->nPagesize;
     u8 *aData = (u8 *)lsmMallocRc(pFS->pEnv, nSz, &rc);
@@ -2276,7 +2596,7 @@ int lsmFsPagePersist(Page *pPg){
         rc = fsAppendPage(pFS, pPg->pSeg, &pPg->iPg, &iPrev, &iNext);
         if( rc!=LSM_OK ) return rc;
 
-        if( pFS->bUseMmap==0 ){
+        if( pFS->mmapmgr.eUseMmap==LSM_MMAP_OFF ){
           int iHash = fsHashKey(pFS->nHash, pPg->iPg);
           pPg->pHashNext = pFS->apHash[iHash];
           pFS->apHash[iHash] = pPg;
@@ -2307,13 +2627,12 @@ int lsmFsPagePersist(Page *pPg){
         i64 iOff;                   /* Offset to write within database file */
 
         iOff = (i64)pFS->nPagesize * (i64)(pPg->iPg-1);
-        if( pFS->bUseMmap==0 ){
+        if( pFS->mmapmgr.eUseMmap==0 ){
           u8 *aData = pPg->aData - (pPg->flags & PAGE_HASPREV);
           rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, aData, pFS->nPagesize);
         }else if( pPg->flags & PAGE_FREE ){
-          fsGrowMapping(pFS, iOff + pFS->nPagesize, &rc);
+          u8 *aTo = (u8 *)fsMmapRef(pFS, iOff, pFS->nPagesize, &pPg->pRef, &rc);
           if( rc==LSM_OK ){
-            u8 *aTo = &((u8 *)(pFS->pMap))[iOff];
             u8 *aFrom = pPg->aData - (pPg->flags & PAGE_HASPREV);
             memcpy(aTo, aFrom, pFS->nPagesize);
             lsmFree(pFS->pEnv, aFrom);
@@ -2419,7 +2738,8 @@ int lsmFsPageRelease(Page *pPg){
       pPg->aData -= (pPg->flags & PAGE_HASPREV);
       pPg->flags &= ~PAGE_HASPREV;
 
-      if( pFS->bUseMmap ){
+      if( pFS->mmapmgr.eUseMmap!=LSM_MMAP_OFF ){
+        fsMmapUnref(pFS, &pPg->pRef);
         pPg->pHashNext = pFS->pFree;
         pFS->pFree = pPg;
       }else{

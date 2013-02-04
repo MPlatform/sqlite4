@@ -95,7 +95,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->bUseLog = LSM_DFLT_USE_LOG;
   pDb->iReader = -1;
   pDb->bMultiProc = LSM_DFLT_MULTIPLE_PROCESSES;
-  pDb->bMmap = LSM_DFLT_MMAP;
+  pDb->eMmap = LSM_DFLT_MMAP;
   pDb->xLog = xLog;
   return LSM_OK;
 }
@@ -291,10 +291,10 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
     case LSM_CONFIG_MMAP: {
       int *piVal = va_arg(ap, int *);
-      if( pDb->pDatabase==0 ){
-        pDb->bMmap = (LSM_IS_64_BIT && *piVal);
+      if( pDb->pDatabase==0 && (*piVal>=0 && *piVal<=2) ){
+        pDb->eMmap = *piVal;
       }
-      *piVal = pDb->bMmap;
+      *piVal = pDb->eMmap;
       break;
     }
 

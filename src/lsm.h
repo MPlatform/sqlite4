@@ -42,6 +42,23 @@ typedef long long int lsm_i64;              /* 64-bit signed integer type */
 ** CAPI: Database Runtime Environment
 **
 ** Run-time environment used by LSM
+**
+** xMap(pFile, iOff, nByte, ppOut, pnOut):
+**   Memory map nByte bytes of file pFile starting at file offset iOff. If
+**   the file is less than (iOff+nByte) bytes in size extend it before 
+**   mapping the new region. If successful, return LSM_OK and set *ppOut to
+**   point to the mapped region. Set pnOut to the number of bytes mapped
+**   (always nByte in this case). Otherwise, return an LSM error code.
+**
+**   If parameter iOff is zero, then nByte may be negative. In this case,
+**   if the absolute value of nByte is greater than the size of the file
+**   in bytes, then this is identical to a request with nByte set to a
+**   positive value of the same magnitude. Or, if the file is more than
+**   |nByte| bytes in size, the entire file should be mapped.
+**
+** xUnmap(pFile, nMap, pMap):
+**   Argument pMap points to a mapping nMap bytes in size returned by a
+**   previous invocation of xMap() on file pFile. Unmap it.
 */
 struct lsm_env {
   int nByte;                 /* Size of this structure in bytes */
@@ -55,7 +72,11 @@ struct lsm_env {
   int (*xTruncate)(lsm_file *, lsm_i64);
   int (*xSync)(lsm_file *);
   int (*xSectorSize)(lsm_file *);
+#if 0
   int (*xRemap)(lsm_file *, lsm_i64, void **, lsm_i64*);
+#endif
+  int (*xMap)(lsm_file *, lsm_i64 iOff, lsm_i64 nByte, void **, lsm_i64 *);
+  int (*xUnmap)(lsm_file *, void *, lsm_i64);
   int (*xFileid)(lsm_file *, void *pBuf, int *pnBuf);
   int (*xClose)(lsm_file *);
   int (*xUnlink)(lsm_env*, const char *);
@@ -242,6 +263,10 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1
 #define LSM_SAFETY_FULL   2
+
+#define LSM_MMAP_OFF     0
+#define LSM_MMAP_FULL    1
+#define LSM_MMAP_LIMITED 2
 
 /*
 ** CAPI: Compression and/or Encryption Hooks

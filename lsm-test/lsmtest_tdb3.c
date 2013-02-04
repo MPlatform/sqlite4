@@ -302,6 +302,7 @@ static int testEnvSectorSize(lsm_file *pFile){
   return pRealEnv->xSectorSize(p->pReal);
 }
 
+#if 0
 static int testEnvRemap(
   lsm_file *pFile, 
   lsm_i64 iMin, 
@@ -311,6 +312,29 @@ static int testEnvRemap(
   lsm_env *pRealEnv = tdb_lsm_env();
   LsmFile *p = (LsmFile *)pFile;
   return pRealEnv->xRemap(p->pReal, iMin, ppOut, pnOut);
+}
+#endif
+
+static int testEnvMap(
+  lsm_file *pFile,
+  lsm_i64 iOff,
+  lsm_i64 nByte,
+  void **ppOut,
+  lsm_i64 *pszOut
+){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
+  return pRealEnv->xMap(p->pReal, iOff, nByte, ppOut, pszOut);
+}
+
+static int testEnvUnmap(
+  lsm_file *pFile, 
+  void *pMap, 
+  lsm_i64 nMap
+){
+  lsm_env *pRealEnv = tdb_lsm_env();
+  LsmFile *p = (LsmFile *)pFile;
+  return pRealEnv->xUnmap(p->pReal, pMap, nMap);
 }
 
 static int testEnvFileid(
@@ -934,7 +958,11 @@ static int testLsmOpen(
   pDb->env.xTruncate = testEnvTruncate;
   pDb->env.xSync = testEnvSync;
   pDb->env.xSectorSize = testEnvSectorSize;
+#if 0
   pDb->env.xRemap = testEnvRemap;
+#endif
+  pDb->env.xMap = testEnvMap;
+  pDb->env.xUnmap = testEnvUnmap;
   pDb->env.xFileid = testEnvFileid;
   pDb->env.xClose = testEnvClose;
   pDb->env.xUnlink = testEnvUnlink;

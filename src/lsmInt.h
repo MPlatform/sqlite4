@@ -50,7 +50,7 @@
 #define LSM_DFLT_LOG_SIZE           (128*1024)
 #define LSM_DFLT_AUTOMERGE          4
 #define LSM_DFLT_SAFETY             LSM_SAFETY_NORMAL
-#define LSM_DFLT_MMAP               LSM_IS_64_BIT
+#define LSM_DFLT_MMAP               (LSM_IS_64_BIT ? LSM_MMAP_FULL : 0)
 #define LSM_DFLT_MULTIPLE_PROCESSES 1
 #define LSM_DFLT_USE_LOG            1
 
@@ -313,7 +313,7 @@ struct lsm_db {
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
   int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
   int nMaxFreelist;               /* Configured by LSM_CONFIG_MAX_FREELIST */
-  int bMmap;                      /* Configured by LSM_CONFIG_MMAP */
+  int eMmap;                      /* Configured by LSM_CONFIG_MMAP */
   int nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
   lsm_compress compress;          /* Compression callbacks */

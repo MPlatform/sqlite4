@@ -177,6 +177,52 @@ static int lsmPosixOsSectorSize(lsm_file *pFile){
   return 512;
 }
 
+static int lsmPosixOsMap(
+  lsm_file *pFile,
+  lsm_i64 iOff,
+  lsm_i64 nByte,
+  void **ppOut,
+  lsm_i64 *pszOut
+){
+  PosixFile *p = (PosixFile *)pFile;
+  off_t off = (off_t)iOff;
+  int prc;                        /* Posix Return Code */
+  struct stat buf;
+  size_t sz;
+
+  memset(&buf, 0, sizeof(buf));
+  prc = fstat(p->fd, &buf);
+  if( prc!=0 ) return LSM_IOERR_BKPT;
+
+  if( nByte<=0 ){
+    sz = (size_t)(LSM_MAX(nByte*-1, (i64)buf.st_size));
+  }else{
+    sz = (size_t)nByte;
+  }
+  sz = (size_t)(LSM_MAX(sz, 1<<15));
+
+  if( (off+sz)>buf.st_size ){
+    prc = ftruncate(p->fd, (off+sz));
+    if( prc!=0 ) return LSM_IOERR_BKPT;
+  }
+
+  *ppOut = mmap(0, sz, PROT_READ|PROT_WRITE, MAP_SHARED, p->fd, off);
+  if( *ppOut==0 ) return LSM_IOERR_BKPT;
+
+  *pszOut = (i64)sz;
+  return LSM_OK;
+}
+
+static int lsmPosixOsUnmap(
+  lsm_file *pFile, 
+  void *pMap, 
+  lsm_i64 nMap
+){
+  PosixFile *p = (PosixFile *)pFile;
+  munmap(pMap, (size_t)nMap);
+  return LSM_OK;
+}
+
 static int lsmPosixOsRemap(
   lsm_file *pFile, 
   lsm_i64 iMin, 
@@ -659,7 +705,11 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsTruncate,      /* xTruncate */
     lsmPosixOsSync,          /* xSync */
     lsmPosixOsSectorSize,    /* xSectorSize */
+#if 0
     lsmPosixOsRemap,         /* xRemap */
+#endif
+    lsmPosixOsMap,           /* xMap */
+    lsmPosixOsUnmap,         /* xUnmap */
     lsmPosixOsFileid,        /* xFileid */
     lsmPosixOsClose,         /* xClose */
     lsmPosixOsUnlink,        /* xUnlink */

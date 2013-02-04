@@ -381,6 +381,7 @@ proc run_all_tests {} {
 
 #run_all_tests
 
+if 0 {
 generate_chart png res.db 1 2
 update
 capture_photo lsmperf1.gif
@@ -395,7 +396,16 @@ generate_chart png res.db 5 6
 update
 capture_photo lsmperf3.gif
 destroy .c
+}
 
-exit
+run_speed_test res.db 900 20000 20000 0 100 "mmap=2" mmap=2
+after 10000
+run_speed_test res.db 900 20000 20000 0 100 "mmap=0" mmap=0
+generate_chart png res.db 1 2
+update
+#capture_photo lsmperf.gif
+#destroy .c
+
+#exit
 
 
