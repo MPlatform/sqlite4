@@ -1,0 +1,89 @@
+# 2012 November 02
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+#
+# This file tests that the LSM_CONFIG_MULTIPLE_PROCESSES parameter seems
+# to work as documented.
+#
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+source $testdir/lock_common.tcl
+set testprefix lsm3
+db close
+
+do_multiclient_test tn {
+
+  # The [do_multiclient_test] command automatically opens a connection
+  # in each process (or three connections in this process). We don't want
+  # them in this case.
+  code1 { db close }
+  code2 { db2 close }
+  code3 { db3 close }
+
+  if { $tn==1 } {
+    set locked {1 {database is locked}}
+  } else {
+    set locked {0 {}}
+  }
+
+  # Open a single-process connection to the database from an external
+  # process (if $tn==1, otherwise open it from within the current 
+  # process).
+  code2 { sqlite4 db2 file:test.db?lsm_multiple_processes=0 }
+
+  # Try to open some other connections to the database file, both in multi
+  # and single process mode. If ($tn==1), then all such attempts fail. Or,
+  # if ($tn==2), they all succeed.
+  do_test $tn.1 {
+    catch { db close }
+    list [catch {sqlite4 db file:test.db?lsm_multiple_processes=0} msg] $msg
+  } $locked
+  do_test $tn.2 {
+    catch { db close }
+    list [catch {sqlite4 db file:test.db?lsm_multiple_processes=0} msg] $msg
+  } $locked
+  do_test $tn.3 {
+    catch { db close }
+    list [catch {sqlite4 db file:test.db?lsm_multiple_processes=1} msg] $msg
+  } $locked
+  do_test $tn.4 {
+    catch { db close }
+    list [catch {sqlite4 db file:test.db?lsm_multiple_processes=1} msg] $msg
+  } $locked
+
+  # Now open a connection from an external process in multi-proc mode.
+  # Observe that further connections are allowed if they are from within
+  # the same process or if the LSM_CONFIG_MULTIPLE_PROCESSES parameter
+  # is set to true.
+  code2 { 
+    db2 close
+    sqlite4 db2 file:test.db
+  }
+
+  do_test $tn.5 {
+    catch { db close }
+    list [catch {sqlite4 db file:test.db?lsm_multiple_processes=0} msg] $msg
+  } $locked
+  do_test $tn.6 {
+    catch { db close }
+    list [catch {sqlite4 db file:test.db?lsm_multiple_processes=0} msg] $msg
+  } $locked
+  do_test $tn.7 {
+    catch { db close }
+    list [catch {sqlite4 db file:test.db?lsm_multiple_processes=1} msg] $msg
+  } {0 {}}
+  do_test $tn.8 {
+    catch { db close }
+    list [catch {sqlite4 db file:test.db?lsm_multiple_processes=1} msg] $msg
+  } {0 {}}
+}
+
+
+finish_test
