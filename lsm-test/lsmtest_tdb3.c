@@ -755,7 +755,6 @@ int test_lsm_config_str(
     { "safety",           0, LSM_CONFIG_SAFETY },
     { "autowork",         0, LSM_CONFIG_AUTOWORK },
     { "autocheckpoint",   0, LSM_CONFIG_AUTOCHECKPOINT },
-    { "log_size",         0, LSM_CONFIG_LOG_SIZE },
     { "mmap",             0, LSM_CONFIG_MMAP },
     { "use_log",          0, LSM_CONFIG_USE_LOG },
     { "automerge",        0, LSM_CONFIG_AUTOMERGE },
@@ -979,7 +978,7 @@ int test_lsm_small_open(
   int bClear, 
   TestDb **ppDb
 ){
-  const char *zCfg = "page_size=256 block_size=65536";
+  const char *zCfg = "page_size=256 block_size=64";
   return testLsmOpen(zCfg, zFile, bClear, ppDb);
 }
 
@@ -988,10 +987,10 @@ int test_lsm_lomem_open(
   int bClear, 
   TestDb **ppDb
 ){
-    /* "max_freelist=4 autocheckpoint=32768 " */
+    /* "max_freelist=4 autocheckpoint=32" */
   const char *zCfg = 
-    "page_size=256 block_size=65536 autoflush=16384 "
-    "autocheckpoint=32768 "
+    "page_size=256 block_size=64 autoflush=16 "
+    "autocheckpoint=32"
     "mmap=0 "
   ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
@@ -1003,8 +1002,8 @@ int test_lsm_zip_open(
   TestDb **ppDb
 ){
   const char *zCfg = 
-    "page_size=256 block_size=65536 autoflush=16384 "
-    "autocheckpoint=32768 compression=1 mmap=0 "
+    "page_size=256 block_size=64 autoflush=16 "
+    "autocheckpoint=32 compression=1 mmap=0 "
   ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }

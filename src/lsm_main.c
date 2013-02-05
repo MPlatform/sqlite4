@@ -87,7 +87,6 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->bAutowork = LSM_DFLT_AUTOWORK;
   pDb->eSafety = LSM_DFLT_SAFETY;
   pDb->xCmp = xCmp;
-  pDb->nLogSz = LSM_DFLT_LOG_SIZE;
   pDb->nDfltPgsz = LSM_DFLT_PAGE_SIZE;
   pDb->nDfltBlksz = LSM_DFLT_BLOCK_SIZE;
   pDb->nMerge = LSM_DFLT_AUTOMERGE;
@@ -211,11 +210,14 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
   switch( eParam ){
     case LSM_CONFIG_AUTOFLUSH: {
+      /* This parameter is read and written in KB. But all internal 
+      ** processing is done in bytes.  */
       int *piVal = va_arg(ap, int *);
-      if( *piVal>=0 ){
-        pDb->nTreeLimit = *piVal;
+      int iVal = *piVal;
+      if( iVal>=0 && iVal<=(1024*1024) ){
+        pDb->nTreeLimit = iVal*1024;
       }
-      *piVal = pDb->nTreeLimit;
+      *piVal = (pDb->nTreeLimit / 1024);
       break;
     }
 
@@ -229,20 +231,14 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
     }
 
     case LSM_CONFIG_AUTOCHECKPOINT: {
+      /* This parameter is read and written in KB. But all internal processing
+      ** (including the lsm_db.nAutockpt variable) is done in bytes.  */
       int *piVal = va_arg(ap, int *);
       if( *piVal>=0 ){
-        pDb->nAutockpt = *piVal;
+        int iVal = *piVal;
+        pDb->nAutockpt = (i64)iVal * 1024;
       }
-      *piVal = pDb->nAutockpt;
-      break;
-    }
-
-    case LSM_CONFIG_LOG_SIZE: {
-      int *piVal = va_arg(ap, int *);
-      if( *piVal>0 ){
-        pDb->nLogSz = *piVal;
-      }
-      *piVal = pDb->nLogSz;
+      *piVal = (int)(pDb->nAutockpt / 1024);
       break;
     }
 
@@ -264,17 +260,20 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
     }
 
     case LSM_CONFIG_BLOCK_SIZE: {
+      /* This parameter is read and written in KB. But all internal 
+      ** processing is done in bytes.  */
       int *piVal = va_arg(ap, int *);
       if( pDb->pDatabase ){
         /* If lsm_open() has been called, this is a read-only parameter. 
-        ** Set the output variable to the page-size according to the 
+        ** Set the output variable to the block-size in KB according to the 
         ** FileSystem object.  */
-        *piVal = lsmFsBlockSize(pDb->pFS);
+        *piVal = lsmFsBlockSize(pDb->pFS) / 1024;
       }else{
-        if( *piVal>=65536 && ((*piVal-1) & *piVal)==0 ){
-          pDb->nDfltBlksz = *piVal;
+        int iVal = *piVal;
+        if( iVal>=64 && iVal<=65536 && ((iVal-1) & iVal)==0 ){
+          pDb->nDfltBlksz = iVal * 1024;
         }else{
-          *piVal = pDb->nDfltBlksz;
+          *piVal = pDb->nDfltBlksz / 1024;
         }
       }
       break;

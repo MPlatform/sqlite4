@@ -161,7 +161,7 @@ is part of the SQLite4 library. To use LSM in an application, the application
 links against libsqlite4 and includes the header file "lsm.h" in any files
 that access the LSM API.
 
-<p><i>Pointer to build instructions for sqlite4</i>
+<p><span style=color:red>Pointer to build instructions for sqlite4</span>
 
 <h1 id=basic_usage>3. Basic Usage</h1>
 
@@ -953,7 +953,11 @@ parameters.
     number of segments present in the file, which can improve the performance
     of database read operations.
 
-    <p><span style=color:red>If auto-work is not enabled...</span>
+    <p>Additionally, whether or not auto-work is enabled, this option is used
+    to determine the maximum number of segments of a given age that are 
+    allowed to accumulate in the database file. This is described in the
+    <a href=#compulsary_work_and_checkpoints>compulsary work and checkpoints</a>
+    section below.
 
     <p>The default value is 4. This option must be set to a value between
     2 and 8, inclusive.
@@ -964,8 +968,8 @@ parameters.
     to true, then work and checkpoint operations are automatically scheduled
     within calls to lsm_insert(), lsm_delete(), lsm_delete_range() and
     lsm_commit(). Otherwise, if it is set to false, these operations must
-    be explicitly invoked by the application. See <span style=color:red>some
-    link here</span> for details.
+    be <a href=#explicit_scheduling>explicitly scheduled</a> by the
+    application. 
 
     <p>The default value is 1.
 

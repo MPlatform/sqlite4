@@ -45,7 +45,7 @@
 #define LSM_DFLT_PAGE_SIZE          (4 * 1024)
 #define LSM_DFLT_BLOCK_SIZE         (1 * 1024 * 1024)
 #define LSM_DFLT_AUTOFLUSH          (1 * 1024 * 1024)
-#define LSM_DFLT_AUTOCHECKPOINT     (2 * 1024 * 1024)
+#define LSM_DFLT_AUTOCHECKPOINT     (i64)(2 * 1024 * 1024)
 #define LSM_DFLT_AUTOWORK           1
 #define LSM_DFLT_LOG_SIZE           (128*1024)
 #define LSM_DFLT_AUTOMERGE          4
@@ -308,13 +308,12 @@ struct lsm_db {
   int bAutowork;                  /* Configured by LSM_CONFIG_AUTOWORK */
   int nTreeLimit;                 /* Configured by LSM_CONFIG_AUTOFLUSH */
   int nMerge;                     /* Configured by LSM_CONFIG_AUTOMERGE */
-  int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
   int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
   int nMaxFreelist;               /* Configured by LSM_CONFIG_MAX_FREELIST */
   int bMmap;                      /* Configured by LSM_CONFIG_MMAP */
-  int nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
+  i64 nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
   lsm_compress compress;          /* Compression callbacks */
 

@@ -146,20 +146,38 @@ int lsm_config(lsm_db *, int, ...);
 ** The following values may be passed as the second argument to lsm_config().
 **
 ** LSM_CONFIG_AUTOFLUSH:
-**   A read/write integer parameter. This value determines the maximum amount
-**   of space (in bytes) used to accumulate writes in main-memory before 
-**   they are flushed to a level 0 segment.
+**   A read/write integer parameter. 
+**
+**   This value determines the amount of data allowed to accumulate in a
+**   live in-memory tree before it is marked as old. After committing a
+**   transaction, a connection checks if the size of the live in-memory tree,
+**   including data structure overhead, is greater than the value of this
+**   option in KB. If it is, and there is not already an old in-memory tree,
+**   the live in-memory tree is marked as old.
+**
+**   The maximum allowable value is 1048576 (1GB). There is no minimum 
+**   value. If this parameter is set to zero, then an attempt is made to
+**   mark the live in-memory tree as old after each transaction is committed.
+**
+**   The default value is 1024 (1MB).
 **
 ** LSM_CONFIG_PAGE_SIZE:
 **   A read/write integer parameter. This parameter may only be set before
 **   lsm_open() has been called.
 **
 ** LSM_CONFIG_BLOCK_SIZE:
-**   A read/write integer parameter. This parameter may only be set before
-**   lsm_open() has been called.
+**   A read/write integer parameter. 
 **
-** LSM_CONFIG_LOG_SIZE:
-**   A read/write integer parameter.
+**   This parameter may only be set before lsm_open() has been called. It
+**   must be set to a power of two between 64 and 65536, inclusive (block 
+**   sizes between 64KB and 64MB).
+**
+**   If the connection creates a new database, the block size of the new
+**   database is set to the value of this option in KB. After lsm_open()
+**   has been called, querying this parameter returns the actual block
+**   size of the opened database.
+**
+**   The default value is 1024 (1MB blocks).
 **
 ** LSM_CONFIG_SAFETY:
 **   A read/write integer parameter. Valid values are 0, 1 (the default) 
@@ -182,6 +200,20 @@ int lsm_config(lsm_db *, int, ...);
 **
 ** LSM_CONFIG_AUTOCHECKPOINT:
 **   A read/write integer parameter.
+**
+**   If this option is set to non-zero value N, then a checkpoint is
+**   automatically attempted after each N KB of data have been written to 
+**   the database file.
+**
+**   The amount of uncheckpointed data already written to the database file
+**   is a global parameter. After performing database work (writing to the
+**   database file), the process checks if the total amount of uncheckpointed 
+**   data exceeds the value of this paramter. If so, a checkpoint is performed.
+**   This means that this option may cause the connection to perform a 
+**   checkpoint even if the current connection has itself written very little
+**   data into the database file.
+**
+**   The default value is 2048 (checkpoint every 2MB).
 **
 ** LSM_CONFIG_MMAP:
 **   A read/write integer parameter. True to use mmap() to access the 
@@ -229,7 +261,6 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_SAFETY              3
 #define LSM_CONFIG_BLOCK_SIZE          4
 #define LSM_CONFIG_AUTOWORK            5
-#define LSM_CONFIG_LOG_SIZE            6
 #define LSM_CONFIG_MMAP                7
 #define LSM_CONFIG_USE_LOG             8
 #define LSM_CONFIG_AUTOMERGE           9

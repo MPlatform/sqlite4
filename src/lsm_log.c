@@ -205,6 +205,9 @@
 /* Require a checksum every 32KB. */
 #define LSM_CKSUM_MAXDATA (32*1024)
 
+/* Do not wrap a log file smaller than this in bytes. */
+#define LSM_MIN_LOGWRAP      (128*1024)
+
 /*
 ** szSector:
 **   Commit records must be aligned to end on szSector boundaries. If
@@ -403,9 +406,8 @@ int lsmLogBegin(lsm_db *pDb){
   /* There are now three scenarios:
   **
   **   1) Regions 0 and 1 are both zero bytes in size and region 2 begins
-  **      at a file offset greater than N, where N is the value configured
-  **      by LSM_CONFIG_LOG_SIZE. In this case, wrap around to the start
-  **      and write data into the start of the log file. 
+  **      at a file offset greater than LSM_MIN_LOGWRAP. In this case, wrap
+  **      around to the start and write data into the start of the log file. 
   **
   **   2) Region 1 is zero bytes in size and region 2 occurs earlier in the 
   **      file than region 0. In this case, append data to region 2, but
@@ -421,7 +423,7 @@ int lsmLogBegin(lsm_db *pDb){
   pNew->cksum0 = pDb->treehdr.log.cksum0;
   pNew->cksum1 = pDb->treehdr.log.cksum1;
 
-  if( aReg[0].iEnd==0 && aReg[1].iEnd==0 && aReg[2].iStart>=pDb->nLogSz ){
+  if( aReg[0].iEnd==0 && aReg[1].iEnd==0 && aReg[2].iStart>=LSM_MIN_LOGWRAP ){
     /* Case 1. Wrap around to the start of the file. Write an LSM_LOG_JUMP 
     ** into the log file in this case. Pad it out to 8 bytes using a PAD2
     ** record so that the checksums can be updated immediately.  */
