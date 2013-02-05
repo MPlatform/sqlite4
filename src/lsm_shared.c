@@ -1584,7 +1584,7 @@ void lsmShmBarrier(lsm_db *db){
   lsmEnvShmBarrier(db->pEnv);
 }
 
-int lsm_checkpoint(lsm_db *pDb, int *pnByte){
+int lsm_checkpoint(lsm_db *pDb, int *pnKB){
   int rc;                         /* Return code */
   u32 nWrite = 0;                 /* Number of pages checkpointed */
 
@@ -1592,14 +1592,14 @@ int lsm_checkpoint(lsm_db *pDb, int *pnByte){
   ** pages written between this and the previous checkpoint.  */
   rc = lsmCheckpointWrite(pDb, 0, &nWrite);
 
-  /* If required, calculate the output variable (bytes of data checkpointed). 
+  /* If required, calculate the output variable (KB of data checkpointed). 
   ** Set it to zero if an error occured.  */
-  if( pnByte ){
-    int nByte = 0;
+  if( pnKB ){
+    int nKB = 0;
     if( rc==LSM_OK && nWrite ){
-      nByte = (int)nWrite * lsmFsPageSize(pDb->pFS);
+      nKB = (((i64)nWrite * lsmFsPageSize(pDb->pFS)) + 1023) / 1024;
     }
-    *pnByte = nByte;
+    *pnKB = nKB;
   }
 
   return rc;

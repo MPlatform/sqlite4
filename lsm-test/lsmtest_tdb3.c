@@ -15,8 +15,8 @@ typedef struct LsmDb LsmDb;
 typedef struct LsmWorker LsmWorker;
 typedef struct LsmFile LsmFile;
 
-#define LSMTEST_DFLT_MT_MAX_CKPT (8*1024*1024)
-#define LSMTEST_DFLT_MT_MIN_CKPT (2*1024*1024)
+#define LSMTEST_DFLT_MT_MAX_CKPT (8*1024)
+#define LSMTEST_DFLT_MT_MIN_CKPT (2*1024)
 
 #ifdef LSM_MUTEX_PTHREADS
 #include <pthread.h>
@@ -500,13 +500,13 @@ static int test_lsm_close(TestDb *pTestDb){
 
 static int waitOnCheckpointer(LsmDb *pDb, lsm_db *db){
   int nSleep = 0;
-  int nByte;
+  int nKB;
   int rc;
 
   do {
-    nByte = 0;
-    rc = lsm_info(db, LSM_INFO_CHECKPOINT_SIZE, &nByte);
-    if( rc!=LSM_OK || nByte<pDb->nMtMaxCkpt ) break;
+    nKB = 0;
+    rc = lsm_info(db, LSM_INFO_CHECKPOINT_SIZE, &nKB);
+    if( rc!=LSM_OK || nKB<pDb->nMtMaxCkpt ) break;
     usleep(5000);
     nSleep += 5;
   }while( 1 );
@@ -525,10 +525,10 @@ static int waitOnWorker(LsmDb *pDb){
 
   rc = lsm_config(pDb->db, LSM_CONFIG_AUTOFLUSH, &nLimit);
   do {
-    int bOld, nNew, rc;
-    rc = lsm_info(pDb->db, LSM_INFO_TREE_SIZE, &bOld, &nNew);
+    int nOld, nNew, rc;
+    rc = lsm_info(pDb->db, LSM_INFO_TREE_SIZE, &nOld, &nNew);
     if( rc!=LSM_OK ) return rc;
-    if( bOld==0 || nNew<(nLimit/2) ) break;
+    if( nOld==0 || nNew<(nLimit/2) ) break;
     usleep(5000);
     nSleep += 5;
   }while( 1 );
@@ -1122,9 +1122,9 @@ static void *worker_main(void *pArg){
 
     pthread_mutex_unlock(&p->worker_mutex);
     if( p->eType==LSMTEST_THREAD_CKPT ){
-      int nByte = 0;
-      rc = lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nByte);
-      if( rc==LSM_OK && nByte>=p->pDb->nMtMinCkpt ){
+      int nKB = 0;
+      rc = lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nKB);
+      if( rc==LSM_OK && nKB>=p->pDb->nMtMinCkpt ){
         rc = lsm_checkpoint(pWorker, 0);
       }
     }else{

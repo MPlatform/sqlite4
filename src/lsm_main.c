@@ -455,7 +455,7 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
 static int infoFreelistSize(lsm_db *pDb, int *pnFree, int *pnWaiting){
 }
 
-static int infoTreeSize(lsm_db *db, int *pnOld, int *pnNew){
+static int infoTreeSize(lsm_db *db, int *pnOldKB, int *pnNewKB){
   ShmHeader *pShm = db->pShmhdr;
   TreeHeader *p = &pShm->hdr1;
 
@@ -478,15 +478,15 @@ static int infoTreeSize(lsm_db *db, int *pnOld, int *pnNew){
   ** lsm_info(LSM_INFO_TREE_SIZE) request), neither of these are considered to
   ** be problems.
   */
-  *pnNew = (int)p->root.nByte;
+  *pnNewKB = ((int)p->root.nByte + 1023) / 1024;
   if( p->iOldShmid ){
     if( p->iOldLog==lsmCheckpointLogOffset(pShm->aSnap1) ){
-      *pnOld = 0;
+      *pnOldKB = 0;
     }else{
-      *pnOld = (int)p->oldroot.nByte;
+      *pnOldKB = ((int)p->oldroot.nByte + 1023) / 1024;
     }
   }else{
-    *pnOld = 0;
+    *pnOldKB = 0;
   }
 
   return LSM_OK;
@@ -557,8 +557,8 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
     }
 
     case LSM_INFO_CHECKPOINT_SIZE: {
-      int *pnByte = va_arg(ap, int *);
-      rc = lsmCheckpointSize(pDb, pnByte);
+      int *pnKB = va_arg(ap, int *);
+      rc = lsmCheckpointSize(pDb, pnKB);
       break;
     }
 

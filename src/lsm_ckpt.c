@@ -1186,16 +1186,23 @@ void lsmCheckpointZeroLogoffset(lsm_db *pDb){
   memcpy(pDb->pShmhdr->aSnap2, pDb->aSnapshot, nCkpt*sizeof(u32));
 }
 
-int lsmCheckpointSize(lsm_db *db, int *pnByte){
+/*
+** Set the output variable to the number of KB of data written into the
+** database file since the most recent checkpoint.
+*/
+int lsmCheckpointSize(lsm_db *db, int *pnKB){
   ShmHeader *pShm = db->pShmhdr;
   int rc = LSM_OK;
   u32 nSynced;
 
+  /* Set nSynced to the number of pages that had been written when the 
+  ** database was last checkpointed. */
   rc = lsmCheckpointSynced(db, 0, 0, &nSynced);
+
   if( rc==LSM_OK ){
     u32 nPgsz = db->pShmhdr->aSnap1[CKPT_HDR_PGSZ];
     u32 nWrite = db->pShmhdr->aSnap1[CKPT_HDR_NWRITE];
-    *pnByte = (int)((nWrite - nSynced) * nPgsz);
+    *pnKB = (int)(( ((i64)(nWrite - nSynced) * nPgsz) + 1023) / 1024);
   }
 
   return rc;

@@ -396,7 +396,7 @@ int lsm_info(lsm_db *, int, ...);
 **
 ** LSM_INFO_CHECKPOINT_SIZE:
 **   The third argument should be of type (int *). The location pointed to
-**   by this argument is populated with the number of bytes written to the
+**   by this argument is populated with the number of KB written to the
 **   database file since the most recent checkpoint.
 **
 ** LSM_INFO_TREE_SIZE:
@@ -413,7 +413,7 @@ int lsm_info(lsm_db *, int, ...);
 **   to disk at any time.
 ** 
 **   Assuming no error occurs, the location pointed to by the first of the two
-**   (int *) arguments is set to the size of the old in-memory tree in bytes.
+**   (int *) arguments is set to the size of the old in-memory tree in KB.
 **   The second is set to the size of the current, or live in-memory tree.
 */
 #define LSM_INFO_NWRITE           1
@@ -500,13 +500,13 @@ int lsm_flush(lsm_db *pDb);
 ** error code if an error occurs or LSM_OK otherwise.
 **
 ** If the current snapshot has already been checkpointed, calling this 
-** function is a no-op. In this case if pnByte is not NULL, *pnByte is
+** function is a no-op. In this case if pnKB is not NULL, *pnKB is
 ** set to 0. Or, if the current snapshot is successfully checkpointed
-** by this function and pbCkpt is not NULL, *pnByte is set to the number
+** by this function and pbKB is not NULL, *pnKB is set to the number
 ** of bytes written to the database file since the previous checkpoint
 ** (the same measure as returned by the LSM_INFO_CHECKPOINT_SIZE query).
 */
-int lsm_checkpoint(lsm_db *pDb, int *pnByte);
+int lsm_checkpoint(lsm_db *pDb, int *pnKB);
 
 /*
 ** CAPI: Opening and Closing Database Cursors
