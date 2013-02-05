@@ -491,7 +491,7 @@ int lsm_delete_range(lsm_db *,
 **
 ** This function is called by a thread to work on the database structure.
 */
-int lsm_work(lsm_db *pDb, int nMerge, int nPage, int *pnWrite);
+int lsm_work(lsm_db *pDb, int nMerge, int nKB, int *pnWrite);
 
 int lsm_flush(lsm_db *pDb);
 

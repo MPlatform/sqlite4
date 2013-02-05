@@ -1289,7 +1289,7 @@ the following are true:
 <ul>
   <li> <p>All database content is stored in a single 
        <a href=#architectural_overview>segment</a>. This makes the
-       database effectively equivalent to an optimally packed b-tree stucture
+       data structure equivalent to an optimally packed b-tree stucture
        for search operations - minimizing the number of disk sectors that need
        to be visted when searching the database.
 
@@ -1300,15 +1300,12 @@ the following are true:
 
 <p>In order to optimize the database, lsm_work() should be called with 
 the nMerge argument set to 1 and the third parameter set to a negative value
-(interpreted as - keep working until there is no more work to do). For 
+(interpreted as "keep working until there is no more work to do"). For 
 example:
 
 <verbatim>
   rc = lsm_work(db, 1, -1, 0);
 </verbatim>
-
-<p><span style=color:red>todo: the -1 as the 3rd argument above is currently
-not supported</span>
 
 <p>When optimizing the database as above, either the LSM_CONFIG_AUTOCHECKPOINT
 parameter should be set to a non-zero value or lsm_checkpoint() should be
@@ -1316,7 +1313,6 @@ called periodically. Otherwise, no checkpoints will be performed, preventing
 the library from reusing any space occupied by old segments even after their
 content has been merged into the new segment. The result - a database file that
 is optimized, except that it is up to twice as large as it otherwise would be.
-
 
 
 

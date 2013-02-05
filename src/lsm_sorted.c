@@ -5200,17 +5200,19 @@ static int doLsmWork(lsm_db *pDb, int nMerge, int nPage, int *pnWrite){
 
   assert( nMerge>=1 );
 
-  if( nPage>0 ){
+  if( nPage!=0 ){
     int bCkpt = 0;
     do {
       int nThis = 0;
+      int nReq = (nPage>=0) ? (nPage-nWrite) : ((int)0x7FFFFFFF);
+
       bCkpt = 0;
-      rc = doLsmSingleWork(pDb, 0, nMerge, nPage-nWrite, &nThis, &bCkpt);
+      rc = doLsmSingleWork(pDb, 0, nMerge, nReq, &nThis, &bCkpt);
       nWrite += nThis;
       if( rc==LSM_OK && bCkpt ){
         rc = lsm_checkpoint(pDb, 0);
       }
-    }while( rc==LSM_OK && (nWrite<nPage && bCkpt) );
+    }while( rc==LSM_OK && bCkpt && (nWrite<nPage || nPage<0) );
   }
 
   if( pnWrite ){
@@ -5226,14 +5228,32 @@ static int doLsmWork(lsm_db *pDb, int nMerge, int nPage, int *pnWrite){
 /*
 ** Perform work to merge database segments together.
 */
-int lsm_work(lsm_db *pDb, int nMerge, int nPage, int *pnWrite){
+int lsm_work(lsm_db *pDb, int nMerge, int nKB, int *pnWrite){
+  int rc;                         /* Return code */
+  int nPgsz;                      /* Nominal page size in bytes */
+  int nPage;                      /* Equivalent of nKB in pages */
+  int nWrite = 0;                 /* Number of pages written */
 
   /* This function may not be called if pDb has an open read or write
   ** transaction. Return LSM_MISUSE if an application attempts this.  */
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
-
   if( nMerge<=0 ) nMerge = pDb->nMerge;
-  return doLsmWork(pDb, nMerge, nPage, pnWrite);
+
+  /* Convert from KB to pages */
+  nPgsz = lsmFsPageSize(pDb->pFS);
+  if( nKB>=0 ){
+    nPage = ((i64)nKB * 1024 + nPgsz - 1) / nPgsz;
+  }else{
+    nPage = -1;
+  }
+
+  rc = doLsmWork(pDb, nMerge, nPage, &nWrite);
+  
+  if( pnWrite ){
+    /* Convert back from pages to KB */
+    *pnWrite = (int)(((i64)nWrite * 1024 + nPgsz - 1) / nPgsz);
+  }
+  return rc;
 }
 
 int lsm_flush(lsm_db *db){
@@ -5301,6 +5321,7 @@ int lsmSortedAutoWork(
     lsmLogMessage(pDb, rc, "lsmSortedAutoWork(): %d*%d = %d pages", 
         nUnit, nDepth, nRemaining);
 #endif
+    assert( nRemaining>=0 );
     rc = doLsmWork(pDb, pDb->nMerge, nRemaining, 0);
     if( rc==LSM_BUSY ) rc = LSM_OK;
 

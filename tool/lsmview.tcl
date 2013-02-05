@@ -401,7 +401,7 @@ proc static_select_callback {C segment} {
   # Delete the existing tree entries.
   $myTree delete [$myTree children {}]
 
-  set nBlksz [exec_lsmtest_show -c $myCfg $myDb blocksize]
+  set nBlksz [expr [exec_lsmtest_show -c $myCfg $myDb blocksize] * 1024]
   set nPgsz  [exec_lsmtest_show -c $myCfg $myDb pagesize]
 
   if {[regexp {c=1} $myCfg]          || [regexp {co=1} $myCfg]
