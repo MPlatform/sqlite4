@@ -199,7 +199,6 @@ static int lsmPosixOsMap(
   }else{
     sz = (size_t)nByte;
   }
-  sz = (size_t)(LSM_MAX(sz, 1<<15));
 
   if( (off+sz)>buf.st_size ){
     prc = ftruncate(p->fd, (off+sz));
@@ -207,7 +206,9 @@ static int lsmPosixOsMap(
   }
 
   *ppOut = mmap(0, sz, PROT_READ|PROT_WRITE, MAP_SHARED, p->fd, off);
-  if( *ppOut==0 ) return LSM_IOERR_BKPT;
+  if( *ppOut==MAP_FAILED ){
+    return LSM_IOERR_BKPT;
+  }
 
   *pszOut = (i64)sz;
   return LSM_OK;

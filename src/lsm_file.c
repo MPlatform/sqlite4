@@ -828,6 +828,8 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     }else{
       pFS->mmapmgr.eUseMmap = pDb->eMmap;
       pFS->mmapmgr.nMapsz = 1*1024*1024;
+
+      pFS->mmapmgr.nMapsz = 4*1024;
     }
 
     /* Make a copy of the database and log file names. */
@@ -1543,7 +1545,8 @@ static int fsPageGet(
 
     p->aData = fsMmapRef(pFS, iOff, pFS->nPagesize, &p->pRef, &rc);
     if( rc!=LSM_OK ){
-      lsmFsPageRelease(p);
+      p->pHashNext = pFS->pFree;
+      pFS->pFree = p;
       p = 0;
     }
   }else{
@@ -1632,11 +1635,12 @@ int lsmFsReadSyncedId(lsm_db *db, int iMeta, i64 *piVal){
   assert( iMeta==1 || iMeta==2 );
   if( pFS->mmapmgr.eUseMmap!=LSM_MMAP_OFF ){
     MmapMgrRef *pRef = 0;
-    u8 *pMap;                     /* Mapping of two meta pages */
+    u8 *pMap;                     /* Mapping of meta pages */
+    int iOff = (iMeta==2 ? LSM_META_PAGE_SIZE : 0);
 
-    pMap = (u8 *)fsMmapRef(pFS, 0, LSM_META_PAGE_SIZE*2, &pRef, &rc);
+    pMap = (u8 *)fsMmapRef(pFS, iOff, LSM_META_PAGE_SIZE, &pRef, &rc);
     if( rc==LSM_OK ){
-      *piVal = (i64)lsmGetU64(&pMap[(iMeta-1)*LSM_META_PAGE_SIZE]);
+      *piVal = (i64)lsmGetU64(pMap);
       fsMmapUnref(pFS, &pRef);
     }
   }else{
