@@ -4742,12 +4742,25 @@ static int sortedMoveBlock(lsm_db *pDb, int *pnWrite){
       p->redirect.a = lsmMallocZeroRc(pDb->pEnv, nByte, &rc);
     }
     if( rc==LSM_OK ){
-      memmove(&p->redirect.a[1], &p->redirect.a[0], 
-          sizeof(struct RedirectEntry) * p->redirect.n
-      );
-      p->redirect.a[0].iFrom = iFrom;
-      p->redirect.a[0].iTo = iTo;
-      p->redirect.n++;
+
+      /* Check if the block just moved was already redirected. */
+      int i;
+      for(i=0; i<p->redirect.n; i++){
+        if( p->redirect.a[i].iTo==iFrom ) break;
+      }
+
+      if( i==p->redirect.n ){
+        /* Block iFrom was not already redirected. Add a new array entry. */
+        memmove(&p->redirect.a[1], &p->redirect.a[0], 
+            sizeof(struct RedirectEntry) * p->redirect.n
+            );
+        p->redirect.a[0].iFrom = iFrom;
+        p->redirect.a[0].iTo = iTo;
+        p->redirect.n++;
+      }else{
+        /* Block iFrom was already redirected. Overwrite existing entry. */
+        p->redirect.a[i].iTo = iTo;
+      }
 
       rc = lsmBlockFree(pDb, iFrom);
 
