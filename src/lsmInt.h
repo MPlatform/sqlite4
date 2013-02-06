@@ -338,6 +338,8 @@ struct lsm_db {
   int bUseFreelist;               /* True to use pFreelist */
   int bIncrMerge;                 /* True if currently doing a merge */
 
+  int bInFactory;                 /* True if within factory.xFactory() */
+
   /* Debugging message callback */
   void (*xLog)(void *, int, const char *);
   void *pLogCtx;
@@ -896,6 +898,8 @@ void lsmDbDeferredClose(lsm_db *, lsm_file *, LsmFile *);
 LsmFile *lsmDbRecycleFd(lsm_db *);
 
 int lsmWalkFreelist(lsm_db *, int, int (*)(void *, int, i64), void *);
+
+int lsmCheckCompressionId(lsm_db *, u32);
 
 
 /**************************************************************************

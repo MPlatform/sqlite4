@@ -415,7 +415,8 @@ static int test_sqlite4_lsm_flush(
 static int testConfigureSetCompression(
   Tcl_Interp *interp, 
   lsm_db *db, 
-  Tcl_Obj *pCmp
+  Tcl_Obj *pCmp,
+  unsigned int iId
 ){
   struct CompressionScheme {
     const char *zName;
@@ -438,13 +439,44 @@ static int testConfigureSetCompression(
   int iOpt;
   int rc;
 
-  rc = Tcl_GetIndexFromObjStruct(
-      interp, pCmp, aCmp, sizeof(aCmp[0]), "scheme", 0, &iOpt
-  );
-  if( rc!=TCL_OK ) return rc;
+  if( interp ){
+    rc = Tcl_GetIndexFromObjStruct(
+        interp, pCmp, aCmp, sizeof(aCmp[0]), "scheme", 0, &iOpt
+        );
+    if( rc!=TCL_OK ) return rc;
+  }else{
+    int nOpt = sizeof(aCmp)/sizeof(aCmp[0]);
+    for(iOpt=0; iOpt<nOpt; iOpt++){
+      if( iId==aCmp[iOpt].cmp.iId ) break;
+    }
+    if( iOpt==nOpt ) return 0;
+  }
 
   rc = lsm_config(db, LSM_CONFIG_SET_COMPRESSION, &aCmp[iOpt].cmp);
+  return rc;
+}
 
+static int testCompressFactory(void *pCtx, lsm_db *db, unsigned int iId){
+  return testConfigureSetCompression(0, db, 0, iId);
+}
+
+static int testConfigureSetFactory(
+  Tcl_Interp *interp, 
+  lsm_db *db, 
+  Tcl_Obj *pArg
+){
+  lsm_compress_factory aFactory[2] = {
+    { 0, 0, 0 },
+    { 0, testCompressFactory, 0 },
+  };
+  int bArg = 0;
+  int rc;
+
+  rc = Tcl_GetBooleanFromObj(interp, pArg, &bArg);
+  if( rc!=TCL_OK ) return rc;
+  assert( bArg==1 || bArg==0 );
+
+  rc = lsm_config(db, LSM_CONFIG_SET_COMPRESSION_FACTORY, &aFactory[bArg]);
   return rc;
 }
 
@@ -453,18 +485,19 @@ static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
     const char *zOpt;
     int eOpt;
   } aConfig[] = {
-    { "autoflush",        LSM_CONFIG_AUTOFLUSH },
-    { "page_size",        LSM_CONFIG_PAGE_SIZE },
-    { "block_size",       LSM_CONFIG_BLOCK_SIZE },
-    { "safety",           LSM_CONFIG_SAFETY },
-    { "autowork",         LSM_CONFIG_AUTOWORK },
-    { "autocheckpoint",   LSM_CONFIG_AUTOCHECKPOINT },
-    { "mmap",             LSM_CONFIG_MMAP },
-    { "use_log",          LSM_CONFIG_USE_LOG },
-    { "automerge",        LSM_CONFIG_AUTOMERGE },
-    { "max_freelist",     LSM_CONFIG_MAX_FREELIST },
-    { "multi_proc",       LSM_CONFIG_MULTIPLE_PROCESSES },
-    { "set_compression",  LSM_CONFIG_SET_COMPRESSION },
+    { "autoflush",               LSM_CONFIG_AUTOFLUSH },
+    { "page_size",               LSM_CONFIG_PAGE_SIZE },
+    { "block_size",              LSM_CONFIG_BLOCK_SIZE },
+    { "safety",                  LSM_CONFIG_SAFETY },
+    { "autowork",                LSM_CONFIG_AUTOWORK },
+    { "autocheckpoint",          LSM_CONFIG_AUTOCHECKPOINT },
+    { "mmap",                    LSM_CONFIG_MMAP },
+    { "use_log",                 LSM_CONFIG_USE_LOG },
+    { "automerge",               LSM_CONFIG_AUTOMERGE },
+    { "max_freelist",            LSM_CONFIG_MAX_FREELIST },
+    { "multi_proc",              LSM_CONFIG_MULTIPLE_PROCESSES },
+    { "set_compression",         LSM_CONFIG_SET_COMPRESSION },
+    { "set_compression_factory", LSM_CONFIG_SET_COMPRESSION_FACTORY },
     { 0, 0 }
   };
   int nElem;
@@ -487,7 +520,10 @@ static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
         rc = TCL_ERROR;
       }else{
         if( aConfig[iOpt].eOpt==LSM_CONFIG_SET_COMPRESSION ){
-          rc = testConfigureSetCompression(interp, db, apElem[i+1]);
+          rc = testConfigureSetCompression(interp, db, apElem[i+1], 0);
+        }
+        else if( aConfig[iOpt].eOpt==LSM_CONFIG_SET_COMPRESSION_FACTORY ){
+          rc = testConfigureSetFactory(interp, db, apElem[i+1]);
         }
         else {
           int iVal;

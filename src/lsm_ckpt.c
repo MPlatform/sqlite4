@@ -926,10 +926,8 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   rc = lsmCheckpointDeserialize(pDb, 1, pShm->aSnap1, &pDb->pWorker);
   if( pDb->pWorker ) pDb->pWorker->pDatabase = pDb->pDatabase;
 
-  if( rc==LSM_OK && pDb->pWorker->iCmpId!=pDb->compress.iId ){
-    lsmFreeSnapshot(pDb->pEnv, pDb->pWorker);
-    rc = LSM_MISMATCH;
-    pDb->pWorker = 0;
+  if( rc==LSM_OK ){
+    rc = lsmCheckCompressionId(pDb, pDb->pWorker->iCmpId);
   }
 
 #if 0

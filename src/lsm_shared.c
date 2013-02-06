@@ -925,6 +925,20 @@ int lsmFinishRecovery(lsm_db *pDb){
   return LSM_OK;
 }
 
+int lsmCheckCompressionId(lsm_db *pDb, u32 iReq){
+  if( pDb->compress.iId!=iReq ){
+    if( pDb->factory.xFactory ){
+      pDb->bInFactory = 1;
+      pDb->factory.xFactory(pDb->factory.pCtx, pDb, iReq);
+      pDb->bInFactory = 0;
+    }
+    if( pDb->compress.iId!=iReq ){
+      return LSM_MISMATCH;
+    }
+  }
+  return LSM_OK;
+}
+
 /*
 ** Begin a read transaction. This function is a no-op if the connection
 ** passed as the only argument already has an open read transaction.
@@ -983,7 +997,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
           ** If not, set rc to LSM_MISMATCH.  */
           assert( rc!=LSM_OK || pDb->pClient->iCmpId!=LSM_COMPRESSION_EMPTY );
           if( rc==LSM_OK && pDb->pClient->iCmpId!=pDb->compress.iId ){
-            rc = LSM_MISMATCH;
+            rc = lsmCheckCompressionId(pDb, pDb->pClient->iCmpId);
           }
         }else{
           rc = lsmReleaseReadlock(pDb);

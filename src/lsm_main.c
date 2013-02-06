@@ -344,10 +344,14 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
     case LSM_CONFIG_SET_COMPRESSION: {
       lsm_compress *p = va_arg(ap, lsm_compress *);
-      if( pDb->iReader>=0 ){
+      if( pDb->iReader>=0 && pDb->bInFactory==0 ){
         /* May not change compression schemes with an open transaction */
         rc = LSM_MISUSE_BKPT;
       }else{
+        if( pDb->compress.xFree ){
+          /* Invoke any destructor belonging to the current compression. */
+          pDb->compress.xFree(pDb->compress.pCtx);
+        }
         if( p->xBound==0 ){
           memset(&pDb->compress, 0, sizeof(lsm_compress));
           pDb->compress.iId = LSM_COMPRESSION_NONE;
