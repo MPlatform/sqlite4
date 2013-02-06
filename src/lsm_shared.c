@@ -434,6 +434,9 @@ int lsmDbDatabaseConnect(
   if( rc==LSM_OK ){
     rc = doDbConnect(pDb);
   }
+  if( rc==LSM_OK ){
+    rc = lsmFsConfigure(pDb);
+  }
 
   return rc;
 }
@@ -975,10 +978,18 @@ int lsmBeginReadTrans(lsm_db *pDb){
           }
           assert( (rc==LSM_OK)==(pDb->pClient!=0) );
           assert( pDb->iReader>=0 );
+
+          /* Check that the client has the right compression hooks loaded.
+          ** If not, set rc to LSM_MISMATCH.  */
+          assert( rc!=LSM_OK || pDb->pClient->iCmpId!=LSM_COMPRESSION_EMPTY );
+          if( rc==LSM_OK && pDb->pClient->iCmpId!=pDb->compress.iId ){
+            rc = LSM_MISMATCH;
+          }
         }else{
           rc = lsmReleaseReadlock(pDb);
         }
       }
+
       if( rc==LSM_BUSY ){
         rc = LSM_OK;
       }

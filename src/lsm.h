@@ -24,6 +24,7 @@ extern "C" {
 ** Opaque handle types.
 */
 typedef struct lsm_compress lsm_compress;   /* Compression library functions */
+typedef struct lsm_compress_factory lsm_compress_factory;
 typedef struct lsm_cursor lsm_cursor;       /* Database cursor handle */
 typedef struct lsm_db lsm_db;               /* Database connection handle */
 typedef struct lsm_env lsm_env;             /* Runtime environment */
@@ -106,6 +107,8 @@ struct lsm_env {
 #define LSM_PROTOCOL  15
 #define LSM_MISUSE    21
 
+#define LSM_MISMATCH  50
+
 /* 
 ** CAPI: Creating and Destroying Database Connection Handles
 **
@@ -120,7 +123,7 @@ int lsm_close(lsm_db *pDb);
 int lsm_open(lsm_db *pDb, const char *zFilename);
 
 /*
-** CAPI: Obtaining pointers to databases environments
+** CAPI: Obtaining pointers to database environments
 **
 ** Return a pointer to the environment used by the database connection 
 ** passed as the first argument. Assuming the argument is valid, this 
@@ -255,20 +258,25 @@ int lsm_config(lsm_db *, int, ...);
 ** LSM_CONFIG_GET_COMPRESSION:
 **   Query the compression methods used to compress and decompress database
 **   content.
+**
+** LSM_CONFIG_SET_COMPRESSION_FACTORY:
+**   Configure a factory method to be invoked in case of an LSM_MISMATCH
+**   error.
 */
-#define LSM_CONFIG_AUTOFLUSH           1
-#define LSM_CONFIG_PAGE_SIZE           2
-#define LSM_CONFIG_SAFETY              3
-#define LSM_CONFIG_BLOCK_SIZE          4
-#define LSM_CONFIG_AUTOWORK            5
-#define LSM_CONFIG_MMAP                7
-#define LSM_CONFIG_USE_LOG             8
-#define LSM_CONFIG_AUTOMERGE           9
-#define LSM_CONFIG_MAX_FREELIST       10
-#define LSM_CONFIG_MULTIPLE_PROCESSES 11
-#define LSM_CONFIG_AUTOCHECKPOINT     12
-#define LSM_CONFIG_SET_COMPRESSION    13
-#define LSM_CONFIG_GET_COMPRESSION    14
+#define LSM_CONFIG_AUTOFLUSH                1
+#define LSM_CONFIG_PAGE_SIZE                2
+#define LSM_CONFIG_SAFETY                   3
+#define LSM_CONFIG_BLOCK_SIZE               4
+#define LSM_CONFIG_AUTOWORK                 5
+#define LSM_CONFIG_MMAP                     7
+#define LSM_CONFIG_USE_LOG                  8
+#define LSM_CONFIG_AUTOMERGE                9
+#define LSM_CONFIG_MAX_FREELIST            10
+#define LSM_CONFIG_MULTIPLE_PROCESSES      11
+#define LSM_CONFIG_AUTOCHECKPOINT          12
+#define LSM_CONFIG_SET_COMPRESSION         13
+#define LSM_CONFIG_GET_COMPRESSION         14
+#define LSM_CONFIG_SET_COMPRESSION_FACTORY 15
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1
@@ -283,7 +291,17 @@ struct lsm_compress {
   int (*xBound)(void *, int nSrc);
   int (*xCompress)(void *, char *, int *, const char *, int);
   int (*xUncompress)(void *, char *, int *, const char *, int);
+  void (*xFree)(void *pCtx);
 };
+
+struct lsm_compress_factory {
+  void *pCtx;
+  int (*xFactory)(void *, lsm_db *, unsigned int);
+  void (*xFree)(void *pCtx);
+};
+
+#define LSM_COMPRESSION_EMPTY 0
+#define LSM_COMPRESSION_NONE  1
 
 
 /*

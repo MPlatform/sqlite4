@@ -96,6 +96,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->bMultiProc = LSM_DFLT_MULTIPLE_PROCESSES;
   pDb->bMmap = LSM_DFLT_MMAP;
   pDb->xLog = xLog;
+  pDb->compress.iId = LSM_COMPRESSION_NONE;
   return LSM_OK;
 }
 
@@ -194,6 +195,12 @@ int lsm_close(lsm_db *pDb){
       lsmDbDatabaseRelease(pDb);
       lsmLogClose(pDb);
       lsmFsClose(pDb->pFS);
+      
+      /* Invoke any destructors registered for the compression or 
+      ** compression factory callbacks.  */
+      if( pDb->factory.xFree ) pDb->factory.xFree(pDb->factory.pCtx);
+      if( pDb->compress.xFree ) pDb->compress.xFree(pDb->compress.pCtx);
+
       lsmFree(pDb->pEnv, pDb->rollback.aArray);
       lsmFree(pDb->pEnv, pDb->aTrans);
       lsmFree(pDb->pEnv, pDb->apShm);
@@ -337,12 +344,28 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
     case LSM_CONFIG_SET_COMPRESSION: {
       lsm_compress *p = va_arg(ap, lsm_compress *);
-      if( pDb->pDatabase ){
-        /* If lsm_open() has been called, this call is against the rules. */
+      if( pDb->iReader>=0 ){
+        /* May not change compression schemes with an open transaction */
         rc = LSM_MISUSE_BKPT;
       }else{
-        memcpy(&pDb->compress, p, sizeof(lsm_compress));
+        if( p->xBound==0 ){
+          memset(&pDb->compress, 0, sizeof(lsm_compress));
+          pDb->compress.iId = LSM_COMPRESSION_NONE;
+        }else{
+          memcpy(&pDb->compress, p, sizeof(lsm_compress));
+        }
+        rc = lsmFsConfigure(pDb);
       }
+      break;
+    }
+
+    case LSM_CONFIG_SET_COMPRESSION_FACTORY: {
+      lsm_compress_factory *p = va_arg(ap, lsm_compress_factory *);
+      if( pDb->factory.xFree ){
+        /* Invoke any destructor belonging to the current factory. */
+        pDb->factory.xFree(pDb->factory.pCtx);
+      }
+      memcpy(&pDb->factory, p, sizeof(lsm_compress_factory));
       break;
     }
 

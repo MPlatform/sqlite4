@@ -316,6 +316,7 @@ struct lsm_db {
   i64 nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
   lsm_compress compress;          /* Compression callbacks */
+  lsm_compress_factory factory;   /* Compression callback factory */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
@@ -526,6 +527,7 @@ struct FreelistEntry {
 */
 struct Snapshot {
   Database *pDatabase;            /* Database this snapshot belongs to */
+  u32 iCmpId;                     /* Id of compression scheme */
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
   i64 iLogOff;                    /* Log file offset */
@@ -643,6 +645,8 @@ int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 */
 int lsmFsOpen(lsm_db *, const char *);
 void lsmFsClose(FileSystem *);
+
+int lsmFsConfigure(lsm_db *db);
 
 int lsmFsBlockSize(FileSystem *);
 void lsmFsSetBlockSize(FileSystem *, int);

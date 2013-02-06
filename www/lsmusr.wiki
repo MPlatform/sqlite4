@@ -1150,7 +1150,7 @@ clients should set the LSM_CONFIG_AUTOWORK parameter to zero.
 <verbatim>
   int rc;
   lsm_db *db;
-  int nCkpt = 4*1024*1024;
+  int nCkpt = 4*1024;             /* 4096KB == 4MB */
 
   /* Open a database connection to database "test.db". 
   **
@@ -1168,7 +1168,7 @@ clients should set the LSM_CONFIG_AUTOWORK parameter to zero.
 
     /* Attempt up to 512KB of work. Set nWrite to the number of bytes
     ** actually written to disk.  */
-    rc = lsm_work(db, 2, 512*1024, &nWrite);
+    rc = lsm_work(db, 2, 512, &nWrite);
     if( rc!=LSM_OK && rc!=LSM_BUSY ){
       /* Anything other than LSM_OK or LSM_BUSY is a problem. LSM_BUSY
       ** indicates that some other client has taken the WORKER lock. Any

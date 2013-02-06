@@ -510,11 +510,6 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     pFS->nMetasize = 4 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
-    if( pDb->compress.xCompress ){
-      pFS->pCompress = &pDb->compress;
-    }else{
-      pFS->bUseMmap = pDb->bMmap;
-    }
 
     /* Make a copy of the database and log file names. */
     memcpy(pFS->zDb, zDb, nDb+1);
@@ -550,6 +545,56 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
 
   pDb->pFS = pFS;
   return rc;
+}
+
+/*
+** Configure the file-system object according to the current values of
+** the LSM_CONFIG_MMAP and LSM_CONFIG_SET_COMPRESSION options.
+*/
+int lsmFsConfigure(lsm_db *db){
+  FileSystem *pFS = db->pFS;
+  lsm_env *pEnv = pFS->pEnv;
+  Page *pPg;
+
+  assert( pFS->nOut==0 );
+  assert( pFS->pWaiting==0 );
+
+  /* Reset any compression/decompression buffers already allocated */
+  lsmFree(pEnv, pFS->aIBuffer);
+  lsmFree(pEnv, pFS->aOBuffer);
+  pFS->nBuffer = 0;
+
+  /* Unmap the file, if it is currently mapped */
+  if( pFS->pMap ){
+    lsmEnvRemap(pEnv, pFS->fdDb, -1, &pFS->pMap, &pFS->nMap);
+    pFS->bUseMmap = 0;
+  }
+
+  /* Free all allocate page structures */
+  pPg = pFS->pLruFirst;
+  while( pPg ){
+    Page *pNext = pPg->pLruNext;
+    if( pPg->flags & PAGE_FREE ) lsmFree(pEnv, pPg->aData);
+    lsmFree(pEnv, pPg);
+    pPg = pNext;
+  }
+
+  /* Zero pointers that point to deleted page objects */
+  pFS->nCacheAlloc = 0;
+  pFS->pLruFirst = 0;
+  pFS->pLruLast = 0;
+  pFS->pFree = 0;
+
+  /* Configure the FileSystem object */
+  if( db->compress.xCompress ){
+    pFS->pCompress = &db->compress;
+    pFS->bUseMmap = 0;
+  }else{
+    pFS->pCompress = 0;
+    pFS->bUseMmap = db->bMmap;
+  }
+
+  return LSM_OK;
 }
 
 /*

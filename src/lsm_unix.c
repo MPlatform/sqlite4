@@ -194,18 +194,20 @@ static int lsmPosixOsRemap(
     *pnOut = p->nMap = 0;
   }
 
-  memset(&buf, 0, sizeof(buf));
-  prc = fstat(p->fd, &buf);
-  if( prc!=0 ) return LSM_IOERR_BKPT;
-  iSz = buf.st_size;
-  if( iSz<iMin ){
-    iSz = ((iMin + (2<<20) - 1) / (2<<20)) * (2<<20);
-    prc = ftruncate(p->fd, iSz);
+  if( iMin>=0 ){
+    memset(&buf, 0, sizeof(buf));
+    prc = fstat(p->fd, &buf);
     if( prc!=0 ) return LSM_IOERR_BKPT;
-  }
+    iSz = buf.st_size;
+    if( iSz<iMin ){
+      iSz = ((iMin + (2<<20) - 1) / (2<<20)) * (2<<20);
+      prc = ftruncate(p->fd, iSz);
+      if( prc!=0 ) return LSM_IOERR_BKPT;
+    }
 
-  p->pMap = mmap(0, iSz, PROT_READ|PROT_WRITE, MAP_SHARED, p->fd, 0);
-  p->nMap = iSz;
+    p->pMap = mmap(0, iSz, PROT_READ|PROT_WRITE, MAP_SHARED, p->fd, 0);
+    p->nMap = iSz;
+  }
 
   *ppOut = p->pMap;
   *pnOut = p->nMap;
