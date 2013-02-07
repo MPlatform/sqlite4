@@ -374,13 +374,13 @@ lsm_csr_valid() returns 0, and the loop is finished. API function
 key associated with each database entry visited.
 
 <verbatim>
-  for(rc = lsm_csr_first(csr); lsm_csr_valid(csr); rc = lsm_csr_next(csr)){
+  for(rc=lsm_csr_first(csr); rc==LSM_OK && lsm_csr_valid(csr); rc=lsm_csr_next(csr)){
     const void *pKey; int nKey;
     const void *pVal; int nVal;
 
     rc = lsm_csr_key(csr, &pKey, &nKey);
     if( rc==LSM_OK ) rc = lsm_csr_value(csr, &pVal, &nVal);
-    if( rc!=LSM_OK ) break;
+    if( rc==LSM_OK ) break;
 
     /* At this point pKey points to the current key (size nKey bytes) and
     ** pVal points to the corresponding value (size nVal bytes).  */
@@ -727,10 +727,11 @@ of type lsm_compress, which is defined as follows:
   };
 </verbatim>
 
-<p><i> Explain how the hooks work here (same as zipvfs) </i>
+<p><span style=color:red> Explain how the hooks work here (same as zipvfs)
+</span>
 
-<p><i> Example code? Using zlib? Or something simple like an RLE
-implementation?</i>
+<p><span style=color:red> Example code? Using zlib? Or something simple like an
+RLE implementation?</span>
 
 <p>The database file header of any LSM database contains a 32-bit unsigned
 "compression id" field. If the database is not a compressed database, this
@@ -739,35 +740,67 @@ identifying the compression and/or encryption scheme in use. Application
 compression scheme ids must be greater than or equal to 10000. Values smaller
 than 10000 are reserved for internal use.
 
-<p>The lsm_compression_id() API may be used to read the compression id from
-a database connection. Because the compression id is stored in the database
+<p>The lsm_info() API may be used to read the compression id from a database 
+connection as follows: 
+
+<verbatim>
+  unsigned int iCompressionId;
+  rc = lsm_info(db, LSM_INFO_COMPRESSION_ID, &iCompressionId);
+  if( rc==LSM_OK ){
+    /* Variable iCompressionId now contains the db compression id */
+  }
+</verbatim>
+
+Because the compression id is stored in the database
 header, it may be read before any required compression or encryption hooks
 are configured.
 
 <verbatim>
   #define LSM_COMPRESSION_EMPTY    0
   #define LSM_COMPRESSION_NONE     1
-  int lsm_compression_id(lsm_db *db, u32 *piId);
 </verbatim>
 
 <p>When a database is opened for the first time, before it is first written,
-the compression id field is set to LSM_COMPRESSION_EMPTY (0). The first time
-a transaction is committed, the database compression id is set to a copy of 
-the lsm_compress.iId field of the compression hooks for the database handle
-committing the transaction, or to LSM_COMPRESSION_NONE (1) if no compression
-hooks are configured.
+the compression id field is set to LSM_COMPRESSION_EMPTY (0). After data is
+written into the database file, the database compression id is set to a copy 
+of the lsm_compress.iId field of the compression hooks for the database handle
+doing the writing, or to LSM_COMPRESSION_NONE (1) if no compression hooks 
+are configured.
 
 <p>Once the compression id is set to something other than 
-LSM_COMPRESSION_EMPTY, when a database handle opens a read or write 
-transaction on the database, the compression id is compared against the 
-lsm_compress.iId field of the configured compression hooks, or against LSM_COMPRESSION_NONE if no compression hooks are configured. If the compression id
-does not match, then an LSM_MISMATCH error is returned and the operation 
-fails (no transaction or database cursor is opened).
+LSM_COMPRESSION_EMPTY, when a database handle attempts to read or write the
+database file, the compression id is compared against the lsm_compress.iId 
+field of the configured compression hooks, or against LSM_COMPRESSION_NONE if
+no compression hooks are configured. If the compression id does not match, then
+an LSM_MISMATCH error is returned and the operation fails (no transaction or
+database cursor is opened).
 
-<p><i>Maybe there should be a way to register a mismatch-handler callback.
-Otherwise, applications have to handle LSM_MISMATCH everywhere...
-</i>
+<p>It is also possible to register a compression factory callback with a 
+database handle. If one is registered, the compression factory callback is
+invoked instead of returning LSM_MISMATCH if the configured compression hooks
+do not match the compression id of a database. If the callback registers
+compatible compression hooks with the database handle (using the normal
+lsm_config() interface), then the database read or write operation resumes
+after it returns. Otherwise, if the compression factory callback does not
+register new, compatible, compression hooks with the database handle,
+LSM_MISMATCH is returned to the user.
 
+<p>A compression factory callback is registered with a database handle
+by calling lsm_config() with the second argument set to
+LSM_CONFIG_SET_COMPRESSION_FACTORY, and the third argument set to point to
+an instance of structure lsm_compress_factory. The lsm_config() copies the
+contents of the structure - it does not retain a pointer to it.
+
+<verbatim>
+  typedef struct lsm_compress_factory lsm_compress_factory;
+  struct lsm_compress_factory {
+    void *pCtx;
+    int (*xFactory)(void *pCtx, lsm_db *db, unsigned int iCompressionId);
+    void (*xFree)(void *pCtx);
+  };
+</verbatim>
+
+<p><span style=color:red> Explain how the xFactory hook works here. </span>
 
 <h1 id=performance_tuning>6. Performance Tuning</h1>
 

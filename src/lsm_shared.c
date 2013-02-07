@@ -916,7 +916,6 @@ void lsmFinishWork(lsm_db *pDb, int bFlush, int *pRc){
   lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK, 0);
 }
 
-
 /*
 ** Called when recovery is finished.
 */
@@ -925,17 +924,33 @@ int lsmFinishRecovery(lsm_db *pDb){
   return LSM_OK;
 }
 
+/*
+** Check if the currently configured compression functions
+** (LSM_CONFIG_SET_COMPRESSION) are compatible with a database that has its
+** compression id set to iReq. Compression routines are compatible if iReq
+** is zero (indicating the database is empty), or if it is equal to the 
+** compression id of the configured compression routines.
+**
+** If the check shows that the current compression are incompatible and there
+** is a compression factory registered, give it a chance to install new
+** compression routines.
+**
+** If, after any registered factory is invoked, the compression functions
+** are still incompatible, return LSM_MISMATCH. Otherwise, LSM_OK.
+*/
 int lsmCheckCompressionId(lsm_db *pDb, u32 iReq){
-  if( pDb->compress.iId!=iReq ){
+  if( iReq!=LSM_COMPRESSION_EMPTY && pDb->compress.iId!=iReq ){
     if( pDb->factory.xFactory ){
       pDb->bInFactory = 1;
       pDb->factory.xFactory(pDb->factory.pCtx, pDb, iReq);
       pDb->bInFactory = 0;
     }
     if( pDb->compress.iId!=iReq ){
+      /* Incompatible */
       return LSM_MISMATCH;
     }
   }
+  /* Compatible */
   return LSM_OK;
 }
 
@@ -995,8 +1010,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
 
           /* Check that the client has the right compression hooks loaded.
           ** If not, set rc to LSM_MISMATCH.  */
-          assert( rc!=LSM_OK || pDb->pClient->iCmpId!=LSM_COMPRESSION_EMPTY );
-          if( rc==LSM_OK && pDb->pClient->iCmpId!=pDb->compress.iId ){
+          if( rc==LSM_OK ){
             rc = lsmCheckCompressionId(pDb, pDb->pClient->iCmpId);
           }
         }else{

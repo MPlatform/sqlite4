@@ -451,10 +451,13 @@ static int ckptExportSnapshot(
 
   /* Write the checkpoint header */
   assert( iId>=0 );
+  assert( pSnap->iCmpId==pDb->compress.iId
+       || pSnap->iCmpId==LSM_COMPRESSION_EMPTY 
+  );
   ckptSetValue(&ckpt, CKPT_HDR_ID_MSW, (u32)(iId>>32), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_ID_LSW, (u32)(iId&0xFFFFFFFF), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NCKPT, iOut+2, &rc);
-  ckptSetValue(&ckpt, CKPT_HDR_CMPID, pSnap->iCmpId, &rc);
+  ckptSetValue(&ckpt, CKPT_HDR_CMPID, pDb->compress.iId, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NBLOCK, pSnap->nBlock, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_BLKSZ, lsmFsBlockSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nLevel, &rc);
@@ -883,6 +886,18 @@ int lsmCheckpointLoad(lsm_db *pDb, int *piRead){
   return LSM_PROTOCOL;
 }
 
+int lsmInfoCompressionId(lsm_db *db, u32 *piCmpId){
+  int rc;
+
+  assert( db->pClient==0 && db->pWorker==0 );
+  rc = lsmCheckpointLoad(db, 0);
+  if( rc==LSM_OK ){
+    *piCmpId = db->aSnapshot[CKPT_HDR_CMPID];
+  }
+
+  return rc;
+}
+
 int lsmCheckpointLoadOk(lsm_db *pDb, int iSnap){
   u32 *aShm;
   assert( iSnap==1 || iSnap==2 );
@@ -958,11 +973,7 @@ int lsmCheckpointDeserialize(
     pNew->nWrite = aCkpt[CKPT_HDR_NWRITE];
     rc = ckptLoadLevels(pDb, aCkpt, &iIn, nLevel, &pNew->pLevel);
     pNew->iLogOff = lsmCheckpointLogOffset(aCkpt);
-
     pNew->iCmpId = aCkpt[CKPT_HDR_CMPID];
-    if( pNew->iCmpId==LSM_COMPRESSION_EMPTY ){
-      pNew->iCmpId = pDb->compress.iId;
-    }
 
     /* Make a copy of the append-list */
     for(i=0; i<LSM_APPLIST_SZ; i++){

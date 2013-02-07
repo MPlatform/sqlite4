@@ -459,7 +459,6 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   Snapshot *pWorker;              /* Worker snapshot */
   int bUnlock = 0;
   LsmString s;
-  int i;
   int rc;
 
   /* Obtain the worker snapshot */
@@ -477,9 +476,6 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   /* Release the snapshot and return */
   infoFreeWorker(pDb, bUnlock);
   return rc;
-}
-
-static int infoFreelistSize(lsm_db *pDb, int *pnFree, int *pnWaiting){
 }
 
 static int infoTreeSize(lsm_db *db, int *pnOldKB, int *pnNewKB){
@@ -593,6 +589,16 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       int *pnOld = va_arg(ap, int *);
       int *pnNew = va_arg(ap, int *);
       rc = infoTreeSize(pDb, pnOld, pnNew);
+      break;
+    }
+
+    case LSM_INFO_COMPRESSION_ID: {
+      unsigned int *piOut = va_arg(ap, unsigned int *);
+      if( pDb->pClient ){
+        *piOut = pDb->pClient->iCmpId;
+      }else{
+        rc = lsmInfoCompressionId(pDb, piOut);
+      }
       break;
     }
 
@@ -866,8 +872,6 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
   if( iLevel<pDb->nTransOpen ){
     if( iLevel==0 ){
-      int bAutowork = 0;
-
       /* Commit the transaction to disk. */
       if( rc==LSM_OK ) rc = lsmLogCommit(pDb);
       if( rc==LSM_OK && pDb->eSafety==LSM_SAFETY_FULL ){

@@ -22,7 +22,7 @@ extern const char *sqlite4TestErrorName(int);
 
 /*************************************************************************
 */
-#define ENCRYPTION_XOR_MASK 0xa3b2bbb6
+#define ENCRYPTION_XOR_MASK 0x23b2bbb6
 static int testCompressEncBound(void *pCtx, int nSrc){
   return nSrc;
 }
@@ -48,7 +48,7 @@ static int testCompressEncUncompress(
   char *pOut, int *pnOut, 
   const char *pIn, int nIn
 ){
-  return testCompressEncUncompress(pCtx, pOut, pnOut, pIn, nIn);
+  return testCompressEncCompress(pCtx, pOut, pnOut, pIn, nIn);
 }
 static void testCompressEncFree(void *pCtx){
   /* no-op */
@@ -540,6 +540,7 @@ static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
   return rc;
 }
 
+
 typedef struct TclLsmCursor TclLsmCursor;
 typedef struct TclLsm TclLsm;
 
@@ -577,6 +578,38 @@ static void test_lsm_del(void *ctx){
     lsm_close(p->db);
     ckfree((char *)p);
   }
+}
+
+static int testInfoLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
+  struct Lsminfo {
+    const char *zOpt;
+    int eOpt;
+  } aInfo[] = {
+    { "compression_id",          LSM_INFO_COMPRESSION_ID },
+    { 0, 0 }
+  };
+  int rc;
+  int iOpt;
+
+  rc = Tcl_GetIndexFromObjStruct(
+      interp, pObj, aInfo, sizeof(aInfo[0]), "option", 0, &iOpt
+  );
+  if( rc==LSM_OK ){
+    switch( aInfo[iOpt].eOpt ){
+      case LSM_INFO_COMPRESSION_ID: {
+        unsigned int iCmpId = 0;
+        rc = lsm_info(db, LSM_INFO_COMPRESSION_ID, &iCmpId);
+        if( rc==LSM_OK ){
+          Tcl_SetObjResult(interp, Tcl_NewWideIntObj((Tcl_WideInt)iCmpId));
+        }else{
+          test_lsm_error(interp, "lsm_info", rc);
+        }
+        break;
+      }
+    }
+  }
+
+  return rc;
 }
 
 /*
@@ -724,6 +757,7 @@ static int test_lsm_cmd(
     /*  9 */ {"flush",        0, ""},
     /* 10 */ {"config",       1, "LIST"},
     /* 11 */ {"checkpoint",   0, ""},
+    /* 12 */ {"info",         1, "OPTION"},
     {0, 0, 0}
   };
   int iCmd;
@@ -857,6 +891,10 @@ static int test_lsm_cmd(
     case 11: assert( 0==strcmp(aCmd[11].zCmd, "checkpoint") ); {
       rc = lsm_checkpoint(p->db, 0);
       return test_lsm_error(interp, "lsm_checkpoint", rc);
+    }
+
+    case 12: assert( 0==strcmp(aCmd[12].zCmd, "info") ); {
+      return testInfoLsm(interp, p->db, objv[2]);
     }
 
     default:

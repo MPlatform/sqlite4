@@ -303,7 +303,6 @@ struct lsm_compress_factory {
 #define LSM_COMPRESSION_EMPTY 0
 #define LSM_COMPRESSION_NONE  1
 
-
 /*
 ** CAPI: Allocating and Freeing Memory
 **
@@ -433,6 +432,11 @@ int lsm_info(lsm_db *, int, ...);
 **   Assuming no error occurs, the location pointed to by the first of the two
 **   (int *) arguments is set to the size of the old in-memory tree in KB.
 **   The second is set to the size of the current, or live in-memory tree.
+**
+** LSM_INFO_COMPRESSION_ID:
+**   This value should be followed by a single argument of type 
+**   (unsigned int *). If successful, the location pointed to is populated 
+**   with the database compression id before returning.
 */
 #define LSM_INFO_NWRITE           1
 #define LSM_INFO_NREAD            2
@@ -445,8 +449,8 @@ int lsm_info(lsm_db *, int, ...);
 #define LSM_INFO_ARRAY_PAGES      9
 #define LSM_INFO_CHECKPOINT_SIZE 10
 #define LSM_INFO_TREE_SIZE       11
-
 #define LSM_INFO_FREELIST_SIZE   12
+#define LSM_INFO_COMPRESSION_ID  13
 
 
 /* 
