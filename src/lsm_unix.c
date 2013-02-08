@@ -123,11 +123,15 @@ static int lsmPosixOsTruncate(
   lsm_file *pFile,                /* File to write to */
   lsm_i64 nSize                   /* Size to truncate file to */
 ){
-  int rc = LSM_OK;
-  int prc;                        /* Posix Return Code */
   PosixFile *p = (PosixFile *)pFile;
-
-  prc = ftruncate(p->fd, (off_t)nSize);
+  int rc = LSM_OK;                /* Return code */
+  int prc;                        /* Posix Return Code */
+  struct stat sStat;              /* Result of fstat() invocation */
+  
+  prc = fstat(p->fd, &sStat);
+  if( prc==0 && sStat.st_size>nSize ){
+    prc = ftruncate(p->fd, (off_t)nSize);
+  }
   if( prc<0 ) rc = lsm_ioerr();
 
   return rc;

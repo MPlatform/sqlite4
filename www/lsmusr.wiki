@@ -1017,8 +1017,8 @@ parameters.
     performance of read operations, as database pages do not have to be copied
     from operating system buffers into user space buffers before they can be
     examined. 
-    <p>This option can only be set before lsm_open() is called on the database
-    connection.
+    <p>This option may not be set if there is a read or write transaction
+    open on the database.
     <p>The default value is 1 (true) on a 64-bit platform, and 0 otherwise.
 
   <dt> <a href=lsmapi.wiki#LSM_CONFIG_MULTIPLE_PROCESSES>LSM_CONFIG_MULTIPLE_PROCESSES</a>

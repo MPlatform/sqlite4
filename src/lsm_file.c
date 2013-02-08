@@ -553,45 +553,47 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
 */
 int lsmFsConfigure(lsm_db *db){
   FileSystem *pFS = db->pFS;
-  lsm_env *pEnv = pFS->pEnv;
-  Page *pPg;
+  if( pFS ){
+    lsm_env *pEnv = pFS->pEnv;
+    Page *pPg;
 
-  assert( pFS->nOut==0 );
-  assert( pFS->pWaiting==0 );
+    assert( pFS->nOut==0 );
+    assert( pFS->pWaiting==0 );
 
-  /* Reset any compression/decompression buffers already allocated */
-  lsmFree(pEnv, pFS->aIBuffer);
-  lsmFree(pEnv, pFS->aOBuffer);
-  pFS->nBuffer = 0;
+    /* Reset any compression/decompression buffers already allocated */
+    lsmFree(pEnv, pFS->aIBuffer);
+    lsmFree(pEnv, pFS->aOBuffer);
+    pFS->nBuffer = 0;
 
-  /* Unmap the file, if it is currently mapped */
-  if( pFS->pMap ){
-    lsmEnvRemap(pEnv, pFS->fdDb, -1, &pFS->pMap, &pFS->nMap);
-    pFS->bUseMmap = 0;
-  }
+    /* Unmap the file, if it is currently mapped */
+    if( pFS->pMap ){
+      lsmEnvRemap(pEnv, pFS->fdDb, -1, &pFS->pMap, &pFS->nMap);
+      pFS->bUseMmap = 0;
+    }
 
-  /* Free all allocate page structures */
-  pPg = pFS->pLruFirst;
-  while( pPg ){
-    Page *pNext = pPg->pLruNext;
-    if( pPg->flags & PAGE_FREE ) lsmFree(pEnv, pPg->aData);
-    lsmFree(pEnv, pPg);
-    pPg = pNext;
-  }
+    /* Free all allocate page structures */
+    pPg = pFS->pLruFirst;
+    while( pPg ){
+      Page *pNext = pPg->pLruNext;
+      if( pPg->flags & PAGE_FREE ) lsmFree(pEnv, pPg->aData);
+      lsmFree(pEnv, pPg);
+      pPg = pNext;
+    }
 
-  /* Zero pointers that point to deleted page objects */
-  pFS->nCacheAlloc = 0;
-  pFS->pLruFirst = 0;
-  pFS->pLruLast = 0;
-  pFS->pFree = 0;
+    /* Zero pointers that point to deleted page objects */
+    pFS->nCacheAlloc = 0;
+    pFS->pLruFirst = 0;
+    pFS->pLruLast = 0;
+    pFS->pFree = 0;
 
-  /* Configure the FileSystem object */
-  if( db->compress.xCompress ){
-    pFS->pCompress = &db->compress;
-    pFS->bUseMmap = 0;
-  }else{
-    pFS->pCompress = 0;
-    pFS->bUseMmap = db->bMmap;
+    /* Configure the FileSystem object */
+    if( db->compress.xCompress ){
+      pFS->pCompress = &db->compress;
+      pFS->bUseMmap = 0;
+    }else{
+      pFS->pCompress = 0;
+      pFS->bUseMmap = db->bMmap;
+    }
   }
 
   return LSM_OK;

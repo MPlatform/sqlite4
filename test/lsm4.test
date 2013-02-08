@@ -9,6 +9,10 @@
 #
 #***********************************************************************
 #
+# The focus of this file is testing the LSM library. More specifically,
+# it focuses on testing the compression, compression-id and
+# compression-factory functionality.
+#
 
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
