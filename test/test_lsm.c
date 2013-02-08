@@ -9,7 +9,6 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-**
 */
 
 #include <tcl.h>
@@ -20,6 +19,133 @@
 
 extern int getDbPointer(Tcl_Interp *interp, const char *zA, sqlite4 **ppDb);
 extern const char *sqlite4TestErrorName(int);
+
+/*************************************************************************
+*/
+#define ENCRYPTION_XOR_MASK 0x23b2bbb6
+static int testCompressEncBound(void *pCtx, int nSrc){
+  return nSrc;
+}
+static int testCompressEncCompress(
+  void *pCtx, 
+  char *pOut, int *pnOut, 
+  const char *pIn, int nIn
+){
+  int i;
+  unsigned int *aIn = (unsigned int *)pOut;
+  unsigned int *aOut = (unsigned int *)pIn;
+
+  assert( (nIn%4)==0 );
+  for(i=0; i<(nIn/4); i++){
+    aOut[i] = (aIn[i] ^ ENCRYPTION_XOR_MASK);
+  }
+  *pnOut = nIn;
+
+  return LSM_OK;
+}
+static int testCompressEncUncompress(
+  void *pCtx, 
+  char *pOut, int *pnOut, 
+  const char *pIn, int nIn
+){
+  return testCompressEncCompress(pCtx, pOut, pnOut, pIn, nIn);
+}
+static void testCompressEncFree(void *pCtx){
+  /* no-op */
+}
+/* 
+** End of compression routines "encrypt".
+*************************************************************************/
+
+/*************************************************************************
+*/
+static int testCompressRleBound(void *pCtx, int nSrc){
+  return nSrc*2;
+}
+static int testCompressRleCompress(
+  void *pCtx, 
+  char *pOut, int *pnOut, 
+  const char *pIn, int nIn
+){
+  int iOut = 0;
+  int i;
+  char c;
+  int n;
+
+  c = pIn[0];
+  n = 1;
+  for(i=1; i<nIn; i++){
+    if( pIn[i]==c && n<127 ){
+      n++;
+    }else{
+      pOut[iOut++] = c;
+      pOut[iOut++] = (char)n;
+      c = pIn[i];
+      n = 1;
+    }
+  }
+
+  pOut[iOut++] = c;
+  pOut[iOut++] = (char)n;
+  *pnOut = iOut;
+
+  return LSM_OK;
+}
+static int testCompressRleUncompress(
+  void *pCtx, 
+  char *pOut, int *pnOut, 
+  const char *pIn, int nIn
+){
+  int i;
+  int iOut = 0;
+
+  for(i=0; i<nIn; i+=2){
+    int iRep;
+    char c = pIn[i];
+    int n = (int)(pIn[i+1]);
+
+    for(iRep=0; iRep<n; iRep++){
+      pOut[iOut++] = c;
+    }
+  }
+
+  *pnOut = iOut;
+  return LSM_OK;
+}
+static void testCompressRleFree(void *pCtx){
+}
+/* 
+** End of compression routines "rle".
+*************************************************************************/
+
+/*************************************************************************
+*/
+static int testCompressNoopBound(void *pCtx, int nSrc){
+  return nSrc;
+}
+static int testCompressNoopCompress(
+  void *pCtx, 
+  char *pOut, int *pnOut, 
+  const char *pIn, int nIn
+){
+  *pnOut = nIn;
+  memcpy(pOut, pIn, nIn);
+  return LSM_OK;
+}
+static int testCompressNoopUncompress(
+  void *pCtx, 
+  char *pOut, int *pnOut, 
+  const char *pIn, int nIn
+){
+  *pnOut = nIn;
+  memcpy(pOut, pIn, nIn);
+  return LSM_OK;
+}
+static void testCompressNoopFree(void *pCtx){
+}
+/* 
+** End of compression routines "noop".
+*************************************************************************/
 
 /*
 ** TCLCMD:    sqlite4_lsm_config DB DBNAME PARAM ...
@@ -34,7 +160,6 @@ static int test_sqlite4_lsm_config(
     const char *zSwitch;
     int iVal;
   } aParam[] = {
-    { "log-size",       LSM_CONFIG_LOG_SIZE }, 
     { "safety",         LSM_CONFIG_SAFETY }, 
     { "autoflush",      LSM_CONFIG_AUTOFLUSH }, 
     { "mmap",           LSM_CONFIG_MMAP }, 
@@ -287,23 +412,92 @@ static int test_sqlite4_lsm_flush(
   return TCL_OK;
 }
 
+static int testConfigureSetCompression(
+  Tcl_Interp *interp, 
+  lsm_db *db, 
+  Tcl_Obj *pCmp,
+  unsigned int iId
+){
+  struct CompressionScheme {
+    const char *zName;
+    lsm_compress cmp;
+  } aCmp[] = {
+    { "encrypt", { 0, 43, 
+        testCompressEncBound, testCompressEncCompress,
+        testCompressEncUncompress, testCompressEncFree
+    } },
+    { "rle", { 0, 44, 
+        testCompressRleBound, testCompressRleCompress,
+        testCompressRleUncompress, testCompressRleFree
+    } },
+    { "noop", { 0, 45, 
+        testCompressNoopBound, testCompressNoopCompress,
+        testCompressNoopUncompress, testCompressNoopFree
+    } },
+    { 0, {0, 0, 0, 0, 0, 0} }
+  };
+  int iOpt;
+  int rc;
+
+  if( interp ){
+    rc = Tcl_GetIndexFromObjStruct(
+        interp, pCmp, aCmp, sizeof(aCmp[0]), "scheme", 0, &iOpt
+        );
+    if( rc!=TCL_OK ) return rc;
+  }else{
+    int nOpt = sizeof(aCmp)/sizeof(aCmp[0]);
+    for(iOpt=0; iOpt<nOpt; iOpt++){
+      if( iId==aCmp[iOpt].cmp.iId ) break;
+    }
+    if( iOpt==nOpt ) return 0;
+  }
+
+  rc = lsm_config(db, LSM_CONFIG_SET_COMPRESSION, &aCmp[iOpt].cmp);
+  return rc;
+}
+
+static int testCompressFactory(void *pCtx, lsm_db *db, unsigned int iId){
+  return testConfigureSetCompression(0, db, 0, iId);
+}
+
+static int testConfigureSetFactory(
+  Tcl_Interp *interp, 
+  lsm_db *db, 
+  Tcl_Obj *pArg
+){
+  lsm_compress_factory aFactory[2] = {
+    { 0, 0, 0 },
+    { 0, testCompressFactory, 0 },
+  };
+  int bArg = 0;
+  int rc;
+
+  rc = Tcl_GetBooleanFromObj(interp, pArg, &bArg);
+  if( rc!=TCL_OK ) return rc;
+  assert( bArg==1 || bArg==0 );
+
+  rc = lsm_config(db, LSM_CONFIG_SET_COMPRESSION_FACTORY, &aFactory[bArg]);
+  return rc;
+}
+
 static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
   struct Lsmconfig {
     const char *zOpt;
     int eOpt;
   } aConfig[] = {
-    { "autoflush",        LSM_CONFIG_AUTOFLUSH },
-    { "page_size",        LSM_CONFIG_PAGE_SIZE },
-    { "block_size",       LSM_CONFIG_BLOCK_SIZE },
-    { "safety",           LSM_CONFIG_SAFETY },
-    { "autowork",         LSM_CONFIG_AUTOWORK },
-    { "autocheckpoint",   LSM_CONFIG_AUTOCHECKPOINT },
-    { "log_size",         LSM_CONFIG_LOG_SIZE },
-    { "mmap",             LSM_CONFIG_MMAP },
-    { "use_log",          LSM_CONFIG_USE_LOG },
-    { "automerge",        LSM_CONFIG_AUTOMERGE },
-    { "max_freelist",     LSM_CONFIG_MAX_FREELIST },
-    { "multi_proc",       LSM_CONFIG_MULTIPLE_PROCESSES },
+    { "autoflush",               LSM_CONFIG_AUTOFLUSH },
+    { "page_size",               LSM_CONFIG_PAGE_SIZE },
+    { "block_size",              LSM_CONFIG_BLOCK_SIZE },
+    { "safety",                  LSM_CONFIG_SAFETY },
+    { "autowork",                LSM_CONFIG_AUTOWORK },
+    { "autocheckpoint",          LSM_CONFIG_AUTOCHECKPOINT },
+    { "mmap",                    LSM_CONFIG_MMAP },
+    { "use_log",                 LSM_CONFIG_USE_LOG },
+    { "automerge",               LSM_CONFIG_AUTOMERGE },
+    { "max_freelist",            LSM_CONFIG_MAX_FREELIST },
+    { "multi_proc",              LSM_CONFIG_MULTIPLE_PROCESSES },
+    { "set_compression",         LSM_CONFIG_SET_COMPRESSION },
+    { "set_compression_factory", LSM_CONFIG_SET_COMPRESSION_FACTORY },
     { 0, 0 }
   };
   int nElem;
@@ -325,10 +519,19 @@ static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
             );
         rc = TCL_ERROR;
       }else{
-        int iVal;
-        rc = Tcl_GetIntFromObj(interp, apElem[i+1], &iVal);
-        if( rc==TCL_OK ){
-          lsm_config(db, aConfig[iOpt].eOpt, &iVal);
+        if( aConfig[iOpt].eOpt==LSM_CONFIG_SET_COMPRESSION ){
+          rc = testConfigureSetCompression(interp, db, apElem[i+1], 0);
+        }
+        else if( aConfig[iOpt].eOpt==LSM_CONFIG_SET_COMPRESSION_FACTORY ){
+          rc = testConfigureSetFactory(interp, db, apElem[i+1]);
+        }
+        else {
+          int iVal;
+          rc = Tcl_GetIntFromObj(interp, apElem[i+1], &iVal);
+          if( rc==TCL_OK ){
+            lsm_config(db, aConfig[iOpt].eOpt, &iVal);
+          }
+          Tcl_SetObjResult(interp, Tcl_NewIntObj(iVal));
         }
       }
     }
@@ -336,6 +539,7 @@ static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
 
   return rc;
 }
+
 
 typedef struct TclLsmCursor TclLsmCursor;
 typedef struct TclLsm TclLsm;
@@ -374,6 +578,38 @@ static void test_lsm_del(void *ctx){
     lsm_close(p->db);
     ckfree((char *)p);
   }
+}
+
+static int testInfoLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
+  struct Lsminfo {
+    const char *zOpt;
+    int eOpt;
+  } aInfo[] = {
+    { "compression_id",          LSM_INFO_COMPRESSION_ID },
+    { 0, 0 }
+  };
+  int rc;
+  int iOpt;
+
+  rc = Tcl_GetIndexFromObjStruct(
+      interp, pObj, aInfo, sizeof(aInfo[0]), "option", 0, &iOpt
+  );
+  if( rc==LSM_OK ){
+    switch( aInfo[iOpt].eOpt ){
+      case LSM_INFO_COMPRESSION_ID: {
+        unsigned int iCmpId = 0;
+        rc = lsm_info(db, LSM_INFO_COMPRESSION_ID, &iCmpId);
+        if( rc==LSM_OK ){
+          Tcl_SetObjResult(interp, Tcl_NewWideIntObj((Tcl_WideInt)iCmpId));
+        }else{
+          test_lsm_error(interp, "lsm_info", rc);
+        }
+        break;
+      }
+    }
+  }
+
+  return rc;
 }
 
 /*
@@ -521,6 +757,7 @@ static int test_lsm_cmd(
     /*  9 */ {"flush",        0, ""},
     /* 10 */ {"config",       1, "LIST"},
     /* 11 */ {"checkpoint",   0, ""},
+    /* 12 */ {"info",         1, "OPTION"},
     {0, 0, 0}
   };
   int iCmd;
@@ -623,7 +860,6 @@ static int test_lsm_cmd(
       int nWork = 0;
       int nMerge = 1;
       int nWrite = 0;
-      int i;
 
       if( objc==3 ){
         rc = Tcl_GetIntFromObj(interp, objv[2], &nWork);
@@ -655,6 +891,10 @@ static int test_lsm_cmd(
     case 11: assert( 0==strcmp(aCmd[11].zCmd, "checkpoint") ); {
       rc = lsm_checkpoint(p->db, 0);
       return test_lsm_error(interp, "lsm_checkpoint", rc);
+    }
+
+    case 12: assert( 0==strcmp(aCmd[12].zCmd, "info") ); {
+      return testInfoLsm(interp, p->db, objv[2]);
     }
 
     default:

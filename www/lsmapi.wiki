@@ -21,7 +21,7 @@ the <a href=lsmusr.wiki>LSM User Manual</a>.
 <li><a href="#lsm" style=text-decoration:none>LSM Error Codes</a>
 <li><a href="#creating" style=text-decoration:none>Creating and Destroying Database Connection Handles</a>
 <li><a href="#connecting" style=text-decoration:none>Connecting to a Database</a>
-<li><a href="#obtaining" style=text-decoration:none>Obtaining pointers to databases environments</a>
+<li><a href="#obtaining" style=text-decoration:none>Obtaining pointers to database environments</a>
 <li><a href="#configuring" style=text-decoration:none>Configuring a database connection.</a>
 <li><a href="#compression" style=text-decoration:none>Compression and/or Encryption Hooks</a>
 <li><a href="#allocating" style=text-decoration:none>Allocating and Freeing Memory</a>
@@ -67,6 +67,7 @@ the <a href=lsmusr.wiki>LSM User Manual</a>.
 <br style=clear:both>
 <h1 style=clear:both>All LSM API Types</h1>
 <span style=display:block;float:left;width:35ex><a href=#lsm_compress>lsm_compress</a></span>
+<span style=display:block;float:left;width:35ex><a href=#lsm_compress>lsm_compress</a></span>
 <span style=display:block;float:left;width:35ex><a href=#lsm_env>lsm_env</a></span>
 <br style=clear:both>
 <h1>All LSM API Constants</h1>
@@ -78,13 +79,13 @@ the <a href=lsmusr.wiki>LSM User Manual</a>.
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_AUTOWORK>LSM_CONFIG_AUTOWORK</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_BLOCK_SIZE>LSM_CONFIG_BLOCK_SIZE</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_GET_COMPRESSION>LSM_CONFIG_GET_COMPRESSION</a></span>
-<span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_LOG_SIZE>LSM_CONFIG_LOG_SIZE</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_MAX_FREELIST>LSM_CONFIG_MAX_FREELIST</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_MMAP>LSM_CONFIG_MMAP</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_MULTIPLE_PROCESSES>LSM_CONFIG_MULTIPLE_PROCESSES</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_PAGE_SIZE>LSM_CONFIG_PAGE_SIZE</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_SAFETY>LSM_CONFIG_SAFETY</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_SET_COMPRESSION>LSM_CONFIG_SET_COMPRESSION</a></span>
+<span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_SET_COMPRESSION_FACTORY>LSM_CONFIG_SET_COMPRESSION_FACTORY</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CONFIG_USE_LOG>LSM_CONFIG_USE_LOG</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_CORRUPT>LSM_CORRUPT</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_ERROR>LSM_ERROR</a></span>
@@ -94,6 +95,7 @@ the <a href=lsmusr.wiki>LSM User Manual</a>.
 <span style=display:block;float:left;width:35ex><a href=#LSM_INFO_CHECKPOINT_SIZE>LSM_INFO_CHECKPOINT_SIZE</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_INFO_DB_STRUCTURE>LSM_INFO_DB_STRUCTURE</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_INFO_FREELIST>LSM_INFO_FREELIST</a></span>
+<span style=display:block;float:left;width:35ex><a href=#LSM_INFO_FREELIST_SIZE>LSM_INFO_FREELIST_SIZE</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_INFO_LOG_STRUCTURE>LSM_INFO_LOG_STRUCTURE</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_INFO_NREAD>LSM_INFO_NREAD</a></span>
 <span style=display:block;float:left;width:35ex><a href=#LSM_INFO_NWRITE>LSM_INFO_NWRITE</a></span>
@@ -182,7 +184,7 @@ int lsm_close(lsm_db *pDb);
 <h2 id=connecting>Connecting to a Database<a id=lsm_open></a></h2>
 <verbatim>int lsm_open(lsm_db *pDb, const char *zFilename);
 </verbatim>
-<h2 id=obtaining>Obtaining pointers to databases environments</h2>
+<h2 id=obtaining>Obtaining pointers to database environments</h2>
 <verbatim>lsm_env *lsm_get_env(lsm_db *pDb);
 lsm_env *lsm_default_env(void);
 </verbatim>
@@ -191,36 +193,50 @@ passed as the first argument. Assuming the argument is valid, this
 function always returns a valid environment pointer - it cannot fail.
 The lsm_default_env() function returns a pointer to the default LSM
 environment for the current platform.
-<h2 id=configuring>Configuring a database connection.<a id=lsm_config></a><a id=LSM_CONFIG_AUTOFLUSH></a><a id=LSM_CONFIG_PAGE_SIZE></a><a id=LSM_CONFIG_SAFETY></a><a id=LSM_CONFIG_BLOCK_SIZE></a><a id=LSM_CONFIG_AUTOWORK></a><a id=LSM_CONFIG_LOG_SIZE></a><a id=LSM_CONFIG_MMAP></a><a id=LSM_CONFIG_USE_LOG></a><a id=LSM_CONFIG_AUTOMERGE></a><a id=LSM_CONFIG_MAX_FREELIST></a><a id=LSM_CONFIG_MULTIPLE_PROCESSES></a><a id=LSM_CONFIG_AUTOCHECKPOINT></a><a id=LSM_CONFIG_SET_COMPRESSION></a><a id=LSM_CONFIG_GET_COMPRESSION></a><a id=LSM_SAFETY_OFF></a><a id=LSM_SAFETY_NORMAL></a><a id=LSM_SAFETY_FULL></a></h2>
+<h2 id=configuring>Configuring a database connection.<a id=lsm_config></a><a id=LSM_CONFIG_AUTOFLUSH></a><a id=LSM_CONFIG_PAGE_SIZE></a><a id=LSM_CONFIG_SAFETY></a><a id=LSM_CONFIG_BLOCK_SIZE></a><a id=LSM_CONFIG_AUTOWORK></a><a id=LSM_CONFIG_MMAP></a><a id=LSM_CONFIG_USE_LOG></a><a id=LSM_CONFIG_AUTOMERGE></a><a id=LSM_CONFIG_MAX_FREELIST></a><a id=LSM_CONFIG_MULTIPLE_PROCESSES></a><a id=LSM_CONFIG_AUTOCHECKPOINT></a><a id=LSM_CONFIG_SET_COMPRESSION></a><a id=LSM_CONFIG_GET_COMPRESSION></a><a id=LSM_CONFIG_SET_COMPRESSION_FACTORY></a><a id=LSM_SAFETY_OFF></a><a id=LSM_SAFETY_NORMAL></a><a id=LSM_SAFETY_FULL></a></h2>
 <verbatim>int lsm_config(lsm_db *, int, ...);
-#define LSM_CONFIG_AUTOFLUSH           1
-#define LSM_CONFIG_PAGE_SIZE           2
-#define LSM_CONFIG_SAFETY              3
-#define LSM_CONFIG_BLOCK_SIZE          4
-#define LSM_CONFIG_AUTOWORK            5
-#define LSM_CONFIG_LOG_SIZE            6
-#define LSM_CONFIG_MMAP                7
-#define LSM_CONFIG_USE_LOG             8
-#define LSM_CONFIG_AUTOMERGE           9
-#define LSM_CONFIG_MAX_FREELIST       10
-#define LSM_CONFIG_MULTIPLE_PROCESSES 11
-#define LSM_CONFIG_AUTOCHECKPOINT     12
-#define LSM_CONFIG_SET_COMPRESSION    13
-#define LSM_CONFIG_GET_COMPRESSION    14
+#define LSM_CONFIG_AUTOFLUSH                1
+#define LSM_CONFIG_PAGE_SIZE                2
+#define LSM_CONFIG_SAFETY                   3
+#define LSM_CONFIG_BLOCK_SIZE               4
+#define LSM_CONFIG_AUTOWORK                 5
+#define LSM_CONFIG_MMAP                     7
+#define LSM_CONFIG_USE_LOG                  8
+#define LSM_CONFIG_AUTOMERGE                9
+#define LSM_CONFIG_MAX_FREELIST            10
+#define LSM_CONFIG_MULTIPLE_PROCESSES      11
+#define LSM_CONFIG_AUTOCHECKPOINT          12
+#define LSM_CONFIG_SET_COMPRESSION         13
+#define LSM_CONFIG_GET_COMPRESSION         14
+#define LSM_CONFIG_SET_COMPRESSION_FACTORY 15
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1
 #define LSM_SAFETY_FULL   2
 </verbatim>
 <p>The lsm_config() function is used to configure a database connection.
 The following values may be passed as the second argument to lsm_config().
-<p><dl><dt>LSM_CONFIG_AUTOFLUSH<dd>A read/write integer parameter. This value determines the maximum amount
-of space (in bytes) used to accumulate writes in main-memory before 
-they are flushed to a level 0 segment.
+<p><dl><dt>LSM_CONFIG_AUTOFLUSH<dd>A read/write integer parameter. 
+<p>This value determines the amount of data allowed to accumulate in a
+live in-memory tree before it is marked as old. After committing a
+transaction, a connection checks if the size of the live in-memory tree,
+including data structure overhead, is greater than the value of this
+option in KB. If it is, and there is not already an old in-memory tree,
+the live in-memory tree is marked as old.
+<p>The maximum allowable value is 1048576 (1GB). There is no minimum 
+value. If this parameter is set to zero, then an attempt is made to
+mark the live in-memory tree as old after each transaction is committed.
+<p>The default value is 1024 (1MB).
 <p><dt>LSM_CONFIG_PAGE_SIZE<dd>A read/write integer parameter. This parameter may only be set before
 lsm_open() has been called.
-<p><dt>LSM_CONFIG_BLOCK_SIZE<dd>A read/write integer parameter. This parameter may only be set before
-lsm_open() has been called.
-<p><dt>LSM_CONFIG_LOG_SIZE<dd>A read/write integer parameter.
+<p><dt>LSM_CONFIG_BLOCK_SIZE<dd>A read/write integer parameter. 
+<p>This parameter may only be set before lsm_open() has been called. It
+must be set to a power of two between 64 and 65536, inclusive (block 
+sizes between 64KB and 64MB).
+<p>If the connection creates a new database, the block size of the new
+database is set to the value of this option in KB. After lsm_open()
+has been called, querying this parameter returns the actual block
+size of the opened database.
+<p>The default value is 1024 (1MB blocks).
 <p><dt>LSM_CONFIG_SAFETY<dd>A read/write integer parameter. Valid values are 0, 1 (the default) 
 and 2. This parameter determines how robust the database is in the
 face of a system crash (e.g. a power failure or operating system 
@@ -234,6 +250,17 @@ database file. Following recovery the database file
 contains all successfully committed transactions.
 <p><dt>LSM_CONFIG_AUTOWORK<dd>A read/write integer parameter.
 <p><dt>LSM_CONFIG_AUTOCHECKPOINT<dd>A read/write integer parameter.
+<p>If this option is set to non-zero value N, then a checkpoint is
+automatically attempted after each N KB of data have been written to 
+the database file.
+<p>The amount of uncheckpointed data already written to the database file
+is a global parameter. After performing database work (writing to the
+database file), the process checks if the total amount of uncheckpointed 
+data exceeds the value of this paramter. If so, a checkpoint is performed.
+This means that this option may cause the connection to perform a 
+checkpoint even if the current connection has itself written very little
+data into the database file.
+<p>The default value is 2048 (checkpoint every 2MB).
 <p><dt>LSM_CONFIG_MMAP<dd>A read/write integer parameter. True to use mmap() to access the 
 database file. False otherwise.
 <p><dt>LSM_CONFIG_USE_LOG<dd>A read/write boolean parameter. True (the default) to use the log
@@ -259,13 +286,21 @@ structures contents.
 after lsm_open() has been called results in an LSM_MISUSE error.
 <p><dt>LSM_CONFIG_GET_COMPRESSION<dd>Query the compression methods used to compress and decompress database
 content.
-</dl><h2 id=compression>Compression and/or Encryption Hooks<a id=lsm_compress></a></h2>
+<p><dt>LSM_CONFIG_SET_COMPRESSION_FACTORY<dd>Configure a factory method to be invoked in case of an LSM_MISMATCH
+error.
+</dl><h2 id=compression>Compression and/or Encryption Hooks<a id=lsm_compress></a><a id=lsm_compress></a></h2>
 <verbatim>struct lsm_compress {
   void *pCtx;
   unsigned int iId;
   int (*xBound)(void *, int nSrc);
   int (*xCompress)(void *, char *, int *, const char *, int);
   int (*xUncompress)(void *, char *, int *, const char *, int);
+  void (*xFree)(void *pCtx);
+};
+struct lsm_compress_factory {
+  void *pCtx;
+  int (*xFactory)(void *, lsm_db *, u32);
+  void (*xFree)(void *pCtx);
 };
 </verbatim>
 <h2 id=allocating>Allocating and Freeing Memory<a id=lsm_free></a></h2>
@@ -276,7 +311,7 @@ void lsm_free(lsm_env*, void *);
 <p>Invoke the memory allocation functions that belong to environment
 pEnv. Or the system defaults if no memory allocation functions have 
 been registered.
-<h2 id=querying>Querying a Connection For Operational Data<a id=lsm_info></a><a id=LSM_INFO_NWRITE></a><a id=LSM_INFO_NREAD></a><a id=LSM_INFO_DB_STRUCTURE></a><a id=LSM_INFO_LOG_STRUCTURE></a><a id=LSM_INFO_ARRAY_STRUCTURE></a><a id=LSM_INFO_PAGE_ASCII_DUMP></a><a id=LSM_INFO_PAGE_HEX_DUMP></a><a id=LSM_INFO_FREELIST></a><a id=LSM_INFO_ARRAY_PAGES></a><a id=LSM_INFO_CHECKPOINT_SIZE></a><a id=LSM_INFO_TREE_SIZE></a></h2>
+<h2 id=querying>Querying a Connection For Operational Data<a id=lsm_info></a><a id=LSM_INFO_NWRITE></a><a id=LSM_INFO_NREAD></a><a id=LSM_INFO_DB_STRUCTURE></a><a id=LSM_INFO_LOG_STRUCTURE></a><a id=LSM_INFO_ARRAY_STRUCTURE></a><a id=LSM_INFO_PAGE_ASCII_DUMP></a><a id=LSM_INFO_PAGE_HEX_DUMP></a><a id=LSM_INFO_FREELIST></a><a id=LSM_INFO_ARRAY_PAGES></a><a id=LSM_INFO_CHECKPOINT_SIZE></a><a id=LSM_INFO_TREE_SIZE></a><a id=LSM_INFO_FREELIST_SIZE></a></h2>
 <verbatim>int lsm_info(lsm_db *, int, ...);
 #define LSM_INFO_NWRITE           1
 #define LSM_INFO_NREAD            2
@@ -289,6 +324,7 @@ been registered.
 #define LSM_INFO_ARRAY_PAGES      9
 #define LSM_INFO_CHECKPOINT_SIZE 10
 #define LSM_INFO_TREE_SIZE       11
+#define LSM_INFO_FREELIST_SIZE   12
 </verbatim>
 <p>Query a database connection for operational statistics or data.
 The following values may be passed as the second argument to lsm_info().
@@ -354,7 +390,7 @@ string should be eventually freed by the caller using lsm_free().
 free block in the database. The element itself consists of two 
 integers - the block number and the id of the snapshot that freed it.
 <p><dt>LSM_INFO_CHECKPOINT_SIZE<dd>The third argument should be of type (int *). The location pointed to
-by this argument is populated with the number of bytes written to the
+by this argument is populated with the number of KB written to the
 database file since the most recent checkpoint.
 <p><dt>LSM_INFO_TREE_SIZE<dd>If this value is passed as the second argument to an lsm_info() call, it
 should be followed by two arguments of type (int *) (for a total of four
@@ -367,7 +403,7 @@ accumulate new data written to the database. The other tree structure -
 the old tree - is a read-only tree holding older data and may be flushed 
 to disk at any time.
 <p>Assuming no error occurs, the location pointed to by the first of the two
-(int *) arguments is set to the size of the old in-memory tree in bytes.
+(int *) arguments is set to the size of the old in-memory tree in KB.
 The second is set to the size of the current, or live in-memory tree.
 </dl><h2 id=opening>Opening and Closing Write Transactions<a id=lsm_begin></a><a id=lsm_commit></a><a id=lsm_rollback></a></h2>
 <verbatim>int lsm_begin(lsm_db *pDb, int iLevel);
@@ -409,17 +445,17 @@ and smaller than (pKey2/nKey2). Note that keys (pKey1/nKey1) and
 (pKey2/nKey2) themselves, if they exist in the database, are not deleted.
 <p>Return LSM_OK if successful, or an LSM error code otherwise.
 <h2 id=explicit>Explicit Database Work and Checkpointing<a id=lsm_work></a><a id=lsm_flush></a><a id=lsm_checkpoint></a></h2>
-<verbatim>int lsm_work(lsm_db *pDb, int nMerge, int nPage, int *pnWrite);
+<verbatim>int lsm_work(lsm_db *pDb, int nMerge, int nKB, int *pnWrite);
 int lsm_flush(lsm_db *pDb);
-int lsm_checkpoint(lsm_db *pDb, int *pnByte);
+int lsm_checkpoint(lsm_db *pDb, int *pnKB);
 </verbatim>
 <p>This function is called by a thread to work on the database structure.
 Attempt to checkpoint the current database snapshot. Return an LSM
 error code if an error occurs or LSM_OK otherwise.
 <p>If the current snapshot has already been checkpointed, calling this 
-function is a no-op. In this case if pnByte is not NULL, *pnByte is
+function is a no-op. In this case if pnKB is not NULL, *pnKB is
 set to 0. Or, if the current snapshot is successfully checkpointed
-by this function and pbCkpt is not NULL, *pnByte is set to the number
+by this function and pbKB is not NULL, *pnKB is set to the number
 of bytes written to the database file since the previous checkpoint
 (the same measure as returned by the LSM_INFO_CHECKPOINT_SIZE query).
 <h2 id=opening>Opening and Closing Database Cursors<a id=lsm_csr_open></a><a id=lsm_csr_close></a></h2>

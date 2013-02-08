@@ -316,6 +316,7 @@ struct lsm_db {
   i64 nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
   lsm_compress compress;          /* Compression callbacks */
+  lsm_compress_factory factory;   /* Compression callback factory */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
@@ -336,6 +337,8 @@ struct lsm_db {
   Freelist *pFreelist;            /* See sortedNewToplevel() */
   int bUseFreelist;               /* True to use pFreelist */
   int bIncrMerge;                 /* True if currently doing a merge */
+
+  int bInFactory;                 /* True if within factory.xFactory() */
 
   /* Debugging message callback */
   void (*xLog)(void *, int, const char *);
@@ -526,6 +529,7 @@ struct FreelistEntry {
 */
 struct Snapshot {
   Database *pDatabase;            /* Database this snapshot belongs to */
+  u32 iCmpId;                     /* Id of compression scheme */
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
   i64 iLogOff;                    /* Log file offset */
@@ -571,6 +575,8 @@ int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite);
 
 int lsmCheckpointSize(lsm_db *db, int *pnByte);
 
+int lsmInfoCompressionId(lsm_db *db, u32 *piCmpId);
+
 /* 
 ** Functions from file "lsm_tree.c".
 */
@@ -589,6 +595,7 @@ int lsmTreeLoadHeader(lsm_db *pDb, int *);
 int lsmTreeLoadHeaderOk(lsm_db *, int);
 
 int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
+int lsmTreeDelete(lsm_db *db, void *pKey1, int nKey1, void *pKey2, int nKey2);
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);
 void lsmTreeMark(lsm_db *pDb, TreeMark *pMark);
 
@@ -643,6 +650,8 @@ int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 */
 int lsmFsOpen(lsm_db *, const char *);
 void lsmFsClose(FileSystem *);
+
+int lsmFsConfigure(lsm_db *db);
 
 int lsmFsBlockSize(FileSystem *);
 void lsmFsSetBlockSize(FileSystem *, int);
@@ -892,6 +901,8 @@ void lsmDbDeferredClose(lsm_db *, lsm_file *, LsmFile *);
 LsmFile *lsmDbRecycleFd(lsm_db *);
 
 int lsmWalkFreelist(lsm_db *, int, int (*)(void *, int, i64), void *);
+
+int lsmCheckCompressionId(lsm_db *, u32);
 
 
 /**************************************************************************

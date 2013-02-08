@@ -32,11 +32,12 @@
 **     2. The checkpoint id LSW.
 **     3. The number of integer values in the entire checkpoint, including 
 **        the two checksum values.
-**     4. The total number of blocks in the database.
-**     5. The block size.
-**     6. The number of levels.
-**     7. The nominal database page size.
-**     8. The number of pages (in total) written to the database file.
+**     4. The compression scheme id.
+**     5. The total number of blocks in the database.
+**     6. The block size.
+**     7. The number of levels.
+**     8. The nominal database page size.
+**     9. The number of pages (in total) written to the database file.
 **
 **   Log pointer:
 **
@@ -174,7 +175,7 @@ static const int one = 1;
 #define LSM_LITTLE_ENDIAN (*(u8 *)(&one))
 
 /* Sizes, in integers, of various parts of the checkpoint. */
-#define CKPT_HDR_SIZE         8
+#define CKPT_HDR_SIZE         9
 #define CKPT_LOGPTR_SIZE      4
 #define CKPT_APPENDLIST_SIZE  (LSM_APPLIST_SZ * 2)
 
@@ -182,16 +183,17 @@ static const int one = 1;
 #define CKPT_HDR_ID_MSW   0
 #define CKPT_HDR_ID_LSW   1
 #define CKPT_HDR_NCKPT    2
-#define CKPT_HDR_NBLOCK   3
-#define CKPT_HDR_BLKSZ    4
-#define CKPT_HDR_NLEVEL   5
-#define CKPT_HDR_PGSZ     6
-#define CKPT_HDR_NWRITE   7
+#define CKPT_HDR_CMPID    3
+#define CKPT_HDR_NBLOCK   4
+#define CKPT_HDR_BLKSZ    5
+#define CKPT_HDR_NLEVEL   6
+#define CKPT_HDR_PGSZ     7
+#define CKPT_HDR_NWRITE   8
 
-#define CKPT_HDR_LO_MSW     8
-#define CKPT_HDR_LO_LSW     9
-#define CKPT_HDR_LO_CKSUM1 10
-#define CKPT_HDR_LO_CKSUM2 11
+#define CKPT_HDR_LO_MSW     9
+#define CKPT_HDR_LO_LSW    10
+#define CKPT_HDR_LO_CKSUM1 11
+#define CKPT_HDR_LO_CKSUM2 12
 
 typedef struct CkptBuffer CkptBuffer;
 
@@ -449,9 +451,13 @@ static int ckptExportSnapshot(
 
   /* Write the checkpoint header */
   assert( iId>=0 );
+  assert( pSnap->iCmpId==pDb->compress.iId
+       || pSnap->iCmpId==LSM_COMPRESSION_EMPTY 
+  );
   ckptSetValue(&ckpt, CKPT_HDR_ID_MSW, (u32)(iId>>32), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_ID_LSW, (u32)(iId&0xFFFFFFFF), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NCKPT, iOut+2, &rc);
+  ckptSetValue(&ckpt, CKPT_HDR_CMPID, pDb->compress.iId, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NBLOCK, pSnap->nBlock, &rc);
   ckptSetValue(&ckpt, CKPT_HDR_BLKSZ, lsmFsBlockSize(pFS), &rc);
   ckptSetValue(&ckpt, CKPT_HDR_NLEVEL, nLevel, &rc);
@@ -761,19 +767,20 @@ static int ckptTryLoad(lsm_db *pDb, MetaPage *pPg, u32 iMeta, int *pRc){
 */
 static void ckptLoadEmpty(lsm_db *pDb){
   u32 aCkpt[] = {
-    0,                  /* CKPT_HDR_ID_MSW */
-    10,                 /* CKPT_HDR_ID_LSW */
-    0,                  /* CKPT_HDR_NCKPT */
-    0,                  /* CKPT_HDR_NBLOCK */
-    0,                  /* CKPT_HDR_BLKSZ */
-    0,                  /* CKPT_HDR_NLEVEL */
-    0,                  /* CKPT_HDR_PGSZ */
-    0,                  /* CKPT_HDR_OVFL */
-    0,                  /* CKPT_HDR_NWRITE */
-    0, 0, 1234, 5678,   /* The log pointer and initial checksum */
-    0,0,0,0, 0,0,0,0,   /* The append list */
-    0,                  /* The free block list */
-    0, 0                /* Space for checksum values */
+    0,                       /* CKPT_HDR_ID_MSW */
+    10,                      /* CKPT_HDR_ID_LSW */
+    0,                       /* CKPT_HDR_NCKPT */
+    LSM_COMPRESSION_EMPTY,   /* CKPT_HDR_CMPID */
+    0,                       /* CKPT_HDR_NBLOCK */
+    0,                       /* CKPT_HDR_BLKSZ */
+    0,                       /* CKPT_HDR_NLEVEL */
+    0,                       /* CKPT_HDR_PGSZ */
+    0,                       /* CKPT_HDR_OVFL */
+    0,                       /* CKPT_HDR_NWRITE */
+    0, 0, 1234, 5678,        /* The log pointer and initial checksum */
+    0,0,0,0, 0,0,0,0,        /* The append list */
+    0,                       /* The free block list */
+    0, 0                     /* Space for checksum values */
   };
   u32 nCkpt = array_size(aCkpt);
   ShmHeader *pShm = pDb->pShmhdr;
@@ -879,6 +886,18 @@ int lsmCheckpointLoad(lsm_db *pDb, int *piRead){
   return LSM_PROTOCOL;
 }
 
+int lsmInfoCompressionId(lsm_db *db, u32 *piCmpId){
+  int rc;
+
+  assert( db->pClient==0 && db->pWorker==0 );
+  rc = lsmCheckpointLoad(db, 0);
+  if( rc==LSM_OK ){
+    *piCmpId = db->aSnapshot[CKPT_HDR_CMPID];
+  }
+
+  return rc;
+}
+
 int lsmCheckpointLoadOk(lsm_db *pDb, int iSnap){
   u32 *aShm;
   assert( iSnap==1 || iSnap==2 );
@@ -922,6 +941,10 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   rc = lsmCheckpointDeserialize(pDb, 1, pShm->aSnap1, &pDb->pWorker);
   if( pDb->pWorker ) pDb->pWorker->pDatabase = pDb->pDatabase;
 
+  if( rc==LSM_OK ){
+    rc = lsmCheckCompressionId(pDb, pDb->pWorker->iCmpId);
+  }
+
 #if 0
   assert( rc!=LSM_OK || lsmFsIntegrityCheck(pDb) );
 #endif
@@ -950,6 +973,7 @@ int lsmCheckpointDeserialize(
     pNew->nWrite = aCkpt[CKPT_HDR_NWRITE];
     rc = ckptLoadLevels(pDb, aCkpt, &iIn, nLevel, &pNew->pLevel);
     pNew->iLogOff = lsmCheckpointLogOffset(aCkpt);
+    pNew->iCmpId = aCkpt[CKPT_HDR_CMPID];
 
     /* Make a copy of the append-list */
     for(i=0; i<LSM_APPLIST_SZ; i++){
