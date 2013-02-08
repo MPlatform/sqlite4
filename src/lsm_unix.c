@@ -38,6 +38,11 @@
 #include <sys/mman.h>
 #include "lsmInt.h"
 
+/* There is no fdatasync() call on Android */
+#ifdef __ANDROID__
+# define fdatasync(x) fsync(x)
+#endif
+
 /*
 ** An open file is an instance of the following object
 */
@@ -407,9 +412,11 @@ static int lsmPosixOsClose(lsm_file *pFile){
 }
 
 static int lsmPosixOsSleep(lsm_env *pEnv, int us){
-  if( usleep(us) ){
-    return LSM_IOERR;
-  }
+#if 0
+  /* Apparently on Android usleep() returns void */
+  if( usleep(us) ) return LSM_IOERR;
+#endif
+  usleep(us);
   return LSM_OK;
 }
 
