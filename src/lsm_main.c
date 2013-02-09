@@ -93,6 +93,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
   pDb->bUseLog = LSM_DFLT_USE_LOG;
   pDb->iReader = -1;
+  pDb->iRwclient = -1;
   pDb->bMultiProc = LSM_DFLT_MULTIPLE_PROCESSES;
   pDb->bMmap = LSM_DFLT_MMAP;
   pDb->xLog = xLog;
@@ -192,9 +193,11 @@ int lsm_close(lsm_db *pDb){
     }else{
       lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
       pDb->pClient = 0;
+
       lsmDbDatabaseRelease(pDb);
       lsmLogClose(pDb);
       lsmFsClose(pDb->pFS);
+      assert( pDb->mLock==0 );
       
       /* Invoke any destructors registered for the compression or 
       ** compression factory callbacks.  */

@@ -281,6 +281,10 @@ static void doDbDisconnect(lsm_db *pDb){
     }
   }
 
+  if( pDb->iRwclient>=0 ){
+    lsmShmLock(pDb, LSM_LOCK_RWCLIENT(pDb->iRwclient), LSM_LOCK_UNLOCK, 0);
+  }
+
   lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_UNLOCK, 0);
   lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
   pDb->pShmhdr = 0;
@@ -338,10 +342,21 @@ static int doDbConnect(lsm_db *pDb){
     rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_SHARED, 0);
   }
 
-  /* If anything went wrong, unlock DMS2. Unlock DMS1 in any case. */
+  /* If anything went wrong, unlock DMS2. Otherwise, try to take an exclusive
+  ** lock on one of the LSM_LOCK_RWCLIENT() locks. Unlock DMS1 in any case. */
   if( rc!=LSM_OK ){
     lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_UNLOCK, 0);
     pDb->pShmhdr = 0;
+  }else{
+    int i;
+    for(i=0; i<LSM_LOCK_NRWCLIENT; i++){
+      int rc2 = lsmShmLock(pDb, LSM_LOCK_RWCLIENT(i), LSM_LOCK_EXCL, 0);
+      if( rc2==LSM_OK ) pDb->iRwclient = i;
+      if( rc2!=LSM_BUSY ){
+        rc = rc2;
+        break;
+      }
+    }
   }
   lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
   return rc;
@@ -1524,13 +1539,13 @@ int lsmShmLock(
   int bBlock                      /* True for a blocking lock */
 ){
   lsm_db *pIter;
-  const u32 me = (1 << (iLock-1));
-  const u32 ms = (1 << (iLock+16-1));
+  const u64 me = ((u64)1 << (iLock-1));
+  const u64 ms = ((u64)1 << (iLock+32-1));
   int rc = LSM_OK;
   Database *p = db->pDatabase;
 
-  assert( iLock>=1 && iLock<=LSM_LOCK_READER(LSM_LOCK_NREADER-1) );
-  assert( iLock<=16 );
+  assert( iLock>=1 && iLock<=LSM_LOCK_RWCLIENT(LSM_LOCK_NRWCLIENT-1) );
+  assert( LSM_LOCK_RWCLIENT(LSM_LOCK_NRWCLIENT-1)<=32 );
   assert( eOp==LSM_LOCK_UNLOCK || eOp==LSM_LOCK_SHARED || eOp==LSM_LOCK_EXCL );
 
   /* Check for a no-op. Proceed only if this is not one of those. */
@@ -1598,8 +1613,8 @@ int lsmShmLock(
 #ifdef LSM_DEBUG
 
 int shmLockType(lsm_db *db, int iLock){
-  const u32 me = (1 << (iLock-1));
-  const u32 ms = (1 << (iLock+16-1));
+  const u64 me = ((u64)1 << (iLock-1));
+  const u64 ms = ((u64)1 << (iLock+32-1));
 
   if( db->mLock & me ) return LSM_LOCK_EXCL;
   if( db->mLock & ms ) return LSM_LOCK_SHARED;

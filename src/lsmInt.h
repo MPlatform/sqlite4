@@ -132,13 +132,18 @@ int lsmErrorBkpt(int);
 /* The number of available read locks. */
 #define LSM_LOCK_NREADER   6
 
+/* The number of available read-write client locks. */
+#define LSM_LOCK_NRWCLIENT   16
+
 /* Lock definitions */
 #define LSM_LOCK_DMS1         1
 #define LSM_LOCK_DMS2         2
-#define LSM_LOCK_WRITER       3
-#define LSM_LOCK_WORKER       4
-#define LSM_LOCK_CHECKPOINTER 5
+#define LSM_LOCK_DMS3         3
+#define LSM_LOCK_WRITER       4
+#define LSM_LOCK_WORKER       5
+#define LSM_LOCK_CHECKPOINTER 6
 #define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
+#define LSM_LOCK_RWCLIENT(i)  ((i) + LSM_LOCK_READER(LSM_LOCK_NREADER))
 
 /*
 ** Hard limit on the number of free-list entries that may be stored in 
@@ -284,14 +289,14 @@ struct TreeHeader {
 ** mLock:
 **   A bitmask representing the locks currently held by the connection.
 **   An LSM database supports N distinct locks, where N is some number less
-**   than or equal to 16. Locks are numbered starting from 1 (see the 
+**   than or equal to 32. Locks are numbered starting from 1 (see the 
 **   definitions for LSM_LOCK_WRITER and co.).
 **
-**   The least significant 16-bits in mLock represent EXCLUSIVE locks. The
+**   The least significant 32-bits in mLock represent EXCLUSIVE locks. The
 **   most significant are SHARED locks. So, if a connection holds a SHARED
 **   lock on lock region iLock, then the following is true:
 **
-**       (mLock & ((iLock+16-1) << 1))
+**       (mLock & ((iLock+32-1) << 1))
 **
 **   Or for an EXCLUSIVE lock:
 **
@@ -321,6 +326,7 @@ struct lsm_db {
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
   Database *pDatabase;            /* Database shared data */
+  int iRwclient;                  /* Read-write client lock held (-1 == none) */
 
   /* Client transaction context */
   Snapshot *pClient;              /* Client snapshot */
@@ -349,7 +355,7 @@ struct lsm_db {
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
 
-  u32 mLock;                      /* Mask of current locks. See lsmShmLock(). */
+  u64 mLock;                      /* Mask of current locks. See lsmShmLock(). */
   lsm_db *pNext;                  /* Next connection to same database */
 
   int nShm;                       /* Size of apShm[] array */

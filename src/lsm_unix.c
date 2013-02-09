@@ -306,7 +306,7 @@ int lsmPosixOsLock(lsm_file *pFile, int iLock, int eType){
   assert( aType[LSM_LOCK_SHARED]==F_RDLCK );
   assert( aType[LSM_LOCK_EXCL]==F_WRLCK );
   assert( eType>=0 && eType<array_size(aType) );
-  assert( iLock>0 && iLock<=16 );
+  assert( iLock>0 && iLock<=32 );
 
   memset(&lock, 0, sizeof(lock));
   lock.l_whence = SEEK_SET;
