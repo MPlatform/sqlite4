@@ -217,6 +217,13 @@ sqlite4_num sqlite4_num_div(sqlite4_num A, sqlite4_num B){
 }
 
 /*
+** Test if A is NaN.
+*/
+int sqlite4_num_isnan(sqlite4_num A){
+  return A.e>SQLITE4_MX_EXP && A.m==0; 
+}
+
+/*
 ** Compare numbers A and B.  Return:
 **
 **    1     if A<B
