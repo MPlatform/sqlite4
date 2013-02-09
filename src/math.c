@@ -330,7 +330,7 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
     i = 0;
   }
   if( nIn<=0 ) goto not_a_valid_number;
-  if( nIn>=incr*2
+  if( nIn>=incr*3
    && ((c=zIn[i])=='i' || c=='I')
    && ((c=zIn[i+incr])=='n' || c=='N')
    && ((c=zIn[i+incr*2])=='f' || c=='F')
