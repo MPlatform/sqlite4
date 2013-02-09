@@ -432,8 +432,8 @@ Opening a read transaction:
   <li> <p>Load the current snapshot from shared-memory.
 <p>Steps 1 and 2 are similar. In both cases, there are two copies
 of the data structure being read in shared memory. No lock is held to prevent
-another client updating them while the read is taking place using the following
-pattern:
+another client updating them while the read is taking place. Updaters use the
+following pattern:
 
 <ol type=i>
   <li> Update copy 2.

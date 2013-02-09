@@ -331,6 +331,7 @@ struct lsm_db {
   int nTransAlloc;                /* Allocated size of aTrans[] array */
   TransMark *aTrans;              /* Array of marks for transaction rollback */
   IntArray rollback;              /* List of tree-nodes to roll back */
+  int bDiscardOld;                /* True if lsmTreeDiscardOld() was called */
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */

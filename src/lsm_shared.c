@@ -788,7 +788,6 @@ int lsmBlockFree(lsm_db *pDb, int iBlk){
 */
 int lsmBlockRefree(lsm_db *pDb, int iBlk){
   int rc = LSM_OK;                /* Return code */
-  Snapshot *p = pDb->pWorker;
 
 #ifdef LSM_LOG_FREELIST
   lsmLogMessage(pDb, LSM_OK, "lsmBlockRefree(): Refree block %d", iBlk);
@@ -902,18 +901,33 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
 ** file space can be recycled.
 */
 void lsmFinishWork(lsm_db *pDb, int bFlush, int *pRc){
-  assert( *pRc!=0 || pDb->pWorker );
+  int rc = *pRc;
+  assert( rc!=0 || pDb->pWorker );
   if( pDb->pWorker ){
     /* If no error has occurred, serialize the worker snapshot and write
     ** it to shared memory.  */
-    if( *pRc==LSM_OK ){
-      *pRc = lsmSaveWorker(pDb, bFlush);
+    if( rc==LSM_OK ){
+      rc = lsmSaveWorker(pDb, bFlush);
     }
+
+    /* Assuming no error has occurred, update a read lock slot with the
+    ** new snapshot id (see comments above function lsmSetReadLock()).  */
+    if( rc==LSM_OK ){
+      if( pDb->iReader<0 ){
+        rc = lsmTreeLoadHeader(pDb, 0);
+      }
+      if( rc==LSM_OK ){
+        rc = lsmSetReadLock(pDb, pDb->pWorker->iId, pDb->treehdr.iUsedShmid);
+      }
+    }
+
+    /* Free the snapshot object. */
     lsmFreeSnapshot(pDb->pEnv, pDb->pWorker);
     pDb->pWorker = 0;
   }
 
   lsmShmLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_UNLOCK, 0);
+  *pRc = rc;
 }
 
 /*
@@ -1082,6 +1096,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   ShmHeader *pShm = pDb->pShmhdr; /* Shared memory header */
 
   assert( pDb->nTransOpen==0 );
+  assert( pDb->bDiscardOld==0 );
 
   /* If there is no read-transaction open, open one now. */
   rc = lsmBeginReadTrans(pDb);
@@ -1116,6 +1131,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
     p->root.iTransId++;
     if( lsmTreeHasOld(pDb) && p->iOldLog==pDb->pClient->iLogOff ){
       lsmTreeDiscardOld(pDb);
+      pDb->bDiscardOld = 1;
     }
   }else{
     lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
@@ -1148,10 +1164,16 @@ int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
   }
   lsmTreeEndTransaction(pDb, bCommit);
 
-  if( rc==LSM_OK && bFlush && pDb->bAutowork ){
-    rc = lsmSortedAutoWork(pDb, 1);
+  if( rc==LSM_OK ){
+    if( bFlush && pDb->bAutowork ){
+      rc = lsmSortedAutoWork(pDb, 1);
+    }else if( bCommit && pDb->bDiscardOld ){
+      rc = lsmSetReadLock(pDb, pDb->pClient->iId, pDb->treehdr.iUsedShmid);
+    }
   }
+  pDb->bDiscardOld = 0;
   lsmShmLock(pDb, LSM_LOCK_WRITER, LSM_LOCK_UNLOCK, 0);
+
   if( bFlush && pDb->bAutowork==0 && pDb->xWork ){
     pDb->xWork(pDb, pDb->pWorkCtx);
   }
@@ -1174,6 +1196,53 @@ static int slotIsUsable(ShmReader *p, i64 iLsm, u32 iShmMin, u32 iShmMax){
       && shm_sequence_ge(iShmMax, p->iTreeId)
       && shm_sequence_ge(p->iTreeId, iShmMin)
   );
+}
+
+/*
+** Attempt to populate one of the read-lock slots to contain lock values
+** iLsm/iShm. Or, if such a slot exists already, this function is a no-op.
+**
+** It is not an error if no slot can be populated because the write-lock
+** cannot be obtained. If any other error occurs, return an LSM error code.
+** Otherwise, LSM_OK.
+**
+** This function is called at various points to try to ensure that there
+** always exists at least one read-lock slot that can be used by a read-only
+** client. And so that, in the usual case, there is an "exact match" available
+** whenever a read transaction is opened by any client. At present this
+** function is called when:
+**
+**    * A write transaction that called lsmTreeDiscardOld() is committed, and
+**    * Whenever the working snapshot is updated (i.e. lsmFinishWork()).
+*/
+int lsmSetReadLock(lsm_db *db, i64 iLsm, u32 iShm){
+  int rc = LSM_OK;
+  ShmHeader *pShm = db->pShmhdr;
+  int i;
+
+  /* Check if there is already a slot containing the required values. */
+  for(i=0; i<LSM_LOCK_NREADER; i++){
+    ShmReader *p = &pShm->aReader[i];
+    if( p->iLsmId==iLsm && p->iTreeId==iShm ) return LSM_OK;
+  }
+
+  /* Iterate through all read-lock slots, attempting to take a write-lock
+  ** on each of them. If a write-lock succeeds, populate the locked slot
+  ** with the required values and break out of the loop.  */
+  for(i=0; rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
+    rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
+    if( rc==LSM_BUSY ){
+      rc = LSM_OK;
+    }else{
+      ShmReader *p = &pShm->aReader[i];
+      p->iLsmId = iLsm;
+      p->iTreeId = iShm;
+      lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK, 0);
+      break;
+    }
+  }
+
+  return rc;
 }
 
 /*
@@ -1368,7 +1437,6 @@ int lsmShmCacheChunks(lsm_db *db, int nChunk){
   int rc = LSM_OK;
   if( nChunk>db->nShm ){
     static const int NINCR = 16;
-    void *pRet = 0;
     Database *p = db->pDatabase;
     lsm_env *pEnv = db->pEnv;
     int nAlloc;
