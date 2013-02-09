@@ -392,6 +392,24 @@ not_a_valid_number:
 }
 
 /*
+** Convert an sqlite4_int64 to a number and return that number.
+*/
+sqlite4_num sqlite4_num_from_int64(sqlite4_int64 n){
+  sqlite4_num r;
+  r.approx = 0;
+  r.e = 0;
+  r.sign = n < 0;
+  if( n>=0 ){
+    r.m = n;
+  }else if( n!=SMALLEST_INT64 ){
+    r.m = -n;
+  }else{
+    r.m = 1+(u64)LARGEST_INT64;
+  }
+  return r;
+}
+
+/*
 ** Convert an integer into text in the buffer supplied. The
 ** text is zero-terminated and right-justified in the buffer.
 ** A pointer to the first character of text is returned.
