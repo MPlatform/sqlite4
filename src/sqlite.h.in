@@ -4347,7 +4347,7 @@ typedef struct sqlite4_num sqlite4_num;
 struct sqlite4_num {
   unsigned char sign;     /* Sign of the overall value */
   unsigned char approx;   /* True if the value is approximate */
-  unsigned short e;       /* The exponent. */
+  short e;                /* The exponent. */
   sqlite4_uint64 m;       /* The significant */
 };
 
