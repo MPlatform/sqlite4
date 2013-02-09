@@ -342,7 +342,7 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
   while( i<nIn && (c = zIn[i])!=0 ){
     i += incr;
     if( c>='0' && c<='9' ){
-      if( c==0 && nDigit==0 ){
+      if( c=='0' && nDigit==0 ){
         if( seenRadix && r.e > -(SQLITE4_MX_EXP+1000) ) r.e--;
         continue;
       }
