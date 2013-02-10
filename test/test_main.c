@@ -4459,6 +4459,61 @@ static int test_num_to_text(
   return TCL_OK;
 }
 
+static int test_num_binary_op(
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv,            /* Text of each argument */
+  sqlite4_num (*op) (sqlite4_num, sqlite4_num)
+){
+  sqlite4_num A, B, R;
+  if( argc!=3 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
+      " NUM NUM\"", 0);
+    return TCL_ERROR;
+  }
+  A = test_parse_num(argv[1]);
+  B = test_parse_num(argv[2]);
+  R = op(A, B);
+  append_num_result(interp, R);
+  return TCL_OK;
+}
+
+static int test_num_add(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_binary_op( interp, argc, argv, sqlite4_num_add );
+}
+
+static int test_num_sub(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_binary_op( interp, argc, argv, sqlite4_num_sub );
+}
+
+static int test_num_mul(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_binary_op( interp, argc, argv, sqlite4_num_mul );
+}
+
+static int test_num_div(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_binary_op( interp, argc, argv, sqlite4_num_div );
+}
+
 /*
 ** Register commands with the TCL interpreter.
 */
@@ -4514,7 +4569,12 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4IoTrace",                (Tcl_CmdProc*)test_io_trace         },
      { "sqlite4_num_compare",           (Tcl_CmdProc*)test_num_compare      }, 
      { "sqlite4_num_from_text",         (Tcl_CmdProc*)test_num_from_text    }, 
-     { "sqlite4_num_to_text",           (Tcl_CmdProc*)test_num_to_text      }, 
+     { "sqlite4_num_to_text",           (Tcl_CmdProc*)test_num_to_text      },
+     { "sqlite4_num_add",               (Tcl_CmdProc*)test_num_add          },
+     { "sqlite4_num_sub",               (Tcl_CmdProc*)test_num_sub          },
+     { "sqlite4_num_mul",               (Tcl_CmdProc*)test_num_mul          },
+     { "sqlite4_num_div",               (Tcl_CmdProc*)test_num_div          },
+   
   };
   static struct {
      char *zName;

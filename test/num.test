@@ -36,5 +36,30 @@ do_test num-2.1.1 {
 do_test num-2.1.2 {
   sqlite4_num_to_text [sqlite4_num_from_text 37 2]
 } {37}
+do_test num-2.1.4 {
+  sqlite4_num_compare [sqlite4_num_from_text 2.9e2X 5] 290
+} {equal}
+
+do_test num-3.1.1 {
+  sqlite4_num_to_text [sqlite4_num_add 5 7]
+} {12}
+
+do_test num-4.1.1 {
+  sqlite4_num_to_text [sqlite4_num_sub 9 3]
+} {6}
+do_test num-4.1.2 {
+  sqlite4_num_to_text [sqlite4_num_sub 5 12]
+} {-7}
+
+do_test num-5.1.1 {
+  sqlite4_num_to_text [sqlite4_num_mul 9 8]
+} {72}
+
+do_test num-6.1.1 {
+  sqlite4_num_to_text [sqlite4_num_div 6 5]
+} {1.2}
+
+
+
 
 finish_test
