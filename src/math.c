@@ -363,33 +363,32 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
       }
     }else if( c=='.' ){
       seenRadix = 1;
-    }else{
+    }else if( c=='e' || c=='E' ){
+      int exp = 0;
+      int expsign = 0;
+      int nEDigit = 0;
+      if( zIn[i]=='-' ){
+        expsign = 1;
+        i += incr;
+      }else if( zIn[i]=='+' ){
+        i += incr;
+      }
+      if( i>=nIn ) goto not_a_valid_number;
+      while( i<nIn && (c = zIn[i])!=0 ){
+        i += incr;
+        if( c<'0' || c>'9' ) goto not_a_valid_number;
+        if( c=='0' && nEDigit==0 ) continue;
+        nEDigit++;
+        if( nEDigit>3 ) goto not_a_valid_number;
+        exp = exp*10 + c - '0';
+      }
+      if( expsign ) exp = -exp;
+      r.e += exp;
       break;
+    }else{
+      goto not_a_valid_number;
     }
   }
-  if( c=='e' || c=='E' ){
-    int exp = 0;
-    int expsign = 0;
-    int nEDigit = 0;
-    if( zIn[i]=='-' ){
-      expsign = 1;
-      i += incr;
-    }else if( zIn[i]=='+' ){
-      i += incr;
-    }
-    if( i>=nIn ) goto not_a_valid_number;
-    while( i<nIn && (c = zIn[i])!=0  ){
-      i += incr;
-      if( c<'0' || c>'9' ) break;
-      if( c=='0' && nEDigit==0 ) continue;
-      nEDigit++;
-      if( nEDigit>3 ) goto not_a_valid_number;
-      exp = exp*10 + c - '0';
-    }
-    if( expsign ) exp = -exp;
-    r.e += exp;
-  }
-  if( c!=0 ) goto not_a_valid_number;
   return r;
   
 not_a_valid_number:
