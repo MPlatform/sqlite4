@@ -4442,6 +4442,23 @@ static int test_num_from_text(
   return TCL_OK;
 }
 
+static int test_num_to_text(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  char text[30];
+  if( argc!=2 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
+      " NUM\"", 0);
+    return TCL_ERROR;
+  }
+  sqlite4_num_to_text( test_parse_num( argv[1] ), text );
+  Tcl_AppendResult( interp, text, 0 );
+  return TCL_OK;
+}
+
 /*
 ** Register commands with the TCL interpreter.
 */
@@ -4497,6 +4514,7 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4IoTrace",                (Tcl_CmdProc*)test_io_trace         },
      { "sqlite4_num_compare",           (Tcl_CmdProc*)test_num_compare      }, 
      { "sqlite4_num_from_text",         (Tcl_CmdProc*)test_num_from_text    }, 
+     { "sqlite4_num_to_text",           (Tcl_CmdProc*)test_num_to_text      }, 
   };
   static struct {
      char *zName;
