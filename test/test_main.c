@@ -4514,6 +4514,41 @@ static int test_num_div(
   return test_num_binary_op( interp, argc, argv, sqlite4_num_div );
 }
 
+static int test_num_predicate(
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv,            /* Text of each argument */
+  int (*pred) (sqlite4_num)
+){
+  sqlite4_num A;
+  if( argc!=2 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
+      " NUM\"", 0);
+    return TCL_ERROR;
+  }
+  A = test_parse_num(argv[1]);
+  Tcl_AppendResult(interp, pred(A) ? "true" : "false", 0);  
+  return TCL_OK;
+}
+
+static int test_num_isinf(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_predicate( interp, argc, argv, sqlite4_num_isinf );
+}
+
+static int test_num_isnan(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_predicate( interp, argc, argv, sqlite4_num_isnan );
+}
+
 /*
 ** Register commands with the TCL interpreter.
 */
@@ -4574,7 +4609,8 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_num_sub",               (Tcl_CmdProc*)test_num_sub          },
      { "sqlite4_num_mul",               (Tcl_CmdProc*)test_num_mul          },
      { "sqlite4_num_div",               (Tcl_CmdProc*)test_num_div          },
-   
+     { "sqlite4_num_isinf",             (Tcl_CmdProc*)test_num_isinf        },
+     { "sqlite4_num_isnan",             (Tcl_CmdProc*)test_num_isnan        },
   };
   static struct {
      char *zName;
