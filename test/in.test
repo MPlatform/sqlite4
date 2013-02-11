@@ -274,11 +274,6 @@ do_test in-8.1 {
     SELECT b FROM t1 WHERE a IN ('hello','there')
   }
 } {world}
-do_test in-8.2 {
-  execsql {
-    SELECT b FROM t1 WHERE a IN ("hello",'there')
-  }
-} {world}
 
 # Test constructs of the form:  expr IN tablename
 #
