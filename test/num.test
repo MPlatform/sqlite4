@@ -50,6 +50,9 @@ do_test num-4.1.1 {
 do_test num-4.1.2 {
   sqlite4_num_to_text [sqlite4_num_sub 5 12]
 } {-7}
+do_test num-4.2.1 {
+  sqlite4_num_compare [sqlite4_num_sub 1 1] [sqlite4_num_sub -1 -1]
+} {equal}
 
 do_test num-5.1.1 {
   sqlite4_num_to_text [sqlite4_num_mul 9 8]

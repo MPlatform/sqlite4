@@ -255,6 +255,7 @@ int sqlite4_num_compare(sqlite4_num A, sqlite4_num B){
     return B.sign ? 3 : 1;
   }
   if( A.sign!=B.sign ){
+    if ( A.m==0 && B.m==0 ) return 2;
     return A.sign ? 1 : 3;
   }
   adjustExponent(&A, &B);
