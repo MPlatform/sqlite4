@@ -131,8 +131,12 @@ int sqlite4VdbeDecodeValue(
       if( e&1 ) r = -r;
       if( e&2 ){
         e = -(e>>2);
-        while( e<=-10 ){ r /= 1.0e10; e += 10; }
-        while( e<0 ){ r /= 10.0; e++; }
+        if( e==0 ){
+          r *= 1e+300*1e+300;
+        }else{
+          while( e<=-10 ){ r /= 1.0e10; e += 10; }
+          while( e<0 ){ r /= 10.0; e++; }
+        }
       }else{
         e = e>>2;
         while( e>=10 ){ r *= 1.0e10; e -= 10; }
