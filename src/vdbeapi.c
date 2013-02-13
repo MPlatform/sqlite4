@@ -189,18 +189,19 @@ int sqlite4_value_type(sqlite4_value* pVal){
 ** then sets the error code to SQLITE4_TOOBIG
 */
 static void setResultStrOrError(
-  sqlite4_context *pCtx,  /* Function context */
-  const char *z,          /* String pointer */
-  int n,                  /* Bytes in string, or negative */
-  u8 enc,                 /* Encoding of z.  0 for BLOBs */
-  void (*xDel)(void*)     /* Destructor function */
+  sqlite4_context *pCtx,     /* Function context */
+  const char *z,             /* String pointer */
+  int n,                     /* Bytes in string, or negative */
+  u8 enc,                    /* Encoding of z.  0 for BLOBs */
+  void (*xDel)(void*,void*), /* Destructor function */
+  void *pDelArg              /* First argument to xDel() */
 ){
   if( xDel==SQLITE4_DYNAMIC ){
     assert( sqlite4MemdebugHasType(z, MEMTYPE_HEAP) );
     assert( sqlite4MemdebugNoType(z, ~MEMTYPE_HEAP) );
     sqlite4MemdebugSetType((char*)z, MEMTYPE_DB | MEMTYPE_HEAP);
   }
-  if( sqlite4VdbeMemSetStr(&pCtx->s, z, n, enc, xDel)==SQLITE4_TOOBIG ){
+  if( sqlite4VdbeMemSetStr(&pCtx->s, z, n, enc, xDel,pDelArg)==SQLITE4_TOOBIG ){
     sqlite4_result_error_toobig(pCtx);
   }
 }
@@ -208,11 +209,12 @@ void sqlite4_result_blob(
   sqlite4_context *pCtx, 
   const void *z, 
   int n, 
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( n>=0 );
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, 0, xDel);
+  setResultStrOrError(pCtx, z, n, 0, xDel, pDelArg);
 }
 void sqlite4_result_double(sqlite4_context *pCtx, double rVal){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
@@ -221,13 +223,13 @@ void sqlite4_result_double(sqlite4_context *pCtx, double rVal){
 void sqlite4_result_error(sqlite4_context *pCtx, const char *z, int n){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
   pCtx->isError = SQLITE4_ERROR;
-  sqlite4VdbeMemSetStr(&pCtx->s, z, n, SQLITE4_UTF8, SQLITE4_TRANSIENT);
+  sqlite4VdbeMemSetStr(&pCtx->s, z, n, SQLITE4_UTF8, SQLITE4_TRANSIENT, 0);
 }
 #ifndef SQLITE4_OMIT_UTF16
 void sqlite4_result_error16(sqlite4_context *pCtx, const void *z, int n){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
   pCtx->isError = SQLITE4_ERROR;
-  sqlite4VdbeMemSetStr(&pCtx->s, z, n, SQLITE4_UTF16NATIVE, SQLITE4_TRANSIENT);
+  sqlite4VdbeMemSetStr(&pCtx->s, z, n, SQLITE4_UTF16NATIVE,SQLITE4_TRANSIENT,0);
 }
 #endif
 void sqlite4_result_int(sqlite4_context *pCtx, int iVal){
@@ -246,38 +248,42 @@ void sqlite4_result_text(
   sqlite4_context *pCtx, 
   const char *z, 
   int n,
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, SQLITE4_UTF8, xDel);
+  setResultStrOrError(pCtx, z, n, SQLITE4_UTF8, xDel, pDelArg);
 }
 #ifndef SQLITE4_OMIT_UTF16
 void sqlite4_result_text16(
   sqlite4_context *pCtx, 
   const void *z, 
   int n, 
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16NATIVE, xDel);
+  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16NATIVE, xDel, pDelArg);
 }
 void sqlite4_result_text16be(
   sqlite4_context *pCtx, 
   const void *z, 
   int n, 
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16BE, xDel);
+  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16BE, xDel, pDelArg);
 }
 void sqlite4_result_text16le(
   sqlite4_context *pCtx, 
   const void *z, 
   int n, 
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16LE, xDel);
+  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16LE, xDel, pDelArg);
 }
 #endif /* SQLITE4_OMIT_UTF16 */
 void sqlite4_result_value(sqlite4_context *pCtx, sqlite4_value *pValue){
@@ -292,7 +298,7 @@ void sqlite4_result_error_code(sqlite4_context *pCtx, int errCode){
   pCtx->isError = errCode;
   if( pCtx->s.flags & MEM_Null ){
     sqlite4VdbeMemSetStr(&pCtx->s, sqlite4ErrStr(errCode), -1, 
-                         SQLITE4_UTF8, SQLITE4_STATIC);
+                         SQLITE4_UTF8, SQLITE4_STATIC, 0);
   }
 }
 
@@ -301,7 +307,7 @@ void sqlite4_result_error_toobig(sqlite4_context *pCtx){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
   pCtx->isError = SQLITE4_TOOBIG;
   sqlite4VdbeMemSetStr(&pCtx->s, "string or blob too big", -1, 
-                       SQLITE4_UTF8, SQLITE4_STATIC);
+                       SQLITE4_UTF8, SQLITE4_STATIC, 0);
 }
 
 /* An SQLITE4_NOMEM error. */
@@ -591,7 +597,8 @@ void sqlite4_set_auxdata(
   sqlite4_context *pCtx, 
   int iArg, 
   void *pAux, 
-  void (*xDelete)(void*)
+  void (*xDelete)(void*,void*),
+  void *pDeleteArg
 ){
   struct AuxData *pAuxData;
   VdbeFunc *pVdbeFunc;
@@ -614,15 +621,16 @@ void sqlite4_set_auxdata(
 
   pAuxData = &pVdbeFunc->apAux[iArg];
   if( pAuxData->pAux && pAuxData->xDelete ){
-    pAuxData->xDelete(pAuxData->pAux);
+    pAuxData->xDelete(pAuxData->pDeleteArg, pAuxData->pAux);
   }
   pAuxData->pAux = pAux;
   pAuxData->xDelete = xDelete;
+  pAuxData->pDeleteArg = pDeleteArg;
   return;
 
 failed:
   if( xDelete ){
-    xDelete(pAux);
+    xDelete(pDeleteArg, pAux);
   }
 }
 
@@ -1008,12 +1016,13 @@ static int vdbeUnbind(Vdbe *p, int i){
 ** Bind a text or BLOB value.
 */
 static int bindText(
-  sqlite4_stmt *pStmt,   /* The statement to bind against */
-  int i,                 /* Index of the parameter to bind */
-  const void *zData,     /* Pointer to the data to be bound */
-  int nData,             /* Number of bytes of data to be bound */
-  void (*xDel)(void*),   /* Destructor for the data */
-  u8 encoding            /* Encoding for the data */
+  sqlite4_stmt *pStmt,       /* The statement to bind against */
+  int i,                     /* Index of the parameter to bind */
+  const void *zData,         /* Pointer to the data to be bound */
+  int nData,                 /* Number of bytes of data to be bound */
+  void (*xDel)(void*,void*), /* Destructor for the data */
+  void *pDelArg,             /* First argument to xDel() */
+  u8 encoding                /* Encoding for the data */
 ){
   Vdbe *p = (Vdbe *)pStmt;
   Mem *pVar;
@@ -1023,7 +1032,7 @@ static int bindText(
   if( rc==SQLITE4_OK ){
     if( zData!=0 ){
       pVar = &p->aVar[i-1];
-      rc = sqlite4VdbeMemSetStr(pVar, zData, nData, encoding, xDel);
+      rc = sqlite4VdbeMemSetStr(pVar, zData, nData, encoding, xDel, pDelArg);
       if( rc==SQLITE4_OK && encoding!=0 ){
         rc = sqlite4VdbeChangeEncoding(pVar, ENC(p->db));
       }
@@ -1032,7 +1041,7 @@ static int bindText(
     }
     sqlite4_mutex_leave(p->db->mutex);
   }else if( xDel!=SQLITE4_STATIC && xDel!=SQLITE4_TRANSIENT ){
-    xDel((void*)zData);
+    xDel(pDelArg, (void*)zData);
   }
   return rc;
 }
@@ -1046,9 +1055,10 @@ int sqlite4_bind_blob(
   int i, 
   const void *zData, 
   int nData, 
-  void (*xDel)(void*)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
-  return bindText(pStmt, i, zData, nData, xDel, 0);
+  return bindText(pStmt, i, zData, nData, xDel, pDelArg, 0);
 }
 int sqlite4_bind_double(sqlite4_stmt *pStmt, int i, double rValue){
   int rc;
@@ -1087,9 +1097,10 @@ int sqlite4_bind_text(
   int i, 
   const char *zData, 
   int nData, 
-  void (*xDel)(void*)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
-  return bindText(pStmt, i, zData, nData, xDel, SQLITE4_UTF8);
+  return bindText(pStmt, i, zData, nData, xDel, pDelArg, SQLITE4_UTF8);
 }
 #ifndef SQLITE4_OMIT_UTF16
 int sqlite4_bind_text16(
@@ -1097,9 +1108,10 @@ int sqlite4_bind_text16(
   int i, 
   const void *zData, 
   int nData, 
-  void (*xDel)(void*)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
-  return bindText(pStmt, i, zData, nData, xDel, SQLITE4_UTF16NATIVE);
+  return bindText(pStmt, i, zData, nData, xDel, pDelArg, SQLITE4_UTF16NATIVE);
 }
 #endif /* SQLITE4_OMIT_UTF16 */
 int sqlite4_bind_value(sqlite4_stmt *pStmt, int i, const sqlite4_value *pValue){
@@ -1117,12 +1129,13 @@ int sqlite4_bind_value(sqlite4_stmt *pStmt, int i, const sqlite4_value *pValue){
       if( pValue->flags & MEM_Zero ){
         rc = sqlite4_bind_zeroblob(pStmt, i, pValue->u.nZero);
       }else{
-        rc = sqlite4_bind_blob(pStmt, i, pValue->z, pValue->n,SQLITE4_TRANSIENT);
+        rc = sqlite4_bind_blob(pStmt, i, pValue->z, pValue->n,
+                               SQLITE4_TRANSIENT, 0);
       }
       break;
     }
     case SQLITE4_TEXT: {
-      rc = bindText(pStmt,i,  pValue->z, pValue->n, SQLITE4_TRANSIENT,
+      rc = bindText(pStmt,i,  pValue->z, pValue->n, SQLITE4_TRANSIENT, 0,
                               pValue->enc);
       break;
     }

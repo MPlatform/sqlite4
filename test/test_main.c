@@ -686,7 +686,7 @@ static void t1_ifnullFunc(
     if( SQLITE4_NULL!=sqlite4_value_type(argv[i]) ){
       int n = sqlite4_value_bytes(argv[i]);
       sqlite4_result_text(context, (char*)sqlite4_value_text(argv[i]),
-          n, SQLITE4_TRANSIENT);
+          n, SQLITE4_TRANSIENT, 0);
       break;
     }
   }
@@ -706,7 +706,7 @@ static void hex8Func(sqlite4_context *p, int argc, sqlite4_value **argv){
     sprintf(&zBuf[i*2], "%02x", z[i]&0xff);
   }
   zBuf[i*2] = 0;
-  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT, 0);
 }
 #ifndef SQLITE4_OMIT_UTF16
 static void hex16Func(sqlite4_context *p, int argc, sqlite4_value **argv){
@@ -718,7 +718,7 @@ static void hex16Func(sqlite4_context *p, int argc, sqlite4_value **argv){
     sprintf(&zBuf[i*4], "%04x", z[i]&0xff);
   }
   zBuf[i*4] = 0;
-  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT, 0);
 }
 #endif
 
@@ -791,7 +791,7 @@ static void sqlite4ExecFunc(
   (void)sqlite4_exec((sqlite4*)sqlite4_user_data(context),
       (char*)sqlite4_value_text(argv[0]),
       execFuncCallback, &x, 0);
-  sqlite4_result_text(context, x.z, x.nUsed, SQLITE4_TRANSIENT);
+  sqlite4_result_text(context, x.z, x.nUsed, SQLITE4_TRANSIENT, 0);
   sqlite4_free(0, x.z);
 }
 
@@ -831,7 +831,7 @@ static void tkt2213Function(
   }else{
     char *zCopy = (char *)sqlite4_malloc(sqlite4_context_env(context),nText);
     memcpy(zCopy, zText1, nText);
-    sqlite4_result_text(context, zCopy, nText, SQLITE4_DYNAMIC);
+    sqlite4_result_text(context, zCopy, nText, SQLITE4_DYNAMIC, 0);
   }
 }
 
@@ -969,7 +969,8 @@ static int test_create_function(
     sqlite4_value *pVal;
     sqlite4_mutex_enter(db->mutex);
     pVal = sqlite4ValueNew(db);
-    sqlite4ValueSetStr(pVal, -1, "x_sqlite_exec", SQLITE4_UTF8, SQLITE4_STATIC);
+    sqlite4ValueSetStr(pVal, -1, "x_sqlite_exec", SQLITE4_UTF8,
+                       SQLITE4_STATIC, 0);
     zUtf16 = sqlite4ValueText(pVal, SQLITE4_UTF16NATIVE);
     if( db->mallocFailed ){
       rc = SQLITE4_NOMEM;
@@ -1714,7 +1715,7 @@ static void testFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         sqlite4_result_int64(context, sqlite4_value_int64(argv[1]));
       }else if( sqlite4_stricmp(zArg0,"string")==0 ){
         sqlite4_result_text(context, (char*)sqlite4_value_text(argv[1]), -1,
-            SQLITE4_TRANSIENT);
+            SQLITE4_TRANSIENT, 0);
       }else if( sqlite4_stricmp(zArg0,"double")==0 ){
         sqlite4_result_double(context, sqlite4_value_double(argv[1]));
       }else if( sqlite4_stricmp(zArg0,"null")==0 ){
@@ -2100,14 +2101,14 @@ static int test_bind(
   if( strcmp(argv[4],"null")==0 ){
     rc = sqlite4_bind_null(pStmt, idx);
   }else if( strcmp(argv[4],"static")==0 ){
-    rc = sqlite4_bind_text(pStmt, idx, sqlite_static_bind_value, -1, 0);
+    rc = sqlite4_bind_text(pStmt, idx, sqlite_static_bind_value, -1, 0, 0);
   }else if( strcmp(argv[4],"static-nbytes")==0 ){
     rc = sqlite4_bind_text(pStmt, idx, sqlite_static_bind_value,
-                                       sqlite_static_bind_nbyte, 0);
+                                       sqlite_static_bind_nbyte, 0, 0);
   }else if( strcmp(argv[4],"normal")==0 ){
-    rc = sqlite4_bind_text(pStmt, idx, argv[3], -1, SQLITE4_TRANSIENT);
+    rc = sqlite4_bind_text(pStmt, idx, argv[3], -1, SQLITE4_TRANSIENT, 0);
   }else if( strcmp(argv[4],"blob10")==0 ){
-    rc = sqlite4_bind_text(pStmt, idx, "abc\000xyz\000pq", 10, SQLITE4_STATIC);
+    rc = sqlite4_bind_text(pStmt, idx, "abc\000xyz\000pq", 10,SQLITE4_STATIC,0);
   }else{
     Tcl_AppendResult(interp, "4th argument should be "
         "\"null\" or \"static\" or \"normal\"", 0);
@@ -2187,11 +2188,11 @@ static int test_collate_func(
   sqlite4BeginBenignMalloc(pEnv);
   pVal = sqlite4ValueNew(0);
   if( pVal ){
-    sqlite4ValueSetStr(pVal, nA, zA, encin, SQLITE4_STATIC);
+    sqlite4ValueSetStr(pVal, nA, zA, encin, SQLITE4_STATIC, 0);
     n = sqlite4_value_bytes(pVal);
     Tcl_ListObjAppendElement(i,pX,
         Tcl_NewStringObj((char*)sqlite4_value_text(pVal),n));
-    sqlite4ValueSetStr(pVal, nB, zB, encin, SQLITE4_STATIC);
+    sqlite4ValueSetStr(pVal, nB, zB, encin, SQLITE4_STATIC, 0);
     n = sqlite4_value_bytes(pVal);
     Tcl_ListObjAppendElement(i,pX,
         Tcl_NewStringObj((char*)sqlite4_value_text(pVal),n));
@@ -2389,12 +2390,13 @@ static void test_function_utf8(
       Tcl_NewStringObj((char*)sqlite4_value_text(argv[0]), -1));
   Tcl_EvalObjEx(interp, pX, 0);
   Tcl_DecrRefCount(pX);
-  sqlite4_result_text(pCtx, Tcl_GetStringResult(interp), -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(pCtx, Tcl_GetStringResult(interp), -1,
+                      SQLITE4_TRANSIENT, 0);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE4_UTF8, SQLITE4_STATIC);
+      SQLITE4_UTF8, SQLITE4_STATIC, 0);
   sqlite4_result_text16be(pCtx, sqlite4_value_text16be(pVal),
-      -1, SQLITE4_TRANSIENT);
+      -1, SQLITE4_TRANSIENT, 0);
   sqlite4ValueFree(pVal);
 }
 static void test_function_utf16le(
@@ -2415,8 +2417,9 @@ static void test_function_utf16le(
   Tcl_DecrRefCount(pX);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE4_UTF8, SQLITE4_STATIC);
-  sqlite4_result_text(pCtx,(char*)sqlite4_value_text(pVal),-1,SQLITE4_TRANSIENT);
+      SQLITE4_UTF8, SQLITE4_STATIC, 0);
+  sqlite4_result_text(pCtx, (char*)sqlite4_value_text(pVal), -1,
+                      SQLITE4_TRANSIENT, 0);
   sqlite4ValueFree(pVal);
 }
 static void test_function_utf16be(
@@ -2437,13 +2440,13 @@ static void test_function_utf16be(
   Tcl_DecrRefCount(pX);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE4_UTF8, SQLITE4_STATIC);
+      SQLITE4_UTF8, SQLITE4_STATIC, 0);
   sqlite4_result_text16(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE4_TRANSIENT);
+      -1, SQLITE4_TRANSIENT, 0);
   sqlite4_result_text16be(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE4_TRANSIENT);
+      -1, SQLITE4_TRANSIENT, 0);
   sqlite4_result_text16le(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE4_TRANSIENT);
+      -1, SQLITE4_TRANSIENT, 0);
   sqlite4ValueFree(pVal);
 }
 #endif /* SQLITE4_OMIT_UTF16 */
@@ -2788,7 +2791,7 @@ static int test_bind_text(
   value = (char*)Tcl_GetByteArrayFromObj(objv[3], &bytes);
   if( Tcl_GetIntFromObj(interp, objv[4], &bytes) ) return TCL_ERROR;
 
-  rc = sqlite4_bind_text(pStmt, idx, value, bytes, SQLITE4_TRANSIENT);
+  rc = sqlite4_bind_text(pStmt, idx, value, bytes, SQLITE4_TRANSIENT, 0);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
   if( rc!=SQLITE4_OK ){
     Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
@@ -2836,7 +2839,7 @@ static int test_bind_text16(
   value = (char*)Tcl_GetByteArrayFromObj(oString, 0);
   if( Tcl_GetIntFromObj(interp, oBytes, &bytes) ) return TCL_ERROR;
 
-  rc = sqlite4_bind_text16(pStmt, idx, (void *)value, bytes, xDel);
+  rc = sqlite4_bind_text16(pStmt, idx, (void *)value, bytes, xDel, 0);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
   if( rc!=SQLITE4_OK ){
     Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
@@ -2883,7 +2886,7 @@ static int test_bind_blob(
   value = Tcl_GetString(objv[3]);
   if( Tcl_GetIntFromObj(interp, objv[4], &bytes) ) return TCL_ERROR;
 
-  rc = sqlite4_bind_blob(pStmt, idx, value, bytes, xDestructor);
+  rc = sqlite4_bind_blob(pStmt, idx, value, bytes, xDestructor, 0);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
   if( rc!=SQLITE4_OK ){
     return TCL_ERROR;

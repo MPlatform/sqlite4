@@ -884,7 +884,8 @@ case OP_String8: {         /* same as TK_STRING, out2-prerelease */
 
 #ifndef SQLITE4_OMIT_UTF16
   if( encoding!=SQLITE4_UTF8 ){
-    rc = sqlite4VdbeMemSetStr(pOut, pOp->p4.z, -1, SQLITE4_UTF8, SQLITE4_STATIC);
+    rc = sqlite4VdbeMemSetStr(pOut, pOp->p4.z, -1, SQLITE4_UTF8,
+                              SQLITE4_STATIC, 0);
     if( rc==SQLITE4_TOOBIG ) goto too_big;
     if( SQLITE4_OK!=sqlite4VdbeChangeEncoding(pOut, encoding) ) goto no_mem;
     assert( pOut->zMalloc==pOut->z );
@@ -950,7 +951,7 @@ case OP_Null: {           /* out2-prerelease */
 */
 case OP_Blob: {                /* out2-prerelease */
   assert( pOp->p1 <= SQLITE4_MAX_LENGTH );
-  sqlite4VdbeMemSetStr(pOut, pOp->p4.z, pOp->p1, 0, 0);
+  sqlite4VdbeMemSetStr(pOut, pOp->p4.z, pOp->p1, 0, 0, 0);
   pOut->enc = encoding;
   UPDATE_MAX_BLOBSIZE(pOut);
   break;
@@ -2257,7 +2258,8 @@ case OP_MakeIdxKey: {
     if( nSeq ){
       memcpy(&aRec[nRec], &aSeq[sizeof(aSeq)-nSeq], nSeq);
     }
-    rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec+nSeq, 0, SQLITE4_DYNAMIC);
+    rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec+nSeq, 0,
+                              SQLITE4_DYNAMIC, 0);
     REGISTER_TRACE(pOp->p3, pOut);
     UPDATE_MAX_BLOBSIZE(pOut);
   }
@@ -2347,7 +2349,8 @@ case OP_MakeRecord: {
     if( rc ){
       sqlite4DbFree(db, aRec);
     }else{
-      rc = sqlite4VdbeMemSetStr(pKeyOut, (char *)aRec, nRec, 0, SQLITE4_DYNAMIC);
+      rc = sqlite4VdbeMemSetStr(pKeyOut, (char *)aRec, nRec, 0,
+                                SQLITE4_DYNAMIC, 0);
       REGISTER_TRACE(keyReg, pKeyOut);
       UPDATE_MAX_BLOBSIZE(pKeyOut);
     }
@@ -2363,7 +2366,7 @@ case OP_MakeRecord: {
     if( rc ){
       sqlite4DbFree(db, aRec);
     }else{
-      rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec, 0, SQLITE4_DYNAMIC);
+      rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec, 0, SQLITE4_DYNAMIC,0);
       REGISTER_TRACE(pOp->p3, pOut);
       UPDATE_MAX_BLOBSIZE(pOut);
     }
@@ -3521,7 +3524,7 @@ case OP_GrpCompare: {
   ){
     pc = pOp->p2-1;
   }else{
-    sqlite4VdbeMemSetStr(pIn3, (const char*)aKey, nKey, 0, SQLITE4_TRANSIENT);
+    sqlite4VdbeMemSetStr(pIn3, (const char*)aKey, nKey, 0, SQLITE4_TRANSIENT,0);
   }
 
   break;
@@ -3588,7 +3591,7 @@ case OP_RowData: {
   if( rc==SQLITE4_OK && nData>db->aLimit[SQLITE4_LIMIT_LENGTH] ){
     goto too_big;
   }
-  sqlite4VdbeMemSetStr(pOut, (const char*)pData, nData, 0, SQLITE4_TRANSIENT);
+  sqlite4VdbeMemSetStr(pOut, (const char*)pData, nData, 0, SQLITE4_TRANSIENT,0);
   pOut->enc = SQLITE4_UTF8;  /* In case the blob is ever cast to text */
   UPDATE_MAX_BLOBSIZE(pOut);
   break;
@@ -4109,7 +4112,8 @@ case OP_RowSetRead: {       /* in1 */
   if( (pIn1->flags & MEM_RowSet)
    && (aKey = sqlite4RowSetRead(pIn1->u.pRowSet, &nKey))
   ){
-    rc = sqlite4VdbeMemSetStr(pOut, (char const *)aKey, nKey, 0, SQLITE4_TRANSIENT);
+    rc = sqlite4VdbeMemSetStr(pOut, (char const *)aKey, nKey, 0,
+                              SQLITE4_TRANSIENT, 0);
     sqlite4RowSetNext(pIn1->u.pRowSet);
   }else{
     /* The RowSet is empty */

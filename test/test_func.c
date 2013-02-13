@@ -69,7 +69,7 @@ static void randStr(sqlite4_context *context, int argc, sqlite4_value **argv){
     zBuf[i] = zSrc[zBuf[i]%(sizeof(zSrc)-1)];
   }
   zBuf[n] = 0;
-  sqlite4_result_text(context, (char*)zBuf, n, SQLITE4_TRANSIENT);
+  sqlite4_result_text(context, (char*)zBuf, n, SQLITE4_TRANSIENT, 0);
 }
 
 /*
@@ -84,7 +84,7 @@ static void randStr(sqlite4_context *context, int argc, sqlite4_value **argv){
 ** WARNING: Not threadsafe.
 */
 static int test_destructor_count_var = 0;
-static void destructor(void *p){
+static void destructor(void *pNotUsed, void *p){
   char *zVal = (char *)p;
   assert(zVal);
   zVal--;
@@ -111,7 +111,7 @@ static void test_destructor(
   zVal[len+2] = 0;
   zVal++;
   memcpy(zVal, sqlite4_value_text(argv[0]), len);
-  sqlite4_result_text(pCtx, zVal, -1, destructor);
+  sqlite4_result_text(pCtx, zVal, -1, destructor, 0);
 }
 #ifndef SQLITE4_OMIT_UTF16
 static void test_destructor16(
@@ -134,7 +134,7 @@ static void test_destructor16(
   zVal[len+2] = 0;
   zVal++;
   memcpy(zVal, sqlite4_value_text16(argv[0]), len);
-  sqlite4_result_text16(pCtx, zVal, -1, destructor);
+  sqlite4_result_text16(pCtx, zVal, -1, destructor, 0);
 }
 #endif
 static void test_destructor_count(
@@ -167,7 +167,7 @@ static void test_agg_errmsg16_final(sqlite4_context *ctx){
   sqlite4BeginBenignMalloc();
   z = sqlite4_errmsg16(db);
   sqlite4EndBenignMalloc();
-  sqlite4_result_text16(ctx, z, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text16(ctx, z, -1, SQLITE4_TRANSIENT, 0);
 #endif
 }
 
@@ -182,7 +182,9 @@ static void test_agg_errmsg16_final(sqlite4_context *ctx){
 ** registration, the result for that argument is 1.  The overall result
 ** is the individual argument results separated by spaces.
 */
-static void free_test_auxdata(void *p) {sqlite4_free(0, p);}
+static void free_test_auxdata(void *pEnv, void *p){
+  sqlite4_free((sqlite4_env*)pEnv, p);
+}
 static void test_auxdata(
   sqlite4_context *pCtx, 
   int nArg,
@@ -190,6 +192,7 @@ static void test_auxdata(
 ){
   int i;
   char *zRet = testContextMalloc(pCtx, nArg*2);
+  sqlite4_env *pEnv;
   if( !zRet ) return;
   memset(zRet, 0, nArg*2);
   for(i=0; i<nArg; i++){
@@ -207,12 +210,14 @@ static void test_auxdata(
       zAux = testContextMalloc(pCtx, n);
       if( zAux ){
         memcpy(zAux, z, n);
-        sqlite4_set_auxdata(pCtx, i, zAux, free_test_auxdata);
+        sqlite4_set_auxdata(pCtx, i, zAux,
+                            free_test_auxdata, sqlite4_context_env(pCtx));
       }
       zRet[i*2+1] = ' ';
     }
   }
-  sqlite4_result_text(pCtx, zRet, 2*nArg-1, free_test_auxdata);
+  sqlite4_result_text(pCtx, zRet, 2*nArg-1,
+                      free_test_auxdata, sqlite4_context_env(pCtx));
 }
 
 /*
@@ -234,7 +239,7 @@ static void test_error(
 /* A counter object with its destructor.  Used by counterFunc() below.
 */
 struct counterObject { int cnt; sqlite4_env *pEnv; };
-void counterFree(void *x){
+void counterFree(void *NotUsed, void *x){
   struct counterObject *p = (struct counterObject*)x;
   sqlite4_free(p->pEnv, p);
 }
@@ -260,7 +265,7 @@ static void counterFunc(
     }
     pCounter->cnt = sqlite4_value_int(argv[0]);
     pCounter->pEnv = sqlite4_context_env(pCtx);
-    sqlite4_set_auxdata(pCtx, 0, pCounter, counterFree);
+    sqlite4_set_auxdata(pCtx, 0, pCounter, counterFree, 0);
   }else{
     pCounter->cnt++;
   }
@@ -323,7 +328,7 @@ static void test_eval(
     assert( pStmt==0 );
     zErr = sqlite4_mprintf(pEnv, "sqlite4_prepare() error: %s",
                            sqlite4_errmsg(db));
-    sqlite4_result_text(pCtx, zErr, -1, SQLITE4_DYNAMIC);
+    sqlite4_result_text(pCtx, zErr, -1, SQLITE4_DYNAMIC, 0);
     sqlite4_result_error_code(pCtx, rc);
   }
 }
@@ -376,7 +381,7 @@ static void testHexToUtf16be(
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text16be(pCtx, zOut, n/2, SQLITE4_DYNAMIC);
+    sqlite4_result_text16be(pCtx, zOut, n/2, SQLITE4_DYNAMIC, 0);
   }
 }
 #endif
@@ -403,7 +408,7 @@ static void testHexToUtf8(
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text(pCtx, zOut, n/2, SQLITE4_DYNAMIC);
+    sqlite4_result_text(pCtx, zOut, n/2, SQLITE4_DYNAMIC, 0);
   }
 }
 
@@ -430,7 +435,7 @@ static void testHexToUtf16le(
     sqlite4_result_error_nomem(pCtx);
   }else{
     testHexToBin(zIn, zOut);
-    sqlite4_result_text16le(pCtx, zOut, n/2, SQLITE4_DYNAMIC);
+    sqlite4_result_text16le(pCtx, zOut, n/2, SQLITE4_DYNAMIC, 0);
   }
 }
 #endif

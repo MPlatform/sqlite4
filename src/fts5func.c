@@ -49,7 +49,7 @@ struct Fts5RankCtx {
   double *aIdf;                   /* IDF weights for each phrase in query */
 };
 
-static void fts5RankFreeCtx(void *pCtx){
+static void fts5RankFreeCtx(void *pNotUsed, void *pCtx){
   if( pCtx ){
     Fts5RankCtx *p = (Fts5RankCtx *)pCtx;
     sqlite4DbFree(p->db, p);
@@ -136,7 +136,7 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
     sqlite4_mi_phrase_count(pCtx, &nPhrase);
     nByte = sizeof(Fts5RankCtx) + (nPhrase+nField) * sizeof(double);
     p = (Fts5RankCtx *)sqlite4DbMallocZero(db, nByte);
-    sqlite4_set_auxdata(pCtx, 0, (void *)p, fts5RankFreeCtx);
+    sqlite4_set_auxdata(pCtx, 0, (void *)p, fts5RankFreeCtx, 0);
     p = sqlite4_get_auxdata(pCtx, 0);
 
     if( !p ){
@@ -270,7 +270,7 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
       zExplain = sqlite4MAppendf(
           db, zExplain, "%s</table><b>overall rank=%.2f</b>", zExplain, rank
       );
-      sqlite4_result_text(pCtx, zExplain, -1, SQLITE4_TRANSIENT);
+      sqlite4_result_text(pCtx, zExplain, -1, SQLITE4_TRANSIENT, 0);
     }else{
       sqlite4_result_double(pCtx, rank);
     }
@@ -593,7 +593,7 @@ static void fts5Snippet(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
           );
         }
       }
-      sqlite4_result_text(pCtx, text.zOut, text.nOut, SQLITE4_TRANSIENT);
+      sqlite4_result_text(pCtx, text.zOut, text.nOut, SQLITE4_TRANSIENT, 0);
       sqlite4DbFree(sqlite4_context_db_handle(pCtx), text.zOut);
       break;
     }
@@ -670,4 +670,3 @@ int sqlite4InitFts5Func(sqlite4 *db){
 
   return rc;
 }
-

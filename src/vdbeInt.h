@@ -149,7 +149,8 @@ struct Mem {
   Mem *pScopyFrom;    /* This Mem is a shallow copy of pScopyFrom */
   void *pFiller;      /* So that sizeof(Mem) is a multiple of 8 */
 #endif
-  void (*xDel)(void *);  /* If not null, call this function to delete Mem.z */
+  void (*xDel)(void*,void*); /* Function to delete Mem.z */
+  void *pDelArg;             /* First argument to xDel() */
   char *zMalloc;      /* Dynamic buffer allocated by sqlite4_malloc() */
 };
 
@@ -217,7 +218,8 @@ struct VdbeFunc {
   int nAux;                     /* Number of entries allocated for apAux[] */
   struct AuxData {
     void *pAux;                   /* Aux data for the i-th argument */
-    void (*xDelete)(void *);      /* Destructor for the aux data */
+    void (*xDelete)(void*,void*); /* Destructor for the aux data */
+    void *pDeleteArg;             /* First argument to xDelete */
   } apAux[1];                   /* One slot for each function argument */
 };
 
@@ -398,7 +400,8 @@ int sqlite4VdbeMemCopy(Mem*, const Mem*);
 void sqlite4VdbeMemShallowCopy(Mem*, const Mem*, int);
 void sqlite4VdbeMemMove(Mem*, Mem*);
 int sqlite4VdbeMemNulTerminate(Mem*);
-int sqlite4VdbeMemSetStr(Mem*, const char*, int, u8, void(*)(void*));
+int sqlite4VdbeMemSetStr(Mem*, const char*, int, u8,
+                         void(*)(void*,void*),void*);
 void sqlite4VdbeMemSetInt64(Mem*, i64);
 #ifdef SQLITE4_OMIT_FLOATING_POINT
 # define sqlite4VdbeMemSetDouble sqlite4VdbeMemSetInt64

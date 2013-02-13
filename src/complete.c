@@ -269,7 +269,7 @@ int sqlite4_complete16(const void *zSql){
   if( rc ) return rc;
 #endif
   pVal = sqlite4ValueNew(0);
-  sqlite4ValueSetStr(pVal, -1, zSql, SQLITE4_UTF16NATIVE, SQLITE4_STATIC);
+  sqlite4ValueSetStr(pVal, -1, zSql, SQLITE4_UTF16NATIVE, SQLITE4_STATIC, 0);
   zSql8 = sqlite4ValueText(pVal, SQLITE4_UTF8);
   if( zSql8 ){
     rc = sqlite4_complete(zSql8);

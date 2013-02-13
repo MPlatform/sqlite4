@@ -75,7 +75,7 @@ static void typeofFunc(
     case SQLITE4_BLOB:    z = "blob";    break;
     default:             z = "null";    break;
   }
-  sqlite4_result_text(context, z, -1, SQLITE4_STATIC);
+  sqlite4_result_text(context, z, -1, SQLITE4_STATIC, 0);
 }
 
 
@@ -244,13 +244,13 @@ static void substrFunc(
     for(z2=z; *z2 && p2; p2--){
       SQLITE4_SKIP_UTF8(z2);
     }
-    sqlite4_result_text(context, (char*)z, (int)(z2-z), SQLITE4_TRANSIENT);
+    sqlite4_result_text(context, (char*)z, (int)(z2-z), SQLITE4_TRANSIENT, 0);
   }else{
     if( p1+p2>len ){
       p2 = len-p1;
       if( p2<0 ) p2 = 0;
     }
-    sqlite4_result_blob(context, (char*)&z[p1], (int)p2, SQLITE4_TRANSIENT);
+    sqlite4_result_blob(context, (char*)&z[p1], (int)p2, SQLITE4_TRANSIENT, 0);
   }
 }
 
@@ -336,7 +336,7 @@ static void upperFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
       for(i=0; i<n; i++){
         z1[i] = (char)sqlite4Toupper(z2[i]);
       }
-      sqlite4_result_text(context, z1, n, SQLITE4_DYNAMIC);
+      sqlite4_result_text(context, z1, n, SQLITE4_DYNAMIC, 0);
     }
   }
 }
@@ -355,7 +355,7 @@ static void lowerFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
       for(i=0; i<n; i++){
         z1[i] = sqlite4Tolower(z2[i]);
       }
-      sqlite4_result_text(context, z1, n, SQLITE4_DYNAMIC);
+      sqlite4_result_text(context, z1, n, SQLITE4_DYNAMIC, 0);
     }
   }
 }
@@ -434,7 +434,7 @@ static void randomBlob(
   p = contextMalloc(context, n);
   if( p ){
     sqlite4_randomness(sqlite4_context_env(context), n, p);
-    sqlite4_result_blob(context, (char*)p, n, SQLITE4_DYNAMIC);
+    sqlite4_result_blob(context, (char*)p, n, SQLITE4_DYNAMIC, 0);
   }
 }
 
@@ -754,7 +754,7 @@ static void versionFunc(
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
   /* IMP: R-48699-48617 This function is an SQL wrapper around the
   ** sqlite4_libversion() C-interface. */
-  sqlite4_result_text(context, sqlite4_libversion(), -1, SQLITE4_STATIC);
+  sqlite4_result_text(context, sqlite4_libversion(), -1, SQLITE4_STATIC, 0);
 }
 
 /*
@@ -770,7 +770,7 @@ static void sourceidFunc(
   UNUSED_PARAMETER2(NotUsed, NotUsed2);
   /* IMP: R-24470-31136 This function is an SQL wrapper around the
   ** sqlite4_sourceid() C interface. */
-  sqlite4_result_text(context, sqlite4_sourceid(), -1, SQLITE4_STATIC);
+  sqlite4_result_text(context, sqlite4_sourceid(), -1, SQLITE4_STATIC, 0);
 }
 
 /*
@@ -830,7 +830,8 @@ static void compileoptiongetFunc(
   ** is a wrapper around the sqlite4_compileoption_get() C/C++ function.
   */
   n = sqlite4_value_int(argv[0]);
-  sqlite4_result_text(context, sqlite4_compileoption_get(n), -1, SQLITE4_STATIC);
+  sqlite4_result_text(context, sqlite4_compileoption_get(n), -1,
+                      SQLITE4_STATIC, 0);
 }
 #endif /* SQLITE4_OMIT_COMPILEOPTION_DIAGS */
 
@@ -877,7 +878,7 @@ static void quoteFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         zText[(nBlob*2)+3] = '\0';
         zText[0] = 'x';
         zText[1] = '\'';
-        sqlite4_result_text(context, zText, -1, SQLITE4_TRANSIENT);
+        sqlite4_result_text(context, zText, -1, SQLITE4_TRANSIENT, 0);
         sqlite4_free(sqlite4_context_env(context), zText);
       }
       break;
@@ -901,13 +902,13 @@ static void quoteFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         }
         z[j++] = '\'';
         z[j] = 0;
-        sqlite4_result_text(context, z, j, SQLITE4_DYNAMIC);
+        sqlite4_result_text(context, z, j, SQLITE4_DYNAMIC, 0);
       }
       break;
     }
     default: {
       assert( sqlite4_value_type(argv[0])==SQLITE4_NULL );
-      sqlite4_result_text(context, "NULL", 4, SQLITE4_STATIC);
+      sqlite4_result_text(context, "NULL", 4, SQLITE4_STATIC, 0);
       break;
     }
   }
@@ -938,7 +939,7 @@ static void hexFunc(
       *(z++) = hexdigits[c&0xf];
     }
     *z = 0;
-    sqlite4_result_text(context, zHex, n*2, SQLITE4_DYNAMIC);
+    sqlite4_result_text(context, zHex, n*2, SQLITE4_DYNAMIC, 0);
   }
 }
 
@@ -1047,7 +1048,7 @@ static void replaceFunc(
   j += nStr - i;
   assert( j<=nOut );
   zOut[j] = 0;
-  sqlite4_result_text(context, (char*)zOut, j, SQLITE4_DYNAMIC);
+  sqlite4_result_text(context, (char*)zOut, j, SQLITE4_DYNAMIC, 0);
 }
 
 /*
@@ -1131,7 +1132,7 @@ static void trimFunc(
       sqlite4_free(sqlite4_context_env(context), azChar);
     }
   }
-  sqlite4_result_text(context, (char*)zIn, nIn, SQLITE4_TRANSIENT);
+  sqlite4_result_text(context, (char*)zIn, nIn, SQLITE4_TRANSIENT, 0);
 }
 
 
@@ -1186,11 +1187,11 @@ static void soundexFunc(
       zResult[j++] = '0';
     }
     zResult[j] = 0;
-    sqlite4_result_text(context, zResult, 4, SQLITE4_TRANSIENT);
+    sqlite4_result_text(context, zResult, 4, SQLITE4_TRANSIENT, 0);
   }else{
     /* IMP: R-64894-50321 The string "?000" is returned if the argument
     ** is NULL or contains no ASCII alphabetic characters. */
-    sqlite4_result_text(context, "?000", 4, SQLITE4_STATIC);
+    sqlite4_result_text(context, "?000", 4, SQLITE4_STATIC, 0);
   }
 }
 #endif /* SQLITE4_SOUNDEX */
@@ -1418,7 +1419,7 @@ static void groupConcatFinalize(sqlite4_context *context){
       sqlite4_result_error_nomem(context);
     }else{    
       sqlite4_result_text(context, sqlite4StrAccumFinish(pAccum), -1, 
-                          SQLITE4_DYNAMIC);
+                          SQLITE4_DYNAMIC, 0);
     }
   }
 }

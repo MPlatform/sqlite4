@@ -116,7 +116,9 @@ static u8 name_to_enc(Tcl_Interp *interp, Tcl_Obj *pObj){
   return pEnc->enc;
 }
 
-static void freeStr(void *pStr){ sqlite4_free(0, pStr); }
+static void freeStr(void *pEnv, void *pStr){
+  sqlite4_free((sqlite4_env*)pEnv, pStr);
+}
 
 /*
 ** Usage:   test_translate <string/blob> <from enc> <to enc> ?<transient>?
@@ -134,7 +136,7 @@ static int test_translate(
 
   char *z;
   int len;
-  void (*xDel)(void *p) = SQLITE4_STATIC;
+  void (*xDel)(void*,void*) = SQLITE4_STATIC;
 
   if( objc!=4 && objc!=5 ){
     Tcl_AppendResult(interp, "wrong # args: should be \"",
@@ -159,7 +161,7 @@ static int test_translate(
     if( objc==5 ){
       z = sqlite4_mprintf(0, "%s", z);
     }
-    sqlite4ValueSetStr(pVal, -1, z, enc_from, xDel);
+    sqlite4ValueSetStr(pVal, -1, z, enc_from, xDel, 0);
   }else{
     z = (char*)Tcl_GetByteArrayFromObj(objv[1], &len);
     if( objc==5 ){
@@ -167,7 +169,7 @@ static int test_translate(
       z = sqlite4_malloc(0, len);
       memcpy(z, zTmp, len);
     }
-    sqlite4ValueSetStr(pVal, -1, z, enc_from, xDel);
+    sqlite4ValueSetStr(pVal, -1, z, enc_from, xDel, 0);
   }
 
   z = (char *)sqlite4ValueText(pVal, enc_to);

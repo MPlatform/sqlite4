@@ -145,17 +145,18 @@ int sqlite4VdbeDecodeValue(
       sqlite4VdbeMemSetDouble(pOut, r);
     }else if( cclass==0 ){
       if( size==0 ){
-        sqlite4VdbeMemSetStr(pOut, "", 0, SQLITE4_UTF8, SQLITE4_TRANSIENT);
+        sqlite4VdbeMemSetStr(pOut, "", 0, SQLITE4_UTF8, SQLITE4_TRANSIENT, 0);
       }else if( p->a[ofst]>0x02 ){
         sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 
-                             SQLITE4_UTF8, SQLITE4_TRANSIENT);
+                             SQLITE4_UTF8, SQLITE4_TRANSIENT, 0);
       }else{
         static const u8 enc[] = {SQLITE4_UTF8,SQLITE4_UTF16LE,SQLITE4_UTF16BE };
         sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst+1), size-1, 
-                             enc[p->a[ofst]], SQLITE4_TRANSIENT);
+                             enc[p->a[ofst]], SQLITE4_TRANSIENT, 0);
       }
     }else{
-      sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0,SQLITE4_TRANSIENT);
+      sqlite4VdbeMemSetStr(pOut, (char*)(p->a+ofst), size, 0,
+                           SQLITE4_TRANSIENT, 0);
     }
   }
   testcase( i==iVal );

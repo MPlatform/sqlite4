@@ -204,7 +204,7 @@ void sqlite4VdbeResetStepResult(Vdbe*);
 void sqlite4VdbeRewind(Vdbe*);
 int sqlite4VdbeReset(Vdbe*);
 void sqlite4VdbeSetNumCols(Vdbe*,int);
-int sqlite4VdbeSetColName(Vdbe*, int, int, const char *, void(*)(void*));
+int sqlite4VdbeSetColName(Vdbe*, int, int, const char *, void(*)(void*,void*));
 void sqlite4VdbeCountChanges(Vdbe*);
 sqlite4 *sqlite4VdbeDb(Vdbe*);
 void sqlite4VdbeSetSql(Vdbe*, const char *z, int n);

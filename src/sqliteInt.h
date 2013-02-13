@@ -2966,7 +2966,7 @@ u8 sqlite4GetBoolean(const char *z);
 const void *sqlite4ValueText(sqlite4_value*, u8);
 int sqlite4ValueBytes(sqlite4_value*, u8);
 void sqlite4ValueSetStr(sqlite4_value*, int, const void *,u8, 
-                        void(*)(void*));
+                        void(*)(void*,void*),void*);
 void sqlite4ValueFree(sqlite4_value*);
 sqlite4_value *sqlite4ValueNew(sqlite4 *);
 char *sqlite4Utf16to8(sqlite4 *, const void*, int, u8);
