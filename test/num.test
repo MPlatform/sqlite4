@@ -1,0 +1,91 @@
+# 2001 September 15
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+# This file implements regression tests for SQLite library.  The
+# focus of this file is testing the sqlite_*_printf() interface.
+#
+# $Id: printf.test,v 1.31 2009/02/01 00:21:10 drh Exp $
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+
+do_test num-1.1.1 {
+  sqlite4_num_compare 20 20 
+} {equal}
+do_test num-1.1.2 {
+  sqlite4_num_compare 20 2e1
+} {equal}
+do_test num-1.1.3 {
+  sqlite4_num_compare -00034 -3.4e1
+} {equal}
+do_test num-1.1.4 {
+  sqlite4_num_compare -inf +inf
+} {lesser}
+do_test num-1.1.5 {
+  sqlite4_num_compare -inf 0
+} {lesser}
+do_test num-1.1.6 {
+  sqlite4_num_compare inf 4
+} {greater}
+do_test num-1.1.7 {
+  sqlite4_num_compare nan 7
+} {incomparable}
+# Is +0 > -0?
+#do_test num-equal-1.1.4 {
+#  sqlite4_num_compare +0 -0
+#} {equal}
+
+do_test num-2.1.1 {
+  sqlite4_num_to_text [sqlite4_num_from_text 37]
+} {37}
+do_test num-2.1.2 {
+  sqlite4_num_to_text [sqlite4_num_from_text 37 2]
+} {37}
+do_test num-2.1.4 {
+  sqlite4_num_compare [sqlite4_num_from_text 2.9e2X 5] 290
+} {equal}
+do_test num-2.1.5 {
+  sqlite4_num_isnan [sqlite4_num_from_text inf 2]
+} {true}
+do_test num-2.1.6 {
+  sqlite4_num_isinf [sqlite4_num_from_text inf 3]
+} {true}
+
+do_test num-3.1.1 {
+  sqlite4_num_to_text [sqlite4_num_add 5 7]
+} {12}
+
+do_test num-4.1.1 {
+  sqlite4_num_to_text [sqlite4_num_sub 9 3]
+} {6}
+do_test num-4.1.2 {
+  sqlite4_num_to_text [sqlite4_num_sub 5 12]
+} {-7}
+do_test num-4.2.1 {
+  sqlite4_num_compare [sqlite4_num_sub 1 1] [sqlite4_num_sub -1 -1]
+} {equal}
+
+do_test num-5.1.1 {
+  sqlite4_num_to_text [sqlite4_num_mul 9 8]
+} {72}
+
+do_test num-6.1.1 {
+  sqlite4_num_to_text [sqlite4_num_div 6 5]
+} {1.2}
+do_test num-6.1.2 {
+  sqlite4_num_compare 2 [sqlite4_num_div 2 1]
+} {equal}
+do_test num-6.1.3 {
+  sqlite4_num_to_text [sqlite4_num_div 2 1]
+} {2}
+do_test num-6.1.4 {
+  sqlite4_num_to_text [sqlite4_num_div 22 10]
+} {2.2}
+finish_test

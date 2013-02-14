@@ -464,7 +464,7 @@ extern const int sqlite4one;
 */
 #define LARGEST_INT64  (0xffffffff|(((i64)0x7fffffff)<<32))
 #define SMALLEST_INT64 (((i64)-1) - LARGEST_INT64)
-#define LARGEST_UINT64  (0xffffffff|(((i64)0xffffffff)<<32))
+#define LARGEST_UINT64  (0xffffffff|(((u64)0xffffffff)<<32))
 
 /* 
 ** Round up a number to the next larger multiple of 8.  This is used
