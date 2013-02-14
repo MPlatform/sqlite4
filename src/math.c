@@ -501,8 +501,10 @@ int sqlite4_num_to_text(sqlite4_num x, char *zOut){
       zOut[0] = '.';
       memcpy(zOut+1, zNum, n);
       nOut += n;
+      zOut[n+1] = 0;
+    }else{
+      zOut[0] = 0;
     }
-    zOut[n+1] = 0;
     return nOut;
   }
   if( x.e<0 && x.e >= -n-5 ){

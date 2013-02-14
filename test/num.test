@@ -79,8 +79,13 @@ do_test num-5.1.1 {
 do_test num-6.1.1 {
   sqlite4_num_to_text [sqlite4_num_div 6 5]
 } {1.2}
-
-
-
-
+do_test num-6.1.2 {
+  sqlite4_num_compare 2 [sqlite4_num_div 2 1]
+} {equal}
+do_test num-6.1.3 {
+  sqlite4_num_to_text [sqlite4_num_div 2 1]
+} {2}
+do_test num-6.1.4 {
+  sqlite4_num_to_text [sqlite4_num_div 22 10]
+} {2.2}
 finish_test
