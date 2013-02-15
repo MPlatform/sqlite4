@@ -893,18 +893,14 @@ struct sqlite4 {
 ** Possible values for the sqlite4.flags.
 */
 #define SQLITE4_VdbeTrace      0x00000100  /* True to trace VDBE execution */
-#define SQLITE4_InternChanges  0x00000200  /* Uncommitted Hash table changes */
-#define SQLITE4_CountRows      0x00001000  /* Count rows changed by INSERT, */
-                                          /*   DELETE, or UPDATE and return */
-                                          /*   the count using a callback. */
-#define SQLITE4_SqlTrace       0x00004000  /* Debug print SQL as it executes */
-#define SQLITE4_VdbeListing    0x00008000  /* Debug listings of VDBE programs */
-#define SQLITE4_WriteSchema    0x00010000  /* OK to update SQLITE4_MASTER */
-#define SQLITE4_KvTrace        0x00020000  /* Trace Key/value storage calls */
-#define SQLITE4_IgnoreChecks   0x00040000  /* Do not enforce check constraints */
-#define SQLITE4_ReadUncommitted 0x0080000  /* For shared-cache mode */
-#define SQLITE4_LegacyFileFmt  0x00100000  /* Create new databases in format 1 */
-#define SQLITE4_RecoveryMode   0x00800000  /* Ignore schema errors */
+#define SQLITE4_SqlTrace       0x00000200  /* Debug print SQL as it executes */
+#define SQLITE4_VdbeListing    0x00000400  /* Debug listings of VDBE programs */
+#define SQLITE4_KvTrace        0x00000800  /* Trace Key/value storage calls */
+#define SQLITE4_VdbeAddopTrace 0x00001000  /* Trace sqlite4VdbeAddOp() calls */
+#define SQLITE4_InternChanges  0x00010000  /* Uncommitted Hash table changes */
+#define SQLITE4_WriteSchema    0x00020000  /* OK to update SQLITE4_MASTER */
+#define SQLITE4_IgnoreChecks   0x00040000  /* Dont enforce check constraints */
+#define SQLITE4_RecoveryMode   0x00080000  /* Ignore schema errors */
 #define SQLITE4_ReverseOrder   0x01000000  /* Reverse unordered SELECTs */
 #define SQLITE4_RecTriggers    0x02000000  /* Enable recursive triggers */
 #define SQLITE4_ForeignKeys    0x04000000  /* Enforce foreign key constraints  */

@@ -4734,7 +4734,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 #ifdef SQLITE4_DEBUG
   extern int sqlite4WhereTrace;
   extern int sqlite4OSTrace;
-  extern int sqlite4VdbeAddopTrace;
 #endif
 #ifdef SQLITE4_TEST
   extern char sqlite4_query_plan[];
@@ -4789,8 +4788,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
       (char*)&query_plan, TCL_LINK_STRING|TCL_LINK_READ_ONLY);
 #endif
 #ifdef SQLITE4_DEBUG
-  Tcl_LinkVar(interp, "sqlite_addop_trace",
-      (char*)&sqlite4VdbeAddopTrace, TCL_LINK_INT);
   Tcl_LinkVar(interp, "sqlite_where_trace",
       (char*)&sqlite4WhereTrace, TCL_LINK_INT);
 #endif
