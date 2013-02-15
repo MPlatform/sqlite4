@@ -1282,7 +1282,7 @@ static int selectColumnsFromExprList(
   char *zName;                /* Column name */
   int nName;                  /* Size of name in zName[] */
 
-  *pnCol = nCol = pEList->nExpr;
+  *pnCol = nCol = pEList ? pEList->nExpr : 0;
   aCol = *paCol = sqlite4DbMallocZero(db, sizeof(aCol[0])*nCol);
   if( aCol==0 ) return SQLITE4_NOMEM;
   for(i=0, pCol=aCol; i<nCol; i++, pCol++){
