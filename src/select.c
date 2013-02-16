@@ -948,7 +948,7 @@ static void generateSortTail(
     addr = 1 + sqlite4VdbeAddOp2(v, OP_SorterSort, iTab, addrBreak);
     codeOffset(v, p, addrContinue);
     sqlite4VdbeAddOp2(v, OP_SorterData, iTab, regSortOut);
-    sqlite4VdbeAddOp3(v, OP_Column, ptab2, pOrderBy->nExpr+1, regRow);
+    sqlite4VdbeAddOp3(v, OP_Column, ptab2, 0, regRow);
     sqlite4VdbeChangeP5(v, OPFLAG_CLEARCACHE);
   }else{
     addr = 1 + sqlite4VdbeAddOp2(v, OP_Sort, iTab, addrBreak);
@@ -2309,7 +2309,8 @@ static int multiSelectOrderBy(
   }else{
     int nExpr = p->pEList->nExpr;
     assert( nOrderBy>=nExpr || db->mallocFailed );
-    regPrev = sqlite4GetTempRange(pParse, nExpr+1);
+    regPrev = pParse->nMem + 1;
+    pParse->nMem += nExpr + 1;
     sqlite4VdbeAddOp2(v, OP_Integer, 0, regPrev);
     pKeyDup = sqlite4DbMallocZero(db,
                   sizeof(*pKeyDup) + nExpr*(sizeof(CollSeq*)+1) );
@@ -2489,12 +2490,6 @@ static int multiSelectOrderBy(
   sqlite4VdbeAddOp4(v, OP_Compare, destA.iMem, destB.iMem, nOrderBy,
                          (char*)pKeyMerge, P4_KEYINFO_HANDOFF);
   sqlite4VdbeAddOp3(v, OP_Jump, addrAltB, addrAeqB, addrAgtB);
-
-  /* Release temporary registers
-  */
-  if( regPrev ){
-    sqlite4ReleaseTempRange(pParse, regPrev, nOrderBy+1);
-  }
 
   /* Jump to the this point in order to terminate the query.
   */

@@ -3534,16 +3534,6 @@ case OP_GrpCompare: {
 **
 ** Write into register P2 the current sorter data for sorter cursor P1.
 */
-case OP_SorterData: {
-  VdbeCursor *pC; 
-  pOut = &aMem[pOp->p2];
-  pC = p->apCsr[pOp->p1];
-  assert( pC!=0 );
-  pOp->opcode = OP_RowData;
-  pc--;
-  break;
-}
-
 /* Opcode: RowData P1 P2 * * *
 **
 ** Write into register P2 the complete row data for cursor P1.
@@ -3564,6 +3554,7 @@ case OP_SorterData: {
 ** If the P1 cursor must be pointing to a valid row (not a NULL row)
 ** of a real table, not a pseudo-table.
 */
+case OP_SorterData:
 case OP_RowKey:
 case OP_RowData: {
   VdbeCursor *pC;
