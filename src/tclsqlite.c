@@ -506,7 +506,7 @@ static void tclSqlFunc(sqlite4_context *context, int argc, sqlite4_value**argv){
       /* Only return a BLOB type if the Tcl variable is a bytearray and
       ** has no string representation. */
       data = Tcl_GetByteArrayFromObj(pVar, &n);
-      sqlite4_result_blob(context, data, n, SQLITE4_TRANSIENT);
+      sqlite4_result_blob(context, data, n, SQLITE4_TRANSIENT, 0);
     }else if( c=='b' && strcmp(zType,"boolean")==0 ){
       Tcl_GetIntFromObj(0, pVar, &n);
       sqlite4_result_int(context, n);
@@ -521,7 +521,7 @@ static void tclSqlFunc(sqlite4_context *context, int argc, sqlite4_value**argv){
       sqlite4_result_int64(context, v);
     }else{
       data = (unsigned char *)Tcl_GetStringFromObj(pVar, &n);
-      sqlite4_result_text(context, (char *)data, n, SQLITE4_TRANSIENT);
+      sqlite4_result_text(context, (char *)data, n, SQLITE4_TRANSIENT, 0);
     }
   }
 }
@@ -848,7 +848,7 @@ static int dbPrepareAndBind(
           ** it has no string representation or the host
           ** parameter name begins with "@". */
           data = Tcl_GetByteArrayFromObj(pVar, &n);
-          sqlite4_bind_blob(pStmt, i, data, n, SQLITE4_STATIC);
+          sqlite4_bind_blob(pStmt, i, data, n, SQLITE4_STATIC, 0);
           Tcl_IncrRefCount(pVar);
           pPreStmt->apParm[iParm++] = pVar;
         }else if( c=='b' && strcmp(zType,"boolean")==0 ){
@@ -865,7 +865,7 @@ static int dbPrepareAndBind(
           sqlite4_bind_int64(pStmt, i, v);
         }else{
           data = (unsigned char *)Tcl_GetStringFromObj(pVar, &n);
-          sqlite4_bind_text(pStmt, i, (char *)data, n, SQLITE4_STATIC);
+          sqlite4_bind_text(pStmt, i, (char *)data, n, SQLITE4_STATIC, 0);
           Tcl_IncrRefCount(pVar);
           pPreStmt->apParm[iParm++] = pVar;
         }
@@ -1670,7 +1670,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
         ){
           sqlite4_bind_null(pStmt, i+1);
         }else{
-          sqlite4_bind_text(pStmt, i+1, azCol[i], -1, SQLITE4_STATIC);
+          sqlite4_bind_text(pStmt, i+1, azCol[i], -1, SQLITE4_STATIC, 0);
         }
       }
       sqlite4_step(pStmt);
@@ -2803,7 +2803,7 @@ static void md5finalize(sqlite4_context *context){
   p = sqlite4_aggregate_context(context, sizeof(*p));
   MD5Final(digest,p);
   MD5DigestToBase16(digest, zBuf);
-  sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT, 0);
 }
 int Md5_Register(sqlite4 *db){
   int rc = sqlite4_create_function(db, "md5sum", -1, SQLITE4_UTF8, 0, 0, 

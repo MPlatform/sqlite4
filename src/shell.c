@@ -321,7 +321,7 @@ static void shellstaticFunc(
   assert( zShellStatic );
   UNUSED_PARAMETER(argc);
   UNUSED_PARAMETER(argv);
-  sqlite4_result_text(context, zShellStatic, -1, SQLITE4_STATIC);
+  sqlite4_result_text(context, zShellStatic, -1, SQLITE4_STATIC, 0);
 }
 
 
@@ -1807,7 +1807,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
           }
           z[k] = 0;
         }
-        sqlite4_bind_text(pStmt, i+1, azCol[i], -1, SQLITE4_STATIC);
+        sqlite4_bind_text(pStmt, i+1, azCol[i], -1, SQLITE4_STATIC, 0);
       }
       sqlite4_step(pStmt);
       rc = sqlite4_reset(pStmt);
@@ -2172,9 +2172,9 @@ static int do_meta_command(char *zLine, struct callback_data *p){
     nRow = nAlloc = 0;
     azResult = 0;
     if( nArg>1 ){
-      sqlite4_bind_text(pStmt, 1, azArg[1], -1, SQLITE4_TRANSIENT);
+      sqlite4_bind_text(pStmt, 1, azArg[1], -1, SQLITE4_TRANSIENT, 0);
     }else{
-      sqlite4_bind_text(pStmt, 1, "%", -1, SQLITE4_STATIC);
+      sqlite4_bind_text(pStmt, 1, "%", -1, SQLITE4_STATIC, 0);
     }
     while( sqlite4_step(pStmt)==SQLITE4_ROW ){
       if( nRow>=nAlloc ){

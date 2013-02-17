@@ -18,17 +18,6 @@
 #include "vdbeInt.h"
 
 
-
-/*
-** When debugging the code generator in a symbolic debugger, one can
-** set the sqlite4VdbeAddopTrace to 1 and all opcodes will be printed
-** as they are added to the instruction stream.
-*/
-#ifdef SQLITE4_DEBUG
-int sqlite4VdbeAddopTrace = 0;
-#endif
-
-
 /*
 ** Create a new virtual database engine.
 */
@@ -152,7 +141,9 @@ int sqlite4VdbeAddOp3(Vdbe *p, int op, int p1, int p2, int p3){
   pOp->p4type = P4_NOTUSED;
 #ifdef SQLITE4_DEBUG
   pOp->zComment = 0;
-  if( sqlite4VdbeAddopTrace ) sqlite4VdbePrintOp(0, i, &p->aOp[i]);
+  if( p->db->flags & SQLITE4_VdbeAddopTrace ){
+    sqlite4VdbePrintOp(0, i, &p->aOp[i]);
+  }
 #endif
 #ifdef VDBE_PROFILE
   pOp->cycles = 0;
@@ -505,7 +496,7 @@ int sqlite4VdbeAddOpList(Vdbe *p, int nOp, VdbeOpList const *aOp){
       pOut->p5 = 0;
 #ifdef SQLITE4_DEBUG
       pOut->zComment = 0;
-      if( sqlite4VdbeAddopTrace ){
+      if( p->db->flags & SQLITE4_VdbeAddopTrace ){
         sqlite4VdbePrintOp(0, i+addr, &p->aOp[i+addr]);
       }
 #endif
@@ -1195,7 +1186,7 @@ int sqlite4VdbeList(
     pMem->flags = MEM_Dyn|MEM_Str|MEM_Term;
     z = displayP4(pOp, pMem->z, 32);
     if( z!=pMem->z ){
-      sqlite4VdbeMemSetStr(pMem, z, -1, SQLITE4_UTF8, 0);
+      sqlite4VdbeMemSetStr(pMem, z, -1, SQLITE4_UTF8, 0, 0);
     }else{
       assert( pMem->z!=0 );
       pMem->n = sqlite4Strlen30(pMem->z);
@@ -1638,19 +1629,21 @@ int sqlite4VdbeSetColName(
   int idx,                         /* Index of column zName applies to */
   int var,                         /* One of the COLNAME_* constants */
   const char *zName,               /* Pointer to buffer containing name */
-  void (*xDel)(void*)              /* Memory management strategy for zName */
+  void (*xDel)(void*,void*)        /* Memory management strategy for zName */
 ){
   int rc;
   Mem *pColName;
   assert( idx<p->nResColumn );
   assert( var<COLNAME_N );
+  assert( xDel==SQLITE4_STATIC || xDel==SQLITE4_TRANSIENT
+             || xDel==SQLITE4_DYNAMIC );
   if( p->db->mallocFailed ){
     assert( !zName || xDel!=SQLITE4_DYNAMIC );
     return SQLITE4_NOMEM;
   }
   assert( p->aColName!=0 );
   pColName = &(p->aColName[idx+var*p->nResColumn]);
-  rc = sqlite4VdbeMemSetStr(pColName, zName, -1, SQLITE4_UTF8, xDel);
+  rc = sqlite4VdbeMemSetStr(pColName, zName, -1, SQLITE4_UTF8, xDel, 0);
   assert( rc!=0 || !zName || (pColName->flags&MEM_Term)!=0 );
   return rc;
 }
@@ -1976,7 +1969,8 @@ int sqlite4VdbeTransferError(Vdbe *p){
   if( p->zErrMsg ){
     u8 mallocFailed = db->mallocFailed;
     sqlite4BeginBenignMalloc(db->pEnv);
-    sqlite4ValueSetStr(db->pErr, -1, p->zErrMsg, SQLITE4_UTF8, SQLITE4_TRANSIENT);
+    sqlite4ValueSetStr(db->pErr, -1, p->zErrMsg, SQLITE4_UTF8,
+                       SQLITE4_TRANSIENT, 0);
     sqlite4EndBenignMalloc(db->pEnv);
     db->mallocFailed = mallocFailed;
     db->errCode = rc;
@@ -2023,7 +2017,8 @@ int sqlite4VdbeReset(Vdbe *p){
     ** called), set the database error in this case as well.
     */
     sqlite4Error(db, p->rc, 0);
-    sqlite4ValueSetStr(db->pErr, -1, p->zErrMsg, SQLITE4_UTF8, SQLITE4_TRANSIENT);
+    sqlite4ValueSetStr(db->pErr, -1, p->zErrMsg, SQLITE4_UTF8,
+                       SQLITE4_TRANSIENT, 0);
     sqlite4DbFree(db, p->zErrMsg);
     p->zErrMsg = 0;
   }
@@ -2085,7 +2080,7 @@ void sqlite4VdbeDeleteAuxData(VdbeFunc *pVdbeFunc, int mask){
     struct AuxData *pAux = &pVdbeFunc->apAux[i];
     if( (i>31 || !(mask&(((u32)1)<<i))) && pAux->pAux ){
       if( pAux->xDelete ){
-        pAux->xDelete(pAux->pAux);
+        pAux->xDelete(pAux->pDeleteArg, pAux->pAux);
       }
       pAux->pAux = 0;
     }

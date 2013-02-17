@@ -464,7 +464,7 @@ extern const int sqlite4one;
 */
 #define LARGEST_INT64  (0xffffffff|(((i64)0x7fffffff)<<32))
 #define SMALLEST_INT64 (((i64)-1) - LARGEST_INT64)
-#define LARGEST_UINT64  (0xffffffff|(((i64)0xffffffff)<<32))
+#define LARGEST_UINT64  (0xffffffff|(((u64)0xffffffff)<<32))
 
 /* 
 ** Round up a number to the next larger multiple of 8.  This is used
@@ -893,18 +893,14 @@ struct sqlite4 {
 ** Possible values for the sqlite4.flags.
 */
 #define SQLITE4_VdbeTrace      0x00000100  /* True to trace VDBE execution */
-#define SQLITE4_InternChanges  0x00000200  /* Uncommitted Hash table changes */
-#define SQLITE4_CountRows      0x00001000  /* Count rows changed by INSERT, */
-                                          /*   DELETE, or UPDATE and return */
-                                          /*   the count using a callback. */
-#define SQLITE4_SqlTrace       0x00004000  /* Debug print SQL as it executes */
-#define SQLITE4_VdbeListing    0x00008000  /* Debug listings of VDBE programs */
-#define SQLITE4_WriteSchema    0x00010000  /* OK to update SQLITE4_MASTER */
-#define SQLITE4_KvTrace        0x00020000  /* Trace Key/value storage calls */
-#define SQLITE4_IgnoreChecks   0x00040000  /* Do not enforce check constraints */
-#define SQLITE4_ReadUncommitted 0x0080000  /* For shared-cache mode */
-#define SQLITE4_LegacyFileFmt  0x00100000  /* Create new databases in format 1 */
-#define SQLITE4_RecoveryMode   0x00800000  /* Ignore schema errors */
+#define SQLITE4_SqlTrace       0x00000200  /* Debug print SQL as it executes */
+#define SQLITE4_VdbeListing    0x00000400  /* Debug listings of VDBE programs */
+#define SQLITE4_KvTrace        0x00000800  /* Trace Key/value storage calls */
+#define SQLITE4_VdbeAddopTrace 0x00001000  /* Trace sqlite4VdbeAddOp() calls */
+#define SQLITE4_InternChanges  0x00010000  /* Uncommitted Hash table changes */
+#define SQLITE4_WriteSchema    0x00020000  /* OK to update SQLITE4_MASTER */
+#define SQLITE4_IgnoreChecks   0x00040000  /* Dont enforce check constraints */
+#define SQLITE4_RecoveryMode   0x00080000  /* Ignore schema errors */
 #define SQLITE4_ReverseOrder   0x01000000  /* Reverse unordered SELECTs */
 #define SQLITE4_RecTriggers    0x02000000  /* Enable recursive triggers */
 #define SQLITE4_ForeignKeys    0x04000000  /* Enforce foreign key constraints  */
@@ -1656,7 +1652,6 @@ struct Expr {
 #define EP_Error      0x0008  /* Expression contains one or more errors */
 #define EP_Distinct   0x0010  /* Aggregate function with DISTINCT keyword */
 #define EP_VarSelect  0x0020  /* pSelect is correlated, not constant */
-#define EP_DblQuoted  0x0040  /* token.z was originally in "..." */
 #define EP_InfixFunc  0x0080  /* True for an infix function: LIKE, GLOB, etc */
 #define EP_ExpCollate 0x0100  /* Collating sequence specified explicitly */
 #define EP_FixedDest  0x0200  /* Result needed in a specific register */
@@ -2967,7 +2962,7 @@ u8 sqlite4GetBoolean(const char *z);
 const void *sqlite4ValueText(sqlite4_value*, u8);
 int sqlite4ValueBytes(sqlite4_value*, u8);
 void sqlite4ValueSetStr(sqlite4_value*, int, const void *,u8, 
-                        void(*)(void*));
+                        void(*)(void*,void*),void*);
 void sqlite4ValueFree(sqlite4_value*);
 sqlite4_value *sqlite4ValueNew(sqlite4 *);
 char *sqlite4Utf16to8(sqlite4 *, const void*, int, u8);

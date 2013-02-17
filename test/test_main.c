@@ -686,7 +686,7 @@ static void t1_ifnullFunc(
     if( SQLITE4_NULL!=sqlite4_value_type(argv[i]) ){
       int n = sqlite4_value_bytes(argv[i]);
       sqlite4_result_text(context, (char*)sqlite4_value_text(argv[i]),
-          n, SQLITE4_TRANSIENT);
+          n, SQLITE4_TRANSIENT, 0);
       break;
     }
   }
@@ -706,7 +706,7 @@ static void hex8Func(sqlite4_context *p, int argc, sqlite4_value **argv){
     sprintf(&zBuf[i*2], "%02x", z[i]&0xff);
   }
   zBuf[i*2] = 0;
-  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT, 0);
 }
 #ifndef SQLITE4_OMIT_UTF16
 static void hex16Func(sqlite4_context *p, int argc, sqlite4_value **argv){
@@ -718,7 +718,7 @@ static void hex16Func(sqlite4_context *p, int argc, sqlite4_value **argv){
     sprintf(&zBuf[i*4], "%04x", z[i]&0xff);
   }
   zBuf[i*4] = 0;
-  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(p, (char*)zBuf, -1, SQLITE4_TRANSIENT, 0);
 }
 #endif
 
@@ -791,7 +791,7 @@ static void sqlite4ExecFunc(
   (void)sqlite4_exec((sqlite4*)sqlite4_user_data(context),
       (char*)sqlite4_value_text(argv[0]),
       execFuncCallback, &x, 0);
-  sqlite4_result_text(context, x.z, x.nUsed, SQLITE4_TRANSIENT);
+  sqlite4_result_text(context, x.z, x.nUsed, SQLITE4_TRANSIENT, 0);
   sqlite4_free(0, x.z);
 }
 
@@ -831,7 +831,7 @@ static void tkt2213Function(
   }else{
     char *zCopy = (char *)sqlite4_malloc(sqlite4_context_env(context),nText);
     memcpy(zCopy, zText1, nText);
-    sqlite4_result_text(context, zCopy, nText, SQLITE4_DYNAMIC);
+    sqlite4_result_text(context, zCopy, nText, SQLITE4_DYNAMIC, 0);
   }
 }
 
@@ -969,7 +969,8 @@ static int test_create_function(
     sqlite4_value *pVal;
     sqlite4_mutex_enter(db->mutex);
     pVal = sqlite4ValueNew(db);
-    sqlite4ValueSetStr(pVal, -1, "x_sqlite_exec", SQLITE4_UTF8, SQLITE4_STATIC);
+    sqlite4ValueSetStr(pVal, -1, "x_sqlite_exec", SQLITE4_UTF8,
+                       SQLITE4_STATIC, 0);
     zUtf16 = sqlite4ValueText(pVal, SQLITE4_UTF16NATIVE);
     if( db->mallocFailed ){
       rc = SQLITE4_NOMEM;
@@ -1714,7 +1715,7 @@ static void testFunc(sqlite4_context *context, int argc, sqlite4_value **argv){
         sqlite4_result_int64(context, sqlite4_value_int64(argv[1]));
       }else if( sqlite4_stricmp(zArg0,"string")==0 ){
         sqlite4_result_text(context, (char*)sqlite4_value_text(argv[1]), -1,
-            SQLITE4_TRANSIENT);
+            SQLITE4_TRANSIENT, 0);
       }else if( sqlite4_stricmp(zArg0,"double")==0 ){
         sqlite4_result_double(context, sqlite4_value_double(argv[1]));
       }else if( sqlite4_stricmp(zArg0,"null")==0 ){
@@ -2100,14 +2101,14 @@ static int test_bind(
   if( strcmp(argv[4],"null")==0 ){
     rc = sqlite4_bind_null(pStmt, idx);
   }else if( strcmp(argv[4],"static")==0 ){
-    rc = sqlite4_bind_text(pStmt, idx, sqlite_static_bind_value, -1, 0);
+    rc = sqlite4_bind_text(pStmt, idx, sqlite_static_bind_value, -1, 0, 0);
   }else if( strcmp(argv[4],"static-nbytes")==0 ){
     rc = sqlite4_bind_text(pStmt, idx, sqlite_static_bind_value,
-                                       sqlite_static_bind_nbyte, 0);
+                                       sqlite_static_bind_nbyte, 0, 0);
   }else if( strcmp(argv[4],"normal")==0 ){
-    rc = sqlite4_bind_text(pStmt, idx, argv[3], -1, SQLITE4_TRANSIENT);
+    rc = sqlite4_bind_text(pStmt, idx, argv[3], -1, SQLITE4_TRANSIENT, 0);
   }else if( strcmp(argv[4],"blob10")==0 ){
-    rc = sqlite4_bind_text(pStmt, idx, "abc\000xyz\000pq", 10, SQLITE4_STATIC);
+    rc = sqlite4_bind_text(pStmt, idx, "abc\000xyz\000pq", 10,SQLITE4_STATIC,0);
   }else{
     Tcl_AppendResult(interp, "4th argument should be "
         "\"null\" or \"static\" or \"normal\"", 0);
@@ -2187,11 +2188,11 @@ static int test_collate_func(
   sqlite4BeginBenignMalloc(pEnv);
   pVal = sqlite4ValueNew(0);
   if( pVal ){
-    sqlite4ValueSetStr(pVal, nA, zA, encin, SQLITE4_STATIC);
+    sqlite4ValueSetStr(pVal, nA, zA, encin, SQLITE4_STATIC, 0);
     n = sqlite4_value_bytes(pVal);
     Tcl_ListObjAppendElement(i,pX,
         Tcl_NewStringObj((char*)sqlite4_value_text(pVal),n));
-    sqlite4ValueSetStr(pVal, nB, zB, encin, SQLITE4_STATIC);
+    sqlite4ValueSetStr(pVal, nB, zB, encin, SQLITE4_STATIC, 0);
     n = sqlite4_value_bytes(pVal);
     Tcl_ListObjAppendElement(i,pX,
         Tcl_NewStringObj((char*)sqlite4_value_text(pVal),n));
@@ -2389,12 +2390,13 @@ static void test_function_utf8(
       Tcl_NewStringObj((char*)sqlite4_value_text(argv[0]), -1));
   Tcl_EvalObjEx(interp, pX, 0);
   Tcl_DecrRefCount(pX);
-  sqlite4_result_text(pCtx, Tcl_GetStringResult(interp), -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(pCtx, Tcl_GetStringResult(interp), -1,
+                      SQLITE4_TRANSIENT, 0);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE4_UTF8, SQLITE4_STATIC);
+      SQLITE4_UTF8, SQLITE4_STATIC, 0);
   sqlite4_result_text16be(pCtx, sqlite4_value_text16be(pVal),
-      -1, SQLITE4_TRANSIENT);
+      -1, SQLITE4_TRANSIENT, 0);
   sqlite4ValueFree(pVal);
 }
 static void test_function_utf16le(
@@ -2415,8 +2417,9 @@ static void test_function_utf16le(
   Tcl_DecrRefCount(pX);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE4_UTF8, SQLITE4_STATIC);
-  sqlite4_result_text(pCtx,(char*)sqlite4_value_text(pVal),-1,SQLITE4_TRANSIENT);
+      SQLITE4_UTF8, SQLITE4_STATIC, 0);
+  sqlite4_result_text(pCtx, (char*)sqlite4_value_text(pVal), -1,
+                      SQLITE4_TRANSIENT, 0);
   sqlite4ValueFree(pVal);
 }
 static void test_function_utf16be(
@@ -2437,13 +2440,13 @@ static void test_function_utf16be(
   Tcl_DecrRefCount(pX);
   pVal = sqlite4ValueNew(0);
   sqlite4ValueSetStr(pVal, -1, Tcl_GetStringResult(interp), 
-      SQLITE4_UTF8, SQLITE4_STATIC);
+      SQLITE4_UTF8, SQLITE4_STATIC, 0);
   sqlite4_result_text16(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE4_TRANSIENT);
+      -1, SQLITE4_TRANSIENT, 0);
   sqlite4_result_text16be(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE4_TRANSIENT);
+      -1, SQLITE4_TRANSIENT, 0);
   sqlite4_result_text16le(pCtx, sqlite4_value_text16le(pVal),
-      -1, SQLITE4_TRANSIENT);
+      -1, SQLITE4_TRANSIENT, 0);
   sqlite4ValueFree(pVal);
 }
 #endif /* SQLITE4_OMIT_UTF16 */
@@ -2788,7 +2791,7 @@ static int test_bind_text(
   value = (char*)Tcl_GetByteArrayFromObj(objv[3], &bytes);
   if( Tcl_GetIntFromObj(interp, objv[4], &bytes) ) return TCL_ERROR;
 
-  rc = sqlite4_bind_text(pStmt, idx, value, bytes, SQLITE4_TRANSIENT);
+  rc = sqlite4_bind_text(pStmt, idx, value, bytes, SQLITE4_TRANSIENT, 0);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
   if( rc!=SQLITE4_OK ){
     Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
@@ -2836,7 +2839,7 @@ static int test_bind_text16(
   value = (char*)Tcl_GetByteArrayFromObj(oString, 0);
   if( Tcl_GetIntFromObj(interp, oBytes, &bytes) ) return TCL_ERROR;
 
-  rc = sqlite4_bind_text16(pStmt, idx, (void *)value, bytes, xDel);
+  rc = sqlite4_bind_text16(pStmt, idx, (void *)value, bytes, xDel, 0);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
   if( rc!=SQLITE4_OK ){
     Tcl_AppendResult(interp, sqlite4TestErrorName(rc), 0);
@@ -2883,7 +2886,7 @@ static int test_bind_blob(
   value = Tcl_GetString(objv[3]);
   if( Tcl_GetIntFromObj(interp, objv[4], &bytes) ) return TCL_ERROR;
 
-  rc = sqlite4_bind_blob(pStmt, idx, value, bytes, xDestructor);
+  rc = sqlite4_bind_blob(pStmt, idx, value, bytes, xDestructor, 0);
   if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
   if( rc!=SQLITE4_OK ){
     return TCL_ERROR;
@@ -4350,6 +4353,205 @@ static int optimization_control(
   return TCL_OK;
 }
 
+#define NUM_FORMAT "sign:%d approx:%d e:%d m:%lld"
+
+/* Append a return value representing a sqlite4_num.
+*/
+static void append_num_result( Tcl_Interp *interp, sqlite4_num A ){
+  char buf[100];
+  sprintf( buf, NUM_FORMAT, A.sign, A.approx, A.e, A.m );
+  Tcl_AppendResult(interp, buf, 0);
+}
+
+/* Convert a string either representing a sqlite4_num (listing its fields as
+** returned by append_num_result) or that can be parsed as one. Invalid
+** strings become NaN.
+*/
+static sqlite4_num test_parse_num( char *arg ){
+  sqlite4_num A;
+  int sign, approx, e;
+  if( sscanf( arg, NUM_FORMAT, &sign, &approx, &e, &A.m)==4 ){
+    A.sign = sign;
+    A.approx = approx;
+    A.e = e;
+    return A;
+  } else {
+    return sqlite4_num_from_text(arg, -1, 0);
+  }
+}
+
+/* Convert return values of sqlite4_num to strings that will be readable in
+** the tests.
+*/
+static char *describe_num_comparison( int code ){
+  switch( code ){
+    case 0: return "incomparable";
+    case 1: return "lesser";
+    case 2: return "equal";
+    case 3: return "greater";
+    default: return "error"; 
+  }
+}
+
+/* Compare two numbers A and B. Returns "incomparable", "lesser", "equal",
+** "greater", or "error".
+*/
+static int test_num_compare(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  sqlite4_num A, B;
+  int cmp;
+  if( argc!=3 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
+       " NUM NUM\"", 0);
+    return TCL_ERROR;
+  }
+  
+  A = test_parse_num( argv[1] );
+  B = test_parse_num( argv[2] );
+  cmp = sqlite4_num_compare(A, B);
+  Tcl_AppendResult( interp, describe_num_comparison( cmp ), 0);
+  return TCL_OK; 
+}
+
+/* Create a sqlite4_num from a string. The optional second argument specifies
+** how many bytes may be read.
+*/
+static int test_num_from_text(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  sqlite4_num A;
+  int len;
+  if( argc!=2 && argc!=3 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
+      " STRING\" or \"", argv[0], " STRING INTEGER\"", 0);
+    return TCL_ERROR;
+  }
+
+  if( argc==3 ){
+    if ( Tcl_GetInt(interp, argv[2], &len) ) return TCL_ERROR; 
+  }else{
+    len = -1;
+  }
+
+  A = sqlite4_num_from_text( argv[1], len, 0 );
+  append_num_result(interp, A);
+  return TCL_OK;
+}
+
+static int test_num_to_text(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  char text[30];
+  if( argc!=2 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
+      " NUM\"", 0);
+    return TCL_ERROR;
+  }
+  sqlite4_num_to_text( test_parse_num( argv[1] ), text );
+  Tcl_AppendResult( interp, text, 0 );
+  return TCL_OK;
+}
+
+static int test_num_binary_op(
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv,            /* Text of each argument */
+  sqlite4_num (*op) (sqlite4_num, sqlite4_num)
+){
+  sqlite4_num A, B, R;
+  if( argc!=3 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
+      " NUM NUM\"", 0);
+    return TCL_ERROR;
+  }
+  A = test_parse_num(argv[1]);
+  B = test_parse_num(argv[2]);
+  R = op(A, B);
+  append_num_result(interp, R);
+  return TCL_OK;
+}
+
+static int test_num_add(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_binary_op( interp, argc, argv, sqlite4_num_add );
+}
+
+static int test_num_sub(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_binary_op( interp, argc, argv, sqlite4_num_sub );
+}
+
+static int test_num_mul(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_binary_op( interp, argc, argv, sqlite4_num_mul );
+}
+
+static int test_num_div(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_binary_op( interp, argc, argv, sqlite4_num_div );
+}
+
+static int test_num_predicate(
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv,            /* Text of each argument */
+  int (*pred) (sqlite4_num)
+){
+  sqlite4_num A;
+  if( argc!=2 ){
+    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0],
+      " NUM\"", 0);
+    return TCL_ERROR;
+  }
+  A = test_parse_num(argv[1]);
+  Tcl_AppendResult(interp, pred(A) ? "true" : "false", 0);  
+  return TCL_OK;
+}
+
+static int test_num_isinf(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_predicate( interp, argc, argv, sqlite4_num_isinf );
+}
+
+static int test_num_isnan(
+  void *NotUsed,
+  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
+  int argc,              /* Number of arguments */
+  char **argv            /* Text of each argument */
+){
+  return test_num_predicate( interp, argc, argv, sqlite4_num_isnan );
+}
+
 /*
 ** Register commands with the TCL interpreter.
 */
@@ -4402,7 +4604,16 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_get_autocommit",        (Tcl_CmdProc*)get_autocommit        },
      { "sqlite4_stack_used",            (Tcl_CmdProc*)test_stack_used       },
      { "printf",                        (Tcl_CmdProc*)test_printf           },
-     { "sqlite4IoTrace",              (Tcl_CmdProc*)test_io_trace         },
+     { "sqlite4IoTrace",                (Tcl_CmdProc*)test_io_trace         },
+     { "sqlite4_num_compare",           (Tcl_CmdProc*)test_num_compare      }, 
+     { "sqlite4_num_from_text",         (Tcl_CmdProc*)test_num_from_text    }, 
+     { "sqlite4_num_to_text",           (Tcl_CmdProc*)test_num_to_text      },
+     { "sqlite4_num_add",               (Tcl_CmdProc*)test_num_add          },
+     { "sqlite4_num_sub",               (Tcl_CmdProc*)test_num_sub          },
+     { "sqlite4_num_mul",               (Tcl_CmdProc*)test_num_mul          },
+     { "sqlite4_num_div",               (Tcl_CmdProc*)test_num_div          },
+     { "sqlite4_num_isinf",             (Tcl_CmdProc*)test_num_isinf        },
+     { "sqlite4_num_isnan",             (Tcl_CmdProc*)test_num_isnan        },
   };
   static struct {
      char *zName;
@@ -4523,7 +4734,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 #ifdef SQLITE4_DEBUG
   extern int sqlite4WhereTrace;
   extern int sqlite4OSTrace;
-  extern int sqlite4VdbeAddopTrace;
 #endif
 #ifdef SQLITE4_TEST
   extern char sqlite4_query_plan[];
@@ -4578,8 +4788,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
       (char*)&query_plan, TCL_LINK_STRING|TCL_LINK_READ_ONLY);
 #endif
 #ifdef SQLITE4_DEBUG
-  Tcl_LinkVar(interp, "sqlite_addop_trace",
-      (char*)&sqlite4VdbeAddopTrace, TCL_LINK_INT);
   Tcl_LinkVar(interp, "sqlite_where_trace",
       (char*)&sqlite4WhereTrace, TCL_LINK_INT);
 #endif

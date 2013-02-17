@@ -79,7 +79,7 @@ static void renameTableFunc(
 
     zRet = sqlite4MPrintf(db, "%.*s\"%w\"%s", ((u8*)tname.z) - zSql, zSql, 
        zTableName, tname.z+tname.n);
-    sqlite4_result_text(context, zRet, -1, SQLITE4_TRANSIENT);
+    sqlite4_result_text(context, zRet, -1, SQLITE4_TRANSIENT, 0);
     sqlite4DbFree(db, zRet);
   }
 }
@@ -142,7 +142,7 @@ static void renameParentFunc(
   }
 
   zResult = sqlite4MPrintf(db, "%s%s", (zOutput?zOutput:""), zInput), 
-  sqlite4_result_text(context, zResult, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(context, zResult, -1, SQLITE4_TRANSIENT, 0);
   sqlite4DbFree(db, zOutput);
   sqlite4DbFree(db, zResult);
 }
@@ -220,7 +220,7 @@ static void renameTriggerFunc(
     */
     zRet = sqlite4MPrintf(db, "%.*s\"%w\"%s", ((u8*)tname.z) - zSql, zSql, 
        zTableName, tname.z+tname.n);
-    sqlite4_result_text(context, zRet, -1, SQLITE4_TRANSIENT);
+    sqlite4_result_text(context, zRet, -1, SQLITE4_TRANSIENT, 0);
     sqlite4DbFree(db, zRet);
   }
 }

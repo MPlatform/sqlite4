@@ -1833,13 +1833,16 @@ typedef struct sqlite4_context sqlite4_context;
 ** See also: [sqlite4_bind_parameter_count()],
 ** [sqlite4_bind_parameter_name()], and [sqlite4_bind_parameter_index()].
 */
-int sqlite4_bind_blob(sqlite4_stmt*, int, const void*, int n, void(*)(void*));
+int sqlite4_bind_blob(sqlite4_stmt*, int, const void*, int n, 
+                      void(*)(void*,void*),void*);
 int sqlite4_bind_double(sqlite4_stmt*, int, double);
 int sqlite4_bind_int(sqlite4_stmt*, int, int);
 int sqlite4_bind_int64(sqlite4_stmt*, int, sqlite4_int64);
 int sqlite4_bind_null(sqlite4_stmt*, int);
-int sqlite4_bind_text(sqlite4_stmt*, int, const char*, int n, void(*)(void*));
-int sqlite4_bind_text16(sqlite4_stmt*, int, const void*, int, void(*)(void*));
+int sqlite4_bind_text(sqlite4_stmt*, int, const char*, int n,
+                      void(*)(void*,void*),void*);
+int sqlite4_bind_text16(sqlite4_stmt*, int, const void*, int,
+                        void(*)(void*,void*),void*);
 int sqlite4_bind_value(sqlite4_stmt*, int, const sqlite4_value*);
 int sqlite4_bind_zeroblob(sqlite4_stmt*, int, int n);
 
@@ -2664,7 +2667,8 @@ sqlite4_env *sqlite4_context_env(sqlite4_context*);
 ** the SQL function is running.
 */
 void *sqlite4_get_auxdata(sqlite4_context*, int N);
-void sqlite4_set_auxdata(sqlite4_context*, int N, void*, void (*)(void*));
+void sqlite4_set_auxdata(sqlite4_context*, int N, void*,
+                         void (*)(void*,void*),void*);
 
 
 /*
@@ -2681,8 +2685,8 @@ void sqlite4_set_auxdata(sqlite4_context*, int N, void*, void (*)(void*));
 ** The typedef is necessary to work around problems in certain
 ** C++ compilers.  See ticket #2191.
 */
-typedef void (*sqlite4_destructor_type)(void*);
-void sqlite4_dynamic(void*);
+typedef void (*sqlite4_destructor_type)(void*,void*);
+void sqlite4_dynamic(void*,void*);
 #define SQLITE4_STATIC      ((sqlite4_destructor_type)0)
 #define SQLITE4_TRANSIENT   ((sqlite4_destructor_type)-1)
 #define SQLITE4_DYNAMIC     (sqlite4_dynamic)
@@ -2798,7 +2802,8 @@ void sqlite4_dynamic(void*);
 ** than the one containing the application-defined function that received
 ** the [sqlite4_context] pointer, the results are undefined.
 */
-void sqlite4_result_blob(sqlite4_context*, const void*, int, void(*)(void*));
+void sqlite4_result_blob(sqlite4_context*, const void*, int,
+                         void(*)(void*,void*),void*);
 void sqlite4_result_double(sqlite4_context*, double);
 void sqlite4_result_error(sqlite4_context*, const char*, int);
 void sqlite4_result_error16(sqlite4_context*, const void*, int);
@@ -2808,10 +2813,14 @@ void sqlite4_result_error_code(sqlite4_context*, int);
 void sqlite4_result_int(sqlite4_context*, int);
 void sqlite4_result_int64(sqlite4_context*, sqlite4_int64);
 void sqlite4_result_null(sqlite4_context*);
-void sqlite4_result_text(sqlite4_context*, const char*, int, void(*)(void*));
-void sqlite4_result_text16(sqlite4_context*, const void*, int, void(*)(void*));
-void sqlite4_result_text16le(sqlite4_context*, const void*, int,void(*)(void*));
-void sqlite4_result_text16be(sqlite4_context*, const void*, int,void(*)(void*));
+void sqlite4_result_text(sqlite4_context*, const char*, int,
+                         void(*)(void*,void*),void*);
+void sqlite4_result_text16(sqlite4_context*, const void*, int,
+                           void(*)(void*,void*),void*);
+void sqlite4_result_text16le(sqlite4_context*, const void*, int,
+                             void(*)(void*,void*),void*);
+void sqlite4_result_text16be(sqlite4_context*, const void*, int,
+                             void(*)(void*,void*),void*);
 void sqlite4_result_value(sqlite4_context*, sqlite4_value*);
 void sqlite4_result_zeroblob(sqlite4_context*, int n);
 
@@ -4347,7 +4356,7 @@ typedef struct sqlite4_num sqlite4_num;
 struct sqlite4_num {
   unsigned char sign;     /* Sign of the overall value */
   unsigned char approx;   /* True if the value is approximate */
-  unsigned short e;       /* The exponent. */
+  short e;                /* The exponent. */
   sqlite4_uint64 m;       /* The significant */
 };
 

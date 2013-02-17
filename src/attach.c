@@ -243,6 +243,8 @@ static void detachFunc(
 
   sqlite4KVStoreClose(pDb->pKV);
   pDb->pKV = 0;
+  sqlite4SchemaClear(db->pEnv, pDb->pSchema);
+  sqlite4DbFree(db, pDb->pSchema);
   pDb->pSchema = 0;
   sqlite4ResetInternalSchema(db, -1);
   return;

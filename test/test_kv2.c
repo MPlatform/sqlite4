@@ -291,8 +291,21 @@ static int kvwrap_install_cmd(Tcl_Interp *interp, int objc, Tcl_Obj **objv){
   }
 
   if( kvwg.xFactory==0 ){
-    sqlite4_env_config(0, SQLITE4_ENVCONFIG_KVSTORE_GET, "main", &kvwg.xFactory);
-    sqlite4_env_config(0, SQLITE4_ENVCONFIG_KVSTORE_PUSH, "main",newFileStorage);
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_KVSTORE_GET,"main", &kvwg.xFactory);
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_KVSTORE_PUSH,"main",newFileStorage);
+  }
+  return TCL_OK;
+}
+
+static int kvwrap_uninstall_cmd(Tcl_Interp *interp, int objc, Tcl_Obj **objv){
+  if( objc!=2 ){
+    Tcl_WrongNumArgs(interp, 2, objv, "");
+    return TCL_ERROR;
+  }
+
+  if( kvwg.xFactory ){
+    sqlite4_env_config(0, SQLITE4_ENVCONFIG_KVSTORE_POP,"main", &kvwg.xFactory);
+    kvwg.xFactory = 0;
   }
   return TCL_OK;
 }
@@ -344,10 +357,11 @@ static int kvwrap_command(
     const char *zCmd;
     int (*xCmd)(Tcl_Interp *, int, Tcl_Obj **);
   } aSub[] = {
-    { "install", kvwrap_install_cmd },
-    { "step",    kvwrap_step_cmd },
-    { "seek",    kvwrap_seek_cmd },
-    { "reset",   kvwrap_reset_cmd },
+    { "install",   kvwrap_install_cmd },
+    { "step",      kvwrap_step_cmd },
+    { "seek",      kvwrap_seek_cmd },
+    { "reset",     kvwrap_reset_cmd },
+    { "uninstall", kvwrap_uninstall_cmd },
   };
   int iSub;
   int rc;

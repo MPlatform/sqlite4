@@ -29,7 +29,7 @@
 /*
 ** Dummy function used as a unique symbol for SQLITE4_DYNAMIC
 */
-void sqlite4_dynamic(void *p){ (void)p; }
+void sqlite4_dynamic(void *pArg,void *p){ (void)pArg; (void)p; }
 
 #ifndef SQLITE4_AMALGAMATION
 /* IMPLEMENTATION-OF: R-46656-45156 The sqlite4_version[] string constant
@@ -1267,7 +1267,7 @@ const void *sqlite4_errmsg16(sqlite4 *db){
     z = sqlite4_value_text16(db->pErr);
     if( z==0 ){
       sqlite4ValueSetStr(db->pErr, -1, sqlite4ErrStr(db->errCode),
-           SQLITE4_UTF8, SQLITE4_STATIC);
+           SQLITE4_UTF8, SQLITE4_STATIC, 0);
       z = sqlite4_value_text16(db->pErr);
     }
     /* A malloc() may have failed within the call to sqlite4_value_text16()

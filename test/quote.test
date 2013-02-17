@@ -34,9 +34,6 @@ do_test quote-1.2.1 {
 do_test quote-1.2.2 {
   catchsql {SELECT * FROM [@abc]}  ;# SqlServer compatibility
 } {0 {5 hello}}
-do_test quote-1.2.3 {
-  catchsql {SELECT * FROM `@abc`}  ;# MySQL compatibility
-} {0 {5 hello}}
 do_test quote-1.3 {
   catchsql {
     SELECT '@abc'.'!pqr', '@abc'.'#xyz'+5 FROM '@abc'
@@ -50,11 +47,6 @@ do_test quote-1.3.1 {
 do_test quote-1.3.2 {
   catchsql {
     SELECT "!pqr", "#xyz"+5 FROM '@abc'
-  }
-} {0 {hello 10}}
-do_test quote-1.3.3 {
-  catchsql {
-    SELECT [!pqr], `#xyz`+5 FROM '@abc'
   }
 } {0 {hello 10}}
 do_test quote-1.3.4 {

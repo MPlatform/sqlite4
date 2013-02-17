@@ -132,9 +132,9 @@ void sqlite4Error(sqlite4 *db, int err_code, const char *zFormat, ...){
       va_start(ap, zFormat);
       z = sqlite4VMPrintf(db, zFormat, ap);
       va_end(ap);
-      sqlite4ValueSetStr(db->pErr, -1, z, SQLITE4_UTF8, SQLITE4_DYNAMIC);
+      sqlite4ValueSetStr(db->pErr, -1, z, SQLITE4_UTF8, SQLITE4_DYNAMIC, 0);
     }else{
-      sqlite4ValueSetStr(db->pErr, 0, 0, SQLITE4_UTF8, SQLITE4_STATIC);
+      sqlite4ValueSetStr(db->pErr, 0, 0, SQLITE4_UTF8, SQLITE4_STATIC, 0);
     }
   }
 }

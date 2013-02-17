@@ -814,7 +814,7 @@ static void datetimeFunc(
     computeYMD_HMS(&x);
     sqlite4_snprintf(zBuf,sizeof(zBuf), "%04d-%02d-%02d %02d:%02d:%02d",
                      x.Y, x.M, x.D, x.h, x.m, (int)(x.s));
-    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
+    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT, 0);
   }
 }
 
@@ -833,7 +833,7 @@ static void timeFunc(
     char zBuf[100];
     computeHMS(&x);
     sqlite4_snprintf(zBuf,sizeof(zBuf), "%02d:%02d:%02d", x.h, x.m, (int)x.s);
-    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
+    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT, 0);
   }
 }
 
@@ -852,7 +852,7 @@ static void dateFunc(
     char zBuf[100];
     computeYMD(&x);
     sqlite4_snprintf(zBuf,sizeof(zBuf), "%04d-%02d-%02d", x.Y, x.M, x.D);
-    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
+    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT, 0);
   }
 }
 
@@ -1000,7 +1000,7 @@ static void strftimeFunc(
   }
   z[j] = 0;
   sqlite4_result_text(context, z, -1,
-                      z==zBuf ? SQLITE4_TRANSIENT : SQLITE4_DYNAMIC);
+                      z==zBuf ? SQLITE4_TRANSIENT : SQLITE4_DYNAMIC, 0);
 }
 
 /*
@@ -1087,7 +1087,7 @@ static void currentTimeFunc(
 #endif
   if( pTm ){
     strftime(zBuf, 20, zFormat, &sNow);
-    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
+    sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT, 0);
   }
 }
 #endif

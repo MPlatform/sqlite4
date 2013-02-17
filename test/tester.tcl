@@ -762,6 +762,7 @@ proc finalize_testing {} {
   if {$::cmdlinearg(binarylog)} {
     vfslog finalize binarylog
   }
+  kvwrap uninstall
   if {[lindex [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_COUNT 0] 1]>0 ||
               [sqlite4_memory_used]>0} {
     puts "Unfreed memory: [sqlite4_memory_used] bytes in\

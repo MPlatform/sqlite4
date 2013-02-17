@@ -366,8 +366,7 @@ int sqlite4SelectExprHeight(Select *p){
 ** If dequote is true, then the token (if it exists) is dequoted.
 ** If dequote is false, no dequoting is performance.  The deQuote
 ** parameter is ignored if pToken is NULL or if the token does not
-** appear to be quoted.  If the quotes were of the form "..." (double-quotes)
-** then the EP_DblQuoted flag is set on the expression node.
+** appear to be quoted.
 **
 ** Special case:  If op==TK_INTEGER and pToken points to a string that
 ** can be translated into a 32-bit integer, then the token is not
@@ -407,9 +406,8 @@ Expr *sqlite4ExprAlloc(
         if( pToken->n ) memcpy(pNew->u.zToken, pToken->z, pToken->n);
         pNew->u.zToken[pToken->n] = 0;
         if( dequote && nExtra>=3 
-             && ((c = pToken->z[0])=='\'' || c=='"' || c=='[' || c=='`') ){
+             && ((c = pToken->z[0])=='\'' || c=='"' || c=='[') ){
           sqlite4Dequote(pNew->u.zToken);
-          if( c=='"' ) pNew->flags |= EP_DblQuoted;
         }
       }
     }

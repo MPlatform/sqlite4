@@ -3396,7 +3396,7 @@ static void fts5_parse_expr(
   }
 
   fts5PrintExpr(db, azCol, pExpr, &zRet);
-  sqlite4_result_text(pCtx, zRet, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(pCtx, zRet, -1, SQLITE4_TRANSIENT, 0);
   fts5ExpressionFree(db, pExpr);
   sqlite4_free(sqlite4_db_env(db), zRet);
 
@@ -3423,4 +3423,3 @@ int sqlite4InitFts5(sqlite4 *db){
 #endif
   return sqlite4InitFts5Func(db);
 }
-
