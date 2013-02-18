@@ -49,6 +49,7 @@ struct Database {
   Database *pDbNext;              /* Next Database structure in global list */
 
   /* Protected by the local mutex (pClientMutex) */
+  int bReadonly;                  /* True if Database.pFile is read-only */
   int bMultiProc;                 /* True if running in multi-process mode */
   lsm_file *pFile;                /* Used for locks/shm in multi-proc mode */
   LsmFile *pLsmFile;              /* List of deferred closes */
@@ -362,6 +363,18 @@ static int doDbConnect(lsm_db *pDb){
   return rc;
 }
 
+static int dbOpenSharedFd(lsm_env *pEnv, Database *p, int bRoOk){
+  int rc;
+
+  rc = lsmEnvOpen(pEnv, p->zName, 0, &p->pFile);
+  if( rc==LSM_IOERR && bRoOk ){
+    rc = lsmEnvOpen(pEnv, p->zName, LSM_OPEN_READONLY, &p->pFile);
+    p->bReadonly = 1;
+  }
+
+  return rc;
+}
+
 /*
 ** Return a reference to the shared Database handle for the database 
 ** identified by canonical path zName. If this is the first connection to
@@ -413,9 +426,12 @@ int lsmDbDatabaseConnect(
       ** succeeds and this connection requested single-process mode, 
       ** attempt to take the exclusive lock on DMS2.  */
       if( rc==LSM_OK ){
-        rc = lsmEnvOpen(pDb->pEnv, p->zName, &p->pFile);
+        int bReadonly = (pDb->bReadonly && pDb->bMultiProc);
+        rc = dbOpenSharedFd(pDb->pEnv, p, bReadonly);
       }
+
       if( rc==LSM_OK && p->bMultiProc==0 ){
+        assert( p->bReadonly==0 );
         rc = lsmEnvLock(pDb->pEnv, p->pFile, LSM_LOCK_DMS2, LSM_LOCK_EXCL);
       }
 
@@ -444,13 +460,20 @@ int lsmDbDatabaseConnect(
   pDb->pDatabase = p;
   if( rc==LSM_OK ){
     assert( p );
-    rc = lsmFsOpen(pDb, zName);
+    rc = lsmFsOpen(pDb, zName, p->bReadonly);
   }
-  if( rc==LSM_OK ){
-    rc = doDbConnect(pDb);
-  }
-  if( rc==LSM_OK ){
-    rc = lsmFsConfigure(pDb);
+
+  /* If the db handle is read-write, then connect to the system now. Run
+  ** recovery as necessary. Or, if this is a read-only database handle,
+  ** defer attempting to connect to the system until a read-transaction
+  ** is opened.  */
+  if( pDb->bReadonly==0 ){
+    if( rc==LSM_OK ){
+      rc = doDbConnect(pDb);
+    }
+    if( rc==LSM_OK ){
+      rc = lsmFsConfigure(pDb);
+    }
   }
 
   return rc;
@@ -910,6 +933,54 @@ void lsmFreeSnapshot(lsm_env *pEnv, Snapshot *p){
 }
 
 /*
+** Attempt to populate one of the read-lock slots to contain lock values
+** iLsm/iShm. Or, if such a slot exists already, this function is a no-op.
+**
+** It is not an error if no slot can be populated because the write-lock
+** cannot be obtained. If any other error occurs, return an LSM error code.
+** Otherwise, LSM_OK.
+**
+** This function is called at various points to try to ensure that there
+** always exists at least one read-lock slot that can be used by a read-only
+** client. And so that, in the usual case, there is an "exact match" available
+** whenever a read transaction is opened by any client. At present this
+** function is called when:
+**
+**    * A write transaction that called lsmTreeDiscardOld() is committed, and
+**    * Whenever the working snapshot is updated (i.e. lsmFinishWork()).
+*/
+static int dbSetReadLock(lsm_db *db, i64 iLsm, u32 iShm){
+  int rc = LSM_OK;
+  ShmHeader *pShm = db->pShmhdr;
+  int i;
+
+  /* Check if there is already a slot containing the required values. */
+  for(i=0; i<LSM_LOCK_NREADER; i++){
+    ShmReader *p = &pShm->aReader[i];
+    if( p->iLsmId==iLsm && p->iTreeId==iShm ) return LSM_OK;
+  }
+
+  /* Iterate through all read-lock slots, attempting to take a write-lock
+  ** on each of them. If a write-lock succeeds, populate the locked slot
+  ** with the required values and break out of the loop.  */
+  for(i=0; rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
+    rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
+    if( rc==LSM_BUSY ){
+      rc = LSM_OK;
+    }else{
+      ShmReader *p = &pShm->aReader[i];
+      p->iLsmId = iLsm;
+      p->iTreeId = iShm;
+      lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK, 0);
+      break;
+    }
+  }
+
+  return rc;
+}
+
+
+/*
 ** Argument bFlush is true if the contents of the in-memory tree has just
 ** been flushed to disk. The significance of this is that once the snapshot
 ** created to hold the updated state of the database is synced to disk, log
@@ -926,13 +997,13 @@ void lsmFinishWork(lsm_db *pDb, int bFlush, int *pRc){
     }
 
     /* Assuming no error has occurred, update a read lock slot with the
-    ** new snapshot id (see comments above function lsmSetReadLock()).  */
+    ** new snapshot id (see comments above function dbSetReadLock()).  */
     if( rc==LSM_OK ){
       if( pDb->iReader<0 ){
         rc = lsmTreeLoadHeader(pDb, 0);
       }
       if( rc==LSM_OK ){
-        rc = lsmSetReadLock(pDb, pDb->pWorker->iId, pDb->treehdr.iUsedShmid);
+        rc = dbSetReadLock(pDb, pDb->pWorker->iId, pDb->treehdr.iUsedShmid);
       }
     }
 
@@ -989,12 +1060,15 @@ int lsmCheckCompressionId(lsm_db *pDb, u32 iReq){
 */
 int lsmBeginReadTrans(lsm_db *pDb){
   const int MAX_READLOCK_ATTEMPTS = 10;
+  const int nMaxAttempt = (pDb->bRoTrans ? 1 : MAX_READLOCK_ATTEMPTS);
+
   int rc = LSM_OK;                /* Return code */
   int iAttempt = 0;
 
+
   assert( pDb->pWorker==0 );
 
-  while( rc==LSM_OK && pDb->iReader<0 && (iAttempt++)<MAX_READLOCK_ATTEMPTS ){
+  while( rc==LSM_OK && pDb->iReader<0 && (iAttempt++)<nMaxAttempt ){
     int iTreehdr = 0;
     int iSnap = 0;
     assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
@@ -1035,7 +1109,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
             rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot,&pDb->pClient);
           }
           assert( (rc==LSM_OK)==(pDb->pClient!=0) );
-          assert( pDb->iReader>=0 );
+          assert( pDb->iReader>=0 || pDb->bRoTrans );
 
           /* Check that the client has the right compression hooks loaded.
           ** If not, set rc to LSM_MISMATCH.  */
@@ -1075,6 +1149,44 @@ if( rc==LSM_OK && pDb->pClient ){
 }
 
 /*
+** db is a read-only database handle in the disconnected state. This function
+** attempts to open a read-transaction on the database. This may involve
+** connecting to the database system (opening shared memory etc.).
+*/
+int lsmBeginRoTrans(lsm_db *db){
+  int rc = LSM_OK;
+
+  assert( db->bReadonly && db->pShmhdr==0 );
+  assert( db->iReader<0 );
+
+  if( db->bRoTrans==0 ){
+    if( 1 ){
+      rc = lsmShmLock(db, LSM_LOCK_CHECKPOINTER, LSM_LOCK_SHARED, 0);
+      if( rc==LSM_OK ){
+        db->bRoTrans = 1;
+        rc = lsmShmCacheChunks(db, 1);
+        if( rc==LSM_OK ){
+          db->pShmhdr = (ShmHeader *)db->apShm[0];
+          memset(db->pShmhdr, 0, sizeof(ShmHeader));
+          rc = lsmCheckpointRecover(db);
+          if( rc==LSM_OK ){
+            rc = lsmLogRecover(db);
+          }
+        }
+      }
+    }else{
+      /* lock(DMS2, SHARED) etc. */
+    }
+
+    if( rc==LSM_OK ){
+      rc = lsmBeginReadTrans(db);
+    }
+  }
+
+  return rc;
+}
+
+/*
 ** Close the currently open read transaction.
 */
 void lsmFinishReadTrans(lsm_db *pDb){
@@ -1086,21 +1198,20 @@ void lsmFinishReadTrans(lsm_db *pDb){
   assert( pDb->pWorker==0 );
   assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
-#if 0
-  if( pClient ){
-    lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
-    pDb->pClient = 0;
-  }
-#endif
+  lsmReleaseReadlock(pDb);
+  if( pDb->bRoTrans ){
+    int i;
+    for(i=0; i<pDb->nShm; i++){
+      lsmFree(pDb->pEnv, pDb->apShm[i]);
+    }
+    lsmFree(pDb->pEnv, pDb->apShm);
+    pDb->apShm = 0;
+    pDb->nShm = 0;
+    pDb->pShmhdr = 0;
 
-#if 0
-if( pDb->pClient && pDb->iReader>=0 ){
-  fprintf(stderr, 
-      "finished reading %p: snapshot:%d\n", (void *)pDb, (int)pDb->pClient->iId
-  );
-}
-#endif
-  if( pDb->iReader>=0 ) lsmReleaseReadlock(pDb);
+    lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);
+    pDb->bRoTrans = 0;
+  }
 }
 
 /*
@@ -1183,7 +1294,7 @@ int lsmFinishWriteTrans(lsm_db *pDb, int bCommit){
     if( bFlush && pDb->bAutowork ){
       rc = lsmSortedAutoWork(pDb, 1);
     }else if( bCommit && pDb->bDiscardOld ){
-      rc = lsmSetReadLock(pDb, pDb->pClient->iId, pDb->treehdr.iUsedShmid);
+      rc = dbSetReadLock(pDb, pDb->pClient->iId, pDb->treehdr.iUsedShmid);
     }
   }
   pDb->bDiscardOld = 0;
@@ -1214,53 +1325,6 @@ static int slotIsUsable(ShmReader *p, i64 iLsm, u32 iShmMin, u32 iShmMax){
 }
 
 /*
-** Attempt to populate one of the read-lock slots to contain lock values
-** iLsm/iShm. Or, if such a slot exists already, this function is a no-op.
-**
-** It is not an error if no slot can be populated because the write-lock
-** cannot be obtained. If any other error occurs, return an LSM error code.
-** Otherwise, LSM_OK.
-**
-** This function is called at various points to try to ensure that there
-** always exists at least one read-lock slot that can be used by a read-only
-** client. And so that, in the usual case, there is an "exact match" available
-** whenever a read transaction is opened by any client. At present this
-** function is called when:
-**
-**    * A write transaction that called lsmTreeDiscardOld() is committed, and
-**    * Whenever the working snapshot is updated (i.e. lsmFinishWork()).
-*/
-int lsmSetReadLock(lsm_db *db, i64 iLsm, u32 iShm){
-  int rc = LSM_OK;
-  ShmHeader *pShm = db->pShmhdr;
-  int i;
-
-  /* Check if there is already a slot containing the required values. */
-  for(i=0; i<LSM_LOCK_NREADER; i++){
-    ShmReader *p = &pShm->aReader[i];
-    if( p->iLsmId==iLsm && p->iTreeId==iShm ) return LSM_OK;
-  }
-
-  /* Iterate through all read-lock slots, attempting to take a write-lock
-  ** on each of them. If a write-lock succeeds, populate the locked slot
-  ** with the required values and break out of the loop.  */
-  for(i=0; rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
-    rc = lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_EXCL, 0);
-    if( rc==LSM_BUSY ){
-      rc = LSM_OK;
-    }else{
-      ShmReader *p = &pShm->aReader[i];
-      p->iLsmId = iLsm;
-      p->iTreeId = iShm;
-      lsmShmLock(db, LSM_LOCK_READER(i), LSM_LOCK_UNLOCK, 0);
-      break;
-    }
-  }
-
-  return rc;
-}
-
-/*
 ** Obtain a read-lock on database version identified by the combination
 ** of snapshot iLsm and tree iTree. Return LSM_OK if successful, or
 ** an LSM error code otherwise.
@@ -1272,6 +1336,9 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
 
   assert( db->iReader<0 );
   assert( shm_sequence_ge(iShmMax, iShmMin) );
+
+  /* This is a no-op if the read-only transaction flag is set. */
+  if( db->bRoTrans ) return LSM_OK;
 
   /* Search for an exact match. */
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
@@ -1470,46 +1537,55 @@ int lsmShmCacheChunks(lsm_db *db, int nChunk){
       db->apShm = apShm;
     }
 
-    /* Enter the client mutex */
-    lsmMutexEnter(pEnv, p->pClientMutex);
-
-    /* Extend the Database objects apShmChunk[] array if necessary. Using the
-    ** same pattern as for the lsm_db.apShm[] array above.  */
-    nAlloc = ((p->nShmChunk + NINCR - 1) / NINCR) * NINCR;
-    while( nChunk>=nAlloc ){
-      void **apShm;
-      nAlloc +=  NINCR;
-      apShm = lsmRealloc(pEnv, p->apShmChunk, sizeof(void*)*nAlloc);
-      if( !apShm ){
-        rc = LSM_NOMEM_BKPT;
-        break;
-      }
-      p->apShmChunk = apShm;
-    }
-
-    for(i=db->nShm; rc==LSM_OK && i<nChunk; i++){
-      if( i>=p->nShmChunk ){
-        void *pChunk = 0;
-        if( p->bMultiProc==0 ){
-          /* Single process mode */
-          pChunk = lsmMallocZeroRc(pEnv, LSM_SHM_CHUNK_SIZE, &rc);
-        }else{
-          /* Multi-process mode */
-          rc = lsmEnvShmMap(pEnv, p->pFile, i, LSM_SHM_CHUNK_SIZE, &pChunk);
-        }
-        if( rc==LSM_OK ){
-          p->apShmChunk[i] = pChunk;
-          p->nShmChunk++;
-        }
-      }
-      if( rc==LSM_OK ){
-        db->apShm[i] = p->apShmChunk[i];
+    if( db->bRoTrans ){
+      for(i=db->nShm; rc==LSM_OK && i<nChunk; i++){
+        db->apShm[i] = lsmMallocZeroRc(pEnv, LSM_SHM_CHUNK_SIZE, &rc);
         db->nShm++;
       }
-    }
 
-    /* Release the client mutex */
-    lsmMutexLeave(pEnv, p->pClientMutex);
+    }else{
+
+      /* Enter the client mutex */
+      lsmMutexEnter(pEnv, p->pClientMutex);
+
+      /* Extend the Database objects apShmChunk[] array if necessary. Using the
+       ** same pattern as for the lsm_db.apShm[] array above.  */
+      nAlloc = ((p->nShmChunk + NINCR - 1) / NINCR) * NINCR;
+      while( nChunk>=nAlloc ){
+        void **apShm;
+        nAlloc +=  NINCR;
+        apShm = lsmRealloc(pEnv, p->apShmChunk, sizeof(void*)*nAlloc);
+        if( !apShm ){
+          rc = LSM_NOMEM_BKPT;
+          break;
+        }
+        p->apShmChunk = apShm;
+      }
+
+      for(i=db->nShm; rc==LSM_OK && i<nChunk; i++){
+        if( i>=p->nShmChunk ){
+          void *pChunk = 0;
+          if( p->bMultiProc==0 ){
+            /* Single process mode */
+            pChunk = lsmMallocZeroRc(pEnv, LSM_SHM_CHUNK_SIZE, &rc);
+          }else{
+            /* Multi-process mode */
+            rc = lsmEnvShmMap(pEnv, p->pFile, i, LSM_SHM_CHUNK_SIZE, &pChunk);
+          }
+          if( rc==LSM_OK ){
+            p->apShmChunk[i] = pChunk;
+            p->nShmChunk++;
+          }
+        }
+        if( rc==LSM_OK ){
+          db->apShm[i] = p->apShmChunk[i];
+          db->nShm++;
+        }
+      }
+
+      /* Release the client mutex */
+      lsmMutexLeave(pEnv, p->pClientMutex);
+    }
   }
 
   return rc;
@@ -1544,6 +1620,7 @@ int lsmShmLock(
   int rc = LSM_OK;
   Database *p = db->pDatabase;
 
+  assert( eOp!=LSM_LOCK_EXCL || db->bReadonly==0 );
   assert( iLock>=1 && iLock<=LSM_LOCK_RWCLIENT(LSM_LOCK_NRWCLIENT-1) );
   assert( LSM_LOCK_RWCLIENT(LSM_LOCK_NRWCLIENT-1)<=32 );
   assert( eOp==LSM_LOCK_UNLOCK || eOp==LSM_LOCK_SHARED || eOp==LSM_LOCK_EXCL );

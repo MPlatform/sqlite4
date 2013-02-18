@@ -156,6 +156,7 @@ static int testEnvFullpath(
 static int testEnvOpen(
   lsm_env *pEnv,                  /* Environment for current LsmDb */
   const char *zFile,              /* Name of file to open */
+  int flags,
   lsm_file **ppFile               /* OUT: New file handle object */
 ){
   lsm_env *pRealEnv = tdb_lsm_env();
@@ -169,7 +170,7 @@ static int testEnvOpen(
   pRet->pDb = pDb;
   pRet->bLog = (nFile > 4 && 0==memcmp("-log", &zFile[nFile-4], 4));
 
-  rc = pRealEnv->xOpen(pRealEnv, zFile, &pRet->pReal);
+  rc = pRealEnv->xOpen(pRealEnv, zFile, flags, &pRet->pReal);
   if( rc!=LSM_OK ){
     testFree(pRet);
     pRet = 0;
@@ -380,7 +381,7 @@ static void doSystemCrash(LsmDb *pDb){
     lsm_file *pFile = 0;
     int i;
 
-    pEnv->xOpen(pEnv, zFile, &pFile);
+    pEnv->xOpen(pEnv, zFile, 0, &pFile);
     for(i=0; i<pDb->aFile[iFile].nSector; i++){
       u8 *aOld = pDb->aFile[iFile].aSector[i].aOld;
       if( aOld ){

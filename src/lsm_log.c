@@ -360,7 +360,7 @@ int lsmLogBegin(lsm_db *pDb){
 
   /* If the log file has not yet been opened, open it now. Also allocate
   ** the LogWriter structure, if it has not already been allocated.  */
-  rc = lsmFsOpenLog(pDb->pFS);
+  rc = lsmFsOpenLog(pDb, 0);
   if( pDb->pLogWriter==0 ){
     pNew = lsmMallocZeroRc(pDb->pEnv, sizeof(LogWriter), &rc);
     if( pNew ){
@@ -958,8 +958,9 @@ int lsmLogRecover(lsm_db *pDb){
   int iPass;
   int nJump = 0;                  /* Number of LSM_LOG_JUMP records in pass 0 */
   DbLog *pLog;
+  int bOpen;
 
-  rc = lsmFsOpenLog(pDb->pFS);
+  rc = lsmFsOpenLog(pDb, &bOpen);
   if( rc!=LSM_OK ) return rc;
 
   rc = lsmTreeInit(pDb);
@@ -976,120 +977,122 @@ int lsmLogRecover(lsm_db *pDb){
   ** count the number of committed transactions in the log. The second 
   ** iterates through those transactions and updates the in-memory tree 
   ** structure with their contents.  */
-  for(iPass=0; iPass<2 && rc==LSM_OK; iPass++){
-    int bEof = 0;
+  if( bOpen ){
+    for(iPass=0; iPass<2 && rc==LSM_OK; iPass++){
+      int bEof = 0;
 
-    while( rc==LSM_OK && !bEof ){
-      u8 eType = 0;
-      logReaderByte(&reader, &eType, &rc);
+      while( rc==LSM_OK && !bEof ){
+        u8 eType = 0;
+        logReaderByte(&reader, &eType, &rc);
 
-      switch( eType ){
-        case LSM_LOG_PAD1:
-          break;
+        switch( eType ){
+          case LSM_LOG_PAD1:
+            break;
 
-        case LSM_LOG_PAD2: {
-          int nPad;
-          logReaderVarint(&reader, &buf1, &nPad, &rc);
-          logReaderBlob(&reader, &buf1, nPad, 0, &rc);
-          break;
-        }
-
-        case LSM_LOG_WRITE:
-        case LSM_LOG_WRITE_CKSUM: {
-          int nKey;
-          int nVal;
-          u8 *aVal;
-          logReaderVarint(&reader, &buf1, &nKey, &rc);
-          logReaderVarint(&reader, &buf2, &nVal, &rc);
-
-          if( eType==LSM_LOG_WRITE_CKSUM ){
-            logReaderCksum(&reader, &buf1, &bEof, &rc);
-          }else{
-            bEof = logRequireCksum(&reader, nKey+nVal);
+          case LSM_LOG_PAD2: {
+            int nPad;
+            logReaderVarint(&reader, &buf1, &nPad, &rc);
+            logReaderBlob(&reader, &buf1, nPad, 0, &rc);
+            break;
           }
-          if( bEof ) break;
 
-          logReaderBlob(&reader, &buf1, nKey, 0, &rc);
-          logReaderBlob(&reader, &buf2, nVal, &aVal, &rc);
-          if( iPass==1 && rc==LSM_OK ){ 
-            rc = lsmTreeInsert(pDb, (u8 *)buf1.z, nKey, aVal, nVal);
-          }
-          break;
-        }
+          case LSM_LOG_WRITE:
+          case LSM_LOG_WRITE_CKSUM: {
+            int nKey;
+            int nVal;
+            u8 *aVal;
+            logReaderVarint(&reader, &buf1, &nKey, &rc);
+            logReaderVarint(&reader, &buf2, &nVal, &rc);
 
-        case LSM_LOG_DELETE:
-        case LSM_LOG_DELETE_CKSUM: {
-          int nKey; u8 *aKey;
-          logReaderVarint(&reader, &buf1, &nKey, &rc);
-
-          if( eType==LSM_LOG_DELETE_CKSUM ){
-            logReaderCksum(&reader, &buf1, &bEof, &rc);
-          }else{
-            bEof = logRequireCksum(&reader, nKey);
-          }
-          if( bEof ) break;
-
-          logReaderBlob(&reader, &buf1, nKey, &aKey, &rc);
-          if( iPass==1 && rc==LSM_OK ){ 
-            rc = lsmTreeInsert(pDb, aKey, nKey, NULL, -1);
-          }
-          break;
-        }
-
-        case LSM_LOG_COMMIT:
-          logReaderCksum(&reader, &buf1, &bEof, &rc);
-          if( bEof==0 ){
-            nCommit++;
-            assert( nCommit>0 || iPass==1 );
-            if( nCommit==0 ) bEof = 1;
-          }
-          break;
-
-        case LSM_LOG_JUMP: {
-          int iOff = 0;
-          logReaderVarint(&reader, &buf1, &iOff, &rc);
-          if( rc==LSM_OK ){
-            if( iPass==1 ){
-              if( pLog->aRegion[2].iStart==0 ){
-                assert( pLog->aRegion[1].iStart==0 );
-                pLog->aRegion[1].iEnd = reader.iOff;
-              }else{
-                assert( pLog->aRegion[0].iStart==0 );
-                pLog->aRegion[0].iStart = pLog->aRegion[2].iStart;
-                pLog->aRegion[0].iEnd = reader.iOff - reader.buf.n+reader.iBuf;
-              }
-              pLog->aRegion[2].iStart = iOff;
+            if( eType==LSM_LOG_WRITE_CKSUM ){
+              logReaderCksum(&reader, &buf1, &bEof, &rc);
             }else{
-              if( (nJump++)==2 ){
-                bEof = 1;
-              }
+              bEof = logRequireCksum(&reader, nKey+nVal);
             }
+            if( bEof ) break;
 
-            reader.iOff = iOff;
-            reader.buf.n = reader.iBuf;
+            logReaderBlob(&reader, &buf1, nKey, 0, &rc);
+            logReaderBlob(&reader, &buf2, nVal, &aVal, &rc);
+            if( iPass==1 && rc==LSM_OK ){ 
+              rc = lsmTreeInsert(pDb, (u8 *)buf1.z, nKey, aVal, nVal);
+            }
+            break;
           }
-          break;
-        }
 
-        default:
-          /* Including LSM_LOG_EOF */
-          bEof = 1;
-          break;
-      }
-    }
+          case LSM_LOG_DELETE:
+          case LSM_LOG_DELETE_CKSUM: {
+            int nKey; u8 *aKey;
+            logReaderVarint(&reader, &buf1, &nKey, &rc);
 
-    if( rc==LSM_OK && iPass==0 ){
-      if( nCommit==0 ){
-        if( pLog->aRegion[2].iStart==0 ){
-          iPass = 1;
-        }else{
-          pLog->aRegion[2].iStart = 0;
-          iPass = -1;
-          lsmCheckpointZeroLogoffset(pDb);
+            if( eType==LSM_LOG_DELETE_CKSUM ){
+              logReaderCksum(&reader, &buf1, &bEof, &rc);
+            }else{
+              bEof = logRequireCksum(&reader, nKey);
+            }
+            if( bEof ) break;
+
+            logReaderBlob(&reader, &buf1, nKey, &aKey, &rc);
+            if( iPass==1 && rc==LSM_OK ){ 
+              rc = lsmTreeInsert(pDb, aKey, nKey, NULL, -1);
+            }
+            break;
+          }
+
+          case LSM_LOG_COMMIT:
+            logReaderCksum(&reader, &buf1, &bEof, &rc);
+            if( bEof==0 ){
+              nCommit++;
+              assert( nCommit>0 || iPass==1 );
+              if( nCommit==0 ) bEof = 1;
+            }
+            break;
+
+          case LSM_LOG_JUMP: {
+            int iOff = 0;
+            logReaderVarint(&reader, &buf1, &iOff, &rc);
+            if( rc==LSM_OK ){
+              if( iPass==1 ){
+                if( pLog->aRegion[2].iStart==0 ){
+                  assert( pLog->aRegion[1].iStart==0 );
+                  pLog->aRegion[1].iEnd = reader.iOff;
+                }else{
+                  assert( pLog->aRegion[0].iStart==0 );
+                  pLog->aRegion[0].iStart = pLog->aRegion[2].iStart;
+                  pLog->aRegion[0].iEnd = reader.iOff - reader.buf.n+reader.iBuf;
+                }
+                pLog->aRegion[2].iStart = iOff;
+              }else{
+                if( (nJump++)==2 ){
+                  bEof = 1;
+                }
+              }
+
+              reader.iOff = iOff;
+              reader.buf.n = reader.iBuf;
+            }
+            break;
+          }
+
+          default:
+            /* Including LSM_LOG_EOF */
+            bEof = 1;
+            break;
         }
       }
-      logReaderInit(pDb, pLog, 0, &reader);
-      nCommit = nCommit * -1;
+
+      if( rc==LSM_OK && iPass==0 ){
+        if( nCommit==0 ){
+          if( pLog->aRegion[2].iStart==0 ){
+            iPass = 1;
+          }else{
+            pLog->aRegion[2].iStart = 0;
+            iPass = -1;
+            lsmCheckpointZeroLogoffset(pDb);
+          }
+        }
+        logReaderInit(pDb, pLog, 0, &reader);
+        nCommit = nCommit * -1;
+      }
     }
   }
 
@@ -1104,6 +1107,10 @@ int lsmLogRecover(lsm_db *pDb){
     rc = lsmFinishRecovery(pDb);
   }else{
     lsmFinishRecovery(pDb);
+  }
+
+  if( pDb->bRoTrans ){
+    lsmFsCloseLog(pDb);
   }
 
   lsmStringClear(&buf1);

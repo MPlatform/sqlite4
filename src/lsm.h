@@ -39,6 +39,9 @@ typedef long long int lsm_i64;              /* 64-bit signed integer type */
 #define LSM_LOCK_SHARED 1
 #define LSM_LOCK_EXCL   2
 
+/* Flags for lsm_env.xOpen() */
+#define LSM_OPEN_READONLY 0x0001
+
 /*
 ** CAPI: Database Runtime Environment
 **
@@ -50,7 +53,7 @@ struct lsm_env {
   /****** file i/o ***********************************************/
   void *pVfsCtx;
   int (*xFullpath)(lsm_env*, const char *, char *, int *);
-  int (*xOpen)(lsm_env*, const char *, lsm_file **);
+  int (*xOpen)(lsm_env*, const char *, int flags, lsm_file **);
   int (*xRead)(lsm_file *, lsm_i64, void *, int);
   int (*xWrite)(lsm_file *, lsm_i64, void *, int);
   int (*xTruncate)(lsm_file *, lsm_i64);
@@ -100,6 +103,7 @@ struct lsm_env {
 #define LSM_ERROR      1
 #define LSM_BUSY       5
 #define LSM_NOMEM      7
+#define LSM_READONLY   8
 #define LSM_IOERR     10
 #define LSM_CORRUPT   11
 #define LSM_FULL      13
@@ -108,6 +112,9 @@ struct lsm_env {
 #define LSM_MISUSE    21
 
 #define LSM_MISMATCH  50
+
+
+#define LSM_IOERR_NOENT (LSM_IOERR | (1<<8))
 
 /* 
 ** CAPI: Creating and Destroying Database Connection Handles
@@ -262,6 +269,10 @@ int lsm_config(lsm_db *, int, ...);
 ** LSM_CONFIG_SET_COMPRESSION_FACTORY:
 **   Configure a factory method to be invoked in case of an LSM_MISMATCH
 **   error.
+**
+** LSM_CONFIG_READONLY:
+**   A read/write boolean parameter. This parameter may only be set before
+**   lsm_open() is called.
 */
 #define LSM_CONFIG_AUTOFLUSH                1
 #define LSM_CONFIG_PAGE_SIZE                2
@@ -277,6 +288,7 @@ int lsm_config(lsm_db *, int, ...);
 #define LSM_CONFIG_SET_COMPRESSION         13
 #define LSM_CONFIG_GET_COMPRESSION         14
 #define LSM_CONFIG_SET_COMPRESSION_FACTORY 15
+#define LSM_CONFIG_READONLY                16
 
 #define LSM_SAFETY_OFF    0
 #define LSM_SAFETY_NORMAL 1

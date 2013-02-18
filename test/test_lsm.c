@@ -498,6 +498,7 @@ static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
     { "multi_proc",              LSM_CONFIG_MULTIPLE_PROCESSES },
     { "set_compression",         LSM_CONFIG_SET_COMPRESSION },
     { "set_compression_factory", LSM_CONFIG_SET_COMPRESSION_FACTORY },
+    { "readonly",                LSM_CONFIG_READONLY },
     { 0, 0 }
   };
   int nElem;

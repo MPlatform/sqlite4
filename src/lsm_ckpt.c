@@ -883,7 +883,7 @@ int lsmCheckpointLoad(lsm_db *pDb, int *piRead){
 
     lsmShmBarrier(pDb);
   }
-  return LSM_PROTOCOL;
+  return LSM_PROTOCOL_BKPT;
 }
 
 int lsmInfoCompressionId(lsm_db *db, u32 *piCmpId){
@@ -934,7 +934,7 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
     }else if( ckptChecksumOk(pShm->aSnap2) ){
       memcpy(pShm->aSnap1, pShm->aSnap2, sizeof(u32)*nInt2);
     }else{
-      return LSM_PROTOCOL;
+      return LSM_PROTOCOL_BKPT;
     }
   }
 

@@ -2357,7 +2357,7 @@ int lsmTreeLoadHeader(lsm_db *pDb, int *piRead){
 
     lsmShmBarrier(pDb);
   }
-  return LSM_PROTOCOL;
+  return LSM_PROTOCOL_BKPT;
 }
 
 int lsmTreeLoadHeaderOk(lsm_db *pDb, int iRead){

@@ -114,10 +114,11 @@ int lsmErrorBkpt(int);
 # define lsmErrorBkpt(x) (x)
 #endif
 
-#define LSM_IOERR_BKPT   lsmErrorBkpt(LSM_IOERR)
-#define LSM_NOMEM_BKPT   lsmErrorBkpt(LSM_NOMEM)
-#define LSM_CORRUPT_BKPT lsmErrorBkpt(LSM_CORRUPT)
-#define LSM_MISUSE_BKPT  lsmErrorBkpt(LSM_MISUSE)
+#define LSM_PROTOCOL_BKPT lsmErrorBkpt(LSM_PROTOCOL)
+#define LSM_IOERR_BKPT    lsmErrorBkpt(LSM_IOERR)
+#define LSM_NOMEM_BKPT    lsmErrorBkpt(LSM_NOMEM)
+#define LSM_CORRUPT_BKPT  lsmErrorBkpt(LSM_CORRUPT)
+#define LSM_MISUSE_BKPT   lsmErrorBkpt(LSM_MISUSE)
 
 #define unused_parameter(x) (void)(x)
 #define array_size(x) (sizeof(x)/sizeof(x[0]))
@@ -135,13 +136,12 @@ int lsmErrorBkpt(int);
 /* The number of available read-write client locks. */
 #define LSM_LOCK_NRWCLIENT   16
 
-/* Lock definitions */
+/* Lock definitions. */
 #define LSM_LOCK_DMS1         1
 #define LSM_LOCK_DMS2         2
-#define LSM_LOCK_DMS3         3
-#define LSM_LOCK_WRITER       4
-#define LSM_LOCK_WORKER       5
-#define LSM_LOCK_CHECKPOINTER 6
+#define LSM_LOCK_WRITER       3
+#define LSM_LOCK_WORKER       4
+#define LSM_LOCK_CHECKPOINTER 5
 #define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
 #define LSM_LOCK_RWCLIENT(i)  ((i) + LSM_LOCK_READER(LSM_LOCK_NREADER))
 
@@ -320,17 +320,20 @@ struct lsm_db {
   int bMmap;                      /* Configured by LSM_CONFIG_MMAP */
   i64 nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
+  int bReadonly;                  /* Configured by LSM_CONFIG_READONLY */
   lsm_compress compress;          /* Compression callbacks */
   lsm_compress_factory factory;   /* Compression callback factory */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
   Database *pDatabase;            /* Database shared data */
+
   int iRwclient;                  /* Read-write client lock held (-1 == none) */
 
   /* Client transaction context */
   Snapshot *pClient;              /* Client snapshot */
   int iReader;                    /* Read lock held (-1 == unlocked) */
+  int bRoTrans;                   /* True if a read-only db trans is open */
   MultiCursor *pCsr;              /* List of all open cursors */
   LogWriter *pLogWriter;          /* Context for writing to the log file */
   int nTransOpen;                 /* Number of opened write transactions */
@@ -655,7 +658,9 @@ int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 /**************************************************************************
 ** Start of functions from "lsm_file.c".
 */
-int lsmFsOpen(lsm_db *, const char *);
+int lsmFsOpen(lsm_db *, const char *, int);
+int lsmFsOpenLog(lsm_db *, int *);
+void lsmFsCloseLog(lsm_db *);
 void lsmFsClose(FileSystem *);
 
 int lsmFsConfigure(lsm_db *db);
@@ -729,7 +734,7 @@ int lsmInfoArrayStructure(lsm_db *pDb, int bBlock, Pgno iFirst, char **pzOut);
 int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmConfigMmap(lsm_db *pDb, int *piParam);
 
-int lsmEnvOpen(lsm_env *, const char *, lsm_file **);
+int lsmEnvOpen(lsm_env *, const char *, int, lsm_file **);
 int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile);
 int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock);
 
