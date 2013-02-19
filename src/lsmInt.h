@@ -904,7 +904,6 @@ void lsmShmHasLock(lsm_db *db, int iLock, int eOp);
 #endif
 
 int lsmReadlock(lsm_db *, i64 iLsm, u32 iShmMin, u32 iShmMax);
-int lsmReleaseReadlock(lsm_db *);
 
 int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);
 int lsmTreeInUse(lsm_db *db, u32 iLsmId, int *pbInUse);

@@ -744,7 +744,6 @@ int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
     assert( pDb->bReadonly );
     rc = lsmBeginRoTrans(pDb);
   }else{
-    assert( pDb->bRoTrans==0 );
     rc = lsmBeginReadTrans(pDb);
   }
 

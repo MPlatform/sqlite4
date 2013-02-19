@@ -255,6 +255,9 @@ static void doDbDisconnect(lsm_db *pDb){
       ** in-memory tree to disk and write a checkpoint.  */
       rc = lsmShmTestLock(pDb, LSM_LOCK_DMS2, 1, LSM_LOCK_EXCL);
       if( rc==LSM_OK ){
+        rc = lsmShmTestLock(pDb, LSM_LOCK_CHECKPOINTER, 1, LSM_LOCK_EXCL);
+      }
+      if( rc==LSM_OK ){
         int bReadonly = 0;        /* True if there exist read-only conns. */
 
         /* Flush the in-memory tree, if required. If there is data to flush,
@@ -1009,6 +1012,19 @@ static int dbSetReadLock(lsm_db *db, i64 iLsm, u32 iShm){
   return rc;
 }
 
+/*
+** Release the read-lock currently held by connection db.
+*/
+int dbReleaseReadlock(lsm_db *db){
+  int rc = LSM_OK;
+  if( db->iReader>=0 ){
+    rc = lsmShmLock(db, LSM_LOCK_READER(db->iReader), LSM_LOCK_UNLOCK, 0);
+    db->iReader = -1;
+  }
+  db->bRoTrans = 0;
+  return rc;
+}
+
 
 /*
 ** Argument bFlush is true if the contents of the in-memory tree has just
@@ -1095,7 +1111,6 @@ int lsmBeginReadTrans(lsm_db *pDb){
   int rc = LSM_OK;                /* Return code */
   int iAttempt = 0;
 
-
   assert( pDb->pWorker==0 );
 
   while( rc==LSM_OK && pDb->iReader<0 && (iAttempt++)<nMaxAttempt ){
@@ -1139,7 +1154,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
             rc = lsmCheckpointDeserialize(pDb, 0, pDb->aSnapshot,&pDb->pClient);
           }
           assert( (rc==LSM_OK)==(pDb->pClient!=0) );
-          assert( pDb->iReader>=0 || pDb->bRoTrans );
+          assert( pDb->iReader>=0 );
 
           /* Check that the client has the right compression hooks loaded.
           ** If not, set rc to LSM_MISMATCH.  */
@@ -1147,7 +1162,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
             rc = lsmCheckCompressionId(pDb, pDb->pClient->iCmpId);
           }
         }else{
-          rc = lsmReleaseReadlock(pDb);
+          rc = dbReleaseReadlock(pDb);
         }
       }
 
@@ -1172,7 +1187,7 @@ if( rc==LSM_OK && pDb->pClient ){
     rc = lsmShmCacheChunks(pDb, pDb->treehdr.nChunk);
   }
   if( rc!=LSM_OK ){
-    lsmReleaseReadlock(pDb);
+    dbReleaseReadlock(pDb);
   }
   if( pDb->pClient==0 && rc==LSM_OK ) rc = LSM_BUSY;
   return rc;
@@ -1247,7 +1262,6 @@ void lsmFinishReadTrans(lsm_db *pDb){
   assert( pDb->pWorker==0 );
   assert( pDb->pCsr==0 && pDb->nTransOpen==0 );
 
-  lsmReleaseReadlock(pDb);
   if( pDb->bRoTrans ){
     int i;
     for(i=0; i<pDb->nShm; i++){
@@ -1259,8 +1273,8 @@ void lsmFinishReadTrans(lsm_db *pDb){
     pDb->pShmhdr = 0;
 
     lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);
-    pDb->bRoTrans = 0;
   }
+  dbReleaseReadlock(pDb);
 }
 
 /*
@@ -1272,6 +1286,7 @@ int lsmBeginWriteTrans(lsm_db *pDb){
 
   assert( pDb->nTransOpen==0 );
   assert( pDb->bDiscardOld==0 );
+  assert( pDb->bReadonly==0 );
 
   /* If there is no read-transaction open, open one now. */
   rc = lsmBeginReadTrans(pDb);
@@ -1387,7 +1402,10 @@ int lsmReadlock(lsm_db *db, i64 iLsm, u32 iShmMin, u32 iShmMax){
   assert( shm_sequence_ge(iShmMax, iShmMin) );
 
   /* This is a no-op if the read-only transaction flag is set. */
-  if( db->bRoTrans ) return LSM_OK;
+  if( db->bRoTrans ){
+    db->iReader = 0;
+    return LSM_OK;
+  }
 
   /* Search for an exact match. */
   for(i=0; db->iReader<0 && rc==LSM_OK && i<LSM_LOCK_NREADER; i++){
@@ -1529,18 +1547,6 @@ int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse){
     return LSM_OK;
   }
   return isInUse(db, iLsmId, 0, pbInUse);
-}
-
-/*
-** Release the read-lock currently held by connection db.
-*/
-int lsmReleaseReadlock(lsm_db *db){
-  int rc = LSM_OK;
-  if( db->iReader>=0 ){
-    rc = lsmShmLock(db, LSM_LOCK_READER(db->iReader), LSM_LOCK_UNLOCK, 0);
-    db->iReader = -1;
-  }
-  return rc;
 }
 
 /*

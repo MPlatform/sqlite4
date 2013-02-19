@@ -179,5 +179,24 @@ do_test 3.8 {
   list [file exists test.db-log] [file exists test.db-shm]
 } {0 1}
 
+#-------------------------------------------------------------------------
+#
+do_test 4.1 {
+  create_abc_log test.db
+  list [file size test.db] [file size test.db-log]
+} {0 56}
+
+do_test 4.2 {
+  lsm_open db test.db {readonly 1}
+  db csr_open T
+  list [db_fetch db a] [db_fetch db b] [db_fetch db c]
+} {alpha bravo charlie}
+
+do_test 4.3 { 
+  lsm_open db_rw test.db
+  db_rw close
+  list [file size test.db] [file size test.db-log]
+} {0 56}
+
 finish_test
 
