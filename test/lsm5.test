@@ -36,6 +36,17 @@ proc create_abc_db {file} {
   db close
 }
 
+proc create_abc_log {file} {
+  forcedelete $file ${file}-2
+  lsm_open db ${file}-2
+  db write a alpha
+  db write b bravo
+  db write c charlie
+  file copy ${file}-2 $file
+  file copy ${file}-2-log $file-log
+  db close
+}
+
 #-------------------------------------------------------------------------
 # When the database system is shut down (i.e. when the last connection
 # disconnects), an attempt is made to truncate the database file to the
@@ -59,9 +70,9 @@ do_test 1.3 {
 
 #-------------------------------------------------------------------------
 # Test that if an attempt is made to open a read-write connection to a 
-# database that the client does not have permission to write to is attempted
-# an error is reported. In order to open a read-write connection to a
-# database, the client requires:
+# non-live database that the client does not have permission to write to is
+# attempted an error is reported. In order to open a read-write connection 
+# to a database, the client requires:
 #
 #   * read-write access to the db file,
 #   * read-write access to the log file,
@@ -74,7 +85,6 @@ do_test 1.3 {
 # point in the future this will be improved. Likely when sqlite4 level tests 
 # for opening read-only databases are added.
 # 
-
 foreach {tn filename setup} {
 
   1 test.dir/test.db {
@@ -109,7 +119,6 @@ foreach {tn filename setup} {
   }
 
 } {
-
   do_test 2.$tn.1 {
     eval $setup
     set rc [catch {lsm_open db $filename} msg]
@@ -123,9 +132,52 @@ foreach {tn filename setup} {
     db close
     set res
   } {alpha bravo charlie}
-
 }
 
+#-------------------------------------------------------------------------
+# Try having a read-only connection connect to a non-live system where the
+# log file contains content. In this scenario the read-only client must 
+# read the contents from the log file at the start of each read-transaction. 
+#
+do_test 3.1 {
+  create_abc_log test.db
+  list [file size test.db] [file size test.db-log]
+} {0 56}
+do_test 3.2 {
+  lsm_open db $filename {readonly 1}
+  set res [list [db_fetch db a] [db_fetch db b] [db_fetch db c]]
+  db close
+  set res
+} {alpha bravo charlie}
+do_test 3.3 {
+  list [file size test.db] [file size test.db-log]
+} {0 56}
+
+# Now make the same db live and check the read-only connection can still
+# read it.
+do_test 3.4 { file exists test.db-shm } 0
+do_test 3.5 { 
+  lsm_open db_rw test.db
+  file exists test.db-shm
+} 1
+do_test 3.6 {
+  lsm_open db test.db {readonly 1}
+  list [db_fetch db a] [db_fetch db b] [db_fetch db c]
+} {alpha bravo charlie}
+
+# Close the read-write connection. This should cause a checkpoint and delete
+# the log file, even though the system remains live.
+do_test 3.7 { 
+  db_rw close
+  list [file exists test.db-log] [file exists test.db-shm]
+} {0 1}
+
+# Now close the read-only connection. The system is now non-live, but the 
+# *-shm remains in the file-system (the readonly connection cannot unlink it).
+do_test 3.8 { 
+  db close
+  list [file exists test.db-log] [file exists test.db-shm]
+} {0 1}
 
 finish_test
 

@@ -212,7 +212,7 @@ static int dbTruncateFile(lsm_db *pDb){
   int rc;
 
   assert( pDb->pWorker==0 );
-  assert( lsmShmAssertLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL) );
+  assert( lsmShmAssertLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL) );
   rc = lsmCheckpointLoadWorker(pDb);
 
   if( rc==LSM_OK ){
@@ -242,52 +242,73 @@ static int dbTruncateFile(lsm_db *pDb){
 static void doDbDisconnect(lsm_db *pDb){
   int rc;
 
-  /* Block for an exclusive lock on DMS1. This lock serializes all calls
-  ** to doDbConnect() and doDbDisconnect() across all processes.  */
-  rc = lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL, 1);
-  if( rc==LSM_OK ){
-
-    /* Try an exclusive lock on DMS2. If successful, this is the last
-    ** connection to the database. In this case flush the contents of the
-    ** in-memory tree to disk and write a checkpoint.  */
-    rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL, 0);
+  if( pDb->bReadonly ){
+    lsmShmLock(pDb, LSM_LOCK_DMS3, LSM_LOCK_UNLOCK, 0);
+  }else{
+    /* Block for an exclusive lock on DMS1. This lock serializes all calls
+    ** to doDbConnect() and doDbDisconnect() across all processes.  */
+    rc = lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL, 1);
     if( rc==LSM_OK ){
-      /* Flush the in-memory tree, if required. If there is data to flush,
-      ** this will create a new client snapshot in Database.pClient. The
-      ** checkpoint (serialization) of this snapshot may be written to disk
-      ** by the following block.  
-      **
-      ** There is no need to mess around with WRITER locks or anything at
-      ** this point. The lock on DMS2 guarantees that pDb has exclusive
-      ** access to the db at this point.
-      */
-      rc = lsmTreeLoadHeader(pDb, 0);
-      if( rc==LSM_OK && (lsmTreeHasOld(pDb) || lsmTreeSize(pDb)>0) ){
-        rc = lsmFlushTreeToDisk(pDb);
-      }
 
-      /* Write a checkpoint to disk. */
+      /* Try an exclusive lock on DMS2. If successful, this is the last
+      ** connection to the database. In this case flush the contents of the
+      ** in-memory tree to disk and write a checkpoint.  */
+      rc = lsmShmTestLock(pDb, LSM_LOCK_DMS2, 1, LSM_LOCK_EXCL);
       if( rc==LSM_OK ){
-        rc = lsmCheckpointWrite(pDb, 1, 0);
-      }
+        int bReadonly = 0;        /* True if there exist read-only conns. */
 
-      /* If the checkpoint was written successfully, delete the log file
-      ** and, if possible, truncate the database file.  */
-      if( rc==LSM_OK ){
-        Database *p = pDb->pDatabase;
-        dbTruncateFile(pDb);
-        lsmFsCloseAndDeleteLog(pDb->pFS);
-        if( p->pFile && p->bMultiProc ) lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
+        /* Flush the in-memory tree, if required. If there is data to flush,
+        ** this will create a new client snapshot in Database.pClient. The
+        ** checkpoint (serialization) of this snapshot may be written to disk
+        ** by the following block.  
+        **
+        ** There is no need to take a WRITER lock here. That there are no 
+        ** other locks on DMS2 guarantees that there are no other read-write
+        ** connections at this time (and the lock on DMS1 guarantees that
+        ** no new ones may appear).
+        */
+        rc = lsmTreeLoadHeader(pDb, 0);
+        if( rc==LSM_OK && (lsmTreeHasOld(pDb) || lsmTreeSize(pDb)>0) ){
+          rc = lsmFlushTreeToDisk(pDb);
+        }
+
+        /* Now check if there are any read-only connections. If there are,
+        ** then do not truncate the db file or unlink the shared-memory 
+        ** region.  */
+        if( rc==LSM_OK ){
+          rc = lsmShmTestLock(pDb, LSM_LOCK_DMS3, 1, LSM_LOCK_EXCL);
+          if( rc==LSM_BUSY ){
+            bReadonly = 1;
+            rc = LSM_OK;
+          }
+        }
+
+        /* Write a checkpoint to disk. */
+        if( rc==LSM_OK ){
+          rc = lsmCheckpointWrite(pDb, (bReadonly==0), 1, 0);
+        }
+
+        /* If the checkpoint was written successfully, delete the log file
+        ** and, if possible, truncate the database file.  */
+        if( rc==LSM_OK ){
+          Database *p = pDb->pDatabase;
+          if( bReadonly==0 ){
+            dbTruncateFile(pDb);
+            if( p->pFile && p->bMultiProc ){
+              lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
+            }
+          }
+        }
       }
     }
-  }
 
-  if( pDb->iRwclient>=0 ){
-    lsmShmLock(pDb, LSM_LOCK_RWCLIENT(pDb->iRwclient), LSM_LOCK_UNLOCK, 0);
-  }
+    if( pDb->iRwclient>=0 ){
+      lsmShmLock(pDb, LSM_LOCK_RWCLIENT(pDb->iRwclient), LSM_LOCK_UNLOCK, 0);
+    }
 
-  lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_UNLOCK, 0);
-  lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
+    lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_UNLOCK, 0);
+    lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
+  }
   pDb->pShmhdr = 0;
 }
 
@@ -298,6 +319,7 @@ static int doDbConnect(lsm_db *pDb){
 
   /* Obtain a pointer to the shared-memory header */
   assert( pDb->pShmhdr==0 );
+  assert( pDb->bReadonly==0 );
   rc = lsmShmCacheChunks(pDb, 1);
   if( rc!=LSM_OK ) return rc;
   pDb->pShmhdr = (ShmHeader *)pDb->apShm[0];
@@ -316,15 +338,21 @@ static int doDbConnect(lsm_db *pDb){
     return rc;
   }
 
-  /* Try an exclusive lock on DMS2. If successful, this is the first and 
-  ** only connection to the database. In this case initialize the 
+  /* Try an exclusive lock on DMS2/DMS3. If successful, this is the first 
+  ** and only connection to the database. In this case initialize the 
   ** shared-memory and run log file recovery.  */
-  rc = lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL, 0);
+  assert( LSM_LOCK_DMS3==1+LSM_LOCK_DMS2 );
+  rc = lsmShmTestLock(pDb, LSM_LOCK_DMS2, 2, LSM_LOCK_EXCL);
   if( rc==LSM_OK ){
     memset(pDb->pShmhdr, 0, sizeof(ShmHeader));
     rc = lsmCheckpointRecover(pDb);
     if( rc==LSM_OK ){
       rc = lsmLogRecover(pDb);
+    }
+    if( rc==LSM_OK ){
+      ShmHeader *pShm = pDb->pShmhdr;
+      pShm->aReader[0].iLsmId = lsmCheckpointId(pShm->aSnap1, 0);
+      pShm->aReader[0].iTreeId = pDb->treehdr.iUsedShmid;
     }
   }else if( rc==LSM_BUSY ){
     rc = LSM_OK;
@@ -346,7 +374,6 @@ static int doDbConnect(lsm_db *pDb){
   /* If anything went wrong, unlock DMS2. Otherwise, try to take an exclusive
   ** lock on one of the LSM_LOCK_RWCLIENT() locks. Unlock DMS1 in any case. */
   if( rc!=LSM_OK ){
-    lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_UNLOCK, 0);
     pDb->pShmhdr = 0;
   }else{
     int i;
@@ -844,7 +871,7 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
 ** not be held that long (in case it is required by a client flushing an
 ** in-memory tree to disk).
 */
-int lsmCheckpointWrite(lsm_db *pDb, int bTruncate, u32 *pnWrite){
+int lsmCheckpointWrite(lsm_db *pDb, int bTruncate, int bDellog, u32 *pnWrite){
   int rc;                         /* Return Code */
   u32 nWrite = 0;
 
@@ -902,6 +929,9 @@ int lsmCheckpointWrite(lsm_db *pDb, int bTruncate, u32 *pnWrite){
 
     if( rc==LSM_OK && bTruncate ){
       rc = lsmFsTruncateDb(pDb->pFS, (i64)nBlock*lsmFsBlockSize(pDb->pFS));
+    }
+    if( rc==LSM_OK && bDellog ){
+      lsmFsCloseAndDeleteLog(pDb->pFS);
     }
   }
 
@@ -1160,8 +1190,19 @@ int lsmBeginRoTrans(lsm_db *db){
   assert( db->iReader<0 );
 
   if( db->bRoTrans==0 ){
-    if( 1 ){
+
+    /* Attempt a shared-lock on DMS1. */
+    rc = lsmShmLock(db, LSM_LOCK_DMS1, LSM_LOCK_SHARED, 0);
+    if( rc!=LSM_OK ) return rc;
+
+    rc = lsmShmTestLock(
+        db, LSM_LOCK_RWCLIENT(0), LSM_LOCK_NREADER, LSM_LOCK_SHARED
+    );
+    if( rc==LSM_OK ){
+      /* System is not live */
       rc = lsmShmLock(db, LSM_LOCK_CHECKPOINTER, LSM_LOCK_SHARED, 0);
+      lsmShmLock(db, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
+
       if( rc==LSM_OK ){
         db->bRoTrans = 1;
         rc = lsmShmCacheChunks(db, 1);
@@ -1174,8 +1215,16 @@ int lsmBeginRoTrans(lsm_db *db){
           }
         }
       }
-    }else{
-      /* lock(DMS2, SHARED) etc. */
+    }else if( rc==LSM_BUSY ){
+      /* System is live! */
+      rc = lsmShmLock(db, LSM_LOCK_DMS3, LSM_LOCK_SHARED, 0);
+      lsmShmLock(db, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
+      if( rc==LSM_OK ){
+        rc = lsmShmCacheChunks(db, 1);
+        if( rc==LSM_OK ){
+          db->pShmhdr = (ShmHeader *)db->apShm[0];
+        }
+      }
     }
 
     if( rc==LSM_OK ){
@@ -1600,6 +1649,49 @@ static int lockSharedFile(lsm_env *pEnv, Database *p, int iLock, int eOp){
 }
 
 /*
+** Test if it would be possible for connection db to obtain a lock of type
+** eType on the nLock locks starting at iLock. If so, return LSM_OK. If it
+** would not be possible to obtain the lock due to a lock held by another
+** connection, return LSM_BUSY. If an IO or other error occurs (i.e. in the 
+** lsm_env.xTestLock function), return some other LSM error code.
+**
+** Note that this function never actually locks the database - it merely
+** queries the system to see if there exists a lock that would prevent
+** it from doing so.
+*/
+int lsmShmTestLock(
+  lsm_db *db,
+  int iLock,
+  int nLock,
+  int eOp
+){
+  int rc = LSM_OK;
+  lsm_db *pIter;
+  Database *p = db->pDatabase;
+  int i;
+  u64 mask = 0;
+
+  for(i=iLock; i<(iLock+nLock); i++){
+    mask |= ((u64)1 << (iLock-1));
+    if( eOp==LSM_LOCK_EXCL ) mask |= ((u64)1 << (iLock+32-1));
+  }
+
+  lsmMutexEnter(db->pEnv, p->pClientMutex);
+  for(pIter=p->pConn; pIter; pIter=pIter->pNext){
+    if( pIter!=db && (pIter->mLock & mask) ) break;
+  }
+
+  if( pIter ){
+    rc = LSM_BUSY;
+  }else if( p->bMultiProc ){
+    rc = lsmEnvTestLock(db->pEnv, p->pFile, iLock, nLock, eOp);
+  }
+
+  lsmMutexLeave(db->pEnv, p->pClientMutex);
+  return rc;
+}
+
+/*
 ** Attempt to obtain the lock identified by the iLock and bExcl parameters.
 ** If successful, return LSM_OK. If the lock cannot be obtained because 
 ** there exists some other conflicting lock, return LSM_BUSY. If some other
@@ -1789,7 +1881,7 @@ int lsm_checkpoint(lsm_db *pDb, int *pnKB){
 
   /* Attempt the checkpoint. If successful, nWrite is set to the number of
   ** pages written between this and the previous checkpoint.  */
-  rc = lsmCheckpointWrite(pDb, 0, &nWrite);
+  rc = lsmCheckpointWrite(pDb, 0, 0, &nWrite);
 
   /* If required, calculate the output variable (KB of data checkpointed). 
   ** Set it to zero if an error occured.  */

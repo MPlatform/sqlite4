@@ -354,6 +354,16 @@ int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock){
   return pEnv->xLock(pFile, iLock, eLock);
 }
 
+int lsmEnvTestLock(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  int iLock, 
+  int nLock, 
+  int eLock
+){
+  return pEnv->xTestLock(pFile, iLock, nLock, eLock);
+}
+
 int lsmEnvShmMap(
   lsm_env *pEnv, 
   lsm_file *pFile, 
@@ -418,7 +428,7 @@ int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
 }
 
 /*
-** Truncate the log file to nByte bytes in size.
+** Truncate the db file to nByte bytes in size.
 */
 int lsmFsTruncateDb(FileSystem *pFS, i64 nByte){
   if( pFS->fdDb==0 ) return LSM_OK;

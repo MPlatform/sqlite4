@@ -349,6 +349,16 @@ static int testEnvLock(lsm_file *pFile, int iLock, int eType){
   return pRealEnv->xLock(p->pReal, iLock, eType);
 }
 
+static int testEnvTestLock(lsm_file *pFile, int iLock, int nLock, int eType){
+  LsmFile *p = (LsmFile *)pFile;
+  lsm_env *pRealEnv = tdb_lsm_env();
+
+  if( iLock==2 && eType==LSM_LOCK_EXCL && p->pDb->bNoRecovery ){
+    return LSM_BUSY;
+  }
+  return pRealEnv->xTestLock(p->pReal, iLock, nLock, eType);
+}
+
 static int testEnvShmMap(lsm_file *pFile, int iRegion, int sz, void **pp){
   LsmFile *p = (LsmFile *)pFile;
   lsm_env *pRealEnv = tdb_lsm_env();
@@ -939,6 +949,7 @@ static int testLsmOpen(
   pDb->env.xClose = testEnvClose;
   pDb->env.xUnlink = testEnvUnlink;
   pDb->env.xLock = testEnvLock;
+  pDb->env.xTestLock = testEnvTestLock;
   pDb->env.xShmBarrier = testEnvShmBarrier;
   pDb->env.xShmMap = testEnvShmMap;
   pDb->env.xShmUnmap = testEnvShmUnmap;

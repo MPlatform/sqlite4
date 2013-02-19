@@ -922,7 +922,7 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   /* Must be holding the WORKER lock to do this. Or DMS2. */
   assert( 
       lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL) 
-   || lsmShmAssertLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL) 
+   || lsmShmAssertLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL) 
   );
 
   /* Check that the two snapshots match. If not, repair them. */

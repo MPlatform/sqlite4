@@ -64,6 +64,7 @@ struct lsm_env {
   int (*xClose)(lsm_file *);
   int (*xUnlink)(lsm_env*, const char *);
   int (*xLock)(lsm_file*, int, int);
+  int (*xTestLock)(lsm_file*, int, int, int);
   int (*xShmMap)(lsm_file*, int, int, void **);
   void (*xShmBarrier)(void);
   int (*xShmUnmap)(lsm_file*, int);

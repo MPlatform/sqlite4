@@ -137,11 +137,12 @@ int lsmErrorBkpt(int);
 #define LSM_LOCK_NRWCLIENT   16
 
 /* Lock definitions. */
-#define LSM_LOCK_DMS1         1
-#define LSM_LOCK_DMS2         2
-#define LSM_LOCK_WRITER       3
-#define LSM_LOCK_WORKER       4
-#define LSM_LOCK_CHECKPOINTER 5
+#define LSM_LOCK_DMS1         1   /* Serialize connect/disconnect ops */
+#define LSM_LOCK_DMS2         2   /* Read-write connections */
+#define LSM_LOCK_DMS3         3   /* Read-only connections */
+#define LSM_LOCK_WRITER       4
+#define LSM_LOCK_WORKER       5
+#define LSM_LOCK_CHECKPOINTER 6
 #define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
 #define LSM_LOCK_RWCLIENT(i)  ((i) + LSM_LOCK_READER(LSM_LOCK_NREADER))
 
@@ -556,7 +557,7 @@ struct Snapshot {
 /*
 ** Functions from file "lsm_ckpt.c".
 */
-int lsmCheckpointWrite(lsm_db *, int, u32 *);
+int lsmCheckpointWrite(lsm_db *, int, int, u32 *);
 int lsmCheckpointLevels(lsm_db *, int, void **, int *);
 int lsmCheckpointLoadLevels(lsm_db *pDb, void *pVal, int nVal);
 
@@ -737,6 +738,7 @@ int lsmConfigMmap(lsm_db *pDb, int *piParam);
 int lsmEnvOpen(lsm_env *, const char *, int, lsm_file **);
 int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile);
 int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock);
+int lsmEnvTestLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int nLock, int);
 
 int lsmEnvShmMap(lsm_env *, lsm_file *, int, int, void **); 
 void lsmEnvShmBarrier(lsm_env *);
