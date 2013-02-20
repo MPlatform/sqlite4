@@ -139,7 +139,6 @@ int sqlite4_clear_bindings(sqlite4_stmt *pStmt){
 const void *sqlite4_value_blob(sqlite4_value *pVal){
   Mem *p = (Mem*)pVal;
   if( p->flags & (MEM_Blob|MEM_Str) ){
-   (void)sqlite4VdbeMemExpandBlob(p);
     p->flags &= ~MEM_Str;
     p->flags |= MEM_Blob;
     return p->n ? p->z : 0;
@@ -289,10 +288,6 @@ void sqlite4_result_text16le(
 void sqlite4_result_value(sqlite4_context *pCtx, sqlite4_value *pValue){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
   sqlite4VdbeMemCopy(&pCtx->s, pValue);
-}
-void sqlite4_result_zeroblob(sqlite4_context *pCtx, int n){
-  assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  sqlite4VdbeMemSetZeroBlob(&pCtx->s, n);
 }
 void sqlite4_result_error_code(sqlite4_context *pCtx, int errCode){
   pCtx->isError = errCode;
@@ -753,11 +748,6 @@ static void columnMallocFailure(sqlite4_stmt *pStmt)
 const void *sqlite4_column_blob(sqlite4_stmt *pStmt, int i){
   const void *val;
   val = sqlite4_value_blob( columnMem(pStmt,i) );
-  /* Even though there is no encoding conversion, value_blob() might
-  ** need to call malloc() to expand the result of a zeroblob() 
-  ** expression. 
-  */
-  columnMallocFailure(pStmt);
   return val;
 }
 int sqlite4_column_bytes(sqlite4_stmt *pStmt, int i){
@@ -1126,12 +1116,8 @@ int sqlite4_bind_value(sqlite4_stmt *pStmt, int i, const sqlite4_value *pValue){
       break;
     }
     case SQLITE4_BLOB: {
-      if( pValue->flags & MEM_Zero ){
-        rc = sqlite4_bind_zeroblob(pStmt, i, pValue->u.nZero);
-      }else{
-        rc = sqlite4_bind_blob(pStmt, i, pValue->z, pValue->n,
-                               SQLITE4_TRANSIENT, 0);
-      }
+      rc = sqlite4_bind_blob(pStmt, i, pValue->z, pValue->n,
+                             SQLITE4_TRANSIENT, 0);
       break;
     }
     case SQLITE4_TEXT: {
@@ -1143,16 +1129,6 @@ int sqlite4_bind_value(sqlite4_stmt *pStmt, int i, const sqlite4_value *pValue){
       rc = sqlite4_bind_null(pStmt, i);
       break;
     }
-  }
-  return rc;
-}
-int sqlite4_bind_zeroblob(sqlite4_stmt *pStmt, int i, int n){
-  int rc;
-  Vdbe *p = (Vdbe *)pStmt;
-  rc = vdbeUnbind(p, i);
-  if( rc==SQLITE4_OK ){
-    sqlite4VdbeMemSetZeroBlob(&p->aVar[i-1], n);
-    sqlite4_mutex_leave(p->db->mutex);
   }
   return rc;
 }

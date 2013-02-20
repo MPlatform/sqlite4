@@ -353,9 +353,6 @@ void sqlite4VdbeMemPrettyPrint(Mem *pMem, char *zBuf){
     }
 
     zCsr += sqlite4_snprintf(zCsr, 100, "]%s", encnames[pMem->enc]);
-    if( f & MEM_Zero ){
-      zCsr += sqlite4_snprintf(zCsr, 100, "+%dz",pMem->u.nZero);
-    }
     *zCsr = '\0';
   }else if( f & MEM_Str ){
     int j, k;
@@ -1146,7 +1143,6 @@ case OP_Concat: {           /* same as TK_CONCAT, in1, in2, out3 */
     sqlite4VdbeMemSetNull(pOut);
     break;
   }
-  if( ExpandBlob(pIn1) || ExpandBlob(pIn2) ) goto no_mem;
   Stringify(pIn1, encoding);
   Stringify(pIn2, encoding);
   nByte = pIn1->n + pIn2->n;
@@ -1588,9 +1584,8 @@ case OP_ToText: {                  /* same as TK_TO_TEXT, in1 */
   assert( MEM_Str==(MEM_Blob>>3) );
   pIn1->flags |= (pIn1->flags&MEM_Blob)>>3;
   applyAffinity(pIn1, SQLITE4_AFF_TEXT, encoding);
-  rc = ExpandBlob(pIn1);
   assert( pIn1->flags & MEM_Str || db->mallocFailed );
-  pIn1->flags &= ~(MEM_Int|MEM_Real|MEM_Blob|MEM_Zero);
+  pIn1->flags &= ~(MEM_Int|MEM_Real|MEM_Blob);
   UPDATE_MAX_BLOBSIZE(pIn1);
   break;
 }
@@ -2334,9 +2329,6 @@ case OP_MakeRecord: {
     assert( memIsValid(pMem) );
     if( zAffinity ){
       applyAffinity(pMem, *(zAffinity++), encoding);
-    }
-    if( pMem->flags&MEM_Zero ){
-      (void)ExpandBlob(pMem);
     }
   }
 

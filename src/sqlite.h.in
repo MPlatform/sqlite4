@@ -1807,14 +1807,6 @@ typedef struct sqlite4_context sqlite4_context;
 ** SQLite makes its own private copy of the data immediately, before
 ** the sqlite4_bind_*() routine returns.
 **
-** ^The sqlite4_bind_zeroblob() routine binds a BLOB of length N that
-** is filled with zeroes.  ^A zeroblob uses a fixed amount of memory
-** (just an integer to hold its size) while it is being processed.
-** Zeroblobs are intended to serve as placeholders for BLOBs whose
-** content is later written using
-** [sqlite4_blob_open | incremental BLOB I/O] routines.
-** ^A negative value for the zeroblob results in a zero-length BLOB.
-**
 ** ^If any of the sqlite4_bind_*() routines are called with a NULL pointer
 ** for the [prepared statement] or with a prepared statement for which
 ** [sqlite4_step()] has been called more recently than [sqlite4_reset()],
@@ -1844,7 +1836,6 @@ int sqlite4_bind_text(sqlite4_stmt*, int, const char*, int n,
 int sqlite4_bind_text16(sqlite4_stmt*, int, const void*, int,
                         void(*)(void*,void*),void*);
 int sqlite4_bind_value(sqlite4_stmt*, int, const sqlite4_value*);
-int sqlite4_bind_zeroblob(sqlite4_stmt*, int, int n);
 
 /*
 ** CAPIREF: Number Of SQL Parameters
@@ -2709,10 +2700,6 @@ void sqlite4_dynamic(void*,void*);
 ** to by the second parameter and which is N bytes long where N is the
 ** third parameter.
 **
-** ^The sqlite4_result_zeroblob() interfaces set the result of
-** the application-defined function to be a BLOB containing all zero
-** bytes and N bytes in size, where N is the value of the 2nd parameter.
-**
 ** ^The sqlite4_result_double() interface sets the result from
 ** an application-defined function to be a floating point value specified
 ** by its 2nd argument.
@@ -2822,7 +2809,6 @@ void sqlite4_result_text16le(sqlite4_context*, const void*, int,
 void sqlite4_result_text16be(sqlite4_context*, const void*, int,
                              void(*)(void*,void*),void*);
 void sqlite4_result_value(sqlite4_context*, sqlite4_value*);
-void sqlite4_result_zeroblob(sqlite4_context*, int n);
 
 /*
 ** CAPIREF: Define New Collating Sequences

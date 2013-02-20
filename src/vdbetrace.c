@@ -139,8 +139,6 @@ char *sqlite4VdbeExpandSql(
         {
           sqlite4XPrintf(&out, "'%.*q'", pVar->n, pVar->z);
         }
-      }else if( pVar->flags & MEM_Zero ){
-        sqlite4XPrintf(&out, "zeroblob(%d)", pVar->u.nZero);
       }else{
         assert( pVar->flags & MEM_Blob );
         sqlite4StrAccumAppend(&out, "x'", 2);

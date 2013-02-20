@@ -944,28 +944,6 @@ static void hexFunc(
 }
 
 /*
-** The zeroblob(N) function returns a zero-filled blob of size N bytes.
-*/
-static void zeroblobFunc(
-  sqlite4_context *context,
-  int argc,
-  sqlite4_value **argv
-){
-  i64 n;
-  sqlite4 *db = sqlite4_context_db_handle(context);
-  assert( argc==1 );
-  UNUSED_PARAMETER(argc);
-  n = sqlite4_value_int64(argv[0]);
-  testcase( n==db->aLimit[SQLITE4_LIMIT_LENGTH] );
-  testcase( n==db->aLimit[SQLITE4_LIMIT_LENGTH]+1 );
-  if( n>db->aLimit[SQLITE4_LIMIT_LENGTH] ){
-    sqlite4_result_error_toobig(context);
-  }else{
-    sqlite4_result_zeroblob(context, (int)n); /* IMP: R-00293-64994 */
-  }
-}
-
-/*
 ** The replace() function.  Three arguments are all strings: call
 ** them A, B, and C. The result is also a string which is derived
 ** from A by replacing every occurance of B with C.  The match
@@ -1566,7 +1544,6 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
     FUNCTION(changes,            0, 0, 0, changes          ),
     FUNCTION(total_changes,      0, 0, 0, total_changes    ),
     FUNCTION(replace,            3, 0, 0, replaceFunc      ),
-    FUNCTION(zeroblob,           1, 0, 0, zeroblobFunc     ),
   #ifdef SQLITE4_SOUNDEX
     FUNCTION(soundex,            1, 0, 0, soundexFunc      ),
   #endif

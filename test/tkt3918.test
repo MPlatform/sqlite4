@@ -24,8 +24,8 @@ do_test tkt3918.1 {
 do_test tkt3918.2 {
   execsql {
     INSERT INTO t1 VALUES(1, randstr(1000,1000));
-    INSERT INTO t1 VALUES(2, zeroblob(248*1020 + 100));
-    INSERT INTO t1 VALUES(3, zeroblob(2*1020 + 100));
+    INSERT INTO t1 VALUES(2, randomblob(248*1020 + 100));
+    INSERT INTO t1 VALUES(3, randomblob(2*1020 + 100));
   }
 } {}
 

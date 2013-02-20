@@ -118,7 +118,6 @@ int sqlite4VdbeMemMakeWriteable(Mem *pMem){
   int f;
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
   assert( (pMem->flags&MEM_RowSet)==0 );
-  (void)ExpandBlob(pMem);
   f = pMem->flags;
   if( (f&(MEM_Str|MEM_Blob)) && pMem->z!=pMem->zMalloc ){
     if( sqlite4VdbeMemGrow(pMem, pMem->n + 2, 1) ){
@@ -172,7 +171,6 @@ int sqlite4VdbeMemStringify(Mem *pMem, int enc){
   const int nByte = 32;
 
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
-  assert( !(fg&MEM_Zero) );
   assert( !(fg&(MEM_Str|MEM_Blob)) );
   assert( fg&(MEM_Int|MEM_Real) );
   assert( (pMem->flags&MEM_RowSet)==0 );
@@ -459,20 +457,6 @@ void sqlite4VdbeMemSetNull(Mem *pMem){
 }
 
 /*
-** Delete any previous value and set the value to be a BLOB of length
-** n containing all zeros.
-*/
-void sqlite4VdbeMemSetZeroBlob(Mem *pMem, int n){
-  sqlite4VdbeMemRelease(pMem);
-  pMem->flags = MEM_Blob|MEM_Zero;
-  pMem->type = SQLITE4_BLOB;
-  pMem->n = 0;
-  if( n<0 ) n = 0;
-  pMem->u.nZero = n;
-  pMem->enc = SQLITE4_UTF8;
-}
-
-/*
 ** Delete any previous value and set the value stored in *pMem to val,
 ** manifest type INTEGER.
 */
@@ -527,9 +511,6 @@ int sqlite4VdbeMemTooBig(Mem *p){
   assert( p->db!=0 );
   if( p->flags & (MEM_Str|MEM_Blob) ){
     int n = p->n;
-    if( p->flags & MEM_Zero ){
-      n += p->u.nZero;
-    }
     return n>p->db->aLimit[SQLITE4_LIMIT_LENGTH];
   }
   return 0; 
@@ -858,7 +839,6 @@ const void *sqlite4ValueText(sqlite4_value* pVal, u8 enc){
   }
   assert( (MEM_Blob>>3) == MEM_Str );
   pVal->flags |= (pVal->flags & MEM_Blob)>>3;
-  (void)ExpandBlob(pVal);
   if( pVal->flags&MEM_Str ){
     sqlite4VdbeChangeEncoding(pVal, enc & ~SQLITE4_UTF16_ALIGNED);
     if( (enc & SQLITE4_UTF16_ALIGNED)!=0 && 1==(1&SQLITE4_PTR_TO_INT(pVal->z)) ){
@@ -1042,11 +1022,7 @@ void sqlite4ValueFree(sqlite4_value *v){
 int sqlite4ValueBytes(sqlite4_value *pVal, u8 enc){
   Mem *p = (Mem*)pVal;
   if( (p->flags & MEM_Blob)!=0 || sqlite4ValueText(pVal, enc) ){
-    if( p->flags & MEM_Zero ){
-      return p->n + p->u.nZero;
-    }else{
-      return p->n;
-    }
+    return p->n;
   }
   return 0;
 }

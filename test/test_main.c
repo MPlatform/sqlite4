@@ -2538,42 +2538,6 @@ static int test_breakpoint(
 }
 
 /*
-** Usage:   sqlite4_bind_zeroblob  STMT IDX N
-**
-** Test the sqlite4_bind_zeroblob interface.  STMT is a prepared statement.
-** IDX is the index of a wildcard in the prepared statement.  This command
-** binds a N-byte zero-filled BLOB to the wildcard.
-*/
-static int test_bind_zeroblob(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  sqlite4_stmt *pStmt;
-  int idx;
-  int n;
-  int rc;
-
-  if( objc!=4 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "STMT IDX N");
-    return TCL_ERROR;
-  }
-
-  if( getStmtPointer(interp, Tcl_GetString(objv[1]), &pStmt) ) return TCL_ERROR;
-  if( Tcl_GetIntFromObj(interp, objv[2], &idx) ) return TCL_ERROR;
-  if( Tcl_GetIntFromObj(interp, objv[3], &n) ) return TCL_ERROR;
-
-  rc = sqlite4_bind_zeroblob(pStmt, idx, n);
-  if( sqlite4TestErrCode(interp, StmtToDb(pStmt), rc) ) return TCL_ERROR;
-  if( rc!=SQLITE4_OK ){
-    return TCL_ERROR;
-  }
-
-  return TCL_OK;
-}
-
-/*
 ** Usage:   sqlite4_bind_int  STMT N VALUE
 **
 ** Test the sqlite4_bind_int interface.  STMT is a prepared statement.
@@ -4622,7 +4586,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
   } aObjCmd[] = {
      { "sqlite4_connection_pointer",    get_sqlite_pointer, 0 },
      { "sqlite4_bind_int",              test_bind_int,      0 },
-     { "sqlite4_bind_zeroblob",         test_bind_zeroblob, 0 },
      { "sqlite4_bind_int64",            test_bind_int64,    0 },
      { "sqlite4_bind_double",           test_bind_double,   0 },
      { "sqlite4_bind_null",             test_bind_null     ,0 },

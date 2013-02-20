@@ -136,7 +136,6 @@ struct Mem {
   double r;           /* Real value */
   union {
     i64 i;              /* Integer value used when MEM_Int is set in flags */
-    int nZero;          /* Used when bit MEM_Zero is set in flags */
     FuncDef *pDef;      /* Used only when flags==MEM_Agg */
     RowSet *pRowSet;    /* Used only when flags==MEM_RowSet */
     VdbeFrame *pFrame;  /* Used when flags==MEM_Frame */
@@ -187,13 +186,12 @@ struct Mem {
 #define MEM_Static    0x0800   /* Mem.z points to a static string */
 #define MEM_Ephem     0x1000   /* Mem.z points to an ephemeral string */
 #define MEM_Agg       0x2000   /* Mem.z points to an agg function context */
-#define MEM_Zero      0x4000   /* Mem.i contains count of 0s appended to blob */
 
 /*
 ** Clear any existing type flags from a Mem and replace them with f
 */
 #define MemSetTypeFlag(p, f) \
-   ((p)->flags = ((p)->flags&~(MEM_TypeMask|MEM_Zero))|f)
+   ((p)->flags = ((p)->flags&~(MEM_TypeMask))|f)
 
 /*
 ** Return true if a memory cell is not marked as invalid.  This macro
@@ -409,7 +407,6 @@ void sqlite4VdbeMemSetInt64(Mem*, i64);
   void sqlite4VdbeMemSetDouble(Mem*, double);
 #endif
 void sqlite4VdbeMemSetNull(Mem*);
-void sqlite4VdbeMemSetZeroBlob(Mem*,int);
 int sqlite4VdbeMemMakeWriteable(Mem*);
 int sqlite4VdbeMemStringify(Mem*, int);
 i64 sqlite4VdbeIntValue(Mem*);
@@ -457,8 +454,5 @@ int sqlite4VdbeMemTranslate(Mem*, u8);
 #endif
 int sqlite4VdbeMemHandleBom(Mem *pMem);
 
-
-#define sqlite4VdbeMemExpandBlob(x) SQLITE4_OK
-#define ExpandBlob(P) SQLITE4_OK
 
 #endif /* !defined(_VDBEINT_H_) */

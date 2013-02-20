@@ -2218,9 +2218,6 @@ u32 sqlite4VdbeSerialType(Mem *pMem, int file_format){
   }
   assert( pMem->db->mallocFailed || flags&(MEM_Str|MEM_Blob) );
   n = pMem->n;
-  if( flags & MEM_Zero ){
-    n += pMem->u.nZero;
-  }
   assert( n>=0 );
   return ((n*2) + 12 + ((flags&MEM_Str)!=0));
 }
@@ -2334,19 +2331,10 @@ u32 sqlite4VdbeSerialPut(u8 *buf, int nBuf, Mem *pMem, int file_format){
 
   /* String or blob */
   if( serial_type>=12 ){
-    assert( pMem->n + ((pMem->flags & MEM_Zero)?pMem->u.nZero:0)
-             == (int)sqlite4VdbeSerialTypeLen(serial_type) );
+    assert( pMem->n == (int)sqlite4VdbeSerialTypeLen(serial_type) );
     assert( pMem->n<=nBuf );
     len = pMem->n;
     memcpy(buf, pMem->z, len);
-    if( pMem->flags & MEM_Zero ){
-      len += pMem->u.nZero;
-      assert( nBuf>=0 );
-      if( len > (u32)nBuf ){
-        len = (u32)nBuf;
-      }
-      memset(&buf[pMem->n], 0, len-pMem->n);
-    }
     return len;
   }
 
