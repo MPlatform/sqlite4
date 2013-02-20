@@ -2699,6 +2699,12 @@ static void substSelect(
 **        ORDER by clause of the parent must be simple references to 
 **        columns of the sub-query.
 **
+**        Also, each component of the sub-query must return the same number
+**        of result columns. This is actually a requirement for any compound
+**        SELECT statement, but all the code here does is make sure that no
+**        such (illegal) sub-query is flattened. The caller will detect the
+**        syntax error and return a detailed message.
+**
 **  (19)  The subquery does not use LIMIT or the outer query does not
 **        have a WHERE clause.
 **
@@ -2838,6 +2844,7 @@ static int flattenSubquery(
       if( (pSub1->selFlags & (SF_Distinct|SF_Aggregate))!=0
        || (pSub1->pPrior && pSub1->op!=TK_ALL) 
        || pSub1->pSrc->nSrc<1
+       || pSub->pEList->nExpr!=pSub1->pEList->nExpr
       ){
         return 0;
       }
