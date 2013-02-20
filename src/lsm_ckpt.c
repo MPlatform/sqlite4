@@ -46,6 +46,12 @@
 **     3. Log checksum 0.
 **     4. Log checksum 1.
 **
+**     Note that the "log offset" is not the literal byte offset. Instead,
+**     it is the byte offset multiplied by 2, with least significant bit
+**     toggled each time the log pointer value is changed. This is to make
+**     sure that this field changes each time the log pointer is updated,
+**     even if the log file itself is disabled. See lsmTreeMakeOld().
+**
 **     See ckptExportLog() and ckptImportLog().
 **
 **   Append points:
@@ -1123,7 +1129,7 @@ int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite){
           ckptChangeEndianness(aCopy, nCkpt);
           if( ckptChecksumOk(aCopy) ){
             if( piId ) *piId = lsmCheckpointId(aCopy, 0);
-            if( piLog ) *piLog = lsmCheckpointLogOffset(aCopy);
+            if( piLog ) *piLog = (lsmCheckpointLogOffset(aCopy) >> 1);
             if( pnWrite ) *pnWrite = aCopy[CKPT_HDR_NWRITE];
           }
           lsmFree(pDb->pEnv, aCopy);
@@ -1183,9 +1189,8 @@ void lsmCheckpointLogoffset(
   u32 *aCkpt,
   DbLog *pLog
 ){ 
-  u32 iOffMSB = aCkpt[CKPT_HDR_LO_MSW];
-  u32 iOffLSB = aCkpt[CKPT_HDR_LO_LSW];
-  pLog->aRegion[2].iStart = (((i64)iOffMSB) << 32) + ((i64)iOffLSB);
+  pLog->aRegion[2].iStart = (lsmCheckpointLogOffset(aCkpt) >> 1);
+
   pLog->cksum0 = aCkpt[CKPT_HDR_LO_CKSUM1];
   pLog->cksum1 = aCkpt[CKPT_HDR_LO_CKSUM2];
   pLog->iSnapshotId = lsmCheckpointId(aCkpt, 0);

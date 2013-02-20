@@ -1047,8 +1047,19 @@ static int treeInsertLeaf(
 }
 
 void lsmTreeMakeOld(lsm_db *pDb){
+
+  /* A write transaction must be open. Otherwise the code below that
+  ** assumes (pDb->pClient->iLogOff) is current may malfunction. 
+  **
+  ** Update: currently this assert fails due to lsm_flush(), which does
+  ** not set nTransOpen.
+  */
+  assert( /* pDb->nTransOpen>0 && */ pDb->iReader>=0 );
+
   if( pDb->treehdr.iOldShmid==0 ){
-    pDb->treehdr.iOldLog = pDb->treehdr.log.aRegion[2].iEnd;
+    pDb->treehdr.iOldLog = (pDb->treehdr.log.aRegion[2].iEnd << 1);
+    pDb->treehdr.iOldLog |= (~(pDb->pClient->iLogOff) & (i64)0x0001);
+
     pDb->treehdr.oldcksum0 = pDb->treehdr.log.cksum0;
     pDb->treehdr.oldcksum1 = pDb->treehdr.log.cksum1;
     pDb->treehdr.iOldShmid = pDb->treehdr.iNextShmid-1;
