@@ -1083,6 +1083,7 @@ int lsmTreeInit(lsm_db *pDb){
   ShmChunk *pOne;
   int rc = LSM_OK;
 
+  memset(&pDb->treehdr, 0, sizeof(TreeHeader));
   pDb->treehdr.root.iTransId = 1;
   pDb->treehdr.iFirst = 1;
   pDb->treehdr.nChunk = 2;
@@ -2357,7 +2358,7 @@ int lsmTreeLoadHeader(lsm_db *pDb, int *piRead){
 
     lsmShmBarrier(pDb);
   }
-  return LSM_PROTOCOL;
+  return LSM_PROTOCOL_BKPT;
 }
 
 int lsmTreeLoadHeaderOk(lsm_db *pDb, int iRead){

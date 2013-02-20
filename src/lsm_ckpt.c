@@ -883,7 +883,7 @@ int lsmCheckpointLoad(lsm_db *pDb, int *piRead){
 
     lsmShmBarrier(pDb);
   }
-  return LSM_PROTOCOL;
+  return LSM_PROTOCOL_BKPT;
 }
 
 int lsmInfoCompressionId(lsm_db *db, u32 *piCmpId){
@@ -922,7 +922,7 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
   /* Must be holding the WORKER lock to do this. Or DMS2. */
   assert( 
       lsmShmAssertLock(pDb, LSM_LOCK_WORKER, LSM_LOCK_EXCL) 
-   || lsmShmAssertLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_EXCL) 
+   || lsmShmAssertLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_EXCL) 
   );
 
   /* Check that the two snapshots match. If not, repair them. */
@@ -934,7 +934,7 @@ int lsmCheckpointLoadWorker(lsm_db *pDb){
     }else if( ckptChecksumOk(pShm->aSnap2) ){
       memcpy(pShm->aSnap1, pShm->aSnap2, sizeof(u32)*nInt2);
     }else{
-      return LSM_PROTOCOL;
+      return LSM_PROTOCOL_BKPT;
     }
   }
 

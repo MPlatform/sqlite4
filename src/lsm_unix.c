@@ -58,8 +58,6 @@ struct PosixFile {
   void **apShm;                   /* Array of 32K shared memory segments */
 };
 
-static int lsm_ioerr(void){ return LSM_IOERR; }
-
 static char *posixShmFile(PosixFile *p){
   char *zShm;
   int nName = strlen(p->zName);
@@ -73,7 +71,8 @@ static char *posixShmFile(PosixFile *p){
 
 static int lsmPosixOsOpen(
   lsm_env *pEnv,
-  const char *zFile, 
+  const char *zFile,
+  int flags,
   lsm_file **ppFile
 ){
   int rc = LSM_OK;
@@ -83,14 +82,20 @@ static int lsmPosixOsOpen(
   if( p==0 ){
     rc = LSM_NOMEM;
   }else{
+    int bReadonly = (flags & LSM_OPEN_READONLY);
+    int oflags = (bReadonly ? O_RDONLY : (O_RDWR|O_CREAT));
     memset(p, 0, sizeof(PosixFile));
     p->zName = zFile;
     p->pEnv = pEnv;
-    p->fd = open(zFile, O_RDWR|O_CREAT, 0644);
+    p->fd = open(zFile, oflags, 0644);
     if( p->fd<0 ){
       lsm_free(pEnv, p);
       p = 0;
-      rc = lsm_ioerr();
+      if( errno==ENOENT ){
+        rc = lsmErrorBkpt(LSM_IOERR_NOENT);
+      }else{
+        rc = LSM_IOERR_BKPT;
+      }
     }
   }
 
@@ -110,10 +115,10 @@ static int lsmPosixOsWrite(
 
   offset = lseek(p->fd, (off_t)iOff, SEEK_SET);
   if( offset!=iOff ){
-    rc = lsm_ioerr();
+    rc = LSM_IOERR_BKPT;
   }else{
     ssize_t prc = write(p->fd, pData, (size_t)nData);
-    if( prc<0 ) rc = lsm_ioerr();
+    if( prc<0 ) rc = LSM_IOERR_BKPT;
   }
 
   return rc;
@@ -132,7 +137,7 @@ static int lsmPosixOsTruncate(
   if( prc==0 && sStat.st_size>nSize ){
     prc = ftruncate(p->fd, (off_t)nSize);
   }
-  if( prc<0 ) rc = lsm_ioerr();
+  if( prc<0 ) rc = LSM_IOERR_BKPT;
 
   return rc;
 }
@@ -149,11 +154,11 @@ static int lsmPosixOsRead(
 
   offset = lseek(p->fd, (off_t)iOff, SEEK_SET);
   if( offset!=iOff ){
-    rc = lsm_ioerr();
+    rc = LSM_IOERR_BKPT;
   }else{
     ssize_t prc = read(p->fd, pData, (size_t)nData);
     if( prc<0 ){ 
-      rc = lsm_ioerr();
+      rc = LSM_IOERR_BKPT;
     }else if( prc<nData ){
       memset(&((u8 *)pData)[prc], 0, nData - prc);
     }
@@ -174,7 +179,7 @@ static int lsmPosixOsSync(lsm_file *pFile){
     prc = msync(p->pMap, p->nMap, MS_SYNC);
   }
   if( prc==0 ) prc = fdatasync(p->fd);
-  if( prc<0 ) rc = lsm_ioerr();
+  if( prc<0 ) rc = LSM_IOERR_BKPT;
 #else
   (void)pFile;
 #endif
@@ -306,7 +311,7 @@ int lsmPosixOsLock(lsm_file *pFile, int iLock, int eType){
   assert( aType[LSM_LOCK_SHARED]==F_RDLCK );
   assert( aType[LSM_LOCK_EXCL]==F_WRLCK );
   assert( eType>=0 && eType<array_size(aType) );
-  assert( iLock>0 && iLock<=16 );
+  assert( iLock>0 && iLock<=32 );
 
   memset(&lock, 0, sizeof(lock));
   lock.l_whence = SEEK_SET;
@@ -319,8 +324,35 @@ int lsmPosixOsLock(lsm_file *pFile, int iLock, int eType){
     if( e==EACCES || e==EAGAIN ){
       rc = LSM_BUSY;
     }else{
-      rc = LSM_IOERR;
+      rc = LSM_IOERR_BKPT;
     }
+  }
+
+  return rc;
+}
+
+int lsmPosixOsTestLock(lsm_file *pFile, int iLock, int nLock, int eType){
+  int rc = LSM_OK;
+  PosixFile *p = (PosixFile *)pFile;
+  static const short aType[3] = { 0, F_RDLCK, F_WRLCK };
+  struct flock lock;
+
+  assert( eType==LSM_LOCK_SHARED || eType==LSM_LOCK_EXCL );
+  assert( aType[LSM_LOCK_SHARED]==F_RDLCK );
+  assert( aType[LSM_LOCK_EXCL]==F_WRLCK );
+  assert( eType>=0 && eType<array_size(aType) );
+  assert( iLock>0 && iLock<=32 );
+
+  memset(&lock, 0, sizeof(lock));
+  lock.l_whence = SEEK_SET;
+  lock.l_len = nLock;
+  lock.l_type = aType[eType];
+  lock.l_start = (4096-iLock);
+
+  if( fcntl(p->fd, F_GETLK, &lock) ){
+    rc = LSM_IOERR_BKPT;
+  }else if( lock.l_type!=F_UNLCK ){
+    rc = LSM_BUSY;
   }
 
   return rc;
@@ -373,7 +405,7 @@ int lsmPosixOsShmMap(lsm_file *pFile, int iChunk, int sz, void **ppShm){
     p->apShm[iChunk] = mmap(0, LSM_SHM_CHUNK_SIZE, 
         PROT_READ|PROT_WRITE, MAP_SHARED, p->shmfd, iChunk*LSM_SHM_CHUNK_SIZE
     );
-    if( p->apShm[iChunk]==0 ) return LSM_IOERR;
+    if( p->apShm[iChunk]==0 ) return LSM_IOERR_BKPT;
   }
 
   *ppShm = p->apShm[iChunk];
@@ -677,6 +709,7 @@ lsm_env *lsm_default_env(void){
     lsmPosixOsClose,         /* xClose */
     lsmPosixOsUnlink,        /* xUnlink */
     lsmPosixOsLock,          /* xLock */
+    lsmPosixOsTestLock,      /* xTestLock */
     lsmPosixOsShmMap,        /* xShmMap */
     lsmPosixOsShmBarrier,    /* xShmBarrier */
     lsmPosixOsShmUnmap,      /* xShmUnmap */

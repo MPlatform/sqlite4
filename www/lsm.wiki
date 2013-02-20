@@ -2,7 +2,36 @@
 <title>LSM Design Overview</title>
 <nowiki>
 
-<h1>1. Summary </h1>
+
+<div id=start_of_toc></div>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#summary style=text-decoration:none>1. Summary </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#data_structures style=text-decoration:none>2. Data Structures </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#locks style=text-decoration:none>2.1. Locks</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_file style=text-decoration:none>2.2. Database file</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#sorted_runs style=text-decoration:none>2.2.1. Sorted Runs</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#levels style=text-decoration:none>2.2.2. Levels</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#snapshots style=text-decoration:none>2.2.3. Snapshots</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#in-memory_tree style=text-decoration:none>2.3. In-Memory Tree</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#memory_allocation style=text-decoration:none>2.3.1. Memory Allocation</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#header_fields style=text-decoration:none>2.3.2. Header Fields</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#other_shared-memory_fields style=text-decoration:none>2.4. Other Shared-Memory Fields</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#log_file style=text-decoration:none>2.5. Log file</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_recovery_and_shutdown style=text-decoration:none>3. Database Recovery and Shutdown</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#read-write_clients style=text-decoration:none>3.1. Read-write clients</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_operations style=text-decoration:none>4. Database Operations </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#reading style=text-decoration:none>4.1. Reading</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#writing style=text-decoration:none>4.2. Writing</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#flushing_the_in-memory_tree_to_disk style=text-decoration:none>4.2.1. Flushing the in-memory tree to disk</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#shared-memory_management style=text-decoration:none>4.2.2. Shared-memory management</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#log_file_management style=text-decoration:none>4.2.3. Log file management</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#working style=text-decoration:none>4.3. Working</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#free-block_list_management style=text-decoration:none>4.3.1. Free-block list management</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#checkpoint_operations style=text-decoration:none>4.4. Checkpoint Operations</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#scheduling_policies style=text-decoration:none>5. Scheduling Policies</a><br>
+
+<div id=end_of_toc></div>
+
+<h1 id=summary>1. Summary </h1>
 
 The LSM embedded database software stores data in three distinct data
 structures:
@@ -46,15 +75,15 @@ are written into the database file as a new sorted run. To reduce the number
 of sorted runs in the database file, chronologically adjacent sorted runs 
 may be merged together into a single run, either automatically or on demand.
 
-<h1>2. Data Structures </h1>
+<h1 id=data_structures>2. Data Structures </h1>
 
-<h2>Locks</h2>
+<h2 id=locks>2.1. Locks</h2>
 <p>
 Read/write (shared/exclusive) file locks are used to control concurrent 
 access. LSM uses the following file-locks:
 
 <ul>
-  <li> <p>The <b>DMS1</b> and <b>DMS2</b> locking regions. These are used to
+  <li> <p>The <b>DMS1</b>, <b>DMS2</b> locking regions. These are used to
        implement the "dead-man-switch" mechanism copied from SQLite's WAL
        mode for safely connecting to and disconnecting from a database. 
        See "Database Recovery and Shutdown" below.
@@ -92,7 +121,7 @@ equivalent to "holding an exclusive lock on the WRITER locking region".
 Similar interpretations apply to "the WORKER lock" and "the CHECKPOINTER 
 lock".
 
-<h2>Database file</h2>
+<h2 id=database_file>2.2. Database file</h2>
 
 <p>
 This section summarizes the contents of the database file informally. A 
@@ -126,7 +155,7 @@ by its 32-bit page number. This means the maximum database size is roughly
 (pgsz * 2^32) bytes. The first and last pages in each block are 4 bytes
 smaller than the others. This is to make room for a single page-number.
 
-<h3>Sorted Runs</h3>
+<h3 id=sorted_runs>2.2.1. Sorted Runs</h3>
 
 <p>
 A single sorted run is spread across one or more database pages (each page
@@ -168,7 +197,7 @@ arbitrary values.
 
 <p><span style="color:red"> TODO: Embedded pointers.  </span>
 
-<h3>Levels</h3>
+<h3 id=levels>2.2.2. Levels</h3>
 
 <p>
 Each sorted run is assigned to a "level". Normally, a level consists of a
@@ -229,7 +258,7 @@ time for all entries.
 
 
 
-<h3 style="clear:both">Snapshots</h3>
+<h3 id=snapshots>2.2.3. Snapshots</h3>
 
 <p>
 Each meta page may contain a database <b>snapshot</b>. A snapshot contains all 
@@ -254,7 +283,7 @@ sorted runs and free space). Specifically, it contains:
 A more detailed description is available in the header comments in
 source code file <a href="../src/lsm_ckpt.c">lsm_ckpt.c</a>
 
-<h2>In-Memory Tree</h2>
+<h2 id=in-memory_tree>2.3. In-Memory Tree</h2>
 
 <p>
 The in-memory tree is an append-only b-tree of order 4 (each node may have 
@@ -268,7 +297,7 @@ interior nodes that are updated when a leaf node is written that are not
 described here. See header comments in source code file 
 <a href=../src/lsm_tree.c>lsm_tree.c</a> for details.
 
-<h3>Memory Allocation</h3>
+<h3 id=memory_allocation>2.3.1. Memory Allocation</h3>
 
 <p>
 More than one in-memory 
@@ -334,7 +363,7 @@ writer are reverted (perhaps not to their original values, but to values
 that put them at the start of the linked list - before those chunks that
 may still be in use by existing readers).
 
-<h3>Header Fields</h3>
+<h3 id=header_fields>2.3.2. Header Fields</h3>
 <p>
 As well as the in-memory tree data, the following fixed-size fields 
 stored in well-known locations in shared-memory are part of the in-memory
@@ -355,7 +384,7 @@ ever written to by clients holding the WRITER lock.
 </ul>
 
 
-<h2>Other Shared-Memory Fields</h2>
+<h2 id=other_shared-memory_fields>2.4. Other Shared-Memory Fields</h2>
 
 <ul>
   <li> Snapshot 1.
@@ -365,15 +394,17 @@ ever written to by clients holding the WRITER lock.
   <li> READER lock values.
 </ul>
 
-<h2>Log file</h2>
+<h2 id=log_file>2.5. Log file</h2>
 
 <a href=../src/lsm_log.c>lsm_log.c</a>.
 
-<h1>3. Database Recovery and Shutdown</h1>
+<h1 id=database_recovery_and_shutdown>3. Database Recovery and Shutdown</h1>
+
+<h2 id=read-write_clients>3.1. Read-write clients</h2>
 
 <p>
 Exclusive locks on locking region DMS1 are used to serialize all connect and
-disconnect operations. 
+disconnect operations performed by read-write clients. 
 
 <p>When an LSM database connection is opened (i.e. lsm_open() is called):
 
@@ -419,9 +450,17 @@ successful lsm_open()):
   unlock(DMS1)
 </pre>
 
-<h1>4. Database Operations </h1>
+<h2 id=read-only_clients>3.1. Read-only clients</h2>
 
-<h2>Reading</h2>
+<p>It is assumed that read-only clients may take SHARED locks only. And
+that a read-only client may not run database recovery when a db is opened 
+in multi-process mode.
+
+<p>
+
+<h1 id=database_operations>4. Database Operations </h1>
+
+<h2 id=reading>4.1. Reading</h2>
 
 <p>
 Opening a read transaction:
@@ -516,7 +555,7 @@ lock is held.
 To close a read transaction all that is required is to drop the SHARED lock
 held on the READER slot. 
 
-<h2>Writing</h2>
+<h2 id=writing>4.2. Writing</h2>
 
 <p>
 To open a write transaction:
@@ -564,7 +603,7 @@ case it performs the following:
   <li> Clear the writer flag.
 </ol>
 
-<h3>Flushing the in-memory tree to disk</h3>
+<h3 id=flushing_the_in-memory_tree_to_disk>4.2.1. Flushing the in-memory tree to disk</h3>
 
 <p>
 For the purposes of writing, the database file and the in-memory tree are
@@ -586,7 +625,7 @@ tree, and processes holding the WORKER lock write to the database file.
        shared-memory.
 </ol>
 
-<h3>Shared-memory management</h3>
+<h3 id=shared-memory_management>4.2.2. Shared-memory management</h3>
 
 <p>
 A writer client may have to allocate new shared-memory chunks. This can be
@@ -605,7 +644,7 @@ be reused, the writer must check that:
        does in WAL mode.
 </ul>
 
-<h3>Log file management</h3>
+<h3 id=log_file_management>4.2.3. Log file management</h3>
 
 <p>
 A writer client also writes to the log file. All information required to write
@@ -625,7 +664,7 @@ header. Their exists a shared-memory variable indicating which of the two
 meta-pages contain this snapshot, but the writer process still has to read the
 snapshot data and verify its checksum from disk.
 
-<h2>Working</h2>
+<h2 id=working>4.3. Working</h2>
 
 <p>
 Working is similar to writing. The difference is that a "writer" modifies
@@ -649,7 +688,7 @@ the in-memory tree. A "worker" modifies the contents of the database file.
   <li> <p>Release the WORKER lock.
 </ol>
 
-<h3>Free-block list management</h3>
+<h3 id=free-block_list_management>4.3.1. Free-block list management</h3>
 
 <p>
 Worker clients occasionally need to allocate new database blocks or move
@@ -679,7 +718,7 @@ There are two conditions for reusing a free-block:
 
 
 
-<h2>Checkpoint Operations</h2>
+<h2 id=checkpoint_operations>4.4. Checkpoint Operations</h2>
 
 <ol>
   <li> Take CHECKPOINTER lock.
@@ -705,7 +744,7 @@ There are two conditions for reusing a free-block:
   <li> Drop the CHECKPOINTER lock.
 </ol>
 
-<h1>5. Scheduling Policies</h1>
+<h1 id=scheduling_policies>5. Scheduling Policies</h1>
 
 <p>
 When a client writes to a database, the in-memory tree and log file are
@@ -748,6 +787,8 @@ database snapshots from growing overly large.
 </ul>
 
 <p><b> Auto work </b>
+
+
 
 
 

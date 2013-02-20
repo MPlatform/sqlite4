@@ -39,9 +39,10 @@ static void assert_db_state(lsm_db *pDb){
   ** handle must be holding a pointer to a client snapshot. And the reverse 
   ** - if there are no open cursors and no write transactions then there must 
   ** not be a client snapshot.  */
-  assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->iReader>=0) );
+  
+  assert( (pDb->pCsr!=0||pDb->nTransOpen>0)==(pDb->iReader>=0||pDb->bRoTrans) );
 
-  assert( pDb->iReader<0 || pDb->pClient!=0 );
+  assert( (pDb->iReader<0 && pDb->bRoTrans==0) || pDb->pClient!=0 );
 
   assert( pDb->nTransOpen>=0 );
 }
@@ -93,6 +94,7 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
   pDb->bUseLog = LSM_DFLT_USE_LOG;
   pDb->iReader = -1;
+  pDb->iRwclient = -1;
   pDb->bMultiProc = LSM_DFLT_MULTIPLE_PROCESSES;
   pDb->bMmap = LSM_DFLT_MMAP;
   pDb->xLog = xLog;
@@ -162,22 +164,28 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     rc = getFullpathname(pDb->pEnv, zFilename, &zFull);
     assert( rc==LSM_OK || zFull==0 );
 
-    /* Connect to the database */
+    /* Connect to the database. */
     if( rc==LSM_OK ){
       rc = lsmDbDatabaseConnect(pDb, zFull);
     }
 
-    /* Configure the file-system connection with the page-size and block-size
-    ** of this database. Even if the database file is zero bytes in size
-    ** on disk, these values have been set in shared-memory by now, and so are
-    ** guaranteed not to change during the lifetime of this connection.  */
-    if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb, 0)) ){
-      lsmFsSetPageSize(pDb->pFS, lsmCheckpointPgsz(pDb->aSnapshot));
-      lsmFsSetBlockSize(pDb->pFS, lsmCheckpointBlksz(pDb->aSnapshot));
+    if( pDb->bReadonly==0 ){
+      /* Configure the file-system connection with the page-size and block-size
+      ** of this database. Even if the database file is zero bytes in size
+      ** on disk, these values have been set in shared-memory by now, and so 
+      ** are guaranteed not to change during the lifetime of this connection.  
+      */
+      if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb, 0)) ){
+        lsmFsSetPageSize(pDb->pFS, lsmCheckpointPgsz(pDb->aSnapshot));
+        lsmFsSetBlockSize(pDb->pFS, lsmCheckpointBlksz(pDb->aSnapshot));
+      }
     }
 
     lsmFree(pDb->pEnv, zFull);
   }
+
+  assert( pDb->bReadonly==0 || pDb->bReadonly==1 );
+  assert( rc!=LSM_OK || (pDb->pShmhdr==0)==(pDb->bReadonly==1) );
 
   return rc;
 }
@@ -192,9 +200,11 @@ int lsm_close(lsm_db *pDb){
     }else{
       lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
       pDb->pClient = 0;
+
       lsmDbDatabaseRelease(pDb);
       lsmLogClose(pDb);
       lsmFsClose(pDb->pFS);
+      assert( pDb->mLock==0 );
       
       /* Invoke any destructors registered for the compression or 
       ** compression factory callbacks.  */
@@ -340,6 +350,16 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
       }else{
         pDb->bMultiProc = *piVal = (*piVal!=0);
       }
+      break;
+    }
+
+    case LSM_CONFIG_READONLY: {
+      int *piVal = va_arg(ap, int *);
+      /* If lsm_open() has been called, this is a read-only parameter. */
+      if( pDb->pDatabase==0 && *piVal>=0 ){
+        pDb->bReadonly = *piVal = (*piVal!=0);
+      }
+      *piVal = pDb->bReadonly;
       break;
     }
 
@@ -719,7 +739,13 @@ int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
 
   /* Open a read transaction if one is not already open. */
   assert_db_state(pDb);
-  rc = lsmBeginReadTrans(pDb);
+
+  if( pDb->pShmhdr==0 ){
+    assert( pDb->bReadonly );
+    rc = lsmBeginRoTrans(pDb);
+  }else{
+    rc = lsmBeginReadTrans(pDb);
+  }
 
   /* Allocate the multi-cursor. */
   if( rc==LSM_OK ) rc = lsmMCursorNew(pDb, &pCsr);
@@ -822,13 +848,13 @@ void lsmLogMessage(lsm_db *pDb, int rc, const char *zFormat, ...){
 }
 
 int lsm_begin(lsm_db *pDb, int iLevel){
-  int rc = LSM_OK;
+  int rc;
 
   assert_db_state( pDb );
+  rc = (pDb->bReadonly ? LSM_READONLY : LSM_OK);
 
   /* A value less than zero means open one more transaction. */
   if( iLevel<0 ) iLevel = pDb->nTransOpen + 1;
-
   if( iLevel>pDb->nTransOpen ){
     int i;
 

@@ -156,6 +156,7 @@ static int testEnvFullpath(
 static int testEnvOpen(
   lsm_env *pEnv,                  /* Environment for current LsmDb */
   const char *zFile,              /* Name of file to open */
+  int flags,
   lsm_file **ppFile               /* OUT: New file handle object */
 ){
   lsm_env *pRealEnv = tdb_lsm_env();
@@ -169,7 +170,7 @@ static int testEnvOpen(
   pRet->pDb = pDb;
   pRet->bLog = (nFile > 4 && 0==memcmp("-log", &zFile[nFile-4], 4));
 
-  rc = pRealEnv->xOpen(pRealEnv, zFile, &pRet->pReal);
+  rc = pRealEnv->xOpen(pRealEnv, zFile, flags, &pRet->pReal);
   if( rc!=LSM_OK ){
     testFree(pRet);
     pRet = 0;
@@ -348,6 +349,16 @@ static int testEnvLock(lsm_file *pFile, int iLock, int eType){
   return pRealEnv->xLock(p->pReal, iLock, eType);
 }
 
+static int testEnvTestLock(lsm_file *pFile, int iLock, int nLock, int eType){
+  LsmFile *p = (LsmFile *)pFile;
+  lsm_env *pRealEnv = tdb_lsm_env();
+
+  if( iLock==2 && eType==LSM_LOCK_EXCL && p->pDb->bNoRecovery ){
+    return LSM_BUSY;
+  }
+  return pRealEnv->xTestLock(p->pReal, iLock, nLock, eType);
+}
+
 static int testEnvShmMap(lsm_file *pFile, int iRegion, int sz, void **pp){
   LsmFile *p = (LsmFile *)pFile;
   lsm_env *pRealEnv = tdb_lsm_env();
@@ -380,7 +391,7 @@ static void doSystemCrash(LsmDb *pDb){
     lsm_file *pFile = 0;
     int i;
 
-    pEnv->xOpen(pEnv, zFile, &pFile);
+    pEnv->xOpen(pEnv, zFile, 0, &pFile);
     for(i=0; i<pDb->aFile[iFile].nSector; i++){
       u8 *aOld = pDb->aFile[iFile].aSector[i].aOld;
       if( aOld ){
@@ -938,6 +949,7 @@ static int testLsmOpen(
   pDb->env.xClose = testEnvClose;
   pDb->env.xUnlink = testEnvUnlink;
   pDb->env.xLock = testEnvLock;
+  pDb->env.xTestLock = testEnvTestLock;
   pDb->env.xShmBarrier = testEnvShmBarrier;
   pDb->env.xShmMap = testEnvShmMap;
   pDb->env.xShmUnmap = testEnvShmUnmap;

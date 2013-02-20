@@ -114,10 +114,11 @@ int lsmErrorBkpt(int);
 # define lsmErrorBkpt(x) (x)
 #endif
 
-#define LSM_IOERR_BKPT   lsmErrorBkpt(LSM_IOERR)
-#define LSM_NOMEM_BKPT   lsmErrorBkpt(LSM_NOMEM)
-#define LSM_CORRUPT_BKPT lsmErrorBkpt(LSM_CORRUPT)
-#define LSM_MISUSE_BKPT  lsmErrorBkpt(LSM_MISUSE)
+#define LSM_PROTOCOL_BKPT lsmErrorBkpt(LSM_PROTOCOL)
+#define LSM_IOERR_BKPT    lsmErrorBkpt(LSM_IOERR)
+#define LSM_NOMEM_BKPT    lsmErrorBkpt(LSM_NOMEM)
+#define LSM_CORRUPT_BKPT  lsmErrorBkpt(LSM_CORRUPT)
+#define LSM_MISUSE_BKPT   lsmErrorBkpt(LSM_MISUSE)
 
 #define unused_parameter(x) (void)(x)
 #define array_size(x) (sizeof(x)/sizeof(x[0]))
@@ -132,13 +133,20 @@ int lsmErrorBkpt(int);
 /* The number of available read locks. */
 #define LSM_LOCK_NREADER   6
 
-/* Lock definitions */
-#define LSM_LOCK_DMS1         1
-#define LSM_LOCK_DMS2         2
-#define LSM_LOCK_WRITER       3
-#define LSM_LOCK_WORKER       4
-#define LSM_LOCK_CHECKPOINTER 5
-#define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
+/* The number of available read-write client locks. */
+#define LSM_LOCK_NRWCLIENT   16
+
+/* Lock definitions. 
+*/
+#define LSM_LOCK_DMS1         1   /* Serialize connect/disconnect ops */
+#define LSM_LOCK_DMS2         2   /* Read-write connections */
+#define LSM_LOCK_DMS3         3   /* Read-only connections */
+#define LSM_LOCK_WRITER       4
+#define LSM_LOCK_WORKER       5
+#define LSM_LOCK_CHECKPOINTER 6
+#define LSM_LOCK_ROTRANS      7
+#define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_ROTRANS + 1)
+#define LSM_LOCK_RWCLIENT(i)  ((i) + LSM_LOCK_READER(LSM_LOCK_NREADER))
 
 /*
 ** Hard limit on the number of free-list entries that may be stored in 
@@ -284,14 +292,14 @@ struct TreeHeader {
 ** mLock:
 **   A bitmask representing the locks currently held by the connection.
 **   An LSM database supports N distinct locks, where N is some number less
-**   than or equal to 16. Locks are numbered starting from 1 (see the 
+**   than or equal to 32. Locks are numbered starting from 1 (see the 
 **   definitions for LSM_LOCK_WRITER and co.).
 **
-**   The least significant 16-bits in mLock represent EXCLUSIVE locks. The
+**   The least significant 32-bits in mLock represent EXCLUSIVE locks. The
 **   most significant are SHARED locks. So, if a connection holds a SHARED
 **   lock on lock region iLock, then the following is true:
 **
-**       (mLock & ((iLock+16-1) << 1))
+**       (mLock & ((iLock+32-1) << 1))
 **
 **   Or for an EXCLUSIVE lock:
 **
@@ -315,6 +323,7 @@ struct lsm_db {
   int bMmap;                      /* Configured by LSM_CONFIG_MMAP */
   i64 nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
+  int bReadonly;                  /* Configured by LSM_CONFIG_READONLY */
   lsm_compress compress;          /* Compression callbacks */
   lsm_compress_factory factory;   /* Compression callback factory */
 
@@ -322,9 +331,12 @@ struct lsm_db {
   FileSystem *pFS;                /* On-disk portion of database */
   Database *pDatabase;            /* Database shared data */
 
+  int iRwclient;                  /* Read-write client lock held (-1 == none) */
+
   /* Client transaction context */
   Snapshot *pClient;              /* Client snapshot */
   int iReader;                    /* Read lock held (-1 == unlocked) */
+  int bRoTrans;                   /* True if a read-only db trans is open */
   MultiCursor *pCsr;              /* List of all open cursors */
   LogWriter *pLogWriter;          /* Context for writing to the log file */
   int nTransOpen;                 /* Number of opened write transactions */
@@ -349,7 +361,7 @@ struct lsm_db {
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
 
-  u32 mLock;                      /* Mask of current locks. See lsmShmLock(). */
+  u64 mLock;                      /* Mask of current locks. See lsmShmLock(). */
   lsm_db *pNext;                  /* Next connection to same database */
 
   int nShm;                       /* Size of apShm[] array */
@@ -649,7 +661,9 @@ int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 /**************************************************************************
 ** Start of functions from "lsm_file.c".
 */
-int lsmFsOpen(lsm_db *, const char *);
+int lsmFsOpen(lsm_db *, const char *, int);
+int lsmFsOpenLog(lsm_db *, int *);
+void lsmFsCloseLog(lsm_db *);
 void lsmFsClose(FileSystem *);
 
 int lsmFsConfigure(lsm_db *db);
@@ -723,9 +737,10 @@ int lsmInfoArrayStructure(lsm_db *pDb, int bBlock, Pgno iFirst, char **pzOut);
 int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmConfigMmap(lsm_db *pDb, int *piParam);
 
-int lsmEnvOpen(lsm_env *, const char *, lsm_file **);
+int lsmEnvOpen(lsm_env *, const char *, int, lsm_file **);
 int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile);
 int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock);
+int lsmEnvTestLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int nLock, int);
 
 int lsmEnvShmMap(lsm_env *, lsm_file *, int, int, void **); 
 void lsmEnvShmBarrier(lsm_env *);
@@ -836,6 +851,8 @@ int lsmBeginReadTrans(lsm_db *);
 int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
 
+int lsmDetectRoTrans(lsm_db *db, int *);
+
 int lsmBeginWork(lsm_db *);
 void lsmFinishWork(lsm_db *, int, int *);
 
@@ -882,6 +899,7 @@ void lsmFreeSnapshot(lsm_env *, Snapshot *);
 
 int lsmShmCacheChunks(lsm_db *db, int nChunk);
 int lsmShmLock(lsm_db *db, int iLock, int eOp, int bBlock);
+int lsmShmTestLock(lsm_db *db, int iLock, int nLock, int eOp);
 void lsmShmBarrier(lsm_db *db);
 
 #ifdef LSM_DEBUG
@@ -891,7 +909,6 @@ void lsmShmHasLock(lsm_db *db, int iLock, int eOp);
 #endif
 
 int lsmReadlock(lsm_db *, i64 iLsm, u32 iShmMin, u32 iShmMax);
-int lsmReleaseReadlock(lsm_db *);
 
 int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);
 int lsmTreeInUse(lsm_db *db, u32 iLsmId, int *pbInUse);

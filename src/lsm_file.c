@@ -303,8 +303,8 @@ static int IOERR_WRAPPER(int rc){
 **     lsmEnvUnlink()
 **     lsmEnvRemap()
 */
-int lsmEnvOpen(lsm_env *pEnv, const char *zFile, lsm_file **ppNew){
-  return pEnv->xOpen(pEnv, zFile, ppNew);
+int lsmEnvOpen(lsm_env *pEnv, const char *zFile, int flags, lsm_file **ppNew){
+  return pEnv->xOpen(pEnv, zFile, flags, ppNew);
 }
 static int lsmEnvRead(
   lsm_env *pEnv, 
@@ -352,6 +352,16 @@ static int lsmEnvRemap(
 int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock){
   if( pFile==0 ) return LSM_OK;
   return pEnv->xLock(pFile, iLock, eLock);
+}
+
+int lsmEnvTestLock(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  int iLock, 
+  int nLock, 
+  int eLock
+){
+  return pEnv->xTestLock(pFile, iLock, nLock, eLock);
 }
 
 int lsmEnvShmMap(
@@ -418,7 +428,7 @@ int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
 }
 
 /*
-** Truncate the log file to nByte bytes in size.
+** Truncate the db file to nByte bytes in size.
 */
 int lsmFsTruncateDb(FileSystem *pFS, i64 nByte){
   if( pFS->fdDb==0 ) return LSM_OK;
@@ -459,12 +469,16 @@ static int fsHashKey(int nHash, int iPg){
 */
 static lsm_file *fsOpenFile(
   FileSystem *pFS,                /* File system object */
+  int bReadonly,                  /* True to open this file read-only */
   int bLog,                       /* True for log, false for db */
   int *pRc                        /* IN/OUT: Error code */
 ){
   lsm_file *pFile = 0;
   if( *pRc==LSM_OK ){
-    *pRc = lsmEnvOpen(pFS->pEnv, (bLog ? pFS->zLog : pFS->zDb), &pFile);
+    int flags = (bReadonly ? LSM_OPEN_READONLY : 0);
+    const char *zPath = (bLog ? pFS->zLog : pFS->zDb);
+
+    *pRc = lsmEnvOpen(pFS->pEnv, zPath, flags, &pFile);
   }
   return pFile;
 }
@@ -480,17 +494,47 @@ static lsm_file *fsOpenFile(
 **     lsmFsSyncLog
 **     lsmFsReadLog
 */
-int lsmFsOpenLog(FileSystem *pFS){
+int lsmFsOpenLog(lsm_db *db, int *pbOpen){
   int rc = LSM_OK;
-  if( 0==pFS->fdLog ){ pFS->fdLog = fsOpenFile(pFS, 1, &rc); }
+  FileSystem *pFS = db->pFS;
+
+  if( 0==pFS->fdLog ){ 
+    pFS->fdLog = fsOpenFile(pFS, db->bReadonly, 1, &rc); 
+
+    if( rc==LSM_IOERR_NOENT && db->bReadonly ){
+      rc = LSM_OK;
+    }
+  }
+
+  if( pbOpen ) *pbOpen = (pFS->fdLog!=0);
   return rc;
+}
+
+void lsmFsCloseLog(lsm_db *db){
+  FileSystem *pFS = db->pFS;
+  if( pFS->fdLog ){
+    lsmEnvClose(pFS->pEnv, pFS->fdLog);
+    pFS->fdLog = 0;
+  }
 }
 
 /*
 ** Open a connection to a database stored within the file-system (the
 ** "system of files").
+**
+** If parameter bReadonly is true, then open a read-only file-descriptor
+** on the database file. It is possible that bReadonly will be false even
+** if the user requested that pDb be opened read-only. This is because the
+** file-descriptor may later on be recycled by a read-write connection.
+** If the db file can be opened for read-write access, it always is. Parameter
+** bReadonly is only ever true if it has already been determined that the
+** db can only be opened for read-only access.
 */
-int lsmFsOpen(lsm_db *pDb, const char *zDb){
+int lsmFsOpen(
+  lsm_db *pDb,                    /* Database connection to open fd for */
+  const char *zDb,                /* Full path to database file */
+  int bReadonly                   /* True to open db file read-only */
+){
   FileSystem *pFS;
   int rc = LSM_OK;
   int nDb = strlen(zDb);
@@ -531,7 +575,7 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     }else{
       pFS->pLsmFile = lsmMallocZeroRc(pDb->pEnv, sizeof(LsmFile), &rc);
       if( rc==LSM_OK ){
-        pFS->fdDb = fsOpenFile(pFS, 0, &rc);
+        pFS->fdDb = fsOpenFile(pFS, bReadonly, 0, &rc);
       }
     }
 

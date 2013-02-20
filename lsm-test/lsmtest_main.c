@@ -1333,7 +1333,7 @@ static int do_replay(int nArg, char **azArg){
   }
   zDb = azArg[1];
   pEnv = tdb_lsm_env();
-  rc = pEnv->xOpen(pEnv, zDb, &pOut);
+  rc = pEnv->xOpen(pEnv, zDb, 0, &pOut);
   if( rc!=LSM_OK ) return rc;
 
   while( feof(pInput)==0 ){
