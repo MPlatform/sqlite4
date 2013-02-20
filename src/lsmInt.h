@@ -136,7 +136,8 @@ int lsmErrorBkpt(int);
 /* The number of available read-write client locks. */
 #define LSM_LOCK_NRWCLIENT   16
 
-/* Lock definitions. */
+/* Lock definitions. 
+*/
 #define LSM_LOCK_DMS1         1   /* Serialize connect/disconnect ops */
 #define LSM_LOCK_DMS2         2   /* Read-write connections */
 #define LSM_LOCK_DMS3         3   /* Read-only connections */

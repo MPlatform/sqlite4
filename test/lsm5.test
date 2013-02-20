@@ -14,16 +14,9 @@
 
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
+source $testdir/lsm_common.tcl
 set testprefix lsm5
 db close
-
-proc db_fetch {db key} {
-  db csr_open csr
-  csr seek $key eq
-  set ret [csr value]
-  csr close
-  set ret
-}
 
 # Create a new database with file name $file.
 #
