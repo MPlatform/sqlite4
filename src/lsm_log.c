@@ -304,8 +304,14 @@ static i64 lastByteOnSector(LogWriter *pLog, i64 iOff){
 ** into the db header.
 */
 static int logReclaimSpace(lsm_db *pDb){
-  int rc = LSM_OK;
+  int rc;
   int iMeta;
+  int bRotrans;                   /* True if there exists some ro-trans */
+
+  /* Test if there exists some other connection with a read-only transaction
+  ** open. If there does, then log file space may not be reclaimed.  */
+  rc = lsmDetectRoTrans(pDb, &bRotrans);
+  if( rc!=LSM_OK || bRotrans ) return rc;
 
   iMeta = (int)pDb->pShmhdr->iMetaPage;
   if( iMeta==1 || iMeta==2 ){
@@ -1058,7 +1064,7 @@ int lsmLogRecover(lsm_db *pDb){
                 }else{
                   assert( pLog->aRegion[0].iStart==0 );
                   pLog->aRegion[0].iStart = pLog->aRegion[2].iStart;
-                  pLog->aRegion[0].iEnd = reader.iOff - reader.buf.n+reader.iBuf;
+                  pLog->aRegion[0].iEnd = reader.iOff-reader.buf.n+reader.iBuf;
                 }
                 pLog->aRegion[2].iStart = iOff;
               }else{

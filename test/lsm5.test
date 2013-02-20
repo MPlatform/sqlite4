@@ -29,7 +29,7 @@ proc db_fetch {db key} {
 #
 proc create_abc_db {file} {
   forcedelete $file
-  lsm_open db $file
+  lsm_open db $file {block_size 256}
   db write a alpha
   db write b bravo
   db write c charlie
@@ -193,10 +193,20 @@ do_test 4.2 {
 } {alpha bravo charlie}
 
 do_test 4.3 { 
-  lsm_open db_rw test.db
+  lsm_open db_rw test.db {block_size 64}
+  db_rw write b BRAVO
   db_rw close
   list [file size test.db] [file size test.db-log]
-} {0 56}
+} {65536 74}
+
+do_test 4.4 {
+  list [db_fetch db a] [db_fetch db b] [db_fetch db c]
+} {alpha bravo charlie}
+
+do_test 4.5 {
+  T close
+  list [db_fetch db a] [db_fetch db b] [db_fetch db c]
+} {alpha BRAVO charlie}
 
 finish_test
 

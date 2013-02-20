@@ -1083,6 +1083,7 @@ int lsmTreeInit(lsm_db *pDb){
   ShmChunk *pOne;
   int rc = LSM_OK;
 
+  memset(&pDb->treehdr, 0, sizeof(TreeHeader));
   pDb->treehdr.root.iTransId = 1;
   pDb->treehdr.iFirst = 1;
   pDb->treehdr.nChunk = 2;

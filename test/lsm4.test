@@ -118,5 +118,15 @@ do_test 2.7 {
   list [db_fetch db 3] [db_fetch db 4]
 } {three four}
 
+#-------------------------------------------------------------------------
+#
+catch {db close}
+forcedelete test.db
+
+do_test 3.1 {
+  lsm_open db test.db
+  db_fetch db abc
+} {}
+
 finish_test
 

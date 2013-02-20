@@ -288,14 +288,25 @@ static void doDbDisconnect(lsm_db *pDb){
 
         /* Write a checkpoint to disk. */
         if( rc==LSM_OK ){
-          rc = lsmCheckpointWrite(pDb, (bReadonly==0), 1, 0);
+          rc = lsmCheckpointWrite(pDb, (bReadonly==0), 0);
         }
 
         /* If the checkpoint was written successfully, delete the log file
         ** and, if possible, truncate the database file.  */
         if( rc==LSM_OK ){
+          int bRotrans = 0;
           Database *p = pDb->pDatabase;
-          if( bReadonly==0 ){
+
+          /* The log file may only be deleted if there are no clients 
+          ** read-only clients running rotrans transactions.  */
+          rc = lsmDetectRoTrans(pDb, &bRotrans);
+          if( rc==LSM_OK && bRotrans==0 ){
+            lsmFsCloseAndDeleteLog(pDb->pFS);
+          }
+
+          /* The database may only be truncated if there exist no read-only
+          ** clients - either connected or running rotrans transactions. */
+          if( bReadonly==0 && bRotrans==0 ){
             dbTruncateFile(pDb);
             if( p->pFile && p->bMultiProc ){
               lsmEnvShmUnmap(pDb->pEnv, p->pFile, 1);
@@ -794,8 +805,23 @@ int lsmBlockAllocate(lsm_db *pDb, int iBefore, int *piBlk){
   }
 #endif
 
-  /* Query the free block list for a suitable block */
-  if( rc==LSM_OK ) rc = findFreeblock(pDb, iInUse, (iBefore>0), &iRet);
+
+  /* Unless there exists a read-only transaction (which prevents us from
+  ** recycling any blocks regardless, query the free block list for a 
+  ** suitable block to reuse. 
+  **
+  ** It might seem more natural to check for a read-only transaction at
+  ** the start of this function. However, it is better do wait until after
+  ** the call to lsmCheckpointSynced() to do so.
+  */
+  if( rc==LSM_OK ){
+    int bRotrans;
+    rc = lsmDetectRoTrans(pDb, &bRotrans);
+
+    if( rc==LSM_OK && bRotrans==0 ){
+      rc = findFreeblock(pDb, iInUse, (iBefore>0), &iRet);
+    }
+  }
 
   if( iBefore>0 && (iRet<=0 || iRet>=iBefore) ){
     iRet = 0;
@@ -874,7 +900,7 @@ int lsmBlockRefree(lsm_db *pDb, int iBlk){
 ** not be held that long (in case it is required by a client flushing an
 ** in-memory tree to disk).
 */
-int lsmCheckpointWrite(lsm_db *pDb, int bTruncate, int bDellog, u32 *pnWrite){
+int lsmCheckpointWrite(lsm_db *pDb, int bTruncate, u32 *pnWrite){
   int rc;                         /* Return Code */
   u32 nWrite = 0;
 
@@ -932,9 +958,6 @@ int lsmCheckpointWrite(lsm_db *pDb, int bTruncate, int bDellog, u32 *pnWrite){
 
     if( rc==LSM_OK && bTruncate ){
       rc = lsmFsTruncateDb(pDb->pFS, (i64)nBlock*lsmFsBlockSize(pDb->pFS));
-    }
-    if( rc==LSM_OK && bDellog ){
-      lsmFsCloseAndDeleteLog(pDb->pFS);
     }
   }
 
@@ -1194,6 +1217,34 @@ if( rc==LSM_OK && pDb->pClient ){
 }
 
 /*
+** This function is used by a read-write connection to determine if there
+** are currently one or more read-only transactions open on the database
+** (in this context a read-only transaction is one opened by a read-only
+** connection on a non-live database).
+**
+** If no error occurs, LSM_OK is returned and *pbExists is set to true if
+** some other connection has a read-only transaction open, or false 
+** otherwise. If an error occurs an LSM error code is returned and the final
+** value of *pbExist is undefined.
+*/
+int lsmDetectRoTrans(lsm_db *db, int *pbExist){
+  int rc;
+
+  /* Only a read-write connection may use this function. */
+  assert( db->bReadonly==0 );
+
+  rc = lsmShmTestLock(db, LSM_LOCK_ROTRANS, 1, LSM_LOCK_EXCL);
+  if( rc==LSM_BUSY ){
+    *pbExist = 1;
+    rc = LSM_OK;
+  }else{
+    *pbExist = 0;
+  }
+
+  return rc;
+}
+
+/*
 ** db is a read-only database handle in the disconnected state. This function
 ** attempts to open a read-transaction on the database. This may involve
 ** connecting to the database system (opening shared memory etc.).
@@ -1214,8 +1265,11 @@ int lsmBeginRoTrans(lsm_db *db){
         db, LSM_LOCK_RWCLIENT(0), LSM_LOCK_NREADER, LSM_LOCK_SHARED
     );
     if( rc==LSM_OK ){
-      /* System is not live */
-      rc = lsmShmLock(db, LSM_LOCK_CHECKPOINTER, LSM_LOCK_SHARED, 0);
+      /* System is not live. Take a SHARED lock on the ROTRANS byte and
+      ** release DMS1. Locking ROTRANS tells all read-write clients that they
+      ** may not recycle any disk space from within the database or log files,
+      ** as a read-only client may be using it.  */
+      rc = lsmShmLock(db, LSM_LOCK_ROTRANS, LSM_LOCK_SHARED, 0);
       lsmShmLock(db, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
 
       if( rc==LSM_OK ){
@@ -1272,7 +1326,7 @@ void lsmFinishReadTrans(lsm_db *pDb){
     pDb->nShm = 0;
     pDb->pShmhdr = 0;
 
-    lsmShmLock(pDb, LSM_LOCK_CHECKPOINTER, LSM_LOCK_UNLOCK, 0);
+    lsmShmLock(pDb, LSM_LOCK_ROTRANS, LSM_LOCK_UNLOCK, 0);
   }
   dbReleaseReadlock(pDb);
 }
@@ -1887,7 +1941,7 @@ int lsm_checkpoint(lsm_db *pDb, int *pnKB){
 
   /* Attempt the checkpoint. If successful, nWrite is set to the number of
   ** pages written between this and the previous checkpoint.  */
-  rc = lsmCheckpointWrite(pDb, 0, 0, &nWrite);
+  rc = lsmCheckpointWrite(pDb, 0, &nWrite);
 
   /* If required, calculate the output variable (KB of data checkpointed). 
   ** Set it to zero if an error occured.  */
