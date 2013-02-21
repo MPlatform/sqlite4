@@ -3,31 +3,33 @@
 <nowiki>
 
 
+
+
 <div id=start_of_toc></div>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#summary style=text-decoration:none>1. Summary </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#data_structures style=text-decoration:none>2. Data Structures </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#locks style=text-decoration:none>2.1. Locks</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_file style=text-decoration:none>2.2. Database file</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#sorted_runs style=text-decoration:none>2.2.1. Sorted Runs</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#levels style=text-decoration:none>2.2.2. Levels</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#snapshots style=text-decoration:none>2.2.3. Snapshots</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#in-memory_tree style=text-decoration:none>2.3. In-Memory Tree</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#memory_allocation style=text-decoration:none>2.3.1. Memory Allocation</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#header_fields style=text-decoration:none>2.3.2. Header Fields</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#other_shared-memory_fields style=text-decoration:none>2.4. Other Shared-Memory Fields</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#log_file style=text-decoration:none>2.5. Log file</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_recovery_and_shutdown style=text-decoration:none>3. Database Recovery and Shutdown</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#locks style=text-decoration:none>2. Locks </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_connect_and_disconnect_operations style=text-decoration:none>3. Database Connect and Disconnect Operations</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#read-write_clients style=text-decoration:none>3.1. Read-write clients</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_operations style=text-decoration:none>4. Database Operations </a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#reading style=text-decoration:none>4.1. Reading</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#writing style=text-decoration:none>4.2. Writing</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#flushing_the_in-memory_tree_to_disk style=text-decoration:none>4.2.1. Flushing the in-memory tree to disk</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#shared-memory_management style=text-decoration:none>4.2.2. Shared-memory management</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#log_file_management style=text-decoration:none>4.2.3. Log file management</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#working style=text-decoration:none>4.3. Working</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#free-block_list_management style=text-decoration:none>4.3.1. Free-block list management</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#checkpoint_operations style=text-decoration:none>4.4. Checkpoint Operations</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#scheduling_policies style=text-decoration:none>5. Scheduling Policies</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#read-only_clients style=text-decoration:none>3.2. Read-only clients</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#data_structures style=text-decoration:none>4. Data Structures </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_file style=text-decoration:none>4.1. Database file</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#sorted_runs style=text-decoration:none>4.1.1. Sorted Runs</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#levels style=text-decoration:none>4.1.2. Levels</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#snapshots style=text-decoration:none>4.1.3. Snapshots</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#in-memory_tree style=text-decoration:none>4.2. In-Memory Tree</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#memory_allocation style=text-decoration:none>4.2.1. Memory Allocation</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#header_fields style=text-decoration:none>4.2.2. Header Fields</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#other_shared-memory_fields style=text-decoration:none>4.3. Other Shared-Memory Fields</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#log_file style=text-decoration:none>4.4. Log file</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_operations style=text-decoration:none>5. Database Operations </a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#reading style=text-decoration:none>5.1. Reading</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#writing style=text-decoration:none>5.2. Writing</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#flushing_the_in-memory_tree_to_disk style=text-decoration:none>5.2.1. Flushing the in-memory tree to disk</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#shared-memory_management style=text-decoration:none>5.2.2. Shared-memory management</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#log_file_management style=text-decoration:none>5.2.3. Log file management</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#working style=text-decoration:none>5.3. Working</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#free-block_list_management style=text-decoration:none>5.3.1. Free-block list management</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#checkpoint_operations style=text-decoration:none>5.4. Checkpoint Operations</a><br>
 
 <div id=end_of_toc></div>
 
@@ -75,37 +77,39 @@ are written into the database file as a new sorted run. To reduce the number
 of sorted runs in the database file, chronologically adjacent sorted runs 
 may be merged together into a single run, either automatically or on demand.
 
-<h1 id=locking>2. Locks and Locking Protocols</h1> <p>
+<h1 id=locks>2. Locks</h1> 
 Read/write (shared/exclusive) file locks are used to control concurrent 
-access. LSM uses the following file-locks:
+access. LSM uses the following "locking regions". Each locking region may
+be locked and unlocked separately.
 
-<table>
-  <tr><td valign=top>DMS1
+<p>
+<table style="margin:0 4ex">
+  <tr><td valign=top style="width:16ex">DMS1
       <td><p style=margin-top:0>
-          This locking byte is used to serialize all connection and
+          This locking region is used to serialize all connection and
           disconnection operations performed by read-write database
           connections. An EXCLUSIVE lock is taken for the duration of all such
           operations.
 
           <p>Additionally, read-only connections take a SHARED lock on this
-          locking byte while attempting to connect to a database. This ensures
+          locking region while attempting to connect to a database. This ensures
           that a read-only connection does not attempt to connect to the
           database while a read-write clients connection or disconnection
           operation is ongoing.
 
   <tr><td valign=top>DMS2
       <td><p style=margin-top:0>
-          Read-write connections hold a SHARED lock on this locking byte for
+          Read-write connections hold a SHARED lock on this locking region for
           as long as they are connected to the database.
 
   <tr><td valign=top>DMS3
       <td><p style=margin-top:0>
-          Read-only connections hold a SHARED lock on this locking byte for
+          Read-only connections hold a SHARED lock on this locking region for
           as long as they are connected to the database.
 
   <tr><td valign=top>RWCLIENT(n)
       <td><p style=margin-top:0>
-          There are a total of 16 RWCLIENT locking bytes. After a read-write
+          There are a total of 16 RWCLIENT locking regions. After a read-write
           client connects to the database it attempts to find a free RWCLIENT
           locking slot to take an EXCLUSIVE lock on. If it cannot find one,
           this is not an error. If it can, then the lock is held for as long 
@@ -123,7 +127,7 @@ access. LSM uses the following file-locks:
 
   <tr><td valign=top>WRITER
       <td><p style=margin-top:0>
-          A database client holds an EXCLUSIVE lock on this locking byte
+          A database client holds an EXCLUSIVE lock on this locking region
           while writing data to the database. Outside of recovery, only clients
           holding this lock may modify the contents of the in-memory b-tree.
           Holding this lock is synonymous with having an open write transaction
@@ -131,71 +135,146 @@ access. LSM uses the following file-locks:
 
   <tr><td valign=top>WORKER
       <td><p style=margin-top:0>
-          A database client holds an EXCLUSIVE lock on this locking byte
+          A database client holds an EXCLUSIVE lock on this locking region
           while performing database work (writing data into the body of the
           database file).
 
-  <tr><td valign=top>CHECKPOINTER&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <tr><td valign=top>CHECKPOINTER
       <td><p style=margin-top:0>
-          A database client holds an EXCLUSIVE lock on this locking byte
+          A database client holds an EXCLUSIVE lock on this locking region
           while performing a checkpoint (syncing the database file and 
           writing to the database header).
 
   <tr><td valign=top>ROTRANS
       <td><p style=margin-top:0>
-          A read-only database client holds a SHARED lock on this locking byte
+          A read-only database client holds a SHARED lock on this locking region
           while reading from a non-live database system.
 
   <tr><td valign=top>READER(n)
       <td><p style=margin-top:0>
-          There are a total of 6 READER locking bytes. Unless it is a read-only
-          client reading from a non-live database, a client holds a SHARED lock
-          on one of these while it has an open read transaction.  Each READER
-          lock is associated with a pair of id values identifying the regions
-          of the in-memory tree and database file that may be read by clients
-          holding such SHARED locks.
+          There are a total of 6 READER locking regions. Unless it is a
+          read-only client reading from a non-live database, a client holds a
+          SHARED lock on one of these while it has an open read transaction.
+          Each READER lock is associated with a pair of id values identifying
+          the regions of the in-memory tree and database file that may be read
+          by clients holding such SHARED locks.
 </table>
 
+<h1 id=database_connect_and_disconnect_operations>3. Database Connect and Disconnect Operations</h1>
 
+<h2 id=read-write_clients>3.1. Read-write clients</h2>
 
-<h1 id=data_structures>2. Data Structures </h1>
+<p>When an LSM database connection is opened (i.e. lsm_open() is called):
 
-<h2 id=locks>2.1. Locks</h2>
+<pre>
+  lock(DMS1, EXCLUSIVE)                # Block until successful
+    trylock(DMS2+DMS3, EXCLUSIVE)
+    if( trylock() successful ){
+      zero shared memory and run recovery
+    }
+    if( no error during recovery ){
+      lock(DMS2, SHARED)               # "cannot" fail
+      lock(RWCLIENT(x), EXCLUSIVE)     # see comment below
+    }
+  unlock(DMS1)
+</pre>
+
 <p>
-Read/write (shared/exclusive) file locks are used to control concurrent 
-access. LSM uses the following file-locks:
+Running recovery involves reading the database file header and log file
+to initialize the contents of shared-memory. Recovery is only run when the
+first connection connects to the database file. There are no circumstances
+(including the unexpected failure of a writer process) that may cause 
+recovery to take place after the first client has successfully connected.
 
-<ul>
-  <li> <p>The <b>DMS1</b>, <b>DMS2</b> locking regions. These are used to
-       implement the "dead-man-switch" mechanism copied from SQLite's WAL
-       mode for safely connecting to and disconnecting from a database. 
-       See "Database Recovery and Shutdown" below.
+<p>
+After the SHARED lock on DMS2 is taken, an effort is made to find a free
+RWCLIENT locking region and take an EXCLUSIVE lock on it. If no such region
+can be found, this step is omitted. It is not an error if this happens.
 
-  <li> <p>Several (say 3) <b>READER</b> locking regions. Database clients 
-       hold a SHARED lock one of the READER locking regions while reading the
-       database. As in SQLite WAL mode, each reader lock is paired with a 
-       value indicating the version of the database that the client process 
-       is using. The value consists of two fields:
+<p>
+Assuming recovery is successful (or not required), the database client is
+left holding a SHARED lock on DMS2 and, possibly, an EXCLUSIVE lock on one
+of the RWCLIENT locks. These locks are held for as long as the database
+connection remains open.
 
-  <ul>
-    <li> A 64-bit snapshot id. This identifies the version of the database file
-         that the reader is accessing.
-    <li> A 32-bit shared-memory chunk id. This identifies the version of the
-         in-memory tree the reader is reading.
-  </ul>
+<p>
+When disconnecting from a database (i.e. an lsm_close() call following a
+successful lsm_open()):
 
-  <li> <p>The <b>WRITER</b> locking region. A database client holds an 
-       EXCLUSIVE lock on this locking region while writing data to the 
-       database. Outside of recovery, only clients holding this lock may
-       modify the contents of the in-memory b-tree.
+<pre>
+  lock(DMS1, EXCLUSIVE)           # Block until successful
+    trylock(DMS2, EXCLUSIVE)
+    if( trylock() successful ){
+      flush in-memory tree
+      checkpoint database
 
-  <li> <p>The <b>WORKER</b> lock. A database client holds an EXCLUSIVE lock
-       on this locking region while writing data into the body of the 
-       database file.
+      trylock(DMS3, EXCLUSIVE)
+      if( trylock() successful ){
+        delete shared memory
+      }
 
-  <li> <p>The <b>CHECKPOINTER</b> lock. A database client holds an EXCLUSIVE
-       lock on this locking region while writing to the database file header.
+      trylock(ROTRANS, EXCLUSIVE)
+      if( trylock() successful ){
+        unlink log file
+      }
+    }
+    unlock(RWCLIENT(x))           # If holding RWCLIENT lock
+    unlock(DMS2)
+  unlock(DMS1)
+</pre>
+
+<h2 id=read-only_clients>3.2. Read-only clients</h2>
+
+<p>It is assumed that read-only clients:
+
+<ul> 
+  <li>may take SHARED locks only,
+  <li>may not write to shared-memory, the database file or the log file, and
+  <li>may not use the trylock(x, EXCLUSIVE) primitive to detect SHARED locks
+      held by other clients. 
 </ul>
+
+<p>A read-only client does not attempt to connect to the database from within
+the lsm_open() call. Instead, this is defered until the first time the client
+attempts to read from the database.
+
+<pre>
+  lock(DMS1, SHARED)              # Block until successful
+    trylock(RWCLIENT(all), SHARED)
+    if( trylock() successful ){
+      # System is not live. The database must be read directly from disk.
+      lock(ROTRANS, SHARED)
+    }else{
+      # Client is now connected. The read transaction may now be opened
+      # in the same way as it would be for a read-write client.
+      lock(DMS3, SHARED)
+    }
+  unlock(DMS1)
+</pre>
+
+<p>
+Assuming no error occurs, the procedure above leads to one of two possible
+outcomes:
+
+<ul> 
+  <li> <p>DMS3 is locked and the read-only client is now connected to the 
+       database. From this point on, the read-only client uses the same
+       procedure to open a read transaction as any other client. The lock on 
+       DMS3 is held until the client disconnects from the database. 
+
+  <li> <p>ROTRANS is locked and the read-only client is still disconnected.
+       Holding the lock on ROTRANS guarantees that no read-write client
+       will overwrite any existing data in the database file or log file.
+       This allows the read-only client to run a disconnected read 
+       transaction - it recovers any data in the log file into private memory,
+       then reads data as required from the database file for the duration
+       of the users read transaction.
+</ul>
+
+<p>A disconnected read transaction is closed by dropping the ROTRANS lock.
+
+
+<h1 id=data_structures>4. Data Structures </h1>
 
 <p>
 In the following sections, "the WRITER lock", refers to an exclusive lock
@@ -204,7 +283,7 @@ equivalent to "holding an exclusive lock on the WRITER locking region".
 Similar interpretations apply to "the WORKER lock" and "the CHECKPOINTER 
 lock".
 
-<h2 id=database_file>2.2. Database file</h2>
+<h2 id=database_file>4.1. Database file</h2>
 
 <p>
 This section summarizes the contents of the database file informally. A 
@@ -238,7 +317,7 @@ by its 32-bit page number. This means the maximum database size is roughly
 (pgsz * 2^32) bytes. The first and last pages in each block are 4 bytes
 smaller than the others. This is to make room for a single page-number.
 
-<h3 id=sorted_runs>2.2.1. Sorted Runs</h3>
+<h3 id=sorted_runs>4.1.1. Sorted Runs</h3>
 
 <p>
 A single sorted run is spread across one or more database pages (each page
@@ -280,7 +359,7 @@ arbitrary values.
 
 <p><span style="color:red"> TODO: Embedded pointers.  </span>
 
-<h3 id=levels>2.2.2. Levels</h3>
+<h3 id=levels>4.1.2. Levels</h3>
 
 <p>
 Each sorted run is assigned to a "level". Normally, a level consists of a
@@ -341,7 +420,7 @@ time for all entries.
 
 
 
-<h3 id=snapshots>2.2.3. Snapshots</h3>
+<h3 id=snapshots>4.1.3. Snapshots</h3>
 
 <p>
 Each meta page may contain a database <b>snapshot</b>. A snapshot contains all 
@@ -366,7 +445,7 @@ sorted runs and free space). Specifically, it contains:
 A more detailed description is available in the header comments in
 source code file <a href="../src/lsm_ckpt.c">lsm_ckpt.c</a>
 
-<h2 id=in-memory_tree>2.3. In-Memory Tree</h2>
+<h2 id=in-memory_tree>4.2. In-Memory Tree</h2>
 
 <p>
 The in-memory tree is an append-only b-tree of order 4 (each node may have 
@@ -380,7 +459,7 @@ interior nodes that are updated when a leaf node is written that are not
 described here. See header comments in source code file 
 <a href=../src/lsm_tree.c>lsm_tree.c</a> for details.
 
-<h3 id=memory_allocation>2.3.1. Memory Allocation</h3>
+<h3 id=memory_allocation>4.2.1. Memory Allocation</h3>
 
 <p>
 More than one in-memory 
@@ -446,7 +525,7 @@ writer are reverted (perhaps not to their original values, but to values
 that put them at the start of the linked list - before those chunks that
 may still be in use by existing readers).
 
-<h3 id=header_fields>2.3.2. Header Fields</h3>
+<h3 id=header_fields>4.2.2. Header Fields</h3>
 <p>
 As well as the in-memory tree data, the following fixed-size fields 
 stored in well-known locations in shared-memory are part of the in-memory
@@ -467,7 +546,7 @@ ever written to by clients holding the WRITER lock.
 </ul>
 
 
-<h2 id=other_shared-memory_fields>2.4. Other Shared-Memory Fields</h2>
+<h2 id=other_shared-memory_fields>4.3. Other Shared-Memory Fields</h2>
 
 <ul>
   <li> Snapshot 1.
@@ -477,73 +556,13 @@ ever written to by clients holding the WRITER lock.
   <li> READER lock values.
 </ul>
 
-<h2 id=log_file>2.5. Log file</h2>
+<h2 id=log_file>4.4. Log file</h2>
 
 <a href=../src/lsm_log.c>lsm_log.c</a>.
 
-<h1 id=database_recovery_and_shutdown>3. Database Recovery and Shutdown</h1>
+<h1 id=database_operations>5. Database Operations </h1>
 
-<h2 id=read-write_clients>3.1. Read-write clients</h2>
-
-<p>
-Exclusive locks on locking region DMS1 are used to serialize all connect and
-disconnect operations performed by read-write clients. 
-
-<p>When an LSM database connection is opened (i.e. lsm_open() is called):
-
-<pre>
-  lock(DMS1, EXCLUSIVE)           # Block until successful
-    lock(DMS2, EXCLUSIVE)         # Abandon if not immediately successful
-    if( DMS2 successfully locked ){
-      zero *-shm file (or equivalent)
-      run recovery
-    }
-    if( error during recovery ){
-      unlock(DMS2)
-    }else{
-      lock(DMS2, SHARED)          # "cannot" fail
-    }
-  unlock(DMS1)
-</pre>
-
-<p>
-Running recovery involves reading the database file header and log file
-to initialize the contents of shared-memory. Recovery is only run when the
-first connection connects to the database file. There are no circumstances
-(including the unexpected failure of a writer process) that may cause 
-recovery to take place after the first client has successfully connected.
-
-<p>
-Assuming recovery is successful (or not required), the database client is
-left holding a SHARED lock on DMS2. This lock is held for as long as the
-database connection remains open.
-
-<p>
-When disconnecting from a database (i.e. an lsm_close() call following a
-successful lsm_open()):
-
-<pre>
-  lock(DMS1, EXCLUSIVE)           # Block until successful
-    lock(DMS2, EXCLUSIVE)         # Abandon if not immediately successful
-    if( DMS2 successfully locked ){
-      ...TODO...
-      delete *-shm file (or equivalent)
-    }
-    unlock(DMS2)
-  unlock(DMS1)
-</pre>
-
-<h2 id=read-only_clients>3.1. Read-only clients</h2>
-
-<p>It is assumed that read-only clients may take SHARED locks only. And
-that a read-only client may not run database recovery when a db is opened 
-in multi-process mode.
-
-<p>
-
-<h1 id=database_operations>4. Database Operations </h1>
-
-<h2 id=reading>4.1. Reading</h2>
+<h2 id=reading>5.1. Reading</h2>
 
 <p>
 Opening a read transaction:
@@ -638,7 +657,7 @@ lock is held.
 To close a read transaction all that is required is to drop the SHARED lock
 held on the READER slot. 
 
-<h2 id=writing>4.2. Writing</h2>
+<h2 id=writing>5.2. Writing</h2>
 
 <p>
 To open a write transaction:
@@ -686,7 +705,7 @@ case it performs the following:
   <li> Clear the writer flag.
 </ol>
 
-<h3 id=flushing_the_in-memory_tree_to_disk>4.2.1. Flushing the in-memory tree to disk</h3>
+<h3 id=flushing_the_in-memory_tree_to_disk>5.2.1. Flushing the in-memory tree to disk</h3>
 
 <p>
 For the purposes of writing, the database file and the in-memory tree are
@@ -708,7 +727,7 @@ tree, and processes holding the WORKER lock write to the database file.
        shared-memory.
 </ol>
 
-<h3 id=shared-memory_management>4.2.2. Shared-memory management</h3>
+<h3 id=shared-memory_management>5.2.2. Shared-memory management</h3>
 
 <p>
 A writer client may have to allocate new shared-memory chunks. This can be
@@ -727,7 +746,7 @@ be reused, the writer must check that:
        does in WAL mode.
 </ul>
 
-<h3 id=log_file_management>4.2.3. Log file management</h3>
+<h3 id=log_file_management>5.2.3. Log file management</h3>
 
 <p>
 A writer client also writes to the log file. All information required to write
@@ -747,7 +766,7 @@ header. Their exists a shared-memory variable indicating which of the two
 meta-pages contain this snapshot, but the writer process still has to read the
 snapshot data and verify its checksum from disk.
 
-<h2 id=working>4.3. Working</h2>
+<h2 id=working>5.3. Working</h2>
 
 <p>
 Working is similar to writing. The difference is that a "writer" modifies
@@ -771,7 +790,7 @@ the in-memory tree. A "worker" modifies the contents of the database file.
   <li> <p>Release the WORKER lock.
 </ol>
 
-<h3 id=free-block_list_management>4.3.1. Free-block list management</h3>
+<h3 id=free-block_list_management>5.3.1. Free-block list management</h3>
 
 <p>
 Worker clients occasionally need to allocate new database blocks or move
@@ -801,7 +820,7 @@ There are two conditions for reusing a free-block:
 
 
 
-<h2 id=checkpoint_operations>4.4. Checkpoint Operations</h2>
+<h2 id=checkpoint_operations>5.4. Checkpoint Operations</h2>
 
 <ol>
   <li> Take CHECKPOINTER lock.
@@ -826,52 +845,6 @@ There are two conditions for reusing a free-block:
 
   <li> Drop the CHECKPOINTER lock.
 </ol>
-
-<h1 id=scheduling_policies>5. Scheduling Policies</h1>
-
-<p>
-When a client writes to a database, the in-memory tree and log file are
-updated by the client itself before the lsm_write() call returns. Eventually, 
-once sufficient writes have accumulated in memory, the client marks the 
-current tree as "old", and subsequent writes are accumulated in a new tree.
-
-<p>
-In order to prevent the in-memory tree and log file from growing indefinitely,
-at some point in the future the following must occur:
-
-<ul>
-  <li>The contents of the old tree must be written into the database file
-      (a WORKER lock operation). Once this is done the memory used to store the
-      old tree is available for reuse.
-
-  <li>A checkpoint operation must take place to sync the data into the 
-      database file and update the database header (a CHECKPOINT lock 
-      operation). Once this has been done the log file space that was used 
-      to store the data may be reclaimed.
-</ul>
-
-<p>
-In addition to the above, it is necessary to perform a certain amount of 
-work on the database to merge existing levels together. This is not just
-to speed up queries - there is a hard limit of roughly 40 levels to stop
-database snapshots from growing overly large.
-
-<p><b> Explicit Calls to lsm_work() and lsm_checkpoint() </b>
-
-<p><b> Compulsory work </b>
-
-<ul>
-  <li><p> If a writer tries to mark a tree as "old", but there is already an
-       old tree in-memory, the writer attempts to grab the WORKER lock and
-       write both the old and new tree to a new database level.
-
-      <p> If the WORKER lock cannot be obtained immediately, block until it
-       can be
-</ul>
-
-<p><b> Auto work </b>
-
-
 
 
 
