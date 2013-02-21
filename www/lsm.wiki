@@ -75,6 +75,89 @@ are written into the database file as a new sorted run. To reduce the number
 of sorted runs in the database file, chronologically adjacent sorted runs 
 may be merged together into a single run, either automatically or on demand.
 
+<h1 id=locking>2. Locks and Locking Protocols</h1> <p>
+Read/write (shared/exclusive) file locks are used to control concurrent 
+access. LSM uses the following file-locks:
+
+<table>
+  <tr><td valign=top>DMS1
+      <td><p style=margin-top:0>
+          This locking byte is used to serialize all connection and
+          disconnection operations performed by read-write database
+          connections. An EXCLUSIVE lock is taken for the duration of all such
+          operations.
+
+          <p>Additionally, read-only connections take a SHARED lock on this
+          locking byte while attempting to connect to a database. This ensures
+          that a read-only connection does not attempt to connect to the
+          database while a read-write clients connection or disconnection
+          operation is ongoing.
+
+  <tr><td valign=top>DMS2
+      <td><p style=margin-top:0>
+          Read-write connections hold a SHARED lock on this locking byte for
+          as long as they are connected to the database.
+
+  <tr><td valign=top>DMS3
+      <td><p style=margin-top:0>
+          Read-only connections hold a SHARED lock on this locking byte for
+          as long as they are connected to the database.
+
+  <tr><td valign=top>RWCLIENT(n)
+      <td><p style=margin-top:0>
+          There are a total of 16 RWCLIENT locking bytes. After a read-write
+          client connects to the database it attempts to find a free RWCLIENT
+          locking slot to take an EXCLUSIVE lock on. If it cannot find one,
+          this is not an error. If it can, then the lock is held for as long 
+          as the read-write client is connected to the database for.
+
+          <p>The sole purpose of these locks is that they allow a read-only
+          client to detect whether or not there exists at least one read-write
+          client connected to the database. Of course if large numbers of 
+          read-write clients connect and disconnect from the system in an
+          inconvenient order the system may enter a state where there exists
+          one or more connected read-write clients but none of them hold a
+          RWCLIENT lock. This is not important - if a read-only client fails
+          to detect that the system has read-write clients it may be less
+          efficient, but will not malfunction.
+
+  <tr><td valign=top>WRITER
+      <td><p style=margin-top:0>
+          A database client holds an EXCLUSIVE lock on this locking byte
+          while writing data to the database. Outside of recovery, only clients
+          holding this lock may modify the contents of the in-memory b-tree.
+          Holding this lock is synonymous with having an open write transaction
+          on the database.
+
+  <tr><td valign=top>WORKER
+      <td><p style=margin-top:0>
+          A database client holds an EXCLUSIVE lock on this locking byte
+          while performing database work (writing data into the body of the
+          database file).
+
+  <tr><td valign=top>CHECKPOINTER&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      <td><p style=margin-top:0>
+          A database client holds an EXCLUSIVE lock on this locking byte
+          while performing a checkpoint (syncing the database file and 
+          writing to the database header).
+
+  <tr><td valign=top>ROTRANS
+      <td><p style=margin-top:0>
+          A read-only database client holds a SHARED lock on this locking byte
+          while reading from a non-live database system.
+
+  <tr><td valign=top>READER(n)
+      <td><p style=margin-top:0>
+          There are a total of 6 READER locking bytes. Unless it is a read-only
+          client reading from a non-live database, a client holds a SHARED lock
+          on one of these while it has an open read transaction.  Each READER
+          lock is associated with a pair of id values identifying the regions
+          of the in-memory tree and database file that may be read by clients
+          holding such SHARED locks.
+</table>
+
+
+
 <h1 id=data_structures>2. Data Structures </h1>
 
 <h2 id=locks>2.1. Locks</h2>
