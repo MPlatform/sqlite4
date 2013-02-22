@@ -168,11 +168,13 @@
 ** If none of the above are defined, then set SQLITE4_SYSTEM_MALLOC as
 ** the default.
 */
-#if defined(SQLITE4_SYSTEM_MALLOC)+defined(SQLITE4_WIN32_MALLOC)+defined(SQLITE4_MEMDEBUG)>1
+#if defined(SQLITE4_SYSTEM_MALLOC)+defined(SQLITE4_WIN32_MALLOC)\
+   +defined(SQLITE4_MEMDEBUG)>1
 # error "At most one of the following compile-time configuration options\
  is allows: SQLITE4_SYSTEM_MALLOC, SQLITE4_WIN32_MALLOC, SQLITE4_MEMDEBUG"
 #endif
-#if defined(SQLITE4_SYSTEM_MALLOC)+defined(SQLITE4_WIN32_MALLOC)+defined(SQLITE4_MEMDEBUG)==0
+#if defined(SQLITE4_SYSTEM_MALLOC)+defined(SQLITE4_WIN32_MALLOC)\
+   +defined(SQLITE4_MEMDEBUG)==0
 # define SQLITE4_SYSTEM_MALLOC 1
 #endif
 
@@ -197,7 +199,8 @@
 **
 ** See also ticket #2741.
 */
-#if !defined(_XOPEN_SOURCE) && !defined(__DARWIN__) && !defined(__APPLE__) && SQLITE4_THREADSAFE
+#if !defined(_XOPEN_SOURCE) && !defined(__DARWIN__) && !defined(__APPLE__)\
+     && SQLITE4_THREADSAFE
 #  define _XOPEN_SOURCE 500  /* Needed to enable pthread recursive mutexes */
 #endif
 
@@ -903,7 +906,7 @@ struct sqlite4 {
 #define SQLITE4_RecoveryMode   0x00080000  /* Ignore schema errors */
 #define SQLITE4_ReverseOrder   0x01000000  /* Reverse unordered SELECTs */
 #define SQLITE4_RecTriggers    0x02000000  /* Enable recursive triggers */
-#define SQLITE4_ForeignKeys    0x04000000  /* Enforce foreign key constraints  */
+#define SQLITE4_ForeignKeys    0x04000000  /* Enable foreign key constraints */
 #define SQLITE4_AutoIndex      0x08000000  /* Enable automatic indexes */
 #define SQLITE4_PreferBuiltin  0x10000000  /* Preference to built-in funcs */
 #define SQLITE4_EnableTrigger  0x40000000  /* True to enable triggers */
@@ -913,27 +916,27 @@ struct sqlite4 {
 ** sqlite4_test_control(SQLITE4_TESTCTRL_OPTIMIZATIONS,...) interface.
 ** These must be the low-order bits of the flags field.
 */
-#define SQLITE4_QueryFlattener 0x01        /* Disable query flattening */
-#define SQLITE4_ColumnCache    0x02        /* Disable the column cache */
-#define SQLITE4_IndexSort      0x04        /* Disable indexes for sorting */
-#define SQLITE4_IndexSearch    0x08        /* Disable indexes for searching */
-#define SQLITE4_IndexCover     0x10        /* Disable index covering table */
-#define SQLITE4_GroupByOrder   0x20        /* Disable GROUPBY cover of ORDERBY */
-#define SQLITE4_FactorOutConst 0x40        /* Disable factoring out constants */
-#define SQLITE4_IdxRealAsInt   0x80        /* Store REAL as INT in indices */
-#define SQLITE4_DistinctOpt    0x80        /* DISTINCT using indexes */
-#define SQLITE4_OptMask        0xff        /* Mask of all disablable opts */
+#define SQLITE4_QueryFlattener 0x01     /* Disable query flattening */
+#define SQLITE4_ColumnCache    0x02     /* Disable the column cache */
+#define SQLITE4_IndexSort      0x04     /* Disable indexes for sorting */
+#define SQLITE4_IndexSearch    0x08     /* Disable indexes for searching */
+#define SQLITE4_IndexCover     0x10     /* Disable index covering table */
+#define SQLITE4_GroupByOrder   0x20     /* Disable GROUPBY cover of ORDERBY */
+#define SQLITE4_FactorOutConst 0x40     /* Disable factoring out constants */
+#define SQLITE4_IdxRealAsInt   0x80     /* Store REAL as INT in indices */
+#define SQLITE4_DistinctOpt    0x80     /* DISTINCT using indexes */
+#define SQLITE4_OptMask        0xff     /* Mask of all disablable opts */
 
 /*
 ** Possible values for the sqlite.magic field.
 ** The numbers are obtained at random and have no special meaning, other
 ** than being distinct from one another.
 */
-#define SQLITE4_MAGIC_OPEN     0xa029a697  /* Database is open */
-#define SQLITE4_MAGIC_CLOSED   0x9f3c2d33  /* Database is closed */
-#define SQLITE4_MAGIC_SICK     0x4b771290  /* Error and awaiting close */
-#define SQLITE4_MAGIC_BUSY     0xf03b7906  /* Database currently in use */
-#define SQLITE4_MAGIC_ERROR    0xb5357930  /* An SQLITE4_MISUSE error occurred */
+#define SQLITE4_MAGIC_OPEN    0x4d06c919  /* Database is open */
+#define SQLITE4_MAGIC_CLOSED  0x5f2246b4  /* Database is closed */
+#define SQLITE4_MAGIC_SICK    0xcaad9e61  /* Error and awaiting close */
+#define SQLITE4_MAGIC_BUSY    0xb07f8c8c  /* Database currently in use */
+#define SQLITE4_MAGIC_ERROR   0x912e4c46  /* An SQLITE4_MISUSE error occurred */
 
 /*
 ** This structure encapsulates a user-function destructor callback (as
@@ -964,7 +967,7 @@ struct FuncDestructor {
 #define SQLITE4_FUNC_NEEDCOLL 0x08 /* sqlite4GetFuncCollSeq() might be called */
 #define SQLITE4_FUNC_PRIVATE  0x10 /* Allowed for internal use only */
 #define SQLITE4_FUNC_COUNT    0x20 /* Built-in count(*) aggregate */
-#define SQLITE4_FUNC_COALESCE 0x40 /* Built-in coalesce() or ifnull() function */
+#define SQLITE4_FUNC_COALESCE 0x40 /* Built-in coalesce() or ifnull() func */
 
 /*
 ** The following three macros, FUNCTION(), LIKEFUNC() and AGGREGATE() are
@@ -1122,9 +1125,9 @@ struct CollSeq {
 ** Additional bit values that can be ORed with an affinity without
 ** changing the affinity.
 */
-#define SQLITE4_JUMPIFNULL   0x08  /* jumps if either operand is NULL */
-#define SQLITE4_STOREP2      0x10  /* Store result in reg[P2] rather than jump */
-#define SQLITE4_NULLEQ       0x80  /* NULL=NULL */
+#define SQLITE4_JUMPIFNULL  0x08  /* jumps if either operand is NULL */
+#define SQLITE4_STOREP2     0x10  /* Store result in reg[P2] rather than jump */
+#define SQLITE4_NULLEQ      0x80  /* NULL=NULL */
 
 /*
 ** An object of this type is created for each virtual table present in
@@ -2183,7 +2186,7 @@ struct Parse {
   int iNewidxReg;      /* First argument to OP_NewIdxid */
   u8 nColCache;        /* Number of entries in aColCache[] */
   u8 iColCache;        /* Next entry in aColCache[] to replace */
-  ParseYColCache aColCache[SQLITE4_N_COLCACHE]; /* One for each column cache entry */
+  ParseYColCache aColCache[SQLITE4_N_COLCACHE]; /* One per colcache entry */
   yDbMask writeMask;   /* Start a write transaction on these databases */
   yDbMask cookieMask;  /* Bitmask of schema verified databases */
   u8 isMultiWrite;     /* True if statement may affect/insert multiple rows */
@@ -2741,8 +2744,9 @@ void sqlite4SelectDelete(sqlite4*, Select*);
 Table *sqlite4SrcListLookup(Parse*, SrcList*);
 int sqlite4IsReadOnly(Parse*, Table*, int);
 void sqlite4OpenTable(Parse*, int iCur, int iDb, Table*, int);
-#if defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE4_OMIT_SUBQUERY)
-Expr *sqlite4LimitWhere(Parse *, SrcList *, Expr *, ExprList *, Expr *, Expr *, char *);
+#if defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) \
+    && !defined(SQLITE4_OMIT_SUBQUERY)
+Expr *sqlite4LimitWhere(Parse*,SrcList*,Expr*,ExprList*,Expr*,Expr*,char*);
 #endif
 void sqlite4DeleteFrom(Parse*, SrcList*, Expr*);
 void sqlite4Update(Parse*, SrcList*, ExprList*, Expr*, int);
@@ -2922,8 +2926,11 @@ int sqlite4PutVarint64(unsigned char*, sqlite4_uint64);
 **     x = putVarint32( A, B );
 **
 */
-#define getVarint32(A,B)  (u8)((*(A)<(u8)0x80) ? ((B) = (u32)*(A)),1 : sqlite4GetVarint32((A), (u32 *)&(B)))
-#define putVarint32(A,B)  (u8)(((u32)(B)<(u32)0x80) ? (*(A) = (unsigned char)(B)),1 : sqlite4PutVarint32((A), (B)))
+#define getVarint32(A,B)  \
+  (u8)((*(A)<(u8)0x80)?((B)=(u32)*(A)),1:sqlite4GetVarint32((A),(u32 *)&(B)))
+#define putVarint32(A,B)  \
+  (u8)(((u32)(B)<(u32)0x80)?(*(A)=(unsigned char)(B)),1\
+  :sqlite4PutVarint32((A),(B)))
 #define getVarint    sqlite4GetVarint
 #define putVarint    sqlite4PutVarint
 
