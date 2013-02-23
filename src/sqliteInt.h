@@ -2409,6 +2409,7 @@ struct sqlite4_env {
   int mxStrlen;                     /* Maximum string length */
   int szLookaside;                  /* Default lookaside buffer size */
   int nLookaside;                   /* Default lookaside buffer count */
+  sqlite4_mm *pMM;                  /* Memory allocator for this environment */
   sqlite4_mem_methods m;            /* Low-level memory allocation interface */
   sqlite4_mutex_methods mutex;      /* Low-level mutex interface */
   void *pHeap;                      /* Heap storage space */
@@ -2483,6 +2484,11 @@ int sqlite4WalkSelectFrom(Walker*, Select*);
     while( (*zIn & 0xc0)==0x80 ){ zIn++; }             \
   }                                                    \
 }
+
+/*
+** Default memory allocator
+*/
+extern sqlite4_mm sqlite4MMSystem;
 
 /*
 ** The SQLITE4_*_BKPT macros are substitutes for the error codes with

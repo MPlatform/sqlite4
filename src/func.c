@@ -1269,15 +1269,6 @@ static void countStep(sqlite4_context *context, int argc, sqlite4_value **argv){
   if( (argc==0 || SQLITE4_NULL!=sqlite4_value_type(argv[0])) && p ){
     p->n++;
   }
-
-#ifndef SQLITE4_OMIT_DEPRECATED
-  /* The sqlite4_aggregate_count() function is deprecated.  But just to make
-  ** sure it still operates correctly, verify that its count agrees with our 
-  ** internal count when using count(*) and when the total count can be
-  ** expressed as a 32-bit integer. */
-  assert( argc==1 || p==0 || p->n>0x7fffffff
-          || p->n==sqlite4_aggregate_count(context) );
-#endif
 }   
 static void countFinalize(sqlite4_context *context){
   CountCtx *p;

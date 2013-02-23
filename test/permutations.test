@@ -149,7 +149,6 @@ test_suite "src4" -prefix "" -description {
   between.test
   bigrow.test
   bind.test
-  bindxfer.test
 
   boundary1.test boundary4.test
   cast.test

@@ -70,14 +70,14 @@ TCPPX = g++ -Wall -g -I. -I$(TOP)/src $(OPTS)
 LIBOBJ+= vdbe.o parse.o \
          alter.o analyze.o attach.o auth.o \
          build.o \
-         callback.o complete.o ctime.o date.o delete.o expr.o fault.o fkey.o \
-	 fts5.o fts5func.o \
+         callback.o complete.o ctime.o date.o delete.o env.o expr.o \
+         fault.o fkey.o fts5.o fts5func.o \
          func.o global.o hash.o \
          icu.o insert.o kv.o kvlsm.o kvmem.o legacy.o \
          lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o lsm_mem.o lsm_mutex.o \
          lsm_shared.o lsm_str.o lsm_sorted.o lsm_tree.o \
          lsm_unix.o lsm_varint.o \
-         main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
+         main.o malloc.o math.o mem.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          mutex.o mutex_noop.o mutex_unix.o mutex_w32.o \
          opcodes.o os.o \
          pragma.o prepare.o printf.o \
@@ -101,6 +101,7 @@ SRC = \
   $(TOP)/src/ctime.c \
   $(TOP)/src/date.c \
   $(TOP)/src/delete.c \
+  $(TOP)/src/env.c \
   $(TOP)/src/expr.c \
   $(TOP)/src/fault.c \
   $(TOP)/src/fkey.c \
@@ -134,6 +135,7 @@ SRC = \
   $(TOP)/src/main.c \
   $(TOP)/src/malloc.c \
   $(TOP)/src/math.c \
+  $(TOP)/src/mem.o \
   $(TOP)/src/mem0.c \
   $(TOP)/src/mem1.c \
   $(TOP)/src/mem2.c \

@@ -51,6 +51,142 @@ extern "C" {
 #endif
 
 /*
+** CAPIREF: 64-Bit Integer Types
+** KEYWORDS: sqlite4_int64 sqlite4_uint64
+**
+** Because there is no cross-platform way to specify 64-bit integer types
+** SQLite includes typedefs for 64-bit signed and unsigned integers.
+**
+** ^The sqlite4_int64 and sqlite_int64 types can store integer values
+** between -9223372036854775808 and +9223372036854775807 inclusive.  ^The
+** sqlite4_uint64 and sqlite_uint64 types can store integer values 
+** between 0 and +18446744073709551615 inclusive.
+*/
+#ifdef SQLITE4_INT64_TYPE
+  typedef SQLITE4_INT64_TYPE sqlite4_int64_t;
+  typedef unsigned SQLITE4_INT64_TYPE sqlite4_uint64_t;
+#elif defined(_MSC_VER) || defined(__BORLANDC__)
+  typedef __int64 sqlite4_int64_t;
+  typedef unsigned __int64 sqlite4_uint64_t;
+#else
+  typedef long long int sqlite4_int64_t;
+  typedef unsigned long long int sqlite4_uint64_t;
+#endif
+typedef sqlite4_int64_t sqlite4_int64;
+typedef sqlite4_uint64_t sqlite4_uint64;
+
+/*
+** CAPIREF: String length type
+**
+** A type for measuring the length of the string.  Like size_t but
+** does not require &lt;stddef.h&gt;
+*/
+typedef int sqlite4_size_t;
+
+/*
+** Available memory allocator object subtypes:
+*/
+typedef enum {
+  SQLITE4_MM_SYSTEM = 1,     /* Use the system malloc() */
+  SQLITE4_MM_ONESIZE = 2,    /* All allocations map to a fixed size */
+  SQLITE4_MM_OVERFLOW = 3,   /* Two allocators. Use A first; failover to B */
+  SQLITE4_MM_COMPACT = 4,    /* Like memsys3 from SQLite3 */
+  SQLITE4_MM_ROBSON = 5,     /* Like memsys5 from SQLite3 */
+  SQLITE4_MM_LINEAR = 6,     /* Allocate from a fixed buffer w/o free */
+  SQLITE4_MM_BESPOKE = 7,    /* Caller-defined implementation */
+  SQLITE4_MM_DEBUG,          /* Debugging memory allocator */
+  SQLITE4_MM_STATS           /* Keep memory statistics */
+} sqlite4_mm_type;
+
+/*
+** Base class for the memory allocator object.
+**
+** Implementations may extend this with additional
+** fields specific to its own needs.  This needs to be public so that
+** applications can supply their on customized memory allocators.
+*/
+typedef struct sqlite4_mm sqlite4_mm;
+typedef struct sqlite4_mm_methods sqlite4_mm_methods;
+struct sqlite4_mm {
+  const struct sqlite4_mm_methods *pMethods;
+};
+struct sqlite4_mm_methods {
+  int iVersion;
+  void *(*xMalloc)(sqlite4_mm*, sqlite4_size_t);
+  void *(*xRealloc)(sqlite4_mm*, void*, sqlite4_size_t);
+  void (*xFree)(sqlite4_mm*, void*);
+  sqlite4_size_t (*xMsize)(sqlite4_mm*, void*);
+  int (*xMember)(sqlite4_mm*, const void*);
+  void (*xBenign)(sqlite4_mm*, int);
+  sqlite4_int64 (*xStat)(sqlite4_mm*, unsigned eType, unsigned bFlags);
+  void (*xFinal)(sqlite4_mm*);
+};
+
+/*
+** Return a pointer to the default memory allocator, which is basically
+** a wrapper around system malloc()/realloc()/free().
+*/
+sqlite4_mm *sqlite4_mm_default(void);
+
+
+/*
+** Allocate a new memory manager.  Return NULL if unable.
+*/
+sqlite4_mm *sqlite4_mm_new(sqlite4_mm_type, ...);
+
+/*
+** Free the sqlite4_mm object.
+**
+** All outstanding memory for the allocator must be freed prior to
+** invoking this interface, or else the behavior is undefined.
+*/
+void sqlite4_mm_destroy(sqlite4_mm*);
+
+/*
+** Core memory allocation routines:
+*/
+void *sqlite4_mm_malloc(sqlite4_mm*, sqlite4_size_t);
+void *sqlite4_mm_realloc(sqlite4_mm*, void*, sqlite4_size_t);
+void sqlite4_mm_free(sqlite4_mm*, void*);
+
+/*
+** Return the size of a memory allocation.
+**
+** All memory allocators in SQLite4 must be able to report their size.
+** When using system malloc() on system that lack the malloc_usable_size()
+** routine or its equivalent, then the sqlite4_mm object allocates 8 extra
+** bytes for each memory allocation and stores the allocation size in those
+** initial 8 bytes.
+*/
+sqlite4_size_t sqlite4_mm_msize(sqlite4_mm*, void*);
+
+/*
+** Check to see if pOld is a memory allocation from pMM.  If it is, return
+** 1.  If not, return 0.  If we cannot determine an answer, return -1.
+**
+** If pOld is not a valid memory allocation or is a memory allocation that
+** has previously been freed, then the result of this routine is undefined.
+*/
+int sqlite4_mm_member(sqlite4_mm *pMM, const void *pOld);
+
+/*
+** Return statistics or status information about a memory allocator.
+** Not all memory allocators provide all stat values.  Some memory
+** allocators provides no states at all.  If a particular stat for
+** a memory allocator is unavailable, then -1 is returned.
+*/
+sqlite4_int64 sqlite4_mm_stat(sqlite4_mm *pMM, int eType, unsigned flags);
+
+/*
+** Enable or disable benign failure mode.  Benign failure mode can be
+** nested.  In benign failure mode, OOM errors do not necessarily propagate
+** back out to the application but can be dealt with internally.  Memory
+** allocations that occur in benign failure mode are considered "optional".
+*/
+void sqlite4_mm_benign_failures(sqlite4_mm*, int bEnable);
+
+
+/*
 ** CAPIREF: Run-time Environment Object
 **
 ** An instance of the following object defines the run-time environment 
@@ -228,39 +364,6 @@ int sqlite4_threadsafe(sqlite4_env*);
 ** sqlite4 object.
 */
 typedef struct sqlite4 sqlite4;
-
-/*
-** CAPIREF: 64-Bit Integer Types
-** KEYWORDS: sqlite4_int64 sqlite4_uint64
-**
-** Because there is no cross-platform way to specify 64-bit integer types
-** SQLite includes typedefs for 64-bit signed and unsigned integers.
-**
-** ^The sqlite4_int64 and sqlite_int64 types can store integer values
-** between -9223372036854775808 and +9223372036854775807 inclusive.  ^The
-** sqlite4_uint64 and sqlite_uint64 types can store integer values 
-** between 0 and +18446744073709551615 inclusive.
-*/
-#ifdef SQLITE4_INT64_TYPE
-  typedef SQLITE4_INT64_TYPE sqlite4_int64_t;
-  typedef unsigned SQLITE4_INT64_TYPE sqlite4_uint64_t;
-#elif defined(_MSC_VER) || defined(__BORLANDC__)
-  typedef __int64 sqlite4_int64_t;
-  typedef unsigned __int64 sqlite4_uint64_t;
-#else
-  typedef long long int sqlite4_int64_t;
-  typedef unsigned long long int sqlite4_uint64_t;
-#endif
-typedef sqlite4_int64_t sqlite4_int64;
-typedef sqlite4_uint64_t sqlite4_uint64;
-
-/*
-** CAPIREF: String length type
-**
-** A type for measuring the length of the string.  Like size_t but
-** does not require &lt;stddef.h&gt;
-*/
-typedef int sqlite4_size_t;
 
 /*
 ** If compiling for a processor that lacks floating point support,

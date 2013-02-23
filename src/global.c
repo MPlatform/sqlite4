@@ -129,63 +129,6 @@ const unsigned char sqlite4CtypeMap[256] = {
 };
 #endif
 
-/*
-** Default factory objects
-*/
-static KVFactory memFactory = {
-   0,
-   "temp",
-   sqlite4KVStoreOpenMem,
-   1
-};
-KVFactory sqlite4BuiltinFactory = {
-   &memFactory,
-   "main",
-   sqlite4KVStoreOpenLsm,
-   1
-};
-
-/*
-** The following singleton contains the global configuration for
-** the SQLite library.
-*/
-struct sqlite4_env sqlite4DefaultEnv = {
-   sizeof(sqlite4_env),       /* nByte */
-   1,                         /* iVersion */
-   SQLITE4_DEFAULT_MEMSTATUS, /* bMemstat */
-   1,                         /* bCoreMutex */
-   SQLITE4_THREADSAFE==1,     /* bFullMutex */
-   0x7ffffffe,                /* mxStrlen */
-   128,                       /* szLookaside */
-   500,                       /* nLookaside */
-   {0,0,0,0,0,0,0,0,0},       /* m */
-   {0,0,0,0,0,0,0,0,0,0},     /* mutex */
-   (void*)0,                  /* pHeap */
-   0,                         /* nHeap */
-   0, 0,                      /* mnHeap, mxHeap */
-   0,                         /* mxParserStack */
-   &sqlite4BuiltinFactory,    /* pFactory */
-   sqlite4OsRandomness,       /* xRandomness */
-   sqlite4OsCurrentTime,      /* xCurrentTime */
-   /* All the rest should always be initialized to zero */
-   0,                         /* isInit */
-   0,                         /* pFactoryMutex */
-   0,                         /* pPrngMutex */
-   0, 0,                      /* prngX, prngY */
-   0,                         /* xLog */
-   0,                         /* pLogArg */
-   0,                         /* bLocaltimeFault */
-   0,                         /* pMemMutex */
-   {0,0,0,0},                 /* nowValue[] */
-   {0,0,0,0},                 /* mxValue[] */
-   {0,}                       /* hashGlobalFunc */
-};
-
-/*
-** Return the default environment
-*/
-sqlite4_env *sqlite4_env_default(void){ return &sqlite4DefaultEnv; }
-
 
 /*
 ** Constant tokens for values 0 and 1.

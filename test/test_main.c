@@ -1012,20 +1012,6 @@ static void t1CountFinalize(sqlite4_context *context){
   }
 }
 
-#ifndef SQLITE4_OMIT_DEPRECATED
-static void legacyCountStep(
-  sqlite4_context *context,
-  int argc,
-  sqlite4_value **argv
-){
-  /* no-op */
-}
-
-static void legacyCountFinalize(sqlite4_context *context){
-  sqlite4_result_int(context, sqlite4_aggregate_count(context));
-}
-#endif
-
 /*
 ** Usage:  sqlite4_create_aggregate DB
 **
@@ -1065,13 +1051,6 @@ static int test_create_aggregate(
     rc = sqlite4_create_function(db, "x_count", 1, SQLITE4_UTF8, 0, 0,
         t1CountStep,t1CountFinalize);
   }
-#ifndef SQLITE4_OMIT_DEPRECATED
-  if( rc==SQLITE4_OK ){
-    rc = sqlite4_create_function(db, "legacy_count", 0, SQLITE4_ANY, 0, 0,
-        legacyCountStep, legacyCountFinalize
-    );
-  }
-#endif
   if( sqlite4TestErrCode(interp, db, rc) ) return TCL_ERROR;
   Tcl_SetResult(interp, (char *)t1ErrorName(rc), 0);
   return TCL_OK;
@@ -1963,56 +1942,6 @@ static int test_reset(
     return TCL_ERROR;
   }
 */
-  return TCL_OK;
-}
-
-/*
-** Usage:  sqlite4_expired STMT 
-**
-** Return TRUE if a recompilation of the statement is recommended.
-*/
-static int test_expired(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#ifndef SQLITE4_OMIT_DEPRECATED
-  sqlite4_stmt *pStmt;
-  if( objc!=2 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " <STMT>", 0);
-    return TCL_ERROR;
-  }
-  if( getStmtPointer(interp, Tcl_GetString(objv[1]), &pStmt) ) return TCL_ERROR;
-  Tcl_SetObjResult(interp, Tcl_NewBooleanObj(sqlite4_expired(pStmt)));
-#endif
-  return TCL_OK;
-}
-
-/*
-** Usage:  sqlite4_transfer_bindings FROMSTMT TOSTMT
-**
-** Transfer all bindings from FROMSTMT over to TOSTMT
-*/
-static int test_transfer_bind(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#ifndef SQLITE4_OMIT_DEPRECATED
-  sqlite4_stmt *pStmt1, *pStmt2;
-  if( objc!=3 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"",
-        Tcl_GetStringFromObj(objv[0], 0), " FROM-STMT TO-STMT", 0);
-    return TCL_ERROR;
-  }
-  if( getStmtPointer(interp, Tcl_GetString(objv[1]), &pStmt1)) return TCL_ERROR;
-  if( getStmtPointer(interp, Tcl_GetString(objv[2]), &pStmt2)) return TCL_ERROR;
-  Tcl_SetObjResult(interp, 
-     Tcl_NewIntObj(sqlite4_transfer_bindings(pStmt1,pStmt2)));
-#endif
   return TCL_OK;
 }
 
@@ -3492,24 +3421,6 @@ static int test_stmt_utf8(
   return TCL_OK;
 }
 
-static int test_global_recover(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-#ifndef SQLITE4_OMIT_DEPRECATED
-  int rc;
-  if( objc!=1 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "");
-    return TCL_ERROR;
-  }
-  rc = sqlite4_global_recover();
-  Tcl_SetResult(interp, (char *)t1ErrorName(rc), TCL_STATIC);
-#endif
-  return TCL_OK;
-}
-
 /*
 ** Usage: sqlite4_column_text STMT column
 **
@@ -4582,8 +4493,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_finalize",              test_finalize      ,0 },
      { "sqlite4_stmt_status",           test_stmt_status   ,0 },
      { "sqlite4_reset",                 test_reset         ,0 },
-     { "sqlite4_expired",               test_expired       ,0 },
-     { "sqlite4_transfer_bindings",     test_transfer_bind ,0 },
      { "sqlite4_changes",               test_changes       ,0 },
      { "sqlite4_step",                  test_step          ,0 },
      { "sqlite4_sql",                   test_sql           ,0 },
@@ -4638,7 +4547,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
 #endif
 #endif
      { "sqlite4_create_collation",   test_create_collation, 0 },
-     { "sqlite4_global_recover",     test_global_recover, 0   },
      { "working_64bit_int",          working_64bit_int,   0   },
      { "sqlite4_create_function_v2", test_create_function_v2, 0 },
 

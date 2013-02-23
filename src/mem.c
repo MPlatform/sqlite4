@@ -14,7 +14,6 @@
 ** allocator object.
 */
 #include "sqlite4.h"
-#include "mem.h"
 #include <stdlib.h>
 
 /*************************************************************************
@@ -100,19 +99,19 @@ static malloc_zone_t* _sqliteZone_;
 /*
 ** Implementations of core routines
 */
-static void *mmSysMalloc(sqlite4_mm *pMM, sqlite4_int64 iSize){
+static void *mmSysMalloc(sqlite4_mm *pMM, sqlite4_size_t iSize){
 #ifdef SQLITE4_MALLOCSIZE
   return SQLITE4_MALLOC(iSize);
 #else
   unsigned char *pRes = SQLITE4_MALLOC(iSize+8);
   if( pRes ){
-    *(sqlite4_int64*)pRes = iSize;
+    *(sqlite4_size_t*)pRes = iSize;
     pRes += 8;
   }
   return pRes;
 #endif
 }
-static void *mmSysRealloc(sqlite4_mm *pMM, void *pOld, sqlite4_int64 iSz){
+static void *mmSysRealloc(sqlite4_mm *pMM, void *pOld, sqlite4_size_t iSz){
 #ifdef SQLITE4_MALLOCSIZE
   return SQLITE4_REALLOC(pOld, iSz);
 #else
@@ -122,7 +121,7 @@ static void *mmSysRealloc(sqlite4_mm *pMM, void *pOld, sqlite4_int64 iSz){
   pRes -= 8;
   pRes = SQLITE4_REALLOC(pRes, iSz+8);
   if( pRes ){
-    *(sqlite4_int64*)pRes = iSz;
+    *(sqlite4_size_t*)pRes = iSz;
     pRes += 8;
   }
   return pRes;
@@ -139,7 +138,7 @@ static void mmSysFree(sqlite4_mm *pNotUsed, void *pOld){
   SQLITE4_FREE(pRes);
 #endif
 }
-static sqlite4_int64 mmSysMsize(sqlite4_mm *pNotUsed, void *pOld){
+static sqlite4_size_t mmSysMsize(sqlite4_mm *pNotUsed, void *pOld){
 #ifdef SQLITE4_MALLOCSIZE
   return SQLITE4_MALLOCSIZE(pOld);
 #else
@@ -147,7 +146,7 @@ static sqlite4_int64 mmSysMsize(sqlite4_mm *pNotUsed, void *pOld){
   if( pOld==0 ) return 0;
   pX = (unsigned char *)pOld;
   pX -= 8;
-  return *(sqlite4_int64*)pX;
+  return *(sqlite4_size_t*)pX;
 #endif
 }
 
@@ -159,11 +158,15 @@ static const sqlite4_mm_methods mmSysMethods = {
   /* xMsize   */    mmSysMsize,
   /* xMember  */    0,
   /* xBenign  */    0,
+  /* xStat    */    0,
   /* xFinal   */    0
 };
-static sqlite4_mm mmSystem =  {
+sqlite4_mm sqlite4MMSystem =  {
   /* pMethods */    &mmSysMethods
 };
+
+/* The system memory allocator is the default. */
+sqlite4_mm *sqlite4_mm_default(void){ return &sqlite4MMSystem; }
 
 /*************************************************************************
 ** The SQLITE4_MM_OVERFLOW memory allocator.
@@ -179,7 +182,7 @@ struct mmOvfl {
   sqlite4_mm *pB;     /* Backup memory allocator in case pA fails */
 };
 
-static void *mmOvflMalloc(sqlite4_mm *pMM, sqlite4_int64 iSz){
+static void *mmOvflMalloc(sqlite4_mm *pMM, sqlite4_size_t iSz){
   const struct mmOvfl *pOvfl = (const struct mmOvfl*)pMM;
   void *pRes;
   pRes = pOvfl->pA->pMethods->xMalloc(pOvfl->pA, iSz);
@@ -188,7 +191,7 @@ static void *mmOvflMalloc(sqlite4_mm *pMM, sqlite4_int64 iSz){
   }
   return pRes;
 }
-static void *mmOvflRealloc(sqlite4_mm *pMM, void *pOld, sqlite4_int64 iSz){
+static void *mmOvflRealloc(sqlite4_mm *pMM, void *pOld, sqlite4_size_t iSz){
   const struct mmOvfl *pOvfl;
   void *pRes;
   if( pOld==0 ) return mmOvflMalloc(pMM, iSz);
@@ -210,9 +213,9 @@ static void mmOvflFree(sqlite4_mm *pMM, void *pOld){
     pOvfl->pB->pMethods->xFree(pOvfl->pB, pOld);
   }
 }
-static sqlite4_int64 mmOvflMsize(sqlite4_mm *pMM, void *pOld){
+static sqlite4_size_t mmOvflMsize(sqlite4_mm *pMM, void *pOld){
   const struct mmOvfl *pOvfl;
-  sqlite4_int64 iSz;
+  sqlite4_size_t iSz;
   if( pOld==0 ) return 0;
   pOvfl = (const struct mmOvfl*)pMM;
   if( pOvfl->xMemberOfA(pOvfl->pA, pOld) ){
@@ -255,6 +258,7 @@ static const sqlite4_mm_methods mmOvflMethods = {
   /* xMsize   */    mmOvflMsize,
   /* xMember  */    mmOvflMember,
   /* xBenign  */    mmOvflBenign,
+  /* xStat    */    0,
   /* xFinal   */    mmOvflFinal
 };
 static sqlite4_mm *mmOvflNew(sqlite4_mm *pA, sqlite4_mm *pB){
@@ -297,7 +301,7 @@ struct mmOneszBlock {
   struct mmOneszBlock *pNext;  /* Next on the freelist */
 };
 
-static void *mmOneszMalloc(sqlite4_mm *pMM, sqlite4_int64 iSz){
+static void *mmOneszMalloc(sqlite4_mm *pMM, sqlite4_size_t iSz){
   struct mmOnesz *pOnesz = (struct mmOnesz*)pMM;
   void *pRes;
   if( iSz>pOnesz->sz ) return 0;
@@ -314,7 +318,7 @@ static void mmOneszFree(sqlite4_mm *pMM, void *pOld){
     pOnesz->pFree = pBlock;
   }
 }
-static void *mmOneszRealloc(sqlite4_mm *pMM, void *pOld, sqlite4_int64 iSz){
+static void *mmOneszRealloc(sqlite4_mm *pMM, void *pOld, sqlite4_size_t iSz){
   struct mmOnesz *pOnesz = (struct mmOnesz*)pMM;
   if( pOld==0 ) return mmOneszMalloc(pMM, iSz);
   if( iSz<=0 ){
@@ -324,7 +328,7 @@ static void *mmOneszRealloc(sqlite4_mm *pMM, void *pOld, sqlite4_int64 iSz){
   if( iSz>pOnesz->sz ) return 0;
   return pOld;
 }
-static sqlite4_int64 mmOneszMsize(sqlite4_mm *pMM, void *pOld){
+static sqlite4_size_t mmOneszMsize(sqlite4_mm *pMM, void *pOld){
   struct mmOnesz *pOnesz = (struct mmOnesz*)pMM;
   return pOld ? pOnesz->sz : 0;  
 }
@@ -340,6 +344,7 @@ static const sqlite4_mm_methods mmOneszMethods = {
   /* xMsize   */    mmOneszMsize,
   /* xMember  */    mmOneszMember,
   /* xBenign  */    0,
+  /* xStat    */    0,
   /* xFinal   */    0
 };
 static sqlite4_mm *mmOneszNew(void *pSpace, int sz, int cnt){
@@ -368,30 +373,35 @@ static sqlite4_mm *mmOneszNew(void *pSpace, int sz, int cnt){
 /*************************************************************************
 ** Main interfaces.
 */
-void *sqlite4_mm_malloc(sqlite4_mm *pMM, sqlite4_int64 iSize){
-  if( pMM==0 ) pMM = &mmSystem;
+void *sqlite4_mm_malloc(sqlite4_mm *pMM, sqlite4_size_t iSize){
+  if( pMM==0 ) pMM = &sqlite4MMSystem;
   return pMM->pMethods->xMalloc(pMM,iSize);
 }
-void *sqlite4_mm_realloc(sqlite4_mm *pMM, void *pOld, sqlite4_int64 iSize){
-  if( pMM==0 ) pMM = &mmSystem;
+void *sqlite4_mm_realloc(sqlite4_mm *pMM, void *pOld, sqlite4_size_t iSize){
+  if( pMM==0 ) pMM = &sqlite4MMSystem;
   return pMM->pMethods->xRealloc(pMM,pOld,iSize);
 }
 void sqlite4_mm_free(sqlite4_mm *pMM, void *pOld){
-  if( pMM==0 ) pMM = &mmSystem;
+  if( pMM==0 ) pMM = &sqlite4MMSystem;
   pMM->pMethods->xFree(pMM,pOld);
 }
-sqlite4_int64 sqlite4_mm_msize(sqlite4_mm *pMM, void *pOld){
-  if( pMM==0 ) pMM = &mmSystem;
+sqlite4_size_t sqlite4_mm_msize(sqlite4_mm *pMM, void *pOld){
+  if( pMM==0 ) pMM = &sqlite4MMSystem;
   return pMM->pMethods->xMsize(pMM,pOld);
 }
 int sqlite4_mm_member(sqlite4_mm *pMM, const void *pOld){
   return (pMM && pMM->pMethods->xMember!=0) ?
             pMM->pMethods->xMember(pMM,pOld) : -1;
 }
-void sqlite4_mm_benign_failure(sqlite4_mm *pMM, int bEnable){
+void sqlite4_mm_benign_failures(sqlite4_mm *pMM, int bEnable){
   if( pMM && pMM->pMethods->xBenign ){
     pMM->pMethods->xBenign(pMM, bEnable);
   }
+}
+sqlite4_int64 sqlite4_mm_stat(sqlite4_mm *pMM, int eStatType, unsigned flags){
+  if( pMM==0 ) return -1;
+  if( pMM->pMethods->xStat==0 ) return -1;
+  return pMM->pMethods->xStat(pMM, eStatType, flags);
 }
 void sqlite4_mm_destroy(sqlite4_mm *pMM){
   if( pMM && pMM->pMethods->xFinal ) pMM->pMethods->xFinal(pMM);
@@ -408,7 +418,7 @@ sqlite4_mm *sqlite4_mm_new(sqlite4_mm_type eType, ...){
   va_start(ap, eType);
   switch( eType ){
     case SQLITE4_MM_SYSTEM: {
-      pMM = &mmSystem;
+      pMM = &sqlite4MMSystem;
       break;
     }
     case SQLITE4_MM_OVERFLOW: {

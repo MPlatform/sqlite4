@@ -54,11 +54,7 @@ foreach enc $encodings {
   set j 1
   foreach init $inits {
 
-    do_test enc4-$i.$j.2 {
-      set S [sqlite4_prepare db "SELECT $init+?" -1 dummy]
-      sqlite4_expired $S
-    } {0}
-      
+    set S [sqlite4_prepare db "SELECT $init+?" -1 dummy]
     set k 1
     foreach val $vals {
       for {set x 1} {$x<16} {incr x} {
