@@ -135,7 +135,7 @@ SRC = \
   $(TOP)/src/main.c \
   $(TOP)/src/malloc.c \
   $(TOP)/src/math.c \
-  $(TOP)/src/mem.o \
+  $(TOP)/src/mem.c \
   $(TOP)/src/mem0.c \
   $(TOP)/src/mem1.c \
   $(TOP)/src/mem2.c \
