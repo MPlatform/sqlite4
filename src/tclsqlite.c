@@ -1273,7 +1273,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     "close",              "collate",           "collation_needed",
     "complete",           "copy",              "enable_load_extension", 
     "errorcode",          "eval",              "exists",             
-    "function",           "interrupt",         "last_insert_rowid",
+    "function",           "interrupt",         
     "nullvalue",          "onecolumn",         "profile",
     "rekey",              "status",            "total_changes",
     "trace",              "transaction",       "unlock_notify",
@@ -1284,7 +1284,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     DB_CLOSE,             DB_COLLATE,          DB_COLLATION_NEEDED,
     DB_COMPLETE,          DB_COPY,             DB_ENABLE_LOAD_EXTENSION, 
     DB_ERRORCODE,         DB_EVAL,             DB_EXISTS,            
-    DB_FUNCTION,          DB_INTERRUPT,        DB_LAST_INSERT_ROWID, 
+    DB_FUNCTION,          DB_INTERRUPT,        
     DB_NULLVALUE,         DB_ONECOLUMN,        DB_PROFILE,           
     DB_REKEY,             DB_STATUS,           DB_TOTAL_CHANGES,    
     DB_TRACE,             DB_TRANSACTION,      DB_UNLOCK_NOTIFY,
@@ -1900,24 +1900,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
       }
     }
     Tcl_SetObjResult(interp, dbTextToObj(pDb->zNull));
-    break;
-  }
-
-  /*
-  **     $db last_insert_rowid 
-  **
-  ** Return an integer which is the ROWID for the most recent insert.
-  */
-  case DB_LAST_INSERT_ROWID: {
-    Tcl_Obj *pResult;
-    Tcl_WideInt rowid;
-    if( objc!=2 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "");
-      return TCL_ERROR;
-    }
-    rowid = sqlite4_last_insert_rowid(pDb->db);
-    pResult = Tcl_GetObjResult(interp);
-    Tcl_SetWideIntObj(pResult, rowid);
     break;
   }
 

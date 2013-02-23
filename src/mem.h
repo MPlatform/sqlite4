@@ -9,10 +9,9 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** This header file defines the interface that the SQLite4 memory
-** management logic.
 **
-** Some of this will eventually fold into sqliteInt.h.
+** This file defines the sqlite4_mm "SQLite4 Memory Manager" object and
+** its interfaces.
 */
 
 
@@ -32,7 +31,27 @@ struct sqlite4_mm {
 };
 
 /*
-** An instance of the following object defines a BESPOKE memory alloator
+** Memory statistics reporting
+*/
+typedef enum {
+  SQLITE4_MMSTAT_OUT = 1,         /* Bytes of memory outstanding */
+  SQLITE4_MMSTAT_UNITS = 2,       /* Separate allocations outstanding */
+  SQLITE4_MMSTAT_SIZE = 3,        /* Size of the allocation */
+  SQLITE4_MMSTAT_SZFAULT = 4,     /* Number of faults due to size */
+  SQLITE4_MMSTAT_MEMFAULT = 5,    /* Number of faults due to out of space */
+  SQLITE4_MMSTAT_FAULT = 6,       /* Total number of faults */
+};
+
+/*
+** Bit flags for the 3rd parameter of xStat()
+*/
+#define SQLITE4_MMSTAT_HIGHWATER  0x01
+#define SQLITE4_MMSTAT_RESET      0x02
+#define SQLITE4_MMSTAT_HWRESET    0x03
+
+/*
+** An instance of the following object defines the methods on
+** a BESPOKE memory allocator.
 */
 struct sqlite4_mm_methods {
   int iVersion;
@@ -42,6 +61,7 @@ struct sqlite4_mm_methods {
   sqlite4_int64 (*xMsize)(sqlite4_mm*, void*);
   int (*xMember)(sqlite4_mm*, const void*);
   void (*xBenign)(sqlite4_mm*, int);
+  sqlite4_int64 (*xStat)(sqlite4_mm*, sqlite4_mm_stattype, unsigned flags);
   void (*xFinal)(sqlite4_mm*);
 };
 
@@ -49,15 +69,15 @@ struct sqlite4_mm_methods {
 ** Available memory management types:
 */
 typedef enum {
-  SQLITE4_MM_SYSTEM,         /* Use the system malloc() */
-  SQLITE4_MM_ONESIZE,        /* All allocations map to a fixed size */
-  SQLITE4_MM_OVERFLOW,       /* Two allocators. Use A first; failover to B */
-  SQLITE4_MM_COMPACT,        /* Like memsys3 from SQLite3 */
-  SQLITE4_MM_ROBSON,         /* Like memsys5 from SQLite3 */
-  SQLITE4_MM_LINEAR,         /* Allocate from a fixed buffer w/o free */
+  SQLITE4_MM_SYSTEM = 1,     /* Use the system malloc() */
+  SQLITE4_MM_ONESIZE = 2,    /* All allocations map to a fixed size */
+  SQLITE4_MM_OVERFLOW = 3,   /* Two allocators. Use A first; failover to B */
+  SQLITE4_MM_COMPACT = 4,    /* Like memsys3 from SQLite3 */
+  SQLITE4_MM_ROBSON = 5,     /* Like memsys5 from SQLite3 */
+  SQLITE4_MM_LINEAR = 6,     /* Allocate from a fixed buffer w/o free */
+  SQLITE4_MM_BESPOKE = 7,    /* Caller-defined implementation */
   SQLITE4_MM_DEBUG,          /* Debugging memory allocator */
-  SQLITE4_MM_STATS,          /* Keep memory statistics */
-  SQLITE4_MM_BESPOKE         /* Caller-defined implementation */
+  SQLITE4_MM_STATS           /* Keep memory statistics */
 } sqlite4_mm_type;
 
 /*
@@ -107,3 +127,6 @@ int sqlite4_mm_member(sqlite4_mm *pMM, const void *pOld);
 ** allocations that occur in benign failure mode are considered "optional".
 */
 void sqlite4_mm_benign_failures(sqlite4_mm*, int bEnable);
+
+/*
+** Rest

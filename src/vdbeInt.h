@@ -58,7 +58,6 @@ struct VdbeCursor {
   int pseudoTableReg;   /* Register holding pseudotable content. */
   int nField;           /* Number of fields in the header */
   Bool zeroed;          /* True if zeroed out and ready for reuse */
-  Bool rowidIsValid;    /* True if lastRowid is valid */
   Bool atFirst;         /* True if pointing to first entry */
   Bool nullRow;         /* True if pointing to a row with no data */
   Bool isTable;         /* True if a table requiring integer keys */
@@ -68,7 +67,6 @@ struct VdbeCursor {
   const sqlite4_module *pModule;     /* Module for cursor pVtabCursor */
   i64 seqCount;         /* Sequence counter */
   i64 movetoTarget;     /* Argument to the deferred move-to */
-  i64 lastRowid;        /* Last rowid from a Next or NextIdx operation */
   VdbeSorter *pSorter;  /* Sorter object for OP_SorterOpen cursors */
   Fts5Cursor *pFts;     /* Fts5 cursor object (or NULL) */
 
@@ -113,7 +111,6 @@ struct VdbeFrame {
   void *token;            /* Copy of SubProgram.token */
   int nChildMem;          /* Number of memory cells for child frame */
   int nChildCsr;          /* Number of cursors for child frame */
-  i64 lastRowid;          /* Last insert rowid (sqlite4.lastRowid) */
   int nChange;            /* Statement changes (Vdbe.nChanges)     */
   VdbeFrame *pParent;     /* Parent of this frame, or NULL if parent is main */
 };

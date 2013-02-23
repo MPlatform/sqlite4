@@ -439,23 +439,6 @@ static void randomBlob(
 }
 
 /*
-** Implementation of the last_insert_rowid() SQL function.  The return
-** value is the same as the sqlite4_last_insert_rowid() API function.
-*/
-static void last_insert_rowid(
-  sqlite4_context *context, 
-  int NotUsed, 
-  sqlite4_value **NotUsed2
-){
-  sqlite4 *db = sqlite4_context_db_handle(context);
-  UNUSED_PARAMETER2(NotUsed, NotUsed2);
-  /* IMP: R-51513-12026 The last_insert_rowid() SQL function is a
-  ** wrapper around the sqlite4_last_insert_rowid() C/C++ interface
-  ** function. */
-  sqlite4_result_int64(context, sqlite4_last_insert_rowid(db));
-}
-
-/*
 ** Implementation of the changes() SQL function.
 **
 ** IMP: R-62073-11209 The changes() SQL function is a wrapper
@@ -1540,7 +1523,6 @@ void sqlite4RegisterGlobalFunctions(sqlite4_env *pEnv){
     FUNCTION(sqlite_compileoption_get, 1, 0, 0, compileoptiongetFunc  ),
 #endif /* SQLITE4_OMIT_COMPILEOPTION_DIAGS */
     FUNCTION(quote,              1, 0, 0, quoteFunc        ),
-    FUNCTION(last_insert_rowid,  0, 0, 0, last_insert_rowid),
     FUNCTION(changes,            0, 0, 0, changes          ),
     FUNCTION(total_changes,      0, 0, 0, total_changes    ),
     FUNCTION(replace,            3, 0, 0, replaceFunc      ),

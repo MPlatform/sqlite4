@@ -1524,7 +1524,6 @@ int sqlite4VdbeFrameRestore(VdbeFrame *pFrame){
   v->nMem = pFrame->nMem;
   v->apCsr = pFrame->apCsr;
   v->nCursor = pFrame->nCursor;
-  v->db->lastRowid = pFrame->lastRowid;
   v->nChange = pFrame->nChange;
   return pFrame->pc;
 }

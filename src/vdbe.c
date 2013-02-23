@@ -526,7 +526,6 @@ int sqlite4VdbeExec(
   Mem *pOut = 0;             /* Output operand */
   int iCompare = 0;          /* Result of last OP_Compare operation */
   int *aPermute = 0;         /* Permutation of columns for OP_Compare */
-  i64 lastRowid = db->lastRowid;  /* Saved value of the last insert ROWID */
 #ifdef VDBE_PROFILE
   u64 start;                 /* CPU clock count at start of opcode */
   int origPc;                /* Program counter at start of opcode */
@@ -795,7 +794,6 @@ case OP_Halt: {
     p->nFrame--;
     sqlite4VdbeSetChanges(db, p->nChange);
     pc = sqlite4VdbeFrameRestore(pFrame);
-    lastRowid = db->lastRowid;
     if( pOp->p2==OE_Ignore ){
       /* Instruction pc is the OP_Program that invoked the sub-program 
       ** currently being halted. If the p2 instruction of this OP_Halt
@@ -1383,9 +1381,7 @@ case OP_Function: {
     assert( pOp[-1].opcode==OP_CollSeq );
     ctx.pColl = pOp[-1].p4.pColl;
   }
-  db->lastRowid = lastRowid;
   (*ctx.pFunc->xFunc)(&ctx, n, apVal); /* IMP: R-24505-23230 */
-  lastRowid = db->lastRowid;
 
   /* If any auxiliary data functions have been called by this user function,
   ** immediately call the destructor for any non-static values.
@@ -2196,10 +2192,6 @@ case OP_Affinity: {
 ** If the OPFLAG_SEQCOUNT bit of P5 is set, then a sequence number 
 ** (unique within the cursor) is appended to the record. The sole purpose
 ** of this is to ensure that the key blob is unique within the cursors table.
-**
-** If the OPFLAG_LASTROWID bit of P5 is set and the value of the first and
-** only field of the key is an integer, then set the lastRowid field to the
-** value of that integer.
 */
 case OP_MakeIdxKey: {
   VdbeCursor *pC;
@@ -2231,9 +2223,6 @@ case OP_MakeIdxKey: {
       iSeq = iSeq >> 7;
     }while( iSeq );
     aSeq[sizeof(aSeq)-nSeq] |= 0x80;
-  }
-  if( (pOp->p5 & OPFLAG_LASTROWID)!=0 && (pData0->flags & MEM_Int)!=0 ){
-    lastRowid = pData0->u.i;
   }
 
   memAboutToChange(p, pOut);
@@ -3433,7 +3422,6 @@ case OP_InsertInt: {
   }
 
   if( pOp->p5 & OPFLAG_NCHANGE ) p->nChange++;
-  if( pOp->p5 & OPFLAG_LASTROWID ) db->lastRowid = lastRowid = iKey;
   if( pData->flags & MEM_Null ){
     pData->z = 0;
     pData->n = 0;
@@ -3636,7 +3624,6 @@ case OP_NullRow: {
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
   pC->nullRow = 1;
-  pC->rowidIsValid = 0;
   break;
 }
 
@@ -3777,7 +3764,6 @@ case OP_Next: {        /* jump */
     pC->nullRow = 1;
     rc = SQLITE4_OK;
   }
-  pC->rowidIsValid = 0;
   break;
 }
 
@@ -4192,7 +4178,6 @@ case OP_Program: {        /* jump */
 
   p->nFrame++;
   pFrame->pParent = p->pFrame;
-  pFrame->lastRowid = lastRowid;
   pFrame->nChange = p->nChange;
   p->nChange = 0;
   p->pFrame = pFrame;
@@ -4817,10 +4802,6 @@ case OP_VUpdate: {
     rc = pModule->xUpdate(pVtab, nArg, apArg, &rowid);
     db->vtabOnConflict = vtabOnConflict;
     importVtabErrMsg(p, pVtab);
-    if( rc==SQLITE4_OK && pOp->p1 ){
-      assert( nArg>1 && apArg[0] && (apArg[0]->flags&MEM_Null) );
-      db->lastRowid = lastRowid = rowid;
-    }
     if( rc==SQLITE4_CONSTRAINT && pOp->p4.pVtab->bConstraint ){
       if( pOp->p5==OE_Ignore ){
         rc = SQLITE4_OK;
@@ -5073,7 +5054,6 @@ vdbe_error_halt:
   ** release the mutexes on btrees that were acquired at the
   ** top. */
 vdbe_return:
-  db->lastRowid = lastRowid;
   return rc;
 
   /* Jump to here if a string or blob larger than SQLITE4_MAX_LENGTH

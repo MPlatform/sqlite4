@@ -567,31 +567,6 @@ static int test_snprintf_int(
 }
 
 
-
-/*
-** Usage:  sqlite4_last_insert_rowid DB
-**
-** Returns the integer ROWID of the most recent insert.
-*/
-static int test_last_rowid(
-  void *NotUsed,
-  Tcl_Interp *interp,    /* The TCL interpreter that invoked this command */
-  int argc,              /* Number of arguments */
-  char **argv            /* Text of each argument */
-){
-  sqlite4 *db;
-  char zBuf[30];
-
-  if( argc!=2 ){
-    Tcl_AppendResult(interp, "wrong # args: should be \"", argv[0], " DB\"", 0);
-    return TCL_ERROR;
-  }
-  if( getDbPointer(interp, argv[1], &db) ) return TCL_ERROR;
-  sprintf(zBuf, "%lld", sqlite4_last_insert_rowid(db));
-  Tcl_AppendResult(interp, zBuf, 0);
-  return SQLITE4_OK;
-}
-
 /*
 ** Usage:  sqlite4_key DB KEY
 **
@@ -4547,7 +4522,6 @@ int Sqlitetest1_Init(Tcl_Interp *interp){
      { "sqlite4_mprintf_z_test",        (Tcl_CmdProc*)test_mprintf_z        },
      { "sqlite4_mprintf_n_test",        (Tcl_CmdProc*)test_mprintf_n        },
      { "sqlite4_snprintf_int",          (Tcl_CmdProc*)test_snprintf_int     },
-     { "sqlite4_last_insert_rowid",     (Tcl_CmdProc*)test_last_rowid       },
      { "sqlite4_exec_printf",           (Tcl_CmdProc*)test_exec_printf      },
      { "sqlite4_exec_hex",              (Tcl_CmdProc*)test_exec_hex         },
      { "sqlite4_exec",                  (Tcl_CmdProc*)test_exec             },

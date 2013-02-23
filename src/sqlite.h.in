@@ -9,21 +9,12 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** This header file defines the interface that the SQLite library
+**
+** This header file defines the interface that the SQLite4 library
 ** presents to client programs.  If a C-function, structure, datatype,
 ** or constant definition does not appear in this file, then it is
 ** not a published API of SQLite, is subject to change without
 ** notice, and should not be referenced by programs that use SQLite.
-**
-** Some of the definitions that are in this file are marked as
-** "experimental".  Experimental interfaces are normally new
-** features recently added to SQLite.  We do not anticipate changes
-** to experimental interfaces but reserve the right to make minor changes
-** if experience from use "in the wild" suggest such changes are prudent.
-**
-** The official C-language API documentation for SQLite is derived
-** from comments in this file.  This file is the authoritative source
-** on how SQLite interfaces are suppose to operate.
 **
 ** The name of this file under configuration management is "sqlite.h.in".
 ** The makefile makes some minor changes to this file (such as inserting
@@ -48,22 +39,6 @@ extern "C" {
 #ifndef SQLITE4_EXTERN
 # define SQLITE4_EXTERN extern
 #endif
-
-/*
-** These no-op macros are used in front of interfaces to mark those
-** interfaces as either deprecated or experimental.  New applications
-** should not use deprecated interfaces - they are support for backwards
-** compatibility only.  Application writers should be aware that
-** experimental interfaces are subject to change in point releases.
-**
-** These macros used to resolve to various kinds of compiler magic that
-** would generate warning messages when they were used.  But that
-** compiler magic ended up generating such a flurry of bug reports
-** that we have taken it all out and gone back to using simple
-** noop macros.
-*/
-#define SQLITE4_DEPRECATED
-#define SQLITE4_EXPERIMENTAL
 
 /*
 ** Ensure these symbols were not defined by some previous header file.
@@ -742,49 +717,6 @@ struct sqlite4_mem_methods {
 
 
 /*
-** CAPIREF: Last Insert Rowid
-**
-** ^The sqlite4_last_insert_rowid(D) routine returns the primary key value
-** of the the most recent successful [INSERT] from [database connection] D
-** into a table where the primary key of the inserted row is a single
-** integer.
-** ^If there have been no successful [INSERT]s of rows with a single integer
-** PRIMARY KEY value on database connection D, then this routine returns
-** zero.
-**
-** ^(If an [INSERT] occurs within a trigger or within a [virtual table]
-** method, then this routine will return the [rowid] of the inserted
-** row as long as the trigger or virtual table method is running.
-** But once the trigger or virtual table method ends, the value returned 
-** by this routine reverts to what it was before the trigger or virtual
-** table method began.)^
-**
-** ^An [INSERT] that fails due to a constraint violation is not a
-** successful [INSERT] and does not change the value returned by this
-** routine.  ^Thus INSERT OR FAIL, INSERT OR IGNORE, INSERT OR ROLLBACK,
-** and INSERT OR ABORT make no changes to the return value of this
-** routine when their insertion fails.  ^(When INSERT OR REPLACE
-** encounters a constraint violation, it does not fail.  The
-** INSERT continues to completion after deleting rows that caused
-** the constraint problem so INSERT OR REPLACE will always change
-** the return value of this interface.)^
-**
-** ^For the purposes of this routine, an [INSERT] is considered to
-** be successful even if it is subsequently rolled back.
-**
-** This function is accessible to SQL statements via the
-** [last_insert_rowid() SQL function].
-**
-** If a separate thread performs a new [INSERT] on the same
-** database connection while the [sqlite4_last_insert_rowid()]
-** function is running and thus changes the last insert [rowid],
-** then the value returned by [sqlite4_last_insert_rowid()] is
-** unpredictable and might not equal either the old or the new
-** last insert [rowid].
-*/
-sqlite4_int64 sqlite4_last_insert_rowid(sqlite4*);
-
-/*
 ** CAPIREF: Count The Number Of Rows Modified
 **
 ** ^This function returns the number of database rows that were changed
@@ -1315,7 +1247,7 @@ int sqlite4_set_authorizer(
 ** subject to change in future versions of SQLite.
 */
 void *sqlite4_trace(sqlite4*, void(*xTrace)(void*,const char*), void*);
-SQLITE4_EXPERIMENTAL void *sqlite4_profile(sqlite4*,
+void *sqlite4_profile(sqlite4*,
    void(*xProfile)(void*,const char*,sqlite4_uint64), void*);
 
 /*
@@ -2144,7 +2076,8 @@ int sqlite4_data_count(sqlite4_stmt *pStmt);
 ** ^The sqlite4_column_type() routine returns the
 ** [SQLITE4_INTEGER | datatype code] for the initial data type
 ** of the result column.  ^The returned value is one of [SQLITE4_INTEGER],
-** [SQLITE4_FLOAT], [SQLITE4_TEXT], [SQLITE4_BLOB], or [SQLITE4_NULL].  The value
+** [SQLITE4_FLOAT], [SQLITE4_TEXT], [SQLITE4_BLOB], or [SQLITE4_NULL].
+** The value
 ** returned by sqlite4_column_type() is only meaningful if no type
 ** conversions have occurred as described below.  After a type conversion,
 ** the value returned by sqlite4_column_type() is undefined.  Future
@@ -2474,23 +2407,6 @@ int sqlite4_create_function_v2(
 #define SQLITE4_UTF16_ALIGNED  8    /* sqlite4_create_collation only */
 
 /*
-** CAPIREF: Deprecated Functions
-** DEPRECATED
-**
-** These functions are [deprecated].  In order to maintain
-** backwards compatibility with older code, these functions continue 
-** to be supported.  However, new applications should avoid
-** the use of these functions.  To help encourage people to avoid
-** using these functions, we are not going to tell you what they do.
-*/
-#ifndef SQLITE4_OMIT_DEPRECATED
-SQLITE4_DEPRECATED int sqlite4_aggregate_count(sqlite4_context*);
-SQLITE4_DEPRECATED int sqlite4_expired(sqlite4_stmt*);
-SQLITE4_DEPRECATED int sqlite4_transfer_bindings(sqlite4_stmt*, sqlite4_stmt*);
-SQLITE4_DEPRECATED int sqlite4_global_recover(void);
-#endif
-
-/*
 ** CAPIREF: Obtaining SQL Function Parameter Values
 **
 ** The C-language implementation of SQL functions and aggregates uses
@@ -2723,7 +2639,8 @@ void sqlite4_dynamic(void*,void*);
 ** modify the text after they return without harm.
 ** ^The sqlite4_result_error_code() function changes the error code
 ** returned by SQLite as a result of an error in a function.  ^By default,
-** the error code is SQLITE4_ERROR.  ^A subsequent call to sqlite4_result_error()
+** the error code is SQLITE4_ERROR.
+** ^A subsequent call to sqlite4_result_error()
 ** or sqlite4_result_error16() resets the error code to SQLITE4_ERROR.
 **
 ** ^The sqlite4_result_toobig() interface causes SQLite to throw an error
@@ -3855,7 +3772,8 @@ int sqlite4_db_status(sqlite4*, int op, int *pCur, int *pHiwtr, int resetFlg);
 ** if a discontinued or unsupported verb is invoked.
 **
 ** <dl>
-** [[SQLITE4_DBSTATUS_LOOKASIDE_USED]] ^(<dt>SQLITE4_DBSTATUS_LOOKASIDE_USED</dt>
+** [[SQLITE4_DBSTATUS_LOOKASIDE_USED]]
+** ^(<dt>SQLITE4_DBSTATUS_LOOKASIDE_USED</dt>
 ** <dd>This parameter returns the number of lookaside memory slots currently
 ** checked out.</dd>)^
 **
@@ -3960,7 +3878,8 @@ int sqlite4_stmt_status(sqlite4_stmt*, int op,int resetFlg);
 ** The meanings of the various counters are as follows:
 **
 ** <dl>
-** [[SQLITE4_STMTSTATUS_FULLSCAN_STEP]] <dt>SQLITE4_STMTSTATUS_FULLSCAN_STEP</dt>
+** [[SQLITE4_STMTSTATUS_FULLSCAN_STEP]]
+** <dt>SQLITE4_STMTSTATUS_FULLSCAN_STEP</dt>
 ** <dd>^This is the number of times that SQLite has stepped forward in
 ** a table as part of a full table scan.  Large numbers for this counter
 ** may indicate opportunities for performance improvement through 
@@ -4201,7 +4120,8 @@ int sqlite4_vtab_config(sqlite4*, int op, ...);
 **
 ** This function may only be called from within a call to the [xUpdate] method
 ** of a [virtual table] implementation for an INSERT or UPDATE operation. ^The
-** value returned is one of [SQLITE4_ROLLBACK], [SQLITE4_IGNORE], [SQLITE4_FAIL],
+** value returned is one of [SQLITE4_ROLLBACK], [SQLITE4_IGNORE],
+** [SQLITE4_FAIL],
 ** [SQLITE4_ABORT], or [SQLITE4_REPLACE], according to the [ON CONFLICT] mode
 ** of the SQL statement that triggered the call to the [xUpdate] method of the
 ** [virtual table].
@@ -4322,7 +4242,7 @@ typedef struct sqlite4_kv_methods sqlite4_kv_methods;
 ** New key/value storage engines can be added to SQLite4 at run-time.
 ** In order to create a new KV storage engine, the application must 
 ** supply a "factory" function that creates an instance of the
-** sqlite4_kvstore object.  This is typedef defines the signature
+** sqlite4_kvstore object.  This typedef defines the signature
 ** of that factory function.
 */
 typedef int (*sqlite4_kvfactory)(

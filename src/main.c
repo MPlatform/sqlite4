@@ -31,13 +31,6 @@
 */
 void sqlite4_dynamic(void *pArg,void *p){ (void)pArg; (void)p; }
 
-#ifndef SQLITE4_AMALGAMATION
-/* IMPLEMENTATION-OF: R-46656-45156 The sqlite4_version[] string constant
-** contains the text of SQLITE4_VERSION macro. 
-*/
-const char sqlite4_version[] = SQLITE4_VERSION;
-#endif
-
 /* IMPLEMENTATION-OF: R-53536-42575 The sqlite4_libversion() function returns
 ** a pointer to the to the sqlite4_version[] string constant. 
 */
@@ -664,13 +657,6 @@ static int collNocaseMkKey(
     }
   }
   return nIn;
-}
-
-/*
-** Return the ROWID of the most recent insert
-*/
-sqlite4_int64 sqlite4_last_insert_rowid(sqlite4 *db){
-  return db->lastRowid;
 }
 
 /*
