@@ -1,0 +1,289 @@
+<title>Introduction For Programmers</title>
+
+<h2>1.0 Overview</h2>
+
+This document provides a broad overview of the Application Programming
+Interface (API) for SQLite4.  If you are new to SQLite and are wondering
+how to write a program that uses SQLite or how to incorporate SQLite into
+your existing program, this document is a good starting point.
+
+<h2>2.0 Implementation Language</h2>
+
+SQLite is written in ANSI-C.
+The C programming language is used because it is the universal assembly
+language - it can run on just about any hardware and on just about any
+operating system.  No matter what programming
+language is used for the application code, it can usually interface easily
+with a library written in C.
+
+SQLite is written in an Object-Oriented (OO) style.
+This may comes as a surprise to readers who have been trained to think
+that C++ is necessary for OO programming.  While it is true that C++
+has lots of syntactic sugar designed to make OO-style programming easier,
+there is nothing missing from generic ANSI-C that disqualifies it from
+using OO ideas and practices.
+
+In this document, there will be much talk of "objects", which are implemented
+as ordinary C structures, of course.  There is also talk of "methods" which
+are really just procedures which take a pointer to the object as their
+first parameter.  SQLite also uses object inheritance, though inheritance
+is only used in fringe areas of the API that do not fall within the scope
+of this document.
+
+<h2>3.0 Principal Objects</h2>
+
+Here are four object classes that every programmer who uses SQLite4 needs
+to be aware of:
+
+  1.  <b>sqlite4_mm</b> - A memory allocator
+  2.  <b>sqlite4_env</b> - A run-time environment
+  3.  <b>sqlite4</b> - A database connection
+  4.  <b>sqlite4_stmt</b> - A prepared statement
+
+The most important of these are the latter two, the database connection
+and prepared statement objects.
+SQLite4 provides default instances of a memory allocator and run-time
+environment which are adequate for most system programming tasks.
+
+
+<h3>3.1 The Memory Allocator Object</h3>
+
+A memory allocator object is used to allocate and deallocate bulk memory.
+SQLite4 supplies a default memory allocator object (obtained by calling
+the sqlite4_mm_default() function) which is just a wrapper around the
+system malloc()/realloc()/free() routines.  Most applications will get
+along fine using just this default.  But for applications with more advanced
+needs, other memory allocator objects are available, including:
+
+  *  Memory allocators that use fixed pool of memory (provided at start time)
+     rather than the heap.
+
+  *  Meta-memory allocators that use one memory allocator first but then
+     fail-over to a second one if the first one runs out of memory or is
+     otherwise unable to satisfy an allocation.
+
+  *  Memory allocators operating out of a fixed pool of memory and that
+     provide robust guarantees against memory fragmentation.
+
+  *  Memory allocators that provide lots of information about how much
+     memory is being used.
+
+  *  Memory allocators that can simulate out-of-memory (OOM) faults for
+     testing purposes.
+
+  *  Memory allocators that aggressively check for misuse of the memory
+     allocation system, by (for example) overwriting memory as it is freed,
+     and initializing newly allocated memory to a random bit pattern.
+
+  *  Completely customized and application-specific memory allocators.
+
+The various memory allocators mentioned above are implemented by subclassing
+the top-level memory allocator object.  Unless you are implementing your
+own customized memory allocator, you do not really need to know about this
+subclassing.  At the application programming level, you will only encounter
+pointers to the sqlite4_mm object base class.
+
+There are various methods on the sqlite4_mm object, including:
+
+  *  <b>sqlite4_mm_malloc()</b> - allocate bulk memory
+  *  <b>sqlite4_mm_free()</b> - release memory previously allocated
+  *  <b>sqlite4_mm_realloc()</b> - change the size of a prior allocation
+  *  <b>sqlite4_mm_msize()</b> - report the size of an allocation
+  *  <b>sqlite4_mm_stat()</b> - report usage statistics on a memory allocator
+
+A memory allocator object is also passed as parameter to certain 
+interfaces in order to be used as a destructor.  For example, when
+binding a string to a parameter in a prepared statement using the
+sqlite4_bind_text() method on the prepared statement object, there
+is a parameter which is a pointer to a memory allocator object.  If
+that parameter is not NULL (and is not one of a handful of other
+values with special meanings) then SQLite4 will invoke the sqlite3_mm_free()
+method of the memory allocator on the string when it has finished using
+the string.
+
+<h3>3.2 The Run-Time Environment Object</h3>
+
+An instance of the run-time environment object defines how SQLite4
+interfaces to the rest of the system.  Each run-time environment object
+includes a pointer to a memory allocator object which is the default
+memory allocator for that environment.  The run-time environment also
+includes information such as:
+
+  *  How to create and use mutexes
+  *  Which storage engines are available for use on the backend
+  *  A library of SQL functions available for use by all database connections
+  *  Methods for obtaining the current time and for obtaining randomness
+  *  State information that is shared across multiple database connections
+  *  Other "global" configuration settings and start-time settings
+
+SQLite4 supplies a default run-time environment object
+(obtained by calling the sqlite4_env_default() function)
+that is suitable for use in most applications.  
+In fact, for many routines that require a pointer to a
+run-time environment object, you can pass in a NULL pointer and the
+NULL pointer will be automatically converted into a pointer to the default
+run-time environment.
+
+Usually the default run-time environment object is adequate, but some
+applications, especially those running on custom platforms or on small
+resource-limited devices, may want to create and use a new run-time
+environment object with non-standard settings.  A reasonable design is
+to create a single instance of an appropriate run-time environment object,
+then store a pointer to that object in a global variable where it is
+readily accessible to all parts of the application.
+
+It is possible to use two or more run-time environment objects within
+the same application.  But use caution here.  Due to a long-standing 
+bug in the design of Posix Advisor Locks (NB: the bug is in posix, not
+in SQLite) if you open two or more database connections to the same
+database using different run-time environment objects, then file locks
+will be broken in unexpected ways, which can lead to database corruption.
+Opening connections with different run-time environments to different
+databases is harmless and safe.  Opening multiple connections to the 
+same database using the same run-time environment is also harmless and safe.
+But opening multiple connections to the same database from different
+run-time environments can cause problems under posix.  Therefore, if
+you are programming for a posix system (iOS, Android, QNX, Linux, MacOS,
+etc.) you are advised to stick to using a single run-time environment
+for your application.  Windows does not have the posix advisory locking
+bug and so you are free to mix and match run-time environment objects,
+database connections, and databases with wild abandon there, if you are
+willing to sacrifice portability.
+
+<h3>3.3 The Database Connection Object</h3>
+
+The most important object is the database connection object: <b>sqlite4</b>.
+Each database connection object represents an open connection to one or
+more database files.  (The database connection starts out associated with
+just a single database file, but more databases can be added using the
+ATTACH statement.)  Many applications will have just a single database
+connection object, since they are only talking to a single database.
+But there are no arbitrary restrictions on the number of database objects
+that can be open at once.  (The number of open database connections might
+be constrained by system resource limitations such as the maximum number of
+open file descriptors.)  Multiple database connections can be opened on
+the same database file, if desired.
+
+Every database connection object is associated with a single run-time
+environment object.  The environment of a database connection determines
+how the database connection interacts with the operating system.  The
+run-time environment for the database connection is specified when the
+database connection is opened and cannot be changed.  In fact, the
+procedure for creating (for "opening") a database connection object is
+really a method on the run-time environment object.
+
+The life-cycle of a database connection object usually goes something
+like this:
+
+  #   Create the database connection object (also referred to as "opening" the
+      database connection) using the sqlite4_open() method of the 
+      sqlite4_env object.
+  #   Run SQL statements against the database connection using either the
+      direct interface (sqlite4_exec()) or by creating prepared statement
+      objects, one for each SQL statement, and evaluating the prepared
+      statement objects.
+  #   Destroy the database connection object (also referred to as
+      "closing" the database connection) using the sqlite4_close() method
+      of the sqlite4 object.
+
+Much SQLite programming centers around the use of database connection objects
+and programmers who use the SQLite library will quickly become familar with
+this object.  It is the traditional (at least among the SQLite developers
+themselves) to use the name "db" for variable that are pointers to a
+database connection object.
+
+<h3>3.4 The Prepared Statement Object</h3>
+
+A prepared statement object, <b>sqlite4_stmt</b>, represents a single statement
+of SQL that is to be run against a particular database connection.  Every
+prepared statement object is associated with a particular database connection
+object.  All prepared statements for a database connection must be destroyed
+(or "finalized") before the database connection can be destroyed (or "closed").
+
+The use of prepared statements is not strictly necessary in SQLite4.  One can
+do any type of SQL statement desired using the sqlite4_exec() method of the
+database connection object.  However, prepared statements are very handy and
+every programmer who wants to make serious use of the SQLite4 library needs
+to be familiar with them.
+
+A prepared statement object is created using the sqlite4_prepare() method
+on the database connection object.  The sqlite4_prepare() method takes
+a string as input which contains the text of the SQL statement, and outputs
+a pointer to a prepared statement object.  Think of the SQL statement text
+as source code and the prepared statement object as object code and the
+sqlite4_prepare() method as the compiler.
+
+A prepared statement is evaluated or executed using the sqlite4_step() 
+method on the prepared statement object.  Each call to sqlite4_step() 
+advances the prepared
+statement until it either (1) determines the next row of output or (2)
+completely finishes evaluating the SQL statement or (3) encounters an
+error.  The integer return value from sqlite4_step() lets the application
+know which of these three outcomes occurred.  For an SQL statement like
+an INSERT, UPDATE, or DELETE that does not return a result, the
+sqlite4_step() statement is usually called just a single time and reports
+completion of the SQL statement after the first step.  For a SELECT
+statement that returns multiple rows of output, on the other hand,
+the sqlite4_step() statement will be called multiple times, once for
+each row of output, then one last time to complete the evaluation.
+
+At any time, though typically after the prepared statement completes,
+the prepared statement object can be destroyed (or "finalized") by
+calling the sqlite4_finalize() method.  The perpared statement can also
+be reset back to the beginning of its execution program at any time by
+using the sqlite4_reset() method.  A common paradigm is to prepare
+a prepared statement once, then run the same statement many times
+using calls to sqlite4_step() for each execution with calls to
+sqlite4_reset() to rewind the program back to the beginning whenever
+it completes, followed by a single call to sqlite4_finalize() to destroy
+the prepared statement object at the very end.
+
+The SQL text used to create a prepared statement might include
+"parameter" - placeholders for unknown values.  For example:
+
+<blockquote><verbatim>
+INSERT INTO tab_xyz(x1,y2,z3) VALUES(:x, :y, :z);
+</verbatim></blockquote>
+
+In the INSERT statement above, the three values to be inserted as a new
+row into tab_xyz are specified as parameters ":x", ":y", and ":z".  
+Parameters can also be named as just a question mark ("?") or as a 
+question mark followed by a small integer (ex: "?17") or as identifiers
+that come after "$" or "@" (ex: "$var1" or "@xyz").
+
+When a prepared statement contains parameters, values (strings, blobs,
+integers, floating point numbers) can be "bound" to those parameters
+using methods on the prepared statement object.  For example, the
+sqlite4_bind_text() method will bind a UTF8 string to a parameter.
+The sqlite4_bind_int64() method will bind a signed 64-bit integer to 
+a parameter.  The sqlite4_bind_blob() method will bind a BLOB to the
+parameter.  And so forth.
+A parameter can be bound multiple times.  Each binding overrides the
+previous.
+
+The use of parameters has important advantages:
+
+  1.  Prepared statements can be compiled once and then reused many times,
+      by resetting the prepared statement and rebinding new values into
+      the parameters.  This reduces the number of calls to sqlite4_prepare()
+      and thus improves application performance.
+
+  2.  Values bound to parameters do not need to be escaped or encoded in
+      any way.  One binds raw content.  This is both more efficient than
+      having to encode the value as SQL text, and it completely eliminates
+      the possibility of an SQL injection attack.
+
+It is stated above that the use of prepared statements is not required
+since all SQL statements can be run using the sqlite4_exec() method on
+the database connection object.  That statement is true, but does not
+give the whole story.  In reality, the use of a prepared statement is
+the only way to evaluate SQL statements in SQLite4.  The sqlite4_exec()
+method is just a convenience wrapper that does all of the low-level work
+of preparing, stepping, and finalizing the prepared statements automatically,
+and out of sight.  So even though an application can avoid having to use
+prepared statements directly by using just sqlite4_exec(), prepared statement
+objects are still being used behind the scenes.
+
+<h2>4.0 Usage Example</h2>
+
+<i>TBD..</i>

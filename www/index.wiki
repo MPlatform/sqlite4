@@ -1,6 +1,7 @@
 <title>SQLite4</title>
 
   *  [./design.wiki | The Design Of SQLite4]
+  *  [./prog-intro.wiki | Introduction to SQLite4 for Programmers]
   *  [./env.wiki | The Run-time Environment Object]
   *  [./varint.wiki | The Varint format]
   *  [./data_encoding.wiki | The Data Encoding]
