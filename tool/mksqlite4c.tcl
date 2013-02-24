@@ -215,12 +215,14 @@ foreach file {
    sqliteInt.h
 
    global.c
+   env.c
    ctime.c
    status.c
    date.c
 
    os.c
    fault.c
+   mem.c
    mem0.c
    mem1.c
    mem2.c

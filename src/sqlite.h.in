@@ -119,6 +119,7 @@ struct sqlite4_mm_methods {
   int (*xMember)(sqlite4_mm*, const void*);
   void (*xBenign)(sqlite4_mm*, int);
   sqlite4_int64 (*xStat)(sqlite4_mm*, unsigned eType, unsigned bFlags);
+  int (*xCtrl)(sqlite4_mm*, unsigned eType, va_list);
   void (*xFinal)(sqlite4_mm*);
 };
 
@@ -127,6 +128,12 @@ struct sqlite4_mm_methods {
 ** a wrapper around system malloc()/realloc()/free().
 */
 sqlite4_mm *sqlite4_mm_default(void);
+
+
+/*
+** Create a new memory allocator object.
+*/
+sqlite4_mm *sqlite4_mm_new(sqlite4_mm_type, ...);
 
 
 /*
@@ -170,12 +177,34 @@ sqlite4_size_t sqlite4_mm_msize(sqlite4_mm*, void*);
 int sqlite4_mm_member(sqlite4_mm *pMM, const void *pOld);
 
 /*
+** Allowed values for the second parameter ("eType") to sqlite4_mm_type().
+*/
+#define SQLITE4_MMSTAT_OUT        1
+#define SQLITE4_MMSTAT_OUT_HW     2
+#define SQLITE4_MMSTAT_UNITS      3
+#define SQLITE4_MMSTAT_UNITS_HW   4
+#define SQLITE4_MMSTAT_SIZE       5
+#define SQLITE4_MMSTAT_SZFAULT    6
+#define SQLITE4_MMSTAT_MEMFAULT   7
+#define SQLITE4_MMSTAT_FAULT      8
+
+/*
+** Bits for the bit vector third parameter ("flags") to sqlite4_mm_type()
+*/
+#define SQLITE4_MMSTAT_RESET      0x01
+
+/*
 ** Return statistics or status information about a memory allocator.
 ** Not all memory allocators provide all stat values.  Some memory
 ** allocators provides no states at all.  If a particular stat for
 ** a memory allocator is unavailable, then -1 is returned.
 */
 sqlite4_int64 sqlite4_mm_stat(sqlite4_mm *pMM, int eType, unsigned flags);
+
+/*
+** Send a control message into a memory allocator.
+*/
+int sqlit4_mm_control(sqlite4_mm *pMM, int eType, ...);
 
 /*
 ** Enable or disable benign failure mode.  Benign failure mode can be
