@@ -318,6 +318,7 @@ static void doDbDisconnect(lsm_db *pDb){
 
     if( pDb->iRwclient>=0 ){
       lsmShmLock(pDb, LSM_LOCK_RWCLIENT(pDb->iRwclient), LSM_LOCK_UNLOCK, 0);
+      pDb->iRwclient = -1;
     }
 
     lsmShmLock(pDb, LSM_LOCK_DMS2, LSM_LOCK_UNLOCK, 0);
@@ -401,6 +402,7 @@ static int doDbConnect(lsm_db *pDb){
     }
   }
   lsmShmLock(pDb, LSM_LOCK_DMS1, LSM_LOCK_UNLOCK, 0);
+
   return rc;
 }
 
@@ -1817,8 +1819,10 @@ int lsmShmLock(
           if( nShared==0 ){
             rc = lockSharedFile(db->pEnv, p, iLock, LSM_LOCK_SHARED);
           }
-          db->mLock |= ms;
-          db->mLock &= ~me;
+          if( rc==LSM_OK ){
+            db->mLock |= ms;
+            db->mLock &= ~me;
+          }
         }
         break;
 
@@ -1828,7 +1832,9 @@ int lsmShmLock(
           rc = LSM_BUSY;
         }else{
           rc = lockSharedFile(db->pEnv, p, iLock, LSM_LOCK_EXCL);
-          db->mLock |= (me|ms);
+          if( rc==LSM_OK ){
+            db->mLock |= (me|ms);
+          }
         }
         break;
     }

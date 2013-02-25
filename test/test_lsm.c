@@ -147,6 +147,160 @@ static void testCompressNoopFree(void *pCtx){
 ** End of compression routines "noop".
 *************************************************************************/
 
+static int testConfigureSetCompression(
+  Tcl_Interp *interp, 
+  lsm_db *db, 
+  Tcl_Obj *pCmp,
+  unsigned int iId
+){
+  struct CompressionScheme {
+    const char *zName;
+    lsm_compress cmp;
+  } aCmp[] = {
+    { "encrypt", { 0, 43, 
+        testCompressEncBound, testCompressEncCompress,
+        testCompressEncUncompress, testCompressEncFree
+    } },
+    { "rle", { 0, 44, 
+        testCompressRleBound, testCompressRleCompress,
+        testCompressRleUncompress, testCompressRleFree
+    } },
+    { "noop", { 0, 45, 
+        testCompressNoopBound, testCompressNoopCompress,
+        testCompressNoopUncompress, testCompressNoopFree
+    } },
+    { 0, {0, 0, 0, 0, 0, 0} }
+  };
+  int iOpt;
+  int rc;
+
+  if( interp ){
+    rc = Tcl_GetIndexFromObjStruct(
+        interp, pCmp, aCmp, sizeof(aCmp[0]), "scheme", 0, &iOpt
+        );
+    if( rc!=TCL_OK ) return rc;
+  }else{
+    int nOpt = sizeof(aCmp)/sizeof(aCmp[0]);
+    for(iOpt=0; iOpt<nOpt; iOpt++){
+      if( iId==aCmp[iOpt].cmp.iId ) break;
+    }
+    if( iOpt==nOpt ) return 0;
+  }
+
+  rc = lsm_config(db, LSM_CONFIG_SET_COMPRESSION, &aCmp[iOpt].cmp);
+  return rc;
+}
+
+static int testCompressFactory(void *pCtx, lsm_db *db, unsigned int iId){
+  return testConfigureSetCompression(0, db, 0, iId);
+}
+
+static int testConfigureSetFactory(
+  Tcl_Interp *interp, 
+  lsm_db *db, 
+  Tcl_Obj *pArg
+){
+  lsm_compress_factory aFactory[2] = {
+    { 0, 0, 0 },
+    { 0, testCompressFactory, 0 },
+  };
+  int bArg = 0;
+  int rc;
+
+  rc = Tcl_GetBooleanFromObj(interp, pArg, &bArg);
+  if( rc!=TCL_OK ) return rc;
+  assert( bArg==1 || bArg==0 );
+
+  rc = lsm_config(db, LSM_CONFIG_SET_COMPRESSION_FACTORY, &aFactory[bArg]);
+  return rc;
+}
+
+/*
+** Array apObj[] is an array of nObj Tcl objects intended to be transformed
+** into lsm_config() calls on database db.
+**
+** Each pair of objects in the array is treated as a key/value pair used
+** as arguments to a single lsm_config() call. If there are an even number
+** of objects in the array, then the interpreter result is set to the output
+** value of the final lsm_config() call. Or, if there are an odd number of
+** objects in the array, the final object is treated as the key for a 
+** read-only call to lsm_config(), the return value of which is used as
+** the interpreter result. For example, the following:
+**
+**   { safety 1 mmap 0 use_log }
+**
+** Results in a sequence of calls similar to:
+**
+**   iVal = 1;  lsm_config(db, LSM_CONFIG_SAFETY,  &iVal);
+**   iVal = 0;  lsm_config(db, LSM_CONFIG_MMAP,    &iVal);
+**   iVal = -1; lsm_config(db, LSM_CONFIG_USE_LOG, &iVal);
+**   Tcl_SetObjResult(interp, Tcl_NewIntObj(iVal));
+*/
+static int testConfigureLsm(
+  Tcl_Interp *interp, 
+  lsm_db *db, 
+  int nObj,
+  Tcl_Obj *const* apObj
+){
+  struct Lsmconfig {
+    const char *zOpt;
+    int eOpt;
+    int bInteger;
+  } aConfig[] = {
+    { "autoflush",               LSM_CONFIG_AUTOFLUSH,               1 },
+    { "page_size",               LSM_CONFIG_PAGE_SIZE,               1 },
+    { "block_size",              LSM_CONFIG_BLOCK_SIZE,              1 },
+    { "safety",                  LSM_CONFIG_SAFETY,                  1 },
+    { "autowork",                LSM_CONFIG_AUTOWORK,                1 },
+    { "autocheckpoint",          LSM_CONFIG_AUTOCHECKPOINT,          1 },
+    { "mmap",                    LSM_CONFIG_MMAP,                    1 },
+    { "use_log",                 LSM_CONFIG_USE_LOG,                 1 },
+    { "automerge",               LSM_CONFIG_AUTOMERGE,               1 },
+    { "max_freelist",            LSM_CONFIG_MAX_FREELIST,            1 },
+    { "multi_proc",              LSM_CONFIG_MULTIPLE_PROCESSES,      1 },
+    { "set_compression",         LSM_CONFIG_SET_COMPRESSION,         0 },
+    { "set_compression_factory", LSM_CONFIG_SET_COMPRESSION_FACTORY, 0 },
+    { "readonly",                LSM_CONFIG_READONLY,                1 },
+    { 0, 0, 0 }
+  };
+  int i;
+  int rc = TCL_OK;
+
+  for(i=0; rc==TCL_OK && i<nObj; i+=2){
+    int iOpt;
+    rc = Tcl_GetIndexFromObjStruct(
+        interp, apObj[i], aConfig, sizeof(aConfig[0]), "option", 0, &iOpt
+    );
+    if( rc==TCL_OK ){
+      if( i==(nObj-1) ){
+        Tcl_ResetResult(interp);
+        if( aConfig[iOpt].bInteger ){
+          int iVal = -1;
+          lsm_config(db, aConfig[iOpt].eOpt, &iVal);
+          Tcl_SetObjResult(interp, Tcl_NewIntObj(iVal));
+        }
+      }else{
+        if( aConfig[iOpt].eOpt==LSM_CONFIG_SET_COMPRESSION ){
+          rc = testConfigureSetCompression(interp, db, apObj[i+1], 0);
+        }
+        else if( aConfig[iOpt].eOpt==LSM_CONFIG_SET_COMPRESSION_FACTORY ){
+          rc = testConfigureSetFactory(interp, db, apObj[i+1]);
+        }
+        else {
+          int iVal;
+          rc = Tcl_GetIntFromObj(interp, apObj[i+1], &iVal);
+          if( rc==TCL_OK ){
+            lsm_config(db, aConfig[iOpt].eOpt, &iVal);
+          }
+          Tcl_SetObjResult(interp, Tcl_NewIntObj(iVal));
+        }
+      }
+    }
+  }
+
+  return rc;
+}
+
 /*
 ** TCLCMD:    sqlite4_lsm_config DB DBNAME PARAM ...
 */
@@ -156,22 +310,10 @@ static int test_sqlite4_lsm_config(
   int objc,
   Tcl_Obj *CONST objv[]
 ){
-  struct Switch {
-    const char *zSwitch;
-    int iVal;
-  } aParam[] = {
-    { "safety",         LSM_CONFIG_SAFETY }, 
-    { "autoflush",      LSM_CONFIG_AUTOFLUSH }, 
-    { "mmap",           LSM_CONFIG_MMAP }, 
-    { "page-size",      LSM_CONFIG_PAGE_SIZE }, 
-    { "autowork",       LSM_CONFIG_AUTOWORK }, 
-    { 0, 0 }
-  };
 
   const char *zDb;                /* objv[1] as a string */
   const char *zName;              /* objv[2] as a string */
-  int iParam;                     /* Second argument for lsm_config() */
-  int iConfig = -1;               /* Third argument for lsm_config() */
+
   int rc;
   sqlite4 *db;
   lsm_db *pLsm;
@@ -183,30 +325,20 @@ static int test_sqlite4_lsm_config(
   }
   zDb = Tcl_GetString(objv[1]);
   zName = Tcl_GetString(objv[2]);
-  rc = Tcl_GetIndexFromObjStruct(
-      interp, objv[3], aParam, sizeof(aParam[0]), "param", 0, &iParam
-  );
-  if( rc!=TCL_OK ) return rc;
+
+  rc = getDbPointer(interp, zDb, &db);
   if( rc==TCL_OK ){
-    iParam = aParam[iParam].iVal;
-    rc = getDbPointer(interp, zDb, &db);
+    rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
+    if( rc!=SQLITE4_OK ){
+      Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
+      rc = TCL_ERROR;
+    }
   }
-  if( rc==TCL_OK && objc==5 ){
-    rc = Tcl_GetIntFromObj(interp, objv[4], &iConfig);
-  }
-  if( rc!=TCL_OK ) return rc;
 
-  rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
   if( rc==SQLITE4_OK ){
-    rc = lsm_config(pLsm, iParam, &iConfig);
-    Tcl_SetObjResult(interp, Tcl_NewIntObj(iConfig));
+    testConfigureLsm(interp, pLsm, objc-3, &objv[3]);
   }
-
-  if( rc!=SQLITE4_OK ){
-    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
-    return TCL_ERROR;
-  }
-  return TCL_OK;
+  return rc;
 }
 
 /*
@@ -366,179 +498,6 @@ static int test_sqlite4_lsm_checkpoint(
 
   Tcl_ResetResult(interp);
   return TCL_OK;
-}
-
-/*
-** TCLCMD:    sqlite4_lsm_flush DB DBNAME 
-*/
-static int test_sqlite4_lsm_flush(
-  void * clientData,
-  Tcl_Interp *interp,
-  int objc,
-  Tcl_Obj *CONST objv[]
-){
-  const char *zDb;
-  const char *zName;
-  int rc;
-  sqlite4 *db;
-  lsm_db *pLsm;
-
-  if( objc!=3 ){
-    Tcl_WrongNumArgs(interp, 1, objv, "DB DBNAME");
-    return TCL_ERROR;
-  }
-  zDb = Tcl_GetString(objv[1]);
-  zName = Tcl_GetString(objv[2]);
-
-  rc = getDbPointer(interp, zDb, &db);
-  if( rc!=TCL_OK ) return rc;
-
-  rc = sqlite4_kvstore_control(db, zName, SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
-  if( rc==SQLITE4_OK ){
-    int nZero = 0;
-    int nOrig = -1;
-    lsm_config(pLsm, LSM_CONFIG_AUTOFLUSH, &nOrig);
-    lsm_config(pLsm, LSM_CONFIG_AUTOFLUSH, &nZero);
-    rc = lsm_begin(pLsm, 1);
-    if( rc==LSM_OK ) rc = lsm_commit(pLsm, 0);
-    lsm_config(pLsm, LSM_CONFIG_AUTOFLUSH, &nOrig);
-  }
-  if( rc!=SQLITE4_OK ){
-    Tcl_SetResult(interp, (char *)sqlite4TestErrorName(rc), TCL_STATIC);
-    return TCL_ERROR;
-  }
-
-  Tcl_ResetResult(interp);
-  return TCL_OK;
-}
-
-static int testConfigureSetCompression(
-  Tcl_Interp *interp, 
-  lsm_db *db, 
-  Tcl_Obj *pCmp,
-  unsigned int iId
-){
-  struct CompressionScheme {
-    const char *zName;
-    lsm_compress cmp;
-  } aCmp[] = {
-    { "encrypt", { 0, 43, 
-        testCompressEncBound, testCompressEncCompress,
-        testCompressEncUncompress, testCompressEncFree
-    } },
-    { "rle", { 0, 44, 
-        testCompressRleBound, testCompressRleCompress,
-        testCompressRleUncompress, testCompressRleFree
-    } },
-    { "noop", { 0, 45, 
-        testCompressNoopBound, testCompressNoopCompress,
-        testCompressNoopUncompress, testCompressNoopFree
-    } },
-    { 0, {0, 0, 0, 0, 0, 0} }
-  };
-  int iOpt;
-  int rc;
-
-  if( interp ){
-    rc = Tcl_GetIndexFromObjStruct(
-        interp, pCmp, aCmp, sizeof(aCmp[0]), "scheme", 0, &iOpt
-        );
-    if( rc!=TCL_OK ) return rc;
-  }else{
-    int nOpt = sizeof(aCmp)/sizeof(aCmp[0]);
-    for(iOpt=0; iOpt<nOpt; iOpt++){
-      if( iId==aCmp[iOpt].cmp.iId ) break;
-    }
-    if( iOpt==nOpt ) return 0;
-  }
-
-  rc = lsm_config(db, LSM_CONFIG_SET_COMPRESSION, &aCmp[iOpt].cmp);
-  return rc;
-}
-
-static int testCompressFactory(void *pCtx, lsm_db *db, unsigned int iId){
-  return testConfigureSetCompression(0, db, 0, iId);
-}
-
-static int testConfigureSetFactory(
-  Tcl_Interp *interp, 
-  lsm_db *db, 
-  Tcl_Obj *pArg
-){
-  lsm_compress_factory aFactory[2] = {
-    { 0, 0, 0 },
-    { 0, testCompressFactory, 0 },
-  };
-  int bArg = 0;
-  int rc;
-
-  rc = Tcl_GetBooleanFromObj(interp, pArg, &bArg);
-  if( rc!=TCL_OK ) return rc;
-  assert( bArg==1 || bArg==0 );
-
-  rc = lsm_config(db, LSM_CONFIG_SET_COMPRESSION_FACTORY, &aFactory[bArg]);
-  return rc;
-}
-
-static int testConfigureLsm(Tcl_Interp *interp, lsm_db *db, Tcl_Obj *pObj){
-  struct Lsmconfig {
-    const char *zOpt;
-    int eOpt;
-  } aConfig[] = {
-    { "autoflush",               LSM_CONFIG_AUTOFLUSH },
-    { "page_size",               LSM_CONFIG_PAGE_SIZE },
-    { "block_size",              LSM_CONFIG_BLOCK_SIZE },
-    { "safety",                  LSM_CONFIG_SAFETY },
-    { "autowork",                LSM_CONFIG_AUTOWORK },
-    { "autocheckpoint",          LSM_CONFIG_AUTOCHECKPOINT },
-    { "mmap",                    LSM_CONFIG_MMAP },
-    { "use_log",                 LSM_CONFIG_USE_LOG },
-    { "automerge",               LSM_CONFIG_AUTOMERGE },
-    { "max_freelist",            LSM_CONFIG_MAX_FREELIST },
-    { "multi_proc",              LSM_CONFIG_MULTIPLE_PROCESSES },
-    { "set_compression",         LSM_CONFIG_SET_COMPRESSION },
-    { "set_compression_factory", LSM_CONFIG_SET_COMPRESSION_FACTORY },
-    { "readonly",                LSM_CONFIG_READONLY },
-    { 0, 0 }
-  };
-  int nElem;
-  int i;
-  Tcl_Obj **apElem;
-  int rc;
-
-  rc = Tcl_ListObjGetElements(interp, pObj, &nElem, &apElem);
-  for(i=0; rc==TCL_OK && i<nElem; i+=2){
-    int iOpt;
-    rc = Tcl_GetIndexFromObjStruct(
-        interp, apElem[i], aConfig, sizeof(aConfig[0]), "option", 0, &iOpt
-    );
-    if( rc==TCL_OK ){
-      if( i==(nElem-1) ){
-        Tcl_ResetResult(interp);
-        Tcl_AppendResult(interp, "option \"", Tcl_GetString(apElem[i]), 
-            "\" requires an argument", 0
-            );
-        rc = TCL_ERROR;
-      }else{
-        if( aConfig[iOpt].eOpt==LSM_CONFIG_SET_COMPRESSION ){
-          rc = testConfigureSetCompression(interp, db, apElem[i+1], 0);
-        }
-        else if( aConfig[iOpt].eOpt==LSM_CONFIG_SET_COMPRESSION_FACTORY ){
-          rc = testConfigureSetFactory(interp, db, apElem[i+1]);
-        }
-        else {
-          int iVal;
-          rc = Tcl_GetIntFromObj(interp, apElem[i+1], &iVal);
-          if( rc==TCL_OK ){
-            lsm_config(db, aConfig[iOpt].eOpt, &iVal);
-          }
-          Tcl_SetObjResult(interp, Tcl_NewIntObj(iVal));
-        }
-      }
-    }
-  }
-
-  return rc;
 }
 
 
@@ -886,7 +845,12 @@ static int test_lsm_cmd(
     }
 
     case 10: assert( 0==strcmp(aCmd[10].zCmd, "config") ); {
-      return testConfigureLsm(interp, p->db, objv[2]);
+      Tcl_Obj **apObj;
+      int nObj;
+      if( TCL_OK==Tcl_ListObjGetElements(interp, objv[2], &nObj, &apObj) ){
+        return testConfigureLsm(interp, p->db, nObj, apObj);
+      }
+      return TCL_ERROR;
     }
 
     case 11: assert( 0==strcmp(aCmd[11].zCmd, "checkpoint") ); {
@@ -944,7 +908,12 @@ static int test_lsm_open(
   }
 
   if( objc==4 ){
-    rc = testConfigureLsm(interp, p->db, objv[3]);
+    Tcl_Obj **apObj;
+    int nObj;
+    rc = Tcl_ListObjGetElements(interp, objv[3], &nObj, &apObj);
+    if( rc==TCL_OK ){
+      rc = testConfigureLsm(interp, p->db, nObj, apObj);
+    }
     if( rc!=TCL_OK ){ 
       test_lsm_del((void *)p);
       return rc;
@@ -972,7 +941,6 @@ int SqlitetestLsm_Init(Tcl_Interp *interp){
   } aCmd[] = {
     { "sqlite4_lsm_work",       test_sqlite4_lsm_work                },
     { "sqlite4_lsm_checkpoint", test_sqlite4_lsm_checkpoint          },
-    { "sqlite4_lsm_flush",      test_sqlite4_lsm_flush               },
     { "sqlite4_lsm_info",       test_sqlite4_lsm_info                },
     { "sqlite4_lsm_config",     test_sqlite4_lsm_config              },
     { "lsm_open",               test_lsm_open                        },

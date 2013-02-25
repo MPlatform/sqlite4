@@ -547,6 +547,39 @@ static void fts5SnippetImprove(
   pSnip->hlmask = mask;
 }
 
+/*
+** Parameter aSnip points to an array of nSnip Snippet objects, where nSnip
+** is less than or equal to 4. This function sorts the array in place in
+** ascending order of Snippet.iCol and Snippet.iOff. 
+*/
+static void fts5SnippetSort(Snippet *aSnip, int nSnip){
+  Snippet aTmp[4];
+  int i;
+
+  assert( nSnip<=4 && nSnip>=1 );
+
+  for(i=0; i<nSnip; i++){
+    int iBest = -1;
+    int iTry;
+    for(iTry=0; iTry<nSnip; iTry++){
+      Snippet *pTry = &aSnip[iTry];
+      if( pTry->iCol>=0 && (iBest<0 
+         || pTry->iCol<aSnip[iBest].iCol
+         || (pTry->iCol==aSnip[iBest].iCol && pTry->iOff<aSnip[iBest].iOff)
+      )){
+        iBest = iTry;
+      }
+    }
+
+    assert( iBest>=0 );
+    memcpy(&aTmp[i], &aSnip[iBest], sizeof(Snippet));
+    aSnip[iBest].iCol = -1;
+  }
+
+  memcpy(aSnip, aTmp, sizeof(Snippet)*nSnip);
+}
+
+
 static void fts5Snippet(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
   Snippet aSnip[4];
   int nSnip;
@@ -583,6 +616,7 @@ static void fts5Snippet(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
     }
     if( mask==0 || nSnip==4 ){
       SnippetText text = {0, 0, 0};
+      fts5SnippetSort(aSnip, nSnip);
       for(i=0; rc==SQLITE4_OK && i<nSnip; i++){
         int nSz;
         rc = sqlite4_mi_size(pCtx, aSnip[i].iCol, -1, &nSz);

@@ -87,7 +87,7 @@ do_execsql_test 3.2 {
   SELECT * FROM sqlite_master
 } {
   table t1                    t1 2 {CREATE TABLE t1(k PRIMARY KEY, v UNIQUE)} 
-  index sqlite_autoindex_t1_2 t1 3 {}
+  index sqlite_t1_unique2 t1 3 {}
 }
 
 #explain { INSERT INTO t1 VALUES('one', '111') }
@@ -127,7 +127,7 @@ do_execsql_test 5.3 {
   SELECT * FROM sqlite_master
 } {
   table t1                    t1 3 {CREATE TABLE t1(k, v UNIQUE)} 
-  index sqlite_autoindex_t1_1 t1 2 {}
+  index sqlite_t1_unique1 t1 2 {}
   index i1                    t1 4 {CREATE INDEX i1 ON t1(v)}
 }
 

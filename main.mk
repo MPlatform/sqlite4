@@ -491,7 +491,7 @@ TESTFIXTURE_PREREQ += libsqlite4.a
 testfixture$(EXE): $(TESTFIXTURE_PREREQ)
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \
 		$(TESTSRC) $(TESTSRC2) $(TOP)/src/tclsqlite.c                \
-		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB) libsqlite4.a
+		-o testfixture$(EXE) $(LIBTCL) libsqlite4.a $(THREADLIB)
 
 amalgamation-testfixture$(EXE): sqlite4.c $(TESTSRC) $(TOP)/src/tclsqlite.c
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \

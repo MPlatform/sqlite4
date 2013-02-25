@@ -76,7 +76,6 @@ do_execsql_test 3.1 {
   INSERT INTO t1 SELECT randstr(100,100), randstr(100,100) FROM t1;   -- 64K
 }
 do_test 3.2 {
-  sqlite4_lsm_flush db main
   sqlite4_lsm_work db main -nmerge 1 -npage 1000000
   execsql { SELECT count(*) FROM t1 }
 } {65536}
@@ -87,7 +86,8 @@ do_test 3.3 {
 } {65536}
 do_test 3.4 {
   execsql { INSERT INTO t1 VALUES(randstr(100,100), randstr(100,100)) }
-  sqlite4_lsm_flush db main
+  db close
+  sqlite4 db test.db
   sqlite4_lsm_work db main -nmerge 1 -npage 1000000
   execsql { SELECT count(*) FROM t1 }
 } {65537}

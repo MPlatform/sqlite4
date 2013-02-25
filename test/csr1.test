@@ -77,8 +77,8 @@ do_execsql_test 3.1 {
   BEGIN;
     INSERT INTO t1 VALUES(10, randstr(910, 910));
 }
-do_test 3.2 { sqlite4_lsm_config db main autoflush } [expr 1*1024*1024]
-do_test 3.3 { sqlite4_lsm_config db main autoflush 4096 } 4096
+do_test 3.2 { sqlite4_lsm_config db main autoflush } 1024
+do_test 3.3 { sqlite4_lsm_config db main autoflush 4 } 4
 
 do_test 3.4 {
   set res [list]

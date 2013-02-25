@@ -36,7 +36,6 @@ do_test 1.9 { sqlite4_lsm_config db main safety    } {2}
 #-------------------------------------------------------------------------
 reset_db
 do_test 2.0 { sqlite4_lsm_config db main safety   2    } {2}
-do_test 2.1 { sqlite4_lsm_config db main log-size 1024 } {1024}
 
 do_execsql_test 2.2 {
   CREATE TABLE t1(a PRIMARY KEY, b);
@@ -56,7 +55,7 @@ do_execsql_test 2.4 {
 } {}
 do_filesize_test 2.5   0 2048
 
-do_test         2.6 { sqlite4_lsm_flush db main } {}
+do_test         2.6 { optimize_db } {}
 do_execsql_test 2.7 { INSERT INTO t1 VALUES(randstr(50,50), randstr(50,50)) }
 do_test         2.8 { sqlite4_lsm_checkpoint db main } {}
 do_test 2.9 { sqlite4_lsm_info db main log-structure } {0 0 0 0 2560 3072}
@@ -71,7 +70,7 @@ for {set i 1} {$i <= 6} {incr i} {
 
 do_test 2.11 { 
   sqlite4_lsm_info db main log-structure 
-} {2560 3080 0 2216 3584 4608}
+} {0 0 0 0 2560 6144}
 
 
 finish_test

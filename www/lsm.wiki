@@ -5,6 +5,7 @@
 
 
 
+
 <div id=start_of_toc></div>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#summary style=text-decoration:none>1. Summary </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#locks style=text-decoration:none>2. Locks </a><br>
@@ -24,9 +25,6 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#database_operations style=text-decoration:none>5. Database Operations </a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#reading style=text-decoration:none>5.1. Reading</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#writing style=text-decoration:none>5.2. Writing</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#flushing_the_in-memory_tree_to_disk style=text-decoration:none>5.2.1. Flushing the in-memory tree to disk</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#shared-memory_management style=text-decoration:none>5.2.2. Shared-memory management</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#log_file_management style=text-decoration:none>5.2.3. Log file management</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#working style=text-decoration:none>5.3. Working</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#free-block_list_management style=text-decoration:none>5.3.1. Free-block list management</a><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href=#checkpoint_operations style=text-decoration:none>5.4. Checkpoint Operations</a><br>
@@ -705,67 +703,6 @@ case it performs the following:
   <li> Clear the writer flag.
 </ol>
 
-<h3 id=flushing_the_in-memory_tree_to_disk>5.2.1. Flushing the in-memory tree to disk</h3>
-
-<p>
-For the purposes of writing, the database file and the in-memory tree are
-largely independent. Processes holding the WRITER lock write to the in-memory
-tree, and processes holding the WORKER lock write to the database file.
-
-<ol>
-  <li> If a write transaction is open, write the new tree-header to
-       shared-memory (as described above). Otherwise, if no write-transaction
-       is open, open one - repairing the tree headers if required.
-
-  <li> Execute a WORKER transaction (see "Working" below) to add a new level
-       to the LSM. The new level contains the current contents of the 
-       in-memory tree.
-
-  <li> Update the private copy of the tree-header to reflect a new, empty tree.
-
-  <li> Commit the write transaction, writing the new, empty tree to
-       shared-memory.
-</ol>
-
-<h3 id=shared-memory_management>5.2.2. Shared-memory management</h3>
-
-<p>
-A writer client may have to allocate new shared-memory chunks. This can be
-done either by extending the shared-memory region or by recycling the first
-chunk in the linked-list. To check if the first chunk in the linked-list may
-be reused, the writer must check that:
-
-<ul>
-  <li> The chunk is not part of the current in-memory tree (the one being
-       appended to by the writer). A writer can check this by examining its
-       private copy of the tree-header.
-
-  <li> The chunk is not part of an in-memory tree being used by an existing
-       reader. A writer checks this by scanning (and possibly updating) the
-       values associated with the READER locks - similar to the way SQLite 
-       does in WAL mode.
-</ul>
-
-<h3 id=log_file_management>5.2.3. Log file management</h3>
-
-<p>
-A writer client also writes to the log file. All information required to write
-to the log file  (the offset to write to and the initial checksum values) is
-embedded in the tree-header. Except, in order to reuse log file space (wrap
-around to the start of the log file), a writer needs to know that the space
-being recycled will not be required by any recovery process in the future.
-In other words, that the information contained in the transactions being
-overwritten has been written into the database file and is part of the
-snapshot written into the database file by a checkpointer (see "Checkpoint
-Operations" below).
-
-<p>
-To determine whether or not the log file can be wrapped, the writer requires
-access to information stored in the newest snapshot written into the database
-header. Their exists a shared-memory variable indicating which of the two
-meta-pages contain this snapshot, but the writer process still has to read the
-snapshot data and verify its checksum from disk.
-
 <h2 id=working>5.3. Working</h2>
 
 <p>
@@ -845,6 +782,8 @@ There are two conditions for reusing a free-block:
 
   <li> Drop the CHECKPOINTER lock.
 </ol>
+
+
 
 
 

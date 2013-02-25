@@ -144,6 +144,25 @@ static int getFullpathname(
 }
 
 /*
+** Check that the bits in the db->mLock mask are consistent with the
+** value stored in db->iRwclient. An assert shall fail otherwise.
+*/
+static void assertRwclientLockValue(lsm_db *db){
+#ifndef NDEBUG
+  u64 msk;                        /* Mask of mLock bits for RWCLIENT locks */
+  u64 rwclient = 0;               /* Bit corresponding to db->iRwclient */
+
+  if( db->iRwclient>=0 ){
+    rwclient = ((u64)1 << (LSM_LOCK_RWCLIENT(db->iRwclient)-1));
+  }
+  msk  = ((u64)1 << (LSM_LOCK_RWCLIENT(LSM_LOCK_NRWCLIENT)-1)) - 1;
+  msk -= (((u64)1 << (LSM_LOCK_RWCLIENT(0)-1)) - 1);
+
+  assert( (db->mLock & msk)==rwclient );
+#endif
+}
+
+/*
 ** Open a new connection to database zFilename.
 */
 int lsm_open(lsm_db *pDb, const char *zFilename){
@@ -182,6 +201,7 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     }
 
     lsmFree(pDb->pEnv, zFull);
+    assertRwclientLockValue(pDb);
   }
 
   assert( pDb->bReadonly==0 || pDb->bReadonly==1 );
@@ -189,7 +209,6 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
 
   return rc;
 }
-
 
 int lsm_close(lsm_db *pDb){
   int rc = LSM_OK;
@@ -200,6 +219,8 @@ int lsm_close(lsm_db *pDb){
     }else{
       lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
       pDb->pClient = 0;
+
+      assertRwclientLockValue(pDb);
 
       lsmDbDatabaseRelease(pDb);
       lsmLogClose(pDb);

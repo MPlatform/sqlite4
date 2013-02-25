@@ -36,6 +36,7 @@ do_multiclient_test tn {
   # Open a single-process connection to the database from an external
   # process (if $tn==1, otherwise open it from within the current 
   # process).
+breakpoint
   code2 { sqlite4 db2 file:test.db?lsm_multiple_processes=0 }
 
   # Try to open some other connections to the database file, both in multi
