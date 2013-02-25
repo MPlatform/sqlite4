@@ -17,9 +17,14 @@
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
 
+proc zeroblob {n} {
+  string repeat [binary format c 0] $n
+}
+
 do_test tkt3761-1.1 {
   db close
   sqlite4 db :memory:
+  db func zeroblob zeroblob
   db eval {
     PRAGMA auto_vacuum=INCREMENTAL;
     CREATE TABLE t1(x);
