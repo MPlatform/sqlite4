@@ -24,6 +24,7 @@ do_test 1.2 {
   lindex [catchsql { SELECT datetime('now', 'utc') }] 0
 } {0}
 
+if 0 {
 sqlite4_test_control SQLITE4_TESTCTRL_LOCALTIME_FAULT 1
 
 do_test 2.1 {
@@ -34,5 +35,6 @@ do_test 2.2 {
 } {1 {local time unavailable}}
 
 sqlite4_test_control SQLITE4_TESTCTRL_LOCALTIME_FAULT 0
+}
 
 finish_test

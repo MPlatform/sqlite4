@@ -118,7 +118,6 @@ struct SqliteDb {
   int disableAuth;           /* Disable the authorizer if it exists */
   char *zNull;               /* Text to substitute for an SQL NULL value */
   SqlFunc *pFunc;            /* List of SQL functions */
-  Tcl_Obj *pUnlockNotify;    /* Unlock notify script (if any) */
   SqlCollate *pCollate;      /* List of SQL collation functions */
   int rc;                    /* Return code of most recent sqlite4_exec() */
   Tcl_Obj *pCollateNeeded;   /* Collation needed script */
@@ -313,33 +312,6 @@ static void DbProfileHandler(void *cd, const char *zSql, sqlite4_uint64 tm){
   Tcl_Eval(pDb->interp, Tcl_DStringValue(&str));
   Tcl_DStringFree(&str);
   Tcl_ResetResult(pDb->interp);
-}
-#endif
-
-#if defined(SQLITE4_TEST) && defined(SQLITE4_ENABLE_UNLOCK_NOTIFY)
-static void setTestUnlockNotifyVars(Tcl_Interp *interp, int iArg, int nArg){
-  char zBuf[64];
-  sprintf(zBuf, "%d", iArg);
-  Tcl_SetVar(interp, "sqlite_unlock_notify_arg", zBuf, TCL_GLOBAL_ONLY);
-  sprintf(zBuf, "%d", nArg);
-  Tcl_SetVar(interp, "sqlite_unlock_notify_argcount", zBuf, TCL_GLOBAL_ONLY);
-}
-#else
-# define setTestUnlockNotifyVars(x,y,z)
-#endif
-
-#ifdef SQLITE4_ENABLE_UNLOCK_NOTIFY
-static void DbUnlockNotify(void **apArg, int nArg){
-  int i;
-  for(i=0; i<nArg; i++){
-    const int flags = (TCL_EVAL_GLOBAL|TCL_EVAL_DIRECT);
-    SqliteDb *pDb = (SqliteDb *)apArg[i];
-    setTestUnlockNotifyVars(pDb->interp, i, nArg);
-    assert( pDb->pUnlockNotify);
-    Tcl_EvalObjEx(pDb->interp, pDb->pUnlockNotify, flags);
-    Tcl_DecrRefCount(pDb->pUnlockNotify);
-    pDb->pUnlockNotify = 0;
-  }
 }
 #endif
 
@@ -1276,7 +1248,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     "function",           "interrupt",         
     "nullvalue",          "onecolumn",         "profile",
     "rekey",              "status",            "total_changes",
-    "trace",              "transaction",       "unlock_notify",
+    "trace",              "transaction",
     "version",            0
   };
   enum DB_enum {
@@ -1287,7 +1259,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     DB_FUNCTION,          DB_INTERRUPT,        
     DB_NULLVALUE,         DB_ONECOLUMN,        DB_PROFILE,           
     DB_REKEY,             DB_STATUS,           DB_TOTAL_CHANGES,    
-    DB_TRACE,             DB_TRANSACTION,      DB_UNLOCK_NOTIFY,
+    DB_TRACE,             DB_TRANSACTION,
     DB_VERSION
   };
   /* don't leave trailing commas on DB_enum, it confuses the AIX xlc compiler */
@@ -2118,42 +2090,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     }else{
       rc = DbTransPostCmd(&cd, interp, Tcl_EvalObjEx(interp, pScript, 0));
     }
-    break;
-  }
-
-  /*
-  **    $db unlock_notify ?script?
-  */
-  case DB_UNLOCK_NOTIFY: {
-#ifndef SQLITE4_ENABLE_UNLOCK_NOTIFY
-    Tcl_AppendResult(interp, "unlock_notify not available in this build", 0);
-    rc = TCL_ERROR;
-#else
-    if( objc!=2 && objc!=3 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "?SCRIPT?");
-      rc = TCL_ERROR;
-    }else{
-      void (*xNotify)(void **, int) = 0;
-      void *pNotifyArg = 0;
-
-      if( pDb->pUnlockNotify ){
-        Tcl_DecrRefCount(pDb->pUnlockNotify);
-        pDb->pUnlockNotify = 0;
-      }
-  
-      if( objc==3 ){
-        xNotify = DbUnlockNotify;
-        pNotifyArg = (void *)pDb;
-        pDb->pUnlockNotify = objv[2];
-        Tcl_IncrRefCount(pDb->pUnlockNotify);
-      }
-  
-      if( sqlite4_unlock_notify(pDb->db, xNotify, pNotifyArg) ){
-        Tcl_AppendResult(interp, sqlite4_errmsg(pDb->db), 0);
-        rc = TCL_ERROR;
-      }
-    }
-#endif
     break;
   }
 
