@@ -2250,6 +2250,7 @@ struct AuthContext {
 ** Bitfield flags for P5 value in OP_Insert and OP_Delete
 */
 #define OPFLAG_NCHANGE       0x01    /* Set to update db->nChange */
+#define OPFLAG_PARTIALKEY    0x02    /* Not all values given to OP_MakeIdxKey */
 #define OPFLAG_ISUPDATE      0x04    /* This OP_Insert is an sql UPDATE */
 #define OPFLAG_APPEND        0x08    /* This is likely to be an append */
 #define OPFLAG_SEQCOUNT      0x10    /* Append sequence number to key */

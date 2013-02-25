@@ -2192,6 +2192,11 @@ case OP_Affinity: {
 ** If the OPFLAG_SEQCOUNT bit of P5 is set, then a sequence number 
 ** (unique within the cursor) is appended to the record. The sole purpose
 ** of this is to ensure that the key blob is unique within the cursors table.
+**
+** If the OPFLAG_PARTIALKEY bit of P5 is set, that means the value supplied
+** for N is not the true number of values in the key, only the number that
+** need to be encoded for this operation.  This effects the encoding of
+** final BLOBs.
 */
 case OP_MakeIdxKey: {
   VdbeCursor *pC;
@@ -2233,7 +2238,8 @@ case OP_MakeIdxKey: {
     assert( nField<=pKeyInfo->nField );
   }
   rc = sqlite4VdbeEncodeKey(
-    db, pData0, nField, pC->iRoot, pKeyInfo, &aRec, &nRec, nSeq
+    db, pData0, nField, nField+(pOp->p5 & OPFLAG_PARTIALKEY),
+    pC->iRoot, pKeyInfo, &aRec, &nRec, nSeq
   );
 
   if( rc ){
@@ -2325,7 +2331,8 @@ case OP_MakeRecord: {
   if( pC ){
     aRec = 0;
     rc = sqlite4VdbeEncodeKey(db, 
-        pData0, pC->pKeyInfo->nField, pC->iRoot, pC->pKeyInfo, &aRec, &nRec, 0
+        pData0, pC->pKeyInfo->nField, pC->pKeyInfo->nField,
+        pC->iRoot, pC->pKeyInfo, &aRec, &nRec, 0
     );
     if( rc ){
       sqlite4DbFree(db, aRec);
@@ -2984,7 +2991,8 @@ case OP_SeekGt: {       /* jump, in3 */
   nField = pOp->p4.i;
   pIn3 = &aMem[pOp->p3];
   rc = sqlite4VdbeEncodeKey(
-      db, pIn3, nField, pC->iRoot, pC->pKeyInfo, &aProbe, &nProbe, 1
+      db, pIn3, nField, nField+(pOp->p5 & OPFLAG_PARTIALKEY),
+      pC->iRoot, pC->pKeyInfo, &aProbe, &nProbe, 1
   );
 
   /*   Opcode    search-dir    increment-key
@@ -3045,7 +3053,7 @@ case OP_Seek: {    /* in2 */
   assert( pC!=0 );
   assert( pC->isTable );
   pKVCur = pC->pKVCur;
-  rc = sqlite4VdbeEncodeKey(db, aMem+pOp->p2, 1, pC->iRoot, 0,
+  rc = sqlite4VdbeEncodeKey(db, aMem+pOp->p2, 1, 1, pC->iRoot, 0,
                             &aKey, &nKey, 0);
   if( rc==SQLITE4_OK ){
     rc = sqlite4KVCursorSeek(pKVCur, aKey, nKey, 0);
@@ -3122,8 +3130,10 @@ case OP_Found: {        /* jump, in3 */
   assert( pC->pKVCur!=0 );
   assert( pC->isTable==0 || pOp->opcode==OP_NotExists );
   if( pOp->p4.i>0 ){
-    rc = sqlite4VdbeEncodeKey(db, pIn3, pOp->p4.i, pC->iRoot,
-                              pC->pKeyInfo, &pProbe, &nProbe, 0);
+    rc = sqlite4VdbeEncodeKey(
+        db, pIn3, pOp->p4.i, pOp->p4.i + (pOp->p5 & OPFLAG_PARTIALKEY),
+        pC->iRoot, pC->pKeyInfo, &pProbe, &nProbe, 0
+    );
     pFree = pProbe;
   }else{
     pProbe = (KVByteArray*)pIn3->z;

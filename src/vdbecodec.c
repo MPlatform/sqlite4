@@ -510,10 +510,11 @@ static int encodeLargeFloatKey(double r, KeyEncoder *p){
 ** Encode a single column of the key
 */
 static int encodeOneKeyValue(
-  KeyEncoder *p,
-  Mem *pMem,
-  u8 sortOrder,
-  CollSeq *pColl
+  KeyEncoder *p,    /* Key encoder context */
+  Mem *pMem,        /* Value to be encoded */
+  u8 sortOrder,     /* Sort order for this value */
+  u8 isLastValue,   /* True if this is the last value in the key */
+  CollSeq *pColl    /* Collating sequence for the value */
 ){
   int flags = pMem->flags;
   int i, e;
@@ -615,8 +616,15 @@ static int encodeOneKeyValue(
     /* Release any memory allocated to hold the translated text */
     if( pEnc==&sMem ) sqlite4VdbeMemRelease(&sMem);
 
-  }else
-  {
+  }else if( isLastValue ){
+    /* A BLOB value that is the right-most value of a key */
+    assert( flags & MEM_Blob );
+    if( enlargeEncoderAllocation(p, pMem->n+1) ) return SQLITE4_NOMEM;
+    p->aOut[p->nOut++] = 0x26;
+    memcpy(p->aOut+p->nOut, pMem->z, pMem->n);
+    p->nOut += pMem->n;
+  }else{
+    /* A BLOB value that is followed by other values */
     const unsigned char *a;
     unsigned char s, t;
     assert( flags & MEM_Blob );
@@ -686,6 +694,10 @@ int sqlite4VdbeShortKey(
         while( (0xFF!=*(p++)) );
         break;
 
+      case 0x26:                  /* Blob-final (ascending) */
+      case 0xD9:                  /* Blob-final (descending) */
+        return nKey;
+
       case 0x22: case 0xDD:       /* Large positive number */
       case 0x14: case 0xEB:       /* Small negative number */
       case 0x16: case 0xE9:       /* Small positive number */
@@ -731,11 +743,12 @@ int sqlite4VdbeEncodeKey(
   sqlite4 *db,                 /* The database connection */
   Mem *aIn,                    /* Values to be encoded */
   int nIn,                     /* Number of entries in aIn[] */
+  int nInTotal,                /* Number of values in a complete key */
   int iTabno,                  /* The table this key applies to */
   KeyInfo *pKeyInfo,           /* Collating sequence and sort-order info */
   u8 **paOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
-  int nExtra                   /* See above */
+  int nExtra                   /* extra bytes of space appended to the key */
 ){
   int i;
   int rc = SQLITE4_OK;
@@ -758,7 +771,8 @@ int sqlite4VdbeEncodeKey(
   aColl = pKeyInfo->aColl;
   so = pKeyInfo->aSortOrder;
   for(i=0; i<nIn && rc==SQLITE4_OK; i++){
-    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE4_SO_ASC, aColl[i]);
+    rc = encodeOneKeyValue(&x, aIn+i, so ? so[i] : SQLITE4_SO_ASC,
+                           i==nInTotal-1, aColl[i]);
   }
 
   if( rc==SQLITE4_OK && nExtra ){ rc = enlargeEncoderAllocation(&x, nExtra); }

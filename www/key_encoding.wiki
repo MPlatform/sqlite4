@@ -61,14 +61,24 @@ will sort first.
 
 <h2>Binary Encoding</h2>
 
-Each SQL value that is BINARY begins with a single byte of 0x25 and
+The encoding of binaries fields is different depending on whether or not
+the value to be encoded is the last value (the right-most value) in the key.
+
+Each SQL value that is BINARY that is not the last value of the key
+begins with a single byte of 0x25 and
 ends with a single byte of 0x00.  There are zero or more intervening bytes
 that encode the binary value.  None of the intervening bytes may be zero.
 Each of the intervening bytes contains 7 bits of blob content with a 1 in
 the high-order bit (the 0x80 bit).  The final byte before the 0x00 contains
 any left-over bits of the blob content.
 
-The initial byte of a binary value, 0x25, is larger than the initial
+When the very last value of a key is BINARY, then it is encoded as a single
+byte of 0x26 and is followed by a byte-for-byte copy of the BINARY value.
+This alternative encoding is more efficient, but it only works if there are
+no subsequent values in the key, since there is no termination mark on the
+BLOB being encoded.
+
+The initial byte of a binary value, 0x25 or 0x26, is larger than the initial
 byte of a text value, 0x24, ensuring that every binary value will sort
 after every text value.
 
@@ -188,4 +198,5 @@ follow is given by the following table:
 <tr><td>  positive infinity  <td><td> 0x23
 <tr><td>  text               <td><td> 0x24,     T
 <tr><td>  binary             <td><td> 0x25,     B
+<tr><td>  final binary       <td><td> 0x26,     X
 </table><blockquote>

@@ -376,11 +376,12 @@ int sqlite4VdbeEncodeKey(
   sqlite4 *db,                 /* The database connection */
   Mem *aIn,                    /* Values to be encoded */
   int nIn,                     /* Number of entries in aIn[] */
+  int nInTotal,                /* Number of values in complete key */
   int iTabno,                  /* The table this key applies to */
   KeyInfo *pKeyInfo,           /* Collating sequence information */
   u8 **pzOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
-  int bIncr                    /* Make the key "incrementable" */
+  int nExtra                   /* Append extra bytes on end of key */
 );
 int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_int64 v);
 int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);
