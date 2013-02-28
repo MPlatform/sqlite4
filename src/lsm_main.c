@@ -755,7 +755,7 @@ int lsm_delete_range(
 ** transaction, open a read transaction here.
 */
 int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
-  int rc;                         /* Return code */
+  int rc = LSM_OK;                /* Return code */
   MultiCursor *pCsr = 0;          /* New cursor object */
 
   /* Open a read transaction if one is not already open. */
@@ -764,7 +764,7 @@ int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
   if( pDb->pShmhdr==0 ){
     assert( pDb->bReadonly );
     rc = lsmBeginRoTrans(pDb);
-  }else{
+  }else if( pDb->iReader<0 ){
     rc = lsmBeginReadTrans(pDb);
   }
 

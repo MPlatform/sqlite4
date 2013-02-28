@@ -816,10 +816,10 @@ int test_lsm_config_str(
       zStart = z;
       while( *z>='0' && *z<='9' ) z++;
       if( *z=='k' || *z=='K' ){
-        iMul = 1024;
+        iMul = 1;
         z++;
       }else if( *z=='M' || *z=='M' ){
-        iMul = 1024 * 1024;
+        iMul = 1024;
         z++;
       }
       nParam = z-zStart;
@@ -841,10 +841,10 @@ int test_lsm_config_str(
             if( pLsm ) nThread = iVal;
             break;
           case TEST_MT_MIN_CKPT:
-            if( pLsm && iVal>0 ) pLsm->nMtMinCkpt = iVal;
+            if( pLsm && iVal>0 ) pLsm->nMtMinCkpt = iVal*1024;
             break;
           case TEST_MT_MAX_CKPT:
-            if( pLsm && iVal>0 ) pLsm->nMtMaxCkpt = iVal;
+            if( pLsm && iVal>0 ) pLsm->nMtMaxCkpt = iVal*1024;
             break;
 #ifdef HAVE_ZLIB
           case TEST_COMPRESSION:

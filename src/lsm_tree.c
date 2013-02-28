@@ -268,6 +268,13 @@ static void intArrayTruncate(IntArray *p, int nVal){
 /* End of IntArray methods.
 ***********************************************************************/
 
+static int treeKeycmp(void *p1, int n1, void *p2, int n2){
+  int res;
+  res = memcmp(p1, p2, LSM_MIN(n1, n2));
+  if( res==0 ) res = (n1-n2);
+  return res;
+}
+
 /*
 ** The pointer passed as the first argument points to an interior node,
 ** not a leaf. This function returns the offset of the iCell'th child
@@ -287,6 +294,9 @@ static int treeOffsetToChunk(u32 iOff){
   return (int)(iOff>>15);
 }
 
+#define treeShmptrUnsafe(pDb, iPtr) \
+(&((u8*)((pDb)->apShm[(iPtr)>>15]))[(iPtr) & (LSM_SHM_CHUNK_SIZE-1)])
+
 /*
 ** Return a pointer to the mapped memory location associated with *-shm 
 ** file offset iPtr.
@@ -296,7 +306,7 @@ static void *treeShmptr(lsm_db *pDb, u32 iPtr){
   assert( (iPtr>>15)<pDb->nShm );
   assert( pDb->apShm[iPtr>>15] );
 
-  return iPtr?(&((u8*)(pDb->apShm[iPtr>>15]))[iPtr & (LSM_SHM_CHUNK_SIZE-1)]):0;
+  return iPtr ? treeShmptrUnsafe(pDb, iPtr) : 0;
 }
 
 static ShmChunk * treeShmChunk(lsm_db *pDb, int iChunk){
@@ -565,11 +575,16 @@ static void treeCursorInit(lsm_db *pDb, int bOld, TreeCursor *pCsr){
 ** is pointing to. 
 */
 static TreeKey *csrGetKey(TreeCursor *pCsr, TreeBlob *pBlob, int *pRc){
-  TreeKey *pRet = (TreeKey *)treeShmkey(pCsr->pDb,
-      pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]], 
-      TKV_LOADVAL, pBlob, pRc
-  );
-  assert( pRet==0 || assertFlagsOk(pRet->flags) );
+  TreeKey *pRet;
+  lsm_db *pDb = pCsr->pDb;
+  u32 iPtr = pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]];
+
+  assert( iPtr );
+  pRet = treeShmptrUnsafe(pDb, iPtr);
+  if( !(pRet->flags & LSM_CONTIGUOUS) ){
+    pRet = treeShmkey(pDb, iPtr, TKV_LOADVAL, pBlob, pRc);
+  }
+
   return pRet;
 }
 
@@ -721,6 +736,7 @@ static TreeKey *newTreeKey(
 ){
   TreeKey *p;
   u32 iPtr;
+  u32 iEnd;
   int nRem;
   u8 *a;
   int n;
@@ -753,6 +769,13 @@ static TreeKey *newTreeKey(
     a = pVal;
     n = nRem = nVal;
     pVal = 0;
+  }
+
+  iEnd = iPtr + sizeof(TreeKey) + nKey + LSM_MAX(0, nVal);
+  if( (iPtr & ~(LSM_SHM_CHUNK_SIZE-1))!=(iEnd & ~(LSM_SHM_CHUNK_SIZE-1)) ){
+    p->flags = 0;
+  }else{
+    p->flags = LSM_CONTIGUOUS;
   }
 
   if( *pRc ) return 0;
@@ -1440,6 +1463,7 @@ static int treeInsertEntry(
   assert( flags==LSM_INSERT       || flags==LSM_POINT_DELETE 
        || flags==LSM_START_DELETE || flags==LSM_END_DELETE 
   );
+  assert( (flags & LSM_CONTIGUOUS)==0 );
 #if 0
   dump_tree_contents(pDb, "before");
 #endif
@@ -1497,7 +1521,8 @@ static int treeInsertEntry(
   /* Allocate and populate a new key-value pair structure */
   pTreeKey = newTreeKey(pDb, &iTreeKey, pKey, nKey, pVal, nVal, &rc);
   if( rc!=LSM_OK ) return rc;
-  pTreeKey->flags = flags;
+  assert( pTreeKey->flags==0 || pTreeKey->flags==LSM_CONTIGUOUS );
+  pTreeKey->flags |= flags;
 
   if( p->iRoot==0 ){
     /* The tree is completely empty. Add a new root node and install
@@ -1783,7 +1808,7 @@ int lsmTreeDelete(
   TreeBlob blob = {0, 0};
 
   /* The range must be sensible - that (key1 < key2). */
-  assert( db->xCmp(pKey1, nKey1, pKey2, nKey2)<0 );
+  assert( treeKeycmp(pKey1, nKey1, pKey2, nKey2)<0 );
   assert( assert_delete_ranges_match(db) );
 
 #if 0
@@ -1815,7 +1840,7 @@ int lsmTreeDelete(
     bDone = 1;
     if( lsmTreeCursorValid(&csr) ){
       lsmTreeCursorKey(&csr, 0, &pDel, &nDel);
-      if( db->xCmp(pDel, nDel, pKey2, nKey2)<0 ) bDone = 0;
+      if( treeKeycmp(pDel, nDel, pKey2, nKey2)<0 ) bDone = 0;
     }
 
     if( bDone==0 ){
@@ -1932,7 +1957,7 @@ static int treeCsrCompare(TreeCursor *pCsr, void *pKey, int nKey){
   assert( pCsr->iNode>=0 );
   p = csrGetKey(pCsr, &pCsr->blob, &rc);
   if( p ){
-    cmp = pCsr->pDb->xCmp(TKV_KEY(p), p->nKey, pKey, nKey);
+    cmp = treeKeycmp(TKV_KEY(p), p->nKey, pKey, nKey);
   }
   return cmp;
 }
@@ -1957,8 +1982,6 @@ int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
   int rc = LSM_OK;                /* Return code */
   lsm_db *pDb = pCsr->pDb;
   TreeRoot *pRoot = pCsr->pRoot;
-  int (*xCmp)(void *, int, void *, int) = pDb->xCmp;
-
   u32 iNodePtr;                   /* Location of current node in search */
 
   /* Discard any saved position data */
@@ -1977,18 +2000,22 @@ int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
     while( iNodePtr ){
       TreeNode *pNode;            /* Node at location iNodePtr */
       int iTest;                  /* Index of second key to test (0 or 2) */
+      u32 iTreeKey;
       TreeKey *pTreeKey;          /* Key to compare against */
 
-      pNode = (TreeNode *)treeShmptr(pDb, iNodePtr);
+      pNode = (TreeNode *)treeShmptrUnsafe(pDb, iNodePtr);
       iNode++;
       pCsr->apTreeNode[iNode] = pNode;
 
       /* Compare (pKey/nKey) with the key in the middle slot of B-tree node
       ** pNode. The middle slot is never empty. If the comparison is a match,
       ** then the search is finished. Break out of the loop. */
-      pTreeKey = treeShmkey(pDb, pNode->aiKeyPtr[1], TKV_LOADKEY, &b, &rc);
-      if( rc!=LSM_OK ) break;
-      res = xCmp((void *)&pTreeKey[1], pTreeKey->nKey, pKey, nKey);
+      pTreeKey = treeShmptrUnsafe(pDb, pNode->aiKeyPtr[1]);
+      if( !(pTreeKey->flags & LSM_CONTIGUOUS) ){
+        pTreeKey = treeShmkey(pDb, pNode->aiKeyPtr[1], TKV_LOADKEY, &b, &rc);
+        if( rc!=LSM_OK ) break;
+      }
+      res = treeKeycmp((void *)&pTreeKey[1], pTreeKey->nKey, pKey, nKey);
       if( res==0 ){
         pCsr->aiCell[iNode] = 1;
         break;
@@ -1998,16 +2025,20 @@ int lsmTreeCursorSeek(TreeCursor *pCsr, void *pKey, int nKey, int *pRes){
       ** to either the left or right key of the B-tree node, if such a key
       ** exists. */
       iTest = (res>0 ? 0 : 2);
-      pTreeKey = treeShmkey(pDb, pNode->aiKeyPtr[iTest], TKV_LOADKEY, &b, &rc);
-      if( rc ) break;
-      if( pTreeKey==0 ){
-        iTest = 1;
-      }else{
-        res = xCmp((void *)&pTreeKey[1], pTreeKey->nKey, pKey, nKey);
+      iTreeKey = pNode->aiKeyPtr[iTest];
+      if( iTreeKey ){
+        pTreeKey = treeShmptrUnsafe(pDb, iTreeKey);
+        if( !(pTreeKey->flags & LSM_CONTIGUOUS) ){
+          pTreeKey = treeShmkey(pDb, iTreeKey, TKV_LOADKEY, &b, &rc);
+          if( rc ) break;
+        }
+        res = treeKeycmp((void *)&pTreeKey[1], pTreeKey->nKey, pKey, nKey);
         if( res==0 ){
           pCsr->aiCell[iNode] = iTest;
           break;
         }
+      }else{
+        iTest = 1;
       }
 
       if( iNode<(pRoot->nHeight-1) ){
@@ -2092,7 +2123,7 @@ int lsmTreeCursorNext(TreeCursor *pCsr){
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
     TreeKey *pK2 = csrGetKey(pCsr, &pCsr->blob, &rc);
-    assert( rc || pDb->xCmp(TKV_KEY(pK2),pK2->nKey,TKV_KEY(pK1),pK1->nKey)>=0 );
+    assert( rc||treeKeycmp(TKV_KEY(pK2),pK2->nKey,TKV_KEY(pK1),pK1->nKey)>=0 );
   }
   tblobFree(pDb, &key1);
 #endif
@@ -2160,7 +2191,7 @@ int lsmTreeCursorPrev(TreeCursor *pCsr){
 #ifndef NDEBUG
   if( pCsr->iNode>=0 ){
     TreeKey *pK2 = csrGetKey(pCsr, &pCsr->blob, &rc);
-    assert( rc || pDb->xCmp(TKV_KEY(pK2), pK2->nKey, TKV_KEY(pK1), pK1->nKey)<0 );
+    assert( rc || treeKeycmp(TKV_KEY(pK2),pK2->nKey,TKV_KEY(pK1),pK1->nKey)<0 );
   }
   tblobFree(pDb, &key1);
 #endif
@@ -2214,11 +2245,11 @@ int lsmTreeCursorFlags(TreeCursor *pCsr){
   int flags = 0;
   if( pCsr && pCsr->iNode>=0 ){
     int rc = LSM_OK;
-    TreeKey *pKey = (TreeKey *)treeShmptr(pCsr->pDb,
+    TreeKey *pKey = (TreeKey *)treeShmptrUnsafe(pCsr->pDb,
         pCsr->apTreeNode[pCsr->iNode]->aiKeyPtr[pCsr->aiCell[pCsr->iNode]]
     );
     assert( rc==LSM_OK );
-    flags = pKey->flags;
+    flags = (pKey->flags & ~LSM_CONTIGUOUS);
   }
   return flags;
 }

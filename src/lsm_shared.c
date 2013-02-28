@@ -1337,7 +1337,7 @@ void lsmFinishReadTrans(lsm_db *pDb){
 ** Open a write transaction.
 */
 int lsmBeginWriteTrans(lsm_db *pDb){
-  int rc;                         /* Return code */
+  int rc = LSM_OK;                /* Return code */
   ShmHeader *pShm = pDb->pShmhdr; /* Shared memory header */
 
   assert( pDb->nTransOpen==0 );
@@ -1345,7 +1345,9 @@ int lsmBeginWriteTrans(lsm_db *pDb){
   assert( pDb->bReadonly==0 );
 
   /* If there is no read-transaction open, open one now. */
-  rc = lsmBeginReadTrans(pDb);
+  if( pDb->iReader<0 ){
+    rc = lsmBeginReadTrans(pDb);
+  }
 
   /* Attempt to take the WRITER lock */
   if( rc==LSM_OK ){

@@ -1332,6 +1332,7 @@ static int fsPageGet(
     }
     p->aData = &((u8 *)pFS->pMap)[pFS->nPagesize * (iReal-1)];
     p->iPg = iReal;
+    assert( (p->flags & PAGE_FREE)==0 );
   }else{
 
     /* Search the hash-table for the page */

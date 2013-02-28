@@ -2573,7 +2573,7 @@ case OP_SetCookie: {       /* in3 */
 
 /* Opcode: VerifyCookie P1 P2 P3 * *
 **
-** cHECK THe value of global database parameter number 0 (the
+** Check the value of global database parameter number 0 (the
 ** schema version) and make sure it is equal to P2 and that the
 ** generation counter on the local schema parse equals P3.
 **

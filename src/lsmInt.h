@@ -171,6 +171,8 @@ int lsmErrorBkpt(int);
 #define LSM_SEPARATOR    0x10     /* True if entry is separator key only */
 #define LSM_SYSTEMKEY    0x20     /* True if entry is a system key (FREELIST) */
 
+#define LSM_CONTIGUOUS   0x40     /* Used in lsm_tree.c */
+
 /*
 ** A string that can grow by appending.
 */
