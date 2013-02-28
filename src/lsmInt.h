@@ -306,6 +306,18 @@ struct TreeHeader {
 **   Or for an EXCLUSIVE lock:
 **
 **       (mLock & ((iLock-1) << 1))
+** 
+** pCsr:
+**   Points to the head of a linked list that contains all currently open
+**   cursors. Once this list becomes empty, the user has no outstanding
+**   cursors and the database handle can be successfully closed.
+**
+** pCsrCache:
+**   This list contains cursor objects that have been closed using
+**   lsm_csr_close(). Each time a cursor is closed, it is shifted from 
+**   the pCsr list to this list. When a new cursor is opened, this list
+**   is inspected to see if there exists a cursor object that can be
+**   reused. This is an optimization only.
 */
 struct lsm_db {
 
@@ -346,6 +358,8 @@ struct lsm_db {
   TransMark *aTrans;              /* Array of marks for transaction rollback */
   IntArray rollback;              /* List of tree-nodes to roll back */
   int bDiscardOld;                /* True if lsmTreeDiscardOld() was called */
+
+  MultiCursor *pCsrCache;         /* List of all closed cursors */
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
@@ -786,7 +800,7 @@ void *lsmSortedSplitKey(Level *pLevel, int *pnByte);
 void lsmSortedSaveTreeCursors(lsm_db *);
 
 int lsmMCursorNew(lsm_db *, MultiCursor **);
-void lsmMCursorClose(MultiCursor *);
+void lsmMCursorClose(MultiCursor *, int);
 int lsmMCursorSeek(MultiCursor *, int, void *, int , int);
 int lsmMCursorFirst(MultiCursor *);
 int lsmMCursorPrev(MultiCursor *);
@@ -797,6 +811,7 @@ int lsmMCursorKey(MultiCursor *, void **, int *);
 int lsmMCursorValue(MultiCursor *, void **, int *);
 int lsmMCursorType(MultiCursor *, int *);
 lsm_db *lsmMCursorDb(MultiCursor *);
+void lsmMCursorFreeCache(lsm_db *);
 
 int lsmSaveCursors(lsm_db *pDb);
 int lsmRestoreCursors(lsm_db *pDb);

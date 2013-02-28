@@ -217,6 +217,7 @@ int lsm_close(lsm_db *pDb){
     if( pDb->pCsr || pDb->nTransOpen ){
       rc = LSM_MISUSE_BKPT;
     }else{
+      lsmMCursorFreeCache(pDb);
       lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
       pDb->pClient = 0;
 
@@ -769,13 +770,15 @@ int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
   }
 
   /* Allocate the multi-cursor. */
-  if( rc==LSM_OK ) rc = lsmMCursorNew(pDb, &pCsr);
+  if( rc==LSM_OK ){
+    rc = lsmMCursorNew(pDb, &pCsr);
+  }
 
   /* If an error has occured, set the output to NULL and delete any partially
   ** allocated cursor. If this means there are no open cursors, release the
   ** client snapshot.  */
   if( rc!=LSM_OK ){
-    lsmMCursorClose(pCsr);
+    lsmMCursorClose(pCsr, 0);
     dbReleaseClientSnapshot(pDb);
   }
 
@@ -791,7 +794,7 @@ int lsm_csr_close(lsm_cursor *p){
   if( p ){
     lsm_db *pDb = lsmMCursorDb((MultiCursor *)p);
     assert_db_state(pDb);
-    lsmMCursorClose((MultiCursor *)p);
+    lsmMCursorClose((MultiCursor *)p, 1);
     dbReleaseClientSnapshot(pDb);
     assert_db_state(pDb);
   }

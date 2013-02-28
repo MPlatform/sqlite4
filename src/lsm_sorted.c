@@ -2245,7 +2245,23 @@ static void mcursorFreeComponents(MultiCursor *pCsr){
   pCsr->pBtCsr = 0;
 }
 
-void lsmMCursorClose(MultiCursor *pCsr){
+void lsmMCursorFreeCache(lsm_db *pDb){
+  MultiCursor *p;
+  MultiCursor *pNext;
+  for(p=pDb->pCsrCache; p; p=pNext){
+    pNext = p->pNext;
+    lsmMCursorClose(p, 0);
+  }
+  pDb->pCsrCache = 0;
+}
+
+/*
+** Close the cursor passed as the first argument.
+**
+** If the bCache parameter is true, then shift the cursor to the pCsrCache
+** list for possible reuse instead of actually deleting it.
+*/
+void lsmMCursorClose(MultiCursor *pCsr, int bCache){
   if( pCsr ){
     lsm_db *pDb = pCsr->pDb;
     MultiCursor **pp;             /* Iterator variable */
@@ -2259,15 +2275,35 @@ void lsmMCursorClose(MultiCursor *pCsr){
       }
     }
 
-    /* Free the allocation used to cache the current key, if any. */
-    sortedBlobFree(&pCsr->key);
-    sortedBlobFree(&pCsr->val);
+    if( bCache ){
+      int i;                      /* Used to iterate through segment-pointers */
 
-    /* Free the component cursors */
-    mcursorFreeComponents(pCsr);
+      /* Release any page references held by this cursor. */
+      assert( !pCsr->pBtCsr );
+      for(i=0; i<pCsr->nPtr; i++){
+        SegmentPtr *pPtr = &pCsr->aPtr[i];
+        lsmFsPageRelease(pPtr->pPg);
+        pPtr->pPg = 0;
+      }
 
-    /* Free the cursor structure itself */
-    lsmFree(pDb->pEnv, pCsr);
+      /* Reset the tree cursors */
+      lsmTreeCursorReset(pCsr->apTreeCsr[0]);
+      lsmTreeCursorReset(pCsr->apTreeCsr[1]);
+
+      /* Add the cursor to the pCsrCache list */
+      pCsr->pNext = pDb->pCsrCache;
+      pDb->pCsrCache = pCsr;
+    }else{
+      /* Free the allocation used to cache the current key, if any. */
+      sortedBlobFree(&pCsr->key);
+      sortedBlobFree(&pCsr->val);
+
+      /* Free the component cursors */
+      mcursorFreeComponents(pCsr);
+
+      /* Free the cursor structure itself */
+      lsmFree(pDb->pEnv, pCsr);
+    }
   }
 }
 
@@ -2426,6 +2462,9 @@ static int multiCursorVisitFreelist(MultiCursor *pCsr){
 
 /*
 ** Allocate and return a new database cursor.
+**
+** This method should only be called to allocate user cursors. As it may
+** recycle a cursor from lsm_db.pCsrCache.
 */
 int lsmMCursorNew(
   lsm_db *pDb,                    /* Database handle */
@@ -2434,11 +2473,33 @@ int lsmMCursorNew(
   MultiCursor *pCsr = 0;
   int rc = LSM_OK;
 
-  pCsr = multiCursorNew(pDb, &rc);
-  if( rc==LSM_OK ) rc = multiCursorInit(pCsr, pDb->pClient);
+  if( pDb->pCsrCache ){
+    int bOld;                     /* True if there is an old in-memory tree */
+
+    /* Remove a cursor from the pCsrCache list and add it to the open list. */
+    pCsr = pDb->pCsrCache;
+    pDb->pCsrCache = pCsr->pNext;
+    pCsr->pNext = pDb->pCsr;
+    pDb->pCsr = pCsr;
+
+    /* The cursor can almost be used as is, except that the old in-memory
+    ** tree cursor may be present and not required, or required and not
+    ** present. Fix this if required.  */
+    bOld = (lsmTreeHasOld(pDb) && pDb->treehdr.iOldLog!=pDb->pClient->iLogOff);
+    if( !bOld && pCsr->apTreeCsr[1] ){
+      lsmTreeCursorDestroy(pCsr->apTreeCsr[1]);
+      pCsr->apTreeCsr[1] = 0;
+    }else if( bOld && !pCsr->apTreeCsr[1] ){
+      rc = lsmTreeCursorNew(pDb, 1, &pCsr->apTreeCsr[1]);
+    }
+
+  }else{
+    pCsr = multiCursorNew(pDb, &rc);
+    if( rc==LSM_OK ) rc = multiCursorInit(pCsr, pDb->pClient);
+  }
 
   if( rc!=LSM_OK ){
-    lsmMCursorClose(pCsr);
+    lsmMCursorClose(pCsr, 0);
     pCsr = 0;
   }
   assert( (rc==LSM_OK)==(pCsr!=0) );
@@ -2557,7 +2618,7 @@ int lsmSortedWalkFreelist(
     }
   }
 
-  lsmMCursorClose(pCsr);
+  lsmMCursorClose(pCsr, 0);
   if( pSnap!=pDb->pWorker ){
     lsmFreeSnapshot(pDb->pEnv, pSnap);
   }
@@ -2600,7 +2661,7 @@ int lsmSortedLoadFreelist(
       }
     }
 
-    lsmMCursorClose(pCsr);
+    lsmMCursorClose(pCsr, 0);
   }
 
   return rc;
@@ -4035,7 +4096,7 @@ static void mergeWorkerShutdown(MergeWorker *pMW, int *pRc){
     pMerge->iOutputOff = -1;
   }
 
-  lsmMCursorClose(pCsr);
+  lsmMCursorClose(pCsr, 0);
 
   /* Persist and release the output page. */
   if( rc==LSM_OK ) rc = mergeWorkerPersistAndRelease(pMW);
@@ -4289,7 +4350,7 @@ static int sortedNewToplevel(
   }
 
   if( rc!=LSM_OK ){
-    lsmMCursorClose(pCsr);
+    lsmMCursorClose(pCsr, 0);
   }else{
     Pgno iLeftPtr = 0;
     Merge merge;                  /* Merge object used to create new level */
@@ -5339,6 +5400,7 @@ int lsmSortedAutoWork(
     if( rc==LSM_BUSY ) rc = LSM_OK;
 
     if( bRestore && pDb->pCsr ){
+      lsmMCursorFreeCache(pDb);
       lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
       pDb->pClient = 0;
       rc = lsmCheckpointLoad(pDb, 0);
