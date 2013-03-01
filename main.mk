@@ -534,6 +534,11 @@ threadtest3$(EXE): sqlite4.o $(TOP)/test/threadtest3.c $(TOP)/test/tt3_checkpoin
 threadtest: threadtest3$(EXE)
 	./threadtest3$(EXE)
 
+SQLSRC = $(TOP)/lsm-test/sqltest.c $(TOP)/lsm-test/lsmtest_util.c 
+sqltest$(EXE): $(SQLSRC) libsqlite4.a
+	$(TCCX) $(TOP)/lsm-test/sqltest.c \
+        -o sqltest$(EXE) -lsqlite3 libsqlite4.a $(THREADLIB)
+
 TEST_EXTENSION = $(SHPREFIX)testloadext.$(SO)
 $(TEST_EXTENSION): $(TOP)/test/test_loadext.c
 	$(MKSHLIB) $(TOP)/test/test_loadext.c -o $(TEST_EXTENSION)
