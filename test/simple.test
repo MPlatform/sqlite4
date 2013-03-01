@@ -1461,7 +1461,24 @@ do_test 74.2 {
     execsql "INSERT INTO t1 VALUES('k$i', randstr(500,500))"
   }
 } {}
-breakpoint
 db close
+
+#-------------------------------------------------------------------------
+# Index on a blob.
+#
+reset_db
+
+do_execsql_test 75.1 { 
+  CREATE TABLE t1(a PRIMARY KEY, b UNIQUE);
+  INSERT INTO t1 VALUES(x'12345678', x'12345678');
+}
+
+do_execsql_test 75.2 { 
+  SELECT count(*) FROM t1 WHERE a = x'12345678'
+} 1
+
+do_execsql_test 75.3 { 
+  SELECT count(*) FROM t1 WHERE b = x'12345678'
+} 1
 
 finish_test
