@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <unistd.h>
 
 #define SQLITE3_DB_FILE "test.db3"
 #define SQLITE4_DB_FILE "test.db4"
@@ -109,7 +110,6 @@ static int do_explode(const char *zLine, int rc, int iLine){
 /* src4 implementation */
 static void rblobFunc4(sqlite4_context *ctx, int nArg, sqlite4_value **apArg){
   unsigned char aBlob[1000];
-  static unsigned int iCall = 0;
 
   int iSeed = sqlite4_value_int(apArg[0]);
   int nMin = sqlite4_value_int(apArg[1]);
@@ -132,7 +132,6 @@ static void install_rblob_function4(sqlite4 *db){
 /* sqlite3 implementation */
 static void rblobFunc3(sqlite3_context *ctx, int nArg, sqlite3_value **apArg){
   unsigned char aBlob[1000];
-  static unsigned int iCall = 0;
 
   int iSeed = sqlite3_value_int(apArg[0]);
   int nMin = sqlite3_value_int(apArg[1]);
