@@ -7,7 +7,7 @@ int do_work(int nArg, char **azArg){
     const char *zName;
   } aOpt [] = {
     { "-nmerge" },
-    { "-npage" },
+    { "-nkb" },
     { 0 }
   };
 
@@ -16,7 +16,7 @@ int do_work(int nArg, char **azArg){
   int i;
   const char *zDb;
   int nMerge = 1;
-  int nWork = (1<<30);
+  int nKB = (1<<30);
 
   if( nArg==0 ) goto usage;
   zDb = azArg[nArg-1];
@@ -33,7 +33,7 @@ int do_work(int nArg, char **azArg){
       case 1:
         i++;
         if( i==(nArg-1) ) goto usage;
-        nWork = atoi(azArg[i]);
+        nKB = atoi(azArg[i]);
         break;
     }
   }
@@ -51,7 +51,7 @@ int do_work(int nArg, char **azArg){
       n = n*2;
       lsm_config(pDb, LSM_CONFIG_AUTOCHECKPOINT, &n);
 
-      rc = lsm_work(pDb, nMerge, nWork, 0);
+      rc = lsm_work(pDb, nMerge, nKB, 0);
       if( rc!=LSM_OK ){
         testPrintError("lsm_work(): rc=%d\n", rc);
       }

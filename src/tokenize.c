@@ -227,7 +227,6 @@ int sqlite4GetToken(const unsigned char *z, int *tokenType){
       *tokenType = TK_BITNOT;
       return 1;
     }
-    case '`':
     case '\'':
     case '"': {
       int delim = z[0];

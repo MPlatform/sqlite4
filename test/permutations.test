@@ -135,7 +135,7 @@ test_suite "src4" -prefix "" -description {
 } -files {
   simple.test simple2.test
   log3.test 
-  lsm1.test lsm2.test
+  lsm1.test lsm2.test lsm3.test lsm4.test lsm5.test
   csr1.test
   ckpt1.test
   mc1.test
@@ -149,7 +149,6 @@ test_suite "src4" -prefix "" -description {
   between.test
   bigrow.test
   bind.test
-  bindxfer.test
 
   boundary1.test boundary4.test
   cast.test

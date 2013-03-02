@@ -1319,9 +1319,6 @@ void sqlite4GenerateConstraintChecks(
       }
     }
     sqlite4VdbeAddOp3(v, OP_MakeIdxKey, iIdx, regTmp, regKey);
-    if( pIdx==pPk && (pPk->fIndex & IDX_IntPK)!=0 ){
-      sqlite4VdbeChangeP5(v, OPFLAG_LASTROWID);
-    }
     VdbeComment((v, "key for %s", pIdx->zName));
 
     /* If Index.onError==OE_None, then pIdx is not a UNIQUE or PRIMARY KEY 
@@ -1804,7 +1801,7 @@ static int xferOptimization(
   }
   sqlite4VdbeAddOp2(v, OP_RowData, iSrc, regData);
   sqlite4VdbeAddOp3(v, OP_Insert, iDest, regData, regRowid);
-  sqlite4VdbeChangeP5(v, OPFLAG_NCHANGE|OPFLAG_LASTROWID|OPFLAG_APPEND);
+  sqlite4VdbeChangeP5(v, OPFLAG_NCHANGE|OPFLAG_APPEND);
   sqlite4VdbeChangeP4(v, -1, pDest->zName, 0);
   sqlite4VdbeAddOp2(v, OP_Next, iSrc, addr1);
   for(pDestIdx=pDest->pIndex; pDestIdx; pDestIdx=pDestIdx->pNext){

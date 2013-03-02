@@ -353,9 +353,6 @@ void sqlite4VdbeMemPrettyPrint(Mem *pMem, char *zBuf){
     }
 
     zCsr += sqlite4_snprintf(zCsr, 100, "]%s", encnames[pMem->enc]);
-    if( f & MEM_Zero ){
-      zCsr += sqlite4_snprintf(zCsr, 100, "+%dz",pMem->u.nZero);
-    }
     *zCsr = '\0';
   }else if( f & MEM_Str ){
     int j, k;
@@ -529,7 +526,6 @@ int sqlite4VdbeExec(
   Mem *pOut = 0;             /* Output operand */
   int iCompare = 0;          /* Result of last OP_Compare operation */
   int *aPermute = 0;         /* Permutation of columns for OP_Compare */
-  i64 lastRowid = db->lastRowid;  /* Saved value of the last insert ROWID */
 #ifdef VDBE_PROFILE
   u64 start;                 /* CPU clock count at start of opcode */
   int origPc;                /* Program counter at start of opcode */
@@ -798,7 +794,6 @@ case OP_Halt: {
     p->nFrame--;
     sqlite4VdbeSetChanges(db, p->nChange);
     pc = sqlite4VdbeFrameRestore(pFrame);
-    lastRowid = db->lastRowid;
     if( pOp->p2==OE_Ignore ){
       /* Instruction pc is the OP_Program that invoked the sub-program 
       ** currently being halted. If the p2 instruction of this OP_Halt
@@ -884,7 +879,8 @@ case OP_String8: {         /* same as TK_STRING, out2-prerelease */
 
 #ifndef SQLITE4_OMIT_UTF16
   if( encoding!=SQLITE4_UTF8 ){
-    rc = sqlite4VdbeMemSetStr(pOut, pOp->p4.z, -1, SQLITE4_UTF8, SQLITE4_STATIC);
+    rc = sqlite4VdbeMemSetStr(pOut, pOp->p4.z, -1, SQLITE4_UTF8,
+                              SQLITE4_STATIC, 0);
     if( rc==SQLITE4_TOOBIG ) goto too_big;
     if( SQLITE4_OK!=sqlite4VdbeChangeEncoding(pOut, encoding) ) goto no_mem;
     assert( pOut->zMalloc==pOut->z );
@@ -950,7 +946,7 @@ case OP_Null: {           /* out2-prerelease */
 */
 case OP_Blob: {                /* out2-prerelease */
   assert( pOp->p1 <= SQLITE4_MAX_LENGTH );
-  sqlite4VdbeMemSetStr(pOut, pOp->p4.z, pOp->p1, 0, 0);
+  sqlite4VdbeMemSetStr(pOut, pOp->p4.z, pOp->p1, 0, 0, 0);
   pOut->enc = encoding;
   UPDATE_MAX_BLOBSIZE(pOut);
   break;
@@ -1145,7 +1141,6 @@ case OP_Concat: {           /* same as TK_CONCAT, in1, in2, out3 */
     sqlite4VdbeMemSetNull(pOut);
     break;
   }
-  if( ExpandBlob(pIn1) || ExpandBlob(pIn2) ) goto no_mem;
   Stringify(pIn1, encoding);
   Stringify(pIn2, encoding);
   nByte = pIn1->n + pIn2->n;
@@ -1386,9 +1381,7 @@ case OP_Function: {
     assert( pOp[-1].opcode==OP_CollSeq );
     ctx.pColl = pOp[-1].p4.pColl;
   }
-  db->lastRowid = lastRowid;
   (*ctx.pFunc->xFunc)(&ctx, n, apVal); /* IMP: R-24505-23230 */
-  lastRowid = db->lastRowid;
 
   /* If any auxiliary data functions have been called by this user function,
   ** immediately call the destructor for any non-static values.
@@ -1587,9 +1580,8 @@ case OP_ToText: {                  /* same as TK_TO_TEXT, in1 */
   assert( MEM_Str==(MEM_Blob>>3) );
   pIn1->flags |= (pIn1->flags&MEM_Blob)>>3;
   applyAffinity(pIn1, SQLITE4_AFF_TEXT, encoding);
-  rc = ExpandBlob(pIn1);
   assert( pIn1->flags & MEM_Str || db->mallocFailed );
-  pIn1->flags &= ~(MEM_Int|MEM_Real|MEM_Blob|MEM_Zero);
+  pIn1->flags &= ~(MEM_Int|MEM_Real|MEM_Blob);
   UPDATE_MAX_BLOBSIZE(pIn1);
   break;
 }
@@ -2201,9 +2193,10 @@ case OP_Affinity: {
 ** (unique within the cursor) is appended to the record. The sole purpose
 ** of this is to ensure that the key blob is unique within the cursors table.
 **
-** If the OPFLAG_LASTROWID bit of P5 is set and the value of the first and
-** only field of the key is an integer, then set the lastRowid field to the
-** value of that integer.
+** If the OPFLAG_PARTIALKEY bit of P5 is set, that means the value supplied
+** for N is not the true number of values in the key, only the number that
+** need to be encoded for this operation.  This effects the encoding of
+** final BLOBs.
 */
 case OP_MakeIdxKey: {
   VdbeCursor *pC;
@@ -2236,9 +2229,6 @@ case OP_MakeIdxKey: {
     }while( iSeq );
     aSeq[sizeof(aSeq)-nSeq] |= 0x80;
   }
-  if( (pOp->p5 & OPFLAG_LASTROWID)!=0 && (pData0->flags & MEM_Int)!=0 ){
-    lastRowid = pData0->u.i;
-  }
 
   memAboutToChange(p, pOut);
 
@@ -2248,7 +2238,8 @@ case OP_MakeIdxKey: {
     assert( nField<=pKeyInfo->nField );
   }
   rc = sqlite4VdbeEncodeKey(
-    db, pData0, nField, pC->iRoot, pKeyInfo, &aRec, &nRec, nSeq
+    db, pData0, nField, nField+(pOp->p5 & OPFLAG_PARTIALKEY),
+    pC->iRoot, pKeyInfo, &aRec, &nRec, nSeq
   );
 
   if( rc ){
@@ -2257,7 +2248,8 @@ case OP_MakeIdxKey: {
     if( nSeq ){
       memcpy(&aRec[nRec], &aSeq[sizeof(aSeq)-nSeq], nSeq);
     }
-    rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec+nSeq, 0, SQLITE4_DYNAMIC);
+    rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec+nSeq, 0,
+                              SQLITE4_DYNAMIC, 0);
     REGISTER_TRACE(pOp->p3, pOut);
     UPDATE_MAX_BLOBSIZE(pOut);
   }
@@ -2333,21 +2325,20 @@ case OP_MakeRecord: {
     if( zAffinity ){
       applyAffinity(pMem, *(zAffinity++), encoding);
     }
-    if( pMem->flags&MEM_Zero ){
-      (void)ExpandBlob(pMem);
-    }
   }
 
   /* Compute the key (if this is a MakeKey opcode) */
   if( pC ){
     aRec = 0;
     rc = sqlite4VdbeEncodeKey(db, 
-        pData0, pC->pKeyInfo->nField, pC->iRoot, pC->pKeyInfo, &aRec, &nRec, 0
+        pData0, pC->pKeyInfo->nField, pC->pKeyInfo->nField,
+        pC->iRoot, pC->pKeyInfo, &aRec, &nRec, 0
     );
     if( rc ){
       sqlite4DbFree(db, aRec);
     }else{
-      rc = sqlite4VdbeMemSetStr(pKeyOut, (char *)aRec, nRec, 0, SQLITE4_DYNAMIC);
+      rc = sqlite4VdbeMemSetStr(pKeyOut, (char *)aRec, nRec, 0,
+                                SQLITE4_DYNAMIC, 0);
       REGISTER_TRACE(keyReg, pKeyOut);
       UPDATE_MAX_BLOBSIZE(pKeyOut);
     }
@@ -2363,7 +2354,7 @@ case OP_MakeRecord: {
     if( rc ){
       sqlite4DbFree(db, aRec);
     }else{
-      rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec, 0, SQLITE4_DYNAMIC);
+      rc = sqlite4VdbeMemSetStr(pOut, (char *)aRec, nRec, 0, SQLITE4_DYNAMIC,0);
       REGISTER_TRACE(pOp->p3, pOut);
       UPDATE_MAX_BLOBSIZE(pOut);
     }
@@ -2582,7 +2573,7 @@ case OP_SetCookie: {       /* in3 */
 
 /* Opcode: VerifyCookie P1 P2 P3 * *
 **
-** cHECK THe value of global database parameter number 0 (the
+** Check the value of global database parameter number 0 (the
 ** schema version) and make sure it is equal to P2 and that the
 ** generation counter on the local schema parse equals P3.
 **
@@ -3000,7 +2991,8 @@ case OP_SeekGt: {       /* jump, in3 */
   nField = pOp->p4.i;
   pIn3 = &aMem[pOp->p3];
   rc = sqlite4VdbeEncodeKey(
-      db, pIn3, nField, pC->iRoot, pC->pKeyInfo, &aProbe, &nProbe, 1
+      db, pIn3, nField, nField+(pOp->p5 & OPFLAG_PARTIALKEY),
+      pC->iRoot, pC->pKeyInfo, &aProbe, &nProbe, 1
   );
 
   /*   Opcode    search-dir    increment-key
@@ -3061,7 +3053,7 @@ case OP_Seek: {    /* in2 */
   assert( pC!=0 );
   assert( pC->isTable );
   pKVCur = pC->pKVCur;
-  rc = sqlite4VdbeEncodeKey(db, aMem+pOp->p2, 1, pC->iRoot, 0,
+  rc = sqlite4VdbeEncodeKey(db, aMem+pOp->p2, 1, 1, pC->iRoot, 0,
                             &aKey, &nKey, 0);
   if( rc==SQLITE4_OK ){
     rc = sqlite4KVCursorSeek(pKVCur, aKey, nKey, 0);
@@ -3138,8 +3130,10 @@ case OP_Found: {        /* jump, in3 */
   assert( pC->pKVCur!=0 );
   assert( pC->isTable==0 || pOp->opcode==OP_NotExists );
   if( pOp->p4.i>0 ){
-    rc = sqlite4VdbeEncodeKey(db, pIn3, pOp->p4.i, pC->iRoot,
-                              pC->pKeyInfo, &pProbe, &nProbe, 0);
+    rc = sqlite4VdbeEncodeKey(
+        db, pIn3, pOp->p4.i, pOp->p4.i + (pOp->p5 & OPFLAG_PARTIALKEY),
+        pC->iRoot, pC->pKeyInfo, &pProbe, &nProbe, 0
+    );
     pFree = pProbe;
   }else{
     pProbe = (KVByteArray*)pIn3->z;
@@ -3438,7 +3432,6 @@ case OP_InsertInt: {
   }
 
   if( pOp->p5 & OPFLAG_NCHANGE ) p->nChange++;
-  if( pOp->p5 & OPFLAG_LASTROWID ) db->lastRowid = lastRowid = iKey;
   if( pData->flags & MEM_Null ){
     pData->z = 0;
     pData->n = 0;
@@ -3521,7 +3514,7 @@ case OP_GrpCompare: {
   ){
     pc = pOp->p2-1;
   }else{
-    sqlite4VdbeMemSetStr(pIn3, (const char*)aKey, nKey, 0, SQLITE4_TRANSIENT);
+    sqlite4VdbeMemSetStr(pIn3, (const char*)aKey, nKey, 0, SQLITE4_TRANSIENT,0);
   }
 
   break;
@@ -3531,16 +3524,6 @@ case OP_GrpCompare: {
 **
 ** Write into register P2 the current sorter data for sorter cursor P1.
 */
-case OP_SorterData: {
-  VdbeCursor *pC; 
-  pOut = &aMem[pOp->p2];
-  pC = p->apCsr[pOp->p1];
-  assert( pC!=0 );
-  pOp->opcode = OP_RowData;
-  pc--;
-  break;
-}
-
 /* Opcode: RowData P1 P2 * * *
 **
 ** Write into register P2 the complete row data for cursor P1.
@@ -3561,6 +3544,7 @@ case OP_SorterData: {
 ** If the P1 cursor must be pointing to a valid row (not a NULL row)
 ** of a real table, not a pseudo-table.
 */
+case OP_SorterData:
 case OP_RowKey:
 case OP_RowData: {
   VdbeCursor *pC;
@@ -3588,7 +3572,7 @@ case OP_RowData: {
   if( rc==SQLITE4_OK && nData>db->aLimit[SQLITE4_LIMIT_LENGTH] ){
     goto too_big;
   }
-  sqlite4VdbeMemSetStr(pOut, (const char*)pData, nData, 0, SQLITE4_TRANSIENT);
+  sqlite4VdbeMemSetStr(pOut, (const char*)pData, nData, 0, SQLITE4_TRANSIENT,0);
   pOut->enc = SQLITE4_UTF8;  /* In case the blob is ever cast to text */
   UPDATE_MAX_BLOBSIZE(pOut);
   break;
@@ -3650,7 +3634,6 @@ case OP_NullRow: {
   pC = p->apCsr[pOp->p1];
   assert( pC!=0 );
   pC->nullRow = 1;
-  pC->rowidIsValid = 0;
   break;
 }
 
@@ -3791,7 +3774,6 @@ case OP_Next: {        /* jump */
     pC->nullRow = 1;
     rc = SQLITE4_OK;
   }
-  pC->rowidIsValid = 0;
   break;
 }
 
@@ -4109,7 +4091,8 @@ case OP_RowSetRead: {       /* in1 */
   if( (pIn1->flags & MEM_RowSet)
    && (aKey = sqlite4RowSetRead(pIn1->u.pRowSet, &nKey))
   ){
-    rc = sqlite4VdbeMemSetStr(pOut, (char const *)aKey, nKey, 0, SQLITE4_TRANSIENT);
+    rc = sqlite4VdbeMemSetStr(pOut, (char const *)aKey, nKey, 0,
+                              SQLITE4_TRANSIENT, 0);
     sqlite4RowSetNext(pIn1->u.pRowSet);
   }else{
     /* The RowSet is empty */
@@ -4205,7 +4188,6 @@ case OP_Program: {        /* jump */
 
   p->nFrame++;
   pFrame->pParent = p->pFrame;
-  pFrame->lastRowid = lastRowid;
   pFrame->nChange = p->nChange;
   p->nChange = 0;
   p->pFrame = pFrame;
@@ -4830,10 +4812,6 @@ case OP_VUpdate: {
     rc = pModule->xUpdate(pVtab, nArg, apArg, &rowid);
     db->vtabOnConflict = vtabOnConflict;
     importVtabErrMsg(p, pVtab);
-    if( rc==SQLITE4_OK && pOp->p1 ){
-      assert( nArg>1 && apArg[0] && (apArg[0]->flags&MEM_Null) );
-      db->lastRowid = lastRowid = rowid;
-    }
     if( rc==SQLITE4_CONSTRAINT && pOp->p4.pVtab->bConstraint ){
       if( pOp->p5==OE_Ignore ){
         rc = SQLITE4_OK;
@@ -5086,7 +5064,6 @@ vdbe_error_halt:
   ** release the mutexes on btrees that were acquired at the
   ** top. */
 vdbe_return:
-  db->lastRowid = lastRowid;
   return rc;
 
   /* Jump to here if a string or blob larger than SQLITE4_MAX_LENGTH

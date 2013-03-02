@@ -1,11 +1,8 @@
 
-#include "lsmtest.h"
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
-
 
 /*
 ** Global variables used within this module.
@@ -16,9 +13,9 @@ static struct TestutilGlobal {
 } g = {0, 0};
 
 static struct TestutilRnd {
-  u32 aRand1[2048];          /* Bits 0..10 */
-  u32 aRand2[2048];          /* Bits 11..21 */
-  u32 aRand3[1024];          /* Bits 22..31 */
+  unsigned int aRand1[2048];          /* Bits 0..10 */
+  unsigned int aRand2[2048];          /* Bits 11..21 */
+  unsigned int aRand3[1024];          /* Bits 22..31 */
 } r;
 
 /*************************************************************************
@@ -72,7 +69,7 @@ static struct sqlite3PrngType {
 };
 
 /* Generate and return single random byte */
-static u8 randomByte(void){
+static unsigned char randomByte(void){
   unsigned char t;
   sqlite3Prng.i++;
   t = sqlite3Prng.s[sqlite3Prng.i];
@@ -98,14 +95,13 @@ static void randomBlob(int nBuf, unsigned char *zBuf){
 
 
 int testPrngInit(void){
-  sqlite3_initialize();
   randomBlob(sizeof(r.aRand1), (unsigned char *)r.aRand1);
   randomBlob(sizeof(r.aRand2), (unsigned char *)r.aRand2);
   randomBlob(sizeof(r.aRand3), (unsigned char *)r.aRand3);
-  return LSM_OK;
+  return 0;
 }
 
-u32 testPrngValue(u32 iVal){
+unsigned int testPrngValue(unsigned int iVal){
   return
     r.aRand1[iVal & 0x000007FF] ^
     r.aRand2[(iVal>>11) & 0x000007FF] ^
@@ -113,14 +109,14 @@ u32 testPrngValue(u32 iVal){
   ;
 }
 
-void testPrngArray(u32 iVal, u32 *aOut, int nOut){
+void testPrngArray(unsigned int iVal, unsigned int *aOut, int nOut){
   int i;
   for(i=0; i<nOut; i++){
     aOut[i] = testPrngValue(iVal+i);
   }
 }
 
-void testPrngString(u32 iVal, char *aOut, int nOut){
+void testPrngString(unsigned int iVal, char *aOut, int nOut){
   int i;
   for(i=0; i<(nOut-1); i++){
     aOut[i] = 'a' + (testPrngValue(iVal+i) % 26);
@@ -152,7 +148,7 @@ static void argError(void *aData, const char *zType, int sz, const char *zArg){
   testPrintError("unrecognized %s \"%s\": must be ", zType, zArg);
   for(pEntry=(struct Entry *)aData; 
       pEntry->zName; 
-      pEntry=(struct Entry *)&((u8 *)pEntry)[sz]
+      pEntry=(struct Entry *)&((unsigned char *)pEntry)[sz]
   ){
     if( zPrev ){ testPrintError("%s, ", zPrev); }
     zPrev = pEntry->zName;
@@ -177,7 +173,7 @@ int testArgSelectX(
 
   for(pEntry=(struct Entry *)aData; 
       pEntry->zName; 
-      pEntry=(struct Entry *)&((u8 *)pEntry)[sz]
+      pEntry=(struct Entry *)&((unsigned char *)pEntry)[sz]
   ){
     int nName = strlen(pEntry->zName);
     if( nArg<=nName && memcmp(pEntry->zName, zArg, nArg)==0 ){

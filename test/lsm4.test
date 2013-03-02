@@ -1,0 +1,132 @@
+# 2013 February 06
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+#
+# The focus of this file is testing the LSM library. More specifically,
+# it focuses on testing the compression, compression-id and
+# compression-factory functionality.
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+set testprefix lsm4
+db close
+
+# Compression scheme ids (defined in test_lsm.c):
+#
+set compression_id(encrypt) 43
+set compression_id(rle)     44
+set compression_id(noop)    45
+
+proc db_fetch {db key} {
+  db csr_open csr
+  csr seek $key eq
+  set ret [csr value]
+  csr close
+  set ret
+}
+
+do_test 1.1 {
+  lsm_open db test.db 
+  db config {set_compression noop}
+  db write 1 abc
+  db write 2 def
+  db close
+} {}
+
+do_test 1.2 {
+  lsm_open db test.db 
+  db config {set_compression noop}
+  list [db_fetch db 1] [db_fetch db 2]
+} {abc def}
+
+do_test 1.3 {
+  db close
+  lsm_open db test.db 
+  db config {set_compression rle}
+  list [catch {db_fetch db 1} msg] $msg
+} {1 {error in lsm_csr_open() - 50}}
+
+do_test 1.4 {
+  db close
+  lsm_open db test.db 
+  list [catch {db_fetch db 1} msg] $msg
+} {1 {error in lsm_csr_open() - 50}}
+
+do_test 1.5 {
+  db config {set_compression_factory true}
+  list [db_fetch db 1] [db_fetch db 2]
+} {abc def}
+
+do_test 1.6 { db info compression_id } $compression_id(noop)
+db close
+
+#-------------------------------------------------------------------------
+#
+forcedelete test.db
+
+do_test 2.1 {
+  lsm_open db test.db
+  db info compression_id
+} {0}
+
+do_test 2.2 {
+  db write 1 abc
+  db write 2 abc
+  db info compression_id
+} {0}
+
+do_test 2.3 {
+  lsm_open db2 test.db
+  db2 info compression_id
+} {0}
+
+do_test 2.4 {
+  db close
+  db2 info compression_id
+} {0}
+
+do_test 2.5 {
+  db2 close
+  lsm_open db test.db
+  db info compression_id
+} {1}
+
+db close
+forcedelete test.db
+
+do_test 2.6 {
+  lsm_open db test.db
+  db config {set_compression rle}
+  db write 3 three
+  db write 4 four
+  db close
+
+  lsm_open db test.db
+  db info compression_id
+} $compression_id(rle)
+
+do_test 2.7 {
+  db config {set_compression rle}
+  list [db_fetch db 3] [db_fetch db 4]
+} {three four}
+
+#-------------------------------------------------------------------------
+#
+catch {db close}
+forcedelete test.db
+
+do_test 3.1 {
+  lsm_open db test.db
+  db_fetch db abc
+} {}
+
+finish_test
+

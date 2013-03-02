@@ -567,7 +567,7 @@ static void print_speed_test_help(){
 "  -fetch   $fetch                  (default value 0)\n"
 "  -keysize $keysize                (default value 12)\n"
 "  -valsize $valsize                (default value 100)\n"
-"  -system  $system                 (default value \"lsm\"\n"
+"  -system  $system                 (default value \"lsm\")\n"
 "\n"
 );
 }
@@ -646,7 +646,7 @@ int do_speed_test2(int nArg, char **azArg){
     if( aOpt[i].zOpt ){
       if( aOpt[i].eVal>=0 ){
         printf(" %s=%d", &aOpt[i].zOpt[1], aParam[aOpt[i].eVal]);
-      }else{
+      }else if( aOpt[i].eVal==-1 ){
         printf(" %s=\"%s\"", &aOpt[i].zOpt[1], zSystem);
       }
     }
@@ -1333,7 +1333,7 @@ static int do_replay(int nArg, char **azArg){
   }
   zDb = azArg[1];
   pEnv = tdb_lsm_env();
-  rc = pEnv->xOpen(pEnv, zDb, &pOut);
+  rc = pEnv->xOpen(pEnv, zDb, 0, &pOut);
   if( rc!=LSM_OK ) return rc;
 
   while( feof(pInput)==0 ){
@@ -1430,7 +1430,7 @@ static int st_do_io(int a, char **b)        { return do_io(a, b); }
 static void lsmtest_rusage_report(void){
   int res;
   struct rusage r;
-  memset(&r, sizeof(r), 0);
+  memset(&r, 0, sizeof(r));
 
   res = getrusage(RUSAGE_SELF, &r);
   assert( res==0 );
@@ -1458,7 +1458,7 @@ int main(int argc, char **argv){
     {"replay",      do_replay},
 
     {"speed",       do_speed_tests},
-    {"speed2",       do_speed_test2},
+    {"speed2",      do_speed_test2},
     {"show",        st_do_show},
     {"work",        st_do_work},
     {"test",        do_test},

@@ -762,6 +762,7 @@ proc finalize_testing {} {
   if {$::cmdlinearg(binarylog)} {
     vfslog finalize binarylog
   }
+  kvwrap uninstall
   if {[lindex [sqlite4_env_status SQLITE4_ENVSTATUS_MALLOC_COUNT 0] 1]>0 ||
               [sqlite4_memory_used]>0} {
     puts "Unfreed memory: [sqlite4_memory_used] bytes in\
@@ -1565,7 +1566,11 @@ proc count {sql} {
 #
 proc optimize_db {} { 
   #catch { 
-    sqlite4_lsm_flush db main 
+    set af [sqlite4_lsm_config db main autoflush]
+    sqlite4_lsm_config db main autoflush 0
+    db eval { BEGIN EXCLUSIVE; COMMIT; }
+    sqlite4_lsm_config db main autoflush $af
+    
     sqlite4_lsm_work db main -nmerge 1 -npage 100000 
     sqlite4_lsm_checkpoint db main
   #}

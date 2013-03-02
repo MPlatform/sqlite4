@@ -15,8 +15,8 @@ typedef struct LsmDb LsmDb;
 typedef struct LsmWorker LsmWorker;
 typedef struct LsmFile LsmFile;
 
-#define LSMTEST_DFLT_MT_MAX_CKPT (8*1024*1024)
-#define LSMTEST_DFLT_MT_MIN_CKPT (2*1024*1024)
+#define LSMTEST_DFLT_MT_MAX_CKPT (8*1024)
+#define LSMTEST_DFLT_MT_MIN_CKPT (2*1024)
 
 #ifdef LSM_MUTEX_PTHREADS
 #include <pthread.h>
@@ -156,6 +156,7 @@ static int testEnvFullpath(
 static int testEnvOpen(
   lsm_env *pEnv,                  /* Environment for current LsmDb */
   const char *zFile,              /* Name of file to open */
+  int flags,
   lsm_file **ppFile               /* OUT: New file handle object */
 ){
   lsm_env *pRealEnv = tdb_lsm_env();
@@ -169,7 +170,7 @@ static int testEnvOpen(
   pRet->pDb = pDb;
   pRet->bLog = (nFile > 4 && 0==memcmp("-log", &zFile[nFile-4], 4));
 
-  rc = pRealEnv->xOpen(pRealEnv, zFile, &pRet->pReal);
+  rc = pRealEnv->xOpen(pRealEnv, zFile, flags, &pRet->pReal);
   if( rc!=LSM_OK ){
     testFree(pRet);
     pRet = 0;
@@ -372,6 +373,16 @@ static int testEnvLock(lsm_file *pFile, int iLock, int eType){
   return pRealEnv->xLock(p->pReal, iLock, eType);
 }
 
+static int testEnvTestLock(lsm_file *pFile, int iLock, int nLock, int eType){
+  LsmFile *p = (LsmFile *)pFile;
+  lsm_env *pRealEnv = tdb_lsm_env();
+
+  if( iLock==2 && eType==LSM_LOCK_EXCL && p->pDb->bNoRecovery ){
+    return LSM_BUSY;
+  }
+  return pRealEnv->xTestLock(p->pReal, iLock, nLock, eType);
+}
+
 static int testEnvShmMap(lsm_file *pFile, int iRegion, int sz, void **pp){
   LsmFile *p = (LsmFile *)pFile;
   lsm_env *pRealEnv = tdb_lsm_env();
@@ -404,7 +415,7 @@ static void doSystemCrash(LsmDb *pDb){
     lsm_file *pFile = 0;
     int i;
 
-    pEnv->xOpen(pEnv, zFile, &pFile);
+    pEnv->xOpen(pEnv, zFile, 0, &pFile);
     for(i=0; i<pDb->aFile[iFile].nSector; i++){
       u8 *aOld = pDb->aFile[iFile].aSector[i].aOld;
       if( aOld ){
@@ -524,13 +535,13 @@ static int test_lsm_close(TestDb *pTestDb){
 
 static int waitOnCheckpointer(LsmDb *pDb, lsm_db *db){
   int nSleep = 0;
-  int nByte;
+  int nKB;
   int rc;
 
   do {
-    nByte = 0;
-    rc = lsm_info(db, LSM_INFO_CHECKPOINT_SIZE, &nByte);
-    if( rc!=LSM_OK || nByte<pDb->nMtMaxCkpt ) break;
+    nKB = 0;
+    rc = lsm_info(db, LSM_INFO_CHECKPOINT_SIZE, &nKB);
+    if( rc!=LSM_OK || nKB<pDb->nMtMaxCkpt ) break;
     usleep(5000);
     nSleep += 5;
   }while( 1 );
@@ -549,10 +560,10 @@ static int waitOnWorker(LsmDb *pDb){
 
   rc = lsm_config(pDb->db, LSM_CONFIG_AUTOFLUSH, &nLimit);
   do {
-    int bOld, nNew, rc;
-    rc = lsm_info(pDb->db, LSM_INFO_TREE_SIZE, &bOld, &nNew);
+    int nOld, nNew, rc;
+    rc = lsm_info(pDb->db, LSM_INFO_TREE_SIZE, &nOld, &nNew);
     if( rc!=LSM_OK ) return rc;
-    if( bOld==0 || nNew<(nLimit/2) ) break;
+    if( nOld==0 || nNew<(nLimit/2) ) break;
     usleep(5000);
     nSleep += 5;
   }while( 1 );
@@ -779,7 +790,6 @@ int test_lsm_config_str(
     { "safety",           0, LSM_CONFIG_SAFETY },
     { "autowork",         0, LSM_CONFIG_AUTOWORK },
     { "autocheckpoint",   0, LSM_CONFIG_AUTOCHECKPOINT },
-    { "log_size",         0, LSM_CONFIG_LOG_SIZE },
     { "mmap",             0, LSM_CONFIG_MMAP },
     { "use_log",          0, LSM_CONFIG_USE_LOG },
     { "automerge",        0, LSM_CONFIG_AUTOMERGE },
@@ -830,10 +840,10 @@ int test_lsm_config_str(
       zStart = z;
       while( *z>='0' && *z<='9' ) z++;
       if( *z=='k' || *z=='K' ){
-        iMul = 1024;
+        iMul = 1;
         z++;
       }else if( *z=='M' || *z=='M' ){
-        iMul = 1024 * 1024;
+        iMul = 1024;
         z++;
       }
       nParam = z-zStart;
@@ -855,10 +865,10 @@ int test_lsm_config_str(
             if( pLsm ) nThread = iVal;
             break;
           case TEST_MT_MIN_CKPT:
-            if( pLsm && iVal>0 ) pLsm->nMtMinCkpt = iVal;
+            if( pLsm && iVal>0 ) pLsm->nMtMinCkpt = iVal*1024;
             break;
           case TEST_MT_MAX_CKPT:
-            if( pLsm && iVal>0 ) pLsm->nMtMaxCkpt = iVal;
+            if( pLsm && iVal>0 ) pLsm->nMtMaxCkpt = iVal*1024;
             break;
 #ifdef HAVE_ZLIB
           case TEST_COMPRESSION:
@@ -967,6 +977,7 @@ static int testLsmOpen(
   pDb->env.xClose = testEnvClose;
   pDb->env.xUnlink = testEnvUnlink;
   pDb->env.xLock = testEnvLock;
+  pDb->env.xTestLock = testEnvTestLock;
   pDb->env.xShmBarrier = testEnvShmBarrier;
   pDb->env.xShmMap = testEnvShmMap;
   pDb->env.xShmUnmap = testEnvShmUnmap;
@@ -1007,7 +1018,7 @@ int test_lsm_small_open(
   int bClear, 
   TestDb **ppDb
 ){
-  const char *zCfg = "page_size=256 block_size=65536";
+  const char *zCfg = "page_size=256 block_size=64";
   return testLsmOpen(zCfg, zFile, bClear, ppDb);
 }
 
@@ -1016,10 +1027,10 @@ int test_lsm_lomem_open(
   int bClear, 
   TestDb **ppDb
 ){
-    /* "max_freelist=4 autocheckpoint=32768 " */
+    /* "max_freelist=4 autocheckpoint=32" */
   const char *zCfg = 
-    "page_size=256 block_size=65536 autoflush=16384 "
-    "autocheckpoint=32768 "
+    "page_size=256 block_size=64 autoflush=16 "
+    "autocheckpoint=32"
     "mmap=0 "
   ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
@@ -1031,8 +1042,8 @@ int test_lsm_zip_open(
   TestDb **ppDb
 ){
   const char *zCfg = 
-    "page_size=256 block_size=65536 autoflush=16384 "
-    "autocheckpoint=32768 compression=1 mmap=0 "
+    "page_size=256 block_size=64 autoflush=16 "
+    "autocheckpoint=32 compression=1 mmap=0 "
   ;
   return testLsmOpen(zCfg, zFilename, bClear, ppDb);
 }
@@ -1151,9 +1162,9 @@ static void *worker_main(void *pArg){
 
     pthread_mutex_unlock(&p->worker_mutex);
     if( p->eType==LSMTEST_THREAD_CKPT ){
-      int nByte = 0;
-      rc = lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nByte);
-      if( rc==LSM_OK && nByte>=p->pDb->nMtMinCkpt ){
+      int nKB = 0;
+      rc = lsm_info(pWorker, LSM_INFO_CHECKPOINT_SIZE, &nKB);
+      if( rc==LSM_OK && nKB>=p->pDb->nMtMinCkpt ){
         rc = lsm_checkpoint(pWorker, 0);
       }
     }else{

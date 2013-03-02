@@ -214,7 +214,7 @@ do_test boundary4-3.1 {
 } {}
 do_test boundary4-3.2 {
   db eval {
-    ALTER TABLE t1 ADD COLUMN z; UPDATE t1 SET z=zeroblob(600)
+    ALTER TABLE t1 ADD COLUMN z; UPDATE t1 SET z=randomblob(600)
   }
 } {}
 do_test boundary4-3.3 {

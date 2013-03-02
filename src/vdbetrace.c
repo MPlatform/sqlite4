@@ -130,7 +130,7 @@ char *sqlite4VdbeExpandSql(
           Mem utf8;
           memset(&utf8, 0, sizeof(utf8));
           utf8.db = db;
-          sqlite4VdbeMemSetStr(&utf8, pVar->z, pVar->n, enc, SQLITE4_STATIC);
+          sqlite4VdbeMemSetStr(&utf8, pVar->z, pVar->n, enc, SQLITE4_STATIC, 0);
           sqlite4VdbeChangeEncoding(&utf8, SQLITE4_UTF8);
           sqlite4XPrintf(&out, "'%.*q'", utf8.n, utf8.z);
           sqlite4VdbeMemRelease(&utf8);
@@ -139,8 +139,6 @@ char *sqlite4VdbeExpandSql(
         {
           sqlite4XPrintf(&out, "'%.*q'", pVar->n, pVar->z);
         }
-      }else if( pVar->flags & MEM_Zero ){
-        sqlite4XPrintf(&out, "zeroblob(%d)", pVar->u.nZero);
       }else{
         assert( pVar->flags & MEM_Blob );
         sqlite4StrAccumAppend(&out, "x'", 2);

@@ -221,6 +221,8 @@ struct MmapMgrRef {
 **
 **   In non-mmap() mode, this list is an LRU list of cached pages with 
 **   nRef==0.
+**
+** apHash, nHash:
 */
 struct FileSystem {
   lsm_db *pDb;                    /* Database handle that owns this object */
@@ -353,8 +355,8 @@ static int IOERR_WRAPPER(int rc){
 **     lsmEnvUnlink()
 **     lsmEnvRemap()
 */
-int lsmEnvOpen(lsm_env *pEnv, const char *zFile, lsm_file **ppNew){
-  return pEnv->xOpen(pEnv, zFile, ppNew);
+int lsmEnvOpen(lsm_env *pEnv, const char *zFile, int flags, lsm_file **ppNew){
+  return pEnv->xOpen(pEnv, zFile, flags, ppNew);
 }
 static int lsmEnvRead(
   lsm_env *pEnv, 
@@ -424,6 +426,16 @@ int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock){
   return pEnv->xLock(pFile, iLock, eLock);
 }
 
+int lsmEnvTestLock(
+  lsm_env *pEnv, 
+  lsm_file *pFile, 
+  int iLock, 
+  int nLock, 
+  int eLock
+){
+  return pEnv->xTestLock(pFile, iLock, nLock, eLock);
+}
+
 int lsmEnvShmMap(
   lsm_env *pEnv, 
   lsm_file *pFile, 
@@ -488,7 +500,7 @@ int lsmFsTruncateLog(FileSystem *pFS, i64 nByte){
 }
 
 /*
-** Truncate the log file to nByte bytes in size.
+** Truncate the db file to nByte bytes in size.
 */
 int lsmFsTruncateDb(FileSystem *pFS, i64 nByte){
   if( pFS->fdDb==0 ) return LSM_OK;
@@ -529,12 +541,16 @@ static int fsHashKey(int nHash, int iPg){
 */
 static lsm_file *fsOpenFile(
   FileSystem *pFS,                /* File system object */
+  int bReadonly,                  /* True to open this file read-only */
   int bLog,                       /* True for log, false for db */
   int *pRc                        /* IN/OUT: Error code */
 ){
   lsm_file *pFile = 0;
   if( *pRc==LSM_OK ){
-    *pRc = lsmEnvOpen(pFS->pEnv, (bLog ? pFS->zLog : pFS->zDb), &pFile);
+    int flags = (bReadonly ? LSM_OPEN_READONLY : 0);
+    const char *zPath = (bLog ? pFS->zLog : pFS->zDb);
+
+    *pRc = lsmEnvOpen(pFS->pEnv, zPath, flags, &pFile);
   }
   return pFile;
 }
@@ -793,17 +809,47 @@ static void fsMmapClose(FileSystem *pFS){
 **     lsmFsSyncLog
 **     lsmFsReadLog
 */
-int lsmFsOpenLog(FileSystem *pFS){
+int lsmFsOpenLog(lsm_db *db, int *pbOpen){
   int rc = LSM_OK;
-  if( 0==pFS->fdLog ){ pFS->fdLog = fsOpenFile(pFS, 1, &rc); }
+  FileSystem *pFS = db->pFS;
+
+  if( 0==pFS->fdLog ){ 
+    pFS->fdLog = fsOpenFile(pFS, db->bReadonly, 1, &rc); 
+
+    if( rc==LSM_IOERR_NOENT && db->bReadonly ){
+      rc = LSM_OK;
+    }
+  }
+
+  if( pbOpen ) *pbOpen = (pFS->fdLog!=0);
   return rc;
+}
+
+void lsmFsCloseLog(lsm_db *db){
+  FileSystem *pFS = db->pFS;
+  if( pFS->fdLog ){
+    lsmEnvClose(pFS->pEnv, pFS->fdLog);
+    pFS->fdLog = 0;
+  }
 }
 
 /*
 ** Open a connection to a database stored within the file-system (the
 ** "system of files").
+**
+** If parameter bReadonly is true, then open a read-only file-descriptor
+** on the database file. It is possible that bReadonly will be false even
+** if the user requested that pDb be opened read-only. This is because the
+** file-descriptor may later on be recycled by a read-write connection.
+** If the db file can be opened for read-write access, it always is. Parameter
+** bReadonly is only ever true if it has already been determined that the
+** db can only be opened for read-only access.
 */
-int lsmFsOpen(lsm_db *pDb, const char *zDb){
+int lsmFsOpen(
+  lsm_db *pDb,                    /* Database connection to open fd for */
+  const char *zDb,                /* Full path to database file */
+  int bReadonly                   /* True to open db file read-only */
+){
   FileSystem *pFS;
   int rc = LSM_OK;
   int nDb = strlen(zDb);
@@ -823,9 +869,7 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     pFS->nMetasize = 4 * 1024;
     pFS->pDb = pDb;
     pFS->pEnv = pDb->pEnv;
-    if( pDb->compress.xCompress ){
-      pFS->pCompress = &pDb->compress;
-    }else{
+    if( !pDb->compress.xCompress ){
       pFS->mmapmgr.eUseMmap = pDb->eMmap;
       pFS->mmapmgr.nMapsz = 1*1024*1024;
 
@@ -852,7 +896,7 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
     }else{
       pFS->pLsmFile = lsmMallocZeroRc(pDb->pEnv, sizeof(LsmFile), &rc);
       if( rc==LSM_OK ){
-        pFS->fdDb = fsOpenFile(pFS, 0, &rc);
+        pFS->fdDb = fsOpenFile(pFS, bReadonly, 0, &rc);
       }
     }
 
@@ -866,6 +910,58 @@ int lsmFsOpen(lsm_db *pDb, const char *zDb){
 
   pDb->pFS = pFS;
   return rc;
+}
+
+/*
+** Configure the file-system object according to the current values of
+** the LSM_CONFIG_MMAP and LSM_CONFIG_SET_COMPRESSION options.
+*/
+int lsmFsConfigure(lsm_db *db){
+  FileSystem *pFS = db->pFS;
+  if( pFS ){
+    lsm_env *pEnv = pFS->pEnv;
+    Page *pPg;
+
+    assert( pFS->nOut==0 );
+    assert( pFS->pWaiting==0 );
+
+    /* Reset any compression/decompression buffers already allocated */
+    lsmFree(pEnv, pFS->aIBuffer);
+    lsmFree(pEnv, pFS->aOBuffer);
+    pFS->nBuffer = 0;
+
+    /* Unmap the file, if it is currently mapped */
+    if( pFS->pMap ){
+      lsmEnvRemap(pEnv, pFS->fdDb, -1, &pFS->pMap, &pFS->nMap);
+      pFS->bUseMmap = 0;
+    }
+
+    /* Free all allocate page structures */
+    pPg = pFS->pLruFirst;
+    while( pPg ){
+      Page *pNext = pPg->pLruNext;
+      if( pPg->flags & PAGE_FREE ) lsmFree(pEnv, pPg->aData);
+      lsmFree(pEnv, pPg);
+      pPg = pNext;
+    }
+
+    /* Zero pointers that point to deleted page objects */
+    pFS->nCacheAlloc = 0;
+    pFS->pLruFirst = 0;
+    pFS->pLruLast = 0;
+    pFS->pFree = 0;
+
+    /* Configure the FileSystem object */
+    if( db->compress.xCompress ){
+      pFS->pCompress = &db->compress;
+      pFS->bUseMmap = 0;
+    }else{
+      pFS->pCompress = 0;
+      pFS->bUseMmap = db->bMmap;
+    }
+  }
+
+  return LSM_OK;
 }
 
 /*
@@ -1549,6 +1645,8 @@ static int fsPageGet(
       pFS->pFree = p;
       p = 0;
     }
+
+    assert( (p->flags & PAGE_FREE)==0 );
   }else{
 
     /* Search the hash-table for the page */

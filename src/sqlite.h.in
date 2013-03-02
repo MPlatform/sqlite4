@@ -9,21 +9,12 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** This header file defines the interface that the SQLite library
+**
+** This header file defines the interface that the SQLite4 library
 ** presents to client programs.  If a C-function, structure, datatype,
 ** or constant definition does not appear in this file, then it is
 ** not a published API of SQLite, is subject to change without
 ** notice, and should not be referenced by programs that use SQLite.
-**
-** Some of the definitions that are in this file are marked as
-** "experimental".  Experimental interfaces are normally new
-** features recently added to SQLite.  We do not anticipate changes
-** to experimental interfaces but reserve the right to make minor changes
-** if experience from use "in the wild" suggest such changes are prudent.
-**
-** The official C-language API documentation for SQLite is derived
-** from comments in this file.  This file is the authoritative source
-** on how SQLite interfaces are suppose to operate.
 **
 ** The name of this file under configuration management is "sqlite.h.in".
 ** The makefile makes some minor changes to this file (such as inserting
@@ -50,22 +41,6 @@ extern "C" {
 #endif
 
 /*
-** These no-op macros are used in front of interfaces to mark those
-** interfaces as either deprecated or experimental.  New applications
-** should not use deprecated interfaces - they are support for backwards
-** compatibility only.  Application writers should be aware that
-** experimental interfaces are subject to change in point releases.
-**
-** These macros used to resolve to various kinds of compiler magic that
-** would generate warning messages when they were used.  But that
-** compiler magic ended up generating such a flurry of bug reports
-** that we have taken it all out and gone back to using simple
-** noop macros.
-*/
-#define SQLITE4_DEPRECATED
-#define SQLITE4_EXPERIMENTAL
-
-/*
 ** Ensure these symbols were not defined by some previous header file.
 */
 #ifdef SQLITE4_VERSION
@@ -74,6 +49,171 @@ extern "C" {
 #ifdef SQLITE4_VERSION_NUMBER
 # undef SQLITE4_VERSION_NUMBER
 #endif
+
+/*
+** CAPIREF: 64-Bit Integer Types
+** KEYWORDS: sqlite4_int64 sqlite4_uint64
+**
+** Because there is no cross-platform way to specify 64-bit integer types
+** SQLite includes typedefs for 64-bit signed and unsigned integers.
+**
+** ^The sqlite4_int64 and sqlite_int64 types can store integer values
+** between -9223372036854775808 and +9223372036854775807 inclusive.  ^The
+** sqlite4_uint64 and sqlite_uint64 types can store integer values 
+** between 0 and +18446744073709551615 inclusive.
+*/
+#ifdef SQLITE4_INT64_TYPE
+  typedef SQLITE4_INT64_TYPE sqlite4_int64_t;
+  typedef unsigned SQLITE4_INT64_TYPE sqlite4_uint64_t;
+#elif defined(_MSC_VER) || defined(__BORLANDC__)
+  typedef __int64 sqlite4_int64_t;
+  typedef unsigned __int64 sqlite4_uint64_t;
+#else
+  typedef long long int sqlite4_int64_t;
+  typedef unsigned long long int sqlite4_uint64_t;
+#endif
+typedef sqlite4_int64_t sqlite4_int64;
+typedef sqlite4_uint64_t sqlite4_uint64;
+
+/*
+** CAPIREF: String length type
+**
+** A type for measuring the length of the string.  Like size_t but
+** does not require &lt;stddef.h&gt;
+*/
+typedef int sqlite4_size_t;
+
+/*
+** Available memory allocator object subtypes:
+*/
+typedef enum {
+  SQLITE4_MM_SYSTEM = 1,     /* Use the system malloc() */
+  SQLITE4_MM_ONESIZE = 2,    /* All allocations map to a fixed size */
+  SQLITE4_MM_OVERFLOW = 3,   /* Two allocators. Use A first; failover to B */
+  SQLITE4_MM_COMPACT = 4,    /* Like memsys3 from SQLite3 */
+  SQLITE4_MM_ROBSON = 5,     /* Like memsys5 from SQLite3 */
+  SQLITE4_MM_LINEAR = 6,     /* Allocate from a fixed buffer w/o free */
+  SQLITE4_MM_BESPOKE = 7,    /* Caller-defined implementation */
+  SQLITE4_MM_DEBUG,          /* Debugging memory allocator */
+  SQLITE4_MM_STATS           /* Keep memory statistics */
+} sqlite4_mm_type;
+
+/*
+** Base class for the memory allocator object.
+**
+** Implementations may extend this with additional
+** fields specific to its own needs.  This needs to be public so that
+** applications can supply their on customized memory allocators.
+*/
+typedef struct sqlite4_mm sqlite4_mm;
+typedef struct sqlite4_mm_methods sqlite4_mm_methods;
+struct sqlite4_mm {
+  const struct sqlite4_mm_methods *pMethods;
+};
+struct sqlite4_mm_methods {
+  int iVersion;
+  void *(*xMalloc)(sqlite4_mm*, sqlite4_size_t);
+  void *(*xRealloc)(sqlite4_mm*, void*, sqlite4_size_t);
+  void (*xFree)(sqlite4_mm*, void*);
+  sqlite4_size_t (*xMsize)(sqlite4_mm*, void*);
+  int (*xMember)(sqlite4_mm*, const void*);
+  void (*xBenign)(sqlite4_mm*, int);
+  sqlite4_int64 (*xStat)(sqlite4_mm*, unsigned eType, unsigned bFlags);
+  int (*xCtrl)(sqlite4_mm*, unsigned eType, va_list);
+  void (*xFinal)(sqlite4_mm*);
+};
+
+/*
+** Return a pointer to the default memory allocator, which is basically
+** a wrapper around system malloc()/realloc()/free().
+*/
+sqlite4_mm *sqlite4_mm_default(void);
+
+
+/*
+** Create a new memory allocator object.
+*/
+sqlite4_mm *sqlite4_mm_new(sqlite4_mm_type, ...);
+
+
+/*
+** Allocate a new memory manager.  Return NULL if unable.
+*/
+sqlite4_mm *sqlite4_mm_new(sqlite4_mm_type, ...);
+
+/*
+** Free the sqlite4_mm object.
+**
+** All outstanding memory for the allocator must be freed prior to
+** invoking this interface, or else the behavior is undefined.
+*/
+void sqlite4_mm_destroy(sqlite4_mm*);
+
+/*
+** Core memory allocation routines:
+*/
+void *sqlite4_mm_malloc(sqlite4_mm*, sqlite4_size_t);
+void *sqlite4_mm_realloc(sqlite4_mm*, void*, sqlite4_size_t);
+void sqlite4_mm_free(sqlite4_mm*, void*);
+
+/*
+** Return the size of a memory allocation.
+**
+** All memory allocators in SQLite4 must be able to report their size.
+** When using system malloc() on system that lack the malloc_usable_size()
+** routine or its equivalent, then the sqlite4_mm object allocates 8 extra
+** bytes for each memory allocation and stores the allocation size in those
+** initial 8 bytes.
+*/
+sqlite4_size_t sqlite4_mm_msize(sqlite4_mm*, void*);
+
+/*
+** Check to see if pOld is a memory allocation from pMM.  If it is, return
+** 1.  If not, return 0.  If we cannot determine an answer, return -1.
+**
+** If pOld is not a valid memory allocation or is a memory allocation that
+** has previously been freed, then the result of this routine is undefined.
+*/
+int sqlite4_mm_member(sqlite4_mm *pMM, const void *pOld);
+
+/*
+** Allowed values for the second parameter ("eType") to sqlite4_mm_type().
+*/
+#define SQLITE4_MMSTAT_OUT        1
+#define SQLITE4_MMSTAT_OUT_HW     2
+#define SQLITE4_MMSTAT_UNITS      3
+#define SQLITE4_MMSTAT_UNITS_HW   4
+#define SQLITE4_MMSTAT_SIZE       5
+#define SQLITE4_MMSTAT_SZFAULT    6
+#define SQLITE4_MMSTAT_MEMFAULT   7
+#define SQLITE4_MMSTAT_FAULT      8
+
+/*
+** Bits for the bit vector third parameter ("flags") to sqlite4_mm_type()
+*/
+#define SQLITE4_MMSTAT_RESET      0x01
+
+/*
+** Return statistics or status information about a memory allocator.
+** Not all memory allocators provide all stat values.  Some memory
+** allocators provides no states at all.  If a particular stat for
+** a memory allocator is unavailable, then -1 is returned.
+*/
+sqlite4_int64 sqlite4_mm_stat(sqlite4_mm *pMM, int eType, unsigned flags);
+
+/*
+** Send a control message into a memory allocator.
+*/
+int sqlit4_mm_control(sqlite4_mm *pMM, int eType, ...);
+
+/*
+** Enable or disable benign failure mode.  Benign failure mode can be
+** nested.  In benign failure mode, OOM errors do not necessarily propagate
+** back out to the application but can be dealt with internally.  Memory
+** allocations that occur in benign failure mode are considered "optional".
+*/
+void sqlite4_mm_benign_failures(sqlite4_mm*, int bEnable);
+
 
 /*
 ** CAPIREF: Run-time Environment Object
@@ -253,39 +393,6 @@ int sqlite4_threadsafe(sqlite4_env*);
 ** sqlite4 object.
 */
 typedef struct sqlite4 sqlite4;
-
-/*
-** CAPIREF: 64-Bit Integer Types
-** KEYWORDS: sqlite4_int64 sqlite4_uint64
-**
-** Because there is no cross-platform way to specify 64-bit integer types
-** SQLite includes typedefs for 64-bit signed and unsigned integers.
-**
-** ^The sqlite4_int64 and sqlite_int64 types can store integer values
-** between -9223372036854775808 and +9223372036854775807 inclusive.  ^The
-** sqlite4_uint64 and sqlite_uint64 types can store integer values 
-** between 0 and +18446744073709551615 inclusive.
-*/
-#ifdef SQLITE4_INT64_TYPE
-  typedef SQLITE4_INT64_TYPE sqlite4_int64_t;
-  typedef unsigned SQLITE4_INT64_TYPE sqlite4_uint64_t;
-#elif defined(_MSC_VER) || defined(__BORLANDC__)
-  typedef __int64 sqlite4_int64_t;
-  typedef unsigned __int64 sqlite4_uint64_t;
-#else
-  typedef long long int sqlite4_int64_t;
-  typedef unsigned long long int sqlite4_uint64_t;
-#endif
-typedef sqlite4_int64_t sqlite4_int64;
-typedef sqlite4_uint64_t sqlite4_uint64;
-
-/*
-** CAPIREF: String length type
-**
-** A type for measuring the length of the string.  Like size_t but
-** does not require &lt;stddef.h&gt;
-*/
-typedef int sqlite4_size_t;
 
 /*
 ** If compiling for a processor that lacks floating point support,
@@ -740,49 +847,6 @@ struct sqlite4_mem_methods {
 #define SQLITE4_DBCONFIG_ENABLE_FKEY     1002  /* int int* */
 #define SQLITE4_DBCONFIG_ENABLE_TRIGGER  1003  /* int int* */
 
-
-/*
-** CAPIREF: Last Insert Rowid
-**
-** ^The sqlite4_last_insert_rowid(D) routine returns the primary key value
-** of the the most recent successful [INSERT] from [database connection] D
-** into a table where the primary key of the inserted row is a single
-** integer.
-** ^If there have been no successful [INSERT]s of rows with a single integer
-** PRIMARY KEY value on database connection D, then this routine returns
-** zero.
-**
-** ^(If an [INSERT] occurs within a trigger or within a [virtual table]
-** method, then this routine will return the [rowid] of the inserted
-** row as long as the trigger or virtual table method is running.
-** But once the trigger or virtual table method ends, the value returned 
-** by this routine reverts to what it was before the trigger or virtual
-** table method began.)^
-**
-** ^An [INSERT] that fails due to a constraint violation is not a
-** successful [INSERT] and does not change the value returned by this
-** routine.  ^Thus INSERT OR FAIL, INSERT OR IGNORE, INSERT OR ROLLBACK,
-** and INSERT OR ABORT make no changes to the return value of this
-** routine when their insertion fails.  ^(When INSERT OR REPLACE
-** encounters a constraint violation, it does not fail.  The
-** INSERT continues to completion after deleting rows that caused
-** the constraint problem so INSERT OR REPLACE will always change
-** the return value of this interface.)^
-**
-** ^For the purposes of this routine, an [INSERT] is considered to
-** be successful even if it is subsequently rolled back.
-**
-** This function is accessible to SQL statements via the
-** [last_insert_rowid() SQL function].
-**
-** If a separate thread performs a new [INSERT] on the same
-** database connection while the [sqlite4_last_insert_rowid()]
-** function is running and thus changes the last insert [rowid],
-** then the value returned by [sqlite4_last_insert_rowid()] is
-** unpredictable and might not equal either the old or the new
-** last insert [rowid].
-*/
-sqlite4_int64 sqlite4_last_insert_rowid(sqlite4*);
 
 /*
 ** CAPIREF: Count The Number Of Rows Modified
@@ -1315,7 +1379,7 @@ int sqlite4_set_authorizer(
 ** subject to change in future versions of SQLite.
 */
 void *sqlite4_trace(sqlite4*, void(*xTrace)(void*,const char*), void*);
-SQLITE4_EXPERIMENTAL void *sqlite4_profile(sqlite4*,
+void *sqlite4_profile(sqlite4*,
    void(*xProfile)(void*,const char*,sqlite4_uint64), void*);
 
 /*
@@ -1807,14 +1871,6 @@ typedef struct sqlite4_context sqlite4_context;
 ** SQLite makes its own private copy of the data immediately, before
 ** the sqlite4_bind_*() routine returns.
 **
-** ^The sqlite4_bind_zeroblob() routine binds a BLOB of length N that
-** is filled with zeroes.  ^A zeroblob uses a fixed amount of memory
-** (just an integer to hold its size) while it is being processed.
-** Zeroblobs are intended to serve as placeholders for BLOBs whose
-** content is later written using
-** [sqlite4_blob_open | incremental BLOB I/O] routines.
-** ^A negative value for the zeroblob results in a zero-length BLOB.
-**
 ** ^If any of the sqlite4_bind_*() routines are called with a NULL pointer
 ** for the [prepared statement] or with a prepared statement for which
 ** [sqlite4_step()] has been called more recently than [sqlite4_reset()],
@@ -1833,15 +1889,17 @@ typedef struct sqlite4_context sqlite4_context;
 ** See also: [sqlite4_bind_parameter_count()],
 ** [sqlite4_bind_parameter_name()], and [sqlite4_bind_parameter_index()].
 */
-int sqlite4_bind_blob(sqlite4_stmt*, int, const void*, int n, void(*)(void*));
+int sqlite4_bind_blob(sqlite4_stmt*, int, const void*, int n, 
+                      void(*)(void*,void*),void*);
 int sqlite4_bind_double(sqlite4_stmt*, int, double);
 int sqlite4_bind_int(sqlite4_stmt*, int, int);
 int sqlite4_bind_int64(sqlite4_stmt*, int, sqlite4_int64);
 int sqlite4_bind_null(sqlite4_stmt*, int);
-int sqlite4_bind_text(sqlite4_stmt*, int, const char*, int n, void(*)(void*));
-int sqlite4_bind_text16(sqlite4_stmt*, int, const void*, int, void(*)(void*));
+int sqlite4_bind_text(sqlite4_stmt*, int, const char*, int n,
+                      void(*)(void*,void*),void*);
+int sqlite4_bind_text16(sqlite4_stmt*, int, const void*, int,
+                        void(*)(void*,void*),void*);
 int sqlite4_bind_value(sqlite4_stmt*, int, const sqlite4_value*);
-int sqlite4_bind_zeroblob(sqlite4_stmt*, int, int n);
 
 /*
 ** CAPIREF: Number Of SQL Parameters
@@ -2150,7 +2208,8 @@ int sqlite4_data_count(sqlite4_stmt *pStmt);
 ** ^The sqlite4_column_type() routine returns the
 ** [SQLITE4_INTEGER | datatype code] for the initial data type
 ** of the result column.  ^The returned value is one of [SQLITE4_INTEGER],
-** [SQLITE4_FLOAT], [SQLITE4_TEXT], [SQLITE4_BLOB], or [SQLITE4_NULL].  The value
+** [SQLITE4_FLOAT], [SQLITE4_TEXT], [SQLITE4_BLOB], or [SQLITE4_NULL].
+** The value
 ** returned by sqlite4_column_type() is only meaningful if no type
 ** conversions have occurred as described below.  After a type conversion,
 ** the value returned by sqlite4_column_type() is undefined.  Future
@@ -2480,23 +2539,6 @@ int sqlite4_create_function_v2(
 #define SQLITE4_UTF16_ALIGNED  8    /* sqlite4_create_collation only */
 
 /*
-** CAPIREF: Deprecated Functions
-** DEPRECATED
-**
-** These functions are [deprecated].  In order to maintain
-** backwards compatibility with older code, these functions continue 
-** to be supported.  However, new applications should avoid
-** the use of these functions.  To help encourage people to avoid
-** using these functions, we are not going to tell you what they do.
-*/
-#ifndef SQLITE4_OMIT_DEPRECATED
-SQLITE4_DEPRECATED int sqlite4_aggregate_count(sqlite4_context*);
-SQLITE4_DEPRECATED int sqlite4_expired(sqlite4_stmt*);
-SQLITE4_DEPRECATED int sqlite4_transfer_bindings(sqlite4_stmt*, sqlite4_stmt*);
-SQLITE4_DEPRECATED int sqlite4_global_recover(void);
-#endif
-
-/*
 ** CAPIREF: Obtaining SQL Function Parameter Values
 **
 ** The C-language implementation of SQL functions and aggregates uses
@@ -2664,7 +2706,8 @@ sqlite4_env *sqlite4_context_env(sqlite4_context*);
 ** the SQL function is running.
 */
 void *sqlite4_get_auxdata(sqlite4_context*, int N);
-void sqlite4_set_auxdata(sqlite4_context*, int N, void*, void (*)(void*));
+void sqlite4_set_auxdata(sqlite4_context*, int N, void*,
+                         void (*)(void*,void*),void*);
 
 
 /*
@@ -2681,8 +2724,8 @@ void sqlite4_set_auxdata(sqlite4_context*, int N, void*, void (*)(void*));
 ** The typedef is necessary to work around problems in certain
 ** C++ compilers.  See ticket #2191.
 */
-typedef void (*sqlite4_destructor_type)(void*);
-void sqlite4_dynamic(void*);
+typedef void (*sqlite4_destructor_type)(void*,void*);
+void sqlite4_dynamic(void*,void*);
 #define SQLITE4_STATIC      ((sqlite4_destructor_type)0)
 #define SQLITE4_TRANSIENT   ((sqlite4_destructor_type)-1)
 #define SQLITE4_DYNAMIC     (sqlite4_dynamic)
@@ -2704,10 +2747,6 @@ void sqlite4_dynamic(void*);
 ** an application-defined function to be the BLOB whose content is pointed
 ** to by the second parameter and which is N bytes long where N is the
 ** third parameter.
-**
-** ^The sqlite4_result_zeroblob() interfaces set the result of
-** the application-defined function to be a BLOB containing all zero
-** bytes and N bytes in size, where N is the value of the 2nd parameter.
 **
 ** ^The sqlite4_result_double() interface sets the result from
 ** an application-defined function to be a floating point value specified
@@ -2732,7 +2771,8 @@ void sqlite4_dynamic(void*);
 ** modify the text after they return without harm.
 ** ^The sqlite4_result_error_code() function changes the error code
 ** returned by SQLite as a result of an error in a function.  ^By default,
-** the error code is SQLITE4_ERROR.  ^A subsequent call to sqlite4_result_error()
+** the error code is SQLITE4_ERROR.
+** ^A subsequent call to sqlite4_result_error()
 ** or sqlite4_result_error16() resets the error code to SQLITE4_ERROR.
 **
 ** ^The sqlite4_result_toobig() interface causes SQLite to throw an error
@@ -2798,7 +2838,8 @@ void sqlite4_dynamic(void*);
 ** than the one containing the application-defined function that received
 ** the [sqlite4_context] pointer, the results are undefined.
 */
-void sqlite4_result_blob(sqlite4_context*, const void*, int, void(*)(void*));
+void sqlite4_result_blob(sqlite4_context*, const void*, int,
+                         void(*)(void*,void*),void*);
 void sqlite4_result_double(sqlite4_context*, double);
 void sqlite4_result_error(sqlite4_context*, const char*, int);
 void sqlite4_result_error16(sqlite4_context*, const void*, int);
@@ -2808,12 +2849,15 @@ void sqlite4_result_error_code(sqlite4_context*, int);
 void sqlite4_result_int(sqlite4_context*, int);
 void sqlite4_result_int64(sqlite4_context*, sqlite4_int64);
 void sqlite4_result_null(sqlite4_context*);
-void sqlite4_result_text(sqlite4_context*, const char*, int, void(*)(void*));
-void sqlite4_result_text16(sqlite4_context*, const void*, int, void(*)(void*));
-void sqlite4_result_text16le(sqlite4_context*, const void*, int,void(*)(void*));
-void sqlite4_result_text16be(sqlite4_context*, const void*, int,void(*)(void*));
+void sqlite4_result_text(sqlite4_context*, const char*, int,
+                         void(*)(void*,void*),void*);
+void sqlite4_result_text16(sqlite4_context*, const void*, int,
+                           void(*)(void*,void*),void*);
+void sqlite4_result_text16le(sqlite4_context*, const void*, int,
+                             void(*)(void*,void*),void*);
+void sqlite4_result_text16be(sqlite4_context*, const void*, int,
+                             void(*)(void*,void*),void*);
 void sqlite4_result_value(sqlite4_context*, sqlite4_value*);
-void sqlite4_result_zeroblob(sqlite4_context*, int n);
 
 /*
 ** CAPIREF: Define New Collating Sequences
@@ -3860,7 +3904,8 @@ int sqlite4_db_status(sqlite4*, int op, int *pCur, int *pHiwtr, int resetFlg);
 ** if a discontinued or unsupported verb is invoked.
 **
 ** <dl>
-** [[SQLITE4_DBSTATUS_LOOKASIDE_USED]] ^(<dt>SQLITE4_DBSTATUS_LOOKASIDE_USED</dt>
+** [[SQLITE4_DBSTATUS_LOOKASIDE_USED]]
+** ^(<dt>SQLITE4_DBSTATUS_LOOKASIDE_USED</dt>
 ** <dd>This parameter returns the number of lookaside memory slots currently
 ** checked out.</dd>)^
 **
@@ -3965,7 +4010,8 @@ int sqlite4_stmt_status(sqlite4_stmt*, int op,int resetFlg);
 ** The meanings of the various counters are as follows:
 **
 ** <dl>
-** [[SQLITE4_STMTSTATUS_FULLSCAN_STEP]] <dt>SQLITE4_STMTSTATUS_FULLSCAN_STEP</dt>
+** [[SQLITE4_STMTSTATUS_FULLSCAN_STEP]]
+** <dt>SQLITE4_STMTSTATUS_FULLSCAN_STEP</dt>
 ** <dd>^This is the number of times that SQLite has stepped forward in
 ** a table as part of a full table scan.  Large numbers for this counter
 ** may indicate opportunities for performance improvement through 
@@ -3987,127 +4033,6 @@ int sqlite4_stmt_status(sqlite4_stmt*, int op,int resetFlg);
 #define SQLITE4_STMTSTATUS_FULLSCAN_STEP     1
 #define SQLITE4_STMTSTATUS_SORT              2
 #define SQLITE4_STMTSTATUS_AUTOINDEX         3
-
-
-/*
-** CAPIREF: Unlock Notification
-**
-** ^When running in shared-cache mode, a database operation may fail with
-** an [SQLITE4_LOCKED] error if the required locks on the shared-cache or
-** individual tables within the shared-cache cannot be obtained. See
-** [SQLite Shared-Cache Mode] for a description of shared-cache locking. 
-** ^This API may be used to register a callback that SQLite will invoke 
-** when the connection currently holding the required lock relinquishes it.
-** ^This API is only available if the library was compiled with the
-** [SQLITE4_ENABLE_UNLOCK_NOTIFY] C-preprocessor symbol defined.
-**
-** See Also: [Using the SQLite Unlock Notification Feature].
-**
-** ^Shared-cache locks are released when a database connection concludes
-** its current transaction, either by committing it or rolling it back. 
-**
-** ^When a connection (known as the blocked connection) fails to obtain a
-** shared-cache lock and SQLITE4_LOCKED is returned to the caller, the
-** identity of the database connection (the blocking connection) that
-** has locked the required resource is stored internally. ^After an 
-** application receives an SQLITE4_LOCKED error, it may call the
-** sqlite4_unlock_notify() method with the blocked connection handle as 
-** the first argument to register for a callback that will be invoked
-** when the blocking connections current transaction is concluded. ^The
-** callback is invoked from within the [sqlite4_step] or [sqlite4_close]
-** call that concludes the blocking connections transaction.
-**
-** ^(If sqlite4_unlock_notify() is called in a multi-threaded application,
-** there is a chance that the blocking connection will have already
-** concluded its transaction by the time sqlite4_unlock_notify() is invoked.
-** If this happens, then the specified callback is invoked immediately,
-** from within the call to sqlite4_unlock_notify().)^
-**
-** ^If the blocked connection is attempting to obtain a write-lock on a
-** shared-cache table, and more than one other connection currently holds
-** a read-lock on the same table, then SQLite arbitrarily selects one of 
-** the other connections to use as the blocking connection.
-**
-** ^(There may be at most one unlock-notify callback registered by a 
-** blocked connection. If sqlite4_unlock_notify() is called when the
-** blocked connection already has a registered unlock-notify callback,
-** then the new callback replaces the old.)^ ^If sqlite4_unlock_notify() is
-** called with a NULL pointer as its second argument, then any existing
-** unlock-notify callback is canceled. ^The blocked connections 
-** unlock-notify callback may also be canceled by closing the blocked
-** connection using [sqlite4_close()].
-**
-** The unlock-notify callback is not reentrant. If an application invokes
-** any sqlite4_xxx API functions from within an unlock-notify callback, a
-** crash or deadlock may be the result.
-**
-** ^Unless deadlock is detected (see below), sqlite4_unlock_notify() always
-** returns SQLITE4_OK.
-**
-** <b>Callback Invocation Details</b>
-**
-** When an unlock-notify callback is registered, the application provides a 
-** single void* pointer that is passed to the callback when it is invoked.
-** However, the signature of the callback function allows SQLite to pass
-** it an array of void* context pointers. The first argument passed to
-** an unlock-notify callback is a pointer to an array of void* pointers,
-** and the second is the number of entries in the array.
-**
-** When a blocking connections transaction is concluded, there may be
-** more than one blocked connection that has registered for an unlock-notify
-** callback. ^If two or more such blocked connections have specified the
-** same callback function, then instead of invoking the callback function
-** multiple times, it is invoked once with the set of void* context pointers
-** specified by the blocked connections bundled together into an array.
-** This gives the application an opportunity to prioritize any actions 
-** related to the set of unblocked database connections.
-**
-** <b>Deadlock Detection</b>
-**
-** Assuming that after registering for an unlock-notify callback a 
-** database waits for the callback to be issued before taking any further
-** action (a reasonable assumption), then using this API may cause the
-** application to deadlock. For example, if connection X is waiting for
-** connection Y's transaction to be concluded, and similarly connection
-** Y is waiting on connection X's transaction, then neither connection
-** will proceed and the system may remain deadlocked indefinitely.
-**
-** To avoid this scenario, the sqlite4_unlock_notify() performs deadlock
-** detection. ^If a given call to sqlite4_unlock_notify() would put the
-** system in a deadlocked state, then SQLITE4_LOCKED is returned and no
-** unlock-notify callback is registered. The system is said to be in
-** a deadlocked state if connection A has registered for an unlock-notify
-** callback on the conclusion of connection B's transaction, and connection
-** B has itself registered for an unlock-notify callback when connection
-** A's transaction is concluded. ^Indirect deadlock is also detected, so
-** the system is also considered to be deadlocked if connection B has
-** registered for an unlock-notify callback on the conclusion of connection
-** C's transaction, where connection C is waiting on connection A. ^Any
-** number of levels of indirection are allowed.
-**
-** <b>The "DROP TABLE" Exception</b>
-**
-** When a call to [sqlite4_step()] returns SQLITE4_LOCKED, it is almost 
-** always appropriate to call sqlite4_unlock_notify(). There is however,
-** one exception. When executing a "DROP TABLE" or "DROP INDEX" statement,
-** SQLite checks if there are any currently executing SELECT statements
-** that belong to the same connection. If there are, SQLITE4_LOCKED is
-** returned. In this case there is no "blocking connection", so invoking
-** sqlite4_unlock_notify() results in the unlock-notify callback being
-** invoked immediately. If the application then re-attempts the "DROP TABLE"
-** or "DROP INDEX" query, an infinite loop might be the result.
-**
-** One way around this problem is to check the extended error code returned
-** by an sqlite4_step() call. ^(If there is a blocking connection, then the
-** extended error code is set to SQLITE4_LOCKED_SHAREDCACHE. Otherwise, in
-** the special "DROP TABLE/INDEX" case, the extended error code is just 
-** SQLITE4_LOCKED.)^
-*/
-int sqlite4_unlock_notify(
-  sqlite4 *pBlocked,                          /* Waiting connection */
-  void (*xNotify)(void **apArg, int nArg),    /* Callback function to invoke */
-  void *pNotifyArg                            /* Argument to pass to xNotify */
-);
 
 
 /*
@@ -4206,7 +4131,8 @@ int sqlite4_vtab_config(sqlite4*, int op, ...);
 **
 ** This function may only be called from within a call to the [xUpdate] method
 ** of a [virtual table] implementation for an INSERT or UPDATE operation. ^The
-** value returned is one of [SQLITE4_ROLLBACK], [SQLITE4_IGNORE], [SQLITE4_FAIL],
+** value returned is one of [SQLITE4_ROLLBACK], [SQLITE4_IGNORE],
+** [SQLITE4_FAIL],
 ** [SQLITE4_ABORT], or [SQLITE4_REPLACE], according to the [ON CONFLICT] mode
 ** of the SQL statement that triggered the call to the [xUpdate] method of the
 ** [virtual table].
@@ -4327,7 +4253,7 @@ typedef struct sqlite4_kv_methods sqlite4_kv_methods;
 ** New key/value storage engines can be added to SQLite4 at run-time.
 ** In order to create a new KV storage engine, the application must 
 ** supply a "factory" function that creates an instance of the
-** sqlite4_kvstore object.  This is typedef defines the signature
+** sqlite4_kvstore object.  This typedef defines the signature
 ** of that factory function.
 */
 typedef int (*sqlite4_kvfactory)(
@@ -4347,7 +4273,7 @@ typedef struct sqlite4_num sqlite4_num;
 struct sqlite4_num {
   unsigned char sign;     /* Sign of the overall value */
   unsigned char approx;   /* True if the value is approximate */
-  unsigned short e;       /* The exponent. */
+  short e;                /* The exponent. */
   sqlite4_uint64 m;       /* The significant */
 };
 

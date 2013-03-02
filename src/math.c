@@ -217,6 +217,20 @@ sqlite4_num sqlite4_num_div(sqlite4_num A, sqlite4_num B){
 }
 
 /*
+** Test if A is infinite.
+*/
+int sqlite4_num_isinf(sqlite4_num A){
+  return A.e>SQLITE4_MX_EXP && A.m!=0;
+}
+
+/*
+** Test if A is NaN.
+*/
+int sqlite4_num_isnan(sqlite4_num A){
+  return A.e>SQLITE4_MX_EXP && A.m==0; 
+}
+
+/*
 ** Compare numbers A and B.  Return:
 **
 **    1     if A<B
@@ -241,6 +255,7 @@ int sqlite4_num_compare(sqlite4_num A, sqlite4_num B){
     return B.sign ? 3 : 1;
   }
   if( A.sign!=B.sign ){
+    if ( A.m==0 && B.m==0 ) return 2;
     return A.sign ? 1 : 3;
   }
   adjustExponent(&A, &B);
@@ -323,7 +338,7 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
     i = 0;
   }
   if( nIn<=0 ) goto not_a_valid_number;
-  if( nIn>=incr*2
+  if( nIn>=incr*3
    && ((c=zIn[i])=='i' || c=='I')
    && ((c=zIn[i+incr])=='n' || c=='N')
    && ((c=zIn[i+incr*2])=='f' || c=='F')
@@ -335,7 +350,7 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
   while( i<nIn && (c = zIn[i])!=0 ){
     i += incr;
     if( c>='0' && c<='9' ){
-      if( c==0 && nDigit==0 ){
+      if( c=='0' && nDigit==0 ){
         if( seenRadix && r.e > -(SQLITE4_MX_EXP+1000) ) r.e--;
         continue;
       }
@@ -349,39 +364,56 @@ sqlite4_num sqlite4_num_from_text(const char *zIn, int nIn, unsigned flags){
       }
     }else if( c=='.' ){
       seenRadix = 1;
-    }else{
+    }else if( c=='e' || c=='E' ){
+      int exp = 0;
+      int expsign = 0;
+      int nEDigit = 0;
+      if( zIn[i]=='-' ){
+        expsign = 1;
+        i += incr;
+      }else if( zIn[i]=='+' ){
+        i += incr;
+      }
+      if( i>=nIn ) goto not_a_valid_number;
+      while( i<nIn && (c = zIn[i])!=0 ){
+        i += incr;
+        if( c<'0' || c>'9' ) goto not_a_valid_number;
+        if( c=='0' && nEDigit==0 ) continue;
+        nEDigit++;
+        if( nEDigit>3 ) goto not_a_valid_number;
+        exp = exp*10 + c - '0';
+      }
+      if( expsign ) exp = -exp;
+      r.e += exp;
       break;
+    }else{
+      goto not_a_valid_number;
     }
   }
-  if( c=='e' || c=='E' ){
-    int exp = 0;
-    int expsign = 0;
-    int nEDigit = 0;
-    if( zIn[i]=='-' ){
-      expsign = 1;
-      i += incr;
-    }else if( zIn[i]=='+' ){
-      i += incr;
-    }
-    if( i>=nIn ) goto not_a_valid_number;
-    while( i<nIn && (c = zIn[i])!=0  ){
-      i += incr;
-      if( c<'0' || c>'9' ) break;
-      if( c=='0' && nEDigit==0 ) continue;
-      nEDigit++;
-      if( nEDigit>3 ) goto not_a_valid_number;
-      exp = exp*10 + c - '0';
-    }
-    if( expsign ) exp = -exp;
-    r.e += exp;
-  }
-  if( c!=0 ) goto not_a_valid_number;
   return r;
   
 not_a_valid_number:
   r.e = SQLITE4_MX_EXP+1;
   r.m = 0;
   return r;  
+}
+
+/*
+** Convert an sqlite4_int64 to a number and return that number.
+*/
+sqlite4_num sqlite4_num_from_int64(sqlite4_int64 n){
+  sqlite4_num r;
+  r.approx = 0;
+  r.e = 0;
+  r.sign = n < 0;
+  if( n>=0 ){
+    r.m = n;
+  }else if( n!=SMALLEST_INT64 ){
+    r.m = -n;
+  }else{
+    r.m = 1+(u64)LARGEST_INT64;
+  }
+  return r;
 }
 
 /*
@@ -469,8 +501,10 @@ int sqlite4_num_to_text(sqlite4_num x, char *zOut){
       zOut[0] = '.';
       memcpy(zOut+1, zNum, n);
       nOut += n;
+      zOut[n+1] = 0;
+    }else{
+      zOut[0] = 0;
     }
-    zOut[n+1] = 0;
     return nOut;
   }
   if( x.e<0 && x.e >= -n-5 ){

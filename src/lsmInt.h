@@ -45,7 +45,7 @@
 #define LSM_DFLT_PAGE_SIZE          (4 * 1024)
 #define LSM_DFLT_BLOCK_SIZE         (1 * 1024 * 1024)
 #define LSM_DFLT_AUTOFLUSH          (1 * 1024 * 1024)
-#define LSM_DFLT_AUTOCHECKPOINT     (2 * 1024 * 1024)
+#define LSM_DFLT_AUTOCHECKPOINT     (i64)(2 * 1024 * 1024)
 #define LSM_DFLT_AUTOWORK           1
 #define LSM_DFLT_LOG_SIZE           (128*1024)
 #define LSM_DFLT_AUTOMERGE          4
@@ -114,10 +114,11 @@ int lsmErrorBkpt(int);
 # define lsmErrorBkpt(x) (x)
 #endif
 
-#define LSM_IOERR_BKPT   lsmErrorBkpt(LSM_IOERR)
-#define LSM_NOMEM_BKPT   lsmErrorBkpt(LSM_NOMEM)
-#define LSM_CORRUPT_BKPT lsmErrorBkpt(LSM_CORRUPT)
-#define LSM_MISUSE_BKPT  lsmErrorBkpt(LSM_MISUSE)
+#define LSM_PROTOCOL_BKPT lsmErrorBkpt(LSM_PROTOCOL)
+#define LSM_IOERR_BKPT    lsmErrorBkpt(LSM_IOERR)
+#define LSM_NOMEM_BKPT    lsmErrorBkpt(LSM_NOMEM)
+#define LSM_CORRUPT_BKPT  lsmErrorBkpt(LSM_CORRUPT)
+#define LSM_MISUSE_BKPT   lsmErrorBkpt(LSM_MISUSE)
 
 #define unused_parameter(x) (void)(x)
 #define array_size(x) (sizeof(x)/sizeof(x[0]))
@@ -132,13 +133,20 @@ int lsmErrorBkpt(int);
 /* The number of available read locks. */
 #define LSM_LOCK_NREADER   6
 
-/* Lock definitions */
-#define LSM_LOCK_DMS1         1
-#define LSM_LOCK_DMS2         2
-#define LSM_LOCK_WRITER       3
-#define LSM_LOCK_WORKER       4
-#define LSM_LOCK_CHECKPOINTER 5
-#define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_CHECKPOINTER + 1)
+/* The number of available read-write client locks. */
+#define LSM_LOCK_NRWCLIENT   16
+
+/* Lock definitions. 
+*/
+#define LSM_LOCK_DMS1         1   /* Serialize connect/disconnect ops */
+#define LSM_LOCK_DMS2         2   /* Read-write connections */
+#define LSM_LOCK_DMS3         3   /* Read-only connections */
+#define LSM_LOCK_WRITER       4
+#define LSM_LOCK_WORKER       5
+#define LSM_LOCK_CHECKPOINTER 6
+#define LSM_LOCK_ROTRANS      7
+#define LSM_LOCK_READER(i)    ((i) + LSM_LOCK_ROTRANS + 1)
+#define LSM_LOCK_RWCLIENT(i)  ((i) + LSM_LOCK_READER(LSM_LOCK_NREADER))
 
 /*
 ** Hard limit on the number of free-list entries that may be stored in 
@@ -162,6 +170,8 @@ int lsmErrorBkpt(int);
 #define LSM_INSERT       0x08     /* Insert this key and value */
 #define LSM_SEPARATOR    0x10     /* True if entry is separator key only */
 #define LSM_SYSTEMKEY    0x20     /* True if entry is a system key (FREELIST) */
+
+#define LSM_CONTIGUOUS   0x40     /* Used in lsm_tree.c */
 
 /*
 ** A string that can grow by appending.
@@ -284,18 +294,30 @@ struct TreeHeader {
 ** mLock:
 **   A bitmask representing the locks currently held by the connection.
 **   An LSM database supports N distinct locks, where N is some number less
-**   than or equal to 16. Locks are numbered starting from 1 (see the 
+**   than or equal to 32. Locks are numbered starting from 1 (see the 
 **   definitions for LSM_LOCK_WRITER and co.).
 **
-**   The least significant 16-bits in mLock represent EXCLUSIVE locks. The
+**   The least significant 32-bits in mLock represent EXCLUSIVE locks. The
 **   most significant are SHARED locks. So, if a connection holds a SHARED
 **   lock on lock region iLock, then the following is true:
 **
-**       (mLock & ((iLock+16-1) << 1))
+**       (mLock & ((iLock+32-1) << 1))
 **
 **   Or for an EXCLUSIVE lock:
 **
 **       (mLock & ((iLock-1) << 1))
+** 
+** pCsr:
+**   Points to the head of a linked list that contains all currently open
+**   cursors. Once this list becomes empty, the user has no outstanding
+**   cursors and the database handle can be successfully closed.
+**
+** pCsrCache:
+**   This list contains cursor objects that have been closed using
+**   lsm_csr_close(). Each time a cursor is closed, it is shifted from 
+**   the pCsr list to this list. When a new cursor is opened, this list
+**   is inspected to see if there exists a cursor object that can be
+**   reused. This is an optimization only.
 */
 struct lsm_db {
 
@@ -308,35 +330,44 @@ struct lsm_db {
   int bAutowork;                  /* Configured by LSM_CONFIG_AUTOWORK */
   int nTreeLimit;                 /* Configured by LSM_CONFIG_AUTOFLUSH */
   int nMerge;                     /* Configured by LSM_CONFIG_AUTOMERGE */
-  int nLogSz;                     /* Configured by LSM_CONFIG_LOG_SIZE */
   int bUseLog;                    /* Configured by LSM_CONFIG_USE_LOG */
   int nDfltPgsz;                  /* Configured by LSM_CONFIG_PAGE_SIZE */
   int nDfltBlksz;                 /* Configured by LSM_CONFIG_BLOCK_SIZE */
   int nMaxFreelist;               /* Configured by LSM_CONFIG_MAX_FREELIST */
   int eMmap;                      /* Configured by LSM_CONFIG_MMAP */
-  int nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
+  i64 nAutockpt;                  /* Configured by LSM_CONFIG_AUTOCHECKPOINT */
   int bMultiProc;                 /* Configured by L_C_MULTIPLE_PROCESSES */
+  int bReadonly;                  /* Configured by LSM_CONFIG_READONLY */
   lsm_compress compress;          /* Compression callbacks */
+  lsm_compress_factory factory;   /* Compression callback factory */
 
   /* Sub-system handles */
   FileSystem *pFS;                /* On-disk portion of database */
   Database *pDatabase;            /* Database shared data */
 
+  int iRwclient;                  /* Read-write client lock held (-1 == none) */
+
   /* Client transaction context */
   Snapshot *pClient;              /* Client snapshot */
   int iReader;                    /* Read lock held (-1 == unlocked) */
+  int bRoTrans;                   /* True if a read-only db trans is open */
   MultiCursor *pCsr;              /* List of all open cursors */
   LogWriter *pLogWriter;          /* Context for writing to the log file */
   int nTransOpen;                 /* Number of opened write transactions */
   int nTransAlloc;                /* Allocated size of aTrans[] array */
   TransMark *aTrans;              /* Array of marks for transaction rollback */
   IntArray rollback;              /* List of tree-nodes to roll back */
+  int bDiscardOld;                /* True if lsmTreeDiscardOld() was called */
+
+  MultiCursor *pCsrCache;         /* List of all closed cursors */
 
   /* Worker context */
   Snapshot *pWorker;              /* Worker snapshot (or NULL) */
   Freelist *pFreelist;            /* See sortedNewToplevel() */
   int bUseFreelist;               /* True to use pFreelist */
   int bIncrMerge;                 /* True if currently doing a merge */
+
+  int bInFactory;                 /* True if within factory.xFactory() */
 
   /* Debugging message callback */
   void (*xLog)(void *, int, const char *);
@@ -346,7 +377,7 @@ struct lsm_db {
   void (*xWork)(lsm_db *, void *);
   void *pWorkCtx;
 
-  u32 mLock;                      /* Mask of current locks. See lsmShmLock(). */
+  u64 mLock;                      /* Mask of current locks. See lsmShmLock(). */
   lsm_db *pNext;                  /* Next connection to same database */
 
   int nShm;                       /* Size of apShm[] array */
@@ -527,6 +558,7 @@ struct FreelistEntry {
 */
 struct Snapshot {
   Database *pDatabase;            /* Database this snapshot belongs to */
+  u32 iCmpId;                     /* Id of compression scheme */
   Level *pLevel;                  /* Pointer to level 0 of snapshot (or NULL) */
   i64 iId;                        /* Snapshot id */
   i64 iLogOff;                    /* Log file offset */
@@ -572,6 +604,8 @@ int lsmCheckpointSynced(lsm_db *pDb, i64 *piId, i64 *piLog, u32 *pnWrite);
 
 int lsmCheckpointSize(lsm_db *db, int *pnByte);
 
+int lsmInfoCompressionId(lsm_db *db, u32 *piCmpId);
+
 /* 
 ** Functions from file "lsm_tree.c".
 */
@@ -590,6 +624,7 @@ int lsmTreeLoadHeader(lsm_db *pDb, int *);
 int lsmTreeLoadHeaderOk(lsm_db *, int);
 
 int lsmTreeInsert(lsm_db *pDb, void *pKey, int nKey, void *pVal, int nVal);
+int lsmTreeDelete(lsm_db *db, void *pKey1, int nKey1, void *pKey2, int nKey2);
 void lsmTreeRollback(lsm_db *pDb, TreeMark *pMark);
 void lsmTreeMark(lsm_db *pDb, TreeMark *pMark);
 
@@ -642,8 +677,12 @@ int lsmMutexNotHeld(lsm_env *, lsm_mutex *);
 /**************************************************************************
 ** Start of functions from "lsm_file.c".
 */
-int lsmFsOpen(lsm_db *, const char *);
+int lsmFsOpen(lsm_db *, const char *, int);
+int lsmFsOpenLog(lsm_db *, int *);
+void lsmFsCloseLog(lsm_db *);
 void lsmFsClose(FileSystem *);
+
+int lsmFsConfigure(lsm_db *db);
 
 int lsmFsBlockSize(FileSystem *);
 void lsmFsSetBlockSize(FileSystem *, int);
@@ -714,9 +753,10 @@ int lsmInfoArrayStructure(lsm_db *pDb, int bBlock, Pgno iFirst, char **pzOut);
 int lsmInfoArrayPages(lsm_db *pDb, Pgno iFirst, char **pzOut);
 int lsmConfigMmap(lsm_db *pDb, int *piParam);
 
-int lsmEnvOpen(lsm_env *, const char *, lsm_file **);
+int lsmEnvOpen(lsm_env *, const char *, int, lsm_file **);
 int lsmEnvClose(lsm_env *pEnv, lsm_file *pFile);
 int lsmEnvLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int eLock);
+int lsmEnvTestLock(lsm_env *pEnv, lsm_file *pFile, int iLock, int nLock, int);
 
 int lsmEnvShmMap(lsm_env *, lsm_file *, int, int, void **); 
 void lsmEnvShmBarrier(lsm_env *);
@@ -760,7 +800,7 @@ void *lsmSortedSplitKey(Level *pLevel, int *pnByte);
 void lsmSortedSaveTreeCursors(lsm_db *);
 
 int lsmMCursorNew(lsm_db *, MultiCursor **);
-void lsmMCursorClose(MultiCursor *);
+void lsmMCursorClose(MultiCursor *, int);
 int lsmMCursorSeek(MultiCursor *, int, void *, int , int);
 int lsmMCursorFirst(MultiCursor *);
 int lsmMCursorPrev(MultiCursor *);
@@ -771,6 +811,7 @@ int lsmMCursorKey(MultiCursor *, void **, int *);
 int lsmMCursorValue(MultiCursor *, void **, int *);
 int lsmMCursorType(MultiCursor *, int *);
 lsm_db *lsmMCursorDb(MultiCursor *);
+void lsmMCursorFreeCache(lsm_db *);
 
 int lsmSaveCursors(lsm_db *pDb);
 int lsmRestoreCursors(lsm_db *pDb);
@@ -827,6 +868,8 @@ int lsmBeginReadTrans(lsm_db *);
 int lsmBeginWriteTrans(lsm_db *);
 int lsmBeginFlush(lsm_db *);
 
+int lsmDetectRoTrans(lsm_db *db, int *);
+
 int lsmBeginWork(lsm_db *);
 void lsmFinishWork(lsm_db *, int, int *);
 
@@ -873,6 +916,7 @@ void lsmFreeSnapshot(lsm_env *, Snapshot *);
 
 int lsmShmCacheChunks(lsm_db *db, int nChunk);
 int lsmShmLock(lsm_db *db, int iLock, int eOp, int bBlock);
+int lsmShmTestLock(lsm_db *db, int iLock, int nLock, int eOp);
 void lsmShmBarrier(lsm_db *db);
 
 #ifdef LSM_DEBUG
@@ -882,7 +926,6 @@ void lsmShmHasLock(lsm_db *db, int iLock, int eOp);
 #endif
 
 int lsmReadlock(lsm_db *, i64 iLsm, u32 iShmMin, u32 iShmMax);
-int lsmReleaseReadlock(lsm_db *);
 
 int lsmLsmInUse(lsm_db *db, i64 iLsmId, int *pbInUse);
 int lsmTreeInUse(lsm_db *db, u32 iLsmId, int *pbInUse);
@@ -893,6 +936,8 @@ void lsmDbDeferredClose(lsm_db *, lsm_file *, LsmFile *);
 LsmFile *lsmDbRecycleFd(lsm_db *);
 
 int lsmWalkFreelist(lsm_db *, int, int (*)(void *, int, i64), void *);
+
+int lsmCheckCompressionId(lsm_db *, u32);
 
 
 /**************************************************************************

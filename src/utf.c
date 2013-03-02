@@ -474,7 +474,7 @@ char *sqlite4Utf16to8(sqlite4 *db, const void *z, int nByte, u8 enc){
   Mem m;
   memset(&m, 0, sizeof(m));
   m.db = db;
-  sqlite4VdbeMemSetStr(&m, z, nByte, enc, SQLITE4_STATIC);
+  sqlite4VdbeMemSetStr(&m, z, nByte, enc, SQLITE4_STATIC, 0);
   sqlite4VdbeChangeEncoding(&m, SQLITE4_UTF8);
   if( db->mallocFailed ){
     sqlite4VdbeMemRelease(&m);
@@ -502,7 +502,7 @@ char *sqlite4Utf8to16(sqlite4 *db, u8 enc, char *z, int n, int *pnOut){
   Mem m;
   memset(&m, 0, sizeof(m));
   m.db = db;
-  sqlite4VdbeMemSetStr(&m, z, n, SQLITE4_UTF8, SQLITE4_STATIC);
+  sqlite4VdbeMemSetStr(&m, z, n, SQLITE4_UTF8, SQLITE4_STATIC, 0);
   if( sqlite4VdbeMemTranslate(&m, enc) ){
     assert( db->mallocFailed );
     return 0;

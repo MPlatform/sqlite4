@@ -118,7 +118,8 @@ void sqlite4MaterializeView(
 }
 #endif /* !defined(SQLITE4_OMIT_VIEW) && !defined(SQLITE4_OMIT_TRIGGER) */
 
-#if defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE4_OMIT_SUBQUERY)
+#if defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) \
+ && !defined(SQLITE4_OMIT_SUBQUERY)
 /*
 ** Generate an expression tree to implement the WHERE, ORDER BY,
 ** and LIMIT/OFFSET portion of DELETE and UPDATE statements.
@@ -128,20 +129,20 @@ void sqlite4MaterializeView(
 **                               pLimitWhere (pInClause)
 */
 Expr *sqlite4LimitWhere(
-  Parse *pParse,               /* The parser context */
-  SrcList *pSrc,               /* the FROM clause -- which tables to scan */
-  Expr *pWhere,                /* The WHERE clause.  May be null */
-  ExprList *pOrderBy,          /* The ORDER BY clause.  May be null */
-  Expr *pLimit,                /* The LIMIT clause.  May be null */
-  Expr *pOffset,               /* The OFFSET clause.  May be null */
-  char *zStmtType              /* Either DELETE or UPDATE.  For error messages. */
+  Parse *pParse,            /* The parser context */
+  SrcList *pSrc,            /* the FROM clause -- which tables to scan */
+  Expr *pWhere,             /* The WHERE clause.  May be null */
+  ExprList *pOrderBy,       /* The ORDER BY clause.  May be null */
+  Expr *pLimit,             /* The LIMIT clause.  May be null */
+  Expr *pOffset,            /* The OFFSET clause.  May be null */
+  char *zStmtType           /* Either DELETE or UPDATE. For error messages. */
 ){
-  Expr *pWhereRowid = NULL;    /* WHERE rowid .. */
-  Expr *pInClause = NULL;      /* WHERE rowid IN ( select ) */
-  Expr *pSelectRowid = NULL;   /* SELECT rowid ... */
-  ExprList *pEList = NULL;     /* Expression list contaning only pSelectRowid */
-  SrcList *pSelectSrc = NULL;  /* SELECT rowid FROM x ... (dup of pSrc) */
-  Select *pSelect = NULL;      /* Complete SELECT tree */
+  Expr *pWhereRowid = NULL; /* WHERE rowid .. */
+  Expr *pInClause = NULL;   /* WHERE rowid IN ( select ) */
+  Expr *pSelectRowid = NULL;/* SELECT rowid ... */
+  ExprList *pEList = NULL;  /* Expression list contaning only pSelectRowid */
+  SrcList *pSelectSrc = NULL;/* SELECT rowid FROM x ... (dup of pSrc) */
+  Select *pSelect = NULL;   /* Complete SELECT tree */
 
   /* Check that there isn't an ORDER BY without a LIMIT clause.
   */
@@ -209,7 +210,8 @@ limit_where_cleanup_2:
   sqlite4ExprDelete(pParse->db, pOffset);
   return 0;
 }
-#endif /* defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) && !defined(SQLITE4_OMIT_SUBQUERY) */
+#endif /* defined(SQLITE4_ENABLE_UPDATE_DELETE_LIMIT) */
+       /* && !defined(SQLITE4_OMIT_SUBQUERY) */
 
 /*
 ** Generate code for a DELETE FROM statement.
@@ -265,7 +267,8 @@ void sqlite4DeleteFrom(
 
   /* Invoke the authorization callback */
   rcauth = sqlite4AuthCheck(pParse, SQLITE4_DELETE, pTab->zName, 0, zDb);
-  assert( rcauth==SQLITE4_OK || rcauth==SQLITE4_DENY || rcauth==SQLITE4_IGNORE );
+  assert( rcauth==SQLITE4_OK || rcauth==SQLITE4_DENY
+         || rcauth==SQLITE4_IGNORE );
   if( rcauth==SQLITE4_DENY ){
     goto delete_from_cleanup;
   }

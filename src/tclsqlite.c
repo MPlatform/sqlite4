@@ -118,7 +118,6 @@ struct SqliteDb {
   int disableAuth;           /* Disable the authorizer if it exists */
   char *zNull;               /* Text to substitute for an SQL NULL value */
   SqlFunc *pFunc;            /* List of SQL functions */
-  Tcl_Obj *pUnlockNotify;    /* Unlock notify script (if any) */
   SqlCollate *pCollate;      /* List of SQL collation functions */
   int rc;                    /* Return code of most recent sqlite4_exec() */
   Tcl_Obj *pCollateNeeded;   /* Collation needed script */
@@ -316,33 +315,6 @@ static void DbProfileHandler(void *cd, const char *zSql, sqlite4_uint64 tm){
 }
 #endif
 
-#if defined(SQLITE4_TEST) && defined(SQLITE4_ENABLE_UNLOCK_NOTIFY)
-static void setTestUnlockNotifyVars(Tcl_Interp *interp, int iArg, int nArg){
-  char zBuf[64];
-  sprintf(zBuf, "%d", iArg);
-  Tcl_SetVar(interp, "sqlite_unlock_notify_arg", zBuf, TCL_GLOBAL_ONLY);
-  sprintf(zBuf, "%d", nArg);
-  Tcl_SetVar(interp, "sqlite_unlock_notify_argcount", zBuf, TCL_GLOBAL_ONLY);
-}
-#else
-# define setTestUnlockNotifyVars(x,y,z)
-#endif
-
-#ifdef SQLITE4_ENABLE_UNLOCK_NOTIFY
-static void DbUnlockNotify(void **apArg, int nArg){
-  int i;
-  for(i=0; i<nArg; i++){
-    const int flags = (TCL_EVAL_GLOBAL|TCL_EVAL_DIRECT);
-    SqliteDb *pDb = (SqliteDb *)apArg[i];
-    setTestUnlockNotifyVars(pDb->interp, i, nArg);
-    assert( pDb->pUnlockNotify);
-    Tcl_EvalObjEx(pDb->interp, pDb->pUnlockNotify, flags);
-    Tcl_DecrRefCount(pDb->pUnlockNotify);
-    pDb->pUnlockNotify = 0;
-  }
-}
-#endif
-
 static void tclCollateNeeded(
   void *pCtx,
   sqlite4 *db,
@@ -506,7 +478,7 @@ static void tclSqlFunc(sqlite4_context *context, int argc, sqlite4_value**argv){
       /* Only return a BLOB type if the Tcl variable is a bytearray and
       ** has no string representation. */
       data = Tcl_GetByteArrayFromObj(pVar, &n);
-      sqlite4_result_blob(context, data, n, SQLITE4_TRANSIENT);
+      sqlite4_result_blob(context, data, n, SQLITE4_TRANSIENT, 0);
     }else if( c=='b' && strcmp(zType,"boolean")==0 ){
       Tcl_GetIntFromObj(0, pVar, &n);
       sqlite4_result_int(context, n);
@@ -521,7 +493,7 @@ static void tclSqlFunc(sqlite4_context *context, int argc, sqlite4_value**argv){
       sqlite4_result_int64(context, v);
     }else{
       data = (unsigned char *)Tcl_GetStringFromObj(pVar, &n);
-      sqlite4_result_text(context, (char *)data, n, SQLITE4_TRANSIENT);
+      sqlite4_result_text(context, (char *)data, n, SQLITE4_TRANSIENT, 0);
     }
   }
 }
@@ -848,7 +820,7 @@ static int dbPrepareAndBind(
           ** it has no string representation or the host
           ** parameter name begins with "@". */
           data = Tcl_GetByteArrayFromObj(pVar, &n);
-          sqlite4_bind_blob(pStmt, i, data, n, SQLITE4_STATIC);
+          sqlite4_bind_blob(pStmt, i, data, n, SQLITE4_STATIC, 0);
           Tcl_IncrRefCount(pVar);
           pPreStmt->apParm[iParm++] = pVar;
         }else if( c=='b' && strcmp(zType,"boolean")==0 ){
@@ -865,7 +837,7 @@ static int dbPrepareAndBind(
           sqlite4_bind_int64(pStmt, i, v);
         }else{
           data = (unsigned char *)Tcl_GetStringFromObj(pVar, &n);
-          sqlite4_bind_text(pStmt, i, (char *)data, n, SQLITE4_STATIC);
+          sqlite4_bind_text(pStmt, i, (char *)data, n, SQLITE4_STATIC, 0);
           Tcl_IncrRefCount(pVar);
           pPreStmt->apParm[iParm++] = pVar;
         }
@@ -1273,10 +1245,10 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     "close",              "collate",           "collation_needed",
     "complete",           "copy",              "enable_load_extension", 
     "errorcode",          "eval",              "exists",             
-    "function",           "interrupt",         "last_insert_rowid",
+    "function",           "interrupt",         
     "nullvalue",          "onecolumn",         "profile",
     "rekey",              "status",            "total_changes",
-    "trace",              "transaction",       "unlock_notify",
+    "trace",              "transaction",
     "version",            0
   };
   enum DB_enum {
@@ -1284,10 +1256,10 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     DB_CLOSE,             DB_COLLATE,          DB_COLLATION_NEEDED,
     DB_COMPLETE,          DB_COPY,             DB_ENABLE_LOAD_EXTENSION, 
     DB_ERRORCODE,         DB_EVAL,             DB_EXISTS,            
-    DB_FUNCTION,          DB_INTERRUPT,        DB_LAST_INSERT_ROWID, 
+    DB_FUNCTION,          DB_INTERRUPT,        
     DB_NULLVALUE,         DB_ONECOLUMN,        DB_PROFILE,           
     DB_REKEY,             DB_STATUS,           DB_TOTAL_CHANGES,    
-    DB_TRACE,             DB_TRANSACTION,      DB_UNLOCK_NOTIFY,
+    DB_TRACE,             DB_TRANSACTION,
     DB_VERSION
   };
   /* don't leave trailing commas on DB_enum, it confuses the AIX xlc compiler */
@@ -1670,7 +1642,7 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
         ){
           sqlite4_bind_null(pStmt, i+1);
         }else{
-          sqlite4_bind_text(pStmt, i+1, azCol[i], -1, SQLITE4_STATIC);
+          sqlite4_bind_text(pStmt, i+1, azCol[i], -1, SQLITE4_STATIC, 0);
         }
       }
       sqlite4_step(pStmt);
@@ -1904,24 +1876,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
   }
 
   /*
-  **     $db last_insert_rowid 
-  **
-  ** Return an integer which is the ROWID for the most recent insert.
-  */
-  case DB_LAST_INSERT_ROWID: {
-    Tcl_Obj *pResult;
-    Tcl_WideInt rowid;
-    if( objc!=2 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "");
-      return TCL_ERROR;
-    }
-    rowid = sqlite4_last_insert_rowid(pDb->db);
-    pResult = Tcl_GetObjResult(interp);
-    Tcl_SetWideIntObj(pResult, rowid);
-    break;
-  }
-
-  /*
   ** The DB_ONECOLUMN method is implemented together with DB_EXISTS.
   */
 
@@ -2136,42 +2090,6 @@ static int DbObjCmd(void *cd, Tcl_Interp *interp, int objc,Tcl_Obj *const*objv){
     }else{
       rc = DbTransPostCmd(&cd, interp, Tcl_EvalObjEx(interp, pScript, 0));
     }
-    break;
-  }
-
-  /*
-  **    $db unlock_notify ?script?
-  */
-  case DB_UNLOCK_NOTIFY: {
-#ifndef SQLITE4_ENABLE_UNLOCK_NOTIFY
-    Tcl_AppendResult(interp, "unlock_notify not available in this build", 0);
-    rc = TCL_ERROR;
-#else
-    if( objc!=2 && objc!=3 ){
-      Tcl_WrongNumArgs(interp, 2, objv, "?SCRIPT?");
-      rc = TCL_ERROR;
-    }else{
-      void (*xNotify)(void **, int) = 0;
-      void *pNotifyArg = 0;
-
-      if( pDb->pUnlockNotify ){
-        Tcl_DecrRefCount(pDb->pUnlockNotify);
-        pDb->pUnlockNotify = 0;
-      }
-  
-      if( objc==3 ){
-        xNotify = DbUnlockNotify;
-        pNotifyArg = (void *)pDb;
-        pDb->pUnlockNotify = objv[2];
-        Tcl_IncrRefCount(pDb->pUnlockNotify);
-      }
-  
-      if( sqlite4_unlock_notify(pDb->db, xNotify, pNotifyArg) ){
-        Tcl_AppendResult(interp, sqlite4_errmsg(pDb->db), 0);
-        rc = TCL_ERROR;
-      }
-    }
-#endif
     break;
   }
 
@@ -2803,7 +2721,7 @@ static void md5finalize(sqlite4_context *context){
   p = sqlite4_aggregate_context(context, sizeof(*p));
   MD5Final(digest,p);
   MD5DigestToBase16(digest, zBuf);
-  sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT);
+  sqlite4_result_text(context, zBuf, -1, SQLITE4_TRANSIENT, 0);
 }
 int Md5_Register(sqlite4 *db){
   int rc = sqlite4_create_function(db, "md5sum", -1, SQLITE4_UTF8, 0, 0, 

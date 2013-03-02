@@ -49,7 +49,7 @@ struct Fts5RankCtx {
   double *aIdf;                   /* IDF weights for each phrase in query */
 };
 
-static void fts5RankFreeCtx(void *pCtx){
+static void fts5RankFreeCtx(void *pNotUsed, void *pCtx){
   if( pCtx ){
     Fts5RankCtx *p = (Fts5RankCtx *)pCtx;
     sqlite4DbFree(p->db, p);
@@ -136,7 +136,7 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
     sqlite4_mi_phrase_count(pCtx, &nPhrase);
     nByte = sizeof(Fts5RankCtx) + (nPhrase+nField) * sizeof(double);
     p = (Fts5RankCtx *)sqlite4DbMallocZero(db, nByte);
-    sqlite4_set_auxdata(pCtx, 0, (void *)p, fts5RankFreeCtx);
+    sqlite4_set_auxdata(pCtx, 0, (void *)p, fts5RankFreeCtx, 0);
     p = sqlite4_get_auxdata(pCtx, 0);
 
     if( !p ){
@@ -270,7 +270,7 @@ static void fts5Rank(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
       zExplain = sqlite4MAppendf(
           db, zExplain, "%s</table><b>overall rank=%.2f</b>", zExplain, rank
       );
-      sqlite4_result_text(pCtx, zExplain, -1, SQLITE4_TRANSIENT);
+      sqlite4_result_text(pCtx, zExplain, -1, SQLITE4_TRANSIENT, 0);
     }else{
       sqlite4_result_double(pCtx, rank);
     }
@@ -547,6 +547,39 @@ static void fts5SnippetImprove(
   pSnip->hlmask = mask;
 }
 
+/*
+** Parameter aSnip points to an array of nSnip Snippet objects, where nSnip
+** is less than or equal to 4. This function sorts the array in place in
+** ascending order of Snippet.iCol and Snippet.iOff. 
+*/
+static void fts5SnippetSort(Snippet *aSnip, int nSnip){
+  Snippet aTmp[4];
+  int i;
+
+  assert( nSnip<=4 && nSnip>=1 );
+
+  for(i=0; i<nSnip; i++){
+    int iBest = -1;
+    int iTry;
+    for(iTry=0; iTry<nSnip; iTry++){
+      Snippet *pTry = &aSnip[iTry];
+      if( pTry->iCol>=0 && (iBest<0 
+         || pTry->iCol<aSnip[iBest].iCol
+         || (pTry->iCol==aSnip[iBest].iCol && pTry->iOff<aSnip[iBest].iOff)
+      )){
+        iBest = iTry;
+      }
+    }
+
+    assert( iBest>=0 );
+    memcpy(&aTmp[i], &aSnip[iBest], sizeof(Snippet));
+    aSnip[iBest].iCol = -1;
+  }
+
+  memcpy(aSnip, aTmp, sizeof(Snippet)*nSnip);
+}
+
+
 static void fts5Snippet(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
   Snippet aSnip[4];
   int nSnip;
@@ -583,6 +616,7 @@ static void fts5Snippet(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
     }
     if( mask==0 || nSnip==4 ){
       SnippetText text = {0, 0, 0};
+      fts5SnippetSort(aSnip, nSnip);
       for(i=0; rc==SQLITE4_OK && i<nSnip; i++){
         int nSz;
         rc = sqlite4_mi_size(pCtx, aSnip[i].iCol, -1, &nSz);
@@ -593,7 +627,7 @@ static void fts5Snippet(sqlite4_context *pCtx, int nArg, sqlite4_value **apArg){
           );
         }
       }
-      sqlite4_result_text(pCtx, text.zOut, text.nOut, SQLITE4_TRANSIENT);
+      sqlite4_result_text(pCtx, text.zOut, text.nOut, SQLITE4_TRANSIENT, 0);
       sqlite4DbFree(sqlite4_context_db_handle(pCtx), text.zOut);
       break;
     }
@@ -670,4 +704,3 @@ int sqlite4InitFts5Func(sqlite4 *db){
 
   return rc;
 }
-

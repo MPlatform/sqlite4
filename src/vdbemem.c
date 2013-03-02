@@ -93,7 +93,7 @@ int sqlite4VdbeMemGrow(Mem *pMem, int n, int preserve){
   }
   if( pMem->flags&MEM_Dyn && pMem->xDel ){
     assert( pMem->xDel!=SQLITE4_DYNAMIC );
-    pMem->xDel((void *)(pMem->z));
+    pMem->xDel(pMem->pDelArg, (void *)(pMem->z));
   }
 
   pMem->z = pMem->zMalloc;
@@ -118,7 +118,6 @@ int sqlite4VdbeMemMakeWriteable(Mem *pMem){
   int f;
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
   assert( (pMem->flags&MEM_RowSet)==0 );
-  (void)ExpandBlob(pMem);
   f = pMem->flags;
   if( (f&(MEM_Str|MEM_Blob)) && pMem->z!=pMem->zMalloc ){
     if( sqlite4VdbeMemGrow(pMem, pMem->n + 2, 1) ){
@@ -172,7 +171,6 @@ int sqlite4VdbeMemStringify(Mem *pMem, int enc){
   const int nByte = 32;
 
   assert( pMem->db==0 || sqlite4_mutex_held(pMem->db->mutex) );
-  assert( !(fg&MEM_Zero) );
   assert( !(fg&(MEM_Str|MEM_Blob)) );
   assert( fg&(MEM_Int|MEM_Real) );
   assert( (pMem->flags&MEM_RowSet)==0 );
@@ -244,7 +242,7 @@ void sqlite4VdbeMemReleaseExternal(Mem *p){
   }else if( p->flags&MEM_Dyn && p->xDel ){
     assert( (p->flags&MEM_RowSet)==0 );
     assert( p->xDel!=SQLITE4_DYNAMIC );
-    p->xDel((void *)p->z);
+    p->xDel(p->pDelArg, (void *)p->z);
     p->xDel = 0;
   }else if( p->flags&MEM_RowSet ){
     sqlite4RowSetClear(p->u.pRowSet);
@@ -459,20 +457,6 @@ void sqlite4VdbeMemSetNull(Mem *pMem){
 }
 
 /*
-** Delete any previous value and set the value to be a BLOB of length
-** n containing all zeros.
-*/
-void sqlite4VdbeMemSetZeroBlob(Mem *pMem, int n){
-  sqlite4VdbeMemRelease(pMem);
-  pMem->flags = MEM_Blob|MEM_Zero;
-  pMem->type = SQLITE4_BLOB;
-  pMem->n = 0;
-  if( n<0 ) n = 0;
-  pMem->u.nZero = n;
-  pMem->enc = SQLITE4_UTF8;
-}
-
-/*
 ** Delete any previous value and set the value stored in *pMem to val,
 ** manifest type INTEGER.
 */
@@ -527,9 +511,6 @@ int sqlite4VdbeMemTooBig(Mem *p){
   assert( p->db!=0 );
   if( p->flags & (MEM_Str|MEM_Blob) ){
     int n = p->n;
-    if( p->flags & MEM_Zero ){
-      n += p->u.nZero;
-    }
     return n>p->db->aLimit[SQLITE4_LIMIT_LENGTH];
   }
   return 0; 
@@ -636,11 +617,12 @@ void sqlite4VdbeMemMove(Mem *pTo, Mem *pFrom){
 ** either case, SQLITE4_TOOBIG is returned.
 */
 int sqlite4VdbeMemSetStr(
-  Mem *pMem,          /* Memory cell to set to string value */
-  const char *z,      /* String pointer */
-  int n,              /* Bytes in string, or negative */
-  u8 enc,             /* Encoding of z.  0 for BLOBs */
-  void (*xDel)(void*) /* Destructor function */
+  Mem *pMem,                /* Memory cell to set to string value */
+  const char *z,            /* String pointer */
+  int n,                    /* Bytes in string, or negative */
+  u8 enc,                   /* Encoding of z.  0 for BLOBs */
+  void (*xDel)(void*,void*),/* Destructor function */
+  void *pDelArg             /* First argument to xDel() */
 ){
   int nByte = n;      /* New value for pMem->n */
   int iLimit;         /* Maximum allowed string or blob size */
@@ -695,6 +677,7 @@ int sqlite4VdbeMemSetStr(
     sqlite4VdbeMemRelease(pMem);
     pMem->z = (char *)z;
     pMem->xDel = xDel;
+    pMem->pDelArg = pDelArg;
     flags |= ((xDel==SQLITE4_STATIC)?MEM_Static:MEM_Dyn);
   }
 
@@ -856,7 +839,6 @@ const void *sqlite4ValueText(sqlite4_value* pVal, u8 enc){
   }
   assert( (MEM_Blob>>3) == MEM_Str );
   pVal->flags |= (pVal->flags & MEM_Blob)>>3;
-  (void)ExpandBlob(pVal);
   if( pVal->flags&MEM_Str ){
     sqlite4VdbeChangeEncoding(pVal, enc & ~SQLITE4_UTF16_ALIGNED);
     if( (enc & SQLITE4_UTF16_ALIGNED)!=0 && 1==(1&SQLITE4_PTR_TO_INT(pVal->z)) ){
@@ -951,7 +933,7 @@ int sqlite4ValueFromExpr(
     }else{
       zVal = sqlite4MPrintf(db, "%s%s", zNeg, pExpr->u.zToken);
       if( zVal==0 ) goto no_mem;
-      sqlite4ValueSetStr(pVal, -1, zVal, SQLITE4_UTF8, SQLITE4_DYNAMIC);
+      sqlite4ValueSetStr(pVal, -1, zVal, SQLITE4_UTF8, SQLITE4_DYNAMIC, 0);
       if( op==TK_FLOAT ) pVal->type = SQLITE4_FLOAT;
     }
     if( (op==TK_INTEGER || op==TK_FLOAT ) && affinity==SQLITE4_AFF_NONE ){
@@ -992,7 +974,7 @@ int sqlite4ValueFromExpr(
     nVal = sqlite4Strlen30(zVal)-1;
     assert( zVal[nVal]=='\'' );
     sqlite4VdbeMemSetStr(pVal, sqlite4HexToBlob(db, zVal, nVal), nVal/2,
-                         0, SQLITE4_DYNAMIC);
+                         0, SQLITE4_DYNAMIC, 0);
   }
 #endif
 
@@ -1014,13 +996,14 @@ no_mem:
 ** Change the string value of an sqlite4_value object
 */
 void sqlite4ValueSetStr(
-  sqlite4_value *v,     /* Value to be set */
-  int n,                /* Length of string z */
-  const void *z,        /* Text of the new string */
-  u8 enc,               /* Encoding to use */
-  void (*xDel)(void*)   /* Destructor for the string */
+  sqlite4_value *v,          /* Value to be set */
+  int n,                     /* Length of string z */
+  const void *z,             /* Text of the new string */
+  u8 enc,                    /* Encoding to use */
+  void (*xDel)(void*,void*), /* Destructor for the string */
+  void *pDelArg              /* First argument to xDel() */
 ){
-  if( v ) sqlite4VdbeMemSetStr((Mem *)v, z, n, enc, xDel);
+  if( v ) sqlite4VdbeMemSetStr((Mem *)v, z, n, enc, xDel, pDelArg);
 }
 
 /*
@@ -1039,11 +1022,7 @@ void sqlite4ValueFree(sqlite4_value *v){
 int sqlite4ValueBytes(sqlite4_value *pVal, u8 enc){
   Mem *p = (Mem*)pVal;
   if( (p->flags & MEM_Blob)!=0 || sqlite4ValueText(pVal, enc) ){
-    if( p->flags & MEM_Zero ){
-      return p->n + p->u.nZero;
-    }else{
-      return p->n;
-    }
+    return p->n;
   }
   return 0;
 }

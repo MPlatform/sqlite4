@@ -1,0 +1,50 @@
+# 2013 February 20
+#
+# The author disclaims copyright to this source code.  In place of
+# a legal notice, here is a blessing:
+#
+#    May you do good and not evil.
+#    May you find forgiveness for yourself and forgive others.
+#    May you share freely, never taking more than you give.
+#
+#***********************************************************************
+#
+# The focus of this file is testing the LSM library. Specifically, it
+# checks that the in-memory tree is flushed to disk when the last connection
+# is closed.
+#
+
+set testdir [file dirname $argv0]
+source $testdir/tester.tcl
+source $testdir/lsm_common.tcl
+set testprefix lsm6
+db close
+
+foreach {tn mp lf} {
+         1  1  1
+         2  1  0
+         3  0  1
+         4  0  0
+} {
+
+  do_test $tn.1 {
+    forcedelete test.db test.db-log
+    lsm_open db test.db [list multi_proc $mp use_log $lf]
+    for {set i 0} {$i < 1000} {incr i} {
+      db write $i [string repeat "$i." 1000]
+    }
+    expr {[file size test.db-log] > 0}
+  } $lf
+
+  do_test $tn.2 {
+    db close
+    lsm_open db test.db 
+    db_fetch db 999
+  } [string repeat 999. 1000]
+
+  db close
+}
+
+finish_test
+
+

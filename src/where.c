@@ -4165,6 +4165,9 @@ static Bitmask codeOneLoopStart(
     testcase( op==OP_SeekLe );
     testcase( op==OP_SeekLt );
     sqlite4VdbeAddOp4Int(v, op, iIdxCur, addrNxt, regBase, nConstraint);
+    if( (pIdx->nColumn + (pIdx==pPk ? 0 : pPk->nColumn))>nEq ){
+      sqlite4VdbeChangeP5(v, OPFLAG_PARTIALKEY);
+    }
 
     /* Set variable op to the instruction required to determine if the
     ** cursor is passed the end of the range. If the range is unbounded,

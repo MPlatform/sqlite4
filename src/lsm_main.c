@@ -39,9 +39,10 @@ static void assert_db_state(lsm_db *pDb){
   ** handle must be holding a pointer to a client snapshot. And the reverse 
   ** - if there are no open cursors and no write transactions then there must 
   ** not be a client snapshot.  */
-  assert( (pDb->pCsr!=0 || pDb->nTransOpen>0)==(pDb->iReader>=0) );
+  
+  assert( (pDb->pCsr!=0||pDb->nTransOpen>0)==(pDb->iReader>=0||pDb->bRoTrans) );
 
-  assert( pDb->iReader<0 || pDb->pClient!=0 );
+  assert( (pDb->iReader<0 && pDb->bRoTrans==0) || pDb->pClient!=0 );
 
   assert( pDb->nTransOpen>=0 );
 }
@@ -87,16 +88,17 @@ int lsm_new(lsm_env *pEnv, lsm_db **ppDb){
   pDb->bAutowork = LSM_DFLT_AUTOWORK;
   pDb->eSafety = LSM_DFLT_SAFETY;
   pDb->xCmp = xCmp;
-  pDb->nLogSz = LSM_DFLT_LOG_SIZE;
   pDb->nDfltPgsz = LSM_DFLT_PAGE_SIZE;
   pDb->nDfltBlksz = LSM_DFLT_BLOCK_SIZE;
   pDb->nMerge = LSM_DFLT_AUTOMERGE;
   pDb->nMaxFreelist = LSM_MAX_FREELIST_ENTRIES;
   pDb->bUseLog = LSM_DFLT_USE_LOG;
   pDb->iReader = -1;
+  pDb->iRwclient = -1;
   pDb->bMultiProc = LSM_DFLT_MULTIPLE_PROCESSES;
   pDb->eMmap = LSM_DFLT_MMAP;
   pDb->xLog = xLog;
+  pDb->compress.iId = LSM_COMPRESSION_NONE;
   return LSM_OK;
 }
 
@@ -142,6 +144,25 @@ static int getFullpathname(
 }
 
 /*
+** Check that the bits in the db->mLock mask are consistent with the
+** value stored in db->iRwclient. An assert shall fail otherwise.
+*/
+static void assertRwclientLockValue(lsm_db *db){
+#ifndef NDEBUG
+  u64 msk;                        /* Mask of mLock bits for RWCLIENT locks */
+  u64 rwclient = 0;               /* Bit corresponding to db->iRwclient */
+
+  if( db->iRwclient>=0 ){
+    rwclient = ((u64)1 << (LSM_LOCK_RWCLIENT(db->iRwclient)-1));
+  }
+  msk  = ((u64)1 << (LSM_LOCK_RWCLIENT(LSM_LOCK_NRWCLIENT)-1)) - 1;
+  msk -= (((u64)1 << (LSM_LOCK_RWCLIENT(0)-1)) - 1);
+
+  assert( (db->mLock & msk)==rwclient );
+#endif
+}
+
+/*
 ** Open a new connection to database zFilename.
 */
 int lsm_open(lsm_db *pDb, const char *zFilename){
@@ -162,26 +183,32 @@ int lsm_open(lsm_db *pDb, const char *zFilename){
     rc = getFullpathname(pDb->pEnv, zFilename, &zFull);
     assert( rc==LSM_OK || zFull==0 );
 
-    /* Connect to the database */
+    /* Connect to the database. */
     if( rc==LSM_OK ){
       rc = lsmDbDatabaseConnect(pDb, zFull);
     }
 
-    /* Configure the file-system connection with the page-size and block-size
-    ** of this database. Even if the database file is zero bytes in size
-    ** on disk, these values have been set in shared-memory by now, and so are
-    ** guaranteed not to change during the lifetime of this connection.  */
-    if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb, 0)) ){
-      lsmFsSetPageSize(pDb->pFS, lsmCheckpointPgsz(pDb->aSnapshot));
-      lsmFsSetBlockSize(pDb->pFS, lsmCheckpointBlksz(pDb->aSnapshot));
+    if( pDb->bReadonly==0 ){
+      /* Configure the file-system connection with the page-size and block-size
+      ** of this database. Even if the database file is zero bytes in size
+      ** on disk, these values have been set in shared-memory by now, and so 
+      ** are guaranteed not to change during the lifetime of this connection.  
+      */
+      if( rc==LSM_OK && LSM_OK==(rc = lsmCheckpointLoad(pDb, 0)) ){
+        lsmFsSetPageSize(pDb->pFS, lsmCheckpointPgsz(pDb->aSnapshot));
+        lsmFsSetBlockSize(pDb->pFS, lsmCheckpointBlksz(pDb->aSnapshot));
+      }
     }
 
     lsmFree(pDb->pEnv, zFull);
+    assertRwclientLockValue(pDb);
   }
+
+  assert( pDb->bReadonly==0 || pDb->bReadonly==1 );
+  assert( rc!=LSM_OK || (pDb->pShmhdr==0)==(pDb->bReadonly==1) );
 
   return rc;
 }
-
 
 int lsm_close(lsm_db *pDb){
   int rc = LSM_OK;
@@ -190,11 +217,22 @@ int lsm_close(lsm_db *pDb){
     if( pDb->pCsr || pDb->nTransOpen ){
       rc = LSM_MISUSE_BKPT;
     }else{
+      lsmMCursorFreeCache(pDb);
       lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
       pDb->pClient = 0;
+
+      assertRwclientLockValue(pDb);
+
       lsmDbDatabaseRelease(pDb);
       lsmLogClose(pDb);
       lsmFsClose(pDb->pFS);
+      assert( pDb->mLock==0 );
+      
+      /* Invoke any destructors registered for the compression or 
+      ** compression factory callbacks.  */
+      if( pDb->factory.xFree ) pDb->factory.xFree(pDb->factory.pCtx);
+      if( pDb->compress.xFree ) pDb->compress.xFree(pDb->compress.pCtx);
+
       lsmFree(pDb->pEnv, pDb->rollback.aArray);
       lsmFree(pDb->pEnv, pDb->aTrans);
       lsmFree(pDb->pEnv, pDb->apShm);
@@ -211,11 +249,14 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
   switch( eParam ){
     case LSM_CONFIG_AUTOFLUSH: {
+      /* This parameter is read and written in KB. But all internal 
+      ** processing is done in bytes.  */
       int *piVal = va_arg(ap, int *);
-      if( *piVal>=0 ){
-        pDb->nTreeLimit = *piVal;
+      int iVal = *piVal;
+      if( iVal>=0 && iVal<=(1024*1024) ){
+        pDb->nTreeLimit = iVal*1024;
       }
-      *piVal = pDb->nTreeLimit;
+      *piVal = (pDb->nTreeLimit / 1024);
       break;
     }
 
@@ -229,20 +270,14 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
     }
 
     case LSM_CONFIG_AUTOCHECKPOINT: {
+      /* This parameter is read and written in KB. But all internal processing
+      ** (including the lsm_db.nAutockpt variable) is done in bytes.  */
       int *piVal = va_arg(ap, int *);
       if( *piVal>=0 ){
-        pDb->nAutockpt = *piVal;
+        int iVal = *piVal;
+        pDb->nAutockpt = (i64)iVal * 1024;
       }
-      *piVal = pDb->nAutockpt;
-      break;
-    }
-
-    case LSM_CONFIG_LOG_SIZE: {
-      int *piVal = va_arg(ap, int *);
-      if( *piVal>0 ){
-        pDb->nLogSz = *piVal;
-      }
-      *piVal = pDb->nLogSz;
+      *piVal = (int)(pDb->nAutockpt / 1024);
       break;
     }
 
@@ -264,17 +299,20 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
     }
 
     case LSM_CONFIG_BLOCK_SIZE: {
+      /* This parameter is read and written in KB. But all internal 
+      ** processing is done in bytes.  */
       int *piVal = va_arg(ap, int *);
       if( pDb->pDatabase ){
         /* If lsm_open() has been called, this is a read-only parameter. 
-        ** Set the output variable to the page-size according to the 
+        ** Set the output variable to the block-size in KB according to the 
         ** FileSystem object.  */
-        *piVal = lsmFsBlockSize(pDb->pFS);
+        *piVal = lsmFsBlockSize(pDb->pFS) / 1024;
       }else{
-        if( *piVal>=65536 && ((*piVal-1) & *piVal)==0 ){
-          pDb->nDfltBlksz = *piVal;
+        int iVal = *piVal;
+        if( iVal>=64 && iVal<=65536 && ((iVal-1) & iVal)==0 ){
+          pDb->nDfltBlksz = iVal * 1024;
         }else{
-          *piVal = pDb->nDfltBlksz;
+          *piVal = pDb->nDfltBlksz / 1024;
         }
       }
       break;
@@ -291,8 +329,9 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
     case LSM_CONFIG_MMAP: {
       int *piVal = va_arg(ap, int *);
-      if( pDb->pDatabase==0 && (*piVal>=0 && *piVal<=2) ){
-        pDb->eMmap = *piVal;
+      if( pDb->iReader<0 && *piVal>=0 && *piVal<=1 ){
+        pDb->bMmap = *piVal;
+        rc = lsmFsConfigure(pDb);
       }
       *piVal = pDb->eMmap;
       break;
@@ -336,14 +375,44 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
       break;
     }
 
+    case LSM_CONFIG_READONLY: {
+      int *piVal = va_arg(ap, int *);
+      /* If lsm_open() has been called, this is a read-only parameter. */
+      if( pDb->pDatabase==0 && *piVal>=0 ){
+        pDb->bReadonly = *piVal = (*piVal!=0);
+      }
+      *piVal = pDb->bReadonly;
+      break;
+    }
+
     case LSM_CONFIG_SET_COMPRESSION: {
       lsm_compress *p = va_arg(ap, lsm_compress *);
-      if( pDb->pDatabase ){
-        /* If lsm_open() has been called, this call is against the rules. */
+      if( pDb->iReader>=0 && pDb->bInFactory==0 ){
+        /* May not change compression schemes with an open transaction */
         rc = LSM_MISUSE_BKPT;
       }else{
-        memcpy(&pDb->compress, p, sizeof(lsm_compress));
+        if( pDb->compress.xFree ){
+          /* Invoke any destructor belonging to the current compression. */
+          pDb->compress.xFree(pDb->compress.pCtx);
+        }
+        if( p->xBound==0 ){
+          memset(&pDb->compress, 0, sizeof(lsm_compress));
+          pDb->compress.iId = LSM_COMPRESSION_NONE;
+        }else{
+          memcpy(&pDb->compress, p, sizeof(lsm_compress));
+        }
+        rc = lsmFsConfigure(pDb);
       }
+      break;
+    }
+
+    case LSM_CONFIG_SET_COMPRESSION_FACTORY: {
+      lsm_compress_factory *p = va_arg(ap, lsm_compress_factory *);
+      if( pDb->factory.xFree ){
+        /* Invoke any destructor belonging to the current factory. */
+        pDb->factory.xFree(pDb->factory.pCtx);
+      }
+      memcpy(&pDb->factory, p, sizeof(lsm_compress_factory));
       break;
     }
 
@@ -433,7 +502,6 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   Snapshot *pWorker;              /* Worker snapshot */
   int bUnlock = 0;
   LsmString s;
-  int i;
   int rc;
 
   /* Obtain the worker snapshot */
@@ -453,10 +521,7 @@ int lsmInfoFreelist(lsm_db *pDb, char **pzOut){
   return rc;
 }
 
-static int infoFreelistSize(lsm_db *pDb, int *pnFree, int *pnWaiting){
-}
-
-static int infoTreeSize(lsm_db *db, int *pnOld, int *pnNew){
+static int infoTreeSize(lsm_db *db, int *pnOldKB, int *pnNewKB){
   ShmHeader *pShm = db->pShmhdr;
   TreeHeader *p = &pShm->hdr1;
 
@@ -479,15 +544,15 @@ static int infoTreeSize(lsm_db *db, int *pnOld, int *pnNew){
   ** lsm_info(LSM_INFO_TREE_SIZE) request), neither of these are considered to
   ** be problems.
   */
-  *pnNew = (int)p->root.nByte;
+  *pnNewKB = ((int)p->root.nByte + 1023) / 1024;
   if( p->iOldShmid ){
     if( p->iOldLog==lsmCheckpointLogOffset(pShm->aSnap1) ){
-      *pnOld = 0;
+      *pnOldKB = 0;
     }else{
-      *pnOld = (int)p->oldroot.nByte;
+      *pnOldKB = ((int)p->oldroot.nByte + 1023) / 1024;
     }
   }else{
-    *pnOld = 0;
+    *pnOldKB = 0;
   }
 
   return LSM_OK;
@@ -558,8 +623,8 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
     }
 
     case LSM_INFO_CHECKPOINT_SIZE: {
-      int *pnByte = va_arg(ap, int *);
-      rc = lsmCheckpointSize(pDb, pnByte);
+      int *pnKB = va_arg(ap, int *);
+      rc = lsmCheckpointSize(pDb, pnKB);
       break;
     }
 
@@ -567,6 +632,16 @@ int lsm_info(lsm_db *pDb, int eParam, ...){
       int *pnOld = va_arg(ap, int *);
       int *pnNew = va_arg(ap, int *);
       rc = infoTreeSize(pDb, pnOld, pnNew);
+      break;
+    }
+
+    case LSM_INFO_COMPRESSION_ID: {
+      unsigned int *piOut = va_arg(ap, unsigned int *);
+      if( pDb->pClient ){
+        *piOut = pDb->pClient->iCmpId;
+      }else{
+        rc = lsmInfoCompressionId(pDb, piOut);
+      }
       break;
     }
 
@@ -681,21 +756,29 @@ int lsm_delete_range(
 ** transaction, open a read transaction here.
 */
 int lsm_csr_open(lsm_db *pDb, lsm_cursor **ppCsr){
-  int rc;                         /* Return code */
+  int rc = LSM_OK;                /* Return code */
   MultiCursor *pCsr = 0;          /* New cursor object */
 
   /* Open a read transaction if one is not already open. */
   assert_db_state(pDb);
-  rc = lsmBeginReadTrans(pDb);
+
+  if( pDb->pShmhdr==0 ){
+    assert( pDb->bReadonly );
+    rc = lsmBeginRoTrans(pDb);
+  }else if( pDb->iReader<0 ){
+    rc = lsmBeginReadTrans(pDb);
+  }
 
   /* Allocate the multi-cursor. */
-  if( rc==LSM_OK ) rc = lsmMCursorNew(pDb, &pCsr);
+  if( rc==LSM_OK ){
+    rc = lsmMCursorNew(pDb, &pCsr);
+  }
 
   /* If an error has occured, set the output to NULL and delete any partially
   ** allocated cursor. If this means there are no open cursors, release the
   ** client snapshot.  */
   if( rc!=LSM_OK ){
-    lsmMCursorClose(pCsr);
+    lsmMCursorClose(pCsr, 0);
     dbReleaseClientSnapshot(pDb);
   }
 
@@ -711,7 +794,7 @@ int lsm_csr_close(lsm_cursor *p){
   if( p ){
     lsm_db *pDb = lsmMCursorDb((MultiCursor *)p);
     assert_db_state(pDb);
-    lsmMCursorClose((MultiCursor *)p);
+    lsmMCursorClose((MultiCursor *)p, 1);
     dbReleaseClientSnapshot(pDb);
     assert_db_state(pDb);
   }
@@ -789,13 +872,13 @@ void lsmLogMessage(lsm_db *pDb, int rc, const char *zFormat, ...){
 }
 
 int lsm_begin(lsm_db *pDb, int iLevel){
-  int rc = LSM_OK;
+  int rc;
 
   assert_db_state( pDb );
+  rc = (pDb->bReadonly ? LSM_READONLY : LSM_OK);
 
   /* A value less than zero means open one more transaction. */
   if( iLevel<0 ) iLevel = pDb->nTransOpen + 1;
-
   if( iLevel>pDb->nTransOpen ){
     int i;
 
@@ -840,8 +923,6 @@ int lsm_commit(lsm_db *pDb, int iLevel){
 
   if( iLevel<pDb->nTransOpen ){
     if( iLevel==0 ){
-      int bAutowork = 0;
-
       /* Commit the transaction to disk. */
       if( rc==LSM_OK ) rc = lsmLogCommit(pDb);
       if( rc==LSM_OK && pDb->eSafety==LSM_SAFETY_FULL ){

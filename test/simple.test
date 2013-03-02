@@ -87,7 +87,7 @@ do_execsql_test 3.2 {
   SELECT * FROM sqlite_master
 } {
   table t1                    t1 2 {CREATE TABLE t1(k PRIMARY KEY, v UNIQUE)} 
-  index sqlite_autoindex_t1_2 t1 3 {}
+  index sqlite_t1_unique2 t1 3 {}
 }
 
 #explain { INSERT INTO t1 VALUES('one', '111') }
@@ -127,7 +127,7 @@ do_execsql_test 5.3 {
   SELECT * FROM sqlite_master
 } {
   table t1                    t1 3 {CREATE TABLE t1(k, v UNIQUE)} 
-  index sqlite_autoindex_t1_1 t1 2 {}
+  index sqlite_t1_unique1 t1 2 {}
   index i1                    t1 4 {CREATE INDEX i1 ON t1(v)}
 }
 
@@ -1461,7 +1461,24 @@ do_test 74.2 {
     execsql "INSERT INTO t1 VALUES('k$i', randstr(500,500))"
   }
 } {}
-breakpoint
 db close
+
+#-------------------------------------------------------------------------
+# Index on a blob.
+#
+reset_db
+
+do_execsql_test 75.1 { 
+  CREATE TABLE t1(a PRIMARY KEY, b UNIQUE);
+  INSERT INTO t1 VALUES(x'12345678', x'12345678');
+}
+
+do_execsql_test 75.2 { 
+  SELECT count(*) FROM t1 WHERE a = x'12345678'
+} 1
+
+do_execsql_test 75.3 { 
+  SELECT count(*) FROM t1 WHERE b = x'12345678'
+} 1
 
 finish_test

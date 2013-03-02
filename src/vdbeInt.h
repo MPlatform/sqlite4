@@ -58,7 +58,6 @@ struct VdbeCursor {
   int pseudoTableReg;   /* Register holding pseudotable content. */
   int nField;           /* Number of fields in the header */
   Bool zeroed;          /* True if zeroed out and ready for reuse */
-  Bool rowidIsValid;    /* True if lastRowid is valid */
   Bool atFirst;         /* True if pointing to first entry */
   Bool nullRow;         /* True if pointing to a row with no data */
   Bool isTable;         /* True if a table requiring integer keys */
@@ -68,7 +67,6 @@ struct VdbeCursor {
   const sqlite4_module *pModule;     /* Module for cursor pVtabCursor */
   i64 seqCount;         /* Sequence counter */
   i64 movetoTarget;     /* Argument to the deferred move-to */
-  i64 lastRowid;        /* Last rowid from a Next or NextIdx operation */
   VdbeSorter *pSorter;  /* Sorter object for OP_SorterOpen cursors */
   Fts5Cursor *pFts;     /* Fts5 cursor object (or NULL) */
 
@@ -113,7 +111,6 @@ struct VdbeFrame {
   void *token;            /* Copy of SubProgram.token */
   int nChildMem;          /* Number of memory cells for child frame */
   int nChildCsr;          /* Number of cursors for child frame */
-  i64 lastRowid;          /* Last insert rowid (sqlite4.lastRowid) */
   int nChange;            /* Statement changes (Vdbe.nChanges)     */
   VdbeFrame *pParent;     /* Parent of this frame, or NULL if parent is main */
 };
@@ -136,7 +133,6 @@ struct Mem {
   double r;           /* Real value */
   union {
     i64 i;              /* Integer value used when MEM_Int is set in flags */
-    int nZero;          /* Used when bit MEM_Zero is set in flags */
     FuncDef *pDef;      /* Used only when flags==MEM_Agg */
     RowSet *pRowSet;    /* Used only when flags==MEM_RowSet */
     VdbeFrame *pFrame;  /* Used when flags==MEM_Frame */
@@ -149,7 +145,8 @@ struct Mem {
   Mem *pScopyFrom;    /* This Mem is a shallow copy of pScopyFrom */
   void *pFiller;      /* So that sizeof(Mem) is a multiple of 8 */
 #endif
-  void (*xDel)(void *);  /* If not null, call this function to delete Mem.z */
+  void (*xDel)(void*,void*); /* Function to delete Mem.z */
+  void *pDelArg;             /* First argument to xDel() */
   char *zMalloc;      /* Dynamic buffer allocated by sqlite4_malloc() */
 };
 
@@ -186,13 +183,12 @@ struct Mem {
 #define MEM_Static    0x0800   /* Mem.z points to a static string */
 #define MEM_Ephem     0x1000   /* Mem.z points to an ephemeral string */
 #define MEM_Agg       0x2000   /* Mem.z points to an agg function context */
-#define MEM_Zero      0x4000   /* Mem.i contains count of 0s appended to blob */
 
 /*
 ** Clear any existing type flags from a Mem and replace them with f
 */
 #define MemSetTypeFlag(p, f) \
-   ((p)->flags = ((p)->flags&~(MEM_TypeMask|MEM_Zero))|f)
+   ((p)->flags = ((p)->flags&~(MEM_TypeMask))|f)
 
 /*
 ** Return true if a memory cell is not marked as invalid.  This macro
@@ -217,7 +213,8 @@ struct VdbeFunc {
   int nAux;                     /* Number of entries allocated for apAux[] */
   struct AuxData {
     void *pAux;                   /* Aux data for the i-th argument */
-    void (*xDelete)(void *);      /* Destructor for the aux data */
+    void (*xDelete)(void*,void*); /* Destructor for the aux data */
+    void *pDeleteArg;             /* First argument to xDelete */
   } apAux[1];                   /* One slot for each function argument */
 };
 
@@ -379,11 +376,12 @@ int sqlite4VdbeEncodeKey(
   sqlite4 *db,                 /* The database connection */
   Mem *aIn,                    /* Values to be encoded */
   int nIn,                     /* Number of entries in aIn[] */
+  int nInTotal,                /* Number of values in complete key */
   int iTabno,                  /* The table this key applies to */
   KeyInfo *pKeyInfo,           /* Collating sequence information */
   u8 **pzOut,                  /* Write the resulting key here */
   int *pnOut,                  /* Number of bytes in the key */
-  int bIncr                    /* Make the key "incrementable" */
+  int nExtra                   /* Append extra bytes on end of key */
 );
 int sqlite4VdbeEncodeIntKey(u8 *aBuf,sqlite4_int64 v);
 int sqlite4VdbeDecodeIntKey(const KVByteArray*, KVSize, sqlite4_int64*);
@@ -398,7 +396,8 @@ int sqlite4VdbeMemCopy(Mem*, const Mem*);
 void sqlite4VdbeMemShallowCopy(Mem*, const Mem*, int);
 void sqlite4VdbeMemMove(Mem*, Mem*);
 int sqlite4VdbeMemNulTerminate(Mem*);
-int sqlite4VdbeMemSetStr(Mem*, const char*, int, u8, void(*)(void*));
+int sqlite4VdbeMemSetStr(Mem*, const char*, int, u8,
+                         void(*)(void*,void*),void*);
 void sqlite4VdbeMemSetInt64(Mem*, i64);
 #ifdef SQLITE4_OMIT_FLOATING_POINT
 # define sqlite4VdbeMemSetDouble sqlite4VdbeMemSetInt64
@@ -406,7 +405,6 @@ void sqlite4VdbeMemSetInt64(Mem*, i64);
   void sqlite4VdbeMemSetDouble(Mem*, double);
 #endif
 void sqlite4VdbeMemSetNull(Mem*);
-void sqlite4VdbeMemSetZeroBlob(Mem*,int);
 int sqlite4VdbeMemMakeWriteable(Mem*);
 int sqlite4VdbeMemStringify(Mem*, int);
 i64 sqlite4VdbeIntValue(Mem*);
@@ -454,8 +452,5 @@ int sqlite4VdbeMemTranslate(Mem*, u8);
 #endif
 int sqlite4VdbeMemHandleBom(Mem *pMem);
 
-
-#define sqlite4VdbeMemExpandBlob(x) SQLITE4_OK
-#define ExpandBlob(P) SQLITE4_OK
 
 #endif /* !defined(_VDBEINT_H_) */

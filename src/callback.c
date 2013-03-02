@@ -32,7 +32,7 @@ static void callCollNeeded(sqlite4 *db, int enc, const char *zName){
   if( db->xCollNeeded16 ){
     char const *zExternal;
     sqlite4_value *pTmp = sqlite4ValueNew(db);
-    sqlite4ValueSetStr(pTmp, -1, zName, SQLITE4_UTF8, SQLITE4_STATIC);
+    sqlite4ValueSetStr(pTmp, -1, zName, SQLITE4_UTF8, SQLITE4_STATIC, 0);
     zExternal = sqlite4ValueText(pTmp, SQLITE4_UTF16NATIVE);
     if( zExternal ){
       db->xCollNeeded16(db->pCollNeededArg, db, (int)ENC(db), zExternal);

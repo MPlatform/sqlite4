@@ -16,21 +16,6 @@
 #include "sqliteInt.h"
 #include "vdbeInt.h"
 
-#ifndef SQLITE4_OMIT_DEPRECATED
-/*
-** Return TRUE (non-zero) of the statement supplied as an argument needs
-** to be recompiled.  A statement needs to be recompiled whenever the
-** execution environment changes in a way that would alter the program
-** that sqlite4_prepare() generates.  For example, if new functions or
-** collating sequences are registered or if an authorizer function is
-** added or changed.
-*/
-int sqlite4_expired(sqlite4_stmt *pStmt){
-  Vdbe *p = (Vdbe*)pStmt;
-  return p==0 || p->expired;
-}
-#endif
-
 /*
 ** Check on a Vdbe to make sure it has not been finalized.  Log
 ** an error and return true if it has been finalized (or is otherwise
@@ -139,7 +124,6 @@ int sqlite4_clear_bindings(sqlite4_stmt *pStmt){
 const void *sqlite4_value_blob(sqlite4_value *pVal){
   Mem *p = (Mem*)pVal;
   if( p->flags & (MEM_Blob|MEM_Str) ){
-   (void)sqlite4VdbeMemExpandBlob(p);
     p->flags &= ~MEM_Str;
     p->flags |= MEM_Blob;
     return p->n ? p->z : 0;
@@ -189,18 +173,19 @@ int sqlite4_value_type(sqlite4_value* pVal){
 ** then sets the error code to SQLITE4_TOOBIG
 */
 static void setResultStrOrError(
-  sqlite4_context *pCtx,  /* Function context */
-  const char *z,          /* String pointer */
-  int n,                  /* Bytes in string, or negative */
-  u8 enc,                 /* Encoding of z.  0 for BLOBs */
-  void (*xDel)(void*)     /* Destructor function */
+  sqlite4_context *pCtx,     /* Function context */
+  const char *z,             /* String pointer */
+  int n,                     /* Bytes in string, or negative */
+  u8 enc,                    /* Encoding of z.  0 for BLOBs */
+  void (*xDel)(void*,void*), /* Destructor function */
+  void *pDelArg              /* First argument to xDel() */
 ){
   if( xDel==SQLITE4_DYNAMIC ){
     assert( sqlite4MemdebugHasType(z, MEMTYPE_HEAP) );
     assert( sqlite4MemdebugNoType(z, ~MEMTYPE_HEAP) );
     sqlite4MemdebugSetType((char*)z, MEMTYPE_DB | MEMTYPE_HEAP);
   }
-  if( sqlite4VdbeMemSetStr(&pCtx->s, z, n, enc, xDel)==SQLITE4_TOOBIG ){
+  if( sqlite4VdbeMemSetStr(&pCtx->s, z, n, enc, xDel,pDelArg)==SQLITE4_TOOBIG ){
     sqlite4_result_error_toobig(pCtx);
   }
 }
@@ -208,11 +193,12 @@ void sqlite4_result_blob(
   sqlite4_context *pCtx, 
   const void *z, 
   int n, 
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( n>=0 );
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, 0, xDel);
+  setResultStrOrError(pCtx, z, n, 0, xDel, pDelArg);
 }
 void sqlite4_result_double(sqlite4_context *pCtx, double rVal){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
@@ -221,13 +207,13 @@ void sqlite4_result_double(sqlite4_context *pCtx, double rVal){
 void sqlite4_result_error(sqlite4_context *pCtx, const char *z, int n){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
   pCtx->isError = SQLITE4_ERROR;
-  sqlite4VdbeMemSetStr(&pCtx->s, z, n, SQLITE4_UTF8, SQLITE4_TRANSIENT);
+  sqlite4VdbeMemSetStr(&pCtx->s, z, n, SQLITE4_UTF8, SQLITE4_TRANSIENT, 0);
 }
 #ifndef SQLITE4_OMIT_UTF16
 void sqlite4_result_error16(sqlite4_context *pCtx, const void *z, int n){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
   pCtx->isError = SQLITE4_ERROR;
-  sqlite4VdbeMemSetStr(&pCtx->s, z, n, SQLITE4_UTF16NATIVE, SQLITE4_TRANSIENT);
+  sqlite4VdbeMemSetStr(&pCtx->s, z, n, SQLITE4_UTF16NATIVE,SQLITE4_TRANSIENT,0);
 }
 #endif
 void sqlite4_result_int(sqlite4_context *pCtx, int iVal){
@@ -246,53 +232,53 @@ void sqlite4_result_text(
   sqlite4_context *pCtx, 
   const char *z, 
   int n,
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, SQLITE4_UTF8, xDel);
+  setResultStrOrError(pCtx, z, n, SQLITE4_UTF8, xDel, pDelArg);
 }
 #ifndef SQLITE4_OMIT_UTF16
 void sqlite4_result_text16(
   sqlite4_context *pCtx, 
   const void *z, 
   int n, 
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16NATIVE, xDel);
+  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16NATIVE, xDel, pDelArg);
 }
 void sqlite4_result_text16be(
   sqlite4_context *pCtx, 
   const void *z, 
   int n, 
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16BE, xDel);
+  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16BE, xDel, pDelArg);
 }
 void sqlite4_result_text16le(
   sqlite4_context *pCtx, 
   const void *z, 
   int n, 
-  void (*xDel)(void *)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16LE, xDel);
+  setResultStrOrError(pCtx, z, n, SQLITE4_UTF16LE, xDel, pDelArg);
 }
 #endif /* SQLITE4_OMIT_UTF16 */
 void sqlite4_result_value(sqlite4_context *pCtx, sqlite4_value *pValue){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
   sqlite4VdbeMemCopy(&pCtx->s, pValue);
 }
-void sqlite4_result_zeroblob(sqlite4_context *pCtx, int n){
-  assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
-  sqlite4VdbeMemSetZeroBlob(&pCtx->s, n);
-}
 void sqlite4_result_error_code(sqlite4_context *pCtx, int errCode){
   pCtx->isError = errCode;
   if( pCtx->s.flags & MEM_Null ){
     sqlite4VdbeMemSetStr(&pCtx->s, sqlite4ErrStr(errCode), -1, 
-                         SQLITE4_UTF8, SQLITE4_STATIC);
+                         SQLITE4_UTF8, SQLITE4_STATIC, 0);
   }
 }
 
@@ -301,7 +287,7 @@ void sqlite4_result_error_toobig(sqlite4_context *pCtx){
   assert( sqlite4_mutex_held(pCtx->s.db->mutex) );
   pCtx->isError = SQLITE4_TOOBIG;
   sqlite4VdbeMemSetStr(&pCtx->s, "string or blob too big", -1, 
-                       SQLITE4_UTF8, SQLITE4_STATIC);
+                       SQLITE4_UTF8, SQLITE4_STATIC, 0);
 }
 
 /* An SQLITE4_NOMEM error. */
@@ -591,7 +577,8 @@ void sqlite4_set_auxdata(
   sqlite4_context *pCtx, 
   int iArg, 
   void *pAux, 
-  void (*xDelete)(void*)
+  void (*xDelete)(void*,void*),
+  void *pDeleteArg
 ){
   struct AuxData *pAuxData;
   VdbeFunc *pVdbeFunc;
@@ -614,33 +601,18 @@ void sqlite4_set_auxdata(
 
   pAuxData = &pVdbeFunc->apAux[iArg];
   if( pAuxData->pAux && pAuxData->xDelete ){
-    pAuxData->xDelete(pAuxData->pAux);
+    pAuxData->xDelete(pAuxData->pDeleteArg, pAuxData->pAux);
   }
   pAuxData->pAux = pAux;
   pAuxData->xDelete = xDelete;
+  pAuxData->pDeleteArg = pDeleteArg;
   return;
 
 failed:
   if( xDelete ){
-    xDelete(pAux);
+    xDelete(pDeleteArg, pAux);
   }
 }
-
-#ifndef SQLITE4_OMIT_DEPRECATED
-/*
-** Return the number of times the Step function of a aggregate has been 
-** called.
-**
-** This function is deprecated.  Do not use it for new code.  It is
-** provide only to avoid breaking legacy code.  New aggregate function
-** implementations should keep their own counts within their aggregate
-** context.
-*/
-int sqlite4_aggregate_count(sqlite4_context *p){
-  assert( p && p->pMem && p->pFunc && p->pFunc->xStep );
-  return p->pMem->n;
-}
-#endif
 
 /*
 ** Return the number of columns in the result set for the statement pStmt.
@@ -745,11 +717,6 @@ static void columnMallocFailure(sqlite4_stmt *pStmt)
 const void *sqlite4_column_blob(sqlite4_stmt *pStmt, int i){
   const void *val;
   val = sqlite4_value_blob( columnMem(pStmt,i) );
-  /* Even though there is no encoding conversion, value_blob() might
-  ** need to call malloc() to expand the result of a zeroblob() 
-  ** expression. 
-  */
-  columnMallocFailure(pStmt);
   return val;
 }
 int sqlite4_column_bytes(sqlite4_stmt *pStmt, int i){
@@ -1008,12 +975,13 @@ static int vdbeUnbind(Vdbe *p, int i){
 ** Bind a text or BLOB value.
 */
 static int bindText(
-  sqlite4_stmt *pStmt,   /* The statement to bind against */
-  int i,                 /* Index of the parameter to bind */
-  const void *zData,     /* Pointer to the data to be bound */
-  int nData,             /* Number of bytes of data to be bound */
-  void (*xDel)(void*),   /* Destructor for the data */
-  u8 encoding            /* Encoding for the data */
+  sqlite4_stmt *pStmt,       /* The statement to bind against */
+  int i,                     /* Index of the parameter to bind */
+  const void *zData,         /* Pointer to the data to be bound */
+  int nData,                 /* Number of bytes of data to be bound */
+  void (*xDel)(void*,void*), /* Destructor for the data */
+  void *pDelArg,             /* First argument to xDel() */
+  u8 encoding                /* Encoding for the data */
 ){
   Vdbe *p = (Vdbe *)pStmt;
   Mem *pVar;
@@ -1023,7 +991,7 @@ static int bindText(
   if( rc==SQLITE4_OK ){
     if( zData!=0 ){
       pVar = &p->aVar[i-1];
-      rc = sqlite4VdbeMemSetStr(pVar, zData, nData, encoding, xDel);
+      rc = sqlite4VdbeMemSetStr(pVar, zData, nData, encoding, xDel, pDelArg);
       if( rc==SQLITE4_OK && encoding!=0 ){
         rc = sqlite4VdbeChangeEncoding(pVar, ENC(p->db));
       }
@@ -1032,7 +1000,7 @@ static int bindText(
     }
     sqlite4_mutex_leave(p->db->mutex);
   }else if( xDel!=SQLITE4_STATIC && xDel!=SQLITE4_TRANSIENT ){
-    xDel((void*)zData);
+    xDel(pDelArg, (void*)zData);
   }
   return rc;
 }
@@ -1046,9 +1014,10 @@ int sqlite4_bind_blob(
   int i, 
   const void *zData, 
   int nData, 
-  void (*xDel)(void*)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
-  return bindText(pStmt, i, zData, nData, xDel, 0);
+  return bindText(pStmt, i, zData, nData, xDel, pDelArg, 0);
 }
 int sqlite4_bind_double(sqlite4_stmt *pStmt, int i, double rValue){
   int rc;
@@ -1087,9 +1056,10 @@ int sqlite4_bind_text(
   int i, 
   const char *zData, 
   int nData, 
-  void (*xDel)(void*)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
-  return bindText(pStmt, i, zData, nData, xDel, SQLITE4_UTF8);
+  return bindText(pStmt, i, zData, nData, xDel, pDelArg, SQLITE4_UTF8);
 }
 #ifndef SQLITE4_OMIT_UTF16
 int sqlite4_bind_text16(
@@ -1097,9 +1067,10 @@ int sqlite4_bind_text16(
   int i, 
   const void *zData, 
   int nData, 
-  void (*xDel)(void*)
+  void (*xDel)(void*,void*),
+  void *pDelArg
 ){
-  return bindText(pStmt, i, zData, nData, xDel, SQLITE4_UTF16NATIVE);
+  return bindText(pStmt, i, zData, nData, xDel, pDelArg, SQLITE4_UTF16NATIVE);
 }
 #endif /* SQLITE4_OMIT_UTF16 */
 int sqlite4_bind_value(sqlite4_stmt *pStmt, int i, const sqlite4_value *pValue){
@@ -1114,15 +1085,12 @@ int sqlite4_bind_value(sqlite4_stmt *pStmt, int i, const sqlite4_value *pValue){
       break;
     }
     case SQLITE4_BLOB: {
-      if( pValue->flags & MEM_Zero ){
-        rc = sqlite4_bind_zeroblob(pStmt, i, pValue->u.nZero);
-      }else{
-        rc = sqlite4_bind_blob(pStmt, i, pValue->z, pValue->n,SQLITE4_TRANSIENT);
-      }
+      rc = sqlite4_bind_blob(pStmt, i, pValue->z, pValue->n,
+                             SQLITE4_TRANSIENT, 0);
       break;
     }
     case SQLITE4_TEXT: {
-      rc = bindText(pStmt,i,  pValue->z, pValue->n, SQLITE4_TRANSIENT,
+      rc = bindText(pStmt,i,  pValue->z, pValue->n, SQLITE4_TRANSIENT, 0,
                               pValue->enc);
       break;
     }
@@ -1130,16 +1098,6 @@ int sqlite4_bind_value(sqlite4_stmt *pStmt, int i, const sqlite4_value *pValue){
       rc = sqlite4_bind_null(pStmt, i);
       break;
     }
-  }
-  return rc;
-}
-int sqlite4_bind_zeroblob(sqlite4_stmt *pStmt, int i, int n){
-  int rc;
-  Vdbe *p = (Vdbe *)pStmt;
-  rc = vdbeUnbind(p, i);
-  if( rc==SQLITE4_OK ){
-    sqlite4VdbeMemSetZeroBlob(&p->aVar[i-1], n);
-    sqlite4_mutex_leave(p->db->mutex);
   }
   return rc;
 }
@@ -1207,35 +1165,6 @@ int sqlite4TransferBindings(sqlite4_stmt *pFromStmt, sqlite4_stmt *pToStmt){
   sqlite4_mutex_leave(pTo->db->mutex);
   return SQLITE4_OK;
 }
-
-#ifndef SQLITE4_OMIT_DEPRECATED
-/*
-** Deprecated external interface.  Internal/core SQLite code
-** should call sqlite4TransferBindings.
-**
-** Is is misuse to call this routine with statements from different
-** database connections.  But as this is a deprecated interface, we
-** will not bother to check for that condition.
-**
-** If the two statements contain a different number of bindings, then
-** an SQLITE4_ERROR is returned.  Nothing else can go wrong, so otherwise
-** SQLITE4_OK is returned.
-*/
-int sqlite4_transfer_bindings(sqlite4_stmt *pFromStmt, sqlite4_stmt *pToStmt){
-  Vdbe *pFrom = (Vdbe*)pFromStmt;
-  Vdbe *pTo = (Vdbe*)pToStmt;
-  if( pFrom->nVar!=pTo->nVar ){
-    return SQLITE4_ERROR;
-  }
-  if( pTo->expmask ){
-    pTo->expired = 1;
-  }
-  if( pFrom->expmask ){
-    pFrom->expired = 1;
-  }
-  return sqlite4TransferBindings(pFromStmt, pToStmt);
-}
-#endif
 
 /*
 ** Return the sqlite4* database handle to which the prepared statement given

@@ -44,12 +44,12 @@
 # FIXME:  Required options for now.
 #
 OPTS += -DLSM_MUTEX_NONE
-OPTS += -DSQLITE4_DEBUG=1 -DLSM_DEBUG=1
+#OPTS += -DSQLITE4_DEBUG=1 -DLSM_DEBUG=1
 OPTS += -DHAVE_GMTIME_R
 OPTS += -DHAVE_LOCALTIME_R
 OPTS += -DHAVE_MALLOC_USABLE_SIZE
 OPTS += -DHAVE_USLEEP
-OPTS += -DSQLITE4_MEMDEBUG=1
+#OPTS += -DSQLITE4_MEMDEBUG=1
 #OPTS += -DSQLITE4_NO_SYNC=1 -DLSM_NO_SYNC=1
 OPTS += -DSQLITE4_OMIT_ANALYZE
 OPTS += -DSQLITE4_OMIT_AUTOMATIC_INDEX
@@ -70,14 +70,14 @@ TCPPX = g++ -Wall -g -I. -I$(TOP)/src $(OPTS)
 LIBOBJ+= vdbe.o parse.o \
          alter.o analyze.o attach.o auth.o \
          build.o \
-         callback.o complete.o ctime.o date.o delete.o expr.o fault.o fkey.o \
-	 fts5.o fts5func.o \
+         callback.o complete.o ctime.o date.o delete.o env.o expr.o \
+         fault.o fkey.o fts5.o fts5func.o \
          func.o global.o hash.o \
          icu.o insert.o kv.o kvlsm.o kvmem.o legacy.o \
          lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o lsm_mem.o lsm_mutex.o \
          lsm_shared.o lsm_str.o lsm_sorted.o lsm_tree.o \
          lsm_unix.o lsm_varint.o \
-         main.o malloc.o math.o mem0.o mem1.o mem2.o mem3.o mem5.o \
+         main.o malloc.o math.o mem.o mem0.o mem1.o mem2.o mem3.o mem5.o \
          mutex.o mutex_noop.o mutex_unix.o mutex_w32.o \
          opcodes.o os.o \
          pragma.o prepare.o printf.o \
@@ -101,6 +101,7 @@ SRC = \
   $(TOP)/src/ctime.c \
   $(TOP)/src/date.c \
   $(TOP)/src/delete.c \
+  $(TOP)/src/env.c \
   $(TOP)/src/expr.c \
   $(TOP)/src/fault.c \
   $(TOP)/src/fkey.c \
@@ -134,6 +135,7 @@ SRC = \
   $(TOP)/src/main.c \
   $(TOP)/src/malloc.c \
   $(TOP)/src/math.c \
+  $(TOP)/src/mem.c \
   $(TOP)/src/mem0.c \
   $(TOP)/src/mem1.c \
   $(TOP)/src/mem2.c \
@@ -489,7 +491,7 @@ TESTFIXTURE_PREREQ += libsqlite4.a
 testfixture$(EXE): $(TESTFIXTURE_PREREQ)
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \
 		$(TESTSRC) $(TESTSRC2) $(TOP)/src/tclsqlite.c                \
-		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB) libsqlite4.a
+		-o testfixture$(EXE) $(LIBTCL) libsqlite4.a $(THREADLIB)
 
 amalgamation-testfixture$(EXE): sqlite4.c $(TESTSRC) $(TOP)/src/tclsqlite.c
 	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)                  \
@@ -531,6 +533,11 @@ threadtest3$(EXE): sqlite4.o $(TOP)/test/threadtest3.c $(TOP)/test/tt3_checkpoin
 
 threadtest: threadtest3$(EXE)
 	./threadtest3$(EXE)
+
+SQLSRC = $(TOP)/lsm-test/sqltest.c $(TOP)/lsm-test/lsmtest_util.c 
+sqltest$(EXE): $(SQLSRC) libsqlite4.a
+	$(TCCX) $(TOP)/lsm-test/sqltest.c \
+        -o sqltest$(EXE) -lsqlite3 libsqlite4.a $(THREADLIB)
 
 TEST_EXTENSION = $(SHPREFIX)testloadext.$(SO)
 $(TEST_EXTENSION): $(TOP)/test/test_loadext.c

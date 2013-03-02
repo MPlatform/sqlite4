@@ -948,12 +948,12 @@ static void generateSortTail(
     addr = 1 + sqlite4VdbeAddOp2(v, OP_SorterSort, iTab, addrBreak);
     codeOffset(v, p, addrContinue);
     sqlite4VdbeAddOp2(v, OP_SorterData, iTab, regSortOut);
-    sqlite4VdbeAddOp3(v, OP_Column, ptab2, pOrderBy->nExpr+1, regRow);
+    sqlite4VdbeAddOp3(v, OP_Column, ptab2, 0, regRow);
     sqlite4VdbeChangeP5(v, OPFLAG_CLEARCACHE);
   }else{
     addr = 1 + sqlite4VdbeAddOp2(v, OP_Sort, iTab, addrBreak);
     codeOffset(v, p, addrContinue);
-    /* sqlite4VdbeAddOp3(v, OP_Column, iTab, pOrderBy->nExpr+1, regRow); */
+    sqlite4VdbeAddOp3(v, OP_Column, iTab, 0, regRow);
   }
   switch( eDest ){
     case SRT_Table:
@@ -1282,7 +1282,7 @@ static int selectColumnsFromExprList(
   char *zName;                /* Column name */
   int nName;                  /* Size of name in zName[] */
 
-  *pnCol = nCol = pEList->nExpr;
+  *pnCol = nCol = pEList ? pEList->nExpr : 0;
   aCol = *paCol = sqlite4DbMallocZero(db, sizeof(aCol[0])*nCol);
   if( aCol==0 ) return SQLITE4_NOMEM;
   for(i=0, pCol=aCol; i<nCol; i++, pCol++){
@@ -2309,7 +2309,8 @@ static int multiSelectOrderBy(
   }else{
     int nExpr = p->pEList->nExpr;
     assert( nOrderBy>=nExpr || db->mallocFailed );
-    regPrev = sqlite4GetTempRange(pParse, nExpr+1);
+    regPrev = pParse->nMem + 1;
+    pParse->nMem += nExpr + 1;
     sqlite4VdbeAddOp2(v, OP_Integer, 0, regPrev);
     pKeyDup = sqlite4DbMallocZero(db,
                   sizeof(*pKeyDup) + nExpr*(sizeof(CollSeq*)+1) );
@@ -2489,12 +2490,6 @@ static int multiSelectOrderBy(
   sqlite4VdbeAddOp4(v, OP_Compare, destA.iMem, destB.iMem, nOrderBy,
                          (char*)pKeyMerge, P4_KEYINFO_HANDOFF);
   sqlite4VdbeAddOp3(v, OP_Jump, addrAltB, addrAeqB, addrAgtB);
-
-  /* Release temporary registers
-  */
-  if( regPrev ){
-    sqlite4ReleaseTempRange(pParse, regPrev, nOrderBy+1);
-  }
 
   /* Jump to the this point in order to terminate the query.
   */
@@ -2704,6 +2699,12 @@ static void substSelect(
 **        ORDER by clause of the parent must be simple references to 
 **        columns of the sub-query.
 **
+**        Also, each component of the sub-query must return the same number
+**        of result columns. This is actually a requirement for any compound
+**        SELECT statement, but all the code here does is make sure that no
+**        such (illegal) sub-query is flattened. The caller will detect the
+**        syntax error and return a detailed message.
+**
 **  (19)  The subquery does not use LIMIT or the outer query does not
 **        have a WHERE clause.
 **
@@ -2843,6 +2844,7 @@ static int flattenSubquery(
       if( (pSub1->selFlags & (SF_Distinct|SF_Aggregate))!=0
        || (pSub1->pPrior && pSub1->op!=TK_ALL) 
        || pSub1->pSrc->nSrc<1
+       || pSub->pEList->nExpr!=pSub1->pEList->nExpr
       ){
         return 0;
       }
