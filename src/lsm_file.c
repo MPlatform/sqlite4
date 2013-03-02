@@ -657,7 +657,7 @@ static void *fsMmapRef(
   assert( *ppRef==0 );
 
   if( p->eUseMmap==LSM_MMAP_FULL ){
-    fsGrowMapping(pFS, iOff+nByte, &rc);
+    fsGrowMapping(pFS, LSM_MAX(iOff+nByte, 8192), &rc);
     if( rc==LSM_OK ){
       pRet = (void *)&((u8 *)p->pMap)[iOff];
       *ppRef = (MmapMgrRef *)pRet;
@@ -873,7 +873,7 @@ int lsmFsOpen(
       pFS->mmapmgr.eUseMmap = pDb->eMmap;
       pFS->mmapmgr.nMapsz = 1*1024*1024;
 
-      pFS->mmapmgr.nMapsz = 4*1024;
+      /* pFS->mmapmgr.nMapsz = 4*1024; */
     }
 
     /* Make a copy of the database and log file names. */
@@ -931,10 +931,7 @@ int lsmFsConfigure(lsm_db *db){
     pFS->nBuffer = 0;
 
     /* Unmap the file, if it is currently mapped */
-    if( pFS->pMap ){
-      lsmEnvRemap(pEnv, pFS->fdDb, -1, &pFS->pMap, &pFS->nMap);
-      pFS->bUseMmap = 0;
-    }
+    fsMmapClose(pFS);
 
     /* Free all allocate page structures */
     pPg = pFS->pLruFirst;
@@ -954,10 +951,10 @@ int lsmFsConfigure(lsm_db *db){
     /* Configure the FileSystem object */
     if( db->compress.xCompress ){
       pFS->pCompress = &db->compress;
-      pFS->bUseMmap = 0;
+      pFS->mmapmgr.eUseMmap = LSM_MMAP_OFF;
     }else{
       pFS->pCompress = 0;
-      pFS->bUseMmap = db->bMmap;
+      pFS->mmapmgr.eUseMmap = db->eMmap;
     }
   }
 

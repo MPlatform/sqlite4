@@ -329,8 +329,8 @@ int lsm_config(lsm_db *pDb, int eParam, ...){
 
     case LSM_CONFIG_MMAP: {
       int *piVal = va_arg(ap, int *);
-      if( pDb->iReader<0 && *piVal>=0 && *piVal<=1 ){
-        pDb->bMmap = *piVal;
+      if( pDb->iReader<0 && *piVal>=0 && *piVal<=2 ){
+        pDb->eMmap = *piVal;
         rc = lsmFsConfigure(pDb);
       }
       *piVal = pDb->eMmap;

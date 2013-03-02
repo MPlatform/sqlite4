@@ -704,8 +704,8 @@ static int btreeCursorNext(BtreeCursor *pCsr){
       iLoad = btreeCursorPtr(aData, nData, pPg->iCell);
       do {
         Page *pLoad;
-        pCsr->iPg++;
         rc = lsmFsDbPageGet(pCsr->pFS, pCsr->pSeg, iLoad, &pLoad);
+        pCsr->iPg++;
         pCsr->aPg[pCsr->iPg].pPage = pLoad;
         pCsr->aPg[pCsr->iPg].iCell = 0;
         if( rc==LSM_OK ){
