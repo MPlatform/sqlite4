@@ -70,6 +70,7 @@ struct KVMem {
   KVMemChng **apLog;    /* Array of transaction logs */
   int nCursor;          /* Number of outstanding cursors */
   int iMagicKVMemBase;  /* Magic number of sanity */
+  unsigned int iMeta;   /* Schema cookie value */
 };
 #define SQLITE4_KVMEMBASE_MAGIC  0xbfcd47d0
 
@@ -916,6 +917,18 @@ static int kvmemControl(KVStore *pKVStore, int op, void *pArg){
   return SQLITE4_NOTFOUND;
 }
 
+static int kvmemGetMeta(KVStore *pKVStore, unsigned int *piVal){
+  KVMem *p = (KVMem*)pKVStore;
+  *piVal = p->iMeta;
+  return SQLITE4_OK;
+}
+
+static int kvmemPutMeta(KVStore *pKVStore, unsigned int iVal){
+  KVMem *p = (KVMem*)pKVStore;
+  p->iMeta = iVal;
+  return SQLITE4_OK;
+}
+
 /* Virtual methods for the in-memory storage engine */
 static const KVStoreMethods kvmemMethods = {
   1,                        /* iVersion */
@@ -936,7 +949,9 @@ static const KVStoreMethods kvmemMethods = {
   kvmemRollback,            /* xRollback */
   kvmemRevert,              /* xRevert */
   kvmemClose,               /* xClose */
-  kvmemControl              /* xControl */
+  kvmemControl,             /* xControl */
+  kvmemGetMeta,             /* xGetMeta */
+  kvmemPutMeta              /* xPutMeta */
 };
 
 /*

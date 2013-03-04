@@ -4231,6 +4231,8 @@ struct sqlite4_kv_methods {
   int (*xRevert)(sqlite4_kvstore*, int);
   int (*xClose)(sqlite4_kvstore*);
   int (*xControl)(sqlite4_kvstore*, int, void*);
+  int (*xGetMeta)(sqlite4_kvstore*, unsigned int *);
+  int (*xPutMeta)(sqlite4_kvstore*, unsigned int);
 };
 typedef struct sqlite4_kv_methods sqlite4_kv_methods;
 

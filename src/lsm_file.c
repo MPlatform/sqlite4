@@ -893,23 +893,25 @@ static void fsPageRemoveFromHash(FileSystem *pFS, Page *pPg){
 ** Purge the page cache of all entries with nRef==0.
 */
 void lsmFsPurgeCache(FileSystem *pFS){
-  Page *pPg;
+  if( pFS->bUseMmap==0 ){
+    Page *pPg;
 
-  pPg = pFS->pLruFirst;
-  while( pPg ){
-    Page *pNext = pPg->pLruNext;
-    fsPageRemoveFromHash(pFS, pPg);
-    if( pPg->flags & PAGE_FREE ){
-      lsmFree(pFS->pEnv, pPg->aData);
+    pPg = pFS->pLruFirst;
+    while( pPg ){
+      Page *pNext = pPg->pLruNext;
+      fsPageRemoveFromHash(pFS, pPg);
+      if( pPg->flags & PAGE_FREE ){
+        lsmFree(pFS->pEnv, pPg->aData);
+      }
+      lsmFree(pFS->pEnv, pPg);
+      pPg = pNext;
+      pFS->nCacheAlloc--;
     }
-    lsmFree(pFS->pEnv, pPg);
-    pPg = pNext;
-    pFS->nCacheAlloc--;
-  }
-  pFS->pLruFirst = 0;
-  pFS->pLruLast = 0;
+    pFS->pLruFirst = 0;
+    pFS->pLruLast = 0;
 
-  assert( pFS->nCacheAlloc<=pFS->nOut && pFS->nCacheAlloc>=0 );
+    assert( pFS->nCacheAlloc<=pFS->nOut && pFS->nCacheAlloc>=0 );
+  }
 }
 
 /*

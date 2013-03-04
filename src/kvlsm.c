@@ -409,6 +409,16 @@ static int kvlsmControl(KVStore *pKVStore, int op, void *pArg){
   return rc;
 }
 
+static int kvlsmGetMeta(KVStore *pKVStore, unsigned int *piVal){
+  KVLsm *p = (KVLsm *)pKVStore;
+  return lsm_get_user_version(p->pDb, piVal);
+}
+
+static int kvlsmPutMeta(KVStore *pKVStore, unsigned int iVal){
+  KVLsm *p = (KVLsm *)pKVStore;
+  return lsm_set_user_version(p->pDb, iVal);
+}
+
 /*
 ** Create a new in-memory storage engine and return a pointer to it.
 */
@@ -421,25 +431,27 @@ int sqlite4KVStoreOpenLsm(
 
   /* Virtual methods for an LSM data store */
   static const KVStoreMethods kvlsmMethods = {
-    1,                          /* iVersion */
-    sizeof(KVStoreMethods),     /* szSelf */
-    kvlsmReplace,               /* xReplace */
-    kvlsmOpenCursor,            /* xOpenCursor */
-    kvlsmSeek,                  /* xSeek */
-    kvlsmNextEntry,             /* xNext */
-    kvlsmPrevEntry,             /* xPrev */
-    kvlsmDelete,                /* xDelete */
-    kvlsmKey,                   /* xKey */
-    kvlsmData,                  /* xData */
-    kvlsmReset,                 /* xReset */
-    kvlsmCloseCursor,           /* xCloseCursor */
-    kvlsmBegin,                 /* xBegin */
-    kvlsmCommitPhaseOne,        /* xCommitPhaseOne */
-    kvlsmCommitPhaseTwo,        /* xCommitPhaseTwo */
-    kvlsmRollback,              /* xRollback */
-    kvlsmRevert,                /* xRevert */
-    kvlsmClose,                 /* xClose */
-    kvlsmControl                /* xControl */
+    1,                            /* iVersion */
+    sizeof(KVStoreMethods),       /* szSelf */
+    kvlsmReplace,                 /* xReplace */
+    kvlsmOpenCursor,              /* xOpenCursor */
+    kvlsmSeek,                    /* xSeek */
+    kvlsmNextEntry,               /* xNext */
+    kvlsmPrevEntry,               /* xPrev */
+    kvlsmDelete,                  /* xDelete */
+    kvlsmKey,                     /* xKey */
+    kvlsmData,                    /* xData */
+    kvlsmReset,                   /* xReset */
+    kvlsmCloseCursor,             /* xCloseCursor */
+    kvlsmBegin,                   /* xBegin */
+    kvlsmCommitPhaseOne,          /* xCommitPhaseOne */
+    kvlsmCommitPhaseTwo,          /* xCommitPhaseTwo */
+    kvlsmRollback,                /* xRollback */
+    kvlsmRevert,                  /* xRevert */
+    kvlsmClose,                   /* xClose */
+    kvlsmControl,                 /* xControl */
+    kvlsmGetMeta,                 /* xGetMeta */
+    kvlsmPutMeta                  /* xPutMeta */
   };
 
   KVLsm *pNew;
