@@ -281,6 +281,7 @@ struct TreeHeader {
   u32 iWrite;                     /* Write offset in shm file */
   TreeRoot oldroot;               /* Root and height of the previous tree */
   u32 iOldShmid;                  /* Last shm-id used by previous tree */
+  u32 iUsrVersion;                /* get/set_user_version() value */
   i64 iOldLog;                    /* Log offset associated with old tree */
   u32 oldcksum0;
   u32 oldcksum1;

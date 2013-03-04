@@ -2559,7 +2559,7 @@ case OP_SetCookie: {       /* in3 */
   pIn3 = &aMem[pOp->p3];
   sqlite4VdbeMemIntegerify(pIn3);
   v = (u32)pIn3->u.i;
-  rc = sqlite4KVStorePutMeta(db, pDb->pKV, 0, 1, &v);
+  rc = sqlite4KVStorePutSchema(pDb->pKV, v);
   pDb->pSchema->schema_cookie = (int)pIn3->u.i;
   db->flags |= SQLITE4_InternChanges;
   if( pOp->p1==1 ){
@@ -2597,7 +2597,7 @@ case OP_VerifyCookie: {
   assert( pOp->p1>=0 && pOp->p1<db->nDb );
   pKV = db->aDb[pOp->p1].pKV;
   if( pKV ){
-    rc = sqlite4KVStoreGetMeta(pKV, 0, 1, &iMeta);
+    rc = sqlite4KVStoreGetSchema(pKV, &iMeta);
     if( rc ) break;
     iGen = db->aDb[pOp->p1].pSchema->iGeneration;
   }else{

@@ -334,6 +334,9 @@ void lsm_free(lsm_env*, void *);
 */
 int lsm_info(lsm_db *, int, ...);
 
+int lsm_get_user_version(lsm_db *, unsigned int *);
+int lsm_set_user_version(lsm_db *, unsigned int);
+
 /*
 ** The following values may be passed as the second argument to lsm_info().
 **

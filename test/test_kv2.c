@@ -234,6 +234,16 @@ static int kvwrapControl(KVStore *pKVStore, int op, void *pArg){
   return p->pReal->pStoreVfunc->xControl(p->pReal, op, pArg);
 }
 
+static int kvwrapGetMeta(KVStore *pKVStore, unsigned int *piVal){
+  KVWrap *p = (KVWrap *)pKVStore;
+  return p->pReal->pStoreVfunc->xGetMeta(p->pReal, piVal);
+}
+
+static int kvwrapPutMeta(KVStore *pKVStore, unsigned int iVal){
+  KVWrap *p = (KVWrap *)pKVStore;
+  return p->pReal->pStoreVfunc->xPutMeta(p->pReal, iVal);
+}
+
 static int newFileStorage(
   sqlite4_env *pEnv,
   KVStore **ppKVStore,
@@ -261,7 +271,9 @@ static int newFileStorage(
     kvwrapRollback,
     kvwrapRevert,
     kvwrapClose,
-    kvwrapControl
+    kvwrapControl,
+    kvwrapGetMeta,
+    kvwrapPutMeta
   };
 
   KVWrap *pNew;

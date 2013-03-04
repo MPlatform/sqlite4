@@ -375,6 +375,23 @@ int sqlite4KVStoreGetMeta(KVStore *p, int iStart, int nMeta, unsigned int *a){
 }
 
 /*
+** Store schema cookie value iVal.
+*/
+int sqlite4KVStorePutSchema(KVStore *p, unsigned int iVal){
+  kvTrace(p, "xPutMeta(%d,%d) -> %s", p->kvId, (int)iVal);
+  return p->pStoreVfunc->xPutMeta(p, iVal);
+}
+
+/*
+** Read the schema cookie value into *piVal.
+*/
+int sqlite4KVStoreGetSchema(KVStore *p, unsigned int *piVal){
+  int rc = p->pStoreVfunc->xGetMeta(p, piVal);
+  kvTrace(p, "xGetMeta(%d) -> %d", p->kvId, (int)*piVal);
+  return rc;
+}
+
+/*
 ** Write nMeta unsigned 32-bit integers beginning with iStart.
 */
 int sqlite4KVStorePutMeta(

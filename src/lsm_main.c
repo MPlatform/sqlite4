@@ -960,4 +960,52 @@ int lsm_rollback(lsm_db *pDb, int iLevel){
   return rc;
 }
 
+int lsm_get_user_version(lsm_db *pDb, unsigned int *piUsr){
+  int rc = LSM_OK;                /* Return code */
+
+  /* Open a read transaction if one is not already open. */
+  assert_db_state(pDb);
+  if( pDb->pShmhdr==0 ){
+    assert( pDb->bReadonly );
+    rc = lsmBeginRoTrans(pDb);
+  }else if( pDb->iReader<0 ){
+    rc = lsmBeginReadTrans(pDb);
+  }
+
+  /* Allocate the multi-cursor. */
+  if( rc==LSM_OK ){
+    *piUsr = pDb->treehdr.iUsrVersion;
+  }
+
+  dbReleaseClientSnapshot(pDb);
+  assert_db_state(pDb);
+  return rc;
+}
+
+int lsm_set_user_version(lsm_db *pDb, unsigned int iUsr){
+  int rc = LSM_OK;                /* Return code */
+  int bCommit = 0;                /* True to commit before returning */
+
+  if( pDb->nTransOpen==0 ){
+    bCommit = 1;
+    rc = lsm_begin(pDb, 1);
+  }
+
+  if( rc==LSM_OK ){
+    pDb->treehdr.iUsrVersion = iUsr;
+  }
+
+  /* If a transaction was opened at the start of this function, commit it. 
+  ** Or, if an error has occurred, roll it back.  */
+  if( bCommit ){
+    if( rc==LSM_OK ){
+      rc = lsm_commit(pDb, 0);
+    }else{
+      lsm_rollback(pDb, 0);
+    }
+  }
+
+  return rc;
+}
+
 

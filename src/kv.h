@@ -174,6 +174,10 @@ int sqlite4KVStoreClose(KVStore *p);
 
 int sqlite4KVStoreGetMeta(KVStore *p, int, int, unsigned int*);
 int sqlite4KVStorePutMeta(sqlite4*, KVStore *p, int, int, unsigned int*);
+
+int sqlite4KVStorePutSchema(KVStore *p, unsigned int iVal);
+int sqlite4KVStoreGetSchema(KVStore *p, unsigned int *piVal);
+
 #ifdef SQLITE4_DEBUG
   void sqlite4KVStoreDump(KVStore *p);
 #endif
