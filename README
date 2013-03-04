@@ -11,9 +11,8 @@ script found at the root of the source tree.  Then run "make".
 For example:
 
     tar xzf sqlite.tar.gz    ;#  Unpack the source tree into "sqlite"
-    mkdir bld                ;#  Build will occur in a sibling directory
-    cd bld                   ;#  Change to the build directory
-    ../sqlite/configure      ;#  Run the configure script
+    ./autogen.sh             ;#  Create the configure script
+    configure                ;#  Run the configure script
     make                     ;#  Run the makefile.
     make install             ;#  (Optional) Install the build products
 

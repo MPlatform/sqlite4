@@ -1,0 +1,323 @@
+# Linux/UNIX build configuration
+
+ADDCFLAGS     = -ggdb -D UNIX -D_REENTRANT -W -fPIC
+ADDCPPFLAGS   = 
+ADDLDFLAGS    = -D_REENTRANT -L $(PREFIX)/lib 
+ADDLIBS       = -pthread
+DSO_EXTENSION = so
+INCPATHS      = -I $(PREFIX)/include
+
+# C Compiler and options for use in building executables that will run on the
+# platform that is doing the build.
+
+BCC = clang -g
+#BCC = /opt/ancic/bin/c89 -0
+
+# If the target operating system supports the "usleep()" system call, then
+# define the HAVE_USLEEP macro for all C modules.
+
+#USLEEP = 
+USLEEP = -DHAVE_USLEEP=1
+
+#### If you want the SQLite library to be safe for use within a 
+#    multi-threaded program, then define the following macro
+#    appropriately:
+#
+#THREADSAFE = -DTHREADSAFE=1
+THREADSAFE = -DTHREADSAFE=0
+
+#### Specify any extra linker options needed to make the library
+#    thread safe
+#
+#THREADLIB = -lpthread
+THREADLIB = 
+
+#### Specify any extra libraries needed to access required functions.
+#
+#TLIBS = -lrt    # fdatasync on Solaris 8
+TLIBS = 
+
+# Compiler Settings
+
+#### C Compile and options for use in building executables that 
+#    will run on the target platform.  This is usually the same
+#    as BCC, unless you are cross-compiling.
+#
+#TCC = gcc -O6
+TCC = gcc -g -rdynamic -O0 -Wall -fstrict-aliasing
+#TCC = clang -g -O0 -Wall -fstrict-aliasing
+#TCC = gcc420 -g -O2 -Wall
+#TCC = gcc -g -O0 -Wall -fprofile-arcs -ftest-coverage
+#TCC = /opt/mingw/bin/i386-mingw32-gcc -O6
+#TCC = /opt/ansic/bin/c89 -O +z -Wl,-a,archive
+
+TCCX  =  $(TCC) $(OPTS) -I. -I$(TOP)/src -I$(TOP) 
+TCCX += -I$(TOP)/ext/rtree -I$(TOP)/ext/icu -I$(TOP)/ext/fts3
+TCCX += -I$(TOP)/ext/async
+TCPPX = g++ -Wall -g -I. -I$(TOP)/src $(OPTS)
+
+#-------------------------------------------------------------------------------
+# Build
+#-------------------------------------------------------------------------------
+
+# This is the default Makefile target.  The objects listed here
+# are what get build when you type just "make" with no arguments.
+#
+all:	sqlite4.h libsqlite4.a sqlite4$(EXE)
+
+libsqlite4.a:	parse.c $(LIBOBJ)
+	$(AR) libsqlite4.a $(LIBOBJ)
+	$(RANLIB) libsqlite4.a
+
+sqlite4$(EXE):	$(TOP)/src/shell.c libsqlite4.a sqlite4.h
+	$(TCCX) $(READLINE_FLAGS) -o sqlite4$(EXE)                  \
+		$(TOP)/src/shell.c                                  \
+		libsqlite4.a $(LIBREADLINE) $(TLIBS) $(THREADLIB) $(MATHLIB)
+
+sqlite4.o:	sqlite4.c
+	$(TCCX) -c sqlite4.c
+
+# This target creates a directory named "tsrc" and fills it with copies of all
+# of the C source code and header files needed to build on the target
+# system. Some of the C source code and header files are automatically
+# generated.  This target takes care of all that automatic generation.
+
+target_source:	$(SRC) $(TOP)/tool/vdbe-compress.tcl
+	rm -rf tsrc
+	mkdir tsrc
+	cp -f $(SRC) tsrc
+	rm tsrc/sqlite.h.in tsrc/parse.y
+	tclsh $(TOP)/tool/vdbe-compress.tcl <tsrc/vdbe.c >vdbe.new
+	mv vdbe.new tsrc/vdbe.c
+	touch target_source
+
+sqlite4.c:	target_source $(TOP)/tool/mksqlite4c.tcl
+	tclsh $(TOP)/tool/mksqlite4c.tcl
+	echo '#ifndef USE_SYSTEM_SQLITE' >tclsqlite4.c
+	cat sqlite4.c >>tclsqlite4.c
+	echo '#endif /* USE_SYSTEM_SQLITE */' >>tclsqlite4.c
+	cat $(TOP)/src/tclsqlite.c >>tclsqlite4.c
+
+sqlite4.c-debug:	target_source $(TOP)/tool/mksqlite4c.tcl
+	tclsh $(TOP)/tool/mksqlite4c.tcl --linemacros
+	echo '#ifndef USE_SYSTEM_SQLITE' >tclsqlite4.c
+	cat sqlite4.c >>tclsqlite4.c
+	echo '#endif /* USE_SYSTEM_SQLITE */' >>tclsqlite4.c
+	echo '#line 1 "tclsqlite.c"' >>tclsqlite4.c
+	cat $(TOP)/src/tclsqlite.c >>tclsqlite4.c
+
+sqlite4-all.c:	sqlite4.c $(TOP)/tool/split-sqlite4c.tcl
+	tclsh $(TOP)/tool/split-sqlite4c.tcl
+
+fts2amal.c:	target_source $(TOP)/ext/fts2/mkfts2amal.tcl
+	tclsh $(TOP)/ext/fts2/mkfts2amal.tcl
+
+fts3amal.c:	target_source $(TOP)/ext/fts3/mkfts3amal.tcl
+	tclsh $(TOP)/ext/fts3/mkfts3amal.tcl
+
+# Rules to build the LEMON compiler generator
+#
+lemon:	$(TOP)/tool/lemon.c $(TOP)/src/lempar.c
+	$(BCC) -o lemon $(TOP)/tool/lemon.c
+	cp $(TOP)/src/lempar.c .
+
+# Rules to build individual *.o files from generated *.c files. This
+# applies to:
+#
+#     parse.o
+#     opcodes.o
+#
+%.o: %.c $(HDR)
+	$(TCCX) -c $<
+
+# Rules to build individual *.o files from files in the src directory.
+#
+%.o: $(TOP)/src/%.c $(HDR)
+	$(TCCX) -c $<
+
+tclsqlite.o:	$(TOP)/src/tclsqlite.c $(HDR)
+	$(TCCX) $(TCL_FLAGS) -c $(TOP)/src/tclsqlite.c
+
+# Rules to build opcodes.c and opcodes.h
+#
+opcodes.c:	opcodes.h $(TOP)/tool/mkopcodec.awk
+	$(NAWK) -f $(TOP)/tool/mkopcodec.awk opcodes.h >opcodes.c
+
+opcodes.h:	parse.h $(TOP)/src/vdbe.c $(TOP)/tool/mkopcodeh.awk
+	cat parse.h $(TOP)/src/vdbe.c | \
+		$(NAWK) -f $(TOP)/tool/mkopcodeh.awk >opcodes.h
+
+# Rules to build parse.c and parse.h - the outputs of lemon.
+#
+parse.h:	parse.c
+
+parse.c:	$(TOP)/src/parse.y lemon $(TOP)/tool/addopcodes.awk
+	cp $(TOP)/src/parse.y .
+	rm -f parse.h
+	./lemon $(OPTS) parse.y
+	mv parse.h parse.h.temp
+	$(NAWK) -f $(TOP)/tool/addopcodes.awk parse.h.temp >parse.h
+
+sqlite4.h:	$(TOP)/src/sqlite.h.in $(TOP)/manifest.uuid $(TOP)/VERSION
+	tclsh $(TOP)/tool/mksqlite4h.tcl $(TOP) >sqlite4.h
+
+keywordhash.h:	$(TOP)/tool/mkkeywordhash.c
+	$(BCC) -o mkkeywordhash $(OPTS) $(TOP)/tool/mkkeywordhash.c
+	./mkkeywordhash >keywordhash.h
+
+# Rules to build the extension objects.
+icu.o:	$(TOP)/ext/icu/icu.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/icu/icu.c
+
+fts2.o:	$(TOP)/ext/fts2/fts2.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2.c
+
+fts2_hash.o:	$(TOP)/ext/fts2/fts2_hash.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_hash.c
+
+fts2_icu.o:	$(TOP)/ext/fts2/fts2_icu.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_icu.c
+
+fts2_porter.o:	$(TOP)/ext/fts2/fts2_porter.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_porter.c
+
+fts2_tokenizer.o:	$(TOP)/ext/fts2/fts2_tokenizer.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_tokenizer.c
+
+fts2_tokenizer1.o:	$(TOP)/ext/fts2/fts2_tokenizer1.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts2/fts2_tokenizer1.c
+
+fts3.o:	$(TOP)/ext/fts3/fts3.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3.c
+
+fts3_aux.o:	$(TOP)/ext/fts3/fts3_aux.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_aux.c
+
+fts3_expr.o:	$(TOP)/ext/fts3/fts3_expr.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_expr.c
+
+fts3_hash.o:	$(TOP)/ext/fts3/fts3_hash.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_hash.c
+
+fts3_icu.o:	$(TOP)/ext/fts3/fts3_icu.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_icu.c
+
+fts3_snippet.o:	$(TOP)/ext/fts3/fts3_snippet.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_snippet.c
+
+fts3_porter.o:	$(TOP)/ext/fts3/fts3_porter.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_porter.c
+
+fts3_tokenizer.o:	$(TOP)/ext/fts3/fts3_tokenizer.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_tokenizer.c
+
+fts3_tokenizer1.o:	$(TOP)/ext/fts3/fts3_tokenizer1.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_tokenizer1.c
+
+fts3_write.o:	$(TOP)/ext/fts3/fts3_write.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/fts3/fts3_write.c
+
+rtree.o:	$(TOP)/ext/rtree/rtree.c $(HDR) $(EXTHDR)
+	$(TCCX) -DSQLITE4_CORE -c $(TOP)/ext/rtree/rtree.c
+
+# Rules for building test programs and for running tests
+#
+tclsqlite4:	$(TOP)/src/tclsqlite.c libsqlite4.a
+	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 -o tclsqlite4 \
+		$(TOP)/src/tclsqlite.c libsqlite4.a $(LIBTCL) $(THREADLIB)
+
+# Rules to build the 'testfixture' application.
+#
+TESTFIXTURE_FLAGS  = -DSQLITE4_TEST=1 -DSQLITE4_CRASH_TEST=1
+TESTFIXTURE_FLAGS += -DSQLITE4_SERVER=1 -DSQLITE4_PRIVATE="" -DSQLITE4_CORE 
+
+TESTFIXTURE_PREREQ  = $(TESTSRC) $(TESTSRC2) 
+TESTFIXTURE_PREREQ += $(TOP)/src/tclsqlite.c
+TESTFIXTURE_PREREQ += libsqlite4.a
+
+testfixture$(EXE): $(TESTFIXTURE_PREREQ)
+	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)              \
+		$(TESTSRC) $(TESTSRC2) $(TOP)/src/tclsqlite.c                \
+		-o testfixture$(EXE) $(LIBTCL) libsqlite4.a $(THREADLIB)
+
+amalgamation-testfixture$(EXE): sqlite4.c $(TESTSRC) $(TOP)/src/tclsqlite.c
+	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)              \
+		$(TESTSRC) $(TOP)/src/tclsqlite.c sqlite4.c                  \
+		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB)
+
+fts3-testfixture$(EXE): sqlite4.c fts3amal.c $(TESTSRC) $(TOP)/src/tclsqlite.c
+	$(TCCX) $(TCL_FLAGS) -DTCLSH=1 $(TESTFIXTURE_FLAGS)              \
+	-DSQLITE4_ENABLE_FTS3=1                                          \
+		$(TESTSRC) $(TOP)/src/tclsqlite.c sqlite4.c fts3amal.c       \
+		-o testfixture$(EXE) $(LIBTCL) $(THREADLIB)
+
+fulltest:	testfixture$(EXE) sqlite4$(EXE)
+	./testfixture$(EXE) $(TOP)/test/all.test
+
+soaktest:	testfixture$(EXE) sqlite4$(EXE)
+	./testfixture$(EXE) $(TOP)/test/all.test -soak=1
+
+test:	testfixture$(EXE) sqlite4$(EXE)
+	./testfixture$(EXE) $(TOP)/test/src4.test
+
+# Rules to build the 'lsmtest' application.
+#
+lsmtest$(EXE): libsqlite4.a $(LSMTESTSRC) $(LSMTESTHDR)
+	$(TCPPX) -c $(TOP)/lsm-test/lsmtest_tdb2.cc
+	$(TCCX) $(LSMTESTSRC) lsmtest_tdb2.o libsqlite4.a -o lsmtest$(EXE) $(THREADLIB) -lsqlite3
+
+
+varint$(EXE):	$(TOP)/src/varint.c
+	$(TCCX) -DVARINT_TOOL -o varint$(EXE) $(TOP)/src/varint.c
+
+# The next two rules are used to support the "threadtest" target. Building
+# threadtest runs a few thread-safety tests that are implemented in C. This
+# target is invoked by the releasetest.tcl script.
+# 
+threadtest3$(EXE): sqlite4.o $(TOP)/test/threadtest3.c $(TOP)/test/tt3_checkpoint.c
+	$(TCCX) -O2 sqlite4.o $(TOP)/test/threadtest3.c \
+		-o threadtest3$(EXE) $(THREADLIB)
+
+threadtest: threadtest3$(EXE)
+	./threadtest3$(EXE)
+
+TEST_EXTENSION = $(SHPREFIX)testloadext.$(SO)
+$(TEST_EXTENSION): $(TOP)/test/test_loadext.c
+	$(MKSHLIB) $(TOP)/test/test_loadext.c -o $(TEST_EXTENSION)
+
+extensiontest: testfixture$(EXE) $(TEST_EXTENSION)
+	./testfixture$(EXE) $(TOP)/test/loadext.test
+
+# This target will fail if the SQLite amalgamation contains any exported
+# symbols that do not begin with "sqlite4_". It is run as part of the
+# releasetest.tcl script.
+#
+checksymbols: sqlite4.o
+	nm -g --defined-only sqlite4.o | grep -v " sqlite4_" ; test $$? -ne 0
+
+# Standard install and cleanup targets
+#
+install:	sqlite4 libsqlite4.a sqlite4.h
+	mv sqlite4 /usr/bin
+	mv libsqlite4.a /usr/lib
+	mv sqlite4.h /usr/include
+
+clean:	
+	rm -f *.o sqlite4 sqlite4.exe libsqlite4.a sqlite4.h opcodes.*
+	rm -f lemon lemon.exe lempar.c parse.* sqlite*.tar.gz
+	rm -f mkkeywordhash mkkeywordhash.exe keywordhash.h
+	rm -f $(PUBLISH)
+	rm -f *.da *.bb *.bbg gmon.out
+	rm -rf tsrc target_source
+	rm -f testloadext.dll libtestloadext.so
+	rm -f amalgamation-testfixture amalgamation-testfixture.exe
+	rm -f fts3-testfixture fts3-testfixture.exe
+	rm -f testfixture testfixture.exe
+	rm -f lsmtest
+	rm -f threadtest3 threadtest3.exe
+	rm -f sqlite4.c fts?amal.c tclsqlite4.c
+	rm -f sqlite4_analyzer sqlite4_analyzer.exe sqlite4_analyzer.c
+
+fossil-clean:
+	fossil extras | xargs rm
+

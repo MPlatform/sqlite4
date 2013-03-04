@@ -1,0 +1,320 @@
+DEBUG_ON      = -D DEBUG
+DEBUG_OFF     = -O2
+PROFILE_ON    = -pg --profile-arcs --test-coverage
+PROFILE_OFF   = 
+PROFILING     = $(PROFILE_OFF)
+DEBUGGING	  = $(DEBUG_ON)
+
+NAME          = sqlite4
+
+# The toplevel directory of the source tree.  This is the directory that
+# contains this "Makefile.in" and the "configure.in" script.
+
+TOP = .
+
+###############################################################################
+# The following macros should be defined before this script is
+# invoked:
+#
+# TOP              The toplevel directory of the source tree.  This is the
+#                  directory that contains files "VERSION" and "README".
+#
+# BCC              C Compiler and options for use in building executables that
+#                  will run on the platform that is doing the build.
+#
+# TCC              C Compiler and options for use in building executables that 
+#                  will run on the target platform.  This is usually the same
+#                  as BCC, unless you are cross-compiling.
+#
+# THREADLIB        Specify any extra linker options needed to make the library
+#                  thread safe
+#
+# OPTS             Extra compiler command-line options for the TCC compiler
+#
+# EXE              The suffix to add to executable files.  ".exe" for windows
+#                  and "" for Unix.
+#
+# AR               Tools used to build a static library.
+# RANLIB
+#
+# TCL_FLAGS        Extra compiler options needed for programs that use the
+#                  TCL library.
+#
+# LIBTCL           Linker options needed to link against the TCL library.
+#
+# READLINE_FLAGS   Compiler options needed for programs that use the
+#                  readline() library.
+#
+# LIBREADLINE      Linker options needed by programs using readline() must
+#                  link against.
+#
+# NAWK             Nawk compatible awk program.  Older (obsolete?) solaris
+#                  systems need this to avoid using the original AT&T AWK.
+#
+# Once the macros above are defined, the rest of this make script will
+# build the SQLite library and testing tools.
+
+# Tools used to build a static library
+
+AR     = ar cr
+RANLIB = ranlib
+
+# Linker options needed to link against the TCL library.
+#LIBTCL = -ltcl8.4 -lm -ldl
+LIBTCL = -ltcl8.6 -lm -lpthread -ldl -lz
+
+# Extra compiler options needed for programs that use the TCL library.
+# TCL_FLAGS = -DSTATIC_BUILD=1
+
+# Compiler options needed for programs that use the readline() library.
+READLINE_FLAGS =
+#READLINE_FLAGS = -DHAVE_READLINE=1 -I/usr/include/readline
+
+# Linker options needed by programs using readline() must link against.
+LIBREADLINE = -ldl -lpthread
+#LIBREADLINE = -static -lreadline -ltermcap
+
+# Should the database engine assume text is coded as UTF-8 or iso8859?
+ENCODING  = UTF8
+#ENCODING = ISO8859
+
+# Math library
+MATHLIB = -lm
+
+# AWK (Needed by brain-dead Solaris systems)
+NAWK = awk
+
+# THREADLIB  Libraries needed for threadtest 
+THREADLIB = -ldl -lpthread
+
+LIBOBJ+= vdbe.o parse.o \
+         alter.o analyze.o attach.o auth.o \
+         build.o \
+         callback.o complete.o ctime.o date.o delete.o env.o expr.o \
+         fault.o fkey.o fts5.o fts5func.o \
+         func.o global.o hash.o \
+         icu.o insert.o kv.o kvlsm.o kvmem.o legacy.o \
+         lsm_ckpt.o lsm_file.o lsm_log.o lsm_main.o lsm_mem.o lsm_mutex.o \
+         lsm_shared.o lsm_str.o lsm_sorted.o lsm_tree.o \
+         lsm_unix.o lsm_varint.o \
+         main.o malloc.o math.o mem.o mem0.o mem1.o mem2.o mem3.o mem5.o \
+         mutex.o mutex_noop.o mutex_unix.o mutex_w32.o \
+         opcodes.o os.o \
+         pragma.o prepare.o printf.o \
+         random.o resolve.o rowset.o rtree.o select.o status.o \
+         tokenize.o trigger.o \
+         update.o util.o varint.o \
+         vdbeapi.o vdbeaux.o vdbecodec.o vdbecursor.o \
+         vdbemem.o vdbetrace.o \
+         walker.o where.o utf.o
+
+# All of the source code files.
+SRC = \
+  $(TOP)/src/alter.c \
+  $(TOP)/src/analyze.c \
+  $(TOP)/src/attach.c \
+  $(TOP)/src/auth.c \
+  $(TOP)/src/build.c \
+  $(TOP)/src/callback.c \
+  $(TOP)/src/complete.c \
+  $(TOP)/src/ctime.c \
+  $(TOP)/src/date.c \
+  $(TOP)/src/delete.c \
+  $(TOP)/src/env.c \
+  $(TOP)/src/expr.c \
+  $(TOP)/src/fault.c \
+  $(TOP)/src/fkey.c \
+  $(TOP)/src/fts5.c \
+  $(TOP)/src/fts5func.c \
+  $(TOP)/src/func.c \
+  $(TOP)/src/global.c \
+  $(TOP)/src/hash.c \
+  $(TOP)/src/hash.h \
+  $(TOP)/src/hwtime.h \
+  $(TOP)/src/insert.c \
+  $(TOP)/src/kv.c \
+  $(TOP)/src/kv.h \
+  $(TOP)/src/kvlsm.c \
+  $(TOP)/src/kvmem.c \
+  $(TOP)/src/legacy.c \
+  $(TOP)/src/lsm.h \
+  $(TOP)/src/lsmInt.h \
+  $(TOP)/src/lsm_ckpt.c \
+  $(TOP)/src/lsm_file.c \
+  $(TOP)/src/lsm_log.c \
+  $(TOP)/src/lsm_main.c \
+  $(TOP)/src/lsm_mem.c \
+  $(TOP)/src/lsm_mutex.c \
+  $(TOP)/src/lsm_shared.c \
+  $(TOP)/src/lsm_str.c \
+  $(TOP)/src/lsm_sorted.c \
+  $(TOP)/src/lsm_tree.c \
+  $(TOP)/src/lsm_unix.c \
+  $(TOP)/src/lsm_varint.c \
+  $(TOP)/src/main.c \
+  $(TOP)/src/malloc.c \
+  $(TOP)/src/math.c \
+  $(TOP)/src/mem.c \
+  $(TOP)/src/mem0.c \
+  $(TOP)/src/mem1.c \
+  $(TOP)/src/mem2.c \
+  $(TOP)/src/mem3.c \
+  $(TOP)/src/mem5.c \
+  $(TOP)/src/mutex.c \
+  $(TOP)/src/mutex.h \
+  $(TOP)/src/mutex_noop.c \
+  $(TOP)/src/mutex_unix.c \
+  $(TOP)/src/mutex_w32.c \
+  $(TOP)/src/os.c \
+  $(TOP)/src/os.h \
+  $(TOP)/src/parse.y \
+  $(TOP)/src/pragma.c \
+  $(TOP)/src/prepare.c \
+  $(TOP)/src/printf.c \
+  $(TOP)/src/random.c \
+  $(TOP)/src/resolve.c \
+  $(TOP)/src/rowset.c \
+  $(TOP)/src/select.c \
+  $(TOP)/src/shell.c \
+  $(TOP)/src/sqlite.h.in \
+  $(TOP)/src/sqliteInt.h \
+  $(TOP)/src/sqliteLimit.h \
+  $(TOP)/src/status.c \
+  $(TOP)/src/tclsqlite.c \
+  $(TOP)/src/tokenize.c \
+  $(TOP)/src/trigger.c \
+  $(TOP)/src/utf.c \
+  $(TOP)/src/update.c \
+  $(TOP)/src/util.c \
+  $(TOP)/src/varint.c \
+  $(TOP)/src/vdbe.c \
+  $(TOP)/src/vdbe.h \
+  $(TOP)/src/vdbeapi.c \
+  $(TOP)/src/vdbeaux.c \
+  $(TOP)/src/vdbecodec.c \
+  $(TOP)/src/vdbecursor.c \
+  $(TOP)/src/vdbemem.c \
+  $(TOP)/src/vdbetrace.c \
+  $(TOP)/src/vdbeInt.h \
+  $(TOP)/src/walker.c \
+  $(TOP)/src/where.c
+
+# Source code for extensions
+SRC += \
+  $(TOP)/ext/fts3/fts3.c \
+  $(TOP)/ext/fts3/fts3.h \
+  $(TOP)/ext/fts3/fts3Int.h \
+  $(TOP)/ext/fts3/fts3_aux.c \
+  $(TOP)/ext/fts3/fts3_expr.c \
+  $(TOP)/ext/fts3/fts3_hash.c \
+  $(TOP)/ext/fts3/fts3_hash.h \
+  $(TOP)/ext/fts3/fts3_icu.c \
+  $(TOP)/ext/fts3/fts3_porter.c \
+  $(TOP)/ext/fts3/fts3_snippet.c \
+  $(TOP)/ext/fts3/fts3_tokenizer.h \
+  $(TOP)/ext/fts3/fts3_tokenizer.c \
+  $(TOP)/ext/fts3/fts3_tokenizer1.c \
+  $(TOP)/ext/fts3/fts3_write.c
+SRC += \
+  $(TOP)/ext/icu/sqliteicu.h \
+  $(TOP)/ext/icu/icu.c
+SRC += \
+  $(TOP)/ext/rtree/rtree.h \
+  $(TOP)/ext/rtree/rtree.c
+
+# Generated source code files
+SRC += \
+  keywordhash.h \
+  opcodes.c \
+  opcodes.h \
+  parse.c \
+  parse.h \
+  sqlite4.h
+
+# Source code to the test files.
+TESTSRC = \
+  $(TOP)/test/test_main.c \
+  $(TOP)/test/test_thread0.c \
+  $(TOP)/test/test_utf.c \
+  $(TOP)/test/test_misc1.c \
+  $(TOP)/test/test_config.c \
+  $(TOP)/test/test_func.c \
+  $(TOP)/test/test_hexio.c \
+  $(TOP)/test/test_lsm.c \
+  $(TOP)/test/test_kv.c \
+  $(TOP)/test/test_kv2.c \
+  $(TOP)/test/test_malloc.c \
+  $(TOP)/test/test_mem.c \
+  $(TOP)/test/test_mutex.c \
+  $(TOP)/test/test_thread.c \
+  $(TOP)/test/test_wsd.c
+
+#TESTSRC += $(TOP)/ext/fts2/fts2_tokenizer.c
+#TESTSRC += $(TOP)/ext/fts3/fts3_tokenizer.c
+
+TESTSRC2 = \
+  $(TOP)/src/attach.c \
+  $(TOP)/src/build.c \
+  $(TOP)/src/date.c \
+  $(TOP)/src/expr.c \
+  $(TOP)/src/fts5.c \
+  $(TOP)/src/fts5func.c \
+  $(TOP)/src/func.c \
+  $(TOP)/src/insert.c \
+  $(TOP)/src/mem5.c \
+  $(TOP)/src/os.c \
+  $(TOP)/src/pragma.c \
+  $(TOP)/src/prepare.c \
+  $(TOP)/src/printf.c \
+  $(TOP)/src/random.c \
+  $(TOP)/src/select.c \
+  $(TOP)/src/tokenize.c \
+  $(TOP)/src/utf.c \
+  $(TOP)/src/util.c \
+  $(TOP)/src/vdbeapi.c \
+  $(TOP)/src/vdbeaux.c \
+  $(TOP)/src/vdbe.c \
+  $(TOP)/src/vdbemem.c \
+  $(TOP)/src/where.c \
+  parse.c \
+
+# Header files used by all library source files.
+HDR = \
+   $(TOP)/src/hash.h \
+   $(TOP)/src/hwtime.h \
+   keywordhash.h \
+   $(TOP)/src/kv.h \
+   $(TOP)/src/lsm.h \
+   $(TOP)/src/lsmInt.h \
+   $(TOP)/src/mutex.h \
+   opcodes.h \
+   $(TOP)/src/os.h \
+   parse.h  \
+   sqlite4.h  \
+   $(TOP)/src/sqliteInt.h  \
+   $(TOP)/src/sqliteLimit.h \
+   $(TOP)/src/vdbe.h \
+   $(TOP)/src/vdbeInt.h
+
+EXTHDR = \
+  $(TOP)/ext/fts3/fts3.h \
+  $(TOP)/ext/fts3/fts3Int.h \
+  $(TOP)/ext/fts3/fts3_hash.h \
+  $(TOP)/ext/fts3/fts3_tokenizer.h
+EXTHDR += \
+  $(TOP)/ext/rtree/rtree.h
+EXTHDR += \
+  $(TOP)/ext/icu/sqliteicu.h
+
+LSMTESTSRC = $(TOP)/lsm-test/lsmtest1.c $(TOP)/lsm-test/lsmtest2.c           \
+             $(TOP)/lsm-test/lsmtest3.c $(TOP)/lsm-test/lsmtest4.c           \
+             $(TOP)/lsm-test/lsmtest5.c $(TOP)/lsm-test/lsmtest6.c           \
+             $(TOP)/lsm-test/lsmtest7.c $(TOP)/lsm-test/lsmtest8.c           \
+             $(TOP)/lsm-test/lsmtest9.c                                      \
+             $(TOP)/lsm-test/lsmtest_datasource.c \
+             $(TOP)/lsm-test/lsmtest_func.c $(TOP)/lsm-test/lsmtest_io.c     \
+             $(TOP)/lsm-test/lsmtest_main.c $(TOP)/lsm-test/lsmtest_mem.c    \
+             $(TOP)/lsm-test/lsmtest_tdb.c $(TOP)/lsm-test/lsmtest_tdb3.c    \
+             $(TOP)/lsm-test/lsmtest_util.c 
+
+LSMTESTHDR = $(TOP)/lsm-test/lsmtest.h $(TOP)/lsm-test/lsmtest_tdb.h

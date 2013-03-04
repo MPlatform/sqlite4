@@ -1,0 +1,32 @@
+# Linux build configuration
+
+include Make.unix
+
+# Pick a compiler...
+compiler ?= gcc
+compiler ?= tcc
+compiler ?= clang
+
+########################################################################
+# LIBTCL compile/link flags
+TCL_FLAGS ?= -I/usr/include/tcl
+LIBTCL ?= -L/usr/lib -ltcl8.5 -lm -ldl
+
+########################################################################
+# TCC=Compiler for target platform binaries.
+# BCC=Compiler for local native binaries.
+ifeq (gcc,$(compiler))
+  BCC ?= gcc -g -fPIC -UNDEBUG -DDEBUG -Wall
+  BCC += -std=c89
+endif
+ifeq (tcc,$(compiler))
+  BCC ?= tcc -g -Wall
+endif
+ifeq (clang,$(compiler))
+  BCC ?= clang -g -Wall
+endif
+
+# Force regeneration of sqlite4.h if any makefiles change...
+parse.h sqlite4.h: $(MAKEFILE_LIST)
+$(MAKEFILE_LIST):
+

@@ -1,0 +1,56 @@
+m4_include([VERSION.m4])
+
+AC_INIT(sqlite4, VERSION_NUMBER, drh@sqlite.org)
+
+AC_CONFIG_AUX_DIR(config)
+
+PACKAGE=sqlite4
+
+AC_SUBST(VERSION, $VERSION_NUMBER)
+
+AC_CANONICAL_HOST
+AC_MSG_NOTICE([Host = ${host}])
+
+case ${host} in 
+    *-FreeBSD*)
+    AC_SUBST(OS_MAKEFILE, Make.freebsd)
+    ;;
+	*-linux*)
+    AC_SUBST(OS_MAKEFILE, Make.linux)
+    ;;
+     *-*-mingw32*)
+    AC_SUBST(OS_MAKEFILE, Make.mingw)
+    ;;
+    *-solaris*)
+    AC_SUBST(OS_MAKEFILE, Make.solaris)
+    ;;
+esac
+
+AC_CONFIG_HEADERS(config.h)
+
+# Checks for programs.
+AC_PROG_CC
+AC_PROG_CXX
+AC_PROG_CXXCPP
+AC_PROG_INSTALL
+AC_PROG_RANLIB
+AC_PROG_AWK
+
+# Checks for libraries.
+
+# Checks for header files.
+
+AC_HEADER_STDC
+#AC_CHECK_HEADERS(utime.h)
+#AC_CHECK_HEADERS(sys/epoll.h, AC_DEFINE([LINUX_26],[],[Linux 2.6]), AC_DEFINE([LINUX_24],[],[Linux 2.4]))
+#AC_CHECK_HEADERS(sys/epoll.h)
+AC_FUNC_UTIME_NULL
+
+# Checks for typedefs, structures, and compiler characteristics.
+
+# Checks for library functions.
+
+AC_CONFIG_FILES([Makefile])
+
+AC_OUTPUT
+

@@ -1,0 +1,8 @@
+# Windows build configuration
+
+DSO_EXTENSION = dll
+INCPATHS      = -I ../include
+ADDCFLAGS     = -Wall -D_WIN32
+ADDLDFLAGS    = -L/usr/lib -Wl,-L,/c/usr/bin -Wl,--dll
+ADDLIBS  	  = $(STATIC_LIBS) -lbz2 \
+                -lrpcrt4 -lshell32 -lws2_32 -ladvapi32 -lkernel32 -lmsvcrt
