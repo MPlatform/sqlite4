@@ -769,6 +769,8 @@ int lsmFsReadSyncedId(lsm_db *db, int, i64 *piVal);
 int lsmFsSegmentContainsPg(FileSystem *pFS, Segment *, Pgno, int *);
 Pgno lsmFsRedirectPage(FileSystem *, Redirect *, Pgno);
 
+void lsmFsPurgeCache(FileSystem *);
+
 /*
 ** End of functions from "lsm_file.c".
 **************************************************************************/

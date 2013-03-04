@@ -453,6 +453,8 @@ int sqlite4KVStoreOpenLsm(
       const char *zParam;
       int eParam;
     } aConfig[] = {
+      { "lsm_mmap", LSM_CONFIG_MMAP },
+      { "lsm_page_size", LSM_CONFIG_PAGE_SIZE },
       { "lsm_block_size", LSM_CONFIG_BLOCK_SIZE },
       { "lsm_multiple_processes", LSM_CONFIG_MULTIPLE_PROCESSES }
     };
@@ -465,6 +467,7 @@ int sqlite4KVStoreOpenLsm(
       int i;
       int bMmap = 0;
       lsm_config(pNew->pDb, LSM_CONFIG_MMAP, &bMmap);
+
       for(i=0; i<ArraySize(aConfig); i++){
         const char *zVal = sqlite4_uri_parameter(zName, aConfig[i].zParam);
         if( zVal ){

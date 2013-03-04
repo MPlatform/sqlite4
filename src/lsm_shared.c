@@ -1152,6 +1152,7 @@ int lsmBeginReadTrans(lsm_db *pDb){
         lsmFreeSnapshot(pDb->pEnv, pDb->pClient);
         pDb->pClient = 0;
         lsmMCursorFreeCache(pDb);
+        lsmFsPurgeCache(pDb->pFS);
         rc = lsmCheckpointLoad(pDb, &iSnap);
       }else{
         iSnap = 1;

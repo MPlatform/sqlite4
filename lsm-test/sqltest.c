@@ -34,14 +34,23 @@
 */
 static int unlink_db(const char *zDb){
   int i;
+  char *zBase = (char *)zDb;
   const char *azExt[] = { "", "-shm", "-wal", "-journal", "-log", 0 };
 
+  if( 0==sqlite4_strnicmp("file:", zDb, 5) ){
+    for(i=5; zDb[i] && zDb[i]!='?'; i++);
+    zBase = sqlite4_mprintf(0, "%.*s", i-5, &zDb[5]);
+  }
+
   for(i=0; azExt[i]; i++){
-    char *zFile = sqlite4_mprintf(0, "%s%s", zDb, azExt[i]);
+    char *zFile = sqlite4_mprintf(0, "%s%s", zBase, azExt[i]);
     unlink(zFile);
     sqlite4_free(0, zFile);
   }
 
+  if( zBase!=zDb ){
+    sqlite4_free(0, zBase);
+  }
   return 0;
 }
 
@@ -184,6 +193,7 @@ static int integer_query3(sqlite3 *db, const char *zSql){
 *************************************************************************/
 
 static int do_insert1_test4(
+  const char *zFile,
   int nRow,                       /* Number of rows to insert in total */
   int nRowPerTrans,               /* Number of rows per transaction */
   int nIdx,                       /* Number of aux indexes (aside from PK) */
@@ -198,8 +208,9 @@ static int do_insert1_test4(
 
   lsm_db *pLsm;
 
-  unlink_db(SQLITE4_DB_FILE);
-  EXPLODE(  sqlite4_open(0, SQLITE4_DB_FILE, &db)  );
+  if( zFile==0 ) zFile = SQLITE4_DB_FILE;
+  unlink_db(zFile);
+  EXPLODE(  sqlite4_open(0, zFile, &db)  );
   sqlite4_kvstore_control(db, "main", SQLITE4_KVCTRL_LSM_HANDLE, &pLsm);
   i = iSync;
   lsm_config(pLsm, LSM_CONFIG_SAFETY, &i);
@@ -239,6 +250,7 @@ static int do_insert1_test4(
   return 0;
 }
 static int do_insert1_test3(
+  const char *zFile,
   int nRow,                       /* Number of rows to insert in total */
   int nRowPerTrans,               /* Number of rows per transaction */
   int nIdx,                       /* Number of aux indexes (aside from PK) */
@@ -252,8 +264,9 @@ static int do_insert1_test3(
   int i;                          /* Counter to count nRow rows */
   int nMs;                        /* Test time in ms */
 
-  unlink_db(SQLITE3_DB_FILE);
-  EXPLODE( sqlite3_open(SQLITE3_DB_FILE, &db) );
+  if( zFile==0 ) zFile = SQLITE3_DB_FILE;
+  unlink_db(zFile);
+  EXPLODE( sqlite3_open(zFile, &db) );
   EXPLODE( sqlite3_exec(db, "PRAGMA journal_mode=WAL", 0, 0, 0) );
   zSync = sqlite4_mprintf(0, "PRAGMA synchronous=%d", iSync);
   EXPLODE( sqlite3_exec(db, zSync, 0, 0, 0) );
@@ -306,6 +319,7 @@ static int do_insert1(int argc, char **argv){
     {"-rowspertrans", 1,    10000000}, 
     {"-indexes",      0,    20}, 
     {"-sync",         0,    2}, 
+    {"-file",         -1,    -1}, 
     {0,0,0}
   };
   int i;
@@ -315,6 +329,7 @@ static int do_insert1(int argc, char **argv){
   int nRowPerTrans = 10;          /* Total rows each transaction: 50000 */
   int nIdx = 3;                   /* Number of auxilliary indexes */
   int iSync = 1;                  /* PRAGMA synchronous setting */
+  const char *zFile = 0;
 
   for(i=0; i<argc; i++){
     int iSel;
@@ -327,20 +342,24 @@ static int do_insert1(int argc, char **argv){
       fprintf(stderr, "option %s requires an argument\n", aArg[iSel].zArg);
       return -1;
     }
-    iVal = atoi(argv[++i]);
-    if( iVal<aArg[iSel].nMin || iVal>aArg[iSel].nMax ){
-      fprintf(stderr, "option %s out of range (%d..%d)\n", 
-          aArg[iSel].zArg, aArg[iSel].nMin, aArg[iSel].nMax 
-      );
-      return -1;
-    }
+    if( 0==strcmp("-file", aArg[iSel].zArg) ){
+      zFile = argv[++i];
+    }else{
+      iVal = atoi(argv[++i]);
+      if( iVal<aArg[iSel].nMin || iVal>aArg[iSel].nMax ){
+        fprintf(stderr, "option %s out of range (%d..%d)\n", 
+            aArg[iSel].zArg, aArg[iSel].nMin, aArg[iSel].nMax 
+            );
+        return -1;
+      }
 
-    switch( iSel ){
-      case 0: iDb = iVal;          break;
-      case 1: nRow = iVal;         break;
-      case 2: nRowPerTrans = iVal; break;
-      case 3: nIdx = iVal;         break;
-      case 4: iSync = iVal;        break;
+      switch( iSel ){
+        case 0: iDb = iVal;          break;
+        case 1: nRow = iVal;         break;
+        case 2: nRowPerTrans = iVal; break;
+        case 3: nIdx = iVal;         break;
+        case 4: iSync = iVal;        break;
+      }
     }
   }
 
@@ -349,15 +368,16 @@ static int do_insert1(int argc, char **argv){
   );
   fflush(stdout);
   if( iDb==3 ){
-    do_insert1_test3(nRow, nRowPerTrans, nIdx, iSync);
+    do_insert1_test3(zFile, nRow, nRowPerTrans, nIdx, iSync);
   }else{
-    do_insert1_test4(nRow, nRowPerTrans, nIdx, iSync);
+    do_insert1_test4(zFile, nRow, nRowPerTrans, nIdx, iSync);
   }
 
   return 0;
 }
 
 static int do_select1_test4(
+  const char *zFile,
   int nRow,                       /* Number of rows to read in total */
   int nRowPerTrans,               /* Number of rows per transaction */
   int iIdx
@@ -369,7 +389,8 @@ static int do_select1_test4(
   int i;
   int nTblRow;
 
-  EXPLODE( sqlite4_open(0, SQLITE4_DB_FILE, &db) );
+  if( zFile==0 ) zFile = SQLITE4_DB_FILE;
+  EXPLODE( sqlite4_open(0, zFile, &db) );
   install_rblob_function4(db);
 
   nTblRow = integer_query4(db, "SELECT count(*) FROM t1");
@@ -399,6 +420,7 @@ static int do_select1_test4(
   return 0;
 }
 static int do_select1_test3(
+  const char *zFile,
   int nRow,                       /* Number of rows to read in total */
   int nRowPerTrans,               /* Number of rows per transaction */
   int iIdx
@@ -409,8 +431,10 @@ static int do_select1_test3(
   sqlite3 *db;
   int i;
   int nTblRow;
+  
 
-  EXPLODE( sqlite3_open(SQLITE3_DB_FILE, &db) );
+  if( zFile==0 ) zFile = SQLITE3_DB_FILE;
+  EXPLODE( sqlite3_open(zFile, &db) );
   install_rblob_function3(db);
 
   nTblRow = integer_query3(db, "SELECT count(*) FROM t1");
@@ -450,6 +474,7 @@ static int do_select1(int argc, char **argv){
     {"-rows",         1,    10000000}, 
     {"-rowspertrans", 1,    10000000}, 
     {"-index",        0,    21}, 
+    {"-file",        -1,    -1}, 
     {0,0,0}
   };
   int i;
@@ -458,10 +483,10 @@ static int do_select1(int argc, char **argv){
   int nRow = 50000;               /* Total rows: 50000 */
   int nRowPerTrans = 10;          /* Total rows each transaction: 50000 */
   int iIdx = 0;
+  const char *zFile = 0;
 
   for(i=0; i<argc; i++){
     int iSel;
-    int iVal;
     int rc;
 
     rc = testArgSelectX(aArg, "argument", sizeof(aArg[0]), argv[i], &iSel);
@@ -470,19 +495,23 @@ static int do_select1(int argc, char **argv){
       fprintf(stderr, "option %s requires an argument\n", aArg[iSel].zArg);
       return -1;
     }
-    iVal = atoi(argv[++i]);
-    if( iVal<aArg[iSel].nMin || iVal>aArg[iSel].nMax ){
-      fprintf(stderr, "option %s out of range (%d..%d)\n", 
-          aArg[iSel].zArg, aArg[iSel].nMin, aArg[iSel].nMax 
-      );
-      return -1;
-    }
+    if( 0==strcmp("-file", aArg[iSel].zArg) ){
+      zFile = argv[++i];
+    }else{
+      int iVal = atoi(argv[++i]);
+      if( iVal<aArg[iSel].nMin || iVal>aArg[iSel].nMax ){
+        fprintf(stderr, "option %s out of range (%d..%d)\n", 
+            aArg[iSel].zArg, aArg[iSel].nMin, aArg[iSel].nMax 
+            );
+        return -1;
+      }
 
-    switch( iSel ){
-      case 0: iDb = iVal;          break;
-      case 1: nRow = iVal;         break;
-      case 2: nRowPerTrans = iVal; break;
-      case 3: iIdx = iVal;         break;
+      switch( iSel ){
+        case 0: iDb = iVal;          break;
+        case 1: nRow = iVal;         break;
+        case 2: nRowPerTrans = iVal; break;
+        case 3: iIdx = iVal;         break;
+      }
     }
   }
 
@@ -491,9 +520,9 @@ static int do_select1(int argc, char **argv){
   );
   fflush(stdout);
   if( iDb==3 ){
-    do_select1_test3(nRow, nRowPerTrans, iIdx);
+    do_select1_test3(zFile, nRow, nRowPerTrans, iIdx);
   }else{
-    do_select1_test4(nRow, nRowPerTrans, iIdx);
+    do_select1_test4(zFile, nRow, nRowPerTrans, iIdx);
   }
 
   return 0;

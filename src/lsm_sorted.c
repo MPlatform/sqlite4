@@ -5313,6 +5313,8 @@ int lsm_work(lsm_db *pDb, int nMerge, int nKB, int *pnWrite){
   if( pDb->nTransOpen || pDb->pCsr ) return LSM_MISUSE_BKPT;
   if( nMerge<=0 ) nMerge = pDb->nMerge;
 
+  lsmFsPurgeCache(pDb->pFS);
+
   /* Convert from KB to pages */
   nPgsz = lsmFsPageSize(pDb->pFS);
   if( nKB>=0 ){
@@ -5838,7 +5840,6 @@ void lsmSortedDumpStructure(
   Snapshot *pDump = pSnap;
   Level *pTopLevel;
   char *zFree = 0;
-
 
   assert( pSnap );
   pTopLevel = lsmDbSnapshotLevel(pDump);

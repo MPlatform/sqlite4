@@ -562,7 +562,7 @@ int lsmFsOpen(
 
     /* Allocate the hash-table here. At some point, it should be changed
     ** so that it can grow dynamicly. */
-    pFS->nCacheMax = 2048;
+    pFS->nCacheMax = 2048*1024 / pFS->nPagesize;
     pFS->nHash = 4096;
     pFS->apHash = lsmMallocZeroRc(pDb->pEnv, sizeof(Page *) * pFS->nHash, &rc);
 
@@ -729,6 +729,7 @@ int lsmFsBlockSize(FileSystem *pFS){
 */
 void lsmFsSetPageSize(FileSystem *pFS, int nPgsz){
   pFS->nPagesize = nPgsz;
+  pFS->nCacheMax = 2048*1024 / pFS->nPagesize;
 }
 
 /*
@@ -887,9 +888,50 @@ static void fsPageRemoveFromHash(FileSystem *pFS, Page *pPg){
   *pp = pPg->pHashNext;
 }
 
+
+/*
+** Purge the page cache of all entries with nRef==0.
+*/
+void lsmFsPurgeCache(FileSystem *pFS){
+  Page *pPg;
+
+  pPg = pFS->pLruFirst;
+  while( pPg ){
+    Page *pNext = pPg->pLruNext;
+    fsPageRemoveFromHash(pFS, pPg);
+    if( pPg->flags & PAGE_FREE ){
+      lsmFree(pFS->pEnv, pPg->aData);
+    }
+    lsmFree(pFS->pEnv, pPg);
+    pPg = pNext;
+    pFS->nCacheAlloc--;
+  }
+  pFS->pLruFirst = 0;
+  pFS->pLruLast = 0;
+
+  assert( pFS->nCacheAlloc<=pFS->nOut && pFS->nCacheAlloc>=0 );
+}
+
+/*
+** Search the hash-table for page iPg. If an entry is round, return a pointer
+** to it. Otherwise, return NULL.
+**
+** Either way, if argument piHash is not NULL set *piHash to the hash slot
+** number that page iPg would be stored in before returning.
+*/
+static Page *fsPageFindInHash(FileSystem *pFS, Pgno iPg, int *piHash){
+  Page *p;                        /* Return value */
+  int iHash = fsHashKey(pFS->nHash, iPg);
+
+  if( piHash ) *piHash = iHash;
+  for(p=pFS->apHash[iHash]; p; p=p->pHashNext){
+    if( p->iPg==iPg) break;
+  }
+  return p;
+}
+
 static int fsPageBuffer(
   FileSystem *pFS, 
-  int bRequireData,               /* True to allocate buffer as well */
   Page **ppOut
 ){
   int rc = LSM_OK;
@@ -898,7 +940,7 @@ static int fsPageBuffer(
     pPage = lsmMallocZero(pFS->pEnv, sizeof(Page));
     if( !pPage ){
       rc = LSM_NOMEM_BKPT;
-    }else if( bRequireData ){
+    }else{
       pPage->aData = (u8 *)lsmMalloc(pFS->pEnv, pFS->nPagesize);
       pPage->flags = PAGE_FREE;
       if( !pPage->aData ){
@@ -907,16 +949,19 @@ static int fsPageBuffer(
         pPage = 0;
       }
       pFS->nCacheAlloc++;
-    }else{
-      fsPageAddToLru(pFS, pPage);
     }
   }else{
+    u8 *aData;
     pPage = pFS->pLruFirst;
+    aData = pPage->aData;
     fsPageRemoveFromLru(pFS, pPage);
     fsPageRemoveFromHash(pFS, pPage);
+
+    memset(pPage, 0, sizeof(Page));
+    pPage->flags = PAGE_FREE;
+    pPage->aData = aData;
   }
 
-  assert( pPage==0 || (pPage->flags & PAGE_DIRTY)==0 );
   *ppOut = pPage;
   return rc;
 }
@@ -1342,7 +1387,7 @@ static int fsPageGet(
     }
 
     if( p==0 ){
-      rc = fsPageBuffer(pFS, 1, &p);
+      rc = fsPageBuffer(pFS, &p);
       if( rc==LSM_OK ){
         int nSpace = 0;
         p->iPg = iReal;
@@ -1823,7 +1868,7 @@ int lsmFsSortedAppend(
     /* In compressed database mode the page is not assigned a page number
     ** or location in the database file at this point. This will be done
     ** by the lsmFsPagePersist() call.  */
-    rc = fsPageBuffer(pFS, 1, &pPg);
+    rc = fsPageBuffer(pFS, &pPg);
     if( rc==LSM_OK ){
       pPg->pFS = pFS;
       pPg->pSeg = p;
@@ -2111,6 +2156,7 @@ int lsmFsMoveBlock(FileSystem *pFS, Segment *pSeg, int iTo, int iFrom){
           rc = lsmEnvWrite(pFS->pEnv, pFS->fdDb, iOff, aData, nSz);
         }
       }
+      lsmFsPurgeCache(pFS);
     }
   }
 
@@ -2308,6 +2354,22 @@ void lsmFsFlushWaiting(FileSystem *pFS, int *pRc){
   *pRc = rc;
 }
 
+static void fsRemoveHashEntry(FileSystem *pFS, Pgno iPg){
+  Page *p;
+  int iHash = fsHashKey(pFS->nHash, iPg);
+
+  for(p=pFS->apHash[iHash]; p && p->iPg!=iPg; p=p->pHashNext);
+
+  if( p ){
+    assert( p->nRef==0 );
+    fsPageRemoveFromHash(pFS, p);
+    p->iPg = 0;
+    iHash = fsHashKey(pFS->nHash, 0);
+    p->pHashNext = pFS->apHash[iHash];
+    pFS->apHash[iHash] = p;
+  }
+}
+
 /*
 ** If the page passed as an argument is dirty, update the database file
 ** (or mapping of the database file) with its current contents and mark
@@ -2370,6 +2432,7 @@ int lsmFsPagePersist(Page *pPg){
 
         if( pFS->bUseMmap==0 ){
           int iHash = fsHashKey(pFS->nHash, pPg->iPg);
+          fsRemoveHashEntry(pFS, pPg->iPg);
           pPg->pHashNext = pFS->apHash[iHash];
           pFS->apHash[iHash] = pPg;
           assert( pPg->pHashNext==0 || pPg->pHashNext->iPg!=pPg->iPg );
@@ -2515,10 +2578,14 @@ int lsmFsPageRelease(Page *pPg){
         pPg->pHashNext = pFS->pFree;
         pFS->pFree = pPg;
       }else{
+#if 0
         assert( pPg->pLruNext==0 );
         assert( pPg->pLruPrev==0 );
         fsPageRemoveFromHash(pFS, pPg);
         fsPageBufferFree(pPg);
+#else
+        fsPageAddToLru(pFS, pPg);
+#endif
       }
     }
   }
